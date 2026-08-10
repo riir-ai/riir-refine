@@ -1,0 +1,34 @@
+[package]
+name = "riir-clippy"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Clippy-healing drafter+pruner pipeline: modelless ternary drafter x rust-analyzer validator x adaptive LoRA fallback"
+publish = false
+
+[lib]
+name = "riir_clippy"
+path = "src/lib.rs"
+
+[dependencies]
+# Public substrate: ConstraintPruner trait + ternary SIMD matvec
+katgpt-core = { path = "../katgpt-rs/crates/katgpt-core" }
+
+# Serialization for corpus freeze/thaw (BLAKE3-committed)
+blake3 = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[dev-dependencies]
+
+[features]
+default = []
+
+# Ruliology candidate enumeration (L3 refinement layer)
+ruliology_search = []
+
+# WASM rust-analyzer pruner (L2 sandboxed variant — deferred on rubrc maturity)
+wasm_pruner = []
+
+# Adaptive LoRA fallback (L4 — deferred to riir-train; opt-in when ready)
+clippy_lora = []
