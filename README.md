@@ -1,10 +1,11 @@
 # riir-clippy
 
-Clippy-healing drafter+pruner pipeline: modelless ternary drafter × rust-analyzer validator × adaptive LoRA fallback.
+Clippy-healing drafter+pruner pipeline: modelless ternary drafter × rust-analyzer validator × additive self-evolution loop (LoRA fallback deferred).
 
 ## Status
 
-**POC — Phase 0 (rule distillation) + L1 (drafter) + L2 (syntax validator) done.**
+**POC — Phase 0 (rule distillation) + L1 (drafter) + L2 (syntax validator)
++ additive self-evolution loop done.**
 
 The clippy-healing pipeline that distills clippy rules into a ruliology-style
 search space, drafts fixes via a modelless ternary SIMD matvec, and validates
@@ -18,6 +19,7 @@ fallback, not the co-equal path.
 | L2 — Syntax validator | ✅ Done (Issue 002, `syn`-based parse check, p50=6.8µs) |
 | L2 — Lint resolution check | ✅ Done (Issue 003, `clippy_verify` feature, real `cargo clippy` JSON parsing, ~130ms/verify) |
 | L3 — Ruliology search | ✅ Done (Issue 005, `ruliology_search` feature, Pareto-front from katgpt-ruliology pattern, ~400µs/10-candidate search) |
+| SE — Self-evolution loop (additive) | ✅ Done (Issue 004 + Issue 008; `self_evolve` feature, opt-in; G1–G5 + G6/G7 ALL PASS — 50.0pp healing-rate improvement on real `cargo clippy` feedback) |
 | L4 — LoRA fallback | ⏳ Deferred to riir-train |
 
 ## Architecture
@@ -39,6 +41,14 @@ L2 — VALIDATOR (always-on)
          │
          ▼
   [ validated clippy fix ]
+         │
+         ▼ (opt-in, additive — feature `self_evolve`)
+SE — SELF-EVOLUTION LOOP (composes on top of L0–L2)
+  LatentFixMemory   : 3-axis retrieval over past fix trajectories
+                     (latent dot+sigmoid, BM25 lexical, identical-triple dedup)
+  LatentSkillEvolution: EMA per-lint direction-vector update
+  Heals + records outcome → next-call retrieval benefits
+  Degenerates to static-corpus path when memory is empty
 ```
 
 ## L3 — Ruliology candidate search
@@ -59,11 +69,15 @@ payoff (lint_satisfied: bool), not pairwise tournament payoffs, so the
 
 ## Modelless-first mandate
 
-The primary path (L0-L3) is entirely modelless — no training, no backprop:
+The primary path (L0–L3) is entirely modelless — no training, no backprop:
 - **L0**: rule distillation (named rules + bounded fix-space)
 - **L1**: ternary SIMD matvec drafter (frozen direction vectors)
 - **L2**: rust-analyzer validation
 - **L3** (opt-in): ruliology Pareto-front candidate search
+- **SE** (opt-in, additive): self-evolution loop — latent retrieval + EMA
+  direction update. No gradient descent; the only state mutations are
+  append-only memory + EMA direction refresh, matching the global
+  modelless-first mandate.
 
 The LoRA fallback (L4) is deferred to riir-train and is the conservative last
 resort, not a co-equal path.
@@ -81,6 +95,9 @@ cargo run --example heal_demo
 cargo bench --bench bench_001_l1_matvec      # L1 hot path
 cargo bench --bench bench_002_l2_pruner_syn   # L2 hot path
 cargo run --example ruliology_search_demo --features ruliology_search --release  # L3 opt-in
+
+# Self-evolution real-world validation (~30s; spawns real cargo clippy)
+cargo run --example self_evolve_real_world_demo --features "self_evolve clippy_verify" --release
 ```
 
 ## Usage
@@ -107,6 +124,8 @@ if result.is_valid() {
 ## References
 
 - [Bench 001](.benchmarks/001_goat_consolidated.md) — consolidated GOAT gate results (L1 + L2 + Phase 3 + L3)
+- [Bench 008](.benchmarks/008_real_world_validation.md) — real-world validation of `self_evolve` via `cargo clippy` (G6 + G7)
+- [`.docs/10_self_evolve/`](.docs/10_self_evolve/) — design notes for the self-evolution loop (HealPipeline, LatentFixMemory, LatentSkillEvolution)
 - [Proposal 034](../riir-ai/.proposals/034_clippy_healing_drafter_pruner.md) — the design argument
 - [Plan 331 Phase A](../riir-train/.plans/331_lora_rust_coder_candidates_consolidated.md) — Gemma-2 r16 production (LoRA fallback base)
 - [Plan 333](../riir-train/.plans/333_bitnet_ternary_moe_neuro_symbolic_poc.md) — Ternary-Bonsai-27B (LoRA fallback primary base)
