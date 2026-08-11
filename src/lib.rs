@@ -9,7 +9,7 @@
 //!    fallback when no weights loaded.
 //! 3. **L2 — Validator**: `syn`-based syntax parse check (always-on,
 //!    modelless). Lint resolution verification via `cargo clippy` re-run is
-//!    Phase 3 work.
+//!    Phase 3 (feature-gated `clippy_verify`, opt-in).
 //! 4. **L3 — Ruliology candidate search** (opt-in): Pareto-front enumeration
 //!    when multiple valid fixes exist.
 //! 5. **L4 — `LoRA` fallback** (deferred): adaptive learning on the residual
@@ -36,7 +36,15 @@ pub mod drafter;
 pub mod pruner;
 pub mod seed_corpus;
 
+// Phase 3: optional lint resolution verification via real cargo clippy.
+// Opt-in because it's slow (seconds) and requires cargo+clippy on PATH.
+#[cfg(feature = "clippy_verify")]
+pub mod clippy_verifier;
+
 pub use corpus::ClippyCorpus;
 pub use drafter::ClippyTernaryDrafter;
 pub use pruner::RustAnalyzerPruner;
 pub use seed_corpus::build_seed_corpus;
+
+#[cfg(feature = "clippy_verify")]
+pub use clippy_verifier::ClippyVerifier;

@@ -28,6 +28,11 @@ syn = { version = "2", default-features = false, features = ["full", "parsing", 
 [features]
 default = []
 
+# Lint resolution verification via real `cargo clippy` re-run (Phase 3).
+# Opt-in because it's slow (seconds), requires cargo+clippy on PATH, and
+# does temp-dir I/O. The fast path (L2 syntax check) stays always-on.
+clippy_verify = []
+
 # Ruliology candidate enumeration (L3 refinement layer)
 ruliology_search = []
 
@@ -44,3 +49,10 @@ harness = false
 [[bench]]
 name = "bench_002_l2_pruner_syn"
 harness = false
+
+# Phase 3 GOAT gate lives in examples/ to avoid the benches/ auto-target conflict.
+# Run with: cargo run --example clippy_verify_demo --features clippy_verify --release
+
+[[example]]
+name = "clippy_verify_demo"
+required-features = ["clippy_verify"]

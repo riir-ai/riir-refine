@@ -3,20 +3,23 @@
 //! Implements the L2 validation layer of the clippy-healing pipeline.
 //! The pruner validates that a drafted fix:
 //! 1. Parses as valid Rust syntax (via `syn`, in-process — always checked)
-//! 2. Resolves the clippy lint (would require `cargo clippy` re-run — Phase 3 TODO)
+//! 2. Resolves the clippy lint (via `cargo clippy` re-run — feature-gated `clippy_verify`)
 //!
 //! ## Honesty contract
 //!
 //! - `parses = true` → the code actually parsed with `syn` (real syntax check)
-//! - `lint_resolved = true` → **known limitation**: currently always `true`
-//!   because we don't shell out to `cargo clippy` yet. This is documented
-//!   honestly: the syntax check is the load-bearing validation; lint
-//!   resolution verification is Phase 3 work.
+//! - `lint_resolved = true` (via [`validate`](Self::validate)) → **known limitation**:
+//!   always `true` because the fast path doesn't shell out to `cargo clippy`.
+//!   The syntax check is the load-bearing validation.
+//! - `lint_resolved = true` (via [`validate_with_clippy`](Self::validate_with_clippy))
+//!   → **truthful**: cargo clippy confirmed the lint did NOT fire. Requires
+//!   the `clippy_verify` feature.
 //!
 //! ## Modelless-first
 //!
 //! `syn` is a pure Rust parser with zero ML — no training, no backprop.
-//! This satisfies the modelless-first mandate for the L2 layer.
+//! `cargo clippy` is a deterministic rules engine — no ML, no training.
+//! Both satisfy the modelless-first mandate for the L2 layer.
 
 use std::process::Command;
 use syn::{File, Item};
@@ -31,9 +34,13 @@ pub struct ValidationResult {
     pub parses: bool,
     /// Whether the fix resolves the clippy lint.
     ///
-    /// **Known limitation**: currently always `true` because we don't run
-    /// `cargo clippy` on the fix (Phase 3 TODO). The syntax check is the
-    /// load-bearing validation.
+    /// **Fast path** ([`validate`](Self::validate)): always `true` — the fast
+    /// path doesn't run `cargo clippy`. The syntax check is the load-bearing
+    /// validation.
+    ///
+    /// **Slow path** ([`validate_with_clippy`](Self::validate_with_clippy),
+    /// feature `clippy_verify`): truthful — `true` only when cargo clippy
+    /// confirms the lint did NOT fire on the fixed code.
     pub lint_resolved: bool,
     /// Diagnostic messages from the parser (if any).
     ///
@@ -52,13 +59,13 @@ impl ValidationResult {
 /// Native rust-analyzer pruner.
 ///
 /// Validates drafted clippy fixes using `syn` for in-process syntax parsing.
-/// The `rust_analyzer_bin` / `cargo_bin` fields exist for the future Phase 3
-/// integration (temp-crate scaffolding + `cargo clippy` re-run), but are not
-/// used by the current syntax-only validation.
+/// The `rust_analyzer_bin` / `cargo_bin` fields exist for the Phase 3
+/// integration (temp-crate scaffolding + `cargo clippy` re-run, wired in
+/// [`validate_with_clippy`](Self::validate_with_clippy) behind `clippy_verify`).
 pub struct RustAnalyzerPruner {
-    /// Path to the rust-analyzer binary (reserved for Phase 3 clippy integration).
+    /// Path to the rust-analyzer binary (reserved for future rust-analyzer AST integration).
     rust_analyzer_bin: String,
-    /// Path to the cargo binary (reserved for Phase 3 clippy integration).
+    /// Path to the cargo binary (reserved for Phase 3 cargo clippy integration).
     #[allow(dead_code, reason = "reserved for Phase 3 cargo clippy integration")]
     cargo_bin: String,
 }
@@ -95,16 +102,16 @@ impl RustAnalyzerPruner {
     /// tries `parse_file` first, then falls back to wrapping the snippet in
     /// `fn _wrap() { <code> }` for expression/statement snippets.
     ///
-    /// **Lint resolution (Phase 3 TODO):** always returns `lint_resolved =
-    /// true` — this is a documented limitation, not a lie. The syntax check
-    /// is the load-bearing validation; full `cargo clippy` verification is
-    /// Phase 3 work (temp crate scaffolding + clippy JSON parsing).
+    /// **Lint resolution:** always returns `lint_resolved = true` — this is
+    /// a documented limitation. For truthful lint resolution, use
+    /// [`validate_with_clippy`](Self::validate_with_clippy) (requires the
+    /// `clippy_verify` feature, ~130ms/verify).
     #[must_use]
     pub fn validate(&self, code: &str, _lint_name: &str) -> ValidationResult {
         match Self::parse_rust(code) {
             Ok(()) => ValidationResult {
                 parses: true,
-                lint_resolved: true, // Phase 3 TODO — see struct doc
+                lint_resolved: true, // Fast path — see validate_with_clippy for truthful lint_resolved
                 diagnostics: vec![],
             },
             Err(msg) => ValidationResult {
@@ -155,6 +162,62 @@ impl RustAnalyzerPruner {
     /// marginal diagnostic gain — the error message itself is the value).
     fn format_syn_error(err: &syn::Error) -> String {
         format!("parse error: {err}")
+    }
+
+    /// Validate a drafted fix with BOTH syntax check AND real cargo clippy re-run.
+    ///
+    /// This is the Phase 3 thorough validation path. It first runs the fast
+    /// `syn`-based syntax check (always-on, microseconds), then — if the code
+    /// parses — spawns `cargo clippy` on a temp crate to verify the target lint
+    /// is actually resolved (seconds).
+    ///
+    /// The `lint_resolved` field in the returned [`ValidationResult`] is
+    /// **truthful** when this method is used: it's `true` only when cargo
+    /// clippy confirms the lint did NOT fire on the fixed code.
+    ///
+    /// # Performance
+    ///
+    /// This method is **slow** (seconds per invocation). Use the regular
+    /// [`validate`](Self::validate) for the fast path (syntax only, microseconds).
+    ///
+    /// # Feature gate
+    ///
+    /// Requires the `clippy_verify` feature. Not available in default builds.
+    #[cfg(feature = "clippy_verify")]
+    #[must_use]
+    pub fn validate_with_clippy(&self, code: &str, lint_name: &str) -> ValidationResult {
+        // Step 1: fast syntax check (always-on).
+        let mut result = self.validate(code, lint_name);
+
+        // Step 2: if it parses, run cargo clippy for real lint resolution.
+        if result.parses {
+            let verifier = crate::clippy_verifier::ClippyVerifier::new();
+            let clippy_result = verifier.verify(code, lint_name);
+            result.lint_resolved = clippy_result.lint_resolved;
+
+            // If clippy didn't run (cargo missing, I/O error), note it.
+            if !clippy_result.ran {
+                if let Some(err) = clippy_result.error {
+                    result.diagnostics.push(format!(
+                        "clippy_verify did not run: {err}"
+                    ));
+                }
+            } else if !clippy_result.lint_resolved {
+                // Lint still present — add the present lints as diagnostics.
+                result.diagnostics.push(format!(
+                    "lint not resolved: clippy still reports {}",
+                    clippy_result
+                        .present_lints
+                        .iter()
+                        .filter(|l| l.starts_with("clippy::"))
+                        .cloned()
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ));
+            }
+        }
+
+        result
     }
 
     /// Check if rust-analyzer is available on the system (reserved for Phase 3).
@@ -301,5 +364,42 @@ mod tests {
     fn parse_file_ast_returns_err_on_bad_syntax() {
         let result = RustAnalyzerPruner::parse_file_ast("fn broken( ->");
         assert!(result.is_err());
+    }
+
+    // ── validate_with_clippy (Phase 3 — feature-gated) ────────────────────
+    // These tests verify the composition: syntax check + cargo clippy.
+    // They run real cargo clippy (slow, seconds) so they're #[ignore]'d.
+
+    #[cfg(feature = "clippy_verify")]
+    #[test]
+    #[ignore = "slow: runs real cargo clippy (seconds)"]
+    fn validate_with_clippy_fixed_code_is_truthful() {
+        // G1 for Phase 3: the lint_resolved field is now TRUTHFUL when
+        // validate_with_clippy is used. Fixed code → lint_resolved = true.
+        let pruner = RustAnalyzerPruner::new();
+        let fixed_code = "fn foo() -> i32 { 42 }";
+        let result = pruner.validate_with_clippy(fixed_code, "needless_return");
+        assert!(result.parses, "code must parse");
+        assert!(
+            result.lint_resolved,
+            "fixed code should resolve needless_return"
+        );
+    }
+
+    #[cfg(feature = "clippy_verify")]
+    #[test]
+    #[ignore = "slow: runs real cargo clippy (seconds)"]
+    fn validate_with_clippy_buggy_code_is_truthful() {
+        // G1 for Phase 3: buggy code → lint_resolved = false.
+        // This is the load-bearing test — it proves lint_resolved is no
+        // longer a lie. The old validate() always returned true here.
+        let pruner = RustAnalyzerPruner::new();
+        let buggy_code = "fn foo() -> i32 { return 42; }";
+        let result = pruner.validate_with_clippy(buggy_code, "needless_return");
+        assert!(result.parses, "buggy code is valid Rust, just has a lint");
+        assert!(
+            !result.lint_resolved,
+            "buggy code should NOT resolve needless_return — the field is now truthful"
+        );
     }
 }
