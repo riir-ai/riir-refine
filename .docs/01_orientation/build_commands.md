@@ -17,7 +17,7 @@ cargo check --features clippy_verify
 # L3 ruliology Pareto-front candidate search (Issue 005)
 cargo check --features ruliology_search
 
-# Issue 004: latent-first self-evolution loop (staged, pending commit)
+# Issue 004 + Issue 008: latent-first self-evolution loop (opt-in, G1–G7 PASS)
 cargo check --features self_evolve
 
 # Every feature at once — catches combo-only regressions

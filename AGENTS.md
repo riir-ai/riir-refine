@@ -100,10 +100,10 @@ blockquote + file table + "See also" cross-refs.
 | `04_pruner/` | L2 syn validator: `RustAnalyzerPruner` + `ValidationResult` + honesty contract |
 | `05_clippy_verify/` | Phase 3 lint resolution: `ClippyVerifier` (opt-in `clippy_verify`) |
 | `06_ruliology/` | L3 Pareto-front: `RuliologySearch` + `pareto_front` + `ast_delta_size` (opt-in) |
-| `07_examples/` | The 3 in-tree examples (`heal_demo`, `clippy_verify_demo`, `ruliology_search_demo`) |
+| `07_examples/` | The 4 in-tree examples (`heal_demo`, `clippy_verify_demo`, `ruliology_search_demo`, `self_evolve_real_world_demo`) |
 | `08_benchmarks/` | GOAT gate methodology + measured results |
 | `09_lessons/` | Canonical patterns: borrow-without-dep, modelless-first, freeze/thaw, honest POC caveats, sigmoid-not-softmax |
-| `10_self_evolve/` | Issue 004: latent-first self-evolution loop (`HealPipeline` + `LatentFixMemory` + `LatentSkillEvolution`, opt-in `self_evolve`) |
+| `10_self_evolve/` | Issue 004 + Issue 008: latent-first self-evolution loop (`HealPipeline` + `LatentFixMemory` + `LatentSkillEvolution`, opt-in `self_evolve`; G1–G7 ALL PASS) |
 
 The top-level `.docs/README.md` is the index. `README.md` (repo root) remains
 the build surface (Status + Quick Start + Usage); `AGENTS.md` (this file)

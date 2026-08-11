@@ -57,3 +57,4 @@ is in `.benchmarks/008_real_world_validation.md`.
 
 - [`goat_methodology.md`](goat_methodology.md) — the 4-gate pattern
 - [`../../.benchmarks/001_goat_consolidated.md`](../../.benchmarks/001_goat_consolidated.md) — the persisted record
+- [`../../.benchmarks/008_real_world_validation.md`](../../.benchmarks/008_real_world_validation.md) — self_evolve G6/G7

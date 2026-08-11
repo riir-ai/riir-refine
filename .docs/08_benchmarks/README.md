@@ -14,6 +14,7 @@
 ## Persisted results
 
 - [`.benchmarks/001_goat_consolidated.md`](../../.benchmarks/001_goat_consolidated.md) — L1 + L2 + Phase 3 + L3
+- [`.benchmarks/008_real_world_validation.md`](../../.benchmarks/008_real_world_validation.md) — self_evolve G6/G7 (real cargo clippy)
 
 ## Re-run commands
 
@@ -29,6 +30,9 @@ cargo run --example ruliology_search_demo --features ruliology_search --release
 
 # Phase 3 (opt-in verification — requires cargo+clippy on PATH)
 cargo run --example clippy_verify_demo --features clippy_verify --release
+
+# self_evolve real-world validation (opt-in — requires cargo+clippy on PATH, ~30s)
+cargo run --example self_evolve_real_world_demo --features "self_evolve clippy_verify" --release
 ```
 
 ## See also

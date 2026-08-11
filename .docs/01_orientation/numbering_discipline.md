@@ -18,10 +18,10 @@ This prevents the number-recycling collision documented in
 
 | Folder | Highwater |
 |---|---|
-| `.issues/` | 7 |
+| `.issues/` | 8 |
 | `.plans/` | (none yet) |
 | `.docs/` | (this book uses folder numbers, not file numbers — see below) |
-| `.benchmarks/` | 1 |
+| `.benchmarks/` | 2 |
 | `.research/` | 1 |
 
 ## `.docs/` special case
