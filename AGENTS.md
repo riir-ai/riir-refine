@@ -84,6 +84,37 @@ The modelless path (L0-L3) is PRIMARY. LoRA (L4) is the conservative last resort
 The self-evolution layer (Issue 004) is additive — it composes on top of L0-L2
 without modifying the frozen pipeline.
 
+## Documentation Shape
+
+This repo ships a **10-folder numbered `.docs/` book** (opened 2026-08-11,
+Issue 007), matching the `riir-ai/.docs/` / `riir-neuron-db/.docs/` /
+`riir-game-sdk/.docs/` format: numbered folders for sort order, unnumbered
+`.md` files inside, each folder has a `README.md` index with a purpose
+blockquote + file table + "See also" cross-refs.
+
+| Folder | Scope |
+|---|---|
+| `01_orientation/` | Crate role, sibling layout, boundary rationale, build commands, numbering |
+| `02_corpus/` | L0 rule distillation: `ClippyCorpus` + BLAKE3 commitment + seed corpus |
+| `03_drafter/` | L1 ternary SIMD matvec: `ClippyTernaryDrafter` + BLAKE3 `embedder` |
+| `04_pruner/` | L2 syn validator: `RustAnalyzerPruner` + `ValidationResult` + honesty contract |
+| `05_clippy_verify/` | Phase 3 lint resolution: `ClippyVerifier` (opt-in `clippy_verify`) |
+| `06_ruliology/` | L3 Pareto-front: `RuliologySearch` + `pareto_front` + `ast_delta_size` (opt-in) |
+| `07_examples/` | The 3 in-tree examples (`heal_demo`, `clippy_verify_demo`, `ruliology_search_demo`) |
+| `08_benchmarks/` | GOAT gate methodology + measured results |
+| `09_lessons/` | Canonical patterns: borrow-without-dep, modelless-first, freeze/thaw, honest POC caveats, sigmoid-not-softmax |
+| `10_self_evolve/` | Issue 004: latent-first self-evolution loop (`HealPipeline` + `LatentFixMemory` + `LatentSkillEvolution`, opt-in `self_evolve`) |
+
+The top-level `.docs/README.md` is the index. `README.md` (repo root) remains
+the build surface (Status + Quick Start + Usage); `AGENTS.md` (this file)
+remains the authoritative repo-local context.
+
+For `.docs/`: files inside numbered folders have **no number prefix**.
+Filenames are bare slugs (e.g. `crate_role.md`). The folder number provides
+sort order; the filename provides identity. Add a new doc by dropping
+`slug.md` in the right group folder and adding one line to that folder's
+`README.md` index table.
+
 ## Numbering Discipline
 
 Issue, plan, doc, benchmark, and research numbers are **monotonic and never
