@@ -297,6 +297,58 @@ dev tool, not a game pillar amplifier).
 `blake3`) already exist there. **Nothing ships in riir-ai** — the patterns
 are borrowed, not imported.
 
+## Deferred / future work
+
+Validated + shipped (G1-G7 ALL PASS). Three items deferred pending
+concrete triggers — recorded here so they're not lost when the issue
+tracker is pruned.
+
+### D1 — `self_evolve` stays opt-in (decision, not a defect)
+
+**Trigger to revisit:** a deployment environment where `clippy_verify` is
+on the default path (e.g. a CI bot with cargo always on PATH).
+
+The mechanism is validated against real `cargo clippy` feedback (G7:
+50.0pp improvement, 50% → 100%). The opt-in gate is a deployment-
+environment constraint, not a correctness concern: `clippy_verify` is
+itself opt-in (slow, ~130ms/verify, requires cargo+clippy on PATH), and
+`self_evolve`'s feedback loop depends on it. Promoting `self_evolve` to
+default-on without `clippy_verify` available means the loop can't run.
+
+### D2 — Graph k-hop retrieval axis (research candidate)
+
+**Trigger to revisit:** a concrete use case where latent + BM25 retrieval
+is demonstrably insufficient (missed a fix that a lint→lint taxonomy
+adjacency would have found).
+
+The current `LatentFixMemory` has 2 retrieval axes:
+1. **Latent** — 8-D vector KNN via BLAKE3-deterministic embedding
+2. **BM25** — exact symbol match on lint_name + code tokens
+
+A 3rd axis would be **graph k-hop** over a lint→lint taxonomy (e.g.
+`needless_return` is adjacent to `needless_return_loop` is adjacent to
+`redundant_closure`). The substrate exists in `riir-rag`'s `graph_rag`
+feature (Plan 526) but adds ~2MB of dep weight (`kg_triple + syn`).
+
+Defer until the 2-axis retrieval shows a concrete gap. TheGOAT G5/G7
+results show 2 axes is sufficient for the current 10-lint seed corpus.
+
+### D3 — Production-scale profiling (perf follow-up)
+
+**Trigger to revisit:** `LatentFixMemory` grows beyond 10K trajectories,
+or the `success_rate_for` lookup shows up in a profile.
+
+The `success_rate_for(lint_name, fixed_code)` lookup added in Issue 008
+(G7 fix) is a linear scan over all trajectories. Measured at ~6µs at
+N=1000 (within the G2 latency budget). At production scale (10K+ 
+trajectories accumulated over weeks of CI runs), this may become a
+bottleneck.
+
+**Mitigation when triggered:** add a `HashMap<(lint_name_hash,
+fixed_code_hash), Stats>` index alongside the `Vec<FixTrajectory>`. 
+The hashes are already computed for the latent axis; the index is a
+one-line insert on `record_outcome`. No change to the retrieval API.
+
 ## Related Research
 
 - [Proposal 034](../riir-ai/.proposals/034_clippy_healing_drafter_pruner.md) — the clippy-healing design this extends
