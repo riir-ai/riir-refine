@@ -21,7 +21,7 @@ This prevents the number-recycling collision documented in
 | `.issues/` | 8 |
 | `.plans/` | (none yet) |
 | `.docs/` | (this book uses folder numbers, not file numbers — see below) |
-| `.benchmarks/` | 2 |
+| `.benchmarks/` | 8 |
 | `.research/` | 1 |
 
 ## `.docs/` special case
