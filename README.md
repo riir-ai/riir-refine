@@ -13,7 +13,7 @@ fallback, not the co-equal path.
 
 | Layer | Status |
 |---|---|
-| L0 — Corpus (rule distillation) | ✅ Done (BLAKE3-committed freeze/thaw) |
+| L0 — Corpus (rule distillation) | ✅ Done (BLAKE3-committed freeze/thaw + seed corpus with 10 common lints) |
 | L1 — Ternary SIMD drafter | ✅ Done (Issue 001, zero-alloc matvec, p50=2.3µs) |
 | L2 — Syntax validator | ✅ Done (Issue 002, `syn`-based parse check, p50=6.8µs) |
 | L2 — Lint resolution check | ⏳ Phase 3 (temp-crate + `cargo clippy` JSON) |
@@ -52,20 +52,27 @@ The primary path (L0-L3) is entirely modelless — no training, no backprop:
 The LoRA fallback (L4) is deferred to riir-train and is the conservative last
 resort, not a co-equal path.
 
+## Quick Start
+
+```sh
+# Run the end-to-end demo (L0 corpus → L1 drafter → L2 pruner)
+cargo run --example heal_demo
+```
+
 ## Usage
 
 ```rust
-use riir_clippy::{ClippyCorpus, ClippyTernaryDrafter, RustAnalyzerPruner};
+use riir_clippy::{build_seed_corpus, ClippyTernaryDrafter, RustAnalyzerPruner};
 
-// Build the corpus from (lint, buggy, fixed) entries
-let corpus = ClippyCorpus::new(entries);
+// Build the corpus from seed entries (or your own)
+let corpus = build_seed_corpus();
 
 // Draft a fix (fallback mode = corpus template lookup)
 let mut drafter = ClippyTernaryDrafter::fallback();
-let candidates: Vec<_> = corpus.lookup("needless_return").collect();
+let candidates: Vec<_> = corpus.lookup("needless_return").cloned().collect();
 let drafted = drafter.draft_fix("needless_return", buggy_code, &candidates)?;
 
-// Validate with rust-analyzer
+// Validate with the syn-based syntax pruner
 let pruner = RustAnalyzerPruner::new();
 let result = pruner.validate(&drafted.code, "needless_return");
 if result.is_valid() {

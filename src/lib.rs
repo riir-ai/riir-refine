@@ -34,7 +34,9 @@
 pub mod corpus;
 pub mod drafter;
 pub mod pruner;
+pub mod seed_corpus;
 
 pub use corpus::ClippyCorpus;
 pub use drafter::ClippyTernaryDrafter;
 pub use pruner::RustAnalyzerPruner;
+pub use seed_corpus::build_seed_corpus;
