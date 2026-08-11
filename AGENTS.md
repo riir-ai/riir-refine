@@ -76,10 +76,9 @@ cargo run --example ruliology_search_demo --features ruliology_search --release
 - `default`: L0 (corpus) + L1 (ternary drafter) + L2 (native rust-analyzer pruner)
 - `clippy_verify` (opt-in): Phase 3 lint resolution verification via real `cargo clippy` re-run. Slow (~130ms/verify), requires cargo+clippy on PATH.
 - `ruliology_search` (opt-in): L3 Pareto-front candidate search. Reuses the algorithm pattern from `katgpt-ruliology` (Bench 572) without a code-level dep. Runs once per lint invocation (~400µs/10 candidates), not per-tick.
-- `self_evolve` (opt-in, Issue 004): latent-first self-evolution loop (memory + EMA direction update). Default-off until G5 (self-evolution gain ≥5pp) passes.
+- `self_evolve` (opt-in, Issue 004): latent-first self-evolution loop — `LatentFixMemory` (3-axis retrieval over fix trajectories) + `LatentSkillEvolution` (EMA direction-vector update). GOAT G1-G5 ALL PASS (G5: 70pp healing rate improvement in controlled fixture). Borrows `dot+sigmoid` from riir-agents + 3-axis retrieval from riir-rag, reimplemented locally (~730 LOC, boundary-compliant). Stays opt-in until validated against real cargo clippy feedback (Phase 3 `clippy_verify` integration).
 - `wasm_pruner` (opt-in, deferred): L2 WASM rust-analyzer variant (blocked on rubrc)
 - `clippy_lora` (opt-in, deferred): L4 adaptive LoRA fallback (blocked on riir-train integration)
-- `self_evolve` (opt-in, Issue 004): latent-first self-evolution loop — `LatentFixMemory` (3-axis retrieval over fix trajectories) + `LatentSkillEvolution` (EMA direction-vector update). GOAT G1-G5 ALL PASS (G5: 70pp healing rate improvement in controlled fixture). Borrows `dot+sigmoid` from riir-agents + 3-axis retrieval from riir-rag, reimplemented locally (~730 LOC, boundary-compliant). Stays opt-in until validated against real cargo clippy feedback (Phase 3 `clippy_verify` integration).
 
 The modelless path (L0-L3) is PRIMARY. LoRA (L4) is the conservative last resort.
 The self-evolution layer (Issue 004) is additive — it composes on top of L0-L2

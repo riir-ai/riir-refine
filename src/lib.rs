@@ -35,6 +35,7 @@
 
 pub mod corpus;
 pub mod drafter;
+pub mod embedder;
 pub mod pruner;
 pub mod seed_corpus;
 
@@ -50,8 +51,19 @@ pub mod clippy_verifier;
 #[cfg(feature = "ruliology_search")]
 pub mod ruliology_search;
 
-pub use corpus::ClippyCorpus;
+// Issue 004: latent-first self-evolution loop (memory + EMA direction update).
+// Opt-in because it's an experimental layer on top of the frozen L0-L2 pipeline.
+// Default-off until G5 (self-evolution gain) passes.
+#[cfg(feature = "self_evolve")]
+pub mod evolve;
+#[cfg(feature = "self_evolve")]
+pub mod memory;
+#[cfg(feature = "self_evolve")]
+pub mod self_evolve;
+
+pub use corpus::{ClippyCorpus, ClippyFixEntry};
 pub use drafter::ClippyTernaryDrafter;
+pub use embedder::{Direction, EMBED_DIM, embed, embed_into};
 pub use pruner::RustAnalyzerPruner;
 pub use seed_corpus::build_seed_corpus;
 
@@ -60,3 +72,10 @@ pub use clippy_verifier::ClippyVerifier;
 
 #[cfg(feature = "ruliology_search")]
 pub use ruliology_search::{RuliologySearch, ScoredCandidate};
+
+#[cfg(feature = "self_evolve")]
+pub use evolve::{EvolveConfig, LatentSkillEvolution};
+#[cfg(feature = "self_evolve")]
+pub use memory::{FixTrajectory, LatentFixMemory, LatentQuery, ScoredTrajectory};
+#[cfg(feature = "self_evolve")]
+pub use self_evolve::{HealPipeline, HealResult, HealSource};
