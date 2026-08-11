@@ -9,8 +9,9 @@ This record persists the GOAT gate measurements for the four committed
 layers of the clippy-healing pipeline. Each gate was measured by running
 its dedicated bench/example target in release mode on a clean tree.
 
-The Issue 004 (`self_evolve`) GOAT results will ship in a separate record
-once that work commits.
+The Issue 004 (`self_evolve`) GOAT results (G1-G5) are captured in
+`10_self_evolve/`; the real-world validation (G6/G7, Issue 008) is in
+`008_real_world_validation.md`.
 
 ---
 
@@ -135,7 +136,8 @@ cargo run --example clippy_verify_demo --features clippy_verify --release
 
 ## References
 
-- [Issue 001](../.issues/) — L1 ternary matvec (resolved + removed per noise-reduction)
-- [Issue 002](../.issues/) — L2 syn pruner (resolved + removed per noise-reduction)
-- [Issue 003](../.issues/003_phase3_clippy_lint_resolution_verify.md) — Phase 3 clippy verify
-- [Issue 005](../.issues/005_l3_ruliology_pareto_front_candidate_search.md) — L3 ruliology search
+- Issues 001 + 002 — L1 ternary matvec + L2 syn pruner (resolved + removed per noise-reduction)
+- Issue 003 — Phase 3 clippy verify (resolved + removed per noise-reduction; captured in `05_clippy_verify/`)
+- Issue 005 — L3 ruliology search (resolved + removed per noise-reduction; captured in `06_ruliology/`)
+- Issue 004 — self_evolve loop (resolved + removed per noise-reduction; captured in `10_self_evolve/`)
+- Issue 008 — real-world validation G6/G7 (resolved + removed; captured in `008_real_world_validation.md`)

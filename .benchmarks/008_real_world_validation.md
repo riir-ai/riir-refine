@@ -1,7 +1,7 @@
 # Benchmark 008 — Real-World Validation of self_evolve via clippy_verify
 
 **Date:** 2026-08-11
-**Issue:** [008](../.issues/008_real_world_clippy_verify_validation.md)
+**Issue:** 008 (resolved + removed per noise-reduction; resolution captured here)
 **Gate:** G6 (corpus truthfulness) + G7 (self-evolution with real cargo clippy)
 
 ## Setup

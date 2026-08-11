@@ -253,7 +253,7 @@ the evolution mechanism works.
 
 ## GOAT gate sketch
 
-The POC issue (`.issues/004`) defines the gate:
+The POC issue (Issue 004, resolved + removed per noise-reduction; canonical record is `.docs/10_self_evolve/` + `.benchmarks/008_real_world_validation.md`) defined the gate:
 
 | Gate | What | Target |
 |---|---|---|

@@ -52,11 +52,12 @@ L3 — RULIOLOGY SEARCH (opt-in)                      ← L3 (06_ruliology)
   [ validated clippy fix ]
 ```
 
-## Open validation
+## Resolved validation
 
-- **Issue 008** — real-world validation of `self_evolve` via `cargo clippy`
-  feedback (G6 corpus truthfulness + G7 self-evolution with real clippy).
-  In progress. See `.issues/008_real_world_clippy_verify_validation.md`.
+- **Issue 008** (resolved + removed per noise-reduction) — real-world
+  validation of `self_evolve` via `cargo clippy` feedback (G6 corpus
+  truthfulness + G7 self-evolution with real clippy). Both gates PASS.
+  See `.benchmarks/008_real_world_validation.md`.
 
 ## See also
 

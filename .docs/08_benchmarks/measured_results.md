@@ -49,9 +49,9 @@ For a single clippy lint invocation (one lint, one fix candidate):
 
 ## Issue 004 (self_evolve)
 
-The Issue 004 (`self_evolve`) GOAT results will ship in a separate record
-once that work commits. The feature is staged but uncommitted (sibling
-agent's WIP).
+The Issue 004 (`self_evolve`) GOAT results (G1-G5) are captured in the
+`10_self_evolve/` folder. The real-world validation (G6/G7, Issue 008)
+is in `.benchmarks/008_real_world_validation.md`.
 
 ## See also
 
