@@ -8,9 +8,10 @@
 //!
 //! These examples are **illustrative** — the L2 syntax pruner validates that
 //! the fixed code parses as valid Rust, but does NOT verify the lint is
-//! actually resolved (that's Phase 3: `cargo clippy` re-run). The `buggy_code`
-//! and `fixed_code` represent the *pattern* the tool learns from, not
-//! verified trigger/fix pairs.
+//! actually resolved in the fast path. For truthful lint resolution, enable
+//! the `clippy_verify` feature and use `validate_with_clippy` (runs real
+//! `cargo clippy`). The `buggy_code` and `fixed_code` represent the *pattern*
+//! the tool learns from, not verified trigger/fix pairs in the fast path.
 
 use crate::corpus::{ClippyCorpus, ClippyFixEntry};
 

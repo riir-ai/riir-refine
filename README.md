@@ -16,7 +16,7 @@ fallback, not the co-equal path.
 | L0 — Corpus (rule distillation) | ✅ Done (BLAKE3-committed freeze/thaw + seed corpus with 10 common lints) |
 | L1 — Ternary SIMD drafter | ✅ Done (Issue 001, zero-alloc matvec, p50=2.3µs) |
 | L2 — Syntax validator | ✅ Done (Issue 002, `syn`-based parse check, p50=6.8µs) |
-| L2 — Lint resolution check | ⏳ Phase 3 (temp-crate + `cargo clippy` JSON) |
+| L2 — Lint resolution check | ✅ Done (Issue 003, `clippy_verify` feature, real `cargo clippy` JSON parsing, ~130ms/verify) |
 | L3 — Ruliology search | ⏳ Feature-gated, not implemented |
 | L4 — LoRA fallback | ⏳ Deferred to riir-train |
 
@@ -35,7 +35,7 @@ L1 — MODELLESS DRAFTER (PlasmaPath ternary SIMD matvec)
          ▼
 L2 — VALIDATOR (always-on)
   `syn` in-process parse check (fast, modelless)
-  Phase 3: `cargo clippy` re-run for lint resolution (deferred)
+  Phase 3: `cargo clippy` re-run for lint resolution (feature `clippy_verify`)
          │
          ▼
   [ validated clippy fix ]

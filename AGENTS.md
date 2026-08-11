@@ -12,7 +12,8 @@ The pipeline:
 1. **L0 — Rule distillation**: each clippy lint → named rule + bounded fix-space
 2. **L1 — Plasma/hot path drafter**: modelless ternary SIMD matvec, zero-alloc (Issue 001, DONE)
 3. **L2 — Validator**: `syn`-based syntax parse check (always-on, modelless — Issue 002, DONE).
-   Lint resolution verification via `cargo clippy` re-run is Phase 3 (deferred).
+   Lint resolution verification via `cargo clippy` re-run is Phase 3 (Issue 003,
+   feature-gated `clippy_verify`, DONE).
 4. **L3 — Ruliology candidate search** (opt-in): Pareto-front enumeration
 5. **L4 — LoRA fallback** (deferred): adaptive learning, last resort
 
@@ -65,6 +66,7 @@ cargo check --all-features
 ## Feature Flag Discipline
 
 - `default`: L0 (corpus) + L1 (ternary drafter) + L2 (native rust-analyzer pruner)
+- `clippy_verify` (opt-in): Phase 3 lint resolution verification via real `cargo clippy` re-run. Slow (~130ms/verify), requires cargo+clippy on PATH.
 - `ruliology_search` (opt-in): L3 Pareto-front candidate enumeration
 - `wasm_pruner` (opt-in, deferred): L2 WASM rust-analyzer variant (blocked on rubrc)
 - `clippy_lora` (opt-in, deferred): L4 adaptive LoRA fallback (blocked on riir-train integration)
