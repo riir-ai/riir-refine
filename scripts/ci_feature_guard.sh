@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# riir-clippy feature isolation guard.
+#
+# Runs five cargo layers to catch feature-combo regressions:
+#   1. --no-default-features  → zero-dep baseline (only katgpt-core cross-repo)
+#   2. default features       → the production path
+#   3. --each-feature         → all 5 single-feature combos (--keep-going, so
+#                               one run enumerates every failure — the
+#                               riir-chain Issue 034 lesson)
+#   4. --all-features         → every feature at once (catches combo-only bugs
+#                               like the new_spectral/merkle_root regression
+#                               documented in riir-neuron-db AGENTS.md)
+#   5. clippy + tests         → lint + lib tests under default + all-features
+#
+# No Lean proof gate (this repo has no `.proofs/`).
+# No wasm32 gate (the `wasm_pruner` feature is deferred on rubrc maturity).
+#
+# Requires cargo-hack for layer 3: `cargo install cargo-hack --locked`.
+set -euo pipefail
+
+echo "=== Layer 1: zero-dep baseline (--no-default-features) ==="
+cargo check --no-default-features
+echo "✓ --no-default-features passes"
+
+echo
+echo "=== Layer 2: default features (the production path) ==="
+cargo check
+echo "✓ default features compile"
+
+echo
+echo "=== Layer 3: per-feature check (--each-feature) ==="
+if command -v cargo-hack &>/dev/null; then
+    # `--keep-going`: without it the run aborts on the first broken feature, so
+    # it reports *a* failure rather than *the* failures (riir-chain Issue 034).
+    cargo hack check --each-feature --keep-going
+    echo "✓ all single-feature combos pass"
+else
+    echo "⚠ cargo-hack not installed, skipping per-feature check"
+    echo "  install with: cargo install cargo-hack --locked"
+fi
+
+echo
+echo "=== Layer 4: all-features combination check ==="
+# Catches combo-only bugs — the class where no single feature turns on both
+# sides of a regression simultaneously (the merkle_root/can_freeze lesson,
+# riir-neuron-db AGENTS.md). riir-clippy's 5 features are mostly independent,
+# but `self_evolve` + `ruliology_search` both touch the drafter/pruner surface.
+cargo check --all-features
+echo "✓ --all-features compiles"
+
+echo
+echo "=== Layer 5a: clippy (no-default-features + all-features) ==="
+cargo clippy --all-targets --no-default-features -- -D warnings
+cargo clippy --all-targets --all-features -- -D warnings
+echo "✓ clippy clean (both feature extremes)"
+
+echo
+echo "=== Layer 5b: lib tests (default + all-features) ==="
+cargo test --lib
+cargo test --lib --all-features
+echo "✓ lib tests pass (both feature sets)"
+
+echo
+echo "=== All layers PASS ==="

@@ -73,6 +73,14 @@ resort, not a co-equal path.
 ```sh
 # Run the end-to-end demo (L0 corpus → L1 drafter → L2 pruner)
 cargo run --example heal_demo
+
+# Full CI guard (5 layers: no-dep / default / per-feature / all-features / clippy+tests)
+./scripts/ci_feature_guard.sh
+
+# Re-run GOAT benches (results persisted in .benchmarks/001_goat_consolidated.md)
+cargo bench --bench bench_001_l1_matvec      # L1 hot path
+cargo bench --bench bench_002_l2_pruner_syn   # L2 hot path
+cargo run --example ruliology_search_demo --features ruliology_search --release  # L3 opt-in
 ```
 
 ## Usage
@@ -98,6 +106,7 @@ if result.is_valid() {
 
 ## References
 
+- [Bench 001](.benchmarks/001_goat_consolidated.md) — consolidated GOAT gate results (L1 + L2 + Phase 3 + L3)
 - [Proposal 034](../riir-ai/.proposals/034_clippy_healing_drafter_pruner.md) — the design argument
 - [Plan 331 Phase A](../riir-train/.plans/331_lora_rust_coder_candidates_consolidated.md) — Gemma-2 r16 production (LoRA fallback base)
 - [Plan 333](../riir-train/.plans/333_bitnet_ternary_moe_neuro_symbolic_poc.md) — Ternary-Bonsai-27B (LoRA fallback primary base)
