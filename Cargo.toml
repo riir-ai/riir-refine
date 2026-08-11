@@ -19,6 +19,10 @@ blake3 = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
+# L2 pruner: pure Rust syntax parser (modelless, zero ML).
+# Already in Cargo.lock transitively — zero new dep cost.
+syn = { version = "2", default-features = false, features = ["full", "parsing", "derive"] }
+
 [dev-dependencies]
 
 [features]
@@ -35,4 +39,8 @@ clippy_lora = []
 
 [[bench]]
 name = "bench_001_l1_matvec"
+harness = false
+
+[[bench]]
+name = "bench_002_l2_pruner_syn"
 harness = false

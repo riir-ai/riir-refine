@@ -7,8 +7,9 @@
 //! 2. **L1 — Plasma/hot path drafter**: modelless ternary SIMD matvec proposes
 //!    fixes using frozen direction vectors. Zero-alloc hot path. Template
 //!    fallback when no weights loaded.
-//! 3. **L2 — Validator**: native rust-analyzer pruner validates parse +
-//!    type-check. WASM variant (opt-in) for sandboxed distribution.
+//! 3. **L2 — Validator**: `syn`-based syntax parse check (always-on,
+//!    modelless). Lint resolution verification via `cargo clippy` re-run is
+//!    Phase 3 work.
 //! 4. **L3 — Ruliology candidate search** (opt-in): Pareto-front enumeration
 //!    when multiple valid fixes exist.
 //! 5. **L4 — LoRA fallback** (deferred): adaptive learning on the residual

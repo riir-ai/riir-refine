@@ -4,12 +4,21 @@ Clippy-healing drafter+pruner pipeline: modelless ternary drafter × rust-analyz
 
 ## Status
 
-**POC — Phase 0 (rule distillation foundation)**
+**POC — Phase 0 (rule distillation) + L1 (drafter) + L2 (syntax validator) done.**
 
 The clippy-healing pipeline that distills clippy rules into a ruliology-style
 search space, drafts fixes via a modelless ternary SIMD matvec, and validates
-with a rust-analyzer constraint pruner. Heavyweight LoRA is the last-resort
+with a `syn`-based syntax pruner. Heavyweight LoRA is the last-resort
 fallback, not the co-equal path.
+
+| Layer | Status |
+|---|---|
+| L0 — Corpus (rule distillation) | ✅ Done (BLAKE3-committed freeze/thaw) |
+| L1 — Ternary SIMD drafter | ✅ Done (Issue 001, zero-alloc matvec, p50=2.3µs) |
+| L2 — Syntax validator | ✅ Done (Issue 002, `syn`-based parse check, p50=6.8µs) |
+| L2 — Lint resolution check | ⏳ Phase 3 (temp-crate + `cargo clippy` JSON) |
+| L3 — Ruliology search | ⏳ Feature-gated, not implemented |
+| L4 — LoRA fallback | ⏳ Deferred to riir-train |
 
 ## Architecture
 
@@ -25,8 +34,8 @@ L1 — MODELLESS DRAFTER (PlasmaPath ternary SIMD matvec)
          │
          ▼
 L2 — VALIDATOR (always-on)
-  Native rust-analyzer (default) — parse + type-check + clippy re-run
-  WASM rust-analyzer (opt-in, deferred on rubrc maturity)
+  `syn` in-process parse check (fast, modelless)
+  Phase 3: `cargo clippy` re-run for lint resolution (deferred)
          │
          ▼
   [ validated clippy fix ]

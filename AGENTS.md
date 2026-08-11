@@ -10,8 +10,9 @@ game concern, NOT a training repo, NOT a chain repo.
 
 The pipeline:
 1. **L0 — Rule distillation**: each clippy lint → named rule + bounded fix-space
-2. **L1 — Plasma/hot path drafter**: modelless ternary SIMD matvec, zero-alloc
-3. **L2 — Validator**: native rust-analyzer (default) or WASM (opt-in, deferred)
+2. **L1 — Plasma/hot path drafter**: modelless ternary SIMD matvec, zero-alloc (Issue 001, DONE)
+3. **L2 — Validator**: `syn`-based syntax parse check (always-on, modelless — Issue 002, DONE).
+   Lint resolution verification via `cargo clippy` re-run is Phase 3 (deferred).
 4. **L3 — Ruliology candidate search** (opt-in): Pareto-front enumeration
 5. **L4 — LoRA fallback** (deferred): adaptive learning, last resort
 
