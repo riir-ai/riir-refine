@@ -72,6 +72,7 @@ impl LatentFixMemory {
                     scratch: &mut Vec<usize>,
                     out: &mut [ScoredTrajectory]) -> usize;
     pub fn record_outcome(&mut self, lint_name: &str, fixed_code: &str, success: bool);
+    pub fn success_rate_for(&self, lint_name: &str, fixed_code: &str) -> f32;
     pub fn len(&self) -> usize;
     pub fn is_empty(&self) -> bool;
 }
@@ -89,6 +90,25 @@ pub struct LatentQuery {
 
 The query pre-computes its embedding + hash at construction time so the
 retrieval hot path is pure arithmetic (no hashing in the loop).
+
+## `success_rate_for` (Issue 008)
+
+```rust
+pub fn success_rate_for(&self, lint_name: &str, fixed_code: &str) -> f32
+```
+
+Looks up the actual success rate for a specific `(lint_name, fixed_code)`
+pair. Returns `0.5` (neutral) if no trajectory exists for this pair.
+
+This was added in Issue 008 to fix a G7 mechanism bug: the heal pipeline
+previously hardcoded `success_rate = 0.5` for drafter candidates, which
+masked fail feedback — a repeatedly-failed drafter pick kept its neutral
+0.5, tying with the correct candidate (also 0.5) and winning ties. Now
+the pipeline looks up the actual trajectory stats, so after a fail the
+drafter candidate's rate drops to 0.0 and the correct candidate wins.
+
+Linear scan over all trajectories — acceptable for POC scale, worth
+profiling at production volume.
 
 ## See also
 

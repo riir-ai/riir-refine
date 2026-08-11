@@ -31,9 +31,11 @@ memory exists, it degenerates to the existing static-corpus path.
 ## Status
 
 - **Shipped:** commit `bf342f1` (2026-08-11). GOAT G1–G5 ALL PASS.
-- **Open:** [Issue 008](../../.issues/008_real_world_clippy_verify_validation.md)
-  — real-world validation via `cargo clippy` feedback (G6 corpus
-  truthfulness + G7 self-evolution with real clippy). In progress.
+- **Validated:** commit `458f1b4` (2026-08-11). G6 (10/10 corpus truthfulness)
+  + G7 (50.0pp improvement with real `cargo clippy` feedback) ALL PASS.
+  See [Bench 008](../../.benchmarks/008_real_world_validation.md).
+- **Feature gate:** stays opt-in — deployment constraint
+  (`clippy_verify` is itself opt-in), not a correctness concern.
 
 ## See also
 
