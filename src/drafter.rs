@@ -86,12 +86,26 @@ impl ClippyTernaryDrafter {
         self.weights.is_none()
     }
 
+    /// Current capacity of the input scratch buffer (for G4 alloc-free checks).
+    #[inline]
+    #[must_use]
+    pub fn input_scratch_capacity(&self) -> usize {
+        self.input_scratch.capacity()
+    }
+
+    /// Current capacity of the output scratch buffer (for G4 alloc-free checks).
+    #[inline]
+    #[must_use]
+    pub fn output_scratch_capacity(&self) -> usize {
+        self.output_scratch.capacity()
+    }
+
     /// Draft a fix for the given lint name and buggy code.
     ///
     /// - **Fallback mode**: returns the first corpus entry for this lint.
     /// - **With weights (L1)**: runs the ternary SIMD matvec over a
-    ///   BLAKE3-deterministic embedding of (lint_name, buggy_code) to select
-    ///   the best fix candidate. Zero-alloc hot path.
+    ///   BLAKE3-deterministic embedding of (`lint_name`, `buggy_code`) to select
+    ///   the best fix candidate. Zero-alloc hot path (reuses scratch buffers).
     ///
     /// The actual fix validation happens in the pruner (L2), NOT here.
     /// The drafter proposes; the pruner disposes.
@@ -105,18 +119,69 @@ impl ClippyTernaryDrafter {
             return None;
         }
 
-        if self.weights.is_some() {
-            // L1: ternary matvec path (zero-alloc, reuses scratch buffers)
-            // TODO: embed (lint_name, buggy_code) into input_scratch via
-            // BLAKE3-deterministic feature extraction, run ternary matvec,
-            // sigmoid the output to get confidence, select best candidate.
-            //
-            // For now (POC stub): deterministically pick based on hash.
-            let idx = simple_hash_select(lint_name, buggy_code, candidates.len());
+        if let Some(tw) = self.weights.as_ref() {
+            // L1: ternary SIMD matvec path (zero-alloc, reuses scratch buffers).
+            // 1. BLAKE3-hash (lint_name, buggy_code) → fill input_scratch with
+            //    normalized hash bytes (cycling for cols > 32). Hash bytes give
+            //    better signal diversity than raw code bytes (ASCII-biased).
+            // 2. simd_ternary_matvec → output_scratch.
+            // 3. Sigmoid(mean(output)) → confidence (feature-dependent, not hardcoded).
+            // 4. FNV-1a hash of output scores → candidate index (same proven
+            //    pattern as quest_grammar::plasma_draft::generate_with_weights).
+            let input = &mut self.input_scratch;
+            debug_assert_eq!(
+                input.len(),
+                tw.cols,
+                "input_scratch len {} != weights.cols {}",
+                input.len(),
+                tw.cols
+            );
+
+            // BLAKE3 hash of (lint_name \0 buggy_code) -> 32 bytes of high-entropy seed.
+            let mut hasher = blake3::Hasher::new();
+            hasher.update(lint_name.as_bytes());
+            hasher.update(b"\x00");
+            hasher.update(buggy_code.as_bytes());
+            let hash = hasher.finalize();
+            let hb = hash.as_bytes(); // 32 bytes
+
+            // Cycle the 32 hash bytes through input_scratch (cols may be > 32).
+            // Normalize byte [0, 255] → f32 [-0.5, 0.5] for a zero-centered input.
+            for (i, slot) in input.iter_mut().enumerate() {
+                *slot = f32::from(hb[i % 32]) / 255.0 - 0.5;
+            }
+
+            let output = &mut self.output_scratch;
+            debug_assert_eq!(
+                output.len(),
+                tw.rows,
+                "output_scratch len {} != weights.rows {}",
+                output.len(),
+                tw.rows
+            );
+            katgpt_core::simd_ternary_matvec(tw, input, output);
+
+            // Confidence: sigmoid(mean(output)) → scalar in (0, 1).
+            #[allow(clippy::cast_precision_loss)] // output.len() is small (<256 rows)
+            let mean = output.iter().sum::<f32>() / output.len() as f32;
+            let confidence = sigmoid(mean);
+
+            // Candidate selection: FNV-1a fold over output scores → index.
+            // Same deterministic reduction as quest_grammar's plasma_draft.
+            let output_hash = output
+                .iter()
+                .enumerate()
+                .fold(0xcbf2_9ce4_8422_2325_u64, |h, (i, &v)| {
+                    let bits = v.to_bits();
+                    h ^ (u64::from(bits).wrapping_add((i as u64).wrapping_mul(0x0100_0000_01b3)))
+                });
+            #[allow(clippy::cast_possible_truncation)] // intentional: index via modulo
+            let idx = (output_hash % candidates.len() as u64) as usize;
+
             let entry = &candidates[idx];
             Some(DraftedFix {
                 code: entry.fixed_code.clone(),
-                confidence: 0.7, // placeholder until matvec is wired
+                confidence,
                 source: DraftSource::TernaryMatvec,
             })
         } else {
@@ -131,20 +196,10 @@ impl ClippyTernaryDrafter {
     }
 }
 
-/// Deterministic index selection via BLAKE3 hash (placeholder for full matvec).
-fn simple_hash_select(lint_name: &str, buggy_code: &str, n: usize) -> usize {
-    let mut hasher = blake3::Hasher::new();
-    hasher.update(lint_name.as_bytes());
-    hasher.update(b"\x00");
-    hasher.update(buggy_code.as_bytes());
-    let hash = hasher.finalize();
-    let bytes = hash.as_bytes();
-    // Use first 8 bytes as u64
-    let val = u64::from_le_bytes([
-        bytes[0], bytes[1], bytes[2], bytes[3],
-        bytes[4], bytes[5], bytes[6], bytes[7],
-    ]);
-    (val as usize) % n
+/// Logistic sigmoid (never softmax per AGENTS.md rule).
+#[inline]
+fn sigmoid(x: f32) -> f32 {
+    1.0 / (1.0 + (-x).exp())
 }
 
 #[cfg(test)]
@@ -189,10 +244,100 @@ mod tests {
         assert!(fix.is_none());
     }
 
+    // ── L1 ternary matvec path tests ──────────────────────────────────────
+
+    /// Build small deterministic ternary weights for testing the L1 path.
+    /// Uses `quantize_from_f32` — the same constructor as `quest_grammar`'s tests.
+    fn mock_weights() -> katgpt_core::TernaryWeights {
+        // 4 rows × 8 cols — small enough to reason about, large enough to exercise matvec.
+        let weights: &[f32] = &[
+            1.0, -1.0, 0.0, 1.0, -1.0, 0.0, 1.0, -1.0,
+            -1.0, 1.0, 1.0, 0.0, -1.0, 1.0, 0.0, 1.0,
+            0.0, 0.0, 1.0, -1.0, 1.0, -1.0, 1.0, 0.0,
+            1.0, 1.0, -1.0, -1.0, 0.0, 0.0, 1.0, 1.0,
+        ];
+        katgpt_core::TernaryWeights::quantize_from_f32(weights, 4, 8)
+    }
+
     #[test]
-    fn hash_select_is_deterministic() {
-        let a = simple_hash_select("needless_return", "return 42;", 2);
-        let b = simple_hash_select("needless_return", "return 42;", 2);
-        assert_eq!(a, b);
+    fn l1_drafter_runs_matvec() {
+        let mut drafter = ClippyTernaryDrafter::with_weights(mock_weights());
+        assert!(!drafter.is_fallback());
+
+        let entries = mock_entries();
+        let fix = drafter.draft_fix("needless_return", "return 42;", &entries);
+        assert!(fix.is_some());
+        let fix = fix.unwrap();
+        // Must claim TernaryMatvec (not CorpusTemplate) — it actually ran the matvec.
+        assert_eq!(fix.source, DraftSource::TernaryMatvec);
+        assert!(!fix.code.is_empty());
+        // Confidence is now derived from sigmoid(mean(output)) — must be in (0, 1).
+        assert!(fix.confidence > 0.0 && fix.confidence < 1.0);
+    }
+
+    #[test]
+    fn l1_drafter_is_deterministic() {
+        // G1: same (lint, code, weights, candidates) → identical output.
+        let entries = mock_entries();
+        let mut drafter = ClippyTernaryDrafter::with_weights(mock_weights());
+
+        let fix1 = drafter.draft_fix("needless_return", "return 42;", &entries).unwrap();
+        let fix2 = drafter.draft_fix("needless_return", "return 42;", &entries).unwrap();
+
+        assert_eq!(fix1.code, fix2.code);
+        // G1 determinism: bit-identical confidence (not approximate — the matvec
+        // is deterministic, so the same input MUST produce the same f32 bits).
+        assert_eq!(fix1.confidence.to_bits(), fix2.confidence.to_bits());
+        assert_eq!(fix1.source, fix2.source);
+    }
+
+    #[test]
+    fn l1_different_input_can_produce_different_output() {
+        // Different (lint_name, buggy_code) → different BLAKE3 hash → different
+        // matvec input → potentially different candidate selection. We only
+        // check that the path processes both without panic; the exact selection
+        // is deterministic but weight-dependent.
+        let entries = mock_entries();
+        let mut drafter = ClippyTernaryDrafter::with_weights(mock_weights());
+
+        let _fix1 = drafter.draft_fix("needless_return", "return 42;", &entries).unwrap();
+        let _fix2 = drafter.draft_fix("redundant_closure", "|x| f(x)", &entries).unwrap();
+        // Both should produce valid fixes — the point is no panic + valid source.
+    }
+
+    #[test]
+    fn l1_confidence_in_valid_range() {
+        // Confidence = sigmoid(mean(output)) must always be in (0, 1),
+        // never NaN, never exactly 0 or 1 (sigmoid asymptote).
+        let entries = mock_entries();
+        let mut drafter = ClippyTernaryDrafter::with_weights(mock_weights());
+
+        for lint in &["needless_return", "redundant_closure", "unused_var"] {
+            for code in &["return 42;", "let x = 1;", "|x| f(x)"] {
+                let fix = drafter.draft_fix(lint, code, &entries).unwrap();
+                assert!(fix.confidence > 0.0, "confidence must be > 0 for {lint}/{code}");
+                assert!(fix.confidence < 1.0, "confidence must be < 1 for {lint}/{code}");
+                assert!(!fix.confidence.is_nan());
+            }
+        }
+    }
+
+    #[test]
+    fn load_weights_resizes_scratch() {
+        let mut drafter = ClippyTernaryDrafter::with_weights(mock_weights());
+        // Initial scratch: input=8, output=4
+        assert_eq!(drafter.input_scratch.len(), 8);
+        assert_eq!(drafter.output_scratch.len(), 4);
+
+        // Swap to bigger weights
+        let big = katgpt_core::TernaryWeights::quantize_from_f32(&[1.0; 32], 2, 16);
+        drafter.load_weights(big);
+        assert_eq!(drafter.input_scratch.len(), 16);
+        assert_eq!(drafter.output_scratch.len(), 2);
+
+        // Draft still works with new dims
+        let entries = mock_entries();
+        let fix = drafter.draft_fix("needless_return", "return 42;", &entries).unwrap();
+        assert_eq!(fix.source, DraftSource::TernaryMatvec);
     }
 }

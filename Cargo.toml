@@ -32,3 +32,7 @@ wasm_pruner = []
 
 # Adaptive LoRA fallback (L4 — deferred to riir-train; opt-in when ready)
 clippy_lora = []
+
+[[bench]]
+name = "bench_001_l1_matvec"
+harness = false
