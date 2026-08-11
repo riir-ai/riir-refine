@@ -44,10 +44,10 @@ wasm_pruner = []
 # Adaptive LoRA fallback (L4 — deferred to riir-train; opt-in when ready)
 clippy_lora = []
 
-# Issue 004: latent-first self-evolution loop (memory + EMA direction update).
-# Default-off until G5 (self-evolution gain ≥5pp healing rate improvement) passes.
-# Borrows the dot+sigmoid pattern from riir-agents + the 3-axis retrieval
-# shape from riir-rag, reimplemented locally (~300 LOC, boundary-compliant).
+# Issue 004 + Issue 008: latent-first self-evolution loop (memory + EMA direction update).
+# Default-off (deployment constraint: clippy_verify is itself opt-in).
+# G1-G5 PASS (Issue 004) + G6/G7 validated against real cargo clippy (Issue 008):
+# G6 10/10 corpus truthfulness, G7 50.0pp improvement (50% → 100%).
 self_evolve = []
 
 [[bench]]
@@ -68,3 +68,9 @@ required-features = ["clippy_verify"]
 [[example]]
 name = "ruliology_search_demo"
 required-features = ["ruliology_search"]
+
+# Issue 008: real-world validation of self_evolve via cargo clippy ground truth.
+# Requires both self_evolve + clippy_verify. SLOW — spawns cargo clippy dozens of times.
+[[example]]
+name = "self_evolve_real_world_demo"
+required-features = ["self_evolve", "clippy_verify"]

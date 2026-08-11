@@ -32,8 +32,8 @@ pub fn build_seed_corpus() -> ClippyCorpus {
         ClippyFixEntry {
             lint_name: "redundant_closure".to_string(),
             lint_group: "style".to_string(),
-            buggy_code: "fn apply(f: impl Fn(i32) -> i32, x: i32) -> i32 { f(x) }\nfn caller(x: i32) -> i32 { apply(|v| double(v), x) }".to_string(),
-            fixed_code: "fn apply(f: impl Fn(i32) -> i32, x: i32) -> i32 { f(x) }\nfn caller(x: i32) -> i32 { apply(double, x) }".to_string(),
+            buggy_code: "fn double(x: i32) -> i32 { x * 2 }\nfn apply(f: impl Fn(i32) -> i32, x: i32) -> i32 { f(x) }\nfn caller(x: i32) -> i32 { apply(|v| double(v), x) }".to_string(),
+            fixed_code: "fn double(x: i32) -> i32 { x * 2 }\nfn apply(f: impl Fn(i32) -> i32, x: i32) -> i32 { f(x) }\nfn caller(x: i32) -> i32 { apply(double, x) }".to_string(),
         },
         ClippyFixEntry {
             lint_name: "needless_lifetimes".to_string(),
@@ -51,7 +51,10 @@ pub fn build_seed_corpus() -> ClippyCorpus {
         ClippyFixEntry {
             lint_name: "manual_map".to_string(),
             lint_group: "complexity".to_string(),
-            buggy_code: "fn opt_double(x: Option<i32>) -> Option<i32> {\n    if x.is_some() { Some(x.unwrap() * 2) } else { None }\n}".to_string(),
+            // NOTE: uses `match ... { Some => Some, None => None }` which is the
+            // canonical manual_map pattern. (The old `if x.is_some()` version
+            // triggered `unnecessary_unwrap` instead — caught by G6 in Issue 008.)
+            buggy_code: "fn opt_double(x: Option<i32>) -> Option<i32> {\n    match x {\n        Some(v) => Some(v * 2),\n        None => None,\n    }\n}".to_string(),
             fixed_code: "fn opt_double(x: Option<i32>) -> Option<i32> {\n    x.map(|v| v * 2)\n}".to_string(),
         },
         ClippyFixEntry {

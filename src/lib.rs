@@ -51,9 +51,9 @@ pub mod clippy_verifier;
 #[cfg(feature = "ruliology_search")]
 pub mod ruliology_search;
 
-// Issue 004: latent-first self-evolution loop (memory + EMA direction update).
-// Opt-in because it's an experimental layer on top of the frozen L0-L2 pipeline.
-// Default-off until G5 (self-evolution gain) passes.
+// Issue 004 + Issue 008: latent-first self-evolution loop (memory + EMA direction update).
+// Opt-in (deployment constraint: clippy_verify is itself opt-in).
+// Validated: G1-G5 PASS (Issue 004) + G6/G7 real cargo clippy PASS (Issue 008).
 #[cfg(feature = "self_evolve")]
 pub mod evolve;
 #[cfg(feature = "self_evolve")]

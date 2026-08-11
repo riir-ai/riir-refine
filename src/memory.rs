@@ -317,6 +317,22 @@ impl LatentFixMemory {
         self.trajectories.get(idx)
     }
 
+    /// Look up the success rate for a specific (`lint_name`, `fixed_code`) pair.
+    ///
+    /// Returns `0.5` (neutral) if no trajectory exists for this pair — the
+    /// caller should treat this as "no information". This lets the heal
+    /// pipeline look up the ACTUAL trajectory stats for a drafter candidate,
+    /// instead of assuming a hardcoded neutral 0.5.
+    #[must_use]
+    pub fn success_rate_for(&self, lint_name: &str, fixed_code: &str) -> f32 {
+        for t in &self.trajectories {
+            if t.lint_name == lint_name && t.fixed_code == fixed_code {
+                return t.success_rate();
+            }
+        }
+        0.5 // no trajectory → neutral
+    }
+
     /// Iterate over all stored trajectories.
     pub fn iter(&self) -> impl Iterator<Item = &FixTrajectory> {
         self.trajectories.iter()

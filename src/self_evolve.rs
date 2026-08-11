@@ -179,11 +179,16 @@ impl HealPipeline {
         if let Some(draft) = drafted {
             let mut dir = [0.0f32; EMBED_DIM];
             embed_into(lint_name, &draft.code, &mut dir);
+            // Look up the ACTUAL trajectory stats for this code — if it has
+            // been tried before and failed, its success_rate should reflect
+            // that (not a hardcoded 0.5). This lets fail feedback bias
+            // selection away from repeatedly-failed drafter picks.
+            let success_rate = self.memory.success_rate_for(lint_name, &draft.code);
             candidates.push(Candidate {
                 code: draft.code,
                 direction: dir,
                 source: HealSource::Drafter,
-                success_rate: 0.5, // neutral — no trajectory yet
+                success_rate,
             });
         }
 
