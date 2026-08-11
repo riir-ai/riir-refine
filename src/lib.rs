@@ -12,21 +12,21 @@
 //!    Phase 3 work.
 //! 4. **L3 — Ruliology candidate search** (opt-in): Pareto-front enumeration
 //!    when multiple valid fixes exist.
-//! 5. **L4 — LoRA fallback** (deferred): adaptive learning on the residual
+//! 5. **L4 — `LoRA` fallback** (deferred): adaptive learning on the residual
 //!    lints L0-L3 miss. Last resort, not co-equal path.
 //!
 //! ## Architecture
 //!
 //! This crate borrows the **drafter+pruner+corpus pattern** from
-//! `riir-games-quest/quest_grammar` (SealQuestCorpus + TernaryDraftModel +
-//! ConstraintPruner) but has **zero game-domain coupling**. It is a developer
+//! `riir-games-quest/quest_grammar` (`SealQuestCorpus` + `TernaryDraftModel` +
+//! `ConstraintPruner`) but has **zero game-domain coupling**. It is a developer
 //! tool, not game content.
 //!
 //! ## Modelless-first mandate
 //!
 //! The primary path (L0-L3) is entirely modelless — no training, no backprop.
-//! The LoRA fallback (L4) is the conservative last resort, not the co-equal
-//! path. This matches the user's core direction: "old-school LoRA is really
+//! The `LoRA` fallback (L4) is the conservative last resort, not the co-equal
+//! path. This matches the user's core direction: "old-school `LoRA` is really
 //! later."
 
 #![warn(clippy::all, clippy::pedantic)]

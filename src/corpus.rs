@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 /// - `buggy_code` + `fixed_code` = physical (raw bytes, bit-identical for replay)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClippyFixEntry {
-    /// The clippy lint name (e.g., "needless_return", "redundant_closure").
+    /// The clippy lint name (e.g., "`needless_return`", "`redundant_closure`").
     pub lint_name: String,
     /// The lint group (style, correctness, suspicious, complexity, perf).
     pub lint_group: String,
@@ -31,7 +31,7 @@ pub struct ClippyFixEntry {
 /// The ternary drafter (L1) consumes these as frozen direction vectors.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClippyCorpus {
-    /// All fix entries, keyed by lint_name for dedup.
+    /// All fix entries, keyed by `lint_name` for dedup.
     pub entries: Vec<ClippyFixEntry>,
     /// BLAKE3 hash of the serialized entries (tamper-evidence).
     pub commitment: [u8; 32],
@@ -39,6 +39,7 @@ pub struct ClippyCorpus {
 
 impl ClippyCorpus {
     /// Build a corpus from fix entries, computing the BLAKE3 commitment.
+    #[must_use]
     pub fn new(mut entries: Vec<ClippyFixEntry>) -> Self {
         // Sort by lint_name for deterministic commitment
         entries.sort_by(|a, b| a.lint_name.cmp(&b.lint_name));
@@ -67,16 +68,29 @@ impl ClippyCorpus {
     }
 
     /// Verify the corpus commitment (tamper-evidence check).
+    #[must_use]
     pub fn verify(&self) -> bool {
         self.commitment == Self::compute_commitment(&self.entries)
     }
 
     /// Freeze (serialize) the corpus to bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns `serde_json::Error` if serialization fails (e.g., the corpus
+    /// contains non-serializable data — should not happen with `String` fields).
     pub fn freeze(&self) -> Result<Vec<u8>, serde_json::Error> {
         serde_json::to_vec(self)
     }
 
     /// Thaw (deserialize) the corpus from bytes, verifying the commitment.
+    ///
+    /// # Errors
+    ///
+    /// Returns `serde_json::Error` if deserialization fails (corrupt JSON,
+    /// schema mismatch, etc.). A commitment mismatch does NOT return an
+    /// error — the corpus is returned so the caller can decide how to handle
+    /// tamper detection.
     pub fn thaw(bytes: &[u8]) -> Result<Self, serde_json::Error> {
         let corpus: Self = serde_json::from_slice(bytes)?;
         if !corpus.verify() {
@@ -93,9 +107,10 @@ impl ClippyCorpus {
     }
 
     /// All unique lint names in the corpus.
+    #[must_use]
     pub fn lint_names(&self) -> Vec<&str> {
         let mut names: Vec<&str> = self.entries.iter().map(|e| e.lint_name.as_str()).collect();
-        names.sort();
+        names.sort_unstable();
         names.dedup();
         names
     }

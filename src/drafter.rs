@@ -50,6 +50,7 @@ pub enum DraftSource {
 
 impl ClippyTernaryDrafter {
     /// Create in fallback mode (no ternary weights — corpus lookup only).
+    #[must_use] 
     pub fn fallback() -> Self {
         Self {
             weights: None,
@@ -62,6 +63,7 @@ impl ClippyTernaryDrafter {
     ///
     /// Pre-allocates the SIMD matvec scratch buffers to `(weights.cols,
     /// weights.rows)` so the hot path is zero-alloc.
+    #[must_use] 
     pub fn with_weights(weights: katgpt_core::TernaryWeights) -> Self {
         let cols = weights.cols;
         let rows = weights.rows;
@@ -82,6 +84,7 @@ impl ClippyTernaryDrafter {
     }
 
     /// Whether the drafter is in fallback (template) mode.
+    #[must_use] 
     pub fn is_fallback(&self) -> bool {
         self.weights.is_none()
     }
