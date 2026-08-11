@@ -62,6 +62,7 @@ impl ValidationResult {
 /// The `rust_analyzer_bin` / `cargo_bin` fields exist for the Phase 3
 /// integration (temp-crate scaffolding + `cargo clippy` re-run, wired in
 /// [`validate_with_clippy`](Self::validate_with_clippy) behind `clippy_verify`).
+#[derive(Debug, Clone)]
 pub struct RustAnalyzerPruner {
     /// Path to the rust-analyzer binary (reserved for future rust-analyzer AST integration).
     rust_analyzer_bin: String,

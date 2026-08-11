@@ -11,7 +11,9 @@
 //!    modelless). Lint resolution verification via `cargo clippy` re-run is
 //!    Phase 3 (feature-gated `clippy_verify`, opt-in).
 //! 4. **L3 — Ruliology candidate search** (opt-in): Pareto-front enumeration
-//!    when multiple valid fixes exist.
+//!    when multiple valid fixes exist. Reuses the algorithm pattern from
+//!    `katgpt-ruliology` (Bench 572) without a code-level dep — clippy fixes
+//!    have ground-truth payoff, not tournament payoffs.
 //! 5. **L4 — `LoRA` fallback** (deferred): adaptive learning on the residual
 //!    lints L0-L3 miss. Last resort, not co-equal path.
 //!
@@ -41,6 +43,13 @@ pub mod seed_corpus;
 #[cfg(feature = "clippy_verify")]
 pub mod clippy_verifier;
 
+// L3: optional ruliology Pareto-front candidate search.
+// Opt-in refinement layer — runs once per lint invocation (not per-tick).
+// Reuses the Pareto-front pattern from katgpt-ruliology (Bench 572) without
+// a code-level dep (see .issues/005 for the consume-vs-build verdict).
+#[cfg(feature = "ruliology_search")]
+pub mod ruliology_search;
+
 pub use corpus::ClippyCorpus;
 pub use drafter::ClippyTernaryDrafter;
 pub use pruner::RustAnalyzerPruner;
@@ -48,3 +57,6 @@ pub use seed_corpus::build_seed_corpus;
 
 #[cfg(feature = "clippy_verify")]
 pub use clippy_verifier::ClippyVerifier;
+
+#[cfg(feature = "ruliology_search")]
+pub use ruliology_search::{RuliologySearch, ScoredCandidate};

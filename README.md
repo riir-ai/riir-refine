@@ -17,7 +17,7 @@ fallback, not the co-equal path.
 | L1 — Ternary SIMD drafter | ✅ Done (Issue 001, zero-alloc matvec, p50=2.3µs) |
 | L2 — Syntax validator | ✅ Done (Issue 002, `syn`-based parse check, p50=6.8µs) |
 | L2 — Lint resolution check | ✅ Done (Issue 003, `clippy_verify` feature, real `cargo clippy` JSON parsing, ~130ms/verify) |
-| L3 — Ruliology search | ⏳ Feature-gated, not implemented |
+| L3 — Ruliology search | ✅ Done (Issue 005, `ruliology_search` feature, Pareto-front from katgpt-ruliology pattern, ~400µs/10-candidate search) |
 | L4 — LoRA fallback | ⏳ Deferred to riir-train |
 
 ## Architecture
@@ -40,6 +40,22 @@ L2 — VALIDATOR (always-on)
          ▼
   [ validated clippy fix ]
 ```
+
+## L3 — Ruliology candidate search
+
+When the L1 drafter proposes multiple candidates and L2 accepts more than one,
+L3 enumerates the Pareto-front of (lint_satisfied, AST delta size) and picks
+the minimum-complexity fix among the Pareto-optimal set.
+
+The Pareto-front algorithm is reimplemented locally (~30 LOC) from
+`katgpt-rs/crates/katgpt-ruliology/src/types.rs::WinMatrix::pareto_front`
+(GOAT PASS, Bench 572). The substrate's version is coupled to `WinMatrix`
+(2-player tournament semantics) + non-optionally pulls `katgpt-pruners`
+(g_zero feature) — too heavy for clippy's needs. Clippy fixes have ground-truth
+payoff (lint_satisfied: bool), not pairwise tournament payoffs, so the
+`WinMatrix` type doesn't fit. This mirrors the repo's existing pattern:
+`ClippyTernaryDrafter` reuses the `TernaryDraftModel` pattern from
+`quest_grammar` without a code-level dep.
 
 ## Modelless-first mandate
 

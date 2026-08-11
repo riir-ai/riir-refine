@@ -20,8 +20,10 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 # L2 pruner: pure Rust syntax parser (modelless, zero ML).
-# Already in Cargo.lock transitively — zero new dep cost.
-syn = { version = "2", default-features = false, features = ["full", "parsing", "derive"] }
+# L3 ruliology search: AST delta-size computation via `syn::visit`.
+# `visit` feature gates the AST traversal walker; `full` + `parsing` are
+# already required by the L2 pruner. Already in Cargo.lock transitively.
+syn = { version = "2", default-features = false, features = ["full", "parsing", "derive", "visit"] }
 
 [dev-dependencies]
 
@@ -42,6 +44,12 @@ wasm_pruner = []
 # Adaptive LoRA fallback (L4 — deferred to riir-train; opt-in when ready)
 clippy_lora = []
 
+# Issue 004: latent-first self-evolution loop (memory + EMA direction update).
+# Default-off until G5 (self-evolution gain ≥5pp healing rate improvement) passes.
+# Borrows the dot+sigmoid pattern from riir-agents + the 3-axis retrieval
+# shape from riir-rag, reimplemented locally (~300 LOC, boundary-compliant).
+self_evolve = []
+
 [[bench]]
 name = "bench_001_l1_matvec"
 harness = false
@@ -56,3 +64,7 @@ harness = false
 [[example]]
 name = "clippy_verify_demo"
 required-features = ["clippy_verify"]
+
+[[example]]
+name = "ruliology_search_demo"
+required-features = ["ruliology_search"]

@@ -67,6 +67,7 @@ cargo check --all-features
 
 - `default`: L0 (corpus) + L1 (ternary drafter) + L2 (native rust-analyzer pruner)
 - `clippy_verify` (opt-in): Phase 3 lint resolution verification via real `cargo clippy` re-run. Slow (~130ms/verify), requires cargo+clippy on PATH.
+- `ruliology_search` (opt-in): L3 Pareto-front candidate search. Reuses the algorithm pattern from `katgpt-ruliology` (Bench 572) without a code-level dep. Runs once per lint invocation (~400µs/10 candidates), not per-tick.
 - `ruliology_search` (opt-in): L3 Pareto-front candidate enumeration
 - `wasm_pruner` (opt-in, deferred): L2 WASM rust-analyzer variant (blocked on rubrc)
 - `clippy_lora` (opt-in, deferred): L4 adaptive LoRA fallback (blocked on riir-train integration)
