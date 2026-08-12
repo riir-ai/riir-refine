@@ -92,11 +92,13 @@ required-features = ["self_evolve", "clippy_verify"]
 # Emits JSONL of (lint, emitted fix, latency); tokens are counted externally by
 # scripts/bench_bonsai_vs_clippy_tokps.py using the SAME Bonsai tokenizer, so
 # both arms share one numerator unit. MODE=l1l2|self_evolve selects the path.
-[[example]]
+[[bench]]
 name = "bench_e2e_tokps"
+harness = false
 required-features = ["self_evolve"]
 
 # Bench 010: llama.cpp vs katgpt ternary, both generating on clippy prompts.
-[[example]]
+[[bench]]
 name = "bench_clippy_ternary_tps"
+harness = false
 required-features = ["ternary_inference"]

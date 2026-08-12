@@ -85,8 +85,7 @@ be the standing regression target.
 ## Reproduce
 
 ```sh
-CARGO_TARGET_DIR=/tmp/clippy_e2e_target cargo run --release \
-  --example bench_e2e_tokps --features self_evolve -- \
+CARGO_TARGET_DIR=/tmp/clippy_e2e_target cargo bench --bench bench_e2e_tokps --features self_evolve -- \
   benches/fixtures/e2e_cases_heldout.json /tmp/clippy_e2e_heldout.jsonl
 # => exact-match: 0/10, parse-valid: 10/10
 ```

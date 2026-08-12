@@ -1,0 +1,19 @@
+# Single toolchain across all 8 repos in this stack (katgpt-rs, riir-ai,
+# riir-chain, riir-neuron-db, riir-train, riir-game-sdk, riir-armageddon,
+# riir-clippy). Divergent pins caused a real failure: riir-clippy had NO pin, so
+# it used the box default (1.93.0), and the moment it took a path dependency on
+# riir-gpu the build died at RESOLUTION time —
+#
+#   error: rustc 1.93.0 is not supported by the following package:
+#     cubecl-zspace@0.11.0-pre.2 requires rustc 1.95
+#
+# 1.97.0 is the unified channel because it is the highest pin already in use
+# (riir-chain, whose hand-pinned clippy/test gate counts are calibrated to it)
+# and it satisfies cubecl 0.11's 1.95 floor. Picking the lower 1.95.0 instead
+# would have forced riir-chain DOWN and risked re-reddening those pinned gates.
+#
+# Raising this is a deliberate act: bump `channel` here in its own reviewed
+# commit and fix the new lints in that commit.
+[toolchain]
+channel = "1.97.0"
+components = ["clippy", "rustfmt"]

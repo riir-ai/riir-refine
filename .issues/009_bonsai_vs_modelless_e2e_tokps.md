@@ -59,8 +59,7 @@ arm emits raw Rust and gets tokenized post-hoc; it is not credited with
 
 ```sh
 # Arm A — modelless pipeline (both fixtures)
-CARGO_TARGET_DIR=/tmp/clippy_e2e_target cargo run --release \
-  --example bench_e2e_tokps --features self_evolve -- \
+CARGO_TARGET_DIR=/tmp/clippy_e2e_target cargo bench --bench bench_e2e_tokps --features self_evolve -- \
   benches/fixtures/e2e_cases_seed.json /tmp/clippy_e2e_seed.jsonl
 
 # Arm B — Bonsai via llama.cpp (Q2_0 needs the prismml fork; upstream
