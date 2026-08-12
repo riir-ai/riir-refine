@@ -25,6 +25,14 @@ serde_json = "1"
 # already required by the L2 pruner. Already in Cargo.lock transitively.
 syn = { version = "2", default-features = false, features = ["full", "parsing", "derive", "visit"] }
 
+# ── Ternary inference arm (Bench 010) ────────────────────────────────────
+# Real katgpt ternary generation on the clippy task, so llama.cpp can be
+# compared against OUR inference stack rather than against the retriever.
+# Optional + feature-gated: these are heavy sibling crates and the default
+# build must stay dependency-light.
+riir-engine = { path = "../riir-ai/crates/riir-engine", optional = true, default-features = false, features = ["deltanet_ternary_inference"] }
+riir-gpu = { path = "../riir-ai/crates/riir-gpu", optional = true, default-features = false, features = ["cubecl_runtime", "ternary_gemv"] }
+
 [dev-dependencies]
 
 [features]
@@ -43,6 +51,11 @@ wasm_pruner = []
 
 # Adaptive LoRA fallback (L4 — deferred to riir-train; opt-in when ready)
 clippy_lora = []
+
+# Bench 010: katgpt ternary generation (GPU-resident forward, Metal via CubeCL)
+# measured on the SAME clippy prompts llama.cpp is given. Opt-in: pulls
+# riir-engine + riir-gpu and needs the Bonsai GGUF at runtime.
+ternary_inference = ["dep:riir-engine", "dep:riir-gpu"]
 
 # Issue 004 + Issue 008: latent-first self-evolution loop (memory + EMA direction update).
 # Default-off (deployment constraint: clippy_verify is itself opt-in).
@@ -82,3 +95,8 @@ required-features = ["self_evolve", "clippy_verify"]
 [[example]]
 name = "bench_e2e_tokps"
 required-features = ["self_evolve"]
+
+# Bench 010: llama.cpp vs katgpt ternary, both generating on clippy prompts.
+[[example]]
+name = "bench_clippy_ternary_tps"
+required-features = ["ternary_inference"]
