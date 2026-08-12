@@ -311,17 +311,38 @@ Two consequences, stated plainly:
 - **The absolutes do not transfer.** Anyone re-running this must re-measure;
   do not quote the µs or t/s figures as machine specs for an M3 Max.
 
-A third-party throughput reference, taken via `llama-bench` (its own harness,
-no server, no instrumentation in the loop) on a quieter box:
+## llama.cpp raw throughput reference (what "Bonsai tok/s" can mean)
+
+`llama-bench` runs its own harness — no server, no HTTP, no sampling, no
+instrumentation in the loop — so it isolates the model/hardware rate. Measured
+twice, at different load:
 
 ```sh
-llama-bench -m Ternary-Bonsai-27B-Q2_0.gguf -p 64 -n 32 -ngl 99 -r 1
+llama-bench -m Ternary-Bonsai-27B-Q2_0.gguf -p 512 -n 128 -ngl 99 -r 3   # quiet, load 4.09
+llama-bench -m Ternary-Bonsai-27B-Q2_0.gguf -p 64  -n 32  -ngl 99 -r 1   # loaded, load 77
 ```
 
-| test | t/s |
-|---|---|
-| pp64 (prompt eval) | 137.65 ± 0.00 |
-| tg32 (decode) | 20.38 ± 0.00 |
+| test | t/s | condition |
+|---|---:|---|
+| **pp512** (prefill) | **207.79 ± 6.25** | quiet |
+| **tg128** (decode) | **25.50 ± 0.36** | quiet |
+| pp64 (prefill) | 137.65 ± 0.00 | loaded |
+| tg32 (decode) | 20.38 ± 0.00 | loaded |
+| **e2e per request (server)** | **15.87 – 16.57** | the figure this bench uses |
 
-The 20.38 t/s decode figure independently corroborates the ~21 t/s quiet
-server measurement, which is the honest ceiling to credit Bonsai with here.
+Three numbers, and the difference between them is the point:
+
+- **Prefill scales with batch** (137.65 t/s at pp64 → 207.79 t/s at pp512), so a
+  prefill figure quoted without its batch size means nothing.
+- **Peak decode is 25.50 t/s** — llama.cpp's ceiling for this model on this box.
+- **A real request delivers ~16 t/s.** The 25.5 → 16 gap is *not* only the
+  load-77 contention. In descending order: contention; **decode degrades as the
+  KV context grows** (`tg128` measures 128 tokens, while bench cases generated
+  266–2043 tokens each); and e2e includes prompt processing, sampling, and HTTP
+  that `llama-bench` excludes by construction.
+
+**Bench 009 therefore quotes the e2e rate, not 25.50 t/s.** Using the
+`llama-bench` ceiling would have credited Bonsai with a throughput no actual
+request on this task achieves — flattering the arm this bench is measuring
+*against*, and inflating the reported ratio in the modelless arm's favour by
+~1.6×. The e2e number is the one a caller experiences.
