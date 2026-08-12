@@ -1,7 +1,7 @@
 # Issue 009 — E2E tokens/sec: Ternary-Bonsai-27B (llama.cpp) vs the modelless pipeline
 
 **Type:** proof / benchmark
-**Status:** SEED MEASURED — held-out Bonsai pass in flight; results in
+**Status:** COMPLETE — both fixtures measured; verdict in
 [Bench 009](../.benchmarks/009_bonsai_vs_modelless_e2e_tokps.md)
 **Date:** 2026-08-12
 **Host:** M3 Max (Metal, 12 threads), macOS Darwin 25.5.0
@@ -74,3 +74,30 @@ python3 scripts/bench_bonsai_vs_clippy_tokps.py --port 8123 \
   --clippy-jsonl /tmp/clippy_e2e_seed.jsonl --out /tmp/h2h_seed.json \
   --max-tokens 2048
 ```
+
+---
+
+## Outcome (2026-08-12)
+
+| gate | result |
+|---|---|
+| **G1 throughput** | tok/s ratio **113,242×** (seed) / **109,146×** (held-out); fixes/sec **3.11 M×** / **2.89 M×**. Bonsai 16.57 / 15.87 tok/s; modelless 1.88 M / 1.73 M tok/s (quiet). |
+| **G2 in-distribution quality** | modelless **10/10**, Bonsai **10/10** — a tie, but the modelless 10/10 is retrieval of its own corpus. |
+| **G3 generalization quality** | modelless **0/10**, Bonsai **10/10** (9/10 by strict grader; the one miss is a grader false negative on `\|&x\|` vs `\|x\|`, both verified to compile and be semantically identical). **FAIL for the modelless arm.** |
+| **G4 honesty** | 0/10 Bonsai truncations at 2048 tokens (7/10 at 512 — harness artifact, corrected). Modelless input-independence confirmed: 10/10 held-out emissions byte-identical to seed emissions → Issue 010. |
+
+**Verdict:** cache-vs-compute, not model-vs-modelless. The modelless pipeline is
+a ~110,000× faster *cache* over corpus-resident lint fixes and should ship as
+one; it has no measured capability on unseen code, and its misses are silent
+(L2 reports `parses=true` on all 10 wrong answers). Bonsai's accuracy is flat
+across the distribution shift.
+
+**Follow-ups filed:** [Issue 010](010_drafter_cannot_generalize_heldout_code.md)
+(drafter returns corpus text verbatim — the root cause of G3).
+
+**Flag note:** `MODE=l1l2` (default features) beat `MODE=self_evolve`
+back-to-back on a quiet box for bit-identical quality on both fixtures, so the
+premise that `self_evolve` is "the best flag" does not hold for single-shot
+healing. Issue 008's gain needs the `report_outcome` feedback loop this bench
+does not exercise.
+

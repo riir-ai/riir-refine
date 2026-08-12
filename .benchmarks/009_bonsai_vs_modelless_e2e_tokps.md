@@ -134,6 +134,56 @@ tokens per fix are reasoning the other arm never emits. `fixes/sec` — the rate
 of *delivered work* — is the 3.1 M× figure. Both are reported because tok/s was
 the metric asked for and fixes/sec is the one that is verbosity-independent.
 
+## Results — held-out fixture (generalization)
+
+Same 10 lints, code the corpus has never seen. `--max-tokens 2048`,
+`--temp 0.0`. **0/10 truncated.** clippy arm = `MODE=self_evolve`.
+
+| lint | Bonsai t/s | tok | s | trunc | b_ok | clippy t/s (loaded) | clippy t/s (quiet) | tok | c_ok | ratio (quiet) |
+|---|---:|---:|---:|:-:|:-:|---:|---:|---:|:-:|---:|
+| `needless_return` | 15.20 | 279 | 18.4 | N | Y | 1,268,633 | 1,384,722 | 12 | **N** | 91,128× |
+| `redundant_closure` | 15.86 | 635 | 40.0 | N | Y | 1,587,740 | 1,959,782 | 69 | **N** | 123,582× |
+| `needless_lifetimes` | 16.22 | 796 | 49.1 | N | Y | 874,699 | 1,230,769 | 16 | **N** | 75,883× |
+| `redundant_field_names` | 15.87 | 358 | 22.6 | N | Y | 1,600,000 | 2,224,176 | 43 | **N** | 140,109× |
+| `manual_map` | 16.68 | 1750 | 104.9 | N | Y | 1,162,529 | 1,631,579 | 31 | **N** | 97,805× |
+| `unnecessary_unwrap` | 14.93 | 266 | 17.8 | N | Y | 1,439,971 | 1,613,445 | 24 | **N** | 108,084× |
+| `needless_range_loop` | 15.57 | 1431 | 91.9 | N | N* | 1,511,305 | 1,662,013 | 25 | **N** | 106,758× |
+| `useless_conversion` | 15.45 | 305 | 19.7 | N | Y | 1,590,400 | 1,748,391 | 22 | **N** | 113,170× |
+| `unnecessary_mut_passed` | 15.77 | 1514 | 96.0 | N | Y | 1,249,569 | 1,375,451 | 29 | **N** | 87,205× |
+| `needless_borrow` | 15.35 | 839 | 54.7 | N | Y | 1,777,778 | 1,936,306 | 38 | **N** | 126,157× |
+
+### Held-out aggregate
+
+| metric | Bonsai-27B Q2_0 | riir-clippy `self_evolve` | ratio |
+|---|---:|---:|---:|
+| **e2e tok/s** (loaded clippy) | 15.868 | 1,428,076 | **89,999×** |
+| **e2e tok/s** (quiet clippy) | 15.868 | 1,731,907 | **109,146×** |
+| total tokens / total time | 8173 tok / 515.1 s | 309 tok / 178.4 µs (quiet) | — |
+| **fixes/sec** | 0.01941 (51.5 s/fix) | 56,049 (17.8 µs/fix) | **2,886,906×** |
+| avg tokens per fix | 817.3 | 30.9 | 26.4× more verbose |
+| exact-match | **9/10** (effectively 10/10, see below) | **0/10** | — |
+| truncated | 0/10 | n/a | — |
+
+### \* The one Bonsai "miss" is my grader's fault, not the model's
+
+`needless_range_loop` is scored wrong only because of a strict comparison:
+
+```rust
+fixture `want` : v.iter().map(|x| x * 2).collect()
+Bonsai emitted : v.iter().map(|&x| x * 2).collect()
+```
+
+Both compile and are semantically identical — verified by building and running
+both against the same input (`[1,2,3] → [2,4,6]`, `assert_eq!` between the two
+forms passes). The destructuring closure is arguably the more idiomatic of the
+two. **Bonsai's real held-out score is 10/10**; the 9/10 is a false negative
+from normalized-exact-match, which cannot see semantic equivalence.
+
+Recorded rather than quietly corrected, because it cuts the honest way: my
+grader is biased *against* the LLM arm, and the verdict below holds anyway.
+
+---
+
 ### The seed result is not the tie it looks like
 
 Both arms scored 10/10, but they are not the same achievement:
@@ -151,6 +201,54 @@ were cut off mid-reasoning with an empty code block. Raising the budget to 2048
 moved Bonsai from 3/10 to 10/10 and changed nothing else. **The first number was
 an artifact of my harness, not a property of the model**, which is why the
 truncation column now exists.
+
+---
+
+## Cross-fixture verdict
+
+| | seed (in-distribution) | held-out (unseen code) |
+|---|---|---|
+| Bonsai e2e tok/s | 16.571 | 15.868 |
+| clippy e2e tok/s (quiet) | 1,876,526 | 1,731,907 |
+| **tok/s ratio** | **113,242×** | **109,146×** |
+| **fixes/sec ratio** | **3,105,538×** | **2,886,906×** |
+| Bonsai exact-match | 10/10 | 10/10 (9/10 by strict grader) |
+| **clippy exact-match** | **10/10** | **0/10** |
+| Bonsai truncated | 0/10 | 0/10 |
+
+**The throughput answer, as asked:** the modelless pipeline delivers a clippy
+fix ~110,000× more tokens/sec and ~2.9 M× more fixes/sec than Ternary-Bonsai-27B
+on llama.cpp. That number is real, reproducible, and stable across both
+fixtures (the ratio moves <4% between them).
+
+**The verdict that matters:** the ratio is only meaningful where the answer is
+already in the corpus. Bonsai's accuracy is **flat across the distribution
+shift** — 10/10 in-distribution, 10/10 on unseen code — because it is actually
+reading the input and transforming it. The modelless arm goes **10/10 → 0/10**
+on the same shift, because it is not solving the task at all; it is retrieving
+a stored string whose match to the seed set was guaranteed by construction
+(Issue 010). Its 30.9 tokens per answer are the *same* 30.9 tokens regardless
+of what it was asked.
+
+So the two arms are not competing on one axis:
+
+- **On corpus-resident lints**, the modelless path is the correct engineering
+  choice by an enormous margin. 17 µs versus 51 s is not a trade-off; it is a
+  different category of operation, and both are right.
+- **On anything unseen**, the modelless path has no capability to compare. A
+  109,146× speedup toward a confidently wrong function is worth less than
+  51 seconds toward a correct one. Per the repo's GOAT rule — a perf gain on an
+  incorrect answer is a speedup of a wrong result — **the held-out column is a
+  GOAT FAIL for the modelless arm, and no throughput number rescues it.**
+
+**Practical reading:** this is a cache-vs-compute result, not a
+model-vs-modelless result. The modelless pipeline is an excellent *cache* over
+known lint fixes and should be deployed as one — with the corpus-miss path
+falling through to something that can actually generalize. What it is not, on
+this evidence, is a replacement for the model. The dangerous failure mode is
+that a miss is **silent**: L2 reports `parses=true` on all 10 wrong answers
+(Issue 010), so nothing in the always-on path signals that the cache missed.
+Fixing that signal is worth more than any further tok/s tuning.
 
 ---
 
