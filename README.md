@@ -30,7 +30,7 @@ clippy fixer. Measured on 10 lints:
 | | in-distribution (corpus holds the fix) | held-out (same lints, unseen code) |
 |---|---|---|
 | exact-match | **10/10** | **0/10** |
-| e2e throughput vs Bonsai-27B | ~113,000× tok/s | ~109,000× tok/s |
+| e2e throughput vs Bonsai-27B | ~74,000× tok/s | ~68,000× tok/s |
 
 The L1 drafter returns corpus `fixed_code` **verbatim** — the input code selects
 *which* stored fix to return but never influences the text ([Issue 010](.issues/010_drafter_cannot_generalize_heldout_code.md)).
@@ -143,7 +143,7 @@ if result.is_valid() {
 
 - [Bench 001](.benchmarks/001_goat_consolidated.md) — consolidated GOAT gate results (L1 + L2 + Phase 3 + L3)
 - [Bench 008](.benchmarks/008_real_world_validation.md) — real-world validation of `self_evolve` via `cargo clippy` (G6 + G7)
-- [Bench 009](.benchmarks/009_bonsai_vs_modelless_e2e_tokps.md) — e2e tok/s vs Ternary-Bonsai-27B on llama.cpp (~110,000× throughput; 0/10 held-out quality)
+- [Bench 009](.benchmarks/009_bonsai_vs_modelless_e2e_tokps.md) — e2e tok/s vs Ternary-Bonsai-27B on llama.cpp (~74,000× throughput; 0/10 held-out quality)
 - [`.docs/10_self_evolve/`](.docs/10_self_evolve/) — design notes for the self-evolution loop (HealPipeline, LatentFixMemory, LatentSkillEvolution)
 - [Proposal 034](../riir-ai/.proposals/034_clippy_healing_drafter_pruner.md) — the design argument
 - [Plan 331 Phase A](../riir-train/.plans/331_lora_rust_coder_candidates_consolidated.md) — Gemma-2 r16 production (LoRA fallback base)

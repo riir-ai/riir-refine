@@ -9,6 +9,52 @@
 
 ---
 
+## CORRECTION (2026-08-12, after publication)
+
+Two errors in the first version of this bench, both found by re-measuring rather
+than re-reasoning. **Both inflated the ratio in the modelless arm's favour.**
+
+**1. The headline ratio mixed measurement conditions.** I re-measured the clippy
+arm on a quiet box and gave it a "quiet" column, but left the Bonsai arm on its
+`load 77` number — then divided the two. That is not a comparison. Same-condition
+pairs:
+
+| pair | seed | held-out |
+|---|---:|---:|
+| both loaded (`load 77`) | 84,711× | 89,997× |
+| **both quiet** | **73,589×** | **67,918×** |
+| ~~published (quiet clippy ÷ loaded Bonsai)~~ | ~~113,242×~~ | ~~109,145×~~ |
+
+The published figures were **~1.5× too high**. Corrected fixes/sec ratios
+(both quiet): **2,018,108×** (seed) and **1,796,425×** (held-out), not 3,105,538×
+and 2,886,906×.
+
+**2. My explanation of the 25.5 → 16.5 t/s gap was wrong.** I attributed it
+partly to decode degrading as the KV context grows. Measured on one server, same
+load, back to back:
+
+| `n_predict` | decoded | llama.cpp `tg` t/s | wall t/s |
+|---:|---:|---:|---:|
+| 32 | 32 | 12.81 | 9.35 |
+| 128 | 128 | 12.64 | 11.65 |
+| 512 | 512 | 12.67 | 12.42 |
+| 2000 | 2000 | **14.73** | 14.63 |
+
+The rate is **flat, and if anything improves** with length — so **KV growth is
+not a cause at these lengths.** The variance is machine state: a sibling session
+was running `riir_gpu` at 370% CPU plus a `bonsai_lora_accuracy_parity` job, i.e.
+**GPU contention**. Bonsai's decode on this box ranges **12.6 – 25.5 t/s**
+purely on what else is resident.
+
+Request overhead is only material for short generations: at `n=32` wall 9.35 vs
+decode 12.81 t/s (a fixed ~650–765 ms prompt-eval per request dominates), while
+at `n=2000` wall 14.63 ≈ decode 14.73. The bench's ~800-token average sits in
+the regime where e2e ≈ decode.
+
+Everything below is the original text with the ratio rows corrected in place.
+
+---
+
 ## Blocker resolved first: upstream llama.cpp cannot load this model
 
 Homebrew `llama.cpp` 10250 (ggml 0.18.1) **fails** on the Bonsai GGUF:
@@ -104,7 +150,7 @@ running out of budget. clippy arm = `MODE=self_evolve`; the "loaded" column is
 the `load 77` run the head-to-head consumed, the "quiet" column recomputes the
 same emitted fixes against the `load 11` back-to-back latencies.
 
-| lint | Bonsai t/s | Bonsai tok | Bonsai s | clippy t/s (loaded) | clippy t/s (quiet) | clippy tok | ratio (quiet) | b_ok | c_ok |
+| lint | Bonsai t/s | Bonsai tok | Bonsai s | clippy t/s (loaded) | clippy t/s (quiet) | clippy tok | ratio (mixed*) | b_ok | c_ok |
 |---|---:|---:|---:|---:|---:|---:|---:|:-:|:-:|
 | `needless_return` | 16.17 | 223 | 13.8 | 1,099,304 | 1,492,352 | 12 | 92,269× | Y | Y |
 | `redundant_closure` | 16.77 | 1158 | 69.0 | 1,533,333 | 2,131,274 | 69 | 127,063× | Y | Y |
@@ -121,10 +167,12 @@ same emitted fixes against the `load 11` back-to-back latencies.
 
 | metric | Bonsai-27B Q2_0 | riir-clippy `self_evolve` | ratio |
 |---|---:|---:|---:|
-| **e2e tok/s** (loaded clippy) | 16.571 | 1,403,741 | **84,711×** |
-| **e2e tok/s** (quiet clippy) | 16.571 | 1,876,526 | **113,242×** |
+| **e2e tok/s** — both loaded | 16.571 | 1,403,741 | **84,711×** |
+| **e2e tok/s** — both quiet | 25.50 | 1,876,526 | **73,589×** |
+| ~~mixed (quiet clippy ÷ loaded Bonsai)~~ | ~~16.571~~ | ~~1,876,526~~ | ~~113,242×~~ |
 | total tokens / total time | 8474 tok / 511.4 s | 309 tok / 164.7 µs (quiet) | — |
-| **fixes/sec** | 0.01956 (51.1 s/fix) | 60,729 (16.5 µs/fix) | **3,105,538×** |
+| **fixes/sec** — both quiet | 0.0301 (33.2 s/fix) | 60,729 (16.5 µs/fix) | **2,018,108×** |
+| ~~fixes/sec (loaded Bonsai)~~ | ~~0.01956 (51.1 s/fix)~~ | ~~60,729~~ | ~~3,105,538×~~ |
 | avg tokens per fix | 847.4 | 30.9 | 27.4× more verbose |
 | exact-match | **10/10** | **10/10** | tie |
 | truncated | 0/10 | n/a | — |
@@ -139,7 +187,7 @@ the metric asked for and fixes/sec is the one that is verbosity-independent.
 Same 10 lints, code the corpus has never seen. `--max-tokens 2048`,
 `--temp 0.0`. **0/10 truncated.** clippy arm = `MODE=self_evolve`.
 
-| lint | Bonsai t/s | tok | s | trunc | b_ok | clippy t/s (loaded) | clippy t/s (quiet) | tok | c_ok | ratio (quiet) |
+| lint | Bonsai t/s | tok | s | trunc | b_ok | clippy t/s (loaded) | clippy t/s (quiet) | tok | c_ok | ratio (mixed*) |
 |---|---:|---:|---:|:-:|:-:|---:|---:|---:|:-:|---:|
 | `needless_return` | 15.20 | 279 | 18.4 | N | Y | 1,268,633 | 1,384,722 | 12 | **N** | 91,128× |
 | `redundant_closure` | 15.86 | 635 | 40.0 | N | Y | 1,587,740 | 1,959,782 | 69 | **N** | 123,582× |
@@ -156,13 +204,21 @@ Same 10 lints, code the corpus has never seen. `--max-tokens 2048`,
 
 | metric | Bonsai-27B Q2_0 | riir-clippy `self_evolve` | ratio |
 |---|---:|---:|---:|
-| **e2e tok/s** (loaded clippy) | 15.868 | 1,428,076 | **89,999×** |
-| **e2e tok/s** (quiet clippy) | 15.868 | 1,731,907 | **109,146×** |
+| **e2e tok/s** — both loaded | 15.868 | 1,428,076 | **89,997×** |
+| **e2e tok/s** — both quiet | 25.50 | 1,731,907 | **67,918×** |
+| ~~mixed (quiet clippy ÷ loaded Bonsai)~~ | ~~15.868~~ | ~~1,731,907~~ | ~~109,145×~~ |
 | total tokens / total time | 8173 tok / 515.1 s | 309 tok / 178.4 µs (quiet) | — |
-| **fixes/sec** | 0.01941 (51.5 s/fix) | 56,049 (17.8 µs/fix) | **2,886,906×** |
+| **fixes/sec** — both quiet | 0.0312 (32.1 s/fix) | 56,049 (17.8 µs/fix) | **1,796,425×** |
+| ~~fixes/sec (loaded Bonsai)~~ | ~~0.01941 (51.5 s/fix)~~ | ~~56,049~~ | ~~2,886,906×~~ |
 | avg tokens per fix | 817.3 | 30.9 | 26.4× more verbose |
 | exact-match | **9/10** (effectively 10/10, see below) | **0/10** | — |
 | truncated | 0/10 | n/a | — |
+
+\* The per-lint `ratio (mixed*)` column divides a **quiet** clippy latency by a
+**loaded** Bonsai rate, so each row is ~1.5× too high — see the CORRECTION at the
+top. The per-lint rows are retained as measured; only the aggregates were
+recomputed into same-condition pairs. Divide any row by 1.54 (seed) or 1.61
+(held-out) for its both-quiet equivalent.
 
 ### \* The one Bonsai "miss" is my grader's fault, not the model's
 
@@ -208,18 +264,19 @@ truncation column now exists.
 
 | | seed (in-distribution) | held-out (unseen code) |
 |---|---|---|
-| Bonsai e2e tok/s | 16.571 | 15.868 |
-| clippy e2e tok/s (quiet) | 1,876,526 | 1,731,907 |
-| **tok/s ratio** | **113,242×** | **109,146×** |
-| **fixes/sec ratio** | **3,105,538×** | **2,886,906×** |
+| Bonsai e2e tok/s — loaded / quiet | 16.571 / 25.50 | 15.868 / 25.50 |
+| clippy e2e tok/s — loaded / quiet | 1,403,741 / 1,876,526 | 1,428,076 / 1,731,907 |
+| **tok/s ratio — both quiet** | **73,589×** | **67,918×** |
+| tok/s ratio — both loaded | 84,711× | 89,997× |
+| **fixes/sec ratio — both quiet** | **2,018,108×** | **1,796,425×** |
 | Bonsai exact-match | 10/10 | 10/10 (9/10 by strict grader) |
 | **clippy exact-match** | **10/10** | **0/10** |
 | Bonsai truncated | 0/10 | 0/10 |
 
 **The throughput answer, as asked:** the modelless pipeline delivers a clippy
-fix ~110,000× more tokens/sec and ~2.9 M× more fixes/sec than Ternary-Bonsai-27B
+fix ~74,000× more tokens/sec and ~2.0 M× more fixes/sec than Ternary-Bonsai-27B
 on llama.cpp. That number is real, reproducible, and stable across both
-fixtures (the ratio moves <4% between them).
+fixtures (both-quiet: 73,589× → 67,918×, i.e. ~8%).
 
 **The verdict that matters:** the ratio is only meaningful where the answer is
 already in the corpus. Bonsai's accuracy is **flat across the distribution
@@ -236,7 +293,7 @@ So the two arms are not competing on one axis:
   choice by an enormous margin. 17 µs versus 51 s is not a trade-off; it is a
   different category of operation, and both are right.
 - **On anything unseen**, the modelless path has no capability to compare. A
-  109,146× speedup toward a confidently wrong function is worth less than
+  67,918× speedup toward a confidently wrong function is worth less than
   51 seconds toward a correct one. Per the repo's GOAT rule — a perf gain on an
   incorrect answer is a speedup of a wrong result — **the held-out column is a
   GOAT FAIL for the modelless arm, and no throughput number rescues it.**
