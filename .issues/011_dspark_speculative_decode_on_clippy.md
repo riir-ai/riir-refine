@@ -69,13 +69,42 @@ moment its output is verified rather than returned.
 
 ## Prerequisite
 
-The fork ships `test-dspark-forward`, `test-dspark-loop`, `test-dspark-real-eval`
-in `vendor/prismml-llama.cpp/build/bin/`, and riir-ai references DSpark in
-Proposal 018 / Plan 485. **First task is to establish what is actually runnable
-on M3 Metal against Bonsai** — Proposal 018 records DSpark as the winner of a
-GOAT gate that FlashAR failed, but does not confirm a wired ternary path.
+- [x] **T0** — **RESOLVED 2026-08-12. The runnable path is the fork binary, not
+      a riir-ai crate, and it is Metal-capable.**
 
-- [ ] **T0** — Locate the runnable DSpark path (fork binary vs riir-ai crate) and
-      confirm it accepts the Bonsai Q2_0 GGUF on Metal. If nothing is wired,
-      this issue converts to "wire DSpark into the ternary forward" and the
-      measurement follows.
+  **Correction to this issue's original text:** it claimed the binaries live in
+  `vendor/prismml-llama.cpp/build/bin/` *relative to this repo*. That is wrong —
+  **riir-clippy has no `vendor/` directory at all.** The fork is a sibling of
+  the repo set:
+
+  ```text
+  /Users/katopz/git/vendor/prismml-llama.cpp/build/bin/
+  ```
+
+  Findings:
+
+  | question | answer |
+  |---|---|
+  | Binaries present? | Yes — `test-dspark-forward`, `test-dspark-loop`, `test-dspark-real-eval`, all built 2026-08-09 |
+  | Native on M3? | Yes — `Mach-O 64-bit executable arm64`; `test-dspark-forward` runs and prints usage |
+  | Metal-capable? | **Yes** — links `libggml-metal.0.dylib`, *identical* backend linkage to the `llama-cli` that produced Bench 010's 149.95 tok/s Metal numbers |
+  | CUDA-gated? | No — `common/dspark-markov.cu` is the device path, but the header documents a host fallback via `LLAMA_DSPARK_MARKOV_CUDA=0` |
+  | Rust implementation in riir-ai? | **None.** A grep over `crates/**/*.rs` finds zero hits; every DSpark reference is prose in `.proposals/018`, `.plans/485`, `.plans/528`, `.issues/606`, `.issues/608` |
+
+  So this issue does **not** convert to "wire DSpark into the ternary forward" —
+  the fork binary is the measurement vehicle. Note the consequence for G3/G4:
+  the fork arm measures *llama.cpp + DSpark*, so it answers "does speculation
+  help llama.cpp on clippy prompts", **not** "does it help katgpt". A katgpt-side
+  speculative path would still need building before G3 can compare our
+  effective throughput against our own 17.85 raw baseline.
+
+  Usage discovered:
+  ```text
+  test-dspark-forward <model.gguf> --tier1 | --tier2 <ref.bin> \
+      [min_argmax_match_rate] [min_top5_overlap]
+  ```
+
+- [ ] **T0b** — Run `test-dspark-forward <Bonsai-Q2_0.gguf> --tier1` on Metal and
+      record acceptance behaviour. Not yet done: it loads a second 7 GB model and
+      was deferred to avoid contending with the Issue 637 T3 prefill run on the
+      same box.
