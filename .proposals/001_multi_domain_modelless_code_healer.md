@@ -251,6 +251,7 @@ Promotion: `clippy_lints` stays default-on (it IS the current behavior under a n
 5. **`rust-optimize` skill** (`~/.agents/skills/rust-optimize/SKILL.md`) — the L0 rule distillation for the `rust_perf` domain (its checklist maps 1:1 to corpus entries).
 6. **Bench 009** (`riir-clippy/.benchmarks/009_bonsai_vs_modelless_e2e_tokps.md`) — the cache-vs-compute silent-miss lesson, cross-domain.
 7. **riir-game-sdk Issue 002** — the facade re-export pattern this proposal uses for back-compat (`pub use` preserves old names after the underlying type moves).
+8. **popcorn** ([`tilde-research/popcorn`](https://github.com/tilde-research/popcorn), upstream origin) — PyTorch kernel dispatcher, 96 kernels × ~100 impls × 7 backends. The L0 corpus source for the `kernel_opt` domain (distilled, not ported — see Proposal 012 §Phase 0). Referenced as the methodology source (reference-check + benchmark records + agent loop); the Python/Triton backend code is not portable to the Rust stack.
 
 ## TL;DR
 
