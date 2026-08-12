@@ -74,3 +74,11 @@ required-features = ["ruliology_search"]
 [[example]]
 name = "self_evolve_real_world_demo"
 required-features = ["self_evolve", "clippy_verify"]
+
+# E2E tokens/sec harness (Bonsai/llama.cpp head-to-head denominator).
+# Emits JSONL of (lint, emitted fix, latency); tokens are counted externally by
+# scripts/bench_bonsai_vs_clippy_tokps.py using the SAME Bonsai tokenizer, so
+# both arms share one numerator unit. MODE=l1l2|self_evolve selects the path.
+[[example]]
+name = "bench_e2e_tokps"
+required-features = ["self_evolve"]

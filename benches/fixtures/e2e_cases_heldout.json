@@ -1,0 +1,56 @@
+{
+  "name": "heldout",
+  "note": "Out-of-distribution: SAME 10 lints, DIFFERENT code. The riir-clippy corpus does NOT contain these fixes — only a same-lint template. This is the generalization axis; the seed set only measures retrieval. Fixes chosen to have a single canonical idiomatic form so normalized exact-match stays a fair grader for both arms.",
+  "cases": [
+    {
+      "lint": "needless_return",
+      "buggy": "fn bar(x: i32) -> i32 { return x + 1; }",
+      "want": "fn bar(x: i32) -> i32 { x + 1 }"
+    },
+    {
+      "lint": "redundant_closure",
+      "buggy": "fn sq(x: u32) -> u32 { x * x }\nfn run(v: Vec<u32>) -> Vec<u32> { v.into_iter().map(|n| sq(n)).collect() }",
+      "want": "fn sq(x: u32) -> u32 { x * x }\nfn run(v: Vec<u32>) -> Vec<u32> { v.into_iter().map(sq).collect() }"
+    },
+    {
+      "lint": "needless_lifetimes",
+      "buggy": "fn head<'a>(v: &'a Vec<u8>) -> &'a u8 { &v[0] }",
+      "want": "fn head(v: &Vec<u8>) -> &u8 { &v[0] }"
+    },
+    {
+      "lint": "redundant_field_names",
+      "buggy": "struct Cfg { name: String, port: u16 }\nfn mk(name: String, port: u16) -> Cfg {\n    Cfg { name: name, port: port }\n}",
+      "want": "struct Cfg { name: String, port: u16 }\nfn mk(name: String, port: u16) -> Cfg {\n    Cfg { name, port }\n}"
+    },
+    {
+      "lint": "manual_map",
+      "buggy": "fn to_text(x: Option<u8>) -> Option<String> {\n    match x {\n        Some(v) => Some(v.to_string()),\n        None => None,\n    }\n}",
+      "want": "fn to_text(x: Option<u8>) -> Option<String> {\n    x.map(|v| v.to_string())\n}"
+    },
+    {
+      "lint": "unnecessary_unwrap",
+      "buggy": "fn get(r: Option<u32>) -> u32 {\n    if r.is_some() { r.unwrap() } else { 7 }\n}",
+      "want": "fn get(r: Option<u32>) -> u32 {\n    r.unwrap_or(7)\n}"
+    },
+    {
+      "lint": "needless_range_loop",
+      "buggy": "fn double_all(v: &Vec<i32>) -> Vec<i32> {\n    let mut out = Vec::new();\n    for i in 0..v.len() { out.push(v[i] * 2); }\n    out\n}",
+      "want": "fn double_all(v: &Vec<i32>) -> Vec<i32> {\n    v.iter().map(|x| x * 2).collect()\n}"
+    },
+    {
+      "lint": "useless_conversion",
+      "buggy": "fn twice(n: u64) -> u64 {\n    let m: u64 = n.into();\n    m * 2\n}",
+      "want": "fn twice(n: u64) -> u64 {\n    n * 2\n}"
+    },
+    {
+      "lint": "unnecessary_mut_passed",
+      "buggy": "fn count(v: &Vec<u8>) -> usize { v.len() }\nfn go(mut v: Vec<u8>) -> usize { count(&mut v) }",
+      "want": "fn count(v: &Vec<u8>) -> usize { v.len() }\nfn go(v: Vec<u8>) -> usize { count(&v) }"
+    },
+    {
+      "lint": "needless_borrow",
+      "buggy": "fn show(s: &str) -> usize { s.len() }\nfn go(s: &str) -> usize { show(&s) }",
+      "want": "fn show(s: &str) -> usize { s.len() }\nfn go(s: &str) -> usize { show(s) }"
+    }
+  ]
+}

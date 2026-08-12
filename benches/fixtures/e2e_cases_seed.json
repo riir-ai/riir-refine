@@ -1,0 +1,56 @@
+{
+  "name": "seed",
+  "note": "In-distribution: the exact (lint, buggy_code) pairs the riir-clippy seed corpus was built from. The clippy arm's corpus CONTAINS the ground-truth fix, so its quality here measures retrieval, not generalization.",
+  "cases": [
+    {
+      "lint": "needless_return",
+      "buggy": "fn foo() -> i32 { return 42; }",
+      "want": "fn foo() -> i32 { 42 }"
+    },
+    {
+      "lint": "redundant_closure",
+      "buggy": "fn double(x: i32) -> i32 { x * 2 }\nfn apply(f: impl Fn(i32) -> i32, x: i32) -> i32 { f(x) }\nfn caller(x: i32) -> i32 { apply(|v| double(v), x) }",
+      "want": "fn double(x: i32) -> i32 { x * 2 }\nfn apply(f: impl Fn(i32) -> i32, x: i32) -> i32 { f(x) }\nfn caller(x: i32) -> i32 { apply(double, x) }"
+    },
+    {
+      "lint": "needless_lifetimes",
+      "buggy": "fn first<'a>(s: &'a String) -> &'a str { s.as_str() }",
+      "want": "fn first(s: &String) -> &str { s.as_str() }"
+    },
+    {
+      "lint": "redundant_field_names",
+      "buggy": "struct Point { x: i32, y: i32 }\nfn make(x: i32, y: i32) -> Point {\n    Point { x: x, y: y }\n}",
+      "want": "struct Point { x: i32, y: i32 }\nfn make(x: i32, y: i32) -> Point {\n    Point { x, y }\n}"
+    },
+    {
+      "lint": "manual_map",
+      "buggy": "fn opt_double(x: Option<i32>) -> Option<i32> {\n    match x {\n        Some(v) => Some(v * 2),\n        None => None,\n    }\n}",
+      "want": "fn opt_double(x: Option<i32>) -> Option<i32> {\n    x.map(|v| v * 2)\n}"
+    },
+    {
+      "lint": "unnecessary_unwrap",
+      "buggy": "fn process(opt: Option<i32>) -> i32 {\n    if opt.is_some() { opt.unwrap() } else { 0 }\n}",
+      "want": "fn process(opt: Option<i32>) -> i32 {\n    opt.unwrap_or(0)\n}"
+    },
+    {
+      "lint": "needless_range_loop",
+      "buggy": "fn sum_vec(v: &Vec<i32>) -> i32 {\n    let mut total = 0;\n    for i in 0..v.len() { total += v[i]; }\n    total\n}",
+      "want": "fn sum_vec(v: &Vec<i32>) -> i32 {\n    v.iter().sum()\n}"
+    },
+    {
+      "lint": "useless_conversion",
+      "buggy": "fn add_one(x: i32) -> i32 {\n    let y: i32 = x.into();\n    y + 1\n}",
+      "want": "fn add_one(x: i32) -> i32 {\n    x + 1\n}"
+    },
+    {
+      "lint": "unnecessary_mut_passed",
+      "buggy": "fn length(s: &str) -> usize { s.len() }\nfn caller(mut s: String) -> usize { length(&mut s) }",
+      "want": "fn length(s: &str) -> usize { s.len() }\nfn caller(s: String) -> usize { length(&s) }"
+    },
+    {
+      "lint": "needless_borrow",
+      "buggy": "fn take_ref(x: &i32) -> i32 { *x }\nfn caller(x: &i32) -> i32 { take_ref(&x) }",
+      "want": "fn take_ref(x: &i32) -> i32 { *x }\nfn caller(x: &i32) -> i32 { take_ref(x) }"
+    }
+  ]
+}
