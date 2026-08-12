@@ -108,3 +108,37 @@ moment its output is verified rather than returned.
       record acceptance behaviour. Not yet done: it loads a second 7 GB model and
       was deferred to avoid contending with the Issue 637 T3 prefill run on the
       same box.
+
+## Status of the alternative route (riir-ai Issue 637 T3) — 2026-08-12
+
+This issue exists because DSpark looked like the cheapest way to beat
+llama.cpp's 31.21 tok/s without fixing the underlying gaps. The *other* route —
+batched prefill — has now been built and gated, and it did not work:
+
+- **riir-ai Issue 637 T1/T2**: the batched ternary GEMM is correct (2.0e-7 vs P
+  sequential GEMVs) but caps at **1.08×** on the projection roll-up against a
+  ≥3× gate; the wins are launch-overhead amortization on under-occupied shapes,
+  and `ffn_gate/up` + `ffn_down` (63% of projection time) are unwinnable.
+- **riir-ai Issue 637 T3**: `prefill()` shipped behind `ternary_gemm_batched`
+  but **fails G1** — exact at P=1, diverging from P=2 (max rel 2.7e-1 → 4.2e0),
+  though argmax holds at every P. Root cause open. G2 measured 1.05×.
+
+So the prefill route is not going to close the gap either, which raises rather
+than lowers the value of measuring speculation here.
+
+**G3/G4 caveat that constrains what this issue can conclude.** Per T0, the only
+runnable DSpark is the *fork binary*, so its arm measures **llama.cpp + DSpark**,
+not katgpt + DSpark. That means:
+
+- **G3** (effective throughput) cannot be stated against our own 17.85 raw
+  baseline from the fork arm alone — it would compare llama.cpp's speculated
+  rate against katgpt's unspeculated one, the exact category error that had to
+  be corrected in Bench 009 and flagged in Bench 585. A katgpt-side speculative
+  path must exist first.
+- **G4** (fairness) is *satisfiable* by this route and is what it is actually
+  good for: llama.cpp-speculated vs llama.cpp-raw is a clean same-engine pair
+  and answers "how much does DSpark buy on clippy prompts at all" — which is
+  the prerequisite question before anyone builds a katgpt-side drafter.
+
+Reframe accordingly: T0b measures the **ceiling** of the idea, not our position
+against it.
