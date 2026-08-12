@@ -1,0 +1,76 @@
+# Issue 009 — E2E tokens/sec: Ternary-Bonsai-27B (llama.cpp) vs the modelless pipeline
+
+**Type:** proof / benchmark
+**Status:** SEED MEASURED — held-out Bonsai pass in flight; results in
+[Bench 009](../.benchmarks/009_bonsai_vs_modelless_e2e_tokps.md)
+**Date:** 2026-08-12
+**Host:** M3 Max (Metal, 12 threads), macOS Darwin 25.5.0
+
+## Question
+
+What is the **end-to-end tokens/sec** of the riir-clippy modelless pipeline
+(best feature flag) versus Ternary-Bonsai-27B-Q2_0 served by llama.cpp, on the
+same clippy-healing task?
+
+## Metric
+
+```text
+tok/s = tokens(emitted fix) / wall_clock(request → fix in hand)
+```
+
+Both arms produce the same deliverable: given `(lint_name, buggy_code)`, emit
+fixed Rust source. The **numerator uses one tokenizer for both arms** —
+Bonsai's own vocab via `llama-tokenize` — so the unit is identical. The clippy
+arm emits raw Rust and gets tokenized post-hoc; it is not credited with
+"free" tokens.
+
+## Fairness constraints (all enforced in the harness)
+
+1. **Shared fixture.** Both arms read the same `(lint, buggy, want)` triples
+   from `benches/fixtures/e2e_cases_*.json`. No duplicated case list.
+2. **Two fixtures, because one is not a fair read.**
+   - `e2e_cases_seed.json` — the exact 10 pairs the seed corpus was built from.
+     The clippy corpus **contains the ground-truth fix**, so this measures
+     retrieval, not generalization.
+   - `e2e_cases_heldout.json` — same 10 lints, unseen code. This is the
+     generalization axis and the one that decides the quality verdict.
+3. **Bonsai is a thinking model.** Its reasoning tokens count toward its own
+   e2e time (correct — the user waits for them), but `--max-tokens` must be
+   large enough to finish reasoning *and* emit code. At 512 tokens, 7/10 runs
+   were cut off mid-reasoning and scored 0 for a budget reason, not a
+   capability reason. Re-run at 2048 with a `truncated` column reported.
+4. **Setup/load cost reported separately**, never silently amortized: Bonsai
+   pays model load; the clippy arm pays corpus thaw + memory seeding.
+5. **Quality is reported next to throughput.** tok/s on a wrong fix is not a
+   win — per the repo's GOAT rule, a perf gain on an incorrect answer is a
+   speedup of a wrong result.
+
+## Gates
+
+- **G1 (throughput):** report clippy tok/s ÷ Bonsai tok/s on both fixtures.
+- **G2 (in-distribution quality):** exact-match rate on the seed fixture.
+- **G3 (generalization quality):** exact-match rate on the held-out fixture.
+  **This gate decides whether the throughput number means anything.**
+- **G4 (honesty):** truncation count reported for the Bonsai arm; the clippy
+  arm's emitted bytes checked for input-independence (does it emit the same
+  fix regardless of the buggy code it was handed?).
+
+## Reproduce
+
+```sh
+# Arm A — modelless pipeline (both fixtures)
+CARGO_TARGET_DIR=/tmp/clippy_e2e_target cargo run --release \
+  --example bench_e2e_tokps --features self_evolve -- \
+  benches/fixtures/e2e_cases_seed.json /tmp/clippy_e2e_seed.jsonl
+
+# Arm B — Bonsai via llama.cpp (Q2_0 needs the prismml fork; upstream
+# llama.cpp CANNOT load this file — see Bench 009 "Blocker" section)
+/Users/katopz/git/vendor/prismml-llama.cpp/build/bin/llama-server \
+  --model /Users/katopz/git/riir-train/data/Ternary-Bonsai-27B-Q2_0.gguf \
+  --port 8123 --ctx-size 4096 --temp 0.0 --seed 42 -ngl 99 --no-webui --jinja
+
+python3 scripts/bench_bonsai_vs_clippy_tokps.py --port 8123 \
+  --cases benches/fixtures/e2e_cases_seed.json \
+  --clippy-jsonl /tmp/clippy_e2e_seed.jsonl --out /tmp/h2h_seed.json \
+  --max-tokens 2048
+```
