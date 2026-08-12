@@ -15,12 +15,30 @@ fallback, not the co-equal path.
 | Layer | Status |
 |---|---|
 | L0 — Corpus (rule distillation) | ✅ Done (BLAKE3-committed freeze/thaw + seed corpus with 10 common lints) |
-| L1 — Ternary SIMD drafter | ✅ Done (Issue 001, zero-alloc matvec, p50=2.3µs) |
+| L1 — Ternary SIMD drafter | ✅ Done (Issue 001, zero-alloc matvec, p50=2.3µs) — ⚠️ **corpus-resident lints only**, see Issue 010 |
 | L2 — Syntax validator | ✅ Done (Issue 002, `syn`-based parse check, p50=6.8µs) |
 | L2 — Lint resolution check | ✅ Done (Issue 003, `clippy_verify` feature, real `cargo clippy` JSON parsing, ~130ms/verify) |
 | L3 — Ruliology search | ✅ Done (Issue 005, `ruliology_search` feature, Pareto-front from katgpt-ruliology pattern, ~400µs/10-candidate search) |
 | SE — Self-evolution loop (additive) | ✅ Done (Issue 004 + Issue 008; `self_evolve` feature, opt-in; G1–G5 + G6/G7 ALL PASS — 50.0pp healing-rate improvement on real `cargo clippy` feedback) |
 | L4 — LoRA fallback | ⏳ Deferred to riir-train |
+
+## Scope limit (measured, Bench 009)
+
+The pipeline is a **fast cache over corpus-resident lint fixes**, not a general
+clippy fixer. Measured on 10 lints:
+
+| | in-distribution (corpus holds the fix) | held-out (same lints, unseen code) |
+|---|---|---|
+| exact-match | **10/10** | **0/10** |
+| e2e throughput vs Bonsai-27B | ~113,000× tok/s | ~109,000× tok/s |
+
+The L1 drafter returns corpus `fixed_code` **verbatim** — the input code selects
+*which* stored fix to return but never influences the text ([Issue 010](.issues/010_drafter_cannot_generalize_heldout_code.md)).
+On unseen code it therefore emits a valid-but-wrong function, and L2 reports
+`parses = true` on it, so **a cache miss is currently silent**. Deploy it as a
+cache with a fallback path, and do not read the throughput number as a
+capability claim. For reference, Ternary-Bonsai-27B scored 10/10 on both
+fixtures at ~16 tok/s.
 
 ## Architecture
 
@@ -125,6 +143,7 @@ if result.is_valid() {
 
 - [Bench 001](.benchmarks/001_goat_consolidated.md) — consolidated GOAT gate results (L1 + L2 + Phase 3 + L3)
 - [Bench 008](.benchmarks/008_real_world_validation.md) — real-world validation of `self_evolve` via `cargo clippy` (G6 + G7)
+- [Bench 009](.benchmarks/009_bonsai_vs_modelless_e2e_tokps.md) — e2e tok/s vs Ternary-Bonsai-27B on llama.cpp (~110,000× throughput; 0/10 held-out quality)
 - [`.docs/10_self_evolve/`](.docs/10_self_evolve/) — design notes for the self-evolution loop (HealPipeline, LatentFixMemory, LatentSkillEvolution)
 - [Proposal 034](../riir-ai/.proposals/034_clippy_healing_drafter_pruner.md) — the design argument
 - [Plan 331 Phase A](../riir-train/.plans/331_lora_rust_coder_candidates_consolidated.md) — Gemma-2 r16 production (LoRA fallback base)
