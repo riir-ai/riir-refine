@@ -8,7 +8,7 @@
 //! validator found ParetoDominated in the default config (Bench 013), `None`
 //! for unconditional wins + honestly NotBenchable rules.
 //!
-//! 22 entries across 11 categories (complexity 7, allocation 3, simd 3,
+//! 22 entries across 11 categories (complexity 6, allocation 3, simd 3,
 //! layout 2, concurrency 2, arithmetic 1, iterators 1, dispatch 1, caching 1,
 //! bevy 1, wasm 1). 18 are benchable (15 ParetoDominant + 2 ParetoDominated +
 //! 1 Mixed); 4 are honestly NotBenchable.
@@ -65,11 +65,11 @@ use crate::domains::rust_perf::{PerfRule, RustPerfDomain};
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 21 entries
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 22 entries
 /// covering the main `rust-optimize` skill categories (complexity, allocation,
 /// layout, concurrency, simd, arithmetic, iterators, dispatch, caching, bevy,
 /// wasm). Complexity is the deepest category (6 rules: 3 algorithmic + entry
-/// merge + loop fusion + branchless-via-vectorization); allocation has 3; simd
+/// merge + loop fusion + prefix-sum-2d); allocation has 3; simd
 /// has 3; layout + concurrency have 2; the rest have 1 each.
 #[must_use]
 #[allow(clippy::too_many_lines)] // seed corpus is a data table; length scales with rule count
@@ -1561,7 +1561,7 @@ mod tests {
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
         categories.dedup();
-        // 11 distinct categories. Complexity is the deepest (7 rules);
+        // 11 distinct categories. Complexity is the deepest (6 rules);
         // allocation + simd have 3 each; layout + concurrency have 2;
         // arithmetic, iterators, dispatch, caching, bevy, wasm have 1 each.
         assert_eq!(categories.len(), 11);

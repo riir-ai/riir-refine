@@ -20,10 +20,9 @@
 ## Corpus
 
 22 seed rules across 11 skill-checklist categories. Complexity is the
-deepest category (7 rules — the 3 algorithmic anti-patterns + HashMap
-lookup merging + loop fusion + branchless-vectorization + prefix-sum-2d);
-allocation + simd have 3 each; layout + concurrency have 2; the rest have 1
-each. 18 are benchable (carry a `BenchSpec`); 4 are honestly `NotBenchable`
+depest category (6 rules — the 3 algorithmic anti-patterns + HashMap
+lookup merging + loop fusion + prefix-sum-2d); allocation + simd have 3
+each; layout + concurrency have 2; the rest have 1 each. 18 are benchable (carry a `BenchSpec`); 4 are honestly `NotBenchable`
 (need external runtimes or are structural). 3 of the 18 benchable rules carry
 `context_notes` (Bench 013 found 2 `ParetoDominated` + 1 `Mixed` in the
 default config — consumers should treat them as context-dependent, not

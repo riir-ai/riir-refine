@@ -8,7 +8,7 @@
 
 The `rust_perf` domain end-to-end (Plan 001 Phase 2):
 
-1. **Build corpus**: `build_perf_seed_corpus()` → 21 `PerfRule` entries across
+1. **Build corpus**: `build_perf_seed_corpus()` → 22 `PerfRule` entries across
    11 skill-checklist categories (complexity is deepest with 6 rules;
    allocation + simd have 3 each).
 2. **List rules**: prints all 22 rules grouped by category.
