@@ -1,7 +1,7 @@
 # Issue 011 — Measure DSpark speculative decode on clippy prompts
 
 **Type:** proof / measurement
-**Status:** OPEN — not measured
+**Status:** RESOLVED 2026-08-13 — measured; DSpark is a net **slowdown (0.55×)** on the current checkpoint. See [Bench 012](../.benchmarks/012_dspark_speculative_acceptance_clippy.md).
 **Filed:** 2026-08-12
 **Evidence base:** [Bench 010](../.benchmarks/010_llamacpp_vs_katgpt_ternary_clippy_tps.md) — raw forward, **no speculation enabled**
 
@@ -104,43 +104,64 @@ moment its output is verified rather than returned.
       [min_argmax_match_rate] [min_top5_overlap]
   ```
 
-- [ ] **T0b** — Run `test-dspark-forward <Bonsai-Q2_0.gguf> --tier1` on Metal and
-      record acceptance behaviour. Not yet done: it loads a second 7 GB model and
-      was deferred to avoid contending with the Issue 637 T3 prefill run on the
-      same box.
+- [x] **T0b** — **RESOLVED 2026-08-13. Measured in [Bench 012](../.benchmarks/012_dspark_speculative_acceptance_clippy.md). DSpark is a net slowdown (0.554×) on the current `dspark-Q4_1` checkpoint; the accept rate (0.558 overall, 0.774 code) is below the breakeven the block-diffusion draft cost demands. Speculation moves clippy throughput the wrong way — it will not reach llama.cpp's 31.21 tok/s.**
 
-      **GPU exclusivity is now a hard precondition, not politeness (2026-08-13).**
-      riir-ai [Issue 640](../../riir-ai/.issues/640_batched_rmsnorm_prefill_nondeterministic.md)
-      established that a second process using the GPU makes wgpu/Metal produce
-      **bit-different results** for identical input — measured at
-      **4.05% → 50.00%** divergence (12.3×, χ²(1)=36.03, p≈2×10⁻⁹,
-      riir-ai `.benchmarks/649_contention_ab.md`), with the contending process
-      slowing the victim 1.78×.
+  **Two corrections to this task's original text** (factual, verified against
+  `vendor/prismml-llama.cpp/tests/test-dspark-forward.cpp`):
 
-      That is directly disqualifying for this task. **Tier-1 acceptance is an
-      argmax-agreement statistic between draft and target**, and contention is
-      known to flip exactly those bits. An acceptance rate measured while another
-      job holds the GPU is not a measurement of DSpark — it is a measurement of
-      DSpark plus an unquantified corruption term, and it would be
-      indistinguishable from a genuinely poor acceptance rate.
+  1. **`--tier1` takes the drafter, not the target.** `run_tier1` reads
+     `dspark.dspark.block_size` from the loaded model and fails otherwise
+     (`"could not read dspark.dspark.block_size from GGUF"`). Passing the Q2_0
+     target exits 1 instantly. The drafter GGUF is the correct argument.
+  2. **tier1 is a CPU synthetic finiteness/shape smoke test, NOT an
+     argmax-agreement statistic between draft and target.** It pins
+     `n_gpu_layers = 0` (*"CPU: deterministic, no Metal precision surprises"*)
+     and asserts logits are finite + correctly shaped. There is no draft-vs-target
+     argmax comparison in tier1 — that lives in `test-dspark-real-eval` (real
+     target + drafter, per-token accept). tier1 has **no GPU surface**, so the
+     GPU-exclusivity blockade that held this task for two sessions was premised
+     on a misread: contention cannot corrupt a CPU smoke test.
 
-      Before running T0b:
+  **What was actually run** (both binaries):
 
-      1. Confirm no other GPU consumer — check processes directly.
-         **Load average is not a proxy**: riir-ai measured the divergence firing
-         at load 4.3 and staying quiet at load 9.3.
-      2. Record GPU-exclusivity in the result alongside the number, the way load
-         average is already recorded.
-      3. If exclusivity cannot be guaranteed, state that and treat the acceptance
-         figure as provisional. A gate measured under contention is not evidence.
+  - `test-dspark-forward --tier1 <drafter>` → **PASSED** (~1 s, CPU). Drafter
+    `Bonsai-27B-dspark` loads clean: 3.65B, 6 trunk layers, `block_size=4`,
+    `target_layers=[1,16,31,46,61]`, `markov_rank=256`, `confidence_head=true`,
+    vocab 248320. Logits finite (`non_finite=0`), shape `4×248320`. This is a
+    forward-graph validity check; it does not measure acceptance.
+  - `test-dspark-real-eval <target> <drafter>` on GPU (24 built-in prompts,
+    clear GPU) → **accept 0.558** (code 0.774 / reasoning 0.678 / chat 0.344),
+    τ 3.23, **speedup 0.554** (AR 12.31 tok/s → spec 6.81 tok/s). A CPU
+    cross-check (`n_gpu_layers=0`, contention-immune for the accept metric)
+    agreed within Metal precision (overall 0.514 vs 0.558).
 
-      The riir-ai repo carries this as a standing rule in its `AGENTS.md`
-      ("GPU exclusivity during correctness gates"); it applies here for the same
-      reason.
+  **GPU exclusivity remains a hard precondition — but for `real-eval`, not
+  tier1.** The accept-rate measurement *does* use the GPU (`n_gpu_layers=999`)
+  and *is* an argmax-agreement statistic, so the Bench 649 discipline correctly
+  applies to it. The GPU run was measured under verified exclusivity: pre-flight
+  showed `0` compute procs after the sibling `bench_655_tasks_max_ab` loop
+  exited; run window 15:56:48→16:05:30, `exit=0`, stable ~14–15 tok/s AR on code
+  (no Bench-649 divergence signature). See Bench 012 §"GPU exclusivity".
 
-      Status 2026-08-13 12:04: **still blocked** — a sibling
-      `bonsai_lora_accuracy_parity_arm_c` job has held the GPU for 58+ minutes,
-      which is the same class of contention T0b was originally deferred for.
+  **Why the win does not materialize.** Accept-by-depth is healthy and even
+  rises with depth (0.76→0.86), so the drafter's block-diffusion refinement is
+  working. But τ≈3.2 accepted tokens per round does not pay for the cost of
+  drafting a full `block_size=4` block (fixed-length markov-resample loop) plus
+  the verify forward. Every prompt was slower under speculation (best 0.78×).
+  This matches the vendor scope doc: *"accept rate does not yet beat MTP… around
+  600 training steps in."* The drafter is under-trained.
+
+  **Open follow-ups (do NOT reopen this issue for these):**
+  - Re-measure when a later-trained dspark checkpoint lands (the scope doc gates
+    runtime on training convergence).
+  - **G5 clippy-specific:** the clippy held-out fixtures were *not* run — the
+    target GGUF has **no chat_template**, blocking the `dataset.jsonl` path
+    (which applies the chat template). The converted clippy set is staged
+    (`clippy_l4_sft_test.jsonl` → 116 prompts `{"turns":[...]}`) and ready when a
+    templated target is. The built-in chat/reasoning categories already preview
+    the G5 collapse (chat 0.344; worst prompts 0.17–0.27).
+  - **G3 katgpt-side:** a katgpt+DSpark path does not exist; this bench positions
+    the *ceiling of the idea* on the llama.cpp engine, which is sub-1.0.
 
 ## Status of the alternative route (riir-ai Issue 637 T3) — 2026-08-12
 
