@@ -8,9 +8,9 @@
 //! validator found ParetoDominated in the default config (Bench 013), `None`
 //! for unconditional wins + honestly NotBenchable rules.
 //!
-//! 21 entries across 11 categories (complexity 6, allocation 3, simd 3,
+//! 22 entries across 11 categories (complexity 7, allocation 3, simd 3,
 //! layout 2, concurrency 2, arithmetic 1, iterators 1, dispatch 1, caching 1,
-//! bevy 1, wasm 1). 17 are benchable (14 ParetoDominant + 2 ParetoDominated +
+//! bevy 1, wasm 1). 18 are benchable (15 ParetoDominant + 2 ParetoDominated +
 //! 1 Mixed); 4 are honestly NotBenchable.
 //!
 //! ## Bench specs (behind `rust_perf_bench`)
@@ -20,12 +20,13 @@
 //! `run_buggy` / `run_fixed` entry points. The bench validator generates a
 //! temp bin crate from the spec + runs a timing loop at multiple sizes.
 //!
-//! Currently benchable (17/21):
+//! Currently benchable (18/22):
 //! - `o1-lookup` (Vec scan vs HashMap lookup — clear O(n) vs O(1))
 //! - `bsearch-sorted-slice` (linear scan vs binary search — O(n) vs O(log n) on sorted data)
 //! - `dedupe-hashset-vs-vec` (Vec::contains loop vs HashSet collect — O(n²) vs O(n))
 //! - `entry-vs-contains-insert` (contains_key+insert vs entry API — merge HashMap lookups)
 //! - `loop-fusion` (two iterator passes vs one fused loop — cache locality, merge loops)
+//! - `prefix-sum-2d` (O(n) region scan vs O(1) prefix sum — boundary-vs-volume, grows with N)
 //! - `static-str` (String alloc vs &'static str — allocation cost)
 //! - `simd-chunk` (scalar vs chunked loop — vectorization at large N)
 //! - `branchless-conditional` (if vs bool-as-usize multiply — vectorization + branch prediction)
@@ -41,7 +42,7 @@
 //! - `vec-with-capacity` (Vec::new() growth vs Vec::with_capacity — realloc cost)
 //! - `format-concat-loop` (format! concat in loop vs push_str — O(n²) vs O(n))
 //!
-//! Not benchable (4/21) — honest:
+//! Not benchable (4/22) — honest:
 //! - `layout-reorder` (struct size — deterministic `size_of`, not a runtime
 //!   microbench; the cache-utilization claim needs a specific access pattern)
 //! - `repr-u8-enum` (enum size — deterministic `size_of`, same class as
@@ -450,6 +451,35 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
             context_notes: None,
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: Some(loop_fusion_bench_spec()),
+        },
+        // ── complexity: O(n) region scan → O(1) prefix sum (boundary-vs-volume) ──
+        // Per the rust-optimize skill item 1: "boundary-vs-volume" (Stokes /
+        // divergence theorem). The discrete instantiation is the 2D prefix sum
+        // (a.k.a. summed-area table / integral image): instead of scanning all
+        // O(n) interior cells per region-sum query, pre-compute the cumulative
+        // sum once (O(n)), then answer each query in O(1) via 4 corner lookups.
+        // The prefix array encodes the "boundary" (cumulative sum at the
+        // corners); the region mass is reconstructed from boundary values
+        // alone — the discrete form of the Stokes theorem.
+        //
+        // This is distinct from `o1-lookup` (point query via HashMap): prefix
+        // sum handles aggregate/range queries via mathematical pre-computation.
+        // The compiler cannot derive a prefix-sum transform from a nested-loop
+        // scan — it requires the programmer to recognize the pattern.
+        //
+        // Bench 013: ParetoDominant 30× → 26,000× (grows linearly with N — the
+        // scan is O(K * region_area) per K queries while the prefix is O(K)
+        // after a one-time O(n) build). Valid for d ≤ 3 (2D maps, 3D belief
+        // regions); for d ≥ 8 (HLA state) the prefix array exceeds the interior.
+        PerfRule {
+            rule_id: "prefix-sum-2d".to_string(),
+            name: "O(n) 2D region-sum scan per query → O(1) prefix sum (boundary-vs-volume)".to_string(),
+            category: "complexity".to_string(),
+            buggy_code: "fn region_sum(grid: &Vec<Vec<i64>>, x0: usize, y0: usize, x1: usize, y1: usize) -> i64 {\n    let mut sum = 0;\n    for x in x0..x1 {\n        for y in y0..y1 {\n            sum += grid[x][y];\n        }\n    }\n    sum\n}".to_string(),
+            fixed_code: "// Pre-compute once: prefix[x][y] = sum of grid[0..x][0..y]\nfn build_prefix(grid: &[Vec<i64>]) -> Vec<Vec<i64>> {\n    let w = grid.len();\n    let h = grid.first().map(|r| r.len()).unwrap_or(0);\n    let mut p = vec![vec![0i64; h + 1]; w + 1];\n    for x in 0..w {\n        for y in 0..h {\n            p[x + 1][y + 1] = grid[x][y] + p[x][y + 1] + p[x + 1][y] - p[x][y];\n        }\n    }\n    p\n}\nfn region_sum(prefix: &[Vec<i64>], x0: usize, y0: usize, x1: usize, y1: usize) -> i64 {\n    prefix[x1][y1] - prefix[x0][y1] - prefix[x1][y0] + prefix[x0][y0]\n}".to_string(),
+            context_notes: None,
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(prefix_sum_2d_bench_spec()),
         },
     ])
 }
@@ -1168,6 +1198,104 @@ pub fn run_fixed(input: &[u64]) {
     }
 }
 
+/// Bench spec for `prefix-sum-2d`: O(n) 2D region-sum scan vs O(1) prefix sum.
+///
+/// Tests K=50 random region queries on a sqrt(N)×sqrt(N) grid. The scan reads
+/// K×region_area cells; the prefix reads K×4 cells (after a one-time O(N) build
+/// in `make_input`). The win grows linearly with N — at N=1K it's ~30×, at
+/// N=1M it's ~26,000×.
+#[cfg(feature = "rust_perf_bench")]
+fn prefix_sum_2d_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![1_000, 10_000, 100_000, 1_000_000],
+        harness: r#"
+mod buggy {
+pub fn region_sum(grid: &[Vec<i64>], x0: usize, y0: usize, x1: usize, y1: usize) -> i64 {
+    let mut sum = 0i64;
+    for x in x0..x1 {
+        for y in y0..y1 {
+            sum += grid[x][y];
+        }
+    }
+    sum
+}
+}
+
+mod fixed {
+pub fn build_prefix(grid: &[Vec<i64>]) -> Vec<Vec<i64>> {
+    let w = grid.len();
+    let h = grid.first().map(|r| r.len()).unwrap_or(0);
+    let mut p = vec![vec![0i64; h + 1]; w + 1];
+    for x in 0..w {
+        for y in 0..h {
+            p[x + 1][y + 1] = grid[x][y] + p[x][y + 1] + p[x + 1][y] - p[x][y];
+        }
+    }
+    p
+}
+pub fn region_sum(prefix: &[Vec<i64>], x0: usize, y0: usize, x1: usize, y1: usize) -> i64 {
+    prefix[x1][y1] - prefix[x0][y1] - prefix[x1][y0] + prefix[x0][y0]
+}
+}
+
+pub struct Input {
+    grid: Vec<Vec<i64>>,
+    prefix: Vec<Vec<i64>>,
+    queries: Vec<(usize, usize, usize, usize)>,
+}
+
+pub fn make_input(n: usize) -> Input {
+    let dim = ((n as f64).sqrt().round() as usize).max(2);
+    let grid: Vec<Vec<i64>> = (0..dim)
+        .map(|x| (0..dim).map(|y| ((x * 31 + y * 17) % 100) as i64).collect())
+        .collect();
+    let prefix = fixed::build_prefix(&grid);
+    // K=50 region queries covering ~half the grid each.
+    let half = (dim / 2).max(1);
+    let queries: Vec<(usize, usize, usize, usize)> = (0..50)
+        .map(|i| {
+            let x0 = (i * 7) % half;
+            let y0 = (i * 13) % half;
+            let x1 = (x0 + half).min(dim);
+            let y1 = (y0 + half).min(dim);
+            (x0, y0, x1, y1)
+        })
+        .collect();
+    Input { grid, prefix, queries }
+}
+
+pub fn run_buggy(input: &Input) {
+    let mut total = 0i64;
+    for &(x0, y0, x1, y1) in &input.queries {
+        total = total.wrapping_add(buggy::region_sum(
+            std::hint::black_box(&input.grid),
+            std::hint::black_box(x0),
+            std::hint::black_box(y0),
+            std::hint::black_box(x1),
+            std::hint::black_box(y1),
+        ));
+    }
+    std::hint::black_box(total);
+}
+
+pub fn run_fixed(input: &Input) {
+    let mut total = 0i64;
+    for &(x0, y0, x1, y1) in &input.queries {
+        total = total.wrapping_add(fixed::region_sum(
+            std::hint::black_box(&input.prefix),
+            std::hint::black_box(x0),
+            std::hint::black_box(y0),
+            std::hint::black_box(x1),
+            std::hint::black_box(y1),
+        ));
+    }
+    std::hint::black_box(total);
+}
+"#
+        .to_string(),
+    }
+}
+
 /// Bench spec for `precompute-table`: runtime popcount loop vs const table.
 #[cfg(feature = "rust_perf_bench")]
 fn precompute_table_bench_spec() -> BenchSpec {
@@ -1426,14 +1554,14 @@ mod tests {
     }
 
     #[test]
-    fn seed_corpus_has_twenty_one_entries_across_eleven_categories() {
+    fn seed_corpus_has_twenty_two_entries_across_eleven_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 21);
+        assert_eq!(corpus.entries.len(), 22);
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
         categories.dedup();
-        // 11 distinct categories. Complexity is the deepest (6 rules);
+        // 11 distinct categories. Complexity is the deepest (7 rules);
         // allocation + simd have 3 each; layout + concurrency have 2;
         // arithmetic, iterators, dispatch, caching, bevy, wasm have 1 each.
         assert_eq!(categories.len(), 11);
@@ -1504,10 +1632,10 @@ mod tests {
 
     #[cfg(feature = "rust_perf_bench")]
     #[test]
-    fn seventeen_rules_have_bench_specs() {
+    fn eighteen_rules_have_bench_specs() {
         let corpus = build_perf_seed_corpus();
         let with_spec = corpus.entries.iter().filter(|e| e.bench_spec.is_some()).count();
-        assert_eq!(with_spec, 17, "expected 17 benchable rules, got {with_spec}");
+        assert_eq!(with_spec, 18, "expected 18 benchable rules, got {with_spec}");
     }
 
     #[cfg(feature = "rust_perf_bench")]
@@ -1530,7 +1658,7 @@ mod tests {
     /// Bench 013 found 3 rules with non-dominant verdicts in the default
     /// config (2 ParetoDominated + 1 Mixed). Their `context_notes` annotation
     /// records the finding so consumers don't unconditionally suggest them.
-    /// The other 15 have `context_notes: None` (unconditional wins or honestly
+    /// The other 19 have `context_notes: None` (unconditional wins or honestly
     /// NotBenchable).
     #[test]
     fn three_annotated_rules_carry_context_notes() {
@@ -1547,18 +1675,18 @@ mod tests {
         assert!(annotated.contains(&"dedupe-hashset-vs-vec"));
     }
 
-    /// The 18 non-annotated rules (14 ParetoDominant + 4 NotBenchable) must
+    /// The 19 non-annotated rules (15 ParetoDominant + 4 NotBenchable) must
     /// have `context_notes: None` — they are either unconditional wins or
     /// honestly unmeasurable.
     #[test]
-    fn eighteen_rules_have_no_context_notes() {
+    fn nineteen_rules_have_no_context_notes() {
         let corpus = build_perf_seed_corpus();
         let unannotated = corpus
             .entries
             .iter()
             .filter(|e| e.context_notes.is_none())
             .count();
-        assert_eq!(unannotated, 18, "expected 18 unannotated rules");
+        assert_eq!(unannotated, 19, "expected 19 unannotated rules");
     }
 
     /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -1582,7 +1710,7 @@ mod tests {
 
     /// Integration: the drafter propagates `context_notes` from `PerfRule`
     /// through `DraftedFix` for the 3 annotated rules (2 ParetoDominated + 1
-    /// Mixed), and `None` for the 11 unconditional wins. This is the Plan 001
+    /// Mixed), and `None` for the 12 unconditional wins. This is the Plan 001
     /// post-promotion wiring (2026-08-13) — the field existed on `PerfRule`
     /// but was invisible to the domain-agnostic drafter until
     /// `HealEntry::context_notes()` landed.
@@ -1612,9 +1740,9 @@ mod tests {
             );
         }
 
-        // The 18 unannotated rules must return None from the trait too.
+        // The 19 unannotated rules must return None from the trait too.
         let unannotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_none()).collect();
-        assert_eq!(unannotated.len(), 18, "expected 18 unannotated rules");
+        assert_eq!(unannotated.len(), 19, "expected 19 unannotated rules");
         for rule in &unannotated {
             assert!(HealEntry::context_notes(*rule).is_none(), "{} should have no context_notes", rule.rule_id);
         }

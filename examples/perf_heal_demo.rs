@@ -1,7 +1,7 @@
 //! Example: heal a perf rule using the `rust_perf` domain.
 //!
 //! Demonstrates the Phase 2 scaffold end-to-end:
-//! 1. Build the seed corpus (21 rules from the rust-optimize skill checklist).
+//! 1. Build the seed corpus (22 rules from the rust-optimize skill checklist).
 //! 2. Validate that each fixed pattern parses via the L2 pruner.
 //! 3. Show the corpus commitment + tamper-evidence check.
 //! 4. Optionally run `cargo test` verification if `rust_perf_verify` is on.

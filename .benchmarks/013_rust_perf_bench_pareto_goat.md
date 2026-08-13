@@ -27,15 +27,15 @@ Rules without a `BenchSpec` are honestly marked `NotBenchable`.
 
 | Gate | What | Target | Status |
 |---|---|---|---|
-| G1 (correctness) | benchable rules produce real measurements (ran=true, non-empty results) | all 17 benchable rules run | ✅ PASS (17/17 ran) |
+| G1 (correctness) | benchable rules produce real measurements (ran=true, non-empty results) | all 18 benchable rules run | ✅ PASS (18/18 ran) |
 | G2 (latency) | per-rule latency (temp crate compile + bench subprocess) | documented, not hot-path | ~5-15s/rule (compile-dominated) |
 | G3 (no-regression) | default features (no `rust_perf_bench`) still pass | default `cargo test --lib` green | ✅ PASS (91 default tests) |
 | G4 (alloc-free) | N/A — subprocess-based validator | N/A | ✅ PASS (documented N/A) |
-| G5 (Pareto verdict) | majority of benchable rules are Pareto-dominant | `pareto_dominant * 2 > benchable` | ✅ PASS (14/17 = majority) |
+| G5 (Pareto verdict) | majority of benchable rules are Pareto-dominant | `pareto_dominant * 2 > benchable` | ✅ PASS (15/18 = majority) |
 
-## Measured results (17 benchable, 4 not-benchable)
+## Measured results (18 benchable, 4 not-benchable)
 
-### Pareto-dominant (14/17) — the pattern works
+### Pareto-dominant (15/18) — the pattern works
 
 | Rule | N=small | N=large | Peak speedup | Verdict |
 |---|---:|---:|---:|---|
@@ -53,6 +53,7 @@ Rules without a `BenchSpec` are honestly marked `NotBenchable`.
 | `loop-fusion` | 1.46x (N=1000) | **1.56x** (N=1000000) | 1.56x | ✅ ParetoDominant (4/4 sizes faster) |
 | `collect-avoidance` | 2.27x (N=1000) | **2.95x** (N=100000) | 2.95x | ✅ ParetoDominant (4/4 sizes faster) |
 | `dyn-to-enum` | 2.88x (N=1000) | **2.50x** (N=100000) | 2.88x | ✅ ParetoDominant (3/3 sizes faster) |
+| `prefix-sum-2d` | 34.42x (N=1000) | **29964.14x** (N=1000000) | 29964.14x | ✅ ParetoDominant (4/4 sizes faster) |
 
 The `o1-lookup` N=10 SLOWER (0.60x) is small-N noise — HashMap has
 setup overhead that dominates at 10 elements. The O(n)→O(1) win is
@@ -129,30 +130,47 @@ intermediate that forces a second pass). Loop fusion is a distinct pattern:
 both passes are read-only consumers over the same slice, but the compiler
 can't merge them.
 
-### Investigation note: three candidate gaps tested, one verified
+`prefix-sum-2d` wins 34×–30000× because the buggy path scans all O(n) interior
+cells per region-sum query while the fixed path answers each query in O(1) via
+4 corner lookups on a pre-computed prefix sum. This is checklist item 1's
+"boundary-vs-volume" sub-item (Stokes / divergence theorem) — the discrete
+instantiation is the 2D prefix sum (a.k.a. summed-area table / integral image):
+the prefix array encodes the boundary cumulative sum, and each query
+reconstructs the region mass from boundary values alone. The win grows
+linearly with N (scan is O(K × region_area) for K queries; prefix is O(K)
+after a one-time O(N) build). Valid for d ≤ 3 (2D maps, 3D belief regions);
+for d ≥ 8 (HLA state) the prefix array exceeds the interior. This rule is
+distinct from `o1-lookup` (point query via HashMap) — prefix sum handles
+aggregate/range queries via mathematical pre-computation, not a data structure
+swap. The compiler cannot derive a prefix-sum transform from a nested-loop
+scan — it requires the programmer to recognize the pattern.
 
-This expansion tested three candidate patterns from the checklist:
+### Investigation note: four candidate gaps tested, two verified
+
+This expansion tested four candidate patterns from the checklist across two
+sessions:
 
 | Candidate | Checklist item | Verdict | Honest reason |
 |---|---|---|---|
 | **loop-fusion** (merge loops) | 1. Complexity | ✅ ParetoDominant (~1.5×) | Compiler can't fuse two separate iterator consumers; cache locality win at all N |
+| **prefix-sum-2d** (boundary-vs-volume) | 1. Complexity | ✅ ParetoDominant (34×–30000×) | Compiler can't derive a prefix-sum transform from a nested-loop scan; win grows linearly with N |
 | loop-invariant hoisting (compute once not N×M) | 8. Caching | ❌ ParetoDominated (0.88–1.02×) | **LLVM's LICM pass already hoists the call** — tested with `#[inline(never)]` + `expensive(k)` where k is loop-invariant: LLVM sees the function only depends on k, not on loop state, and hoists it despite no inlining. The manual hoist is sometimes SLOWER (register allocation interference). |
 | iter-to-index (use index arithmetic) | 5. Iterators | ❌ ParetoDominated (~1.00×) | **Compiler produces identical codegen** for `.zip().enumerate().map()` chains and direct index loops — tested zip+enumerate+map vs `for i in 0..n`: within noise at all N. LLVM lowers iterator chains to the same pointer-arithmetic loops as explicit indexing. |
 
 The empirical verification BEFORE corpus addition is the key defense: two
-of three candidates were honestly ParetoDominated (compiler already handles
-them) and were correctly excluded. Only the genuinely benchable pattern
-(loop fusion) was added. This mirrors the prior session's methodology
-(`entry-vs-contains-insert` + `branchless-conditional` were also verified
-before addition).
+of four candidates were honestly ParetoDominated (compiler already handles
+them) and were correctly excluded. Only the genuinely benchable patterns
+(loop fusion + prefix sum) were added. This mirrors the methodology across
+all corpus expansion rounds (`entry-vs-contains-insert` +
+`branchless-conditional` were also verified before addition).
 
-### Mixed (1/17) — scale-dependent
+### Mixed (1/18) — scale-dependent
 
 | Rule | Speedup range | Verdict | Honest reason |
 |---|---:|---|---|
 | `dedupe-hashset-vs-vec` | 0.64x–7.53x | ~ Mixed (2/4 Faster, 2/4 Slower) | HashSet allocation + hashing overhead exceeds the O(n²) cost at small N (≤500 elements, trivial comparison count). Wins clearly at N ≥ 1000 (up to 7.53x at N=5000). Suggest for dedup on collections known to exceed ~500 elements; for small dedup, the `Vec::contains` approach is fine. |
 
-### Pareto-dominated (2/17) — honest findings
+### Pareto-dominated (2/18) — honest findings
 
 | Rule | Speedup range | Verdict | Honest reason |
 |---|---:|---|---|
@@ -163,7 +181,7 @@ These are NOT bugs in the validator — they're exactly the kind of
 honest signal Proposal 001 caveat 3 predicted ("perf has no single
 ground truth — 'faster' depends on workload, hardware, input size").
 
-### Not benchable (4/21) — honest markings
+### Not benchable (4/22) — honest markings
 
 | Rule | Reason |
 |---|---|
@@ -204,8 +222,8 @@ is simpler, faster to compile, and sufficient for a Pareto verdict.
 
 **rust_perf was promoted to default-on 2026-08-13.** The GOAT gate (G1+G5)
 passed:
-- G1: all 17 benchable rules produce real measurements ✅
-- G5: 14/17 benchable rules are Pareto-dominant (majority) ✅
+- G1: all 18 benchable rules produce real measurements ✅
+- G5: 15/18 benchable rules are Pareto-dominant (majority) ✅
 
 The promotion follows the global AGENTS.md rule "promote to default if gain
 also demote loser":
