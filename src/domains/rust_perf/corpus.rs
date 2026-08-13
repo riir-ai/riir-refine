@@ -8,9 +8,9 @@
 //! validator found ParetoDominated in the default config (Bench 013), `None`
 //! for unconditional wins + honestly NotBenchable rules.
 //!
-//! 43 entries across 12 categories (complexity 12, allocation 12, simd 5,
-//! layout 4, iterators 4, concurrency 2, io 1, arithmetic 1, dispatch 1,
-//! caching 1, bevy 1, wasm 1). 35 are benchable (29 ParetoDominant + 2
+//! 46 entries across 12 categories (complexity 14, allocation 13, simd 5,
+//! layout 4, iterators 4, concurrency 2, io 3, arithmetic 1, dispatch 1,
+//! caching 1, bevy 1, wasm 1). 38 are benchable (32 ParetoDominant + 2
 //! ParetoDominated + 4 Mixed); 8 are honestly NotBenchable.
 //!
 //! ## Bench specs (behind `rust_perf_bench`)
@@ -20,7 +20,7 @@
 //! `run_buggy` / `run_fixed` entry points. The bench validator generates a
 //! temp bin crate from the spec + runs a timing loop at multiple sizes.
 //!
-//! Currently benchable (35/43):
+//! Currently benchable (38/46):
 //! - `o1-lookup` (Vec scan vs HashMap lookup — clear O(n) vs O(1))
 //! - `bsearch-sorted-slice` (linear scan vs binary search — O(n) vs O(log n) on sorted data)
 //! - `dedupe-hashset-vs-vec` (Vec::contains loop vs HashSet collect — O(n²) vs O(n))
@@ -30,6 +30,8 @@
 //! - `swap-remove` (Vec::remove O(n) shift vs Vec::swap_remove O(1) swap — grows with N)
 //! - `sort-unstable` (stable sort allocates vs sort_unstable in-place — no allocation + faster algo)
 //! - `sort-by-key` (sort_by repeated closure vs sort_by_key single extraction — N vs N·log N)
+//! - `vec-remove-front-to-vecdeque` (Vec::remove(0) O(n²) drain vs VecDeque::pop_front O(n) — grows with N²)
+//! - `btreemap-sorted-iteration` (HashMap + sort per query vs BTreeMap natural order — O(n log n) vs O(n) per query)
 //! - `static-str` (String alloc vs &'static str — allocation cost)
 //! - `simd-chunk` (scalar vs chunked loop — vectorization at large N)
 //! - `branchless-conditional` (if vs bool-as-usize multiply — vectorization + branch prediction)
@@ -58,8 +60,9 @@
 //! - `buffered-io` (File::read byte-by-byte → BufReader 8KB batched — ~97×)
 //! - `bufwriter-batched` (File::write per-record → BufWriter batched — syscall amortization)
 //! - `log-write-direct` (push_str(&format!(...)) temp alloc → write! direct — ~1.7×)
+//! - `cow-conditional-alloc` (String always-alloc → Cow<str> borrow when no transform — N vs 0.1N allocations)
 //!
-//! Not benchable (8/43) — honest:
+//! Not benchable (8/46) — honest:
 //! - `layout-reorder` (struct size — deterministic `size_of`, not a runtime
 //!   microbench; the cache-utilization claim needs a specific access pattern)
 //! - `repr-u8-enum` (enum size — deterministic `size_of`, same class as
@@ -89,11 +92,11 @@ use crate::domains::rust_perf::{PerfRule, RustPerfDomain};
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 43 entries
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 46 entries
 /// covering the main perf pattern categories (complexity, allocation, simd,
 /// layout, iterators, concurrency, io, arithmetic, dispatch, caching, bevy,
-/// wasm). Allocation + complexity are the deepest (12 rules each); simd has 5;
-/// layout + iterators have 4 each; concurrency has 2; io + the rest have 1 each.
+/// wasm). Complexity + allocation are the deepest (14 + 13 rules); simd has 5;
+/// layout + iterators have 4 each; io has 3; concurrency has 2; the rest have 1.
 #[must_use]
 #[allow(clippy::too_many_lines)] // seed corpus is a data table; length scales with rule count
 pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
@@ -846,6 +849,56 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
             context_notes: Some("Mixed in Bench 016 default config: 2/4 Faster (n=64, n=1024), 1/4 Slower (n=4096), 1/4 Tie (n=256). LLVM auto-vectorizes the manual index loop effectively for u8 slices — at medium sizes (256-1024) the performance is indistinguishable, and at n=4096 the manual loop is marginally faster (likely due to memcpy's setup overhead being amortized differently). copy_from_slice is still the correct idiom (eliminates bounds checks, guarantees SIMD lowering, is less code) but consumers should know the throughput difference is small for u8 in release mode. The win is clearer for larger element types (u64, structs) where the manual loop's per-element bounds check is more expensive relative to the copy.".to_string()),
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: Some(copy_from_slice_bench_spec()),
+        },
+        // ── complexity: Vec::remove(0) O(n) shift → VecDeque::pop_front O(1) ──
+        // Fills the corpus's data-structure-choice gap: zero prior rules about
+        // choosing the right collection. Vec::remove(0) does a memmove of all
+        // remaining elements left by one position — O(n) per call, O(n²) to
+        // drain N elements. VecDeque is a ring buffer: pop_front just advances
+        // the head index — O(1) per call, O(n) to drain. The compiler cannot
+        // turn a contiguous-array memmove into a ring-buffer head advance.
+        PerfRule {
+            rule_id: "vec-remove-front-to-vecdeque".to_string(),
+            name: "Vec::remove(0) O(n) shift → VecDeque::pop_front O(1)".to_string(),
+            category: "complexity".to_string(),
+            buggy_code: "fn drain_queue(queue: &mut Vec<u32>) -> u64 {\n    let mut sum = 0u64;\n    while !queue.is_empty() {\n        sum += queue.remove(0) as u64;\n    }\n    sum\n}".to_string(),
+            fixed_code: "use std::collections::VecDeque;\nfn drain_queue(queue: &mut VecDeque<u32>) -> u64 {\n    let mut sum = 0u64;\n    while let Some(val) = queue.pop_front() {\n        sum += val as u64;\n    }\n    sum\n}".to_string(),
+            context_notes: None,
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(vec_remove_front_bench_spec()),
+        },
+        // ── complexity: HashMap + sort-on-each-query → BTreeMap natural order ──
+        // Data-structure choice: when sorted iteration is needed repeatedly,
+        // HashMap forces O(n log n) sort per query. BTreeMap maintains sorted
+        // order by construction (self-balancing BST) → O(n) iteration. The
+        // compiler cannot replace a hash table + sort with a balanced tree.
+        PerfRule {
+            rule_id: "btreemap-sorted-iteration".to_string(),
+            name: "HashMap + sort-on-each-query → BTreeMap natural sorted iteration".to_string(),
+            category: "complexity".to_string(),
+            buggy_code: "use std::collections::HashMap;\nfn sorted_keys(map: &HashMap<u32, u32>) -> Vec<u32> {\n    let mut keys: Vec<u32> = map.keys().copied().collect();\n    keys.sort_unstable();\n    keys\n}".to_string(),
+            fixed_code: "use std::collections::BTreeMap;\nfn sorted_keys(map: &BTreeMap<u32, u32>) -> Vec<u32> {\n    map.keys().copied().collect()\n}".to_string(),
+            context_notes: None,
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(btreemap_sorted_iteration_bench_spec()),
+        },
+        // ── allocation: String return (always alloc) → Cow<str> borrow ──────
+        // Data-structure choice: when a function conditionally transforms a
+        // string, returning String forces an allocation even when no
+        // transformation occurs. Cow<str> borrows the input in the common
+        // (no-work) case — zero allocation. The compiler cannot avoid a
+        // String heap allocation; it's a concrete type, not an optimization
+        // target. The classic example: HTML escaping where 90%+ of strings
+        // have no special characters.
+        PerfRule {
+            rule_id: "cow-conditional-alloc".to_string(),
+            name: "String return (always alloc) → Cow<str> (borrow when no transform)".to_string(),
+            category: "allocation".to_string(),
+            buggy_code: "fn escape_html(s: &str) -> String {\n    if !s.contains(['<', '>', '&']) {\n        return s.to_string();\n    }\n    s.replace('<', \"&lt;\")\n        .replace('>', \"&gt;\")\n        .replace('&', \"&amp;\")\n}".to_string(),
+            fixed_code: "use std::borrow::Cow;\nfn escape_html(s: &str) -> Cow<str> {\n    if !s.contains(['<', '>', '&']) {\n        return Cow::Borrowed(s);\n    }\n    Cow::Owned(s.replace('<', \"&lt;\").replace('>', \"&gt;\").replace('&', \"&amp;\"))\n}".to_string(),
+            context_notes: None,
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(cow_conditional_alloc_bench_spec()),
         },
     ])
 }
@@ -2761,6 +2814,201 @@ pub fn run_fixed(input: &Input) {
     }
 }
 
+/// Bench spec for `vec-remove-front-to-vecdeque`: drain N elements from front.
+///
+/// Vec::remove(0) does a memmove of all remaining elements (O(n) per call,
+/// O(n²) total). VecDeque::pop_front advances the head index (O(1) per call,
+/// O(n) total). Grows quadratically with N.
+#[cfg(feature = "rust_perf_bench")]
+fn vec_remove_front_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![100, 1_000, 10_000, 50_000],
+        harness: r#"
+mod buggy {
+    pub fn drain_queue(queue: &mut Vec<u32>) -> u64 {
+        let mut sum = 0u64;
+        while !queue.is_empty() {
+            sum += queue.remove(0) as u64;
+        }
+        sum
+    }
+}
+
+mod fixed {
+    use std::collections::VecDeque;
+    pub fn drain_queue(queue: &mut VecDeque<u32>) -> u64 {
+        let mut sum = 0u64;
+        while let Some(val) = queue.pop_front() {
+            sum += val as u64;
+        }
+        sum
+    }
+}
+
+pub struct Input {
+    vec: Vec<u32>,
+    deque: std::collections::VecDeque<u32>,
+}
+
+pub fn make_input(n: usize) -> Input {
+    let vec: Vec<u32> = (0..n).map(|i| i as u32).collect();
+    let deque: std::collections::VecDeque<u32> = vec.iter().copied().collect();
+    Input { vec, deque }
+}
+
+pub fn run_buggy(input: &Input) {
+    let mut queue = input.vec.clone();
+    std::hint::black_box(buggy::drain_queue(&mut queue));
+}
+
+pub fn run_fixed(input: &Input) {
+    let mut queue = input.deque.clone();
+    std::hint::black_box(fixed::drain_queue(&mut queue));
+}
+"#
+        .to_string(),
+    }
+}
+
+/// Bench spec for `btreemap-sorted-iteration`: sorted iteration × K queries.
+///
+/// HashMap + sort_unstable per query is O(n log n) each. BTreeMap's keys()
+/// iterator is already sorted — O(n) per query. Insert in pseudo-random order
+/// so HashMap's iteration order is NOT accidentally sorted.
+#[cfg(feature = "rust_perf_bench")]
+fn btreemap_sorted_iteration_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![100, 1_000, 10_000, 50_000],
+        harness: r#"
+use std::collections::{BTreeMap, HashMap};
+
+mod buggy {
+    use std::collections::HashMap;
+    pub fn sorted_keys(map: &HashMap<u32, u32>) -> Vec<u32> {
+        let mut keys: Vec<u32> = map.keys().copied().collect();
+        keys.sort_unstable();
+        keys
+    }
+}
+
+mod fixed {
+    use std::collections::BTreeMap;
+    pub fn sorted_keys(map: &BTreeMap<u32, u32>) -> Vec<u32> {
+        map.keys().copied().collect()
+    }
+}
+
+pub struct Input {
+    hashmap: HashMap<u32, u32>,
+    btreemap: BTreeMap<u32, u32>,
+    queries: usize,
+}
+
+pub fn make_input(n: usize) -> Input {
+    let mut hashmap = HashMap::with_capacity(n);
+    let mut btreemap = BTreeMap::new();
+    // Insert with pseudo-random keys so HashMap iteration order is NOT sorted.
+    for i in 0..n {
+        let key = (i.wrapping_mul(7919).wrapping_add(31)) as u32;
+        hashmap.insert(key, i as u32);
+        btreemap.insert(key, i as u32);
+    }
+    // Sorted iteration needed repeatedly (N/10 queries) — the common case
+    // where a BTreeMap is the right choice over a HashMap.
+    let queries = (n / 10).max(1);
+    Input { hashmap, btreemap, queries }
+}
+
+pub fn run_buggy(input: &Input) {
+    let queries = std::hint::black_box(input.queries);
+    for _ in 0..queries {
+        std::hint::black_box(buggy::sorted_keys(&input.hashmap));
+    }
+}
+
+pub fn run_fixed(input: &Input) {
+    let queries = std::hint::black_box(input.queries);
+    for _ in 0..queries {
+        std::hint::black_box(fixed::sorted_keys(&input.btreemap));
+    }
+}
+"#
+        .to_string(),
+    }
+}
+
+/// Bench spec for `cow-conditional-alloc`: HTML-escape N strings (90% clean).
+///
+/// The buggy path calls `s.to_string()` for every string (N allocations).
+/// The fixed path returns `Cow::Borrowed(s)` for the 90% that need no escaping
+/// (0 allocations) + `Cow::Owned(...)` for the 10% that do. Net: 0.1N vs N
+/// allocations.
+#[cfg(feature = "rust_perf_bench")]
+fn cow_conditional_alloc_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![100, 1_000, 10_000, 50_000],
+        harness: r#"
+use std::borrow::Cow;
+
+mod buggy {
+    pub fn escape_html(s: &str) -> String {
+        if !s.contains(['<', '>', '&']) {
+            return s.to_string();
+        }
+        s.replace('<', "&lt;")
+            .replace('>', "&gt;")
+            .replace('&', "&amp;")
+    }
+}
+
+mod fixed {
+    use std::borrow::Cow;
+    pub fn escape_html(s: &str) -> Cow<str> {
+        if !s.contains(['<', '>', '&']) {
+            return Cow::Borrowed(s);
+        }
+        Cow::Owned(s.replace('<', "&lt;").replace('>', "&gt;").replace('&', "&amp;"))
+    }
+}
+
+pub struct Input {
+    strings: Vec<String>,
+}
+
+pub fn make_input(n: usize) -> Input {
+    // 90% of strings have no special chars (common case); 10% do.
+    let strings: Vec<String> = (0..n).map(|i| {
+        if i % 10 == 0 {
+            format!("hello <b>world</b> #{} & friends", i)
+        } else {
+            format!("plain text line number {}", i)
+        }
+    }).collect();
+    Input { strings }
+}
+
+pub fn run_buggy(input: &Input) {
+    let mut total_len = 0usize;
+    for s in &input.strings {
+        let escaped = buggy::escape_html(s);
+        total_len += escaped.len();
+    }
+    std::hint::black_box(total_len);
+}
+
+pub fn run_fixed(input: &Input) {
+    let mut total_len = 0usize;
+    for s in &input.strings {
+        let escaped = fixed::escape_html(s);
+        total_len += escaped.len();
+    }
+    std::hint::black_box(total_len);
+}
+"#
+        .to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2776,17 +3024,17 @@ mod tests {
     }
 
     #[test]
-    fn seed_corpus_has_forty_three_entries_across_twelve_categories() {
+    fn seed_corpus_has_forty_six_entries_across_twelve_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 43);
+        assert_eq!(corpus.entries.len(), 46);
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
         categories.dedup();
-        // 12 distinct categories (Issue 012 added `io`). Allocation is the
-        // deepest (12 rules); complexity has 12; simd has 5; layout has 4;
-        // iterators has 4; concurrency has 2; io has 1; arithmetic, dispatch,
-        // caching, bevy, wasm have 1 each.
+        // 12 distinct categories. Complexity is the deepest (14 rules,
+        // including Issue 013's data-structure-choice rules); allocation has 13;
+        // simd has 5; layout has 4; iterators has 4; concurrency has 2; io
+        // has 3; arithmetic, dispatch, caching, bevy, wasm have 1 each.
         assert_eq!(categories.len(), 12);
     }
 
@@ -2855,10 +3103,10 @@ mod tests {
 
     #[cfg(feature = "rust_perf_bench")]
     #[test]
-    fn thirty_five_rules_have_bench_specs() {
+    fn thirty_eight_rules_have_bench_specs() {
         let corpus = build_perf_seed_corpus();
         let with_spec = corpus.entries.iter().filter(|e| e.bench_spec.is_some()).count();
-        assert_eq!(with_spec, 35, "expected 35 benchable rules, got {with_spec}");
+        assert_eq!(with_spec, 38, "expected 38 benchable rules, got {with_spec}");
     }
 
     #[cfg(feature = "rust_perf_bench")]
@@ -2912,14 +3160,14 @@ mod tests {
     /// ParetoDominated + 2 Mixed) + 8 NotBenchable = 39 total. The 4 annotated
     /// + 35 unannotated = 39.
     #[test]
-    fn thirty_seven_rules_have_no_context_notes() {
+    fn forty_rules_have_no_context_notes() {
         let corpus = build_perf_seed_corpus();
         let unannotated = corpus
             .entries
             .iter()
             .filter(|e| e.context_notes.is_none())
             .count();
-        assert_eq!(unannotated, 37, "expected 37 unannotated rules");
+        assert_eq!(unannotated, 40, "expected 40 unannotated rules");
     }
 
     /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -2972,9 +3220,9 @@ mod tests {
             );
         }
 
-        // The 37 unannotated rules must return None from the trait too.
+        // The 40 unannotated rules must return None from the trait too.
         let unannotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_none()).collect();
-        assert_eq!(unannotated.len(), 37, "expected 37 unannotated rules");
+        assert_eq!(unannotated.len(), 40, "expected 40 unannotated rules");
         for rule in &unannotated {
             assert!(HealEntry::context_notes(*rule).is_none(), "{} should have no context_notes", rule.rule_id);
         }
