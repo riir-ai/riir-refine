@@ -8,10 +8,10 @@
 
 The `rust_perf` domain end-to-end (Plan 001 Phase 2):
 
-1. **Build corpus**: `build_perf_seed_corpus()` → 22 `PerfRule` entries across
-   11 skill-checklist categories (complexity is deepest with 6 rules;
-   allocation + simd have 3 each).
-2. **List rules**: prints all 22 rules grouped by category.
+1. **Build corpus**: `build_perf_seed_corpus()` → 25 `PerfRule` entries across
+   11 categories (complexity is deepest with 7 rules;
+   allocation + simd have 4 each).
+2. **List rules**: prints all 25 rules grouped by category.
 3. **Validate**: calls `RustPerfDomain::validate()` on each fixed pattern.
    - Without `rust_perf_verify`: L2 pruner syntax check (`PerfParseVerdict`)
    - With `rust_perf_verify`: `cargo test` re-run (`PerfVerifyResult` with
@@ -33,9 +33,11 @@ The `rust_perf` domain end-to-end (Plan 001 Phase 2):
 | complexity | `entry-vs-contains-insert` | `contains_key()` + `insert()` → `entry().or_insert()` (merge HashMap lookups) |
 | complexity | `loop-fusion` | Two iterator passes over same data → one fused `for` loop (merge loops) |
 | complexity | `prefix-sum-2d` | O(n) 2D region-sum scan → O(1) prefix sum (boundary-vs-volume) |
+| complexity | `swap-remove` | `Vec::remove(i)` O(n) shift → `Vec::swap_remove(i)` O(1) swap |
 | allocation | `static-str` | `String` → `&'static str` for constant labels |
 | allocation | `vec-with-capacity` | `Vec::new()` + push → `Vec::with_capacity(n)` |
 | allocation | `format-concat-loop` | `format!("{s}{x}")` in loop → `String::push_str` |
+| allocation | `ok-or-else` | `ok_or(expensive())` → `ok_or_else(\|\| expensive())` (lazy error eval) |
 | layout | `layout-reorder` | Field reorder to eliminate padding |
 | layout | `repr-u8-enum` | Field-less enum → `#[repr(u8)]` for 1-byte size |
 | concurrency | `mutex-to-atomic` | `Mutex<u32>` counter → `AtomicU32::fetch_add` |
@@ -43,6 +45,7 @@ The `rust_perf` domain end-to-end (Plan 001 Phase 2):
 | simd | `simd-chunk` | Scalar loop → 4-wide chunked loop |
 | simd | `bool-to-bitpack` | `Vec<bool>` count → packed `Vec<u64>` + `count_ones()` |
 | simd | `branchless-conditional` | Data-dependent `if` in hot loop → `val * cond as u64` branchless multiply |
+| simd | `chunks-exact` | `chunks` (variable last) → `chunks_exact` (uniform, vectorizes) |
 | arithmetic | `f32-counter-to-int` | f32 accumulator for integer tally → u64 accumulator |
 | iterators | `collect-avoidance` | Unnecessary `.collect()` intermediate → chained iterator |
 | dispatch | `dyn-to-enum` | `Box<dyn Trait>` dispatch → enum dispatch (devirtualize) |
@@ -55,7 +58,7 @@ The `rust_perf` domain end-to-end (Plan 001 Phase 2):
 ```text
 === rust_perf domain — Phase 2 scaffold demo ===
 
-Seed corpus: 22 entries
+Seed corpus: 25 entries
 Commitment (BLAKE3): <updated on rebuild — see `build_perf_seed_corpus()`>
 
 Rules by category:

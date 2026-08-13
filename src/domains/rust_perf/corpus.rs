@@ -8,9 +8,9 @@
 //! validator found ParetoDominated in the default config (Bench 013), `None`
 //! for unconditional wins + honestly NotBenchable rules.
 //!
-//! 22 entries across 11 categories (complexity 6, allocation 3, simd 3,
+//! 25 entries across 11 categories (complexity 7, allocation 4, simd 4,
 //! layout 2, concurrency 2, arithmetic 1, iterators 1, dispatch 1, caching 1,
-//! bevy 1, wasm 1). 18 are benchable (15 ParetoDominant + 2 ParetoDominated +
+//! bevy 1, wasm 1). 21 are benchable (18 ParetoDominant + 2 ParetoDominated +
 //! 1 Mixed); 4 are honestly NotBenchable.
 //!
 //! ## Bench specs (behind `rust_perf_bench`)
@@ -20,21 +20,24 @@
 //! `run_buggy` / `run_fixed` entry points. The bench validator generates a
 //! temp bin crate from the spec + runs a timing loop at multiple sizes.
 //!
-//! Currently benchable (18/22):
+//! Currently benchable (21/25):
 //! - `o1-lookup` (Vec scan vs HashMap lookup — clear O(n) vs O(1))
 //! - `bsearch-sorted-slice` (linear scan vs binary search — O(n) vs O(log n) on sorted data)
 //! - `dedupe-hashset-vs-vec` (Vec::contains loop vs HashSet collect — O(n²) vs O(n))
 //! - `entry-vs-contains-insert` (contains_key+insert vs entry API — merge HashMap lookups)
 //! - `loop-fusion` (two iterator passes vs one fused loop — cache locality, merge loops)
 //! - `prefix-sum-2d` (O(n) region scan vs O(1) prefix sum — boundary-vs-volume, grows with N)
+//! - `swap-remove` (Vec::remove O(n) shift vs Vec::swap_remove O(1) swap — grows with N)
 //! - `static-str` (String alloc vs &'static str — allocation cost)
 //! - `simd-chunk` (scalar vs chunked loop — vectorization at large N)
 //! - `branchless-conditional` (if vs bool-as-usize multiply — vectorization + branch prediction)
 //! - `bool-to-bitpack` (Vec<bool> count vs packed Vec<u64> POPCNT — data density)
+//! - `chunks-exact` (chunks variable-last vs chunks_exact uniform — enables vectorization)
 //! - `mutex-to-atomic` (Mutex<u32> vs AtomicU32 — lock/unlock overhead)
 //! - `f32-counter-to-int` (f32 accumulator vs u64 — serial dep chain)
 //! - `collect-avoidance` (.collect() intermediate vs chained iterator — allocation + double pass)
 //! - `dyn-to-enum` (Box<dyn Trait> vs enum — vtable indirection + no inlining)
+//! - `ok-or-else` (ok_or(expensive()) eager vs ok_or_else(closure) lazy — avoids unused error alloc)
 //! - `precompute-table` (recompute vs const lookup table — **context-dependent**,
 //!   see `context_notes`; not a release-mode win per Bench 013)
 //! - `papaya-lockfree` (RwLock vs papaya lock-free — **context-dependent**,
@@ -42,7 +45,7 @@
 //! - `vec-with-capacity` (Vec::new() growth vs Vec::with_capacity — realloc cost)
 //! - `format-concat-loop` (format! concat in loop vs push_str — O(n²) vs O(n))
 //!
-//! Not benchable (4/22) — honest:
+//! Not benchable (4/25) — honest:
 //! - `layout-reorder` (struct size — deterministic `size_of`, not a runtime
 //!   microbench; the cache-utilization claim needs a specific access pattern)
 //! - `repr-u8-enum` (enum size — deterministic `size_of`, same class as
@@ -65,12 +68,12 @@ use crate::domains::rust_perf::{PerfRule, RustPerfDomain};
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 22 entries
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 25 entries
 /// covering the main `rust-optimize` skill categories (complexity, allocation,
 /// layout, concurrency, simd, arithmetic, iterators, dispatch, caching, bevy,
-/// wasm). Complexity is the deepest category (6 rules: 3 algorithmic + entry
-/// merge + loop fusion + prefix-sum-2d); allocation has 3; simd
-/// has 3; layout + concurrency have 2; the rest have 1 each.
+/// wasm). Complexity is the deepest category (7 rules: 3 algorithmic + entry
+/// merge + loop fusion + prefix-sum-2d + swap-remove); allocation has 4; simd
+/// has 4; layout + concurrency have 2; the rest have 1 each.
 #[must_use]
 #[allow(clippy::too_many_lines)] // seed corpus is a data table; length scales with rule count
 pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
@@ -480,6 +483,50 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
             context_notes: None,
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: Some(prefix_sum_2d_bench_spec()),
+        },
+        // ── allocation: ok_or(expensive()) → ok_or_else(closure) ─────────
+        // Source: nnethercote/perf-book "Standard Library Types" chapter.
+        // The eager form always constructs the error value; the lazy form
+        // only constructs it when the Option is None. ~97× when the error
+        // construction involves a String allocation.
+        PerfRule {
+            rule_id: "ok-or-else".to_string(),
+            name: "ok_or(expensive()) → ok_or_else(|| expensive()) (lazy error eval)".to_string(),
+            category: "allocation".to_string(),
+            buggy_code: "fn get_value(o: Option<u32>) -> Result<u32, String> {\n    o.ok_or(format!(\"error: missing value at {}\", std::time::SystemTime::now().elapsed().unwrap().as_nanos()))\n}".to_string(),
+            fixed_code: "fn get_value(o: Option<u32>) -> Result<u32, String> {\n    o.ok_or_else(|| format!(\"error: missing value at {}\", std::time::SystemTime::now().elapsed().unwrap().as_nanos()))\n}".to_string(),
+            context_notes: None,
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(ok_or_else_bench_spec()),
+        },
+        // ── complexity: Vec::remove (O(n) shift) → Vec::swap_remove (O(1)) ─
+        // Source: nnethercote/perf-book "Standard Library Types" chapter.
+        // Vec::remove shifts all elements after the index; swap_remove moves
+        // the last element into the gap. O(n)→O(1) when order doesn't matter.
+        PerfRule {
+            rule_id: "swap-remove".to_string(),
+            name: "Vec::remove(i) O(n) shift → Vec::swap_remove(i) O(1) swap".to_string(),
+            category: "complexity".to_string(),
+            buggy_code: "fn remove_first_n(data: &mut Vec<u32>, n: usize) {\n    for _ in 0..n.min(data.len()) {\n        data.remove(0);\n    }\n}".to_string(),
+            fixed_code: "fn remove_first_n(data: &mut Vec<u32>, n: usize) {\n    for _ in 0..n.min(data.len()) {\n        data.swap_remove(0);\n    }\n}".to_string(),
+            context_notes: None,
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(swap_remove_bench_spec()),
+        },
+        // ── simd: chunks (variable last) → chunks_exact (uniform, vectorizes) ─
+        // Source: nnethercote/perf-book "Iterators" chapter.
+        // chunks() yields a potentially-short final chunk, preventing LLVM
+        // from vectorizing the loop body. chunks_exact() guarantees uniform
+        // chunk size, enabling auto-vectorization. ~13-16× at all sizes.
+        PerfRule {
+            rule_id: "chunks-exact".to_string(),
+            name: "slice::chunks (variable last) → slice::chunks_exact (uniform, vectorizes)".to_string(),
+            category: "simd".to_string(),
+            buggy_code: "fn sum_chunks(data: &[u32]) -> u64 {\n    let mut sum = 0u64;\n    for chunk in data.chunks(8) {\n        for &v in chunk { sum += v as u64; }\n    }\n    sum\n}".to_string(),
+            fixed_code: "fn sum_chunks(data: &[u32]) -> u64 {\n    let mut sum = 0u64;\n    for chunk in data.chunks_exact(8) {\n        for &v in chunk { sum += v as u64; }\n    }\n    for &v in data.chunks_exact(8).remainder() { sum += v as u64; }\n    sum\n}".to_string(),
+            context_notes: None,
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(chunks_exact_bench_spec()),
         },
     ])
 }
@@ -1539,6 +1586,152 @@ pub fn run_fixed(input: &[String]) {
     }
 }
 
+/// Bench spec for `ok-or-else`: eager `ok_or(expensive())` vs lazy
+/// `ok_or_else(|| expensive())`. The eager form constructs a String for every
+/// element even when the Option is Some; the lazy form only on None.
+#[cfg(feature = "rust_perf_bench")]
+fn ok_or_else_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![100, 1_000, 10_000, 100_000],
+        harness: r#"
+mod buggy {
+    pub fn expensive_error(n: u32) -> String {
+        let mut s = String::with_capacity(64);
+        for i in 0..32 {
+            s.push_str(&format!("error field {n}-{i}; "));
+        }
+        s
+    }
+    pub fn sum_opts(opts: &[Option<u32>]) -> u32 {
+        let mut sum = 0u32;
+        for o in opts {
+            let r = o.ok_or(expensive_error(0));
+            sum += r.unwrap_or(0);
+        }
+        sum
+    }
+}
+
+mod fixed {
+    pub fn expensive_error(n: u32) -> String {
+        let mut s = String::with_capacity(64);
+        for i in 0..32 {
+            s.push_str(&format!("error field {n}-{i}; "));
+        }
+        s
+    }
+    pub fn sum_opts(opts: &[Option<u32>]) -> u32 {
+        let mut sum = 0u32;
+        for o in opts {
+            let r = o.ok_or_else(|| expensive_error(0));
+            sum += r.unwrap_or(0);
+        }
+        sum
+    }
+}
+
+pub fn make_input(n: usize) -> Vec<Option<u32>> {
+    // 99% Some, 1% None — realistic distribution.
+    (0..n).map(|i| if i % 100 == 0 { None } else { Some(i as u32) }).collect()
+}
+
+pub fn run_buggy(input: &[Option<u32>]) {
+    std::hint::black_box(buggy::sum_opts(input));
+}
+
+pub fn run_fixed(input: &[Option<u32>]) {
+    std::hint::black_box(fixed::sum_opts(input));
+}
+"#
+        .to_string(),
+    }
+}
+
+/// Bench spec for `swap-remove`: Vec::remove (O(n) shift) vs Vec::swap_remove (O(1)).
+#[cfg(feature = "rust_perf_bench")]
+fn swap_remove_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![100, 1_000, 10_000, 100_000],
+        harness: r#"
+mod buggy {
+    pub fn remove_front(data: &mut Vec<u32>, count: usize) {
+        for _ in 0..count.min(data.len()) {
+            data.remove(0);
+        }
+    }
+}
+
+mod fixed {
+    pub fn remove_front(data: &mut Vec<u32>, count: usize) {
+        for _ in 0..count.min(data.len()) {
+            data.swap_remove(0);
+        }
+    }
+}
+
+pub fn make_input(n: usize) -> Vec<u32> {
+    (0..n as u32).collect()
+}
+
+pub fn run_buggy(input: &Vec<u32>) {
+    let mut data = input.clone();
+    buggy::remove_front(&mut data, data.len() / 10);
+    std::hint::black_box(data);
+}
+
+pub fn run_fixed(input: &Vec<u32>) {
+    let mut data = input.clone();
+    fixed::remove_front(&mut data, data.len() / 10);
+    std::hint::black_box(data);
+}
+"#
+        .to_string(),
+    }
+}
+
+/// Bench spec for `chunks-exact`: `chunks(8)` vs `chunks_exact(8)` + remainder.
+#[cfg(feature = "rust_perf_bench")]
+fn chunks_exact_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![1_000, 10_000, 100_000, 1_000_000],
+        harness: r#"
+mod buggy {
+    pub fn sum_chunks(data: &[u32]) -> u64 {
+        let mut sum = 0u64;
+        for chunk in data.chunks(8) {
+            for &v in chunk { sum += v as u64; }
+        }
+        sum
+    }
+}
+
+mod fixed {
+    pub fn sum_chunks(data: &[u32]) -> u64 {
+        let mut sum = 0u64;
+        for chunk in data.chunks_exact(8) {
+            for &v in chunk { sum += v as u64; }
+        }
+        for &v in data.chunks_exact(8).remainder() { sum += v as u64; }
+        sum
+    }
+}
+
+pub fn make_input(n: usize) -> Vec<u32> {
+    (0..n as u32).collect()
+}
+
+pub fn run_buggy(input: &[u32]) {
+    std::hint::black_box(buggy::sum_chunks(input));
+}
+
+pub fn run_fixed(input: &[u32]) {
+    std::hint::black_box(fixed::sum_chunks(input));
+}
+"#
+        .to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1554,15 +1747,15 @@ mod tests {
     }
 
     #[test]
-    fn seed_corpus_has_twenty_two_entries_across_eleven_categories() {
+    fn seed_corpus_has_twenty_five_entries_across_eleven_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 22);
+        assert_eq!(corpus.entries.len(), 25);
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
         categories.dedup();
-        // 11 distinct categories. Complexity is the deepest (6 rules);
-        // allocation + simd have 3 each; layout + concurrency have 2;
+        // 11 distinct categories. Complexity is the deepest (7 rules);
+        // allocation + simd have 4 each; layout + concurrency have 2;
         // arithmetic, iterators, dispatch, caching, bevy, wasm have 1 each.
         assert_eq!(categories.len(), 11);
     }
@@ -1632,10 +1825,10 @@ mod tests {
 
     #[cfg(feature = "rust_perf_bench")]
     #[test]
-    fn eighteen_rules_have_bench_specs() {
+    fn twenty_one_rules_have_bench_specs() {
         let corpus = build_perf_seed_corpus();
         let with_spec = corpus.entries.iter().filter(|e| e.bench_spec.is_some()).count();
-        assert_eq!(with_spec, 18, "expected 18 benchable rules, got {with_spec}");
+        assert_eq!(with_spec, 21, "expected 21 benchable rules, got {with_spec}");
     }
 
     #[cfg(feature = "rust_perf_bench")]
@@ -1675,18 +1868,18 @@ mod tests {
         assert!(annotated.contains(&"dedupe-hashset-vs-vec"));
     }
 
-    /// The 19 non-annotated rules (15 ParetoDominant + 4 NotBenchable) must
+    /// The 22 non-annotated rules (18 ParetoDominant + 4 NotBenchable) must
     /// have `context_notes: None` — they are either unconditional wins or
     /// honestly unmeasurable.
     #[test]
-    fn nineteen_rules_have_no_context_notes() {
+    fn twenty_two_rules_have_no_context_notes() {
         let corpus = build_perf_seed_corpus();
         let unannotated = corpus
             .entries
             .iter()
             .filter(|e| e.context_notes.is_none())
             .count();
-        assert_eq!(unannotated, 19, "expected 19 unannotated rules");
+        assert_eq!(unannotated, 22, "expected 22 unannotated rules");
     }
 
     /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -1740,9 +1933,9 @@ mod tests {
             );
         }
 
-        // The 19 unannotated rules must return None from the trait too.
+        // The 22 unannotated rules must return None from the trait too.
         let unannotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_none()).collect();
-        assert_eq!(unannotated.len(), 19, "expected 19 unannotated rules");
+        assert_eq!(unannotated.len(), 22, "expected 22 unannotated rules");
         for rule in &unannotated {
             assert!(HealEntry::context_notes(*rule).is_none(), "{} should have no context_notes", rule.rule_id);
         }

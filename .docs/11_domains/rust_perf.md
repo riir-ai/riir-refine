@@ -19,11 +19,13 @@
 
 ## Corpus
 
-22 seed rules across 11 skill-checklist categories. Complexity is the
-depest category (6 rules — the 3 algorithmic anti-patterns + HashMap
-lookup merging + loop fusion + prefix-sum-2d); allocation + simd have 3
-each; layout + concurrency have 2; the rest have 1 each. 18 are benchable (carry a `BenchSpec`); 4 are honestly `NotBenchable`
-(need external runtimes or are structural). 3 of the 18 benchable rules carry
+25 seed rules across 11 categories (rust-optimize skill checklist +
+nnethercote/perf-book). Complexity is the
+depest category (7 rules — the 3 algorithmic anti-patterns + HashMap
+lookup merging + loop fusion + prefix-sum-2d + swap-remove); allocation + simd
+have 4 each; layout + concurrency have 2; the rest have 1 each. 21 are
+benchable (carry a `BenchSpec`); 4 are honestly `NotBenchable`
+(need external runtimes or are structural). 3 of the 21 benchable rules carry
 `context_notes` (Bench 013 found 2 `ParetoDominated` + 1 `Mixed` in the
 default config — consumers should treat them as context-dependent, not
 unconditional suggestions).
@@ -36,9 +38,11 @@ unconditional suggestions).
 | `entry-vs-contains-insert` | complexity | ✅ 1.5x ParetoDominant | — | `contains_key()` + `insert()` → `entry().or_insert()` (merge HashMap lookups: 2 hashes → 1 hash) |
 | `loop-fusion` | complexity | ✅ 1.5x ParetoDominant | — | Two iterator passes (`.sum()` + `.max()`) over same data → one fused `for` loop (cache locality; compiler can't fuse separate iterator consumers) |
 | `prefix-sum-2d` | complexity | ✅ 34-30000x ParetoDominant | — | O(n) 2D region-sum scan per query → O(1) prefix sum (boundary-vs-volume: prefix encodes boundary cumulative sum, each query reads 4 corners instead of scanning interior) |
+| `swap-remove` | complexity | ✅ 2-18485x ParetoDominant | — | `Vec::remove(i)` O(n) shift → `Vec::swap_remove(i)` O(1) swap (order doesn't matter; win grows with N) |
 | `static-str` | allocation | ✅ 42x ParetoDominant | — | `String` return → `&'static str` for constant labels |
 | `vec-with-capacity` | allocation | ✅ 1.1-4.3x ParetoDominant | — | `Vec::new()` + push loop → `Vec::with_capacity(n)` (realloc cost) |
 | `format-concat-loop` | allocation | ✅ 42-95x ParetoDominant | — | `format!("{s}{x}")` concat in loop → `String::push_str` (O(n²) → O(n)) |
+| `ok-or-else` | allocation | ✅ 97x ParetoDominant | — | `ok_or(expensive())` eager error construction → `ok_or_else(\|\| expensive())` lazy closure (avoids unused error allocation; source: nnethercote/perf-book) |
 | `layout-reorder` | layout | ❌ NotBenchable | — | Field reorder to eliminate padding (deterministic `size_of`, not a runtime microbench) |
 | `repr-u8-enum` | layout | ❌ NotBenchable | — | Field-less enum → `#[repr(u8)]` (deterministic `size_of`, same class as layout-reorder) |
 | `mutex-to-atomic` | concurrency | ✅ 2.5x ParetoDominant | — | `Mutex<u32>` counter inc → `AtomicU32::fetch_add` (Mutex lock/unlock is opaque; ~2.5× single-threaded) |
@@ -46,6 +50,7 @@ unconditional suggestions).
 | `simd-chunk` | simd | ✅ 3.9x ParetoDominant | — | Scalar loop → 4-wide chunked loop for LLVM auto-vectorization |
 | `bool-to-bitpack` | simd | ✅ 7-11x ParetoDominant | — | `Vec<bool>` set-bit count → packed `Vec<u64>` + `count_ones()` (data density + hardware POPCNT) |
 | `branchless-conditional` | simd | ✅ 10x ParetoDominant | — | Data-dependent `if` in hot loop → `val * cond as u64` branchless multiply (LLVM vectorizes the multiply but cannot vectorize the branchy loop) |
+| `chunks-exact` | simd | ✅ 13-16x ParetoDominant | — | `slice::chunks` (variable last chunk) → `slice::chunks_exact` (uniform chunks, enables vectorization; source: nnethercote/perf-book) |
 | `f32-counter-to-int` | arithmetic | ✅ 7.5-11x ParetoDominant | — | f32 accumulator for integer tally → u64 accumulator (f32 add dep chain can't be broken without fast-math) |
 | `collect-avoidance` | iterators | ✅ 2.3-3.0x ParetoDominant | — | Unnecessary `.collect()` intermediate → chained iterator (allocation + double pass → single pass, zero alloc) |
 | `dyn-to-enum` | dispatch | ✅ 2.5-2.9x ParetoDominant | — | `Box<dyn Trait>` dispatch → enum dispatch (devirtualize: vtable indirection → direct match, compiler can inline) |

@@ -33,9 +33,9 @@ Rules without a `BenchSpec` are honestly marked `NotBenchable`.
 | G4 (alloc-free) | N/A — subprocess-based validator | N/A | ✅ PASS (documented N/A) |
 | G5 (Pareto verdict) | majority of benchable rules are Pareto-dominant | `pareto_dominant * 2 > benchable` | ✅ PASS (15/18 = majority) |
 
-## Measured results (18 benchable, 4 not-benchable)
+## Measured results (21 benchable, 4 not-benchable)
 
-### Pareto-dominant (15/18) — the pattern works
+### Pareto-dominant (18/21) — the pattern works
 
 | Rule | N=small | N=large | Peak speedup | Verdict |
 |---|---:|---:|---:|---|
@@ -54,6 +54,9 @@ Rules without a `BenchSpec` are honestly marked `NotBenchable`.
 | `collect-avoidance` | 2.27x (N=1000) | **2.95x** (N=100000) | 2.95x | ✅ ParetoDominant (4/4 sizes faster) |
 | `dyn-to-enum` | 2.88x (N=1000) | **2.50x** (N=100000) | 2.88x | ✅ ParetoDominant (3/3 sizes faster) |
 | `prefix-sum-2d` | 34.42x (N=1000) | **29964.14x** (N=1000000) | 29964.14x | ✅ ParetoDominant (4/4 sizes faster) |
+| `ok-or-else` | 98.68x (N=100) | **95.42x** (N=100000) | 98.68x | ✅ ParetoDominant (4/4 sizes faster) |
+| `swap-remove` | 2.05x (N=100) | **18485.00x** (N=100000) | 18485.00x | ✅ ParetoDominant (4/4 sizes faster) |
+| `chunks-exact` | 13.31x (N=1000) | **15.94x** (N=1000000) | 15.94x | ✅ ParetoDominant (4/4 sizes faster) |
 
 The `o1-lookup` N=10 SLOWER (0.60x) is small-N noise — HashMap has
 setup overhead that dominates at 10 elements. The O(n)→O(1) win is
@@ -145,31 +148,68 @@ aggregate/range queries via mathematical pre-computation, not a data structure
 swap. The compiler cannot derive a prefix-sum transform from a nested-loop
 scan — it requires the programmer to recognize the pattern.
 
-### Investigation note: five candidate gaps tested, two verified
+`ok-or-else` wins ~97× because the buggy path constructs the error String for
+every element (even when the Option is Some) while the fixed path only
+constructs it when the Option is None. The compiler cannot prove that
+`expensive_error()` has no side effects (it calls `format!` which allocates),
+so it must execute it eagerly. This pattern comes from nnethercote/perf-book
+"Standard Library Types" — `ok_or(e)` eagerly evaluates `e`; `ok_or_else(\|\| e)`
+lazily evaluates it. Same applies to `map_or`, `unwrap_or`, `Result::or`.
 
-This expansion tested five candidate patterns across three sessions:
+`swap-remove` wins 2×–18485× (grows with N) because `Vec::remove(i)` shifts all
+elements after index `i` one position left (O(n)) while `Vec::swap_remove(i)`
+moves the last element into the gap (O(1)). The compiler cannot change
+algorithmic complexity. This pattern comes from nnethercote/perf-book
+"Standard Library Types" — use `swap_remove` when element order doesn't matter.
 
-| Candidate | Checklist item | Verdict | Honest reason |
+`chunks-exact` wins ~13–16× because `chunks(8)` yields a potentially-short
+final chunk, preventing LLVM from vectorizing the loop body (each chunk may
+have a different length, so the vectorizer can't pack iterations into SIMD
+lanes). `chunks_exact(8)` guarantees every chunk (except the remainder) is
+exactly 8 elements, enabling auto-vectorization. This pattern comes from
+nnethercote/perf-book "Iterators" — use `chunks_exact` when chunk size doesn't
+exactly divide the slice length.
+
+### Investigation note: eleven candidate patterns tested, five verified
+
+This expansion tested eleven candidate patterns across four sessions (6 from
+the `rust-optimize` skill checklist gap audit + 5 from nnethercote/perf-book
+chapter distillation):
+
+| Candidate | Source | Verdict | Honest reason |
 |---|---|---|---|
-| **loop-fusion** (merge loops) | 1. Complexity | ✅ ParetoDominant (~1.5×) | Compiler can't fuse two separate iterator consumers; cache locality win at all N |
-| **prefix-sum-2d** (boundary-vs-volume) | 1. Complexity | ✅ ParetoDominant (34×–30000×) | Compiler can't derive a prefix-sum transform from a nested-loop scan; win grows linearly with N |
-| loop-invariant hoisting (compute once not N×M) | 8. Caching | ❌ ParetoDominated (0.88–1.02×) | **LLVM's LICM pass already hoists the call** — tested with `#[inline(never)]` + `expensive(k)` where k is loop-invariant: LLVM sees the function only depends on k, not on loop state, and hoists it despite no inlining. The manual hoist is sometimes SLOWER (register allocation interference). |
-| iter-to-index (use index arithmetic) | 5. Iterators | ❌ ParetoDominated (~1.00×) | **Compiler produces identical codegen** for `.zip().enumerate().map()` chains and direct index loops — tested zip+enumerate+map vs `for i in 0..n`: within noise at all N. LLVM lowers iterator chains to the same pointer-arithmetic loops as explicit indexing. |
-| mem::replace vs clone+assign (bonus, NOT in checklist) | N/A (bonus) | ❌ Rejected — bench-design mismatch | ParetoDominant when isolated (70×–24000× clone vs reference) but the mutation pattern doesn't fit the read-only corpus bench framework cleanly: `mem::replace` requires `&mut` access while the bench passes `&Input`. The fair bench (clone+assign vs replace with shared setup) showed only 1.3–2.4×, modest for a bonus pattern. The pattern IS a genuine win, but the bench disconnect (bench compares clone-vs-reference, not clone+assign-vs-replace) makes it a poor fit for the corpus's "bench measures the rule's actual fix" convention. |
+| **loop-fusion** (merge loops) | checklist item 1 | ✅ ParetoDominant (~1.5×) | Compiler can't fuse two separate iterator consumers; cache locality win at all N |
+| **prefix-sum-2d** (boundary-vs-volume) | checklist item 1 | ✅ ParetoDominant (34×–30000×) | Compiler can't derive a prefix-sum transform from a nested-loop scan; win grows linearly with N |
+| **ok-or-else** (lazy error eval) | perf-book Std Types | ✅ ParetoDominant (~97×) | `ok_or(expensive())` eagerly constructs error for every element; `ok_or_else(\|\| expensive())` only on None. Compiler can't prove expensive() has no side effects |
+| **swap-remove** (O(1) removal) | perf-book Std Types | ✅ ParetoDominant (2×–18485×) | `Vec::remove` shifts O(n) elements; `swap_remove` is O(1). Compiler can't change algorithmic complexity |
+| **chunks-exact** (vectorizable chunks) | perf-book Iterators | ✅ ParetoDominant (13×–16×) | `chunks` yields variable-length final chunk → prevents vectorization; `chunks_exact` guarantees uniform chunk size |
+| loop-invariant hoisting | checklist item 8 | ❌ ParetoDominated (0.88–1.02×) | **LLVM's LICM pass already hoists the call** — tested with `#[inline(never)]` + `expensive(k)` where k is loop-invariant: LLVM sees the function only depends on k, not on loop state, and hoists it despite no inlining |
+| iter-to-index (use index arithmetic) | checklist item 5 | ❌ ParetoDominated (~1.00×) | **Compiler produces identical codegen** for `.zip().enumerate().map()` chains and direct index loops |
+| mem::replace vs clone+assign | bonus (not in checklist) | ❌ Rejected — bench-design mismatch | ParetoDominant when isolated but the mutation pattern doesn't fit the read-only corpus bench framework |
+| filter_map vs filter().map() | perf-book Iterators | ❌ ParetoDominated (0.76–0.94×) | **LLVM optimizes `filter().map()` into a single pass** — the `filter_map` closure returns Option which adds an extra branch. The perf-book says it "may be faster" but in practice the compiler already fuses |
+| clone_from vs clone assign | perf-book Std Types | ❌ ParetoDominated (0.91–0.98×) | **clone_from's allocation reuse overhead exceeds the benefit** when dst capacity ≥ src len — the reuse check + in-place copy costs more than a fresh allocation. Win only materializes when the dst Vec is significantly larger |
+| bounds-check iter vs index | perf-book Bounds Checks | ❌ Tie (~1.00×) | **LLVM elides bounds checks** for `for i in 0..len { arr[i] }` — the compiler proves `i < len` from the loop bound. The perf-book warns "these can affect performance, though less often than you might expect" — confirmed empirically |
 
-The empirical verification BEFORE corpus addition is the key defense: two
-of five candidates were honestly rejected (compiler already handles them),
-one rejected for bench-design mismatch, and two were added. Only the
-genuinely benchable patterns (loop fusion + prefix sum) passed both the
-ParetoDominance gate AND the bench-design fitness check.
+The empirical verification BEFORE corpus addition is the key defense: five
+of eleven candidates were honestly rejected (compiler already handles them,
+or bench-design mismatch), and five were added. Only the genuinely benchable
+patterns passed both the ParetoDominance gate AND the bench-design fitness
+check.
 
-### Mixed (1/18) — scale-dependent
+**The perf-book distillation lesson:** nnethercote/perf-book is the canonical
+Rust performance reference, but 3 of 6 patterns tested from it were already
+handled by LLVM (filter_map fusion, clone_from allocation reuse, bounds-check
+elision). The perf-book documents patterns that WERE perf wins in specific
+historical contexts (older rustc versions, specific code shapes) but LLVM has
+since learned to handle. The empirical-before-add discipline catches these.
+
+### Mixed (1/21) — scale-dependent
 
 | Rule | Speedup range | Verdict | Honest reason |
 |---|---:|---|---|
 | `dedupe-hashset-vs-vec` | 0.64x–7.53x | ~ Mixed (2/4 Faster, 2/4 Slower) | HashSet allocation + hashing overhead exceeds the O(n²) cost at small N (≤500 elements, trivial comparison count). Wins clearly at N ≥ 1000 (up to 7.53x at N=5000). Suggest for dedup on collections known to exceed ~500 elements; for small dedup, the `Vec::contains` approach is fine. |
 
-### Pareto-dominated (2/18) — honest findings
+### Pareto-dominated (2/21) — honest findings
 
 | Rule | Speedup range | Verdict | Honest reason |
 |---|---:|---|---|
@@ -180,7 +220,7 @@ These are NOT bugs in the validator — they're exactly the kind of
 honest signal Proposal 001 caveat 3 predicted ("perf has no single
 ground truth — 'faster' depends on workload, hardware, input size").
 
-### Not benchable (4/22) — honest markings
+### Not benchable (4/25) — honest markings
 
 | Rule | Reason |
 |---|---|
@@ -221,8 +261,8 @@ is simpler, faster to compile, and sufficient for a Pareto verdict.
 
 **rust_perf was promoted to default-on 2026-08-13.** The GOAT gate (G1+G5)
 passed:
-- G1: all 18 benchable rules produce real measurements ✅
-- G5: 15/18 benchable rules are Pareto-dominant (majority) ✅
+- G1: all 21 benchable rules produce real measurements ✅
+- G5: 18/21 benchable rules are Pareto-dominant (majority) ✅
 
 The promotion follows the global AGENTS.md rule "promote to default if gain
 also demote loser":
@@ -267,3 +307,5 @@ cargo run --example perf_bench_demo --features rust_perf_bench --release
 - [Proposal 001 caveat 3](../.proposals/001_multi_domain_modelless_code_healer.md) — the perf validator weakness this closes
 - [Plan 001 Phase 2](../.plans/001_multi_domain_framework_refactor.md) — the rust_perf domain scaffold this validator completes
 - [`.docs/11_domains/rust_perf.md`](../.docs/11_domains/rust_perf.md) — domain doc (updated with the validator hierarchy)
+- [`rust-optimize` skill](~/.agents/skills/rust-optimize/SKILL.md) — the checklist source (11 items)
+- [nnethercote/perf-book](https://github.com/nnethercote/perf-book) — the Rust Performance Book (canonical perf reference; 3 rules distilled: ok-or-else, swap-remove, chunks-exact; 3 candidates tested + rejected)
