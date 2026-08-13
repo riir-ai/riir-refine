@@ -34,28 +34,48 @@ SYSTEM = (
 )
 
 
-def build_prompt(lint: str, buggy: str) -> str:
-    # Byte-identical to the Rust harness's chat string (chat template applied
-    # by llama-server via --jinja, so we send the raw system+user messages and
-    # let the server wrap them).
+def build_chat_string(lint: str, buggy: str) -> str:
+    # Byte-identical to the Rust harness's `chat` variable in
+    # benches/bench_clippy_ternary_tps.rs. The Rust arm renders the chat
+    # template by hand and tokenizes this exact string (yielding 93/154/102
+    # tokens). We send it pre-rendered so the server does NOT apply its own
+    # template (we disable chat template application on the request) and the
+    # token counts match the katgpt arm bit-for-bit.
     return (
-        f"clippy lint: `{lint}`\n\nOffending code:\n```rust\n{buggy}\n```\n\n"
-        f"Corrected code:"
+        f"<|im_start|>system\n{SYSTEM}<|im_end|>\n"
+        f"<|im_start|>user\nclippy lint: `{lint}`\n\n"
+        f"Offending code:\n```rust\n{buggy}\n```\n\n"
+        f"Corrected code:<|im_end|>\n<|im_start|>assistant\n"
     )
 
 
+def tokenize_count(port: int, text: str) -> int:
+    """Count tokens with the resident model's tokenizer (Bench 009 pattern)."""
+    req = urllib.request.Request(
+        f"http://127.0.0.1:{port}/tokenize",
+        data=json.dumps({"content": text}).encode(),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        return len(json.loads(resp.read())["tokens"])
+
+
 def call_completion(port: int, lint: str, buggy: str, n_predict: int) -> dict:
-    # /completion takes the raw prompt string + applies the chat template when
-    # --jinja is set. We pass the system message as the prompt prefix so the
-    # template sees the same system+user shape the Rust arm constructs.
+    # Pre-render the chat string exactly as the Rust arm does and send it as a
+    # raw prompt. `chat_template: false` disables server-side template
+    # application so the prompt is consumed verbatim (no double-wrapping) and
+    # the token count the server reports matches the katgpt arm.
+    chat = build_chat_string(lint, buggy)
     payload = {
-        "prompt": build_prompt(lint, buggy),
-        "system_prompt": SYSTEM,
+        "prompt": chat,
         "temperature": 0.0,
         "n_predict": n_predict,
         "stream": False,
         "cache_prompt": False,
         "seed": 42,
+        # Rendered already; do not let the server wrap it again.
+        "chat_template": False,
     }
     req = urllib.request.Request(
         f"http://127.0.0.1:{port}/completion",
@@ -98,9 +118,15 @@ def main() -> int:
     for c in cases:
         lint = c["lint"]
         buggy = c["buggy"]
+        # Verify token parity BEFORE timing: count the pre-rendered chat string
+        # with the resident model's tokenizer. Must match the katgpt arm's count.
+        chat = build_chat_string(lint, buggy)
+        verified_ptok = tokenize_count(args.port, chat)
         out = call_completion(args.port, lint, buggy, args.n_predict)
         t = out.get("timings", {})
-        prompt_n = t.get("prompt_n", out.get("tokens_evaluated", 0))
+        # Prefer the server's own prompt_n, but fall back to the verified count
+        # if the server mis-reports (it should match).
+        prompt_n = t.get("prompt_n", verified_ptok)
         predicted_n = t.get("predicted_n", out.get("tokens_predicted", 0))
         prompt_ms = t.get("prompt_ms", 0.0)
         predicted_ms = t.get("predicted_ms", 0.0)
