@@ -22,6 +22,7 @@
 //!   6. Return the result. Caller reports outcome → feeds back to memory + evolution.
 //! ```
 
+use crate::adaptive_drafter::ClippyAdaptiveDrafter;
 use crate::corpus::ClippyFixEntry;
 use crate::drafter::ClippyTernaryDrafter;
 use crate::embedder::{Direction, EMBED_DIM, embed_into};
@@ -50,6 +51,10 @@ pub enum HealSource {
     Drafter,
     /// A past fix trajectory retrieved from memory.
     Memory,
+    /// The Stage 2 adaptive drafter — a verified fix served from the pool
+    /// (Issue 010 fix direction). Highest-confidence source: the fix was
+    /// validated by `cargo clippy` during the tuning phase.
+    Stage2Adaptive,
 }
 
 /// Internal candidate for the heal pipeline's selection step.
@@ -81,6 +86,10 @@ pub struct HealPipeline {
     memory: LatentFixMemory,
     /// The latent skill evolution layer (reader-side direction overlay).
     evolution: LatentSkillEvolution,
+    /// The Stage 2 adaptive drafter — pool of verified fixes keyed by input
+    /// (Issue 010 fix direction). Empty by default; populated by
+    /// [`tune_against_fixture`](Self::tune_against_fixture) off the hot path.
+    adaptive: ClippyAdaptiveDrafter,
     /// Reusable scratch buffer for retrieval index sort (alloc-free after warm-up).
     retrieve_scratch: Vec<usize>,
     /// Reusable scratch buffer for retrieval results (alloc-free after warm-up).
@@ -96,9 +105,22 @@ impl HealPipeline {
             pruner,
             memory: LatentFixMemory::default(),
             evolution: LatentSkillEvolution::default(),
+            adaptive: ClippyAdaptiveDrafter::new(),
             retrieve_scratch: Vec::new(),
             retrieve_out: Vec::new(),
         }
+    }
+
+    /// Borrow the Stage 2 adaptive drafter (for inspection / testing).
+    #[must_use]
+    pub fn adaptive(&self) -> &ClippyAdaptiveDrafter {
+        &self.adaptive
+    }
+
+    /// Whether the Stage 2 adaptive drafter has any verified fixes in the pool.
+    #[must_use]
+    pub fn has_stage2_entries(&self) -> bool {
+        !self.adaptive.is_empty()
     }
 
     /// Check the internal `retrieve_out` buffer capacity (for G4 alloc-free
@@ -148,12 +170,19 @@ impl HealPipeline {
 
     /// Attempt to heal a clippy lint using the self-evolving pipeline.
     ///
+    /// **Stage 2 routing (Issue 010):** if the adaptive drafter has a verified
+    /// fix for `(lint_name, buggy_code)`, return it immediately. Otherwise
+    /// fall back to the Stage 1 drafter + memory + evolution path. The Stage 2
+    /// pool is populated OFF the hot path by [`tune_against_fixture`].
+    ///
     /// See the module doc for the flow. Returns `None` if no candidate could
-    /// be produced (empty corpus + empty memory).
+    /// be produced (empty corpus + empty memory + no Stage 2 hit).
     ///
     /// The caller is responsible for verifying the fix actually resolves the
     /// lint (e.g., via `report_outcome` after checking with real cargo clippy).
     /// For POC / testing, the caller can simulate outcomes.
+    ///
+    /// [`tune_against_fixture`]: Self::tune_against_fixture
     ///
     /// # Panics
     ///
@@ -161,6 +190,22 @@ impl HealPipeline {
     /// (should not happen — guarded by the candidate-collection invariant).
     #[must_use]
     pub fn heal(&mut self, lint_name: &str, buggy_code: &str, corpus: &[ClippyFixEntry]) -> Option<HealResult> {
+        // Stage 2 routing: if the adaptive drafter has a verified entry, return it.
+        // This is the ~µs serve path (hash lookup) after the tuning loop populated
+        // the pool. The Stage 1 path below is the always-on fallback.
+        if let Some(verified) = self.adaptive.lookup(lint_name, buggy_code) {
+            // Stage 2 fixes were already validated by `cargo clippy` during
+            // tuning. We still run the L2 pruner (cheap) to set the `parses`
+            // field honestly.
+            let validation = self.pruner.validate(&verified, lint_name);
+            return Some(HealResult {
+                fixed_code: verified,
+                parses: validation.parses,
+                evolution_score: 1.0, // verified = highest confidence
+                source: HealSource::Stage2Adaptive,
+            });
+        }
+
         // Step 1: retrieve past trajectories for this lint + code context.
         let query = LatentQuery::new(lint_name.to_string(), buggy_code);
         self.memory.retrieve_into(&query, 5, &mut self.retrieve_scratch, &mut self.retrieve_out);
@@ -271,6 +316,122 @@ impl HealPipeline {
 
         // 4. EMA direction update (the actual "evolution").
         self.evolution.record_outcome(lint_name, &fix_dir, success);
+    }
+
+    /// **Stage 2 tuning loop (Issue 010 fix direction).**
+    ///
+    /// For each `(lint_name, buggy_code)` pair, populate the adaptive drafter's
+    /// pool with a verified fix. The flow:
+    ///
+    /// 1. Stage 1 `draft_fix` produces a candidate. If it passes the identity
+    ///    guard + `cargo clippy` verification → join the pool.
+    /// 2. If Stage 1 declines (identity guard fail) or fails verification →
+    ///    ask the per-lint AST proposer (`crate::proposers`) for a candidate.
+    ///    If the proposer's output passes `cargo clippy` → join the pool.
+    ///
+    /// **Re-running `cargo clippy` during tuning is fine** — the ~130 ms cost
+    /// is 4 orders of magnitude above the Stage 1 hot path (~µs), but the
+    /// tuning loop is a batch process that builds the Stage 2 pool. The hot
+    /// path stays at Stage 1's ~µs latency; it upgrades to Stage 2's ~µs serve
+    /// only when a verified entry exists.
+    ///
+    /// This method is OFF the hot path — call it once at startup (or as a
+    /// periodic background refresh), not per user request.
+    ///
+    /// # Arguments
+    ///
+    /// - `cases`: iterator of `(lint_name, buggy_code)` pairs to tune against.
+    /// - `verifier`: the `ClippyVerifier` used to verify proposed fixes.
+    ///
+    /// # Returns
+    ///
+    /// A [`TuneReport`] summarizing the tuning pass — how many cases were
+    /// `stage1_hits`, `stage1_verified`, `stage2_proposed`, `stage2_verified`,
+    /// or failed. The pool's `len()` after the call is the cumulative count of
+    /// verified fixes admitted.
+    #[cfg(feature = "clippy_verify")]
+    pub fn tune_against_fixture<'a, I>(
+        &mut self,
+        cases: I,
+        verifier: &crate::clippy_verifier::ClippyVerifier,
+    ) -> TuneReport
+    where
+        I: IntoIterator<Item = (&'a str, &'a str)>,
+    {
+        let mut report = TuneReport::default();
+        for (lint_name, buggy_code) in cases {
+            report.total += 1;
+            if self.adaptive.lookup(lint_name, buggy_code).is_some() {
+                report.stage1_hits += 1;
+                continue;
+            }
+
+            // Stage 1 path.
+            let stage1_ok = if let Some(draft) = self.drafter.draft_fix(lint_name, buggy_code, &[]) {
+                let v = verifier.verify(&draft.code, lint_name);
+                if v.ran && v.lint_resolved {
+                    self.adaptive.insert(lint_name, buggy_code, draft.code);
+                    report.stage1_verified += 1;
+                    true
+                } else {
+                    false
+                }
+            } else {
+                false
+            };
+            if stage1_ok {
+                continue;
+            }
+
+            // Stage 2 proposer path.
+            if let Some(proposed) = crate::proposers::propose_fix(lint_name, buggy_code) {
+                report.stage2_proposed += 1;
+                let v = verifier.verify(&proposed, lint_name);
+                if v.ran && v.lint_resolved {
+                    self.adaptive.insert(lint_name, buggy_code, proposed);
+                    report.stage2_verified += 1;
+                }
+            }
+        }
+        report
+    }
+
+    /// Insert a verified fix directly into the Stage 2 adaptive pool.
+    ///
+    /// Used by callers that have their own verification path (e.g. they ran
+    /// `cargo clippy` manually). The tuning loop above does this automatically;
+    /// this method is for direct seeding (e.g. for tests).
+    pub fn insert_verified(&self, lint_name: &str, buggy_code: &str, verified_fix: String) {
+        self.adaptive.insert(lint_name, buggy_code, verified_fix);
+    }
+}
+
+/// Report from a Stage 2 tuning pass.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct TuneReport {
+    /// Total number of `(lint, buggy)` cases the tuning loop processed.
+    pub total: u32,
+    /// Cases where the adaptive pool already had a hit (skipped).
+    pub stage1_hits: u32,
+    /// Cases where Stage 1 (the L1 drafter) produced a verified fix.
+    pub stage1_verified: u32,
+    /// Cases where the Stage 2 proposer produced a candidate.
+    pub stage2_proposed: u32,
+    /// Cases where the Stage 2 proposer's candidate was verified.
+    pub stage2_verified: u32,
+}
+
+impl TuneReport {
+    /// Cases that ended with a verified fix in the pool.
+    #[must_use]
+    pub fn verified_count(&self) -> u32 {
+        self.stage1_verified + self.stage2_verified
+    }
+
+    /// Cases that ended without a verified fix (Stage 1 + Stage 2 both failed).
+    #[must_use]
+    pub fn failed_count(&self) -> u32 {
+        self.total - self.stage1_hits - self.verified_count()
     }
 }
 

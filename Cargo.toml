@@ -19,11 +19,20 @@ blake3 = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
+# Stage 2 adaptive drafter: lock-free pool (per AGENTS.md: papaya over Arc<RwLock<HashMap>>).
+papaya = "0.2"
+
 # L2 pruner: pure Rust syntax parser (modelless, zero ML).
 # L3 ruliology search: AST delta-size computation via `syn::visit`.
 # `visit` feature gates the AST traversal walker; `full` + `parsing` are
 # already required by the L2 pruner. Already in Cargo.lock transitively.
-syn = { version = "2", default-features = false, features = ["full", "parsing", "derive", "visit"] }
+# `visit-mut` + `printing` added for Stage 2 AST-rewrite proposers (Issue 010).
+# `extra-traits` for Eq/Debug on syn types in tests.
+syn = { version = "2", default-features = false, features = ["full", "parsing", "derive", "visit", "visit-mut", "printing", "extra-traits", "clone-impls"] }
+
+# Stage 2 proposers: AST rewrites via TokenStream round-trip.
+proc-macro2 = "1"
+quote = "1"
 
 # ── Ternary inference arm (Bench 010) ────────────────────────────────────
 # Real katgpt ternary generation on the clippy task, so llama.cpp can be
@@ -86,6 +95,12 @@ required-features = ["ruliology_search"]
 # Requires both self_evolve + clippy_verify. SLOW — spawns cargo clippy dozens of times.
 [[example]]
 name = "self_evolve_real_world_demo"
+required-features = ["self_evolve", "clippy_verify"]
+
+# Issue 010: Stage 2 tuning demo. Populates the adaptive pool via cargo clippy
+# re-run (off-hot-path tuning loop). Slow — spawns cargo clippy per case.
+[[example]]
+name = "stage2_tuning_demo"
 required-features = ["self_evolve", "clippy_verify"]
 
 # E2E tokens/sec harness (Bonsai/llama.cpp head-to-head denominator).

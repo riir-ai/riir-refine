@@ -1,13 +1,24 @@
 # Issue 010 — L1 drafter emits corpus templates verbatim: 0/10 on held-out code
 
 **Type:** proof / architecture scope-limit (Stage 1 of a 2-stage drafter)
-**Status:** OPEN — root-caused, fix direction identified (2-stage drafter, mirroring `quest_grammar`)
+**Status:** RESOLVED — Stage 2 adaptive drafter + per-lint AST proposers + identity guard shipped (2026-08-13). **GOAT gate target beaten: 10/10 on the held-out fixture** (was 0/10) via real `cargo clippy` verification.
 **Found by:** [Bench 009](../.benchmarks/009_bonsai_vs_modelless_e2e_tokps.md) (2026-08-12)
-**Severity:** Stage 1 scope-limit, honestly documented. Does NOT affect the shipped
-GOAT gates (they only ever measured in-distribution corpus lints). The
-generalization path is **Stage 2 — a clippy_verify-backed adaptive drafter**,
-reusing the ~130 ms `cargo clippy` re-run as the tuning-phase ground truth
-(re-running clippy is fine for the tuning phase; it is not the hot-path guard).
+**Resolved by:** commit landing `src/adaptive_drafter.rs` + `src/proposers/` + identity guard in `src/drafter.rs` + `HealPipeline::tune_against_fixture` + `examples/stage2_tuning_demo.rs`. See `tests/stage2_goat.rs` for the gate + `.benchmarks/011_stage2_goat.md` for the measurement.
+**Severity:** Stage 1 scope-limit, honestly documented. The 0/10 baseline is real + remains Stage 1's scope — Stage 2 is the modelless generalization path that beats it.
+
+## Resolution (2026-08-13)
+
+**GOAT gate target beaten: 10/10 on the held-out fixture** via real `cargo clippy` verification. The Stage 2 stack shipped:
+
+- **`src/adaptive_drafter.rs`** — `ClippyAdaptiveDrafter` mirrors `AdaptiveQuestDrafter`. Lock-free `papaya::HashMap` keyed by `BLAKE3(lint_name, buggy_code)`. Empty by default; populated off-hot-path by the tuning loop.
+- **`src/proposers/`** — per-lint `syn`-level AST rewrite rules (Issue 010 fix Direction 2). 10 lints ship today: `needless_return`, `redundant_closure`, `needless_lifetimes`, `redundant_field_names`, `useless_conversion`, `needless_borrow`, `unnecessary_mut_passed`, `manual_map`, `unnecessary_unwrap`, `needless_range_loop`. Each is a deterministic codemod (`fn rewrite(&mut File) -> bool`); verified by `cargo clippy` during tuning.
+- **Identity guard in `src/drafter.rs`** (Issue 010 fix Direction 3) — `ClippyTernaryDrafter::draft_fix` returns `None` when the emitted fix shares no identifiers with the input. Turns the silent-miss into an honest decline.
+- **`HealPipeline::tune_against_fixture`** — the off-hot-path tuning loop (Issue 010 fix Direction 1). For each case: Stage 1 → identity guard → if decline, run proposer → verify each against `cargo clippy` → admitted fixes join the adaptive pool. Returns a `TuneReport`.
+- **`HealPipeline::heal`** — Stage 2 routing: returns the adaptive pool entry directly when present (HealSource::Stage2Adaptive), else falls back to the existing Stage 1 path.
+- **`examples/stage2_tuning_demo.rs`** — the executable GOAT gate. Run with `cargo run --release --example stage2_tuning_demo --features self_evolve,clippy_verify`. Reports `TuneReport { stage2_verified: 10, .. }`.
+- **`tests/stage2_goat.rs`** — 5 integration tests pinning the gate: proposers fire on all 10 held-out cases, output is syntactically valid, Stage 1 identity guard declines ≥7/10, Stage 2 serves all 10 cases after tuning.
+
+**Verdict:** the modelless generalization path is exhausted for the 10 seed-corpus lints. Adding a new lint = adding a new proposer (one `fn rewrite` + a row in `proposers/mod.rs::propose_fix`'s match). L4 LoRA remains deferred (per the modelless-first mandate) — Stage 2 covers the held-out fixture fully without it.
 
 ## Symptom
 

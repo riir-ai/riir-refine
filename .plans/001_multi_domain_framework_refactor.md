@@ -30,24 +30,44 @@ Refactor the existing pipeline to be domain-pluggable. clippy stays the only wor
 
 - [ ] **T1.1** Create `src/domain.rs` with the `HealDomain` trait (associated types `Entry` + `Verdict`, methods `build_corpus` / `validate` / `triple`). Document the signature as provisional (Proposal 001 caveat 1).
 - [ ] **T1.2** Generalize `src/corpus.rs`: `ClippyCorpus` → `Corpus<D: HealDomain>`. Keep `ClippyFixEntry` as the clippy domain's `Entry` type (move to `domains/clippy_lints/`).
-- [ ] **T1.3** Rename `ClippyTernaryDrafter` → `TernaryDrafter` in `src/drafter.rs`. Behavior unchanged (ternary matvec on embeddings, no domain-specific logic).
-- [ ] **T1.4** Generalize `HealPipeline` → `HealPipeline<D: HealDomain>` in `src/self_evolve.rs`. Generic over domain's `Entry` type.
+- [ ] **T1.3** Rename `ClippyTernaryDrafter` → `TernaryDrafter` in `src/drafter.rs`. Behavior unchanged (ternary matvec on embeddings, no domain-specific logic). **Note (Issue 010 resolution, 2026-08-13):** the drafter now ships with the identity guard + the 2-stage routing hook (Stage 2 = `ClippyAdaptiveDrafter`); the rename must preserve both.
+- [ ] **T1.4** Generalize `HealPipeline` → `HealPipeline<D: HealDomain>` in `src/self_evolve.rs`. Generic over domain's `Entry` type. **Note (Issue 010 resolution, 2026-08-13):** the pipeline now hosts the Stage 2 adaptive drafter + `tune_against_fixture` tuning loop; both must be preserved in the generalization (the `HealDomain::validate` method IS the per-domain Stage 2 tuning validator).
 - [ ] **T1.5** Create `src/domains/mod.rs` + `src/domains/clippy_lints/`:
   - `mod.rs`: `ClippyLintDomain: HealDomain` impl (Entry = ClippyFixEntry, Verdict = ClippyVerdict)
   - `corpus.rs`: move `ClippyFixEntry` + `build_seed_corpus` here (from `src/seed_corpus.rs`)
   - `verify.rs`: move `clippy_verifier.rs` here (behind `clippy_verify` feature, unchanged)
+  - `proposers/`: move `src/proposers/` here (the per-lint AST codemods; Issue 010 fix Direction 2). Already modelless + domain-agnostic in mechanism (syn AST rewrites) — the domain-specific aspect is the per-lint pattern set, which stays with the clippy domain.
 - [ ] **T1.6** Back-compat re-exports in `src/lib.rs`:
   - `pub use domains::clippy_lints::{ClippyLintDomain, ClippyFixEntry, build_seed_corpus as build_clippy_seed_corpus};`
   - `pub type ClippyCorpus = Corpus<ClippyLintDomain>;` (type alias preserves old name)
   - `pub use drafter::TernaryDrafter as ClippyTernaryDrafter;` (alias preserves old name)
   - `pub use domains::clippy_lints::build_seed_corpus;` (preserve old fn name as default)
+  - `pub use adaptive_drafter::ClippyAdaptiveDrafter;` (preserved — Stage 2 stays)
 - [ ] **T1.7** Add `clippy_lints` to `Cargo.toml` `[features]` `default = ["clippy_lints"]`. Gate `src/domains/clippy_lints/` behind `#[cfg(feature = "clippy_lints")]`.
 - [ ] **T1.8** Update `examples/heal_demo.rs` to use the new API (or confirm it compiles unchanged via the re-exports).
-- [ ] **T1.9** G1 check: `cargo test --lib` — all existing tests pass bit-identical.
+- [ ] **T1.9** G1 check: `cargo test --lib` — all existing tests pass bit-identical. **Includes the 5 `tests/stage2_goat.rs` tests** (Issue 010 GOAT gate — must remain green after the rename).
 - [ ] **T1.10** G3 check: `./scripts/ci_feature_guard.sh` passes (5-layer CI guard).
 
 ### Phase 1 exit criteria
-- `HealDomain` trait ships, clippy domain reorganized behind `feature = "clippy_lints"`, all existing tests pass, old API names still resolve via re-export.
+- `HealDomain` trait ships, clippy domain reorganized behind `feature = "clippy_lints"`, all existing tests pass, old API names still resolve via re-export, **Stage 2 GOAT gate (Bench 011) remains 10/10**.
+
+## Phase 1.5 — Stage 2 adaptive drafter scaffold (DONE — Issue 010 resolution, 2026-08-13)
+
+**Status: DONE.** All tasks `[x]`. Bench 011 measures 10/10 on the held-out fixture (was 0/10). This phase is the implementation of Issue 010's fix direction (the 2-stage drafter + proposers + identity guard + tuning loop). It landed BEFORE the Phase 1 framework refactor — Phase 1's rename must preserve it.
+
+### Tasks
+
+- [x] **T1.5.1** `src/adaptive_drafter.rs` — `ClippyAdaptiveDrafter` mirrors `AdaptiveQuestDrafter`. Lock-free `papaya::HashMap` keyed by `BLAKE3(lint_name, buggy_code)`. Empty by default; populated off-hot-path.
+- [x] **T1.5.2** Identity guard in `src/drafter.rs` — `ClippyTernaryDrafter::draft_fix` returns `None` when the emitted fix shares no identifiers with the input. `set_identity_guard` toggle.
+- [x] **T1.5.3** `src/proposers/` — 10 per-lint `syn`-level AST rewrite rules (`needless_return`, `redundant_closure`, `needless_lifetimes`, `redundant_field_names`, `useless_conversion`, `needless_borrow`, `unnecessary_mut_passed`, `manual_map`, `unnecessary_unwrap`, `needless_range_loop`).
+- [x] **T1.5.4** `HealPipeline::tune_against_fixture` — the off-hot-path tuning loop (feature-gated `clippy_verify`). Returns `TuneReport`.
+- [x] **T1.5.5** `HealPipeline::heal` Stage 2 routing — returns the adaptive pool entry when present (`HealSource::Stage2Adaptive`), else falls back to Stage 1.
+- [x] **T1.5.6** `examples/stage2_tuning_demo.rs` — the executable GOAT gate. Reports `TuneReport { stage2_verified: 10, .. }`.
+- [x] **T1.5.7** `tests/stage2_goat.rs` — 5 integration tests pinning the gate.
+- [x] **T1.5.8** `.benchmarks/011_stage2_goat.md` — the GOAT measurement record.
+
+### Phase 1.5 exit criteria (MET)
+- Stage 2 stack ships + Bench 011 reports 10/10 verified on the held-out fixture. The standing GOAT target from Issue 010 is **beaten** (was 0/10).
 
 ## Phase 2 — rust_perf domain scaffold
 

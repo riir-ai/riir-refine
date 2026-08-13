@@ -33,9 +33,11 @@
 
 #![warn(clippy::all, clippy::pedantic)]
 
+pub mod adaptive_drafter;
 pub mod corpus;
 pub mod drafter;
 pub mod embedder;
+pub mod proposers;
 pub mod pruner;
 pub mod seed_corpus;
 
@@ -67,6 +69,9 @@ pub use embedder::{Direction, EMBED_DIM, embed, embed_into};
 pub use pruner::RustAnalyzerPruner;
 pub use seed_corpus::build_seed_corpus;
 
+// Issue 010: Stage 2 adaptive drafter (mirrors `AdaptiveQuestDrafter`).
+pub use adaptive_drafter::ClippyAdaptiveDrafter;
+
 #[cfg(feature = "clippy_verify")]
 pub use clippy_verifier::ClippyVerifier;
 
@@ -78,4 +83,4 @@ pub use evolve::{EvolveConfig, LatentSkillEvolution};
 #[cfg(feature = "self_evolve")]
 pub use memory::{FixTrajectory, LatentFixMemory, LatentQuery, ScoredTrajectory};
 #[cfg(feature = "self_evolve")]
-pub use self_evolve::{HealPipeline, HealResult, HealSource};
+pub use self_evolve::{HealPipeline, HealResult, HealSource, TuneReport};
