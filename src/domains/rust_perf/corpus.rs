@@ -15,12 +15,13 @@
 //! `run_buggy` / `run_fixed` entry points. The bench validator generates a
 //! temp bin crate from the spec + runs a timing loop at multiple sizes.
 //!
-//! Currently benchable (9/13):
+//! Currently benchable (10/14):
 //! - `o1-lookup` (Vec scan vs HashMap lookup — clear O(n) vs O(1))
 //! - `bsearch-sorted-slice` (linear scan vs binary search — O(n) vs O(log n) on sorted data)
 //! - `dedupe-hashset-vs-vec` (Vec::contains loop vs HashSet collect — O(n²) vs O(n))
 //! - `static-str` (String alloc vs &'static str — allocation cost)
 //! - `simd-chunk` (scalar vs chunked loop — vectorization at large N)
+//! - `bool-to-bitpack` (Vec<bool> count vs packed Vec<u64> POPCNT — data density)
 //! - `precompute-table` (recompute vs const lookup table — **context-dependent**,
 //!   see `context_notes`; not a release-mode win per Bench 013)
 //! - `papaya-lockfree` (RwLock vs papaya lock-free — **context-dependent**,
@@ -28,7 +29,7 @@
 //! - `vec-with-capacity` (Vec::new() growth vs Vec::with_capacity — realloc cost)
 //! - `format-concat-loop` (format! concat in loop vs push_str — O(n²) vs O(n))
 //!
-//! Not benchable (4/13) — honest:
+//! Not benchable (4/14) — honest:
 //! - `layout-reorder` (struct size — deterministic `size_of`, not a runtime
 //!   microbench; the cache-utilization claim needs a specific access pattern)
 //! - `repr-u8-enum` (enum size — deterministic `size_of`, same class as
@@ -51,13 +52,11 @@ use crate::domains::rust_perf::{PerfRule, RustPerfDomain};
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 13 entries
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 14 entries
 /// covering the main `rust-optimize` skill categories (complexity, allocation,
-/// layout, concurrency, simd, caching, bevy, wasm). Complexity is now the
-/// deepest category (3 rules: `o1-lookup`, `bsearch-sorted-slice`,
-/// `dedupe-hashset-vs-vec`) — it covers the most common algorithmic anti-
-/// patterns; allocation is second (3 rules: `static-str`, `vec-with-capacity`,
-/// `format-concat-loop`).
+/// layout, concurrency, simd, caching, bevy, wasm). Complexity + allocation
+/// are the deepest categories (3 rules each); simd + layout have 2; the rest
+/// have 1 each.
 #[must_use]
 #[allow(clippy::too_many_lines)] // seed corpus is a data table; length scales with rule count
 pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
@@ -177,6 +176,21 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
             context_notes: None,
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: Some(simd_chunk_bench_spec()),
+        },
+        // ── simd: bool array → packed bitvec for POPCNT acceleration ────────
+        // Data density: Vec<bool> uses 1 byte per bool; packed Vec<u64> uses
+        // 1 bit. For counting set bits, the fixed path runs POPCNT on each
+        // 64-bit word (1 instruction per 64 bools) vs the buggy path's
+        // per-byte comparison. The compiler cannot auto-pack bools into bits.
+        PerfRule {
+            rule_id: "bool-to-bitpack".to_string(),
+            name: "Vec<bool> set-bit count → packed Vec<u64> + count_ones()".to_string(),
+            category: "simd".to_string(),
+            buggy_code: "fn count_true(flags: &[bool]) -> usize {\n    flags.iter().filter(|&&b| b).count()\n}".to_string(),
+            fixed_code: "fn count_true(bits: &[u64]) -> usize {\n    bits.iter().map(|w| w.count_ones() as usize).sum()\n}".to_string(),
+            context_notes: None,
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(bool_to_bitpack_bench_spec()),
         },
         // ── caching: pre-compute lookup table ─────────────────────────────
         // Context-dependent: the compiler optimizes the runtime popcount loop
@@ -535,6 +549,66 @@ pub fn run_fixed(input: &[f32]) {
     }
 }
 
+/// Bench spec for `bool-to-bitpack`: Vec<bool> count vs packed Vec<u64> POPCNT.
+///
+/// The buggy path iterates a `Vec<bool>` (1 byte per element) and counts set
+/// bits via `filter().count()`. The fixed path packs bools into `Vec<u64>`
+/// (1 bit per element) and counts via `count_ones()` (POPCNT instruction).
+/// The compiler cannot auto-pack bools into bits — this is a data-density
+/// transformation the programmer must make explicitly. The win comes from
+/// 8× less memory + hardware POPCNT (1 instruction per 64 bools vs per-byte
+/// branch).
+#[cfg(feature = "rust_perf_bench")]
+fn bool_to_bitpack_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![100, 1_000, 10_000, 100_000],
+        harness: r#"
+mod buggy {
+    pub fn count_true(flags: &[bool]) -> usize {
+        flags.iter().filter(|&&b| b).count()
+    }
+}
+
+mod fixed {
+    pub fn count_true(bits: &[u64]) -> usize {
+        bits.iter().map(|w| w.count_ones() as usize).sum()
+    }
+}
+
+pub struct Input {
+    bools: Vec<bool>,
+    bits: Vec<u64>,
+}
+
+pub fn make_input(n: usize) -> Input {
+    // ~67% set bits, pseudo-random but deterministic.
+    let bools: Vec<bool> = (0..n)
+        .map(|i| (i as u32).wrapping_mul(2654435761) % 3 != 0)
+        .collect();
+    // Pack bools into u64s.
+    let mut bits = vec![0u64; (n + 63) / 64];
+    for (i, &b) in bools.iter().enumerate() {
+        if b {
+            bits[i / 64] |= 1u64 << (i % 64);
+        }
+    }
+    Input { bools, bits }
+}
+
+pub fn run_buggy(input: &Input) {
+    let c = buggy::count_true(&input.bools);
+    std::hint::black_box(c);
+}
+
+pub fn run_fixed(input: &Input) {
+    let c = fixed::count_true(&input.bits);
+    std::hint::black_box(c);
+}
+"#
+        .to_string(),
+    }
+}
+
 /// Bench spec for `precompute-table`: runtime popcount loop vs const table.
 #[cfg(feature = "rust_perf_bench")]
 fn precompute_table_bench_spec() -> BenchSpec {
@@ -793,15 +867,15 @@ mod tests {
     }
 
     #[test]
-    fn seed_corpus_has_thirteen_entries_across_eight_categories() {
+    fn seed_corpus_has_fourteen_entries_across_eight_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 13);
+        assert_eq!(corpus.entries.len(), 14);
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
         categories.dedup();
         // 8 distinct categories. Complexity + allocation tie for deepest
-        // (3 rules each); layout has 2; the rest have 1 each.
+        // (3 rules each); simd + layout have 2; the rest have 1 each.
         assert_eq!(categories.len(), 8);
     }
 
@@ -870,10 +944,10 @@ mod tests {
 
     #[cfg(feature = "rust_perf_bench")]
     #[test]
-    fn nine_rules_have_bench_specs() {
+    fn ten_rules_have_bench_specs() {
         let corpus = build_perf_seed_corpus();
         let with_spec = corpus.entries.iter().filter(|e| e.bench_spec.is_some()).count();
-        assert_eq!(with_spec, 9, "expected 9 benchable rules, got {with_spec}");
+        assert_eq!(with_spec, 10, "expected 10 benchable rules, got {with_spec}");
     }
 
     #[cfg(feature = "rust_perf_bench")]
@@ -913,18 +987,18 @@ mod tests {
         assert!(annotated.contains(&"dedupe-hashset-vs-vec"));
     }
 
-    /// The 10 non-annotated rules (6 ParetoDominant + 4 NotBenchable) must
+    /// The 11 non-annotated rules (7 ParetoDominant + 4 NotBenchable) must
     /// have `context_notes: None` — they are either unconditional wins or
     /// honestly unmeasurable.
     #[test]
-    fn ten_rules_have_no_context_notes() {
+    fn eleven_rules_have_no_context_notes() {
         let corpus = build_perf_seed_corpus();
         let unannotated = corpus
             .entries
             .iter()
             .filter(|e| e.context_notes.is_none())
             .count();
-        assert_eq!(unannotated, 10, "expected 10 unannotated rules");
+        assert_eq!(unannotated, 11, "expected 11 unannotated rules");
     }
 
     /// `context_notes` is backward-compatible via `#[serde(default)]`: an older

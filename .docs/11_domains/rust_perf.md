@@ -19,12 +19,12 @@
 
 ## Corpus
 
-13 seed rules across 8 skill-checklist categories. Complexity + allocation
+14 seed rules across 8 skill-checklist categories. Complexity + allocation
 are the deepest categories (3 rules each — complexity covers the most common
 algorithmic anti-patterns: O(n)→O(1)/O(log n) lookups, O(n²)→O(n) dedup;
-allocation covers the most common memory anti-patterns); layout has 2; the
-rest have 1 each. 9 are benchable (carry a `BenchSpec`); 4 are honestly
-`NotBenchable` (need external runtimes or are structural). 3 of the 9
+allocation covers the most common memory anti-patterns); simd + layout have 2;
+the rest have 1 each. 10 are benchable (carry a `BenchSpec`); 4 are honestly
+`NotBenchable` (need external runtimes or are structural). 3 of the 10
 benchable rules carry `context_notes` (Bench 013 found 2 `ParetoDominated` +
 1 `Mixed` in the default config — consumers should treat them as context-
 dependent, not unconditional suggestions).
@@ -41,6 +41,7 @@ dependent, not unconditional suggestions).
 | `repr-u8-enum` | layout | ❌ NotBenchable | — | Field-less enum → `#[repr(u8)]` (deterministic `size_of`, same class as layout-reorder) |
 | `papaya-lockfree` | concurrency | ❌ 0.55-0.79x ParetoDominated | ⚠️ `context_notes` | `Arc<RwLock<HashMap>>` → `papaya` lock-free map (benefit needs multi-threaded contention) |
 | `simd-chunk` | simd | ✅ 3.9x ParetoDominant | — | Scalar loop → 4-wide chunked loop for LLVM auto-vectorization |
+| `bool-to-bitpack` | simd | ✅ 7-11x ParetoDominant | — | `Vec<bool>` set-bit count → packed `Vec<u64>` + `count_ones()` (data density + hardware POPCNT) |
 | `precompute-table` | caching | ❌ 0.20-0.40x ParetoDominated | ⚠️ `context_notes` | Recompute-per-call → `const` lookup table (compiler optimizes popcount to POPCNT in release) |
 | `bevy-reactive-loop` | bevy | ❌ NotBenchable | — | `WinitSettings::default()` (Continuous, 100% CPU) → `reactive_low_power` (needs Bevy runtime) |
 | `wasm-batch-ffi` | wasm | ❌ NotBenchable | — | Per-call FFI (250ns floor × N×M) → single batch invocation (needs WASM runtime) |
@@ -80,9 +81,9 @@ the measured GOAT results.
 
 The original caveat called perf "the weakest link" because perf has no
 single ground truth. **Bench 013 closes this**: the Pareto validator now
-provides the real perf ground truth. 6/9 benchable rules are Pareto-dominant
-(clear wins); 2/9 are honestly Pareto-dominated (compiler optimizations,
-regime-dependent benefits); 1/9 is Mixed (scale-dependent) — exactly the
+provides the real perf ground truth. 7/10 benchable rules are Pareto-dominant
+(clear wins); 2/10 are honestly Pareto-dominated (compiler optimizations,
+regime-dependent benefits); 1/10 is Mixed (scale-dependent) — exactly the
 kind of honest signal the caveat predicted.
 
 ## Drafter + pipeline integration (`context_notes` propagation, 2026-08-13)
