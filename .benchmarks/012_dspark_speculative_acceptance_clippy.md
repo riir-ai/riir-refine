@@ -26,9 +26,11 @@ This is consistent with the fork's own scope doc
 MTP… around 600 training steps in… runtime work is gated on that result."* The drafter is
 under-trained; this bench measures the ceiling and the ceiling is below breakeven.
 
-**G5 clippy-specific (§D, added 2026-08-13)** ran 24 real clippy prompts after unblocking the
-`chat_template` gap: accept **0.695** / speedup **0.679×** — still a net slowdown (0/24 prompts
-beat 1.0×), but no off-distribution collapse. G5 confirms the verdict; it does not flip it.
+**G5 clippy-specific (§D, full 116-prompt run, 2026-08-13)** ran all 116 clippy SFT-test
+prompts (10 lint types) after unblocking the `chat_template` gap: accept **0.710** / speedup
+**0.667×** — still a net slowdown (0/116 prompts beat 1.0×), but no off-distribution collapse.
+Per-lint breakdown: local-expression lints accept ~0.80, AST-rewriting lints (`manual_map`,
+`useless_conversion`) ~0.60 — the gap is structural, not statistical. G5 confirms the verdict.
 
 ---
 
@@ -154,11 +156,11 @@ that number is not cited.)
 | **G3** effective tok/s | spec vs raw, reported as effective | spec **6.81** vs same-engine AR **12.31** = **0.554×**. Effective throughput is *lower*, not higher. (Vs the issue's cross-engine aspirational targets: 6.81 < 17.85 katgpt-raw < 31.21 llama-raw — speculation does not reach either.) |
 | **G4** fairness | speculated vs speculated / same-engine | **Satisfied and decisive**: same-engine spec-vs-AR = 0.554×. DSpark loses on the engine it runs on. |
 | **G1** correctness | spec ≡ greedy | Not separately re-verified here; `test-dspark-real-eval` accepts via `common_sampler_sample_and_accept_n` (greedy/temp=0 target verify), which is lossless by construction — emitted text is the greedy decode. The speedup is computed against the same greedy AR baseline. |
-| **G5** held-out | accept must not collapse off-distribution | **MEASURED (clippy-specific), §D below.** 24 real clippy prompts run as plain-text continuation (the `chat_template` block was bypassed via a local vendor-harness `plain:`-prefix patch — see §D). **No collapse**: clippy accept 0.695 weighted / 0.707 mean, range 0.53–0.85 — code-shaped, not the 0.17–0.27 collapse seen on the built-in chat category. **But still a net slowdown** (speedup 0.679, 0/24 prompts beat 1.0×). The verdict is unchanged: G5 confirms, does not flip. |
+| **G5** held-out | accept must not collapse off-distribution | **MEASURED (clippy-specific, full 116-prompt set), §D below.** All 116 real clippy prompts (10 lint types × ~12) run as plain-text continuation (the `chat_template` block was bypassed via a local vendor-harness `plain:`-prefix patch — see §D). **No collapse**: clippy accept 0.710 weighted / 0.693 mean, range 0.36–0.89 — code-shaped, far above the 0.17–0.27 collapse seen on the built-in chat category. **But still a net slowdown** (speedup 0.667, 0/116 prompts beat 1.0×). The verdict is unchanged: G5 confirms, does not flip. Per-lint breakdown (§D) shows local-expression lints accept ~0.80, AST-rewriting lints (~0.60) are the hard case. |
 
 ---
 
-## D. G5 clippy-specific — `test-dspark-real-eval` on 24 real clippy prompts (2026-08-13)
+## D. G5 clippy-specific — `test-dspark-real-eval` on the full 116-prompt clippy SFT set (2026-08-13)
 
 The built-in runs (§B/§C) used the harness's 24 hardcoded Python/C++/chat prompts. G5 asks
 whether acceptance **collapses** on the actual clippy workload (Rust lint-healing prompts),
@@ -168,60 +170,81 @@ which the drafter has not memorized. The block was that `dataset.jsonl` forces
 **Unblock:** a minimal local patch to the vendor harness adds an opt-in `plain:` prefix on
 the dataset path — when present, the jsonl is loaded as **plain-text continuation** (no chat
 template), exactly like the built-in prompts. The patch is 4 edits (~12 lines), existing
-behavior unchanged without the prefix. The 116-prompt clippy set
-(`clippy_l4_sft_test.jsonl` → `/tmp/clippy_l4_turns.jsonl`, `{"turns":["..."]}`) was already
-staged; the first 24 were run.
+behavior unchanged without the prefix (committed vendor-side, `prismml-llama.cpp@855b1f8`).
 
-**Run:** GPU (`n_gpu_layers=999`), `n_predict=96`, `plain:/tmp/clippy_l4_turns.jsonl`, 24 prompts.
-Concurrent GPU load: Unity editor idle (1.9% CPU, light render — not compute-saturating; the
-accept-rate metric is hardware-independent per §C anyway). Window 16:40:01→16:46:37, `exit=0`.
+**Run:** GPU (`n_gpu_layers=999`), `n_predict=96`, `plain:/tmp/clippy_l4_turns.jsonl`, **all
+116 prompts** (10 distinct lint types × ~12 prompts each). Concurrent GPU load: Unity editor
+idle (~1% CPU, light render — not compute-saturating; the accept-rate metric is hardware-
+independent per §C anyway). Window 17:23:08→17:51:57, `exit=0`.
 
 | metric | value |
 |---|---:|
-| prompts | 24 |
-| drafted / accepted | 2504 / 1741 |
-| **accept (weighted)** | **0.6953** |
-| accept (mean) | 0.707 |
-| accept (min / max) | 0.532 / 0.852 |
-| τ (accepted/round) | 3.78 |
-| AR tok/s | 14.73 |
-| spec tok/s | 9.90 |
-| **speedup** | **0.672** |
-| prompts with speedup > 1.0 | **0 / 24** |
+| prompts | 116 |
+| drafted / accepted | 9676 / 6867 |
+| **accept (weighted)** | **0.7097** |
+| accept (mean / median) | 0.693 / 0.740 |
+| accept (min / max) | 0.357 / 0.893 |
+| τ (accepted/round, weighted) | 3.84 |
+| AR tok/s | 13.35 |
+| spec tok/s | 8.91 |
+| **speedup** | **0.667** |
+| prompts with speedup > 1.0 | **0 / 116** |
+| prompts with accept > 0.8 | 32 / 116 |
+| prompts with accept < 0.6 | 31 / 116 |
 
-**Accept-by-depth** (conditional): 0.89 / 0.80 / 0.89 / 0.88 — healthy, rises with depth
+**Accept-by-depth** (conditional): 0.88 / 0.82 / 0.91 / 0.89 — healthy, rises with depth
 (same block-diffusion refinement signature as §B).
 
-### The clippy prompt set is bimodal — and not in the direction Issue 011 predicted
+### Per-lint breakdown (the actionable signal)
 
-The first 6 staged prompts are all `manual_map` variants (`Some(x) => Some(f(x))` →
-`.map(f)`), which Issue 011's thesis called "near-deterministic" / best-case for speculation.
-The measured result **contradicts** that prediction:
+The 116-prompt set is balanced across 10 distinct clippy lints (~12 each), so the per-lint
+accept rate is a clean characterization of which fix shapes a token drafter can predict:
 
-| clippy subset | n | mean accept |
-|---|---:|---:|
-| `manual_map` (prompts 0–5, the "near-deterministic" lint) | 6 | **0.597** |
-| varied lints (prompts 6–23) | 18 | **0.744** |
+| lint | n | drafted | accepted | **accept** | speedup | best prompt |
+|---|---:|---:|---:|---:|---:|---:|
+| `redundant_closure`        | 12 | 1104 | 902 | **0.817** | 0.745 | 0.776 |
+| `needless_range_loop`      |  8 |  700 | 561 | **0.801** | 0.713 | 0.810 |
+| `needless_lifetimes`       | 12 | 1056 | 837 | **0.793** | 0.715 | 0.980 |
+| `needless_borrow`          | 12 | 1148 | 899 | **0.783** | 0.719 | 0.941 |
+| `redundant_field_names`    | 12 |  636 | 457 | **0.719** | 0.686 | 0.758 |
+| `needless_return`          | 12 |  812 | 557 | **0.686** | 0.608 | 0.757 |
+| `unnecessary_mut_passed`   | 12 |  712 | 482 | **0.677** | 0.637 | 0.902 |
+| `unnecessary_unwrap`       | 12 |  788 | 509 | **0.646** | 0.593 | 0.764 |
+| `manual_map`               | 12 | 1356 | 842 | **0.621** | 0.596 | 0.718 |
+| `useless_conversion`       | 12 | 1364 | 821 | **0.602** | 0.589 | 0.645 |
 
-The drafter does **not** capture the `match → .map()` rewrite well — the rewrite changes the
-AST shape (drops a `match` arm), which a token-level block-diffusion drafter trained on general
-code cannot predict from the local context alone. The varied lints (single-token /
-local-expression fixes) accept better. This is a useful negative finding: lint-healing
-predictability is **not** uniform across lints, and the structurally-rewriting lints are the
-*hard* case for a token drafter, not the easy one.
+The pattern is clear and **contradicts Issue 011's thesis** ("clippy fixes are
+near-deterministic → best-case for speculation"):
+
+- **Local-expression lints accept well (~0.80):** `redundant_closure` (`|x| f(x)` → `f`),
+  `needless_borrow`, `needless_lifetimes`, `needless_range_loop`. These are fixes the drafter
+  can predict from the local token context — the rewrite is a deletion/substitution within a
+  single expression.
+- **AST-rewriting lints accept poorly (~0.60):** `manual_map` (`match` → `.map()`),
+  `useless_conversion` (remove `.into()`/`as`), `unnecessary_unwrap`. These change the AST
+  shape (drop a branch, remove a layer of indirection), which a token-level block-diffusion
+  drafter trained on general code cannot predict from local context alone. **`manual_map` —
+  the lint Issue 011 explicitly named as "near-deterministic" / best-case — is in fact the
+  second-worst category (0.621).**
+
+This is the actionable signal for any future drafter improvement: the gap is **structural**,
+not statistical. A drafter that reasons over AST shape (or is fine-tuned on the rewrite
+patterns) would lift the bottom quartile; a better token predictor would not.
 
 ### G5 verdict
 
-- **No collapse.** The clippy-specific accept (0.695) is **above** the §B overall (0.558) and
-  well above the chat-category collapse (0.344). Clippy prompts are code-shaped and stay in the
-  0.53–0.85 band — the G5 failure mode (off-distribution collapse) does **not** appear.
-- **But still a net slowdown** (0.679× mean, 0/24 prompts beat 1.0×). G5 **confirms** the
-  §B/§C verdict; it does not flip it. Even the best clippy prompt (0.852 accept) was a 0.78×
-  slowdown — the draft-cost floor dominates acceptance at this checkpoint.
-- The headline number for clippy is **0.695 accept / 0.679× speedup**, vs the built-in code
-  proxy's **0.774 / still-net-slower**. Clippy is slightly *below* the generic-code proxy
-  (the `manual_map` rewrite penalty drags the mean down), reinforcing that clippy is not the
-  best-case workload the issue hoped for.
+- **No collapse.** The clippy-specific accept (0.710 weighted / 0.693 mean) is **well above**
+  the §B overall (0.558) and far above the chat-category collapse (0.344). Clippy prompts are
+  code-shaped and stay in the 0.36–0.89 band — the G5 failure mode (off-distribution collapse)
+  does **not** appear. The worst single prompt was 0.357 (still 2× the chat-category floor).
+- **But still a net slowdown** (0.667× weighted, 0.658× mean, **0/116 prompts beat 1.0×**).
+  G5 **confirms** the §B/§C verdict; it does not flip it. Even the best prompt (0.893 accept)
+  was a 0.98× slowdown — the draft-cost floor dominates acceptance at this checkpoint.
+- The headline number for clippy is **0.710 accept / 0.667× speedup**, vs the built-in code
+  proxy's **0.774 / still-net-slower**. Clippy is slightly *below* the generic-code proxy,
+  driven by the AST-rewriting lints (`manual_map`, `useless_conversion`) that drag the mean
+  down. The local-expression lints alone (~0.80) would clear the code proxy, but still not
+  breakeven.
 
 ---
 
@@ -242,9 +265,10 @@ predictability is **not** uniform across lints, and the structurally-rewriting l
   A katgpt-side speculative path does not exist; this bench cannot position katgpt+DSpark vs
   katgpt-raw (17.85). It positions the *ceiling of the idea* on this engine — and the ceiling is
   sub-1.0.
-- **Clippy-lint-specific** accept (G5): **now measured — §D below.** No collapse (0.53–0.85,
-  code-shaped), but still a net slowdown (0.679×). The 116-prompt clippy set remains staged at
-  `/tmp/clippy_l4_turns.jsonl` for a fuller run if a later checkpoint warrants it.
+- **Clippy-lint-specific** accept (G5): **now fully measured — §D below** (116 prompts,
+  10 lint types, per-lint breakdown). No collapse (0.36–0.89, code-shaped), but still a net
+  slowdown (0.667×). The actionable finding: local-expression lints accept ~0.80,
+  AST-rewriting lints (~0.60) are the hard case — the gap is structural, not statistical.
 
 ---
 
