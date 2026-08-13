@@ -39,10 +39,11 @@
 - **Phase 1 (framework refactor):** DONE 2026-08-13. `HealDomain` trait
   shipped, clippy domain reorganized behind `clippy_lints`, all 142 existing
   tests pass bit-identical.
-- **Phase 2 (rust_perf):** DONE 2026-08-13. 8 seed rules across 8 categories
-  (complexity, allocation, layout, concurrency, simd, caching, bevy, wasm).
-  `cargo test` verifier works (compile-error detection via exit status + JSON
-  parsing). Perf-bench Pareto validator DEFERRED (Proposal 001 caveat 3).
+- **Phase 2 (rust_perf):** DONE 2026-08-13. 16 seed rules across 9 categories
+  (complexity, allocation, layout, concurrency, simd, arithmetic, caching,
+  bevy, wasm). `cargo test` verifier works (compile-error detection via exit
+  status + JSON parsing). Perf-bench Pareto validator DONE (Bench 013 GOAT
+  G1+G5 PASS) — `rust_perf` promoted to default-on 2026-08-13.
 - **Phase 3 (kernel_opt):** DONE 2026-08-13. 2 placeholder rules (real
   popcorn distillation deferred per Proposal 012 §Phase 0).
   `KernelExpertRouter` wraps `pick_domain<4,5>` (Plan 558, identity directions

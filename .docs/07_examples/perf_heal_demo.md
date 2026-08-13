@@ -8,10 +8,10 @@
 
 The `rust_perf` domain end-to-end (Plan 001 Phase 2):
 
-1. **Build corpus**: `build_perf_seed_corpus()` → 14 `PerfRule` entries across
-   8 skill-checklist categories (complexity + allocation tie for deepest
+1. **Build corpus**: `build_perf_seed_corpus()` → 16 `PerfRule` entries across
+   9 skill-checklist categories (complexity + allocation tie for deepest
    with 3 rules each).
-2. **List rules**: prints all 14 rules grouped by category.
+2. **List rules**: prints all 16 rules grouped by category.
 3. **Validate**: calls `RustPerfDomain::validate()` on each fixed pattern.
    - Without `rust_perf_verify`: L2 pruner syntax check (`PerfParseVerdict`)
    - With `rust_perf_verify`: `cargo test` re-run (`PerfVerifyResult` with
@@ -23,7 +23,7 @@ The `rust_perf` domain end-to-end (Plan 001 Phase 2):
 6. **Optional cargo test** (with `rust_perf_verify`): runs `PerfVerifier` on
    the first rule, prints `ran`/`test_passes`/`passed`/`failed`.
 
-## The 14 seed rules
+## The 16 seed rules
 
 | Category | Rule | Pattern |
 |---|---|---|
@@ -35,9 +35,11 @@ The `rust_perf` domain end-to-end (Plan 001 Phase 2):
 | allocation | `format-concat-loop` | `format!("{s}{x}")` in loop → `String::push_str` |
 | layout | `layout-reorder` | Field reorder to eliminate padding |
 | layout | `repr-u8-enum` | Field-less enum → `#[repr(u8)]` for 1-byte size |
+| concurrency | `mutex-to-atomic` | `Mutex<u32>` counter → `AtomicU32::fetch_add` |
 | concurrency | `papaya-lockfree` | `Arc<RwLock<HashMap>>` → `papaya` lock-free map |
 | simd | `simd-chunk` | Scalar loop → 4-wide chunked loop |
 | simd | `bool-to-bitpack` | `Vec<bool>` count → packed `Vec<u64>` + `count_ones()` |
+| arithmetic | `f32-counter-to-int` | f32 accumulator for integer tally → u64 accumulator |
 | caching | `precompute-table` | Recompute-per-call → `const` lookup table |
 | bevy | `bevy-reactive-loop` | `WinitSettings::default()` → `reactive_low_power` |
 | wasm | `wasm-batch-ffi` | Per-call FFI → batch invocation |
@@ -47,7 +49,7 @@ The `rust_perf` domain end-to-end (Plan 001 Phase 2):
 ```text
 === rust_perf domain — Phase 2 scaffold demo ===
 
-Seed corpus: 14 entries
+Seed corpus: 16 entries
 Commitment (BLAKE3): 1887fcc7d1421ba6e81aac1cacd988e604a03ed808dce0a2c6962d083a36a453
 
 Rules by category:
@@ -67,7 +69,7 @@ Tamper-evidence check:
   verify() on tampered corpus: false (expected: false)
 
 HealDomain trait impl:
-  build_corpus() returned 14 entries (matches seed: true)
+  build_corpus() returned 16 entries (matches seed: true)
 
 === Phase 2 scaffold demo complete ===
 ```

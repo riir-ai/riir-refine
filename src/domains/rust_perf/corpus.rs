@@ -166,6 +166,24 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: Some(papaya_lockfree_bench_spec()),
         },
+        // ── concurrency: Mutex<u32> counter → AtomicU32 ─────────────────
+        // Per the rust-optimize skill item 6: "Mutex<u32> → AtomicU32".
+        // The Mutex lock/unlock path involves an atomic CAS to acquire + an
+        // atomic store to release (plus the MutexGuard RAII lifecycle),
+        // even on the uncontended path. AtomicU32::fetch_add is a single
+        // `lock xadd` instruction. The compiler cannot eliminate Mutex::lock
+        // (it's an opaque call). Bench 013: ParetoDominant ~2.5× across all
+        // sizes (1K → 1M) single-threaded — no contention needed.
+        PerfRule {
+            rule_id: "mutex-to-atomic".to_string(),
+            name: "Mutex<u32> counter → AtomicU32 fetch_add".to_string(),
+            category: "concurrency".to_string(),
+            buggy_code: "use std::sync::Mutex;\nstruct Counter(Mutex<u32>);\nimpl Counter {\n    fn new() -> Self { Self(Mutex::new(0)) }\n    fn inc(&self) { *self.0.lock().unwrap() += 1; }\n}".to_string(),
+            fixed_code: "use std::sync::atomic::{AtomicU32, Ordering};\nstruct Counter(AtomicU32);\nimpl Counter {\n    fn new() -> Self { Self(AtomicU32::new(0)) }\n    fn inc(&self) { self.0.fetch_add(1, Ordering::Relaxed); }\n}".to_string(),
+            context_notes: None,
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(mutex_to_atomic_bench_spec()),
+        },
         // ── simd: chunked loop for auto-vectorization ─────────────────────
         PerfRule {
             rule_id: "simd-chunk".to_string(),
@@ -191,6 +209,26 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
             context_notes: None,
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: Some(bool_to_bitpack_bench_spec()),
+        },
+        // ── arithmetic: f32 accumulator → u64 accumulator ───────────────────
+        // Per the rust-optimize skill item 4: "f32 counters → u32/u64".
+        // f32 addition is NOT associative (IEEE 754 rounding), so the
+        // compiler CANNOT break the sequential dependency chain or use
+        // multiple SIMD accumulators without -C fast-math (which Rust does
+        // not enable by default). Each f32 add has 3–4 cycle latency, fully
+        // serial. u64 addition IS associative, so the compiler vectorizes
+        // (multiple independent accumulators) + the add latency is 1 cycle.
+        // Bench 013: ParetoDominant 7.5× → 20.5× (grows with N — the f32
+        // dependency chain bottleneck worsens relative to vectorized u64).
+        PerfRule {
+            rule_id: "f32-counter-to-int".to_string(),
+            name: "f32 accumulator for integer tally → u64 accumulator".to_string(),
+            category: "arithmetic".to_string(),
+            buggy_code: "fn tally(scores: &[u32]) -> f32 {\n    let mut total = 0.0f32;\n    for &s in scores { total += s as f32; }\n    total\n}".to_string(),
+            fixed_code: "fn tally(scores: &[u32]) -> u64 {\n    let mut total = 0u64;\n    for &s in scores { total += s as u64; }\n    total\n}".to_string(),
+            context_notes: None,
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(f32_counter_to_int_bench_spec()),
         },
         // ── caching: pre-compute lookup table ─────────────────────────────
         // Context-dependent: the compiler optimizes the runtime popcount loop
@@ -609,6 +647,116 @@ pub fn run_fixed(input: &Input) {
     }
 }
 
+/// Bench spec for `mutex-to-atomic`: Mutex<u32> inc loop vs AtomicU32 fetch_add.
+///
+/// The buggy path locks + unlocks a `Mutex<u32>` per increment. Even on the
+/// uncontended path, this involves an atomic CAS to acquire + an atomic store
+/// to release (plus the `MutexGuard` RAII lifecycle). The fixed path uses a
+/// single `AtomicU32::fetch_add(1, Relaxed)` — one `lock xadd` instruction.
+/// The compiler cannot eliminate `Mutex::lock` (it's an opaque call).
+#[cfg(feature = "rust_perf_bench")]
+fn mutex_to_atomic_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![1_000, 10_000, 100_000, 1_000_000],
+        harness: r#"
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicU32, Ordering};
+
+mod buggy {
+use std::sync::Mutex;
+pub struct Counter(Mutex<u32>);
+impl Counter {
+    pub fn new() -> Self { Self(Mutex::new(0)) }
+    #[inline(never)]
+    pub fn inc(&self) { *self.0.lock().unwrap() += 1; }
+    pub fn get(&self) -> u32 { *self.0.lock().unwrap() }
+}
+}
+
+mod fixed {
+use std::sync::atomic::{AtomicU32, Ordering};
+pub struct Counter(AtomicU32);
+impl Counter {
+    pub fn new() -> Self { Self(AtomicU32::new(0)) }
+    #[inline(never)]
+    pub fn inc(&self) { self.0.fetch_add(1, Ordering::Relaxed); }
+    pub fn get(&self) -> u32 { self.0.load(Ordering::Relaxed) }
+}
+}
+
+pub struct Input {
+    n: usize,
+}
+
+pub fn make_input(n: usize) -> Input {
+    Input { n }
+}
+
+pub fn run_buggy(input: &Input) {
+    let c = buggy::Counter::new();
+    for _ in 0..input.n { c.inc(); }
+    std::hint::black_box(c.get());
+}
+
+pub fn run_fixed(input: &Input) {
+    let c = fixed::Counter::new();
+    for _ in 0..input.n { c.inc(); }
+    std::hint::black_box(c.get());
+}
+"#
+        .to_string(),
+    }
+}
+
+/// Bench spec for `f32-counter-to-int`: f32 accumulator vs u64 accumulator.
+///
+/// The buggy path accumulates integer values into an `f32` total. f32
+/// addition is NOT associative (IEEE 754 rounding), so the compiler cannot
+/// break the sequential dependency chain or use multiple SIMD accumulators
+/// without `-C fast-math` (which Rust does not enable by default). Each f32
+/// add has 3–4 cycle latency, fully serial. The fixed path uses a `u64`
+/// accumulator — integer addition IS associative, so the compiler vectorizes
+/// with multiple independent accumulators + 1-cycle add latency.
+#[cfg(feature = "rust_perf_bench")]
+fn f32_counter_to_int_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![100, 1_000, 10_000, 100_000],
+        harness: r#"
+mod buggy {
+    pub fn tally(scores: &[u32]) -> f32 {
+        let mut total = 0.0f32;
+        for &s in scores { total += s as f32; }
+        total
+    }
+}
+
+mod fixed {
+    pub fn tally(scores: &[u32]) -> u64 {
+        let mut total = 0u64;
+        for &s in scores { total += s as u64; }
+        total
+    }
+}
+
+pub fn make_input(n: usize) -> Vec<u32> {
+    // Pseudo-random but deterministic values in a realistic range.
+    (0..n).map(|i| (i as u32).wrapping_mul(2654435761) % 1000).collect()
+}
+
+pub fn run_buggy(input: &[u32]) {
+    let t = buggy::tally(input);
+    std::hint::black_box(t);
+}
+
+pub fn run_fixed(input: &[u32]) {
+    let t = fixed::tally(input);
+    std::hint::black_box(t);
+}
+"#
+        .to_string(),
+    }
+}
+
 /// Bench spec for `precompute-table`: runtime popcount loop vs const table.
 #[cfg(feature = "rust_perf_bench")]
 fn precompute_table_bench_spec() -> BenchSpec {
@@ -867,16 +1015,17 @@ mod tests {
     }
 
     #[test]
-    fn seed_corpus_has_fourteen_entries_across_eight_categories() {
+    fn seed_corpus_has_sixteen_entries_across_nine_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 14);
+        assert_eq!(corpus.entries.len(), 16);
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
         categories.dedup();
-        // 8 distinct categories. Complexity + allocation tie for deepest
-        // (3 rules each); simd + layout have 2; the rest have 1 each.
-        assert_eq!(categories.len(), 8);
+        // 9 distinct categories. Complexity + allocation tie for deepest
+        // (3 rules each); simd + layout + concurrency have 2; arithmetic,
+        // caching, bevy, wasm have 1 each.
+        assert_eq!(categories.len(), 9);
     }
 
     #[test]
@@ -944,10 +1093,10 @@ mod tests {
 
     #[cfg(feature = "rust_perf_bench")]
     #[test]
-    fn ten_rules_have_bench_specs() {
+    fn twelve_rules_have_bench_specs() {
         let corpus = build_perf_seed_corpus();
         let with_spec = corpus.entries.iter().filter(|e| e.bench_spec.is_some()).count();
-        assert_eq!(with_spec, 10, "expected 10 benchable rules, got {with_spec}");
+        assert_eq!(with_spec, 12, "expected 12 benchable rules, got {with_spec}");
     }
 
     #[cfg(feature = "rust_perf_bench")]
@@ -991,14 +1140,14 @@ mod tests {
     /// have `context_notes: None` — they are either unconditional wins or
     /// honestly unmeasurable.
     #[test]
-    fn eleven_rules_have_no_context_notes() {
+    fn thirteen_rules_have_no_context_notes() {
         let corpus = build_perf_seed_corpus();
         let unannotated = corpus
             .entries
             .iter()
             .filter(|e| e.context_notes.is_none())
             .count();
-        assert_eq!(unannotated, 11, "expected 11 unannotated rules");
+        assert_eq!(unannotated, 13, "expected 13 unannotated rules");
     }
 
     /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -1052,8 +1201,9 @@ mod tests {
             );
         }
 
-        // The 10 unannotated rules must return None from the trait too.
+        // The 13 unannotated rules must return None from the trait too.
         let unannotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_none()).collect();
+        assert_eq!(unannotated.len(), 13, "expected 13 unannotated rules");
         for rule in &unannotated {
             assert!(HealEntry::context_notes(*rule).is_none(), "{} should have no context_notes", rule.rule_id);
         }

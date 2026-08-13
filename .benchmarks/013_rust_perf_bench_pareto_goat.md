@@ -27,15 +27,15 @@ Rules without a `BenchSpec` are honestly marked `NotBenchable`.
 
 | Gate | What | Target | Status |
 |---|---|---|---|
-| G1 (correctness) | benchable rules produce real measurements (ran=true, non-empty results) | all 10 benchable rules run | ✅ PASS (10/10 ran) |
+| G1 (correctness) | benchable rules produce real measurements (ran=true, non-empty results) | all 12 benchable rules run | ✅ PASS (12/12 ran) |
 | G2 (latency) | per-rule latency (temp crate compile + bench subprocess) | documented, not hot-path | ~5-15s/rule (compile-dominated) |
 | G3 (no-regression) | default features (no `rust_perf_bench`) still pass | default `cargo test --lib` green | ✅ PASS (91 default tests) |
 | G4 (alloc-free) | N/A — subprocess-based validator | N/A | ✅ PASS (documented N/A) |
-| G5 (Pareto verdict) | majority of benchable rules are Pareto-dominant | `pareto_dominant * 2 > benchable` | ✅ PASS (7/10 = majority) |
+| G5 (Pareto verdict) | majority of benchable rules are Pareto-dominant | `pareto_dominant * 2 > benchable` | ✅ PASS (9/12 = majority) |
 
-## Measured results (10 benchable, 4 not-benchable)
+## Measured results (12 benchable, 4 not-benchable)
 
-### Pareto-dominant (7/10) — the pattern works
+### Pareto-dominant (9/12) — the pattern works
 
 | Rule | N=small | N=large | Peak speedup | Verdict |
 |---|---:|---:|---:|---|
@@ -46,6 +46,8 @@ Rules without a `BenchSpec` are honestly marked `NotBenchable`.
 | `static-str` | 37.06x (N=1) | **43.18x** (N=100) | 43.18x | ✅ ParetoDominant (3/3 sizes faster) |
 | `vec-with-capacity` | 4.43x (N=100) | **1.07x** (N=100000) | 4.43x | ✅ ParetoDominant (4/4 sizes faster) |
 | `format-concat-loop` | 45.25x (N=100) | **94.58x** (N=1000) | 94.58x | ✅ ParetoDominant (3/3 sizes faster) |
+| `mutex-to-atomic` | 2.57x (N=1000) | **2.52x** (N=1000000) | 2.57x | ✅ ParetoDominant (4/4 sizes faster) |
+| `f32-counter-to-int` | 7.50x (N=100) | **11.43x** (N=1000) | 11.43x | ✅ ParetoDominant (4/4 sizes faster) |
 
 The `o1-lookup` N=10 SLOWER (0.60x) is small-N noise — HashMap has
 setup overhead that dominates at 10 elements. The O(n)→O(1) win is
@@ -54,13 +56,27 @@ overwhelming at large N (570x at N=10000).
 `bsearch-sorted-slice` is the standout: O(log n) vs O(n) produces a
 **2709×** speedup at N=100000 — the log scale gap grows without bound.
 
-### Mixed (1/10) — scale-dependent
+`mutex-to-atomic` is a consistent ~2.5× across all sizes — the Mutex
+lock/unlock path involves an atomic CAS to acquire + an atomic store to
+release (plus the `MutexGuard` RAII lifecycle), while `AtomicU32::fetch_add`
+is a single `lock xadd` instruction. The compiler cannot eliminate
+`Mutex::lock` (it's an opaque call). This is the first concurrency rule
+that's ParetoDominant single-threaded (`papaya-lockfree` needs contention).
+
+`f32-counter-to-int` wins because f32 addition is NOT associative (IEEE
+754 rounding), so the compiler cannot break the sequential dependency chain
+or use multiple SIMD accumulators without `-C fast-math` (which Rust does not
+enable by default). Each f32 add has 3–4 cycle latency, fully serial. The u64
+accumulator vectorizes freely (integer addition IS associative) + 1-cycle add
+latency.
+
+### Mixed (1/12) — scale-dependent
 
 | Rule | Speedup range | Verdict | Honest reason |
 |---|---:|---|---|
 | `dedupe-hashset-vs-vec` | 0.64x–7.53x | ~ Mixed (2/4 Faster, 2/4 Slower) | HashSet allocation + hashing overhead exceeds the O(n²) cost at small N (≤500 elements, trivial comparison count). Wins clearly at N ≥ 1000 (up to 7.53x at N=5000). Suggest for dedup on collections known to exceed ~500 elements; for small dedup, the `Vec::contains` approach is fine. |
 
-### Pareto-dominated (2/10) — honest findings
+### Pareto-dominated (2/12) — honest findings
 
 | Rule | Speedup range | Verdict | Honest reason |
 |---|---:|---|---|
@@ -71,7 +87,7 @@ These are NOT bugs in the validator — they're exactly the kind of
 honest signal Proposal 001 caveat 3 predicted ("perf has no single
 ground truth — 'faster' depends on workload, hardware, input size").
 
-### Not benchable (4/14) — honest markings
+### Not benchable (4/16) — honest markings
 
 | Rule | Reason |
 |---|---|
@@ -112,8 +128,8 @@ is simpler, faster to compile, and sufficient for a Pareto verdict.
 
 **rust_perf was promoted to default-on 2026-08-13.** The GOAT gate (G1+G5)
 passed:
-- G1: all 10 benchable rules produce real measurements ✅
-- G5: 7/10 benchable rules are Pareto-dominant (majority) ✅
+- G1: all 12 benchable rules produce real measurements ✅
+- G5: 9/12 benchable rules are Pareto-dominant (majority) ✅
 
 The promotion follows the global AGENTS.md rule "promote to default if gain
 also demote loser":
@@ -149,7 +165,7 @@ required.
 # Clean temp dirs (forces fresh cargo builds)
 rm -rf /tmp/riir_perf_bench/
 
-# Run the GOAT gate (slow — compiles + runs 5 temp crates)
+# Run the GOAT gate (slow — compiles + runs 7 temp crates)
 cargo run --example perf_bench_demo --features rust_perf_bench --release
 ```
 

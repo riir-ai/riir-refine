@@ -19,15 +19,15 @@
 
 ## Corpus
 
-14 seed rules across 8 skill-checklist categories. Complexity + allocation
+16 seed rules across 9 skill-checklist categories. Complexity + allocation
 are the deepest categories (3 rules each — complexity covers the most common
 algorithmic anti-patterns: O(n)→O(1)/O(log n) lookups, O(n²)→O(n) dedup;
-allocation covers the most common memory anti-patterns); simd + layout have 2;
-the rest have 1 each. 10 are benchable (carry a `BenchSpec`); 4 are honestly
-`NotBenchable` (need external runtimes or are structural). 3 of the 10
-benchable rules carry `context_notes` (Bench 013 found 2 `ParetoDominated` +
-1 `Mixed` in the default config — consumers should treat them as context-
-dependent, not unconditional suggestions).
+allocation covers the most common memory anti-patterns); simd + layout +
+concurrency have 2; the rest have 1 each. 12 are benchable (carry a
+`BenchSpec`); 4 are honestly `NotBenchable` (need external runtimes or are
+structural). 3 of the 12 benchable rules carry `context_notes` (Bench 013
+found 2 `ParetoDominated` + 1 `Mixed` in the default config — consumers
+should treat them as context-dependent, not unconditional suggestions).
 
 | Rule ID | Category | Bench verdict | Context? | Pattern |
 |---|---|---|---|---|
@@ -39,9 +39,11 @@ dependent, not unconditional suggestions).
 | `format-concat-loop` | allocation | ✅ 42-95x ParetoDominant | — | `format!("{s}{x}")` concat in loop → `String::push_str` (O(n²) → O(n)) |
 | `layout-reorder` | layout | ❌ NotBenchable | — | Field reorder to eliminate padding (deterministic `size_of`, not a runtime microbench) |
 | `repr-u8-enum` | layout | ❌ NotBenchable | — | Field-less enum → `#[repr(u8)]` (deterministic `size_of`, same class as layout-reorder) |
+| `mutex-to-atomic` | concurrency | ✅ 2.5x ParetoDominant | — | `Mutex<u32>` counter inc → `AtomicU32::fetch_add` (Mutex lock/unlock is opaque; ~2.5× single-threaded) |
 | `papaya-lockfree` | concurrency | ❌ 0.55-0.79x ParetoDominated | ⚠️ `context_notes` | `Arc<RwLock<HashMap>>` → `papaya` lock-free map (benefit needs multi-threaded contention) |
 | `simd-chunk` | simd | ✅ 3.9x ParetoDominant | — | Scalar loop → 4-wide chunked loop for LLVM auto-vectorization |
 | `bool-to-bitpack` | simd | ✅ 7-11x ParetoDominant | — | `Vec<bool>` set-bit count → packed `Vec<u64>` + `count_ones()` (data density + hardware POPCNT) |
+| `f32-counter-to-int` | arithmetic | ✅ 7.5-11x ParetoDominant | — | f32 accumulator for integer tally → u64 accumulator (f32 add dep chain can't be broken without fast-math) |
 | `precompute-table` | caching | ❌ 0.20-0.40x ParetoDominated | ⚠️ `context_notes` | Recompute-per-call → `const` lookup table (compiler optimizes popcount to POPCNT in release) |
 | `bevy-reactive-loop` | bevy | ❌ NotBenchable | — | `WinitSettings::default()` (Continuous, 100% CPU) → `reactive_low_power` (needs Bevy runtime) |
 | `wasm-batch-ffi` | wasm | ❌ NotBenchable | — | Per-call FFI (250ns floor × N×M) → single batch invocation (needs WASM runtime) |
@@ -81,9 +83,9 @@ the measured GOAT results.
 
 The original caveat called perf "the weakest link" because perf has no
 single ground truth. **Bench 013 closes this**: the Pareto validator now
-provides the real perf ground truth. 7/10 benchable rules are Pareto-dominant
-(clear wins); 2/10 are honestly Pareto-dominated (compiler optimizations,
-regime-dependent benefits); 1/10 is Mixed (scale-dependent) — exactly the
+provides the real perf ground truth. 9/12 benchable rules are Pareto-dominant
+(clear wins); 2/12 are honestly Pareto-dominated (compiler optimizations,
+regime-dependent benefits); 1/12 is Mixed (scale-dependent) — exactly the
 kind of honest signal the caveat predicted.
 
 ## Drafter + pipeline integration (`context_notes` propagation, 2026-08-13)
@@ -155,7 +157,7 @@ cargo invocations against temp crates race on cargo's build cache lock.
 ## Source
 
 - [`src/domains/rust_perf/mod.rs`](../../src/domains/rust_perf/mod.rs) — `PerfRule` + `RustPerfDomain`
-- [`src/domains/rust_perf/corpus.rs`](../../src/domains/rust_perf/corpus.rs) — `build_perf_seed_corpus()` + 7 `BenchSpec`s
+- [`src/domains/rust_perf/corpus.rs`](../../src/domains/rust_perf/corpus.rs) — `build_perf_seed_corpus()` + 9 `BenchSpec`s
 - [`src/domains/rust_perf/verify.rs`](../../src/domains/rust_perf/verify.rs) — `PerfVerifier` (cargo test)
 - [`src/domains/rust_perf/bench.rs`](../../src/domains/rust_perf/bench.rs) — `PerfBenchValidator` (Pareto verdict)
 - [`examples/perf_heal_demo.rs`](../../examples/perf_heal_demo.rs) — scaffold end-to-end demo
