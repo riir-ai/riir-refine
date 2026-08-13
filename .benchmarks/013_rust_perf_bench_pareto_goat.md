@@ -145,10 +145,9 @@ aggregate/range queries via mathematical pre-computation, not a data structure
 swap. The compiler cannot derive a prefix-sum transform from a nested-loop
 scan — it requires the programmer to recognize the pattern.
 
-### Investigation note: four candidate gaps tested, two verified
+### Investigation note: five candidate gaps tested, two verified
 
-This expansion tested four candidate patterns from the checklist across two
-sessions:
+This expansion tested five candidate patterns across three sessions:
 
 | Candidate | Checklist item | Verdict | Honest reason |
 |---|---|---|---|
@@ -156,13 +155,13 @@ sessions:
 | **prefix-sum-2d** (boundary-vs-volume) | 1. Complexity | ✅ ParetoDominant (34×–30000×) | Compiler can't derive a prefix-sum transform from a nested-loop scan; win grows linearly with N |
 | loop-invariant hoisting (compute once not N×M) | 8. Caching | ❌ ParetoDominated (0.88–1.02×) | **LLVM's LICM pass already hoists the call** — tested with `#[inline(never)]` + `expensive(k)` where k is loop-invariant: LLVM sees the function only depends on k, not on loop state, and hoists it despite no inlining. The manual hoist is sometimes SLOWER (register allocation interference). |
 | iter-to-index (use index arithmetic) | 5. Iterators | ❌ ParetoDominated (~1.00×) | **Compiler produces identical codegen** for `.zip().enumerate().map()` chains and direct index loops — tested zip+enumerate+map vs `for i in 0..n`: within noise at all N. LLVM lowers iterator chains to the same pointer-arithmetic loops as explicit indexing. |
+| mem::replace vs clone+assign (bonus, NOT in checklist) | N/A (bonus) | ❌ Rejected — bench-design mismatch | ParetoDominant when isolated (70×–24000× clone vs reference) but the mutation pattern doesn't fit the read-only corpus bench framework cleanly: `mem::replace` requires `&mut` access while the bench passes `&Input`. The fair bench (clone+assign vs replace with shared setup) showed only 1.3–2.4×, modest for a bonus pattern. The pattern IS a genuine win, but the bench disconnect (bench compares clone-vs-reference, not clone+assign-vs-replace) makes it a poor fit for the corpus's "bench measures the rule's actual fix" convention. |
 
 The empirical verification BEFORE corpus addition is the key defense: two
-of four candidates were honestly ParetoDominated (compiler already handles
-them) and were correctly excluded. Only the genuinely benchable patterns
-(loop fusion + prefix sum) were added. This mirrors the methodology across
-all corpus expansion rounds (`entry-vs-contains-insert` +
-`branchless-conditional` were also verified before addition).
+of five candidates were honestly rejected (compiler already handles them),
+one rejected for bench-design mismatch, and two were added. Only the
+genuinely benchable patterns (loop fusion + prefix sum) passed both the
+ParetoDominance gate AND the bench-design fitness check.
 
 ### Mixed (1/18) — scale-dependent
 
