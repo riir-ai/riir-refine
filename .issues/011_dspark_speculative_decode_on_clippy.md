@@ -154,12 +154,15 @@ moment its output is verified rather than returned.
   **Open follow-ups (do NOT reopen this issue for these):**
   - Re-measure when a later-trained dspark checkpoint lands (the scope doc gates
     runtime on training convergence).
-  - **G5 clippy-specific:** the clippy held-out fixtures were *not* run — the
-    target GGUF has **no chat_template**, blocking the `dataset.jsonl` path
-    (which applies the chat template). The converted clippy set is staged
-    (`clippy_l4_sft_test.jsonl` → 116 prompts `{"turns":[...]}`) and ready when a
-    templated target is. The built-in chat/reasoning categories already preview
-    the G5 collapse (chat 0.344; worst prompts 0.17–0.27).
+  - **G5 clippy-specific: MEASURED 2026-08-13 (Bench 012 §D).** The `chat_template` block
+    was bypassed via a local vendor-harness `plain:`-prefix patch (loads the jsonl as plain-
+    text continuation). 24 real clippy prompts: **accept 0.695 / speedup 0.679 — no collapse**
+    (range 0.53–0.85, code-shaped, well above the chat-category 0.344) **but still a net
+    slowdown** (0/24 prompts beat 1.0×). G5 confirms the verdict; it does not flip it. Notable
+    negative finding: the `manual_map` "near-deterministic" lint (Issue 011's predicted
+    best-case) actually accepted *worse* (0.597) than the varied lints (0.744) — the
+    `match → .map()` AST rewrite is the hard case for a token drafter, not the easy one.
+    The 116-prompt set remains staged for a fuller run if a later checkpoint warrants it.
   - **G3 katgpt-side:** a katgpt+DSpark path does not exist; this bench positions
     the *ceiling of the idea* on the llama.cpp engine, which is sub-1.0.
 
