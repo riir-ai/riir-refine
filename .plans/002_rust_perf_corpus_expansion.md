@@ -3,7 +3,7 @@
 **Proposal:** [001](../.proposals/001_multi_domain_modelless_code_healer.md) (caveat 3
 extension — corpus coverage, not a new domain)
 **Branch:** `develop` (per global rule — no feature branches)
-**Status:** in flight
+**Status:** in flight — Phase 1 T-hash DONE (2026-08-13, commit `c5e27a3`); corpus now 28 rules. Remaining Phase 1 candidates + Phases 2-4 pending.
 **Domain:** `rust_perf` (default-on since 2026-08-13, [Bench 013](../.benchmarks/013_rust_perf_bench_pareto_goat.md))
 
 ## Goal
@@ -34,7 +34,7 @@ expected baseline — perf claims rot as LLVM improves.
 ## Substrate-first gate (pre-flight, MANDATORY)
 
 Before implementing, verify no substrate is duplicated:
-- [x] Existing `PerfRule` struct + `build_perf_seed_corpus()` (25 rules) — the
+- [x] Existing `PerfRule` struct + `build_perf_seed_corpus()` (28 rules as of 2026-08-13) — the
       corpus to extend, not replace.
 - [x] `BenchSpec` harness pattern + `PerfBenchValidator` (Bench 013) — the
       empirical gate every new benchable rule must pass.
@@ -90,12 +90,17 @@ investigation log), `[~]` when deferred.
 
 ### Source A — nnethercote/perf-book (7 untouched distillable chapters)
 
-- [ ] **T-hash** · `fast-hasher` · category: hashing · **Benchable**
-  - Source: perf-book `hashing.md` + MS M-FAST-HASHER + reintech FxHashMap
+- [x] **T-hash** · `fast-hasher` · category: complexity · **Benchable** — DONE 2026-08-13
+  - Source: perf-book `hashing.md` + MS M-FAST-HASHER + reintech FxHashMap + rustc/bevy real-world
   - Pattern: `HashMap::default()` (SipHash, DoS-safe) for trusted internal keys →
     `FxHashMap`/`foldhash` (faster non-crypto hasher). The default hasher's
     randomization + SipHash rounds cost ~2-10× vs FxHash on integer/pointer keys.
-  - Overlap: none (new category). Distinct from `o1-lookup` (that's algorithmic;
+  - **Bench result (Bench 013 validator):** ParetoDominant 8/8 sizes (3.3-5.8×).
+    Shipped as rule `fxhashmap` in commit `c5e27a3`.
+  - **Category note:** filed under `complexity` (not new `hashing` category) because
+    the existing complexity category already holds the HashMap-related rules
+    (`o1-lookup`, `entry-vs-contains-insert`). A 1-rule category is too sparse.
+  - Overlap: none. Distinct from `o1-lookup` (that's algorithmic;
     this is constant-factor on the hash function itself).
 
 - [ ] **T-heap-box-str** · `box-str-immutable` · category: allocation · **Benchable**
@@ -320,7 +325,7 @@ For each `- [ ]` task marked **Benchable** above, the workflow is:
 
 ### Tasks (benchable candidates — empirical gate)
 
-- [ ] **T-hash** — `fast-hasher` (FxHash vs SipHash on int keys)
+- [x] **T-hash** — `fast-hasher` (FxHash vs SipHash on int keys) — DONE 2026-08-13, ParetoDominant 3.3-5.8×
 - [ ] **T-heap-box-str** — `box-str-immutable` (Vec<String> → Vec<Box<str>>)
 - [ ] **T-heap-smallvec** — `smallvec-stack` (Vec → SmallVec for ≤8 typical)
 - [ ] **T-heap-reuse-clear** — `reuse-allocation-clear` (alloc-per-call → .clear() reuse)
@@ -338,6 +343,10 @@ For each `- [ ]` task marked **Benchable** above, the workflow is:
 - [ ] **T-object-pool** — `object-pool-reuse` (alloc+drop loop → pool acquire/release)
 - [ ] **T-soa-layout** — `soa-vs-aos` (AoS → SoA for field-wise iteration)
 - [ ] **T-avoid-clone** — `avoid-unnecessary-clone` (clone → borrow; the missing classic)
+
+**Additional rules shipped outside this plan's candidate list (rustc/bevy pattern mining):**
+- [x] **retain-inplace** — `iter().filter().collect()` → `Vec::retain()` in-place (1.3-2.0×) — DONE 2026-08-13
+- [x] **mem-take** — `buf.clone() + buf.clear()` → `mem::take()` (1.9-2.6×) — DONE 2026-08-13
 
 **Expected outcome:** based on the Bench 013 5/11 acceptance rate, expect ~9-12
 of these 18 to pass ParetoDominance, ~4-6 to be honestly rejected (LLVM already
