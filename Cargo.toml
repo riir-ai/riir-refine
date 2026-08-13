@@ -45,16 +45,20 @@ riir-gpu = { path = "../riir-ai/crates/riir-gpu", optional = true, default-featu
 [dev-dependencies]
 
 [features]
-default = ["clippy_lints"]
+default = ["clippy_lints", "rust_perf"]
 
 # Domain features (Plan 001 multi-domain framework refactor).
-# clippy_lints is the first domain; default-on. Phase 2 adds `rust_perf`,
-# Phase 3 adds `kernel_heal`.
+# clippy_lints is the first domain; default-on. Phase 2 adds `rust_perf`
+# (promoted to default-on 2026-08-13 after the perf-bench Pareto validator
+# GOAT gate passed — Bench 013 G1+G5). Phase 3 adds `kernel_heal`.
 clippy_lints = []
 
 # Phase 2: rust performance healing domain (rust-optimize skill checklist).
-# Opt-in (default-off). Not promoted to default until a domain-specific GOAT
-# (perf-bench Pareto validator) passes.
+# DEFAULT-ON since 2026-08-13 (Bench 013 GOAT G1+G5 PASS). 2 of 8 rules
+# (`precompute-table`, `papaya-lockfree`) carry `context_notes` annotations
+# recording that the bench validator found them ParetoDominated in the default
+# config — consumers should treat annotated rules as context-dependent, not
+# unconditional suggestions.
 rust_perf = []
 
 # Perf rule resolution verification via real `cargo test` re-run (Phase 2).

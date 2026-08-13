@@ -96,20 +96,28 @@ is simpler, faster to compile, and sufficient for a Pareto verdict.
 
 ## Promotion decision
 
-**rust_perf is eligible for default-on promotion.** The GOAT gate (G1+G5)
-passes:
+**rust_perf was promoted to default-on 2026-08-13.** The GOAT gate (G1+G5)
+passed:
 - G1: all 5 benchable rules produce real measurements ✅
 - G5: 3/5 benchable rules are Pareto-dominant (majority) ✅
 
-The validator itself is the deliverable — it works correctly, catches
-real perf characteristics (including honest "this rule is not a win in
-release mode" findings), and provides the Pareto verdict that Proposal
-001 caveat 3 required.
+The promotion follows the global AGENTS.md rule "promote to default if gain
+also demote loser":
+- **Promoted**: the `rust_perf` domain moved from opt-in to `default = [...]`
+  in Cargo.toml.
+- **Demoted (annotated)**: the 2 ParetoDominated rules (`precompute-table`,
+  `papaya-lockfree`) now carry a `context_notes: Some(...)` annotation on
+  [`PerfRule`] documenting that the bench found them slower in the default
+  config. The patterns are kept in the corpus (they're genuine wins in their
+  respective regimes — non-POPCNT targets / multi-threaded contention) but
+  consumers should treat annotated rules as context-dependent, not
+  unconditional suggestions. The annotation is backward-compatible via
+  `#[serde(default)]` — older freeze/thaw snapshots deserialize as `None`.
 
-**Not promoted yet** — the promotion requires updating the `default`
-feature in Cargo.toml + updating the Cargo.toml comment. This is a
-separate decision (the validator passing is necessary but the user
-should confirm the promotion is desired).
+The validator itself is the deliverable — it works correctly, catches real
+perf characteristics (including honest "this rule is not a win in release
+mode" findings), and provides the Pareto verdict that Proposal 001 caveat 3
+required.
 
 ## Re-running
 

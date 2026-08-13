@@ -1,6 +1,8 @@
 //! The rust performance healing domain.
 //!
-//! This is the second `HealDomain` impl (Plan 001 Phase 2). It owns:
+//! This is the second `HealDomain` impl (Plan 001 Phase 2). **Promoted to
+//! default-on 2026-08-13** after the perf-bench Pareto validator GOAT gate
+//! passed (Bench 013 G1+G5). It owns:
 //! - [`PerfRule`] — the corpus entry type (rule id, category, buggy, fixed,
 //!   optional bench spec)
 //! - [`RustPerfDomain`] — the `HealDomain` impl (`build_corpus`, validate)
@@ -57,6 +59,15 @@ pub mod verify;
 /// The `bench_spec` field is **optional** — rules needing external runtimes
 /// (Bevy, WASM) are honestly left without one and reported as `NotBenchable`
 /// by the validator.
+///
+/// The `context_notes` field documents rules where the bench validator found
+/// the "fix" is **not a default-configuration win** (e.g. the compiler already
+/// optimizes the buggy form, or the benefit only appears under a specific
+/// runtime regime like multi-threaded contention). When `Some`, consumers of
+/// the corpus should treat the rule as **context-dependent** — present it as
+/// a documented pattern, not an unconditional suggestion. The two rules
+/// flagged in [Bench 013](../../../../.benchmarks/013_rust_perf_bench_pareto_goat.md)
+/// (`precompute-table`, `papaya-lockfree`) carry this annotation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PerfRule {
     /// Short kebab-case rule id (e.g., "`o1-lookup`", "`layout-reorder`").
@@ -70,6 +81,14 @@ pub struct PerfRule {
     pub buggy_code: String,
     /// The fast code pattern.
     pub fixed_code: String,
+    /// Honest annotation for rules where the bench validator found the "fix"
+    /// is not a default-configuration win (Bench 013). `None` for
+    /// unconditional wins + honestly `NotBenchable` rules.
+    ///
+    /// Backward-compatible via `#[serde(default)]` — older freeze/thaw
+    /// snapshots (pre-this-field) deserialize as `None`.
+    #[serde(default)]
+    pub context_notes: Option<String>,
     /// Optional microbenchmark spec for the `rust_perf_bench` validator.
     ///
     /// `None` means the rule is `NotBenchable` (needs an external runtime).

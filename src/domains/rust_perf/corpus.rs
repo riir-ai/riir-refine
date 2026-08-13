@@ -1,9 +1,12 @@
 //! Seed corpus — rust performance rules distilled from the `rust-optimize`
 //! skill checklist.
 //!
-//! Each entry is a `(rule_id, name, category, buggy_code, fixed_code)` tuple
-//! representing a real perf pattern from the skill. The corpus is
-//! BLAKE3-committed via [`Corpus::new`](crate::corpus::Corpus::new).
+//! Each entry is a `(rule_id, name, category, buggy_code, fixed_code, context_notes)`
+//! tuple representing a real perf pattern from the skill. The corpus is
+//! BLAKE3-committed via [`Corpus::new`](crate::corpus::Corpus::new). The
+//! `context_notes` field is `Option<String>` — `Some(...)` for rules the bench
+//! validator found ParetoDominated in the default config (Bench 013), `None`
+//! for unconditional wins + honestly NotBenchable rules.
 //!
 //! ## Bench specs (behind `rust_perf_bench`)
 //!
@@ -16,14 +19,26 @@
 //! - `o1-lookup` (Vec scan vs HashMap lookup — clear O(n) vs O(1))
 //! - `static-str` (String alloc vs &'static str — allocation cost)
 //! - `simd-chunk` (scalar vs chunked loop — vectorization at large N)
-//! - `precompute-table` (recompute vs const lookup table — table win)
-//! - `papaya-lockfree` (RwLock vs papaya lock-free — concurrent read path)
+//! - `precompute-table` (recompute vs const lookup table — **context-dependent**,
+//!   see `context_notes`; not a release-mode win per Bench 013)
+//! - `papaya-lockfree` (RwLock vs papaya lock-free — **context-dependent**,
+//!   see `context_notes`; only a win under multi-threaded contention)
 //!
 //! Not benchable (3/8) — honest:
 //! - `layout-reorder` (struct size — deterministic `size_of`, not a runtime
 //!   microbench; the cache-utilization claim needs a specific access pattern)
 //! - `bevy-reactive-loop` (needs the Bevy runtime — can't run in a temp crate)
 //! - `wasm-batch-ffi` (needs a WASM runtime — can't run in a temp crate)
+//!
+//! ## Context-dependent rules (`context_notes`)
+//!
+//! Two rules carry a `context_notes: Some(...)` annotation recording that the
+//! Bench 013 Pareto validator found them **ParetoDominated** in the default
+//! configuration (`precompute-table`, `papaya-lockfree`). The patterns are
+//! genuine wins in their respective regimes (non-POPCNT targets / multi-
+//! threaded contention) and are kept in the corpus as documented patterns,
+//! but consumers should treat them as context-dependent — not unconditional
+//! suggestions.
 
 use crate::corpus::Corpus;
 use crate::domains::rust_perf::{PerfRule, RustPerfDomain};
@@ -43,6 +58,7 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
             category: "complexity".to_string(),
             buggy_code: "fn find_user(users: &Vec<(u32, String)>, id: u32) -> Option<&String> {\n    users.iter().find(|(uid, _)| *uid == id).map(|(_, n)| n)\n}".to_string(),
             fixed_code: "use std::collections::HashMap;\nfn find_user(users: &HashMap<u32, String>, id: u32) -> Option<&String> {\n    users.get(&id)\n}".to_string(),
+            context_notes: None,
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: Some(o1_lookup_bench_spec()),
         },
@@ -53,6 +69,7 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
             category: "allocation".to_string(),
             buggy_code: "fn label() -> String { \"ready\".to_string() }".to_string(),
             fixed_code: "fn label() -> &'static str { \"ready\" }".to_string(),
+            context_notes: None,
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: Some(static_str_bench_spec()),
         },
@@ -65,6 +82,7 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
             // padding after the u8. Reordering u64 → u32 → u8 packs to 16 bytes.
             buggy_code: "#[repr(C)]\nstruct Bad { a: u8, b: u64, c: u32 }".to_string(),
             fixed_code: "#[repr(C)]\nstruct Good { b: u64, c: u32, a: u8 }".to_string(),
+            context_notes: None,
             // Not benchable: size_of is deterministic (compile-time), and the
             // cache-utilization claim needs a specific access pattern to show
             // up in a microbench. Honest "NotBenchable".
@@ -73,13 +91,28 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
         },
         // ── concurrency: Arc<RwLock<HashMap>> → papaya ────────────────────
         // Per the user AGENTS.md rule: "Use papaya as possible for lock-free
-        // Arc<RwLock<HashMap>>".
+        // Arc<RwLock<HashMap>>". Context-dependent: only a win under
+        // multi-threaded contention (Bench 013 measured single-threaded reads
+        // as 0.55–0.79× — papaya's epoch GC overhead dominates without
+        // concurrent access). The AGENTS.md rule is correct for hot
+        // concurrent paths; the annotation is for the single-threaded case.
         PerfRule {
             rule_id: "papaya-lockfree".to_string(),
             name: "Arc<RwLock<HashMap>> → papaya lock-free map".to_string(),
             category: "concurrency".to_string(),
             buggy_code: "use std::sync::{Arc, RwLock};\nuse std::collections::HashMap;\nstruct Store(Arc<RwLock<HashMap<u32, String>>>);".to_string(),
             fixed_code: "use papaya::HashMap;\nstruct Store(HashMap<u32, String>);".to_string(),
+            // Bench 013 ParetoDominated (0.55–0.79× single-threaded). The
+            // win is real under contention; the annotation marks the
+            // default-config (single-threaded bench) as NOT a win.
+            context_notes: Some(
+                "Bench 013: ParetoDominated 0.55-0.79x single-threaded. \
+                 Win only under multi-threaded contention (papaya epoch GC \
+                 overhead dominates without concurrent readers). The AGENTS.md \
+                 rule (papaya for Arc<RwLock<HashMap>>) is correct for hot \
+                 concurrent paths; do not suggest for single-threaded reads."
+                    .to_string(),
+            ),
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: Some(papaya_lockfree_bench_spec()),
         },
@@ -90,16 +123,34 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
             category: "simd".to_string(),
             buggy_code: "fn sum(v: &[f32]) -> f32 {\n    let mut s = 0.0;\n    for i in 0..v.len() { s += v[i]; }\n    s\n}".to_string(),
             fixed_code: "fn sum(v: &[f32]) -> f32 {\n    let chunks = v.chunks_exact(4);\n    let rem = v.chunks_exact(4).remainder();\n    let mut acc = [0.0f32; 4];\n    for c in chunks {\n        acc[0] += c[0]; acc[1] += c[1]; acc[2] += c[2]; acc[3] += c[3];\n    }\n    acc.iter().chain(rem).copied().sum()\n}".to_string(),
+            context_notes: None,
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: Some(simd_chunk_bench_spec()),
         },
         // ── caching: pre-compute lookup table ─────────────────────────────
+        // Context-dependent: the compiler optimizes the runtime popcount loop
+        // to a single POPCNT instruction in release mode, making the lookup
+        // table slower (L1 cache latency > POPCNT latency). Bench 013
+        // measured 0.20–0.40× — the rule is NOT a release-mode win on modern
+        // CPUs. Kept in the corpus as a documented pattern (valid for targets
+        // without POPCNT or in debug mode); the context_notes annotation marks
+        // it as NOT a default suggestion.
         PerfRule {
             rule_id: "precompute-table".to_string(),
             name: "Pre-compute lookup table once, reuse across calls".to_string(),
             category: "caching".to_string(),
             buggy_code: "fn parity_byte(b: u8) -> u8 {\n    (0..8).filter(|i| b & (1 << i) != 0).count() as u8 & 1\n}".to_string(),
             fixed_code: "const PARITY: [u8; 256] = {\n    let mut t = [0u8; 256];\n    let mut i = 0;\n    while i < 256 { t[i] = (i.count_ones() & 1) as u8; i += 1; }\n    t\n};\nfn parity_byte(b: u8) -> u8 { PARITY[b as usize] }".to_string(),
+            // Bench 013 ParetoDominated (0.20–0.40× release). The compiler
+            // already lowers the buggy form to POPCNT; the table is slower.
+            context_notes: Some(
+                "Bench 013: ParetoDominated 0.20-0.40x release mode. The \
+                 compiler lowers (0..8).filter().count() to a single POPCNT \
+                 instruction; the lookup table is slower (L1 cache latency \
+                 > POPCNT latency). NOT a default suggestion — only valid for \
+                 targets without POPCNT or in debug mode."
+                    .to_string(),
+            ),
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: Some(precompute_table_bench_spec()),
         },
@@ -112,6 +163,7 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
             category: "bevy".to_string(),
             buggy_code: "use bevy::winit::WinitSettings;\nfn setup() -> WinitSettings { WinitSettings::default() }".to_string(),
             fixed_code: "use bevy::winit::{UpdateMode, WinitSettings};\nuse std::time::Duration;\nfn setup() -> WinitSettings {\n    WinitSettings {\n        focused_mode: UpdateMode::reactive_low_power(Duration::from_millis(50)),\n        unfocused_mode: UpdateMode::reactive_low_power(Duration::from_secs(1)),\n    }\n}".to_string(),
+            context_notes: None,
             // Not benchable: needs the Bevy runtime (event loop + winit).
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: None,
@@ -125,6 +177,7 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
             category: "wasm".to_string(),
             buggy_code: "// Per-call FFI: 250ns floor × N×M invocations\nfn validate_all(items: &[u32], rules: &[u32]) -> Vec<bool> {\n    items.iter().map(|i| rules.iter().map(|r| validate_one(*i, *r)).all(|b| b)).collect()\n}\nfn validate_one(_i: u32, _r: u32) -> bool { true }".to_string(),
             fixed_code: "// Batch: one FFI call carries shared state + per-item arrays\nfn validate_all(items: &[u32], rules: &[u32]) -> Vec<bool> {\n    let mut out = vec![false; items.len()];\n    validate_batch(items, rules, &mut out);\n    out\n}\nfn validate_batch(_items: &[u32], _rules: &[u32], _out: &mut [bool]) {\n    // single FFI call: shared rules + per-item arrays → out\n}".to_string(),
+            context_notes: None,
             // Not benchable: needs a WASM runtime (js-sys / wasm-bindgen FFI).
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: None,
@@ -533,5 +586,56 @@ mod tests {
         assert!(without_spec.contains(&"layout-reorder"));
         assert!(without_spec.contains(&"bevy-reactive-loop"));
         assert!(without_spec.contains(&"wasm-batch-ffi"));
+    }
+
+    /// Bench 013 found 2 rules ParetoDominated in the default config. Their
+    /// `context_notes` annotation records the finding so consumers don't
+    /// unconditionally suggest them. The other 6 have `context_notes: None`
+    /// (unconditional wins or honestly NotBenchable).
+    #[test]
+    fn two_dominated_rules_carry_context_notes() {
+        let corpus = build_perf_seed_corpus();
+        let annotated: Vec<&str> = corpus
+            .entries
+            .iter()
+            .filter(|e| e.context_notes.is_some())
+            .map(|e| e.rule_id.as_str())
+            .collect();
+        assert_eq!(annotated.len(), 2, "expected 2 context-annotated rules");
+        assert!(annotated.contains(&"precompute-table"));
+        assert!(annotated.contains(&"papaya-lockfree"));
+    }
+
+    /// The 6 non-annotated rules (3 ParetoDominant + 3 NotBenchable) must
+    /// have `context_notes: None` — they are either unconditional wins or
+    /// honestly unmeasurable.
+    #[test]
+    fn six_rules_have_no_context_notes() {
+        let corpus = build_perf_seed_corpus();
+        let unannotated = corpus
+            .entries
+            .iter()
+            .filter(|e| e.context_notes.is_none())
+            .count();
+        assert_eq!(unannotated, 6, "expected 6 unannotated rules");
+    }
+
+    /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
+    /// freeze/thaw snapshot (pre-this-field) deserializes as `None`.
+    #[test]
+    fn context_notes_backward_compatible_serde() {
+        let corpus = build_perf_seed_corpus();
+        // Serialize + deserialize round-trip preserves the annotation.
+        let json = serde_json::to_string(&corpus.entries).unwrap();
+        let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
+        let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
+        assert_eq!(annotated, 2);
+
+        // Simulate a pre-field snapshot: strip `context_notes` from JSON.
+        // (A real old snapshot simply omits the key; serde(default) → None.)
+        let old_json = json.replace("\"context_notes\":", "\"__removed_context_notes\":");
+        let old_back: Vec<PerfRule> = serde_json::from_str(&old_json).unwrap();
+        let old_annotated = old_back.iter().filter(|e| e.context_notes.is_some()).count();
+        assert_eq!(old_annotated, 0, "missing field should default to None");
     }
 }

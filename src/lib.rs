@@ -108,7 +108,7 @@ pub use domains::clippy_lints::corpus::build_seed_corpus;
 #[cfg(feature = "clippy_verify")]
 pub use domains::clippy_lints::verify::{ClippyVerifyResult, ClippyVerifier};
 
-// ── rust_perf domain re-exports (behind `rust_perf` feature, opt-in) ───────
+// ── rust_perf domain re-exports (behind `rust_perf` feature, default-on) ──
 #[cfg(feature = "rust_perf")]
 pub use domains::rust_perf::{PerfParseVerdict, PerfRule, RustPerfDomain};
 

@@ -2,6 +2,11 @@
 
 > The second `HealDomain` impl. Heals rust performance issues using rules
 > distilled from the `rust-optimize` skill checklist.
+>
+> **Promoted to default-on 2026-08-13** after the perf-bench Pareto
+> validator GOAT gate passed (Bench 013 G1+G5). The domain module now
+> compiles by default; the validators (`rust_perf_verify`,
+> `rust_perf_bench`) remain opt-in (slow subprocess-based checks).
 
 ## Validator hierarchy (strongest last)
 
@@ -15,18 +20,21 @@
 ## Corpus
 
 8 seed rules, one per skill-checklist category. 5 are benchable (carry a
-`BenchSpec`); 3 are honestly `NotBenchable` (need external runtimes).
+`BenchSpec`); 3 are honestly `NotBenchable` (need external runtimes). 2 of
+the 5 benchable rules carry `context_notes` (Bench 013 found them
+`ParetoDominated` in the default config — consumers should treat them as
+context-dependent, not unconditional suggestions).
 
-| Rule ID | Category | Benchable? | Pattern |
-|---|---|---|---|
-| `o1-lookup` | complexity | ✅ 570x win | O(n) `Vec` scan → O(1) `HashMap` lookup |
-| `static-str` | allocation | ✅ 42x win | `String` return → `&'static str` for constant labels |
-| `layout-reorder` | layout | ❌ NotBenchable | Field reorder to eliminate padding (deterministic `size_of`, not a runtime microbench) |
-| `papaya-lockfree` | concurrency | ✅ 0.55-0.79x (honest dominated) | `Arc<RwLock<HashMap>>` → `papaya` lock-free map (benefit needs multi-threaded contention) |
-| `simd-chunk` | simd | ✅ 3.9x win | Scalar loop → 4-wide chunked loop for LLVM auto-vectorization |
-| `precompute-table` | caching | ✅ 0.20-0.40x (honest dominated) | Recompute-per-call → `const` lookup table (compiler optimizes popcount to POPCNT in release) |
-| `bevy-reactive-loop` | bevy | ❌ NotBenchable | `WinitSettings::default()` (Continuous, 100% CPU) → `reactive_low_power` (needs Bevy runtime) |
-| `wasm-batch-ffi` | wasm | ❌ NotBenchable | Per-call FFI (250ns floor × N×M) → single batch invocation (needs WASM runtime) |
+| Rule ID | Category | Bench verdict | Context? | Pattern |
+|---|---|---|---|---|
+| `o1-lookup` | complexity | ✅ 570x ParetoDominant | — | O(n) `Vec` scan → O(1) `HashMap` lookup |
+| `static-str` | allocation | ✅ 42x ParetoDominant | — | `String` return → `&'static str` for constant labels |
+| `layout-reorder` | layout | ❌ NotBenchable | — | Field reorder to eliminate padding (deterministic `size_of`, not a runtime microbench) |
+| `papaya-lockfree` | concurrency | ❌ 0.55-0.79x ParetoDominated | ⚠️ `context_notes` | `Arc<RwLock<HashMap>>` → `papaya` lock-free map (benefit needs multi-threaded contention) |
+| `simd-chunk` | simd | ✅ 3.9x ParetoDominant | — | Scalar loop → 4-wide chunked loop for LLVM auto-vectorization |
+| `precompute-table` | caching | ❌ 0.20-0.40x ParetoDominated | ⚠️ `context_notes` | Recompute-per-call → `const` lookup table (compiler optimizes popcount to POPCNT in release) |
+| `bevy-reactive-loop` | bevy | ❌ NotBenchable | — | `WinitSettings::default()` (Continuous, 100% CPU) → `reactive_low_power` (needs Bevy runtime) |
+| `wasm-batch-ffi` | wasm | ❌ NotBenchable | — | Per-call FFI (250ns floor × N×M) → single batch invocation (needs WASM runtime) |
 
 ## Validator (cargo test — behind `rust_perf_verify`)
 

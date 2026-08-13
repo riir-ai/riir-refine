@@ -8,7 +8,7 @@ space, drafts fixes via a modelless ternary SIMD matvec, and validates with a
 | Domain | Feature | Status | Corpus |
 |---|---|---|---|
 | **clippy_lints** (default) | `clippy_lints` | ✅ Production | 10 common lints (style/complexity/perf/nursery) |
-| **rust_perf** (opt-in) | `rust_perf` | ✅ Phase 2 scaffold | 8 rules from `rust-optimize` skill (complexity/allocation/layout/concurrency/simd/caching/bevy/wasm) |
+| **rust_perf** (default since 2026-08-13) | `rust_perf` | ✅ Phase 2 (GOAT G1+G5 PASS, Bench 013) | 8 rules from `rust-optimize` skill (complexity/allocation/layout/concurrency/simd/caching/bevy/wasm); 2 carry `context_notes` (ParetoDominated in default config) |
 | **kernel_opt** (opt-in) | `kernel_heal` | ✅ Phase 3 scaffold | 2 placeholder rules (matvec-coalesce, gemm-tiling); real popcorn distillation deferred (Proposal 012 §Phase 0) |
 
 Heavyweight LoRA is the last-resort fallback, not the co-equal path.
@@ -78,9 +78,10 @@ src/
     │   ├── corpus.rs   # 10 common clippy lints
     │   ├── verify.rs   # cargo clippy re-run (behind clippy_verify)
     │   └── proposers/  # 10 per-lint AST codemods (Issue 010 Stage 2)
-    ├── rust_perf/      # feature "rust_perf" (opt-in) — rust-optimize perf healing
+    ├── rust_perf/      # feature "rust_perf" (default-on since 2026-08-13) — rust-optimize perf healing
     │   ├── corpus.rs   # 8 perf rules from the rust-optimize skill checklist
-    │   └── verify.rs   # cargo test re-run (behind rust_perf_verify)
+    │   ├── verify.rs   # cargo test re-run (behind rust_perf_verify)
+    │   └── bench.rs    # perf-bench Pareto validator (behind rust_perf_bench, the GOAT gate)
     └── kernel_opt/     # feature "kernel_heal" (opt-in, 4090 DEFERRED)
         ├── corpus.rs   # 2 placeholder rules (popcorn distillation DEFERRED)
         ├── router.rs   # KernelExpertRouter wraps pick_domain<4,5> (Plan 558)
@@ -99,8 +100,9 @@ vision), not shipped.
 |---|---|---|---|
 | `clippy_lints` | ✅ on | — | clippy lint healing domain |
 | `clippy_verify` | off | `clippy_lints` | real `cargo clippy` lint resolution check |
-| `rust_perf` | off | — | rust perf healing domain (Plan 001 Phase 2) |
+| `rust_perf` | ✅ on | — | rust perf healing domain (Plan 001 Phase 2; promoted 2026-08-13, Bench 013 G1+G5) |
 | `rust_perf_verify` | off | `rust_perf` | real `cargo test` test pass check |
+| `rust_perf_bench` | off | `rust_perf` | perf-bench Pareto validator (the GOAT gate; Bench 013) |
 | `kernel_heal` | off | `katgpt-core/variable_rank_domain_expert` | GPU kernel opt domain (Plan 001 Phase 3) |
 | `kernel_verify` | off | `kernel_heal` | CubeCL compile check (STUB — full validator deferred) |
 | `ruliology_search` | off | `clippy_lints` | L3 Pareto-front candidate search |
@@ -195,8 +197,8 @@ resort, not a co-equal path.
 # Run the clippy healing demo (L0 corpus → L1 drafter → L2 pruner)
 cargo run --example heal_demo
 
-# Run the rust_perf domain demo (Plan 001 Phase 2)
-cargo run --example perf_heal_demo --features rust_perf
+# Run the rust_perf domain demo (Plan 001 Phase 2; default-on since 2026-08-13)
+cargo run --example perf_heal_demo
 
 # Full CI guard (5 layers: no-dep / default / per-feature / all-features / clippy+tests)
 ./scripts/ci_feature_guard.sh
