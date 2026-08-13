@@ -181,20 +181,22 @@ fn main() {
     for (lint_name, buggy_code, candidates) in &fixture {
         let corpus_entries = make_corpus(lint_name, candidates);
         let result = baseline_pipeline.heal(lint_name, buggy_code, &corpus_entries);
-        let (resolved, source) = match result {
+        let (resolved, source, notes) = match result {
             Some(r) => {
                 let vr = verifier.verify(&r.fixed_code, lint_name);
-                (vr.ran && vr.lint_resolved, r.source)
+                (vr.ran && vr.lint_resolved, r.source, r.context_notes)
             }
-            None => (false, riir_clippy::HealSource::Drafter),
+            None => (false, riir_clippy::HealSource::Drafter, None),
         };
         if resolved {
             baseline_resolved += 1;
         }
+        let note_marker = if notes.is_some() { " ⚠️" } else { "" };
         println!(
-            "  {:30} → {} (source: {:?})",
+            "  {:30} → {}{} (source: {:?})",
             lint_name,
             if resolved { "✅ resolved" } else { "❌ not resolved" },
+            note_marker,
             source
         );
     }
@@ -257,20 +259,22 @@ fn main() {
     for (lint_name, buggy_code, candidates) in &fixture {
         let corpus_entries = make_corpus(lint_name, candidates);
         let result = evolved_pipeline.heal(lint_name, buggy_code, &corpus_entries);
-        let (resolved, source) = match result {
+        let (resolved, source, notes) = match result {
             Some(r) => {
                 let vr = verifier.verify(&r.fixed_code, lint_name);
-                (vr.ran && vr.lint_resolved, r.source)
+                (vr.ran && vr.lint_resolved, r.source, r.context_notes)
             }
-            None => (false, riir_clippy::HealSource::Drafter),
+            None => (false, riir_clippy::HealSource::Drafter, None),
         };
         if resolved {
             evolved_resolved += 1;
         }
+        let note_marker = if notes.is_some() { " ⚠️" } else { "" };
         println!(
-            "  {:30} → {} (source: {:?})",
+            "  {:30} → {}{} (source: {:?})",
             lint_name,
             if resolved { "✅ resolved" } else { "❌ not resolved" },
+            note_marker,
             source
         );
     }

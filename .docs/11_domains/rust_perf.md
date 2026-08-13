@@ -76,30 +76,62 @@ provides the real perf ground truth. 3/5 benchable rules are Pareto-dominant
 regime-dependent benefits) — exactly the kind of honest signal the caveat
 predicted.
 
-## Drafter integration (`context_notes` propagation, 2026-08-13)
+## Drafter + pipeline integration (`context_notes` propagation, 2026-08-13)
 
 The 2 `ParetoDominated` rules carry a `context_notes: Some(...)` annotation on
-[`PerfRule`](../../src/domains/rust_perf/mod.rs). The domain-agnostic drafter
-now propagates this annotation through [`DraftedFix::context_notes`] via a
-non-breaking default method on [`HealEntry::context_notes()`]:
+[`PerfRule`](../../src/domains/rust_perf/mod.rs). The annotation now propagates
+end-to-end through the full heal stack — drafter → pipeline → consumer:
 
 ```text
-PerfRule.context_notes  →  HealEntry::context_notes()  →  DraftedFix.context_notes  →  consumer
-      (struct field)           (trait method, default None)      (propagated field)        (decides)
+PerfRule.context_notes
+      (struct field)
+         │
+         ▼
+HealEntry::context_notes()          (trait method, default None)
+         │
+         ▼
+DraftedFix.context_notes            (L1 drafter output)
+         │
+         ▼
+Candidate.context_notes             (pipeline internal, drafter path only)
+         │
+         ▼
+HealResult.context_notes            (pipeline output)
+         │
+         ▼
+consumer                            (CLI/IDE/CI displays ⚠️ when Some)
 ```
 
-**The drafter does NOT skip or downgrade annotated rules.** The rule is a
-genuine pattern — just not an unconditional win in the default configuration.
-The consumer (CLI caller, IDE plugin, CI gate) reads `DraftedFix::context_notes`
-and decides whether their context matches (multi-threaded? POPCNT target?).
+**The drafter + pipeline do NOT skip or downgrade annotated rules.** The rule
+is a genuine pattern — just not an unconditional win in the default
+configuration. The consumer (CLI caller, IDE plugin, CI gate) reads
+`DraftedFix::context_notes` (direct drafter API) or `HealResult::context_notes`
+(self-evolve pipeline API) and decides whether their context matches
+(multi-threaded? POPCNT target?).
 
-This is the honest design: the drafter surfaces the annotation; it does not
+This is the honest design: the pipeline surfaces the annotation; it does not
 make policy decisions about whether a rule applies. The policy belongs to the
 consumer, who knows their context.
 
+### Pipeline path coverage
+
+| Path | `context_notes` | Why |
+|---|---|---|
+| **Drafter** (`HealSource::Drafter`) | ✅ propagated | The drafter reads the corpus entry's `context_notes()` directly. |
+| **Memory** (`HealSource::Memory`) | `None` | `FixTrajectory` doesn't carry the annotation — it was surfaced on the first drafter-sourced serve. Adding it to `FixTrajectory` is a follow-up if a consumer needs it on cached paths. |
+| **Stage2** (`HealSource::Stage2Adaptive`) | `None` | The adaptive drafter serves a verified fix (cached). The annotation was surfaced when the fix was first drafted before tuning. |
+
+### Consumer display
+
+Examples that print fix output now surface the annotation:
+- `heal_demo.rs` — prints `⚠️ Context-dependent: <notes>` when `DraftedFix::context_notes` is `Some`
+- `self_evolve_real_world_demo.rs` — appends `⚠️` marker to the per-lint line when `HealResult::context_notes` is `Some`
+
 Non-breaking: `HealEntry::context_notes()` has a default `None` impl, so
 `clippy_lints` + `kernel_opt` entries need no changes — they are unconditional
-wins (or honestly `NotBenchable`) and return `None`.
+wins (or honestly `NotBenchable`) and return `None`. The new
+`HealResult::context_notes` + `Candidate.context_notes` fields are additive
+(existing test assertions only read `.source`/`.evolution_score`/`.fixed_code`/`.parses`).
 
 ## Cargo-in-cargo test constraint
 

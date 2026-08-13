@@ -49,6 +49,16 @@ pub struct HealResult {
     pub evolution_score: f32,
     /// Whether this fix came from memory (past trajectory) or the drafter.
     pub source: HealSource,
+    /// Propagated from the drafter candidate's [`DraftedFix::context_notes`] (Plan 001
+    /// post-promotion, 2026-08-13). `Some` signals the rule is context-dependent —
+    /// not an unconditional default-config win. The pipeline does NOT skip or
+    /// downgrade annotated rules; it surfaces the annotation so the consumer
+    /// decides whether their context matches.
+    ///
+    /// Only the drafter path (`source == Drafter`) carries the annotation. The
+    /// Stage2 cache + memory paths serve verified fixes whose annotation was
+    /// already surfaced on the first drafter-sourced serve.
+    pub context_notes: Option<String>,
 }
 
 /// Where the proposed fix came from.
@@ -72,6 +82,10 @@ struct Candidate {
     /// The trajectory's historical success rate (if from memory).
     /// Drafter candidates have no trajectory → neutral 0.5.
     success_rate: f32,
+    /// Propagated from the drafter's [`DraftedFix::context_notes`] (drafter path
+    /// only). `None` for memory + Stage2 candidates — the annotation is rule-level
+    /// metadata surfaced on the first drafter-sourced serve.
+    context_notes: Option<String>,
 }
 
 /// Weight on the evolution-score axis in candidate selection.
@@ -219,6 +233,7 @@ impl HealPipeline {
                 parses: validation.parses,
                 evolution_score: 1.0, // verified = highest confidence
                 source: HealSource::Stage2Adaptive,
+                context_notes: None, // Stage2 serves cached verified fixes; the annotation was surfaced on the first drafter serve.
             });
         }
 
@@ -250,6 +265,7 @@ impl HealPipeline {
                 direction: dir,
                 source: HealSource::Drafter,
                 success_rate,
+                context_notes: draft.context_notes,
             });
         }
 
@@ -265,6 +281,7 @@ impl HealPipeline {
                     direction: traj.direction,
                     source: HealSource::Memory,
                     success_rate: traj.success_rate(),
+                    context_notes: None, // FixTrajectory doesn't carry the annotation; surfaced on the first drafter serve.
                 });
             }
         }
@@ -299,6 +316,7 @@ impl HealPipeline {
             parses: validation.parses,
             evolution_score: best_score,
             source: cand.source,
+            context_notes: cand.context_notes.clone(),
         })
     }
 
@@ -582,5 +600,61 @@ mod tests {
         let result = p.heal("needless_return", "return 42;", &corpus).unwrap();
         // The corpus's fixed_code ("fn foo() -> i32 { 42 }") should parse.
         assert!(result.parses, "corpus fix must parse");
+    }
+
+    // ── context_notes pipeline propagation (Plan 001 post-promotion, 2026-08-13) ──
+
+    /// Test entry that overrides `context_notes()` — simulates a
+    /// `ParetoDominated` rule so we can verify the pipeline propagates the
+    /// annotation through `HealResult` (drafter → Candidate → `HealResult`).
+    #[derive(Clone)]
+    struct PipelineAnnotatedEntry {
+        rule_id: String,
+        buggy: String,
+        fixed: String,
+        notes: Option<String>,
+    }
+
+    impl HealEntry for PipelineAnnotatedEntry {
+        fn rule_id(&self) -> &str {
+            &self.rule_id
+        }
+        fn buggy_code(&self) -> &str {
+            &self.buggy
+        }
+        fn fixed_code(&self) -> &str {
+            &self.fixed
+        }
+        fn context_notes(&self) -> Option<&str> {
+            self.notes.as_deref()
+        }
+    }
+
+    #[test]
+    fn heal_propagates_context_notes_via_drafter_path() {
+        // The drafter path (source=Drafter) must propagate context_notes from
+        // the selected corpus entry to HealResult. This closes the
+        // drafter → Candidate → HealResult chain.
+        let entries = vec![PipelineAnnotatedEntry {
+            rule_id: "precompute-table".to_string(),
+            buggy: "let pop = v.iter().filter(|x| **x).count();".to_string(),
+            fixed: "let pop = v.iter().filter(|x| **x).count(); // table".to_string(),
+            notes: Some("ParetoDominated 0.20-0.40x (Bench 013)".to_string()),
+        }];
+        let mut p = make_pipeline();
+        let result = p.heal("precompute-table", "let pop = v.iter().filter(|x| **x).count();", &entries).unwrap();
+        assert_eq!(result.source, HealSource::Drafter, "no memory seeded → must come from drafter");
+        assert!(result.context_notes.is_some(), "drafter path must propagate context_notes");
+        assert_eq!(result.context_notes.as_deref(), Some("ParetoDominated 0.20-0.40x (Bench 013)"));
+    }
+
+    #[test]
+    fn heal_context_notes_none_for_default_entries() {
+        // ClippyFixEntry uses the default context_notes() -> None. The
+        // pipeline must propagate None for these entries.
+        let mut p = make_pipeline();
+        let corpus = mock_corpus();
+        let result = p.heal("needless_return", "return 42;", &corpus).unwrap();
+        assert!(result.context_notes.is_none(), "default clippy entries should have no context_notes");
     }
 }

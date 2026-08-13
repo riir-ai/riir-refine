@@ -74,6 +74,9 @@ fn main() {
 
                 println!("Lint: {} [{:?}]", lint_name, f.source);
                 println!("  Confidence: {:.4}", f.confidence);
+                if let Some(notes) = &f.context_notes {
+                    println!("  ⚠️  Context-dependent: {}", notes);
+                }
                 println!("  Parse:      {}  Lint resolved: {}  {}",
                     result.parses, result.lint_resolved, status);
                 if !result.diagnostics.is_empty() {
@@ -111,6 +114,9 @@ fn main() {
         println!("  Lint:     needless_return");
         println!("  Source:   {:?}", fix.source);
         println!("  Conf:     {:.4} (template default)", fix.confidence);
+        if let Some(notes) = &fix.context_notes {
+            println!("  ⚠️  Context-dependent: {}", notes);
+        }
         println!("  Valid:    {} {}", result.parses, if result.is_valid() { "✅" } else { "❌" });
     }
     println!();
