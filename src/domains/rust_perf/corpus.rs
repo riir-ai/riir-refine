@@ -8,10 +8,10 @@
 //! validator found ParetoDominated in the default config (Bench 013), `None`
 //! for unconditional wins + honestly NotBenchable rules.
 //!
-//! 39 entries across 11 categories (complexity 10, allocation 12, layout 4,
-//! concurrency 2, simd 4, iterators 4, arithmetic 1, dispatch 1, caching 1,
-//! bevy 1, wasm 1). 31 are benchable (27 ParetoDominant + 2 ParetoDominated +
-//! 2 Mixed); 8 are honestly NotBenchable.
+//! 43 entries across 12 categories (complexity 12, allocation 12, simd 5,
+//! layout 4, iterators 4, concurrency 2, io 1, arithmetic 1, dispatch 1,
+//! caching 1, bevy 1, wasm 1). 35 are benchable (29 ParetoDominant + 2
+//! ParetoDominated + 4 Mixed); 8 are honestly NotBenchable.
 //!
 //! ## Bench specs (behind `rust_perf_bench`)
 //!
@@ -20,7 +20,7 @@
 //! `run_buggy` / `run_fixed` entry points. The bench validator generates a
 //! temp bin crate from the spec + runs a timing loop at multiple sizes.
 //!
-//! Currently benchable (31/35):
+//! Currently benchable (35/43):
 //! - `o1-lookup` (Vec scan vs HashMap lookup — clear O(n) vs O(1))
 //! - `bsearch-sorted-slice` (linear scan vs binary search — O(n) vs O(log n) on sorted data)
 //! - `dedupe-hashset-vs-vec` (Vec::contains loop vs HashSet collect — O(n²) vs O(n))
@@ -28,11 +28,14 @@
 //! - `loop-fusion` (two iterator passes vs one fused loop — cache locality, merge loops)
 //! - `prefix-sum-2d` (O(n) region scan vs O(1) prefix sum — boundary-vs-volume, grows with N)
 //! - `swap-remove` (Vec::remove O(n) shift vs Vec::swap_remove O(1) swap — grows with N)
+//! - `sort-unstable` (stable sort allocates vs sort_unstable in-place — no allocation + faster algo)
+//! - `sort-by-key` (sort_by repeated closure vs sort_by_key single extraction — N vs N·log N)
 //! - `static-str` (String alloc vs &'static str — allocation cost)
 //! - `simd-chunk` (scalar vs chunked loop — vectorization at large N)
 //! - `branchless-conditional` (if vs bool-as-usize multiply — vectorization + branch prediction)
 //! - `bool-to-bitpack` (Vec<bool> count vs packed Vec<u64> POPCNT — data density)
 //! - `chunks-exact` (chunks variable-last vs chunks_exact uniform — enables vectorization)
+//! - `copy-from-slice` (index-loop copy vs copy_from_slice — SIMD + no bounds check)
 //! - `mutex-to-atomic` (Mutex<u32> vs AtomicU32 — lock/unlock overhead)
 //! - `f32-counter-to-int` (f32 accumulator vs u64 — serial dep chain)
 //! - `collect-avoidance` (.collect() intermediate vs chained iterator — allocation + double pass)
@@ -53,9 +56,10 @@
 //! - `box-avoid` (Vec<Box<i64>> heap per elem → Vec<i64> stack values — ~10-35×)
 //! - `smallvec-stack` (Vec<T> always heap → stack array for ≤8 typical — ~7-12×)
 //! - `buffered-io` (File::read byte-by-byte → BufReader 8KB batched — ~97×)
+//! - `bufwriter-batched` (File::write per-record → BufWriter batched — syscall amortization)
 //! - `log-write-direct` (push_str(&format!(...)) temp alloc → write! direct — ~1.7×)
 //!
-//! Not benchable (8/39) — honest:
+//! Not benchable (8/43) — honest:
 //! - `layout-reorder` (struct size — deterministic `size_of`, not a runtime
 //!   microbench; the cache-utilization claim needs a specific access pattern)
 //! - `repr-u8-enum` (enum size — deterministic `size_of`, same class as
@@ -71,24 +75,25 @@
 //!
 //! ## Context-dependent rules (`context_notes`)
 //!
-//! Four rules carry a `context_notes: Some(...)` annotation recording that the
-//! Bench 013 Pareto validator found them **ParetoDominated** or **Mixed** in the
-//! default configuration (`precompute-table`, `papaya-lockfree`,
-//! `dedupe-hashset-vs-vec`, `reuse-allocation-clear`). The patterns are genuine wins in their respective
-//! regimes (non-POPCNT targets / multi-threaded contention / large N / small-to-medium N) and are
-//! kept in the corpus as documented patterns, but consumers should treat them
-//! as context-dependent — not unconditional suggestions.
+//! Six rules carry a `context_notes: Some(...)` annotation recording that the
+//! Pareto validator found them **ParetoDominated** or **Mixed** in the default
+//! configuration. The original 4 from Bench 013 (`precompute-table`,
+//! `papaya-lockfree`, `dedupe-hashset-vs-vec`, `reuse-allocation-clear`) + 2
+//! from Bench 016 / Issue 012 (`sort-by-key`, `copy-from-slice`). The patterns
+//! are genuine wins in their respective regimes and are kept in the corpus as
+//! documented patterns, but consumers should treat them as context-dependent
+//! — not unconditional suggestions.
 
 use crate::corpus::Corpus;
 use crate::domains::rust_perf::{PerfRule, RustPerfDomain};
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 39 entries
-/// covering the main perf pattern categories (complexity, allocation, layout,
-/// concurrency, simd, arithmetic, iterators, dispatch, caching, bevy, wasm).
-/// Allocation is the deepest category (12 rules); complexity has 10.
-/// Layout, simd, iterators have 4 each; concurrency has 2; the rest have 1 each.
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 43 entries
+/// covering the main perf pattern categories (complexity, allocation, simd,
+/// layout, iterators, concurrency, io, arithmetic, dispatch, caching, bevy,
+/// wasm). Allocation + complexity are the deepest (12 rules each); simd has 5;
+/// layout + iterators have 4 each; concurrency has 2; io + the rest have 1 each.
 #[must_use]
 #[allow(clippy::too_many_lines)] // seed corpus is a data table; length scales with rule count
 pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
@@ -779,6 +784,68 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
             // std::mem::size_of_val but that's deterministic, not a timing.
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: None,
+        },
+        // ── complexity: stable sort → unstable sort (no allocation + faster algo) ─
+        // Source: std docs + perf-book. `sort()` uses a stable mergesort that
+        // allocates temporary storage; `sort_unstable()` uses pattern-defeating
+        // quicksort (pdqsort) which is in-place + typically 2-3× faster for
+        // random data. The compiler cannot transform a stable sort into an
+        // unstable one — this is a library-level algorithm choice.
+        PerfRule {
+            rule_id: "sort-unstable".to_string(),
+            name: "Vec::sort() stable (allocates) → Vec::sort_unstable() (in-place, faster)".to_string(),
+            category: "complexity".to_string(),
+            buggy_code: "fn sort_scores(scores: &mut Vec<u32>) {\n    scores.sort();\n}".to_string(),
+            fixed_code: "fn sort_scores(scores: &mut Vec<u32>) {\n    scores.sort_unstable();\n}".to_string(),
+            context_notes: None,
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(sort_unstable_bench_spec()),
+        },
+        // ── complexity: sort_by(closure) → sort_by_key(closure) (N vs N·log N key extractions) ─
+        // Source: std docs. `sort_by(|a, b| f(a).cmp(&f(b)))` calls `f` O(N log N)
+        // times; `sort_by_key(|x| f(x))` extracts each key exactly once (N calls)
+        // then sorts the cached keys. The win scales with key-extraction cost.
+        PerfRule {
+            rule_id: "sort-by-key".to_string(),
+            name: "sort_by(|a,b| a.x.cmp(&b.x)) → sort_by_key(|x| x.x) (extract key once per element)".to_string(),
+            category: "complexity".to_string(),
+            buggy_code: "fn sort_by_score(items: &mut Vec<(String, u32)>) {\n    items.sort_by(|a, b| a.1.cmp(&b.1));\n}".to_string(),
+            fixed_code: "fn sort_by_score(items: &mut Vec<(String, u32)>) {\n    items.sort_by_key(|item| item.1);\n}".to_string(),
+            context_notes: Some("ParetoDominated in Bench 016 default config: 4/4 Tie at n=1K-100K with integer keys on (String, u32) tuples. The compiler optimizes sort_by's comparator to avoid redundant key reads for simple field access. sort_by_key is a correctness/idiom win (avoids writing the comparator twice), not a throughput win for trivial keys. The win materializes only when the key function is non-trivial (hash computation, nested dereference, or expensive computation that the compiler cannot CSE across comparator calls).".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(sort_by_key_bench_spec()),
+        },
+        // ── io: per-record File::write → BufWriter batched (syscall reduction) ──
+        // Source: perf-book `io.md` + std docs. Each `File::write` call is a
+        // syscall (~1-2µs on Linux, ~2-4µs on macOS). `BufWriter` coalesces
+        // writes into 8KB buffers, amortizing the syscall cost. This is the
+        // write-side analog of `buffered-io` (BufReader for reads).
+        PerfRule {
+            rule_id: "bufwriter-batched".to_string(),
+            name: "File::write per-record (syscall each) → BufWriter batched (8KB coalesced)".to_string(),
+            category: "io".to_string(),
+            buggy_code: "use std::io::Write;\nfn write_records(file: &mut std::fs::File, records: &[Vec<u8>]) -> std::io::Result<()> {\n    for rec in records {\n        file.write_all(rec)?; // syscall per record\n    }\n    Ok(())\n}".to_string(),
+            fixed_code: "use std::io::{BufWriter, Write};\nfn write_records(file: std::fs::File, records: &[Vec<u8>]) -> std::io::Result<()> {\n    let mut buf = BufWriter::new(file);\n    for rec in records {\n        buf.write_all(rec)?; // buffered → one syscall per 8KB\n    }\n    buf.flush()?; // flush remaining buffered data\n    Ok(())\n}".to_string(),
+            context_notes: None,
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(bufwriter_batched_bench_spec()),
+        },
+        // ── simd: manual index-loop copy → slice::copy_from_slice (SIMD + no bounds check) ─
+        // Source: std docs + perf-book `simd.md`. A manual `for i in 0..n { dst[i] =
+        // src[i]; }` loop does per-element bounds checking + scalar copies.
+        // `copy_from_slice` is a single call that LLVM lowers to `memcpy` /
+        // SIMD-wide stores when the length is known or aligned. The compiler
+        // *can* sometimes auto-vectorize the manual loop, but `copy_from_slice`
+        // guarantees it + eliminates the per-index bounds check.
+        PerfRule {
+            rule_id: "copy-from-slice".to_string(),
+            name: "Manual index-loop element copy → slice::copy_from_slice (memcpy / SIMD)".to_string(),
+            category: "simd".to_string(),
+            buggy_code: "fn copy_data(dst: &mut [u8], src: &[u8]) {\n    for i in 0..src.len() {\n        dst[i] = src[i];\n    }\n}".to_string(),
+            fixed_code: "fn copy_data(dst: &mut [u8], src: &[u8]) {\n    dst.copy_from_slice(src);\n}".to_string(),
+            context_notes: Some("Mixed in Bench 016 default config: 2/4 Faster (n=64, n=1024), 1/4 Slower (n=4096), 1/4 Tie (n=256). LLVM auto-vectorizes the manual index loop effectively for u8 slices — at medium sizes (256-1024) the performance is indistinguishable, and at n=4096 the manual loop is marginally faster (likely due to memcpy's setup overhead being amortized differently). copy_from_slice is still the correct idiom (eliminates bounds checks, guarantees SIMD lowering, is less code) but consumers should know the throughput difference is small for u8 in release mode. The win is clearer for larger element types (u64, structs) where the manual loop's per-element bounds check is more expensive relative to the copy.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(copy_from_slice_bench_spec()),
         },
     ])
 }
@@ -2450,6 +2517,250 @@ pub fn run_fixed(input: &[u64]) {
     }
 }
 
+/// Bench spec for `sort-unstable`: stable sort (allocates temp buffer) vs
+/// unstable sort (in-place pdqsort).
+///
+/// Unstable sort avoids the O(n) temporary allocation + uses a faster
+/// algorithm (pattern-defeating quicksort vs mergesort). The win is largest
+/// on random data where pdqsort's pivot selection is optimal.
+#[cfg(feature = "rust_perf_bench")]
+fn sort_unstable_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![100, 1_000, 10_000, 100_000],
+        harness: r#"
+mod buggy {
+    pub fn sort(scores: &mut Vec<u32>) { scores.sort(); }
+}
+
+mod fixed {
+    pub fn sort(scores: &mut Vec<u32>) { scores.sort_unstable(); }
+}
+
+pub struct Input {
+    data: Vec<u32>,
+}
+
+pub fn make_input(n: usize) -> Input {
+    // Pseudo-random data (deterministic seed for reproducibility).
+    let mut data = Vec::with_capacity(n);
+    let mut seed: u64 = 0x9E3779B97F4A7C15;
+    for i in 0..n {
+        seed ^= seed << 13;
+        seed ^= seed >> 7;
+        seed ^= seed << 17;
+        data.push((seed.wrapping_add(i as u64)) as u32);
+    }
+    Input { data }
+}
+
+pub fn run_buggy(input: &Input) {
+    let mut data = input.data.clone();
+    buggy::sort(&mut data);
+    std::hint::black_box(&data);
+}
+
+pub fn run_fixed(input: &Input) {
+    let mut data = input.data.clone();
+    fixed::sort(&mut data);
+    std::hint::black_box(&data);
+}
+"#
+        .to_string(),
+    }
+}
+
+/// Bench spec for `sort-by-key`: sort_by with repeated closure calls vs
+/// sort_by_key with single key extraction.
+///
+/// Uses `Vec<(String, u32)>` sorted by the u32 score field. `sort_by` calls
+/// the comparator O(N log N) times — each call reads `.1` from two elements.
+/// `sort_by_key` extracts the key once per element (N calls), then sorts the
+/// cached `u32` keys. The win is cache locality: with large `(String, u32)`
+/// tuples spanning multiple cache lines, accessing `.1` fewer times reduces
+/// cache pressure.
+#[cfg(feature = "rust_perf_bench")]
+fn sort_by_key_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![1_000, 10_000, 50_000, 100_000],
+        harness: r#"
+mod buggy {
+    pub fn sort_by_score(items: &mut Vec<(String, u32)>) {
+        items.sort_by(|a, b| a.1.cmp(&b.1));
+    }
+}
+
+mod fixed {
+    pub fn sort_by_score(items: &mut Vec<(String, u32)>) {
+        items.sort_by_key(|item| item.1);
+    }
+}
+
+pub struct Input {
+    items: Vec<(String, u32)>,
+}
+
+pub fn make_input(n: usize) -> Input {
+    let mut items = Vec::with_capacity(n);
+    let mut seed: u64 = 0x12345678ABCDEF00;
+    for i in 0..n {
+        seed ^= seed << 13;
+        seed ^= seed >> 7;
+        seed ^= seed << 17;
+        // Generate strings of varying length (10-30 chars) so each tuple
+        // is large enough to span cache lines — makes the key-extraction
+        // count difference measurable.
+        let len = 10 + (seed % 21) as usize;
+        let s: String = (0..len).map(|j| ((seed.wrapping_add(j as u64) % 26) as u8 + b'a') as char).collect();
+        items.push((s, (seed % 1_000_000) as u32));
+    }
+    Input { items }
+}
+
+pub fn run_buggy(input: &Input) {
+    let mut items = input.items.clone();
+    buggy::sort_by_score(&mut items);
+    std::hint::black_box(&items);
+}
+
+pub fn run_fixed(input: &Input) {
+    let mut items = input.items.clone();
+    fixed::sort_by_score(&mut items);
+    std::hint::black_box(&items);
+}
+"#
+        .to_string(),
+    }
+}
+
+/// Bench spec for `bufwriter-batched`: per-record File::write (syscall each)
+/// vs BufWriter batched.
+///
+/// Uses `tempfile` to get a real filesystem path. Each record is 64 bytes;
+/// with 8KB BufWriter buffering, ~128 records per flush. The buggy path does
+/// one syscall per record; the fixed path does one syscall per ~128 records.
+#[cfg(feature = "rust_perf_bench")]
+fn bufwriter_batched_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![100, 1_000, 10_000],
+        harness: r#"
+// [dep: tempfile = "3"]
+use std::io::{BufWriter, Write};
+
+mod buggy {
+    use std::io::Write;
+    pub fn write_records(file: &mut std::fs::File, records: &[Vec<u8>]) {
+        for rec in records {
+            let _ = file.write_all(rec);
+        }
+    }
+}
+
+mod fixed {
+    use std::io::{BufWriter, Write};
+    pub fn write_records(file: std::fs::File, records: &[Vec<u8>]) {
+        let mut buf = BufWriter::new(file);
+        for rec in records {
+            let _ = buf.write_all(rec);
+        }
+        let _ = buf.flush();
+    }
+}
+
+pub struct Input {
+    records: Vec<Vec<u8>>,
+    dir: tempfile::TempDir,
+}
+
+pub fn make_input(n: usize) -> Input {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let mut records = Vec::with_capacity(n);
+    for i in 0..n {
+        // 64-byte records (realistic line length)
+        let rec = format!("{i:060}\n").into_bytes();
+        records.push(rec);
+    }
+    Input { records, dir }
+}
+
+pub fn run_buggy(input: &Input) {
+    let path = input.dir.path().join("buggy.txt");
+    let mut file = std::fs::File::create(&path).expect("create");
+    buggy::write_records(&mut file, &input.records);
+    std::hint::black_box(&file);
+    drop(file);
+    let _ = std::fs::remove_file(&path);
+}
+
+pub fn run_fixed(input: &Input) {
+    let path = input.dir.path().join("fixed.txt");
+    let file = std::fs::File::create(&path).expect("create");
+    fixed::write_records(file, &input.records);
+    let _ = std::fs::remove_file(&path);
+}
+"#
+        .to_string(),
+    }
+}
+
+/// Bench spec for `copy-from-slice`: manual index-loop copy vs `copy_from_slice`.
+///
+/// The manual loop does per-element bounds checking + scalar loads/stores.
+/// `copy_from_slice` is a single intrinsic that LLVM lowers to `memcpy` or
+/// SIMD-wide operations. The win is largest on medium-sized slices where
+/// the manual loop's overhead (bounds check + scalar ops) is measurable but
+/// the data fits in cache.
+#[cfg(feature = "rust_perf_bench")]
+fn copy_from_slice_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![64, 256, 1_024, 4_096],
+        harness: r#"
+mod buggy {
+    pub fn copy_data(dst: &mut [u8], src: &[u8]) {
+        for i in 0..src.len() {
+            dst[i] = src[i];
+        }
+    }
+}
+
+mod fixed {
+    pub fn copy_data(dst: &mut [u8], src: &[u8]) {
+        dst.copy_from_slice(src);
+    }
+}
+
+pub struct Input {
+    src: Vec<u8>,
+    dst: Vec<u8>,
+}
+
+pub fn make_input(n: usize) -> Input {
+    let mut seed: u64 = 0xDEADBEEFCAFEBABE;
+    let src: Vec<u8> = (0..n).map(|i| {
+        seed ^= seed << 13;
+        seed ^= seed >> 7;
+        seed ^= seed << 17;
+        seed as u8
+    }).collect();
+    let dst = vec![0u8; n];
+    Input { src, dst }
+}
+
+pub fn run_buggy(input: &Input) {
+    let mut dst = input.dst.clone();
+    buggy::copy_data(&mut dst, &input.src);
+    std::hint::black_box(&dst);
+}
+
+pub fn run_fixed(input: &Input) {
+    let mut dst = input.dst.clone();
+    fixed::copy_data(&mut dst, &input.src);
+    std::hint::black_box(&dst);
+}
+"#
+        .to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2465,17 +2776,18 @@ mod tests {
     }
 
     #[test]
-    fn seed_corpus_has_thirty_nine_entries_across_eleven_categories() {
+    fn seed_corpus_has_forty_three_entries_across_twelve_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 39);
+        assert_eq!(corpus.entries.len(), 43);
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
         categories.dedup();
-        // 11 distinct categories. Allocation is the deepest (12 rules);
-        // complexity has 10; layout has 4; simd has 4; iterators has 4;
-        // concurrency has 2; arithmetic, dispatch, caching, bevy, wasm have 1 each.
-        assert_eq!(categories.len(), 11);
+        // 12 distinct categories (Issue 012 added `io`). Allocation is the
+        // deepest (12 rules); complexity has 12; simd has 5; layout has 4;
+        // iterators has 4; concurrency has 2; io has 1; arithmetic, dispatch,
+        // caching, bevy, wasm have 1 each.
+        assert_eq!(categories.len(), 12);
     }
 
     #[test]
@@ -2543,10 +2855,10 @@ mod tests {
 
     #[cfg(feature = "rust_perf_bench")]
     #[test]
-    fn thirty_one_rules_have_bench_specs() {
+    fn thirty_five_rules_have_bench_specs() {
         let corpus = build_perf_seed_corpus();
         let with_spec = corpus.entries.iter().filter(|e| e.bench_spec.is_some()).count();
-        assert_eq!(with_spec, 31, "expected 31 benchable rules, got {with_spec}");
+        assert_eq!(with_spec, 35, "expected 35 benchable rules, got {with_spec}");
     }
 
     #[cfg(feature = "rust_perf_bench")]
@@ -2573,10 +2885,11 @@ mod tests {
     /// Bench 013 found 4 rules with non-dominant verdicts in the default
     /// config (2 ParetoDominated + 2 Mixed). Their `context_notes` annotation
     /// records the finding so consumers don't unconditionally suggest them.
-    /// The other 27 have `context_notes: None` (unconditional wins or honestly
-    /// NotBenchable).
+    /// Bench 016 (Issue 012) added 2 more annotated rules (sort-by-key,
+    /// copy-from-slice). The other 37 have `context_notes: None` (unconditional
+    /// wins or honestly NotBenchable).
     #[test]
-    fn four_annotated_rules_carry_context_notes() {
+    fn six_annotated_rules_carry_context_notes() {
         let corpus = build_perf_seed_corpus();
         let annotated: Vec<&str> = corpus
             .entries
@@ -2584,11 +2897,13 @@ mod tests {
             .filter(|e| e.context_notes.is_some())
             .map(|e| e.rule_id.as_str())
             .collect();
-        assert_eq!(annotated.len(), 4, "expected 4 context-annotated rules");
+        assert_eq!(annotated.len(), 6, "expected 6 context-annotated rules");
         assert!(annotated.contains(&"precompute-table"));
         assert!(annotated.contains(&"papaya-lockfree"));
         assert!(annotated.contains(&"dedupe-hashset-vs-vec"));
         assert!(annotated.contains(&"reuse-allocation-clear"));
+        assert!(annotated.contains(&"sort-by-key"));
+        assert!(annotated.contains(&"copy-from-slice"));
     }
 
     /// The 35 non-annotated rules (28 ParetoDominant + 8 NotBenchable - 1 mixed reuse) must
@@ -2597,14 +2912,14 @@ mod tests {
     /// ParetoDominated + 2 Mixed) + 8 NotBenchable = 39 total. The 4 annotated
     /// + 35 unannotated = 39.
     #[test]
-    fn thirty_five_rules_have_no_context_notes() {
+    fn thirty_seven_rules_have_no_context_notes() {
         let corpus = build_perf_seed_corpus();
         let unannotated = corpus
             .entries
             .iter()
             .filter(|e| e.context_notes.is_none())
             .count();
-        assert_eq!(unannotated, 35, "expected 35 unannotated rules");
+        assert_eq!(unannotated, 37, "expected 37 unannotated rules");
     }
 
     /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -2616,7 +2931,7 @@ mod tests {
         let json = serde_json::to_string(&corpus.entries).unwrap();
         let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
         let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-        assert_eq!(annotated, 4);
+        assert_eq!(annotated, 6);
 
         // Simulate a pre-field snapshot: strip `context_notes` from JSON.
         // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -2627,20 +2942,19 @@ mod tests {
     }
 
     /// Integration: the drafter propagates `context_notes` from `PerfRule`
-    /// through `DraftedFix` for the 3 annotated rules (2 ParetoDominated + 1
-    /// Mixed), and `None` for the 12 unconditional wins. This is the Plan 001
-    /// post-promotion wiring (2026-08-13) — the field existed on `PerfRule`
-    /// but was invisible to the domain-agnostic drafter until
-    /// `HealEntry::context_notes()` landed.
+    /// through `DraftedFix` for the annotated rules, and `None` for the
+    /// unconditional wins. The original 4 annotations (Bench 013: 2
+    /// ParetoDominated + 2 Mixed) + the 2 new annotations from Issue 012 /
+    /// Bench 016 (sort-by-key, copy-from-slice).
     #[test]
     fn drafter_propagates_context_notes_from_perf_corpus() {
         use crate::domain::HealEntry;
 
         let corpus = build_perf_seed_corpus();
 
-        // Filter to the 4 annotated rules.
+        // Filter to the 6 annotated rules.
         let annotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_some()).collect();
-        assert_eq!(annotated.len(), 4, "expected 4 annotated rules");
+        assert_eq!(annotated.len(), 6, "expected 6 annotated rules");
 
         // The HealEntry trait override must agree with the struct field.
         for rule in &annotated {
@@ -2658,9 +2972,9 @@ mod tests {
             );
         }
 
-        // The 35 unannotated rules must return None from the trait too.
+        // The 37 unannotated rules must return None from the trait too.
         let unannotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_none()).collect();
-        assert_eq!(unannotated.len(), 35, "expected 35 unannotated rules");
+        assert_eq!(unannotated.len(), 37, "expected 37 unannotated rules");
         for rule in &unannotated {
             assert!(HealEntry::context_notes(*rule).is_none(), "{} should have no context_notes", rule.rule_id);
         }
