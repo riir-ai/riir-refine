@@ -12,7 +12,7 @@
 | File | Scope |
 |---|---|
 | [`heal_domain_trait.md`](heal_domain_trait.md) | `HealDomain` + `HealEntry` traits — the one new abstraction |
-| [`rust_perf.md`](rust_perf.md) | Phase 2: `RustPerfDomain` + `PerfRule` + 18-rule seed corpus + `PerfVerifier` (`cargo test`) |
+| [`rust_perf.md`](rust_perf.md) | Phase 2: `RustPerfDomain` + `PerfRule` + 20-rule seed corpus + `PerfVerifier` (`cargo test`) |
 | [`kernel_opt.md`](kernel_opt.md) | Phase 3: `KernelOptDomain` + `KernelRule` + `KernelExpertRouter` (`pick_domain`) + `KernelThermalRouter` (Plasma→Hot→Warm→Cold→Freeze) + `KernelVerifier` (stub) |
 | [`cross_domain_routing.md`](cross_domain_routing.md) | Why cross-domain auto-routing is NOT in scope (Proposal 001) |
 
@@ -39,7 +39,7 @@
 - **Phase 1 (framework refactor):** DONE 2026-08-13. `HealDomain` trait
   shipped, clippy domain reorganized behind `clippy_lints`, all 142 existing
   tests pass bit-identical.
-- **Phase 2 (rust_perf):** DONE 2026-08-13. 18 seed rules across 11 categories
+- **Phase 2 (rust_perf):** DONE 2026-08-13. 20 seed rules across 11 categories
   (complexity, allocation, layout, concurrency, simd, arithmetic, iterators,
   dispatch, caching, bevy, wasm). `cargo test` verifier works (compile-error
   detection via exit status + JSON parsing). Perf-bench Pareto validator DONE

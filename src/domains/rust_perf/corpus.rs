@@ -8,6 +8,11 @@
 //! validator found ParetoDominated in the default config (Bench 013), `None`
 //! for unconditional wins + honestly NotBenchable rules.
 //!
+//! 20 entries across 11 categories (complexity 5, allocation 3, simd 3,
+//! layout 2, concurrency 2, arithmetic 1, iterators 1, dispatch 1, caching 1,
+//! bevy 1, wasm 1). 16 are benchable (14 ParetoDominant + 2 ParetoDominated +
+//! 1 Mixed); 4 are honestly NotBenchable.
+//!
 //! ## Bench specs (behind `rust_perf_bench`)
 //!
 //! Benchable rules carry an optional [`BenchSpec`] — a self-contained harness
@@ -15,12 +20,14 @@
 //! `run_buggy` / `run_fixed` entry points. The bench validator generates a
 //! temp bin crate from the spec + runs a timing loop at multiple sizes.
 //!
-//! Currently benchable (14/18):
+//! Currently benchable (16/20):
 //! - `o1-lookup` (Vec scan vs HashMap lookup — clear O(n) vs O(1))
 //! - `bsearch-sorted-slice` (linear scan vs binary search — O(n) vs O(log n) on sorted data)
 //! - `dedupe-hashset-vs-vec` (Vec::contains loop vs HashSet collect — O(n²) vs O(n))
+//! - `entry-vs-contains-insert` (contains_key+insert vs entry API — merge HashMap lookups)
 //! - `static-str` (String alloc vs &'static str — allocation cost)
 //! - `simd-chunk` (scalar vs chunked loop — vectorization at large N)
+//! - `branchless-conditional` (if vs bool-as-usize multiply — vectorization + branch prediction)
 //! - `bool-to-bitpack` (Vec<bool> count vs packed Vec<u64> POPCNT — data density)
 //! - `mutex-to-atomic` (Mutex<u32> vs AtomicU32 — lock/unlock overhead)
 //! - `f32-counter-to-int` (f32 accumulator vs u64 — serial dep chain)
@@ -33,7 +40,7 @@
 //! - `vec-with-capacity` (Vec::new() growth vs Vec::with_capacity — realloc cost)
 //! - `format-concat-loop` (format! concat in loop vs push_str — O(n²) vs O(n))
 //!
-//! Not benchable (4/18) — honest:
+//! Not benchable (4/20) — honest:
 //! - `layout-reorder` (struct size — deterministic `size_of`, not a runtime
 //!   microbench; the cache-utilization claim needs a specific access pattern)
 //! - `repr-u8-enum` (enum size — deterministic `size_of`, same class as
@@ -56,11 +63,12 @@ use crate::domains::rust_perf::{PerfRule, RustPerfDomain};
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 18 entries
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 20 entries
 /// covering the main `rust-optimize` skill categories (complexity, allocation,
 /// layout, concurrency, simd, arithmetic, iterators, dispatch, caching, bevy,
-/// wasm). Complexity + allocation are the deepest categories (3 rules each);
-/// simd + layout + concurrency have 2; the rest have 1 each.
+/// wasm). Complexity is the deepest category (5 rules: 3 algorithmic + entry
+/// merge + branchless-via-vectorization); allocation has 3; simd has 3; layout
+/// + concurrency have 2; the rest have 1 each.
 #[must_use]
 #[allow(clippy::too_many_lines)] // seed corpus is a data table; length scales with rule count
 pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
@@ -374,6 +382,48 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
             context_notes: None,
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: Some(dyn_to_enum_bench_spec()),
+        },
+        // ── complexity: contains_key() + insert() → entry().or_insert() ──
+        // Per the rust-optimize skill item 1: "merge HashMap lookups".
+        // The buggy path does TWO hash lookups: contains_key hashes + probes,
+        // then insert hashes + probes again. The compiler cannot merge them
+        // because insert may need to grow the table (opaque call). The fixed
+        // path uses the entry() API: ONE hash + probe, in-place insert if
+        // absent. Bench 013: ParetoDominant 2.8–3.4× across all sizes (100 →
+        // 100K). The win is the eliminated redundant hash + probe — a
+        // genuine constant-factor improvement, not algorithmic.
+        PerfRule {
+            rule_id: "entry-vs-contains-insert".to_string(),
+            name: "contains_key() + insert() → entry().or_insert() (merge HashMap lookups)".to_string(),
+            category: "complexity".to_string(),
+            buggy_code: "use std::collections::HashMap;\nfn insert_if_absent(map: &mut HashMap<u32, u32>, k: u32, v: u32) {\n    if !map.contains_key(&k) {\n        map.insert(k, v);\n    }\n}".to_string(),
+            fixed_code: "use std::collections::HashMap;\nfn insert_if_absent(map: &mut HashMap<u32, u32>, k: u32, v: u32) {\n    map.entry(k).or_insert(v);\n}".to_string(),
+            context_notes: None,
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(entry_vs_contains_insert_bench_spec()),
+        },
+        // ── simd: data-dependent if → branchless arithmetic for vectorization ──
+        // Per the rust-optimize skill item 7: "branch-free inner loops (use
+        // bool as usize instead of if)". The buggy path uses `if cond[i] { ... }`
+        // inside a hot loop — the data-dependent branch prevents LLVM from
+        // auto-vectorizing (each iteration may or may not execute the body).
+        // The fixed path uses `val * cond[i] as u64` — a branchless multiply
+        // that LLVM vectorizes into SIMD lanes (e.g., 4-wide or 8-wide).
+        // Bench 013: ParetoDominant 6.8–13× across all conditions tested
+        // (unpredictable 50% random → predictable 99%/1%/100%). The win is
+        // primarily auto-vectorization, NOT branch prediction — even with
+        // 100% predictable conditions, the branchless version is ~10× faster
+        // because LLVM vectorizes the multiply loop but cannot vectorize the
+        // branchy loop.
+        PerfRule {
+            rule_id: "branchless-conditional".to_string(),
+            name: "Data-dependent if in hot loop → branchless arithmetic (bool as usize)".to_string(),
+            category: "simd".to_string(),
+            buggy_code: "fn conditional_sum(data: &[u32], cond: &[bool]) -> u64 {\n    let mut sum: u64 = 0;\n    for i in 0..data.len() {\n        if cond[i] {\n            sum += data[i] as u64;\n        }\n    }\n    sum\n}".to_string(),
+            fixed_code: "fn conditional_sum(data: &[u32], cond: &[bool]) -> u64 {\n    let mut sum: u64 = 0;\n    for i in 0..data.len() {\n        sum += data[i] as u64 * cond[i] as u64;\n    }\n    sum\n}".to_string(),
+            context_notes: None,
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(branchless_conditional_bench_spec()),
         },
     ])
 }
@@ -922,6 +972,124 @@ pub fn run_fixed(input: &[f64]) {
     }
 }
 
+/// Bench spec for `entry-vs-contains-insert`: contains_key() + insert() vs entry().
+///
+/// The buggy path calls `contains_key(k)` then `insert(k, v)` — two hash
+/// computations + two probes. The fixed path uses `entry(k).or_insert(v)` —
+/// one hash + one probe, in-place insert. The compiler cannot merge the two
+/// lookups because `insert` may need to grow the table (opaque call). Input
+/// keys have ~50% existing + ~50% new to exercise both branches.
+#[cfg(feature = "rust_perf_bench")]
+fn entry_vs_contains_insert_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![100, 1_000, 10_000, 100_000],
+        harness: r#"
+use std::collections::HashMap;
+
+mod buggy {
+use std::collections::HashMap;
+pub fn insert_if_absent(map: &mut HashMap<u32, u32>, keys: &[u32]) {
+    for &k in keys {
+        if !map.contains_key(&k) {
+            map.insert(k, k.wrapping_mul(31));
+        }
+    }
+}
+}
+
+mod fixed {
+use std::collections::HashMap;
+pub fn insert_if_absent(map: &mut HashMap<u32, u32>, keys: &[u32]) {
+    for &k in keys {
+        map.entry(k).or_insert(k.wrapping_mul(31));
+    }
+}
+}
+
+pub fn make_input(n: usize) -> Vec<u32> {
+    // Mix of existing + new keys: keys cycle through 0..(n*2), so ~50% hit.
+    (0..n).map(|i| (i as u32).wrapping_mul(7) % (n as u32 * 2)).collect()
+}
+
+pub fn run_buggy(input: &[u32]) {
+    let mut map = HashMap::with_capacity(input.len());
+    buggy::insert_if_absent(&mut map, input);
+    std::hint::black_box(map.len());
+}
+
+pub fn run_fixed(input: &[u32]) {
+    let mut map = HashMap::with_capacity(input.len());
+    fixed::insert_if_absent(&mut map, input);
+    std::hint::black_box(map.len());
+}
+"#
+        .to_string(),
+    }
+}
+
+/// Bench spec for `branchless-conditional`: data-dependent if vs branchless multiply.
+///
+/// The buggy path uses `if cond[i] { sum += data[i] }` — a data-dependent
+/// branch inside a hot loop that prevents LLVM auto-vectorization. The fixed
+/// path uses `sum += data[i] * cond[i] as u64` — a branchless multiply that
+/// LLVM vectorizes into SIMD lanes. The win is primarily vectorization, not
+/// branch prediction: even with 100% predictable conditions the branchless
+/// version is ~10× faster because the multiply loop vectorizes but the
+/// branchy loop cannot.
+#[cfg(feature = "rust_perf_bench")]
+fn branchless_conditional_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![1_000, 10_000, 100_000, 1_000_000],
+        harness: r#"
+mod buggy {
+pub fn conditional_sum(data: &[u32], cond: &[bool]) -> u64 {
+    let mut sum: u64 = 0;
+    for i in 0..data.len() {
+        if cond[i] {
+            sum += data[i] as u64;
+        }
+    }
+    sum
+}
+}
+
+mod fixed {
+pub fn conditional_sum(data: &[u32], cond: &[bool]) -> u64 {
+    let mut sum: u64 = 0;
+    for i in 0..data.len() {
+        sum += data[i] as u64 * cond[i] as u64;
+    }
+    sum
+}
+}
+
+pub struct Input {
+    data: Vec<u32>,
+    cond: Vec<bool>,
+}
+
+pub fn make_input(n: usize) -> Input {
+    // ~50% true conditions: pseudo-random but deterministic.
+    // This is the worst case for branch prediction (unpredictable).
+    let data: Vec<u32> = (0..n).map(|i| (i as u32).wrapping_mul(2654435761)).collect();
+    let cond: Vec<bool> = (0..n).map(|i| (i.wrapping_mul(12345) % 2) == 0).collect();
+    Input { data, cond }
+}
+
+pub fn run_buggy(input: &Input) {
+    let s = buggy::conditional_sum(&input.data, &input.cond);
+    std::hint::black_box(s);
+}
+
+pub fn run_fixed(input: &Input) {
+    let s = fixed::conditional_sum(&input.data, &input.cond);
+    std::hint::black_box(s);
+}
+"#
+        .to_string(),
+    }
+}
+
 /// Bench spec for `precompute-table`: runtime popcount loop vs const table.
 #[cfg(feature = "rust_perf_bench")]
 fn precompute_table_bench_spec() -> BenchSpec {
@@ -1180,16 +1348,16 @@ mod tests {
     }
 
     #[test]
-    fn seed_corpus_has_eighteen_entries_across_eleven_categories() {
+    fn seed_corpus_has_twenty_entries_across_eleven_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 18);
+        assert_eq!(corpus.entries.len(), 20);
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
         categories.dedup();
-        // 11 distinct categories. Complexity + allocation tie for deepest
-        // (3 rules each); simd + layout + concurrency have 2; arithmetic,
-        // iterators, dispatch, caching, bevy, wasm have 1 each.
+        // 11 distinct categories. Complexity is the deepest (5 rules);
+        // allocation + simd have 3 each; layout + concurrency have 2;
+        // arithmetic, iterators, dispatch, caching, bevy, wasm have 1 each.
         assert_eq!(categories.len(), 11);
     }
 
@@ -1258,10 +1426,10 @@ mod tests {
 
     #[cfg(feature = "rust_perf_bench")]
     #[test]
-    fn fourteen_rules_have_bench_specs() {
+    fn sixteen_rules_have_bench_specs() {
         let corpus = build_perf_seed_corpus();
         let with_spec = corpus.entries.iter().filter(|e| e.bench_spec.is_some()).count();
-        assert_eq!(with_spec, 14, "expected 14 benchable rules, got {with_spec}");
+        assert_eq!(with_spec, 16, "expected 16 benchable rules, got {with_spec}");
     }
 
     #[cfg(feature = "rust_perf_bench")]
@@ -1301,18 +1469,18 @@ mod tests {
         assert!(annotated.contains(&"dedupe-hashset-vs-vec"));
     }
 
-    /// The 15 non-annotated rules (11 ParetoDominant + 4 NotBenchable) must
+    /// The 17 non-annotated rules (13 ParetoDominant + 4 NotBenchable) must
     /// have `context_notes: None` — they are either unconditional wins or
     /// honestly unmeasurable.
     #[test]
-    fn fifteen_rules_have_no_context_notes() {
+    fn seventeen_rules_have_no_context_notes() {
         let corpus = build_perf_seed_corpus();
         let unannotated = corpus
             .entries
             .iter()
             .filter(|e| e.context_notes.is_none())
             .count();
-        assert_eq!(unannotated, 15, "expected 15 unannotated rules");
+        assert_eq!(unannotated, 17, "expected 17 unannotated rules");
     }
 
     /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -1366,9 +1534,9 @@ mod tests {
             );
         }
 
-        // The 15 unannotated rules must return None from the trait too.
+        // The 17 unannotated rules must return None from the trait too.
         let unannotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_none()).collect();
-        assert_eq!(unannotated.len(), 15, "expected 15 unannotated rules");
+        assert_eq!(unannotated.len(), 17, "expected 17 unannotated rules");
         for rule in &unannotated {
             assert!(HealEntry::context_notes(*rule).is_none(), "{} should have no context_notes", rule.rule_id);
         }

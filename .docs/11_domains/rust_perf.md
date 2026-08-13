@@ -19,13 +19,12 @@
 
 ## Corpus
 
-18 seed rules across 11 skill-checklist categories. Complexity + allocation
-are the deepest categories (3 rules each — complexity covers the most common
-algorithmic anti-patterns: O(n)→O(1)/O(log n) lookups, O(n²)→O(n) dedup;
-allocation covers the most common memory anti-patterns); simd + layout +
-concurrency have 2; the rest have 1 each. 14 are benchable (carry a
+20 seed rules across 11 skill-checklist categories. Complexity is the
+deepest category (5 rules — the 3 algorithmic anti-patterns + HashMap
+lookup merging + branchless-vectorization); allocation + simd have 3 each;
+layout + concurrency have 2; the rest have 1 each. 16 are benchable (carry a
 `BenchSpec`); 4 are honestly `NotBenchable` (need external runtimes or are
-structural). 3 of the 14 benchable rules carry `context_notes` (Bench 013
+structural). 3 of the 16 benchable rules carry `context_notes` (Bench 013
 found 2 `ParetoDominated` + 1 `Mixed` in the default config — consumers
 should treat them as context-dependent, not unconditional suggestions).
 
@@ -34,6 +33,7 @@ should treat them as context-dependent, not unconditional suggestions).
 | `o1-lookup` | complexity | ✅ 570x ParetoDominant | — | O(n) `Vec` scan → O(1) `HashMap` lookup |
 | `bsearch-sorted-slice` | complexity | ✅ 16-2709x ParetoDominant | — | O(n) `.contains()` on sorted slice → O(log n) `binary_search()` |
 | `dedupe-hashset-vs-vec` | complexity | ~ Mixed (2/4 Faster) | ⚠️ `context_notes` | O(n²) `Vec::contains` dedup loop → O(n) `HashSet` collect (wins at N ≥ 1000; HashSet overhead dominates at small N) |
+| `entry-vs-contains-insert` | complexity | ✅ 1.5x ParetoDominant | — | `contains_key()` + `insert()` → `entry().or_insert()` (merge HashMap lookups: 2 hashes → 1 hash) |
 | `static-str` | allocation | ✅ 42x ParetoDominant | — | `String` return → `&'static str` for constant labels |
 | `vec-with-capacity` | allocation | ✅ 1.1-4.3x ParetoDominant | — | `Vec::new()` + push loop → `Vec::with_capacity(n)` (realloc cost) |
 | `format-concat-loop` | allocation | ✅ 42-95x ParetoDominant | — | `format!("{s}{x}")` concat in loop → `String::push_str` (O(n²) → O(n)) |
@@ -43,6 +43,7 @@ should treat them as context-dependent, not unconditional suggestions).
 | `papaya-lockfree` | concurrency | ❌ 0.55-0.79x ParetoDominated | ⚠️ `context_notes` | `Arc<RwLock<HashMap>>` → `papaya` lock-free map (benefit needs multi-threaded contention) |
 | `simd-chunk` | simd | ✅ 3.9x ParetoDominant | — | Scalar loop → 4-wide chunked loop for LLVM auto-vectorization |
 | `bool-to-bitpack` | simd | ✅ 7-11x ParetoDominant | — | `Vec<bool>` set-bit count → packed `Vec<u64>` + `count_ones()` (data density + hardware POPCNT) |
+| `branchless-conditional` | simd | ✅ 10x ParetoDominant | — | Data-dependent `if` in hot loop → `val * cond as u64` branchless multiply (LLVM vectorizes the multiply but cannot vectorize the branchy loop) |
 | `f32-counter-to-int` | arithmetic | ✅ 7.5-11x ParetoDominant | — | f32 accumulator for integer tally → u64 accumulator (f32 add dep chain can't be broken without fast-math) |
 | `collect-avoidance` | iterators | ✅ 2.3-3.0x ParetoDominant | — | Unnecessary `.collect()` intermediate → chained iterator (allocation + double pass → single pass, zero alloc) |
 | `dyn-to-enum` | dispatch | ✅ 2.5-2.9x ParetoDominant | — | `Box<dyn Trait>` dispatch → enum dispatch (devirtualize: vtable indirection → direct match, compiler can inline) |
@@ -85,9 +86,9 @@ the measured GOAT results.
 
 The original caveat called perf "the weakest link" because perf has no
 single ground truth. **Bench 013 closes this**: the Pareto validator now
-provides the real perf ground truth. 11/14 benchable rules are Pareto-dominant
-(clear wins); 2/14 are honestly Pareto-dominated (compiler optimizations,
-regime-dependent benefits); 1/14 is Mixed (scale-dependent) — exactly the
+provides the real perf ground truth. 13/16 benchable rules are Pareto-dominant
+(clear wins); 2/16 are honestly Pareto-dominated (compiler optimizations,
+regime-dependent benefits); 1/16 is Mixed (scale-dependent) — exactly the
 kind of honest signal the caveat predicted.
 
 ## Drafter + pipeline integration (`context_notes` propagation, 2026-08-13)
@@ -159,7 +160,7 @@ cargo invocations against temp crates race on cargo's build cache lock.
 ## Source
 
 - [`src/domains/rust_perf/mod.rs`](../../src/domains/rust_perf/mod.rs) — `PerfRule` + `RustPerfDomain`
-- [`src/domains/rust_perf/corpus.rs`](../../src/domains/rust_perf/corpus.rs) — `build_perf_seed_corpus()` + 11 `BenchSpec`s
+- [`src/domains/rust_perf/corpus.rs`](../../src/domains/rust_perf/corpus.rs) — `build_perf_seed_corpus()` + 13 `BenchSpec`s
 - [`src/domains/rust_perf/verify.rs`](../../src/domains/rust_perf/verify.rs) — `PerfVerifier` (cargo test)
 - [`src/domains/rust_perf/bench.rs`](../../src/domains/rust_perf/bench.rs) — `PerfBenchValidator` (Pareto verdict)
 - [`examples/perf_heal_demo.rs`](../../examples/perf_heal_demo.rs) — scaffold end-to-end demo

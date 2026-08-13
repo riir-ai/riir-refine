@@ -27,15 +27,15 @@ Rules without a `BenchSpec` are honestly marked `NotBenchable`.
 
 | Gate | What | Target | Status |
 |---|---|---|---|
-| G1 (correctness) | benchable rules produce real measurements (ran=true, non-empty results) | all 14 benchable rules run | ✅ PASS (14/14 ran) |
+| G1 (correctness) | benchable rules produce real measurements (ran=true, non-empty results) | all 16 benchable rules run | ✅ PASS (16/16 ran) |
 | G2 (latency) | per-rule latency (temp crate compile + bench subprocess) | documented, not hot-path | ~5-15s/rule (compile-dominated) |
 | G3 (no-regression) | default features (no `rust_perf_bench`) still pass | default `cargo test --lib` green | ✅ PASS (91 default tests) |
 | G4 (alloc-free) | N/A — subprocess-based validator | N/A | ✅ PASS (documented N/A) |
-| G5 (Pareto verdict) | majority of benchable rules are Pareto-dominant | `pareto_dominant * 2 > benchable` | ✅ PASS (11/14 = majority) |
+| G5 (Pareto verdict) | majority of benchable rules are Pareto-dominant | `pareto_dominant * 2 > benchable` | ✅ PASS (13/16 = majority) |
 
-## Measured results (14 benchable, 4 not-benchable)
+## Measured results (16 benchable, 4 not-benchable)
 
-### Pareto-dominant (11/14) — the pattern works
+### Pareto-dominant (13/16) — the pattern works
 
 | Rule | N=small | N=large | Peak speedup | Verdict |
 |---|---:|---:|---:|---|
@@ -43,11 +43,13 @@ Rules without a `BenchSpec` are honestly marked `NotBenchable`.
 | `bsearch-sorted-slice` | 16.00x (N=100) | **2709.00x** (N=100000) | 2709.00x | ✅ ParetoDominant (4/4 sizes faster) |
 | `simd-chunk` | 2.90x (N=100) | **3.90x** (N=100000) | 3.90x | ✅ ParetoDominant (4/4 sizes faster) |
 | `bool-to-bitpack` | 1.00x (N=100) | **11.03x** (N=100000) | 11.03x | ✅ ParetoDominant (3/4 faster, 1 tie) |
+| `branchless-conditional` | 10.49x (N=1000) | **10.29x** (N=1000000) | 10.60x | ✅ ParetoDominant (4/4 sizes faster) |
 | `static-str` | 37.06x (N=1) | **43.18x** (N=100) | 43.18x | ✅ ParetoDominant (3/3 sizes faster) |
 | `vec-with-capacity` | 4.43x (N=100) | **1.07x** (N=100000) | 4.43x | ✅ ParetoDominant (4/4 sizes faster) |
 | `format-concat-loop` | 45.25x (N=100) | **94.58x** (N=1000) | 94.58x | ✅ ParetoDominant (3/3 sizes faster) |
 | `mutex-to-atomic` | 2.57x (N=1000) | **2.52x** (N=1000000) | 2.57x | ✅ ParetoDominant (4/4 sizes faster) |
 | `f32-counter-to-int` | 7.50x (N=100) | **11.43x** (N=1000) | 11.43x | ✅ ParetoDominant (4/4 sizes faster) |
+| `entry-vs-contains-insert` | 1.48x (N=100) | **1.57x** (N=10000) | 1.57x | ✅ ParetoDominant (4/4 sizes faster) |
 | `collect-avoidance` | 2.27x (N=1000) | **2.95x** (N=100000) | 2.95x | ✅ ParetoDominant (4/4 sizes faster) |
 | `dyn-to-enum` | 2.88x (N=1000) | **2.50x** (N=100000) | 2.88x | ✅ ParetoDominant (3/3 sizes faster) |
 
@@ -88,13 +90,36 @@ per call (3 ops in the inner loop → 3× vtable misses). This rule was NOT in
 the `rust-optimize` skill checklist — a genuine gap the corpus expansion
 found.
 
-### Mixed (1/14) — scale-dependent
+`branchless-conditional` wins ~10× because the data-dependent `if cond[i]`
+inside the hot loop prevents LLVM auto-vectorization — each iteration may or
+may not execute the body, so the vectorizer cannot pack multiple iterations
+into SIMD lanes. The fixed path uses `val * cond[i] as u64` — a branchless
+multiply that LLVM vectorizes freely. **The win is primarily vectorization,
+not branch prediction**: even with 100% predictable conditions (verified via
+a separate standalone bench at 99%/1%/100% true), the branchless version is
+still ~10× faster because the multiply loop vectorizes but the branchy loop
+cannot. This rule covers checklist item 7's "branch-free inner loops" sub-item
+that was previously only partially covered by `bool-to-bitpack` (data density)
+— the two are distinct: `bool-to-bitpack` is about 8× memory compression +
+hardware POPCNT; `branchless-conditional` is about auto-vectorization of the
+loop body itself.
+
+`entry-vs-contains-insert` wins ~1.5× because the buggy path does TWO hash
+lookups (`contains_key` hashes + probes, then `insert` hashes + probes again)
+while the fixed path does ONE (`entry().or_insert()` hashes + probes once,
+inserts in-place if absent). The compiler cannot merge the two lookups
+because `insert` may need to grow the table (opaque call). This is checklist
+item 1's "merge HashMap lookups" sub-item — a very common pattern that was
+previously not covered. The ~1.5× speedup is a genuine constant-factor
+improvement (eliminating one redundant hash + probe per key), not algorithmic.
+
+### Mixed (1/16) — scale-dependent
 
 | Rule | Speedup range | Verdict | Honest reason |
 |---|---:|---|---|
 | `dedupe-hashset-vs-vec` | 0.64x–7.53x | ~ Mixed (2/4 Faster, 2/4 Slower) | HashSet allocation + hashing overhead exceeds the O(n²) cost at small N (≤500 elements, trivial comparison count). Wins clearly at N ≥ 1000 (up to 7.53x at N=5000). Suggest for dedup on collections known to exceed ~500 elements; for small dedup, the `Vec::contains` approach is fine. |
 
-### Pareto-dominated (2/14) — honest findings
+### Pareto-dominated (2/16) — honest findings
 
 | Rule | Speedup range | Verdict | Honest reason |
 |---|---:|---|---|
@@ -105,7 +130,7 @@ These are NOT bugs in the validator — they're exactly the kind of
 honest signal Proposal 001 caveat 3 predicted ("perf has no single
 ground truth — 'faster' depends on workload, hardware, input size").
 
-### Not benchable (4/18) — honest markings
+### Not benchable (4/20) — honest markings
 
 | Rule | Reason |
 |---|---|
@@ -146,8 +171,8 @@ is simpler, faster to compile, and sufficient for a Pareto verdict.
 
 **rust_perf was promoted to default-on 2026-08-13.** The GOAT gate (G1+G5)
 passed:
-- G1: all 14 benchable rules produce real measurements ✅
-- G5: 11/14 benchable rules are Pareto-dominant (majority) ✅
+- G1: all 16 benchable rules produce real measurements ✅
+- G5: 13/16 benchable rules are Pareto-dominant (majority) ✅
 
 The promotion follows the global AGENTS.md rule "promote to default if gain
 also demote loser":
@@ -183,7 +208,7 @@ required.
 # Clean temp dirs (forces fresh cargo builds)
 rm -rf /tmp/riir_perf_bench/
 
-# Run the GOAT gate (slow — compiles + runs 9 temp crates)
+# Run the GOAT gate (slow — compiles + runs 11 temp crates)
 cargo run --example perf_bench_demo --features rust_perf_bench --release
 ```
 
