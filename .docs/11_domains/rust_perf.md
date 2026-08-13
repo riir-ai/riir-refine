@@ -19,14 +19,15 @@
 
 ## Corpus
 
-20 seed rules across 11 skill-checklist categories. Complexity is the
-deepest category (5 rules — the 3 algorithmic anti-patterns + HashMap
-lookup merging + branchless-vectorization); allocation + simd have 3 each;
-layout + concurrency have 2; the rest have 1 each. 16 are benchable (carry a
-`BenchSpec`); 4 are honestly `NotBenchable` (need external runtimes or are
-structural). 3 of the 16 benchable rules carry `context_notes` (Bench 013
-found 2 `ParetoDominated` + 1 `Mixed` in the default config — consumers
-should treat them as context-dependent, not unconditional suggestions).
+21 seed rules across 11 skill-checklist categories. Complexity is the
+deepest category (6 rules — the 3 algorithmic anti-patterns + HashMap
+lookup merging + loop fusion + branchless-vectorization); allocation + simd
+have 3 each; layout + concurrency have 2; the rest have 1 each. 17 are
+benchable (carry a `BenchSpec`); 4 are honestly `NotBenchable` (need external
+runtimes or are structural). 3 of the 17 benchable rules carry `context_notes`
+(Bench 013 found 2 `ParetoDominated` + 1 `Mixed` in the default config —
+consumers should treat them as context-dependent, not unconditional
+suggestions).
 
 | Rule ID | Category | Bench verdict | Context? | Pattern |
 |---|---|---|---|---|
@@ -34,6 +35,7 @@ should treat them as context-dependent, not unconditional suggestions).
 | `bsearch-sorted-slice` | complexity | ✅ 16-2709x ParetoDominant | — | O(n) `.contains()` on sorted slice → O(log n) `binary_search()` |
 | `dedupe-hashset-vs-vec` | complexity | ~ Mixed (2/4 Faster) | ⚠️ `context_notes` | O(n²) `Vec::contains` dedup loop → O(n) `HashSet` collect (wins at N ≥ 1000; HashSet overhead dominates at small N) |
 | `entry-vs-contains-insert` | complexity | ✅ 1.5x ParetoDominant | — | `contains_key()` + `insert()` → `entry().or_insert()` (merge HashMap lookups: 2 hashes → 1 hash) |
+| `loop-fusion` | complexity | ✅ 1.5x ParetoDominant | — | Two iterator passes (`.sum()` + `.max()`) over same data → one fused `for` loop (cache locality; compiler can't fuse separate iterator consumers) |
 | `static-str` | allocation | ✅ 42x ParetoDominant | — | `String` return → `&'static str` for constant labels |
 | `vec-with-capacity` | allocation | ✅ 1.1-4.3x ParetoDominant | — | `Vec::new()` + push loop → `Vec::with_capacity(n)` (realloc cost) |
 | `format-concat-loop` | allocation | ✅ 42-95x ParetoDominant | — | `format!("{s}{x}")` concat in loop → `String::push_str` (O(n²) → O(n)) |
@@ -86,9 +88,9 @@ the measured GOAT results.
 
 The original caveat called perf "the weakest link" because perf has no
 single ground truth. **Bench 013 closes this**: the Pareto validator now
-provides the real perf ground truth. 13/16 benchable rules are Pareto-dominant
-(clear wins); 2/16 are honestly Pareto-dominated (compiler optimizations,
-regime-dependent benefits); 1/16 is Mixed (scale-dependent) — exactly the
+provides the real perf ground truth. 14/17 benchable rules are Pareto-dominant
+(clear wins); 2/17 are honestly Pareto-dominated (compiler optimizations,
+regime-dependent benefits); 1/17 is Mixed (scale-dependent) — exactly the
 kind of honest signal the caveat predicted.
 
 ## Drafter + pipeline integration (`context_notes` propagation, 2026-08-13)

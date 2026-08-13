@@ -27,15 +27,15 @@ Rules without a `BenchSpec` are honestly marked `NotBenchable`.
 
 | Gate | What | Target | Status |
 |---|---|---|---|
-| G1 (correctness) | benchable rules produce real measurements (ran=true, non-empty results) | all 16 benchable rules run | ✅ PASS (16/16 ran) |
+| G1 (correctness) | benchable rules produce real measurements (ran=true, non-empty results) | all 17 benchable rules run | ✅ PASS (17/17 ran) |
 | G2 (latency) | per-rule latency (temp crate compile + bench subprocess) | documented, not hot-path | ~5-15s/rule (compile-dominated) |
 | G3 (no-regression) | default features (no `rust_perf_bench`) still pass | default `cargo test --lib` green | ✅ PASS (91 default tests) |
 | G4 (alloc-free) | N/A — subprocess-based validator | N/A | ✅ PASS (documented N/A) |
-| G5 (Pareto verdict) | majority of benchable rules are Pareto-dominant | `pareto_dominant * 2 > benchable` | ✅ PASS (13/16 = majority) |
+| G5 (Pareto verdict) | majority of benchable rules are Pareto-dominant | `pareto_dominant * 2 > benchable` | ✅ PASS (14/17 = majority) |
 
-## Measured results (16 benchable, 4 not-benchable)
+## Measured results (17 benchable, 4 not-benchable)
 
-### Pareto-dominant (13/16) — the pattern works
+### Pareto-dominant (14/17) — the pattern works
 
 | Rule | N=small | N=large | Peak speedup | Verdict |
 |---|---:|---:|---:|---|
@@ -50,6 +50,7 @@ Rules without a `BenchSpec` are honestly marked `NotBenchable`.
 | `mutex-to-atomic` | 2.57x (N=1000) | **2.52x** (N=1000000) | 2.57x | ✅ ParetoDominant (4/4 sizes faster) |
 | `f32-counter-to-int` | 7.50x (N=100) | **11.43x** (N=1000) | 11.43x | ✅ ParetoDominant (4/4 sizes faster) |
 | `entry-vs-contains-insert` | 1.48x (N=100) | **1.57x** (N=10000) | 1.57x | ✅ ParetoDominant (4/4 sizes faster) |
+| `loop-fusion` | 1.46x (N=1000) | **1.56x** (N=1000000) | 1.56x | ✅ ParetoDominant (4/4 sizes faster) |
 | `collect-avoidance` | 2.27x (N=1000) | **2.95x** (N=100000) | 2.95x | ✅ ParetoDominant (4/4 sizes faster) |
 | `dyn-to-enum` | 2.88x (N=1000) | **2.50x** (N=100000) | 2.88x | ✅ ParetoDominant (3/3 sizes faster) |
 
@@ -113,13 +114,45 @@ item 1's "merge HashMap lookups" sub-item — a very common pattern that was
 previously not covered. The ~1.5× speedup is a genuine constant-factor
 improvement (eliminating one redundant hash + probe per key), not algorithmic.
 
-### Mixed (1/16) — scale-dependent
+`loop-fusion` wins ~1.5× because the buggy path iterates the data TWICE (once
+for `.sum()`, once for `.max()`) while the fixed path does both reductions in
+one pass. The compiler CANNOT fuse the two separate iterator consumers — each
+is an independent trait method call that consumes the iterator, and LLVM
+doesn't have a loop-fusion pass (it would need to prove aliasing + ordering
+constraints across two calls). The win is cache locality: at large N, the
+second reduction in the fused loop reads from L1 (data still hot from the
+first reduction), while the second pass in the buggy version re-reads from
+L2/L3 or RAM. This is checklist item 1's "merge loops" sub-item — the
+complement of `entry-vs-contains-insert` (which merges HashMap lookups in the
+same iteration) + `collect-avoidance` (which eliminates a `.collect()`
+intermediate that forces a second pass). Loop fusion is a distinct pattern:
+both passes are read-only consumers over the same slice, but the compiler
+can't merge them.
+
+### Investigation note: three candidate gaps tested, one verified
+
+This expansion tested three candidate patterns from the checklist:
+
+| Candidate | Checklist item | Verdict | Honest reason |
+|---|---|---|---|
+| **loop-fusion** (merge loops) | 1. Complexity | ✅ ParetoDominant (~1.5×) | Compiler can't fuse two separate iterator consumers; cache locality win at all N |
+| loop-invariant hoisting (compute once not N×M) | 8. Caching | ❌ ParetoDominated (0.88–1.02×) | **LLVM's LICM pass already hoists the call** — tested with `#[inline(never)]` + `expensive(k)` where k is loop-invariant: LLVM sees the function only depends on k, not on loop state, and hoists it despite no inlining. The manual hoist is sometimes SLOWER (register allocation interference). |
+| iter-to-index (use index arithmetic) | 5. Iterators | ❌ ParetoDominated (~1.00×) | **Compiler produces identical codegen** for `.zip().enumerate().map()` chains and direct index loops — tested zip+enumerate+map vs `for i in 0..n`: within noise at all N. LLVM lowers iterator chains to the same pointer-arithmetic loops as explicit indexing. |
+
+The empirical verification BEFORE corpus addition is the key defense: two
+of three candidates were honestly ParetoDominated (compiler already handles
+them) and were correctly excluded. Only the genuinely benchable pattern
+(loop fusion) was added. This mirrors the prior session's methodology
+(`entry-vs-contains-insert` + `branchless-conditional` were also verified
+before addition).
+
+### Mixed (1/17) — scale-dependent
 
 | Rule | Speedup range | Verdict | Honest reason |
 |---|---:|---|---|
 | `dedupe-hashset-vs-vec` | 0.64x–7.53x | ~ Mixed (2/4 Faster, 2/4 Slower) | HashSet allocation + hashing overhead exceeds the O(n²) cost at small N (≤500 elements, trivial comparison count). Wins clearly at N ≥ 1000 (up to 7.53x at N=5000). Suggest for dedup on collections known to exceed ~500 elements; for small dedup, the `Vec::contains` approach is fine. |
 
-### Pareto-dominated (2/16) — honest findings
+### Pareto-dominated (2/17) — honest findings
 
 | Rule | Speedup range | Verdict | Honest reason |
 |---|---:|---|---|
@@ -130,7 +163,7 @@ These are NOT bugs in the validator — they're exactly the kind of
 honest signal Proposal 001 caveat 3 predicted ("perf has no single
 ground truth — 'faster' depends on workload, hardware, input size").
 
-### Not benchable (4/20) — honest markings
+### Not benchable (4/21) — honest markings
 
 | Rule | Reason |
 |---|---|
@@ -171,8 +204,8 @@ is simpler, faster to compile, and sufficient for a Pareto verdict.
 
 **rust_perf was promoted to default-on 2026-08-13.** The GOAT gate (G1+G5)
 passed:
-- G1: all 16 benchable rules produce real measurements ✅
-- G5: 13/16 benchable rules are Pareto-dominant (majority) ✅
+- G1: all 17 benchable rules produce real measurements ✅
+- G5: 14/17 benchable rules are Pareto-dominant (majority) ✅
 
 The promotion follows the global AGENTS.md rule "promote to default if gain
 also demote loser":

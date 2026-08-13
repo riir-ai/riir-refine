@@ -12,7 +12,7 @@
 | File | Scope |
 |---|---|
 | [`heal_domain_trait.md`](heal_domain_trait.md) | `HealDomain` + `HealEntry` traits — the one new abstraction |
-| [`rust_perf.md`](rust_perf.md) | Phase 2: `RustPerfDomain` + `PerfRule` + 20-rule seed corpus + `PerfVerifier` (`cargo test`) |
+| [`rust_perf.md`](rust_perf.md) | Phase 2: `RustPerfDomain` + `PerfRule` + 21-rule seed corpus + `PerfVerifier` (`cargo test`) |
 | [`kernel_opt.md`](kernel_opt.md) | Phase 3: `KernelOptDomain` + `KernelRule` + `KernelExpertRouter` (`pick_domain`) + `KernelThermalRouter` (Plasma→Hot→Warm→Cold→Freeze) + `KernelVerifier` (stub) |
 | [`cross_domain_routing.md`](cross_domain_routing.md) | Why cross-domain auto-routing is NOT in scope (Proposal 001) |
 

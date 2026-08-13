@@ -8,9 +8,9 @@
 //! validator found ParetoDominated in the default config (Bench 013), `None`
 //! for unconditional wins + honestly NotBenchable rules.
 //!
-//! 20 entries across 11 categories (complexity 5, allocation 3, simd 3,
+//! 21 entries across 11 categories (complexity 6, allocation 3, simd 3,
 //! layout 2, concurrency 2, arithmetic 1, iterators 1, dispatch 1, caching 1,
-//! bevy 1, wasm 1). 16 are benchable (14 ParetoDominant + 2 ParetoDominated +
+//! bevy 1, wasm 1). 17 are benchable (14 ParetoDominant + 2 ParetoDominated +
 //! 1 Mixed); 4 are honestly NotBenchable.
 //!
 //! ## Bench specs (behind `rust_perf_bench`)
@@ -20,11 +20,12 @@
 //! `run_buggy` / `run_fixed` entry points. The bench validator generates a
 //! temp bin crate from the spec + runs a timing loop at multiple sizes.
 //!
-//! Currently benchable (16/20):
+//! Currently benchable (17/21):
 //! - `o1-lookup` (Vec scan vs HashMap lookup — clear O(n) vs O(1))
 //! - `bsearch-sorted-slice` (linear scan vs binary search — O(n) vs O(log n) on sorted data)
 //! - `dedupe-hashset-vs-vec` (Vec::contains loop vs HashSet collect — O(n²) vs O(n))
 //! - `entry-vs-contains-insert` (contains_key+insert vs entry API — merge HashMap lookups)
+//! - `loop-fusion` (two iterator passes vs one fused loop — cache locality, merge loops)
 //! - `static-str` (String alloc vs &'static str — allocation cost)
 //! - `simd-chunk` (scalar vs chunked loop — vectorization at large N)
 //! - `branchless-conditional` (if vs bool-as-usize multiply — vectorization + branch prediction)
@@ -40,7 +41,7 @@
 //! - `vec-with-capacity` (Vec::new() growth vs Vec::with_capacity — realloc cost)
 //! - `format-concat-loop` (format! concat in loop vs push_str — O(n²) vs O(n))
 //!
-//! Not benchable (4/20) — honest:
+//! Not benchable (4/21) — honest:
 //! - `layout-reorder` (struct size — deterministic `size_of`, not a runtime
 //!   microbench; the cache-utilization claim needs a specific access pattern)
 //! - `repr-u8-enum` (enum size — deterministic `size_of`, same class as
@@ -63,12 +64,12 @@ use crate::domains::rust_perf::{PerfRule, RustPerfDomain};
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 20 entries
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 21 entries
 /// covering the main `rust-optimize` skill categories (complexity, allocation,
 /// layout, concurrency, simd, arithmetic, iterators, dispatch, caching, bevy,
-/// wasm). Complexity is the deepest category (5 rules: 3 algorithmic + entry
-/// merge + branchless-via-vectorization); allocation has 3; simd has 3; layout
-/// + concurrency have 2; the rest have 1 each.
+/// wasm). Complexity is the deepest category (6 rules: 3 algorithmic + entry
+/// merge + loop fusion + branchless-via-vectorization); allocation has 3; simd
+/// has 3; layout + concurrency have 2; the rest have 1 each.
 #[must_use]
 #[allow(clippy::too_many_lines)] // seed corpus is a data table; length scales with rule count
 pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
@@ -424,6 +425,31 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
             context_notes: None,
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: Some(branchless_conditional_bench_spec()),
+        },
+        // ── complexity: two passes over same data → one fused pass ──────────
+        // Per the rust-optimize skill item 1: "merge loops". The buggy path
+        // iterates the data twice: once for `.sum()`, once for `.max()`. Each
+        // iterator consumer is a separate trait method call that independently
+        // consumes the iterator — the compiler CANNOT fuse them into a single
+        // pass (loop fusion is not a standard LLVM optimization pass; it would
+        // need to prove aliasing + ordering constraints across two calls).
+        // The fixed path does both reductions in one explicit loop — one
+        // cache pass, one set of loads. Bench 013: ParetoDominant 1.46–1.52×
+        // across all sizes (1K → 1M). The win is cache locality: the data is
+        // hot in L1 for the second reduction in the fused loop but cold for
+        // the second pass in the buggy version (at large N exceeding L1/L2).
+        // This is the complement of `entry-vs-contains-insert` (which merges
+        // HashMap lookups in the same iteration) — loop fusion merges
+        // iterations over the same collection.
+        PerfRule {
+            rule_id: "loop-fusion".to_string(),
+            name: "Two iterator passes over same data → one fused for loop (merge loops)".to_string(),
+            category: "complexity".to_string(),
+            buggy_code: "fn sum_max(data: &[u64]) -> (u64, u64) {\n    let sum: u64 = data.iter().copied().sum();\n    let max: u64 = data.iter().copied().max().unwrap_or(0);\n    (sum, max)\n}".to_string(),
+            fixed_code: "fn sum_max(data: &[u64]) -> (u64, u64) {\n    let mut sum = 0u64;\n    let mut max = 0u64;\n    for &x in data {\n        sum += x;\n        if x > max { max = x; }\n    }\n    (sum, max)\n}".to_string(),
+            context_notes: None,
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(loop_fusion_bench_spec()),
         },
     ])
 }
@@ -1090,6 +1116,58 @@ pub fn run_fixed(input: &Input) {
     }
 }
 
+/// Bench spec for `loop-fusion`: two iterator passes vs one fused loop.
+///
+/// The buggy path uses `.iter().copied().sum()` + `.iter().copied().max()`
+/// — two separate iterator consumers, each independently walking the slice.
+/// The compiler cannot fuse them into a single pass. The fixed path does
+/// both reductions in one explicit `for` loop — one cache pass. Bench 013:
+/// ParetoDominant ~1.5× across all sizes (1K → 1M). The win is cache
+/// locality at large N (second reduction in the fused loop reads from L1;
+/// second pass in the buggy version re-reads from L2/L3 or RAM).
+#[cfg(feature = "rust_perf_bench")]
+fn loop_fusion_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![1_000, 10_000, 100_000, 1_000_000],
+        harness: r#"
+mod buggy {
+pub fn sum_max(data: &[u64]) -> (u64, u64) {
+    let sum: u64 = data.iter().copied().sum();
+    let max: u64 = data.iter().copied().max().unwrap_or(0);
+    (sum, max)
+}
+}
+
+mod fixed {
+pub fn sum_max(data: &[u64]) -> (u64, u64) {
+    let mut sum = 0u64;
+    let mut max = 0u64;
+    for &x in data {
+        sum += x;
+        if x > max { max = x; }
+    }
+    (sum, max)
+}
+}
+
+pub fn make_input(n: usize) -> Vec<u64> {
+    (0..n).map(|i| (i as u64).wrapping_mul(31) % 1000).collect()
+}
+
+pub fn run_buggy(input: &[u64]) {
+    let r = buggy::sum_max(input);
+    std::hint::black_box(r);
+}
+
+pub fn run_fixed(input: &[u64]) {
+    let r = fixed::sum_max(input);
+    std::hint::black_box(r);
+}
+"#
+        .to_string(),
+    }
+}
+
 /// Bench spec for `precompute-table`: runtime popcount loop vs const table.
 #[cfg(feature = "rust_perf_bench")]
 fn precompute_table_bench_spec() -> BenchSpec {
@@ -1348,14 +1426,14 @@ mod tests {
     }
 
     #[test]
-    fn seed_corpus_has_twenty_entries_across_eleven_categories() {
+    fn seed_corpus_has_twenty_one_entries_across_eleven_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 20);
+        assert_eq!(corpus.entries.len(), 21);
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
         categories.dedup();
-        // 11 distinct categories. Complexity is the deepest (5 rules);
+        // 11 distinct categories. Complexity is the deepest (6 rules);
         // allocation + simd have 3 each; layout + concurrency have 2;
         // arithmetic, iterators, dispatch, caching, bevy, wasm have 1 each.
         assert_eq!(categories.len(), 11);
@@ -1426,10 +1504,10 @@ mod tests {
 
     #[cfg(feature = "rust_perf_bench")]
     #[test]
-    fn sixteen_rules_have_bench_specs() {
+    fn seventeen_rules_have_bench_specs() {
         let corpus = build_perf_seed_corpus();
         let with_spec = corpus.entries.iter().filter(|e| e.bench_spec.is_some()).count();
-        assert_eq!(with_spec, 16, "expected 16 benchable rules, got {with_spec}");
+        assert_eq!(with_spec, 17, "expected 17 benchable rules, got {with_spec}");
     }
 
     #[cfg(feature = "rust_perf_bench")]
@@ -1469,18 +1547,18 @@ mod tests {
         assert!(annotated.contains(&"dedupe-hashset-vs-vec"));
     }
 
-    /// The 17 non-annotated rules (13 ParetoDominant + 4 NotBenchable) must
+    /// The 18 non-annotated rules (14 ParetoDominant + 4 NotBenchable) must
     /// have `context_notes: None` — they are either unconditional wins or
     /// honestly unmeasurable.
     #[test]
-    fn seventeen_rules_have_no_context_notes() {
+    fn eighteen_rules_have_no_context_notes() {
         let corpus = build_perf_seed_corpus();
         let unannotated = corpus
             .entries
             .iter()
             .filter(|e| e.context_notes.is_none())
             .count();
-        assert_eq!(unannotated, 17, "expected 17 unannotated rules");
+        assert_eq!(unannotated, 18, "expected 18 unannotated rules");
     }
 
     /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -1534,9 +1612,9 @@ mod tests {
             );
         }
 
-        // The 17 unannotated rules must return None from the trait too.
+        // The 18 unannotated rules must return None from the trait too.
         let unannotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_none()).collect();
-        assert_eq!(unannotated.len(), 17, "expected 17 unannotated rules");
+        assert_eq!(unannotated.len(), 18, "expected 18 unannotated rules");
         for rule in &unannotated {
             assert!(HealEntry::context_notes(*rule).is_none(), "{} should have no context_notes", rule.rule_id);
         }

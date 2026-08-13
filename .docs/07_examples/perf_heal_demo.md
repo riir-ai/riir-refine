@@ -8,10 +8,10 @@
 
 The `rust_perf` domain end-to-end (Plan 001 Phase 2):
 
-1. **Build corpus**: `build_perf_seed_corpus()` → 20 `PerfRule` entries across
-   11 skill-checklist categories (complexity is deepest with 5 rules;
+1. **Build corpus**: `build_perf_seed_corpus()` → 21 `PerfRule` entries across
+   11 skill-checklist categories (complexity is deepest with 6 rules;
    allocation + simd have 3 each).
-2. **List rules**: prints all 20 rules grouped by category.
+2. **List rules**: prints all 21 rules grouped by category.
 3. **Validate**: calls `RustPerfDomain::validate()` on each fixed pattern.
    - Without `rust_perf_verify`: L2 pruner syntax check (`PerfParseVerdict`)
    - With `rust_perf_verify`: `cargo test` re-run (`PerfVerifyResult` with
@@ -23,7 +23,7 @@ The `rust_perf` domain end-to-end (Plan 001 Phase 2):
 6. **Optional cargo test** (with `rust_perf_verify`): runs `PerfVerifier` on
    the first rule, prints `ran`/`test_passes`/`passed`/`failed`.
 
-## The 20 seed rules
+## The 21 seed rules
 
 | Category | Rule | Pattern |
 |---|---|---|
@@ -31,6 +31,7 @@ The `rust_perf` domain end-to-end (Plan 001 Phase 2):
 | complexity | `bsearch-sorted-slice` | O(n) `.contains()` on sorted → O(log n) `binary_search()` |
 | complexity | `dedupe-hashset-vs-vec` | O(n²) `Vec::contains` dedup loop → O(n) `HashSet` collect |
 | complexity | `entry-vs-contains-insert` | `contains_key()` + `insert()` → `entry().or_insert()` (merge HashMap lookups) |
+| complexity | `loop-fusion` | Two iterator passes over same data → one fused `for` loop (merge loops) |
 | allocation | `static-str` | `String` → `&'static str` for constant labels |
 | allocation | `vec-with-capacity` | `Vec::new()` + push → `Vec::with_capacity(n)` |
 | allocation | `format-concat-loop` | `format!("{s}{x}")` in loop → `String::push_str` |
@@ -53,7 +54,7 @@ The `rust_perf` domain end-to-end (Plan 001 Phase 2):
 ```text
 === rust_perf domain — Phase 2 scaffold demo ===
 
-Seed corpus: 20 entries
+Seed corpus: 21 entries
 Commitment (BLAKE3): <updated on rebuild — see `build_perf_seed_corpus()`>
 
 Rules by category:
