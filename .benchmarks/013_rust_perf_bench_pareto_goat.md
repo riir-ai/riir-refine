@@ -27,15 +27,15 @@ Rules without a `BenchSpec` are honestly marked `NotBenchable`.
 
 | Gate | What | Target | Status |
 |---|---|---|---|
-| G1 (correctness) | benchable rules produce real measurements (ran=true, non-empty results) | all 18 benchable rules run | ✅ PASS (18/18 ran) |
+| G1 (correctness) | benchable rules produce real measurements (ran=true, non-empty results) | all 30 benchable rules run | ✅ PASS (30/30 ran) |
 | G2 (latency) | per-rule latency (temp crate compile + bench subprocess) | documented, not hot-path | ~5-15s/rule (compile-dominated) |
 | G3 (no-regression) | default features (no `rust_perf_bench`) still pass | default `cargo test --lib` green | ✅ PASS (91 default tests) |
 | G4 (alloc-free) | N/A — subprocess-based validator | N/A | ✅ PASS (documented N/A) |
-| G5 (Pareto verdict) | majority of benchable rules are Pareto-dominant | `pareto_dominant * 2 > benchable` | ✅ PASS (15/18 = majority) |
+| G5 (Pareto verdict) | majority of benchable rules are Pareto-dominant | `pareto_dominant * 2 > benchable` | ✅ PASS (27/30 = majority) |
 
-## Measured results (27 benchable, 4 not-benchable)
+## Measured results (30 benchable, 4 not-benchable)
 
-### Pareto-dominant (24/27) — the pattern works
+### Pareto-dominant (27/30) — the pattern works
 
 | Rule | N=small | N=large | Peak speedup | Verdict |
 |---|---:|---:|---:|---|
@@ -63,6 +63,9 @@ Rules without a `BenchSpec` are honestly marked `NotBenchable`.
 | `avoid-clone` | 2.97x (N=100) | **1.48x** (N=100000) | 2.97x | ✅ ParetoDominant (4/4 sizes faster) |
 | `box-str-immutable` | 1.10x (N=1000) | **1.32x** (N=100000) | 1.32x | ✅ ParetoDominant (3/3 sizes faster) |
 | `reuse-allocation-clear` | 4.04x (N=100) | **0.87x** (N=100000) | 4.04x | ✅ ParetoDominant (3/4 faster) — ⚠️ loses at N=100K (L2 cache pressure), carries `context_notes` |
+| `box-avoid` | 37.10x (N=1000) | **9.60x** (N=100000) | 42.31x | ✅ ParetoDominant (3/3 sizes faster) — heap alloc per element dwarfs the data work |
+| `smallvec-stack` | 27.00x (N=1) | **75.00x** (N=8) | 75.00x | ✅ ParetoDominant (3/3 sizes faster) — heap alloc on every call dominates at small N |
+| `buffered-io` | 99.17x (N=10000) | **131.89x** (N=100000) | 131.89x | ✅ ParetoDominant (2/2 sizes faster) — syscall per byte vs 8KB batched BufReader |
 
 The `o1-lookup` N=10 SLOWER (0.60x) is small-N noise — HashMap has
 setup overhead that dominates at 10 elements. The O(n)→O(1) win is
@@ -224,12 +227,14 @@ N=100,000) because more elements fit per cache line. This is distinct from
 `static-str` (String → &'static str for literals); `box-str-immutable` is
 for owned immutable collections where you can't use a literal.
 
-### Investigation note: nineteen candidate patterns tested, eleven verified
+### Investigation note: twenty-eight candidate patterns tested, fourteen verified
 
-This expansion tested nineteen candidate patterns across six sessions (6 from
+This expansion tested twenty-eight candidate patterns across seven sessions (6 from
 the `rust-optimize` skill checklist gap audit + 5 from nnethercote/perf-book
 chapter distillation + 4 from rustc-hash/bevy real-world pattern mining + 4
-from Mara Bos / MS Pragmatic / reintech source distillation):
+from Mara Bos / MS Pragmatic / reintech source distillation + 6 from Plan 002
+Phase 1 batch 3 concurrency/allocation/IO distillation + 3 from Plan 002 Phase 1
+batch 4 inline/IO/SmallVec distillation):
 
 | Candidate | Source | Verdict | Honest reason |
 |---|---|---|---|
@@ -244,6 +249,15 @@ from Mara Bos / MS Pragmatic / reintech source distillation):
 | **avoid-clone** (borrow vs clone) | Plan 002 T-avoid-clone | ✅ ParetoDominant (1.3–3.0×) | `fn(data: Vec<T>)` clones on call; `fn(data: &[T])` borrows. Compiler can't elide clone (heap alloc + OOM panic = opaque) |
 | **box-str-immutable** (Vec<String> → Vec<Box<str>>) | Plan 002 T-heap-box-str | ✅ ParetoDominant (1.1–1.3×) | String is 3 words (ptr, len, cap); Box<str> is 2. Saves 8 bytes/element → better cache density at scale |
 | **reuse-allocation-clear** (scratch buffer reuse) | Plan 002 T-heap-reuse-clear | ~ Mixed (3/4 Faster) | Wins at N ≤ 10K (up to 5.97×); loses at N=100K (reused buffer exceeds L2 cache). Context-dependent |
+| **box-avoid** (Vec<Box<T>> → Vec<T>) | Plan 002 T-box-avoid | ✅ ParetoDominant (9.6–42×) | `Box::new()` heap-allocates every element; `Vec<T>` stores inline. The heap alloc dominates at all sizes |
+| **smallvec-stack** (Vec → stack array for ≤8) | Plan 002 T-heap-smallvec | ✅ ParetoDominant (27–75×) | `Vec::new()` heap-allocates even for 0 elements; stack array avoids heap entirely for the common small case |
+| **buffered-io** (File::read → BufReader) | Plan 002 T-io-buffered | ✅ ParetoDominant (99–132×) | Byte-by-byte `read()` issues a syscall per byte; `BufReader` batches into 8KB buffer |
+| cas-to-fetch (CAS loop → fetch_add) | Plan 002 T-cas-to-fetch | ❌ ParetoDominated/Tie (1.07–1.09×) | **Single-threaded CAS rarely retries** — the overhead is just the extra load instruction. Win needs multi-threaded contention, which the harness doesn't exercise |
+| rwlock-read-heavy (Mutex → RwLock) | Plan 002 T-rwlock-read-heavy | ❌ ParetoDominated (0.94–0.96×, RwLock SLOWER) | **RwLock has MORE per-op overhead** than Mutex (reader count tracking). Win only materializes under TRUE parallelism (multiple threads reading concurrently); sequential reads show no benefit |
+| object-pool (alloc+drop loop → pool reuse) | Plan 002 T-object-pool | ❌ Duplicate of `reuse-allocation-clear` | Same underlying pattern (clear vs alloc). The existing rule covers it with the Mixed annotation. Adding would inflate count without adding insight |
+| ordering-relaxed (SeqCst → Relaxed) | Plan 002 T-ordering-relaxed | ❌ Tie (1.00–1.02×) | **No difference on ARM64** (M3 Max) — both SeqCst and Relaxed compile to LDAR/STAR. The cost difference is x86-only (MFENCE/LFENCE for SeqCst stores) |
+| scope-threads (Arc+spawn → thread::scope) | Plan 002 T-scope-threads | ❌ Tie (0.98–1.01×) | **The Arc clone cost (~10ns) is negligible vs thread spawn (~7µs)**. The win from `thread::scope` is architectural (no Arc needed, borrow checker safety), not perf |
+| inline-hot-fn (#[inline(never)] → #[inline(always)]) | Plan 002 T-inline | ❌ ParetoDominated (0.73–0.75×, inline SLOWER) | **`#[inline(always)]` causes code bloat** that hurts instruction cache. With proper `black_box(i)` to prevent constant folding, the inlined version is ~25% SLOWER. The perf-book explicitly warns against `#[inline(always)]` — LLVM's inlining heuristics are better than human annotation |
 | loop-invariant hoisting | checklist item 8 | ❌ ParetoDominated (0.88–1.02×) | **LLVM's LICM pass already hoists the call** — tested with `#[inline(never)]` + `expensive(k)` where k is loop-invariant: LLVM sees the function only depends on k, not on loop state, and hoists it despite no inlining |
 | iter-to-index (use index arithmetic) | checklist item 5 | ❌ ParetoDominated (~1.00×) | **Compiler produces identical codegen** for `.zip().enumerate().map()` chains and direct index loops |
 | mem::replace vs clone+assign | bonus (not in checklist) | ❌ Rejected — bench-design mismatch | ParetoDominant when isolated but the mutation pattern doesn't fit the read-only corpus bench framework |
@@ -253,11 +267,11 @@ from Mara Bos / MS Pragmatic / reintech source distillation):
 | array vs Vec (fixed-size) | real-world pattern | ❌ Tie (~1.01× at N=64) | **Compiler vectorizes both equally** — the array's stack allocation advantage is negligible for sum loops. Small win (1.23×) at N=16 is within noise at the ns level. REJECT — not a consistent, clear win |
 | soa-vs-aos (struct of arrays) | Plan 002 T-soa-layout | ❌ ParetoDominated/Tie (~0.86–1.01×) | **AoS cache utilization is already good for 6-field structs** — SoA benefit only materializes for much wider structs (16+ fields). At N=100K SoA was actually SLOWER (0.86×) |
 
-The empirical verification BEFORE corpus addition is the key defense: eight
-of nineteen candidates were honestly rejected (compiler already handles them,
-or bench-design mismatch, or ParetoDominated), and eleven were added. Only the
-genuinely benchable patterns passed both the ParetoDominance gate AND the
-bench-design fitness check.
+The empirical verification BEFORE corpus addition is the key defense: fourteen
+of twenty-eight candidates were honestly rejected (compiler already handles them,
+or bench-design mismatch, or ParetoDominated, or duplicate), and fourteen were
+added. Only the genuinely benchable patterns passed both the ParetoDominance gate
+AND the bench-design fitness check.
 
 **The perf-book distillation lesson:** nnethercote/perf-book is the canonical
 Rust performance reference, but 3 of 6 patterns tested from it were already
@@ -266,13 +280,13 @@ elision). The perf-book documents patterns that WERE perf wins in specific
 historical contexts (older rustc versions, specific code shapes) but LLVM has
 since learned to handle. The empirical-before-add discipline catches these.
 
-### Mixed (1/27) — scale-dependent
+### Mixed (1/30) — scale-dependent
 
 | Rule | Speedup range | Verdict | Honest reason |
 |---|---:|---|---|
 | `dedupe-hashset-vs-vec` | 0.64x–7.53x | ~ Mixed (2/4 Faster, 2/4 Slower) | HashSet allocation + hashing overhead exceeds the O(n²) cost at small N (≤500 elements, trivial comparison count). Wins clearly at N ≥ 1000 (up to 7.53x at N=5000). Suggest for dedup on collections known to exceed ~500 elements; for small dedup, the `Vec::contains` approach is fine. |
 
-### Pareto-dominated (2/27) — honest findings
+### Pareto-dominated (2/30) — honest findings
 
 | Rule | Speedup range | Verdict | Honest reason |
 |---|---:|---|---|
@@ -283,7 +297,7 @@ These are NOT bugs in the validator — they're exactly the kind of
 honest signal Proposal 001 caveat 3 predicted ("perf has no single
 ground truth — 'faster' depends on workload, hardware, input size").
 
-### Not benchable (4/31) — honest markings
+### Not benchable (4/34) — honest markings
 
 | Rule | Reason |
 |---|---|
@@ -324,8 +338,8 @@ is simpler, faster to compile, and sufficient for a Pareto verdict.
 
 **rust_perf was promoted to default-on 2026-08-13.** The GOAT gate (G1+G5)
 passed:
-- G1: all 27 benchable rules produce real measurements ✅
-- G5: 24/27 benchable rules are Pareto-dominant (majority) ✅
+- G1: all 30 benchable rules produce real measurements ✅
+- G5: 27/30 benchable rules are Pareto-dominant (majority) ✅
 
 The promotion follows the global AGENTS.md rule "promote to default if gain
 also demote loser":

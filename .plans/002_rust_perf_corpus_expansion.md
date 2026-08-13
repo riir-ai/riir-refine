@@ -327,20 +327,20 @@ For each `- [ ]` task marked **Benchable** above, the workflow is:
 
 - [x] **T-hash** — `fast-hasher` (FxHash vs SipHash on int keys) — DONE 2026-08-13, ParetoDominant 3.3-5.8×
 - [x] **T-heap-box-str** — `box-str-immutable` — DONE 2026-08-13, ParetoDominant 1.1-1.3×
-- [ ] **T-heap-smallvec** — `smallvec-stack` (Vec → SmallVec for ≤8 typical)
+- [x] **T-heap-smallvec** — `smallvec-stack` — DONE 2026-08-13, ParetoDominant 27-75× (stack array for ≤8 typical)
 - [x] **T-heap-reuse-clear** — `reuse-allocation-clear` — DONE 2026-08-13, Mixed (3/4 Faster, carries context_notes)
-- [ ] **T-inline** — `inline-hot-fn` (likely reject — LLVM inlines within-crate)
-- [ ] **T-io-buffered** — `buffered-io` (File → BufReader; needs temp file in bench)
+- [-] **T-inline** — `inline-hot-fn` — REJECTED 2026-08-13: ParetoDominated (0.73-0.75×, inline SLOWER). `#[inline(always)]` causes code bloat that hurts i-cache. With proper black_box to prevent constant folding, the inlined version is ~25% slower. LLVM's heuristics are better than human annotation.
+- [x] **T-io-buffered** — `buffered-io` — DONE 2026-08-13, ParetoDominant 99-132× (BufReader 8KB batches vs syscall per byte)
 - [ ] **T-rayon** — `rayon-par-iter` (needs rayon dep + >5µs/item workload)
-- [ ] **T-box-avoid** — `avoid-unnecessary-box` (Box<small T> → T)
-- [ ] **T-scope-threads** — `scoped-threads` (Arc+spawn → thread::scope)
-- [ ] **T-rwlock-read-heavy** — `rwlock-vs-mutex` (read-heavy Mutex → RwLock; regime-gated)
-- [ ] **T-cas-to-fetch** — `cas-loop-to-fetch-op` (CAS loop → fetch_add)
-- [ ] **T-ordering-relaxed** — `ordering-relaxed-where-safe` (SeqCst → Relaxed; ARM fence cost)
+- [x] **T-box-avoid** — `avoid-unnecessary-box` — DONE 2026-08-13, ParetoDominant 9.6-42× (heap alloc per element)
+- [-] **T-scope-threads** — `scoped-threads` — REJECTED 2026-08-13: Tie (0.98-1.01×). Arc clone cost (~10ns) is negligible vs thread spawn (~7µs). The win is architectural (no Arc needed, borrow checker safety), not perf.
+- [-] **T-rwlock-read-heavy** — `rwlock-vs-mutex` — REJECTED 2026-08-13: ParetoDominated (0.94-0.96×, RwLock SLOWER). RwLock has more per-op overhead than Mutex. Win only materializes under TRUE parallelism (multiple concurrent readers), which the sequential harness doesn't exercise.
+- [-] **T-cas-to-fetch** — `cas-loop-to-fetch-op` — REJECTED 2026-08-13: Tie (1.07-1.09×). Single-threaded CAS rarely retries (no contention). The win needs multi-threaded contention, which the harness doesn't exercise.
+- [-] **T-ordering-relaxed** — `ordering-relaxed-where-safe` — REJECTED 2026-08-13: Tie (1.00-1.02×). No difference on ARM64 (M3 Max) — both SeqCst and Relaxed compile to LDAR/STAR. The cost difference is x86-only.
 - [ ] **T-park-vs-spin** — `parking-vs-busy-spin` (spin → thread::park; CPU-time metric)
 - [ ] **T-log-no-format** — `log-no-format-in-hot-loop` (format! in loop → structured args)
 - [ ] **T-lift-hot-field** — `lift-hot-field-from-arc` (denormalize hot bool out of Arc chain)
-- [ ] **T-object-pool** — `object-pool-reuse` (alloc+drop loop → pool acquire/release)
+- [-] **T-object-pool** — `object-pool-reuse` — REJECTED 2026-08-13: Duplicate of `reuse-allocation-clear`. Same underlying pattern (clear vs alloc). Adding would inflate count without adding insight.
 - [-] **T-soa-layout** — `soa-vs-aos` — REJECTED 2026-08-13: ParetoDominated/Tie (0.86-1.01×). AoS cache utilization already good for 6-field structs.
 - [x] **T-avoid-clone** — `avoid-unnecessary-clone` — DONE 2026-08-13, ParetoDominant 1.3-3.0×
   - **Additional rules shipped outside this plan's candidate list (rustc/bevy pattern mining):**

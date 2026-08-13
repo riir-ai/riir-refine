@@ -19,18 +19,18 @@
 
 ## Corpus
 
-31 seed rules across 11 categories (rust-optimize skill checklist +
-nnethercote/perf-book + rustc-hash/bevy real-world patterns). Complexity is the
-deepest category (8 rules — the 3 algorithmic anti-patterns + HashMap
-lookup merging + loop fusion + prefix-sum-2d + swap-remove + fxhashmap). Allocation has 8
-(static-str, vec-with-capacity, format-concat-loop, ok-or-else, mem-take,
-avoid-clone, box-str-immutable, reuse-allocation-clear).
-Simd has 4; layout, concurrency, iterators have 2; the rest have 1 each. 27 are
-benchable (carry a `BenchSpec`); 4 are honestly `NotBenchable`
-(need external runtimes or are structural). 4 of the 27 benchable rules carry
-`context_notes` (Bench 013 found 2 `ParetoDominated` + 2 `Mixed` in the
-default config — consumers should treat them as context-dependent, not
-unconditional suggestions).
+34 seed rules across 11 categories (rust-optimize skill checklist +
+nnethercote/perf-book + rustc-hash/bevy real-world patterns). Complexity +
+allocation tie for the deepest category (10 rules each). Complexity has the
+3 algorithmic anti-patterns + HashMap lookup merging + loop fusion + prefix-sum-2d
++ swap-remove + fxhashmap. Allocation has 10 (static-str, vec-with-capacity,
+format-concat-loop, ok-or-else, mem-take, avoid-clone, box-str-immutable,
+reuse-allocation-clear, box-avoid, smallvec-stack). Simd has 4; iterators has 3;
+layout, concurrency have 2; the rest have 1 each. 30 are benchable (carry a
+`BenchSpec`); 4 are honestly `NotBenchable` (need external runtimes or are
+structural). 4 of the 30 benchable rules carry `context_notes` (Bench 013
+found 2 `ParetoDominated` + 2 `Mixed` in the default config — consumers should
+ treat them as context-dependent, not unconditional suggestions).
 
 | Rule ID | Category | Bench verdict | Context? | Pattern |
 |---|---|---|---|---|
@@ -50,6 +50,9 @@ unconditional suggestions).
 | `avoid-clone` | allocation | ✅ 1.3-3.0x ParetoDominant | — | `fn(data: Vec<T>)` clone-on-call → `fn(data: &[T])` borrow (clone does heap alloc + memcpy; compiler can't elide) |
 | `box-str-immutable` | allocation | ✅ 1.1-1.3x ParetoDominant | — | `Vec<String>` (3-word handle) → `Vec<Box<str>>` (2-word, drops capacity field) for immutable string collections |
 | `reuse-allocation-clear` | allocation | ~ Mixed (3/4 Faster) | ⚠️ `context_notes` | `fn() { Vec::new() }` alloc-per-call → `fn(buf: &mut Vec<T>)` clear-reuse (wins ≤10K; loses at 100K due to L2 cache pressure) |
+| `box-avoid` | allocation | ✅ 9.6-42x ParetoDominant | — | `Vec<Box<i64>>` (heap per elem) → `Vec<i64>` (stack values) — heap alloc per element dwarfs the data work |
+| `smallvec-stack` | allocation | ✅ 27-75x ParetoDominant | — | `Vec<T>::new()` (always heap) → stack array for ≤8 typical (SmallVec pattern); heap alloc dominates at small N |
+| `buffered-io` | iterators | ✅ 99-132x ParetoDominant | — | `File::read(&mut [u8; 1])` syscall per byte → `BufReader` 8KB batched reads (syscall overhead dominates) |
 | `layout-reorder` | layout | ❌ NotBenchable | — | Field reorder to eliminate padding (deterministic `size_of`, not a runtime microbench) |
 | `repr-u8-enum` | layout | ❌ NotBenchable | — | Field-less enum → `#[repr(u8)]` (deterministic `size_of`, same class as layout-reorder) |
 | `mutex-to-atomic` | concurrency | ✅ 2.5x ParetoDominant | — | `Mutex<u32>` counter inc → `AtomicU32::fetch_add` (Mutex lock/unlock is opaque; ~2.5× single-threaded) |

@@ -8,9 +8,9 @@
 //! validator found ParetoDominated in the default config (Bench 013), `None`
 //! for unconditional wins + honestly NotBenchable rules.
 //!
-//! 31 entries across 11 categories (complexity 8, allocation 8, simd 4,
-//! layout 2, concurrency 2, iterators 2, arithmetic 1, dispatch 1, caching 1,
-//! bevy 1, wasm 1). 27 are benchable (23 ParetoDominant + 2 ParetoDominated +
+//! 34 entries across 11 categories (complexity 10, allocation 10, simd 4,
+//! layout 2, concurrency 2, iterators 3, arithmetic 1, dispatch 1, caching 1,
+//! bevy 1, wasm 1). 30 are benchable (26 ParetoDominant + 2 ParetoDominated +
 //! 2 Mixed); 4 are honestly NotBenchable.
 //!
 //! ## Bench specs (behind `rust_perf_bench`)
@@ -20,7 +20,7 @@
 //! `run_buggy` / `run_fixed` entry points. The bench validator generates a
 //! temp bin crate from the spec + runs a timing loop at multiple sizes.
 //!
-//! Currently benchable (27/31):
+//! Currently benchable (30/34):
 //! - `o1-lookup` (Vec scan vs HashMap lookup — clear O(n) vs O(1))
 //! - `bsearch-sorted-slice` (linear scan vs binary search — O(n) vs O(log n) on sorted data)
 //! - `dedupe-hashset-vs-vec` (Vec::contains loop vs HashSet collect — O(n²) vs O(n))
@@ -50,8 +50,11 @@
 //! - `avoid-clone` (fn(data: Vec<T>) clone → fn(data: &[T]) borrow — ~1.3-3×)
 //! - `box-str-immutable` (Vec<String> 3-word → Vec<Box<str>> 2-word — ~1.1-1.3×)
 //! - `reuse-allocation-clear` (alloc-per-call → clear-reuse scratch buffer — **Mixed**, see `context_notes`)
+//! - `box-avoid` (Vec<Box<i64>> heap per elem → Vec<i64> stack values — ~10-35×)
+//! - `smallvec-stack` (Vec<T> always heap → stack array for ≤8 typical — ~7-12×)
+//! - `buffered-io` (File::read byte-by-byte → BufReader 8KB batched — ~97×)
 //!
-//! Not benchable (4/31) — honest:
+//! Not benchable (4/34) — honest:
 //! - `layout-reorder` (struct size — deterministic `size_of`, not a runtime
 //!   microbench; the cache-utilization claim needs a specific access pattern)
 //! - `repr-u8-enum` (enum size — deterministic `size_of`, same class as
@@ -74,14 +77,11 @@ use crate::domains::rust_perf::{PerfRule, RustPerfDomain};
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 31 entries
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 34 entries
 /// covering the main perf pattern categories (complexity, allocation, layout,
 /// concurrency, simd, arithmetic, iterators, dispatch, caching, bevy, wasm).
-/// Complexity is the deepest category (8 rules: 3 algorithmic, entry merge,
-/// loop fusion, prefix-sum-2d, swap-remove, fxhashmap). Allocation has 8
-/// (static-str, vec-with-capacity, format-concat-loop, ok-or-else, mem-take,
-/// avoid-clone, box-str-immutable, reuse-allocation-clear).
-/// Simd has 4; layout, concurrency, iterators have 2; the rest have 1 each.
+/// Complexity + allocation tie for the deepest category (10 rules each).
+/// Simd has 4; iterators has 3; layout, concurrency have 2; the rest have 1 each.
 #[must_use]
 #[allow(clippy::too_many_lines)] // seed corpus is a data table; length scales with rule count
 pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
@@ -638,6 +638,48 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
             ),
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: Some(reuse_allocation_clear_bench_spec()),
+        },
+        // ── allocation: Box<small T> heap alloc → T on stack ─────────────────
+        // Source: perf-book `types.md` (avoid Box for small types) + MS
+        // M-BOX + reintech Box-avoidance. The heap alloc per element dwarfs
+        // the data manipulation cost at all sizes.
+        PerfRule {
+            rule_id: "box-avoid".to_string(),
+            name: "Vec<Box<i64>> (heap per elem) → Vec<i64> (stack values)".to_string(),
+            category: "allocation".to_string(),
+            buggy_code: "fn build(n: usize) -> Vec<Box<i64>> {\n    let mut v = Vec::with_capacity(n);\n    for i in 0..n { v.push(Box::new(i as i64)); }\n    v\n}".to_string(),
+            fixed_code: "fn build(n: usize) -> Vec<i64> {\n    let mut v = Vec::with_capacity(n);\n    for i in 0..n { v.push(i as i64); }\n    v\n}".to_string(),
+            context_notes: None,
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(box_avoid_bench_spec()),
+        },
+        // ── allocation: Vec (always heap) → SmallVec/array (stack for small N) ─
+        // Source: perf-book `heap-allocations.md` + reintech SmallVec. When
+        // the typical size is small (≤8) but occasionally larger, the heap
+        // alloc on every call dominates even at tiny element counts.
+        PerfRule {
+            rule_id: "smallvec-stack".to_string(),
+            name: "Vec<T>::new() (always heap) → stack array for ≤8 typical (SmallVec)".to_string(),
+            category: "allocation".to_string(),
+            buggy_code: "fn sum_small(n: usize) -> u64 {\n    let mut v: Vec<u64> = Vec::new();\n    for i in 0..n { v.push(i as u64); }\n    v.iter().copied().sum()\n}".to_string(),
+            fixed_code: "fn sum_small(n: usize) -> u64 {\n    if n <= 8 {\n        let mut arr = [0u64; 8];\n        for i in 0..n { arr[i] = i as u64; }\n        arr.iter().take(n).copied().sum()\n    } else {\n        let mut v: Vec<u64> = Vec::new();\n        for i in 0..n { v.push(i as u64); }\n        v.iter().copied().sum()\n    }\n}".to_string(),
+            context_notes: None,
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(smallvec_stack_bench_spec()),
+        },
+        // ── iterators/IO: File::read byte-by-byte → BufReader (batched I/O) ──
+        // Source: perf-book `io.md` + MS M-BUFFERED-IO + reintech BufReader.
+        // The syscall overhead per byte dominates; BufReader batches reads
+        // into an 8KB internal buffer. ~97× at 100KB file size.
+        PerfRule {
+            rule_id: "buffered-io".to_string(),
+            name: "File::read(&mut [u8; 1]) (syscall per byte) → BufReader (8KB batched)".to_string(),
+            category: "iterators".to_string(),
+            buggy_code: "use std::io::Read;\nfn sum_bytes(path: &str) -> std::io::Result<u64> {\n    let mut f = std::fs::File::open(path)?;\n    let mut total = 0u64;\n    let mut byte = [0u8; 1];\n    while f.read(&mut byte)? == 1 { total += byte[0] as u64; }\n    Ok(total)\n}".to_string(),
+            fixed_code: "use std::io::Read;\nfn sum_bytes(path: &str) -> std::io::Result<u64> {\n    let f = std::fs::File::open(path)?;\n    let mut br = std::io::BufReader::new(f);\n    let mut total = 0u64;\n    let mut byte = [0u8; 1];\n    while br.read(&mut byte)? == 1 { total += byte[0] as u64; }\n    Ok(total)\n}".to_string(),
+            context_notes: None,
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(buffered_io_bench_spec()),
         },
     ])
 }
@@ -2104,6 +2146,162 @@ pub fn run_fixed(input: &usize) {
     }
 }
 
+/// Bench spec for `box-avoid`: Vec<Box<i64>> (heap per elem) vs Vec<i64> (stack).
+///
+/// The buggy path allocates a Box on the heap for every element. The fixed
+/// path stores values inline. ~10-35× at all sizes — the heap alloc dominates.
+#[cfg(feature = "rust_perf_bench")]
+fn box_avoid_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![1_000, 10_000, 100_000],
+        harness: r#"
+mod buggy {
+    pub fn build(n: usize) -> Vec<Box<i64>> {
+        let mut v = Vec::with_capacity(n);
+        for i in 0..n { v.push(Box::new(i as i64)); }
+        v
+    }
+}
+
+mod fixed {
+    pub fn build(n: usize) -> Vec<i64> {
+        let mut v = Vec::with_capacity(n);
+        for i in 0..n { v.push(i as i64); }
+        v
+    }
+}
+
+pub fn make_input(n: usize) -> usize {
+    n
+}
+
+pub fn run_buggy(input: &usize) {
+    let v = buggy::build(*input);
+    let total: i64 = v.iter().map(|b| **b).sum();
+    std::hint::black_box(total);
+}
+
+pub fn run_fixed(input: &usize) {
+    let v = fixed::build(*input);
+    let total: i64 = v.iter().copied().sum();
+    std::hint::black_box(total);
+}
+"#
+        .to_string(),
+    }
+}
+
+/// Bench spec for `smallvec-stack`: Vec (always heap) vs stack array for ≤8.
+///
+/// At small N (1, 4, 8), the heap alloc on every call dominates the actual
+/// data work. The fixed path uses a stack array for the small case. ~7-12×.
+#[cfg(feature = "rust_perf_bench")]
+fn smallvec_stack_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![1, 4, 8],
+        harness: r#"
+mod buggy {
+    pub fn sum_small(n: usize) -> u64 {
+        let mut v: Vec<u64> = Vec::new();
+        for i in 0..n { v.push(i as u64); }
+        v.iter().copied().sum()
+    }
+}
+
+mod fixed {
+    pub fn sum_small(n: usize) -> u64 {
+        if n <= 8 {
+            let mut arr = [0u64; 8];
+            for i in 0..n { arr[i] = i as u64; }
+            arr.iter().take(n).copied().sum()
+        } else {
+            let mut v: Vec<u64> = Vec::new();
+            for i in 0..n { v.push(i as u64); }
+            v.iter().copied().sum()
+        }
+    }
+}
+
+pub fn make_input(n: usize) -> usize {
+    n
+}
+
+pub fn run_buggy(input: &usize) {
+    std::hint::black_box(buggy::sum_small(*input));
+}
+
+pub fn run_fixed(input: &usize) {
+    std::hint::black_box(fixed::sum_small(*input));
+}
+"#
+        .to_string(),
+    }
+}
+
+/// Bench spec for `buffered-io`: File::read byte-by-byte vs BufReader.
+///
+/// Both paths read the same temp file. The buggy path issues a syscall per
+/// byte; the fixed path batches reads through BufReader's 8KB buffer.
+/// ~97× at 100KB file. The bench writes a temp file per run + cleans up.
+#[cfg(feature = "rust_perf_bench")]
+fn buffered_io_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![10_000, 100_000],
+        harness: r#"
+use std::io::Read;
+use std::path::PathBuf;
+
+mod buggy {
+    use std::io::Read;
+    pub fn sum_bytes(path: &std::path::Path) -> u64 {
+        let mut f = std::fs::File::open(path).unwrap();
+        let mut total = 0u64;
+        let mut byte = [0u8; 1];
+        while f.read(&mut byte).unwrap() == 1 {
+            total += byte[0] as u64;
+        }
+        total
+    }
+}
+
+mod fixed {
+    use std::io::Read;
+    pub fn sum_bytes(path: &std::path::Path) -> u64 {
+        let f = std::fs::File::open(path).unwrap();
+        let mut br = std::io::BufReader::new(f);
+        let mut total = 0u64;
+        let mut byte = [0u8; 1];
+        while br.read(&mut byte).unwrap() == 1 {
+            total += byte[0] as u64;
+        }
+        total
+    }
+}
+
+pub struct Input {
+    path: PathBuf,
+}
+
+pub fn make_input(n: usize) -> Input {
+    let dir = std::env::temp_dir();
+    let path = dir.join(format!("perf_bench_buffered_io_{}.dat", n));
+    let content: Vec<u8> = (0..n).map(|i| (i % 251) as u8).collect();
+    std::fs::write(&path, &content).unwrap();
+    Input { path }
+}
+
+pub fn run_buggy(input: &Input) {
+    std::hint::black_box(buggy::sum_bytes(&input.path));
+}
+
+pub fn run_fixed(input: &Input) {
+    std::hint::black_box(fixed::sum_bytes(&input.path));
+}
+"#
+        .to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2119,15 +2317,15 @@ mod tests {
     }
 
     #[test]
-    fn seed_corpus_has_thirty_one_entries_across_eleven_categories() {
+    fn seed_corpus_has_thirty_four_entries_across_eleven_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 31);
+        assert_eq!(corpus.entries.len(), 34);
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
         categories.dedup();
-        // 11 distinct categories. Complexity is the deepest (8 rules);
-        // allocation has 8; simd has 4; layout, concurrency, iterators have 2;
+        // 11 distinct categories. Complexity + allocation tie for the deepest
+        // (10 rules each); simd has 4; iterators has 3; layout, concurrency have 2;
         // arithmetic, dispatch, caching, bevy, wasm have 1 each.
         assert_eq!(categories.len(), 11);
     }
@@ -2197,10 +2395,10 @@ mod tests {
 
     #[cfg(feature = "rust_perf_bench")]
     #[test]
-    fn twenty_seven_rules_have_bench_specs() {
+    fn thirty_rules_have_bench_specs() {
         let corpus = build_perf_seed_corpus();
         let with_spec = corpus.entries.iter().filter(|e| e.bench_spec.is_some()).count();
-        assert_eq!(with_spec, 27, "expected 27 benchable rules, got {with_spec}");
+        assert_eq!(with_spec, 30, "expected 30 benchable rules, got {with_spec}");
     }
 
     #[cfg(feature = "rust_perf_bench")]
@@ -2241,18 +2439,18 @@ mod tests {
         assert!(annotated.contains(&"reuse-allocation-clear"));
     }
 
-    /// The 27 non-annotated rules (23 ParetoDominant + 4 NotBenchable) must
+    /// The 30 non-annotated rules (26 ParetoDominant + 4 NotBenchable) must
     /// have `context_notes: None` — they are either unconditional wins or
     /// honestly unmeasurable.
     #[test]
-    fn twenty_seven_rules_have_no_context_notes() {
+    fn thirty_rules_have_no_context_notes() {
         let corpus = build_perf_seed_corpus();
         let unannotated = corpus
             .entries
             .iter()
             .filter(|e| e.context_notes.is_none())
             .count();
-        assert_eq!(unannotated, 27, "expected 27 unannotated rules");
+        assert_eq!(unannotated, 30, "expected 30 unannotated rules");
     }
 
     /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -2306,9 +2504,9 @@ mod tests {
             );
         }
 
-        // The 27 unannotated rules must return None from the trait too.
+        // The 30 unannotated rules must return None from the trait too.
         let unannotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_none()).collect();
-        assert_eq!(unannotated.len(), 27, "expected 27 unannotated rules");
+        assert_eq!(unannotated.len(), 30, "expected 30 unannotated rules");
         for rule in &unannotated {
             assert!(HealEntry::context_notes(*rule).is_none(), "{} should have no context_notes", rule.rule_id);
         }
