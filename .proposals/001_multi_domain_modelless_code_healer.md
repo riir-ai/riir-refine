@@ -240,9 +240,91 @@ Promotion: `clippy_lints` stays default-on (it IS the current behavior under a n
 
 ### Explicitly NOT shipped by this proposal
 - Cross-domain routing (auto-detect domain from code shape) — caveat in §Proposed design
-- A unified `cargo heal` CLI — each domain exposes its own entry point for now
 - L4 LoRA for any domain — deferred (caveat 4)
 - Real corpora for rust_perf / kernel_opt — framework ships scaffolds; corpora are follow-up plans
+
+## Product vision: `cargo heal` CLI (design sketch — not yet implemented)
+
+The library framework is the substrate. The **product surface** is a `cargo heal`
+CLI binary (`cargo-heal` on PATH) that turns the healing pipeline into a
+developer tool. The key design decision: **fallback, not replacement**.
+
+### `cargo clippy --fix` handles the common case; we pick up the tail
+
+Clippy's `--fix` is battle-tested, handles hundreds of `MachineApplicable` lints,
+and is free. Reinventing it is wasted effort. Instead, `cargo heal` runs as a
+**second pass** after `--fix`:
+
+```text
+cargo heal:
+  1. cargo clippy --fix             ← clippy handles what it can (fast, reliable)
+  2. cargo clippy (re-scan)         ← find lints that REMAIN after --fix gave up
+  3. for each remaining lint:       ← the tail our shallow reasoning picks up
+     ├── Stage 2 adaptive lookup (verified fix pool, ~µs)
+     ├── Stage 1 ternary drafter (if no Stage 2 hit)
+     └── AST proposer (shallow pattern match + rewrite)
+  4. verify each fix with cargo clippy (ground truth)
+  5. apply via span-level patch (from clippy JSON `byte_start`/`byte_end`)
+  6. feed successful fixes into Stage 2 pool (compounding learning)
+```
+
+The clippy JSON output marks each lint's fix applicability:
+
+| Applicability | `--fix` handles it? | Our layer? |
+|---|---|---|
+| `MachineApplicable` | yes | not needed |
+| `MaybeIncorrect` | no | **yes** |
+| `HasPlaceholders` | no | **yes** |
+| `Unspecified` | no | **yes** |
+
+### "Shallow reasoning" is the honest positioning
+
+The AST proposers are **shallow** — pure syntactic pattern match + rewrite:
+
+```text
+"see match x { Some(v) => Some(f(v)), None => None }"
+    → "rewrite to x.map(|v| f(v))"
+```
+
+No type inference. No borrow analysis. No trait resolution. Just AST shapes.
+This is explicitly modelless (no ML, no weights, no training) and fills exactly
+the gap `--fix` leaves behind. The value prop is: **clippy fix gets you 90%
+there, heal picks up the remaining tail**.
+
+### Watch mode (`--watch`)
+
+```bash
+cargo heal              # one-shot: scan + heal all lints once
+cargo heal --watch      # watch mode: auto-heal on file change
+```
+
+Watch mode uses `notify` (file system watcher) + re-runs the heal pipeline on
+save. This is the `cargo watch` + `cargo heal` combo as a single experience:
+write code → save → clippy fires → auto-heal → iterate.
+
+Step 6 (feed successful fixes into Stage 2 pool) is the **compounding payoff** —
+over time, the Stage 2 pool grows with verified fixes for lints clippy can't
+handle, so the same lint in new code gets served instantly on the next run.
+
+### Key technical challenge: span-level patching
+
+The current AST proposers output whole-file rewrites via `ToTokens` (semantically
+correct but not formatting-preserving). For watch mode this is a dealbreaker —
+you can't reformat someone's entire file every save.
+
+The fix path: use clippy's JSON output which includes the exact
+`byte_start`/`byte_end` span of each lint. Apply the proposer's fix only at that
+span. This preserves the developer's formatting and only touches the linted code.
+
+### This section is a sketch — the design can pivot
+
+Nothing here is implemented yet. The library framework (Phase 1) is DONE; the
+CLI binary is a future phase. The core design questions still open:
+- Should `heal --watch` be the default (or `--once`)?
+- How to handle lints where our proposer + clippy disagree on the fix?
+- Git integration (auto-stage healed files? dry-run by default?)
+- Multi-domain CLI (does `cargo heal` also handle `rust_perf` rules, or is
+  that a separate `cargo heal --domain perf` flag?)
 
 ## Phased rollout (sketch — Plan 001 expands this)
 
@@ -282,11 +364,14 @@ Promotion: `clippy_lints` stays default-on (it IS the current behavior under a n
 ## Out of scope
 
 - Cross-domain auto-routing (caller picks domain via feature flag)
-- Unified CLI (`cargo heal`) — each domain has its own entry point
 - L4 LoRA for any domain (deferred per caveat 4)
 - Real rust_perf / kernel_opt corpora (follow-up plans per domain)
 - A new repo for any domain (supersedes Proposal 012's "new repo" — same repo, domain as feature)
 - Cross-domain corpus sharing (a clippy rule doesn't help a kernel heal; domains are isolated)
+
+> **Note:** The `cargo heal` CLI was previously listed here as out of scope.
+> It has been promoted to the "Product vision" section above — the design is a
+> sketch that can pivot. Implementation is a future phase.
 
 ## References
 
