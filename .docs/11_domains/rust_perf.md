@@ -25,15 +25,18 @@ deepest category (12 rules). Complexity has 10. Layout, simd, iterators have 4
 each; concurrency has 2; the rest have 1 each. 31 are benchable (carry a
 `BenchSpec`); 8 are honestly `NotBenchable` (need external runtimes or are
 structural — size_of, memory, fairness). 4 of the 31 benchable rules carry
-`context_notes` (Bench 013 found 2 `ParetoDominated` + 2 `Mixed` in the
-default config — consumers should treat them as context-dependent, not
-unconditional suggestions).
+`context_notes` (Bench 015 finalization: 2 `ParetoDominated` —
+`precompute-table` + `papaya-lockfree` — are honestly slower in the default
+config; 2 regime-fragile — `dedupe-hashset-vs-vec` + `reuse-allocation-clear`
+— pass ParetoDominant but have 1 slower size each, flagging them as
+scale-dependent. Consumers should treat annotated rules as context-dependent,
+not unconditional suggestions).
 
 | Rule ID | Category | Bench verdict | Context? | Pattern |
 |---|---|---|---|---|
 | `o1-lookup` | complexity | ✅ 570x ParetoDominant | — | O(n) `Vec` scan → O(1) `HashMap` lookup |
 | `bsearch-sorted-slice` | complexity | ✅ 16-2709x ParetoDominant | — | O(n) `.contains()` on sorted slice → O(log n) `binary_search()` |
-| `dedupe-hashset-vs-vec` | complexity | ~ Mixed (2/4 Faster) | ⚠️ `context_notes` | O(n²) `Vec::contains` dedup loop → O(n) `HashSet` collect (wins at N ≥ 1000; HashSet overhead dominates at small N) |
+| `dedupe-hashset-vs-vec` | complexity | ~ ParetoDominant (3/4 Faster; 1 slower @ n=500) | ⚠️ `context_notes` | O(n²) `Vec::contains` dedup loop → O(n) `HashSet` collect (wins at N ≥ 1000; HashSet overhead dominates at small N; regime-fragile — see Bench 015) |
 | `entry-vs-contains-insert` | complexity | ✅ 1.5x ParetoDominant | — | `contains_key()` + `insert()` → `entry().or_insert()` (merge HashMap lookups: 2 hashes → 1 hash) |
 | `loop-fusion` | complexity | ✅ 1.5x ParetoDominant | — | Two iterator passes (`.sum()` + `.max()`) over same data → one fused `for` loop (cache locality; compiler can't fuse separate iterator consumers) |
 | `prefix-sum-2d` | complexity | ✅ 34-30000x ParetoDominant | — | O(n) 2D region-sum scan per query → O(1) prefix sum (boundary-vs-volume: prefix encodes boundary cumulative sum, each query reads 4 corners instead of scanning interior) |
@@ -46,7 +49,7 @@ unconditional suggestions).
 | `mem-take` | allocation | ✅ 1.9-2.6x ParetoDominant | — | `buf.clone()` + `buf.clear()` → `mem::take(&mut buf)` (moves Vec allocation O(1), no deep clone) |
 | `avoid-clone` | allocation | ✅ 1.3-3.0x ParetoDominant | — | `fn(data: Vec<T>)` clone-on-call → `fn(data: &[T])` borrow (clone does heap alloc + memcpy; compiler can't elide) |
 | `box-str-immutable` | allocation | ✅ 1.1-1.3x ParetoDominant | — | `Vec<String>` (3-word handle) → `Vec<Box<str>>` (2-word, drops capacity field) for immutable string collections |
-| `reuse-allocation-clear` | allocation | ~ Mixed (3/4 Faster) | ⚠️ `context_notes` | `fn() { Vec::new() }` alloc-per-call → `fn(buf: &mut Vec<T>)` clear-reuse (wins ≤10K; loses at 100K due to L2 cache pressure) |
+| `reuse-allocation-clear` | allocation | ~ ParetoDominant (3/4 Faster; 1 slower @ n=100K) | ⚠️ `context_notes` | `fn() { Vec::new() }` alloc-per-call → `fn(buf: &mut Vec<T>)` clear-reuse (wins ≤10K; loses at 100K due to L2 cache pressure; regime-fragile — see Bench 015) |
 | `box-avoid` | allocation | ✅ 9.6-42x ParetoDominant | — | `Vec<Box<i64>>` (heap per elem) → `Vec<i64>` (stack values) — heap alloc per element dwarfs the data work |
 | `smallvec-stack` | allocation | ✅ 27-75x ParetoDominant | — | `Vec<T>::new()` (always heap) → stack array for ≤8 typical (SmallVec pattern); heap alloc dominates at small N |
 | `buffered-io` | iterators | ✅ 99-132x ParetoDominant | — | `File::read(&mut [u8; 1])` syscall per byte → `BufReader` 8KB batched reads (syscall overhead dominates) |
@@ -100,20 +103,22 @@ Rules without a `BenchSpec` are honestly marked `NotBenchable` — they need
 external runtimes (Bevy, WASM) a temp crate cannot provide.
 
 See [Bench 013](../../.benchmarks/013_rust_perf_bench_pareto_goat.md) for
-the measured GOAT results.
+the original promotion-gate results, and [Bench 015](../../.benchmarks/015_rust_perf_expansion_phase4_goat.md)
+for the Phase 4 finalization on the expanded 39-rule corpus.
 
-## Caveat (Proposal 001 caveat 3 — closed by Bench 013)
+## Caveat (Proposal 001 caveat 3 — closed by Bench 013, re-confirmed by Bench 015)
 
 The original caveat called perf "the weakest link" because perf has no
 single ground truth. **Bench 013 closes this**: the Pareto validator now
-provides the real perf ground truth. 15/18 benchable rules are Pareto-dominant
-(clear wins); 2/18 are honestly Pareto-dominated (compiler optimizations,
-regime-dependent benefits); 1/18 is Mixed (scale-dependent) — exactly the
-kind of honest signal the caveat predicted.
+provides the real perf ground truth. **Bench 015 re-confirms on the expanded
+corpus**: 29/31 benchable rules are Pareto-dominant (clear wins); 2/31 are
+honestly Pareto-dominated (compiler optimizations, regime-dependent benefits);
+2 of the 29 ParetoDominant are regime-fragile (1 slower size each, kept
+annotated) — exactly the kind of honest signal the caveat predicted.
 
 ## Drafter + pipeline integration (`context_notes` propagation, 2026-08-13)
 
-The 3 annotated rules (2 `ParetoDominated` + 1 `Mixed`) carry a
+The 4 annotated rules (2 `ParetoDominated` + 2 regime-fragile) carry a
 `context_notes: Some(...)` annotation on
 [`PerfRule`](../../src/domains/rust_perf/mod.rs). The annotation is **rule-level
 metadata** — it describes the RULE, not a specific fix. The pipeline looks it
@@ -205,14 +210,15 @@ them.
 ## Source
 
 - [`src/domains/rust_perf/mod.rs`](../../src/domains/rust_perf/mod.rs) — `PerfRule` + `RustPerfDomain`
-- [`src/domains/rust_perf/corpus.rs`](../../src/domains/rust_perf/corpus.rs) — `build_perf_seed_corpus()` + 13 `BenchSpec`s
+- [`src/domains/rust_perf/corpus.rs`](../../src/domains/rust_perf/corpus.rs) — `build_perf_seed_corpus()` + 31 `BenchSpec`s (8 rules are honestly NotBenchable)
 - [`src/domains/rust_perf/verify.rs`](../../src/domains/rust_perf/verify.rs) — `PerfVerifier` (cargo test)
 - [`src/domains/rust_perf/bench.rs`](../../src/domains/rust_perf/bench.rs) — `PerfBenchValidator` (Pareto verdict)
 - [`examples/perf_heal_demo.rs`](../../examples/perf_heal_demo.rs) — scaffold end-to-end demo
-- [`examples/perf_bench_demo.rs`](../../examples/perf_bench_demo.rs) — the GOAT gate (Bench 013)
+- [`examples/perf_bench_demo.rs`](../../examples/perf_bench_demo.rs) — the GOAT gate (Bench 013 promotion + Bench 015 Phase 4 finalization)
 
 ## See also
 
 - [`heal_domain_trait.md`](heal_domain_trait.md) — the trait this implements
 - [Proposal 001 caveat 3](../../.proposals/001_multi_domain_modelless_code_healer.md) — the perf validator weakness (now closed)
-- [Bench 013](../../.benchmarks/013_rust_perf_bench_pareto_goat.md) — the GOAT results
+- [Bench 013](../../.benchmarks/013_rust_perf_bench_pareto_goat.md) — the original promotion-gate GOAT results (historical; pre-expansion corpus snapshots)
+- [Bench 015](../../.benchmarks/015_rust_perf_expansion_phase4_goat.md) — Phase 4 finalization on the expanded 39-rule corpus (29/31 ParetoDominant)

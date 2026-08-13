@@ -8,7 +8,7 @@ This book documents the **modelless-first code-healing pipeline** that
 distills rules into a ruliology-style search space, drafts fixes via a
 modelless ternary SIMD matvec, validates with a `syn`-based syntax pruner,
 and refines via Pareto-front candidate search. Three domains ship (Plan 001):
-`clippy_lints` (default), `rust_perf` (Phase 2 opt-in), `kernel_opt` (Phase 3
+`clippy_lints` (default), `rust_perf` (Phase 2, default-on since 2026-08-13), `kernel_opt` (Phase 3
 opt-in). LoRA (L4) is the conservative last-resort fallback, not the
 co-equal path.
 

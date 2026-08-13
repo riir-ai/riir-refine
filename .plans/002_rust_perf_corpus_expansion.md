@@ -3,8 +3,8 @@
 **Proposal:** [001](../.proposals/001_multi_domain_modelless_code_healer.md) (caveat 3
 extension — corpus coverage, not a new domain)
 **Branch:** `develop` (per global rule — no feature branches)
-**Status:** in flight — Phase 1 T-hash DONE (2026-08-13, commit `c5e27a3`); corpus now 28 rules. Remaining Phase 1 candidates + Phases 2-4 pending.
-**Domain:** `rust_perf` (default-on since 2026-08-13, [Bench 013](../.benchmarks/013_rust_perf_bench_pareto_goat.md))
+**Status:** COMPLETE 2026-08-13. All phases landed: Phase 1 (all candidates DONE or honestly REJECTED), Phase 2 (4 NotBenchable DONE), Phase 3 (build-config doc DONE), Phase 4 (re-bench + GOAT DONE — [Bench 015](../.benchmarks/015_rust_perf_expansion_phase4_goat.md), 29/31 ParetoDominant). Corpus grew 22→39 rules across the plan's batches.
+**Domain:** `rust_perf` (default-on since 2026-08-13, [Bench 013](../.benchmarks/013_rust_perf_bench_pareto_goat.md) promotion + [Bench 015](../.benchmarks/015_rust_perf_expansion_phase4_goat.md) finalization)
 
 ## Goal
 
@@ -375,23 +375,42 @@ documents them as recommendations, not corpus rules.
       (post-link, ~2-5% more). Source: perf-book `build-configuration.md` + Kobzol.
 - [x] **T-pgo** — folded into T-buildconfig doc section (same ruling).
 
-## Phase 4 — Re-bench + GOAT gate (Bench 014)
+## Phase 4 — Re-bench + GOAT gate (Bench 015)
 
 After Phases 1-3 land, re-run the full Pareto validator on the expanded corpus.
 
-- [ ] **T-rebench** — run `cargo run --example perf_bench_demo --features rust_perf_bench --release`
-      on the full expanded corpus. Record results in `.benchmarks/014_rust_perf_expansion_goat.md`.
-- [ ] **T-goat-g1** — all new benchable rules produce real measurements (G1).
-- [ ] **T-goat-g5** — majority of new benchable rules are ParetoDominant (G5). If
-      the acceptance rate is much lower than 5/11, investigate whether the corpus
-      is adding noise rather than signal.
-- [ ] **T-goat-g3** — default features (no `rust_perf_bench`) still pass
-      `cargo test --lib` (no-regression).
-- [ ] **T-doc** — update `.docs/11_domains/rust_perf.md` corpus table with new rules
-      + update the category count. Update Bench 013's "References" line if needed.
-- [ ] **T-clippy** — `cargo clippy --all-targets -D warnings` clean with new rules.
-- [ ] **T-agents** — update `AGENTS.md` rust_perf feature description if the rule
-      count changes materially (25 → ~35-40).
+> **Renumbering note (2026-08-13):** this phase originally specified `Bench 014`.
+> Bench 014 was allocated to a different experiment
+> (`.benchmarks/014_bench010_rerun_llamacpp_vs_katgpt_ternary.md`) while this
+> plan was in flight. Per the global numbering-discipline rule ("monotonic
+> and never reused"), the Phase 4 bench moved to **Bench 015**. The
+> `Bench 014` references in this section are stale; Bench 015 is canonical.
+
+- [x] **T-rebench** — DONE 2026-08-13. Ran
+      `cargo run --example perf_bench_demo --features rust_perf_bench --release`
+      on the full expanded 39-rule corpus. Results recorded in
+      [`.benchmarks/015_rust_perf_expansion_phase4_goat.md`](../.benchmarks/015_rust_perf_expansion_phase4_goat.md).
+- [x] **T-goat-g1** — DONE 2026-08-13. All 31 benchable rules produce real
+      measurements (0 failed).
+- [x] **T-goat-g5** — DONE 2026-08-13. 29/31 (94%) of benchable rules are
+      ParetoDominant — well above the 5/11 acceptance bar and the plan's
+      expected-outcome prediction. 2 honestly ParetoDominated
+      (`precompute-table`, `papaya-lockfree`); 2 of the 29 ParetoDominant are
+      regime-fragile (`dedupe-hashset-vs-vec`, `reuse-allocation-clear`) and
+      keep their `context_notes` annotation.
+- [x] **T-goat-g3** — DONE 2026-08-13. Default features (no `rust_perf_bench`)
+      pass `cargo test --lib` (91 tests).
+- [x] **T-doc** — DONE 2026-08-13. Updated corpus table verdicts + counts in
+      [`.docs/11_domains/rust_perf.md`](../.docs/11_domains/rust_perf.md):
+      `reuse-allocation-clear` + `dedupe-hashset-vs-vec` rows now reflect the
+      Phase 4 ParetoDominant-with-1-slower-size finding; the Caveat section
+      counts updated from 15/18 → 29/31; Source section BenchSpec count
+      13 → 31; See-also adds Bench 015.
+- [x] **T-clippy** — DONE 2026-08-13. `cargo clippy --all-targets -D warnings`
+      clean.
+- [x] **T-agents** — DONE 2026-08-13. Updated `AGENTS.md` rust_perf feature
+      description: rule count 31→39, benchable count 27→31, ParetoDominant
+      count 28→29, Mixed framing → regime-fragile framing.
 
 ## What this plan does NOT do
 
@@ -408,6 +427,8 @@ After Phases 1-3 land, re-run the full Pareto validator on the expanded corpus.
 
 - [Bench 013](../.benchmarks/013_rust_perf_bench_pareto_goat.md) — the existing
   GOAT gate + the "3 rules distilled from perf-book" line this plan rechecks
+- [Bench 015](../.benchmarks/015_rust_perf_expansion_phase4_goat.md) — the Phase 4
+  finalization re-bench on the expanded 39-rule corpus (29/31 ParetoDominant)
 - [Plan 001 Phase 2](001_multi_domain_framework_refactor.md) — the rust_perf
   domain scaffold
 - [`.docs/11_domains/rust_perf.md`](../.docs/11_domains/rust_perf.md) — domain doc
