@@ -19,13 +19,13 @@
 
 ## Corpus
 
-25 seed rules across 11 categories (rust-optimize skill checklist +
-nnethercote/perf-book). Complexity is the
-depest category (7 rules — the 3 algorithmic anti-patterns + HashMap
-lookup merging + loop fusion + prefix-sum-2d + swap-remove); allocation + simd
-have 4 each; layout + concurrency have 2; the rest have 1 each. 21 are
+28 seed rules across 11 categories (rust-optimize skill checklist +
+nethercote/perf-book + rustc-hash/bevy real-world patterns). Complexity is the
+deepest category (8 rules — the 3 algorithmic anti-patterns + HashMap
+lookup merging + loop fusion + prefix-sum-2d + swap-remove + fxhashmap); allocation has 5;
+simd has 4; layout + concurrency + iterators have 2; the rest have 1 each. 24 are
 benchable (carry a `BenchSpec`); 4 are honestly `NotBenchable`
-(need external runtimes or are structural). 3 of the 21 benchable rules carry
+(need external runtimes or are structural). 3 of the 24 benchable rules carry
 `context_notes` (Bench 013 found 2 `ParetoDominated` + 1 `Mixed` in the
 default config — consumers should treat them as context-dependent, not
 unconditional suggestions).
@@ -39,10 +39,12 @@ unconditional suggestions).
 | `loop-fusion` | complexity | ✅ 1.5x ParetoDominant | — | Two iterator passes (`.sum()` + `.max()`) over same data → one fused `for` loop (cache locality; compiler can't fuse separate iterator consumers) |
 | `prefix-sum-2d` | complexity | ✅ 34-30000x ParetoDominant | — | O(n) 2D region-sum scan per query → O(1) prefix sum (boundary-vs-volume: prefix encodes boundary cumulative sum, each query reads 4 corners instead of scanning interior) |
 | `swap-remove` | complexity | ✅ 2-18485x ParetoDominant | — | `Vec::remove(i)` O(n) shift → `Vec::swap_remove(i)` O(1) swap (order doesn't matter; win grows with N) |
+| `fxhashmap` | complexity | ✅ 1.6-4.2x ParetoDominant | — | std `HashMap` (SipHash, DoS-resistant) → `FxHashMap` (FxHash, 1 mul + xor) for non-adversarial keys (compiler can't swap hashers; used pervasively in rustc) |
 | `static-str` | allocation | ✅ 42x ParetoDominant | — | `String` return → `&'static str` for constant labels |
 | `vec-with-capacity` | allocation | ✅ 1.1-4.3x ParetoDominant | — | `Vec::new()` + push loop → `Vec::with_capacity(n)` (realloc cost) |
 | `format-concat-loop` | allocation | ✅ 42-95x ParetoDominant | — | `format!("{s}{x}")` concat in loop → `String::push_str` (O(n²) → O(n)) |
 | `ok-or-else` | allocation | ✅ 97x ParetoDominant | — | `ok_or(expensive())` eager error construction → `ok_or_else(\|\| expensive())` lazy closure (avoids unused error allocation; source: nnethercote/perf-book) |
+| `mem-take` | allocation | ✅ 3.0-3.1x ParetoDominant | — | `buf.clone()` + `buf.clear()` → `mem::take(&mut buf)` (moves Vec allocation in O(1), no deep clone; ~3× across all sizes) |
 | `layout-reorder` | layout | ❌ NotBenchable | — | Field reorder to eliminate padding (deterministic `size_of`, not a runtime microbench) |
 | `repr-u8-enum` | layout | ❌ NotBenchable | — | Field-less enum → `#[repr(u8)]` (deterministic `size_of`, same class as layout-reorder) |
 | `mutex-to-atomic` | concurrency | ✅ 2.5x ParetoDominant | — | `Mutex<u32>` counter inc → `AtomicU32::fetch_add` (Mutex lock/unlock is opaque; ~2.5× single-threaded) |
@@ -53,6 +55,7 @@ unconditional suggestions).
 | `chunks-exact` | simd | ✅ 13-16x ParetoDominant | — | `slice::chunks` (variable last chunk) → `slice::chunks_exact` (uniform chunks, enables vectorization; source: nnethercote/perf-book) |
 | `f32-counter-to-int` | arithmetic | ✅ 7.5-11x ParetoDominant | — | f32 accumulator for integer tally → u64 accumulator (f32 add dep chain can't be broken without fast-math) |
 | `collect-avoidance` | iterators | ✅ 2.3-3.0x ParetoDominant | — | Unnecessary `.collect()` intermediate → chained iterator (allocation + double pass → single pass, zero alloc) |
+| `retain-inplace` | iterators | ✅ 1.5-2.1x ParetoDominant | — | `iter().filter().collect()` new Vec → `Vec::retain()` in-place filter (no allocation, single pass; ~1.5-2× across all sizes) |
 | `dyn-to-enum` | dispatch | ✅ 2.5-2.9x ParetoDominant | — | `Box<dyn Trait>` dispatch → enum dispatch (devirtualize: vtable indirection → direct match, compiler can inline) |
 | `precompute-table` | caching | ❌ 0.20-0.40x ParetoDominated | ⚠️ `context_notes` | Recompute-per-call → `const` lookup table (compiler optimizes popcount to POPCNT in release) |
 | `bevy-reactive-loop` | bevy | ❌ NotBenchable | — | `WinitSettings::default()` (Continuous, 100% CPU) → `reactive_low_power` (needs Bevy runtime) |

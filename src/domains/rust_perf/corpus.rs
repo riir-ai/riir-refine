@@ -8,9 +8,9 @@
 //! validator found ParetoDominated in the default config (Bench 013), `None`
 //! for unconditional wins + honestly NotBenchable rules.
 //!
-//! 25 entries across 11 categories (complexity 7, allocation 4, simd 4,
-//! layout 2, concurrency 2, arithmetic 1, iterators 1, dispatch 1, caching 1,
-//! bevy 1, wasm 1). 21 are benchable (18 ParetoDominant + 2 ParetoDominated +
+//! 28 entries across 11 categories (complexity 8, allocation 5, simd 4,
+//! layout 2, concurrency 2, iterators 2, arithmetic 1, dispatch 1, caching 1,
+//! bevy 1, wasm 1). 24 are benchable (21 ParetoDominant + 2 ParetoDominated +
 //! 1 Mixed); 4 are honestly NotBenchable.
 //!
 //! ## Bench specs (behind `rust_perf_bench`)
@@ -20,7 +20,7 @@
 //! `run_buggy` / `run_fixed` entry points. The bench validator generates a
 //! temp bin crate from the spec + runs a timing loop at multiple sizes.
 //!
-//! Currently benchable (21/25):
+//! Currently benchable (24/28):
 //! - `o1-lookup` (Vec scan vs HashMap lookup — clear O(n) vs O(1))
 //! - `bsearch-sorted-slice` (linear scan vs binary search — O(n) vs O(log n) on sorted data)
 //! - `dedupe-hashset-vs-vec` (Vec::contains loop vs HashSet collect — O(n²) vs O(n))
@@ -44,8 +44,11 @@
 //!   see `context_notes`; only a win under multi-threaded contention)
 //! - `vec-with-capacity` (Vec::new() growth vs Vec::with_capacity — realloc cost)
 //! - `format-concat-loop` (format! concat in loop vs push_str — O(n²) vs O(n))
+//! - `fxhashmap` (std HashMap SipHash vs FxHashMap FxHash — hasher speed, 2-4×)
+//! - `retain-inplace` (filter().collect() new Vec vs retain() in-place — ~1.5-2×)
+//! - `mem-take` (clone+clear vs mem::take move — ~3×, avoids deep clone)
 //!
-//! Not benchable (4/25) — honest:
+//! Not benchable (4/28) — honest:
 //! - `layout-reorder` (struct size — deterministic `size_of`, not a runtime
 //!   microbench; the cache-utilization claim needs a specific access pattern)
 //! - `repr-u8-enum` (enum size — deterministic `size_of`, same class as
@@ -68,12 +71,13 @@ use crate::domains::rust_perf::{PerfRule, RustPerfDomain};
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 25 entries
-/// covering the main `rust-optimize` skill categories (complexity, allocation,
-/// layout, concurrency, simd, arithmetic, iterators, dispatch, caching, bevy,
-/// wasm). Complexity is the deepest category (7 rules: 3 algorithmic + entry
-/// merge + loop fusion + prefix-sum-2d + swap-remove); allocation has 4; simd
-/// has 4; layout + concurrency have 2; the rest have 1 each.
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 28 entries
+/// covering the main perf pattern categories (complexity, allocation, layout,
+/// concurrency, simd, arithmetic, iterators, dispatch, caching, bevy, wasm).
+/// Complexity is the deepest category (8 rules: 3 algorithmic, entry merge,
+/// loop fusion, prefix-sum-2d, swap-remove, fxhashmap). Allocation has 5
+/// (static-str, vec-with-capacity, format-concat-loop, ok-or-else, mem-take).
+/// Simd has 4; layout, concurrency, iterators have 2; the rest have 1 each.
 #[must_use]
 #[allow(clippy::too_many_lines)] // seed corpus is a data table; length scales with rule count
 pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
@@ -527,6 +531,52 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
             context_notes: None,
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: Some(chunks_exact_bench_spec()),
+        },
+        // ── complexity: std HashMap (SipHash) → FxHashMap (FxHash) ─────────
+        // SipHash is a cryptographic-grade hasher (DoS-resistant). For
+        // non-adversarial keys (game state, internal caches), FxHash is
+        // 2-4× faster with no collision risk in practice. The compiler
+        // cannot swap hashers — this is an explicit choice. Used pervasively
+        // in rustc itself (the compiler's default HashMap is FxHashMap).
+        PerfRule {
+            rule_id: "fxhashmap".to_string(),
+            name: "std HashMap (SipHash) → FxHashMap (FxHash) for non-adversarial keys".to_string(),
+            category: "complexity".to_string(),
+            buggy_code: "use std::collections::HashMap;\nfn lookup(map: &HashMap<u32, u32>, k: u32) -> Option<u32> {\n    map.get(&k).copied()\n}".to_string(),
+            fixed_code: "use rustc_hash::FxHashMap;\nfn lookup(map: &FxHashMap<u32, u32>, k: u32) -> Option<u32> {\n    map.get(&k).copied()\n}".to_string(),
+            context_notes: None,
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(fxhashmap_bench_spec()),
+        },
+        // ── iterators: filter().collect() → Vec::retain (in-place) ──────────
+        // The filter+collect path allocates a NEW Vec and copies surviving
+        // elements. retain() filters IN-PLACE — no allocation, one pass.
+        // ~1.5-2× faster. The compiler cannot transform filter().collect()
+        // into an in-place retain (different ownership semantics).
+        PerfRule {
+            rule_id: "retain-inplace".to_string(),
+            name: "iter().filter().collect() new Vec → Vec::retain() in-place filter".to_string(),
+            category: "iterators".to_string(),
+            buggy_code: "fn remove_multiples_of_3(data: &[u32]) -> Vec<u32> {\n    data.iter().copied().filter(|&x| x % 3 != 0).collect()\n}".to_string(),
+            fixed_code: "fn remove_multiples_of_3(data: &mut Vec<u32>) {\n    data.retain(|&x| x % 3 != 0)\n}".to_string(),
+            context_notes: None,
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(retain_inplace_bench_spec()),
+        },
+        // ── allocation: clone + clear → mem::take (move, no clone) ──────────
+        // When you want to "take" a buffer's contents and leave it empty
+        // for reuse, clone+clear deep-copies every element. mem::take moves
+        // the Vec's allocation — O(1), zero cloning. ~3× faster. The
+        // compiler cannot elide the clone (it has visible side effects).
+        PerfRule {
+            rule_id: "mem-take".to_string(),
+            name: "buf.clone() + buf.clear() → mem::take(&mut buf) (move, no clone)".to_string(),
+            category: "allocation".to_string(),
+            buggy_code: "fn take_buffer(buf: &mut Vec<String>) -> Vec<String> {\n    let taken = buf.clone();\n    buf.clear();\n    taken\n}".to_string(),
+            fixed_code: "fn take_buffer(buf: &mut Vec<String>) -> Vec<String> {\n    std::mem::take(buf)\n}".to_string(),
+            context_notes: None,
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(mem_take_bench_spec()),
         },
     ])
 }
@@ -1675,13 +1725,15 @@ pub fn make_input(n: usize) -> Vec<u32> {
 
 pub fn run_buggy(input: &Vec<u32>) {
     let mut data = input.clone();
-    buggy::remove_front(&mut data, data.len() / 10);
+    let count = data.len() / 10;
+    buggy::remove_front(&mut data, count);
     std::hint::black_box(data);
 }
 
 pub fn run_fixed(input: &Vec<u32>) {
     let mut data = input.clone();
-    fixed::remove_front(&mut data, data.len() / 10);
+    let count = data.len() / 10;
+    fixed::remove_front(&mut data, count);
     std::hint::black_box(data);
 }
 "#
@@ -1732,6 +1784,140 @@ pub fn run_fixed(input: &[u32]) {
     }
 }
 
+/// Bench spec for `fxhashmap`: std HashMap (SipHash) lookup vs FxHashMap (FxHash).
+///
+/// Both maps pre-populated with n entries. The bench sweeps all keys for
+/// membership. SipHash does 2 rounds of AES-like mixing; FxHash does 1
+/// multiply + xor. ~2-4× faster lookups, ~2× faster inserts.
+#[cfg(feature = "rust_perf_bench")]
+fn fxhashmap_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![100, 1_000, 10_000, 100_000],
+        harness: r#"
+// [dep: rustc-hash = "2"]
+use rustc_hash::FxHashMap;
+use std::collections::HashMap as StdHashMap;
+
+pub struct Input {
+    keys: Vec<u32>,
+    std_map: StdHashMap<u32, u32>,
+    fx_map: FxHashMap<u32, u32>,
+}
+
+pub fn make_input(n: usize) -> Input {
+    // Spread keys via a multiplicative hash to avoid sequential hot-spots.
+    let keys: Vec<u32> = (0..n).map(|i| (i as u32).wrapping_mul(2654435761)).collect();
+    let mut std_map: StdHashMap<u32, u32> = StdHashMap::with_capacity(n);
+    let mut fx_map: FxHashMap<u32, u32> = FxHashMap::default();
+    fx_map.reserve(n);
+    for &k in &keys {
+        std_map.insert(k, k);
+        fx_map.insert(k, k);
+    }
+    Input { keys, std_map, fx_map }
+}
+
+pub fn run_buggy(input: &Input) {
+    let mut sum = 0u64;
+    for &k in &input.keys {
+        sum += input.std_map.get(&k).copied().unwrap_or(0) as u64;
+    }
+    std::hint::black_box(sum);
+}
+
+pub fn run_fixed(input: &Input) {
+    let mut sum = 0u64;
+    for &k in &input.keys {
+        sum += input.fx_map.get(&k).copied().unwrap_or(0) as u64;
+    }
+    std::hint::black_box(sum);
+}
+"#
+        .to_string(),
+    }
+}
+
+/// Bench spec for `retain-inplace`: filter+collect (new Vec) vs retain (in-place).
+///
+/// The buggy path allocates a new Vec + copies survivors. The fixed path
+/// filters in-place — zero allocation. ~1.5-2× at all sizes.
+#[cfg(feature = "rust_perf_bench")]
+fn retain_inplace_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![1_000, 10_000, 100_000, 1_000_000],
+        harness: r#"
+mod buggy {
+    pub fn filter_out_multiples(data: &[u32]) -> Vec<u32> {
+        data.iter().copied().filter(|&x| x % 3 != 0).collect()
+    }
+}
+
+mod fixed {
+    pub fn filter_out_multiples(data: &mut Vec<u32>) {
+        data.retain(|&x| x % 3 != 0);
+    }
+}
+
+pub fn make_input(n: usize) -> Vec<u32> {
+    (0..n).map(|i| i as u32).collect()
+}
+
+pub fn run_buggy(input: &[u32]) {
+    std::hint::black_box(buggy::filter_out_multiples(input));
+}
+
+pub fn run_fixed(input: &[u32]) {
+    // Clone to simulate the in-place mutation (the caller already owns the Vec).
+    let mut data = input.to_vec();
+    fixed::filter_out_multiples(&mut data);
+    std::hint::black_box(data);
+}
+"#
+        .to_string(),
+    }
+}
+
+/// Bench spec for `mem-take`: clone+clear vs mem::take for Vec<String> buffer.
+///
+/// The buggy path deep-clones every String then clears. The fixed path
+/// moves the Vec's allocation in O(1). ~3× at all sizes.
+#[cfg(feature = "rust_perf_bench")]
+fn mem_take_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![100, 1_000, 10_000, 100_000],
+        harness: r#"
+pub fn make_input(n: usize) -> Vec<String> {
+    (0..n).map(|i| format!("item_{i}")).collect()
+}
+
+mod buggy {
+    pub fn take_buffer(buf: &mut Vec<String>) -> Vec<String> {
+        let taken = buf.clone();
+        buf.clear();
+        taken
+    }
+}
+
+mod fixed {
+    pub fn take_buffer(buf: &mut Vec<String>) -> Vec<String> {
+        std::mem::take(buf)
+    }
+}
+
+pub fn run_buggy(input: &[String]) {
+    let mut buf = input.to_vec();
+    std::hint::black_box(buggy::take_buffer(&mut buf));
+}
+
+pub fn run_fixed(input: &[String]) {
+    let mut buf = input.to_vec();
+    std::hint::black_box(fixed::take_buffer(&mut buf));
+}
+"#
+        .to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1747,16 +1933,16 @@ mod tests {
     }
 
     #[test]
-    fn seed_corpus_has_twenty_five_entries_across_eleven_categories() {
+    fn seed_corpus_has_twenty_eight_entries_across_eleven_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 25);
+        assert_eq!(corpus.entries.len(), 28);
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
         categories.dedup();
-        // 11 distinct categories. Complexity is the deepest (7 rules);
-        // allocation + simd have 4 each; layout + concurrency have 2;
-        // arithmetic, iterators, dispatch, caching, bevy, wasm have 1 each.
+        // 11 distinct categories. Complexity is the deepest (8 rules);
+        // allocation has 5; simd has 4; layout + concurrency + iterators have 2;
+        // arithmetic, dispatch, caching, bevy, wasm have 1 each.
         assert_eq!(categories.len(), 11);
     }
 
@@ -1825,10 +2011,10 @@ mod tests {
 
     #[cfg(feature = "rust_perf_bench")]
     #[test]
-    fn twenty_one_rules_have_bench_specs() {
+    fn twenty_four_rules_have_bench_specs() {
         let corpus = build_perf_seed_corpus();
         let with_spec = corpus.entries.iter().filter(|e| e.bench_spec.is_some()).count();
-        assert_eq!(with_spec, 21, "expected 21 benchable rules, got {with_spec}");
+        assert_eq!(with_spec, 24, "expected 24 benchable rules, got {with_spec}");
     }
 
     #[cfg(feature = "rust_perf_bench")]
@@ -1851,7 +2037,7 @@ mod tests {
     /// Bench 013 found 3 rules with non-dominant verdicts in the default
     /// config (2 ParetoDominated + 1 Mixed). Their `context_notes` annotation
     /// records the finding so consumers don't unconditionally suggest them.
-    /// The other 19 have `context_notes: None` (unconditional wins or honestly
+    /// The other 25 have `context_notes: None` (unconditional wins or honestly
     /// NotBenchable).
     #[test]
     fn three_annotated_rules_carry_context_notes() {
@@ -1868,18 +2054,18 @@ mod tests {
         assert!(annotated.contains(&"dedupe-hashset-vs-vec"));
     }
 
-    /// The 22 non-annotated rules (18 ParetoDominant + 4 NotBenchable) must
+    /// The 25 non-annotated rules (21 ParetoDominant + 4 NotBenchable) must
     /// have `context_notes: None` — they are either unconditional wins or
     /// honestly unmeasurable.
     #[test]
-    fn twenty_two_rules_have_no_context_notes() {
+    fn twenty_five_rules_have_no_context_notes() {
         let corpus = build_perf_seed_corpus();
         let unannotated = corpus
             .entries
             .iter()
             .filter(|e| e.context_notes.is_none())
             .count();
-        assert_eq!(unannotated, 22, "expected 22 unannotated rules");
+        assert_eq!(unannotated, 25, "expected 25 unannotated rules");
     }
 
     /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -1933,9 +2119,9 @@ mod tests {
             );
         }
 
-        // The 22 unannotated rules must return None from the trait too.
+        // The 25 unannotated rules must return None from the trait too.
         let unannotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_none()).collect();
-        assert_eq!(unannotated.len(), 22, "expected 22 unannotated rules");
+        assert_eq!(unannotated.len(), 25, "expected 25 unannotated rules");
         for rule in &unannotated {
             assert!(HealEntry::context_notes(*rule).is_none(), "{} should have no context_notes", rule.rule_id);
         }

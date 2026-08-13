@@ -54,8 +54,8 @@ default = ["clippy_lints", "rust_perf"]
 clippy_lints = []
 
 # Phase 2: rust performance healing domain (rust-optimize skill checklist
-# + nnethercote/perf-book). DEFAULT-ON since 2026-08-13 (Bench 013 GOAT G1+G5
-# PASS). 3 of 21 benchable
+# + nnethercote/perf-book + rustc-hash/bevy real-world patterns). DEFAULT-ON
+# since 2026-08-13 (Bench 013 GOAT G1+G5 PASS). 3 of 24 benchable
 # rules (`precompute-table`, `papaya-lockfree`, `dedupe-hashset-vs-vec`) carry
 # `context_notes` annotations recording that the bench validator found them
 # ParetoDominated or Mixed in the default config — consumers should treat
@@ -139,7 +139,7 @@ name = "perf_heal_demo"
 required-features = ["rust_perf"]
 
 # Phase 2 GOAT gate: perf-bench Pareto validator across the benchable corpus.
-# Runs generated microbenchmarks for 21/25 rules + reports Pareto verdicts.
+# Runs generated microbenchmarks for 24/28 rules + reports Pareto verdicts.
 # SLOW — spawns cargo build + run per rule (seconds each).
 [[example]]
 name = "perf_bench_demo"
