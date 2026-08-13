@@ -15,7 +15,7 @@
 //! `run_buggy` / `run_fixed` entry points. The bench validator generates a
 //! temp bin crate from the spec + runs a timing loop at multiple sizes.
 //!
-//! Currently benchable (5/8):
+//! Currently benchable (7/11):
 //! - `o1-lookup` (Vec scan vs HashMap lookup — clear O(n) vs O(1))
 //! - `static-str` (String alloc vs &'static str — allocation cost)
 //! - `simd-chunk` (scalar vs chunked loop — vectorization at large N)
@@ -23,10 +23,14 @@
 //!   see `context_notes`; not a release-mode win per Bench 013)
 //! - `papaya-lockfree` (RwLock vs papaya lock-free — **context-dependent**,
 //!   see `context_notes`; only a win under multi-threaded contention)
+//! - `vec-with-capacity` (Vec::new() growth vs Vec::with_capacity — realloc cost)
+//! - `format-concat-loop` (format! concat in loop vs push_str — O(n²) vs O(n))
 //!
-//! Not benchable (3/8) — honest:
+//! Not benchable (4/11) — honest:
 //! - `layout-reorder` (struct size — deterministic `size_of`, not a runtime
 //!   microbench; the cache-utilization claim needs a specific access pattern)
+//! - `repr-u8-enum` (enum size — deterministic `size_of`, same class as
+//!   `layout-reorder`)
 //! - `bevy-reactive-loop` (needs the Bevy runtime — can't run in a temp crate)
 //! - `wasm-batch-ffi` (needs a WASM runtime — can't run in a temp crate)
 //!
@@ -45,10 +49,13 @@ use crate::domains::rust_perf::{PerfRule, RustPerfDomain};
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 8 entries
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 11 entries
 /// covering the main `rust-optimize` skill categories (complexity, allocation,
-/// layout, concurrency, simd, caching, bevy, wasm).
+/// layout, concurrency, simd, caching, bevy, wasm). Allocation is the deepest
+/// category (3 rules: `static-str`, `vec-with-capacity`, `format-concat-loop`)
+/// — it is the most common real-world Rust perf anti-pattern.
 #[must_use]
+#[allow(clippy::too_many_lines)] // seed corpus is a data table; length scales with rule count
 pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     Corpus::new(vec![
         // ── complexity: O(n) scan → O(1) lookup ────────────────────────────
@@ -179,6 +186,56 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
             fixed_code: "// Batch: one FFI call carries shared state + per-item arrays\nfn validate_all(items: &[u32], rules: &[u32]) -> Vec<bool> {\n    let mut out = vec![false; items.len()];\n    validate_batch(items, rules, &mut out);\n    out\n}\nfn validate_batch(_items: &[u32], _rules: &[u32], _out: &mut [bool]) {\n    // single FFI call: shared rules + per-item arrays → out\n}".to_string(),
             context_notes: None,
             // Not benchable: needs a WASM runtime (js-sys / wasm-bindgen FFI).
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: None,
+        },
+        // ── allocation: Vec::new() + push → Vec::with_capacity ───────────
+        // Per the rust-optimize skill: "Pre-allocate output arrays upfront,
+        // write in-place instead of collecting per-iteration". The Vec
+        // growth strategy causes O(log n) reallocations + O(n) total copies;
+        // with_capacity does 1 allocation + 0 extra copies.
+        PerfRule {
+            rule_id: "vec-with-capacity".to_string(),
+            name: "Vec::new() + push loop → Vec::with_capacity(n)".to_string(),
+            category: "allocation".to_string(),
+            buggy_code: "fn build(n: usize) -> Vec<u32> {\n    let mut v = Vec::new();\n    for i in 0..n { v.push(i as u32); }\n    v\n}".to_string(),
+            fixed_code: "fn build(n: usize) -> Vec<u32> {\n    let mut v = Vec::with_capacity(n);\n    for i in 0..n { v.push(i as u32); }\n    v\n}".to_string(),
+            context_notes: None,
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(vec_with_capacity_bench_spec()),
+        },
+        // ── allocation: format!("{s}{x}") in loop → push_str ─────────────
+        // Classic O(n²) anti-pattern: format! creates a new String each
+        // iteration, copying the entire accumulated string. push_str
+        // amortizes to O(n). At 1000 chunks of 10 bytes, the buggy path
+        // copies ~5MB total vs ~10KB for the fixed path.
+        PerfRule {
+            rule_id: "format-concat-loop".to_string(),
+            name: "format!(\"{s}{x}\") concat in loop → String::push_str".to_string(),
+            category: "allocation".to_string(),
+            buggy_code: "fn build(chunks: &[&str]) -> String {\n    let mut s = String::new();\n    for chunk in chunks { s = format!(\"{s}{chunk}\"); }\n    s\n}".to_string(),
+            fixed_code: "fn build(chunks: &[&str]) -> String {\n    let total: usize = chunks.iter().map(|c| c.len()).sum();\n    let mut s = String::with_capacity(total);\n    for chunk in chunks { s.push_str(chunk); }\n    s\n}".to_string(),
+            context_notes: None,
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(format_concat_loop_bench_spec()),
+        },
+        // ── layout: field-less enum without repr → #[repr(u8)] ───────────
+        // Per the rust-optimize skill: "Use #[repr(u8)] on field-less enums
+        // to guarantee 1-byte size". Without repr, the compiler picks the
+        // default (often 4+ bytes depending on variant count + niche
+        // optimization). Not benchable: size_of is compile-time; the runtime
+        // impact (memory bandwidth, cache utilization) needs a specific
+        // access pattern to show up in a microbench.
+        PerfRule {
+            rule_id: "repr-u8-enum".to_string(),
+            name: "Field-less enum → #[repr(u8)] for guaranteed 1-byte size".to_string(),
+            category: "layout".to_string(),
+            buggy_code: "enum Color { Red, Green, Blue }".to_string(),
+            fixed_code: "#[repr(u8)]\nenum Color { Red, Green, Blue }".to_string(),
+            context_notes: None,
+            // Not benchable: size_of is deterministic (compile-time), and the
+            // cache/bandwidth claim needs a specific access pattern (array of
+            // enums). Honest "NotBenchable", same class as layout-reorder.
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: None,
         },
@@ -475,6 +532,111 @@ std::hint::black_box(acc);
 }
 }
 
+/// Bench spec for `vec-with-capacity`: Vec::new() growth vs Vec::with_capacity.
+///
+/// The buggy path uses `Vec::new()` + push, triggering the growth strategy
+/// (1 → 2 → 4 → 8 → … reallocs + copies). The fixed path pre-allocates with
+/// `Vec::with_capacity(n)`, doing 1 allocation + 0 extra copies. The win is
+/// the realloc + copy cost, which grows with n.
+#[cfg(feature = "rust_perf_bench")]
+fn vec_with_capacity_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![100, 1_000, 10_000, 100_000],
+        harness: r#"
+mod buggy {
+    pub fn build(n: usize) -> Vec<u32> {
+        let mut v = Vec::new();
+        for i in 0..n {
+            v.push(i as u32);
+        }
+        v
+    }
+}
+
+mod fixed {
+    pub fn build(n: usize) -> Vec<u32> {
+        let mut v = Vec::with_capacity(n);
+        for i in 0..n {
+            v.push(i as u32);
+        }
+        v
+    }
+}
+
+pub struct Input {
+    pub n: usize,
+}
+
+pub fn make_input(n: usize) -> Input {
+    Input { n }
+}
+
+pub fn run_buggy(input: &Input) {
+    let v = buggy::build(input.n);
+    std::hint::black_box(v);
+}
+
+pub fn run_fixed(input: &Input) {
+    let v = fixed::build(input.n);
+    std::hint::black_box(v);
+}
+"#
+        .to_string(),
+    }
+}
+
+/// Bench spec for `format-concat-loop`: O(n²) format! concat vs O(n) push_str.
+///
+/// The buggy path uses `s = format!("{s}{chunk}")` which allocates a new String
+/// each iteration + copies the entire accumulated string. The fixed path uses
+/// `s.push_str(chunk)` which amortizes to O(n). At n=1000 chunks of ~10 bytes,
+/// the buggy path copies ~5MB total vs ~10KB for the fixed path.
+#[cfg(feature = "rust_perf_bench")]
+fn format_concat_loop_bench_spec() -> BenchSpec {
+    BenchSpec {
+        // Cap at 1000: the O(n²) buggy path copies ~5MB at n=1000; larger
+        // sizes would dominate the bench wall-clock + risk allocator jitter.
+        sizes: vec![100, 500, 1_000],
+        harness: r#"
+mod buggy {
+    pub fn build(chunks: &[String]) -> String {
+        let mut s = String::new();
+        for chunk in chunks {
+            s = format!("{s}{chunk}");
+        }
+        s
+    }
+}
+
+mod fixed {
+    pub fn build(chunks: &[String]) -> String {
+        let total: usize = chunks.iter().map(|c| c.len()).sum();
+        let mut s = String::with_capacity(total);
+        for chunk in chunks {
+            s.push_str(chunk);
+        }
+        s
+    }
+}
+
+pub fn make_input(n: usize) -> Vec<String> {
+    (0..n).map(|i| format!("chunk-{i:04}")).collect()
+}
+
+pub fn run_buggy(input: &[String]) {
+    let s = buggy::build(input);
+    std::hint::black_box(s);
+}
+
+pub fn run_fixed(input: &[String]) {
+    let s = fixed::build(input);
+    std::hint::black_box(s);
+}
+"#
+        .to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -490,14 +652,16 @@ mod tests {
     }
 
     #[test]
-    fn seed_corpus_has_eight_entries_across_eight_categories() {
+    fn seed_corpus_has_eleven_entries_across_eight_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 8);
+        assert_eq!(corpus.entries.len(), 11);
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
         categories.dedup();
-        // 8 distinct categories (one rule per category).
+        // 8 distinct categories. Allocation is the deepest (3 rules:
+        // static-str, vec-with-capacity, format-concat-loop); layout has 2
+        // (layout-reorder, repr-u8-enum); the rest have 1 each.
         assert_eq!(categories.len(), 8);
     }
 
@@ -541,8 +705,8 @@ mod tests {
         let via_seed = build_perf_seed_corpus().entries;
         assert_eq!(via_trait.len(), via_seed.len());
         // Both go through the same sort, so the order is identical.
-        assert_eq!(via_trait[0].rule_id, via_seed[0].rule_id);
-        assert_eq!(via_trait[7].rule_id, via_seed[7].rule_id);
+        assert_eq!(via_trait.first().map(|e| e.rule_id.as_str()), via_seed.first().map(|e| e.rule_id.as_str()));
+        assert_eq!(via_trait.last().map(|e| e.rule_id.as_str()), via_seed.last().map(|e| e.rule_id.as_str()));
     }
 
     #[test]
@@ -566,15 +730,15 @@ mod tests {
 
     #[cfg(feature = "rust_perf_bench")]
     #[test]
-    fn five_rules_have_bench_specs() {
+    fn seven_rules_have_bench_specs() {
         let corpus = build_perf_seed_corpus();
         let with_spec = corpus.entries.iter().filter(|e| e.bench_spec.is_some()).count();
-        assert_eq!(with_spec, 5, "expected 5 benchable rules, got {with_spec}");
+        assert_eq!(with_spec, 7, "expected 7 benchable rules, got {with_spec}");
     }
 
     #[cfg(feature = "rust_perf_bench")]
     #[test]
-    fn three_rules_are_not_benchable() {
+    fn four_rules_are_not_benchable() {
         let corpus = build_perf_seed_corpus();
         let without_spec: Vec<&str> = corpus
             .entries
@@ -582,15 +746,16 @@ mod tests {
             .filter(|e| e.bench_spec.is_none())
             .map(|e| e.rule_id.as_str())
             .collect();
-        assert_eq!(without_spec.len(), 3);
+        assert_eq!(without_spec.len(), 4);
         assert!(without_spec.contains(&"layout-reorder"));
+        assert!(without_spec.contains(&"repr-u8-enum"));
         assert!(without_spec.contains(&"bevy-reactive-loop"));
         assert!(without_spec.contains(&"wasm-batch-ffi"));
     }
 
     /// Bench 013 found 2 rules ParetoDominated in the default config. Their
     /// `context_notes` annotation records the finding so consumers don't
-    /// unconditionally suggest them. The other 6 have `context_notes: None`
+    /// unconditionally suggest them. The other 9 have `context_notes: None`
     /// (unconditional wins or honestly NotBenchable).
     #[test]
     fn two_dominated_rules_carry_context_notes() {
@@ -606,18 +771,18 @@ mod tests {
         assert!(annotated.contains(&"papaya-lockfree"));
     }
 
-    /// The 6 non-annotated rules (3 ParetoDominant + 3 NotBenchable) must
+    /// The 9 non-annotated rules (5 ParetoDominant + 4 NotBenchable) must
     /// have `context_notes: None` — they are either unconditional wins or
     /// honestly unmeasurable.
     #[test]
-    fn six_rules_have_no_context_notes() {
+    fn nine_rules_have_no_context_notes() {
         let corpus = build_perf_seed_corpus();
         let unannotated = corpus
             .entries
             .iter()
             .filter(|e| e.context_notes.is_none())
             .count();
-        assert_eq!(unannotated, 6, "expected 6 unannotated rules");
+        assert_eq!(unannotated, 9, "expected 9 unannotated rules");
     }
 
     /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -669,7 +834,7 @@ mod tests {
             );
         }
 
-        // The 6 unannotated rules must return None from the trait too.
+        // The 9 unannotated rules must return None from the trait too.
         let unannotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_none()).collect();
         for rule in &unannotated {
             assert!(HealEntry::context_notes(*rule).is_none(), "{} should have no context_notes", rule.rule_id);

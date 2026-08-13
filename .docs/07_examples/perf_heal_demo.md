@@ -8,9 +8,9 @@
 
 The `rust_perf` domain end-to-end (Plan 001 Phase 2):
 
-1. **Build corpus**: `build_perf_seed_corpus()` → 8 `PerfRule` entries (one
-   per skill-checklist category).
-2. **List rules**: prints all 8 rules grouped by category.
+1. **Build corpus**: `build_perf_seed_corpus()` → 11 `PerfRule` entries across
+   8 skill-checklist categories (allocation is the deepest with 3 rules).
+2. **List rules**: prints all 11 rules grouped by category.
 3. **Validate**: calls `RustPerfDomain::validate()` on each fixed pattern.
    - Without `rust_perf_verify`: L2 pruner syntax check (`PerfParseVerdict`)
    - With `rust_perf_verify`: `cargo test` re-run (`PerfVerifyResult` with
@@ -22,13 +22,16 @@ The `rust_perf` domain end-to-end (Plan 001 Phase 2):
 6. **Optional cargo test** (with `rust_perf_verify`): runs `PerfVerifier` on
    the first rule, prints `ran`/`test_passes`/`passed`/`failed`.
 
-## The 8 seed rules
+## The 11 seed rules
 
 | Category | Rule | Pattern |
 |---|---|---|
 | complexity | `o1-lookup` | O(n) `Vec` scan → O(1) `HashMap` lookup |
 | allocation | `static-str` | `String` → `&'static str` for constant labels |
+| allocation | `vec-with-capacity` | `Vec::new()` + push → `Vec::with_capacity(n)` |
+| allocation | `format-concat-loop` | `format!("{s}{x}")` in loop → `String::push_str` |
 | layout | `layout-reorder` | Field reorder to eliminate padding |
+| layout | `repr-u8-enum` | Field-less enum → `#[repr(u8)]` for 1-byte size |
 | concurrency | `papaya-lockfree` | `Arc<RwLock<HashMap>>` → `papaya` lock-free map |
 | simd | `simd-chunk` | Scalar loop → 4-wide chunked loop |
 | caching | `precompute-table` | Recompute-per-call → `const` lookup table |
@@ -40,7 +43,7 @@ The `rust_perf` domain end-to-end (Plan 001 Phase 2):
 ```text
 === rust_perf domain — Phase 2 scaffold demo ===
 
-Seed corpus: 8 entries
+Seed corpus: 11 entries
 Commitment (BLAKE3): 1887fcc7d1421ba6e81aac1cacd988e604a03ed808dce0a2c6962d083a36a453
 
 Rules by category:
@@ -60,7 +63,7 @@ Tamper-evidence check:
   verify() on tampered corpus: false (expected: false)
 
 HealDomain trait impl:
-  build_corpus() returned 8 entries (matches seed: true)
+  build_corpus() returned 11 entries (matches seed: true)
 
 === Phase 2 scaffold demo complete ===
 ```
@@ -69,8 +72,9 @@ HealDomain trait impl:
 
 This demo validates that fixed patterns **parse as valid Rust** (or **pass
 `cargo test`** with `rust_perf_verify`). It does NOT verify the perf claim
-(faster on production input). The perf-bench Pareto validator is deferred
-(Proposal 001 caveat 3).
+(faster on production input). The perf-bench Pareto validator
+(`rust_perf_bench` feature, `perf_bench_demo` example) provides the real
+perf ground truth.
 
 ## See also
 

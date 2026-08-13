@@ -19,17 +19,22 @@
 
 ## Corpus
 
-8 seed rules, one per skill-checklist category. 5 are benchable (carry a
-`BenchSpec`); 3 are honestly `NotBenchable` (need external runtimes). 2 of
-the 5 benchable rules carry `context_notes` (Bench 013 found them
-`ParetoDominated` in the default config — consumers should treat them as
-context-dependent, not unconditional suggestions).
+11 seed rules across 8 skill-checklist categories. Allocation is the
+deepest category (3 rules — it is the most common real-world Rust perf
+anti-pattern); layout has 2; the rest have 1 each. 7 are benchable (carry a
+`BenchSpec`); 4 are honestly `NotBenchable` (need external runtimes or are
+structural). 2 of the 7 benchable rules carry `context_notes` (Bench 013
+found them `ParetoDominated` in the default config — consumers should treat
+them as context-dependent, not unconditional suggestions).
 
 | Rule ID | Category | Bench verdict | Context? | Pattern |
 |---|---|---|---|---|
 | `o1-lookup` | complexity | ✅ 570x ParetoDominant | — | O(n) `Vec` scan → O(1) `HashMap` lookup |
 | `static-str` | allocation | ✅ 42x ParetoDominant | — | `String` return → `&'static str` for constant labels |
+| `vec-with-capacity` | allocation | ✅ 1.1-4.3x ParetoDominant | — | `Vec::new()` + push loop → `Vec::with_capacity(n)` (realloc cost) |
+| `format-concat-loop` | allocation | ✅ 42-95x ParetoDominant | — | `format!("{s}{x}")` concat in loop → `String::push_str` (O(n²) → O(n)) |
 | `layout-reorder` | layout | ❌ NotBenchable | — | Field reorder to eliminate padding (deterministic `size_of`, not a runtime microbench) |
+| `repr-u8-enum` | layout | ❌ NotBenchable | — | Field-less enum → `#[repr(u8)]` (deterministic `size_of`, same class as layout-reorder) |
 | `papaya-lockfree` | concurrency | ❌ 0.55-0.79x ParetoDominated | ⚠️ `context_notes` | `Arc<RwLock<HashMap>>` → `papaya` lock-free map (benefit needs multi-threaded contention) |
 | `simd-chunk` | simd | ✅ 3.9x ParetoDominant | — | Scalar loop → 4-wide chunked loop for LLVM auto-vectorization |
 | `precompute-table` | caching | ❌ 0.20-0.40x ParetoDominated | ⚠️ `context_notes` | Recompute-per-call → `const` lookup table (compiler optimizes popcount to POPCNT in release) |
@@ -71,8 +76,8 @@ the measured GOAT results.
 
 The original caveat called perf "the weakest link" because perf has no
 single ground truth. **Bench 013 closes this**: the Pareto validator now
-provides the real perf ground truth. 3/5 benchable rules are Pareto-dominant
-(clear wins); 2/5 are honestly Pareto-dominated (compiler optimizations,
+provides the real perf ground truth. 5/7 benchable rules are Pareto-dominant
+(clear wins); 2/7 are honestly Pareto-dominated (compiler optimizations,
 regime-dependent benefits) — exactly the kind of honest signal the caveat
 predicted.
 
@@ -143,7 +148,7 @@ cargo invocations against temp crates race on cargo's build cache lock.
 ## Source
 
 - [`src/domains/rust_perf/mod.rs`](../../src/domains/rust_perf/mod.rs) — `PerfRule` + `RustPerfDomain`
-- [`src/domains/rust_perf/corpus.rs`](../../src/domains/rust_perf/corpus.rs) — `build_perf_seed_corpus()` + 5 `BenchSpec`s
+- [`src/domains/rust_perf/corpus.rs`](../../src/domains/rust_perf/corpus.rs) — `build_perf_seed_corpus()` + 7 `BenchSpec`s
 - [`src/domains/rust_perf/verify.rs`](../../src/domains/rust_perf/verify.rs) — `PerfVerifier` (cargo test)
 - [`src/domains/rust_perf/bench.rs`](../../src/domains/rust_perf/bench.rs) — `PerfBenchValidator` (Pareto verdict)
 - [`examples/perf_heal_demo.rs`](../../examples/perf_heal_demo.rs) — scaffold end-to-end demo
