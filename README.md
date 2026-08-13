@@ -8,7 +8,7 @@ space, drafts fixes via a modelless ternary SIMD matvec, and validates with a
 | Domain | Feature | Status | Corpus |
 |---|---|---|---|
 | **clippy_lints** (default) | `clippy_lints` | ✅ Production | 10 common lints (style/complexity/perf/nursery) |
-| **rust_perf** (default since 2026-08-13) | `rust_perf` | ✅ Phase 2 (GOAT G1+G5 PASS, Bench 013) | 8 rules from `rust-optimize` skill (complexity/allocation/layout/concurrency/simd/caching/bevy/wasm); 2 carry `context_notes` (ParetoDominated in default config) |
+| **rust_perf** (default since 2026-08-13) | `rust_perf` | ✅ Phase 2 (GOAT G1+G5 PASS, Bench 013) | 13 rules from `rust-optimize` skill (complexity/allocation/layout/concurrency/simd/caching/bevy/wasm); 3 carry `context_notes` (2 ParetoDominated + 1 Mixed in default config) |
 | **kernel_opt** (opt-in) | `kernel_heal` | ✅ Phase 3 scaffold | 2 placeholder rules (matvec-coalesce, gemm-tiling); real popcorn distillation deferred (Proposal 012 §Phase 0) |
 
 Heavyweight LoRA is the last-resort fallback, not the co-equal path.

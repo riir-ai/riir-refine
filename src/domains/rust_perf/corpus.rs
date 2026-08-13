@@ -15,8 +15,10 @@
 //! `run_buggy` / `run_fixed` entry points. The bench validator generates a
 //! temp bin crate from the spec + runs a timing loop at multiple sizes.
 //!
-//! Currently benchable (7/11):
+//! Currently benchable (9/13):
 //! - `o1-lookup` (Vec scan vs HashMap lookup — clear O(n) vs O(1))
+//! - `bsearch-sorted-slice` (linear scan vs binary search — O(n) vs O(log n) on sorted data)
+//! - `dedupe-hashset-vs-vec` (Vec::contains loop vs HashSet collect — O(n²) vs O(n))
 //! - `static-str` (String alloc vs &'static str — allocation cost)
 //! - `simd-chunk` (scalar vs chunked loop — vectorization at large N)
 //! - `precompute-table` (recompute vs const lookup table — **context-dependent**,
@@ -26,7 +28,7 @@
 //! - `vec-with-capacity` (Vec::new() growth vs Vec::with_capacity — realloc cost)
 //! - `format-concat-loop` (format! concat in loop vs push_str — O(n²) vs O(n))
 //!
-//! Not benchable (4/11) — honest:
+//! Not benchable (4/13) — honest:
 //! - `layout-reorder` (struct size — deterministic `size_of`, not a runtime
 //!   microbench; the cache-utilization claim needs a specific access pattern)
 //! - `repr-u8-enum` (enum size — deterministic `size_of`, same class as
@@ -36,24 +38,26 @@
 //!
 //! ## Context-dependent rules (`context_notes`)
 //!
-//! Two rules carry a `context_notes: Some(...)` annotation recording that the
-//! Bench 013 Pareto validator found them **ParetoDominated** in the default
-//! configuration (`precompute-table`, `papaya-lockfree`). The patterns are
-//! genuine wins in their respective regimes (non-POPCNT targets / multi-
-//! threaded contention) and are kept in the corpus as documented patterns,
-//! but consumers should treat them as context-dependent — not unconditional
-//! suggestions.
+//! Three rules carry a `context_notes: Some(...)` annotation recording that the
+//! Bench 013 Pareto validator found them **ParetoDominated** or **Mixed** in the
+//! default configuration (`precompute-table`, `papaya-lockfree`,
+//! `dedupe-hashset-vs-vec`). The patterns are genuine wins in their respective
+//! regimes (non-POPCNT targets / multi-threaded contention / large N) and are
+//! kept in the corpus as documented patterns, but consumers should treat them
+//! as context-dependent — not unconditional suggestions.
 
 use crate::corpus::Corpus;
 use crate::domains::rust_perf::{PerfRule, RustPerfDomain};
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 11 entries
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 13 entries
 /// covering the main `rust-optimize` skill categories (complexity, allocation,
-/// layout, concurrency, simd, caching, bevy, wasm). Allocation is the deepest
-/// category (3 rules: `static-str`, `vec-with-capacity`, `format-concat-loop`)
-/// — it is the most common real-world Rust perf anti-pattern.
+/// layout, concurrency, simd, caching, bevy, wasm). Complexity is now the
+/// deepest category (3 rules: `o1-lookup`, `bsearch-sorted-slice`,
+/// `dedupe-hashset-vs-vec`) — it covers the most common algorithmic anti-
+/// patterns; allocation is second (3 rules: `static-str`, `vec-with-capacity`,
+/// `format-concat-loop`).
 #[must_use]
 #[allow(clippy::too_many_lines)] // seed corpus is a data table; length scales with rule count
 pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
@@ -68,6 +72,46 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
             context_notes: None,
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: Some(o1_lookup_bench_spec()),
+        },
+        // ── complexity: O(n) scan on sorted slice → O(log n) binary search ─
+        // The compiler cannot transform a linear scan into a binary search;
+        // this is a genuine algorithmic improvement on pre-sorted data.
+        PerfRule {
+            rule_id: "bsearch-sorted-slice".to_string(),
+            name: "O(n) .contains() on sorted slice → O(log n) binary_search()".to_string(),
+            category: "complexity".to_string(),
+            buggy_code: "fn contains(sorted: &[u32], target: u32) -> bool {\n    sorted.iter().any(|&x| x == target)\n}".to_string(),
+            fixed_code: "fn contains(sorted: &[u32], target: u32) -> bool {\n    sorted.binary_search(&target).is_ok()\n}".to_string(),
+            context_notes: None,
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(bsearch_sorted_slice_bench_spec()),
+        },
+        // ── complexity: O(n²) dedup via Vec::contains → O(n) HashSet ───────
+        // Building a unique Vec by repeated linear membership checks is O(n²).
+        // Collecting into a HashSet then draining is O(n) average. The
+        // compiler cannot optimize a growing-Vec membership loop into a hash
+        // table — this is a pure algorithmic improvement.
+        PerfRule {
+            rule_id: "dedupe-hashset-vs-vec".to_string(),
+            name: "O(n²) Vec::contains dedup loop → O(n) HashSet collect".to_string(),
+            category: "complexity".to_string(),
+            buggy_code: "fn unique(items: &[u32]) -> Vec<u32> {\n    let mut seen = Vec::new();\n    for &x in items {\n        if !seen.contains(&x) { seen.push(x); }\n    }\n    seen\n}".to_string(),
+            fixed_code: "use std::collections::HashSet;\nfn unique(items: &[u32]) -> Vec<u32> {\n    let seen: HashSet<u32> = items.iter().copied().collect();\n    seen.into_iter().collect()\n}".to_string(),
+            // Bench 013 Mixed (2/4 Faster, 2/4 Slower). HashSet allocation +
+            // hashing overhead exceeds the O(n²) cost at small N (≤500).
+            // Wins clearly at N ≥ 1000 (up to 7.5× at N=5000). The rule is a
+            // genuine algorithmic win for collections known to exceed ~500
+            // elements; for small dedup the Vec::contains approach is fine.
+            context_notes: Some(
+                "Bench 013: Mixed (2/4 Faster, 2/4 Slower). O(n²) cost is \
+                 trivial at small N (≤500), so HashSet allocation + hashing \
+                 overhead dominates. Wins at N ≥ 1000 (1.5× to 7.5×). Suggest \
+                 for dedup on collections known to exceed ~500 elements; for \
+                 small dedup, the Vec::contains approach is fine."
+                    .to_string(),
+            ),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(dedupe_hashset_vs_vec_bench_spec()),
         },
         // ── allocation: String → &'static str ─────────────────────────────
         PerfRule {
@@ -296,6 +340,103 @@ pub fn run_buggy(input: &Input) {
 pub fn run_fixed(input: &Input) {
     let id = std::hint::black_box((input.vec.len() - 1) as u32);
     std::hint::black_box(fixed::find_user(&input.map, id));
+}
+"#
+        .to_string(),
+    }
+}
+
+/// Bench spec for `bsearch-sorted-slice`: O(n) linear scan vs O(log n) binary search.
+///
+/// Both functions search a sorted `&[u32]` for a target that is NOT present
+/// (worst case for the linear scan — full pass). Binary search examines only
+/// log₂(n) elements. The compiler cannot transform the linear `any()` into a
+/// binary search, so the win is real at all sizes ≥ 100.
+#[cfg(feature = "rust_perf_bench")]
+fn bsearch_sorted_slice_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![100, 1_000, 10_000, 100_000],
+        harness: r#"
+mod buggy {
+    pub fn contains(sorted: &[u32], target: u32) -> bool {
+        sorted.iter().any(|&x| x == target)
+    }
+}
+
+mod fixed {
+    pub fn contains(sorted: &[u32], target: u32) -> bool {
+        sorted.binary_search(&target).is_ok()
+    }
+}
+
+pub fn make_input(n: usize) -> Vec<u32> {
+    // Sorted ascending 0,1,2,...,n-1
+    (0..n as u32).collect()
+}
+
+pub fn run_buggy(input: &[u32]) {
+    // Worst case: target not present (full O(n) scan).
+    let target = std::hint::black_box(input.len() as u32);
+    std::hint::black_box(buggy::contains(input, target));
+}
+
+pub fn run_fixed(input: &[u32]) {
+    let target = std::hint::black_box(input.len() as u32);
+    std::hint::black_box(fixed::contains(input, target));
+}
+"#
+        .to_string(),
+    }
+}
+
+/// Bench spec for `dedupe-hashset-vs-vec`: O(n²) growing-Vec dedup vs O(n) HashSet.
+///
+/// The buggy path builds a unique list by repeatedly calling `Vec::contains`
+/// on a growing vector — O(n²) total comparisons. The fixed path collects
+/// into a HashSet in O(n) average. Input has ~n/2 unique values repeated
+/// twice, ensuring the growing-Vec scan has meaningful work at every step.
+/// Sizes capped at 5_000 because the O(n²) buggy path dominates wall-clock
+/// at larger n (~6 ms at 5_000; ~25 ms at 10_000).
+#[cfg(feature = "rust_perf_bench")]
+fn dedupe_hashset_vs_vec_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![100, 500, 1_000, 5_000],
+        harness: r#"
+mod buggy {
+    pub fn unique(items: &[u32]) -> Vec<u32> {
+        let mut seen = Vec::new();
+        for &x in items {
+            if !seen.contains(&x) {
+                seen.push(x);
+            }
+        }
+        seen
+    }
+}
+
+mod fixed {
+    use std::collections::HashSet;
+    pub fn unique(items: &[u32]) -> Vec<u32> {
+        let seen: HashSet<u32> = items.iter().copied().collect();
+        seen.into_iter().collect()
+    }
+}
+
+pub fn make_input(n: usize) -> Vec<u32> {
+    // Half duplicates: values cycle through 0..(n/2), repeated twice.
+    // This produces O(n²) behavior in the buggy path (every element
+    // triggers a Vec scan of growing length).
+    (0..n).map(|i| (i % (n / 2)) as u32).collect()
+}
+
+pub fn run_buggy(input: &[u32]) {
+    let v = buggy::unique(input);
+    std::hint::black_box(v);
+}
+
+pub fn run_fixed(input: &[u32]) {
+    let v = fixed::unique(input);
+    std::hint::black_box(v);
 }
 "#
         .to_string(),
@@ -652,16 +793,15 @@ mod tests {
     }
 
     #[test]
-    fn seed_corpus_has_eleven_entries_across_eight_categories() {
+    fn seed_corpus_has_thirteen_entries_across_eight_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 11);
+        assert_eq!(corpus.entries.len(), 13);
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
         categories.dedup();
-        // 8 distinct categories. Allocation is the deepest (3 rules:
-        // static-str, vec-with-capacity, format-concat-loop); layout has 2
-        // (layout-reorder, repr-u8-enum); the rest have 1 each.
+        // 8 distinct categories. Complexity + allocation tie for deepest
+        // (3 rules each); layout has 2; the rest have 1 each.
         assert_eq!(categories.len(), 8);
     }
 
@@ -730,10 +870,10 @@ mod tests {
 
     #[cfg(feature = "rust_perf_bench")]
     #[test]
-    fn seven_rules_have_bench_specs() {
+    fn nine_rules_have_bench_specs() {
         let corpus = build_perf_seed_corpus();
         let with_spec = corpus.entries.iter().filter(|e| e.bench_spec.is_some()).count();
-        assert_eq!(with_spec, 7, "expected 7 benchable rules, got {with_spec}");
+        assert_eq!(with_spec, 9, "expected 9 benchable rules, got {with_spec}");
     }
 
     #[cfg(feature = "rust_perf_bench")]
@@ -753,12 +893,13 @@ mod tests {
         assert!(without_spec.contains(&"wasm-batch-ffi"));
     }
 
-    /// Bench 013 found 2 rules ParetoDominated in the default config. Their
-    /// `context_notes` annotation records the finding so consumers don't
-    /// unconditionally suggest them. The other 9 have `context_notes: None`
-    /// (unconditional wins or honestly NotBenchable).
+    /// Bench 013 found 3 rules with non-dominant verdicts in the default
+    /// config (2 ParetoDominated + 1 Mixed). Their `context_notes` annotation
+    /// records the finding so consumers don't unconditionally suggest them.
+    /// The other 10 have `context_notes: None` (unconditional wins or honestly
+    /// NotBenchable).
     #[test]
-    fn two_dominated_rules_carry_context_notes() {
+    fn three_annotated_rules_carry_context_notes() {
         let corpus = build_perf_seed_corpus();
         let annotated: Vec<&str> = corpus
             .entries
@@ -766,23 +907,24 @@ mod tests {
             .filter(|e| e.context_notes.is_some())
             .map(|e| e.rule_id.as_str())
             .collect();
-        assert_eq!(annotated.len(), 2, "expected 2 context-annotated rules");
+        assert_eq!(annotated.len(), 3, "expected 3 context-annotated rules");
         assert!(annotated.contains(&"precompute-table"));
         assert!(annotated.contains(&"papaya-lockfree"));
+        assert!(annotated.contains(&"dedupe-hashset-vs-vec"));
     }
 
-    /// The 9 non-annotated rules (5 ParetoDominant + 4 NotBenchable) must
+    /// The 10 non-annotated rules (6 ParetoDominant + 4 NotBenchable) must
     /// have `context_notes: None` — they are either unconditional wins or
     /// honestly unmeasurable.
     #[test]
-    fn nine_rules_have_no_context_notes() {
+    fn ten_rules_have_no_context_notes() {
         let corpus = build_perf_seed_corpus();
         let unannotated = corpus
             .entries
             .iter()
             .filter(|e| e.context_notes.is_none())
             .count();
-        assert_eq!(unannotated, 9, "expected 9 unannotated rules");
+        assert_eq!(unannotated, 10, "expected 10 unannotated rules");
     }
 
     /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -794,7 +936,7 @@ mod tests {
         let json = serde_json::to_string(&corpus.entries).unwrap();
         let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
         let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-        assert_eq!(annotated, 2);
+        assert_eq!(annotated, 3);
 
         // Simulate a pre-field snapshot: strip `context_notes` from JSON.
         // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -805,19 +947,20 @@ mod tests {
     }
 
     /// Integration: the drafter propagates `context_notes` from `PerfRule`
-    /// through `DraftedFix` for the 2 ParetoDominated rules, and `None` for
-    /// the 6 unconditional wins. This is the Plan 001 post-promotion wiring
-    /// (2026-08-13) — the field existed on `PerfRule` but was invisible to
-    /// the domain-agnostic drafter until `HealEntry::context_notes()` landed.
+    /// through `DraftedFix` for the 3 annotated rules (2 ParetoDominated + 1
+    /// Mixed), and `None` for the 7 unconditional wins. This is the Plan 001
+    /// post-promotion wiring (2026-08-13) — the field existed on `PerfRule`
+    /// but was invisible to the domain-agnostic drafter until
+    /// `HealEntry::context_notes()` landed.
     #[test]
     fn drafter_propagates_context_notes_from_perf_corpus() {
         use crate::domain::HealEntry;
 
         let corpus = build_perf_seed_corpus();
 
-        // Filter to the 2 annotated rules.
+        // Filter to the 3 annotated rules.
         let annotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_some()).collect();
-        assert_eq!(annotated.len(), 2, "expected 2 annotated rules");
+        assert_eq!(annotated.len(), 3, "expected 3 annotated rules");
 
         // The HealEntry trait override must agree with the struct field.
         for rule in &annotated {
@@ -828,13 +971,14 @@ mod tests {
                 rule.rule_id
             );
             assert!(
-                rule.context_notes.as_ref().unwrap().contains("ParetoDominated"),
-                "annotation should mention ParetoDominated for {}",
+                rule.context_notes.as_ref().unwrap().contains("ParetoDominated")
+                    || rule.context_notes.as_ref().unwrap().contains("Mixed"),
+                "annotation should mention ParetoDominated or Mixed for {}",
                 rule.rule_id
             );
         }
 
-        // The 9 unannotated rules must return None from the trait too.
+        // The 10 unannotated rules must return None from the trait too.
         let unannotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_none()).collect();
         for rule in &unannotated {
             assert!(HealEntry::context_notes(*rule).is_none(), "{} should have no context_notes", rule.rule_id);

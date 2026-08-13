@@ -25,8 +25,9 @@ use serde::Serialize;
 /// The `context_notes()` method (Plan 001 post-promotion, 2026-08-13) has a
 /// default `None` impl so it is **non-breaking** — domains whose rules are
 /// unconditional wins (clippy, `kernel_opt`) need no changes. The `rust_perf`
-/// domain overrides it for the 2 `ParetoDominated` rules (Bench 013) so the
-/// drafter can propagate the annotation through [`DraftedFix`](crate::DraftedFix).
+/// domain overrides it for the 3 annotated rules (2 `ParetoDominated` + 1 `Mixed`
+/// per Bench 013) so the drafter can propagate the annotation through
+/// [`DraftedFix`](crate::DraftedFix).
 pub trait HealEntry {
     /// The rule identifier (clippy: lint name, perf: rule id, kernel: concept id).
     fn rule_id(&self) -> &str;

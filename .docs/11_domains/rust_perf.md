@@ -19,17 +19,21 @@
 
 ## Corpus
 
-11 seed rules across 8 skill-checklist categories. Allocation is the
-deepest category (3 rules — it is the most common real-world Rust perf
-anti-pattern); layout has 2; the rest have 1 each. 7 are benchable (carry a
-`BenchSpec`); 4 are honestly `NotBenchable` (need external runtimes or are
-structural). 2 of the 7 benchable rules carry `context_notes` (Bench 013
-found them `ParetoDominated` in the default config — consumers should treat
-them as context-dependent, not unconditional suggestions).
+13 seed rules across 8 skill-checklist categories. Complexity + allocation
+are the deepest categories (3 rules each — complexity covers the most common
+algorithmic anti-patterns: O(n)→O(1)/O(log n) lookups, O(n²)→O(n) dedup;
+allocation covers the most common memory anti-patterns); layout has 2; the
+rest have 1 each. 9 are benchable (carry a `BenchSpec`); 4 are honestly
+`NotBenchable` (need external runtimes or are structural). 3 of the 9
+benchable rules carry `context_notes` (Bench 013 found 2 `ParetoDominated` +
+1 `Mixed` in the default config — consumers should treat them as context-
+dependent, not unconditional suggestions).
 
 | Rule ID | Category | Bench verdict | Context? | Pattern |
 |---|---|---|---|---|
 | `o1-lookup` | complexity | ✅ 570x ParetoDominant | — | O(n) `Vec` scan → O(1) `HashMap` lookup |
+| `bsearch-sorted-slice` | complexity | ✅ 16-2709x ParetoDominant | — | O(n) `.contains()` on sorted slice → O(log n) `binary_search()` |
+| `dedupe-hashset-vs-vec` | complexity | ~ Mixed (2/4 Faster) | ⚠️ `context_notes` | O(n²) `Vec::contains` dedup loop → O(n) `HashSet` collect (wins at N ≥ 1000; HashSet overhead dominates at small N) |
 | `static-str` | allocation | ✅ 42x ParetoDominant | — | `String` return → `&'static str` for constant labels |
 | `vec-with-capacity` | allocation | ✅ 1.1-4.3x ParetoDominant | — | `Vec::new()` + push loop → `Vec::with_capacity(n)` (realloc cost) |
 | `format-concat-loop` | allocation | ✅ 42-95x ParetoDominant | — | `format!("{s}{x}")` concat in loop → `String::push_str` (O(n²) → O(n)) |
@@ -76,14 +80,15 @@ the measured GOAT results.
 
 The original caveat called perf "the weakest link" because perf has no
 single ground truth. **Bench 013 closes this**: the Pareto validator now
-provides the real perf ground truth. 5/7 benchable rules are Pareto-dominant
-(clear wins); 2/7 are honestly Pareto-dominated (compiler optimizations,
-regime-dependent benefits) — exactly the kind of honest signal the caveat
-predicted.
+provides the real perf ground truth. 6/9 benchable rules are Pareto-dominant
+(clear wins); 2/9 are honestly Pareto-dominated (compiler optimizations,
+regime-dependent benefits); 1/9 is Mixed (scale-dependent) — exactly the
+kind of honest signal the caveat predicted.
 
 ## Drafter + pipeline integration (`context_notes` propagation, 2026-08-13)
 
-The 2 `ParetoDominated` rules carry a `context_notes: Some(...)` annotation on
+The 3 annotated rules (2 `ParetoDominated` + 1 `Mixed`) carry a
+`context_notes: Some(...)` annotation on
 [`PerfRule`](../../src/domains/rust_perf/mod.rs). The annotation now propagates
 end-to-end through the full heal stack — drafter → pipeline → consumer:
 

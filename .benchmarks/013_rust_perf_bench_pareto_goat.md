@@ -27,27 +27,39 @@ Rules without a `BenchSpec` are honestly marked `NotBenchable`.
 
 | Gate | What | Target | Status |
 |---|---|---|---|
-| G1 (correctness) | benchable rules produce real measurements (ran=true, non-empty results) | all 5 benchable rules run | ✅ PASS (5/5 ran) |
+| G1 (correctness) | benchable rules produce real measurements (ran=true, non-empty results) | all 9 benchable rules run | ✅ PASS (9/9 ran) |
 | G2 (latency) | per-rule latency (temp crate compile + bench subprocess) | documented, not hot-path | ~5-15s/rule (compile-dominated) |
-| G3 (no-regression) | default features (no `rust_perf_bench`) still pass | default `cargo test --lib` green | ✅ PASS (75 default tests) |
+| G3 (no-regression) | default features (no `rust_perf_bench`) still pass | default `cargo test --lib` green | ✅ PASS (91 default tests) |
 | G4 (alloc-free) | N/A — subprocess-based validator | N/A | ✅ PASS (documented N/A) |
-| G5 (Pareto verdict) | majority of benchable rules are Pareto-dominant | `pareto_dominant * 2 > benchable` | ✅ PASS (3/5 = majority) |
+| G5 (Pareto verdict) | majority of benchable rules are Pareto-dominant | `pareto_dominant * 2 > benchable` | ✅ PASS (6/9 = majority) |
 
-## Measured results (5 benchable, 3 not-benchable)
+## Measured results (9 benchable, 4 not-benchable)
 
-### Pareto-dominant (3/5) — the pattern works
+### Pareto-dominant (6/9) — the pattern works
 
 | Rule | N=small | N=large | Peak speedup | Verdict |
 |---|---:|---:|---:|---|
 | `o1-lookup` | 0.60x (N=10) | **570.60x** (N=10000) | 570.60x | ✅ ParetoDominant (3/4 sizes faster) |
+| `bsearch-sorted-slice` | 16.00x (N=100) | **2709.00x** (N=100000) | 2709.00x | ✅ ParetoDominant (4/4 sizes faster) |
 | `simd-chunk` | 2.90x (N=100) | **3.90x** (N=100000) | 3.90x | ✅ ParetoDominant (4/4 sizes faster) |
 | `static-str` | 37.06x (N=1) | **43.18x** (N=100) | 43.18x | ✅ ParetoDominant (3/3 sizes faster) |
+| `vec-with-capacity` | 4.43x (N=100) | **1.07x** (N=100000) | 4.43x | ✅ ParetoDominant (4/4 sizes faster) |
+| `format-concat-loop` | 45.25x (N=100) | **94.58x** (N=1000) | 94.58x | ✅ ParetoDominant (3/3 sizes faster) |
 
 The `o1-lookup` N=10 SLOWER (0.60x) is small-N noise — HashMap has
 setup overhead that dominates at 10 elements. The O(n)→O(1) win is
 overwhelming at large N (570x at N=10000).
 
-### Pareto-dominated (2/5) — honest findings
+`bsearch-sorted-slice` is the standout: O(log n) vs O(n) produces a
+**2709×** speedup at N=100000 — the log scale gap grows without bound.
+
+### Mixed (1/9) — scale-dependent
+
+| Rule | Speedup range | Verdict | Honest reason |
+|---|---:|---|---|
+| `dedupe-hashset-vs-vec` | 0.64x–7.53x | ~ Mixed (2/4 Faster, 2/4 Slower) | HashSet allocation + hashing overhead exceeds the O(n²) cost at small N (≤500 elements, trivial comparison count). Wins clearly at N ≥ 1000 (up to 7.53x at N=5000). Suggest for dedup on collections known to exceed ~500 elements; for small dedup, the `Vec::contains` approach is fine. |
+
+### Pareto-dominated (2/9) — honest findings
 
 | Rule | Speedup range | Verdict | Honest reason |
 |---|---:|---|---|
@@ -58,11 +70,12 @@ These are NOT bugs in the validator — they're exactly the kind of
 honest signal Proposal 001 caveat 3 predicted ("perf has no single
 ground truth — 'faster' depends on workload, hardware, input size").
 
-### Not benchable (3/8) — honest markings
+### Not benchable (4/13) — honest markings
 
 | Rule | Reason |
 |---|---|
 | `layout-reorder` | `size_of` is deterministic (compile-time); the cache-utilization claim needs a specific access pattern to show up in a microbench. |
+| `repr-u8-enum` | `size_of` is deterministic (compile-time), same class as `layout-reorder`. |
 | `bevy-reactive-loop` | Needs the Bevy runtime (event loop + winit) — can't run in a temp crate. |
 | `wasm-batch-ffi` | Needs a WASM runtime (js-sys / wasm-bindgen FFI) — can't run in a temp crate. |
 
@@ -98,18 +111,19 @@ is simpler, faster to compile, and sufficient for a Pareto verdict.
 
 **rust_perf was promoted to default-on 2026-08-13.** The GOAT gate (G1+G5)
 passed:
-- G1: all 5 benchable rules produce real measurements ✅
-- G5: 3/5 benchable rules are Pareto-dominant (majority) ✅
+- G1: all 9 benchable rules produce real measurements ✅
+- G5: 6/9 benchable rules are Pareto-dominant (majority) ✅
 
 The promotion follows the global AGENTS.md rule "promote to default if gain
 also demote loser":
 - **Promoted**: the `rust_perf` domain moved from opt-in to `default = [...]`
   in Cargo.toml.
 - **Demoted (annotated)**: the 2 ParetoDominated rules (`precompute-table`,
-  `papaya-lockfree`) now carry a `context_notes: Some(...)` annotation on
-  [`PerfRule`] documenting that the bench found them slower in the default
-  config. The patterns are kept in the corpus (they're genuine wins in their
-  respective regimes — non-POPCNT targets / multi-threaded contention) but
+  `papaya-lockfree`) + the 1 Mixed rule (`dedupe-hashset-vs-vec`) now carry a
+  `context_notes: Some(...)` annotation on [`PerfRule`] documenting that the
+  bench found them slower or scale-dependent in the default config. The
+  patterns are kept in the corpus (they're genuine wins in their respective
+  regimes — non-POPCNT targets / multi-threaded contention / large N) but
   consumers should treat annotated rules as context-dependent, not
   unconditional suggestions. The annotation is backward-compatible via
   `#[serde(default)]` — older freeze/thaw snapshots deserialize as `None`.
