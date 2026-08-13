@@ -63,6 +63,14 @@ rust_perf = []
 # Implies `rust_perf` (uses the perf verifier).
 rust_perf_verify = ["rust_perf"]
 
+# Perf-bench Pareto validator (Plan 001 Phase 2 GOAT gate).
+# Generates microbenchmarks at multiple input sizes + reports a Pareto verdict
+# (faster on N of M sizes). This is the **promotion gate** for `rust_perf`.
+# Opt-in because it's slow (seconds per rule — spawns cargo build + run),
+# requires cargo on PATH, and microbenchmarks are inherently noisy.
+# Implies `rust_perf` (adds the BenchSpec field to PerfRule).
+rust_perf_bench = ["rust_perf"]
+
 # Phase 3: GPU kernel optimization healing domain (absorbs Proposal 012).
 # Opt-in (default-off). 4090 LoRA (L4) deferred to riir-train. Not promoted
 # to default until a domain-specific GOAT (real corpus + full numeric
@@ -124,6 +132,13 @@ required-features = ["clippy_lints"]
 [[example]]
 name = "perf_heal_demo"
 required-features = ["rust_perf"]
+
+# Phase 2 GOAT gate: perf-bench Pareto validator across the benchable corpus.
+# Runs generated microbenchmarks for 5/8 rules + reports Pareto verdicts.
+# SLOW — spawns cargo build + run per rule (seconds each).
+[[example]]
+name = "perf_bench_demo"
+required-features = ["rust_perf_bench"]
 
 [[example]]
 name = "clippy_verify_demo"

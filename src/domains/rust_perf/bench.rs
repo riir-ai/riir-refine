@@ -1,0 +1,652 @@
+//! Perf-bench Pareto validator — runs generated microbenchmarks across multiple
+//! input sizes and reports a Pareto verdict (faster on N of M sizes).
+//!
+//! This is the **promotion gate** for the `rust_perf` domain (Proposal 001
+//! caveat 3). The existing `rust_perf_verify` runs `cargo test` (compilation +
+//! test pass) — a *degraded* validator with no perf claim. This module adds
+//! the real perf ground truth: does the fixed code actually run faster?
+//!
+//! Behind the `rust_perf_bench` feature gate (opt-in, default-off) because:
+//! - **Slow**: each rule spawns a cargo build + bench subprocess (seconds)
+//! - **Environment-dependent**: requires cargo on PATH
+//! - **Noise**: microbenchmarks are inherently noisy (mitigated via warmup +
+//!   dynamic calibration + median-of-samples, but still a measurement, not a proof)
+//!
+//! ## Methodology
+//!
+//! 1. Generate a temp **bin** crate embedding the rule's `BenchSpec.harness`
+//!    + a timing loop (dynamic calibration → warmup → median-of-samples).
+//! 2. Run `cargo run --release` on the temp crate.
+//! 3. Parse JSON lines: `{"size":N,"buggy_ns":X,"fixed_ns":Y}`.
+//! 4. Compute per-size outcome (Faster/Slower/Tie at ±5% threshold).
+//! 5. Aggregate into a [`ParetoVerdict`] (ParetoDominant if faster on majority).
+//!
+//! ## Modelless-first
+//!
+//! `cargo run` + `std::time::Instant` are deterministic runners — no ML, no
+//! training. The timing *measurement* is noisy, but the verdict logic
+//! (median + threshold comparison) is deterministic given the measurements.
+//! This satisfies the modelless-first mandate.
+
+use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
+use std::process::Command;
+
+/// A benchmark specification for a perf rule.
+///
+/// Rules without a bench spec are [`BenchVerdict::NotBenchable`] — honest
+/// marking for rules that need external runtimes (Bevy, WASM) a temp crate
+/// cannot provide.
+///
+/// The `harness` is a **self-contained Rust source fragment** that defines:
+/// - `pub fn make_input(n: usize) -> <Input>` — builds the input for size `n`
+/// - `pub fn run_buggy(input: &<Input>)` — exercises the buggy pattern
+/// - `pub fn run_fixed(input: &<Input>)` — exercises the fixed pattern
+///
+/// The harness embeds the buggy + fixed code inline (with any needed `pub`
+/// modifiers). The validator wraps this fragment with a timing loop + compiles
+/// it as a bin crate.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BenchSpec {
+    /// Input sizes to sweep (e.g., `[10, 100, 1000, 10000]`).
+    pub sizes: Vec<usize>,
+    /// Self-contained Rust source defining `make_input` + `run_buggy` + `run_fixed`.
+    pub harness: String,
+}
+
+/// The per-size outcome of a bench comparison.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SizeOutcome {
+    /// Fixed code is ≥5% faster than buggy at this size.
+    Faster,
+    /// Fixed code is ≥5% slower than buggy at this size.
+    Slower,
+    /// Within ±5% (noise band).
+    Tie,
+}
+
+/// A single size's measurement result.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SizeResult {
+    pub size: usize,
+    /// Median ns/iter for the buggy code.
+    pub buggy_ns: u64,
+    /// Median ns/iter for the fixed code.
+    pub fixed_ns: u64,
+    /// `buggy_ns / fixed_ns` (>1.0 = fixed is faster).
+    pub speedup: f64,
+    pub outcome: SizeOutcome,
+}
+
+/// The overall Pareto verdict across all sizes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BenchOverall {
+    /// Fixed code is faster on the majority of sizes (the promotion bar).
+    ParetoDominant,
+    /// Faster on some sizes, slower on others.
+    Mixed,
+    /// Fixed code is slower on the majority (a regression).
+    ParetoDominated,
+}
+
+/// The full verdict from a perf-bench Pareto comparison.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParetoVerdict {
+    pub rule_id: String,
+    pub results: Vec<SizeResult>,
+    pub faster_count: usize,
+    pub slower_count: usize,
+    pub tie_count: usize,
+    pub overall: BenchOverall,
+    /// Whether `cargo run` executed successfully.
+    pub ran: bool,
+    /// Error message if `ran` is false.
+    pub error: Option<String>,
+}
+
+/// The verdict for a rule that has no `BenchSpec`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NotBenchable {
+    pub rule_id: String,
+    pub reason: String,
+}
+
+/// The union verdict from the bench validator.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum BenchVerdict {
+    Pareto(ParetoVerdict),
+    NotBenchable(NotBenchable),
+}
+
+impl BenchVerdict {
+    /// `true` if the rule passed its bench gate (Pareto-dominant).
+    #[must_use]
+    pub fn is_pareto_dominant(&self) -> bool {
+        matches!(
+            self,
+            BenchVerdict::Pareto(ParetoVerdict {
+                overall: BenchOverall::ParetoDominant,
+                ..
+            })
+        )
+    }
+
+    /// `true` if the rule was honestly skipped (no bench spec).
+    #[must_use]
+    pub fn is_not_benchable(&self) -> bool {
+        matches!(self, BenchVerdict::NotBenchable(_))
+    }
+}
+
+/// Classify a speedup ratio into a per-size outcome.
+///
+/// - `speedup > 1.05` → Faster (fixed is ≥5% faster)
+/// - `speedup < 0.95` → Slower (fixed is ≥5% slower)
+/// - otherwise → Tie (within the ±5% noise band)
+#[inline]
+fn classify_speedup(speedup: f64) -> SizeOutcome {
+    const FASTER_THRESHOLD: f64 = 1.05;
+    const SLOWER_THRESHOLD: f64 = 0.95;
+    if speedup > FASTER_THRESHOLD {
+        SizeOutcome::Faster
+    } else if speedup < SLOWER_THRESHOLD {
+        SizeOutcome::Slower
+    } else {
+        SizeOutcome::Tie
+    }
+}
+
+/// Aggregate per-size outcomes into an overall verdict.
+fn aggregate_outcomes(results: &[SizeResult]) -> BenchOverall {
+    let total = results.len();
+    let faster = results.iter().filter(|r| r.outcome == SizeOutcome::Faster).count();
+    let slower = results.iter().filter(|r| r.outcome == SizeOutcome::Slower).count();
+    if total == 0 {
+        return BenchOverall::Mixed;
+    }
+    if faster > slower && faster * 2 > total {
+        BenchOverall::ParetoDominant
+    } else if slower > faster && slower * 2 > total {
+        BenchOverall::ParetoDominated
+    } else {
+        BenchOverall::Mixed
+    }
+}
+
+/// The bench validator — generates + runs microbenchmarks for perf rules.
+pub struct PerfBenchValidator {
+    cargo_bin: String,
+    work_root: PathBuf,
+}
+
+impl Default for PerfBenchValidator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl PerfBenchValidator {
+    /// Create a validator using system cargo + default temp root.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cargo_bin: "cargo".to_string(),
+            work_root: std::env::temp_dir().join("riir_perf_bench"),
+        }
+    }
+
+    /// Override the cargo binary path.
+    #[must_use]
+    pub fn with_cargo_bin(cargo: impl Into<String>) -> Self {
+        Self {
+            cargo_bin: cargo.into(),
+            work_root: std::env::temp_dir().join("riir_perf_bench"),
+        }
+    }
+
+    /// Override the temp crate root directory.
+    #[must_use]
+    pub fn with_work_root(mut self, root: impl Into<PathBuf>) -> Self {
+        self.work_root = root.into();
+        self
+    }
+
+    /// Check if cargo is available.
+    #[must_use]
+    pub fn is_cargo_available(&self) -> bool {
+        Command::new(&self.cargo_bin)
+            .arg("--version")
+            .output()
+            .is_ok()
+    }
+
+    /// Run the bench validator for one rule.
+    ///
+    /// If the rule has a `BenchSpec`, generates a temp bin crate, runs the
+    /// timing loop, and returns a [`ParetoVerdict`]. If not, returns
+    /// [`BenchVerdict::NotBenchable`].
+    #[must_use]
+    pub fn validate(&self, rule_id: &str, spec: Option<&BenchSpec>) -> BenchVerdict {
+        let Some(spec) = spec else {
+            return BenchVerdict::NotBenchable(NotBenchable {
+                rule_id: rule_id.to_string(),
+                reason: "no BenchSpec (rule needs an external runtime or is structural)"
+                    .to_string(),
+            });
+        };
+
+        match self.run_bench(rule_id, spec) {
+            Ok(results) => {
+                let faster_count = results.iter().filter(|r| r.outcome == SizeOutcome::Faster).count();
+                let slower_count = results.iter().filter(|r| r.outcome == SizeOutcome::Slower).count();
+                let tie_count = results.iter().filter(|r| r.outcome == SizeOutcome::Tie).count();
+                let overall = aggregate_outcomes(&results);
+                BenchVerdict::Pareto(ParetoVerdict {
+                    rule_id: rule_id.to_string(),
+                    results,
+                    faster_count,
+                    slower_count,
+                    tie_count,
+                    overall,
+                    ran: true,
+                    error: None,
+                })
+            }
+            Err(e) => BenchVerdict::Pareto(ParetoVerdict {
+                rule_id: rule_id.to_string(),
+                results: vec![],
+                faster_count: 0,
+                slower_count: 0,
+                tie_count: 0,
+                overall: BenchOverall::Mixed,
+                ran: false,
+                error: Some(e),
+            }),
+        }
+    }
+
+    /// Generate the temp bin crate, compile, run, and parse results.
+    fn run_bench(&self, rule_id: &str, spec: &BenchSpec) -> Result<Vec<SizeResult>, String> {
+        let crate_dir = self.prepare_crate(rule_id, spec)?;
+        let stdout = self.run_cargo(&crate_dir)?;
+        Ok(Self::parse_bench_output(&stdout))
+    }
+
+    /// Prepare the temp bin crate.
+    ///
+    /// BLAKE3-keyed dir name → cargo reuses build cache on repeat calls.
+    fn prepare_crate(&self, rule_id: &str, spec: &BenchSpec) -> Result<PathBuf, String> {
+        // Hash rule_id + harness + sizes for a stable dir name.
+        let mut hasher_input = String::new();
+        hasher_input.push_str(rule_id);
+        hasher_input.push('|');
+        hasher_input.push_str(&spec.harness);
+        hasher_input.push('|');
+        for &s in &spec.sizes {
+            hasher_input.push_str(&s.to_string());
+            hasher_input.push(',');
+        }
+        let hash = blake3::hash(hasher_input.as_bytes());
+        let hex = hash.to_hex();
+        let dir = self.work_root.join(&hex[..16]);
+
+        let src_dir = dir.join("src");
+        std::fs::create_dir_all(&src_dir)
+            .map_err(|e| format!("create_dir_all failed: {e}"))?;
+
+        let cargo_toml = "[package]\n\
+            name = \"perf_bench\"\n\
+            version = \"0.0.0\"\n\
+            edition = \"2021\"\n\
+            \n\
+            [[bin]]\n\
+            name = \"perf_bench\"\n\
+            path = \"src/main.rs\"\n";
+
+        let deps = Self::extract_deps(&spec.harness);
+        let cargo_toml: String = if deps.is_empty() {
+            cargo_toml.to_string()
+        } else {
+            format!("{cargo_toml}\n[dependencies]\n{}", deps.join("\n"))
+        };
+
+        std::fs::write(dir.join("Cargo.toml"), cargo_toml)
+            .map_err(|e| format!("write Cargo.toml failed: {e}"))?;
+
+        // Generate src/main.rs: harness code + timing loop.
+        let main_rs = Self::generate_main_rs(spec);
+        std::fs::write(src_dir.join("main.rs"), main_rs)
+            .map_err(|e| format!("write main.rs failed: {e}"))?;
+
+        Ok(dir)
+    }
+
+    /// Extract [dep:...] markers from the harness to build Cargo.toml [dependencies].
+    ///
+    /// Convention: harness may include lines like `// [dep: papaya = "0.2"]` to
+    /// declare crates.io deps. These are stripped from the Rust source + added
+    /// to Cargo.toml as-is (the marker content IS the TOML dependency line).
+    fn extract_deps(harness: &str) -> Vec<String> {
+        let mut deps = Vec::new();
+        for line in harness.lines() {
+            let trimmed = line.trim();
+            if let Some(rest) = trimmed.strip_prefix("// [dep:") {
+                // Extract everything between `[dep:` and `]` as the TOML dep line.
+                let dep = rest.trim_end_matches(']').trim();
+                if !dep.is_empty() {
+                    deps.push(dep.to_string());
+                }
+            }
+        }
+        deps
+    }
+
+    /// Generate the complete `src/main.rs`: harness (with dep markers stripped)
+    /// + the timing loop.
+    ///
+    /// Uses a raw-string template with `__SIZES__` placeholder + `.replace()`
+    /// instead of nested `format!` — avoids the brace-escaping hell that
+    /// comes from generating Rust source containing `println!` format strings.
+    fn generate_main_rs(spec: &BenchSpec) -> String {
+        // Raw-string template — `{{` and `}}` here are LITERAL characters in
+        // the generated Rust source (the runtime `println!` format string uses
+        // them as escape sequences). No format! processing on this template.
+        const TIMING_LOOP: &str = r#"
+fn main() {
+    let sizes: &[usize] = &[__SIZES__];
+    let warmup_iters: u32 = 100;
+    let sample_count: usize = 21; // odd → clean median
+    let target_sample_ns: u64 = 1_000_000; // ~1ms per sample
+
+    for &n in sizes {
+        let input = make_input(n);
+
+        // Warmup both functions (instruction cache + branch predictor).
+        for _ in 0..warmup_iters {
+            run_buggy(&input);
+            run_fixed(&input);
+        }
+
+        // Dynamically calibrate iterations per sample for each function
+        // so each sample targets ~1ms (avoids timer-noise floor for fast fns).
+        let buggy_iters = calibrate(|| run_buggy(&input), target_sample_ns);
+        let fixed_iters = calibrate(|| run_fixed(&input), target_sample_ns);
+
+        // Measure buggy: take median of `sample_count` samples.
+        let mut buggy_samples: Vec<u64> = Vec::with_capacity(sample_count);
+        for _ in 0..sample_count {
+            let t0 = std::time::Instant::now();
+            for _ in 0..buggy_iters {
+                run_buggy(&input);
+            }
+            let total_ns = t0.elapsed().as_nanos() as u64;
+            buggy_samples.push(total_ns / buggy_iters.max(1));
+        }
+        buggy_samples.sort_unstable();
+        let buggy_median = buggy_samples[sample_count / 2];
+
+        // Measure fixed (interleave to reduce thermal/frequency bias).
+        let mut fixed_samples: Vec<u64> = Vec::with_capacity(sample_count);
+        for _ in 0..sample_count {
+            let t0 = std::time::Instant::now();
+            for _ in 0..fixed_iters {
+                run_fixed(&input);
+            }
+            let total_ns = t0.elapsed().as_nanos() as u64;
+            fixed_samples.push(total_ns / fixed_iters.max(1));
+        }
+        fixed_samples.sort_unstable();
+        let fixed_median = fixed_samples[sample_count / 2];
+
+        // Emit JSON line for the validator to parse.
+        // {{ and }} are escape sequences in the runtime println! format string.
+        println!("{{\"size\":{},\"buggy_ns\":{},\"fixed_ns\":{}}}",
+            n, buggy_median, fixed_median);
+    }
+}
+
+/// Calibrate iterations so one sample batch ≈ `target_ns`.
+fn calibrate<F: Fn()>(f: F, target_ns: u64) -> u64 {
+    let test_iters: u64 = 50;
+    let t0 = std::time::Instant::now();
+    for _ in 0..test_iters {
+        f();
+    }
+    let per_iter_ns = t0.elapsed().as_nanos() as u64 / test_iters.max(1);
+    let iters = target_ns / per_iter_ns.max(1);
+    iters.clamp(1, 10_000_000)
+}
+"#;
+
+        // Strip dep-marker lines from the harness source.
+        let harness_clean: String = spec
+            .harness
+            .lines()
+            .filter(|l| !l.trim_start().starts_with("// [dep:"))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        let sizes_array: String = spec
+            .sizes
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        let timing_loop = TIMING_LOOP.replace("__SIZES__", &sizes_array);
+
+        format!(
+            "// Auto-generated by PerfBenchValidator — do not hand-edit.\n{harness_clean}\n{timing_loop}"
+        )
+    }
+
+    /// Run `cargo run --release` on the temp crate, return stdout.
+    fn run_cargo(&self, crate_dir: &std::path::Path) -> Result<String, String> {
+        let manifest_path = crate_dir.join("Cargo.toml");
+        let output = Command::new(&self.cargo_bin)
+            .arg("run")
+            .arg("--release")
+            .arg("--manifest-path")
+            .arg(&manifest_path)
+            .output()
+            .map_err(|e| format!("cargo spawn failed: {e}"))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            // Truncate long error output.
+            let snippet = if stderr.len() > 2000 { &stderr[stderr.len() - 2000..] } else { &stderr };
+            return Err(format!("cargo run failed: {snippet}"));
+        }
+
+        Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+    }
+
+    /// Parse JSON lines from the bench subprocess into SizeResults.
+    #[allow(clippy::cast_precision_loss)]
+    fn parse_bench_output(stdout: &str) -> Vec<SizeResult> {
+        let mut results = Vec::new();
+        for line in stdout.lines() {
+            let line = line.trim();
+            if line.is_empty() || !line.starts_with('{') {
+                continue;
+            }
+            let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else {
+                continue;
+            };
+            let Some(size) = v.get("size").and_then(serde_json::Value::as_u64) else {
+                continue;
+            };
+            let Some(buggy_ns) = v.get("buggy_ns").and_then(serde_json::Value::as_u64) else {
+                continue;
+            };
+            let Some(fixed_ns) = v.get("fixed_ns").and_then(serde_json::Value::as_u64) else {
+                continue;
+            };
+            let speedup = if fixed_ns == 0 {
+                1.0
+            } else {
+                buggy_ns as f64 / fixed_ns as f64
+            };
+            let outcome = classify_speedup(speedup);
+            results.push(SizeResult {
+                size: usize::try_from(size).unwrap_or(usize::MAX),
+                buggy_ns,
+                fixed_ns,
+                speedup,
+                outcome,
+            });
+        }
+        results
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn classify_speedup_thresholds() {
+        assert_eq!(classify_speedup(1.10), SizeOutcome::Faster);
+        assert_eq!(classify_speedup(1.06), SizeOutcome::Faster);
+        assert_eq!(classify_speedup(1.05), SizeOutcome::Tie); // not > 1.05
+        assert_eq!(classify_speedup(1.00), SizeOutcome::Tie);
+        assert_eq!(classify_speedup(0.96), SizeOutcome::Tie); // not < 0.95
+        assert_eq!(classify_speedup(0.94), SizeOutcome::Slower);
+        assert_eq!(classify_speedup(0.50), SizeOutcome::Slower);
+    }
+
+    #[test]
+    fn aggregate_all_faster_is_dominant() {
+        let results = vec![
+            SizeResult { size: 10, buggy_ns: 100, fixed_ns: 50, speedup: 2.0, outcome: SizeOutcome::Faster },
+            SizeResult { size: 100, buggy_ns: 200, fixed_ns: 80, speedup: 2.5, outcome: SizeOutcome::Faster },
+        ];
+        assert_eq!(aggregate_outcomes(&results), BenchOverall::ParetoDominant);
+    }
+
+    #[test]
+    fn aggregate_majority_faster_is_dominant() {
+        // 3 faster, 1 slower out of 4 → faster*2 (6) > total (4) → dominant.
+        let results = vec![
+            SizeResult { size: 10, buggy_ns: 100, fixed_ns: 50, speedup: 2.0, outcome: SizeOutcome::Faster },
+            SizeResult { size: 100, buggy_ns: 200, fixed_ns: 80, speedup: 2.5, outcome: SizeOutcome::Faster },
+            SizeResult { size: 1000, buggy_ns: 300, fixed_ns: 100, speedup: 3.0, outcome: SizeOutcome::Faster },
+            SizeResult { size: 10000, buggy_ns: 100, fixed_ns: 200, speedup: 0.5, outcome: SizeOutcome::Slower },
+        ];
+        assert_eq!(aggregate_outcomes(&results), BenchOverall::ParetoDominant);
+    }
+
+    #[test]
+    fn aggregate_half_and_half_is_mixed() {
+        // 2 faster, 2 slower → neither dominant.
+        let results = vec![
+            SizeResult { size: 10, buggy_ns: 100, fixed_ns: 50, speedup: 2.0, outcome: SizeOutcome::Faster },
+            SizeResult { size: 100, buggy_ns: 100, fixed_ns: 200, speedup: 0.5, outcome: SizeOutcome::Slower },
+        ];
+        assert_eq!(aggregate_outcomes(&results), BenchOverall::Mixed);
+    }
+
+    #[test]
+    fn aggregate_all_slower_is_dominated() {
+        let results = vec![
+            SizeResult { size: 10, buggy_ns: 50, fixed_ns: 100, speedup: 0.5, outcome: SizeOutcome::Slower },
+            SizeResult { size: 100, buggy_ns: 80, fixed_ns: 200, speedup: 0.4, outcome: SizeOutcome::Slower },
+        ];
+        assert_eq!(aggregate_outcomes(&results), BenchOverall::ParetoDominated);
+    }
+
+    #[test]
+    fn aggregate_empty_is_mixed() {
+        assert_eq!(aggregate_outcomes(&[]), BenchOverall::Mixed);
+    }
+
+    #[test]
+    fn verdict_is_pareto_dominant_helper() {
+        let v = BenchVerdict::Pareto(ParetoVerdict {
+            rule_id: "test".to_string(),
+            results: vec![],
+            faster_count: 2,
+            slower_count: 0,
+            tie_count: 0,
+            overall: BenchOverall::ParetoDominant,
+            ran: true,
+            error: None,
+        });
+        assert!(v.is_pareto_dominant());
+        assert!(!v.is_not_benchable());
+    }
+
+    #[test]
+    fn verdict_not_benchable_helper() {
+        let v = BenchVerdict::NotBenchable(NotBenchable {
+            rule_id: "bevy".to_string(),
+            reason: "needs bevy runtime".to_string(),
+        });
+        assert!(!v.is_pareto_dominant());
+        assert!(v.is_not_benchable());
+    }
+
+    #[test]
+    fn validate_none_spec_returns_not_benchable() {
+        let v = PerfBenchValidator::new();
+        let verdict = v.validate("test", None);
+        assert!(verdict.is_not_benchable());
+    }
+
+    #[test]
+    fn extract_deps_parses_dep_markers() {
+        let harness = "// [dep: papaya = \"0.2\"]\n// [dep: blake3 = \"1\"]\npub fn foo() {}";
+        let deps = PerfBenchValidator::extract_deps(harness);
+        assert_eq!(deps, vec!["papaya = \"0.2\"", "blake3 = \"1\""]);
+    }
+
+    #[test]
+    fn extract_deps_no_markers_returns_empty() {
+        let harness = "pub fn foo() {}";
+        let deps = PerfBenchValidator::extract_deps(harness);
+        assert!(deps.is_empty());
+    }
+
+    #[test]
+    fn generate_main_rs_strips_dep_markers() {
+        let spec = BenchSpec {
+            sizes: vec![10],
+            harness: "// [dep: papaya]\npub fn make_input(_n: usize) -> u64 { 42 }\npub fn run_buggy(_: &u64) {}\npub fn run_fixed(_: &u64) {}".to_string(),
+        };
+        let main_rs = PerfBenchValidator::generate_main_rs(&spec);
+        assert!(!main_rs.contains("// [dep: papaya]"));
+        assert!(main_rs.contains("fn main()"));
+        assert!(main_rs.contains("pub fn make_input"));
+        assert!(main_rs.contains("&[10]"));
+    }
+
+    #[test]
+    fn parse_bench_output_valid_json() {
+        let stdout = r#"{"size":10,"buggy_ns":100,"fixed_ns":50}
+{"size":100,"buggy_ns":200,"fixed_ns":80}
+some garbage line
+{"size":1000,"buggy_ns":300,"fixed_ns":600}"#;
+        let results = PerfBenchValidator::parse_bench_output(stdout);
+        assert_eq!(results.len(), 3);
+        assert_eq!(results[0].size, 10);
+        assert_eq!(results[0].buggy_ns, 100);
+        assert_eq!(results[0].fixed_ns, 50);
+        assert!((results[0].speedup - 2.0).abs() < 0.001);
+        assert_eq!(results[0].outcome, SizeOutcome::Faster);
+        assert_eq!(results[2].outcome, SizeOutcome::Slower);
+    }
+
+    #[test]
+    fn parse_bench_output_empty_returns_empty() {
+        let results = PerfBenchValidator::parse_bench_output("");
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn parse_bench_output_handles_zero_fixed_ns() {
+        let stdout = r#"{"size":10,"buggy_ns":100,"fixed_ns":0}"#;
+        let results = PerfBenchValidator::parse_bench_output(stdout);
+        assert_eq!(results.len(), 1);
+        assert!((results[0].speedup - 1.0).abs() < 0.001); // guard against div-by-zero
+    }
+}

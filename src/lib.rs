@@ -120,6 +120,13 @@ pub use domains::rust_perf::corpus::build_perf_seed_corpus;
 #[cfg(feature = "rust_perf_verify")]
 pub use domains::rust_perf::verify::{PerfVerifyResult, PerfVerifier};
 
+/// `rust_perf` bench validator (behind `rust_perf_bench`).
+#[cfg(feature = "rust_perf_bench")]
+pub use domains::rust_perf::bench::{
+    BenchOverall, BenchSpec, BenchVerdict, NotBenchable, ParetoVerdict,
+    PerfBenchValidator, SizeOutcome, SizeResult,
+};
+
 // ── kernel_opt domain re-exports (behind `kernel_heal` feature, opt-in) ────
 #[cfg(feature = "kernel_heal")]
 pub use domains::kernel_opt::{KernelOptDomain, KernelRule, KernelVerdict};

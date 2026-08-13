@@ -1,21 +1,29 @@
 //! The rust performance healing domain.
 //!
 //! This is the second `HealDomain` impl (Plan 001 Phase 2). It owns:
-//! - [`PerfRule`] — the corpus entry type (rule id, category, buggy, fixed)
+//! - [`PerfRule`] — the corpus entry type (rule id, category, buggy, fixed,
+//!   optional bench spec)
 //! - [`RustPerfDomain`] — the `HealDomain` impl (`build_corpus`, validate)
 //! - The seed corpus distilled from the `rust-optimize` skill checklist
 //! - The verifier (behind `rust_perf_verify`): runs `cargo test` as subprocess
-//!   (perf-bench Pareto verdict deferred per Proposal 001 caveat 3)
+//! - The bench validator (behind `rust_perf_bench`): runs generated
+//!   microbenchmarks across multiple sizes + reports a Pareto verdict — the
+//!   **promotion gate** for the domain (Proposal 001 caveat 3)
 //!
-//! ## Caveat (Proposal 001 caveat 3)
+//! ## Validator hierarchy (strongest last)
 //!
-//! The validator is the **weakest link** across the three domains. clippy has
-//! binary ground truth (lint satisfied: yes/no). kernel has numeric ground
-//! truth (output matches reference within tolerance). perf has **no single
-//! ground truth** — "faster" depends on workload, hardware, input size. The
-//! first cut ships a **degraded validator** (`cargo test` pass + syntax), not
-//! a perf-bench Pareto verdict. The real perf-bench validator lands as a
-//! separate plan.
+//! 1. **L2 pruner** (always-on, modelless): `syn`-based syntax parse check.
+//! 2. **`rust_perf_verify`** (opt-in): `cargo test` re-run (compiles + tests pass).
+//! 3. **`rust_perf_bench`** (opt-in): generated microbenchmarks at multiple
+//!    input sizes → Pareto verdict (faster on N of M sizes). This is the
+//!    **real perf ground truth** — the gate that can promote `rust_perf`
+//!    to default-on.
+//!
+//! Rules without a [`BenchSpec`] are honestly marked `NotBenchable` — they
+//! need external runtimes (Bevy, WASM) a temp crate cannot provide.
+
+#![allow(clippy::doc_markdown)]
+#![allow(clippy::needless_raw_string_hashes)]
 //!
 //! ## Domain classification (per AGENTS.md sync boundary rule)
 //!
@@ -30,6 +38,9 @@ use crate::domain::{HealDomain, HealEntry};
 
 pub mod corpus;
 
+#[cfg(feature = "rust_perf_bench")]
+pub mod bench;
+
 #[cfg(feature = "rust_perf_verify")]
 pub mod verify;
 
@@ -38,8 +49,14 @@ pub mod verify;
 /// Distilled from the `rust-optimize` skill checklist. Each entry pairs a
 /// **buggy pattern** (the slow form) with a **fixed pattern** (the fast form)
 /// plus metadata (rule id, display name, category). The L1 drafter reads the
-/// `fixed_pattern` field, the L2 pruner parses it, and the verifier (behind
-/// `rust_perf_verify`) runs `cargo test`.
+/// `fixed_code` field, the L2 pruner parses it, the verifier (behind
+/// `rust_perf_verify`) runs `cargo test`, and the bench validator (behind
+/// `rust_perf_bench`) runs generated microbenchmarks if a `bench_spec` is
+/// present.
+///
+/// The `bench_spec` field is **optional** — rules needing external runtimes
+/// (Bevy, WASM) are honestly left without one and reported as `NotBenchable`
+/// by the validator.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PerfRule {
     /// Short kebab-case rule id (e.g., "`o1-lookup`", "`layout-reorder`").
@@ -53,6 +70,13 @@ pub struct PerfRule {
     pub buggy_code: String,
     /// The fast code pattern.
     pub fixed_code: String,
+    /// Optional microbenchmark spec for the `rust_perf_bench` validator.
+    ///
+    /// `None` means the rule is `NotBenchable` (needs an external runtime).
+    /// `Some(spec)` means the bench validator can generate + run a
+    /// microbenchmark for this rule.
+    #[cfg(feature = "rust_perf_bench")]
+    pub bench_spec: Option<bench::BenchSpec>,
 }
 
 impl HealEntry for PerfRule {

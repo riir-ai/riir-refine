@@ -14,7 +14,9 @@ Three domains ship (Plan 001):
    original domain; 10 common lints across style/complexity/perf/nursery.
 2. **`rust_perf`** (opt-in, Phase 2) — heals rust perf issues. 8 rules
    distilled from the `rust-optimize` skill checklist (complexity,
-   allocation, layout, concurrency, simd, caching, bevy, wasm).
+   allocation, layout, concurrency, simd, caching, bevy, wasm). The
+   **perf-bench Pareto validator** (Bench 013, `rust_perf_bench` feature)
+   is the promotion gate — GOAT G1+G5 PASS.
 3. **`kernel_opt`** (opt-in, Phase 3) — heals GPU kernel optimization. 2
    placeholder rules (real popcorn distillation deferred per Proposal 012
    §Phase 0). Absorbs Proposal 012's design (thermal-tier + latent-MoE +
@@ -133,7 +135,8 @@ cargo run --example ruliology_search_demo --features ruliology_search --release
 - `clippy_lints` (default-on): the clippy lint healing domain.
 - `clippy_verify` (opt-in): Phase 3 lint resolution verification via real `cargo clippy` re-run. Slow (~130ms/verify), requires cargo+clippy on PATH. Implies `clippy_lints`.
 - `rust_perf` (opt-in, Plan 001 Phase 2): rust performance healing domain. 8 rules from the `rust-optimize` skill checklist.
-- `rust_perf_verify` (opt-in): `cargo test` re-run for perf rule verification. Slow (seconds), requires cargo on PATH. Implies `rust_perf`. **Perf-bench Pareto verdict DEFERRED** (Proposal 001 caveat 3 — the weakest validator across the three domains).
+- `rust_perf_verify` (opt-in): `cargo test` re-run for perf rule verification. Slow (seconds), requires cargo on PATH. Implies `rust_perf`.
+- `rust_perf_bench` (opt-in, Plan 001 Phase 2 GOAT gate): generated microbenchmarks at multiple input sizes → Pareto verdict. **GOAT G1+G5 PASS (Bench 013)** — 3/5 benchable rules Pareto-dominant (o1-lookup 570x, simd-chunk 3.9x, static-str 42x); 2/5 honestly dominated (precompute-table: compiler optimizes popcount to POPCNT in release; papaya-lockfree: benefit needs multi-threaded contention). Closes Proposal 001 caveat 3. Implies `rust_perf`.
 - `kernel_heal` (opt-in, Plan 001 Phase 3): GPU kernel optimization healing domain. Absorbs Proposal 012. Enables `katgpt-core/variable_rank_domain_expert` for the `pick_domain` router (Plan 558). 4090 LoRA + real popcorn corpus DEFERRED.
 - `kernel_verify` (opt-in): CubeCL compile check. **STUB** — delegates to shared `RustAnalyzerPruner`; full numeric compare deferred (Proposal 012 §Phase 0). Implies `kernel_heal`.
 - `ruliology_search` (opt-in): L3 Pareto-front candidate search. Reuses the algorithm pattern from `katgpt-ruliology` (Bench 572) without a code-level dep. Runs once per lint invocation (~400µs/10 candidates), not per-tick. Implies `clippy_lints`.
@@ -145,9 +148,10 @@ cargo run --example ruliology_search_demo --features ruliology_search --release
 The modelless path (L0-L3) is PRIMARY. LoRA (L4) is the conservative last resort.
 The self-evolution layer (Issue 004) is additive — it composes on top of L0-L2
 without modifying the frozen pipeline. The two new domains (rust_perf,
-kernel_opt) are opt-in scaffolds — NOT promoted to default-on until their
-domain-specific GOAT gates pass (perf-bench Pareto for rust_perf; real popcorn
-corpus + full numeric validator for kernel_opt).
+kernel_opt) are opt-in scaffolds — `kernel_opt` is NOT promoted to default-on until its
+GOAT gate (real corpus + full numeric validator) passes. `rust_perf`'s GOAT gate
+(Bench 013, the perf-bench Pareto validator) PASSES — eligible for default-on
+promotion pending user decision.
 
 ## Documentation Shape
 
