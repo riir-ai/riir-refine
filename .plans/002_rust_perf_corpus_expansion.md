@@ -331,15 +331,15 @@ For each `- [ ]` task marked **Benchable** above, the workflow is:
 - [x] **T-heap-reuse-clear** — `reuse-allocation-clear` — DONE 2026-08-13, Mixed (3/4 Faster, carries context_notes)
 - [-] **T-inline** — `inline-hot-fn` — REJECTED 2026-08-13: ParetoDominated (0.73-0.75×, inline SLOWER). `#[inline(always)]` causes code bloat that hurts i-cache. With proper black_box to prevent constant folding, the inlined version is ~25% slower. LLVM's heuristics are better than human annotation.
 - [x] **T-io-buffered** — `buffered-io` — DONE 2026-08-13, ParetoDominant 99-132× (BufReader 8KB batches vs syscall per byte)
-- [ ] **T-rayon** — `rayon-par-iter` (needs rayon dep + >5µs/item workload)
+- [ ] **T-rayon** — `rayon-par-iter` — REJECTED 2026-08-13: Out of scope (architectural). Parallelization requires adding a dep + restructuring code; the Mixed bench (parallel slower at N=1K, tie at N=10K, 7.4× at N=100K) also shows it's regime-gated by data size. A code healer can't meaningfully suggest "add rayon".
 - [x] **T-box-avoid** — `avoid-unnecessary-box` — DONE 2026-08-13, ParetoDominant 9.6-42× (heap alloc per element)
 - [-] **T-scope-threads** — `scoped-threads` — REJECTED 2026-08-13: Tie (0.98-1.01×). Arc clone cost (~10ns) is negligible vs thread spawn (~7µs). The win is architectural (no Arc needed, borrow checker safety), not perf.
 - [-] **T-rwlock-read-heavy** — `rwlock-vs-mutex` — REJECTED 2026-08-13: ParetoDominated (0.94-0.96×, RwLock SLOWER). RwLock has more per-op overhead than Mutex. Win only materializes under TRUE parallelism (multiple concurrent readers), which the sequential harness doesn't exercise.
 - [-] **T-cas-to-fetch** — `cas-loop-to-fetch-op` — REJECTED 2026-08-13: Tie (1.07-1.09×). Single-threaded CAS rarely retries (no contention). The win needs multi-threaded contention, which the harness doesn't exercise.
 - [-] **T-ordering-relaxed** — `ordering-relaxed-where-safe` — REJECTED 2026-08-13: Tie (1.00-1.02×). No difference on ARM64 (M3 Max) — both SeqCst and Relaxed compile to LDAR/STAR. The cost difference is x86-only.
-- [ ] **T-park-vs-spin** — `parking-vs-busy-spin` (spin → thread::park; CPU-time metric)
-- [ ] **T-log-no-format** — `log-no-format-in-hot-loop` (format! in loop → structured args)
-- [ ] **T-lift-hot-field** — `lift-hot-field-from-arc` (denormalize hot bool out of Arc chain)
+- [-] **T-park-vs-spin** — `parking-vs-busy-spin` — REJECTED 2026-08-13: Metric mismatch. The win is CPU-time (spin burns 100% CPU), not wall-clock. The bench validator measures wall-clock (both complete in similar time).
+- [x] **T-log-no-format** — `log-write-direct` — DONE 2026-08-13, ParetoDominant 1.9-2.0× (push_str(&format!()) temp alloc → write! direct)
+- [-] **T-lift-hot-field** — `lift-hot-field-from-arc` — REJECTED 2026-08-13: Architecturally hard to bench. Requires measuring cache locality of a specific field access across an Arc boundary; very hard to isolate in a microbench.
 - [-] **T-object-pool** — `object-pool-reuse` — REJECTED 2026-08-13: Duplicate of `reuse-allocation-clear`. Same underlying pattern (clear vs alloc). Adding would inflate count without adding insight.
 - [-] **T-soa-layout** — `soa-vs-aos` — REJECTED 2026-08-13: ParetoDominated/Tie (0.86-1.01×). AoS cache utilization already good for 6-field structs.
 - [x] **T-avoid-clone** — `avoid-unnecessary-clone` — DONE 2026-08-13, ParetoDominant 1.3-3.0×
@@ -357,10 +357,10 @@ ships without measurement.
 These are real perf patterns but the win is structural (memory size / future size)
 not runtime speed. Add to corpus with `bench_spec: None` + honest `context_notes`.
 
-- [ ] **T-heap-shrink-fit** — `shrink-to-fit-after-build` (memory win, not speed)
-- [ ] **T-box-variant** — `box-large-enum-variant` (size_of; shrink common case)
-- [ ] **T-async-yield** — `async-yield-point` (fairness/latency-tail, not throughput)
-- [ ] **T-async-future-size** — `async-future-size` (size_of_val; reduce future state machine)
+- [x] **T-heap-shrink-fit** — `shrink-to-fit-after-build` — DONE 2026-08-13 (memory win, not speed)
+- [x] **T-box-variant** — `box-large-enum-variant` — DONE 2026-08-13 (size_of; shrink common case)
+- [x] **T-async-yield** — `async-yield-point` — DONE 2026-08-13 (fairness/latency-tail, not throughput)
+- [x] **T-async-future-size** — `async-future-size` — DONE 2026-08-13 (size_of_val; reduce future state machine)
 
 ## Phase 3 — Build-config ruling + doc (design decision)
 
@@ -368,12 +368,12 @@ The code healer edits `.rs` via `syn`. PGO / LTO / codegen-units / BOLT are
 `Cargo.toml` + CI-workflow changes — **out of scope for the healer.** This phase
 documents them as recommendations, not corpus rules.
 
-- [ ] **T-buildconfig** — scope ruling: NOT corpus rules. Add a "Build-config
+- [x] **T-buildconfig** — scope ruling: NOT corpus rules. Added a "Build-config
       recommendations (not healable)" section to `.docs/11_domains/rust_perf.md`
       covering: `codegen-units=1`, `lto="thin"`, `panic="abort"`, `strip=true`,
       PGO (`cargo-pgo`: instrument → run → optimize, ~10-20% on CPU-bound), BOLT
       (post-link, ~2-5% more). Source: perf-book `build-configuration.md` + Kobzol.
-- [ ] **T-pgo** — fold into T-buildconfig doc section (same ruling).
+- [x] **T-pgo** — folded into T-buildconfig doc section (same ruling).
 
 ## Phase 4 — Re-bench + GOAT gate (Bench 014)
 

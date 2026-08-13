@@ -8,10 +8,10 @@
 
 The `rust_perf` domain end-to-end (Plan 001 Phase 2):
 
-1. **Build corpus**: `build_perf_seed_corpus()` → 34 `PerfRule` entries across
+1. **Build corpus**: `build_perf_seed_corpus()` → 39 `PerfRule` entries across
    11 categories (complexity is deepest with 8 rules;
    allocation has 8; simd has 4).
-2. **List rules**: prints all 34 rules grouped by category.
+2. **List rules**: prints all 39 rules grouped by category.
 3. **Validate**: calls `RustPerfDomain::validate()` on each fixed pattern.
    - Without `rust_perf_verify`: L2 pruner syntax check (`PerfParseVerdict`)
    - With `rust_perf_verify`: `cargo test` re-run (`PerfVerifyResult` with
@@ -58,7 +58,7 @@ The `rust_perf` domain end-to-end (Plan 001 Phase 2):
 ```text
 === rust_perf domain — Phase 2 scaffold demo ===
 
-Seed corpus: 34 entries
+Seed corpus: 39 entries
 Commitment (BLAKE3): <updated on rebuild — see `build_perf_seed_corpus()`>
 
 Rules by category:

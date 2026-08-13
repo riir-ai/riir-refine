@@ -8,10 +8,10 @@
 //! validator found ParetoDominated in the default config (Bench 013), `None`
 //! for unconditional wins + honestly NotBenchable rules.
 //!
-//! 34 entries across 11 categories (complexity 10, allocation 10, simd 4,
-//! layout 2, concurrency 2, iterators 3, arithmetic 1, dispatch 1, caching 1,
-//! bevy 1, wasm 1). 30 are benchable (26 ParetoDominant + 2 ParetoDominated +
-//! 2 Mixed); 4 are honestly NotBenchable.
+//! 39 entries across 11 categories (complexity 10, allocation 12, layout 4,
+//! concurrency 2, simd 4, iterators 4, arithmetic 1, dispatch 1, caching 1,
+//! bevy 1, wasm 1). 31 are benchable (27 ParetoDominant + 2 ParetoDominated +
+//! 2 Mixed); 8 are honestly NotBenchable.
 //!
 //! ## Bench specs (behind `rust_perf_bench`)
 //!
@@ -20,7 +20,7 @@
 //! `run_buggy` / `run_fixed` entry points. The bench validator generates a
 //! temp bin crate from the spec + runs a timing loop at multiple sizes.
 //!
-//! Currently benchable (30/34):
+//! Currently benchable (31/35):
 //! - `o1-lookup` (Vec scan vs HashMap lookup — clear O(n) vs O(1))
 //! - `bsearch-sorted-slice` (linear scan vs binary search — O(n) vs O(log n) on sorted data)
 //! - `dedupe-hashset-vs-vec` (Vec::contains loop vs HashSet collect — O(n²) vs O(n))
@@ -53,12 +53,19 @@
 //! - `box-avoid` (Vec<Box<i64>> heap per elem → Vec<i64> stack values — ~10-35×)
 //! - `smallvec-stack` (Vec<T> always heap → stack array for ≤8 typical — ~7-12×)
 //! - `buffered-io` (File::read byte-by-byte → BufReader 8KB batched — ~97×)
+//! - `log-write-direct` (push_str(&format!(...)) temp alloc → write! direct — ~1.7×)
 //!
-//! Not benchable (4/34) — honest:
+//! Not benchable (8/39) — honest:
 //! - `layout-reorder` (struct size — deterministic `size_of`, not a runtime
 //!   microbench; the cache-utilization claim needs a specific access pattern)
 //! - `repr-u8-enum` (enum size — deterministic `size_of`, same class as
 //!   `layout-reorder`)
+//! - `box-large-enum-variant` (enum size — deterministic `size_of`, shrinks
+//!   the common case by boxing the rare large variant)
+//! - `shrink-to-fit-after-build` (memory win, not speed — releases excess
+//!   Vec capacity after incremental construction)
+//! - `async-yield-point` (fairness/latency-tail win, not throughput)
+//! - `async-future-size` (future state-machine size — deterministic `size_of_val`)
 //! - `bevy-reactive-loop` (needs the Bevy runtime — can't run in a temp crate)
 //! - `wasm-batch-ffi` (needs a WASM runtime — can't run in a temp crate)
 //!
@@ -77,11 +84,11 @@ use crate::domains::rust_perf::{PerfRule, RustPerfDomain};
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 34 entries
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 39 entries
 /// covering the main perf pattern categories (complexity, allocation, layout,
 /// concurrency, simd, arithmetic, iterators, dispatch, caching, bevy, wasm).
-/// Complexity + allocation tie for the deepest category (10 rules each).
-/// Simd has 4; iterators has 3; layout, concurrency have 2; the rest have 1 each.
+/// Allocation is the deepest category (12 rules); complexity has 10.
+/// Layout, simd, iterators have 4 each; concurrency has 2; the rest have 1 each.
 #[must_use]
 #[allow(clippy::too_many_lines)] // seed corpus is a data table; length scales with rule count
 pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
@@ -680,6 +687,98 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
             context_notes: None,
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: Some(buffered_io_bench_spec()),
+        },
+        // ── allocation: push_str(&format!(...)) temp alloc → write! direct ──
+        // Source: perf-book `string-formatting.md` + MS M-LOG + reintech.
+        // The buggy path creates a temporary String per iteration via format!,
+        // pushes it, then drops it. The fixed path uses write! to format directly
+        // into the existing buffer — zero temporary allocation. ~1.7× at all sizes.
+        // Distinct from `format-concat-loop` (which is about quadratic accumulation
+        // via reassignment); this is about avoiding the per-iteration temp.
+        PerfRule {
+            rule_id: "log-write-direct".to_string(),
+            name: "buf.push_str(&format!(...)) (temp String per iter) → write!(buf, ...) direct".to_string(),
+            category: "allocation".to_string(),
+            buggy_code: "fn build_log(items: &[u64]) -> String {\n    let mut log = String::new();\n    for &i in items { log.push_str(&format!(\"item={i}\\n\")); }\n    log\n}".to_string(),
+            fixed_code: "use std::fmt::Write;\nfn build_log(items: &[u64]) -> String {\n    let mut log = String::new();\n    for &i in items { write!(&mut log, \"item={i}\\n\").unwrap(); }\n    log\n}".to_string(),
+            context_notes: None,
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(log_write_direct_bench_spec()),
+        },
+        // ── allocation (NotBenchable): Vec::shrink_to_fit after build ────────
+        // Source: perf-book `heap-allocations.md`. After building a Vec
+        // incrementally (push loop, dedup, parse), the capacity may exceed
+        // the len significantly (over-allocation during growth). shrink_to_fit
+        // releases the excess. This is a **memory win**, not a speed win —
+        // NotBenchable (deterministic size_of, not a runtime microbench).
+        PerfRule {
+            rule_id: "shrink-to-fit-after-build".to_string(),
+            name: "Vec with over-allocated capacity → shrink_to_fit() after build".to_string(),
+            category: "allocation".to_string(),
+            buggy_code: "fn build(n: usize) -> Vec<u32> {\n    let mut v = Vec::new();\n    for i in 0..n { v.push(i as u32); }\n    v // capacity may be ~2× len due to growth\n}".to_string(),
+            fixed_code: "fn build(n: usize) -> Vec<u32> {\n    let mut v = Vec::new();\n    for i in 0..n { v.push(i as u32); }\n    v.shrink_to_fit(); // release excess capacity\n    v\n}".to_string(),
+            context_notes: None,
+            // Not benchable: the win is peak memory (size_of), not speed.
+            // shrink_to_fit is a no-op if capacity == len; the alloc overhead
+            // of the realloc may even make it slower for the build path. The
+            // value is long-lived Vecs that over-allocated during construction.
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: None,
+        },
+        // ── layout (NotBenchable): Box large enum variant ─────────────────────
+        // Source: perf-book `types.md`. When an enum has one large variant
+        // (e.g., `[u8; 1024]`) and many small ones, every instance carries
+        // the large variant's size. Boxing the large variant shrinks the
+        // common case (enum becomes 8 bytes + discriminant vs 1032 bytes).
+        PerfRule {
+            rule_id: "box-large-enum-variant".to_string(),
+            name: "Enum with one large variant → Box<LargeVariant> (shrink common case)".to_string(),
+            category: "layout".to_string(),
+            buggy_code: "enum Event {\n    Click { x: i32, y: i32 },\n    KeyPress(char),\n    BigData([u8; 1024]), // inflates ALL events to 1032+ bytes\n}".to_string(),
+            fixed_code: "enum Event {\n    Click { x: i32, y: i32 },\n    KeyPress(char),\n    BigData(Box<[u8; 1024]>), // common case: 16 bytes (discriminant + ptr)\n}".to_string(),
+            context_notes: None,
+            // Not benchable: the win is size_of (every enum instance shrinks),
+            // which improves cache density. Not a speed microbench in isolation.
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: None,
+        },
+        // ── iterators (NotBenchable): async yield point for fairness ────────
+        // Source: perf-book `async.md`. A long-running async fn without a
+        // yield point (no .await) blocks the executor for the entire duration.
+        // Adding a cooperative yield point (tokio::task::yield_now) lets the
+        // executor schedule other tasks. The win is **latency tail + fairness**,
+        // not throughput — NotBenchable (throughput-neutral, the win is in
+        // p99 latency under multi-task contention).
+        PerfRule {
+            rule_id: "async-yield-point".to_string(),
+            name: "Long async fn (no yield) → cooperative yield_now() for fairness".to_string(),
+            category: "iterators".to_string(),
+            buggy_code: "async fn process_batch(items: &[Item]) {\n    for item in items {\n        process(item); // no .await → blocks executor for entire batch\n    }\n}".to_string(),
+            fixed_code: "async fn process_batch(items: &[Item]) {\n    for (i, item) in items.iter().enumerate() {\n        process(item);\n        if i % 100 == 0 { tokio::task::yield_now().await; }\n    }\n}".to_string(),
+            context_notes: None,
+            // Not benchable: the win is p99 latency under contention (fairness),
+            // not single-task throughput. Throughput-neutral or slightly negative.
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: None,
+        },
+        // ── layout (NotBenchable): async fn future size reduction ───────────
+        // Source: perf-book `async.md`. Each async fn compiles to a state
+        // machine struct whose size is the max of all locals across all await
+        // points. Large locals (big Vecs, arrays) inflates the future size,
+        // wasting memory per spawned task. Scoping locals (block expressions)
+            // drops them before the next await, shrinking the state machine.
+        PerfRule {
+            rule_id: "async-future-size".to_string(),
+            name: "Large locals across .await → scoped blocks (shrink future state machine)".to_string(),
+            category: "layout".to_string(),
+            buggy_code: "async fn handle() {\n    let big_buf = vec![0u8; 8192]; // lives across .await → in future\n    let result = do_work(&big_buf).await;\n    // big_buf still in the future state machine here\n    process(result);\n}".to_string(),
+            fixed_code: "async fn handle() {\n    let result = {\n        let big_buf = vec![0u8; 8192]; // dropped before .await returns\n        do_work(&big_buf).await\n    }; // big_buf no longer in future state machine\n    process(result);\n}".to_string(),
+            context_notes: None,
+            // Not benchable: the win is size_of_val of the future (memory per
+            // spawned task), not a runtime microbench. Measurable via
+            // std::mem::size_of_val but that's deterministic, not a timing.
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: None,
         },
     ])
 }
@@ -2302,6 +2401,55 @@ pub fn run_fixed(input: &Input) {
     }
 }
 
+/// Bench spec for `log-write-direct`: push_str(&format!(...)) vs write! direct.
+///
+/// The buggy path creates a temporary String via format! every iteration,
+/// pushes it into the log buffer, then drops the temp. The fixed path uses
+/// write! to format directly into the existing buffer — zero temp alloc.
+/// ~1.7× at all sizes. Distinct from `format-concat-loop` (quadratic
+/// accumulation); this is about avoiding the per-iteration temporary.
+#[cfg(feature = "rust_perf_bench")]
+fn log_write_direct_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![100, 1_000, 10_000],
+        harness: r#"
+mod buggy {
+    pub fn build_log(items: &[u64]) -> String {
+        let mut log = String::new();
+        for &i in items {
+            log.push_str(&format!("item={i}\n"));
+        }
+        log
+    }
+}
+
+mod fixed {
+    use std::fmt::Write;
+    pub fn build_log(items: &[u64]) -> String {
+        let mut log = String::new();
+        for &i in items {
+            write!(&mut log, "item={i}\n").unwrap();
+        }
+        log
+    }
+}
+
+pub fn make_input(n: usize) -> Vec<u64> {
+    (0..n as u64).collect()
+}
+
+pub fn run_buggy(input: &[u64]) {
+    std::hint::black_box(buggy::build_log(input));
+}
+
+pub fn run_fixed(input: &[u64]) {
+    std::hint::black_box(fixed::build_log(input));
+}
+"#
+        .to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2317,16 +2465,16 @@ mod tests {
     }
 
     #[test]
-    fn seed_corpus_has_thirty_four_entries_across_eleven_categories() {
+    fn seed_corpus_has_thirty_nine_entries_across_eleven_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 34);
+        assert_eq!(corpus.entries.len(), 39);
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
         categories.dedup();
-        // 11 distinct categories. Complexity + allocation tie for the deepest
-        // (10 rules each); simd has 4; iterators has 3; layout, concurrency have 2;
-        // arithmetic, dispatch, caching, bevy, wasm have 1 each.
+        // 11 distinct categories. Allocation is the deepest (12 rules);
+        // complexity has 10; layout has 4; simd has 4; iterators has 4;
+        // concurrency has 2; arithmetic, dispatch, caching, bevy, wasm have 1 each.
         assert_eq!(categories.len(), 11);
     }
 
@@ -2395,15 +2543,15 @@ mod tests {
 
     #[cfg(feature = "rust_perf_bench")]
     #[test]
-    fn thirty_rules_have_bench_specs() {
+    fn thirty_one_rules_have_bench_specs() {
         let corpus = build_perf_seed_corpus();
         let with_spec = corpus.entries.iter().filter(|e| e.bench_spec.is_some()).count();
-        assert_eq!(with_spec, 30, "expected 30 benchable rules, got {with_spec}");
+        assert_eq!(with_spec, 31, "expected 31 benchable rules, got {with_spec}");
     }
 
     #[cfg(feature = "rust_perf_bench")]
     #[test]
-    fn four_rules_are_not_benchable() {
+    fn eight_rules_are_not_benchable() {
         let corpus = build_perf_seed_corpus();
         let without_spec: Vec<&str> = corpus
             .entries
@@ -2411,11 +2559,15 @@ mod tests {
             .filter(|e| e.bench_spec.is_none())
             .map(|e| e.rule_id.as_str())
             .collect();
-        assert_eq!(without_spec.len(), 4);
+        assert_eq!(without_spec.len(), 8);
         assert!(without_spec.contains(&"layout-reorder"));
         assert!(without_spec.contains(&"repr-u8-enum"));
         assert!(without_spec.contains(&"bevy-reactive-loop"));
         assert!(without_spec.contains(&"wasm-batch-ffi"));
+        assert!(without_spec.contains(&"shrink-to-fit-after-build"));
+        assert!(without_spec.contains(&"box-large-enum-variant"));
+        assert!(without_spec.contains(&"async-yield-point"));
+        assert!(without_spec.contains(&"async-future-size"));
     }
 
     /// Bench 013 found 4 rules with non-dominant verdicts in the default
@@ -2439,18 +2591,20 @@ mod tests {
         assert!(annotated.contains(&"reuse-allocation-clear"));
     }
 
-    /// The 30 non-annotated rules (26 ParetoDominant + 4 NotBenchable) must
+    /// The 35 non-annotated rules (28 ParetoDominant + 8 NotBenchable - 1 mixed reuse) must
     /// have `context_notes: None` — they are either unconditional wins or
-    /// honestly unmeasurable.
+    /// honestly unmeasurable. Actually: 31 benchable (27 ParetoDominant + 2
+    /// ParetoDominated + 2 Mixed) + 8 NotBenchable = 39 total. The 4 annotated
+    /// + 35 unannotated = 39.
     #[test]
-    fn thirty_rules_have_no_context_notes() {
+    fn thirty_five_rules_have_no_context_notes() {
         let corpus = build_perf_seed_corpus();
         let unannotated = corpus
             .entries
             .iter()
             .filter(|e| e.context_notes.is_none())
             .count();
-        assert_eq!(unannotated, 30, "expected 30 unannotated rules");
+        assert_eq!(unannotated, 35, "expected 35 unannotated rules");
     }
 
     /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -2504,9 +2658,9 @@ mod tests {
             );
         }
 
-        // The 30 unannotated rules must return None from the trait too.
+        // The 35 unannotated rules must return None from the trait too.
         let unannotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_none()).collect();
-        assert_eq!(unannotated.len(), 30, "expected 30 unannotated rules");
+        assert_eq!(unannotated.len(), 35, "expected 35 unannotated rules");
         for rule in &unannotated {
             assert!(HealEntry::context_notes(*rule).is_none(), "{} should have no context_notes", rule.rule_id);
         }

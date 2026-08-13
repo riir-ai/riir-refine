@@ -19,18 +19,15 @@
 
 ## Corpus
 
-34 seed rules across 11 categories (rust-optimize skill checklist +
-nnethercote/perf-book + rustc-hash/bevy real-world patterns). Complexity +
-allocation tie for the deepest category (10 rules each). Complexity has the
-3 algorithmic anti-patterns + HashMap lookup merging + loop fusion + prefix-sum-2d
-+ swap-remove + fxhashmap. Allocation has 10 (static-str, vec-with-capacity,
-format-concat-loop, ok-or-else, mem-take, avoid-clone, box-str-immutable,
-reuse-allocation-clear, box-avoid, smallvec-stack). Simd has 4; iterators has 3;
-layout, concurrency have 2; the rest have 1 each. 30 are benchable (carry a
-`BenchSpec`); 4 are honestly `NotBenchable` (need external runtimes or are
-structural). 4 of the 30 benchable rules carry `context_notes` (Bench 013
-found 2 `ParetoDominated` + 2 `Mixed` in the default config — consumers should
- treat them as context-dependent, not unconditional suggestions).
+39 seed rules across 11 categories (rust-optimize skill checklist +
+nnethercote/perf-book + rustc-hash/bevy real-world patterns). Allocation is the
+deepest category (12 rules). Complexity has 10. Layout, simd, iterators have 4
+each; concurrency has 2; the rest have 1 each. 31 are benchable (carry a
+`BenchSpec`); 8 are honestly `NotBenchable` (need external runtimes or are
+structural — size_of, memory, fairness). 4 of the 31 benchable rules carry
+`context_notes` (Bench 013 found 2 `ParetoDominated` + 2 `Mixed` in the
+default config — consumers should treat them as context-dependent, not
+unconditional suggestions).
 
 | Rule ID | Category | Bench verdict | Context? | Pattern |
 |---|---|---|---|---|
@@ -53,6 +50,7 @@ found 2 `ParetoDominated` + 2 `Mixed` in the default config — consumers should
 | `box-avoid` | allocation | ✅ 9.6-42x ParetoDominant | — | `Vec<Box<i64>>` (heap per elem) → `Vec<i64>` (stack values) — heap alloc per element dwarfs the data work |
 | `smallvec-stack` | allocation | ✅ 27-75x ParetoDominant | — | `Vec<T>::new()` (always heap) → stack array for ≤8 typical (SmallVec pattern); heap alloc dominates at small N |
 | `buffered-io` | iterators | ✅ 99-132x ParetoDominant | — | `File::read(&mut [u8; 1])` syscall per byte → `BufReader` 8KB batched reads (syscall overhead dominates) |
+| `log-write-direct` | allocation | ✅ 1.9-2.0x ParetoDominant | — | `buf.push_str(&format!(...))` (temp String per iter) → `write!(buf, ...)` direct (zero temp alloc; distinct from `format-concat-loop` which is about quadratic accumulation) |
 | `layout-reorder` | layout | ❌ NotBenchable | — | Field reorder to eliminate padding (deterministic `size_of`, not a runtime microbench) |
 | `repr-u8-enum` | layout | ❌ NotBenchable | — | Field-less enum → `#[repr(u8)]` (deterministic `size_of`, same class as layout-reorder) |
 | `mutex-to-atomic` | concurrency | ✅ 2.5x ParetoDominant | — | `Mutex<u32>` counter inc → `AtomicU32::fetch_add` (Mutex lock/unlock is opaque; ~2.5× single-threaded) |
@@ -68,6 +66,10 @@ found 2 `ParetoDominated` + 2 `Mixed` in the default config — consumers should
 | `precompute-table` | caching | ❌ 0.20-0.40x ParetoDominated | ⚠️ `context_notes` | Recompute-per-call → `const` lookup table (compiler optimizes popcount to POPCNT in release) |
 | `bevy-reactive-loop` | bevy | ❌ NotBenchable | — | `WinitSettings::default()` (Continuous, 100% CPU) → `reactive_low_power` (needs Bevy runtime) |
 | `wasm-batch-ffi` | wasm | ❌ NotBenchable | — | Per-call FFI (250ns floor × N×M) → single batch invocation (needs WASM runtime) |
+| `shrink-to-fit-after-build` | allocation | ❌ NotBenchable | — | Vec with over-allocated capacity → `shrink_to_fit()` after build (memory win, not speed; the realloc may even make build slower) |
+| `box-large-enum-variant` | layout | ❌ NotBenchable | — | Enum with one `[u8; 1024]` variant → `Box<[u8; 1024]>` (shrinks common case from 1032→16 bytes; size_of win improves cache density) |
+| `async-yield-point` | iterators | ❌ NotBenchable | — | Long async fn (no `.await`) → cooperative `yield_now()` every 100 iters (fairness/p99-latency win under contention, not single-task throughput) |
+| `async-future-size` | layout | ❌ NotBenchable | — | Large locals across `.await` → scoped blocks (drops before next await; shrinks future state machine via `size_of_val`) |
 
 ## Validator (cargo test — behind `rust_perf_verify`)
 
@@ -174,6 +176,31 @@ Tests that spawn `cargo test`/`cargo run` are `#[ignore]`'d ("slow: runs
 real cargo subprocess (seconds); also needs `--test-threads=1` under
 cargo-in-cargo"). This mirrors the `clippy_verify` test pattern — concurrent
 cargo invocations against temp crates race on cargo's build cache lock.
+
+## Build-config recommendations (not healable)
+
+The code healer edits `.rs` via `syn`. PGO / LTO / codegen-units / BOLT are
+`Cargo.toml` + CI-workflow changes — **out of scope for the healer.** This
+section documents them as recommendations, not corpus rules. Source:
+nnethercote/perf-book `build-configuration.md` + Kobzol (cargo-pgo).
+
+| Config | What it does | Expected gain | Trade-off |
+|---|---|---|---|
+| `codegen-units = 1` | Lets LLVM see the entire crate for better optimization | 1-5% CPU | Slower compile (LLVM can't parallelize per-crate) |
+| `lto = "thin"` | Cross-crate inlining (LTO) — sees through `pub fn` boundaries | 2-10% | Slower compile (link-time analysis across all deps) |
+| `panic = "abort"` | Removes unwinding machinery (~6KB binary size + some codegen paths) | 1-3% binary | Can't catch panics; no unwinding for Drop |
+| `strip = true` | Strips debug symbols from the release binary | 30-70% binary size | No stack traces in production |
+| **PGO** (`cargo-pgo`) | Profile-Guided Optimization: instrument → run representative workload → rebuild with profile | 10-20% CPU | Requires a representative workload run; CI integration complexity |
+| **BOLT** (post-link) | Binary Optimization Layout Tool — reorders binary layout post-link for better i-cache | 2-5% on top of PGO | Requires LLVM BOLT; Linux x86-64 only |
+
+**Recommendation:** for CPU-bound production binaries, the ROI hierarchy is:
+1. `codegen-units = 1` + `lto = "thin"` (easy, always worth it)
+2. PGO if the workload is stable + representable (biggest single gain)
+3. BOLT if on Linux x86-64 + already doing PGO (incremental on top)
+
+The healer does NOT suggest these — they're Cargo.toml/CI changes, not code
+patterns. A separate "build-config audit" tool (out of scope) could check for
+them.
 
 ## Source
 
