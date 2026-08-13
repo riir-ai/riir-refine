@@ -109,6 +109,39 @@ moment its output is verified rather than returned.
       was deferred to avoid contending with the Issue 637 T3 prefill run on the
       same box.
 
+      **GPU exclusivity is now a hard precondition, not politeness (2026-08-13).**
+      riir-ai [Issue 640](../../riir-ai/.issues/640_batched_rmsnorm_prefill_nondeterministic.md)
+      established that a second process using the GPU makes wgpu/Metal produce
+      **bit-different results** for identical input — measured at
+      **4.05% → 50.00%** divergence (12.3×, χ²(1)=36.03, p≈2×10⁻⁹,
+      riir-ai `.benchmarks/649_contention_ab.md`), with the contending process
+      slowing the victim 1.78×.
+
+      That is directly disqualifying for this task. **Tier-1 acceptance is an
+      argmax-agreement statistic between draft and target**, and contention is
+      known to flip exactly those bits. An acceptance rate measured while another
+      job holds the GPU is not a measurement of DSpark — it is a measurement of
+      DSpark plus an unquantified corruption term, and it would be
+      indistinguishable from a genuinely poor acceptance rate.
+
+      Before running T0b:
+
+      1. Confirm no other GPU consumer — check processes directly.
+         **Load average is not a proxy**: riir-ai measured the divergence firing
+         at load 4.3 and staying quiet at load 9.3.
+      2. Record GPU-exclusivity in the result alongside the number, the way load
+         average is already recorded.
+      3. If exclusivity cannot be guaranteed, state that and treat the acceptance
+         figure as provisional. A gate measured under contention is not evidence.
+
+      The riir-ai repo carries this as a standing rule in its `AGENTS.md`
+      ("GPU exclusivity during correctness gates"); it applies here for the same
+      reason.
+
+      Status 2026-08-13 12:04: **still blocked** — a sibling
+      `bonsai_lora_accuracy_parity_arm_c` job has held the GPU for 58+ minutes,
+      which is the same class of contention T0b was originally deferred for.
+
 ## Status of the alternative route (riir-ai Issue 637 T3) — 2026-08-12
 
 This issue exists because DSpark looked like the cheapest way to beat
