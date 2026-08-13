@@ -49,15 +49,13 @@ pub struct HealResult {
     pub evolution_score: f32,
     /// Whether this fix came from memory (past trajectory) or the drafter.
     pub source: HealSource,
-    /// Propagated from the drafter candidate's [`DraftedFix::context_notes`] (Plan 001
-    /// post-promotion, 2026-08-13). `Some` signals the rule is context-dependent —
-    /// not an unconditional default-config win. The pipeline does NOT skip or
-    /// downgrade annotated rules; it surfaces the annotation so the consumer
-    /// decides whether their context matches.
-    ///
-    /// Only the drafter path (`source == Drafter`) carries the annotation. The
-    /// Stage2 cache + memory paths serve verified fixes whose annotation was
-    /// already surfaced on the first drafter-sourced serve.
+    /// Rule-level `context_notes` looked up from the corpus at heal time
+    /// (Plan 001 post-promotion, 2026-08-13). `Some` signals the rule is
+    /// context-dependent — not an unconditional default-config win. The
+    /// pipeline surfaces the annotation on ALL paths (drafter / memory /
+    /// Stage2) because the annotation is rule-level metadata, not fix-level.
+    /// The pipeline does NOT skip or downgrade annotated rules; it surfaces
+    /// the annotation so the consumer decides whether their context matches.
     pub context_notes: Option<String>,
 }
 
@@ -82,10 +80,6 @@ struct Candidate {
     /// The trajectory's historical success rate (if from memory).
     /// Drafter candidates have no trajectory → neutral 0.5.
     success_rate: f32,
-    /// Propagated from the drafter's [`DraftedFix::context_notes`] (drafter path
-    /// only). `None` for memory + Stage2 candidates — the annotation is rule-level
-    /// metadata surfaced on the first drafter-sourced serve.
-    context_notes: Option<String>,
 }
 
 /// Weight on the evolution-score axis in candidate selection.
@@ -220,6 +214,16 @@ impl HealPipeline {
         buggy_code: &str,
         corpus: &[E],
     ) -> Option<HealResult> {
+        // Look up rule-level context_notes from the corpus (the source of truth
+        // for rule metadata). This ensures the annotation is surfaced on ALL
+        // paths (drafter / memory / Stage2) — the annotation describes the
+        // RULE, not a specific fix, so it's the same regardless of which path
+        // serves the fix.
+        let rule_context_notes: Option<&str> = corpus
+            .iter()
+            .find(|e| e.rule_id() == rule_id)
+            .and_then(HealEntry::context_notes);
+
         // Stage 2 routing: if the adaptive drafter has a verified entry, return it.
         // This is the ~µs serve path (hash lookup) after the tuning loop populated
         // the pool. The Stage 1 path below is the always-on fallback.
@@ -233,7 +237,7 @@ impl HealPipeline {
                 parses: validation.parses,
                 evolution_score: 1.0, // verified = highest confidence
                 source: HealSource::Stage2Adaptive,
-                context_notes: None, // Stage2 serves cached verified fixes; the annotation was surfaced on the first drafter serve.
+                context_notes: rule_context_notes.map(str::to_string),
             });
         }
 
@@ -265,7 +269,6 @@ impl HealPipeline {
                 direction: dir,
                 source: HealSource::Drafter,
                 success_rate,
-                context_notes: draft.context_notes,
             });
         }
 
@@ -281,7 +284,6 @@ impl HealPipeline {
                     direction: traj.direction,
                     source: HealSource::Memory,
                     success_rate: traj.success_rate(),
-                    context_notes: None, // FixTrajectory doesn't carry the annotation; surfaced on the first drafter serve.
                 });
             }
         }
@@ -316,7 +318,7 @@ impl HealPipeline {
             parses: validation.parses,
             evolution_score: best_score,
             source: cand.source,
-            context_notes: cand.context_notes.clone(),
+            context_notes: rule_context_notes.map(str::to_string),
         })
     }
 
@@ -603,10 +605,13 @@ mod tests {
     }
 
     // ── context_notes pipeline propagation (Plan 001 post-promotion, 2026-08-13) ──
+    // The annotation is rule-level metadata looked up from the corpus at heal
+    // time. It surfaces on ALL paths (drafter / memory / Stage2), not just the
+    // drafter path — the annotation describes the RULE, not a specific fix.
 
-    /// Test entry that overrides `context_notes()` — simulates a
-    /// `ParetoDominated` rule so we can verify the pipeline propagates the
-    /// annotation through `HealResult` (drafter → Candidate → `HealResult`).
+    /// Test entry that overrides `context_notes()` — simulates an annotated
+    /// rule so we can verify the pipeline surfaces the annotation through
+    /// `HealResult` on all paths.
     #[derive(Clone)]
     struct PipelineAnnotatedEntry {
         rule_id: String,
@@ -632,9 +637,9 @@ mod tests {
 
     #[test]
     fn heal_propagates_context_notes_via_drafter_path() {
-        // The drafter path (source=Drafter) must propagate context_notes from
-        // the selected corpus entry to HealResult. This closes the
-        // drafter → Candidate → HealResult chain.
+        // The drafter path (source=Drafter) must surface context_notes from
+        // the corpus lookup. The annotation is rule-level metadata — the same
+        // regardless of which path serves the fix.
         let entries = vec![PipelineAnnotatedEntry {
             rule_id: "precompute-table".to_string(),
             buggy: "let pop = v.iter().filter(|x| **x).count();".to_string(),
@@ -644,7 +649,7 @@ mod tests {
         let mut p = make_pipeline();
         let result = p.heal("precompute-table", "let pop = v.iter().filter(|x| **x).count();", &entries).unwrap();
         assert_eq!(result.source, HealSource::Drafter, "no memory seeded → must come from drafter");
-        assert!(result.context_notes.is_some(), "drafter path must propagate context_notes");
+        assert!(result.context_notes.is_some(), "drafter path must surface context_notes");
         assert_eq!(result.context_notes.as_deref(), Some("ParetoDominated 0.20-0.40x (Bench 013)"));
     }
 
@@ -656,5 +661,54 @@ mod tests {
         let corpus = mock_corpus();
         let result = p.heal("needless_return", "return 42;", &corpus).unwrap();
         assert!(result.context_notes.is_none(), "default clippy entries should have no context_notes");
+    }
+
+    #[test]
+    fn heal_propagates_context_notes_via_stage2_path() {
+        // The Stage2 adaptive drafter (cached verified fixes) must also surface
+        // context_notes — the annotation is rule-level metadata looked up from
+        // the corpus, not fix-level data stored in the cache.
+        let entries = vec![PipelineAnnotatedEntry {
+            rule_id: "precompute-table".to_string(),
+            buggy: "let pop = v.iter().filter(|x| **x).count();".to_string(),
+            fixed: "let pop = v.iter().filter(|x| **x).count(); // table".to_string(),
+            notes: Some("ParetoDominated 0.20-0.40x (Bench 013)".to_string()),
+        }];
+        let mut p = make_pipeline();
+        // Seed the Stage2 pool with a verified fix for this rule.
+        p.insert_verified(
+            "precompute-table",
+            "let pop = v.iter().filter(|x| **x).count();",
+            "let pop = v.iter().filter(|x| **x).count(); // table".to_string(),
+        );
+        let result = p.heal("precompute-table", "let pop = v.iter().filter(|x| **x).count();", &entries).unwrap();
+        assert_eq!(result.source, HealSource::Stage2Adaptive, "must come from Stage2 cache");
+        assert!(result.context_notes.is_some(), "Stage2 path must surface context_notes from corpus");
+        assert_eq!(result.context_notes.as_deref(), Some("ParetoDominated 0.20-0.40x (Bench 013)"));
+    }
+
+    #[test]
+    fn heal_propagates_context_notes_via_memory_path() {
+        // When the memory path wins (a past trajectory beats the drafter
+        // candidate), the annotation must still surface from the corpus
+        // lookup. The annotation is NOT stored in FixTrajectory.
+        let entries = vec![PipelineAnnotatedEntry {
+            rule_id: "annotated-rule".to_string(),
+            buggy: "let buggy = 1;".to_string(),
+            fixed: "let fixed = 1;".to_string(),
+            notes: Some("Mixed 2/4 Faster (Bench 013)".to_string()),
+        }];
+        let mut p = make_pipeline();
+        // Seed memory with a trajectory so the memory path is available.
+        p.seed_from_corpus(&entries);
+        // Report a success on the memory fix so its success_rate > drafter's.
+        p.report_outcome("annotated-rule", "let buggy = 1;", "let fixed = 1;", true);
+
+        let result = p.heal("annotated-rule", "let buggy = 1;", &entries);
+        assert!(result.is_some(), "must produce a result");
+        let r = result.unwrap();
+        // The annotation must surface regardless of source (Drafter or Memory).
+        assert!(r.context_notes.is_some(), "memory path must surface context_notes from corpus");
+        assert_eq!(r.context_notes.as_deref(), Some("Mixed 2/4 Faster (Bench 013)"));
     }
 }

@@ -89,24 +89,25 @@ kind of honest signal the caveat predicted.
 
 The 3 annotated rules (2 `ParetoDominated` + 1 `Mixed`) carry a
 `context_notes: Some(...)` annotation on
-[`PerfRule`](../../src/domains/rust_perf/mod.rs). The annotation now propagates
-end-to-end through the full heal stack — drafter → pipeline → consumer:
+[`PerfRule`](../../src/domains/rust_perf/mod.rs). The annotation is **rule-level
+metadata** — it describes the RULE, not a specific fix. The pipeline looks it
+up from the corpus at heal time + surfaces it on ALL paths (drafter / memory /
+Stage2):
 
 ```text
 PerfRule.context_notes
-      (struct field)
+      (struct field — the source of truth for rule metadata)
          │
          ▼
 HealEntry::context_notes()          (trait method, default None)
          │
-         ▼
-DraftedFix.context_notes            (L1 drafter output)
+         ├──→ DraftedFix.context_notes  (L1 drafter output — for standalone drafter use)
          │
          ▼
-Candidate.context_notes             (pipeline internal, drafter path only)
+HealPipeline::heal()                (corpus lookup at the top of heal())
          │
          ▼
-HealResult.context_notes            (pipeline output)
+HealResult.context_notes            (pipeline output — same annotation on all paths)
          │
          ▼
 consumer                            (CLI/IDE/CI displays ⚠️ when Some)
@@ -117,7 +118,7 @@ is a genuine pattern — just not an unconditional win in the default
 configuration. The consumer (CLI caller, IDE plugin, CI gate) reads
 `DraftedFix::context_notes` (direct drafter API) or `HealResult::context_notes`
 (self-evolve pipeline API) and decides whether their context matches
-(multi-threaded? POPCNT target?).
+(multi-threaded? POPCNT target? large N?).
 
 This is the honest design: the pipeline surfaces the annotation; it does not
 make policy decisions about whether a rule applies. The policy belongs to the
@@ -125,11 +126,11 @@ consumer, who knows their context.
 
 ### Pipeline path coverage
 
-| Path | `context_notes` | Why |
+| Path | `context_notes` | How |
 |---|---|---|
-| **Drafter** (`HealSource::Drafter`) | ✅ propagated | The drafter reads the corpus entry's `context_notes()` directly. |
-| **Memory** (`HealSource::Memory`) | `None` | `FixTrajectory` doesn't carry the annotation — it was surfaced on the first drafter-sourced serve. Adding it to `FixTrajectory` is a follow-up if a consumer needs it on cached paths. |
-| **Stage2** (`HealSource::Stage2Adaptive`) | `None` | The adaptive drafter serves a verified fix (cached). The annotation was surfaced when the fix was first drafted before tuning. |
+| **Drafter** (`HealSource::Drafter`) | ✅ from corpus lookup | `heal()` looks up the corpus entry by `rule_id` + calls `HealEntry::context_notes()`. |
+| **Memory** (`HealSource::Memory`) | ✅ from corpus lookup | Same corpus lookup — `FixTrajectory` doesn't carry the annotation (it's fix-level data), but the corpus is the source of truth for rule-level metadata. |
+| **Stage2** (`HealSource::Stage2Adaptive`) | ✅ from corpus lookup | Same corpus lookup — the adaptive drafter serves a cached verified fix; the annotation is still the rule-level metadata from the corpus. |
 
 ### Consumer display
 
