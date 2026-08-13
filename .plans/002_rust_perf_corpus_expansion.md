@@ -326,9 +326,9 @@ For each `- [ ]` task marked **Benchable** above, the workflow is:
 ### Tasks (benchable candidates — empirical gate)
 
 - [x] **T-hash** — `fast-hasher` (FxHash vs SipHash on int keys) — DONE 2026-08-13, ParetoDominant 3.3-5.8×
-- [ ] **T-heap-box-str** — `box-str-immutable` (Vec<String> → Vec<Box<str>>)
+- [x] **T-heap-box-str** — `box-str-immutable` — DONE 2026-08-13, ParetoDominant 1.1-1.3×
 - [ ] **T-heap-smallvec** — `smallvec-stack` (Vec → SmallVec for ≤8 typical)
-- [ ] **T-heap-reuse-clear** — `reuse-allocation-clear` (alloc-per-call → .clear() reuse)
+- [x] **T-heap-reuse-clear** — `reuse-allocation-clear` — DONE 2026-08-13, Mixed (3/4 Faster, carries context_notes)
 - [ ] **T-inline** — `inline-hot-fn` (likely reject — LLVM inlines within-crate)
 - [ ] **T-io-buffered** — `buffered-io` (File → BufReader; needs temp file in bench)
 - [ ] **T-rayon** — `rayon-par-iter` (needs rayon dep + >5µs/item workload)
@@ -341,10 +341,9 @@ For each `- [ ]` task marked **Benchable** above, the workflow is:
 - [ ] **T-log-no-format** — `log-no-format-in-hot-loop` (format! in loop → structured args)
 - [ ] **T-lift-hot-field** — `lift-hot-field-from-arc` (denormalize hot bool out of Arc chain)
 - [ ] **T-object-pool** — `object-pool-reuse` (alloc+drop loop → pool acquire/release)
-- [ ] **T-soa-layout** — `soa-vs-aos` (AoS → SoA for field-wise iteration)
-- [ ] **T-avoid-clone** — `avoid-unnecessary-clone` (clone → borrow; the missing classic)
-
-**Additional rules shipped outside this plan's candidate list (rustc/bevy pattern mining):**
+- [-] **T-soa-layout** — `soa-vs-aos` — REJECTED 2026-08-13: ParetoDominated/Tie (0.86-1.01×). AoS cache utilization already good for 6-field structs.
+- [x] **T-avoid-clone** — `avoid-unnecessary-clone` — DONE 2026-08-13, ParetoDominant 1.3-3.0×
+  - **Additional rules shipped outside this plan's candidate list (rustc/bevy pattern mining):**
 - [x] **retain-inplace** — `iter().filter().collect()` → `Vec::retain()` in-place (1.3-2.0×) — DONE 2026-08-13
 - [x] **mem-take** — `buf.clone() + buf.clear()` → `mem::take()` (1.9-2.6×) — DONE 2026-08-13
 

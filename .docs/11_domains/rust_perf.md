@@ -19,14 +19,16 @@
 
 ## Corpus
 
-28 seed rules across 11 categories (rust-optimize skill checklist +
-nethercote/perf-book + rustc-hash/bevy real-world patterns). Complexity is the
+31 seed rules across 11 categories (rust-optimize skill checklist +
+nnethercote/perf-book + rustc-hash/bevy real-world patterns). Complexity is the
 deepest category (8 rules — the 3 algorithmic anti-patterns + HashMap
-lookup merging + loop fusion + prefix-sum-2d + swap-remove + fxhashmap); allocation has 5;
-simd has 4; layout + concurrency + iterators have 2; the rest have 1 each. 24 are
+lookup merging + loop fusion + prefix-sum-2d + swap-remove + fxhashmap). Allocation has 8
+(static-str, vec-with-capacity, format-concat-loop, ok-or-else, mem-take,
+avoid-clone, box-str-immutable, reuse-allocation-clear).
+Simd has 4; layout, concurrency, iterators have 2; the rest have 1 each. 27 are
 benchable (carry a `BenchSpec`); 4 are honestly `NotBenchable`
-(need external runtimes or are structural). 3 of the 24 benchable rules carry
-`context_notes` (Bench 013 found 2 `ParetoDominated` + 1 `Mixed` in the
+(need external runtimes or are structural). 4 of the 27 benchable rules carry
+`context_notes` (Bench 013 found 2 `ParetoDominated` + 2 `Mixed` in the
 default config — consumers should treat them as context-dependent, not
 unconditional suggestions).
 
@@ -44,7 +46,10 @@ unconditional suggestions).
 | `vec-with-capacity` | allocation | ✅ 1.1-4.3x ParetoDominant | — | `Vec::new()` + push loop → `Vec::with_capacity(n)` (realloc cost) |
 | `format-concat-loop` | allocation | ✅ 42-95x ParetoDominant | — | `format!("{s}{x}")` concat in loop → `String::push_str` (O(n²) → O(n)) |
 | `ok-or-else` | allocation | ✅ 97x ParetoDominant | — | `ok_or(expensive())` eager error construction → `ok_or_else(\|\| expensive())` lazy closure (avoids unused error allocation; source: nnethercote/perf-book) |
-| `mem-take` | allocation | ✅ 3.0-3.1x ParetoDominant | — | `buf.clone()` + `buf.clear()` → `mem::take(&mut buf)` (moves Vec allocation in O(1), no deep clone; ~3× across all sizes) |
+| `mem-take` | allocation | ✅ 1.9-2.6x ParetoDominant | — | `buf.clone()` + `buf.clear()` → `mem::take(&mut buf)` (moves Vec allocation O(1), no deep clone) |
+| `avoid-clone` | allocation | ✅ 1.3-3.0x ParetoDominant | — | `fn(data: Vec<T>)` clone-on-call → `fn(data: &[T])` borrow (clone does heap alloc + memcpy; compiler can't elide) |
+| `box-str-immutable` | allocation | ✅ 1.1-1.3x ParetoDominant | — | `Vec<String>` (3-word handle) → `Vec<Box<str>>` (2-word, drops capacity field) for immutable string collections |
+| `reuse-allocation-clear` | allocation | ~ Mixed (3/4 Faster) | ⚠️ `context_notes` | `fn() { Vec::new() }` alloc-per-call → `fn(buf: &mut Vec<T>)` clear-reuse (wins ≤10K; loses at 100K due to L2 cache pressure) |
 | `layout-reorder` | layout | ❌ NotBenchable | — | Field reorder to eliminate padding (deterministic `size_of`, not a runtime microbench) |
 | `repr-u8-enum` | layout | ❌ NotBenchable | — | Field-less enum → `#[repr(u8)]` (deterministic `size_of`, same class as layout-reorder) |
 | `mutex-to-atomic` | concurrency | ✅ 2.5x ParetoDominant | — | `Mutex<u32>` counter inc → `AtomicU32::fetch_add` (Mutex lock/unlock is opaque; ~2.5× single-threaded) |

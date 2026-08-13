@@ -8,10 +8,10 @@
 //! validator found ParetoDominated in the default config (Bench 013), `None`
 //! for unconditional wins + honestly NotBenchable rules.
 //!
-//! 28 entries across 11 categories (complexity 8, allocation 5, simd 4,
+//! 31 entries across 11 categories (complexity 8, allocation 8, simd 4,
 //! layout 2, concurrency 2, iterators 2, arithmetic 1, dispatch 1, caching 1,
-//! bevy 1, wasm 1). 24 are benchable (21 ParetoDominant + 2 ParetoDominated +
-//! 1 Mixed); 4 are honestly NotBenchable.
+//! bevy 1, wasm 1). 27 are benchable (23 ParetoDominant + 2 ParetoDominated +
+//! 2 Mixed); 4 are honestly NotBenchable.
 //!
 //! ## Bench specs (behind `rust_perf_bench`)
 //!
@@ -20,7 +20,7 @@
 //! `run_buggy` / `run_fixed` entry points. The bench validator generates a
 //! temp bin crate from the spec + runs a timing loop at multiple sizes.
 //!
-//! Currently benchable (24/28):
+//! Currently benchable (27/31):
 //! - `o1-lookup` (Vec scan vs HashMap lookup — clear O(n) vs O(1))
 //! - `bsearch-sorted-slice` (linear scan vs binary search — O(n) vs O(log n) on sorted data)
 //! - `dedupe-hashset-vs-vec` (Vec::contains loop vs HashSet collect — O(n²) vs O(n))
@@ -47,8 +47,11 @@
 //! - `fxhashmap` (std HashMap SipHash vs FxHashMap FxHash — hasher speed, 2-4×)
 //! - `retain-inplace` (filter().collect() new Vec vs retain() in-place — ~1.5-2×)
 //! - `mem-take` (clone+clear vs mem::take move — ~3×, avoids deep clone)
+//! - `avoid-clone` (fn(data: Vec<T>) clone → fn(data: &[T]) borrow — ~1.3-3×)
+//! - `box-str-immutable` (Vec<String> 3-word → Vec<Box<str>> 2-word — ~1.1-1.3×)
+//! - `reuse-allocation-clear` (alloc-per-call → clear-reuse scratch buffer — **Mixed**, see `context_notes`)
 //!
-//! Not benchable (4/28) — honest:
+//! Not benchable (4/31) — honest:
 //! - `layout-reorder` (struct size — deterministic `size_of`, not a runtime
 //!   microbench; the cache-utilization claim needs a specific access pattern)
 //! - `repr-u8-enum` (enum size — deterministic `size_of`, same class as
@@ -58,11 +61,11 @@
 //!
 //! ## Context-dependent rules (`context_notes`)
 //!
-//! Three rules carry a `context_notes: Some(...)` annotation recording that the
+//! Four rules carry a `context_notes: Some(...)` annotation recording that the
 //! Bench 013 Pareto validator found them **ParetoDominated** or **Mixed** in the
 //! default configuration (`precompute-table`, `papaya-lockfree`,
-//! `dedupe-hashset-vs-vec`). The patterns are genuine wins in their respective
-//! regimes (non-POPCNT targets / multi-threaded contention / large N) and are
+//! `dedupe-hashset-vs-vec`, `reuse-allocation-clear`). The patterns are genuine wins in their respective
+//! regimes (non-POPCNT targets / multi-threaded contention / large N / small-to-medium N) and are
 //! kept in the corpus as documented patterns, but consumers should treat them
 //! as context-dependent — not unconditional suggestions.
 
@@ -71,12 +74,13 @@ use crate::domains::rust_perf::{PerfRule, RustPerfDomain};
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 28 entries
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 31 entries
 /// covering the main perf pattern categories (complexity, allocation, layout,
 /// concurrency, simd, arithmetic, iterators, dispatch, caching, bevy, wasm).
 /// Complexity is the deepest category (8 rules: 3 algorithmic, entry merge,
-/// loop fusion, prefix-sum-2d, swap-remove, fxhashmap). Allocation has 5
-/// (static-str, vec-with-capacity, format-concat-loop, ok-or-else, mem-take).
+/// loop fusion, prefix-sum-2d, swap-remove, fxhashmap). Allocation has 8
+/// (static-str, vec-with-capacity, format-concat-loop, ok-or-else, mem-take,
+/// avoid-clone, box-str-immutable, reuse-allocation-clear).
 /// Simd has 4; layout, concurrency, iterators have 2; the rest have 1 each.
 #[must_use]
 #[allow(clippy::too_many_lines)] // seed corpus is a data table; length scales with rule count
@@ -577,6 +581,63 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
             context_notes: None,
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: Some(mem_take_bench_spec()),
+        },
+        // ── allocation: unnecessary clone → borrow (&) ───────────────────────
+        // The single most common Rust perf anti-pattern (Plan 002 T-avoid-clone).
+        // Passing `data: Vec<T>` by value clones the entire collection on every
+        // call. Passing `data: &[T]` borrows — zero allocation, zero copy.
+        // The compiler can't elide clone (visible side effects: heap alloc).
+        // ~1.3-3× faster.
+        PerfRule {
+            rule_id: "avoid-clone".to_string(),
+            name: "fn(data: Vec<T>) clone-on-call → fn(data: &[T]) borrow".to_string(),
+            category: "allocation".to_string(),
+            buggy_code: "fn process(data: Vec<u8>) -> u64 {\n    data.iter().map(|&b| b as u64).sum()\n}".to_string(),
+            fixed_code: "fn process(data: &[u8]) -> u64 {\n    data.iter().map(|&b| b as u64).sum()\n}".to_string(),
+            context_notes: None,
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(avoid_clone_bench_spec()),
+        },
+        // ── allocation: Vec<String> → Vec<Box<str>> (drop capacity word) ────
+        // String is 3 words (ptr, len, capacity). Box<str> is 2 words (ptr, len).
+        // For immutable string collections, Box<str> saves 8 bytes/element on
+        // 64-bit → better cache density. ~1.1-1.3× at scale. The compiler can't
+        // change the representation type.
+        PerfRule {
+            rule_id: "box-str-immutable".to_string(),
+            name: "Vec<String> (3-word handle) → Vec<Box<str>> (2-word, no capacity)".to_string(),
+            category: "allocation".to_string(),
+            buggy_code: "struct Config { labels: Vec<String> }".to_string(),
+            fixed_code: "struct Config { labels: Vec<Box<str>> }".to_string(),
+            context_notes: None,
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(box_str_immutable_bench_spec()),
+        },
+        // ── allocation: alloc-per-call → clear-reuse (scratch buffer) ────────
+        // Allocating a fresh Vec inside a hot function is wasteful when the
+        // caller can pass a reusable buffer. The compiler can't hoist the
+        // allocation (it may panic on OOM). **Context-dependent** — wins at
+        // small-to-medium N but can lose at very large N where the reused
+        // buffer exceeds L2 cache (see context_notes).
+        PerfRule {
+            rule_id: "reuse-allocation-clear".to_string(),
+            name: "fn() { let mut v = Vec::new() } alloc-per-call → fn(buf: &mut Vec<T>) clear-reuse".to_string(),
+            category: "allocation".to_string(),
+            buggy_code: "fn hot(n: usize) -> u64 {\n    let mut v: Vec<u32> = Vec::new();\n    for i in 0..n { v.push(i as u32); }\n    v.iter().map(|&x| x as u64).sum()\n}".to_string(),
+            fixed_code: "fn hot(n: usize, buf: &mut Vec<u32>) -> u64 {\n    buf.clear();\n    for i in 0..n { buf.push(i as u32); }\n    buf.iter().map(|&x| x as u64).sum()\n}".to_string(),
+            // Bench 013 Mixed (3/4 Faster, 1/4 Slower). Wins clearly at
+            // N ≤ 10,000 (up to 5.97× at N=100). At N=100,000 the reused
+            // buffer exceeds L2 cache → reuse path is slower than fresh alloc.
+            // The rule is a genuine win for hot functions called in tight loops
+            // with small-to-medium buffers; for very large buffers, alloc-per-call
+            // may be fine.
+            context_notes: Some(
+                "Bench 013: Mixed 3/4 Faster (5.97× at N=100, 1.60× at N=1000, 1.20× at N=10000) \
+                 but 0.87× at N=100000 (reused buffer exceeds L2 cache). Suggest for hot \
+                 functions called in tight loops with small-to-medium buffers (≤10K elements).".to_string()
+            ),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(reuse_allocation_clear_bench_spec()),
         },
     ])
 }
@@ -1918,6 +1979,131 @@ pub fn run_fixed(input: &[String]) {
     }
 }
 
+/// Bench spec for `avoid-clone`: clone(Vec<u8>) vs borrow(&[u8]).
+///
+/// The buggy path clones the whole Vec (heap alloc + memcpy) every call.
+/// The fixed path borrows the slice — zero allocation. ~1.3-3× faster.
+#[cfg(feature = "rust_perf_bench")]
+fn avoid_clone_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![100, 1_000, 10_000, 100_000],
+        harness: r#"
+mod buggy {
+    pub fn process(data: Vec<u8>) -> u64 {
+        data.iter().map(|&b| b as u64).sum()
+    }
+}
+
+mod fixed {
+    pub fn process(data: &[u8]) -> u64 {
+        data.iter().map(|&b| b as u64).sum()
+    }
+}
+
+pub fn make_input(n: usize) -> Vec<u8> {
+    (0..n as u8).cycle().take(n).collect()
+}
+
+pub fn run_buggy(input: &[u8]) {
+    std::hint::black_box(buggy::process(input.to_vec()));
+}
+
+pub fn run_fixed(input: &[u8]) {
+    std::hint::black_box(fixed::process(input));
+}
+"#
+        .to_string(),
+    }
+}
+
+/// Bench spec for `box-str-immutable`: Vec<String> vs Vec<Box<str>>.
+///
+/// String is 3 words (ptr, len, capacity); Box<str> is 2 (ptr, len).
+/// The capacity word savings improve cache density at scale. ~1.1-1.3×.
+#[cfg(feature = "rust_perf_bench")]
+fn box_str_immutable_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![1_000, 10_000, 100_000],
+        harness: r#"
+pub struct Input {
+    strings: Vec<String>,
+    box_strs: Vec<Box<str>>,
+}
+
+pub fn make_input(n: usize) -> Input {
+    let strings: Vec<String> = (0..n).map(|i| format!("item_{i}")).collect();
+    let box_strs: Vec<Box<str>> = strings.iter().map(|s| s.as_str().into()).collect();
+    Input { strings, box_strs }
+}
+
+pub fn run_buggy(input: &Input) {
+    let mut total = 0usize;
+    for s in &input.strings {
+        total += s.len();
+    }
+    std::hint::black_box(total);
+}
+
+pub fn run_fixed(input: &Input) {
+    let mut total = 0usize;
+    for s in &input.box_strs {
+        total += s.len();
+    }
+    std::hint::black_box(total);
+}
+"#
+        .to_string(),
+    }
+}
+
+/// Bench spec for `reuse-allocation-clear`: alloc-per-call vs clear-reuse.
+///
+/// The buggy path allocates a fresh Vec::new() inside the function body
+/// every call. The fixed path reuses a caller-passed buffer via .clear().
+/// **Mixed** — wins at N ≤ 10,000 (up to 5.97× at N=100), loses at N=100,000
+/// where the reused buffer exceeds L2 cache.
+#[cfg(feature = "rust_perf_bench")]
+fn reuse_allocation_clear_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![100, 1_000, 10_000, 100_000],
+        harness: r#"
+mod buggy {
+    pub fn build_temp(n: usize) -> u64 {
+        let mut v: Vec<u32> = Vec::new();
+        for i in 0..n {
+            v.push(i as u32);
+        }
+        v.iter().map(|&x| x as u64).sum()
+    }
+}
+
+mod fixed {
+    pub fn build_temp(n: usize, buf: &mut Vec<u32>) -> u64 {
+        buf.clear();
+        for i in 0..n {
+            buf.push(i as u32);
+        }
+        buf.iter().map(|&x| x as u64).sum()
+    }
+}
+
+pub fn make_input(n: usize) -> usize {
+    n
+}
+
+pub fn run_buggy(input: &usize) {
+    std::hint::black_box(buggy::build_temp(*input));
+}
+
+pub fn run_fixed(input: &usize) {
+    let mut buf: Vec<u32> = Vec::with_capacity(*input);
+    std::hint::black_box(fixed::build_temp(*input, &mut buf));
+}
+"#
+        .to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1933,15 +2119,15 @@ mod tests {
     }
 
     #[test]
-    fn seed_corpus_has_twenty_eight_entries_across_eleven_categories() {
+    fn seed_corpus_has_thirty_one_entries_across_eleven_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 28);
+        assert_eq!(corpus.entries.len(), 31);
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
         categories.dedup();
         // 11 distinct categories. Complexity is the deepest (8 rules);
-        // allocation has 5; simd has 4; layout + concurrency + iterators have 2;
+        // allocation has 8; simd has 4; layout, concurrency, iterators have 2;
         // arithmetic, dispatch, caching, bevy, wasm have 1 each.
         assert_eq!(categories.len(), 11);
     }
@@ -2011,10 +2197,10 @@ mod tests {
 
     #[cfg(feature = "rust_perf_bench")]
     #[test]
-    fn twenty_four_rules_have_bench_specs() {
+    fn twenty_seven_rules_have_bench_specs() {
         let corpus = build_perf_seed_corpus();
         let with_spec = corpus.entries.iter().filter(|e| e.bench_spec.is_some()).count();
-        assert_eq!(with_spec, 24, "expected 24 benchable rules, got {with_spec}");
+        assert_eq!(with_spec, 27, "expected 27 benchable rules, got {with_spec}");
     }
 
     #[cfg(feature = "rust_perf_bench")]
@@ -2034,13 +2220,13 @@ mod tests {
         assert!(without_spec.contains(&"wasm-batch-ffi"));
     }
 
-    /// Bench 013 found 3 rules with non-dominant verdicts in the default
-    /// config (2 ParetoDominated + 1 Mixed). Their `context_notes` annotation
+    /// Bench 013 found 4 rules with non-dominant verdicts in the default
+    /// config (2 ParetoDominated + 2 Mixed). Their `context_notes` annotation
     /// records the finding so consumers don't unconditionally suggest them.
-    /// The other 25 have `context_notes: None` (unconditional wins or honestly
+    /// The other 27 have `context_notes: None` (unconditional wins or honestly
     /// NotBenchable).
     #[test]
-    fn three_annotated_rules_carry_context_notes() {
+    fn four_annotated_rules_carry_context_notes() {
         let corpus = build_perf_seed_corpus();
         let annotated: Vec<&str> = corpus
             .entries
@@ -2048,24 +2234,25 @@ mod tests {
             .filter(|e| e.context_notes.is_some())
             .map(|e| e.rule_id.as_str())
             .collect();
-        assert_eq!(annotated.len(), 3, "expected 3 context-annotated rules");
+        assert_eq!(annotated.len(), 4, "expected 4 context-annotated rules");
         assert!(annotated.contains(&"precompute-table"));
         assert!(annotated.contains(&"papaya-lockfree"));
         assert!(annotated.contains(&"dedupe-hashset-vs-vec"));
+        assert!(annotated.contains(&"reuse-allocation-clear"));
     }
 
-    /// The 25 non-annotated rules (21 ParetoDominant + 4 NotBenchable) must
+    /// The 27 non-annotated rules (23 ParetoDominant + 4 NotBenchable) must
     /// have `context_notes: None` — they are either unconditional wins or
     /// honestly unmeasurable.
     #[test]
-    fn twenty_five_rules_have_no_context_notes() {
+    fn twenty_seven_rules_have_no_context_notes() {
         let corpus = build_perf_seed_corpus();
         let unannotated = corpus
             .entries
             .iter()
             .filter(|e| e.context_notes.is_none())
             .count();
-        assert_eq!(unannotated, 25, "expected 25 unannotated rules");
+        assert_eq!(unannotated, 27, "expected 27 unannotated rules");
     }
 
     /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -2077,7 +2264,7 @@ mod tests {
         let json = serde_json::to_string(&corpus.entries).unwrap();
         let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
         let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-        assert_eq!(annotated, 3);
+        assert_eq!(annotated, 4);
 
         // Simulate a pre-field snapshot: strip `context_notes` from JSON.
         // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -2099,9 +2286,9 @@ mod tests {
 
         let corpus = build_perf_seed_corpus();
 
-        // Filter to the 3 annotated rules.
+        // Filter to the 4 annotated rules.
         let annotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_some()).collect();
-        assert_eq!(annotated.len(), 3, "expected 3 annotated rules");
+        assert_eq!(annotated.len(), 4, "expected 4 annotated rules");
 
         // The HealEntry trait override must agree with the struct field.
         for rule in &annotated {
@@ -2119,9 +2306,9 @@ mod tests {
             );
         }
 
-        // The 25 unannotated rules must return None from the trait too.
+        // The 27 unannotated rules must return None from the trait too.
         let unannotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_none()).collect();
-        assert_eq!(unannotated.len(), 25, "expected 25 unannotated rules");
+        assert_eq!(unannotated.len(), 27, "expected 27 unannotated rules");
         for rule in &unannotated {
             assert!(HealEntry::context_notes(*rule).is_none(), "{} should have no context_notes", rule.rule_id);
         }

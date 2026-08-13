@@ -13,15 +13,15 @@ Three domains ship (Plan 001):
 1. **`clippy_lints`** (default-on) — heals `cargo clippy` warnings. The
    original domain; 10 common lints across style/complexity/perf/nursery.
 2. **`rust_perf`** (default-on since 2026-08-13, Phase 2) — heals rust perf
-   issues. 28 rules distilled from the `rust-optimize` skill checklist +
+   issues. 31 rules distilled from the `rust-optimize` skill checklist +
    nnethercote/perf-book + rustc-hash/bevy real-world patterns (complexity,
    allocation, layout, concurrency, simd, arithmetic, iterators, dispatch,
    caching, bevy, wasm). The **perf-bench
    Pareto validator** (Bench 013,
-   `rust_perf_bench` feature) is the promotion gate — GOAT G1+G5 PASS. 3 of
-   24 benchable rules (`precompute-table`, `papaya-lockfree`,
-   `dedupe-hashset-vs-vec`) carry `context_notes` annotations recording the
-   bench finding (2 ParetoDominated + 1 Mixed in the default config —
+   `rust_perf_bench` feature) is the promotion gate — GOAT G1+G5 PASS. 4 of
+   27 benchable rules (`precompute-table`, `papaya-lockfree`,
+   `dedupe-hashset-vs-vec`, `reuse-allocation-clear`) carry `context_notes` annotations recording the
+   bench finding (2 ParetoDominated + 2 Mixed in the default config —
    consumers should treat annotated rules as context-dependent).
 3. **`kernel_opt`** (opt-in, Phase 3) — heals GPU kernel optimization. 2
    placeholder rules (real popcorn distillation deferred per Proposal 012
@@ -140,9 +140,9 @@ cargo run --example ruliology_search_demo --features ruliology_search --release
 - `default` = `["clippy_lints"]`: clippy lint healing domain + L0 (corpus) + L1 (ternary drafter) + L2 (native rust-analyzer pruner)
 - `clippy_lints` (default-on): the clippy lint healing domain.
 - `clippy_verify` (opt-in): Phase 3 lint resolution verification via real `cargo clippy` re-run. Slow (~130ms/verify), requires cargo+clippy on PATH. Implies `clippy_lints`.
-- `rust_perf` (default-on since 2026-08-13, Plan 001 Phase 2): rust performance healing domain. 28 rules from the `rust-optimize` skill checklist + nnethercote/perf-book + rustc-hash/bevy real-world patterns. Promoted after Bench 013 GOAT G1+G5 PASS. 3 of 24 benchable rules (`precompute-table`, `papaya-lockfree`, `dedupe-hashset-vs-vec`) carry `context_notes` annotations (Bench 013: 2 ParetoDominated + 1 Mixed in default config — consumers should treat as context-dependent).
+- `rust_perf` (default-on since 2026-08-13, Plan 001 Phase 2): rust performance healing domain. 31 rules from the `rust-optimize` skill checklist + nnethercote/perf-book + rustc-hash/bevy real-world patterns. Promoted after Bench 013 GOAT G1+G5 PASS. 4 of 27 benchable rules (`precompute-table`, `papaya-lockfree`, `dedupe-hashset-vs-vec`, `reuse-allocation-clear`) carry `context_notes` annotations (Bench 013: 2 ParetoDominated + 2 Mixed in default config — consumers should treat as context-dependent).
 - `rust_perf_verify` (opt-in): `cargo test` re-run for perf rule verification. Slow (seconds), requires cargo on PATH. Implies `rust_perf`.
-- `rust_perf_bench` (opt-in, Plan 001 Phase 2 GOAT gate): generated microbenchmarks at multiple input sizes → Pareto verdict. **GOAT G1+G5 PASS (Bench 013)** — 22/24 benchable rules Pareto-dominant (o1-lookup 570x, bsearch-sorted-slice 16-2709x, simd-chunk 3.9x, bool-to-bitpack 7-11x, branchless-conditional 10x, static-str 42x, vec-with-capacity 1.1-4.3x, format-concat-loop 42-95x, mutex-to-atomic 2.5x, f32-counter-to-int 7.5-11x, entry-vs-contains-insert 1.5x, loop-fusion 1.5x, collect-avoidance 2.3-3.0x, dyn-to-enum 2.5-2.9x, prefix-sum-2d 34-30000x, ok-or-else 97x, swap-remove 3-7927x, chunks-exact 13-16x, fxhashmap 3.3-5.8x, retain-inplace 1.3-2.0x, mem-take 1.9-2.6x); 2/24 honestly dominated (precompute-table: compiler optimizes popcount to POPCNT in release; papaya-lockfree: benefit needs multi-threaded contention); 1/24 Mixed (dedupe-hashset-vs-vec: wins at N ≥ 1000, loses at small N due to HashSet overhead). Closes Proposal 001 caveat 3. Implies `rust_perf`.
+- `rust_perf_bench` (opt-in, Plan 001 Phase 2 GOAT gate): generated microbenchmarks at multiple input sizes → Pareto verdict. **GOAT G1+G5 PASS (Bench 013)** — 23/27 benchable rules Pareto-dominant (o1-lookup 570x, bsearch-sorted-slice 16-2709x, simd-chunk 3.9x, bool-to-bitpack 7-11x, branchless-conditional 10x, static-str 42x, vec-with-capacity 1.1-4.3x, format-concat-loop 42-95x, mutex-to-atomic 2.5x, f32-counter-to-int 7.5-11x, entry-vs-contains-insert 1.5x, loop-fusion 1.5x, collect-avoidance 2.3-3.0x, dyn-to-enum 2.5-2.9x, prefix-sum-2d 34-30000x, ok-or-else 97x, swap-remove 3-7927x, chunks-exact 13-16x, fxhashmap 3.3-5.8x, retain-inplace 1.3-2.0x, mem-take 1.9-2.6x, avoid-clone 1.3-3.0x, box-str-immutable 1.1-1.3x); 2/27 honestly dominated (precompute-table: compiler optimizes popcount to POPCNT in release; papaya-lockfree: benefit needs multi-threaded contention); 2/27 Mixed (dedupe-hashset-vs-vec: wins at N ≥ 1000; reuse-allocation-clear: wins at N ≤ 10K, loses at N=100K due to L2 cache pressure). Closes Proposal 001 caveat 3. Implies `rust_perf`.
 - `kernel_heal` (opt-in, Plan 001 Phase 3): GPU kernel optimization healing domain. Absorbs Proposal 012. Enables `katgpt-core/variable_rank_domain_expert` for the `pick_domain` router (Plan 558). 4090 LoRA + real popcorn corpus DEFERRED.
 - `kernel_verify` (opt-in): CubeCL compile check. **STUB** — delegates to shared `RustAnalyzerPruner`; full numeric compare deferred (Proposal 012 §Phase 0). Implies `kernel_heal`.
 - `ruliology_search` (opt-in): L3 Pareto-front candidate search. Reuses the algorithm pattern from `katgpt-ruliology` (Bench 572) without a code-level dep. Runs once per lint invocation (~400µs/10 candidates), not per-tick. Implies `clippy_lints`.
