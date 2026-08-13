@@ -1,4 +1,4 @@
-//! GOAT gate for Issue 001: L1 ternary matvec path in ClippyTernaryDrafter.
+//! GOAT gate for Issue 001: L1 ternary matvec path in TernaryDrafter.
 //!
 //! Gates:
 //! - G1 (determinism): same input → identical output across runs
@@ -8,8 +8,8 @@
 
 #![allow(clippy::pedantic)]
 
-use riir_clippy::corpus::ClippyFixEntry;
-use riir_clippy::drafter::{ClippyTernaryDrafter, DraftSource};
+use riir_clippy::ClippyFixEntry;
+use riir_clippy::drafter::{DraftSource, TernaryDrafter};
 use std::time::Instant;
 
 fn mock_entries(n: usize) -> Vec<ClippyFixEntry> {
@@ -50,7 +50,7 @@ fn main() {
 
     // ── G1: Determinism ──────────────────────────────────────────────────
     {
-        let mut drafter = ClippyTernaryDrafter::with_weights(weights.clone());
+        let mut drafter = TernaryDrafter::with_weights(weights.clone());
         let r1 = drafter.draft_fix("needless_return", "return 42;", &entries).unwrap();
         let r2 = drafter.draft_fix("needless_return", "return 42;", &entries).unwrap();
 
@@ -68,7 +68,7 @@ fn main() {
 
     // ── G2: Latency ──────────────────────────────────────────────────────
     {
-        let mut drafter = ClippyTernaryDrafter::with_weights(weights.clone());
+        let mut drafter = TernaryDrafter::with_weights(weights.clone());
         let n_iters = 10_000;
 
         // Warmup
@@ -103,7 +103,7 @@ fn main() {
 
     // ── G3: No-regression (L0 fallback unchanged) ────────────────────────
     {
-        let mut fallback = ClippyTernaryDrafter::fallback();
+        let mut fallback = TernaryDrafter::fallback();
         assert!(fallback.is_fallback());
 
         let fix = fallback.draft_fix("needless_return", "return 42;", &entries).unwrap();
@@ -122,7 +122,7 @@ fn main() {
 
     // ── G4: Alloc-free steady state ──────────────────────────────────────
     {
-        let mut drafter = ClippyTernaryDrafter::with_weights(weights.clone());
+        let mut drafter = TernaryDrafter::with_weights(weights.clone());
 
         let input_cap_before = drafter.input_scratch_capacity();
         let output_cap_before = drafter.output_scratch_capacity();

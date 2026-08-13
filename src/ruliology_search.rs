@@ -24,17 +24,20 @@
 //! Entirely modelless: pure AST diff + Pareto dominance check. No training,
 //! no backprop. Runs once per lint invocation (not per-tick).
 
-use crate::corpus::ClippyFixEntry;
+use crate::domain::HealEntry;
 
 /// A candidate fix scored for Pareto-front ranking.
 ///
 /// `lint_satisfied` is the payoff (higher is better); `ast_delta_size` is the
 /// complexity (lower is better). A candidate dominates another if it has
 /// payoff ≥ AND strictly lower complexity (with at least one strict inequality).
+///
+/// Generic over `E: HealEntry` (Plan 001 Phase 1) — works with any domain's
+/// corpus entry type.
 #[derive(Debug, Clone)]
-pub struct ScoredCandidate<'a> {
+pub struct ScoredCandidate<'a, E: HealEntry> {
     /// The corpus entry being scored.
-    pub entry: &'a ClippyFixEntry,
+    pub entry: &'a E,
     /// Payoff: true if L2 accepts (parses) the fixed code. When the
     /// `clippy_verify` feature is also enabled, callers can substitute the
     /// stricter `lint_resolved` signal from `validate_with_clippy`.
@@ -94,22 +97,25 @@ impl RuliologySearch {
     /// Returns all candidates (not just the Pareto-front), sorted by
     /// `(lint_satisfied desc, ast_delta_size asc, pareto_rank asc)`.
     /// Callers typically take `result[0]` or filter `pareto_rank == 0`.
+    ///
+    /// Generic over `E: HealEntry` (Plan 001 Phase 1) — works with any domain's
+    /// corpus entry type.
     #[must_use]
-    pub fn search<'c>(
+    pub fn search<'c, E: HealEntry>(
         &self,
         buggy_code: &str,
-        candidates: &'c [ClippyFixEntry],
-    ) -> Vec<ScoredCandidate<'c>> {
+        candidates: &'c [E],
+    ) -> Vec<ScoredCandidate<'c, E>> {
         if candidates.is_empty() {
             return Vec::new();
         }
 
         // Phase 1: score each candidate.
-        let mut scored: Vec<ScoredCandidate<'c>> = candidates
+        let mut scored: Vec<ScoredCandidate<'c, E>> = candidates
             .iter()
             .map(|entry| {
-                let result = self.pruner.validate(&entry.fixed_code, &entry.lint_name);
-                let ast_delta = ast_delta_size(buggy_code, &entry.fixed_code);
+                let result = self.pruner.validate(entry.fixed_code(), entry.rule_id());
+                let ast_delta = ast_delta_size(buggy_code, entry.fixed_code());
                 ScoredCandidate {
                     entry,
                     lint_satisfied: result.parses,
@@ -153,11 +159,11 @@ impl RuliologySearch {
     ///
     /// Returns `None` if no candidates satisfy the L2 pruner.
     #[must_use]
-    pub fn best_fix<'c>(
+    pub fn best_fix<'c, E: HealEntry>(
         &self,
         buggy_code: &str,
-        candidates: &'c [ClippyFixEntry],
-    ) -> Option<&'c ClippyFixEntry> {
+        candidates: &'c [E],
+    ) -> Option<&'c E> {
         let scored = self.search(buggy_code, candidates);
         scored
             .into_iter()
@@ -167,11 +173,11 @@ impl RuliologySearch {
 
     /// Return only the Pareto-optimal candidates (rank 0).
     #[must_use]
-    pub fn pareto_optimal<'c>(
+    pub fn pareto_optimal<'c, E: HealEntry>(
         &self,
         buggy_code: &str,
-        candidates: &'c [ClippyFixEntry],
-    ) -> Vec<ScoredCandidate<'c>> {
+        candidates: &'c [E],
+    ) -> Vec<ScoredCandidate<'c, E>> {
         self.search(buggy_code, candidates)
             .into_iter()
             .filter(|s| s.pareto_rank == 0)
@@ -190,7 +196,7 @@ impl RuliologySearch {
 /// (`katgpt-ruliology/src/types.rs` lines 119-126), with bool payoff +
 /// usize complexity in place of f64/f32.
 #[inline]
-fn dominates(a: &ScoredCandidate<'_>, b: &ScoredCandidate<'_>) -> bool {
+fn dominates<E: HealEntry>(a: &ScoredCandidate<'_, E>, b: &ScoredCandidate<'_, E>) -> bool {
     let payoff_ge = a.lint_satisfied >= b.lint_satisfied; // bool: true >= false
     let complexity_le = a.ast_delta_size <= b.ast_delta_size;
     let strictly_better =
@@ -394,11 +400,11 @@ pub fn pareto_front(payoffs: &[bool], complexities: &[usize]) -> Vec<usize> {
     front
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "clippy_lints"))]
 mod tests {
     use super::*;
-    use crate::corpus::ClippyFixEntry;
-    use crate::seed_corpus::build_seed_corpus;
+    use crate::domains::clippy_lints::ClippyFixEntry;
+    use crate::domains::clippy_lints::corpus::build_seed_corpus;
 
     fn mock_entry(lint: &str, buggy: &str, fixed: &str) -> ClippyFixEntry {
         ClippyFixEntry {
@@ -511,7 +517,7 @@ mod tests {
         assert!(!dominates(&b, &a));
     }
 
-    fn mock_scored(satisfied: bool, complexity: usize) -> ScoredCandidate<'static> {
+    fn mock_scored(satisfied: bool, complexity: usize) -> ScoredCandidate<'static, ClippyFixEntry> {
         // SAFETY: we never read `entry` in the dominates/dominance tests, so
         // we use a leaked static. This is test-only.
         static EMPTY_ENTRY: std::sync::OnceLock<ClippyFixEntry> = std::sync::OnceLock::new();
@@ -580,7 +586,8 @@ mod tests {
     #[test]
     fn search_empty_candidates_returns_empty() {
         let search = RuliologySearch::new();
-        let result = search.search("fn foo() {}", &[]);
+        let empty: [ClippyFixEntry; 0] = [];
+        let result = search.search("fn foo() {}", &empty);
         assert!(result.is_empty());
     }
 

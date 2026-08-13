@@ -10,6 +10,13 @@
 //! existing static-corpus path (drafter + pruner only). Evolution only biases
 //! candidate selection when past outcomes have been recorded.
 //!
+//! ## Domain-agnostic methods (Plan 001 Phase 1)
+//!
+//! `heal` and `seed_from_corpus` are generic over `E: HealEntry` — they work
+//! with any domain's corpus entry type. The memory + evolution layers remain
+//! clippy-specific (they use `lint_name` vocabulary) until a second domain
+//! needs the self-evolution layer.
+//!
 //! ## Flow
 //!
 //! ```text
@@ -22,9 +29,9 @@
 //!   6. Return the result. Caller reports outcome → feeds back to memory + evolution.
 //! ```
 
-use crate::adaptive_drafter::ClippyAdaptiveDrafter;
-use crate::corpus::ClippyFixEntry;
-use crate::drafter::ClippyTernaryDrafter;
+use crate::adaptive_drafter::AdaptiveDrafter;
+use crate::domain::HealEntry;
+use crate::drafter::TernaryDrafter;
 use crate::embedder::{Direction, EMBED_DIM, embed_into};
 use crate::evolve::LatentSkillEvolution;
 use crate::memory::{FixTrajectory, LatentFixMemory, LatentQuery};
@@ -53,7 +60,7 @@ pub enum HealSource {
     Memory,
     /// The Stage 2 adaptive drafter — a verified fix served from the pool
     /// (Issue 010 fix direction). Highest-confidence source: the fix was
-    /// validated by `cargo clippy` during the tuning phase.
+    /// validated by the domain validator during the tuning phase.
     Stage2Adaptive,
 }
 
@@ -79,7 +86,7 @@ const W_RATE: f32 = 0.4;
 /// evolution layer is a reader-side overlay.
 pub struct HealPipeline {
     /// The frozen L1 ternary drafter (existing — not modified by evolution).
-    drafter: ClippyTernaryDrafter,
+    drafter: TernaryDrafter,
     /// The frozen L2 syntax pruner (existing — not modified by evolution).
     pruner: RustAnalyzerPruner,
     /// The latent fix-trajectory memory (grows with use).
@@ -89,7 +96,7 @@ pub struct HealPipeline {
     /// The Stage 2 adaptive drafter — pool of verified fixes keyed by input
     /// (Issue 010 fix direction). Empty by default; populated by
     /// [`tune_against_fixture`](Self::tune_against_fixture) off the hot path.
-    adaptive: ClippyAdaptiveDrafter,
+    adaptive: AdaptiveDrafter,
     /// Reusable scratch buffer for retrieval index sort (alloc-free after warm-up).
     retrieve_scratch: Vec<usize>,
     /// Reusable scratch buffer for retrieval results (alloc-free after warm-up).
@@ -99,13 +106,13 @@ pub struct HealPipeline {
 impl HealPipeline {
     /// Construct a new pipeline with the given drafter + pruner + empty memory.
     #[must_use]
-    pub fn new(drafter: ClippyTernaryDrafter, pruner: RustAnalyzerPruner) -> Self {
+    pub fn new(drafter: TernaryDrafter, pruner: RustAnalyzerPruner) -> Self {
         Self {
             drafter,
             pruner,
             memory: LatentFixMemory::default(),
             evolution: LatentSkillEvolution::default(),
-            adaptive: ClippyAdaptiveDrafter::new(),
+            adaptive: AdaptiveDrafter::new(),
             retrieve_scratch: Vec::new(),
             retrieve_out: Vec::new(),
         }
@@ -113,7 +120,7 @@ impl HealPipeline {
 
     /// Borrow the Stage 2 adaptive drafter (for inspection / testing).
     #[must_use]
-    pub fn adaptive(&self) -> &ClippyAdaptiveDrafter {
+    pub fn adaptive(&self) -> &AdaptiveDrafter {
         &self.adaptive
     }
 
@@ -157,29 +164,33 @@ impl HealPipeline {
 
     /// Seed the memory from a corpus (each entry becomes a trajectory with
     /// neutral success/fail stats).
-    pub fn seed_from_corpus(&mut self, entries: &[ClippyFixEntry]) {
+    ///
+    /// Generic over `E: HealEntry` — works with any domain's entry type.
+    pub fn seed_from_corpus<E: HealEntry>(&mut self, entries: &[E]) {
         for entry in entries {
             let traj = FixTrajectory::new(
-                entry.lint_name.clone(),
-                entry.buggy_code.clone(),
-                entry.fixed_code.clone(),
+                entry.rule_id().to_string(),
+                entry.buggy_code().to_string(),
+                entry.fixed_code().to_string(),
             );
             self.memory.insert(traj);
         }
     }
 
-    /// Attempt to heal a clippy lint using the self-evolving pipeline.
+    /// Attempt to heal a rule using the self-evolving pipeline.
+    ///
+    /// Generic over `E: HealEntry` — works with any domain's corpus entry type.
     ///
     /// **Stage 2 routing (Issue 010):** if the adaptive drafter has a verified
-    /// fix for `(lint_name, buggy_code)`, return it immediately. Otherwise
+    /// fix for `(rule_id, buggy_code)`, return it immediately. Otherwise
     /// fall back to the Stage 1 drafter + memory + evolution path. The Stage 2
     /// pool is populated OFF the hot path by [`tune_against_fixture`].
     ///
-    /// See the module doc for the flow. Returns `None` if no candidate could
-    /// be produced (empty corpus + empty memory + no Stage 2 hit).
+    /// Returns `None` if no candidate could be produced (empty corpus + empty
+    /// memory + no Stage 2 hit).
     ///
     /// The caller is responsible for verifying the fix actually resolves the
-    /// lint (e.g., via `report_outcome` after checking with real cargo clippy).
+    /// rule (e.g., via `report_outcome` after checking with real validation).
     /// For POC / testing, the caller can simulate outcomes.
     ///
     /// [`tune_against_fixture`]: Self::tune_against_fixture
@@ -189,15 +200,20 @@ impl HealPipeline {
     /// Panics if the internal candidate-index bookkeeping is inconsistent
     /// (should not happen — guarded by the candidate-collection invariant).
     #[must_use]
-    pub fn heal(&mut self, lint_name: &str, buggy_code: &str, corpus: &[ClippyFixEntry]) -> Option<HealResult> {
+    pub fn heal<E: HealEntry>(
+        &mut self,
+        rule_id: &str,
+        buggy_code: &str,
+        corpus: &[E],
+    ) -> Option<HealResult> {
         // Stage 2 routing: if the adaptive drafter has a verified entry, return it.
         // This is the ~µs serve path (hash lookup) after the tuning loop populated
         // the pool. The Stage 1 path below is the always-on fallback.
-        if let Some(verified) = self.adaptive.lookup(lint_name, buggy_code) {
-            // Stage 2 fixes were already validated by `cargo clippy` during
+        if let Some(verified) = self.adaptive.lookup(rule_id, buggy_code) {
+            // Stage 2 fixes were already validated by the domain validator during
             // tuning. We still run the L2 pruner (cheap) to set the `parses`
             // field honestly.
-            let validation = self.pruner.validate(&verified, lint_name);
+            let validation = self.pruner.validate(&verified, rule_id);
             return Some(HealResult {
                 fixed_code: verified,
                 parses: validation.parses,
@@ -206,12 +222,12 @@ impl HealPipeline {
             });
         }
 
-        // Step 1: retrieve past trajectories for this lint + code context.
-        let query = LatentQuery::new(lint_name.to_string(), buggy_code);
+        // Step 1: retrieve past trajectories for this rule + code context.
+        let query = LatentQuery::new(rule_id.to_string(), buggy_code);
         self.memory.retrieve_into(&query, 5, &mut self.retrieve_scratch, &mut self.retrieve_out);
 
         // Step 2: draft a fix using the existing L1 drafter.
-        let drafted = self.drafter.draft_fix(lint_name, buggy_code, corpus);
+        let drafted = self.drafter.draft_fix(rule_id, buggy_code, corpus);
 
         // Step 3: collect candidates (drafter output + memory trajectories).
         // Each candidate carries its code + direction + optional success_rate.
@@ -223,12 +239,12 @@ impl HealPipeline {
         // Candidate from drafter (if it produced one).
         if let Some(draft) = drafted {
             let mut dir = [0.0f32; EMBED_DIM];
-            embed_into(lint_name, &draft.code, &mut dir);
+            embed_into(rule_id, &draft.code, &mut dir);
             // Look up the ACTUAL trajectory stats for this code — if it has
             // been tried before and failed, its success_rate should reflect
             // that (not a hardcoded 0.5). This lets fail feedback bias
             // selection away from repeatedly-failed drafter picks.
-            let success_rate = self.memory.success_rate_for(lint_name, &draft.code);
+            let success_rate = self.memory.success_rate_for(rule_id, &draft.code);
             candidates.push(Candidate {
                 code: draft.code,
                 direction: dir,
@@ -261,11 +277,11 @@ impl HealPipeline {
         // Combined score = W_EVO * evolution_score + W_RATE * success_rate.
         // W_EVO = 0.6 (the evolved direction is the primary signal).
         // W_RATE = 0.4 (historical reliability is a strong secondary signal).
-        // For unseen lints (evolution returns 0.5), success_rate dominates —
+        // For unseen rules (evolution returns 0.5), success_rate dominates —
         // this means the first fix attempt picks the most reliable past fix.
         let mut best = None::<(usize, f32)>;
         for (i, cand) in candidates.iter().enumerate() {
-            let evo_score = self.evolution.score_candidate(lint_name, &cand.direction);
+            let evo_score = self.evolution.score_candidate(rule_id, &cand.direction);
             let combined = W_EVO * evo_score + W_RATE * cand.success_rate;
             if best.is_none_or(|(_, best_score)| combined > best_score) {
                 best = Some((i, combined));
@@ -276,7 +292,7 @@ impl HealPipeline {
         let cand = &candidates[best_idx];
 
         // Step 5: validate with the L2 pruner.
-        let validation = self.pruner.validate(&cand.code, lint_name);
+        let validation = self.pruner.validate(&cand.code, rule_id);
 
         Some(HealResult {
             fixed_code: cand.code.clone(),
@@ -294,53 +310,54 @@ impl HealPipeline {
     /// direction update.
     pub fn report_outcome(
         &mut self,
-        lint_name: &str,
+        rule_id: &str,
         buggy_code: &str,
         fixed_code: &str,
         success: bool,
     ) {
         // 1. Compute the fix's direction.
         let mut fix_dir = [0.0f32; EMBED_DIM];
-        embed_into(lint_name, fixed_code, &mut fix_dir);
+        embed_into(rule_id, fixed_code, &mut fix_dir);
 
         // 2. Insert the trajectory if it doesn't exist yet.
         let traj = FixTrajectory::new(
-            lint_name.to_string(),
+            rule_id.to_string(),
             buggy_code.to_string(),
             fixed_code.to_string(),
         );
         self.memory.insert(traj);
 
         // 3. Update the trajectory's success/fail stats.
-        self.memory.record_outcome(lint_name, fixed_code, success);
+        self.memory.record_outcome(rule_id, fixed_code, success);
 
         // 4. EMA direction update (the actual "evolution").
-        self.evolution.record_outcome(lint_name, &fix_dir, success);
+        self.evolution.record_outcome(rule_id, &fix_dir, success);
     }
 
     /// **Stage 2 tuning loop (Issue 010 fix direction).**
     ///
-    /// For each `(lint_name, buggy_code)` pair, populate the adaptive drafter's
+    /// For each `(rule_id, buggy_code)` pair, populate the adaptive drafter's
     /// pool with a verified fix. The flow:
     ///
     /// 1. Stage 1 `draft_fix` produces a candidate. If it passes the identity
-    ///    guard + `cargo clippy` verification → join the pool.
-    /// 2. If Stage 1 declines (identity guard fail) or fails verification →
-    ///    ask the per-lint AST proposer (`crate::proposers`) for a candidate.
-    ///    If the proposer's output passes `cargo clippy` → join the pool.
+    ///    guard + domain validation → join the pool.
+    /// 2. If Stage 1 declines (identity guard fail) or fails validation →
+    ///    ask the per-lint AST proposer (`domains::clippy_lints::proposers`)
+    ///    for a candidate. If the proposer's output passes validation → join
+    ///    the pool.
     ///
-    /// **Re-running `cargo clippy` during tuning is fine** — the ~130 ms cost
-    /// is 4 orders of magnitude above the Stage 1 hot path (~µs), but the
-    /// tuning loop is a batch process that builds the Stage 2 pool. The hot
-    /// path stays at Stage 1's ~µs latency; it upgrades to Stage 2's ~µs serve
-    /// only when a verified entry exists.
+    /// **Re-running the domain validator during tuning is fine** — the ~130 ms
+    /// cost (clippy) is 4 orders of magnitude above the Stage 1 hot path (~µs),
+    /// but the tuning loop is a batch process that builds the Stage 2 pool. The
+    /// hot path stays at Stage 1's ~µs latency; it upgrades to Stage 2's ~µs
+    /// serve only when a verified entry exists.
     ///
     /// This method is OFF the hot path — call it once at startup (or as a
     /// periodic background refresh), not per user request.
     ///
     /// # Arguments
     ///
-    /// - `cases`: iterator of `(lint_name, buggy_code)` pairs to tune against.
+    /// - `cases`: iterator of `(rule_id, buggy_code)` pairs to tune against.
     /// - `verifier`: the `ClippyVerifier` used to verify proposed fixes.
     ///
     /// # Returns
@@ -353,24 +370,29 @@ impl HealPipeline {
     pub fn tune_against_fixture<'a, I>(
         &mut self,
         cases: I,
-        verifier: &crate::clippy_verifier::ClippyVerifier,
+        verifier: &crate::domains::clippy_lints::verify::ClippyVerifier,
     ) -> TuneReport
     where
         I: IntoIterator<Item = (&'a str, &'a str)>,
     {
+        use crate::domains::clippy_lints::ClippyFixEntry;
+
         let mut report = TuneReport::default();
-        for (lint_name, buggy_code) in cases {
+        for (rule_id, buggy_code) in cases {
             report.total += 1;
-            if self.adaptive.lookup(lint_name, buggy_code).is_some() {
+            if self.adaptive.lookup(rule_id, buggy_code).is_some() {
                 report.stage1_hits += 1;
                 continue;
             }
 
-            // Stage 1 path.
-            let stage1_ok = if let Some(draft) = self.drafter.draft_fix(lint_name, buggy_code, &[]) {
-                let v = verifier.verify(&draft.code, lint_name);
+            // Stage 1 path — pass empty candidates so the identity guard fires
+            // + Stage 2 proposer takes over. (The drafter returns None for
+            // empty candidates, so stage1_ok is always false here.)
+            let empty: [ClippyFixEntry; 0] = [];
+            let stage1_ok = if let Some(draft) = self.drafter.draft_fix(rule_id, buggy_code, &empty) {
+                let v = verifier.verify(&draft.code, rule_id);
                 if v.ran && v.lint_resolved {
-                    self.adaptive.insert(lint_name, buggy_code, draft.code);
+                    self.adaptive.insert(rule_id, buggy_code, draft.code);
                     report.stage1_verified += 1;
                     true
                 } else {
@@ -384,11 +406,13 @@ impl HealPipeline {
             }
 
             // Stage 2 proposer path.
-            if let Some(proposed) = crate::proposers::propose_fix(lint_name, buggy_code) {
+            if let Some(proposed) =
+                crate::domains::clippy_lints::proposers::propose_fix(rule_id, buggy_code)
+            {
                 report.stage2_proposed += 1;
-                let v = verifier.verify(&proposed, lint_name);
+                let v = verifier.verify(&proposed, rule_id);
                 if v.ran && v.lint_resolved {
-                    self.adaptive.insert(lint_name, buggy_code, proposed);
+                    self.adaptive.insert(rule_id, buggy_code, proposed);
                     report.stage2_verified += 1;
                 }
             }
@@ -399,17 +423,17 @@ impl HealPipeline {
     /// Insert a verified fix directly into the Stage 2 adaptive pool.
     ///
     /// Used by callers that have their own verification path (e.g. they ran
-    /// `cargo clippy` manually). The tuning loop above does this automatically;
-    /// this method is for direct seeding (e.g. for tests).
-    pub fn insert_verified(&self, lint_name: &str, buggy_code: &str, verified_fix: String) {
-        self.adaptive.insert(lint_name, buggy_code, verified_fix);
+    /// the domain validator manually). The tuning loop above does this
+    /// automatically; this method is for direct seeding (e.g. for tests).
+    pub fn insert_verified(&self, rule_id: &str, buggy_code: &str, verified_fix: String) {
+        self.adaptive.insert(rule_id, buggy_code, verified_fix);
     }
 }
 
 /// Report from a Stage 2 tuning pass.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct TuneReport {
-    /// Total number of `(lint, buggy)` cases the tuning loop processed.
+    /// Total number of `(rule, buggy)` cases the tuning loop processed.
     pub total: u32,
     /// Cases where the adaptive pool already had a hit (skipped).
     pub stage1_hits: u32,
@@ -435,10 +459,11 @@ impl TuneReport {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "clippy_lints"))]
 #[allow(clippy::float_cmp)] // tests check bit-identical determinism
 mod tests {
     use super::*;
+    use crate::domains::clippy_lints::ClippyFixEntry;
 
     fn mock_corpus() -> Vec<ClippyFixEntry> {
         vec![
@@ -458,13 +483,14 @@ mod tests {
     }
 
     fn make_pipeline() -> HealPipeline {
-        HealPipeline::new(ClippyTernaryDrafter::fallback(), RustAnalyzerPruner::new())
+        HealPipeline::new(TernaryDrafter::fallback(), RustAnalyzerPruner::new())
     }
 
     #[test]
     fn heal_returns_none_on_empty_corpus_and_memory() {
         let mut p = make_pipeline();
-        let result = p.heal("needless_return", "return 42;", &[]);
+        let empty: [ClippyFixEntry; 0] = [];
+        let result = p.heal("needless_return", "return 42;", &empty);
         assert!(result.is_none(), "empty corpus + empty memory → no candidates");
     }
 

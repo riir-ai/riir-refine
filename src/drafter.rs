@@ -1,23 +1,32 @@
-//! Modelless ternary drafter for clippy fixes.
+//! Modelless ternary drafter for code fixes.
 //!
 //! Mirrors the `TernaryDraftModel` pattern from
-//! `riir-games-quest/quest_grammar/plasma_draft.rs` but specialized for
-//! clippy lint fixes. Uses `katgpt_core::TernaryWeights` for multiplication-
-//! free SIMD matvec with zero-alloc hot path.
+//! `riir-games-quest/quest_grammar/plasma_draft.rs`. Uses
+//! `katgpt_core::TernaryWeights` for multiplication-free SIMD matvec with
+//! zero-alloc hot path.
 //!
 //! # Hot-path contract
 //!
 //! `draft_fix` reuses two pre-allocated scratch buffers (`input_scratch`,
 //! `output_scratch`) sized at `with_weights` time. This makes the SIMD matvec
 //! hot path **zero-alloc** — the same pattern as the quest grammar drafter.
+//!
+//! # Domain-agnostic (Plan 001 Phase 1)
+//!
+//! Renamed from `ClippyTernaryDrafter` → `TernaryDrafter`. The `draft_fix`
+//! method is now generic over `E: HealEntry` — it reads `E::fixed_code()` from
+//! each candidate, so it works with any domain's entry type. The old
+//! `ClippyTernaryDrafter` name is preserved as a type alias via re-export.
 
-/// The modelless ternary drafter for clippy fixes.
+use crate::domain::HealEntry;
+
+/// The modelless ternary drafter for code fixes.
 ///
 /// When ternary weight files (`.bits`) are available, uses them for fast
 /// draft generation via multiplication-free SIMD matvec from katgpt-core.
 /// Otherwise, falls back to corpus-based template lookup.
 #[derive(Debug, Clone)]
-pub struct ClippyTernaryDrafter {
+pub struct TernaryDrafter {
     /// Frozen ternary weights for the drafter (L1 hot path).
     /// `None` = fallback mode (use corpus lookup).
     weights: Option<katgpt_core::TernaryWeights>,
@@ -52,7 +61,7 @@ pub enum DraftSource {
     TernaryMatvec,
 }
 
-impl ClippyTernaryDrafter {
+impl TernaryDrafter {
     /// Create in fallback mode (no ternary weights — corpus lookup only).
     #[must_use]
     pub fn fallback() -> Self {
@@ -126,11 +135,15 @@ impl ClippyTernaryDrafter {
         self.output_scratch.capacity()
     }
 
-    /// Draft a fix for the given lint name and buggy code.
+    /// Draft a fix for the given rule id and buggy code.
     ///
-    /// - **Fallback mode**: returns the first corpus entry for this lint.
+    /// Generic over `E: HealEntry` — works with any domain's corpus entry type.
+    /// The drafter reads `E::fixed_code()` from each candidate to select + emit
+    /// the proposed fix.
+    ///
+    /// - **Fallback mode**: returns the first corpus entry for this rule.
     /// - **With weights (L1)**: runs the ternary SIMD matvec over a
-    ///   BLAKE3-deterministic embedding of (`lint_name`, `buggy_code`) to select
+    ///   BLAKE3-deterministic embedding of (`rule_id`, `buggy_code`) to select
     ///   the best fix candidate. Zero-alloc hot path (reuses scratch buffers).
     ///
     /// The actual fix validation happens in the pruner (L2), NOT here.
@@ -140,17 +153,17 @@ impl ClippyTernaryDrafter {
     /// default), the drafter returns `None` when the emitted fix shares no
     /// identifiers with the buggy code. This is the Stage 1 decline path — the
     /// caller routes to Stage 2 when this returns `None`.
-    pub fn draft_fix(
+    pub fn draft_fix<E: HealEntry>(
         &mut self,
-        lint_name: &str,
+        rule_id: &str,
         buggy_code: &str,
-        candidates: &[crate::corpus::ClippyFixEntry],
+        candidates: &[E],
     ) -> Option<DraftedFix> {
         if candidates.is_empty() {
             return None;
         }
 
-        let raw = self.draft_fix_raw(lint_name, buggy_code, candidates);
+        let raw = self.draft_fix_raw(rule_id, buggy_code, candidates);
 
         // Identity guard (Issue 010): if the emitted fix shares no identifiers
         // with the buggy code, the Stage 1 retriever is producing a confidently-
@@ -170,17 +183,17 @@ impl ClippyTernaryDrafter {
     /// Returns `DraftedFix` directly (not `Option`) — both branches always
     /// produce a fix. The caller (`draft_fix`) handles the empty-candidates +
     /// identity-guard `None` cases.
-    fn draft_fix_raw(
+    fn draft_fix_raw<E: HealEntry>(
         &mut self,
-        lint_name: &str,
+        rule_id: &str,
         buggy_code: &str,
-        candidates: &[crate::corpus::ClippyFixEntry],
+        candidates: &[E],
     ) -> DraftedFix {
         // (Path split from original `draft_fix` body — original behavior preserved.)
 
         if let Some(tw) = self.weights.as_ref() {
             // L1: ternary SIMD matvec path (zero-alloc, reuses scratch buffers).
-            // 1. BLAKE3-hash (lint_name, buggy_code) → fill input_scratch with
+            // 1. BLAKE3-hash (rule_id, buggy_code) → fill input_scratch with
             //    normalized hash bytes (cycling for cols > 32). Hash bytes give
             //    better signal diversity than raw code bytes (ASCII-biased).
             // 2. simd_ternary_matvec → output_scratch.
@@ -196,9 +209,9 @@ impl ClippyTernaryDrafter {
                 tw.cols
             );
 
-            // BLAKE3 hash of (lint_name \0 buggy_code) -> 32 bytes of high-entropy seed.
+            // BLAKE3 hash of (rule_id \0 buggy_code) -> 32 bytes of high-entropy seed.
             let mut hasher = blake3::Hasher::new();
-            hasher.update(lint_name.as_bytes());
+            hasher.update(rule_id.as_bytes());
             hasher.update(b"\x00");
             hasher.update(buggy_code.as_bytes());
             let hash = hasher.finalize();
@@ -239,7 +252,7 @@ impl ClippyTernaryDrafter {
 
             let entry = &candidates[idx];
             DraftedFix {
-                code: entry.fixed_code.clone(),
+                code: entry.fixed_code().to_string(),
                 confidence,
                 source: DraftSource::TernaryMatvec,
             }
@@ -247,7 +260,7 @@ impl ClippyTernaryDrafter {
             // L0: corpus template lookup
             let entry = &candidates[0];
             DraftedFix {
-                code: entry.fixed_code.clone(),
+                code: entry.fixed_code().to_string(),
                 confidence: 0.5, // lower confidence for template
                 source: DraftSource::CorpusTemplate,
             }
@@ -319,10 +332,10 @@ fn is_rust_keyword(s: &str) -> bool {
     )
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "clippy_lints"))]
 mod tests {
     use super::*;
-    use crate::corpus::ClippyFixEntry;
+    use crate::domains::clippy_lints::ClippyFixEntry;
 
     fn mock_entries() -> Vec<ClippyFixEntry> {
         vec![
@@ -343,7 +356,7 @@ mod tests {
 
     #[test]
     fn fallback_drafter_uses_corpus_template() {
-        let mut drafter = ClippyTernaryDrafter::fallback();
+        let mut drafter = TernaryDrafter::fallback();
         assert!(drafter.is_fallback());
 
         let entries = mock_entries();
@@ -356,8 +369,9 @@ mod tests {
 
     #[test]
     fn draft_fix_returns_none_for_empty_candidates() {
-        let mut drafter = ClippyTernaryDrafter::fallback();
-        let fix = drafter.draft_fix("needless_return", "return 42;", &[]);
+        let mut drafter = TernaryDrafter::fallback();
+        let empty: [ClippyFixEntry; 0] = [];
+        let fix = drafter.draft_fix("needless_return", "return 42;", &empty);
         assert!(fix.is_none());
     }
 
@@ -378,7 +392,7 @@ mod tests {
 
     #[test]
     fn l1_drafter_runs_matvec() {
-        let mut drafter = ClippyTernaryDrafter::with_weights(mock_weights());
+        let mut drafter = TernaryDrafter::with_weights(mock_weights());
         assert!(!drafter.is_fallback());
 
         let entries = mock_entries();
@@ -396,7 +410,7 @@ mod tests {
     fn l1_drafter_is_deterministic() {
         // G1: same (lint, code, weights, candidates) → identical output.
         let entries = mock_entries();
-        let mut drafter = ClippyTernaryDrafter::with_weights(mock_weights());
+        let mut drafter = TernaryDrafter::with_weights(mock_weights());
 
         let fix1 = drafter.draft_fix("needless_return", "return 42;", &entries).unwrap();
         let fix2 = drafter.draft_fix("needless_return", "return 42;", &entries).unwrap();
@@ -415,7 +429,7 @@ mod tests {
         // check that the path processes both without panic; the exact selection
         // is deterministic but weight-dependent.
         let entries = mock_entries();
-        let mut drafter = ClippyTernaryDrafter::with_weights(mock_weights());
+        let mut drafter = TernaryDrafter::with_weights(mock_weights());
 
         let _fix1 = drafter.draft_fix("needless_return", "return 42;", &entries).unwrap();
         let _fix2 = drafter.draft_fix("redundant_closure", "|x| f(x)", &entries).unwrap();
@@ -427,7 +441,7 @@ mod tests {
         // Confidence = sigmoid(mean(output)) must always be in (0, 1),
         // never NaN, never exactly 0 or 1 (sigmoid asymptote).
         let entries = mock_entries();
-        let mut drafter = ClippyTernaryDrafter::with_weights(mock_weights());
+        let mut drafter = TernaryDrafter::with_weights(mock_weights());
 
         for lint in &["needless_return", "redundant_closure", "unused_var"] {
             for code in &["return 42;", "let x = 1;", "|x| f(x)"] {
@@ -441,7 +455,7 @@ mod tests {
 
     #[test]
     fn load_weights_resizes_scratch() {
-        let mut drafter = ClippyTernaryDrafter::with_weights(mock_weights());
+        let mut drafter = TernaryDrafter::with_weights(mock_weights());
         // Initial scratch: input=8, output=4
         assert_eq!(drafter.input_scratch.len(), 8);
         assert_eq!(drafter.output_scratch.len(), 4);

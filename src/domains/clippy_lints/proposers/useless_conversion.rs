@@ -47,7 +47,7 @@ mod tests {
     fn propose(input: &str) -> Option<String> {
         let mut file = syn::parse_file(input).ok()?;
         if rewrite(&mut file) {
-            Some(crate::proposers::quote_file(&file))
+            Some(super::super::quote_file(&file))
         } else {
             None
         }

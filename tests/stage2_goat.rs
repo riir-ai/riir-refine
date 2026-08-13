@@ -17,7 +17,8 @@
 
 #![allow(clippy::pedantic)]
 
-use riir_clippy::{proposers, RustAnalyzerPruner};
+use riir_clippy::domains::clippy_lints::proposers;
+use riir_clippy::RustAnalyzerPruner;
 
 /// One held-out case.
 #[derive(Debug, Clone)]

@@ -1,8 +1,8 @@
-//! Seed corpus — common clippy lint examples for the clippy-healing pipeline.
+//! Seed corpus — common clippy lint examples for the clippy-healing domain.
 //!
 //! Each entry is a `(lint_name, lint_group, buggy_code, fixed_code)` tuple
 //! representing a real clippy lint pattern. The corpus is BLAKE3-committed
-//! via [`ClippyCorpus::new`].
+//! via [`Corpus::new`](crate::corpus::Corpus::new).
 //!
 //! ## Caveat
 //!
@@ -13,15 +13,16 @@
 //! `cargo clippy`). The `buggy_code` and `fixed_code` represent the *pattern*
 //! the tool learns from, not verified trigger/fix pairs in the fast path.
 
-use crate::corpus::{ClippyCorpus, ClippyFixEntry};
+use crate::corpus::Corpus;
+use crate::domains::clippy_lints::{ClippyFixEntry, ClippyLintDomain};
 
 /// Build a seed corpus from common clippy lint examples.
 ///
-/// Returns a BLAKE3-committed [`ClippyCorpus`] with ~10 entries covering
-/// the most frequent clippy lints (style, complexity, perf groups).
+/// Returns a BLAKE3-committed [`Corpus<ClippyLintDomain>`] with ~10 entries
+/// covering the most frequent clippy lints (style, complexity, perf groups).
 #[must_use]
-pub fn build_seed_corpus() -> ClippyCorpus {
-    ClippyCorpus::new(vec![
+pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
+    Corpus::new(vec![
         // ── style group ──────────────────────────────────────────────────
         ClippyFixEntry {
             lint_name: "needless_return".to_string(),
@@ -153,7 +154,7 @@ mod tests {
     fn seed_corpus_freeze_thaw_roundtrip() {
         let corpus = build_seed_corpus();
         let frozen = corpus.freeze().unwrap();
-        let thawed = ClippyCorpus::thaw(&frozen).unwrap();
+        let thawed = Corpus::<ClippyLintDomain>::thaw(&frozen).unwrap();
         assert_eq!(thawed.commitment, corpus.commitment);
         assert_eq!(thawed.entries.len(), corpus.entries.len());
         assert!(thawed.verify());

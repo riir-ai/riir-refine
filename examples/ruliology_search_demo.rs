@@ -53,7 +53,7 @@ fn main() {
 
         // G1c: best_fix picks the minimum-complexity Pareto-optimal fix.
         let search = RuliologySearch::new();
-        use riir_clippy::corpus::ClippyFixEntry;
+        use riir_clippy::ClippyFixEntry;
         let candidates = vec![
             ClippyFixEntry {
                 lint_name: "needless_return".to_string(),

@@ -45,15 +45,22 @@ riir-gpu = { path = "../riir-ai/crates/riir-gpu", optional = true, default-featu
 [dev-dependencies]
 
 [features]
-default = []
+default = ["clippy_lints"]
+
+# Domain features (Plan 001 Phase 1 framework refactor).
+# clippy_lints is the first + currently only domain; default-on.
+# Phase 2 adds `rust_perf`, Phase 3 adds `kernel_heal`.
+clippy_lints = []
 
 # Lint resolution verification via real `cargo clippy` re-run (Phase 3).
 # Opt-in because it's slow (seconds), requires cargo+clippy on PATH, and
 # does temp-dir I/O. The fast path (L2 syntax check) stays always-on.
-clippy_verify = []
+# Implies `clippy_lints` (uses the clippy verifier + proposers).
+clippy_verify = ["clippy_lints"]
 
-# Ruliology candidate enumeration (L3 refinement layer)
-ruliology_search = []
+# Ruliology candidate enumeration (L3 refinement layer).
+# Implies `clippy_lints` (searches over clippy corpus entries).
+ruliology_search = ["clippy_lints"]
 
 # WASM rust-analyzer pruner (L2 sandboxed variant — deferred on rubrc maturity)
 wasm_pruner = []
@@ -75,6 +82,7 @@ self_evolve = []
 [[bench]]
 name = "bench_001_l1_matvec"
 harness = false
+required-features = ["clippy_lints"]
 
 [[bench]]
 name = "bench_002_l2_pruner_syn"
@@ -82,6 +90,10 @@ harness = false
 
 # Phase 3 GOAT gate lives in examples/ to avoid the benches/ auto-target conflict.
 # Run with: cargo run --example clippy_verify_demo --features clippy_verify --release
+
+[[example]]
+name = "heal_demo"
+required-features = ["clippy_lints"]
 
 [[example]]
 name = "clippy_verify_demo"
@@ -110,7 +122,7 @@ required-features = ["self_evolve", "clippy_verify"]
 [[bench]]
 name = "bench_e2e_tokps"
 harness = false
-required-features = ["self_evolve"]
+required-features = ["self_evolve", "clippy_lints"]
 
 # Bench 010: llama.cpp vs katgpt ternary, both generating on clippy prompts.
 [[bench]]

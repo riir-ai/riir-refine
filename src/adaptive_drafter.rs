@@ -1,4 +1,4 @@
-//! Stage 2 adaptive drafter — verified-fix pool, keyed by `(lint_name, buggy_hash)`.
+//! Stage 2 adaptive drafter — verified-fix pool, keyed by `(rule_id, buggy_hash)`.
 //!
 //! Mirrors `AdaptiveQuestDrafter` from
 //! `riir-games-quest/quest_grammar/plasma_draft.rs`: a hash-keyed lookup over
@@ -9,19 +9,25 @@
 //! ## Two-stage routing (Issue 010 fix direction, `quest_grammar` precedent)
 //!
 //! ```text
-//! draft_fix(lint, buggy):
-//!   1. adaptive.lookup(lint, buggy)  → Some(fix)   // Stage 2 hit
+//! draft_fix(rule, buggy):
+//!   1. adaptive.lookup(rule, buggy)  → Some(fix)   // Stage 2 hit
 //!   2. ternary.draft_fix(...)        → fallback    // Stage 1 otherwise
 //! ```
 //!
-//! Stage 1 (`ClippyTernaryDrafter`) is always-on + modelless + ~µs but
-//! cannot generalize (Issue 010: returns verbatim corpus text). Stage 2
-//! serves verified fixes the tuning loop has admitted — the pool is empty
-//! until `tune_against_fixture` populates it.
+//! Stage 1 (`TernaryDrafter`) is always-on + modelless + ~µs but cannot
+//! generalize (Issue 010: returns verbatim corpus text). Stage 2 serves
+//! verified fixes the tuning loop has admitted — the pool is empty until
+//! `tune_against_fixture` populates it.
+//!
+//! ## Domain-agnostic (Plan 001 Phase 1)
+//!
+//! Renamed from `ClippyAdaptiveDrafter` → `AdaptiveDrafter`. The pool stores
+//! `String` (verified fix code) keyed by `BLAKE3(rule_id, buggy_code)`. No
+//! domain-specific types — works with any domain.
 //!
 //! ## Determinism
 //!
-//! The pool key is `BLAKE3(lint_name \0 buggy_code)` — deterministic across
+//! The pool key is `BLAKE3(rule_id \0 buggy_code)` — deterministic across
 //! runs. The pool itself is a `papaya::HashMap` (lock-free) so concurrent
 //! tuning + serving is safe.
 //!
@@ -33,18 +39,18 @@
 use blake3::Hasher;
 use papaya::HashMap;
 
-/// Key for the adaptive pool: BLAKE3(`lint_name \0 buggy_code`) → 8 bytes.
+/// Key for the adaptive pool: BLAKE3(`rule_id \0 buggy_code`) → 8 bytes.
 type PoolKey = [u8; 8];
 
-/// Compute the pool key for a `(lint_name, buggy_code)` pair.
+/// Compute the pool key for a `(rule_id, buggy_code)` pair.
 ///
 /// Public so the tuning loop + tests can compute the same key the drafter
 /// will look up.
 #[must_use]
 #[inline]
-pub fn pool_key(lint_name: &str, buggy_code: &str) -> PoolKey {
+pub fn pool_key(rule_id: &str, buggy_code: &str) -> PoolKey {
     let mut hasher = Hasher::new();
-    hasher.update(lint_name.as_bytes());
+    hasher.update(rule_id.as_bytes());
     hasher.update(b"\x00");
     hasher.update(buggy_code.as_bytes());
     let mut key = [0u8; 8];
@@ -52,44 +58,44 @@ pub fn pool_key(lint_name: &str, buggy_code: &str) -> PoolKey {
     key
 }
 
-/// Stage 2 adaptive drafter — pool of clippy-verified fixes keyed by input.
+/// Stage 2 adaptive drafter — pool of verified fixes keyed by input.
 ///
 /// Issue 010 fix direction (mirrors `AdaptiveQuestDrafter`):
-/// - Empty pool → caller routes to Stage 1 (`ClippyTernaryDrafter`).
+/// - Empty pool → caller routes to Stage 1 (`TernaryDrafter`).
 /// - Populated pool → `lookup` returns the verified fix in O(1).
 ///
 /// The pool is **populated OFF the hot path** by `HealPipeline::tune_against_fixture`,
-/// which re-runs `cargo clippy` (~130 ms — acceptable for tuning, NOT for the
-/// hot path) to admit only fixes that actually resolve the lint.
+/// which re-runs the domain validator (~130 ms for clippy — acceptable for tuning,
+/// NOT for the hot path) to admit only fixes that actually resolve the rule.
 #[derive(Debug, Default)]
-pub struct ClippyAdaptiveDrafter {
+pub struct AdaptiveDrafter {
     /// `papaya::HashMap` for lock-free concurrent tuning + serving.
-    /// Key: `BLAKE3(lint_name`, `buggy_code`). Value: the verified fix code.
+    /// Key: `BLAKE3(rule_id, buggy_code)`. Value: the verified fix code.
     pool: HashMap<PoolKey, String>,
 }
 
-impl ClippyAdaptiveDrafter {
+impl AdaptiveDrafter {
     /// Construct an empty adaptive drafter.
     #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Look up a verified fix for `(lint_name, buggy_code)`.
+    /// Look up a verified fix for `(rule_id, buggy_code)`.
     ///
     /// Returns `Some(verified_fix)` on hit, `None` on miss (caller falls back
     /// to Stage 1). O(1) hash lookup — no allocation on miss, one String clone
     /// on hit.
     #[must_use]
-    pub fn lookup(&self, lint_name: &str, buggy_code: &str) -> Option<String> {
-        let key = pool_key(lint_name, buggy_code);
+    pub fn lookup(&self, rule_id: &str, buggy_code: &str) -> Option<String> {
+        let key = pool_key(rule_id, buggy_code);
         self.pool.pin().get(&key).cloned()
     }
 
     /// Insert a verified fix into the pool. Called by the tuning loop after
-    /// `cargo clippy` confirms the fix resolves the lint.
-    pub fn insert(&self, lint_name: &str, buggy_code: &str, verified_fix: String) {
-        let key = pool_key(lint_name, buggy_code);
+    /// the domain validator confirms the fix resolves the rule.
+    pub fn insert(&self, rule_id: &str, buggy_code: &str, verified_fix: String) {
+        let key = pool_key(rule_id, buggy_code);
         self.pool.pin().insert(key, verified_fix);
     }
 
@@ -117,14 +123,14 @@ mod tests {
 
     #[test]
     fn empty_pool_lookups_miss() {
-        let drafter = ClippyAdaptiveDrafter::new();
+        let drafter = AdaptiveDrafter::new();
         assert!(drafter.is_empty());
         assert_eq!(drafter.lookup("needless_return", "fn foo() { return 1; }"), None);
     }
 
     #[test]
     fn insert_then_lookup_hits() {
-        let drafter = ClippyAdaptiveDrafter::new();
+        let drafter = AdaptiveDrafter::new();
         drafter.insert(
             "needless_return",
             "fn bar(x: i32) -> i32 { return x + 1; }",
@@ -139,8 +145,8 @@ mod tests {
 
     #[test]
     fn different_buggy_code_misses() {
-        // Same lint, different buggy_code → different key → miss.
-        let drafter = ClippyAdaptiveDrafter::new();
+        // Same rule, different buggy_code → different key → miss.
+        let drafter = AdaptiveDrafter::new();
         drafter.insert(
             "needless_return",
             "fn bar(x: i32) -> i32 { return x + 1; }",
@@ -168,7 +174,7 @@ mod tests {
     }
 
     #[test]
-    fn pool_key_differs_for_different_lint() {
+    fn pool_key_differs_for_different_rule() {
         let k1 = pool_key("needless_return", "fn foo() { return 1; }");
         let k2 = pool_key("redundant_closure", "fn foo() { return 1; }");
         assert_ne!(k1, k2);
@@ -176,7 +182,7 @@ mod tests {
 
     #[test]
     fn clear_empties_pool() {
-        let drafter = ClippyAdaptiveDrafter::new();
+        let drafter = AdaptiveDrafter::new();
         drafter.insert("lint", "code", "fix".to_string());
         assert!(!drafter.is_empty());
         drafter.clear();
@@ -187,7 +193,7 @@ mod tests {
     fn concurrent_insert_and_lookup() {
         // papaya is lock-free — concurrent access is safe. This is a smoke test
         // (not a stress test) verifying the API works under a simple race.
-        let drafter = std::sync::Arc::new(ClippyAdaptiveDrafter::new());
+        let drafter = std::sync::Arc::new(AdaptiveDrafter::new());
         let mut handles = Vec::new();
         for i in 0..4 {
             let d = drafter.clone();

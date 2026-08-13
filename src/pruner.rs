@@ -192,7 +192,7 @@ impl RustAnalyzerPruner {
 
         // Step 2: if it parses, run cargo clippy for real lint resolution.
         if result.parses {
-            let verifier = crate::clippy_verifier::ClippyVerifier::new();
+            let verifier = crate::domains::clippy_lints::verify::ClippyVerifier::new();
             let clippy_result = verifier.verify(code, lint_name);
             result.lint_resolved = clippy_result.lint_resolved;
 

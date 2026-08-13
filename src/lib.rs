@@ -1,21 +1,22 @@
-//! # riir-clippy — Clippy-Healing Drafter+Pruner Pipeline
+//! # riir-clippy — Multi-Domain Modelless Code Healer
 //!
-//! A modelless-first pipeline that heals `cargo clippy` warnings using:
+//! A modelless-first pipeline that heals code (clippy lints, perf issues,
+//! kernel opt) using a drafter+pruner+corpus pattern. The framework is
+//! domain-pluggable behind the [`HealDomain`] trait (Plan 001).
 //!
-//! 1. **L0 — Rule distillation**: each clippy lint distilled into a named rule
+//! ## Layers
+//!
+//! 1. **L0 — Rule distillation**: each rule distilled into a named entry
 //!    with a bounded fix-space, stored in a BLAKE3-committed corpus.
 //! 2. **L1 — Plasma/hot path drafter**: modelless ternary SIMD matvec proposes
-//!    fixes using frozen direction vectors. Zero-alloc hot path. Template
-//!    fallback when no weights loaded.
+//!    fixes using frozen direction vectors. Zero-alloc hot path.
 //! 3. **L2 — Validator**: `syn`-based syntax parse check (always-on,
-//!    modelless). Lint resolution verification via `cargo clippy` re-run is
-//!    Phase 3 (feature-gated `clippy_verify`, opt-in).
+//!    modelless). Domain-specific lint resolution verification is opt-in
+//!    (`clippy_verify` for the clippy domain).
 //! 4. **L3 — Ruliology candidate search** (opt-in): Pareto-front enumeration
-//!    when multiple valid fixes exist. Reuses the algorithm pattern from
-//!    `katgpt-ruliology` (Bench 572) without a code-level dep — clippy fixes
-//!    have ground-truth payoff, not tournament payoffs.
+//!    when multiple valid fixes exist.
 //! 5. **L4 — `LoRA` fallback** (deferred): adaptive learning on the residual
-//!    lints L0-L3 miss. Last resort, not co-equal path.
+//!    cases L0-L3 miss. Last resort, not co-equal path.
 //!
 //! ## Architecture
 //!
@@ -23,6 +24,12 @@
 //! `riir-games-quest/quest_grammar` (`SealQuestCorpus` + `TernaryDraftModel` +
 //! `ConstraintPruner`) but has **zero game-domain coupling**. It is a developer
 //! tool, not game content.
+//!
+//! ## Multi-domain (Plan 001)
+//!
+//! The framework is domain-pluggable behind [`HealDomain`]. The clippy domain
+//! (`clippy_lints` feature, default-on) is the first + currently only domain.
+//! Phase 2 adds `rust_perf`; Phase 3 adds `kernel_heal`.
 //!
 //! ## Modelless-first mandate
 //!
@@ -33,18 +40,18 @@
 
 #![warn(clippy::all, clippy::pedantic)]
 
+// ── Domain-agnostic core (always compiled) ─────────────────────────────────
 pub mod adaptive_drafter;
 pub mod corpus;
+pub mod domain;
 pub mod drafter;
 pub mod embedder;
-pub mod proposers;
 pub mod pruner;
-pub mod seed_corpus;
 
-// Phase 3: optional lint resolution verification via real cargo clippy.
-// Opt-in because it's slow (seconds) and requires cargo+clippy on PATH.
-#[cfg(feature = "clippy_verify")]
-pub mod clippy_verifier;
+// ── Domain modules (feature-gated) ─────────────────────────────────────────
+pub mod domains;
+
+// ── Opt-in layers ──────────────────────────────────────────────────────────
 
 // L3: optional ruliology Pareto-front candidate search.
 // Opt-in refinement layer — runs once per lint invocation (not per-tick).
@@ -63,17 +70,39 @@ pub mod memory;
 #[cfg(feature = "self_evolve")]
 pub mod self_evolve;
 
-pub use corpus::{ClippyCorpus, ClippyFixEntry};
-pub use drafter::ClippyTernaryDrafter;
+// ── Back-compat re-exports (preserve pre-refactor API names) ───────────────
+// These type aliases + re-exports keep existing call sites compiling unchanged
+// after the Plan 001 Phase 1 framework refactor.
+
+/// Back-compat: `ClippyTernaryDrafter` = `TernaryDrafter` (Plan 001 rename).
+pub type ClippyTernaryDrafter = drafter::TernaryDrafter;
+
+/// Back-compat: `ClippyAdaptiveDrafter` = `AdaptiveDrafter` (Plan 001 rename).
+pub type ClippyAdaptiveDrafter = adaptive_drafter::AdaptiveDrafter;
+
+/// Back-compat: re-export drafter types at the old paths.
+pub use drafter::{DraftSource, DraftedFix, TernaryDrafter};
+pub use adaptive_drafter::AdaptiveDrafter;
+pub use corpus::Corpus;
+pub use domain::{HealDomain, HealEntry};
 pub use embedder::{Direction, EMBED_DIM, embed, embed_into};
 pub use pruner::RustAnalyzerPruner;
-pub use seed_corpus::build_seed_corpus;
 
-// Issue 010: Stage 2 adaptive drafter (mirrors `AdaptiveQuestDrafter`).
-pub use adaptive_drafter::ClippyAdaptiveDrafter;
+// ── Clippy domain re-exports (behind `clippy_lints` feature, default-on) ──
+#[cfg(feature = "clippy_lints")]
+pub use domains::clippy_lints::{ClippyFixEntry, ClippyLintDomain};
 
+/// Back-compat: `ClippyCorpus` = `Corpus<ClippyLintDomain>` (Plan 001 rename).
+#[cfg(feature = "clippy_lints")]
+pub type ClippyCorpus = Corpus<ClippyLintDomain>;
+
+/// Back-compat: `build_seed_corpus` builds the clippy seed corpus.
+#[cfg(feature = "clippy_lints")]
+pub use domains::clippy_lints::corpus::build_seed_corpus;
+
+/// Back-compat: `ClippyVerifier` (behind `clippy_verify`).
 #[cfg(feature = "clippy_verify")]
-pub use clippy_verifier::ClippyVerifier;
+pub use domains::clippy_lints::verify::{ClippyVerifyResult, ClippyVerifier};
 
 #[cfg(feature = "ruliology_search")]
 pub use ruliology_search::{RuliologySearch, ScoredCandidate};
