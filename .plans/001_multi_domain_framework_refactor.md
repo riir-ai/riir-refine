@@ -49,7 +49,7 @@ Refactor the existing pipeline to be domain-pluggable. clippy stays the only wor
 - [x] **T1.7** Added `clippy_lints` to `Cargo.toml` `[features]` `default = ["clippy_lints"]`. Gate `src/domains/clippy_lints/` behind `#[cfg(feature = "clippy_lints")]`. `clippy_verify` + `ruliology_search` imply `clippy_lints`.
 - [x] **T1.8** `examples/heal_demo.rs` compiles unchanged via the re-exports (`ClippyTernaryDrafter` type alias + `build_seed_corpus` re-export).
 - [x] **T1.9** G1 check: `cargo test --lib` — all existing tests pass bit-identical (133 lib tests with all features). **The 5 `tests/stage2_goat.rs` tests pass** (Issue 010 GOAT gate — remains green after the rename).
-- [x] **T1.10** G3 check: `./scripts/ci_feature_guard.sh` — layers 1-3 + 5 pass (layer 4 `--all-features` fails on pre-existing `ternary_inference`/`riir-gpu` compile error, unrelated to this refactor).
+- [x] **T1.10** G3 check: `./scripts/ci_feature_guard.sh` — layers 1-3 + 5 pass. Layer 4 `--all-features` now passes clean after riir-ai commit `4bfe3b30` fixed the `attn_sub_on` cfg gate (was: pre-existing `ternary_inference`/`riir-gpu` compile error, unrelated to this refactor).
 
 ### Phase 1 exit criteria — MET
 - `HealDomain` trait ships, clippy domain reorganized behind `feature = "clippy_lints"`, all existing tests pass (142 total), old API names still resolve via re-export + type aliases, **Stage 2 GOAT gate (Bench 011) remains 10/10** (5 stage2_goat integration tests pass).
@@ -76,7 +76,7 @@ Refactor the existing pipeline to be domain-pluggable. clippy stays the only wor
 
 First new domain. Corpus from the `rust-optimize` skill checklist. Validator is `cargo test` (perf-bench deferred per Proposal 001 caveat 3).
 
-**Status: DONE (2026-08-13).** All tasks `[x]`. 189 lib tests pass with all features (minus pre-existing `ternary_inference`/`riir-gpu` failure). `rust_perf` + `rust_perf_verify` compile clean alone + in combination. clippy clean.
+**Status: DONE (2026-08-13).** All tasks `[x]`. 189 lib tests pass with all features (the pre-existing `ternary_inference`/`riir-gpu` failure was fixed in riir-ai commit `4bfe3b30`). `rust_perf` + `rust_perf_verify` compile clean alone + in combination. clippy clean.
 
 ### Tasks
 
@@ -126,7 +126,8 @@ DEFERRED. No tasks in this plan. Reopens as a riir-train plan when a domain's mo
 **Status: docs portion DONE (2026-08-13).** T5.5–T5.7 done (`.docs/` book
 index, README, AGENTS.md updated for multi-domain architecture). T5.1–T5.4
 (GOAT gate re-runs) are measured in-place: 189 lib tests pass with all
-features (minus pre-existing ternary_inference); all existing GOAT gates
+features (the pre-existing ternary_inference failure was fixed in riir-ai
+commit `4bfe3b30`); all existing GOAT gates
 (stage2_goat 5/5, goat_gate_004 4/4+1ignored) remain green; clippy clean
 across all feature combinations.
 
@@ -134,7 +135,7 @@ across all feature combinations.
 
 - [x] **T5.1 (G1 correctness)** `cargo test --all-features --lib` — clippy domain bit-identical (all 142 pre-existing tests pass), rust_perf + kernel_opt scaffolds compile + trait impls exercised (47 new tests). Total: 189 tests.
 - [x] **T5.2 (G2 perf)** L1 drafter latency measured in-place — no regression detected (no new tests fail; the trait dispatch adds ≤1 virtual call as designed). Canonical measurement via `cargo bench --bench bench_001_l1_matvec` unchanged.
-- [x] **T5.3 (G3 no-regression)** `./scripts/ci_feature_guard.sh` — layers 1-3 + 5 pass. Layer 4 `--all-features` fails ONLY on pre-existing `ternary_inference`/`riir-gpu` compile error (unrelated to this refactor).
+- [x] **T5.3 (G3 no-regression)** `./scripts/ci_feature_guard.sh` — **all 5 layers pass** (was: layer 4 `--all-features` failed on pre-existing `ternary_inference`/`riir-gpu` compile error; fixed in riir-ai commit `4bfe3b30`).
 - [x] **T5.4 (G4 alloc-free)** clippy domain hot path unchanged — no new boxing introduced (the domain modules are behind feature gates; the hot path stays generic over `E: HealEntry`).
 - [x] **T5.5** `.docs/` book index updated (AGENTS.md table reflects the 11-folder layout including `11_domains/` for Plan 001 Phase 2+3).
 - [x] **T5.6** `README.md` updated: three domains (clippy_lints default, rust_perf opt-in, kernel_heal opt-in), feature matrix table, multi-domain architecture diagram, kernel_opt-specific layers diagram.

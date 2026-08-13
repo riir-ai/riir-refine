@@ -114,8 +114,9 @@ cargo check --features kernel_heal
 # With ruliology candidate search (L3)
 cargo check --features ruliology_search
 
-# All features (except pre-existing ternary_inference/riir-gpu failure)
-cargo check --features "clippy_lints rust_perf rust_perf_verify clippy_verify ruliology_search self_evolve kernel_heal kernel_verify"
+# All features (the pre-existing ternary_inference/riir-gpu failure was fixed
+# in riir-ai commit 4bfe3b30 — relaxed attn_sub_on cfg gate to cubecl_runtime)
+cargo check --all-features
 
 # Full CI guard (5 layers: no-dep / default / per-feature / all-features / clippy+tests)
 ./scripts/ci_feature_guard.sh
@@ -139,7 +140,7 @@ cargo run --example ruliology_search_demo --features ruliology_search --release
 - `self_evolve` (opt-in, Issue 004 + Issue 008): latent-first self-evolution loop — `LatentFixMemory` (3-axis retrieval over fix trajectories) + `LatentSkillEvolution` (EMA direction-vector update). GOAT G1-G5 ALL PASS (G5: 70pp healing rate improvement in controlled fixture). **G6/G7 validated against real cargo clippy feedback (Issue 008): G6 10/10 corpus truthfulness PASS, G7 50.0pp improvement (50% → 100%) PASS.** Borrows `dot+sigmoid` from riir-agents + 3-axis retrieval from riir-rag, reimplemented locally (~730 LOC, boundary-compliant). Stays opt-in (deployment-environment constraint: `clippy_verify` is itself opt-in). The mechanism is validated; the opt-in gate is not a correctness concern.
 - `wasm_pruner` (opt-in, deferred): L2 WASM rust-analyzer variant (blocked on rubrc)
 - `clippy_lora` (opt-in, deferred): L4 adaptive LoRA fallback (blocked on riir-train integration)
-- `ternary_inference` (opt-in, Bench 010): katgpt ternary generation on clippy prompts. **Pre-existing compile error** (`attn_sub_on` not found in riir-gpu) unrelated to this framework — blocks `--all-features` CI layer.
+- `ternary_inference` (opt-in, Bench 010): katgpt ternary generation on clippy prompts. The pre-existing compile error (`attn_sub_on` not found in riir-gpu) was **FIXED** in riir-ai commit `4bfe3b30` — the cfg gate on `attn_sub_on` + `ATTN_SUBSTAGE_MASK` + `ATTN_SUBSTAGE_ALL` was relaxed from `all(cubecl_runtime, ternary_gemm_batched)` to just `cubecl_runtime` (behavior-preserving: the mask defaults to all-on). `--all-features` CI layer 4 now passes clean.
 
 The modelless path (L0-L3) is PRIMARY. LoRA (L4) is the conservative last resort.
 The self-evolution layer (Issue 004) is additive — it composes on top of L0-L2
