@@ -113,6 +113,15 @@ also demote loser":
   consumers should treat annotated rules as context-dependent, not
   unconditional suggestions. The annotation is backward-compatible via
   `#[serde(default)]` — older freeze/thaw snapshots deserialize as `None`.
+- **Drafter propagation (2026-08-13, post-promotion)**: the annotation now
+  flows end-to-end through the domain-agnostic drafter. A non-breaking
+  default method `HealEntry::context_notes() -> Option<&str> { None }` lets
+  the drafter read the annotation from any domain's entry type; the
+  drafter propagates it through `DraftedFix::context_notes` so the consumer
+  (CLI / IDE / CI) decides whether their context matches. The drafter does
+  NOT skip or downgrade annotated rules — it surfaces the annotation; the
+  consumer makes the policy call. `clippy_lints` + `kernel_opt` use the
+  default `None` impl (no changes needed).
 
 The validator itself is the deliverable — it works correctly, catches real
 perf characteristics (including honest "this rule is not a win in release

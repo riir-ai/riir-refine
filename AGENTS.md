@@ -152,7 +152,11 @@ The modelless path (L0-L3) is PRIMARY. LoRA (L4) is the conservative last resort
 The self-evolution layer (Issue 004) is additive — it composes on top of L0-L2
 without modifying the frozen pipeline. `rust_perf` was promoted to default-on
 2026-08-13 (Bench 013 GOAT G1+G5 PASS) with the 2 ParetoDominated rules
-carrying `context_notes` annotations ("demote loser" per global rule).
+carrying `context_notes` annotations ("demote loser" per global rule). The
+annotations now propagate end-to-end through the drafter via a non-breaking
+default method `HealEntry::context_notes() -> Option<&str> { None }` →
+`DraftedFix::context_notes` (2026-08-13 post-promotion wiring). The drafter
+surfaces the annotation; the consumer decides whether their context matches.
 `kernel_opt` is NOT promoted to default-on until its GOAT gate (real corpus +
 full numeric validator) passes.
 

@@ -29,7 +29,7 @@
 //!
 //! The framework is domain-pluggable behind [`HealDomain`]. Three domains ship:
 //! - **`clippy_lints`** (default-on) — `clippy::*` lint healing (the original domain)
-//! - **`rust_perf`** (opt-in, Phase 2) — `rust-optimize` perf healing
+//! - **`rust_perf`** (default-on, Phase 2) — `rust-optimize` perf healing (promoted 2026-08-13 after Bench 013 GOAT)
 //! - **`kernel_heal`** (opt-in, Phase 3) — GPU kernel optimization healing (absorbs `Proposal 012`; 4090 `LoRA` deferred)
 //!
 //! Cross-domain auto-routing is NOT in scope — each domain is selected by

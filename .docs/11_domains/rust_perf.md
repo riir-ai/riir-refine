@@ -76,6 +76,31 @@ provides the real perf ground truth. 3/5 benchable rules are Pareto-dominant
 regime-dependent benefits) — exactly the kind of honest signal the caveat
 predicted.
 
+## Drafter integration (`context_notes` propagation, 2026-08-13)
+
+The 2 `ParetoDominated` rules carry a `context_notes: Some(...)` annotation on
+[`PerfRule`](../../src/domains/rust_perf/mod.rs). The domain-agnostic drafter
+now propagates this annotation through [`DraftedFix::context_notes`] via a
+non-breaking default method on [`HealEntry::context_notes()`]:
+
+```text
+PerfRule.context_notes  →  HealEntry::context_notes()  →  DraftedFix.context_notes  →  consumer
+      (struct field)           (trait method, default None)      (propagated field)        (decides)
+```
+
+**The drafter does NOT skip or downgrade annotated rules.** The rule is a
+genuine pattern — just not an unconditional win in the default configuration.
+The consumer (CLI caller, IDE plugin, CI gate) reads `DraftedFix::context_notes`
+and decides whether their context matches (multi-threaded? POPCNT target?).
+
+This is the honest design: the drafter surfaces the annotation; it does not
+make policy decisions about whether a rule applies. The policy belongs to the
+consumer, who knows their context.
+
+Non-breaking: `HealEntry::context_notes()` has a default `None` impl, so
+`clippy_lints` + `kernel_opt` entries need no changes — they are unconditional
+wins (or honestly `NotBenchable`) and return `None`.
+
 ## Cargo-in-cargo test constraint
 
 Tests that spawn `cargo test`/`cargo run` are `#[ignore]`'d ("slow: runs

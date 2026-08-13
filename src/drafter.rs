@@ -51,6 +51,13 @@ pub struct DraftedFix {
     pub confidence: f32,
     /// Whether this was a template/fallback draft (L0) or a ternary draft (L1).
     pub source: DraftSource,
+    /// Propagated from the selected candidate's `HealEntry::context_notes()`
+    /// (Plan 001 post-promotion, 2026-08-13). `Some` signals the rule is
+    /// context-dependent — not an unconditional win in the default
+    /// configuration. The drafter does NOT skip or downgrade annotated rules;
+    /// this field is the honest signal for the consumer to decide whether
+    /// their context (multi-threaded? POPCNT target? ...) matches.
+    pub context_notes: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -255,6 +262,7 @@ impl TernaryDrafter {
                 code: entry.fixed_code().to_string(),
                 confidence,
                 source: DraftSource::TernaryMatvec,
+                context_notes: entry.context_notes().map(str::to_string),
             }
         } else {
             // L0: corpus template lookup
@@ -263,6 +271,7 @@ impl TernaryDrafter {
                 code: entry.fixed_code().to_string(),
                 confidence: 0.5, // lower confidence for template
                 source: DraftSource::CorpusTemplate,
+                context_notes: entry.context_notes().map(str::to_string),
             }
         }
     }
@@ -470,5 +479,92 @@ mod tests {
         let entries = mock_entries();
         let fix = drafter.draft_fix("needless_return", "return 42;", &entries).unwrap();
         assert_eq!(fix.source, DraftSource::TernaryMatvec);
+    }
+
+    // ── context_notes propagation (Plan 001 post-promotion, 2026-08-13) ──
+
+    /// Test entry that overrides `context_notes()` — simulates a
+    /// `ParetoDominated` rule (Bench 013) so we can verify the drafter
+    /// propagates the annotation through `DraftedFix`.
+    #[derive(Clone)]
+    struct AnnotatedEntry {
+        rule_id: String,
+        buggy: String,
+        fixed: String,
+        notes: Option<String>,
+    }
+
+    impl HealEntry for AnnotatedEntry {
+        fn rule_id(&self) -> &str {
+            &self.rule_id
+        }
+        fn buggy_code(&self) -> &str {
+            &self.buggy
+        }
+        fn fixed_code(&self) -> &str {
+            &self.fixed
+        }
+        fn context_notes(&self) -> Option<&str> {
+            self.notes.as_deref()
+        }
+    }
+
+    #[test]
+    fn clippy_entries_default_to_no_context_notes() {
+        // ClippyFixEntry uses the default `context_notes() -> None`. The
+        // drafter must propagate `None` for these entries.
+        let entries = mock_entries();
+        let mut drafter = TernaryDrafter::with_weights(mock_weights());
+        let fix = drafter.draft_fix("needless_return", "return 42;", &entries).unwrap();
+        assert!(fix.context_notes.is_none(), "clippy entries should have no context_notes");
+    }
+
+    #[test]
+    fn context_notes_propagate_l1_matvec() {
+        // L1 path: the matvec selects a candidate. If that candidate has
+        // context_notes, the DraftedFix must carry them.
+        let entries = vec![AnnotatedEntry {
+            rule_id: "precompute-table".to_string(),
+            buggy: "let pop = v.iter().filter(|x| **x).count();".to_string(),
+            fixed: "let pop = v.iter().filter(|x| **x).count(); // table lookup".to_string(),
+            notes: Some("ParetoDominated 0.20-0.40x (Bench 013)".to_string()),
+        }];
+        let mut drafter = TernaryDrafter::with_weights(mock_weights());
+        let fix = drafter.draft_fix("precompute-table", "let pop = v.iter().filter(|x| **x).count();", &entries).unwrap();
+        assert_eq!(fix.source, DraftSource::TernaryMatvec);
+        assert!(fix.context_notes.is_some(), "L1 must propagate context_notes");
+        assert!(fix.context_notes.as_ref().unwrap().contains("ParetoDominated"));
+    }
+
+    #[test]
+    fn context_notes_propagate_l0_fallback() {
+        // L0 path: the fallback drafter picks candidates[0]. If that entry
+        // has context_notes, the DraftedFix must carry them.
+        let entries = vec![AnnotatedEntry {
+            rule_id: "papaya-lockfree".to_string(),
+            buggy: "let m = std::sync::RwLock::new(HashMap::new());".to_string(),
+            fixed: "let m = papaya::HashMap::new();".to_string(),
+            notes: Some("ParetoDominated 0.55-0.79x single-threaded (Bench 013)".to_string()),
+        }];
+        let mut drafter = TernaryDrafter::fallback();
+        let fix = drafter.draft_fix("papaya-lockfree", "let m = std::sync::RwLock::new(HashMap::new());", &entries).unwrap();
+        assert_eq!(fix.source, DraftSource::CorpusTemplate);
+        assert!(fix.context_notes.is_some(), "L0 must propagate context_notes");
+        assert!(fix.context_notes.as_ref().unwrap().contains("single-threaded"));
+    }
+
+    #[test]
+    fn annotated_entry_with_none_notes_propagates_none() {
+        // An entry that overrides context_notes() but returns None (e.g. a
+        // perf rule that IS an unconditional win) should propagate None.
+        let entries = vec![AnnotatedEntry {
+            rule_id: "o1-lookup".to_string(),
+            buggy: "let v: Vec<u32> = (0..n).map(|i| arr[i]).collect();".to_string(),
+            fixed: "let v = arr.to_vec();".to_string(),
+            notes: None,
+        }];
+        let mut drafter = TernaryDrafter::with_weights(mock_weights());
+        let fix = drafter.draft_fix("o1-lookup", "let v: Vec<u32> = (0..n).map(|i| arr[i]).collect();", &entries).unwrap();
+        assert!(fix.context_notes.is_none(), "None notes should propagate as None");
     }
 }

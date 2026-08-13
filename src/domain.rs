@@ -21,6 +21,12 @@ use serde::Serialize;
 /// `fixed_code()`, the pipeline's `seed_from_corpus` reads all three, and the
 /// ruliology search reads `fixed_code()` + `buggy_code()`. This is a thin
 /// accessor trait — it carries no domain-specific semantics.
+///
+/// The `context_notes()` method (Plan 001 post-promotion, 2026-08-13) has a
+/// default `None` impl so it is **non-breaking** — domains whose rules are
+/// unconditional wins (clippy, `kernel_opt`) need no changes. The `rust_perf`
+/// domain overrides it for the 2 `ParetoDominated` rules (Bench 013) so the
+/// drafter can propagate the annotation through [`DraftedFix`](crate::DraftedFix).
 pub trait HealEntry {
     /// The rule identifier (clippy: lint name, perf: rule id, kernel: concept id).
     fn rule_id(&self) -> &str;
@@ -30,6 +36,22 @@ pub trait HealEntry {
 
     /// The fixed code that resolves the rule.
     fn fixed_code(&self) -> &str;
+
+    /// Annotation for rules that are NOT default-configuration wins (Bench 013).
+    ///
+    /// `Some(notes)` means the consumer should treat this rule as
+    /// **context-dependent** — the fix is a genuine pattern, but the bench
+    /// validator found it is not unconditionally better than the buggy code in
+    /// the default configuration (e.g. the compiler already optimizes the buggy
+    /// form, or the benefit only appears under a specific runtime regime).
+    ///
+    /// Default `None` — most rules are unconditional wins. The drafter does NOT
+    /// skip or downgrade annotated rules; it propagates the annotation through
+    /// [`DraftedFix::context_notes`] so the consumer decides whether their
+    /// context matches.
+    fn context_notes(&self) -> Option<&str> {
+        None
+    }
 }
 
 /// One pluggable code-healing domain (clippy lints, rust perf, kernel opt, ...).

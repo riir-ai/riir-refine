@@ -113,6 +113,11 @@ impl HealEntry for PerfRule {
     fn fixed_code(&self) -> &str {
         &self.fixed_code
     }
+
+    #[inline]
+    fn context_notes(&self) -> Option<&str> {
+        self.context_notes.as_deref()
+    }
 }
 
 /// The rust performance healing domain — `HealDomain` impl for perf rules.

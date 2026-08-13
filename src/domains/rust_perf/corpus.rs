@@ -638,4 +638,41 @@ mod tests {
         let old_annotated = old_back.iter().filter(|e| e.context_notes.is_some()).count();
         assert_eq!(old_annotated, 0, "missing field should default to None");
     }
+
+    /// Integration: the drafter propagates `context_notes` from `PerfRule`
+    /// through `DraftedFix` for the 2 ParetoDominated rules, and `None` for
+    /// the 6 unconditional wins. This is the Plan 001 post-promotion wiring
+    /// (2026-08-13) — the field existed on `PerfRule` but was invisible to
+    /// the domain-agnostic drafter until `HealEntry::context_notes()` landed.
+    #[test]
+    fn drafter_propagates_context_notes_from_perf_corpus() {
+        use crate::domain::HealEntry;
+
+        let corpus = build_perf_seed_corpus();
+
+        // Filter to the 2 annotated rules.
+        let annotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_some()).collect();
+        assert_eq!(annotated.len(), 2, "expected 2 annotated rules");
+
+        // The HealEntry trait override must agree with the struct field.
+        for rule in &annotated {
+            assert_eq!(
+                HealEntry::context_notes(*rule),
+                rule.context_notes.as_deref(),
+                "HealEntry::context_notes() must match the PerfRule field for {}",
+                rule.rule_id
+            );
+            assert!(
+                rule.context_notes.as_ref().unwrap().contains("ParetoDominated"),
+                "annotation should mention ParetoDominated for {}",
+                rule.rule_id
+            );
+        }
+
+        // The 6 unannotated rules must return None from the trait too.
+        let unannotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_none()).collect();
+        for rule in &unannotated {
+            assert!(HealEntry::context_notes(*rule).is_none(), "{} should have no context_notes", rule.rule_id);
+        }
+    }
 }
