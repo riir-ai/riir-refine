@@ -47,10 +47,35 @@ riir-gpu = { path = "../riir-ai/crates/riir-gpu", optional = true, default-featu
 [features]
 default = ["clippy_lints"]
 
-# Domain features (Plan 001 Phase 1 framework refactor).
-# clippy_lints is the first + currently only domain; default-on.
-# Phase 2 adds `rust_perf`, Phase 3 adds `kernel_heal`.
+# Domain features (Plan 001 multi-domain framework refactor).
+# clippy_lints is the first domain; default-on. Phase 2 adds `rust_perf`,
+# Phase 3 adds `kernel_heal`.
 clippy_lints = []
+
+# Phase 2: rust performance healing domain (rust-optimize skill checklist).
+# Opt-in (default-off). Not promoted to default until a domain-specific GOAT
+# (perf-bench Pareto validator) passes.
+rust_perf = []
+
+# Perf rule resolution verification via real `cargo test` re-run (Phase 2).
+# Opt-in because it's slow (seconds), requires cargo on PATH, and does
+# temp-dir I/O. The fast path (L2 syntax check) stays always-on.
+# Implies `rust_perf` (uses the perf verifier).
+rust_perf_verify = ["rust_perf"]
+
+# Phase 3: GPU kernel optimization healing domain (absorbs Proposal 012).
+# Opt-in (default-off). 4090 LoRA (L4) deferred to riir-train. Not promoted
+# to default until a domain-specific GOAT (real corpus + full numeric
+# validator) passes.
+# Enables `variable_rank_domain_expert` on katgpt-core for the latent-MoE
+# expert router (`pick_domain`, Plan 558).
+kernel_heal = ["katgpt-core/variable_rank_domain_expert"]
+
+# Kernel rule resolution verification via CubeCL compile (Phase 3).
+# **STUB** — currently delegates to the shared RustAnalyzerPruner (syntax
+# check only). Full CubeCL compile + numeric compare vs reference deferred
+# (Proposal 012 §Phase 0). Implies `kernel_heal`.
+kernel_verify = ["kernel_heal"]
 
 # Lint resolution verification via real `cargo clippy` re-run (Phase 3).
 # Opt-in because it's slow (seconds), requires cargo+clippy on PATH, and
@@ -94,6 +119,11 @@ harness = false
 [[example]]
 name = "heal_demo"
 required-features = ["clippy_lints"]
+
+# Phase 2: rust_perf domain demo. Validates the scaffold end-to-end.
+[[example]]
+name = "perf_heal_demo"
+required-features = ["rust_perf"]
 
 [[example]]
 name = "clippy_verify_demo"

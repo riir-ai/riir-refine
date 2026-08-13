@@ -7,3 +7,9 @@
 
 #[cfg(feature = "clippy_lints")]
 pub mod clippy_lints;
+
+#[cfg(feature = "rust_perf")]
+pub mod rust_perf;
+
+#[cfg(feature = "kernel_heal")]
+pub mod kernel_opt;

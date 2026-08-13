@@ -27,9 +27,13 @@
 //!
 //! ## Multi-domain (Plan 001)
 //!
-//! The framework is domain-pluggable behind [`HealDomain`]. The clippy domain
-//! (`clippy_lints` feature, default-on) is the first + currently only domain.
-//! Phase 2 adds `rust_perf`; Phase 3 adds `kernel_heal`.
+//! The framework is domain-pluggable behind [`HealDomain`]. Three domains ship:
+//! - **`clippy_lints`** (default-on) — `clippy::*` lint healing (the original domain)
+//! - **`rust_perf`** (opt-in, Phase 2) — `rust-optimize` perf healing
+//! - **`kernel_heal`** (opt-in, Phase 3) — GPU kernel optimization healing (absorbs `Proposal 012`; 4090 `LoRA` deferred)
+//!
+//! Cross-domain auto-routing is NOT in scope — each domain is selected by
+//! enabling its feature flag.
 //!
 //! ## Modelless-first mandate
 //!
@@ -103,6 +107,38 @@ pub use domains::clippy_lints::corpus::build_seed_corpus;
 /// Back-compat: `ClippyVerifier` (behind `clippy_verify`).
 #[cfg(feature = "clippy_verify")]
 pub use domains::clippy_lints::verify::{ClippyVerifyResult, ClippyVerifier};
+
+// ── rust_perf domain re-exports (behind `rust_perf` feature, opt-in) ───────
+#[cfg(feature = "rust_perf")]
+pub use domains::rust_perf::{PerfParseVerdict, PerfRule, RustPerfDomain};
+
+/// Back-compat: `build_perf_seed_corpus` (behind `rust_perf`).
+#[cfg(feature = "rust_perf")]
+pub use domains::rust_perf::corpus::build_perf_seed_corpus;
+
+/// `rust_perf` verifier (behind `rust_perf_verify`).
+#[cfg(feature = "rust_perf_verify")]
+pub use domains::rust_perf::verify::{PerfVerifyResult, PerfVerifier};
+
+// ── kernel_opt domain re-exports (behind `kernel_heal` feature, opt-in) ────
+#[cfg(feature = "kernel_heal")]
+pub use domains::kernel_opt::{KernelOptDomain, KernelRule, KernelVerdict};
+
+/// Back-compat: `build_kernel_seed_corpus` (behind `kernel_heal`).
+#[cfg(feature = "kernel_heal")]
+pub use domains::kernel_opt::corpus::build_kernel_seed_corpus;
+
+/// `kernel_opt` expert router (behind `kernel_heal`).
+#[cfg(feature = "kernel_heal")]
+pub use domains::kernel_opt::router::{KernelExpertRouter, KERNEL_EXPERT_NAMES, NUM_KERNEL_EXPERTS, ACTIVITY_DIM};
+
+/// `kernel_opt` thermal router (behind `kernel_heal`).
+#[cfg(feature = "kernel_heal")]
+pub use domains::kernel_opt::thermal::{KernelThermalRouter, ThermalTier};
+
+/// `kernel_opt` verifier (behind `kernel_verify`).
+#[cfg(feature = "kernel_verify")]
+pub use domains::kernel_opt::verify::{KernelVerifyResult, KernelVerifier};
 
 #[cfg(feature = "ruliology_search")]
 pub use ruliology_search::{RuliologySearch, ScoredCandidate};
