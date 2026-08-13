@@ -225,6 +225,8 @@ predictability is **not** uniform across lints, and the structurally-rewriting l
 
 ---
 
+## What this concludes (and what it does not)
+
 **Concludes:**
 - DSpark on the **current** `dspark-Q4_1` checkpoint is a **net slowdown (0.55×)** for this
   target on M3 Max. Speculation will not lift clippy-healing throughput above llama.cpp's raw
