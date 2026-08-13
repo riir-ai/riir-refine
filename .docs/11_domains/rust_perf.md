@@ -19,13 +19,13 @@
 
 ## Corpus
 
-16 seed rules across 9 skill-checklist categories. Complexity + allocation
+18 seed rules across 11 skill-checklist categories. Complexity + allocation
 are the deepest categories (3 rules each — complexity covers the most common
 algorithmic anti-patterns: O(n)→O(1)/O(log n) lookups, O(n²)→O(n) dedup;
 allocation covers the most common memory anti-patterns); simd + layout +
-concurrency have 2; the rest have 1 each. 12 are benchable (carry a
+concurrency have 2; the rest have 1 each. 14 are benchable (carry a
 `BenchSpec`); 4 are honestly `NotBenchable` (need external runtimes or are
-structural). 3 of the 12 benchable rules carry `context_notes` (Bench 013
+structural). 3 of the 14 benchable rules carry `context_notes` (Bench 013
 found 2 `ParetoDominated` + 1 `Mixed` in the default config — consumers
 should treat them as context-dependent, not unconditional suggestions).
 
@@ -44,6 +44,8 @@ should treat them as context-dependent, not unconditional suggestions).
 | `simd-chunk` | simd | ✅ 3.9x ParetoDominant | — | Scalar loop → 4-wide chunked loop for LLVM auto-vectorization |
 | `bool-to-bitpack` | simd | ✅ 7-11x ParetoDominant | — | `Vec<bool>` set-bit count → packed `Vec<u64>` + `count_ones()` (data density + hardware POPCNT) |
 | `f32-counter-to-int` | arithmetic | ✅ 7.5-11x ParetoDominant | — | f32 accumulator for integer tally → u64 accumulator (f32 add dep chain can't be broken without fast-math) |
+| `collect-avoidance` | iterators | ✅ 2.3-3.0x ParetoDominant | — | Unnecessary `.collect()` intermediate → chained iterator (allocation + double pass → single pass, zero alloc) |
+| `dyn-to-enum` | dispatch | ✅ 2.5-2.9x ParetoDominant | — | `Box<dyn Trait>` dispatch → enum dispatch (devirtualize: vtable indirection → direct match, compiler can inline) |
 | `precompute-table` | caching | ❌ 0.20-0.40x ParetoDominated | ⚠️ `context_notes` | Recompute-per-call → `const` lookup table (compiler optimizes popcount to POPCNT in release) |
 | `bevy-reactive-loop` | bevy | ❌ NotBenchable | — | `WinitSettings::default()` (Continuous, 100% CPU) → `reactive_low_power` (needs Bevy runtime) |
 | `wasm-batch-ffi` | wasm | ❌ NotBenchable | — | Per-call FFI (250ns floor × N×M) → single batch invocation (needs WASM runtime) |
@@ -83,9 +85,9 @@ the measured GOAT results.
 
 The original caveat called perf "the weakest link" because perf has no
 single ground truth. **Bench 013 closes this**: the Pareto validator now
-provides the real perf ground truth. 9/12 benchable rules are Pareto-dominant
-(clear wins); 2/12 are honestly Pareto-dominated (compiler optimizations,
-regime-dependent benefits); 1/12 is Mixed (scale-dependent) — exactly the
+provides the real perf ground truth. 11/14 benchable rules are Pareto-dominant
+(clear wins); 2/14 are honestly Pareto-dominated (compiler optimizations,
+regime-dependent benefits); 1/14 is Mixed (scale-dependent) — exactly the
 kind of honest signal the caveat predicted.
 
 ## Drafter + pipeline integration (`context_notes` propagation, 2026-08-13)
@@ -157,7 +159,7 @@ cargo invocations against temp crates race on cargo's build cache lock.
 ## Source
 
 - [`src/domains/rust_perf/mod.rs`](../../src/domains/rust_perf/mod.rs) — `PerfRule` + `RustPerfDomain`
-- [`src/domains/rust_perf/corpus.rs`](../../src/domains/rust_perf/corpus.rs) — `build_perf_seed_corpus()` + 9 `BenchSpec`s
+- [`src/domains/rust_perf/corpus.rs`](../../src/domains/rust_perf/corpus.rs) — `build_perf_seed_corpus()` + 11 `BenchSpec`s
 - [`src/domains/rust_perf/verify.rs`](../../src/domains/rust_perf/verify.rs) — `PerfVerifier` (cargo test)
 - [`src/domains/rust_perf/bench.rs`](../../src/domains/rust_perf/bench.rs) — `PerfBenchValidator` (Pareto verdict)
 - [`examples/perf_heal_demo.rs`](../../examples/perf_heal_demo.rs) — scaffold end-to-end demo

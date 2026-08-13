@@ -15,13 +15,17 @@
 //! `run_buggy` / `run_fixed` entry points. The bench validator generates a
 //! temp bin crate from the spec + runs a timing loop at multiple sizes.
 //!
-//! Currently benchable (10/14):
+//! Currently benchable (14/18):
 //! - `o1-lookup` (Vec scan vs HashMap lookup — clear O(n) vs O(1))
 //! - `bsearch-sorted-slice` (linear scan vs binary search — O(n) vs O(log n) on sorted data)
 //! - `dedupe-hashset-vs-vec` (Vec::contains loop vs HashSet collect — O(n²) vs O(n))
 //! - `static-str` (String alloc vs &'static str — allocation cost)
 //! - `simd-chunk` (scalar vs chunked loop — vectorization at large N)
 //! - `bool-to-bitpack` (Vec<bool> count vs packed Vec<u64> POPCNT — data density)
+//! - `mutex-to-atomic` (Mutex<u32> vs AtomicU32 — lock/unlock overhead)
+//! - `f32-counter-to-int` (f32 accumulator vs u64 — serial dep chain)
+//! - `collect-avoidance` (.collect() intermediate vs chained iterator — allocation + double pass)
+//! - `dyn-to-enum` (Box<dyn Trait> vs enum — vtable indirection + no inlining)
 //! - `precompute-table` (recompute vs const lookup table — **context-dependent**,
 //!   see `context_notes`; not a release-mode win per Bench 013)
 //! - `papaya-lockfree` (RwLock vs papaya lock-free — **context-dependent**,
@@ -29,7 +33,7 @@
 //! - `vec-with-capacity` (Vec::new() growth vs Vec::with_capacity — realloc cost)
 //! - `format-concat-loop` (format! concat in loop vs push_str — O(n²) vs O(n))
 //!
-//! Not benchable (4/14) — honest:
+//! Not benchable (4/18) — honest:
 //! - `layout-reorder` (struct size — deterministic `size_of`, not a runtime
 //!   microbench; the cache-utilization claim needs a specific access pattern)
 //! - `repr-u8-enum` (enum size — deterministic `size_of`, same class as
@@ -52,11 +56,11 @@ use crate::domains::rust_perf::{PerfRule, RustPerfDomain};
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 14 entries
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 18 entries
 /// covering the main `rust-optimize` skill categories (complexity, allocation,
-/// layout, concurrency, simd, caching, bevy, wasm). Complexity + allocation
-/// are the deepest categories (3 rules each); simd + layout have 2; the rest
-/// have 1 each.
+/// layout, concurrency, simd, arithmetic, iterators, dispatch, caching, bevy,
+/// wasm). Complexity + allocation are the deepest categories (3 rules each);
+/// simd + layout + concurrency have 2; the rest have 1 each.
 #[must_use]
 #[allow(clippy::too_many_lines)] // seed corpus is a data table; length scales with rule count
 pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
@@ -334,6 +338,42 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
             // enums). Honest "NotBenchable", same class as layout-reorder.
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: None,
+        },
+        // ── iterators: unnecessary .collect() intermediate → chained iterator ──
+        // Per the rust-optimize skill item 5: "fix double chunks_exact()".
+        // The general pattern: collecting an intermediate Vec then iterating
+        // it again. The collect allocates (heap + copy) + forces a second
+        // pass. The fixed path chains the iterators — zero allocation, single
+        // pass. The compiler cannot eliminate a .collect() (it must produce a
+        // concrete Vec). Bench 013: ParetoDominant 2.4–3.0× across all sizes
+        // (1K → 1M).
+        PerfRule {
+            rule_id: "collect-avoidance".to_string(),
+            name: "Unnecessary .collect() intermediate → chained iterator".to_string(),
+            category: "iterators".to_string(),
+            buggy_code: "fn transform_sum(vals: &[u64]) -> u64 {\n    let mapped: Vec<u64> = vals.iter().map(|x| x * 2).collect();\n    mapped.iter().sum()\n}".to_string(),
+            fixed_code: "fn transform_sum(vals: &[u64]) -> u64 {\n    vals.iter().map(|x| x * 2).sum()\n}".to_string(),
+            context_notes: None,
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(collect_avoidance_bench_spec()),
+        },
+        // ── dispatch: Box<dyn Trait> → enum dispatch (devirtualize) ──────
+        // NOT in the rust-optimize skill checklist — a genuine gap. The buggy
+        // path uses dynamic dispatch via Box<dyn Trait>: each call is a vtable
+        // load + indirect call (branch misprediction risk, no inlining). The
+        // fixed path uses an enum: the match arms are direct calls the
+        // compiler can inline + branch-predict. The compiler cannot devirtualize
+        // through an opaque trait object. Bench 013: ParetoDominant ~2.0×
+        // across all sizes (1K → 100K).
+        PerfRule {
+            rule_id: "dyn-to-enum".to_string(),
+            name: "Box<dyn Trait> dispatch → enum dispatch (devirtualize)".to_string(),
+            category: "dispatch".to_string(),
+            buggy_code: "trait Op { fn apply(&self, x: f64) -> f64; }\nfn run(ops: &[Box<dyn Op>], vals: &[f64]) -> f64 {\n    let mut acc = 0.0;\n    for &x in vals { let mut v = x; for op in ops { v = op.apply(v); } acc += v; }\n    acc\n}".to_string(),
+            fixed_code: "enum Op { Scale(f64), Offset(f64), Square }\nimpl Op {\n    fn apply(&self, x: f64) -> f64 {\n        match self { Op::Scale(s) => x * s, Op::Offset(o) => x + o, Op::Square => x * x }\n    }\n}\nfn run(ops: &[Op], vals: &[f64]) -> f64 {\n    let mut acc = 0.0;\n    for &x in vals { let mut v = x; for op in ops { v = op.apply(v); } acc += v; }\n    acc\n}".to_string(),
+            context_notes: None,
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(dyn_to_enum_bench_spec()),
         },
     ])
 }
@@ -757,6 +797,131 @@ pub fn run_fixed(input: &[u32]) {
     }
 }
 
+/// Bench spec for `collect-avoidance`: .collect() intermediate vs chained iterator.
+///
+/// The buggy path collects an intermediate `Vec<u64>` from the map, then
+/// iterates it again for the sum. The collect allocates (heap alloc + copy
+/// of all elements) + forces a second pass. The fixed path chains map+sum
+/// — zero allocation, single pass. The compiler cannot eliminate a
+/// `.collect()` (it must produce a concrete `Vec`).
+#[cfg(feature = "rust_perf_bench")]
+fn collect_avoidance_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![1_000, 10_000, 100_000, 1_000_000],
+        harness: r#"
+mod buggy {
+    pub fn transform_sum(vals: &[u64]) -> u64 {
+        let mapped: Vec<u64> = vals.iter().map(|x| x.wrapping_mul(2)).collect();
+        mapped.iter().sum()
+    }
+}
+
+mod fixed {
+    pub fn transform_sum(vals: &[u64]) -> u64 {
+        vals.iter().map(|x| x.wrapping_mul(2)).sum()
+    }
+}
+
+pub fn make_input(n: usize) -> Vec<u64> {
+    (0..n as u64).collect()
+}
+
+pub fn run_buggy(input: &[u64]) {
+    let s = buggy::transform_sum(input);
+    std::hint::black_box(s);
+}
+
+pub fn run_fixed(input: &[u64]) {
+    let s = fixed::transform_sum(input);
+    std::hint::black_box(s);
+}
+"#
+        .to_string(),
+    }
+}
+
+/// Bench spec for `dyn-to-enum`: Box<dyn Trait> vs enum dispatch.
+///
+/// The buggy path uses `Box<dyn Op>` — each `.apply()` is a vtable load +
+/// indirect call. The compiler cannot inline through an opaque trait object
+/// or devirtualize when the concrete type is erased. The fixed path uses an
+/// enum: the match arms are direct calls the compiler can inline + the
+/// branch predictor learns the match arm pattern.
+#[cfg(feature = "rust_perf_bench")]
+fn dyn_to_enum_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![1_000, 10_000, 100_000],
+        harness: r#"
+mod buggy {
+    trait Op {
+        fn apply(&self, x: f64) -> f64;
+    }
+    struct Scale(f64);
+    impl Op for Scale { fn apply(&self, x: f64) -> f64 { x * self.0 } }
+    struct Offset(f64);
+    impl Op for Offset { fn apply(&self, x: f64) -> f64 { x + self.0 } }
+    struct Square;
+    impl Op for Square { fn apply(&self, x: f64) -> f64 { x * x } }
+
+    fn make_ops() -> Vec<Box<dyn Op>> {
+        vec![Box::new(Scale(1.1)), Box::new(Offset(0.5)), Box::new(Square)]
+    }
+    pub fn run(vals: &[f64]) -> f64 {
+        let ops = make_ops();
+        let mut acc = 0.0f64;
+        for &x in vals {
+            let mut v = x;
+            for op in &ops { v = op.apply(v); }
+            acc += v;
+        }
+        acc
+    }
+}
+
+mod fixed {
+    enum OpEnum { Scale(f64), Offset(f64), Square }
+    impl OpEnum {
+        fn apply(&self, x: f64) -> f64 {
+            match self {
+                OpEnum::Scale(s) => x * s,
+                OpEnum::Offset(o) => x + o,
+                OpEnum::Square => x * x,
+            }
+        }
+    }
+    fn make_ops() -> Vec<OpEnum> {
+        vec![OpEnum::Scale(1.1), OpEnum::Offset(0.5), OpEnum::Square]
+    }
+    pub fn run(vals: &[f64]) -> f64 {
+        let ops = make_ops();
+        let mut acc = 0.0f64;
+        for &x in vals {
+            let mut v = x;
+            for op in &ops { v = op.apply(v); }
+            acc += v;
+        }
+        acc
+    }
+}
+
+pub fn make_input(n: usize) -> Vec<f64> {
+    (0..n).map(|i| ((i as f64) * 0.1).sin()).collect()
+}
+
+pub fn run_buggy(input: &[f64]) {
+    let r = buggy::run(input);
+    std::hint::black_box(r);
+}
+
+pub fn run_fixed(input: &[f64]) {
+    let r = fixed::run(input);
+    std::hint::black_box(r);
+}
+"#
+        .to_string(),
+    }
+}
+
 /// Bench spec for `precompute-table`: runtime popcount loop vs const table.
 #[cfg(feature = "rust_perf_bench")]
 fn precompute_table_bench_spec() -> BenchSpec {
@@ -1015,17 +1180,17 @@ mod tests {
     }
 
     #[test]
-    fn seed_corpus_has_sixteen_entries_across_nine_categories() {
+    fn seed_corpus_has_eighteen_entries_across_eleven_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 16);
+        assert_eq!(corpus.entries.len(), 18);
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
         categories.dedup();
-        // 9 distinct categories. Complexity + allocation tie for deepest
+        // 11 distinct categories. Complexity + allocation tie for deepest
         // (3 rules each); simd + layout + concurrency have 2; arithmetic,
-        // caching, bevy, wasm have 1 each.
-        assert_eq!(categories.len(), 9);
+        // iterators, dispatch, caching, bevy, wasm have 1 each.
+        assert_eq!(categories.len(), 11);
     }
 
     #[test]
@@ -1093,10 +1258,10 @@ mod tests {
 
     #[cfg(feature = "rust_perf_bench")]
     #[test]
-    fn twelve_rules_have_bench_specs() {
+    fn fourteen_rules_have_bench_specs() {
         let corpus = build_perf_seed_corpus();
         let with_spec = corpus.entries.iter().filter(|e| e.bench_spec.is_some()).count();
-        assert_eq!(with_spec, 12, "expected 12 benchable rules, got {with_spec}");
+        assert_eq!(with_spec, 14, "expected 14 benchable rules, got {with_spec}");
     }
 
     #[cfg(feature = "rust_perf_bench")]
@@ -1119,7 +1284,7 @@ mod tests {
     /// Bench 013 found 3 rules with non-dominant verdicts in the default
     /// config (2 ParetoDominated + 1 Mixed). Their `context_notes` annotation
     /// records the finding so consumers don't unconditionally suggest them.
-    /// The other 10 have `context_notes: None` (unconditional wins or honestly
+    /// The other 15 have `context_notes: None` (unconditional wins or honestly
     /// NotBenchable).
     #[test]
     fn three_annotated_rules_carry_context_notes() {
@@ -1136,18 +1301,18 @@ mod tests {
         assert!(annotated.contains(&"dedupe-hashset-vs-vec"));
     }
 
-    /// The 11 non-annotated rules (7 ParetoDominant + 4 NotBenchable) must
+    /// The 15 non-annotated rules (11 ParetoDominant + 4 NotBenchable) must
     /// have `context_notes: None` — they are either unconditional wins or
     /// honestly unmeasurable.
     #[test]
-    fn thirteen_rules_have_no_context_notes() {
+    fn fifteen_rules_have_no_context_notes() {
         let corpus = build_perf_seed_corpus();
         let unannotated = corpus
             .entries
             .iter()
             .filter(|e| e.context_notes.is_none())
             .count();
-        assert_eq!(unannotated, 13, "expected 13 unannotated rules");
+        assert_eq!(unannotated, 15, "expected 15 unannotated rules");
     }
 
     /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -1171,7 +1336,7 @@ mod tests {
 
     /// Integration: the drafter propagates `context_notes` from `PerfRule`
     /// through `DraftedFix` for the 3 annotated rules (2 ParetoDominated + 1
-    /// Mixed), and `None` for the 7 unconditional wins. This is the Plan 001
+    /// Mixed), and `None` for the 11 unconditional wins. This is the Plan 001
     /// post-promotion wiring (2026-08-13) — the field existed on `PerfRule`
     /// but was invisible to the domain-agnostic drafter until
     /// `HealEntry::context_notes()` landed.
@@ -1201,9 +1366,9 @@ mod tests {
             );
         }
 
-        // The 13 unannotated rules must return None from the trait too.
+        // The 15 unannotated rules must return None from the trait too.
         let unannotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_none()).collect();
-        assert_eq!(unannotated.len(), 13, "expected 13 unannotated rules");
+        assert_eq!(unannotated.len(), 15, "expected 15 unannotated rules");
         for rule in &unannotated {
             assert!(HealEntry::context_notes(*rule).is_none(), "{} should have no context_notes", rule.rule_id);
         }

@@ -8,7 +8,7 @@ space, drafts fixes via a modelless ternary SIMD matvec, and validates with a
 | Domain | Feature | Status | Corpus |
 |---|---|---|---|
 | **clippy_lints** (default) | `clippy_lints` | ✅ Production | 10 common lints (style/complexity/perf/nursery) |
-| **rust_perf** (default since 2026-08-13) | `rust_perf` | ✅ Phase 2 (GOAT G1+G5 PASS, Bench 013) | 16 rules from `rust-optimize` skill (complexity/allocation/layout/concurrency/simd/arithmetic/caching/bevy/wasm); 3 carry `context_notes` (2 ParetoDominated + 1 Mixed in default config) |
+| **rust_perf** (default since 2026-08-13) | `rust_perf` | ✅ Phase 2 (GOAT G1+G5 PASS, Bench 013) | 18 rules from `rust-optimize` skill (complexity/allocation/layout/concurrency/simd/arithmetic/iterators/dispatch/caching/bevy/wasm); 3 carry `context_notes` (2 ParetoDominated + 1 Mixed in default config) |
 | **kernel_opt** (opt-in) | `kernel_heal` | ✅ Phase 3 scaffold | 2 placeholder rules (matvec-coalesce, gemm-tiling); real popcorn distillation deferred (Proposal 012 §Phase 0) |
 
 Heavyweight LoRA is the last-resort fallback, not the co-equal path.
@@ -26,7 +26,7 @@ domain-pluggable behind the `HealDomain` trait.
 
 | Layer | Status |
 |---|---|
-| L0 — Corpus (rule distillation) | ✅ Done (BLAKE3-committed freeze/thaw + seed corpus with 10 common lints + 8 perf rules + 2 kernel rules) |
+| L0 — Corpus (rule distillation) | ✅ Done (BLAKE3-committed freeze/thaw + seed corpus with 10 common lints + 18 perf rules + 2 kernel rules) |
 | L1 — Ternary SIMD drafter | ✅ Done (Issue 001, zero-alloc matvec, p50=2.3µs) — ⚠️ **corpus-resident lints only**, see Issue 010 |
 | L2 — Syntax validator | ✅ Done (Issue 002, `syn`-based parse check, p50=6.8µs) |
 | L2 — Lint resolution check (clippy) | ✅ Done (Issue 003, `clippy_verify` feature, real `cargo clippy` JSON parsing, ~130ms/verify) |
@@ -79,7 +79,7 @@ src/
     │   ├── verify.rs   # cargo clippy re-run (behind clippy_verify)
     │   └── proposers/  # 10 per-lint AST codemods (Issue 010 Stage 2)
     ├── rust_perf/      # feature "rust_perf" (default-on since 2026-08-13) — rust-optimize perf healing
-    │   ├── corpus.rs   # 8 perf rules from the rust-optimize skill checklist
+    │   ├── corpus.rs   # 18 perf rules from the rust-optimize skill checklist
     │   ├── verify.rs   # cargo test re-run (behind rust_perf_verify)
     │   └── bench.rs    # perf-bench Pareto validator (behind rust_perf_bench, the GOAT gate)
     └── kernel_opt/     # feature "kernel_heal" (opt-in, 4090 DEFERRED)

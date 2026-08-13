@@ -8,10 +8,10 @@
 
 The `rust_perf` domain end-to-end (Plan 001 Phase 2):
 
-1. **Build corpus**: `build_perf_seed_corpus()` → 16 `PerfRule` entries across
-   9 skill-checklist categories (complexity + allocation tie for deepest
+1. **Build corpus**: `build_perf_seed_corpus()` → 18 `PerfRule` entries across
+   11 skill-checklist categories (complexity + allocation tie for deepest
    with 3 rules each).
-2. **List rules**: prints all 16 rules grouped by category.
+2. **List rules**: prints all 18 rules grouped by category.
 3. **Validate**: calls `RustPerfDomain::validate()` on each fixed pattern.
    - Without `rust_perf_verify`: L2 pruner syntax check (`PerfParseVerdict`)
    - With `rust_perf_verify`: `cargo test` re-run (`PerfVerifyResult` with
@@ -23,7 +23,7 @@ The `rust_perf` domain end-to-end (Plan 001 Phase 2):
 6. **Optional cargo test** (with `rust_perf_verify`): runs `PerfVerifier` on
    the first rule, prints `ran`/`test_passes`/`passed`/`failed`.
 
-## The 16 seed rules
+## The 18 seed rules
 
 | Category | Rule | Pattern |
 |---|---|---|
@@ -40,6 +40,8 @@ The `rust_perf` domain end-to-end (Plan 001 Phase 2):
 | simd | `simd-chunk` | Scalar loop → 4-wide chunked loop |
 | simd | `bool-to-bitpack` | `Vec<bool>` count → packed `Vec<u64>` + `count_ones()` |
 | arithmetic | `f32-counter-to-int` | f32 accumulator for integer tally → u64 accumulator |
+| iterators | `collect-avoidance` | Unnecessary `.collect()` intermediate → chained iterator |
+| dispatch | `dyn-to-enum` | `Box<dyn Trait>` dispatch → enum dispatch (devirtualize) |
 | caching | `precompute-table` | Recompute-per-call → `const` lookup table |
 | bevy | `bevy-reactive-loop` | `WinitSettings::default()` → `reactive_low_power` |
 | wasm | `wasm-batch-ffi` | Per-call FFI → batch invocation |
@@ -49,12 +51,11 @@ The `rust_perf` domain end-to-end (Plan 001 Phase 2):
 ```text
 === rust_perf domain — Phase 2 scaffold demo ===
 
-Seed corpus: 16 entries
-Commitment (BLAKE3): 1887fcc7d1421ba6e81aac1cacd988e604a03ed808dce0a2c6962d083a36a453
+Seed corpus: 18 entries
+Commitment (BLAKE3): 1d18f5b41463666e0056a2498fa26fc82edc142751de1bc97f042159f7389dae
 
 Rules by category:
-  [allocation] static-str — String → &'static str for constant labels
-  [bevy] bevy-reactive-loop — Bevy Continuous → reactive_low_power event loop
+  [allocation] format-concat-loop — format!("{s}{x}") concat in loop → String::push_str
   ...
 
 Validating fixed patterns via domain validate():
@@ -69,7 +70,7 @@ Tamper-evidence check:
   verify() on tampered corpus: false (expected: false)
 
 HealDomain trait impl:
-  build_corpus() returned 16 entries (matches seed: true)
+  build_corpus() returned 18 entries (matches seed: true)
 
 === Phase 2 scaffold demo complete ===
 ```
