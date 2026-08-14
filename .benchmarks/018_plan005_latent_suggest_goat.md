@@ -154,6 +154,10 @@ Calibration distributions with n=24 positives (unchanged conclusion):
 positives [3.193 ..= 34.709] (n=24), negatives [6.081 ..= 69.372] (n=14),
 separation: OVERLAP — refutation stands.
 
+G2 re-run (release, expanded fixture): **290 µs/chunk** (480 chunk queries) —
+PASS, 3.4× headroom (was 349 µs at n=12; the added snippets are on average
+shorter, slightly improving the mean).
+
 Confidence interval context: at 24 items the one-sided 95% lower bound on
 precision (Wilson) is ~0.80 — the gate floor — versus ~0.76 at 12 items
 (12/12). The expansion therefore buys exact coverage breadth (all clippy
