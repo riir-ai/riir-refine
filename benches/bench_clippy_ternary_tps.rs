@@ -252,7 +252,6 @@ fn main() {
             decode_speculative(
                 &mut fwd,
                 &weights,
-                &last_logits[..vocab],
                 prompt_tokens,
                 decode_tokens,
                 tokenizer.eos_id(),
@@ -353,34 +352,40 @@ fn main() {
 /// Speculative decode loop (Issue 665).
 ///
 /// Corrected implementation — the bench_665 verify logic was off-by-one
-/// (`all_logits[i]` predicts the position AFTER `draft_tokens[i]`, so to verify
-/// `d_i` you need `all_logits[i-1]`, or `seed_logits` for `d_0`). bench_665 got
-/// α=0.88 on repetitive counting text where the off-by-one coincidentally
-/// matches; on natural-language clippy prompts it collapses to α=0.13 + G1 FAIL.
+/// (`all_logits[i]` used to mean logits AFTER `draft_tokens[i]`, so verifying
+/// `d_i` needed `all_logits[i-1]`, or a separate `read_logits()` for `d_0`).
+/// bench_665 got α=0.88 on repetitive counting text where the off-by-one
+/// coincidentally matches; on natural-language clippy prompts it collapses to
+/// α=0.13 + G1 FAIL.
 ///
-/// Algorithm (per round, starting from GPU position P with `current_logits`
-/// predicting position P):
+/// The substrate now returns K+1 position-aligned logits (Issue 669 follow-up):
+/// `all_logits[i]` predicts `draft_tokens[i]`'s position for ALL i (including
+/// i=0 — it re-reads the same GPU buffer a threaded `current_logits` would
+/// have cloned), and `all_logits[K]` predicts the position after the last
+/// draft. No per-round `read_logits()` sync, no threading.
+///
+/// Algorithm (per round, starting from GPU position P):
 ///
 /// 1. Draft predicts `[d_0, ..., d_{K-1}]` for positions P, P+1, ..., P+K-1.
 /// 2. `forward_speculative_verify` processes each draft token at its position,
-///    returning `all_logits[i]` which predicts position P+i+1.
-/// 3. Verify: `d_0` against `current_logits` (predicts P), `d_i` against
-///    `all_logits[i-1]` (predicts P+i). Accept matching prefix.
-/// 4. If all accepted: no rollback. P += K. Next round's `current_logits` =
-///    `all_logits[K-1]`.
+///    returning K+1 position-aligned logits.
+/// 3. Verify: `d_i` against `all_logits[i]` (predicts P+i). Accept matching
+///    prefix.
+/// 4. If all accepted: no rollback. P += K. `self.logits` already holds the
+///    last forward's output → next round's `all_logits[0]` is the seed.
 /// 5. If rejected at j: rollback to P. Re-apply accepted + corrected. P += j+1.
-///    `current_logits` = last re-apply forward output.
+///    The re-apply's last forward writes `self.logits` → next round's
+///    `all_logits[0]` is the seed.
 ///
-/// No bonus token — it complicates GPU-state tracking (the GPU hasn't processed
-/// the bonus token, so the next round's positions would misalign). Accept at
-/// most K tokens per round.
+/// No bonus token — committing `argmax(all_logits[K])` without processing it
+/// misaligns GPU pos vs token positions (Issue 669). Accept at most K tokens
+/// per round.
 ///
 /// Returns `(generated_tokens, acceptance_rate, spec_rounds)`.
 #[cfg(feature = "ternary_inference")]
 fn decode_speculative(
     fwd: &mut riir_gpu::TernaryDeltanetGpuForward,
     weights: &riir_engine::deltanet::ternary_weights::QwenDeltaNetTernaryWeights,
-    seed_logits: &[f32],
     prompt_tokens: &[usize],
     decode_tokens: usize,
     eos_id: usize,
@@ -397,9 +402,6 @@ fn decode_speculative(
     drafter.add_context(&prompt_u32);
 
     let mut generated: Vec<u32> = Vec::with_capacity(decode_tokens);
-    // current_logits = the logits predicting the NEXT position to fill.
-    // After prefill, this is seed_logits (predicts the first generated token).
-    let mut current_logits: Vec<f32> = seed_logits.to_vec();
 
     let mut spec_rounds = 0usize;
     let mut total_accepted = 0usize;
@@ -428,22 +430,17 @@ fn decode_speculative(
             Some(fwd.checkpoint_speculative())
         };
         let all_logits = fwd.forward_speculative_verify(weights, &draft_tokens);
-        // all_logits[i] = logits AFTER processing draft_tokens[i] = predicts the
-        // position AFTER draft_tokens[i]. To verify draft_tokens[i], use the
-        // logits that predict its position:
-        //   d_0 → current_logits (predicts d_0's position)
-        //   d_i → all_logits[i-1] (predicts d_i's position)
+        // all_logits is K+1 position-aligned (Issue 669 follow-up):
+        //   all_logits[i] predicts draft_tokens[i]'s position (i < K)
+        //   all_logits[K] predicts the position after the last draft
+        // all_logits[0] re-reads the GPU buffer that a threaded
+        // `current_logits` would have cloned — bit-identical, no sync.
 
         // 3. Verify: accept matching prefix, reject at first divergence.
         let mut first_reject = DRAFT_K;
         for i in 0..DRAFT_K {
             total_draft += 1;
-            let verify_logits: &[f32] = if i == 0 {
-                &current_logits
-            } else {
-                &all_logits[i - 1]
-            };
-            let main_token = argmax(verify_logits).unwrap_or(0);
+            let main_token = argmax(&all_logits[i]).unwrap_or(0);
             if main_token == draft_tokens[i] {
                 total_accepted += 1;
                 generated.push(draft_tokens[i] as u32);
@@ -459,16 +456,10 @@ fn decode_speculative(
             }
         }
 
-        // 4. Update current_logits for the next round.
-        //    If all K accepted: current_logits = all_logits[K-1] (predicts the
-        //    position after the last accepted token — no rollback needed, the
-        //    GPU state already reflects all K forwards).
-        //    If rejected at j>0: the accepted prefix's last forward output is
-        //    all_logits[j-1], but we're about to rollback + re-apply which
-        //    overwrites current_logits anyway.
-        if first_reject == DRAFT_K {
-            current_logits = all_logits[DRAFT_K - 1].clone();
-        }
+        // 4. Nothing to thread: both round-exit paths leave `self.logits`
+        //    holding the current-position logits (full accept → the last
+        //    verify forward's output; reject → the last re-apply forward's
+        //    output), so the next round's all_logits[0] is the seed.
 
         // 5. Rollback + re-apply if any tokens were rejected.
         //    The GPU processed d_0..d_{K-1} during verify, but d_{first_reject}
@@ -484,7 +475,7 @@ fn decode_speculative(
             let reapply_tokens = &generated[generated.len() - n_to_reapply..];
             for &tok in reapply_tokens {
                 fwd.set_input_token(weights, tok as usize);
-                current_logits = fwd.forward_token(tok as usize);
+                let _ = fwd.forward_token(tok as usize);
             }
         }
 
