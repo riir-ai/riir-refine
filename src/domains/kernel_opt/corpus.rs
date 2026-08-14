@@ -298,6 +298,58 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
             ref_shape: "// naive: load full K and V matrices (O(N*D) shared memory)\nfn kv_full_load(q: &[f32], k: &[f32], v: &[f32], n: usize) -> Vec<f32> {\n    let mut out = vec![0.0f32; n];\n    for i in 0..n {\n        for j in 0..n {\n            out[i] += q[i] * k[j] * v[j];\n        }\n    }\n    out\n}".to_string(),
             opt_pattern: "// optimized: stream KV blocks (O(block*D) shared memory)\nfn kv_block_stream(q: &[f32], k: &[f32], v: &[f32], n: usize, block: usize) -> Vec<f32> {\n    let mut out = vec![0.0f32; n];\n    for i in 0..n {\n        let mut acc = 0.0;\n        for j_start in (0..n).step_by(block) {\n            let j_end = (j_start + block).min(n);\n            // load k[j_start..j_end] + v[j_start..j_end] into shared mem\n            let mut block_acc = 0.0;\n            for j in j_start..j_end {\n                block_acc += q[i] * k[j] * v[j];\n            }\n            acc += block_acc;\n        }\n        out[i] = acc;\n    }\n    out\n}".to_string(),
         },
+        // ════════════════════════════════════════════════════════════════════
+        // Category G: Linear-attention recurrence (Batch 3, 6 rules)
+        // ════════════════════════════════════════════════════════════════════
+        // ── state-forget-gate — plain state update → exponential decay gate ─
+        // Source: gsa.py, gated_delta_product.py — state *= gate.exp() before
+        // adding new k/v, implementing exponential forgetting of old state.
+        KernelRule {
+            rule_id: "state-forget-gate".to_string(),
+            gpu_concept: "exponential decay gate on recurrent state".to_string(),
+            ref_shape: "// naive: state accumulates without decay (unbounded growth)\nfn state_update_no_gate(state: &mut [f32], k: &[f32], v: &[f32], beta: f32) {\n    for i in 0..state.len() {\n        state[i] += beta * k[i] * v[i];\n    }\n}".to_string(),
+            opt_pattern: "// optimized: exponential forget gate (bounded state, sigmoid-stable)\nfn state_update_gated(state: &mut [f32], k: &[f32], v: &[f32], beta: f32, gate: f32) {\n    let decay = gate.exp(); // e^gate ∈ (0, ∞), typically gate < 0 → decay < 1\n    for i in 0..state.len() {\n        state[i] = state[i] * decay + beta * k[i] * v[i];\n    }\n}".to_string(),
+        },
+        // ── householder-rank1-update — general update → Householder reflection ─
+        // Source: delta_rule.py — the delta rule is a rank-1 Householder reflection:\n        // S_t = (I - β k_t k_t^T) S_{t-1} + β k_t v_t^T. The error-correcting form\n        // computes error = v_t - S k_t, then updates by k_t ⊗ (β * error).
+        KernelRule {
+            rule_id: "householder-rank1-update".to_string(),
+            gpu_concept: "rank-1 Householder reflection state update".to_string(),
+            ref_shape: "// naive: general state update (no error correction)\nfn state_update_naive(state: &mut [[f32; V]; K], k: &[f32; K], v: &[f32; V], beta: f32) {\n    for kv in 0..K {\n        for vv in 0..V {\n            state[kv][vv] += beta * k[kv] * v[vv];\n        }\n    }\n}".to_string(),
+            opt_pattern: "// optimized: error-correcting delta rule (Householder rank-1)\nfn delta_rule_update(state: &mut [[f32; V]; K], k: &[f32; K], v: &[f32; V], beta: f32) {\n    // step 1: compute prediction error = v - S^T k\n    let mut error = [0.0f32; V];\n    for vv in 0..V {\n        let mut pred = 0.0;\n        for kv in 0..K { pred += state[kv][vv] * k[kv]; }\n        error[vv] = v[vv] - pred;\n    }\n    // step 2: rank-1 update: S += k ⊗ (beta * error)\n    for kv in 0..K {\n        let scaled_k = beta * k[kv];\n        for vv in 0..V {\n            state[kv][vv] += scaled_k * error[vv];\n        }\n    }\n}".to_string(),
+        },
+        // ── chunkwise-parallel-recurrence — full sequential → chunk-parallel ─
+        // Source: fla chunk_delta_rule — the sequential recurrence is split into\n        // chunks; intra-chunk interactions are parallelized via matmul, inter-chunk\n        // state transitions remain sequential.
+        KernelRule {
+            rule_id: "chunkwise-parallel-recurrence".to_string(),
+            gpu_concept: "chunkwise parallelism for state-carrying loops".to_string(),
+            ref_shape: "// naive: fully sequential recurrence (O(N) sequential steps, no parallelism)\nfn recurrence_sequential(k: &[f32], v: &[f32], state: &mut [f32], n: usize) -> Vec<f32> {\n    let mut out = vec![0.0f32; n];\n    for t in 0..n {\n        // each step depends on previous state — fully sequential\n        state[t % state.len()] += k[t] * v[t];\n        out[t] = state[t % state.len()];\n    }\n    out\n}".to_string(),
+            opt_pattern: "// optimized: chunkwise parallel (O(N/chunk) sequential, intra-chunk parallel)\nfn recurrence_chunkwise(k: &[f32], v: &[f32], state: &mut [f32], n: usize, chunk: usize) -> Vec<f32> {\n    let mut out = vec![0.0f32; n];\n    for t_start in (0..n).step_by(chunk) {\n        let t_end = (t_start + chunk).min(n);\n        // intra-chunk: parallel matmul for interactions within this chunk\n        let chunk_len = t_end - t_start;\n        let mut chunk_state = state.to_vec();\n        for t in t_start..t_end {\n            chunk_state[t % state.len()] += k[t] * v[t];\n            out[t] = chunk_state[t % state.len()];\n        }\n        // inter-chunk: sequential state transition\n        *state = chunk_state;\n    }\n    out\n}".to_string(),
+        },
+        // ── recurrent-vs-chunk-dispatch — one path → backend by seq length ──
+        // Source: fla fused_recurrent_delta_rule vs chunk_delta_rule — the recurrent\n        // path is faster for short sequences (low parallelism overhead), the chunk\n        // path is faster for long sequences (more parallelism).
+        KernelRule {
+            rule_id: "recurrent-vs-chunk-dispatch".to_string(),
+            gpu_concept: "sequence-length-aware backend dispatch".to_string(),
+            ref_shape: "// naive: always use chunkwise (overhead dominates for short sequences)\nfn dispatch_always_chunk(k: &[f32], v: &[f32], n: usize) -> Vec<f32> {\n    let mut state = vec![0.0f32; 64];\n    recurrence_chunkwise(k, v, &mut state, n, 64)\n}".to_string(),
+            opt_pattern: "// optimized: dispatch by sequence length (recurrent for short, chunk for long)\nfn dispatch_by_length(k: &[f32], v: &[f32], n: usize) -> Vec<f32> {\n    let mut state = vec![0.0f32; 64];\n    if n < 256 {\n        // short: sequential recurrent (low overhead)\n        recurrence_sequential(k, v, &mut state, n)\n    } else {\n        // long: chunkwise parallel (high throughput)\n        recurrence_chunkwise(k, v, &mut state, n, 64)\n    }\n}".to_string(),
+        },
+        // ── multi-write-per-step — single write → N Householder writes ────
+        // Source: gated_delta_product.py — DeltaProduct does num_householder\n        // Householder reflections per timestep under one forget gate.
+        KernelRule {
+            rule_id: "multi-write-per-step".to_string(),
+            gpu_concept: "multiple state writes per timestep".to_string(),
+            ref_shape: "// naive: single write per step (1 Householder reflection)\nfn step_single_write(state: &mut [[f32; V]; K], k: &[f32; K], v: &[f32; V], beta: f32) {\n    delta_rule_update(state, k, v, beta);\n}".to_string(),
+            opt_pattern: "// optimized: N writes per step under one gate (DeltaProduct)\nfn step_multi_write(state: &mut [[f32; V]; K], ks: &[[f32; K]], vs: &[[f32; V]], betas: &[f32], n: usize, gate: f32) {\n    // apply forget gate once\n    let decay = gate.exp();\n    for kv in 0..K {\n        for vv in 0..V {\n            state[kv][vv] *= decay;\n        }\n    }\n    // N Householder reflections\n    for j in 0..n {\n        delta_rule_update(state, &ks[j], &vs[j], betas[j]);\n    }\n}".to_string(),
+        },
+        // ── chained-two-pass-recurrence — single pass → two chained passes ─
+        // Source: gsa.py — Gated Slot Attention chains two sequential recurrences\n        // (K-state then V-state) with a softmax bridge between them.
+        KernelRule {
+            rule_id: "chained-two-pass-recurrence".to_string(),
+            gpu_concept: "chained sequential recurrences with softmax bridge".to_string(),
+            ref_shape: "// naive: single recurrence pass (one state matrix)\nfn single_pass_recurrence(k: &[f32], v: &[f32], q: &[f32], state: &mut [f32], n: usize) -> Vec<f32> {\n    let mut out = vec![0.0f32; n];\n    for t in 0..n {\n        state[t % state.len()] += k[t] * v[t];\n        out[t] = state[t % state.len()] * q[t];\n    }\n    out\n}".to_string(),
+            opt_pattern: "// optimized: two chained passes with softmax bridge (Gated Slot Attention)\nfn two_pass_recurrence(k: &[f32], v: &[f32], s: &[f32], q: &[f32], gate: &[f32], k_state: &mut [f32], v_state: &mut [f32], n: usize) -> Vec<f32> {\n    let mut intermediate = vec![0.0f32; n];\n    // pass 1: K-state recurrence → intermediate scores\n    for t in 0..n {\n        let decay = gate[t].exp();\n        k_state[t % k_state.len()] = k_state[t % k_state.len()] * decay + k[t] * s[t];\n        intermediate[t] = k_state[t % k_state.len()] * q[t];\n    }\n    // softmax bridge\n    let max_val = intermediate.iter().copied().fold(f32::NEG_INFINITY, f32::max);\n    let sum: f32 = intermediate.iter().map(|x| (x - max_val).exp()).sum();\n    let probs: Vec<f32> = intermediate.iter().map(|x| (x - max_val).exp() / sum).collect();\n    // pass 2: V-state recurrence → final output\n    let mut out = vec![0.0f32; n];\n    for t in 0..n {\n        let decay = gate[t].exp();\n        v_state[t % v_state.len()] = v_state[t % v_state.len()] * decay + s[t] * v[t];\n        out[t] = v_state[t % v_state.len()] * probs[t];\n    }\n    out\n}".to_string(),
+        },
     ])
 }
 
@@ -321,8 +373,9 @@ mod tests {
         let corpus = build_kernel_seed_corpus();
         // Batch 1 (21): 2 original + 19 popcorn-distilled.
         // Batch 2 (7): flash-attention tiling.
-        // Total: 28.
-        assert_eq!(corpus.entries.len(), 28, "batches 1+2 should have 28 rules");
+        // Batch 3 (6): linear-attention recurrence.
+        // Total: 34.
+        assert_eq!(corpus.entries.len(), 34, "batches 1+2+3 should have 34 rules");
     }
 
     #[test]
@@ -478,5 +531,39 @@ mod tests {
         assert!(concepts.contains(&"causal matrix diagonal/off-diagonal splitting"));
         assert!(concepts.contains(&"shared-memory-aware tile sizing"));
         assert!(concepts.contains(&"KV block streaming through shared memory"));
+    }
+
+    #[test]
+    fn batch3_rules_present() {
+        // Verify the 6 batch-3 linear-attention recurrence rules are in the corpus.
+        let corpus = build_kernel_seed_corpus();
+        let ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        for expected in [
+            "state-forget-gate",
+            "householder-rank1-update",
+            "chunkwise-parallel-recurrence",
+            "recurrent-vs-chunk-dispatch",
+            "multi-write-per-step",
+            "chained-two-pass-recurrence",
+        ] {
+            assert!(
+                ids.contains(&expected),
+                "batch-3 rule '{expected}' missing from corpus"
+            );
+        }
+    }
+
+    #[test]
+    fn batch3_recurrence_concepts_covered() {
+        // Verify the linear-attention recurrence concepts are represented.
+        let corpus = build_kernel_seed_corpus();
+        let concepts: Vec<&str> =
+            corpus.entries.iter().map(|e| e.gpu_concept.as_str()).collect();
+        assert!(concepts.contains(&"exponential decay gate on recurrent state"));
+        assert!(concepts.contains(&"rank-1 Householder reflection state update"));
+        assert!(concepts.contains(&"chunkwise parallelism for state-carrying loops"));
+        assert!(concepts.contains(&"sequence-length-aware backend dispatch"));
+        assert!(concepts.contains(&"multiple state writes per timestep"));
+        assert!(concepts.contains(&"chained sequential recurrences with softmax bridge"));
     }
 }

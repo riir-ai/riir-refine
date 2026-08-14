@@ -9,7 +9,7 @@ space, drafts fixes via a modelless ternary SIMD matvec, and validates with a
 |---|---|---|---|
 | **clippy_lints** (default) | `clippy_lints` | ✅ Production | 10 common lints (style/complexity/perf/nursery) |
 | **rust_perf** (default since 2026-08-13) | `rust_perf` | ✅ Phase 2 (GOAT G1+G5 PASS, Bench 013 promotion + Bench 015 finalization + Bench 016 Issue 012 + Bench 017 Issue 013) | 46 rules from `rust-optimize` skill + nnethercote/perf-book + rustc-hash/bevy patterns (complexity/allocation/layout/concurrency/simd/arithmetic/iterators/dispatch/caching/io/bevy/wasm); 6 carry `context_notes` (2 ParetoDominated + 4 regime-fragile/Mixed in default config) |
-| **kernel_opt** (opt-in) | `kernel_heal` | ✅ Phase 3 + Batch 1-2 corpus | 28 rules (2 original + 26 popcorn-distilled, Research 002-003); full distillation ~300-500 rules in ~15-25 batches |
+| **kernel_opt** (opt-in) | `kernel_heal` | ✅ Phase 3 + Batch 1-3 corpus | 34 rules (2 original + 32 popcorn-distilled, Research 002-004); full distillation ~300-500 rules in ~15-25 batches |
 
 Heavyweight LoRA is the last-resort fallback, not the co-equal path.
 
@@ -83,7 +83,7 @@ src/
     │   ├── verify.rs   # cargo test re-run (behind rust_perf_verify)
     │   └── bench.rs    # perf-bench Pareto validator (behind rust_perf_bench, the GOAT gate)
     └── kernel_opt/     # feature "kernel_heal" (opt-in, 4090 DEFERRED)
-        ├── corpus.rs   # 28 rules (Batch 1+2: flash-attn tiling + memory/compute/fusion)
+        ├── corpus.rs   # 34 rules (Batch 1-3: flash-attn + recurrence + memory/compute/fusion)
         ├── router.rs   # KernelExpertRouter wraps pick_domain<4,5> (Plan 558)
         ├── thermal.rs  # Plasma→Hot→Warm→Cold→Freeze tier dispatch (returns Plasma)
         └── verify.rs   # compile-only stub (behind kernel_verify)

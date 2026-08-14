@@ -10,7 +10,7 @@
 | Component | Ships now | Deferred |
 |---|---|---|
 | `KernelOptDomain: HealDomain` | ✅ | |
-| Seed corpus (Batch 1-2: 28 rules) | ✅ | Full corpus (~300-500 rules, ~15-25 batches) |
+| Seed corpus (Batch 1-3: 34 rules) | ✅ | Full corpus (~300-500 rules, ~15-25 batches) |
 | `KernelExpertRouter` (`pick_domain`) | ✅ (identity directions) | Per-expert centroids from popcorn |
 | `KernelThermalRouter` (5-tier stub) | ✅ (returns Plasma) | Warm/Cold LoRA (4090, riir-train) |
 | `KernelVerifier` (compile-only) | ✅ (behind `kernel_verify`) | Full numeric compare vs reference |
@@ -20,7 +20,8 @@
 
 Batch 1 (Research 002): 21 rules — 2 original + 19 popcorn-distilled across 5 categories.
 Batch 2 (Research 003): 7 rules — flash-attention tiling patterns.
-Total: 28 rules. Full corpus target: ~300-500 rules in ~15-25 batches.
+Batch 3 (Research 004): 6 rules — linear-attention recurrence patterns.
+Total: 34 rules. Full corpus target: ~300-500 rules in ~15-25 batches.
 
 ### Category A: Memory access patterns (6 rules)
 
@@ -154,6 +155,17 @@ deferred (Proposal 012 §Phase 0). `is_full_validator_available()` returns
 | `causal-diag-offdiag-split` | causal matrix diagonal/off-diagonal splitting | Uniform precision → diagonal fp32 + off-diagonal bf16-safe |
 | `shared-mem-aware-tile` | shared-memory-aware tile sizing | Fixed tile → SM-aware (Hopper larger, Ampere smaller) |
 | `kv-block-streaming` | KV block streaming through shared memory | Full KV load → block streaming (O(block) shared mem) |
+
+### Category G: Linear-attention recurrence (Batch 3, 6 rules)
+
+| Rule ID | GPU concept | Pattern |
+|---|---|---|
+| `state-forget-gate` | exponential decay gate on recurrent state | Unbounded accumulation → `state *= gate.exp()` |
+| `householder-rank1-update` | rank-1 Householder reflection | General update → error-correcting delta rule |
+| `chunkwise-parallel-recurrence` | chunkwise parallelism for state-carrying loops | Fully sequential → chunk-parallel (intra-chunk matmul) |
+| `recurrent-vs-chunk-dispatch` | sequence-length-aware backend dispatch | Always chunk → recurrent for short, chunk for long |
+| `multi-write-per-step` | multiple state writes per timestep | Single write → N Householder writes under one gate (DeltaProduct) |
+| `chained-two-pass-recurrence` | chained sequential recurrences with softmax bridge | Single pass → K-state then V-state with softmax bridge (GSA) |
 
 ## Source
 
