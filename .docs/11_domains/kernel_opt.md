@@ -10,7 +10,7 @@
 | Component | Ships now | Deferred |
 |---|---|---|
 | `KernelOptDomain: HealDomain` | ✅ | |
-| Seed corpus (Batch 1-13: 119 rules; popcorn COMPLETE) | ✅ | Future source: new popcorn releases, real burn-cubecl kernels |
+| Seed corpus (Batch 1-14: 123 rules; popcorn COMPLETE; riir-gpu opened Batch 14) | ✅ | Future source: riir-gpu (~196K lines, mostly unmined), new popcorn releases |
 | `KernelExpertRouter` (`pick_domain`) | ✅ (8-dim activity, 15/15 reachable, Plan 004) | Mined centroids via `CommittedFieldBlend` |
 | `KernelThermalRouter` (5-tier stub) | ✅ (returns Plasma) | Warm/Cold LoRA (4090, riir-train) |
 | `KernelVerifier` (compile-only) | ✅ (behind `kernel_verify`) | Full numeric compare vs reference |
@@ -31,9 +31,10 @@ Batch 10 (Research 011): 12 rules — popcorn compute + chunked reduction + poly
 Batch 11 (Research 012): 11 rules — popcorn linear-attention recurrence family (gla, simple_gla, rwkv7, delta_rule, iplr_delta_rule, gated_oja_rule) + parallelism (chunk_global_cumsum, retention, lightning_attn) + flash-attn tiling (deltaformer) + compute (based, rebased, linear_attn) + dispatch (lightning_attn). A 12th candidate (chunk-reset-scan) was dropped as a duplicate of chunk-reset-cumsum (Batch 6).
 Batch 12 (Research 013): 14 rules — popcorn gated delta family (gated_delta_rule, gated_delta_product) + specialized recurrences (mesa_net, mesa_net_decode, titans_linear, ttt, rwkv4, rwkv6) + advanced attention (wall_attn, multi_token_attention) + MoE gate (momoe) + KDA gate (kda_gate, kda_gate_cumsum) + hierarchical mask (log_linear_attn). Three candidates (kda per-key-dim gate, forgetting_attn cumsum decay, abc two-state softmax) were dropped as duplicates.
 Batch 13 (Research 014): 6 rules — popcorn final unmined pass. RL loss stability (grpo_offpolicy: expm1 for KL cancellation) + complex-free RoPE (llama4_rope: paired reals) + multimodal RoPE (qwen2vl_mrope: cyclic modality table) + RWKV-7 channel mixing (rwkv7_channel_mixing: stateful cat-prefix shift + squared ReLU from sqrelu) + RWKV-7 gate output (rwkv7_gate_output: fused reduce-then-broadcast). rwkv7_k_update + sigmoid + tvd yielded no new rule.
-Total: 119 rules. Popcorn corpus distillation COMPLETE — every popcorn kernel file read.
+Batch 14 (Research 015): 4 rules — **first batch mining riir-gpu (the stack's own production kernels), not external libraries**. Norm-fold into matmul (gemv_q4k_batched_rmsnorm: fold inv_rms scalar into the GEMV dot) + reduction-split pre-pass (compute_inv_rms: scalar pre-pass + fold) + single-plane reduction (Issue 611 fix: one plane suffices vs N redundant planes) + CPU-bottleneck offload (gpu_transpose Issue 402: GPU compute kernel writes directly into pooled memory). Two riir-gpu files (lora_fused SGMV, rope_geglu section-view) assessed + dropped (SGMV overlaps MoE grouped; section-view is pointer arithmetic not an opt).
+Total: 123 rules. Popcorn corpus COMPLETE; riir-gpu (~196K lines) opened as the next distillation source.
 
-### Category A: Memory access patterns (6 rules)
+### Category A: Memory access patterns (7 rules)
 
 | Rule ID | GPU concept | Pattern |
 |---|---|---|
@@ -43,6 +44,7 @@ Total: 119 rules. Popcorn corpus distillation COMPLETE — every popcorn kernel 
 | `grid-stride-loop` | work distribution | Fixed one-thread-per-element → grid-stride for arbitrary n |
 | `gemm-tiling` | shared-memory tiling | Naive GEMM (global mem) → tiled GEMM (shared mem reuse) |
 | `masked-boundary-load` | boundary-safe memory access | Unchecked load → masked load with fallback |
+| `offload-cpu-bottleneck-to-gpu-kernel` | CPU→GPU data-prep offload | CPU transpose (674ms/step bottleneck) → GPU compute kernel writing into pooled memory (riir-gpu Issue 402) |
 
 ### Category B: Compute patterns (18 rules)
 
@@ -67,7 +69,7 @@ Total: 119 rules. Popcorn corpus distillation COMPLETE — every popcorn kernel 
 | `stateful-shift-via-cat-prefix` | cross-batch stateful shift | Zero-pad shift → `cat(x_prev, x[:-1])` (carries real cross-batch state) |
 | `squared-relu-activation` | sparse sharpening activation | `relu(x)` then square → fused `max(x,0)²` (zeros preserved, non-zeros sharpened) |
 
-### Category C: Fusion patterns (10 rules)
+### Category C: Fusion patterns (11 rules)
 
 | Rule ID | GPU concept | Pattern |
 |---|---|---|
@@ -81,6 +83,7 @@ Total: 119 rules. Popcorn corpus distillation COMPLETE — every popcorn kernel 
 | `gather-selective-reduction` | selective reduction | Full softmax → gather selected tokens only (GRPO) |
 | `fuse-gate-transform-chunk-cumsum` | gate + cumsum fusion | Separate gate + chunk cumsum → fused (no intermediate) |
 | `rkv-receptance-correction` | fused reduce-then-broadcast | 4-pass triple-mul+reduce+broadcast-mul+add → fused `(r·k·ρ).sum(keepdim)·v + o` |
+| `fold-norm-scalar-into-matmul` | norm-fold into matmul | Separate CPU norm pass + upload → fold inv_rms scalar into the GEMV dot product (riir-gpu gemv_q4k_rmsnorm, ~30s/step saved at 12B) |
 
 ### Category D: Dispatch patterns (8 rules)
 
@@ -95,7 +98,7 @@ Total: 119 rules. Popcorn corpus distillation COMPLETE — every popcorn kernel 
 | `dual-mode-gate-transform` | dual-mode gate dispatch | Hardcoded formula → unbounded softplus / bounded sigmoid by parameter |
 | `cyclic-modality-table-selection` | multimodal RoPE dispatch | Single RoPE table → split head_dim into sections, cyclic gather from N modality tables |
 
-### Category E: Parallelism patterns (6 rules)
+### Category E: Parallelism patterns (8 rules)
 
 | Rule ID | GPU concept | Pattern |
 |---|---|---|
@@ -104,7 +107,9 @@ Total: 119 rules. Popcorn corpus distillation COMPLETE — every popcorn kernel 
 | `backward-as-conjugate` | backward kernel reuse | Separate backward → forward with conjugate flag |
 | `reverse-scan-via-double-flip` | reverse-direction scan | Sequential reverse loop → flip+cumsum+flip (reuses forward scan) |
 | `pairwise-distance-decay-matrix` | decay matrix materialization | Sequential per-step decay → N×N matrix from arange distance |
-| `softmax-topk-renormalize-scatter` | MoE sparse gate | Dense gate → softmax+topk+renorm+scatter sparse gate matrix |
+| `softmax-topk-renormalize-scatter` | `MoE` sparse gate | Dense gate → softmax+topk+renorm+scatter sparse gate matrix |
+| `split-reduction-scalar-prepass` | reduction-split for fusion | CPU reduction + upload full tensor → scalar pre-pass (O(batch) output) + fold into main consumer (riir-gpu compute_inv_rms) |
+| `single-plane-sufficient-reduction` | redundant-plane elimination | N planes all computing identical sum → one plane (8× wasted FLOPs, riir-gpu Issue 611 fix) |
 
 ### Category F: Flash-attention tiling (10 rules)
 
@@ -160,7 +165,7 @@ pub fn route(&self, activity: &[f32; ACTIVITY_DIM]) -> usize {
 }
 ```
 
-**Plan 003 (2026-08-14):** router wired to the 119-rule corpus via 15 category
+**Plan 003 (2026-08-14):** router wired to the 123-rule corpus via 15 category
 experts. Each expert owns its category's `rule_ids` via `KERNEL_CATEGORIES`.
 - **Activity vector** = raw physical (kernel signature: `[M, N, K, dtype, hw,
   is_attention, is_fusion, is_ir_transform]` — 8-dim per Plan 004, normalized

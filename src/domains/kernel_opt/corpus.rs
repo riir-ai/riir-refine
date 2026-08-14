@@ -58,6 +58,15 @@
 //!   `sigmoid`) yielded no new rule; `tvd` was covered by `upcast-before-reduction`.
 //!   Corpus: **119 rules across 15 categories (A–O)**. Category B (compute) is now
 //!   the largest cluster at 18 rules.
+//! - **Batch 14 (Research 015):** 4 riir-gpu production rules — first batch mining
+//!   the stack's own kernels (not external libraries). Norm-fold into matmul
+//!   (`gemv_q4k_batched_rmsnorm`: fold `inv_rms` scalar into the GEMV dot),
+//!   reduction-split pre-pass (`compute_inv_rms`: scalar pre-pass + fold),
+//!   single-plane reduction (Issue 611 fix: one plane suffices), CPU-bottleneck
+//!   offload (`gpu_transpose`: GPU compute kernel into pooled memory). Two riir-gpu
+//!   files (`lora_fused`, `rope_geglu`) assessed + dropped (`SGMV` overlaps `MoE` grouped,
+//!   section-view is pointer arithmetic not an opt). Corpus: **123 rules across 15
+//!   categories (A–O)**. Opens riir-gpu (~196K lines) as the next distillation source.
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
@@ -1343,6 +1352,72 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
             ref_shape: "// naive: 4 separate passes — triple-mul, reduce, broadcast-mul, add+gate\nfn rkv_correction_naive(o: &[f32], r: &[f32], k: &[f32], r_k: &[f32], v: &[f32], g: &[f32], d: usize, n: usize) -> Vec<f32> {\n    // pass 1: elementwise r*k*r_k (materialized)\n    let mut triple = vec![0.0f32; n * d];\n    for i in 0..(n*d) { triple[i] = r[i] * k[i] * r_k[i]; }\n    // pass 2: reduce over head_dim (materialized scalar per head)\n    let mut reduced = vec![0.0f32; n];\n    for i in 0..n { for dd in 0..d { reduced[i] += triple[i*d+dd]; } }\n    // pass 3: broadcast-multiply by v (materialized)\n    let mut correction = vec![0.0f32; n * d];\n    for i in 0..n { for dd in 0..d { correction[i*d+dd] = reduced[i] * v[i*d+dd]; } }\n    // pass 4: add to o, gate by g\n    let mut out = vec![0.0f32; n * d];\n    for i in 0..(n*d) { out[i] = (o[i] + correction[i]) * g[i]; }\n    out\n}".to_string(),
             opt_pattern: "// optimized: fused reduce-then-broadcast (rwkv7_gate_output) — one pass\nfn rkv_correction_fused(o: &[f32], r: &[f32], k: &[f32], r_k: &[f32], v: &[f32], g: &[f32], d: usize, n: usize) -> Vec<f32> {\n    let mut out = vec![0.0f32; n * d];\n    for i in 0..n {\n        // reduce over head_dim: dot(r*k*r_k, all dims) — keepdim = scalar per head\n        let mut s = 0.0;\n        for dd in 0..d { s += r[i*d+dd] * k[i*d+dd] * r_k[i*d+dd]; }\n        // broadcast-multiply by v, add to o, gate by g — all inline, no intermediate\n        for dd in 0..d {\n            out[i*d+dd] = (o[i*d+dd] + s * v[i*d+dd]) * g[i*d+dd];\n        }\n    }\n    out\n}".to_string(),
         },
+        // Batch 14 (Research 015): riir-gpu production kernels — norm-fold into matmul,
+        // reduction-split pre-pass, single-plane reduction, CPU-bottleneck offload.
+        // 4 rules from 2 riir-gpu source files (the first batch mining the stack's own
+        // kernels, not external libraries).
+        // ════════════════════════════════════════════════════════════════════
+        // ── fold-norm-scalar-into-matmul — separate norm pass → scalar fold into GEMV dot (C) ──
+        // Source: riir-gpu gemv_q4k_batched_rmsnorm_cubecl.rs — the fused kernel folds
+        // `* inv_rms[pos] * gamma[col]` INTO the GEMV dot product. RMSNorm's inv_rms is a
+        // single scalar per position (shared across the hidden dim); multiplying it inline
+        // during the per-element accumulation adds 2 muls/element — negligible vs the
+        // dequant cost. Eliminates the CPU RMSNorm loop + the normed buffer upload
+        // (~30s/step saved at 12B). Distinct from `fuse-norm-act-linear` (fuses 3
+        // elementwise ops; this folds a reduction-derived scalar into a matmul).
+        KernelRule {
+            rule_id: "fold-norm-scalar-into-matmul".to_string(),
+            gpu_concept: "fold normalization scalar (inv_rms) into the matmul dot product — norm becomes 2 inline multiplies".to_string(),
+            ref_shape: "// naive: separate CPU RMSNorm pass → normed buffer → upload → GPU GEMV\nfn rmsnorm_then_gemv_naive(input: &[f32], gamma: &[f32], weight: &[f32], inv_rms: &[f32], m: usize, n: usize, batch: usize) -> Vec<f32> {\n    // pass 1 (CPU): normed[pos][i] = input[pos][i] * inv_rms[pos] * gamma[i]\n    let mut normed = vec![0.0f32; batch * n];\n    for pos in 0..batch { for i in 0..n {\n        normed[pos*n + i] = input[pos*n + i] * inv_rms[pos] * gamma[i];\n    } }\n    // pass 2 (GPU GEMV): output[pos][row] = sum_col weight[row][col] * normed[pos][col]\n    let mut out = vec![0.0f32; batch * m];\n    for pos in 0..batch { for row in 0..m {\n        let mut acc = 0.0;\n        for col in 0..n { acc += weight[row*n + col] * normed[pos*n + col]; }\n        out[pos*m + row] = acc;\n    } }\n    out // requires uploading `normed` (batch * n * 4 bytes) to GPU\n}".to_string(),
+            opt_pattern: "// optimized: fold inv_rms * gamma INTO the GEMV dot (riir-gpu gemv_q4k_rmsnorm)\nfn gemv_with_inline_norm(input: &[f32], gamma: &[f32], weight: &[f32], inv_rms: &[f32], m: usize, n: usize, batch: usize) -> Vec<f32> {\n    let mut out = vec![0.0f32; batch * m];\n    for pos in 0..batch { for row in 0..m {\n        let mut acc = 0.0;\n        for col in 0..n {\n            // 2 extra multiplies/element — negligible vs dequant; same memory pattern\n            let normed_input = input[pos*n + col] * inv_rms[pos] * gamma[col];\n            acc += weight[row*n + col] * normed_input;\n        }\n        out[pos*m + row] = acc;\n    } }\n    out // NO normed buffer, NO upload — input stays raw on GPU from prior layer\n}".to_string(),
+        },
+        // ── split-reduction-scalar-prepass — fused reduction+consumer → scalar pre-pass + fold (E) ──
+        // Source: riir-gpu gemv_q4k_batched_rmsnorm_cubecl.rs — `compute_inv_rms` (tiny
+        // pre-pass: input[batch×n] → inv_rms[batch], 1 scalar/position) then the fused GEMV
+        // that consumes the scalar. The split is required because the GEMV's per-element
+        // accumulation can't see the reduction result without a cross-warp barrier. The
+        // pre-pass writes O(batch) scalars (not O(batch×hidden) tensors), so it's cheap.
+        // General principle: when a reduction's output is tiny, split + fold the scalar.
+        // Distinct from `shift-via-pad-subtract` (avoids a two-pass) + `chunk-split-mean-pool`
+        // (splits a tensor into chunks; this splits a reduction FROM its consumer).
+        KernelRule {
+            rule_id: "split-reduction-scalar-prepass".to_string(),
+            gpu_concept: "split a reduction whose output is a tiny scalar into a pre-pass, fold the scalar into the main consumer".to_string(),
+            ref_shape: "// naive: compute the reduction (e.g. mean-of-squares for RMSNorm) on CPU, upload the full normed tensor\nfn norm_on_cpu_then_gpu_matmul(input: &[f32], gamma: &[f32], weight: &[f32], m: usize, n: usize, batch: usize) -> Vec<f32> {\n    // CPU computes the full reduction + normalization (slow: O(batch*n) CPU work)\n    let mut normed = vec![0.0f32; batch * n];\n    for pos in 0..batch {\n        let mut sum_sq = 0.0;\n        for i in 0..n { sum_sq += input[pos*n + i] * input[pos*n + i]; }\n        let inv_rms = 1.0 / (sum_sq / n as f32 + 1e-6).sqrt();\n        for i in 0..n { normed[pos*n + i] = input[pos*n + i] * inv_rms * gamma[i]; }\n    }\n    // then GPU matmul on the uploaded normed tensor\n    let mut out = vec![0.0f32; batch * m];\n    for pos in 0..batch { for row in 0..m {\n        let mut acc = 0.0;\n        for col in 0..n { acc += weight[row*n + col] * normed[pos*n + col]; }\n        out[pos*m + row] = acc;\n    } }\n    out\n}".to_string(),
+            opt_pattern: "// optimized: split — scalar pre-pass (GPU) + fused main pass that folds the scalar (riir-gpu)\nfn split_prepass_then_fused_main(input: &[f32], gamma: &[f32], weight: &[f32], m: usize, n: usize, batch: usize) -> Vec<f32> {\n    // PRE-PASS (GPU dispatch 1): reduce input[batch×n] → inv_rms[batch] (O(batch) scalars)\n    let mut inv_rms = vec![0.0f32; batch];\n    for pos in 0..batch {\n        let mut sum_sq = 0.0;\n        for i in 0..n { sum_sq += input[pos*n + i] * input[pos*n + i]; }\n        inv_rms[pos] = 1.0 / (sum_sq / n as f32 + 1e-6).sqrt();\n    }\n    // MAIN PASS (GPU dispatch 2): fused GEMV + inline norm (folds the scalar, see fold-norm rule)\n    let mut out = vec![0.0f32; batch * m];\n    for pos in 0..batch { for row in 0..m {\n        let mut acc = 0.0;\n        for col in 0..n {\n            acc += weight[row*n + col] * input[pos*n + col] * inv_rms[pos] * gamma[col];\n        }\n        out[pos*m + row] = acc;\n    } }\n    out // NO full-normed-tensor upload — only O(batch) scalars cross the pre-pass boundary\n}".to_string(),
+        },
+        // ── single-plane-sufficient-reduction — N redundant planes → one plane (E) ──
+        // Source: riir-gpu gemv_q4k_batched_rmsnorm_cubecl.rs Issue 611 — the original
+        // `compute_inv_rms` launched CubeDim::new_1d(256) = 8 planes × 32 lanes. All 8
+        // planes independently strided over the same n elements + each called plane_sum
+        // (which only reduces within a plane) → 8× wasted work + 8 threads wrote the same
+        // value (benign race, correct result, 8× the FLOPs). Fix: CubeDim::new_1d(32) —
+        // one plane's 32 lanes stride by PLANE_DIM to cover all n, then plane_sum reduces
+        // exactly the contributing lanes. When a reduction fits in one plane, launch one.
+        // Distinct from `multi-dim-grid-launch`/`block-count-clamp` (those are block/grid
+        // axes; this is the plane/warp axis WITHIN a block).
+        KernelRule {
+            rule_id: "single-plane-sufficient-reduction".to_string(),
+            gpu_concept: "one plane (warp) suffices for a cooperative reduction — do not launch N redundant planes that recompute the identical sum".to_string(),
+            ref_shape: "// naive: launch N planes that ALL redundantly compute the identical reduction (Issue 611)\nfn reduce_with_redundant_planes(input: &[f32], n: usize, batch: usize, plane_dim: usize, n_planes: usize) -> Vec<f32> {\n    // dispatch: CubeDim::new_1d(plane_dim * n_planes) — e.g. 256 = 8 planes × 32 lanes\n    let threads_per_cube = plane_dim * n_planes;\n    let mut out = vec![0.0f32; batch];\n    for pos in 0..batch {\n        for plane in 0..n_planes { // each plane independently does the FULL reduction\n            let mut partial = 0.0;\n            // each lane in this plane strides by plane_dim to cover all n\n            for lane in 0..plane_dim {\n                let col = lane;\n                if col < n { partial += input[pos*n + col]; }\n            }\n            let plane_sum_val = partial; // plane_sum reduces within this plane\n            if plane == 0 { out[pos] = plane_sum_val; } // only plane 0 writes (others wasted)\n        }\n    }\n    out // n_planes× wasted FLOPs — all planes computed the same sum\n}".to_string(),
+            opt_pattern: "// optimized: one plane suffices (riir-gpu Issue 611 fix) — CubeDim::new_1d(plane_dim)\nfn reduce_single_plane(input: &[f32], n: usize, batch: usize, plane_dim: usize) -> Vec<f32> {\n    // dispatch: CubeDim::new_1d(plane_dim) — e.g. 32 lanes = 1 plane\n    let mut out = vec![0.0f32; batch];\n    for pos in 0..batch {\n        let mut partial = 0.0;\n        // the plane's lanes stride by plane_dim to cover all n columns\n        let mut col = 0;\n        while col < n {\n            partial += input[pos*n + col];\n            col += plane_dim;\n        }\n        let plane_sum_val = partial; // plane_sum reduces exactly the lanes that contributed\n        out[pos] = plane_sum_val; // one write, no redundant planes\n    }\n    out // 1× the work — the 32 lanes cover all n via the stride\n}".to_string(),
+        },
+        // ── offload-cpu-bottleneck-to-gpu-kernel — CPU data-prep → GPU compute into pooled memory (A) ──
+        // Source: riir-gpu gpu_transpose.rs Issue 402 Phase 9h — the LM head weight matrix
+        // (640 MB at 0.40B, 163840×1024 aspect) took 674 ms/step on M3 Max CPU due to
+        // scattered cache writes. Fix: upload raw (non-transposed) via write_buffer into a
+        // staging GPU buffer (sequential write — fast), then a tiled WGSL compute kernel
+        // reads staging + writes transposed DIRECTLY into the CubeCL-pooled target buffer
+        // (the same memory WeightBufferSlot caches). The transform becomes a GPU dispatch
+        // instead of a CPU stall + upload. Distinct from `contiguity-guard-before-reshape`
+        // (skip the copy when already contiguous — opposite: this does the copy on GPU
+        // when the CPU copy is the bottleneck).
+        KernelRule {
+            rule_id: "offload-cpu-bottleneck-to-gpu-kernel".to_string(),
+            gpu_concept: "when CPU data-prep (transpose, permute, format convert) is the bottleneck, run a GPU compute kernel that writes directly into pooled memory".to_string(),
+            ref_shape: "// naive: CPU transposes the weight matrix, then uploads the transposed result\nfn cpu_transpose_then_upload(weight: &[f32], rows: usize, cols: usize) -> Vec<f32> {\n    // CPU transpose — O(rows*cols) scattered writes, cache-unfriendly for extreme aspect ratios\n    // (e.g. 163840×1024 = 640 MB → 674 ms/step on M3 Max due to cache miss storms)\n    let mut transposed = vec![0.0f32; rows * cols];\n    for r in 0..rows { for c in 0..cols {\n        transposed[c*rows + r] = weight[r*cols + c]; // scattered write — cache killer\n    } }\n    transposed // then upload this (sequential, but the CPU step already dominated)\n}".to_string(),
+            opt_pattern: "// optimized: GPU compute kernel transposes into pooled memory (riir-gpu Issue 402)\nfn gpu_transpose_into_pooled(weight: &[f32], rows: usize, cols: usize) -> Vec<f32> {\n    // step 1: upload RAW (non-transposed) weight via write_buffer — sequential write, fast\n    let staging = weight.to_vec(); // (on GPU: queue.write_buffer into staging buffer)\n    // step 2: tiled GPU compute kernel reads staging, writes transposed into pooled target\n    let tile = 32;\n    let mut transposed = vec![0.0f32; rows * cols];\n    for tr in (0..rows).step_by(tile) { for tc in (0..cols).step_by(tile) {\n        // one workgroup per tile — coalesced read + coalesced write\n        for dr in 0..tile { for dc in 0..tile {\n            let r = tr + dr; let c = tc + dc;\n            if r < rows && c < cols {\n                transposed[c*rows + r] = staging[r*cols + c]; // writes into pooled memory directly\n            }\n        } }\n    } }\n    transposed // the CPU stall is gone — the transform is a GPU dispatch\n}".to_string(),
+        },
     ])
 }
 
@@ -1363,7 +1438,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (6 rules)
+    // A: Memory access patterns (7 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -1374,6 +1449,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "grid-stride-loop",
             "gemm-tiling",
             "masked-boundary-load",
+            "offload-cpu-bottleneck-to-gpu-kernel",
         ],
     ),
     // B: Compute patterns (18 rules)
@@ -1401,7 +1477,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "squared-relu-activation",
         ],
     ),
-    // C: Fusion patterns (10 rules)
+    // C: Fusion patterns (11 rules)
     (
         KernelCategory::Fusion,
         "C: fusion",
@@ -1416,6 +1492,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "gather-selective-reduction",
             "fuse-gate-transform-chunk-cumsum",
             "rkv-receptance-correction",
+            "fold-norm-scalar-into-matmul",
         ],
     ),
     // D: Dispatch patterns (8 rules)
@@ -1433,7 +1510,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "cyclic-modality-table-selection",
         ],
     ),
-    // E: Parallelism patterns (6 rules)
+    // E: Parallelism patterns (8 rules)
     (
         KernelCategory::Parallelism,
         "E: parallelism",
@@ -1444,6 +1521,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "reverse-scan-via-double-flip",
             "pairwise-distance-decay-matrix",
             "softmax-topk-renormalize-scatter",
+            "split-reduction-scalar-prepass",
+            "single-plane-sufficient-reduction",
         ],
     ),
     // F: Flash-attention tiling (10 rules)
@@ -1594,7 +1673,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
 /// Returns 15 buckets (one per category), each containing the `KernelRule`s whose
 /// `rule_id` appears in that category's slice of [`KERNEL_CATEGORIES`]. This is
 /// the category-scoped view of the corpus — a future heal pipeline can consult
-/// the routed expert's rules first without scanning all 99.
+/// the routed expert's rules first without scanning all 123.
 ///
 /// # Allocation
 ///
@@ -1654,8 +1733,9 @@ mod tests {
         // Batch 11 (11): popcorn linear-attention recurrence family (gla, simple_gla, based, rebased, linear_attn, retention, lightning_attn, rwkv7, delta_rule, iplr_delta_rule, gated_oja_rule, deltaformer, chunk_global_cumsum, chunk_local_cumsum).
         // Batch 12 (14): popcorn gated delta + specialized recurrence + advanced attention (gated_delta_rule, gated_delta_product, mesa_net, mesa_net_decode, titans_linear, ttt, rwkv4, rwkv6, wall_attn, multi_token_attention, momoe, kda_gate, kda_gate_cumsum, log_linear_attn).
         // Batch 13 (6): popcorn final pass — RL loss stability (grpo_offpolicy), complex-free RoPE (llama4_rope), multimodal RoPE (qwen2vl_mrope), RWKV-7 channel mixing + gate output (rwkv7_channel_mixing, rwkv7_gate_output, sqrelu).
-        // Total: 119.
-        assert_eq!(corpus.entries.len(), 119, "batches 1-13 should have 119 rules");
+        // Batch 14 (4): riir-gpu production kernels — norm-fold into matmul, reduction-split pre-pass, single-plane reduction, CPU-bottleneck offload (gemv_q4k_batched_rmsnorm_cubecl, gpu_transpose).
+        // Total: 123.
+        assert_eq!(corpus.entries.len(), 123, "batches 1-14 should have 123 rules");
     }
 
     #[test]
@@ -2177,6 +2257,41 @@ mod tests {
     }
 
     // ════════════════════════════════════════════════════════════════════
+    // Batch 14 (Research 015) — riir-gpu production kernels: norm-fold + reduction-split + single-plane + CPU-offload
+    // ════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn batch14_rules_present() {
+        // Verify the 4 batch-14 rules across C/E/A.
+        let corpus = build_kernel_seed_corpus();
+        let ids: Vec<&str> =
+            corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        // Category C (1 new): fold norm scalar into matmul
+        assert!(ids.contains(&"fold-norm-scalar-into-matmul"), "fold norm into gemv");
+        // Category E (2 new): reduction-split pre-pass + single-plane reduction
+        assert!(ids.contains(&"split-reduction-scalar-prepass"), "scalar pre-pass");
+        assert!(ids.contains(&"single-plane-sufficient-reduction"), "single plane");
+        // Category A (1 new): offload CPU bottleneck to GPU kernel
+        assert!(ids.contains(&"offload-cpu-bottleneck-to-gpu-kernel"), "cpu offload");
+    }
+
+    #[test]
+    fn batch14_norm_fold_reduction_split_offload_concepts_covered() {
+        // Verify the batch-14 norm-fold + reduction-split + single-plane + offload concepts.
+        let corpus = build_kernel_seed_corpus();
+        let concepts: Vec<&str> =
+            corpus.entries.iter().map(|e| e.gpu_concept.as_str()).collect();
+        // Category C: fold norm scalar into matmul (riir-gpu gemv_q4k_rmsnorm)
+        assert!(concepts.contains(&"fold normalization scalar (inv_rms) into the matmul dot product — norm becomes 2 inline multiplies"));
+        // Category E: split reduction into scalar pre-pass (riir-gpu compute_inv_rms)
+        assert!(concepts.contains(&"split a reduction whose output is a tiny scalar into a pre-pass, fold the scalar into the main consumer"));
+        // Category E: single-plane sufficient reduction (riir-gpu Issue 611)
+        assert!(concepts.contains(&"one plane (warp) suffices for a cooperative reduction — do not launch N redundant planes that recompute the identical sum"));
+        // Category A: offload CPU bottleneck to GPU kernel (riir-gpu gpu_transpose)
+        assert!(concepts.contains(&"when CPU data-prep (transpose, permute, format convert) is the bottleneck, run a GPU compute kernel that writes directly into pooled memory"));
+    }
+
+    // ════════════════════════════════════════════════════════════════════
     // Plan 003 — Router ↔ corpus wiring tests
     // ════════════════════════════════════════════════════════════════════
 
@@ -2218,13 +2333,13 @@ mod tests {
 
     #[test]
     fn kernel_categories_counts_match_plan_003_table() {
-        // Pin per-category rule counts to the Plan 003 table (updated for Batch 13).
+        // Pin per-category rule counts to the Plan 003 table (updated for Batch 14).
         let expected = [
-            (KernelCategory::MemoryAccess, 6),
+            (KernelCategory::MemoryAccess, 7),
             (KernelCategory::Compute, 18),
-            (KernelCategory::Fusion, 10),
+            (KernelCategory::Fusion, 11),
             (KernelCategory::Dispatch, 8),
-            (KernelCategory::Parallelism, 6),
+            (KernelCategory::Parallelism, 8),
             (KernelCategory::FlashAttnTiling, 10),
             (KernelCategory::LinearAttnRecurrence, 17),
             (KernelCategory::MoeDispatchBackward, 9),
@@ -2243,9 +2358,9 @@ mod tests {
                 "Plan 003: category {cat:?} has {} rules, expected {count}",
                 entry.2.len());
         }
-        // Sum must equal 119.
+        // Sum must equal 123.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 119, "Plan 003: category totals must sum to 119");
+        assert_eq!(total, 123, "Plan 003: category totals must sum to 123");
     }
 
     #[test]
@@ -2255,7 +2370,7 @@ mod tests {
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 119, "Plan 003: grouped corpus has {total} rules, expected 119");
+        assert_eq!(total, 123, "Plan 003: grouped corpus has {total} rules, expected 123");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");
