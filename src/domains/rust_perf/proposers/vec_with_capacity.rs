@@ -2,9 +2,7 @@
 //!
 //! Pattern: a `let mut v = Vec::new();` (or `vec![]`) binding followed, in
 //! the same block, by a `for` loop that pushes to `v`. The capacity hint is
-//! inferred from the loop header — only forms with an unambiguous capacity
-//! source rewrite (an incorrect `.len()` on a type that has none would
-//! produce code that doesn't compile):
+//! inferred from the loop header:
 //!
 //! | Loop header | Capacity |
 //! |---|---|
@@ -17,26 +15,63 @@
 //! source). A shadowing re-`let` of `v` between binding and loop stops the
 //! scan — the pushes may belong to the shadow.
 //!
+//! ## Parse-only safety gates (Plan 005 T6.2 / Bench 019 G5)
+//!
+//! The proposer has no type checker, so a rewrite is only emitted when the
+//! capacity is **provably usize and in scope at the init position** by
+//! syntax alone. Both gates below were added after a real-file G5 run on
+//! katgpt-pruners caught compile breaks the 36 fixtures missed:
+//!
+//! 1. **Scope gate** — the rewritten init sits at the binding, but the
+//!    capacity expression may reference a `let` declared LATER in the block
+//!    (`E0425`: `Vec::with_capacity(min_regions)` one line before
+//!    `let min_regions = ...`). Any single-segment path in the capacity
+//!    expression that is let-bound anywhere after the vec binding skips
+//!    the rewrite. (Shadowing ambiguity is resolved conservatively:
+//!    module-level consts sharing a name with a later `let` are skipped
+//!    too.)
+//! 2. **usize gate** — `with_capacity` takes `usize`, but a range bound
+//!    can be any integer type (`E0308`: `0..BOARD_SIZE` with a `u8` const
+//!    — the literal `0` infers to `u8` in the range but `with_capacity`
+//!    rejects it). Only these forms are provably usize:
+//!    - an integer literal,
+//!    - `<expr>.len()` (the std `len` convention; a custom non-usize
+//!      `len` is out of scope for this rule),
+//!    - usize-preserving arithmetic (`.saturating_sub/.saturating_add/
+//!      .wrapping_sub/.wrapping_add`) on a provably-usize receiver with
+//!      an integer-literal argument,
+//!    - a plain path naming a fn param explicitly annotated `usize`.
+//!      Plain-path bounds that are consts, associated consts, or locals
+//!      (`0..n` where `n` is a `let`) are skipped — syn cannot know their
+//!      type.
+//!
 //! Span-preserving: the edit replaces exactly the `Vec::new()` init text;
 //! the capacity fragment is the ORIGINAL source text of the inferred node.
 
 use super::{edit, src, SourceEdit};
 use syn::visit::Visit;
-use syn::{Expr, ExprLit, File, Lit, Local, Pat, RangeLimits, Stmt};
+use syn::{Expr, ExprLit, File, Lit, Local, Pat, RangeLimits, Signature, Stmt};
 
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
     let mut edits = Vec::new();
-    super::for_each_fn(file, |_sig, block| {
-        collect_block_edits(source, block, &mut edits);
+    super::for_each_fn(file, |sig, block| {
+        collect_block_edits(source, sig, block, &mut edits);
     });
     edits
 }
 
-fn collect_block_edits(source: &str, block: &syn::Block, edits: &mut Vec<SourceEdit>) {
+fn collect_block_edits(source: &str, sig: &Signature, block: &syn::Block, edits: &mut Vec<SourceEdit>) {
     let stmts = &block.stmts;
+    let usize_params = usize_typed_params(sig);
     for (i, stmt) in stmts.iter().enumerate() {
         let Stmt::Local(local) = stmt else { continue };
         let Some(ident) = fresh_vec_binding(local) else { continue };
+        // Idents let-bound at this block level after the vec binding: none of
+        // them are in scope at the init position (scope gate).
+        let later_bound: Vec<String> = stmts[i + 1..]
+            .iter()
+            .filter_map(stmt_local_ident)
+            .collect();
         for later in stmts.iter().skip(i + 1) {
             // Stop at a shadowing re-bind of the same ident: pushes after it
             // may belong to the shadow, not the binding we'd rewrite.
@@ -44,7 +79,8 @@ fn collect_block_edits(source: &str, block: &syn::Block, edits: &mut Vec<SourceE
                 break;
             }
             if let Some(cap) = loop_capacity(later, ident) {
-                if let Some(replacement) = cap_replacement(source, &cap) {
+                if let Some(replacement) = cap_replacement(source, &cap, &usize_params, &later_bound)
+                {
                     if let Some(init) = &local.init {
                         edits.push(edit(&init.expr, replacement));
                     }
@@ -91,6 +127,43 @@ fn fresh_vec_binding(local: &Local) -> Option<&syn::Ident> {
         }
         _ => None,
     }
+}
+
+/// If `stmt` is a `let`, the first bound ident (for the later-bound set).
+fn stmt_local_ident(stmt: &Stmt) -> Option<String> {
+    let Stmt::Local(local) = stmt else { return None };
+    first_pat_ident(&local.pat)
+}
+
+/// First `Pat::Ident` bound anywhere in the pattern (tuple/struct patterns
+/// included).
+fn first_pat_ident(pat: &Pat) -> Option<String> {
+    match pat {
+        Pat::Ident(pi) => Some(pi.ident.to_string()),
+        Pat::Or(po) => po.cases.iter().find_map(first_pat_ident),
+        Pat::Tuple(pt) => pt.elems.iter().find_map(first_pat_ident),
+        Pat::Reference(pr) => first_pat_ident(&pr.pat),
+        Pat::Slice(ps) => ps.elems.iter().find_map(first_pat_ident),
+        Pat::Struct(ps) => ps.fields.iter().find_map(|pf| first_pat_ident(&pf.pat)),
+        Pat::Type(pt) => first_pat_ident(&pt.pat),
+        _ => None,
+    }
+}
+
+/// Params explicitly annotated `usize` (provably-usize plain paths).
+fn usize_typed_params(sig: &Signature) -> Vec<String> {
+    let mut out = Vec::new();
+    for arg in &sig.inputs {
+        let syn::FnArg::Typed(pt) = arg else { continue };
+        let syn::Type::Path(tp) = &*pt.ty else { continue };
+        let is_usize = tp.path.segments.len() == 1 && tp.path.segments[0].ident == "usize";
+        if is_usize {
+            if let Some(name) = first_pat_ident(&pt.pat) {
+                out.push(name);
+            }
+        }
+    }
+    out
 }
 
 /// Does this stmt re-bind `ident` (any mutability)?
@@ -156,12 +229,87 @@ fn capacity_from_iter(expr: &Expr) -> Option<Cap> {
 }
 
 /// Build `Vec::with_capacity(<cap text>)` from the ORIGINAL source text of
-/// the capacity node.
-fn cap_replacement(source: &str, cap: &Cap) -> Option<String> {
-    match cap {
-        Cap::Node(node) => Some(format!("Vec::with_capacity({})", src(source, node)?)),
-        Cap::NodePlusOne(node) => Some(format!("Vec::with_capacity({} + 1)", src(source, node)?)),
-        Cap::LenOf(node) => Some(format!("Vec::with_capacity({}.len())", src(source, node)?)),
+/// the capacity node, gated by the parse-only safety checks (scope + usize).
+fn cap_replacement(
+    source: &str,
+    cap: &Cap,
+    usize_params: &[String],
+    later_bound: &[String],
+) -> Option<String> {
+    let node = match cap {
+        Cap::Node(node) => {
+            if !capacity_is_usize(node, usize_params) || references_later_let(node, later_bound) {
+                return None;
+            }
+            format!("Vec::with_capacity({})", src(source, node)?)
+        }
+        Cap::NodePlusOne(node) => {
+            if !capacity_is_usize(node, usize_params) || references_later_let(node, later_bound) {
+                return None;
+            }
+            format!("Vec::with_capacity({} + 1)", src(source, node)?)
+        }
+        // The emitted text is `<node>.len()` — always usize; the receiver
+        // still must not reference a later `let`.
+        Cap::LenOf(node) => {
+            if references_later_let(node, later_bound) {
+                return None;
+            }
+            format!("Vec::with_capacity({}.len())", src(source, node)?)
+        }
+    };
+    Some(node)
+}
+
+/// Parse-only usize proof (see module docs for the whitelist).
+fn capacity_is_usize(expr: &Expr, usize_params: &[String]) -> bool {
+    match expr {
+        Expr::Lit(ExprLit { lit: Lit::Int(_), .. }) => true,
+        // `x.len()` — usize by the std `len` convention.
+        Expr::MethodCall(mc) if mc.method == "len" && mc.args.is_empty() => true,
+        // usize-preserving arithmetic on a usize base with a literal arg.
+        Expr::MethodCall(mc)
+            if matches!(
+                mc.method.to_string().as_str(),
+                "saturating_sub" | "saturating_add" | "wrapping_sub" | "wrapping_add"
+            ) && mc.args.len() == 1
+                && matches!(mc.args.first(), Some(Expr::Lit(ExprLit { lit: Lit::Int(_), .. })))
+                && capacity_is_usize(&mc.receiver, usize_params) =>
+        {
+            true
+        }
+        // A plain path is usize only when it names an explicitly-`usize`
+        // fn param. Consts / locals / associated consts are type-blind.
+        Expr::Path(p) => p
+            .path
+            .get_ident()
+            .is_some_and(|i| usize_params.iter().any(|param| param == &i.to_string())),
+        _ => false,
+    }
+}
+
+/// Does the expression reference a single-segment path that is let-bound
+/// later in the block (i.e. NOT in scope at the init position)?
+fn references_later_let(expr: &Expr, later_bound: &[String]) -> bool {
+    let mut scan = LaterLetScan { later_bound, found: false };
+    scan.visit_expr(expr);
+    scan.found
+}
+
+struct LaterLetScan<'a> {
+    later_bound: &'a [String],
+    found: bool,
+}
+
+impl<'ast> Visit<'ast> for LaterLetScan<'_> {
+    fn visit_expr_path(&mut self, p: &'ast syn::ExprPath) {
+        if let Some(ident) = p.path.get_ident() {
+            if self.later_bound.iter().any(|n| n == &ident.to_string()) {
+                self.found = true;
+                return;
+            }
+        }
+        syn::visit::visit_expr_path(self, p);
     }
 }
 
@@ -263,15 +411,67 @@ mod tests {
     }
 
     #[test]
-    fn complex_capacity_expression_preserved() {
-        // The capacity node's ORIGINAL text (a call expr) is reused verbatim.
+    fn len_rooted_arithmetic_is_usize() {
+        // `.len()`-rooted `saturating_sub(<literal>)` is usize by construction
+        // (the katgpt-pruners bandit_bridge / path_sampler shape).
         let out = propose_fix(
+            "vec-with-capacity",
+            "fn build(t: &Trajectory) -> Vec<u32> {\n    let mut v = Vec::new();\n    \
+             for i in 0..t.path.len().saturating_sub(1) { v.push(i as u32); }\n    v\n}",
+        )
+        .expect("pattern matched");
+        assert!(
+            squash(&out).contains(&squash("Vec::with_capacity(t.path.len().saturating_sub(1))")),
+            "{out}"
+        );
+    }
+
+    #[test]
+    fn later_let_bound_skipped() {
+        // G5 scope-gate: the capacity text would land BEFORE `min_regions`'s
+        // `let` (E0425) — the katgpt-pruners bfcp_region_cache shape.
+        assert!(propose_fix(
+            "vec-with-capacity",
+            "fn build(a: &[u32], b: &[u32]) -> Vec<u32> {\n    let mut v = Vec::new();\n    \
+             let m = a.len().min(b.len());\n    for i in 0..m { v.push(a[i]); }\n    v\n}",
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn later_let_bound_len_form_skipped() {
+        // Same scope gate for the LenOf form (`&items` where `items` is a
+        // later `let`) — the katgpt-pruners reflection.rs shape.
+        assert!(propose_fix(
+            "vec-with-capacity",
+            "fn build(pairs: &[u32]) -> Vec<u32> {\n    let mut v = Vec::new();\n    \
+             let items: Vec<u32> = pairs.to_vec();\n    for x in &items { v.push(*x); }\n    v\n}",
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn non_usize_param_bound_skipped() {
+        // G5 usize gate: `n: u32` is a plain path that is provably NOT usize.
+        assert!(propose_fix(
+            "vec-with-capacity",
+            "fn build(n: u32) -> Vec<u32> {\n    let mut v = Vec::new();\n    \
+             for i in 0..n { v.push(i); }\n    v\n}",
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn method_bound_not_len_skipped() {
+        // `cfg.count()` is not parse-only-provably usize (G5 usize gate) —
+        // the katgpt-pruners map_generator `num_floors.saturating_sub(1)`
+        // class: arithmetic on a plain-path receiver.
+        assert!(propose_fix(
             "vec-with-capacity",
             "fn build(cfg: &Cfg) -> Vec<u32> {\n    let mut v = Vec::new();\n    \
              for i in 0..cfg.count() { v.push(i as u32); }\n    v\n}",
         )
-        .expect("pattern matched");
-        assert!(squash(&out).contains("Vec::with_capacity(cfg.count())"), "{out}");
+        .is_none());
     }
 
     #[test]

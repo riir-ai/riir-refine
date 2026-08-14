@@ -102,11 +102,13 @@ edit splice (Bench 019, G1–G4 PASS). **T6.4 (2026-08-14)** migrated the
 10 clippy_lints proposers to the same emitter — shared substrate in
 `src/edit_emitter.rs` (feature-neutral, re-exported by both domains),
 `propose_fix` signature preserved for `self_evolve`, `--fix` extended to
-the **7 structural** clippy lints (`FIXABLE_LINTS`; needless_return,
-redundant_closure, redundant_field_names, manual_map, unnecessary_unwrap,
-needless_range_loop, needless_lifetimes) with bounded-fixpoint application
-so nested fixes compose; the 3 type-blind lints (needless_borrow,
-useless_conversion, unnecessary_mut_passed) stay `self_evolve`-only.
+the structural clippy lints (`FIXABLE_LINTS`; needless_return,
+redundant_field_names, manual_map, unnecessary_unwrap,
+needless_range_loop, needless_lifetimes — 6) with bounded-fixpoint
+application so nested fixes compose; the type-blind lints
+(needless_borrow, useless_conversion, unnecessary_mut_passed, and
+redundant_closure — demoted from FIXABLE by the T6.2 G5 real-file run
+after it caught an E0631 fn-path coercion break) stay `self_evolve`-only.
 The migration fixed four latent detection bugs in the old mutation-based
 proposers (needless_lifetimes elision unsoundness incl. `FnMut(&'a S)`
 positions + receivers; needless_range_loop `&v`-on-ref-param `&&Vec`
@@ -187,9 +189,13 @@ annotation, NOT a gate (empirical finding — the 8-D structural centroids
 mis-routed fixtures, starving the correct domain; re-gating via tuned
 centroids or the 768-D embedder is a future tuning option). Each domain is
 still feature-selected; requesting a feature-off domain is a hard error.
-The bin stays **suggest-only** — the Phase 4 rust_perf `propose_fix`
-proposers landed as library code; the `--fix` CLI wiring + the G5
-real-fix gate are Phase 6 (kernel proposers Phase 5).
+Since Phase 6 the bin also runs **`--fix [--write] [--quiet]`** — the
+span-preserving edit-splice emitter + the rust_perf + structural-clippy
+proposers (T6.1/T6.4), hardened by the T6.2 G5 real-file run on
+katgpt-rs/katgpt-pruners (Bench 019 §G5 addendum: 3 proposer bug classes
+caught by the compile gate + fixed at root cause; 12 files / 20 edits
+landed, compiled + 1233 tests passed; katgpt-rs `8c331cd9`). Kernel
+proposers remain Phase 5 (deferred — concept-grade corpus).
 
 ### `kernel_opt`-specific layers (Phase 3)
 

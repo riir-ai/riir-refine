@@ -45,20 +45,20 @@
 //! | Lint | Detection |
 //! |---|---|
 //! | `needless_return` | trailing `return expr;` → tail `expr` (syntax-local) |
-//! | `redundant_closure` | `\|x\| f(x)` → `f` (same arg count, structural) |
 //! | `redundant_field_names` | `Foo { x: x }` → `Foo { x }` (structural) |
 //! | `manual_map` | exact `match`/`Some`/`None` shape (structural) |
 //! | `unnecessary_unwrap` | exact `is_some`/`unwrap`/else shape (structural, receiver-matched) |
 //! | `needless_range_loop` | `0..v.len()` + index-only usage (exact AST analysis) |
 //! | `needless_lifetimes` | single elidable lifetime (elision-rule verified) |
 //!
-//! The remaining three proposers fire on **type-blind** detection — they are
+//! The remaining four proposers fire on **type-blind** detection — they are
 //! correct when the types line up, but a parse-only validator cannot know
 //! that. They stay available to the `self_evolve` tuning loop (whose output
 //! IS verified by a real `cargo clippy` run) and are excluded from `--fix`:
 //!
 //! | Lint | Why not `--fix` |
 //! |---|---|
+//! | `redundant_closure` | `\|x\| f(x)` → `f` only compiles when the closure arg's type matches `f`'s param EXACTLY — the closure body may rely on a coercion (deref `&Vec<T>` → `&[T]`, autoref) that a fn item does not get. **Demoted from `FIXABLE_LINTS` by the Bench 019 G5 real-file run** (katgpt-pruners `roaring_membership.rs`: `.map(\|v\| CompactBitmap::from_bool_vec(v))` with `from_bool_vec(&[bool])` — the rewrite is E0631). |
 //! | `needless_borrow` | whether `&x` is needless depends on the callee's expected type |
 //! | `useless_conversion` | `.into()` is only useless if source type == annotated type |
 //! | `unnecessary_mut_passed` | `&mut v` → `&v` depends on the callee's signature; the param-`mut` strip is file-wide |
@@ -86,12 +86,14 @@ pub use crate::edit_emitter::{
 };
 
 /// Lints whose proposers are `cargo heal --fix` eligible — detection is
-/// purely structural (see module docs). The other three proposers
-/// (`needless_borrow`, `useless_conversion`, `unnecessary_mut_passed`) are
-/// type-blind and only fire through the `self_evolve` verified loop.
+/// purely structural (see module docs). The other four proposers
+/// (`redundant_closure`, `needless_borrow`, `useless_conversion`,
+/// `unnecessary_mut_passed`) are type-blind and only fire through the
+/// `self_evolve` verified loop. `redundant_closure` was demoted here after
+/// the Bench 019 G5 run caught an E0631 on a deref-coercion closure
+/// (katgpt-pruners `roaring_membership.rs`).
 pub const FIXABLE_LINTS: &[&str] = &[
     "needless_return",
-    "redundant_closure",
     "redundant_field_names",
     "manual_map",
     "unnecessary_unwrap",
@@ -167,17 +169,24 @@ mod tests {
         assert_eq!(propose_fix("needless_return", "this is not rust {{{"), None);
     }
 
-    /// The fixable list is the structural-detection subset — the three
-    /// type-blind lints must stay out (parse-only `--fix` cannot check types).
+    /// The fixable list is the structural-detection subset — the four
+    /// type-blind lints must stay out (parse-only `--fix` cannot check
+    /// types). `redundant_closure` joined this set after the Bench 019 G5
+    /// real-file run caught an E0631 (deref-coercion closure → fn path).
     #[test]
     fn fixable_lints_exclude_type_blind_rules() {
-        for excluded in ["needless_borrow", "useless_conversion", "unnecessary_mut_passed"] {
+        for excluded in [
+            "needless_borrow",
+            "useless_conversion",
+            "unnecessary_mut_passed",
+            "redundant_closure",
+        ] {
             assert!(
                 !FIXABLE_LINTS.contains(&excluded),
                 "{excluded} must not be --fix eligible"
             );
         }
-        assert_eq!(FIXABLE_LINTS.len(), 7);
+        assert_eq!(FIXABLE_LINTS.len(), 6);
     }
 
     /// Every proposer lint round-trips through the shared dispatch (fires on

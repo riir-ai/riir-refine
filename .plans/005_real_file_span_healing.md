@@ -242,7 +242,7 @@ structural set (T6.4) and kernel stays suggest-only.
 
 ## Phase 6 — `cargo heal --fix` + final GOAT gate (G5 real-file value)
 
-**Status: T6.1 DONE 2026-08-14 (Bench 019); T6.4 DONE 2026-08-14; T6.2/T6.3 pending.**
+**Status: T6.1 DONE 2026-08-14 (Bench 019); T6.4 DONE 2026-08-14; T6.2/T6.3 DONE 2026-08-14 (Bench 019 G5 addendum).**
 The `--fix` wiring shipped with the **span-preserving patch emitter** (the
 proposal's "honest production choice", not the prettyplease MVP): the 5
 rust_perf proposers were refactored from AST-mutation to edit-collecting
@@ -256,11 +256,13 @@ byte-identical — verified on a real 700-line file (1 line changed).
 `propose_fix` keeps its signature for `self_evolve`, but now
 parse → collect_edits → splice instead of mutate → `ToTokens`
 re-emission (the old path destroyed the caller's formatting). `--fix`
-now also runs the **7 structural** clippy lints (detection alone
-guarantees semantics: needless_return, redundant_closure,
-redundant_field_names, manual_map, unnecessary_unwrap,
-needless_range_loop, needless_lifetimes); the 3 **type-blind** ones
-(needless_borrow, useless_conversion, unnecessary_mut_passed) stay
+now also runs the **structural** clippy lints (detection alone guarantees
+semantics: needless_return, redundant_field_names,
+manual_map, unnecessary_unwrap, needless_range_loop, needless_lifetimes —
+6 as of the T6.2 G5 run, which demoted redundant_closure after it caught
+an E0631 fn-path coercion break); the **type-blind** ones
+(needless_borrow, useless_conversion, unnecessary_mut_passed,
+redundant_closure) stay
 self_evolve-only (their rewrites are only correct when types line up;
 parse-only validation can't check). The migration also fixed four
 latent correctness bugs in the mutation-based detection (see T6.4
@@ -273,9 +275,15 @@ threshold from the original T6.1 text is therefore NOT used to gate
 application — the visitor IS the confirmation. `--fix [--write] [--quiet]`
 composes with the suggest pass.
 
-T6.2 is **blocked**: the riir-ai working tree is mid-rebase with a sibling
-session's in-flight work — landing the G5 real fix must wait for their
-rebase to land.
+T6.2 is **DONE (2026-08-14, Bench 019 G5 addendum)**: the gate landed in
+**katgpt-rs** (`katgpt-pruners`, commit `8c331cd9`, pushed) — riir-ai
+remained sibling-active (dirty riir-net/qvu_lora/cudarc WIP) and
+katgpt-rs is a sibling repo per this repo's layout, clean + quiet. The
+real-file run CAUGHT three latent proposer bug classes (use-before-decl
+capacity, non-usize capacity bounds, fn-path coercion in
+redundant_closure) — all fixed at root cause in the same session, the
+gated re-run compiled + passed 1233 tests in one pass. `redundant_closure`
+was demoted from `FIXABLE_LINTS` (7 → 6 structural lints).
 
 ### Tasks
 
@@ -284,23 +292,27 @@ rebase to land.
       `--suggest` output for that rule.
       **DONE with a design correction** — the proposer visitor (not a latent-score
       threshold) is the application gate (caveat 4); the span-preserving emitter
-      shipped (Bench 019 G1-G4 PASS, G5 blocked).
-- [ ] **T6.2 (G5 real-file value)** At least ONE real fix lands in a sibling repo
+      shipped (Bench 019 G1-G4 PASS; G5 landed in the same bench's addendum).
+- [x] **T6.2 (G5 real-file value)** At least ONE real fix lands in a sibling repo
       (riir-ai or riir-gpu): the latent matcher detects a real anti-pattern, the proposer
       rewrites it, the change compiles + tests pass.
-      **BLOCKED on the sibling session's riir-ai rebase** (mid-flight at 2026-08-14;
-      candidate true positive already found: `adaptive_drafter.rs:197`-class patterns
-      in the sibling repos — rerun `cargo heal --fix` against them once clean).
-- [ ] **T6.3** `.benchmarks/016_real_file_heal_goat.md` — full G1-G5 measurement.
+      **DONE 2026-08-14** — landed in **katgpt-rs** instead (riir-ai sibling-active;
+      katgpt-rs is a sibling repo, clean + quiet): `katgpt-pruners` 12 files / 20 edits,
+      commit `8c331cd9` (pushed). Run 1 caught 6 compile errors across 4 files →
+      3 proposer bug classes fixed at root cause (scope gate, usize gate,
+      redundant_closure demotion) → run 2 compiled + passed 1233/1233 tests.
+      See Bench 019 §G5 addendum.
+- [x] **T6.3** `.benchmarks/016_real_file_heal_goat.md` — full G1-G5 measurement.
       Renumbered to **Bench 019** (016 was taken by the rust_perf v2 corpus batch);
-      G1-G4 recorded there now, G5 lands with T6.2.
+      G1-G4 recorded there, **G5 recorded in the §G5 addendum (2026-08-14): PASS**.
 - [x] **T6.4** Migrate the clippy_lints proposers to the edit-splice emitter
       (extends `--fix` to the clippy domain; preserves `propose_fix` for `self_evolve`).
       **DONE 2026-08-14.** Shared emitter extracted to `src/edit_emitter.rs`
       (feature-neutral; rust_perf re-exports preserve the old import path).
       All 10 proposers migrated to immutable-walk + `SourceEdit` collection;
-      `FIXABLE_LINTS` = the 7 structural rules (`--fix` eligible), the 3 type-blind
-      ones stay `self_evolve`-only. Fix application iterates to a bounded fixpoint
+      `FIXABLE_LINTS` = the structural rules (`--fix` eligible; 7 at T6.4
+      time, 6 after the T6.2 G5 run demoted `redundant_closure`), the
+      type-blind ones stay `self_evolve`-only. Fix application iterates to a bounded fixpoint
       (4 passes + unchanged-output guard) so nested fixes compose.
       Four latent detection bugs fixed by the migration (found by real-file review
       + type-checking the spliced output):

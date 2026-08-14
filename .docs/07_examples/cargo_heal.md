@@ -25,9 +25,12 @@ fixed/optimized pattern snippet head for manual review.
 
 `--fix` mode (Phase 6 T6.1 + T6.4): runs the compiled-in proposers'
 visitors on each file + applies their **span-preserving** edits — the 5
-rust_perf rules PLUS the 7 structural clippy lints (T6.4 migrated the
+rust_perf rules PLUS the 6 structural clippy lints (T6.4 migrated the
 clippy proposers from AST-mutation + whole-file re-emission to the same
-edit-splice emitter). Everything outside a matched span stays
+edit-splice emitter; the T6.2 G5 real-file run later demoted
+`redundant_closure` to the type-blind set after it caught an E0631
+fn-path coercion break — see
+[Bench 019 §G5 addendum](../../.benchmarks/019_plan005_phase6_fix_span_preserving_goat.md)). Everything outside a matched span stays
 byte-identical (no reformat; see
 [Bench 019](../../.benchmarks/019_plan005_phase6_fix_span_preserving_goat.md)).
 The proposer's visitor is the gate: latent suggestions never auto-apply.
@@ -48,11 +51,11 @@ fxhashmap's inserted `use`) still points at the right line. Only edits
 that were actually applied are reported (pass-1 overlap-dropped edits
 re-applied on pass 2 are not double-counted).
 
-The 3 type-blind clippy proposers (`needless_borrow`,
-`useless_conversion`, `unnecessary_mut_passed`) are NOT `--fix` eligible —
-their detection is only sound with type knowledge (available in the
-`self_evolve` loop's cargo-clippy-verified path, not parse-only
-validation). They stay suggest-only at the CLI.
+The 4 type-blind clippy proposers (`needless_borrow`,
+`useless_conversion`, `unnecessary_mut_passed`, `redundant_closure`) are
+NOT `--fix` eligible — their detection is only sound with type knowledge
+(available in the `self_evolve` loop's cargo-clippy-verified path, not
+parse-only validation). They stay suggest-only at the CLI.
 
 ```text
 cargo heal --suggest [--domain <auto|clippy|perf|kernel>] [--top-k <N>] <path>...
@@ -62,7 +65,7 @@ cargo heal --fix [--write] [--quiet] <path>...
 --fix        Fix mode: apply the compiled-in proposers' span-preserving edits
              (perf: vec-with-capacity, entry-vs-contains-insert, static-str,
              bool-to-bitpack, fxhashmap; clippy: needless_return,
-             redundant_closure, redundant_field_names, manual_map,
+             redundant_field_names, manual_map,
              unnecessary_unwrap, needless_range_loop, needless_lifetimes).
 --write      With --fix: write the spliced file in place (default: review only).
 --quiet      With --fix: skip the --suggest pass.

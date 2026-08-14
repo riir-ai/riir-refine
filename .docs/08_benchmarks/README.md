@@ -18,7 +18,7 @@
 - [`.benchmarks/013_rust_perf_bench_pareto_goat.md`](../../.benchmarks/013_rust_perf_bench_pareto_goat.md) — rust_perf Pareto validator promotion gate (historical; pre-expansion corpus snapshots)
 - [`.benchmarks/015_rust_perf_expansion_phase4_goat.md`](../../.benchmarks/015_rust_perf_expansion_phase4_goat.md) — rust_perf Phase 4 finalization on the expanded 39-rule corpus (29/31 ParetoDominant)
 - [`.benchmarks/018_plan005_latent_suggest_goat.md`](../../.benchmarks/018_plan005_latent_suggest_goat.md) — Plan 005 latent `--suggest` GOAT (G1–G4 ALL PASS: 100% precision, 349 µs/chunk)
-- [`.benchmarks/019_plan005_phase6_fix_span_preserving_goat.md`](../../.benchmarks/019_plan005_phase6_fix_span_preserving_goat.md) — Plan 005 Phase 6 T6.1 span-preserving `--fix` GOAT (G1–G4 PASS; 1-line diff on a real 700-line file; G5 blocked on sibling rebase)
+- [`.benchmarks/019_plan005_phase6_fix_span_preserving_goat.md`](../../.benchmarks/019_plan005_phase6_fix_span_preserving_goat.md) — Plan 005 Phase 6 span-preserving `--fix` GOAT (G1–G4 PASS; G5 PASS via the addendum — real fixes landed in katgpt-rs `katgpt-pruners` after the compile gate caught 3 proposer bug classes, all fixed at root cause)
 
 ## Re-run commands
 
