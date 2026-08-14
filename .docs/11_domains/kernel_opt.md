@@ -10,7 +10,7 @@
 | Component | Ships now | Deferred |
 |---|---|---|
 | `KernelOptDomain: HealDomain` | ✅ | |
-| Seed corpus (Batch 1-20: 145 rules; popcorn COMPLETE; riir-gpu opened Batch 14, mined Batch 15-20) | ✅ | Future source: riir-gpu (~196K lines, mostly unmined), new popcorn releases |
+| Seed corpus (Batch 1-21: 150 rules; popcorn COMPLETE; riir-gpu opened Batch 14, mined Batch 15-21) | ✅ | Future source: riir-gpu (~196K lines, mostly unmined), new popcorn releases |
 | `KernelExpertRouter` (`pick_domain`) | ✅ (8-dim activity, 15/15 reachable, Plan 004) | Mined centroids via `CommittedFieldBlend` |
 | `KernelThermalRouter` (5-tier stub) | ✅ (returns Plasma) | Warm/Cold LoRA (4090, riir-train) |
 | `KernelVerifier` (compile-only) | ✅ (behind `kernel_verify`) | Full numeric compare vs reference |
@@ -38,9 +38,10 @@ Batch 17 (Research 018): 4 rules — **fourth batch mining riir-gpu (ternary sca
 Batch 18 (Research 019): 3 rules — **fifth batch mining riir-gpu (Q4_K quantized GEMV family)**. Row-tile-amortize-input-load (gemv_q4k_plane_rowtiled: assign N output rows per plane, load input once, reuse across N dot products — GEMV to small-GEMM via M-widening) + factor-affine-quant-scale-out-of-element-loop (gemv_q4k_plane_factored: when dequant is affine in the code within a sub-block, factor d·scale and dmin·min out — Q4_K-specific, ternary has no min offset to factor) + pin-lane-to-quant-sub-block-coalesce-byte-loads (gemv_q4k_plane_factored: remap lane→element so each lane is pinned to one sub-block — 8 loads→2, enables affine factoring). Three sibling Q4_K files (qkv, geglu, batched) assessed + dropped: qkv = composition of fuse-gate-up-gemv-activation (triple fusion); geglu = same fuse + Q4_K dequant; batched = no new opt.
 Batch 19 (Research 020): 2 rules — **sixth batch mining riir-gpu (fused-dispatch family)**. Chain-dispatches-single-sync-point (ternary_ffn_fused: queue N dependent dispatches in one command buffer, sync only once at the end — command-buffer-level fusion distinct from single-kernel fusion; linear dependency chains keep intermediates bounded, fan-out is the known-bad case per Bench 437) + fuse-residual-via-in-place-output-array (gemv_ternary_residual_cubecl: when a kernel needs N+1 array params but the runtime limits to N, alias the output buffer as the accumulation input (read-then-write) — bypasses CubeCL v0.10's hard 5-array limit, collapses 128 dispatches/token → 64). Three sibling files assessed + dropped: deltanet_input_proj_fused (same pattern as ternary_ffn_fused — confirms generality); deltanet_chunked + base recurrence (covered by recurrent-vs-chunk-dispatch Batch 11).
 Batch 20 (Research 021): 5 rules — **seventh batch mining riir-gpu (CUDA hardware-instruction cluster + CubeCL LUT + base-3 trit)**. Cooperative-block-wide-quantize-staging (gemv_ternary_cuda_raw `_fused` variant: ALL 256 threads cooperate to quantize f32→int8 into shared memory once, then each warp reads from shared — eliminates a separate staging dispatch + global round-trip; distinct from dequant-once-per-k-tile which is per-tile WEIGHT dequant, this is block-wide ACTIVATION quantize) + byte-perm-lut-via-permutation-immediate (gemv_ternary_cuda_raw: pack {−1,0,1,2} in one int, __byte_perm(constant, constant, code >> shift) decodes 4 codes to 4 signed bytes in ONE PTX instruction — first CUDA-specific HW-instruction rule, no CubeCL analogue) + dp4a-int8-hardware-dot-product (gemv_ternary_cuda_raw: NVIDIA __dp4a does 4-lane int8 dot in one instruction — distinct from cmma Batch 16 which is CubeCL 8×8×8 matrix tile op, this is scalar 4-lane int8 dot, CUDA-only) + threadgroup-subset-sum-lut-keyed-by-activation (gemv_ternary_cubecl LUT path gated `ternary_lut_gemv`: precompute 16-entry subset-sum table per 4-activation group in threadgroup memory, 4-weight ternary dot = 2 reads + 1 subtract; one build serves every row because the table is keyed by ACTIVATION subset (contains no weight/scale/zero-point) — structurally different amortization from the Q4_K LUT negative result which was keyed by weight+scale+zero-point and rebuilt 160 tables/row) + base-3-trit-packing-5-per-byte (gemv_ternary_cubecl trit path: pack 5 ternary per byte using base-3 mixed-radix, 17.6% denser than 2-bit codes; REGIME-DEPENDENT — wins on Metal, loses 2.1× on CUDA scalar ALU per Issue 607). Three Metal files assessed + dropped: all 3 are REFUTED end-to-end (3.72× kernel gain lost to 0.87×/0.95× integration overhead); 2 genuinely novel patterns (cross-runtime zero-copy handle extraction + pool-buffer aliasing hazard workaround) DEFERRED to Batch 21 for coherent treatment.
-Total: 145 rules. Popcorn corpus COMPLETE; riir-gpu (~196K lines) remains open as the next distillation source (18 of ~200 files mined).
+Batch 21 (Research 022): 5 rules — **eighth batch mining riir-gpu (Metal cross-runtime zero-copy integration cluster)**. Cross-runtime-raw-handle-extraction (gemm_ternary_metal_zero_copy: extract `id<MTLBuffer>` from CubeCL/wgpu handles via `as_hal::<Metal>().raw_handle()` to bypass wgpu-core validation — generic, applies to any wrapper-runtime→raw-native-dispatch integration without a host round-trip) + pool-buffer-aliasing-dedicated-output (when the runtime sub-allocates handles within one pool buffer, input/output aliasing breaks hazard tracking — fix: dedicated output buffer keyed by byte size + GPU→GPU copy back; distinct from inplace-output-alias Batch 19 which is parameter-count bypass) + same-queue-implicit-ordering-no-sync (dispatch on the shared command queue the wrapper uses — in-order execution makes explicit sync unnecessary; eliminates the host-round-trip serialization that refuted Issue 656) + per-dispatch-pointer-re-extraction (when the runtime can reallocate its pool between dispatches, raw pointers must be re-extracted on EVERY dispatch, not cached — the correctness invariant that makes raw-handle-extraction safe) + no-blocking-sync-in-async-pipeline (`wait_until_completed` serializes the async pipeline — use queue ordering + caller's pre-dispatch sync to cover correctness; complement of chain-dispatches-single-sync-point Batch 19). The 2 refuted siblings (`gemm_ternary_metal_tensor.rs` + `_wgpu.rs`) are covered by these general rules: the host-round-trip is the anti-pattern rule #3 fixes, the per-dispatch staging copies are a special case of rule #2 when the runtime can't extract raw handles.
+Total: 150 rules. Popcorn corpus COMPLETE; riir-gpu (~196K lines) remains open as the next distillation source (19 of ~200 files mined).
 
-### Category A: Memory access patterns (13 rules)
+### Category A: Memory access patterns (17 rules)
 
 | Rule ID | GPU concept | Pattern |
 |---|---|---|
@@ -57,6 +58,10 @@ Total: 145 rules. Popcorn corpus COMPLETE; riir-gpu (~196K lines) remains open a
 | `row-tile-amortize-input-load` | GEMV → small-GEMM via M-widening | 1 output row per plane (input loaded m×) → N output rows per plane with N register accumulators (input loaded once, reused across N dot products) (riir-gpu gemv_q4k_plane_rowtiled, Issue 609; gain scales with input-load/compute ratio: ~2× ternary, ~1.1-1.3× Q4_K) |
 | `pin-lane-to-quant-sub-block-coalesce-byte-loads` | lane→element remap for byte coalescing | Strided lane map (each lane visits all 8 sub-blocks, 8 scattered loads) → lane-fixed map (each lane pinned to one sub-block, 8 bytes in 2 u32 words, 8→2 loads) (riir-gpu gemv_q4k_plane_factored, Issue 609 T2; also enables affine factoring by making scale/min loop-invariant) |
 | `cooperative-block-wide-quantize-staging` | block-wide cooperative shared-memory staging | Separate quantize dispatch + global-memory read in consumer → ALL 256 threads cooperate to quantize disjoint chunks into shared memory once, then each warp reads from shared (riir-gpu gemv_ternary_cuda_raw `_fused` variant, Issue 616 T4; distinct from dequant-once-per-k-tile which is per-tile WEIGHT dequant, this is block-wide ACTIVATION quantize) |
+| `cross-runtime-raw-handle-extraction` | cross-runtime raw native handle extraction | Host round-trip (GPU→CPU→native GPU→CPU→wrapper GPU, 4 transfers) → extract raw `id<MTLBuffer>` from wrapper handle via `as_hal::<Metal>().raw_handle()` and dispatch native kernel directly on wrapper-owned memory (0 transfers; riir-gpu gemm_ternary_metal_zero_copy, Issue 663 T5; generic for any wrapper-runtime→raw-native-dispatch integration) |
+| `pool-buffer-aliasing-dedicated-output` | pool-buffer aliasing hazard workaround | Bind output handle directly (shares pool buffer with input → hazard tracking silently fails, kernel writes nothing) → write to dedicated buffer keyed by byte size, GPU→GPU copy back via blit encoder (1 copy, 0 host round-trips; riir-gpu gemm_ternary_metal_zero_copy, Issue 663 T5; distinct from inplace-output-alias Batch 19 which is parameter-count bypass) |
+| `same-queue-implicit-ordering-no-sync` | same-queue implicit ordering | Separate queue for native dispatch (forces explicit `wait_until_completed`) → submit on the wrapper's command queue, rely on in-order execution within one queue (no host-side sync needed; eliminates the host-round-trip serialization that refuted Issue 656; distinct from chain-dispatches-single-sync-point Batch 19 which is intra-cmdbut) |
+| `per-dispatch-pointer-re-extraction` | per-dispatch raw pointer re-extraction | Cache raw pointer across dispatches (use-after-free when pool defragments) → cache the wrapper handle (stable, ref-counted), re-extract raw pointer fresh on every dispatch (correctness invariant that makes cross-runtime-raw-handle-extraction safe; riir-gpu gemm_ternary_metal_zero_copy) |
 
 ### Category B: Compute patterns (27 rules)
 
@@ -109,7 +114,7 @@ Total: 145 rules. Popcorn corpus COMPLETE; riir-gpu (~196K lines) remains open a
 | `chain-dispatches-single-sync-point` | command-buffer-level dispatch fusion | N dispatches + N syncs → N dispatches + 1 sync (riir-gpu ternary_ffn_fused; linear dependency chains keep intermediates bounded; fan-out is the known-bad case per Bench 437) |
 | `fuse-residual-via-in-place-output-array` | parameter-count bypass via in-place aliasing | Separate GEMV dispatch + ResidualAdd dispatch → single in-place kernel (riir-gpu gemv_ternary_residual_cubecl; output buffer doubles as residual input, bypasses CubeCL v0.10 5-array limit, collapses 128→64 dispatches/token) |
 
-### Category D: Dispatch patterns (9 rules)
+### Category D: Dispatch patterns (10 rules)
 
 | Rule ID | GPU concept | Pattern |
 |---|---|---|
@@ -122,6 +127,7 @@ Total: 145 rules. Popcorn corpus COMPLETE; riir-gpu (~196K lines) remains open a
 | `dual-mode-gate-transform` | dual-mode gate dispatch | Hardcoded formula → unbounded softplus / bounded sigmoid by parameter |
 | `cyclic-modality-table-selection` | multimodal RoPE dispatch | Single RoPE table → split head_dim into sections, cyclic gather from N modality tables |
 | `swap-large-axis-to-x-for-workgroup-distribution` | dispatch axis swap for SM distribution | (M,P) cube count with small M on X under-utilizes SMs → (P,M) swap so the large axis gets X-tiles for even workgroup distribution (riir-gpu gemm_ternary_simdgroup, mirrors matmul_swap_ab) |
+| `no-blocking-sync-in-async-pipeline` | no blocking sync in async pipeline | `wait_until_completed` after every dispatch (serializes the async pipeline, 448 blocking round-trips per prefill) → submit and return; rely on queue ordering + caller's pre-dispatch sync for correctness (only non-queued test reads need explicit sync; riir-gpu gemm_ternary_metal_zero_copy, Issue 663 T5; complement of chain-dispatches-single-sync-point Batch 19 which reduces N syncs to 1, this eliminates the final sync) |
 
 ### Category E: Parallelism patterns (8 rules)
 
@@ -190,7 +196,7 @@ pub fn route(&self, activity: &[f32; ACTIVITY_DIM]) -> usize {
 }
 ```
 
-**Plan 003 (2026-08-14):** router wired to the 145-rule corpus via 15 category
+**Plan 003 (2026-08-14):** router wired to the 150-rule corpus via 15 category
 experts. Each expert owns its category's `rule_ids` via `KERNEL_CATEGORIES`.
 - **Activity vector** = raw physical (kernel signature: `[M, N, K, dtype, hw,
   is_attention, is_fusion, is_ir_transform]` — 8-dim per Plan 004, normalized
@@ -217,7 +223,7 @@ so `pick_domain` is reachable.
 
 **Composition example** (`examples/kernel_heal_demo.rs`): the router is
 composed with the drafter + corpus end-to-end. The demo routes 8 representative
-kernel signatures, narrows each to its category's rules (~4–10 vs 145 flat — a
+kernel signatures, narrows each to its category's rules (~4–10 vs 150 flat — a
 15× candidate reduction), then drafts + validates a fix. This is the reference
 composition for future kernel_opt consumers. Run with:
 `cargo run --example kernel_heal_demo --features kernel_heal`.

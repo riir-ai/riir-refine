@@ -137,7 +137,7 @@
 //!   intermediates bounded, fan-out is the known-bad case per Bench 437),
 //!   fuse-residual-via-in-place-output-array (`gemv_ternary_residual_cubecl`: when
 //!   a kernel needs N+1 array params but the runtime limits to N, alias the output
-//!   buffer as the accumulation input (read-then-write) — bypasses CubeCL v0.10's
+//!   buffer as the accumulation input (read-then-write) — bypasses `CubeCL` v0.10's
 //!   hard 5-array limit, collapses 128 dispatches/token → 64). Three sibling files
 //!   assessed + dropped (`deltanet_input_proj_fused`: same pattern as
 //!   `ternary_ffn_fused` — confirms generality; `deltanet_chunked` + base recurrence:
@@ -145,23 +145,23 @@
 //!   15 categories (A–O)**. `riir-gpu` remains open (16 of ~200 files mined).
 //! - **Batch 20 (Research 021):** 5 riir-gpu production rules — seventh batch mining
 //!   the stack's own kernels, focused on the CUDA hardware-instruction cluster +
-//!   CubeCL LUT + base-3 trit paths. Cooperative-block-wide-quantize-staging
+//!   `CubeCL` LUT + base-3 trit paths. Cooperative-block-wide-quantize-staging
 //!   (`gemv_ternary_cuda_raw` fused variant: ALL 256 threads cooperate to quantize
 //!   f32→int8 into shared memory once, then each warp reads from shared —
 //!   eliminates a separate staging dispatch + global round-trip; distinct from
 //!   dequant-once-per-k-tile which is per-tile WEIGHT dequant, this is block-wide
 //!   ACTIVATION quantize), byte-perm-lut-via-permutation-immediate
-//!   (`gemv_ternary_cuda_raw`: pack {−1,0,1,2} in one int, __byte_perm(constant,
+//!   (`gemv_ternary_cuda_raw`: pack {−1,0,1,2} in one int, `__byte_perm`(constant,
 //!   constant, code >> shift) decodes 4 codes to 4 signed bytes in ONE PTX
-//!   instruction — first CUDA-specific HW-instruction rule, no CubeCL analogue),
-//!   dp4a-int8-hardware-dot-product (`gemv_ternary_cuda_raw`: NVIDIA __dp4a does
+//!   instruction — first CUDA-specific HW-instruction rule, no `CubeCL` analogue),
+//!   dp4a-int8-hardware-dot-product (`gemv_ternary_cuda_raw`: NVIDIA `__dp4a` does
 //!   4-lane int8 dot in one instruction — distinct from cmma Batch 16 which is
-//!   CubeCL 8×8×8 matrix tile op, this is scalar 4-lane int8 dot, CUDA-only),
+//!   `CubeCL` 8×8×8 matrix tile op, this is scalar 4-lane int8 dot, CUDA-only),
 //!   threadgroup-subset-sum-lut-keyed-by-activation (`gemv_ternary_cubecl` LUT
 //!   path gated `ternary_lut_gemv`: precompute 16-entry subset-sum table per
 //!   4-activation group in threadgroup memory, 4-weight ternary dot = 2 reads + 1
 //!   subtract; one build serves every row because the table is keyed by ACTIVATION
-//!   subset — structurally different amortization from the Q4_K LUT negative
+//!   subset — structurally different amortization from the `Q4_K` LUT negative
 //!   result which was keyed by weight+scale+zero-point and rebuilt 160 tables/row),
 //!   base-3-trit-packing-5-per-byte (`gemv_ternary_cubecl` trit path: pack 5
 //!   ternary per byte using base-3 mixed-radix, 17.6% denser than 2-bit codes;
@@ -170,6 +170,33 @@
 //!   kernel gain lost to 0.87×/0.95× integration overhead; 2 genuinely novel
 //!   patterns deferred to Batch 21). Corpus: **145 rules across 15 categories
 //!   (A–O)**. `riir-gpu` remains open (18 of ~200 files mined).
+//! - **Batch 21 (Research 022):** 5 riir-gpu production rules — eighth batch mining
+//!   the stack's own kernels, focused on the **Metal cross-runtime zero-copy
+//!   integration cluster** (`gemm_ternary_metal_zero_copy.rs`, Issue 663 T5). The
+//!   patterns are about the INTEGRATION ARCHITECTURE (how a higher-level runtime
+//!   hands GPU memory to a raw native dispatch), not the kernel itself.
+//!   Cross-runtime-raw-handle-extraction (extract `id<MTLBuffer>` from CubeCL/wgpu
+//!   handles via `as_hal::<Metal>().raw_handle()` to bypass wgpu-core validation —
+//!   generic, applies to any cross-runtime integration where a wrapper runtime
+//!   needs to pass GPU memory to a raw native dispatch without a host round-trip),
+//!   pool-buffer-aliasing-dedicated-output (when the runtime sub-allocates handles
+//!   within one pool buffer, input/output aliasing breaks hazard tracking — fix:
+//!   dedicated output buffer keyed by byte size + GPU→GPU copy back; distinct from
+//!   inplace-output-alias Batch 19 which is parameter-count bypass), same-queue-
+//!   implicit-ordering-no-sync (dispatch on the shared command queue the wrapper
+//!   uses — in-order execution makes explicit sync unnecessary; eliminates the
+//!   host-round-trip serialization that refuted Issue 656), per-dispatch-pointer-
+//!   re-extraction (when the runtime can reallocate its pool between dispatches,
+//!   raw pointers must be re-extracted on EVERY dispatch, not cached — the
+//!   correctness invariant that makes raw-handle-extraction safe), no-blocking-
+//!   sync-in-async-pipeline (`wait_until_completed` serializes the async pipeline —
+//!   use queue ordering + caller's pre-dispatch sync to cover correctness;
+//!   complement of chain-dispatches-single-sync-point Batch 19). The 2 refuted
+//!   siblings (`gemm_ternary_metal_tensor.rs` + `_wgpu.rs`) are covered by these
+//!   general rules: the host-round-trip is the anti-pattern rule #3 fixes, the
+//!   per-dispatch staging copies are a special case of rule #2 when the runtime
+//!   can't extract raw handles. Corpus: **150 rules across 15 categories (A–O)**.
+//!   `riir-gpu` remains open (19 of ~200 files mined).
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
@@ -2079,6 +2106,125 @@ fn gemv_residual_inplace(weight: &[f32], input: &[f32], residual_output: &mut [f
             ref_shape: "// naive: 2-bit code packing (4 ternary values per byte, 2.125 bits/weight)\nfn pack_2bit(codes: &[u8; 4]) -> u8 {\n    // code in {0, 1, 2} maps to {-1, 0, +1}\n    // 4 codes per byte, 2 bits each\n    codes[0] | (codes[1] << 2) | (codes[2] << 4) | (codes[3] << 6)\n}\nfn unpack_2bit(byte: u8) -> [u8; 4] {\n    [\n        (byte >> 0) & 0x3,  // shift + mask — cheap on all backends\n        (byte >> 2) & 0x3,\n        (byte >> 4) & 0x3,\n        (byte >> 6) & 0x3,\n    ]\n}".to_string(),
             opt_pattern: "// optimized: base-3 trit packing (5 ternary values per byte, 1.75 bits/weight)\nfn pack_trit5(codes: &[u8; 5]) -> u8 {\n    // 5 trits per byte: 3^5 = 243 <= 256 (fits in a byte)\n    codes[0] + codes[1] * 3 + codes[2] * 9 + codes[3] * 27 + codes[4] * 81\n}\nfn unpack_trit5(byte: u8) -> [u8; 5] {\n    let mut rem = byte;\n    let c0 = rem % 3; rem /= 3;  // div/mod — compiler optimizes to mul-by-inverse\n    let c1 = rem % 3; rem /= 3;\n    let c2 = rem % 3; rem /= 3;\n    let c3 = rem % 3; rem /= 3;\n    let c4 = rem % 3;\n    [c0, c1, c2, c3, c4]\n    // 17.6% denser than 2-bit (1.75 vs 2.125 bits/weight)\n    // REGIME-DEPENDENT: wins on Metal (bandwidth-bound, div/mod cheap),\n    // loses 2.1x on CUDA (div/mod expensive on scalar ALU, incompatible with __dp4a)\n}".to_string(),
         },
+        // ════════════════════════════════════════════════════════════════════
+        // Batch 21 (Research 022) — Metal cross-runtime zero-copy integration
+        // cluster (5 rules: 4A + 1D)
+        //
+        // Source: riir-gpu gemm_ternary_metal_zero_copy.rs (Issue 663 T5).
+        // The third-attempt raw-Metal integration that eliminates both
+        // overhead sources from Issue 656 (host round-trip) + Issue 657
+        // (per-dispatch staging copies). The patterns are about the
+        // INTEGRATION ARCHITECTURE (how a higher-level runtime hands GPU
+        // memory to a raw native dispatch), not the kernel itself.
+        //
+        // Generic — apply to any cross-runtime integration where a wrapper
+        // runtime (wgpu, CubeCL) needs to pass GPU memory to a raw native
+        // dispatch (Metal, Vulkan, CUDA). The 2 refuted siblings
+        // (gemm_ternary_metal_tensor.rs + _wgpu.rs) are covered by these
+        // general rules: the host-round-trip is the anti-pattern rule #3
+        // fixes, and the per-dispatch staging copies are a special case of
+        // rule #2 when the runtime can't extract raw handles.
+        // ════════════════════════════════════════════════════════════════════
+        // ── cross-runtime-raw-handle-extraction — host round-trip → raw handle (A) ──
+        // Source: riir-gpu gemm_ternary_metal_zero_copy.rs L230-252. Extract
+        // `id<MTLBuffer>` from a CubeCL/wgpu handle via `get_resource` →
+        // `as_hal::<Metal>` → `raw_handle()`. The handle extraction is the
+        // ONLY way to dispatch a raw native kernel that reads/writes memory
+        // owned by the higher-level runtime, without a host round-trip.
+        //
+        // Distinct from `alignment-gated-zero-copy-view` (N) — that's view
+        // offsets within a single wgpu buffer (same-runtime, no cross-runtime
+        // extraction); this is raw GPU API handle extraction across runtimes
+        // (cross-runtime, different layer entirely).
+        KernelRule {
+            rule_id: "cross-runtime-raw-handle-extraction".to_string(),
+            gpu_concept: "when a higher-level GPU runtime (wgpu, CubeCL) wraps a lower-level native API (Metal, Vulkan, CUDA), extract the raw native handle (e.g. id<MTLBuffer>) from the wrapper handle via the runtime's as_hal/raw_handle API — enables raw native kernel dispatch that reads/writes wrapper-owned memory without a host round-trip".to_string(),
+            ref_shape: "// naive: host round-trip — read wrapper buffer to CPU, upload to native buffer, run native kernel, read back, re-upload to wrapper
+fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Handle) -> Result<Vec<f32>, String> {\n    let input_host: Vec<f32> = client.read_one(input.clone());      // GPU -> CPU (blocking sync)\n    let weights_host: Vec<f32> = client.read_one(weights.clone()); // GPU -> CPU (blocking sync)\n    let native_buf_in = native_device.new_buffer(input_host.len() as u64);\n    native_buf_in.upload(&input_host);                              // CPU -> native GPU\n    let out = native_kernel.launch(&native_buf_in, &native_weights); // run\n    let out_host = out.read_to_vec();                               // native GPU -> CPU\n    client.write(output_handle, &out_host);                         // CPU -> wrapper GPU\n    Ok(out_host) // 4 host-device transfers per dispatch — serialized the async pipeline\n}".to_string(),
+            opt_pattern: "// optimized: extract raw id<MTLBuffer> from the wrapper handle — zero copy, zero host round-trip\nfn native_dispatch_zero_copy(client: &CubeCLClient, input: &Handle, weights: &Handle) -> Result<(), String> {\n    // 1. Get the wrapper's view of the resource\n    let managed = client.get_resource(input.clone()).map_err(|e| format!(\"get_resource failed: {e:?}\"))?;\n    let resource = managed.resource();\n    let wgpu_buffer = &resource.buffer;\n    let offset = resource.offset;\n    // 2. Extract the raw native handle via the wrapper's hal accessor\n    let raw_ptr = unsafe {\n        let guard = wgpu_buffer.as_hal::<wgpu::hal::api::Metal>();\n        let hal_buf = guard.as_ref().ok_or(\"wrapper buffer is not Metal\")?;\n        let proto = hal_buf.raw_handle(); // &ProtocolObject<dyn MTLBuffer>\n        proto as *const _ as *mut metal::MTLBuffer\n    };\n    // 3. Dispatch the native kernel directly on the raw handle (no copy)\n    let buf_ref: &BufferRef = unsafe { BufferRef::from_ptr(raw_ptr) };\n    encoder.set_buffer(0, Some(buf_ref), offset); // native kernel reads/writes wrapper-owned memory\n    Ok(()) // 0 host-device transfers — async pipeline stays async\n}".to_string(),
+        },
+        // ── pool-buffer-aliasing-dedicated-output — pool aliasing breaks hazard tracking → dedicated output + GPU->GPU copy (A) ──
+        // Source: riir-gpu gemm_ternary_metal_zero_copy.rs L291-315. When the
+        // runtime sub-allocates handles within one pool buffer, aliasing
+        // between input and output (which share the same pool) breaks Metal's
+        // hazard tracking — the kernel runs but writes nothing. Fix: write to
+        // a dedicated buffer (not from the wrapper pool) keyed by byte size,
+        // then GPU->GPU copy back via `encoder.copy_from_buffer` (same command
+        // buffer, zero host round-trip).
+        //
+        // Distinct from `inplace-output-alias` (M, Batch 19) — that's
+        // parameter-count bypass via single-buffer read-then-write within one
+        // kernel (output aliases accumulation input); this is cross-buffer
+        // hazard resolution when the runtime's pool aliases input and output
+        // across DIFFERENT buffers (the output is a separate dedicated
+        // buffer, then copied back).
+        KernelRule {
+            rule_id: "pool-buffer-aliasing-dedicated-output".to_string(),
+            gpu_concept: "when the runtime sub-allocates handles within one pool buffer (e.g. CubeCL pool buffer), input and output handles sharing the same pool alias each other and break hazard tracking — write to a dedicated output buffer keyed by byte size, then GPU->GPU copy back via blit encoder (same command buffer, zero host round-trip)".to_string(),
+            ref_shape: "// naive: bind the output handle directly — Metal hazard tracking silently fails, kernel runs but writes nothing\nfn dispatch_with_pool_aliasing(client: &CubeCLClient, input: &Handle, output: &Handle) {\n    let (in_ptr, in_off) = extract_raw(client, input);\n    let (out_ptr, out_off) = extract_raw(client, output);\n    // BUG: input + output share the same CubeCL pool buffer — Metal's hazard\n    // tracking sees the read + write on the same id<MTLBuffer> as a conflict\n    // and silently fails the cooperative-tensor store. Kernel runs, writes nothing.\n    encoder.set_buffer(0, Some(in_ref), in_off);\n    encoder.set_buffer(4, Some(out_ref), out_off); // same pool — aliasing hazard\n    encoder.dispatch_thread_groups(grid, threadgroup);\n}".to_string(),
+            opt_pattern: "// optimized: dedicated output buffer keyed by byte size + GPU->GPU copy back\nstruct OutputCache { cache: Mutex<HashMap<u64, Buffer>> }\nfn dispatch_with_dedicated_output(cache: &OutputCache, client: &CubeCLClient, input: &Handle, output: &Handle, output_bytes: u64) {\n    let (in_ptr, in_off) = extract_raw(client, input);\n    let (out_ptr, out_off) = extract_raw(client, output); // for the copy-back target\n    // Dedicated output buffer — NOT from the CubeCL pool. Cached by byte size.\n    let dedicated = {\n        let mut c = cache.cache.lock().unwrap();\n        c.entry(output_bytes).or_insert_with(|| {\n            device_ref.new_buffer(output_bytes, MTLResourceOptions::StorageModeShared)\n        }).clone()\n    };\n    encoder.set_buffer(0, Some(in_ref), in_off);\n    encoder.set_buffer(4, Some(&dedicated), 0); // dedicated — no pool aliasing\n    encoder.dispatch_thread_groups(grid, threadgroup);\n    encoder.end_encoding();\n    // GPU->GPU copy back to the CubeCL output handle (same command buffer)\n    let blit = cmd_buffer.new_blit_command_encoder();\n    blit.copy_from_buffer(&dedicated, 0, out_ref, out_off, output_bytes);\n    blit.end_encoding(); // 1 GPU->GPU copy, 0 host round-trips\n}".to_string(),
+        },
+        // ── same-queue-implicit-ordering-no-sync — dispatch on shared queue, rely on in-order execution (A) ──
+        // Source: riir-gpu gemm_ternary_metal_zero_copy.rs L350-412. By
+        // dispatching the raw native kernel on the SAME Metal command queue
+        // the wrapper runtime uses, ordering is implicit (no host-side
+        // sync/wait). The wrapper's subsequent dispatches automatically run
+        // after the raw native dispatch (Metal guarantees in-order execution
+        // within one queue). This eliminates the host-round-trip serialization
+        // that refuted Issue 656.
+        //
+        // Distinct from `chain-dispatches-single-sync-point` (C, Batch 19) —
+        // that's queue N dependent dispatches in ONE command buffer with one
+        // end-sync; this is dispatching on a SHARED QUEUE (different command
+        // buffers, same queue) and relying on in-order execution WITHOUT a
+        // final sync. Different scope (intra-cmdbuf vs cross-cmdbut-same-queue).
+        KernelRule {
+            rule_id: "same-queue-implicit-ordering-no-sync".to_string(),
+            gpu_concept: "when a raw native dispatch must be ordered relative to wrapper-runtime dispatches (e.g. Metal kernel output read by a later CubeCL dispatch), submit on the SAME command queue the wrapper uses — the API guarantees in-order execution within one queue, so no explicit host-side sync or wait_until_completed is needed".to_string(),
+            ref_shape: "// naive: separate command queue for the native dispatch — forces explicit sync between wrapper and native contexts\nfn dispatch_separate_queue(native_dev: &Device, wrapper_queue: &WrapperQueue, input: &Handle) {\n    let native_queue = native_dev.new_command_queue(); // SEPARATE queue from wrapper\n    let cmd = native_queue.new_command_buffer();\n    // ... dispatch native kernel ...\n    cmd.commit();\n    cmd.wait_until_completed(); // MUST sync — wrapper has no ordering visibility into native queue\n    // wrapper can now safely read the output\n}".to_string(),
+            opt_pattern: "// optimized: extract the wrapper's command queue + dispatch the native kernel on it — ordering is implicit\nfn dispatch_shared_queue(wrapper_dev: Arc<WgpuDevice>, wrapper_queue: Arc<WgpuQueue>, input: &Handle) {\n    // Extract the raw id<MTLCommandQueue> from the wrapper's wgpu queue\n    let queue_ptr = unsafe {\n        let guard = wrapper_queue.as_hal::<wgpu::hal::api::Metal>();\n        let q = guard.as_ref().expect(\"wrapper queue is not Metal\");\n        q.as_raw() as *mut metal::MTLCommandQueue\n    };\n    let queue_ref: &CommandQueueRef = unsafe { CommandQueueRef::from_ptr(queue_ptr) };\n    let cmd = queue_ref.new_command_buffer(); // SAME queue as wrapper\n    // ... dispatch native kernel ...\n    cmd.commit();\n    // NO wait_until_completed — Metal guarantees in-order execution within one queue.\n    // The wrapper's NEXT dispatch (e.g. next prefill projection that reads this\n    // output) is automatically ordered AFTER this native dispatch. Blocking here\n    // would serialize the async pipeline (reintroducing the host-round-trip cost).\n}".to_string(),
+        },
+        // ── per-dispatch-pointer-re-extraction — cache handle, re-extract raw pointer fresh (A) ──
+        // Source: riir-gpu gemm_ternary_metal_zero_copy.rs L211-224 + L278-283.
+        // When the runtime can reallocate/defragment its memory pool between
+        // dispatches, raw pointers extracted from handles must be re-extracted
+        // on EVERY dispatch, not cached. Cache the higher-level handle
+        // (cheap, ref-counted, stable), re-extract the raw pointer fresh.
+        // This is the CORRECTNESS INVARIANT that makes rule #1 safe.
+        //
+        // Caching a raw pointer across dispatches is a use-after-free when the
+        // pool defragments. The handle clone is cheap (Arc bump); the
+        // raw-pointer extraction is a few pointer reads.
+        KernelRule {
+            rule_id: "per-dispatch-pointer-re-extraction".to_string(),
+            gpu_concept: "when a higher-level runtime can reallocate/defragment its memory pool between dispatches, raw native pointers extracted from wrapper handles must be re-extracted on EVERY dispatch, not cached across dispatches — cache the higher-level handle (ref-counted, stable) and re-extract the raw pointer fresh each time".to_string(),
+            ref_shape: "// naive: cache the raw pointer across dispatches — use-after-free when the pool defragments\nstruct BadCache {\n    cached_ptr: *mut metal::MTLBuffer, // cached ONCE at boot\n    cached_offset: u64,\n}\nimpl BadCache {\n    fn dispatch(&self, encoder: &Encoder) {\n        // BUG: if the wrapper's pool defragmented between boot and this dispatch,\n        // cached_ptr points to freed/recycled memory — use-after-free.\n        let buf_ref: &BufferRef = unsafe { BufferRef::from_ptr(self.cached_ptr) };\n        encoder.set_buffer(0, Some(buf_ref), self.cached_offset);\n    }\n}".to_string(),
+            opt_pattern: "// optimized: cache the WRAPPER HANDLE (stable, ref-counted), re-extract the raw pointer on EVERY dispatch\nstruct SafeCache {\n    handle: Handle, // wrapper handle — cheap to clone (Arc bump), stable across pool defrags\n}\nimpl SafeCache {\n    fn dispatch(&self, client: &CubeCLClient, encoder: &Encoder) -> Result<(), String> {\n        // Re-extract the raw pointer FRESH on every dispatch — the handle is\n        // stable but the underlying pool allocation may have moved.\n        let managed = client.get_resource(self.handle.clone()).map_err(|e| format!(\"{e:?}\"))?;\n        let resource = managed.resource();\n        let wgpu_buffer = &resource.buffer;\n        let offset = resource.offset;\n        let raw_ptr = unsafe {\n            let guard = wgpu_buffer.as_hal::<wgpu::hal::api::Metal>();\n            let hal_buf = guard.as_ref().ok_or(\"not Metal\")?;\n            hal_buf.raw_handle() as *mut metal::MTLBuffer\n        };\n        let buf_ref: &BufferRef = unsafe { BufferRef::from_ptr(raw_ptr) };\n        encoder.set_buffer(0, Some(buf_ref), offset);\n        Ok(()) // safe across pool defragmentation — pointer is always fresh\n    }\n}".to_string(),
+        },
+        // ── no-blocking-sync-in-async-pipeline — wait_until_completed serializes → rely on queue ordering (D) ──
+        // Source: riir-gpu gemm_ternary_metal_zero_copy.rs L407-419. The
+        // dispatch does NOT call `cmd_buffer.wait_until_completed()`. The
+        // command buffer runs on the shared Metal queue — the wrapper's
+        // subsequent dispatches (including the next prefill projection that
+        // reads this output) are automatically ordered after it (Metal
+        // guarantees in-order execution within one queue). Blocking here would
+        // serialize the async pipeline, reintroducing the host-round-trip cost.
+        //
+        // The `client.sync()` BEFORE dispatch ensures the INPUT buffer's data
+        // is committed; the queue ordering ensures the OUTPUT is visible to
+        // the next consumer. Only a test that reads the buffer via a
+        // non-queued path (e.g. `client.read_one` which may map without a GPU
+        // sync) needs explicit `wait_until_completed`.
+        //
+        // Complement of `chain-dispatches-single-sync-point` (C, Batch 19) —
+        // that's about reducing N syncs to 1 WITHIN a command buffer; this is
+        // about avoiding the FINAL sync entirely by relying on queue ordering.
+        KernelRule {
+            rule_id: "no-blocking-sync-in-async-pipeline".to_string(),
+            gpu_concept: "when dispatching on a shared command queue inside an async pipeline, never call wait_until_completed/sync — it serializes the pipeline by blocking the host thread. Use queue ordering (in-order execution within one queue) + the caller's pre-dispatch sync to cover correctness. Only non-queued read paths (test read_one) need explicit sync".to_string(),
+            ref_shape: "// naive: block on every dispatch — serializes the async pipeline (host thread stalls)\nfn dispatch_blocking(cmd_queue: &CommandQueueRef) -> Result<Vec<f32>, String> {\n    let cmd = cmd_queue.new_command_buffer();\n    let encoder = cmd.new_compute_command_encoder();\n    // ... dispatch kernel ...\n    encoder.end_encoding();\n    cmd.commit();\n    cmd.wait_until_completed(); // BLOCKS the host thread until the GPU finishes\n    // The next dispatch can't even be queued until this one finishes —\n    // the async pipeline is serialized into a sync one. At ~448 prefill\n    // projections, this is 448 blocking round-trips (the Issue 656 regression).\n    Ok(read_output())\n}".to_string(),
+            opt_pattern: "// optimized: no blocking sync — submit and return; queue ordering covers correctness\nfn dispatch_non_blocking(cmd_queue: &CommandQueueRef) -> Result<(), String> {\n    let cmd = cmd_queue.new_command_buffer();\n    let encoder = cmd.new_compute_command_encoder();\n    // ... dispatch kernel ...\n    encoder.end_encoding();\n    cmd.commit();\n    // NO wait_until_completed — the host thread returns immediately. The\n    // wrapper's NEXT dispatch on the same queue is automatically ordered\n    // AFTER this one (Metal: in-order execution within one queue).\n    //\n    // The caller's pre-dispatch `client.sync()` ensured the INPUT was committed;\n    // the queue ordering ensures the OUTPUT is visible to the next consumer.\n    // Only an external test using `client.read_one` (which may map without\n    // a GPU sync) needs to call wait_until_completed explicitly.\n    Ok(()) // async pipeline stays async — 448 projections pipeline through the queue\n}".to_string(),
+        },
     ])
 }
 
@@ -2099,7 +2245,7 @@ fn gemv_residual_inplace(weight: &[f32], input: &[f32], residual_output: &mut [f
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (13 rules)
+    // A: Memory access patterns (17 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -2117,6 +2263,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "row-tile-amortize-input-load",
             "pin-lane-to-quant-sub-block-coalesce-byte-loads",
             "cooperative-block-wide-quantize-staging",
+            "cross-runtime-raw-handle-extraction",
+            "pool-buffer-aliasing-dedicated-output",
+            "same-queue-implicit-ordering-no-sync",
+            "per-dispatch-pointer-re-extraction",
         ],
     ),
     // B: Compute patterns (27 rules)
@@ -2174,7 +2324,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fuse-residual-via-in-place-output-array",
         ],
     ),
-    // D: Dispatch patterns (9 rules)
+    // D: Dispatch patterns (10 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -2188,6 +2338,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "dual-mode-gate-transform",
             "cyclic-modality-table-selection",
             "swap-large-axis-to-x-for-workgroup-distribution",
+            "no-blocking-sync-in-async-pipeline",
         ],
     ),
     // E: Parallelism patterns (8 rules)
@@ -2423,8 +2574,9 @@ mod tests {
         // Batch 18 (3): riir-gpu production kernels — row-tile-amortize-input-load, factor-affine-quant-scale-out-of-element-loop, pin-lane-to-quant-sub-block-coalesce-byte-loads (gemv_q4k_cubecl Q4_K family).
         // Batch 19 (2): riir-gpu production kernels — chain-dispatches-single-sync-point, fuse-residual-via-in-place-output-array (ternary_ffn_fused, gemv_ternary_residual_cubecl).
         // Batch 20 (5): riir-gpu production kernels — cooperative-block-wide-quantize-staging, byte-perm-lut-via-permutation-immediate, dp4a-int8-hardware-dot-product, threadgroup-subset-sum-lut-keyed-by-activation, base-3-trit-packing-5-per-byte (gemv_ternary_cuda_raw + gemv_ternary_cubecl LUT/trit paths).
-        // Total: 145.
-        assert_eq!(corpus.entries.len(), 145, "batches 1-20 should have 145 rules");
+        // Batch 21 (5): riir-gpu production kernels — cross-runtime-raw-handle-extraction, pool-buffer-aliasing-dedicated-output, same-queue-implicit-ordering-no-sync, per-dispatch-pointer-re-extraction, no-blocking-sync-in-async-pipeline (gemm_ternary_metal_zero_copy.rs — Metal cross-runtime integration cluster).
+        // Total: 150.
+        assert_eq!(corpus.entries.len(), 150, "batches 1-21 should have 150 rules");
     }
 
     #[test]
@@ -3176,6 +3328,44 @@ mod tests {
     }
 
     // ════════════════════════════════════════════════════════════════════
+    // Batch 21 (Research 022) — Metal cross-runtime zero-copy integration
+    // cluster (5 rules: 4A + 1D)
+    // ════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn batch21_rules_present() {
+        // Verify the 5 batch-21 rules across A/D.
+        let corpus = build_kernel_seed_corpus();
+        let ids: Vec<&str> =
+            corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        // A (4 new): cross-runtime-raw-handle-extraction + pool-buffer-aliasing-dedicated-output + same-queue-implicit-ordering-no-sync + per-dispatch-pointer-re-extraction
+        assert!(ids.contains(&"cross-runtime-raw-handle-extraction"), "cross-runtime raw handle extraction");
+        assert!(ids.contains(&"pool-buffer-aliasing-dedicated-output"), "pool-buffer aliasing dedicated output");
+        assert!(ids.contains(&"same-queue-implicit-ordering-no-sync"), "same-queue implicit ordering no sync");
+        assert!(ids.contains(&"per-dispatch-pointer-re-extraction"), "per-dispatch pointer re-extraction");
+        // D (1 new): no-blocking-sync-in-async-pipeline
+        assert!(ids.contains(&"no-blocking-sync-in-async-pipeline"), "no-blocking-sync-in-async-pipeline");
+    }
+
+    #[test]
+    fn batch21_metal_cross_runtime_concepts_covered() {
+        // Verify the batch-21 Metal cross-runtime integration concepts.
+        let corpus = build_kernel_seed_corpus();
+        let concepts: Vec<&str> =
+            corpus.entries.iter().map(|e| e.gpu_concept.as_str()).collect();
+        // A: cross-runtime-raw-handle-extraction (riir-gpu gemm_ternary_metal_zero_copy.rs L230-252)
+        assert!(concepts.contains(&"when a higher-level GPU runtime (wgpu, CubeCL) wraps a lower-level native API (Metal, Vulkan, CUDA), extract the raw native handle (e.g. id<MTLBuffer>) from the wrapper handle via the runtime's as_hal/raw_handle API — enables raw native kernel dispatch that reads/writes wrapper-owned memory without a host round-trip"));
+        // A: pool-buffer-aliasing-dedicated-output (riir-gpu gemm_ternary_metal_zero_copy.rs L291-315)
+        assert!(concepts.contains(&"when the runtime sub-allocates handles within one pool buffer (e.g. CubeCL pool buffer), input and output handles sharing the same pool alias each other and break hazard tracking — write to a dedicated output buffer keyed by byte size, then GPU->GPU copy back via blit encoder (same command buffer, zero host round-trip)"));
+        // A: same-queue-implicit-ordering-no-sync (riir-gpu gemm_ternary_metal_zero_copy.rs L350-412)
+        assert!(concepts.contains(&"when a raw native dispatch must be ordered relative to wrapper-runtime dispatches (e.g. Metal kernel output read by a later CubeCL dispatch), submit on the SAME command queue the wrapper uses — the API guarantees in-order execution within one queue, so no explicit host-side sync or wait_until_completed is needed"));
+        // A: per-dispatch-pointer-re-extraction (riir-gpu gemm_ternary_metal_zero_copy.rs L211-224 + L278-283)
+        assert!(concepts.contains(&"when a higher-level runtime can reallocate/defragment its memory pool between dispatches, raw native pointers extracted from wrapper handles must be re-extracted on EVERY dispatch, not cached across dispatches — cache the higher-level handle (ref-counted, stable) and re-extract the raw pointer fresh each time"));
+        // D: no-blocking-sync-in-async-pipeline (riir-gpu gemm_ternary_metal_zero_copy.rs L407-419)
+        assert!(concepts.contains(&"when dispatching on a shared command queue inside an async pipeline, never call wait_until_completed/sync — it serializes the pipeline by blocking the host thread. Use queue ordering (in-order execution within one queue) + the caller's pre-dispatch sync to cover correctness. Only non-queued read paths (test read_one) need explicit sync"));
+    }
+
+    // ════════════════════════════════════════════════════════════════════
     // Plan 003 — Router ↔ corpus wiring tests
     // ════════════════════════════════════════════════════════════════════
 
@@ -3217,12 +3407,12 @@ mod tests {
 
     #[test]
     fn kernel_categories_counts_match_plan_003_table() {
-        // Pin per-category rule counts to the Plan 003 table (updated for Batch 20).
+        // Pin per-category rule counts to the Plan 003 table (updated for Batch 21).
         let expected = [
-            (KernelCategory::MemoryAccess, 13),
+            (KernelCategory::MemoryAccess, 17),
             (KernelCategory::Compute, 27),
             (KernelCategory::Fusion, 14),
-            (KernelCategory::Dispatch, 9),
+            (KernelCategory::Dispatch, 10),
             (KernelCategory::Parallelism, 8),
             (KernelCategory::FlashAttnTiling, 10),
             (KernelCategory::LinearAttnRecurrence, 17),
@@ -3242,9 +3432,9 @@ mod tests {
                 "Plan 003: category {cat:?} has {} rules, expected {count}",
                 entry.2.len());
         }
-        // Sum must equal 145.
+        // Sum must equal 150.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 145, "Plan 003: category totals must sum to 145");
+        assert_eq!(total, 150, "Plan 003: category totals must sum to 150");
     }
 
     #[test]
@@ -3254,7 +3444,7 @@ mod tests {
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 145, "Plan 003: grouped corpus has {total} rules, expected 145");
+        assert_eq!(total, 150, "Plan 003: grouped corpus has {total} rules, expected 150");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");
