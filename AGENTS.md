@@ -26,7 +26,7 @@ Three domains ship (Plan 001):
    bench finding (Bench 015 + Bench 016: 2 ParetoDominated + 4 regime-fragile/Mixed in the
    default config — consumers should treat annotated rules as
    context-dependent).
-3. **`kernel_opt`** (opt-in, Phase 3) — heals GPU kernel optimization. 160 rules
+3. **`kernel_opt`** (opt-in, Phase 3) — heals GPU kernel optimization. 164 rules
    (Batch 1-6: 50 popcorn-distilled from Research 002-007; Batch 7: 9 burn-cubecl
    Rust-native autotune dispatch + conv-as-GEMM + layout rules from Research 008;
    Batch 8: 9 burn-cubecl kernel polymorphism + dtype/alignment specialization +
@@ -53,6 +53,8 @@ Three domains ship (Plan 001):
    Batch 22: 5 riir-gpu production-kernel rules (dynamic-shared-memory-runtime-sized, ternary-bit-plane-u64-as-2x-u32, warp-shuffle-intrinsics-for-sub-warp-reduction, fused-activation-quantize-for-gemv-consumer, cuda-graph-scalar-via-device-pointer) from Research 023 — the ninth batch mining the stack's own kernels (cudarc_kernels/ — the full raw-CUDA forward port for Issue 615: embedding + attention + elementwise + deltanet; patterns include `extern __shared__` runtime-sized smem, bit-plane ternary dequant, `__shfl_down_sync` warp reduction for ≤32-thread blocks, activation+quantize fusion for GEMV consumers, and `_devpos` variants for CUDA Graph capture). Absorbs Proposal 012's design
    (thermal-tier + latent-MoE + numeric validator); 4090 LoRA deferred.
    Batch 23: 5 riir-gpu production-kernel rules (combined-kv-buffer-keys-then-values, gqa-kv-head-sharing-bandwidth-reduction, softcap-tanh-attention-score, fold-query-tokens-for-occupancy, hardcoded-fast-path-jit-specialization) from Research 024 — the tenth batch mining the stack's own kernels (attention_cubecl/ — the `CubeCL` flash-attention decode cluster: combined KV buffer `[keys | values]`, GQA KV-head sharing via `kv_group = head_idx * n_kv_head / n_head`, Gemma's `softcap * tanh(score/softcap)` bounded logits, fold-factor query-token coalescing for speculative-decode occupancy, and hardcoded fast-path vs parametric JIT specialization; ~24% decode throughput gain on M3 Max). Absorbs Proposal 012's design
+   (thermal-tier + latent-MoE + numeric validator); 4090 LoRA deferred.
+   Batch 24: 4 riir-gpu production-kernel rules (widen-index-multiply-to-64bit, dual-accumulator-single-reduction-sweep, dual-grad-same-pass, broadcast-uniform-skip-reduce) from Research 025 — the eleventh batch mining the stack's own kernels (cudarc_kernels/backward.rs — the Issue 641 per-layer backward cluster; closes `cudarc_kernels/` 6/6: 64-bit index widening for address math on large buffers, two block reductions fused into one sweep sharing loads + barrier tree, both partials of a product-rule activation in one kernel sharing one sigmoid eval, and thread-uniform values broadcast-not-reduced — the T7.2 validation catch where z came out blockDim.x× too large). Absorbs Proposal 012's design
    (thermal-tier + latent-MoE + numeric validator); 4090 LoRA deferred.
 
 The pipeline (shared across all domains):

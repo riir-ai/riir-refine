@@ -241,9 +241,21 @@
 //!   divisor of `seq_len_q` ≤ `workgroup_size/n_head`), hardcoded-fast-path-
 //!   jit-specialization (D — dispatch a hardcoded kernel variant when params
 //!   match a known config so the JIT can constant-fold dims into optimized
-//!   Metal/WGSL shaders; ~24% decode throughput gain on M3 Max). Corpus:
-//!   **160 rules across 15 categories (A–O)**. `riir-gpu` remains open (24 of
-//!   ~200 files mined; `attention_cubecl/` fully covered).
+//!   Metal/WGSL shaders; ~24% decode throughput gain on M3 Max).
+//! - **Batch 24 (Research 025):** 4 rules from `cudarc_kernels/backward.rs`
+//!   (1923 lines; Issue 641 per-layer backward CUDA kernels): widen-index-
+//!   multiply-to-64bit (A — cast one operand of an address-producing multiply
+//!   to 64-bit when position × stride can exceed 2^31; int32 wraps silently),
+//!   dual-accumulator-single-reduction-sweep (B — two block reductions over
+//!   the same data fused into one sweep: shared loads + shared barrier tree;
+//!   `RMSNorm` backward's sum(x²) + `dot(grad_y·γ·x)`), dual-grad-same-pass
+//!   (C — both partials of a product-rule activation emitted from ONE kernel
+//!   sharing input reads + one sigmoid evaluation), broadcast-uniform-skip-
+//!   reduce (E — thread-uniform values derived from already-reduced
+//!   broadcasts must be broadcast, not re-reduced; re-reducing multiplies by
+//!   blockDim.x — the T7.2 validation bug in softmax backward). Corpus:
+//!   **164 rules across 15 categories (A–O)**. `riir-gpu` remains open (25 of
+//!   ~200 files mined; `cudarc_kernels/` + `attention_cubecl/` fully covered).
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
@@ -2409,6 +2421,77 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
             ref_shape: "// naive: parametric kernel reads dims from buffer — JIT cannot constant-fold\n#[cube(launch_unchecked)]\nfn attention_parametric(q: &[f32], kv: &[f32], params: &[f32], out: &mut [f32]) {\n    let n_head = params[0] as u32;       // runtime read — not a compile-time constant\n    let head_dim = params[2] as u32;     // runtime read — loop bound unknown to JIT\n    let mut d = 0u32;\n    while d < head_dim {                 // JIT cannot unroll — head_dim unknown\n        dot += q[d] * kv[d];\n        d += 1u32;\n    }\n    // params buffer allocation + per-tile buffer reads add ~5% overhead\n}".to_string(),
             opt_pattern: "// optimized: hardcoded fast-path — constants baked in, JIT constant-folds\n#[cube(launch_unchecked)]\nfn attention_hardcoded_gemma2(q: &[f32], kv: &[f32], out: &mut [f32]) {\n    let n_head = 8u32;      // COMPILE-TIME constant — JIT unrolls + folds strides\n    let head_dim = 256u32;  // COMPILE-TIME — JIT unrolls the dot-product loop\n    let mut d = 0u32;\n    while d < 256u32 {\n        dot += q[d] * kv[d];\n        d += 1u32;\n    }\n    // no params buffer, no per-dispatch reads, JIT generates optimized Metal/WGSL\n}\n// dispatch:\nfn launch(params: &Params) {\n    if params.n_head == 8 && params.head_dim == 256 && params.softcap == 50.0 {\n        attention_hardcoded_gemma2::launch_unchecked(...);  // fast path (~24% faster)\n    } else {\n        attention_parametric::launch_unchecked(...);  // generic fallback\n    }\n}".to_string(),
         },
+        // ════════════════════════════════════════════════════════════════════
+        // Batch 24 (Research 025): cudarc_kernels backward cluster — 4 rules
+        // (cudarc_kernels/backward.rs — 1923 lines; Issue 641 T7.3/T7.5
+        // per-layer backward CUDA kernels for DeltaNet + Attention: RMSNorm /
+        // SwiGLU / z-gating / output-gate / conv1d+SiLU / L2-norm / beta-decay
+        // / softmax-attention backward + in-place vector accumulate).
+        // ════════════════════════════════════════════════════════════════════
+        // ── widen-index-multiply-to-64bit — address-width for large buffers (A) ──
+        // Source: riir-gpu cudarc_kernels/backward.rs L416/L474/L478/L515/L518 —
+        // every KV cache access in softmax_attention_backward_f32 uses
+        // `(long)t * kv_stride + kv_off`. int32 index arithmetic wraps silently
+        // in CUDA when position × stride exceeds 2^31 (long-context KV caches,
+        // big batched weight-grad buffers) → OOB reads / wrong elements with
+        // no error. The pattern: keep loop counters + small dims 32-bit
+        // (register economy), widen ONLY the address-producing multiply by
+        // casting ONE operand to 64-bit.
+        KernelRule {
+            rule_id: "widen-index-multiply-to-64bit".to_string(),
+            gpu_concept: "when a flat index product (position × stride) can exceed 2^31 on large buffers (long-context KV caches, big batched grads), widen ONLY the address-producing multiply to 64-bit by casting one operand — keep loop counters and small dims 32-bit for register economy. int32 index overflow in CUDA wraps silently → OOB reads / wrong elements with no error. Appears as `(long)t * kv_stride` at every KV cache access. Distinct from upcast-before-reduction (fp32 precision) — this is integer address width".to_string(),
+            ref_shape: "// naive: 32-bit index multiply — wraps when t * kv_stride exceeds 2^31\nfn kv_dot_naive(q: &[f32], kv_cache: &[f32], t: i32, kv_stride: i32, kv_off: i32, head_dim: usize) -> f32 {\n    let base = t * kv_stride + kv_off;  // i32 arithmetic — overflows silently in CUDA\n    let mut dot = 0.0;\n    for d in 0..head_dim { dot += q[d] * kv_cache[(base + d as i32) as usize]; }\n    dot  // t=500_000, kv_stride=8192 → 4.1e9 > 2^31 → wrapped index, silent wrong reads\n}".to_string(),
+            opt_pattern: "// optimized: widen ONE operand of the address multiply — loop counters stay 32-bit\nfn kv_dot_widened(q: &[f32], kv_cache: &[f32], t: i32, kv_stride: i32, kv_off: i32, head_dim: usize) -> f32 {\n    let base = t as i64 * kv_stride as i64 + kv_off as i64;  // 64-bit address math\n    let mut dot = 0.0;\n    for d in 0..head_dim { dot += q[d] * kv_cache[(base + d as i64) as usize]; }\n    dot  // correct index at any realistic cache size; the 64-bit pair costs 1 extra register\n}".to_string(),
+        },
+        // ── dual-accumulator-single-reduction-sweep — two reductions, one barrier tree (B) ──
+        // Source: riir-gpu cudarc_kernels/backward.rs L61-83
+        // (rmsnorm_batched_backward_f32 pass 1). RMSNorm backward needs TWO
+        // reductions over the SAME elements: sum_sq = Σ x[i]² and
+        // dot = Σ grad_y[i]·gamma[i]·x[i]. The kernel computes both partial
+        // sums in ONE strided loop (x[off+i] loaded once, feeding both
+        // accumulators), then reduces BOTH shared-memory arrays inside the
+        // SAME stride tree (s_sum_sq[tid] += s_sum_sq[tid+stride] AND
+        // s_dot[tid] += s_dot[tid+stride] per step) — halving global loads
+        // and halving the __syncthreads() count vs two sequential reductions.
+        KernelRule {
+            rule_id: "dual-accumulator-single-reduction-sweep".to_string(),
+            gpu_concept: "fuse two block reductions over the same data into one sweep: keep two partial accumulators in the same strided loop (each element loaded once, feeding both), and reduce both shared-memory arrays inside the SAME stride tree — halves global loads and halves the __syncthreads() barrier count vs two sequential reductions. RMSNorm backward needs sum(x²) and dot(grad_y·γ·x) over identical elements — the canonical case. Distinct from split-sign-accumulators-defer-subtraction (ILP chains within one dot) — this is barrier + load sharing across two different reductions".to_string(),
+            ref_shape: "// naive: two separate reduction passes — x loaded twice, two barrier trees\nfn rmsnorm_bwd_two_passes(grad_y: &[f32], x: &[f32], gamma: &[f32], head_dim: usize) -> (f32, f32) {\n    let sum_sq: f32 = (0..head_dim).map(|i| x[i] * x[i]).sum();              // pass 1: load x\n    let dot: f32 = (0..head_dim).map(|i| grad_y[i] * gamma[i] * x[i]).sum(); // pass 2: load x AGAIN\n    // each pass = its own shared-memory tree + its own __syncthreads() sequence\n    (sum_sq, dot)\n}".to_string(),
+            opt_pattern: "// optimized: one sweep, two accumulators, ONE shared barrier tree\nfn rmsnorm_bwd_dual_acc(grad_y: &[f32], x: &[f32], gamma: &[f32], head_dim: usize) -> (f32, f32) {\n    let mut partial_sq = 0.0f32;\n    let mut partial_dot = 0.0f32;\n    for i in 0..head_dim {\n        let xi = x[i];                        // loaded ONCE — feeds both accumulators\n        partial_sq += xi * xi;\n        partial_dot += grad_y[i] * gamma[i] * xi;\n    }\n    // single block-reduction sweeps BOTH accumulator arrays per stride step:\n    //   s_sum_sq[tid] += s_sum_sq[tid + stride];\n    //   s_dot[tid]    += s_dot[tid + stride];\n    // half the __syncthreads() count + half the x[] loads vs two reductions\n    (partial_sq, partial_dot)\n}".to_string(),
+        },
+        // ── dual-grad-same-pass — both partials of a product rule in one kernel (C) ──
+        // Source: riir-gpu cudarc_kernels/backward.rs L108-126 (swiglu),
+        // L137-155 (z_gating), L169-186 (output_gate_sigmoid), L345-369
+        // (beta_decay). A product-rule activation out = f(gate)·g(other)
+        // yields TWO partial derivatives that share the same inputs AND the
+        // same transcendental evaluation: grad_a = grad_out·f'(a)·b and
+        // grad_b = grad_out·f(a). One kernel loads each element once,
+        // evaluates sigmoid/silu ONCE, writes both grad buffers. Two kernels
+        // would re-read all inputs + re-evaluate exp + launch twice.
+        KernelRule {
+            rule_id: "dual-grad-same-pass".to_string(),
+            gpu_concept: "a product-rule activation out = f(gate)·g(other) has TWO partial derivatives that share the same inputs and the same transcendental evaluation (sigmoid/silu) — emit both from ONE kernel: load each element once, evaluate the activation + its derivative once, write both grad buffers. Applies to every gated backward (SwiGLU: grad_gate+grad_up; z-gating: grad_pre+grad_z; sigmoid output-gate: grad_pre+grad_gate; beta/decay pair). Distinct from fused-backward-chain (producer→consumer chain stays in registers) and fuse-gate-up-gemv-activation (forward sibling GEMVs) — this is the backward fan-out: sibling grads sharing one evaluation".to_string(),
+            ref_shape: "// naive: two kernels — each re-reads all inputs and re-evaluates the sigmoid\nfn swiglu_bwd_gate_kernel(grad_out: &[f32], gate: &[f32], up: &[f32], grad_gate: &mut [f32]) {\n    for i in 0..gate.len() {\n        let sig = 1.0 / (1.0 + (-gate[i]).exp());    // exp evaluated HERE\n        let silu_deriv = sig * (1.0 + gate[i] * (1.0 - sig));\n        grad_gate[i] = grad_out[i] * silu_deriv * up[i];  // reads gate + up + grad_out\n    }\n}\nfn swiglu_bwd_up_kernel(grad_out: &[f32], gate: &[f32], up: &[f32], grad_up: &mut [f32]) {\n    for i in 0..gate.len() {\n        let sig = 1.0 / (1.0 + (-gate[i]).exp());    // SAME exp re-evaluated\n        grad_up[i] = grad_out[i] * gate[i] * sig;    // reads the SAME inputs again\n    }\n}\n// 2× input reads, 2× transcendental evals, 2× kernel launches".to_string(),
+            opt_pattern: "// optimized: ONE kernel — one pass, one sigmoid, both partials\nfn swiglu_bwd_dual(grad_out: &[f32], gate: &[f32], up: &[f32],\n                   grad_gate: &mut [f32], grad_up: &mut [f32]) {\n    for i in 0..gate.len() {\n        let g = gate[i];                             // read once\n        let sig = 1.0 / (1.0 + (-g).exp());          // exp once — feeds BOTH partials\n        let silu_g = g * sig;\n        let silu_deriv = sig * (1.0 + g * (1.0 - sig));\n        grad_gate[i] = grad_out[i] * silu_deriv * up[i];\n        grad_up[i] = grad_out[i] * silu_g;           // silu_g reuses the same sig\n    }\n    // halves input reads + transcendental evals + kernel launches\n}".to_string(),
+        },
+        // ── broadcast-uniform-skip-reduce — thread-uniform values are not reduced (E) ──
+        // Source: riir-gpu cudarc_kernels/backward.rs L492-501
+        // (softmax_attention_backward_f32, the documented T7.2 BUG FIX):
+        // "z is the same for all threads (gp was already reduced to
+        // s_reduce[0], so every thread computed the same z_local). No
+        // cross-thread reduction needed — just broadcast from thread 0 via
+        // shared memory. BUG FIX (T7.2 validation catch): the prior code
+        // reduced z_local across threads, which multiplied z by blockDim.x
+        // since every thread had the same value." When a per-thread value is
+        // derived ENTIRELY from already-reduced broadcasts, it is
+        // thread-uniform: re-reducing it sums the identical value blockDim.x
+        // times — wrong result, not just wasted barriers. Broadcast instead.
+        KernelRule {
+            rule_id: "broadcast-uniform-skip-reduce".to_string(),
+            gpu_concept: "when a per-thread value is derived entirely from already-reduced broadcasts (every thread read the same smem[0] + the same shared arrays), it is thread-uniform: do NOT re-reduce it — the tree sums the identical value blockDim.x times, multiplying the result by the block size (a correctness bug, not just wasted barriers). Broadcast instead: thread 0 writes smem, one barrier, every thread reads. Caught as the T7.2 validation bug in riir-gpu's softmax backward (z came out blockDim.x× too large). Distinct from single-plane-sufficient-reduction (dispatch-level redundant planes) — this is intra-block uniformity after a reduction".to_string(),
+            ref_shape: "// naive: block-reduce a value that is ALREADY identical in every thread\n__shared__ float s_reduce[256];\n// every thread's z_local is IDENTICAL (derived from the same reduced s_reduce[0])\ns_reduce[tid] = z_local;\n__syncthreads();\nfor (int stride = 128; stride > 0; stride >>= 1) {      // full barrier tree\n    if (tid < stride) s_reduce[tid] += s_reduce[tid + stride];  // sums the SAME value\n    __syncthreads();\n}\nfloat z = s_reduce[0];  // = z_local * blockDim.x — WRONG (256× too large), not just slow".to_string(),
+            opt_pattern: "// optimized: thread-uniform value → broadcast from thread 0, no reduction\n__shared__ float s_bcast[1];\n// uniform-by-construction: z_local derives only from already-reduced\n// broadcasts (every thread read the same s_reduce[0] + the same probs[t])\nif (tid == 0) { s_bcast[0] = z_local; }   // one write\n__syncthreads();                          // ONE barrier\nfloat z = s_bcast[0];                     // every thread reads the value — correct".to_string(),
+        },
     ])
 }
 
@@ -2421,7 +2504,7 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 160-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 164-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -2429,7 +2512,7 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (21 rules)
+    // A: Memory access patterns (22 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -2455,9 +2538,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "ternary-bit-plane-u64-as-2x-u32",
             "combined-kv-buffer-keys-then-values",
             "gqa-kv-head-sharing-bandwidth-reduction",
+            "widen-index-multiply-to-64bit",
         ],
     ),
-    // B: Compute patterns (29 rules)
+    // B: Compute patterns (30 rules)
     (
         KernelCategory::Compute,
         "B: compute",
@@ -2491,9 +2575,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "threadgroup-subset-sum-lut-keyed-by-activation",
             "warp-shuffle-intrinsics-for-sub-warp-reduction",
             "softcap-tanh-attention-score",
+            "dual-accumulator-single-reduction-sweep",
         ],
     ),
-    // C: Fusion patterns (15 rules)
+    // C: Fusion patterns (16 rules)
     (
         KernelCategory::Fusion,
         "C: fusion",
@@ -2513,6 +2598,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "chain-dispatches-single-sync-point",
             "fuse-residual-via-in-place-output-array",
             "fused-activation-quantize-for-gemv-consumer",
+            "dual-grad-same-pass",
         ],
     ),
     // D: Dispatch patterns (13 rules)
@@ -2535,7 +2621,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "hardcoded-fast-path-jit-specialization",
         ],
     ),
-    // E: Parallelism patterns (8 rules)
+    // E: Parallelism patterns (9 rules)
     (
         KernelCategory::Parallelism,
         "E: parallelism",
@@ -2548,6 +2634,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "softmax-topk-renormalize-scatter",
             "split-reduction-scalar-prepass",
             "single-plane-sufficient-reduction",
+            "broadcast-uniform-skip-reduce",
         ],
     ),
     // F: Flash-attention tiling (10 rules)
@@ -2701,7 +2788,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
 /// Returns 15 buckets (one per category), each containing the `KernelRule`s whose
 /// `rule_id` appears in that category's slice of [`KERNEL_CATEGORIES`]. This is
 /// the category-scoped view of the corpus — a future heal pipeline can consult
-/// the routed expert's rules first without scanning all 145.
+/// the routed expert's rules first without scanning all 164.
 ///
 /// # Allocation
 ///
@@ -2771,8 +2858,9 @@ mod tests {
         // Batch 21 (5): riir-gpu production kernels — cross-runtime-raw-handle-extraction, pool-buffer-aliasing-dedicated-output, same-queue-implicit-ordering-no-sync, per-dispatch-pointer-re-extraction, no-blocking-sync-in-async-pipeline (gemm_ternary_metal_zero_copy.rs — Metal cross-runtime integration cluster).
         // Batch 22 (5): riir-gpu production kernels — dynamic-shared-memory-runtime-sized, ternary-bit-plane-u64-as-2x-u32, warp-shuffle-intrinsics-for-sub-warp-reduction, fused-activation-quantize-for-gemv-consumer, cuda-graph-scalar-via-device-pointer (cudarc_kernels/ — embedding.rs + attention.rs + mod.rs + deltanet.rs; Issue 615 full GPU-resident forward port).
         // Batch 23 (5): riir-gpu production kernels — combined-kv-buffer-keys-then-values, gqa-kv-head-sharing-bandwidth-reduction, softcap-tanh-attention-score, fold-query-tokens-for-occupancy, hardcoded-fast-path-jit-specialization (attention_cubecl/mod.rs — CubeCL flash-attention decode cluster).
-        // Total: 160.
-        assert_eq!(corpus.entries.len(), 160, "batches 1-23 should have 160 rules");
+        // Batch 24 (4): riir-gpu production kernels — widen-index-multiply-to-64bit, dual-accumulator-single-reduction-sweep, dual-grad-same-pass, broadcast-uniform-skip-reduce (cudarc_kernels/backward.rs — Issue 641 per-layer backward cluster: RMSNorm/SwiGLU/z-gating/output-gate/conv1d+SiLU/L2-norm/beta-decay/softmax-attention backward).
+        // Total: 164.
+        assert_eq!(corpus.entries.len(), 164, "batches 1-24 should have 164 rules");
     }
 
     #[test]
@@ -3630,6 +3718,38 @@ mod tests {
         assert!(concepts.contains(&"when kernel params match a known config (e.g. Gemma 2 2B: n_head=8, n_kv_head=4, head_dim=256, softcap=50.0), dispatch a hardcoded variant that bakes the constants into the kernel body — the JIT compiler can then constant-fold dimensions into optimized shaders (unrolled loops, known stride multiplies, eliminated per-tile branching). The generic parametric kernel reads dims from a buffer per dispatch, preventing constant-folding. Measured gain: ~24% decode throughput (31.4 → 41.4 tok/s on M3 Max Metal). Distinct from autotune-warps-stages (sweeps configs) — here the config is matched, not searched"));
     }
 
+    #[test]
+    fn batch24_rules_present() {
+        // Verify the 4 batch-24 rules across A/B/C/E.
+        let corpus = build_kernel_seed_corpus();
+        let ids: Vec<&str> =
+            corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        // A (1 new): widen-index-multiply-to-64bit
+        assert!(ids.contains(&"widen-index-multiply-to-64bit"), "widen index multiply to 64bit");
+        // B (1 new): dual-accumulator-single-reduction-sweep
+        assert!(ids.contains(&"dual-accumulator-single-reduction-sweep"), "dual accumulator single reduction sweep");
+        // C (1 new): dual-grad-same-pass
+        assert!(ids.contains(&"dual-grad-same-pass"), "dual grad same pass");
+        // E (1 new): broadcast-uniform-skip-reduce
+        assert!(ids.contains(&"broadcast-uniform-skip-reduce"), "broadcast uniform skip reduce");
+    }
+
+    #[test]
+    fn batch24_cudarc_backward_concepts_covered() {
+        // Verify the batch-24 cudarc_kernels backward cluster concepts.
+        let corpus = build_kernel_seed_corpus();
+        let concepts: Vec<&str> =
+            corpus.entries.iter().map(|e| e.gpu_concept.as_str()).collect();
+        // A: widen-index-multiply-to-64bit (riir-gpu cudarc_kernels/backward.rs L416/L474/L478/L515/L518)
+        assert!(concepts.contains(&"when a flat index product (position × stride) can exceed 2^31 on large buffers (long-context KV caches, big batched grads), widen ONLY the address-producing multiply to 64-bit by casting one operand — keep loop counters and small dims 32-bit for register economy. int32 index overflow in CUDA wraps silently → OOB reads / wrong elements with no error. Appears as `(long)t * kv_stride` at every KV cache access. Distinct from upcast-before-reduction (fp32 precision) — this is integer address width"));
+        // B: dual-accumulator-single-reduction-sweep (riir-gpu cudarc_kernels/backward.rs L61-83)
+        assert!(concepts.contains(&"fuse two block reductions over the same data into one sweep: keep two partial accumulators in the same strided loop (each element loaded once, feeding both), and reduce both shared-memory arrays inside the SAME stride tree — halves global loads and halves the __syncthreads() barrier count vs two sequential reductions. RMSNorm backward needs sum(x²) and dot(grad_y·γ·x) over identical elements — the canonical case. Distinct from split-sign-accumulators-defer-subtraction (ILP chains within one dot) — this is barrier + load sharing across two different reductions"));
+        // C: dual-grad-same-pass (riir-gpu cudarc_kernels/backward.rs L108-126 + L137-155 + L169-186 + L345-369)
+        assert!(concepts.contains(&"a product-rule activation out = f(gate)·g(other) has TWO partial derivatives that share the same inputs and the same transcendental evaluation (sigmoid/silu) — emit both from ONE kernel: load each element once, evaluate the activation + its derivative once, write both grad buffers. Applies to every gated backward (SwiGLU: grad_gate+grad_up; z-gating: grad_pre+grad_z; sigmoid output-gate: grad_pre+grad_gate; beta/decay pair). Distinct from fused-backward-chain (producer→consumer chain stays in registers) and fuse-gate-up-gemv-activation (forward sibling GEMVs) — this is the backward fan-out: sibling grads sharing one evaluation"));
+        // E: broadcast-uniform-skip-reduce (riir-gpu cudarc_kernels/backward.rs L492-501 — the T7.2 bug fix)
+        assert!(concepts.contains(&"when a per-thread value is derived entirely from already-reduced broadcasts (every thread read the same smem[0] + the same shared arrays), it is thread-uniform: do NOT re-reduce it — the tree sums the identical value blockDim.x times, multiplying the result by the block size (a correctness bug, not just wasted barriers). Broadcast instead: thread 0 writes smem, one barrier, every thread reads. Caught as the T7.2 validation bug in riir-gpu's softmax backward (z came out blockDim.x× too large). Distinct from single-plane-sufficient-reduction (dispatch-level redundant planes) — this is intra-block uniformity after a reduction"));
+    }
+
     // ════════════════════════════════════════════════════════════════════
     // Plan 003 — Router ↔ corpus wiring tests
     // ════════════════════════════════════════════════════════════════════
@@ -3641,7 +3761,7 @@ mod tests {
 
     #[test]
     fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-        // Every rule_id in the 160-rule corpus must appear in exactly one category.
+        // Every rule_id in the 164-rule corpus must appear in exactly one category.
         let corpus = build_kernel_seed_corpus();
         let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
         let mut categorized: Vec<&str> = Vec::new();
@@ -3672,13 +3792,13 @@ mod tests {
 
     #[test]
     fn kernel_categories_counts_match_plan_003_table() {
-        // Pin per-category rule counts to the Plan 003 table (updated for Batch 23).
+        // Pin per-category rule counts to the Plan 003 table (updated for Batch 24).
         let expected = [
-            (KernelCategory::MemoryAccess, 21),
-            (KernelCategory::Compute, 29),
-            (KernelCategory::Fusion, 15),
+            (KernelCategory::MemoryAccess, 22),
+            (KernelCategory::Compute, 30),
+            (KernelCategory::Fusion, 16),
             (KernelCategory::Dispatch, 13),
-            (KernelCategory::Parallelism, 8),
+            (KernelCategory::Parallelism, 9),
             (KernelCategory::FlashAttnTiling, 10),
             (KernelCategory::LinearAttnRecurrence, 17),
             (KernelCategory::MoeDispatchBackward, 9),
@@ -3697,9 +3817,9 @@ mod tests {
                 "Plan 003: category {cat:?} has {} rules, expected {count}",
                 entry.2.len());
         }
-        // Sum must equal 160.
+        // Sum must equal 164.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 160, "Plan 003: category totals must sum to 160");
+        assert_eq!(total, 164, "Plan 003: category totals must sum to 164");
     }
 
     #[test]
@@ -3709,7 +3829,7 @@ mod tests {
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 160, "Plan 003: grouped corpus has {total} rules, expected 160");
+        assert_eq!(total, 164, "Plan 003: grouped corpus has {total} rules, expected 164");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");
