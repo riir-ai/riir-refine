@@ -210,8 +210,8 @@ buggy→fixed idiom pairs).
 
 **Reopen trigger:** mine ≥5 real outer-Rust launch/dispatch/layout rules from
 riir-gpu with literal buggy→fixed code pairs (like Batch 14+ did for
-concepts, but proposer-grade). Until then `--fix` covers perf (+ clippy's
-mutation-based set, wiring TBD) and kernel stays suggest-only.
+concepts, but proposer-grade). Until then `--fix` covers perf + the clippy
+structural set (T6.4) and kernel stays suggest-only.
 
 ### Tasks
 - [ ] **T5.1-T5.6** The 5 kernel proposers (launch/dispatch/layout only, outside `#[cube]`).
@@ -220,14 +220,30 @@ mutation-based set, wiring TBD) and kernel stays suggest-only.
 
 ## Phase 6 — `cargo heal --fix` + final GOAT gate (G5 real-file value)
 
-**Status: T6.1 DONE 2026-08-14 (Bench 019); T6.2/T6.3 pending.** The
-`--fix` wiring shipped with the **span-preserving patch emitter** (the
+**Status: T6.1 DONE 2026-08-14 (Bench 019); T6.4 DONE 2026-08-14; T6.2/T6.3 pending.**
+The `--fix` wiring shipped with the **span-preserving patch emitter** (the
 proposal's "honest production choice", not the prettyplease MVP): the 5
 rust_perf proposers were refactored from AST-mutation to edit-collecting
 (`SourceEdit` byte ranges via `proc-macro2` span-locations; replacement
 text built from the matched nodes' ORIGINAL source), and `apply_edits`
 splices them back-to-front. Everything outside a matched span stays
 byte-identical — verified on a real 700-line file (1 line changed).
+
+**T6.4** migrated the 10 clippy_lints proposers to the same emitter
+(shared substrate extracted to `src/edit_emitter.rs`, feature-neutral):
+`propose_fix` keeps its signature for `self_evolve`, but now
+parse → collect_edits → splice instead of mutate → `ToTokens`
+re-emission (the old path destroyed the caller's formatting). `--fix`
+now also runs the **7 structural** clippy lints (detection alone
+guarantees semantics: needless_return, redundant_closure,
+redundant_field_names, manual_map, unnecessary_unwrap,
+needless_range_loop, needless_lifetimes); the 3 **type-blind** ones
+(needless_borrow, useless_conversion, unnecessary_mut_passed) stay
+self_evolve-only (their rewrites are only correct when types line up;
+parse-only validation can't check). The migration also fixed four
+latent correctness bugs in the mutation-based detection (see T6.4
+notes). Fix application iterates to a bounded fixpoint so nested fixes
+compose (`return Cfg { x: x };` → `Cfg { x }` in two passes).
 
 The proposer's visitor is the `--fix` gate (caveat 4): latent suggestions
 never auto-apply; retrieval reports/prioritizes. The latent-score
@@ -256,10 +272,40 @@ rebase to land.
 - [ ] **T6.3** `.benchmarks/016_real_file_heal_goat.md` — full G1-G5 measurement.
       Renumbered to **Bench 019** (016 was taken by the rust_perf v2 corpus batch);
       G1-G4 recorded there now, G5 lands with T6.2.
+- [x] **T6.4** Migrate the clippy_lints proposers to the edit-splice emitter
+      (extends `--fix` to the clippy domain; preserves `propose_fix` for `self_evolve`).
+      **DONE 2026-08-14.** Shared emitter extracted to `src/edit_emitter.rs`
+      (feature-neutral; rust_perf re-exports preserve the old import path).
+      All 10 proposers migrated to immutable-walk + `SourceEdit` collection;
+      `FIXABLE_LINTS` = the 7 structural rules (`--fix` eligible), the 3 type-blind
+      ones stay `self_evolve`-only. Fix application iterates to a bounded fixpoint
+      (4 passes + unchanged-output guard) so nested fixes compose.
+      Four latent detection bugs fixed by the migration (found by real-file review
+      + type-checking the spliced output):
+      1. `needless_lifetimes` — old rule ("one declared lifetime") was unsound:
+        elided `&` inputs are input lifetimes too, and `'a` inside `FnMut(&'a S)`
+        args / `Index<'a>` / `impl T + 'a` / receivers dangles. Now guarded by a
+        single elision walker (exactly ONE input ref slot total; target only in
+        strippable `&`-annotation positions).
+      2. `needless_range_loop` — emitted `&v` unconditionally: for `v: &Vec<_>`
+        that iterates `&&Vec` (NOT an iterator). Now resolves the collection
+        against fn params (ref param → `v`, owned → `&v`, unresolvable → skip)
+        + blocks slot writes (`v[i] = x`, `v[i] += x`) and address-of (`&v[i]`).
+      3. `needless_range_loop` — token-substring usage counting false-positived
+        on `v[v[i]]` (rewrote to `v[__elem]`) and false-negatived on `minimum`
+        containing `i`. Replaced by exact `Expr::Index`/path analysis.
+      4. `unnecessary_unwrap` — didn't check that the `unwrap` receiver matches
+        the `is_some` receiver (`if a.is_some() { b.unwrap() }` → `a.unwrap_or`).
+        Now receiver-text-matched.
 
 ### Phase 6 exit criteria
 - G5 PASS. `cargo heal --fix` is production-usable for the 10 shipped proposers +
   `--suggest` covers the rest of the corpus.
+- **Public distribution (if this milestone ships to users) is BINARY-ONLY via a
+  separate public dist repo** — source stays private per Research 003. See
+  [Proposal 003](../.proposals/003_binary_only_distribution.md) (brew tap /
+  curl|sh / install.ps1 / scoop; never `cargo publish`, never source in the
+  release assets).
 
 ## Phase 7 — Self-healing closed loop (MAG online EMA + LatentFixMemory)
 

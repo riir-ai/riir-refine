@@ -91,8 +91,51 @@ line excerpts vs whole-item spans). The `cargo-heal` bin exposes it:
 (smoke: 19 files, ~0.4s incl. index build). Phase 4 (2026-08-14) landed
 the top-5 rust_perf `syn` AST proposers (`src/domains/rust_perf/proposers/`,
 `propose_fix` dispatch + 36 fixture tests — see
-[`.docs/11_domains/rust_perf.md`](.docs/11_domains/rust_perf.md) §Proposers);
-the bin stays suggest-only until the Phase 6 `--fix` wiring.
+[`.docs/11_domains/rust_perf.md`](.docs/11_domains/rust_perf.md) §Proposers).
+Phase 6 T6.1 wired `--fix [--write] [--quiet]` with the span-preserving
+edit splice (Bench 019, G1–G4 PASS). **T6.4 (2026-08-14)** migrated the
+10 clippy_lints proposers to the same emitter — shared substrate in
+`src/edit_emitter.rs` (feature-neutral, re-exported by both domains),
+`propose_fix` signature preserved for `self_evolve`, `--fix` extended to
+the **7 structural** clippy lints (`FIXABLE_LINTS`; needless_return,
+redundant_closure, redundant_field_names, manual_map, unnecessary_unwrap,
+needless_range_loop, needless_lifetimes) with bounded-fixpoint application
+so nested fixes compose; the 3 type-blind lints (needless_borrow,
+useless_conversion, unnecessary_mut_passed) stay `self_evolve`-only.
+The migration fixed four latent detection bugs in the old mutation-based
+proposers (needless_lifetimes elision unsoundness incl. `FnMut(&'a S)`
+positions + receivers; needless_range_loop `&v`-on-ref-param `&&Vec`
+non-iterator + token-heuristic `v[v[i]]` false positive; unnecessary_unwrap
+receiver mismatch) — see Plan 005 §Phase 6 T6.4 notes.
+
+## Source secrecy & binary-only distribution (non-negotiable)
+
+**Per [Research 003](../riir-ai/.research/003_Commercial_Open_Source_Strategy_Verdict.md):
+"anything `riir-*` is internal. No exceptions."** This repo's source never
+becomes public. The product surface (`cargo heal`) ships as **prebuilt
+binaries only**, via GitHub Releases on a small PUBLIC distribution repo —
+NOT on this repo (release assets on a private repo are not publicly
+downloadable). Full design: [Proposal 003](../.proposals/003_binary_only_distribution.md).
+
+Hard rules for any future session:
+
+1. **Never publish source.** No `cargo publish` (already blocked:
+   `publish = false` in `Cargo.toml`), no public mirrors, no source tarballs
+   in release assets, no "open-source it for adoption" — that path is
+   reserved for `katgpt-rs` (the public funnel) alone.
+2. **Public surface = 3 tiny source-free repos**: `gist-rs/cargo-heal`
+   (releases + `install.sh` + `install.ps1` + capabilities-only README),
+   `gist-rs/homebrew-tap` (Formula), `gist-rs/scoop-bucket` (manifests).
+   **Zero `.rs` files allowed in any of them** (CI guard). Do not create
+   other public distribution surfaces without a proposal.
+3. **Release binary hygiene**: build with `default + latent_retrieval +
+   rust_perf` features ONLY (the `cargo-heal` bin's required-features);
+   `strip = true` in the release profile; ship `SHA256SUMS` +
+   `THIRD_PARTY_LICENSES.md` in every archive (MIT/Apache binary-distribution
+   obligation); never ship dev/debug builds or `ternary_inference`.
+4. **Windows users** get `install.ps1` + the scoop bucket; winget only after
+   Authenticode signing (deferred). macOS/Linux get `install.sh` + the brew
+   tap.
 
 ## Why this is a separate repo (not in riir-ai)
 
@@ -225,7 +268,7 @@ cargo run --example ruliology_search_demo --features ruliology_search --release
 - `kernel_heal` (opt-in, Plan 001 Phase 3): GPU kernel optimization healing domain. Absorbs Proposal 012. Enables `katgpt-core/variable_rank_domain_expert` for the `pick_domain` router (Plan 558). 15 category experts (Plan 003), 8-dim activity vector with 15/15 reachable (Plan 004), routed heal pipeline composed in `kernel_heal_demo` example. 4090 LoRA + real popcorn corpus DEFERRED.
 - `kernel_verify` (opt-in): CubeCL compile check. **STUB** — delegates to shared `RustAnalyzerPruner`; full numeric compare deferred (Proposal 012 §Phase 0). Implies `kernel_heal`.
 - `ruliology_search` (opt-in): L3 Pareto-front candidate search. Reuses the algorithm pattern from `katgpt-ruliology` (Bench 572) without a code-level dep. Runs once per lint invocation (~400µs/10 candidates), not per-tick. Implies `clippy_lints`.
-- `latent_retrieval` (opt-in, Plan 005 Phase 1): real-file span-level latent retrieval — the `--suggest` MVP. Indexes every enabled domain's corpus via riir-rag (`RuleIndex`: `ShardIndex` Clifford-wedge KNN + BM25, multi-scale), routes spans via corpus-derived domain centroids (`DomainRouter`, annotation only), retrieves ranked rules (`LatentMatcher`, fan-out across enabled domains). ZERO proposer code — suggestions are the corpus pattern texts; `--fix` needs the Phase 4/5 proposers. Gates `dep:riir-rag` (heavy tree: riir-rag + transitively riir-neuron-db — the default build stays light). Powers the `cargo-heal` bin (`--suggest` / `--domain auto|clippy|perf|kernel` / `--top-k`). **GOAT G1–G4 ALL PASS (Bench 018, 2026-08-14):** G1 100% (12/12 top-1, target ≥80%), G2 349µs/chunk (<1ms, 2.9× headroom), G3 104 lib tests, G4 `SuggestScratch` stable across 50 repeat scans. Known limits: fan-out routing (no gate), no minimum-score threshold (every span suggests), 12-item G1 fixture.
+- `latent_retrieval` (opt-in, Plan 005 Phase 1): real-file span-level latent retrieval — the `--suggest` MVP. Indexes every enabled domain's corpus via riir-rag (`RuleIndex`: `ShardIndex` Clifford-wedge KNN + BM25, multi-scale), routes spans via corpus-derived domain centroids (`DomainRouter`, annotation only), retrieves ranked rules (`LatentMatcher`, fan-out across enabled domains). The suggest path itself has ZERO proposer code — suggestions are the corpus pattern texts; the proposers live in each domain's `proposers/` module (rust_perf Phase 4, clippy T6.4) + the shared `src/edit_emitter.rs` substrate, gated by the proposers' own Cargo features. Gates `dep:riir-rag` (heavy tree: riir-rag + transitively riir-neuron-db — the default build stays light). Powers the `cargo-heal` bin (`--suggest` / `--fix` / `--domain auto|clippy|perf|kernel` / `--top-k`). **GOAT G1–G4 ALL PASS (Bench 018, 2026-08-14):** G1 100% (12/12 top-1, target ≥80%), G2 349µs/chunk (<1ms, 2.9× headroom), G3 104 lib tests, G4 `SuggestScratch` stable across 50 repeat scans. Known limits: fan-out routing (no gate), no minimum-score threshold (every span suggests), 12-item G1 fixture.
 - `self_evolve` (opt-in, Issue 004 + Issue 008): latent-first self-evolution loop — `LatentFixMemory` (3-axis retrieval over fix trajectories) + `LatentSkillEvolution` (EMA direction-vector update). GOAT G1-G5 ALL PASS (G5: 70pp healing rate improvement in controlled fixture). **G6/G7 validated against real cargo clippy feedback (Issue 008): G6 10/10 corpus truthfulness PASS, G7 50.0pp improvement (50% → 100%) PASS.** Borrows `dot+sigmoid` from riir-agents + 3-axis retrieval from riir-rag, reimplemented locally (~730 LOC, boundary-compliant). Stays opt-in (deployment-environment constraint: `clippy_verify` is itself opt-in). The mechanism is validated; the opt-in gate is not a correctness concern.
 - `wasm_pruner` (opt-in, deferred): L2 WASM rust-analyzer variant (blocked on rubrc)
 - `clippy_lora` (opt-in, deferred): L4 adaptive LoRA fallback (blocked on riir-train integration)
