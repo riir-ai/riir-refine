@@ -10,7 +10,7 @@
 | Component | Ships now | Deferred |
 |---|---|---|
 | `KernelOptDomain: HealDomain` | ✅ | |
-| Seed corpus (Batch 1-19: 140 rules; popcorn COMPLETE; riir-gpu opened Batch 14, mined Batch 15-19) | ✅ | Future source: riir-gpu (~196K lines, mostly unmined), new popcorn releases |
+| Seed corpus (Batch 1-20: 145 rules; popcorn COMPLETE; riir-gpu opened Batch 14, mined Batch 15-20) | ✅ | Future source: riir-gpu (~196K lines, mostly unmined), new popcorn releases |
 | `KernelExpertRouter` (`pick_domain`) | ✅ (8-dim activity, 15/15 reachable, Plan 004) | Mined centroids via `CommittedFieldBlend` |
 | `KernelThermalRouter` (5-tier stub) | ✅ (returns Plasma) | Warm/Cold LoRA (4090, riir-train) |
 | `KernelVerifier` (compile-only) | ✅ (behind `kernel_verify`) | Full numeric compare vs reference |
@@ -37,9 +37,10 @@ Batch 16 (Research 017): 4 rules — **third batch mining riir-gpu**. cmma hardw
 Batch 17 (Research 018): 4 rules — **fourth batch mining riir-gpu (ternary scalar-ALU hot loop)**. Skip-all-zero-packed-words-via-or-reduce (gemm_ternary_batched: OR-reduce all tile rows' pos+neg bit-words, skip the 32-iteration sign-extraction loop when the whole tile's word is zero — ternary sparsity exploit) + hoist-group-invariant-scale-out-of-word-loop (gemv_ternary_block_contiguous: cache the per-group quant scale in a register across the 4 words it covers, reload only at the group boundary — 4× fewer global loads) + split-sign-accumulators-defer-subtraction (both ternary files: keep separate pos/neg accumulators inside the bit loop, subtract once at the end — 32→1 subtracts/word + independent ILP chains) + clamp-tile-indices-to-sentinel-discard-at-write (gemm_ternary_batched: alias OOB tile rows to m-1, compute fully, discard at write time — keeps the loop body uniform without padding overhead). Two files assessed + dropped (rope_geglu_cubecl: pairing-generic + precomputed cos/sin table are composition of existing dispatch/precompute principles; forward_dflare: 17-binding layout + heterogeneous KV are architectural, not kernel optimization).
 Batch 18 (Research 019): 3 rules — **fifth batch mining riir-gpu (Q4_K quantized GEMV family)**. Row-tile-amortize-input-load (gemv_q4k_plane_rowtiled: assign N output rows per plane, load input once, reuse across N dot products — GEMV to small-GEMM via M-widening) + factor-affine-quant-scale-out-of-element-loop (gemv_q4k_plane_factored: when dequant is affine in the code within a sub-block, factor d·scale and dmin·min out — Q4_K-specific, ternary has no min offset to factor) + pin-lane-to-quant-sub-block-coalesce-byte-loads (gemv_q4k_plane_factored: remap lane→element so each lane is pinned to one sub-block — 8 loads→2, enables affine factoring). Three sibling Q4_K files (qkv, geglu, batched) assessed + dropped: qkv = composition of fuse-gate-up-gemv-activation (triple fusion); geglu = same fuse + Q4_K dequant; batched = no new opt.
 Batch 19 (Research 020): 2 rules — **sixth batch mining riir-gpu (fused-dispatch family)**. Chain-dispatches-single-sync-point (ternary_ffn_fused: queue N dependent dispatches in one command buffer, sync only once at the end — command-buffer-level fusion distinct from single-kernel fusion; linear dependency chains keep intermediates bounded, fan-out is the known-bad case per Bench 437) + fuse-residual-via-in-place-output-array (gemv_ternary_residual_cubecl: when a kernel needs N+1 array params but the runtime limits to N, alias the output buffer as the accumulation input (read-then-write) — bypasses CubeCL v0.10's hard 5-array limit, collapses 128 dispatches/token → 64). Three sibling files assessed + dropped: deltanet_input_proj_fused (same pattern as ternary_ffn_fused — confirms generality); deltanet_chunked + base recurrence (covered by recurrent-vs-chunk-dispatch Batch 11).
-Total: 140 rules. Popcorn corpus COMPLETE; riir-gpu (~196K lines) remains open as the next distillation source (16 of ~200 files mined).
+Batch 20 (Research 021): 5 rules — **seventh batch mining riir-gpu (CUDA hardware-instruction cluster + CubeCL LUT + base-3 trit)**. Cooperative-block-wide-quantize-staging (gemv_ternary_cuda_raw `_fused` variant: ALL 256 threads cooperate to quantize f32→int8 into shared memory once, then each warp reads from shared — eliminates a separate staging dispatch + global round-trip; distinct from dequant-once-per-k-tile which is per-tile WEIGHT dequant, this is block-wide ACTIVATION quantize) + byte-perm-lut-via-permutation-immediate (gemv_ternary_cuda_raw: pack {−1,0,1,2} in one int, __byte_perm(constant, constant, code >> shift) decodes 4 codes to 4 signed bytes in ONE PTX instruction — first CUDA-specific HW-instruction rule, no CubeCL analogue) + dp4a-int8-hardware-dot-product (gemv_ternary_cuda_raw: NVIDIA __dp4a does 4-lane int8 dot in one instruction — distinct from cmma Batch 16 which is CubeCL 8×8×8 matrix tile op, this is scalar 4-lane int8 dot, CUDA-only) + threadgroup-subset-sum-lut-keyed-by-activation (gemv_ternary_cubecl LUT path gated `ternary_lut_gemv`: precompute 16-entry subset-sum table per 4-activation group in threadgroup memory, 4-weight ternary dot = 2 reads + 1 subtract; one build serves every row because the table is keyed by ACTIVATION subset (contains no weight/scale/zero-point) — structurally different amortization from the Q4_K LUT negative result which was keyed by weight+scale+zero-point and rebuilt 160 tables/row) + base-3-trit-packing-5-per-byte (gemv_ternary_cubecl trit path: pack 5 ternary per byte using base-3 mixed-radix, 17.6% denser than 2-bit codes; REGIME-DEPENDENT — wins on Metal, loses 2.1× on CUDA scalar ALU per Issue 607). Three Metal files assessed + dropped: all 3 are REFUTED end-to-end (3.72× kernel gain lost to 0.87×/0.95× integration overhead); 2 genuinely novel patterns (cross-runtime zero-copy handle extraction + pool-buffer aliasing hazard workaround) DEFERRED to Batch 21 for coherent treatment.
+Total: 145 rules. Popcorn corpus COMPLETE; riir-gpu (~196K lines) remains open as the next distillation source (18 of ~200 files mined).
 
-### Category A: Memory access patterns (12 rules)
+### Category A: Memory access patterns (13 rules)
 
 | Rule ID | GPU concept | Pattern |
 |---|---|---|
@@ -55,8 +56,9 @@ Total: 140 rules. Popcorn corpus COMPLETE; riir-gpu (~196K lines) remains open a
 | `hoist-group-invariant-scale-out-of-word-loop` | register-cached group invariant | Reload scale from buffer every word iteration → cache the per-group quant scale in a register across the 4 words it covers, reload only at the group boundary (riir-gpu gemv_ternary_block_contiguous, 4× fewer global loads) |
 | `row-tile-amortize-input-load` | GEMV → small-GEMM via M-widening | 1 output row per plane (input loaded m×) → N output rows per plane with N register accumulators (input loaded once, reused across N dot products) (riir-gpu gemv_q4k_plane_rowtiled, Issue 609; gain scales with input-load/compute ratio: ~2× ternary, ~1.1-1.3× Q4_K) |
 | `pin-lane-to-quant-sub-block-coalesce-byte-loads` | lane→element remap for byte coalescing | Strided lane map (each lane visits all 8 sub-blocks, 8 scattered loads) → lane-fixed map (each lane pinned to one sub-block, 8 bytes in 2 u32 words, 8→2 loads) (riir-gpu gemv_q4k_plane_factored, Issue 609 T2; also enables affine factoring by making scale/min loop-invariant) |
+| `cooperative-block-wide-quantize-staging` | block-wide cooperative shared-memory staging | Separate quantize dispatch + global-memory read in consumer → ALL 256 threads cooperate to quantize disjoint chunks into shared memory once, then each warp reads from shared (riir-gpu gemv_ternary_cuda_raw `_fused` variant, Issue 616 T4; distinct from dequant-once-per-k-tile which is per-tile WEIGHT dequant, this is block-wide ACTIVATION quantize) |
 
-### Category B: Compute patterns (24 rules)
+### Category B: Compute patterns (27 rules)
 
 | Rule ID | GPU concept | Pattern |
 |---|---|---|
@@ -84,6 +86,9 @@ Total: 140 rules. Popcorn corpus COMPLETE; riir-gpu (~196K lines) remains open a
 | `split-sign-accumulators-defer-subtraction` | deferred sign subtraction | Subtract pos−neg per bit inside the loop (32/word) → keep separate pos/neg accumulators, subtract once at the end (1/word + independent ILP chains, both ternary files) |
 | `clamp-tile-indices-to-sentinel-discard-at-write` | divergence-free tile bounds | Per-lane bounds check inside the loop → alias OOB tile rows to m-1 sentinel, compute fully, discard redundant results at write time (riir-gpu gemm_ternary_batched) |
 | `factor-affine-quant-scale-out-of-element-loop` | algebraic factoring of affine quant | Apply d·scale and dmin·min per element inside the dot loop → when dequant is affine in the code within a sub-block, factor scales out: accumulate Σ(code·x) and Σ(x) separately, apply scales once per sub-block (riir-gpu gemv_q4k_plane_factored, Issue 609 T2; Q4_K/min+scale-quant-specific — ternary is LINEAR in bits with no min offset) |
+| `byte-perm-lut-via-permutation-immediate` | CUDA __byte_perm packed-alphabet decode | Shift+mask+sign chain per code (N codes = ~3N scalar ops) → __byte_perm(constant, constant, code >> shift) decodes 4 codes to 4 signed bytes in ONE PTX instruction; constant packs the signed alphabet as bytes (riir-gpu gemv_ternary_cuda_raw, Issue 608 T2; CUDA-specific sm_70+ intrinsic, no CubeCL/Metal analogue) |
+| `dp4a-int8-hardware-dot-product` | NVIDIA __dp4a 4-lane int8 dot | Scalar 4-element int8 dot (~8 FMA ops) → NVIDIA __dp4a(a, b, c) computes a[0]*b[0]+a[1]*b[1]+a[2]*b[2]+a[3]*b[3]+c in ONE PTX instruction (riir-gpu gemv_ternary_cuda_raw, Issue 608 T2; distinct from cmma Batch 16 — that's CubeCL 8×8×8 matrix tile op, this is scalar 4-lane int8 dot, CUDA-only, requires int8 activations → ~6× kernel speedup over scalar ALU on ternary GEMV) |
+| `threadgroup-subset-sum-lut-keyed-by-activation` | threadgroup subset-sum LUT (activation-keyed) | Per-bit shift+mask+select loop (~28 ops per 4-weight dot) → precompute 16-entry subset-sum table per 4-activation group in threadgroup memory, 4-weight dot = 2 reads + 1 subtract; ONE build serves EVERY row because the table is keyed by ACTIVATION subset (contains no weight/scale/zero-point) — structurally different amortization from the Q4_K LUT negative result (riir-gpu gemv_ternary_cubecl LUT path, Issue 606 T3c path 1, gated `ternary_lut_gemv`; Q4_K LUT was keyed by weight+scale+zero-point, rebuilt 160 tables/row → ate the fusion win) |
 
 ### Category C: Fusion patterns (14 rules)
 
@@ -185,7 +190,7 @@ pub fn route(&self, activity: &[f32; ACTIVITY_DIM]) -> usize {
 }
 ```
 
-**Plan 003 (2026-08-14):** router wired to the 140-rule corpus via 15 category
+**Plan 003 (2026-08-14):** router wired to the 145-rule corpus via 15 category
 experts. Each expert owns its category's `rule_ids` via `KERNEL_CATEGORIES`.
 - **Activity vector** = raw physical (kernel signature: `[M, N, K, dtype, hw,
   is_attention, is_fusion, is_ir_transform]` — 8-dim per Plan 004, normalized
@@ -212,7 +217,7 @@ so `pick_domain` is reachable.
 
 **Composition example** (`examples/kernel_heal_demo.rs`): the router is
 composed with the drafter + corpus end-to-end. The demo routes 8 representative
-kernel signatures, narrows each to its category's rules (~4–6 vs 68 flat — a
+kernel signatures, narrows each to its category's rules (~4–10 vs 145 flat — a
 15× candidate reduction), then drafts + validates a fix. This is the reference
 composition for future kernel_opt consumers. Run with:
 `cargo run --example kernel_heal_demo --features kernel_heal`.
@@ -357,7 +362,7 @@ deferred (Proposal 012 §Phase 0). `is_full_validator_available()` returns
 | `reshape-rank-for-backend` | rank adapter — reshape to backend-required rank | Leak rank contract to caller → reshape (1,-1,h), run kernel, reshape back |
 | `detached-broadcast-insert` | non-differentiable broadcast via detach + view | Materialize full broadcast → detach() + insert dim (view, no alloc) |
 
-### Category N: dtype + alignment specialization (10 rules — 2 Batch 8 + 4 Batch 9 + 2 Batch 10 + 1 Batch 15 + 1 Batch 16)
+### Category N: dtype + alignment specialization (11 rules — 2 Batch 8 + 4 Batch 9 + 2 Batch 10 + 1 Batch 15 + 1 Batch 16 + 1 Batch 20)
 
 | Rule ID | GPU concept | Pattern |
 |---|---|---|
@@ -371,6 +376,7 @@ deferred (Proposal 012 §Phase 0). `is_full_validator_available()` returns
 | `dtype-restricted-backend` | backend restricted to precision-stable dtypes | All-dtype backend → dispatch on dtype (fast path only for stable) |
 | `water-fill-tail-dim-shared-codebook` | non-uniform bit allocation + tail-shared codebook | Uniform per-dim codebooks at max_bits → top d_eff dims get per-dim codebooks, tail dims share one b_low-bit codebook (riir-gpu spectralquant/dequant, 2.3× codebook memory reduction) |
 | `norm-decoupled-low-bit-scoring` | norm-decoupled low-bit key quantization | Store full-magnitude key, quantize directly (needs 8 bits) → store per-position L2 norm separately as a scalar, quantize the unit-normalized key at 2-4 bits, reconstruct score as norm × dot(unit_q, unit_k_quantized) (riir-gpu forward_turboquant, 4× less key memory) |
+| `base-3-trit-packing-5-per-byte` | base-3 mixed-radix ternary packing (5/byte) | 2-bit code packing (4 ternary/byte, 2.125 bits/weight) → base-3 trit packing (5 ternary/byte, 1.75 bits/weight — 17.6% denser; decode via byte % 3, byte /= 3 which compiler optimizes to mul-by-inverse) (riir-gpu gemv_ternary_cubecl trit path, Issue 628 T2; REGIME-DEPENDENT — wins on Metal where div/mod is cheap + bandwidth-bound, loses 2.1× on CUDA scalar ALU per Issue 607 + incompatible with __dp4a int8 path) |
 
 ### Category O: IR strength reduction (Batch 8, 4 rules — cubecl-opt)
 

@@ -16,7 +16,7 @@ that closes the Plan 003/004 gap (the `KernelExpertRouter` was corpus-wired +
    8-dim activity vectors (Plan 004).
 3. **Route + narrow**: for each representative kernel signature, `build_activity()`
    → `router.route()` → expert index → `rules_for_expert()` → narrowed candidate
-   set (~4–6 rules vs 68 flat — a 15× candidate reduction).
+   set (~4–10 rules vs 145 flat — a 15× candidate reduction).
 4. **Draft**: `TernaryDrafter::draft_fix()` on the narrowed candidate set (L1
    ternary SIMD matvec or L0 corpus template fallback).
 5. **Validate**: `KernelOptDomain::validate()` — syntax check (or CubeCL compile
@@ -69,26 +69,26 @@ expert domain, then the drafter operates within that domain.
 ## Output shape
 
 ```text
-📦 L0 Corpus: 140 rules (BLAKE3 verified: ✅)
+📦 L0 Corpus: 145 rules (BLAKE3 verified: ✅)
    Categories: 15
-     A: memory access — 12 rules
+     A: memory access — 13 rules
      ...
 
 🔀 Router: 15 experts, 8-dim activity vector
 
-─── Routed Heal Pipeline ──────────────────────────────────────────────────────
+─── Routed Heal Pipeline ───────────────────────────────────────────────────────
 
 🔑 Signature: Naive matvec (strided read → coalescing)
    Routed to: expert 0 (A: memory access) — category: A: memory access
-   Candidates: 12/140 rules (narrowed by router)
+   Candidates: 13/145 rules (narrowed by router)
    Thermal:    Plasma
    Drafted:   coalesced-row-read [TernaryMatvec] conf=0.5234
    Validate:  ✅ VALID
    ...
 
 ─── Flat vs Routed Candidate Count ─────────────────────────────
-  Flat corpus:     140 rules searched per heal
-  Routed (avg):    9.3 rules searched per heal (category avg)
+  Flat corpus:     145 rules searched per heal
+  Routed (avg):    9.7 rules searched per heal (category avg)
   Reduction:       15.0×
 ```
 

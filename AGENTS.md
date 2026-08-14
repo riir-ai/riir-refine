@@ -26,7 +26,7 @@ Three domains ship (Plan 001):
    bench finding (Bench 015 + Bench 016: 2 ParetoDominated + 4 regime-fragile/Mixed in the
    default config — consumers should treat annotated rules as
    context-dependent).
-3. **`kernel_opt`** (opt-in, Phase 3) — heals GPU kernel optimization. 140 rules
+3. **`kernel_opt`** (opt-in, Phase 3) — heals GPU kernel optimization. 145 rules
    (Batch 1-6: 50 popcorn-distilled from Research 002-007; Batch 7: 9 burn-cubecl
    Rust-native autotune dispatch + conv-as-GEMM + layout rules from Research 008;
    Batch 8: 9 burn-cubecl kernel polymorphism + dtype/alignment specialization +
@@ -45,6 +45,8 @@ Three domains ship (Plan 001):
    Batch 18: 3 riir-gpu production-kernel rules (row-tile-amortize-input-load, factor-affine-quant-scale-out-of-element-loop, pin-lane-to-quant-sub-block-coalesce-byte-loads) from Research 019 — the fifth batch mining the stack's own kernels (gemv_q4k_cubecl — the Q4_K quantized GEMV family: GEMV→small-GEMM M-widening, affine dequant factoring, lane-pinned byte coalescing). Absorbs Proposal 012's design
    (thermal-tier + latent-MoE + numeric validator); 4090 LoRA deferred.
    Batch 19: 2 riir-gpu production-kernel rules (chain-dispatches-single-sync-point, fuse-residual-via-in-place-output-array) from Research 020 — the sixth batch mining the stack's own kernels (ternary_ffn_fused + gemv_ternary_residual_cubecl — command-buffer-level dispatch fusion + in-place output-array parameter-count bypass). Absorbs Proposal 012's design
+   (thermal-tier + latent-MoE + numeric validator); 4090 LoRA deferred.
+   Batch 20: 5 riir-gpu production-kernel rules (cooperative-block-wide-quantize-staging, byte-perm-lut-via-permutation-immediate, dp4a-int8-hardware-dot-product, threadgroup-subset-sum-lut-keyed-by-activation, base-3-trit-packing-5-per-byte) from Research 021 — the seventh batch mining the stack's own kernels (gemv_ternary_cuda_raw + gemv_ternary_cubecl LUT/trit paths — first CUDA-specific hardware-instruction cluster: __byte_perm permutation LUT + __dp4a int8 dot product + cooperative block-wide quantize staging; plus CubeCL threadgroup subset-sum LUT keyed by activation + base-3 trit packing). Absorbs Proposal 012's design
    (thermal-tier + latent-MoE + numeric validator); 4090 LoRA deferred.
 
 The pipeline (shared across all domains):

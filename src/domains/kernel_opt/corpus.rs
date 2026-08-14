@@ -126,9 +126,50 @@
 //!   lane→element so each lane is pinned to one sub-block — 8 loads→2, enables
 //!   affine factoring). Three sibling `Q4_K` files (qkv, geglu, batched) assessed
 //!   and dropped: qkv = composition of fuse-gate-up-gemv-activation (triple fusion);
-//!   geglu = same fuse + `Q4_K` dequant; batched = no new opt. Corpus: **140
-//!   rules across 15 categories (A–O)**. `riir-gpu` remains open (16 of ~200
+//!   geglu = same fuse + `Q4_K` dequant; batched = no new opt. Corpus: **138
+//!   rules across 15 categories (A–O)**. `riir-gpu` remains open (13 of ~200
 //!   files mined).
+//! - **Batch 19 (Research 020):** 2 riir-gpu production rules — sixth batch mining
+//!   the stack's own kernels, focused on the fused-dispatch family.
+//!   Chain-dispatches-single-sync-point (`ternary_ffn_fused`: queue N dependent
+//!   dispatches in one command buffer, sync only once at the end — command-buffer-
+//!   level fusion distinct from single-kernel fusion; linear dependency chains keep
+//!   intermediates bounded, fan-out is the known-bad case per Bench 437),
+//!   fuse-residual-via-in-place-output-array (`gemv_ternary_residual_cubecl`: when
+//!   a kernel needs N+1 array params but the runtime limits to N, alias the output
+//!   buffer as the accumulation input (read-then-write) — bypasses CubeCL v0.10's
+//!   hard 5-array limit, collapses 128 dispatches/token → 64). Three sibling files
+//!   assessed + dropped (`deltanet_input_proj_fused`: same pattern as
+//!   `ternary_ffn_fused` — confirms generality; `deltanet_chunked` + base recurrence:
+//!   covered by recurrent-vs-chunk-dispatch Batch 11). Corpus: **140 rules across
+//!   15 categories (A–O)**. `riir-gpu` remains open (16 of ~200 files mined).
+//! - **Batch 20 (Research 021):** 5 riir-gpu production rules — seventh batch mining
+//!   the stack's own kernels, focused on the CUDA hardware-instruction cluster +
+//!   CubeCL LUT + base-3 trit paths. Cooperative-block-wide-quantize-staging
+//!   (`gemv_ternary_cuda_raw` fused variant: ALL 256 threads cooperate to quantize
+//!   f32→int8 into shared memory once, then each warp reads from shared —
+//!   eliminates a separate staging dispatch + global round-trip; distinct from
+//!   dequant-once-per-k-tile which is per-tile WEIGHT dequant, this is block-wide
+//!   ACTIVATION quantize), byte-perm-lut-via-permutation-immediate
+//!   (`gemv_ternary_cuda_raw`: pack {−1,0,1,2} in one int, __byte_perm(constant,
+//!   constant, code >> shift) decodes 4 codes to 4 signed bytes in ONE PTX
+//!   instruction — first CUDA-specific HW-instruction rule, no CubeCL analogue),
+//!   dp4a-int8-hardware-dot-product (`gemv_ternary_cuda_raw`: NVIDIA __dp4a does
+//!   4-lane int8 dot in one instruction — distinct from cmma Batch 16 which is
+//!   CubeCL 8×8×8 matrix tile op, this is scalar 4-lane int8 dot, CUDA-only),
+//!   threadgroup-subset-sum-lut-keyed-by-activation (`gemv_ternary_cubecl` LUT
+//!   path gated `ternary_lut_gemv`: precompute 16-entry subset-sum table per
+//!   4-activation group in threadgroup memory, 4-weight ternary dot = 2 reads + 1
+//!   subtract; one build serves every row because the table is keyed by ACTIVATION
+//!   subset — structurally different amortization from the Q4_K LUT negative
+//!   result which was keyed by weight+scale+zero-point and rebuilt 160 tables/row),
+//!   base-3-trit-packing-5-per-byte (`gemv_ternary_cubecl` trit path: pack 5
+//!   ternary per byte using base-3 mixed-radix, 17.6% denser than 2-bit codes;
+//!   REGIME-DEPENDENT — wins on Metal, loses 2.1× on CUDA scalar ALU per Issue
+//!   607). Three Metal files assessed + dropped (all 3 REFUTED end-to-end — 3.72×
+//!   kernel gain lost to 0.87×/0.95× integration overhead; 2 genuinely novel
+//!   patterns deferred to Batch 21). Corpus: **145 rules across 15 categories
+//!   (A–O)**. `riir-gpu` remains open (18 of ~200 files mined).
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
@@ -1911,6 +1952,133 @@ fn gemv_residual_inplace(weight: &[f32], input: &[f32], residual_output: &mut [f
             ref_shape: "// naive: strided lane map — each lane visits all 8 sub-blocks, 8 scattered loads\nfn q4k_strided_lane(weight: &[u32], input: &[f32], lane: u32, plane_dim: u32, bo_q4k: u32) -> f32 {\n    let mut acc = 0.0;\n    let mut k = lane;\n    while k < 256 {\n        let sub_block = k / 32; // changes every iteration — sc/min NOT invariant\n        let pos = k % 32;\n        // 8 different qs_word_idx values per lane -> 8 scattered global loads\n        let qs_byte_idx = (sub_block / 2) * 32 + pos;\n        let qs_word = weight[bo_q4k + 4 + qs_byte_idx / 4]; // lanes 0-3 re-read word bo+4\n        acc += ((qs_word >> ((qs_byte_idx % 4) * 8)) & 0xF) as f32 * input[k];\n        k += plane_dim;\n    }\n    acc // 8 loads/lane, 4x redundant across lanes 0-3\n}".to_string(),
             opt_pattern: "// optimized: lane-fixed map — pin each lane to one sub-block, 8 bytes in 2 words\nfn q4k_lane_fixed(weight: &[u32], input: &[f32], lane: u32, bo_q4k: u32) -> f32 {\n    let sub_block = lane / 4;  // CONSTANT for this lane — sc/min are loop-invariant!\n    let chunk = lane % 4;\n    let pair = sub_block / 2;\n    let is_high = sub_block % 2;\n    let word0 = pair * 8 + chunk * 2; // 8 consecutive bytes -> exactly 2 u32 words\n    let sh = is_high * 4;             // nibble shift folds (no branch)\n    let w0 = weight[bo_q4k + 4 + word0];     // load 1\n    let w1 = weight[bo_q4k + 4 + word0 + 1]; // load 2 (the ONLY 2 loads)\n    let elem_off = sub_block * 32 + chunk * 8;\n    (((w0 >> sh) & 15) as f32) * input[elem_off]\n        + (((w0 >> (8 + sh)) & 15) as f32) * input[elem_off + 1]\n        + (((w0 >> (16 + sh)) & 15) as f32) * input[elem_off + 2]\n        + (((w0 >> (24 + sh)) & 15) as f32) * input[elem_off + 3]\n        + (((w1 >> sh) & 15) as f32) * input[elem_off + 4]\n        + (((w1 >> (8 + sh)) & 15) as f32) * input[elem_off + 5]\n        + (((w1 >> (16 + sh)) & 15) as f32) * input[elem_off + 6]\n        + (((w1 >> (24 + sh)) & 15) as f32) * input[elem_off + 7]\n    // 2 loads total (was 8) — no inner loop, exact 256-element partition across 32 lanes\n}".to_string(),
         },
+        // ════════════════════════════════════════════════════════════════════
+        // Batch 20 (Research 021) — CUDA hardware-instruction cluster +
+        // CubeCL LUT + base-3 trit (5 rules: 1A + 3B + 1N)
+        // ════════════════════════════════════════════════════════════════════
+        // ── cooperative-block-wide-quantize-staging — per-call quantize dispatch → block-wide cooperative shared-memory staging (A) ──
+        // Source: riir-gpu gemv_ternary_cuda_raw.rs `gemv_ternary_dp4a_fused`
+        // (Issue 616 T4). The split-kernel path quantizes f32 activations to
+        // int8 in a SEPARATE kernel launch (1 extra dispatch + global-memory
+        // round-trip per forward). The fused variant has all 256 threads in
+        // the block cooperate to quantize the full N-element activation vector
+        // into shared memory ONCE (thread t handles blocks t, t+256, ...,
+        // each block = 16 elements), then each warp runs its dp4a loop
+        // reading from shared memory. Per-block absmax + scale write is
+        // conflict-free (each block owned by exactly one thread). After
+        // __syncthreads(), the dp4a loop reads 4 int words from shared memory
+        // per inner iteration (vs global memory in the split path).
+        //
+        // Distinct from `dequant-once-per-k-tile-into-shared-memory` (Batch
+        // 16) — that's per-K-tile WEIGHT dequant (each tile's dequant is
+        // independent); this is block-wide ACTIVATION quantize (the whole
+        // block cooperates on one shared activation vector, then every warp
+        // reads it). The cooperation granularity is the whole block (256
+        // threads), not per-tile.
+        KernelRule {
+            rule_id: "cooperative-block-wide-quantize-staging".to_string(),
+            gpu_concept: "when an input vector must be quantized/transformed once per dispatch and consumed by every warp in the block, have ALL threads cooperate to write disjoint chunks into shared memory, then each warp reads from shared memory — eliminates a separate staging dispatch + global-memory round-trip".to_string(),
+            ref_shape: "// naive: separate quantize dispatch + global-memory read in the GEMV kernel\nfn gemv_split_quantize(act_f32: &[f32], act_i8: &mut [i8], ascale: &mut [f32], n: usize, ablock: usize) {\n    // Dispatch 1: quantize f32 -> int8 (separate kernel, global-memory round-trip)\n    for blk in 0..n.div_ceil(ablock) {\n        let mut absmax = 0.0;\n        for i in blk*ablock..(blk*ablock + ablock).min(n) { absmax = absmax.max(act_f32[i].abs()); }\n        let d = if absmax > 0.0 { absmax / 127.0 } else { 1.0 };\n        ascale[blk] = d;\n        for i in blk*ablock..(blk*ablock + ablock).min(n) {\n            act_i8[i] = (act_f32[i] / d).round().clamp(-128.0, 127.0) as i8;\n        }\n    }\n    // Dispatch 2: GEMV reads act_i8 from GLOBAL memory (1 extra dispatch + 1 upload)\n}".to_string(),
+            opt_pattern: "// optimized: fused kernel — all 256 threads cooperate to quantize into shared memory\nfn gemv_fused_cooperative(act_f32: &[f32], out: &mut [f32], n: usize, ablock: usize, m: usize) {\n    // sh_act[N] + sh_ascale[ablocks] live in shared memory\n    let bs = 256; // blockDim.x\n    for blk in tid..n.div_ceil(ablock).step_by(bs) {\n        // Thread t owns block t (and t+bs, t+2bs, ...) — conflict-free scale write\n        let mut absmax = 0.0;\n        for i in blk*ablock..(blk*ablock + ablock).min(n) { absmax = absmax.max(act_f32[i].abs()); }\n        let d = if absmax > 0.0 { absmax / 127.0 } else { 1.0 };\n        sh_ascale[blk] = d;\n        for i in blk*ablock..(blk*ablock + ablock).min(n) {\n            sh_act[i] = (act_f32[i] / d).round().clamp(-128.0, 127.0) as i8;\n        }\n    }\n    __syncthreads();\n    // Each warp now reads sh_act from SHARED memory in its dp4a loop — no global read\n    // 1 dispatch total (was 2) + no act_i8 upload (saves N bytes host->device)\n}".to_string(),
+        },
+        // ── byte-perm-lut-via-permutation-immediate — shift/mask/sign chain → single PTX __byte_perm with permutation constant (B) ──
+        // Source: riir-gpu gemv_ternary_cuda_raw.rs (Issue 608 T2). NVIDIA
+        // __byte_perm(a, b, selector) picks 4 bytes from the 8-byte concatenation
+        // {a, b} indexed by the 4 nibbles of `selector` — one PTX instruction.
+        // The ternary kernel packs {−1, 0, 1, 2} as bytes in a constant int
+        // 0x020100FF, then calls __byte_perm(0x020100FF, 0x020100FF, q >> 0)
+        // where q is a packed int16 of 8 two-bit codes. Each nibble of (q >> 0)
+        // has its low 2 bits indexing straight to the signed symbol — 4 codes
+        // decoded to 4 signed bytes in ONE instruction. A second __byte_perm
+        // re-interleaves the even/odd halves. Total: 3 PTX instructions for
+        // 8-code decode vs ~24 scalar shift/mask/sign instructions.
+        //
+        // Generalizes to any small signed alphabet {s_0, ..., s_{2^k−1}}:
+        // pack the alphabet as bytes in a permutation constant, then use
+        // __byte_perm to map k-bit codes to their signed symbols in one
+        // instruction. CUDA-specific (no CubeCL analogue). Requires sm_70+.
+        KernelRule {
+            rule_id: "byte-perm-lut-via-permutation-immediate".to_string(),
+            gpu_concept: "decode N small-radix codes to signed symbols in ONE hardware instruction via __byte_perm(constant, constant, code >> shift) — the constant packs the signed alphabet as bytes, the selector nibbles index straight to the symbol (no LUT load, no branch, no modular arithmetic)".to_string(),
+            ref_shape: "// naive: shift + mask + sign-extend per code (N codes = ~3N scalar ops)\nfn decode_ternary_naive(q: u16) -> [i8; 8] {\n    let mut out = [0i8; 8];\n    for k in 0..8 {\n        let code = ((q >> (k * 2)) & 0x3) as i8;\n        // code 0 -> -1, 1 -> 0, 2 -> +1\n        out[k] = code - 1; // 2->1, 1->0, 0->-1 — but this is 8 iterations of shift+mask+sub\n    }\n    out // ~24 scalar ops for 8 codes\n}".to_string(),
+            opt_pattern: "// optimized: __byte_perm with packed signed-alphabet constant (3 PTX instructions for 8 codes)\n// 0x020100FF holds bytes {-1 (0xFF), 0, 1, 2} at indices 0..3\nfn decode_ternary_byte_perm(q: i32) -> ([i8; 4], [i8; 4]) {\n    // __byte_perm(a, b, sel): pick 4 bytes from {a,b} (8 bytes total), one per nibble of sel\n    let alphabet = 0x020100FFu32; // byte 0 = 0xFF (-1), 1 = 0, 2 = 1, 3 = 2\n    let qe = __byte_perm(alphabet, alphabet, (q >> 0) as u32);  // even nibbles -> 4 signed bytes\n    let qo = __byte_perm(alphabet, alphabet, (q >> 2) as u32);  // odd nibbles  -> 4 signed bytes\n    let qx = __byte_perm(qe, qo, 0x5140);  // re-interleave: elements 0,1,2,3 from qe,qo\n    let qy = __byte_perm(qe, qo, 0x7362);  // re-interleave: elements 4,5,6,7 from qe,qo\n    (unpack(qx), unpack(qy)) // 3 HW instructions total (was ~24 scalar)\n}\n// __byte_perm is sm_70+ CUDA intrinsic; no CubeCL/Metal analogue.".to_string(),
+        },
+        // ── dp4a-int8-hardware-dot-product — scalar 4-element dot → NVIDIA __dp4a single PTX instruction (B) ──
+        // Source: riir-gpu gemv_ternary_cuda_raw.rs (Issue 608 T2). NVIDIA
+        // __dp4a(a, b, c) computes a[0]*b[0] + a[1]*b[1] + a[2]*b[2] +
+        // a[3]*b[3] + c for 4 int8 lanes in ONE PTX instruction (dp4a.s32.s8.s32).
+        // The ternary GEMV uses it twice per 8-code block: 2 instructions for
+        // an 8-element dot product that would take ~24 scalar FMA ops.
+        //
+        // Distinct from `cmma-hardware-unit-over-scalar-alu` (Batch 16) —
+        // that's CubeCL cmma matrix-multiply-accumulate (8x8x8 tile matrix
+        // op); this is NVIDIA scalar 4-lane int8 dot. Different instruction
+        // class, different operand width (int8 vs f16/bf16), different
+        // backend (CUDA-only vs CubeCL). The int8 requirement means
+        // activations must be quantized per-block first (accuracy cost
+        // ~3.7e-3 mean relative error on gaussians — argmax preserved).
+        KernelRule {
+            rule_id: "dp4a-int8-hardware-dot-product".to_string(),
+            gpu_concept: "replace scalar 4-element int8 dot product with NVIDIA __dp4a — one PTX instruction (dp4a.s32.s8.s32) computes a[0]*b[0]+a[1]*b[1]+a[2]*b[2]+a[3]*b[3]+c for 4 int8 lanes. Distinct from cmma matrix tile op (Batch 16) — this is a scalar 4-lane SIMD dot, CUDA-only, requires int8 operands".to_string(),
+            ref_shape: "// naive: scalar 4-element dot product (~8 FMA ops)\nfn dot4_scalar(a: &[i8; 4], b: &[i8; 4]) -> i32 {\n    a[0] as i32 * b[0] as i32\n        + a[1] as i32 * b[1] as i32\n        + a[2] as i32 * b[2] as i32\n        + a[3] as i32 * b[3] as i32\n}\n// For an 8-element dot: 2 calls = ~16 scalar FMA ops + 4 sign-extend ops = ~20 ops".to_string(),
+            opt_pattern: "// optimized: NVIDIA __dp4a — 1 PTX instruction per 4-element int8 dot\nfn dot8_dp4a(a: &[i8; 8], b: &[i8; 8]) -> i32 {\n    let a_lo = pack_i8_le(a[0], a[1], a[2], a[3]);\n    let a_hi = pack_i8_le(a[4], a[5], a[6], a[7]);\n    let b_lo = pack_i8_le(b[0], b[1], b[2], b[3]);\n    let b_hi = pack_i8_le(b[4], b[5], b[6], b[7]);\n    let mut sum = __dp4a(a_lo, b_lo, 0); // 1 instruction: 4-lane int8 dot + add\n    sum = __dp4a(a_hi, b_hi, sum);       // 1 instruction: 4-lane int8 dot + accumulate\n    sum // 2 PTX instructions total (was ~20 scalar ops)\n}\n// __dp4a is sm_70+ CUDA intrinsic; requires int8 operands (activation quantization needed).\n// Achieves ~6x kernel speedup over scalar ALU on int8 ternary GEMV (llama.cpp 621 GB/s vs CubeCL 108 GB/s on 4090).".to_string(),
+        },
+        // ── threadgroup-subset-sum-lut-keyed-by-activation — per-bit shift/mask/select loop → 2 threadgroup-LUT reads + 1 subtract per 4 weights (B) ──
+        // Source: riir-gpu gemv_ternary_cubecl.rs `gemv_ternary_plane_lut`
+        // (Issue 606 T3c path 1, gated `ternary_lut_gemv`). Precompute a
+        // 16-entry subset-sum table per 4-activation group in threadgroup
+        // memory (256 groups × 16 masks = 4096 f32 = 16 KB), then each
+        // 4-weight ternary dot collapses to S[p] − S[q] where p is the 4-bit
+        // +1 pattern and q is the -1 pattern. Build is 4 loads + 12 adds per
+        // group (the 16 subset sums share pair-sums), amortized over
+        // 8 planes × 4 rows = 32 rows per workgroup and every tile iteration.
+        //
+        // THE KEY INSIGHT (why this is NOT the Q4_K LUT negative result):
+        // the table is keyed by the ACTIVATION subset and contains no
+        // weight, no scale, no zero-point. It therefore depends on nothing
+        // that varies down the rows — one build serves EVERY output row in
+        // the matrix. The Q4_K LUT (Plan 486, Bench 487) was keyed by weight
+        // value + scale + zero-point, all of which vary per row AND per
+        // sub-block, so a 5120-wide row rebuilt ~160 tables each amortizing
+        // over only 32 elements — the rebuild ate the fusion win.
+        // Structurally different amortization regime, not a tuning difference.
+        //
+        // Geometry forced: LUT_TILE_COLS = 1024 (= 32 u32 words = PLANE_DIM;
+        // = 256 groups of 4 = CubeDim). Both build + consume come out
+        // one-item-per-thread with no remainder loop.
+        KernelRule {
+            rule_id: "threadgroup-subset-sum-lut-keyed-by-activation".to_string(),
+            gpu_concept: "precompute a 16-entry subset-sum table per 4-element activation group in threadgroup memory (keyed by activation subset, containing no weight/scale/zero-point), then each 4-weight signed dot collapses to 2 table reads + 1 subtract — one build serves every output row because the table depends on nothing that varies down the rows".to_string(),
+            ref_shape: "// naive: per-bit shift/mask/select loop (~28 ops per 4-weight ternary dot)\nfn ternary_dot4_naive(pos_bits: u8, neg_bits: u8, x: &[f32; 4]) -> f32 {\n    let mut acc = 0.0;\n    for k in 0..4 {\n        let p = (pos_bits >> k) & 1;\n        let n = (neg_bits >> k) & 1;\n        let sign = if p == 1 { 1.0 } else if n == 1 { -1.0 } else { 0.0 };\n        acc += sign * x[k]; // 2 shifts + 2 masks + 2 int->float + select + FMA per weight\n    }\n    acc // ~28 ops per 4-weight dot, repeated for every output row\n}".to_string(),
+            opt_pattern: "// optimized: threadgroup subset-sum LUT — 2 reads + 1 subtract per 4-weight dot\n// BUILD (once per tile, serves every row):\n//   thread t owns activation group t (4 elements x0..x3)\n//   S[m] = sum of x_i for i in bitmask m (16 subsets of a 4-element group)\nfn build_subset_sum_lut(x: &[f32; 4], lut: &mut [f32; 16]) {\n    let x01 = x[0] + x[1];\n    let x23 = x[2] + x[3];\n    lut[0b0000] = 0.0;\n    lut[0b0001] = x[0];\n    lut[0b0010] = x[1];\n    lut[0b0011] = x01;\n    lut[0b0100] = x[2];\n    lut[0b0101] = x[0] + x[2];\n    // ... 10 more subset sums sharing pair-sums (12 adds total)\n    lut[0b1111] = x01 + x23;\n}\n// CONSUME (every row reuses the same LUT):\nfn ternary_dot4_lut(pos_bits: u8, neg_bits: u8, lut: &[f32; 16]) -> f32 {\n    lut[(pos_bits & 0xF) as usize] - lut[(neg_bits & 0xF) as usize]\n    // 2 reads + 1 subtract (was ~28 ops) — one build amortizes over all rows\n}".to_string(),
+        },
+        // ── base-3-trit-packing-5-per-byte — 2-bit codes (4/byte) → base-3 trits (5/byte, 17.6% denser) (N) ──
+        // Source: riir-gpu gemv_ternary_cubecl.rs `gemv_ternary_trit_rowtiled8`\n        // (Issue 628 T2). Pack 5 ternary values per byte using base-3 encoding
+        // (code = byte % 3; byte /= 3), reducing memory by 17.6% vs 2-bit
+        // codes (1.75 bits/weight vs 2.125). Each group of 128 weights
+        // occupies 28 bytes (26 live + 2 pad to u32 alignment = 7 u32 words).
+        // The decode uses modular arithmetic, which the compiler optimizes
+        // to multiply-by-inverse.
+        //
+        // HONEST CAVEAT (Issue 607): \"packed won on Metal, lost 2.1x on CUDA\".
+        // The trit format's div/mod decode is significantly slower than the
+        // bit-plane format's shift/mask on CUDA scalar ALU, and CUDA's int8
+        // dp4a path can't consume base-3 trits directly (it requires the
+        // 2-bit code layout). The format is viable on Metal (where div/mod
+        // cost is lower and bandwidth-bound kernels benefit from the 17.6%
+        // cut) but NOT on CUDA. Regime-dependent rule.
+        //
+        // Distinct from `ternary-weight-quant` (bit-plane format: 2 bit-planes
+        // of 64 bits each, indexed by bit position) and `int2-pack-weights`
+        // (4 values per byte via 2-bit codes). Base-3 trit is mixed-radix
+        // (5 per byte) rather than fixed-width (4 per byte), trading decode
+        // cost for density.
+        KernelRule {
+            rule_id: "base-3-trit-packing-5-per-byte".to_string(),
+            gpu_concept: "pack 5 ternary values per byte using base-3 mixed-radix encoding (byte % 3 decode) — 17.6% denser than 2-bit codes (1.75 vs 2.125 bits/weight), regime-dependent: wins on bandwidth-bound Metal (div/mod cheap), loses 2.1x on CUDA scalar ALU (div/mod expensive, incompatible with __dp4a int8 path)".to_string(),
+            ref_shape: "// naive: 2-bit code packing (4 ternary values per byte, 2.125 bits/weight)\nfn pack_2bit(codes: &[u8; 4]) -> u8 {\n    // code in {0, 1, 2} maps to {-1, 0, +1}\n    // 4 codes per byte, 2 bits each\n    codes[0] | (codes[1] << 2) | (codes[2] << 4) | (codes[3] << 6)\n}\nfn unpack_2bit(byte: u8) -> [u8; 4] {\n    [\n        (byte >> 0) & 0x3,  // shift + mask — cheap on all backends\n        (byte >> 2) & 0x3,\n        (byte >> 4) & 0x3,\n        (byte >> 6) & 0x3,\n    ]\n}".to_string(),
+            opt_pattern: "// optimized: base-3 trit packing (5 ternary values per byte, 1.75 bits/weight)\nfn pack_trit5(codes: &[u8; 5]) -> u8 {\n    // 5 trits per byte: 3^5 = 243 <= 256 (fits in a byte)\n    codes[0] + codes[1] * 3 + codes[2] * 9 + codes[3] * 27 + codes[4] * 81\n}\nfn unpack_trit5(byte: u8) -> [u8; 5] {\n    let mut rem = byte;\n    let c0 = rem % 3; rem /= 3;  // div/mod — compiler optimizes to mul-by-inverse\n    let c1 = rem % 3; rem /= 3;\n    let c2 = rem % 3; rem /= 3;\n    let c3 = rem % 3; rem /= 3;\n    let c4 = rem % 3;\n    [c0, c1, c2, c3, c4]\n    // 17.6% denser than 2-bit (1.75 vs 2.125 bits/weight)\n    // REGIME-DEPENDENT: wins on Metal (bandwidth-bound, div/mod cheap),\n    // loses 2.1x on CUDA (div/mod expensive on scalar ALU, incompatible with __dp4a)\n}".to_string(),
+        },
     ])
 }
 
@@ -1923,7 +2091,7 @@ fn gemv_residual_inplace(weight: &[f32], input: &[f32], residual_output: &mut [f
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 140-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 145-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1931,7 +2099,7 @@ fn gemv_residual_inplace(weight: &[f32], input: &[f32], residual_output: &mut [f
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (12 rules)
+    // A: Memory access patterns (13 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -1948,9 +2116,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "hoist-group-invariant-scale-out-of-word-loop",
             "row-tile-amortize-input-load",
             "pin-lane-to-quant-sub-block-coalesce-byte-loads",
+            "cooperative-block-wide-quantize-staging",
         ],
     ),
-    // B: Compute patterns (24 rules)
+    // B: Compute patterns (27 rules)
     (
         KernelCategory::Compute,
         "B: compute",
@@ -1979,6 +2148,9 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "split-sign-accumulators-defer-subtraction",
             "clamp-tile-indices-to-sentinel-discard-at-write",
             "factor-affine-quant-scale-out-of-element-loop",
+            "byte-perm-lut-via-permutation-immediate",
+            "dp4a-int8-hardware-dot-product",
+            "threadgroup-subset-sum-lut-keyed-by-activation",
         ],
     ),
     // C: Fusion patterns (14 rules)
@@ -2148,7 +2320,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "detached-broadcast-insert",
         ],
     ),
-    // N: dtype + alignment specialization (10 rules)
+    // N: dtype + alignment specialization (11 rules)
     (
         KernelCategory::DtypeAlignment,
         "N: dtype + alignment",
@@ -2163,6 +2335,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "dtype-restricted-backend",
             "water-fill-tail-dim-shared-codebook",
             "norm-decoupled-low-bit-scoring",
+            "base-3-trit-packing-5-per-byte",
         ],
     ),
     // O: IR strength reduction (4 rules)
@@ -2183,7 +2356,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
 /// Returns 15 buckets (one per category), each containing the `KernelRule`s whose
 /// `rule_id` appears in that category's slice of [`KERNEL_CATEGORIES`]. This is
 /// the category-scoped view of the corpus — a future heal pipeline can consult
-/// the routed expert's rules first without scanning all 140.
+/// the routed expert's rules first without scanning all 145.
 ///
 /// # Allocation
 ///
@@ -2249,8 +2422,9 @@ mod tests {
         // Batch 17 (4): riir-gpu production kernels — skip-all-zero-packed-words-via-or-reduce, hoist-group-invariant-scale-out-of-word-loop, split-sign-accumulators-defer-subtraction, clamp-tile-indices-to-sentinel-discard-at-write (gemm_ternary_batched, gemv_ternary_block_contiguous).
         // Batch 18 (3): riir-gpu production kernels — row-tile-amortize-input-load, factor-affine-quant-scale-out-of-element-loop, pin-lane-to-quant-sub-block-coalesce-byte-loads (gemv_q4k_cubecl Q4_K family).
         // Batch 19 (2): riir-gpu production kernels — chain-dispatches-single-sync-point, fuse-residual-via-in-place-output-array (ternary_ffn_fused, gemv_ternary_residual_cubecl).
-        // Total: 140.
-        assert_eq!(corpus.entries.len(), 140, "batches 1-19 should have 140 rules");
+        // Batch 20 (5): riir-gpu production kernels — cooperative-block-wide-quantize-staging, byte-perm-lut-via-permutation-immediate, dp4a-int8-hardware-dot-product, threadgroup-subset-sum-lut-keyed-by-activation, base-3-trit-packing-5-per-byte (gemv_ternary_cuda_raw + gemv_ternary_cubecl LUT/trit paths).
+        // Total: 145.
+        assert_eq!(corpus.entries.len(), 145, "batches 1-20 should have 145 rules");
     }
 
     #[test]
@@ -2963,6 +3137,45 @@ mod tests {
     }
 
     // ════════════════════════════════════════════════════════════════════
+    // Batch 20 (Research 021) — CUDA hardware-instruction cluster +
+    // CubeCL LUT + base-3 trit (5 rules: 1A + 3B + 1N)
+    // ════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn batch20_rules_present() {
+        // Verify the 5 batch-20 rules across A/B/N.
+        let corpus = build_kernel_seed_corpus();
+        let ids: Vec<&str> =
+            corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        // A (1 new): cooperative-block-wide-quantize-staging
+        assert!(ids.contains(&"cooperative-block-wide-quantize-staging"), "cooperative block-wide quantize staging");
+        // B (3 new): byte-perm-lut-via-permutation-immediate + dp4a-int8-hardware-dot-product + threadgroup-subset-sum-lut-keyed-by-activation
+        assert!(ids.contains(&"byte-perm-lut-via-permutation-immediate"), "byte perm lut via permutation immediate");
+        assert!(ids.contains(&"dp4a-int8-hardware-dot-product"), "dp4a int8 hardware dot product");
+        assert!(ids.contains(&"threadgroup-subset-sum-lut-keyed-by-activation"), "threadgroup subset-sum lut keyed by activation");
+        // N (1 new): base-3-trit-packing-5-per-byte
+        assert!(ids.contains(&"base-3-trit-packing-5-per-byte"), "base-3 trit packing 5 per byte");
+    }
+
+    #[test]
+    fn batch20_cuda_dp4a_lut_trit_concepts_covered() {
+        // Verify the batch-20 CUDA-dp4a + LUT + trit concepts.
+        let corpus = build_kernel_seed_corpus();
+        let concepts: Vec<&str> =
+            corpus.entries.iter().map(|e| e.gpu_concept.as_str()).collect();
+        // A: cooperative-block-wide-quantize-staging (riir-gpu gemv_ternary_cuda_raw.rs fused variant)
+        assert!(concepts.contains(&"when an input vector must be quantized/transformed once per dispatch and consumed by every warp in the block, have ALL threads cooperate to write disjoint chunks into shared memory, then each warp reads from shared memory — eliminates a separate staging dispatch + global-memory round-trip"));
+        // B: byte-perm-lut-via-permutation-immediate (riir-gpu gemv_ternary_cuda_raw.rs)
+        assert!(concepts.contains(&"decode N small-radix codes to signed symbols in ONE hardware instruction via __byte_perm(constant, constant, code >> shift) — the constant packs the signed alphabet as bytes, the selector nibbles index straight to the symbol (no LUT load, no branch, no modular arithmetic)"));
+        // B: dp4a-int8-hardware-dot-product (riir-gpu gemv_ternary_cuda_raw.rs)
+        assert!(concepts.contains(&"replace scalar 4-element int8 dot product with NVIDIA __dp4a — one PTX instruction (dp4a.s32.s8.s32) computes a[0]*b[0]+a[1]*b[1]+a[2]*b[2]+a[3]*b[3]+c for 4 int8 lanes. Distinct from cmma matrix tile op (Batch 16) — this is a scalar 4-lane SIMD dot, CUDA-only, requires int8 operands"));
+        // B: threadgroup-subset-sum-lut-keyed-by-activation (riir-gpu gemv_ternary_cubecl.rs LUT path)
+        assert!(concepts.contains(&"precompute a 16-entry subset-sum table per 4-element activation group in threadgroup memory (keyed by activation subset, containing no weight/scale/zero-point), then each 4-weight signed dot collapses to 2 table reads + 1 subtract — one build serves every output row because the table depends on nothing that varies down the rows"));
+        // N: base-3-trit-packing-5-per-byte (riir-gpu gemv_ternary_cubecl.rs trit path)
+        assert!(concepts.contains(&"pack 5 ternary values per byte using base-3 mixed-radix encoding (byte % 3 decode) — 17.6% denser than 2-bit codes (1.75 vs 2.125 bits/weight), regime-dependent: wins on bandwidth-bound Metal (div/mod cheap), loses 2.1x on CUDA scalar ALU (div/mod expensive, incompatible with __dp4a int8 path)"));
+    }
+
+    // ════════════════════════════════════════════════════════════════════
     // Plan 003 — Router ↔ corpus wiring tests
     // ════════════════════════════════════════════════════════════════════
 
@@ -2973,7 +3186,7 @@ mod tests {
 
     #[test]
     fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-        // Every rule_id in the 140-rule corpus must appear in exactly one category.
+        // Every rule_id in the 145-rule corpus must appear in exactly one category.
         let corpus = build_kernel_seed_corpus();
         let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
         let mut categorized: Vec<&str> = Vec::new();
@@ -3004,10 +3217,10 @@ mod tests {
 
     #[test]
     fn kernel_categories_counts_match_plan_003_table() {
-        // Pin per-category rule counts to the Plan 003 table (updated for Batch 19).
+        // Pin per-category rule counts to the Plan 003 table (updated for Batch 20).
         let expected = [
-            (KernelCategory::MemoryAccess, 12),
-            (KernelCategory::Compute, 24),
+            (KernelCategory::MemoryAccess, 13),
+            (KernelCategory::Compute, 27),
             (KernelCategory::Fusion, 14),
             (KernelCategory::Dispatch, 9),
             (KernelCategory::Parallelism, 8),
@@ -3019,7 +3232,7 @@ mod tests {
             (KernelCategory::AutotuneDispatch, 4),
             (KernelCategory::ConvGemmLayout, 5),
             (KernelCategory::KernelPolymorphism, 5),
-            (KernelCategory::DtypeAlignment, 10),
+            (KernelCategory::DtypeAlignment, 11),
             (KernelCategory::IrStrengthReduction, 4),
         ];
         for (cat, count) in expected {
@@ -3029,9 +3242,9 @@ mod tests {
                 "Plan 003: category {cat:?} has {} rules, expected {count}",
                 entry.2.len());
         }
-        // Sum must equal 140.
+        // Sum must equal 145.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 140, "Plan 003: category totals must sum to 140");
+        assert_eq!(total, 145, "Plan 003: category totals must sum to 145");
     }
 
     #[test]
@@ -3041,7 +3254,7 @@ mod tests {
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 140, "Plan 003: grouped corpus has {total} rules, expected 140");
+        assert_eq!(total, 145, "Plan 003: grouped corpus has {total} rules, expected 145");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");
