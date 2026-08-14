@@ -39,6 +39,16 @@
 //!   `rebased`, `linear_attn`) + dispatch (`lightning_attn`). A 12th candidate
 //!   (`chunk-reset-scan`) was dropped as a duplicate of `chunk-reset-cumsum`
 //!   (Batch 6). Corpus: **99 rules across 15 categories (A–O)**.
+//! - **Batch 12 (Research 013):** 14 popcorn rules — gated delta family
+//!   (`gated_delta_rule`, `gated_delta_product`), specialized recurrences
+//!   (`mesa_net`, `mesa_net_decode`, `titans_linear`, `ttt`, `rwkv4`, `rwkv6`),
+//!   advanced attention (`wall_attn`, `multi_token_attention`), `MoE` gate
+//!   (`momoe`), KDA gate (`kda_gate`, `kda_gate_cumsum`), hierarchical mask
+//!   (`log_linear_attn`).
+//!   Three candidates (`kda` per-key-dim gate, `forgetting_attn` cumsum decay,
+//!   `abc` two-state softmax) were dropped as duplicates of existing rules.
+//!   Corpus: **113 rules across 15 categories (A–O)**. Category G (linear-attn
+//!   recurrence) is now the largest cluster at 17 rules.
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
@@ -1070,6 +1080,183 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
             ref_shape: "// naive: constant per-head decay slope regardless of layer depth\nfn decay_slope_constant(heads: usize, layer_idx: usize, num_layers: usize) -> Vec<f32> {\n    // same schedule at every layer — ignores depth\n    let _ = (layer_idx, num_layers);\n    (0..heads).map(|h| -8.0 / heads as f32 * h as f32).collect()\n}".to_string(),
             opt_pattern: "// optimized: slope scales with depth (lightning_attn) — deeper → slower decay\nfn decay_slope_depth_aware(heads: usize, layer_idx: usize, num_layers: usize) -> Vec<f32> {\n    let depth_factor = 1.0 - layer_idx as f32 / num_layers as f32; // 1.0 at layer 0 → 0.0 at last\n    (0..heads)\n        .map(|h| -(8.0 / heads as f32) * depth_factor * h as f32)\n        .collect()\n}".to_string(),
         },
+        // ════════════════════════════════════════════════════════════════════
+        // Batch 12 (Research 013): 14 rules — gated delta + specialized recurrence + advanced attention
+        // ════════════════════════════════════════════════════════════════════
+        // ── gate-then-correct-delta-rule — decay THEN correct against decayed state ──
+        // Source: gated_delta_rule.py — `state = state * g.exp()[..., None, None];
+        // error = v - state·k; state += k ⊗ (β·error)`. The ordering is load-bearing:
+        // the gate applies to the state BEFORE the delta correction, so the
+        // Householder-style projection `v - S·k` targets the DECAYED subspace.
+        // Distinct from `state-forget-gate` (no correction) and `householder-rank1-update`
+        // (no gate); the gated delta rule is the composition with gate-first ordering.
+        KernelRule {
+            rule_id: "gate-then-correct-delta-rule".to_string(),
+            gpu_concept: "gated delta rule: decay state then correct against decayed subspace".to_string(),
+            ref_shape: "// naive: correction against un-decayed state (wrong ordering — projection misses decay)\nfn delta_no_gate_first(state: &mut [f32], k: &[f32], v: &[f32], beta: f32, gate: &[f32], d: usize, t: usize) {\n    let error = v[t] - dot(&state[t*d..(t+1)*d], &k[t*d..(t+1)*d]); // projects un-decayed state\n    for dd in 0..d { state[t*d+dd] += beta * k[t*d+dd] * error; }\n    let g = gate[t].exp();\n    for dd in 0..d { state[t*d+dd] *= g; } // gate AFTER write — wrong order\n}".to_string(),
+            opt_pattern: "// optimized: gate-then-correct (gated_delta_rule) — decay first, correct against decayed\nfn delta_gate_then_correct(state: &mut [f32], k: &[f32], v: &[f32], beta: f32, gate: &[f32], d: usize, t: usize) {\n    let g = gate[t].exp();\n    for dd in 0..d { state[t*d+dd] *= g; } // decay FIRST\n    let error = v[t] - dot(&state[t*d..(t+1)*d], &k[t*d..(t+1)*d]); // projects decayed state\n    for dd in 0..d { state[t*d+dd] += beta * k[t*d+dd] * error; } // write correction\n}".to_string(),
+        },
+        // ── gate-then-multi-householder-write — one gate, N inner delta writes ────
+        // Source: gated_delta_product.py — `state *= g.exp()` then loop `j in 0..num_householder
+        // { error = v[i] - state·k[i]; state += k[i] ⊗ (β[i]·error) }`. A single per-head
+        // forget gate wraps N Householder delta writes per step. Generalizes
+        // `multi-write-per-step` (Batch 3) by composing it with the delta rule inside
+        // one gated outer step. The outer gate is paid once; N corrections share the
+        // decayed baseline.
+        KernelRule {
+            rule_id: "gate-then-multi-householder-write".to_string(),
+            gpu_concept: "one outer gate wrapping N inner Householder delta writes per step".to_string(),
+            ref_shape: "// naive: re-apply the gate per inner write (N gate evaluations, redundant)\nfn multi_write_redundant_gate(state: &mut [f32], k: &[f32], v: &[f32], beta: &[f32], gate: &[f32], d: usize, n_h: usize, t: usize) {\n    for j in 0..n_h {\n        let g = gate[t].exp();\n        for dd in 0..d { state[t*d+dd] *= g; } // gate re-applied N times — redundant\n        let i = t * n_h + j;\n        let error = v[i] - dot(&state[t*d..(t+1)*d], &k[i*d..(i+1)*d]);\n        for dd in 0..d { state[t*d+dd] += beta[i] * k[i*d+dd] * error; }\n    }\n}".to_string(),
+            opt_pattern: "// optimized: gate ONCE then N inner delta writes (gated_delta_product)\nfn multi_write_gate_once(state: &mut [f32], k: &[f32], v: &[f32], beta: &[f32], gate: &[f32], d: usize, n_h: usize, t: usize) {\n    let g = gate[t].exp();\n    for dd in 0..d { state[t*d+dd] *= g; } // gate paid once\n    for j in 0..n_h {\n        let i = t * n_h + j;\n        let error = v[i] - dot(&state[t*d..(t+1)*d], &k[i*d..(i+1)*d]); // projects decayed state\n        for dd in 0..d { state[t*d+dd] += beta[i] * k[i*d+dd] * error; } // N corrections\n    }\n}".to_string(),
+        },
+        // ── online-gram-ridge-solve — gated Gram accumulators + ridge solve per step ─
+        // Source: mesa_net.py — `H_kk = g·H_kk + β·k⊗k; H_kv = g·H_kv + β·k⊗v` (two
+        // parallel gated Gram accumulators), then `o = H_kv^T · (H_kk + λI)^{-1} · q`.
+        // Solving the normal equations at each step turns the recurrence into an
+        // online ridge regression — structurally unlike any existing rule
+        // (delta/householder/oja WRITE corrections; this SOLVES for the read).
+        KernelRule {
+            rule_id: "online-gram-ridge-solve".to_string(),
+            gpu_concept: "online ridge regression: gated Gram accumulators + per-step solve".to_string(),
+            ref_shape: "// naive: store full kv history then batch ridge solve at end (O(N²d²) memory)\nfn ridge_batch(K: &[f32], V: &[f32], q: &[f32], lamb: f32, d: usize, n: usize) -> Vec<f32> {\n    let mut hkk = vec![0.0f32; d * d];\n    let mut hkv = vec![0.0f32; d * d];\n    for t in 0..n {\n        for i in 0..d { for j in 0..d { hkk[i*d+j] += K[t*d+i] * K[t*d+j]; } }\n        for i in 0..d { for j in 0..d { hkv[i*d+j] += K[t*d+i] * V[t*d+j]; } }\n    }\n    // solve (hkk + λI) q* = q at the end — no per-step read\n    solve_ridge(&hkk, &hkv, q, lamb, d)\n}".to_string(),
+            opt_pattern: "// optimized: online gated Gram accumulators + per-step ridge solve (mesa_net)\nfn ridge_online_gated(hkk: &mut [f32], hkv: &mut [f32], k: &[f32], v: &[f32], beta: f32, g: f32, q: &[f32], lamb: f32, d: usize) -> Vec<f32> {\n    // decay both Gram matrices with the shared gate\n    let decay = g.exp();\n    for i in 0..(d*d) { hkk[i] *= decay; hkv[i] *= decay; }\n    // accumulate β-weighted outer products\n    for i in 0..d { for j in 0..d {\n        hkk[i*d+j] += beta * k[i] * k[j];\n        hkv[i*d+j] += beta * k[i] * v[j];\n    } }\n    // solve (hkk + λI) q* = q THIS step → read H_kv^T q*\n    solve_ridge(hkk, hkv, q, lamb, d)\n}".to_string(),
+        },
+        // ── momentum-gated-memory-recurrence — SGD momentum + EMA memory coupling ──
+        // Source: titans_linear.py — `momentum = η·momentum − 2θ·∇M L(M)` then
+        // `memory = (1−α)·memory + momentum`. Two coupled gated recurrences: the
+        // momentum state carries SGD-with-momentum; the memory matrix is an EMA of
+        // the momentum. The gradient is the reconstruction error against the CURRENT
+        // memory. "Train a linear model at inference time" as a recurrence.
+        KernelRule {
+            rule_id: "momentum-gated-memory-recurrence".to_string(),
+            gpu_concept: "two coupled recurrences: SGD momentum state + EMA memory matrix".to_string(),
+            ref_shape: "// naive: plain GD on memory, no momentum (slow convergence, no EMA smoothing)\nfn gd_no_momentum(memory: &mut [f32], k: &[f32], v: &[f32], theta: f32, d: usize, t: usize) {\n    // ∇ = k ⊗ (kW − v) — reconstruction error gradient\n    let mut kw = vec![0.0f32; d];\n    for i in 0..d { for j in 0..d { kw[i] += memory[j*d+i] * k[t*d+j]; } }\n    for i in 0..d { for j in 0..d {\n        memory[j*d+i] -= 2.0 * theta * k[t*d+j] * (kw[i] - v[t*d+i]);\n    } }\n}".to_string(),
+            opt_pattern: "// optimized: momentum + EMA memory (titans_linear) — two coupled gated recurrences\nfn momentum_ema_memory(memory: &mut [f32], momentum: &mut [f32], k: &[f32], v: &[f32], theta: f32, eta: f32, alpha: f32, d: usize, t: usize) {\n    // ∇ = k ⊗ (kW − v) against current memory\n    let mut kw = vec![0.0f32; d];\n    for i in 0..d { for j in 0..d { kw[i] += memory[j*d+i] * k[t*d+j]; } }\n    // momentum recurrence: m = η·m − 2θ·∇\n    for i in 0..d { for j in 0..d {\n        let grad = k[t*d+j] * (kw[i] - v[t*d+i]);\n        momentum[j*d+i] = eta * momentum[j*d+i] - 2.0 * theta * grad;\n    } }\n    // memory recurrence: M = (1−α)·M + m (EMA of momentum)\n    for i in 0..(d*d) { memory[i] = (1.0 - alpha) * memory[i] + momentum[i]; }\n}".to_string(),
+        },
+        // ── current-token-bonus-read-before-update — boosted read, then plain write ──
+        // Source: rwkv6.py — `boosted = state + diag(u) ⊗ (k⊗v); out = r·boosted;
+        // state = state·diag(e^w) + k⊗v`. The output is read from a BOOSTED state
+        // (current token gets a bonus `u`), THEN the state updates with the
+        // un-boosted kv. The bonus is transient — additive for the read only,
+        // not stored. Distinct from standard write-then-read recurrence.
+        KernelRule {
+            rule_id: "current-token-bonus-read-before-update".to_string(),
+            gpu_concept: "read from boosted state (transient bonus), then update with un-boosted kv".to_string(),
+            ref_shape: "// naive: write to state first, read after (no bonus — current token undervalued)\nfn write_then_read(state: &mut [f32], k: &[f32], v: &[f32], r: &[f32], w: &[f32], d: usize, t: usize) -> f32 {\n    // decay + write\n    for dd in 0..d { state[t*d+dd] = state[t*d+dd] * w[t].exp() + k[t*d+dd] * v[t]; }\n    // read AFTER write — no current-token bonus\n    let mut out = 0.0;\n    for dd in 0..d { out += state[t*d+dd] * r[t*d+dd]; }\n    out\n}".to_string(),
+            opt_pattern: "// optimized: read-before-update with transient bonus (rwkv6)\nfn bonus_read_before_update(state: &mut [f32], k: &[f32], v: &[f32], r: &[f32], w: &[f32], u: &[f32], d: usize, t: usize) -> f32 {\n    // boosted state = state + u·(k⊗v) — transient bonus for the READ only\n    let mut out = 0.0;\n    for dd in 0..d {\n        let boosted = state[t*d+dd] + u[t*d+dd] * k[t*d+dd] * v[t];\n        out += boosted * r[t*d+dd];\n    }\n    // update state with UN-boosted kv (bonus not stored)\n    for dd in 0..d { state[t*d+dd] = state[t*d+dd] * w[t].exp() + k[t*d+dd] * v[t]; }\n    out\n}".to_string(),
+        },
+        // ── wkv-logsumexp-three-channel-state — 3-channel (num/den/max) logsumexp ──
+        // Source: rwkv4.py — state = (alpha, beta, eps) = (numerator, denominator,
+        // running-max). Each step: `tau = max(ukt, eps); up = exp(eps−tau); cur =
+        // exp(ukt−tau); out = (up·alpha + cur·v) / (up·beta + cur)`. The running max
+        // `eps` prevents exp overflow over long sequences. The 3rd channel is the
+        // numerical-stability carrier — structurally distinct from 2-channel EMA.
+        KernelRule {
+            rule_id: "wkv-logsumexp-three-channel-state".to_string(),
+            gpu_concept: "WKV with 3-channel state (num/den/max) + logsumexp max-subtraction".to_string(),
+            ref_shape: "// naive: 2-channel EMA (num/den) — exp overflow on long sequences (no running max)\nfn wkv_2ch(alpha: &mut f32, beta: &mut f32, k: f32, v: f32, decay: f32, bonus: f32) -> f32 {\n    let ukt = bonus + k;\n    let out = (alpha.exp() * *alpha + ukt.exp() * v) / (alpha.exp() * *beta + ukt.exp());\n    // overflow: ukt.exp() blows up when bonus+k is large\n    *alpha = decay.exp() * *alpha + ukt.exp() * v;\n    *beta = decay.exp() * *beta + ukt.exp();\n    out\n}".to_string(),
+            opt_pattern: "// optimized: 3-channel logsumexp-stable WKV (rwkv4) — running max prevents overflow\nfn wkv_3ch_logsumexp(alpha: &mut f32, beta: &mut f32, eps: &mut f32, k: f32, v: f32, decay: f32, bonus: f32) -> f32 {\n    let ukt = bonus + k;\n    let tau = ukt.max(*eps); // running max\n    let up = (*eps - tau).exp(); // bounded ≤ 1\n    let cur = (ukt - tau).exp(); // bounded ≤ 1\n    let out = (up * *alpha + cur * v) / (up * *beta + cur);\n    // advance the 3-channel state\n    let shifted = decay + *eps;\n    *eps = shifted.max(k);\n    let up2 = (shifted - *eps).exp();\n    let cur2 = (k - *eps).exp();\n    *alpha = up2 * *alpha + cur2 * v;\n    *beta = up2 * *beta + cur2;\n    out\n}".to_string(),
+        },
+        // ── hierarchical-log2-level-mask — O(log seq) hierarchical sparse mask ──────
+        // Source: log_linear_attn.py — `levels = ceil(log2(seq))+1`; base =
+        // `diag_embed(scales[...,0,:])`; per level `half = 1<<(level−1)`, `anchor =
+        // i − i%half`, mask `(i%(2·half) ≥ half) & (j+half ≥ anchor) & (j < anchor)`.
+        // One learned scale per log2 level. Converts dense N×N decay into a sparse
+        // hierarchical structure — distinct from dense `pairwise-distance-decay-matrix`.
+        KernelRule {
+            rule_id: "hierarchical-log2-level-mask".to_string(),
+            gpu_concept: "O(log seq) hierarchical mask with per-level learned scales".to_string(),
+            ref_shape: "// naive: dense N×N decay matrix (O(N²) memory + compute)\nfn dense_decay_matrix(seq: usize, slope: f32) -> Vec<f32> {\n    let mut m = vec![0.0f32; seq * seq];\n    for i in 0..seq { for j in 0..=i {\n        m[i*seq+j] = (slope * (i - j) as f32).exp();\n    } }\n    m\n}".to_string(),
+            opt_pattern: "// optimized: hierarchical log2-level mask (log_linear_attn) — O(N log N) sparse\nfn hierarchical_mask(seq: usize, scales: &[f32]) -> Vec<f32> {\n    let levels = (seq as f32).log2().ceil() as usize + 1;\n    let mut h = vec![0.0f32; seq * seq];\n    // level 0: diagonal\n    for i in 0..seq { h[i*seq+i] = scales[0]; }\n    // levels 1..: anchor-relative blocks\n    for level in 1..levels {\n        let half = 1 << (level - 1);\n        for i in 0..seq {\n            let anchor = i - i % half;\n            for j in 0..seq {\n                let in_block = (i % (2*half) >= half) && (j + half >= anchor) && (j < anchor);\n                if in_block { h[i*seq+j] = scales[level]; }\n            }\n        }\n    }\n    h\n}".to_string(),
+        },
+        // ── iterative-cg-solve-over-matvec — CG with Jacobi preconditioner ──────────
+        // Source: mesa_net_decode.py — solve `(H_kk + λI) x = q` via conjugate
+        // gradient: `apply_system(x) = H_kk·x + λ·x` (matvec, no inverse materialized),
+        // diagonal Jacobi preconditioner `x = q / (diag(H_kk) + λ + ε)`, then the CG
+        // loop (`α = r²/(d·Ad)`, Polak-Ribière `β`). Trading memory (no inverse) for
+        // bounded iterations.
+        KernelRule {
+            rule_id: "iterative-cg-solve-over-matvec".to_string(),
+            gpu_concept: "conjugate-gradient solve over matvec with Jacobi preconditioner (no inverse)".to_string(),
+            ref_shape: "// naive: materialize the inverse (O(d²) memory + O(d³) solve)\nfn solve_via_inverse(hkk: &[f32], q: &[f32], lamb: f32, d: usize) -> Vec<f32> {\n    let mut a = hkk.to_vec();\n    for i in 0..d { a[i*d+i] += lamb; } // add λI\n    let inv = inverse(&a, d); // O(d³) — materialize the full inverse\n    matvec(&inv, q, d)\n}".to_string(),
+            opt_pattern: "// optimized: CG iteration over matvec (mesa_net_decode) — no inverse, bounded iters\nfn solve_cg(hkk: &[f32], q: &[f32], lamb: f32, d: usize, max_iter: usize) -> Vec<f32> {\n    let apply = |x: &[f32]| -> Vec<f32> {\n        let mut out = vec![0.0f32; d];\n        for i in 0..d { for j in 0..d { out[i] += hkk[i*d+j] * x[j]; } out[i] += lamb * x[i]; }\n        out\n    };\n    // Jacobi preconditioner: x₀ = q / (diag + λ + ε)\n    let mut x = vec![0.0f32; d];\n    for i in 0..d { x[i] = q[i] / (hkk[i*d+i] + lamb + 1e-5); }\n    let mut r = { let ax = apply(&x); q.iter().zip(ax.iter()).map(|(a,b)| a-b).collect::<Vec<_>>() };\n    let mut dir = r.clone();\n    let mut sq = r.iter().map(|v| v*v).sum::<f32>();\n    for _ in 0..max_iter {\n        let ad = apply(&dir);\n        let alpha = sq / (dir.iter().zip(ad.iter()).map(|(a,b)| a*b).sum::<f32>() + 1e-5);\n        for i in 0..d { x[i] += alpha * dir[i]; r[i] -= alpha * ad[i]; }\n        let next_sq = r.iter().map(|v| v*v).sum::<f32>();\n        let beta_cg = next_sq / (sq + 1e-5);\n        for i in 0..d { dir[i] = r[i] + beta_cg * dir[i]; }\n        sq = next_sq;\n    }\n    x\n}".to_string(),
+        },
+        // ── chunked-test-time-gradient-descent — mini-batch chunked GD + last-step ──
+        // Source: ttt.py — `for start in 0..seq step mini_batch_size`: compute the
+        // GD step `∇ = (LN(kW)·w − (v−k))·w` over the chunk with a lower-triangular
+        // causal mask `attn = (q·k^T)·tril`, then update `W −= η_last · k^T · v_new`
+        // using only the LAST step's gradient (`η_last = η[:,:,-1:]`). The
+        // last-step-update bounds the weight update to one matmul per chunk.
+        KernelRule {
+            rule_id: "chunked-test-time-gradient-descent".to_string(),
+            gpu_concept: "mini-batch chunked GD with causal mask + last-step weight update".to_string(),
+            ref_shape: "// naive: sequential per-token GD (O(seq) sequential steps, no chunking)\nfn gd_sequential(w: &mut [f32], k: &[f32], v: &[f32], eta: f32, d: usize, seq: usize) {\n    for t in 0..seq {\n        let mut kw = vec![0.0f32; d];\n        for i in 0..d { for j in 0..d { kw[i] += w[j*d+i] * k[t*d+j]; } }\n        let grad = k[t] * (kw[0] - v[t]); // simplified per-token gradient\n        for i in 0..(d*d) { w[i] -= eta * grad; } // full update per token\n    }\n}".to_string(),
+            opt_pattern: "// optimized: chunked mini-batch GD with last-step update (ttt)\nfn gd_chunked_last_step(w: &mut [f32], k: &[f32], v: &[f32], eta_last: &[f32], d: usize, seq: usize, mbs: usize) {\n    for start in (0..seq).step_by(mbs) {\n        let stop = (start + mbs).min(seq);\n        // compute v_new over the chunk (causal lower-triangular attn)\n        let mut v_new = vec![0.0f32; (stop-start)*d];\n        for oi in 0..(stop-start) {\n            for oj in 0..=oi { // tril: causal within chunk\n                for dd in 0..d { v_new[oi*d+dd] += k[(start+oj)*d+dd] * v[(start+oj)*d]; }\n            }\n        }\n        // weight update using ONLY the last step's gradient (η_last)\n        let last = stop - start - 1;\n        for i in 0..d { for j in 0..d {\n            w[j*d+i] -= eta_last[0] * k[(start+last)*d+j] * v_new[last*d+i];\n        } }\n    }\n}".to_string(),
+        },
+        // ── block-local-reference-frame-for-overflow — reframe per block to bound exp ──
+        // Source: wall_attn.py — per-channel decay `2^(P_i − P_j)` overflows fp32
+        // when prefix > 128 in log2. Fix: frame each query block on its OWN first
+        // prefix — `scores[start:stop,:start] = (q·2^(P_q−P_ref)) · (k·2^(P_ref−P_k))`
+        // keeps both factors in `[0,1]` for keys before the block. Block size
+        // `max(16, seq/(4·√head_dim))` scales with sequence to keep the diagonal
+        // ~1/16 of the score cost.
+        KernelRule {
+            rule_id: "block-local-reference-frame-for-overflow".to_string(),
+            gpu_concept: "per-block reference frame to keep exp arguments bounded (avoid fp32 overflow)".to_string(),
+            ref_shape: "// naive: global prefix difference — 2^(P_i - P_j) overflows fp32 on long sequences\nfn decay_global_overflow(q: &[f32], k: &[f32], prefix: &[f32], d: usize, seq: usize) -> Vec<f32> {\n    let mut scores = vec![0.0f32; seq * seq];\n    for i in 0..seq { for j in 0..seq {\n        // overflow: prefix[i] - prefix[j] can exceed 128 in log2\n        let decay = 2.0f32.powf(prefix[i] - prefix[j]);\n        let mut s = 0.0;\n        for dd in 0..d { s += q[i*d+dd] * k[j*d+dd] * decay; }\n        scores[i*seq+j] = s;\n    } }\n    scores\n}".to_string(),
+            opt_pattern: "// optimized: block-local reference frame (wall_attn) — both factors stay in [0,1]\nfn decay_block_local(q: &[f32], k: &[f32], prefix: &[f32], d: usize, seq: usize) -> Vec<f32> {\n    let block = ((seq as f32 / (4.0 * (d as f32).sqrt())) as usize).max(16);\n    let mut scores = vec![0.0f32; seq * seq];\n    for start in (0..seq).step_by(block) {\n        let stop = (start + block).min(seq);\n        let pref = prefix[start]; // block's own reference frame\n        for i in start..stop { for j in 0..start { // keys before the block\n            // both exp2 args ≤ 0 → both factors in [0,1], no overflow\n            let qi = 2.0f32.powf(prefix[i] - pref); // ≤ 1 (pref = min in block)\n            let kj = 2.0f32.powf(pref - prefix[j]); // ≤ 1\n            let mut s = 0.0;\n            for dd in 0..d { s += q[i*d+dd] * qi * k[j*d+dd] * kj; }\n            scores[i*seq+j] = s;\n        } }\n    }\n    scores\n}".to_string(),
+        },
+        // ── two-stage-mask-softmax-then-conv — -inf before, 0 after ────────────────
+        // Source: multi_token_attention.py — `softmax(masked_fill(causal, -1e9))`
+        // then `conv2d(probs, weight)` then `masked_fill(causal, 0.0)`. Two-stage
+        // masking: -inf BEFORE softmax (probabilities correct — future gets zero
+        // weight), 0 AFTER conv (conv doesn't leak future-mixed values back). The
+        // -inf-before / 0-after split is the only masking that is both
+        // probability-correct AND conv-causal-safe.
+        KernelRule {
+            rule_id: "two-stage-mask-softmax-then-conv".to_string(),
+            gpu_concept: "two-stage mask: -inf before softmax, 0 after conv (probability + causal correct)".to_string(),
+            ref_shape: "// naive: single mask after conv only — softmax leaks future probability into conv\nfn mask_after_conv_only(scores: &[f32], n: usize, kernel: &[f32], ksize: usize) -> Vec<f32> {\n    // softmax WITHOUT pre-mask — future positions get nonzero weight\n    let mut probs = vec![0.0f32; n * n];\n    for i in 0..n {\n        let mut mx = f32::NEG_INFINITY;\n        for j in 0..n { mx = mx.max(scores[i*n+j]); }\n        let mut s = 0.0;\n        for j in 0..n { probs[i*n+j] = (scores[i*n+j]-mx).exp(); s += probs[i*n+j]; }\n        for j in 0..n { probs[i*n+j] /= s; } // future leaks weight here\n    }\n    conv2d(&probs, kernel, ksize, n) // mask AFTER — too late, future already mixed\n}".to_string(),
+            opt_pattern: "// optimized: two-stage mask (multi_token_attention) — -inf before, 0 after\nfn two_stage_mask(scores: &[f32], n: usize, kernel: &[f32], ksize: usize) -> Vec<f32> {\n    // STAGE 1: -inf before softmax → future gets exactly zero probability\n    let mut probs = vec![0.0f32; n * n];\n    for i in 0..n {\n        let mut mx = f32::NEG_INFINITY;\n        for j in 0..n { let s = if j <= i { scores[i*n+j] } else { -1e9 }; mx = mx.max(s); }\n        let mut s = 0.0;\n        for j in 0..n { probs[i*n+j] = if j <= i { (scores[i*n+j]-mx).exp() } else { 0.0 }; s += probs[i*n+j]; }\n        for j in 0..n { probs[i*n+j] /= s; } // future is exactly 0\n    }\n    let out = conv2d(&probs, kernel, ksize, n);\n    // STAGE 2: 0 after conv → clear any future-mixed values the conv introduced\n    let mut masked = out;\n    for i in 0..n { for j in 0..n { if j > i { masked[i*n+j] = 0.0; } } }\n    masked\n}".to_string(),
+        },
+        // ── softmax-topk-renormalize-scatter — MoE gate: softmax→topk→renorm→scatter ─
+        // Source: momoe.py — `probs = softmax(logits)`, `picked = probs.topk(k)`,
+        // `gates = zeros.scatter(-1, picked.indices, picked.values / picked.values.sum())`.
+        // Three steps fused: (1) softmax over all experts, (2) top-k + renormalization
+        // of selected probs to sum to 1, (3) scatter into a sparse N×experts gate
+        // matrix with only k nonzeros per token. The sparse structure is what the
+        // grouped GEMM consumes.
+        KernelRule {
+            rule_id: "softmax-topk-renormalize-scatter".to_string(),
+            gpu_concept: "MoE gate: softmax → topk → renormalize → scatter sparse gate matrix".to_string(),
+            ref_shape: "// naive: dense gate matrix (all experts get a weight, O(N·E) memory)\nfn dense_gate(logits: &[f32], n: usize, e: usize) -> Vec<f32> {\n    let mut gates = vec![0.0f32; n * e];\n    for i in 0..n {\n        let mut mx = f32::NEG_INFINITY;\n        for j in 0..e { mx = mx.max(logits[i*e+j]); }\n        let mut s = 0.0;\n        for j in 0..e { gates[i*e+j] = (logits[i*e+j]-mx).exp(); s += gates[i*e+j]; }\n        for j in 0..e { gates[i*e+j] /= s; } // dense — every expert active\n    }\n    gates\n}".to_string(),
+            opt_pattern: "// optimized: softmax-topk-renormalize-scatter (momoe) — sparse k-nonzero gate\nfn sparse_topk_gate(logits: &[f32], n: usize, e: usize, top_k: usize) -> Vec<f32> {\n    let mut gates = vec![0.0f32; n * e]; // sparse: only k nonzeros per row\n    for i in 0..n {\n        // softmax\n        let mut mx = f32::NEG_INFINITY;\n        for j in 0..e { mx = mx.max(logits[i*e+j]); }\n        let mut probs = vec![0.0f32; e];\n        let mut s = 0.0;\n        for j in 0..e { probs[j] = (logits[i*e+j]-mx).exp(); s += probs[j]; }\n        for j in 0..e { probs[j] /= s; }\n        // top-k selection\n        let mut idx: Vec<usize> = (0..e).collect();\n        idx.sort_by(|&a,&b| probs[b].partial_cmp(&probs[a]).unwrap());\n        let picked = &idx[..top_k];\n        // renormalize selected probs to sum to 1\n        let sum: f32 = picked.iter().map(|&j| probs[j]).sum();\n        // scatter into sparse gate matrix\n        for &j in picked { gates[i*e+j] = probs[j] / sum; }\n    }\n    gates\n}".to_string(),
+        },
+        // ── fuse-gate-transform-chunk-cumsum — gate transform fused with chunk cumsum ─
+        // Source: kda_gate_cumsum.py — `gate = transform(g)` then
+        // `cat([chunk.cumsum(1) for chunk in gate.split(chunk_size, 1)], 1)`.
+        // Fuses the gate transform (`-rate·softplus(g+b)` or `L·sigmoid(rate·(g+b))`)
+        // with a chunk-local inclusive cumsum. The gate output feeds the cumsum
+        // without a materialized intermediate. Composes `chunk-reset-cumsum`
+        // (Batch 6) with the gate transform as a fused producer.
+        KernelRule {
+            rule_id: "fuse-gate-transform-chunk-cumsum".to_string(),
+            gpu_concept: "fuse gate transform with chunk-local cumsum (no materialized intermediate)".to_string(),
+            ref_shape: "// naive: gate transform then SEPARATE chunk cumsum (two kernel passes)\nfn gate_then_cumsum_separate(g: &[f32], rate: f32, chunk: usize, n: usize) -> Vec<f32> {\n    // pass 1: gate transform (materialized intermediate)\n    let mut gate = vec![0.0f32; n];\n    for i in 0..n { gate[i] = -rate * softplus(g[i]); }\n    // pass 2: chunk-local cumsum over the intermediate\n    let mut out = vec![0.0f32; n];\n    for c_start in (0..n).step_by(chunk) {\n        let c_end = (c_start + chunk).min(n);\n        let mut acc = 0.0;\n        for i in c_start..c_end { acc += gate[i]; out[i] = acc; }\n    }\n    out\n}".to_string(),
+            opt_pattern: "// optimized: fused gate-transform + chunk-cumsum (kda_gate_cumsum) — one pass\nfn fused_gate_chunk_cumsum(g: &[f32], rate: f32, chunk: usize, n: usize) -> Vec<f32> {\n    let mut out = vec![0.0f32; n];\n    for c_start in (0..n).step_by(chunk) {\n        let c_end = (c_start + chunk).min(n);\n        let mut acc = 0.0;\n        for i in c_start..c_end {\n            // gate transform INLINE — feeds the cumsum directly, no intermediate\n            acc += -rate * softplus(g[i]);\n            out[i] = acc;\n        }\n    }\n    out\n}\nfn softplus(x: f32) -> f32 { if x > 20.0 { x } else { (1.0 + x.exp()).ln() } }".to_string(),
+        },
+        // ── dual-mode-gate-transform — unbounded softplus vs bounded sigmoid ────────
+        // Source: kda_gate.py — two gate formulas dispatched by parameter presence:
+        // unbounded `-rate·softplus(g+b)` when `lower_bound is None`, bounded
+        // `L·sigmoid(rate·(g+b))` when a `lower_bound` is provided. The bounded mode
+        // clamps the gate to `[0, L]` for numerical stability; the unbounded mode
+        // lets it grow freely. One kernel, two formulas, parameter-specialized.
+        KernelRule {
+            rule_id: "dual-mode-gate-transform".to_string(),
+            gpu_concept: "dual-mode gate: unbounded softplus OR bounded sigmoid, dispatched by parameter".to_string(),
+            ref_shape: "// naive: always use one formula regardless of stability needs (hardcoded)\nfn gate_hardcoded(g: &[f32], rate: f32, n: usize) -> Vec<f32> {\n    // always unbounded softplus — can overflow on large g even when bounded mode is wanted\n    (0..n).map(|i| -rate * softplus(g[i])).collect()\n}\nfn softplus(x: f32) -> f32 { if x > 20.0 { x } else { (1.0 + x.exp()).ln() } }".to_string(),
+            opt_pattern: "// optimized: dual-mode gate (kda_gate) — dispatched by lower_bound presence\nfn gate_dual_mode(g: &[f32], rate: f32, lower_bound: Option<f32>, n: usize) -> Vec<f32> {\n    match lower_bound {\n        None => {\n            // unbounded: -rate·softplus(g) — lets gate grow freely\n            (0..n).map(|i| -rate * softplus(g[i])).collect()\n        }\n        Some(lb) => {\n            // bounded: lb·sigmoid(rate·g) — clamps to [0, lb] for stability\n            (0..n).map(|i| lb * sigmoid(rate * g[i])).collect()\n        }\n    }\n}\nfn sigmoid(x: f32) -> f32 { 1.0 / (1.0 + (-x).exp()) }\nfn softplus(x: f32) -> f32 { if x > 20.0 { x } else { (1.0 + x.exp()).ln() } }".to_string(),
+        },
     ])
 }
 
@@ -1082,7 +1269,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 99-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 113-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1103,7 +1290,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "masked-boundary-load",
         ],
     ),
-    // B: Compute patterns (11 rules)
+    // B: Compute patterns (14 rules)
     (
         KernelCategory::Compute,
         "B: compute",
@@ -1119,9 +1306,12 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "sorted-cumsum-threshold",
             "polynomial-taylor-feature-map",
             "positive-feature-map-shift",
+            "hierarchical-log2-level-mask",
+            "iterative-cg-solve-over-matvec",
+            "chunked-test-time-gradient-descent",
         ],
     ),
-    // C: Fusion patterns (8 rules)
+    // C: Fusion patterns (9 rules)
     (
         KernelCategory::Fusion,
         "C: fusion",
@@ -1134,9 +1324,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fuse-group-norm-linear",
             "fuse-jsd-logsumexp",
             "gather-selective-reduction",
+            "fuse-gate-transform-chunk-cumsum",
         ],
     ),
-    // D: Dispatch patterns (6 rules)
+    // D: Dispatch patterns (7 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -1147,9 +1338,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "predicate-gate-div512",
             "multi-condition-predicate",
             "layer-depth-decay-schedule",
+            "dual-mode-gate-transform",
         ],
     ),
-    // E: Parallelism patterns (5 rules)
+    // E: Parallelism patterns (6 rules)
     (
         KernelCategory::Parallelism,
         "E: parallelism",
@@ -1159,9 +1351,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "backward-as-conjugate",
             "reverse-scan-via-double-flip",
             "pairwise-distance-decay-matrix",
+            "softmax-topk-renormalize-scatter",
         ],
     ),
-    // F: Flash-attention tiling (8 rules)
+    // F: Flash-attention tiling (10 rules)
     (
         KernelCategory::FlashAttnTiling,
         "F: flash-attn tiling",
@@ -1174,9 +1367,11 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "shared-mem-aware-tile",
             "kv-block-streaming",
             "strict-causal-mask-tril-offset",
+            "block-local-reference-frame-for-overflow",
+            "two-stage-mask-softmax-then-conv",
         ],
     ),
-    // G: Linear-attention recurrence (11 rules)
+    // G: Linear-attention recurrence (17 rules)
     (
         KernelCategory::LinearAttnRecurrence,
         "G: linear-attn recurrence",
@@ -1192,6 +1387,12 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "oja-subtractive-normalization",
             "identity-plus-low-rank-delta",
             "cumsum-gate-to-decay-matrix",
+            "gate-then-correct-delta-rule",
+            "gate-then-multi-householder-write",
+            "online-gram-ridge-solve",
+            "momentum-gated-memory-recurrence",
+            "current-token-bonus-read-before-update",
+            "wkv-logsumexp-three-channel-state",
         ],
     ),
     // H: MoE dispatch + backward pass (9 rules)
@@ -1359,8 +1560,9 @@ mod tests {
         // Batch 9 (8): popcorn fusion + dtype/quant + dispatch (add_rms_norm, group_norm_linear, jsd, int8_int2_matmul, _quant).
         // Batch 10 (12): popcorn compute + chunked reduction + polymorphism (mean_pooling, solve_tril, hadamard_transform, comba, dyt, token_shift, sparsemax, selective_log_softmax, softmax, rms_norm, geglu, swiglu, rope, gelu).
         // Batch 11 (11): popcorn linear-attention recurrence family (gla, simple_gla, based, rebased, linear_attn, retention, lightning_attn, rwkv7, delta_rule, iplr_delta_rule, gated_oja_rule, deltaformer, chunk_global_cumsum, chunk_local_cumsum).
-        // Total: 99.
-        assert_eq!(corpus.entries.len(), 99, "batches 1-11 should have 99 rules");
+        // Batch 12 (14): popcorn gated delta + specialized recurrence + advanced attention (gated_delta_rule, gated_delta_product, mesa_net, mesa_net_decode, titans_linear, ttt, rwkv4, rwkv6, wall_attn, multi_token_attention, momoe, kda_gate, kda_gate_cumsum, log_linear_attn).
+        // Total: 113.
+        assert_eq!(corpus.entries.len(), 113, "batches 1-12 should have 113 rules");
     }
 
     #[test]
@@ -1785,6 +1987,65 @@ mod tests {
         assert!(concepts.contains(&"layer-depth-dependent decay schedule (deeper layers decay slower)"));
     }
 
+    // ══════════════════════════════════════════════════════════════════
+    // Batch 12 (Research 013) — gated delta + specialized recurrence + advanced attention
+    // ══════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn batch12_rules_present() {
+        // Verify the 14 batch-12 rules across G/B/F/E/C/D.
+        let corpus = build_kernel_seed_corpus();
+        let ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        // G: linear-attn recurrence (+6)
+        assert!(ids.contains(&"gate-then-correct-delta-rule"), "gated_delta_rule");
+        assert!(ids.contains(&"gate-then-multi-householder-write"), "gated_delta_product");
+        assert!(ids.contains(&"online-gram-ridge-solve"), "mesa_net ridge");
+        assert!(ids.contains(&"momentum-gated-memory-recurrence"), "titans_linear momentum");
+        assert!(ids.contains(&"current-token-bonus-read-before-update"), "rwkv6 bonus");
+        assert!(ids.contains(&"wkv-logsumexp-three-channel-state"), "rwkv4 3ch");
+        // B: compute (+3)
+        assert!(ids.contains(&"hierarchical-log2-level-mask"), "log_linear_attn hier");
+        assert!(ids.contains(&"iterative-cg-solve-over-matvec"), "mesa_net_decode cg");
+        assert!(ids.contains(&"chunked-test-time-gradient-descent"), "ttt chunked gd");
+        // F: flash-attn tiling (+2)
+        assert!(ids.contains(&"block-local-reference-frame-for-overflow"), "wall_attn reframe");
+        assert!(ids.contains(&"two-stage-mask-softmax-then-conv"), "multi_token_attention 2stage");
+        // E: parallelism (+1)
+        assert!(ids.contains(&"softmax-topk-renormalize-scatter"), "momoe gate");
+        // C: fusion (+1)
+        assert!(ids.contains(&"fuse-gate-transform-chunk-cumsum"), "kda_gate_cumsum fused");
+        // D: dispatch (+1)
+        assert!(ids.contains(&"dual-mode-gate-transform"), "kda_gate dual-mode");
+    }
+
+    #[test]
+    fn batch12_recurrence_attention_concepts_covered() {
+        // Verify the batch-12 recurrence + attention + gate concepts are represented.
+        let corpus = build_kernel_seed_corpus();
+        let concepts: Vec<&str> =
+            corpus.entries.iter().map(|e| e.gpu_concept.as_str()).collect();
+        // Category G: linear-attn recurrence (new)
+        assert!(concepts.contains(&"gated delta rule: decay state then correct against decayed subspace"));
+        assert!(concepts.contains(&"one outer gate wrapping N inner Householder delta writes per step"));
+        assert!(concepts.contains(&"online ridge regression: gated Gram accumulators + per-step solve"));
+        assert!(concepts.contains(&"two coupled recurrences: SGD momentum state + EMA memory matrix"));
+        assert!(concepts.contains(&"read from boosted state (transient bonus), then update with un-boosted kv"));
+        assert!(concepts.contains(&"WKV with 3-channel state (num/den/max) + logsumexp max-subtraction"));
+        // Category B: compute (new)
+        assert!(concepts.contains(&"O(log seq) hierarchical mask with per-level learned scales"));
+        assert!(concepts.contains(&"conjugate-gradient solve over matvec with Jacobi preconditioner (no inverse)"));
+        assert!(concepts.contains(&"mini-batch chunked GD with causal mask + last-step weight update"));
+        // Category F: flash-attn tiling (new)
+        assert!(concepts.contains(&"per-block reference frame to keep exp arguments bounded (avoid fp32 overflow)"));
+        assert!(concepts.contains(&"two-stage mask: -inf before softmax, 0 after conv (probability + causal correct)"));
+        // Category E: parallelism (new)
+        assert!(concepts.contains(&"MoE gate: softmax → topk → renormalize → scatter sparse gate matrix"));
+        // Category C: fusion (new)
+        assert!(concepts.contains(&"fuse gate transform with chunk-local cumsum (no materialized intermediate)"));
+        // Category D: dispatch (new)
+        assert!(concepts.contains(&"dual-mode gate: unbounded softplus OR bounded sigmoid, dispatched by parameter"));
+    }
+
     // ════════════════════════════════════════════════════════════════════
     // Plan 003 — Router ↔ corpus wiring tests
     // ════════════════════════════════════════════════════════════════════
@@ -1796,7 +2057,7 @@ mod tests {
 
     #[test]
     fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-        // Every rule_id in the 99-rule corpus must appear in exactly one category.
+        // Every rule_id in the 113-rule corpus must appear in exactly one category.
         let corpus = build_kernel_seed_corpus();
         let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
         let mut categorized: Vec<&str> = Vec::new();
@@ -1827,15 +2088,15 @@ mod tests {
 
     #[test]
     fn kernel_categories_counts_match_plan_003_table() {
-        // Pin per-category rule counts to the Plan 003 table (updated for Batch 11).
+        // Pin per-category rule counts to the Plan 003 table (updated for Batch 12).
         let expected = [
             (KernelCategory::MemoryAccess, 6),
-            (KernelCategory::Compute, 11),
-            (KernelCategory::Fusion, 8),
-            (KernelCategory::Dispatch, 6),
-            (KernelCategory::Parallelism, 5),
-            (KernelCategory::FlashAttnTiling, 8),
-            (KernelCategory::LinearAttnRecurrence, 11),
+            (KernelCategory::Compute, 14),
+            (KernelCategory::Fusion, 9),
+            (KernelCategory::Dispatch, 7),
+            (KernelCategory::Parallelism, 6),
+            (KernelCategory::FlashAttnTiling, 10),
+            (KernelCategory::LinearAttnRecurrence, 17),
             (KernelCategory::MoeDispatchBackward, 9),
             (KernelCategory::NsaBlockSparse, 4),
             (KernelCategory::VarlenChunkedReduction, 5),
@@ -1852,9 +2113,9 @@ mod tests {
                 "Plan 003: category {cat:?} has {} rules, expected {count}",
                 entry.2.len());
         }
-        // Sum must equal 99.
+        // Sum must equal 113.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 99, "Plan 003: category totals must sum to 99");
+        assert_eq!(total, 113, "Plan 003: category totals must sum to 113");
     }
 
     #[test]
@@ -1864,7 +2125,7 @@ mod tests {
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 99, "Plan 003: grouped corpus has {total} rules, expected 99");
+        assert_eq!(total, 113, "Plan 003: grouped corpus has {total} rules, expected 113");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");

@@ -10,7 +10,7 @@
 | Component | Ships now | Deferred |
 |---|---|---|
 | `KernelOptDomain: HealDomain` | ✅ | |
-| Seed corpus (Batch 1-11: 99 rules) | ✅ | Full corpus (~300-500 rules, ~15-25 batches) |
+| Seed corpus (Batch 1-12: 113 rules) | ✅ | Full corpus (~300-500 rules, ~15-25 batches) |
 | `KernelExpertRouter` (`pick_domain`) | ✅ (8-dim activity, 15/15 reachable, Plan 004) | Mined centroids via `CommittedFieldBlend` |
 | `KernelThermalRouter` (5-tier stub) | ✅ (returns Plasma) | Warm/Cold LoRA (4090, riir-train) |
 | `KernelVerifier` (compile-only) | ✅ (behind `kernel_verify`) | Full numeric compare vs reference |
@@ -29,7 +29,8 @@ Batch 8 (Research 009): 9 rules — burn-cubecl kernel polymorphism + dtype/alig
 Batch 9 (Research 010): 8 rules — popcorn fusion + dtype/quant + dispatch (add_rms_norm, group_norm_linear, jsd, int8_int2_matmul, _quant).
 Batch 10 (Research 011): 12 rules — popcorn compute + chunked reduction + polymorphism (mean_pooling, solve_tril, hadamard_transform, comba, dyt, token_shift, sparsemax, selective_log_softmax, softmax, rms_norm, geglu, swiglu, rope, gelu).
 Batch 11 (Research 012): 11 rules — popcorn linear-attention recurrence family (gla, simple_gla, rwkv7, delta_rule, iplr_delta_rule, gated_oja_rule) + parallelism (chunk_global_cumsum, retention, lightning_attn) + flash-attn tiling (deltaformer) + compute (based, rebased, linear_attn) + dispatch (lightning_attn). A 12th candidate (chunk-reset-scan) was dropped as a duplicate of chunk-reset-cumsum (Batch 6).
-Total: 99 rules. Full corpus target: ~300-500 rules in ~15-25 batches.
+Batch 12 (Research 013): 14 rules — popcorn gated delta family (gated_delta_rule, gated_delta_product) + specialized recurrences (mesa_net, mesa_net_decode, titans_linear, ttt, rwkv4, rwkv6) + advanced attention (wall_attn, multi_token_attention) + MoE gate (momoe) + KDA gate (kda_gate, kda_gate_cumsum) + hierarchical mask (log_linear_attn). Three candidates (kda per-key-dim gate, forgetting_attn cumsum decay, abc two-state softmax) were dropped as duplicates.
+Total: 113 rules. Full corpus target: ~300-500 rules in ~15-25 batches.
 
 ### Category A: Memory access patterns (6 rules)
 
@@ -42,7 +43,7 @@ Total: 99 rules. Full corpus target: ~300-500 rules in ~15-25 batches.
 | `gemm-tiling` | shared-memory tiling | Naive GEMM (global mem) → tiled GEMM (shared mem reuse) |
 | `masked-boundary-load` | boundary-safe memory access | Unchecked load → masked load with fallback |
 
-### Category B: Compute patterns (11 rules)
+### Category B: Compute patterns (14 rules)
 
 | Rule ID | GPU concept | Pattern |
 |---|---|---|
@@ -57,8 +58,11 @@ Total: 99 rules. Full corpus target: ~300-500 rules in ~15-25 batches.
 | `sorted-cumsum-threshold` | support-set selection | Iterative projection → sort+cumsum+threshold (single pass) |
 | `polynomial-taylor-feature-map` | softmax kernel approximation | Full softmax → polynomial Taylor feature map (Based: 1+x+0.5x²) |
 | `positive-feature-map-shift` | non-negative normalizer | Raw signed q/k → elu+1 shift (normalizer never crosses zero) |
+| `hierarchical-log2-level-mask` | O(log seq) hierarchical mask | Dense N×N decay → O(N log N) sparse hierarchical (per-level scales) |
+| `iterative-cg-solve-over-matvec` | conjugate-gradient solve | Materialize inverse → CG over matvec with Jacobi preconditioner |
+| `chunked-test-time-gradient-descent` | mini-batch chunked GD | Sequential per-token GD → chunked GD with causal mask + last-step update |
 
-### Category C: Fusion patterns (8 rules)
+### Category C: Fusion patterns (9 rules)
 
 | Rule ID | GPU concept | Pattern |
 |---|---|---|
@@ -70,8 +74,9 @@ Total: 99 rules. Full corpus target: ~300-500 rules in ~15-25 batches.
 | `fuse-group-norm-linear` | group norm + linear fusion | 2-pass norm+linear → fused (no intermediate tensor) |
 | `fuse-jsd-logsumexp` | log-domain divergence fusion | Materialize prob matrices → logaddexp (no matrices) |
 | `gather-selective-reduction` | selective reduction | Full softmax → gather selected tokens only (GRPO) |
+| `fuse-gate-transform-chunk-cumsum` | gate + cumsum fusion | Separate gate + chunk cumsum → fused (no intermediate) |
 
-### Category D: Dispatch patterns (6 rules)
+### Category D: Dispatch patterns (7 rules)
 
 | Rule ID | GPU concept | Pattern |
 |---|---|---|
@@ -81,8 +86,9 @@ Total: 99 rules. Full corpus target: ~300-500 rules in ~15-25 batches.
 | `predicate-gate-div512` | shape-divisibility gate | Unconditional packed path → `inner_dim % 512 == 0` gate |
 | `multi-condition-predicate` | compound shape+dtype gate | Single condition → multi-condition (rows%32 AND width%8) |
 | `layer-depth-decay-schedule` | depth-aware parameter schedule | Constant decay slope → slope ∝ (1 − layer_idx/num_layers) |
+| `dual-mode-gate-transform` | dual-mode gate dispatch | Hardcoded formula → unbounded softplus / bounded sigmoid by parameter |
 
-### Category E: Parallelism patterns (5 rules)
+### Category E: Parallelism patterns (6 rules)
 
 | Rule ID | GPU concept | Pattern |
 |---|---|---|
@@ -91,6 +97,44 @@ Total: 99 rules. Full corpus target: ~300-500 rules in ~15-25 batches.
 | `backward-as-conjugate` | backward kernel reuse | Separate backward → forward with conjugate flag |
 | `reverse-scan-via-double-flip` | reverse-direction scan | Sequential reverse loop → flip+cumsum+flip (reuses forward scan) |
 | `pairwise-distance-decay-matrix` | decay matrix materialization | Sequential per-step decay → N×N matrix from arange distance |
+| `softmax-topk-renormalize-scatter` | MoE sparse gate | Dense gate → softmax+topk+renorm+scatter sparse gate matrix |
+
+### Category F: Flash-attention tiling (10 rules)
+
+| Rule ID | GPU concept | Pattern |
+|---|---|---|
+| `online-softmax-streaming` | online softmax | 2-pass max+exp → streaming m/acc single pass |
+| `exp2-log2-base2` | base-2 numerics | exp/log → exp2/log2 (faster on hardware) |
+| `block-pointer-2d` | 2D block pointer | Manual offsets → block_ptr 2D tile load |
+| `heuristic-compile-dispatch` | heuristic dispatch | Runtime branch → compile-time autotune heuristic |
+| `causal-diag-offdiag-split` | causal mask split | Diagonal+off-diagonal → separate kernels (no mask check) |
+| `shared-mem-aware-tile` | shared-memory tile sizing | Fixed tile → occupancy-aware (load vs compute bound) |
+| `kv-block-streaming` | KV block streaming | Load all KV → stream one block at a time |
+| `strict-causal-mask-tril-offset` | strictly-causal mask | tril(0) → tril(-1) (exclude diagonal) + NaN guard |
+| `block-local-reference-frame-for-overflow` | overflow-safe decay | Global prefix diff (overflows fp32) → per-block reference frame (bounded) |
+| `two-stage-mask-softmax-then-conv` | two-stage mask | Mask after conv only → -inf before softmax + 0 after conv |
+
+### Category G: Linear-attention recurrence (17 rules)
+
+| Rule ID | GPU concept | Pattern |
+|---|---|---|
+| `state-forget-gate` | gated recurrence | Ungated write → `state *= exp(g); state += k⊗v` |
+| `householder-rank1-update` | Householder reflection | Naive write → project out stored component then write |
+| `chunkwise-parallel-recurrence` | chunked parallelism | Sequential recurrence → chunk-level parallel + inter-chunk reduction |
+| `recurrent-vs-chunk-dispatch` | backend dispatch | Single path → recurrent (decode) vs chunk (train) |
+| `multi-write-per-step` | multi-write recurrence | Single write → N writes per step (DeltaNet) |
+| `chained-two-pass-recurrence` | two-pass recurrence | Single pass → two chained gated passes with softmax bridge |
+| `per-key-dim-diagonal-gate` | per-dim decay gate | Per-head scalar gate → per-key-dim vector gate |
+| `erase-replace-low-rank-transition` | diagonal+low-rank transition | 2-phase forget+write → 4-phase erase+decay+replace+write (RWKV-7) |
+| `oja-subtractive-normalization` | Oja normalization | Write k⊗v → project out stored component `k − Sv` first |
+| `identity-plus-low-rank-delta` | I+ba^T rotation | Forget gate → `(I+ba^T)` additive-rotational update |
+| `cumsum-gate-to-decay-matrix` | pairwise decay from cumsum | Per-step gate loop → cumsum + pairwise diff + exp |
+| `gate-then-correct-delta-rule` | gated delta rule | Correction against un-decayed state → decay first then correct |
+| `gate-then-multi-householder-write` | gated multi-Householder | Gate per inner write → one gate + N inner delta writes |
+| `online-gram-ridge-solve` | online ridge regression | Batch solve → online gated Gram accumulators + per-step solve |
+| `momentum-gated-memory-recurrence` | SGD momentum + EMA memory | Plain GD → coupled momentum + EMA memory recurrences |
+| `current-token-bonus-read-before-update` | boosted read + plain write | Write-then-read → boosted read (transient bonus) then update |
+| `wkv-logsumexp-three-channel-state` | 3-channel logsumexp WKV | 2-channel EMA (overflow) → 3-channel (num/den/max) |
 
 The patterns are Rust-shaped pseudocode so the shared `RustAnalyzerPruner` can
 validate them in the fast path. When the full validator lands (CubeCL compile +
@@ -109,7 +153,7 @@ pub fn route(&self, activity: &[f32; ACTIVITY_DIM]) -> usize {
 }
 ```
 
-**Plan 003 (2026-08-14):** router wired to the 99-rule corpus via 15 category
+**Plan 003 (2026-08-14):** router wired to the 113-rule corpus via 15 category
 experts. Each expert owns its category's `rule_ids` via `KERNEL_CATEGORIES`.
 - **Activity vector** = raw physical (kernel signature: `[M, N, K, dtype, hw,
   is_attention, is_fusion, is_ir_transform]` — 8-dim per Plan 004, normalized
