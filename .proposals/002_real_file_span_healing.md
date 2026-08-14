@@ -98,7 +98,7 @@ matcher becomes riir-rag's latent retrieval, which is domain-agnostic.
 │             [riir-rag embedder.rs — EXISTS, BLAKE3+DFT+sigmoid]     │
 │             (opt-in: BonsaiEmbedder 768-D for higher accuracy)      │
 ├─────────────────────────────────────────────────────────────────────┤
-│ 3. ROUTE    pick_domain<3, 8>(activity, domain_directions) → 0|1|2   │
+│ 3. ROUTE    pick_domain<3, 8>(activity, domain_directions) → 0|1|2  │
 │             [katgpt-core variable_rank_domain_expert.rs — EXISTS]   │
 │             0=clippy_lints, 1=rust_perf, 2=kernel_opt               │
 │             (the dMoE — domain-level Mixture of Experts)            │
@@ -269,8 +269,265 @@ real .rs file
 ```
 
 Steps 4↻ (memory) + 7 (evolve) form the **self-healing closed loop**. The healer
-improves its retrieval (memory) + its routing (evolved directions) from every fix it
-applies. This is the MAG self-healing fusion — modelless, online, no training.
+improves its retrieval (memory) + its routing (evolved directions) from every fix
+it applies. This is the MAG self-healing fusion — modelless, online, no training.
+
+
+## Deep fusion layer — calibrated UQ + sleep-cycle consolidation + Poincaré imagination + ConvexTok AST + trajectory-archetype (2026-08-14)
+
+The 7-substrate pipeline above ships `--suggest` + `--fix` with modelless
+self-healing. A deeper substrate harvest (vocabulary-translated grep across
+all 7 repos, subagent-parallel) surfaced **five more fusion layers** that the
+healer does NOT yet consume but that ship in katgpt-core / katgpt-rs / riir-ai
+TODAY. Each is verified to exist by direct grep (not subagent claim).
+
+The unifying reframe: **the healer is a *system* not a *pipeline* — it has
+perception (UQ), memory (consolidation), imagination (Poincaré roll-out),
+language (AST vocabulary), and post-hoc shape classification (trajectory
+archetype).** The 7-substrate version had no perception, no imagination, no
+language, and no shape classification. The deep-fusion version does.
+
+### Deep fusion A — calibrated UQ (the "which fix is correct" layer)
+
+`DraftedFix.confidence` is currently `sigmoid(mean(matvec_output))` — a raw
+scalar in (0,1). **This is uncalibrated** (the exact failure mode Bench 010
+documents for BoMSampler: 5-15% empirical coverage vs nominal 95%). Three
+DEFAULT-ON katgpt-core primitives close this:
+
+1. **`ConformalIntervalCalibrator<F: PointForecaster>`** (`katgpt-core/src/conformal/mod.rs`)
+   — distribution-free confidence intervals with empirical-coverage guarantees.
+   Wrap the drafter's confidence: collect residuals
+   `(predicted_correct, actual_correct)` per rule_id after each `--fix` cycle,
+   calibrate the raw scalar into a true 95% interval on "is this fix correct".
+   The standing floor (`ConformalIntervalCalibrator<SeasonalNaiveForecaster>`,
+   Bench 010) is the regression test — the calibrator MUST beat it.
+2. **`select_best_belief(candidates: &[(u32,u32)], ε, incumbent)`** (`best_belief.rs:284`)
+   — Beta(1+S, 1+F) posterior ε-quantile selector. **Proven 15-30% selection-
+   regret reduction vs MLE floor** (Bench 010 T5). Replace the linear blend
+   `0.6·evolution + 0.4·success_rate` in `HealPipeline::heal` with this. Each
+   candidate fix carries `(successes, failures)`; pick the Bayesian winner.
+   **This directly answers "fix A vs fix B"** — the question that broke the
+   original 7-substrate pipeline.
+3. **`clr_vote<T, E, V>` + `ClrConfig`** (`katgpt-claim/src/clr/vote.rs:79`)
+   — Claim-Level Reliability: sample K candidate fixes, cluster by outcome,
+   M-verifier vote per cluster, pick the most-reliable cluster's representative.
+   The nonlinear `(mean_m v_k,m)^5` gate sharpens cluster rankings vs majority
+   vote (Bench 284 GOAT: 100% win rate vs 22% majority). Generate K=8 drafted
+   fixes (currently 1), cluster by syntactic similarity, run the L2 pruner on
+   each, vote.
+
+**Why this is novel.** Existing code healers (clippy, ruff, eslint --fix) emit
+ONE fix with no confidence. They cannot answer "how sure are you?". Calibrated
+UQ on candidate fixes is the missing product surface — and the substrate ships
+TODAY, fully floor-tested.
+
+### Deep fusion B — sleep-cycle consolidation (the "overnight learning" layer)
+
+`LatentFixMemory` is per-trajectory, in-memory only. The healer re-learns from
+scratch each session. THREE substrates close this (all verified via grep):
+
+1. **`mine_motifs_at_sleep_cycle(miner, admitter, dl_old_bits)`**
+   (`katgpt-core/src/closure/mining.rs:101`) — offline motif mining at the
+   sleep-cycle boundary. Mines recurring subgraphs (PTGs — primitive transition
+   graphs) over recent trajectories, computes PRI (Primitive Reuse Index) per
+   motif, admits high-PRI motifs into a frozen skill library. Returns
+   `SleepCycleClosureReport { motifs, pri, ptg_count, admitted_count }`.
+   Rayon-parallel, modelless, zero GD. **Direct drop-in for overnight
+   consolidation of fix-pattern motifs.**
+2. **`LocalKvStore`** (Warm tier, `riir-neuron-db/src/local_kv.rs`) — encrypted
+   WAL-backed KV with BLAKE3-keyed XOF. `put_pod<T: Pod>`, `pod_view<T>`,
+   `commit_value`/`verify_commitment` for tamper-evidence. **Persist fix
+   outcomes overnight.** Key = `BLAKE3(lint_name ∥ rule_id ∥ buggy_hash)`,
+   Value = `FixOutcome { fixed_code, verified, blake3_root }`. Survives restart.
+3. **`ConsolidationPipeline::can_freeze` + `FreezeGateReport`**
+   (`riir-neuron-db/src/consolidation.rs`) — the two-sided gate that decides
+   "is this batch ready to consolidate into a frozen snapshot?" (n≥d samples
+   AND flatness < τ). **Gate skill-library commits** — don't freeze a motif
+   until enough trajectories observed AND the direction has converged.
+
+The composed loop: each `--fix` records (rule, code, fix, outcome) → in-memory
+`LatentFixMemory` → at sleep cycle, `mine_motifs_at_sleep_cycle` extracts
+recurring fix-pattern motifs → `can_freeze` gates which motifs graduate →
+admitted motifs persist via `LocalKvStore` + freeze/thaw envelope. The healer
+literally sleeps, dreams about past fixes, and wakes up with new skills.
+
+### Deep fusion C — Poincaré fix-imagination (the "simulate before apply" layer) — THE NOVEL ANGLE
+
+**The single most novel fusion.** Existing healers apply a fix and check the
+result. The deep-fusion healer *imagines the fix* in latent space *before*
+touching the file, scores the imagined post-fix state, and only applies if the
+score is good.
+
+Two substrates compose:
+
+1. **`fit_poincare_adapter` + `poincare_navigate_into` + `poincare_multi_step_into`**
+   (`katgpt-core/src/poincare.rs:680`, `lib.rs:2256`) — given a fitted
+   `PoincareAdapter { φ, W, W† }` (offline-fit via PCA + ridge regression,
+   no GD), source latent state `z_src`, and source/target raw positions, writes
+   the imagined destination latent `z_out = z_src + φ⁻¹(φ(z_src) + W†·Δtarget)`.
+   Zero-allocation, single matvec + MLP eval. **Game-runtime wrapper exists**:
+   `riir-engine/src/poincare_bridge/imagine.rs::imagine_belief_into`.
+2. **`ViableManifoldGraph` + `manifold_curiosity_walk` + `manifold_geodesic`**
+   (`katgpt-core/src/viable_manifold_graph.rs`, DEFAULT-ON, G1-G7 PASS,
+   7.10 ns/step) — builds a discrete safe-subgraph from samples where each node
+   + edge satisfies a viability predicate + Jacobian pullback volume threshold.
+   **The "safe fix neighborhood" graph** — fixes never leave the viable set
+   (compile-passing code states).
+
+**The translation table** (NPC HLA state → code healer):
+
+| Game concept | Healer concept |
+|---|---|
+| NPC HLA state `z_src` | Current code-state embedding (8-dim, from ModellessEmbedder) |
+| Source position `src_pos` | Current file hash / context signature |
+| Target position `dst_pos` | Proposed fix hash / target signature |
+| Imagined HLA `z_out` | Predicted post-fix code-state embedding |
+| `compute_animal_emotions(z_out)` | `score_fix_goodness(z_out)` (dot + sigmoid onto a learned direction) |
+| Anti-cheat invariant (never substitute for raw position) | **Never substitute imagined fix for applied fix** — imagined fixes never get committed to git |
+
+The healer's loop becomes: chunk → embed → route → retrieve rule → draft fix →
+**IMAGINE the fix in Poincaré space → score → if score < τ, reject the fix and
+try the next retrieved rule** → if score ≥ τ, apply + validate with the L2
+pruner. **The imagination gate prevents wasted L2 calls** (the L2 pruner is
+the slow step; imagination is µs-scale).
+
+**Honest caveat (must be in any plan that consumes this):** Plan 497 Phase 2
+REFUTED on quality axis for NPC HLA (linear model can't fit nonlinear emotion
+evolution). **The latency win stands (102× speedup)** and for code healing the
+nonlinearity bar is LOWER — fix locality is closer to linear than NPC emotion
+curves. But this is an honest risk, not a guaranteed win. The fusion ships
+behind an opt-in feature gate; quality is benchmarked against a "no-imagination"
+baseline (the L2 pruner alone) before any promotion.
+
+### Deep fusion D — ConvexTok LP-graph for AST nodes (the "globally optimal vocabulary" layer) — THE SUPER-GOAT
+
+**The genuinely novel fusion. No code-domain analog exists** (grep for
+`convex.*code|ast.*convex|abstract_syntax.*lp` returns zero hits across all
+7 repos).
+
+The substrate ships in katgpt-tokenizer (opt-in `convex_tok`):
+- `GraphBuilder::build(&[Vec<u8>], max_len)` (`convex_graph.rs`) — coloured
+  DAG from byte-corpus; vertices = positions, free edges = single bytes,
+  priced edges = candidate multi-byte tokens coloured by substring.
+- `ConvexSolver::solve(graph, budget_k)` (`convex_solver.rs:24`) — LP via
+  `good_lp`/HiGHS, picks fractional token selection maximizing compression.
+- `Rounder::{det, bias, int}` (`convex_rounding.rs`) — LP → integral vocab.
+- `Certifier::certify(sol, rounded)` (`convex_certify.rs`) — optimality gap.
+
+12/12 GOAT PASS (test_127_convex_tok_goat.rs).
+
+**The fusion:** feed `GraphBuilder::build()` AST-node-kind byte sequences
+instead of literal bytes. Each lint-fix corpus entry becomes a sequence of
+AST node kinds (via `syn` visitor: `[ExprMatch, Arm, Pat, Path, ...]`). The LP
+then picks a vocabulary of K "AST multi-node tokens" that maximize fix-
+template compression. **This gives the healer a globally-optimal AST vocabulary**
+— far more structured than the current 1-fix-per-rule corpus.
+
+Why this matters: today's `ClippyCorpus` is a flat list of (lint_name, ref_shape,
+opt_pattern, fix). The vocabulary is implicit (one entry per rule). ConvexTok-
+AST extracts the **recurring AST sub-patterns across rules** — e.g., a
+`swap-remove` motif (3 AST nodes) might appear in 5 different perf rules.
+With a learned K=64 AST vocabulary, the drafter composes fixes from these
+reusable atoms rather than memorizing per-rule templates. **This is the
+language-model analog for the healer — its own token vocabulary, learned
+from its own corpus.**
+
+**Honest research question (NOT a quick fusion):** ConvexTok's LP is over a
+coloured DAG where colours = byte-substrings. AST nodes are not bytes — the
+encoding design (what is a "colour" for an AST node? node-kind? kind+arity?
+kind+child-shape?) is the research question, not the LP. File as
+`.research/NNN_convex_ast_vocab.md` first; the LP infrastructure is 100% reused.
+
+### Deep fusion E — SweTrajectoryFreezer (the "fix-attempt shape classifier" layer)
+
+`SweTrajectoryFreezer<N, D>` (`katgpt-core/src/swe_trajectory_freeze/`, Bench
+013 GOAT G1-G4 PASS, Bench 014 G5 cross-model PASS) freezes a fix-generation
+trajectory into a D-dim geometry summary, classifies into N archetypes
+(`converged_correct`, `committed_wrong`, `oscillation`), `gates()` returns
+per-archetype match scores.
+
+**Fusion:** each fix attempt IS a trajectory (draft → prune → apply → verify).
+Freeze it, classify the archetype:
+- `converged_correct` → high confidence, ship
+- `committed_wrong` → low confidence, escalate to human review or stronger pruner
+- `oscillation` → the drafter is flip-flopping, abort + log for self_evolve
+
+This is a **trajectory-shape confidence signal**, complementary to the
+residual-based signal from `ConformalIntervalCalibrator` (Deep fusion A).
+
+### The revised 12-substrate fusion (the SUPER-GOAT product architecture)
+
+```
+real .rs file
+   1. CHUNK     AstChunker.chunk()                                [riir-rag]
+   2. EMBED     ModellessEmbedder.embed() → [f32;8]              [riir-rag] (+ KVarN normalize, opt-in)
+   3. ROUTE     pick_domain<3,8>(activity, DOMAIN_DIRS)           [katgpt-core]  (dMoE)
+   4. RETRIEVE  RetrievalProvider.retrieve(LatentQuery)            [riir-rag]    (Clifford KNN)
+      ↻ MEMORY  LatentFixMemory.retrieve(past trajectories)       [riir-clippy] (3-axis)
+   5. REWRITE   proposer.rewrite(file) (if exists)                [clippy_lints; perf/kernel: Plan 005]
+   6. IMAGINE   poincare_navigate_into(z_src → z_out)             [katgpt-core] (Poincaré) — NEW
+      SCORE     dot(z_out, goodness_dir) + sigmoid; if < τ → next rule
+      VIABLE    manifold_geodesic(z_now, z_target) feasibility     [katgpt-core] (ViableManifoldGraph) — NEW
+   7. VALIDATE  RustAnalyzerPruner (always)                       [riir-clippy]
+               WasmPruner (fast, Proposal 011) OR cargo test (slow fallback)
+   8. SELECT    select_best_belief(candidates, ε)                  [katgpt-core] (Beta posterior) — NEW
+               clr_vote(K candidates, M verifiers)                 [katgpt-claim] (Claim-Level Reliability) — NEW
+   9. CALIBRATE ConformalIntervalCalibrator wraps DraftedFix.confidence [katgpt-core] — NEW
+      FREEZE    SweTrajectoryFreezer.classify(attempt → archetype) [katgpt-core] — NEW
+  10. EVOLVE    LatentSkillEvolution.record_outcome()               [riir-clippy] (MAG online EMA → DOMAIN_DIRS)
+  11. SLEEP     mine_motifs_at_sleep_cycle(miner) — overnight batch [katgpt-core] — NEW
+      FREEZE    ConsolidationPipeline::can_freeze gate              [riir-neuron-db] — NEW
+      PERSIST   LocalKvStore.put_pod(FixOutcome) — WAL-committed    [riir-neuron-db] — NEW
+  12. VOCAB     ConvexTok AST vocabulary (offline, optional)         [katgpt-tokenizer] — NEW (research-gated)
+```
+
+**This is no longer "clippy with extra rules."** It is a self-imagining,
+calibrated, sleep-consolidating code healer with its own learned AST vocabulary.
+
+### What's NEW vs the 7-substrate version
+
+- **Calibrated confidence (steps 8, 9):** the healer now answers "how sure am
+  I?" with a 95% coverage guarantee, not a raw sigmoid. Beta-posterior selection
+  + CLR voting replace the linear blend.
+- **Imagination before apply (step 6):** the healer simulates the fix in
+  Poincaré space + checks the safe-manifold graph BEFORE the expensive L2
+  validate. Wasted L2 calls drop, throughput rises.
+- **Sleep-cycle consolidation (step 11):** the healer mines motifs from past
+  fixes overnight + freezes them into a versioned skill library (BLAKE3-
+  committed via LocalKvStore).
+- **Trajectory-archetype classification (step 9 FREEZE):** each fix attempt is
+  classified (converged_correct / committed_wrong / oscillation) — a shape-based
+  confidence signal complementary to the residual-based conformal one.
+- **Learned AST vocabulary (step 12):** ConvexTok LP over AST nodes gives a
+  globally-optimal multi-node token vocabulary. Research-gated — the encoding
+  design is the open question.
+
+### Honest caveats (deep fusion layer, 2026-08-14)
+
+1. **Poincaré imagination REFUTED on quality axis for NPC HLA** (Plan 497 Phase
+   2). The latency win stands. For code healing the nonlinearity bar is lower
+   but this is an honest risk — ship behind opt-in feature gate, benchmark
+   against no-imagination baseline before any promotion.
+2. **ConvexTok-AST encoding is a research question**, not a fusion. File
+   `.research/NNN_convex_ast_vocab.md` before any plan. The LP infrastructure
+   is 100% reused; the colouring scheme is the open question.
+3. **`select_best_belief` proven on Bench 010 T5** (heteroscedastic regime).
+   The lint-fix domain may not be heteroscedastic enough to see the 15-30%
+   regret reduction. Honest benchmark required.
+4. **`mine_motifs_at_sleep_cycle` needs PTG-shaped trajectories.** The healer's
+   current `FixTrajectory` is not PTG-shaped (it's a flat (rule, code, fix)
+   record). Generalize the trajectory type before mining.
+5. **Three substrates from the harvest remain UNVERIFIED** — `HebbianKernelMemory`,
+   `ExperienceReuseHook`, `DeltaMemoryState`. Subagents claimed them but my direct
+   grep did not confirm. File `.issues/` to verify before any plan consumes them.
+   **UPDATE (2026-08-14, same session): all three VERIFIED via direct grep.**
+   `HebbianKernelMemory` in katgpt-core Plan 559 (DEFAULT-ON, G1-G5 PASS),
+   `DeltaMemoryState` in katgpt-core Plan 408 (DEFAULT-ON), `ExperienceReuseHook`
+   in riir-engine arg_runtime (dual-stream TD learning). Plan 005 Phase 14 wires
+   them as additive fusions on top of Phases 9-12.
+6. **Feature-gate discipline holds.** Every deep-fusion layer ships behind an
+   opt-in feature (`poincare_imagination`, `sleep_consolidation`, `convex_ast_vocab`,
+   etc.). Promotion to default requires the GOAT gate to PASS, per global rule.
 
 
 ### Honest caveats (revised)
@@ -382,18 +639,29 @@ No new substrate invented. The novelty is the **composition** (real-file healing
 ## What ships (Plan 005) vs deferred
 
 ### Ships (Plan 005 scope)
-- Proposer trait surface (free fn, mirrors clippy_lints — no `HealDomain` trait change).
-- Top-5 perf proposers + top-5 kernel proposers (the Pareto-dominant, high-frequency ones).
-- Shallow-reasoning matcher: hard-coded visitors for the 10 proposers + ternary-matvec `--suggest` fallback for the rest.
-- `cargo heal` CLI MVP: scan, match, propose, validate, `--fix` (span-preserving) + `--suggest`.
-- GOAT gate: the 10 proposers round-trip on real fixture files (detect → rewrite → parse → semantics-preserving via `cargo test`).
+
+**Original 7-substrate pipeline (Phases 1-7):**
+- Phase 1-3: riir-rag latent retrieval (the `--suggest` MVP, ZERO proposers).
+- Phase 2: `cargo heal --suggest` CLI.
+- Phase 3: GOAT gate for `--suggest` mode (G1-G4).
+- Phase 4-5: top-5 perf + top-5 kernel proposers (the `--fix` upgrade).
+- Phase 6: `cargo heal --fix` + GOAT G5 (real-file value).
+- Phase 7: self-healing closed loop (MAG online EMA → DOMAIN_DIRECTIONS).
+
+**Deep fusion layers (Phases 9-14, all substrate verified via direct grep 2026-08-14):**
+- Phase 9: calibrated UQ (`ConformalIntervalCalibrator` + `select_best_belief` + `clr_vote`).
+- Phase 10: sleep-cycle consolidation (`mine_motifs_at_sleep_cycle` + `LocalKvStore` + `can_freeze`).
+- Phase 11: Poincaré fix-imagination (`poincare_navigate_into` + `ViableManifoldGraph`).
+- Phase 12: trajectory-archetype classifier (`SweTrajectoryFreezer`).
+- Phase 13: ConvexTok AST vocabulary (**RESEARCH ONLY** — encoding design first).
+- Phase 14: verified substrates (`DeltaMemoryState` + `HebbianKernelMemory` + `ExperienceReuseHook`).
 
 ### Deferred (separate plans)
+- WASM pruner (Plan 005 Phase 8) — blocked on `rubrc` maturity (Proposal 011).
+- ConvexTok-AST implementation (Phase 15+) — opens only if Phase 13 research shows ≥2× compression.
 - Full proposer coverage (all 34 perf + ~30 kernel rules) — Plan 005 proves the pattern with 10; expansion is mechanical follow-up.
 - CubeCL macro-body proposers — blocked on a CubeCL-aware parser (research, not impl).
-- Cross-domain auto-routing — out of scope per caveat 5.
-- L4 LoRA — deferred across all domains (Plan 001 Phase 4).
-- `--watch` mode (Proposal 001 sketch) — deferred.
+- L4 LoRA drafter weights — multi-step path via quest_grammar training + distill_attention.
 
 ## GOAT gate (Plan 005 §Phase 6)
 

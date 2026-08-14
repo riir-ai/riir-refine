@@ -191,6 +191,228 @@ phase is SKETCHED, not started. Until it lands, `cargo test` (slow) + `RustAnaly
 
 **Status: blocked on rubrc (Proposal 011).**
 
+## Phase 9 — Calibrated UQ layer (Deep fusion A: conformal + select_best_belief + clr_vote)
+
+Replace the uncalibrated `DraftedFix.confidence = sigmoid(mean(matvec_output))` with
+calibrated, distribution-free confidence intervals. Three DEFAULT-ON katgpt-core
+primitives fuse: `ConformalIntervalCalibrator<F>`, `select_best_belief`, `clr_vote`.
+All three are verified to ship via direct grep (2026-08-14). All are floor-tested.
+
+**Status: not started. Substrate verified.**
+
+### Tasks
+
+- [ ] **T9.1** Define `FixForecaster: PointForecaster` impl that maps
+      `(rule_id, buggy_hash) → f32` predicted-correctness score. The forecast
+      target = 1.0 if the fix was actually correct (post-verify), 0.0 otherwise.
+      Wrap `TernaryDrafter`'s existing `confidence` output as the point forecast.
+- [ ] **T9.2** Wrap with `ConformalIntervalCalibrator<FixForecaster>` behind a
+      `calibrated_uq` feature gate. Per-rule residual ring buffer (capacity 64).
+      The calibrated output replaces `DraftedFix.confidence` with a true 95%
+      interval `[lo, hi]`.
+- [ ] **T9.3** Replace the `0.6·evolution + 0.4·success_rate` linear blend in
+      `HealPipeline::heal` with `select_best_belief(candidates, ε, incumbent)`.
+      Each candidate carries `(successes, failures)` as Beta posterior counts.
+- [ ] **T9.4 (clr_vote, opt-in `clr_voting`)** Generate K=8 drafted fixes
+      (currently 1) via QMC perturbation of the ternary matvec, cluster by
+      syntactic similarity (Levenshtein on AST node-kind sequence), run L2
+      pruner on each, `clr_vote` picks the most-reliable cluster's winner.
+- [ ] **T9.5** GOAT gate (calibrated_uq): empirical coverage of the 95%
+      interval ≥ 90% on a fixture corpus; `select_best_belief` selection-regret
+      ≤ the linear-blend baseline (Bench 010 T5 floor). Record in
+      `.benchmarks/017_calibrated_uq_goat.md`.
+
+### Phase 9 exit criteria
+- `DraftedFix.confidence` is a calibrated interval, not a raw sigmoid.
+- `HealPipeline::heal` selects fixes via Beta-posterior, not linear blend.
+- GOAT G1 (coverage) + G2 (regret vs linear blend) PASS.
+
+## Phase 10 — Sleep-cycle consolidation layer (Deep fusion B: mine_motifs_at_sleep_cycle + LocalKvStore + can_freeze)
+
+The healer stops re-learning from scratch each session. Three substrates compose:
+`mine_motifs_at_sleep_cycle` (overnight motif mining over fix trajectories) →
+`ConsolidationPipeline::can_freeze` (gate) → `LocalKvStore` (BLAKE3-committed
+persistence of frozen motifs). All three verified via direct grep (2026-08-14).
+
+**Status: not started. Substrate verified.**
+
+### Tasks
+
+- [ ] **T10.1** Generalize `FixTrajectory` to PTG-shape (primitive transition
+      graph) — the input shape `mine_motifs_at_sleep_cycle` expects. Each fix
+      becomes a 3-node PTG: `(retrieve_rule) → (draft_fix) → (verify_outcome)`.
+- [ ] **T10.2** Persist fix trajectories via `LocalKvStore::put_pod<FixOutcome>`
+      keyed by `BLAKE3(lint_name ∥ rule_id ∥ buggy_hash)`. Survives restart.
+      Native-only (no WASM — `LocalKvStore` uses std::fs).
+- [ ] **T10.3** Implement `cargo heal --sleep` CLI: drain accumulated trajectories
+      → `mine_motifs_at_sleep_cycle(miner, admitter, dl_old_bits)` →
+      `SleepCycleClosureReport` → admit high-PRI motifs via `MotifAdmitter`.
+- [ ] **T10.4** Gate motif graduation with `ConsolidationPipeline::can_freeze`
+      semantics: only freeze motifs with `n_wake_events ≥ d AND flatness < τ`.
+      Prevents premature freezing of noisy patterns.
+- [ ] **T10.5** Freeze admitted motifs via the existing `freeze()`/`thaw()` on
+      `Corpus` (BLAKE3-committed). The healer's learned skill library is
+      reproducible + auditable.
+- [ ] **T10.6** GOAT gate (sleep_consolidation): on a fixture corpus with N=100
+      fix cycles, `cargo heal --sleep` extracts ≥1 motif that the next `--fix`
+      cycle retrieves (precision improvement ≥10% vs cold-start). Record in
+      `.benchmarks/018_sleep_consolidation_goat.md`.
+
+### Phase 10 exit criteria
+- `cargo heal --sleep` mines motifs from past trajectories, freezes them,
+  persists them across restart.
+- The healer's skill library improves overnight.
+
+## Phase 11 — Poincaré fix-imagination layer (Deep fusion C: imagine_belief_into + ViableManifoldGraph)
+
+**THE NOVEL ANGLE.** The healer imagines the fix in Poincaré space BEFORE the
+expensive L2 validate. Two substrates compose: `poincare_navigate_into`
+(single-step imagination) + `ViableManifoldGraph` (safe fix-neighborhood graph).
+Both verified via direct grep (2026-08-14).
+
+**Status: not started. Substrate verified. Honest risk documented (Plan 497 Phase 2 quality REFUTE for NPC HLA; latency win stands; code-healing nonlinearity bar is lower but not zero).**
+
+### Tasks
+
+- [ ] **T11.1** Collect (pre-fix embedding, post-fix embedding) trajectory
+      pairs from past `--fix` cycles. The corpus needs trajectory shape — the
+      current flat `FixTrajectory` is insufficient (blocker for T11.2).
+- [ ] **T11.2** Fit `PoincareAdapter` offline via `fit_poincare_adapter(
+      z_samples, target_samples, latent_dim=8, target_dim=8, ...)`. Closed-form
+      PCA + ridge regression, no GD. The adapter is BLAKE3-committed + frozen.
+- [ ] **T11.3** Define `score_fix_goodness(z_out: &[f32;8]) -> f32` —
+      `dot(z_out, goodness_direction) + sigmoid` onto a learned "correct code"
+      direction. The direction is mined from past verified fixes.
+- [ ] **T11.4** Build `SafeManifoldGraph` from a corpus of compile-passing code
+      embeddings. Predicate = "does this state compile?". Curiosity walk =
+      "what's the nearest compile-passing neighbor of the proposed fix?".
+- [ ] **T11.5** Compose: chunk → embed → route → retrieve → draft fix →
+      **IMAGINE via `poincare_navigate_into(z_src, src_pos, dst_pos, z_out)`** →
+      score → if score < τ, reject + try next retrieved rule → if score ≥ τ,
+      L2-validate. The imagination gate is µs-scale; the L2 pruner is ms-scale;
+      net throughput rises if imagination rejects ≥20% of bad fixes.
+- [ ] **T11.6** GOAT gate (poincare_imagination): on a fixture corpus,
+      imagination rejects ≥30% of "would-fail-L2" fixes (recall) while accepting
+      ≥90% of "would-pass-L2" fixes (precision). Latency improvement ≥1.5× vs
+      no-imagination baseline. Record in `.benchmarks/019_poincare_imagination_goat.md`.
+- [ ] **T11.7** Multi-step imagination (`poincare_multi_step_into`) for large
+      fixes that span multiple chunks: split the fix into N sub-steps, imagine
+      each, reject if any sub-step diverges.
+
+### Phase 11 exit criteria
+- Imagination gate ships behind `poincare_imagination` feature gate (opt-in).
+- GOAT G1 (recall ≥30%) + G2 (precision ≥90%) + G3 (latency ≥1.5×) PASS.
+- If quality REFUTED (like Plan 497 Phase 2 for NPC HLA): document honestly,
+  keep the latency win, demote the quality claim, do NOT promote.
+
+## Phase 12 — Trajectory-archetype classifier (Deep fusion E: SweTrajectoryFreezer)
+
+Each fix attempt is classified into an archetype (`converged_correct`,
+`committed_wrong`, `oscillation`) via `SweTrajectoryFreezer<N, D>`. Verified
+via direct grep (2026-08-14, Bench 013 G3 + Bench 014 G5 PASS).
+
+**Status: not started. Substrate verified.**
+
+### Tasks
+
+- [ ] **T12.1** Define the 3 archetypes as a `FixArchetype` enum.
+- [ ] **T12.2** Fit `SweTrajectoryFreezer<3, 8>` from past `--fix` trajectories
+      labelled by outcome (converged_correct = post-fix passes L2; committed_wrong
+      = post-fix fails L2; oscillation = drafter flip-flops across cycles).
+- [ ] **T12.3** Wire `freezer.freeze_attempt(trajectory) → archetype` into the
+      `--fix` path as a complementary confidence signal to the conformal one
+      (Phase 9).
+- [ ] **T12.4** GOAT gate: cross-archetype discrimination (Bench 013 G3
+      methodology) PASS on the fixture corpus. Record in
+      `.benchmarks/020_trajectory_archetype_goat.md`.
+
+### Phase 12 exit criteria
+- `committed_wrong` + `oscillation` archetypes escalate to human review.
+- `converged_correct` archetype unlocks the high-confidence auto-apply path.
+
+## Phase 13 — ConvexTok AST vocabulary (Deep fusion D: research-gated, NOT a plan yet)
+
+**THE SUPER-GOAT.** Apply the ConvexTok LP-graph to AST node-kind sequences →
+learn a globally-optimal AST multi-node token vocabulary. Genuinely novel — no
+code-domain analog exists (grep confirmed 2026-08-14).
+
+**Status: NOT STARTED. This is a research question, not a plan.** The LP
+infrastructure (`GraphBuilder`, `ConvexSolver`, `Rounder`, `Certifier`) is
+100% reused from katgpt-tokenizer. The open question is the colouring scheme
+(what is a "colour" for an AST node?).
+
+### Tasks (research, not implementation)
+
+- [ ] **T13.1** File `.research/NNN_convex_ast_vocab.md` — design the AST-node
+      colouring scheme (node-kind vs kind+arity vs kind+child-shape). Cite
+      ConvexTok paper. Sketch the encoding.
+- [ ] **T13.2** Build a 1000-fix-corpus AST node-kind sequence dataset (extract
+      via `syn` visitor from the existing `ClippyCorpus` + perf + kernel rules).
+- [ ] **T13.3** Run `GraphBuilder::build(ast_sequences, max_len=8)` +
+      `ConvexSolver::solve(graph, budget_k=64)` + `Rounder::det` on the dataset.
+      Measure: how many recurring AST motifs does the LP find? What's the
+      compression ratio vs the flat per-rule corpus?
+- [ ] **T13.4** If T13.3 shows ≥2× compression: file a `.proposals/` for the
+      ConvexTok-AST vocabulary as a Phase 14 implementation plan. Else:
+      document the negative result + close.
+
+### Phase 13 exit criteria
+- Research note filed. Either a follow-up plan is opened (T13.4 positive) or
+  the avenue is documented as a negative result (T13.4 negative).
+
+## Phase 14 — Verified additional substrates (HebbianKernelMemory + DeltaMemoryState + ExperienceReuseHook)
+
+The deep-fusion harvest surfaced three more substrates. Originally marked "unverified",
+they are NOW CONFIRMED via direct grep (2026-08-14):
+
+- **`DeltaMemoryState`** — `katgpt-core/src/delta_mem/state.rs` (DEFAULT-ON, Plan 408).
+  Rank-r associative bandit memory. `read(key) → value`, `write(key, value)` (δ-update),
+  `mean_prediction_error()` (drift signal). Composition: `MemorySteeredPruner<P>`
+  wraps an inner pruner and adds memory-steered corrections: `corrected_relevance =
+  base + α·memory.read(context)`. **Use as the drafter's correction layer** — key =
+  `(lint_name_hash, buggy_code latent)`, value = fix-direction correction.
+- **`HebbianKernelMemory<D>`** — `katgpt-core/src/hebbian_kernel_memory.rs` (Plan 559,
+  G1-G5 PASS, DEFAULT-ON). Closed-form fact-storing MLP. Bilinear sketched-K₂ feature
+  map + ridge-whitened readout. **Store verified (rule_id, buggy_code) → fixed_code
+  mappings as Hebbian facts.** Retrieval is O(1) associative recall. Replaces the
+  current `HashMap<String, Direction>` in `LatentSkillEvolution`.
+- **`ExperienceReuseHook` + `query_priors_dual`** —
+  `riir-engine/src/arg_runtime/experience_reuse.rs`. Latent-seeded NS-traversal over
+  a fix-trajectory DAG. Dual-stream returns BOTH `ReuseCandidate` (positive priors,
+  UCB-scored) AND `AvoidCandidate` (negative priors, Q-negative failure signal).
+  **Replaces the flat `Vec<FixTrajectory>` scan with graph-indexed prior lookup.**
+  Dual-stream = "these fixes worked" + "these fixes caused cargo build breakage —
+  avoid". The natural sink for `cargo clippy`/`cargo build` verify feedback.
+
+**Status: substrate verified. Not started.**
+
+### Tasks (additive — these compose on top of Phases 9-12)
+
+- [ ] **T14.1** Wrap `TernaryDrafter` in `MemorySteeredPruner<P>` so each draft
+      is corrected by `DeltaMemoryState::read(context)` keyed on
+      `(lint_name_hash, buggy_code_latent)`. The `write()` happens on each
+      verified fix (success → +α toward the correction, fail → -α away).
+- [ ] **T14.2** Replace `HashMap<String, Direction>` in `LatentSkillEvolution` with
+      `HebbianKernelMemory<8>` for the verified-fix fact store. O(1) associative
+      recall vs O(N) hash scan. The fact corpus = (rule_id, buggy_hash) → fixed_code.
+- [ ] **T14.3** Replace the flat `Vec<FixTrajectory>` in `LatentFixMemory` with
+      `ExperienceReuseHook`. The hook gives graph-indexed prior lookup +
+      dual-stream (positive + negative priors) for free.
+- [ ] **T14.4** Wire `cargo build` failure outcomes into the dual-stream's
+      `record_observation_outcome_dual`: `cargo build` fail = strong negative prior.
+      `cargo clippy` fail = weak negative prior. `cargo test` pass = strong
+      positive prior. This is the modelless RL signal layer.
+- [ ] **T14.5** GOAT gate (verified_substrates): on the fixture corpus,
+      memory-steered drafting (T14.1) + Hebbian fact recall (T14.2) + graph-indexed
+      priors (T14.3) collectively improve G1 precision ≥5% over Phase 9 alone.
+      Record in `.benchmarks/021_verified_substrates_goat.md`.
+
+### Phase 14 exit criteria
+- All three substrates wired. The healer's memory layer is no longer flat +
+  in-memory; it's Hebbian fact store + graph-indexed dual-stream + memory-steered
+  drafter.
+- GOAT G1 PASS (≥5% improvement over Phase 9).
+
 ### Tasks (sketch — not started)
 
 - [ ] **T8.1** `WasmPruner: ConstraintPruner` impl (katgpt-rs) — compiles the test suite
@@ -203,7 +425,7 @@ phase is SKETCHED, not started. Until it lands, `cargo test` (slow) + `RustAnaly
 - BLOCKED. Reopens when rubrc lands (Proposal 011 Phase 3). Until then, the slow path
   (`cargo test`) is the validator; the self-healing loop (Phase 7) works with either.
 
-## Out of scope (per Proposal 002 revised)
+## Out of scope (per Proposal 002 revised + deep fusion layer)
 
 - Full proposer coverage (all 34 perf + ~30 kernel) — decoupled; `--suggest` covers them.
 - CubeCL `#[cube]` macro-body proposers — `--suggest` still works (embedding captures the
@@ -211,6 +433,9 @@ phase is SKETCHED, not started. Until it lands, `cargo test` (slow) + `RustAnaly
 - L4 LoRA — deferred across all domains.
 - `--watch` mode — deferred.
 - Domain-direction mining via `CommittedFieldBlend` — hand-crafted vectors ship first.
+- **ConvexTok-AST implementation** — Phase 13 is research-only. The implementation
+  plan (Phase 15+) opens only if the encoding design + corpus experiment (T13.3)
+  shows ≥2× compression.
 
 ## Risks
 
