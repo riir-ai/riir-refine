@@ -67,6 +67,18 @@
 //!   files (`lora_fused`, `rope_geglu`) assessed + dropped (`SGMV` overlaps `MoE` grouped,
 //!   section-view is pointer arithmetic not an opt). Corpus: **123 rules across 15
 //!   categories (A–O)**. Opens riir-gpu (~196K lines) as the next distillation source.
+//! - **Batch 15 (Research 016):** 4 riir-gpu production rules — second batch mining
+//!   the stack's own kernels. Block-contiguous weight layout (`gemm_ternary_block_contiguous`:
+//!   pack 3 separate weight buffers into 1 to cut global-memory accesses 3×), fused
+//!   dual GEMV + `GeGLU` (`gemv_geglu_f16`: fuse 2 sibling GEMVs + act into 1 dispatch,
+//!   saves 52 dispatches/decode at 26 layers), orthogonal pre-rotation
+//!   (`spectralquant/attention.rs`: pre-rotate query once vs each key, ~4096× fewer
+//!   rotation FLOPs), water-fill tail-dim shared codebook (`spectralquant/dequant.rs`:
+//!   top dims get per-dim codebooks, tail dims share one low-bit codebook, 2.3×
+//!   codebook memory reduction). One riir-gpu file (`forward_flashprefill`) assessed
+//!   and dropped (cascade structure overlaps `NSA` Category I; 4 staged dispatches
+//!   is a non-opt). Corpus: **127 rules across 15 categories (A–O)**. `riir-gpu`
+//!   remains open as the next distillation source (5 of ~200 files mined).
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
@@ -1418,6 +1430,78 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
             ref_shape: "// naive: CPU transposes the weight matrix, then uploads the transposed result\nfn cpu_transpose_then_upload(weight: &[f32], rows: usize, cols: usize) -> Vec<f32> {\n    // CPU transpose — O(rows*cols) scattered writes, cache-unfriendly for extreme aspect ratios\n    // (e.g. 163840×1024 = 640 MB → 674 ms/step on M3 Max due to cache miss storms)\n    let mut transposed = vec![0.0f32; rows * cols];\n    for r in 0..rows { for c in 0..cols {\n        transposed[c*rows + r] = weight[r*cols + c]; // scattered write — cache killer\n    } }\n    transposed // then upload this (sequential, but the CPU step already dominated)\n}".to_string(),
             opt_pattern: "// optimized: GPU compute kernel transposes into pooled memory (riir-gpu Issue 402)\nfn gpu_transpose_into_pooled(weight: &[f32], rows: usize, cols: usize) -> Vec<f32> {\n    // step 1: upload RAW (non-transposed) weight via write_buffer — sequential write, fast\n    let staging = weight.to_vec(); // (on GPU: queue.write_buffer into staging buffer)\n    // step 2: tiled GPU compute kernel reads staging, writes transposed into pooled target\n    let tile = 32;\n    let mut transposed = vec![0.0f32; rows * cols];\n    for tr in (0..rows).step_by(tile) { for tc in (0..cols).step_by(tile) {\n        // one workgroup per tile — coalesced read + coalesced write\n        for dr in 0..tile { for dc in 0..tile {\n            let r = tr + dr; let c = tc + dc;\n            if r < rows && c < cols {\n                transposed[c*rows + r] = staging[r*cols + c]; // writes into pooled memory directly\n            }\n        } }\n    } }\n    transposed // the CPU stall is gone — the transform is a GPU dispatch\n}".to_string(),
         },
+        // ════════════════════════════════════════════════════════════════════
+        // Batch 15 (Research 016): riir-gpu production kernels — block-contiguous
+        // weight layout, fused dual GEMV + GeGLU, orthogonal pre-rotation,
+        // water-fill tail-dim shared codebook. 4 rules from 3 riir-gpu source
+        // files (the second batch mining the stack's own kernels).
+        // ════════════════════════════════════════════════════════════════════
+        // ── block-contiguous-weight-layout — 3-buffer SoA → 1-buffer AoS (A) ──
+        // Source: riir-gpu gemm_ternary_block_contiguous_cubecl.rs (Issue 650
+        // Phase 2). The prior layout used 3 separate GPU buffers (pos_bits,
+        // neg_bits, group_scale) — 3 global-memory accesses per K-tile per row.
+        // Packing them into a single block-contiguous buffer (9 × u32 per
+        // 128-weight group) needs 1 access per group. At large N (ffn_down at
+        // N=17408), this is a 3× reduction in global-memory accesses — the
+        // structural fix for the 1.89× vs llama.cpp 9.4× gap (Bench 645 #5).
+        // Distinct from `matvec-coalesce` (within a single buffer) — this
+        // packs multiple LOGICAL buffers into one PHYSICAL buffer.
+        KernelRule {
+            rule_id: "block-contiguous-weight-layout".to_string(),
+            gpu_concept: "pack multiple logical weight buffers (scale + bit-planes) into one block-contiguous buffer so one global-memory access fetches all components".to_string(),
+            ref_shape: "// naive: 3 separate GPU buffers (SoA) — 3 global-memory accesses per group\nstruct TernaryWeightsSoA { pos_bits: Vec<u32>, neg_bits: Vec<u32>, scale: Vec<f32> }\nfn dequant_soa(w: &TernaryWeightsSoA, row: usize, col: usize, groups_per_row: usize) -> f32 {\n    let g = col / 128;\n    let scale = w.scale[row * groups_per_row + g];          // access 1\n    let lc = col % 128;\n    let pos = (w.pos_bits[row * groups_per_row * 4 + g * 4 + lc / 32] >> (lc % 32)) & 1; // access 2\n    let neg = (w.neg_bits[row * groups_per_row * 4 + g * 4 + lc / 32] >> (lc % 32)) & 1; // access 3\n    let sign = pos as f32 - neg as f32;\n    sign * scale\n}".to_string(),
+            opt_pattern: "// optimized: single block-contiguous buffer (AoS) — 1 access per group\n// layout per 128-weight group: u32[0]=scale, u32[1..5]=pos plane, u32[5..9]=neg plane\nconst U32_PER_BLOCK_GROUP: usize = 9;\nfn dequant_block_contiguous(block_buf: &[u32], row: usize, col: usize, groups_per_row: usize) -> f32 {\n    let g = col / 128;\n    let blk_base = (row * groups_per_row + g) * U32_PER_BLOCK_GROUP;\n    let scale = f32::from_bits(block_buf[blk_base]);          // access 1 (the only access)\n    let lc = col % 128;\n    let pos = (block_buf[blk_base + 1 + lc / 32] >> (lc % 32)) & 1; // same cache line\n    let neg = (block_buf[blk_base + 5 + lc / 32] >> (lc % 32)) & 1; // same cache line\n    let sign = pos as f32 - neg as f32;\n    sign * scale\n}".to_string(),
+        },
+        // ── fuse-gate-up-gemv-activation — 3 dispatches → 1 fused (C) ────────
+        // Source: riir-gpu gemv_geglu_f16_cubecl.rs (Plan 106 P8/P9). A GeGLU
+        // (or SwiGLU) activation consumes two independent linear projections
+        // (gate + up) of the SAME input vector. The naive path runs 3 GPU
+        // dispatches: gate GEMV, up GEMV, GeGLU elementwise. Fusing them into
+        // one kernel saves 2 dispatches per layer × 26 layers = **52 dispatches
+        // per decode token**. The two GEMVs share the input vector (loaded
+        // once); the activation folds inline after the plane_sum reduction.
+        // Distinct from `fused-matmul-activation` (1 matmul + 1 act, sequential)
+        // — this fuses two PARALLEL sibling projections.
+        KernelRule {
+            rule_id: "fuse-gate-up-gemv-activation".to_string(),
+            gpu_concept: "fuse two sibling GEMVs (gate + up projections) + their multiplicative activation into one kernel dispatch".to_string(),
+            ref_shape: "// naive: 3 separate GPU dispatches (gate GEMV, up GEMV, GeGLU elementwise)\nfn geglu_three_dispatches(weight_gate: &[f32], weight_up: &[f32], input: &[f32], m: usize, n: usize) -> Vec<f32> {\n    let gate = gemv_launch(weight_gate, input, m, n);  // dispatch 1\n    let up = gemv_launch(weight_up, input, m, n);     // dispatch 2 (re-reads input)\n    // dispatch 3: elementwise GeGLU = GELU(gate) * up\n    gate.iter().zip(up.iter()).map(|(g, u)| gelu(*g) * u).collect()\n}".to_string(),
+            opt_pattern: "// optimized: one fused kernel — gate + up + GeGLU in a single dispatch (riir-gpu gemv_geglu_f16)\nfn geglu_fused(weight_gate: &[f32], weight_up: &[f32], input: &[f32], m: usize, n: usize, plane_dim: usize) -> Vec<f32> {\n    let mut out = vec![0.0f32; m];\n    for row in 0..m {\n        let off = row * n;\n        // gate dot product (cooperative plane reduction)\n        let mut gate = 0.0;\n        for k in 0..n { gate += weight_gate[off + k] * input[k]; }\n        // up dot product — input[k] is already in register, re-use it\n        let mut up = 0.0;\n        for k in 0..n { up += weight_up[off + k] * input[k]; }\n        // GeGLU: GELU(gate) * up — inline, no intermediate buffer\n        out[row] = gelu(gate) * up;\n    }\n    out // 1 dispatch total (was 3) — saves 52 dispatches/decode at 26 layers\n}".to_string(),
+        },
+        // ── pre-rotate-once-exploit-orthogonality — O(N) rotations → O(1) (B) ─
+        // Source: riir-gpu spectralquant/attention.rs (Plan 078). SpectralQuant
+        // rotates keys by an orthogonal eigenbasis V: score = dot(q, V·y_hat).
+        // Orthogonality gives the identity dot(q, V·y) = dot(V^T·q, y), so we
+        // pre-rotate the query ONCE (one d_h × d_h matvec) and compute
+        // dot(V^T·q, y_hat) for each key — no per-key rotation. At seq_len_kv =
+        // 4096, d_h = 128, this cuts rotation FLOPs by ~4096×. General pattern:
+        // any orthogonal transform (eigendecomposition, QR, Householder) where
+        // one side is shared across many inner products.
+        KernelRule {
+            rule_id: "pre-rotate-once-exploit-orthogonality".to_string(),
+            gpu_concept: "for dot(q, R·y) with many y and orthogonal R, pre-rotate the query once (q' = R^T·q) instead of rotating each y".to_string(),
+            ref_shape: "// naive: rotate each key by orthogonal R, then dot with q\nfn score_rotate_each_key(q: &[f32], keys: &[f32], r: &[f32], seq_len_kv: usize, d_h: usize) -> Vec<f32> {\n    let mut scores = vec![0.0f32; seq_len_kv];\n    for t in 0..seq_len_kv {\n        // rotate key t: rotated[d] = Σ_j R[d*d_h + j] * keys[t*d_h + j]  — O(d_h²) per key\n        let mut rotated = vec![0.0f32; d_h];\n        for d in 0..d_h {\n            for j in 0..d_h { rotated[d] += r[d * d_h + j] * keys[t * d_h + j]; }\n        }\n        // dot with q\n        for d in 0..d_h { scores[t] += q[d] * rotated[d]; }\n    }\n    scores // O(seq_len_kv × d_h²) rotation FLOPs\n}".to_string(),
+            opt_pattern: "// optimized: pre-rotate query once (q' = R^T·q), then dot q' with each unrotated key\nfn score_pre_rotate_query(q: &[f32], keys: &[f32], r: &[f32], seq_len_kv: usize, d_h: usize) -> Vec<f32> {\n    // one-time pre-rotation: q'[d] = Σ_j R^T[d*d_h + j] * q[j] = Σ_j R[j*d_h + d] * q[j]\n    let mut q_prime = vec![0.0f32; d_h];\n    for d in 0..d_h {\n        for j in 0..d_h { q_prime[d] += r[j * d_h + d] * q[j]; }\n    }\n    // per-key: just dot(q', key) — NO rotation\n    let mut scores = vec![0.0f32; seq_len_kv];\n    for t in 0..seq_len_kv {\n        for d in 0..d_h { scores[t] += q_prime[d] * keys[t * d_h + d]; }\n    }\n    scores // O(d_h²) pre-rotation + O(seq_len_kv × d_h) dots — ~seq_len_kv× fewer rotation FLOPs\n}".to_string(),
+        },
+        // ── water-fill-tail-dim-shared-codebook — per-dim codebook everywhere → ─
+        // top-dims per-dim, tail-dims shared low-bit (N)
+        // Source: riir-gpu spectralquant/dequant.rs (Plan 078). Variable-bit
+        // dequant where the top d_eff dimensions get their own per-dim Lloyd-Max
+        // codebooks sized to the water-fill bit allocation, but the tail dims
+        // (d_eff..d_h, which carry <1% of the energy) share a single codebook
+        // at b_low bits. Cuts codebook memory from O(d_h × 2^max_bits) to
+        // O(d_eff × 2^max_bits + (d_h - d_eff) × 2^b_low). At d_h=128, d_eff=32,
+        // max_bits=4, b_low=2: 2048 → 896 floats (2.3× memory reduction). The
+        // tail dims are too low-energy for per-dim codebooks to pay back their
+        // memory cost. Distinct from `int2-pack-weights` (uniform 2-bit) and
+        // `ternary-weight-quant` (uniform ternary) — this is NON-UNIFORM bit
+        // allocation + tail-shared codebook.
+        KernelRule {
+            rule_id: "water-fill-tail-dim-shared-codebook".to_string(),
+            gpu_concept: "non-uniform bit allocation: per-dim codebooks for top-energy dims, single shared low-bit codebook for low-energy tail dims".to_string(),
+            ref_shape: "// naive: uniform per-dim codebooks at max_bits for all dims (ignores energy distribution)\nfn dequant_uniform_per_dim(packed: &[u32], codebook: &[f32], d_h: usize, max_bits: usize) -> Vec<f32> {\n    // codebook layout: [d_h][1 << max_bits] — every dim gets a full max_bits codebook\n    let cb_stride = 1usize << max_bits;\n    let mut out = vec![0.0f32; d_h];\n    for d in 0..d_h {\n        let idx = unpack_index(packed, d, max_bits); // max_bits per dim, uniform\n        out[d] = codebook[d * cb_stride + idx];\n    }\n    out // codebook memory = d_h × 2^max_bits (e.g. 128 × 16 = 2048 floats)\n}".to_string(),
+            opt_pattern: "// optimized: top d_eff dims get per-dim codebooks (max_bits), tail dims share one b_low-bit codebook\nfn dequant_water_fill(packed: &[u32], codebook_top: &[f32], codebook_tail: &[f32], d_h: usize, d_eff: usize, max_bits: usize, b_low: usize) -> Vec<f32> {\n    let cb_top_stride = 1usize << max_bits;\n    let cb_tail_stride = 1usize << b_low;\n    let mut out = vec![0.0f32; d_h];\n    // top dims: per-dim codebook at max_bits (high fidelity)\n    for d in 0..d_eff {\n        let idx = unpack_index(packed, d, max_bits);\n        out[d] = codebook_top[d * cb_top_stride + idx];\n    }\n    // tail dims: shared single codebook at b_low bits (low fidelity, <1% energy)\n    for d in d_eff..d_h {\n        let idx = unpack_index(packed, d, b_low);\n        out[d] = codebook_tail[idx]; // SAME codebook_tail for all tail dims\n    }\n    out // codebook memory = d_eff × 2^max_bits + (d_h - d_eff) × 2^b_low\n        // e.g. 32×16 + 96×4 = 896 floats (was 2048) — 2.3× reduction\n}".to_string(),
+        },
     ])
 }
 
@@ -1438,7 +1522,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (7 rules)
+    // A: Memory access patterns (8 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -1450,9 +1534,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "gemm-tiling",
             "masked-boundary-load",
             "offload-cpu-bottleneck-to-gpu-kernel",
+            "block-contiguous-weight-layout",
         ],
     ),
-    // B: Compute patterns (18 rules)
+    // B: Compute patterns (19 rules)
     (
         KernelCategory::Compute,
         "B: compute",
@@ -1475,9 +1560,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "complex-mul-via-paired-reals",
             "stateful-shift-via-cat-prefix",
             "squared-relu-activation",
+            "pre-rotate-once-exploit-orthogonality",
         ],
     ),
-    // C: Fusion patterns (11 rules)
+    // C: Fusion patterns (12 rules)
     (
         KernelCategory::Fusion,
         "C: fusion",
@@ -1493,6 +1579,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fuse-gate-transform-chunk-cumsum",
             "rkv-receptance-correction",
             "fold-norm-scalar-into-matmul",
+            "fuse-gate-up-gemv-activation",
         ],
     ),
     // D: Dispatch patterns (8 rules)
@@ -1640,7 +1727,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "detached-broadcast-insert",
         ],
     ),
-    // N: dtype + alignment specialization (8 rules)
+    // N: dtype + alignment specialization (9 rules)
     (
         KernelCategory::DtypeAlignment,
         "N: dtype + alignment",
@@ -1653,6 +1740,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "upcast-before-loss",
             "batched-upcast-map",
             "dtype-restricted-backend",
+            "water-fill-tail-dim-shared-codebook",
         ],
     ),
     // O: IR strength reduction (4 rules)
@@ -1673,7 +1761,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
 /// Returns 15 buckets (one per category), each containing the `KernelRule`s whose
 /// `rule_id` appears in that category's slice of [`KERNEL_CATEGORIES`]. This is
 /// the category-scoped view of the corpus — a future heal pipeline can consult
-/// the routed expert's rules first without scanning all 123.
+/// the routed expert's rules first without scanning all 127.
 ///
 /// # Allocation
 ///
@@ -1734,8 +1822,9 @@ mod tests {
         // Batch 12 (14): popcorn gated delta + specialized recurrence + advanced attention (gated_delta_rule, gated_delta_product, mesa_net, mesa_net_decode, titans_linear, ttt, rwkv4, rwkv6, wall_attn, multi_token_attention, momoe, kda_gate, kda_gate_cumsum, log_linear_attn).
         // Batch 13 (6): popcorn final pass — RL loss stability (grpo_offpolicy), complex-free RoPE (llama4_rope), multimodal RoPE (qwen2vl_mrope), RWKV-7 channel mixing + gate output (rwkv7_channel_mixing, rwkv7_gate_output, sqrelu).
         // Batch 14 (4): riir-gpu production kernels — norm-fold into matmul, reduction-split pre-pass, single-plane reduction, CPU-bottleneck offload (gemv_q4k_batched_rmsnorm_cubecl, gpu_transpose).
-        // Total: 123.
-        assert_eq!(corpus.entries.len(), 123, "batches 1-14 should have 123 rules");
+        // Batch 15 (4): riir-gpu production kernels — block-contiguous weight layout, fused dual GEMV + GeGLU, orthogonal pre-rotation, water-fill tail-dim shared codebook (gemm_ternary_block_contiguous, gemv_geglu_f16, spectralquant).
+        // Total: 127.
+        assert_eq!(corpus.entries.len(), 127, "batches 1-15 should have 127 rules");
     }
 
     #[test]
@@ -2292,6 +2381,42 @@ mod tests {
     }
 
     // ════════════════════════════════════════════════════════════════════
+    // Batch 15 (Research 016) — riir-gpu production kernels: block-contiguous layout + fused GeGLU GEMV + orthogonal pre-rotation + water-fill tail-dim
+    // ════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn batch15_rules_present() {
+        // Verify the 4 batch-15 rules across A/B/C/N.
+        let corpus = build_kernel_seed_corpus();
+        let ids: Vec<&str> =
+            corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        // Category A (1 new): block-contiguous weight layout
+        assert!(ids.contains(&"block-contiguous-weight-layout"), "block-contiguous layout");
+        // Category C (1 new): fuse gate+up GEMV + GeGLU
+        assert!(ids.contains(&"fuse-gate-up-gemv-activation"), "fused dual GEMV + GeGLU");
+        // Category B (1 new): pre-rotate query once
+        assert!(ids.contains(&"pre-rotate-once-exploit-orthogonality"), "pre-rotate query");
+        // Category N (1 new): water-fill tail-dim shared codebook
+        assert!(ids.contains(&"water-fill-tail-dim-shared-codebook"), "water-fill tail-dim");
+    }
+
+    #[test]
+    fn batch15_block_contiguous_fused_geglu_rotation_codebook_concepts_covered() {
+        // Verify the batch-15 block-contiguous + fused-geglu + rotation + codebook concepts.
+        let corpus = build_kernel_seed_corpus();
+        let concepts: Vec<&str> =
+            corpus.entries.iter().map(|e| e.gpu_concept.as_str()).collect();
+        // Category A: block-contiguous weight layout (riir-gpu gemm_ternary_block_contiguous)
+        assert!(concepts.contains(&"pack multiple logical weight buffers (scale + bit-planes) into one block-contiguous buffer so one global-memory access fetches all components"));
+        // Category C: fuse gate+up GEMV + GeGLU (riir-gpu gemv_geglu_f16)
+        assert!(concepts.contains(&"fuse two sibling GEMVs (gate + up projections) + their multiplicative activation into one kernel dispatch"));
+        // Category B: pre-rotate query once (riir-gpu spectralquant/attention.rs)
+        assert!(concepts.contains(&"for dot(q, R·y) with many y and orthogonal R, pre-rotate the query once (q' = R^T·q) instead of rotating each y"));
+        // Category N: water-fill tail-dim shared codebook (riir-gpu spectralquant/dequant.rs)
+        assert!(concepts.contains(&"non-uniform bit allocation: per-dim codebooks for top-energy dims, single shared low-bit codebook for low-energy tail dims"));
+    }
+
+    // ════════════════════════════════════════════════════════════════════
     // Plan 003 — Router ↔ corpus wiring tests
     // ════════════════════════════════════════════════════════════════════
 
@@ -2333,11 +2458,11 @@ mod tests {
 
     #[test]
     fn kernel_categories_counts_match_plan_003_table() {
-        // Pin per-category rule counts to the Plan 003 table (updated for Batch 14).
+        // Pin per-category rule counts to the Plan 003 table (updated for Batch 15).
         let expected = [
-            (KernelCategory::MemoryAccess, 7),
-            (KernelCategory::Compute, 18),
-            (KernelCategory::Fusion, 11),
+            (KernelCategory::MemoryAccess, 8),
+            (KernelCategory::Compute, 19),
+            (KernelCategory::Fusion, 12),
             (KernelCategory::Dispatch, 8),
             (KernelCategory::Parallelism, 8),
             (KernelCategory::FlashAttnTiling, 10),
@@ -2348,7 +2473,7 @@ mod tests {
             (KernelCategory::AutotuneDispatch, 4),
             (KernelCategory::ConvGemmLayout, 5),
             (KernelCategory::KernelPolymorphism, 5),
-            (KernelCategory::DtypeAlignment, 8),
+            (KernelCategory::DtypeAlignment, 9),
             (KernelCategory::IrStrengthReduction, 4),
         ];
         for (cat, count) in expected {
@@ -2358,9 +2483,9 @@ mod tests {
                 "Plan 003: category {cat:?} has {} rules, expected {count}",
                 entry.2.len());
         }
-        // Sum must equal 123.
+        // Sum must equal 127.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 123, "Plan 003: category totals must sum to 123");
+        assert_eq!(total, 127, "Plan 003: category totals must sum to 127");
     }
 
     #[test]
@@ -2370,7 +2495,7 @@ mod tests {
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 123, "Plan 003: grouped corpus has {total} rules, expected 123");
+        assert_eq!(total, 127, "Plan 003: grouped corpus has {total} rules, expected 127");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");

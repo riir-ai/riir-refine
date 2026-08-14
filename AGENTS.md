@@ -26,7 +26,7 @@ Three domains ship (Plan 001):
    bench finding (Bench 015 + Bench 016: 2 ParetoDominated + 4 regime-fragile/Mixed in the
    default config — consumers should treat annotated rules as
    context-dependent).
-3. **`kernel_opt`** (opt-in, Phase 3) — heals GPU kernel optimization. 123 rules
+3. **`kernel_opt`** (opt-in, Phase 3) — heals GPU kernel optimization. 127 rules
    (Batch 1-6: 50 popcorn-distilled from Research 002-007; Batch 7: 9 burn-cubecl
    Rust-native autotune dispatch + conv-as-GEMM + layout rules from Research 008;
    Batch 8: 9 burn-cubecl kernel polymorphism + dtype/alignment specialization +
@@ -37,7 +37,8 @@ Three domains ship (Plan 001):
    Batch 12: 14 popcorn gated delta + specialized recurrence + advanced attention rules from Research 013;
    Batch 13: 6 popcorn final-pass rules (RL loss stability, complex-free RoPE, multimodal RoPE, RWKV-7 channel mixing + gate output) from Research 014;
    popcorn corpus distillation COMPLETE — every popcorn kernel file read;
-   Batch 14: 4 riir-gpu production-kernel rules (norm-fold into matmul, reduction-split pre-pass, single-plane reduction, CPU-bottleneck offload) from Research 015 — the first batch mining the stack's own kernels, not external libraries). Absorbs Proposal 012's design
+   Batch 14: 4 riir-gpu production-kernel rules (norm-fold into matmul, reduction-split pre-pass, single-plane reduction, CPU-bottleneck offload) from Research 015 — the first batch mining the stack's own kernels, not external libraries);
+   Batch 15: 4 riir-gpu production-kernel rules (block-contiguous weight layout, fused dual GEMV + GeGLU, orthogonal pre-rotation, water-fill tail-dim shared codebook) from Research 016 — the second batch mining the stack's own kernels (ternary GEMM + fused GeGLU GEMV + SpectralQuant). Absorbs Proposal 012's design
    (thermal-tier + latent-MoE + numeric validator); 4090 LoRA deferred.
 
 The pipeline (shared across all domains):

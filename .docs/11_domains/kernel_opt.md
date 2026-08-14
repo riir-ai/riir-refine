@@ -10,7 +10,7 @@
 | Component | Ships now | Deferred |
 |---|---|---|
 | `KernelOptDomain: HealDomain` | ✅ | |
-| Seed corpus (Batch 1-14: 123 rules; popcorn COMPLETE; riir-gpu opened Batch 14) | ✅ | Future source: riir-gpu (~196K lines, mostly unmined), new popcorn releases |
+| Seed corpus (Batch 1-15: 127 rules; popcorn COMPLETE; riir-gpu opened Batch 14, mined Batch 15) | ✅ | Future source: riir-gpu (~196K lines, mostly unmined), new popcorn releases |
 | `KernelExpertRouter` (`pick_domain`) | ✅ (8-dim activity, 15/15 reachable, Plan 004) | Mined centroids via `CommittedFieldBlend` |
 | `KernelThermalRouter` (5-tier stub) | ✅ (returns Plasma) | Warm/Cold LoRA (4090, riir-train) |
 | `KernelVerifier` (compile-only) | ✅ (behind `kernel_verify`) | Full numeric compare vs reference |
@@ -32,9 +32,10 @@ Batch 11 (Research 012): 11 rules — popcorn linear-attention recurrence family
 Batch 12 (Research 013): 14 rules — popcorn gated delta family (gated_delta_rule, gated_delta_product) + specialized recurrences (mesa_net, mesa_net_decode, titans_linear, ttt, rwkv4, rwkv6) + advanced attention (wall_attn, multi_token_attention) + MoE gate (momoe) + KDA gate (kda_gate, kda_gate_cumsum) + hierarchical mask (log_linear_attn). Three candidates (kda per-key-dim gate, forgetting_attn cumsum decay, abc two-state softmax) were dropped as duplicates.
 Batch 13 (Research 014): 6 rules — popcorn final unmined pass. RL loss stability (grpo_offpolicy: expm1 for KL cancellation) + complex-free RoPE (llama4_rope: paired reals) + multimodal RoPE (qwen2vl_mrope: cyclic modality table) + RWKV-7 channel mixing (rwkv7_channel_mixing: stateful cat-prefix shift + squared ReLU from sqrelu) + RWKV-7 gate output (rwkv7_gate_output: fused reduce-then-broadcast). rwkv7_k_update + sigmoid + tvd yielded no new rule.
 Batch 14 (Research 015): 4 rules — **first batch mining riir-gpu (the stack's own production kernels), not external libraries**. Norm-fold into matmul (gemv_q4k_batched_rmsnorm: fold inv_rms scalar into the GEMV dot) + reduction-split pre-pass (compute_inv_rms: scalar pre-pass + fold) + single-plane reduction (Issue 611 fix: one plane suffices vs N redundant planes) + CPU-bottleneck offload (gpu_transpose Issue 402: GPU compute kernel writes directly into pooled memory). Two riir-gpu files (lora_fused SGMV, rope_geglu section-view) assessed + dropped (SGMV overlaps MoE grouped; section-view is pointer arithmetic not an opt).
-Total: 123 rules. Popcorn corpus COMPLETE; riir-gpu (~196K lines) opened as the next distillation source.
+Batch 15 (Research 016): 4 rules — **second batch mining riir-gpu**. Block-contiguous weight layout (gemm_ternary_block_contiguous: pack 3 separate weight buffers into 1 to cut global-memory accesses 3×) + fused dual GEMV + GeGLU (gemv_geglu_f16: fuse 2 sibling GEMVs + act into 1 dispatch, saves 52 dispatches/decode at 26 layers) + orthogonal pre-rotation (spectralquant/attention.rs: pre-rotate query once vs each key, ~4096× fewer rotation FLOPs) + water-fill tail-dim shared codebook (spectralquant/dequant.rs: top dims per-dim codebooks, tail dims share one low-bit codebook, 2.3× codebook memory reduction). One riir-gpu file (forward_flashprefill) assessed + dropped (cascade structure overlaps NSA Category I; 4 staged dispatches is a non-opt).
+Total: 127 rules. Popcorn corpus COMPLETE; riir-gpu (~196K lines) remains open as the next distillation source (5 of ~200 files mined).
 
-### Category A: Memory access patterns (7 rules)
+### Category A: Memory access patterns (8 rules)
 
 | Rule ID | GPU concept | Pattern |
 |---|---|---|
@@ -45,8 +46,9 @@ Total: 123 rules. Popcorn corpus COMPLETE; riir-gpu (~196K lines) opened as the 
 | `gemm-tiling` | shared-memory tiling | Naive GEMM (global mem) → tiled GEMM (shared mem reuse) |
 | `masked-boundary-load` | boundary-safe memory access | Unchecked load → masked load with fallback |
 | `offload-cpu-bottleneck-to-gpu-kernel` | CPU→GPU data-prep offload | CPU transpose (674ms/step bottleneck) → GPU compute kernel writing into pooled memory (riir-gpu Issue 402) |
+| `block-contiguous-weight-layout` | multi-buffer → single-buffer packing | 3 separate SoA weight buffers (pos+neg+scale) → 1 block-contiguous AoS buffer (1 access per group, riir-gpu gemm_ternary_block_contiguous, 3× fewer global-memory accesses) |
 
-### Category B: Compute patterns (18 rules)
+### Category B: Compute patterns (19 rules)
 
 | Rule ID | GPU concept | Pattern |
 |---|---|---|
@@ -68,8 +70,9 @@ Total: 123 rules. Popcorn corpus COMPLETE; riir-gpu (~196K lines) opened as the 
 | `complex-mul-via-paired-reals` | complex-free representation | Complex dtype → interleaved `[real, imag]` pairs + 4 scalar muls |
 | `stateful-shift-via-cat-prefix` | cross-batch stateful shift | Zero-pad shift → `cat(x_prev, x[:-1])` (carries real cross-batch state) |
 | `squared-relu-activation` | sparse sharpening activation | `relu(x)` then square → fused `max(x,0)²` (zeros preserved, non-zeros sharpened) |
+| `pre-rotate-once-exploit-orthogonality` | orthogonal pre-rotation identity | Rotate each key by R then dot with q → pre-rotate query once (`q'=R^T·q`) for orthogonal R, then dot `q'` with each unrotated key (riir-gpu spectralquant/attention, ~4096× fewer rotation FLOPs) |
 
-### Category C: Fusion patterns (11 rules)
+### Category C: Fusion patterns (12 rules)
 
 | Rule ID | GPU concept | Pattern |
 |---|---|---|
@@ -84,6 +87,7 @@ Total: 123 rules. Popcorn corpus COMPLETE; riir-gpu (~196K lines) opened as the 
 | `fuse-gate-transform-chunk-cumsum` | gate + cumsum fusion | Separate gate + chunk cumsum → fused (no intermediate) |
 | `rkv-receptance-correction` | fused reduce-then-broadcast | 4-pass triple-mul+reduce+broadcast-mul+add → fused `(r·k·ρ).sum(keepdim)·v + o` |
 | `fold-norm-scalar-into-matmul` | norm-fold into matmul | Separate CPU norm pass + upload → fold inv_rms scalar into the GEMV dot product (riir-gpu gemv_q4k_rmsnorm, ~30s/step saved at 12B) |
+| `fuse-gate-up-gemv-activation` | sibling-GEMV + activation fusion | 3 dispatches (gate GEMV + up GEMV + GeGLU) → 1 fused kernel (riir-gpu gemv_geglu_f16, saves 52 dispatches/decode at 26 layers) |
 
 ### Category D: Dispatch patterns (8 rules)
 
@@ -165,7 +169,7 @@ pub fn route(&self, activity: &[f32; ACTIVITY_DIM]) -> usize {
 }
 ```
 
-**Plan 003 (2026-08-14):** router wired to the 123-rule corpus via 15 category
+**Plan 003 (2026-08-14):** router wired to the 127-rule corpus via 15 category
 experts. Each expert owns its category's `rule_ids` via `KERNEL_CATEGORIES`.
 - **Activity vector** = raw physical (kernel signature: `[M, N, K, dtype, hw,
   is_attention, is_fusion, is_ir_transform]` — 8-dim per Plan 004, normalized
@@ -337,7 +341,7 @@ deferred (Proposal 012 §Phase 0). `is_full_validator_available()` returns
 | `reshape-rank-for-backend` | rank adapter — reshape to backend-required rank | Leak rank contract to caller → reshape (1,-1,h), run kernel, reshape back |
 | `detached-broadcast-insert` | non-differentiable broadcast via detach + view | Materialize full broadcast → detach() + insert dim (view, no alloc) |
 
-### Category N: dtype + alignment specialization (8 rules — 2 Batch 8 + 4 Batch 9 + 2 Batch 10)
+### Category N: dtype + alignment specialization (9 rules — 2 Batch 8 + 4 Batch 9 + 2 Batch 10 + 1 Batch 15)
 
 | Rule ID | GPU concept | Pattern |
 |---|---|---|
@@ -349,6 +353,7 @@ deferred (Proposal 012 §Phase 0). `is_full_validator_available()` returns
 | `upcast-before-loss` | upcast to f32 before log/exp in loss | fp16 loss (log underflows) → f32 upcast before log/exp |
 | `batched-upcast-map` | batched type promotion via map over tuple | Per-tensor upcast calls → `map(upcast, tuple)` (signals independence) |
 | `dtype-restricted-backend` | backend restricted to precision-stable dtypes | All-dtype backend → dispatch on dtype (fast path only for stable) |
+| `water-fill-tail-dim-shared-codebook` | non-uniform bit allocation + tail-shared codebook | Uniform per-dim codebooks at max_bits → top d_eff dims get per-dim codebooks, tail dims share one b_low-bit codebook (riir-gpu spectralquant/dequant, 2.3× codebook memory reduction) |
 
 ### Category O: IR strength reduction (Batch 8, 4 rules — cubecl-opt)
 
