@@ -26,10 +26,11 @@ Three domains ship (Plan 001):
    bench finding (Bench 015 + Bench 016: 2 ParetoDominated + 4 regime-fragile/Mixed in the
    default config — consumers should treat annotated rules as
    context-dependent).
-3. **`kernel_opt`** (opt-in, Phase 3) — heals GPU kernel optimization. 50 rules
-   (Batch 1-6: 2 original + 48 popcorn-distilled, Research 002-007; full corpus
-   ~300-500 rules in ~15-25 batches). Absorbs Proposal 012's design (thermal-tier +
-   latent-MoE + numeric validator); 4090 LoRA deferred.
+3. **`kernel_opt`** (opt-in, Phase 3) — heals GPU kernel optimization. 59 rules
+   (Batch 1-6: 50 popcorn-distilled from Research 002-007; Batch 7: 9 burn-cubecl
+   Rust-native autotune dispatch + conv-as-GEMM + layout rules from Research 008;
+   full corpus ~300-500 rules in ~15-25 batches). Absorbs Proposal 012's design
+   (thermal-tier + latent-MoE + numeric validator); 4090 LoRA deferred.
 
 The pipeline (shared across all domains):
 1. **L0 — Rule distillation**: each rule → named entry + bounded fix-space
@@ -86,7 +87,7 @@ The `kernel_opt` domain adds two layers on top of the shared pipeline:
    `katgpt_core::variable_rank_domain_expert::pick_domain<4, 5>` (Plan 558).
    Activity vector = kernel signature `[M, N, K, dtype, hw]`; domain
    directions = per-expert centroids (placeholder: identity vectors until
-   popcorn distillation lands). Modelless argmax — zero allocation.
+   distillation-derived centroids land). Modelless argmax — zero allocation.
 
 2. **`KernelThermalRouter`** (`src/domains/kernel_opt/thermal.rs`) — the
    FlashAR/QGF thermal-tier pattern: Plasma→Hot→Warm→Cold→Freeze escalation.

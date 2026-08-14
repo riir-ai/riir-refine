@@ -10,7 +10,7 @@
 | Component | Ships now | Deferred |
 |---|---|---|
 | `KernelOptDomain: HealDomain` | ✅ | |
-| Seed corpus (Batch 1-6: 50 rules) | ✅ | Full corpus (~300-500 rules, ~15-25 batches) |
+| Seed corpus (Batch 1-7: 59 rules) | ✅ | Full corpus (~300-500 rules, ~15-25 batches) |
 | `KernelExpertRouter` (`pick_domain`) | ✅ (identity directions) | Per-expert centroids from popcorn |
 | `KernelThermalRouter` (5-tier stub) | ✅ (returns Plasma) | Warm/Cold LoRA (4090, riir-train) |
 | `KernelVerifier` (compile-only) | ✅ (behind `kernel_verify`) | Full numeric compare vs reference |
@@ -24,7 +24,8 @@ Batch 3 (Research 004): 6 rules — linear-attention recurrence patterns.
 Batch 4 (Research 005): 9 rules — MoE dispatch + backward-pass patterns.
 Batch 5 (Research 006): 4 rules — NSA block-sparse selection patterns.
 Batch 6 (Research 007): 3 rules — varlen packing + chunked reductions.
-Total: 50 rules. Full corpus target: ~300-500 rules in ~15-25 batches.
+Batch 7 (Research 008): 9 rules — burn-cubecl autotune dispatch + conv-as-GEMM + memory layout.
+Total: 59 rules. Full corpus target: ~300-500 rules in ~15-25 batches.
 
 ### Category A: Memory access patterns (6 rules)
 
@@ -201,6 +202,25 @@ deferred (Proposal 012 §Phase 0). `is_full_validator_available()` returns
 | `chunk-reset-cumsum` | cumsum that resets at chunk boundaries | Full cumsum → cumsum reset every chunk_size elements |
 | `cumsum-additive-bias` | additive bias via cumulative sum of a gate | O(N²) bias matrix → O(N) cumsum difference |
 
+### Category K: Autotune dispatch (Batch 7, 4 rules — burn-cubecl)
+
+| Rule ID | GPU concept | Pattern |
+|---|---|---|
+| `panic-safe-autotune-candidate` | panic-resilient autotune candidate | Direct call (panics on bad shape) → catch_unwind → Err (autotune skips) |
+| `multi-priority-tune-groups` | shape-keyed priority-ranked autotune groups | Flat candidate list → priority-ranked groups (MAX/HIGH/MIN/NEVER) keyed on shape |
+| `shape-kind-dispatch` | matmul-kind-keyed kernel family dispatch | Single general GEMM for all shapes → GEMV for matvec, GEMM for general |
+| `vector-width-pow2-sweep` | vectorization width as an autotune dimension | Fixed vector width → sweep C ∈ {1,2,4,8,16,32,64} as autotune candidates |
+
+### Category L: Conv-as-GEMM + memory layout (Batch 7, 5 rules — burn-cubecl)
+
+| Rule ID | GPU concept | Pattern |
+|---|---|---|
+| `conv-1x1-as-matmul` | 1×1 convolution as direct matmul (skip im2col) | im2col expansion + GEMM → reshape to 2D + matmul (no column expansion) |
+| `contiguity-guard-before-reshape` | stride-contiguity guard skips unnecessary relayout copy | Always-copy-into-contiguous → check stride contiguity, skip copy if already compatible |
+| `cube-count-bounded-batch-pack` | grid-limit-aware batch packing | One batch per launch → pack max batches ≤ cube-count limit (find largest divisor) |
+| `stride-align-vectorization-key` | stride-byte-alignment determines vectorization width | Fixed vectorization → trailing-zeros of (stride × bytes) picks vector width |
+| `anchor-shape-bucketing` | shape bucketing for autotune cache reuse | Exact-shape autotune key → bucketed key (nearest N) so similar shapes share cache |
+
 ## Source
 
 - [`src/domains/kernel_opt/mod.rs`](../../src/domains/kernel_opt/mod.rs) — `KernelRule` + `KernelOptDomain`
@@ -218,6 +238,7 @@ deferred (Proposal 012 §Phase 0). `is_full_validator_available()` returns
 - [Research 005](../../.research/005_popcorn_kernel_opt_distillation_batch4.md) — Batch 4 MoE dispatch + backward pass
 - [Research 006](../../.research/006_popcorn_kernel_opt_distillation_batch5.md) — Batch 5 NSA block-sparse selection
 - [Research 007](../../.research/007_popcorn_kernel_opt_distillation_batch6.md) — Batch 6 varlen + chunked reductions
+- [Research 008](../../.research/008_burn_cubecl_kernel_opt_distillation_batch7.md) — Batch 7 burn-cubecl autotune dispatch + conv-as-GEMM + layout
 - [Proposal 012](../../.proposals/) — the absorbed GPU kernel optimizer design
 - [Plan 558](../../../katgpt-rs/.plans/) — `pick_domain` substrate (katgpt-core)
 - [Research 453](../../../katgpt-rs/.research/) — LatentMoE variable-rank principle

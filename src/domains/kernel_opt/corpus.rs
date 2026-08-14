@@ -19,8 +19,13 @@
 //! - **Batch 4 (Research 005):** 9 `MoE` dispatch + backward-pass rules.
 //! - **Batch 5 (Research 006):** 4 NSA block-sparse selection rules.
 //! - **Batch 6 (Research 007):** 3 varlen packing + chunked reduction rules.
-//! - **Deferred:** remaining kernels are mostly already-covered patterns or
-//!   domain-specific math; future batches need new source impl files.
+//! - **Batch 7 (Research 008):** 9 Rust-native rules from `burn-cubecl` — autotune
+//!   dispatch (panic-safe candidates, multi-priority tune groups, shape-kind
+//!   dispatch, vector-width sweep) + conv-as-GEMM + memory layout (1×1 conv as
+//!   matmul, contiguity guard, cube-count batch pack, stride-align vectorization,
+//!   anchor shape bucketing).
+//! - **Deferred:** remaining popcorn kernels are mostly already-covered patterns
+//!   or domain-specific math; future batches need new source impl files.
 
 use crate::corpus::Corpus;
 use crate::domains::kernel_opt::{KernelOptDomain, KernelRule};
@@ -502,6 +507,111 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
             ref_shape: "// naive: materialize full N×N bias matrix (O(N²) memory + compute)\nfn attention_with_bias_matrix(q: &[f32], k: &[f32], g: &[f32], n: usize, d: usize, out: &mut [f32]) {\n    let mut bias = vec![0.0f32; n * n];\n    for i in 0..n {\n        for j in 0..n {\n            let mut sum = 0.0;\n            for t in 0..=i { sum += g[t]; }\n            let mut sum_j = 0.0;\n            for t in 0..=j { sum_j += g[t]; }\n            bias[i * n + j] = sum - sum_j;\n        }\n    }\n    attention_with_bias(q, k, &bias, n, d, out);\n}".to_string(),
             opt_pattern: "// optimized: bias = cumsum(g)[i] - cumsum(g)[j] (O(N) to compute cumsum)\nfn attention_with_cumsum_bias(q: &[f32], k: &[f32], g: &[f32], n: usize, d: usize, out: &mut [f32]) {\n    let mut cumsum = vec![0.0f32; n];\n    let mut acc = 0.0f32;\n    for (i, &val) in g.iter().enumerate() {\n        acc += val;\n        cumsum[i] = acc;\n    }\n    // attention adds (cumsum[i] - cumsum[j]) to each score — no bias matrix\n    attention_with_cumsum_diff(q, k, &cumsum, n, d, out);\n}".to_string(),
         },
+        // ════════════════════════════════════════════════════════════════════
+        // Category K: Autotune dispatch (Batch 7, 4 rules — burn-cubecl)
+        // ════════════════════════════════════════════════════════════════════
+        // ── panic-safe-autotune-candidate — direct call → catch_unwind ────
+        // Source: burn-cubecl matmul/tune/base.rs — launch_matmul_safe wraps
+        // launch_matmul in catch_unwind so a divide-by-zero panic in tiling
+        // blueprint autotune becomes Err, letting the autotuner skip the kernel
+        // instead of crashing the whole search.
+        KernelRule {
+            rule_id: "panic-safe-autotune-candidate".to_string(),
+            gpu_concept: "panic-resilient autotune candidate".to_string(),
+            ref_shape: "// naive: direct kernel call panics on unsupported shape (aborts the search)\nfn run_candidate(data: &[f32]) -> Vec<f32> {\n    tile_kernel(data) // panics if data.len() not multiple of TILE\n}".to_string(),
+            opt_pattern: "// optimized: catch_unwind wraps the kernel — panic becomes Err, autotune skips it\nfn run_candidate_safe(data: &[f32]) -> Result<Vec<f32>, String> {\n    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {\n        tile_kernel(data)\n    })).map_err(|_| \"candidate panicked\".to_string())\n}".to_string(),
+        },
+        // ── multi-priority-tune-groups — flat list → priority-ranked groups ─
+        // Source: burn-cubecl matmul/tune/base.rs — TuneGroup with PRIORITY_MAX/HIGH/
+        // MEDIUM/MIN/NEVER(-1) keyed on MatmulKind + GlobalScale + skew-factor. A
+        // candidate with priority -1 is skipped entirely; higher priority is
+        // benchmarked first. This replaces a flat candidate sweep with a shape-
+        // keyed pruned search.
+        KernelRule {
+            rule_id: "multi-priority-tune-groups".to_string(),
+            gpu_concept: "shape-keyed priority-ranked autotune groups".to_string(),
+            ref_shape: "// naive: flat candidate list, all equal priority (tuner benchmarks all every shape)\nfn candidates() -> Vec<(&str, i8)> {\n    vec![(\"kernel_tma\", 0), (\"kernel_gemv\", 0), (\"kernel_naive\", 0)]\n}".to_string(),
+            opt_pattern: "// optimized: priority-ranked groups keyed on shape (SKIP = -1 prunes the candidate)\nfn candidates_keyed(m: usize, n: usize, k: usize) -> Vec<(&str, i8)> {\n    let is_gemv = m == 1 || n == 1;\n    let skew = m.max(n).max(k) / m.min(n).min(k).max(1);\n    vec![\n        (\"kernel_tma\", if !is_gemv && skew < 4 { 3 } else { -1 }),\n        (\"kernel_gemv\", if is_gemv { 3 } else { -1 }),\n        (\"kernel_naive\", 0),\n    ]\n}".to_string(),
+        },
+        // ── shape-kind-dispatch — one kernel → kind-keyed family ──────────
+        // Source: burn-cubecl matmul/tune/base.rs — MatmulKind (General/MatVec/
+        // VecMat/InnerProduct) routes to distinct kernel families. A dedicated
+        // GEMV kernel (plane-parallel or unit-perpendicular) runs for matvec;
+        // a general tiled GEMM runs otherwise.
+        KernelRule {
+            rule_id: "shape-kind-dispatch".to_string(),
+            gpu_concept: "matmul-kind-keyed kernel family dispatch".to_string(),
+            ref_shape: "// naive: single general GEMM kernel for all shapes (slow for matvec: 99% waste)\nfn matmul(a: &[f32], b: &[f32], m: usize, n: usize, k: usize) -> Vec<f32> {\n    general_gemm(a, b, m, n, k)\n}".to_string(),
+            opt_pattern: "// optimized: dispatch on matmul kind — matvec uses a dedicated GEMV kernel\nenum MatmulKind { General, MatVec, VecMat, InnerProduct }\nfn matmul_dispatched(a: &[f32], b: &[f32], m: usize, n: usize, k: usize) -> Vec<f32> {\n    let kind = if m == 1 { MatmulKind::VecMat }\n        else if n == 1 { MatmulKind::MatVec }\n        else if k == 1 { MatmulKind::InnerProduct }\n        else { MatmulKind::General };\n    match kind {\n        MatmulKind::MatVec => gemv_kernel(a, b, m, n, k),\n        MatmulKind::VecMat => vecmat_kernel(a, b, m, n, k),\n        _ => general_gemm(a, b, m, n, k),\n    }\n}".to_string(),
+        },
+        // ── vector-width-pow2-sweep — fixed width → autotune over C ───────
+        // Source: burn-cubecl reduce/tune.rs — sum_one_shot<C> with C in
+        // {1,2,4,8,16,32,64} registered as separate autotune candidates. The
+        // tuner picks the best vector width per (element_count, dtype) rather
+        // than hardcoding one.
+        KernelRule {
+            rule_id: "vector-width-pow2-sweep".to_string(),
+            gpu_concept: "vectorization width as an autotune dimension".to_string(),
+            ref_shape: "// naive: fixed vector width regardless of element count\nfn reduce_sum(data: &[f32]) -> f32 {\n    let mut acc = 0.0;\n    for chunk in data.chunks(4) { for v in chunk { acc += v; } }\n    acc\n}".to_string(),
+            opt_pattern: "// optimized: vector width C swept over pow2 values; tuner picks best per shape\nfn reduce_sum_sweep(data: &[f32]) -> f32 {\n    let best_c = [1, 2, 4, 8, 16, 32, 64]\n        .into_iter()\n        .min_by_key(|&c| bench_reduce(data, c))\n        .unwrap_or(4);\n    let mut acc = 0.0;\n    for chunk in data.chunks(best_c) { for v in chunk { acc += v; } }\n    acc\n}".to_string(),
+        },
+        // ════════════════════════════════════════════════════════════════════
+        // Category L: Conv-as-GEMM + memory layout (Batch 7, 5 rules — burn-cubecl)
+        // ════════════════════════════════════════════════════════════════════
+        // ── conv-1x1-as-matmul — im2col expansion → reshape + matmul ──────
+        // Source: burn-cubecl conv/im2col.rs conv_im2col_1x1 — a 1×1 conv (kernel
+        // all ones) is mathematically a matmul over [(N,H,W), C_in] × [C_in, C_out].
+        // Reshaping to 2D + matmul skips the O(N*C_in) im2col column expansion.
+        KernelRule {
+            rule_id: "conv-1x1-as-matmul".to_string(),
+            gpu_concept: "1x1 convolution as direct matmul (skip im2col)".to_string(),
+            ref_shape: "// naive: im2col expansion materializes a KH*KW*C column matrix, then GEMM\nfn conv_1x1_im2col(input: &[f32], weight: &[f32], n: usize, c_in: usize, c_out: usize) -> Vec<f32> {\n    let mut col = vec![0.0f32; n * c_in];\n    unfold_im2col(input, &mut col, n, c_in); // O(n * c_in) extra memory\n    matmul(&col, weight, n, c_out, c_in)\n}".to_string(),
+            opt_pattern: "// optimized: 1x1 conv IS a matmul — reshape input to [N, C_in], skip the unfold\nfn conv_1x1_matmul(input: &[f32], weight: &[f32], n: usize, c_in: usize, c_out: usize) -> Vec<f32> {\n    let weight_t = transpose(weight, c_in, c_out); // [C_in, C_out]\n    matmul(input, &weight_t, n, c_out, c_in)\n}".to_string(),
+        },
+        // ── contiguity-guard-before-reshape — always-copy → check-then-skip ─
+        // Source: burn-cubecl conv/im2col.rs is_spatial_contiguous + reshape_input —
+        // before doing a free metadata reshape [(N,H,W),C], check that channel is
+        // contiguous (stride[C]==1) and spatial dims nest correctly. Only call
+        // into_contiguous_pitched when the layout doesn't already support it.
+        KernelRule {
+            rule_id: "contiguity-guard-before-reshape".to_string(),
+            gpu_concept: "stride-contiguity guard skips unnecessary relayout copy".to_string(),
+            ref_shape: "// naive: always copy into contiguous before any reshape (copies even when free)\nfn reshape_safe(tensor: &[f32], strides: &[usize]) -> Vec<f32> {\n    into_contiguous(tensor, strides) // always copies all elements\n}".to_string(),
+            opt_pattern: "// optimized: check stride contiguity first — skip the copy if already compatible\nfn reshape_guarded(tensor: &[f32], strides: &[usize]) -> Vec<f32> {\n    if strides[strides.len() - 1] == 1 && spatial_nested(strides) {\n        tensor.to_vec() // already contiguous — free metadata reshape\n    } else {\n        into_contiguous(tensor, strides)\n    }\n}".to_string(),
+        },
+        // ── cube-count-bounded-batch-pack — one-at-a-time → saturate grid ──
+        // Source: burn-cubecl conv/im2col.rs batches_per_run — max_simultaneous =
+        // min(u16::MAX / cube_count_per_batch, batch_size), then find the largest
+        // divisor of batch_size ≤ max to pack batches per launch. This saturates
+        // the GPU grid without overflowing the cube-count limit.
+        KernelRule {
+            rule_id: "cube-count-bounded-batch-pack".to_string(),
+            gpu_concept: "grid-limit-aware batch packing".to_string(),
+            ref_shape: "// naive: launch one batch at a time (underutilizes grid for small batches)\nfn launch_batches(data: &[f32], batch_size: usize, per_batch: usize) {\n    for b in 0..batch_size {\n        launch_grid(&data[b * per_batch..]); // 1 batch per launch\n    }\n}".to_string(),
+            opt_pattern: "// optimized: pack max batches per launch up to the cube-count limit (u16::MAX)\nfn batches_per_run(batch_size: usize, cubes_per_batch: usize) -> usize {\n    let max = Ord::min(u16::MAX as usize / cubes_per_batch, batch_size);\n    (0..=max).rev().find(|&per_run| batch_size % per_run == 0).unwrap_or(1)\n}".to_string(),
+        },
+        // ── stride-align-vectorization-key — fixed vec → trailing-zeros key ─
+        // Source: burn-cubecl conv/forward/tune.rs stride_align — min trailing-zeros
+        // of (stride × byte_size) capped at 2^10 (128-byte swizzle) defines the
+        // achievable vectorization. pow2_factor(channels) = min(trailing_zeros, 4).
+        // Both feed the autotune key to pick vector width.
+        KernelRule {
+            rule_id: "stride-align-vectorization-key".to_string(),
+            gpu_concept: "stride-byte-alignment determines vectorization width".to_string(),
+            ref_shape: "// naive: fixed vectorization regardless of stride alignment\nfn vec_width(strides: &[usize]) -> usize {\n    4 // hardcoded — wastes bandwidth if strides aren't 4-aligned\n}".to_string(),
+            opt_pattern: "// optimized: vectorization = min trailing-zeros of (stride * bytes), capped at 2^10\nfn vec_width_aligned(strides: &[usize], bytes_per_elem: usize) -> usize {\n    let factor = strides.iter()\n        .map(|s| (s * bytes_per_elem).trailing_zeros())\n        .min()\n        .unwrap_or(10)\n        .min(10);\n    1usize << factor\n}".to_string(),
+        },
+        // ── anchor-shape-bucketing — exact-shape key → bucketed key ───────
+        // Source: burn-cubecl conv/forward/tune.rs anchor(shape, None, None, None) —
+        // spatial dims are bucketed (anchored) so similar shapes share an autotune
+        // cache entry. Without anchoring, every distinct (H, W) re-tunes from
+        // scratch; with it, shapes within the same bucket reuse the tuned config.
+        KernelRule {
+            rule_id: "anchor-shape-bucketing".to_string(),
+            gpu_concept: "shape bucketing for autotune cache reuse".to_string(),
+            ref_shape: "// naive: unique autotune key per exact shape (re-tunes per pixel difference)\nfn tune_key(h: usize, w: usize, c: usize) -> (usize, usize, usize) {\n    (h, w, c) // 224x224 and 225x225 are separate keys\n}".to_string(),
+            opt_pattern: "// optimized: bucket spatial dims so similar shapes share a cache entry\nfn tune_key_anchored(h: usize, w: usize, c: usize) -> (usize, usize, usize) {\n    let bucket = 16; // anchor to nearest 16\n    ((h + bucket - 1) / bucket * bucket, (w + bucket - 1) / bucket * bucket, c)\n}".to_string(),
+        },
     ])
 }
 
@@ -529,8 +639,9 @@ mod tests {
         // Batch 4 (9): MoE dispatch + backward pass.
         // Batch 5 (4): NSA block-sparse selection.
         // Batch 6 (3): varlen packing + chunked reductions.
-        // Total: 50.
-        assert_eq!(corpus.entries.len(), 50, "batches 1-6 should have 50 rules");
+        // Batch 7 (9): burn-cubecl autotune dispatch + conv-as-GEMM + layout.
+        // Total: 59.
+        assert_eq!(corpus.entries.len(), 59, "batches 1-7 should have 59 rules");
     }
 
     #[test]
@@ -818,5 +929,45 @@ mod tests {
         assert!(concepts.contains(&"pack variable-length sequences via cu_seqlens, no padding"));
         assert!(concepts.contains(&"cumsum that resets at chunk boundaries"));
         assert!(concepts.contains(&"additive bias via cumulative sum of a gate"));
+    }
+
+    #[test]
+    fn batch7_rules_present() {
+        // Verify the 9 batch-7 burn-cubecl autotune dispatch + conv/layout rules.
+        let corpus = build_kernel_seed_corpus();
+        let ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        for expected in [
+            "panic-safe-autotune-candidate",
+            "multi-priority-tune-groups",
+            "shape-kind-dispatch",
+            "vector-width-pow2-sweep",
+            "conv-1x1-as-matmul",
+            "contiguity-guard-before-reshape",
+            "cube-count-bounded-batch-pack",
+            "stride-align-vectorization-key",
+            "anchor-shape-bucketing",
+        ] {
+            assert!(
+                ids.contains(&expected),
+                "batch-7 rule '{expected}' missing from corpus"
+            );
+        }
+    }
+
+    #[test]
+    fn batch7_burn_cubecl_concepts_covered() {
+        // Verify the burn-cubecl autotune + conv/layout concepts are represented.
+        let corpus = build_kernel_seed_corpus();
+        let concepts: Vec<&str> =
+            corpus.entries.iter().map(|e| e.gpu_concept.as_str()).collect();
+        assert!(concepts.contains(&"panic-resilient autotune candidate"));
+        assert!(concepts.contains(&"shape-keyed priority-ranked autotune groups"));
+        assert!(concepts.contains(&"matmul-kind-keyed kernel family dispatch"));
+        assert!(concepts.contains(&"vectorization width as an autotune dimension"));
+        assert!(concepts.contains(&"1x1 convolution as direct matmul (skip im2col)"));
+        assert!(concepts.contains(&"stride-contiguity guard skips unnecessary relayout copy"));
+        assert!(concepts.contains(&"grid-limit-aware batch packing"));
+        assert!(concepts.contains(&"stride-byte-alignment determines vectorization width"));
+        assert!(concepts.contains(&"shape bucketing for autotune cache reuse"));
     }
 }
