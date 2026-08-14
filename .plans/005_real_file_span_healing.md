@@ -159,6 +159,10 @@ queue + the proposers stay the only instantiation gate. Full record: Bench
 - [x] **T3.1 (G1 retrieval precision)** On a fixture of known anti-patterns, the top-1
       retrieved rule is correct ≥80% of the time (per domain). Record in `.benchmarks/`.
       Bench 018: 12/12 = 100% (6 clippy + 6 perf renamed-identifier variants).
+      **Expanded 12 → 24 (2026-08-14, Bench 018 Addendum 2): 23/24 = 96%** — all
+      10 clippy rules + 14 perf rules covered; single miss = `retain-inplace` →
+      `collect-avoidance` (near-miss sibling pair, same text-similarity root
+      cause as the threshold refutation). Gate still PASS.
 - [x] **T3.2 (G2 latency)** Chunk + embed + route + retrieve < 1ms per chunk (Clifford
       wedge KNN is O(log N); Bench 575 measured 123µs p50 @ N=1000).
       Measured 349µs/chunk end-to-end (multi-scale + 2-domain fan-out), release.

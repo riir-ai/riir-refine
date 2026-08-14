@@ -130,6 +130,36 @@ top-1 comes from the whole-text query; per-line queries add ~nothing).
   changes, or when prototyping a discriminative successor (e.g.
   distinctive-line coverage, or proposer-gated suggestions).
 
+## Addendum 2 (2026-08-14) — G1 fixture expanded 12 → 24
+
+The known-limitation "12-item G1 fixture" was the weakest leg of the gate.
+Expanded with renamed-identifier variants for previously-uncovered rules
+(clippy: needless_lifetimes, redundant_field_names, needless_range_loop,
+unnecessary_mut_passed — now ALL 10 clippy rules covered; perf: static-str,
+dedupe-hashset-vs-vec, ok-or-else, swap-remove, chunks-exact, retain-inplace,
+mem-take, avoid-clone — 14 of 46 perf rules covered).
+
+**Result: 23/24 = 96% (gate ≥80% PASS; was 12/12 = 100% on the smaller set).**
+
+The single miss is the predicted confusable pair: the `retain-inplace`
+variant's top-1 is `collect-avoidance` (16.25) — both buggy forms are
+`iter().…().collect()` chains; the distinguishing feature (collect-avoidance
+collects into a NAMED BINDING then re-iterates it vs retain-inplace's direct
+filter-collect return) is invisible to the fused latent+BM25 text similarity.
+This is the same root cause as the threshold refutation (Addendum 1), now
+measured on the retrieval side: near-miss sibling rules within the corpus are
+the matcher's real confusion class — cross-rule, not clean-vs-buggy.
+
+Calibration distributions with n=24 positives (unchanged conclusion):
+positives [3.193 ..= 34.709] (n=24), negatives [6.081 ..= 69.372] (n=14),
+separation: OVERLAP — refutation stands.
+
+Confidence interval context: at 24 items the one-sided 95% lower bound on
+precision (Wilson) is ~0.80 — the gate floor — versus ~0.76 at 12 items
+(12/12). The expansion therefore buys exact coverage breadth (all clippy
+rules) more than statistical tightness; the honest statement is "≥80% with
+95% confidence on a 24-item fixture covering all 10 clippy + 14 perf rules".
+
 ## Reproduce
 
 ```sh

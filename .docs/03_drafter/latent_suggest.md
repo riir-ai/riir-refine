@@ -56,7 +56,7 @@ no weights; opt-in 768-D `BonsaiEmbedder` for higher accuracy) +
 
 | Gate | Target | Measured |
 |---|---|---|
-| G1 retrieval precision (top-1, per domain) | ≥ 80% | **100% (12/12)** — 6 clippy + 6 perf renamed-identifier variants |
+| G1 retrieval precision (top-1, per domain) | ≥ 80% | **96% (23/24)** — 10 clippy + 14 perf renamed-identifier variants (expanded from 12 → 24, 2026-08-14; all 10 clippy rules now covered; single miss = `retain-inplace` → `collect-avoidance`, the near-miss sibling pair) |
 | G2 latency per chunk (end-to-end) | < 1 ms | **349 µs** (multi-scale + 2-domain fan-out, release) — 2.9× headroom |
 | G3 no-regression | lib suite green | **104/104** |
 | G4 alloc-free steady state | scratch capacity stable | **stable across 50 repeat scans** (`SuggestScratch`) |
@@ -79,8 +79,12 @@ honest as its fixture.
   inherent; treat `--suggest` output as a ranked review queue. The
   calibration instrument lives in `tests/latent_suggest_goat.rs`
   (`NEGATIVE_FIXTURE` + the two calibration tests).
-- G1's per-domain fixture is small (12); the ≥80% bar at N=12 means ≥10
-  hits. Expanding the fixture tightens the confidence interval.
+- G1's fixture was expanded 12 → 24 (2026-08-14): 96% (23/24) — the one
+  miss is the `retain-inplace`/`collect-avoidance` near-miss pair (same
+  root cause as the threshold refutation: text similarity cannot see the
+  named-binding-re-consume distinction). Wilson 95% lower bound ≈ 0.80 =
+  the gate floor. The expansion's real gain is coverage breadth (all 10
+  clippy rules), not statistical tightness.
 
 ## CLI
 

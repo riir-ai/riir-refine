@@ -19,7 +19,9 @@ use std::time::Instant;
 use riir_clippy::draft::{DomainId, LatentMatcher};
 
 /// G1 fixture — clippy-domain variants (identifiers renamed vs the corpus).
-/// `(expected_rule, variant_snippet)`.
+/// `(expected_rule, variant_snippet)`. Expanded 12 → 24 items 2026-08-14
+/// (renamed variants for previously-uncovered rules) to tighten the ≥80%
+/// confidence interval — now covers ALL 10 clippy rules + 14 of 46 perf rules.
 #[cfg(feature = "clippy_lints")]
 const CLIPPY_FIXTURE: &[(&str, &str)] = &[
     (
@@ -45,6 +47,22 @@ const CLIPPY_FIXTURE: &[(&str, &str)] = &[
     (
         "useless_conversion",
         "fn area(width: u32) -> u32 {\n    let w: u32 = width.into();\n    w * 2\n}",
+    ),
+    (
+        "needless_lifetimes",
+        "fn head<'a>(txt: &'a String) -> &'a str { txt.as_str() }",
+    ),
+    (
+        "redundant_field_names",
+        "struct Region { w: u32, h: u32 }\nfn build(w: u32, h: u32) -> Region {\n    Region { w: w, h: h }\n}",
+    ),
+    (
+        "needless_range_loop",
+        "fn total_costs(v: &Vec<i64>) -> i64 {\n    let mut acc = 0;\n    for i in 0..v.len() { acc += v[i]; }\n    acc\n}",
+    ),
+    (
+        "unnecessary_mut_passed",
+        "fn measure(s: &str) -> usize { s.len() }\nfn caller(mut s: String) -> usize { measure(&mut s) }",
     ),
 ];
 
@@ -74,6 +92,38 @@ const PERF_FIXTURE: &[(&str, &str)] = &[
     (
         "bool-to-bitpack",
         "fn pack(flags: &[bool]) -> Vec<u8> {\n    flags.iter().map(|b| if *b { 1u8 } else { 0u8 }).collect()\n}",
+    ),
+    (
+        "static-str",
+        "fn status() -> String { \"idle\".to_string() }",
+    ),
+    (
+        "dedupe-hashset-vs-vec",
+        "fn distinct(tags: &[u64]) -> Vec<u64> {\n    let mut hit = Vec::new();\n    for &t in tags {\n        if !hit.contains(&t) { hit.push(t); }\n    }\n    hit\n}",
+    ),
+    (
+        "ok-or-else",
+        "fn fetch_port(o: Option<u16>) -> Result<u16, String> {\n    o.ok_or(format!(\"bad port: {}\", std::process::id()))\n}",
+    ),
+    (
+        "swap-remove",
+        "fn drop_front_n(rows: &mut Vec<u32>, n: usize) {\n    for _ in 0..n.min(rows.len()) {\n        rows.remove(0);\n    }\n}",
+    ),
+    (
+        "chunks-exact",
+        "fn sum_lanes(buf: &[u32]) -> u64 {\n    let mut total = 0u64;\n    for chunk in buf.chunks(4) {\n        for &v in chunk { total += v as u64; }\n    }\n    total\n}",
+    ),
+    (
+        "retain-inplace",
+        "fn drop_odds(vals: &[i32]) -> Vec<i32> {\n    vals.iter().copied().filter(|&n| n % 2 == 0).collect()\n}",
+    ),
+    (
+        "mem-take",
+        "fn drain_queue(q: &mut Vec<String>) -> Vec<String> {\n    let out = q.clone();\n    q.clear();\n    out\n}",
+    ),
+    (
+        "avoid-clone",
+        "fn checksum(bytes: Vec<u8>) -> u64 {\n    bytes.iter().map(|&b| b as u64).sum()\n}",
     ),
 ];
 
