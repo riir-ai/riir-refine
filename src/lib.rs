@@ -32,8 +32,10 @@
 //! - **`rust_perf`** (default-on, Phase 2) — `rust-optimize` perf healing (promoted 2026-08-13 after Bench 013 GOAT)
 //! - **`kernel_heal`** (opt-in, Phase 3) — GPU kernel optimization healing (absorbs `Proposal 012`; 4090 `LoRA` deferred)
 //!
-//! Cross-domain auto-routing is NOT in scope — each domain is selected by
-//! enabling its feature flag.
+//! Cross-domain auto-routing ships behind the `latent_retrieval` feature
+//! (Plan 005): real-file span-level `--suggest` via the riir-rag latent
+//! substrate. Each domain is additionally selected by its feature flag for
+//! the non-latent paths.
 //!
 //! ## Modelless-first mandate
 //!
@@ -73,6 +75,13 @@ pub mod evolve;
 pub mod memory;
 #[cfg(feature = "self_evolve")]
 pub mod self_evolve;
+
+// Plan 005: real-file span-level latent retrieval (`--suggest` MVP).
+// Composes riir-rag (AstChunker + ModellessEmbedder + NeuronDbRetriever) +
+// the katgpt-core routing primitive. Opt-in — pulls the riir-rag +
+// riir-neuron-db path deps (heavy; default build stays light).
+#[cfg(feature = "latent_retrieval")]
+pub mod draft;
 
 // ── Back-compat re-exports (preserve pre-refactor API names) ───────────────
 // These type aliases + re-exports keep existing call sites compiling unchanged
@@ -164,3 +173,7 @@ pub use evolve::{EvolveConfig, LatentSkillEvolution};
 pub use memory::{FixTrajectory, LatentFixMemory, LatentQuery, ScoredTrajectory};
 #[cfg(feature = "self_evolve")]
 pub use self_evolve::{HealPipeline, HealResult, HealSource, TuneReport};
+
+// Plan 005: latent retrieval surface (`--suggest` MVP).
+#[cfg(feature = "latent_retrieval")]
+pub use draft::{DomainId, DomainRouter, LatentMatcher, RuleIndex, ScoredRule, SpanSuggestion};

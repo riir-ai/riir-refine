@@ -1,0 +1,282 @@
+//! The composed `--suggest` pipeline (Plan 005 T1.3 + T1.5).
+//!
+//! ```text
+//! real .rs file → AstChunker (fn/impl/struct spans)
+//!              → ModellessEmbedder → DomainRouter (which domain owns it)
+//!              → that domain's RuleIndex.retrieve → ranked rules
+//! ```
+//!
+//! ZERO proposer code — the corpus `buggy_code`/`ref_shape` +
+//! `fixed_code`/`opt_pattern` texts ARE the suggestion (`--fix` needs the
+//! Phase 4/5 proposers). Composes riir-rag as-is; nothing here reimplements
+//! chunking, embedding, or retrieval.
+
+use riir_rag::ast_chunker::AstChunker;
+use riir_rag::Chunker;
+
+use crate::domain::{HealDomain, HealEntry};
+
+use super::corpus_index::{RuleIndex, ScoredRule};
+use super::domain_router::{DomainId, DomainRouter};
+
+/// One suggestion bundle for one code span.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SpanSuggestion {
+    /// Source file the span came from.
+    pub path: String,
+    /// 1-based inclusive line range of the span.
+    pub start_line: usize,
+    pub end_line: usize,
+    /// The router's domain verdict for the span (ANNOTATION — retrieval is
+    /// fan-out, not gated; see `LatentMatcher::suggest_span`).
+    pub routed_domain: DomainId,
+    /// Per-enabled-domain ranked rules (best first), one entry per domain
+    /// that has an index.
+    pub by_domain: Vec<(DomainId, Vec<ScoredRule>)>,
+}
+
+impl SpanSuggestion {
+    /// All suggested rules across domains, best-score-first.
+    #[must_use]
+    pub fn all_rules(&self) -> Vec<&ScoredRule> {
+        let mut all: Vec<&ScoredRule> = self
+            .by_domain
+            .iter()
+            .flat_map(|(_, rules)| rules.iter())
+            .collect();
+        all.sort_unstable_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        all
+    }
+}
+
+/// The cross-domain latent matcher — owns the router + one index per enabled
+/// domain.
+///
+/// Construction indexes every enabled domain's corpus (clippy ~10, perf ~46,
+/// kernel ~155 rules — one modelless embedding each; milliseconds).
+pub struct LatentMatcher {
+    router: DomainRouter,
+    clippy: Option<RuleIndex>,
+    perf: Option<RuleIndex>,
+    kernel: Option<RuleIndex>,
+}
+
+impl LatentMatcher {
+    /// Build from the corpora of every feature-enabled domain.
+    ///
+    /// Each enabled domain contributes (a) its patterns to the router's
+    /// centroid and (b) a [`RuleIndex`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an error `String` if no domain is feature-enabled, or if any
+    /// enabled domain's [`RuleIndex::build`] fails.
+    #[allow(clippy::too_many_lines)]
+    pub fn from_enabled_domains() -> Result<Self, String> {
+        let mut router_domains = Vec::new();
+
+        #[cfg(feature = "clippy_lints")]
+        let clippy = {
+            let patterns: Vec<(String, String)> =
+                crate::domains::clippy_lints::ClippyLintDomain::build_corpus()
+                    .into_iter()
+                    .map(|e| (e.rule_id().to_string(), e.buggy_code().to_string()))
+                    .collect();
+            router_domains.push((
+                DomainId::Clippy,
+                patterns.iter().map(|(_, t)| t.clone()).collect(),
+            ));
+            Some(RuleIndex::build(patterns)?)
+        };
+        #[cfg(not(feature = "clippy_lints"))]
+        let clippy = None;
+
+        #[cfg(feature = "rust_perf")]
+        let perf = {
+            let patterns: Vec<(String, String)> =
+                crate::domains::rust_perf::RustPerfDomain::build_corpus()
+                    .into_iter()
+                    .map(|e| (e.rule_id().to_string(), e.buggy_code().to_string()))
+                    .collect();
+            router_domains.push((
+                DomainId::Perf,
+                patterns.iter().map(|(_, t)| t.clone()).collect(),
+            ));
+            Some(RuleIndex::build(patterns)?)
+        };
+        #[cfg(not(feature = "rust_perf"))]
+        let perf = None;
+
+        #[cfg(feature = "kernel_heal")]
+        let kernel = {
+            let patterns: Vec<(String, String)> =
+                crate::domains::kernel_opt::KernelOptDomain::build_corpus()
+                    .into_iter()
+                    .map(|e| (e.rule_id().to_string(), e.buggy_code().to_string()))
+                    .collect();
+            router_domains.push((
+                DomainId::Kernel,
+                patterns.iter().map(|(_, t)| t.clone()).collect(),
+            ));
+            Some(RuleIndex::build(patterns)?)
+        };
+        #[cfg(not(feature = "kernel_heal"))]
+        let kernel = None;
+
+        if router_domains.is_empty() {
+            return Err(
+                "LatentMatcher: no domains enabled (need at least one of clippy_lints/rust_perf/kernel_heal)"
+                    .to_string(),
+            );
+        }
+
+        Ok(Self {
+            router: DomainRouter::new(router_domains),
+            clippy,
+            perf,
+            kernel,
+        })
+    }
+
+    /// The domains this matcher can route to.
+    #[must_use]
+    pub fn domains(&self) -> &[DomainId] {
+        self.router.domains()
+    }
+
+    fn index_for(&self, domain: DomainId) -> Option<&RuleIndex> {
+        match domain {
+            DomainId::Clippy => self.clippy.as_ref(),
+            DomainId::Perf => self.perf.as_ref(),
+            DomainId::Kernel => self.kernel.as_ref(),
+        }
+    }
+
+    /// Suggest rules for a single code span (already-chunked text).
+    ///
+    /// **Fan-out retrieval, not gated** (Phase 1 empirical finding): the
+    /// 8-D structural centroids are too coarse to gate — in fixture testing
+    /// the router mis-routed a `return expr;` fn to perf and a linear-scan
+    /// fn to clippy, starving the correct domain's index in both cases.
+    /// Retrieval therefore queries EVERY enabled domain and the router
+    /// verdict is returned as an annotation (a Phase 3 candidate prior —
+    /// re-gate once centroids are tuned or the 768-D embedder is in).
+    ///
+    /// Multi-scale per domain: whole span + per-line queries.
+    pub fn suggest_span(&self, code: &str, top_k: usize) -> (DomainId, Vec<(DomainId, Vec<ScoredRule>)>) {
+        let routed = self.router.route(code).unwrap_or(DomainId::Clippy);
+        let by_domain = self.suggest_all_domains(code, top_k);
+        (routed, by_domain)
+    }
+
+    /// Retrieve `top_k` rules from EVERY enabled domain's index (fan-out).
+    fn suggest_all_domains(&self, code: &str, top_k: usize) -> Vec<(DomainId, Vec<ScoredRule>)> {
+        let mut out = Vec::with_capacity(3);
+        for domain in [DomainId::Clippy, DomainId::Perf, DomainId::Kernel] {
+            if let Some(index) = self.index_for(domain) {
+                out.push((domain, index.suggest_deep(code, top_k)));
+            }
+        }
+        out
+    }
+
+    /// Suggest rules for every chunk of a real `.rs` file.
+    ///
+    /// Uses [`AstChunker`] (fn/impl/struct spans with 1-based line ranges).
+    /// Order: file order. Retrieval fans out across all enabled domains
+    /// (see [`Self::suggest_span`]); the router verdict annotates each span.
+    pub fn suggest_file(&self, src: &str, path: &str, top_k: usize) -> Vec<SpanSuggestion> {
+        let chunker = AstChunker;
+        let chunks = chunker.chunk(src, path);
+        let mut out = Vec::with_capacity(chunks.len());
+        for chunk in chunks {
+            let (routed_domain, by_domain) = self.suggest_span(&chunk.content, top_k);
+            out.push(SpanSuggestion {
+                path: chunk.source.path.clone(),
+                start_line: chunk.source.start_line,
+                end_line: chunk.source.end_line,
+                routed_domain,
+                by_domain,
+            });
+        }
+        out
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SAMPLE: &str = "\
+pub fn area(w: f64, h: f64) -> f64 {
+    return w * h;
+}
+
+pub fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {
+    for u in users {
+        if u.id == id {
+            return Some(u);
+        }
+    }
+    None
+}
+";
+
+    #[test]
+    fn matcher_builds_from_enabled_domains() {
+        // Default features: clippy_lints + rust_perf → 2 domains.
+        let m = LatentMatcher::from_enabled_domains().expect("build");
+        assert!(
+            m.domains().len() >= 2,
+            "expected ≥2 enabled domains, got {:?}",
+            m.domains()
+        );
+    }
+
+    #[test]
+    fn span_suggestion_routes_and_retrieves() {
+        let m = LatentMatcher::from_enabled_domains().expect("build");
+        let (routed, by_domain) = m.suggest_span("fn f() -> u8 { return 7; }", 3);
+        assert!(!by_domain.is_empty());
+        // Fan-out: the clippy domain's list must exist + top-1 needless_return
+        // (empirically the routed annotation may differ — see the mis-routing
+        // finding in suggest_span's doc).
+        let clippy = by_domain
+            .iter()
+            .find(|(d, _)| *d == DomainId::Clippy)
+            .expect("clippy index enabled by default");
+        assert!(!clippy.1.is_empty());
+        assert_eq!(clippy.1[0].rule_id, "needless_return");
+        let _ = routed;
+    }
+
+    #[test]
+    fn file_suggestion_covers_all_chunks_with_lines() {
+        let m = LatentMatcher::from_enabled_domains().expect("build");
+        let sugg = m.suggest_file(SAMPLE, "sample.rs", 3);
+        assert!(sugg.len() >= 2, "expected ≥2 chunks (2 fns), got {}", sugg.len());
+        for s in &sugg {
+            assert_eq!(s.path, "sample.rs");
+            assert!(s.start_line >= 1 && s.end_line >= s.start_line);
+            assert!(!s.by_domain.is_empty());
+            assert!(!s.all_rules().is_empty(), "chunk {} suggested no rules", s.start_line);
+        }
+        // Fan-out: the needless_return-shaped chunk must surface that rule
+        // via the CLIPPY domain list (in top-3 — recall; precision@1 over a
+        // real fixture is the Phase 3 G1 gate's job).
+        let ret = sugg
+            .iter()
+            .find(|s| {
+                s.by_domain.iter().any(|(d, rules)| {
+                    *d == DomainId::Clippy
+                        && rules.iter().any(|r| r.rule_id == "needless_return")
+                })
+            })
+            .expect("some chunk must surface needless_return via the clippy list");
+        assert_eq!(ret.start_line, 1);
+    }
+}

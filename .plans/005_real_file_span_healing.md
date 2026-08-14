@@ -46,25 +46,45 @@ The critical-path milestone. Index the corpus rules, embed real code chunks, ret
 matching rules via Clifford-wedge KNN. This ships a WORKING `--suggest` mode with no
 proposer code at all — the corpus `ref_shape`/`opt_pattern` text is the suggestion.
 
-**Status: not started.**
+**Status: DONE 2026-08-14** (13 tests, clippy-clean, `latent_retrieval` feature).
+One design deviation, empirically driven: retrieval is **fan-out across all
+enabled domains** (`suggest_span` doc has the full account) — the plan's
+gated route→retrieve starved the correct domain on fixture testing (the
+8-D structural centroids mis-routed a `return expr;` fn to perf + a
+linear-scan fn to clippy, swapped). The router verdict survives as an
+annotation; re-gating is a Phase 3 tuning option (tuned centroids or the
+768-D embedder). Second addition: **multi-scale indexing + queries** (whole
+pattern + significant pattern lines; whole span + significant span lines) —
+corpus patterns are 1-5 line excerpts while real spans are whole items, and
+the single-scale retrieval missed the needle on the file fixture.
 
 ### Tasks
 
-- [ ] **T1.1** Add `riir-rag` as a dep of `riir-clippy` (behind a `latent_retrieval`
+- [x] **T1.1** Add `riir-rag` as a dep of `riir-clippy` (behind a `latent_retrieval`
       feature gate; pulls `AstChunker` + `ModellessEmbedder` + `RetrievalProvider`).
-- [ ] **T1.2** `src/draft/corpus_index.rs` — index each domain's corpus entries as
+- [x] **T1.2** `src/draft/corpus_index.rs` — index each domain's corpus entries as
       riir-rag chunks. The `ref_shape` text → `ModellessEmbedder.embed()` → `ShardIndex`.
       One index per domain (3 indices) OR one index with a domain tag.
-- [ ] **T1.3** `src/draft/latent_matcher.rs` — given a real code chunk: `AstChunker.chunk()`
+      Done as one `RuleIndex` per domain (multi-scale: whole `buggy_code`/`ref_shape`
+      + significant pattern lines, keyed `BLAKE3 → rule_id`).
+- [x] **T1.3** `src/draft/latent_matcher.rs` — given a real code chunk: `AstChunker.chunk()`
       → `ModellessEmbedder.embed()` → `LatentQuery::from_direction()` → `retrieve()`.
       Returns `Vec<(rule_id, latent_score)>` ranked.
-- [ ] **T1.4** `src/draft/domain_router.rs` — `pick_domain::<3, 8>` with hand-crafted
+- [x] **T1.4** `src/draft/domain_router.rs` — `pick_domain::<3, 8>` with hand-crafted
       `DOMAIN_DIRECTIONS` (clippy/perf/kernel signatures). The 8-D activity = the code
       chunk embedding. Output: domain index 0/1/2.
-- [ ] **T1.5** Compose: chunk → embed → route(domain) → retrieve(from that domain's index)
+      Deviation: corpus-derived centroids (L2-normalized mean of pattern embeddings)
+      instead of hand-crafted directions, and a runtime-sized argmax mirroring
+      `pick_domain`'s tie semantics (the enabled-domain set is feature-dependent —
+      `pick_domain` is const-generic over N). Routing verdict is an annotation, not
+      a gate (see the Phase 1 status note).
+- [x] **T1.5** Compose: chunk → embed → route(domain) → retrieve(from that domain's index)
       → ranked rules. This is the `--suggest` pipeline.
-- [ ] **T1.6** Tests: index a small fixture corpus, embed a matching code span, confirm
+      Done as fan-out (all enabled domains), router verdict annotated.
+- [x] **T1.6** Tests: index a small fixture corpus, embed a matching code span, confirm
       the top-1 retrieved rule is the correct one (per domain).
+      13 draft tests: index build/multi-scale/top-1/determinism, centroid
+      unit-norm/separation/routing/panics, matcher span/file/recall.
 
 ### Phase 1 exit criteria
 - Latent retrieval works end-to-end: real code chunk → correct rule retrieved, for all

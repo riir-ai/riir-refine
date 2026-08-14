@@ -41,6 +41,14 @@ quote = "1"
 # build must stay dependency-light.
 riir-engine = { path = "../riir-ai/crates/riir-engine", optional = true, default-features = false, features = ["deltanet_ternary_inference"] }
 riir-gpu = { path = "../riir-ai/crates/riir-gpu", optional = true, default-features = false, features = ["cubecl_runtime", "ternary_gemv", "ternary_gemm_simdgroup", "ternary_gemm_batched", "metal_tensor_gemm", "speculative_decode"] }
+
+# Plan 005 Phase 1: latent retrieval substrate for the `--suggest` MVP.
+# AstChunker (fn/impl/struct spans) + ModellessEmbedder (BLAKE3+DFT+sigmoid,
+# modelless) + NeuronDbRetriever (ShardIndex Clifford-wedge KNN + BM25).
+# Composed as-is — zero retrieval code reimplemented locally.
+# Optional + feature-gated (`latent_retrieval`): pulls the
+# riir-neuron-db path dep transitively; the default build stays light.
+riir-rag = { path = "../riir-ai/crates/riir-rag", optional = true, default-features = false, features = ["ast_chunker", "neuron_db"] }
 # NOTE: metal_tensor_gemm (Issue 663 T5, +1.21× prefill on M3 Metal) needs the
 # vendored wgpu-hal fork (adds `raw_handle()` on metal::Buffer). The fork lives
 # at `riir-ai/vendor/wgpu-hal-30.0.0/`. Per cargo's patch-inheritance rules,
@@ -91,6 +99,13 @@ rust_perf_bench = ["rust_perf"]
 # Enables `variable_rank_domain_expert` on katgpt-core for the latent-MoE
 # expert router (`pick_domain`, Plan 558).
 kernel_heal = ["katgpt-core/variable_rank_domain_expert"]
+
+# Plan 005 Phase 1: real-file span-level latent retrieval (`--suggest` MVP).
+# Indexes every enabled domain's corpus via riir-rag, routes spans via
+# domain centroids, retrieves ranked rules. ZERO proposer code — suggestions
+# are the corpus pattern texts. `--fix` needs the Phase 4/5 proposers.
+# Opt-in: heavy dep tree (riir-rag + riir-neuron-db + syn-pulled chunker).
+latent_retrieval = ["dep:riir-rag"]
 
 # Kernel rule resolution verification via CubeCL compile (Phase 3).
 # **STUB** — currently delegates to the shared RustAnalyzerPruner (syntax
