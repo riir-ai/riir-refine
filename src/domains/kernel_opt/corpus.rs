@@ -248,14 +248,29 @@
 //!   to 64-bit when position × stride can exceed 2^31; int32 wraps silently),
 //!   dual-accumulator-single-reduction-sweep (B — two block reductions over
 //!   the same data fused into one sweep: shared loads + shared barrier tree;
-//!   `RMSNorm` backward's sum(x²) + `dot(grad_y·γ·x)`), dual-grad-same-pass
+//!   (`RMSNorm` backward's sum(x²) + `dot(grad_y·γ·x)`), dual-grad-same-pass
 //!   (C — both partials of a product-rule activation emitted from ONE kernel
 //!   sharing input reads + one sigmoid evaluation), broadcast-uniform-skip-
 //!   reduce (E — thread-uniform values derived from already-reduced
 //!   broadcasts must be broadcast, not re-reduced; re-reducing multiplies by
-//!   blockDim.x — the T7.2 validation bug in softmax backward). Corpus:
-//!   **164 rules across 15 categories (A–O)**. `riir-gpu` remains open (25 of
-//!   ~200 files mined; `cudarc_kernels/` + `attention_cubecl/` fully covered).
+//!   blockDim.x — the T7.2 validation bug in softmax backward).
+//! - **Batch 25 (Research 026):** 5 rules from the Gemma cluster
+//!   (`gemma2_cubecl/` + `gemma4_cubecl/`): device-side-argmax-minimal-download
+//!   (D — greedy decode needs ONE u32, not the logits: run argmax on device,
+//!   download 4 B instead of ~1 MB/token, ~250,000× smaller boundary
+//!   crossing), monotone-transform-elision-under-argmax (B — softcap
+//!   `cap·tanh(x/cap)` is strictly increasing → argmax unchanged → skip the
+//!   256K-tanh pass for greedy decode), fan-out-shared-input-single-sync
+//!   (C — N INDEPENDENT sibling kernels sharing one input: upload once,
+//!   clone the handle, queue all, first read executes the batched submission),
+//!   hot-swap-weights-preserve-autotune-caches (D — `LoRA` training refreshes
+//!   weight handles per step while keeping autotune + JIT caches; avoids
+//!   ~seconds of re-benchmark + recompile per step), tree-reduction-depth-
+//!   over-sequential-accumulate (B — plane tree depth ≈77 vs sequential
+//!   depth 2304: ~30× better accuracy, prevents 26-layer gradient divergence,
+//!   Issue 424). Corpus: **169 rules across 15 categories (A–O)**. `riir-gpu`
+//!   remains open (30 of ~200 files mined; the Gemma cluster + `cudarc_kernels/`
+//!   + `attention_cubecl/` assessed).
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
@@ -2492,6 +2507,117 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
             ref_shape: "// naive: block-reduce a value that is ALREADY identical in every thread\n__shared__ float s_reduce[256];\n// every thread's z_local is IDENTICAL (derived from the same reduced s_reduce[0])\ns_reduce[tid] = z_local;\n__syncthreads();\nfor (int stride = 128; stride > 0; stride >>= 1) {      // full barrier tree\n    if (tid < stride) s_reduce[tid] += s_reduce[tid + stride];  // sums the SAME value\n    __syncthreads();\n}\nfloat z = s_reduce[0];  // = z_local * blockDim.x — WRONG (256× too large), not just slow".to_string(),
             opt_pattern: "// optimized: thread-uniform value → broadcast from thread 0, no reduction\n__shared__ float s_bcast[1];\n// uniform-by-construction: z_local derives only from already-reduced\n// broadcasts (every thread read the same s_reduce[0] + the same probs[t])\nif (tid == 0) { s_bcast[0] = z_local; }   // one write\n__syncthreads();                          // ONE barrier\nfloat z = s_bcast[0];                     // every thread reads the value — correct".to_string(),
         },
+        // ════════════════════════════════════════════════════════════════════
+        // Batch 25 (Research 026): riir-gpu production kernels — the Gemma
+        // cluster (gemma2_cubecl/ + gemma4_cubecl/): device-side argmax with
+        // minimal download, monotone-transform elision under argmax, fan-out
+        // sibling dispatches sharing one input + one sync, weight hot-swap
+        // preserving autotune/JIT caches, and tree-reduction depth over
+        // sequential accumulation.
+        // ════════════════════════════════════════════════════════════════════
+        // ── device-side-argmax-minimal-download — download vocab×4B → 4B (D) ──
+        // Source: riir-gpu gemma2_cubecl/gpu_forward.rs L319-346
+        // (gpu_argmax_from_handle, Plan 171 T3) + L348-423 (generate_gpu).
+        // Greedy decode needs ONE u32 (the token id), not the logits. A GPU
+        // argmax reduction kernel downloads 4 bytes instead of vocab_size×4
+        // (~1 MB at 256K vocab): ~250,000× smaller per-token boundary crossing.
+        // Over 50-prompt + 500-token decode: ~550 MB → ~50 MB total (prefill
+        // still reads full logits once; decode never does).
+        //
+        // Distinct from offload-cpu-bottleneck-to-gpu-kernel (A — moving slow
+        // CPU data-prep onto GPU): the CPU argmax isn't slow; the DOWNLOAD
+        // feeding it is the cost, and the fix shrinks the crossing itself.
+        // Distinct from chain-dispatches-single-sync-point (sync COUNT) —
+        // this is download SIZE.
+        KernelRule {
+            rule_id: "device-side-argmax-minimal-download".to_string(),
+            gpu_concept: "when the host needs only a tiny derived result of a large GPU array (argmax index, top-k, threshold count), compute it ON DEVICE with a reduction kernel and download only the tiny result — 4 bytes (1 u32) instead of the full array (vocab_size × 4 ≈ 1 MB at 256K vocab). Greedy decode is the canonical consumer: ~250,000× smaller per-token boundary crossing; a 50-prompt + 500-decode session downloads ~50 MB instead of ~550 MB. Distinct from offload-cpu-bottleneck-to-gpu-kernel (CPU work moved to GPU) — the CPU side isn't slow, the DOWNLOAD feeding it is the cost; and from chain-dispatches-single-sync-point (sync count) — this is download size".to_string(),
+            ref_shape: "// naive: download the full logits vector every decode token, argmax on CPU\nfn decode_token_naive(logits_handle: Handle, vocab: usize) -> usize {\n    let logits: Vec<f32> = read_handle(&logits_handle); // downloads vocab × 4 bytes (~1 MB)\n    logits.iter().enumerate()                          // CPU argmax over 256K floats\n        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())\n        .map(|(i, _)| i)\n        .unwrap_or(0)\n}\n// 500 decode tokens × ~1 MB = ~500 MB crossed the bus just to pick 1 index/token".to_string(),
+            opt_pattern: "// optimized: GPU argmax kernel — download only the winning index (4 bytes)\nfn gpu_argmax_from_handle(logits_handle: Handle, vocab: usize) -> usize {\n    let output_handle = client.empty(core::mem::size_of::<u32>()); // 4-byte output\n    unsafe {\n        ArgmaxCubeCL::launch::<Runtime>(                  // device-side reduction:\n            &client, logits_handle, output_handle.clone(), vocab // blocks reduce slices,\n        );                                               // finals in shared memory\n    }\n    let bytes = client.read_one(output_handle).unwrap(); // downloads 4 bytes\n    u32::from_bytes(&bytes)[0] as usize\n}\n// 500 decode tokens × 4 B ≈ 2 KB total — prefill still reads full logits once\n// (sampling needs values); the decode loop never downloads them again".to_string(),
+        },
+        // ── monotone-transform-elision-under-argmax — softcap skipped (B) ──
+        // Source: riir-gpu gemma2_cubecl/gpu_forward.rs L208-217 — the doc on
+        // forward_gpu_logits_handle: "Logit softcapping is NOT applied. Since
+        // softcap (tanh(x/cap) * cap) is monotonically increasing, it doesn't
+        // change the argmax result, so it can be safely skipped for greedy
+        // decoding." The CPU-facing forward() still applies it — values are
+        // consumed there. Composes with device-side-argmax: the skipped pass
+        // would have been 256K tanh evals per decode token.
+        //
+        // Distinct from softcap-tanh-attention-score (Batch 23 — APPLYING
+        // softcap in-kernel for bounded attention logits): this ELIDES the
+        // transform when the consumer only needs order. Distinct from
+        // optional-bias-branch (absence check) — the transform exists; its
+        // output's ORDER is invariant under it.
+        KernelRule {
+            rule_id: "monotone-transform-elision-under-argmax".to_string(),
+            gpu_concept: "a strictly monotone post-transform (softcap cap·tanh(x/cap), clamps, positive rescalings) does not change the argmax — skip it entirely when the only consumer is greedy decoding / top-k / any order-only query. The GPU decode path returns the raw logits WITHOUT final logit softcapping because tanh is monotonically increasing: argmax(softcap(x)) == argmax(x); the value-consuming CPU path still applies it. Elides a full-array transcendental pass (256K tanh evals per decode token). Distinct from softcap-tanh-attention-score (applying softcap in-kernel) — this elides it under order-only consumers; distinct from optional-bias-branch (absence) — the transform exists but order is invariant under it".to_string(),
+            ref_shape: "// naive: apply the monotone softcap to the full logits vector before argmax\nfn decode_with_unnecessary_softcap(logits: &mut [f32], cap: f32) -> usize {\n    for x in logits.iter_mut() {              // cap·tanh(x/cap) over 256K floats\n        *x = cap * (*x / cap).tanh();         // 256K transcendental evals — ORDER-ONLY\n    }                                          // consumer: argmax below\n    logits.iter().enumerate()\n        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())\n        .map(|(i, _)| i).unwrap_or(0)\n}".to_string(),
+            opt_pattern: "// optimized: softcap is strictly increasing → argmax unchanged → skip it\nfn decode_skip_softcap(logits: &[f32]) -> usize {\n    // cap·tanh(x/cap) is monotonically increasing in x, so\n    // argmax(softcap(x)) == argmax(x) — elide the entire pass.\n    // (The CPU-facing forward() still applies softcap when VALUES are consumed;\n    //  sampling/thresholding code that needs bounded logits also keeps it.)\n    logits.iter().enumerate()\n        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())\n        .map(|(i, _)| i).unwrap_or(0)          // zero tanh evaluations\n}".to_string(),
+        },
+        // ── fan-out-shared-input-single-sync — 3 uploads+3 syncs → 1+1 (C) ──
+        // Source: riir-gpu gemma2_cubecl/dispatch.rs L69-122 (dispatch_qkv).
+        // "All three GEMVs share the same input (hidden state). CubeCL batches
+        // them into a single GPU submission." The input handle is created ONCE
+        // and cloned into each launch (Arc bump); the first output read triggers
+        // execution of the whole batched submission, so the remaining reads
+        // return already-completed buffers.
+        //
+        // Distinct from chain-dispatches-single-sync-point (Batch 19 — DEPENDENT
+        // dispatches, sync amortization only): this is INDEPENDENT sibling
+        // kernels where the shared input upload is also hoisted. Note the
+        // chain rule's "fan-out is the known-bad case per Bench 437" caveat
+        // refers to DAG fan-out (one dispatch's output feeding multiple LATER
+        // dispatches — intermediates accumulate); this is input-sharing
+        // fan-out with independent outputs read once at the end — no
+        // intermediates outlive the batch. Distinct from
+        // fuse-gate-up-gemv-activation (fusing siblings into ONE kernel) — a
+        // tighter but more invasive option; this keeps existing kernels
+        // unchanged (needed when the projections have different consumers or
+        // pre-existing kernel variants).
+        KernelRule {
+            rule_id: "fan-out-shared-input-single-sync".to_string(),
+            gpu_concept: "when N INDEPENDENT sibling kernels consume the same input (Q/K/V GEMVs on the same hidden state, per-head projections), create the input handle ONCE, clone it into each launch (cheap ref-count), queue all N dispatches, then read the outputs back-to-back — the first read executes the whole batched submission, so 1 upload + 1 effective sync instead of N uploads + N syncs. NOT the Bench 437 known-bad fan-out (one dispatch's output feeding multiple later dispatches — intermediates accumulate): here outputs are independent and read once at the end, no intermediates outlive the batch. Distinct from chain-dispatches-single-sync-point (dependent dispatches, sync amortization only — no shared upload) and from fuse-gate-up-gemv-activation (fuses siblings into ONE kernel — tighter but more invasive; this keeps existing kernels unchanged)".to_string(),
+            ref_shape: "// naive: 3 self-contained dispatch helpers — each uploads the input + syncs\nfn qkv_naive(w_q: &Handle, w_k: &Handle, w_v: &Handle, hidden: &[f32]) -> (Vec<f32>, Vec<f32>, Vec<f32>) {\n    let q = dispatch_gemv_sync(w_q, hidden); // create_from_slice(hidden) + read → upload 1, sync 1\n    let k = dispatch_gemv_sync(w_k, hidden); // SAME hidden uploaded again   → upload 2, sync 2\n    let v = dispatch_gemv_sync(w_v, hidden); // and again                    → upload 3, sync 3\n    (q, k, v) // 3 uploads of the same bytes, 3 CPU↔GPU round-trips\n}".to_string(),
+            opt_pattern: "// optimized: hoist the shared upload; queue all 3; one effective sync\nfn qkv_fan_out(w_q: &Handle, w_k: &Handle, w_v: &Handle, hidden: &[f32]) -> (Vec<f32>, Vec<f32>, Vec<f32>) {\n    let input = client.create_from_slice(f32::as_bytes(hidden)); // uploaded ONCE\n    let q_out = client.empty(q_dim * 4);\n    let k_out = client.empty(kv_dim * 4);\n    let v_out = client.empty(kv_dim * 4);\n    unsafe {\n        gemv.launch(&client, w_q.clone(), input.clone(), q_out.clone(), q_dim, n);\n        gemv.launch(&client, w_k.clone(), input.clone(), k_out.clone(), kv_dim, n);\n        gemv.launch(&client, w_v.clone(), input,          v_out.clone(), kv_dim, n);\n    }\n    // Single sync: the FIRST read executes the whole batched submission;\n    // the remaining reads return already-completed buffers.\n    (read_handle(&q_out), read_handle(&k_out), read_handle(&v_out))\n}".to_string(),
+        },
+        // ── hot-swap-weights-preserve-autotune-caches — new() per step → swap (D) ──
+        // Source: riir-gpu gemma4_cubecl/mod.rs L215-235 (replace_weights).
+        // "Used by the LoRA training loop: each step merges the LoRA delta into
+        // the working weights, then calls this to refresh the GPU handles.
+        // This avoids the ~seconds of autotune re-benchmarking + JIT
+        // recompilation that happens on every new() call." The CubeCL client,
+        // autotune cache, JIT kernel cache, RoPE tables, and layer params are
+        // all preserved; only weight handles + CPU gamma copies + KV state
+        // are refreshed.
+        //
+        // Distinct from freeze/thaw weight snapshots (versioning) — this is
+        // about amortizing RUNTIME caches (autotune benchmarks, JIT-compiled
+        // shaders) across weight changes.
+        KernelRule {
+            rule_id: "hot-swap-weights-preserve-autotune-caches".to_string(),
+            gpu_concept: "when a training loop refreshes weights every step (LoRA merge → new handles), replace ONLY the weight handles + CPU-side copies — keep the compute client, autotune cache (per-(m,n) benchmarked variants), JIT-compiled kernel cache, precomputed tables, and layer params. A full reconstruct re-runs autotune benchmarking + JIT compilation (~seconds) per step; the hot-swap path pays only the buffer uploads. Distinct from freeze/thaw weight snapshots — this amortizes runtime caches across weight changes, not weight versions".to_string(),
+            ref_shape: "// naive: rebuild the whole GPU model every training step\nfn lora_step_rebuild(client: ComputeClient, merged: &Weights, config: &Config) -> GpuModel {\n    // LoRA merge changed the weights — construct from scratch:\n    let model = GpuModel::new(client, merged, config);\n    //   → re-uploads all weights (fine)\n    //   → re-benchmarks autotune variants per (m, n)  (~seconds!)\n    //   → re-JIT-compiles every kernel shader         (~seconds!)\n    model\n}\n// 500 training steps × (autotune + JIT) = minutes of pure re-initialization".to_string(),
+            opt_pattern: "// optimized: replace_weights keeps client + autotune + JIT caches alive\nfn lora_step_hot_swap(model: &mut GpuModel, merged: &Weights) {\n    model.weights = WeightBuffers::from_weights(&model.client, merged, &model.config);\n    model.norm_gammas = NormGammas::from_weights(merged);   // CPU copies refresh\n    model.wte_cpu = merged.wte.clone();\n    for layer in 0..model.config.n_layer {                  // reset KV cache state\n        model.kv_cache.keys[layer].clear();\n        model.kv_cache.values[layer].clear();\n        model.kv_cache.n_positions[layer] = 0;\n    }\n    // autotune cache, JIT cache, client, rope tables, layer params: preserved.\n    // Per-step cost = weight upload only — the ~seconds of autotune + JIT\n    // recompilation happened once at construction and is never paid again.\n}".to_string(),
+        },
+        // ── tree-reduction-depth-over-sequential-accumulate — depth 2304 → 77 (B) ──
+        // Source: riir-gpu gemma2_cubecl/dispatch.rs L881-893 (Issue 424 fix,
+        // dispatch_gemv_batched_backward_gpu replacing dispatch_gemm_gpu in the
+        // batched backward): "The GEMM tiled kernel accumulates sequentially\n        // (depth n=2304), while the Plane kernel tree-reduces across 32 lanes\n        // (depth n/32 + log2(32) ≈ 77). The 30× better numerical accuracy\n        // prevents gradient divergence at 26-layer scale."
+        //
+        // Accumulated rounding error grows with summation DEPTH: sequential
+        // adds round on top of n-1 prior roundings (error ~O(n·ε) worst case);
+        // a lane-strided + butterfly tree keeps depth ~n/32 + log2(32). A
+        // perf-neutral kernel CHOICE that changes only the summation order.
+        //
+        // Distinct from upcast-before-reduction (raising input precision) —
+        // this changes the reduction's association shape at equal dtype.
+        KernelRule {
+            rule_id: "tree-reduction-depth-over-sequential-accumulate".to_string(),
+            gpu_concept: "when the same dot product can be computed by either a sequential-accumulate kernel (tiled GEMM: error chain depth = n) or a tree-reduction kernel (plane/subgroup lanes: depth n/lanes + log2(lanes)), prefer the tree for gradient paths — accumulated rounding error grows with summation depth, and at 26-layer backward scale, sequential depth 2304 vs tree depth ≈77 gives ~30× better numerical accuracy, enough to prevent outright gradient divergence. A perf-neutral kernel swap changing only the summation order. Distinct from upcast-before-reduction (raising input precision) — this changes the reduction's association shape at equal dtype".to_string(),
+            ref_shape: "// naive: sequential accumulation — error grows with full reduction depth\nfn gemm_tiled_sequential(a: &[f32], b_row: &[f32], out: &mut [f32], m: usize, n: usize, p: usize) {\n    for r in 0..m { for c in 0..p {\n        let mut acc = 0.0;\n        for k in 0..n {                        // depth n = 2304: each add rounds\n            acc += a[r*n + k] * b_row[c*n + k]; // on top of 2303 prior roundings\n        }\n        out[r*p + c] = acc;\n    } }\n    // 26 layers of backward through depth-2304 sums → gradient divergence\n    // (measured: ~30× worse error vs the plane kernel — Issue 424)\n}".to_string(),
+            opt_pattern: "// optimized: plane tree reduction — depth n/32 + log2(32) ≈ 77\nfn gemv_plane_tree(a: &[f32], b_row: &[f32], out: &mut [f32], m: usize, n: usize, p: usize) {\n    const LANES: usize = 32;                  // subgroup size (Metal: always 32)\n    for c in 0..p {\n        // phase 1: each lane sums a strided slice — depth n/32 = 72\n        let mut lane_partial = 0.0;\n        let mut k = lane_id();\n        while k < n { lane_partial += a[k] * b_row[c*n + k]; k += LANES; }\n        // phase 2: log-depth butterfly across lanes — depth log2(32) = 5\n        lane_partial += shuffle_down_xor(lane_partial, 16);\n        lane_partial += shuffle_down_xor(lane_partial, 8);\n        lane_partial += shuffle_down_xor(lane_partial, 4);\n        lane_partial += shuffle_down_xor(lane_partial, 2);\n        lane_partial += shuffle_down_xor(lane_partial, 1);\n        if lane_id() == 0 { out[c] = lane_partial; } // total depth ≈ 77, not 2304\n    }\n}".to_string(),
+        },
     ])
 }
 
@@ -2504,7 +2630,7 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 164-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 169-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -2541,7 +2667,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "widen-index-multiply-to-64bit",
         ],
     ),
-    // B: Compute patterns (30 rules)
+    // B: Compute patterns (32 rules)
     (
         KernelCategory::Compute,
         "B: compute",
@@ -2576,9 +2702,11 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "warp-shuffle-intrinsics-for-sub-warp-reduction",
             "softcap-tanh-attention-score",
             "dual-accumulator-single-reduction-sweep",
+            "monotone-transform-elision-under-argmax",
+            "tree-reduction-depth-over-sequential-accumulate",
         ],
     ),
-    // C: Fusion patterns (16 rules)
+    // C: Fusion patterns (17 rules)
     (
         KernelCategory::Fusion,
         "C: fusion",
@@ -2599,9 +2727,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fuse-residual-via-in-place-output-array",
             "fused-activation-quantize-for-gemv-consumer",
             "dual-grad-same-pass",
+            "fan-out-shared-input-single-sync",
         ],
     ),
-    // D: Dispatch patterns (13 rules)
+    // D: Dispatch patterns (15 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -2619,6 +2748,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "cuda-graph-scalar-via-device-pointer",
             "fold-query-tokens-for-occupancy",
             "hardcoded-fast-path-jit-specialization",
+            "device-side-argmax-minimal-download",
+            "hot-swap-weights-preserve-autotune-caches",
         ],
     ),
     // E: Parallelism patterns (9 rules)
@@ -2788,7 +2919,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
 /// Returns 15 buckets (one per category), each containing the `KernelRule`s whose
 /// `rule_id` appears in that category's slice of [`KERNEL_CATEGORIES`]. This is
 /// the category-scoped view of the corpus — a future heal pipeline can consult
-/// the routed expert's rules first without scanning all 164.
+/// the routed expert's rules first without scanning all 169.
 ///
 /// # Allocation
 ///
@@ -2859,8 +2990,9 @@ mod tests {
         // Batch 22 (5): riir-gpu production kernels — dynamic-shared-memory-runtime-sized, ternary-bit-plane-u64-as-2x-u32, warp-shuffle-intrinsics-for-sub-warp-reduction, fused-activation-quantize-for-gemv-consumer, cuda-graph-scalar-via-device-pointer (cudarc_kernels/ — embedding.rs + attention.rs + mod.rs + deltanet.rs; Issue 615 full GPU-resident forward port).
         // Batch 23 (5): riir-gpu production kernels — combined-kv-buffer-keys-then-values, gqa-kv-head-sharing-bandwidth-reduction, softcap-tanh-attention-score, fold-query-tokens-for-occupancy, hardcoded-fast-path-jit-specialization (attention_cubecl/mod.rs — CubeCL flash-attention decode cluster).
         // Batch 24 (4): riir-gpu production kernels — widen-index-multiply-to-64bit, dual-accumulator-single-reduction-sweep, dual-grad-same-pass, broadcast-uniform-skip-reduce (cudarc_kernels/backward.rs — Issue 641 per-layer backward cluster: RMSNorm/SwiGLU/z-gating/output-gate/conv1d+SiLU/L2-norm/beta-decay/softmax-attention backward).
-        // Total: 164.
-        assert_eq!(corpus.entries.len(), 164, "batches 1-24 should have 164 rules");
+        // Batch 25 (5): riir-gpu production kernels — device-side-argmax-minimal-download, monotone-transform-elision-under-argmax, fan-out-shared-input-single-sync, hot-swap-weights-preserve-autotune-caches, tree-reduction-depth-over-sequential-accumulate (gemma2_cubecl/ + gemma4_cubecl/ — the Gemma cluster: GPU decode loop + dispatch helpers + KV cache + weight hot-swap).
+        // Total: 169.
+        assert_eq!(corpus.entries.len(), 169, "batches 1-25 should have 169 rules");
     }
 
     #[test]
@@ -3751,6 +3883,44 @@ mod tests {
     }
 
     // ════════════════════════════════════════════════════════════════════
+    // Batch 25 (Research 026) — riir-gpu production kernels: Gemma cluster
+    // ════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn batch25_rules_present() {
+        // Verify the 5 batch-25 rules across B/C/D.
+        let corpus = build_kernel_seed_corpus();
+        let ids: Vec<&str> =
+            corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        // D (2 new): device-side-argmax-minimal-download + hot-swap-weights-preserve-autotune-caches
+        assert!(ids.contains(&"device-side-argmax-minimal-download"), "device side argmax minimal download");
+        assert!(ids.contains(&"hot-swap-weights-preserve-autotune-caches"), "hot swap weights preserve autotune caches");
+        // B (2 new): monotone-transform-elision-under-argmax + tree-reduction-depth-over-sequential-accumulate
+        assert!(ids.contains(&"monotone-transform-elision-under-argmax"), "monotone transform elision under argmax");
+        assert!(ids.contains(&"tree-reduction-depth-over-sequential-accumulate"), "tree reduction depth over sequential accumulate");
+        // C (1 new): fan-out-shared-input-single-sync
+        assert!(ids.contains(&"fan-out-shared-input-single-sync"), "fan out shared input single sync");
+    }
+
+    #[test]
+    fn batch25_gemma_cluster_concepts_covered() {
+        // Verify the batch-25 Gemma cluster concepts.
+        let corpus = build_kernel_seed_corpus();
+        let concepts: Vec<&str> =
+            corpus.entries.iter().map(|e| e.gpu_concept.as_str()).collect();
+        // D: device-side-argmax-minimal-download (riir-gpu gemma2_cubecl/gpu_forward.rs L319-346 + L348-423)
+        assert!(concepts.contains(&"when the host needs only a tiny derived result of a large GPU array (argmax index, top-k, threshold count), compute it ON DEVICE with a reduction kernel and download only the tiny result — 4 bytes (1 u32) instead of the full array (vocab_size × 4 ≈ 1 MB at 256K vocab). Greedy decode is the canonical consumer: ~250,000× smaller per-token boundary crossing; a 50-prompt + 500-decode session downloads ~50 MB instead of ~550 MB. Distinct from offload-cpu-bottleneck-to-gpu-kernel (CPU work moved to GPU) — the CPU side isn't slow, the DOWNLOAD feeding it is the cost; and from chain-dispatches-single-sync-point (sync count) — this is download size"));
+        // B: monotone-transform-elision-under-argmax (riir-gpu gemma2_cubecl/gpu_forward.rs L208-217)
+        assert!(concepts.contains(&"a strictly monotone post-transform (softcap cap·tanh(x/cap), clamps, positive rescalings) does not change the argmax — skip it entirely when the only consumer is greedy decoding / top-k / any order-only query. The GPU decode path returns the raw logits WITHOUT final logit softcapping because tanh is monotonically increasing: argmax(softcap(x)) == argmax(x); the value-consuming CPU path still applies it. Elides a full-array transcendental pass (256K tanh evals per decode token). Distinct from softcap-tanh-attention-score (applying softcap in-kernel) — this elides it under order-only consumers; distinct from optional-bias-branch (absence) — the transform exists but order is invariant under it"));
+        // C: fan-out-shared-input-single-sync (riir-gpu gemma2_cubecl/dispatch.rs L69-122)
+        assert!(concepts.contains(&"when N INDEPENDENT sibling kernels consume the same input (Q/K/V GEMVs on the same hidden state, per-head projections), create the input handle ONCE, clone it into each launch (cheap ref-count), queue all N dispatches, then read the outputs back-to-back — the first read executes the whole batched submission, so 1 upload + 1 effective sync instead of N uploads + N syncs. NOT the Bench 437 known-bad fan-out (one dispatch's output feeding multiple later dispatches — intermediates accumulate): here outputs are independent and read once at the end, no intermediates outlive the batch. Distinct from chain-dispatches-single-sync-point (dependent dispatches, sync amortization only — no shared upload) and from fuse-gate-up-gemv-activation (fuses siblings into ONE kernel — tighter but more invasive; this keeps existing kernels unchanged)"));
+        // D: hot-swap-weights-preserve-autotune-caches (riir-gpu gemma4_cubecl/mod.rs L215-235)
+        assert!(concepts.contains(&"when a training loop refreshes weights every step (LoRA merge → new handles), replace ONLY the weight handles + CPU-side copies — keep the compute client, autotune cache (per-(m,n) benchmarked variants), JIT-compiled kernel cache, precomputed tables, and layer params. A full reconstruct re-runs autotune benchmarking + JIT compilation (~seconds) per step; the hot-swap path pays only the buffer uploads. Distinct from freeze/thaw weight snapshots — this amortizes runtime caches across weight changes, not weight versions"));
+        // B: tree-reduction-depth-over-sequential-accumulate (riir-gpu gemma2_cubecl/dispatch.rs L881-893 — Issue 424 fix)
+        assert!(concepts.contains(&"when the same dot product can be computed by either a sequential-accumulate kernel (tiled GEMM: error chain depth = n) or a tree-reduction kernel (plane/subgroup lanes: depth n/lanes + log2(lanes)), prefer the tree for gradient paths — accumulated rounding error grows with summation depth, and at 26-layer backward scale, sequential depth 2304 vs tree depth ≈77 gives ~30× better numerical accuracy, enough to prevent outright gradient divergence. A perf-neutral kernel swap changing only the summation order. Distinct from upcast-before-reduction (raising input precision) — this changes the reduction's association shape at equal dtype"));
+    }
+
+    // ════════════════════════════════════════════════════════════════════
     // Plan 003 — Router ↔ corpus wiring tests
     // ════════════════════════════════════════════════════════════════════
 
@@ -3761,7 +3931,7 @@ mod tests {
 
     #[test]
     fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-        // Every rule_id in the 164-rule corpus must appear in exactly one category.
+        // Every rule_id in the 169-rule corpus must appear in exactly one category.
         let corpus = build_kernel_seed_corpus();
         let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
         let mut categorized: Vec<&str> = Vec::new();
@@ -3792,12 +3962,12 @@ mod tests {
 
     #[test]
     fn kernel_categories_counts_match_plan_003_table() {
-        // Pin per-category rule counts to the Plan 003 table (updated for Batch 24).
+        // Pin per-category rule counts to the Plan 003 table (updated for Batch 25).
         let expected = [
             (KernelCategory::MemoryAccess, 22),
-            (KernelCategory::Compute, 30),
-            (KernelCategory::Fusion, 16),
-            (KernelCategory::Dispatch, 13),
+            (KernelCategory::Compute, 32),
+            (KernelCategory::Fusion, 17),
+            (KernelCategory::Dispatch, 15),
             (KernelCategory::Parallelism, 9),
             (KernelCategory::FlashAttnTiling, 10),
             (KernelCategory::LinearAttnRecurrence, 17),
@@ -3817,9 +3987,9 @@ mod tests {
                 "Plan 003: category {cat:?} has {} rules, expected {count}",
                 entry.2.len());
         }
-        // Sum must equal 164.
+        // Sum must equal 169.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 164, "Plan 003: category totals must sum to 164");
+        assert_eq!(total, 169, "Plan 003: category totals must sum to 169");
     }
 
     #[test]
@@ -3829,7 +3999,7 @@ mod tests {
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 164, "Plan 003: grouped corpus has {total} rules, expected 164");
+        assert_eq!(total, 169, "Plan 003: grouped corpus has {total} rules, expected 169");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");
