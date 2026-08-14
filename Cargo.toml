@@ -150,6 +150,15 @@ required-features = ["rust_perf_bench"]
 name = "clippy_verify_demo"
 required-features = ["clippy_verify"]
 
+# Phase 3: kernel_opt domain demo. Demonstrates the routed heal pipeline:
+# router → narrowed candidates → drafter → validator + thermal tier.
+# Closes the Plan 003/004 gap (router was corpus-wired but never called in
+# runnable code). Run with:
+#   cargo run --example kernel_heal_demo --features kernel_heal
+[[example]]
+name = "kernel_heal_demo"
+required-features = ["kernel_heal"]
+
 [[example]]
 name = "ruliology_search_demo"
 required-features = ["ruliology_search"]

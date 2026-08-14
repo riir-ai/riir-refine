@@ -116,6 +116,13 @@ constructing activity vectors from shape + operation-class flags.
 The `kernel_heal` feature enables `katgpt-core/variable_rank_domain_expert`
 so `pick_domain` is reachable.
 
+**Composition example** (`examples/kernel_heal_demo.rs`): the router is
+composed with the drafter + corpus end-to-end. The demo routes 8 representative
+kernel signatures, narrows each to its category's rules (~4–6 vs 68 flat — a
+15× candidate reduction), then drafts + validates a fix. This is the reference
+composition for future kernel_opt consumers. Run with:
+`cargo run --example kernel_heal_demo --features kernel_heal`.
+
 ## Thermal — `KernelThermalRouter` + `ThermalTier`
 
 The FlashAR/QGF thermal-tier pattern: Plasma→Hot→Warm→Cold→Freeze escalation.
