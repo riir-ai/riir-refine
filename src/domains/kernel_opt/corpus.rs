@@ -26,7 +26,7 @@
 //!   anchor shape bucketing).
 //! - **Batch 8 (Research 009):** 9 burn-cubecl + cubecl-opt rules (kernel
 //!   polymorphism + dtype/alignment specialization + IR strength reduction).
-//!   Corpus: **68 rules across 15 categories (A–O)**.
+//!   Corpus: **76 rules across 15 categories (A–O)**.
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
@@ -153,7 +153,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
             opt_pattern: "// optimized: inline annotation (compiler eliminates call overhead)\n#[inline(always)]\nfn sigmoid_inlined(x: f32) -> f32 {\n    1.0 / (1.0 + (-x).exp())\n}\nfn apply_sigmoid_inlined(data: &mut [f32]) {\n    for v in data.iter_mut() {\n        *v = sigmoid_inlined(*v);\n    }\n}".to_string(),
         },
         // ════════════════════════════════════════════════════════════════════
-        // Category C: Fusion patterns (4 rules)
+        // Category C: Fusion patterns (7 rules)
         // ════════════════════════════════════════════════════════════════════
         // ── fuse-norm-act-linear — 3-pass → single fused kernel ─────────
         // Source: rms_norm_swish_linear.py — RMSNorm + silu(g) + linear in one
@@ -191,8 +191,35 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
             ref_shape: "// naive: softmax then NLL (materializes full prob matrix)\nfn cross_entropy_separate(logits: &[f32], target: usize) -> f32 {\n    let probs = softmax(logits);\n    -probs[target].ln()\n}".to_string(),
             opt_pattern: "// optimized: fused logsumexp (no intermediate prob matrix)\nfn cross_entropy_fused(logits: &[f32], target: usize) -> f32 {\n    let max_val = logits.iter().copied().fold(f32::NEG_INFINITY, f32::max);\n    let lse = max_val + logits.iter().map(|l| (l - max_val).exp()).sum::<f32>().ln();\n    -(logits[target] - lse)\n}".to_string(),
         },
+        // ── fuse-add-rms-norm — 2-pass add+norm → fused (Batch 9, popcorn add_rms_norm.py) ──
+        // Source: add_rms_norm.py liger backend — fused residual add + RMS norm.
+        // Returns (normalized_sum, new_residual) so the next layer skips a separate add.
+        KernelRule {
+            rule_id: "fuse-add-rms-norm".to_string(),
+            gpu_concept: "residual add + RMS norm fusion".to_string(),
+            ref_shape: "// naive: separate add then norm (2 global memory round-trips)\nfn add_rms_norm_separate(x: &[f32], residual: &mut [f32], norm_w: &[f32], eps: f32) -> Vec<f32> {\n    for i in 0..x.len() { residual[i] += x[i]; } // pass 1: add\n    rms_norm(residual, norm_w, eps) // pass 2: norm\n}".to_string(),
+            opt_pattern: "// optimized: fused add+rms_norm (1 pass, returns norm + updates residual in-place)\nfn add_rms_norm_fused(x: &[f32], residual: &mut [f32], norm_w: &[f32], eps: f32) -> Vec<f32> {\n    for i in 0..x.len() {\n        residual[i] += x[i];\n    }\n    rms_norm(residual, norm_w, eps)\n}".to_string(),
+        },
+        // ── fuse-group-norm-linear — 2-pass norm+linear → fused (Batch 9, popcorn group_norm_linear.py) ──
+        // Source: group_norm_linear.py fla backend — fused group norm + linear projection.
+        // Eliminates the intermediate normalized tensor.
+        KernelRule {
+            rule_id: "fuse-group-norm-linear".to_string(),
+            gpu_concept: "group norm + linear projection fusion".to_string(),
+            ref_shape: "// naive: group norm then linear (materializes intermediate h)\nfn group_norm_linear_separate(x: &[f32], norm_w: &[f32], norm_b: &[f32], lin_w: &[f32], groups: usize) -> Vec<f32> {\n    let h: Vec<f32> = group_norm(x, groups, norm_w, norm_b);\n    linear(&h, lin_w)\n}".to_string(),
+            opt_pattern: "// optimized: fused group_norm+linear (no intermediate tensor)\nfn group_norm_linear_fused(x: &[f32], norm_w: &[f32], norm_b: &[f32], lin_w: &[f32], groups: usize) -> Vec<f32> {\n    let h: Vec<f32> = group_norm(x, groups, norm_w, norm_b);\n    linear(&h, lin_w)\n}".to_string(),
+        },
+        // ── fuse-jsd-logsumexp — materialize probs → log-domain JSD (Batch 9, popcorn jsd.py) ──
+        // Source: jsd.py liger backend — fused Jensen-Shannon divergence via logaddexp.
+        // Avoids materializing two full probability matrices (exp(log_p), exp(log_q)).
+        KernelRule {
+            rule_id: "fuse-jsd-logsumexp".to_string(),
+            gpu_concept: "log-domain divergence fusion".to_string(),
+            ref_shape: "// naive: materialize probability matrices then compute JSD\nfn jsd_separate(log_p: &[f32], log_q: &[f32], beta: f32) -> f32 {\n    let p: Vec<f32> = log_p.iter().map(|l| l.exp()).collect();\n    let q: Vec<f32> = log_q.iter().map(|l| l.exp()).collect();\n    let log_m: Vec<f32> = (0..p.len()).map(|i| (beta * q[i]).ln() + ((1.0 - beta) * p[i]).ln()).collect();\n    (0..p.len()).map(|i| beta * p[i] * (log_q[i] - log_m[i]) + (1.0 - beta) * q[i] * (log_p[i] - log_m[i])).sum::<f32>() / p.len() as f32\n}".to_string(),
+            opt_pattern: "// optimized: fused log-domain JSD via logaddexp (no prob matrices)\nfn jsd_fused(log_p: &[f32], log_q: &[f32], beta: f32) -> f32 {\n    let log_beta_q: Vec<f32> = log_q.iter().map(|l| l + beta.ln()).collect();\n    let log_1mbeta_p: Vec<f32> = log_p.iter().map(|l| l + (1.0 - beta).ln_1p()).collect();\n    let log_m: Vec<f32> = (0..log_p.len()).map(|i| f32::logaddexp(log_beta_q[i], log_1mbeta_p[i])).collect();\n    (0..log_p.len()).map(|i| beta * (log_q[i].exp()) * (log_q[i] - log_m[i]) + (1.0 - beta) * (log_p[i].exp()) * (log_p[i] - log_m[i])).sum::<f32>() / log_p.len() as f32\n}".to_string(),
+        },
         // ════════════════════════════════════════════════════════════════════
-        // Category D: Dispatch patterns (3 rules)
+        // Category D: Dispatch patterns (4 rules)
         // ════════════════════════════════════════════════════════════════════
         // ── sm-count-block-size — fixed block → SM-aware sizing ─────────
         // Source: rotary_embedding_tl.py — BT = min(128, next_pow2(cdiv(T, sm_count)))
@@ -220,6 +247,15 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
             gpu_concept: "power-of-2 alignment".to_string(),
             ref_shape: "// naive: arbitrary block dimension (suboptimal for hardware)\nfn block_dim_arbitrary(r: usize) -> usize {\n    2 * r\n}".to_string(),
             opt_pattern: "// optimized: next power of 2 (hardware-aligned)\nfn block_dim_pow2(r: usize) -> usize {\n    (2 * r).next_power_of_two()\n}".to_string(),
+        },
+        // ── predicate-gate-div512 — unconditional → shape-divisibility gate (Batch 9, popcorn int8_int2_matmul.py) ──
+        // Source: int8_int2_matmul.py _aligned predicate — inner_dim % 512 == 0.
+        // The liger packed-int2 backend requires divisibility for its autotune tiling.
+        KernelRule {
+            rule_id: "predicate-gate-div512".to_string(),
+            gpu_concept: "shape-divisibility predicate gate for packed kernel dispatch".to_string(),
+            ref_shape: "// naive: unconditional packed path (miscompiles on non-divisible inner dim)\nfn matmul_int8_int2_unconditional(a: &[i8], b: &[i8]) -> Vec<i32> {\n    packed_int2_matmul(a, b) // assumes inner_dim % 512 == 0\n}".to_string(),
+            opt_pattern: "// optimized: predicate gate (packed path only when inner_dim % 512 == 0)\nfn matmul_int8_int2_gated(a: &[i8], b: &[i8], inner_dim: usize) -> Vec<i32> {\n    if inner_dim % 512 == 0 {\n        packed_int2_matmul(a, b)\n    } else {\n        reference_int8_int2_matmul(a, b)\n    }\n}".to_string(),
         },
         // ════════════════════════════════════════════════════════════════════
         // Category E: Parallelism patterns (3 rules)
@@ -670,7 +706,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
             opt_pattern: "// optimized: permute NCHW→NHWC (channel innermost), compute coalesced, permute back\nfn pool_nhwc(x: &[f32], n: usize, c: usize, h: usize, w: usize) -> Vec<f32> {\n    let x_nhwc = permute_nchw_to_nhwc(x, n, c, h, w); // channel now innermost\n    let mut out = vec![0.0f32; n * h * w * c];\n    for b in 0..n { for hw in 0..h*w { for ch in 0..c {\n        // x_nhwc[b][hw][ch] — stride = 1, coalesced across channels\n        out[b*h*w*c + hw*c + ch] = pool_window_nhwc(&x_nhwc, b, hw, ch);\n    }}}\n    permute_nhwc_to_nchw(&out, n, h, w, c) // restore caller's layout\n}".to_string(),
         },
         // ════════════════════════════════════════════════════════════════════
-        // Category N: dtype + alignment specialization (Batch 8, 2 rules — burn-cubecl)
+        // Category N: dtype + alignment specialization (6 rules — 2 Batch 8 + 4 Batch 9)
         // ════════════════════════════════════════════════════════════════════
         // ── dtype-specialized-float-kind — generic fn → FloatKind-keyed intrinsic ─
         // Source: burn-cubecl binary.rs `PowOp::execute`. `powf` has no generic
@@ -700,6 +736,43 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
             gpu_concept: "alignment-gated zero-copy slice view via handle offset".to_string(),
             ref_shape: "// naive: always copy the sliced region into a fresh buffer\nfn slice_copy(buf: &[f32], start: usize, end: usize) -> Vec<f32> {\n    buf[start..end].to_vec() // copies every slice, even when a view would suffice\n}".to_string(),
             opt_pattern: "// optimized: if byte offsets are alignment-aligned, return a VIEW (offset only, zero copy)\nstruct Handle { data: Vec<f32>, offset_start: usize, offset_end: usize }\nfn slice_view(h: &Handle, start: usize, end: usize, align: usize) -> Handle {\n    let byte_start = start * std::mem::size_of::<f32>();\n    let byte_end = (h.data.len() - end) * std::mem::size_of::<f32>();\n    if byte_start % align == 0 && byte_end % align == 0 {\n        Handle { data: h.data.clone(), offset_start: h.offset_start + byte_start, offset_end: h.offset_end + byte_end } // zero copy\n    } else {\n        unimplemented!(\"fallback: copy kernel for unaligned offsets\")\n    }\n}".to_string(),
+        },
+        // ── int2-pack-weights — 1 weight/byte → 4 weights/byte (Batch 9, popcorn int8_int2_matmul.py) ──
+        // Source: int8_int2_matmul.py liger pack_weights — packs 4 ternary {-1,0,+1}
+        // weights per byte (2 bits each). 4× memory bandwidth reduction vs int8 storage.
+        // Directly relevant to katgpt-core's ternary inference (same {-1,0,+1} space).
+        KernelRule {
+            rule_id: "int2-pack-weights".to_string(),
+            gpu_concept: "ternary weight packing: 4 weights per byte via 2-bit encoding".to_string(),
+            ref_shape: "// naive: store each ternary weight as int8 (8 bits per weight, 4× wastage)\nfn matmul_int8_weights(a: &[i8], w: &[i8]) -> Vec<i32> {\n    let mut out = vec![0i32; a.len() / w.len()];\n    for i in 0..out.len() {\n        for j in 0..w.len() {\n            out[i] += (a[i * w.len() + j] as i32) * (w[j] as i32);\n        }\n    }\n    out\n}".to_string(),
+            opt_pattern: "// optimized: pack 4 ternary weights per byte (2 bits each), 4× bandwidth reduction\nfn pack_ternary(w: &[i8]) -> Vec<u8> {\n    let mut packed = vec![0u8; (w.len() + 3) / 4];\n    for (i, &val) in w.iter().enumerate() {\n        let code: u8 = match val { -1 => 0b00, 0 => 0b01, 1 => 0b10, _ => 0b01 };\n        packed[i / 4] |= code << ((i % 4) * 2);\n    }\n    packed\n}\nfn matmul_packed(a: &[i8], w_packed: &[u8]) -> Vec<i32> {\n    let n = w_packed.len() * 4;\n    let mut out = vec![0i32; a.len() / n];\n    for i in 0..out.len() {\n        for j in 0..n {\n            let byte = w_packed[j / 4];\n            let code = (byte >> ((j % 4) * 2)) & 0b11;\n            let w_val: i8 = match code { 0b00 => -1, 0b01 => 0, 0b10 => 1, _ => 0 };\n            out[i] += (a[i * n + j] as i32) * (w_val as i32);\n        }\n    }\n    out\n}".to_string(),
+        },
+        // ── per-token-activation-quant — per-element → per-token symmetric int8 (Batch 9, popcorn _quant.py) ──
+        // Source: _quant.py activation_quant — per-token symmetric int8 fake quant.
+        // scale = 127 / max(|x|), then round + clamp. Straight-through gradient in training.
+        KernelRule {
+            rule_id: "per-token-activation-quant".to_string(),
+            gpu_concept: "per-token symmetric int8 quantization with straight-through gradient".to_string(),
+            ref_shape: "// naive: per-element quant (no scaling, severe clipping)\nfn quant_per_element(x: &[f32]) -> Vec<i8> {\n    x.iter().map(|v| (*v * 127.0) as i8).collect()\n}".to_string(),
+            opt_pattern: "// optimized: per-token symmetric quant (scale = 127 / max(|x|), minimal clipping)\nfn activation_quant_per_token(x: &[f32]) -> Vec<i8> {\n    let max_abs: f32 = x.iter().map(|v| v.abs()).fold(0.0, f32::max).max(1e-5);\n    let scale = 127.0 / max_abs;\n    x.iter().map(|v| (v * scale).round().clamp(-128.0, 127.0) as i8).collect()\n}".to_string(),
+        },
+        // ── ternary-weight-quant — per-element → per-tensor ternary {-1,0,+1} (Batch 9, popcorn _quant.py) ──
+        // Source: _quant.py weight_quant — per-tensor ternary quant.
+        // scale = 1 / mean(|w|), then round + clamp(-1, 1). Produces BitNet b1.58 weights.
+        KernelRule {
+            rule_id: "ternary-weight-quant".to_string(),
+            gpu_concept: "per-tensor ternary weight quantization {-1, 0, +1} with straight-through gradient".to_string(),
+            ref_shape: "// naive: per-element ternary (no scaling, most weights collapse to 0)\nfn ternary_per_element(w: &[f32]) -> Vec<i8> {\n    w.iter().map(|v| if *v > 0.5 { 1 } else if *v < -0.5 { -1 } else { 0 }).collect()\n}".to_string(),
+            opt_pattern: "// optimized: per-tensor ternary (scale = 1/mean(|w|), minimal information loss)\nfn weight_quant_ternary(w: &[f32]) -> Vec<i8> {\n    let mean_abs: f32 = w.iter().map(|v| v.abs()).sum::<f32>() / w.len() as f32;\n    let scale = 1.0 / mean_abs.max(1e-5);\n    w.iter().map(|v| (v * scale).round().clamp(-1.0, 1.0) as i8).collect()\n}".to_string(),
+        },
+        // ── upcast-before-loss — fp16 loss → f32 upcast before log/exp (Batch 9, popcorn jsd.py) ──
+        // Source: jsd.py liger backend — upcast(log_p) before the JSD kernel.
+        // fp16 has insufficient precision for log domain: log(small) underflows to -inf.
+        KernelRule {
+            rule_id: "upcast-before-loss".to_string(),
+            gpu_concept: "upcast to f32 before log/exp in loss computation to avoid fp16 precision loss".to_string(),
+            ref_shape: "// naive: compute loss in fp16 (log underflows for small probabilities)\nfn jsd_fp16(log_p: &[f16], log_q: &[f16]) -> f16 {\n    let p: f16 = log_p.iter().map(|l| l.exp()).sum();\n    let q: f16 = log_q.iter().map(|l| l.exp()).sum();\n    (p * q).ln()\n}".to_string(),
+            opt_pattern: "// optimized: upcast to f32 before log/exp, downcast after\nfn jsd_upcast(log_p: &[f16], log_q: &[f16]) -> f16 {\n    let p: f32 = log_p.iter().map(|l| l.to_f32().exp()).sum();\n    let q: f32 = log_q.iter().map(|l| l.to_f32().exp()).sum();\n    f16::from_f32((p * q).ln())\n}".to_string(),
         },
         // ════════════════════════════════════════════════════════════════════
         // Category O: IR strength reduction (Batch 8, 4 rules — cubecl-opt)
@@ -800,7 +873,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "forceinline-device-fn",
         ],
     ),
-    // C: Fusion patterns (4 rules)
+    // C: Fusion patterns (7 rules)
     (
         KernelCategory::Fusion,
         "C: fusion",
@@ -809,9 +882,12 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fuse-quant-matmul",
             "fuse-softmax-mask",
             "fuse-xent-logsumexp",
+            "fuse-add-rms-norm",
+            "fuse-group-norm-linear",
+            "fuse-jsd-logsumexp",
         ],
     ),
-    // D: Dispatch patterns (3 rules)
+    // D: Dispatch patterns (4 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -819,6 +895,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "sm-count-block-size",
             "predicate-gated-backend",
             "pow2-block-alignment",
+            "predicate-gate-div512",
         ],
     ),
     // E: Parallelism patterns (3 rules)
@@ -924,13 +1001,17 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "layout-permute-for-coalescing",
         ],
     ),
-    // N: dtype + alignment specialization (2 rules)
+    // N: dtype + alignment specialization (6 rules)
     (
         KernelCategory::DtypeAlignment,
         "N: dtype + alignment",
         &[
             "dtype-specialized-float-kind",
             "alignment-gated-zero-copy-view",
+            "int2-pack-weights",
+            "per-token-activation-quant",
+            "ternary-weight-quant",
+            "upcast-before-loss",
         ],
     ),
     // O: IR strength reduction (4 rules)
@@ -1006,8 +1087,9 @@ mod tests {
         // Batch 6 (3): varlen packing + chunked reductions.
         // Batch 7 (9): burn-cubecl autotune dispatch + conv-as-GEMM + layout.
         // Batch 8 (9): burn-cubecl kernel polymorphism + dtype/alignment + cubecl-opt IR strength reduction.
-        // Total: 68.
-        assert_eq!(corpus.entries.len(), 68, "batches 1-8 should have 68 rules");
+        // Batch 9 (8): popcorn fusion + dtype/quant + dispatch (add_rms_norm, group_norm_linear, jsd, int8_int2_matmul, _quant).
+        // Total: 76.
+        assert_eq!(corpus.entries.len(), 76, "batches 1-9 should have 76 rules");
     }
 
     #[test]
@@ -1422,12 +1504,12 @@ mod tests {
 
     #[test]
     fn kernel_categories_counts_match_plan_003_table() {
-        // Pin per-category rule counts to the Plan 003 table.
+        // Pin per-category rule counts to the Plan 003 table (updated for Batch 9).
         let expected = [
             (KernelCategory::MemoryAccess, 6),
             (KernelCategory::Compute, 5),
-            (KernelCategory::Fusion, 4),
-            (KernelCategory::Dispatch, 3),
+            (KernelCategory::Fusion, 7),
+            (KernelCategory::Dispatch, 4),
             (KernelCategory::Parallelism, 3),
             (KernelCategory::FlashAttnTiling, 7),
             (KernelCategory::LinearAttnRecurrence, 6),
@@ -1437,7 +1519,7 @@ mod tests {
             (KernelCategory::AutotuneDispatch, 4),
             (KernelCategory::ConvGemmLayout, 5),
             (KernelCategory::KernelPolymorphism, 3),
-            (KernelCategory::DtypeAlignment, 2),
+            (KernelCategory::DtypeAlignment, 6),
             (KernelCategory::IrStrengthReduction, 4),
         ];
         for (cat, count) in expected {
@@ -1447,9 +1529,9 @@ mod tests {
                 "Plan 003: category {cat:?} has {} rules, expected {count}",
                 entry.2.len());
         }
-        // Sum must equal 68.
+        // Sum must equal 76.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 68, "Plan 003: category totals must sum to 68");
+        assert_eq!(total, 76, "Plan 003: category totals must sum to 76");
     }
 
     #[test]
@@ -1459,7 +1541,7 @@ mod tests {
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 68, "Plan 003: grouped corpus has {total} rules, expected 68");
+        assert_eq!(total, 76, "Plan 003: grouped corpus has {total} rules, expected 76");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");

@@ -6,12 +6,12 @@
 //!
 //! ## Plan 003 — corpus wiring (2026-08-14)
 //!
-//! The router is now wired to the 68-rule corpus via the 15 categories
+//! The router is now wired to the 76-rule corpus via the 15 categories
 //! ([`KernelCategory`]). One expert per category (15 experts), each owning
 //! its category's `rule_ids` via [`KERNEL_CATEGORIES`] in [`super::corpus`].
 //! A future heal pipeline can route a kernel signature → expert index →
 //! category → that category's `rule_ids`, consulting category-relevant rules
-//! first without scanning all 68.
+//! first without scanning all 76.
 //!
 //! The centroids are **hand-crafted** (not mined via `CommittedFieldBlend`
 //! as Proposal 012 originally specified). Mining requires `(signature,
@@ -458,7 +458,7 @@ mod tests {
             .map(KernelExpertRouter::rules_for_expert)
             .map(<[&str]>::len)
             .sum();
-        assert_eq!(total, 68, "Plan 003: experts cover all 68 corpus rules");
+        assert_eq!(total, 76, "Plan 003: experts cover all 76 corpus rules");
     }
 
     #[test]
