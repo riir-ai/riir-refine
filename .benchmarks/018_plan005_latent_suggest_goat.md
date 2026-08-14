@@ -68,11 +68,67 @@ rule-id String per distinct retrieved rule, the output clone.
   finding — centroid mis-routing starved the correct domain). The 8-D
   structural centroids are too coarse to gate; a Phase 3+ tuning option is
   re-gating with tuned directions or the 768-D Bonsai embedder.
-- `--suggest` prints suggestions for EVERY span (scores are relative; no
-  minimum-score threshold yet). Threshold calibration needs a
-  negative-example fixture (clean code → no suggestions) — future work.
+- ~~`--suggest` prints suggestions for EVERY span (scores are relative; no
+  minimum-score threshold yet).~~ **Threshold calibration attempted +
+  REFUTED** — see the addendum below. The every-span noise is inherent to
+  text-similarity scoring, not a missing constant.
 - G1's per-domain fixture is small (12). The ≥80% bar at N=12 means ≥10
   hits; expanding the fixture tightens the confidence interval.
+
+## Addendum (2026-08-14, same day) — minimum-score threshold: REFUTED
+
+Bench 018's top follow-up ("threshold calibration needs a negative-example
+fixture — clean code → no suggestions") was executed the same day. The
+negative fixture shipped (14 adversarial clean snippets — the CORRECT version
+of each corpus anti-pattern, plus innocent struct/trait shapes) in
+`tests/latent_suggest_goat.rs::NEGATIVE_FIXTURE`, with two calibration
+tests as the permanent measurement instrument
+(`threshold_calibration_distribution` +
+`scoring_mode_calibration_whole_vs_deep`; run with `--nocapture`).
+
+### Result: OVERLAP — no threshold exists
+
+| Set | Score range (best-rule, multi-scale) |
+|---|---|
+| Positives (G1 fixtures, owning-domain top-1) | **[3.19 ..= 34.71]** |
+| Negatives (clean adversarial snippets) | **[6.08 ..= 69.37]** |
+
+Specific refutations (adversarial negative ≥ its positive counterpart):
+
+- The **correct** `Vec::with_capacity(n)` fn scored **34.16** on
+  `vec-with-capacity` — HIGHER than the true positive's 33.57 (the correct
+  sibling shares the whole+push-loop lines; only the allocation line differs
+  by one token).
+- `bool-to-bitpack` scored **identically** (23.14) on the buggy
+  `if *b { 1u8 } else { 0u8 }` and the fixed `*b as u8`.
+- The perf domain fires 13–69 on **every** negative (generic Rust token
+  overlap: fn/Vec/HashMap/iter) — cross-domain noise is structural.
+- An innocent `struct Point {...}` impl block hit **69.37** (`dyn-to-enum`).
+
+A floor keeping all positives (≤3.19) kills **zero** negatives (min 6.08). A
+floor killing the worst negatives (≥69) kills **all** positives. The
+trade-off frontier is useless at every point.
+
+### Root cause
+
+The fused `latent + BM25` score measures **text similarity, not rule
+instantiation**. A rule-bearing token difference (`Vec::new()` vs
+`Vec::with_capacity(n)`, `if/else` vs `as`) is invisible to token overlap at
+these pattern sizes. The multi-scale accumulation hypothesis was ALSO tested
+and refuted: whole-span-only scoring produces near-identical scores (the
+top-1 comes from the whole-text query; per-line queries add ~nothing).
+
+### Consequence
+
+- No `MIN_SUGGEST_SCORE` shipped (a constant that fails its own floor gate is
+  worse than none). `ScoredRule::score`'s doc now carries the warning.
+- `--suggest` output is a **ranked review queue for a human**, exactly as
+  documented; `--fix`'s proposer AST visitors remain the ONLY rule-
+  instantiation gate (they already see the structural difference the score
+  cannot).
+- The instrument stays: re-run the calibration whenever the corpus/embedder
+  changes, or when prototyping a discriminative successor (e.g.
+  distinctive-line coverage, or proposer-gated suggestions).
 
 ## Reproduce
 

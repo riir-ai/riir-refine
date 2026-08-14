@@ -100,6 +100,9 @@ files, ~0.4s total including index build). Bin name `cargo-heal` (cargo
 subcommand convention → `cargo heal` once installed). No-threshold note:
 every span prints suggestions (scores are relative); a minimum-score
 cutoff is a Phase 3 G1 concern — the precision measurement drives it.
+**Follow-up (same day, Phase 3 addendum): the cutoff was measured and
+REFUTED** — see Phase 3 + Bench 018 addendum. Every-span output is the
+permanent shape of `--suggest`.
 
 ### Tasks
 
@@ -135,6 +138,21 @@ G3 104 lib tests, G4 scratch stable. Notable: the first G1 run FAILED at
 fn-closure, value-borrow vs ref-borrow, iterator-chain vs canonical
 `.into()`); faithful rewritten variants scored 12/12. Fixture-faithfulness
 audit precedes retriever tuning (recorded in Bench 018).
+
+**Follow-up (2026-08-14, same day): minimum-score threshold REFUTED.** The
+Bench 018 follow-up list called for threshold calibration via a
+negative-example fixture. The fixture shipped (14 adversarial clean snippets
+— the CORRECT version of each corpus anti-pattern — in
+`tests/latent_suggest_goat.rs::NEGATIVE_FIXTURE`) + two calibration tests
+as the permanent instrument. Measured: positives [3.19 ..= 34.71] vs
+negatives [6.08 ..= 69.37] — **OVERLAP**; the correct `Vec::with_capacity`
+fn scores 34.16 on `vec-with-capacity` (higher than the positive's 33.57);
+whole-span-only ≡ multi-scale (the line-accumulation hypothesis refuted
+too). Root cause: the fused latent+BM25 score is text similarity, not rule
+instantiation — a one-token difference (`Vec::new()` vs `Vec::with_capacity`)
+is invisible. No threshold shipped; `--suggest` stays a ranked review
+queue + the proposers stay the only instantiation gate. Full record: Bench
+018 addendum.
 
 ### Tasks
 

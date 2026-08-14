@@ -30,6 +30,15 @@ pub struct ScoredRule {
     pub rule_id: String,
     /// Relevance — the retriever's fused latent/BM25 score for the best
     /// matching chunk of this rule.
+    ///
+    /// **Text similarity, NOT rule instantiation** (measured — Bench 018
+    /// addendum, 2026-08-14): adversarial clean snippets (the correct version
+    /// of each corpus anti-pattern) score as high as or higher than true
+    /// positives, in both whole-span and multi-scale scoring modes. There is
+    /// NO minimum-score threshold that separates them; do not consume this
+    /// as a confidence/certainty signal. The proposers' AST visitors are the
+    /// only rule-instantiation gate (`--fix`); `--suggest` output is ranked
+    /// candidates for a human.
     pub score: f32,
 }
 

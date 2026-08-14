@@ -87,8 +87,10 @@ without `kernel_heal`).
 
 ## Caveat
 
-No minimum-score threshold yet — every span prints suggestions (scores are
-relative). Treat output as a ranked review queue, not a verdict.
+No minimum-score threshold — and none is possible (measured, Bench 018
+addendum): clean adversarial code scores as high as buggy code under the
+text-similarity scorer. Treat output as a ranked review queue, not a
+verdict; `--fix`'s proposers are the instantiation gate.
 
 ## See also
 

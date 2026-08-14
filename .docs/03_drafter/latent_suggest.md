@@ -68,12 +68,17 @@ variants scored 12/12. Lesson (Issue 669 class): **audit fixture
 faithfulness BEFORE tuning the retriever** — a retrieval gate is only as
 honest as its fixture.
 
-## Known limitations (honest scope, Bench 018)
+## Known limitations (honest scope, Bench 018 + addendum)
 
 - Routing is fan-out + annotation, not gating (deviation 1 above).
-- No minimum-score threshold — every span prints suggestions (scores are
-  relative). Threshold calibration needs a negative-example fixture
-  (clean code → no suggestions); future work.
+- **No minimum-score threshold — and none is possible** (measured, Bench 018
+  addendum 2026-08-14): adversarial clean snippets (the correct version of
+  each corpus anti-pattern) score as high as or higher than the true
+  positives, in both whole-span and multi-scale modes. The fused score is
+  text similarity, not rule instantiation. Every span printing suggestions is
+  inherent; treat `--suggest` output as a ranked review queue. The
+  calibration instrument lives in `tests/latent_suggest_goat.rs`
+  (`NEGATIVE_FIXTURE` + the two calibration tests).
 - G1's per-domain fixture is small (12); the ≥80% bar at N=12 means ≥10
   hits. Expanding the fixture tightens the confidence interval.
 
