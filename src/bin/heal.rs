@@ -32,7 +32,7 @@ use std::path::{Path, PathBuf};
 
 use riir_clippy::domains::clippy_lints::proposers::FIXABLE_LINTS;
 use riir_clippy::domains::rust_perf::proposers::FIXABLE_RULES;
-use riir_clippy::edit_emitter::{apply_edits, RuleEdit};
+use riir_clippy::edit_emitter::RuleEdit;
 use riir_clippy::draft::{DomainId, LatentMatcher, SpanSuggestion};
 
 /// Print usage + exit 2 (arg-error convention).
@@ -255,11 +255,21 @@ fn main() {
         // return-strip's span) are dropped by overlap selection on pass 1.
         // Re-parsing the spliced output exposes them; iterate until no new
         // edits (bounded, and the unchanged-output guard stops oscillation).
+        //
+        // Review line numbers are FINAL-source coordinates: each edit's byte
+        // offset is recorded against its own pass's input, then remapped
+        // through its own + every later pass's applied splices (own-pass
+        // mapping is safe — see below; some fixes change line counts —
+        // manual_map collapses multi-line matches, fxhashmap's use-append
+        // inserts a line — so per-pass numbers would drift).
         const MAX_FIX_PASSES: usize = 4;
         let mut current = src.clone();
-        let mut all_edits: Vec<(String, usize)> = Vec::new(); // (rule_id, line)
+        // (pass, rule_id, start offset in that pass's input text)
+        let mut all_edits: Vec<(usize, String, usize)> = Vec::new();
+        // Per-pass applied splices (in that pass's input coordinates).
+        let mut pass_splices: Vec<Vec<riir_clippy::edit_emitter::SourceEdit>> = Vec::new();
         if args.fix {
-            for _ in 0..MAX_FIX_PASSES {
+            for pass in 0..MAX_FIX_PASSES {
                 let Ok(parsed) = syn::parse_file(&current) else {
                     eprintln!("skip (unparseable): {display}");
                     break;
@@ -280,14 +290,24 @@ fn main() {
                 if edits.is_empty() {
                     break;
                 }
-                let next = apply_edits(
+                let (next, splices) = riir_clippy::edit_emitter::apply_edits_traced(
                     &current,
                     edits.iter().map(|re| re.edit.clone()).collect(),
                 );
+                // Report only edits that SURVIVED selection — a pass-1 edit
+                // dropped as overlapping (nested inside another fix's span)
+                // gets re-collected + applied on pass 2; recording both
+                // inflates the count + duplicates the review line.
+                let applied: std::collections::HashSet<(usize, usize)> = splices
+                    .iter()
+                    .map(|s| (s.start, s.end))
+                    .collect();
                 for re in &edits {
-                    let line = current[..re.edit.start].matches('\n').count() + 1;
-                    all_edits.push((re.rule_id.clone(), line));
+                    if applied.contains(&(re.edit.start, re.edit.end)) {
+                        all_edits.push((pass, re.rule_id.clone(), re.edit.start));
+                    }
                 }
+                pass_splices.push(splices);
                 let changed = next != current;
                 current = next;
                 if !changed {
@@ -295,7 +315,20 @@ fn main() {
                 }
             }
         }
-        let all_edits = all_edits;
+        // Remap each edit's offset through ALL passes from its own onward
+        // (own-pass mapping is safe: the edit's own splice breaks at
+        // `start >= p` without self-applying), then express it as a line
+        // number in the final text.
+        let all_edits: Vec<(String, usize)> = all_edits
+            .into_iter()
+            .map(|(pass, rule_id, start)| {
+                let mut pos = start;
+                for splices in pass_splices.iter().skip(pass) {
+                    pos = riir_clippy::edit_emitter::map_through_splices(pos, splices);
+                }
+                (rule_id, current[..pos].matches('\n').count() + 1)
+            })
+            .collect();
         if !all_edits.is_empty() {
             n_fixed_files += 1;
             n_fixed_edits += all_edits.len();

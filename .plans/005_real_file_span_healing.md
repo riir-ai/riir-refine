@@ -316,6 +316,21 @@ rebase to land.
         the `is_some` receiver (`if a.is_some() { b.unwrap() }` → `a.unwrap_or`).
         Now receiver-text-matched.
 
+      **Post-landing polish (same day):** per-edit review line numbers now
+      reference the FINAL written source, not per-pass intermediates — each
+      pass records its edits in input coordinates + `apply_edits_traced`
+      returns the splices actually applied, then `map_through_splices` remaps
+      the recorded positions through every pass's applied splices (own pass
+      included — safe by the `start >= p` break) before line-counting in the
+      final source. Without this, edits before a line-count-changing fix
+      (manual_map's multi-line collapse, fxhashmap's inserted `use`) reported
+      drifted lines. Same change fixed duplicate reporting: pass-1 edits
+      dropped by overlap selection but re-applied on pass 2 were being
+      counted twice; the bin now reports only edits in the applied-splices
+      set. 4 new emitter tests (incl. the deletion-then-insertion coordinate
+      regression that caught the first `map_through_splices` draft's frame
+      bug + a two-pass composition case).
+
 ### Phase 6 exit criteria
 - G5 PASS. `cargo heal --fix` is production-usable for the 10 shipped proposers +
   `--suggest` covers the rest of the corpus.

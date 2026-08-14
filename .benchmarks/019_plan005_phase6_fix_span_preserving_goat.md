@@ -47,14 +47,29 @@ cannot check deps; review mode is the safety net).
 
 ## Honest limits
 
-- `--fix` covers the 5 rust_perf proposers only (T6.1 scope). The 10
-  clippy_lints proposers remain mutation-based (consumed by `self_evolve`);
-  migrating them to the edit emitter is follow-up work.
+- ~~`--fix` covers the 5 rust_perf proposers only (T6.1 scope)~~ — superseded
+  by the T6.4 addendum below.
 - Kernel: no proposers (Phase 5 deferred — concept-grade corpus, see Plan
   005 §Phase 5).
 - `--write` trusts the proposers' visitor gates; signature-visible rewrites
   (`static-str`, `bool-to-bitpack`) ripple to callers — `rust_perf_verify`
   (cargo test) is the semantic gate, run by the consumer.
+
+## T6.4 addendum (2026-08-14, commit `b83230e` + same-day polish)
+
+`--fix` extended from the 5 rust_perf proposers to **5 + 7** — the 10
+clippy_lints proposers migrated to this emitter (see
+[Plan 005](../.plans/005_real_file_span_healing.md) §Phase 6 T6.4 for the
+four latent detection bugs the migration fixed). The G1/G1'/G3 regime is
+unchanged: proposer fixtures + L2 pruner parse-check on every output,
+span preservation by construction, clippy clean. Same-day polish:
+review line numbers now reference the FINAL written source (positions
+remapped through every pass's applied splices via `apply_edits_traced` +
+`map_through_splices`) + pass-1 overlap-dropped edits re-applied on pass 2
+are no longer double-counted. Verified live on a nested fixture
+(`return Cfg { x: x };` → `Cfg { x }` across 2 passes + a manual_map
+collapse): all reported lines correct in the final file, output
+type-checks clean under rustc.
 
 ## Commands
 

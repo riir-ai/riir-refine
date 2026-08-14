@@ -31,15 +31,22 @@ edit-splice emitter). Everything outside a matched span stays
 byte-identical (no reformat; see
 [Bench 019](../../.benchmarks/019_plan005_phase6_fix_span_preserving_goat.md)).
 The proposer's visitor is the gate: latent suggestions never auto-apply.
-Review mode (default) prints per-edit rule + line; `--write` splices in
-place. `--quiet` skips the suggest pass when fixing.
+Review mode (default) prints per-edit rule + final-source line; `--write`
+splices in place. `--quiet` skips the suggest pass when fixing.
 
 Fix application iterates to a **fixpoint** (bounded, 4 passes): an outer
 edit's replacement keeps the inner nodes' ORIGINAL text, so fixes nested
 inside a replaced region (`return Cfg { x: x };` — the field-shorthand
 edits live inside the return-strip's span) are dropped by overlap
 selection on pass 1 + picked up on pass 2 after re-parse. The
-unchanged-output guard stops oscillation.
+unchanged-output guard stops oscillation. Per-edit review lines reference
+the **final written source**: each pass's edits are recorded in input
+coordinates, then remapped through every pass's applied splices
+(`apply_edits_traced` + `map_through_splices`) before line-counting — so
+an edit before a line-count-changing fix (manual_map's collapse,
+fxhashmap's inserted `use`) still points at the right line. Only edits
+that were actually applied are reported (pass-1 overlap-dropped edits
+re-applied on pass 2 are not double-counted).
 
 The 3 type-blind clippy proposers (`needless_borrow`,
 `useless_conversion`, `unnecessary_mut_passed`) are NOT `--fix` eligible —

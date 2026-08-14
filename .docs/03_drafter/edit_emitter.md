@@ -16,6 +16,18 @@ uses, regardless of domain:
   already-selected region is dropped), then application runs
   **back-to-front** so earlier byte offsets stay valid as replacement
   lengths change.
+- [`apply_edits_traced`] — `apply_edits` that also returns the splices it
+  actually applied (in INPUT coordinates). Anything needing "what really
+  applied" must use this — `apply_edits` silently drops overlapping edits,
+  and a caller that ignores that double-counts re-applied pass-2 edits.
+- [`map_through_splices`] — remaps a position recorded against a pass's
+  INPUT through that pass's applied splices into OUTPUT coordinates. All
+  comparisons use the ORIGINAL offset (a walking position compared against
+  unshifted splice starts mis-orders deletion-then-insertion pairs); a
+  position inside a replaced region clamps to the region's output start.
+  The `--fix` review line numbers compose one remap per pass so they
+  reference the FINAL written source even when earlier fixes changed line
+  counts (`manual_map` collapses matches, `fxhashmap` inserts a `use`).
 - helpers — `src` (node → its ORIGINAL source text via `proc-macro2`
   span-locations), `edit` (node → edit), `for_each_fn` (free fns + impl
   methods + nested inline mods), `swallow_following_space` (`&'a u8` →
@@ -37,7 +49,9 @@ feature gate — both domains' proposer modules re-export it
   destroyed the caller's formatting).
 - `bin/heal.rs` — composes both domains' edits per file, then iterates to
   a bounded fixpoint (see
-  [`../07_examples/cargo_heal.md`](../07_examples/cargo_heal.md)).
+  [`../07_examples/cargo_heal.md`](../07_examples/cargo_heal.md)). Uses
+  `apply_edits_traced` + `map_through_splices` to report per-edit lines
+  against the final written source.
 
 ## See also
 

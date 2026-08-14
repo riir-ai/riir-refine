@@ -56,7 +56,19 @@ pub struct RuleEdit {
 /// as replacements change lengths. Invalid ranges (misaligned char
 /// boundaries) are dropped, not panicked on.
 #[must_use]
-pub fn apply_edits(source: &str, mut edits: Vec<SourceEdit>) -> String {
+pub fn apply_edits(source: &str, edits: Vec<SourceEdit>) -> String {
+    apply_edits_traced(source, edits).0
+}
+
+/// [`apply_edits`](fn.apply_edits.html) that also returns the splices it
+/// actually applied (in INPUT-source coordinates, sorted ascending by
+/// start). The caller uses these to remap positions recorded against this
+/// pass's input through later passes — e.g. `cargo heal --fix` review line
+/// numbers against the FINAL written source, not per-pass intermediates
+/// (some fixes change line counts: `manual_map` collapses multi-line matches,
+/// fxhashmap's use-append inserts a line).
+#[must_use]
+pub fn apply_edits_traced(source: &str, mut edits: Vec<SourceEdit>) -> (String, Vec<SourceEdit>) {
     // Phase 1 — selection (outer-first, drop overlaps).
     edits.sort_by(|a, b| a.start.cmp(&b.start).then(b.end.cmp(&a.end)));
     let mut selected: Vec<SourceEdit> = Vec::with_capacity(edits.len());
@@ -70,10 +82,37 @@ pub fn apply_edits(source: &str, mut edits: Vec<SourceEdit>) -> String {
     }
     // Phase 2 — apply back-to-front (offsets before each edit stay valid).
     let mut out = source.to_string();
-    for e in selected.into_iter().rev() {
+    for e in selected.iter().rev() {
         out.replace_range(e.start..e.end, &e.replacement);
     }
-    out
+    (out, selected)
+}
+
+/// Remap a byte offset recorded against a pass's INPUT through that pass's
+/// applied splices (as returned by [`apply_edits_traced`]) into the pass's
+/// OUTPUT coordinates. All comparisons use the ORIGINAL offset — a walking
+/// position compared against unshifted splice starts mis-orders
+/// deletion-then-insertion pairs. A position inside a replaced region clamps
+/// to the region's output start (the old content is gone). Safe for a
+/// splice's OWN start too (it breaks at `start >= p` before self-applying).
+#[must_use]
+pub fn map_through_splices(p: usize, splices: &[SourceEdit]) -> usize {
+    let mut delta: isize = 0;
+    for s in splices {
+        if s.start >= p {
+            break; // sorted ascending, non-overlapping — later splices can't move p
+        }
+        if s.end <= p {
+            // Splice ends before p — shifts it by its length delta
+            // (negative for deletions).
+            delta += s.replacement.len().cast_signed() - (s.end - s.start).cast_signed();
+        } else {
+            // p lies inside the replaced region — clamp to its output start,
+            // shifted by the strictly-earlier splices accumulated so far.
+            return (s.start.cast_signed() + delta).cast_unsigned();
+        }
+    }
+    (p.cast_signed() + delta).cast_unsigned()
 }
 
 // ── Shared helpers ───────────────────────────────────────────────────────
@@ -222,5 +261,103 @@ mod tests {
         let lt = r.lifetime.as_ref().expect("lifetime present");
         let e = swallow_following_space(source, edit(lt, String::new()));
         assert_eq!(&source[e.start..e.end], "'a ");
+    }
+
+    #[test]
+    fn traced_variant_returns_the_applied_splices() {
+        let src = "aaaa bbbb cccc";
+        let (out, splices) = apply_edits_traced(
+            src,
+            vec![
+                SourceEdit { start: 5, end: 9, replacement: "XX".to_string() },
+                // overlaps "bbbb" — must be dropped from the splice record
+                SourceEdit { start: 6, end: 8, replacement: "Y".to_string() },
+            ],
+        );
+        assert_eq!(out, "aaaa XX cccc");
+        assert_eq!(splices.len(), 1);
+        assert_eq!((splices[0].start, splices[0].end), (5, 9));
+        assert_eq!(splices[0].replacement, "XX");
+    }
+
+    #[test]
+    fn map_through_splices_tracks_insertions_and_deletions() {
+        // One insertion (grows +3) + one deletion (shrinks −4), sorted asc.
+        let splices = vec![
+            SourceEdit { start: 2, end: 2, replacement: "xyz".to_string() },  // insert
+            SourceEdit { start: 10, end: 14, replacement: String::new() },   // delete
+        ];
+        // Before everything: unmoved.
+        assert_eq!(map_through_splices(0, &splices), 0);
+        // At the insertion point: unmoved (p <= start).
+        assert_eq!(map_through_splices(2, &splices), 2);
+        // Past the insertion: +3.
+        assert_eq!(map_through_splices(3, &splices), 6);
+        // Past the deletion: +3 − 4.
+        assert_eq!(map_through_splices(15, &splices), 14);
+        // Inside the deleted region: clamps to its output start (10 + 3).
+        assert_eq!(map_through_splices(12, &splices), 13);
+    }
+
+    #[test]
+    fn map_orders_deletion_then_insertion_correctly() {
+        // The regression case for the original-p comparison frame: a deletion
+        // BEFORE an insertion. A walking position compared against unshifted
+        // starts would break at the insertion and drop its shift.
+        let splices = vec![
+            SourceEdit { start: 0, end: 10, replacement: String::new() },       // delete 10
+            SourceEdit { start: 12, end: 12, replacement: "ZZZZ".to_string() }, // insert 4
+        ];
+        // p=20 (past both): −10 +4 → 14.
+        assert_eq!(map_through_splices(20, &splices), 14);
+        // p=11 (between them): only the deletion applies → 1.
+        assert_eq!(map_through_splices(11, &splices), 1);
+        // p=5 (inside the deleted region): clamps to 0.
+        assert_eq!(map_through_splices(5, &splices), 0);
+    }
+
+    #[test]
+    fn map_composes_across_two_passes_like_the_fix_loop() {
+        // Mirrors the bin's fix loop: offsets are computed (not hardcoded) so
+        // the test survives string edits. Pass 1 strips a `return` in fn a;
+        // pass 2 collapses fn b to one line (line count −2). A pass-1 edit
+        // recorded INSIDE fn b must remap to fn b's final position.
+        let pass1_src = "fn a() -> u8 {\n    return 7;\n}\n\nfn b() -> u8 {\n    return 8;\n}\n";
+        let ret_a = pass1_src.find("return 7;").expect("ret a");
+        let (pass2_src, s1) = apply_edits_traced(
+            pass1_src,
+            vec![SourceEdit { start: ret_a, end: ret_a + "return 7;".len(), replacement: "7".to_string() }],
+        );
+        let ret_b_in_pass1 = pass1_src.find("return 8;").expect("ret b");
+        let fn_b_in_pass2 = pass2_src.find("fn b").expect("fn b");
+        let close_rel = pass2_src[fn_b_in_pass2..].find("}\n").expect("close");
+        let fn_b_end = fn_b_in_pass2 + close_rel + 1; // include the `}`
+        let (final_src, s2) = apply_edits_traced(
+            &pass2_src,
+            vec![SourceEdit {
+                start: fn_b_in_pass2,
+                end: fn_b_end,
+                replacement: "fn b() -> u8 { 8 }".to_string(),
+            }],
+        );
+        assert!(final_src.contains("fn b() -> u8 { 8 }"));
+        assert_eq!(final_src.matches('\n').count(), 5);
+
+        // A pass-1 edit at fn b's `return` (pass-1 INPUT coords): first map
+        // through pass 1's own splices (the −8 shrink before it), then pass 2
+        // collapses the region containing it → clamps to fn b's start.
+        let pos_after_pass1 = map_through_splices(ret_b_in_pass1, &s1);
+        let pos_final = map_through_splices(pos_after_pass1, &s2);
+        assert_eq!(pos_final, fn_b_in_pass2);
+        let line = final_src[..pos_final].matches('\n').count() + 1;
+        assert_eq!(line, 5, "fn b starts on line 5 of the final text");
+
+        // A pass-1 edit BEFORE the collapse (fn a's `return`): unmoved by
+        // pass 2 (the splice starts after it); line 2 in the final text.
+        let pos_a = map_through_splices(ret_a, &s1);
+        let pos_a = map_through_splices(pos_a, &s2);
+        assert_eq!(pos_a, ret_a); // same length replacement → no shift
+        let line = final_src[..pos_a].matches('\n').count() + 1;
+        assert_eq!(line, 2);
     }
 }
