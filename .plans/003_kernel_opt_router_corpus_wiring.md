@@ -178,8 +178,8 @@ centroids).
 
 ### Phase 4 — Commit + push
 
-- [ ] 4.1 Commit with `feat:` prefix.
-- [ ] 4.2 Push to `origin/develop`.
+- [x] 4.1 Commit with `feat:` prefix.
+- [x] 4.2 Push to `origin/develop`.
 
 ## GOAT gate
 
