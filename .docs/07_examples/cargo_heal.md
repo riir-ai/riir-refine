@@ -17,8 +17,9 @@ subcommand convention makes it `cargo heal --suggest src/`.
 walker — no new dep; skips hidden/`target`/`vendor`), chunks them at
 fn/impl/struct boundaries, retrieves matching corpus rules via the latent
 substrate, and prints top-K rules per span with scores + the
-fixed/optimized pattern snippet head for manual review. `--fix` arrives
-with the Phase 4/5 proposers.
+fixed/optimized pattern snippet head for manual review. The Phase 4
+rust_perf `propose_fix` proposers landed as library code; a `--fix` CLI
+mode is Phase 6.
 
 ```text
 cargo heal --suggest [--domain <auto|clippy|perf|kernel>] [--top-k <N>] <path>...

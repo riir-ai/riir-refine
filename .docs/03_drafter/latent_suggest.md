@@ -11,8 +11,9 @@ The retrieval layer that matches **real code spans** to corpus rules. Real
 `.rs` files are chunked at fn/impl/struct boundaries, embedded modellessly,
 routed across domains, and matched against a per-domain latent index of the
 corpus. **ZERO proposer code** — the suggestion IS the corpus pattern text
-(`buggy_code`/`ref_shape` + the head of `fixed_code`/`opt_pattern`). `--fix`
-arrives with the Phase 4/5 proposers.
+(`buggy_code`/`ref_shape` + the head of `fixed_code`/`opt_pattern`). The
+Phase 4 rust_perf `propose_fix` proposers landed 2026-08-14 as library
+code; wiring them into a `cargo heal --fix` CLI is Phase 6.
 
 Zero retrieval code reimplemented — the layer composes riir-rag's substrate
 as-is: `AstChunker` (spans) + `ModellessEmbedder` (BLAKE3+DFT+sigmoid, 8-D,

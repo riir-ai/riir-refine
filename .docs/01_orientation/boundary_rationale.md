@@ -15,10 +15,16 @@ coupling, it belongs in a **new repo**, not as a new module in riir-ai.
 
 ## The evidence (zero game-domain coupling)
 
-- No dependency on `riir-engine`, `riir-games`, or any game crate
-- No dependency on `riir-chain`, `riir-neuron-db`
-- Only public dep: `katgpt-core` (ConstraintPruner trait + ternary SIMD
-  matvec)
+- No dependency on `riir-games*`, `riir-game-sdk`, or any game crate —
+  from ANY feature combination
+- No dependency on `riir-chain`; `riir-neuron-db` only transitive (via
+  `riir-rag` under the opt-in `latent_retrieval` feature)
+- Default build: only public dep is `katgpt-core` (ConstraintPruner
+  trait + ternary SIMD matvec). Two opt-in feature-gated arms consume
+  non-game sibling crates where reimplementation would duplicate whole
+  substrates: `ternary_inference` → `riir-engine` + `riir-gpu` (Bench 010
+  inference arm), `latent_retrieval` → `riir-rag` (Plan 005 retrieval
+  substrate, `cargo heal --suggest`)
 - The `TernaryDraftModel` pattern is reimplemented locally (~200 LOC),
   not imported cross-workspace
 

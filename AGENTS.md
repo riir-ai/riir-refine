@@ -69,16 +69,44 @@ The pipeline (shared across all domains):
 4. **L3 — Ruliology candidate search** (opt-in): Pareto-front enumeration
 5. **L4 — LoRA fallback** (deferred): adaptive learning, last resort
 
+**Plan 005 (2026-08-14) — latent retrieval + `cargo heal --suggest` CLI
+(Phases 1–4 DONE).** `src/draft/` ships the span-level retrieval layer:
+real `.rs` files → `AstChunker` spans → 8-D modelless embedding →
+domain-centroid routing (annotation only) → fan-out retrieval against
+per-domain latent indexes of the corpus → ranked rules + pattern
+snippets. ZERO retrieval code reimplemented — composes riir-rag as-is
+(`AstChunker` + `ModellessEmbedder` + `NeuronDbRetriever`) behind the
+opt-in `latent_retrieval` feature. GOAT G1–G4 ALL PASS (Bench 018):
+G1 100% (12/12 top-1 precision), G2 349µs/chunk (<1ms target, 2.9×
+headroom), G3 104/104 lib tests, G4 `SuggestScratch` stable across 50
+repeat scans. Two empirical deviations: fan-out retrieval instead of
+gated routing (the 8-D centroids mis-routed fixtures — verdict is an
+annotation) + multi-scale indexing/queries (corpus patterns are 1–5
+line excerpts vs whole-item spans). The `cargo-heal` bin exposes it:
+`cargo run --features latent_retrieval --bin cargo-heal -- --suggest src/`
+(smoke: 19 files, ~0.4s incl. index build). Phase 4 (2026-08-14) landed
+the top-5 rust_perf `syn` AST proposers (`src/domains/rust_perf/proposers/`,
+`propose_fix` dispatch + 36 fixture tests — see
+[`.docs/11_domains/rust_perf.md`](.docs/11_domains/rust_perf.md) §Proposers);
+the bin stays suggest-only until the Phase 6 `--fix` wiring.
+
 ## Why this is a separate repo (not in riir-ai)
 
 The code healer borrows the **drafter+pruner+corpus pattern** from
 `riir-games-quest/quest_grammar` (TernaryDraftModel + SealQuestCorpus +
 ConstraintPruner), but has **zero game-domain coupling**:
 
-- No dependency on `riir-engine`, `riir-games`, or any game crate
-- No dependency on `riir-chain`, `riir-neuron-db`
-- Only public dep: `katgpt-core` (ConstraintPruner trait + ternary SIMD matvec
-  + `pick_domain` for kernel_opt's expert router, Plan 558)
+- No dependency on `riir-games*`, `riir-game-sdk`, or any game crate —
+  from ANY feature combination
+- No dependency on `riir-chain`; `riir-neuron-db` only transitive (via
+  `riir-rag` under the opt-in `latent_retrieval` feature)
+- Default build: only public dep is `katgpt-core` (ConstraintPruner trait
+  + ternary SIMD matvec + `pick_domain` for kernel_opt's expert router,
+  Plan 558). Two opt-in feature-gated arms consume non-game sibling
+  crates where reimplementation would duplicate whole substrates:
+  `ternary_inference` → `riir-engine` + `riir-gpu` (Bench 010 inference
+  arm); `latent_retrieval` → `riir-rag` (Plan 005 retrieval substrate,
+  `cargo heal --suggest`)
 - The `TernaryDraftModel` pattern is reimplemented locally (~200 LOC), not
   imported cross-workspace
 
@@ -99,10 +127,17 @@ L0→L1→L2→L3→L4 pipeline; each domain owns its corpus + validator. **Prop
 "new repo" recommendation. The trait abstraction makes future extraction a
 move, not a rewrite.
 
-**Cross-domain auto-routing is NOT in scope** — each domain is selected by
-enabling its feature flag. A unified `cargo heal` CLI that auto-detects
-domain from code shape is a future design sketch (Proposal 001 §Product
-vision), not shipped.
+**Cross-domain auto-routing** — Plan 005 Phase 1/2 (2026-08-14) shipped
+the unified `cargo heal --suggest` CLI with `--domain auto`, revising the
+original "not in scope" stance: `auto` **fans out across all
+feature-enabled domains** with the router verdict as a per-span
+annotation, NOT a gate (empirical finding — the 8-D structural centroids
+mis-routed fixtures, starving the correct domain; re-gating via tuned
+centroids or the 768-D embedder is a future tuning option). Each domain is
+still feature-selected; requesting a feature-off domain is a hard error.
+The bin stays **suggest-only** — the Phase 4 rust_perf `propose_fix`
+proposers landed as library code; the `--fix` CLI wiring + the G5
+real-fix gate are Phase 6 (kernel proposers Phase 5).
 
 ### `kernel_opt`-specific layers (Phase 3)
 
@@ -129,10 +164,12 @@ The `kernel_opt` domain adds two layers on top of the shared pipeline:
 ```
 /git/riir-clippy          ← this repo (clippy-healing pipeline)
 /git/katgpt-rs            ← katgpt-core (NON-OPTIONAL: ConstraintPruner trait + ternary matvec)
-/git/riir-ai              ← NOT a dep (game runtime — wrong domain)
+/git/riir-ai              ← OPTIONAL dep (feature-gated arms only: ternary_inference →
+                          riir-engine + riir-gpu, Bench 010; latent_retrieval → riir-rag,
+                          Plan 005. Default build: NOT a dep)
 /git/riir-train           ← OPTIONAL dep (only for L4 LoRA fallback, deferred)
 /git/riir-chain           ← NOT a dep
-/git/riir-neuron-db       ← NOT a dep
+/git/riir-neuron-db       ← transitive only (via riir-rag under latent_retrieval)
 ```
 
 Path deps in `Cargo.toml` assume the standard `/git/` sibling layout.
@@ -152,6 +189,10 @@ cargo run --example perf_heal_demo --features rust_perf
 # kernel_opt domain (Plan 001 Phase 3, 4090 DEFERRED)
 cargo check --features kernel_heal
 cargo run --example kernel_heal_demo --features kernel_heal
+
+# Plan 005 latent retrieval + the cargo-heal CLI (opt-in; pulls riir-rag)
+cargo check --features latent_retrieval
+cargo run --features latent_retrieval --bin cargo-heal -- --suggest src/
 
 # With ruliology candidate search (L3)
 cargo check --features ruliology_search
@@ -180,6 +221,7 @@ cargo run --example ruliology_search_demo --features ruliology_search --release
 - `kernel_heal` (opt-in, Plan 001 Phase 3): GPU kernel optimization healing domain. Absorbs Proposal 012. Enables `katgpt-core/variable_rank_domain_expert` for the `pick_domain` router (Plan 558). 15 category experts (Plan 003), 8-dim activity vector with 15/15 reachable (Plan 004), routed heal pipeline composed in `kernel_heal_demo` example. 4090 LoRA + real popcorn corpus DEFERRED.
 - `kernel_verify` (opt-in): CubeCL compile check. **STUB** — delegates to shared `RustAnalyzerPruner`; full numeric compare deferred (Proposal 012 §Phase 0). Implies `kernel_heal`.
 - `ruliology_search` (opt-in): L3 Pareto-front candidate search. Reuses the algorithm pattern from `katgpt-ruliology` (Bench 572) without a code-level dep. Runs once per lint invocation (~400µs/10 candidates), not per-tick. Implies `clippy_lints`.
+- `latent_retrieval` (opt-in, Plan 005 Phase 1): real-file span-level latent retrieval — the `--suggest` MVP. Indexes every enabled domain's corpus via riir-rag (`RuleIndex`: `ShardIndex` Clifford-wedge KNN + BM25, multi-scale), routes spans via corpus-derived domain centroids (`DomainRouter`, annotation only), retrieves ranked rules (`LatentMatcher`, fan-out across enabled domains). ZERO proposer code — suggestions are the corpus pattern texts; `--fix` needs the Phase 4/5 proposers. Gates `dep:riir-rag` (heavy tree: riir-rag + transitively riir-neuron-db — the default build stays light). Powers the `cargo-heal` bin (`--suggest` / `--domain auto|clippy|perf|kernel` / `--top-k`). **GOAT G1–G4 ALL PASS (Bench 018, 2026-08-14):** G1 100% (12/12 top-1, target ≥80%), G2 349µs/chunk (<1ms, 2.9× headroom), G3 104 lib tests, G4 `SuggestScratch` stable across 50 repeat scans. Known limits: fan-out routing (no gate), no minimum-score threshold (every span suggests), 12-item G1 fixture.
 - `self_evolve` (opt-in, Issue 004 + Issue 008): latent-first self-evolution loop — `LatentFixMemory` (3-axis retrieval over fix trajectories) + `LatentSkillEvolution` (EMA direction-vector update). GOAT G1-G5 ALL PASS (G5: 70pp healing rate improvement in controlled fixture). **G6/G7 validated against real cargo clippy feedback (Issue 008): G6 10/10 corpus truthfulness PASS, G7 50.0pp improvement (50% → 100%) PASS.** Borrows `dot+sigmoid` from riir-agents + 3-axis retrieval from riir-rag, reimplemented locally (~730 LOC, boundary-compliant). Stays opt-in (deployment-environment constraint: `clippy_verify` is itself opt-in). The mechanism is validated; the opt-in gate is not a correctness concern.
 - `wasm_pruner` (opt-in, deferred): L2 WASM rust-analyzer variant (blocked on rubrc)
 - `clippy_lora` (opt-in, deferred): L4 adaptive LoRA fallback (blocked on riir-train integration)
@@ -199,8 +241,8 @@ full numeric validator) passes.
 
 ## Documentation Shape
 
-This repo ships a **10-folder numbered `.docs/` book** (opened 2026-08-11,
-Issue 007), matching the `riir-ai/.docs/` / `riir-neuron-db/.docs/` /
+This repo ships a **11-folder numbered `.docs/` book** (opened 2026-08-11,
+Issue 007; the 11th folder was added for the Plan 001 domains), matching the `riir-ai/.docs/` / `riir-neuron-db/.docs/` /
 `riir-game-sdk/.docs/` format: numbered folders for sort order, unnumbered
 `.md` files inside, each folder has a `README.md` index with a purpose
 blockquote + file table + "See also" cross-refs.
@@ -209,11 +251,11 @@ blockquote + file table + "See also" cross-refs.
 |---|---|
 | `01_orientation/` | Crate role, sibling layout, boundary rationale, multi-domain architecture (Plan 001), build commands, numbering |
 | `02_corpus/` | L0 rule distillation: `Corpus<D>` (generic) + BLAKE3 commitment + per-domain seed corpora |
-| `03_drafter/` | L1 ternary SIMD matvec: `TernaryDrafter` (generic over `E: HealEntry`) + BLAKE3 `embedder` |
+| `03_drafter/` | L1 ternary SIMD matvec: `TernaryDrafter` (generic over `E: HealEntry`) + BLAKE3 `embedder` + Plan 005 latent retrieval (`RuleIndex`/`DomainRouter`/`LatentMatcher`, `--suggest` MVP, Bench 018 GOAT G1–G4) |
 | `04_pruner/` | L2 syn validator: `RustAnalyzerPruner` + `ValidationResult` + honesty contract |
 | `05_clippy_verify/` | clippy lint resolution: `ClippyVerifier` (opt-in `clippy_verify`) |
 | `06_ruliology/` | L3 Pareto-front: `RuliologySearch` + `pareto_front` + `ast_delta_size` (opt-in) |
-| `07_examples/` | The 8 in-tree examples (`heal_demo`, `perf_heal_demo`, `perf_bench_demo`, `kernel_heal_demo`, `clippy_verify_demo`, `ruliology_search_demo`, `self_evolve_real_world_demo`, `stage2_tuning_demo`) |
+| `07_examples/` | The 8 in-tree examples (`heal_demo`, `perf_heal_demo`, `perf_bench_demo`, `kernel_heal_demo`, `clippy_verify_demo`, `ruliology_search_demo`, `self_evolve_real_world_demo`, `stage2_tuning_demo`) + the `cargo-heal` bin (Plan 005 `--suggest` CLI) |
 | `08_benchmarks/` | GOAT gate methodology + measured results |
 | `09_lessons/` | Canonical patterns: borrow-without-dep, modelless-first, freeze/thaw, honest POC caveats, sigmoid-not-softmax |
 | `10_self_evolve/` | Issue 004 + Issue 008: latent-first self-evolution loop (`HealPipeline` + `LatentFixMemory` + `LatentSkillEvolution`, opt-in `self_evolve`; G1–G7 ALL PASS) |

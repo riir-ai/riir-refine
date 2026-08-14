@@ -192,6 +192,19 @@ just using the API that was already there.
    harness still uses the sequential decode loop. Wiring
    `forward_speculative_verify` is the next harness update. The Issue 665
    benchmark measured +1.21× at α=0.88 (thermal-throttled lower bound).
+   **UPDATE (2026-08-14, session 3 — WIRED, honest NEGATIVE):** commit
+   `c5660dc` added the `SPECULATIVE=1` arm (n-gram, K=2) to this harness.
+   Result on clippy prompts: **α = 0.19–0.22** (natural-language `<think>`
+   reasoning) — far below the α≥0.58 breakeven; decode **3.3–4.4× SLOWER**
+   than sequential. Issue 665's +1.21× (repetitive text) does NOT
+   reproduce on this workload — **NET-NEGATIVE for clippy fix
+   generation**. G1 (bit-identical emitted text vs sequential) PASSES
+   after fixing the bench_665 off-by-one verify bug (argmax index vs
+   draft index — filed as riir-ai Issue 667); `51d3586` then dropped the
+   `current_logits` threading (K+1 position-aligned logits). Throughput
+   measured under GPU contention — provisional per the Bench 649 rule;
+   exclusive-GPU re-run pending. Mirrors Bench 012's DSpark finding:
+   both speculative arms lose on clippy-class prompts.
 3. **The reproducible win is simdgroup batched prefill: +42.5% (1.42×).** This
    is the production DEFAULT-ON path. The gap to llama.cpp on prefill closed
    from 8.38× to 5.88×.

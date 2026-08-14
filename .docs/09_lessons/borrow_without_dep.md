@@ -19,8 +19,18 @@ corpus). The pruner ships its own `validate()` API (returns
 (syntax + lint) validation model didn't fit the trait's shape.
 
 **Why not import**: `riir-games-quest` is a game crate in riir-ai.
-riir-clippy cannot depend on riir-ai (boundary rule). The only
-code-level dep is `katgpt-core` (the ternary SIMD matvec substrate).
+Game crates are unreachable from any feature combination (the
+load-bearing boundary rule). The default build's only code-level dep is
+`katgpt-core` (the ternary SIMD matvec substrate).
+
+> **Nuance (2026-08-14, Plan 005):** the boundary rule is about
+> **game-domain coupling**, not the riir-ai workspace. Two opt-in
+> feature-gated arms consume specific **non-game** sibling crates where
+> reimplementation would duplicate whole substrates:
+> `ternary_inference` → `riir-engine` + `riir-gpu` (Bench 010), and
+> `latent_retrieval` → `riir-rag` (Plan 005, `cargo heal --suggest`).
+> The "reimplement locally" default still holds for patterns that fit
+> in ~200 LOC.
 
 ### 2. Modelless embedder (from `riir-rag`)
 
@@ -34,7 +44,12 @@ bounded output.
 u32 split → f32 normalization), different types (clippy lint tuples
 instead of text chunks).
 
-**Why not import**: `riir-rag` is in riir-ai. Boundary rule.
+**Why not import**: `riir-rag` is in riir-ai — and for the ~30 LOC
+embedder, the local reimplementation is the right call (default build
+stays dep-light). The rule has a measured exception: Plan 005's
+`latent_retrieval` consumes riir-rag's full retrieval substrate
+(`AstChunker` + `NeuronDbRetriever`) under a feature gate — see
+[`../03_drafter/latent_suggest.md`](../03_drafter/latent_suggest.md).
 
 ### 3. Pareto-front (from `katgpt-ruliology`)
 

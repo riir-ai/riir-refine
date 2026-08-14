@@ -52,8 +52,10 @@ enough for zero-alloc stack arrays; large enough for diverse embeddings
 
 Borrows the `ModellessEmbedder` pattern from `riir-rag` (riir-ai):
 BLAKE3 + deterministic projection + bounded output. Reimplemented
-locally (~30 LOC) because riir-clippy cannot depend on riir-ai
-(boundary rule).
+locally (~30 LOC) so the default build stays free of riir-ai deps
+(opt-in feature arms excepted — see
+[`latent_suggest.md`](latent_suggest.md), which consumes the substrate
+embedder directly under `latent_retrieval`).
 
 ## Test coverage
 

@@ -18,11 +18,11 @@ co-equal path.
 |---|---|---|
 | 01 | [`01_orientation/`](01_orientation/README.md) | Crate role, sibling layout, boundary rationale, build commands |
 | 02 | [`02_corpus/`](02_corpus/README.md) | L0 rule distillation: `Corpus<D>` (generic) + BLAKE3 commitment + per-domain seed corpora |
-| 03 | [`03_drafter/`](03_drafter/README.md) | L1 ternary SIMD matvec drafter (`TernaryDrafter`, generic over `E: HealEntry`) + BLAKE3 modelless embedder |
+| 03 | [`03_drafter/`](03_drafter/README.md) | L1 ternary SIMD matvec drafter (`TernaryDrafter`, generic over `E: HealEntry`) + BLAKE3 modelless embedder + Plan 005 latent retrieval (`RuleIndex`/`DomainRouter`/`LatentMatcher`, `--suggest` MVP) |
 | 04 | [`04_pruner/`](04_pruner/README.md) | L2 `syn`-based syntax validator (domain-agnostic) |
 | 05 | [`05_clippy_verify/`](05_clippy_verify/README.md) | clippy lint resolution via real `cargo clippy` (opt-in) |
 | 06 | [`06_ruliology/`](06_ruliology/README.md) | L3 Pareto-front candidate search (opt-in) |
-| 07 | [`07_examples/`](07_examples/README.md) | The 5 in-tree examples |
+| 07 | [`07_examples/`](07_examples/README.md) | The 8 in-tree examples + the `cargo-heal` bin (`cargo heal --suggest`) |
 | 08 | [`08_benchmarks/`](08_benchmarks/README.md) | GOAT gate methodology + measured results |
 | 09 | [`09_lessons/`](09_lessons/README.md) | Canonical patterns + honest POC caveats |
 | 10 | [`10_self_evolve/`](10_self_evolve/README.md) | Issue 004 + Issue 008: latent-first self-evolution loop (G1–G7 ALL PASS) |
@@ -31,6 +31,11 @@ co-equal path.
 ## Pipeline overview
 
 ```text
+Real .rs files (Plan 005 — feature `latent_retrieval`, the --suggest MVP)
+  AstChunker spans → ModellessEmbedder (8-D) → DomainRouter (annotation)
+  → RuleIndex fan-out retrieve → ranked rules + pattern snippets   ← 03_drafter/latent_suggest.md
+         │
+         ▼
 Domain corpus (BLAKE3-committed freeze/thaw)        ← L0 (02_corpus)
   clippy_lints: (lint_name, lint_group, buggy_code, fixed_code)
   rust_perf:    (rule_id, name, category, buggy_code, fixed_code)
@@ -58,6 +63,10 @@ L3 — RULIOLOGY SEARCH (opt-in)                      ← L3 (06_ruliology)
          ▼
   [ validated fix ]
 ```
+
+The Plan 005 latent path is currently **suggest-only** at the CLI — the
+Phase 4 rust_perf `propose_fix` proposers landed 2026-08-14 as library
+code; wiring them into `cargo heal --fix` is Phase 6.
 
 ## Resolved validation
 
