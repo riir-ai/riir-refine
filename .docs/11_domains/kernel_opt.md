@@ -10,7 +10,7 @@
 | Component | Ships now | Deferred |
 |---|---|---|
 | `KernelOptDomain: HealDomain` | ✅ | |
-| Seed corpus (Batch 1-18: 138 rules; popcorn COMPLETE; riir-gpu opened Batch 14, mined Batch 15-18) | ✅ | Future source: riir-gpu (~196K lines, mostly unmined), new popcorn releases |
+| Seed corpus (Batch 1-19: 140 rules; popcorn COMPLETE; riir-gpu opened Batch 14, mined Batch 15-19) | ✅ | Future source: riir-gpu (~196K lines, mostly unmined), new popcorn releases |
 | `KernelExpertRouter` (`pick_domain`) | ✅ (8-dim activity, 15/15 reachable, Plan 004) | Mined centroids via `CommittedFieldBlend` |
 | `KernelThermalRouter` (5-tier stub) | ✅ (returns Plasma) | Warm/Cold LoRA (4090, riir-train) |
 | `KernelVerifier` (compile-only) | ✅ (behind `kernel_verify`) | Full numeric compare vs reference |
@@ -36,7 +36,8 @@ Batch 15 (Research 016): 4 rules — **second batch mining riir-gpu**. Block-con
 Batch 16 (Research 017): 4 rules — **third batch mining riir-gpu**. cmma hardware unit over scalar ALU (gemm_ternary_simdgroup: use the cooperative matrix multiply-accumulate hardware unit instead of scalar ALU — 64 FMAs/cycle on the dedicated unit) + dequant-once-per-K-tile into shared memory (gemm_ternary_simdgroup: dequant a weight tile once, let the hardware matrix unit consume it across all output rows — m× amortization) + swap-large-axis-to-X (gemm_ternary_simdgroup: put the large GEMM axis on the X cube-count for workgroup distribution) + norm-decoupled low-bit scoring (forward_turboquant: store per-position L2 norm separately, quantize the unit-normalized key at 2-4 bits, reconstruct score as norm × dot). Four files assessed + dropped (lora_fused SGMV overlaps Category H; spectralquant/rotation boilerplate; spectralquant/qjl composition of water-fill with JL; spectralquant/calibration two-pass reduce overlaps split-reduction).
 Batch 17 (Research 018): 4 rules — **fourth batch mining riir-gpu (ternary scalar-ALU hot loop)**. Skip-all-zero-packed-words-via-or-reduce (gemm_ternary_batched: OR-reduce all tile rows' pos+neg bit-words, skip the 32-iteration sign-extraction loop when the whole tile's word is zero — ternary sparsity exploit) + hoist-group-invariant-scale-out-of-word-loop (gemv_ternary_block_contiguous: cache the per-group quant scale in a register across the 4 words it covers, reload only at the group boundary — 4× fewer global loads) + split-sign-accumulators-defer-subtraction (both ternary files: keep separate pos/neg accumulators inside the bit loop, subtract once at the end — 32→1 subtracts/word + independent ILP chains) + clamp-tile-indices-to-sentinel-discard-at-write (gemm_ternary_batched: alias OOB tile rows to m-1, compute fully, discard at write time — keeps the loop body uniform without padding overhead). Two files assessed + dropped (rope_geglu_cubecl: pairing-generic + precomputed cos/sin table are composition of existing dispatch/precompute principles; forward_dflare: 17-binding layout + heterogeneous KV are architectural, not kernel optimization).
 Batch 18 (Research 019): 3 rules — **fifth batch mining riir-gpu (Q4_K quantized GEMV family)**. Row-tile-amortize-input-load (gemv_q4k_plane_rowtiled: assign N output rows per plane, load input once, reuse across N dot products — GEMV to small-GEMM via M-widening) + factor-affine-quant-scale-out-of-element-loop (gemv_q4k_plane_factored: when dequant is affine in the code within a sub-block, factor d·scale and dmin·min out — Q4_K-specific, ternary has no min offset to factor) + pin-lane-to-quant-sub-block-coalesce-byte-loads (gemv_q4k_plane_factored: remap lane→element so each lane is pinned to one sub-block — 8 loads→2, enables affine factoring). Three sibling Q4_K files (qkv, geglu, batched) assessed + dropped: qkv = composition of fuse-gate-up-gemv-activation (triple fusion); geglu = same fuse + Q4_K dequant; batched = no new opt.
-Total: 138 rules. Popcorn corpus COMPLETE; riir-gpu (~196K lines) remains open as the next distillation source (13 of ~200 files mined).
+Batch 19 (Research 020): 2 rules — **sixth batch mining riir-gpu (fused-dispatch family)**. Chain-dispatches-single-sync-point (ternary_ffn_fused: queue N dependent dispatches in one command buffer, sync only once at the end — command-buffer-level fusion distinct from single-kernel fusion; linear dependency chains keep intermediates bounded, fan-out is the known-bad case per Bench 437) + fuse-residual-via-in-place-output-array (gemv_ternary_residual_cubecl: when a kernel needs N+1 array params but the runtime limits to N, alias the output buffer as the accumulation input (read-then-write) — bypasses CubeCL v0.10's hard 5-array limit, collapses 128 dispatches/token → 64). Three sibling files assessed + dropped: deltanet_input_proj_fused (same pattern as ternary_ffn_fused — confirms generality); deltanet_chunked + base recurrence (covered by recurrent-vs-chunk-dispatch Batch 11).
+Total: 140 rules. Popcorn corpus COMPLETE; riir-gpu (~196K lines) remains open as the next distillation source (16 of ~200 files mined).
 
 ### Category A: Memory access patterns (12 rules)
 
@@ -84,7 +85,7 @@ Total: 138 rules. Popcorn corpus COMPLETE; riir-gpu (~196K lines) remains open a
 | `clamp-tile-indices-to-sentinel-discard-at-write` | divergence-free tile bounds | Per-lane bounds check inside the loop → alias OOB tile rows to m-1 sentinel, compute fully, discard redundant results at write time (riir-gpu gemm_ternary_batched) |
 | `factor-affine-quant-scale-out-of-element-loop` | algebraic factoring of affine quant | Apply d·scale and dmin·min per element inside the dot loop → when dequant is affine in the code within a sub-block, factor scales out: accumulate Σ(code·x) and Σ(x) separately, apply scales once per sub-block (riir-gpu gemv_q4k_plane_factored, Issue 609 T2; Q4_K/min+scale-quant-specific — ternary is LINEAR in bits with no min offset) |
 
-### Category C: Fusion patterns (12 rules)
+### Category C: Fusion patterns (14 rules)
 
 | Rule ID | GPU concept | Pattern |
 |---|---|---|
@@ -100,6 +101,8 @@ Total: 138 rules. Popcorn corpus COMPLETE; riir-gpu (~196K lines) remains open a
 | `rkv-receptance-correction` | fused reduce-then-broadcast | 4-pass triple-mul+reduce+broadcast-mul+add → fused `(r·k·ρ).sum(keepdim)·v + o` |
 | `fold-norm-scalar-into-matmul` | norm-fold into matmul | Separate CPU norm pass + upload → fold inv_rms scalar into the GEMV dot product (riir-gpu gemv_q4k_rmsnorm, ~30s/step saved at 12B) |
 | `fuse-gate-up-gemv-activation` | sibling-GEMV + activation fusion | 3 dispatches (gate GEMV + up GEMV + GeGLU) → 1 fused kernel (riir-gpu gemv_geglu_f16, saves 52 dispatches/decode at 26 layers) |
+| `chain-dispatches-single-sync-point` | command-buffer-level dispatch fusion | N dispatches + N syncs → N dispatches + 1 sync (riir-gpu ternary_ffn_fused; linear dependency chains keep intermediates bounded; fan-out is the known-bad case per Bench 437) |
+| `fuse-residual-via-in-place-output-array` | parameter-count bypass via in-place aliasing | Separate GEMV dispatch + ResidualAdd dispatch → single in-place kernel (riir-gpu gemv_ternary_residual_cubecl; output buffer doubles as residual input, bypasses CubeCL v0.10 5-array limit, collapses 128→64 dispatches/token) |
 
 ### Category D: Dispatch patterns (9 rules)
 
@@ -182,7 +185,7 @@ pub fn route(&self, activity: &[f32; ACTIVITY_DIM]) -> usize {
 }
 ```
 
-**Plan 003 (2026-08-14):** router wired to the 138-rule corpus via 15 category
+**Plan 003 (2026-08-14):** router wired to the 140-rule corpus via 15 category
 experts. Each expert owns its category's `rule_ids` via `KERNEL_CATEGORIES`.
 - **Activity vector** = raw physical (kernel signature: `[M, N, K, dtype, hw,
   is_attention, is_fusion, is_ir_transform]` — 8-dim per Plan 004, normalized

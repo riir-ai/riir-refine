@@ -126,8 +126,8 @@
 //!   lane→element so each lane is pinned to one sub-block — 8 loads→2, enables
 //!   affine factoring). Three sibling `Q4_K` files (qkv, geglu, batched) assessed
 //!   and dropped: qkv = composition of fuse-gate-up-gemv-activation (triple fusion);
-//!   geglu = same fuse + `Q4_K` dequant; batched = no new opt. Corpus: **138
-//!   rules across 15 categories (A–O)**. `riir-gpu` remains open (13 of ~200
+//!   geglu = same fuse + `Q4_K` dequant; batched = no new opt. Corpus: **140
+//!   rules across 15 categories (A–O)**. `riir-gpu` remains open (16 of ~200
 //!   files mined).
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
@@ -1787,6 +1787,107 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
             ref_shape: "// naive: apply d*sc and dmin*min per element inside the dot loop\nfn q4k_dot_naive(input: &[f32], d: f32, dmin: f32, sc: f32, min_val: f32, nibbles: &[u32], n: usize) -> f32 {\n    let mut acc = 0.0;\n    for j in 0..n {\n        // per-element: 2 mul (d*sc) + 1 sub (dmin*min) + FMA = ~22 ops\n        let dequant = d * sc * (nibbles[j] as f32) - dmin * min_val;\n        acc += dequant * input[j]; // scale applied EVERY element (sc is constant!)\n    }\n    acc // sc/min decoded once but d*sc*nib - dmin*min computed n times\n}".to_string(),
             opt_pattern: "// optimized: factor d*sc and dmin*min out — accumulate sum(nib*x) and sum(x) separately\nfn q4k_dot_factored(input: &[f32], d: f32, dmin: f32, sc: f32, min_val: f32, nibbles: &[u32], n: usize) -> f32 {\n    let mut nib_dot = 0.0; // sum(nib_j * x_j) — the only per-row part\n    let mut sum_x = 0.0;   // sum(x_j) — row-independent when row-tiling\n    for j in 0..n {\n        nib_dot += (nibbles[j] as f32) * input[j]; // ~7 ops: FMA only\n        sum_x += input[j];                         // ~1 add\n    }\n    // apply scales ONCE per sub-block (was per-element)\n    d * sc * nib_dot - dmin * min_val * sum_x\n}".to_string(),
         },
+        // ════════════════════════════════════════════════════════════════════
+        // Batch 19 (Research 020): 2 riir-gpu production rules — sixth batch
+        // mining the stack's own kernels, focused on the fused-dispatch family
+        // (command-buffer-level fusion + in-place residual bypass).
+        // Source: riir-gpu ternary_ffn_fused.rs + gemv_ternary_residual_cubecl.rs.
+        // Three sibling files assessed + dropped: deltanet_input_proj_fused
+        // (same pattern as ternary_ffn_fused — confirms generality); deltanet
+        // chunked + base recurrence (covered by recurrent-vs-chunk-dispatch).
+        // ════════════════════════════════════════════════════════════════════
+        // ── chain-dispatches-single-sync-point — N dispatches + N syncs → N dispatches + 1 sync (C) ──
+        // Source: riir-gpu ternary_ffn_fused.rs (Issue 600). The fused ternary
+        // FFN chains 4 dispatches — gate GEMV + up GEMV + SwiGLU + down GEMV —
+        // into a single GPU command buffer, eliminating the per-matvec CPU↔GPU
+        // sync that made the naive Issue 599 integration slower than CPU. All
+        // 4 dispatches are queued WITHOUT `read_one`; only the final output is
+        // read back — ONE GPU sync point instead of 4. At most 2 intermediate
+        // buffers are live at any point (the dependency chain is linear:
+        // gate+up → SwiGLU → inter → down → out), so the command scheduler can
+        // reuse buffer memory between dependent dispatches.
+        //
+        // **Key applicability constraint:** works when the dependency chain is
+        // LINEAR (max N_live_intermediates small). The counterexample is
+        // Bench 437's failed deferred-readback: it kept Q/K/V/gate/up outputs
+        // ALL alive simultaneously (5 concurrent buffers), which INCREASED
+        // Metal memory pressure → 16% slower. Fan-out N independent
+        // intermediates consumed later is the known-bad case.
+        //
+        // Distinct from `fuse-gate-up-gemv-activation` (single-KERNEL fusion
+        // collapsing N ops into 1 kernel — saves dispatch overhead AND global
+        // memory bandwidth; this is command-BUFFER-level fusion keeping N
+        // kernels but 1 sync point — saves dispatch overhead only, applies
+        // when ops can't legally collapse into one kernel: different
+        // work-group shapes, different weight tensors, or independent ops).
+        KernelRule {
+            rule_id: "chain-dispatches-single-sync-point".to_string(),
+            gpu_concept: "queue N dependent GPU dispatches in one command buffer, sync only once at the end (not after each dispatch) — linear dependency chains keep intermediate buffer count bounded".to_string(),
+            ref_shape: "// naive: sync after each dispatch (N sync points, N CPU↔GPU round-trips)
+fn ffn_naive(weight_gate: &[f32], weight_up: &[f32], weight_down: &[f32], x: &[f32], m: usize, n: usize) -> Vec<f32> {
+    let gate = gemv_dispatch_sync(weight_gate, x, m, n); // dispatch 1 + read_one sync (~55-97µs)
+    let up = gemv_dispatch_sync(weight_up, x, m, n);     // dispatch 2 + read_one sync
+    let inter: Vec<f32> = gate.iter().zip(up.iter()).map(|(g, u)| silu(*g) * u).collect(); // CPU elementwise
+    gemv_dispatch_sync(weight_down, &inter, n, m)         // dispatch 3 + read_one sync — 3 sync points total
+}".to_string(),
+            opt_pattern: "// optimized: queue all dispatches in one command buffer, sync ONCE at the end
+fn ffn_deferred_sync(weight_gate: &[f32], weight_up: &[f32], weight_down: &[f32], x: &[f32], m: usize, n: usize) -> Vec<f32> {
+    let gate_h = empty_buf(m);  let up_h = empty_buf(m);  let inter_h = empty_buf(m);  let out_h = empty_buf(n);
+    gemv_dispatch_noread(weight_gate, x, gate_h.clone()); // dispatch 1 (no sync)
+    gemv_dispatch_noread(weight_up,   x, up_h.clone());   // dispatch 2 (no sync — gate+up can run back-to-back)
+    swiglu_dispatch(gate_h, up_h, inter_h.clone());        // dispatch 3 (consumes gate+up, frees them)
+    gemv_dispatch_noread(weight_down, inter_h, out_h.clone()); // dispatch 4 (no sync)
+    read_one(out_h)                                        // ONE sync point — at most 2 intermediates live at once
+}".to_string(),
+        },
+        // ── fuse-residual-via-in-place-output-array — 6th array impossible → alias output as residual input (C) ──
+        // Source: riir-gpu gemv_ternary_residual_cubecl.rs (Issue 616).
+        // Single-dispatch kernel that computes
+        //   residual_output[row] += dot(weight_row, input)
+        // for ternary bit-plane weights. Collapses 2 dispatches × 64 layers =
+        // 128 dispatches/token into 64 dispatches/token (saves one Metal kernel
+        // launch ~55-97µs each).
+        //
+        // CubeCL v0.10 has a hard **5 Array parameter limit** per kernel. The
+        // plain ternary GEMV already uses 5 (pos_bits, neg_bits, scales, input,
+        // output). Adding a 6th `residual` array is impossible. The fix: make
+        // the kernel in-place — the residual lives in the output buffer and is
+        // overwritten by GEMV result + residual. Same 5 args, but the output
+        // buffer is read-then-written. Lane 0 of each plane reads
+        // `residual_output[row]` before writing
+        // `residual_output[row] = residual[row] + gemv_result[row]`.
+        //
+        // General pattern: when a kernel needs N+1 array parameters but the
+        // runtime limits to N, and one of the N outputs is the accumulation
+        // target of the (N+1)th input, alias the output to the accumulation
+        // input (read-then-write semantics).
+        //
+        // Distinct from `fuse-add-rms-norm` (Batch 9 — fuses add+norm into
+        // one PASS for bandwidth savings); this fuses GEMV+add by ALIASING
+        // the output buffer as the residual input to bypass a hard
+        // parameter-count constraint — the mechanism is in-place aliasing,
+        // not pass-count reduction.
+        KernelRule {
+            rule_id: "fuse-residual-via-in-place-output-array".to_string(),
+            gpu_concept: "when a kernel needs N+1 array parameters but the runtime limits to N, and the output is the accumulation target of the extra input, alias the output buffer as the accumulation input (read-then-write) — bypasses parameter count limits without adding a dispatch".to_string(),
+            ref_shape: "// naive: separate GEMV dispatch + ResidualAdd dispatch (2 sync points, 6th array needed for residual)
+fn gemv_then_residual_dispatch(weight: &[f32], input: &[f32], residual: &[f32], m: usize, n: usize) -> Vec<f32> {
+    let gemv_out = gemv_dispatch_sync(weight, input, m, n); // dispatch 1: 5 arrays (weight, input, output)
+    // dispatch 2: residual_add(residual, gemv_out) — needs gemv_out + residual as INPUTS (6th array)
+    residual.iter().zip(gemv_out.iter()).map(|(r, g)| r + g).collect() // 2 dispatches × 64 layers = 128/token
+}".to_string(),
+            opt_pattern: "// optimized: single in-place kernel — output buffer aliases the residual input
+fn gemv_residual_inplace(weight: &[f32], input: &[f32], residual_output: &mut [f32], m: usize, n: usize) {
+    // SAME 5 arrays as plain GEMV (weight, input, output) — output is read-then-written
+    for row in 0..m {
+        let mut acc = 0.0;
+        for col in 0..n { acc += weight[row * n + col] * input[col]; }
+        // LANE 0: read residual_output[row] THEN write residual + gemv_result
+        residual_output[row] = residual_output[row] + acc; // in-place: output doubles as residual input
+    }
+    // 1 dispatch × 64 layers = 64/token (was 128) — no 6th array needed
+}".to_string(),
+        },
         // ── pin-lane-to-quant-sub-block-coalesce-byte-loads — strided to lane-fixed (A) ──
         // Source: riir-gpu gemv_q4k_cubecl.rs `gemv_q4k_plane_factored` (Issue
         // 609 T2). The naive strided lane-element map (k = lane + i*PLANE_DIM)
@@ -1822,7 +1923,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 138-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 140-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1880,7 +1981,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "factor-affine-quant-scale-out-of-element-loop",
         ],
     ),
-    // C: Fusion patterns (12 rules)
+    // C: Fusion patterns (14 rules)
     (
         KernelCategory::Fusion,
         "C: fusion",
@@ -1897,6 +1998,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "rkv-receptance-correction",
             "fold-norm-scalar-into-matmul",
             "fuse-gate-up-gemv-activation",
+            "chain-dispatches-single-sync-point",
+            "fuse-residual-via-in-place-output-array",
         ],
     ),
     // D: Dispatch patterns (9 rules)
@@ -2080,7 +2183,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
 /// Returns 15 buckets (one per category), each containing the `KernelRule`s whose
 /// `rule_id` appears in that category's slice of [`KERNEL_CATEGORIES`]. This is
 /// the category-scoped view of the corpus — a future heal pipeline can consult
-/// the routed expert's rules first without scanning all 138.
+/// the routed expert's rules first without scanning all 140.
 ///
 /// # Allocation
 ///
@@ -2145,8 +2248,9 @@ mod tests {
         // Batch 16 (4): riir-gpu production kernels — cmma hardware unit, dequant-once-per-k-tile, dispatch axis swap, norm-decoupled low-bit scoring (gemm_ternary_simdgroup, forward_turboquant).
         // Batch 17 (4): riir-gpu production kernels — skip-all-zero-packed-words-via-or-reduce, hoist-group-invariant-scale-out-of-word-loop, split-sign-accumulators-defer-subtraction, clamp-tile-indices-to-sentinel-discard-at-write (gemm_ternary_batched, gemv_ternary_block_contiguous).
         // Batch 18 (3): riir-gpu production kernels — row-tile-amortize-input-load, factor-affine-quant-scale-out-of-element-loop, pin-lane-to-quant-sub-block-coalesce-byte-loads (gemv_q4k_cubecl Q4_K family).
-        // Total: 138.
-        assert_eq!(corpus.entries.len(), 138, "batches 1-18 should have 138 rules");
+        // Batch 19 (2): riir-gpu production kernels — chain-dispatches-single-sync-point, fuse-residual-via-in-place-output-array (ternary_ffn_fused, gemv_ternary_residual_cubecl).
+        // Total: 140.
+        assert_eq!(corpus.entries.len(), 140, "batches 1-19 should have 140 rules");
     }
 
     #[test]
@@ -2835,6 +2939,29 @@ mod tests {
         assert!(concepts.contains(&"remap the lane-element assignment so each lane is pinned to one quantization sub-block — the 8 consecutive bytes it needs fall in 2 consecutive u32 words (8 loads to 2), and scale/min become loop-invariant (enabling affine factoring)"));
     }
 
+    #[test]
+    fn batch19_rules_present() {
+        // Verify the 2 batch-19 rules in Category C (fusion).
+        let corpus = build_kernel_seed_corpus();
+        let ids: Vec<&str> =
+            corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        // Category C (2 new): chain-dispatches-single-sync-point + fuse-residual-via-in-place-output-array
+        assert!(ids.contains(&"chain-dispatches-single-sync-point"), "chain dispatches single sync point");
+        assert!(ids.contains(&"fuse-residual-via-in-place-output-array"), "fuse residual via in-place output array");
+    }
+
+    #[test]
+    fn batch19_chain_dispatch_inplace_residual_concepts_covered() {
+        // Verify the batch-19 chain-dispatch + in-place-residual concepts.
+        let corpus = build_kernel_seed_corpus();
+        let concepts: Vec<&str> =
+            corpus.entries.iter().map(|e| e.gpu_concept.as_str()).collect();
+        // Category C: chain-dispatches-single-sync-point (riir-gpu ternary_ffn_fused)
+        assert!(concepts.contains(&"queue N dependent GPU dispatches in one command buffer, sync only once at the end (not after each dispatch) — linear dependency chains keep intermediate buffer count bounded"));
+        // Category C: fuse-residual-via-in-place-output-array (riir-gpu gemv_ternary_residual_cubecl)
+        assert!(concepts.contains(&"when a kernel needs N+1 array parameters but the runtime limits to N, and the output is the accumulation target of the extra input, alias the output buffer as the accumulation input (read-then-write) — bypasses parameter count limits without adding a dispatch"));
+    }
+
     // ════════════════════════════════════════════════════════════════════
     // Plan 003 — Router ↔ corpus wiring tests
     // ════════════════════════════════════════════════════════════════════
@@ -2846,7 +2973,7 @@ mod tests {
 
     #[test]
     fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-        // Every rule_id in the 138-rule corpus must appear in exactly one category.
+        // Every rule_id in the 140-rule corpus must appear in exactly one category.
         let corpus = build_kernel_seed_corpus();
         let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
         let mut categorized: Vec<&str> = Vec::new();
@@ -2877,11 +3004,11 @@ mod tests {
 
     #[test]
     fn kernel_categories_counts_match_plan_003_table() {
-        // Pin per-category rule counts to the Plan 003 table (updated for Batch 18).
+        // Pin per-category rule counts to the Plan 003 table (updated for Batch 19).
         let expected = [
             (KernelCategory::MemoryAccess, 12),
             (KernelCategory::Compute, 24),
-            (KernelCategory::Fusion, 12),
+            (KernelCategory::Fusion, 14),
             (KernelCategory::Dispatch, 9),
             (KernelCategory::Parallelism, 8),
             (KernelCategory::FlashAttnTiling, 10),
@@ -2902,9 +3029,9 @@ mod tests {
                 "Plan 003: category {cat:?} has {} rules, expected {count}",
                 entry.2.len());
         }
-        // Sum must equal 138.
+        // Sum must equal 140.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 138, "Plan 003: category totals must sum to 138");
+        assert_eq!(total, 140, "Plan 003: category totals must sum to 140");
     }
 
     #[test]
@@ -2914,7 +3041,7 @@ mod tests {
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 138, "Plan 003: grouped corpus has {total} rules, expected 138");
+        assert_eq!(total, 140, "Plan 003: grouped corpus has {total} rules, expected 140");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");
