@@ -19,23 +19,21 @@
 //! carry. The hand-crafted centroids encode the kernel-shape signature that
 //! triggers each category (M/N/K ratios + dtype/hw signals).
 //!
-//! ## Honest caveat — the 5-dim activity vector is rank-deficient
+//! ## Plan 004 — 8-dim activity vector (2026-08-14)
 //!
-//! The 5-dim activity vector `[M, N, K, dtype, hw]` is **shape-only** — it
-//! cannot cleanly discriminate operation-class categories (`flash-attn`,
-//! `linear-attn`, `MoE`, `NSA`, `varlen`) which need an *operation-type* signal.
-//! The 15×5 centroid matrix is rank-deficient. Operation-driven categories
-//! get centroids encoding "long-sequence + reduction-heavy" signatures as
-//! a shape proxy — a **deliberate approximation**, documented per category.
-//!
-//! **Next step (deferred, needs concrete consumer):** extend `ACTIVITY_DIM`
-//! from 5 to ~8 with operation-class one-hot axes (`is_attention`,
-//! `is_moe`, `is_reduction`).
+//! Plan 003 shipped 5-dim shape-only activity vectors + documented that
+//! categories C (fusion) and O (IR strength reduction) were unreachable — a
+//! rank-deficiency of the 5-dim encoding. Plan 004 extends to **8 dims** by
+//! adding 3 operation-class one-hot axes (`is_attention`, `is_fusion`,
+//! `is_ir_transform`). C gets a unique `is_fusion=1.0` signal; O gets a
+//! unique `is_ir_transform=1.0` signal; F/G/I get `is_attention=1.0`.
+//! **Result: 15/15 categories reachable** (was 13/15).
 //!
 //! ## Domain classification
 //!
 //! - **Activity vector** = raw physical (kernel signature: M, N, K, dtype
-//!   enum, hw enum). Deterministic + replayable.
+//!   enum, hw enum, + 3 operation-class one-hot flags). Deterministic +
+//!   replayable. See [`build_activity`] for the consumer-facing constructor.
 //! - **Domain directions** = latent (hand-crafted centroids, projected to a
 //!   scalar expert index via dot-product + argmax). NOT synced — only the
 //!   resulting expert index crosses the sync boundary.
@@ -53,13 +51,86 @@ use crate::domains::kernel_opt::corpus::KERNEL_CATEGORIES;
 /// [`KERNEL_CATEGORIES`].
 pub const NUM_KERNEL_EXPERTS: usize = 15;
 
-/// Activity vector dimension. The kernel signature: `[M, N, K, dtype, hw]`
-/// (normalized to `[0.0, 1.0]` per axis). 5 dims covers the common GEMM /
-/// matvec / pointwise shapes.
+/// Activity vector dimension. The kernel signature:
+/// `[M, N, K, dtype, hw, is_attention, is_fusion, is_ir_transform]`
+/// (normalized to `[0.0, 1.0]` per axis).
 ///
-/// **Plan 003 caveat:** 5 dims is rank-deficient for 15 categories. Future
-/// extension (operation-class axes) deferred — see module docs.
-pub const ACTIVITY_DIM: usize = 5;
+/// - Axes 0-4 (shape): M, N, K, dtype, hw — cover the common GEMM / matvec /
+///   pointwise shapes.
+/// - Axes 5-7 (operation class): `is_attention`, `is_fusion`, `is_ir_transform`
+///   — one-hot flags set by the consumer based on the kernel's operation type.
+///   These resolve the Plan 003 rank-deficiency (C + O were unreachable with
+///   shape-only axes).
+///
+/// See [`build_activity`] for the consumer-facing constructor + the named
+/// axis-index constants ([`AXIS_M`] … [`AXIS_IS_IR_TRANSFORM`]).
+pub const ACTIVITY_DIM: usize = 8;
+
+// ─── Named axis indices ───────────────────────────────────────────────────
+// Consumers should use these constants instead of hardcoding array indices.
+
+/// Axis 0: M dimension (rows / output elements). Normalized to `[0, 1]`.
+pub const AXIS_M: usize = 0;
+/// Axis 1: N dimension (cols / output elements). Normalized to `[0, 1]`.
+pub const AXIS_N: usize = 1;
+/// Axis 2: K dimension (reduction inner). Normalized to `[0, 1]`.
+pub const AXIS_K: usize = 2;
+/// Axis 3: dtype enum (0.0 = f32, 0.5 = f16, 1.0 = i8/u4/etc.). Normalized.
+pub const AXIS_DTYPE: usize = 3;
+/// Axis 4: hardware enum (0.0 = CPU, 0.5 = Metal, 1.0 = CUDA). Normalized.
+pub const AXIS_HW: usize = 4;
+/// Axis 5: `is_attention` — one-hot flag for attention-family kernels
+/// (flash-attn, linear-attn, NSA). Set by the consumer based on operation type.
+pub const AXIS_IS_ATTENTION: usize = 5;
+/// Axis 6: `is_fusion` — one-hot flag for multi-op fused kernels
+/// (norm+act, quant+matmul, masked softmax). Set by the consumer.
+pub const AXIS_IS_FUSION: usize = 6;
+/// Axis 7: `is_ir_transform` — one-hot flag for compile-time IR strength
+/// reduction (mul/div/mod by pow2 → shift/mask). Set by the consumer.
+pub const AXIS_IS_IR_TRANSFORM: usize = 7;
+
+/// Build an activity vector from shape + operation-class flags.
+///
+/// This is the consumer-facing constructor. A future heal pipeline that
+/// receives a kernel signature + operation class calls this then
+/// [`KernelExpertRouter::route`].
+///
+/// # Arguments
+///
+/// - `m`, `n`, `k`: kernel shape dimensions, normalized to `[0.0, 1.0]`
+///   (e.g., `m / MAX_M` where `MAX_M` is the largest expected dim).
+/// - `dtype`: dtype signal in `[0.0, 1.0]` (0.0 = f32, 0.5 = f16, 1.0 = low-bit).
+/// - `hw`: hardware signal in `[0.0, 1.0]` (0.0 = CPU, 0.5 = Metal, 1.0 = CUDA).
+/// - `is_attention`: true for attention-family kernels (flash-attn, linear-attn, NSA).
+/// - `is_fusion`: true for multi-op fused kernels.
+/// - `is_ir_transform`: true for compile-time IR strength reduction.
+///
+/// # Zero allocation
+///
+/// Returns a stack `[f32; ACTIVITY_DIM]` — no heap.
+#[must_use]
+#[allow(clippy::too_many_arguments)] // 8 args = 8 activity-vector axes
+pub fn build_activity(
+    m: f32,
+    n: f32,
+    k: f32,
+    dtype: f32,
+    hw: f32,
+    is_attention: bool,
+    is_fusion: bool,
+    is_ir_transform: bool,
+) -> [f32; ACTIVITY_DIM] {
+    [
+        m,
+        n,
+        k,
+        dtype,
+        hw,
+        f32::from(is_attention),
+        f32::from(is_fusion),
+        f32::from(is_ir_transform),
+    ]
+}
 
 /// The 15 kernel optimization experts, one per corpus category (A–O).
 ///
@@ -85,46 +156,47 @@ pub const KERNEL_EXPERT_NAMES: [&str; NUM_KERNEL_EXPERTS] = [
 
 /// Hand-crafted per-category centroids for the 15 kernel experts.
 ///
-/// Each centroid encodes the kernel-shape signature that triggers that category,
-/// as a 5-dim vector `[M, N, K, dtype, hw]` normalized to `[0.0, 1.0]`. All
-/// components are non-negative (negative components would only hurt the dot
-/// product with non-negative activity values).
+/// Each centroid encodes the kernel-shape signature + operation-class flags
+/// that trigger that category, as an 8-dim vector
+/// `[M, N, K, dtype, hw, is_attention, is_fusion, is_ir_transform]`
+/// normalized to `[0.0, 1.0]`. All components are non-negative (negative
+/// components would only hurt the dot product with non-negative activity
+/// values).
 ///
-/// **Centroid design (Plan 003):** each category is assigned a primary axis +
-/// secondary axes to make its direction contrastive. Verified computationally:
-/// 13/15 categories are reachable (some activity vector routes to them).
+/// **Centroid design (Plan 003 + Plan 004):**
+/// - Plan 003 assigned each category a primary shape axis + secondary axes.
+///   Verified computationally: 13/15 categories reachable.
+/// - Plan 004 added 3 operation-class one-hot axes (`is_attention`,
+///   `is_fusion`, `is_ir_transform`) to resolve the 2 unreachable categories
+///   (C fusion, O IR strength reduction). **15/15 now reachable.**
 ///
-/// **Known limitation (2/15 unreachable):** categories C (fusion — balanced
-/// M+N+K) and O (IR strength reduction — low everything / u32) are unreachable
-/// via `argmax(activity · centroid)` with non-negative activity. C is always
-/// beaten by a more peaked centroid on its strongest axis; O's low-everything
-/// signature can't beat any higher centroid. These are documented limitations
-/// of the 5-dim shape-only activity vector — a richer encoding (operation-class
-/// axes) would resolve them. See module-level "Honest caveat" docs.
+/// **How C + O became reachable (Plan 004):**
+/// - C (fusion) gets `is_fusion=1.0` — no other centroid sets it, so any
+///   activity vector with `is_fusion>0` routes to C.
+/// - O (IR strength) gets `is_ir_transform=1.0` — same uniqueness argument.
 ///
-/// Replaces the pre-Plan-003 `IDENTITY_KERNEL_DIRECTIONS` placeholder (4
-/// identity vectors). Mining real centroids via `CommittedFieldBlend` (Plan 321)
-/// is deferred — needs `(signature, observed_speedup)` tuples.
+/// Mining real centroids via `CommittedFieldBlend` (Plan 321) is deferred —
+/// needs `(signature, observed_speedup)` tuples.
 ///
 /// # Layout
 ///
 /// `CATEGORY_KERNEL_DIRECTIONS[e][i]` = direction component `i` for expert `e`.
 pub const CATEGORY_KERNEL_DIRECTIONS: [[f32; ACTIVITY_DIM]; NUM_KERNEL_EXPERTS] = [
-    [0.9, 0.1, 0.0, 0.0, 0.0], // A: memory access — M-dominant
-    [0.0, 0.1, 0.9, 0.0, 0.0], // B: compute — K-dominant
-    [0.5, 0.5, 0.5, 0.1, 0.1], // C: fusion — balanced (UNREACHABLE: beaten by peaked centroids)
-    [0.0, 0.0, 0.0, 0.1, 0.9], // D: dispatch — hw-dominant
-    [0.4, 0.4, 0.0, 0.0, 0.5], // E: parallelism — M+N + hw (grid launch)
-    [0.8, 0.8, 0.6, 0.0, 0.0], // F: flash-attn tiling — large M+N+K
-    [0.2, 0.2, 0.6, 0.3, 0.0], // G: linear-attn recurrence — small M+N, K, some dtype
-    [0.3, 0.0, 0.8, 0.1, 0.0], // H: MoE dispatch — K + some M (expert routing)
-    [0.0, 1.0, 0.0, 0.0, 0.0], // I: NSA block-sparse — pure N-dominant
-    [0.7, 0.0, 0.1, 0.2, 0.0], // J: varlen packing — M + some dtype
-    [0.1, 0.1, 0.1, 0.3, 0.7], // K: autotune dispatch — hw + some dtype
-    [0.6, 0.6, 0.0, 0.3, 0.0], // L: conv-as-GEMM + layout — M+N + dtype
-    [0.0, 0.0, 0.0, 0.6, 0.5], // M: kernel polymorphism — dtype + hw
-    [0.0, 0.0, 0.0, 0.9, 0.1], // N: dtype + alignment — dtype-dominant
-    [0.0, 0.0, 0.0, 0.05, 0.05], // O: IR strength reduction — low everything (UNREACHABLE)
+    [0.9, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], // A: memory access — M-dominant
+    [0.0, 0.1, 0.9, 0.0, 0.0, 0.0, 0.0, 0.0], // B: compute — K-dominant
+    [0.5, 0.5, 0.5, 0.1, 0.1, 0.0, 1.0, 0.0], // C: fusion — balanced + is_fusion
+    [0.0, 0.0, 0.0, 0.1, 0.9, 0.0, 0.0, 0.0], // D: dispatch — hw-dominant
+    [0.5, 0.5, 0.0, 0.0, 0.7, 0.0, 0.0, 0.0], // E: parallelism — M+N + hw (grid launch)
+    [0.8, 0.8, 0.6, 0.0, 0.0, 1.0, 0.0, 0.0], // F: flash-attn tiling — large M+N+K + is_attention
+    [0.2, 0.2, 0.6, 0.3, 0.0, 1.0, 0.0, 0.0], // G: linear-attn recurrence — small M+N, K + is_attention
+    [0.2, 0.0, 0.5, 0.5, 0.0, 0.0, 0.0, 0.0], // H: MoE dispatch — moderate M+K + dtype (expert routing)
+    [0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0], // I: NSA block-sparse — pure N + is_attention
+    [0.85, 0.0, 0.0, 0.3, 0.0, 0.0, 0.0, 0.0], // J: varlen packing — peaked M + some dtype
+    [0.0, 0.0, 0.0, 0.5, 0.8, 0.0, 0.0, 0.0], // K: autotune dispatch — dtype + hw (config sweep)
+    [0.6, 0.6, 0.0, 0.3, 0.0, 0.0, 0.0, 0.0], // L: conv-as-GEMM + layout — M+N + dtype
+    [0.2, 0.2, 0.0, 0.6, 0.3, 0.0, 0.0, 0.0], // M: kernel polymorphism — small shape + dtype + hw (op-family trait)
+    [0.0, 0.0, 0.0, 0.9, 0.1, 0.0, 0.0, 0.0], // N: dtype + alignment — dtype-dominant
+    [0.0, 0.0, 0.0, 0.05, 0.05, 0.0, 0.0, 1.0], // O: IR strength reduction — is_ir_transform
 ];
 
 /// The kernel expert router — selects ONE expert from `NUM_KERNEL_EXPERTS`
@@ -226,6 +298,7 @@ impl Default for KernelExpertRouter {
 }
 
 #[cfg(test)]
+#[allow(clippy::float_cmp)] // exact comparisons of known f32 values in tests
 mod tests {
     use super::*;
 
@@ -233,25 +306,26 @@ mod tests {
     fn category_centroids_route_shape_signatures() {
         let router = KernelExpertRouter::new();
         // Large-M only → memory access (category A, idx 0).
-        // activity ≈ [0.9, 0.1, 0.0, 0.0, 0.0]
-        // dot(A) = 0.9*0.9 + 0.1*0.1 = 0.81 + 0.01 = 0.82
-        // dot(F) = 0.9*0.8 + 0.1*0.8 + 0.0*0.6 = 0.72 + 0.08 = 0.80
-        // A wins (0.82 > 0.80).
-        assert_eq!(router.route(&[0.9, 0.1, 0.0, 0.0, 0.0]), 0);
+        let activity = build_activity(0.9, 0.0, 0.0, 0.0, 0.0, false, false, false);
+        assert_eq!(router.route(&activity), 0);
         // Large-K only → compute (category B, idx 1).
-        assert_eq!(router.route(&[0.0, 0.1, 0.9, 0.0, 0.0]), 1);
+        let activity = build_activity(0.0, 0.0, 0.9, 0.0, 0.0, false, false, false);
+        assert_eq!(router.route(&activity), 1);
         // Large-hw only → dispatch (category D, idx 3).
-        assert_eq!(router.route(&[0.0, 0.0, 0.0, 0.1, 0.9]), 3);
+        let activity = build_activity(0.0, 0.0, 0.0, 0.0, 0.9, false, false, false);
+        assert_eq!(router.route(&activity), 3);
         // Large-dtype only → dtype + alignment (category N, idx 13).
-        assert_eq!(router.route(&[0.0, 0.0, 0.0, 0.9, 0.1]), 13);
-        // Large-N only → NSA block-sparse (category I, idx 8).
-        assert_eq!(router.route(&[0.0, 1.0, 0.0, 0.0, 0.0]), 8);
+        let activity = build_activity(0.0, 0.0, 0.0, 0.9, 0.0, false, false, false);
+        assert_eq!(router.route(&activity), 13);
+        // Large-N + is_attention → NSA block-sparse (category I, idx 8).
+        let activity = build_activity(0.0, 1.0, 0.0, 0.0, 0.0, true, false, false);
+        assert_eq!(router.route(&activity), 8);
     }
 
     #[test]
     fn route_is_deterministic() {
         let router = KernelExpertRouter::new();
-        let activity = [0.5, 0.3, 0.8, 0.1, 0.2];
+        let activity = build_activity(0.5, 0.3, 0.8, 0.1, 0.2, false, false, false);
         let r1 = router.route(&activity);
         let r2 = router.route(&activity);
         assert_eq!(r1, r2);
@@ -264,7 +338,8 @@ mod tests {
         for &m in &[0.1, 0.5, 0.9] {
             for &n in &[0.1, 0.5, 0.9] {
                 for &k in &[0.1, 0.5, 0.9] {
-                    let idx = router.route(&[m, n, k, 0.5, 0.5]);
+                    let activity = build_activity(m, n, k, 0.5, 0.5, false, false, false);
+                    let idx = router.route(&activity);
                     assert!(idx < NUM_KERNEL_EXPERTS,
                         "route returned {idx}, must be < {NUM_KERNEL_EXPERTS}");
                 }
@@ -276,11 +351,13 @@ mod tests {
     fn route_named_returns_category_label() {
         let router = KernelExpertRouter::new();
         // Large-M only → memory access.
-        let name = router.route_named(&[0.9, 0.1, 0.0, 0.0, 0.0]);
+        let activity = build_activity(0.9, 0.0, 0.0, 0.0, 0.0, false, false, false);
+        let name = router.route_named(&activity);
         assert_eq!(name, "A: memory access",
             "large-M-only should route to category A, got '{name}'");
         // Large-hw → dispatch.
-        let name = router.route_named(&[0.0, 0.0, 0.0, 0.1, 0.9]);
+        let activity = build_activity(0.0, 0.0, 0.0, 0.0, 0.9, false, false, false);
+        let name = router.route_named(&activity);
         assert_eq!(name, "D: dispatch",
             "large-hw-only should route to category D, got '{name}'");
     }
@@ -308,15 +385,18 @@ mod tests {
         // NaN in the activity vector should not panic. pick_domain uses
         // partial_cmp which returns Equal on NaN → ties → lowest index.
         let router = KernelExpertRouter::new();
-        let _ = router.route(&[f32::NAN, 0.0, 0.0, 0.0, 0.0]);
+        let mut activity = [0.0f32; ACTIVITY_DIM];
+        activity[0] = f32::NAN;
+        let _ = router.route(&activity);
         // No panic = pass.
     }
 
     #[test]
     fn num_experts_and_activity_dim_are_stable() {
         // Pin the const generics so future changes are deliberate.
+        // Plan 004: ACTIVITY_DIM raised 5 → 8 (operation-class axes).
         assert_eq!(NUM_KERNEL_EXPERTS, 15);
-        assert_eq!(ACTIVITY_DIM, 5);
+        assert_eq!(ACTIVITY_DIM, 8);
         assert_eq!(KERNEL_EXPERT_NAMES.len(), NUM_KERNEL_EXPERTS);
         assert_eq!(CATEGORY_KERNEL_DIRECTIONS.len(), NUM_KERNEL_EXPERTS);
         assert_eq!(CATEGORY_KERNEL_DIRECTIONS[0].len(), ACTIVITY_DIM);
@@ -324,7 +404,7 @@ mod tests {
 
     #[test]
     fn category_centroids_match_expert_count() {
-        // Every expert has a centroid; every centroid has 5 dims.
+        // Every expert has a centroid; every centroid has ACTIVITY_DIM dims.
         assert_eq!(
             CATEGORY_KERNEL_DIRECTIONS.len(),
             NUM_KERNEL_EXPERTS,
@@ -411,7 +491,7 @@ mod tests {
     fn route_then_lookup_yields_consistent_category() {
         // End-to-end: route → category → rules → expert_for_rule matches back.
         let router = KernelExpertRouter::new();
-        let activity = [0.9, 0.1, 0.0, 0.0, 0.0]; // large-M-only → A
+        let activity = build_activity(0.9, 0.0, 0.0, 0.0, 0.0, false, false, false); // → A
         let expert_idx = router.route(&activity);
         assert_eq!(expert_idx, 0, "large-M-only routes to A (idx 0)");
         let category = KernelExpertRouter::category_for_expert(expert_idx).unwrap();
@@ -427,42 +507,100 @@ mod tests {
         assert_eq!(category.as_str(), KERNEL_EXPERT_NAMES[expert_idx]);
     }
 
+    // ════════════════════════════════════════════════════════════════════
+    // Plan 004 — 8-dim activity vector + 15/15 reachability
+    // ════════════════════════════════════════════════════════════════════
+
     #[test]
-    fn reachable_categories_covers_13_of_15() {
-        // Plan 003 documented limitation: 13/15 categories are reachable via
-        // argmax(activity · centroid) with non-negative activity in [0,1].
-        // Categories C (fusion — balanced) and O (IR strength — low everything)
-        // are unreachable — a documented limitation of the 5-dim shape-only
-        // activity vector. See router module docs.
+    fn build_activity_sets_flags_correctly() {
+        // All shape axes + all flags off.
+        let a = build_activity(0.5, 0.3, 0.8, 0.1, 0.2, false, false, false);
+        assert_eq!(a, [0.5, 0.3, 0.8, 0.1, 0.2, 0.0, 0.0, 0.0]);
+        // All flags on.
+        let a = build_activity(0.0, 0.0, 0.0, 0.0, 0.0, true, true, true);
+        assert_eq!(a, [0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0]);
+        // Mixed flags.
+        let a = build_activity(0.9, 0.1, 0.0, 0.0, 0.0, false, true, false);
+        assert_eq!(a[AXIS_M], 0.9);
+        assert_eq!(a[AXIS_IS_FUSION], 1.0);
+        assert_eq!(a[AXIS_IS_ATTENTION], 0.0);
+        assert_eq!(a[AXIS_IS_IR_TRANSFORM], 0.0);
+    }
+
+    #[test]
+    fn build_activity_dimension_matches_const() {
+        let a = build_activity(0.0, 0.0, 0.0, 0.0, 0.0, false, false, false);
+        assert_eq!(a.len(), ACTIVITY_DIM);
+    }
+
+    #[test]
+    fn all_15_categories_reachable() {
+        // Plan 004: with the 8-dim activity vector (operation-class axes added),
+        // ALL 15 categories should be reachable. Plan 003 had 13/15 (C + O
+        // unreachable); the is_fusion + is_ir_transform axes resolve both.
         let router = KernelExpertRouter::new();
         let mut reachable = std::collections::HashSet::new();
-        // Sweep a coarse grid of activity vectors.
-        for &m in &[0.0, 0.1, 0.3, 0.5, 0.7, 0.9, 1.0] {
-            for &n in &[0.0, 0.1, 0.3, 0.5, 0.7, 0.9, 1.0] {
-                for &k in &[0.0, 0.1, 0.3, 0.5, 0.7, 0.9, 1.0] {
-                    for &d in &[0.0, 0.1, 0.3, 0.5, 0.7, 0.9, 1.0] {
-                        for &h in &[0.0, 0.1, 0.3, 0.5, 0.7, 0.9, 1.0] {
-                            let idx = router.route(&[m, n, k, d, h]);
-                            reachable.insert(idx);
+        // Coarse grid sweep: 5 values per dim × 8 dims = 390,625 points.
+        // Covers shape axes [0..4] + operation-class axes [5..7].
+        for &m in &[0.0, 0.25, 0.5, 0.75, 1.0] {
+            for &n in &[0.0, 0.25, 0.5, 0.75, 1.0] {
+                for &k in &[0.0, 0.25, 0.5, 0.75, 1.0] {
+                    for &d in &[0.0, 0.25, 0.5, 0.75, 1.0] {
+                        for &h in &[0.0, 0.25, 0.5, 0.75, 1.0] {
+                            for &attn in &[0.0, 1.0] {
+                                for &fus in &[0.0, 1.0] {
+                                    for &ir in &[0.0, 1.0] {
+                                        let idx = router.route(&[
+                                            m, n, k, d, h, attn, fus, ir,
+                                        ]);
+                                        reachable.insert(idx);
+                                    }
+                                }
+                            }
                         }
                     }
                 }
             }
         }
-        // Must reach at least 13 of 15 (C + O documented as unreachable).
-        assert!(reachable.len() >= 13,
-            "Plan 003: only {} categories reachable, expected ≥13",
-            reachable.len());
-        // C (idx 2) and O (idx 14) should NOT be in the reachable set.
-        // (If they ARE reachable, the centroid design improved — update this
-        // test to celebrate, not gate.)
-        // This is an informational assertion — C and O being unreachable is
-        // the documented limitation, not a bug.
-        if reachable.contains(&2) {
-            eprintln!("Plan 003: category C is now reachable (centroid improvement!)");
-        }
-        if reachable.contains(&14) {
-            eprintln!("Plan 003: category O is now reachable (centroid improvement!)");
+        assert_eq!(reachable.len(), NUM_KERNEL_EXPERTS,
+            "Plan 004: expected all {NUM_KERNEL_EXPERTS} categories reachable, \
+             got {}: missing = {:?}",
+            reachable.len(),
+            (0..NUM_KERNEL_EXPERTS).filter(|i| !reachable.contains(i)).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn per_category_canonical_routing() {
+        // Each category has a canonical activity vector that routes to it.
+        // This proves the router can distinguish all 15 categories — not just
+        // that some grid point hits each (which could be coincidental).
+        let router = KernelExpertRouter::new();
+        let cases: [(KernelCategory, [f32; ACTIVITY_DIM]); NUM_KERNEL_EXPERTS] = [
+            // Canonical activity vectors found via fine-grid max-margin search.
+            // Each maximizes (target_score - max_other_score) over a 21^5×2^3 grid.
+            (KernelCategory::MemoryAccess,          build_activity(1.0, 0.05, 0.0, 0.0, 0.0, false, false, false)),
+            (KernelCategory::Compute,               build_activity(0.0, 0.0, 1.0, 0.0, 0.0, false, false, false)),
+            (KernelCategory::Fusion,                build_activity(0.0, 0.0, 0.0, 0.0, 0.0, false, true, false)),
+            (KernelCategory::Dispatch,              build_activity(0.0, 0.0, 0.0, 0.0, 1.0, false, false, false)),
+            (KernelCategory::Parallelism,           build_activity(0.3, 0.85, 0.0, 0.0, 1.0, false, false, false)),
+            (KernelCategory::FlashAttnTiling,       build_activity(1.0, 1.0, 1.0, 0.0, 0.0, true, false, false)),
+            (KernelCategory::LinearAttnRecurrence,  build_activity(0.0, 0.0, 0.05, 1.0, 0.0, true, false, false)),
+            (KernelCategory::MoeDispatchBackward,   build_activity(0.5, 0.0, 0.85, 1.0, 0.0, false, false, false)),
+            (KernelCategory::NsaBlockSparse,        build_activity(0.0, 1.0, 0.0, 0.0, 0.0, true, false, false)),
+            (KernelCategory::VarlenChunkedReduction,build_activity(1.0, 0.0, 0.0, 1.0, 0.0, false, false, false)),
+            (KernelCategory::AutotuneDispatch,      build_activity(0.0, 0.0, 0.0, 1.0, 1.0, false, false, false)),
+            (KernelCategory::ConvGemmLayout,        build_activity(0.25, 0.9, 0.0, 1.0, 0.0, false, false, false)),
+            (KernelCategory::KernelPolymorphism,    build_activity(0.15, 0.9, 0.0, 0.95, 0.55, false, false, false)),
+            (KernelCategory::DtypeAlignment,        build_activity(0.0, 0.0, 0.0, 1.0, 0.0, false, false, false)),
+            (KernelCategory::IrStrengthReduction,   build_activity(0.0, 0.0, 0.0, 0.0, 0.0, false, false, true)),
+        ];
+        for (expected_cat, activity) in cases {
+            let expert_idx = router.route(&activity);
+            let actual_cat = KernelExpertRouter::category_for_expert(expert_idx)
+                .expect("routed expert must have a category");
+            assert_eq!(actual_cat, expected_cat,
+                "canonical activity for {expected_cat:?} routed to {actual_cat:?} (expert {expert_idx}), \
+                 activity = {activity:?}");
         }
     }
 }

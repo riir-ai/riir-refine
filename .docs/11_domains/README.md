@@ -47,8 +47,9 @@
   (Bench 013 GOAT G1+G5 PASS) — `rust_perf` promoted to default-on 2026-08-13.
 - **Phase 3 (kernel_opt):** DONE 2026-08-13. 34 rules (Batch 1-3: 2 original + 32
   popcorn-distilled per Research 002-004; full corpus ~300-500 rules in ~15-25 batches).
-  `KernelExpertRouter` wraps `pick_domain<4,5>` (Plan 558, identity directions
-  placeholder). `KernelThermalRouter` returns Plasma for all calls
+  `KernelExpertRouter` wraps `pick_domain<15,8>` (Plan 558; Plan 004 extended the
+  activity vector from 5 to 8 dims with operation-class one-hot axes; 15/15
+  categories reachable). `KernelThermalRouter` returns Plasma for all calls
   (modelless-first mandate). 4090 Warm/Cold/Freeze tiers DEFERRED.
 - **Phase 4 (L4 LoRA, all domains):** DEFERRED to riir-train. Reopens when a
   domain's modelless path plateaus below its G1 gate.

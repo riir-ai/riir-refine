@@ -11,7 +11,7 @@
 |---|---|---|
 | `KernelOptDomain: HealDomain` | ✅ | |
 | Seed corpus (Batch 1-8: 68 rules) | ✅ | Full corpus (~300-500 rules, ~15-25 batches) |
-| `KernelExpertRouter` (`pick_domain`) | ✅ (category centroids, Plan 003) | Mined centroids via `CommittedFieldBlend` |
+| `KernelExpertRouter` (`pick_domain`) | ✅ (8-dim activity, 15/15 reachable, Plan 004) | Mined centroids via `CommittedFieldBlend` |
 | `KernelThermalRouter` (5-tier stub) | ✅ (returns Plasma) | Warm/Cold LoRA (4090, riir-train) |
 | `KernelVerifier` (compile-only) | ✅ (behind `kernel_verify`) | Full numeric compare vs reference |
 | L4 LoRA fallback | | ✅ Deferred across all domains |
@@ -84,7 +84,7 @@ Wraps `katgpt_core::variable_rank_domain_expert::pick_domain<15, 5>` (Plan 558):
 
 ```rust
 pub const NUM_KERNEL_EXPERTS: usize = 15; // one per corpus category (A–O)
-pub const ACTIVITY_DIM: usize = 5;        // M, N, K, dtype, hw
+pub const ACTIVITY_DIM: usize = 8;        // M, N, K, dtype, hw, is_attention, is_fusion, is_ir_transform
 
 pub fn route(&self, activity: &[f32; ACTIVITY_DIM]) -> usize {
     pick_domain::<NUM_KERNEL_EXPERTS, ACTIVITY_DIM>(activity, &self.directions)
@@ -93,8 +93,9 @@ pub fn route(&self, activity: &[f32; ACTIVITY_DIM]) -> usize {
 
 **Plan 003 (2026-08-14):** router wired to the 68-rule corpus via 15 category
 experts. Each expert owns its category's `rule_ids` via `KERNEL_CATEGORIES`.
-- **Activity vector** = raw physical (kernel signature: `[M, N, K, dtype, hw]`,
-  normalized to `[0, 1]`).
+- **Activity vector** = raw physical (kernel signature: `[M, N, K, dtype, hw,
+  is_attention, is_fusion, is_ir_transform]` — 8-dim per Plan 004, normalized
+  to `[0, 1]`). The `build_activity()` helper is the consumer-facing constructor.
 - **Domain directions** = latent (hand-crafted category centroids — see
   `CATEGORY_KERNEL_DIRECTIONS` const; mining via `CommittedFieldBlend` deferred).
 - **Expert index** = raw categorical (synced).
@@ -105,11 +106,12 @@ experts. Each expert owns its category's `rule_ids` via `KERNEL_CATEGORIES`.
 - `rules_for_expert(idx) -> &[&str]` — maps expert → category's rule_ids.
 - `expert_for_rule(rule_id) -> Option<usize>` — reverse lookup.
 
-**Honest limitation:** the 5-dim shape-only activity vector is rank-deficient
-for 15 categories. 13/15 are reachable via argmax; categories C (fusion-balanced)
-and O (IR strength-low) are unreachable — documented limitation that an
-operation-class activity extension (deferred, needs concrete consumer) would
-resolve.
+**Plan 004 (2026-08-14):** extended the activity vector from 5 to 8 dims by
+adding 3 operation-class one-hot axes (`is_attention`, `is_fusion`,
+`is_ir_transform`). **All 15/15 categories are now reachable** (was 13/15 in
+Plan 003 — categories C and O were unreachable due to 5-dim rank deficiency).
+The `build_activity()` helper provides the consumer-facing constructor for
+constructing activity vectors from shape + operation-class flags.
 
 The `kernel_heal` feature enables `katgpt-core/variable_rank_domain_expert`
 so `pick_domain` is reachable.

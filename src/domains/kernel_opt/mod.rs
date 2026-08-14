@@ -12,7 +12,7 @@
 //! |---|---|---|
 //! | `KernelOptDomain: HealDomain` | ✅ | |
 //! | Seed corpus (1-2 placeholders) | ✅ | Real popcorn-distilled corpus |
-//! | `KernelExpertRouter` (`pick_domain`) | ✅ (category centroids, Plan 003) | Mined centroids via `CommittedFieldBlend` |
+//! | `KernelExpertRouter` (`pick_domain`) | ✅ (8-dim activity, 15/15 reachable, Plan 004) | Mined centroids via `CommittedFieldBlend` |
 //! | `KernelThermalRouter` (5-tier stub) | ✅ (returns Plasma) | Warm/Cold `LoRA` (4090, riir-train) |
 //! | `KernelVerifier` (compile-only) | ✅ (behind `kernel_verify`) | Full numeric compare vs reference |
 //! | L4 `LoRA` fallback | | ✅ Deferred across all domains |

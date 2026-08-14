@@ -143,6 +143,8 @@ pub use domains::kernel_opt::corpus::{build_corpus_categorized, KERNEL_CATEGORIE
 #[cfg(feature = "kernel_heal")]
 pub use domains::kernel_opt::router::{
     KernelExpertRouter, KERNEL_EXPERT_NAMES, NUM_KERNEL_EXPERTS, ACTIVITY_DIM,
+    build_activity, AXIS_M, AXIS_N, AXIS_K, AXIS_DTYPE, AXIS_HW,
+    AXIS_IS_ATTENTION, AXIS_IS_FUSION, AXIS_IS_IR_TRANSFORM,
 };
 
 /// `kernel_opt` thermal router (behind `kernel_heal`).
