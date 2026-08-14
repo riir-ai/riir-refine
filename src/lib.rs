@@ -176,4 +176,6 @@ pub use self_evolve::{HealPipeline, HealResult, HealSource, TuneReport};
 
 // Plan 005: latent retrieval surface (`--suggest` MVP).
 #[cfg(feature = "latent_retrieval")]
-pub use draft::{DomainId, DomainRouter, LatentMatcher, RuleIndex, ScoredRule, SpanSuggestion};
+pub use draft::{
+    DomainId, DomainRouter, LatentMatcher, RuleIndex, RuleInfo, ScoredRule, SpanSuggestion,
+};

@@ -95,21 +95,34 @@ the single-scale retrieval missed the needle on the file fixture.
 
 Ship the user-facing binary that runs Phase 1's pipeline over real files.
 
-**Status: not started.**
+**Status: DONE 2026-08-14.** Smoke-verified on this repo's own `src/` (19
+files, ~0.4s total including index build). Bin name `cargo-heal` (cargo
+subcommand convention → `cargo heal` once installed). No-threshold note:
+every span prints suggestions (scores are relative); a minimum-score
+cutoff is a Phase 3 G1 concern — the precision measurement drives it.
 
 ### Tasks
 
-- [ ] **T2.1** `src/bin/heal.rs` — args: `--suggest`, `--domain <auto|clippy|perf|kernel>`
-      (default `auto` = dMoE routing), `[path...]`.
-- [ ] **T2.2** File scanner: walk `path`, `AstChunker.chunk()` each `.rs` file.
-- [ ] **T2.3** For each chunk: embed → route(domain) → retrieve → print top-K rules with
+- [x] **T2.1** `src/bin/heal.rs` — args: `--suggest`, `--domain <auto|clippy|perf|kernel>`
+      (default `auto` = dMoE routing), `[path...]`. + `--top-k <N>` (default 3).
+- [x] **T2.2** File scanner: walk `path`, `AstChunker.chunk()` each `.rs` file.
+      Std-only recursive walker (no new dep) — skips hidden/`target`/`vendor`.
+- [x] **T2.3** For each chunk: embed → route(domain) → retrieve → print top-K rules with
       scores + the `opt_pattern` snippet for manual review.
-- [ ] **T2.4** Domain gating: `--domain perf` requires `--features rust_perf`; etc.
+      Fan-out across enabled domains (Phase 1 deviation); router verdict
+      annotates each span. Snippet = first significant line of the rule's
+      `fixed_code` (via the new `LatentMatcher::rule_book`).
+- [x] **T2.4** Domain gating: `--domain perf` requires `--features rust_perf`; etc.
       `--domain auto` runs all enabled feature-gated domains via the dMoE router.
+      Explicitly requesting a feature-off domain is a hard error with the
+      enabled list in the message (verified on `--domain kernel` without
+      `kernel_heal`).
 
 ### Phase 2 exit criteria
 - `cargo heal --suggest src/` prints real suggestions on real files. The product exists
   (suggest mode). `--fix` is Phase 4/5.
+  **MET 2026-08-14** — smoke run on this repo's `src/`: real spans with scores
+  + fixed-pattern snippets, ~0.4s wall for 19 files incl. index build.
 
 ## Phase 3 — GOAT gate for the latent path (G1-G4, `--suggest` mode)
 

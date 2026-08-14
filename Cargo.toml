@@ -212,6 +212,14 @@ name = "bench_clippy_ternary_tps"
 harness = false
 required-features = ["ternary_inference"]
 
+# Plan 005 Phase 2: the unified `cargo heal` CLI (suggest mode). Named
+# `cargo-heal` so an installed copy gets the `cargo heal` subcommand UX.
+# Gated on latent_retrieval (the matcher + indexes live behind it).
+[[bin]]
+name = "cargo-heal"
+path = "src/bin/heal.rs"
+required-features = ["latent_retrieval"]
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Local patches — mirror riir-ai/Cargo.toml's [patch.crates-io] so the
 # metal_tensor_gemm + cubecl_runtime features compile from THIS workspace.

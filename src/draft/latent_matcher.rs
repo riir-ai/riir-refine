@@ -53,6 +53,18 @@ impl SpanSuggestion {
     }
 }
 
+/// A corpus rule's displayable essence — what `--suggest` prints for manual
+/// review (Plan 005 T2.3).
+#[derive(Debug, Clone, PartialEq)]
+pub struct RuleInfo {
+    /// Owning domain.
+    pub domain: DomainId,
+    /// The slow/buggy pattern (what the span was matched against).
+    pub buggy_code: String,
+    /// The fixed/optimized pattern (the manual-review suggestion).
+    pub fixed_code: String,
+}
+
 /// The cross-domain latent matcher — owns the router + one index per enabled
 /// domain.
 ///
@@ -63,6 +75,7 @@ pub struct LatentMatcher {
     clippy: Option<RuleIndex>,
     perf: Option<RuleIndex>,
     kernel: Option<RuleIndex>,
+    rule_book: std::collections::HashMap<String, RuleInfo>,
 }
 
 impl LatentMatcher {
@@ -78,52 +91,83 @@ impl LatentMatcher {
     #[allow(clippy::too_many_lines)]
     pub fn from_enabled_domains() -> Result<Self, String> {
         let mut router_domains = Vec::new();
+        let mut rule_book = std::collections::HashMap::new();
+
+        macro_rules! index_domain {
+            ($var:ident, $domain:expr, $corpus:expr) => {{
+                let entries: Vec<_> = $corpus;
+                let mut pattern_texts = Vec::with_capacity(entries.len());
+                for (rule_id, buggy, fixed) in &entries {
+                    pattern_texts.push(buggy.clone());
+                    rule_book.insert(
+                        rule_id.clone(),
+                        RuleInfo {
+                            domain: $domain,
+                            buggy_code: buggy.clone(),
+                            fixed_code: fixed.clone(),
+                        },
+                    );
+                }
+                router_domains.push(($domain, pattern_texts));
+                let patterns: Vec<(String, String)> = entries
+                    .into_iter()
+                    .map(|(rule_id, buggy, _fixed)| (rule_id, buggy))
+                    .collect();
+                Some(RuleIndex::build(patterns)?)
+            }};
+        }
 
         #[cfg(feature = "clippy_lints")]
-        let clippy = {
-            let patterns: Vec<(String, String)> =
-                crate::domains::clippy_lints::ClippyLintDomain::build_corpus()
-                    .into_iter()
-                    .map(|e| (e.rule_id().to_string(), e.buggy_code().to_string()))
-                    .collect();
-            router_domains.push((
-                DomainId::Clippy,
-                patterns.iter().map(|(_, t)| t.clone()).collect(),
-            ));
-            Some(RuleIndex::build(patterns)?)
-        };
+        let clippy = index_domain!(
+            clippy,
+            DomainId::Clippy,
+            crate::domains::clippy_lints::ClippyLintDomain::build_corpus()
+                .into_iter()
+                .map(|e| {
+                    (
+                        e.rule_id().to_string(),
+                        e.buggy_code().to_string(),
+                        e.fixed_code().to_string(),
+                    )
+                })
+                .collect::<Vec<_>>()
+        );
         #[cfg(not(feature = "clippy_lints"))]
         let clippy = None;
 
         #[cfg(feature = "rust_perf")]
-        let perf = {
-            let patterns: Vec<(String, String)> =
-                crate::domains::rust_perf::RustPerfDomain::build_corpus()
-                    .into_iter()
-                    .map(|e| (e.rule_id().to_string(), e.buggy_code().to_string()))
-                    .collect();
-            router_domains.push((
-                DomainId::Perf,
-                patterns.iter().map(|(_, t)| t.clone()).collect(),
-            ));
-            Some(RuleIndex::build(patterns)?)
-        };
+        let perf = index_domain!(
+            perf,
+            DomainId::Perf,
+            crate::domains::rust_perf::RustPerfDomain::build_corpus()
+                .into_iter()
+                .map(|e| {
+                    (
+                        e.rule_id().to_string(),
+                        e.buggy_code().to_string(),
+                        e.fixed_code().to_string(),
+                    )
+                })
+                .collect::<Vec<_>>()
+        );
         #[cfg(not(feature = "rust_perf"))]
         let perf = None;
 
         #[cfg(feature = "kernel_heal")]
-        let kernel = {
-            let patterns: Vec<(String, String)> =
-                crate::domains::kernel_opt::KernelOptDomain::build_corpus()
-                    .into_iter()
-                    .map(|e| (e.rule_id().to_string(), e.buggy_code().to_string()))
-                    .collect();
-            router_domains.push((
-                DomainId::Kernel,
-                patterns.iter().map(|(_, t)| t.clone()).collect(),
-            ));
-            Some(RuleIndex::build(patterns)?)
-        };
+        let kernel = index_domain!(
+            kernel,
+            DomainId::Kernel,
+            crate::domains::kernel_opt::KernelOptDomain::build_corpus()
+                .into_iter()
+                .map(|e| {
+                    (
+                        e.rule_id().to_string(),
+                        e.buggy_code().to_string(),
+                        e.fixed_code().to_string(),
+                    )
+                })
+                .collect::<Vec<_>>()
+        );
         #[cfg(not(feature = "kernel_heal"))]
         let kernel = None;
 
@@ -139,7 +183,17 @@ impl LatentMatcher {
             clippy,
             perf,
             kernel,
+            rule_book,
         })
+    }
+
+    /// Look up a suggested rule's display info (buggy + fixed patterns).
+    ///
+    /// `--suggest` prints the `fixed_code` snippet for manual review
+    /// (Plan 005 T2.3); `--fix` (Phase 4/5) will consume the same book.
+    #[must_use]
+    pub fn rule_book(&self, rule_id: &str) -> Option<&RuleInfo> {
+        self.rule_book.get(rule_id)
     }
 
     /// The domains this matcher can route to.
