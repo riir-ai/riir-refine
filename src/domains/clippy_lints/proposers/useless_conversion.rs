@@ -1,77 +1,83 @@
 //! `clippy::useless_conversion` — `let x: T = y.into()` → `let x: T = y`.
+//!
+//! Span-preserving (T6.4): the `.into()` call's byte range is replaced by
+//! the ORIGINAL source text of its receiver.
+//!
+//! **Type-blind** (not `--fix` eligible): the rewrite is only correct when
+//! `y`'s type already equals the annotation `T` — a parse-only validator
+//! cannot know that. The `self_evolve` loop (real `cargo clippy` verify)
+//! remains the consumer.
 
-use syn::{Expr, File, ItemFn};
+use super::{edit, src, SourceEdit};
+use syn::visit::Visit;
+use syn::{Expr, File, Local};
 
-pub(crate) fn rewrite(file: &mut File) -> bool {
-    let mut changed = false;
-    for item in &mut file.items {
-        if let syn::Item::Fn(fn_item) = item {
-            changed |= rewrite_fn(fn_item);
-        }
-    }
-    changed
+/// Collect the lint's edits against the original source. Empty = no match.
+pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
+    let mut v = Collector { source, edits: Vec::new() };
+    v.visit_file(file);
+    v.edits
 }
 
-fn rewrite_fn(fn_item: &mut ItemFn) -> bool {
-    let mut changed = false;
-    for stmt in &mut fn_item.block.stmts {
-        if let syn::Stmt::Local(local) = stmt {
-            // Must have an explicit type annotation + an init.
-            let Some(init) = &mut local.init else {
-                continue;
-            };
-            // Must also have a type annotation on the pattern.
-            if !matches!(&local.pat, syn::Pat::Type(_)) {
-                continue;
-            }
-            // init.expr must be a `.into()` method call.
-            let new_expr = match init.expr.as_ref() {
-                Expr::MethodCall(mc) if mc.method == "into" && mc.args.is_empty() => {
-                    Some((*mc.receiver).clone())
+struct Collector<'a> {
+    source: &'a str,
+    edits: Vec<SourceEdit>,
+}
+
+impl<'ast> Visit<'ast> for Collector<'_> {
+    fn visit_local(&mut self, local: &'ast Local) {
+        syn::visit::visit_local(self, local);
+        // Must have an explicit type annotation + an init.
+        let Some(init) = &local.init else { return };
+        if init.diverge.is_some() {
+            return;
+        }
+        if !matches!(&local.pat, syn::Pat::Type(_)) {
+            return;
+        }
+        // init.expr must be a `.into()` method call.
+        if let Expr::MethodCall(mc) = init.expr.as_ref() {
+            if mc.method == "into" && mc.args.is_empty() {
+                if let Some(text) = src(self.source, &*mc.receiver) {
+                    self.edits.push(edit(&init.expr, text));
                 }
-                _ => None,
-            };
-            if let Some(callee) = new_expr {
-                *init.expr = callee;
-                changed = true;
             }
         }
     }
-    changed
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    fn propose(input: &str) -> Option<String> {
-        let mut file = syn::parse_file(input).ok()?;
-        if rewrite(&mut file) {
-            Some(super::super::quote_file(&file))
-        } else {
-            None
-        }
-    }
+    use super::super::propose_fix;
 
     #[test]
     fn drops_redundant_into() {
         let input = "fn twice(n: u64) -> u64 {\n    let m: u64 = n.into();\n    m * 2\n}";
-        let out = propose(input).expect("matched");
-        assert!(!out.contains(".into"), "into not dropped: {out}");
-        assert!(out.contains('n'), "callee lost: {out}");
+        let out = propose_fix("useless_conversion", input).expect("matched");
+        assert!(out.contains("let m: u64 = n;"), "into not dropped: {out}");
+        assert!(!out.contains(".into"), "{out}");
     }
 
     #[test]
     fn leaves_non_into_let_unchanged() {
         let input = "fn twice(n: u64) -> u64 {\n    let m: u64 = n + 1;\n    m\n}";
-        let out = propose(input);
+        let out = propose_fix("useless_conversion", input);
         assert!(out.is_none(), "non-into let touched: {out:?}");
     }
 
     #[test]
     fn leaves_let_without_type_annotation() {
         let input = "fn twice(n: u64) -> u64 {\n    let m = n.into();\n    m\n}";
-        let out = propose(input);
+        let out = propose_fix("useless_conversion", input);
         assert!(out.is_none(), "no-type-annot let touched: {out:?}");
+    }
+
+    #[test]
+    fn parenthesized_receiver_keeps_parens() {
+        // The receiver of `(a + b).into()` is the Paren node — its ORIGINAL
+        // text (parens included) re-parses standalone in the let-init slot.
+        let input = "fn f(a: u64, b: u64) -> u64 { let m: u64 = (a + b).into(); m }";
+        let out = propose_fix("useless_conversion", input).expect("matched");
+        assert!(out.contains("let m: u64 = (a + b);"), "{out}");
     }
 }

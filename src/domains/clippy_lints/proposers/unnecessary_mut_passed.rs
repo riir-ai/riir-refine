@@ -1,77 +1,79 @@
 //! `clippy::unnecessary_mut_passed` — `f(&mut v)` → `f(&v)` + drop `mut`.
+//!
+//! Span-preserving (T6.4): each `&mut <path>` call arg's byte range is
+//! replaced by `&<path text>`; each `mut <ident>` fn-param pattern's byte
+//! range is replaced by the bare ident.
+//!
+//! **Type-blind + file-wide** (not `--fix` eligible): whether `&mut v` is
+//! unnecessary depends on the callee's signature, and the param-`mut` strip
+//! applies to every fn in the file once any call-site matches (the original
+//! proposer's behavior, preserved). Parse-only validation cannot decide
+//! either. The `self_evolve` loop (real `cargo clippy` verify) remains the
+//! consumer.
 
-use syn::{Expr, File};
+use super::{edit, for_each_fn, src, SourceEdit};
+use syn::visit::Visit;
+use syn::{Expr, File, Pat};
 
-pub(crate) fn rewrite(file: &mut File) -> bool {
-    use syn::visit_mut::VisitMut;
-    struct Visitor {
-        changed: bool,
-    }
-    impl VisitMut for Visitor {
-        fn visit_expr_mut(&mut self, e: &mut Expr) {
-            syn::visit_mut::visit_expr_mut(self, e);
-            if let Expr::Call(call) = e {
-                for arg in &mut call.args {
-                    if let Expr::Reference(r) = arg {
-                        if r.mutability.is_some() && matches!(&*r.expr, Expr::Path(..)) {
-                            r.mutability = None;
-                            self.changed = true;
+/// Collect the lint's edits against the original source. Empty = no match.
+pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
+    let mut v = CallScan { source, edits: Vec::new() };
+    v.visit_file(file);
+
+    // Second pass: drop `mut` from fn parameter patterns (file-wide, when
+    // any call-site edit fired — the original proposer's behavior).
+    if !v.edits.is_empty() {
+        for_each_fn(file, |sig, _block| {
+            for input in &sig.inputs {
+                if let syn::FnArg::Typed(pat) = input {
+                    if let Pat::Ident(pi) = &*pat.pat {
+                        if pi.mutability.is_some() {
+                            v.edits.push(edit(pi, pi.ident.to_string()));
                         }
+                    }
+                }
+            }
+        });
+    }
+    v.edits
+}
+
+struct CallScan<'a> {
+    source: &'a str,
+    edits: Vec<SourceEdit>,
+}
+
+impl<'ast> Visit<'ast> for CallScan<'_> {
+    fn visit_expr_call(&mut self, call: &'ast syn::ExprCall) {
+        syn::visit::visit_expr_call(self, call);
+        for arg in &call.args {
+            if let Expr::Reference(r) = arg {
+                if r.mutability.is_some() && matches!(&*r.expr, Expr::Path(..)) {
+                    if let Some(text) = src(self.source, &*r.expr) {
+                        self.edits.push(edit(arg, format!("&{text}")));
                     }
                 }
             }
         }
     }
-    let mut v = Visitor { changed: false };
-    syn::visit_mut::visit_file_mut(&mut v, file);
-
-    // Second pass: drop `mut` from `fn` parameter patterns.
-    if v.changed {
-        for item in &mut file.items {
-            if let syn::Item::Fn(fn_item) = item {
-                for input in &mut fn_item.sig.inputs {
-                    if let syn::FnArg::Typed(pat) = input {
-                        if let syn::Pat::Ident(pi) = &mut *pat.pat {
-                            if pi.mutability.is_some() {
-                                pi.mutability = None;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-    v.changed
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    fn propose(input: &str) -> Option<String> {
-        let mut file = syn::parse_file(input).ok()?;
-        if rewrite(&mut file) {
-            Some(super::super::quote_file(&file))
-        } else {
-            None
-        }
-    }
+    use super::super::propose_fix;
 
     #[test]
     fn drops_mut_from_call_and_binding() {
         let input = "fn count(v: &Vec<u8>) -> usize { v.len() }\nfn go(mut v: Vec<u8>) -> usize { count(&mut v) }";
-        let out = propose(input).expect("matched");
-        assert!(!out.contains("& mut"), "call-site mut not dropped: {out}");
-        assert!(
-            !out.contains("mut v :"),
-            "binding mut not dropped: {out}"
-        );
+        let out = propose_fix("unnecessary_mut_passed", input).expect("matched");
+        assert!(out.contains("count(&v)"), "call-site mut not dropped: {out}");
+        assert!(out.contains("fn go(v: Vec<u8>)"), "binding mut not dropped: {out}");
     }
 
     #[test]
     fn leaves_immutable_calls_unchanged() {
         let input = "fn count(v: &Vec<u8>) -> usize { v.len() }\nfn go(v: Vec<u8>) -> usize { count(&v) }";
-        let out = propose(input);
+        let out = propose_fix("unnecessary_mut_passed", input);
         assert!(out.is_none(), "non-mut call touched: {out:?}");
     }
 }

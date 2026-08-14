@@ -6,12 +6,14 @@
 //! annotates each span), and print top-K rules with scores + the
 //! fixed/optimized pattern snippet for manual review.
 //!
-//! `--fix` mode (Phase 6 T6.1): run the compiled-in rust_perf proposers on
-//! each file + apply their span-preserving edits. Without `--write`, fixed
-//! files print a per-edit review (rule + the changed span); with `--write`,
-//! the spliced file is written in place. Everything outside a matched span
-//! stays byte-identical. `--fix` ALSO runs the suggest pass unless
-//! `--quiet` is given, so rules without proposers still surface.
+//! `--fix` mode (Phase 6 T6.1 + T6.4): run the compiled-in proposers on
+//! each file + apply their span-preserving edits — rust_perf rules plus the
+//! structural clippy lints (the three type-blind clippy proposers stay
+//! suggest-only; see the clippy proposers' module docs). Without `--write`,
+//! fixed files print a per-edit review (rule + the changed span); with
+//! `--write`, the spliced file is written in place. Everything outside a
+//! matched span stays byte-identical. `--fix` ALSO runs the suggest pass
+//! unless `--quiet` is given, so rules without proposers still surface.
 //!
 //! Run (in-repo):
 //!
@@ -28,7 +30,9 @@
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 
-use riir_clippy::domains::rust_perf::proposers::{apply_edits, collect_edits, FIXABLE_RULES};
+use riir_clippy::domains::clippy_lints::proposers::FIXABLE_LINTS;
+use riir_clippy::domains::rust_perf::proposers::FIXABLE_RULES;
+use riir_clippy::edit_emitter::{apply_edits, RuleEdit};
 use riir_clippy::draft::{DomainId, LatentMatcher, SpanSuggestion};
 
 /// Print usage + exit 2 (arg-error convention).
@@ -41,9 +45,9 @@ USAGE:
     cargo heal --fix [--write] [--quiet] [--top-k <N>] <path>...
 
     --suggest       Suggest mode: print matching rules per code span (no edits).
-    --fix           Fix mode: apply the compiled-in rust_perf proposers' span-preserving
-                    edits ({} rules: {}). The proposer's visitor is the gate —
-                    latent suggestions never auto-apply.
+    --fix           Fix mode: apply the compiled-in proposers' span-preserving edits
+                    ({} perf rules + {} clippy lints: {} | {}). The proposer's visitor
+                    is the gate — latent suggestions never auto-apply.
     --write         With --fix: write the spliced file in place. Without it, print a
                     per-edit review (default: review only).
     --quiet         With --fix: skip the --suggest pass (only show fixes).
@@ -55,7 +59,9 @@ Domains are feature-gated: clippy + perf are default-on; kernel needs
 --features kernel_heal. Requesting a domain whose feature is off is an
 error (T2.4 gating).",
         FIXABLE_RULES.len(),
-        FIXABLE_RULES.join(", ")
+        FIXABLE_RULES.join(", "),
+        FIXABLE_LINTS.len(),
+        FIXABLE_LINTS.join(", ")
     );
     std::process::exit(2);
 }
@@ -240,32 +246,65 @@ fn main() {
         let display = file.display().to_string();
 
         // ── --fix: run the compiled-in proposers (the visitor IS the gate).
-        let mut all_edits = Vec::new();
+        // Both domains: rust_perf rules + the structural clippy lints (T6.4).
+        // Cross-domain overlaps resolve in apply_edits' outer-first selection.
+        //
+        // Fixpoint iteration: an outer edit's replacement keeps the inner
+        // nodes' ORIGINAL text, so fixes nested inside a replaced region
+        // (`return Cfg { x: x };` — the field-shorthand edits live inside the
+        // return-strip's span) are dropped by overlap selection on pass 1.
+        // Re-parsing the spliced output exposes them; iterate until no new
+        // edits (bounded, and the unchanged-output guard stops oscillation).
+        const MAX_FIX_PASSES: usize = 4;
+        let mut current = src.clone();
+        let mut all_edits: Vec<(String, usize)> = Vec::new(); // (rule_id, line)
         if args.fix {
-            if let Ok(parsed) = syn::parse_file(&src) {
+            for _ in 0..MAX_FIX_PASSES {
+                let Ok(parsed) = syn::parse_file(&current) else {
+                    eprintln!("skip (unparseable): {display}");
+                    break;
+                };
+                let mut edits: Vec<RuleEdit> = Vec::new();
                 for rule in FIXABLE_RULES {
-                    for re in collect_edits(rule, &src, &parsed) {
-                        all_edits.push(re);
-                    }
+                    edits.extend(riir_clippy::domains::rust_perf::proposers::collect_edits(
+                        rule, &current, &parsed,
+                    ));
                 }
-            } else {
-                eprintln!("skip (unparseable): {display}");
+                for lint in FIXABLE_LINTS {
+                    edits.extend(
+                        riir_clippy::domains::clippy_lints::proposers::collect_edits(
+                            lint, &current, &parsed,
+                        ),
+                    );
+                }
+                if edits.is_empty() {
+                    break;
+                }
+                let next = apply_edits(
+                    &current,
+                    edits.iter().map(|re| re.edit.clone()).collect(),
+                );
+                for re in &edits {
+                    let line = current[..re.edit.start].matches('\n').count() + 1;
+                    all_edits.push((re.rule_id.clone(), line));
+                }
+                let changed = next != current;
+                current = next;
+                if !changed {
+                    break;
+                }
             }
         }
+        let all_edits = all_edits;
         if !all_edits.is_empty() {
             n_fixed_files += 1;
             n_fixed_edits += all_edits.len();
-            let fixed = apply_edits(
-                &src,
-                all_edits.iter().map(|re| re.edit.clone()).collect(),
-            );
             println!("fix {} ({} edit(s)):", display, all_edits.len());
-            for re in &all_edits {
-                let line = src[..re.edit.start].matches('\n').count() + 1;
-                println!("  [{:<24}] line {line}", re.rule_id);
+            for (rule_id, line) in &all_edits {
+                println!("  [{:<24}] line {line}", rule_id);
             }
             if args.write {
-                std::fs::write(file, &fixed).unwrap_or_else(|e| {
+                std::fs::write(file, &current).unwrap_or_else(|e| {
                     eprintln!("write failed for {display}: {e}");
                 });
             }

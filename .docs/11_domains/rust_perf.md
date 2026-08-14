@@ -227,9 +227,12 @@ auto-apply.
 | `bool-to-bitpack` | `flags: &[bool]` count → `flags: &[u64]` + `count_ones().sum()` | signature-visible (param type); param name preserved (no rename hazards) |
 | `fxhashmap` | std `HashMap` → `rustc_hash::FxHashMap` (use swap + group slimming + path rewrite) | healed crate needs the `rustc-hash` dep; glob/`pub use`/fn-local forms skipped |
 
-The `for_each_fn_mut` shared helper scans free fns + impl methods + nested
-inline `mod` blocks — beyond the clippy proposers' file-level scan. `--fix`
-CLI wiring + the G5 real-fix-in-a-sibling-repo gate are Phase 6.
+The `for_each_fn` shared helper (now in
+[`edit_emitter.rs`](../../src/edit_emitter.rs)) scans free fns + impl
+methods + nested inline `mod` blocks. `--fix` CLI wiring shipped with
+Phase 6 T6.1 (Bench 019); the clippy proposers joined the same emitter in
+T6.4. The G5 real-fix-in-a-sibling-repo gate remains blocked on the
+riir-ai rebase.
 
 ## Source
 

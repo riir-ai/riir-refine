@@ -13,8 +13,8 @@
 |---|---|
 | [`clippy_ternary_drafter.md`](clippy_ternary_drafter.md) | `ClippyTernaryDrafter` + `DraftedFix` + `DraftSource` |
 | [`embedder.md`](embedder.md) | BLAKE3-deterministic modelless embedder (`embed` / `embed_into`) |
-| [`latent_suggest.md`](latent_suggest.md) | Plan 005 span-level latent retrieval (`--suggest` MVP): `RuleIndex` + `LatentMatcher` + domain centroids |
 | [`latent_suggest.md`](latent_suggest.md) | Plan 005 latent retrieval: `RuleIndex` + `DomainRouter` + `LatentMatcher` (`--suggest` MVP, GOAT G1–G4 PASS, Bench 018) |
+| [`edit_emitter.md`](edit_emitter.md) | Shared span-preserving `--fix` substrate (T6.4): `SourceEdit` + `apply_edits` + helpers, feature-neutral |
 
 ## Source
 

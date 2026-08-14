@@ -222,7 +222,7 @@ required-features = ["ternary_inference"]
 [[bin]]
 name = "cargo-heal"
 path = "src/bin/heal.rs"
-required-features = ["latent_retrieval", "rust_perf"]
+required-features = ["latent_retrieval", "rust_perf", "clippy_lints"]
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Local patches — mirror riir-ai/Cargo.toml's [patch.crates-io] so the

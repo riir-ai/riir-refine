@@ -64,9 +64,10 @@ L3 — RULIOLOGY SEARCH (opt-in)                      ← L3 (06_ruliology)
   [ validated fix ]
 ```
 
-The Plan 005 latent path is currently **suggest-only** at the CLI — the
-Phase 4 rust_perf `propose_fix` proposers landed 2026-08-14 as library
-code; wiring them into `cargo heal --fix` is Phase 6.
+The Plan 005 latent path is **suggest + fix** at the CLI — the Phase 4
+rust_perf `propose_fix` proposers + the T6.4 clippy emitter migration are
+wired into `cargo heal --fix` (span-preserving edits; the proposer visitor
+is the gate). See [`07_examples/cargo_heal.md`](07_examples/cargo_heal.md).
 
 ## Resolved validation
 

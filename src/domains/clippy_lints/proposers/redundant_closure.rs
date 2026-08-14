@@ -1,31 +1,41 @@
 //! `clippy::redundant_closure` — `|x| f(x)` → `f` when the closure body is a
 //! single call passing the closure's only parameter as the only argument.
+//!
+//! Span-preserving (T6.4): the closure's byte range is replaced by the
+//! ORIGINAL source text of the callee path.
 
+use super::{edit, src, SourceEdit};
+use syn::visit::Visit;
 use syn::{Expr, ExprClosure, File};
 
-pub(crate) fn rewrite(file: &mut File) -> bool {
-    use syn::visit_mut::VisitMut;
-    struct Visitor {
-        changed: bool,
-    }
-    impl VisitMut for Visitor {
-        fn visit_expr_mut(&mut self, e: &mut Expr) {
-            syn::visit_mut::visit_expr_mut(self, e);
-            if let Expr::Closure(closure) = e {
-                if let Some(replacement) = simplify_closure(closure) {
-                    *e = replacement;
-                    self.changed = true;
-                }
+/// Collect the lint's edits against the original source. Empty = no match.
+pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
+    let mut v = Collector { source, edits: Vec::new() };
+    v.visit_file(file);
+    v.edits
+}
+
+struct Collector<'a> {
+    source: &'a str,
+    edits: Vec<SourceEdit>,
+}
+
+impl<'ast> Visit<'ast> for Collector<'_> {
+    fn visit_expr_closure(&mut self, c: &'ast ExprClosure) {
+        // Depth-first: inner redundant closures collect their own edits (an
+        // outer match's replacement region contains no other bare-id use, so
+        // overlap selection cannot drop a live inner fix here).
+        syn::visit::visit_expr_closure(self, c);
+        if let Some(callee) = simplify_closure(c) {
+            if let Some(text) = src(self.source, callee) {
+                self.edits.push(edit(c, text));
             }
         }
     }
-    let mut v = Visitor { changed: false };
-    syn::visit_mut::visit_file_mut(&mut v, file);
-    v.changed
 }
 
-/// If the closure is `|x| f(x)`, return `Expr::Path(f)`. Otherwise None.
-fn simplify_closure(closure: &ExprClosure) -> Option<Expr> {
+/// If the closure is `|x| f(x)`, return the callee path `f`. Otherwise None.
+fn simplify_closure(closure: &ExprClosure) -> Option<&syn::ExprPath> {
     if closure.inputs.len() != 1 {
         return None;
     }
@@ -57,52 +67,49 @@ fn simplify_closure(closure: &ExprClosure) -> Option<Expr> {
     if arg_ident != &param_pat.ident {
         return None;
     }
-    let callee = match &*call.func {
-        Expr::Path(p) => p.clone(),
-        _ => return None,
-    };
-    Some(Expr::Path(callee))
+    match &*call.func {
+        Expr::Path(p) => Some(p),
+        _ => None,
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    fn propose(input: &str) -> Option<String> {
-        let mut file = syn::parse_file(input).ok()?;
-        if rewrite(&mut file) {
-            Some(super::super::quote_file(&file))
-        } else {
-            None
-        }
-    }
+    use super::super::propose_fix;
 
     #[test]
     fn simplifies_redundant_closure_in_call() {
         let input = "fn sq(x: u32) -> u32 { x * x }\nfn run(v: Vec<u32>) -> Vec<u32> { v.into_iter().map(|n| sq(n)).collect() }";
-        let out = propose(input).expect("matched");
-        // The closure should be gone; `sq` should appear as a bare path.
-        assert!(out.contains("sq"), "callee lost: {out}");
+        let out = propose_fix("redundant_closure", input).expect("matched");
+        assert!(out.contains(".map(sq)"), "closure not replaced by bare path: {out}");
+        assert!(out.contains("fn sq(x: u32) -> u32 { x * x }"), "unrelated fn must be byte-identical: {out}");
     }
 
     #[test]
     fn leaves_non_redundant_closure() {
         let input = "fn go() { let f = |x: i32| x + 1; }";
-        let out = propose(input);
+        let out = propose_fix("redundant_closure", input);
         assert!(out.is_none(), "non-redundant closure touched: {out:?}");
     }
 
     #[test]
     fn leaves_two_arg_closure() {
         let input = "fn go() { let f = |x: i32, y: i32| add(x, y); }";
-        let out = propose(input);
+        let out = propose_fix("redundant_closure", input);
         assert!(out.is_none(), "two-param closure touched: {out:?}");
     }
 
     #[test]
     fn leaves_method_call_closure() {
         let input = "fn go() { let f = |x: i32| x.abs(); }";
-        let out = propose(input);
+        let out = propose_fix("redundant_closure", input);
         assert!(out.is_none(), "method-call closure touched: {out:?}");
+    }
+
+    #[test]
+    fn qualified_path_callee_preserved() {
+        let input = "fn run(v: Vec<u32>) -> Vec<u32> { v.into_iter().map(|n| u32::from(n)).collect() }";
+        let out = propose_fix("redundant_closure", input).expect("matched");
+        assert!(out.contains("map(u32::from)"), "{out}");
     }
 }

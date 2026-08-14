@@ -1,8 +1,9 @@
-# cargo-heal — the unified healing CLI (Plan 005 Phase 2 + Phase 6 T6.1)
+# cargo-heal — the unified healing CLI (Plan 005 Phase 2 + Phase 6 T6.1/T6.4)
 
 **Source:** [`src/bin/heal.rs`](../../src/bin/heal.rs)
-**Feature:** `latent_retrieval` + `rust_perf` (required — the matcher/indexes
-live behind the former, the `--fix` proposers behind the latter)
+**Feature:** `latent_retrieval` + `rust_perf` + `clippy_lints` (required —
+the matcher/indexes live behind the first, the `--fix` proposers behind the
+latter two)
 **Run (in-repo):**
 
 ```sh
@@ -22,22 +23,40 @@ fn/impl/struct boundaries, retrieves matching corpus rules via the latent
 substrate, and prints top-K rules per span with scores + the
 fixed/optimized pattern snippet head for manual review.
 
-`--fix` mode (Phase 6 T6.1): runs the compiled-in rust_perf proposers'
-visitors on each file + applies their **span-preserving** edits —
-everything outside a matched span stays byte-identical (no reformat; see
+`--fix` mode (Phase 6 T6.1 + T6.4): runs the compiled-in proposers'
+visitors on each file + applies their **span-preserving** edits — the 5
+rust_perf rules PLUS the 7 structural clippy lints (T6.4 migrated the
+clippy proposers from AST-mutation + whole-file re-emission to the same
+edit-splice emitter). Everything outside a matched span stays
+byte-identical (no reformat; see
 [Bench 019](../../.benchmarks/019_plan005_phase6_fix_span_preserving_goat.md)).
 The proposer's visitor is the gate: latent suggestions never auto-apply.
 Review mode (default) prints per-edit rule + line; `--write` splices in
 place. `--quiet` skips the suggest pass when fixing.
+
+Fix application iterates to a **fixpoint** (bounded, 4 passes): an outer
+edit's replacement keeps the inner nodes' ORIGINAL text, so fixes nested
+inside a replaced region (`return Cfg { x: x };` — the field-shorthand
+edits live inside the return-strip's span) are dropped by overlap
+selection on pass 1 + picked up on pass 2 after re-parse. The
+unchanged-output guard stops oscillation.
+
+The 3 type-blind clippy proposers (`needless_borrow`,
+`useless_conversion`, `unnecessary_mut_passed`) are NOT `--fix` eligible —
+their detection is only sound with type knowledge (available in the
+`self_evolve` loop's cargo-clippy-verified path, not parse-only
+validation). They stay suggest-only at the CLI.
 
 ```text
 cargo heal --suggest [--domain <auto|clippy|perf|kernel>] [--top-k <N>] <path>...
 cargo heal --fix [--write] [--quiet] <path>...
 
 --suggest    Suggest mode: print matching rules per code span (no edits).
---fix        Fix mode: apply the rust_perf proposers' span-preserving edits
-             (vec-with-capacity, entry-vs-contains-insert, static-str,
-             bool-to-bitpack, fxhashmap).
+--fix        Fix mode: apply the compiled-in proposers' span-preserving edits
+             (perf: vec-with-capacity, entry-vs-contains-insert, static-str,
+             bool-to-bitpack, fxhashmap; clippy: needless_return,
+             redundant_closure, redundant_field_names, manual_map,
+             unnecessary_unwrap, needless_range_loop, needless_lifetimes).
 --write      With --fix: write the spliced file in place (default: review only).
 --quiet      With --fix: skip the --suggest pass.
 --domain     Filter suggest output to one domain (default: auto — all enabled).
