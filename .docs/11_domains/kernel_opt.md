@@ -10,7 +10,7 @@
 | Component | Ships now | Deferred |
 |---|---|---|
 | `KernelOptDomain: HealDomain` | ✅ | |
-| Seed corpus (Batch 1-5: 47 rules) | ✅ | Full corpus (~300-500 rules, ~15-25 batches) |
+| Seed corpus (Batch 1-6: 50 rules) | ✅ | Full corpus (~300-500 rules, ~15-25 batches) |
 | `KernelExpertRouter` (`pick_domain`) | ✅ (identity directions) | Per-expert centroids from popcorn |
 | `KernelThermalRouter` (5-tier stub) | ✅ (returns Plasma) | Warm/Cold LoRA (4090, riir-train) |
 | `KernelVerifier` (compile-only) | ✅ (behind `kernel_verify`) | Full numeric compare vs reference |
@@ -23,7 +23,8 @@ Batch 2 (Research 003): 7 rules — flash-attention tiling patterns.
 Batch 3 (Research 004): 6 rules — linear-attention recurrence patterns.
 Batch 4 (Research 005): 9 rules — MoE dispatch + backward-pass patterns.
 Batch 5 (Research 006): 4 rules — NSA block-sparse selection patterns.
-Total: 47 rules. Full corpus target: ~300-500 rules in ~15-25 batches.
+Batch 6 (Research 007): 3 rules — varlen packing + chunked reductions.
+Total: 50 rules. Full corpus target: ~300-500 rules in ~15-25 batches.
 
 ### Category A: Memory access patterns (6 rules)
 
@@ -192,6 +193,14 @@ deferred (Proposal 012 §Phase 0). `is_full_validator_available()` returns
 | `block-compression-before-routing` | pool to coarse blocks, route on compressed reps | Score all fine positions → pool to blocks, score compressed, attend top-k |
 | `sliding-window-plus-sparse` | decompose attention into local + global sparse, gated sum | Single attention pass → local window + global sparse with gates |
 
+### Category J: Varlen packing + chunked reductions (Batch 6, 3 rules)
+
+| Rule ID | GPU concept | Pattern |
+|---|---|---|
+| `varlen-packing` | pack variable-length sequences via cu_seqlens, no padding | Padded batch (waste on padding) → packed 1D buffer with cumsum offsets |
+| `chunk-reset-cumsum` | cumsum that resets at chunk boundaries | Full cumsum → cumsum reset every chunk_size elements |
+| `cumsum-additive-bias` | additive bias via cumulative sum of a gate | O(N²) bias matrix → O(N) cumsum difference |
+
 ## Source
 
 - [`src/domains/kernel_opt/mod.rs`](../../src/domains/kernel_opt/mod.rs) — `KernelRule` + `KernelOptDomain`
@@ -208,6 +217,7 @@ deferred (Proposal 012 §Phase 0). `is_full_validator_available()` returns
 - [Research 004](../../.research/004_popcorn_kernel_opt_distillation_batch3.md) — Batch 3 linear-attention recurrence
 - [Research 005](../../.research/005_popcorn_kernel_opt_distillation_batch4.md) — Batch 4 MoE dispatch + backward pass
 - [Research 006](../../.research/006_popcorn_kernel_opt_distillation_batch5.md) — Batch 5 NSA block-sparse selection
+- [Research 007](../../.research/007_popcorn_kernel_opt_distillation_batch6.md) — Batch 6 varlen + chunked reductions
 - [Proposal 012](../../.proposals/) — the absorbed GPU kernel optimizer design
 - [Plan 558](../../../katgpt-rs/.plans/) — `pick_domain` substrate (katgpt-core)
 - [Research 453](../../../katgpt-rs/.research/) — LatentMoE variable-rank principle

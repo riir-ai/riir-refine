@@ -18,7 +18,9 @@
 //! - **Batch 3 (Research 004):** 6 linear-attention recurrence rules.
 //! - **Batch 4 (Research 005):** 9 `MoE` dispatch + backward-pass rules.
 //! - **Batch 5 (Research 006):** 4 NSA block-sparse selection rules.
-//! - **Deferred:** remaining kernels (losses, activations, normalization variants).
+//! - **Batch 6 (Research 007):** 3 varlen packing + chunked reduction rules.
+//! - **Deferred:** remaining kernels are mostly already-covered patterns or
+//!   domain-specific math; future batches need new source impl files.
 
 use crate::corpus::Corpus;
 use crate::domains::kernel_opt::{KernelOptDomain, KernelRule};
@@ -464,12 +466,41 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
             opt_pattern: "// optimized: pool to coarse blocks, score on compressed reps\nfn select_over_compressed(\n    q: &[f32], k: &[f32], block_size: usize, n_blocks: usize, d: usize, top_count: usize,\n) -> Vec<usize> {\n    let mut block_scores = vec![0.0f32; n_blocks];\n    for b in 0..n_blocks {\n        let mut pooled = vec![0.0f32; d];\n        for j in 0..block_size {\n            for dd in 0..d {\n                pooled[dd] += k[(b * block_size + j) * d + dd];\n            }\n        }\n        for dd in 0..d {\n            pooled[dd] /= block_size as f32;\n        }\n        block_scores[b] = dot(&q[..d], &pooled);\n    }\n    argtopk(&block_scores, top_count)\n}".to_string(),
         },
         // ── sliding-window-plus-sparse — single pass → local + global split ─
-        // Source: nsa_tl.py nsa — decompose into sliding window + block-sparse,\n        // combine via gated weighted sum (Longformer/BigBird/NSA pattern).
+        // Source: nsa_tl.py nsa — decompose into sliding window + block-sparse,
+        // combine via gated weighted sum (Longformer/BigBird/NSA pattern).
         KernelRule {
             rule_id: "sliding-window-plus-sparse".to_string(),
             gpu_concept: "decompose attention into local + global sparse, gated sum".to_string(),
             ref_shape: "// naive: single attention pass must handle both local and global patterns\nfn attend_single(q: &[f32], k: &[f32], v: &[f32], n: usize, d: usize, out: &mut [f32]) {\n    for i in 0..n {\n        let score = dot(&q[..d], &k[i * d..(i + 1) * d]);\n        for j in 0..d {\n            out[j] += score * v[i * d + j];\n        }\n    }\n}".to_string(),
             opt_pattern: "// optimized: decompose into local window + global sparse, combine with gates\nfn attend_decomposed(\n    q: &[f32], k: &[f32], v: &[f32], d: usize,\n    g_local: f32, g_global: f32,\n    block_indices: &[usize], window_left: usize,\n    out: &mut [f32],\n) {\n    let mut local_out = vec![0.0f32; d];\n    let mut global_out = vec![0.0f32; d];\n    attend_sliding_window(q, k, v, d, window_left, &mut local_out);\n    attend_block_sparse(q, k, v, d, block_indices, &mut global_out);\n    for j in 0..d {\n        out[j] = local_out[j] * g_local + global_out[j] * g_global;\n    }\n}".to_string(),
+        },
+        // ════════════════════════════════════════════════════════════════════
+        // Category J: Varlen packing + chunked reductions (Batch 6, 3 rules)
+        // ════════════════════════════════════════════════════════════════════
+        // ── varlen-packing — padded batch → packed cu_seqlens buffer ────────
+        // Source: attn_varlen.py — pack variable-length sequences end-to-end
+        // via cu_seqlens offsets; eliminate padding waste.
+        KernelRule {
+            rule_id: "varlen-packing".to_string(),
+            gpu_concept: "pack variable-length sequences via cu_seqlens, no padding".to_string(),
+            ref_shape: "// naive: pad all sequences to max length (waste compute on padding)\nfn attention_padded(seqs: &[&[f32]], max_len: usize, d: usize, out: &mut [f32]) {\n    let batch = seqs.len();\n    let mut padded = vec![0.0f32; batch * max_len * d];\n    for (b, seq) in seqs.iter().enumerate() {\n        for (i, &val) in seq.iter().enumerate() {\n            padded[b * max_len * d + i * d] = val;\n        }\n    }\n    // attention runs over the full padded matrix (padding tokens waste compute)\n    attention_kernel(&padded, batch, max_len, d, out);\n}".to_string(),
+            opt_pattern: "// optimized: pack all sequences end-to-end via cu_seqlens offsets\nfn attention_varlen(seqs: &[&[f32]], d: usize, out: &mut [f32]) {\n    let total: usize = seqs.iter().map(|s| s.len() / d).sum();\n    let mut packed = vec![0.0f32; total * d];\n    let mut cu_seqlens = vec![0usize; seqs.len() + 1];\n    let mut offset = 0;\n    for (b, seq) in seqs.iter().enumerate() {\n        packed[offset..offset + seq.len()].copy_from_slice(seq);\n        offset += seq.len();\n        cu_seqlens[b + 1] = offset / d;\n    }\n    // attention runs only on real tokens (no padding, no waste)\n    attention_varlen_kernel(&packed, &cu_seqlens, d, out);\n}".to_string(),
+        },
+        // ── chunk-reset-cumsum — full cumsum → chunk-boundary-reset cumsum ─
+        // Source: chunk_local_cumsum.py — cumsum resets at chunk_size boundaries.
+        KernelRule {
+            rule_id: "chunk-reset-cumsum".to_string(),
+            gpu_concept: "cumsum that resets at chunk boundaries".to_string(),
+            ref_shape: "// naive: full sequence cumsum (accumulates across entire sequence)\nfn cumsum_full(g: &[f32], out: &mut [f32]) {\n    let mut acc = 0.0f32;\n    for (i, &val) in g.iter().enumerate() {\n        acc += val;\n        out[i] = acc;\n    }\n}".to_string(),
+            opt_pattern: "// optimized: chunk-reset cumsum (resets at chunk_size boundaries)\nfn cumsum_chunk_reset(g: &[f32], out: &mut [f32], chunk_size: usize) {\n    let mut acc = 0.0f32;\n    for (i, &val) in g.iter().enumerate() {\n        if i % chunk_size == 0 {\n            acc = 0.0; // reset at chunk boundary\n        }\n        acc += val;\n        out[i] = acc;\n    }\n}".to_string(),
+        },
+        // ── cumsum-additive-bias — O(N²) bias matrix → O(N) cumsum difference ─
+        // Source: forgetting_attn.py — bias[i,j] = cumsum(g)[i] - cumsum(g)[j].
+        KernelRule {
+            rule_id: "cumsum-additive-bias".to_string(),
+            gpu_concept: "additive bias via cumulative sum of a gate".to_string(),
+            ref_shape: "// naive: materialize full N×N bias matrix (O(N²) memory + compute)\nfn attention_with_bias_matrix(q: &[f32], k: &[f32], g: &[f32], n: usize, d: usize, out: &mut [f32]) {\n    let mut bias = vec![0.0f32; n * n];\n    for i in 0..n {\n        for j in 0..n {\n            let mut sum = 0.0;\n            for t in 0..=i { sum += g[t]; }\n            let mut sum_j = 0.0;\n            for t in 0..=j { sum_j += g[t]; }\n            bias[i * n + j] = sum - sum_j;\n        }\n    }\n    attention_with_bias(q, k, &bias, n, d, out);\n}".to_string(),
+            opt_pattern: "// optimized: bias = cumsum(g)[i] - cumsum(g)[j] (O(N) to compute cumsum)\nfn attention_with_cumsum_bias(q: &[f32], k: &[f32], g: &[f32], n: usize, d: usize, out: &mut [f32]) {\n    let mut cumsum = vec![0.0f32; n];\n    let mut acc = 0.0f32;\n    for (i, &val) in g.iter().enumerate() {\n        acc += val;\n        cumsum[i] = acc;\n    }\n    // attention adds (cumsum[i] - cumsum[j]) to each score — no bias matrix\n    attention_with_cumsum_diff(q, k, &cumsum, n, d, out);\n}".to_string(),
         },
     ])
 }
@@ -497,8 +528,9 @@ mod tests {
         // Batch 3 (6): linear-attention recurrence.
         // Batch 4 (9): MoE dispatch + backward pass.
         // Batch 5 (4): NSA block-sparse selection.
-        // Total: 47.
-        assert_eq!(corpus.entries.len(), 47, "batches 1-5 should have 47 rules");
+        // Batch 6 (3): varlen packing + chunked reductions.
+        // Total: 50.
+        assert_eq!(corpus.entries.len(), 50, "batches 1-6 should have 50 rules");
     }
 
     #[test]
@@ -758,5 +790,33 @@ mod tests {
         assert!(concepts.contains(&"hoist invariant row reduction out of per-block loop"));
         assert!(concepts.contains(&"pool to coarse blocks, route on compressed reps"));
         assert!(concepts.contains(&"decompose attention into local + global sparse, gated sum"));
+    }
+
+    #[test]
+    fn batch6_rules_present() {
+        // Verify the 3 batch-6 varlen + chunked-reduction rules are in the corpus.
+        let corpus = build_kernel_seed_corpus();
+        let ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        for expected in [
+            "varlen-packing",
+            "chunk-reset-cumsum",
+            "cumsum-additive-bias",
+        ] {
+            assert!(
+                ids.contains(&expected),
+                "batch-6 rule '{expected}' missing from corpus"
+            );
+        }
+    }
+
+    #[test]
+    fn batch6_varlen_chunked_concepts_covered() {
+        // Verify the varlen + chunked-reduction concepts are represented.
+        let corpus = build_kernel_seed_corpus();
+        let concepts: Vec<&str> =
+            corpus.entries.iter().map(|e| e.gpu_concept.as_str()).collect();
+        assert!(concepts.contains(&"pack variable-length sequences via cu_seqlens, no padding"));
+        assert!(concepts.contains(&"cumsum that resets at chunk boundaries"));
+        assert!(concepts.contains(&"additive bias via cumulative sum of a gate"));
     }
 }
