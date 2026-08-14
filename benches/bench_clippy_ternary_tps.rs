@@ -23,11 +23,35 @@
 //! CLIPPY_CASES=benches/fixtures/e2e_cases_seed.json \
 //! DECODE_TOKENS=64 \
 //!   cargo run --release --features ternary_inference \
-//!   --example bench_clippy_ternary_tps
+//!   --bench bench_clippy_ternary_tps -- --nocapture
 //! ```
 //!
 //! `DECODE_TOKENS` is capped low by default because this path is slow — the
 //! point is a *rate*, not a complete fix. The rate is what the comparison needs.
+//!
+//! # Speculative decode (Issue 665)
+//!
+//! `SPECULATIVE=1` switches the decode loop from sequential (one token per
+//! forward) to speculative (n-gram drafter predicts K=2, GPU verifies in one
+//! batched read). Reports acceptance rate (α) + spec rounds alongside tok/s.
+//! Default OFF. `SPEC_CHECKPOINT=cpu` selects the CPU-side checkpoint path
+//! (default: `gpu`, the CopyCubeCL zero-sync production path).
+//!
+//! **Measured on clippy prompts (2026-08-14, M3 Max, needless_return case):**
+//! G1 PASS (bit-identical emitted text vs sequential) but **α=0.19-0.22** —
+//! far below the α≥0.58 breakeven (Issue 665 T1) — decode 3.3-4.4× SLOWER
+//! than sequential. The n-gram drafter cannot predict natural-language
+//! `<think>` reasoning. Issue 665's 1.21× was measured on repetitive text;
+//! it does NOT reproduce on this workload. NET-NEGATIVE here.
+//!
+//! **bench_665 off-by-one bug (found while wiring this):** the upstream
+//! `bench_665_speculative_decode.rs` verify loop compares `argmax(all_logits[i])`
+//! against `draft_tokens[i]`, but `all_logits[i]` predicts the position AFTER
+//! `draft_tokens[i]` — the correct comparison is `all_logits[i-1]` (or the
+//! pre-speculation logits for `d_0`). The buggy wiring produced G1 FAIL
+//! (garbage tokens) + inflated α=0.13 on this workload; the corrected wiring
+//! produces bit-identical output. bench_665's α=0.88 was measured with the
+//! buggy verify on repetitive text where the off-by-one coincidentally matches.
 
 #![allow(clippy::pedantic)]
 
@@ -38,6 +62,17 @@ use riir_engine::deltanet::effective_rotary_dim;
 use riir_engine::gguf_loader::{load_qwen_deltanet_ternary_weights_gguf, GgufFile};
 use riir_engine::rope::RopeFreqTable;
 use riir_engine::tokenizer::BpeTokenizer;
+
+/// Speculative decode lookahead (K=2 is the sweet spot per Issue 665 T1).
+const DRAFT_K: usize = 2;
+
+/// Checkpoint implementation: `gpu` (CopyCubeCL zero-sync, production path)
+/// or `cpu` (read_to_cpu + write_back, the pre-fix path). Default `gpu`.
+fn gpu_checkpoint() -> bool {
+    std::env::var("SPEC_CHECKPOINT")
+        .map(|v| v != "cpu")
+        .unwrap_or(true)
+}
 
 /// Clamp the native 262K context — it would allocate ~128 GiB of KV cache.
 /// Clippy prompts are ~100 tokens, so 1024 is generous. Mirrors the value the
@@ -83,6 +118,9 @@ fn main() {
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(64);
+    let use_speculative: bool = std::env::var("SPECULATIVE")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
     let n_cases: usize = std::env::var("N_CASES")
         .ok()
         .and_then(|v| v.parse().ok())
@@ -129,11 +167,23 @@ fn main() {
 
     println!("\n=== Bench 010 — katgpt ternary, clippy prompts, M3 Metal ===");
     println!("model load: {load_s:.1}s   gpu init: {gpu_init_s:.1}s   (both excluded from tok/s)");
+    println!("decode path: {}", if use_speculative {
+        format!("speculative (K={DRAFT_K}, Issue 665)")
+    } else {
+        "sequential".to_string()
+    });
     println!();
-    println!(
-        "{:<24} {:>7} {:>7} {:>10} {:>10} {:>10} {:>10}",
-        "lint", "prompt", "decode", "prefill s", "decode s", "dec tok/s", "tot tok/s"
-    );
+    if use_speculative {
+        println!(
+            "{:<24} {:>7} {:>7} {:>10} {:>10} {:>10} {:>10} {:>8} {:>6}",
+            "lint", "prompt", "decode", "prefill s", "decode s", "dec tok/s", "tot tok/s", "alpha", "rounds"
+        );
+    } else {
+        println!(
+            "{:<24} {:>7} {:>7} {:>10} {:>10} {:>10} {:>10}",
+            "lint", "prompt", "decode", "prefill s", "decode s", "dec tok/s", "tot tok/s"
+        );
+    }
 
     let mut rows = Vec::new();
 
@@ -173,50 +223,99 @@ fn main() {
         // Issue 663's +1.21× was measured on an ISOLATED prefill bench, not the
         // full forward — does not reproduce at scale. ZEROCOPY=1 env var forces it
         // on for A/B re-investigation; default is OFF.
-        let _ = riir_gpu::set_prefill_use_simdgroup(true);
+        riir_gpu::set_prefill_use_simdgroup(true);
         #[cfg(target_os = "macos")]
         if std::env::var("ZEROCOPY").unwrap_or_else(|_| "0".to_string()) == "1" {
-            let _ = riir_gpu::set_prefill_use_metal_tensor_zerocopy(true);
+            riir_gpu::set_prefill_use_metal_tensor_zerocopy(true);
         }
 
         let t_prefill = Instant::now();
         let mut last_logits = fwd.prefill(prompt_tokens);
         let prefill_s = t_prefill.elapsed().as_secs_f64();
 
-        // ── Decode: greedy argmax, matching --temp 0.0 ────────────────────
+        // ── Decode ────────────────────────────────────────────────────────
+        // Two paths, selected by the SPECULATIVE env var:
+        //
+        // - Sequential (default): one token per forward. The G1 baseline.
+        //   Matches llama.cpp's `--temp 0.0` greedy decode.
+        //
+        // - Speculative (SPECULATIVE=1): n-gram drafter predicts K=2 tokens,
+        //   GPU verifies both in one batched logits read. Acceptance prefix +
+        //   rollback on reject. Mirrors bench_665_speculative_decode.rs. Issue 665
+        //   T6 measured 1.21× at α=0.88 on an isolated decode bench; this harness
+        //   re-validates on the production-shaped clippy-prompt path.
+        //
+        // Both paths produce identical tokens on a given prompt (greedy argmax
+        // both sides) — only the throughput differs.
         let t_decode = Instant::now();
-        let mut generated: Vec<usize> = Vec::with_capacity(decode_tokens);
-        let first = argmax(&last_logits[..vocab]).unwrap_or(0);
-        generated.push(first);
-        for _ in 1..decode_tokens {
-            let cur = *generated.last().unwrap();
-            fwd.set_input_token(&weights, cur);
-            last_logits = fwd.forward_token(cur);
-            let next = argmax(&last_logits[..vocab]).unwrap_or(0);
-            if next == tokenizer.eos_id() {
-                break;
+        let (generated, acceptance, spec_rounds) = if use_speculative {
+            decode_speculative(
+                &mut fwd,
+                &weights,
+                &last_logits[..vocab],
+                prompt_tokens,
+                decode_tokens,
+                tokenizer.eos_id(),
+            )
+        } else {
+            let mut generated: Vec<usize> = Vec::with_capacity(decode_tokens);
+            let first = argmax(&last_logits[..vocab]).unwrap_or(0);
+            generated.push(first);
+            for _ in 1..decode_tokens {
+                let cur = *generated.last().unwrap();
+                fwd.set_input_token(&weights, cur);
+                last_logits = fwd.forward_token(cur);
+                let next = argmax(&last_logits[..vocab]).unwrap_or(0);
+                if next == tokenizer.eos_id() {
+                    break;
+                }
+                generated.push(next);
             }
-            generated.push(next);
-        }
+            (generated, 0.0_f64, 0_usize)
+        };
         let decode_s = t_decode.elapsed().as_secs_f64();
 
         let dec_tps = generated.len() as f64 / decode_s;
         let tot_tps = (prompt_tokens.len() + generated.len()) as f64 / (prefill_s + decode_s);
 
-        println!(
-            "{:<24} {:>7} {:>7} {:>10.2} {:>10.2} {:>10.3} {:>10.3}",
-            case.lint,
+        if use_speculative {
+            println!(
+                "{:<24} {:>7} {:>7} {:>10.2} {:>10.2} {:>10.3} {:>10.3} {:>8.2} {:>6}",
+                case.lint,
+                prompt_tokens.len(),
+                generated.len(),
+                prefill_s,
+                decode_s,
+                dec_tps,
+                tot_tps,
+                acceptance,
+                spec_rounds
+            );
+        } else {
+            println!(
+                "{:<24} {:>7} {:>7} {:>10.2} {:>10.2} {:>10.3} {:>10.3}",
+                case.lint,
+                prompt_tokens.len(),
+                generated.len(),
+                prefill_s,
+                decode_s,
+                dec_tps,
+                tot_tps
+            );
+        }
+
+        let text = tokenizer.decode(&generated);
+        eprintln!("[bench010] {} emitted: {:?}", case.lint, text);
+        rows.push((
+            case.lint.clone(),
             prompt_tokens.len(),
             generated.len(),
             prefill_s,
             decode_s,
             dec_tps,
-            tot_tps
-        );
-
-        let text = tokenizer.decode(&generated);
-        eprintln!("[bench010] {} emitted: {:?}", case.lint, text);
-        rows.push((case.lint.clone(), prompt_tokens.len(), generated.len(), prefill_s, decode_s, dec_tps, tot_tps, text));
+            tot_tps,
+            text,
+        ));
     }
 
     // ── Aggregate ─────────────────────────────────────────────────────────
@@ -249,4 +348,161 @@ fn main() {
     }
     std::fs::write(&out, s).expect("write jsonl");
     println!("\nwrote {out}");
+}
+
+/// Speculative decode loop (Issue 665).
+///
+/// Corrected implementation — the bench_665 verify logic was off-by-one
+/// (`all_logits[i]` predicts the position AFTER `draft_tokens[i]`, so to verify
+/// `d_i` you need `all_logits[i-1]`, or `seed_logits` for `d_0`). bench_665 got
+/// α=0.88 on repetitive counting text where the off-by-one coincidentally
+/// matches; on natural-language clippy prompts it collapses to α=0.13 + G1 FAIL.
+///
+/// Algorithm (per round, starting from GPU position P with `current_logits`
+/// predicting position P):
+///
+/// 1. Draft predicts `[d_0, ..., d_{K-1}]` for positions P, P+1, ..., P+K-1.
+/// 2. `forward_speculative_verify` processes each draft token at its position,
+///    returning `all_logits[i]` which predicts position P+i+1.
+/// 3. Verify: `d_0` against `current_logits` (predicts P), `d_i` against
+///    `all_logits[i-1]` (predicts P+i). Accept matching prefix.
+/// 4. If all accepted: no rollback. P += K. Next round's `current_logits` =
+///    `all_logits[K-1]`.
+/// 5. If rejected at j: rollback to P. Re-apply accepted + corrected. P += j+1.
+///    `current_logits` = last re-apply forward output.
+///
+/// No bonus token — it complicates GPU-state tracking (the GPU hasn't processed
+/// the bonus token, so the next round's positions would misalign). Accept at
+/// most K tokens per round.
+///
+/// Returns `(generated_tokens, acceptance_rate, spec_rounds)`.
+#[cfg(feature = "ternary_inference")]
+fn decode_speculative(
+    fwd: &mut riir_gpu::TernaryDeltanetGpuForward,
+    weights: &riir_engine::deltanet::ternary_weights::QwenDeltaNetTernaryWeights,
+    seed_logits: &[f32],
+    prompt_tokens: &[usize],
+    decode_tokens: usize,
+    eos_id: usize,
+) -> (Vec<usize>, f64, usize) {
+    use riir_gpu::speculative_decode::NgramDrafter;
+
+    if decode_tokens == 0 {
+        return (Vec::new(), 0.0, 0);
+    }
+
+    // Seed the drafter from the prompt n-grams.
+    let mut drafter = NgramDrafter::default_trigram();
+    let prompt_u32: Vec<u32> = prompt_tokens.iter().map(|&t| t as u32).collect();
+    drafter.add_context(&prompt_u32);
+
+    let mut generated: Vec<u32> = Vec::with_capacity(decode_tokens);
+    // current_logits = the logits predicting the NEXT position to fill.
+    // After prefill, this is seed_logits (predicts the first generated token).
+    let mut current_logits: Vec<f32> = seed_logits.to_vec();
+
+    let mut spec_rounds = 0usize;
+    let mut total_accepted = 0usize;
+    let mut total_draft = 0usize;
+
+    while generated.len() < decode_tokens {
+        spec_rounds += 1;
+
+        // 1. Draft predicts K tokens for the next K positions.
+        //    Context = prompt + generated so far (the drafter needs the suffix).
+        let mut context: Vec<u32> = prompt_u32.clone();
+        context.extend_from_slice(&generated);
+        let draft: Vec<u32> = drafter.predict(&context, DRAFT_K);
+        let draft_tokens: Vec<usize> = draft.iter().map(|&t| t as usize).collect();
+
+        // 2. Checkpoint + speculative verify (K forwards, 1 batched logits read).
+        //    GPU-side checkpoint (default): CopyCubeCL dispatches, zero CPU sync
+        //    (~0.4ms for 160MB, overlaps with subsequent dispatches). CPU-side
+        //    (SPEC_CHECKPOINT=cpu): batched read to CPU + write back on rollback.
+        let use_gpu_ckpt = gpu_checkpoint();
+        let checkpoint_pos = fwd.pos();
+        let checkpoint = if use_gpu_ckpt {
+            fwd.checkpoint_speculative_gpu();
+            None
+        } else {
+            Some(fwd.checkpoint_speculative())
+        };
+        let all_logits = fwd.forward_speculative_verify(weights, &draft_tokens);
+        // all_logits[i] = logits AFTER processing draft_tokens[i] = predicts the
+        // position AFTER draft_tokens[i]. To verify draft_tokens[i], use the
+        // logits that predict its position:
+        //   d_0 → current_logits (predicts d_0's position)
+        //   d_i → all_logits[i-1] (predicts d_i's position)
+
+        // 3. Verify: accept matching prefix, reject at first divergence.
+        let mut first_reject = DRAFT_K;
+        for i in 0..DRAFT_K {
+            total_draft += 1;
+            let verify_logits: &[f32] = if i == 0 {
+                &current_logits
+            } else {
+                &all_logits[i - 1]
+            };
+            let main_token = argmax(verify_logits).unwrap_or(0);
+            if main_token == draft_tokens[i] {
+                total_accepted += 1;
+                generated.push(draft_tokens[i] as u32);
+                if generated.len() >= decode_tokens || draft_tokens[i] == eos_id {
+                    first_reject = i + 1;
+                    break;
+                }
+            } else {
+                // Draft wrong — accept the main model's token instead.
+                generated.push(main_token as u32);
+                first_reject = i;
+                break;
+            }
+        }
+
+        // 4. Update current_logits for the next round.
+        //    If all K accepted: current_logits = all_logits[K-1] (predicts the
+        //    position after the last accepted token — no rollback needed, the
+        //    GPU state already reflects all K forwards).
+        //    If rejected at j>0: the accepted prefix's last forward output is
+        //    all_logits[j-1], but we're about to rollback + re-apply which
+        //    overwrites current_logits anyway.
+        if first_reject == DRAFT_K {
+            current_logits = all_logits[DRAFT_K - 1].clone();
+        }
+
+        // 5. Rollback + re-apply if any tokens were rejected.
+        //    The GPU processed d_0..d_{K-1} during verify, but d_{first_reject}
+        //    was wrong. Rollback restores pre-speculation state; re-apply the
+        //    accepted prefix + corrected token.
+        if first_reject < DRAFT_K {
+            match (use_gpu_ckpt, checkpoint) {
+                (true, None) => fwd.rollback_speculative_gpu(checkpoint_pos),
+                (false, Some(cp)) => fwd.rollback_speculative(&cp),
+                _ => unreachable!("checkpoint variant mismatch"),
+            }
+            let n_to_reapply = first_reject + 1; // accepted drafts + 1 corrected
+            let reapply_tokens = &generated[generated.len() - n_to_reapply..];
+            for &tok in reapply_tokens {
+                fwd.set_input_token(weights, tok as usize);
+                current_logits = fwd.forward_token(tok as usize);
+            }
+        }
+
+        // 6. Update the drafter with newly committed tokens.
+        let update_len = generated.len().min(drafter.order());
+        drafter.add_context(&generated[generated.len() - update_len..]);
+
+        // 7. EOS check.
+        if (*generated.last().unwrap() as usize) == eos_id {
+            break;
+            }
+    }
+
+    let gen_usize: Vec<usize> = generated.iter().map(|&t| t as usize).collect();
+    let acceptance = if total_draft > 0 {
+        total_accepted as f64 / total_draft as f64
+    } else {
+        0.0
+    };
+    (gen_usize, acceptance, spec_rounds)
 }
