@@ -12,10 +12,13 @@
 //!
 //! ## Current state
 //!
-//! - **Batch 1 (this file):** 22 rules (2 original placeholders + 20 popcorn-distilled)
+//! - **Batch 1 (Research 002):** 21 rules (2 original placeholders + 19 popcorn-distilled)
 //!   across 5 categories: memory access, compute, fusion, dispatch, parallelism.
-//! - **Deferred:** flash-attention tiling, linear-attention recurrence, `MoE` dispatch,
-//!   backward-pass kernels (see Research 002 "What's NOT in this batch").
+//! - **Batch 2 (Research 003):** 7 flash-attention tiling rules.
+//! - **Batch 3 (Research 004):** 6 linear-attention recurrence rules.
+//! - **Batch 4 (Research 005):** 9 `MoE` dispatch + backward-pass rules.
+//! - **Batch 5 (Research 006):** 4 NSA block-sparse selection rules.
+//! - **Deferred:** remaining kernels (losses, activations, normalization variants).
 
 use crate::corpus::Corpus;
 use crate::domains::kernel_opt::{KernelOptDomain, KernelRule};
@@ -343,12 +346,130 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
             opt_pattern: "// optimized: N writes per step under one gate (DeltaProduct)\nfn step_multi_write(state: &mut [[f32; V]; K], ks: &[[f32; K]], vs: &[[f32; V]], betas: &[f32], n: usize, gate: f32) {\n    // apply forget gate once\n    let decay = gate.exp();\n    for kv in 0..K {\n        for vv in 0..V {\n            state[kv][vv] *= decay;\n        }\n    }\n    // N Householder reflections\n    for j in 0..n {\n        delta_rule_update(state, &ks[j], &vs[j], betas[j]);\n    }\n}".to_string(),
         },
         // ── chained-two-pass-recurrence — single pass → two chained passes ─
-        // Source: gsa.py — Gated Slot Attention chains two sequential recurrences\n        // (K-state then V-state) with a softmax bridge between them.
+        // Source: gsa.py — Gated Slot Attention chains two sequential recurrences
+        // (K-state then V-state) with a softmax bridge between them.
         KernelRule {
             rule_id: "chained-two-pass-recurrence".to_string(),
             gpu_concept: "chained sequential recurrences with softmax bridge".to_string(),
             ref_shape: "// naive: single recurrence pass (one state matrix)\nfn single_pass_recurrence(k: &[f32], v: &[f32], q: &[f32], state: &mut [f32], n: usize) -> Vec<f32> {\n    let mut out = vec![0.0f32; n];\n    for t in 0..n {\n        state[t % state.len()] += k[t] * v[t];\n        out[t] = state[t % state.len()] * q[t];\n    }\n    out\n}".to_string(),
             opt_pattern: "// optimized: two chained passes with softmax bridge (Gated Slot Attention)\nfn two_pass_recurrence(k: &[f32], v: &[f32], s: &[f32], q: &[f32], gate: &[f32], k_state: &mut [f32], v_state: &mut [f32], n: usize) -> Vec<f32> {\n    let mut intermediate = vec![0.0f32; n];\n    // pass 1: K-state recurrence → intermediate scores\n    for t in 0..n {\n        let decay = gate[t].exp();\n        k_state[t % k_state.len()] = k_state[t % k_state.len()] * decay + k[t] * s[t];\n        intermediate[t] = k_state[t % k_state.len()] * q[t];\n    }\n    // softmax bridge\n    let max_val = intermediate.iter().copied().fold(f32::NEG_INFINITY, f32::max);\n    let sum: f32 = intermediate.iter().map(|x| (x - max_val).exp()).sum();\n    let probs: Vec<f32> = intermediate.iter().map(|x| (x - max_val).exp() / sum).collect();\n    // pass 2: V-state recurrence → final output\n    let mut out = vec![0.0f32; n];\n    for t in 0..n {\n        let decay = gate[t].exp();\n        v_state[t % v_state.len()] = v_state[t % v_state.len()] * decay + s[t] * v[t];\n        out[t] = v_state[t % v_state.len()] * probs[t];\n    }\n    out\n}".to_string(),
+        },
+        // ════════════════════════════════════════════════════════════════════
+        // Category H: MoE dispatch + backward pass (Batch 4, 9 rules)
+        // ════════════════════════════════════════════════════════════════════
+        // ── grouped-launch-cumsum-offsets — N launches → single grouped grid ─
+        // Source: momoe_tl.py lin1_kernel + apply_experts — each block derives
+        // its group membership + per-group row offset from a prefix-sum array.
+        KernelRule {
+            rule_id: "grouped-launch-cumsum-offsets".to_string(),
+            gpu_concept: "grouped GEMM with prefix-sum offsets".to_string(),
+            ref_shape: "// naive: one kernel launch per group, each sized independently\nfn grouped_matmul_naive(x: &[f32], w: &[&[f32]], out: &mut [f32], group_sizes: &[usize], d: usize, h: usize) {\n    let mut offset = 0;\n    for (g, &size) in group_sizes.iter().enumerate() {\n        let x_g = &x[offset * d .. (offset + size) * d];\n        let out_g = &mut out[offset * h .. (offset + size) * h];\n        launch_matmul_kernel(x_g, w[g], out_g); // separate launch per group\n        offset += size;\n    }\n}".to_string(),
+            opt_pattern: "// optimized: single grid launch; each block resolves its group via cumsums\nfn grouped_matmul_cumsum(x: &[f32], w_flat: &[f32], out: &mut [f32], cumsums: &[usize], n_groups: usize) {\n    let total = cumsums[n_groups];\n    for block_id in 0..count_tiles(total, n_groups) {\n        let g = block_to_group(block_id, cumsums);\n        let cumsum_end = cumsums[g + 1];\n        let group_size = cumsum_end - cumsums[g];\n        let local_row = block_to_local_row(block_id, group_size);\n        let global_row = local_row + cumsum_end - group_size;\n        compute_tile(x, w_flat, out, g, global_row);\n    }\n}".to_string(),
+        },
+        // ── l2-grouped-tile-schedule — row-major → swizzled L2-aware mapping ──
+        // Source: momoe_tl.py lin1/lin2/weights_update — grouped swizzle so
+        // adjacent blocks share L2 cache lines of the weight matrix.
+        KernelRule {
+            rule_id: "l2-grouped-tile-schedule".to_string(),
+            gpu_concept: "swizzled L2-cache-aware tile mapping".to_string(),
+            ref_shape: "// naive: row-major block mapping — adjacent pids walk columns, poor L2 reuse\nfn linear_tile_map(pid: usize, blocks_m: usize, blocks_n: usize) -> (usize, usize) {\n    let block_m = pid / blocks_n;\n    let block_n = pid % blocks_n;\n    (block_m, block_n)\n}".to_string(),
+            opt_pattern: "// optimized: grouped swizzle — tile within a row-group before advancing\nfn grouped_tile_map(pid: usize, blocks_m: usize, blocks_n: usize, group_size: usize) -> (usize, usize) {\n    let group_id = pid / (group_size * blocks_n);\n    let start_m = group_id * group_size;\n    let start_pid = start_m * blocks_n;\n    let n_in_group = std::cmp::min(group_size, blocks_m - start_m);\n    let local = pid - start_pid;\n    let block_m = start_m + (local % n_in_group);\n    let block_n = local / n_in_group;\n    (block_m, block_n)\n}".to_string(),
+        },
+        // ── fused-matmul-activation — separate passes → epilogue fusion ──────
+        // Source: momoe_tl.py lin1_kernel — up/gate projection + SwiGLU fused.
+        KernelRule {
+            rule_id: "fused-matmul-activation".to_string(),
+            gpu_concept: "pointwise activation in matmul epilogue".to_string(),
+            ref_shape: "// naive: matmul writes full intermediate to global memory, separate activation pass\nfn matmul_then_activation(x: &[f32], w: &[f32], out: &mut [f32], tmp: &mut [f32], m: usize, h: usize) {\n    matmul(x, w, tmp, m, h);\n    for i in 0..m * h {\n        out[i] = swiglu(tmp[i]);\n    }\n}".to_string(),
+            opt_pattern: "// optimized: apply activation in registers before the single global store\nfn fused_matmul_activation(x: &[f32], w: &[f32], out: &mut [f32], m: usize, h: usize) {\n    for tile in tiles(m, h) {\n        let mut acc: [f32; TILE] = matmul_tile(x, w, tile);\n        for i in 0..TILE {\n            acc[i] = swiglu(acc[i]);\n        }\n        store_tile(out, tile, acc);\n    }\n}".to_string(),
+        },
+        // ── fused-backward-chain — two backward kernels → one fused kernel ──
+        // Source: momoe_tl.py lin2_and_swiglu_backward — linear + activation
+        // backward fused so grad_h stays in registers.
+        KernelRule {
+            rule_id: "fused-backward-chain".to_string(),
+            gpu_concept: "two backward ops fused into one kernel".to_string(),
+            ref_shape: "// naive: two separate kernels with a global-memory handoff\nfn backward_separate(grad_y: &[f32], w2: &[f32], activations: &[f32], grad_z: &mut [f32]) {\n    let mut grad_h = vec![0.0f32; grad_y.len()];\n    linear_backward(grad_y, w2, &mut grad_h);\n    activation_backward(&grad_h, activations, grad_z);\n}".to_string(),
+            opt_pattern: "// optimized: single fused kernel — grad_h stays in registers\nfn backward_fused(grad_y: &[f32], w2: &[f32], activations: &[f32], grad_z: &mut [f32]) {\n    for tile in tiles(grad_y.len()) {\n        let grad_h: [f32; TILE] = linear_backward_tile(grad_y, w2, tile);\n        let grad_z_tile = activation_backward_tile(&grad_h, activations, tile);\n        store_tile(grad_z, tile, grad_z_tile);\n    }\n}".to_string(),
+        },
+        // ── activation-recompute-budget — save all → partial save + recompute ─
+        // Source: momoe_tl.py save logic + swiglu_backward branch — save Msave
+        // rows, recompute the rest in backward (activation checkpointing).
+        KernelRule {
+            rule_id: "activation-recompute-budget".to_string(),
+            gpu_concept: "partial activation save with in-kernel recompute".to_string(),
+            ref_shape: "// naive: save all activations for the backward pass\nfn backward_all_saved(saved_a: &[f32], saved_b: &[f32], grad_in: &[f32], grad_out: &mut [f32], m: usize) {\n    for i in 0..m {\n        let a = saved_a[i];\n        let b = saved_b[i];\n        grad_out[i] = activation_grad(a, b, grad_in[i]);\n    }\n}".to_string(),
+            opt_pattern: "// optimized: save a fraction, recompute the rest in backward\nfn backward_recompute_budget(\n    saved_a: &[f32], saved_b: &[f32], msave: usize,\n    x: &[f32], w: &[f32], grad_in: &[f32], grad_out: &mut [f32], m: usize,\n) {\n    for i in 0..m {\n        let (a, b) = if i < msave {\n            (saved_a[i], saved_b[i])\n        } else {\n            recompute_forward(x, w, i)\n        };\n        grad_out[i] = activation_grad(a, b, grad_in[i]);\n    }\n}".to_string(),
+        },
+        // ── atomic-scatter-reduction — locked → lock-free atomic add ────────
+        // Source: momoe_tl.py lin1_backward + scatter_cols — concurrent blocks\n        // scatter to overlapping output slots via atomic_add.
+        KernelRule {
+            rule_id: "atomic-scatter-reduction".to_string(),
+            gpu_concept: "lock-free atomic scatter for parallel writes".to_string(),
+            ref_shape: "// naive: serialize overlapping writes with a lock per output element\nfn scatter_grad_locked(grads: &[(usize, f32)], out: &mut [f32], locks: &mut [bool]) {\n    for &(idx, val) in grads {\n        while locks[idx] { spin(); }\n        locks[idx] = true;\n        out[idx] += val;\n        locks[idx] = false;\n    }\n}".to_string(),
+            opt_pattern: "// optimized: relaxed atomic add — concurrent blocks accumulate without locks\nuse std::sync::atomic::{AtomicU32, Ordering};\nstruct AtomicF32(AtomicU32);\nfn scatter_grad_atomic(grads: &[(usize, f32)], out: &mut [AtomicF32]) {\n    for &(idx, val) in grads {\n        let bits = val.to_bits();\n        out[idx].0.fetch_add(bits, Ordering::Relaxed);\n    }\n}".to_string(),
+        },
+        // ── weight-grad-batched-outer-product — scalar loop → batched GEMM ──
+        // Source: momoe_tl.py weights_update_kernel — G_W = A^T @ G_b as a
+        // single tiled matmul, not per-token rank-1 updates.
+        KernelRule {
+            rule_id: "weight-grad-batched-outer-product".to_string(),
+            gpu_concept: "weight gradients as batched outer product GEMM".to_string(),
+            ref_shape: "// naive: accumulate weight grad one token at a time (rank-1 updates)\nfn weight_grad_naive(a: &[f32], grad_b: &[f32], grad_w: &mut [f32], m: usize, x: usize, y: usize) {\n    for mi in 0..m {\n        for i in 0..x {\n            for j in 0..y {\n                grad_w[i * y + j] += a[mi * x + i] * grad_b[mi * y + j];\n            }\n        }\n    }\n}".to_string(),
+            opt_pattern: "// optimized: batched outer product as tiled GEMM over the token slice\nfn weight_grad_batched(a: &[f32], grad_b: &[f32], grad_w: &mut [f32], group_start: usize, group_size: usize, x: usize, y: usize) {\n    let a_g = &a[group_start * x ..];\n    let gb_g = &grad_b[group_start * y ..];\n    tiled_matmul_accumulate(a_g, gb_g, grad_w, x, y, group_size);\n}".to_string(),
+        },
+        // ── csr-index-via-prefix-sum — host nonzero → GPU prefix-sum CSR ────
+        // Source: momoe_tl.py scatter_cols + find_used_experts — build CSR
+        // layout in-kernel via prefix sum + atomic slot counter.
+        KernelRule {
+            rule_id: "csr-index-via-prefix-sum".to_string(),
+            gpu_concept: "GPU-side CSR sparse layout via prefix sum".to_string(),
+            ref_shape: "// naive: host-side boolean scan + push to build index lists\nfn build_indices_host(mask: &[bool], n_cols: usize, n_rows: usize, indices: &mut Vec<(usize, usize)>) {\n    indices.clear();\n    for row in 0..n_rows {\n        for col in 0..n_cols {\n            if mask[row * n_cols + col] {\n                indices.push((row, col));\n            }\n        }\n    }\n}".to_string(),
+            opt_pattern: "// optimized: GPU kernel — prefix sum within tiles + atomic slot counter\nuse std::sync::atomic::{AtomicUsize, Ordering};\nfn build_indices_prefix_sum(mask: &[bool], col_idx: &mut [usize], which: &mut [usize], crow: &mut [usize], counts: &[AtomicUsize], n_cols: usize, n_rows: usize) {\n    for row in 0..n_rows {\n        let mut running = 0usize;\n        for start in (0..n_cols).step_by(BLOCK) {\n            let m = load_mask_tile(mask, row, start, BLOCK);\n            let prefix = prefix_sum(&m);\n            for k in 0..BLOCK {\n                if m[k] {\n                    let slot = crow[row] + running + prefix[k];\n                    col_idx[slot] = start + k;\n                    which[slot] = counts[start + k].fetch_add(1, Ordering::Relaxed);\n                }\n            }\n            running += sum(&m);\n        }\n        crow[row + 1] = crow[row] + running;\n    }\n}".to_string(),
+        },
+        // ── autotune-aggregate-workload-key — fixed config → aggregate key ──
+        // Source: momoe_tl.py autotune decorators — key on Msum (total tokens\n        // across all groups), not per-group shapes, for irregular batches.
+        KernelRule {
+            rule_id: "autotune-aggregate-workload-key".to_string(),
+            gpu_concept: "autotune keyed on aggregate workload size".to_string(),
+            ref_shape: "// naive: fixed tile config regardless of total work or per-group variance\nfn launch_fixed_config(total_work: usize, per_group_sizes: &[usize], data: &[f32]) {\n    let block_size = 128;\n    for start in (0..total_work).step_by(block_size) {\n        process_tile(&data[start..]);\n    }\n}".to_string(),
+            opt_pattern: "// optimized: re-select tile config when aggregate work crosses thresholds\nfn launch_autotuned_aggregate(total_work: usize, per_group_sizes: &[usize], data: &[f32]) {\n    let block_size = autotune_lookup(total_work);\n    for start in (0..total_work).step_by(block_size) {\n        process_tile(&data[start..]);\n    }\n}".to_string(),
+        },
+        // ════════════════════════════════════════════════════════════════════
+        // Category I: NSA block-sparse selection (Batch 5, 4 rules)
+        // ════════════════════════════════════════════════════════════════════
+        // ── block-sparse-gather — dense loop → block-indexed gather ────────
+        // Source: nsa_tl.py _sel_attn_fwd_kernel — iterate block_indices array
+        // instead of all N positions.
+        KernelRule {
+            rule_id: "block-sparse-gather".to_string(),
+            gpu_concept: "block-sparse indexed gather via selection array".to_string(),
+            ref_shape: "// naive: iterate all positions, compute score for every key\nfn attend_dense(q: &[f32], k: &[f32], v: &[f32], n: usize, d: usize, out: &mut [f32]) {\n    for i in 0..n {\n        let score = dot(&q[..d], &k[i * d..(i + 1) * d]);\n        for j in 0..d {\n            out[j] += score * v[i * d + j];\n        }\n    }\n}".to_string(),
+            opt_pattern: "// optimized: iterate only selected blocks via index array\nfn attend_block_sparse(\n    q: &[f32], k: &[f32], v: &[f32],\n    block_indices: &[usize], block_size: usize, d: usize, out: &mut [f32],\n) {\n    for &bi in block_indices {\n        let base = bi * block_size;\n        for j in 0..block_size {\n            let row = (base + j) * d;\n            let score = dot(&q[..d], &k[row..row + d]);\n            for dd in 0..d {\n                out[dd] += score * v[row + dd];\n            }\n        }\n    }\n}".to_string(),
+        },
+        // ── precompute-scalar-reduction — recompute per-block → hoist once ──
+        // Source: nsa_tl.py _sel_attn_bwd_preprocess_kernel — delta = sum(o*do)\n        // is invariant; precompute once, not per KV block.
+        KernelRule {
+            rule_id: "precompute-scalar-reduction".to_string(),
+            gpu_concept: "hoist invariant row reduction out of per-block loop".to_string(),
+            ref_shape: "// naive: recompute the row-wise delta inside every block iteration\nfn bwd_recompute_delta(o: &[f32], do_grad: &[f32], d: usize, block_indices: &[usize], dk: &mut [f32]) {\n    for &blk in block_indices {\n        let mut delta = 0.0f32;\n        for i in 0..d {\n            delta += o[i] * do_grad[i];\n        }\n        dk[blk] += grad_from_delta(delta);\n    }\n}".to_string(),
+            opt_pattern: "// optimized: delta precomputed once in separate pass, passed in\nfn precompute_delta(o: &[f32], do_grad: &[f32], d: usize, delta: &mut [f32]) {\n    for row in 0..delta.len() {\n        let base = row * d;\n        delta[row] = (0..d).map(|i| o[base + i] * do_grad[base + i]).sum();\n    }\n}\nfn bwd_with_delta(delta: &[f32], block_indices: &[usize], dk: &mut [f32]) {\n    for (row, &blk) in block_indices.iter().enumerate() {\n        dk[blk] += grad_from_delta(delta[row]);\n    }\n}".to_string(),
+        },
+        // ── block-compression-before-routing — score full → score compressed ─
+        // Source: nsa_tl.py compression_attention + nsa — mean-pool to coarse\n        // blocks, route on compressed reps, attend top-k at full res.
+        KernelRule {
+            rule_id: "block-compression-before-routing".to_string(),
+            gpu_concept: "pool to coarse blocks, route on compressed reps".to_string(),
+            ref_shape: "// naive: score every fine-grained position to decide what to attend to\nfn select_over_full(q: &[f32], k: &[f32], n: usize, d: usize, top_count: usize) -> Vec<usize> {\n    let mut scores = vec![0.0f32; n];\n    for i in 0..n {\n        scores[i] = dot(&q[..d], &k[i * d..(i + 1) * d]);\n    }\n    argtopk(&scores, top_count)\n}".to_string(),
+            opt_pattern: "// optimized: pool to coarse blocks, score on compressed reps\nfn select_over_compressed(\n    q: &[f32], k: &[f32], block_size: usize, n_blocks: usize, d: usize, top_count: usize,\n) -> Vec<usize> {\n    let mut block_scores = vec![0.0f32; n_blocks];\n    for b in 0..n_blocks {\n        let mut pooled = vec![0.0f32; d];\n        for j in 0..block_size {\n            for dd in 0..d {\n                pooled[dd] += k[(b * block_size + j) * d + dd];\n            }\n        }\n        for dd in 0..d {\n            pooled[dd] /= block_size as f32;\n        }\n        block_scores[b] = dot(&q[..d], &pooled);\n    }\n    argtopk(&block_scores, top_count)\n}".to_string(),
+        },
+        // ── sliding-window-plus-sparse — single pass → local + global split ─
+        // Source: nsa_tl.py nsa — decompose into sliding window + block-sparse,\n        // combine via gated weighted sum (Longformer/BigBird/NSA pattern).
+        KernelRule {
+            rule_id: "sliding-window-plus-sparse".to_string(),
+            gpu_concept: "decompose attention into local + global sparse, gated sum".to_string(),
+            ref_shape: "// naive: single attention pass must handle both local and global patterns\nfn attend_single(q: &[f32], k: &[f32], v: &[f32], n: usize, d: usize, out: &mut [f32]) {\n    for i in 0..n {\n        let score = dot(&q[..d], &k[i * d..(i + 1) * d]);\n        for j in 0..d {\n            out[j] += score * v[i * d + j];\n        }\n    }\n}".to_string(),
+            opt_pattern: "// optimized: decompose into local window + global sparse, combine with gates\nfn attend_decomposed(\n    q: &[f32], k: &[f32], v: &[f32], d: usize,\n    g_local: f32, g_global: f32,\n    block_indices: &[usize], window_left: usize,\n    out: &mut [f32],\n) {\n    let mut local_out = vec![0.0f32; d];\n    let mut global_out = vec![0.0f32; d];\n    attend_sliding_window(q, k, v, d, window_left, &mut local_out);\n    attend_block_sparse(q, k, v, d, block_indices, &mut global_out);\n    for j in 0..d {\n        out[j] = local_out[j] * g_local + global_out[j] * g_global;\n    }\n}".to_string(),
         },
     ])
 }
@@ -374,8 +495,10 @@ mod tests {
         // Batch 1 (21): 2 original + 19 popcorn-distilled.
         // Batch 2 (7): flash-attention tiling.
         // Batch 3 (6): linear-attention recurrence.
-        // Total: 34.
-        assert_eq!(corpus.entries.len(), 34, "batches 1+2+3 should have 34 rules");
+        // Batch 4 (9): MoE dispatch + backward pass.
+        // Batch 5 (4): NSA block-sparse selection.
+        // Total: 47.
+        assert_eq!(corpus.entries.len(), 47, "batches 1-5 should have 47 rules");
     }
 
     #[test]
@@ -565,5 +688,75 @@ mod tests {
         assert!(concepts.contains(&"sequence-length-aware backend dispatch"));
         assert!(concepts.contains(&"multiple state writes per timestep"));
         assert!(concepts.contains(&"chained sequential recurrences with softmax bridge"));
+    }
+
+    #[test]
+    fn batch4_rules_present() {
+        // Verify the 9 batch-4 MoE dispatch + backward-pass rules are in the corpus.
+        let corpus = build_kernel_seed_corpus();
+        let ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        for expected in [
+            "grouped-launch-cumsum-offsets",
+            "l2-grouped-tile-schedule",
+            "fused-matmul-activation",
+            "fused-backward-chain",
+            "activation-recompute-budget",
+            "atomic-scatter-reduction",
+            "weight-grad-batched-outer-product",
+            "csr-index-via-prefix-sum",
+            "autotune-aggregate-workload-key",
+        ] {
+            assert!(
+                ids.contains(&expected),
+                "batch-4 rule '{expected}' missing from corpus"
+            );
+        }
+    }
+
+    #[test]
+    fn batch4_moe_backward_concepts_covered() {
+        // Verify the MoE dispatch + backward-pass concepts are represented.
+        let corpus = build_kernel_seed_corpus();
+        let concepts: Vec<&str> =
+            corpus.entries.iter().map(|e| e.gpu_concept.as_str()).collect();
+        assert!(concepts.contains(&"grouped GEMM with prefix-sum offsets"));
+        assert!(concepts.contains(&"swizzled L2-cache-aware tile mapping"));
+        assert!(concepts.contains(&"pointwise activation in matmul epilogue"));
+        assert!(concepts.contains(&"two backward ops fused into one kernel"));
+        assert!(concepts.contains(&"partial activation save with in-kernel recompute"));
+        assert!(concepts.contains(&"lock-free atomic scatter for parallel writes"));
+        assert!(concepts.contains(&"weight gradients as batched outer product GEMM"));
+        assert!(concepts.contains(&"GPU-side CSR sparse layout via prefix sum"));
+        assert!(concepts.contains(&"autotune keyed on aggregate workload size"));
+    }
+
+    #[test]
+    fn batch5_rules_present() {
+        // Verify the 4 batch-5 NSA block-sparse selection rules are in the corpus.
+        let corpus = build_kernel_seed_corpus();
+        let ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        for expected in [
+            "block-sparse-gather",
+            "precompute-scalar-reduction",
+            "block-compression-before-routing",
+            "sliding-window-plus-sparse",
+        ] {
+            assert!(
+                ids.contains(&expected),
+                "batch-5 rule '{expected}' missing from corpus"
+            );
+        }
+    }
+
+    #[test]
+    fn batch5_nsa_concepts_covered() {
+        // Verify the NSA block-sparse selection concepts are represented.
+        let corpus = build_kernel_seed_corpus();
+        let concepts: Vec<&str> =
+            corpus.entries.iter().map(|e| e.gpu_concept.as_str()).collect();
+        assert!(concepts.contains(&"block-sparse indexed gather via selection array"));
+        assert!(concepts.contains(&"hoist invariant row reduction out of per-block loop"));
+        assert!(concepts.contains(&"pool to coarse blocks, route on compressed reps"));
+        assert!(concepts.contains(&"decompose attention into local + global sparse, gated sum"));
     }
 }

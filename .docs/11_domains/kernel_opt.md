@@ -10,7 +10,7 @@
 | Component | Ships now | Deferred |
 |---|---|---|
 | `KernelOptDomain: HealDomain` | ✅ | |
-| Seed corpus (Batch 1-3: 34 rules) | ✅ | Full corpus (~300-500 rules, ~15-25 batches) |
+| Seed corpus (Batch 1-5: 47 rules) | ✅ | Full corpus (~300-500 rules, ~15-25 batches) |
 | `KernelExpertRouter` (`pick_domain`) | ✅ (identity directions) | Per-expert centroids from popcorn |
 | `KernelThermalRouter` (5-tier stub) | ✅ (returns Plasma) | Warm/Cold LoRA (4090, riir-train) |
 | `KernelVerifier` (compile-only) | ✅ (behind `kernel_verify`) | Full numeric compare vs reference |
@@ -21,7 +21,9 @@
 Batch 1 (Research 002): 21 rules — 2 original + 19 popcorn-distilled across 5 categories.
 Batch 2 (Research 003): 7 rules — flash-attention tiling patterns.
 Batch 3 (Research 004): 6 rules — linear-attention recurrence patterns.
-Total: 34 rules. Full corpus target: ~300-500 rules in ~15-25 batches.
+Batch 4 (Research 005): 9 rules — MoE dispatch + backward-pass patterns.
+Batch 5 (Research 006): 4 rules — NSA block-sparse selection patterns.
+Total: 47 rules. Full corpus target: ~300-500 rules in ~15-25 batches.
 
 ### Category A: Memory access patterns (6 rules)
 
@@ -167,6 +169,29 @@ deferred (Proposal 012 §Phase 0). `is_full_validator_available()` returns
 | `multi-write-per-step` | multiple state writes per timestep | Single write → N Householder writes under one gate (DeltaProduct) |
 | `chained-two-pass-recurrence` | chained sequential recurrences with softmax bridge | Single pass → K-state then V-state with softmax bridge (GSA) |
 
+### Category H: MoE dispatch + backward pass (Batch 4, 9 rules)
+
+| Rule ID | GPU concept | Pattern |
+|---|---|---|
+| `grouped-launch-cumsum-offsets` | grouped GEMM with prefix-sum offsets | N separate launches → single grid with cumsum-derived group offsets |
+| `l2-grouped-tile-schedule` | swizzled L2-cache-aware tile mapping | Row-major block map → grouped swizzle for L2 reuse |
+| `fused-matmul-activation` | pointwise activation in matmul epilogue | Separate matmul+activation passes → fused epilogue |
+| `fused-backward-chain` | two backward ops fused into one kernel | Two backward kernels with global handoff → one fused kernel |
+| `activation-recompute-budget` | partial activation save with in-kernel recompute | Save all activations → save fraction + recompute rest (checkpointing) |
+| `atomic-scatter-reduction` | lock-free atomic scatter for parallel writes | Locked scatter → relaxed atomic add |
+| `weight-grad-batched-outer-product` | weight gradients as batched outer product GEMM | Per-token rank-1 updates → batched tiled GEMM |
+| `csr-index-via-prefix-sum` | GPU-side CSR sparse layout via prefix sum | Host nonzero+sort → in-kernel prefix sum + atomic counter |
+| `autotune-aggregate-workload-key` | autotune keyed on aggregate workload size | Fixed config → autotune on total work (Msum) for irregular batches |
+
+### Category I: NSA block-sparse selection (Batch 5, 4 rules)
+
+| Rule ID | GPU concept | Pattern |
+|---|---|---|
+| `block-sparse-gather` | block-sparse indexed gather via selection array | Dense iteration over all N → index-array block gather |
+| `precompute-scalar-reduction` | hoist invariant row reduction out of per-block loop | Recompute delta per block → precompute once in separate pass |
+| `block-compression-before-routing` | pool to coarse blocks, route on compressed reps | Score all fine positions → pool to blocks, score compressed, attend top-k |
+| `sliding-window-plus-sparse` | decompose attention into local + global sparse, gated sum | Single attention pass → local window + global sparse with gates |
+
 ## Source
 
 - [`src/domains/kernel_opt/mod.rs`](../../src/domains/kernel_opt/mod.rs) — `KernelRule` + `KernelOptDomain`
@@ -179,6 +204,10 @@ deferred (Proposal 012 §Phase 0). `is_full_validator_available()` returns
 
 - [`heal_domain_trait.md`](heal_domain_trait.md) — the trait this implements
 - [Research 002](../../.research/002_popcorn_kernel_opt_distillation_batch1.md) — Batch 1 popcorn distillation methodology
+- [Research 003](../../.research/003_popcorn_kernel_opt_distillation_batch2.md) — Batch 2 flash-attention tiling
+- [Research 004](../../.research/004_popcorn_kernel_opt_distillation_batch3.md) — Batch 3 linear-attention recurrence
+- [Research 005](../../.research/005_popcorn_kernel_opt_distillation_batch4.md) — Batch 4 MoE dispatch + backward pass
+- [Research 006](../../.research/006_popcorn_kernel_opt_distillation_batch5.md) — Batch 5 NSA block-sparse selection
 - [Proposal 012](../../.proposals/) — the absorbed GPU kernel optimizer design
 - [Plan 558](../../../katgpt-rs/.plans/) — `pick_domain` substrate (katgpt-core)
 - [Research 453](../../../katgpt-rs/.research/) — LatentMoE variable-rank principle
