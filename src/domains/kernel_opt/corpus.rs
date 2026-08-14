@@ -268,9 +268,36 @@
 //!   ~seconds of re-benchmark + recompile per step), tree-reduction-depth-
 //!   over-sequential-accumulate (B — plane tree depth ≈77 vs sequential
 //!   depth 2304: ~30× better accuracy, prevents 26-layer gradient divergence,
-//!   Issue 424). Corpus: **169 rules across 15 categories (A–O)**. `riir-gpu`
-//!   remains open (30 of ~200 files mined; the Gemma cluster + `cudarc_kernels/`
-//!   + `attention_cubecl/` assessed).
+//!   Issue 424). Corpus: 169 rules across 15 categories (A–O).
+//! - **Batch 26 (Research 027):** 8 rules from the wgpu forward-orchestration
+//!   cluster (`forward/` + the `buffer.rs` download substrate it consumes) —
+//!   the host-side dispatch discipline previous kernel-only batches never
+//!   touched: per-slot-uniform-buffer-write-ordering (D — wgpu flushes ALL
+//!   `queue.write_buffer` calls before the encoder executes, so N dispatches
+//!   sharing ONE uniform buffer all read the LAST write; one 64-byte uniform
+//!   per slot, each wired into its own pre-built bind group — the Issues
+//!   366/367/368 corruption lineage), derive-params-from-global-invocation-id
+//!   (D — encode the per-item parameter in the dispatch grid and decode it
+//!   in-kernel: one dispatch for `n_head × seq_len` workgroups with causal
+//!   masking + GQA mapping computed inside, zero per-position uniform writes
+//!   and zero per-position submits), merge-dispatches-into-single-compute-
+//!   pass (D — dispatches within one compute pass execute IN ORDER, so the
+//!   consumer reads the producer's writes: 6 `LoRA` dispatches in one pass,
+//!   input saves riding the copy channel with no pass at all),
+//!   batched-downloads-single-sync-cycle (D — N readbacks share one encoder,
+//!   submit, `map_async`, and poll; ~1.28 ms per sync measured regardless of
+//!   data size), chunk-encoder-submits-below-driver-limit (D — Metal
+//!   DEADLOCKS past a compute-pass-per-encoder ceiling; chunk to ~48
+//!   passes/encoder and submit each chunk immediately), prebuilt-bind-
+//!   groups-fixed-buffer-combos (A — bind groups for fixed buffer combos are
+//!   built once at init: ~768 `create_bind_group` calls per forward → 0),
+//!   host-cache-immutable-device-weights (A — constant weights cloned
+//!   host-side at init; per-call download was the #1 forward bottleneck at
+//!   2 sync stalls), defer-readback-until-after-submit (A — downloading
+//!   mid-encoder-construction reads pre-submission stale state; record the
+//!   correction and apply it after submit + completion). Corpus: **177 rules
+//!   across 15 categories (A–O)**. `riir-gpu` remains open (38 of ~200 files
+//!   mined; the forward/ cluster + buffer.rs download substrate assessed).
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
@@ -2618,6 +2645,198 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
             ref_shape: "// naive: sequential accumulation — error grows with full reduction depth\nfn gemm_tiled_sequential(a: &[f32], b_row: &[f32], out: &mut [f32], m: usize, n: usize, p: usize) {\n    for r in 0..m { for c in 0..p {\n        let mut acc = 0.0;\n        for k in 0..n {                        // depth n = 2304: each add rounds\n            acc += a[r*n + k] * b_row[c*n + k]; // on top of 2303 prior roundings\n        }\n        out[r*p + c] = acc;\n    } }\n    // 26 layers of backward through depth-2304 sums → gradient divergence\n    // (measured: ~30× worse error vs the plane kernel — Issue 424)\n}".to_string(),
             opt_pattern: "// optimized: plane tree reduction — depth n/32 + log2(32) ≈ 77\nfn gemv_plane_tree(a: &[f32], b_row: &[f32], out: &mut [f32], m: usize, n: usize, p: usize) {\n    const LANES: usize = 32;                  // subgroup size (Metal: always 32)\n    for c in 0..p {\n        // phase 1: each lane sums a strided slice — depth n/32 = 72\n        let mut lane_partial = 0.0;\n        let mut k = lane_id();\n        while k < n { lane_partial += a[k] * b_row[c*n + k]; k += LANES; }\n        // phase 2: log-depth butterfly across lanes — depth log2(32) = 5\n        lane_partial += shuffle_down_xor(lane_partial, 16);\n        lane_partial += shuffle_down_xor(lane_partial, 8);\n        lane_partial += shuffle_down_xor(lane_partial, 4);\n        lane_partial += shuffle_down_xor(lane_partial, 2);\n        lane_partial += shuffle_down_xor(lane_partial, 1);\n        if lane_id() == 0 { out[c] = lane_partial; } // total depth ≈ 77, not 2304\n    }\n}".to_string(),
         },
+        // ════════════════════════════════════════════════════════════════════
+        // Batch 26 (Research 027): riir-gpu production kernels — the wgpu
+        // forward-orchestration cluster (forward/ + the buffer.rs download
+        // substrate it consumes): per-slot uniform buffers vs the write_buffer
+        // ordering hazard, grid-encoded params derived in-kernel, dependent
+        // dispatches merged into one compute pass, batched readbacks sharing
+        // one sync cycle, chunked encoder submits below the Metal pass
+        // ceiling, pre-built bind groups, host-cached immutable weights, and
+        // deferred readback until after submit.
+        // ════════════════════════════════════════════════════════════════════
+        // ── per-slot-uniform-buffer-write-ordering — shared uniform → per-slot (D) ──
+        // Source: riir-gpu forward/mod.rs L141-148 (uniform_relu: "Without
+        // this, the shared uniform_elem gets overwritten by the last
+        // write_uniform call before the encoder runs") + L361-390 (per-slot
+        // batched matmul/elem/lora uniform Vec<Buffer>: "Each slot gets its
+        // own buffer to avoid the wgpu write_buffer ordering bug") +
+        // forward/forward_buffers.rs L550-557 + L622-635 (per-head
+        // attn_uniforms: "all heads' write_buffer calls flush before the
+        // encoder runs, so all heads see the last write") + forward/
+        // adapter_merge.rs L691-693. wgpu queues write_buffer calls: ALL
+        // writes flush BEFORE the encoder executes, so N dispatches in one
+        // encoder sharing ONE uniform buffer all read the LAST write —
+        // per-head attention params, per-target LoRA params, per-slot matmul
+        // params silently corrupt (Issues 366/367/368 lineage: attention
+        // pos-uniform, stale LoRA saved buffers, uniform slot conflict →
+        // zero grad_hidden). The fix is structural: one small uniform buffer
+        // per dispatch SLOT, each wired into its own pre-built bind group.
+        //
+        // Distinct from same-queue-implicit-ordering-no-sync (A — queue-level
+        // dispatch ordering): this is the uniform WRITE channel racing the
+        // encoder, not dispatch ordering. The complementary in-kernel escape
+        // is derive-params-from-global-invocation-id (this batch).
+        KernelRule {
+            rule_id: "per-slot-uniform-buffer-write-ordering".to_string(),
+            gpu_concept: "host-side queue.write_buffer calls all flush BEFORE the recorded encoder executes — N dispatches in one encoder sharing ONE uniform buffer all read the LAST write (per-head attention params, per-target LoRA params, per-slot matmul params silently corrupted; the Issues 366/367/368 lineage). Give each dispatch slot its own small uniform buffer (per head / per adapter / per target / per QKV slot), each wired into its own pre-built bind group, so concurrent writes in one encoder cannot collide. Distinct from same-queue-implicit-ordering-no-sync (queue-level dispatch ordering) — this is the uniform-write channel racing the encoder; the in-kernel escape is derive-params-from-global-invocation-id".to_string(),
+            ref_shape: "// naive: one shared uniform buffer — every dispatch sees the LAST write\nfn per_head_attention_naive(encoder: &mut Encoder, queue: &Queue, shared_uniform: &Buffer, n_head: usize) {\n    for h in 0..n_head {\n        let params = AttnParams { head: h as u32, scale: 0.08, .. }; // differs per head\n        queue.write_buffer(shared_uniform, 0, cast(&params));       // write N times\n        let mut pass = encoder.begin_compute_pass();\n        pass.set_bind_group(0, &bgs[h]); // ALL bgs bind the SAME shared_uniform\n        pass.dispatch_workgroups(1, 1, 1);\n    } // wgpu flushes ALL N writes before the encoder runs → every head\n}     // computes with head = n_head-1's params — silent numerical corruption".to_string(),
+            opt_pattern: "// optimized: one uniform buffer per slot, wired into pre-built bind groups\nfn per_head_attention_slotted(queue: &Queue, encoder: &mut Encoder, layer: usize, n_head: usize) {\n    // allocated ONCE at init: [n_head] 64-byte uniforms + bind groups,\n    // bg[layer][h] binds uniforms[h] — writes land in DIFFERENT buffers\n    for h in 0..n_head {\n        let params = AttnParams { head: h as u32, scale: 0.08, .. };\n        queue.write_buffer(&self.attn_uniforms[h], 0, cast(&params)); // per-slot write\n        let mut pass = encoder.begin_compute_pass();\n        pass.set_bind_group(0, &self.attn_bgs[layer][h]); // binds uniforms[h]\n        pass.dispatch_workgroups(1, 1, 1);\n    } // concurrent writes cannot collide — every head reads its own params\n}".to_string(),
+        },
+        // ── derive-params-from-global-invocation-id — uniform loop → grid decode (D) ──
+        // Source: riir-gpu forward/batched_dispatch.rs L280-350
+        // (dispatch_attention_batched: "One workgroup per (head,
+        // query_position). Total = n_head × seq_len ... The kernel implements
+        // causal masking internally ... GQA mapping is computed inside the
+        // kernel") + forward/dispatch.rs L316-321 ("the batched forward
+        // (forward_batched_full) sidesteps it by computing q_pos from the
+        // global invocation ID"). The per-position path needs a per-position
+        // uniform write, which under the write_buffer ordering bug forces an
+        // encoder + submit PER POSITION (the set-causal/block-causal fallback:
+        // "Cost: one extra submit per position (~microseconds)"). Encoding
+        // the parameter in the DISPATCH GRID eliminates the uniform channel
+        // entirely: flatten (head, q_pos) into the X dimension and decode
+        // in-kernel — 1 dispatch for all heads × all positions.
+        //
+        // Distinct from fold-query-tokens-for-occupancy (Batch 23 — folding
+        // fills idle SMs when n_head < SM_count): the goal here is
+        // eliminating the host-side per-item parameter channel, not
+        // occupancy. Distinct from grid-stride-loop (A — iteration
+        // coverage): the grid IS the parameter.
+        KernelRule {
+            rule_id: "derive-params-from-global-invocation-id".to_string(),
+            gpu_concept: "instead of writing a per-item parameter (query position, head index, row offset) to a uniform from the host — which under the write_buffer ordering bug forces an encoder + submit PER ITEM — encode the parameter in the dispatch grid: flatten (head, item) into workgroup IDs and derive it in-kernel from global_invocation_id. The batched attention path dispatches n_head × seq_len workgroups in ONE call with causal masking + GQA mapping computed inside the kernel — zero per-position uniform writes, zero per-position submits (vs the encoder-per-position fallback paying ~1 submit/position). Distinct from fold-query-tokens-for-occupancy (goal: fill idle SMs — here the goal is eliminating the host-side parameter channel) and from grid-stride-loop (iteration coverage — the grid IS the parameter)".to_string(),
+            ref_shape: "// naive: per-position uniform write + encoder-per-position submit\nfn attention_per_position(tokens: usize, n_head: usize) {\n    for pos in 0..tokens {\n        let params = AttnParams { query_pos: pos as u32, scale: 0.08, .. };\n        queue.write_buffer(&uniform, 0, cast(&params));  // per-position write\n        let mut enc = device.create_command_encoder();   // per-position encoder\n        let mut pass = enc.begin_compute_pass();\n        for h in 0..n_head {\n            pass.set_bind_group(0, &bg[layer][h]);\n            pass.dispatch_workgroups(1, 1, 1);\n        }\n        queue.submit(once(enc.finish()));               // per-position submit\n    } // N submits + N uniform writes; one shared encoder instead hits the\n}     // write_buffer ordering bug (every pos sees the LAST pos's params)".to_string(),
+            opt_pattern: "// optimized: the grid encodes (head, q_pos) — decode in-kernel, one dispatch\nfn attention_batched(encoder: &mut Encoder, tokens: usize, n_head: usize) {\n    let params = AttnBatchedParams { seq_len: tokens as u32, n_head: n_head as u32, .. };\n    queue.write_buffer(&uniform, 0, cast(&params));     // ONE shared write\n    let mut pass = encoder.begin_compute_pass();\n    pass.set_bind_group(0, &bg);\n    // one workgroup per (head, query_position) — total n_head × seq_len\n    pass.dispatch_workgroups((n_head * tokens) as u32, 1, 1);\n}\n// WGSL: let gid = global_invocation_id.x;\n//       let head = gid / seq_len; let q_pos = gid % seq_len;\n//       causal mask (kv 0..=q_pos) + GQA head mapping computed in-kernel —\n//       zero per-position uniforms, zero per-position submits".to_string(),
+        },
+        // ── merge-dispatches-into-single-compute-pass — N passes → 1 pass (D) ──
+        // Source: riir-gpu forward/adapter_merge.rs L410-424 (dispatch_lora_
+        // merge: "Combine A + B dispatches into single compute pass.
+        // Dispatches within a compute pass execute in order, so B reads A's
+        // output.") + L654-770 (dispatch_qkv_fused: "Saves 2 compute passes
+        // (was 3 separate A+B passes → 1 combined pass) ... 1. Hardware copy
+        // input to per-adapter saved-input buffers (no compute pass) 2.
+        // Single compute pass with 6 dispatches"). Dependent dispatches do
+        // not need separate compute passes: pass-scoped set_pipeline/
+        // set_bind_group/dispatch sequences execute IN ORDER with memory
+        // ordering between them, so the consumer dispatch reads the
+        // producer's buffer writes. Pure copies interleaved with the
+        // dispatches ride the copy channel (encoder.copy_buffer_to_buffer
+        // — no pass at all).
+        //
+        // Distinct from chain-dispatches-single-sync-point (Batch 19 —
+        // command-buffer-level chaining to amortize SYNC points): this is
+        // PASS-level merging (begin/end boundary cost per dispatch) where
+        // the one sync was never in question. Composes with
+        // per-slot-uniform-buffer-write-ordering (this batch): all uniform
+        // writes happen before the pass begins, into per-slot buffers.
+        KernelRule {
+            rule_id: "merge-dispatches-into-single-compute-pass".to_string(),
+            gpu_concept: "dependent dispatches queued in ONE compute pass (set_pipeline/set_bind_group/dispatch × N inside a single begin/end) execute in order with memory ordering between them — the consumer dispatch reads the producer's writes without a separate pass, and N−1 pass begin/end boundaries disappear. The QKV LoRA path merges 6 dispatches (3× A pass + 3× B pass) into one pass; pure input-save copies ride the copy channel (encoder.copy_buffer_to_buffer) outside any pass. Distinct from chain-dispatches-single-sync-point (command-buffer-level sync amortization) — this is pass-level merging; composes with per-slot-uniform-buffer-write-ordering (all uniform writes precede the pass, into per-slot buffers)".to_string(),
+            ref_shape: "// naive: one compute pass per dispatch — pass begin/end × N\nfn lora_merge_naive(encoder: &mut Encoder, q: &Adapter, k: &Adapter, v: &Adapter) {\n    for adapter in [q, k, v] {\n        save_input_via_kernel(encoder, adapter);      // copy KERNEL + its own pass\n        { let mut p = encoder.begin_compute_pass();  // pass: A @ x\n          p.set_pipeline(&lora_a); p.set_bind_group(0, &adapter.bg_a);\n          p.dispatch_workgroups(rank_wg, 1, 1); }\n        { let mut p = encoder.begin_compute_pass();  // pass: W@x + B@(A@x)\n          p.set_pipeline(&lora_b); p.set_bind_group(0, &adapter.bg_b);\n          p.dispatch_workgroups(out_wg, 1, 1); }\n    } // 9 passes per layer — begin/end boundary cost × dispatch count\n}".to_string(),
+            opt_pattern: "// optimized: hardware copies + ONE pass with 6 ordered dispatches\nfn lora_merge_fused(encoder: &mut Encoder, q: &Adapter, k: &Adapter, v: &Adapter) {\n    for adapter in [q, k, v] { // input saves ride the copy channel — no pass\n        encoder.copy_buffer_to_buffer(adapter.input, 0, &adapter.saved, 0, in_bytes);\n    }\n    let mut pass = encoder.begin_compute_pass();    // ONE pass for all 6\n    for adapter in [q, k, v] {\n        pass.set_pipeline(&lora_a);                  // dispatches within a\n        pass.set_bind_group(0, &adapter.bg_a);       // pass execute IN ORDER —\n        pass.dispatch_workgroups(rank_wg, 1, 1);     // B reads A's writes\n        pass.set_pipeline(&lora_b);\n        pass.set_bind_group(0, &adapter.bg_b);\n        pass.dispatch_workgroups(out_wg, 1, 1);\n    } // 1 pass (was 3), 0 copy passes (was 3) — per-layer pass count 9 → 1\n}".to_string(),
+        },
+        // ── batched-downloads-single-sync-cycle — N sync cycles → 1 (D) ──
+        // Source: riir-gpu buffer.rs L263-280 (download_f32_batched_
+        // reuse_into, Issue 421 P0.5): "All copies share one command encoder,
+        // one queue.submit, one map_async, and one device.poll(Wait). This
+        // reduces GPU sync overhead from N (one per download) to 1 — the
+        // dominant cost in launch-overhead-bound paths like the LoRA-Muon
+        // optimizer step, where P0 profiling measured each sync at ~1.28 ms
+        // regardless of data size." Staging regions are contiguous,
+        // non-overlapping, 4-byte aligned (wgpu 23 requires copy size/offset
+        // multiples of 4, not 256).
+        //
+        // Distinct from device-side-argmax-minimal-download (Batch 25 —
+        // download SIZE) and chain-dispatches-single-sync-point (Batch 19 —
+        // dispatch SYNC): this is download-path sync COUNT, with the
+        // staging-layout + single-map mechanics the readback channel needs.
+        KernelRule {
+            rule_id: "batched-downloads-single-sync-cycle".to_string(),
+            gpu_concept: "N GPU→CPU readbacks share ONE command encoder, ONE queue.submit, ONE map_async, and ONE device.poll(Wait) — pack each request into a contiguous, non-overlapping, 4-byte-aligned region of a single grow-only staging buffer, copy all sources in one encoder, map the whole range once, and slice per request. Sync overhead drops from N to 1 — the dominant cost in launch-overhead-bound paths (measured ~1.28 ms per sync regardless of data size; the 4-buffer LoRA-Muon step saves ~3.8 ms/step). Distinct from device-side-argmax-minimal-download (download SIZE) and chain-dispatches-single-sync-point (dispatch sync) — this is readback sync COUNT with the staging-layout + single-map mechanics".to_string(),
+            ref_shape: "// naive: one encoder + submit + map + poll per download — sync × N\nfn optimizer_step_naive(grads: &[Buffer]) -> Vec<Vec<f32>> {\n    grads.iter().map(|buf| {\n        let staging = device.create_buffer(MAP_READ | COPY_DST, buf.size());\n        let mut enc = device.create_command_encoder();\n        enc.copy_buffer_to_buffer(buf, 0, &staging, 0, buf.size());\n        queue.submit(once(enc.finish()));\n        staging.slice(..).map_async(Read, cb);\n        device.poll(Wait);                  // ~1.28 ms PER download (measured)\n        read_mapped(&staging)\n    }).collect()                             // 4 buffers = 4 full sync cycles\n}".to_string(),
+            opt_pattern: "// optimized: N copies, ONE encoder/submit/map/poll — sync × 1\nfn optimizer_step_batched(reqs: &mut [DownloadReq], staging: &mut Staging) {\n    let total: usize = reqs.iter().map(|r| r.count).sum();\n    staging.ensure_capacity(device, total);         // grow-only staging reuse\n    let mut layout = 0;                              // contiguous 4-byte-aligned\n    for r in &reqs { r.offset = layout; layout += r.count; } // (wgpu: 4B, not 256B)\n    let mut enc = device.create_command_encoder();\n    for r in &reqs {\n        enc.copy_buffer_to_buffer(r.src, 0, staging.buf(), (r.offset*4) as u64, (r.count*4) as u64);\n    }\n    queue.submit(once(enc.finish()));                // 1 submit\n    staging.buf().slice(..(layout*4) as u64).map_async(Read, cb);\n    device.poll(Wait);                               // 1 poll (~1.28 ms, once)\n    let mapped = get_mapped(staging);\n    for r in reqs {                                  // slice per request\n        r.output.clear();\n        r.output.extend_from_slice(cast(&mapped[r.offset*4 .. (r.offset+r.count)*4]));\n    } // 4 buffers, 1 sync cycle — bit-identical results, ~3.8 ms saved/step\n}".to_string(),
+        },
+        // ── chunk-encoder-submits-below-driver-limit — one encoder → chunks (D) ──
+        // Source: riir-gpu forward/mod.rs L1403-1411 ("Chunked encoder
+        // submission to avoid Metal compute pass limit. Each position
+        // creates ~24 compute passes ... Metal deadlocks with too many
+        // compute passes per encoder. CHUNK_SIZE=2 → ~48 passes/chunk." +
+        // "Issue 016: chunk_size is now tunable via GpuContext (env var
+        // RIIR_GPU_CHUNK_SIZE)") + L1456-1458 ("Submit each chunk immediately
+        // to avoid Metal driver stall from accumulating too many write_buffer
+        // + command buffers before submit"). The driver ceiling is a hard
+        // correctness constraint (DEADLOCK, not slowdown) and there is a
+        // second stall from accumulating too many write_buffer calls before
+        // a submit — so chunk AND flush.
+        //
+        // Distinct from chain-dispatches-single-sync-point (sync-count
+        // choice): this is a driver-limit-forced submission granularity —
+        // the chunk is a correctness bound first, a tuning knob second
+        // (env-tunable: tiny-model loops shrink it, long-prefill raises it).
+        KernelRule {
+            rule_id: "chunk-encoder-submits-below-driver-limit".to_string(),
+            gpu_concept: "drivers impose a compute-pass-per-encoder ceiling (Metal: a few dozen — past it the encoder DEADLOCKS, a hard failure not a slowdown) and a separate stall from accumulating too many write_buffer + command buffers before submit. Chunk recorded work so each encoder stays ~48 passes (~24 passes/position × chunk_size 2), submit each chunk IMMEDIATELY, and make the chunk size env-tunable (tiny-model training loops shrink it, long-prefill raises it). Distinct from chain-dispatches-single-sync-point (a sync-count CHOICE) — this chunking is a driver-limit-forced submission granularity: correctness bound first, tuning knob second".to_string(),
+            ref_shape: "// naive: one encoder for the whole sequence — Metal deadlocks\nfn forward_one_encoder(tokens: usize, n_layer: usize) {\n    let mut enc = device.create_command_encoder();\n    for pos in 0..tokens {\n        for layer in 0..n_layer {\n            dispatch_layer(&mut enc, layer, pos);  // ~24 compute passes / position\n        }\n    }\n    queue.submit(once(enc.finish()));\n} // 256 positions × 6 layers × 24 passes ≈ 36,864 passes in ONE encoder —\n  // past the Metal compute-pass-per-encoder limit the driver DEADLOCKS".to_string(),
+            opt_pattern: "// optimized: chunked submission — bounded passes per encoder, submit each chunk\nfn forward_chunked(tokens: usize, n_layer: usize, chunk_size: usize) { // default 2\n    for chunk_start in (0..tokens).step_by(chunk_size) {\n        let chunk_end = (chunk_start + chunk_size).min(tokens);\n        let mut enc = device.create_command_encoder();\n        for pos in chunk_start..chunk_end {\n            for layer in 0..n_layer {\n                dispatch_layer(&mut enc, layer, pos);  // ~48 passes / chunk\n            }\n        }\n        queue.submit(once(enc.finish())); // submit immediately — don't let\n    }                                    // write_buffer + cmd buffers pile up\n} // env-tunable chunk (RIIR_GPU_CHUNK_SIZE): the driver limit is the ceiling\n".to_string(),
+        },
+        // ── prebuilt-bind-groups-fixed-buffer-combos — per-dispatch BG → init (A) ──
+        // Source: riir-gpu forward/forward_buffers.rs L530-548 + L702-703
+        // ("Pre-built bind groups (avoids create_bind_group per dispatch)"
+        // ... "These eliminate ~768 create_bind_group calls per forward pass
+        // (seq_len=16, n_layer=6)") + forward/mod.rs L412-501 (P0-1
+        // per-adapter LoRA bind groups: "Each adapter has fixed input/output
+        // buffers determined by its target, so we can pre-build bind groups
+        // referencing them"). Bind groups bind BUFFERS, not data — when a
+        // dispatch site's buffer combo is fixed for the lifetime of the
+        // pipeline (attention reads key_cache[layer]/head_query/head_output,
+        // elementwise reads hidden/residual/temp_out), the BG is a constant
+        // and belongs in init, not on the hot path. Dynamic combos (batched
+        // full-sequence ops) still build per call.
+        //
+        // Distinct from hot-swap-weights-preserve-autotune-caches (D —
+        // amortizing RUNTIME caches across weight changes): this amortizes
+        // BIND GROUP creation across calls — the buffers are fixed, only
+        // their contents change.
+        KernelRule {
+            rule_id: "prebuilt-bind-groups-fixed-buffer-combos".to_string(),
+            gpu_concept: "a bind group binds BUFFERS, not data — when a dispatch site's buffer combination is fixed for the pipeline's lifetime (attention reads head_query + key_cache[layer] + value_cache[layer] + head_output, the residual add reads hidden + residual + temp_out, each LoRA adapter has fixed input/output buffers), the bind group is a CONSTANT: build all of them once at init ([n_layer][n_head] attention BGs, [n_layer × 6] adapter BGs, the fixed elementwise combos) and only set the pre-built handles on the hot path (~768 create_bind_group calls per forward pass → 0). Dynamic-buffer combos still build per call. Distinct from hot-swap-weights-preserve-autotune-caches (amortizing runtime caches across weight changes) — the buffers here never change identity, only contents".to_string(),
+            ref_shape: "// naive: create_bind_group per dispatch — allocation churn on the hot path\nfn dispatch_layer_hot(device: &Device, encoder: &mut Encoder, layer: usize, head: usize) {\n    let bg = device.create_bind_group(&BindGroupDescriptor {  // EVERY dispatch\n        layout: &pipeline.layout,\n        entries: &[entry(0, &bufs.head_query), entry(1, &bufs.key_cache[layer]),\n                   entry(2, &bufs.value_cache[layer]), entry(3, &bufs.head_output),\n                   entry(4, &uniforms[head])],\n    });\n    let mut pass = encoder.begin_compute_pass();\n    pass.set_bind_group(0, &bg);\n    pass.dispatch_workgroups(1, 1, 1);\n} // ~768 create_bind_group calls per forward pass (seq_len=16, n_layer=6)".to_string(),
+            opt_pattern: "// optimized: pre-build BGs once at init for every fixed buffer combination\nstruct Scratch { attn_bgs: Vec<Vec<BindGroup>>, bg_add_residual: BindGroup, /* .. */ }\nimpl Scratch {\n    fn new(device: &Device, pipelines: &Pipelines, bufs: &Activations, n_layer: usize, n_head: usize) -> Self {\n        // [n_layer][n_head] — the (layer, head) pair determines a FIXED\n        // buffer combo; build every bind group ONCE at init:\n        let attn_bgs = (0..n_layer).map(|l| (0..n_head).map(|h|\n            device.create_bind_group(fixed_combo(l, h, pipelines, bufs))).collect()).collect();\n        // + fixed elementwise combos (hidden,residual,temp), (mlp_hidden,temp),\n        // + per-adapter LoRA BGs [n_layer × 6], + the lm_head BG ...\n    }\n}\nfn dispatch_layer_prebuilt(state: &Scratch, encoder: &mut Encoder, layer: usize, head: usize) {\n    let mut pass = encoder.begin_compute_pass();\n    pass.set_bind_group(0, &state.attn_bgs[layer][head]); // zero allocation\n    pass.dispatch_workgroups(1, 1, 1);\n} // hot path only SETS pre-built handles — dynamic-buffer combos still\n  // build per call".to_string(),
+        },
+        // ── host-cache-immutable-device-weights — per-call download → init clone (A) ──
+        // Source: riir-gpu forward/mod.rs L111-114 + L869-873 ("Cache weight
+        // data on CPU to eliminate per-forward-call GPU downloads ... These
+        // are constant weights that never change — downloading them every
+        // call was the #1 bottleneck (2 GPU sync stalls per forward pass)")
+        // + L1270-1288 (compute_embeddings: gathers wte[token_id] + wpe[pos]
+        // from the cached rows — "Slice-based extend helps LLVM\n        // auto-vectorize the wte+wpe add" — and uploads the result once).
+        // Counter-example in the same tree: forward/dispatch.rs L1019-1030
+        // downloads a_log/dt_bias/linear_norm EVERY layer EVERY token in the
+        // DeltaNet path — the unoptimized shape this rule warns about.
+        //
+        // Distinct from precompute-scalar-reduction (I — hoisting an
+        // invariant KERNEL reduction out of a loop): this is hoisting the
+        // DEVICE READ of immutable data out of the call, keeping the host
+        // copy authoritative for cheap gathers.
+        KernelRule {
+            rule_id: "host-cache-immutable-device-weights".to_string(),
+            gpu_concept: "constants that live on the GPU but are needed host-side every call (embedding tables wte/wpe, norm gammas, small bias vectors) are cloned to CPU ONCE at init — per-call download_f32 of the same bytes cost 2 full GPU sync stalls per forward pass, measured as the #1 forward bottleneck. The host copy then serves cheap gathers (token embedding lookup = row slice + add, auto-vectorized) whose result is uploaded in ONE write. Apply the reverse test too: any per-layer/per-token download of a weight-shaped buffer (a_log, dt_bias, linear_norm) is this rule unapplied. Distinct from precompute-scalar-reduction (hoisting an invariant KERNEL reduction) — this hoists the DEVICE READ of immutable data out of the hot call".to_string(),
+            ref_shape: "// naive: download the embedding tables from the GPU every forward call\nfn embeddings_via_gpu_download(device: &Device, queue: &Queue, wte: &Buffer,\n                               wpe: &Buffer, n: usize, token_ids: &[usize]) -> Vec<f32> {\n    let wte_host = download_f32(device, queue, wte, vocab * n);  // GPU sync stall 1\n    let wpe_host = download_f32(device, queue, wpe, block * n);  // GPU sync stall 2\n    let mut out = Vec::with_capacity(token_ids.len() * n);\n    for (pos, &t) in token_ids.iter().enumerate() {\n        for i in 0..n { out.push(wte_host[t*n + i] + wpe_host[pos*n + i]); }\n    }\n    out\n} // constants re-downloaded per call — the #1 measured forward bottleneck".to_string(),
+            opt_pattern: "// optimized: cache immutable weights host-side at init; gather on CPU, upload once\nstruct GpuForwardPass {\n    cached_wte: Vec<f32>,             // cloned ONCE in new() — weights never change\n    cached_wpe: Vec<f32>,\n    embeddings_buf: RefCell<Vec<f32>>, // pre-allocated scratch (clear + reuse)\n}\nimpl GpuForwardPass {\n    fn compute_embeddings(&self, token_ids: &[usize]) {\n        let n = self.config.n_embd;\n        let mut emb = self.embeddings_buf.borrow_mut();\n        emb.clear(); emb.reserve(token_ids.len() * n);\n        for (pos, &t) in token_ids.iter().enumerate() {\n            let wte = &self.cached_wte[t*n .. t*n + n];    // slice-based extend:\n            let wpe = &self.cached_wpe[pos*n .. pos*n + n];  // contiguous writes,\n            emb.extend(wte.iter().zip(wpe).map(|(a, b)| a + b)); // auto-vectorized\n        }\n        // ONE upload — zero GPU syncs, zero per-call downloads\n        queue.write_buffer(&self.scratch.embeddings, 0, cast(&emb));\n    }\n}".to_string(),
+        },
+        // ── defer-readback-until-after-submit — mid-encoder read → record (A) ──
+        // Source: riir-gpu forward/mod.rs L291-295 (speft_pending_corrections:
+        // "Plan 162 fix: avoids downloading stale GPU data within a command\n        // encoder") + L1173-1183 (apply_speft_corrections: "must be called\n        // AFTER the command encoder is submitted and GPU operations complete,\n        // so activation buffers contain fresh data") + forward/adapter_merge.rs\n        // L576-578 ("The old CPU fallback downloaded stale GPU data (input/\n        // output buffers not yet written by pending GPU commands)") +
+        // forward/mod.rs L1365-1368 ("avoiding the data race that would occur\n        // if download_f32 (which internally submits command buffers) were\n        // called during encoder construction"). Downloading mid-construction\        // reads PRE-submission buffer contents — the recorded encoder hasn't\n        // executed, so the download sees the previous pass's data AND any\n        // correction uploaded then gets overwritten when the recorded work\n        // finally runs. A mid-pipeline download also internally submits its\n        // own command buffers — breaking the encoder being built. The\n        // pattern: RECORD what needs fixing (a small correction list),\n        // finish + submit, then read fresh data + apply + upload back.
+        //
+        // Distinct from no-blocking-sync-in-async-pipeline (D — don't block\n        // the HOST thread): this is a correctness rule about WHAT the read\n        // returns mid-construction (stale state), independent of blocking.
+        KernelRule {
+            rule_id: "defer-readback-until-after-submit".to_string(),
+            gpu_concept: "never download (map + read) GPU buffers while an encoder referencing them is still under construction — the recorded work has not executed, so the read returns PRE-submission stale state, and any correction uploaded mid-construction is later overwritten by the recorded pass when it runs; the readback's internal submit also breaks the encoder being built. Instead RECORD the needed fixups (small correction list of (buffer, op) pairs), finish + submit the encoder, then download FRESH data, apply, and upload back. Distinct from no-blocking-sync-in-async-pipeline (don't block the host thread) — this is about WHAT a mid-construction read returns (stale state), independent of blocking".to_string(),
+            ref_shape: "// naive: read GPU buffers MID-encoder-construction — stale pending state\nfn speft_merge_broken(&self, encoder: &mut Encoder, input: &Buffer, output: &Buffer) {\n    dispatch_plain_matmul(encoder, w, input, output, ..);   // recorded, NOT run yet\n    let out_now = download_f32(device, queue, output, dim); // reads PRE-submission\n    let in_now  = download_f32(device, queue, input, dim);  // contents — the\n    // fix up out_now += sparse_delta @ in_now ...              // encoder hasn't\n    queue.write_buffer(output, 0, cast(&corrected));        // executed yet!\n}   // then the recorded matmul OVERWRITES the correction — silently wrong;\n    // download_f32's internal submit also breaks the in-flight encoder".to_string(),
+            opt_pattern: "// optimized: record the correction; apply AFTER submit + completion\nstruct Pass { pending: RefCell<Vec<Correction>> }\nfn speft_merge_deferred(&self, encoder: &mut Encoder, layer: usize, target: Target) {\n    dispatch_plain_matmul(encoder, w, input, output, ..);     // recorded\n    self.pending.borrow_mut().push(Correction { layer, target }); // just RECORD\n}                                                            // (zero GPU reads)\nfn apply_corrections_after_submit(&self) {\n    for c in std::mem::take(&mut *self.pending.borrow_mut()) {\n        let output = download_f32_reuse(.., output_buf(c), ..);  // FRESH: encoder\n        let input  = download_f32_reuse(.., input_buf(c), ..);   // already ran\n        apply_sparse_delta(&mut output, &input, &c);              // post-pass data\n        queue.write_buffer(output_buf(c), 0, cast(&output));\n    }\n}   // called after queue.submit + poll — every download sees fresh contents".to_string(),
+        },
     ])
 }
 
@@ -2630,7 +2849,7 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 169-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 177-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -2638,7 +2857,7 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (22 rules)
+    // A: Memory access patterns (25 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -2665,6 +2884,9 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "combined-kv-buffer-keys-then-values",
             "gqa-kv-head-sharing-bandwidth-reduction",
             "widen-index-multiply-to-64bit",
+            "prebuilt-bind-groups-fixed-buffer-combos",
+            "host-cache-immutable-device-weights",
+            "defer-readback-until-after-submit",
         ],
     ),
     // B: Compute patterns (32 rules)
@@ -2730,7 +2952,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fan-out-shared-input-single-sync",
         ],
     ),
-    // D: Dispatch patterns (15 rules)
+    // D: Dispatch patterns (20 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -2750,6 +2972,11 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "hardcoded-fast-path-jit-specialization",
             "device-side-argmax-minimal-download",
             "hot-swap-weights-preserve-autotune-caches",
+            "per-slot-uniform-buffer-write-ordering",
+            "derive-params-from-global-invocation-id",
+            "merge-dispatches-into-single-compute-pass",
+            "batched-downloads-single-sync-cycle",
+            "chunk-encoder-submits-below-driver-limit",
         ],
     ),
     // E: Parallelism patterns (9 rules)
@@ -2919,7 +3146,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
 /// Returns 15 buckets (one per category), each containing the `KernelRule`s whose
 /// `rule_id` appears in that category's slice of [`KERNEL_CATEGORIES`]. This is
 /// the category-scoped view of the corpus — a future heal pipeline can consult
-/// the routed expert's rules first without scanning all 169.
+/// the routed expert's rules first without scanning all 177.
 ///
 /// # Allocation
 ///
@@ -2991,8 +3218,9 @@ mod tests {
         // Batch 23 (5): riir-gpu production kernels — combined-kv-buffer-keys-then-values, gqa-kv-head-sharing-bandwidth-reduction, softcap-tanh-attention-score, fold-query-tokens-for-occupancy, hardcoded-fast-path-jit-specialization (attention_cubecl/mod.rs — CubeCL flash-attention decode cluster).
         // Batch 24 (4): riir-gpu production kernels — widen-index-multiply-to-64bit, dual-accumulator-single-reduction-sweep, dual-grad-same-pass, broadcast-uniform-skip-reduce (cudarc_kernels/backward.rs — Issue 641 per-layer backward cluster: RMSNorm/SwiGLU/z-gating/output-gate/conv1d+SiLU/L2-norm/beta-decay/softmax-attention backward).
         // Batch 25 (5): riir-gpu production kernels — device-side-argmax-minimal-download, monotone-transform-elision-under-argmax, fan-out-shared-input-single-sync, hot-swap-weights-preserve-autotune-caches, tree-reduction-depth-over-sequential-accumulate (gemma2_cubecl/ + gemma4_cubecl/ — the Gemma cluster: GPU decode loop + dispatch helpers + KV cache + weight hot-swap).
-        // Total: 169.
-        assert_eq!(corpus.entries.len(), 169, "batches 1-25 should have 169 rules");
+        // Batch 26 (8): riir-gpu production kernels — per-slot-uniform-buffer-write-ordering, derive-params-from-global-invocation-id, merge-dispatches-into-single-compute-pass, batched-downloads-single-sync-cycle, chunk-encoder-submits-below-driver-limit, prebuilt-bind-groups-fixed-buffer-combos, host-cache-immutable-device-weights, defer-readback-until-after-submit (forward/ + buffer.rs — the wgpu forward-orchestration cluster: uniform hazards, pass merging, submission chunking, download batching, bind-group pre-building, host caching, deferred readback).
+        // Total: 177.
+        assert_eq!(corpus.entries.len(), 177, "batches 1-26 should have 177 rules");
     }
 
     #[test]
@@ -3920,6 +4148,51 @@ mod tests {
         assert!(concepts.contains(&"when the same dot product can be computed by either a sequential-accumulate kernel (tiled GEMM: error chain depth = n) or a tree-reduction kernel (plane/subgroup lanes: depth n/lanes + log2(lanes)), prefer the tree for gradient paths — accumulated rounding error grows with summation depth, and at 26-layer backward scale, sequential depth 2304 vs tree depth ≈77 gives ~30× better numerical accuracy, enough to prevent outright gradient divergence. A perf-neutral kernel swap changing only the summation order. Distinct from upcast-before-reduction (raising input precision) — this changes the reduction's association shape at equal dtype"));
     }
 
+    // Batch 26 (Research 027) — riir-gpu production kernels: wgpu forward-orchestration cluster
+    // ════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn batch26_rules_present() {
+        // Verify the 8 batch-26 rules across A/D.
+        let corpus = build_kernel_seed_corpus();
+        let ids: Vec<&str> =
+            corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        // D (5 new): the dispatch-side hazard + orchestration family
+        assert!(ids.contains(&"per-slot-uniform-buffer-write-ordering"), "per slot uniform buffer write ordering");
+        assert!(ids.contains(&"derive-params-from-global-invocation-id"), "derive params from global invocation id");
+        assert!(ids.contains(&"merge-dispatches-into-single-compute-pass"), "merge dispatches into single compute pass");
+        assert!(ids.contains(&"batched-downloads-single-sync-cycle"), "batched downloads single sync cycle");
+        assert!(ids.contains(&"chunk-encoder-submits-below-driver-limit"), "chunk encoder submits below driver limit");
+        // A (3 new): the host-side resource discipline family
+        assert!(ids.contains(&"prebuilt-bind-groups-fixed-buffer-combos"), "prebuilt bind groups fixed buffer combos");
+        assert!(ids.contains(&"host-cache-immutable-device-weights"), "host cache immutable device weights");
+        assert!(ids.contains(&"defer-readback-until-after-submit"), "defer readback until after submit");
+    }
+
+    #[test]
+    fn batch26_wgpu_forward_concepts_covered() {
+        // Verify the batch-26 wgpu forward-orchestration concepts.
+        let corpus = build_kernel_seed_corpus();
+        let concepts: Vec<&str> =
+            corpus.entries.iter().map(|e| e.gpu_concept.as_str()).collect();
+        // D: per-slot-uniform-buffer-write-ordering (riir-gpu forward/mod.rs L141-148 + L361-390 + forward_buffers.rs L550-557)
+        assert!(concepts.contains(&"host-side queue.write_buffer calls all flush BEFORE the recorded encoder executes — N dispatches in one encoder sharing ONE uniform buffer all read the LAST write (per-head attention params, per-target LoRA params, per-slot matmul params silently corrupted; the Issues 366/367/368 lineage). Give each dispatch slot its own small uniform buffer (per head / per adapter / per target / per QKV slot), each wired into its own pre-built bind group, so concurrent writes in one encoder cannot collide. Distinct from same-queue-implicit-ordering-no-sync (queue-level dispatch ordering) — this is the uniform-write channel racing the encoder; the in-kernel escape is derive-params-from-global-invocation-id"));
+        // D: derive-params-from-global-invocation-id (riir-gpu forward/batched_dispatch.rs L280-350)
+        assert!(concepts.contains(&"instead of writing a per-item parameter (query position, head index, row offset) to a uniform from the host — which under the write_buffer ordering bug forces an encoder + submit PER ITEM — encode the parameter in the dispatch grid: flatten (head, item) into workgroup IDs and derive it in-kernel from global_invocation_id. The batched attention path dispatches n_head × seq_len workgroups in ONE call with causal masking + GQA mapping computed inside the kernel — zero per-position uniform writes, zero per-position submits (vs the encoder-per-position fallback paying ~1 submit/position). Distinct from fold-query-tokens-for-occupancy (goal: fill idle SMs — here the goal is eliminating the host-side parameter channel) and from grid-stride-loop (iteration coverage — the grid IS the parameter)"));
+        // D: merge-dispatches-into-single-compute-pass (riir-gpu forward/adapter_merge.rs L410-424 + L654-770)
+        assert!(concepts.contains(&"dependent dispatches queued in ONE compute pass (set_pipeline/set_bind_group/dispatch × N inside a single begin/end) execute in order with memory ordering between them — the consumer dispatch reads the producer's writes without a separate pass, and N−1 pass begin/end boundaries disappear. The QKV LoRA path merges 6 dispatches (3× A pass + 3× B pass) into one pass; pure input-save copies ride the copy channel (encoder.copy_buffer_to_buffer) outside any pass. Distinct from chain-dispatches-single-sync-point (command-buffer-level sync amortization) — this is pass-level merging; composes with per-slot-uniform-buffer-write-ordering (all uniform writes precede the pass, into per-slot buffers)"));
+        // D: batched-downloads-single-sync-cycle (riir-gpu buffer.rs L263-280 — Issue 421 P0.5)
+        assert!(concepts.contains(&"N GPU→CPU readbacks share ONE command encoder, ONE queue.submit, ONE map_async, and ONE device.poll(Wait) — pack each request into a contiguous, non-overlapping, 4-byte-aligned region of a single grow-only staging buffer, copy all sources in one encoder, map the whole range once, and slice per request. Sync overhead drops from N to 1 — the dominant cost in launch-overhead-bound paths (measured ~1.28 ms per sync regardless of data size; the 4-buffer LoRA-Muon step saves ~3.8 ms/step). Distinct from device-side-argmax-minimal-download (download SIZE) and chain-dispatches-single-sync-point (dispatch sync) — this is readback sync COUNT with the staging-layout + single-map mechanics"));
+        // D: chunk-encoder-submits-below-driver-limit (riir-gpu forward/mod.rs L1403-1411 + L1456-1458)
+        assert!(concepts.contains(&"drivers impose a compute-pass-per-encoder ceiling (Metal: a few dozen — past it the encoder DEADLOCKS, a hard failure not a slowdown) and a separate stall from accumulating too many write_buffer + command buffers before submit. Chunk recorded work so each encoder stays ~48 passes (~24 passes/position × chunk_size 2), submit each chunk IMMEDIATELY, and make the chunk size env-tunable (tiny-model training loops shrink it, long-prefill raises it). Distinct from chain-dispatches-single-sync-point (a sync-count CHOICE) — this chunking is a driver-limit-forced submission granularity: correctness bound first, tuning knob second"));
+        // A: prebuilt-bind-groups-fixed-buffer-combos (riir-gpu forward/forward_buffers.rs L530-548 + L702-703)
+        assert!(concepts.contains(&"a bind group binds BUFFERS, not data — when a dispatch site's buffer combination is fixed for the pipeline's lifetime (attention reads head_query + key_cache[layer] + value_cache[layer] + head_output, the residual add reads hidden + residual + temp_out, each LoRA adapter has fixed input/output buffers), the bind group is a CONSTANT: build all of them once at init ([n_layer][n_head] attention BGs, [n_layer × 6] adapter BGs, the fixed elementwise combos) and only set the pre-built handles on the hot path (~768 create_bind_group calls per forward pass → 0). Dynamic-buffer combos still build per call. Distinct from hot-swap-weights-preserve-autotune-caches (amortizing runtime caches across weight changes) — the buffers here never change identity, only contents"));
+        // A: host-cache-immutable-device-weights (riir-gpu forward/mod.rs L111-114 + L869-873 + L1270-1288)
+        assert!(concepts.contains(&"constants that live on the GPU but are needed host-side every call (embedding tables wte/wpe, norm gammas, small bias vectors) are cloned to CPU ONCE at init — per-call download_f32 of the same bytes cost 2 full GPU sync stalls per forward pass, measured as the #1 forward bottleneck. The host copy then serves cheap gathers (token embedding lookup = row slice + add, auto-vectorized) whose result is uploaded in ONE write. Apply the reverse test too: any per-layer/per-token download of a weight-shaped buffer (a_log, dt_bias, linear_norm) is this rule unapplied. Distinct from precompute-scalar-reduction (hoisting an invariant KERNEL reduction) — this hoists the DEVICE READ of immutable data out of the hot call"));
+        // A: defer-readback-until-after-submit (riir-gpu forward/mod.rs L291-295 + L1173-1183 + adapter_merge.rs L576-578)
+        assert!(concepts.contains(&"never download (map + read) GPU buffers while an encoder referencing them is still under construction — the recorded work has not executed, so the read returns PRE-submission stale state, and any correction uploaded mid-construction is later overwritten by the recorded pass when it runs; the readback's internal submit also breaks the encoder being built. Instead RECORD the needed fixups (small correction list of (buffer, op) pairs), finish + submit the encoder, then download FRESH data, apply, and upload back. Distinct from no-blocking-sync-in-async-pipeline (don't block the host thread) — this is about WHAT a mid-construction read returns (stale state), independent of blocking"));
+    }
+
     // ════════════════════════════════════════════════════════════════════
     // Plan 003 — Router ↔ corpus wiring tests
     // ════════════════════════════════════════════════════════════════════
@@ -3931,7 +4204,7 @@ mod tests {
 
     #[test]
     fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-        // Every rule_id in the 169-rule corpus must appear in exactly one category.
+        // Every rule_id in the 177-rule corpus must appear in exactly one category.
         let corpus = build_kernel_seed_corpus();
         let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
         let mut categorized: Vec<&str> = Vec::new();
@@ -3962,12 +4235,12 @@ mod tests {
 
     #[test]
     fn kernel_categories_counts_match_plan_003_table() {
-        // Pin per-category rule counts to the Plan 003 table (updated for Batch 25).
+        // Pin per-category rule counts to the Plan 003 table (updated for Batch 26).
         let expected = [
-            (KernelCategory::MemoryAccess, 22),
+            (KernelCategory::MemoryAccess, 25),
             (KernelCategory::Compute, 32),
             (KernelCategory::Fusion, 17),
-            (KernelCategory::Dispatch, 15),
+            (KernelCategory::Dispatch, 20),
             (KernelCategory::Parallelism, 9),
             (KernelCategory::FlashAttnTiling, 10),
             (KernelCategory::LinearAttnRecurrence, 17),
@@ -3987,9 +4260,9 @@ mod tests {
                 "Plan 003: category {cat:?} has {} rules, expected {count}",
                 entry.2.len());
         }
-        // Sum must equal 169.
+        // Sum must equal 177.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 169, "Plan 003: category totals must sum to 169");
+        assert_eq!(total, 177, "Plan 003: category totals must sum to 177");
     }
 
     #[test]
@@ -3999,7 +4272,7 @@ mod tests {
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 169, "Plan 003: grouped corpus has {total} rules, expected 169");
+        assert_eq!(total, 177, "Plan 003: grouped corpus has {total} rules, expected 177");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");

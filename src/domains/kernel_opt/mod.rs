@@ -3,15 +3,15 @@
 //! This is the third `HealDomain` impl (Plan 001 Phase 3). It absorbs
 //! Proposal 012's design (thermal-tier + latent-MoE + numeric validator) into
 //! the multi-domain framework. The seed corpus is distilled from popcorn
-//! (Batches 1-13, COMPLETE) + riir-gpu production kernels (Batches 14-25,
-//! OPEN — ~169 rules and growing).
+//! (Batches 1-13, COMPLETE) + riir-gpu production kernels (Batches 14-26,
+//! OPEN — ~177 rules and growing).
 //!
 //! ## What ships now vs deferred (Proposal 012 §Phase 0)
 //!
 //! | Component | Ships now | Deferred |
 //! |---|---|---|
 //! | `KernelOptDomain: HealDomain` | ✅ | |
-//! | Seed corpus | ✅ 169 rules (popcorn 1-13 + riir-gpu 14-25) | riir-gpu mining continues |
+//! | Seed corpus | ✅ 177 rules (popcorn 1-13 + riir-gpu 14-26) | riir-gpu mining continues |
 //! | `KernelExpertRouter` (`pick_domain`) | ✅ (8-dim activity, 15/15 reachable, Plan 004) | Mined centroids via `CommittedFieldBlend` |
 //! | Routed heal pipeline (`kernel_heal_demo` example) | ✅ (Plan 003/004 composition) | |
 //! | `KernelThermalRouter` (5-tier stub) | ✅ (returns Plasma) | Warm/Cold `LoRA` (4090, riir-train) |
