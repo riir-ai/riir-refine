@@ -147,6 +147,62 @@ Proposers enable `--fix` (auto-apply). Start with perf (clippy already has 10).
 - G5 PASS. `cargo heal --fix` is production-usable for the 10 shipped proposers +
   `--suggest` covers the rest of the corpus.
 
+## Phase 7 — Self-healing closed loop (MAG online EMA + LatentFixMemory)
+
+The fusion layer from Proposal 002 §"Fusion layer". The healer improves its own
+retrieval + routing from every fix outcome. **All substrate ships** (`LatentSkillEvolution`
++ `LatentFixMemory` in riir-clippy Issue 004/008); this phase generalizes the key from
+per-lint to per-domain + wires the outcome recorder into the `--fix` path.
+
+**Status: not started.**
+
+### Tasks
+
+- [ ] **T7.1** Generalize `LatentSkillEvolution` key from `lint_name: &str` to
+      `domain_key: &str` (where domain_key = "clippy"/"perf"/"kernel" OR the
+      domain+rule_id composite). The EMA mechanism is domain-agnostic; only the key shape
+      changes. Back-compat: existing per-lint callers pass `lint_name` as the key.
+- [ ] **T7.2** Wire `HealPipeline::heal()` to record the outcome after validation:
+      `evolution.record_outcome(domain, fix_direction, validated)`. The fix_direction =
+      `ModellessEmbedder.embed(fixed_code)`. This evolves the DOMAIN_DIRECTIONS used by
+      `pick_domain<3,8>` — the dMoE router gets smarter with use.
+- [ ] **T7.3** Wire `LatentFixMemory` into the retrieval path (step 4↻ in the pipeline):
+      before the corpus index retrieve, check if a past trajectory matches (same domain +
+      similar code span). If a high-confidence past fix exists, prefer it (it was
+      validated). This is the 3-axis retrieval (latent + BM25 + trajectory) already shipped.
+- [ ] **T7.4** The freeze/thaw: evolved directions + memory persist across runs (via
+      `freeze()`/`thaw()` on `Corpus` + the existing BLAKE3 commitment). The healer's
+      learned directions are reproducible + auditable.
+- [ ] **T7.5** GOAT gate (self-healing): after N=100 fix cycles on a fixture corpus, the
+      retrieval precision (G1 from Phase 3) improves ≥10% vs the cold-start hand-crafted
+      directions. Record in `.benchmarks/`. This is the MAG "does unsupervised direction
+      mining help" gate — modelless, online.
+
+### Phase 7 exit criteria
+- Self-healing loop ships: `--fix` records outcomes → directions evolve → next `--fix`/
+  `--suggest` retrieves better. The dMoE router + corpus retrieval both improve with use.
+  GOAT: ≥10% precision improvement after 100 cycles.
+
+## Phase 8 — WASM pruner fast-validation hook (Proposal 011, gated on rubrc)
+
+The fast `--fix` validator. Blocked on `rubrc` maturity (Proposal 011 Phase 3) — this
+phase is SKETCHED, not started. Until it lands, `cargo test` (slow) + `RustAnalyzerPruner`
+(syntax-only, fast) are the validators.
+
+**Status: blocked on rubrc (Proposal 011).**
+
+### Tasks (sketch — not started)
+
+- [ ] **T8.1** `WasmPruner: ConstraintPruner` impl (katgpt-rs) — compiles the test suite
+      to WASM, runs the proposed fix's token sequence against it, returns valid/invalid.
+- [ ] **T8.2** Wire into `cargo heal --fix` as the fast validator (replaces `cargo test`
+      subprocess for the common case). Fallback to `cargo test` if WASM pruner declines.
+- [ ] **T8.3** GOAT: WasmPruner validation < 10ms (vs ~seconds for cargo test).
+
+### Phase 8 exit criteria
+- BLOCKED. Reopens when rubrc lands (Proposal 011 Phase 3). Until then, the slow path
+  (`cargo test`) is the validator; the self-healing loop (Phase 7) works with either.
+
 ## Out of scope (per Proposal 002 revised)
 
 - Full proposer coverage (all 34 perf + ~30 kernel) — decoupled; `--suggest` covers them.

@@ -180,6 +180,99 @@ clippy installed (the latent matcher works standalone); clippy is the belt-and-s
 confirm step. This also means the `clippy_lints` domain can use the SAME latent
 retrieval path as perf/kernel — no special-casing.
 
+## Fusion layer — MAG self-healing + WASM pruner + KVarN-normalized retrieval
+
+Four MORE substrates (beyond the 3 in the TL;DR addendum) compose onto the pipeline.
+All confirmed to exist via grep:
+
+### MAG unsupervised direction mining (Research 316) → mines the dMoE directions
+
+The `DOMAIN_DIRECTIONS` for `pick_domain<3,8>` start hand-crafted. **They don't have
+to stay that way.** riir-clippy already ships `LatentSkillEvolution` (Issue 004/008,
+`src/evolve.rs`):
+
+```rust
+// record_outcome: EMA update of the direction vector per-key
+// success: dir += α · (fix_dir - dir)   (move toward)
+// fail:    dir -= β · (fix_dir - dir)   (move away)
+fn record_outcome(&mut self, key: &str, fix_direction: &Direction, success: bool)
+```
+
+This IS the modelless MAG: unsupervised direction mining from fix outcomes. Currently
+keyed per-lint; the fusion generalizes the key to per-DOMAIN. Each `cargo heal --fix`
+cycle records (domain, fix_direction, success) → the dMoE `DOMAIN_DIRECTIONS` evolve.
+The router gets smarter with use — no hand-crafted centroids, no offline mining job.
+
+**This closes the "centroid mining deferred" gap from the kernel_opt router.** The
+`CommittedFieldBlend` (Plan 321) was the offline path; `LatentSkillEvolution` is the
+online modelless path that ships TODAY. MAG's 8 operators (Research 316 §"8 MAG
+operators") are the richer offline variant for when the online EMA plateaus.
+
+### Self-healing closed loop (Issue 004/008) → the pipeline composes
+
+`HealPipeline` (already shipped, G1-G7 PASS) already composes:
+1. heal(lint, code) → proposes a fix
+2. validate (clippy_verify / cargo test) → outcome (success/fail)
+3. `LatentSkillEvolution.record_outcome()` → evolve the direction
+4. `LatentFixMemory.insert()` → store the trajectory for 3-axis retrieval
+5. NEXT heal query → `LatentFixMemory.retrieve()` finds similar past fixes → better proposal
+
+In the revised architecture, this loop runs at the DOMAIN level (not per-lint). The
+`--fix` mode records (domain, code_span, fix, outcome); the `--suggest` mode retrieves
+past trajectories. The healer gets better with every fix it applies. **This is
+self-healing** — the system improves its own retrieval + routing from its own outcomes.
+
+### WASM pruner (Proposal 011) → fast `--fix` validation
+
+The current validators are slow: `clippy_verify` (~130ms), `rust_perf_verify` (cargo
+test, seconds), `kernel_verify` (cubecl compile, deferred). Proposal 011's WasmPruner
+compiles the test suite to WASM + runs it as an in-process `ConstraintPruner` —
+millisecond-scale validation, no subprocess spawn.
+
+`ConstraintPruner` (katgpt-core `traits.rs`) is the trait:
+```rust
+pub trait ConstraintPruner {
+    fn is_valid(&self, depth: usize, token_idx: usize, parent_tokens: &[usize]) -> bool;
+}
+```
+
+The WasmPruner impl interprets a proposed fix as a token sequence + validates it against
+the WASM-compiled test suite's pass/fail. This is the fast path for `--fix`'s "does the
+fix break anything" check. The trait already exists; the WasmPruner impl is the new work
+(gated on `rubrc` maturity per Proposal 011 Phase 3). Until then, `cargo test` is the
+slow fallback.
+
+### KVarN variance normalization (Research 049) → accurate Clifford-wedge retrieval
+
+The Clifford-wedge KNN in riir-rag's `NeuronDbRetriever` works on L2-normalized 8-D
+latent vectors. The `FixedProjection` (riir-rag `bonsai_embedder/dense_projection.rs`)
+already uses variance=1/n Gaussian (the JL construction) + `normalize_l2`. KVarN's
+Sinkhorn variance normalization is the refinement: per-dimension variance equalization
+before the L2 norm, so high-variance dimensions don't dominate the dot product. This is
+an embedding-quality upgrade, not a new substrate — it composes into `ModellessEmbedder`
+or `BonsaiEmbedder` as a pre-normalize step. Defered until retrieval precision (G1) needs
+it; the L2-normalized baseline ships first.
+
+### The full 7-substrate fusion (the complete product architecture)
+
+```
+real .rs file
+  1. CHUNK     AstChunker.chunk()                         [riir-rag]
+  2. EMBED     ModellessEmbedder.embed() → [f32;8]         [riir-rag] (+ KVarN normalize, opt-in)
+  3. ROUTE     pick_domain<3,8>(activity, DOMAIN_DIRS)      [katgpt-core]  (dMoE)
+  4. RETRIEVE  RetrievalProvider.retrieve(LatentQuery)       [riir-rag]    (Clifford KNN)
+     ↻ MEMORY  LatentFixMemory.retrieve(past trajectories)  [riir-clippy] (3-axis: latent+BM25+traj)
+  5. REWRITE   proposer.rewrite(file) (if exists)           [clippy_lints; perf/kernel: Plan 005]
+  6. VALIDATE  RustAnalyzerPruner (always)                  [riir-clippy]
+              WasmPruner (fast, Proposal 011) OR cargo test (slow fallback)
+  7. EVOLVE    LatentSkillEvolution.record_outcome()         [riir-clippy] (MAG online EMA → DOMAIN_DIRS)
+```
+
+Steps 4↻ (memory) + 7 (evolve) form the **self-healing closed loop**. The healer
+improves its retrieval (memory) + its routing (evolved directions) from every fix it
+applies. This is the MAG self-healing fusion — modelless, online, no training.
+
+
 ### Honest caveats (revised)
 
 1. **CubeCL `#[cube]` macro bodies** — still out of scope for proposers (syn can't parse
