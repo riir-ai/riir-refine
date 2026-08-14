@@ -96,6 +96,24 @@
 //!   `split-reduction-scalar-prepass`). Corpus: **131 rules across 15 categories
 //!   (A–O)**. `riir-gpu` remains open as the next distillation source (7 of ~200
 //!   files mined).
+//! - **Batch 17 (Research 018):** 4 riir-gpu production rules — fourth batch mining
+//!   the stack's own kernels, focused on the ternary scalar-ALU hot loop.
+//!   Skip-all-zero-packed-words-via-or-reduce (`gemm_ternary_batched`: OR-reduce all
+//!   tile rows' pos+neg bit-words, skip the 32-iteration sign-extraction loop when
+//!   the whole tile's word is zero — ternary sparsity exploit), hoist-group-invariant-
+//!   scale-out-of-word-loop (`gemv_ternary_block_contiguous`: cache the per-group
+//!   quant scale in a register across the 4 words it covers, reload only at the
+//!   group boundary — 4× fewer global loads), split-sign-accumulators-defer-
+//!   subtraction (both ternary files: keep separate pos/neg accumulators inside
+//!   the bit loop, subtract once at the end — 32→1 subtracts/word + independent
+//!   ILP chains), clamp-tile-indices-to-sentinel-discard-at-write
+//!   (`gemm_ternary_batched`: alias OOB tile rows to m-1, compute fully, discard
+//!   at write time — keeps the loop body uniform without padding overhead). Two
+//!   files assessed + dropped (`rope_geglu_cubecl`: pairing-generic + precomputed
+//!   cos/sin table are composition of existing dispatch/precompute principles;
+//!   `forward_dflare`: 17-binding layout + heterogeneous KV are architectural, not
+//!   kernel optimization). Corpus: **135 rules across 15 categories (A–O)**.
+//!   `riir-gpu` remains open as the next distillation source (9 of ~200 files mined).
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
@@ -1613,6 +1631,86 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
             ref_shape: "// naive: store full-magnitude key, quantize directly — norm variation forces high bits\nfn score_full_magnitude_quant(q: &[f32], keys: &[f32], seq_len: usize, d_h: usize) -> Vec<f32> {\n    let mut scores = vec![0.0f32; seq_len];\n    for t in 0..seq_len {\n        // quantize the FULL key — positions with large norm need 8 bits to avoid clipping\n        let quantized_key = quantize_to_int8(&keys[t * d_h..(t + 1) * d_h]); // 8 bits — norm variation is large\n        let mut dot = 0.0;\n        for d in 0..d_h { dot += q[d] * dequant_int8(quantized_key[d]); }\n        scores[t] = dot;\n    }\n    scores // 8 bits/key — high memory cost because norm variation is baked into the quantization range\n}".to_string(),
             opt_pattern: "// optimized: store norm separately, quantize the UNIT-normalized key at 2-4 bits (riir-gpu TurboQuant)\nfn score_norm_decoupled_low_bit(q: &[f32], key_indices: &[u8], key_norm: &[f32], codebook: &[f32], seq_len: usize, d_h: usize, bits: usize) -> Vec<f32> {\n    let mut scores = vec![0.0f32; seq_len];\n    for t in 0..seq_len {\n        let norm = key_norm[t]; // separate per-position scalar (f32, exact)\n        // gather codebook centroids — the stored key is UNIT-normalized, so range ∈ [−1, +1]\n        // → 2 bits (4 centroids) suffice with minimal error\n        let mut dot = 0.0;\n        for d in 0..d_h {\n            let centroid = codebook[key_indices[t * d_h + d] as usize]; // y_hat[d]\n            dot += q[d] * centroid;\n        }\n        scores[t] = norm * dot; // reconstruct full score = norm × dot(unit_q, unit_k)\n    }\n    scores // 2 bits/key + 1 f32 norm/position — 4× less key memory than 8-bit full-magnitude\n}".to_string(),
         },
+        // ════════════════════════════════════════════════════════════════════
+        // Batch 17 (Research 018): riir-gpu production kernels — ternary scalar-ALU
+        // hot-loop: zero-word OR-skip, group-invariant scale hoist, split-sign
+        // accumulators, clamp-tile-indices-to-sentinel. 4 rules from 2 riir-gpu
+        // source files (the fourth batch mining the stack's own kernels).
+        // ════════════════════════════════════════════════════════════════════
+        // ── skip-all-zero-packed-words-via-or-reduce — per-bit guard → OR-reduce early-out (B) ──
+        // Source: riir-gpu gemm_ternary_batched_cubecl.rs — the row-tiled batched
+        // kernel OR-reduces the pos+neg bit-words across ALL rows in the output
+        // tile before entering the 32-iteration sign-extraction loop:
+        //   if (p0 | nw0 | p1 | nw1 | p2 | nw2 | p3 | nw3) != 0u32 { ... }
+        // When the entire 32-bit word is zero across every row in the tile (which
+        // is common in ternary — sparse weights produce many all-zero words), the
+        // kernel skips the 8 weight loads + 32×8 sign-extraction ops + 8 scale
+        // multiplies. This is a ternary/bit-packed-specific sparsity skip: the
+        // OR-reduce is O(rows_in_tile) per word and gates a 32×(rows) work skip.
+        // Distinct from `csr-index-via-prefix-sum` (build a sparse index offline)
+        // and `block-sparse-gather` (iterate a pre-built index) — this is an
+        // INLINE dynamic skip driven by the data itself, no pre-built index.
+        KernelRule {
+            rule_id: "skip-all-zero-packed-words-via-or-reduce".to_string(),
+            gpu_concept: "OR-reduce all rows' pos+neg bit-words; skip the 32-iteration sign-extraction loop when the whole tile's word is zero (ternary sparsity exploit)".to_string(),
+            ref_shape: "// naive: always enter the 32-bit extraction loop (no sparsity awareness)\nfn ternary_dot_no_skip(pos_bits: &[u32], neg_bits: &[u32], scale: &[f32], input: &[f32], m: usize, n: usize) -> Vec<f32> {\n    let mut out = vec![0.0f32; m];\n    for row in 0..m {\n        let mut acc = 0.0;\n        for w in 0..n / 32 {\n            let p = pos_bits[row * (n / 32) + w];\n            let nw = neg_bits[row * (n / 32) + w];\n            // ALWAYS run 32 iterations even when p==0 && nw==0 (common in sparse ternary)\n            for b in 0..32 {\n                let col = w * 32 + b;\n                let pb = (p >> b) & 1;\n                let nb = (nw >> b) & 1;\n                acc += (pb as f32 - nb as f32) * scale[w / 4] * input[col];\n            }\n        }\n        out[row] = acc;\n    }\n    out // 32 iterations × m rows per word — even when the word is all-zero (wasted ALU)\n}".to_string(),
+            opt_pattern: "// optimized: OR-reduce all tile rows' words; skip the loop when the whole tile's word is zero\nfn ternary_dot_or_skip(pos_bits: &[u32], neg_bits: &[u32], scale: &[f32], input: &[f32], m: usize, n: usize, rows_per_tile: usize) -> Vec<f32> {\n    let mut out = vec![0.0f32; m];\n    for tile in (0..m).step_by(rows_per_tile) {\n        for w in 0..n / 32 {\n            // OR-reduce all rows in the tile — if the word is zero across ALL rows, skip\n            let mut any_nonzero = 0u32;\n            for r in 0..rows_per_tile {\n                let row = tile + r;\n                if row < m {\n                    any_nonzero |= pos_bits[row * (n / 32) + w];\n                    any_nonzero |= neg_bits[row * (n / 32) + w];\n                }\n            }\n            if any_nonzero != 0 {\n                for r in 0..rows_per_tile {\n                    let row = tile + r;\n                    if row < m {\n                        let p = pos_bits[row * (n / 32) + w];\n                        let nw = neg_bits[row * (n / 32) + w];\n                        let mut acc = 0.0;\n                        for b in 0..32 {\n                            let col = w * 32 + b;\n                            let pb = (p >> b) & 1;\n                            let nb = (nw >> b) & 1;\n                            acc += (pb as f32 - nb as f32) * input[col];\n                        }\n                        out[row] += acc * scale[w / 4];\n                    }\n                }\n            } // else: skip 32×rows_per_tile sign extractions — ternary sparsity win\n        }\n    }\n    out // all-zero words skipped — O(rows) OR-reduce gates a 32×rows work skip\n}".to_string(),
+        },
+        // ── hoist-group-invariant-scale-out-of-word-loop — reload-per-word → cache-per-group (A) ──
+        // Source: riir-gpu gemv_ternary_block_contiguous_cubecl.rs — the ternary
+        // scale is shared across all 4 words in a 128-weight group (u32[0]=scale,
+        // u32[1..5]=pos, u32[5..9]=neg). The kernel loads the scale ONCE per group
+        // and reuses it across the 4 word iterations, reloading only when the
+        // group boundary changes (every 4 words). GPU compilers often fail to
+        // hoist buffer loads (pointer-aliasing / volatility concerns), so the
+        // manual hoist matters. Distinct from `precompute-scalar-reduction`
+        // (separate pre-pass + pass-in) — this caches a shared value IN-LOOP
+        // across a fixed group of iterations via a register + boundary check,
+        // not a separate dispatch.
+        KernelRule {
+            rule_id: "hoist-group-invariant-scale-out-of-word-loop".to_string(),
+            gpu_concept: "cache a per-group invariant (e.g. quant scale shared across N words) in a register; reload only when the group boundary changes, not every iteration".to_string(),
+            ref_shape: "// naive: reload the scale from the buffer every word iteration\nfn ternary_dot_reload_scale(block_buf: &[u32], input: &[f32], m: usize, groups_per_row: usize) -> Vec<f32> {\n    let mut out = vec![0.0f32; m];\n    let words_per_row = groups_per_row * 4;\n    for row in 0..m {\n        let mut acc = 0.0;\n        for w in 0..words_per_row {\n            let g = w / 4;\n            // RELOAD scale every word — GPU compiler may not hoist (buffer aliasing)\n            let blk = (row * groups_per_row + g) * 9;\n            let scale = f32::from_bits(block_buf[blk]); // access every iteration (4× per group)\n            let p = block_buf[blk + 1 + (w % 4)];\n            let nw = block_buf[blk + 5 + (w % 4)];\n            for b in 0..32 {\n                let pb = (p >> b) & 1;\n                let nb = (nw >> b) & 1;\n                acc += (pb as f32 - nb as f32) * scale * input[w * 32 + b];\n            }\n        }\n        out[row] = acc;\n    }\n    out // scale loaded words_per_row times per row — 4× redundant global loads\n}".to_string(),
+            opt_pattern: "// optimized: cache scale in a register; reload only when the group changes (every 4 words)\nfn ternary_dot_hoist_scale(block_buf: &[u32], input: &[f32], m: usize, groups_per_row: usize) -> Vec<f32> {\n    let mut out = vec![0.0f32; m];\n    let words_per_row = groups_per_row * 4;\n    for row in 0..m {\n        let mut acc = 0.0;\n        let mut cached_g: u32 = u32::MAX; // force first-load\n        let mut cached_scale = 0.0f32;\n        for w in 0..words_per_row {\n            let g = w / 4;\n            let blk_base = (row * groups_per_row + g) * 9;\n            // RELOAD only when the group changes (every 4 words) — register-cached\n            if g != cached_g {\n                cached_scale = f32::from_bits(block_buf[blk_base]); // 1 load per group (was 4)\n                cached_g = g;\n            }\n            let p = block_buf[blk_base + 1 + (w % 4)];\n            let nw = block_buf[blk_base + 5 + (w % 4)];\n            for b in 0..32 {\n                let pb = (p >> b) & 1;\n                let nb = (nw >> b) & 1;\n                acc += (pb as f32 - nb as f32) * cached_scale * input[w * 32 + b];\n            }\n        }\n        out[row] = acc;\n    }\n    out // scale loaded groups_per_row times per row (was words_per_row = 4×groups) — 4× fewer global loads\n}".to_string(),
+        },
+        // ── split-sign-accumulators-defer-subtraction — per-bit subtract → once-at-end (B) ──
+        // Source: riir-gpu gemm_ternary_batched_cubecl.rs + gemv_ternary_block_contiguous.
+        // The ternary dot accumulates signed contributions: per bit, add
+        // select(pos, x, 0) − select(neg, x, 0). The naive form computes the
+        // subtraction INSIDE the 32-iteration bit loop (32 subtracts per word).
+        // The optimized form keeps separate pos/neg accumulators (a_p +=
+        // select(pos, x, 0); a_n += select(neg, x, 0)) inside the loop and does
+        // ONE subtraction (a = a_p − a_n) after the loop completes — reducing
+        // subtractions from 32/word to 1/word. Also reduces dependent-op latency
+        // (the per-bit subtract serializes the add chain; split accumulators are
+        // independent). Distinct from `upcast-before-reduction` (precision) —
+        // this is about instruction count + ILP in a ternary sign-accumulation.
+        KernelRule {
+            rule_id: "split-sign-accumulators-defer-subtraction".to_string(),
+            gpu_concept: "in a signed ternary/bit-packed dot loop, keep separate pos and neg accumulators; subtract once at the end instead of per-bit (fewer subtractions + independent accumulator chains)".to_string(),
+            ref_shape: "// naive: subtract pos-neg inside the bit loop (32 subtractions per word)\nfn ternary_dot_subtract_per_bit(pos_bits: &[u32], neg_bits: &[u32], input: &[f32], n: usize) -> f32 {\n    let mut acc = 0.0;\n    for w in 0..n / 32 {\n        let p = pos_bits[w];\n        let nw = neg_bits[w];\n        for b in 0..32 {\n            let pb = ((p >> b) & 1) as f32;\n            let nb = ((nw >> b) & 1) as f32;\n            // SUBTRACT inside the loop — 32 dependent subtracts per word\n            acc += (pb - nb) * input[w * 32 + b];\n        }\n    }\n    acc // 32 subtracts/word + each subtract is dependent on the prior add\n}".to_string(),
+            opt_pattern: "// optimized: split pos/neg accumulators; subtract once at the end\nfn ternary_dot_split_accumulators(pos_bits: &[u32], neg_bits: &[u32], input: &[f32], n: usize) -> f32 {\n    let mut acc_p = 0.0; // positive contributions only\n    let mut acc_n = 0.0; // negative contributions only\n    for w in 0..n / 32 {\n        let p = pos_bits[w];\n        let nw = neg_bits[w];\n        for b in 0..32 {\n            let x = input[w * 32 + b];\n            // two independent select-adds — NO subtract inside the loop\n            acc_p += ((p >> b) & 1) as f32 * x; // pos accumulator\n            acc_n += ((nw >> b) & 1) as f32 * x; // neg accumulator (indep chain)\n        }\n    }\n    acc_p - acc_n // ONE subtract at the end — 32→1 per word; acc_p/acc_n are independent ILP chains\n}".to_string(),
+        },
+        // ── clamp-tile-indices-to-sentinel-discard-at-write — per-lane bounds check → alias + discard (B) ──
+        // Source: riir-gpu gemm_ternary_batched_cubecl.rs — the row-tiled kernel
+        // owns a 4-row output tile per plane. When m is not a multiple of 4,
+        // out-of-range rows are CLAMPED to alias row m-1 (a valid sentinel),
+        // the full computation runs on the aliased data, and the clamped results
+        // are discarded at write time (guarded by `if row_base + k < m`). This
+        // keeps the 32-iteration bit-extraction loop UNIFORM across the plane —
+        // no per-lane divergence from bounds checks. Distinct from
+        // `ragged-chunk-pad` (pad with zeros → wasted work processing zeros) —
+        // this aliases to real data (the work is real but discarded) so the loop
+        // body stays divergence-free without the overhead of processing padding.
+        // Also distinct from `masked-boundary-load` (per-element OOB→fallback) —
+        // this clamps the INDEX so the load is real, avoiding per-element branches.
+        KernelRule {
+            rule_id: "clamp-tile-indices-to-sentinel-discard-at-write".to_string(),
+            gpu_concept: "when a tile extends past the matrix edge, alias OOB rows to a valid sentinel row and discard the redundant results at write time — keeps the loop body uniform (no per-lane divergence) without padding overhead".to_string(),
+            ref_shape: "// naive: per-element bounds check inside the hot loop (per-lane divergence)\nfn gemm_tile_per_element_check(pos: &[u32], neg: &[u32], input: &[f32], m: usize, n: usize, rows_per_tile: usize) -> Vec<f32> {\n    let mut out = vec![0.0f32; m];\n    for tile_start in (0..m).step_by(rows_per_tile) {\n        for r in 0..rows_per_tile {\n            let row = tile_start + r;\n            for col in 0..n {\n                // PER-ELEMENT bounds check — causes divergence when some lanes are OOB\n                if row < m {\n                    let p = pos[row * (n / 32) + col / 32];\n                    let pb = (p >> (col % 32)) & 1;\n                    out[row] += pb as f32 * input[col]; // only valid rows write\n                }\n            }\n        }\n    }\n    out // per-lane bounds check inside the loop — divergent when tile extends past m\n}".to_string(),
+            opt_pattern: "// optimized: alias OOB rows to m-1 (sentinel); compute fully; discard at write\nfn gemm_tile_clamp_sentinel(pos: &[u32], neg: &[u32], input: &[f32], m: usize, n: usize, rows_per_tile: usize) -> Vec<f32> {\n    let mut out = vec![0.0f32; m];\n    let last = m - 1; // sentinel row\n    for tile_start in (0..m).step_by(rows_per_tile) {\n        // CLAMP row indices — OOB rows alias the sentinel (valid, no divergence)\n        let r0 = tile_start;\n        let r1 = if tile_start + 1 < m { tile_start + 1 } else { last };\n        let r2 = if tile_start + 2 < m { tile_start + 2 } else { last };\n        let r3 = if tile_start + 3 < m { tile_start + 3 } else { last };
+        let mut acc0 = 0.0;\n        let mut acc1 = 0.0;\n        let mut acc2 = 0.0;\n        let mut acc3 = 0.0;\n        for col in 0..n {\n            // UNIFORM loop body — all 4 rows are valid indices (no per-lane check)\n            acc0 += ((pos[r0 * (n / 32) + col / 32] >> (col % 32)) & 1) as f32 * input[col];\n            acc1 += ((pos[r1 * (n / 32) + col / 32] >> (col % 32)) & 1) as f32 * input[col];\n            acc2 += ((pos[r2 * (n / 32) + col / 32] >> (col % 32)) & 1) as f32 * input[col];\n            acc3 += ((pos[r3 * (n / 32) + col / 32] >> (col % 32)) & 1) as f32 * input[col];\n        }\n        // DISCARD redundant results at write time (guarded writes only)\n        out[r0] = acc0;\n        if tile_start + 1 < m { out[r1] = acc1; }\n        if tile_start + 2 < m { out[r2] = acc2; }\n        if tile_start + 3 < m { out[r3] = acc3; }\n    }\n    out // loop body uniform (no divergence) — OOB work is real-but-discarded, not zero-padded\n}".to_string(),
+        },
     ])
 }
 
@@ -1625,7 +1723,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 131-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 135-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1633,7 +1731,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (9 rules)
+    // A: Memory access patterns (10 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -1647,9 +1745,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "offload-cpu-bottleneck-to-gpu-kernel",
             "block-contiguous-weight-layout",
             "dequant-once-per-k-tile-into-shared-memory",
+            "hoist-group-invariant-scale-out-of-word-loop",
         ],
     ),
-    // B: Compute patterns (20 rules)
+    // B: Compute patterns (23 rules)
     (
         KernelCategory::Compute,
         "B: compute",
@@ -1674,6 +1773,9 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "squared-relu-activation",
             "pre-rotate-once-exploit-orthogonality",
             "cmma-hardware-unit-over-scalar-alu",
+            "skip-all-zero-packed-words-via-or-reduce",
+            "split-sign-accumulators-defer-subtraction",
+            "clamp-tile-indices-to-sentinel-discard-at-write",
         ],
     ),
     // C: Fusion patterns (12 rules)
@@ -1876,7 +1978,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
 /// Returns 15 buckets (one per category), each containing the `KernelRule`s whose
 /// `rule_id` appears in that category's slice of [`KERNEL_CATEGORIES`]. This is
 /// the category-scoped view of the corpus — a future heal pipeline can consult
-/// the routed expert's rules first without scanning all 127.
+/// the routed expert's rules first without scanning all 135.
 ///
 /// # Allocation
 ///
@@ -1939,8 +2041,9 @@ mod tests {
         // Batch 14 (4): riir-gpu production kernels — norm-fold into matmul, reduction-split pre-pass, single-plane reduction, CPU-bottleneck offload (gemv_q4k_batched_rmsnorm_cubecl, gpu_transpose).
         // Batch 15 (4): riir-gpu production kernels — block-contiguous weight layout, fused dual GEMV + GeGLU, orthogonal pre-rotation, water-fill tail-dim shared codebook (gemm_ternary_block_contiguous, gemv_geglu_f16, spectralquant).
         // Batch 16 (4): riir-gpu production kernels — cmma hardware unit, dequant-once-per-k-tile, dispatch axis swap, norm-decoupled low-bit scoring (gemm_ternary_simdgroup, forward_turboquant).
-        // Total: 131.
-        assert_eq!(corpus.entries.len(), 131, "batches 1-16 should have 131 rules");
+        // Batch 17 (4): riir-gpu production kernels — skip-all-zero-packed-words-via-or-reduce, hoist-group-invariant-scale-out-of-word-loop, split-sign-accumulators-defer-subtraction, clamp-tile-indices-to-sentinel-discard-at-write (gemm_ternary_batched, gemv_ternary_block_contiguous).
+        // Total: 135.
+        assert_eq!(corpus.entries.len(), 135, "batches 1-17 should have 135 rules");
     }
 
     #[test]
@@ -2569,6 +2672,40 @@ mod tests {
     }
 
     // ════════════════════════════════════════════════════════════════════
+    // Batch 17 (Research 018) — riir-gpu production kernels: zero-word OR-skip + scale hoist + split-sign accumulators + clamp-tile sentinel
+    // ════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn batch17_rules_present() {
+        // Verify the 4 batch-17 rules across A/B.
+        let corpus = build_kernel_seed_corpus();
+        let ids: Vec<&str> =
+            corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        // Category B (3 new): zero-word OR-skip, split-sign accumulators, clamp-tile sentinel
+        assert!(ids.contains(&"skip-all-zero-packed-words-via-or-reduce"), "zero-word or-skip");
+        assert!(ids.contains(&"split-sign-accumulators-defer-subtraction"), "split-sign accumulators");
+        assert!(ids.contains(&"clamp-tile-indices-to-sentinel-discard-at-write"), "clamp-tile sentinel");
+        // Category A (1 new): hoist group-invariant scale
+        assert!(ids.contains(&"hoist-group-invariant-scale-out-of-word-loop"), "scale hoist");
+    }
+
+    #[test]
+    fn batch17_zeroword_scalehoist_splitsign_clampsentinel_concepts_covered() {
+        // Verify the batch-17 zero-word-skip + scale-hoist + split-sign + clamp-sentinel concepts.
+        let corpus = build_kernel_seed_corpus();
+        let concepts: Vec<&str> =
+            corpus.entries.iter().map(|e| e.gpu_concept.as_str()).collect();
+        // Category B: zero-word OR-reduce skip (riir-gpu gemm_ternary_batched)
+        assert!(concepts.contains(&"OR-reduce all rows' pos+neg bit-words; skip the 32-iteration sign-extraction loop when the whole tile's word is zero (ternary sparsity exploit)"));
+        // Category A: hoist group-invariant scale (riir-gpu gemv_ternary_block_contiguous)
+        assert!(concepts.contains(&"cache a per-group invariant (e.g. quant scale shared across N words) in a register; reload only when the group boundary changes, not every iteration"));
+        // Category B: split-sign accumulators (both ternary files)
+        assert!(concepts.contains(&"in a signed ternary/bit-packed dot loop, keep separate pos and neg accumulators; subtract once at the end instead of per-bit (fewer subtractions + independent accumulator chains)"));
+        // Category B: clamp-tile sentinel (riir-gpu gemm_ternary_batched)
+        assert!(concepts.contains(&"when a tile extends past the matrix edge, alias OOB rows to a valid sentinel row and discard the redundant results at write time — keeps the loop body uniform (no per-lane divergence) without padding overhead"));
+    }
+
+    // ════════════════════════════════════════════════════════════════════
     // Plan 003 — Router ↔ corpus wiring tests
     // ════════════════════════════════════════════════════════════════════
 
@@ -2579,7 +2716,7 @@ mod tests {
 
     #[test]
     fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-        // Every rule_id in the 131-rule corpus must appear in exactly one category.
+        // Every rule_id in the 135-rule corpus must appear in exactly one category.
         let corpus = build_kernel_seed_corpus();
         let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
         let mut categorized: Vec<&str> = Vec::new();
@@ -2610,10 +2747,10 @@ mod tests {
 
     #[test]
     fn kernel_categories_counts_match_plan_003_table() {
-        // Pin per-category rule counts to the Plan 003 table (updated for Batch 16).
+        // Pin per-category rule counts to the Plan 003 table (updated for Batch 17).
         let expected = [
-            (KernelCategory::MemoryAccess, 9),
-            (KernelCategory::Compute, 20),
+            (KernelCategory::MemoryAccess, 10),
+            (KernelCategory::Compute, 23),
             (KernelCategory::Fusion, 12),
             (KernelCategory::Dispatch, 9),
             (KernelCategory::Parallelism, 8),
@@ -2635,9 +2772,9 @@ mod tests {
                 "Plan 003: category {cat:?} has {} rules, expected {count}",
                 entry.2.len());
         }
-        // Sum must equal 131.
+        // Sum must equal 135.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 131, "Plan 003: category totals must sum to 131");
+        assert_eq!(total, 135, "Plan 003: category totals must sum to 135");
     }
 
     #[test]
@@ -2647,7 +2784,7 @@ mod tests {
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 131, "Plan 003: grouped corpus has {total} rules, expected 131");
+        assert_eq!(total, 135, "Plan 003: grouped corpus has {total} rules, expected 135");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");

@@ -10,7 +10,7 @@
 | Component | Ships now | Deferred |
 |---|---|---|
 | `KernelOptDomain: HealDomain` | ✅ | |
-| Seed corpus (Batch 1-16: 131 rules; popcorn COMPLETE; riir-gpu opened Batch 14, mined Batch 15-16) | ✅ | Future source: riir-gpu (~196K lines, mostly unmined), new popcorn releases |
+| Seed corpus (Batch 1-17: 135 rules; popcorn COMPLETE; riir-gpu opened Batch 14, mined Batch 15-17) | ✅ | Future source: riir-gpu (~196K lines, mostly unmined), new popcorn releases |
 | `KernelExpertRouter` (`pick_domain`) | ✅ (8-dim activity, 15/15 reachable, Plan 004) | Mined centroids via `CommittedFieldBlend` |
 | `KernelThermalRouter` (5-tier stub) | ✅ (returns Plasma) | Warm/Cold LoRA (4090, riir-train) |
 | `KernelVerifier` (compile-only) | ✅ (behind `kernel_verify`) | Full numeric compare vs reference |
@@ -34,9 +34,10 @@ Batch 13 (Research 014): 6 rules — popcorn final unmined pass. RL loss stabili
 Batch 14 (Research 015): 4 rules — **first batch mining riir-gpu (the stack's own production kernels), not external libraries**. Norm-fold into matmul (gemv_q4k_batched_rmsnorm: fold inv_rms scalar into the GEMV dot) + reduction-split pre-pass (compute_inv_rms: scalar pre-pass + fold) + single-plane reduction (Issue 611 fix: one plane suffices vs N redundant planes) + CPU-bottleneck offload (gpu_transpose Issue 402: GPU compute kernel writes directly into pooled memory). Two riir-gpu files (lora_fused SGMV, rope_geglu section-view) assessed + dropped (SGMV overlaps MoE grouped; section-view is pointer arithmetic not an opt).
 Batch 15 (Research 016): 4 rules — **second batch mining riir-gpu**. Block-contiguous weight layout (gemm_ternary_block_contiguous: pack 3 separate weight buffers into 1 to cut global-memory accesses 3×) + fused dual GEMV + GeGLU (gemv_geglu_f16: fuse 2 sibling GEMVs + act into 1 dispatch, saves 52 dispatches/decode at 26 layers) + orthogonal pre-rotation (spectralquant/attention.rs: pre-rotate query once vs each key, ~4096× fewer rotation FLOPs) + water-fill tail-dim shared codebook (spectralquant/dequant.rs: top dims per-dim codebooks, tail dims share one low-bit codebook, 2.3× codebook memory reduction). One riir-gpu file (forward_flashprefill) assessed + dropped (cascade structure overlaps NSA Category I; 4 staged dispatches is a non-opt).
 Batch 16 (Research 017): 4 rules — **third batch mining riir-gpu**. cmma hardware unit over scalar ALU (gemm_ternary_simdgroup: use the cooperative matrix multiply-accumulate hardware unit instead of scalar ALU — 64 FMAs/cycle on the dedicated unit) + dequant-once-per-K-tile into shared memory (gemm_ternary_simdgroup: dequant a weight tile once, let the hardware matrix unit consume it across all output rows — m× amortization) + swap-large-axis-to-X (gemm_ternary_simdgroup: put the large GEMM axis on the X cube-count for workgroup distribution) + norm-decoupled low-bit scoring (forward_turboquant: store per-position L2 norm separately, quantize the unit-normalized key at 2-4 bits, reconstruct score as norm × dot). Four files assessed + dropped (lora_fused SGMV overlaps Category H; spectralquant/rotation boilerplate; spectralquant/qjl composition of water-fill with JL; spectralquant/calibration two-pass reduce overlaps split-reduction).
-Total: 131 rules. Popcorn corpus COMPLETE; riir-gpu (~196K lines) remains open as the next distillation source (7 of ~200 files mined).
+Batch 17 (Research 018): 4 rules — **fourth batch mining riir-gpu (ternary scalar-ALU hot loop)**. Skip-all-zero-packed-words-via-or-reduce (gemm_ternary_batched: OR-reduce all tile rows' pos+neg bit-words, skip the 32-iteration sign-extraction loop when the whole tile's word is zero — ternary sparsity exploit) + hoist-group-invariant-scale-out-of-word-loop (gemv_ternary_block_contiguous: cache the per-group quant scale in a register across the 4 words it covers, reload only at the group boundary — 4× fewer global loads) + split-sign-accumulators-defer-subtraction (both ternary files: keep separate pos/neg accumulators inside the bit loop, subtract once at the end — 32→1 subtracts/word + independent ILP chains) + clamp-tile-indices-to-sentinel-discard-at-write (gemm_ternary_batched: alias OOB tile rows to m-1, compute fully, discard at write time — keeps the loop body uniform without padding overhead). Two files assessed + dropped (rope_geglu_cubecl: pairing-generic + precomputed cos/sin table are composition of existing dispatch/precompute principles; forward_dflare: 17-binding layout + heterogeneous KV are architectural, not kernel optimization).
+Total: 135 rules. Popcorn corpus COMPLETE; riir-gpu (~196K lines) remains open as the next distillation source (9 of ~200 files mined).
 
-### Category A: Memory access patterns (9 rules)
+### Category A: Memory access patterns (10 rules)
 
 | Rule ID | GPU concept | Pattern |
 |---|---|---|
@@ -49,8 +50,9 @@ Total: 131 rules. Popcorn corpus COMPLETE; riir-gpu (~196K lines) remains open a
 | `offload-cpu-bottleneck-to-gpu-kernel` | CPU→GPU data-prep offload | CPU transpose (674ms/step bottleneck) → GPU compute kernel writing into pooled memory (riir-gpu Issue 402) |
 | `block-contiguous-weight-layout` | multi-buffer → single-buffer packing | 3 separate SoA weight buffers (pos+neg+scale) → 1 block-contiguous AoS buffer (1 access per group, riir-gpu gemm_ternary_block_contiguous, 3× fewer global-memory accesses) |
 | `dequant-once-per-k-tile-into-shared-memory` | amortize dequant across shared tile | Dequant each weight element inline as consumed → dequant a weight tile ONCE into shared memory, let the hardware matrix unit consume it across all output rows that share the tile (riir-gpu gemm_ternary_simdgroup, m× amortization) |
+| `hoist-group-invariant-scale-out-of-word-loop` | register-cached group invariant | Reload scale from buffer every word iteration → cache the per-group quant scale in a register across the 4 words it covers, reload only at the group boundary (riir-gpu gemv_ternary_block_contiguous, 4× fewer global loads) |
 
-### Category B: Compute patterns (20 rules)
+### Category B: Compute patterns (23 rules)
 
 | Rule ID | GPU concept | Pattern |
 |---|---|---|
@@ -74,6 +76,9 @@ Total: 131 rules. Popcorn corpus COMPLETE; riir-gpu (~196K lines) remains open a
 | `squared-relu-activation` | sparse sharpening activation | `relu(x)` then square → fused `max(x,0)²` (zeros preserved, non-zeros sharpened) |
 | `pre-rotate-once-exploit-orthogonality` | orthogonal pre-rotation identity | Rotate each key by R then dot with q → pre-rotate query once (`q'=R^T·q`) for orthogonal R, then dot `q'` with each unrotated key (riir-gpu spectralquant/attention, ~4096× fewer rotation FLOPs) |
 | `cmma-hardware-unit-over-scalar-alu` | hardware matrix unit vs scalar ALU | Scalar dot in a plane (occupancy-bound, ~1.08×) → cooperative matrix multiply-accumulate hardware unit (tensor core / Metal simdgroup_matrix / cmma, 64 FMAs/cycle on the dedicated unit, riir-gpu gemm_ternary_simdgroup) |
+| `skip-all-zero-packed-words-via-or-reduce` | ternary sparsity exploit | Always enter the 32-bit extraction loop → OR-reduce all tile rows' pos+neg bit-words, skip the loop when the whole tile's word is zero (riir-gpu gemm_ternary_batched) |
+| `split-sign-accumulators-defer-subtraction` | deferred sign subtraction | Subtract pos−neg per bit inside the loop (32/word) → keep separate pos/neg accumulators, subtract once at the end (1/word + independent ILP chains, both ternary files) |
+| `clamp-tile-indices-to-sentinel-discard-at-write` | divergence-free tile bounds | Per-lane bounds check inside the loop → alias OOB tile rows to m-1 sentinel, compute fully, discard redundant results at write time (riir-gpu gemm_ternary_batched) |
 
 ### Category C: Fusion patterns (12 rules)
 
@@ -173,7 +178,7 @@ pub fn route(&self, activity: &[f32; ACTIVITY_DIM]) -> usize {
 }
 ```
 
-**Plan 003 (2026-08-14):** router wired to the 127-rule corpus via 15 category
+**Plan 003 (2026-08-14):** router wired to the 135-rule corpus via 15 category
 experts. Each expert owns its category's `rule_ids` via `KERNEL_CATEGORIES`.
 - **Activity vector** = raw physical (kernel signature: `[M, N, K, dtype, hw,
   is_attention, is_fusion, is_ir_transform]` — 8-dim per Plan 004, normalized
