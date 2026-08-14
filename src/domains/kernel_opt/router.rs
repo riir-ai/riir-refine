@@ -603,4 +603,96 @@ mod tests {
                  activity = {activity:?}");
         }
     }
+
+    #[test]
+    fn routed_heal_narrows_candidates_and_drafts_valid_fix() {
+        // Verify the Plan 003/004 composition: route → narrow → draft.
+        // This is the automated test behind the `kernel_heal_demo` example —
+        // it asserts the composition works, not just that it prints.
+        use crate::drafter::TernaryDrafter;
+        use crate::domains::kernel_opt::corpus::build_kernel_seed_corpus;
+
+        let router = KernelExpertRouter::new();
+        let corpus = build_kernel_seed_corpus();
+
+        // Route a flash-attention signature → expert F (idx 5).
+        let activity = build_activity(1.0, 1.0, 1.0, 0.0, 0.0, true, false, false);
+        let expert = router.route(&activity);
+        let category = KernelExpertRouter::category_for_expert(expert)
+            .expect("routed expert must have a category");
+        assert_eq!(category, KernelCategory::FlashAttnTiling,
+            "flash-attn signature should route to F, got {category:?}");
+
+        // Narrow candidates to the routed category.
+        let rule_ids = KernelExpertRouter::rules_for_expert(expert);
+        let candidates: Vec<_> = corpus
+            .entries
+            .iter()
+            .filter(|e| rule_ids.contains(&e.rule_id.as_str()))
+            .cloned()
+            .collect();
+
+        // The narrowed set must be smaller than the full corpus.
+        assert!(candidates.len() < corpus.entries.len(),
+            "narrowed set ({}) should be smaller than full corpus ({})",
+            candidates.len(), corpus.entries.len());
+        assert!(!candidates.is_empty(),
+            "narrowed set should not be empty");
+
+        // Draft a fix from the narrowed set.
+        let mut drafter = TernaryDrafter::fallback();
+        let rule_id = &candidates[0].rule_id;
+        let buggy = &candidates[0].ref_shape;
+        let fix = drafter.draft_fix(rule_id, buggy, &candidates);
+        assert!(fix.is_some(), "drafter should produce a fix from narrowed candidates");
+
+        // The drafted fix must come from the narrowed category.
+        let result = fix.unwrap();
+        let matching = candidates.iter().any(|c| c.opt_pattern == result.code);
+        assert!(matching,
+            "drafted fix must come from the narrowed candidate set");
+    }
+
+    #[test]
+    fn routed_heal_narrowing_is_category_scoped() {
+        // Verify that routing to different categories produces different
+        // candidate sets — the router actually discriminates.
+        use crate::domains::kernel_opt::corpus::build_kernel_seed_corpus;
+
+        let router = KernelExpertRouter::new();
+        let corpus = build_kernel_seed_corpus();
+
+        // Route to category A (memory access) — high M only.
+        let activity_a = build_activity(0.9, 0.05, 0.0, 0.0, 0.0, false, false, false);
+        let expert_a = router.route(&activity_a);
+        let rules_a = KernelExpertRouter::rules_for_expert(expert_a);
+
+        // Route to category O (IR strength reduction) — is_ir_transform flag.
+        let activity_o = build_activity(0.0, 0.0, 0.0, 0.0, 0.0, false, false, true);
+        let expert_o = router.route(&activity_o);
+        let rules_o = KernelExpertRouter::rules_for_expert(expert_o);
+
+        // Different experts.
+        assert_ne!(expert_a, expert_o,
+            "memory-access vs IR-strength-reduction should route to different experts");
+
+        // Different rule sets.
+        assert_ne!(rules_a, rules_o,
+            "different experts should have different rule sets");
+
+        // Both must have non-empty rule sets in the corpus.
+        let candidates_a: Vec<_> = corpus.entries.iter()
+            .filter(|e| rules_a.contains(&e.rule_id.as_str())).collect();
+        let candidates_o: Vec<_> = corpus.entries.iter()
+            .filter(|e| rules_o.contains(&e.rule_id.as_str())).collect();
+        assert!(!candidates_a.is_empty(), "category A should have corpus rules");
+        assert!(!candidates_o.is_empty(), "category O should have corpus rules");
+
+        // No overlap — categories partition the corpus.
+        let overlap: Vec<_> = rules_a.iter()
+            .filter(|r| rules_o.contains(r))
+            .collect();
+        assert!(overlap.is_empty(),
+            "categories A and O should not share rules (found: {overlap:?})");
+    }
 }
