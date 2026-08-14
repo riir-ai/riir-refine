@@ -37,12 +37,19 @@
 //! Default OFF. `SPEC_CHECKPOINT=cpu` selects the CPU-side checkpoint path
 //! (default: `gpu`, the CopyCubeCL zero-sync production path).
 //!
-//! **Measured on clippy prompts (2026-08-14, M3 Max, needless_return case):**
-//! G1 PASS (bit-identical emitted text vs sequential) but **α=0.19-0.22** —
-//! far below the α≥0.58 breakeven (Issue 665 T1) — decode 3.3-4.4× SLOWER
-//! than sequential. The n-gram drafter cannot predict natural-language
-//! `<think>` reasoning. Issue 665's 1.21× was measured on repetitive text;
-//! it does NOT reproduce on this workload. NET-NEGATIVE here.
+**Measured on clippy prompts (2026-08-14, M3 Max, needless_return case):**
+G1 PASS (bit-identical emitted text vs sequential) but **α=0.19-0.22** —
+far below the α≥0.58 breakeven (Issue 665 T1) — decode 3.3-4.4× SLOWER
+than sequential. The n-gram drafter cannot predict natural-language
+`<think>` reasoning. Issue 665's 1.21× was measured on repetitive text;
+it does NOT reproduce on this workload. NET-NEGATIVE here.
+
+**Re-validated 2026-08-14 post-Issue-669-landing (3 cases, landed HEAD):**
+G1 PASS — speculative emits text identical to the sequential arms on all
+3 cases. Decode 6.66 tok/s vs sequential 15.2-17.0 (~2.3-2.6× slower,
+Unity-load session — same net-negative direction). The corrected
+bench_665 repetitive-text re-gate also measured net-negative (0.812×
+GPU-sync) — see Issue 665's T6 CORRECTED section.
 //!
 //! **bench_665 off-by-one bug (found while wiring this):** the upstream
 //! `bench_665_speculative_decode.rs` verify loop compares `argmax(all_logits[i])`
@@ -215,14 +222,18 @@ fn main() {
         // riir-gpu). Measured +42.5% (1.42×) prefill gain over the GEMV loop.
         //
         // The Issue 663 zero-copy RAW-Metal overlay (`metal_tensor_gemm`) is
-        // compiled in but DEFAULT OFF — it REGRESSES in this harness config:
-        //   - decode 17.2 → 0.37 tok/s (47× slower) — likely GPU memory pressure
-        //     from the zerocopy weight cache at 27B model scale
-        //   - prefill 25.0 → 13.4 tok/s (regression, not the +1.21× Issue 663 claims)
-        //   - G1 FAILS on some cases (`needless_return` emits garbage tokens)
+        // compiled in but DEFAULT OFF — the T4 flush fix
+        // (`MetalTensorZeroCopyGemm::dispatch` flush-first, landed 2026-08-14)
+        // recovered the throughput half (decode 0.37 → ~13.6 tok/s, within
+        // ~10-20% of default; prefill ~parity) but G1 still FAILS on 1/3
+        // cases (needless_return emits garbage; the other 2 clean):
+        //   - prefill ~22.9 vs default 21.3-22.5 tok/s (parity, was −46%)
+        //   - decode ~13.6 vs default 15.2-17.0 tok/s (was 47× SLOWER)
+        //   - G1 FAILS on needless_return (garbage tokens persist post-flush)
         // Issue 663's +1.21× was measured on an ISOLATED prefill bench, not the
-        // full forward — does not reproduce at scale. ZEROCOPY=1 env var forces it
-        // on for A/B re-investigation; default is OFF.
+        // full forward — does not reproduce at scale. Issue 670 candidate B
+        // (P<64 gating) remains untried. ZEROCOPY=1 env var forces it on for
+        // A/B re-investigation; default is OFF.
         riir_gpu::set_prefill_use_simdgroup(true);
         #[cfg(target_os = "macos")]
         if std::env::var("ZEROCOPY").unwrap_or_else(|_| "0".to_string()) == "1" {
