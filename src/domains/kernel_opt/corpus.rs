@@ -327,6 +327,56 @@
 //!   rules across 15 categories (A–O)**. `riir-gpu` remains open (42 of
 //!   ~200 files mined; the `forward/` + `backward/` + `backward_dflash/`
 //!   orchestration clusters assessed).
+//! - **Batch 28 (Research 029):** 10 rules from the two largest single
+//!   files in riir-gpu — the deltanet `CubeCL` cluster (`deltanet_cubecl.rs`
+//!   decode-time recurrence + `deltanet_chunked_cubecl.rs` chunkwise-
+//!   parallel prefill, Issue 652 / Plan 533, algorithm Yang & Wang 2024):
+//!   `row-owned-register-blocked-recurrence` (G — decompose the per-head
+//!   state matrix WITHIN one decode step: one workgroup per (head, row),
+//!   the row register-blocked into 4 strided columns per lane, all five
+//!   algebra steps on registers between exactly ONE global read + ONE
+//!   write — 6 passes over S → 2, ~3× cut of the gating memory quantity,
+//!   plus 32× occupancy headroom), `workgroup-equals-plane-native-
+//!   reduction` (E — size the workgroup to EXACTLY one hardware plane and
+//!   compensate width via register blocking: the native shuffle reduction
+//!   then covers the full logical reduction, broadcasts for free, and no
+//!   threadgroup memory or barrier exists at all), `smem-broadcast-
+//!   scalar-then-parallel-scatter` (E — after a workgroup reduction, the
+//!   leader publishes the resulting scalar through the already-reduced
+//!   slot and ALL threads scatter their own column: 1 global write per
+//!   thread instead of `head_dim` serial writes from one idle-heavy
+//!   leader), `token-flattened-elementwise-modulo-shared-weights` (D —
+//!   per-token elementwise launches flatten `[p, n_head]` into ONE 1-D index
+//!   space with per-head weight tables indexed `i % n_head`: 6144
+//!   dispatches → 48, each launch's ~25 CPU allocations amortized away),
+//!   `fused-conv-state-shift-dot-silu` (C — the decode conv1d shifts its
+//!   sliding window IN PLACE, convolves from the freshly shifted state,
+//!   applies `SiLU`, and writes back over the input — one kernel, zero
+//!   intermediates, state persists across steps), `softplus-piecewise-
+//!   saturation-clamp` (B — `ln(1+e^x)` saturates: x for x > 20, 0 for
+//!   x < −20, transcendental only in the safe band; thresholds pinned to
+//!   the CPU reference for GPU/CPU bit-comparability), `reverse-running-
+//!   decay-weight` (G — the intra-chunk pairwise decay matrix dematerialized
+//!   into ONE running scalar carried by the consumer loop running j from t
+//!   DOWN to 0: the empty product (=1 at j=t) anchors the recursion and
+//!   each step multiplies α[j] after use), `split-decay-outputs-eliminate-
+//!   readback` (D — compact packing is a pessimization when it breaks
+//!   consumer layouts: write each output component directly into the
+//!   buffer shape its consumer reads and the device→host→device unpack
+//!   round trip disappears entirely), `carry-dual-layout-dead-slot` (L —
+//!   the prefill carry producer parameterized (stride + offset) to write
+//!   the decode consumer's native sliding-window layout directly, leaving
+//!   slot 0 stale because the decode shift provably overwrites it before
+//!   any read), `nonlinearity-forces-raw-input-buffers` (D — the negative
+//!   space of in-place aliasing: a sequential in-place producer trick is
+//!   incompatible with batched execution when a nonlinearity intervenes,
+//!   because later tokens' windows read earlier tokens' POST-activation
+//!   values — separate raw read-only inputs + write-only outputs are the
+//!   correctness-enabling shape). Corpus: **193 rules across 15 categories
+//!   (A–O)**. `riir-gpu` remains open (44 of ~200 files mined; the
+//!   deltanet `CubeCL` cluster assessed). Mining also surfaced a confirmed
+//!   production bug (cross-chunk `plane_sum` mixing partials of different
+//!   columns → block-constant output) — filed as a riir-ai issue.
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
@@ -3121,6 +3171,243 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
             ref_shape: "// naive: the transient is overwritten before any legal read can happen\nfn grad_capture_broken(encoder: &mut Encoder, temp_grad: &Buffer, n: usize) {\n    dispatch_adapter_grad(encoder, temp_grad);     // temp holds the value NOW\n    dispatch_next_layer(encoder, temp_grad);       // OVERWRITES temp!\n    // option A: download here — mid-encoder read returns pre-submission\n    let g = download_f32(device, queue, temp_grad, n);  // STALE + the internal\n    // submit breaks the encoder being built                        encoder\n    // option B: download after submit — the value is already destroyed\n}".to_string(),
             opt_pattern: "// optimized: encoder-ordered snapshot into a persistent buffer, download after\nstruct Pass { grad_output_buffers: Vec<Buffer> } // one persistent buffer / adapter\nfn grad_capture_snapshot(pass: &Pass, encoder: &mut Encoder, adapter: usize,\n                         temp_grad: &Buffer, n: usize) {\n    dispatch_adapter_grad(encoder, temp_grad);     // temp holds the value\n    // pin the value at THIS dataflow point — the copy lands between the\n    // producing dispatch and the overwrite:\n    encoder.copy_buffer_to_buffer(temp_grad, 0,\n        &pass.grad_output_buffers[adapter], 0, (n * 4) as u64);\n    dispatch_next_layer(encoder, temp_grad);       // overwrite is fine now —\n}                                                 // the snapshot persists\nfn download_after_submit(pass: &Pass, adapter: usize, n: usize) -> Vec<f32> {\n    // called AFTER queue.submit + poll — reads the pinned snapshot, never\n    // a transient, never mid-encoder\n    download_f32_reuse(device, queue, &pass.grad_output_buffers[adapter], n)\n}".to_string(),
         },
+        // ════════════════════════════════════════════════════════════════════
+        // Batch 28 (Research 029): 10 rules — the deltanet CubeCL cluster
+        // (deltanet_cubecl.rs decode-time recurrence + deltanet_chunked_
+        // cubecl.rs chunkwise-parallel prefill). Grows B 32→33, C 18→19,
+        // D 23→26, E 9→11, G 17→19, L 5→6.
+        // ════════════════════════════════════════════════════════════════════
+        // ── row-owned-register-blocked-recurrence — workgroup-per-head → per-(head,row) (G) ──
+        // Source: riir-gpu deltanet_cubecl.rs L255-294 (the rowpar doc: the
+        // row is loaded into registers once and every step operates on
+        // registers; global passes over S: 4 read + 2 write → 1 read + 1
+        // write; memory-bound, so cutting 6 passes to 2 is a ~3× reduction)
+        // + L264-267 (n_head → n_head × head_dim cubes = 32× latency-hiding
+        // headroom) + L338-342/L382-386 (single read/write passes). Rows of
+        // the state matrix are independent within one decode step — narrow
+        // whole-step ownership from head to row granularity; ownership is
+        // what enables register blocking.
+        //
+        // Distinct from chunkwise-parallel-recurrence + recurrent-vs-chunk-
+        // dispatch (sequence-axis parallelism — this is state-matrix
+        // parallelism within one step) and from row-tile-amortize-input-load
+        // (input-load amortization — the owned tile here is the persistent
+        // state itself, read-modify-write across steps).
+        KernelRule {
+            rule_id: "row-owned-register-blocked-recurrence".to_string(),
+            gpu_concept: "rows of a decode-time recurrent state matrix are independent within one step — decompose the per-head state ownership to (head, row) granularity so each workgroup OWNS a row: load it into registers once (each lane register-blocking d/plane strided columns), run every algebra step (decay, retrieve, delta, update, readout) on registers, and write it back exactly once. The memory-bound recurrence drops from 4 global read + 2 write passes over S per step to 1 read + 1 write (~3× cut of the gating quantity), threadgroup traffic and barriers drop to zero, and n_head cubes become n_head × head_dim cubes (32× more resident workgroups for latency hiding). Distinct from chunkwise-parallel-recurrence / recurrent-vs-chunk-dispatch (sequence-axis parallelism for prefill — this is state-matrix parallelism within one decode step) and from row-tile-amortize-input-load (input-load amortization in a GEMV — the owned tile here is the persistent state itself)".to_string(),
+            ref_shape: "// naive: one workgroup owns the whole head state — every row's dot\n// product needs a barriered tree reduction and every algebra step\n// re-touches global memory (4 read + 2 write passes over S per step)\nfn recurrence_workgroup_per_head(state: &mut [f32], k_col: &[f32], smem: &mut [f32],\n                                 d: usize, row: usize, col: usize,\n                                 decay: f32) {\n    let idx = row * d + col;\n    state[idx] *= decay;                  // pass 1: global read + write\n    smem[col] = state[idx] * k_col[col];  // pass 2: partial to smem\n    barrier();\n    if col < 64 { smem[col] += smem[col + 64]; } // tree 128→64→32→16→8→4→2→1\n    barrier();\n    if col < 32 { smem[col] += smem[col + 32]; }\n    barrier();\n    let kv = smem[0]; // ~2304 barriers + 512 B threadgroup traffic per head;\n    let _ = kv;       // the update + readout steps re-read state from global\n}".to_string(),
+            opt_pattern: "// optimized: one workgroup per (head, ROW) — the row is owned, loaded\n// into registers once (lane, lane+32, lane+64, lane+96), all five steps\n// run on registers between ONE global read and ONE global write\nfn recurrence_row_owned(state_row: &mut [f32; 128], k: &[f32; 128], q: &[f32; 128],\n                        v_row: f32, beta: f32, decay: f32, lane: usize,\n                        plane_reduce: fn(f32) -> f32) -> f32 {\n    let c0 = lane; let c1 = lane + 32; let c2 = lane + 64; let c3 = lane + 96;\n    let mut s0 = state_row[c0]; let mut s1 = state_row[c1]; // single global\n    let mut s2 = state_row[c2]; let mut s3 = state_row[c3]; // READ pass\n    s0 *= decay; s1 *= decay; s2 *= decay; s3 *= decay;      // step 1: decay\n    let kv = plane_reduce(s0 * k[c0] + s1 * k[c1] + s2 * k[c2] + s3 * k[c3]);\n    let delta = beta * (v_row - kv);                         // steps 2-3\n    s0 += k[c0] * delta; s1 += k[c1] * delta;                // step 4: update\n    s2 += k[c2] * delta; s3 += k[c3] * delta;\n    let out = plane_reduce(s0 * q[c0] + s1 * q[c1] + s2 * q[c2] + s3 * q[c3]);\n    state_row[c0] = s0; state_row[c1] = s1;                  // single global\n    state_row[c2] = s2; state_row[c3] = s3;                  // WRITE pass\n    out\n}".to_string(),
+        },
+        // ── workgroup-equals-plane-native-reduction — data-width workgroup → plane-sized (E) ──
+        // Source: riir-gpu deltanet_cubecl.rs L256-262 (scattered threadgroup
+        // access costs up to 3.2× effective bandwidth; the legacy kernel runs
+        // a 7-level strided smem tree per row — 1792 scattered smem round-
+        // trips per head; this kernel uses zero threadgroup memory: one cube
+        // is exactly one plane, so plane_sum reduces the whole dot natively)
+        // + L356-360 (the cube is exactly one plane, so plane_sum covers the
+        // FULL dot product — the Issue 610 smem tree existed only because
+        // the cube was 128 threads, i.e. 4 planes, and plane_sum caught just
+        // 1/4 of it) + L362-363 (plane_sum broadcasts, so every lane has it —
+        // no barrier, no thread-0 bottleneck, no smem hand-off) + L650-653.
+        // The Issue 610 bug is the cautionary tale: plane_sum silently
+        // covered 32 of 128 terms.
+        //
+        // Distinct from warp-shuffle-intrinsics-for-sub-warp-reduction (the
+        // shuffle-instead-of-smem rule for blocks ≤ 32 — this is the LAUNCH
+        // GEOMETRY corollary: size the workgroup so the condition holds by
+        // construction, compensating logical width via register blocking)
+        // and from single-plane-sufficient-reduction (the reduction-PLACEMENT
+        // decision — this is the workgroup-SIZING decision that makes the
+        // native path cover everything, plus the broadcast-for-free property).
+        KernelRule {
+            rule_id: "workgroup-equals-plane-native-reduction".to_string(),
+            gpu_concept: "size the workgroup to EXACTLY one hardware plane (e.g. 32 threads on Metal/CUDA) and compensate the lost logical width via register blocking (each lane holds width/plane elements) — the native shuffle reduction then covers the FULL logical reduction, broadcasts the result to every lane for free, and no threadgroup memory or barrier exists at all. This inverts the usual choice of sizing the workgroup to the data width (128 threads), which forces every full reduction to bridge plane boundaries through a strided shared-memory tree (up to 3.2× effective-bandwidth cost + ~2304 barriers per head); a reduction scoped smaller than the workgroup is also a silent-wrong-answer hazard (Issue 610: plane_sum caught 1/4 of the dot). Distinct from warp-shuffle-intrinsics-for-sub-warp-reduction (use shuffles when the block is already ≤ 32 — this is the launch-geometry corollary that makes it hold by construction) and from single-plane-sufficient-reduction (where to place a reduction — this is how to size the workgroup so the native path covers everything)".to_string(),
+            ref_shape: "// naive: workgroup sized to the data width (D=128 threads) — the\n// hardware shuffle reduction only covers 32 threads, so every full\n// reduction must bridge planes through shared memory + barriers\nfn dot_full_workgroup(x: &[f32; 128], y: &[f32; 128], smem: &mut [f32; 128],\n                      lane: usize) -> f32 {\n    smem[lane] = x[lane] * y[lane];\n    barrier();\n    // tree: 128 -> 64 -> 32 -> 16 -> 8 -> 4 -> 2 -> 1, one barrier per level\n    if lane < 64 { smem[lane] += smem[lane + 64]; }\n    barrier();\n    if lane < 32 { smem[lane] += smem[lane + 32]; }\n    barrier();\n    if lane < 16 { smem[lane] += smem[lane + 16]; }\n    barrier();\n    if lane < 8 { smem[lane] += smem[lane + 8]; }\n    barrier();\n    if lane < 4 { smem[lane] += smem[lane + 4]; }\n    barrier();\n    if lane < 2 { smem[lane] += smem[lane + 2]; }\n    barrier();\n    if lane < 1 { smem[0] += smem[1]; }\n    barrier();\n    smem[0] // visible to all only after the last barrier — and a shuffle\n}           // reduction called here would silently cover just 1/4".to_string(),
+            opt_pattern: "// optimized: workgroup sized to EXACTLY one plane (32 threads), each\n// lane register-blocking 4 elements — the native shuffle reduction\n// covers the full logical reduction and broadcasts for free\nfn dot_one_plane(x: &[f32; 128], y: &[f32; 128], lane: usize,\n                 plane_reduce: fn(f32) -> f32) -> f32 {\n    // lane owns the strided elements lane, lane+32, lane+64, lane+96\n    let partial = x[lane] * y[lane]\n        + x[lane + 32] * y[lane + 32]\n        + x[lane + 64] * y[lane + 64]\n        + x[lane + 96] * y[lane + 96];\n    // hardware shuffle reduces across the 32 lanes AND broadcasts the\n    // result back to every lane — no smem, no barrier, no thread-0 read\n    plane_reduce(partial)\n}".to_string(),
+        },
+        // ── smem-broadcast-scalar-then-parallel-scatter — serial leader scatter → broadcast + all-thread scatter (E) ──
+        // Source: riir-gpu deltanet_cubecl.rs L165-173 (the legacy recurrence
+        // kernel, Issue 616 fix: the original port did the ENTIRE state update
+        // S[row, :] += k[:] * delta_row serially in thread 0 — head_dim serial
+        // global memory writes per row, with all other threads idle; this was
+        // the single biggest bottleneck in both the cudarc and CubeCL
+        // forwards) + L174-180 (fix: thread 0 computes delta, broadcasts via
+        // smem[0], then ALL threads update their own column in parallel — 1
+        // global write per thread instead of head_dim serial writes).
+        //
+        // Distinct from broadcast-uniform-skip-reduce (the READ/reduce side —
+        // thread-uniform values are broadcast, not reduced; this is the WRITE
+        // side: broadcast the reduced scalar so the dependent SCATTER
+        // parallelizes) and from fan-out-shared-input-single-sync (N
+        // dispatches sharing one upload — this is intra-workgroup broadcast).
+        KernelRule {
+            rule_id: "smem-broadcast-scalar-then-parallel-scatter".to_string(),
+            gpu_concept: "after a workgroup-wide reduction, the single thread that holds the result must not also perform the entire dependent scatter — publishing the scalar through the already-reduced shared slot (one barrier) lets EVERY thread write its own column/element of the dependent update in parallel: 1 global write per thread instead of width serial writes from one thread with all others idle. The reduced slot doubles as the broadcast channel — the leader overwrites it after every lane has read the reduction result. Distinct from broadcast-uniform-skip-reduce (the read side — uniform values are broadcast, not reduced; this is the write side: broadcast the reduced scalar so the scatter parallelizes) and from fan-out-shared-input-single-sync (N dispatches sharing one host upload — this is intra-workgroup scalar fan-out)".to_string(),
+            ref_shape: "// naive: after the reduction, the one thread holding the result also\n// performs the entire dependent update — width serial global writes\n// with every other thread idle (the single biggest bottleneck in the\n// original DeltaNet forward port)\nfn update_serial_in_leader(state: &mut [f32; 128], k: &[f32; 128],\n                           kv: f32, v_row: f32, beta: f32, lane: usize) {\n    if lane == 0 {\n        let delta = beta * (v_row - kv); // only thread 0 has/uses delta\n        for col in 0..128 {\n            state[col] += k[col] * delta; // 128 SERIAL global writes;\n        }                              // 127 threads sit idle\n    }\n}".to_string(),
+            opt_pattern: "// optimized: the leader publishes the scalar through the already-\n// reduced slot; after ONE barrier every thread scatters its own\n// column — 1 global write per thread instead of width serial writes\nfn update_broadcast_then_scatter(state: &mut [f32; 128], k: &[f32; 128],\n                                 partial: f32, v_row: f32, beta: f32,\n                                 smem: &mut [f32], lane: usize,\n                                 plane_reduce: fn(f32) -> f32) {\n    let kv = plane_reduce(partial); // every lane receives the broadcast\n    if lane == 0 {\n        // leader computes the scalar ONCE and publishes it in the\n        // already-reduced slot (all lanes have consumed the reduction)\n        smem[0] = beta * (v_row - kv);\n    }\n    barrier(); // the single barrier of the whole update\n    let delta = smem[0]; // every thread reads the broadcast scalar\n    state[lane] += k[lane] * delta; // each thread writes its OWN column\n}".to_string(),
+        },
+        // ── token-flattened-elementwise-modulo-shared-weights — per-token dispatches → one flattened dispatch (D) ──
+        // Source: riir-gpu deltanet_cubecl.rs L922-941 (the batched beta/decay
+        // doc: the single-token kernel is pure per-head elementwise arithmetic
+        // with no cross-head or cross-token coupling, so batching is just a
+        // wider index space; prefill calls it once per token per DeltaNet
+        // layer — 128 x 48 = 6144 dispatches at P=128 — and each dispatch
+        // costs ~25 CPU allocations plus launch latency (Issue 638);
+        // collapsing them to 48 is the point) + L932-935 (layout: per-token
+        // buffers [p, n_head] row-major; a_log/dt_bias [n_head] per-head
+        // weights shared across tokens, indexed i % n_head) + L939-941
+        // (dispatch: 256-thread workgroups — unlike the single-token kernel,
+        // which uses one workgroup of n_head threads and would exceed the
+        // max workgroup size at p * n_head) + L991-993 (bit-identical to p
+        // sequential calls: every output element is an independent function
+        // of its own inputs).
+        //
+        // Distinct from batched-upcast-map (the pure wide-map instance — this
+        // adds the MIXED-ARITY layout: flat per-token buffers + modulo-indexed
+        // per-head weight tables in one kernel) and from merge-dispatches-
+        // into-single-compute-pass (pass merging of dependent dispatches —
+        // these were independent launches collapsed into one index space).
+        KernelRule {
+            rule_id: "token-flattened-elementwise-modulo-shared-weights".to_string(),
+            gpu_concept: "a per-token elementwise launch inside a prefill loop (P tokens × per-layer = thousands of dispatches, each paying ~25 host-side allocations + launch latency) collapses to ONE dispatch when the op has no cross-token coupling: flatten [p, n_head] into a single 1-D index space, index the per-token buffers flat (i), and consume the per-head weight tables via i % n_head — the weights repeat every n_head entries while the token buffers do not. Bit-identical to the sequential form by construction (every output element is an independent function of its own inputs). Also fixes the workgroup ceiling: the single-token kernel's one-workgroup-of-n_head-threads shape exceeds the max workgroup size at scale; the flattened form uses fixed 256-thread workgroups. Distinct from batched-upcast-map (pure wide elementwise map — this adds the mixed-arity modulo-indexed shared-weights layout) and from merge-dispatches-into-single-compute-pass (dependent dispatches in one pass — these were independent launches collapsed into one index space)".to_string(),
+            ref_shape: "// naive: one dispatch per token per layer — only the token changes,\n// but every launch pays ~25 CPU allocations + launch latency\n// (6144 dispatches at P=128, 48 heads; Issue 638)\nfn beta_decay_per_token(a_raw: &[f32], a_log: &[f32], dt_bias: &[f32],\n                        out: &mut [f32], p: usize, n_head: usize) {\n    for t in 0..p {\n        // one kernel launch per token:\n        for h in 0..n_head {\n            let a = a_raw[t * n_head + h] + dt_bias[h];\n            out[t * n_head + h] = a_log[h] * softplus(a);\n        }\n    }\n}".to_string(),
+            opt_pattern: "// optimized: tokens × heads flattened into ONE 1-D index space —\n// per-token buffers index flat, per-head weight tables index modulo\nfn beta_decay_flattened(a_raw: &[f32], a_log: &[f32], dt_bias: &[f32],\n                        out: &mut [f32], total: usize, n_head: usize) {\n    // one dispatch, fixed 256-thread workgroups (the per-token form's\n    // one-workgroup-of-n_head-threads shape exceeds the wg max at scale)\n    for i in 0..total {\n        // i decomposes as (token, head); head = i % n_head because the\n        // per-head weights REPEAT every n_head entries while the flat\n        // per-token buffers do not\n        let h = i % n_head;\n        let a = a_raw[i] + dt_bias[h];\n        out[i] = a_log[h] * softplus(a);\n    } // bit-identical: every output is an independent fn of its own inputs\n}".to_string(),
+        },
+        // ── fused-conv-state-shift-dot-silu — three passes + intermediates → one in-place kernel (C) ──
+        // Source: riir-gpu deltanet_cubecl.rs L398-448 (the decode conv1d
+        // kernel: shift conv state left by 1, append input; depthwise dot
+        // out[ch] = Σ_k state[ch,k]·weight[ch,k]; SiLU out = x·sigmoid(x) —
+        // all in one kernel, input modified in-place, conv_state sliding
+        // window modified in-place, zero intermediate buffers, state
+        // persists in GPU global memory across decode steps). One thread per
+        // channel; the window shift is a ks-1-element in-place slide.
+        //
+        // Distinct from stateful-shift-via-cat-prefix (the host-side
+        // allocating variant — this is the in-kernel in-place slide fused
+        // with the dot + activation) and from fused-activation-quantize-
+        // for-gemv-consumer (activation fused for a consumer — here the
+        // activation is fused into the stateful conv PRODUCER, enabling
+        // nonlinearity-forces-raw-input-buffers on the batched side).
+        KernelRule {
+            rule_id: "fused-conv-state-shift-dot-silu".to_string(),
+            gpu_concept: "a decode-time stateful conv (sliding window + depthwise dot + activation) is ONE kernel per step, not three passes with intermediate buffers: each channel's thread shifts the sliding window IN PLACE (a ks-1 element slide, no new window allocation), computes the depthwise dot directly from the freshly shifted state, applies the activation, and writes the result back over the input buffer. Zero intermediate buffers, one dispatch, and the window state persists in global memory across decode steps — the host never touches it. Distinct from stateful-shift-via-cat-prefix (the host-side allocating window update — this is the in-kernel in-place slide fused with the dot + activation) and from fused-activation-quantize-for-gemv-consumer (activation fused at the consumer edge — here it is fused into the stateful producer; note the batched/prefill form CANNOT alias in-place, see nonlinearity-forces-raw-input-buffers)".to_string(),
+            ref_shape: "// naive: three passes with two intermediate buffers — shift the\n// window into a fresh buffer, convolve from it, activate into another\nfn conv1d_three_passes(conv_state: &[f32], input: &[f32], weight: &[f32],\n                       shifted: &mut [f32], out: &mut [f32], ks: usize) {\n    // pass 1: shift the sliding window (separate kernel + buffer)\n    for k in 0..ks - 1 { shifted[k] = conv_state[k + 1]; }\n    shifted[ks - 1] = input[0];\n    // pass 2: depthwise dot from the shifted window\n    let mut sum = 0.0f32;\n    for k in 0..ks { sum += shifted[k] * weight[k]; }\n    // pass 3: activation into the output buffer\n    out[0] = sum * sigmoid(sum);\n    // two intermediate buffers + three dispatches per channel per step\n}".to_string(),
+            opt_pattern: "// optimized: ONE kernel shifts the window IN PLACE, convolves from\n// the freshly shifted state, applies SiLU, writes back over the\n// input — zero intermediates, state persists across decode steps\nfn conv1d_shift_dot_silu_inplace(conv_state: &mut [f32], input: &mut [f32],\n                                 weight: &[f32], ks: usize) {\n    // step 1: in-place slide (no new window allocation)\n    for k in 0..ks - 1 { conv_state[k] = conv_state[k + 1]; }\n    conv_state[ks - 1] = input[0];\n    // step 2: depthwise dot directly from the shifted window\n    let mut sum = 0.0f32;\n    for k in 0..ks { sum += conv_state[k] * weight[k]; }\n    // step 3: SiLU written back over the input in place\n    input[0] = sum * sigmoid(sum);\n}".to_string(),
+        },
+        // ── softplus-piecewise-saturation-clamp — direct ln(1+exp) → piecewise ±20 clamp (B) ──
+        // Source: riir-gpu deltanet_cubecl.rs L863-874 (the beta/decay kernel:
+        // g = a_log[h] · softplus(a_raw + dt_bias); softplus with clamping
+        // (matches CPU: x > 20 → x, x < -20 → 0)) + the batched instance at
+        // L970-980. The clamp thresholds are pinned to the CPU reference so
+        // GPU and CPU stay bit-comparable — and the input feeds a decay
+        // gate exp(g) applied to a PERSISTENT recurrent state, where an inf
+        // from overflow poisons the state forever.
+        //
+        // Distinct from expm1-for-near-zero-exp-minus-one (stable exp(x)−1
+        // NEAR ZERO — this is the FAR-tail saturation of ln(1+e^x)) and
+        // exp2-log2-base2 (base conversion — this is domain clamping).
+        KernelRule {
+            rule_id: "softplus-piecewise-saturation-clamp".to_string(),
+            gpu_concept: "softplus ln(1 + exp(x)) overflows (exp → inf → ln(inf)) for large x and wastes precision for very negative x — evaluate the piecewise form: return x for x > 20 (softplus equals x to f32 precision), 0 for x < -20 (the exponential underflows the sum), and the transcendental only inside the safe band. Pin the thresholds to the CPU reference implementation so GPU and CPU outputs stay bit-comparable under test; when the result feeds an exp() decay gate on a persistent recurrent state, the unclamped form does not just lose precision — one inf poisons the state permanently. Distinct from expm1-for-near-zero-exp-minus-one (cancellation near zero — this is far-tail saturation) and exp2-log2-base2 (base-2 conversion — this is domain clamping)".to_string(),
+            ref_shape: "// naive: ln(1 + exp(x)) evaluated directly — exp overflows to inf\n// for x ≳ 88 (ln(inf) = inf poisons a PERSISTENT recurrent state\n// through the decay gate exp(g)), and wastes cycles for very negative x\nfn softplus_naive(x: f32) -> f32 {\n    (1.0f32 + x.exp()).ln()\n}".to_string(),
+            opt_pattern: "// optimized: piecewise saturation — x for x > 20 (softplus == x to\n// f32 precision), 0 for x < -20, transcendental only in the safe\n// band; thresholds pinned to the CPU reference for bit-comparability\nfn softplus_clamped(x: f32) -> f32 {\n    if x > 20.0f32 {\n        x\n    } else if x < -20.0f32 {\n        0.0f32\n    } else {\n        (1.0f32 + x.exp()).ln()\n    }\n}".to_string(),
+        },
+        // ── reverse-running-decay-weight — materialized decay matrix → running scalar (G) ──
+        // Source: riir-gpu deltanet_chunked_cubecl.rs L683-712 (the intra-chunk
+        // output kernel: loop over j from token downto 0, accumulating
+        // inter_decay incrementally; weight starts at 1 — inter_decay[t,t] =
+        // empty product = 1; update weight for j-1: inter_decay[t,j-1] =
+        // α[j] · inter_decay[t,j], i.e. multiply AFTER use) + the loop
+        // contract at L640-643. The intra-chunk pairwise decay matrix
+        // inter_decay[t,j] = Π_{i=j+1..t} α_i is never materialized: the
+        // consumer loop carries ONE scalar, iterating j DOWNWARD so the
+        // empty product anchors the recursion at j == t.
+        //
+        // The exact INVERSE of cumsum-gate-to-decay-matrix and pairwise-
+        // distance-decay-matrix (both MATERIALIZE the matrix for a batched
+        // matmul — this dematerializes it into the consumer's loop when the
+        // consumer is itself a streaming accumulation). Distinct from
+        // chunkwise-parallel-recurrence (the intra/inter chunk split — this
+        // is the decay computation strategy INSIDE the intra part).
+        KernelRule {
+            rule_id: "reverse-running-decay-weight".to_string(),
+            gpu_concept: "an intra-chunk pairwise decay matrix inter_decay[t,j] = Π_{i=j+1..t} α_i does not need to exist as a matrix when its consumer is a streaming accumulation: iterate j from t DOWNWARD carrying one running scalar — start at 1 (the empty product inter_decay[t,t]), consume the weight for position j, then multiply by α[j] to obtain the weight for j-1. O(C) multiplies per token instead of O(C) per (t,j) pair (or a cumsum+exp materialization pass), zero intermediate memory, and the downward direction is load-bearing — it anchors the empty product so multiply-after-use composes correctly. Distinct from cumsum-gate-to-decay-matrix / pairwise-distance-decay-matrix (the MATERIALIZE-the-matrix approach feeding a batched matmul — this is its dematerialized inverse when the consumer streams) and from chunkwise-parallel-recurrence (the chunk split itself — this is the decay strategy inside the intra-chunk part)".to_string(),
+            ref_shape: "// naive: materialize the pairwise intra-chunk decay matrix — O(C)\n// multiplies per (t, j) pair (or a cumsum + exp pass), plus a second\n// pass to consume it\nfn intra_with_decay_matrix(q_t: &[f32], k: &[f32], v: &[f32], alpha: &[f32],\n                           beta: &[f32], d: usize, t: usize, c: usize,\n                           inter_decay: &mut [f32]) -> Vec<f32> {\n    // pass 1: build the [C, C] lower-triangular decay matrix\n    for tt in 0..c {\n        for j in 0..=tt {\n            let mut w = 1.0f32;\n            for i in (j + 1)..=tt { w *= alpha[i]; } // O(C) per pair\n            inter_decay[tt * c + j] = w;\n        }\n    }\n    // pass 2: consume it\n    let mut out = vec![0.0f32; d];\n    for j in 0..=t {\n        let scale = inter_decay[t * c + j] * beta[j];\n        let mut qv = 0.0f32;\n        for dd in 0..d { qv += q_t[dd] * v[j * d + dd]; }\n        for dd in 0..d { out[dd] += scale * qv * k[j * d + dd]; }\n    }\n    out\n}".to_string(),
+            opt_pattern: "// optimized: NO matrix — the consumer loop runs j from t DOWN to 0\n// with a single running scalar; the empty product (= 1 at j == t)\n// anchors the recursion and each step multiplies α[j] AFTER use\nfn intra_with_running_weight(q_t: &[f32], k: &[f32], v: &[f32], alpha: &[f32],\n                             beta: &[f32], d: usize, t: usize) -> Vec<f32> {\n    let mut out = vec![0.0f32; d];\n    let mut weight = 1.0f32; // inter_decay[t, t] = empty product\n    for step in 0..=t {\n        let j = t - step; // iterate DOWNWARD — anchor at the empty product\n        let mut qv = 0.0f32;\n        for dd in 0..d { qv += q_t[dd] * v[j * d + dd]; }\n        let scale = weight * beta[j]; // weight IS inter_decay[t, j] here\n        for dd in 0..d { out[dd] += scale * qv * k[j * d + dd]; }\n        // decay the weight for the NEXT (j-1) iteration — after use:\n        // inter_decay[t, j-1] = alpha[j] * inter_decay[t, j]\n        weight *= alpha[j];\n    }\n    out\n}".to_string(),
+        },
+        // ── split-decay-outputs-eliminate-readback — packed layout → consumer-shaped outputs (D) ──
+        // Source: riir-gpu deltanet_chunked_cubecl.rs L342-349 (the split
+        // chunk-decay doc: writes per-token decay [n_head, C] and total
+        // decay [n_head] to SEPARATE buffers — no readback needed for
+        // production use; this avoids the [n_head, C+1] packed layout the
+        // original produces, which requires a CPU readback + re-upload to
+        // extract the two components; the split variant writes directly to
+        // the layouts expected by DeltaS ([n_head, C]) and StateTransition
+        // ([n_head])). The pipeline test L1949-1969 documents the exact
+        // readback hack the split variant eliminates — and the wrong-offset
+        // hazard ("the DeltaS kernel reads at head*C + j, which would read
+        // total_decay of head h-1").
+        //
+        // Distinct from per-layer-strided-grad-destination (the backward
+        // sibling — consumer-selected destination STRIDE within one
+        // buffer; this is consumer-selected buffer SPLIT eliminating a host
+        // round trip) and from defer-readback-until-after-submit / batched-
+        // downloads-single-sync-cycle (both MITIGATE readback cost/timing —
+        // this ELIMINATES the readback by producing consumer shapes).
+        KernelRule {
+            rule_id: "split-decay-outputs-eliminate-readback".to_string(),
+            gpu_concept: "compact packing of heterogeneous outputs into one buffer (total_decay stashed at index C of a [H, C+1] row) is a pessimization when the downstream consumers read different shapes ([H, C] and [H]) — the packed layout forces a device→host→device readback-unpack-reupload, and a consumer reading the packed buffer directly reads the WRONG offset (total_decay of head h-1). Write each component directly into the buffer shape its consumer reads — one kernel, two output buffers, the host round trip disappears entirely. Packing elegance loses to consumer layout: optimize the boundary, not the buffer count. Distinct from per-layer-strided-grad-destination (consumer-selected stride within one buffer — this is consumer-selected buffer SPLIT) and from defer-readback-until-after-submit / batched-downloads-single-sync-cycle (both mitigate readback timing/cost — this eliminates the readback by producing consumer shapes at the source)".to_string(),
+            ref_shape: "// naive: pack both outputs into ONE compact [H, C+1] buffer — but\n// the two consumers read [H, C] and [H] shapes, so the host must\n// read the packed buffer back, unpack it, and re-upload two buffers\nfn chunk_decay_packed(alpha: &[f32], packed: &mut [f32], h: usize, c: usize,\n                      per_token: &mut [f32], total: &mut [f32],\n                      host_copy: &mut Vec<f32>) {\n    for hh in 0..h {\n        for j in 0..c {\n            let mut w = 1.0f32;\n            for i in (j + 1)..c { w *= alpha[hh * c + i]; }\n            packed[hh * (c + 1) + j] = w;\n        }\n        let mut t = 1.0f32;\n        for i in 0..c { t *= alpha[hh * c + i]; }\n        packed[hh * (c + 1) + c] = t; // total stashed at index C\n    }\n    // consumers need [H, C] and [H]: device -> host -> device round trip\n    host_copy.clear();\n    host_copy.extend_from_slice(packed);\n    for hh in 0..h {\n        for j in 0..c { per_token[hh * c + j] = host_copy[hh * (c + 1) + j]; }\n        total[hh] = host_copy[hh * (c + 1) + c];\n    }\n}".to_string(),
+            opt_pattern: "// optimized: write each component DIRECTLY into the buffer shape its\n// consumer reads — one kernel, two output buffers, no readback\nfn chunk_decay_split(alpha: &[f32], per_token: &mut [f32], total: &mut [f32],\n                     h: usize, c: usize) {\n    for hh in 0..h {\n        let mut t = 1.0f32;\n        for i in 0..c { t *= alpha[hh * c + i]; }\n        total[hh] = t; // [H] — StateTransition's shape\n        for j in 0..c { // [H, C] — DeltaS's shape\n            let mut w = 1.0f32;\n            for i in (j + 1)..c { w *= alpha[hh * c + i]; }\n            per_token[hh * c + j] = w;\n        }\n    } // compact packing was a pessimization: it broke both consumer\n}     // layouts and forced the host round trip".to_string(),
+        },
+        // ── carry-dual-layout-dead-slot — post-hoc conversion kernel → parameterized producer (L) ──
+        // Source: riir-gpu deltanet_chunked_cubecl.rs L77-85 (carry_stride: the
+        // per-channel stride in the carry buffer — kernel_size - 1 is the
+        // original chunked-carry layout; kernel_size is the conv_state layout
+        // (the full ks-wide sliding window; the chunked kernel reads/writes
+        // positions 1..ks-1, leaving position 0 untouched — it holds a stale
+        // value that the next decode's shift overwrites before use); set via
+        // carry_idx_offset) + L98 (carry_off = ch · carry_stride +
+        // carry_idx_offset). One kernel, two output layouts, two scalar
+        // params — the prefill carry is written directly into the decode
+        // path's native conv_state, no conversion pass between prefill and
+        // decode.
+        //
+        // Distinct from per-layer-strided-grad-destination (consumer-selected
+        // destinations via Option dispatch — this is a PARAMETERIZED producer
+        // writing consumer-native layout with a provably-dead slot) and
+        // alignment-gated-zero-copy-view (view gating — the dead-slot
+        // tolerance by consumer semantics has no analogue there).
+        KernelRule {
+            rule_id: "carry-dual-layout-dead-slot".to_string(),
+            gpu_concept: "when a producer's output feeds a consumer with a different but overlapping layout, parameterize the producer's write stride + index offset (two scalars) instead of adding a conversion pass: the prefill chunk-carry can be written compact [ch, ks-1] OR directly into the decode path's [ch, ks] sliding-window layout from the same kernel. The conv_state variant leaves slot 0 unwritten (stale garbage) — safely, because the decode consumer's shift-left provably overwrites slot 0 before any read. The dead-slot tolerance is a consumer-semantics proof, not a hope: the next decode's shift writes every slot it later reads. Distinct from per-layer-strided-grad-destination (runtime Option-selected destinations — this is one parameterized producer writing consumer-native layout) and from alignment-gated-zero-copy-view (gating a view — the dead-slot-tolerance-by-consumer-semantics element is new)".to_string(),
+            ref_shape: "// naive: prefill finishes with a compact [ch, ks-1] carry; before\n// decode starts, a separate conversion kernel copies it into the\n// decode path's [ch, ks] sliding-window layout\nfn convert_carry_for_decode(compact: &[f32], conv_state: &mut [f32],\n                            conv_dim: usize, ks_m1: usize) {\n    // an extra dispatch + pass over the carry between prefill and decode\n    for ch in 0..conv_dim {\n        for j in 0..ks_m1 {\n            conv_state[ch * (ks_m1 + 1) + 1 + j] = compact[ch * ks_m1 + j];\n        }\n    }\n}".to_string(),
+            opt_pattern: "// optimized: the prefill producer is parameterized (stride + offset)\n// to write the decode consumer's native layout directly; slot 0 is\n// left stale — provably safe because the decode shift overwrites\n// it before any read\nfn carry_written_in_consumer_layout(carry: &mut [f32], input: &[f32],\n                                    conv_dim: usize, c: usize, ks_m1: usize,\n                                    carry_stride: usize, carry_idx_offset: usize) {\n    let window_start = c.saturating_sub(ks_m1);\n    for token in window_start..c {\n        for ch in 0..conv_dim {\n            let slot = token - window_start;\n            // carry_stride=ks-1, offset=0 → compact layout;\n            // carry_stride=ks,  offset=1 → decode's conv_state (slot 0\n            // left stale — the decode shift overwrites it before use)\n            carry[ch * carry_stride + carry_idx_offset + slot] =\n                input[token * conv_dim + ch];\n        }\n    } // SAME kernel, two layouts — no conversion pass at the boundary\n}".to_string(),
+        },
+        // ── nonlinearity-forces-raw-input-buffers — in-place widening trap → raw RO + WO (D) ──
+        // Source: riir-gpu deltanet_chunked_cubecl.rs L27-36 (the chunked conv1d
+        // doc: the single-token kernel shifts conv_state, appends input,
+        // convolves, applies SiLU — all in-place on the input buffer; the
+        // chunked kernel processes C tokens in one dispatch; the KEY
+        // CORRECTNESS constraint: token t's convolution needs the RAW
+        // (pre-SiLU) inputs of tokens t-1..t-3 — if those were overwritten
+        // in-place (as the single-token kernel does), the convolution would
+        // read SiLU'd values, INCORRECT — so the chunked kernel uses
+        // SEPARATE read-only input + write-only output buffers) + L43-47
+        // (the carry holds RAW inputs, updated in-place for the next chunk).
+        //
+        // The negative space of inplace-output-alias (WHEN aliasing works —
+        // this is when it CANNOT): a nonlinearity between producer and
+        // consumer breaks the in-place trick under batching. Distinct from
+        // chunkwise-parallel-recurrence (the chunking shape — this is the
+        // buffer-contract that enables it when nonlinearity intervenes).
+        KernelRule {
+            rule_id: "nonlinearity-forces-raw-input-buffers".to_string(),
+            gpu_concept: "a sequential kernel's in-place trick (write the activated output back over its own input) is INCOMPATIBLE with batched/widened execution whenever a nonlinearity sits between the producer and a windowed consumer: later tokens' convolution windows read earlier tokens' POST-activation values — silently wrong, same dtype, no error. The batched form needs separate read-only RAW inputs + write-only outputs, and the inter-chunk carry must also hold RAW values for the same reason. This is the negative space of in-place aliasing: before widening a sequential in-place kernel's grid over its sequence axis, check whether any consumer reads a value the nonlinearity would have overwritten. Distinct from inplace-output-alias (when aliasing WORKS — this is when it cannot) and from chunkwise-parallel-recurrence (the chunking shape — this is the buffer contract that makes chunking correct when nonlinearity intervenes)".to_string(),
+            ref_shape: "// tempting-but-wrong: reuse the sequential kernel's in-place trick\n// and just widen the grid over tokens — token t+1's convolution\n// window then reads token t's POST-activation value (the\n// nonlinearity intervened between producer and windowed consumer)\nfn chunked_inplace_wrong(input: &mut [f32], weight: &[f32], conv_dim: usize,\n                         ks: usize, c: usize) {\n    for token in 0..c {\n        let mut sum = 0.0f32;\n        for k in 0..ks {\n            let pos = token as isize - ks as isize + 1 + k as isize;\n            // reads NEIGHBOR tokens' inputs — already overwritten by SiLU\n            sum += input[pos.max(0) as usize * conv_dim] * weight[k];\n        }\n        input[token * conv_dim] = sum * sigmoid(sum); // clobbers RAW value\n    } // silently wrong: same dtype, no error, post-activation history\n}".to_string(),
+            opt_pattern: "// optimized (correctness-enabling): separate read-only raw inputs +\n// write-only outputs — the raw window stays pristine for ALL\n// consumers inside the chunk; the carry holds RAW values for the next\nfn chunked_raw_buffers(input: &[f32], output: &mut [f32], weight: &[f32],\n                       carry: &mut [f32], conv_dim: usize, ks: usize,\n                       c: usize) {\n    let ks_m1 = ks - 1;\n    for token in 0..c {\n        let mut sum = 0.0f32;\n        for k in 0..ks {\n            let pos = token as isize - ks_m1 as isize + k as isize;\n            let val = if pos < 0 {\n                // previous chunk's RAW tail\n                carry[(pos + ks_m1 as isize) as usize]\n            } else {\n                input[pos as usize * conv_dim] // RAW — never overwritten\n            };\n            sum += val * weight[k];\n        }\n        output[token * conv_dim] = sum * sigmoid(sum); // write-only out\n    }\n}".to_string(),
+        },
     ])
 }
 
@@ -3175,7 +3462,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "snapshot-transient-grad-for-deferred-download",
         ],
     ),
-    // B: Compute patterns (32 rules)
+    // B: Compute patterns (33 rules)
     (
         KernelCategory::Compute,
         "B: compute",
@@ -3212,9 +3499,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "dual-accumulator-single-reduction-sweep",
             "monotone-transform-elision-under-argmax",
             "tree-reduction-depth-over-sequential-accumulate",
+            "softplus-piecewise-saturation-clamp",
         ],
     ),
-    // C: Fusion patterns (18 rules)
+    // C: Fusion patterns (19 rules)
     (
         KernelCategory::Fusion,
         "C: fusion",
@@ -3237,9 +3525,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "dual-grad-same-pass",
             "fan-out-shared-input-single-sync",
             "fuse-sibling-target-grads-single-kernel",
+            "fused-conv-state-shift-dot-silu",
         ],
     ),
-    // D: Dispatch patterns (23 rules)
+    // D: Dispatch patterns (26 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -3267,9 +3556,12 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "staging-packed-uniforms-encoder-ordered-copies",
             "identical-uniforms-share-single-slot",
             "per-layer-strided-grad-destination",
+            "token-flattened-elementwise-modulo-shared-weights",
+            "split-decay-outputs-eliminate-readback",
+            "nonlinearity-forces-raw-input-buffers",
         ],
     ),
-    // E: Parallelism patterns (9 rules)
+    // E: Parallelism patterns (11 rules)
     (
         KernelCategory::Parallelism,
         "E: parallelism",
@@ -3283,6 +3575,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "split-reduction-scalar-prepass",
             "single-plane-sufficient-reduction",
             "broadcast-uniform-skip-reduce",
+            "workgroup-equals-plane-native-reduction",
+            "smem-broadcast-scalar-then-parallel-scatter",
         ],
     ),
     // F: Flash-attention tiling (10 rules)
@@ -3302,7 +3596,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "two-stage-mask-softmax-then-conv",
         ],
     ),
-    // G: Linear-attention recurrence (17 rules)
+    // G: Linear-attention recurrence (19 rules)
     (
         KernelCategory::LinearAttnRecurrence,
         "G: linear-attn recurrence",
@@ -3324,6 +3618,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "momentum-gated-memory-recurrence",
             "current-token-bonus-read-before-update",
             "wkv-logsumexp-three-channel-state",
+            "row-owned-register-blocked-recurrence",
+            "reverse-running-decay-weight",
         ],
     ),
     // H: MoE dispatch + backward pass (9 rules)
@@ -3376,7 +3672,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "vector-width-pow2-sweep",
         ],
     ),
-    // L: Conv-as-GEMM + memory layout (5 rules)
+    // L: Conv-as-GEMM + memory layout (6 rules)
     (
         KernelCategory::ConvGemmLayout,
         "L: conv-as-GEMM + layout",
@@ -3386,6 +3682,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "cube-count-bounded-batch-pack",
             "stride-align-vectorization-key",
             "anchor-shape-bucketing",
+            "carry-dual-layout-dead-slot",
         ],
     ),
     // M: Kernel parametric polymorphism (5 rules)
@@ -3510,8 +3807,8 @@ mod tests {
         // Batch 25 (5): riir-gpu production kernels — device-side-argmax-minimal-download, monotone-transform-elision-under-argmax, fan-out-shared-input-single-sync, hot-swap-weights-preserve-autotune-caches, tree-reduction-depth-over-sequential-accumulate (gemma2_cubecl/ + gemma4_cubecl/ — the Gemma cluster: GPU decode loop + dispatch helpers + KV cache + weight hot-swap).
         // Batch 26 (8): riir-gpu production kernels — per-slot-uniform-buffer-write-ordering, derive-params-from-global-invocation-id, merge-dispatches-into-single-compute-pass, batched-downloads-single-sync-cycle, chunk-encoder-submits-below-driver-limit, prebuilt-bind-groups-fixed-buffer-combos, host-cache-immutable-device-weights, defer-readback-until-after-submit (forward/ + buffer.rs — the wgpu forward-orchestration cluster: uniform hazards, pass merging, submission chunking, download batching, bind-group pre-building, host caching, deferred readback).
         // Batch 27 (6): riir-gpu production kernels — staging-packed-uniforms-encoder-ordered-copies, identical-uniforms-share-single-slot, persistent-zeros-source-encoder-copy-clear, fuse-sibling-target-grads-single-kernel, per-layer-strided-grad-destination, snapshot-transient-grad-for-deferred-download (backward/ + backward_dflash/ — the backward-pass orchestration clusters: staging-packed uniform distribution, the idempotent-write exemption, encoder-ordered zero clears, sibling-target grad fusion, consumer-selected grad destinations, transient snapshotting for deferred readback).
-        // Total: 183.
-        assert_eq!(corpus.entries.len(), 183, "batches 1-27 should have 183 rules");
+        // Total: 193.
+        assert_eq!(corpus.entries.len(), 193, "batches 1-28 should have 193 rules");
     }
 
     #[test]
@@ -4521,6 +4818,56 @@ mod tests {
         assert!(concepts.contains(&"a gradient needed host-side often lives in a temp buffer that later dispatches in the same encoder overwrite — snapshot it at the correct dataflow point with an encoder-ordered copy into a persistent per-adapter buffer (the copy lands exactly between the producing dispatch and the overwrite), then perform the actual host download after the encoder is submitted. The snapshot pins the value's lifetime; the deferral keeps the submission single. Distinct from defer-readback-until-after-submit (the TIMING rule — read after submit): this is the LIFETIME half, without which the deferred read finds the value already destroyed; composes with persistent-zeros-source-encoder-copy-clear (same timeline trick, value pinning vs clearing)"));
     }
 
+    #[test]
+    fn batch28_rules_present() {
+        // Verify the 10 batch-28 rules across B/C/D/E/G/L.
+        let corpus = build_kernel_seed_corpus();
+        let ids: Vec<&str> =
+            corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        // G (2 new): the deltanet decode/prefill recurrence family
+        assert!(ids.contains(&"row-owned-register-blocked-recurrence"), "row owned register blocked recurrence");
+        assert!(ids.contains(&"reverse-running-decay-weight"), "reverse running decay weight");
+        // E (2 new): the plane/reduction + broadcast-scatter family
+        assert!(ids.contains(&"workgroup-equals-plane-native-reduction"), "workgroup equals plane native reduction");
+        assert!(ids.contains(&"smem-broadcast-scalar-then-parallel-scatter"), "smem broadcast scalar then parallel scatter");
+        // D (3 new): the dispatch-shape family
+        assert!(ids.contains(&"token-flattened-elementwise-modulo-shared-weights"), "token flattened elementwise modulo shared weights");
+        assert!(ids.contains(&"split-decay-outputs-eliminate-readback"), "split decay outputs eliminate readback");
+        assert!(ids.contains(&"nonlinearity-forces-raw-input-buffers"), "nonlinearity forces raw input buffers");
+        // C (1 new), B (1 new), L (1 new)
+        assert!(ids.contains(&"fused-conv-state-shift-dot-silu"), "fused conv state shift dot silu");
+        assert!(ids.contains(&"softplus-piecewise-saturation-clamp"), "softplus piecewise saturation clamp");
+        assert!(ids.contains(&"carry-dual-layout-dead-slot"), "carry dual layout dead slot");
+    }
+
+    #[test]
+    fn batch28_deltanet_concepts_covered() {
+        // Verify the batch-28 deltanet CubeCL cluster concepts.
+        let corpus = build_kernel_seed_corpus();
+        let concepts: Vec<&str> =
+            corpus.entries.iter().map(|e| e.gpu_concept.as_str()).collect();
+        // G: row-owned-register-blocked-recurrence (riir-gpu deltanet_cubecl.rs L255-294 + L264-267 + L338-386)
+        assert!(concepts.contains(&"rows of a decode-time recurrent state matrix are independent within one step — decompose the per-head state ownership to (head, row) granularity so each workgroup OWNS a row: load it into registers once (each lane register-blocking d/plane strided columns), run every algebra step (decay, retrieve, delta, update, readout) on registers, and write it back exactly once. The memory-bound recurrence drops from 4 global read + 2 write passes over S per step to 1 read + 1 write (~3× cut of the gating quantity), threadgroup traffic and barriers drop to zero, and n_head cubes become n_head × head_dim cubes (32× more resident workgroups for latency hiding). Distinct from chunkwise-parallel-recurrence / recurrent-vs-chunk-dispatch (sequence-axis parallelism for prefill — this is state-matrix parallelism within one decode step) and from row-tile-amortize-input-load (input-load amortization in a GEMV — the owned tile here is the persistent state itself)"), "row-owned concept");
+        // E: workgroup-equals-plane-native-reduction (riir-gpu deltanet_cubecl.rs L256-262 + L356-363 + L650-653)
+        assert!(concepts.contains(&"size the workgroup to EXACTLY one hardware plane (e.g. 32 threads on Metal/CUDA) and compensate the lost logical width via register blocking (each lane holds width/plane elements) — the native shuffle reduction then covers the FULL logical reduction, broadcasts the result to every lane for free, and no threadgroup memory or barrier exists at all. This inverts the usual choice of sizing the workgroup to the data width (128 threads), which forces every full reduction to bridge plane boundaries through a strided shared-memory tree (up to 3.2× effective-bandwidth cost + ~2304 barriers per head); a reduction scoped smaller than the workgroup is also a silent-wrong-answer hazard (Issue 610: plane_sum caught 1/4 of the dot). Distinct from warp-shuffle-intrinsics-for-sub-warp-reduction (use shuffles when the block is already ≤ 32 — this is the launch-geometry corollary that makes it hold by construction) and from single-plane-sufficient-reduction (where to place a reduction — this is how to size the workgroup so the native path covers everything)"), "plane-sized workgroup concept");
+        // E: smem-broadcast-scalar-then-parallel-scatter (riir-gpu deltanet_cubecl.rs L165-180, Issue 616)
+        assert!(concepts.contains(&"after a workgroup-wide reduction, the single thread that holds the result must not also perform the entire dependent scatter — publishing the scalar through the already-reduced shared slot (one barrier) lets EVERY thread write its own column/element of the dependent update in parallel: 1 global write per thread instead of width serial writes from one thread with all others idle. The reduced slot doubles as the broadcast channel — the leader overwrites it after every lane has read the reduction result. Distinct from broadcast-uniform-skip-reduce (the read side — uniform values are broadcast, not reduced; this is the write side: broadcast the reduced scalar so the scatter parallelizes) and from fan-out-shared-input-single-sync (N dispatches sharing one host upload — this is intra-workgroup scalar fan-out)"), "broadcast-then-scatter concept");
+        // D: token-flattened-elementwise-modulo-shared-weights (riir-gpu deltanet_cubecl.rs L922-993, Issue 637 T5/638)
+        assert!(concepts.contains(&"a per-token elementwise launch inside a prefill loop (P tokens × per-layer = thousands of dispatches, each paying ~25 host-side allocations + launch latency) collapses to ONE dispatch when the op has no cross-token coupling: flatten [p, n_head] into a single 1-D index space, index the per-token buffers flat (i), and consume the per-head weight tables via i % n_head — the weights repeat every n_head entries while the token buffers do not. Bit-identical to the sequential form by construction (every output element is an independent function of its own inputs). Also fixes the workgroup ceiling: the single-token kernel's one-workgroup-of-n_head-threads shape exceeds the max workgroup size at scale; the flattened form uses fixed 256-thread workgroups. Distinct from batched-upcast-map (pure wide elementwise map — this adds the mixed-arity modulo-indexed shared-weights layout) and from merge-dispatches-into-single-compute-pass (dependent dispatches in one pass — these were independent launches collapsed into one index space)"), "token-flattened concept");
+        // C: fused-conv-state-shift-dot-silu (riir-gpu deltanet_cubecl.rs L398-448)
+        assert!(concepts.contains(&"a decode-time stateful conv (sliding window + depthwise dot + activation) is ONE kernel per step, not three passes with intermediate buffers: each channel's thread shifts the sliding window IN PLACE (a ks-1 element slide, no new window allocation), computes the depthwise dot directly from the freshly shifted state, applies the activation, and writes the result back over the input buffer. Zero intermediate buffers, one dispatch, and the window state persists in global memory across decode steps — the host never touches it. Distinct from stateful-shift-via-cat-prefix (the host-side allocating window update — this is the in-kernel in-place slide fused with the dot + activation) and from fused-activation-quantize-for-gemv-consumer (activation fused at the consumer edge — here it is fused into the stateful producer; note the batched/prefill form CANNOT alias in-place, see nonlinearity-forces-raw-input-buffers)"), "fused conv concept");
+        // B: softplus-piecewise-saturation-clamp (riir-gpu deltanet_cubecl.rs L863-874 + L970-980)
+        assert!(concepts.contains(&"softplus ln(1 + exp(x)) overflows (exp → inf → ln(inf)) for large x and wastes precision for very negative x — evaluate the piecewise form: return x for x > 20 (softplus equals x to f32 precision), 0 for x < -20 (the exponential underflows the sum), and the transcendental only inside the safe band. Pin the thresholds to the CPU reference implementation so GPU and CPU outputs stay bit-comparable under test; when the result feeds an exp() decay gate on a persistent recurrent state, the unclamped form does not just lose precision — one inf poisons the state permanently. Distinct from expm1-for-near-zero-exp-minus-one (cancellation near zero — this is far-tail saturation) and exp2-log2-base2 (base-2 conversion — this is domain clamping)"), "softplus clamp concept");
+        // G: reverse-running-decay-weight (riir-gpu deltanet_chunked_cubecl.rs L640-712)
+        assert!(concepts.contains(&"an intra-chunk pairwise decay matrix inter_decay[t,j] = Π_{i=j+1..t} α_i does not need to exist as a matrix when its consumer is a streaming accumulation: iterate j from t DOWNWARD carrying one running scalar — start at 1 (the empty product inter_decay[t,t]), consume the weight for position j, then multiply by α[j] to obtain the weight for j-1. O(C) multiplies per token instead of O(C) per (t,j) pair (or a cumsum+exp materialization pass), zero intermediate memory, and the downward direction is load-bearing — it anchors the empty product so multiply-after-use composes correctly. Distinct from cumsum-gate-to-decay-matrix / pairwise-distance-decay-matrix (the MATERIALIZE-the-matrix approach feeding a batched matmul — this is its dematerialized inverse when the consumer streams) and from chunkwise-parallel-recurrence (the chunk split itself — this is the decay strategy inside the intra-chunk part)"), "reverse-running-decay concept");
+        // D: split-decay-outputs-eliminate-readback (riir-gpu deltanet_chunked_cubecl.rs L342-349 + L1949-1969)
+        assert!(concepts.contains(&"compact packing of heterogeneous outputs into one buffer (total_decay stashed at index C of a [H, C+1] row) is a pessimization when the downstream consumers read different shapes ([H, C] and [H]) — the packed layout forces a device→host→device readback-unpack-reupload, and a consumer reading the packed buffer directly reads the WRONG offset (total_decay of head h-1). Write each component directly into the buffer shape its consumer reads — one kernel, two output buffers, the host round trip disappears entirely. Packing elegance loses to consumer layout: optimize the boundary, not the buffer count. Distinct from per-layer-strided-grad-destination (consumer-selected stride within one buffer — this is consumer-selected buffer SPLIT) and from defer-readback-until-after-submit / batched-downloads-single-sync-cycle (both mitigate readback timing/cost — this eliminates the readback by producing consumer shapes at the source)"), "split-decay concept");
+        // L: carry-dual-layout-dead-slot (riir-gpu deltanet_chunked_cubecl.rs L77-98)
+        assert!(concepts.contains(&"when a producer's output feeds a consumer with a different but overlapping layout, parameterize the producer's write stride + index offset (two scalars) instead of adding a conversion pass: the prefill chunk-carry can be written compact [ch, ks-1] OR directly into the decode path's [ch, ks] sliding-window layout from the same kernel. The conv_state variant leaves slot 0 unwritten (stale garbage) — safely, because the decode consumer's shift-left provably overwrites slot 0 before any read. The dead-slot tolerance is a consumer-semantics proof, not a hope: the next decode's shift writes every slot it later reads. Distinct from per-layer-strided-grad-destination (runtime Option-selected destinations — this is one parameterized producer writing consumer-native layout) and from alignment-gated-zero-copy-view (gating a view — the dead-slot-tolerance-by-consumer-semantics element is new)"), "carry-dual-layout concept");
+        // D: nonlinearity-forces-raw-input-buffers (riir-gpu deltanet_chunked_cubecl.rs L27-47)
+        assert!(concepts.contains(&"a sequential kernel's in-place trick (write the activated output back over its own input) is INCOMPATIBLE with batched/widened execution whenever a nonlinearity sits between the producer and a windowed consumer: later tokens' convolution windows read earlier tokens' POST-activation values — silently wrong, same dtype, no error. The batched form needs separate read-only RAW inputs + write-only outputs, and the inter-chunk carry must also hold RAW values for the same reason. This is the negative space of in-place aliasing: before widening a sequential in-place kernel's grid over its sequence axis, check whether any consumer reads a value the nonlinearity would have overwritten. Distinct from inplace-output-alias (when aliasing WORKS — this is when it cannot) and from chunkwise-parallel-recurrence (the chunking shape — this is the buffer contract that makes chunking correct when nonlinearity intervenes)"), "nonlinearity-forces-raw concept");
+    }
+
     // ════════════════════════════════════════════════════════════════════
     // Plan 003 — Router ↔ corpus wiring tests
     // ════════════════════════════════════════════════════════════════════
@@ -4532,7 +4879,7 @@ mod tests {
 
     #[test]
     fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-        // Every rule_id in the 183-rule corpus must appear in exactly one category.
+        // Every rule_id in the 193-rule corpus must appear in exactly one category.
         let corpus = build_kernel_seed_corpus();
         let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
         let mut categorized: Vec<&str> = Vec::new();
@@ -4563,20 +4910,20 @@ mod tests {
 
     #[test]
     fn kernel_categories_counts_match_plan_003_table() {
-        // Pin per-category rule counts to the Plan 003 table (updated for Batch 27).
+        // Pin per-category rule counts to the Plan 003 table (updated for Batch 28).
         let expected = [
             (KernelCategory::MemoryAccess, 27),
-            (KernelCategory::Compute, 32),
-            (KernelCategory::Fusion, 18),
-            (KernelCategory::Dispatch, 23),
-            (KernelCategory::Parallelism, 9),
+            (KernelCategory::Compute, 33),
+            (KernelCategory::Fusion, 19),
+            (KernelCategory::Dispatch, 26),
+            (KernelCategory::Parallelism, 11),
             (KernelCategory::FlashAttnTiling, 10),
-            (KernelCategory::LinearAttnRecurrence, 17),
+            (KernelCategory::LinearAttnRecurrence, 19),
             (KernelCategory::MoeDispatchBackward, 9),
             (KernelCategory::NsaBlockSparse, 4),
             (KernelCategory::VarlenChunkedReduction, 5),
             (KernelCategory::AutotuneDispatch, 4),
-            (KernelCategory::ConvGemmLayout, 5),
+            (KernelCategory::ConvGemmLayout, 6),
             (KernelCategory::KernelPolymorphism, 5),
             (KernelCategory::DtypeAlignment, 11),
             (KernelCategory::IrStrengthReduction, 4),
@@ -4588,9 +4935,9 @@ mod tests {
                 "Plan 003: category {cat:?} has {} rules, expected {count}",
                 entry.2.len());
         }
-        // Sum must equal 183.
+        // Sum must equal 193.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 183, "Plan 003: category totals must sum to 183");
+        assert_eq!(total, 193, "Plan 003: category totals must sum to 193");
     }
 
     #[test]
@@ -4600,7 +4947,7 @@ mod tests {
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 183, "Plan 003: grouped corpus has {total} rules, expected 183");
+        assert_eq!(total, 193, "Plan 003: grouped corpus has {total} rules, expected 193");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");
