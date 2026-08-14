@@ -377,6 +377,43 @@
 //!   deltanet `CubeCL` cluster assessed). Mining also surfaced a confirmed
 //!   production bug (cross-chunk `plane_sum` mixing partials of different
 //!   columns → block-constant output) — filed as a riir-ai issue.
+//! - **Batch 29 (Research 030):** 10 rules from the decode-path fusion
+//!   cluster — `deltanet_input_proj_fused.rs` (Issue 602: the 4 `DeltaNet`
+//!   input-projection ternary GEMVs chained into one command buffer) +
+//!   `epilogue/` (Plan 106 Track 3: the CODA GEMM-plus-epilogue cluster —
+//!   `mod.rs` + `coda_primitives` + `gemv_residual` + `norm_residual`):
+//!   `defer-readback-gated-by-live-output-size` (A — deferral is NOT
+//!   unconditional: 5 concurrent ~70 KB FFN buffers measured 16% SLOWER
+//!   via memory pressure while ~8 KB of input-projection outputs chain
+//!   freely — gate on total live bytes), `weight-handle-cache-keyed-by-
+//!   allocation-identity` (A — a hook receiving CPU weight refs resolves
+//!   to cached device handles via the allocation's pointer pair, with an
+//!   on-the-fly miss path), `first-readback-pays-queue-drain` (D — after
+//!   one dispatch burst the first read drains the queue and the rest
+//!   return immediately: syncs are a function of bursts, not read calls),
+//!   `epilogue-at-register-write-phase` (C — the CODA insight: memory-
+//!   bound elementwise ops execute while the GEMV output is still in
+//!   registers, riding lane 0's single store), `delay-rms-scale-past-
+//!   gemv-epilogue` (C — the commutation RMSNorm(x)@W = r·(x·γ)@W splits
+//!   the norm into extract/γ/defer with the honest 3→3 accounting),
+//!   `pack-scalar-params-into-combined-buffer` (D — the ~4-5 Array-param
+//!   budget met by one packed f32 params buffer, derived values host-
+//!   computed, u32s bitcast through the pack), `enum-dispatch-separate-
+//!   kernel-per-variant` (M — no generics in `#[cube]` kernels → host-
+//!   level enum + one branch-free kernel per variant + metadata-driven
+//!   plumbing), `epilogue-must-be-workgroup-local` (E — fusion legality
+//!   is data OWNERSHIP scope, not just dependency: attention stays 9
+//!   dispatches while post-attn drops to 1), `launch-unchecked-caller-
+//!   owned-size-contract` (D — elide per-launch validation into a
+//!   documented `# Safety` contract at the launcher seam), and
+//!   `fast-math-contraction-behind-feature-flag` (B — a `cfg_attr` pair
+//!   keeps strict-FP the byte-identical default while the dot loop
+//!   contracts to FMA only on the opt-in build). Corpus: **203 rules
+//!   across 15 categories (A–O)**. `riir-gpu` remains open (49 of ~200
+//!   files mined). Mining also surfaced 2 latent cache hazards (pointer-key
+//!   staleness on model reload; the key covers only qkv, not z/a/b) and a
+//!   stale-doc-numbers bug in `epilogue/mod.rs` L43 — filed as an issue in
+//!   the `riir-ai` repo.
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
@@ -3408,6 +3445,247 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
             ref_shape: "// tempting-but-wrong: reuse the sequential kernel's in-place trick\n// and just widen the grid over tokens — token t+1's convolution\n// window then reads token t's POST-activation value (the\n// nonlinearity intervened between producer and windowed consumer)\nfn chunked_inplace_wrong(input: &mut [f32], weight: &[f32], conv_dim: usize,\n                         ks: usize, c: usize) {\n    for token in 0..c {\n        let mut sum = 0.0f32;\n        for k in 0..ks {\n            let pos = token as isize - ks as isize + 1 + k as isize;\n            // reads NEIGHBOR tokens' inputs — already overwritten by SiLU\n            sum += input[pos.max(0) as usize * conv_dim] * weight[k];\n        }\n        input[token * conv_dim] = sum * sigmoid(sum); // clobbers RAW value\n    } // silently wrong: same dtype, no error, post-activation history\n}".to_string(),
             opt_pattern: "// optimized (correctness-enabling): separate read-only raw inputs +\n// write-only outputs — the raw window stays pristine for ALL\n// consumers inside the chunk; the carry holds RAW values for the next\nfn chunked_raw_buffers(input: &[f32], output: &mut [f32], weight: &[f32],\n                       carry: &mut [f32], conv_dim: usize, ks: usize,\n                       c: usize) {\n    let ks_m1 = ks - 1;\n    for token in 0..c {\n        let mut sum = 0.0f32;\n        for k in 0..ks {\n            let pos = token as isize - ks_m1 as isize + k as isize;\n            let val = if pos < 0 {\n                // previous chunk's RAW tail\n                carry[(pos + ks_m1 as isize) as usize]\n            } else {\n                input[pos as usize * conv_dim] // RAW — never overwritten\n            };\n            sum += val * weight[k];\n        }\n        output[token * conv_dim] = sum * sigmoid(sum); // write-only out\n    }\n}".to_string(),
         },
+        // ════════════════════════════════════════════════════════════════════
+        // Batch 29 (Research 030): 10 rules — the decode-path fusion cluster
+        // (deltanet_input_proj_fused.rs Issue 602 sibling-GEMV fan-out +
+        // epilogue/ CODA epilogue fusion, Plan 106 Track 3). Grows
+        // A 27→29, B 33→34, C 19→21, D 26→29, E 11→12, M 5→6.
+        // ════════════════════════════════════════════════════════════════════
+        // ── defer-readback-gated-by-live-output-size — unconditional deferral → footprint gate (A) ──
+        // Source: riir-gpu deltanet_input_proj_fused.rs L20-32 (the Bench 437
+        // contrast: "Bench 437 kept Q/K/V/gate/up outputs ALL alive
+        // simultaneously (5 concurrent buffers each ~70 KB for the FFN case),
+        // which increased Metal memory pressure → 16% slower." vs "These 4
+        // input projections produce small outputs ... Total intermediate:
+        // ~8 KB. Negligible memory pressure.") + L17-18 ("All 4 dispatches
+        // are queued without `read_one`. Only the final outputs are read
+        // back — ONE GPU sync point instead of 4.").
+        //
+        // Distinct from defer-readback-until-after-submit (the TIMING rule —
+        // read after submit): this is the PRECONDITION that decides whether
+        // deferral is profitable at all, with a measured counter-example.
+        // Distinct from chain-dispatches-single-sync-point (the dispatch-side
+        // mechanism): this is the output-sizing DECISION that makes the
+        // chaining a win rather than a memory-pressure loss (Bench 437: 16%
+        // regression when applied to large concurrent outputs).
+        KernelRule {
+            rule_id: "defer-readback-gated-by-live-output-size".to_string(),
+            gpu_concept: "deferring all sibling readbacks to one final drain is NOT an unconditional win — gate it on total simultaneously-live output bytes. When the chained outputs are small (e.g. 4 input projections, ~8 KB total), keeping them all GPU-resident to the end is free and one sync point replaces N; when they are large (5 concurrent ~70 KB FFN buffers, ~350 KB live), the deferral itself increases memory pressure and measured 16% SLOWER on Metal — sync per stage and release each buffer instead. The rule converts 'defer readback' from an always-apply transformation into a footprint-gated one; the existing deferral rules carry the timing/mechanism, this carries the failure boundary. Distinct from defer-readback-until-after-submit (the timing rule — read after submit; this is the precondition that decides whether deferral helps at all) and from chain-dispatches-single-sync-point (the dispatch-side mechanism — this is the output-sizing decision that makes the chaining a win rather than a loss)".to_string(),
+            ref_shape: "// naive: one shape for every workload — either sync per sibling\n// (N sync points) or, worse, the 'obvious optimization' applied\n// blind: keep ALL sibling outputs alive to the end even when they\n// are large\nfn fanout_always_defer(w: &[Weights], x: &[f32], outs: &mut [Buffer],\n                       n: usize) {\n    for i in 0..n {\n        dispatch_gemv_noread(&w[i], x, &mut outs[i]);\n    }\n    // ALL n outputs live simultaneously — fine at ~8 KB total, but\n    // the SAME shape on 5 x ~70 KB FFN buffers measured 16% slower:\n    // the deferral itself raised Metal memory pressure\n    for i in 0..n { read_one(&outs[i]); }\n}".to_string(),
+            opt_pattern: "// optimized: gate the deferral on TOTAL live output bytes — chain the\n// independent dispatches + one drain only when the simultaneous\n// footprint is small; large footprints sync per stage and release\nfn fanout_size_gated(w: &[Weights], x: &[f32], outs: &mut [Buffer],\n                     n: usize, live_bytes: usize, limit: usize) {\n    if live_bytes <= limit {\n        // small outputs: all dispatches queued, one drain at the end —\n        // the first read pays the queue drain, the rest return\n        // immediately (already-completed buffers)\n        for i in 0..n { dispatch_gemv_noread(&w[i], x, &mut outs[i]); }\n        for i in 0..n { read_one(&outs[i]); }\n    } else {\n        // large outputs: per-stage sync + release keeps the peak\n        // footprint at ONE buffer instead of n\n        for i in 0..n {\n            dispatch_gemv_noread(&w[i], x, &mut outs[i]);\n            read_one(&outs[i]); // drain + release while small\n        }\n    }\n}".to_string(),
+        },
+        // ── weight-handle-cache-keyed-by-allocation-identity — per-call upload → pointer-keyed cache (A) ──
+        // Source: riir-gpu deltanet_input_proj_fused.rs L279-281 ("a handle
+        // cache keyed by the qkv weight's pointer identity (each layer has a
+        // unique qkv allocation)") + L301-302 ("Cached input-projection
+        // handles, keyed by (qkv_pos_ptr, qkv_neg_ptr)." — papaya::HashMap)
+        // + L323-327 (key construction + insert) + L361-372 (hot-path lookup
+        // + on-the-fly miss path: "On-the-fly upload (first call without
+        // preupload).").
+        //
+        // Distinct from host-cache-immutable-device-weights (upload once at
+        // init — this is the KEYING strategy layered on top: how a hook
+        // receiving CPU refs resolves to those cached handles without
+        // changing any call signature, plus the graceful miss path) and
+        // from per-dispatch-pointer-re-extraction (device pointers re-read
+        // per dispatch against pool aliasing — CPU heap pointers as a
+        // persistent cache key are a different pointer, direction, and
+        // failure mode).
+        KernelRule {
+            rule_id: "weight-handle-cache-keyed-by-allocation-identity".to_string(),
+            gpu_concept: "when a GPU offload hook's public API must accept plain CPU weight references (it cannot require callers to thread device handles through existing model code), key a lock-free host-side cache of pre-uploaded device handles by the CPU weight allocation's POINTER IDENTITY — e.g. (pos_bits.as_ptr(), neg_bits.as_ptr()), unique per layer allocation. The hot path is one O(1) map lookup; a cache miss degrades gracefully to an on-the-fly upload + insert, so the hook works with or without a preupload warm-up and never blocks adoption. The keying is what lets the cache be invisible to the API surface. Distinct from host-cache-immutable-device-weights (the upload-once rule — this is the identity-keyed transparent lookup layered on top) and from per-dispatch-pointer-re-extraction (device pointers re-read per dispatch — CPU heap pointers as a persistent key, opposite direction)".to_string(),
+            ref_shape: "// naive: the offload hook's API receives plain CPU weight\n// references, so it re-uploads the full weight set on EVERY call —\n// a full-matrix host->device copy per decode step\nfn input_projections_naive(client: &Client, qkv: &Weights, z: &Weights,\n                           a: &Weights, b: &Weights, x: &[f32]) -> Out {\n    let qkv_h = upload_weights(client, qkv); // re-uploaded EVERY token\n    let z_h = upload_weights(client, z);\n    let a_h = upload_weights(client, a);\n    let b_h = upload_weights(client, b);\n    dispatch_fused(client, &[qkv_h, z_h, a_h, b_h], x)\n}".to_string(),
+            opt_pattern: "// optimized: cache pre-uploaded device handles in a lock-free map\n// keyed by the CPU allocation's POINTER IDENTITY — the API surface\n// stays CPU-ref-shaped; hot path is one O(1) lookup, a miss uploads\n// on the fly (works with or without a preupload warm-up)\nstruct GpuHook { client: Client,\n                 handles: PapayaMap<(usize, usize), DeviceHandles> }\nimpl GpuHook {\n    fn input_projections(&self, qkv: &Weights, z: &Weights,\n                         a: &Weights, b: &Weights, x: &[f32]) -> Out {\n        // each layer owns a unique weight allocation — its address IS\n        // the layer identity; the (pos, neg) pointer pair disambiguates\n        let key = (qkv.pos.as_ptr() as usize, qkv.neg.as_ptr() as usize);\n        let pin = self.handles.pin(); // lock-free read view\n        let h = match pin.get(&key) {\n            Some(h) => h.clone(),       // hot path: O(1) lookup\n            None => {                   // cold path: upload + insert\n                let h = DeviceHandles::upload(&self.client, qkv, z, a, b);\n                pin.insert(key, h.clone());\n                h\n            }\n        };\n        dispatch_fused(&self.client, &h, x)\n    }\n}".to_string(),
+        },
+        // ── first-readback-pays-queue-drain — N-reads-N-syncs myth → burst-ordered reads (D) ──
+        // Source: riir-gpu deltanet_input_proj_fused.rs L242-245 ("CubeCL's
+        // `read_one` forces a sync; the 4 calls here all drain the same
+        // command queue (the dispatches were already queued by
+        // dispatch_input_projections_noread), so the cost is ~1 sync + 4
+        // small readbacks rather than 4 independent syncs.").
+        //
+        // Distinct from batched-downloads-single-sync-cycle (RESTRUCTURES N
+        // readbacks into one encoder/submit/map/poll cycle — this achieves
+        // ~1 sync with plain sequential read_one calls purely by queue
+        // ordering, and explains when the heavier batching machinery is
+        // unnecessary) and from chain-dispatches-single-sync-point (the
+        // dispatch-side half — this is the read-side completion of the same
+        // cost model: what the single sync actually costs and why the
+        // remaining reads are free).
+        KernelRule {
+            rule_id: "first-readback-pays-queue-drain".to_string(),
+            gpu_concept: "after a single dispatch burst on one command queue, the FIRST blocking read drains the whole queue and every subsequent read of an already-completed buffer returns immediately — N sequential readbacks ordered after one burst cost ~1 sync + N small transfers, with no restructuring into a merged download op needed. Sync count is a function of dispatch BURSTS, not read CALLS: don't add per-read defensive syncs, and don't build batched-download machinery when the reads naturally follow one burst. Distinct from batched-downloads-single-sync-cycle (restructures N readbacks into one submit/map/poll cycle — this is the cheaper ordering-only alternative that makes that machinery unnecessary) and from chain-dispatches-single-sync-point (the dispatch-side mechanism — this is the read-side cost model)".to_string(),
+            ref_shape: "// naive cost model: 'N read calls = N GPU syncs' — so the code\n// either interleaves a defensive sync before EVERY read, or grows\n// merged-download machinery to amortize the (imagined) per-call sync\nfn drain_defensive(client: &Client, bufs: &[Buffer]) -> Vec<Vec<f32>> {\n    let mut out = Vec::new();\n    for b in bufs {\n        client.sync(); // 'to be safe' — but the queue was already\n        out.push(client.read_one(b.clone()).unwrap()); // drained by the\n    }                                                // first read\n    out\n}".to_string(),
+            opt_pattern: "// optimized: after ONE dispatch burst on one command queue, the\n// first read blocks until the whole queue drains; every later read\n// of an already-completed buffer returns immediately — plain\n// sequential reads ordered after the burst cost ~1 sync total\nfn drain_burst_ordered(client: &Client, bufs: &[Buffer]) -> Vec<Vec<f32>> {\n    // dispatches were queued back-to-back earlier (one burst, one\n    // queue) — no interleaved syncs anywhere\n    let mut out = Vec::new();\n    for b in bufs {\n        // read #1 pays the queue drain; reads #2..N hit completed\n        // buffers and return immediately\n        out.push(client.read_one(b.clone()).unwrap());\n    }\n    out // sync count is a function of dispatch BURSTS, not read calls\n}".to_string(),
+        },
+        // ── epilogue-at-register-write-phase — separate elementwise pass → fuse at the store (C) ──
+        // Source: riir-gpu epilogue/mod.rs L8-11 ("CODA (Research 67)
+        // reparameterizes Transformer computation as GEMM-plus-epilogue
+        // programs. The key insight: memory-bound operations (normalization,
+        // residual adds, activations) can execute *while the GEMV output is
+        // still in registers*, avoiding global memory round-trips.") + L13-16
+        // + L21-26 (the per-row architecture) + gemv_residual_cubecl.rs
+        // L103-109 ("let result = plane_sum(partial); if lane == 0u32 {
+        // output[row as usize] = result + residual[row as usize]; }") +
+        // L24-31 (2→1 dispatches per site, 52 over 26 layers; 104 combined
+        // with the norm fusion).
+        //
+        // Distinct from fuse-residual-via-in-place-output-array (buffer
+        // ALIASING to bypass a parameter-count limit — this executes the op
+        // while the value is still in registers at the producer's write
+        // phase) and from merge-dispatches-into-single-compute-pass
+        // (host-side pass merging with zero kernel changes — this edits the
+        // kernel body).
+        KernelRule {
+            rule_id: "epilogue-at-register-write-phase".to_string(),
+            gpu_concept: "memory-bound elementwise operations (residual adds, scales, activations) should execute while the producer's output is STILL IN REGISTERS, at the existing write phase — not as a separate dispatch that reads the output vector back from global memory. In a plane-cooperative GEMV (one plane per output row), plane_sum leaves the full row dot product in every lane's registers, so the epilogue (read residual[row], add, write) rides lane 0's single global store: one extra scalar global read amortized over the n-length cooperative dot, one dispatch eliminated per use site (2→1; 52 per 26-layer model, 104 combined with the norm+residual fusion). The condition is the register-residency of the produced value at the write phase. Distinct from fuse-residual-via-in-place-output-array (buffer aliasing to bypass a parameter limit — this is register-residency at the producer's write phase) and from merge-dispatches-into-single-compute-pass (host-side pass merging, zero kernel changes — this edits the kernel body)".to_string(),
+            ref_shape: "// naive: GEMV kernel writes its output vector to global memory;\n// a SECOND elementwise kernel reads it back, adds the residual,\n// writes again — one extra dispatch + a full global round-trip of\n// the vector per use site\nfn gemv_then_residual(w: &[f32], x: &[f32], residual: &[f32],\n                      out: &mut [f32], m: usize, n: usize) {\n    dispatch_gemv(w, x, out, m, n);            // pass 1: dots -> global\n    dispatch_residual_add(out, residual, m);   // pass 2: read out +\n}                                              // residual, write out".to_string(),
+            opt_pattern: "// optimized: plane_sum leaves the FULL row dot in every lane's\n// registers — the residual add executes at lane 0's existing single\n// global store; the unfused output vector never touches memory\nfn gemv_residual_epilogue(w: &[f32], x: &[f32], residual: &[f32],\n                          out: &mut [f32], m: usize, n: usize,\n                          row: usize, lane: usize,\n                          plane_sum: fn(f32) -> f32) {\n    let mut partial = 0.0f32;\n    let mut k = lane;              // cooperative strided dot product\n    while k < n {\n        partial += w[row * n + k] * x[k];\n        k += 32;\n    }\n    let dot = plane_sum(partial);  // every lane holds the row result\n    if lane == 0 {\n        // epilogue AT the write phase: one extra global read of a\n        // single scalar, amortized over the n-length cooperative dot\n        out[row] = dot + residual[row];\n    }\n}".to_string(),
+        },
+        // ── delay-rms-scale-past-gemv-epilogue — norm-before-GEMV → commute r past the GEMV (C) ──
+        // Source: riir-gpu epilogue/mod.rs L227-235 ("The key identity (CODA
+        // §3.2.1): RMSNorm(x @ W + z) * γ @ W' = r * ((x @ W + z) * γ) @ W'
+        // Where `r` is a per-row scalar that commutes with the matrix
+        // multiply. This lets us compute `r` once and apply it *after* the
+        // next GEMV, eliminating a separate RMSNorm dispatch.") + L118-124
+        // (RowScale: "the RMS scale factor `r` is applied *after* the GEMV
+        // instead of *before* (as a separate RMSNorm kernel). The algebraic
+        // identity: `RMSNorm(x) @ W = r * (x * gamma) @ W`.") + L251-262
+        // (the honest accounting: the pure reparameterization saves ZERO
+        // dispatches 3→3 — the win is fusing r into the last GEMV of the
+        // group + eliminating the pre-GEMV rmsnorm write; with
+        // handle-to-handle passing the dominant benefit is dispatch /
+        // command-buffer overhead, not bandwidth) + coda_primitives_
+        // cubecl.rs L20-24 (the decomposition: PartialRMS extracts r,
+        // NormWeightScale applies gamma, RowScale applies r later).
+        //
+        // Distinct from fold-norm-scalar-into-matmul (folds the scalar into
+        // the matmul internals — this keeps the GEMV body untouched, lands
+        // r in its epilogue, and includes the producer-side decomposition
+        // so no separate scale pass exists anywhere) and from
+        // fuse-add-rms-norm (fuses residual INTO a norm kernel — this moves
+        // the norm's scalar ACROSS a GEMV boundary).
+        KernelRule {
+            rule_id: "delay-rms-scale-past-gemv-epilogue".to_string(),
+            gpu_concept: "RMSNorm's per-row scalar commutes with the downstream matmul — RMSNorm(x) @ W = r · (x·γ) @ W — so split the norm into (a) extracting r (a partial-norm reduction), (b) applying only the elementwise gamma, and (c) applying r later as a row-scale epilogue of the downstream GEMV, composable with a residual add. Be honest about what this saves: the pure reparameterization alone saves ZERO dispatches (3→3) — the real win is fusing r into the LAST GEMV of the group and eliminating the pre-GEMV write of the normed vector; with handle-to-handle passing the dominant benefit is dispatch/command-buffer overhead, not bandwidth. The win compounds when multiple GEMVs share the same r. Distinct from fold-norm-scalar-into-matmul (folds the scalar into the matmul internals — this keeps the GEMV body untouched and adds the producer-side decomposition) and from fuse-add-rms-norm (fuses residual into a norm kernel — this moves the norm scalar across a GEMV boundary)".to_string(),
+            ref_shape: "// naive: RMSNorm runs as its own kernel BEFORE the GEMV —\n// normalize, WRITE the normed vector to global, GEMV immediately\n// reads it back\nfn norm_then_gemv(hidden: &[f32], gamma: &[f32], w: &[f32],\n                  eps: f32) -> Vec<f32> {\n    let normed = dispatch_rmsnorm(hidden, gamma, eps); // kernel 1:\n    dispatch_gemv(w, &normed)        // writes the full normed vector\n}                                    // kernel 2: reads it all back".to_string(),
+            opt_pattern: "// optimized: the per-row scalar r = 1/sqrt(mean(x^2)+eps) COMMUTES\n// with the matmul — extract r en passant, apply only gamma\n// elementwise, and land r in the downstream GEMV's row-scale\n// epilogue (composable with residual: r*dot + residual)\nfn delayed_norm(hidden: &[f32], gamma: &[f32], w: &[f32],\n                eps: f32) -> Vec<f32> {\n    // partial norm: ONE scalar out, not a normed vector\n    let r = partial_rms_scalar(hidden, eps);\n    let d = apply_gamma(hidden, gamma);   // elementwise only\n    // r crosses the kernel boundary as ONE scalar and multiplies the\n    // dot INSIDE the next GEMV's write phase — the normed vector the\n    // GEMV would immediately read back is never written; fuse r into\n    // the LAST GEMV of the group (gate+up share the same r)\n    gemv_rowscale_epilogue(w, &d, r)\n}".to_string(),
+        },
+        // ── pack-scalar-params-into-combined-buffer — per-scalar args → one packed params buffer (D) ──
+        // Source: riir-gpu epilogue/mod.rs L48 ("Limited Array parameters
+        // (~4-5 per kernel) — pack params into combined buffers") +
+        // coda_primitives_cubecl.rs L51-55 ("`params`: `[f32; 2]` —
+        // `[inv_dim, eps]`") + L144-146 (host-side pack:
+        // "let inv_dim = 1.0f32 / dim as f32; let params: &[f32] =
+        // &[inv_dim, eps];") + norm_residual_cubecl.rs L351-354 (batched
+        // variant packs a third scalar) + L179-181 (kernel-side positional
+        // unpack incl. "let dim = params[2usize] as u32;") + mod.rs
+        // L148-154 (total_array_count() couples epilogue choice to the
+        // packing budget).
+        //
+        // Distinct from staging-packed-uniforms-encoder-ordered-copies
+        // (wgpu uniform staging driven by UPLOAD BATCHING — this is driven
+        // by the kernel argument-count limit at the CubeCL launcher/kernel
+        // boundary), from derive-params-from-global-invocation-id (encodes
+        // per-ITEM params in the grid — these are per-LAUNCH scalars that
+        // cannot be derived from position), and from
+        // identical-uniforms-share-single-slot (dedupes identical uniforms
+        // — this packs DISTINCT scalars to fit the budget).
+        KernelRule {
+            rule_id: "pack-scalar-params-into-combined-buffer".to_string(),
+            gpu_concept: "when the kernel DSL caps Array parameters (~4-5 in CubeCL v0.10), pack ALL launch scalars (eps, dim, derived constants) into ONE small f32 params buffer created per launch on the host — precomputing derived values there (inv_dim = 1/dim once on the CPU, not per-thread in-kernel) — and index it positionally in-kernel. When even a u32 like dim won't fit as a scalar arg, bitcast it through the f32 pack and cast back in-kernel. Couple variant choice to the budget with a total_array_count()-style metadata method so a kernel never exceeds the Array limit. Distinct from staging-packed-uniforms-encoder-ordered-copies (driven by upload batching — this is driven by the kernel argument-count limit), from derive-params-from-global-invocation-id (per-item params encoded in the grid — these are per-launch scalars), and from identical-uniforms-share-single-slot (dedupes identical uniforms — this packs distinct scalars)".to_string(),
+            ref_shape: "// naive: every scalar knob is its own kernel argument; derived\n// constants are recomputed by EVERY thread; the moment one more\n// buffer is needed the kernel exceeds the DSL's ~4-5 Array budget\nfn partial_rms_many_args(input: &[f32], eps: f32, dim: usize,\n                         scale: f32, extra: f32, out: &mut [f32]) {\n    let _ = (eps, scale, extra);\n    // 1 Array + 4 scalar args and growing — plus a per-thread divide:\n    let mean = sum_sq(input) * (1.0f32 / dim as f32); // div EVERY thread\n    out[0] = 1.0f32 / (mean + eps).sqrt();\n}".to_string(),
+            opt_pattern: "// optimized: pack ALL launch scalars into ONE small f32 params\n// buffer, precompute derived values on the HOST, unpack\n// positionally in-kernel; bitcast u32s through the pack when\n// scalar args run out\nfn launch_partial_rms(client: &Client, input: &Buffer, out: &Buffer,\n                      dim: usize, eps: f32) {\n    let inv_dim = 1.0f32 / dim as f32;     // host-side, once\n    let dim_f = dim as f32;                // u32 smuggled as f32\n    let params: &[f32] = &[inv_dim, eps, dim_f]; // ONE combined buffer\n    let params_h = client.create_from_slice(params);\n    dispatch(partial_rms, input, params_h, out); // exactly 3 Arrays\n}\nfn partial_rms(input: &[f32], params: &[f32], out: &mut [f32]) {\n    let inv_dim = params[0];               // positional unpack\n    let eps = params[1];\n    let dim = params[2] as u32;            // cast back from the pack\n    let mean = sum_sq(input, dim) * inv_dim; // no per-thread divide\n    out[0] = 1.0f32 / (mean + eps).sqrt();\n}".to_string(),
+        },
+        // ── enum-dispatch-separate-kernel-per-variant — generic kernel → enum + specialized kernels (M) ──
+        // Source: riir-gpu epilogue/mod.rs L47 ("No generics in `#[cube]`
+        // kernels — each fused variant is a separate kernel function") +
+        // L99-103 ("Since CubeCL v0.10 doesn't support generic kernel
+        // parameterization, each variant maps to a separate compiled kernel
+        // function. The enum is used at the Rust level to organize dispatch
+        // logic and kernel selection.") + L137-154 (extra_input_count /
+        // total_array_count metadata) + gemv_residual_cubecl.rs L76 + L140
+        // (the f32/f16 kernel twins with byte-identical launchers).
+        //
+        // Distinct from dtype-specialized-float-kind /
+        // hardcoded-fast-path-jit-specialization (specialize on
+        // dtype/shape for PERF — this is driven by a DSL LIMITATION, and
+        // the pattern is the enum-metadata + one-kernel-per-variant
+        // authoring shape) and from op-family-type-dispatch (dispatches
+        // between op FAMILIES — here every variant is the same op family
+        // with a different epilogue suffix).
+        KernelRule {
+            rule_id: "enum-dispatch-separate-kernel-per-variant".to_string(),
+            gpu_concept: "when the kernel DSL forbids generic kernel parameterization (no generics in #[cube] kernels) — or where a generic form would pay a runtime branch per element — enumerate the fusion-combination space as a host-level #[repr(u8)] enum, compile ONE specialized kernel function per variant (zero in-kernel branching, each with exactly its own Array count, visible even between dtype twins with byte-identical launchers), and drive buffer plumbing from enum metadata methods (extra_input_count, needs_residual, total_array_count). The enum organizes dispatch; the kernel list stays flat and each body is branch-free. Distinct from dtype-specialized-float-kind / hardcoded-fast-path-jit-specialization (dtype/shape specialization for perf — this is DSL-limitation-driven with the enum-metadata authoring shape) and from op-family-type-dispatch (dispatches between op families — every variant here is the same op with a different epilogue suffix)".to_string(),
+            ref_shape: "// naive: try to write ONE generic kernel parameterized over the\n// epilogue behavior — impossible in DSLs without kernel generics,\n// and where it compiles it pays a virtual/branch cost per row and\n// the arg list must fit EVERY variant at once\nfn gemv_generic(w: &[f32], x: &[f32], out: &mut [f32],\n                epilogue: &dyn Fn(f32, usize) -> f32,\n                extras: &[Buffer]) {\n    let _ = extras;\n    let dot = dot_row(w, x);\n    // virtual call per row + one kernel whose signature must\n    // accommodate every variant's buffers\n    out[row_idx()] = epilogue(dot, row_idx());\n}".to_string(),
+            opt_pattern: "// optimized: enumerate the fusion space as a host-level enum;\n// compile ONE specialized kernel per variant (zero in-kernel\n// branching, each with exactly its own Array count); drive buffer\n// plumbing from enum metadata\n#[repr(u8)]\nenum Epilogue { None, ResidualAdd, RowScale, RowScaleResidual }\nimpl Epilogue {\n    fn extra_inputs(self) -> usize { // plumbing metadata drives launch\n        match self {\n            Self::None => 0,\n            Self::ResidualAdd | Self::RowScale => 1,\n            Self::RowScaleResidual => 2,\n        }\n    }\n}\n// one compiled kernel per variant — gemv_none, gemv_residual,\n// gemv_rowscale, gemv_rowscale_residual — the enum organizes the\n// dispatch; each kernel body is branch-free and takes EXACTLY its\n// own params\nfn launch(w: &[f32], x: &[f32], out: &mut [f32], e: Epilogue,\n          bufs: &[Buffer]) {\n    match e {\n        Epilogue::None => dispatch(gemv_none, w, x, out),\n        Epilogue::ResidualAdd => dispatch(gemv_residual, w, x, &bufs[0], out),\n        _ => dispatch(gemv_rowscale_residual, w, x, &bufs[0], &bufs[1], out),\n    }\n}".to_string(),
+        },
+        // ── epilogue-must-be-workgroup-local — any-pair fusion → ownership-scoped fusion (E) ──
+        // Source: riir-gpu epilogue/mod.rs L49 ("No cross-workgroup sync —
+        // epilogue must be workgroup-local") + gemv_residual_cubecl.rs
+        // L50-55 ("Each plane (subgroup) handles one output row via
+        // cooperative dot product. Lane 0 performs the residual add after
+        // `plane_sum()` reduction." — per-row = per-plane ownership is what
+        // makes the epilogue legal) + norm_residual_cubecl.rs L57-59 (the
+        // norm fusion is only possible because the whole reduction fits
+        // one workgroup) + mod.rs L371-375 (the constraint visible in the
+        // budget — attention stays at 9 dispatches while post-attn drops
+        // to 1 and MLP to 4).
+        //
+        // Distinct from nonlinearity-forces-raw-input-buffers (a
+        // buffer-ALIASING legality condition — this is a data-OWNERSHIP
+        // scope condition) and from workgroup-equals-plane-native-
+        // reduction (workgroup SIZING for free shuffles — this is the
+        // fusion BOUNDARY the workgroup's exclusive data scope defines).
+        KernelRule {
+            rule_id: "epilogue-must-be-workgroup-local".to_string(),
+            gpu_concept: "an epilogue may only consume data at the granularity the executing workgroup OWNS — no cross-workgroup sync exists to order it after a foreign write. For plane-per-row GEMV that means per-row scalars (residual[row], scale[row] are each one scalar owned by the row's plane); for a norm fusion it means the whole row reduction must complete inside a single workgroup. Ops needing cross-row or cross-workgroup data (attention over KV, anything with a global barrier) cannot be epilogued — which is why a dispatch budget leaves the attention section unchanged while post-attn and MLP sections fuse down. Fusion legality is an ownership question, not just a data-dependency question. Distinct from nonlinearity-forces-raw-input-buffers (buffer-aliasing legality — this is data-ownership scope legality) and from workgroup-equals-plane-native-reduction (workgroup sizing for free shuffles — this is the fusion boundary that scope defines)".to_string(),
+            ref_shape: "// naive: assume any producer-consumer pair can fuse — but an\n// epilogue needing data the executing workgroup does NOT own has no\n// legal fusion: no cross-workgroup sync exists to order the\n// epilogue after the foreign data's write\nfn illegal_cross_group_epilogue(w: &[f32], x: &[f32],\n                                foreign: &[f32], out: &mut [f32]) {\n    let dot = dot_row(w, x);\n    // foreign[] is written by ANOTHER workgroup — not visible or\n    // ordered here; the fusion is a data race\n    out[row_idx()] = dot + foreign[row_idx()];\n}".to_string(),
+            opt_pattern: "// optimized: an epilogue may only consume data the executing\n// workgroup OWNS — for plane-per-row GEMV that is per-row scalars;\n// ops needing cross-row/cross-workgroup data stay separate\n// dispatches (attention stays 9 dispatches while post-attn drops\n// to 1 and MLP to 4)\nfn legal_row_scoped_epilogue(w: &[f32], x: &[f32], residual: &[f32],\n                             out: &mut [f32], row: usize, lane: usize,\n                             plane_sum: fn(f32) -> f32) {\n    let mut partial = 0.0f32;\n    let mut k = lane;\n    while k < x.len() {\n        partial += w[row * x.len() + k] * x[k];\n        k += 32;\n    }\n    let dot = plane_sum(partial);\n    if lane == 0 {\n        // residual[row] is a per-row scalar owned by THIS workgroup —\n        // same granularity as the output it guards\n        out[row] = dot + residual[row];\n    }\n}".to_string(),
+        },
+        // ── launch-unchecked-caller-owned-size-contract — checked launch → unchecked + # Safety (D) ──
+        // Source: riir-gpu epilogue/mod.rs L50 ("`launch_unchecked` for
+        // performance — caller must ensure buffer sizes") +
+        // gemv_residual_cubecl.rs L205-213 (the documented contract:
+        // "# Safety — Buffer handles must have correct sizes:
+        // `weight_handle`: `m * n` f32 elements ... The client must support
+        // `Plane::Ops`") + L225-226 ("// SAFETY: Caller guarantees correct
+        // buffer sizes and plane support." + the unsafe launch) — the same
+        // shape on every kernel in the cluster.
+        //
+        // Distinct from cuda-graph-scalar-via-device-pointer (streamlines
+        // the launch path by moving scalars to device memory — this elides
+        // per-launch VALIDATION) and from no-blocking-sync-in-async-
+        // pipeline (elides syncs — this elides checks).
+        KernelRule {
+            rule_id: "launch-unchecked-caller-owned-size-contract".to_string(),
+            gpu_concept: "the checked launch path validates buffer sizes and argument consistency on EVERY dispatch — host-side overhead that dominates when each dispatch is microseconds of work in a 14-dispatches-per-layer × 26-layer decode loop. Compile kernels with launch_unchecked, wrap each in a launcher that takes exact element counts as plain args, and push the size contract into a documented # Safety section (exact per-handle element counts, required hardware features) verified by the caller and by tests. The repeated shape: thin launcher struct + one unsafe launch + an enumerated handle-size contract. Distinct from cuda-graph-scalar-via-device-pointer (streamlines launches by moving scalars to device memory — this elides per-launch validation) and from no-blocking-sync-in-async-pipeline (elides syncs — this elides checks)".to_string(),
+            ref_shape: "// naive: the checked launch path re-validates buffer sizes /\n// argument consistency on EVERY dispatch — host-side overhead per\n// launch, significant when each dispatch is microseconds of work\nfn launch_checked(client: &Client, w: &Buffer, x: &Buffer,\n                  out: &Buffer, m: usize, n: usize) {\n    // per-launch validation: sizes, arg counts, element kinds —\n    // repeated 14 x 26 = 364 times per forward\n    client.launch_checked(kernel(), w, x, out, m, n);\n}".to_string(),
+            opt_pattern: "// optimized: compile with launch_unchecked; wrap in a launcher\n// that takes exact element counts as plain args and pushes the\n// size contract into a documented # Safety invariant verified by\n// the caller + tests\n/// # Safety\n/// Buffer handles must have correct sizes:\n/// - `w`: `m * n` f32 elements\n/// - `x`: `n` f32 elements\n/// - `out`: `m` f32 elements\npub unsafe fn launch_gemv_unchecked(client: &Client, w: &Buffer,\n                                     x: &Buffer, out: &Buffer,\n                                     m: usize, n: usize) {\n    // SAFETY: caller guarantees the documented per-handle sizes\n    // (checked once at the seam + pinned by equivalence tests,\n    // instead of per dispatch in the hot loop)\n    client.launch_unchecked(kernel(), m, 1, 1, w, x, out);\n}".to_string(),
+        },
+        // ── fast-math-contraction-behind-feature-flag — global fast-math → per-kernel opt-in attribute (B) ──
+        // Source: riir-gpu epilogue/gemv_residual_cubecl.rs L67-75 + L131-139
+        // (the dual cfg_attr on the same kernel body: #[cfg_attr(feature =
+        // \"gemv_fma_contract\", cube(launch_unchecked, fast_math =
+        // FastMath::AllowContraction.into()))] paired with #[cfg_attr(not(
+        // feature = \"gemv_fma_contract\"), cube(launch_unchecked))]) + the
+        // kernel body under it (L94-101: the strided mul+add dot-product
+        // loop that contracts to FMA on the opt-in build). Intent inferred
+        // from the dual-compilation existence (repo feature-flag
+        // discipline): a numerics-affecting compiler flag is kept opt-in
+        // with a byte-identical default path.
+        //
+        // Distinct from dtype-specialized-float-kind (specializes on data
+        // type — this specializes on COMPILER NUMERICS MODE) and from the
+        // in-kernel numeric transforms (softplus-piecewise-saturation-
+        // clamp, exp2-log2-base2: algorithm changes — this gates a
+        // compiler-level flag with no algorithm change).
+        KernelRule {
+            rule_id: "fast-math-contraction-behind-feature-flag".to_string(),
+            gpu_concept: "a numerics-affecting compiler flag (fast-math contraction) must not be enabled globally — it changes rounding everywhere and breaks bit-comparisons and tolerance gates — nor disabled forever (the hot dot-product loop stays uncontracted mul+add on every build). Attach the flag to the KERNEL ATTRIBUTE via a cfg_attr pair gated on a dedicated Cargo feature: the attribute-identical strict-FP compilation stays the byte-identical default, correctness/equivalence gates run strict, and perf builds opt in. The partial += w[k] * x[k] accumulation contracts to FMA only on the opt-in compilation of the same source. Distinct from dtype-specialized-float-kind (dtype specialization — this is compiler-numerics-mode specialization) and from in-kernel numeric transforms like softplus-piecewise-saturation-clamp (algorithm changes — this gates a compiler flag with zero algorithm change)".to_string(),
+            ref_shape: "// naive: either enable fast-math globally (changes rounding\n// EVERYWHERE, breaks bit-comparisons and tolerance gates) or never\n// (the hot dot loop stays uncontracted mul+add on every build)\nfn dot_strict(w: &[f32], x: &[f32]) -> f32 {\n    let mut acc = 0.0f32;\n    for k in 0..x.len() {\n        // strict-FP on ALL builds: no contraction permitted — extra\n        // rounding per term, forever, because the global flag is\n        // unsafe to flip\n        acc += w[k] * x[k];\n    }\n    acc\n}".to_string(),
+            opt_pattern: "// optimized: attach the numerics flag to the KERNEL via a cfg_attr\n// pair gated on a dedicated Cargo feature — strict-FP stays the\n// byte-identical default; correctness gates run strict, perf\n// builds opt in\n// #[cfg_attr(feature = \"fma_contract\",\n//            cube(launch_unchecked, fast_math = AllowContraction))]\n// #[cfg_attr(not(feature = \"fma_contract\"), cube(launch_unchecked))]\nfn dot_maybe_contracted(w: &[f32], x: &[f32]) -> f32 {\n    let mut acc = 0.0f32;\n    for k in 0..x.len() {\n        // contracts to FMA ONLY on the opt-in compilation of the SAME\n        // source — the default build is byte-identical strict-FP\n        acc += w[k] * x[k];\n    }\n    acc\n}".to_string(),
+        },
     ])
 }
 
@@ -3420,7 +3698,7 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 183-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 203-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -3428,7 +3706,7 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (27 rules)
+    // A: Memory access patterns (29 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -3460,9 +3738,11 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "defer-readback-until-after-submit",
             "persistent-zeros-source-encoder-copy-clear",
             "snapshot-transient-grad-for-deferred-download",
+            "defer-readback-gated-by-live-output-size",
+            "weight-handle-cache-keyed-by-allocation-identity",
         ],
     ),
-    // B: Compute patterns (33 rules)
+    // B: Compute patterns (34 rules)
     (
         KernelCategory::Compute,
         "B: compute",
@@ -3500,9 +3780,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "monotone-transform-elision-under-argmax",
             "tree-reduction-depth-over-sequential-accumulate",
             "softplus-piecewise-saturation-clamp",
+            "fast-math-contraction-behind-feature-flag",
         ],
     ),
-    // C: Fusion patterns (19 rules)
+    // C: Fusion patterns (21 rules)
     (
         KernelCategory::Fusion,
         "C: fusion",
@@ -3526,9 +3807,11 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fan-out-shared-input-single-sync",
             "fuse-sibling-target-grads-single-kernel",
             "fused-conv-state-shift-dot-silu",
+            "epilogue-at-register-write-phase",
+            "delay-rms-scale-past-gemv-epilogue",
         ],
     ),
-    // D: Dispatch patterns (26 rules)
+    // D: Dispatch patterns (29 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -3559,9 +3842,12 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "token-flattened-elementwise-modulo-shared-weights",
             "split-decay-outputs-eliminate-readback",
             "nonlinearity-forces-raw-input-buffers",
+            "first-readback-pays-queue-drain",
+            "pack-scalar-params-into-combined-buffer",
+            "launch-unchecked-caller-owned-size-contract",
         ],
     ),
-    // E: Parallelism patterns (11 rules)
+    // E: Parallelism patterns (12 rules)
     (
         KernelCategory::Parallelism,
         "E: parallelism",
@@ -3577,6 +3863,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "broadcast-uniform-skip-reduce",
             "workgroup-equals-plane-native-reduction",
             "smem-broadcast-scalar-then-parallel-scatter",
+            "epilogue-must-be-workgroup-local",
         ],
     ),
     // F: Flash-attention tiling (10 rules)
@@ -3685,7 +3972,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "carry-dual-layout-dead-slot",
         ],
     ),
-    // M: Kernel parametric polymorphism (5 rules)
+    // M: Kernel parametric polymorphism (6 rules)
     (
         KernelCategory::KernelPolymorphism,
         "M: kernel polymorphism",
@@ -3695,6 +3982,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "layout-permute-for-coalescing",
             "reshape-rank-for-backend",
             "detached-broadcast-insert",
+            "enum-dispatch-separate-kernel-per-variant",
         ],
     ),
     // N: dtype + alignment specialization (11 rules)
@@ -3733,7 +4021,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
 /// Returns 15 buckets (one per category), each containing the `KernelRule`s whose
 /// `rule_id` appears in that category's slice of [`KERNEL_CATEGORIES`]. This is
 /// the category-scoped view of the corpus — a future heal pipeline can consult
-/// routed expert's rules first without scanning all 183.
+/// routed expert's rules first without scanning all 203.
 ///
 /// # Allocation
 ///
@@ -3807,8 +4095,9 @@ mod tests {
         // Batch 25 (5): riir-gpu production kernels — device-side-argmax-minimal-download, monotone-transform-elision-under-argmax, fan-out-shared-input-single-sync, hot-swap-weights-preserve-autotune-caches, tree-reduction-depth-over-sequential-accumulate (gemma2_cubecl/ + gemma4_cubecl/ — the Gemma cluster: GPU decode loop + dispatch helpers + KV cache + weight hot-swap).
         // Batch 26 (8): riir-gpu production kernels — per-slot-uniform-buffer-write-ordering, derive-params-from-global-invocation-id, merge-dispatches-into-single-compute-pass, batched-downloads-single-sync-cycle, chunk-encoder-submits-below-driver-limit, prebuilt-bind-groups-fixed-buffer-combos, host-cache-immutable-device-weights, defer-readback-until-after-submit (forward/ + buffer.rs — the wgpu forward-orchestration cluster: uniform hazards, pass merging, submission chunking, download batching, bind-group pre-building, host caching, deferred readback).
         // Batch 27 (6): riir-gpu production kernels — staging-packed-uniforms-encoder-ordered-copies, identical-uniforms-share-single-slot, persistent-zeros-source-encoder-copy-clear, fuse-sibling-target-grads-single-kernel, per-layer-strided-grad-destination, snapshot-transient-grad-for-deferred-download (backward/ + backward_dflash/ — the backward-pass orchestration clusters: staging-packed uniform distribution, the idempotent-write exemption, encoder-ordered zero clears, sibling-target grad fusion, consumer-selected grad destinations, transient snapshotting for deferred readback).
-        // Total: 193.
-        assert_eq!(corpus.entries.len(), 193, "batches 1-28 should have 193 rules");
+        // Batch 29 (10): riir-gpu production kernels — defer-readback-gated-by-live-output-size, weight-handle-cache-keyed-by-allocation-identity, first-readback-pays-queue-drain, epilogue-at-register-write-phase, delay-rms-scale-past-gemv-epilogue, pack-scalar-params-into-combined-buffer, enum-dispatch-separate-kernel-per-variant, epilogue-must-be-workgroup-local, launch-unchecked-caller-owned-size-contract, fast-math-contraction-behind-feature-flag (deltanet_input_proj_fused.rs + epilogue/ — the decode-path fusion cluster: Issue 602 sibling-GEMV fan-out + Plan 106 Track 3 CODA epilogue fusion).
+        // Total: 203.
+        assert_eq!(corpus.entries.len(), 203, "batches 1-29 should have 203 rules");
     }
 
     #[test]
@@ -4868,6 +5157,90 @@ mod tests {
         assert!(concepts.contains(&"a sequential kernel's in-place trick (write the activated output back over its own input) is INCOMPATIBLE with batched/widened execution whenever a nonlinearity sits between the producer and a windowed consumer: later tokens' convolution windows read earlier tokens' POST-activation values — silently wrong, same dtype, no error. The batched form needs separate read-only RAW inputs + write-only outputs, and the inter-chunk carry must also hold RAW values for the same reason. This is the negative space of in-place aliasing: before widening a sequential in-place kernel's grid over its sequence axis, check whether any consumer reads a value the nonlinearity would have overwritten. Distinct from inplace-output-alias (when aliasing WORKS — this is when it cannot) and from chunkwise-parallel-recurrence (the chunking shape — this is the buffer contract that makes chunking correct when nonlinearity intervenes)"), "nonlinearity-forces-raw concept");
     }
 
+
+    #[test]
+    fn batch29_rules_present() {
+        // Verify the 10 batch-29 rules across A/B/C/D/E/M.
+        let corpus = build_kernel_seed_corpus();
+        let ids: Vec<&str> =
+            corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        // A (2 new): the readback/size-gate + handle-cache family
+        assert!(ids.contains(&"defer-readback-gated-by-live-output-size"), "defer readback gated by live output size");
+        assert!(ids.contains(&"weight-handle-cache-keyed-by-allocation-identity"), "weight handle cache keyed by allocation identity");
+        // D (3 new): the sync-cost-model + launch-path family
+        assert!(ids.contains(&"first-readback-pays-queue-drain"), "first readback pays queue drain");
+        assert!(ids.contains(&"pack-scalar-params-into-combined-buffer"), "pack scalar params into combined buffer");
+        assert!(ids.contains(&"launch-unchecked-caller-owned-size-contract"), "launch unchecked caller owned size contract");
+        // C (2 new): the CODA epilogue family
+        assert!(ids.contains(&"epilogue-at-register-write-phase"), "epilogue at register write phase");
+        assert!(ids.contains(&"delay-rms-scale-past-gemv-epilogue"), "delay rms scale past gemv epilogue");
+        // E (1 new), B (1 new), M (1 new)
+        assert!(ids.contains(&"epilogue-must-be-workgroup-local"), "epilogue must be workgroup local");
+        assert!(ids.contains(&"fast-math-contraction-behind-feature-flag"), "fast math contraction behind feature flag");
+        assert!(ids.contains(&"enum-dispatch-separate-kernel-per-variant"), "enum dispatch separate kernel per variant");
+    }
+
+    #[test]
+    fn batch29_concepts_covered() {
+        // Verify the batch-29 decode-path fusion cluster concepts.
+        let corpus = build_kernel_seed_corpus();
+        let concepts: Vec<&str> =
+            corpus.entries.iter().map(|e| e.gpu_concept.as_str()).collect();
+        // A: defer-readback-gated-by-live-output-size (riir-gpu deltanet_input_proj_fused.rs L17-32 — Bench 437 contrast)
+        assert!(concepts.contains(&"deferring all sibling readbacks to one final drain is NOT an unconditional win — gate it on total simultaneously-live output bytes. When the chained outputs are small (e.g. 4 input projections, ~8 KB total), keeping them all GPU-resident to the end is free and one sync point replaces N; when they are large (5 concurrent ~70 KB FFN buffers, ~350 KB live), the deferral itself increases memory pressure and measured 16% SLOWER on Metal — sync per stage and release each buffer instead. The rule converts 'defer readback' from an always-apply transformation into a footprint-gated one; the existing deferral rules carry the timing/mechanism, this carries the failure boundary. Distinct from defer-readback-until-after-submit (the timing rule — read after submit; this is the precondition that decides whether deferral helps at all) and from chain-dispatches-single-sync-point (the dispatch-side mechanism — this is the output-sizing decision that makes the chaining a win rather than a loss)"), "size-gate concept");
+        // A: weight-handle-cache-keyed-by-allocation-identity (riir-gpu deltanet_input_proj_fused.rs L279-281 + L301-327 + L361-372)
+        assert!(concepts.contains(&"when a GPU offload hook's public API must accept plain CPU weight references (it cannot require callers to thread device handles through existing model code), key a lock-free host-side cache of pre-uploaded device handles by the CPU weight allocation's POINTER IDENTITY — e.g. (pos_bits.as_ptr(), neg_bits.as_ptr()), unique per layer allocation. The hot path is one O(1) map lookup; a cache miss degrades gracefully to an on-the-fly upload + insert, so the hook works with or without a preupload warm-up and never blocks adoption. The keying is what lets the cache be invisible to the API surface. Distinct from host-cache-immutable-device-weights (the upload-once rule — this is the identity-keyed transparent lookup layered on top) and from per-dispatch-pointer-re-extraction (device pointers re-read per dispatch — CPU heap pointers as a persistent key, opposite direction)"), "pointer-identity cache concept");
+        // D: first-readback-pays-queue-drain (riir-gpu deltanet_input_proj_fused.rs L242-245)
+        assert!(concepts.contains(&"after a single dispatch burst on one command queue, the FIRST blocking read drains the whole queue and every subsequent read of an already-completed buffer returns immediately — N sequential readbacks ordered after one burst cost ~1 sync + N small transfers, with no restructuring into a merged download op needed. Sync count is a function of dispatch BURSTS, not read CALLS: don't add per-read defensive syncs, and don't build batched-download machinery when the reads naturally follow one burst. Distinct from batched-downloads-single-sync-cycle (restructures N readbacks into one submit/map/poll cycle — this is the cheaper ordering-only alternative that makes that machinery unnecessary) and from chain-dispatches-single-sync-point (the dispatch-side mechanism — this is the read-side cost model)"), "queue-drain concept");
+        // C: epilogue-at-register-write-phase (riir-gpu epilogue/mod.rs L8-26 + gemv_residual_cubecl.rs L103-109 + L24-31)
+        assert!(concepts.contains(&"memory-bound elementwise operations (residual adds, scales, activations) should execute while the producer's output is STILL IN REGISTERS, at the existing write phase — not as a separate dispatch that reads the output vector back from global memory. In a plane-cooperative GEMV (one plane per output row), plane_sum leaves the full row dot product in every lane's registers, so the epilogue (read residual[row], add, write) rides lane 0's single global store: one extra scalar global read amortized over the n-length cooperative dot, one dispatch eliminated per use site (2→1; 52 per 26-layer model, 104 combined with the norm+residual fusion). The condition is the register-residency of the produced value at the write phase. Distinct from fuse-residual-via-in-place-output-array (buffer aliasing to bypass a parameter limit — this is register-residency at the producer's write phase) and from merge-dispatches-into-single-compute-pass (host-side pass merging, zero kernel changes — this edits the kernel body)"), "register-write-phase concept");
+        // C: delay-rms-scale-past-gemv-epilogue (riir-gpu epilogue/mod.rs L118-133 + L227-262 + coda_primitives_cubecl.rs L20-24)
+        assert!(concepts.contains(&"RMSNorm's per-row scalar commutes with the downstream matmul — RMSNorm(x) @ W = r · (x·γ) @ W — so split the norm into (a) extracting r (a partial-norm reduction), (b) applying only the elementwise gamma, and (c) applying r later as a row-scale epilogue of the downstream GEMV, composable with a residual add. Be honest about what this saves: the pure reparameterization alone saves ZERO dispatches (3→3) — the real win is fusing r into the LAST GEMV of the group and eliminating the pre-GEMV write of the normed vector; with handle-to-handle passing the dominant benefit is dispatch/command-buffer overhead, not bandwidth. The win compounds when multiple GEMVs share the same r. Distinct from fold-norm-scalar-into-matmul (folds the scalar into the matmul internals — this keeps the GEMV body untouched and adds the producer-side decomposition) and from fuse-add-rms-norm (fuses residual into a norm kernel — this moves the norm scalar across a GEMV boundary)"), "delayed-rms concept");
+        // D: pack-scalar-params-into-combined-buffer (riir-gpu epilogue/mod.rs L48 + L148-154 + coda_primitives_cubecl.rs L51-55 + L144-146 + norm_residual_cubecl.rs L179-181 + L351-354)
+        assert!(concepts.contains(&"when the kernel DSL caps Array parameters (~4-5 in CubeCL v0.10), pack ALL launch scalars (eps, dim, derived constants) into ONE small f32 params buffer created per launch on the host — precomputing derived values there (inv_dim = 1/dim once on the CPU, not per-thread in-kernel) — and index it positionally in-kernel. When even a u32 like dim won't fit as a scalar arg, bitcast it through the f32 pack and cast back in-kernel. Couple variant choice to the budget with a total_array_count()-style metadata method so a kernel never exceeds the Array limit. Distinct from staging-packed-uniforms-encoder-ordered-copies (driven by upload batching — this is driven by the kernel argument-count limit), from derive-params-from-global-invocation-id (per-item params encoded in the grid — these are per-launch scalars), and from identical-uniforms-share-single-slot (dedupes identical uniforms — this packs distinct scalars)"), "packed-params concept");
+        // M: enum-dispatch-separate-kernel-per-variant (riir-gpu epilogue/mod.rs L47 + L99-103 + L137-154 + gemv_residual_cubecl.rs L76 + L140)
+        assert!(concepts.contains(&"when the kernel DSL forbids generic kernel parameterization (no generics in #[cube] kernels) — or where a generic form would pay a runtime branch per element — enumerate the fusion-combination space as a host-level #[repr(u8)] enum, compile ONE specialized kernel function per variant (zero in-kernel branching, each with exactly its own Array count, visible even between dtype twins with byte-identical launchers), and drive buffer plumbing from enum metadata methods (extra_input_count, needs_residual, total_array_count). The enum organizes dispatch; the kernel list stays flat and each body is branch-free. Distinct from dtype-specialized-float-kind / hardcoded-fast-path-jit-specialization (dtype/shape specialization for perf — this is DSL-limitation-driven with the enum-metadata authoring shape) and from op-family-type-dispatch (dispatches between op families — every variant here is the same op with a different epilogue suffix)"), "enum-kernel-variant concept");
+        // E: epilogue-must-be-workgroup-local (riir-gpu epilogue/mod.rs L49 + L371-375 + gemv_residual_cubecl.rs L50-55 + norm_residual_cubecl.rs L57-59)
+        assert!(concepts.contains(&"an epilogue may only consume data at the granularity the executing workgroup OWNS — no cross-workgroup sync exists to order it after a foreign write. For plane-per-row GEMV that means per-row scalars (residual[row], scale[row] are each one scalar owned by the row's plane); for a norm fusion it means the whole row reduction must complete inside a single workgroup. Ops needing cross-row or cross-workgroup data (attention over KV, anything with a global barrier) cannot be epilogued — which is why a dispatch budget leaves the attention section unchanged while post-attn and MLP sections fuse down. Fusion legality is an ownership question, not just a data-dependency question. Distinct from nonlinearity-forces-raw-input-buffers (buffer-aliasing legality — this is data-ownership scope legality) and from workgroup-equals-plane-native-reduction (workgroup sizing for free shuffles — this is the fusion boundary that scope defines)"), "workgroup-local concept");
+        // D: launch-unchecked-caller-owned-size-contract (riir-gpu epilogue/mod.rs L50 + gemv_residual_cubecl.rs L205-226)
+        assert!(concepts.contains(&"the checked launch path validates buffer sizes and argument consistency on EVERY dispatch — host-side overhead that dominates when each dispatch is microseconds of work in a 14-dispatches-per-layer × 26-layer decode loop. Compile kernels with launch_unchecked, wrap each in a launcher that takes exact element counts as plain args, and push the size contract into a documented # Safety section (exact per-handle element counts, required hardware features) verified by the caller and by tests. The repeated shape: thin launcher struct + one unsafe launch + an enumerated handle-size contract. Distinct from cuda-graph-scalar-via-device-pointer (streamlines launches by moving scalars to device memory — this elides per-launch validation) and from no-blocking-sync-in-async-pipeline (elides syncs — this elides checks)"), "unchecked-launch concept");
+        // B: fast-math-contraction-behind-feature-flag (riir-gpu epilogue/gemv_residual_cubecl.rs L67-75 + L94-101 + L131-139)
+        assert!(concepts.contains(&"a numerics-affecting compiler flag (fast-math contraction) must not be enabled globally — it changes rounding everywhere and breaks bit-comparisons and tolerance gates — nor disabled forever (the hot dot-product loop stays uncontracted mul+add on every build). Attach the flag to the KERNEL ATTRIBUTE via a cfg_attr pair gated on a dedicated Cargo feature: the attribute-identical strict-FP compilation stays the byte-identical default, correctness/equivalence gates run strict, and perf builds opt in. The partial += w[k] * x[k] accumulation contracts to FMA only on the opt-in compilation of the same source. Distinct from dtype-specialized-float-kind (dtype specialization — this is compiler-numerics-mode specialization) and from in-kernel numeric transforms like softplus-piecewise-saturation-clamp (algorithm changes — this gates a compiler flag with zero algorithm change)"), "fma-flag concept");
+    }
+
+    #[test]
+    #[cfg(not(feature = "kernel_verify"))]
+    fn batch29_pseudocode_parses() {
+        // G1 for Batch 29: every new rule's ref_shape AND opt_pattern must
+        // syn-parse as valid Rust (the L2 pruner verdict), like every
+        // healable pattern the drafter can emit.
+        use crate::domain::HealDomain;
+        let corpus = build_kernel_seed_corpus();
+        let ids = [
+            "defer-readback-gated-by-live-output-size",
+            "weight-handle-cache-keyed-by-allocation-identity",
+            "first-readback-pays-queue-drain",
+            "epilogue-at-register-write-phase",
+            "delay-rms-scale-past-gemv-epilogue",
+            "pack-scalar-params-into-combined-buffer",
+            "enum-dispatch-separate-kernel-per-variant",
+            "epilogue-must-be-workgroup-local",
+            "launch-unchecked-caller-owned-size-contract",
+            "fast-math-contraction-behind-feature-flag",
+        ];
+        for id in ids {
+            let entry = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-29 rule '{id}' missing"));
+            let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+            assert!(ref_verdict.parses, "batch-29 ref_shape for '{id}' must parse");
+            let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+            assert!(opt_verdict.parses, "batch-29 opt_pattern for '{id}' must parse");
+        }
+    }
+
     // ════════════════════════════════════════════════════════════════════
     // Plan 003 — Router ↔ corpus wiring tests
     // ════════════════════════════════════════════════════════════════════
@@ -4879,7 +5252,7 @@ mod tests {
 
     #[test]
     fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-        // Every rule_id in the 193-rule corpus must appear in exactly one category.
+        // Every rule_id in the 203-rule corpus must appear in exactly one category.
         let corpus = build_kernel_seed_corpus();
         let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
         let mut categorized: Vec<&str> = Vec::new();
@@ -4912,11 +5285,11 @@ mod tests {
     fn kernel_categories_counts_match_plan_003_table() {
         // Pin per-category rule counts to the Plan 003 table (updated for Batch 28).
         let expected = [
-            (KernelCategory::MemoryAccess, 27),
-            (KernelCategory::Compute, 33),
-            (KernelCategory::Fusion, 19),
-            (KernelCategory::Dispatch, 26),
-            (KernelCategory::Parallelism, 11),
+            (KernelCategory::MemoryAccess, 29),
+            (KernelCategory::Compute, 34),
+            (KernelCategory::Fusion, 21),
+            (KernelCategory::Dispatch, 29),
+            (KernelCategory::Parallelism, 12),
             (KernelCategory::FlashAttnTiling, 10),
             (KernelCategory::LinearAttnRecurrence, 19),
             (KernelCategory::MoeDispatchBackward, 9),
@@ -4924,7 +5297,7 @@ mod tests {
             (KernelCategory::VarlenChunkedReduction, 5),
             (KernelCategory::AutotuneDispatch, 4),
             (KernelCategory::ConvGemmLayout, 6),
-            (KernelCategory::KernelPolymorphism, 5),
+            (KernelCategory::KernelPolymorphism, 6),
             (KernelCategory::DtypeAlignment, 11),
             (KernelCategory::IrStrengthReduction, 4),
         ];
@@ -4935,9 +5308,9 @@ mod tests {
                 "Plan 003: category {cat:?} has {} rules, expected {count}",
                 entry.2.len());
         }
-        // Sum must equal 193.
+        // Sum must equal 203.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 193, "Plan 003: category totals must sum to 193");
+        assert_eq!(total, 203, "Plan 003: category totals must sum to 203");
     }
 
     #[test]
@@ -4947,7 +5320,7 @@ mod tests {
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 193, "Plan 003: grouped corpus has {total} rules, expected 193");
+        assert_eq!(total, 203, "Plan 003: grouped corpus has {total} rules, expected 203");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");
