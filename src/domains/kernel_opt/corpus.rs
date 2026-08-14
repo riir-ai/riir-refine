@@ -26,13 +26,19 @@
 //!   anchor shape bucketing).
 //! - **Batch 8 (Research 009):** 9 burn-cubecl + cubecl-opt rules (kernel
 //!   polymorphism + dtype/alignment specialization + IR strength reduction).
-//! - **Batch 9 (Research 010):** 8 popcorn rules — fusion (add_rms_norm,
-//!   group_norm_linear, jsd) + dtype/quant (int8_int2_matmul, _quant) + dispatch.
-//! - **Batch 10 (Research 011):** 12 popcorn rules — compute (hadamard_transform,
-//!   dyt, token_shift, sparsemax) + fusion (selective_log_softmax) + dispatch
-//!   (softmax, rms_norm) + chunked reduction (mean_pooling, solve_tril) +
-//!   polymorphism (geglu, swiglu, rope) + dtype (comba, gelu).
-//!   Corpus: **88 rules across 15 categories (A–O)**.
+//! - **Batch 9 (Research 010):** 8 popcorn rules — fusion (`add_rms_norm`,
+//!   `group_norm_linear`, `jsd`) + dtype/quant (`int8_int2_matmul`, `_quant`) + dispatch.
+//! - **Batch 10 (Research 011):** 12 popcorn rules — compute (`hadamard_transform`,
+//!   `dyt`, `token_shift`, `sparsemax`) + fusion (`selective_log_softmax`) + dispatch
+//!   (`softmax`, `rms_norm`) + chunked reduction (`mean_pooling`, `solve_tril`) +
+//!   polymorphism (`geglu`, `swiglu`, `rope`) + dtype (`comba`, `gelu`).
+//! - **Batch 11 (Research 012):** 11 popcorn rules — linear-attention recurrence
+//!   family (`gla`, `simple_gla`, `rwkv7`, `delta_rule`, `iplr_delta_rule`,
+//!   `gated_oja_rule`) + parallelism (`chunk_global_cumsum`, `retention`,
+//!   `lightning_attn`) + flash-attn tiling (`deltaformer`) + compute (`based`,
+//!   `rebased`, `linear_attn`) + dispatch (`lightning_attn`). A 12th candidate
+//!   (`chunk-reset-scan`) was dropped as a duplicate of `chunk-reset-cumsum`
+//!   (Batch 6). Corpus: **99 rules across 15 categories (A–O)**.
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
@@ -932,6 +938,138 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
             ref_shape: "// naive: integer modulo by a power-of-2 constant (uses the div/mod unit)\nfn wrap(x: u32) -> u32 {\n    x % 64 // mod instruction\n}".to_string(),
             opt_pattern: "// optimized: bitwise and with (2^k - 1) mask (cheaper bitwise-and unit)\nfn wrap(x: u32) -> u32 {\n    x & 63 // 64 = 2^6, mask = 64 - 1 = 0b111111\n}".to_string(),
         },
+        // ════════════════════════════════════════════════════════════════════
+        // Batch 11 — popcorn linear-attention recurrence family (13 rules)
+        // Source: popcorn/src/popcorn/kernels/{gla,simple_gla,based,rebased,
+        // linear_attn,retention,lightning_attn,rwkv7,delta_rule,iplr_delta_rule,
+        // gated_oja_rule,deltaformer,hgrn,chunk_global_cumsum,chunk_local_cumsum}.py
+        // Grows G (linear-attn recurrence) from 6 → 11, E (parallelism) 3 → 5,
+        // F (flash-attn tiling) 7 → 8, B (compute) 9 → 11, D (dispatch) 5 → 6,
+        // J (varlen + chunked reduction) 5 → 6.
+        // ════════════════════════════════════════════════════════════════════
+        // ── per-key-dim-diagonal-gate — scalar gate → per-dimension vector gate ─
+        // Source: gla.py — `state * gate[:, t].exp()[..., None]`. The gate is a
+        // per-key-dimension vector (not a scalar per head), broadcast across the
+        // value dimension via `[..., None]`. Each key dimension decays at its
+        // own learned rate. Distinct from `state-forget-gate` (Batch 3) which is
+        // a single scalar decay applied uniformly.
+        KernelRule {
+            rule_id: "per-key-dim-diagonal-gate".to_string(),
+            gpu_concept: "per-dimension diagonal decay gate on recurrent state".to_string(),
+            ref_shape: "// naive: single scalar decay for the whole state vector (uniform forgetting)\nfn state_update_scalar_gate(state: &mut [[f32; V]; K], k: &[f32; K], v: &[f32; V], gate: f32) {\n    let decay = gate.exp();\n    for kv in 0..K {\n        for vv in 0..V {\n            state[kv][vv] = state[kv][vv] * decay + k[kv] * v[vv];\n        }\n    }\n}".to_string(),
+            opt_pattern: "// optimized: per-key-dimension vector decay (gla) — each dim forgets independently\nfn state_update_per_dim_gate(state: &mut [[f32; V]; K], k: &[f32; K], v: &[f32; V], gate: &[f32; K]) {\n    // gate[kv].exp() broadcasts across V via the inner loop (the [..., None] in py)\n    let mut decay = [0.0f32; K];\n    for kv in 0..K { decay[kv] = gate[kv].exp(); }\n    for kv in 0..K {\n        let d_kv = decay[kv];\n        for vv in 0..V {\n            state[kv][vv] = state[kv][vv] * d_kv + k[kv] * v[vv];\n        }\n    }\n}".to_string(),
+        },
+        // ── erase-replace-low-rank-transition — 2-phase update → 4-phase D+LR ──
+        // Source: rwkv7.py — `removed = state·a; state = state*w.exp() + b⊗removed;
+        // state += k⊗v`. The diagonal decay (w) plus the low-rank erase-replace
+        // (a, b) compose a 4-phase transition: project out an erase direction,
+        // decay, add it back along a replace direction, then write the new outer
+        // product. Structurally distinct from gla's 2-phase (decay + write).
+        KernelRule {
+            rule_id: "erase-replace-low-rank-transition".to_string(),
+            gpu_concept: "diagonal-plus-low-rank state transition (erase, decay, replace, write)".to_string(),
+            ref_shape: "// naive: 2-phase update (decay + write) — no in-context erase/replace\nfn state_update_two_phase(state: &mut [[f32; V]; K], k: &[f32; K], v: &[f32; V], w: &[f32; K]) {\n    for kv in 0..K {\n        let d = w[kv].exp();\n        for vv in 0..V {\n            state[kv][vv] = state[kv][vv] * d + k[kv] * v[vv];\n        }\n    }\n}".to_string(),
+            opt_pattern: "// optimized: 4-phase diagonal+low-rank transition (rwkv7 Goose)\nfn state_update_dplr(state: &mut [[f32; V]; K], k: &[f32; K], v: &[f32; V], w: &[f32; K], a: &[f32; K], b: &[f32; K]) {\n    // phase 1: project out the erase direction a → removed[bhv] = Σ_kv state[kv][hv]*a[kv]\n    let mut removed = [0.0f32; V];\n    for vv in 0..V {\n        let mut acc = 0.0;\n        for kv in 0..K { acc += state[kv][vv] * a[kv]; }\n        removed[vv] = acc;\n    }\n    // phase 2 + 3: decay (diagonal w) and add back along replace direction b\n    for kv in 0..K {\n        let d = w[kv].exp();\n        for vv in 0..V {\n            state[kv][vv] = state[kv][vv] * d + b[kv] * removed[vv];\n        }\n    }\n    // phase 4: write the new key-value outer product\n    for kv in 0..K {\n        for vv in 0..V {\n            state[kv][vv] += k[kv] * v[vv];\n        }\n    }\n}".to_string(),
+        },
+        // ── oja-subtractive-normalization — raw write → project-out-then-write ──
+        // Source: gated_oja_rule.py — `write = β(k − Sv)` where `Sv` is the
+        // projection of state onto the current value. Oja's rule subtracts the
+        // already-stored component before writing, keeping the state bounded.
+        // Distinct from householder-rank1-update which projects `v − Sk` (the
+        // value residual, not the key residual).
+        KernelRule {
+            rule_id: "oja-subtractive-normalization".to_string(),
+            gpu_concept: "Oja subtractive normalization: project out stored component before write".to_string(),
+            ref_shape: "// naive: raw outer-product write (state grows unbounded without normalization)\nfn state_write_raw(state: &mut [[f32; V]; K], k: &[f32; K], v: &[f32; V], beta: f32) {\n    for kv in 0..K {\n        for vv in 0..V {\n            state[kv][vv] += beta * k[kv] * v[vv];\n        }\n    }\n}".to_string(),
+            opt_pattern: "// optimized: Oja subtractive — write only the NEW component (k − Sv)\nfn state_write_oja(state: &mut [[f32; V]; K], k: &[f32; K], v: &[f32; V], beta: f32) {\n    // step 1: project state onto v → stored_k[kv] = Σ_vv state[kv][vv]*v[vv]\n    let mut stored_k = [0.0f32; K];\n    for kv in 0..K {\n        let mut acc = 0.0;\n        for vv in 0..V { acc += state[kv][vv] * v[vv]; }\n        stored_k[kv] = acc;\n    }\n    // step 2: write the residual (k − stored_k), not the raw k\n    for kv in 0..K {\n        let residual_k = beta * (k[kv] - stored_k[kv]);\n        for vv in 0..V {\n            state[kv][vv] += residual_k * v[vv];\n        }\n    }\n}".to_string(),
+        },
+        // ── identity-plus-low-rank-delta — decay-gated update → I+ba^T rotation ──
+        // Source: iplr_delta_rule.py — `state += b⊗(state·a)` then `state += k⊗v`.
+        // The rank-1 matrix `(I + b·a^T)` is an identity-plus-low-rank update:
+        // it rotates the state along the (a,b) plane without decaying it. No
+        // forget gate — the update is additive-rotational, preserving state
+        // magnitude (bounded by the input stream rather than by a gate).
+        KernelRule {
+            rule_id: "identity-plus-low-rank-delta".to_string(),
+            gpu_concept: "identity-plus-low-rank (I+ba^T) state rotation then outer-product write".to_string(),
+            ref_shape: "// naive: decay-gated update (state shrinks each step)\nfn state_update_decayed(state: &mut [[f32; V]; K], k: &[f32; K], v: &[f32; V], decay: f32) {\n    for kv in 0..K {\n        for vv in 0..V {\n            state[kv][vv] = state[kv][vv] * decay + k[kv] * v[vv];\n        }\n    }\n}".to_string(),
+            opt_pattern: "// optimized: (I + b·a^T) rotation preserves magnitude, then write outer product\nfn state_update_iplr(state: &mut [[f32; V]; K], k: &[f32; K], v: &[f32; V], a: &[f32; K], b: &[f32; K]) {\n    // phase 1: project state onto a → projected[vv] = Σ_kv state[kv][vv]*a[kv]\n    let mut projected = [0.0f32; V];\n    for vv in 0..V {\n        let mut acc = 0.0;\n        for kv in 0..K { acc += state[kv][vv] * a[kv]; }\n        projected[vv] = acc;\n    }\n    // phase 2: rank-1 rotation along (a,b): state += b ⊗ projected (no decay)\n    for kv in 0..K {\n        for vv in 0..V {\n            state[kv][vv] += b[kv] * projected[vv];\n        }\n    }\n    // phase 3: write the new key-value outer product\n    for kv in 0..K {\n        for vv in 0..V {\n            state[kv][vv] += k[kv] * v[vv];\n        }\n    }\n}".to_string(),
+        },
+        // ── cumsum-gate-to-decay-matrix — per-step gate → pairwise decay matrix ─
+        // Source: simple_gla.py — `decay = g.cumsum(1); decay = (decay[:,None] −
+        // decay[None,:]).tril().exp().tril()`. The per-step log-gate is cumsummed
+        // (telescoping sum), differenced pairwise to get the cumulative decay
+        // between positions i and j, exp'd, then masked causal. Distinct from
+        // retention/lightning which use a constant per-head slope.
+        KernelRule {
+            rule_id: "cumsum-gate-to-decay-matrix".to_string(),
+            gpu_concept: "convert per-step log-gate into pairwise decay matrix via cumsum + diff".to_string(),
+            ref_shape: "// naive: per-step sequential decay (O(N) sequential steps, no pairwise form)\nfn decay_sequential(state: &mut [f32], x: &[f32], gate: &[f32], n: usize) -> Vec<f32> {\n    let mut out = vec![0.0f32; n];\n    for t in 0..n {\n        let d = gate[t].exp();\n        state[t % state.len()] = state[t % state.len()] * d + x[t];\n        out[t] = state[t % state.len()];\n    }\n    out\n}".to_string(),
+            opt_pattern: "// optimized: build pairwise decay matrix from cumsummed gate (simple_gla)\nfn decay_pairwise_matrix(gate: &[f32], n: usize) -> Vec<f32> {\n    // cumsum the log-gate (telescoping)\n    let mut cumgate = vec![0.0f32; n];\n    let mut acc = 0.0;\n    for i in 0..n { acc += gate[i]; cumgate[i] = acc; }\n    // pairwise difference: decay[i][j] = exp(cumgate[i] - cumgate[j]) for i >= j\n    let mut decay = vec![0.0f32; n * n];\n    for i in 0..n {\n        for j in 0..=i {\n            decay[i * n + j] = (cumgate[i] - cumgate[j]).exp();\n        }\n    }\n    decay\n}".to_string(),
+        },
+        // ── reverse-scan-via-double-flip — reverse cumsum → flip+cumsum+flip ───
+        // Source: chunk_global_cumsum.py, chunk_local_cumsum.py — `torch.flip(
+        // torch.cumsum(torch.flip(s, (axis,)), axis), (axis,))`. The canonical
+        // idiom for a reverse-direction cumulative scan when no native
+        // `cumsum_reverse` exists: flip the input, run the forward scan, flip
+        // the output. The two flips compose to a reverse scan.
+        KernelRule {
+            rule_id: "reverse-scan-via-double-flip".to_string(),
+            gpu_concept: "reverse-direction scan via flip → forward scan → flip".to_string(),
+            ref_shape: "// naive: explicit reverse-direction loop (no vectorization, sequential)\nfn cumsum_reverse_naive(x: &[f32], n: usize) -> Vec<f32> {\n    let mut out = vec![0.0f32; n];\n    let mut acc = 0.0;\n    for i in (0..n).rev() {\n        acc += x[i];\n        out[i] = acc;\n    }\n    out\n}".to_string(),
+            opt_pattern: "// optimized: flip → forward cumsum → flip (reuses the vectorized forward scan)\nfn cumsum_reverse_flip(x: &[f32], n: usize) -> Vec<f32> {\n    let mut flipped = vec![0.0f32; n];\n    for i in 0..n { flipped[i] = x[n - 1 - i]; }\n    let mut scanned = vec![0.0f32; n];\n    let mut acc = 0.0;\n    for i in 0..n { acc += flipped[i]; scanned[i] = acc; }\n    let mut out = vec![0.0f32; n];\n    for i in 0..n { out[i] = scanned[n - 1 - i]; }\n    out\n}".to_string(),
+        },
+        // ── pairwise-distance-decay-matrix — per-step decay → N×N decay matrix ─
+        // Source: retention.py, lightning_attn.py — `n = arange(seq); steps =
+        // n[:,None] − n[None,:]; decay = (steps*slope).exp()`. Broadcasts a
+        // per-step (or per-head) decay slope into a full pairwise decay matrix
+        // for a single batched matmul, avoiding the sequential recurrence.
+        KernelRule {
+            rule_id: "pairwise-distance-decay-matrix".to_string(),
+            gpu_concept: "materialize N×N decay matrix from index distance and slope".to_string(),
+            ref_shape: "// naive: sequential recurrence with per-step decay (O(N) sequential steps)\nfn decay_sequential_step(state: &mut [f32], x: &[f32], slope: f32, n: usize) -> Vec<f32> {\n    let mut out = vec![0.0f32; n];\n    let decay = slope.exp();\n    for t in 0..n {\n        state[t % state.len()] = state[t % state.len()] * decay + x[t];\n        out[t] = state[t % state.len()];\n    }\n    out\n}".to_string(),
+            opt_pattern: "// optimized: build N×N decay matrix from arange distance, then batched matmul\nfn decay_matrix_batched(x: &[f32], slope: f32, n: usize) -> Vec<f32> {\n    // steps[i][j] = i - j (pairwise distance), decay[i][j] = exp(slope * (i-j)) for i>=j\n    let mut decay = vec![0.0f32; n * n];\n    for i in 0..n {\n        for j in 0..=i {\n            decay[i * n + j] = (slope * (i as f32 - j as f32)).exp();\n        }\n    }\n    // out[i] = Σ_{j<=i} decay[i][j] * x[j] — one batched matmul, fully parallel\n    let mut out = vec![0.0f32; n];\n    for i in 0..n {\n        let mut acc = 0.0;\n        for j in 0..=i { acc += decay[i * n + j] * x[j]; }\n        out[i] = acc;\n    }\n    out\n}".to_string(),
+        },
+        // ── chunk-reset-scan REMOVED — duplicate of `chunk-reset-cumsum` (Batch 6).
+        // Both source from chunk_local_cumsum.py; the existing rule covers the
+        // split→cumsum→cat chunk-boundary-reset pattern. See Research 012.
+        // ── strict-causal-mask-tril-offset — tril(0) → tril(-1) exclude diag ───
+        // Source: deltaformer.py — `scores.masked_fill(~lower.tril(-1), -inf)`.
+        // Strictly-causal attention excludes the diagonal (position cannot attend\n        // to itself) via `tril(-1)` instead of the standard `tril()`. Paired
+        // with a NaN guard: the first row has no visible keys → softmax of all\n        // -inf → NaN, requiring `nan_to_num` before downstream use.
+        KernelRule {
+            rule_id: "strict-causal-mask-tril-offset".to_string(),
+            gpu_concept: "strictly-causal mask via tril(-1) (exclude diagonal) + NaN guard".to_string(),
+            ref_shape: "// naive: standard causal mask tril(0) — position attends to itself (diag included)\nfn attention_causal_diag(scores: &[f32], n: usize) -> Vec<f32> {\n    let mut out = vec![0.0f32; n * n];\n    for i in 0..n {\n        for j in 0..n {\n            out[i * n + j] = if j <= i { scores[i * n + j] } else { f32::NEG_INFINITY };\n        }\n    }\n    out\n}".to_string(),
+            opt_pattern: "// optimized: strictly-causal tril(-1) (diag excluded) + NaN guard for empty first row\nfn attention_strict_causal(scores: &[f32], n: usize) -> Vec<f32> {\n    let mut out = vec![f32::NEG_INFINITY; n * n];\n    for i in 0..n {\n        for j in 0..n {\n            // tril(-1): j < i (strictly below the diagonal)\n            if j < i { out[i * n + j] = scores[i * n + j]; }\n        }\n    }\n    // first row is all -inf (no visible keys) → softmax would be NaN; guard it\n    for j in 0..n { out[0 * n + j] = 0.0; } // nan_to_num on empty first row\n    out\n}".to_string(),
+        },
+        // ── polynomial-taylor-feature-map — softmax kernel → poly feature map ─
+        // Source: based.py (`1 + x + 0.5·x²`, 2nd-order Taylor), rebased.py
+        // (`x²`, pure quadratic). Approximates the softmax kernel with a
+        // low-degree polynomial so linear attention can run without exp. The\n        // Taylor expansion of `exp(q·k)` truncated at degree 2 is the Based\n        // kernel; dropping the constant + linear terms gives ReBased.
+        KernelRule {
+            rule_id: "polynomial-taylor-feature-map".to_string(),
+            gpu_concept: "polynomial Taylor feature map approximating the softmax kernel".to_string(),
+            ref_shape: "// naive: full softmax attention (exp over all scores, O(N²) + expensive exp)\nfn attention_softmax(q: &[f32], k: &[f32], v: &[f32], d: usize, n: usize) -> Vec<f32> {\n    let mut out = vec![0.0f32; n * d];\n    for i in 0..n {\n        let mut scores = vec![0.0f32; n];\n        let mut max_s = f32::NEG_INFINITY;\n        for j in 0..n {\n            let mut s = 0.0;\n            for dd in 0..d { s += q[i*d+dd] * k[j*d+dd]; }\n            scores[j] = s; max_s = max_s.max(s);\n        }\n        let mut sum_e = 0.0;\n        for j in 0..n { scores[j] = (scores[j] - max_s).exp(); sum_e += scores[j]; }\n        for j in 0..n {\n            for dd in 0..d { out[i*d+dd] += scores[j] / sum_e * v[j*d+dd]; }\n        }\n    }\n    out\n}".to_string(),
+            opt_pattern: "// optimized: polynomial feature map (no exp) — Based kernel: 1 + x + 0.5·x²\nfn attention_poly_feature(q: &[f32], k: &[f32], v: &[f32], d: usize, n: usize) -> Vec<f32> {\n    let mut out = vec![0.0f32; n * d];\n    for i in 0..n {\n        let mut norm = 0.0; // running normalizer Σ a_ts\n        for j in 0..=i { // causal\n            let mut s = 0.0;\n            for dd in 0..d { s += q[i*d+dd] * k[j*d+dd]; }\n            let a = 1.0 + s + 0.5 * s * s; // 2nd-order Taylor of exp(s)\n            for dd in 0..d { out[i*d+dd] += a * v[j*d+dd]; }\n            norm += a;\n        }\n        for dd in 0..d { out[i*d+dd] /= norm + 1e-6; } // normalize\n    }\n    out\n}".to_string(),
+        },
+        // ── positive-feature-map-shift — raw q/k → elu+1 non-negative shift ───
+        // Source: linear_attn.py — q and k pass through `elu(x) + 1` so the\n        // normalizer `Σ k` never crosses zero. Without the shift, signed q/k\n        // can produce a zero or negative normalizer, destabilizing the linear\n        // attention recurrence. The +1 is the minimal shift making elu ≥ 0\n        // strictly positive.
+        KernelRule {
+            rule_id: "positive-feature-map-shift".to_string(),
+            gpu_concept: "shift activation positive (elu+1) so linear-attention normalizer never crosses zero".to_string(),
+            ref_shape: "// naive: raw q/k (signed) — normalizer Σ k can be zero/negative, destabilizing\nfn linear_attn_raw(q: &[f32], k: &[f32], v: &[f32], d: usize, n: usize) -> Vec<f32> {\n    let mut out = vec![0.0f32; n * d];\n    for i in 0..n {\n        let mut norm = 0.0;\n        for j in 0..=i {\n            let mut s = 0.0;\n            for dd in 0..d { s += q[i*d+dd] * k[j*d+dd]; }\n            for dd in 0..d { out[i*d+dd] += s * v[j*d+dd]; }\n            norm += s; // can be zero/negative\n        }\n        for dd in 0..d { out[i*d+dd] /= norm + 1e-10; }\n    }\n    out\n}".to_string(),
+            opt_pattern: "// optimized: elu(x)+1 feature map guarantees non-negative q/k → stable normalizer\nfn linear_attn_positive(q: &[f32], k: &[f32], v: &[f32], d: usize, n: usize) -> Vec<f32> {\n    let map = |x: f32| -> f32 { if x > 0.0 { x + 1.0 } else { x.exp() + 1.0 } }; // elu+1\n    let mut out = vec![0.0f32; n * d];\n    for i in 0..n {\n        let mut norm = 0.0;\n        for j in 0..=i {\n            let mut s = 0.0;\n            for dd in 0..d { s += map(q[i*d+dd]) * map(k[j*d+dd]); }\n            for dd in 0..d { out[i*d+dd] += s * v[j*d+dd]; }\n            norm += s; // strictly positive (map ≥ 1)\n        }\n        for dd in 0..d { out[i*d+dd] /= norm + 1e-10; }\n    }\n    out\n}".to_string(),
+        },
+        // ── layer-depth-decay-schedule — constant slope → depth-varying slope ──
+        // Source: lightning_attn.py — `slope = -(8/heads * (1 - layer_idx/
+        // num_layers)) * arange(heads)`. The decay slope scales with layer\n        // depth: deeper layers (layer_idx → num_layers) decay slower\n        // (slope → 0), shallower layers decay faster. A dispatch decision\n        // baked into kernel parameters via the layer index — not a runtime\n        // branch but a parameter specialization.
+        KernelRule {
+            rule_id: "layer-depth-decay-schedule".to_string(),
+            gpu_concept: "layer-depth-dependent decay schedule (deeper layers decay slower)".to_string(),
+            ref_shape: "// naive: constant per-head decay slope regardless of layer depth\nfn decay_slope_constant(heads: usize, layer_idx: usize, num_layers: usize) -> Vec<f32> {\n    // same schedule at every layer — ignores depth\n    let _ = (layer_idx, num_layers);\n    (0..heads).map(|h| -8.0 / heads as f32 * h as f32).collect()\n}".to_string(),
+            opt_pattern: "// optimized: slope scales with depth (lightning_attn) — deeper → slower decay\nfn decay_slope_depth_aware(heads: usize, layer_idx: usize, num_layers: usize) -> Vec<f32> {\n    let depth_factor = 1.0 - layer_idx as f32 / num_layers as f32; // 1.0 at layer 0 → 0.0 at last\n    (0..heads)\n        .map(|h| -(8.0 / heads as f32) * depth_factor * h as f32)\n        .collect()\n}".to_string(),
+        },
     ])
 }
 
@@ -944,7 +1082,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 88-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 99-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -965,7 +1103,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "masked-boundary-load",
         ],
     ),
-    // B: Compute patterns (9 rules)
+    // B: Compute patterns (11 rules)
     (
         KernelCategory::Compute,
         "B: compute",
@@ -979,6 +1117,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "optional-bias-branch",
             "shift-via-pad-subtract",
             "sorted-cumsum-threshold",
+            "polynomial-taylor-feature-map",
+            "positive-feature-map-shift",
         ],
     ),
     // C: Fusion patterns (8 rules)
@@ -996,7 +1136,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "gather-selective-reduction",
         ],
     ),
-    // D: Dispatch patterns (5 rules)
+    // D: Dispatch patterns (6 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -1006,9 +1146,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "pow2-block-alignment",
             "predicate-gate-div512",
             "multi-condition-predicate",
+            "layer-depth-decay-schedule",
         ],
     ),
-    // E: Parallelism patterns (3 rules)
+    // E: Parallelism patterns (5 rules)
     (
         KernelCategory::Parallelism,
         "E: parallelism",
@@ -1016,9 +1157,11 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "multi-dim-grid-launch",
             "block-count-clamp",
             "backward-as-conjugate",
+            "reverse-scan-via-double-flip",
+            "pairwise-distance-decay-matrix",
         ],
     ),
-    // F: Flash-attention tiling (7 rules)
+    // F: Flash-attention tiling (8 rules)
     (
         KernelCategory::FlashAttnTiling,
         "F: flash-attn tiling",
@@ -1030,9 +1173,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "causal-diag-offdiag-split",
             "shared-mem-aware-tile",
             "kv-block-streaming",
+            "strict-causal-mask-tril-offset",
         ],
     ),
-    // G: Linear-attention recurrence (6 rules)
+    // G: Linear-attention recurrence (11 rules)
     (
         KernelCategory::LinearAttnRecurrence,
         "G: linear-attn recurrence",
@@ -1043,6 +1187,11 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "recurrent-vs-chunk-dispatch",
             "multi-write-per-step",
             "chained-two-pass-recurrence",
+            "per-key-dim-diagonal-gate",
+            "erase-replace-low-rank-transition",
+            "oja-subtractive-normalization",
+            "identity-plus-low-rank-delta",
+            "cumsum-gate-to-decay-matrix",
         ],
     ),
     // H: MoE dispatch + backward pass (9 rules)
@@ -1152,7 +1301,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
 /// Returns 15 buckets (one per category), each containing the `KernelRule`s whose
 /// `rule_id` appears in that category's slice of [`KERNEL_CATEGORIES`]. This is
 /// the category-scoped view of the corpus — a future heal pipeline can consult
-/// the routed expert's rules first without scanning all 68.
+/// the routed expert's rules first without scanning all 99.
 ///
 /// # Allocation
 ///
@@ -1209,8 +1358,9 @@ mod tests {
         // Batch 8 (9): burn-cubecl kernel polymorphism + dtype/alignment + cubecl-opt IR strength reduction.
         // Batch 9 (8): popcorn fusion + dtype/quant + dispatch (add_rms_norm, group_norm_linear, jsd, int8_int2_matmul, _quant).
         // Batch 10 (12): popcorn compute + chunked reduction + polymorphism (mean_pooling, solve_tril, hadamard_transform, comba, dyt, token_shift, sparsemax, selective_log_softmax, softmax, rms_norm, geglu, swiglu, rope, gelu).
-        // Total: 88.
-        assert_eq!(corpus.entries.len(), 88, "batches 1-10 should have 88 rules");
+        // Batch 11 (11): popcorn linear-attention recurrence family (gla, simple_gla, based, rebased, linear_attn, retention, lightning_attn, rwkv7, delta_rule, iplr_delta_rule, gated_oja_rule, deltaformer, chunk_global_cumsum, chunk_local_cumsum).
+        // Total: 99.
+        assert_eq!(corpus.entries.len(), 99, "batches 1-11 should have 99 rules");
     }
 
     #[test]
@@ -1584,6 +1734,58 @@ mod tests {
     }
 
     // ════════════════════════════════════════════════════════════════════
+    // Batch 11 — popcorn linear-attention recurrence family (12 rules)
+    // ════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn batch11_rules_present() {
+        // Verify the 12 batch-11 linear-attention recurrence + scan rules.
+        let corpus = build_kernel_seed_corpus();
+        let ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        // G: linear-attn recurrence (+5)
+        assert!(ids.contains(&"per-key-dim-diagonal-gate"), "gla per-dim gate");
+        assert!(ids.contains(&"erase-replace-low-rank-transition"), "rwkv7 4-phase");
+        assert!(ids.contains(&"oja-subtractive-normalization"), "gated_oja_rule");
+        assert!(ids.contains(&"identity-plus-low-rank-delta"), "iplr_delta_rule");
+        assert!(ids.contains(&"cumsum-gate-to-decay-matrix"), "simple_gla pairwise");
+        // E: parallelism (+2)
+        assert!(ids.contains(&"reverse-scan-via-double-flip"), "chunk_*_cumsum reverse");
+        assert!(ids.contains(&"pairwise-distance-decay-matrix"), "retention/lightning decay");
+        // F: flash-attn tiling (+1)
+        assert!(ids.contains(&"strict-causal-mask-tril-offset"), "deltaformer tril(-1)");
+        // B: compute (+2)
+        assert!(ids.contains(&"polynomial-taylor-feature-map"), "based/rebased poly");
+        assert!(ids.contains(&"positive-feature-map-shift"), "linear_attn elu+1");
+        // D: dispatch (+1)
+        assert!(ids.contains(&"layer-depth-decay-schedule"), "lightning_attn depth");
+        // (J chunk-reset-scan was a duplicate of chunk-reset-cumsum — dropped.)
+    }
+
+    #[test]
+    fn batch11_recurrence_concepts_covered() {
+        // Verify the batch-11 recurrence + scan concepts are represented.
+        let corpus = build_kernel_seed_corpus();
+        let concepts: Vec<&str> =
+            corpus.entries.iter().map(|e| e.gpu_concept.as_str()).collect();
+        // Category G: linear-attention recurrence (new)
+        assert!(concepts.contains(&"per-dimension diagonal decay gate on recurrent state"));
+        assert!(concepts.contains(&"diagonal-plus-low-rank state transition (erase, decay, replace, write)"));
+        assert!(concepts.contains(&"Oja subtractive normalization: project out stored component before write"));
+        assert!(concepts.contains(&"identity-plus-low-rank (I+ba^T) state rotation then outer-product write"));
+        assert!(concepts.contains(&"convert per-step log-gate into pairwise decay matrix via cumsum + diff"));
+        // Category E: parallelism (new)
+        assert!(concepts.contains(&"reverse-direction scan via flip → forward scan → flip"));
+        assert!(concepts.contains(&"materialize N×N decay matrix from index distance and slope"));
+        // Category F: flash-attn tiling (new)
+        assert!(concepts.contains(&"strictly-causal mask via tril(-1) (exclude diagonal) + NaN guard"));
+        // Category B: compute (new)
+        assert!(concepts.contains(&"polynomial Taylor feature map approximating the softmax kernel"));
+        assert!(concepts.contains(&"shift activation positive (elu+1) so linear-attention normalizer never crosses zero"));
+        // Category D: dispatch (new)
+        assert!(concepts.contains(&"layer-depth-dependent decay schedule (deeper layers decay slower)"));
+    }
+
+    // ════════════════════════════════════════════════════════════════════
     // Plan 003 — Router ↔ corpus wiring tests
     // ════════════════════════════════════════════════════════════════════
 
@@ -1594,7 +1796,7 @@ mod tests {
 
     #[test]
     fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-        // Every rule_id in the 88-rule corpus must appear in exactly one category.
+        // Every rule_id in the 99-rule corpus must appear in exactly one category.
         let corpus = build_kernel_seed_corpus();
         let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
         let mut categorized: Vec<&str> = Vec::new();
@@ -1625,15 +1827,15 @@ mod tests {
 
     #[test]
     fn kernel_categories_counts_match_plan_003_table() {
-        // Pin per-category rule counts to the Plan 003 table (updated for Batch 10).
+        // Pin per-category rule counts to the Plan 003 table (updated for Batch 11).
         let expected = [
             (KernelCategory::MemoryAccess, 6),
-            (KernelCategory::Compute, 9),
+            (KernelCategory::Compute, 11),
             (KernelCategory::Fusion, 8),
-            (KernelCategory::Dispatch, 5),
-            (KernelCategory::Parallelism, 3),
-            (KernelCategory::FlashAttnTiling, 7),
-            (KernelCategory::LinearAttnRecurrence, 6),
+            (KernelCategory::Dispatch, 6),
+            (KernelCategory::Parallelism, 5),
+            (KernelCategory::FlashAttnTiling, 8),
+            (KernelCategory::LinearAttnRecurrence, 11),
             (KernelCategory::MoeDispatchBackward, 9),
             (KernelCategory::NsaBlockSparse, 4),
             (KernelCategory::VarlenChunkedReduction, 5),
@@ -1650,9 +1852,9 @@ mod tests {
                 "Plan 003: category {cat:?} has {} rules, expected {count}",
                 entry.2.len());
         }
-        // Sum must equal 88.
+        // Sum must equal 99.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 88, "Plan 003: category totals must sum to 88");
+        assert_eq!(total, 99, "Plan 003: category totals must sum to 99");
     }
 
     #[test]
@@ -1662,7 +1864,7 @@ mod tests {
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 88, "Plan 003: grouped corpus has {total} rules, expected 88");
+        assert_eq!(total, 99, "Plan 003: grouped corpus has {total} rules, expected 99");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");
