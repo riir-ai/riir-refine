@@ -153,6 +153,13 @@ across all feature combinations.
 - Full kernel numeric validator (Proposal 012 §Phase 0 follow-up)
 - Perf-bench Pareto validator for rust_perf (separate plan, Proposal 001 caveat 3)
 
+> **Update (2026-08-14):** the unified `cargo heal` CLI + real-file span healing
+> for `rust_perf`/`kernel_opt` are now scoped into [Proposal 002](../.proposals/002_real_file_span_healing.md)
+> + [Plan 005](005_real_file_span_healing.md). Cross-domain auto-routing stays
+> out of scope (the CLI takes `--domain`). The corpora landed (Batch 14: 123
+> kernel rules; 46 perf rules). This plan (001) built the framework; Plan 005
+> builds the product on top.
+
 ## Numbering discipline
 
 - Proposal 001: `riir-clippy/.proposals/001_multi_domain_modelless_code_healer.md`

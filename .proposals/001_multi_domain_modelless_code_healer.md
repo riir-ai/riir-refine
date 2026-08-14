@@ -326,6 +326,15 @@ CLI binary is a future phase. The core design questions still open:
 - Multi-domain CLI (does `cargo heal` also handle `rust_perf` rules, or is
   that a separate `cargo heal --domain perf` flag?)
 
+> **Update (2026-08-14):** [Proposal 002](002_real_file_span_healing.md) +
+> [Plan 005](../.plans/005_real_file_span_healing.md) concretize this sketch.
+> The multi-domain CLI question is answered: `cargo heal --domain <clippy|perf|kernel|all>`
+> selects the domain(s); cross-domain auto-routing stays out of scope. The CLI
+> MVP (Plan 005 Phase 5) ships `--fix` (span-preserving) + `--suggest` (ternary-matvec
+> advisory). The honest gap this proposal left open — that `rust_perf`/
+> `kernel_opt` only match pseudocode templates, not real files — is exactly what
+> Proposal 002 fixes (lift the `clippy_lints` proposer pattern into both domains).
+
 ## Phased rollout (sketch — Plan 001 expands this)
 
 ### Phase 1 — Framework extraction (modelless, no new domains)
