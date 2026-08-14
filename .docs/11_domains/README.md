@@ -45,8 +45,8 @@
   nnethercote/perf-book. `cargo test` verifier works (compile-error
   detection via exit status + JSON parsing). Perf-bench Pareto validator DONE
   (Bench 013 GOAT G1+G5 PASS) — `rust_perf` promoted to default-on 2026-08-13.
-- **Phase 3 (kernel_opt):** DONE 2026-08-13. 2 placeholder rules (real
-  popcorn distillation deferred per Proposal 012 §Phase 0).
+- **Phase 3 (kernel_opt):** DONE 2026-08-13. 21 rules (Batch 1: 2 original + 19
+  popcorn-distilled per Research 002; full corpus ~300-500 rules in ~15-25 batches).
   `KernelExpertRouter` wraps `pick_domain<4,5>` (Plan 558, identity directions
   placeholder). `KernelThermalRouter` returns Plasma for all calls
   (modelless-first mandate). 4090 Warm/Cold/Freeze tiers DEFERRED.

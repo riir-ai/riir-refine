@@ -26,10 +26,10 @@ Three domains ship (Plan 001):
    bench finding (Bench 015 + Bench 016: 2 ParetoDominated + 4 regime-fragile/Mixed in the
    default config — consumers should treat annotated rules as
    context-dependent).
-3. **`kernel_opt`** (opt-in, Phase 3) — heals GPU kernel optimization. 2
-   placeholder rules (real popcorn distillation deferred per Proposal 012
-   §Phase 0). Absorbs Proposal 012's design (thermal-tier + latent-MoE +
-   numeric validator); 4090 LoRA deferred.
+3. **`kernel_opt`** (opt-in, Phase 3) — heals GPU kernel optimization. 21 rules
+   (Batch 1: 2 original + 19 popcorn-distilled, Research 002; full corpus ~300-500
+   rules in ~15-25 batches). Absorbs Proposal 012's design (thermal-tier +
+   latent-MoE + numeric validator); 4090 LoRA deferred.
 
 The pipeline (shared across all domains):
 1. **L0 — Rule distillation**: each rule → named entry + bounded fix-space

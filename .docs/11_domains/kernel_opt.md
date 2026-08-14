@@ -10,7 +10,7 @@
 | Component | Ships now | Deferred |
 |---|---|---|
 | `KernelOptDomain: HealDomain` | ✅ | |
-| Seed corpus (2 placeholders) | ✅ | Real popcorn-distilled corpus |
+| Seed corpus (Batch 1: 21 rules) | ✅ | Full corpus (~300-500 rules, ~15-25 batches) |
 | `KernelExpertRouter` (`pick_domain`) | ✅ (identity directions) | Per-expert centroids from popcorn |
 | `KernelThermalRouter` (5-tier stub) | ✅ (returns Plasma) | Warm/Cold LoRA (4090, riir-train) |
 | `KernelVerifier` (compile-only) | ✅ (behind `kernel_verify`) | Full numeric compare vs reference |
@@ -18,16 +18,58 @@
 
 ## Corpus
 
-2 placeholder rules (real corpus deferred):
+Batch 1 (Research 002): 21 rules total — 2 original placeholders + 19 popcorn-distilled
+across 5 categories. Full corpus target: ~300-500 rules in ~15-25 batches.
+
+### Category A: Memory access patterns (6 rules)
 
 | Rule ID | GPU concept | Pattern |
 |---|---|---|
 | `matvec-coalesce` | coalesced memory access | Strided read (uncoalesced) → transposed coalesced read |
+| `coalesced-row-read` | coalesced memory access | Strided load (H*D apart) → contiguous load (adjacent) |
+| `vectorized-pack-load` | vectorized memory access | Scalar load → 4-element packed load (16-byte transactions) |
+| `grid-stride-loop` | work distribution | Fixed one-thread-per-element → grid-stride for arbitrary n |
 | `gemm-tiling` | shared-memory tiling | Naive GEMM (global mem) → tiled GEMM (shared mem reuse) |
+| `masked-boundary-load` | boundary-safe memory access | Unchecked load → masked load with fallback |
+
+### Category B: Compute patterns (5 rules)
+
+| Rule ID | GPU concept | Pattern |
+|---|---|---|
+| `autotune-warps-stages` | autotune dispatch | Hardcoded threads → sweep over (warps, stages) |
+| `upcast-before-reduction` | numerical precision | fp16 reduction → fp32 upcast before mean/sum |
+| `branchless-select` | branch divergence elimination | Conditional branch → select/if-expr |
+| `unroll-fixed-inner` | loop unrolling for ILP | Dynamic loop → fixed-size unrolled |
+| `forceinline-device-fn` | function inlining | Regular call → `#[inline(always)]` |
+
+### Category C: Fusion patterns (4 rules)
+
+| Rule ID | GPU concept | Pattern |
+|---|---|---|
+| `fuse-norm-act-linear` | kernel fusion | 3-pass norm+act+linear → single fused pass |
+| `fuse-quant-matmul` | quantization fusion | Separate quant+matmul → fused (BitNet b1.58) |
+| `fuse-softmax-mask` | mask fusion in softmax | Separate mask+softmax → fused masked softmax |
+| `fuse-xent-logsumexp` | cross-entropy fusion | Softmax+NLL → fused logsumexp (no prob matrix) |
+
+### Category D: Dispatch patterns (3 rules)
+
+| Rule ID | GPU concept | Pattern |
+|---|---|---|
+| `sm-count-block-size` | occupancy-aware block sizing | Fixed block → SM-aware `min(128, next_pow2)` |
+| `predicate-gated-backend` | conditional kernel dispatch | Unconditional fast path → shape/dtype predicate gate |
+| `pow2-block-alignment` | power-of-2 alignment | Arbitrary dim → `next_power_of_two` |
+
+### Category E: Parallelism patterns (3 rules)
+
+| Rule ID | GPU concept | Pattern |
+|---|---|---|
+| `multi-dim-grid-launch` | multi-dimensional parallelism | 1D nested loop → 3D parallel grid (batch×head×time) |
+| `block-count-clamp` | grid dimension clamping | Unbounded blocks → clamped to 65535 |
+| `backward-as-conjugate` | backward kernel reuse | Separate backward → forward with conjugate flag |
 
 The patterns are Rust-shaped pseudocode so the shared `RustAnalyzerPruner` can
-validate them in the fast path. When the real corpus lands (real kernel
-source), the validator upgrades to CubeCL compile + numeric compare.
+validate them in the fast path. When the full validator lands (CubeCL compile +
+numeric compare), the patterns will carry real kernel source.
 
 ## Router — `KernelExpertRouter`
 
@@ -111,6 +153,7 @@ deferred (Proposal 012 §Phase 0). `is_full_validator_available()` returns
 ## See also
 
 - [`heal_domain_trait.md`](heal_domain_trait.md) — the trait this implements
+- [Research 002](../../.research/002_popcorn_kernel_opt_distillation_batch1.md) — Batch 1 popcorn distillation methodology
 - [Proposal 012](../../.proposals/) — the absorbed GPU kernel optimizer design
 - [Plan 558](../../../katgpt-rs/.plans/) — `pick_domain` substrate (katgpt-core)
 - [Research 453](../../../katgpt-rs/.research/) — LatentMoE variable-rank principle
