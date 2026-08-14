@@ -414,6 +414,34 @@
 //!   staleness on model reload; the key covers only qkv, not z/a/b) and a
 //!   stale-doc-numbers bug in `epilogue/mod.rs` L43 — filed as an issue in
 //!   the `riir-ai` repo.
+//! - **Batch 30 (Research 031):** 6 rules from the D2F training cluster —
+//!   `dllm/mod.rs` (Plan 068: discrete-diffusion LM GPU training — the
+//!   bidirectional dLLM trainer, the asymmetric distillation loop, the
+//!   direct block-causal trainer, and the `RePlaid` adaptive noise schedule):
+//!   `zero-init-side-branch-frozen-base-path` (M — run the frozen distillation
+//!   teacher through the SAME adapter-capable forward with B=0: W·x +
+//!   B·(A·x) = W·x exactly — one code path + one weight set for both
+//!   modes), `counter-derived-seed-stateless-noise` (E — the corruption
+//!   RNG seeded from ((step << 32) | epoch): every iteration's noise is a
+//!   pure function of its indices, replays standalone, and the seed
+//!   crosses to the GPU as one uniform), `predicate-gated-skip-empty-
+//!   workset-step` (D — one host-side integer check elides the ENTIRE
+//!   forward/loss/backward/optimizer batch when masking drew zero, and
+//!   guarantees the count-based loss normalizer never divides by zero),
+//!   `share-pipeline-set-across-subsystems` (D — one Arc-shared pipeline
+//!   set handed to every subsystem constructor: WGSL validation +
+//!   compilation paid once per run), `pad-uniform-pod-to-min-binding-size`
+//!   (N — explicit _pad u32 fields pin every uniform param struct to
+//!   exactly 16 B so one fixed-size buffer helper serves all kernels,
+//!   with `size_of` tests pinning the layout in CI), and
+//!   `fuse-count-into-mutation-pass` (C — the masked count accumulated
+//!   INSIDE the corruption loop instead of a second O(n) scan; the count
+//!   feeds both loss normalization and the empty-workset gate). Corpus:
+//!   **209 rules across 15 categories (A–O)**. `riir-gpu` remains open (50
+//!   of ~200 files mined). Mining also surfaced a unit-incoherent sign
+//!   basis in `RePlaid` `adapt()` + a tracker-state orphaning bug in
+//!   `adapt_ratios()` + error-swallowing `unwrap_or_default()` on GPU
+//!   downloads — filed as an issue in the `riir-ai` repo.
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
@@ -3686,6 +3714,93 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
             ref_shape: "// naive: either enable fast-math globally (changes rounding\n// EVERYWHERE, breaks bit-comparisons and tolerance gates) or never\n// (the hot dot loop stays uncontracted mul+add on every build)\nfn dot_strict(w: &[f32], x: &[f32]) -> f32 {\n    let mut acc = 0.0f32;\n    for k in 0..x.len() {\n        // strict-FP on ALL builds: no contraction permitted — extra\n        // rounding per term, forever, because the global flag is\n        // unsafe to flip\n        acc += w[k] * x[k];\n    }\n    acc\n}".to_string(),
             opt_pattern: "// optimized: attach the numerics flag to the KERNEL via a cfg_attr\n// pair gated on a dedicated Cargo feature — strict-FP stays the\n// byte-identical default; correctness gates run strict, perf\n// builds opt in\n// #[cfg_attr(feature = \"fma_contract\",\n//            cube(launch_unchecked, fast_math = AllowContraction))]\n// #[cfg_attr(not(feature = \"fma_contract\"), cube(launch_unchecked))]\nfn dot_maybe_contracted(w: &[f32], x: &[f32]) -> f32 {\n    let mut acc = 0.0f32;\n    for k in 0..x.len() {\n        // contracts to FMA ONLY on the opt-in compilation of the SAME\n        // source — the default build is byte-identical strict-FP\n        acc += w[k] * x[k];\n    }\n    acc\n}".to_string(),
         },
+        // ── zero-init-side-branch-frozen-base-path — duplicate no-adapter path → B=0 identity (M) ──
+        // Source: riir-gpu dllm/mod.rs L1044 ("Teacher (frozen, bidirectional):
+        // full attention, no LoRA (base weights only)") + L1097-1098 ("── Teacher:
+        // separate forward pass with zero LoRA (base model only) ── / Standard
+        // LoRA init: A=random, B=zero → LoRA output = 0 (base weights only)") +
+        // L1100-1114 (GpuLoraBuffers::new + GpuForwardPass::new over the SAME
+        // Arc weights) + lora/mod.rs L160 ("A: [rank, in_dim] Kaiming init, B:
+        // [out_dim, rank] zero init.") — the constructor contract the identity
+        // rests on.
+        //
+        // Distinct from host-cache-immutable-device-weights (device-side
+        // caching of uploaded weights — this is adapter-algebra mode reuse)
+        // and from enum-dispatch-separate-kernel-per-variant (enumerating
+        // specialized paths — this collapses the mode axis to ONE path).
+        KernelRule {
+            rule_id: "zero-init-side-branch-frozen-base-path".to_string(),
+            gpu_concept: "to run a FROZEN un-adapted model (a distillation teacher) alongside a trainable adapted model (the student) over the SAME base weights, do not build a second no-adapter forward path or merge the adapter out of a weight copy — initialize the adapter's B matrix to zero (standard LoRA init: A=random, B=zero) and run the SAME adapter-capable forward for both roles: out = W·x + B·(A·x) = W·x exactly, by construction. One code path, one uploaded weight set, both execution modes; the identity is mathematical (B=0 ⇒ side branch ≡ 0), not maintained by discipline or a parallel kernel. Distinct from host-cache-immutable-device-weights (caching uploaded weights — this is mode identity via adapter algebra) and from enum-dispatch-separate-kernel-per-variant (enumerating code paths — this eliminates the mode axis entirely)".to_string(),
+            ref_shape: "// naive: frozen base-model branch = a SECOND forward implementation\n// (a no-adapter kernel path) or a merged-out weight copy —\n// duplicate code + duplicate device weights\nfn teacher_fwd_naive(ctx: &Ctx, w: &Weights, lora: &Lora, x: &[usize]) -> Vec<f32> {\n    let mut base = w.clone(); // full weight-set copy\n    subtract_lora_delta(&mut base, lora);\n    let base_dev = upload_weights(ctx, &base);\n    forward_no_adapter(ctx, &base_dev, x) // parallel no-LoRA path\n}".to_string(),
+            opt_pattern: "// optimized: SAME forward path + adapter buffers; B=0 makes the\n// adapter contribution exactly 0 — the frozen base forward needs\n// zero extra code paths and zero weight duplication\nfn teacher_fwd_zero_b(ctx: &Ctx, w: &Weights, cfg: &Config, x: &[usize]) -> Vec<f32> {\n    let mut rng = Rng::new(42);\n    let lora = LoraBuffers::new(ctx, cfg, &mut rng); // A=random, B=zero\n    let fwd = ForwardPass::new(ctx.clone(), cfg.clone(), w, lora, x.len());\n    fwd.forward(x) // W*x + B*(A*x) == W*x — base weights only\n}".to_string(),
+        },
+        // ── counter-derived-seed-stateless-noise — threaded RNG stream → (step,epoch)-derived seed (E) ──
+        // Source: riir-gpu dllm/mod.rs L828-831 ("PCG32-style RNG (matches
+        // noise_corrupt.wgsl kernel). / Track total_masked during corruption
+        // to avoid a separate O(seq_len) filter scan afterwards. / let mut
+        // rng_state = ((step as u64) << 32) | (epoch as u64);") + L839-842 (the
+        // wrapping LCG + ">> 33" high-bit extraction + named const reciprocal)
+        // + L1526-1537 (the direct trainer's verbatim twin) + L39 (rng_seed: u32
+        // — the same counter-derived seed reaches the GPU launch as ONE uniform
+        // field) + L583-596 (the eval twin: fixed seed + fused count).
+        //
+        // Distinct from derive-params-from-global-invocation-id (derives
+        // per-THREAD identity from the launch grid — this derives the
+        // per-ITERATION seed from loop counters; both are stateless
+        // derivation, different axes).
+        KernelRule {
+            rule_id: "counter-derived-seed-stateless-noise".to_string(),
+            gpu_concept: "derive each training iteration's RNG seed from its loop counters packed into disjoint bit fields — ((step as u64) << 32) | epoch — instead of advancing one shared RNG stream through the loop. Every iteration's noise becomes a pure function of its indices: any step replays standalone (debugging, deterministic eval, crash resume), skipped iterations cannot perturb later streams, and the same shape parallelizes (the seed crosses to the GPU as one uniform with the thread index mixed in-kernel — matches the noise_corrupt.wgsl kernel bit-for-bit). Step an inline wrapping-multiply/add LCG (PCG32-style) and extract the high bits (>> 33) — the statistically good half — scaled by a named const reciprocal so CPU and GPU paths stay bit-identical. Distinct from derive-params-from-global-invocation-id (per-thread identity from the grid — this is per-iteration seed from counters; the two compose)".to_string(),
+            ref_shape: "// naive: one shared RNG stream threaded through every iteration —\n// replaying step k requires replaying 0..k, and any skipped step\n// perturbs the stream for every later one\nfn corrupt_stream(rng: &mut Rng, tokens: &mut [u32], ratio: f32) {\n    for i in 0..tokens.len() {\n        if rng.next_f32() < ratio {\n            tokens[i] = MASK;\n        }\n    }\n}".to_string(),
+            opt_pattern: "// optimized: seed derived from loop counters packed into disjoint\n// bit fields — each iteration's noise stream is a pure function of\n// (step, epoch); the same seed reaches the GPU as one uniform, with\n// the thread index mixed in-kernel\nfn corrupt_counter_seeded(step: u32, epoch: u64, tokens: &mut [u32], ratio: f32) {\n    let mut state = ((step as u64) << 32) | epoch;\n    const INV: f32 = 1.0 / (u32::MAX as f32 + 1.0);\n    for i in 0..tokens.len() {\n        state = state\n            .wrapping_mul(6364136223846793005)\n            .wrapping_add(1442695040888963407);\n        let r = ((state >> 33) as u32) as f32 * INV; // high bits\n        if r < ratio {\n            tokens[i] = MASK;\n        }\n    }\n}".to_string(),
+        },
+        // ── predicate-gated-skip-empty-workset-step — late 0-count guard → top-of-step elision (D) ──
+        // Source: riir-gpu dllm/mod.rs L851-853 ("if total_masked == 0 {\n //
+        // Nothing masked — skip step }") + L1243-1245 (distill twin) + L1546-1548
+        // (direct trainer: the guard placed BEFORE the forward — the correct\n        // ordering) + the contrast at L485-487/L490 ("if total_masked == 0 {\n //
+        // return 0.0; } ... total / total_masked as f32" — a late guard ONLY\n        // inside the loss fn leaves the rest of the step running and the 0/0\n        // hazard one refactor away).
+        //
+        // Distinct from predicate-gated-backend (a predicate choosing BETWEEN
+        // kernels — this elides the whole dispatch batch) and from
+        // skip-all-zero-packed-words-via-or-reduce (an in-kernel sparsity skip\n        // — this is host-orchestrated batch elision + the division guard by\n        // construction).
+        KernelRule {
+            rule_id: "predicate-gated-skip-empty-workset-step".to_string(),
+            gpu_concept: "when a stochastic per-step sampler can produce an empty workset (ratio-scheduled masking can draw zero masked positions), gate the ENTIRE dispatch batch — forward, loss, backward, optimizer step — on a host-computed 'any work' integer check at the TOP of the step, before the first dispatch. One comparison elides the full GPU step sequence AND guarantees the count-based loss normalizer (CE-weight / total_masked) never sees 0 — the div-by-zero guard holds by construction instead of by a late guard buried inside the loss function. Composes with fuse-count-into-mutation-pass: the fused count IS the predicate. Distinct from predicate-gated-backend (predicate choosing between kernels — this elides the batch outright) and from skip-all-zero-packed-words-via-or-reduce (in-kernel word skip — this is host-side batch elision)".to_string(),
+            ref_shape: "// naive: the full GPU step runs even when the sampler masked\n// nothing — and the count-based loss normalizer divides by zero\n// unless a LATE guard inside the loss fn catches it\nfn step_naive(n_masked: usize) -> f32 {\n    let logits = forward_dispatch();\n    let loss = masked_ce(logits, n_masked); // 1/n_masked at 0 -> inf\n    backward_dispatch();\n    optimizer_step();\n    loss\n}".to_string(),
+            opt_pattern: "// optimized: one host-side integer check at the TOP of the step\n// elides the entire batch — forward, loss, backward, optimizer —\n// AND guarantees n_masked >= 1 at the normalization site\nfn step_gated(n_masked: usize) -> Option<f32> {\n    if n_masked == 0 {\n        return None; // skip forward + loss + backward + optimizer\n    }\n    let logits = forward_dispatch();\n    let loss = masked_ce(logits, n_masked); // n >= 1 by construction\n    backward_dispatch();\n    optimizer_step();\n    Some(loss)\n}".to_string(),
+        },
+        // ── share-pipeline-set-across-subsystems — per-subsystem compile → Arc-shared set (D) ──
+        // Source: riir-gpu dllm/mod.rs L1092 ("let pipelines = Arc::new(\n //
+        // GpuPipelines::new(&self.ctx.device));") + L1134-1138 (GpuBackwardPass::\n        // new(..., pipelines.clone())) + L1148 (AdamWOptimizer::new(...,\n        // pipelines.clone())) + L1278 ("masked_loss.compute_loss(&pipelines,\n //
+        // total_masked)") + the direct trainer mirror at L1433/L1459-1463/L1475.
+        //
+        // Distinct from prebuilt-bind-groups-fixed-buffer-combos (bind groups\n        // per dispatch SITE — this is the pipeline-set resource itself shared\n        // across subsystem CONSTRUCTORS) and from hot-swap-weights-\n        // preserve-autotune-caches (keeping caches across swaps — this is\n        // build-once + Arc-share across consumers).
+        KernelRule {
+            rule_id: "share-pipeline-set-across-subsystems".to_string(),
+            gpu_concept: "wgpu pipeline creation validates WGSL and builds pipeline-state objects — expensive, and IDENTICAL across subsystems (loss, backward, optimizer) when they share shader modules. Build ONE pipeline set at orchestrator setup, wrap it in Arc, and hand clones to every subsystem constructor + dispatch site: the compile cost is paid exactly once per training run, the per-step cost is a ref-count bump, and the handle count stays constant. This is the cross-subsystem analog of prebuilt-bind-groups (which pre-builds per dispatch site): share the expensive-to-create resource at the constructor seam. Distinct from prebuilt-bind-groups-fixed-buffer-combos (bind groups per site — this is the pipeline set itself shared across constructors) and from hot-swap-weights-preserve-autotune-caches (cache preservation across swaps — this is single construction)".to_string(),
+            ref_shape: "// naive: each subsystem builds its own pipeline set — every\n// create_*_pipeline call re-validates and re-compiles the same\n// shaders, once per consumer\nfn subsystems_naive(ctx: &Ctx) {\n    let loss = MaskedLoss::new(ctx, LossPipelines::new(&ctx.device));\n    let backward = BackwardPass::new(ctx.clone(), BackwardPipelines::new(&ctx.device));\n    let optimizer = AdamW::new(ctx.clone(), OptPipelines::new(&ctx.device));\n    let _ = (loss, backward, optimizer); // 3x shader compile work\n}".to_string(),
+            opt_pattern: "// optimized: ONE pipeline set built once at trainer setup and\n// Arc-shared into every subsystem constructor — compilation and\n// validation happen exactly once per run; per-step cost is a\n// ref-count bump\nfn subsystems_shared(ctx: &Ctx) {\n    let pipelines = Arc::new(Pipelines::new(&ctx.device));\n    let backward = BackwardPass::new(ctx.clone(), pipelines.clone());\n    let optimizer = AdamW::new(ctx.clone(), pipelines.clone());\n    let loss = compute_loss(&pipelines); // same set at dispatch time\n    let _ = (backward, optimizer, loss);\n}".to_string(),
+        },
+        // ── pad-uniform-pod-to-min-binding-size — incidental struct size → explicit 16 B pad + test pin (N) ──
+        // Source: riir-gpu dllm/mod.rs L33-60 (NoiseCorruptParams 4 x u32;\n        // MaskedLossParams { batch_seq, vocab_size, total_masked, _pad };\n        // PruneLogitsParams { vocab_size, _pad0, _pad1, _pad2 }) + L74-82\n        // ("fn create_uniform_buffer ... size: 16, // All param structs are\n        // 4 x u32 ... usage: UNIFORM | COPY_DST") + dllm/tests.rs L30-49 (three\n        // layout tests: "assert_eq!(size_of::<NoiseCorruptParams>(), 16);\n        // assert_eq!(size_of::<...>() % 16, 0);" for all three structs).
+        //
+        // Distinct from staging-packed-uniforms-encoder-ordered-copies (the\n        // DISTRIBUTION of many uniforms — this is the per-struct layout\n        // discipline) and from vectorized-pack-load / stride-align-\n        // vectorization-key (load-path alignment — this is the uniform-\n        // binding size class, pinned by tests).
+        KernelRule {
+            rule_id: "pad-uniform-pod-to-min-binding-size".to_string(),
+            gpu_concept: "WGSL var<uniform> bindings require the bound struct to satisfy the min-binding-size/alignment class — pad every uniform param struct with explicit _pad u32 fields to an exact 4 x u32 = 16 bytes, so ONE fixed-size (size: 16) uniform-buffer helper serves every kernel in the module and bind-group creation can never fail on an incidental 12-byte struct. Pin the layout with size_of tests (== 16 and % 16 == 0 per struct): adding a field without re-padding breaks CI instead of failing on the GPU at runtime. Zero runtime cost — the padding is dead bytes; the discipline is what makes a single shared buffer helper sound. Distinct from staging-packed-uniforms-encoder-ordered-copies (distribution of uniforms — this is per-struct layout) and from vectorized-pack-load (kernel load alignment — this is the binding size class)".to_string(),
+            ref_shape: "// naive: param structs sized by their fields alone — a 12-byte\n// struct binds fine on one backend, fails the uniform\n// min-binding-size class on another; every kernel hand-rolls\n// its own buffer creation\nstruct Params {\n    n: u32,\n    vocab: u32,\n    total: u32, // 12 bytes — not a multiple of the binding class\n}\nfn upload(p: Params, buf: &Buffer, q: &Queue) {\n    q.write_buffer(buf, 0, bytemuck::bytes_of(&p)); // misaligned bind\n}".to_string(),
+            opt_pattern: "// optimized: explicit _pad fields pin every param struct to exactly\n// 4 x u32 = 16 bytes — ONE fixed-size uniform buffer serves all\n// kernels, and size_of tests pin the layout in CI\nstruct Params {\n    n: u32,\n    vocab: u32,\n    total: u32,\n    _pad: u32, // explicit tail pad -> exactly 16 bytes\n}\nconst _: () = assert!(std::mem::size_of::<Params>() % 16 == 0);\nfn upload(p: Params, buf: &Buffer, q: &Queue) {\n    q.write_buffer(buf, 0, bytemuck::bytes_of(&p)); // one 16 B write\n}".to_string(),
+        },
+        // ── fuse-count-into-mutation-pass — mutation + separate count scan → single counted pass (C) ──
+        // Source: riir-gpu dllm/mod.rs L828-830 ("Track total_masked during\n        // corruption to avoid a separate O(seq_len) filter scan afterwards.")\n        // + L843-847 ("if rand_val < ratio { corrupted_buf[pos] = mask_token_id;\n        // mask_indicators_buf[pos] = true; total_masked += 1; }") + L585-596\n        // (the eval twin: masked_count incremented in the same loop). The count\n        // feeds BOTH the loss normalization and the empty-workset skip gate.
+        //
+        // Distinct from dual-grad-same-pass (two gradient outputs in one\n        // pass — this is a predicate count fused into its producing\n        // mutation) and from the rust_perf domain's loop-fusion (same-\n        // data loop merging on the host — this is the count-reduction-\n        // into-mutation shape whose product gates downstream dispatch).
+        KernelRule {
+            rule_id: "fuse-count-into-mutation-pass".to_string(),
+            gpu_concept: "when a mutation pass writes a predicate-derived output (a mask, a filter) and its CONSUMER needs the count of affected elements (loss normalization, workset gating), accumulate the count INSIDE the mutation loop instead of re-scanning the output afterwards — the increments ride already-hot cache lines and the second O(n) pass (or a second reduction kernel) disappears. In kernel form the per-element predicate write and its reduction share one launch. The fused count is also the natural predicate for eliding empty steps entirely. Distinct from dual-grad-same-pass (two gradient outputs per pass — this is a count fused into its producing mutation) and from plain host loop-fusion (the count's role as the downstream dispatch/normalization gate is the load-bearing half)".to_string(),
+            ref_shape: "// naive: the mutation pass writes the mask, then a SECOND pass\n// scans the output array to count what was masked\nfn corrupt_two_pass(tokens: &mut [u32], mask: &mut [bool], ratio: f32) -> usize {\n    for i in 0..tokens.len() {\n        if rand01() < ratio {\n            tokens[i] = MASK;\n            mask[i] = true;\n        }\n    }\n    mask.iter().filter(|&&m| m).count() // second O(n) scan\n}".to_string(),
+            opt_pattern: "// optimized: accumulate the count INSIDE the mutation loop — one\n// pass over the data, the count riding already-hot cache lines;\n// in kernel form the predicate write and its reduction share\n// one launch\nfn corrupt_counted(tokens: &mut [u32], mask: &mut [bool], ratio: f32) -> usize {\n    let mut total = 0;\n    for i in 0..tokens.len() {\n        if rand01() < ratio {\n            tokens[i] = MASK;\n            mask[i] = true;\n            total += 1; // count fused into the mutation pass\n        }\n    }\n    total\n}".to_string(),
+        },
     ])
 }
 
@@ -3698,7 +3813,7 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 203-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 209-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -3783,7 +3898,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fast-math-contraction-behind-feature-flag",
         ],
     ),
-    // C: Fusion patterns (21 rules)
+    // C: Fusion patterns (22 rules)
     (
         KernelCategory::Fusion,
         "C: fusion",
@@ -3809,9 +3924,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fused-conv-state-shift-dot-silu",
             "epilogue-at-register-write-phase",
             "delay-rms-scale-past-gemv-epilogue",
+            "fuse-count-into-mutation-pass",
         ],
     ),
-    // D: Dispatch patterns (29 rules)
+    // D: Dispatch patterns (31 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -3845,9 +3961,11 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "first-readback-pays-queue-drain",
             "pack-scalar-params-into-combined-buffer",
             "launch-unchecked-caller-owned-size-contract",
+            "predicate-gated-skip-empty-workset-step",
+            "share-pipeline-set-across-subsystems",
         ],
     ),
-    // E: Parallelism patterns (12 rules)
+    // E: Parallelism patterns (13 rules)
     (
         KernelCategory::Parallelism,
         "E: parallelism",
@@ -3864,6 +3982,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "workgroup-equals-plane-native-reduction",
             "smem-broadcast-scalar-then-parallel-scatter",
             "epilogue-must-be-workgroup-local",
+            "counter-derived-seed-stateless-noise",
         ],
     ),
     // F: Flash-attention tiling (10 rules)
@@ -3972,7 +4091,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "carry-dual-layout-dead-slot",
         ],
     ),
-    // M: Kernel parametric polymorphism (6 rules)
+    // M: Kernel parametric polymorphism (7 rules)
     (
         KernelCategory::KernelPolymorphism,
         "M: kernel polymorphism",
@@ -3983,9 +4102,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "reshape-rank-for-backend",
             "detached-broadcast-insert",
             "enum-dispatch-separate-kernel-per-variant",
+            "zero-init-side-branch-frozen-base-path",
         ],
     ),
-    // N: dtype + alignment specialization (11 rules)
+    // N: dtype + alignment specialization (12 rules)
     (
         KernelCategory::DtypeAlignment,
         "N: dtype + alignment",
@@ -4001,6 +4121,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "water-fill-tail-dim-shared-codebook",
             "norm-decoupled-low-bit-scoring",
             "base-3-trit-packing-5-per-byte",
+            "pad-uniform-pod-to-min-binding-size",
         ],
     ),
     // O: IR strength reduction (4 rules)
@@ -4021,7 +4142,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
 /// Returns 15 buckets (one per category), each containing the `KernelRule`s whose
 /// `rule_id` appears in that category's slice of [`KERNEL_CATEGORIES`]. This is
 /// the category-scoped view of the corpus — a future heal pipeline can consult
-/// routed expert's rules first without scanning all 203.
+/// routed expert's rules first without scanning all 209.
 ///
 /// # Allocation
 ///
@@ -4096,8 +4217,9 @@ mod tests {
         // Batch 26 (8): riir-gpu production kernels — per-slot-uniform-buffer-write-ordering, derive-params-from-global-invocation-id, merge-dispatches-into-single-compute-pass, batched-downloads-single-sync-cycle, chunk-encoder-submits-below-driver-limit, prebuilt-bind-groups-fixed-buffer-combos, host-cache-immutable-device-weights, defer-readback-until-after-submit (forward/ + buffer.rs — the wgpu forward-orchestration cluster: uniform hazards, pass merging, submission chunking, download batching, bind-group pre-building, host caching, deferred readback).
         // Batch 27 (6): riir-gpu production kernels — staging-packed-uniforms-encoder-ordered-copies, identical-uniforms-share-single-slot, persistent-zeros-source-encoder-copy-clear, fuse-sibling-target-grads-single-kernel, per-layer-strided-grad-destination, snapshot-transient-grad-for-deferred-download (backward/ + backward_dflash/ — the backward-pass orchestration clusters: staging-packed uniform distribution, the idempotent-write exemption, encoder-ordered zero clears, sibling-target grad fusion, consumer-selected grad destinations, transient snapshotting for deferred readback).
         // Batch 29 (10): riir-gpu production kernels — defer-readback-gated-by-live-output-size, weight-handle-cache-keyed-by-allocation-identity, first-readback-pays-queue-drain, epilogue-at-register-write-phase, delay-rms-scale-past-gemv-epilogue, pack-scalar-params-into-combined-buffer, enum-dispatch-separate-kernel-per-variant, epilogue-must-be-workgroup-local, launch-unchecked-caller-owned-size-contract, fast-math-contraction-behind-feature-flag (deltanet_input_proj_fused.rs + epilogue/ — the decode-path fusion cluster: Issue 602 sibling-GEMV fan-out + Plan 106 Track 3 CODA epilogue fusion).
-        // Total: 203.
-        assert_eq!(corpus.entries.len(), 203, "batches 1-29 should have 203 rules");
+        // Batch 30 (6): riir-gpu production kernels — zero-init-side-branch-frozen-base-path, counter-derived-seed-stateless-noise, predicate-gated-skip-empty-workset-step, share-pipeline-set-across-subsystems, pad-uniform-pod-to-min-binding-size, fuse-count-into-mutation-pass (dllm/mod.rs — the D2F training cluster: Plan 068 discrete-diffusion trainers + RePlaid schedule).
+        // Total: 209.
+        assert_eq!(corpus.entries.len(), 209, "batches 1-30 should have 209 rules");
     }
 
     #[test]
@@ -5241,6 +5363,74 @@ mod tests {
         }
     }
 
+    #[test]
+    fn batch30_rules_present() {
+        // Verify the 6 batch-30 rules across C/D/E/M/N.
+        let corpus = build_kernel_seed_corpus();
+        let ids: Vec<&str> =
+            corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        // M (1 new): the zero-init frozen-teacher identity
+        assert!(ids.contains(&"zero-init-side-branch-frozen-base-path"), "zero init side branch frozen base path");
+        // E (1 new): the counter-derived stateless seed
+        assert!(ids.contains(&"counter-derived-seed-stateless-noise"), "counter derived seed stateless noise");
+        // D (2 new): the empty-workset gate + shared pipeline set
+        assert!(ids.contains(&"predicate-gated-skip-empty-workset-step"), "predicate gated skip empty workset step");
+        assert!(ids.contains(&"share-pipeline-set-across-subsystems"), "share pipeline set across subsystems");
+        // N (1 new): the 16-byte uniform pad discipline
+        assert!(ids.contains(&"pad-uniform-pod-to-min-binding-size"), "pad uniform pod to min binding size");
+        // C (1 new): the fused count
+        assert!(ids.contains(&"fuse-count-into-mutation-pass"), "fuse count into mutation pass");
+    }
+
+    #[test]
+    fn batch30_concepts_covered() {
+        // Verify the batch-30 D2F training cluster concepts.
+        let corpus = build_kernel_seed_corpus();
+        let concepts: Vec<&str> =
+            corpus.entries.iter().map(|e| e.gpu_concept.as_str()).collect();
+        // M: zero-init-side-branch-frozen-base-path (riir-gpu dllm/mod.rs L1044 + L1097-1114 + lora/mod.rs L160)
+        assert!(concepts.contains(&"to run a FROZEN un-adapted model (a distillation teacher) alongside a trainable adapted model (the student) over the SAME base weights, do not build a second no-adapter forward path or merge the adapter out of a weight copy — initialize the adapter's B matrix to zero (standard LoRA init: A=random, B=zero) and run the SAME adapter-capable forward for both roles: out = W·x + B·(A·x) = W·x exactly, by construction. One code path, one uploaded weight set, both execution modes; the identity is mathematical (B=0 ⇒ side branch ≡ 0), not maintained by discipline or a parallel kernel. Distinct from host-cache-immutable-device-weights (caching uploaded weights — this is mode identity via adapter algebra) and from enum-dispatch-separate-kernel-per-variant (enumerating code paths — this eliminates the mode axis entirely)"), "zero-init teacher concept");
+        // E: counter-derived-seed-stateless-noise (riir-gpu dllm/mod.rs L828-842 + L1526-1537 + L39)
+        assert!(concepts.contains(&"derive each training iteration's RNG seed from its loop counters packed into disjoint bit fields — ((step as u64) << 32) | epoch — instead of advancing one shared RNG stream through the loop. Every iteration's noise becomes a pure function of its indices: any step replays standalone (debugging, deterministic eval, crash resume), skipped iterations cannot perturb later streams, and the same shape parallelizes (the seed crosses to the GPU as one uniform with the thread index mixed in-kernel — matches the noise_corrupt.wgsl kernel bit-for-bit). Step an inline wrapping-multiply/add LCG (PCG32-style) and extract the high bits (>> 33) — the statistically good half — scaled by a named const reciprocal so CPU and GPU paths stay bit-identical. Distinct from derive-params-from-global-invocation-id (per-thread identity from the grid — this is per-iteration seed from counters; the two compose)"), "counter-seed concept");
+        // D: predicate-gated-skip-empty-workset-step (riir-gpu dllm/mod.rs L851-853 + L1243-1245 + L1546-1548 + L485-490)
+        assert!(concepts.contains(&"when a stochastic per-step sampler can produce an empty workset (ratio-scheduled masking can draw zero masked positions), gate the ENTIRE dispatch batch — forward, loss, backward, optimizer step — on a host-computed 'any work' integer check at the TOP of the step, before the first dispatch. One comparison elides the full GPU step sequence AND guarantees the count-based loss normalizer (CE-weight / total_masked) never sees 0 — the div-by-zero guard holds by construction instead of by a late guard buried inside the loss function. Composes with fuse-count-into-mutation-pass: the fused count IS the predicate. Distinct from predicate-gated-backend (predicate choosing between kernels — this elides the batch outright) and from skip-all-zero-packed-words-via-or-reduce (in-kernel word skip — this is host-side batch elision)"), "empty-workset gate concept");
+        // D: share-pipeline-set-across-subsystems (riir-gpu dllm/mod.rs L1092 + L1134-1148 + L1278)
+        assert!(concepts.contains(&"wgpu pipeline creation validates WGSL and builds pipeline-state objects — expensive, and IDENTICAL across subsystems (loss, backward, optimizer) when they share shader modules. Build ONE pipeline set at orchestrator setup, wrap it in Arc, and hand clones to every subsystem constructor + dispatch site: the compile cost is paid exactly once per training run, the per-step cost is a ref-count bump, and the handle count stays constant. This is the cross-subsystem analog of prebuilt-bind-groups (which pre-builds per dispatch site): share the expensive-to-create resource at the constructor seam. Distinct from prebuilt-bind-groups-fixed-buffer-combos (bind groups per site — this is the pipeline set itself shared across constructors) and from hot-swap-weights-preserve-autotune-caches (cache preservation across swaps — this is single construction)"), "shared-pipeline concept");
+        // N: pad-uniform-pod-to-min-binding-size (riir-gpu dllm/mod.rs L33-60 + L74-82 + dllm/tests.rs L30-49)
+        assert!(concepts.contains(&"WGSL var<uniform> bindings require the bound struct to satisfy the min-binding-size/alignment class — pad every uniform param struct with explicit _pad u32 fields to an exact 4 x u32 = 16 bytes, so ONE fixed-size (size: 16) uniform-buffer helper serves every kernel in the module and bind-group creation can never fail on an incidental 12-byte struct. Pin the layout with size_of tests (== 16 and % 16 == 0 per struct): adding a field without re-padding breaks CI instead of failing on the GPU at runtime. Zero runtime cost — the padding is dead bytes; the discipline is what makes a single shared buffer helper sound. Distinct from staging-packed-uniforms-encoder-ordered-copies (distribution of uniforms — this is per-struct layout) and from vectorized-pack-load (kernel load alignment — this is the binding size class)"), "uniform-pad concept");
+        // C: fuse-count-into-mutation-pass (riir-gpu dllm/mod.rs L828-830 + L843-847 + L585-596)
+        assert!(concepts.contains(&"when a mutation pass writes a predicate-derived output (a mask, a filter) and its CONSUMER needs the count of affected elements (loss normalization, workset gating), accumulate the count INSIDE the mutation loop instead of re-scanning the output afterwards — the increments ride already-hot cache lines and the second O(n) pass (or a second reduction kernel) disappears. In kernel form the per-element predicate write and its reduction share one launch. The fused count is also the natural predicate for eliding empty steps entirely. Distinct from dual-grad-same-pass (two gradient outputs per pass — this is a count fused into its producing mutation) and from plain host loop-fusion (the count's role as the downstream dispatch/normalization gate is the load-bearing half)"), "fused-count concept");
+    }
+
+    #[test]
+    #[cfg(not(feature = "kernel_verify"))]
+    fn batch30_pseudocode_parses() {
+        // G1 for Batch 30: every new rule's ref_shape AND opt_pattern must
+        // syn-parse as valid Rust (the L2 pruner verdict), like every
+        // healable pattern the drafter can emit.
+        use crate::domain::HealDomain;
+        let corpus = build_kernel_seed_corpus();
+        let ids = [
+            "zero-init-side-branch-frozen-base-path",
+            "counter-derived-seed-stateless-noise",
+            "predicate-gated-skip-empty-workset-step",
+            "share-pipeline-set-across-subsystems",
+            "pad-uniform-pod-to-min-binding-size",
+            "fuse-count-into-mutation-pass",
+        ];
+        for id in ids {
+            let entry = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-30 rule '{id}' missing"));
+            let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+            assert!(ref_verdict.parses, "batch-30 ref_shape for '{id}' must parse");
+            let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+            assert!(opt_verdict.parses, "batch-30 opt_pattern for '{id}' must parse");
+        }
+    }
+
     // ════════════════════════════════════════════════════════════════════
     // Plan 003 — Router ↔ corpus wiring tests
     // ════════════════════════════════════════════════════════════════════
@@ -5252,7 +5442,7 @@ mod tests {
 
     #[test]
     fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-        // Every rule_id in the 203-rule corpus must appear in exactly one category.
+        // Every rule_id in the 209-rule corpus must appear in exactly one category.
         let corpus = build_kernel_seed_corpus();
         let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
         let mut categorized: Vec<&str> = Vec::new();
@@ -5283,13 +5473,13 @@ mod tests {
 
     #[test]
     fn kernel_categories_counts_match_plan_003_table() {
-        // Pin per-category rule counts to the Plan 003 table (updated for Batch 28).
+        // Pin per-category rule counts to the Plan 003 table (updated for Batch 30).
         let expected = [
             (KernelCategory::MemoryAccess, 29),
             (KernelCategory::Compute, 34),
-            (KernelCategory::Fusion, 21),
-            (KernelCategory::Dispatch, 29),
-            (KernelCategory::Parallelism, 12),
+            (KernelCategory::Fusion, 22),
+            (KernelCategory::Dispatch, 31),
+            (KernelCategory::Parallelism, 13),
             (KernelCategory::FlashAttnTiling, 10),
             (KernelCategory::LinearAttnRecurrence, 19),
             (KernelCategory::MoeDispatchBackward, 9),
@@ -5297,8 +5487,8 @@ mod tests {
             (KernelCategory::VarlenChunkedReduction, 5),
             (KernelCategory::AutotuneDispatch, 4),
             (KernelCategory::ConvGemmLayout, 6),
-            (KernelCategory::KernelPolymorphism, 6),
-            (KernelCategory::DtypeAlignment, 11),
+            (KernelCategory::KernelPolymorphism, 7),
+            (KernelCategory::DtypeAlignment, 12),
             (KernelCategory::IrStrengthReduction, 4),
         ];
         for (cat, count) in expected {
@@ -5308,9 +5498,9 @@ mod tests {
                 "Plan 003: category {cat:?} has {} rules, expected {count}",
                 entry.2.len());
         }
-        // Sum must equal 203.
+        // Sum must equal 209.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 203, "Plan 003: category totals must sum to 203");
+        assert_eq!(total, 209, "Plan 003: category totals must sum to 209");
     }
 
     #[test]
@@ -5320,7 +5510,7 @@ mod tests {
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 203, "Plan 003: grouped corpus has {total} rules, expected 203");
+        assert_eq!(total, 209, "Plan 003: grouped corpus has {total} rules, expected 209");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");
