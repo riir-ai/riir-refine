@@ -442,6 +442,37 @@
 //!   basis in `RePlaid` `adapt()` + a tracker-state orphaning bug in
 //!   `adapt_ratios()` + error-swallowing `unwrap_or_default()` on GPU
 //!   downloads — filed as an issue in the `riir-ai` repo.
+//! - **Batch 31 (Research 033):** 8 rules from the training-substrate
+//!   cluster — `lora/mod.rs` + `optimizer.rs` + `dataloader.rs` +
+//!   `buffer.rs` (the layers UNDER the dllm training loop mined in
+//!   Batch 30): `ragged-pack-offset-table-fused-dispatch` (D — the six
+//!   per-adapter GEMV dispatches repacked into contiguous buffers + a
+//!   prefix-sum offset table so ONE launch over Σ `out_dim` covers every
+//!   adapter: ragged segments need an offset table, a modulo cannot
+//!   identify them), `twin-projection-shared-delta-adapter` (L — GQA K/V
+//!   twins share ONE adapter pair: params −33%, optimizer dispatches −1
+//!   per layer, KV delta cache halves at inference),
+//!   `min-rank-inert-adapter-zero-alpha` (M — structurally-required-but-
+//!   inert adapters allocate rank=1 + alpha=0: minimum legal footprint,
+//!   annihilated by scale, not by buffer contents),
+//!   `debug-only-gpu-label-macro` (M — cfg-split label macro: debug gets
+//!   format!'d capture labels, release gets a typed None constant),
+//!   `sync-map-result-stack-cell` (A — poll(Wait) IS the barrier, so the
+//!   map callback parks its result in an `UnsafeCell` instead of an
+//!   Arc<Mutex>: zero lock + zero alloc on the readback critical path),
+//!   `staging-reuse-grow-only-map-prefix` (A — one loop-owned grow-only
+//!   `MAP_READ` staging buffer (~50-500μs driver alloc amortized to zero
+//!   steady-state; maps only the copied prefix), `mapped-at-creation-
+//!   init-upload` (A — one-shot weights upload via `create_buffer_init`:
+//!   no encoder, no submit, no queue-timeline ordering hazard), and
+//!   `dtype-normalize-once-at-upload` (N — bf16→f32 is a bit-shift; do
+//!   it once at ingestion instead of per-dispatch forever). Corpus:
+//!   **217 rules across 15 categories (A–O)**. Mining ALSO surfaced the
+//!   CRITICAL `AdamWOptimizer` shared-uniform truncation — every recorded
+//!   pass saw the LAST write's `param_count`, silently training only 25%
+//!   of `Mlp1.B`/`Mlp2.A` in every GPU `LoRA` loop — FIXED as riir-ai Issue
+//!   679A (per-slot uniforms) + 10 residual hazards filed (Issue 679
+//!   B1-B10).
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
@@ -3801,6 +3832,186 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
             ref_shape: "// naive: the mutation pass writes the mask, then a SECOND pass\n// scans the output array to count what was masked\nfn corrupt_two_pass(tokens: &mut [u32], mask: &mut [bool], ratio: f32) -> usize {\n    for i in 0..tokens.len() {\n        if rand01() < ratio {\n            tokens[i] = MASK;\n            mask[i] = true;\n        }\n    }\n    mask.iter().filter(|&&m| m).count() // second O(n) scan\n}".to_string(),
             opt_pattern: "// optimized: accumulate the count INSIDE the mutation loop — one\n// pass over the data, the count riding already-hot cache lines;\n// in kernel form the predicate write and its reduction share\n// one launch\nfn corrupt_counted(tokens: &mut [u32], mask: &mut [bool], ratio: f32) -> usize {\n    let mut total = 0;\n    for i in 0..tokens.len() {\n        if rand01() < ratio {\n            tokens[i] = MASK;\n            mask[i] = true;\n            total += 1; // count fused into the mutation pass\n        }\n    }\n    total\n}".to_string(),
         },
+        // ══ Batch 31 (Research 033): the training-substrate cluster — ══
+        // lora/mod.rs + optimizer.rs + dataloader.rs + buffer.rs (the layers
+        // UNDER the dllm training loop mined in Batch 30). Mining also
+        // surfaced the CRITICAL AdamW shared-uniform truncation — fixed as
+        // riir-ai Issue 679A (per-slot uniforms), not a new rule (the fix
+        // pattern is Batch 26's per-slot-uniform-buffer-write-ordering).
+        //
+        // ── ragged-pack-offset-table-fused-dispatch — per-matrix dispatches → offset-table single launch (D) ──
+        // Source: riir-gpu lora/mod.rs L308-310 ("Packed LoRA buffers for
+        // fused batched dispatch. / All 6 adapter A/B matrices packed into
+        // contiguous buffers per layer. / Reduces GPU dispatches from 12 to
+        // 2 per layer.") + L317-325 ("Per-layer packed B matrices: [6 ×
+        // out_dim × rank] contiguous. / Each adapter's B may have different
+        // out_dim, packed with stride table." + "pub adapter_b_offsets:
+        // Vec<u32>" + "pub adapter_out_dims: Vec<u32>") + the consumer
+        // forward/adapter_merge.rs L775-779 ("Fused LoRA dispatch for all 6
+        // targets in 2 GPU dispatches (Plan 162 T8).") + L866+L884 ("let
+        // total_out_rows: u32 = packed.adapter_out_dims.iter().sum();" +
+        // "pass.dispatch_workgroups(dispatch_1d(total_out_rows as usize,
+        // 64)[0], 1, 1);").
+        //
+        // Distinct from merge-dispatches-into-single-compute-pass (pass
+        // merging with NO layout change — cannot fuse dispatches whose
+        // shapes differ), token-flattened-elementwise-modulo-shared-weights
+        // (i % n flattening only works for EQUAL segment lengths — ragged
+        // lengths require an offset table), and anchor-shape-bucketing
+        // (padding shapes into buckets — this is exact offsets, zero
+        // padding).
+        KernelRule {
+            rule_id: "ragged-pack-offset-table-fused-dispatch".to_string(),
+            gpu_concept: "a per-layer LoRA forward is 12 tiny GEMV dispatches (A pass + B pass × 6 targets), each with its own pass, bind group, and uniform — at low rank the dispatch and pass overhead dominates the arithmetic. Repack the heterogeneous matrices (same rank, different out_dim) into ONE contiguous buffer plus a host-precomputed prefix-sum offset table, so a single kernel launched over total_rows = Σ out_dim covers every adapter: each thread finds its adapter by walking the offset table. Heterogeneity is absorbed by exact offsets rather than by padding to the max shape — no VRAM wasted, no dead lanes run. Dispatch count drops 12 → 2 per layer, collapsing bind-group churn and per-pass validation overhead. This is the ragged-shape generalization of dispatch flattening: when segments share an op but differ in length, a modulo (i % n) cannot identify the segment — only a prefix-sum offset table can. Distinct from merge-dispatches-into-single-compute-pass (pass merging without layout change — cannot fuse differing shapes) and from token-flattened-elementwise-modulo-shared-weights (modulo flattening for EQUAL lengths — ragged lengths require offsets)".to_string(),
+            ref_shape: "// naive: one dispatch per matrix — 12 per layer; each pays pass\n// open/close, bind group, and uniform overhead that dominates\n// at low rank\nfn per_adapter_dispatch_count(n_targets: usize) -> u32 {\n    let mut dispatches = 0;\n    for _t in 0..n_targets {\n        dispatches += 1; // dispatch_a(rank * in_dim) — small GEMV\n        dispatches += 1; // dispatch_b(out_dim * rank) — another small GEMV\n    }\n    dispatches\n}".to_string(),
+            opt_pattern: "// optimized: ragged segments packed contiguously + prefix-sum offset\n// table; ONE dispatch covers the SUM of segment lengths, threads\n// resolve their segment via the table instead of a modulo\nfn packed_offsets(out_dims: &[u32]) -> (Vec<u32>, u32) {\n    let mut offsets = Vec::with_capacity(out_dims.len());\n    let mut running = 0u32;\n    for &d in out_dims {\n        offsets.push(running);\n        running += d;\n    }\n    let total_rows: u32 = out_dims.iter().sum();\n    (offsets, total_rows) // dispatch_1d(total_rows, 64) — single launch\n}".to_string(),
+        },
+        // ── twin-projection-shared-delta-adapter — twin deltas → one shared pair (L) ──
+        // Source: riir-gpu lora/mod.rs L84-86 ("When `SharedKV`, K and V LoRA
+        // deltas share one weight matrix, / halving LoRA params for
+        // attention and enabling KV cache halving at inference." + "Shared
+        // KV: ΔW_q, ΔW_kv (shared K=V). 5 adapters per layer.") + L488-490
+        // ("When `share_kv: true`, K and V share a single adapter per
+        // layer. / This reduces attention LoRA params by ~33% and enables
+        // KV cache / halving at inference (katgpt-rs Plan 185).") + L517
+        // ("Shared KV adapter — uses K dimensions (K and V have same dims
+        // in GQA)").
+        //
+        // Distinct from combined-kv-buffer-keys-then-values (inference KV
+        // cache STORAGE layout — no parameter sharing) and
+        // gqa-kv-head-sharing-bandwidth-reduction (head-index arithmetic
+        // over cached entries — again no shared trainable delta).
+        KernelRule {
+            rule_id: "twin-projection-shared-delta-adapter".to_string(),
+            gpu_concept: "in GQA transformers the K and V projections have identical shapes, so their low-rank deltas are structurally interchangeable twins. Instead of allocating two adapter pairs (A_k,B_k) and (A_v,B_v), allocate ONE shared pair that both projections read: adapters per layer drop 6 → 5, attention-side LoRA params drop ~33%, and the optimizer dispatch count drops proportionally (one fewer matrix pair per layer in the step loop, one fewer bind group). Because K and V now derive from a single low-rank update, the inference side can halve the KV delta cache — a training-time layout decision whose payoff compounds at inference. The sharing also concentrates gradient signal: both the K-path and V-path gradients flow into the same B. Distinct from combined-kv-buffer-keys-then-values (KV cache storage layout — no parameter sharing) and from gqa-kv-head-sharing-bandwidth-reduction (sharing cached entries across heads — not a shared trainable delta)".to_string(),
+            ref_shape: "// naive: twin projections (identical shapes) each carry their own\n// low-rank pair — 2x params, 2x optimizer dispatches, 2x delta\n// buffers\nstruct TwinDeltaAdapters {\n    k_a: Vec<f32>, // [rank, in_dim]\n    k_b: Vec<f32>, // [kv_dim, rank]\n    v_a: Vec<f32>, // [rank, in_dim] — same shape as k_a\n    v_b: Vec<f32>, // [kv_dim, rank] — same shape as k_b\n}".to_string(),
+            opt_pattern: "// optimized: one shared delta pair serves BOTH twin projections;\n// K and V read the same buffers — params drop by a third per\n// layer, and the inference KV delta cache halves\nstruct SharedTwinDelta {\n    a: Vec<f32>, // [rank, in_dim] — read by K path AND V path\n    b: Vec<f32>, // [kv_dim, rank] — single-sourced KV delta\n}".to_string(),
+        },
+        // ── min-rank-inert-adapter-zero-alpha — full-rank inert → rank-1 + zero scale (M) ──
+        // Source: riir-gpu lora/mod.rs L218-219 ("pub fn zero(device:
+        // &Device, in_dim: usize, out_dim: usize, label: &str) -> Self {
+        // let rank = 1; // Minimal rank for zero adapter") + L666-689
+        // ("Create empty (zero-initialized) LoRA buffers suitable for a
+        // frozen forward pass." + "rank: 1, // Must be > 0 for valid GPU
+        // buffers (zero-sized buffers fail validation)" + "alpha: 0.0, //
+        // Zero alpha → LoRA contribution = alpha/rank * B@A@input = 0").
+        //
+        // Distinct from zero-init-side-branch-frozen-base-path (Batch 30 —
+        // the VALUE contract: B=0 init makes the teacher's forward exactly
+        // W·x; this is the ALLOCATION contract: rank=1 sizing + alpha=0
+        // scale annihilation for buffers that exist only to satisfy
+        // structure).
+        KernelRule {
+            rule_id: "min-rank-inert-adapter-zero-alpha".to_string(),
+            gpu_concept: "sometimes a subsystem is structurally required to hold buffers (the forward pass indexes adapters by layer × target and asserts the count) but is functionally inert — a frozen base model whose LoRA branch must contribute exactly zero. The naive fix pays full training-rank VRAM (rank × in_dim + out_dim × rank per adapter) for buffers that never train. The correct inert allocation is the minimum LEGAL footprint: the API rejects zero-sized buffers, so rank collapses to 1 (the smallest passing validation), cutting the buffer pair from O(rank·d) to O(d). Belt-and-suspenders: the scalar output scale alpha is also set to 0.0, so the contribution (alpha/rank)·B@A@x is zero by arithmetic even if buffer contents ever stray from zero — the annihilation no longer depends on buffer values at all. Distinct from zero-init-side-branch-frozen-base-path (the VALUE contract: B=0 makes a trainable branch start at identity — this is the ALLOCATION contract: minimal sizing + scalar-scale annihilation for structurally-required-but-inert buffers)".to_string(),
+            ref_shape: "// naive: an inert branch that must exist as buffers still\n// allocates full training rank — rank x dims of VRAM per\n// adapter, never trained\nfn inert_footprint_full_rank(rank: usize, in_dim: usize, out_dim: usize) -> usize {\n    rank * in_dim + out_dim * rank // e.g. rank=64: 64x wasted VRAM\n}".to_string(),
+            opt_pattern: "// optimized: minimum legal rank (zero-sized buffers fail\n// validation) plus zero scalar scale — contribution\n// annihilated independent of buffer contents\nfn inert_footprint_min_rank(in_dim: usize, out_dim: usize) -> (usize, f32) {\n    let rank = 1; // smallest footprint that passes buffer validation\n    let alpha = 0.0; // scale kills B@A even if contents stray\n    (1 * in_dim + out_dim * 1, alpha)\n}".to_string(),
+        },
+        // ── debug-only-gpu-label-macro — always-format label → cfg-split macro (M) ──
+        // Source: riir-gpu optimizer.rs L17-28 ("P2-4: Debug-only GPU label
+        // macro. / Eliminates format!() string allocations in release
+        // builds for hot-path encoder labels." + the cfg pair: debug
+        // expands to Some(format!(...)), not(debug) expands to
+        // Option::<String>::None) + call site L326 ("label:
+        // gpu_label!(\"adamw_a_{i}\").as_deref(),").
+        //
+        // Distinct from fast-math-contraction-behind-feature-flag (the
+        // same cfg-pair mechanism gating NUMERICS — this gates an API
+        // metadata parameter with zero numeric effect).
+        KernelRule {
+            rule_id: "debug-only-gpu-label-macro".to_string(),
+            gpu_concept: "every GPU object-creation and dispatch API takes an Option<&str> debug label that the driver may retain and surface in captures. On a hot training path the labels are built with format! — one String allocation plus formatting per encoder/pass/dispatch, and a single optimizer step over N adapters builds 2N pass labels plus N bind-group labels, all read by nobody in release. The discipline is a tiny cfg-split macro: debug builds expand to Some(format!(...)) (full capture fidelity when debugging), release builds expand to a typed Option::<String>::None constant — zero allocation, zero formatting, zero label retention, and no per-call-site cfg! noise because the selection happens at the macro definition. The typed Option::<String>::None (rather than a bare None) lets type inference work at every call site without naming the type. Distinct from fast-math-contraction-behind-feature-flag (same cfg-pair mechanism, but gating numerics — this gates an API metadata parameter with no numeric effect)".to_string(),
+            ref_shape: "// naive: label formatted on EVERY call — allocation + formatting\n// per dispatch even in release builds where nobody reads it\nfn pass_label_always(i: usize) -> Option<String> {\n    Some(format!(\"adamw_a_{i}\")) // release pays for debug tooling\n}".to_string(),
+            opt_pattern: "// optimized: labels exist only in debug builds; release passes a\n// typed None constant — zero alloc, zero format, zero label\n// retention, selection at the macro definition (no per-site cfg!)\nfn pass_label(i: usize) -> Option<String> {\n    if cfg!(debug_assertions) {\n        Some(format!(\"adamw_a_{i}\"))\n    } else {\n        Option::<String>::None\n    }\n}".to_string(),
+        },
+        // ── sync-map-result-stack-cell — Arc<Mutex> result → UnsafeCell under poll barrier (A) ──
+        // Source: riir-gpu buffer.rs L9-14 ("Helper: synchronous GPU buffer
+        // map using a stack-located result. / Since `device.poll(Wait)`
+        // blocks until the callback fires, the callback / writes exactly
+        // once before `poll` returns. This replaces `Arc<Mutex<>>` / with
+        // a zero-allocation stack approach.") + L33-35 ("move |res| unsafe
+        // { *this.inner.get() = Some(res); }") + L43-45 ("// Safety:
+        // SyncMapResult is only used in a single-producer-single-consumer
+        // pattern / // where `device.poll(Wait)` provides the
+        // synchronization barrier. / unsafe impl Sync for SyncMapResult
+        // {}") + L159-164 (the Arc::try_unwrap fast path + the take()
+        // fallback).
+        //
+        // Distinct from batched-downloads-single-sync-cycle (reduces HOW
+        // MANY syncs you pay — this reduces the cost of EACH sync's
+        // host-side result plumbing) and from the defer-readback timing
+        // rules (readback scheduling, not the callback storage mechanism).
+        KernelRule {
+            rule_id: "sync-map-result-stack-cell".to_string(),
+            gpu_concept: "GPU readback APIs (map_async) demand a 'static FnOnce callback, so the naive host pattern parks the result in Arc<Mutex<Option<_>>> — one heap allocation plus a lock acquire/release on every download. But when the caller immediately blocks in device.poll(Wait { timeout: None }), the poll itself is the synchronization barrier: the callback is guaranteed to have fired exactly once before poll returns, so the Mutex protects nothing. Replacing it with Arc<UnsafeCell<Option<_>>> plus a scoped unsafe impl Sync (justified by the poll barrier, documented at the impl) removes the lock and the per-sync allocation from the readback critical path. In decode loops that read back every token, this is host overhead paid on the hottest sync in the program. The Arc::try_unwrap fast path additionally moves the cell onto the stack when the callback has already dropped its clone. Distinct from batched-downloads-single-sync-cycle (reduces sync COUNT — this reduces the per-sync result-plumbing cost) and from the defer-readback timing rules (when to read back — not how the callback result is stored)".to_string(),
+            ref_shape: "// naive: every readback parks its map result in a heap Mutex.\n// Cost: one Arc allocation + lock/unlock per download, on the\n// sync critical path (per-token decode loops pay this every token)\nfn download_naive(device: &Device, buf: &GpuBuffer) -> Vec<f32> {\n    let result: Arc<Mutex<Option<Status>>> = Arc::new(Mutex::new(None));\n    let cb_result = result.clone();\n    buf.map_read(move |status| {\n        // 'static callback forces Arc; shared access forces Mutex\n        *cb_result.lock().unwrap() = Some(status);\n    });\n    device.poll_wait(); // blocks until callback has run\n    let status = result.lock().unwrap().take().unwrap();\n    let _ = status;\n    buf.read_mapped_to_vec()\n}".to_string(),
+            opt_pattern: "// optimized: poll(Wait) IS the barrier — the callback writes\n// exactly once before poll returns. A Mutex adds no safety,\n// only overhead\nstruct SyncMapResult {\n    inner: UnsafeCell<Option<Status>>,\n}\n// Safety: single producer (the map callback), single consumer\n// (after poll(Wait) returns). The poll provides the\n// happens-before edge.\nunsafe impl Sync for SyncMapResult {}\nimpl SyncMapResult {\n    fn callback(self: &Arc<Self>) -> impl FnOnce(Status) + 'static {\n        let this = self.clone();\n        move |res| unsafe { *this.inner.get() = Some(res); }\n    }\n}".to_string(),
+        },
+        // ── staging-reuse-grow-only-map-prefix — per-download staging → loop-owned grow-only (A) ──
+        // Source: riir-gpu buffer.rs L47-51 ("Reusable staging buffer for
+        // GPU-to-CPU downloads. / Avoids creating a new staging buffer
+        // allocation on every download_f32 call." + "Callers that perform
+        // repeated downloads (e.g., training loops) should create one of
+        // these and pass it to download_f32_reuse.") + L68-71 ("pub fn
+        // ensure_capacity" + "if self.capacity >= count && self.buffer.
+        // is_some() { return; }") + L219-220 ("// Only map the portion we
+        // actually copied" + "let buffer_slice = staging_buf.slice(..
+        // bytes_needed as u64);") + L457-458 ("to avoid repeated staging
+        // buffer allocation (~50-500μs driver overhead per call).") + the
+        // optimizer.rs consumer L81-83 + L496-498 ("grad_staging:
+        // RefCell<DownloadStaging>" + "Single staging buffer for all
+        // gradients. / staging.ensure_capacity(device, total_f32);").
+        //
+        // Distinct from batched-downloads-single-sync-cycle (sync-count
+        // amortization — this is the ALLOCATION-lifetime policy for the
+        // staging resource; the two compose) and from
+        // host-cache-immutable-device-weights (caching immutable DATA —
+        // here the buffer object itself is the reused resource and the
+        // data is transient).
+        KernelRule {
+            rule_id: "staging-reuse-grow-only-map-prefix".to_string(),
+            gpu_concept: "a GPU-to-CPU readback needs a dedicated MAP_READ|COPY_DST staging buffer, and creating one is a DRIVER allocation costing ~50-500μs — dwarfing a 4-byte or few-KB copy. In hot loops (per-token decode, optimizer steps, grad clipping) allocating the staging buffer per call means driver overhead dominates the transfer by orders of magnitude. The fix is a loop-owned staging context: ensure_capacity early-returns when the existing buffer suffices (zero driver calls on the hot path), reallocates only when a larger download arrives, and deliberately never shrinks so varying download sizes cannot thrash reallocation. One refinement: because the buffer is sized for the historical maximum, each download must map only the PREFIX it actually copied (slice(..bytes_needed)), not the whole allocation — mapping grants the host a view over regions it never touched. The same contiguous CPU buffer then serves as the upload source after in-place mutation (download buffer, norm accumulator, and upload staging are one allocation, not three). Distinct from batched-downloads-single-sync-cycle (amortizes sync COUNT — this amortizes the staging ALLOCATION; the two compose) and from host-cache-immutable-device-weights (caching immutable contents — here the transient buffer object itself is the reused resource)".to_string(),
+            ref_shape: "// naive: fresh MAP_READ staging buffer per download.\n// Cost: ~50-500us driver allocation per call — dominates\n// scalar and small-tensor readbacks in per-token loops\nfn download_once(device: &Device, src: &GpuBuffer, count: usize) -> Vec<f32> {\n    let staging = device.create_buffer(count * 4, MAP_READ | COPY_DST);\n    let enc = device.new_encoder();\n    enc.copy_buffer_to_buffer(src, 0, staging, 0, count * 4);\n    device.submit(enc);\n    staging.map_read_sync();\n    let out = staging.read_mapped_to_vec();\n    staging.unmap();\n    out // staging dropped: driver allocation paid again next call\n}".to_string(),
+            opt_pattern: "// optimized: one grow-only staging buffer owned by the loop; map\n// only the copied PREFIX of the (possibly larger) allocation\nstruct DownloadStaging {\n    buffer: Option<GpuBuffer>,\n    capacity: usize, // in elements, not bytes\n}\nimpl DownloadStaging {\n    fn ensure_capacity(&mut self, device: &Device, count: usize) {\n        if self.capacity >= count && self.buffer.is_some() {\n            return; // hot path: zero driver calls\n        }\n        self.buffer = Some(device.create_buffer(count * 4, MAP_READ | COPY_DST));\n        self.capacity = count; // grows only; never shrinks\n    }\n}".to_string(),
+        },
+        // ── mapped-at-creation-init-upload — queue-timed init write → mapped memcpy (A) ──
+        // Source: riir-gpu buffer.rs L95-112 ("pub fn upload_f32(" with
+        // "_queue: &wgpu::Queue," — the queue is UNUSED because the write
+        // never rides the queue — "device.create_buffer_init(&wgpu::util::
+        // BufferInitDescriptor { ... contents: bytes, ... })" + "Used for
+        // uploading packed quantized weights (e.g., Q4_K blocks as
+        // array<u32> in WGSL).").
+        //
+        // Distinct from per-slot-uniform-buffer-write-ordering (fixes the
+        // queue-flush hazard for REPEATED updates — this avoids the queue
+        // timeline entirely for one-shot initialization) and from
+        // host-cache-immutable-device-weights (host-side content caching
+        // for re-upload — this governs a single upload's mechanics).
+        KernelRule {
+            rule_id: "mapped-at-creation-init-upload".to_string(),
+            gpu_concept: "for one-shot initial data (weights, packed quantized blocks, constants), create_buffer_init — which maps the buffer at creation and memcpys host data in before unmapping — uploads with NO command encoder, NO queue submission, and NO dependency on the queue timeline. The tell in real code is an explicitly unused queue parameter: the queue is never touched because the write never rides it. The naive alternative (create_buffer + queue.write_buffer) lands the write on the queue timeline where it only takes effect at the next submit and is subject to write-flush ordering relative to encoders built afterwards — the exact hazard class the per-slot-uniform rules document for repeated writes. For immutable weights uploaded once at boot, mapped-at-creation removes that ordering hazard class entirely plus the internal staging copy that write_buffer performs on some backends, and guarantees the buffer is fully resident before the first dispatch that reads it. Distinct from per-slot-uniform-buffer-write-ordering (repeated-update ordering — this is one-shot initialization, a different lifecycle with a different fix) and from host-cache-immutable-device-weights (content caching for re-upload — this is the single upload's mechanics)".to_string(),
+            ref_shape: "// naive: create empty, then push initial data through the queue.\n// The write lands on the queue timeline — effective only at the\n// next submit, and ordered against later submits by flush rules\n// (a classic source of first-dispatch-reads-garbage bugs)\nfn upload_weights(device: &Device, queue: &Queue, data: &[f32]) -> GpuBuffer {\n    let buf = device.create_buffer(data.len() * 4, STORAGE | COPY_DST);\n    queue.write_buffer(&buf, 0, cast_bytes(data));\n    buf // data NOT resident until the next submit flushes\n}".to_string(),
+            opt_pattern: "// optimized: initialize via mapped-at-creation. No encoder, no\n// submit, no queue-timeline ordering hazard — note the queue\n// is not even needed (unused param in the real fn)\nfn upload_weights(device: &Device, _queue: &Queue, data: &[f32]) -> GpuBuffer {\n    device.create_buffer_init(\n        cast_bytes(data),\n        STORAGE | COPY_DST | COPY_SRC,\n    )\n}".to_string(),
+        },
+        // ── dtype-normalize-once-at-upload — per-dispatch dequant → bit-shift once at ingestion (N) ──
+        // Source: riir-gpu buffer.rs L388-404 ("Upload BF16 data as f32
+        // (dequantize during upload). / BF16 = upper 16 bits of IEEE 754
+        // f32. Conversion: f32::from_bits((bits as u32) << 16)." + the
+        // loop "for &bits in data { f32_data.push(f32::from_bits((bits as
+        // u32) << 16)); }").
+        //
+        // Distinct from dequant-once-per-k-tile-into-shared-memory (hoists
+        // dequant INSIDE the kernel per tile — this moves it OFF the
+        // device entirely, once per weight load; opposite side of the
+        // boundary) and from int2-pack-weights (keeps data PACKED on
+        // device for kernels that consume packed formats — the
+        // complementary regime).
+        KernelRule {
+            rule_id: "dtype-normalize-once-at-upload".to_string(),
+            gpu_concept: "when the device-side consumer can only read the native compute dtype (WGSL storage buffers typed f32), decide WHERE the bf16→f32 expansion happens: in every kernel invocation forever, or exactly once at ingestion. Doing it once at upload costs a host pass that is pure bit-shifting (f32::from_bits(bits << 16) — no FP arithmetic, memcpy-class) and trades 2× device memory plus 2× upload bandwidth for zero conversion instructions in every subsequent matmul across all layers and all steps. The break-even strongly favors upload-time conversion when kernels are dtype-restricted and invoked many times per weight load (training loops); it disfavors it when the consumer CAN read packed dtypes natively — that regime is the packed-weights rules, the complementary policy. This is the host-side sibling of the in-kernel dequant hoist: normalize once at the boundary, not per use. Distinct from dequant-once-per-k-tile-into-shared-memory (in-kernel per-tile hoist — this is off-device, once per load; opposite side of the boundary) and from int2-pack-weights (keeps data packed on device — the complementary regime for kernels that consume packed formats)".to_string(),
+            ref_shape: "// naive: ship the storage dtype to the device and convert on the\n// fly, per dispatch, forever\nfn forward_naive(w_bf16: &GpuBuffer, x: &GpuBuffer, out: &mut GpuBuffer) {\n    // every kernel that touches w pays the u16->f32 shift per\n    // element, every layer, every step\n    dispatch(w_bf16, x, out, CONVERT_ON_LOAD);\n}".to_string(),
+            opt_pattern: "// optimized: normalize dtype ONCE at ingestion. bf16 -> f32 is a\n// pure bit shift (upper 16 bits), so the upload pass is\n// memcpy-class\nfn upload_bf16_as_f32(data: &[u16]) -> Vec<f32> {\n    let mut f32_data = Vec::with_capacity(data.len());\n    for &bits in data {\n        f32_data.push(f32::from_bits((bits as u32) << 16));\n    }\n    f32_data // upload once; kernels never convert again\n}".to_string(),
+        },
     ])
 }
 
@@ -3821,7 +4032,7 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (29 rules)
+    // A: Memory access patterns (32 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -3855,6 +4066,9 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "snapshot-transient-grad-for-deferred-download",
             "defer-readback-gated-by-live-output-size",
             "weight-handle-cache-keyed-by-allocation-identity",
+            "sync-map-result-stack-cell",
+            "staging-reuse-grow-only-map-prefix",
+            "mapped-at-creation-init-upload",
         ],
     ),
     // B: Compute patterns (34 rules)
@@ -3927,7 +4141,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fuse-count-into-mutation-pass",
         ],
     ),
-    // D: Dispatch patterns (31 rules)
+    // D: Dispatch patterns (32 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -3963,6 +4177,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "launch-unchecked-caller-owned-size-contract",
             "predicate-gated-skip-empty-workset-step",
             "share-pipeline-set-across-subsystems",
+            "ragged-pack-offset-table-fused-dispatch",
         ],
     ),
     // E: Parallelism patterns (13 rules)
@@ -4089,6 +4304,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "stride-align-vectorization-key",
             "anchor-shape-bucketing",
             "carry-dual-layout-dead-slot",
+            "twin-projection-shared-delta-adapter",
         ],
     ),
     // M: Kernel parametric polymorphism (7 rules)
@@ -4103,9 +4319,11 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "detached-broadcast-insert",
             "enum-dispatch-separate-kernel-per-variant",
             "zero-init-side-branch-frozen-base-path",
+            "min-rank-inert-adapter-zero-alpha",
+            "debug-only-gpu-label-macro",
         ],
     ),
-    // N: dtype + alignment specialization (12 rules)
+    // N: dtype + alignment specialization (13 rules)
     (
         KernelCategory::DtypeAlignment,
         "N: dtype + alignment",
@@ -4122,6 +4340,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "norm-decoupled-low-bit-scoring",
             "base-3-trit-packing-5-per-byte",
             "pad-uniform-pod-to-min-binding-size",
+            "dtype-normalize-once-at-upload",
         ],
     ),
     // O: IR strength reduction (4 rules)
@@ -4219,7 +4438,7 @@ mod tests {
         // Batch 29 (10): riir-gpu production kernels — defer-readback-gated-by-live-output-size, weight-handle-cache-keyed-by-allocation-identity, first-readback-pays-queue-drain, epilogue-at-register-write-phase, delay-rms-scale-past-gemv-epilogue, pack-scalar-params-into-combined-buffer, enum-dispatch-separate-kernel-per-variant, epilogue-must-be-workgroup-local, launch-unchecked-caller-owned-size-contract, fast-math-contraction-behind-feature-flag (deltanet_input_proj_fused.rs + epilogue/ — the decode-path fusion cluster: Issue 602 sibling-GEMV fan-out + Plan 106 Track 3 CODA epilogue fusion).
         // Batch 30 (6): riir-gpu production kernels — zero-init-side-branch-frozen-base-path, counter-derived-seed-stateless-noise, predicate-gated-skip-empty-workset-step, share-pipeline-set-across-subsystems, pad-uniform-pod-to-min-binding-size, fuse-count-into-mutation-pass (dllm/mod.rs — the D2F training cluster: Plan 068 discrete-diffusion trainers + RePlaid schedule).
         // Total: 209.
-        assert_eq!(corpus.entries.len(), 209, "batches 1-30 should have 209 rules");
+        assert_eq!(corpus.entries.len(), 217, "batches 1-31 should have 217 rules");
     }
 
     #[test]
@@ -5431,6 +5650,55 @@ mod tests {
         }
     }
 
+    #[test]
+    fn batch31_rules_present() {
+        let corpus = build_kernel_seed_corpus();
+        let ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        // D (1 new): ragged packed-buffer fused dispatch
+        assert!(ids.contains(&"ragged-pack-offset-table-fused-dispatch"), "ragged pack offset table");
+        // L (1 new): SharedKV twin-projection adapter
+        assert!(ids.contains(&"twin-projection-shared-delta-adapter"), "twin projection shared delta");
+        // M (2 new): min-rank inert adapter + debug-only label macro
+        assert!(ids.contains(&"min-rank-inert-adapter-zero-alpha"), "min-rank inert adapter");
+        assert!(ids.contains(&"debug-only-gpu-label-macro"), "debug-only gpu label macro");
+        // A (3 new): sync result cell + grow-only staging + mapped-at-creation upload
+        assert!(ids.contains(&"sync-map-result-stack-cell"), "sync map result stack cell");
+        assert!(ids.contains(&"staging-reuse-grow-only-map-prefix"), "staging reuse grow only map prefix");
+        assert!(ids.contains(&"mapped-at-creation-init-upload"), "mapped at creation init upload");
+        // N (1 new): dtype normalize once at upload
+        assert!(ids.contains(&"dtype-normalize-once-at-upload"), "dtype normalize once at upload");
+    }
+
+    #[test]
+    #[cfg(not(feature = "kernel_verify"))]
+    fn batch31_pseudocode_parses() {
+        // G1 for Batch 31: every new rule's ref_shape AND opt_pattern must
+        // syn-parse as valid Rust (the L2 pruner verdict).
+        use crate::domain::HealDomain;
+        let corpus = build_kernel_seed_corpus();
+        let ids = [
+            "ragged-pack-offset-table-fused-dispatch",
+            "twin-projection-shared-delta-adapter",
+            "min-rank-inert-adapter-zero-alpha",
+            "debug-only-gpu-label-macro",
+            "sync-map-result-stack-cell",
+            "staging-reuse-grow-only-map-prefix",
+            "mapped-at-creation-init-upload",
+            "dtype-normalize-once-at-upload",
+        ];
+        for id in ids {
+            let entry = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-31 rule '{id}' missing"));
+            let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+            assert!(ref_verdict.parses, "batch-31 ref_shape for '{id}' must parse");
+            let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+            assert!(opt_verdict.parses, "batch-31 opt_pattern for '{id}' must parse");
+        }
+    }
+
     // ════════════════════════════════════════════════════════════════════
     // Plan 003 — Router ↔ corpus wiring tests
     // ════════════════════════════════════════════════════════════════════
@@ -5442,7 +5710,7 @@ mod tests {
 
     #[test]
     fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-        // Every rule_id in the 209-rule corpus must appear in exactly one category.
+        // Every rule_id in the 217-rule corpus must appear in exactly one category.
         let corpus = build_kernel_seed_corpus();
         let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
         let mut categorized: Vec<&str> = Vec::new();
@@ -5475,10 +5743,10 @@ mod tests {
     fn kernel_categories_counts_match_plan_003_table() {
         // Pin per-category rule counts to the Plan 003 table (updated for Batch 30).
         let expected = [
-            (KernelCategory::MemoryAccess, 29),
+            (KernelCategory::MemoryAccess, 32),
             (KernelCategory::Compute, 34),
             (KernelCategory::Fusion, 22),
-            (KernelCategory::Dispatch, 31),
+            (KernelCategory::Dispatch, 32),
             (KernelCategory::Parallelism, 13),
             (KernelCategory::FlashAttnTiling, 10),
             (KernelCategory::LinearAttnRecurrence, 19),
@@ -5486,9 +5754,9 @@ mod tests {
             (KernelCategory::NsaBlockSparse, 4),
             (KernelCategory::VarlenChunkedReduction, 5),
             (KernelCategory::AutotuneDispatch, 4),
-            (KernelCategory::ConvGemmLayout, 6),
-            (KernelCategory::KernelPolymorphism, 7),
-            (KernelCategory::DtypeAlignment, 12),
+            (KernelCategory::ConvGemmLayout, 7),
+            (KernelCategory::KernelPolymorphism, 9),
+            (KernelCategory::DtypeAlignment, 13),
             (KernelCategory::IrStrengthReduction, 4),
         ];
         for (cat, count) in expected {
@@ -5500,7 +5768,7 @@ mod tests {
         }
         // Sum must equal 209.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 209, "Plan 003: category totals must sum to 209");
+        assert_eq!(total, 217, "Plan 003: category totals must sum to 217");
     }
 
     #[test]
@@ -5510,7 +5778,7 @@ mod tests {
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 209, "Plan 003: grouped corpus has {total} rules, expected 209");
+        assert_eq!(total, 217, "Plan 003: grouped corpus has {total} rules, expected 217");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");
