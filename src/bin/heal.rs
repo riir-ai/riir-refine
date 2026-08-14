@@ -1,17 +1,24 @@
-//! `cargo heal` — the unified healing CLI (Plan 005 Phase 2).
+//! `cargo heal` — the unified healing CLI (Plan 005 Phase 2 + Phase 6).
 //!
-//! `--suggest` mode (the MVP): walk real `.rs` files, chunk them at
-//! fn/impl/struct boundaries, retrieve matching corpus rules via the latent
-//! substrate (fan-out across all feature-enabled domains; the router
-//! verdict annotates each span), and print top-K rules with scores + the
+//! `--suggest` mode: walk real `.rs` files, chunk them at fn/impl/struct
+//! boundaries, retrieve matching corpus rules via the latent substrate
+//! (fan-out across all feature-enabled domains; the router verdict
+//! annotates each span), and print top-K rules with scores + the
 //! fixed/optimized pattern snippet for manual review.
 //!
-//! `--fix` arrives with the Phase 4/5 proposers.
+//! `--fix` mode (Phase 6 T6.1): run the compiled-in rust_perf proposers on
+//! each file + apply their span-preserving edits. Without `--write`, fixed
+//! files print a per-edit review (rule + the changed span); with `--write`,
+//! the spliced file is written in place. Everything outside a matched span
+//! stays byte-identical. `--fix` ALSO runs the suggest pass unless
+//! `--quiet` is given, so rules without proposers still surface.
 //!
 //! Run (in-repo):
 //!
 //! ```text
 //! cargo run --features latent_retrieval --bin cargo-heal -- --suggest src/
+//! cargo run --features latent_retrieval --bin cargo-heal -- --fix src/          # review
+//! cargo run --features latent_retrieval --bin cargo-heal -- --fix --write src/  # apply
 //! ```
 //!
 //! Installed as `cargo-heal` (via `cargo install --path . --features
@@ -21,6 +28,7 @@
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 
+use riir_clippy::domains::rust_perf::proposers::{apply_edits, collect_edits, FIXABLE_RULES};
 use riir_clippy::draft::{DomainId, LatentMatcher, SpanSuggestion};
 
 /// Print usage + exit 2 (arg-error convention).
@@ -30,21 +38,33 @@ fn usage() -> ! {
 
 USAGE:
     cargo heal --suggest [--domain <auto|clippy|perf|kernel>] [--top-k <N>] <path>...
+    cargo heal --fix [--write] [--quiet] [--top-k <N>] <path>...
 
     --suggest       Suggest mode: print matching rules per code span (no edits).
-    --domain        Filter output to one domain (default: auto — all enabled).
+    --fix           Fix mode: apply the compiled-in rust_perf proposers' span-preserving
+                    edits ({} rules: {}). The proposer's visitor is the gate —
+                    latent suggestions never auto-apply.
+    --write         With --fix: write the spliced file in place. Without it, print a
+                    per-edit review (default: review only).
+    --quiet         With --fix: skip the --suggest pass (only show fixes).
+    --domain        Filter suggest output to one domain (default: auto — all enabled).
     --top-k <N>     Rules per span per domain (default 3).
     <path>...       Files or directories to scan (.rs files only).
 
 Domains are feature-gated: clippy + perf are default-on; kernel needs
 --features kernel_heal. Requesting a domain whose feature is off is an
-error (T2.4 gating)."
+error (T2.4 gating).",
+        FIXABLE_RULES.len(),
+        FIXABLE_RULES.join(", ")
     );
     std::process::exit(2);
 }
 
 struct Args {
     suggest: bool,
+    fix: bool,
+    write: bool,
+    quiet: bool,
     domain: Option<DomainId>,
     top_k: usize,
     paths: Vec<PathBuf>,
@@ -53,6 +73,9 @@ struct Args {
 fn parse_args() -> Args {
     let mut args = Args {
         suggest: false,
+        fix: false,
+        write: false,
+        quiet: false,
         domain: None,
         top_k: 3,
         paths: Vec::new(),
@@ -61,6 +84,9 @@ fn parse_args() -> Args {
     while let Some(arg) = it.next() {
         match arg.as_str() {
             "--suggest" => args.suggest = true,
+            "--fix" => args.fix = true,
+            "--write" => args.write = true,
+            "--quiet" => args.quiet = true,
             "--domain" => {
                 let Some(value) = it.next() else {
                     eprintln!("--domain requires a value");
@@ -161,9 +187,12 @@ fn print_suggestion(s: &SpanSuggestion, matcher: &LatentMatcher, domain_filter: 
 
 fn main() {
     let args = parse_args();
-    if !args.suggest {
-        // --fix is Phase 4/5; --suggest is the only mode today.
-        eprintln!("no mode given — only --suggest is implemented (Plan 005 Phase 2)");
+    if !args.suggest && !args.fix {
+        eprintln!("no mode given — use --suggest or --fix");
+        usage();
+    }
+    if args.write && !args.fix {
+        eprintln!("--write requires --fix");
         usage();
     }
 
@@ -201,26 +230,77 @@ fn main() {
 
     let mut n_chunks = 0usize;
     let mut n_suggestions = 0usize;
+    let mut n_fixed_files = 0usize;
+    let mut n_fixed_edits = 0usize;
     for file in &files {
         let Ok(src) = std::fs::read_to_string(file) else {
             eprintln!("skip (unreadable): {}", file.display());
             continue;
         };
         let display = file.display().to_string();
-        for s in matcher.suggest_file(&src, &display, args.top_k) {
-            n_chunks += 1;
-            if s.all_rules().is_empty() {
-                continue;
+
+        // ── --fix: run the compiled-in proposers (the visitor IS the gate).
+        let mut all_edits = Vec::new();
+        if args.fix {
+            if let Ok(parsed) = syn::parse_file(&src) {
+                for rule in FIXABLE_RULES {
+                    for re in collect_edits(rule, &src, &parsed) {
+                        all_edits.push(re);
+                    }
+                }
+            } else {
+                eprintln!("skip (unparseable): {display}");
             }
-            n_suggestions += 1;
-            print_suggestion(&s, &matcher, args.domain);
+        }
+        if !all_edits.is_empty() {
+            n_fixed_files += 1;
+            n_fixed_edits += all_edits.len();
+            let fixed = apply_edits(
+                &src,
+                all_edits.iter().map(|re| re.edit.clone()).collect(),
+            );
+            println!("fix {} ({} edit(s)):", display, all_edits.len());
+            for re in &all_edits {
+                let line = src[..re.edit.start].matches('\n').count() + 1;
+                println!("  [{:<24}] line {line}", re.rule_id);
+            }
+            if args.write {
+                std::fs::write(file, &fixed).unwrap_or_else(|e| {
+                    eprintln!("write failed for {display}: {e}");
+                });
+            }
+        }
+
+        // ── suggest pass (unless --fix --quiet). Runs over the ORIGINAL
+        // source — suggestions reference the user's current file; the fix
+        // review above is the change record.
+        if args.suggest || (args.fix && !args.quiet) {
+            for s in matcher.suggest_file(&src, &display, args.top_k) {
+                n_chunks += 1;
+                if s.all_rules().is_empty() {
+                    continue;
+                }
+                n_suggestions += 1;
+                print_suggestion(&s, &matcher, args.domain);
+            }
         }
     }
+    let mode = if args.fix {
+        format!(
+            ", fixed {} file(s) / {} edit(s){}",
+            n_fixed_files,
+            n_fixed_edits,
+            if args.write { " (written)" } else { " (review only — add --write)" }
+        )
+    } else {
+        String::new()
+    };
     println!(
-        "\nscanned {} file(s), {} span(s), {} with suggestions (top-{} per domain)",
+        "\nscanned {} file(s), {} span(s), {} with suggestions (top-{} per domain){}",
         files.len(),
         n_chunks,
         n_suggestions,
-        args.top_k
+        args.top_k,
+        mode
     );
 }

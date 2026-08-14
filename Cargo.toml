@@ -31,7 +31,10 @@ papaya = "0.2"
 syn = { version = "2", default-features = false, features = ["full", "parsing", "derive", "visit", "visit-mut", "printing", "extra-traits", "clone-impls"] }
 
 # Stage 2 proposers: AST rewrites via TokenStream round-trip.
-proc-macro2 = "1"
+# `span-locations` (Plan 005 Phase 6): byte offsets on fallback spans —
+# `syn::parse_file` in a normal lib populates real byte ranges, enabling the
+# span-preserving patch emitter (`SourceEdit` splice, no whole-file reformat).
+proc-macro2 = { version = "1", features = ["span-locations"] }
 quote = "1"
 
 # ── Ternary inference arm (Bench 010) ────────────────────────────────────
@@ -214,11 +217,12 @@ required-features = ["ternary_inference"]
 
 # Plan 005 Phase 2: the unified `cargo heal` CLI (suggest mode). Named
 # `cargo-heal` so an installed copy gets the `cargo heal` subcommand UX.
-# Gated on latent_retrieval (the matcher + indexes live behind it).
+# Gated on latent_retrieval (the matcher + indexes live behind it) AND
+# rust_perf (the --fix proposers live behind it — Phase 6 T6.1).
 [[bin]]
 name = "cargo-heal"
 path = "src/bin/heal.rs"
-required-features = ["latent_retrieval"]
+required-features = ["latent_retrieval", "rust_perf"]
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Local patches — mirror riir-ai/Cargo.toml's [patch.crates-io] so the

@@ -207,13 +207,17 @@ The healer does NOT suggest these — they're Cargo.toml/CI changes, not code
 patterns. A separate "build-config audit" tool (out of scope) could check for
 them.
 
-## Proposers (Plan 005 Phase 4 — the `--fix` upgrade)
+## Proposers (Plan 005 Phase 4 + Phase 6 T6.1 — the `--fix` upgrade)
 
 **DONE 2026-08-14.** [`src/domains/rust_perf/proposers/`](../../src/domains/rust_perf/proposers/)
-ships the top-5 Pareto-dominant rules as `syn` AST rewrites, mirroring the
-`clippy_lints` Stage 2 proposer pattern: the latent matcher (`--suggest`)
-picks the rule, the proposer applies it, the L2 pruner validates the
-result parses (`rust_perf_verify`: `cargo test`).
+ships the top-5 Pareto-dominant rules as `syn` AST detectors +
+**span-preserving source edits**: each proposer walks the parsed file
+immutably and emits `SourceEdit` byte ranges (via `proc-macro2`
+`span-locations`); `apply_edits` splices them back-to-front. Everything
+outside a matched span stays byte-identical — no whole-file reformat
+(Bench 019). The latent matcher (`--suggest`) picks/reports rules; the
+proposer's visitor is the application gate — retrieval scores never
+auto-apply.
 
 | Rule | Rewrite | Notes |
 |---|---|---|

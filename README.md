@@ -38,7 +38,7 @@ domain-pluggable behind the `HealDomain` trait.
 | L2 — Compile check (kernel_opt) | ✅ Stub (Plan 001 Phase 3, `kernel_verify` feature, delegates to shared `RustAnalyzerPruner`; full CubeCL compile + numeric compare deferred per Proposal 012 §Phase 0) |
 | L3 — Ruliology search | ✅ Done (Issue 005, `ruliology_search` feature, Pareto-front from katgpt-ruliology pattern, ~400µs/10-candidate search) |
 | SE — Self-evolution loop (additive) | ✅ Done (Issue 004 + Issue 008; `self_evolve` feature, opt-in; G1–G5 + G6/G7 ALL PASS — 50.0pp healing-rate improvement on real `cargo clippy` feedback) |
-| Latent — span retrieval + suggest CLI (Plan 005) | ✅ Phases 1–3 Done (`latent_retrieval` feature, opt-in; `cargo heal --suggest` — riir-rag `AstChunker`/`ModellessEmbedder`/`NeuronDbRetriever`, fan-out routing; GOAT G1–G4 PASS, Bench 018). Phase 4 rust_perf `propose_fix` proposers landed (library-level); `--fix` CLI = Phase 6, pending |
+| Latent — span retrieval + suggest CLI (Plan 005) | ✅ Phases 1–4 + 6 T6.1 Done (`latent_retrieval` feature, opt-in; `cargo heal --suggest` — riir-rag `AstChunker`/`ModellessEmbedder`/`NeuronDbRetriever`, fan-out routing; GOAT G1–G4 PASS, Bench 018. Phase 4: top-5 rust_perf `propose_fix` proposers. Phase 6 T6.1: `cargo heal --fix [--write]` — **span-preserving** edit splice, visitor-gated; GOAT G1–G4 PASS, Bench 019 — G5 real-sibling-fix blocked on the riir-ai rebase). Phase 5 kernel proposers DEFERRED (concept-grade corpus — see Plan 005 §Phase 5) |
 | Router — kernel_opt expert routing | ✅ Corpus-wired (Plan 003, `KernelExpertRouter` wraps `pick_domain<15,5>` from Plan 558; 15 category centroids wired to 68-rule corpus; 13/15 reachable, 2 documented unreachable) |
 | Thermal — kernel_opt tier dispatch | ✅ Stub (Plan 001 Phase 3, `KernelThermalRouter` + `ThermalTier` enum; Plasma→Hot→Warm→Cold→Freeze; returns Plasma for all calls) |
 | L4 — LoRA fallback (all domains) | ⏳ Deferred to riir-train |
@@ -116,7 +116,7 @@ code; `--fix` CLI wiring is Phase 6.
 | `kernel_heal` | off | `katgpt-core/variable_rank_domain_expert` | GPU kernel opt domain (Plan 001 Phase 3) |
 | `kernel_verify` | off | `kernel_heal` | CubeCL compile check (STUB — full validator deferred) |
 | `ruliology_search` | off | `clippy_lints` | L3 Pareto-front candidate search |
-| `latent_retrieval` | off | `dep:riir-rag` | Plan 005: span-level latent retrieval + `cargo heal --suggest` CLI (GOAT G1–G4 PASS, Bench 018) |
+| `latent_retrieval` | off | `dep:riir-rag` | Plan 005: span-level latent retrieval + `cargo heal --suggest`/`--fix` CLI (Bench 018 G1–G4 + Bench 019) |
 | `self_evolve` | off | — | additive self-evolution loop (memory + EMA) |
 | `ternary_inference` | off | `riir-engine`, `riir-gpu` | Bench 010: katgpt ternary generation on clippy prompts |
 
@@ -225,6 +225,10 @@ cargo run --example self_evolve_real_world_demo --features "self_evolve clippy_v
 
 # Latent suggest over real files (Plan 005; opt-in — pulls riir-rag)
 cargo run --features latent_retrieval --bin cargo-heal -- --suggest src/
+
+# Span-preserving fix (review mode, then write)
+cargo run --features latent_retrieval --bin cargo-heal -- --fix --quiet src/
+cargo run --features latent_retrieval --bin cargo-heal -- --fix --quiet --write src/
 ```
 
 ## Usage
@@ -256,8 +260,9 @@ if result.is_valid() {
 - [Bench 008](.benchmarks/008_real_world_validation.md) — real-world validation of `self_evolve` via `cargo clippy` (G6 + G7)
 - [Bench 009](.benchmarks/009_bonsai_vs_modelless_e2e_tokps.md) — e2e tok/s vs Ternary-Bonsai-27B on llama.cpp (~74,000× throughput; 0/10 held-out quality)
 - [Bench 011](.benchmarks/011_stage2_goat.md) — Stage 2 adaptive drafter GOAT (Issue 010 resolution)
-- [Plan 005](.plans/005_real_file_span_healing.md) — real-file span-level healing (latent suggest, Phases 1–3 DONE)
+- [Plan 005](.plans/005_real_file_span_healing.md) — real-file span-level healing (latent suggest Phases 1–3, proposers Phase 4, `--fix` Phase 6 T6.1; kernel Phase 5 deferred with scope verdict)
 - [Bench 018](.benchmarks/018_plan005_latent_suggest_goat.md) — latent `--suggest` GOAT (G1–G4 ALL PASS)
+- [Bench 019](.benchmarks/019_plan005_phase6_fix_span_preserving_goat.md) — span-preserving `--fix` GOAT (G1–G4 PASS; G5 blocked on sibling rebase)
 - [`.docs/10_self_evolve/`](.docs/10_self_evolve/) — design notes for the self-evolution loop (HealPipeline, LatentFixMemory, LatentSkillEvolution)
 - [Proposal 034](../riir-ai/.proposals/034_clippy_healing_drafter_pruner.md) — the original clippy-healing design argument
 - [Proposal 012](.proposals/) — GPU kernel optimization (absorbed into Plan 001 Phase 3 as `kernel_opt` domain)

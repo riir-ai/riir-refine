@@ -1,11 +1,14 @@
-# cargo-heal — the unified healing CLI (Plan 005 Phase 2)
+# cargo-heal — the unified healing CLI (Plan 005 Phase 2 + Phase 6 T6.1)
 
 **Source:** [`src/bin/heal.rs`](../../src/bin/heal.rs)
-**Feature:** `latent_retrieval` (required — the matcher + indexes live behind it)
+**Feature:** `latent_retrieval` + `rust_perf` (required — the matcher/indexes
+live behind the former, the `--fix` proposers behind the latter)
 **Run (in-repo):**
 
 ```sh
 cargo run --features latent_retrieval --bin cargo-heal -- --suggest src/
+cargo run --features latent_retrieval --bin cargo-heal -- --fix --quiet src/          # review
+cargo run --features latent_retrieval --bin cargo-heal -- --fix --quiet --write src/  # apply
 ```
 
 Installed via `cargo install --path . --features latent_retrieval`, cargo's
@@ -17,18 +20,34 @@ subcommand convention makes it `cargo heal --suggest src/`.
 walker — no new dep; skips hidden/`target`/`vendor`), chunks them at
 fn/impl/struct boundaries, retrieves matching corpus rules via the latent
 substrate, and prints top-K rules per span with scores + the
-fixed/optimized pattern snippet head for manual review. The Phase 4
-rust_perf `propose_fix` proposers landed as library code; a `--fix` CLI
-mode is Phase 6.
+fixed/optimized pattern snippet head for manual review.
+
+`--fix` mode (Phase 6 T6.1): runs the compiled-in rust_perf proposers'
+visitors on each file + applies their **span-preserving** edits —
+everything outside a matched span stays byte-identical (no reformat; see
+[Bench 019](../../.benchmarks/019_plan005_phase6_fix_span_preserving_goat.md)).
+The proposer's visitor is the gate: latent suggestions never auto-apply.
+Review mode (default) prints per-edit rule + line; `--write` splices in
+place. `--quiet` skips the suggest pass when fixing.
 
 ```text
 cargo heal --suggest [--domain <auto|clippy|perf|kernel>] [--top-k <N>] <path>...
+cargo heal --fix [--write] [--quiet] <path>...
 
 --suggest    Suggest mode: print matching rules per code span (no edits).
---domain     Filter output to one domain (default: auto — all enabled).
+--fix        Fix mode: apply the rust_perf proposers' span-preserving edits
+             (vec-with-capacity, entry-vs-contains-insert, static-str,
+             bool-to-bitpack, fxhashmap).
+--write      With --fix: write the spliced file in place (default: review only).
+--quiet      With --fix: skip the --suggest pass.
+--domain     Filter suggest output to one domain (default: auto — all enabled).
 --top-k <N>  Rules per span per domain (default 3).
 <path>...    Files or directories to scan (.rs files only).
 ```
+
+The `fxhashmap` fix requires the healed crate to have the `rustc-hash`
+dependency — parse-only validation cannot check this (documented per-rule
+caveat; review mode is the safety net).
 
 ## Domain gating (T2.4)
 

@@ -194,25 +194,68 @@ tests (140 lib total, clippy-clean). Design notes:
 
 ## Phase 5 — Top-5 kernel proposers (the `--fix` upgrade for kernel)
 
-**Status: not started.** (Same as original Plan 005 Phase 3 — unchanged.)
+**Status: DEFERRED 2026-08-14 — corpus is concept-grade, not proposer-grade.**
+Scope audit (this session): only 8/164 kernel rules even mention real API
+symbols (`CubeDim`/`CubeCount`/`launch`/`client`/`Handle`/...) in their
+`ref_shape`s — and all 8 need kernel-body knowledge (inside `#[cube]`, which
+syn cannot parse — Proposal 002 caveat 1) or cross-call context (framework
+buffer pools, queue-ordering proofs, graph capture). The other 156 are
+pseudo-code concepts with imaginary helpers (`gemv_dispatch_sync`,
+`empty_buf`) — retrieval-grade knowledge, not rewrite targets.
+
+The kernel corpus was built for the LATENT path (`--suggest`, Bench 018 G1
+100% — embedding similarity over concepts works); proposers require
+syntactic determinism that only the perf/clippy corpora provide (exact
+buggy→fixed idiom pairs).
+
+**Reopen trigger:** mine ≥5 real outer-Rust launch/dispatch/layout rules from
+riir-gpu with literal buggy→fixed code pairs (like Batch 14+ did for
+concepts, but proposer-grade). Until then `--fix` covers perf (+ clippy's
+mutation-based set, wiring TBD) and kernel stays suggest-only.
 
 ### Tasks
 - [ ] **T5.1-T5.6** The 5 kernel proposers (launch/dispatch/layout only, outside `#[cube]`).
+      **DEFERRED** — no honest 5 exist in the current corpus (see status).
       (See original Plan 005 Phase 3 — unchanged.)
 
 ## Phase 6 — `cargo heal --fix` + final GOAT gate (G5 real-file value)
 
-**Status: not started.**
+**Status: T6.1 DONE 2026-08-14 (Bench 019); T6.2/T6.3 pending.** The
+`--fix` wiring shipped with the **span-preserving patch emitter** (the
+proposal's "honest production choice", not the prettyplease MVP): the 5
+rust_perf proposers were refactored from AST-mutation to edit-collecting
+(`SourceEdit` byte ranges via `proc-macro2` span-locations; replacement
+text built from the matched nodes' ORIGINAL source), and `apply_edits`
+splices them back-to-front. Everything outside a matched span stays
+byte-identical — verified on a real 700-line file (1 line changed).
+
+The proposer's visitor is the `--fix` gate (caveat 4): latent suggestions
+never auto-apply; retrieval reports/prioritizes. The latent-score
+threshold from the original T6.1 text is therefore NOT used to gate
+application — the visitor IS the confirmation. `--fix [--write] [--quiet]`
+composes with the suggest pass.
+
+T6.2 is **blocked**: the riir-ai working tree is mid-rebase with a sibling
+session's in-flight work — landing the G5 real fix must wait for their
+rebase to land.
 
 ### Tasks
 
-- [ ] **T6.1** Wire `--fix` mode: for each retrieved rule, if a proposer exists + latent
+- [x] **T6.1** Wire `--fix` mode: for each retrieved rule, if a proposer exists + latent
       score > threshold (0.8), apply the rewrite (span-preserving); else fall back to
       `--suggest` output for that rule.
+      **DONE with a design correction** — the proposer visitor (not a latent-score
+      threshold) is the application gate (caveat 4); the span-preserving emitter
+      shipped (Bench 019 G1-G4 PASS, G5 blocked).
 - [ ] **T6.2 (G5 real-file value)** At least ONE real fix lands in a sibling repo
       (riir-ai or riir-gpu): the latent matcher detects a real anti-pattern, the proposer
       rewrites it, the change compiles + tests pass.
+      **BLOCKED on the sibling session's riir-ai rebase** (mid-flight at 2026-08-14;
+      candidate true positive already found: `adaptive_drafter.rs:197`-class patterns
+      in the sibling repos — rerun `cargo heal --fix` against them once clean).
 - [ ] **T6.3** `.benchmarks/016_real_file_heal_goat.md` — full G1-G5 measurement.
+      Renumbered to **Bench 019** (016 was taken by the rust_perf v2 corpus batch);
+      G1-G4 recorded there now, G5 lands with T6.2.
 
 ### Phase 6 exit criteria
 - G5 PASS. `cargo heal --fix` is production-usable for the 10 shipped proposers +
