@@ -173,18 +173,28 @@ just using the API that was already there.
 
 ### What's NOT yet measured (honest follow-ups)
 
-1. **`metal_tensor_gemm` zero-copy overlay (Issue 663, +1.21× on prefill)** — not
-   compiled into this bench because it needs the vendored wgpu-hal fork whose
-   `[patch.crates-io]` is only visible from riir-ai's workspace root. Cross-
-   workspace patch visibility follow-up filed. If enabled, prefill would be
-   ~25.5 × 1.21 = ~30.8 tok/s (4.87× gap to llama.cpp).
-2. **`speculative_decode` (Issue 665, +1.21× on decode)** — the feature is
-   compiled in but the harness still uses the sequential decode loop. Wiring
-   `forward_speculative_verify` is the next harness update. If enabled, decode
-   would be ~17.6 × 1.21 = ~21.3 tok/s (1.46× gap to llama.cpp, down from 1.75×).
-3. **Compound projection**: prefill 1.42× + decode 1.21× (speculative, when
-   wired) → total per-fix latency drops meaningfully. The 6× gap the user
-   flagged is closing.
+1. **`metal_tensor_gemm` zero-copy overlay (Issue 663) — REGRESSION in this harness, NOT shipped.**
+   When enabled, the zerocopy path:
+   - **decode 17.2 → 0.37 tok/s (47× slower)** — likely GPU memory pressure
+     from the zerocopy weight cache at 27B model scale (the cache is uploaded
+     at init even when the runtime flag is off, just from having the feature
+     compiled).
+   - **prefill 25.0 → 13.4 tok/s (regression)** — the OPPOSITE of Issue 663's
+     claimed +1.21×.
+   - **G1 FAILS** on `needless_return` (emits `" T, p+1-1-1-1..."` garbage).
+   Issue 663's +1.21× was measured on an ISOLATED prefill bench
+   (`bench_663_zero_copy_interop.rs`), not the full 27B forward. **The gain
+   does NOT reproduce at production scale.** This is an Issue 663 follow-up:
+   the zerocopy path needs to be revalidated against the full forward, not
+   just the isolated kernel. ZEROCOPY=1 env var forces it on for A/B
+   re-investigation. Filed in riir-ai as a follow-up to Issue 663.
+2. **`speculative_decode` (Issue 665)** — the feature is compiled in but the
+   harness still uses the sequential decode loop. Wiring
+   `forward_speculative_verify` is the next harness update. The Issue 665
+   benchmark measured +1.21× at α=0.88 (thermal-throttled lower bound).
+3. **The reproducible win is simdgroup batched prefill: +42.5% (1.42×).** This
+   is the production DEFAULT-ON path. The gap to llama.cpp on prefill closed
+   from 8.38× to 5.88×.
 
 ### The lesson
 

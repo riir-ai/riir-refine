@@ -40,15 +40,14 @@ quote = "1"
 # Optional + feature-gated: these are heavy sibling crates and the default
 # build must stay dependency-light.
 riir-engine = { path = "../riir-ai/crates/riir-engine", optional = true, default-features = false, features = ["deltanet_ternary_inference"] }
-riir-gpu = { path = "../riir-ai/crates/riir-gpu", optional = true, default-features = false, features = ["cubecl_runtime", "ternary_gemv", "ternary_gemm_simdgroup", "ternary_gemm_batched", "speculative_decode"] }
-# NOTE: `metal_tensor_gemm` (Issue 663 T5, +1.21x) is NOT included here because
-# it requires the vendored wgpu-hal fork (`riir-ai/vendor/wgpu-hal-30.0.0`)
-# whose `[patch.crates-io]` is only visible from riir-ai's workspace root.
-# Cross-workspace patch visibility is a cargo limitation. To enable it here,
-# either (a) duplicate the patch in this Cargo.toml, or (b) build the bench
-# from the riir-ai workspace. Filed as a follow-up. The simdgroup cmma path
-# (`ternary_gemm_simdgroup`, DEFAULT-ON in riir-gpu) is the production fallback
-# and does not need the fork.
+riir-gpu = { path = "../riir-ai/crates/riir-gpu", optional = true, default-features = false, features = ["cubecl_runtime", "ternary_gemv", "ternary_gemm_simdgroup", "ternary_gemm_batched", "metal_tensor_gemm", "speculative_decode"] }
+# NOTE: metal_tensor_gemm (Issue 663 T5, +1.21× prefill on M3 Metal) needs the
+# vendored wgpu-hal fork (adds `raw_handle()` on metal::Buffer). The fork lives
+# at `riir-ai/vendor/wgpu-hal-30.0.0/`. Per cargo's patch-inheritance rules,
+# `[patch.crates-io]` is only honored at the workspace root cargo is invoked
+# from — so we duplicate the patch declarations below pointing at the sibling
+# riir-ai vendor paths. Same trick for cubecl-runtime + cubecl-wgpu (the
+# arithmetic-overflow fix + the raw-handle accessors).
 
 [dev-dependencies]
 
@@ -197,3 +196,17 @@ required-features = ["self_evolve", "clippy_lints"]
 name = "bench_clippy_ternary_tps"
 harness = false
 required-features = ["ternary_inference"]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Local patches — mirror riir-ai/Cargo.toml's [patch.crates-io] so the
+# metal_tensor_gemm + cubecl_runtime features compile from THIS workspace.
+# Cargo's patch-inheritance does NOT cross workspace boundaries, so when we
+# invoke cargo from riir-clippy we have to redeclare them here pointing at
+# the sibling riir-ai vendor paths. Remove once upstream lands the fixes
+# (cubecl tracel-ai/cubecl#1359, cubecl-wgpu raw-handle PR, wgpu-hal
+# raw_handle PR).
+# ─────────────────────────────────────────────────────────────────────────────
+[patch.crates-io]
+cubecl-runtime = { path = "../riir-ai/vendor/cubecl-runtime-0.11.0-pre.2" }
+cubecl-wgpu = { path = "../riir-ai/vendor/cubecl-wgpu-0.11.0-pre.2" }
+wgpu-hal = { path = "../riir-ai/vendor/wgpu-hal-30.0.0" }

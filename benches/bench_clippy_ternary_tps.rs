@@ -156,20 +156,28 @@ fn main() {
 
         fwd.reset_state();
 
-        // ── Prefill: BATCHED path (simdgroup cmma GEMM, not one-token GEMV) ──
+        // ── Prefill: BATCHED simdgroup cmma path (the production DEFAULT-ON) ──
         // The old loop `for tok in prompt_tokens { forward_token(tok) }` was the
         // one-token-at-a-time GEMV path — the slow path Bench 010 measured at
         // 17.89 tok/s prefill (8.38x behind llama.cpp). The batched `prefill()` API
         // processes all prompt tokens in one call via `prefill_project` (GEMM,
         // not GEMV) using the simdgroup cmma kernel (Issue 628/637, DEFAULT-ON in
-        // riir-gpu).
+        // riir-gpu). Measured +42.5% (1.42×) prefill gain over the GEMV loop.
         //
-        // NOTE: the Issue 663 zero-copy RAW-Metal overlay (`metal_tensor_gemm`)
-        // adds another +1.21x on top, but it requires the vendored wgpu-hal fork
-        // whose `[patch.crates-io]` is only visible from riir-ai's workspace.
-        // Cross-workspace patch follow-up filed. Simdgroup alone is still a major
-        // gain over the GEMV loop.
+        // The Issue 663 zero-copy RAW-Metal overlay (`metal_tensor_gemm`) is
+        // compiled in but DEFAULT OFF — it REGRESSES in this harness config:
+        //   - decode 17.2 → 0.37 tok/s (47× slower) — likely GPU memory pressure
+        //     from the zerocopy weight cache at 27B model scale
+        //   - prefill 25.0 → 13.4 tok/s (regression, not the +1.21× Issue 663 claims)
+        //   - G1 FAILS on some cases (`needless_return` emits garbage tokens)
+        // Issue 663's +1.21× was measured on an ISOLATED prefill bench, not the
+        // full forward — does not reproduce at scale. ZEROCOPY=1 env var forces it
+        // on for A/B re-investigation; default is OFF.
         let _ = riir_gpu::set_prefill_use_simdgroup(true);
+        #[cfg(target_os = "macos")]
+        if std::env::var("ZEROCOPY").unwrap_or_else(|_| "0".to_string()) == "1" {
+            let _ = riir_gpu::set_prefill_use_metal_tensor_zerocopy(true);
+        }
 
         let t_prefill = Instant::now();
         let mut last_logits = fwd.prefill(prompt_tokens);
