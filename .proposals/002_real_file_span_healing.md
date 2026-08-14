@@ -7,6 +7,46 @@
 
 ## TL;DR
 
+> **BREAKTHROUGH ADDENDUM (2026-08-14, post user pushback):** the original TL;DR below
+> framed a two-layer matcher (hand-coded visitors + ternary-matvec suggester) + kept
+> cross-domain routing out of scope. **Grep revealed both are unnecessary limitations.**
+> The substrate for a unified, clippy-optional, latent-retrieval architecture already
+> ships across 3 crates:
+>
+> 1. **`AstChunker`** (riir-rag) — chunks Rust files at semantic boundaries (fn/impl/struct)
+>    WITH line ranges. "Put AST in riir-rag" = already implemented.
+> 2. **`RetrievalProvider::retrieve(LatentQuery, budget)`** (riir-rag) — Clifford-wedge KNN
+>    over latent embeddings. This IS the rule-matcher: embed the code span, query the
+>    corpus index, retrieve the matching rule. Works UNIFORMLY for all 3 domains.
+> 3. **`pick_domain<const N, const A>`** (katgpt-core) — generic MoE router. Currently N=15
+>    for kernel categories; **N=3 for cross-domain routing is a one-line instantiation.**
+>
+> The revised architecture collapses the two-layer matcher into ONE latent retrieval
+> path, promotes cross-domain routing from "out of scope" to "ships", and makes clippy
+> **optional verification** (not the matcher). The asymmetry the original TL;DR flagged
+> (clippy has a matcher, perf/kernel don't) disappears — all three domains use the same
+> latent retrieval path. **This is the dMoE-for-multi-domain + AST-in-riir-rag fusion the
+> user identified.**
+>
+> The revised pipeline:
+> ```
+> real .rs file
+>   → AstChunker.chunk()                      [riir-rag: EXISTS]
+>   → ModellessEmbedder.embed() → [f32;8]      [riir-rag: EXISTS, modelless]
+>   → pick_domain<3,8>(activity, dirs)           [katgpt-core: EXISTS, N=3 trivial]
+>       → domain 0/1/2 (clippy/perf/kernel)
+>   → RetrievalProvider.retrieve(query)          [riir-rag: EXISTS, Clifford wedge KNN]
+>       → ranked rules from THAT domain's corpus
+>   → proposer.rewrite() (if one exists)         [clippy_lints: EXISTS; perf/kernel: Plan 005]
+>   → RustAnalyzerPruner                         [riir-clippy: EXISTS]
+>   → optional: clippy_verify / cargo test / cubecl compile
+> ```
+>
+> The original TL;DR + design sections below are retained for lineage; the addendum
+> at §"Revised architecture (dMoE + AST-in-riir-rag)" is the authoritative design.
+>
+> **Original TL;DR (superseded by the addendum on key points):**
+
 The three heal domains today have **asymmetric real-file capability**:
 
 | Domain | Corpus | Drafter | Pruner | **Real-file rewrite (proposer)** | Matcher (what tells you the rule applies?) |
@@ -35,7 +75,135 @@ Right now, `kernel_heal_demo` + `perf_heal_demo` draft a fix from a corpus *temp
 
 Proposal 001 §"Product vision" describes `cargo heal` as a design sketch + flags span-level patching as the "Key technical challenge." It's actually not that hard — `syn` parses the file, the proposer rewrites in place, you write back. The real work is the **proposer coverage** (writing the visitors + rewrites) + the **matcher** (detecting which rule applies without an external diagnostic). This proposal scopes both.
 
-## The proposed design
+## Revised architecture (dMoE + AST-in-riir-rag) — the authoritative design
+
+> This section supersedes the original "proposed design" sections (Layer 0-3) on
+> three points: (1) the matcher is latent retrieval, not hand-coded visitors;
+> (2) cross-domain routing via `pick_domain<3,8>` is IN SCOPE; (3) clippy is optional
+> verification, not the matcher. The proposer pattern (Layer 0) still stands — it's
+> the rewrite mechanism, orthogonal to the matcher.
+
+### The unified latent-space heal path (one pipeline, all domains)
+
+The breakthrough: **all three domains share ONE retrieval path.** The asymmetry
+(clippy has clippy-as-matcher; perf/kernel have nothing) collapses because the
+matcher becomes riir-rag's latent retrieval, which is domain-agnostic.
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│ 1. CHUNK    AstChunker.chunk(file) → Vec<RawChunk> [line ranges]    │
+│             [riir-rag ast_chunker.rs — EXISTS]                      │
+├─────────────────────────────────────────────────────────────────────┤
+│ 2. EMBED    ModellessEmbedder.embed(chunk) → [f32; 8]               │
+│             [riir-rag embedder.rs — EXISTS, BLAKE3+DFT+sigmoid]     │
+│             (opt-in: BonsaiEmbedder 768-D for higher accuracy)      │
+├─────────────────────────────────────────────────────────────────────┤
+│ 3. ROUTE    pick_domain<3, 8>(activity, domain_directions) → 0|1|2   │
+│             [katgpt-core variable_rank_domain_expert.rs — EXISTS]   │
+│             0=clippy_lints, 1=rust_perf, 2=kernel_opt               │
+│             (the dMoE — domain-level Mixture of Experts)            │
+├─────────────────────────────────────────────────────────────────────┤
+│ 4. RETRIEVE RetrievalProvider.retrieve(LatentQuery, budget)         │
+│             → ranked rules from the routed domain's corpus          │
+│             [riir-rag query.rs — EXISTS, Clifford-wedge KNN]        │
+│             The corpus rules (ref_shape text) are indexed chunks.   │
+├─────────────────────────────────────────────────────────────────────┤
+│ 5. REWRITE  proposer.rewrite(file) for the top rule (if one exists) │
+│             [clippy_lints proposers — EXISTS; perf/kernel: Plan 005]│
+├─────────────────────────────────────────────────────────────────────┤
+│ 6. VALIDATE RustAnalyzerPruner (parse check — always)               │
+│             [riir-clippy pruner.rs — EXISTS]                        │
+│             optional: clippy_verify / cargo test / cubecl compile   │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Why this is better than the original two-layer matcher
+
+| Dimension | Original (Layer 1a/1b) | Revised (latent retrieval) |
+|---|---|---|
+| Matcher for perf/kernel | hand-coded visitors + ternary suggester | **riir-rag retrieve (Clifford wedge KNN)** — one path |
+| Cross-domain routing | out of scope (`--domain` flag) | **`pick_domain<3,8>`** — automatic, MoE-routed |
+| clippy dependency | clippy emits lint_name (required for matching) | **optional** — clippy becomes verify-only |
+| New substrate needed | visitors per rule (~64 to write) | **zero** — riir-rag + katgpt-core already ship it |
+| Proposer coverage | the bottleneck (must write 64 proposers) | **decoupled** — retrieval works WITHOUT proposers (`--suggest` mode surfaces the rule + opt_pattern for manual review); proposers are the `--fix` upgrade |
+
+The proposers are still valuable (they enable `--fix` auto-apply), but they're
+no longer on the critical path. **The retrieval-only product (`--suggest`) ships
+first, with ZERO proposer code**, because the corpus ref_shapes are already
+indexed-able chunks. This is a massive scope reduction for Plan 005 Phase 1.
+
+### dMoE — the domain-level Mixture of Experts
+
+`pick_domain<const N, const A>` is already generic over N. The kernel_opt
+router uses `N=15` (15 categories). Cross-domain routing is `N=3`:
+
+```rust
+// The 3 domain-direction vectors (8-D, hand-crafted initially — mined later):
+//   clippy:  high on style/complexity signals (short fns, closures, returns)
+//   perf:    high on hot-path signals (loops, allocations, HashMap)
+//   kernel:  high on GPU signals (CubeDim, CubeCount, #[cube], launch)
+const DOMAIN_DIRECTIONS: [[f32; 8]; 3] = [
+    /* clippy  */ [ ... ],  // mined from clippy lint signatures
+    /* perf    */ [ ... ],  // mined from perf anti-pattern signatures
+    /* kernel  */ [ ... ],  // mined from kernel launch signatures
+];
+let domain = pick_domain::<3, 8>(&activity, &DOMAIN_DIRECTIONS);
+```
+
+The activity vector is the code chunk's 8-D embedding (step 2). The domain
+selection is a dot-product argmax — modelless, zero-allocation, O(3×8)=24
+FLOPs. This IS the "dMoE technique for multi-domain" the user identified: the
+MoE router that was within-kernel-only is instantiated at the domain level.
+
+### AST in riir-rag — the fast + accurate retrieval
+
+The corpus rules become indexed chunks:
+- `ref_shape` (the buggy pattern pseudocode) → embedded via ModellessEmbedder
+- The embedding → indexed in `ShardIndex` (Clifford wedge KNN) or `DenseEmbedIndex`
+- At heal time: the real code chunk is embedded → `LatentQuery::from_direction()`
+  → `retrieve()` → ranked rules by latent similarity
+
+This is faster + more accurate than waiting for clippy because:
+- **Faster:** Clifford-wedge KNN is O(log N) lookup (Bench 575: 123µs p50 @ N=1000);
+  clippy is ~130ms (1000× slower).
+- **More accurate:** latent similarity catches semantic equivalents (a `Vec::push`
+  in a `loop` matches the `vec-with-capacity` rule even if the variable names differ);
+  clippy only catches its hardcoded lint patterns.
+- **Uniform:** works for ALL 3 domains; no per-domain matcher code.
+
+### clippy becomes optional verification
+
+The `clippy_verify` feature (already shipped) re-runs `cargo clippy` to confirm a
+proposed fix resolves the lint. In the revised architecture, this is the ONLY role
+clippy plays — verification, not matching. A user can run `cargo heal --fix` without
+clippy installed (the latent matcher works standalone); clippy is the belt-and-suspenders
+confirm step. This also means the `clippy_lints` domain can use the SAME latent
+retrieval path as perf/kernel — no special-casing.
+
+### Honest caveats (revised)
+
+1. **CubeCL `#[cube]` macro bodies** — still out of scope for proposers (syn can't parse
+   inside). BUT: the latent matcher STILL works on them (AstChunker falls back to
+   whole-file chunk on parse failure; the embedding still captures the signature).
+   So `--suggest` works for kernel-body rules; only `--fix` (proposer) is limited.
+   This is better than the original caveat — the retrieval path covers more ground.
+2. **Latent false-matches** — the Clifford-wedge KNN will sometimes retrieve the wrong
+   rule. Mitigation: `--suggest` mode surfaces the top-K rules with scores for human
+   review; `--fix` requires EITHER a confirmed proposer match OR a high-confidence
+   (>0.8) latent score AND a proposer. The safety contract: never auto-apply a
+   low-confidence latent match.
+3. **Domain-direction mining** — the initial `DOMAIN_DIRECTIONS` are hand-crafted (like
+   kernel_opt's category centroids). Mining via `CommittedFieldBlend` (Plan 321) is
+   the same deferred path; the hand-crafted vectors are the modelless baseline.
+4. **Proposer coverage still voluminous** for `--fix` — but decoupled from the critical
+   path. `--suggest` ships first (zero proposers); proposers expand `--fix` coverage
+   incrementally.
+5. **Cross-domain auto-routing is NOW IN SCOPE** (was caveat 5 in the original). The
+   `pick_domain<3,8>` substrate makes it trivial. The CLI defaults to auto-route; `--domain`
+   overrides for users who want to force a specific domain.
+
+## The proposed design (ORIGINAL — partially superseded by the revised architecture above)
+
 
 ### Layer 0 — the proposer pattern (generalize from `clippy_lints`)
 

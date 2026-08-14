@@ -8,148 +8,153 @@
 
 Lift the `clippy_lints` proposer pattern (real `syn` AST rewrites) into `rust_perf` + `kernel_opt`, add a shallow-reasoning matcher (so perf/kernel detect their own patterns), and ship a unified `cargo heal` CLI that scans real `.rs` files + applies all three domains. This is the `quest_grammar` fusion (Proposal 002): the corpus entries become real `syn` rewrites, not string templates.
 
-**This is a product-capability plan, not a corpus-expansion plan.** The GOAT gate (G5) requires at least one real fix to land in a sibling repo.
+**This is a product-capability plan, not a corpus-expansion plan.** The GOAT gate (G5)
+requires at least one real fix to land in a sibling repo.
+
+> **BREAKTHROUGH REVISION (2026-08-14):** grep revealed the unified latent-retrieval
+> substrate already ships across riir-rag (`AstChunker` + `RetrievalProvider` +
+> `ModellessEmbedder`) + katgpt-core (`pick_domain<const N, const A>`). This collapses
+> the original 6-phase plan: Phase 1 becomes "wire riir-rag" (not "write proposer
+> surface"), cross-domain routing is IN SCOPE (N=3 instantiation), and `--suggest`
+> mode ships with ZERO proposer code (the corpus ref_shapes are already indexable).
+> The phases below are revised. See Proposal 002 §"Revised architecture" for the
+> authoritative design. The proposer work (original Phase 2/3) is now Phase 4/5 —
+> decoupled from the critical path.
 
 ## Substrate-first gate (pre-flight, MANDATORY)
 
 Before implementing, verify the substrate exists:
-- [x] `clippy_lints/proposers/` — 10 `syn` AST codemods (`fn rewrite(&mut syn::File) -> bool`). The pattern to generalize.
-- [x] `propose_fix(rule_id, code) -> Option<String>` — the proposer dispatch shape. Already clippy-specific; perf/kernel get parallel free fns.
-- [x] `TernaryDrafter` (generic over `E: HealEntry`) — the shallow-reasoning embedder. Already shipped.
-- [x] `RustAnalyzerPruner` — `syn`-based parse validation. Already shipped.
-- [x] `KernelExpertRouter::route()` (`pick_domain<15, 8>`) — MoE category narrowing. Already shipped.
-- [x] `quote_file` (ToTokens → string) — the MVP emitter (formatting-non-preserving; T1.3 upgrades to span-preserving).
-- [x] Corpus: 46 perf rules + 123 kernel rules — the knowledge base the matchers consult.
+- [x] **`AstChunker`** (riir-rag `ast_chunker.rs`) — chunks Rust files at fn/impl/struct
+      boundaries WITH line ranges. "Put AST in riir-rag" = ALREADY IMPLEMENTED.
+- [x] **`RetrievalProvider::retrieve(LatentQuery, budget)`** (riir-rag `query.rs`) —
+      Clifford-wedge KNN over latent embeddings. IS the rule-matcher.
+- [x] **`ModellessEmbedder`** (riir-rag `embedder.rs`) — BLAKE3+DFT+sigmoid, 8-D, no weights.
+      (opt-in `BonsaiEmbedder` 768-D for higher accuracy.)
+- [x] **`pick_domain<const N, const A>`** (katgpt-core `variable_rank_domain_expert.rs`) —
+      generic MoE router. N=3 for cross-domain is a one-line instantiation.
+- [x] **`LatentQuery::from_direction([f32;8])`** (riir-rag) — the query builder.
+- [x] `clippy_lints/proposers/` — 10 `syn` AST codemods (the rewrite pattern, decoupled).
+- [x] `RustAnalyzerPruner` — `syn`-based parse validation.
+- [x] `KernelExpertRouter::route()` — within-kernel MoE (N=15); composes with cross-domain.
+- [x] Corpus: 46 perf + 123 kernel + 10 clippy rules — the indexed knowledge base.
 
-No new substrate invented. The proposer pattern + matcher compose existing pieces.
+**Zero new substrate invented.** The entire revised pipeline composes existing pieces.
 
-## Phase 1 — Proposer surface + span-preserving emitter
+## Phase 1 — Wire riir-rag latent retrieval (the `--suggest` MVP, ZERO proposers)
 
-Generalize the proposer dispatch + fix the formatting-preservation gap (Proposal 002 caveat 3).
+The critical-path milestone. Index the corpus rules, embed real code chunks, retrieve
+matching rules via Clifford-wedge KNN. This ships a WORKING `--suggest` mode with no
+proposer code at all — the corpus `ref_shape`/`opt_pattern` text is the suggestion.
 
 **Status: not started.**
 
 ### Tasks
 
-- [ ] **T1.1** Extract the proposer dispatch shape into a domain-agnostic helper. Each domain ships `pub fn propose_fix(rule_id, code) -> Option<String>` (mirrors `clippy_lints`). No `HealDomain` trait change — the free fn is the contract.
-- [ ] **T1.2** Add `src/draft/span_patch.rs` — a span-preserving patch emitter. Instead of re-quoting the whole file (which reformats), emit a `[Span { start_line, start_col, end_line, end_col } → replacement_text]` patch. The CLI applies only the matched spans; the rest of the file stays byte-identical. This is the production choice (Proposal 002 caveat 3).
-- [ ] **T1.3** MVP fallback: if span extraction is too hard for a given proposer, fall back to `prettyplease` (whole-file reformat) behind a `--format` flag. Default is span-preserving; `--format` opts into reformat. Document the tradeoff.
-- [ ] **T1.4** `src/draft/matcher.rs` — the `Matcher` trait: `fn detect(file: &syn::File) -> Vec<Match>` where `Match { rule_id, span, confidence }`. Hard-coded visitors implement this; the ternary-matvec suggester is a separate `Suggester` (advisory, not `Matcher`).
+- [ ] **T1.1** Add `riir-rag` as a dep of `riir-clippy` (behind a `latent_retrieval`
+      feature gate; pulls `AstChunker` + `ModellessEmbedder` + `RetrievalProvider`).
+- [ ] **T1.2** `src/draft/corpus_index.rs` — index each domain's corpus entries as
+      riir-rag chunks. The `ref_shape` text → `ModellessEmbedder.embed()` → `ShardIndex`.
+      One index per domain (3 indices) OR one index with a domain tag.
+- [ ] **T1.3** `src/draft/latent_matcher.rs` — given a real code chunk: `AstChunker.chunk()`
+      → `ModellessEmbedder.embed()` → `LatentQuery::from_direction()` → `retrieve()`.
+      Returns `Vec<(rule_id, latent_score)>` ranked.
+- [ ] **T1.4** `src/draft/domain_router.rs` — `pick_domain::<3, 8>` with hand-crafted
+      `DOMAIN_DIRECTIONS` (clippy/perf/kernel signatures). The 8-D activity = the code
+      chunk embedding. Output: domain index 0/1/2.
+- [ ] **T1.5** Compose: chunk → embed → route(domain) → retrieve(from that domain's index)
+      → ranked rules. This is the `--suggest` pipeline.
+- [ ] **T1.6** Tests: index a small fixture corpus, embed a matching code span, confirm
+      the top-1 retrieved rule is the correct one (per domain).
 
 ### Phase 1 exit criteria
-- Proposer dispatch generalized; span-preserving emitter ships (or `prettyplease` fallback); `Matcher` trait defined. No proposers yet — just the surface.
+- Latent retrieval works end-to-end: real code chunk → correct rule retrieved, for all
+  3 domains. **ZERO proposer code written.** `--suggest` mode is functionally complete
+  (surfacing rules + opt_patterns); `--fix` needs Phase 4/5 proposers.
 
-## Phase 2 — Top-5 perf proposers (prove the pattern)
+## Phase 2 — `cargo heal --suggest` CLI
 
-Pick the 5 highest-impact, most-frequent perf rules (from Bench 013 Pareto winners). Write real `syn` visitors + rewrites for each.
+Ship the user-facing binary that runs Phase 1's pipeline over real files.
 
 **Status: not started.**
 
-### Candidate rules (from Bench 013 — all Pareto-dominant)
-
-| Rule | Speedup | Why top-5 |
-|---|---|---|
-| `vec-with-capacity` | 1.1-4.3× | highest frequency (every `vec![]` in a loop) |
-| `entry-vs-contains-insert` | 1.5× | high frequency (HashMap pattern) |
-| `static-str` | 42× | easy to detect (`String::from("lit")` → `"lit"`) |
-| `bool-to-bitpack` | 7-11× | easy to detect (`Vec<bool>` → bitflags) |
-| `fxhashmap` | 3.3-5.8× | easy to detect (`HashMap` → `FxHashMap` in hot path) |
-
 ### Tasks
 
-- [ ] **T2.1** `src/domains/rust_perf/proposers/vec_with_capacity.rs` — visitor: find `Vec::new()`/`vec![]` followed by `push` in a loop; rewrite: insert `with_capacity(N)` if N is statically known, else `with_capacity_hint`.
-- [ ] **T2.2** `entry_vs_contains_insert.rs` — visitor: `if m.contains_key(k) { m.insert(..) } else { m.insert(..) }` → `m.entry(k)`.
-- [ ] **T2.3** `static_str.rs` — visitor: `String::from("literal")` / `"lit".to_string()` in non-generic context → `"literal"` (borrow).
-- [ ] **T2.4** `bool_to_bitpack.rs` — visitor: `Vec<bool>` / `[bool; N]` in hot path → flag for bitpack (advisory — semantics change, so `--suggest` only).
-- [ ] **T2.5** `fxhashmap.rs` — visitor: `HashMap<K,V>` in a hot-path fn (annotated or inferred) → `FxHashMap`.
-- [ ] **T2.6** `proposers/mod.rs` — `propose_fix(rule_id, code)` dispatch (mirror clippy_lints).
-- [ ] **T2.7** Fixture tests: each proposer detects + rewrites a real `.rs` fixture; output parses; `cargo test` passes.
+- [ ] **T2.1** `src/bin/heal.rs` — args: `--suggest`, `--domain <auto|clippy|perf|kernel>`
+      (default `auto` = dMoE routing), `[path...]`.
+- [ ] **T2.2** File scanner: walk `path`, `AstChunker.chunk()` each `.rs` file.
+- [ ] **T2.3** For each chunk: embed → route(domain) → retrieve → print top-K rules with
+      scores + the `opt_pattern` snippet for manual review.
+- [ ] **T2.4** Domain gating: `--domain perf` requires `--features rust_perf`; etc.
+      `--domain auto` runs all enabled feature-gated domains via the dMoE router.
 
 ### Phase 2 exit criteria
-- 5 perf proposers ship, each round-trips on a fixture. The pattern is proven. `rust_perf` now heals real files (for these 5 rules).
+- `cargo heal --suggest src/` prints real suggestions on real files. The product exists
+  (suggest mode). `--fix` is Phase 4/5.
 
-## Phase 3 — Top-5 kernel proposers (launch/dispatch/layout only)
+## Phase 3 — GOAT gate for the latent path (G1-G4, `--suggest` mode)
 
-Pick 5 kernel rules that operate on Rust OUTSIDE the `#[cube]` macro (Proposal 002 caveat 1). These are the rules about launch params, dispatch, buffer setup.
+Measure the retrieval quality + latency before investing in proposers.
 
 **Status: not started.**
 
-### Candidate rules (all operate on outer Rust, not macro body)
-
-| Rule | Category | Why proposable on real files |
-|---|---|---|
-| `single-plane-sufficient-reduction` | E | detect `CubeDim::new_1d(N)` where N > 32 + body is single `plane_sum` |
-| `offload-cpu-bottleneck-to-gpu-kernel` | A | detect CPU transpose/permute of large buffers → suggest GPU kernel |
-| `block-count-clamp` | E | detect unbounded `CubeCount` without `.min(65535)` |
-| `cube-count-bounded-batch-pack` | L | detect per-batch launch without `batches_per_run` packing |
-| `anchor-shape-bucketing` | L | detect autotune key without `anchor(shape, ..)` |
-
 ### Tasks
 
-- [ ] **T3.1** `src/domains/kernel_opt/proposers/single_plane_reduction.rs` — visitor for `CubeDim::new_1d(N)` + `plane_sum` body.
-- [ ] **T3.2** `cpu_offload.rs` — visitor for CPU transpose/permute patterns (`for r { for c { dst[c*R+r] = src[r*C+c] } }`).
-- [ ] **T3.3** `block_count_clamp.rs` — visitor for `CubeCount::Static(..)` without clamp.
-- [ ] **T3.4** `batch_pack.rs` + `anchor_bucket.rs` — autotune-key visitors.
-- [ ] **T3.5** `proposers/mod.rs` — `propose_fix(rule_id, code)` dispatch.
-- [ ] **T3.6** Fixture tests on real riir-gpu snippets (extracted, not the whole file — avoid the `#[cube]` parse failure).
+- [ ] **T3.1 (G1 retrieval precision)** On a fixture of known anti-patterns, the top-1
+      retrieved rule is correct ≥80% of the time (per domain). Record in `.benchmarks/`.
+- [ ] **T3.2 (G2 latency)** Chunk + embed + route + retrieve < 1ms per chunk (Clifford
+      wedge KNN is O(log N); Bench 575 measured 123µs p50 @ N=1000).
+- [ ] **T3.3 (G3 no-regression)** All existing riir-clippy tests pass.
+- [ ] **T3.4 (G4 alloc-free hot path)** Reuse scratch buffers in the retrieve loop.
 
 ### Phase 3 exit criteria
-- 5 kernel proposers ship, each round-trips on a fixture. Kernel-domain real-file healing works for launch/dispatch/layout rules. Kernel-body rules (flash-attn, linear-attn recurrence) are honestly out of scope (caveat 1).
+- G1-G4 PASS for `--suggest` mode. If G1 (precision) is <80%, tune the domain directions
+  or switch to `BonsaiEmbedder` (768-D, opt-in) before proceeding to proposers.
 
-## Phase 4 — Shallow-reasoning matcher (ternary matvec `--suggest`)
+## Phase 4 — Top-5 perf proposers (the `--fix` upgrade for perf)
 
-For rules WITHOUT a dedicated proposer, the `TernaryDrafter` embeds the code span + matches against corpus `ref_shape`s. Closest match above threshold → suggestion.
+Proposers enable `--fix` (auto-apply). Start with perf (clippy already has 10).
+
+**Status: not started.** (Same as original Plan 005 Phase 2 — unchanged by the revision.)
+
+### Tasks
+- [ ] **T4.1-T4.7** The 5 perf proposers (`vec-with-capacity`, `entry-vs-contains-insert`,
+      `static-str`, `bool-to-bitpack`, `fxhashmap`) + `propose_fix` dispatch + fixture tests.
+      (See original Plan 005 Phase 2 for details — unchanged.)
+
+## Phase 5 — Top-5 kernel proposers (the `--fix` upgrade for kernel)
+
+**Status: not started.** (Same as original Plan 005 Phase 3 — unchanged.)
+
+### Tasks
+- [ ] **T5.1-T5.6** The 5 kernel proposers (launch/dispatch/layout only, outside `#[cube]`).
+      (See original Plan 005 Phase 3 — unchanged.)
+
+## Phase 6 — `cargo heal --fix` + final GOAT gate (G5 real-file value)
 
 **Status: not started.**
 
 ### Tasks
 
-- [ ] **T4.1** `src/draft/suggester.rs` — `Suggester` struct wrapping `TernaryDrafter`. Input: a code span. Output: `Vec<(rule_id, confidence)>` ranked.
-- [ ] **T4.2** Embedding: BLAKE3 the span + ternary-encode (reuse the existing `embedder`). Match against the corpus `ref_shape` embeddings (precomputed at boot).
-- [ ] **T4.3** Threshold tuning: what confidence counts as "suggestable"? Default conservative (0.6); the `--suggest` mode surfaces anything above it with the corpus `opt_pattern` for manual review.
-- [ ] **T4.4** The compose contract: visitors (Phase 2/3) are PRECISE (auto-apply in `--fix`); suggester is ADVISORY (only in `--suggest`). Never auto-apply a suggestion.
-
-### Phase 4 exit criteria
-- Suggester ships; `--suggest` mode surfaces ternary-matvec matches for rules without proposers. The two-layer matcher (precise visitors + advisory suggester) is the "clippy + shallow reasoning" product.
-
-## Phase 5 — Unified `cargo heal` CLI
-
-**Status: not started.**
-
-### Tasks
-
-- [ ] **T5.1** `src/bin/heal.rs` (or `cargo-heal` — decide naming). Args: `--fix`, `--domain <clippy|perf|kernel|all>`, `--suggest`, `[path...]`.
-- [ ] **T5.2** File scanner: walk `path` (default `src/`), parse each `.rs` with `syn`, run enabled domains' `Matcher::detect(file)`.
-- [ ] **T5.3** Apply loop: for each `Match`, call `propose_fix(rule_id, code)`. If span-preserving patch (T1.2), apply patch; else `prettyplease` reformat (T1.3, `--format`).
-- [ ] **T5.4** Validate: `RustAnalyzerPruner` on the result. If invalid, skip + warn.
-- [ ] **T5.5** Output: `--fix` writes in place; no `--fix` prints a unified diff (review mode). `--suggest` prints the suggestions (rule_id + confidence + opt_pattern snippet).
-- [ ] **T5.6** Domain gating: `--domain perf` requires `--features rust_perf`; `--domain kernel` requires `--features kernel_heal`. `--domain all` runs all enabled feature-gated domains.
-
-### Phase 5 exit criteria
-- `cargo heal --fix --domain perf src/` applies the 5 perf proposers to real files, span-preserving, validated. `cargo heal --suggest` surfaces ternary matches. The CLI exists.
-
-## Phase 6 — GOAT gate
-
-**Status: not started.**
-
-### Tasks
-
-- [ ] **T6.1 (G1 correctness)** Each of the 10 proposers (5 perf + 5 kernel) round-trips on a fixture: detect → rewrite → parse → `cargo test` passes (semantics preserved).
-- [ ] **T6.2 (G2 perf)** Matcher + proposer latency < 10ms/file on a 1000-LOC fixture. Record in `.benchmarks/`.
-- [ ] **T6.3 (G3 no-regression)** All existing tests pass (framework + clippy + corpus). New CLI tests added.
-- [ ] **T6.4 (G4 alloc-free hot path)** Visitor walk reuses scratch; no per-file alloc in steady state.
-- [ ] **T6.5 (G5 real-file value)** **At least ONE real fix lands in a sibling repo** (riir-ai or riir-gpu): a perf or kernel rule detects a real anti-pattern in real code, the proposer rewrites it, the change compiles + tests pass. This is the load-bearing gate — "does it actually help."
+- [ ] **T6.1** Wire `--fix` mode: for each retrieved rule, if a proposer exists + latent
+      score > threshold (0.8), apply the rewrite (span-preserving); else fall back to
+      `--suggest` output for that rule.
+- [ ] **T6.2 (G5 real-file value)** At least ONE real fix lands in a sibling repo
+      (riir-ai or riir-gpu): the latent matcher detects a real anti-pattern, the proposer
+      rewrites it, the change compiles + tests pass.
+- [ ] **T6.3** `.benchmarks/016_real_file_heal_goat.md` — full G1-G5 measurement.
 
 ### Phase 6 exit criteria
-- G1-G5 PASS. `.benchmarks/016_real_file_heal_goat.md` records the measurement. The CLI is production-usable for the 10 shipped rules.
+- G5 PASS. `cargo heal --fix` is production-usable for the 10 shipped proposers +
+  `--suggest` covers the rest of the corpus.
 
-## Out of scope (per Proposal 002)
+## Out of scope (per Proposal 002 revised)
 
-- Full proposer coverage (all 34 perf + ~30 kernel) — Plan 005 proves the pattern with 10; expansion is mechanical follow-up plans.
-- CubeCL `#[cube]` macro-body proposers — blocked on a CubeCL-aware parser.
-- Cross-domain auto-routing — user picks `--domain`.
+- Full proposer coverage (all 34 perf + ~30 kernel) — decoupled; `--suggest` covers them.
+- CubeCL `#[cube]` macro-body proposers — `--suggest` still works (embedding captures the
+  signature); only `--fix` is limited.
 - L4 LoRA — deferred across all domains.
 - `--watch` mode — deferred.
+- Domain-direction mining via `CommittedFieldBlend` — hand-crafted vectors ship first.
 
 ## Risks
 
