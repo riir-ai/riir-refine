@@ -86,10 +86,11 @@ vision), not shipped.
 The `kernel_opt` domain adds two layers on top of the shared pipeline:
 
 1. **`KernelExpertRouter`** (`src/domains/kernel_opt/router.rs`) — wraps
-   `katgpt_core::variable_rank_domain_expert::pick_domain<4, 5>` (Plan 558).
+   `katgpt_core::variable_rank_domain_expert::pick_domain<15, 5>` (Plan 558).
    Activity vector = kernel signature `[M, N, K, dtype, hw]`; domain
-   directions = per-expert centroids (placeholder: identity vectors until
-   distillation-derived centroids land). Modelless argmax — zero allocation.
+   directions = per-category centroids (Plan 003: hand-crafted centroids wired
+   to the 68-rule corpus via `KERNEL_CATEGORIES`; 13/15 categories reachable;
+   mining via `CommittedFieldBlend` deferred). Modelless argmax — zero allocation.
 
 2. **`KernelThermalRouter`** (`src/domains/kernel_opt/thermal.rs`) — the
    FlashAR/QGF thermal-tier pattern: Plasma→Hot→Warm→Cold→Freeze escalation.

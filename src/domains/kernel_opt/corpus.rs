@@ -24,11 +24,20 @@
 //!   dispatch, vector-width sweep) + conv-as-GEMM + memory layout (1×1 conv as
 //!   matmul, contiguity guard, cube-count batch pack, stride-align vectorization,
 //!   anchor shape bucketing).
+//! - **Batch 8 (Research 009):** 9 burn-cubecl + cubecl-opt rules (kernel
+//!   polymorphism + dtype/alignment specialization + IR strength reduction).
+//!   Corpus: **68 rules across 15 categories (A–O)**.
+//! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
+//!   maps each of the 15 corpus categories to its `rule_ids`; the
+//!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
+//!   instead of 4 placeholder identity-vector experts.
 //! - **Deferred:** remaining popcorn kernels are mostly already-covered patterns
 //!   or domain-specific math; future batches need new source impl files.
 
+use std::collections::HashMap;
+
 use crate::corpus::Corpus;
-use crate::domains::kernel_opt::{KernelOptDomain, KernelRule};
+use crate::domains::kernel_opt::{KernelCategory, KernelOptDomain, KernelRule};
 
 /// Build the kernel optimization corpus from popcorn-distilled rules.
 ///
@@ -39,7 +48,7 @@ use crate::domains::kernel_opt::{KernelOptDomain, KernelRule};
 pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     Corpus::new(vec![
         // ════════════════════════════════════════════════════════════════════
-        // Category A: Memory access patterns (7 rules)
+        // Category A: Memory access patterns (6 rules)
         // ════════════════════════════════════════════════════════════════════
         // ── matvec-coalesce (original placeholder, kept for back-compat) ──
         // Source: rotary_embedding_tl.py — the naive strided read vs coalesced row read.
@@ -749,6 +758,228 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     ])
 }
 
+/// The category → `rule_ids` mapping — the corpus wiring for [`super::router::KernelExpertRouter`].
+///
+/// One entry per [`KernelCategory`] (15 total). Each entry carries the category's
+/// display name + the static list of `rule_ids` that belong to it. This is the
+/// **router→corpus link**: given a routed expert index, a heal pipeline can look
+/// up the category + its `rule_ids` without scanning the full corpus.
+///
+/// # Plan 003 invariants (enforced by tests)
+///
+/// - **Exhaustive:** every `rule_id` in the 68-rule corpus appears in exactly one
+///   category (no orphan rules, no duplicate appearances).
+/// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
+/// - **Count-stable:** the per-category counts are pinned by tests.
+///
+/// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
+/// design rationale (one expert per category, not one per rule).
+pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
+    // A: Memory access patterns (6 rules)
+    (
+        KernelCategory::MemoryAccess,
+        "A: memory access",
+        &[
+            "matvec-coalesce",
+            "coalesced-row-read",
+            "vectorized-pack-load",
+            "grid-stride-loop",
+            "gemm-tiling",
+            "masked-boundary-load",
+        ],
+    ),
+    // B: Compute patterns (5 rules)
+    (
+        KernelCategory::Compute,
+        "B: compute",
+        &[
+            "autotune-warps-stages",
+            "upcast-before-reduction",
+            "branchless-select",
+            "unroll-fixed-inner",
+            "forceinline-device-fn",
+        ],
+    ),
+    // C: Fusion patterns (4 rules)
+    (
+        KernelCategory::Fusion,
+        "C: fusion",
+        &[
+            "fuse-norm-act-linear",
+            "fuse-quant-matmul",
+            "fuse-softmax-mask",
+            "fuse-xent-logsumexp",
+        ],
+    ),
+    // D: Dispatch patterns (3 rules)
+    (
+        KernelCategory::Dispatch,
+        "D: dispatch",
+        &[
+            "sm-count-block-size",
+            "predicate-gated-backend",
+            "pow2-block-alignment",
+        ],
+    ),
+    // E: Parallelism patterns (3 rules)
+    (
+        KernelCategory::Parallelism,
+        "E: parallelism",
+        &[
+            "multi-dim-grid-launch",
+            "block-count-clamp",
+            "backward-as-conjugate",
+        ],
+    ),
+    // F: Flash-attention tiling (7 rules)
+    (
+        KernelCategory::FlashAttnTiling,
+        "F: flash-attn tiling",
+        &[
+            "online-softmax-streaming",
+            "exp2-log2-base2",
+            "block-pointer-2d",
+            "heuristic-compile-dispatch",
+            "causal-diag-offdiag-split",
+            "shared-mem-aware-tile",
+            "kv-block-streaming",
+        ],
+    ),
+    // G: Linear-attention recurrence (6 rules)
+    (
+        KernelCategory::LinearAttnRecurrence,
+        "G: linear-attn recurrence",
+        &[
+            "state-forget-gate",
+            "householder-rank1-update",
+            "chunkwise-parallel-recurrence",
+            "recurrent-vs-chunk-dispatch",
+            "multi-write-per-step",
+            "chained-two-pass-recurrence",
+        ],
+    ),
+    // H: MoE dispatch + backward pass (9 rules)
+    (
+        KernelCategory::MoeDispatchBackward,
+        "H: MoE dispatch + backward",
+        &[
+            "grouped-launch-cumsum-offsets",
+            "l2-grouped-tile-schedule",
+            "fused-matmul-activation",
+            "fused-backward-chain",
+            "activation-recompute-budget",
+            "atomic-scatter-reduction",
+            "weight-grad-batched-outer-product",
+            "csr-index-via-prefix-sum",
+            "autotune-aggregate-workload-key",
+        ],
+    ),
+    // I: NSA block-sparse selection (4 rules)
+    (
+        KernelCategory::NsaBlockSparse,
+        "I: NSA block-sparse",
+        &[
+            "block-sparse-gather",
+            "precompute-scalar-reduction",
+            "block-compression-before-routing",
+            "sliding-window-plus-sparse",
+        ],
+    ),
+    // J: Varlen packing + chunked reductions (3 rules)
+    (
+        KernelCategory::VarlenChunkedReduction,
+        "J: varlen + chunked reduction",
+        &["varlen-packing", "chunk-reset-cumsum", "cumsum-additive-bias"],
+    ),
+    // K: Autotune dispatch (4 rules)
+    (
+        KernelCategory::AutotuneDispatch,
+        "K: autotune dispatch",
+        &[
+            "panic-safe-autotune-candidate",
+            "multi-priority-tune-groups",
+            "shape-kind-dispatch",
+            "vector-width-pow2-sweep",
+        ],
+    ),
+    // L: Conv-as-GEMM + memory layout (5 rules)
+    (
+        KernelCategory::ConvGemmLayout,
+        "L: conv-as-GEMM + layout",
+        &[
+            "conv-1x1-as-matmul",
+            "contiguity-guard-before-reshape",
+            "cube-count-bounded-batch-pack",
+            "stride-align-vectorization-key",
+            "anchor-shape-bucketing",
+        ],
+    ),
+    // M: Kernel parametric polymorphism (3 rules)
+    (
+        KernelCategory::KernelPolymorphism,
+        "M: kernel polymorphism",
+        &[
+            "op-family-type-dispatch",
+            "inplace-output-alias",
+            "layout-permute-for-coalescing",
+        ],
+    ),
+    // N: dtype + alignment specialization (2 rules)
+    (
+        KernelCategory::DtypeAlignment,
+        "N: dtype + alignment",
+        &[
+            "dtype-specialized-float-kind",
+            "alignment-gated-zero-copy-view",
+        ],
+    ),
+    // O: IR strength reduction (4 rules)
+    (
+        KernelCategory::IrStrengthReduction,
+        "O: IR strength reduction",
+        &[
+            "strength-reduce-mul-pow2",
+            "strength-reduce-mul-pow2-plus-minus-one",
+            "strength-reduce-div-pow2",
+            "strength-reduce-mod-pow2",
+        ],
+    ),
+];
+
+/// Group the flat corpus entries by [`KernelCategory`].
+///
+/// Returns 15 buckets (one per category), each containing the `KernelRule`s whose
+/// `rule_id` appears in that category's slice of [`KERNEL_CATEGORIES`]. This is
+/// the category-scoped view of the corpus — a future heal pipeline can consult
+/// the routed expert's rules first without scanning all 68.
+///
+/// # Allocation
+///
+/// Allocates the grouped `Vec` (one per call). This is NOT a hot-path function
+/// — it's a corpus-construction helper, called once at boot or test setup. The
+/// per-category rule consultation is `O(rules_in_category)` via the static
+/// `KERNEL_CATEGORIES` slices.
+#[must_use]
+pub fn build_corpus_categorized() -> Vec<(KernelCategory, Vec<KernelRule>)> {
+    let corpus = build_kernel_seed_corpus();
+    // Index rule_id → entry for O(1) category-bucket lookup.
+    let by_id: HashMap<&str, &KernelRule> = corpus
+        .entries
+        .iter()
+        .map(|e| (e.rule_id.as_str(), e))
+        .collect();
+    KERNEL_CATEGORIES
+        .iter()
+        .map(|(cat, _label, rule_ids)| {
+            let rules: Vec<KernelRule> = rule_ids
+                .iter()
+                .filter_map(|rid| by_id.get(*rid).copied().cloned())
+                .collect();
+            (*cat, rules)
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1147,5 +1378,91 @@ mod tests {
         assert!(concepts.contains(&"IR strength reduction: multiply by (2^k ± 1) → shift ± self"));
         assert!(concepts.contains(&"IR strength reduction: divide by power of 2 → right shift"));
         assert!(concepts.contains(&"IR strength reduction: modulo by power of 2 → bitwise and mask"));
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    // Plan 003 — Router ↔ corpus wiring tests
+    // ════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn kernel_categories_table_has_15_entries() {
+        assert_eq!(KERNEL_CATEGORIES.len(), 15, "Plan 003: 15 categories (A–O)");
+    }
+
+    #[test]
+    fn kernel_categories_cover_all_corpus_rules_exhaustively() {
+        // Every rule_id in the 68-rule corpus must appear in exactly one category.
+        let corpus = build_kernel_seed_corpus();
+        let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        let mut categorized: Vec<&str> = Vec::new();
+        for (_, _, rule_ids) in KERNEL_CATEGORIES {
+            categorized.extend_from_slice(rule_ids);
+        }
+        // Same length (no missing, no extra).
+        assert_eq!(categorized.len(), corpus_ids.len(),
+            "Plan 003: KERNEL_CATEGORIES rule count ({}) must match corpus ({})",
+            categorized.len(), corpus_ids.len());
+        // No duplicate category assignments.
+        let mut sorted = categorized.clone();
+        sorted.sort_unstable();
+        let before = sorted.len();
+        sorted.dedup();
+        assert_eq!(sorted.len(), before, "Plan 003: rule appears in multiple categories");
+        // Every corpus rule has a category home.
+        for rid in &corpus_ids {
+            assert!(categorized.contains(rid),
+                "Plan 003: corpus rule '{rid}' has no category in KERNEL_CATEGORIES");
+        }
+        // Every category entry exists in the corpus (no stale rule_ids).
+        for rid in &categorized {
+            assert!(corpus_ids.contains(rid),
+                "Plan 003: KERNEL_CATEGORIES references '{rid}' not in corpus");
+        }
+    }
+
+    #[test]
+    fn kernel_categories_counts_match_plan_003_table() {
+        // Pin per-category rule counts to the Plan 003 table.
+        let expected = [
+            (KernelCategory::MemoryAccess, 6),
+            (KernelCategory::Compute, 5),
+            (KernelCategory::Fusion, 4),
+            (KernelCategory::Dispatch, 3),
+            (KernelCategory::Parallelism, 3),
+            (KernelCategory::FlashAttnTiling, 7),
+            (KernelCategory::LinearAttnRecurrence, 6),
+            (KernelCategory::MoeDispatchBackward, 9),
+            (KernelCategory::NsaBlockSparse, 4),
+            (KernelCategory::VarlenChunkedReduction, 3),
+            (KernelCategory::AutotuneDispatch, 4),
+            (KernelCategory::ConvGemmLayout, 5),
+            (KernelCategory::KernelPolymorphism, 3),
+            (KernelCategory::DtypeAlignment, 2),
+            (KernelCategory::IrStrengthReduction, 4),
+        ];
+        for (cat, count) in expected {
+            let entry = KERNEL_CATEGORIES.iter().find(|(c, _, _)| *c == cat)
+                .unwrap_or_else(|| panic!("Plan 003: category {cat:?} missing from KERNEL_CATEGORIES"));
+            assert_eq!(entry.2.len(), count,
+                "Plan 003: category {cat:?} has {} rules, expected {count}",
+                entry.2.len());
+        }
+        // Sum must equal 68.
+        let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
+        assert_eq!(total, 68, "Plan 003: category totals must sum to 68");
+    }
+
+    #[test]
+    fn build_corpus_categorized_round_trips_all_rules() {
+        // build_corpus_categorized groups the corpus by category. Every rule
+        // should appear in exactly one bucket, and the total count should match.
+        let grouped = build_corpus_categorized();
+        assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
+        let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
+        assert_eq!(total, 68, "Plan 003: grouped corpus has {total} rules, expected 68");
+        // No empty buckets.
+        for (cat, rules) in &grouped {
+            assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");
+        }
     }
 }

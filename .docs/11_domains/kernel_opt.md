@@ -11,7 +11,7 @@
 |---|---|---|
 | `KernelOptDomain: HealDomain` | ✅ | |
 | Seed corpus (Batch 1-8: 68 rules) | ✅ | Full corpus (~300-500 rules, ~15-25 batches) |
-| `KernelExpertRouter` (`pick_domain`) | ✅ (identity directions) | Per-expert centroids from popcorn |
+| `KernelExpertRouter` (`pick_domain`) | ✅ (category centroids, Plan 003) | Mined centroids via `CommittedFieldBlend` |
 | `KernelThermalRouter` (5-tier stub) | ✅ (returns Plasma) | Warm/Cold LoRA (4090, riir-train) |
 | `KernelVerifier` (compile-only) | ✅ (behind `kernel_verify`) | Full numeric compare vs reference |
 | L4 LoRA fallback | | ✅ Deferred across all domains |
@@ -80,10 +80,10 @@ numeric compare), the patterns will carry real kernel source.
 
 ## Router — `KernelExpertRouter`
 
-Wraps `katgpt_core::variable_rank_domain_expert::pick_domain<4, 5>` (Plan 558):
+Wraps `katgpt_core::variable_rank_domain_expert::pick_domain<15, 5>` (Plan 558):
 
 ```rust
-pub const NUM_KERNEL_EXPERTS: usize = 4;  // coalesce, tile, fuse, vectorize
+pub const NUM_KERNEL_EXPERTS: usize = 15; // one per corpus category (A–O)
 pub const ACTIVITY_DIM: usize = 5;        // M, N, K, dtype, hw
 
 pub fn route(&self, activity: &[f32; ACTIVITY_DIM]) -> usize {
@@ -91,11 +91,25 @@ pub fn route(&self, activity: &[f32; ACTIVITY_DIM]) -> usize {
 }
 ```
 
-- **Activity vector** = raw physical (kernel signature, deterministic).
-- **Domain directions** = latent (placeholder: identity vectors; real
-  per-expert centroids from popcorn distillation land later).
+**Plan 003 (2026-08-14):** router wired to the 68-rule corpus via 15 category
+experts. Each expert owns its category's `rule_ids` via `KERNEL_CATEGORIES`.
+- **Activity vector** = raw physical (kernel signature: `[M, N, K, dtype, hw]`,
+  normalized to `[0, 1]`).
+- **Domain directions** = latent (hand-crafted category centroids — see
+  `CATEGORY_KERNEL_DIRECTIONS` const; mining via `CommittedFieldBlend` deferred).
 - **Expert index** = raw categorical (synced).
 - Modelless argmax — zero allocation.
+
+**Corpus wiring accessors:**
+- `category_for_expert(idx) -> KernelCategory` — maps expert → category.
+- `rules_for_expert(idx) -> &[&str]` — maps expert → category's rule_ids.
+- `expert_for_rule(rule_id) -> Option<usize>` — reverse lookup.
+
+**Honest limitation:** the 5-dim shape-only activity vector is rank-deficient
+for 15 categories. 13/15 are reachable via argmax; categories C (fusion-balanced)
+and O (IR strength-low) are unreachable — documented limitation that an
+operation-class activity extension (deferred, needs concrete consumer) would
+resolve.
 
 The `kernel_heal` feature enables `katgpt-core/variable_rank_domain_expert`
 so `pick_domain` is reachable.

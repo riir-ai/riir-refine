@@ -34,7 +34,7 @@ domain-pluggable behind the `HealDomain` trait.
 | L2 — Compile check (kernel_opt) | ✅ Stub (Plan 001 Phase 3, `kernel_verify` feature, delegates to shared `RustAnalyzerPruner`; full CubeCL compile + numeric compare deferred per Proposal 012 §Phase 0) |
 | L3 — Ruliology search | ✅ Done (Issue 005, `ruliology_search` feature, Pareto-front from katgpt-ruliology pattern, ~400µs/10-candidate search) |
 | SE — Self-evolution loop (additive) | ✅ Done (Issue 004 + Issue 008; `self_evolve` feature, opt-in; G1–G5 + G6/G7 ALL PASS — 50.0pp healing-rate improvement on real `cargo clippy` feedback) |
-| Router — kernel_opt expert routing | ✅ Stub (Plan 001 Phase 3, `KernelExpertRouter` wraps `pick_domain<4,5>` from Plan 558; identity directions placeholder) |
+| Router — kernel_opt expert routing | ✅ Corpus-wired (Plan 003, `KernelExpertRouter` wraps `pick_domain<15,5>` from Plan 558; 15 category centroids wired to 68-rule corpus; 13/15 reachable, 2 documented unreachable) |
 | Thermal — kernel_opt tier dispatch | ✅ Stub (Plan 001 Phase 3, `KernelThermalRouter` + `ThermalTier` enum; Plasma→Hot→Warm→Cold→Freeze; returns Plasma for all calls) |
 | L4 — LoRA fallback (all domains) | ⏳ Deferred to riir-train |
 
@@ -148,9 +148,10 @@ SE — SELF-EVOLUTION LOOP (composes on top of L0–L2)
 Kernel signature (M, N, K, dtype, hw)
          │
          ▼
-Router — KERNEL EXPERT ROUTER (pick_domain<4,5>, Plan 558)
-  Activity vector · domain_directions → expert index
-  Placeholder: identity directions (real centroids deferred)
+Router — KERNEL EXPERT ROUTER (pick_domain<15,5>, Plan 558)
+  Activity vector · category_centroids → expert index → category → rule_ids
+  Plan 003: 15 category experts wired to 68-rule corpus (hand-crafted centroids;
+  mining via CommittedFieldBlend deferred; 13/15 reachable)
          │
          ▼
 Thermal — KERNEL THERMAL ROUTER (5-tier escalation)

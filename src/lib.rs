@@ -129,15 +129,21 @@ pub use domains::rust_perf::bench::{
 
 // ── kernel_opt domain re-exports (behind `kernel_heal` feature, opt-in) ────
 #[cfg(feature = "kernel_heal")]
-pub use domains::kernel_opt::{KernelOptDomain, KernelRule, KernelVerdict};
+pub use domains::kernel_opt::{KernelCategory, KernelOptDomain, KernelRule, KernelVerdict};
 
 /// Back-compat: `build_kernel_seed_corpus` (behind `kernel_heal`).
 #[cfg(feature = "kernel_heal")]
 pub use domains::kernel_opt::corpus::build_kernel_seed_corpus;
 
+/// `kernel_opt` corpus category wiring (Plan 003) — category → `rule_ids` mapping + grouped corpus builder.
+#[cfg(feature = "kernel_heal")]
+pub use domains::kernel_opt::corpus::{build_corpus_categorized, KERNEL_CATEGORIES};
+
 /// `kernel_opt` expert router (behind `kernel_heal`).
 #[cfg(feature = "kernel_heal")]
-pub use domains::kernel_opt::router::{KernelExpertRouter, KERNEL_EXPERT_NAMES, NUM_KERNEL_EXPERTS, ACTIVITY_DIM};
+pub use domains::kernel_opt::router::{
+    KernelExpertRouter, KERNEL_EXPERT_NAMES, NUM_KERNEL_EXPERTS, ACTIVITY_DIM,
+};
 
 /// `kernel_opt` thermal router (behind `kernel_heal`).
 #[cfg(feature = "kernel_heal")]

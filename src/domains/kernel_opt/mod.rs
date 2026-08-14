@@ -12,7 +12,7 @@
 //! |---|---|---|
 //! | `KernelOptDomain: HealDomain` | ✅ | |
 //! | Seed corpus (1-2 placeholders) | ✅ | Real popcorn-distilled corpus |
-//! | `KernelExpertRouter` (`pick_domain`) | ✅ (identity directions) | Per-expert centroids from popcorn |
+//! | `KernelExpertRouter` (`pick_domain`) | ✅ (category centroids, Plan 003) | Mined centroids via `CommittedFieldBlend` |
 //! | `KernelThermalRouter` (5-tier stub) | ✅ (returns Plasma) | Warm/Cold `LoRA` (4090, riir-train) |
 //! | `KernelVerifier` (compile-only) | ✅ (behind `kernel_verify`) | Full numeric compare vs reference |
 //! | L4 `LoRA` fallback | | ✅ Deferred across all domains |
@@ -43,6 +43,76 @@ pub mod thermal;
 
 #[cfg(feature = "kernel_verify")]
 pub mod verify;
+
+/// The 15 corpus categories (A–O), one per expert in [`router::KernelExpertRouter`].
+///
+/// `#[repr(u8)]` for 1-byte sync efficiency (matches the [`thermal::ThermalTier`]
+/// convention). The discriminant order matches the corpus section order in
+/// [`corpus::build_kernel_seed_corpus`] — category A is memory access (idx 0),
+/// category O is IR strength reduction (idx 14).
+///
+/// See [`corpus::KERNEL_CATEGORIES`] for the category → `rule_ids` mapping.
+/// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
+/// design rationale (one expert per category, not one per rule).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[repr(u8)]
+pub enum KernelCategory {
+    /// A: Memory access patterns (coalescing, vectorized load, grid-stride, tiling, masking).
+    #[default]
+    MemoryAccess = 0,
+    /// B: Compute patterns (autotune config, precision upcast, branchless, unroll, inline).
+    Compute = 1,
+    /// C: Fusion patterns (norm+act+linear, quant+matmul, masked softmax, cross-entropy).
+    Fusion = 2,
+    /// D: Dispatch patterns (SM-aware block size, predicate-gated backend, pow2 alignment).
+    Dispatch = 3,
+    /// E: Parallelism patterns (multi-dim grid, block-count clamp, backward-as-conjugate).
+    Parallelism = 4,
+    /// F: Flash-attention tiling (online softmax, exp2/log2, block pointers, causal split).
+    FlashAttnTiling = 5,
+    /// G: Linear-attention recurrence (forget gate, Householder update, chunkwise parallel).
+    LinearAttnRecurrence = 6,
+    /// H: `MoE` dispatch + backward pass (grouped launch, fused matmul, atomic scatter).
+    MoeDispatchBackward = 7,
+    /// I: NSA block-sparse selection (block gather, scalar reduction, compression, sliding).
+    NsaBlockSparse = 8,
+    /// J: Varlen packing + chunked reductions (`cu_seqlens`, chunk-reset cumsum, additive bias).
+    VarlenChunkedReduction = 9,
+    /// K: Autotune dispatch (panic-safe candidates, multi-priority groups, shape-kind, vector-width).
+    AutotuneDispatch = 10,
+    /// L: Conv-as-GEMM + memory layout (1×1 matmul, contiguity guard, batch pack, stride align).
+    ConvGemmLayout = 11,
+    /// M: Kernel parametric polymorphism (op-family trait, in-place alias, layout permute).
+    KernelPolymorphism = 12,
+    /// N: dtype + alignment specialization (`FloatKind` intrinsic, alignment-gated zero-copy view).
+    DtypeAlignment = 13,
+    /// O: IR strength reduction (mul/div/mod by pow2 → shift/mask).
+    IrStrengthReduction = 14,
+}
+
+impl KernelCategory {
+    /// Human-readable category label (for logging / debugging).
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::MemoryAccess => "A: memory access",
+            Self::Compute => "B: compute",
+            Self::Fusion => "C: fusion",
+            Self::Dispatch => "D: dispatch",
+            Self::Parallelism => "E: parallelism",
+            Self::FlashAttnTiling => "F: flash-attn tiling",
+            Self::LinearAttnRecurrence => "G: linear-attn recurrence",
+            Self::MoeDispatchBackward => "H: MoE dispatch + backward",
+            Self::NsaBlockSparse => "I: NSA block-sparse",
+            Self::VarlenChunkedReduction => "J: varlen + chunked reduction",
+            Self::AutotuneDispatch => "K: autotune dispatch",
+            Self::ConvGemmLayout => "L: conv-as-GEMM + layout",
+            Self::KernelPolymorphism => "M: kernel polymorphism",
+            Self::DtypeAlignment => "N: dtype + alignment",
+            Self::IrStrengthReduction => "O: IR strength reduction",
+        }
+    }
+}
 
 /// A single GPU kernel optimization rule — the corpus entry type for
 /// [`KernelOptDomain`].
