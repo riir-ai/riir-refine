@@ -39,6 +39,7 @@ use serde::{Deserialize, Serialize};
 use crate::domain::{HealDomain, HealEntry};
 
 pub mod corpus;
+pub mod proposers;
 
 #[cfg(feature = "rust_perf_bench")]
 pub mod bench;

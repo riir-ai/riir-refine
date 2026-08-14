@@ -17,6 +17,7 @@
 - [`.benchmarks/008_real_world_validation.md`](../../.benchmarks/008_real_world_validation.md) — self_evolve G6/G7 (real cargo clippy)
 - [`.benchmarks/013_rust_perf_bench_pareto_goat.md`](../../.benchmarks/013_rust_perf_bench_pareto_goat.md) — rust_perf Pareto validator promotion gate (historical; pre-expansion corpus snapshots)
 - [`.benchmarks/015_rust_perf_expansion_phase4_goat.md`](../../.benchmarks/015_rust_perf_expansion_phase4_goat.md) — rust_perf Phase 4 finalization on the expanded 39-rule corpus (29/31 ParetoDominant)
+- [`.benchmarks/018_plan005_latent_suggest_goat.md`](../../.benchmarks/018_plan005_latent_suggest_goat.md) — Plan 005 latent `--suggest` GOAT (G1–G4 ALL PASS: 100% precision, 349 µs/chunk)
 
 ## Re-run commands
 
@@ -35,6 +36,10 @@ cargo run --example clippy_verify_demo --features clippy_verify --release
 
 # self_evolve real-world validation (opt-in — requires cargo+clippy on PATH, ~30s)
 cargo run --example self_evolve_real_world_demo --features "self_evolve clippy_verify" --release
+
+# Plan 005 latent suggest GOAT (opt-in; G2 gate is release-only)
+cargo test --features latent_retrieval --test latent_suggest_goat -- --nocapture
+cargo test --release --features latent_retrieval --test latent_suggest_goat -- --nocapture
 ```
 
 ## See also

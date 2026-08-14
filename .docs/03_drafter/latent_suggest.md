@@ -1,0 +1,87 @@
+# Latent suggest — Plan 005 span-level retrieval (the `--suggest` MVP)
+
+**Source:** [`src/draft/`](../../src/draft/) — `corpus_index.rs` + `domain_router.rs` + `latent_matcher.rs`
+**Feature:** `latent_retrieval` (opt-in — pulls `riir-rag`, transitively `riir-neuron-db`)
+**Plan:** [005](../../.plans/005_real_file_span_healing.md) Phases 1–3 (DONE 2026-08-14)
+**GOAT:** [Bench 018](../../.benchmarks/018_plan005_latent_suggest_goat.md) — **G1–G4 ALL PASS**
+
+## What it is
+
+The retrieval layer that matches **real code spans** to corpus rules. Real
+`.rs` files are chunked at fn/impl/struct boundaries, embedded modellessly,
+routed across domains, and matched against a per-domain latent index of the
+corpus. **ZERO proposer code** — the suggestion IS the corpus pattern text
+(`buggy_code`/`ref_shape` + the head of `fixed_code`/`opt_pattern`). `--fix`
+arrives with the Phase 4/5 proposers.
+
+Zero retrieval code reimplemented — the layer composes riir-rag's substrate
+as-is: `AstChunker` (spans) + `ModellessEmbedder` (BLAKE3+DFT+sigmoid, 8-D,
+no weights; opt-in 768-D `BonsaiEmbedder` for higher accuracy) +
+`NeuronDbRetriever` (`ShardIndex` Clifford-wedge KNN + BM25).
+
+## Pipeline
+
+```text
+.rs file
+  → AstChunker.chunk()            (fn/impl/struct spans — riir-rag)
+  → ModellessEmbedder.embed()     (8-D, no weights — riir-rag)
+  → DomainRouter.route()          (annotation only — see deviations)
+  → RuleIndex.suggest()           (fan-out across ALL enabled domains)
+  → ranked (rule_id, score) + RuleInfo {domain, buggy, fixed}
+```
+
+## Components
+
+| Component | File | Role |
+|---|---|---|
+| `RuleIndex` | `corpus_index.rs` | Per-domain index over `NeuronDbRetriever`. Multi-scale: whole pattern + significant pattern lines, keyed `BLAKE3 → rule_id`. `suggest()` (whole-query) + `suggest_deep()` (whole + per-line, max-merge per rule). |
+| `DomainRouter` | `domain_router.rs` | Corpus-derived L2-normalized centroid directions + runtime-sized argmax mirroring `pick_domain` tie semantics (the enabled-domain set is feature-dependent). |
+| `LatentMatcher` | `latent_matcher.rs` | The composed file/span pipeline + `rule_book` (`rule_id → RuleInfo`, built once at index time — the `--fix` Phase 4/5 proposers consume the same book) + `SuggestScratch` (reused buffers, G4). |
+
+## Two empirical design deviations (Plan 005 Phase 1)
+
+1. **Fan-out, not gated routing.** The plan's gated route→retrieve starved
+   the correct domain on fixtures — the 8-D structural centroids mis-routed
+   a `return expr;` fn to perf + a linear-scan fn to clippy (swapped). The
+   router verdict survives as an **annotation** on each span; re-gating
+   (tuned centroids or the 768-D embedder) is a future tuning option.
+2. **Multi-scale indexing + queries.** Corpus patterns are 1–5 line excerpts
+   while real spans are whole items; single-scale retrieval missed the
+   needle on the file fixture. Both index and queries carry the whole +
+   significant-lines scales.
+
+## GOAT (Bench 018, 2026-08-14 — ALL PASS)
+
+| Gate | Target | Measured |
+|---|---|---|
+| G1 retrieval precision (top-1, per domain) | ≥ 80% | **100% (12/12)** — 6 clippy + 6 perf renamed-identifier variants |
+| G2 latency per chunk (end-to-end) | < 1 ms | **349 µs** (multi-scale + 2-domain fan-out, release) — 2.9× headroom |
+| G3 no-regression | lib suite green | **104/104** |
+| G4 alloc-free steady state | scratch capacity stable | **stable across 50 repeat scans** (`SuggestScratch`) |
+
+The first G1 run FAILED at 75% (9/12) — fixture audit showed 3 variants
+mis-instantiated their rules (method-closure vs fn-closure, value-borrow vs
+ref-borrow, iterator-chain vs canonical `.into()`); faithful rewritten
+variants scored 12/12. Lesson (Issue 669 class): **audit fixture
+faithfulness BEFORE tuning the retriever** — a retrieval gate is only as
+honest as its fixture.
+
+## Known limitations (honest scope, Bench 018)
+
+- Routing is fan-out + annotation, not gating (deviation 1 above).
+- No minimum-score threshold — every span prints suggestions (scores are
+  relative). Threshold calibration needs a negative-example fixture
+  (clean code → no suggestions); future work.
+- G1's per-domain fixture is small (12); the ≥80% bar at N=12 means ≥10
+  hits. Expanding the fixture tightens the confidence interval.
+
+## CLI
+
+The `cargo-heal` bin wraps this layer: see
+[`../07_examples/cargo_heal.md`](../07_examples/cargo_heal.md).
+
+## See also
+
+- [`../02_corpus/`](../02_corpus/README.md) — the indexed knowledge base (L0)
+- [`../01_orientation/sibling_layout.md`](../01_orientation/sibling_layout.md) — the `latent_retrieval` dep posture (opt-in riir-rag arm)
+- [Bench 018](../../.benchmarks/018_plan005_latent_suggest_goat.md) — the full GOAT record

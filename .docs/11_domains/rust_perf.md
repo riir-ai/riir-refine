@@ -207,10 +207,31 @@ The healer does NOT suggest these — they're Cargo.toml/CI changes, not code
 patterns. A separate "build-config audit" tool (out of scope) could check for
 them.
 
+## Proposers (Plan 005 Phase 4 — the `--fix` upgrade)
+
+**DONE 2026-08-14.** [`src/domains/rust_perf/proposers/`](../../src/domains/rust_perf/proposers/)
+ships the top-5 Pareto-dominant rules as `syn` AST rewrites, mirroring the
+`clippy_lints` Stage 2 proposer pattern: the latent matcher (`--suggest`)
+picks the rule, the proposer applies it, the L2 pruner validates the
+result parses (`rust_perf_verify`: `cargo test`).
+
+| Rule | Rewrite | Notes |
+|---|---|---|
+| `vec-with-capacity` | `Vec::new()`/`vec![]` + push loop → `Vec::with_capacity(<cap>)` | capacity only from unambiguous sources (`0..n`, `0..=n`, `&path`, `path.iter()`); bare-path iterables skipped (could be `.len()`-less iterators) |
+| `entry-vs-contains-insert` | `if !m.contains_key(&k) { m.insert(k, v); }` → `m.entry(k).or_insert(v);` | statement-level rewrite (preserves `()` type); walks all stmts file-wide |
+| `static-str` | `-> String { "lit".to_string() }` → `-> &'static str { "lit" }` | signature-visible (return type); `.to_owned()` + `String::from` forms too |
+| `bool-to-bitpack` | `flags: &[bool]` count → `flags: &[u64]` + `count_ones().sum()` | signature-visible (param type); param name preserved (no rename hazards) |
+| `fxhashmap` | std `HashMap` → `rustc_hash::FxHashMap` (use swap + group slimming + path rewrite) | healed crate needs the `rustc-hash` dep; glob/`pub use`/fn-local forms skipped |
+
+The `for_each_fn_mut` shared helper scans free fns + impl methods + nested
+inline `mod` blocks — beyond the clippy proposers' file-level scan. `--fix`
+CLI wiring + the G5 real-fix-in-a-sibling-repo gate are Phase 6.
+
 ## Source
 
 - [`src/domains/rust_perf/mod.rs`](../../src/domains/rust_perf/mod.rs) — `PerfRule` + `RustPerfDomain`
 - [`src/domains/rust_perf/corpus.rs`](../../src/domains/rust_perf/corpus.rs) — `build_perf_seed_corpus()` + 31 `BenchSpec`s (8 rules are honestly NotBenchable)
+- [`src/domains/rust_perf/proposers/`](../../src/domains/rust_perf/proposers/) — the Phase 4 top-5 `syn` AST proposers + `propose_fix` dispatch
 - [`src/domains/rust_perf/verify.rs`](../../src/domains/rust_perf/verify.rs) — `PerfVerifier` (cargo test)
 - [`src/domains/rust_perf/bench.rs`](../../src/domains/rust_perf/bench.rs) — `PerfBenchValidator` (Pareto verdict)
 - [`examples/perf_heal_demo.rs`](../../examples/perf_heal_demo.rs) — scaffold end-to-end demo

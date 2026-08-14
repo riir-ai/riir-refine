@@ -161,10 +161,34 @@ audit precedes retriever tuning (recorded in Bench 018).
 
 Proposers enable `--fix` (auto-apply). Start with perf (clippy already has 10).
 
-**Status: not started.** (Same as original Plan 005 Phase 2 — unchanged by the revision.)
+**Status: DONE 2026-08-14.** `src/domains/rust_perf/proposers/` — the 5
+proposers (`vec-with-capacity`, `entry-vs-contains-insert`, `static-str`,
+`bool-to-bitpack`, `fxhashmap`) + the `propose_fix` dispatch + 36 fixture
+tests (140 lib total, clippy-clean). Design notes:
+- **Capacity-source safety** (`vec-with-capacity`): only unambiguous
+  capacity sources rewrite — `0..n` ranges, `0..=n` (+1), `&path`, and
+  `path.iter()/iter_mut()`. Bare-path iterables (`for x in items`) are
+  SKIPPED: the binding could be an iterator without `.len()`, and the
+  parse-only pruner can't catch the broken code a wrong `.len()` emits.
+- **Statement-level rewrite** (`entry-vs-contains-insert`): the if-stmt
+  produces `()`; replacing it with the semicolon'd
+  `map.entry(k).or_insert(v);` preserves that — the bare method call in
+  value position would be `&mut V` (type change) and wouldn't re-parse
+  mid-block without the semi. Walks ALL stmts file-wide (match arms,
+  closures, loop bodies), not just fn-top-level.
+- **Signature-visible changes documented per-rule** (`static-str` return
+  type, `bool-to-bitpack` param type — same exposure class as the clippy
+  proposers' rewrites; `rust_perf_verify` is the semantic gate).
+- **Use-group surgery** (`fxhashmap`): plain use swapped in place; group
+  uses slimmed (HashSet siblings preserved) + separate
+  `use rustc_hash::FxHashMap;` appended; glob/`pub use`/fn-local forms
+  skipped (public-semantics or sibling-item surgery hazards).
+- `for_each_fn_mut` shared helper covers free fns + impl methods +
+  nested inline `mod` blocks (beyond the clippy proposers' file-level scan).
 
 ### Tasks
-- [ ] **T4.1-T4.7** The 5 perf proposers (`vec-with-capacity`, `entry-vs-contains-insert`,
+
+- [x] **T4.1-T4.7** The 5 perf proposers (`vec-with-capacity`, `entry-vs-contains-insert`,
       `static-str`, `bool-to-bitpack`, `fxhashmap`) + `propose_fix` dispatch + fixture tests.
       (See original Plan 005 Phase 2 for details — unchanged.)
 

@@ -1,0 +1,323 @@
+//! `vec-with-capacity` — `Vec::new()`/`vec![]` + push loop → `Vec::with_capacity(n)`.
+//!
+//! Pattern: a `let mut v = Vec::new();` (or `vec![]`) binding followed, in
+//! the same block, by a `for` loop that pushes to `v`. The capacity hint is
+//! inferred from the loop header — only forms with an unambiguous capacity
+//! source rewrite (an incorrect `.len()` on a type that has none would
+//! produce code that doesn't compile):
+//!
+//! | Loop header | Capacity |
+//! |---|---|
+//! | `for x in 0..n` | `n` |
+//! | `for x in 0..=n` | `n + 1` |
+//! | `for x in &items` | `items.len()` |
+//! | `for x in items.iter()` / `.iter_mut()` | `items.len()` |
+//!
+//! `while` loops + unknown iterator expressions are skipped (no capacity
+//! source). A shadowing re-`let` of `v` between binding and loop stops the
+//! scan — the pushes may belong to the shadow.
+
+use syn::visit::Visit;
+use syn::{Expr, ExprLit, File, Lit, Local, Pat, RangeLimits, Stmt};
+
+use super::for_each_fn_mut;
+
+pub(crate) fn rewrite(file: &mut File) -> bool {
+    let mut changed = false;
+    for_each_fn_mut(file, |_sig, block| {
+        changed |= rewrite_block(block);
+    });
+    changed
+}
+
+fn rewrite_block(block: &mut syn::Block) -> bool {
+    // Pass 1 (immutable): find (local_idx, capacity) pairs. The two-phase
+    // scan avoids holding a &mut into `local` while reading the loop stmts.
+    let stmts = &block.stmts;
+    let mut pending: Vec<(usize, Expr)> = Vec::new();
+    for (i, stmt) in stmts.iter().enumerate() {
+        let Stmt::Local(local) = stmt else { continue };
+        let Some(ident) = fresh_vec_binding(local) else { continue };
+        for later in stmts.iter().skip(i + 1) {
+            // Stop at a shadowing re-bind of the same ident: pushes after it
+            // may belong to the shadow, not the binding we'd rewrite.
+            if stmt_binds_ident(later, ident) {
+                break;
+            }
+            if let Some(cap) = loop_capacity(later, ident) {
+                pending.push((i, cap));
+                break;
+            }
+        }
+    }
+
+    let changed = !pending.is_empty();
+    // Pass 2 (mutable): apply the init rewrites.
+    for (i, cap) in pending {
+        if let Stmt::Local(local) = &mut block.stmts[i] {
+            if let Some(init) = &mut local.init {
+                init.expr = syn::parse_quote! { Vec::with_capacity(#cap) };
+            }
+        }
+    }
+    changed
+}
+
+/// The binding is `let mut <ident> = Vec::new();` / `= vec![];` (no `else`).
+fn fresh_vec_binding(local: &Local) -> Option<&syn::Ident> {
+    let Pat::Ident(pi) = &local.pat else { return None };
+    if pi.by_ref.is_some() || pi.subpat.is_some() || pi.mutability.is_none() {
+        return None;
+    }
+    let init = local.init.as_ref()?;
+    if init.diverge.is_some() {
+        return None;
+    }
+    match &*init.expr {
+        Expr::Call(call) => {
+            let Expr::Path(p) = &*call.func else { return None };
+            let segs: Vec<String> = p.path.segments.iter().map(|s| s.ident.to_string()).collect();
+            if segs == ["Vec", "new"] && call.args.is_empty() {
+                Some(&pi.ident)
+            } else {
+                None
+            }
+        }
+        Expr::Macro(mac) if mac.mac.path.is_ident("vec") && mac.mac.tokens.is_empty() => {
+            Some(&pi.ident)
+        }
+        _ => None,
+    }
+}
+
+/// Does this stmt re-bind `ident` (any mutability)?
+fn stmt_binds_ident(stmt: &Stmt, ident: &syn::Ident) -> bool {
+    match stmt {
+        Stmt::Local(local) => matches!(&local.pat, Pat::Ident(pi) if pi.ident == *ident),
+        _ => false,
+    }
+}
+
+/// If `stmt` is a `for` loop that (a) pushes to `ident` somewhere in its
+/// body and (b) has an unambiguous capacity source, return that capacity.
+fn loop_capacity(stmt: &Stmt, ident: &syn::Ident) -> Option<Expr> {
+    let Stmt::Expr(Expr::ForLoop(fl), _) = stmt else { return None };
+    let mut scan = PushScan { ident, found: false };
+    scan.visit_block(&fl.body);
+    if !scan.found {
+        return None;
+    }
+    capacity_from_iter(&fl.expr)
+}
+
+/// Infer the capacity expression from the for-loop's iterable.
+fn capacity_from_iter(expr: &Expr) -> Option<Expr> {
+    match expr {
+        // `0..n` → `n`; `0..=n` → `n + 1`. Start must be a literal 0.
+        Expr::Range(r) => {
+            let starts_zero = matches!(
+                r.start.as_deref(),
+                Some(Expr::Lit(ExprLit { lit: Lit::Int(li), .. }))
+                    if li.base10_parse::<u64>().is_ok_and(|v| v == 0)
+            );
+            if !starts_zero {
+                return None;
+            }
+            match r.limits {
+                RangeLimits::HalfOpen(_) => r.end.as_deref().cloned(),
+                RangeLimits::Closed(_) => {
+                    let hi: Expr = r.end.as_deref().cloned()?;
+                    Some(syn::parse_quote! { #hi + 1 })
+                }
+            }
+        }
+        // `&items` → `items.len()` (plain path receivers only — field
+        // accesses like `&self.items` parse as Expr::Field, skipped).
+        Expr::Reference(er) => match &*er.expr {
+            Expr::Path(p) => {
+                let path = &p.path;
+                Some(syn::parse_quote! { #path.len() })
+            }
+            _ => None,
+        },
+        // `items.iter()` / `items.iter_mut()` → `items.len()`.
+        Expr::MethodCall(mc)
+            if (mc.method == "iter" || mc.method == "iter_mut") && mc.args.is_empty() =>
+        {
+            match &*mc.receiver {
+                Expr::Path(p) => {
+                    let path = &p.path;
+                    Some(syn::parse_quote! { #path.len() })
+                }
+                Expr::Reference(er) => match &*er.expr {
+                    Expr::Path(p) => {
+                        let path = &p.path;
+                        Some(syn::parse_quote! { #path.len() })
+                    }
+                    _ => None,
+                },
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
+
+/// Immutable scan: is there a `<ident>.push(_)` method call anywhere in the
+/// loop body (including nested ifs + closures)?
+struct PushScan<'a> {
+    ident: &'a syn::Ident,
+    found: bool,
+}
+
+impl<'ast> Visit<'ast> for PushScan<'_> {
+    fn visit_expr_method_call(&mut self, e: &'ast syn::ExprMethodCall) {
+        if self.found {
+            return;
+        }
+        if e.method == "push"
+            && e.args.len() == 1
+            && matches!(&*e.receiver, Expr::Path(p) if p.path.is_ident(self.ident))
+        {
+            self.found = true;
+            return;
+        }
+        syn::visit::visit_expr_method_call(self, e);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::quote_file;
+    use super::*;
+
+    fn propose(input: &str) -> Option<String> {
+        let mut file = syn::parse_file(input).ok()?;
+        if rewrite(&mut file) {
+            Some(quote_file(&file))
+        } else {
+            None
+        }
+    }
+
+    fn squash(s: &str) -> String {
+        s.split_whitespace().collect::<String>()
+    }
+
+    #[test]
+    fn range_loop_gets_capacity() {
+        let out = propose(
+            "fn build(n: usize) -> Vec<u32> {\n    let mut v = Vec::new();\n    \
+             for i in 0..n { v.push(i as u32); }\n    v\n}",
+        )
+        .expect("pattern matched");
+        assert!(squash(&out).contains("Vec::with_capacity(n)"), "{out}");
+    }
+
+    #[test]
+    fn inclusive_range_gets_plus_one() {
+        let out = propose(
+            "fn build(n: usize) -> Vec<u32> {\n    let mut v = Vec::new();\n    \
+             for i in 0..=n { v.push(i as u32); }\n    v\n}",
+        )
+        .expect("pattern matched");
+        assert!(squash(&out).contains("Vec::with_capacity(n+1)"), "{out}");
+    }
+
+    #[test]
+    fn ref_iter_gets_len() {
+        let out = propose(
+            "fn build(items: &Vec<u32>) -> Vec<u32> {\n    let mut v = Vec::new();\n    \
+             for x in &items { v.push(*x); }\n    v\n}",
+        )
+        .expect("pattern matched");
+        assert!(squash(&out).contains(&squash("Vec::with_capacity(items.len())")), "{out}");
+    }
+
+    #[test]
+    fn iter_method_gets_len() {
+        let out = propose(
+            "fn build(items: &[u32]) -> Vec<u32> {\n    let mut v = vec![];\n    \
+             for x in items.iter() { v.push(*x); }\n    v\n}",
+        )
+        .expect("pattern matched");
+        assert!(squash(&out).contains("Vec::with_capacity(items.len())"), "{out}");
+    }
+
+    #[test]
+    fn push_in_nested_if_counts() {
+        let out = propose(
+            "fn build(items: &[u32]) -> Vec<u32> {\n    let mut v = Vec::new();\n    \
+             for x in items.iter() { if *x > 3 { v.push(*x); } }\n    v\n}",
+        )
+        .expect("pattern matched");
+        assert!(squash(&out).contains("with_capacity"), "{out}");
+    }
+
+    #[test]
+    fn bare_path_iterable_unchanged() {
+        // `for x in items` (bare path): the binding could be an iterator
+        // without `.len()` — emitting `items.len()` might not compile, so the
+        // safe design skips it. Use `&items` / `.iter()` / a range instead.
+        assert!(
+            propose(
+                "fn build(items: &[u32]) -> Vec<u32> {\n    let mut v = Vec::new();\n    \
+                 for x in items { v.push(*x); }\n    v\n}",
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn impl_method_rewrites() {
+        let out = propose(
+            "struct S;\nimpl S {\n    fn build(&self, n: usize) -> Vec<u8> {\n        \
+             let mut v = Vec::new();\n        for i in 0..n { v.push(i as u8); }\n        v\n    }\n}",
+        )
+        .expect("pattern matched");
+        assert!(squash(&out).contains("Vec::with_capacity(n)"), "{out}");
+    }
+
+    #[test]
+    fn no_loop_leaves_unchanged() {
+        assert!(propose("fn f() { let mut v = Vec::new(); v.push(1); }").is_none());
+    }
+
+    #[test]
+    fn while_loop_skipped() {
+        assert!(
+            propose(
+                "fn f(mut it: std::vec::IntoIter<u32>) -> Vec<u32> {\n    let mut v = \
+                 Vec::new();\n    while let Some(x) = it.next() { v.push(x); }\n    v\n}"
+            )
+            .is_none(),
+            "while loops have no capacity source"
+        );
+    }
+
+    #[test]
+    fn shadowing_stops_scan() {
+        assert!(propose(
+            "fn f(items: &[u32]) -> Vec<u32> {\n    let mut v = Vec::new();\n    let mut v = \
+             Vec::new();\n    for x in items { v.push(*x); }\n    v\n}"
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn already_with_capacity_unchanged() {
+        assert!(
+            propose("fn f(n: usize) -> Vec<u32> { let mut v = Vec::with_capacity(n); v }")
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn nonzero_range_start_skipped() {
+        assert!(propose(
+            "fn f(n: usize) -> Vec<u32> {\n    let mut v = Vec::new();\n    for i in 1..n { \
+             v.push(i as u32); }\n    v\n}"
+        )
+        .is_none());
+    }
+}
