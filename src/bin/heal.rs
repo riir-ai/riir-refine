@@ -167,7 +167,7 @@ fn main() {
         usage();
     }
 
-    let matcher = LatentMatcher::from_enabled_domains().unwrap_or_else(|e| {
+    let mut matcher = LatentMatcher::from_enabled_domains().unwrap_or_else(|e| {
         eprintln!("index build failed: {e}");
         std::process::exit(1);
     });

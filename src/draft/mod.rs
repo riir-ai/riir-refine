@@ -17,6 +17,6 @@ pub mod corpus_index;
 pub mod domain_router;
 pub mod latent_matcher;
 
-pub use corpus_index::{RuleIndex, ScoredRule};
+pub use corpus_index::{RuleIndex, ScoredRule, SuggestScratch};
 pub use domain_router::{DomainId, DomainRouter};
 pub use latent_matcher::{LatentMatcher, RuleInfo, SpanSuggestion};

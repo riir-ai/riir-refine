@@ -33,6 +33,40 @@ pub struct ScoredRule {
     pub score: f32,
 }
 
+/// Reusable buffers for the suggest loop (Plan 005 T3.4 / G4).
+///
+/// Owned by the caller (the [`LatentMatcher`](super::LatentMatcher) holds
+/// one) and threaded through `*_into` calls — capacities stabilize across
+/// queries, so steady-state scanning grows nothing. Remaining per-query
+/// allocations are bounded: the substrate's per-`retrieve()` candidate `Vec`
+/// (≤ `latent_k` + `bm25_k`) + ≤ one rule-id `String` per distinct retrieved
+/// rule + the output clone.
+#[derive(Default)]
+pub struct SuggestScratch {
+    /// Accumulated retrieved candidates across the multi-scale queries of
+    /// one suggest call (cleared per call; capacity persists).
+    retrieved: Vec<riir_rag::RetrievedChunk>,
+    /// Per-rule best score accumulator (cleared via `drain` per call — the
+    /// owned keys move straight into `ranked`).
+    best: HashMap<String, f32>,
+    /// Ranked output (cleared per call; capacity persists).
+    ranked: Vec<ScoredRule>,
+}
+
+impl SuggestScratch {
+    /// Current `retrieved` capacity (G4 test observable).
+    #[must_use]
+    pub fn retrieved_capacity(&self) -> usize {
+        self.retrieved.capacity()
+    }
+
+    /// Current `ranked` capacity (G4 test observable).
+    #[must_use]
+    pub fn ranked_capacity(&self) -> usize {
+        self.ranked.capacity()
+    }
+}
+
 /// One domain's corpus indexed for latent retrieval.
 ///
 /// Build cost is proportional to corpus size (clippy ~10, perf ~46, kernel
@@ -118,12 +152,23 @@ impl RuleIndex {
     /// substrate's BM25 hybrid stage can boost on identifier overlap — the
     /// designed retrieval path, not a bolt-on.
     pub fn suggest(&self, code: &str, top_k: usize) -> Vec<ScoredRule> {
+        let mut scratch = SuggestScratch::default();
+        self.suggest_into(code, top_k, &mut scratch).to_vec()
+    }
+
+    /// [`suggest`](Self::suggest) with caller-owned scratch (the G4 path).
+    pub fn suggest_into<'s>(
+        &self,
+        code: &str,
+        top_k: usize,
+        scratch: &'s mut SuggestScratch,
+    ) -> &'s [ScoredRule] {
+        scratch.retrieved.clear();
         let activity = ModellessEmbedder.embed(code);
         let query = LatentQuery::from_direction(activity).with_text(code);
-        // Generous budget: for suggest mode we want every retrieved candidate
-        // (latent_k + bm25_k, ≤32 at default config), not a packed subset.
-        let retrieved = self.retriever.retrieve(&query, TokenBudget(usize::MAX));
-        self.rank_retrieved(retrieved.iter(), top_k)
+        let mut retrieved = self.retriever.retrieve(&query, TokenBudget(usize::MAX));
+        scratch.retrieved.append(&mut retrieved);
+        self.rank_into(&scratch.retrieved, top_k, &mut scratch.best, &mut scratch.ranked)
     }
 
     /// Multi-scale suggest: query the whole text AND each significant line,
@@ -135,11 +180,29 @@ impl RuleIndex {
     /// Query count = 1 + significant lines — fine for suggest mode (not a
     /// hot path; each query ~µs at corpus scale, Bench 575).
     pub fn suggest_deep(&self, code: &str, top_k: usize) -> Vec<ScoredRule> {
-        let mut retrieved_all: Vec<riir_rag::RetrievedChunk> = Vec::new();
+        let mut scratch = SuggestScratch::default();
+        self.suggest_deep_into(code, top_k, &mut scratch).to_vec()
+    }
+
+    /// [`suggest_deep`](Self::suggest_deep) with caller-owned scratch — the
+    /// G4 path: buffer capacities stabilize across queries (zero growth in
+    /// steady state; the only remaining allocations are the ≤ `distinct
+    /// rules` id strings + the returned output clone).
+    ///
+    /// The returned slice borrows `scratch` — consume (`.to_vec()` / print)
+    /// before the next call.
+    pub fn suggest_deep_into<'s>(
+        &self,
+        code: &str,
+        top_k: usize,
+        scratch: &'s mut SuggestScratch,
+    ) -> &'s [ScoredRule] {
+        scratch.retrieved.clear();
         {
             let activity = ModellessEmbedder.embed(code);
             let query = LatentQuery::from_direction(activity).with_text(code);
-            retrieved_all.extend(self.retriever.retrieve(&query, TokenBudget(usize::MAX)));
+            let mut retrieved_vec = self.retriever.retrieve(&query, TokenBudget(usize::MAX));
+            scratch.retrieved.append(&mut retrieved_vec);
         }
         for line in code.lines() {
             let trimmed = line.trim();
@@ -148,18 +211,25 @@ impl RuleIndex {
             }
             let activity = ModellessEmbedder.embed(trimmed);
             let query = LatentQuery::from_direction(activity).with_text(trimmed);
-            retrieved_all.extend(self.retriever.retrieve(&query, TokenBudget(usize::MAX)));
+            let mut line_vec = self.retriever.retrieve(&query, TokenBudget(usize::MAX));
+            scratch.retrieved.append(&mut line_vec);
         }
-        self.rank_retrieved(retrieved_all.iter(), top_k)
+        self.rank_into(&scratch.retrieved, top_k, &mut scratch.best, &mut scratch.ranked)
     }
 
-    /// Merge retrieved chunks → per-rule best score → descending rank.
-    fn rank_retrieved<'a>(
+    /// Merge retrieved chunks → per-rule best score → descending rank,
+    /// writing into the caller's `best`/`ranked` buffers (reused capacity).
+    /// Split-field params (not `&mut SuggestScratch`) so call sites can
+    /// field-split the borrow alongside `&scratch.retrieved`.
+    #[allow(clippy::type_complexity)]
+    fn rank_into<'s>(
         &self,
-        retrieved: impl Iterator<Item = &'a riir_rag::RetrievedChunk>,
+        retrieved: &[riir_rag::RetrievedChunk],
         top_k: usize,
-    ) -> Vec<ScoredRule> {
-        let mut best: HashMap<&str, f32> = HashMap::new();
+        best: &'s mut HashMap<String, f32>,
+        ranked: &'s mut Vec<ScoredRule>,
+    ) -> &'s [ScoredRule] {
+        best.clear();
         for chunk in retrieved {
             let Some(rule_id) = self.by_zone_hash.get(&chunk.zone_hash) else {
                 continue;
@@ -167,25 +237,24 @@ impl RuleIndex {
             let score = chunk
                 .exact_score
                 .map_or(chunk.latent_score, |exact| chunk.latent_score + exact);
-            let entry = best.entry(rule_id.as_str()).or_insert(f32::NEG_INFINITY);
+            let entry = best.entry(rule_id.clone()).or_insert(f32::NEG_INFINITY);
             if score > *entry {
                 *entry = score;
             }
         }
-        let mut ranked: Vec<ScoredRule> = best
-            .into_iter()
-            .map(|(rule_id, score)| ScoredRule {
-                rule_id: rule_id.to_string(),
-                score,
-            })
-            .collect();
+        ranked.clear();
+        // drain() moves the owned rule-id Strings straight into the output —
+        // no per-rule re-allocation for keys.
+        for (rule_id, score) in best.drain() {
+            ranked.push(ScoredRule { rule_id, score });
+        }
         ranked.sort_unstable_by(|a, b| {
             b.score
                 .partial_cmp(&a.score)
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
-        ranked.truncate(top_k);
-        ranked
+        let len = ranked.len().min(top_k);
+        &ranked[..len]
     }
 }
 

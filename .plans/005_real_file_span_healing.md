@@ -128,20 +128,34 @@ cutoff is a Phase 3 G1 concern — the precision measurement drives it.
 
 Measure the retrieval quality + latency before investing in proposers.
 
-**Status: not started.**
+**Status: DONE 2026-08-14 — ALL FOUR GATES PASS** (Bench 018):
+G1 100% (12/12, target ≥80%), G2 349µs/chunk (target <1ms, 2.9× headroom),
+G3 104 lib tests, G4 scratch stable. Notable: the first G1 run FAILED at
+75% — audit showed the FIXTURE mis-instantiated 3 rules (method-closure vs
+fn-closure, value-borrow vs ref-borrow, iterator-chain vs canonical
+`.into()`); faithful rewritten variants scored 12/12. Fixture-faithfulness
+audit precedes retriever tuning (recorded in Bench 018).
 
 ### Tasks
 
-- [ ] **T3.1 (G1 retrieval precision)** On a fixture of known anti-patterns, the top-1
+- [x] **T3.1 (G1 retrieval precision)** On a fixture of known anti-patterns, the top-1
       retrieved rule is correct ≥80% of the time (per domain). Record in `.benchmarks/`.
-- [ ] **T3.2 (G2 latency)** Chunk + embed + route + retrieve < 1ms per chunk (Clifford
+      Bench 018: 12/12 = 100% (6 clippy + 6 perf renamed-identifier variants).
+- [x] **T3.2 (G2 latency)** Chunk + embed + route + retrieve < 1ms per chunk (Clifford
       wedge KNN is O(log N); Bench 575 measured 123µs p50 @ N=1000).
-- [ ] **T3.3 (G3 no-regression)** All existing riir-clippy tests pass.
-- [ ] **T3.4 (G4 alloc-free hot path)** Reuse scratch buffers in the retrieve loop.
+      Measured 349µs/chunk end-to-end (multi-scale + 2-domain fan-out), release.
+- [x] **T3.3 (G3 no-regression)** All existing riir-clippy tests pass.
+      104 lib tests green (91 pre-existing + 13 draft).
+- [x] **T3.4 (G4 alloc-free hot path)** Reuse scratch buffers in the retrieve loop.
+      `SuggestScratch` threaded through `suggest_*_into` (split-field borrow);
+      capacities stable across 50 repeat scans. Remaining allocs bounded +
+      documented (Bench 018 §G4).
 
 ### Phase 3 exit criteria
 - G1-G4 PASS for `--suggest` mode. If G1 (precision) is <80%, tune the domain directions
   or switch to `BonsaiEmbedder` (768-D, opt-in) before proceeding to proposers.
+  **MET 2026-08-14 (Bench 018)** — G1 100% on the faithful fixture after the
+  fixture-faithfulness audit (the 75% first run was fixture error, not retrieval).
 
 ## Phase 4 — Top-5 perf proposers (the `--fix` upgrade for perf)
 

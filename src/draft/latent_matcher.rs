@@ -76,6 +76,8 @@ pub struct LatentMatcher {
     perf: Option<RuleIndex>,
     kernel: Option<RuleIndex>,
     rule_book: std::collections::HashMap<String, RuleInfo>,
+    /// G4 scratch — reused across every span + domain query.
+    scratch: super::corpus_index::SuggestScratch,
 }
 
 impl LatentMatcher {
@@ -184,6 +186,7 @@ impl LatentMatcher {
             perf,
             kernel,
             rule_book,
+            scratch: super::corpus_index::SuggestScratch::default(),
         })
     }
 
@@ -202,12 +205,24 @@ impl LatentMatcher {
         self.router.domains()
     }
 
-    fn index_for(&self, domain: DomainId) -> Option<&RuleIndex> {
+    /// Whether a domain's index is built (feature-gated at construction).
+    #[must_use]
+    pub fn has_domain(&self, domain: DomainId) -> bool {
         match domain {
-            DomainId::Clippy => self.clippy.as_ref(),
-            DomainId::Perf => self.perf.as_ref(),
-            DomainId::Kernel => self.kernel.as_ref(),
+            DomainId::Clippy => self.clippy.is_some(),
+            DomainId::Perf => self.perf.is_some(),
+            DomainId::Kernel => self.kernel.is_some(),
         }
+    }
+
+    /// G4 observability: the scratch buffers' current capacities (stability
+    /// across queries is the alloc-free steady-state signal).
+    #[must_use]
+    pub fn scratch_capacities(&self) -> (usize, usize) {
+        (
+            self.scratch.retrieved_capacity(),
+            self.scratch.ranked_capacity(),
+        )
     }
 
     /// Suggest rules for a single code span (already-chunked text).
@@ -221,18 +236,36 @@ impl LatentMatcher {
     /// re-gate once centroids are tuned or the 768-D embedder is in).
     ///
     /// Multi-scale per domain: whole span + per-line queries.
-    pub fn suggest_span(&self, code: &str, top_k: usize) -> (DomainId, Vec<(DomainId, Vec<ScoredRule>)>) {
+    ///
+    /// Takes `&mut self` — the internal G4 scratch is reused across calls.
+    pub fn suggest_span(
+        &mut self,
+        code: &str,
+        top_k: usize,
+    ) -> (DomainId, Vec<(DomainId, Vec<ScoredRule>)>) {
         let routed = self.router.route(code).unwrap_or(DomainId::Clippy);
         let by_domain = self.suggest_all_domains(code, top_k);
         (routed, by_domain)
     }
 
-    /// Retrieve `top_k` rules from EVERY enabled domain's index (fan-out).
-    fn suggest_all_domains(&self, code: &str, top_k: usize) -> Vec<(DomainId, Vec<ScoredRule>)> {
+    /// Retrieve `top_k` rules from EVERY enabled domain's index (fan-out),
+    /// reusing the shared G4 scratch across domains. Field-direct index
+    /// access keeps the borrow checker happy alongside the scratch borrow.
+    fn suggest_all_domains(&mut self, code: &str, top_k: usize) -> Vec<(DomainId, Vec<ScoredRule>)> {
         let mut out = Vec::with_capacity(3);
         for domain in [DomainId::Clippy, DomainId::Perf, DomainId::Kernel] {
-            if let Some(index) = self.index_for(domain) {
-                out.push((domain, index.suggest_deep(code, top_k)));
+            // Direct field access (not `index_for`) so the immutable index
+            // borrow + the mutable scratch borrow stay provably disjoint.
+            let index = match domain {
+                DomainId::Clippy => self.clippy.as_ref(),
+                DomainId::Perf => self.perf.as_ref(),
+                DomainId::Kernel => self.kernel.as_ref(),
+            };
+            if let Some(index) = index {
+                let rules = index
+                    .suggest_deep_into(code, top_k, &mut self.scratch)
+                    .to_vec();
+                out.push((domain, rules));
             }
         }
         out
@@ -243,7 +276,8 @@ impl LatentMatcher {
     /// Uses [`AstChunker`] (fn/impl/struct spans with 1-based line ranges).
     /// Order: file order. Retrieval fans out across all enabled domains
     /// (see [`Self::suggest_span`]); the router verdict annotates each span.
-    pub fn suggest_file(&self, src: &str, path: &str, top_k: usize) -> Vec<SpanSuggestion> {
+    /// Takes `&mut self` — the G4 scratch is reused across every span.
+    pub fn suggest_file(&mut self, src: &str, path: &str, top_k: usize) -> Vec<SpanSuggestion> {
         let chunker = AstChunker;
         let chunks = chunker.chunk(src, path);
         let mut out = Vec::with_capacity(chunks.len());
@@ -293,7 +327,7 @@ pub fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {
 
     #[test]
     fn span_suggestion_routes_and_retrieves() {
-        let m = LatentMatcher::from_enabled_domains().expect("build");
+        let mut m = LatentMatcher::from_enabled_domains().expect("build");
         let (routed, by_domain) = m.suggest_span("fn f() -> u8 { return 7; }", 3);
         assert!(!by_domain.is_empty());
         // Fan-out: the clippy domain's list must exist + top-1 needless_return
@@ -310,7 +344,7 @@ pub fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {
 
     #[test]
     fn file_suggestion_covers_all_chunks_with_lines() {
-        let m = LatentMatcher::from_enabled_domains().expect("build");
+        let mut m = LatentMatcher::from_enabled_domains().expect("build");
         let sugg = m.suggest_file(SAMPLE, "sample.rs", 3);
         assert!(sugg.len() >= 2, "expected ≥2 chunks (2 fns), got {}", sugg.len());
         for s in &sugg {
