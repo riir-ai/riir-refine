@@ -79,6 +79,23 @@
 //!   and dropped (cascade structure overlaps `NSA` Category I; 4 staged dispatches
 //!   is a non-opt). Corpus: **127 rules across 15 categories (A–O)**. `riir-gpu`
 //!   remains open as the next distillation source (5 of ~200 files mined).
+//! - **Batch 16 (Research 017):** 4 riir-gpu production rules — third batch mining
+//!   the stack's own kernels. `cmma` hardware unit (`gemm_ternary_simdgroup`:
+//!   use the cooperative matrix multiply-accumulate hardware unit instead of
+//!   scalar ALU — 64 FMAs/cycle on the dedicated unit vs occupancy-bound scalar),
+//!   dequant-once-per-K-tile into shared memory (`gemm_ternary_simdgroup`: dequant
+//!   a weight tile once, let the hardware matrix unit consume it across all
+//!   output rows — m× amortization), swap-large-axis-to-X (`gemm_ternary_simdgroup`:
+//!   put the large GEMM axis on the X cube-count for workgroup distribution),
+//!   norm-decoupled low-bit scoring (`forward_turboquant`: store per-position L2
+//!   norm separately, quantize the unit-normalized key at 2-4 bits, reconstruct
+//!   score as norm × dot). Four files assessed + dropped (`lora_fused`: `SGMV`
+//!   overlaps Category H `grouped-launch-cumsum-offsets`; `spectralquant/rotation`:
+//!   boilerplate, pre-rotate identity already mined; `spectralquant/qjl`: composition
+//!   of water-fill with `JL`; `spectralquant/calibration`: two-pass reduce overlaps
+//!   `split-reduction-scalar-prepass`). Corpus: **131 rules across 15 categories
+//!   (A–O)**. `riir-gpu` remains open as the next distillation source (7 of ~200
+//!   files mined).
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
@@ -1502,6 +1519,100 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
             ref_shape: "// naive: uniform per-dim codebooks at max_bits for all dims (ignores energy distribution)\nfn dequant_uniform_per_dim(packed: &[u32], codebook: &[f32], d_h: usize, max_bits: usize) -> Vec<f32> {\n    // codebook layout: [d_h][1 << max_bits] — every dim gets a full max_bits codebook\n    let cb_stride = 1usize << max_bits;\n    let mut out = vec![0.0f32; d_h];\n    for d in 0..d_h {\n        let idx = unpack_index(packed, d, max_bits); // max_bits per dim, uniform\n        out[d] = codebook[d * cb_stride + idx];\n    }\n    out // codebook memory = d_h × 2^max_bits (e.g. 128 × 16 = 2048 floats)\n}".to_string(),
             opt_pattern: "// optimized: top d_eff dims get per-dim codebooks (max_bits), tail dims share one b_low-bit codebook\nfn dequant_water_fill(packed: &[u32], codebook_top: &[f32], codebook_tail: &[f32], d_h: usize, d_eff: usize, max_bits: usize, b_low: usize) -> Vec<f32> {\n    let cb_top_stride = 1usize << max_bits;\n    let cb_tail_stride = 1usize << b_low;\n    let mut out = vec![0.0f32; d_h];\n    // top dims: per-dim codebook at max_bits (high fidelity)\n    for d in 0..d_eff {\n        let idx = unpack_index(packed, d, max_bits);\n        out[d] = codebook_top[d * cb_top_stride + idx];\n    }\n    // tail dims: shared single codebook at b_low bits (low fidelity, <1% energy)\n    for d in d_eff..d_h {\n        let idx = unpack_index(packed, d, b_low);\n        out[d] = codebook_tail[idx]; // SAME codebook_tail for all tail dims\n    }\n    out // codebook memory = d_eff × 2^max_bits + (d_h - d_eff) × 2^b_low\n        // e.g. 32×16 + 96×4 = 896 floats (was 2048) — 2.3× reduction\n}".to_string(),
         },
+        // ════════════════════════════════════════════════════════════════════
+        // Batch 16 (Research 017): riir-gpu production kernels — third pass.
+        // 4 rules from 2 riir-gpu source files (cmma hardware unit + dequant
+        // staging + dispatch axis swap from gemm_ternary_simdgroup; norm-decoupled
+        // low-bit scoring from forward_turboquant). Two spectralquant siblings
+        // (rotation.rs, qjl.rs) + calibration.rs + lora_fused_cubecl.rs assessed
+        // + dropped (rotation = boilerplate, pre-rotate already mined; qjl =
+        // composition of water-fill with JL; calibration two-pass reduce overlaps
+        // split-reduction; SGMV multi-adapter batched dispatch overlaps Category H
+        // grouped-launch-cumsum-offsets). Corpus: **131 rules across 15 categories**.
+        // ════════════════════════════════════════════════════════════════════
+        // ── cmma-hardware-unit-over-scalar-alu — scalar dot in plane → cmma (B) ─
+        // Source: riir-gpu gemm_ternary_simdgroup_cubecl.rs (Issue 641). The
+        // plane-cooperative ternary GEMM does the dot product in scalar ALU
+        // inside a plane — each lane accumulates `select(pos,x,0) -
+        // select(neg,x,0)` per bit then `plane_sum()` reduces. Past ~8
+        // accumulators this is occupancy-bound at ~1.08× (Bench 641). The cmma
+        // variant uses Metal's `simdgroup_matrix_8x8` cooperative matrix
+        // multiply-accumulate unit (CubeCL `cmma`) — a dedicated hardware unit
+        // that does 64 FMAs per simdgroup per cycle. The ternary weights are
+        // dequantized into a shared-memory tile, then consumed at hardware rate.
+        // This is the structural difference: the SAME math runs on a unit built
+        // for it (tensor core / cmma) instead of fighting for scalar ALU
+        // bandwidth against the load pipeline. Generalizes to any GEMM where a
+        // hardware matrix unit exists (NVIDIA tensor core, Metal simdgroup_matrix,
+        // Intel DPAS). Distinct from `gemm-tiling` (tile size choice) — this is
+        // about WHICH execution unit runs the multiply.
+        KernelRule {
+            rule_id: "cmma-hardware-unit-over-scalar-alu".to_string(),
+            gpu_concept: "use the cooperative matrix multiply-accumulate hardware unit (tensor core / Metal simdgroup_matrix / cmma) instead of scalar ALU for matrix multiply".to_string(),
+            ref_shape: "// naive: dot product in scalar ALU inside a plane — occupancy-bound\nfn ternary_dot_scalar_alu(pos_bits: &[u32], neg_bits: &[u32], scale: &[f32], input: &[f32], m: usize, n: usize) -> Vec<f32> {\n    let mut out = vec![0.0f32; m];\n    for row in 0..m {\n        let mut acc = 0.0;\n        for col in 0..n {\n            // scalar ALU: extract pos/neg bit, subtract, multiply — 1 FMA equivalent in scalar pipe\n            let pos = ((pos_bits[col / 32] >> (col % 32)) & 1) as f32;\n            let neg = ((neg_bits[col / 32] >> (col % 32)) & 1) as f32;\n            acc += (pos - neg) * scale[col / 128] * input[col];\n        }\n        out[row] = acc;\n    }\n    out // ~1.08× vs llama.cpp — scalar ALU is the bottleneck, not memory\n}".to_string(),
+            opt_pattern: "// optimized: cmma hardware unit (Metal simdgroup_matrix_8x8 / tensor core) — 64 FMAs/cycle\nfn ternary_dot_cmma(pos_bits: &[u32], neg_bits: &[u32], scale: &[f32], input: &[f32], m: usize, n: usize) -> Vec<f32> {\n    // dequant weight tile into shared memory once (see dequant-once-per-k-tile rule)\n    // then cmma::execute consumes it at hardware rate — 64 FMAs per simdgroup per cycle\n    let mut out = vec![0.0f32; m];\n    const TILE: usize = 8; // cmma tile dim (simdgroup_matrix_8x8)\n    for tile_m in (0..m).step_by(TILE) {\n        for tile_n in (0..n).step_by(TILE) {\n            // dequant 8×8 weight tile into shared memory (cooperative, 32 threads × 2 elem)\n            let mut tile_w = [0.0f32; TILE * TILE];\n            let mut tile_x = [0.0f32; TILE * TILE];\n            for r in 0..TILE { for c in 0..TILE {\n                let col = tile_n + c;\n                if col < n {\n                    let pos = ((pos_bits[col / 32] >> (col % 32)) & 1) as f32;\n                    let neg = ((neg_bits[col / 32] >> (col % 32)) & 1) as f32;\n                    tile_w[r * TILE + c] = (pos - neg) * scale[col / 128];\n                    tile_x[r * TILE + c] = input[tile_m * n + col];\n                }\n            } }\n            // cmma::execute: acc += tile_w @ tile_x — runs on the hardware matrix unit\n            // (64 FMAs/cycle on Metal simdgroup; far beyond scalar ALU throughput)\n            for r in 0..TILE { for c in 0..TILE {\n                if tile_m + r < m { out[tile_m + r] += tile_w[r * TILE + c] * tile_x[r * TILE + c]; }\n            } }\n        }\n    }\n    out // structurally different hardware path — not occupancy-bound\n}".to_string(),
+        },
+        // ── dequant-once-per-k-tile-into-shared-memory — per-FMA dequant → once-per-tile (A) ─
+        // Source: riir-gpu gemm_ternary_simdgroup_cubecl.rs (Issue 641). The
+        // naive path dequantizes each weight element inline as it's consumed by
+        // the dot product — O(m×n) dequant ops interleaved with O(m×n) FMAs. The
+        // cmma variant dequantizes a whole 8×8 weight tile ONCE into a
+        // shared-memory staging buffer, then the cmma unit consumes all 64
+        // elements at hardware rate. The dequant cost is amortized across all
+        // 64 cmma FMAs in the tile — 1 dequant per K-tile-column shared across
+        // the entire M-row of the output. Generalizes to any quantized GEMM
+        // (int4/int8/ternary) where the dequant is reusable across output rows:
+        // stage the dequantized tile in shared memory once, let the hardware
+        // matrix unit consume it. Distinct from `block-contiguous-weight-layout`
+        // (memory layout for fewer global accesses) — this is about WHEN the
+        // dequant runs (once-per-tile vs per-element) + WHERE the result lives
+        // (shared memory vs re-fetch).
+        KernelRule {
+            rule_id: "dequant-once-per-k-tile-into-shared-memory".to_string(),
+            gpu_concept: "dequantize a weight tile once into shared memory, let the hardware matrix unit consume it across all output rows that share the tile".to_string(),
+            ref_shape: "// naive: dequant each weight element inline as it's consumed by the dot\nfn quant_matmul_inline_dequant(w_packed: &[u8], x: &[f32], scale: &[f32], m: usize, n: usize, bits: usize) -> Vec<f32> {\n    let mut out = vec![0.0f32; m];\n    for row in 0..m {\n        let mut acc = 0.0;\n        for col in 0..n {\n            // dequant EVERY element inline — O(m×n) dequant ops interleaved with O(m×n) FMAs\n            let byte = w_packed[col / (8 / bits)];\n            let code = (byte >> ((col % (8 / bits)) * bits)) & ((1 << bits) - 1);\n            let w = (code as f32 - 8.0) * scale[col / 32]; // int4 dequant inline\n            acc += w * x[col];\n        }\n        out[row] = acc;\n    }\n    out // dequant runs m×n times — once per (row, col) even though the weight is row-independent\n}".to_string(),
+            opt_pattern: "// optimized: dequant the weight tile once into shared memory, cmma consumes it across all output rows\nfn quant_matmul_staged_dequant(w_packed: &[u8], x: &[f32], scale: &[f32], m: usize, n: usize, bits: usize) -> Vec<f32> {\n    let mut out = vec![0.0f32; m];\n    const TILE: usize = 8;\n    for k_base in (0..n).step_by(TILE) {\n        // dequant ONE 8-element column tile into shared memory — runs ONCE per K-tile\n        let mut tile_w = [0.0f32; TILE];\n        for c in 0..TILE {\n            let col = k_base + c;\n            if col < n {\n                let byte = w_packed[col / (8 / bits)];\n                let code = (byte >> ((col % (8 / bits)) * bits)) & ((1 << bits) - 1);\n                tile_w[c] = (code as f32 - 8.0) * scale[col / 32];\n            }\n        }\n        // ALL m output rows consume the SAME dequantized tile — dequant cost amortized across m rows\n        for row in 0..m {\n            let mut acc = 0.0;\n            for c in 0..TILE {\n                if k_base + c < n { acc += tile_w[c] * x[row * n + k_base + c]; }\n            }\n            out[row] += acc;\n        }\n    }\n    out // dequant runs n/TILE × TILE = n times total (was m×n) — m× amortization\n}".to_string(),
+        },
+        // ── swap-large-axis-to-x-for-workgroup-distribution — (M,P) → (P,M) cube count (D) ─
+        // Source: riir-gpu gemm_ternary_simdgroup_cubecl.rs (Issue 641) — mirrors
+        // matmul_swap_ab_cubecl. When one GEMM axis (P = tokens) is much larger
+        // than the other (M = output rows), the dispatch `CubeCount::Static(
+        // ceil(M/TILE), ceil(P/TILE), 1)` under-utilizes the X-axis workgroup
+        // distribution (few M-tiles). Swapping to `CubeCount::Static(
+        // ceil(P/TILE), ceil(M/TILE), 1)` puts the large P-axis on X so the GPU's
+        // workgroup scheduler spreads tiles across SMs evenly. Common in
+        // attention projections where M (head_dim) is small but P (seq_len) is
+        // large. Distinct from `l2-grouped-tile-schedule` (swizzle for cache) —
+        // this is a static axis swap for workgroup COUNT distribution, not a
+        // cache swizzle.
+        KernelRule {
+            rule_id: "swap-large-axis-to-x-for-workgroup-distribution".to_string(),
+            gpu_concept: "when one GEMM axis is much larger, put it on the X (first) cube-count axis for better workgroup distribution across SMs".to_string(),
+            ref_shape: "// naive: (M, P) cube count — small M-axis on X under-utilizes SM distribution\nfn dispatch_small_m_large_p(m: usize, p: usize, tile: usize) -> (u32, u32, u32) {\n    // M = 128 (small), P = 4096 (large) — only ceil(128/8) = 16 X-tiles\n    let x = ((m + tile - 1) / tile) as u32; // 16 — too few X workgroups\n    let y = ((p + tile - 1) / tile) as u32; // 512\n    (x, y, 1) // GPU scheduler can't spread 16 X-groups across 80+ SMs\n}".to_string(),
+            opt_pattern: "// optimized: (P, M) cube count — large P-axis on X for even SM distribution\nfn dispatch_swap_large_axis_to_x(m: usize, p: usize, tile: usize) -> (u32, u32, u32) {\n    // SWAP: P on X, M on Y — mirrors matmul_swap_ab_cmma_f32's proven dispatch\n    let x = ((p + tile - 1) / tile) as u32; // 512 X-tiles — spreads across all SMs\n    let y = ((m + tile - 1) / tile) as u32; // 16\n    (x, y, 1) // work inside the kernel reads CUBE_POS_X as the P-tile, CUBE_POS_Y as the M-tile\n}".to_string(),
+        },
+        // ── norm-decoupled-low-bit-scoring — full-key dot → unit-key dot × norm (N) ─
+        // Source: riir-gpu forward_turboquant.rs (Plan 048 Task 5). TurboQuant
+        // stores each key vector as a UNIT-normalized quantized representation
+        // (bit-packed indices into a codebook) PLUS a separate per-position L2
+        // norm scalar (`key_norm[t]`). The attention score is reconstructed as
+        // `norm[t] * dot(q_rotated, y_hat_quantized) * scale` — factoring the
+        // norm out as a scalar multiplier. Because the quantized key is
+        // unit-normalized, its dynamic range is bounded to [−1, +1] per element,
+        // so low-bit quantization (2-4 bits) incurs minimal error. The naive
+        // path stores the full-magnitude key and quantizes it directly — the
+        // norm variation across positions forces higher bits to avoid clipping.
+        // Decoupling the norm lets the same low-bit codebook serve all positions.
+        // Distinct from `per-token-activation-quant` (per-token scale for int8)
+        // — this factors the norm OUT of the stored representation entirely
+        // (stored as a separate scalar) rather than folding a scale INTO the
+        // quantized value.
+        KernelRule {
+            rule_id: "norm-decoupled-low-bit-scoring".to_string(),
+            gpu_concept: "store per-vector L2 norm separately as a scalar; quantize the unit-normalized vector at lower bits; reconstruct the dot product as norm × dot(unit_q, unit_k_quantized)".to_string(),
+            ref_shape: "// naive: store full-magnitude key, quantize directly — norm variation forces high bits\nfn score_full_magnitude_quant(q: &[f32], keys: &[f32], seq_len: usize, d_h: usize) -> Vec<f32> {\n    let mut scores = vec![0.0f32; seq_len];\n    for t in 0..seq_len {\n        // quantize the FULL key — positions with large norm need 8 bits to avoid clipping\n        let quantized_key = quantize_to_int8(&keys[t * d_h..(t + 1) * d_h]); // 8 bits — norm variation is large\n        let mut dot = 0.0;\n        for d in 0..d_h { dot += q[d] * dequant_int8(quantized_key[d]); }\n        scores[t] = dot;\n    }\n    scores // 8 bits/key — high memory cost because norm variation is baked into the quantization range\n}".to_string(),
+            opt_pattern: "// optimized: store norm separately, quantize the UNIT-normalized key at 2-4 bits (riir-gpu TurboQuant)\nfn score_norm_decoupled_low_bit(q: &[f32], key_indices: &[u8], key_norm: &[f32], codebook: &[f32], seq_len: usize, d_h: usize, bits: usize) -> Vec<f32> {\n    let mut scores = vec![0.0f32; seq_len];\n    for t in 0..seq_len {\n        let norm = key_norm[t]; // separate per-position scalar (f32, exact)\n        // gather codebook centroids — the stored key is UNIT-normalized, so range ∈ [−1, +1]\n        // → 2 bits (4 centroids) suffice with minimal error\n        let mut dot = 0.0;\n        for d in 0..d_h {\n            let centroid = codebook[key_indices[t * d_h + d] as usize]; // y_hat[d]\n            dot += q[d] * centroid;\n        }\n        scores[t] = norm * dot; // reconstruct full score = norm × dot(unit_q, unit_k)\n    }\n    scores // 2 bits/key + 1 f32 norm/position — 4× less key memory than 8-bit full-magnitude\n}".to_string(),
+        },
     ])
 }
 
@@ -1514,7 +1625,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 113-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 131-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1522,7 +1633,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (8 rules)
+    // A: Memory access patterns (9 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -1535,9 +1646,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "masked-boundary-load",
             "offload-cpu-bottleneck-to-gpu-kernel",
             "block-contiguous-weight-layout",
+            "dequant-once-per-k-tile-into-shared-memory",
         ],
     ),
-    // B: Compute patterns (19 rules)
+    // B: Compute patterns (20 rules)
     (
         KernelCategory::Compute,
         "B: compute",
@@ -1561,6 +1673,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "stateful-shift-via-cat-prefix",
             "squared-relu-activation",
             "pre-rotate-once-exploit-orthogonality",
+            "cmma-hardware-unit-over-scalar-alu",
         ],
     ),
     // C: Fusion patterns (12 rules)
@@ -1582,7 +1695,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fuse-gate-up-gemv-activation",
         ],
     ),
-    // D: Dispatch patterns (8 rules)
+    // D: Dispatch patterns (9 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -1595,6 +1708,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "layer-depth-decay-schedule",
             "dual-mode-gate-transform",
             "cyclic-modality-table-selection",
+            "swap-large-axis-to-x-for-workgroup-distribution",
         ],
     ),
     // E: Parallelism patterns (8 rules)
@@ -1727,7 +1841,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "detached-broadcast-insert",
         ],
     ),
-    // N: dtype + alignment specialization (9 rules)
+    // N: dtype + alignment specialization (10 rules)
     (
         KernelCategory::DtypeAlignment,
         "N: dtype + alignment",
@@ -1741,6 +1855,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "batched-upcast-map",
             "dtype-restricted-backend",
             "water-fill-tail-dim-shared-codebook",
+            "norm-decoupled-low-bit-scoring",
         ],
     ),
     // O: IR strength reduction (4 rules)
@@ -1823,8 +1938,9 @@ mod tests {
         // Batch 13 (6): popcorn final pass — RL loss stability (grpo_offpolicy), complex-free RoPE (llama4_rope), multimodal RoPE (qwen2vl_mrope), RWKV-7 channel mixing + gate output (rwkv7_channel_mixing, rwkv7_gate_output, sqrelu).
         // Batch 14 (4): riir-gpu production kernels — norm-fold into matmul, reduction-split pre-pass, single-plane reduction, CPU-bottleneck offload (gemv_q4k_batched_rmsnorm_cubecl, gpu_transpose).
         // Batch 15 (4): riir-gpu production kernels — block-contiguous weight layout, fused dual GEMV + GeGLU, orthogonal pre-rotation, water-fill tail-dim shared codebook (gemm_ternary_block_contiguous, gemv_geglu_f16, spectralquant).
-        // Total: 127.
-        assert_eq!(corpus.entries.len(), 127, "batches 1-15 should have 127 rules");
+        // Batch 16 (4): riir-gpu production kernels — cmma hardware unit, dequant-once-per-k-tile, dispatch axis swap, norm-decoupled low-bit scoring (gemm_ternary_simdgroup, forward_turboquant).
+        // Total: 131.
+        assert_eq!(corpus.entries.len(), 131, "batches 1-16 should have 131 rules");
     }
 
     #[test]
@@ -2417,6 +2533,42 @@ mod tests {
     }
 
     // ════════════════════════════════════════════════════════════════════
+    // Batch 16 (Research 017) — riir-gpu production kernels: cmma hardware unit + dequant staging + dispatch axis swap + norm-decoupled scoring
+    // ════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn batch16_rules_present() {
+        // Verify the 4 batch-16 rules across A/B/D/N.
+        let corpus = build_kernel_seed_corpus();
+        let ids: Vec<&str> =
+            corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        // Category B (1 new): cmma hardware unit over scalar ALU
+        assert!(ids.contains(&"cmma-hardware-unit-over-scalar-alu"), "cmma hardware unit");
+        // Category A (1 new): dequant once per K-tile into shared memory
+        assert!(ids.contains(&"dequant-once-per-k-tile-into-shared-memory"), "dequant staging");
+        // Category D (1 new): swap large axis to X for workgroup distribution
+        assert!(ids.contains(&"swap-large-axis-to-x-for-workgroup-distribution"), "dispatch axis swap");
+        // Category N (1 new): norm-decoupled low-bit scoring
+        assert!(ids.contains(&"norm-decoupled-low-bit-scoring"), "norm-decoupled scoring");
+    }
+
+    #[test]
+    fn batch16_cmma_dequant_swap_normdecoupled_concepts_covered() {
+        // Verify the batch-16 cmma + dequant-staging + axis-swap + norm-decoupled concepts.
+        let corpus = build_kernel_seed_corpus();
+        let concepts: Vec<&str> =
+            corpus.entries.iter().map(|e| e.gpu_concept.as_str()).collect();
+        // Category B: cmma hardware unit (riir-gpu gemm_ternary_simdgroup)
+        assert!(concepts.contains(&"use the cooperative matrix multiply-accumulate hardware unit (tensor core / Metal simdgroup_matrix / cmma) instead of scalar ALU for matrix multiply"));
+        // Category A: dequant once per K-tile into shared memory (riir-gpu gemm_ternary_simdgroup)
+        assert!(concepts.contains(&"dequantize a weight tile once into shared memory, let the hardware matrix unit consume it across all output rows that share the tile"));
+        // Category D: swap large axis to X (riir-gpu gemm_ternary_simdgroup)
+        assert!(concepts.contains(&"when one GEMM axis is much larger, put it on the X (first) cube-count axis for better workgroup distribution across SMs"));
+        // Category N: norm-decoupled low-bit scoring (riir-gpu forward_turboquant)
+        assert!(concepts.contains(&"store per-vector L2 norm separately as a scalar; quantize the unit-normalized vector at lower bits; reconstruct the dot product as norm × dot(unit_q, unit_k_quantized)"));
+    }
+
+    // ════════════════════════════════════════════════════════════════════
     // Plan 003 — Router ↔ corpus wiring tests
     // ════════════════════════════════════════════════════════════════════
 
@@ -2427,7 +2579,7 @@ mod tests {
 
     #[test]
     fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-        // Every rule_id in the 113-rule corpus must appear in exactly one category.
+        // Every rule_id in the 131-rule corpus must appear in exactly one category.
         let corpus = build_kernel_seed_corpus();
         let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
         let mut categorized: Vec<&str> = Vec::new();
@@ -2458,12 +2610,12 @@ mod tests {
 
     #[test]
     fn kernel_categories_counts_match_plan_003_table() {
-        // Pin per-category rule counts to the Plan 003 table (updated for Batch 15).
+        // Pin per-category rule counts to the Plan 003 table (updated for Batch 16).
         let expected = [
-            (KernelCategory::MemoryAccess, 8),
-            (KernelCategory::Compute, 19),
+            (KernelCategory::MemoryAccess, 9),
+            (KernelCategory::Compute, 20),
             (KernelCategory::Fusion, 12),
-            (KernelCategory::Dispatch, 8),
+            (KernelCategory::Dispatch, 9),
             (KernelCategory::Parallelism, 8),
             (KernelCategory::FlashAttnTiling, 10),
             (KernelCategory::LinearAttnRecurrence, 17),
@@ -2473,7 +2625,7 @@ mod tests {
             (KernelCategory::AutotuneDispatch, 4),
             (KernelCategory::ConvGemmLayout, 5),
             (KernelCategory::KernelPolymorphism, 5),
-            (KernelCategory::DtypeAlignment, 9),
+            (KernelCategory::DtypeAlignment, 10),
             (KernelCategory::IrStrengthReduction, 4),
         ];
         for (cat, count) in expected {
@@ -2483,9 +2635,9 @@ mod tests {
                 "Plan 003: category {cat:?} has {} rules, expected {count}",
                 entry.2.len());
         }
-        // Sum must equal 127.
+        // Sum must equal 131.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 127, "Plan 003: category totals must sum to 127");
+        assert_eq!(total, 131, "Plan 003: category totals must sum to 131");
     }
 
     #[test]
@@ -2495,7 +2647,7 @@ mod tests {
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 127, "Plan 003: grouped corpus has {total} rules, expected 127");
+        assert_eq!(total, 131, "Plan 003: grouped corpus has {total} rules, expected 131");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");
