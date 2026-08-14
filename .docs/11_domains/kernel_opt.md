@@ -10,7 +10,7 @@
 | Component | Ships now | Deferred |
 |---|---|---|
 | `KernelOptDomain: HealDomain` | ✅ | |
-| Seed corpus (Batch 1-7: 59 rules) | ✅ | Full corpus (~300-500 rules, ~15-25 batches) |
+| Seed corpus (Batch 1-8: 68 rules) | ✅ | Full corpus (~300-500 rules, ~15-25 batches) |
 | `KernelExpertRouter` (`pick_domain`) | ✅ (identity directions) | Per-expert centroids from popcorn |
 | `KernelThermalRouter` (5-tier stub) | ✅ (returns Plasma) | Warm/Cold LoRA (4090, riir-train) |
 | `KernelVerifier` (compile-only) | ✅ (behind `kernel_verify`) | Full numeric compare vs reference |
@@ -25,7 +25,8 @@ Batch 4 (Research 005): 9 rules — MoE dispatch + backward-pass patterns.
 Batch 5 (Research 006): 4 rules — NSA block-sparse selection patterns.
 Batch 6 (Research 007): 3 rules — varlen packing + chunked reductions.
 Batch 7 (Research 008): 9 rules — burn-cubecl autotune dispatch + conv-as-GEMM + memory layout.
-Total: 59 rules. Full corpus target: ~300-500 rules in ~15-25 batches.
+Batch 8 (Research 009): 9 rules — burn-cubecl kernel polymorphism + dtype/alignment specialization + cubecl-opt IR strength reduction.
+Total: 68 rules. Full corpus target: ~300-500 rules in ~15-25 batches.
 
 ### Category A: Memory access patterns (6 rules)
 
@@ -221,6 +222,30 @@ deferred (Proposal 012 §Phase 0). `is_full_validator_available()` returns
 | `stride-align-vectorization-key` | stride-byte-alignment determines vectorization width | Fixed vectorization → trailing-zeros of (stride × bytes) picks vector width |
 | `anchor-shape-bucketing` | shape bucketing for autotune cache reuse | Exact-shape autotune key → bucketed key (nearest N) so similar shapes share cache |
 
+### Category M: Kernel parametric polymorphism (Batch 8, 3 rules — burn-cubecl)
+
+| Rule ID | GPU concept | Pattern |
+|---|---|---|
+| `op-family-type-dispatch` | parametric kernel polymorphism over op trait | N copy-pasted kernels (one char differs) → one kernel body + `OpFamily` trait with N associated-type impls |
+| `inplace-output-alias` | output buffer reuse via mutability check (skip allocation) | Fresh output alloc every call → `can_mut` check aliases output to disposable input (zero alloc) |
+| `layout-permute-for-coalescing` | memory layout permutation for coalesced channel access | NCHW strided channel access → permute to NHWC (channel innermost, coalesced), permute back |
+
+### Category N: dtype + alignment specialization (Batch 8, 2 rules — burn-cubecl)
+
+| Rule ID | GPU concept | Pattern |
+|---|---|---|
+| `dtype-specialized-float-kind` | dtype-keyed intrinsic dispatch for low-precision floats | Generic powf (absent/imprecise for f16/bf16) → match on `FloatKind`, cast to concrete dtype, call its intrinsic |
+| `alignment-gated-zero-copy-view` | alignment-gated zero-copy slice view via handle offset | Always-copy slice → if byte offsets are alignment-aligned, return a VIEW (offset-only metadata, zero copy) |
+
+### Category O: IR strength reduction (Batch 8, 4 rules — cubecl-opt)
+
+| Rule ID | GPU concept | Pattern |
+|---|---|---|
+| `strength-reduce-mul-pow2` | IR strength reduction: multiply by power of 2 → left shift | `x * 16` (mul unit) → `x << 4` (shift unit, frees throughput-limited mul) |
+| `strength-reduce-mul-pow2-plus-minus-one` | IR strength reduction: multiply by (2^k ± 1) → shift ± self | `x * 15` (mul) → `(x << 4) - x` (shift + sub, 2 instructions, no mul unit) |
+| `strength-reduce-div-pow2` | IR strength reduction: divide by power of 2 → right shift | `x / 8` (slow div unit, tens of cycles) → `x >> 3` (1 cycle, exact for unsigned) |
+| `strength-reduce-mod-pow2` | IR strength reduction: modulo by power of 2 → bitwise and mask | `x % 64` (div/mod unit) → `x & 63` (bitwise-and unit, exact for unsigned) |
+
 ## Source
 
 - [`src/domains/kernel_opt/mod.rs`](../../src/domains/kernel_opt/mod.rs) — `KernelRule` + `KernelOptDomain`
@@ -239,6 +264,7 @@ deferred (Proposal 012 §Phase 0). `is_full_validator_available()` returns
 - [Research 006](../../.research/006_popcorn_kernel_opt_distillation_batch5.md) — Batch 5 NSA block-sparse selection
 - [Research 007](../../.research/007_popcorn_kernel_opt_distillation_batch6.md) — Batch 6 varlen + chunked reductions
 - [Research 008](../../.research/008_burn_cubecl_kernel_opt_distillation_batch7.md) — Batch 7 burn-cubecl autotune dispatch + conv-as-GEMM + layout
+- [Research 009](../../.research/009_burn_cubecl_cubecl_opt_kernel_opt_distillation_batch8.md) — Batch 8 burn-cubecl kernel polymorphism + dtype/alignment + cubecl-opt IR strength reduction
 - [Proposal 012](../../.proposals/) — the absorbed GPU kernel optimizer design
 - [Plan 558](../../../katgpt-rs/.plans/) — `pick_domain` substrate (katgpt-core)
 - [Research 453](../../../katgpt-rs/.research/) — LatentMoE variable-rank principle

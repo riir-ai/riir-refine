@@ -612,6 +612,140 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
             ref_shape: "// naive: unique autotune key per exact shape (re-tunes per pixel difference)\nfn tune_key(h: usize, w: usize, c: usize) -> (usize, usize, usize) {\n    (h, w, c) // 224x224 and 225x225 are separate keys\n}".to_string(),
             opt_pattern: "// optimized: bucket spatial dims so similar shapes share a cache entry\nfn tune_key_anchored(h: usize, w: usize, c: usize) -> (usize, usize, usize) {\n    let bucket = 16; // anchor to nearest 16\n    ((h + bucket - 1) / bucket * bucket, (w + bucket - 1) / bucket * bucket, c)\n}".to_string(),
         },
+        // ════════════════════════════════════════════════════════════════════
+        // Category M: Kernel parametric polymorphism (Batch 8, 3 rules — burn-cubecl)
+        // ════════════════════════════════════════════════════════════════════
+        // ── op-family-type-dispatch — N copy-pasted kernels → one kernel + trait ─
+        // Source: burn-cubecl comparison.rs `ComparisonOpFamily` + binary.rs
+        // `BinaryOpFamily` + pool/max_pool2d.rs `Pool2dDirectStrategyFamily`.
+        // A single `kernel_<op>` body is parameterized over an `OpFamily` trait
+        // with one associated `Operation` type per concrete op (EqualOp,
+        // GreaterOp, AddOp, MulOp, MaxPoolStrategy, ...). One kernel → N op
+        // impls. Distinct from `predicate-gated-backend` (gates on shape) and
+        // `shape-kind-dispatch` (routes to different kernel families): here
+        // the kernel BODY is identical; only the per-element op varies.
+        KernelRule {
+            rule_id: "op-family-type-dispatch".to_string(),
+            gpu_concept: "parametric kernel polymorphism over op trait".to_string(),
+            ref_shape: "// naive: copy-paste the kernel for each op (N bodies to maintain)\nfn kernel_add(a: &[f32], b: &[f32], out: &mut [f32]) {\n    for i in 0..a.len() { out[i] = a[i] + b[i]; }\n}\nfn kernel_mul(a: &[f32], b: &[f32], out: &mut [f32]) {\n    for i in 0..a.len() { out[i] = a[i] * b[i]; } // identical body, one char differs\n}".to_string(),
+            opt_pattern: "// optimized: one kernel body, parameterized over an OpFamily trait\ntrait OpFamily { fn execute(lhs: f32, rhs: f32) -> f32; }\nstruct AddOp; struct MulOp;\nimpl OpFamily for AddOp { fn execute(l: f32, r: f32) -> f32 { l + r } }\nimpl OpFamily for MulOp { fn execute(l: f32, r: f32) -> f32 { l * r } }\nfn kernel<O: OpFamily>(a: &[f32], b: &[f32], out: &mut [f32]) {\n    for i in 0..a.len() { out[i] = O::execute(a[i], b[i]); } // monomorphized per op\n}".to_string(),
+        },
+        // ── inplace-output-alias — fresh output alloc → reuse input buffer ─────
+        // Source: burn-cubecl comparison.rs `launch_cmp` + binary.rs `launch_binop`.
+        // `can_mut_broadcast(&rhs)` checks whether the lhs can be mutated in place
+        // (alias output → lhs handle). When true, the output reuses the lhs's
+        // buffer (zero allocation + zero copy); `as_linear_view_alias(0)` marks
+        // the aliasing. Falls back to a fresh `empty_device_dtype` allocation
+        // when neither operand is mutably reusable. Distinct from fusion
+        // (merges compute passes) — this aliases the output to an input within
+        // a single pass, skipping the output allocation entirely.
+        KernelRule {
+            rule_id: "inplace-output-alias".to_string(),
+            gpu_concept: "output buffer reuse via mutability check (skip allocation)".to_string(),
+            ref_shape: "// naive: always allocate a fresh output buffer (even when an input could be reused)\nfn binop(lhs: &[f32], rhs: &[f32]) -> Vec<f32> {\n    let mut out = vec![0.0f32; lhs.len()]; // allocates every call\n    for i in 0..lhs.len() { out[i] = lhs[i] + rhs[i]; }\n    out\n}".to_string(),
+            opt_pattern: "// optimized: if lhs is mutably reusable, write the result back into it (no alloc)\nfn binop_inplace(lhs: &mut [f32], rhs: &[f32], lhs_can_mut: bool) -> &mut [f32] {\n    if lhs_can_mut {\n        for i in 0..lhs.len() { lhs[i] += rhs[i]; } // alias output → lhs, zero allocation\n        lhs\n    } else {\n        unimplemented!(\"fallback: allocate fresh output\")\n    }\n}".to_string(),
+        },
+        // ── layout-permute-for-coalescing — NCHW compute → NHWC permute ────────
+        // Source: burn-cubecl pool/max_pool2d.rs `permute_nchw_to_nhwc(x)` →
+        // compute → `permute_nhwc_to_nchw(output)`. NCHW (batch, channel,
+        // height, width) puts channel in dim 1 → strided channel access. NHWC
+        // (batch, height, width, channel) makes channel the innermost dim →
+        // consecutive lanes hit consecutive channels (coalesced). The compute
+        // runs in NHWC; the result is permuted back to NCHW for the caller.
+        // Distinct from `contiguity-guard-before-reshape` (skips a copy) —
+        // this PERMUTES (a real relayout) to a coalescing-friendly frame.
+        KernelRule {
+            rule_id: "layout-permute-for-coalescing".to_string(),
+            gpu_concept: "memory layout permutation for coalesced channel access".to_string(),
+            ref_shape: "// naive: compute in NCHW — channel is dim 1, so per-pixel channel access is strided\nfn pool_nchw(x: &[f32], n: usize, c: usize, h: usize, w: usize) -> Vec<f32> {\n    let mut out = vec![0.0f32; n * c * h * w];\n    for b in 0..n { for ch in 0..c { for hw in 0..h*w {\n        // x[b][ch][hw] — stride = h*w, uncoalesced across channels\n        out[b*c*h*w + ch*h*w + hw] = pool_window(x, b, ch, hw);\n    }}}\n    out\n}".to_string(),
+            opt_pattern: "// optimized: permute NCHW→NHWC (channel innermost), compute coalesced, permute back\nfn pool_nhwc(x: &[f32], n: usize, c: usize, h: usize, w: usize) -> Vec<f32> {\n    let x_nhwc = permute_nchw_to_nhwc(x, n, c, h, w); // channel now innermost\n    let mut out = vec![0.0f32; n * h * w * c];\n    for b in 0..n { for hw in 0..h*w { for ch in 0..c {\n        // x_nhwc[b][hw][ch] — stride = 1, coalesced across channels\n        out[b*h*w*c + hw*c + ch] = pool_window_nhwc(&x_nhwc, b, hw, ch);\n    }}}\n    permute_nhwc_to_nchw(&out, n, h, w, c) // restore caller's layout\n}".to_string(),
+        },
+        // ════════════════════════════════════════════════════════════════════
+        // Category N: dtype + alignment specialization (Batch 8, 2 rules — burn-cubecl)
+        // ════════════════════════════════════════════════════════════════════
+        // ── dtype-specialized-float-kind — generic fn → FloatKind-keyed intrinsic ─
+        // Source: burn-cubecl binary.rs `PowOp::execute`. `powf` has no generic
+        // implementation — f16/bf16/f64 each need their own `__expand_powf`.
+        // The op matches on `ir::FloatKind` (F16/BF16/F64) to cast to the
+        // concrete type, call the dtype-specific intrinsic, and cast back.
+        // F32 is the fallback. The generic path is wrong (or absent) for
+        // low-precision floats; the dtype-specialized path is correct.
+        KernelRule {
+            rule_id: "dtype-specialized-float-kind".to_string(),
+            gpu_concept: "dtype-keyed intrinsic dispatch for low-precision floats".to_string(),
+            ref_shape: "// naive: one generic powf — wrong/absent for f16/bf16 (no f32-precision powf)\nfn powf_generic<T: Float>(lhs: T, rhs: T) -> T {\n    lhs.powf(rhs) // f16::powf is absent or falls back to f32 (precision loss)\n}".to_string(),
+            opt_pattern: "// optimized: match on FloatKind, cast to the concrete dtype, call its intrinsic\n#[derive(PartialEq)] enum FloatKind { F16, Bf16, F32, F64 }\nfn powf_specialized(kind: FloatKind, lhs: &[f32], rhs: &[f32], out: &mut [f32]) {\n    match kind {\n        FloatKind::F16 => { // cast to f16, use f16 powf, cast back\n            for i in 0..out.len() {\n                let l = f16::from_f32(lhs[i]); let r = f16::from_f32(rhs[i]);\n                out[i] = l.powf(r).to_f32();\n            }\n        }\n        FloatKind::F32 => { for i in 0..out.len() { out[i] = lhs[i].powf(rhs[i]); } }\n        // ... F64, Bf16 ...\n    }\n}".to_string(),
+        },
+        // ── alignment-gated-zero-copy-view — always-copy slice → offset-only view ─
+        // Source: burn-cubecl index/slice.rs. When the slice's byte offsets
+        // (start, end) are both multiples of the device's memory-alignment
+        // boundary, the slice is a pure VIEW: adjust the handle's start/end
+        // offsets + metadata (shape, strides), share the underlying buffer,
+        // zero copy. When unaligned, fall back to a copy kernel. Distinct
+        // from `contiguity-guard-before-reshape` (which checks stride
+        // contiguity for reshape and still materializes via to_vec): this
+        // checks BYTE-OFFSET alignment for slice and shares the buffer with
+        // NO data movement at all.
+        KernelRule {
+            rule_id: "alignment-gated-zero-copy-view".to_string(),
+            gpu_concept: "alignment-gated zero-copy slice view via handle offset".to_string(),
+            ref_shape: "// naive: always copy the sliced region into a fresh buffer\nfn slice_copy(buf: &[f32], start: usize, end: usize) -> Vec<f32> {\n    buf[start..end].to_vec() // copies every slice, even when a view would suffice\n}".to_string(),
+            opt_pattern: "// optimized: if byte offsets are alignment-aligned, return a VIEW (offset only, zero copy)\nstruct Handle { data: Vec<f32>, offset_start: usize, offset_end: usize }\nfn slice_view(h: &Handle, start: usize, end: usize, align: usize) -> Handle {\n    let byte_start = start * std::mem::size_of::<f32>();\n    let byte_end = (h.data.len() - end) * std::mem::size_of::<f32>();\n    if byte_start % align == 0 && byte_end % align == 0 {\n        Handle { data: h.data.clone(), offset_start: h.offset_start + byte_start, offset_end: h.offset_end + byte_end } // zero copy\n    } else {\n        unimplemented!(\"fallback: copy kernel for unaligned offsets\")\n    }\n}".to_string(),
+        },
+        // ════════════════════════════════════════════════════════════════════
+        // Category O: IR strength reduction (Batch 8, 4 rules — cubecl-opt)
+        // ════════════════════════════════════════════════════════════════════
+        // Source: cubecl/crates/cubecl-opt/src/passes/reduce_strength.rs — the
+        // compiler IR pass that replaces expensive arithmetic on u32 constants
+        // with cheaper bitwise ops. These apply at the kernel-source level too:
+        // a heal rule can suggest the shift form in source, and the compiler
+        // (or cubecl-opt) will confirm it. All four are guarded on u32
+        // element type (the IR pass skips non-uint types — float shifts are UB).
+        // ── strength-reduce-mul-pow2 — x * 2^k → x << k ─────────────────────
+        // Exact power-of-two multiplier. One instruction (shift left) replaces
+        // one instruction (mul), but the shift is on the ALU's faster port and
+        // frees the multiply unit. The IR pass checks `val.is_power_of_two()`.
+        KernelRule {
+            rule_id: "strength-reduce-mul-pow2".to_string(),
+            gpu_concept: "IR strength reduction: multiply by power of 2 → left shift".to_string(),
+            ref_shape: "// naive: integer multiply by a power-of-2 constant (uses the mul unit)\nfn scale(x: u32) -> u32 {\n    x * 16 // mul instruction\n}".to_string(),
+            opt_pattern: "// optimized: left shift by the constant's log2 (uses the shift unit, frees mul)\nfn scale(x: u32) -> u32 {\n    x << 4 // 16 = 2^4, trailing_zeros(16) = 4\n}".to_string(),
+        },
+        // ── strength-reduce-mul-pow2-plus-minus-one — x*(2^k±1) → (x<<k)±x ──
+        // Source: reduce_strength.rs `(val + 1).is_power_of_two()` and
+        // `(val - 1).is_power_of_two()` arms. A multiplier one away from a
+        // power of two (15, 17, 31, 33, ...) becomes shift + add/sub. This is
+        // the classic GPU LEA-style strength reduction: 2 instructions
+        // (shift + add) replace a multiply, and on GPUs the integer multiply
+        // unit is often throughput-limited. A temp local holds the shift result.
+        KernelRule {
+            rule_id: "strength-reduce-mul-pow2-plus-minus-one".to_string(),
+            gpu_concept: "IR strength reduction: multiply by (2^k ± 1) → shift ± self".to_string(),
+            ref_shape: "// naive: integer multiply by a near-power-of-2 constant (15, 17, 31, 33, ...)\nfn scale(x: u32) -> u32 {\n    x * 15 // mul instruction — 15 = 16 - 1 = 2^4 - 1\n}".to_string(),
+            opt_pattern: "// optimized: shift then subtract self (2 instructions, no mul unit)\nfn scale(x: u32) -> u32 {\n    let shifted = x << 4; // x * 16\n    shifted - x           // x * 16 - x = x * 15\n}".to_string(),
+        },
+        // ── strength-reduce-div-pow2 — x / 2^k → x >> k ─────────────────────
+        // Integer division is one of the slowest ALU ops (tens of cycles on
+        // most GPUs). For power-of-2 divisors, a right shift is exact and
+        // ~10-20x faster. The IR pass guards on `is_pow2(op.rhs)`. Note:
+        // this is EXACT for unsigned division (no rounding-mode subtlety).
+        KernelRule {
+            rule_id: "strength-reduce-div-pow2".to_string(),
+            gpu_concept: "IR strength reduction: divide by power of 2 → right shift".to_string(),
+            ref_shape: "// naive: integer divide by a power-of-2 constant (slow div unit, tens of cycles)\nfn downscale(x: u32) -> u32 {\n    x / 8 // div instruction\n}".to_string(),
+            opt_pattern: "// optimized: logical right shift by the constant's log2 (1 cycle, exact for unsigned)\nfn downscale(x: u32) -> u32 {\n    x >> 3 // 8 = 2^3, trailing_zeros(8) = 3\n}".to_string(),
+        },
+        // ── strength-reduce-mod-pow2 — x % 2^k → x & (2^k - 1) ──────────────
+        // Modulo by a power of 2 is a bitmask in disguise. The div/mod unit
+        // computes both quotient and remainder; replacing `% 2^k` with
+        // `& (2^k - 1)` uses the cheaper bitwise-and unit. The IR pass emits
+        // `BitwiseAnd(lhs, const_val - 1)`. Exact for unsigned operands.
+        KernelRule {
+            rule_id: "strength-reduce-mod-pow2".to_string(),
+            gpu_concept: "IR strength reduction: modulo by power of 2 → bitwise and mask".to_string(),
+            ref_shape: "// naive: integer modulo by a power-of-2 constant (uses the div/mod unit)\nfn wrap(x: u32) -> u32 {\n    x % 64 // mod instruction\n}".to_string(),
+            opt_pattern: "// optimized: bitwise and with (2^k - 1) mask (cheaper bitwise-and unit)\nfn wrap(x: u32) -> u32 {\n    x & 63 // 64 = 2^6, mask = 64 - 1 = 0b111111\n}".to_string(),
+        },
     ])
 }
 
@@ -640,8 +774,9 @@ mod tests {
         // Batch 5 (4): NSA block-sparse selection.
         // Batch 6 (3): varlen packing + chunked reductions.
         // Batch 7 (9): burn-cubecl autotune dispatch + conv-as-GEMM + layout.
-        // Total: 59.
-        assert_eq!(corpus.entries.len(), 59, "batches 1-7 should have 59 rules");
+        // Batch 8 (9): burn-cubecl kernel polymorphism + dtype/alignment + cubecl-opt IR strength reduction.
+        // Total: 68.
+        assert_eq!(corpus.entries.len(), 68, "batches 1-8 should have 68 rules");
     }
 
     #[test]
@@ -969,5 +1104,48 @@ mod tests {
         assert!(concepts.contains(&"grid-limit-aware batch packing"));
         assert!(concepts.contains(&"stride-byte-alignment determines vectorization width"));
         assert!(concepts.contains(&"shape bucketing for autotune cache reuse"));
+    }
+
+    #[test]
+    fn batch8_rules_present() {
+        // Verify the 9 batch-8 kernel polymorphism + dtype/alignment + IR strength-reduction rules.
+        let corpus = build_kernel_seed_corpus();
+        let ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        for expected in [
+            "op-family-type-dispatch",
+            "inplace-output-alias",
+            "layout-permute-for-coalescing",
+            "dtype-specialized-float-kind",
+            "alignment-gated-zero-copy-view",
+            "strength-reduce-mul-pow2",
+            "strength-reduce-mul-pow2-plus-minus-one",
+            "strength-reduce-div-pow2",
+            "strength-reduce-mod-pow2",
+        ] {
+            assert!(
+                ids.contains(&expected),
+                "batch-8 rule '{expected}' missing from corpus"
+            );
+        }
+    }
+
+    #[test]
+    fn batch8_polymorphism_dtype_strength_concepts_covered() {
+        // Verify the 3 new category concepts are represented.
+        let corpus = build_kernel_seed_corpus();
+        let concepts: Vec<&str> =
+            corpus.entries.iter().map(|e| e.gpu_concept.as_str()).collect();
+        // Category M: kernel parametric polymorphism
+        assert!(concepts.contains(&"parametric kernel polymorphism over op trait"));
+        assert!(concepts.contains(&"output buffer reuse via mutability check (skip allocation)"));
+        assert!(concepts.contains(&"memory layout permutation for coalesced channel access"));
+        // Category N: dtype + alignment specialization
+        assert!(concepts.contains(&"dtype-keyed intrinsic dispatch for low-precision floats"));
+        assert!(concepts.contains(&"alignment-gated zero-copy slice view via handle offset"));
+        // Category O: IR strength reduction
+        assert!(concepts.contains(&"IR strength reduction: multiply by power of 2 → left shift"));
+        assert!(concepts.contains(&"IR strength reduction: multiply by (2^k ± 1) → shift ± self"));
+        assert!(concepts.contains(&"IR strength reduction: divide by power of 2 → right shift"));
+        assert!(concepts.contains(&"IR strength reduction: modulo by power of 2 → bitwise and mask"));
     }
 }
