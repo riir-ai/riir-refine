@@ -298,6 +298,35 @@
 //!   correction and apply it after submit + completion). Corpus: **177 rules
 //!   across 15 categories (A–O)**. `riir-gpu` remains open (38 of ~200 files
 //!   mined; the forward/ cluster + buffer.rs download substrate assessed).
+//! - **Batch 27 (Research 028):** 6 rules from the wgpu backward clusters
+//!   (the `backward/` + `backward_dflash/` directories — the low-rank-adapter
+//!   backward pass host orchestration + the `DFlare` concat-KV backward):
+//!   `staging-packed-uniforms-encoder-ordered-copies` (D — the complementary
+//!   fix to per-slot buffers: pack ALL uniform params into ONE 16-byte-aligned
+//!   staging vec, upload once, distribute via `encoder.copy_buffer_to_buffer`
+//!   immediately before each consuming dispatch — the encoder timeline lands
+//!   each copy exactly between dispatches, so ONE shared uniform can change
+//!   value per dispatch), `identical-uniforms-share-single-slot` (D — the
+//!   exemption to the write-ordering hazard: sharing is safe IFF every write
+//!   is byte-identical, the last write being idempotent with all earlier
+//!   ones; N uniforms + N bind groups → 1), `persistent-zeros-source-encoder-
+//!   copy-clear` (A — re-zeroing accumulators between dispatches needs
+//!   encoder-timeline ordering: a device buffer zeroed once at init + copy
+//!   clears; queue writes flush before the whole encoder so layer 1 would
+//!   accumulate on top of layer 0's values), `fuse-sibling-target-grads-
+//!   single-kernel` (C — N sibling targets sharing the same two backward
+//!   kernels fuse per KERNEL KIND, not per target: one summed gradient + one
+//!   grid-sized param-grad dispatch; 6 → 2), `per-layer-strided-grad-
+//!   destination` (D — when a consumer needs per-layer partitioned
+//!   gradients, write layer-major strided offsets directly from the same
+//!   dispatches: the split falls out for free, no de-interleave pass),
+//!   `snapshot-transient-grad-for-deferred-download` (A — a host-needed
+//!   gradient living in an overwrite-doomed temp is pinned by an encoder-
+//!   ordered copy into a persistent buffer, downloaded after submit — the
+//!   LIFETIME complement to defer-readback's TIMING rule). Corpus: **183
+//!   rules across 15 categories (A–O)**. `riir-gpu` remains open (42 of
+//!   ~200 files mined; the `forward/` + `backward/` + `backward_dflash/`
+//!   orchestration clusters assessed).
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
@@ -442,7 +471,8 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
             opt_pattern: "// optimized: branch on bias presence (skip the add when absent)\nfn norm_optional_bias(x: &[f32], scale: &[f32], bias: Option<&[f32]>) -> Vec<f32> {\n    match bias {\n        Some(b) => x.iter().enumerate().map(|(i, v)| v * scale[i] + b[i]).collect(),\n        None => x.iter().enumerate().map(|(i, v)| v * scale[i]).collect(),\n    }\n}".to_string(),
         },
         // ── shift-via-pad-subtract — two-pass shift → fused pad+subtract ──
-        // Source: token_shift.py — F.pad(x, (0,0,1,-1)) - x computes y_t = x_{t-1} - x_t\n        // in one fused elementwise op (pad is a view, subtract is one launch).
+        // Source: token_shift.py — F.pad(x, (0,0,1,-1)) - x computes y_t = x_{t-1} - x_t
+        // in one fused elementwise op (pad is a view, subtract is one launch).
         KernelRule {
             rule_id: "shift-via-pad-subtract".to_string(),
             gpu_concept: "one-pass sequence shift via pad-and-subtract view".to_string(),
@@ -450,7 +480,8 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
             opt_pattern: "// optimized: pad (view) then subtract — one fused launch\nfn token_shift_fused(x: &[f32], seq: usize, dim: usize) -> Vec<f32> {\n    // logical: shifted[t] = x[t-1], shifted[0] = 0\n    (0..seq).flat_map(|t| {\n        let prev = if t == 0 { vec![0.0; dim] } else { x[((t - 1) * dim)..(t * dim)].to_vec() };\n        (0..dim).map(move |d| prev[d] - x[t * dim + d])\n    }).collect()\n}".to_string(),
         },
         // ── sorted-cumsum-threshold — iterative search → sort+cumsum+threshold ──
-        // Source: sparsemax.py — sort x desc, cumsum-1, find max k where k*sorted[k] > cum[k].\n        // Single-pass reduction structure for the support set (vs binary search).
+        // Source: sparsemax.py — sort x desc, cumsum-1, find max k where k*sorted[k] > cum[k].
+        // Single-pass reduction structure for the support set (vs binary search).
         KernelRule {
             rule_id: "sorted-cumsum-threshold".to_string(),
             gpu_concept: "support-set selection via sort + cumulative threshold".to_string(),
@@ -524,7 +555,8 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
             opt_pattern: "// optimized: fused log-domain JSD via logaddexp (no prob matrices)\nfn jsd_fused(log_p: &[f32], log_q: &[f32], beta: f32) -> f32 {\n    let log_beta_q: Vec<f32> = log_q.iter().map(|l| l + beta.ln()).collect();\n    let log_1mbeta_p: Vec<f32> = log_p.iter().map(|l| l + (1.0 - beta).ln_1p()).collect();\n    let log_m: Vec<f32> = (0..log_p.len()).map(|i| f32::logaddexp(log_beta_q[i], log_1mbeta_p[i])).collect();\n    (0..log_p.len()).map(|i| beta * (log_q[i].exp()) * (log_q[i] - log_m[i]) + (1.0 - beta) * (log_p[i].exp()) * (log_p[i] - log_m[i])).sum::<f32>() / log_p.len() as f32\n}".to_string(),
         },
         // ── gather-selective-reduction — full softmax → gather selected only (Batch 10, popcorn selective_log_softmax.py) ──
-        // Source: selective_log_softmax.py — GRPO needs log-probs of selected tokens only.\n        // gather(-1, input_ids) reads O(batch*seq) logits instead of O(batch*seq*vocab).
+        // Source: selective_log_softmax.py — GRPO needs log-probs of selected tokens only.
+        // gather(-1, input_ids) reads O(batch*seq) logits instead of O(batch*seq*vocab).
         KernelRule {
             rule_id: "gather-selective-reduction".to_string(),
             gpu_concept: "selective reduction via gather (avoid full materialization)".to_string(),
@@ -571,7 +603,8 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
             opt_pattern: "// optimized: predicate gate (packed path only when inner_dim % 512 == 0)\nfn matmul_int8_int2_gated(a: &[i8], b: &[i8], inner_dim: usize) -> Vec<i32> {\n    if inner_dim % 512 == 0 {\n        packed_int2_matmul(a, b)\n    } else {\n        reference_int8_int2_matmul(a, b)\n    }\n}".to_string(),
         },
         // ── multi-condition-predicate — single cond → compound gate (Batch 10, popcorn softmax.py + rms_norm.py) ──
-        // Source: softmax.py _transformer_engine_ready (rows%32==0 AND 16<width<16384 AND width%8==0)\n        // + rms_norm.py _aligned (dtype==f32 OR width%8==0). Fast path only when all hold.
+        // Source: softmax.py _transformer_engine_ready (rows%32==0 AND 16<width<16384 AND width%8==0)
+        // + rms_norm.py _aligned (dtype==f32 OR width%8==0). Fast path only when all hold.
         KernelRule {
             rule_id: "multi-condition-predicate".to_string(),
             gpu_concept: "compound shape+dtype predicate gate".to_string(),
@@ -687,7 +720,9 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
             opt_pattern: "// optimized: exponential forget gate (bounded state, sigmoid-stable)\nfn state_update_gated(state: &mut [f32], k: &[f32], v: &[f32], beta: f32, gate: f32) {\n    let decay = gate.exp(); // e^gate ∈ (0, ∞), typically gate < 0 → decay < 1\n    for i in 0..state.len() {\n        state[i] = state[i] * decay + beta * k[i] * v[i];\n    }\n}".to_string(),
         },
         // ── householder-rank1-update — general update → Householder reflection ─
-        // Source: delta_rule.py — the delta rule is a rank-1 Householder reflection:\n        // S_t = (I - β k_t k_t^T) S_{t-1} + β k_t v_t^T. The error-correcting form\n        // computes error = v_t - S k_t, then updates by k_t ⊗ (β * error).
+        // Source: delta_rule.py — the delta rule is a rank-1 Householder reflection:
+        // S_t = (I - β k_t k_t^T) S_{t-1} + β k_t v_t^T. The error-correcting form
+        // computes error = v_t - S k_t, then updates by k_t ⊗ (β * error).
         KernelRule {
             rule_id: "householder-rank1-update".to_string(),
             gpu_concept: "rank-1 Householder reflection state update".to_string(),
@@ -695,7 +730,9 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
             opt_pattern: "// optimized: error-correcting delta rule (Householder rank-1)\nfn delta_rule_update(state: &mut [[f32; V]; K], k: &[f32; K], v: &[f32; V], beta: f32) {\n    // step 1: compute prediction error = v - S^T k\n    let mut error = [0.0f32; V];\n    for vv in 0..V {\n        let mut pred = 0.0;\n        for kv in 0..K { pred += state[kv][vv] * k[kv]; }\n        error[vv] = v[vv] - pred;\n    }\n    // step 2: rank-1 update: S += k ⊗ (beta * error)\n    for kv in 0..K {\n        let scaled_k = beta * k[kv];\n        for vv in 0..V {\n            state[kv][vv] += scaled_k * error[vv];\n        }\n    }\n}".to_string(),
         },
         // ── chunkwise-parallel-recurrence — full sequential → chunk-parallel ─
-        // Source: fla chunk_delta_rule — the sequential recurrence is split into\n        // chunks; intra-chunk interactions are parallelized via matmul, inter-chunk\n        // state transitions remain sequential.
+        // Source: fla chunk_delta_rule — the sequential recurrence is split into
+        // chunks; intra-chunk interactions are parallelized via matmul, inter-chunk
+        // state transitions remain sequential.
         KernelRule {
             rule_id: "chunkwise-parallel-recurrence".to_string(),
             gpu_concept: "chunkwise parallelism for state-carrying loops".to_string(),
@@ -703,7 +740,9 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
             opt_pattern: "// optimized: chunkwise parallel (O(N/chunk) sequential, intra-chunk parallel)\nfn recurrence_chunkwise(k: &[f32], v: &[f32], state: &mut [f32], n: usize, chunk: usize) -> Vec<f32> {\n    let mut out = vec![0.0f32; n];\n    for t_start in (0..n).step_by(chunk) {\n        let t_end = (t_start + chunk).min(n);\n        // intra-chunk: parallel matmul for interactions within this chunk\n        let chunk_len = t_end - t_start;\n        let mut chunk_state = state.to_vec();\n        for t in t_start..t_end {\n            chunk_state[t % state.len()] += k[t] * v[t];\n            out[t] = chunk_state[t % state.len()];\n        }\n        // inter-chunk: sequential state transition\n        *state = chunk_state;\n    }\n    out\n}".to_string(),
         },
         // ── recurrent-vs-chunk-dispatch — one path → backend by seq length ──
-        // Source: fla fused_recurrent_delta_rule vs chunk_delta_rule — the recurrent\n        // path is faster for short sequences (low parallelism overhead), the chunk\n        // path is faster for long sequences (more parallelism).
+        // Source: fla fused_recurrent_delta_rule vs chunk_delta_rule — the recurrent
+        // path is faster for short sequences (low parallelism overhead), the chunk
+        // path is faster for long sequences (more parallelism).
         KernelRule {
             rule_id: "recurrent-vs-chunk-dispatch".to_string(),
             gpu_concept: "sequence-length-aware backend dispatch".to_string(),
@@ -711,7 +750,8 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
             opt_pattern: "// optimized: dispatch by sequence length (recurrent for short, chunk for long)\nfn dispatch_by_length(k: &[f32], v: &[f32], n: usize) -> Vec<f32> {\n    let mut state = vec![0.0f32; 64];\n    if n < 256 {\n        // short: sequential recurrent (low overhead)\n        recurrence_sequential(k, v, &mut state, n)\n    } else {\n        // long: chunkwise parallel (high throughput)\n        recurrence_chunkwise(k, v, &mut state, n, 64)\n    }\n}".to_string(),
         },
         // ── multi-write-per-step — single write → N Householder writes ────
-        // Source: gated_delta_product.py — DeltaProduct does num_householder\n        // Householder reflections per timestep under one forget gate.
+        // Source: gated_delta_product.py — DeltaProduct does num_householder
+        // Householder reflections per timestep under one forget gate.
         KernelRule {
             rule_id: "multi-write-per-step".to_string(),
             gpu_concept: "multiple state writes per timestep".to_string(),
@@ -775,7 +815,8 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
             opt_pattern: "// optimized: save a fraction, recompute the rest in backward\nfn backward_recompute_budget(\n    saved_a: &[f32], saved_b: &[f32], msave: usize,\n    x: &[f32], w: &[f32], grad_in: &[f32], grad_out: &mut [f32], m: usize,\n) {\n    for i in 0..m {\n        let (a, b) = if i < msave {\n            (saved_a[i], saved_b[i])\n        } else {\n            recompute_forward(x, w, i)\n        };\n        grad_out[i] = activation_grad(a, b, grad_in[i]);\n    }\n}".to_string(),
         },
         // ── atomic-scatter-reduction — locked → lock-free atomic add ────────
-        // Source: momoe_tl.py lin1_backward + scatter_cols — concurrent blocks\n        // scatter to overlapping output slots via atomic_add.
+        // Source: momoe_tl.py lin1_backward + scatter_cols — concurrent blocks
+        // scatter to overlapping output slots via atomic_add.
         KernelRule {
             rule_id: "atomic-scatter-reduction".to_string(),
             gpu_concept: "lock-free atomic scatter for parallel writes".to_string(),
@@ -801,7 +842,8 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
             opt_pattern: "// optimized: GPU kernel — prefix sum within tiles + atomic slot counter\nuse std::sync::atomic::{AtomicUsize, Ordering};\nfn build_indices_prefix_sum(mask: &[bool], col_idx: &mut [usize], which: &mut [usize], crow: &mut [usize], counts: &[AtomicUsize], n_cols: usize, n_rows: usize) {\n    for row in 0..n_rows {\n        let mut running = 0usize;\n        for start in (0..n_cols).step_by(BLOCK) {\n            let m = load_mask_tile(mask, row, start, BLOCK);\n            let prefix = prefix_sum(&m);\n            for k in 0..BLOCK {\n                if m[k] {\n                    let slot = crow[row] + running + prefix[k];\n                    col_idx[slot] = start + k;\n                    which[slot] = counts[start + k].fetch_add(1, Ordering::Relaxed);\n                }\n            }\n            running += sum(&m);\n        }\n        crow[row + 1] = crow[row] + running;\n    }\n}".to_string(),
         },
         // ── autotune-aggregate-workload-key — fixed config → aggregate key ──
-        // Source: momoe_tl.py autotune decorators — key on Msum (total tokens\n        // across all groups), not per-group shapes, for irregular batches.
+        // Source: momoe_tl.py autotune decorators — key on Msum (total tokens
+        // across all groups), not per-group shapes, for irregular batches.
         KernelRule {
             rule_id: "autotune-aggregate-workload-key".to_string(),
             gpu_concept: "autotune keyed on aggregate workload size".to_string(),
@@ -821,7 +863,8 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
             opt_pattern: "// optimized: iterate only selected blocks via index array\nfn attend_block_sparse(\n    q: &[f32], k: &[f32], v: &[f32],\n    block_indices: &[usize], block_size: usize, d: usize, out: &mut [f32],\n) {\n    for &bi in block_indices {\n        let base = bi * block_size;\n        for j in 0..block_size {\n            let row = (base + j) * d;\n            let score = dot(&q[..d], &k[row..row + d]);\n            for dd in 0..d {\n                out[dd] += score * v[row + dd];\n            }\n        }\n    }\n}".to_string(),
         },
         // ── precompute-scalar-reduction — recompute per-block → hoist once ──
-        // Source: nsa_tl.py _sel_attn_bwd_preprocess_kernel — delta = sum(o*do)\n        // is invariant; precompute once, not per KV block.
+        // Source: nsa_tl.py _sel_attn_bwd_preprocess_kernel — delta = sum(o*do)
+        // is invariant; precompute once, not per KV block.
         KernelRule {
             rule_id: "precompute-scalar-reduction".to_string(),
             gpu_concept: "hoist invariant row reduction out of per-block loop".to_string(),
@@ -829,7 +872,8 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
             opt_pattern: "// optimized: delta precomputed once in separate pass, passed in\nfn precompute_delta(o: &[f32], do_grad: &[f32], d: usize, delta: &mut [f32]) {\n    for row in 0..delta.len() {\n        let base = row * d;\n        delta[row] = (0..d).map(|i| o[base + i] * do_grad[base + i]).sum();\n    }\n}\nfn bwd_with_delta(delta: &[f32], block_indices: &[usize], dk: &mut [f32]) {\n    for (row, &blk) in block_indices.iter().enumerate() {\n        dk[blk] += grad_from_delta(delta[row]);\n    }\n}".to_string(),
         },
         // ── block-compression-before-routing — score full → score compressed ─
-        // Source: nsa_tl.py compression_attention + nsa — mean-pool to coarse\n        // blocks, route on compressed reps, attend top-k at full res.
+        // Source: nsa_tl.py compression_attention + nsa — mean-pool to coarse
+        // blocks, route on compressed reps, attend top-k at full res.
         KernelRule {
             rule_id: "block-compression-before-routing".to_string(),
             gpu_concept: "pool to coarse blocks, route on compressed reps".to_string(),
@@ -874,7 +918,8 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
             opt_pattern: "// optimized: bias = cumsum(g)[i] - cumsum(g)[j] (O(N) to compute cumsum)\nfn attention_with_cumsum_bias(q: &[f32], k: &[f32], g: &[f32], n: usize, d: usize, out: &mut [f32]) {\n    let mut cumsum = vec![0.0f32; n];\n    let mut acc = 0.0f32;\n    for (i, &val) in g.iter().enumerate() {\n        acc += val;\n        cumsum[i] = acc;\n    }\n    // attention adds (cumsum[i] - cumsum[j]) to each score — no bias matrix\n    attention_with_cumsum_diff(q, k, &cumsum, n, d, out);\n}".to_string(),
         },
         // ── chunk-split-mean-pool — running sum → split+mean (Batch 10, popcorn mean_pooling.py) ──
-        // Source: mean_pooling.py — torch.stack([chunk.mean(1) for chunk in x.split(C, 1)], 1).\n        // Split-then-mean exposes the fixed chunk size for unrollable inner reduction.
+        // Source: mean_pooling.py — torch.stack([chunk.mean(1) for chunk in x.split(C, 1)], 1).
+        // Split-then-mean exposes the fixed chunk size for unrollable inner reduction.
         KernelRule {
             rule_id: "chunk-split-mean-pool".to_string(),
             gpu_concept: "chunked reduction via split + per-chunk mean".to_string(),
@@ -882,7 +927,8 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
             opt_pattern: "// optimized: split into chunks, mean each chunk (exposes chunk structure)\nfn mean_pool_split(x: &[f32], seq: usize, dim: usize, chunk: usize) -> Vec<f32> {\n    let n_chunks = seq / chunk;\n    let mut out = vec![0.0; n_chunks * dim];\n    for c in 0..n_chunks {\n        let base = c * chunk * dim;\n        for d in 0..dim {\n            // inner loop over fixed-size chunk — unrollable\n            let mut acc = 0.0;\n            for t in 0..chunk {\n                acc += x[base + t * dim + d];\n            }\n            out[c * dim + d] = acc / chunk as f32;\n        }\n    }\n    out\n}".to_string(),
         },
         // ── ragged-chunk-pad — branch on tail → pad to block_size (Batch 10, popcorn solve_tril.py) ──
-        // Source: solve_tril.py — F.pad(inverse, (0, block_size - length)) before cat.\n        // Unifies the last ragged chunk with the full chunks (one code path).
+        // Source: solve_tril.py — F.pad(inverse, (0, block_size - length)) before cat.
+        // Unifies the last ragged chunk with the full chunks (one code path).
         KernelRule {
             rule_id: "ragged-chunk-pad".to_string(),
             gpu_concept: "pad ragged tail to block_size for uniform chunk processing".to_string(),
@@ -1043,7 +1089,9 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
             opt_pattern: "// optimized: permute NCHW→NHWC (channel innermost), compute coalesced, permute back\nfn pool_nhwc(x: &[f32], n: usize, c: usize, h: usize, w: usize) -> Vec<f32> {\n    let x_nhwc = permute_nchw_to_nhwc(x, n, c, h, w); // channel now innermost\n    let mut out = vec![0.0f32; n * h * w * c];\n    for b in 0..n { for hw in 0..h*w { for ch in 0..c {\n        // x_nhwc[b][hw][ch] — stride = 1, coalesced across channels\n        out[b*h*w*c + hw*c + ch] = pool_window_nhwc(&x_nhwc, b, hw, ch);\n    }}}\n    permute_nhwc_to_nchw(&out, n, h, w, c) // restore caller's layout\n}".to_string(),
         },
         // ── reshape-rank-for-backend — leak rank contract → reshape+reshape (Batch 10, popcorn geglu.py + swiglu.py) ──
-        // Source: geglu.py/swiglu.py unsloth backends — kernel expects 3-D (1, -1, hidden).\n        // Adapter reshapes any-rank input to 3-D, runs kernel, reshapes back.\n        // Preserves the caller's rank contract (zero-copy view when contiguous).
+        // Source: geglu.py/swiglu.py unsloth backends — kernel expects 3-D (1, -1, hidden).
+        // Adapter reshapes any-rank input to 3-D, runs kernel, reshapes back.
+        // Preserves the caller's rank contract (zero-copy view when contiguous).
         KernelRule {
             rule_id: "reshape-rank-for-backend".to_string(),
             gpu_concept: "rank adapter — reshape to backend-required rank, reshape back".to_string(),
@@ -1051,7 +1099,8 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
             opt_pattern: "// optimized: adapter reshapes to 3-D, runs kernel, reshapes back\nfn gelu_gated_any_rank(a: &[f32], b: &[f32], batch: usize, seq: usize, hidden: usize) -> Vec<f32> {\n    let n = batch * seq;\n    // reshape (batch, seq, hidden) → (1, n, hidden) — zero-copy view\n    let out = elementwise_gelu_gated(a, b, hidden); // kernel runs on 3-D\n    // reshape (1, n, hidden) → (batch, seq, hidden) — restore caller's rank\n    out // same buffer, caller interprets as (batch, seq, hidden)\n}".to_string(),
         },
         // ── detached-broadcast-insert — materialize broadcast → detach+view (Batch 10, popcorn rope.py) ──
-        // Source: rope.py — cos.detach()[:, None] for non-differentiable broadcast.\n        // Detach avoids autograd graph cost; [:, None] inserts broadcast dim (view, no alloc).
+        // Source: rope.py — cos.detach()[:, None] for non-differentiable broadcast.
+        // Detach avoids autograd graph cost; [:, None] inserts broadcast dim (view, no alloc).
         KernelRule {
             rule_id: "detached-broadcast-insert".to_string(),
             gpu_concept: "non-differentiable broadcast via detach + inserted dim view".to_string(),
@@ -1128,7 +1177,8 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
             opt_pattern: "// optimized: upcast to f32 before log/exp, downcast after\nfn jsd_upcast(log_p: &[f16], log_q: &[f16]) -> f16 {\n    let p: f32 = log_p.iter().map(|l| l.to_f32().exp()).sum();\n    let q: f32 = log_q.iter().map(|l| l.to_f32().exp()).sum();\n    f16::from_f32((p * q).ln())\n}".to_string(),
         },
         // ── batched-upcast-map — per-tensor upcast → map over tuple (Batch 10, popcorn comba.py) ──
-        // Source: comba.py — q32, k32, v32, p32, g32, beta32 = map(upcast, (q, k, v, p, g, beta)).\n        // One-line batch upcast signals independence to the compiler (parallelizable).
+        // Source: comba.py — q32, k32, v32, p32, g32, beta32 = map(upcast, (q, k, v, p, g, beta)).
+        // One-line batch upcast signals independence to the compiler (parallelizable).
         KernelRule {
             rule_id: "batched-upcast-map".to_string(),
             gpu_concept: "batched type promotion via map over a tuple".to_string(),
@@ -1136,7 +1186,9 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
             opt_pattern: "// optimized: map over tuple (signals independence, one structured binding)\nfn upcast_six_mapped(q: &[f16], k: &[f16], v: &[f16], p: &[f16], g: &[f16], beta: &[f16]) -> (Vec<f32>, Vec<f32>, Vec<f32>, Vec<f32>, Vec<f32>, Vec<f32>) {\n    let upcast = |t: &[f16]| t.iter().map(|x| x.to_f32()).collect::<Vec<f32>>();\n    let (q32, k32, v32, p32, g32, beta32) = (upcast(q), upcast(k), upcast(v), upcast(p), upcast(g), upcast(beta));\n    (q32, k32, v32, p32, g32, beta32)\n}".to_string(),
         },
         // ── dtype-restricted-backend — all-dtype backend → precision-safe dtype subset (Batch 10, popcorn gelu.py + sparsemax.py) ──
-        // Source: gelu.py fla (Float32|BFloat16, fp16 tanh grads past tol),\n        // sparsemax.py liger (Float32|Float16, bf16 ties break support set).\n        // Encode the dtype restriction in the backend signature, not a runtime check.
+        // Source: gelu.py fla (Float32|BFloat16, fp16 tanh grads past tol),
+        // sparsemax.py liger (Float32|Float16, bf16 ties break support set).
+        // Encode the dtype restriction in the backend signature, not a runtime check.
         KernelRule {
             rule_id: "dtype-restricted-backend".to_string(),
             gpu_concept: "backend restricted to precision-stable dtypes via signature".to_string(),
@@ -1294,8 +1346,10 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
         // split→cumsum→cat chunk-boundary-reset pattern. See Research 012.
         // ── strict-causal-mask-tril-offset — tril(0) → tril(-1) exclude diag ───
         // Source: deltaformer.py — `scores.masked_fill(~lower.tril(-1), -inf)`.
-        // Strictly-causal attention excludes the diagonal (position cannot attend\n        // to itself) via `tril(-1)` instead of the standard `tril()`. Paired
-        // with a NaN guard: the first row has no visible keys → softmax of all\n        // -inf → NaN, requiring `nan_to_num` before downstream use.
+        // Strictly-causal attention excludes the diagonal (position cannot attend
+        // to itself) via `tril(-1)` instead of the standard `tril()`. Paired
+        // with a NaN guard: the first row has no visible keys → softmax of all
+        // -inf → NaN, requiring `nan_to_num` before downstream use.
         KernelRule {
             rule_id: "strict-causal-mask-tril-offset".to_string(),
             gpu_concept: "strictly-causal mask via tril(-1) (exclude diagonal) + NaN guard".to_string(),
@@ -1305,7 +1359,9 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
         // ── polynomial-taylor-feature-map — softmax kernel → poly feature map ─
         // Source: based.py (`1 + x + 0.5·x²`, 2nd-order Taylor), rebased.py
         // (`x²`, pure quadratic). Approximates the softmax kernel with a
-        // low-degree polynomial so linear attention can run without exp. The\n        // Taylor expansion of `exp(q·k)` truncated at degree 2 is the Based\n        // kernel; dropping the constant + linear terms gives ReBased.
+        // low-degree polynomial so linear attention can run without exp. The
+        // Taylor expansion of `exp(q·k)` truncated at degree 2 is the Based
+        // kernel; dropping the constant + linear terms gives ReBased.
         KernelRule {
             rule_id: "polynomial-taylor-feature-map".to_string(),
             gpu_concept: "polynomial Taylor feature map approximating the softmax kernel".to_string(),
@@ -1313,7 +1369,11 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
             opt_pattern: "// optimized: polynomial feature map (no exp) — Based kernel: 1 + x + 0.5·x²\nfn attention_poly_feature(q: &[f32], k: &[f32], v: &[f32], d: usize, n: usize) -> Vec<f32> {\n    let mut out = vec![0.0f32; n * d];\n    for i in 0..n {\n        let mut norm = 0.0; // running normalizer Σ a_ts\n        for j in 0..=i { // causal\n            let mut s = 0.0;\n            for dd in 0..d { s += q[i*d+dd] * k[j*d+dd]; }\n            let a = 1.0 + s + 0.5 * s * s; // 2nd-order Taylor of exp(s)\n            for dd in 0..d { out[i*d+dd] += a * v[j*d+dd]; }\n            norm += a;\n        }\n        for dd in 0..d { out[i*d+dd] /= norm + 1e-6; } // normalize\n    }\n    out\n}".to_string(),
         },
         // ── positive-feature-map-shift — raw q/k → elu+1 non-negative shift ───
-        // Source: linear_attn.py — q and k pass through `elu(x) + 1` so the\n        // normalizer `Σ k` never crosses zero. Without the shift, signed q/k\n        // can produce a zero or negative normalizer, destabilizing the linear\n        // attention recurrence. The +1 is the minimal shift making elu ≥ 0\n        // strictly positive.
+        // Source: linear_attn.py — q and k pass through `elu(x) + 1` so the
+        // normalizer `Σ k` never crosses zero. Without the shift, signed q/k
+        // can produce a zero or negative normalizer, destabilizing the linear
+        // attention recurrence. The +1 is the minimal shift making elu ≥ 0
+        // strictly positive.
         KernelRule {
             rule_id: "positive-feature-map-shift".to_string(),
             gpu_concept: "shift activation positive (elu+1) so linear-attention normalizer never crosses zero".to_string(),
@@ -1322,7 +1382,11 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
         },
         // ── layer-depth-decay-schedule — constant slope → depth-varying slope ──
         // Source: lightning_attn.py — `slope = -(8/heads * (1 - layer_idx/
-        // num_layers)) * arange(heads)`. The decay slope scales with layer\n        // depth: deeper layers (layer_idx → num_layers) decay slower\n        // (slope → 0), shallower layers decay faster. A dispatch decision\n        // baked into kernel parameters via the layer index — not a runtime\n        // branch but a parameter specialization.
+        // num_layers)) * arange(heads)`. The decay slope scales with layer
+        // depth: deeper layers (layer_idx → num_layers) decay slower
+        // (slope → 0), shallower layers decay faster. A dispatch decision
+        // baked into kernel parameters via the layer index — not a runtime
+        // branch but a parameter specialization.
         KernelRule {
             rule_id: "layer-depth-decay-schedule".to_string(),
             gpu_concept: "layer-depth-dependent decay schedule (deeper layers decay slower)".to_string(),
@@ -1553,7 +1617,8 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
             opt_pattern: "// optimized: cyclic modality table selection (qwen2vl_mrope) — per-section table\nfn rope_multimodal(x: &[f32], cos_tables: &[Vec<f32>], sin_tables: &[Vec<f32>], sections: &[usize], n: usize, d: usize) -> Vec<f32> {\n    let n_mod = cos_tables.len(); // e.g. 3: temporal, height, width\n    let mut out = vec![0.0f32; n * d];\n    let mut offset = 0usize;\n    for (sec_idx, &sec_len) in sections.iter().enumerate() {\n        let table_idx = sec_idx % n_mod; // cyclic: temporal=0, height=1, width=2, repeat\n        let cos_t = &cos_tables[table_idx];\n        let sin_t = &sin_tables[table_idx];\n        for i in 0..n { for j in 0..sec_len {\n            let c = cos_t[j]; let s = sin_t[j];\n            out[i*d+2*(offset+j)]   = x[i*d+2*(offset+j)] * c - x[i*d+2*(offset+j)+1] * s;\n            out[i*d+2*(offset+j)+1] = x[i*d+2*(offset+j)] * s + x[i*d+2*(offset+j)+1] * c;\n        } }\n        offset += sec_len;\n    }\n    out\n}".to_string(),
         },
         // ── stateful-shift-via-cat-prefix — shift with cross-batch carry state (B) ──
-        // Source: rwkv7_channel_mixing.py — token-shift `previous = cat((x_prev[:,\n        // None], x[:, :-1]), dim=1)` reconstructs the shifted sequence by
+        // Source: rwkv7_channel_mixing.py — token-shift `previous = cat((x_prev[:,
+        // None], x[:, :-1]), dim=1)` reconstructs the shifted sequence by
         // concatenating the previous batch's last token as the prefix. Distinct from
         // `shift-via-pad-subtract` (Batch 10, token_shift.py): that pads with zeros
         // + computes a DIFFERENCE (y = x_{t-1} − x_t); this carries real state across
@@ -1567,8 +1632,13 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
             opt_pattern: "// optimized: stateful shift via cat prefix (rwkv7_channel_mixing)\nfn shift_cat_carry(x: &[f32], x_prev: &[f32], seq: usize, dim: usize) -> Vec<f32> {\n    let mut shifted = vec![0.0f32; seq * dim];\n    // shifted[0] = x_prev (cross-batch carry — the real last token of prior batch)\n    shifted[..dim].copy_from_slice(x_prev);\n    // shifted[1..] = x[..seq-1] (shift the current batch by one)\n    shifted[dim..].copy_from_slice(&x[..(seq-1)*dim]);\n    shifted\n}".to_string(),
         },
         // ── squared-relu-activation — relu(x)² sparse sharpening (B) ──
-        // Source: sqrelu.py (+ rwkv7_channel_mixing.py consumer) — `relu(x).square()`\n        // preserves ReLU's exact sparsity (zeros stay zero) while quadratically\n        // sharpening non-zero values. Used in Primer (So et al. 2021) + RWKV-7
-        // channel mixing. Distinct from `gelu`/`swish` (smooth activations): the\n        // squaring is applied AFTER the relu gate, so the sparse structure is exact.\n        // The fused form `max(x,0)²` avoids materializing the intermediate relu\n        // output before squaring.
+        // Source: sqrelu.py (+ rwkv7_channel_mixing.py consumer) — `relu(x).square()`
+        // preserves ReLU's exact sparsity (zeros stay zero) while quadratically
+        // sharpening non-zero values. Used in Primer (So et al. 2021) + RWKV-7
+        // channel mixing. Distinct from `gelu`/`swish` (smooth activations): the
+        // squaring is applied AFTER the relu gate, so the sparse structure is exact.
+        // The fused form `max(x,0)²` avoids materializing the intermediate relu
+        // output before squaring.
         KernelRule {
             rule_id: "squared-relu-activation".to_string(),
             gpu_concept: "relu(x)² — sparse activation: preserves ReLU zeros, sharpens non-zeros quadratically".to_string(),
@@ -1576,7 +1646,14 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
             opt_pattern: "// optimized: fused squared ReLU (sqrelu) — one pass, no intermediate\nfn sqrelu_fused(x: &[f32], n: usize) -> Vec<f32> {\n    let mut out = vec![0.0f32; n];\n    for i in 0..n {\n        let v = if x[i] > 0.0 { x[i] } else { 0.0 }; // relu gate\n        out[i] = v * v; // square inline — zeros stay zero, non-zeros sharpen\n    }\n    out\n}".to_string(),
         },
         // ── rkv-receptance-correction — reduce-then-broadcast-multiply fused (C) ──
-        // Source: rwkv7_gate_output.py — `correction = (r*k*r_k).sum(-1, keepdim=\n        // true) * v`, then `y = (o + correction) * g`. A reduce-then-broadcast-multiply\n        // fusion: elementwise triple-product (r·k·ρ), reduce over head_dim with\n        // `keepdim` (broadcastable scalar per head), multiply by v (broadcasts back\n        // to full head_dim), add to o, gate by g. Four elementwise ops + one reduce\n        // fused into a single kernel pass — the `keepdim` makes the reduce output\n        // directly broadcastable without a reshape. Distinct from `gather-selective-\n        // reduction` (that's a gather-then-reduce; this is a reduce-then-broadcast).
+        // Source: rwkv7_gate_output.py — `correction = (r*k*r_k).sum(-1, keepdim=
+        // true) * v`, then `y = (o + correction) * g`. A reduce-then-broadcast-multiply
+        // fusion: elementwise triple-product (r·k·ρ), reduce over head_dim with
+        // `keepdim` (broadcastable scalar per head), multiply by v (broadcasts back
+        // to full head_dim), add to o, gate by g. Four elementwise ops + one reduce
+        // fused into a single kernel pass — the `keepdim` makes the reduce output
+        // directly broadcastable without a reshape. Distinct from `gather-selective-
+        // reduction` (that's a gather-then-reduce; this is a reduce-then-broadcast).
         KernelRule {
             rule_id: "rkv-receptance-correction".to_string(),
             gpu_concept: "fused reduce-then-broadcast: (r·k·ρ).sum(head_dim,keepdim)·v added to o, gated by g".to_string(),
@@ -2181,7 +2258,8 @@ fn gemv_residual_inplace(weight: &[f32], input: &[f32], residual_output: &mut [f
             opt_pattern: "// optimized: threadgroup subset-sum LUT — 2 reads + 1 subtract per 4-weight dot\n// BUILD (once per tile, serves every row):\n//   thread t owns activation group t (4 elements x0..x3)\n//   S[m] = sum of x_i for i in bitmask m (16 subsets of a 4-element group)\nfn build_subset_sum_lut(x: &[f32; 4], lut: &mut [f32; 16]) {\n    let x01 = x[0] + x[1];\n    let x23 = x[2] + x[3];\n    lut[0b0000] = 0.0;\n    lut[0b0001] = x[0];\n    lut[0b0010] = x[1];\n    lut[0b0011] = x01;\n    lut[0b0100] = x[2];\n    lut[0b0101] = x[0] + x[2];\n    // ... 10 more subset sums sharing pair-sums (12 adds total)\n    lut[0b1111] = x01 + x23;\n}\n// CONSUME (every row reuses the same LUT):\nfn ternary_dot4_lut(pos_bits: u8, neg_bits: u8, lut: &[f32; 16]) -> f32 {\n    lut[(pos_bits & 0xF) as usize] - lut[(neg_bits & 0xF) as usize]\n    // 2 reads + 1 subtract (was ~28 ops) — one build amortizes over all rows\n}".to_string(),
         },
         // ── base-3-trit-packing-5-per-byte — 2-bit codes (4/byte) → base-3 trits (5/byte, 17.6% denser) (N) ──
-        // Source: riir-gpu gemv_ternary_cubecl.rs `gemv_ternary_trit_rowtiled8`\n        // (Issue 628 T2). Pack 5 ternary values per byte using base-3 encoding
+        // Source: riir-gpu gemv_ternary_cubecl.rs `gemv_ternary_trit_rowtiled8`
+        // (Issue 628 T2). Pack 5 ternary values per byte using base-3 encoding
         // (code = byte % 3; byte /= 3), reducing memory by 17.6% vs 2-bit
         // codes (1.75 bits/weight vs 2.125). Each group of 128 weights
         // occupies 28 bytes (26 live + 2 pad to u32 alignment = 7 u32 words).
@@ -2358,7 +2436,15 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
             opt_pattern: "// optimized: bit-plane packing — 64 ternary values per u64 block (2 bits each, pos + neg)\n// Layout: pos_bits_u32[rows * blocks64 * 2] + neg_bits_u32[rows * blocks64 * 2]\nfn dequant_bitplane(pos_bits: &[u32], neg_bits: &[u32], scales: &[f32], out: &mut [f32], row: usize, blocks64: usize, groups_per_row: usize, n: usize) {\n    let words_per_row = blocks64 * 2;  // u64 → 2× u32\n    for c in 0..n {\n        let block_idx = c / 64;\n        let word_in_block = (c % 64) / 32;\n        let bit_pos = c % 32;\n        let word_idx = row * words_per_row + block_idx * 2 + word_in_block;\n        let pos_bit = (pos_bits[word_idx] >> bit_pos) & 1;\n        let neg_bit = (neg_bits[word_idx] >> bit_pos) & 1;\n        let sign = pos_bit as f32 - neg_bit as f32;  // +1, 0, or -1\n        let group = c / GROUP_SIZE;\n        let scale = scales[row * groups_per_row + group];\n        out[c] = sign * scale;\n    }\n}".to_string(),
         },
         // ── warp-shuffle-intrinsics-for-sub-warp-reduction — __shfl_down_sync for ≤32-thread blocks (B) ──
-        // Source: riir-gpu cudarc_kernels/mod.rs L163-167 (quantize_f32_to_i8)\n        // + attention.rs L336-344 (final warp reduction). For blocks ≤32\n        // threads (one warp), use __shfl_down_sync for reduction instead\n        // of shared memory + __syncthreads. The warp runs in lockstep (SIMT),\n        // so the shuffle is both correct and free (no smem alloc, no sync\n        // barrier). Companion: for the final 32-thread tail of a larger smem\n        // tree reduction, use `volatile float* vsmem = smem` + skip\n        // __syncthreads — volatile defeats register caching, lockstep makes\n        // the sync unnecessary.
+        // Source: riir-gpu cudarc_kernels/mod.rs L163-167 (quantize_f32_to_i8)
+        // + attention.rs L336-344 (final warp reduction). For blocks ≤32
+        // threads (one warp), use __shfl_down_sync for reduction instead
+        // of shared memory + __syncthreads. The warp runs in lockstep (SIMT),
+        // so the shuffle is both correct and free (no smem alloc, no sync
+        // barrier). Companion: for the final 32-thread tail of a larger smem
+        // tree reduction, use `volatile float* vsmem = smem` + skip
+        // __syncthreads — volatile defeats register caching, lockstep makes
+        // the sync unnecessary.
         KernelRule {
             rule_id: "warp-shuffle-intrinsics-for-sub-warp-reduction".to_string(),
             gpu_concept: "for blocks of 32 threads or fewer (one warp), use __shfl_down_sync(mask, val, delta) butterfly reduction instead of shared memory + __syncthreads — the warp executes in lockstep (SIMT), so the shuffle is both correct and free (no smem allocation, no synchronization barrier). For the final 32-thread tail of a larger smem tree reduction, cast to volatile float* and skip __syncthreads — volatile prevents the compiler from caching stale values in registers".to_string(),
@@ -2366,8 +2452,15 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
             opt_pattern: "// optimized: warp-shuffle butterfly — no smem, no syncthreads (blockDim.x <= 32 = one warp)\nfloat a = fabsf(val);\na = fmaxf(a, __shfl_down_sync(0xFFFFFFFFu, a, 8));\na = fmaxf(a, __shfl_down_sync(0xFFFFFFFFu, a, 4));\na = fmaxf(a, __shfl_down_sync(0xFFFFFFFFu, a, 2));\na = fmaxf(a, __shfl_down_sync(0xFFFFFFFFu, a, 1));\nconst float absmax = __shfl_sync(0xFFFFFFFFu, a, 0);  // broadcast lane 0 to all\n// 4 shuffles, 0 smem, 0 syncthreads — hardware warp intrinsic\n//\n// For the final 32-thread tail of a LARGER smem tree reduction:\nif (tid < 32) {\n    volatile float* vsmem = smem;  // volatile: defeat compiler register caching\n    if (tid < 16) vsmem[tid] = fmaxf(vsmem[tid], vsmem[tid + 16]);\n    if (tid < 8)  vsmem[tid] = fmaxf(vsmem[tid], vsmem[tid + 8]);\n    if (tid < 4)  vsmem[tid] = fmaxf(vsmem[tid], vsmem[tid + 4]);\n    if (tid < 2)  vsmem[tid] = fmaxf(vsmem[tid], vsmem[tid + 2]);\n    if (tid < 1)  vsmem[0] = fmaxf(vsmem[0], vsmem[1]);\n    // NO __syncthreads — warp runs in lockstep".to_string(),
         },
         // ── fused-activation-quantize-for-gemv-consumer — activation + absmax + int8 in one kernel (C) ──
-        // Source: riir-gpu cudarc_kernels/mod.rs L191-289 (rmsnorm_quantize_f32,\n        // Issue 623) + L407-450 (swiglu_quantize_f32, Issue 625) + L468-554\n        // (gate_silu/sigmoid_quantize_f32, Issue 626) + L575+ (rmsnorm_gate_silu_quantize_f32,\n        // Issue 627 three-way fusion). When an activation's output is immediately\n        // consumed by a GEMV that reads int8, fuse the activation + absmax + int8\n        // quantize into one kernel — eliminates the intermediate f32 HBM\n        // round-trip (~2.6 MB/token for RMSNorm, ~115 KB/layer for SwiGLU).
-        // Distinct from fuse-quant-matmul (quantize+matmul) — here the activation\n        // is the non-trivial part (RMSNorm needs a reduction, SwiGLU needs an exp).
+        // Source: riir-gpu cudarc_kernels/mod.rs L191-289 (rmsnorm_quantize_f32,
+        // Issue 623) + L407-450 (swiglu_quantize_f32, Issue 625) + L468-554
+        // (gate_silu/sigmoid_quantize_f32, Issue 626) + L575+ (rmsnorm_gate_silu_quantize_f32,
+        // Issue 627 three-way fusion). When an activation's output is immediately
+        // consumed by a GEMV that reads int8, fuse the activation + absmax + int8
+        // quantize into one kernel — eliminates the intermediate f32 HBM
+        // round-trip (~2.6 MB/token for RMSNorm, ~115 KB/layer for SwiGLU).
+        // Distinct from fuse-quant-matmul (quantize+matmul) — here the activation
+        // is the non-trivial part (RMSNorm needs a reduction, SwiGLU needs an exp).
         KernelRule {
             rule_id: "fused-activation-quantize-for-gemv-consumer".to_string(),
             gpu_concept: "when an activation's output (RMSNorm, SwiGLU, gate*sigmoid, gate*silu) is immediately consumed by a GEMV that reads int8 (not f32), fuse the activation + per-block absmax reduction + int8 quantize into one kernel — eliminates the intermediate f32 HBM round-trip and one kernel launch. The activation is the non-trivial part (needs a reduction or exp); the quantize is the trivial part (absmax + scale + round)".to_string(),
@@ -2375,7 +2468,14 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
             opt_pattern: "// optimized: fused activation + absmax + quantize (1 kernel, no intermediate)\nfn rmsnorm_quantize_fused(input: &[f32], gamma: &[f32], out: &mut [i8], ascale: &mut [f32]) {\n    // Phase 1: RMSNorm sum-of-squares (smem tree reduction)\n    // Phase 2: normalize + find per-block absmax (warp shuffle)\n    // Phase 3: quantize — d = absmax / 127, i8 = round(v / d), write directly\n    // One kernel launch, one HBM write (i8), no intermediate f32\n    // Same pattern applies to: SwiGLU+quantize, gate*sigmoid+quantize,\n    // gate*silu+quantize, and three-way RMSNorm+gate+quantize fusion.".to_string(),
         },
         // ── cuda-graph-scalar-via-device-pointer — _devpos variant for graph capture (D) ──
-        // Source: riir-gpu cudarc_kernels/embedding.rs L76-105 (dequant_wte_row_f32_devpos,\n        // Issue 618) + attention.rs L421-610 (rope_partial_f32_devpos +\n        // kv_cache_append_f32_devpos + attention_decode_f32_devpos). When\n        // capturing a CUDA graph, scalar kernel args (int, float) get baked\n        // into the captured graph — the graph replays the exact value on\n        // every launch. Ship a _devpos variant that reads the scalar from a\n        // device pointer dereferenced at kernel runtime; the caller writes\n        // the new value via memcpy_htod before graph.launch().
+        // Source: riir-gpu cudarc_kernels/embedding.rs L76-105 (dequant_wte_row_f32_devpos,
+        // Issue 618) + attention.rs L421-610 (rope_partial_f32_devpos +
+        // kv_cache_append_f32_devpos + attention_decode_f32_devpos). When
+        // capturing a CUDA graph, scalar kernel args (int, float) get baked
+        // into the captured graph — the graph replays the exact value on
+        // every launch. Ship a _devpos variant that reads the scalar from a
+        // device pointer dereferenced at kernel runtime; the caller writes
+        // the new value via memcpy_htod before graph.launch().
         KernelRule {
             rule_id: "cuda-graph-scalar-via-device-pointer".to_string(),
             gpu_concept: "when capturing a CUDA graph, scalar kernel args (int pos, int row_idx) get baked into the captured graph at capture time — the graph replays the exact value on every launch and cannot change. Ship a _devpos variant that reads the scalar from a const device pointer dereferenced at kernel runtime; the caller writes the new value to a 4-byte device buffer via memcpy_htod on the same stream before graph.launch(), so the captured graph processes a different input each call".to_string(),
@@ -2630,7 +2730,10 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
         // ── tree-reduction-depth-over-sequential-accumulate — depth 2304 → 77 (B) ──
         // Source: riir-gpu gemma2_cubecl/dispatch.rs L881-893 (Issue 424 fix,
         // dispatch_gemv_batched_backward_gpu replacing dispatch_gemm_gpu in the
-        // batched backward): "The GEMM tiled kernel accumulates sequentially\n        // (depth n=2304), while the Plane kernel tree-reduces across 32 lanes\n        // (depth n/32 + log2(32) ≈ 77). The 30× better numerical accuracy\n        // prevents gradient divergence at 26-layer scale."
+        // batched backward): "The GEMM tiled kernel accumulates sequentially
+        // (depth n=2304), while the Plane kernel tree-reduces across 32 lanes
+        // (depth n/32 + log2(32) ≈ 77). The 30× better numerical accuracy
+        // prevents gradient divergence at 26-layer scale."
         //
         // Accumulated rounding error grows with summation DEPTH: sequential
         // adds round on top of n-1 prior roundings (error ~O(n·ε) worst case);
@@ -2810,7 +2913,8 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
         // are constant weights that never change — downloading them every
         // call was the #1 bottleneck (2 GPU sync stalls per forward pass)")
         // + L1270-1288 (compute_embeddings: gathers wte[token_id] + wpe[pos]
-        // from the cached rows — "Slice-based extend helps LLVM\n        // auto-vectorize the wte+wpe add" — and uploads the result once).
+        // from the cached rows — "Slice-based extend helps LLVM
+        // auto-vectorize the wte+wpe add" — and uploads the result once).
         // Counter-example in the same tree: forward/dispatch.rs L1019-1030
         // downloads a_log/dt_bias/linear_norm EVERY layer EVERY token in the
         // DeltaNet path — the unoptimized shape this rule warns about.
@@ -2827,15 +2931,195 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
         },
         // ── defer-readback-until-after-submit — mid-encoder read → record (A) ──
         // Source: riir-gpu forward/mod.rs L291-295 (speft_pending_corrections:
-        // "Plan 162 fix: avoids downloading stale GPU data within a command\n        // encoder") + L1173-1183 (apply_speft_corrections: "must be called\n        // AFTER the command encoder is submitted and GPU operations complete,\n        // so activation buffers contain fresh data") + forward/adapter_merge.rs\n        // L576-578 ("The old CPU fallback downloaded stale GPU data (input/\n        // output buffers not yet written by pending GPU commands)") +
-        // forward/mod.rs L1365-1368 ("avoiding the data race that would occur\n        // if download_f32 (which internally submits command buffers) were\n        // called during encoder construction"). Downloading mid-construction\        // reads PRE-submission buffer contents — the recorded encoder hasn't\n        // executed, so the download sees the previous pass's data AND any\n        // correction uploaded then gets overwritten when the recorded work\n        // finally runs. A mid-pipeline download also internally submits its\n        // own command buffers — breaking the encoder being built. The\n        // pattern: RECORD what needs fixing (a small correction list),\n        // finish + submit, then read fresh data + apply + upload back.
+        // "Plan 162 fix: avoids downloading stale GPU data within a command
+        // encoder") + L1173-1183 (apply_speft_corrections: "must be called
+        // AFTER the command encoder is submitted and GPU operations complete,
+        // so activation buffers contain fresh data") + forward/adapter_merge.rs
+        // L576-578 ("The old CPU fallback downloaded stale GPU data (input/
+        // output buffers not yet written by pending GPU commands)") +
+        // forward/mod.rs L1365-1368 ("avoiding the data race that would occur
+        // if download_f32 (which internally submits command buffers) were
+        // called during encoder construction"). Downloading mid-construction\        // reads PRE-submission buffer contents — the recorded encoder hasn't
+        // executed, so the download sees the previous pass's data AND any
+        // correction uploaded then gets overwritten when the recorded work
+        // finally runs. A mid-pipeline download also internally submits its
+        // own command buffers — breaking the encoder being built. The
+        // pattern: RECORD what needs fixing (a small correction list),
+        // finish + submit, then read fresh data + apply + upload back.
         //
-        // Distinct from no-blocking-sync-in-async-pipeline (D — don't block\n        // the HOST thread): this is a correctness rule about WHAT the read\n        // returns mid-construction (stale state), independent of blocking.
+        // Distinct from no-blocking-sync-in-async-pipeline (D — don't block
+        // the HOST thread): this is a correctness rule about WHAT the read
+        // returns mid-construction (stale state), independent of blocking.
         KernelRule {
             rule_id: "defer-readback-until-after-submit".to_string(),
             gpu_concept: "never download (map + read) GPU buffers while an encoder referencing them is still under construction — the recorded work has not executed, so the read returns PRE-submission stale state, and any correction uploaded mid-construction is later overwritten by the recorded pass when it runs; the readback's internal submit also breaks the encoder being built. Instead RECORD the needed fixups (small correction list of (buffer, op) pairs), finish + submit the encoder, then download FRESH data, apply, and upload back. Distinct from no-blocking-sync-in-async-pipeline (don't block the host thread) — this is about WHAT a mid-construction read returns (stale state), independent of blocking".to_string(),
             ref_shape: "// naive: read GPU buffers MID-encoder-construction — stale pending state\nfn speft_merge_broken(&self, encoder: &mut Encoder, input: &Buffer, output: &Buffer) {\n    dispatch_plain_matmul(encoder, w, input, output, ..);   // recorded, NOT run yet\n    let out_now = download_f32(device, queue, output, dim); // reads PRE-submission\n    let in_now  = download_f32(device, queue, input, dim);  // contents — the\n    // fix up out_now += sparse_delta @ in_now ...              // encoder hasn't\n    queue.write_buffer(output, 0, cast(&corrected));        // executed yet!\n}   // then the recorded matmul OVERWRITES the correction — silently wrong;\n    // download_f32's internal submit also breaks the in-flight encoder".to_string(),
             opt_pattern: "// optimized: record the correction; apply AFTER submit + completion\nstruct Pass { pending: RefCell<Vec<Correction>> }\nfn speft_merge_deferred(&self, encoder: &mut Encoder, layer: usize, target: Target) {\n    dispatch_plain_matmul(encoder, w, input, output, ..);     // recorded\n    self.pending.borrow_mut().push(Correction { layer, target }); // just RECORD\n}                                                            // (zero GPU reads)\nfn apply_corrections_after_submit(&self) {\n    for c in std::mem::take(&mut *self.pending.borrow_mut()) {\n        let output = download_f32_reuse(.., output_buf(c), ..);  // FRESH: encoder\n        let input  = download_f32_reuse(.., input_buf(c), ..);   // already ran\n        apply_sparse_delta(&mut output, &input, &c);              // post-pass data\n        queue.write_buffer(output_buf(c), 0, cast(&output));\n    }\n}   // called after queue.submit + poll — every download sees fresh contents".to_string(),
+        },
+        // ── staging-packed-uniforms-encoder-ordered-copies — N writes → 1 upload (D) ──
+        // Source: riir-gpu backward/mod.rs L15 (architecture note: "Uniforms
+        // → staging buffer + copy_buffer_to_buffer per dispatch") + L1293-1295
+        // ("All uniform params + grad_logits packed into one CPU buffer,
+        // uploaded once, then copy_buffer_to_buffer within the encoder") +
+        // L1505-1512 (single write_buffer of the packed staging vec) +
+        // backward/staging.rs L31-38 (push aligns each Pod to 16 bytes for
+        // GPU copy compatibility) + backward_dflash/mod.rs L774-780 + L944 +
+        // L980-986 (per-dispatch staging→uniform copies). The complementary
+        // fix to per-slot buffers: keep ONE shared uniform buffer and update
+        // it with encoder-ordered DEVICE-SIDE copies — a copy recorded
+        // inside the command encoder lands exactly between the surrounding
+        // dispatches, so the shared buffer can safely change value per
+        // dispatch (per-layer dims, per-position offsets). Bonus: hundreds
+        // of small uniform writes collapse to ONE packed host→device upload.
+        //
+        // Distinct from per-slot-uniform-buffer-write-ordering (Batch 26):
+        // that allocates N buffers so concurrent queue writes cannot
+        // collide; this keeps 1 buffer and moves the update onto the
+        // encoder timeline — use when the param legitimately changes per
+        // dispatch and upload batching matters. Composes with
+        // identical-uniforms-share-single-slot (the idempotent-write
+        // exemption) and persistent-zeros-source-encoder-copy-clear (the
+        // same timeline trick applied to buffer clears).
+        KernelRule {
+            rule_id: "staging-packed-uniforms-encoder-ordered-copies".to_string(),
+            gpu_concept: "pack every uniform parameter for the whole pass into ONE 16-byte-aligned CPU staging vec, upload it with ONE queue.write_buffer, then move each dispatch's slice into the shared uniform buffer via encoder.copy_buffer_to_buffer recorded immediately before the consuming dispatch — a copy on the encoder timeline lands exactly between the surrounding dispatches, so ONE shared uniform buffer can safely change value per dispatch (per-layer dims, per-position offsets). Hundreds of small per-dispatch queue writes collapse to one packed upload; queue writes alone would all flush pre-encoder (last-write-wins). Distinct from per-slot-uniform-buffer-write-ordering (N buffers so writes cannot collide) — this is the 1-buffer encoder-timeline alternative; composes with identical-uniforms-share-single-slot".to_string(),
+            ref_shape: "// naive: per-dispatch queue.write_buffer on ONE shared uniform — every\n// dispatch sees the LAST write + N small host uploads\nfn backward_naive(encoder: &mut Encoder, queue: &Queue, shared: &Buffer, layers: usize) {\n    for layer in 0..layers {\n        let mm = MatmulTParams { m: 768, n: 1024, p: 1, _pad: 0 };\n        queue.write_buffer(shared, 0, cast(&mm));            // small upload 1\n        dispatch_matmul_t(encoder, layer, shared);\n        let elem = ElementwiseParams { count: 768, _pad0: 0, _pad1: 0, _pad2: 0 };\n        queue.write_buffer(shared, 0, cast(&elem));          // small upload 2 —\n        dispatch_add(encoder, layer, shared);                // overwrites mm!\n    } // wgpu flushes ALL queue writes before the encoder runs → every\n}     // dispatch reads the LAST params — silent corruption + N uploads".to_string(),
+            opt_pattern: "// optimized: pack ALL uniform params once, distribute via encoder-ordered copies\nstruct StagingData { data: Vec<u8>, mm_t: u64, elem: u64 } // per-site byte offsets\nfn backward_staged(encoder: &mut Encoder, queue: &Queue, staging_buf: &Buffer,\n                   shared: &Buffer, sd: &StagingData, layers: usize) {\n    // ONE upload for the whole pass (16-byte-aligned pushes, CPU-side)\n    queue.write_buffer(staging_buf, 0, &sd.data);\n    for layer in 0..layers {\n        // encoder-timeline copies: land EXACTLY between the dispatches\n        encoder.copy_buffer_to_buffer(staging_buf, sd.mm_t, shared, 0, MM_BYTES);\n        dispatch_matmul_t(encoder, layer, shared);  // reads matmul params\n        encoder.copy_buffer_to_buffer(staging_buf, sd.elem, shared, 0, ELEM_BYTES);\n        dispatch_add(encoder, layer, shared);       // reads elem params\n    } // ONE shared uniform buffer, safely re-written between dispatches —\n}     // recorded order guarantees each dispatch reads its own params".to_string(),
+        },
+        // ── identical-uniforms-share-single-slot — N slots → 1 when idempotent (D) ──
+        // Source: riir-gpu backward/mod.rs L192-196 ("Shared uniform for
+        // batched elementwise adds. All batched adds use the same count
+        // (seq_len * n_embd), so a single uniform buffer written once per
+        // backward_pass_batched call suffices") + L1447-1452 ("All three
+        // adds share an identical uniform (count = n_embd, constant) —
+        // push once and reuse the offset. Staging data is read-only after
+        // upload.") + backward/dispatch.rs L315-320 ("the caller is
+        // responsible for providing a unique uniform if the count differs
+        // across calls in the same encoder"). The write_buffer last-write-
+        // wins hazard only bites when the writes DIFFER: if every dispatch
+        // sharing a uniform writes byte-identical params, the "last" write
+        // is idempotent with all earlier ones and flush order is moot — so
+        // N uniform buffers + N bind groups collapse to 1.
+        //
+        // Distinct from per-slot-uniform-buffer-write-ordering (the hazard
+        // rule): this is the precise EXEMPTION — sharing is provably safe
+        // iff writes are byte-identical, and the safety contract must be
+        // stated at the API boundary (the dispatch doc). The diverging-
+        // count case is what per-slot buffers / staging copies are for.
+        KernelRule {
+            rule_id: "identical-uniforms-share-single-slot".to_string(),
+            gpu_concept: "the write_buffer last-write-wins hazard only bites when the writes DIFFER — if every dispatch sharing a uniform buffer in one encoder writes byte-identical params (all batched elementwise adds use count = seq_len × n_embd), the last write is idempotent with all earlier ones and flush order is moot: share ONE uniform buffer + ONE bind group instead of N (and in staging terms, push the value once and reuse the byte offset — staging data is read-only after upload). The safety contract must live at the API boundary: 'caller must provide a unique uniform if the count differs across calls in the same encoder'. Distinct from per-slot-uniform-buffer-write-ordering (the hazard rule) — this is the exemption; diverging params need per-slot buffers or staging-packed encoder-ordered copies".to_string(),
+            ref_shape: "// naive: per-slot uniform buffers even though every site writes IDENTICAL params\nfn adds_naive(device: &Device, queue: &Queue, encoder: &mut Encoder,\n              slots: &[Buffer], bgs: &[BindGroup], n: usize) {\n    for i in 0..n {\n        let p = ElemParams { count: 768 };                 // same value every site\n        queue.write_buffer(&slots[i], 0, cast(&p));       // N buffers at init\n        let mut pass = encoder.begin_compute_pass();\n        pass.set_bind_group(0, &bgs[i]);                  // N bind groups at init\n        pass.dispatch_workgroups(768 / 256, 1, 1);\n    } // N uniforms + N bind groups for ONE distinct value — per-slot is\n}     // for params that DIFFER, not for paranoia".to_string(),
+            opt_pattern: "// optimized: sharing is safe iff every write is byte-identical — use ONE slot\nfn adds_shared(queue: &Queue, encoder: &mut Encoder, shared: &Buffer, bg: &BindGroup,\n               n: usize, staging: &mut Staging) {\n    // all sites write count = seq_len * n_embd — byte-identical: the \"last\"\n    // write is idempotent with all earlier ones, so flush order is moot\n    let off = staging.push_once(ElemParams { count: 768 }); // push ONCE,\n    encoder.copy_buffer_to_buffer(staging.buf, off, shared, 0, ELEM_BYTES); // reuse offset\n    let mut pass = encoder.begin_compute_pass();\n    for _ in 0..n {\n        pass.set_bind_group(0, bg);         // ONE bind group, set repeatedly\n        pass.dispatch_workgroups(768 / 256, 1, 1);\n    } // N uniform buffers + N bind groups → 1 (a single diverging count\n}     // silently reintroduces the hazard — keep the contract at the API)".to_string(),
+        },
+        // ── persistent-zeros-source-encoder-copy-clear — per-clear writes → init+copy (A) ──
+        // Source: riir-gpu backward/mod.rs L235-241 (batched_zeros_buf:
+        // "Used via encoder.copy_buffer_to_buffer inside the per-layer loop
+        // (NOT queue.write_buffer, which would hit the write_buffer ordering
+        // bug across layers)") + L267-268 (zeros_buf: COPY_SRC) +
+        // backward/dispatch.rs L621-631 + L1106-1110 (clear_buffer helper:
+        // "Clear a buffer by copying from the pre-initialized zeros buffer")
+        // + backward_dflash/mod.rs L309-310 (init once) + L618 ("If buffer
+        // is larger than zeros_buf, clear in chunks") + L1216-1218
+        // (d_q/d_k_concat/d_v_concat cleared every layer × position).
+        // Re-initializing an accumulator BETWEEN dispatches needs encoder-
+        // timeline ordering (a queue write flushes before the whole encoder
+        // → layer 1 accumulates on top of layer 0's values). The zeros
+        // source is allocated + zeroed once at init (COPY_SRC); each clear
+        // is a device-side copy with zero host→device bandwidth; wgpu has
+        // no buffer-fill API, so the zeros source IS the fill.
+        //
+        // Distinct from per-slot-uniform-buffer-write-ordering (uniform
+        // slots): this is DATA-buffer re-initialization between dispatches,
+        // which per-slot buffers cannot express (same buffer, re-zeroed).
+        // Distinct from staging-packed-uniforms-encoder-ordered-copies
+        // (param distribution): this distributes a constant zero fill from
+        // a dedicated device-resident source.
+        KernelRule {
+            rule_id: "persistent-zeros-source-encoder-copy-clear".to_string(),
+            gpu_concept: "clearing an accumulator buffer between dispatches inside one encoder must happen on the encoder timeline: keep a device buffer pre-zeroed once at init (COPY_SRC, sized to the max clear target) and clear via encoder.copy_buffer_to_buffer from it — a queue.write_buffer of zeros flushes before the WHOLE encoder runs, so every layer's clear lands up front and layer 1 accumulates on top of layer 0's values. Each clear is a device-side copy (zero host→device bandwidth; wgpu has no buffer-fill API so the zeros source IS the fill); if a target is larger than the zeros source, clear in chunks. Distinct from per-slot-uniform-buffer-write-ordering (uniform slots) — this is data-buffer re-init between dispatches; distinct from staging-packed-uniforms (param distribution) — this distributes a constant fill".to_string(),
+            ref_shape: "// naive: re-zero accumulators via queue.write_buffer per layer — all clears\n// flush BEFORE the encoder runs, so later layers accumulate on stale state\nfn layer_zero_naive(queue: &Queue, encoder: &mut Encoder, d_q: &Buffer,\n                    zeros_host: &[f32], n: usize, layers: usize) {\n    for layer in 0..layers {\n        queue.write_buffer(d_q, 0, zeros_host);       // clear N — flushes early\n        dispatch_attn_backward(encoder, layer, d_q); // accumulates d_q +=\n    } // ALL n_layer zero-writes flush before ANY dispatch executes →\n}     // layer 1's attention accumulates ON TOP of layer 0's values".to_string(),
+            opt_pattern: "// optimized: persistent device zeros + encoder-ordered copy clears\nstruct Pass { zeros_buf: Buffer } // allocated + zeroed ONCE at init (COPY_SRC)\nimpl Pass {\n    fn clear(&self, encoder: &mut Encoder, buf: &Buffer, bytes: u64) {\n        let mut off = 0u64;                     // if buf > zeros_buf, chunk\n        while off < bytes {\n            let n = (bytes - off).min(self.zeros_buf.size());\n            encoder.copy_buffer_to_buffer(&self.zeros_buf, 0, buf, off, n);\n            off += n;\n        }\n    }\n}\nfn layer_zero_encoder_ordered(pass: &Pass, encoder: &mut Encoder, d_q: &Buffer,\n                              n: usize, layers: usize) {\n    for layer in 0..layers {\n        pass.clear(encoder, d_q, (n * 4) as u64);  // encoder-timeline copy:\n        dispatch_attn_backward(encoder, layer, d_q); // lands exactly between\n    } // the dispatches — each layer accumulates from a freshly-cleared\n}     // buffer; zero host→device bandwidth per clear, no fill kernel".to_string(),
+        },
+        // ── fuse-sibling-target-grads-single-kernel — N×2 → 2 dispatches (C) ──
+        // Source: riir-gpu backward/dispatch.rs L678-685 ("OFT fused QKV
+        // backward: computes d_input and d_r for Q, K, V in 2 dispatches.
+        // Plan 160 T7: Replaces 6 separate backward dispatches (3 d_input +
+        // 3 d_r) with 2.") + L707 ("all 3 saved the same input" — the shared
+        // saved-input binding) + L849-851 ("Total params = 3 sub-projections
+        // * num_blocks * params_per_block"). N sibling targets (Q/K/V) each
+        // running the same two backward kernels fuse per KERNEL KIND, not
+        // per target: one dispatch computes the summed d_input = Σ Rᵢᵀ·gᵢ
+        // in-kernel (one output write — no combine add pass), one dispatch
+        // computes all N parameter grads in a single grid (N × blocks ×
+        // per_block). All adapters' buffers pack into ONE wide bind group;
+        // the shared saved input is bound once.
+        //
+        // Distinct from dual-grad-same-pass (Batch 24 — two product-rule
+        // partials of ONE op sharing a subexpression): these are gradients
+        // of N DIFFERENT weight sets sharing only the saved input, fused by
+        // sibling symmetry. Distinct from fan-out-shared-input-single-sync
+        // (Batch 25 — the forward mirror, 1 input → N dispatches): this is
+        // N grads → 1 summed/collected output pair. Distinct from
+        // merge-dispatches-into-single-compute-pass (pass-boundary merging):
+        // this is kernel-BODY fusion — the reduction across siblings
+        // happens in-shader.
+        KernelRule {
+            rule_id: "fuse-sibling-target-grads-single-kernel".to_string(),
+            gpu_concept: "when N sibling targets (the Q/K/V projections) each need the same two backward kernels, fuse per KERNEL KIND, not per target: one dispatch computes the summed input-gradient in-kernel (d_input = Σ Rᵢᵀ·gᵢ — one output write, no separate combine-add pass) and one dispatch computes all N parameter gradients in a single grid sized N × num_blocks × params_per_block. Pack every adapter's R matrix, gradient, and the SHARED saved input (all siblings saved the same input — bind it once) into ONE wide bind group. 6 dispatches → 2 per layer. Distinct from dual-grad-same-pass (two partials of ONE op sharing a subexpression — these are grads of N different weight sets sharing only the input) and from fan-out-shared-input-single-sync (forward 1→N mirror) — this is N grads → 1 collected output pair via kernel-body fusion, not pass merging".to_string(),
+            ref_shape: "// naive: per-adapter backward — 2 dispatches × N sibling targets + combine adds\nfn oft_qkv_naive(encoder: &mut Encoder, q: &Adapter, k: &Adapter, v: &Adapter) {\n    for adapter in [q, k, v] {                          // 3 siblings, same math\n        { let mut p = encoder.begin_compute_pass();     // d_input for THIS one\n          p.set_pipeline(&din); p.set_bind_group(0, &adapter.bg_din);\n          p.dispatch_workgroups(adapter.dim_wg, 1, 1); }\n        { let mut p = encoder.begin_compute_pass();     // d_r for THIS one\n          p.set_pipeline(&dr); p.set_bind_group(0, &adapter.bg_dr);\n          p.dispatch_workgroups(adapter.blocks_wg, 1, 1); }\n        // ...then a separate add pass combines the three d_input terms\n    } // 6 dispatches + N-1 combine adds per layer — the siblings read the\n}     // SAME saved input and share the kernel bodies; only buffers differ".to_string(),
+            opt_pattern: "// optimized: fuse per KERNEL KIND across the N siblings — 2 dispatches total\nfn oft_qkv_fused(encoder: &mut Encoder, qkv: &QkvBundle, saved_input: &Buffer) {\n    // ONE wide bind group: R_q,R_k,R_v + g_q,g_k,g_v + the SHARED saved\n    // input (all three saved the same input — bound once) + outputs\n    let bg_wide = make_bg(&layout, &[entry(0, &qkv.r_q), entry(1, &qkv.r_k),\n        entry(2, &qkv.r_v), entry(3, &qkv.g_q), entry(4, &qkv.g_k),\n        entry(5, &qkv.g_v), entry(6, saved_input), entry(7, &qkv.d_input),\n        entry(8, &qkv.weight_delta), entry(9, &qkv.uniform)]);\n    let mut p = encoder.begin_compute_pass();\n    p.set_pipeline(&din_fused);                  // d_input = Σ Rᵢᵀ·gᵢ summed\n    p.set_bind_group(0, &bg_wide);               // IN-KERNEL — one output\n    p.dispatch_workgroups(qkv.dim_wg, 1, 1);     // write, no add pass\n    p.set_pipeline(&dr_fused);                   // ALL N param grads in ONE\n    p.set_bind_group(0, &bg_wide);               // grid: N × blocks ×\n    p.dispatch_workgroups(3 * qkv.blocks * qkv.per_block, 1, 1); // per_block\n    // 6 dispatches + combine adds → 2; the summed d_input needs no add pass\n}".to_string(),
+        },
+        // ── per-layer-strided-grad-destination — post-hoc de-interleave → offsets (D) ──
+        // Source: riir-gpu backward_dflash/mod.rs L205-207 (per_layer_ctx_
+        // grads: "When set, the DFlare context gradient path writes to
+        // per-layer offsets in this buffer instead of accumulating into
+        // d_h_ctx_buf. Layout: [num_draft_layers * seq_len * n_embd],
+        // layer-major.") + L1533-1541 (destination selection at dispatch
+        // time). When a downstream consumer needs a gradient PARTITIONED per
+        // layer, don't run a second pass or post-hoc de-interleave: the
+        // SAME dispatches that accumulate into the shared buffer can write
+        // layer-major strided offsets (layer_idx * seq_len * n_embd + pos *
+        // n_embd) into a pre-partitioned buffer — the per-layer split falls
+        // out of the existing pass for free, and downstream consumers read
+        // contiguous layer slices.
+        //
+        // Distinct from dual-grad-same-pass (two gradients from one
+        // kernel): here ONE gradient gets consumer-selected DESTINATIONS.
+        // Distinct from layout-permute-for-coalescing (layout for memory
+        // coalescing): the destination choice eliminates a re-pass, not a
+        // stride.
+        KernelRule {
+            rule_id: "per-layer-strided-grad-destination".to_string(),
+            gpu_concept: "when a downstream consumer needs a gradient partitioned per layer (per-layer optimizer steps, per-layer analysis), don't accumulate into one shared buffer and de-interleave afterward — write directly to layer-major strided offsets (layer_idx × seq_len × n_embd + pos × n_embd) in one pre-partitioned buffer, selected at dispatch time. The SAME dispatches that would accumulate into the shared buffer produce the per-layer split for free (no second pass, no post-hoc scatter), and downstream consumers read contiguous layer slices instead of strided extraction. Runtime-switchable: the destination is chosen per pass, so shared-accumulator and per-layer modes share one code path. Distinct from dual-grad-same-pass (two grads one kernel — here one grad gets consumer-selected destinations) and from layout-permute-for-coalescing (coalescing — this eliminates a re-pass)".to_string(),
+            ref_shape: "// naive: accumulate into ONE shared buffer, de-interleave per layer afterward\nfn ctx_grad_naive(d_h_ctx: &mut [f32], per_layer: &mut [Vec<f32>], layers: usize,\n                  seq: usize, n: usize) {\n    for layer in 0..layers {\n        // every layer accumulates into d_h_ctx[pos * n + i] — one shared dest\n        accumulate_ctx_grad(layer, d_h_ctx);\n    }\n    // downstream needs PER-LAYER gradients → post-hoc de-interleave pass:\n    for layer in 0..layers {\n        for pos in 0..seq {\n            for i in 0..n {\n                per_layer[layer][pos * n + i] = d_h_ctx[pos * n + i];\n            }\n        }\n    } // a second full pass + a copy per element — the split existed for free\n}".to_string(),
+            opt_pattern: "// optimized: consumer-selected destination offsets — same dispatches, split free\nstruct BackwardPass {\n    d_h_ctx_buf: Buffer,               // shared accumulator (default mode)\n    per_layer_grads: Option<Buffer>,   // [layers × seq × n], layer-major\n}\nimpl BackwardPass {\n    fn ctx_grad_dest(&self, layer: usize, seq: usize, n: usize) -> (&Buffer, u64) {\n        match &self.per_layer_grads {\n            Some(buf) => (buf, (layer * seq * n) as u64), // strided per-layer\n            None => (&self.d_h_ctx_buf, 0),               // shared accumulate\n        }\n    }\n}\nfn ctx_grad_strided(pass: &mut BackwardPass, layers: usize, seq: usize, n: usize) {\n    for layer in 0..layers {\n        let (dest, base) = pass.ctx_grad_dest(layer, seq, n); // runtime-\n        dispatch_ctx_grad(pass, layer, dest, base);  // switchable destination —\n    } // writes land at layer * seq * n + pos * n; downstream reads\n}     // CONTIGUOUS layer slices; no second pass, no de-interleave".to_string(),
+        },
+        // ── snapshot-transient-grad-for-deferred-download — lost temp → pinned copy (A) ──
+        // Source: riir-gpu backward/dispatch.rs L885-897 ("Copy grad_output
+        // to a persistent buffer — will be downloaded after the backward
+        // pass encoder is submitted." + encoder.copy_buffer_to_buffer into
+        // speft_grad_output_buffers[adapter_idx]) + backward/mod.rs L315-319
+        // ("saved grad_output buffers for CPU-side gradient computation
+        // (Plan 162). One buffer per adapter (n_layer * 6). Filled during
+        // backward pass, downloaded after encoder submission."). A gradient
+        // needed host-side often lives in a TEMP that later dispatches in
+        // the same encoder overwrite. Pin it at the correct dataflow point:
+        // an encoder-ordered copy into a persistent per-adapter buffer
+        // lands exactly between the producing dispatch and the overwrite,
+        // and the actual download happens after submit.
+        //
+        // Distinct from defer-readback-until-after-submit (Batch 26 — the
+        // TIMING rule, read after submit): this is the LIFETIME half —
+        // without the snapshot the value is destroyed before the deferred
+        // read ever happens. Composes with persistent-zeros-source-encoder-
+        // copy-clear (the same encoder-timeline copy, applied to value
+        // pinning instead of clearing).
+        KernelRule {
+            rule_id: "snapshot-transient-grad-for-deferred-download".to_string(),
+            gpu_concept: "a gradient needed host-side often lives in a temp buffer that later dispatches in the same encoder overwrite — snapshot it at the correct dataflow point with an encoder-ordered copy into a persistent per-adapter buffer (the copy lands exactly between the producing dispatch and the overwrite), then perform the actual host download after the encoder is submitted. The snapshot pins the value's lifetime; the deferral keeps the submission single. Distinct from defer-readback-until-after-submit (the TIMING rule — read after submit): this is the LIFETIME half, without which the deferred read finds the value already destroyed; composes with persistent-zeros-source-encoder-copy-clear (same timeline trick, value pinning vs clearing)".to_string(),
+            ref_shape: "// naive: the transient is overwritten before any legal read can happen\nfn grad_capture_broken(encoder: &mut Encoder, temp_grad: &Buffer, n: usize) {\n    dispatch_adapter_grad(encoder, temp_grad);     // temp holds the value NOW\n    dispatch_next_layer(encoder, temp_grad);       // OVERWRITES temp!\n    // option A: download here — mid-encoder read returns pre-submission\n    let g = download_f32(device, queue, temp_grad, n);  // STALE + the internal\n    // submit breaks the encoder being built                        encoder\n    // option B: download after submit — the value is already destroyed\n}".to_string(),
+            opt_pattern: "// optimized: encoder-ordered snapshot into a persistent buffer, download after\nstruct Pass { grad_output_buffers: Vec<Buffer> } // one persistent buffer / adapter\nfn grad_capture_snapshot(pass: &Pass, encoder: &mut Encoder, adapter: usize,\n                         temp_grad: &Buffer, n: usize) {\n    dispatch_adapter_grad(encoder, temp_grad);     // temp holds the value\n    // pin the value at THIS dataflow point — the copy lands between the\n    // producing dispatch and the overwrite:\n    encoder.copy_buffer_to_buffer(temp_grad, 0,\n        &pass.grad_output_buffers[adapter], 0, (n * 4) as u64);\n    dispatch_next_layer(encoder, temp_grad);       // overwrite is fine now —\n}                                                 // the snapshot persists\nfn download_after_submit(pass: &Pass, adapter: usize, n: usize) -> Vec<f32> {\n    // called AFTER queue.submit + poll — reads the pinned snapshot, never\n    // a transient, never mid-encoder\n    download_f32_reuse(device, queue, &pass.grad_output_buffers[adapter], n)\n}".to_string(),
         },
     ])
 }
@@ -2849,7 +3133,7 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 177-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 183-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -2857,7 +3141,7 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (25 rules)
+    // A: Memory access patterns (27 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -2887,6 +3171,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "prebuilt-bind-groups-fixed-buffer-combos",
             "host-cache-immutable-device-weights",
             "defer-readback-until-after-submit",
+            "persistent-zeros-source-encoder-copy-clear",
+            "snapshot-transient-grad-for-deferred-download",
         ],
     ),
     // B: Compute patterns (32 rules)
@@ -2928,7 +3214,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "tree-reduction-depth-over-sequential-accumulate",
         ],
     ),
-    // C: Fusion patterns (17 rules)
+    // C: Fusion patterns (18 rules)
     (
         KernelCategory::Fusion,
         "C: fusion",
@@ -2950,9 +3236,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fused-activation-quantize-for-gemv-consumer",
             "dual-grad-same-pass",
             "fan-out-shared-input-single-sync",
+            "fuse-sibling-target-grads-single-kernel",
         ],
     ),
-    // D: Dispatch patterns (20 rules)
+    // D: Dispatch patterns (23 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -2977,6 +3264,9 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "merge-dispatches-into-single-compute-pass",
             "batched-downloads-single-sync-cycle",
             "chunk-encoder-submits-below-driver-limit",
+            "staging-packed-uniforms-encoder-ordered-copies",
+            "identical-uniforms-share-single-slot",
+            "per-layer-strided-grad-destination",
         ],
     ),
     // E: Parallelism patterns (9 rules)
@@ -3146,7 +3436,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
 /// Returns 15 buckets (one per category), each containing the `KernelRule`s whose
 /// `rule_id` appears in that category's slice of [`KERNEL_CATEGORIES`]. This is
 /// the category-scoped view of the corpus — a future heal pipeline can consult
-/// the routed expert's rules first without scanning all 177.
+/// routed expert's rules first without scanning all 183.
 ///
 /// # Allocation
 ///
@@ -3219,8 +3509,9 @@ mod tests {
         // Batch 24 (4): riir-gpu production kernels — widen-index-multiply-to-64bit, dual-accumulator-single-reduction-sweep, dual-grad-same-pass, broadcast-uniform-skip-reduce (cudarc_kernels/backward.rs — Issue 641 per-layer backward cluster: RMSNorm/SwiGLU/z-gating/output-gate/conv1d+SiLU/L2-norm/beta-decay/softmax-attention backward).
         // Batch 25 (5): riir-gpu production kernels — device-side-argmax-minimal-download, monotone-transform-elision-under-argmax, fan-out-shared-input-single-sync, hot-swap-weights-preserve-autotune-caches, tree-reduction-depth-over-sequential-accumulate (gemma2_cubecl/ + gemma4_cubecl/ — the Gemma cluster: GPU decode loop + dispatch helpers + KV cache + weight hot-swap).
         // Batch 26 (8): riir-gpu production kernels — per-slot-uniform-buffer-write-ordering, derive-params-from-global-invocation-id, merge-dispatches-into-single-compute-pass, batched-downloads-single-sync-cycle, chunk-encoder-submits-below-driver-limit, prebuilt-bind-groups-fixed-buffer-combos, host-cache-immutable-device-weights, defer-readback-until-after-submit (forward/ + buffer.rs — the wgpu forward-orchestration cluster: uniform hazards, pass merging, submission chunking, download batching, bind-group pre-building, host caching, deferred readback).
-        // Total: 177.
-        assert_eq!(corpus.entries.len(), 177, "batches 1-26 should have 177 rules");
+        // Batch 27 (6): riir-gpu production kernels — staging-packed-uniforms-encoder-ordered-copies, identical-uniforms-share-single-slot, persistent-zeros-source-encoder-copy-clear, fuse-sibling-target-grads-single-kernel, per-layer-strided-grad-destination, snapshot-transient-grad-for-deferred-download (backward/ + backward_dflash/ — the backward-pass orchestration clusters: staging-packed uniform distribution, the idempotent-write exemption, encoder-ordered zero clears, sibling-target grad fusion, consumer-selected grad destinations, transient snapshotting for deferred readback).
+        // Total: 183.
+        assert_eq!(corpus.entries.len(), 183, "batches 1-27 should have 183 rules");
     }
 
     #[test]
@@ -4193,6 +4484,43 @@ mod tests {
         assert!(concepts.contains(&"never download (map + read) GPU buffers while an encoder referencing them is still under construction — the recorded work has not executed, so the read returns PRE-submission stale state, and any correction uploaded mid-construction is later overwritten by the recorded pass when it runs; the readback's internal submit also breaks the encoder being built. Instead RECORD the needed fixups (small correction list of (buffer, op) pairs), finish + submit the encoder, then download FRESH data, apply, and upload back. Distinct from no-blocking-sync-in-async-pipeline (don't block the host thread) — this is about WHAT a mid-construction read returns (stale state), independent of blocking"));
     }
 
+    #[test]
+    fn batch27_rules_present() {
+        // Verify the 6 batch-27 rules across A/C/D.
+        let corpus = build_kernel_seed_corpus();
+        let ids: Vec<&str> =
+            corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        // D (3 new): the uniform-distribution + destination family
+        assert!(ids.contains(&"staging-packed-uniforms-encoder-ordered-copies"), "staging packed uniforms encoder ordered copies");
+        assert!(ids.contains(&"identical-uniforms-share-single-slot"), "identical uniforms share single slot");
+        assert!(ids.contains(&"per-layer-strided-grad-destination"), "per layer strided grad destination");
+        // C (1 new): the sibling-fusion family
+        assert!(ids.contains(&"fuse-sibling-target-grads-single-kernel"), "fuse sibling target grads single kernel");
+        // A (2 new): the buffer-lifetime family
+        assert!(ids.contains(&"persistent-zeros-source-encoder-copy-clear"), "persistent zeros source encoder copy clear");
+        assert!(ids.contains(&"snapshot-transient-grad-for-deferred-download"), "snapshot transient grad for deferred download");
+    }
+
+    #[test]
+    fn batch27_backward_concepts_covered() {
+        // Verify the batch-27 backward-orchestration concepts.
+        let corpus = build_kernel_seed_corpus();
+        let concepts: Vec<&str> =
+            corpus.entries.iter().map(|e| e.gpu_concept.as_str()).collect();
+        // D: staging-packed-uniforms-encoder-ordered-copies (riir-gpu backward/mod.rs L15 + L1293-1295 + L1505-1512 + staging.rs L31-38)
+        assert!(concepts.contains(&"pack every uniform parameter for the whole pass into ONE 16-byte-aligned CPU staging vec, upload it with ONE queue.write_buffer, then move each dispatch's slice into the shared uniform buffer via encoder.copy_buffer_to_buffer recorded immediately before the consuming dispatch — a copy on the encoder timeline lands exactly between the surrounding dispatches, so ONE shared uniform buffer can safely change value per dispatch (per-layer dims, per-position offsets). Hundreds of small per-dispatch queue writes collapse to one packed upload; queue writes alone would all flush pre-encoder (last-write-wins). Distinct from per-slot-uniform-buffer-write-ordering (N buffers so writes cannot collide) — this is the 1-buffer encoder-timeline alternative; composes with identical-uniforms-share-single-slot"));
+        // D: identical-uniforms-share-single-slot (riir-gpu backward/mod.rs L192-196 + L1447-1452 + backward/dispatch.rs L315-320)
+        assert!(concepts.contains(&"the write_buffer last-write-wins hazard only bites when the writes DIFFER — if every dispatch sharing a uniform buffer in one encoder writes byte-identical params (all batched elementwise adds use count = seq_len × n_embd), the last write is idempotent with all earlier ones and flush order is moot: share ONE uniform buffer + ONE bind group instead of N (and in staging terms, push the value once and reuse the byte offset — staging data is read-only after upload). The safety contract must live at the API boundary: 'caller must provide a unique uniform if the count differs across calls in the same encoder'. Distinct from per-slot-uniform-buffer-write-ordering (the hazard rule) — this is the exemption; diverging params need per-slot buffers or staging-packed encoder-ordered copies"));
+        // A: persistent-zeros-source-encoder-copy-clear (riir-gpu backward/mod.rs L235-241 + L267-268 + backward/dispatch.rs L621-631 + L1106-1110 + backward_dflash/mod.rs L309-310 + L618)
+        assert!(concepts.contains(&"clearing an accumulator buffer between dispatches inside one encoder must happen on the encoder timeline: keep a device buffer pre-zeroed once at init (COPY_SRC, sized to the max clear target) and clear via encoder.copy_buffer_to_buffer from it — a queue.write_buffer of zeros flushes before the WHOLE encoder runs, so every layer's clear lands up front and layer 1 accumulates on top of layer 0's values. Each clear is a device-side copy (zero host→device bandwidth; wgpu has no buffer-fill API so the zeros source IS the fill); if a target is larger than the zeros source, clear in chunks. Distinct from per-slot-uniform-buffer-write-ordering (uniform slots) — this is data-buffer re-init between dispatches; distinct from staging-packed-uniforms (param distribution) — this distributes a constant fill"));
+        // C: fuse-sibling-target-grads-single-kernel (riir-gpu backward/dispatch.rs L678-685 + L707 + L849-851)
+        assert!(concepts.contains(&"when N sibling targets (the Q/K/V projections) each need the same two backward kernels, fuse per KERNEL KIND, not per target: one dispatch computes the summed input-gradient in-kernel (d_input = Σ Rᵢᵀ·gᵢ — one output write, no separate combine-add pass) and one dispatch computes all N parameter gradients in a single grid sized N × num_blocks × params_per_block. Pack every adapter's R matrix, gradient, and the SHARED saved input (all siblings saved the same input — bind it once) into ONE wide bind group. 6 dispatches → 2 per layer. Distinct from dual-grad-same-pass (two partials of ONE op sharing a subexpression — these are grads of N different weight sets sharing only the input) and from fan-out-shared-input-single-sync (forward 1→N mirror) — this is N grads → 1 collected output pair via kernel-body fusion, not pass merging"));
+        // D: per-layer-strided-grad-destination (riir-gpu backward_dflash/mod.rs L205-207 + L1533-1541)
+        assert!(concepts.contains(&"when a downstream consumer needs a gradient partitioned per layer (per-layer optimizer steps, per-layer analysis), don't accumulate into one shared buffer and de-interleave afterward — write directly to layer-major strided offsets (layer_idx × seq_len × n_embd + pos × n_embd) in one pre-partitioned buffer, selected at dispatch time. The SAME dispatches that would accumulate into the shared buffer produce the per-layer split for free (no second pass, no post-hoc scatter), and downstream consumers read contiguous layer slices instead of strided extraction. Runtime-switchable: the destination is chosen per pass, so shared-accumulator and per-layer modes share one code path. Distinct from dual-grad-same-pass (two grads one kernel — here one grad gets consumer-selected destinations) and from layout-permute-for-coalescing (coalescing — this eliminates a re-pass)"));
+        // A: snapshot-transient-grad-for-deferred-download (riir-gpu backward/dispatch.rs L885-897 + backward/mod.rs L315-319)
+        assert!(concepts.contains(&"a gradient needed host-side often lives in a temp buffer that later dispatches in the same encoder overwrite — snapshot it at the correct dataflow point with an encoder-ordered copy into a persistent per-adapter buffer (the copy lands exactly between the producing dispatch and the overwrite), then perform the actual host download after the encoder is submitted. The snapshot pins the value's lifetime; the deferral keeps the submission single. Distinct from defer-readback-until-after-submit (the TIMING rule — read after submit): this is the LIFETIME half, without which the deferred read finds the value already destroyed; composes with persistent-zeros-source-encoder-copy-clear (same timeline trick, value pinning vs clearing)"));
+    }
+
     // ════════════════════════════════════════════════════════════════════
     // Plan 003 — Router ↔ corpus wiring tests
     // ════════════════════════════════════════════════════════════════════
@@ -4204,7 +4532,7 @@ mod tests {
 
     #[test]
     fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-        // Every rule_id in the 177-rule corpus must appear in exactly one category.
+        // Every rule_id in the 183-rule corpus must appear in exactly one category.
         let corpus = build_kernel_seed_corpus();
         let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
         let mut categorized: Vec<&str> = Vec::new();
@@ -4235,12 +4563,12 @@ mod tests {
 
     #[test]
     fn kernel_categories_counts_match_plan_003_table() {
-        // Pin per-category rule counts to the Plan 003 table (updated for Batch 26).
+        // Pin per-category rule counts to the Plan 003 table (updated for Batch 27).
         let expected = [
-            (KernelCategory::MemoryAccess, 25),
+            (KernelCategory::MemoryAccess, 27),
             (KernelCategory::Compute, 32),
-            (KernelCategory::Fusion, 17),
-            (KernelCategory::Dispatch, 20),
+            (KernelCategory::Fusion, 18),
+            (KernelCategory::Dispatch, 23),
             (KernelCategory::Parallelism, 9),
             (KernelCategory::FlashAttnTiling, 10),
             (KernelCategory::LinearAttnRecurrence, 17),
@@ -4260,9 +4588,9 @@ mod tests {
                 "Plan 003: category {cat:?} has {} rules, expected {count}",
                 entry.2.len());
         }
-        // Sum must equal 177.
+        // Sum must equal 183.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 177, "Plan 003: category totals must sum to 177");
+        assert_eq!(total, 183, "Plan 003: category totals must sum to 183");
     }
 
     #[test]
@@ -4272,7 +4600,7 @@ mod tests {
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 177, "Plan 003: grouped corpus has {total} rules, expected 177");
+        assert_eq!(total, 183, "Plan 003: grouped corpus has {total} rules, expected 183");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");
