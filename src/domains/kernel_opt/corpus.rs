@@ -197,6 +197,33 @@
 //!   per-dispatch staging copies are a special case of rule #2 when the runtime
 //!   can't extract raw handles. Corpus: **150 rules across 15 categories (A–O)**.
 //!   `riir-gpu` remains open (19 of ~200 files mined).
+//! - **Batch 22 (Research 023, 2026-08-14):** mined the `cudarc_kernels/`
+//!   directory — the full raw-CUDA forward port for Issue 615 (4 files:
+//!   `embedding.rs` + `attention.rs` + `mod.rs` + `deltanet.rs`, ~8278 LOC).
+//!   The port exists because the dp4a GEMV kernel's 4.7× speedup is
+//!   uncapturable in mixed mode (CPU elementwise + GPU GEMV) — the only way
+//!   to capture it is a full GPU-resident forward where ALL ops run on the
+//!   same CUDA stream. 5 new rules: dynamic-shared-memory-runtime-sized (A —
+//!   `extern __shared__` with launch-time `shared_mem_bytes` for runtime-sized
+//!   dimensions like `head_dim`; fixes the Bonsai-27B `head_dim=256` bug where a
+//!   compile-time `Shared::<[f32]>::new_slice(128)` was too small),
+//!   ternary-bit-plane-u64-as-2x-u32 (A — two bit-planes packed as u64
+//!   blocks cast to 2×u32 for per-bit sign extraction; distinct from
+//!   base-3-trit-packing-5-per-byte which is arithmetic base-3),
+//!   warp-shuffle-intrinsics-for-sub-warp-reduction (B — `__shfl_down_sync`
+//!   butterfly reduction for blocks ≤32 threads = one warp; no smem alloc,
+//!   no syncthreads; includes the `volatile float* vsmem` companion for the
+//!   final 32-thread tail of a larger smem tree), fused-activation-quantize-
+//!   for-gemv-consumer (C — fuse RMSNorm/SwiGLU/gate*sigmoid + absmax + int8
+//!   quantize into one kernel when the activation feeds a GEMV that reads
+//!   int8; eliminates the intermediate f32 HBM round-trip; distinct from
+//!   fuse-quant-matmul which is quantize+matmul), cuda-graph-scalar-via-
+//!   device-pointer (D — ship a `_devpos` variant that reads scalars from a
+//!   device pointer dereferenced at kernel runtime so the captured CUDA graph
+//!   can process different inputs each launch; scalar args get baked into the
+//!   captured graph at capture time). Corpus: **155 rules across 15 categories
+//!   (A–O)**. `riir-gpu` remains open (23 of ~200 files mined; `cudarc_kernels/`
+//!   fully covered).
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
@@ -2225,6 +2252,62 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
             ref_shape: "// naive: block on every dispatch — serializes the async pipeline (host thread stalls)\nfn dispatch_blocking(cmd_queue: &CommandQueueRef) -> Result<Vec<f32>, String> {\n    let cmd = cmd_queue.new_command_buffer();\n    let encoder = cmd.new_compute_command_encoder();\n    // ... dispatch kernel ...\n    encoder.end_encoding();\n    cmd.commit();\n    cmd.wait_until_completed(); // BLOCKS the host thread until the GPU finishes\n    // The next dispatch can't even be queued until this one finishes —\n    // the async pipeline is serialized into a sync one. At ~448 prefill\n    // projections, this is 448 blocking round-trips (the Issue 656 regression).\n    Ok(read_output())\n}".to_string(),
             opt_pattern: "// optimized: no blocking sync — submit and return; queue ordering covers correctness\nfn dispatch_non_blocking(cmd_queue: &CommandQueueRef) -> Result<(), String> {\n    let cmd = cmd_queue.new_command_buffer();\n    let encoder = cmd.new_compute_command_encoder();\n    // ... dispatch kernel ...\n    encoder.end_encoding();\n    cmd.commit();\n    // NO wait_until_completed — the host thread returns immediately. The\n    // wrapper's NEXT dispatch on the same queue is automatically ordered\n    // AFTER this one (Metal: in-order execution within one queue).\n    //\n    // The caller's pre-dispatch `client.sync()` ensured the INPUT was committed;\n    // the queue ordering ensures the OUTPUT is visible to the next consumer.\n    // Only an external test using `client.read_one` (which may map without\n    // a GPU sync) needs to call wait_until_completed explicitly.\n    Ok(()) // async pipeline stays async — 448 projections pipeline through the queue\n}".to_string(),
         },
+        // ════════════════════════════════════════════════════════════════════
+        // Batch 22 (Research 023): cudarc_kernels CUDA cluster — 5 rules
+        // (embedding.rs + attention.rs + mod.rs + deltanet.rs; Issue 615 full
+        // GPU-resident forward port).
+        // ════════════════════════════════════════════════════════════════════
+        // ── dynamic-shared-memory-runtime-sized — extern __shared__ for runtime-sized smem (A) ──
+        // Source: riir-gpu cudarc_kernels/attention.rs L265-301 + deltanet.rs
+        // recurrence kernel. The CubeCL `qwen_attention_decode_f32` used
+        // `Shared::<[f32]>::new_slice(128)` — a compile-time constant too
+        // small for Bonsai-27B (head_dim=256). The raw CUDA port uses
+        // `extern __shared__` with `shared_mem_bytes = head_dim * 4` at
+        // launch, so the allocation matches the actual dimension.
+        KernelRule {
+            rule_id: "dynamic-shared-memory-runtime-sized".to_string(),
+            gpu_concept: "use extern __shared__ with launch-time shared_mem_bytes instead of a compile-time __shared__ array when the smem size depends on a runtime dimension (e.g. head_dim varies: 64 for DeltaNet, 128 for Qwen-7B, 256 for Bonsai-27B)".to_string(),
+            ref_shape: "// naive: compile-time smem — wrong for head_dim != 128\n__shared__ float smem[128];  // too small for Bonsai-27B (head_dim=256)\n// ... uses smem[0..head_dim] — out-of-bounds for head_dim > 128 ...".to_string(),
+            opt_pattern: "// optimized: runtime-sized smem via extern __shared__ + launch config\nextern \"C\" __global__ void kernel(float* out, int head_dim) {\n    extern __shared__ float smem[];  // sized at launch via shared_mem_bytes\n    // ... use smem[0..head_dim] — correct for any head_dim ...\n}\n// launch:\nlet cfg = LaunchConfig {\n    grid_dim: (n_head as u32, 1, 1),\n    block_dim: (head_dim as u32, 1, 1),\n    shared_mem_bytes: (head_dim * 4) as u32,  // runtime-sized\n};".to_string(),
+        },
+        // ── ternary-bit-plane-u64-as-2x-u32 — bit-plane sign extraction for ternary dequant (A) ──
+        // Source: riir-gpu cudarc_kernels/embedding.rs L37-69. Ternary
+        // weights stored as two bit-planes (pos_bits + neg_bits), packed as
+        // u64 blocks cast to 2×u32 for per-bit sign extraction. Column c
+        // maps to: block_idx=c/64, word_in_block=(c%64)/32, bit_pos=c%32.
+        // Distinct from base-3-trit-packing-5-per-byte (arithmetic base-3)
+        // — this is 1 sign bit per position across two planes.
+        KernelRule {
+            rule_id: "ternary-bit-plane-u64-as-2x-u32".to_string(),
+            gpu_concept: "ternary weights as two bit-planes (positive + negative sign bits) packed as u64 blocks cast to 2×u32 words — extract sign per column via bit_pos = c % 32, word_in_block = (c % 64) / 32, then output = sign * per-group scale. The 2×u32 cast is because u64 isn't directly per-bit addressable in CUDA; two u32 words are".to_string(),
+            ref_shape: "// naive: store ternary as i8 per element (3 bytes per 2 ternary values)\nfn dequant_naive(weights: &[i8], scales: &[f32], out: &mut [f32], n: usize) {\n    for c in 0..n {\n        let w = weights[c];  // -1, 0, or +1 stored as i8\n        let group = c / GROUP_SIZE;\n        out[c] = w as f32 * scales[group];\n    }\n}".to_string(),
+            opt_pattern: "// optimized: bit-plane packing — 64 ternary values per u64 block (2 bits each, pos + neg)\n// Layout: pos_bits_u32[rows * blocks64 * 2] + neg_bits_u32[rows * blocks64 * 2]\nfn dequant_bitplane(pos_bits: &[u32], neg_bits: &[u32], scales: &[f32], out: &mut [f32], row: usize, blocks64: usize, groups_per_row: usize, n: usize) {\n    let words_per_row = blocks64 * 2;  // u64 → 2× u32\n    for c in 0..n {\n        let block_idx = c / 64;\n        let word_in_block = (c % 64) / 32;\n        let bit_pos = c % 32;\n        let word_idx = row * words_per_row + block_idx * 2 + word_in_block;\n        let pos_bit = (pos_bits[word_idx] >> bit_pos) & 1;\n        let neg_bit = (neg_bits[word_idx] >> bit_pos) & 1;\n        let sign = pos_bit as f32 - neg_bit as f32;  // +1, 0, or -1\n        let group = c / GROUP_SIZE;\n        let scale = scales[row * groups_per_row + group];\n        out[c] = sign * scale;\n    }\n}".to_string(),
+        },
+        // ── warp-shuffle-intrinsics-for-sub-warp-reduction — __shfl_down_sync for ≤32-thread blocks (B) ──
+        // Source: riir-gpu cudarc_kernels/mod.rs L163-167 (quantize_f32_to_i8)\n        // + attention.rs L336-344 (final warp reduction). For blocks ≤32\n        // threads (one warp), use __shfl_down_sync for reduction instead\n        // of shared memory + __syncthreads. The warp runs in lockstep (SIMT),\n        // so the shuffle is both correct and free (no smem alloc, no sync\n        // barrier). Companion: for the final 32-thread tail of a larger smem\n        // tree reduction, use `volatile float* vsmem = smem` + skip\n        // __syncthreads — volatile defeats register caching, lockstep makes\n        // the sync unnecessary.
+        KernelRule {
+            rule_id: "warp-shuffle-intrinsics-for-sub-warp-reduction".to_string(),
+            gpu_concept: "for blocks of 32 threads or fewer (one warp), use __shfl_down_sync(mask, val, delta) butterfly reduction instead of shared memory + __syncthreads — the warp executes in lockstep (SIMT), so the shuffle is both correct and free (no smem allocation, no synchronization barrier). For the final 32-thread tail of a larger smem tree reduction, cast to volatile float* and skip __syncthreads — volatile prevents the compiler from caching stale values in registers".to_string(),
+            ref_shape: "// naive: shared-memory tree reduction even for a 16-thread block (overkill — one warp)\n__shared__ float smem[16];\nsmem[tid] = val;\n__syncthreads();\nif (tid < 8) smem[tid] = fmaxf(smem[tid], smem[tid + 8]); __syncthreads();\nif (tid < 4) smem[tid] = fmaxf(smem[tid], smem[tid + 4]); __syncthreads();\nif (tid < 2) smem[tid] = fmaxf(smem[tid], smem[tid + 2]); __syncthreads();\nif (tid < 1) smem[0] = fmaxf(smem[0], smem[1]); __syncthreads();\nfloat result = smem[0];  // 4 syncthreads + 16 floats of smem for a 16-thread block".to_string(),
+            opt_pattern: "// optimized: warp-shuffle butterfly — no smem, no syncthreads (blockDim.x <= 32 = one warp)\nfloat a = fabsf(val);\na = fmaxf(a, __shfl_down_sync(0xFFFFFFFFu, a, 8));\na = fmaxf(a, __shfl_down_sync(0xFFFFFFFFu, a, 4));\na = fmaxf(a, __shfl_down_sync(0xFFFFFFFFu, a, 2));\na = fmaxf(a, __shfl_down_sync(0xFFFFFFFFu, a, 1));\nconst float absmax = __shfl_sync(0xFFFFFFFFu, a, 0);  // broadcast lane 0 to all\n// 4 shuffles, 0 smem, 0 syncthreads — hardware warp intrinsic\n//\n// For the final 32-thread tail of a LARGER smem tree reduction:\nif (tid < 32) {\n    volatile float* vsmem = smem;  // volatile: defeat compiler register caching\n    if (tid < 16) vsmem[tid] = fmaxf(vsmem[tid], vsmem[tid + 16]);\n    if (tid < 8)  vsmem[tid] = fmaxf(vsmem[tid], vsmem[tid + 8]);\n    if (tid < 4)  vsmem[tid] = fmaxf(vsmem[tid], vsmem[tid + 4]);\n    if (tid < 2)  vsmem[tid] = fmaxf(vsmem[tid], vsmem[tid + 2]);\n    if (tid < 1)  vsmem[0] = fmaxf(vsmem[0], vsmem[1]);\n    // NO __syncthreads — warp runs in lockstep".to_string(),
+        },
+        // ── fused-activation-quantize-for-gemv-consumer — activation + absmax + int8 in one kernel (C) ──
+        // Source: riir-gpu cudarc_kernels/mod.rs L191-289 (rmsnorm_quantize_f32,\n        // Issue 623) + L407-450 (swiglu_quantize_f32, Issue 625) + L468-554\n        // (gate_silu/sigmoid_quantize_f32, Issue 626) + L575+ (rmsnorm_gate_silu_quantize_f32,\n        // Issue 627 three-way fusion). When an activation's output is immediately\n        // consumed by a GEMV that reads int8, fuse the activation + absmax + int8\n        // quantize into one kernel — eliminates the intermediate f32 HBM\n        // round-trip (~2.6 MB/token for RMSNorm, ~115 KB/layer for SwiGLU).
+        // Distinct from fuse-quant-matmul (quantize+matmul) — here the activation\n        // is the non-trivial part (RMSNorm needs a reduction, SwiGLU needs an exp).
+        KernelRule {
+            rule_id: "fused-activation-quantize-for-gemv-consumer".to_string(),
+            gpu_concept: "when an activation's output (RMSNorm, SwiGLU, gate*sigmoid, gate*silu) is immediately consumed by a GEMV that reads int8 (not f32), fuse the activation + per-block absmax reduction + int8 quantize into one kernel — eliminates the intermediate f32 HBM round-trip and one kernel launch. The activation is the non-trivial part (needs a reduction or exp); the quantize is the trivial part (absmax + scale + round)".to_string(),
+            ref_shape: "// naive: separate activation then quantize (2 kernel launches, intermediate f32 HBM round-trip)\nfn rmsnorm_then_quantize_separate(input: &[f32], gamma: &[f32], out: &mut [i8], ascale: &mut [f32]) {\n    let mut norm = vec![0.0f32; input.len()];  // intermediate f32 buffer (~2.6 MB/token)\n    rmsnorm_kernel(input, gamma, &mut norm);  // launch 1: writes f32 to HBM\n    quantize_kernel(&norm, out, ascale);       // launch 2: reads f32 from HBM, writes i8\n}".to_string(),
+            opt_pattern: "// optimized: fused activation + absmax + quantize (1 kernel, no intermediate)\nfn rmsnorm_quantize_fused(input: &[f32], gamma: &[f32], out: &mut [i8], ascale: &mut [f32]) {\n    // Phase 1: RMSNorm sum-of-squares (smem tree reduction)\n    // Phase 2: normalize + find per-block absmax (warp shuffle)\n    // Phase 3: quantize — d = absmax / 127, i8 = round(v / d), write directly\n    // One kernel launch, one HBM write (i8), no intermediate f32\n    // Same pattern applies to: SwiGLU+quantize, gate*sigmoid+quantize,\n    // gate*silu+quantize, and three-way RMSNorm+gate+quantize fusion.".to_string(),
+        },
+        // ── cuda-graph-scalar-via-device-pointer — _devpos variant for graph capture (D) ──
+        // Source: riir-gpu cudarc_kernels/embedding.rs L76-105 (dequant_wte_row_f32_devpos,\n        // Issue 618) + attention.rs L421-610 (rope_partial_f32_devpos +\n        // kv_cache_append_f32_devpos + attention_decode_f32_devpos). When\n        // capturing a CUDA graph, scalar kernel args (int, float) get baked\n        // into the captured graph — the graph replays the exact value on\n        // every launch. Ship a _devpos variant that reads the scalar from a\n        // device pointer dereferenced at kernel runtime; the caller writes\n        // the new value via memcpy_htod before graph.launch().
+        KernelRule {
+            rule_id: "cuda-graph-scalar-via-device-pointer".to_string(),
+            gpu_concept: "when capturing a CUDA graph, scalar kernel args (int pos, int row_idx) get baked into the captured graph at capture time — the graph replays the exact value on every launch and cannot change. Ship a _devpos variant that reads the scalar from a const device pointer dereferenced at kernel runtime; the caller writes the new value to a 4-byte device buffer via memcpy_htod on the same stream before graph.launch(), so the captured graph processes a different input each call".to_string(),
+            ref_shape: "// naive: scalar arg — baked into captured CUDA graph, cannot change per-launch\nextern \"C\" __global__ void kernel_scalar(const float* in, float* out, const int pos) {\n    // pos is a CAPTURE-TIME constant. graphCapture() bakes this value in;\n    // subsequent graph.launch() calls replay the SAME pos forever.\n    out[threadIdx.x] = in[pos + threadIdx.x];\n}\n// capture:\nstream.launch_builder(&kernel_scalar).arg(in).arg(out).arg(&42).launch(cfg);\nstream.graph_capture_begin();\nstream.launch_builder(&kernel_scalar).arg(in).arg(out).arg(&42).launch(cfg);  // pos=42 baked in\nlet graph = stream.graph_capture_end();\n// graph.launch() always reads pos=42 — cannot process pos=43 without re-capturing.".to_string(),
+            opt_pattern: "// optimized: device-pointer variant — dereferenced at kernel runtime, graph-capturable\nextern \"C\" __global__ void kernel_devpos(const float* in, float* out, const int* pos_dev) {\n    const int pos = *pos_dev;  // dereference at kernel runtime — NOT baked into graph\n    out[threadIdx.x] = in[pos + threadIdx.x];\n}\n// capture (once):\nstream.graph_capture_begin();\nstream.launch_builder(&kernel_devpos).arg(in).arg(out).arg(pos_dev_buf).launch(cfg);\nlet graph = stream.graph_capture_end();  // captures the POINTER, not the value\n// per-call: write new pos to the device buffer, then launch the graph\nstream.memcpy_htod(pos_dev_buf, &new_pos);  // update before launch\ngraph.launch();  // reads whatever pos_dev_buf contains — different pos each call\n// One graph capture amortized across all calls; per-call cost is just a 4-byte memcpy.".to_string(),
+        },
     ])
 }
 
@@ -2237,7 +2320,7 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 145-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 155-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -2245,7 +2328,7 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (17 rules)
+    // A: Memory access patterns (19 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -2267,9 +2350,11 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "pool-buffer-aliasing-dedicated-output",
             "same-queue-implicit-ordering-no-sync",
             "per-dispatch-pointer-re-extraction",
+            "dynamic-shared-memory-runtime-sized",
+            "ternary-bit-plane-u64-as-2x-u32",
         ],
     ),
-    // B: Compute patterns (27 rules)
+    // B: Compute patterns (28 rules)
     (
         KernelCategory::Compute,
         "B: compute",
@@ -2301,9 +2386,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "byte-perm-lut-via-permutation-immediate",
             "dp4a-int8-hardware-dot-product",
             "threadgroup-subset-sum-lut-keyed-by-activation",
+            "warp-shuffle-intrinsics-for-sub-warp-reduction",
         ],
     ),
-    // C: Fusion patterns (14 rules)
+    // C: Fusion patterns (15 rules)
     (
         KernelCategory::Fusion,
         "C: fusion",
@@ -2322,9 +2408,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fuse-gate-up-gemv-activation",
             "chain-dispatches-single-sync-point",
             "fuse-residual-via-in-place-output-array",
+            "fused-activation-quantize-for-gemv-consumer",
         ],
     ),
-    // D: Dispatch patterns (10 rules)
+    // D: Dispatch patterns (11 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -2339,6 +2426,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "cyclic-modality-table-selection",
             "swap-large-axis-to-x-for-workgroup-distribution",
             "no-blocking-sync-in-async-pipeline",
+            "cuda-graph-scalar-via-device-pointer",
         ],
     ),
     // E: Parallelism patterns (8 rules)
@@ -2575,8 +2663,9 @@ mod tests {
         // Batch 19 (2): riir-gpu production kernels — chain-dispatches-single-sync-point, fuse-residual-via-in-place-output-array (ternary_ffn_fused, gemv_ternary_residual_cubecl).
         // Batch 20 (5): riir-gpu production kernels — cooperative-block-wide-quantize-staging, byte-perm-lut-via-permutation-immediate, dp4a-int8-hardware-dot-product, threadgroup-subset-sum-lut-keyed-by-activation, base-3-trit-packing-5-per-byte (gemv_ternary_cuda_raw + gemv_ternary_cubecl LUT/trit paths).
         // Batch 21 (5): riir-gpu production kernels — cross-runtime-raw-handle-extraction, pool-buffer-aliasing-dedicated-output, same-queue-implicit-ordering-no-sync, per-dispatch-pointer-re-extraction, no-blocking-sync-in-async-pipeline (gemm_ternary_metal_zero_copy.rs — Metal cross-runtime integration cluster).
-        // Total: 150.
-        assert_eq!(corpus.entries.len(), 150, "batches 1-21 should have 150 rules");
+        // Batch 22 (5): riir-gpu production kernels — dynamic-shared-memory-runtime-sized, ternary-bit-plane-u64-as-2x-u32, warp-shuffle-intrinsics-for-sub-warp-reduction, fused-activation-quantize-for-gemv-consumer, cuda-graph-scalar-via-device-pointer (cudarc_kernels/ — embedding.rs + attention.rs + mod.rs + deltanet.rs; Issue 615 full GPU-resident forward port).
+        // Total: 155.
+        assert_eq!(corpus.entries.len(), 155, "batches 1-22 should have 155 rules");
     }
 
     #[test]
@@ -3365,6 +3454,41 @@ mod tests {
         assert!(concepts.contains(&"when dispatching on a shared command queue inside an async pipeline, never call wait_until_completed/sync — it serializes the pipeline by blocking the host thread. Use queue ordering (in-order execution within one queue) + the caller's pre-dispatch sync to cover correctness. Only non-queued read paths (test read_one) need explicit sync"));
     }
 
+    #[test]
+    fn batch22_rules_present() {
+        // Verify the 5 batch-22 rules across A/B/C/D.
+        let corpus = build_kernel_seed_corpus();
+        let ids: Vec<&str> =
+            corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        // A (2 new): dynamic-shared-memory-runtime-sized + ternary-bit-plane-u64-as-2x-u32
+        assert!(ids.contains(&"dynamic-shared-memory-runtime-sized"), "dynamic shared memory runtime sized");
+        assert!(ids.contains(&"ternary-bit-plane-u64-as-2x-u32"), "ternary bit plane u64 as 2x u32");
+        // B (1 new): warp-shuffle-intrinsics-for-sub-warp-reduction
+        assert!(ids.contains(&"warp-shuffle-intrinsics-for-sub-warp-reduction"), "warp shuffle intrinsics for sub warp reduction");
+        // C (1 new): fused-activation-quantize-for-gemv-consumer
+        assert!(ids.contains(&"fused-activation-quantize-for-gemv-consumer"), "fused activation quantize for gemv consumer");
+        // D (1 new): cuda-graph-scalar-via-device-pointer
+        assert!(ids.contains(&"cuda-graph-scalar-via-device-pointer"), "cuda graph scalar via device pointer");
+    }
+
+    #[test]
+    fn batch22_cudarc_kernels_concepts_covered() {
+        // Verify the batch-22 cudarc_kernels CUDA cluster concepts.
+        let corpus = build_kernel_seed_corpus();
+        let concepts: Vec<&str> =
+            corpus.entries.iter().map(|e| e.gpu_concept.as_str()).collect();
+        // A: dynamic-shared-memory-runtime-sized (riir-gpu cudarc_kernels/attention.rs L265-301)
+        assert!(concepts.contains(&"use extern __shared__ with launch-time shared_mem_bytes instead of a compile-time __shared__ array when the smem size depends on a runtime dimension (e.g. head_dim varies: 64 for DeltaNet, 128 for Qwen-7B, 256 for Bonsai-27B)"));
+        // A: ternary-bit-plane-u64-as-2x-u32 (riir-gpu cudarc_kernels/embedding.rs L37-69)
+        assert!(concepts.contains(&"ternary weights as two bit-planes (positive + negative sign bits) packed as u64 blocks cast to 2×u32 words — extract sign per column via bit_pos = c % 32, word_in_block = (c % 64) / 32, then output = sign * per-group scale. The 2×u32 cast is because u64 isn't directly per-bit addressable in CUDA; two u32 words are"));
+        // B: warp-shuffle-intrinsics-for-sub-warp-reduction (riir-gpu cudarc_kernels/mod.rs L163-167 + attention.rs L336-344)
+        assert!(concepts.contains(&"for blocks of 32 threads or fewer (one warp), use __shfl_down_sync(mask, val, delta) butterfly reduction instead of shared memory + __syncthreads — the warp executes in lockstep (SIMT), so the shuffle is both correct and free (no smem allocation, no synchronization barrier). For the final 32-thread tail of a larger smem tree reduction, cast to volatile float* and skip __syncthreads — volatile prevents the compiler from caching stale values in registers"));
+        // C: fused-activation-quantize-for-gemv-consumer (riir-gpu cudarc_kernels/mod.rs L191-289 + L407-554)
+        assert!(concepts.contains(&"when an activation's output (RMSNorm, SwiGLU, gate*sigmoid, gate*silu) is immediately consumed by a GEMV that reads int8 (not f32), fuse the activation + per-block absmax reduction + int8 quantize into one kernel — eliminates the intermediate f32 HBM round-trip and one kernel launch. The activation is the non-trivial part (needs a reduction or exp); the quantize is the trivial part (absmax + scale + round)"));
+        // D: cuda-graph-scalar-via-device-pointer (riir-gpu cudarc_kernels/embedding.rs L76-105 + attention.rs L421-610)
+        assert!(concepts.contains(&"when capturing a CUDA graph, scalar kernel args (int pos, int row_idx) get baked into the captured graph at capture time — the graph replays the exact value on every launch and cannot change. Ship a _devpos variant that reads the scalar from a const device pointer dereferenced at kernel runtime; the caller writes the new value to a 4-byte device buffer via memcpy_htod on the same stream before graph.launch(), so the captured graph processes a different input each call"));
+    }
+
     // ════════════════════════════════════════════════════════════════════
     // Plan 003 — Router ↔ corpus wiring tests
     // ════════════════════════════════════════════════════════════════════
@@ -3376,7 +3500,7 @@ mod tests {
 
     #[test]
     fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-        // Every rule_id in the 145-rule corpus must appear in exactly one category.
+        // Every rule_id in the 155-rule corpus must appear in exactly one category.
         let corpus = build_kernel_seed_corpus();
         let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
         let mut categorized: Vec<&str> = Vec::new();
@@ -3407,12 +3531,12 @@ mod tests {
 
     #[test]
     fn kernel_categories_counts_match_plan_003_table() {
-        // Pin per-category rule counts to the Plan 003 table (updated for Batch 21).
+        // Pin per-category rule counts to the Plan 003 table (updated for Batch 22).
         let expected = [
-            (KernelCategory::MemoryAccess, 17),
-            (KernelCategory::Compute, 27),
-            (KernelCategory::Fusion, 14),
-            (KernelCategory::Dispatch, 10),
+            (KernelCategory::MemoryAccess, 19),
+            (KernelCategory::Compute, 28),
+            (KernelCategory::Fusion, 15),
+            (KernelCategory::Dispatch, 11),
             (KernelCategory::Parallelism, 8),
             (KernelCategory::FlashAttnTiling, 10),
             (KernelCategory::LinearAttnRecurrence, 17),
@@ -3432,9 +3556,9 @@ mod tests {
                 "Plan 003: category {cat:?} has {} rules, expected {count}",
                 entry.2.len());
         }
-        // Sum must equal 150.
+        // Sum must equal 155.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 150, "Plan 003: category totals must sum to 150");
+        assert_eq!(total, 155, "Plan 003: category totals must sum to 155");
     }
 
     #[test]
@@ -3444,7 +3568,7 @@ mod tests {
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 150, "Plan 003: grouped corpus has {total} rules, expected 150");
+        assert_eq!(total, 155, "Plan 003: grouped corpus has {total} rules, expected 155");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");
