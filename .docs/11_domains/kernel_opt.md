@@ -10,7 +10,7 @@
 | Component | Ships now | Deferred |
 |---|---|---|
 | `KernelOptDomain: HealDomain` | ✅ | |
-| Seed corpus (Batch 1-9: 76 rules) | ✅ | Full corpus (~300-500 rules, ~15-25 batches) |
+| Seed corpus (Batch 1-10: 88 rules) | ✅ | Full corpus (~300-500 rules, ~15-25 batches) |
 | `KernelExpertRouter` (`pick_domain`) | ✅ (8-dim activity, 15/15 reachable, Plan 004) | Mined centroids via `CommittedFieldBlend` |
 | `KernelThermalRouter` (5-tier stub) | ✅ (returns Plasma) | Warm/Cold LoRA (4090, riir-train) |
 | `KernelVerifier` (compile-only) | ✅ (behind `kernel_verify`) | Full numeric compare vs reference |
@@ -27,7 +27,8 @@ Batch 6 (Research 007): 3 rules — varlen packing + chunked reductions.
 Batch 7 (Research 008): 9 rules — burn-cubecl autotune dispatch + conv-as-GEMM + memory layout.
 Batch 8 (Research 009): 9 rules — burn-cubecl kernel polymorphism + dtype/alignment specialization + cubecl-opt IR strength reduction.
 Batch 9 (Research 010): 8 rules — popcorn fusion + dtype/quant + dispatch (add_rms_norm, group_norm_linear, jsd, int8_int2_matmul, _quant).
-Total: 76 rules. Full corpus target: ~300-500 rules in ~15-25 batches.
+Batch 10 (Research 011): 12 rules — popcorn compute + chunked reduction + polymorphism (mean_pooling, solve_tril, hadamard_transform, comba, dyt, token_shift, sparsemax, selective_log_softmax, softmax, rms_norm, geglu, swiglu, rope, gelu).
+Total: 88 rules. Full corpus target: ~300-500 rules in ~15-25 batches.
 
 ### Category A: Memory access patterns (6 rules)
 
@@ -40,7 +41,7 @@ Total: 76 rules. Full corpus target: ~300-500 rules in ~15-25 batches.
 | `gemm-tiling` | shared-memory tiling | Naive GEMM (global mem) → tiled GEMM (shared mem reuse) |
 | `masked-boundary-load` | boundary-safe memory access | Unchecked load → masked load with fallback |
 
-### Category B: Compute patterns (5 rules)
+### Category B: Compute patterns (9 rules)
 
 | Rule ID | GPU concept | Pattern |
 |---|---|---|
@@ -49,8 +50,12 @@ Total: 76 rules. Full corpus target: ~300-500 rules in ~15-25 batches.
 | `branchless-select` | branch divergence elimination | Conditional branch → select/if-expr |
 | `unroll-fixed-inner` | loop unrolling for ILP | Dynamic loop → fixed-size unrolled |
 | `forceinline-device-fn` | function inlining | Regular call → `#[inline(always)]` |
+| `recursive-kronecker-cat` | structured matrix construction | Element-wise build → recursive cat (O(log d) steps) |
+| `optional-bias-branch` | optional operand skip | Always-add bias → branch on `None` (skip when absent) |
+| `shift-via-pad-subtract` | one-pass sequence shift | Two-pass shift+sub → fused pad+subtract view |
+| `sorted-cumsum-threshold` | support-set selection | Iterative projection → sort+cumsum+threshold (single pass) |
 
-### Category C: Fusion patterns (7 rules)
+### Category C: Fusion patterns (8 rules)
 
 | Rule ID | GPU concept | Pattern |
 |---|---|---|
@@ -58,14 +63,20 @@ Total: 76 rules. Full corpus target: ~300-500 rules in ~15-25 batches.
 | `fuse-quant-matmul` | quantization fusion | Separate quant+matmul → fused (BitNet b1.58) |
 | `fuse-softmax-mask` | mask fusion in softmax | Separate mask+softmax → fused masked softmax |
 | `fuse-xent-logsumexp` | cross-entropy fusion | Softmax+NLL → fused logsumexp (no prob matrix) |
+| `fuse-add-rms-norm` | residual add + RMS norm fusion | 2-pass add+norm → fused (returns new residual too) |
+| `fuse-group-norm-linear` | group norm + linear fusion | 2-pass norm+linear → fused (no intermediate tensor) |
+| `fuse-jsd-logsumexp` | log-domain divergence fusion | Materialize prob matrices → logaddexp (no matrices) |
+| `gather-selective-reduction` | selective reduction | Full softmax → gather selected tokens only (GRPO) |
 
-### Category D: Dispatch patterns (4 rules)
+### Category D: Dispatch patterns (5 rules)
 
 | Rule ID | GPU concept | Pattern |
 |---|---|---|
 | `sm-count-block-size` | occupancy-aware block sizing | Fixed block → SM-aware `min(128, next_pow2)` |
 | `predicate-gated-backend` | conditional kernel dispatch | Unconditional fast path → shape/dtype predicate gate |
 | `pow2-block-alignment` | power-of-2 alignment | Arbitrary dim → `next_power_of_two` |
+| `predicate-gate-div512` | shape-divisibility gate | Unconditional packed path → `inner_dim % 512 == 0` gate |
+| `multi-condition-predicate` | compound shape+dtype gate | Single condition → multi-condition (rows%32 AND width%8) |
 
 ### Category E: Parallelism patterns (3 rules)
 
@@ -92,7 +103,7 @@ pub fn route(&self, activity: &[f32; ACTIVITY_DIM]) -> usize {
 }
 ```
 
-**Plan 003 (2026-08-14):** router wired to the 68-rule corpus via 15 category
+**Plan 003 (2026-08-14):** router wired to the 88-rule corpus via 15 category
 experts. Each expert owns its category's `rule_ids` via `KERNEL_CATEGORIES`.
 - **Activity vector** = raw physical (kernel signature: `[M, N, K, dtype, hw,
   is_attention, is_fusion, is_ir_transform]` — 8-dim per Plan 004, normalized
@@ -219,13 +230,15 @@ deferred (Proposal 012 §Phase 0). `is_full_validator_available()` returns
 | `block-compression-before-routing` | pool to coarse blocks, route on compressed reps | Score all fine positions → pool to blocks, score compressed, attend top-k |
 | `sliding-window-plus-sparse` | decompose attention into local + global sparse, gated sum | Single attention pass → local window + global sparse with gates |
 
-### Category J: Varlen packing + chunked reductions (Batch 6, 3 rules)
+### Category J: Varlen packing + chunked reductions (5 rules — 3 Batch 6 + 2 Batch 10)
 
 | Rule ID | GPU concept | Pattern |
 |---|---|---|
 | `varlen-packing` | pack variable-length sequences via cu_seqlens, no padding | Padded batch (waste on padding) → packed 1D buffer with cumsum offsets |
 | `chunk-reset-cumsum` | cumsum that resets at chunk boundaries | Full cumsum → cumsum reset every chunk_size elements |
 | `cumsum-additive-bias` | additive bias via cumulative sum of a gate | O(N²) bias matrix → O(N) cumsum difference |
+| `chunk-split-mean-pool` | chunked reduction via split + per-chunk mean | Running sum accumulator → split(C).mean() exposes fixed chunk size |
+| `ragged-chunk-pad` | pad ragged tail to block_size | Branch on last-chunk → pad tail, one uniform path |
 
 ### Category K: Autotune dispatch (Batch 7, 4 rules — burn-cubecl)
 
@@ -246,20 +259,28 @@ deferred (Proposal 012 §Phase 0). `is_full_validator_available()` returns
 | `stride-align-vectorization-key` | stride-byte-alignment determines vectorization width | Fixed vectorization → trailing-zeros of (stride × bytes) picks vector width |
 | `anchor-shape-bucketing` | shape bucketing for autotune cache reuse | Exact-shape autotune key → bucketed key (nearest N) so similar shapes share cache |
 
-### Category M: Kernel parametric polymorphism (Batch 8, 3 rules — burn-cubecl)
+### Category M: Kernel parametric polymorphism (5 rules — 3 Batch 8 + 2 Batch 10)
 
 | Rule ID | GPU concept | Pattern |
 |---|---|---|
 | `op-family-type-dispatch` | parametric kernel polymorphism over op trait | N copy-pasted kernels (one char differs) → one kernel body + `OpFamily` trait with N associated-type impls |
 | `inplace-output-alias` | output buffer reuse via mutability check (skip allocation) | Fresh output alloc every call → `can_mut` check aliases output to disposable input (zero alloc) |
 | `layout-permute-for-coalescing` | memory layout permutation for coalesced channel access | NCHW strided channel access → permute to NHWC (channel innermost, coalesced), permute back |
+| `reshape-rank-for-backend` | rank adapter — reshape to backend-required rank | Leak rank contract to caller → reshape (1,-1,h), run kernel, reshape back |
+| `detached-broadcast-insert` | non-differentiable broadcast via detach + view | Materialize full broadcast → detach() + insert dim (view, no alloc) |
 
-### Category N: dtype + alignment specialization (6 rules — 2 Batch 8 + 4 Batch 9)
+### Category N: dtype + alignment specialization (8 rules — 2 Batch 8 + 4 Batch 9 + 2 Batch 10)
 
 | Rule ID | GPU concept | Pattern |
 |---|---|---|
 | `dtype-specialized-float-kind` | dtype-keyed intrinsic dispatch for low-precision floats | Generic powf (absent/imprecise for f16/bf16) → match on `FloatKind`, cast to concrete dtype, call its intrinsic |
 | `alignment-gated-zero-copy-view` | alignment-gated zero-copy slice view via handle offset | Always-copy slice → if byte offsets are alignment-aligned, return a VIEW (offset-only metadata, zero copy) |
+| `int2-pack-weights` | pack 4 ternary weights per byte | 1 weight/byte → 4 weights/byte (2-bit encoding, 4× bandwidth) |
+| `per-token-activation-quant` | per-token symmetric int8 fake quant | Per-element quant → per-token (straight-through gradient) |
+| `ternary-weight-quant` | per-tensor ternary {-1,0,+1} fake quant | Per-element quant → per-tensor ternary (BitNet b1.58) |
+| `upcast-before-loss` | upcast to f32 before log/exp in loss | fp16 loss (log underflows) → f32 upcast before log/exp |
+| `batched-upcast-map` | batched type promotion via map over tuple | Per-tensor upcast calls → `map(upcast, tuple)` (signals independence) |
+| `dtype-restricted-backend` | backend restricted to precision-stable dtypes | All-dtype backend → dispatch on dtype (fast path only for stable) |
 
 ### Category O: IR strength reduction (Batch 8, 4 rules — cubecl-opt)
 
@@ -290,6 +311,7 @@ deferred (Proposal 012 §Phase 0). `is_full_validator_available()` returns
 - [Research 008](../../.research/008_burn_cubecl_kernel_opt_distillation_batch7.md) — Batch 7 burn-cubecl autotune dispatch + conv-as-GEMM + layout
 - [Research 009](../../.research/009_burn_cubecl_cubecl_opt_kernel_opt_distillation_batch8.md) — Batch 8 burn-cubecl kernel polymorphism + dtype/alignment + cubecl-opt IR strength reduction
 - [Research 010](../../.research/010_popcorn_kernel_opt_distillation_batch9.md) — Batch 9 popcorn fusion + dtype/quant + dispatch
+- [Research 011](../../.research/011_popcorn_kernel_opt_distillation_batch10.md) — Batch 10 popcorn compute + chunked reduction + polymorphism
 - [Proposal 012](../../.proposals/) — the absorbed GPU kernel optimizer design
 - [Plan 558](../../../katgpt-rs/.plans/) — `pick_domain` substrate (katgpt-core)
 - [Research 453](../../../katgpt-rs/.research/) — LatentMoE variable-rank principle
