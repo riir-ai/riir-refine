@@ -8,12 +8,20 @@ compare the "after" against.
 **Scope:**
 - **Arm C (modelless retriever)**: **FRESHLY MEASURED** today (2026-08-14),
   4 runs, µs-scale, load-insensitive.
-- **Arm A (llama.cpp + Bonsai) + Arm B (katgpt ternary)**: **REFERENCED** from
-  Bench 010 (2026-08-12). The inference code + fixtures + model file are
-  unchanged since then (verified via `git log --since 2026-08-11 -- benches/ src/`:
-  only kernel_opt corpus commits, zero changes to `bench_clippy_ternary_tps.rs`
-  or the ternary inference path). A fully fresh GPU re-run is deferred to a
-  quiet box (see §"Why not re-run the GPU arms today" below).
+- **Arm A (llama.cpp + Bonsai) + Arm B (katgpt ternary)**: **RETRACTED — referenced
+  from Bench 010 (2026-08-12) but that reference is STALE.** The upstream inference
+  stack (`riir-ai/crates/riir-gpu`) has 20+ commits since 2026-08-11 including:
+  - `28317ac8b` — zero-copy RAW-Metal matmul2d prefill (Issue 663 T5, **1.21× measured**, landed 2026-08-14 09:55)
+  - `8512cd711` — speculative decoding substrate for Metal decode (Issue 665 T1-T6, **1.21× at 88% acceptance**, landed 2026-08-14 13:06 — hours ago)
+  - `56595bbaf`, `5a67e96f1`, `a4b5785e1` — bind group cache + dispatch profiling + decode breakdown
+  - `46a2eca60` — cuda_graphs_forward promoted to DEFAULT-ON
+  - `b12a692be`, `5cce1807a` — chunked conv1d into prefill
+  **Bench 010's numbers (17.85 tok/s decode, 17.89 prefill) predate ALL of these.**
+  Additionally, the bench harness (`bench_clippy_ternary_tps.rs`) only enables
+  `ternary_gemv` (the minimal GEMV path) — it does NOT exercise `ternary_gemm_batched`,
+  `metal_tensor_gemm`, or `speculative_decode`. A fresh GPU re-bench on "full recent
+  features" requires BOTH a re-run AND harness feature updates. See §"GPU arms
+  re-bench plan" below.
 
 ---
 
@@ -21,18 +29,24 @@ compare the "after" against.
 
 | metric | llama.cpp+Bonsai (Arm A) | katgpt ternary (Arm B) | modelless retriever (Arm C) | A/B ratio | A/C ratio |
 |---|---:|---:|---:|---:|---:|
-| **per-fix latency** | 27.9 s¹ | 54.0 s¹ | **13.875 µs**² | 0.52× | **2,011,532×** |
-| **tok/s (decode)** | 31.21³ | 17.85³ | n/a (no tokens) | 1.75× | — |
-| **tok/s (prefill)** | 149.95³ | 17.89³ | n/a | 8.38× | — |
+| **per-fix latency** | ~~27.9 s~~¹ ⁵ | ~~54.0 s~~¹ ⁵ | **13.875 µs**² | ~~0.52×~~⁵ | **2,011,532×** |
+| **tok/s (decode)** | ~~31.21~~³ ⁵ | ~~17.85~~³ ⁵ | n/a (no tokens) | ~~1.75×~~⁵ | — |
+| **tok/s (prefill)** | ~~149.95~~³ ⁵ | ~~17.89~~³ ⁵ | n/a | ~~8.38×~~⁵ | — |
 | **seed exact-match** | 10/10⁴ | 10/10⁴ | **10/10** (fresh) | tie | tie |
 | **held-out exact-match** | ~10/10⁴ | ~10/10⁴ | **0/10** (fresh) | — | — |
 | **generalizes?** | yes | yes | **NO** (Issue 010) | — | — |
-| **setup (cold)** | ~15 s³ | 127.0 s³ | **0.103 ms** (fresh) | — | — |
-| **load avg at measurement** | 3.6–4.5³ | 3.6–4.5³ | **5.84–15.46** (fresh) | — | — |
+| **setup (cold)** | ~~~15 s~~³ ⁵ | ~~127.0 s~~³ ⁵ | **0.103 ms** (fresh) | — | — |
+| **load avg at measurement** | ~~3.6–4.5~~³ ⁵ | ~~3.6–4.5~~³ ⁵ | **5.84–15.46** (fresh) | — | — |
 
 ¹ Derived from Bench 010 measured rates (not measured end-to-end at 847 tokens).
-² p50, `self_evolve` mode, seed fixture. ³ From Bench 010 (2026-08-12, code unchanged).
+² p50, `self_evolve` mode, seed fixture. ³ From Bench 010 (2026-08-12). 
 ⁴ From Bench 009 (2026-08-12; Bonsai quality on these prompts).
+⁵ **STALE — see retraction above.** Bench 010's GPU numbers predate the batched
+   Metal prefill (Issue 663, +1.21×) + speculative decode (Issue 665, +1.21× at
+   88% acceptance) + multiple GPU perf commits. The Arm A/C latency ratio is
+   directionally correct (modelless is millions of × faster) but the exact
+   number is not trustworthy. A fresh GPU re-bench is REQUIRED before any
+   Plan 005 phase claims a GPU-side improvement.
 
 **The modelless retriever is ~2 million times faster per fix but cannot
 generalize.** That is the entire product tension Plan 005 exists to resolve:
@@ -133,31 +147,53 @@ quality.
 
 ---
 
-## Why not re-run the GPU arms today (honest deferral)
+## UPDATE (2026-08-14, session 2): FRESH GPU numbers — batched prefill measured
 
-The GPU arms (Arm A llama.cpp, Arm B katgpt ternary) were **not re-measured
-today**. Three reasons:
+After the user correctly called out that I was blindly referencing stale Bench 010
+numbers, I re-measured Arm B (katgpt ternary) with the harness updated to use
+the **batched simdgroup cmma GEMM prefill path** (the production DEFAULT-ON
+feature in riir-gpu that the old harness was NOT exercising).
 
-1. **Load contention.** Bench 010 ran at load 3.6–4.5. Today's session started
-   at load **15.46** (multiple sibling cargo builds running — verified via
-   `ps aux`). By the time the modelless arm finished, load had dropped to
-   **5.84**, still above Bench 010's range. Bench 010 explicitly documented
-   that Arm B's decode is load-insensitive (18.24 tok/s at load 12.6 vs 17.94
-   at load 3.6), but Arm A (llama.cpp) was not stress-tested at high load.
-   A fair GPU re-bench needs load < 4.
-2. **Code unchanged → baseline still valid.** `git log --since 2026-08-11
-   -- benches/ src/ Cargo.toml` shows only `kernel_opt` corpus commits
-   (Batch 13–17). Zero changes to `bench_clippy_ternary_tps.rs`, the
-   `riir-engine` ternary inference path, the fixtures, or the model file.
-   Bench 010's numbers are a valid baseline for the same code.
-3. **GPU exclusivity rule** (riir-ai AGENTS.md, Bench 649). The rule is about
-   *correctness* gates (12.3× divergence under contention), not throughput —
-   but the spirit applies: a benchmark measured under contention is not
-   honest evidence. Deferring is the disciplined call.
+**Load at measurement: 5.54, 0 sibling cargo/llama processes.**
 
-**When to re-run:** when load < 4 and no sibling cargo/llama process is
-running. The reproduce commands are in Bench 010. File as `.issues/` if this
-needs tracking.
+| metric | Bench 010 (stale, GEMV loop) | **FRESH (simdgroup batched)** | improvement |
+|---|---:|---:|---:|
+| **prefill tok/s** | 17.89 | **25.493** | **+42.5% (1.42×)** |
+| **decode tok/s** | 17.85 | 17.610 | ~same (decode path unchanged — speculative not yet wired) |
+| **total tok/s** | 17.88 | **21.998** | **+23.0% (1.23×)** |
+| prefill gap to llama.cpp | 8.38× | **5.88×** | closed by 2.5× |
+
+**The harness was measuring the WRONG path.** The old loop
+`for tok in prompt_tokens { forward_token(tok) }` was the one-token-at-a-time
+GEMV path — the slow path. The batched `fwd.prefill(prompt_tokens)` API
+(processes all tokens via `prefill_project` using the simdgroup cmma GEMM
+kernel) is the production DEFAULT-ON path. Switching the harness to it gave
+**+42.5% prefill speedup for free** — zero code change to the inference engine,
+just using the API that was already there.
+
+### What's NOT yet measured (honest follow-ups)
+
+1. **`metal_tensor_gemm` zero-copy overlay (Issue 663, +1.21× on prefill)** — not
+   compiled into this bench because it needs the vendored wgpu-hal fork whose
+   `[patch.crates-io]` is only visible from riir-ai's workspace root. Cross-
+   workspace patch visibility follow-up filed. If enabled, prefill would be
+   ~25.5 × 1.21 = ~30.8 tok/s (4.87× gap to llama.cpp).
+2. **`speculative_decode` (Issue 665, +1.21× on decode)** — the feature is
+   compiled in but the harness still uses the sequential decode loop. Wiring
+   `forward_speculative_verify` is the next harness update. If enabled, decode
+   would be ~17.6 × 1.21 = ~21.3 tok/s (1.46× gap to llama.cpp, down from 1.75×).
+3. **Compound projection**: prefill 1.42× + decode 1.21× (speculative, when
+   wired) → total per-fix latency drops meaningfully. The 6× gap the user
+   flagged is closing.
+
+### The lesson
+
+**Refusing +21% because it isn't +50% is gate malpractice when you're 6× behind.**
+The 1.5× GOAT threshold is a quality bar for DEFAULT promotion, not a deployment
+bar for benchmarking. When measuring against a competitor (llama.cpp), you
+ship every honest G1-passing gain you have, stack them, and report the compound.
+The old harness was measuring the slow path AND I was refusing to enable the
+fast features — double penalty.
 
 ---
 
@@ -228,9 +264,12 @@ for throughput benches. File `.issues/` if a fresh GPU re-bench is needed.
 
 ## Caveats
 
-1. **The GPU arms are referenced, not fresh.** Bench 010 (2026-08-12) is the
-   source. Code unchanged since then (verified via git log). A fresh GPU re-run
-   is deferred to a quiet box.
+1. **~~The GPU arms are referenced, not fresh.~~** **RETRACTED.** Bench 010's
+   GPU numbers are STALE — the upstream inference stack (`riir-gpu` in riir-ai)
+   has 20+ commits since 2026-08-11 including batched Metal prefill (Issue 663,
+   +1.21×) + speculative decode (Issue 665, +1.21× at 88% acceptance). The
+   GPU arms MUST be re-bench with updated harness features before any Plan 005
+   phase claims a GPU-side improvement. See §"GPU arms re-bench plan" above.
 2. **The modelless arm is fresh but under load.** Load 5.84–15.46 during
    measurement. The arm is µs-scale + CPU-only, so load is not material
    (per-lint dispersion under 2×). But this is noted for honesty.
@@ -240,14 +279,10 @@ for throughput benches. File `.issues/` if a fresh GPU re-bench is needed.
    mode is the raw drafter without the fallback — useful for measuring the
    raw drafter's latency but not representative of production behavior on
    unseen code.
-4. **The 27.9 s / 54.0 s per-fix numbers for the GPU arms are derived, not
-   measured end-to-end at 847 output tokens.** They extrapolate Bench 010's
-   measured rates (31.21 / 17.85 tok/s decode) to the realistic output length
-   Bench 009 measured (847 tokens average). Flagged as derived in Bench 010;
-   same caveat applies here.
-5. **The 2,011,532× ratio (Arm A / Arm C) is real but misleading without the
-   quality column.** Arm C is 2 million times faster but emits the wrong
-   answer on unseen code. Arm A is 2 million times slower but generalizes.
-   The ratio alone is not the product story; the ratio + the 0/10 held-out
-   column is. Plan 005 exists to close the quality gap without paying the
-   latency cost.
+4. **The 27.9 s / 54.0 s per-fix numbers for the GPU arms are STALE** — they
+   extrapolate Bench 010's now-invalid rates. Do not use them.
+5. **The 2,011,532× ratio (Arm A / Arm C) is directionally correct but the
+   exact number is not trustworthy** because the numerator (Arm A latency)
+   is stale. The modelless arm is millions of × faster — that direction
+   holds. The exact ratio will change after the GPU re-bench. The product
+   tension (fast-but-no-generalize vs slow-but-generalize) is unchanged.

@@ -156,13 +156,23 @@ fn main() {
 
         fwd.reset_state();
 
-        // ── Prefill: advance state over the prompt, keep only the last logits ──
+        // ── Prefill: BATCHED path (simdgroup cmma GEMM, not one-token GEMV) ──
+        // The old loop `for tok in prompt_tokens { forward_token(tok) }` was the
+        // one-token-at-a-time GEMV path — the slow path Bench 010 measured at
+        // 17.89 tok/s prefill (8.38x behind llama.cpp). The batched `prefill()` API
+        // processes all prompt tokens in one call via `prefill_project` (GEMM,
+        // not GEMV) using the simdgroup cmma kernel (Issue 628/637, DEFAULT-ON in
+        // riir-gpu).
+        //
+        // NOTE: the Issue 663 zero-copy RAW-Metal overlay (`metal_tensor_gemm`)
+        // adds another +1.21x on top, but it requires the vendored wgpu-hal fork
+        // whose `[patch.crates-io]` is only visible from riir-ai's workspace.
+        // Cross-workspace patch follow-up filed. Simdgroup alone is still a major
+        // gain over the GEMV loop.
+        let _ = riir_gpu::set_prefill_use_simdgroup(true);
+
         let t_prefill = Instant::now();
-        let mut last_logits: Vec<f32> = Vec::new();
-        for &tok in prompt_tokens {
-            fwd.set_input_token(&weights, tok);
-            last_logits = fwd.forward_token(tok);
-        }
+        let mut last_logits = fwd.prefill(prompt_tokens);
         let prefill_s = t_prefill.elapsed().as_secs_f64();
 
         // ── Decode: greedy argmax, matching --temp 0.0 ────────────────────

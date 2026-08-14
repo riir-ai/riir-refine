@@ -40,7 +40,15 @@ quote = "1"
 # Optional + feature-gated: these are heavy sibling crates and the default
 # build must stay dependency-light.
 riir-engine = { path = "../riir-ai/crates/riir-engine", optional = true, default-features = false, features = ["deltanet_ternary_inference"] }
-riir-gpu = { path = "../riir-ai/crates/riir-gpu", optional = true, default-features = false, features = ["cubecl_runtime", "ternary_gemv"] }
+riir-gpu = { path = "../riir-ai/crates/riir-gpu", optional = true, default-features = false, features = ["cubecl_runtime", "ternary_gemv", "ternary_gemm_simdgroup", "ternary_gemm_batched", "speculative_decode"] }
+# NOTE: `metal_tensor_gemm` (Issue 663 T5, +1.21x) is NOT included here because
+# it requires the vendored wgpu-hal fork (`riir-ai/vendor/wgpu-hal-30.0.0`)
+# whose `[patch.crates-io]` is only visible from riir-ai's workspace root.
+# Cross-workspace patch visibility is a cargo limitation. To enable it here,
+# either (a) duplicate the patch in this Cargo.toml, or (b) build the bench
+# from the riir-ai workspace. Filed as a follow-up. The simdgroup cmma path
+# (`ternary_gemm_simdgroup`, DEFAULT-ON in riir-gpu) is the production fallback
+# and does not need the fork.
 
 [dev-dependencies]
 
