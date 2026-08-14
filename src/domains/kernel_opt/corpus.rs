@@ -224,6 +224,26 @@
 //!   captured graph at capture time). Corpus: **155 rules across 15 categories
 //!   (A–O)**. `riir-gpu` remains open (23 of ~200 files mined; `cudarc_kernels/`
 //!   fully covered).
+//! - **Batch 23 (Research 024, 2026-08-14):** mined the `attention_cubecl/`
+//!   directory — `CubeCL` flash-attention decode cluster (`mod.rs`, 1573 lines).
+//!   This is the `CubeCL` portable-path counterpart to the Batch 22 CUDA raw
+//!   port. 5 new rules: combined-kv-buffer-keys-then-values (A — store keys
+//!   and values as a single contiguous buffer `[keys | values]` to halve
+//!   buffer bindings + coalesce via one `kv_off` index), gqa-kv-head-sharing-
+//!   bandwidth-reduction (A — Grouped-Query Attention: share KV heads across
+//!   query heads via `kv_group = head_idx * n_kv_head / n_head`; reduces KV
+//!   cache bandwidth by `n_head/n_kv_head`×; e.g. 2× for Gemma 2 2B's 8:4),
+//!   softcap-tanh-attention-score (B — Gemma's `softcap * tanh(score/softcap)`
+//!   bounds raw logits to `[-softcap, +softcap]`; smooth + differentiable,
+//!   unlike clamp; `softcap=0` disables for LLaMA/MiniCPM), fold-query-tokens-
+//!   for-occupancy (D — when `n_head < SM_count`, fold multiple speculative-
+//!   decode query tokens into one workgroup via `fold_factor()`; largest
+//!   divisor of `seq_len_q` ≤ `workgroup_size/n_head`), hardcoded-fast-path-
+//!   jit-specialization (D — dispatch a hardcoded kernel variant when params
+//!   match a known config so the JIT can constant-fold dims into optimized
+//!   Metal/WGSL shaders; ~24% decode throughput gain on M3 Max). Corpus:
+//!   **160 rules across 15 categories (A–O)**. `riir-gpu` remains open (24 of
+//!   ~200 files mined; `attention_cubecl/` fully covered).
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
@@ -2308,6 +2328,87 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
             ref_shape: "// naive: scalar arg — baked into captured CUDA graph, cannot change per-launch\nextern \"C\" __global__ void kernel_scalar(const float* in, float* out, const int pos) {\n    // pos is a CAPTURE-TIME constant. graphCapture() bakes this value in;\n    // subsequent graph.launch() calls replay the SAME pos forever.\n    out[threadIdx.x] = in[pos + threadIdx.x];\n}\n// capture:\nstream.launch_builder(&kernel_scalar).arg(in).arg(out).arg(&42).launch(cfg);\nstream.graph_capture_begin();\nstream.launch_builder(&kernel_scalar).arg(in).arg(out).arg(&42).launch(cfg);  // pos=42 baked in\nlet graph = stream.graph_capture_end();\n// graph.launch() always reads pos=42 — cannot process pos=43 without re-capturing.".to_string(),
             opt_pattern: "// optimized: device-pointer variant — dereferenced at kernel runtime, graph-capturable\nextern \"C\" __global__ void kernel_devpos(const float* in, float* out, const int* pos_dev) {\n    const int pos = *pos_dev;  // dereference at kernel runtime — NOT baked into graph\n    out[threadIdx.x] = in[pos + threadIdx.x];\n}\n// capture (once):\nstream.graph_capture_begin();\nstream.launch_builder(&kernel_devpos).arg(in).arg(out).arg(pos_dev_buf).launch(cfg);\nlet graph = stream.graph_capture_end();  // captures the POINTER, not the value\n// per-call: write new pos to the device buffer, then launch the graph\nstream.memcpy_htod(pos_dev_buf, &new_pos);  // update before launch\ngraph.launch();  // reads whatever pos_dev_buf contains — different pos each call\n// One graph capture amortized across all calls; per-call cost is just a 4-byte memcpy.".to_string(),
         },
+        // ════════════════════════════════════════════════════════════════════
+        // Batch 23 (Research 024): CubeCL flash-attention cluster — 5 rules
+        // (attention_cubecl/mod.rs — 1573 lines; flash-attention decode +
+        // folded dispatch + block-causal + GQA + softcap-tanh + combined KV +
+        // hardcoded fast-path JIT specialization).
+        // ════════════════════════════════════════════════════════════════════
+        // ── combined-kv-buffer-keys-then-values — single contiguous KV buffer (A) ──
+        // Source: riir-gpu attention_cubecl/mod.rs L107-140 + L576-650. The
+        // kernel takes a single `kv` buffer `[2 × n_positions × kv_stride]`
+        // laid out as `[keys | values]` (keys occupy the first half, values
+        // the second). One buffer binding instead of two; a single kv_off
+        // index addresses both K (kv[k_base + d]) and V (kv[kv_half + k_base
+        // + d]) via an offset by kv_half. Coalesced because both K and V for
+        // the same position share a contiguous stride.
+        KernelRule {
+            rule_id: "combined-kv-buffer-keys-then-values".to_string(),
+            gpu_concept: "store keys and values as a single contiguous buffer `[keys | values]` with shared stride — halves buffer bindings from 2 to 1 and enables coalesced access via a single kv_off index. The value for position p at dimension d is at kv[kv_half + p * kv_stride + d], where kv_half = kv.len() / 2. Distinct from KV cache layout: this is about the buffer binding shape, not the cache update logic".to_string(),
+            ref_shape: "// naive: separate key + value buffers (2 bindings, 2 strides to manage)\nfn attention_separate_kv(q: &[f32], keys: &[f32], values: &[f32], out: &mut [f32], n_pos: usize, kv_stride: usize, head_dim: usize) {\n    for pos in 0..n_pos {\n        let k_base = pos * kv_stride;  // key stride\n        let v_base = pos * kv_stride;  // value stride (must match for correctness)\n        let mut dot = 0.0;\n        for d in 0..head_dim { dot += q[d] * keys[k_base + d]; }\n        let score = dot;\n        for d in 0..head_dim { out[d] += score * values[v_base + d]; }\n    }\n    // 2 buffer bindings, 2 index variables, 2 stride computations\n}".to_string(),
+            opt_pattern: "// optimized: combined KV buffer [keys | values] — 1 binding, 1 stride\nfn attention_combined_kv(q: &[f32], kv: &[f32], out: &mut [f32], n_pos: usize, kv_stride: usize, head_dim: usize) {\n    let kv_half = kv.len() / 2;  // keys occupy [0, kv_half), values occupy [kv_half, 2*kv_half)\n    for pos in 0..n_pos {\n        let kv_off = pos * kv_stride;\n        let mut dot = 0.0;\n        for d in 0..head_dim { dot += q[d] * kv[kv_off + d]; }  // key read\n        let score = dot;\n        for d in 0..head_dim { out[d] += score * kv[kv_half + kv_off + d]; }  // value read (offset by kv_half)\n    }\n    // 1 buffer binding, 1 stride — halves descriptor table pressure, coalesces\n}".to_string(),
+        },
+        // ── gqa-kv-head-sharing-bandwidth-reduction — share KV across query heads (A) ──
+        // Source: riir-gpu attention_cubecl/mod.rs L150 + L345 + L870. GQA:
+        // n_kv_head < n_head (e.g. Gemma 2 2B: 8 query heads, 4 KV heads = 2:1).
+        // Each query head maps to its KV group via
+        // `kv_group = head_idx * n_kv_head / n_head`. Multiple query heads
+        // in the same group read the SAME KV cache slice — reduces KV cache
+        // bandwidth by n_head/n_kv_head (2× for 8:4). The kernel computes
+        // kv_off = kv_group * head_dim ONCE per workgroup, not per query head.
+        KernelRule {
+            rule_id: "gqa-kv-head-sharing-bandwidth-reduction".to_string(),
+            gpu_concept: "Grouped-Query Attention (GQA): share KV heads across multiple query heads (n_kv_head < n_head) to reduce KV cache memory + bandwidth by n_head/n_kv_head× (e.g. 2× for Gemma 2 2B's 8:4 ratio). Each query head maps to its KV group via kv_group = head_idx * n_kv_head / n_head; the kernel computes kv_off = kv_group * head_dim once per workgroup and reuses it for all K/V reads in that head. Distinct from MHA (1:1) and MQA (all heads share 1 KV head)".to_string(),
+            ref_shape: "// naive: Multi-Head Attention — each query head has its OWN KV cache (n_kv_head == n_head)\nfn mha_attention(q_heads: &[f32], kv_cache: &[f32], out: &[f32], n_head: usize, n_kv_head: usize, head_dim: usize, n_pos: usize) {\n    // kv_cache layout: [n_head × n_pos × head_dim] — one KV slice per query head\n    assert_eq!(n_head, n_kv_head);  // MHA: 1:1 mapping\n    for h in 0..n_head {\n        for pos in 0..n_pos {\n            let kv_off = h * n_pos * head_dim + pos * head_dim;  // UNIQUE per head\n            // ... dot product with q_heads[h] ...\n        }\n    }\n    // KV cache size = n_head × n_pos × head_dim (e.g. 8 × 512 × 256 = 1M floats)\n}".to_string(),
+            opt_pattern: "// optimized: GQA — multiple query heads share one KV head (n_kv_head < n_head)\nfn gqa_attention(q_heads: &[f32], kv_cache: &[f32], out: &[f32], n_head: usize, n_kv_head: usize, head_dim: usize, n_pos: usize) {\n    // kv_cache layout: [n_kv_head × n_pos × head_dim] — shared across query heads\n    for h in 0..n_head {\n        let kv_group = h * n_kv_head / n_head;  // map query head → KV group\n        let kv_off_base = kv_group * head_dim;  // compute ONCE per query head\n        for pos in 0..n_pos {\n            let kv_off = pos * (n_kv_head * head_dim) + kv_off_base;\n            // ... dot product with q_heads[h], reading shared kv_cache[kv_off] ...\n        }\n    }\n    // KV cache size = n_kv_head × n_pos × head_dim (e.g. 4 × 512 × 256 = 0.5M floats — 2× smaller)\n    // Bandwidth savings: n_head/n_kv_head = 8/4 = 2× reduction\n}".to_string(),
+        },
+        // ── softcap-tanh-attention-score — bounded attention scores via tanh (B) ──
+        // Source: riir-gpu attention_cubecl/mod.rs L188-191 + L373-376 +
+        // L894-897. Gemma 2 uses `softcap * tanh(score / softcap)` to bound
+        // raw attention logits to [-softcap, +softcap]. Unlike clamp (which
+        // is non-differentiable at the boundary), tanh is smooth + has a
+        // well-defined gradient everywhere. Prevents extreme logits from
+        // dominating softmax (e.g. a single position with a very high Q·K
+        // score would otherwise drive softmax to near-one-hot). Configurable:
+        // softcap == 0.0 disables softcapping → raw scaled dot product
+        // (used by LLaMA/MiniCPM which don't use logit softcapping).
+        KernelRule {
+            rule_id: "softcap-tanh-attention-score".to_string(),
+            gpu_concept: "bound raw attention logits to [-softcap, +softcap] via softcap * tanh(score / softcap) — a smooth, differentiable alternative to clamping that prevents extreme Q·K scores from dominating softmax. tanh has a well-defined gradient everywhere (unlike clamp's discontinuous gradient at the boundary). Configurable: softcap == 0.0 disables softcapping → raw scaled dot product (LLaMA/MiniCPM path). Used by Gemma 2 (softcap=50.0)".to_string(),
+            ref_shape: "// naive: raw scaled dot product — extreme scores dominate softmax\nfn attention_score_raw(q: &[f32], k: &[f32], scale: f32, head_dim: usize) -> f32 {\n    let mut dot = 0.0;\n    for d in 0..head_dim { dot += q[d] * k[d]; }\n    dot * scale  // unbounded — a single high dot product can dominate softmax\n    // e.g. score = 1000.0 → softmax ≈ one-hot at that position (ignores all others)\n}".to_string(),
+            opt_pattern: "// optimized: softcap-tanh bounded scores (Gemma 2 style)\nfn attention_score_softcap(q: &[f32], k: &[f32], scale: f32, softcap: f32, head_dim: usize) -> f32 {\n    let mut dot = 0.0;\n    for d in 0..head_dim { dot += q[d] * k[d]; }\n    let raw = dot * scale;\n    if softcap == 0.0 {\n        raw  // LLaMA/MiniCPM path: no softcapping\n    } else {\n        softcap * (raw / softcap).tanh()  // = softcap * tanh(raw / softcap)\n        // bounded to [-softcap, +softcap], smooth gradient everywhere\n        // Gemma 2: softcap = 50.0 → scores ∈ [-50, +50], softmax stays well-distributed\n    }\n}".to_string(),
+        },
+        // ── fold-query-tokens-for-occupancy — coalesce query tokens into workgroups (D) ──
+        // Source: riir-gpu attention_cubecl/mod.rs L336-576 (attention_decode_folded_f32,
+        // Plan 179 D1) + L1552-1573 (fold_factor fn). When n_head < SM_count
+        // (small models like Gemma 2 2B with 8 heads on a GPU with 80+ SMs),
+        // many SMs sit idle during single-token decode. Folding multiple
+        // query tokens (speculative decode: seq_len_q > 1) into the same
+        // workgroup increases occupancy. fold_factor() picks the largest
+        // divisor of seq_len_q ≤ workgroup_size / n_head.
+        KernelRule {
+            rule_id: "fold-query-tokens-for-occupancy".to_string(),
+            gpu_concept: "when n_head < SM_count (small models, speculative decode with seq_len_q > 1), fold multiple query tokens into one workgroup to increase GPU occupancy. Each workgroup processes fold_factor query tokens sequentially for one head. fold_factor(n_head, seq_len_q, workgroup_size) picks the largest divisor of seq_len_q ≤ workgroup_size / n_head. Benefit: (n_head × fold) workgroups vs n_head → fills idle SMs during speculative decode".to_string(),
+            ref_shape: "// naive: one workgroup per head — idle SMs when n_head < SM_count\nfn dispatch_unfolded(n_head: u32, seq_len_q: u32) -> u32 {\n    // CubeCount::Static(n_head, 1, 1) — one workgroup per head\n    let workgroups = n_head;\n    // Gemma 2 2B: 8 workgroups on a GPU with 80 SMs → 72 SMs idle (10% occupancy)\n    // Each workgroup processes 1 query token — seq_len_q=4 wastes 3 potential tokens\n    workgroups\n}".to_string(),
+            opt_pattern: "// optimized: fold query tokens into workgroups for higher occupancy\nfn fold_factor(n_head: u32, seq_len_q: u32, workgroup_size: u32) -> u32 {\n    if seq_len_q <= 1 || n_head == 0 { return 1; }\n    let max_fold = seq_len_q.min(workgroup_size / n_head);\n    if max_fold <= 1 { return 1; }\n    // largest divisor of seq_len_q that is ≤ max_fold\n    (1..=max_fold).rev().find(|&d| seq_len_q % d == 0).unwrap_or(1)\n}\nfn dispatch_folded(n_head: u32, seq_len_q: u32, workgroup_size: u32) -> (u32, u32) {\n    let fold = fold_factor(n_head, seq_len_q, workgroup_size);\n    let workgroups = n_head;  // still n_head workgroups, but each does fold tokens\n    // Gemma 2 2B: fold=4 → each workgroup does 4 tokens = 4× the work per SM\n    // Occupancy: 8 workgroups × 4 tokens = 32 token-heads processed (was 8)\n    // The kernel loops `for q_tok in 0..fold` inside each workgroup.\n    (workgroups, fold)\n}".to_string(),
+        },
+        // ── hardcoded-fast-path-jit-specialization — constant-fold dims via hardcoded variant (D) ──
+        // Source: riir-gpu attention_cubecl/mod.rs L1313-1342 (AttentionCubeCL::launch).
+        // When params match a known config (Gemma 2 2B: n_head=8, n_kv_head=4,
+        // head_dim=256, softcap=50.0), dispatch a HARDCODED kernel variant
+        // that bakes the constants directly into the kernel body. The JIT
+        // compiler (CubeCL → Metal/WGSL) can then constant-fold dimensions
+        // into optimized shaders (unrolled loops, known stride multiplies).
+        // The generic parametric kernel reads dims from a buffer per dispatch,
+        // preventing constant-folding. Measured gain: ~24% decode throughput
+        // (31.4 → 41.4 tok/s on M3 Max Metal). Fallback: parametric kernel
+        // for unknown architectures.
+        KernelRule {
+            rule_id: "hardcoded-fast-path-jit-specialization".to_string(),
+            gpu_concept: "when kernel params match a known config (e.g. Gemma 2 2B: n_head=8, n_kv_head=4, head_dim=256, softcap=50.0), dispatch a hardcoded variant that bakes the constants into the kernel body — the JIT compiler can then constant-fold dimensions into optimized shaders (unrolled loops, known stride multiplies, eliminated per-tile branching). The generic parametric kernel reads dims from a buffer per dispatch, preventing constant-folding. Measured gain: ~24% decode throughput (31.4 → 41.4 tok/s on M3 Max Metal). Distinct from autotune-warps-stages (sweeps configs) — here the config is matched, not searched".to_string(),
+            ref_shape: "// naive: parametric kernel reads dims from buffer — JIT cannot constant-fold\n#[cube(launch_unchecked)]\nfn attention_parametric(q: &[f32], kv: &[f32], params: &[f32], out: &mut [f32]) {\n    let n_head = params[0] as u32;       // runtime read — not a compile-time constant\n    let head_dim = params[2] as u32;     // runtime read — loop bound unknown to JIT\n    let mut d = 0u32;\n    while d < head_dim {                 // JIT cannot unroll — head_dim unknown\n        dot += q[d] * kv[d];\n        d += 1u32;\n    }\n    // params buffer allocation + per-tile buffer reads add ~5% overhead\n}".to_string(),
+            opt_pattern: "// optimized: hardcoded fast-path — constants baked in, JIT constant-folds\n#[cube(launch_unchecked)]\nfn attention_hardcoded_gemma2(q: &[f32], kv: &[f32], out: &mut [f32]) {\n    let n_head = 8u32;      // COMPILE-TIME constant — JIT unrolls + folds strides\n    let head_dim = 256u32;  // COMPILE-TIME — JIT unrolls the dot-product loop\n    let mut d = 0u32;\n    while d < 256u32 {\n        dot += q[d] * kv[d];\n        d += 1u32;\n    }\n    // no params buffer, no per-dispatch reads, JIT generates optimized Metal/WGSL\n}\n// dispatch:\nfn launch(params: &Params) {\n    if params.n_head == 8 && params.head_dim == 256 && params.softcap == 50.0 {\n        attention_hardcoded_gemma2::launch_unchecked(...);  // fast path (~24% faster)\n    } else {\n        attention_parametric::launch_unchecked(...);  // generic fallback\n    }\n}".to_string(),
+        },
     ])
 }
 
@@ -2320,7 +2421,7 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 155-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 160-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -2328,7 +2429,7 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (19 rules)
+    // A: Memory access patterns (21 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -2352,9 +2453,11 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "per-dispatch-pointer-re-extraction",
             "dynamic-shared-memory-runtime-sized",
             "ternary-bit-plane-u64-as-2x-u32",
+            "combined-kv-buffer-keys-then-values",
+            "gqa-kv-head-sharing-bandwidth-reduction",
         ],
     ),
-    // B: Compute patterns (28 rules)
+    // B: Compute patterns (29 rules)
     (
         KernelCategory::Compute,
         "B: compute",
@@ -2387,6 +2490,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "dp4a-int8-hardware-dot-product",
             "threadgroup-subset-sum-lut-keyed-by-activation",
             "warp-shuffle-intrinsics-for-sub-warp-reduction",
+            "softcap-tanh-attention-score",
         ],
     ),
     // C: Fusion patterns (15 rules)
@@ -2411,7 +2515,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fused-activation-quantize-for-gemv-consumer",
         ],
     ),
-    // D: Dispatch patterns (11 rules)
+    // D: Dispatch patterns (13 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -2427,6 +2531,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "swap-large-axis-to-x-for-workgroup-distribution",
             "no-blocking-sync-in-async-pipeline",
             "cuda-graph-scalar-via-device-pointer",
+            "fold-query-tokens-for-occupancy",
+            "hardcoded-fast-path-jit-specialization",
         ],
     ),
     // E: Parallelism patterns (8 rules)
@@ -2664,8 +2770,9 @@ mod tests {
         // Batch 20 (5): riir-gpu production kernels — cooperative-block-wide-quantize-staging, byte-perm-lut-via-permutation-immediate, dp4a-int8-hardware-dot-product, threadgroup-subset-sum-lut-keyed-by-activation, base-3-trit-packing-5-per-byte (gemv_ternary_cuda_raw + gemv_ternary_cubecl LUT/trit paths).
         // Batch 21 (5): riir-gpu production kernels — cross-runtime-raw-handle-extraction, pool-buffer-aliasing-dedicated-output, same-queue-implicit-ordering-no-sync, per-dispatch-pointer-re-extraction, no-blocking-sync-in-async-pipeline (gemm_ternary_metal_zero_copy.rs — Metal cross-runtime integration cluster).
         // Batch 22 (5): riir-gpu production kernels — dynamic-shared-memory-runtime-sized, ternary-bit-plane-u64-as-2x-u32, warp-shuffle-intrinsics-for-sub-warp-reduction, fused-activation-quantize-for-gemv-consumer, cuda-graph-scalar-via-device-pointer (cudarc_kernels/ — embedding.rs + attention.rs + mod.rs + deltanet.rs; Issue 615 full GPU-resident forward port).
-        // Total: 155.
-        assert_eq!(corpus.entries.len(), 155, "batches 1-22 should have 155 rules");
+        // Batch 23 (5): riir-gpu production kernels — combined-kv-buffer-keys-then-values, gqa-kv-head-sharing-bandwidth-reduction, softcap-tanh-attention-score, fold-query-tokens-for-occupancy, hardcoded-fast-path-jit-specialization (attention_cubecl/mod.rs — CubeCL flash-attention decode cluster).
+        // Total: 160.
+        assert_eq!(corpus.entries.len(), 160, "batches 1-23 should have 160 rules");
     }
 
     #[test]
@@ -3489,6 +3596,40 @@ mod tests {
         assert!(concepts.contains(&"when capturing a CUDA graph, scalar kernel args (int pos, int row_idx) get baked into the captured graph at capture time — the graph replays the exact value on every launch and cannot change. Ship a _devpos variant that reads the scalar from a const device pointer dereferenced at kernel runtime; the caller writes the new value to a 4-byte device buffer via memcpy_htod on the same stream before graph.launch(), so the captured graph processes a different input each call"));
     }
 
+    #[test]
+    fn batch23_rules_present() {
+        // Verify the 5 batch-23 rules across A/B/D.
+        let corpus = build_kernel_seed_corpus();
+        let ids: Vec<&str> =
+            corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        // A (2 new): combined-kv-buffer-keys-then-values + gqa-kv-head-sharing-bandwidth-reduction
+        assert!(ids.contains(&"combined-kv-buffer-keys-then-values"), "combined kv buffer keys then values");
+        assert!(ids.contains(&"gqa-kv-head-sharing-bandwidth-reduction"), "gqa kv head sharing bandwidth reduction");
+        // B (1 new): softcap-tanh-attention-score
+        assert!(ids.contains(&"softcap-tanh-attention-score"), "softcap tanh attention score");
+        // D (2 new): fold-query-tokens-for-occupancy + hardcoded-fast-path-jit-specialization
+        assert!(ids.contains(&"fold-query-tokens-for-occupancy"), "fold query tokens for occupancy");
+        assert!(ids.contains(&"hardcoded-fast-path-jit-specialization"), "hardcoded fast path jit specialization");
+    }
+
+    #[test]
+    fn batch23_attention_cubecl_concepts_covered() {
+        // Verify the batch-23 attention_cubecl flash-attention cluster concepts.
+        let corpus = build_kernel_seed_corpus();
+        let concepts: Vec<&str> =
+            corpus.entries.iter().map(|e| e.gpu_concept.as_str()).collect();
+        // A: combined-kv-buffer-keys-then-values (riir-gpu attention_cubecl/mod.rs L107-140 + L576-650)
+        assert!(concepts.contains(&"store keys and values as a single contiguous buffer `[keys | values]` with shared stride — halves buffer bindings from 2 to 1 and enables coalesced access via a single kv_off index. The value for position p at dimension d is at kv[kv_half + p * kv_stride + d], where kv_half = kv.len() / 2. Distinct from KV cache layout: this is about the buffer binding shape, not the cache update logic"));
+        // A: gqa-kv-head-sharing-bandwidth-reduction (riir-gpu attention_cubecl/mod.rs L150 + L345 + L870)
+        assert!(concepts.contains(&"Grouped-Query Attention (GQA): share KV heads across multiple query heads (n_kv_head < n_head) to reduce KV cache memory + bandwidth by n_head/n_kv_head× (e.g. 2× for Gemma 2 2B's 8:4 ratio). Each query head maps to its KV group via kv_group = head_idx * n_kv_head / n_head; the kernel computes kv_off = kv_group * head_dim once per workgroup and reuses it for all K/V reads in that head. Distinct from MHA (1:1) and MQA (all heads share 1 KV head)"));
+        // B: softcap-tanh-attention-score (riir-gpu attention_cubecl/mod.rs L188-191 + L373-376 + L894-897)
+        assert!(concepts.contains(&"bound raw attention logits to [-softcap, +softcap] via softcap * tanh(score / softcap) — a smooth, differentiable alternative to clamping that prevents extreme Q·K scores from dominating softmax. tanh has a well-defined gradient everywhere (unlike clamp's discontinuous gradient at the boundary). Configurable: softcap == 0.0 disables softcapping → raw scaled dot product (LLaMA/MiniCPM path). Used by Gemma 2 (softcap=50.0)"));
+        // D: fold-query-tokens-for-occupancy (riir-gpu attention_cubecl/mod.rs L336-576 + L1552-1573)
+        assert!(concepts.contains(&"when n_head < SM_count (small models, speculative decode with seq_len_q > 1), fold multiple query tokens into one workgroup to increase GPU occupancy. Each workgroup processes fold_factor query tokens sequentially for one head. fold_factor(n_head, seq_len_q, workgroup_size) picks the largest divisor of seq_len_q ≤ workgroup_size / n_head. Benefit: (n_head × fold) workgroups vs n_head → fills idle SMs during speculative decode"));
+        // D: hardcoded-fast-path-jit-specialization (riir-gpu attention_cubecl/mod.rs L1313-1342)
+        assert!(concepts.contains(&"when kernel params match a known config (e.g. Gemma 2 2B: n_head=8, n_kv_head=4, head_dim=256, softcap=50.0), dispatch a hardcoded variant that bakes the constants into the kernel body — the JIT compiler can then constant-fold dimensions into optimized shaders (unrolled loops, known stride multiplies, eliminated per-tile branching). The generic parametric kernel reads dims from a buffer per dispatch, preventing constant-folding. Measured gain: ~24% decode throughput (31.4 → 41.4 tok/s on M3 Max Metal). Distinct from autotune-warps-stages (sweeps configs) — here the config is matched, not searched"));
+    }
+
     // ════════════════════════════════════════════════════════════════════
     // Plan 003 — Router ↔ corpus wiring tests
     // ════════════════════════════════════════════════════════════════════
@@ -3500,7 +3641,7 @@ mod tests {
 
     #[test]
     fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-        // Every rule_id in the 155-rule corpus must appear in exactly one category.
+        // Every rule_id in the 160-rule corpus must appear in exactly one category.
         let corpus = build_kernel_seed_corpus();
         let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
         let mut categorized: Vec<&str> = Vec::new();
@@ -3531,12 +3672,12 @@ mod tests {
 
     #[test]
     fn kernel_categories_counts_match_plan_003_table() {
-        // Pin per-category rule counts to the Plan 003 table (updated for Batch 22).
+        // Pin per-category rule counts to the Plan 003 table (updated for Batch 23).
         let expected = [
-            (KernelCategory::MemoryAccess, 19),
-            (KernelCategory::Compute, 28),
+            (KernelCategory::MemoryAccess, 21),
+            (KernelCategory::Compute, 29),
             (KernelCategory::Fusion, 15),
-            (KernelCategory::Dispatch, 11),
+            (KernelCategory::Dispatch, 13),
             (KernelCategory::Parallelism, 8),
             (KernelCategory::FlashAttnTiling, 10),
             (KernelCategory::LinearAttnRecurrence, 17),
@@ -3556,9 +3697,9 @@ mod tests {
                 "Plan 003: category {cat:?} has {} rules, expected {count}",
                 entry.2.len());
         }
-        // Sum must equal 155.
+        // Sum must equal 160.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 155, "Plan 003: category totals must sum to 155");
+        assert_eq!(total, 160, "Plan 003: category totals must sum to 160");
     }
 
     #[test]
@@ -3568,7 +3709,7 @@ mod tests {
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 155, "Plan 003: grouped corpus has {total} rules, expected 155");
+        assert_eq!(total, 160, "Plan 003: grouped corpus has {total} rules, expected 160");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");
