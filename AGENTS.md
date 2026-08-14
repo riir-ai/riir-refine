@@ -26,11 +26,12 @@ Three domains ship (Plan 001):
    bench finding (Bench 015 + Bench 016: 2 ParetoDominated + 4 regime-fragile/Mixed in the
    default config — consumers should treat annotated rules as
    context-dependent).
-3. **`kernel_opt`** (opt-in, Phase 3) — heals GPU kernel optimization. 68 rules
+3. **`kernel_opt`** (opt-in, Phase 3) — heals GPU kernel optimization. 76 rules
    (Batch 1-6: 50 popcorn-distilled from Research 002-007; Batch 7: 9 burn-cubecl
    Rust-native autotune dispatch + conv-as-GEMM + layout rules from Research 008;
    Batch 8: 9 burn-cubecl kernel polymorphism + dtype/alignment specialization +
    cubecl-opt IR strength-reduction rules from Research 009;
+   Batch 9: 8 popcorn fusion + dtype/quant + dispatch rules from Research 010;
    full corpus ~300-500 rules in ~15-25 batches). Absorbs Proposal 012's design
    (thermal-tier + latent-MoE + numeric validator); 4090 LoRA deferred.
 

@@ -10,7 +10,7 @@
 | Component | Ships now | Deferred |
 |---|---|---|
 | `KernelOptDomain: HealDomain` | ✅ | |
-| Seed corpus (Batch 1-8: 68 rules) | ✅ | Full corpus (~300-500 rules, ~15-25 batches) |
+| Seed corpus (Batch 1-9: 76 rules) | ✅ | Full corpus (~300-500 rules, ~15-25 batches) |
 | `KernelExpertRouter` (`pick_domain`) | ✅ (8-dim activity, 15/15 reachable, Plan 004) | Mined centroids via `CommittedFieldBlend` |
 | `KernelThermalRouter` (5-tier stub) | ✅ (returns Plasma) | Warm/Cold LoRA (4090, riir-train) |
 | `KernelVerifier` (compile-only) | ✅ (behind `kernel_verify`) | Full numeric compare vs reference |
@@ -26,7 +26,8 @@ Batch 5 (Research 006): 4 rules — NSA block-sparse selection patterns.
 Batch 6 (Research 007): 3 rules — varlen packing + chunked reductions.
 Batch 7 (Research 008): 9 rules — burn-cubecl autotune dispatch + conv-as-GEMM + memory layout.
 Batch 8 (Research 009): 9 rules — burn-cubecl kernel polymorphism + dtype/alignment specialization + cubecl-opt IR strength reduction.
-Total: 68 rules. Full corpus target: ~300-500 rules in ~15-25 batches.
+Batch 9 (Research 010): 8 rules — popcorn fusion + dtype/quant + dispatch (add_rms_norm, group_norm_linear, jsd, int8_int2_matmul, _quant).
+Total: 76 rules. Full corpus target: ~300-500 rules in ~15-25 batches.
 
 ### Category A: Memory access patterns (6 rules)
 
@@ -49,7 +50,7 @@ Total: 68 rules. Full corpus target: ~300-500 rules in ~15-25 batches.
 | `unroll-fixed-inner` | loop unrolling for ILP | Dynamic loop → fixed-size unrolled |
 | `forceinline-device-fn` | function inlining | Regular call → `#[inline(always)]` |
 
-### Category C: Fusion patterns (4 rules)
+### Category C: Fusion patterns (7 rules)
 
 | Rule ID | GPU concept | Pattern |
 |---|---|---|
@@ -58,7 +59,7 @@ Total: 68 rules. Full corpus target: ~300-500 rules in ~15-25 batches.
 | `fuse-softmax-mask` | mask fusion in softmax | Separate mask+softmax → fused masked softmax |
 | `fuse-xent-logsumexp` | cross-entropy fusion | Softmax+NLL → fused logsumexp (no prob matrix) |
 
-### Category D: Dispatch patterns (3 rules)
+### Category D: Dispatch patterns (4 rules)
 
 | Rule ID | GPU concept | Pattern |
 |---|---|---|
@@ -253,7 +254,7 @@ deferred (Proposal 012 §Phase 0). `is_full_validator_available()` returns
 | `inplace-output-alias` | output buffer reuse via mutability check (skip allocation) | Fresh output alloc every call → `can_mut` check aliases output to disposable input (zero alloc) |
 | `layout-permute-for-coalescing` | memory layout permutation for coalesced channel access | NCHW strided channel access → permute to NHWC (channel innermost, coalesced), permute back |
 
-### Category N: dtype + alignment specialization (Batch 8, 2 rules — burn-cubecl)
+### Category N: dtype + alignment specialization (6 rules — 2 Batch 8 + 4 Batch 9)
 
 | Rule ID | GPU concept | Pattern |
 |---|---|---|
@@ -288,6 +289,7 @@ deferred (Proposal 012 §Phase 0). `is_full_validator_available()` returns
 - [Research 007](../../.research/007_popcorn_kernel_opt_distillation_batch6.md) — Batch 6 varlen + chunked reductions
 - [Research 008](../../.research/008_burn_cubecl_kernel_opt_distillation_batch7.md) — Batch 7 burn-cubecl autotune dispatch + conv-as-GEMM + layout
 - [Research 009](../../.research/009_burn_cubecl_cubecl_opt_kernel_opt_distillation_batch8.md) — Batch 8 burn-cubecl kernel polymorphism + dtype/alignment + cubecl-opt IR strength reduction
+- [Research 010](../../.research/010_popcorn_kernel_opt_distillation_batch9.md) — Batch 9 popcorn fusion + dtype/quant + dispatch
 - [Proposal 012](../../.proposals/) — the absorbed GPU kernel optimizer design
 - [Plan 558](../../../katgpt-rs/.plans/) — `pick_domain` substrate (katgpt-core)
 - [Research 453](../../../katgpt-rs/.research/) — LatentMoE variable-rank principle
