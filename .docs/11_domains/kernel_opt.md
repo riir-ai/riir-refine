@@ -10,7 +10,7 @@
 | Component | Ships now | Deferred |
 |---|---|---|
 | `KernelOptDomain: HealDomain` | ✅ | |
-| Seed corpus (Batch 1-12: 113 rules) | ✅ | Full corpus (~300-500 rules, ~15-25 batches) |
+| Seed corpus (Batch 1-13: 119 rules; popcorn COMPLETE) | ✅ | Future source: new popcorn releases, real burn-cubecl kernels |
 | `KernelExpertRouter` (`pick_domain`) | ✅ (8-dim activity, 15/15 reachable, Plan 004) | Mined centroids via `CommittedFieldBlend` |
 | `KernelThermalRouter` (5-tier stub) | ✅ (returns Plasma) | Warm/Cold LoRA (4090, riir-train) |
 | `KernelVerifier` (compile-only) | ✅ (behind `kernel_verify`) | Full numeric compare vs reference |
@@ -30,7 +30,8 @@ Batch 9 (Research 010): 8 rules — popcorn fusion + dtype/quant + dispatch (add
 Batch 10 (Research 011): 12 rules — popcorn compute + chunked reduction + polymorphism (mean_pooling, solve_tril, hadamard_transform, comba, dyt, token_shift, sparsemax, selective_log_softmax, softmax, rms_norm, geglu, swiglu, rope, gelu).
 Batch 11 (Research 012): 11 rules — popcorn linear-attention recurrence family (gla, simple_gla, rwkv7, delta_rule, iplr_delta_rule, gated_oja_rule) + parallelism (chunk_global_cumsum, retention, lightning_attn) + flash-attn tiling (deltaformer) + compute (based, rebased, linear_attn) + dispatch (lightning_attn). A 12th candidate (chunk-reset-scan) was dropped as a duplicate of chunk-reset-cumsum (Batch 6).
 Batch 12 (Research 013): 14 rules — popcorn gated delta family (gated_delta_rule, gated_delta_product) + specialized recurrences (mesa_net, mesa_net_decode, titans_linear, ttt, rwkv4, rwkv6) + advanced attention (wall_attn, multi_token_attention) + MoE gate (momoe) + KDA gate (kda_gate, kda_gate_cumsum) + hierarchical mask (log_linear_attn). Three candidates (kda per-key-dim gate, forgetting_attn cumsum decay, abc two-state softmax) were dropped as duplicates.
-Total: 113 rules. Full corpus target: ~300-500 rules in ~15-25 batches.
+Batch 13 (Research 014): 6 rules — popcorn final unmined pass. RL loss stability (grpo_offpolicy: expm1 for KL cancellation) + complex-free RoPE (llama4_rope: paired reals) + multimodal RoPE (qwen2vl_mrope: cyclic modality table) + RWKV-7 channel mixing (rwkv7_channel_mixing: stateful cat-prefix shift + squared ReLU from sqrelu) + RWKV-7 gate output (rwkv7_gate_output: fused reduce-then-broadcast). rwkv7_k_update + sigmoid + tvd yielded no new rule.
+Total: 119 rules. Popcorn corpus distillation COMPLETE — every popcorn kernel file read.
 
 ### Category A: Memory access patterns (6 rules)
 
@@ -43,7 +44,7 @@ Total: 113 rules. Full corpus target: ~300-500 rules in ~15-25 batches.
 | `gemm-tiling` | shared-memory tiling | Naive GEMM (global mem) → tiled GEMM (shared mem reuse) |
 | `masked-boundary-load` | boundary-safe memory access | Unchecked load → masked load with fallback |
 
-### Category B: Compute patterns (14 rules)
+### Category B: Compute patterns (18 rules)
 
 | Rule ID | GPU concept | Pattern |
 |---|---|---|
@@ -61,8 +62,12 @@ Total: 113 rules. Full corpus target: ~300-500 rules in ~15-25 batches.
 | `hierarchical-log2-level-mask` | O(log seq) hierarchical mask | Dense N×N decay → O(N log N) sparse hierarchical (per-level scales) |
 | `iterative-cg-solve-over-matvec` | conjugate-gradient solve | Materialize inverse → CG over matvec with Jacobi preconditioner |
 | `chunked-test-time-gradient-descent` | mini-batch chunked GD | Sequential per-token GD → chunked GD with causal mask + last-step update |
+| `expm1-for-near-zero-exp-minus-one` | numerical stability (cancellation) | `exp(x)−1` → `expm1(x)` (avoids catastrophic cancellation near 0) |
+| `complex-mul-via-paired-reals` | complex-free representation | Complex dtype → interleaved `[real, imag]` pairs + 4 scalar muls |
+| `stateful-shift-via-cat-prefix` | cross-batch stateful shift | Zero-pad shift → `cat(x_prev, x[:-1])` (carries real cross-batch state) |
+| `squared-relu-activation` | sparse sharpening activation | `relu(x)` then square → fused `max(x,0)²` (zeros preserved, non-zeros sharpened) |
 
-### Category C: Fusion patterns (9 rules)
+### Category C: Fusion patterns (10 rules)
 
 | Rule ID | GPU concept | Pattern |
 |---|---|---|
@@ -75,8 +80,9 @@ Total: 113 rules. Full corpus target: ~300-500 rules in ~15-25 batches.
 | `fuse-jsd-logsumexp` | log-domain divergence fusion | Materialize prob matrices → logaddexp (no matrices) |
 | `gather-selective-reduction` | selective reduction | Full softmax → gather selected tokens only (GRPO) |
 | `fuse-gate-transform-chunk-cumsum` | gate + cumsum fusion | Separate gate + chunk cumsum → fused (no intermediate) |
+| `rkv-receptance-correction` | fused reduce-then-broadcast | 4-pass triple-mul+reduce+broadcast-mul+add → fused `(r·k·ρ).sum(keepdim)·v + o` |
 
-### Category D: Dispatch patterns (7 rules)
+### Category D: Dispatch patterns (8 rules)
 
 | Rule ID | GPU concept | Pattern |
 |---|---|---|
@@ -87,6 +93,7 @@ Total: 113 rules. Full corpus target: ~300-500 rules in ~15-25 batches.
 | `multi-condition-predicate` | compound shape+dtype gate | Single condition → multi-condition (rows%32 AND width%8) |
 | `layer-depth-decay-schedule` | depth-aware parameter schedule | Constant decay slope → slope ∝ (1 − layer_idx/num_layers) |
 | `dual-mode-gate-transform` | dual-mode gate dispatch | Hardcoded formula → unbounded softplus / bounded sigmoid by parameter |
+| `cyclic-modality-table-selection` | multimodal RoPE dispatch | Single RoPE table → split head_dim into sections, cyclic gather from N modality tables |
 
 ### Category E: Parallelism patterns (6 rules)
 
@@ -153,7 +160,7 @@ pub fn route(&self, activity: &[f32; ACTIVITY_DIM]) -> usize {
 }
 ```
 
-**Plan 003 (2026-08-14):** router wired to the 113-rule corpus via 15 category
+**Plan 003 (2026-08-14):** router wired to the 119-rule corpus via 15 category
 experts. Each expert owns its category's `rule_ids` via `KERNEL_CATEGORIES`.
 - **Activity vector** = raw physical (kernel signature: `[M, N, K, dtype, hw,
   is_attention, is_fusion, is_ir_transform]` — 8-dim per Plan 004, normalized

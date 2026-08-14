@@ -69,7 +69,7 @@ expert domain, then the drafter operates within that domain.
 ## Output shape
 
 ```text
-📦 L0 Corpus: 113 rules (BLAKE3 verified: ✅)
+📦 L0 Corpus: 119 rules (BLAKE3 verified: ✅)
    Categories: 15
      A: memory access — 6 rules
      ...
@@ -80,15 +80,15 @@ expert domain, then the drafter operates within that domain.
 
 🔑 Signature: Naive matvec (strided read → coalescing)
    Routed to: expert 0 (A: memory access) — category: A: memory access
-   Candidates: 6/113 rules (narrowed by router)
+   Candidates: 6/119 rules (narrowed by router)
    Thermal:    Plasma
    Drafted:   coalesced-row-read [TernaryMatvec] conf=0.5234
    Validate:  ✅ VALID
    ...
 
 ─── Flat vs Routed Candidate Count ─────────────────────────────
-  Flat corpus:     113 rules searched per heal
-  Routed (avg):    7.5 rules searched per heal (category avg)
+  Flat corpus:     119 rules searched per heal
+  Routed (avg):    7.9 rules searched per heal (category avg)
   Reduction:       15.0×
 ```
 

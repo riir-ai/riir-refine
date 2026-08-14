@@ -49,6 +49,15 @@
 //!   `abc` two-state softmax) were dropped as duplicates of existing rules.
 //!   Corpus: **113 rules across 15 categories (A–O)**. Category G (linear-attn
 //!   recurrence) is now the largest cluster at 17 rules.
+//! - **Batch 13 (Research 014):** 6 popcorn rules — final unmined pass. RL loss
+//!   stability (`grpo_offpolicy`: `expm1` for KL cancellation), complex-free
+//!   `RoPE` (`llama4_rope`: paired reals), multimodal `RoPE` (`qwen2vl_mrope`:
+//!   cyclic modality table), `RWKV-7` channel mixing (`rwkv7_channel_mixing`:
+//!   stateful cat-prefix shift + squared `ReLU` from `sqrelu`), `RWKV-7` gate output
+//!   (`rwkv7_gate_output`: fused reduce-then-broadcast). Two files (`rwkv7_k_update`,
+//!   `sigmoid`) yielded no new rule; `tvd` was covered by `upcast-before-reduction`.
+//!   Corpus: **119 rules across 15 categories (A–O)**. Category B (compute) is now
+//!   the largest cluster at 18 rules.
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
@@ -1257,6 +1266,83 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
             ref_shape: "// naive: always use one formula regardless of stability needs (hardcoded)\nfn gate_hardcoded(g: &[f32], rate: f32, n: usize) -> Vec<f32> {\n    // always unbounded softplus — can overflow on large g even when bounded mode is wanted\n    (0..n).map(|i| -rate * softplus(g[i])).collect()\n}\nfn softplus(x: f32) -> f32 { if x > 20.0 { x } else { (1.0 + x.exp()).ln() } }".to_string(),
             opt_pattern: "// optimized: dual-mode gate (kda_gate) — dispatched by lower_bound presence\nfn gate_dual_mode(g: &[f32], rate: f32, lower_bound: Option<f32>, n: usize) -> Vec<f32> {\n    match lower_bound {\n        None => {\n            // unbounded: -rate·softplus(g) — lets gate grow freely\n            (0..n).map(|i| -rate * softplus(g[i])).collect()\n        }\n        Some(lb) => {\n            // bounded: lb·sigmoid(rate·g) — clamps to [0, lb] for stability\n            (0..n).map(|i| lb * sigmoid(rate * g[i])).collect()\n        }\n    }\n}\nfn sigmoid(x: f32) -> f32 { 1.0 / (1.0 + (-x).exp()) }\nfn softplus(x: f32) -> f32 { if x > 20.0 { x } else { (1.0 + x.exp()).ln() } }".to_string(),
         },
+        // ════════════════════════════════════════════════════════════════════
+        // Batch 13 (Research 014): final popcorn pass — RL loss stability,
+        // complex-free RoPE, multimodal RoPE, RWKV-7 channel mixing + gate output.
+        // 6 rules from 7 unmined popcorn files.
+        // ════════════════════════════════════════════════════════════════════
+        // ── expm1-for-near-zero-exp-minus-one — exp(x)−1 → expm1(x) (Batch 13, B) ──
+        // Source: grpo_offpolicy.py — KL penalty `loss_kl = expm1(delta) − delta`
+        // computes `e^delta − 1 − delta`. Near delta=0, `exp(delta) − 1` suffers
+        // catastrophic cancellation (both terms ≈ 1). `expm1(delta)` is accurate
+        // for small arguments; the `− delta` shifts the stable kernel to the full
+        // KL expression. Distinct from `exp2-log2-base2` (that's a base swap; this
+        // is a cancellation fix). Batch 6 had deferred grpo_offpolicy as "RL math,
+        // fusion covered" — the numerical-stability aspect was overlooked.
+        KernelRule {
+            rule_id: "expm1-for-near-zero-exp-minus-one".to_string(),
+            gpu_concept: "numerically stable e^x − 1 via expm1 (avoids catastrophic cancellation near 0)".to_string(),
+            ref_shape: "// naive: exp(x) - 1 — catastrophic cancellation when x is near 0\nfn kl_term_naive(delta: &[f32], n: usize) -> Vec<f32> {\n    (0..n).map(|i| delta[i].exp() - 1.0 - delta[i]).collect()\n    // for delta ≈ 0: exp(0.0001) = 1.0001, 1.0001 - 1 = 0.0001 (lost ~4 digits)\n}".to_string(),
+            opt_pattern: "// optimized: expm1(x) - x — expm1 is accurate near 0 (grpo_offpolicy KL)\nfn kl_term_stable(delta: &[f32], n: usize) -> Vec<f32> {\n    // expm1(0.0001) = 0.000100005 — full precision, no cancellation\n    (0..n).map(|i| delta[i].exp_m1() - delta[i]).collect()\n}".to_string(),
+        },
+        // ── complex-mul-via-paired-reals — complex dtype → interleaved real/imag (B) ──
+        // Source: llama4_rope.py — rotary embedding stores freqs as `[cos, sin]`
+        // pairs (shape `[seq, head_dim/2, 2]`) and does complex multiplication via
+        // paired reals: `(r1·r2 − i1·i2, r1·i2 + i1·r2)`. Avoids the complex dtype
+        // entirely — on hardware where `complex<f32>` maps to a slow library path
+        // (not a native register-width op), paired-reals + 4 scalar muls is faster.
+        // The input is `unflatten(-1, (-1, 2))` then `unbind(-1)` to split pairs.
+        KernelRule {
+            rule_id: "complex-mul-via-paired-reals".to_string(),
+            gpu_concept: "represent complex numbers as interleaved [real, imag] pairs, multiply via 4 scalar muls".to_string(),
+            ref_shape: "// naive: use complex<f32> dtype — maps to a slow library path on some hardware\nfn rope_complex(x: &[f32], freqs_complex: &[num_complex::Complex32], n: usize, d: usize) -> Vec<f32> {\n    let mut out = vec![0.0f32; n * d];\n    for i in 0..n { for j in 0..(d/2) {\n        let xc = num_complex::Complex::new(x[i*d+2*j], x[i*d+2*j+1]);\n        let prod = xc * freqs_complex[j]; // complex mul — library call, not native\n        out[i*d+2*j] = prod.re; out[i*d+2*j+1] = prod.im;\n    } }\n    out\n}".to_string(),
+            opt_pattern: "// optimized: paired reals — 4 scalar muls, no complex dtype (llama4_rope)\nfn rope_paired_reals(x: &[f32], freqs: &[f32], n: usize, d: usize) -> Vec<f32> {\n    // freqs layout: [head_dim/2, 2] = [(freq_real, freq_imag), ...]\n    let mut out = vec![0.0f32; n * d];\n    for i in 0..n { for j in 0..(d/2) {\n        let xr = x[i*d+2*j];     // real part of x pair j\n        let xi = x[i*d+2*j+1];   // imag part of x pair j\n        let fr = freqs[2*j];     // freq real\n        let fi = freqs[2*j+1];   // freq imag\n        // complex mul via paired reals: (xr+xi·i)·(fr+fi·i) = (xr·fr−xi·fi) + (xr·fi+xi·fr)·i\n        out[i*d+2*j]   = xr * fr - xi * fi;\n        out[i*d+2*j+1] = xr * fi + xi * fr;\n    } }\n    out\n}".to_string(),
+        },
+        // ── cyclic-modality-table-selection — multimodal RoPE: cyclic table gather (D) ──
+        // Source: qwen2vl_mrope.py — multimodal RoPE splits head_dim into N sections
+        // (temporal, height, width), each pulling cos/sin from a different modality
+        // table. `cos.split(doubled, -1)` then `table[i % 3]` selects per-section.
+        // The cyclic `i % n_modalities` dispatch is the novel part — a per-section
+        // gather from N constant tables, then `cat` back together. Distinct from
+        // standard RoPE (single table) and from `predicate-gated-backend` (runtime
+        // dispatch — this is a compile-time section layout).
+        KernelRule {
+            rule_id: "cyclic-modality-table-selection".to_string(),
+            gpu_concept: "multimodal RoPE: split head_dim into sections, cyclic gather from N modality tables".to_string(),
+            ref_shape: "// naive: single RoPE table for all dims (ignores multimodal structure)\nfn rope_single_table(x: &[f32], cos: &[f32], sin: &[f32], n: usize, d: usize) -> Vec<f32> {\n    let mut out = vec![0.0f32; n * d];\n    for i in 0..n { for j in 0..(d/2) {\n        let c = cos[j]; let s = sin[j]; // one table — wrong for multimodal\n        out[i*d+2*j]   = x[i*d+2*j] * c - x[i*d+2*j+1] * s;\n        out[i*d+2*j+1] = x[i*d+2*j] * s + x[i*d+2*j+1] * c;\n    } }\n    out\n}".to_string(),
+            opt_pattern: "// optimized: cyclic modality table selection (qwen2vl_mrope) — per-section table\nfn rope_multimodal(x: &[f32], cos_tables: &[Vec<f32>], sin_tables: &[Vec<f32>], sections: &[usize], n: usize, d: usize) -> Vec<f32> {\n    let n_mod = cos_tables.len(); // e.g. 3: temporal, height, width\n    let mut out = vec![0.0f32; n * d];\n    let mut offset = 0usize;\n    for (sec_idx, &sec_len) in sections.iter().enumerate() {\n        let table_idx = sec_idx % n_mod; // cyclic: temporal=0, height=1, width=2, repeat\n        let cos_t = &cos_tables[table_idx];\n        let sin_t = &sin_tables[table_idx];\n        for i in 0..n { for j in 0..sec_len {\n            let c = cos_t[j]; let s = sin_t[j];\n            out[i*d+2*(offset+j)]   = x[i*d+2*(offset+j)] * c - x[i*d+2*(offset+j)+1] * s;\n            out[i*d+2*(offset+j)+1] = x[i*d+2*(offset+j)] * s + x[i*d+2*(offset+j)+1] * c;\n        } }\n        offset += sec_len;\n    }\n    out\n}".to_string(),
+        },
+        // ── stateful-shift-via-cat-prefix — shift with cross-batch carry state (B) ──
+        // Source: rwkv7_channel_mixing.py — token-shift `previous = cat((x_prev[:,\n        // None], x[:, :-1]), dim=1)` reconstructs the shifted sequence by
+        // concatenating the previous batch's last token as the prefix. Distinct from
+        // `shift-via-pad-subtract` (Batch 10, token_shift.py): that pads with zeros
+        // + computes a DIFFERENCE (y = x_{t-1} − x_t); this carries real state across
+        // batch boundaries (y[0] = x_prev, not 0). Required for stateful RNN-style
+        // mixing where the first token of each batch depends on the last token of
+        // the prior batch.
+        KernelRule {
+            rule_id: "stateful-shift-via-cat-prefix".to_string(),
+            gpu_concept: "shift sequence with cross-batch carry: cat(prev_state, x[:-1])".to_string(),
+            ref_shape: "// naive: pad with zeros (loses cross-batch state — first token is wrong)\nfn shift_zero_pad(x: &[f32], seq: usize, dim: usize) -> Vec<f32> {\n    let mut shifted = vec![0.0f32; seq * dim];\n    shifted[dim..].copy_from_slice(&x[..(seq-1)*dim]); // shifted[0] = 0 — WRONG carry\n    shifted\n}".to_string(),
+            opt_pattern: "// optimized: stateful shift via cat prefix (rwkv7_channel_mixing)\nfn shift_cat_carry(x: &[f32], x_prev: &[f32], seq: usize, dim: usize) -> Vec<f32> {\n    let mut shifted = vec![0.0f32; seq * dim];\n    // shifted[0] = x_prev (cross-batch carry — the real last token of prior batch)\n    shifted[..dim].copy_from_slice(x_prev);\n    // shifted[1..] = x[..seq-1] (shift the current batch by one)\n    shifted[dim..].copy_from_slice(&x[..(seq-1)*dim]);\n    shifted\n}".to_string(),
+        },
+        // ── squared-relu-activation — relu(x)² sparse sharpening (B) ──
+        // Source: sqrelu.py (+ rwkv7_channel_mixing.py consumer) — `relu(x).square()`\n        // preserves ReLU's exact sparsity (zeros stay zero) while quadratically\n        // sharpening non-zero values. Used in Primer (So et al. 2021) + RWKV-7
+        // channel mixing. Distinct from `gelu`/`swish` (smooth activations): the\n        // squaring is applied AFTER the relu gate, so the sparse structure is exact.\n        // The fused form `max(x,0)²` avoids materializing the intermediate relu\n        // output before squaring.
+        KernelRule {
+            rule_id: "squared-relu-activation".to_string(),
+            gpu_concept: "relu(x)² — sparse activation: preserves ReLU zeros, sharpens non-zeros quadratically".to_string(),
+            ref_shape: "// naive: relu then separate square (two passes, materialized intermediate)\nfn sqrelu_two_pass(x: &[f32], n: usize) -> Vec<f32> {\n    let mut relu_out = vec![0.0f32; n];\n    for i in 0..n { relu_out[i] = if x[i] > 0.0 { x[i] } else { 0.0 }; } // pass 1\n    let mut out = vec![0.0f32; n];\n    for i in 0..n { out[i] = relu_out[i] * relu_out[i]; } // pass 2\n    out\n}".to_string(),
+            opt_pattern: "// optimized: fused squared ReLU (sqrelu) — one pass, no intermediate\nfn sqrelu_fused(x: &[f32], n: usize) -> Vec<f32> {\n    let mut out = vec![0.0f32; n];\n    for i in 0..n {\n        let v = if x[i] > 0.0 { x[i] } else { 0.0 }; // relu gate\n        out[i] = v * v; // square inline — zeros stay zero, non-zeros sharpen\n    }\n    out\n}".to_string(),
+        },
+        // ── rkv-receptance-correction — reduce-then-broadcast-multiply fused (C) ──
+        // Source: rwkv7_gate_output.py — `correction = (r*k*r_k).sum(-1, keepdim=\n        // true) * v`, then `y = (o + correction) * g`. A reduce-then-broadcast-multiply\n        // fusion: elementwise triple-product (r·k·ρ), reduce over head_dim with\n        // `keepdim` (broadcastable scalar per head), multiply by v (broadcasts back\n        // to full head_dim), add to o, gate by g. Four elementwise ops + one reduce\n        // fused into a single kernel pass — the `keepdim` makes the reduce output\n        // directly broadcastable without a reshape. Distinct from `gather-selective-\n        // reduction` (that's a gather-then-reduce; this is a reduce-then-broadcast).
+        KernelRule {
+            rule_id: "rkv-receptance-correction".to_string(),
+            gpu_concept: "fused reduce-then-broadcast: (r·k·ρ).sum(head_dim,keepdim)·v added to o, gated by g".to_string(),
+            ref_shape: "// naive: 4 separate passes — triple-mul, reduce, broadcast-mul, add+gate\nfn rkv_correction_naive(o: &[f32], r: &[f32], k: &[f32], r_k: &[f32], v: &[f32], g: &[f32], d: usize, n: usize) -> Vec<f32> {\n    // pass 1: elementwise r*k*r_k (materialized)\n    let mut triple = vec![0.0f32; n * d];\n    for i in 0..(n*d) { triple[i] = r[i] * k[i] * r_k[i]; }\n    // pass 2: reduce over head_dim (materialized scalar per head)\n    let mut reduced = vec![0.0f32; n];\n    for i in 0..n { for dd in 0..d { reduced[i] += triple[i*d+dd]; } }\n    // pass 3: broadcast-multiply by v (materialized)\n    let mut correction = vec![0.0f32; n * d];\n    for i in 0..n { for dd in 0..d { correction[i*d+dd] = reduced[i] * v[i*d+dd]; } }\n    // pass 4: add to o, gate by g\n    let mut out = vec![0.0f32; n * d];\n    for i in 0..(n*d) { out[i] = (o[i] + correction[i]) * g[i]; }\n    out\n}".to_string(),
+            opt_pattern: "// optimized: fused reduce-then-broadcast (rwkv7_gate_output) — one pass\nfn rkv_correction_fused(o: &[f32], r: &[f32], k: &[f32], r_k: &[f32], v: &[f32], g: &[f32], d: usize, n: usize) -> Vec<f32> {\n    let mut out = vec![0.0f32; n * d];\n    for i in 0..n {\n        // reduce over head_dim: dot(r*k*r_k, all dims) — keepdim = scalar per head\n        let mut s = 0.0;\n        for dd in 0..d { s += r[i*d+dd] * k[i*d+dd] * r_k[i*d+dd]; }\n        // broadcast-multiply by v, add to o, gate by g — all inline, no intermediate\n        for dd in 0..d {\n            out[i*d+dd] = (o[i*d+dd] + s * v[i*d+dd]) * g[i*d+dd];\n        }\n    }\n    out\n}".to_string(),
+        },
     ])
 }
 
@@ -1290,7 +1376,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "masked-boundary-load",
         ],
     ),
-    // B: Compute patterns (14 rules)
+    // B: Compute patterns (18 rules)
     (
         KernelCategory::Compute,
         "B: compute",
@@ -1309,9 +1395,13 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "hierarchical-log2-level-mask",
             "iterative-cg-solve-over-matvec",
             "chunked-test-time-gradient-descent",
+            "expm1-for-near-zero-exp-minus-one",
+            "complex-mul-via-paired-reals",
+            "stateful-shift-via-cat-prefix",
+            "squared-relu-activation",
         ],
     ),
-    // C: Fusion patterns (9 rules)
+    // C: Fusion patterns (10 rules)
     (
         KernelCategory::Fusion,
         "C: fusion",
@@ -1325,9 +1415,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fuse-jsd-logsumexp",
             "gather-selective-reduction",
             "fuse-gate-transform-chunk-cumsum",
+            "rkv-receptance-correction",
         ],
     ),
-    // D: Dispatch patterns (7 rules)
+    // D: Dispatch patterns (8 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -1339,6 +1430,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "multi-condition-predicate",
             "layer-depth-decay-schedule",
             "dual-mode-gate-transform",
+            "cyclic-modality-table-selection",
         ],
     ),
     // E: Parallelism patterns (6 rules)
@@ -1561,8 +1653,9 @@ mod tests {
         // Batch 10 (12): popcorn compute + chunked reduction + polymorphism (mean_pooling, solve_tril, hadamard_transform, comba, dyt, token_shift, sparsemax, selective_log_softmax, softmax, rms_norm, geglu, swiglu, rope, gelu).
         // Batch 11 (11): popcorn linear-attention recurrence family (gla, simple_gla, based, rebased, linear_attn, retention, lightning_attn, rwkv7, delta_rule, iplr_delta_rule, gated_oja_rule, deltaformer, chunk_global_cumsum, chunk_local_cumsum).
         // Batch 12 (14): popcorn gated delta + specialized recurrence + advanced attention (gated_delta_rule, gated_delta_product, mesa_net, mesa_net_decode, titans_linear, ttt, rwkv4, rwkv6, wall_attn, multi_token_attention, momoe, kda_gate, kda_gate_cumsum, log_linear_attn).
-        // Total: 113.
-        assert_eq!(corpus.entries.len(), 113, "batches 1-12 should have 113 rules");
+        // Batch 13 (6): popcorn final pass — RL loss stability (grpo_offpolicy), complex-free RoPE (llama4_rope), multimodal RoPE (qwen2vl_mrope), RWKV-7 channel mixing + gate output (rwkv7_channel_mixing, rwkv7_gate_output, sqrelu).
+        // Total: 119.
+        assert_eq!(corpus.entries.len(), 119, "batches 1-13 should have 119 rules");
     }
 
     #[test]
@@ -2046,6 +2139,43 @@ mod tests {
         assert!(concepts.contains(&"dual-mode gate: unbounded softplus OR bounded sigmoid, dispatched by parameter"));
     }
 
+    #[test]
+    fn batch13_rules_present() {
+        // Verify the 6 batch-13 rules across B/C/D.
+        let corpus = build_kernel_seed_corpus();
+        let ids: Vec<&str> =
+            corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        // Category B (4 new): numerical stability, complex-free RoPE, stateful shift, squared ReLU
+        assert!(ids.contains(&"expm1-for-near-zero-exp-minus-one"));
+        assert!(ids.contains(&"complex-mul-via-paired-reals"));
+        assert!(ids.contains(&"stateful-shift-via-cat-prefix"));
+        assert!(ids.contains(&"squared-relu-activation"));
+        // Category C (1 new): fused reduce-then-broadcast
+        assert!(ids.contains(&"rkv-receptance-correction"));
+        // Category D (1 new): multimodal cyclic table gather
+        assert!(ids.contains(&"cyclic-modality-table-selection"));
+    }
+
+    #[test]
+    fn batch13_stability_rope_activation_concepts_covered() {
+        // Verify the batch-13 numerical stability + RoPE + activation concepts.
+        let corpus = build_kernel_seed_corpus();
+        let concepts: Vec<&str> =
+            corpus.entries.iter().map(|e| e.gpu_concept.as_str()).collect();
+        // Category B: numerical stability (expm1 for KL cancellation)
+        assert!(concepts.contains(&"numerically stable e^x − 1 via expm1 (avoids catastrophic cancellation near 0)"));
+        // Category B: complex-free RoPE (paired reals)
+        assert!(concepts.contains(&"represent complex numbers as interleaved [real, imag] pairs, multiply via 4 scalar muls"));
+        // Category B: stateful shift (cross-batch carry)
+        assert!(concepts.contains(&"shift sequence with cross-batch carry: cat(prev_state, x[:-1])"));
+        // Category B: squared ReLU (sparse sharpening)
+        assert!(concepts.contains(&"relu(x)² — sparse activation: preserves ReLU zeros, sharpens non-zeros quadratically"));
+        // Category C: fused reduce-then-broadcast (RWKV-7 gate output correction)
+        assert!(concepts.contains(&"fused reduce-then-broadcast: (r·k·ρ).sum(head_dim,keepdim)·v added to o, gated by g"));
+        // Category D: multimodal cyclic table selection
+        assert!(concepts.contains(&"multimodal RoPE: split head_dim into sections, cyclic gather from N modality tables"));
+    }
+
     // ════════════════════════════════════════════════════════════════════
     // Plan 003 — Router ↔ corpus wiring tests
     // ════════════════════════════════════════════════════════════════════
@@ -2088,12 +2218,12 @@ mod tests {
 
     #[test]
     fn kernel_categories_counts_match_plan_003_table() {
-        // Pin per-category rule counts to the Plan 003 table (updated for Batch 12).
+        // Pin per-category rule counts to the Plan 003 table (updated for Batch 13).
         let expected = [
             (KernelCategory::MemoryAccess, 6),
-            (KernelCategory::Compute, 14),
-            (KernelCategory::Fusion, 9),
-            (KernelCategory::Dispatch, 7),
+            (KernelCategory::Compute, 18),
+            (KernelCategory::Fusion, 10),
+            (KernelCategory::Dispatch, 8),
             (KernelCategory::Parallelism, 6),
             (KernelCategory::FlashAttnTiling, 10),
             (KernelCategory::LinearAttnRecurrence, 17),
@@ -2113,9 +2243,9 @@ mod tests {
                 "Plan 003: category {cat:?} has {} rules, expected {count}",
                 entry.2.len());
         }
-        // Sum must equal 113.
+        // Sum must equal 119.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 113, "Plan 003: category totals must sum to 113");
+        assert_eq!(total, 119, "Plan 003: category totals must sum to 119");
     }
 
     #[test]
@@ -2125,7 +2255,7 @@ mod tests {
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 113, "Plan 003: grouped corpus has {total} rules, expected 113");
+        assert_eq!(total, 119, "Plan 003: grouped corpus has {total} rules, expected 119");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");
