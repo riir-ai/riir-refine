@@ -16,6 +16,15 @@
 //!
 //! Greedy (argmax) decode, matching llama.cpp's `--temp 0.0`.
 //!
+//! # Diagnostic env vars (Issue 670 instruments, all default-inert)
+//!
+//! - `TRUNCATE_P=<n>` — truncate every prompt to n tokens (P-regime probe;
+//!   both arms see the identical truncated input, so cross-arm bit-identity
+//!   stays the valid G1 criterion even though the completion is odd).
+//! - `LOGITS_PROBE=1` — print post-prefill top-2 logits + gap per case.
+//! - `ZC_WARMUP=<n>` — throwaway prefill of n tokens before the case loop
+//!   (zerocopy first-prefill hazard probe).
+//!
 //! # Run
 //!
 //! ```sh
@@ -37,19 +46,19 @@
 //! Default OFF. `SPEC_CHECKPOINT=cpu` selects the CPU-side checkpoint path
 //! (default: `gpu`, the CopyCubeCL zero-sync production path).
 //!
-**Measured on clippy prompts (2026-08-14, M3 Max, needless_return case):**
-G1 PASS (bit-identical emitted text vs sequential) but **α=0.19-0.22** —
-far below the α≥0.58 breakeven (Issue 665 T1) — decode 3.3-4.4× SLOWER
-than sequential. The n-gram drafter cannot predict natural-language
-`<think>` reasoning. Issue 665's 1.21× was measured on repetitive text;
-it does NOT reproduce on this workload. NET-NEGATIVE here.
-
-**Re-validated 2026-08-14 post-Issue-669-landing (3 cases, landed HEAD):**
-G1 PASS — speculative emits text identical to the sequential arms on all
-3 cases. Decode 6.66 tok/s vs sequential 15.2-17.0 (~2.3-2.6× slower,
-Unity-load session — same net-negative direction). The corrected
-bench_665 repetitive-text re-gate also measured net-negative (0.812×
-GPU-sync) — see Issue 665's T6 CORRECTED section.
+//! **Measured on clippy prompts (2026-08-14, M3 Max, needless_return case):**
+//! G1 PASS (bit-identical emitted text vs sequential) but **α=0.19-0.22** —
+//! far below the α≥0.58 breakeven (Issue 665 T1) — decode 3.3-4.4× SLOWER
+//! than sequential. The n-gram drafter cannot predict natural-language
+//! `<think>` reasoning. Issue 665's 1.21× was measured on repetitive text;
+//! it does NOT reproduce on this workload. NET-NEGATIVE here.
+//!
+//! **Re-validated 2026-08-14 post-Issue-669-landing (3 cases, landed HEAD):**
+//! G1 PASS — speculative emits text identical to the sequential arms on all
+//! 3 cases. Decode 6.66 tok/s vs sequential 15.2-17.0 (~2.3-2.6× slower,
+//! Unity-load session — same net-negative direction). The corrected
+//! bench_665 repetitive-text re-gate also measured net-negative (0.812×
+//! GPU-sync) — see Issue 665's T6 CORRECTED section.
 //!
 //! **bench_665 off-by-one bug (found while wiring this):** the upstream
 //! `bench_665_speculative_decode.rs` verify loop compares `argmax(all_logits[i])`
@@ -194,6 +203,27 @@ fn main() {
 
     let mut rows = Vec::new();
 
+    // Issue 670 probe: throwaway warmup prefill. The surviving ZEROCOPY
+    // corruption hits ONLY the first zerocopy prefill after context init
+    // (case-order A/B: whichever case runs first gets wrong logits; later
+    // ones are bit-identical to simdgroup). If this warmup absorbs the
+    // corruption, all real cases run clean — the workaround shape for the
+    // opt-in feature.
+    if std::env::var("ZC_WARMUP").is_ok() {
+        let warmup_p: usize = std::env::var("ZC_WARMUP")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .filter(|v| *v > 0)
+            .unwrap_or(16);
+        fwd.reset_state();
+        let t = Instant::now();
+        let _ = fwd.prefill(&vec![1usize; warmup_p]);
+        eprintln!(
+            "[bench010] zerocopy warmup prefill ({warmup_p} tok) in {:.2}s",
+            t.elapsed().as_secs_f64()
+        );
+    }
+
     for case in case_file.cases.iter().take(n_cases) {
         // Same chat template the server applies via --jinja, and the same
         // system+user split the Python arm sends.
@@ -211,6 +241,18 @@ fn main() {
             &tokens[..]
         };
 
+        // Issue 670 candidate B probe: optionally truncate the prompt to P
+        // tokens (after the block clamp) so the A/B can exercise the P<64
+        // regime the zerocopy gate now confines itself to. Both arms see the
+        // IDENTICAL truncated input — the pass criterion is cross-arm
+        // bit-identity of the emitted text, not output coherence (a prompt
+        // cut mid-template completes oddly by construction).
+        let prompt_tokens: Vec<usize> = std::env::var("TRUNCATE_P")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .map(|p| prompt_tokens[..p.min(prompt_tokens.len())].to_vec())
+            .unwrap_or_else(|| prompt_tokens.to_vec());
+
         fwd.reset_state();
 
         // ── Prefill: BATCHED simdgroup cmma path (the production DEFAULT-ON) ──
@@ -225,15 +267,23 @@ fn main() {
         // compiled in but DEFAULT OFF — the T4 flush fix
         // (`MetalTensorZeroCopyGemm::dispatch` flush-first, landed 2026-08-14)
         // recovered the throughput half (decode 0.37 → ~13.6 tok/s, within
-        // ~10-20% of default; prefill ~parity) but G1 still FAILS on 1/3
-        // cases (needless_return emits garbage; the other 2 clean):
-        //   - prefill ~22.9 vs default 21.3-22.5 tok/s (parity, was −46%)
-        //   - decode ~13.6 vs default 15.2-17.0 tok/s (was 47× SLOWER)
-        //   - G1 FAILS on needless_return (garbage tokens persist post-flush)
-        // Issue 663's +1.21× was measured on an ISOLATED prefill bench, not the
-        // full forward — does not reproduce at scale. Issue 670 candidate B
-        // (P<64 gating) remains untried. ZEROCOPY=1 env var forces it on for
+        // ~10-20% of default; prefill ~parity). The G1 half is CLOSED as a
+        // negative result (Issue 670 T5, 2026-08-14): the surviving corruption
+        // hits ONLY the FIRST zerocopy prefill after context init — case-order
+        // A/B proved it follows POSITION, not input content, P, or FP regime
+        // (whichever case runs first gets wrong logits; later prefills are
+        // BIT-IDENTICAL to simdgroup, so the kernel numerics are exact). Not
+        // cured by flush (T4), first-dispatch `client.sync()`, P-gating
+        // (candidate B, refuted — corrupts at P=32 too), or a same-P warmup
+        // at mixed P (downgrades, doesn't eliminate). Issue 663's +1.21× was
+        // an ISOLATED prefill bench — no end-to-end gain exists at production
+        // scale (prefill parity in every arm). ZEROCOPY=1 forces it on for
         // A/B re-investigation; default is OFF.
+        //
+        // Diagnostic env vars (Issue 670 instruments, all default-inert):
+        //   TRUNCATE_P=<n>  truncate every prompt to n tokens (P-regime probe)
+        //   LOGITS_PROBE=1  print post-prefill top-2 logits + gap per case
+        //   ZC_WARMUP=<n>   throwaway prefill of n tokens before the case loop
         riir_gpu::set_prefill_use_simdgroup(true);
         #[cfg(target_os = "macos")]
         if std::env::var("ZEROCOPY").unwrap_or_else(|_| "0".to_string()) == "1" {
@@ -241,8 +291,31 @@ fn main() {
         }
 
         let t_prefill = Instant::now();
-        let mut last_logits = fwd.prefill(prompt_tokens);
+        let mut last_logits = fwd.prefill(&prompt_tokens);
         let prefill_s = t_prefill.elapsed().as_secs_f64();
+
+        // Issue 670 root-cause probe: dump the post-prefill top-2 logits + gap.
+        // The surviving ZEROCOPY corruption is deterministic PER INPUT and
+        // P-INDEPENDENT (needless_return garbages at both P=93 and P=32; the
+        // other two cases clean at both) — the signature of a fixed numerics
+        // difference (e.g. the raw kernel's half-precision weight tile)
+        // flipping a near-tie argmax, not FP non-determinism. A collapsed
+        // top-2 gap + flipped top-1 vs the default arm confirms it.
+        if std::env::var("LOGITS_PROBE").is_ok() {
+            let mut top: Vec<(usize, f32)> = last_logits[..vocab]
+                .iter()
+                .enumerate()
+                .map(|(i, &v)| (i, v))
+                .collect();
+            top.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+            let (t1i, t1v) = top[0];
+            let (t2i, t2v) = top[1];
+            eprintln!(
+                "[probe] {} top1=({t1i}, {t1v:.4}) top2=({t2i}, {t2v:.4}) gap={:.4}",
+                case.lint,
+                t1v - t2v
+            );
+        }
 
         // ── Decode ────────────────────────────────────────────────────────
         // Two paths, selected by the SPECULATIVE env var:
@@ -263,7 +336,7 @@ fn main() {
             decode_speculative(
                 &mut fwd,
                 &weights,
-                prompt_tokens,
+                &prompt_tokens,
                 decode_tokens,
                 tokenizer.eos_id(),
             )
