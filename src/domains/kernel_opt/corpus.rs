@@ -114,6 +114,21 @@
 //!   `forward_dflare`: 17-binding layout + heterogeneous KV are architectural, not
 //!   kernel optimization). Corpus: **135 rules across 15 categories (A–O)**.
 //!   `riir-gpu` remains open as the next distillation source (9 of ~200 files mined).
+//! - **Batch 18 (Research 019):** 3 riir-gpu production rules — fifth batch mining
+//!   the stack's own kernels, focused on the `Q4_K` quantized GEMV family (4-bit
+//!   block-quant format with per-block scale + min). Row-tile-amortize-input-load
+//!   (`gemv_q4k_plane_rowtiled`: assign N output rows per plane, load input once,
+//!   reuse across N dot products — GEMV to small-GEMM via M-widening), factor-
+//!   affine-quant-scale-out-of-element-loop (`gemv_q4k_plane_factored`: when
+//!   dequant is affine in the code within a sub-block, factor d·scale and
+//!   dmin·min out — `Q4_K`-specific, ternary has no min offset to factor), pin-
+//!   lane-to-quant-sub-block-coalesce-byte-loads (`gemv_q4k_plane_factored`: remap
+//!   lane→element so each lane is pinned to one sub-block — 8 loads→2, enables
+//!   affine factoring). Three sibling `Q4_K` files (qkv, geglu, batched) assessed
+//!   and dropped: qkv = composition of fuse-gate-up-gemv-activation (triple fusion);
+//!   geglu = same fuse + `Q4_K` dequant; batched = no new opt. Corpus: **138
+//!   rules across 15 categories (A–O)**. `riir-gpu` remains open (13 of ~200
+//!   files mined).
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
@@ -1711,6 +1726,90 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
             opt_pattern: "// optimized: alias OOB rows to m-1 (sentinel); compute fully; discard at write\nfn gemm_tile_clamp_sentinel(pos: &[u32], neg: &[u32], input: &[f32], m: usize, n: usize, rows_per_tile: usize) -> Vec<f32> {\n    let mut out = vec![0.0f32; m];\n    let last = m - 1; // sentinel row\n    for tile_start in (0..m).step_by(rows_per_tile) {\n        // CLAMP row indices — OOB rows alias the sentinel (valid, no divergence)\n        let r0 = tile_start;\n        let r1 = if tile_start + 1 < m { tile_start + 1 } else { last };\n        let r2 = if tile_start + 2 < m { tile_start + 2 } else { last };\n        let r3 = if tile_start + 3 < m { tile_start + 3 } else { last };
         let mut acc0 = 0.0;\n        let mut acc1 = 0.0;\n        let mut acc2 = 0.0;\n        let mut acc3 = 0.0;\n        for col in 0..n {\n            // UNIFORM loop body — all 4 rows are valid indices (no per-lane check)\n            acc0 += ((pos[r0 * (n / 32) + col / 32] >> (col % 32)) & 1) as f32 * input[col];\n            acc1 += ((pos[r1 * (n / 32) + col / 32] >> (col % 32)) & 1) as f32 * input[col];\n            acc2 += ((pos[r2 * (n / 32) + col / 32] >> (col % 32)) & 1) as f32 * input[col];\n            acc3 += ((pos[r3 * (n / 32) + col / 32] >> (col % 32)) & 1) as f32 * input[col];\n        }\n        // DISCARD redundant results at write time (guarded writes only)\n        out[r0] = acc0;\n        if tile_start + 1 < m { out[r1] = acc1; }\n        if tile_start + 2 < m { out[r2] = acc2; }\n        if tile_start + 3 < m { out[r3] = acc3; }\n    }\n    out // loop body uniform (no divergence) — OOB work is real-but-discarded, not zero-padded\n}".to_string(),
         },
+        // ════════════════════════════════════════════════════════════════════
+        // Batch 18 (Research 019): 3 riir-gpu production rules — fifth batch
+        // mining the stack's own kernels, focused on the Q4_K quantized GEMV
+        // family (4-bit block-quant format with per-block scale + min).
+        // Source: riir-gpu gemv_q4k_cubecl.rs — 3 of 4 kernel variants yielded
+        // rules; the 4th (gemv_q4k_tiled) is standard shared-memory tiling.
+        // Three sibling Q4_K files (qkv, geglu, batched) assessed + dropped:
+        // qkv = composition of fuse-gate-up-gemv-activation (triple fusion);
+        // geglu = same fuse pattern + Q4_K dequant; batched = no new opt.
+        // ════════════════════════════════════════════════════════════════════
+        // ── row-tile-amortize-input-load — 1 row/plane → N rows/plane (A) ──
+        // Source: riir-gpu gemv_q4k_cubecl.rs `gemv_q4k_plane_rowtiled` (Issue
+        // 609). The baseline plane-cooperative GEMV assigns one output row per
+        // plane — each input element is loaded from global memory once PER ROW.
+        // Row-tiling assigns N consecutive output rows per plane
+        // (Q4K_ROWS_PER_PLANE=4), holds N register accumulators, and loads
+        // each input element ONCE, reusing it across all N dot products via
+        // `acc[r] += w[r][col] * x[col]`. This is the fundamental GEMV →
+        // small-GEMM transformation: widening M per work-group converts a
+        // memory-bound GEMV into a compute-bound small matrix multiply where
+        // input bandwidth is amortized across N output rows. The gain scales
+        // with the input-load-to-compute ratio: ternary (~9 ALU/load) gets
+        // ~2×; Q4_K (~15 ALU/load: 6-bit scale decode + nibble extract) gets
+        // ~1.1-1.3× (Issue 609 honest expectation). Also seen in
+        // gemm_ternary_batched_cubecl as the substrate for OR-reduce +
+        // sentinel-clamp. Distinct from `gemm-tiling` (shared-memory tile size
+        // for large GEMM) — this is M-widening per PLANE for cooperative GEMV.
+        // Also distinct from `dequant-once-per-k-tile-into-shared-memory`
+        // (amortize the DEQUANT across rows via shared mem) — this amortizes
+        // the INPUT LOAD across rows via register reuse, a different resource.
+        KernelRule {
+            rule_id: "row-tile-amortize-input-load".to_string(),
+            gpu_concept: "assign N consecutive output rows per plane (subgroup), hold N register accumulators, load each input element once and reuse across all N dot products — GEMV to small-GEMM via M-widening".to_string(),
+            ref_shape: "// naive: 1 output row per plane — input[col] re-loaded per row\nfn gemv_one_row_per_plane(weight: &[f32], input: &[f32], m: usize, n: usize) -> Vec<f32> {\n    let mut out = vec![0.0f32; m];\n    for row in 0..m {\n        let mut acc = 0.0;\n        for col in 0..n {\n            acc += weight[row * n + col] * input[col]; // input[col] loaded m times total\n        }\n        out[row] = acc;\n    }\n    out // m * n input loads — memory-bound (input bandwidth = bottleneck)\n}".to_string(),
+            opt_pattern: "// optimized: N rows per plane — input[col] loaded once, reused across N accumulators\nfn gemv_row_tiled(weight: &[f32], input: &[f32], m: usize, n: usize, rows_per_tile: usize) -> Vec<f32> {\n    let mut out = vec![0.0f32; m];\n    for tile_start in (0..m).step_by(rows_per_tile) {\n        let r0 = tile_start;\n        let r1 = if tile_start + 1 < m { tile_start + 1 } else { m - 1 }; // clamp OOB\n        let mut acc0 = 0.0;\n        let mut acc1 = 0.0;\n        for col in 0..n {\n            let x = input[col]; // ONE load — reused by both accumulators in registers\n            acc0 += weight[r0 * n + col] * x;\n            acc1 += weight[r1 * n + col] * x;\n        }\n        out[r0] = acc0;\n        if tile_start + 1 < m { out[r1] = acc1; }\n    }\n    out // n input loads total (was m * n) — rows_per_tile x fewer global reads\n}".to_string(),
+        },
+        // ── factor-affine-quant-scale-out-of-element-loop — per-element scale apply to per-sub-block (B) ──
+        // Source: riir-gpu gemv_q4k_cubecl.rs `gemv_q4k_plane_factored` (Issue
+        // 609 T2 — the bigger lever). Q4_K dequant per element is:
+        //   value = d * sc * nibble - dmin * min
+        // Within a 32-element sub-block, `sc` and `min` are CONSTANT (decoded
+        // once from the 6-bit scale words), so the dequant is AFFINE in the
+        // nibble. Algebraic factoring lifts d*sc and dmin*min out of the
+        // per-element accumulation:
+        //   sum_j (d*sc*nib_j - dmin*min) * x_j = d*sc*(sum_j nib_j*x_j) - dmin*min*(sum_j x_j)
+        // This replaces ~22 ops/element (2 mul + 1 sub + 2 scale decodes + FMA)
+        // with ~7 ops/element + one FMA for nib*x, one add for x — the scale
+        // decode runs once per sub-block (was per-element). When combined with
+        // row-tiling, sum(x_j) is row-independent and computed once per block,
+        // reused across all N rows (only sum(nib_j*x_j) is per-row). This is
+        // Q4_K/min+scale-quant-specific: ternary dequant (sign * scale) is
+        // LINEAR in the bits (no min offset), so there is nothing to factor.
+        // Distinct from `fold-norm-scalar-into-matmul` (fold an EXTERNAL scalar
+        // into the dot) — this factors an INTERNAL affine expression out of
+        // the per-element dequant before it enters the dot.
+        KernelRule {
+            rule_id: "factor-affine-quant-scale-out-of-element-loop".to_string(),
+            gpu_concept: "when the dequant formula is affine in the quantized code within a sub-block (scale and min are constant), factor d*scale and dmin*min out of the per-element accumulation — accumulate sum(code*x) and sum(x) separately, apply scales once per sub-block".to_string(),
+            ref_shape: "// naive: apply d*sc and dmin*min per element inside the dot loop\nfn q4k_dot_naive(input: &[f32], d: f32, dmin: f32, sc: f32, min_val: f32, nibbles: &[u32], n: usize) -> f32 {\n    let mut acc = 0.0;\n    for j in 0..n {\n        // per-element: 2 mul (d*sc) + 1 sub (dmin*min) + FMA = ~22 ops\n        let dequant = d * sc * (nibbles[j] as f32) - dmin * min_val;\n        acc += dequant * input[j]; // scale applied EVERY element (sc is constant!)\n    }\n    acc // sc/min decoded once but d*sc*nib - dmin*min computed n times\n}".to_string(),
+            opt_pattern: "// optimized: factor d*sc and dmin*min out — accumulate sum(nib*x) and sum(x) separately\nfn q4k_dot_factored(input: &[f32], d: f32, dmin: f32, sc: f32, min_val: f32, nibbles: &[u32], n: usize) -> f32 {\n    let mut nib_dot = 0.0; // sum(nib_j * x_j) — the only per-row part\n    let mut sum_x = 0.0;   // sum(x_j) — row-independent when row-tiling\n    for j in 0..n {\n        nib_dot += (nibbles[j] as f32) * input[j]; // ~7 ops: FMA only\n        sum_x += input[j];                         // ~1 add\n    }\n    // apply scales ONCE per sub-block (was per-element)\n    d * sc * nib_dot - dmin * min_val * sum_x\n}".to_string(),
+        },
+        // ── pin-lane-to-quant-sub-block-coalesce-byte-loads — strided to lane-fixed (A) ──
+        // Source: riir-gpu gemv_q4k_cubecl.rs `gemv_q4k_plane_factored` (Issue
+        // 609 T2). The naive strided lane-element map (k = lane + i*PLANE_DIM)
+        // makes sub_block = i, so every lane visits all 8 sub-blocks and its
+        // 8 needed qs bytes scatter across 8 different u32 words — 8 global
+        // loads per lane per block, with 4x redundant loads (lanes 0-3 all
+        // read word bo+4). The lane-fixed map pins each lane to ONE sub-block:
+        //   lane -> sub_block = lane/4, chunk = lane%4, covering 8 consecutive elements
+        // Across 32 lanes that is 8*4*8 = 256 = exact block partition. The 8
+        // consecutive bytes a lane needs (pair*32 + chunk*8 .. +8) live in
+        // exactly 2 consecutive u32 words — 8 loads -> 2 loads per lane. This
+        // also ENABLES the affine factoring above: because each lane is pinned
+        // to one sub_block, sc and min are loop-invariant and can be factored
+        // out. The nibble-select shift folds: sh = is_high * 4 makes low/high
+        // nibble a uniform shift, no branch. Distinct from `matvec-coalesce`
+        // (transpose A for coalesced column reads) — this remaps the lane-element
+        // assignment within a quant block, not the matrix layout.
+        KernelRule {
+            rule_id: "pin-lane-to-quant-sub-block-coalesce-byte-loads".to_string(),
+            gpu_concept: "remap the lane-element assignment so each lane is pinned to one quantization sub-block — the 8 consecutive bytes it needs fall in 2 consecutive u32 words (8 loads to 2), and scale/min become loop-invariant (enabling affine factoring)".to_string(),
+            ref_shape: "// naive: strided lane map — each lane visits all 8 sub-blocks, 8 scattered loads\nfn q4k_strided_lane(weight: &[u32], input: &[f32], lane: u32, plane_dim: u32, bo_q4k: u32) -> f32 {\n    let mut acc = 0.0;\n    let mut k = lane;\n    while k < 256 {\n        let sub_block = k / 32; // changes every iteration — sc/min NOT invariant\n        let pos = k % 32;\n        // 8 different qs_word_idx values per lane -> 8 scattered global loads\n        let qs_byte_idx = (sub_block / 2) * 32 + pos;\n        let qs_word = weight[bo_q4k + 4 + qs_byte_idx / 4]; // lanes 0-3 re-read word bo+4\n        acc += ((qs_word >> ((qs_byte_idx % 4) * 8)) & 0xF) as f32 * input[k];\n        k += plane_dim;\n    }\n    acc // 8 loads/lane, 4x redundant across lanes 0-3\n}".to_string(),
+            opt_pattern: "// optimized: lane-fixed map — pin each lane to one sub-block, 8 bytes in 2 words\nfn q4k_lane_fixed(weight: &[u32], input: &[f32], lane: u32, bo_q4k: u32) -> f32 {\n    let sub_block = lane / 4;  // CONSTANT for this lane — sc/min are loop-invariant!\n    let chunk = lane % 4;\n    let pair = sub_block / 2;\n    let is_high = sub_block % 2;\n    let word0 = pair * 8 + chunk * 2; // 8 consecutive bytes -> exactly 2 u32 words\n    let sh = is_high * 4;             // nibble shift folds (no branch)\n    let w0 = weight[bo_q4k + 4 + word0];     // load 1\n    let w1 = weight[bo_q4k + 4 + word0 + 1]; // load 2 (the ONLY 2 loads)\n    let elem_off = sub_block * 32 + chunk * 8;\n    (((w0 >> sh) & 15) as f32) * input[elem_off]\n        + (((w0 >> (8 + sh)) & 15) as f32) * input[elem_off + 1]\n        + (((w0 >> (16 + sh)) & 15) as f32) * input[elem_off + 2]\n        + (((w0 >> (24 + sh)) & 15) as f32) * input[elem_off + 3]\n        + (((w1 >> sh) & 15) as f32) * input[elem_off + 4]\n        + (((w1 >> (8 + sh)) & 15) as f32) * input[elem_off + 5]\n        + (((w1 >> (16 + sh)) & 15) as f32) * input[elem_off + 6]\n        + (((w1 >> (24 + sh)) & 15) as f32) * input[elem_off + 7]\n    // 2 loads total (was 8) — no inner loop, exact 256-element partition across 32 lanes\n}".to_string(),
+        },
     ])
 }
 
@@ -1723,7 +1822,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 135-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 138-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1731,7 +1830,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (10 rules)
+    // A: Memory access patterns (12 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -1746,9 +1845,11 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "block-contiguous-weight-layout",
             "dequant-once-per-k-tile-into-shared-memory",
             "hoist-group-invariant-scale-out-of-word-loop",
+            "row-tile-amortize-input-load",
+            "pin-lane-to-quant-sub-block-coalesce-byte-loads",
         ],
     ),
-    // B: Compute patterns (23 rules)
+    // B: Compute patterns (24 rules)
     (
         KernelCategory::Compute,
         "B: compute",
@@ -1776,6 +1877,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "skip-all-zero-packed-words-via-or-reduce",
             "split-sign-accumulators-defer-subtraction",
             "clamp-tile-indices-to-sentinel-discard-at-write",
+            "factor-affine-quant-scale-out-of-element-loop",
         ],
     ),
     // C: Fusion patterns (12 rules)
@@ -1978,7 +2080,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
 /// Returns 15 buckets (one per category), each containing the `KernelRule`s whose
 /// `rule_id` appears in that category's slice of [`KERNEL_CATEGORIES`]. This is
 /// the category-scoped view of the corpus — a future heal pipeline can consult
-/// the routed expert's rules first without scanning all 135.
+/// the routed expert's rules first without scanning all 138.
 ///
 /// # Allocation
 ///
@@ -2042,8 +2144,9 @@ mod tests {
         // Batch 15 (4): riir-gpu production kernels — block-contiguous weight layout, fused dual GEMV + GeGLU, orthogonal pre-rotation, water-fill tail-dim shared codebook (gemm_ternary_block_contiguous, gemv_geglu_f16, spectralquant).
         // Batch 16 (4): riir-gpu production kernels — cmma hardware unit, dequant-once-per-k-tile, dispatch axis swap, norm-decoupled low-bit scoring (gemm_ternary_simdgroup, forward_turboquant).
         // Batch 17 (4): riir-gpu production kernels — skip-all-zero-packed-words-via-or-reduce, hoist-group-invariant-scale-out-of-word-loop, split-sign-accumulators-defer-subtraction, clamp-tile-indices-to-sentinel-discard-at-write (gemm_ternary_batched, gemv_ternary_block_contiguous).
-        // Total: 135.
-        assert_eq!(corpus.entries.len(), 135, "batches 1-17 should have 135 rules");
+        // Batch 18 (3): riir-gpu production kernels — row-tile-amortize-input-load, factor-affine-quant-scale-out-of-element-loop, pin-lane-to-quant-sub-block-coalesce-byte-loads (gemv_q4k_cubecl Q4_K family).
+        // Total: 138.
+        assert_eq!(corpus.entries.len(), 138, "batches 1-18 should have 138 rules");
     }
 
     #[test]
@@ -2705,6 +2808,33 @@ mod tests {
         assert!(concepts.contains(&"when a tile extends past the matrix edge, alias OOB rows to a valid sentinel row and discard the redundant results at write time — keeps the loop body uniform (no per-lane divergence) without padding overhead"));
     }
 
+    #[test]
+    fn batch18_rules_present() {
+        // Verify the 3 batch-18 rules across A/B.
+        let corpus = build_kernel_seed_corpus();
+        let ids: Vec<&str> =
+            corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        // Category A (2 new): row-tile amortize input load + pin-lane coalesce
+        assert!(ids.contains(&"row-tile-amortize-input-load"), "row-tile amortize input load");
+        assert!(ids.contains(&"pin-lane-to-quant-sub-block-coalesce-byte-loads"), "pin-lane coalesce byte loads");
+        // Category B (1 new): factor affine quant scale
+        assert!(ids.contains(&"factor-affine-quant-scale-out-of-element-loop"), "factor affine quant scale");
+    }
+
+    #[test]
+    fn batch18_rowtile_factoraffine_pinlane_concepts_covered() {
+        // Verify the batch-18 row-tile + affine-factor + pin-lane concepts.
+        let corpus = build_kernel_seed_corpus();
+        let concepts: Vec<&str> =
+            corpus.entries.iter().map(|e| e.gpu_concept.as_str()).collect();
+        // Category A: row-tile amortize input load (riir-gpu gemv_q4k_plane_rowtiled)
+        assert!(concepts.contains(&"assign N consecutive output rows per plane (subgroup), hold N register accumulators, load each input element once and reuse across all N dot products — GEMV to small-GEMM via M-widening"));
+        // Category B: factor affine quant scale (riir-gpu gemv_q4k_plane_factored)
+        assert!(concepts.contains(&"when the dequant formula is affine in the quantized code within a sub-block (scale and min are constant), factor d*scale and dmin*min out of the per-element accumulation — accumulate sum(code*x) and sum(x) separately, apply scales once per sub-block"));
+        // Category A: pin-lane coalesce byte loads (riir-gpu gemv_q4k_plane_factored)
+        assert!(concepts.contains(&"remap the lane-element assignment so each lane is pinned to one quantization sub-block — the 8 consecutive bytes it needs fall in 2 consecutive u32 words (8 loads to 2), and scale/min become loop-invariant (enabling affine factoring)"));
+    }
+
     // ════════════════════════════════════════════════════════════════════
     // Plan 003 — Router ↔ corpus wiring tests
     // ════════════════════════════════════════════════════════════════════
@@ -2716,7 +2846,7 @@ mod tests {
 
     #[test]
     fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-        // Every rule_id in the 135-rule corpus must appear in exactly one category.
+        // Every rule_id in the 138-rule corpus must appear in exactly one category.
         let corpus = build_kernel_seed_corpus();
         let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
         let mut categorized: Vec<&str> = Vec::new();
@@ -2747,10 +2877,10 @@ mod tests {
 
     #[test]
     fn kernel_categories_counts_match_plan_003_table() {
-        // Pin per-category rule counts to the Plan 003 table (updated for Batch 17).
+        // Pin per-category rule counts to the Plan 003 table (updated for Batch 18).
         let expected = [
-            (KernelCategory::MemoryAccess, 10),
-            (KernelCategory::Compute, 23),
+            (KernelCategory::MemoryAccess, 12),
+            (KernelCategory::Compute, 24),
             (KernelCategory::Fusion, 12),
             (KernelCategory::Dispatch, 9),
             (KernelCategory::Parallelism, 8),
@@ -2772,9 +2902,9 @@ mod tests {
                 "Plan 003: category {cat:?} has {} rules, expected {count}",
                 entry.2.len());
         }
-        // Sum must equal 135.
+        // Sum must equal 138.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 135, "Plan 003: category totals must sum to 135");
+        assert_eq!(total, 138, "Plan 003: category totals must sum to 138");
     }
 
     #[test]
@@ -2784,7 +2914,7 @@ mod tests {
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 135, "Plan 003: grouped corpus has {total} rules, expected 135");
+        assert_eq!(total, 138, "Plan 003: grouped corpus has {total} rules, expected 138");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");
