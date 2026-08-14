@@ -10,7 +10,7 @@
 | Component | Ships now | Deferred |
 |---|---|---|
 | `KernelOptDomain: HealDomain` | ✅ | |
-| Seed corpus (Batch 1: 21 rules) | ✅ | Full corpus (~300-500 rules, ~15-25 batches) |
+| Seed corpus (Batch 1-2: 28 rules) | ✅ | Full corpus (~300-500 rules, ~15-25 batches) |
 | `KernelExpertRouter` (`pick_domain`) | ✅ (identity directions) | Per-expert centroids from popcorn |
 | `KernelThermalRouter` (5-tier stub) | ✅ (returns Plasma) | Warm/Cold LoRA (4090, riir-train) |
 | `KernelVerifier` (compile-only) | ✅ (behind `kernel_verify`) | Full numeric compare vs reference |
@@ -18,8 +18,9 @@
 
 ## Corpus
 
-Batch 1 (Research 002): 21 rules total — 2 original placeholders + 19 popcorn-distilled
-across 5 categories. Full corpus target: ~300-500 rules in ~15-25 batches.
+Batch 1 (Research 002): 21 rules — 2 original + 19 popcorn-distilled across 5 categories.
+Batch 2 (Research 003): 7 rules — flash-attention tiling patterns.
+Total: 28 rules. Full corpus target: ~300-500 rules in ~15-25 batches.
 
 ### Category A: Memory access patterns (6 rules)
 
@@ -141,6 +142,18 @@ deferred (Proposal 012 §Phase 0). `is_full_validator_available()` returns
   projected to a scalar expert index via `pick_domain`). NOT synced — only
   the resulting expert index crosses the sync boundary.
 - Thermal tier = raw categorical (1 byte, `#[repr(u8)]`).
+
+### Category F: Flash-attention tiling (Batch 2, 7 rules)
+
+| Rule ID | GPU concept | Pattern |
+|---|---|---|
+| `online-softmax-streaming` | flash-attention online softmax | Full matrix materialization → streaming running max+sum+rescale |
+| `exp2-log2-base2` | base-2 math | Natural exp/ln → base-2 exp2/log2 (dedicated GPU instruction) |
+| `block-pointer-2d` | structured 2D block pointer loads | Manual offset arithmetic → structured block ptr with boundary check |
+| `heuristic-compile-dispatch` | compile-time heuristic dispatch | Runtime branch → compile-time specialization (dead branch elimination) |
+| `causal-diag-offdiag-split` | causal matrix diagonal/off-diagonal splitting | Uniform precision → diagonal fp32 + off-diagonal bf16-safe |
+| `shared-mem-aware-tile` | shared-memory-aware tile sizing | Fixed tile → SM-aware (Hopper larger, Ampere smaller) |
+| `kv-block-streaming` | KV block streaming through shared memory | Full KV load → block streaming (O(block) shared mem) |
 
 ## Source
 

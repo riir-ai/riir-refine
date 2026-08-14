@@ -232,6 +232,72 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
             ref_shape: "// naive: separate backward kernel (duplicate code, 2x maintenance)\nfn forward(x: &[f32], cos: &[f32], sin: &[f32]) -> Vec<f32> {\n    rotate(x, cos, sin, false)\n}\nfn backward(dy: &[f32], cos: &[f32], sin: &[f32]) -> Vec<f32> {\n    rotate_conjugate(dy, cos, sin)\n}".to_string(),
             opt_pattern: "// optimized: backward = forward with conjugate flag (1 kernel)\nfn rotate_kernel(x: &[f32], cos: &[f32], sin: &[f32], conjugate: bool) -> Vec<f32> {\n    let s = if conjugate { -1.0 } else { 1.0 };\n    x.iter().enumerate().map(|(i, x)| x * cos[i] + s * sin[i]).collect()\n}\nfn forward_reuse(x: &[f32], cos: &[f32], sin: &[f32]) -> Vec<f32> {\n    rotate_kernel(x, cos, sin, false)\n}\nfn backward_reuse(dy: &[f32], cos: &[f32], sin: &[f32]) -> Vec<f32> {\n    rotate_kernel(dy, cos, sin, true)\n}".to_string(),
         },
+        // ════════════════════════════════════════════════════════════════════
+        // Category F: Flash-attention tiling (Batch 2, 7 rules)
+        // ════════════════════════════════════════════════════════════════════
+        // ── online-softmax-streaming — full matrix → streaming online softmax ─
+        // Source: wall_attn_tl.py lines 149-155 — flash-attention's core: running
+        // max + running sum + rescale accumulator across KV blocks.
+        KernelRule {
+            rule_id: "online-softmax-streaming".to_string(),
+            gpu_concept: "flash-attention online softmax".to_string(),
+            ref_shape: "// naive: materialize full attention matrix (O(N^2) memory)\nfn attention_full(q: &[f32], k: &[f32], v: &[f32], n: usize) -> Vec<f32> {\n    let mut scores = vec![0.0f32; n * n];\n    for i in 0..n {\n        for j in 0..n {\n            let mut s = 0.0;\n            for d in 0..D { s += q[i * D + d] * k[j * D + d]; }\n            scores[i * n + j] = s;\n        }\n    }\n    let mut out = vec![0.0f32; n * D];\n    for i in 0..n {\n        let max_val = (0..n).map(|j| scores[i * n + j]).fold(f32::NEG_INFINITY, f32::max);\n        let sum: f32 = (0..n).map(|j| (scores[i * n + j] - max_val).exp()).sum();\n        for d in 0..D {\n            for j in 0..n {\n                let p = (scores[i * n + j] - max_val).exp() / sum;\n                out[i * D + d] += p * v[j * D + d];\n            }\n        }\n    }\n    out\n}".to_string(),
+            opt_pattern: "// optimized: streaming online softmax (O(N) memory, flash-attention)\nfn attention_streaming(q: &[f32], k: &[f32], v: &[f32], n: usize, block: usize) -> Vec<f32> {\n    let mut out = vec![0.0f32; n * D];\n    for i in 0..n {\n        let mut m_old = f32::NEG_INFINITY;\n        let mut l = 0.0f32;\n        let mut o = vec![0.0f32; D];\n        for j_start in (0..n).step_by(block) {\n            let j_end = (j_start + block).min(n);\n            let mut block_max = m_old;\n            let mut block_scores = vec![0.0f32; block];\n            for (idx, j) in (j_start..j_end).enumerate() {\n                let mut s = 0.0;\n                for d in 0..D { s += q[i * D + d] * k[j * D + d]; }\n                block_scores[idx] = s;\n                block_max = block_max.max(s);\n            }\n            let r = (m_old - block_max).exp();\n            l = l * r;\n            for d in 0..D { o[d] *= r; }\n            for (idx, j) in (j_start..j_end).enumerate() {\n                let p = (block_scores[idx] - block_max).exp();\n                l += p;\n                for d in 0..D { o[d] += p * v[j * D + d]; }\n            }\n            m_old = block_max;\n        }\n        for d in 0..D { out[i * D + d] = o[d] / l; }\n    }\n    out\n}".to_string(),
+        },
+        // ── exp2-log2-base2 — natural exp/ln → base-2 exp2/log2 ─────────
+        // Source: wall_attn_tl.py RCP_LN2 + exp2 — base-2 math is faster on GPU
+        // hardware (dedicated exp2/log2 instructions). exp(x) = exp2(x * log2(e)).
+        KernelRule {
+            rule_id: "exp2-log2-base2".to_string(),
+            gpu_concept: "base-2 math for faster GPU exponentiation".to_string(),
+            ref_shape: "// naive: natural exp (slower on GPU, no dedicated instruction)\nfn softmax_naive(scores: &mut [f32]) {\n    let max_val = scores.iter().copied().fold(f32::NEG_INFINITY, f32::max);\n    let sum: f32 = scores.iter().map(|s| (s - max_val).exp()).sum();\n    for s in scores.iter_mut() { *s = (*s - max_val).exp() / sum; }\n}".to_string(),
+            opt_pattern: "// optimized: base-2 exp2 (dedicated GPU instruction, faster)\nconst RCP_LN2: f32 = 1.4426950408889634; // log2(e)\nfn softmax_base2(scores: &mut [f32]) {\n    let max_val = scores.iter().copied().fold(f32::NEG_INFINITY, f32::max);\n    let sum: f32 = scores.iter().map(|s| ((s - max_val) * RCP_LN2).exp2()).sum();\n    for s in scores.iter_mut() { *s = ((s - max_val) * RCP_LN2).exp2() / sum; }\n}".to_string(),
+        },
+        // ── block-pointer-2d — manual offsets → structured 2D block ptr ──
+        // Source: wall_attn_tl.py tl.make_block_ptr — structured block pointer
+        // with boundary checking, replacing manual offset arithmetic.
+        KernelRule {
+            rule_id: "block-pointer-2d".to_string(),
+            gpu_concept: "structured 2D block pointer loads".to_string(),
+            ref_shape: "// naive: manual offset arithmetic (error-prone, no boundary check)\nfn load_2d_manual(base: &[f32], row_stride: usize, col: usize, row: usize, block: usize, out: &mut [f32]) {\n    for r in 0..block {\n        for c in 0..block {\n            let idx = (row + r) * row_stride + col + c;\n            out[r * block + c] = base[idx];\n        }\n    }\n}".to_string(),
+            opt_pattern: "// optimized: structured 2D block pointer (boundary-safe, clear semantics)\nfn load_2d_block_ptr(base: &[f32], row_stride: usize, col: usize, row: usize, block: usize, height: usize, width: usize, out: &mut [f32]) {\n    for r in 0..block {\n        for c in 0..block {\n            let actual_row = row + r;\n            let actual_col = col + c;\n            if actual_row < height && actual_col < width {\n                out[r * block + c] = base[actual_row * row_stride + actual_col];\n            } else {\n                out[r * block + c] = 0.0;\n            }\n        }\n    }\n}".to_string(),
+        },
+        // ── heuristic-compile-dispatch — runtime branch → compile-time ──
+        // Source: wall_attn_tl.py @triton.heuristics — USE_WINDOW, IS_VARLEN,
+        // USE_SINK_BIAS decided at compile time from input args, not at runtime.
+        KernelRule {
+            rule_id: "heuristic-compile-dispatch".to_string(),
+            gpu_concept: "compile-time heuristic dispatch".to_string(),
+            ref_shape: "// naive: runtime branch (always evaluated, prevents specialization)\nfn kernel_with_options(data: &mut [f32], use_window: bool, is_varlen: bool) {\n    for x in data.iter_mut() {\n        *x *= 2.0;\n    }\n    if use_window {\n        for x in data.iter_mut() { *x = x.max(0.0); }\n    }\n    if is_varlen {\n        for x in data.iter_mut() { *x = x.min(1.0); }\n    }\n}".to_string(),
+            opt_pattern: "// optimized: compile-time specialization (dead branches eliminated)\nfn kernel_specialized_window(data: &mut [f32]) {\n    for x in data.iter_mut() { *x = (*x * 2.0).max(0.0); }\n}\nfn kernel_specialized_varlen(data: &mut [f32]) {\n    for x in data.iter_mut() { *x = (*x * 2.0).min(1.0); }\n}\nfn kernel_plain(data: &mut [f32]) {\n    for x in data.iter_mut() { *x *= 2.0; }\n}".to_string(),
+        },
+        // ── causal-diag-offdiag-split — full matrix → diagonal + off-diag ─
+        // Source: wall_attn_tl.py — the attention matrix is split into causal
+        // diagonal blocks + off-diagonal blocks, processed separately for precision.
+        KernelRule {
+            rule_id: "causal-diag-offdiag-split".to_string(),
+            gpu_concept: "causal matrix diagonal/off-diagonal splitting".to_string(),
+            ref_shape: "// naive: full causal matrix (uniform precision, wasteful)\nfn causal_attention_uniform(q: &[f32], k: &[f32], n: usize) -> Vec<f32> {\n    let mut out = vec![0.0f32; n];\n    for i in 0..n {\n        for j in 0..=i {\n            out[i] += q[i] * k[j];\n        }\n    }\n    out\n}".to_string(),
+            opt_pattern: "// optimized: split into diagonal + off-diagonal (precision-tuned per block)\nfn causal_attention_split(q: &[f32], k: &[f32], n: usize, block: usize) -> Vec<f32> {\n    let mut out = vec![0.0f32; n];\n    for i_start in (0..n).step_by(block) {\n        let i_end = (i_start + block).min(n);\n        // off-diagonal: bf16-safe (exp2 <= 1)\n        for i in i_start..i_end {\n            for j in 0..i_start {\n                out[i] += q[i] * k[j];\n            }\n        }\n        // diagonal: fp32 for precision (exp2 can exceed 1)\n        for i in i_start..i_end {\n            for j in i_start..=i {\n                out[i] += q[i] * k[j];\n            }\n        }\n    }\n    out\n}".to_string(),
+        },
+        // ── shared-mem-aware-tile — fixed tile → SM-aware tile size ─────
+        // Source: wall_attn_tl.py check_shared_mem — BK/BV tile sizes adapt to
+        // available shared memory (larger on Hopper, smaller on Ampere).
+        KernelRule {
+            rule_id: "shared-mem-aware-tile".to_string(),
+            gpu_concept: "shared-memory-aware tile sizing".to_string(),
+            ref_shape: "// naive: fixed tile size (suboptimal across GPU architectures)\nfn tile_size_fixed() -> usize {\n    64\n}".to_string(),
+            opt_pattern: "// optimized: shared-memory-aware (larger on Hopper, smaller on Ampere)\nfn tile_size_shared_mem(available_smem: usize, element_size: usize) -> usize {\n    let max_tile = available_smem / (element_size * 2); // Q + K tiles\n    max_tile.min(128).max(16)\n}".to_string(),
+        },
+        // ── kv-block-streaming — full KV load → block streaming ─────────
+        // Source: wall_attn_tl.py KV loop — K/V are loaded in blocks (BS) and
+        // streamed through shared memory, never loading the full KV matrices.
+        KernelRule {
+            rule_id: "kv-block-streaming".to_string(),
+            gpu_concept: "KV block streaming through shared memory".to_string(),
+            ref_shape: "// naive: load full K and V matrices (O(N*D) shared memory)\nfn kv_full_load(q: &[f32], k: &[f32], v: &[f32], n: usize) -> Vec<f32> {\n    let mut out = vec![0.0f32; n];\n    for i in 0..n {\n        for j in 0..n {\n            out[i] += q[i] * k[j] * v[j];\n        }\n    }\n    out\n}".to_string(),
+            opt_pattern: "// optimized: stream KV blocks (O(block*D) shared memory)\nfn kv_block_stream(q: &[f32], k: &[f32], v: &[f32], n: usize, block: usize) -> Vec<f32> {\n    let mut out = vec![0.0f32; n];\n    for i in 0..n {\n        let mut acc = 0.0;\n        for j_start in (0..n).step_by(block) {\n            let j_end = (j_start + block).min(n);\n            // load k[j_start..j_end] + v[j_start..j_end] into shared mem\n            let mut block_acc = 0.0;\n            for j in j_start..j_end {\n                block_acc += q[i] * k[j] * v[j];\n            }\n            acc += block_acc;\n        }\n        out[i] = acc;\n    }\n    out\n}".to_string(),
+        },
     ])
 }
 
@@ -253,8 +319,10 @@ mod tests {
     #[test]
     fn seed_corpus_has_expected_entry_count() {
         let corpus = build_kernel_seed_corpus();
-        // Batch 1: 2 original placeholders + 19 popcorn-distilled = 21.
-        assert_eq!(corpus.entries.len(), 21, "batch 1 should have 21 rules");
+        // Batch 1 (21): 2 original + 19 popcorn-distilled.
+        // Batch 2 (7): flash-attention tiling.
+        // Total: 28.
+        assert_eq!(corpus.entries.len(), 28, "batches 1+2 should have 28 rules");
     }
 
     #[test]
@@ -374,5 +442,41 @@ mod tests {
         assert!(concepts.contains(&"multi-dimensional parallelism"));
         assert!(concepts.contains(&"grid dimension clamping"));
         assert!(concepts.contains(&"backward kernel reuse"));
+    }
+
+    #[test]
+    fn batch2_rules_present() {
+        // Verify the 7 batch-2 flash-attention tiling rules are in the corpus.
+        let corpus = build_kernel_seed_corpus();
+        let ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        for expected in [
+            "online-softmax-streaming",
+            "exp2-log2-base2",
+            "block-pointer-2d",
+            "heuristic-compile-dispatch",
+            "causal-diag-offdiag-split",
+            "shared-mem-aware-tile",
+            "kv-block-streaming",
+        ] {
+            assert!(
+                ids.contains(&expected),
+                "batch-2 rule '{expected}' missing from corpus"
+            );
+        }
+    }
+
+    #[test]
+    fn batch2_flash_attention_concepts_covered() {
+        // Verify the flash-attention concepts are represented.
+        let corpus = build_kernel_seed_corpus();
+        let concepts: Vec<&str> =
+            corpus.entries.iter().map(|e| e.gpu_concept.as_str()).collect();
+        assert!(concepts.contains(&"flash-attention online softmax"));
+        assert!(concepts.contains(&"base-2 math for faster GPU exponentiation"));
+        assert!(concepts.contains(&"structured 2D block pointer loads"));
+        assert!(concepts.contains(&"compile-time heuristic dispatch"));
+        assert!(concepts.contains(&"causal matrix diagonal/off-diagonal splitting"));
+        assert!(concepts.contains(&"shared-memory-aware tile sizing"));
+        assert!(concepts.contains(&"KV block streaming through shared memory"));
     }
 }
