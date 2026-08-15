@@ -37,7 +37,7 @@ no weights; opt-in 768-D `BonsaiEmbedder` for higher accuracy) +
 | Component | File | Role |
 |---|---|---|
 | `RuleIndex` | `corpus_index.rs` | Per-domain index over `NeuronDbRetriever`. Multi-scale: whole pattern + significant pattern lines, keyed `BLAKE3 → rule_id`. `suggest()` (whole-query) + `suggest_deep()` (whole + per-line, max-merge per rule). |
-| `DomainRouter` | `domain_router.rs` | Corpus-derived L2-normalized centroid directions + runtime-sized argmax mirroring `pick_domain` tie semantics (the enabled-domain set is feature-dependent). |
+| `DomainRouter` | `domain_router.rs` | Corpus-derived L2-normalized centroid directions + runtime-sized argmax mirroring `pick_domain` tie semantics (the enabled-domain set is feature-dependent). Since the Issue 020 POC (Bench 025): the annotation embedding is the token-frequency cosine block (`RoutingEmbedding::TfCosine`, 69%/69% 2-/3-domain vs the BLAKE3-baseline's 53%/48%); the spectral DFT variants + the baseline live on as the reproducible measurement matrix (`run_router_eval`). |
 | `LatentMatcher` | `latent_matcher.rs` | The composed file/span pipeline + `rule_book` (`rule_id → RuleInfo`, built once at index time — the `--fix` Phase 4/5 proposers consume the same book) + `SuggestScratch` (reused buffers, G4). |
 
 ## Two empirical design deviations (Plan 005 Phase 1)
@@ -45,8 +45,16 @@ no weights; opt-in 768-D `BonsaiEmbedder` for higher accuracy) +
 1. **Fan-out, not gated routing.** The plan's gated route→retrieve starved
    the correct domain on fixtures — the 8-D structural centroids mis-routed
    a `return expr;` fn to perf + a linear-scan fn to clippy (swapped). The
-   router verdict survives as an **annotation** on each span; re-gating
-   (tuned centroids or the 768-D embedder) is a future tuning option.
+   router verdict survives as an **annotation** on each span. **The re-gate
+   question is CLOSED for the lexical branch** (Issue 020, Bench 025): the
+   spectral POC (token-frequency DFT block + full-TF ablation, 7 variants)
+   topped out at **70.3%** routing accuracy — 15pp under the 85% kill-bar,
+   with the ablation proving the k-coefficient DFT compression loses
+   nothing (full TF ≈ DFT-k8: the LEXICAL signal is the ~70% ceiling;
+   domain membership is semantic). The annotation itself was salvaged to
+   the measured-best variant (TF-cosine-global: +20pp accuracy at 0.96µs
+   vs 3.31µs). Only a semantic-signal embedder (768-D class) could re-open
+   gating.
 2. **Multi-scale indexing + queries.** Corpus patterns are 1–5 line excerpts
    while real spans are whole items; single-scale retrieval missed the
    needle on the file fixture. Both index and queries carry the whole +
@@ -89,7 +97,10 @@ cargo test --features latent_retrieval,kernel_heal --lib retrieval -- --nocaptur
 self-variants 100/100/100. The 12-fixture 100%
 top-1 claim is dead at scale — crowding is real, concentrated in tiny-token
 clippy patterns (`identity_op` alone tops 5 misses). Router annotation
-accuracy: 53.4% (2 domains) / 46.6% (3) — fan-out stays correct. Floors are
+accuracy: **69.3% (2 domains) / 68.6% (3)** since the Issue 020 wiring
+(TF-cosine; was 53.4%/46.6% on the BLAKE3 baseline) — fan-out stays correct,
+and the annotation accuracy carries its own floor (63.6% both states) in the
+gate. Floors are
 pinned in the eval module (baseline − 1 span); a batch that decays them
 fails the suite and must re-pin with a recorded delta. **The Issue 022
 re-pin's −2 clippy spans are the corpus-truthfulness trade**: 5 corpus

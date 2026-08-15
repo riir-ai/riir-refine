@@ -17,7 +17,7 @@ use riir_rag::Chunker;
 use crate::domain::{HealDomain, HealEntry};
 
 use super::corpus_index::{RuleIndex, ScoredRule};
-use super::domain_router::{DomainId, DomainRouter};
+use super::domain_router::{DomainId, DomainRouter, RoutingEmbedding, SpectralOrder};
 
 /// One suggestion bundle for one code span.
 #[derive(Debug, Clone, PartialEq)]
@@ -181,7 +181,17 @@ impl LatentMatcher {
         }
 
         Ok(Self {
-            router: DomainRouter::new(router_domains),
+            // Issue 020 verdict (Bench 025): the annotation router uses the
+            // token-frequency cosine block (69.3%/68.6% 2-domain/3-domain vs
+            // the BLAKE3-baseline's 53.4%/48.3%, at 0.96µs vs 3.31µs per
+            // span). GATING stays killed — 70% < the 85% kill-bar — so this
+            // remains an annotation; retrieval stays fan-out.
+            router: DomainRouter::with_embedding(
+                &router_domains,
+                RoutingEmbedding::TfCosine {
+                    order: SpectralOrder::GlobalFreq,
+                },
+            ),
             clippy,
             perf,
             kernel,
@@ -227,13 +237,14 @@ impl LatentMatcher {
 
     /// Suggest rules for a single code span (already-chunked text).
     ///
-    /// **Fan-out retrieval, not gated** (Phase 1 empirical finding): the
-    /// 8-D structural centroids are too coarse to gate — in fixture testing
-    /// the router mis-routed a `return expr;` fn to perf and a linear-scan
-    /// fn to clippy, starving the correct domain's index in both cases.
-    /// Retrieval therefore queries EVERY enabled domain and the router
-    /// verdict is returned as an annotation (a Phase 3 candidate prior —
-    /// re-gate once centroids are tuned or the 768-D embedder is in).
+    /// **Fan-out retrieval, not gated** (Phase 1 empirical finding, re-gated
+    /// by the Issue 020 POC / Bench 025): the best token-frequency routing
+    /// variant reaches ~70% annotation accuracy — well under the 85% bar a
+    /// gate would need — so retrieval queries EVERY enabled domain and the
+    /// router verdict is returned as an annotation (now via the TF-cosine
+    /// block, the measured-best variant). A semantic-signal router (768-D
+    /// embedder or similar) is the only plausible future re-gate path; the
+    /// lexical branch is measured closed.
     ///
     /// Multi-scale per domain: whole span + per-line queries.
     ///

@@ -826,9 +826,7 @@ global = symlink only.
   weaver_gpu_dflash.rs DONE (43). weaver_gpu/ mod.rs + FULL kvarn/
   DONE (44 — weaver_gpu/tests.rs test-only, not mined).
 - **Also open (riir-clippy issues)**: 019 (idle-loop skill close-out,
-  T6 remainder), 020 (spectral routing POC — kill-bar data landed: needs
-  ≥85% routing accuracy vs the 53.4%/46.6% measured baseline), 021
-  (evidential status axis, P2).
+  T6 remainder), 021 (evidential status axis, P2).
   014 (rust_perf v4) RESOLVED 2026-08-16 (Bench 020); 016 (clippy
   structural expansion) RESOLVED 2026-08-16 (Bench 021 — corpus 10→40,
   FIXABLE 6→33, VERIFY 1→4); 017 (retrieval precision at scale) RESOLVED
@@ -840,7 +838,13 @@ global = symlink only.
   drift) RESOLVED 2026-08-16 (Bench 024 — 5 corpus shapes corrected to
   real-clippy-1.97-firing forms; G6 40/40, G7 50%→100% restored over the
   full 40-lint corpus; retrieval floors re-pinned clippy 58.3→54.2 top-1 —
-  truthfulness wins).
+  truthfulness wins); 020 (spectral routing POC) RESOLVED-KILLED
+  2026-08-16 (Bench 025 — best token-frequency variant 70.3% < the 85%
+  kill-bar; the ablation proves the LEXICAL signal is the ~70% ceiling,
+  not the DFT compression — gating closed for the lexical branch;
+  annotation-only salvage: TF-cosine-global wired, 53.4%→69.3%/48.3%→68.6%
+  at 0.96µs, standing 63.6% floor in the Issue 017 gate; 7-variant matrix
+  kept as the reproducible negative-result artifact).
   015 = sibling's ACTIVE WIP
   (fix_verify mode — do not touch `src/bin/heal.rs`, `src/fix_verify.rs`,
   `src/lib.rs`, `Cargo.toml`, proposers mod.rs/vec_with_capacity, bench.rs,

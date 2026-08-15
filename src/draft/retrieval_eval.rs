@@ -38,13 +38,7 @@
 
 use super::domain_router::DomainId;
 use super::latent_matcher::LatentMatcher;
-
-/// One labeled eval query: a code span + the rule that SHOULD be retrieved.
-struct EvalSpan<'a> {
-    label: &'a str,
-    domain: DomainId,
-    code: &'a str,
-}
+use crate::domain::{HealDomain, HealEntry};
 
 /// Per-domain (or blended) recall counters.
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
@@ -360,6 +354,43 @@ fn kernel_fixture_spans(target: usize) -> Vec<(String, String)> {
 /// near-miss signal for the taxonomy).
 const PROBE_TOP_K: usize = 8;
 
+/// The labeled eval span set as OWNED strings (shared by `run_eval` + the
+/// Issue 020 router eval — both must measure the SAME spans).
+struct OwnedEvalSpan {
+    label: String,
+    domain: DomainId,
+    code: String,
+}
+
+fn labeled_eval_spans() -> Vec<OwnedEvalSpan> {
+    let mut spans = Vec::new();
+    #[cfg(feature = "clippy_lints")]
+    for (lint, code) in super::eval_fixtures_clippy::CLIPPY_SPANS {
+        spans.push(OwnedEvalSpan {
+            label: lint.to_string(),
+            domain: DomainId::Clippy,
+            code: code.to_string(),
+        });
+    }
+    #[cfg(feature = "rust_perf")]
+    for (rule, code) in super::eval_fixtures_perf::PERF_SPANS {
+        spans.push(OwnedEvalSpan {
+            label: rule.to_string(),
+            domain: DomainId::Perf,
+            code: code.to_string(),
+        });
+    }
+    #[cfg(feature = "kernel_heal")]
+    for (rule, code) in kernel_fixture_spans(30) {
+        spans.push(OwnedEvalSpan {
+            label: rule,
+            domain: DomainId::Kernel,
+            code,
+        });
+    }
+    spans
+}
+
 fn domain_index(d: DomainId) -> usize {
     match d {
         DomainId::Clippy => 0,
@@ -397,42 +428,29 @@ pub fn run_eval() -> EvalReport {
     let mut matcher = LatentMatcher::from_enabled_domains().expect("build matcher");
     let mut report = EvalReport::default();
 
-    let mut spans: Vec<EvalSpan<'_>> = Vec::new();
-    // Owned kernel probe — must outlive `spans` (it holds borrows).
-    #[cfg(feature = "kernel_heal")]
-    let kernel_spans = kernel_fixture_spans(30);
-    #[cfg(feature = "clippy_lints")]
-    for (lint, code) in super::eval_fixtures_clippy::CLIPPY_SPANS {
-        spans.push(EvalSpan { label: lint, domain: DomainId::Clippy, code });
-    }
-    #[cfg(feature = "rust_perf")]
-    for (rule, code) in super::eval_fixtures_perf::PERF_SPANS {
-        spans.push(EvalSpan { label: rule, domain: DomainId::Perf, code });
-    }
-    #[cfg(feature = "kernel_heal")]
-    for (rule, code) in &kernel_spans {
-        spans.push(EvalSpan { label: rule, domain: DomainId::Kernel, code });
-    }
-
+    let spans = labeled_eval_spans();
     for span in &spans {
-        if !matcher.has_domain(span.domain) {
+        let label = span.label.as_str();
+        let domain = span.domain;
+        let code = span.code.as_str();
+        if !matcher.has_domain(domain) {
             report.skipped += 1;
             continue;
         }
-        let (routed, by_domain) = matcher.suggest_span(span.code, PROBE_TOP_K);
+        let (routed, by_domain) = matcher.suggest_span(code, PROBE_TOP_K);
         let ranked = by_domain
             .iter()
-            .find(|(d, _)| *d == span.domain)
+            .find(|(d, _)| *d == domain)
             .map_or(Vec::new(), |(_, rules)| canonical_rank(rules));
-        let rank = ranked.iter().position(|r| r.rule_id == span.label);
+        let rank = ranked.iter().position(|r| r.rule_id == label);
         let top1 = ranked.first().map(|r| r.rule_id.clone());
 
         report.router_checked += 1;
-        if routed == span.domain {
+        if routed == domain {
             report.router_correct += 1;
         }
 
-        let di = domain_index(span.domain);
+        let di = domain_index(domain);
         let m = &mut report.per_domain[di];
         m.labeled += 1;
         if rank.is_some_and(|r| r < 1) {
@@ -457,8 +475,8 @@ pub fn run_eval() -> EvalReport {
         }
         if rank.is_none_or(|r| r >= 3) {
             report.misses.push(MissRecord {
-                expected: span.label.to_string(),
-                domain: span.domain,
+                expected: label.to_string(),
+                domain,
                 rank,
                 top1,
             });
@@ -552,6 +570,166 @@ pub fn print_report(report: &EvalReport) {
     }
 }
 
+// ── Issue 020 POC: router spectral-block eval ──────────────────────────
+
+/// The two DOCUMENTED `Plan 005` mis-routes (`latent_matcher` doc + Bench 018):
+/// a `return expr;` fn routed to perf (should → clippy) + a linear-scan fn
+/// routed to clippy (should → perf). The gate requires BOTH fixed.
+const MISROUTE_FIXTURES: [(&str, DomainId); 2] = [
+    (
+        "pub fn area(w: f64, h: f64) -> f64 {\n    return w * h;\n}\n",
+        DomainId::Clippy,
+    ),
+    (
+        "pub fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {\n    for u in users {\n        if u.id == id {\n            return Some(u);\n        }\n    }\n    None\n}\n",
+        DomainId::Perf,
+    ),
+];
+
+/// Mirror of `LatentMatcher::from_enabled_domains`' router-domain assembly
+/// (the same corpus pattern texts — the router eval must measure the router
+/// the production path would build).
+#[allow(clippy::vec_init_then_push)] // cfg-gated per-domain pushes
+fn router_eval_domains() -> Vec<(DomainId, Vec<String>)> {
+    let mut out = Vec::new();
+    #[cfg(feature = "clippy_lints")]
+    out.push((
+        DomainId::Clippy,
+        crate::domains::clippy_lints::ClippyLintDomain::build_corpus()
+            .into_iter()
+            .map(|e| e.buggy_code().to_string())
+            .collect::<Vec<_>>(),
+    ));
+    #[cfg(feature = "rust_perf")]
+    out.push((
+        DomainId::Perf,
+        crate::domains::rust_perf::RustPerfDomain::build_corpus()
+            .into_iter()
+            .map(|e| e.buggy_code().to_string())
+            .collect::<Vec<_>>(),
+    ));
+    #[cfg(feature = "kernel_heal")]
+    out.push((
+        DomainId::Kernel,
+        crate::domains::kernel_opt::KernelOptDomain::build_corpus()
+            .into_iter()
+            .map(|e| e.buggy_code().to_string())
+            .collect::<Vec<_>>(),
+    ));
+    out
+}
+
+/// One routing-variant measurement (Issue 020).
+#[derive(Debug, Clone)]
+pub struct RouterEvalRow {
+    /// Variant name (e.g. `baseline-8d`, `dft8-disc+struct`).
+    pub mode: String,
+    /// Labeled spans routed.
+    pub checked: usize,
+    /// Spans routed to their owning domain.
+    pub correct: usize,
+    /// Both documented mis-routes fixed?
+    pub misroutes_fixed: bool,
+}
+
+impl RouterEvalRow {
+    /// Correct-route ratio (1.0 when nothing was checked — vacuous state).
+    #[must_use]
+    #[allow(clippy::cast_precision_loss)] // span counts ≤ ~10²
+    pub fn accuracy(&self) -> f32 {
+        if self.checked == 0 {
+            1.0
+        } else {
+            self.correct as f32 / self.checked as f32
+        }
+    }
+}
+
+/// The routing variants measured by the POC, in report order.
+#[must_use]
+pub fn router_eval_modes() -> Vec<super::domain_router::RoutingEmbedding> {
+    use super::domain_router::RoutingEmbedding::{self, SpectralDft};
+    use super::domain_router::SpectralOrder::{Discriminative, GlobalFreq};
+    vec![
+        RoutingEmbedding::Baseline,
+        SpectralDft { order: GlobalFreq, with_struct: false },
+        SpectralDft { order: GlobalFreq, with_struct: true },
+        SpectralDft { order: Discriminative, with_struct: false },
+        SpectralDft { order: Discriminative, with_struct: true },
+        RoutingEmbedding::TfCosine { order: GlobalFreq },
+        RoutingEmbedding::TfCosine { order: Discriminative },
+    ]
+}
+
+fn router_mode_name(mode: super::domain_router::RoutingEmbedding) -> String {
+    use super::domain_router::RoutingEmbedding as RE;
+    use super::domain_router::SpectralOrder as SO;
+    match mode {
+        RE::Baseline => "baseline-8d".to_string(),
+        RE::SpectralDft { order, with_struct } => format!(
+            "dft8-{}{}",
+            match order {
+                SO::GlobalFreq => "global",
+                SO::Discriminative => "disc",
+            },
+            if with_struct { "+struct" } else { "" }
+        ),
+        RE::TfCosine { order } => format!(
+            "tf-cosine-{}",
+            match order {
+                SO::GlobalFreq => "global",
+                SO::Discriminative => "disc",
+            }
+        ),
+    }
+}
+
+/// Route every labeled eval span + the two documented mis-route fixtures
+/// under every routing variant. THE Issue 020 measurement.
+#[must_use]
+pub fn run_router_eval() -> Vec<RouterEvalRow> {
+    use super::domain_router::DomainRouter;
+
+    let domains = router_eval_domains();
+    let spans = labeled_eval_spans();
+    let mut rows = Vec::new();
+    for mode in router_eval_modes() {
+        let router = DomainRouter::with_embedding(&domains, mode);
+        let mut correct = 0usize;
+        for span in &spans {
+            if router.route(&span.code) == Some(span.domain) {
+                correct += 1;
+            }
+        }
+        let misroutes_fixed = MISROUTE_FIXTURES
+            .iter()
+            .all(|(code, expected)| router.route(code) == Some(*expected));
+        rows.push(RouterEvalRow {
+            mode: router_mode_name(mode),
+            checked: spans.len(),
+            correct,
+            misroutes_fixed,
+        });
+    }
+    rows
+}
+
+/// Print the router eval table (the `--nocapture` output).
+#[allow(clippy::cast_precision_loss)] // display percentages over tiny counts
+pub fn print_router_eval(rows: &[RouterEvalRow]) {
+    println!("\n== Issue 020 router spectral POC (kill-bar: accuracy >= 85%, both mis-routes fixed) ==");
+    for row in rows {
+        println!(
+            "  {:<22} {:>4}/{} ({:>5.1}%)  mis-routes: {}",
+            row.mode,
+            row.correct,
+            row.checked,
+            row.accuracy() * 100.0,
+            if row.misroutes_fixed { "fixed" } else { "NOT fixed" },
+        );
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -588,6 +766,17 @@ mod tests {
         pub const PERF_TOP3: f32 = 37.0 / 40.0;
         #[cfg(feature = "kernel_heal")]
         pub const KERNEL_TOP3: f32 = 29.0 / 30.0;
+        /// Router-annotation accuracy floor (Issue 020 wiring, Bench 025):
+        /// the TF-cosine-global annotation measured 69.3% (61/88,
+        /// 2-domain) / 68.6% (81/118, 3-domain). Floor = measured − 5
+        /// spans of corpus-growth headroom (both states land at 63.6%).
+        /// This is the standing per-batch measurement of annotation
+        /// quality — NOT a gate-quality claim (gating stays killed at the
+        /// 85% bar).
+        #[cfg(not(feature = "kernel_heal"))]
+        pub const ROUTER_ANNOTATION: f32 = 56.0 / 88.0;
+        #[cfg(feature = "kernel_heal")]
+        pub const ROUTER_ANNOTATION_3D: f32 = 75.0 / 118.0;
     }
 
     #[allow(clippy::cast_precision_loss)] // ratio arithmetic over tiny counts
@@ -631,6 +820,24 @@ mod tests {
         if report.per_domain[2].labeled > 0 {
             let m = &report.per_domain[2];
             assert!(ratio(m.hits_at_3, m.labeled) >= floors::KERNEL_TOP3);
+        }
+        // Issue 020 wiring: the annotation router (TF-cosine-global) keeps a
+        // standing accuracy floor — corpus batches shift centroids/vocab, so
+        // decay below this re-measures + re-pins (record the delta), never
+        // silently weakens. GATING remains killed (85% bar, Bench 025).
+        if report.router_checked > 0 {
+            #[allow(clippy::cast_precision_loss)] // ratio over tiny counts
+            let acc = report.router_correct as f32 / report.router_checked as f32;
+            #[cfg(feature = "kernel_heal")]
+            let floor = floors::ROUTER_ANNOTATION_3D;
+            #[cfg(not(feature = "kernel_heal"))]
+            let floor = floors::ROUTER_ANNOTATION;
+            assert!(
+                acc >= floor,
+                "router annotation accuracy {:.1}% below floor {:.1}% — annotation decayed (re-measure + re-pin per the Issue 020 contract)",
+                acc * 100.0,
+                floor * 100.0
+            );
         }
     }
 
@@ -768,6 +975,24 @@ mod tests {
         assert!(
             total >= 100,
             "fixture set shrank below the Issue 017 floor: {labeled} labeled + {clean} clean = {total}"
+        );
+    }
+
+    /// Issue 020 POC measurement: prints the variant table for the record
+    /// (`--nocapture`). The PASS/KILL decision gates live in
+    /// `router_spectral_gate` (asserting on the WIRED mode) + Bench 025.
+    #[test]
+    fn router_spectral_poc_report() {
+        let rows = run_router_eval();
+        print_router_eval(&rows);
+        // Structural sanity in every state: the measurement itself must be
+        // deterministic + complete.
+        assert!(!rows.is_empty());
+        let again = run_router_eval();
+        assert_eq!(
+            rows.iter().map(|r| (r.correct, r.misroutes_fixed)).collect::<Vec<_>>(),
+            again.iter().map(|r| (r.correct, r.misroutes_fixed)).collect::<Vec<_>>(),
+            "router eval must be deterministic"
         );
     }
 }

@@ -24,6 +24,9 @@ pub mod latent_matcher;
 pub mod retrieval_eval;
 
 pub use corpus_index::{RuleIndex, ScoredRule, SuggestScratch};
-pub use domain_router::{DomainId, DomainRouter};
+pub use domain_router::{
+    DomainId, DomainRouter, RoutingEmbedding, SpectralOrder, SpectralVocab, SPECTRAL_DIM,
+    SPECTRAL_K, SPECTRAL_VOCAB_N,
+};
 pub use latent_matcher::{LatentMatcher, RuleInfo, SpanSuggestion};
-pub use retrieval_eval::{run_eval, EvalReport, DomainMetrics as EvalDomainMetrics};
+pub use retrieval_eval::{run_eval, run_router_eval, EvalReport, DomainMetrics as EvalDomainMetrics};

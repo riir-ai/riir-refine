@@ -268,6 +268,40 @@ HYPHENATED in human output (`clippy::needless-return`) — grep JSON
 (`"code":"clippy::..."`) instead. See
 [`.benchmarks/024`](.benchmarks/024_corpus_real_clippy_drift_goat.md).
 
+**Issue 020 (2026-08-16, RESOLVED-KILLED) — DomainRouter spectral routing
+POC.** The falsifiable question: does a router-local **token-frequency
+spectral block** (k=8 DFT coefficient pairs over a top-128-token vocabulary,
+two orderings + structural suffix + a full-TF ablation — 7 variants) reach
+the ≥85% routing-accuracy kill-bar (Bench 022's bar: below that, gating
+trades correctness for a fraction of the 349µs/chunk fan-out cost)?
+**Verdict: KILL for gating** — best variant 70.3% (tf-cosine-disc, 3-domain)
+/ 75.0% (dft8-global+struct, 2-domain — but mis-routes the documented
+fixtures). The load-bearing finding (the ablation splits the failure):
+**full-128 TF cosine ≈ DFT-k8 over the discriminative vocab (70.3% vs
+69.5%) — the k-coefficient compression loses NOTHING; the lexical signal
+itself is the ~70% ceiling**. Domain membership is semantic, not lexical
+(a perf HashMap rule + a clippy HashMap rule share a token spectrum — the
+issue's predicted mode, now measured). Only a semantic-signal embedder
+(768-D class) could re-open gating; the lexical branch is CLOSED.
+**Salvage shipped (annotation-only, no gating risk):** `LatentMatcher`'s
+router now builds with `TfCosine { order: GlobalFreq }` — annotation
+accuracy 53.4%→69.3% (2d) / 48.3%→68.6% (3d) at 0.96µs vs 3.31µs per span
+(global over disc ordering: equal accuracy, insensitive to the
+enabled-domain set). A standing floor (63.6% both states) joined the Issue
+017 regression gate — annotation decay now re-measures + re-pins, never
+silently weakens. The 7-variant measurement matrix lives on as the
+reproducible negative-result artifact (`run_router_eval` + the
+`router_spectral_poc_report` test — the `gemma2_directions` precedent).
+Baseline reproduced Bench 022 exactly (53.4% 2-domain) — harness valid.
+Determinism (BTreeMap vocab + precomputed twiddle tables, lookup-only
+HashMap) + cost (0.96–4.06µs release; the gate is release-only, the `g2_*`
+Debug pattern — debug pays ~10× on the transcendental paths) both PASS.
+Note: the two original mis-route fixtures now route correctly even under
+the baseline (current-corpus centroids) — overall accuracy, not those two
+fixtures, is the live failure mode. 408/435/592 tests + clippy 0 in all
+states. See
+[`.benchmarks/025`](.benchmarks/025_router_spectral_poc_kill.md).
+
 ## The `riir-clippy` skill (auto-continue idle loop)
 
 `.agents/skills/riir-clippy/SKILL.md` (symlinked into `~/.agents/skills/`
