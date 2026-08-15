@@ -168,7 +168,7 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
         ClippyFixEntry {
             lint_name: "needless_bool_assign".to_string(),
             lint_group: "complexity".to_string(),
-            buggy_code: "fn f(c: bool) { let mut x = false; x = if c { true } else { false }; }".to_string(),
+            buggy_code: "fn f(c: bool) { let mut x = false; if c { x = true; } else { x = false; } }".to_string(),
             fixed_code: "fn f(c: bool) { let mut x = false; x = c; }".to_string(),
         },
         ClippyFixEntry {

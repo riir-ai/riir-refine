@@ -65,7 +65,7 @@
 //! | `uninlined_format_args` | `{}` + plain-ident args → `{ident}` (trait bound identical — if the original compiled, the inline form compiles; aborts on any spec/named/positional placeholder or non-ident arg) |
 //! | `identity_op` | `x * 1`, `x / 1`, `x - 0` (+ `0 + x` int-suffixed) → operand (IEEE-754-verified float-safety split: `+0.0` is NOT identity for `-0.0`, so unsuffixed `+ 0` never fires) |
 //! | `needless_bool` | bool-literal if arms → `cond` / `!cond` (structural; else-position retraction) |
-//! | `needless_bool_assign` | same shape under assignment (structural) |
+//! | `needless_bool_assign` | branch assignments `if c { x = true } else { x = false }` → `x = c` (the assign-RHS form is `needless_bool`, Issue 017 fix) |
 //! | `match_bool` | `true`/`false` arm pats → `if`/`else` (structural) |
 //! | `needless_match` | identity-passthrough match (Some/Ok/bool) → scrutinee (structural) |
 //! | `redundant_static_lifetimes` | `&'static` in static/const type → elide (elision is always `'static` there) |
@@ -472,7 +472,7 @@ fn f(x: Option<u8>) { match x { Some(v) => use_v(v), _ => () } }",
             ),
             (
                 "needless_bool_assign",
-                "fn f(c: bool) { let mut x = false; x = if c { true } else { false }; }",
+                "fn f(c: bool) { let mut x = false; if c { x = true; } else { x = false; } }",
                 "x = c;",
             ),
             (

@@ -1,19 +1,24 @@
-//! `clippy::needless_bool_assign` — `x = if c { true } else { false };` →
-//! `x = c;`.
+//! `clippy::needless_bool_assign` — `if c { x = true; } else { x = false; }`
+//! → `x = c;`.
 //!
-//! Pattern: an assignment whose RHS is an if with one bool-literal statement
-//! per block arm and differing literals (the `needless_bool` shape, in
-//! assignment position).
+//! Pattern (real-clippy shape, verified against clippy 1.93 UI tests — the
+//! Issue 017 eval-fixture pass caught the prior mismatch): an if statement
+//! whose arms each contain a single assignment of a DIFFERING bool literal
+//! to the SAME left-hand side. The assign-RHS form `x = if c { true } else
+//! { false };` is real clippy's `needless_bool`, not `_assign` (that shape
+//! is covered by this crate's `needless_bool` proposer).
 //!
-//! Span-preserving (Issue 016): the ASSIGN expression's byte range is
-//! replaced by `<lhs> = <cond-or-negation>` — both fragments keep their
-//! ORIGINAL source text. No trailing `;` is emitted: the statement's own
-//! semicolon sits outside the expression span and survives the splice.
+//! Span-preserving (Issue 017 fix): the whole if STATEMENT's byte range is
+//! replaced by `<lhs> = <cond-or-negation>;` — both fragments keep their
+//! ORIGINAL source text. The trailing `;` is emitted because an
+//! if-statement in source carries none, while the collapsed assignment
+//! statement requires one (when the source form ends with a stray `;`, it
+//! sits inside the statement span and is swallowed with it).
 
 use super::helpers::{bool_lit, needs_logic_parens};
 use super::{edit, src, SourceEdit};
 use syn::visit::Visit;
-use syn::{Block, Expr, ExprAssign, ExprIf, File, Stmt};
+use syn::{Expr, ExprAssign, ExprIf, File, Stmt};
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
@@ -27,47 +32,68 @@ struct Collector<'a> {
     edits: Vec<SourceEdit>,
 }
 
-impl<'ast> Visit<'ast> for Collector<'_> {
-    fn visit_expr_assign(&mut self, a: &'ast ExprAssign) {
-        syn::visit::visit_expr_assign(self, a);
-        if !a.attrs.is_empty() {
+impl Collector<'_> {
+    /// Try to collapse `if c { lhs = A; } else { lhs = B; }` (differing bool
+    /// literals, same lhs) into `lhs = c;` / `lhs = !c;`.
+    fn try_collapse(&mut self, stmt: &Stmt, i: &ExprIf) {
+        if !i.attrs.is_empty() {
             return; // attrs would be dropped by the splice
         }
-        let Expr::If(i) = &*a.right else { return };
-        let Some(value) = bool_if_value(i) else { return };
-        let Some(lhs) = src(self.source, &*a.left) else { return };
+        let Some((_, else_e)) = &i.else_branch else { return };
+        let Expr::Block(eb) = &**else_e else { return };
+        if !eb.attrs.is_empty() {
+            return;
+        }
+        let Some((then_assign, then_value)) = single_bool_assign(&i.then_branch.stmts) else {
+            return;
+        };
+        let Some((else_assign, else_value)) = single_bool_assign(&eb.block.stmts) else {
+            return;
+        };
+        let Some(then_lhs) = src(self.source, &*then_assign.left) else { return };
+        let Some(else_lhs) = src(self.source, &*else_assign.left) else { return };
+        // Same LHS, differing literals — otherwise this is not the lint.
+        if then_lhs != else_lhs || then_value == else_value {
+            return;
+        }
         let Some(cond) = src(self.source, &i.cond) else { return };
-        let rhs = match value {
+        let rhs = match then_value {
             true => cond,
             false if needs_logic_parens(&i.cond) => format!("!({cond})"),
             false => format!("!{cond}"),
         };
-        self.edits.push(edit(a, format!("{lhs} = {rhs}")));
+        // The STATEMENT span (not the ExprIf span) so a trailing `;` in the
+        // `Stmt::Expr(_, Some(_))` form is swallowed with the if — the
+        // replacement carries its own.
+        self.edits
+            .push(edit(stmt, format!("{then_lhs} = {rhs};")));
     }
 }
 
-/// For an `if c { <bool> } else { <bool> }` with differing literals: the
-/// value the assignment receives (the then-literal), else `None`.
-fn bool_if_value(i: &ExprIf) -> Option<bool> {
-    if !i.attrs.is_empty() {
-        return None;
+impl<'ast> Visit<'ast> for Collector<'_> {
+    fn visit_stmt(&mut self, s: &'ast Stmt) {
+        syn::visit::visit_stmt(self, s);
+        let Expr::If(i) = (match s {
+            Stmt::Expr(e, _) => e,
+            _ => return,
+        }) else {
+            return;
+        };
+        self.try_collapse(s, i);
     }
-    let Some((_, else_e)) = &i.else_branch else { return None };
-    let Expr::Block(eb) = &**else_e else { return None };
-    if !eb.attrs.is_empty() {
-        return None;
-    }
-    let then_bool = single_bool_lit(&i.then_branch)?;
-    let else_bool = single_bool_lit(&eb.block)?;
-    (then_bool != else_bool).then_some(then_bool)
 }
 
-/// The block's single statement as a bool literal, if that's its exact shape.
-fn single_bool_lit(block: &Block) -> Option<bool> {
-    match block.stmts.as_slice() {
-        [Stmt::Expr(e, None)] => bool_lit(e),
-        _ => None,
+/// The statements' single member as an assignment of a bool literal, if
+/// that's the block's exact shape: `(assign, literal-value)`.
+fn single_bool_assign(stmts: &[Stmt]) -> Option<(&ExprAssign, bool)> {
+    let [Stmt::Expr(Expr::Assign(a), Some(_))] = stmts else {
+        return None;
+    };
+    if !a.attrs.is_empty() {
+        return None;
     }
+    let value = bool_lit(&a.right)?;
+    Some((a, value))
 }
 
 #[cfg(test)]
@@ -75,16 +101,16 @@ mod tests {
     use super::super::propose_fix;
 
     #[test]
-    fn bool_if_assignment_collapses() {
-        let input = "fn set(x: &mut bool, c: bool) { *x = if c { true } else { false }; }";
+    fn branch_assignments_collapse() {
+        let input = "fn f(x: &mut bool, c: bool) { if c { *x = true; } else { *x = false; } }";
         let out = propose_fix("needless_bool_assign", input).expect("matched");
-        assert!(out.contains("*x = c;"), "assignment not collapsed: {out}");
+        assert!(out.contains("*x = c;"), "branch form not collapsed: {out}");
         syn::parse_file(&out).expect("re-parses");
     }
 
     #[test]
-    fn negated_shape_collapses() {
-        let input = "fn set(x: &mut bool, c: bool) { *x = if c { false } else { true }; }";
+    fn negated_branches_collapse() {
+        let input = "fn f(x: &mut bool, c: bool) { if c { *x = false; } else { *x = true; } }";
         let out = propose_fix("needless_bool_assign", input).expect("matched");
         assert!(out.contains("*x = !c;"), "{out}");
         syn::parse_file(&out).expect("re-parses");
@@ -92,30 +118,43 @@ mod tests {
 
     #[test]
     fn comparison_condition_negated_with_parens() {
-        let input = "fn set(x: &mut bool, a: u32, b: u32) { *x = if a == b { false } else { true }; }";
+        let input =
+            "fn f(x: &mut bool, a: u32, b: u32) { if a == b { *x = false; } else { *x = true; } }";
         let out = propose_fix("needless_bool_assign", input).expect("matched");
-        assert!(out.contains("*x = !(a == b);"), "comparison must be parenthesized: {out}");
+        assert!(
+            out.contains("*x = !(a == b);"),
+            "comparison must be parenthesized: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 
     #[test]
-    fn non_bool_rhs_untouched() {
-        let input = "fn set(x: &mut u8, c: bool) { *x = if c { 1 } else { 2 }; }";
+    fn assign_rhs_if_untouched() {
+        // `x = if c { true } else { false };` is needless_bool, NOT
+        // needless_bool_assign (real clippy semantics, Issue 017 fix).
+        let input = "fn f(c: bool) { let mut x = false; x = if c { true } else { false }; }";
         let out = propose_fix("needless_bool_assign", input);
-        assert!(out.is_none(), "non-bool rhs must not fire: {out:?}");
+        assert!(out.is_none(), "assign-RHS form must not fire: {out:?}");
     }
 
     #[test]
-    fn same_literal_rhs_untouched() {
-        let input = "fn set(x: &mut bool, c: bool) { *x = if c { true } else { true }; }";
+    fn non_bool_literals_untouched() {
+        let input = "fn f(x: &mut u8, c: bool) { if c { *x = 1; } else { *x = 2; } }";
+        let out = propose_fix("needless_bool_assign", input);
+        assert!(out.is_none(), "non-bool arms must not fire: {out:?}");
+    }
+
+    #[test]
+    fn differing_lhs_untouched() {
+        let input = "fn f(a: &mut bool, b: &mut bool, c: bool) { if c { *a = true; } else { *b = false; } }";
+        let out = propose_fix("needless_bool_assign", input);
+        assert!(out.is_none(), "differing lhs must not fire: {out:?}");
+    }
+
+    #[test]
+    fn same_literal_untouched() {
+        let input = "fn f(x: &mut bool, c: bool) { if c { *x = true; } else { *x = true; } }";
         let out = propose_fix("needless_bool_assign", input);
         assert!(out.is_none(), "constant arms must not fire: {out:?}");
-    }
-
-    #[test]
-    fn plain_assignment_untouched() {
-        let input = "fn set(x: &mut bool) { *x = true; }";
-        let out = propose_fix("needless_bool_assign", input);
-        assert!(out.is_none(), "plain assignment must not fire: {out:?}");
     }
 }

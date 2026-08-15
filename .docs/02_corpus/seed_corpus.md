@@ -42,7 +42,7 @@ compile gate):
 | `uninlined_format_args` | pedantic | fix | `format!("{}", x)` → `format!("{x}")` |
 | `identity_op` | complexity | fix | `x * 1` → `x` (IEEE-754 float-safety split) |
 | `needless_bool` | complexity | fix | `if b { true } else { false }` → `b` |
-| `needless_bool_assign` | complexity | fix | `x = if c { true } else { false }` → `x = c` |
+| `needless_bool_assign` | complexity | fix | `if c { x = true } else { x = false }` → `x = c` (real-clippy shape, Issue 017 fix — the assign-RHS form is `needless_bool`) |
 | `match_bool` | pedantic | fix | `match b { true => a, false => c }` → `if b { a } else { c }` |
 | `needless_match` | complexity | fix | identity `match x { Some(v) => Some(v), .. }` → `x` |
 | `redundant_static_lifetimes` | style | fix | `&'static str` in static/const type → `&str` |
