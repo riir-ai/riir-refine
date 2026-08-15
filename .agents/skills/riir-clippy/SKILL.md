@@ -568,20 +568,54 @@ global = symlink only.
   underscore-identifier family). The 2-lane split (decode structure + SC
   substrate) resolved its one overlap cleanly: the identity INIT is the B30/B31
   instance, the runtime GATE mechanism is the rule.
+- **Batch 43 DONE (2026-08-15, Research 047):** the Weaver speculative-decode
+  GPU corrector cluster (`weaver_gpu_corrector.rs` 1,449 — Plan 436 Phase 4
+  `T4.1`: `GpuWeaverCorrector` + batched scratch + per-depth/batched
+  `correct_marginals`; + `weaver_gpu_dflash.rs` 576 — `T4.2`: the `DFlash`
+  orchestration wrapper; the `weaver_gpu/` kernel dir is a SEPARATE cluster,
+  still unmined) — **5 rules, corpus 320 → 325** (A 73, B 47, D 57):
+  `mutable-input-scratch-residency-write-per-call` (A — per-iteration
+  `create_from_slice` input churn → scratch-resident handles + `client.write`
+  per call; the file's own batched twin is the positive contrast),
+  `topk-select-nth-over-full-vocab-sort` (B — O(V log V) full pair sort →
+  `select_nth_unstable` + K-prefix sort over u32 indices; composes with
+  order-stable-topk), `post-scatter-renorm-support-set-only` (A — dense
+  re-sum/rescale after a K-scatter → sum-during-scatter + support-only
+  rescale, BIT-IDENTICAL by IEEE), `stack-array-row-view-bridge` (A —
+  `Vec<&[f32]>` heap collect → `[&[f32]; 64]` stack bridge, 5+ in-tree
+  sites), `empty-slice-sentinel-launders-shape-violation` (D — the defensive
+  `&[]` row type-checks past the shape contract into a swallowed Err; the
+  negative space of B29 launch-unchecked). 23 falsifications (Issue 468
+  P0/P2 already shipped several rules' fixes — the per-depth vs batched
+  paths sit side by side as native naive/opt contrast). Bug yield filed as
+  riir-ai **Issue 697** (17 hazards: the LIVE 3-layer silent no-correction
+  chain undersized-capture → `&[]` row → `HiddenShape` Err → `let _ =`
+  swallow; the release-mode embedding OOB window ~2.1 GB from a
+  debug_assert-only length check; ~29 alloc requests/call; depth=0
+  unvalidated; the GOAT assertion stricter than its own doc; test-only
+  reachability with NO weaver_gpu CI row). GOAT: 345 kernel_heal + 201
+  default tests, clippy 0 in all 4 states. **Generator lesson (a FOURTH
+  anchor-class variant)**: the mixed-escape tail anchor must account for
+  EVERY byte between the pseudocode's last `\n` escape and `.to_string(),`
+  — the fn body's closing `}` sits between them (`...walk\n}".to_string(),`);
+  an anchor missing the `}` matches nothing. Plus the header anchor must
+  match MID-LINE from distinctive tail text (wrapped `//!` continuations
+  share the prefix; a line-start assumption fails). 2 doc_markdown fixes
+  (`T4.1`/`T4.2` + `DFlash` — the CamelCase-adjacent family).
 - **NEXT mining target**: `ls` the riir-gpu tree for the next unmined
-  cluster (~87 of ~200 files mined). Candidates:
-  `weaver_gpu*` (dflash 576 + corrector 1,449; NOTE the `weaver_gpu/` dir
-  mod.rs ~62 KB + tests 57 KB are a SEPARATE cluster), `kvarn/` (~1,838),
+  cluster (~89 of ~200 files mined). Candidates:
+  `weaver_gpu/` dir (mod.rs ~62 KB + tests 57 KB — the 19-dispatch kernel
+  implementations, the corrector cluster's substrate), `kvarn/` (~1,838),
   `hypernet/` (~3,300), `maxsim/` (~1,049),
   `kimi_k3_gpu_backward_batched.rs` (1,394 — LOW value: shares Issue 693's
   H1/H2 + the broken LCG with the module file; mine only if the better
   clusters are exhausted). Pick 1-2 files, ~4-8 rules (dedup pressure high
-  after 42 batches), Batch 43 (Research 047).
+  after 43 batches), Batch 44 (Research 048).
   - Validation pattern (proven T4 + 32a + 32b-1 + 32c + 36 + 38): corpus files are NOT
     sibling WIP — edit + run GOAT in the main checkout with
     `CARGO_TARGET_DIR=/tmp/riir-clippy-bNN`; `--features kernel_heal`
     for the corpus suite (318 at 34, 321 at 35, 324 at 36, 327 at 37,
-    330 at 38, 333 at 39, 336 at 40, 339 at 41, 342 at 42), default for
+    330 at 38, 333 at 39, 336 at 40, 339 at 41, 342 at 42, 345 at 43), default for
     the 201 suite.
     `--all-features` is currently broken by SIBLING WIP
     (`rust_perf/bench.rs:335 alloc_axis`) — pre-existing, not yours.
@@ -596,7 +630,7 @@ global = symlink only.
     router.rs `rules_for_expert` total + the corpus-count mentions in
     router.rs doc header + the Plan 003 doc-comment `NNN-rule corpus`
     line above KERNEL_CATEGORIES + the `Total: 209 ... current NNN`
-    comment + the file-level `//!` header batch block. All in sync at 320 (A 70, B 46, D 56 after Batch 42; C 32, E 18, F 10, G 19, H 14, I 4, J 5, K 5, L 10, M 9, N 18, O 4).
+    comment + the file-level `//!` header batch block. All in sync at 325 (A 73, B 47, D 57 after Batch 43; C 32, E 18, F 10, G 19, H 14, I 4, J 5, K 5, L 10, M 9, N 18, O 4).
   - **Landing lesson (32b-1, self-caught)**: after a large multi-entry
     corpus edit, `awk`-scan for `rule_id:` lines NOT preceded by a
     standalone `KernelRule {` BEFORE the first compile — JSON `\n`
@@ -608,7 +642,7 @@ global = symlink only.
   WIP STILL ACTIVE as of 2026-08-15 evening: qv_lora.rs + cudarc_kernels/
   + riir-gpu/lib.rs + ternary_deltanet_gpu_forward_cudarc.rs all dirty)
   — mine only after their WIP lands.
-- **Progress**: riir-gpu ~87 of ~200 files mined. Corpus: 320 rules.
+- **Progress**: riir-gpu ~89 of ~200 files mined. Corpus: 325 rules.
   edge_lora module FULLY MINED (32a + 32b-1 + 32c). spectralquant/
   FULLY MINED (15 + 33). gemma4_cubecl_train/ DONE (34).
   gemma2_cubecl_train/ FULLY MINED (35: mod.rs + attention_gpu.rs;
@@ -617,7 +651,8 @@ global = symlink only.
   kimi_k3_gpu_forward.rs DONE (39); kimi_k3_gpu_backward.rs DONE (40);
   kimi_k3_gpu_backward_sequence.rs + weight_buffer_cache.rs DONE (41 —
   the batched twin remains, LOW value). gemma2_d2f/ FULLY MINED
-  (42: mod.rs + gemma2_d2f_sc.rs).
+  (42: mod.rs + gemma2_d2f_sc.rs). weaver_gpu_corrector.rs +
+  weaver_gpu_dflash.rs DONE (43 — the weaver_gpu/ kernel dir remains).
 - **Also open (riir-clippy issues)**: 014 (rust_perf v4, 12 tasks), 016
   (clippy structural expansion, 6), 017 (retrieval precision at scale,
   5), 018 (self_evolve promotion, 6). 015 = sibling's ACTIVE WIP

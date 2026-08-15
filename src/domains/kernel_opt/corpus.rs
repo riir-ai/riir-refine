@@ -983,6 +983,29 @@
 //!   riir-ai Issue 695 (KV GPU→CPU→GPU round-trip 1.7 GB/block, invariant-
 //!   prefix recompute ~227 GMACs, 46.6K blocking reads, hardcoded softcap
 //!   divergence, truncate panic, the unreachable trained-SC path).
+//! - **Batch 43 (2026-08-15, Research 047):** the Weaver speculative-decode
+//!   GPU corrector cluster — `weaver_gpu_corrector.rs` (1,449 LOC, Plan 436
+//!   Phase 4 `T4.1`: `GpuWeaverCorrector` + batched scratch + the per-depth and
+//!   batched `correct_marginals` entry points) + `weaver_gpu_dflash.rs` (576
+//!   LOC, `T4.2`: the `DFlash` draft orchestration wrapper) — **5 rules, corpus
+//!   320 → 325** (A 73, B 47, D 57):
+//!   `mutable-input-scratch-residency-write-per-call` (A — per-iteration
+//!   `create_from_slice` input churn → scratch-resident handles written per
+//!   call; the file's own batched path is the positive contrast),
+//!   `topk-select-nth-over-full-vocab-sort` (B — O(V log V) full pair sort →
+//!   `select_nth_unstable` partition + K-prefix sort over a u32 index buffer),
+//!   `post-scatter-renorm-support-set-only` (A — dense re-sum + rescale after
+//!   a K-scatter → sum-during-scatter + support-only rescale, bit-identical),
+//!   `stack-array-row-view-bridge` (A — `Vec<&[f32]>` heap collect → a
+//!   fixed `[&[f32]; 64]` stack bridge, the speculative-decode idiom at 5+
+//!   in-tree sites), `empty-slice-sentinel-launders-shape-violation` (D — a
+//!   defensive `&[]` sentinel type-checks past the shape contract and lands
+//!   in a swallowed `Err`; slice hard + `debug_assert!`). 23 falsifications
+//!   (Issue 468 P0/P2 already shipped several rules' fixes — the per-depth
+//!   vs batched paths sit side by side as naive/opt contrast). Hazards filed
+//!   as riir-ai Issue 697 (the 3-layer silent no-correction chain, the
+//!   release-mode embedding OOB window, ~29 alloc requests/call, test-only
+//!   reachability with no CI row).
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
@@ -6762,6 +6785,134 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
             ref_shape: "// naive: host loop over every vocab row per position per step\nfn x0_estimate(logits: &[f32], wte_cpu: &[f32], n: usize, mask: usize) -> Vec<f32> {\n    let probs = softmax_masked(logits, mask);\n    let mut est = vec![0.0f32; n];\n    for t in 0..vocab {\n        if t == mask { continue; }\n        let off = t * n;\n        for i in 0..n { est[i] += probs[t] * wte_cpu[off + i]; } // full V x N stream\n    }                                                           // PER POSITION PER STEP\n    est // 2.36 GB host walk + 590M MAC at Gemma-2-2B, per position\n}".to_string(),
             opt_pattern: "// optimized: x_hat = wte^T @ p — ONE transposed GEMV on the resident tied head\nfn x0_estimate_gpu(&mut self, logits: &[f32], mask: usize) -> Vec<f32> {\n    let p = softmax_masked(logits, mask);          // host, over read-back logits\n    let p_handle = self.client.create_from_slice(&p); // V floats up\n    // wte is ALREADY resident — the forward just GEMV'd it for logits = wte @ h\n    let out = self.dispatch_gemv_t(&self.wte_handle, &p_handle); // wte^T @ p\n    self.read_into(&out, self.n_embd)              // n floats back — no mirror walk\n}".to_string(),
         },
+        // ── mutable-input-scratch-residency-write-per-call — per-iteration
+        // input allocations vs scratch-resident handles written per call (A) ──
+        //
+        // Source: riir-gpu weaver_gpu_corrector.rs — the per-depth
+        // `correct_marginals` path allocates its INPUTS fresh inside the
+        // Phase B loop: L461 (`let mut raw_flat: Vec<f32> = vec![0.0; 2 * h];`
+        // per call) + L464-466 (verifier row re-packed EVERY depth — it is
+        // constant across the loop) + L468-477 (THREE `create_from_slice`
+        // device allocations per depth: raw/topk_ids/dflash_logits) + L438-439
+        // (two `vec![0.0f32; k]` per depth). The same file's batched twin is
+        // the POSITIVE contrast: L686-687 packs flat `[depth * k]` buffers +
+        // L729-737 uploads once per call (3 total, not 3 x depth). The scratch
+        // precedent: L168-189 — `GpuWeaverBatchedScratch` persists 18
+        // intermediate handles via `client.empty` while the inputs churn.
+        // `client.write(handle, bytes)` into an existing handle is the
+        // established in-repo path (ternary_deltanet_gpu_forward.rs
+        // rollback_speculative).
+        //
+        // Distinct from immutable-operand-upload-at-set-creation (B33 —
+        // never-changing operands; these change every call), from
+        // slow-path-bootstraps-raw-buffer-hotswap-cache (B39 — weight identity
+        // churn; plain write suffices at known sizes), from
+        // fan-out-shared-input-single-sync (B25 — shared input for sibling
+        // dispatches; here the shared row rides INSIDE the packed buffer).
+        KernelRule {
+            rule_id: "mutable-input-scratch-residency-write-per-call".to_string(),
+            gpu_concept: "A GPU hot path that has already adopted scratch-resident intermediates often still allocates its per-call INPUT buffers fresh — create_from_slice per invocation, and worse per loop-iteration inside one call, makes the device allocator service a new allocation request every iteration and retire the previous buffer, while re-uploading a sub-row that never changes across iterations (the constant verifier row packed alongside the changing drafter row). Give changing inputs the same residency discipline the intermediates already enjoy: allocate their handles once in the scratch struct (client.empty, beside the existing intermediate handles) and write contents per call with client.write(handle, bytes) — the established write-into-existing-handle path; flat per-call buffers sized [depth x K] replace per-iteration [K] allocations when all iterations' data is known before the loop (here Phase A computes every depth's top-K first, so the whole upload set is known pre-loop). Size honesty: at or below the tiny-param threshold the per-call rebuild form is correct (tiny-param-buffer-rebuild-over-cache) — the anti-pattern is (a) per-iteration allocation of real-sized inputs (raw = 2 x h floats = 16 KB at h=2048; 3 x depth device alloc requests per call) and (b) per-ITERATION tiny buffers when one flat per-call buffer serves the loop. Distinct from immutable-operand-upload-at-set-creation (operands that NEVER change get the constructor; these change every call, so the constructor does not apply but the scratch does), from slow-path-bootstraps-raw-buffer-hotswap-cache (weight identity churn needs raw-slot machinery; plain client.write suffices when sizes are known at scratch construction), from fan-out-shared-input-single-sync (one shared input for N sibling dispatches; here the shared sub-row rides INSIDE a per-iteration packed buffer — the fix is residency, not fan-out), and from tiny-param-buffer-rebuild-over-cache (the size counterweight this rule defers to below a cache line).".to_string(),
+            ref_shape: "// naive: fresh device allocation for the inputs EVERY loop iteration\nfn correct_one_depth(client: &Client, h_verifier: &[f32], h_drafter: &[f32],\n                     topk_ids: &[f32], dflash_logits: &[f32], h: usize) {\n    let mut raw_flat: Vec<f32> = vec![0.0; 2 * h];\n    raw_flat[..h].copy_from_slice(h_verifier);      // constant row re-packed\n    raw_flat[h..2 * h].copy_from_slice(h_drafter);  // per iteration\n    let raw_handle = client.create_from_slice(f32::as_bytes(&raw_flat));\n    let ids_handle = client.create_from_slice(f32::as_bytes(topk_ids));\n    let logits_handle = client.create_from_slice(f32::as_bytes(dflash_logits));\n    dispatch_forward(client, &raw_handle, &ids_handle, &logits_handle);\n    // 3 device alloc requests x depth per call; allocator churn + retire\n}\n".to_string(),
+            opt_pattern: "// optimized: inputs are scratch RESIDENTS — handles allocated once beside\n// the intermediates, contents written per call into the existing buffers\nstruct CorrectorScratch {\n    raw: Handle,            // [2 * h]\n    ids: Handle,            // [depth * k] — flat, one write per call\n    logits: Handle,         // [depth * k]\n    raw_staging: Vec<f32>,  // host staging, clear + reuse\n}\nfn correct_depths(client: &Client, scratch: &CorrectorScratch,\n                  h_verifier: &[f32], h_dflash: &[&[f32]], h: usize) {\n    scratch.raw_staging[..h].copy_from_slice(h_verifier); // once per call\n    for (di, h_d) in h_dflash.iter().enumerate() {\n        scratch.raw_staging[h..2 * h].copy_from_slice(h_d);\n        client.write(scratch.raw.clone(), f32::as_bytes(&scratch.raw_staging));\n        dispatch_forward_at(client, &scratch.raw, &scratch.ids, &scratch.logits, di);\n    }\n    // zero device alloc requests per call — same residency as the intermediates\n}\n".to_string(),
+        },
+        // ── topk-select-nth-over-full-vocab-sort — O(V log V) full pair sort
+        // vs select_nth partition + K-prefix sort (B) ──
+        //
+        // Source: riir-gpu weaver_gpu_corrector.rs L421-430 (per-depth path —
+        // materializes (vid, prob) pairs for the WHOLE vocab row + full
+        // `sort_unstable_by`; duplicated at L694-703 in the batched path);
+        // L432-433 (`n_take = n_valid.min(k)` — only K survivors are consumed);
+        // L436 (`to_vec()` snapshot — a second V-to-K reduction point). At
+        // V=256k/K=8: ~4.6M comparisons + 4 MB of 16-B pair movement per depth
+        // vs ~256k comparisons + 4-B index movement. Scale-conditional on
+        // K << V (trivial at the test config V=64).
+        //
+        // Distinct from order-stable-topk-via-index-sort (B32c — the ordering
+        // contract; its naive AND optimized forms both fully sort — compose:
+        // select_nth + prefix sort + ascending re-sort). Parity caution: when
+        // CPU and GPU paths must agree, both sides run the same host
+        // selection — change both or neither.
+        KernelRule {
+            rule_id: "topk-select-nth-over-full-vocab-sort".to_string(),
+            gpu_concept: "Host-side top-K selection feeding a GPU upload commonly materializes the full candidate collection as (id, score) pairs — 4x the score row's bytes at 16 B/entry on 64-bit — and fully sorts it: O(V log V) comparisons plus physical movement of all V payloads, then keeps K. When K << V (speculative-decode top-K over a 256k-vocab marginal row with K=8-64) the full sort is ~18x the selection work at K=8: select_nth_unstable_by partitions in O(V) average, after which sorting only the K-prefix costs O(K log K); selecting over a u32 index buffer that probes the score row (4 B/element) also quarters the data the partition moves versus sorting 16-B (usize, f32) pairs. Determinism: select_nth_unstable + prefix sort is deterministic given the same input sequence; composing with the order-stable rule (re-sort survivors ascending) preserves the canonical-order contract. Parity caution: when a CPU reference and a GPU path must agree (a G3 gate), both sides run the same host selection — change both or neither, since tie order and last-ulp softmax sums can shift under a different selection algorithm. Distinct from order-stable-topk-via-index-sort (its naive AND optimized forms both fully sort — its content is the ordering contract and tie determinism, not the selection cost; compose, don't substitute), from argmax-rng-tie-break-collect-ties (top-1 sweep whose subject is tie-breaking under RNG — not top-K cost), and from device-side-argmax-minimal-download (download size at the boundary — this is the selection algorithm on the host side of it).".to_string(),
+            ref_shape: "// naive: materialize (id, score) pairs for the WHOLE vocab, full sort, keep K\nfn topk_full_sort(row: &[f32], k: usize, pairs: &mut Vec<(usize, f32)>) -> usize {\n    pairs.clear();\n    pairs.reserve(row.len());\n    for (vid, &p) in row.iter().enumerate() {\n        if p.is_finite() {\n            pairs.push((vid, p));\n        }\n    }\n    pairs.sort_unstable_by(|a, b| {\n        b.1.partial_cmp(&a.1).unwrap_or(core::cmp::Ordering::Equal)\n    });\n    k.min(pairs.len()) // O(V log V) + 16 B/pair movement, V=256k, K=8\n}\n".to_string(),
+            opt_pattern: "// optimized: partition in O(V), sort only the K-prefix, move only 4-B indices\nfn topk_partial_select(row: &[f32], k: usize, idx: &mut Vec<u32>) -> usize {\n    idx.clear();\n    idx.reserve(row.len());\n    for (vid, &p) in row.iter().enumerate() {\n        if p.is_finite() {\n            idx.push(vid as u32);\n        }\n    }\n    let take = k.min(idx.len());\n    if take == 0 {\n        return 0;\n    }\n    let desc = |&a: &u32, &b: &u32| {\n        row[a as usize]\n            .partial_cmp(&row[b as usize])\n            .unwrap_or(core::cmp::Ordering::Equal)\n    };\n    idx.select_nth_unstable_by(take - 1, desc);\n    idx[..take].sort_unstable_by(desc);\n    take // O(V) partition + O(K log K) prefix — compose with ascending\n         // re-sort for the canonical-order contract\n}\n".to_string(),
+        },
+        // ── post-scatter-renorm-support-set-only — dense re-sum + rescale
+        // after a K-scatter vs sum-during-scatter + support-only rescale (A) ──
+        //
+        // Source: riir-gpu weaver_gpu_corrector.rs L547-563 (per-depth Phase C:
+        // zero-fill -> scatter n_take <= K values -> `marg_out.iter().sum()`
+        // over the FULL vocab row -> rescale pass over the FULL row);
+        // duplicated byte-for-byte at L797-812 in the batched path (the
+        // duplication itself is Issue 697 H9). V-K of the re-read elements are
+        // exact zeros just written; the support's values were live during the
+        // scatter. At V=256k, K=8, depth=4: ~2M memory ops / ~8 MB row traffic
+        // per call collapse to ~64 ops. Bit-identical by IEEE: +0.0 addition
+        // is exact, 0 x inv = +0.0.
+        //
+        // Distinct from softmax-topk-renormalize-scatter (MoE gate pipeline
+        // that sums the picked set BEFORE building the sparse matrix — here
+        // the dense row exists in-place and is re-scanned AFTER the scatter).
+        KernelRule {
+            rule_id: "post-scatter-renorm-support-set-only".to_string(),
+            gpu_concept: "After zeroing a dense in-place row and scattering K corrected values into it, renormalizing by summing the ENTIRE row re-reads V elements of which V-K are exact zeros, and the rescale pass re-multiplies all V (0 x inv = 0) — two full O(V) sweeps over a row whose non-zero support is exactly the K positions just written, whose values were in registers/cache during the scatter. Accumulate the sum DURING the scatter (K adds) and rescale only the support (K multiplies). Bit-identical to the dense form: adding +0.0 is exact in IEEE f32 and 0 x inv is +0.0, so removing the zeros from both passes cannot change the result — the optimization carries no numerical risk, unlike most reduction reshapes. The zero-fill sweep stays (the in-place output contract requires zeros outside the top-K); only the read-back sweep and the re-scale sweep are deleted. At V=256k, K=8, depth=4: ~2M memory ops and ~8 MB of row traffic per correct_marginals call collapse to ~64 ops. Distinct from softmax-topk-renormalize-scatter (the MoE gate pipeline softmax-then-topk that BUILDS a sparse routing matrix and sums the picked set BEFORE scattering — here the dense row already exists in-place and is re-scanned AFTER), from broadcast-uniform-skip-reduce (kernel-side thread-uniform reduction skipping — this is the host-side read/write set of a post-scatter renorm), and from order-stable-topk-via-index-sort (selection mechanics — this is the write-back pass).".to_string(),
+            ref_shape: "// naive: after the K-scatter, re-read and re-scale the ENTIRE vocab row\nfn scatter_renorm_dense(row: &mut [f32], vids: &[usize], probs: &[f32]) {\n    for v in row.iter_mut() {\n        *v = 0.0;\n    }\n    for (ki, &vid) in vids.iter().enumerate() {\n        row[vid] = probs[ki];\n    }\n    let sum: f32 = row.iter().sum(); // V-K of these are exact zeros\n    if sum > 1e-30 {\n        let inv = 1.0 / sum;\n        for v in row.iter_mut() {\n            *v *= inv; // 0 x inv = +0.0 — pure waste on V-K lanes\n        }\n    }\n}\n".to_string(),
+            opt_pattern: "// optimized: accumulate the sum DURING the scatter, rescale the support only\nfn scatter_renorm_support_only(row: &mut [f32], vids: &[usize], probs: &[f32]) {\n    for v in row.iter_mut() {\n        *v = 0.0;\n    }\n    let mut sum = 0.0f32;\n    for (ki, &vid) in vids.iter().enumerate() {\n        row[vid] = probs[ki];\n        sum += probs[ki]; // the K written values were live right here\n    }\n    if sum > 1e-30 {\n        let inv = 1.0 / sum;\n        for &vid in vids.iter() {\n            row[vid] *= inv; // bit-identical: +0.0 adds are exact anyway\n        }\n    }\n}\n".to_string(),
+        },
+        // ── stack-array-row-view-bridge — Vec<&[f32]> heap collect vs a
+        // fixed [&[f32]; MAX] stack bridge (A) ──
+        //
+        // Source: riir-gpu weaver_gpu_dflash.rs L134-146 (the POSITIVE
+        // instance: `h_dflash_slices: [&[f32]; 64]` built on the stack, passed
+        // as `&h_dflash_slices[..count]`). The anti-instance: the weaver
+        // bench (bench_weaver_gpu_436.rs L499-500 —
+        // `let h_dflash_refs: Vec<&[f32]> = ...collect()`, a heap alloc per
+        // call in the hot path). The idiom recurs at 5+ sites: katgpt-rs
+        // step_gdn_tree.rs L50-62 (build_marginals_view returns the array BY
+        // VALUE as the shared pub helper) + its mirrored twins (rollback +
+        // qwen_deltanet tree steps) + riir-engine dflash.rs L232-245 (the CPU
+        // wrapper this file mirrors).
+        //
+        // Distinct from caller-owned-split-scratch (mutable scratch carving),
+        // from flat-activation-slots-as-readback-target (flattens the
+        // readback destination — this is flat-to-nested view construction on
+        // already-host data), from ragged-pack-offset-table-fused-dispatch
+        // (device-side ragged packing — this is host-side uniform stride).
+        KernelRule {
+            rule_id: "stack-array-row-view-bridge".to_string(),
+            gpu_concept: "A host-side orchestration step holds a flat, densely-packed capture buffer (steps x row_len f32s) but the consumer API is shaped &[&[f32]] (per-row borrowed views — the API shape owned by the sibling CPU implementation). The naive bridge collects a Vec<&[f32]> — a heap allocation per call in the decode hot path (a live in-tree anti-instance: the weaver bench itself does let h_dflash_refs: Vec<&[f32]> = ...collect()), or worse copies into Vec<Vec<f32>>. The optimized bridge constructs the view on the STACK: a fixed-size [&[f32]; MAX_STEPS] initialized to &[], filled for count = steps.min(MAX), passed as &arr[..count] — 64 fat pointers = 1 KB of stack writes, zero heap, zero data copy (rows are borrows of the capture buffer). The pattern recurs at 5+ in-tree sites (katgpt-rs build_marginals_view returns the array by value as a shared pub helper; the rollback + qwen_deltanet tree steps mirror it per its doc; the engine dflash wrapper and this file inline it) — it is the established bridge idiom of the speculative-decode hot path. Distinct from caller-owned-split-scratch (carves ONE caller-owned MUTABLE scratch via split_at_mut for intermediate+output reuse inside a fn — this is an immutable borrowed-view bridge to a foreign API shape, no mutation, no scratch), from flat-activation-slots-as-readback-target (flattens the readback DESTINATION to kill a scatter copy — here nothing is read back; the flat buffer is already host-side and only the view shape changes, flat-to-nested, the opposite direction), and from ragged-pack-offset-table-fused-dispatch (device-side ragged packing — this is host-side uniform-stride view construction).".to_string(),
+            ref_shape: "// naive: heap-allocate the per-row view every call (decode hot path)\nfn submit_rows_naive(buf: &[f32], steps: usize, row_len: usize, sink: &mut dyn FnMut(&[&[f32]])) {\n    let rows: Vec<&[f32]> = (0..steps)\n        .map(|i| &buf[i * row_len..(i + 1) * row_len])\n        .collect(); // one heap alloc per call, 16 B fat pointers\n    sink(&rows);\n}\n".to_string(),
+            opt_pattern: "// optimized: fixed-max stack array of borrowed views — zero heap, zero copy\nfn submit_rows_stack(buf: &[f32], steps: usize, row_len: usize, sink: &mut dyn FnMut(&[&[f32]])) {\n    let mut views: [&[f32]; 64] = [&[]; 64];\n    let count = steps.min(64);\n    for (i, slot) in views.iter_mut().enumerate().take(count) {\n        let start = i * row_len;\n        let end = start + row_len;\n        *slot = &buf[start..end];\n    }\n    sink(&views[..count]); // 1 KB of stack writes; rows borrow the flat buffer\n}\n".to_string(),
+        },
+        // ── empty-slice-sentinel-launders-shape-violation — a defensive &[]
+        // sentinel type-checks past the shape contract into a swallowed Err (D) ──
+        //
+        // Source: riir-gpu weaver_gpu_dflash.rs L140-144 (the sentinel branch:
+        // `*slot = if end <= h_dflash_captured.len() { &...[start..end] }
+        // else { &[] };`) -> weaver_gpu_corrector.rs L636-644 (the consumer
+        // rejects the len-0 row with `Err(HiddenShape)`) -> dflash.rs L247
+        // (`let _ = dflash_predict_with_weaver_gpu(` — the swallow). The
+        // 3-layer composition is LIVE: an undersized capture buffer silently
+        // disables Weaver correction with zero observability. The same
+        // sentinel ships in the shared helper (katgpt-rs step_gdn_tree.rs
+        // L56-60) + the engine twin (riir-engine dflash.rs L239-243); the
+        // CPU swallow is inherited (step_gdn_tree.rs L358). Filed as Issue
+        // 697 H1 — the rule is the mechanism, the issue is the live chain.
+        //
+        // Distinct from launch-unchecked-caller-owned-size-contract (B29 —
+        // WHERE an explicit size contract is enforced; this is the sentinel
+        // that DEFEATS it while appearing safe — the negative space), from
+        // mask-sentinel-matches-reduction-identity (B35) +
+        // clamp-tile-indices-to-sentinel-discard-at-write (B17) (sentinels
+        // used CORRECTLY as identity/discard markers — this is the inverse:
+        // a sentinel that silently disables the guarded work).
+        KernelRule {
+            rule_id: "empty-slice-sentinel-launders-shape-violation".to_string(),
+            gpu_concept: "A row-view builder guards each slice with if end <= buf.len() { &buf[start..end] } else { &[] }, substituting an EMPTY slice when the flat capture buffer is undersized. The &[] row is type-correct (borrows fine, satisfies &[&[f32]]) but shape-invalid (len 0 != row_len), so it sails past the borrow checker and lands in the consumer's shape validation, which rejects it with an Err — which a let-_= orchestration caller then converts into a silent no-op (this exact 3-layer composition exists live: undersized capture -> sentinel row -> HiddenShape Err -> swallowed -> pipeline continues on UNCORRECTED marginals, zero log lines). The caller bug (wrong buffer sizing) is thereby laundered into silent quality degradation with zero observability. Delete the defensive branch and slice hard — Rust slice indexing IS the assertion (panics loudly on out-of-bounds in every profile), optionally fronted with a debug_assert! carrying the sizing contract (steps * row_len <= buf.len()); or propagate a precise error up. Never substitute a sentinel that type-checks but violates the shape contract. Distinct from launch-unchecked-caller-owned-size-contract (WHERE an explicit size contract is documented and enforced on unchecked launches — this is a defensive sentinel that DEFEATS the contract's enforcement while appearing safe, the negative space of that rule), from mask-sentinel-matches-reduction-identity and clamp-tile-indices-to-sentinel-discard-at-write (sentinels used CORRECTLY — identity elements that legitimately participate in a reduction, or discard markers at a write boundary — this is the anti-pattern inverse: a sentinel that silently disables the guarded work).".to_string(),
+            ref_shape: "// naive: the defensive &[] sentinel — type-correct, shape-INVALID\nfn build_views_sentinel(buf: &[f32], count: usize, row_len: usize) -> [&[f32]; 64] {\n    let mut views: [&[f32]; 64] = [&[]; 64];\n    for (i, slot) in views.iter_mut().enumerate().take(count) {\n        let start = i * row_len;\n        let end = start + row_len;\n        *slot = if end <= buf.len() { &buf[start..end] } else { &[] };\n        // the &[] row sails past the borrow checker into the consumer's\n        // shape validation -> Err -> caller swallows -> silent no-op\n    }\n    views\n}\n".to_string(),
+            opt_pattern: "// optimized: hard slice — indexing IS the assertion — + an explicit contract\nfn build_views_asserted(buf: &[f32], count: usize, row_len: usize) -> [&[f32]; 64] {\n    debug_assert!(\n        count * row_len <= buf.len(),\n        \"capture buffer undersized: need {count} x {row_len}, have {}\",\n        buf.len()\n    );\n    let mut views: [&[f32]; 64] = [&[]; 64];\n    for (i, slot) in views.iter_mut().enumerate().take(count) {\n        let start = i * row_len;\n        let end = start + row_len;\n        *slot = &buf[start..end]; // panics loudly on OOB in every profile\n    }\n    views\n}\n".to_string(),
+        },
     ])
 }
 
@@ -6774,7 +6925,7 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 320-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 325-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -6782,7 +6933,7 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (70 rules)
+    // A: Memory access patterns (73 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -6857,9 +7008,12 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "gpu-type-bridge-borrows-not-clones",
             "superseded-primitive-machinery-zombie",
             "expected-embedding-transposed-gemv-resident-head",
+            "mutable-input-scratch-residency-write-per-call",
+            "post-scatter-renorm-support-set-only",
+            "stack-array-row-view-bridge",
         ],
     ),
-    // B: Compute patterns (46 rules)
+    // B: Compute patterns (47 rules)
     (
         KernelCategory::Compute,
         "B: compute",
@@ -6910,6 +7064,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "rademacher-signs-over-gaussian-projection",
             "block-reduction-separate-scratch-runtime-strides",
             "softmax-entropy-via-shift-identity",
+            "topk-select-nth-over-full-vocab-sort",
         ],
     ),
     // C: Fusion patterns (32 rules)
@@ -6951,7 +7106,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "elementwise-offload-needs-device-side-anchor",
         ],
     ),
-    // D: Dispatch patterns (56 rules)
+    // D: Dispatch patterns (57 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -7012,6 +7167,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "per-position-scalar-factored-gemv-collapse",
             "refine-loop-invariant-prefix-elision",
             "runtime-identity-gate-cached-verdict-elides-side-projection",
+            "empty-slice-sentinel-launders-shape-violation",
         ],
     ),
     // E: Parallelism patterns (18 rules)
@@ -7298,8 +7454,9 @@ mod tests {
         // Batch 41 (6): riir-gpu production kernels — concurrent-disjoint-write-buffer-parallelizes-uploads, aliased-slot-allocate-replace-fallback-severs-binding, pool-slot-write-coalescing-owns-only-declared-ranges, pool-reservation-token-outlives-raw-view, gpu-type-bridge-borrows-not-clones, superseded-primitive-machinery-zombie (weight_buffer_cache.rs + kimi_k3_gpu_backward_sequence.rs — the KimiK3 backward sequence PRODUCTION caller path + the write substrate; Issue 693 H1/H2 production routing pinned + orphaned-write fallback + zombie LM-head machinery filed as Issue 694).
         // Batch 35 (8): riir-gpu production kernels — mask-sentinel-matches-reduction-identity, smem-staging-gated-by-cross-thread-reuse, kernelize-host-chain-after-sync-batching-floor, block-reduction-separate-scratch-runtime-strides, saturating-nonlinearity-recovery-breaks-near-cap, adapter-grad-join-mirrors-forward-delta-insertion-point, side-consumer-readback-alias-live-handle-for-dependent-dispatch, quadratic-attention-intermediates-recompute-from-linear-saves (gemma2_cubecl_train/ — the Gemma-2 training cluster: fused causal attention kernel Issue 430 Option B + hybrid LoRA training fwd/bwd).
         // Batch 42 (4): riir-gpu production kernels — refine-loop-invariant-prefix-elision, softmax-entropy-via-shift-identity, runtime-identity-gate-cached-verdict-elides-side-projection, expected-embedding-transposed-gemv-resident-head (gemma2_d2f/ mod.rs + gemma2_d2f_sc.rs — the Gemma-2 D2F block-causal decode cluster + Self-Conditioning; hazards filed as Issue 695).
-        // Total: 209. // (historical batch-30 snapshot; current 320)
-        assert_eq!(corpus.entries.len(), 320, "batches 1-42 should have 320 rules");
+        // Batch 43 (5): riir-gpu production kernels — mutable-input-scratch-residency-write-per-call, topk-select-nth-over-full-vocab-sort, post-scatter-renorm-support-set-only, stack-array-row-view-bridge, empty-slice-sentinel-launders-shape-violation (weaver_gpu_corrector.rs + weaver_gpu_dflash.rs — the Weaver speculative-decode GPU corrector cluster; hazards filed as Issue 697).
+        // Total: 209. // (historical batch-30 snapshot; current 325)
+        assert_eq!(corpus.entries.len(), 325, "batches 1-43 should have 325 rules");
     }
 
     #[test]
@@ -9801,6 +9958,82 @@ mod tests {
         }
     }
 
+    #[test]
+    fn batch43_rules_present() {
+        let corpus = build_kernel_seed_corpus();
+        let ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        // A (3 new): input residency + support-only renorm + stack view bridge
+        assert!(ids.contains(&"mutable-input-scratch-residency-write-per-call"), "input scratch residency");
+        assert!(ids.contains(&"post-scatter-renorm-support-set-only"), "support-only renorm");
+        assert!(ids.contains(&"stack-array-row-view-bridge"), "stack row-view bridge");
+        // B (1 new): select_nth over full-vocab sort
+        assert!(ids.contains(&"topk-select-nth-over-full-vocab-sort"), "select_nth topk");
+        // D (1 new): the &[] sentinel launders the shape violation
+        assert!(ids.contains(&"empty-slice-sentinel-launders-shape-violation"), "sentinel shape violation");
+    }
+
+    #[test]
+    fn batch43_concepts_covered() {
+        // Distinctive ASCII substrings located by rule_id (the 32a convention).
+        let corpus = build_kernel_seed_corpus();
+        let concept = |id: &str| -> String {
+            corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-43 rule '{id}' missing"))
+                .gpu_concept
+                .clone()
+        };
+        // A: mutable-input-scratch-residency-write-per-call (corrector.rs L461-477 vs L686-687/L729-737)
+        let c = concept("mutable-input-scratch-residency-write-per-call");
+        assert!(c.contains("same residency discipline")
+            && c.contains("device allocator service a new allocation request"), "input-residency concept");
+        // B: topk-select-nth-over-full-vocab-sort (corrector.rs L421-436 + L694-709)
+        let c = concept("topk-select-nth-over-full-vocab-sort");
+        assert!(c.contains("select_nth_unstable_by partitions in O(V) average")
+            && c.contains("the selection algorithm on the host side"), "select-nth concept");
+        // A: post-scatter-renorm-support-set-only (corrector.rs L547-563 + L797-812)
+        let c = concept("post-scatter-renorm-support-set-only");
+        assert!(c.contains("non-zero support is exactly the K positions")
+            && c.contains("no numerical risk"), "support-only renorm concept");
+        // A: stack-array-row-view-bridge (dflash.rs L134-146 + 5 in-tree sites)
+        let c = concept("stack-array-row-view-bridge");
+        assert!(c.contains("zero heap, zero data copy")
+            && c.contains("the established bridge idiom"), "stack-bridge concept");
+        // D: empty-slice-sentinel-launders-shape-violation (dflash.rs L140-144 -> L247)
+        let c = concept("empty-slice-sentinel-launders-shape-violation");
+        assert!(c.contains("but shape-invalid")
+            && c.contains("laundered into silent quality degradation"), "sentinel-laundering concept");
+    }
+
+    #[test]
+    #[cfg(not(feature = "kernel_verify"))]
+    fn batch43_pseudocode_parses() {
+        // G1 for Batch 43: every new rule's ref_shape AND opt_pattern must
+        // syn-parse as valid Rust (the L2 pruner verdict).
+        use crate::domain::HealDomain;
+        let corpus = build_kernel_seed_corpus();
+        let ids = [
+            "mutable-input-scratch-residency-write-per-call",
+            "topk-select-nth-over-full-vocab-sort",
+            "post-scatter-renorm-support-set-only",
+            "stack-array-row-view-bridge",
+            "empty-slice-sentinel-launders-shape-violation",
+        ];
+        for id in ids {
+            let entry = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-43 rule '{id}' missing"));
+            let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+            assert!(ref_verdict.parses, "batch-43 ref_shape for '{id}' must parse");
+            let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+            assert!(opt_verdict.parses, "batch-43 opt_pattern for '{id}' must parse");
+        }
+    }
+
 
 
     // ════════════════════════════════════════════════════════════════════
@@ -9814,7 +10047,7 @@ mod tests {
 
     #[test]
     fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-        // Every rule_id in the 320-rule corpus must appear in exactly one category.
+        // Every rule_id in the 325-rule corpus must appear in exactly one category.
         let corpus = build_kernel_seed_corpus();
         let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
         let mut categorized: Vec<&str> = Vec::new();
@@ -9845,12 +10078,12 @@ mod tests {
 
     #[test]
     fn kernel_categories_counts_match_plan_003_table() {
-        // Pin per-category rule counts to the Plan 003 table (updated for Batch 40).
+        // Pin per-category rule counts to the Plan 003 table (updated for Batch 43).
         let expected = [
-            (KernelCategory::MemoryAccess, 70),
-            (KernelCategory::Compute, 46),
+            (KernelCategory::MemoryAccess, 73),
+            (KernelCategory::Compute, 47),
             (KernelCategory::Fusion, 32),
-            (KernelCategory::Dispatch, 56),
+            (KernelCategory::Dispatch, 57),
             (KernelCategory::Parallelism, 18),
             (KernelCategory::FlashAttnTiling, 10),
             (KernelCategory::LinearAttnRecurrence, 19),
@@ -9872,7 +10105,7 @@ mod tests {
         }
         // Sum must equal 320.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 320, "Plan 003: category totals must sum to 320");
+        assert_eq!(total, 325, "Plan 003: category totals must sum to 325");
     }
 
     #[test]
@@ -9882,7 +10115,7 @@ mod tests {
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 320, "Plan 003: grouped corpus has {total} rules, expected 320");
+        assert_eq!(total, 325, "Plan 003: grouped corpus has {total} rules, expected 325");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");
