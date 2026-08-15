@@ -103,7 +103,7 @@ investigation log), `[~]` when deferred.
   - Overlap: none. Distinct from `o1-lookup` (that's algorithmic;
     this is constant-factor on the hash function itself).
 
-- [ ] **T-heap-box-str** · `box-str-immutable` · category: allocation · **Benchable**
+- [x] **T-heap-box-str** · `box-str-immutable` · category: allocation · **Benchable**
   - Source: perf-book `heap-allocations.md` + MS M-BOX-DST
   - Pattern: `Vec<String>` / owned `String` for immutable sequences →
     `Vec<Box<str>>` / `Box<str>`. Drops the `capacity` word (3-word → 2-word
@@ -111,14 +111,14 @@ investigation log), `[~]` when deferred.
   - Overlap: none. Distinct from `static-str` (that's String→&'static str for
     literals; this is owned-String→Box<str> for stored immutable data).
 
-- [ ] **T-heap-smallvec** · `smallvec-stack` · category: allocation · **Benchable**
+- [x] **T-heap-smallvec** · `smallvec-stack` · category: allocation · **Benchable**
   - Source: perf-book `heap-allocations.md` + reintech SmallVec
   - Pattern: `Vec<T>` for a usually-small collection (≤8 elements typical) →
     `SmallVec<[T; 8]>` (stack-allocates the common case, spills to heap on overflow).
   - Overlap: none. Distinct from `vec-with-capacity` (that pre-allocates heap;
     this avoids heap entirely for the common case). Needs `smallvec` dep in bench crate.
 
-- [ ] **T-heap-reuse-clear** · `reuse-allocation-clear` · category: allocation · **Benchable**
+- [x] **T-heap-reuse-clear** · `reuse-allocation-clear` · category: allocation · **Benchable**
   - Source: perf-book `heap-allocations.md` + MS M-MEM-REUSE
   - Pattern: allocate-fresh-per-call (`let mut v = Vec::new()` inside a hot fn) →
     reuse via `.clear()` on a caller-passed buffer (`fn hot(buf: &mut Vec<T>)`).
@@ -127,7 +127,7 @@ investigation log), `[~]` when deferred.
   - Overlap: none. This is the "scratch buffer" pattern from AGENTS.md optimization
     guidelines ("Reuse scratch buffers across loop iterations").
 
-- [ ] **T-heap-shrink-fit** · `shrink-to-fit-after-build` · category: allocation · **NotBenchable** (memory, not speed)
+- [x] **T-heap-shrink-fit** · `shrink-to-fit-after-build` · category: allocation · **NotBenchable** (memory, not speed)
   - Source: perf-book `heap-allocations.md` + MS M-SHRINK-TO-FIT
   - Pattern: long-lived `Vec` built by push-loop without capacity → `.shrink_to_fit()`
     before storing. Frees the ~2× over-allocation from doubling growth.
@@ -135,21 +135,21 @@ investigation log), `[~]` when deferred.
     even cost a realloc). Add as documented rule with `bench_spec: None` +
     `context_notes` noting it's a memory win, not a speed win.
 
-- [ ] **T-inline** · `inline-hot-fn` · category: inlining · **Benchable** (likely reject)
+- [-] **T-inline** · `inline-hot-fn` · category: inlining · **Benchable** (likely reject)
   - Source: perf-book `inlining.md` + reintech #[inline]
   - Pattern: small hot fn called in a tight loop → add `#[inline]`.
   - Honest prediction: **likely ParetoDominated.** LLVM inlines aggressively in
     release mode within a crate; `#[inline]` only helps cross-crate. The perf-book
     itself says the effect is "modest". TEST + record the honest finding either way.
 
-- [ ] **T-io-buffered** · `buffered-io` · category: io · **Benchable** (needs file I/O)
+- [x] **T-io-buffered** · `buffered-io` · category: io · **Benchable** (needs file I/O)
   - Source: perf-book `io.md`
   - Pattern: `File::read`/`File::write` per-line → `BufReader`/`BufWriter` wrapper.
     Each unbuffered syscall has ~µs overhead; buffering amortizes to ~ns/byte.
   - Bench: feasible in a temp crate (write temp file, read it back). Slower bench
     (I/O-bound) but valid. The `io` category is new.
 
-- [ ] **T-rayon** · `rayon-par-iter` · category: parallelism · **Benchable** (needs rayon dep)
+- [-] **T-rayon** · `rayon-par-iter` · category: parallelism · **Benchable** (needs rayon dep)
   - Source: perf-book `parallelism.md` + reintech Rayon
   - Pattern: sequential `.iter().map(expensive).collect()` → `.par_iter().map(expensive).collect()`
     for CPU-bound work where each item > ~5µs (rayon thread-pool overhead floor).
@@ -159,7 +159,7 @@ investigation log), `[~]` when deferred.
     thread-pool overhead (~5μs for rayon)". The bench must use expensive-enough items
     or it'll show rayon SLOWER (the overhead floor). Document the threshold in `context_notes`.
 
-- [ ] **T-box-variant** · `box-large-enum-variant` · category: layout · **NotBenchable** (size_of)
+- [x] **T-box-variant** · `box-large-enum-variant` · category: layout · **NotBenchable** (size_of)
   - Source: perf-book `type-sizes.md`
   - Pattern: enum with one rare large variant → `Box<LargeVariant>` to shrink the
     enum's size to `max(common_variants, Box.word)`. The common case avoids paying
@@ -167,14 +167,14 @@ investigation log), `[~]` when deferred.
   - Bench: NotBenchable (deterministic `size_of`), same class as `layout-reorder`.
     Add as documented rule.
 
-- [ ] **T-box-avoid** · `avoid-unnecessary-box` · category: allocation · **Benchable**
+- [x] **T-box-avoid** · `avoid-unnecessary-box` · category: allocation · **Benchable**
   - Source: perf-book `wrapper-types.md` + MS M-AVOID-INDIRECTION
   - Pattern: `Box<T>` where `T` is small (≤2 words) → `T` directly. The Box adds a
     heap indirection (cache miss) for no benefit when T fits in a register pair.
   - Overlap: distinct from `dyn-to-enum` (that's vtable devirt; this is removing a
     needless heap hop for a concrete small type).
 
-- [ ] **T-buildconfig** · build-configuration (PGO/LTO/codegen-units) · **Design-decision**
+- [x] **T-buildconfig** · build-configuration (PGO/LTO/codegen-units) · **Design-decision**
   - Source: perf-book `build-configuration.md` + Kobzol PGO article + reintech compiler flags
   - Pattern: `codegen-units=16` (default) → `1`; `lto=false` → `thin`; add PGO
     (`-Cprofile-generate` → run → `-Cprofile-use`); BOLT post-link.
@@ -191,7 +191,7 @@ chapters on processor architecture, OS primitives, or "build your own lock"
 exercises) are below. Chapters 4-9 are largely "build it yourself to learn"
 (exercises), not production recommendations — std/primitive alternatives win.
 
-- [ ] **T-scope-threads** · `scoped-threads` · category: concurrency · **Benchable**
+- [-] **T-scope-threads** · `scoped-threads` · category: concurrency · **Benchable**
   - Source: Mara Bos Ch1 (scoped threads) + Ch6 (Arc cost)
   - Pattern: `Arc<T>` + `thread::spawn` + `join` (heap-alloc the shared data + refcount
     inc/dec) → `thread::scope` (borrow shared data by reference, no Arc, no clone).
@@ -199,7 +199,7 @@ exercises) are below. Chapters 4-9 are largely "build it yourself to learn"
   - Overlap: none. New `concurrency` sub-pattern. Benchable (Arc alloc + 2 atomic
     ops vs zero).
 
-- [ ] **T-rwlock-read-heavy** · `rwlock-vs-mutex-read-heavy` · category: concurrency · **Benchable**
+- [-] **T-rwlock-read-heavy** · `rwlock-vs-mutex-read-heavy` · category: concurrency · **Benchable**
   - Source: Mara Bos Ch1 (RwLock) + Ch9
   - Pattern: `Mutex<T>` protecting read-heavy state (99% reads) → `RwLock<T>`
     (multiple concurrent readers). Mutex serializes all readers; RwLock allows
@@ -209,7 +209,7 @@ exercises) are below. Chapters 4-9 are largely "build it yourself to learn"
     is non-trivial. Bench must use a read-heavy workload or it'll show RwLock slower.
     Document the regime in `context_notes`.
 
-- [ ] **T-cas-to-fetch** · `cas-loop-to-fetch-op` · category: concurrency · **Benchable**
+- [-] **T-cas-to-fetch** · `cas-loop-to-fetch-op` · category: concurrency · **Benchable**
   - Source: Mara Bos Ch2 (compare_exchange vs fetch_add)
   - Pattern: `compare_exchange` loop for a simple increment (`loop { let o = x.load(); if x.cas(o, o+1).is_ok() { break } }`) → `fetch_add(1, Relaxed)`.
     The CAS loop can fail + retry under contention; fetch_add is a single hardware
@@ -217,7 +217,7 @@ exercises) are below. Chapters 4-9 are largely "build it yourself to learn"
   - Overlap: distinct from `mutex-to-atomic` (that's Mutex→Atomic; this is
     misused-Atomic→correct-Atomic). Common bug pattern.
 
-- [ ] **T-ordering-relaxed** · `ordering-relaxed-where-safe` · category: concurrency · **Benchable** (ARM-visible, x86 marginal)
+- [-] **T-ordering-relaxed** · `ordering-relaxed-where-safe` · category: concurrency · **Benchable** (ARM-visible, x86 marginal)
   - Source: Mara Bos Ch3 (Memory Ordering)
   - Pattern: `SeqCst` ordering for a counter that only needs atomicity (no
     cross-thread ordering dependency) → `Relaxed`. SeqCst inserts a fence on ARM/ARM64;
@@ -228,7 +228,7 @@ exercises) are below. Chapters 4-9 are largely "build it yourself to learn"
     Bench on M3 (ARM64) should show the fence cost; on x86 it may be a Tie.
   - Overlap: none.
 
-- [ ] **T-park-vs-spin** · `parking-vs-busy-spin` · category: concurrency · **Benchable**
+- [-] **T-park-vs-spin** · `parking-vs-busy-spin` · category: concurrency · **Benchable**
   - Source: Mara Bos Ch1 (thread parking) + Ch9 (avoid busy-looping)
   - Pattern: `while !ready { /* spin */ }` busy-wait → `while !ready { thread::park(); }`
     or condvar. Busy-spin burns 100% CPU + starves the thread that would set `ready`.
@@ -236,7 +236,7 @@ exercises) are below. Chapters 4-9 are largely "build it yourself to learn"
 
 ### Source C — Kobzol, *PGO and BOLT* (cargo-pgo)
 
-- [ ] **T-pgo** · profile-guided optimization · **Design-decision** (see T-buildconfig)
+- [x] **T-pgo** · profile-guided optimization · **Design-decision** (see T-buildconfig)
   - Source: Kobzol blog (cargo-pgo)
   - Pattern: PGO (instrumented build → run workload → rebuild with profile) gives
     ~10-20% on CPU-bound code; BOLT post-link adds ~2-5% more.
@@ -249,7 +249,7 @@ exercises) are below. Chapters 4-9 are largely "build it yourself to learn"
 (Items that overlap with perf-book candidates above are cross-referenced, not
 re-listed. New items only.)
 
-- [ ] **T-async-yield** · `async-yield-point` · category: async · **Benchable** (fairness, not speed)
+- [x] **T-async-yield** · `async-yield-point` · category: async · **Benchable** (fairness, not speed)
   - Source: MS M-YIELD-POINTS
   - Pattern: long-running CPU-bound `async fn` without `.await` → insert
     `yield_now().await` every 10-100µs of work. Without yield points, the task
@@ -257,7 +257,7 @@ re-listed. New items only.)
   - Bench: the win is fairness/latency-tail, not throughput. NotBenchable as a
     speed win; add with `context_notes` noting it's a latency-fairness rule.
 
-- [ ] **T-log-no-format** · `log-no-format-in-hot-loop` · category: allocation · **Benchable**
+- [x] **T-log-no-format** · `log-no-format-in-hot-loop` · category: allocation · **Benchable**
   - Source: MS M-LOG-OVERHEAD
   - Pattern: `log(format!("...{}", x))` inside a hot loop (allocates the String every
     iteration even if logging is disabled) → structured/tuple log args
@@ -266,7 +266,7 @@ re-listed. New items only.)
   - Overlap: none. Distinct from `format-concat-loop` (that's building an output
     string; this is logging overhead). Very common in instrumented hot paths.
 
-- [ ] **T-lift-hot-field** · `lift-hot-field-from-arc` · category: layout · **Benchable**
+- [-] **T-lift-hot-field** · `lift-hot-field-from-arc` · category: layout · **Benchable**
   - Source: MS M-AVOID-INDIRECTION
   - Pattern: `struct Item { config: Arc<Config> }` where `config.feature_flag` is
     checked on every hot call (2 pointer hops: Item→Config→Feature) → denormalize
@@ -275,7 +275,7 @@ re-listed. New items only.)
   - Overlap: distinct from `avoid-unnecessary-box` (that removes a Box; this
     denormalizes a field out of an Arc chain while keeping the Arc).
 
-- [ ] **T-async-future-size** · `async-future-size` · category: async · **NotBenchable** (size_of_val)
+- [x] **T-async-future-size** · `async-future-size` · category: async · **NotBenchable** (size_of_val)
   - Source: MS M-ASYNC-STACK-SIZE
   - Pattern: `async fn hot(large: Large)` embeds `Large` into the future's state
     machine (blows up `size_of_val(&future)`) → `fn hot(large: Large) -> impl Future`
@@ -286,7 +286,7 @@ re-listed. New items only.)
 
 (Most items overlap with perf-book/MS above — cross-referenced. New items only.)
 
-- [ ] **T-object-pool** · `object-pool-reuse` · category: allocation · **Benchable**
+- [-] **T-object-pool** · `object-pool-reuse` · category: allocation · **Benchable**
   - Source: reintech Object Pools
   - Pattern: allocate+drop in a hot loop (`for x in items { let buf = Vec::with_capacity(N); ... }`)
     → object pool (`Mutex<Vec<Vec<u8>>>` acquire/release; reuse allocations).
@@ -295,7 +295,7 @@ re-listed. New items only.)
     (third-party API); clear is when you own the signature. Both are "reuse alloc"
     but the mechanism differs.
 
-- [ ] **T-soa-layout** · `soa-vs-aos` · category: simd/layout · **Benchable**
+- [-] **T-soa-layout** · `soa-vs-aos` · category: simd/layout · **Benchable**
   - Source: reintech SoA vs AoS
   - Pattern: `Vec<Particle { x, y, z, vx, vy, vz }>` (AoS — processing `x` loads
     `y,z,vx,vy,vz` into cache unused) → `StructOfArrays { xs: Vec<f32>, ys: Vec<f32>, ... }`
@@ -305,7 +305,7 @@ re-listed. New items only.)
     this is the data layout across a collection). Big structural change but a
     classic HPC/simd pattern.
 
-- [ ] **T-avoid-clone** · `avoid-unnecessary-clone` · category: allocation · **Benchable**
+- [x] **T-avoid-clone** · `avoid-unnecessary-clone` · category: allocation · **Benchable**
   - Source: reintech + general Rust wisdom (surprisingly NOT in the current corpus!)
   - Pattern: `.clone()` of a large collection/String where a borrow `&` suffices
     (`fn process(data: Vec<u8>)` cloning on every call → `fn process(data: &[u8])`).
@@ -331,7 +331,7 @@ For each `- [ ]` task marked **Benchable** above, the workflow is:
 - [x] **T-heap-reuse-clear** — `reuse-allocation-clear` — DONE 2026-08-13, Mixed (3/4 Faster, carries context_notes)
 - [-] **T-inline** — `inline-hot-fn` — REJECTED 2026-08-13: ParetoDominated (0.73-0.75×, inline SLOWER). `#[inline(always)]` causes code bloat that hurts i-cache. With proper black_box to prevent constant folding, the inlined version is ~25% slower. LLVM's heuristics are better than human annotation.
 - [x] **T-io-buffered** — `buffered-io` — DONE 2026-08-13, ParetoDominant 99-132× (BufReader 8KB batches vs syscall per byte)
-- [ ] **T-rayon** — `rayon-par-iter` — REJECTED 2026-08-13: Out of scope (architectural). Parallelization requires adding a dep + restructuring code; the Mixed bench (parallel slower at N=1K, tie at N=10K, 7.4× at N=100K) also shows it's regime-gated by data size. A code healer can't meaningfully suggest "add rayon".
+- [-] **T-rayon** — `rayon-par-iter` — REJECTED 2026-08-13: Out of scope (architectural). Parallelization requires adding a dep + restructuring code; the Mixed bench (parallel slower at N=1K, tie at N=10K, 7.4× at N=100K) also shows it's regime-gated by data size. A code healer can't meaningfully suggest "add rayon".
 - [x] **T-box-avoid** — `avoid-unnecessary-box` — DONE 2026-08-13, ParetoDominant 9.6-42× (heap alloc per element)
 - [-] **T-scope-threads** — `scoped-threads` — REJECTED 2026-08-13: Tie (0.98-1.01×). Arc clone cost (~10ns) is negligible vs thread spawn (~7µs). The win is architectural (no Arc needed, borrow checker safety), not perf.
 - [-] **T-rwlock-read-heavy** — `rwlock-vs-mutex` — REJECTED 2026-08-13: ParetoDominated (0.94-0.96×, RwLock SLOWER). RwLock has more per-op overhead than Mutex. Win only materializes under TRUE parallelism (multiple concurrent readers), which the sequential harness doesn't exercise.
