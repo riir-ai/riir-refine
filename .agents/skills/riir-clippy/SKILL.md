@@ -100,6 +100,23 @@ cargo run --features latent_retrieval --bin cargo-heal -- --fix --write <target-
 - **Sibling safety**: never `git stash` sibling WIP; commit only your own
   hunks; isolate builds under `/tmp`; before blaming CI on riir-clippy,
   check whether `src/domains/*/bench.rs` WIP is the sibling's.
+- **Stale `rebase-merge` blocks rebases (2026-08-15, Batch 42)**: a
+  previous session's leftover `.git/rebase-merge/autostash` (the marker
+  file only, stash already applied back) makes `git status` say "currently
+  rebasing" + every rebase refuse with a misleading message. Verify the
+  autostash SHA's diff is byte-identical to the current WIP
+  (`git diff <sha>^ <sha> -- <files>` vs `git diff HEAD -- <files>`),
+  then `rm -rf .git/rebase-merge`.
+- **When remote diverged AND sibling WIP overlaps the remote commits**:
+  do NOT `git rebase --autostash` (the pop can conflict on their files).
+  Push via a temp worktree instead: `git worktree add /tmp/<wt>
+  origin/develop --detach` → `git -C /tmp/<wt> cherry-pick <my-sha>` →
+  `git -C /tmp/<wt> push origin HEAD:develop` → `git worktree remove` →
+  `git fetch` + `git update-ref refs/heads/develop origin/develop` (moves
+  the ref WITHOUT touching the tree) → `git reset --mixed HEAD` (clears
+  phantom staged changes) + `git checkout HEAD -- <committed-but-missing
+  files>` (restores files the sibling committed from another clone —
+  disjoint from the WIP set). Disk content of WIP files: untouched.
 - **GPU exclusivity before benches/gates**: `ps aux | grep -E
   "cargo|riir|katgpt" | grep -v grep` — no second compute consumer
   (Unity Editor + Zed are exempt). Bench 649: 12.3× correctness swing
