@@ -656,6 +656,42 @@
 //!   covered). Mining ALSO surfaced the layer_offset-dead-in-kernel
 //!   multi-layer hazard + the `create_uniform_buffer` doc-lie + the
 //!   per-dispatch bind-group family — filed as riir-ai Issue 686.
+//! - **Batch 34 (2026-08-15, Research 038):** the Gemma-4 TRAINING
+//!   cluster (`gemma4_cubecl_train/`: mod.rs + `backward_gpu.rs` — hybrid
+//!   GPU training forward + Phase 2.5 GPU backward; the training
+//!   counterpart of Batch 25's inference-side Gemma cluster):
+//!   `exact-op-parity-for-analytic-backward` (N — the training forward
+//!   evaluates the EXACT op the analytic backward differentiates;
+//!   fast_tanh-class approximations bias every gradient), `mirror-ring-
+//!   store-sliding-window-contiguity` (A — 2·sw mirrored ring makes any
+//!   ≤sw window contiguous by construction; raw-index reads need
+//!   `seq_len` ≤ 2·sw), `split-dispatch-expose-fused-intermediate` (D — a
+//!   fused chain that discards its intermediate forces consumers to
+//!   re-launch the producer; ship a split entry), `preallocated-
+//!   activation-slots-inplace-save` (A — save activations into
+//!   pre-sized [seq][dim] slots; the forward loop is alloc-free),
+//!   `hybrid-cpu-elementwise-gpu-throughput-sync-points` (D — GPU takes
+//!   only throughput-bound kernels; elementwise runs CPU-side between
+//!   the 4 per-layer syncs), `pre-transposed-consumer-layout-handles-
+//!   build-once` (L — backward's W^T materialized once as resident
+//!   handles under the frozen-base contract), `shape-matched-sibling-
+//!   weight-grads-share-input-loop` (C — wk+wv / gate+up rank-1 updates
+//!   share ONE walk of the shared input), `op-major-backward-loop-
+//!   inversion-batch-sequence-axis` (D — positions are free inside each
+//!   backward op stage; batch each stage into one GEMM + one readback),
+//!   `backward-helper-expose-shared-norm-statistic` (H — rmsnorm
+//!   backward must return `inv_rms`, not hide it from the gamma-grad
+//!   path). Corpus: **267 rules across 15 categories (A–O)**. TWO seeds
+//!   resolved by verification: the softcap backward does NOT recompute
+//!   tanh — it algebraically recovers it from the cached post-cap
+//!   logits (already `sigmoid-deriv-recovered-from-output`); the
+//!   dual-KV-cache "pattern" was REJECTED as wisdom — it's an avoidable
+//!   2-3× duplication (hazard H9). Bug yield filed as riir-ai Issue
+//!   687: mirrored-ring backward OOB panic for `seq_len` > 2·sw (P1,
+//!   latent), backward-handle staleness + self-contradictory `LoRA` doc
+//!   (P1), Phase 2 processing zero-gradient positions, the
+//!   ~2.06M-alloc and 345,088-round-trip storms, the CPU weight-grad
+//!   dominance contradicting the header's bottleneck claim, plus 8 more.
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
@@ -4970,6 +5006,277 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
             ref_shape: "// naive: Gaussian projection entries — each entry needs a Gaussian\n// sample (Box-Muller/Ziggurat: several RNG words + transcendentals),\n// and the f32 coefficient is itself rounded, so coefficient * x rounds\n// twice.\nfn gaussian_signs(n: usize) -> Vec<f32> {\n    (0..n).map(|_| gaussian_sample()).collect() // expensive per-entry RNG\n}\nfn project(input: &[f32], signs: &[f32]) -> f32 {\n    signs.iter().zip(input).map(|(s, x)| s * x).sum() // inexact product\n}\n".to_string(),
             opt_pattern: "// optimized: Rademacher ±1 entries — the JL guarantee holds up to\n// constants (Achlioptas); generation is one coin flip per entry, ±1.0\n// is exact in f32, and s * x is exact (sign-bit-only effect) —\n// strength-reducible to a conditional negate in a hotter consumer\nfn rademacher_signs(n: usize) -> Vec<f32> {\n    (0..n)\n        .map(|_| if coin_flip() { 1.0 } else { -1.0 }) // 1 random bit/entry\n        .collect()\n}\nfn project(input: &[f32], signs: &[f32]) -> f32 {\n    // as shipped: plain multiply (exact for ±1 operands)\n    signs.iter().zip(input).map(|(s, x)| s * x).sum()\n}\n".to_string(),
         },
+        // ════════════════════════════════════════════════════════════════════
+        // Batch 34 (Research 038): riir-gpu production kernels — the Gemma-4
+        // training cluster (gemma4_cubecl_train/: mod.rs + backward_gpu.rs —
+        // hybrid GPU training forward + Phase 2.5 GPU backward; the training
+        // counterpart of Batch 25's inference-side Gemma cluster). 9 rules.
+        // Bug yield filed as riir-ai Issue 687 (mirrored-ring backward OOB
+        // for seq_len > 2*sw + backward-handle staleness/LoRA doc
+        // contradiction + Phase 2 processes zero-grad positions + the
+        // alloc/round-trip storms + 9 more).
+        // ════════════════════════════════════════════════════════════════════
+        // ── exact-op-parity-for-analytic-backward — fast approx → exact op in the training forward (N) ──
+        // Source: riir-gpu gemma4_cubecl_train/mod.rs L44-48 ("//! The
+        // training forward uses **standard tanh** (not `fast_tanh`) for
+        // GeGLU and logit softcapping — ... so the analytic backward's
+        // tanh-based derivative is exact."), L198-205 (softcap site:
+        // `*v = cap * (*v / cap).tanh();` with the "STANDARD tanh, not
+        // fast_tanh" comment), L375-379 (GeGLU site), L459-470
+        // (geglu_standard_tanh helper); consumer side riir-engine
+        // gemma4_train/backward.rs L268-272 (`let t_val = arg.tanh();
+        // g_dot[ti] = g_s[ti] * scale * (1.0 - t_val * t_val);`) and
+        // gegelu_backward L80-89 — the backward differentiates standard
+        // tanh, so the training forward MUST evaluate it.
+        //
+        // Doc caveat (riir-ai Issue 687 H13): the header's contrast claim
+        // ("the inference forward (Phase 1) uses fast_tanh") is FALSE for
+        // the GPU path — gemma4_cubecl's gelu_tanh + softcap both call
+        // `.tanh()`; fast_tanh exists only in the CPU inference softcap
+        // (riir-engine gemma4.rs). The RULE stands on the code + the CPU
+        // contrast; the header misattribution is filed separately.
+        // Distinct from dtype-restricted-backend (dtype-gated fast paths
+        // — this gates on train-vs-infer PHASE), from fast-math-
+        // contraction-behind-feature-flag (bit-identity across builds —
+        // this is gradient correctness across forward/backward op pairs),
+        // and from derived-scalar-host-computed-in-uniform (host/kernel
+        // parity — this is forward/backward parity).
+        KernelRule {
+            rule_id: "exact-op-parity-for-analytic-backward".to_string(),
+            gpu_concept: "when a hand-written analytic backward differentiates a SPECIFIC implementation of an op (d/dx[c·tanh(x/c)] = 1−tanh²(x/c)), the training forward must evaluate that exact op — reusing an inference-speed approximation (fast_tanh, polynomial) makes the forward value and its derivative come from two different functions, so every gradient is systematically biased wherever the approximation deviates (worst mid-range |x|), and a finite-difference gradient oracle only passes to the approximation error. The training path pays the slower exact op; the inference path keeps the approximation. Distinct from dtype-restricted-backend (gates the fast path on dtype — this gates on train-vs-infer phase), from fast-math-contraction-behind-feature-flag (bit-identity across builds — this is gradient correctness across the forward/backward op pair), and from derived-scalar-host-computed-in-uniform (host/kernel scalar parity — this is forward/backward op parity).".to_string(),
+            ref_shape: "// naive: the training forward reuses the INFERENCE activation helper\n// (fast_tanh / polynomial approximation \"for speed\") while the analytic\n// backward differentiates the true tanh:\n//   forward:  y = fast_gelu(g)          // ~= gelu(g) but NOT equal\n//   backward: dy/dg = f'(true tanh)     // derivative of a DIFFERENT fn\nfn geglu_train_naive(gate: &[f32], up: &[f32], out: &mut [f32]) {\n    for ((o, &g), &u) in out.iter_mut().zip(gate.iter()).zip(up.iter()) {\n        *o = fast_tanh_gelu(g) * u; // forward != what backward differentiates\n    }\n}\n".to_string(),
+            opt_pattern: "// optimized: a dedicated training-path activation that evaluates the\n// EXACT op the analytic backward differentiates. Slower op, exact\n// gradient: the softcap backward g = scale * (1 - tanh^2(x/cap))\n// assumes the forward computed cap*tanh(x/cap).\nfn geglu_standard_tanh(gate: &[f32], up: &[f32], out: &mut [f32]) {\n    const SQRT_2_OVER_PI: f32 = 0.797_884_6;\n    for ((o, &g), &u) in out.iter_mut().zip(gate.iter()).zip(up.iter()) {\n        let inner = SQRT_2_OVER_PI * (g + 0.044715 * g * g * g);\n        let t = inner.tanh(); // true tanh — matches backward's (1 - t*t)\n        *o = 0.5 * g * (1.0 + t) * u;\n    }\n}\n".to_string(),
+        },
+        // ── mirror-ring-store-sliding-window-contiguity — single ring + wrap assembly → mirrored double-store (A) ──
+        // Source: riir-gpu gemma4_cubecl_train/mod.rs L473-500
+        // (store_kv_into_multi_cache: "writes at `pos % sw` AND mirrors to
+        // `pos % sw + sw`, so any window of ≤ `sw` contiguous positions is
+        // always contiguous in the buffer"); the substrate contract
+        // katgpt-transformer kv_cache.rs L57-61 + L186-188 (capacity
+        // `2 * sw * kvd`, "Mirrored: 2× sliding_window for
+        // contiguous-window reads"); the consumer riir-engine
+        // gemma4_train/mod.rs L618-622 (`let read_start = (t_start %
+        // sw_cache) * kvd;` then ONE contiguous slice — zero wrap
+        // handling). The contrast that proves the tradeoff in the SAME
+        // crate: gemma4_cubecl/kv_cache.rs get_combined_kv_window
+        // L110-124 — the un-mirrored single ring pays the wrap-assembly
+        // branch (primary + wrapped extends) whenever the window crosses
+        // the seam.
+        //
+        // Invariant (must hold): raw-index reads are valid only while
+        // every attended t < 2·sw (seq_len ≤ 2·sliding_window) — no
+        // assertion guards it (riir-ai Issue 687 H1). Distinct from
+        // combined-kv-buffer-keys-then-values (upload layout — composes
+        // with this) and from the IR modulo-strength-reduction rules
+        // (compile % faster — this REMOVES the modulo from the read path
+        // via layout).
+        KernelRule {
+            rule_id: "mirror-ring-store-sliding-window-contiguity".to_string(),
+            gpu_concept: "a sliding-window KV ring of logical capacity sw can be physically allocated as 2·sw slots with each write landing at BOTH pos % sw and pos % sw + sw, so any attended window of ≤ sw positions is contiguous by construction — readers take one contiguous slice (or raw t·kvd indexing valid while t < 2·sw) and never pay per-element modulo or wrap-assembly branches in the hot attention loop. Cost: 2× KV memory + a second bounded memcpy per store. The un-mirrored single ring pays the wrap branch at every seam-crossing window (the same crate's GPU cache does exactly that — the contrast proves the tradeoff). Invariant: raw-index reads require seq_len ≤ 2·sliding_window; enforce it with an assert at the boundary. Distinct from combined-kv-buffer-keys-then-values (the [keys|values] upload layout — composes with this) and from IR modulo strength reduction (compiles % faster — this deletes the modulo from the read path via layout).".to_string(),
+            ref_shape: "// naive: single ring of capacity sw — every read window that crosses\n// the ring seam must be assembled from two disjoint slices (or indexed\n// with per-element modulo); the wrap branch lives in the hot loop.\nfn store_kv_naive(key: &mut [f32], k: &[f32], pos: usize, sw: usize, kvd: usize) {\n    let ring = pos % sw;\n    key[ring * kvd..ring * kvd + kvd].copy_from_slice(k); // one copy\n}\nfn read_window_naive(key: &[f32], t_start: usize, n_pos: usize, sw: usize, kvd: usize) -> Vec<f32> {\n    let mut out = vec![0.0f32; n_pos * kvd];\n    for ti in 0..n_pos {\n        let t = (t_start + ti) % sw; // per-element modulo in the hot loop\n        out[ti * kvd..ti * kvd + kvd].copy_from_slice(&key[t * kvd..t * kvd + kvd]);\n    }\n    out\n}\n".to_string(),
+            opt_pattern: "// optimized: mirrored ring — write BOTH halves (2*sw slots); any\n// window of <= sw positions starting at (t_start % sw) is ONE contiguous\n// slice. Invariant: raw-index reads are valid while t < 2*sw, i.e.\n// seq_len <= 2*sliding_window — assert it at the boundary.\nfn store_kv_mirrored(key: &mut [f32], v: &mut [f32], k: &[f32], val: &[f32], pos: usize, sw: usize, kvd: usize) {\n    let ring_pos = pos % sw;\n    let primary_off = ring_pos * kvd;\n    let mirror_off = (ring_pos + sw) * kvd; // second copy at +sw\n    key[primary_off..primary_off + kvd].copy_from_slice(k);\n    key[mirror_off..mirror_off + kvd].copy_from_slice(k);\n    v[primary_off..primary_off + kvd].copy_from_slice(val);\n    v[mirror_off..mirror_off + kvd].copy_from_slice(val);\n}\nfn read_window_mirrored(key: &[f32], t_start: usize, n_pos: usize, sw: usize, kvd: usize) -> &[f32] {\n    let start = (t_start % sw) * kvd;\n    &key[start..start + n_pos * kvd] // zero wrap handling\n}\n".to_string(),
+        },
+        // ── split-dispatch-expose-fused-intermediate — re-launch producer → split entry returning both outputs (D) ──
+        // Source: riir-gpu gemma4_cubecl_train/mod.rs L325-344 — the file
+        // documents its own anti-pattern: "The GPU fused attention+Wo
+        // path doesn't expose attn_out separately. ... To get attn_out, we
+        // re-run just the attention (no Wo) on GPU. This is one extra GPU
+        // launch per layer — acceptable for training (not the hot
+        // inference path). The alternative (split dispatch like Gemma-2's
+        // `dispatch_attention_wo_split`) would be cleaner"; upstream
+        // gemma4_cubecl/dispatch.rs L152 ("Returns Wo output `[n_embd]`")
+        // + L176-214 (attn_out_handle written by attention, consumed by
+        // the Wo GEMV, NEVER read back — discarded); the fix exists as
+        // the proven sibling precedent gemma2_cubecl/dispatch.rs L353-362
+        // (dispatch_attention_wo_split: "returns BOTH `attn_out` (q_dim)
+        // and `wo_out` (n_embd) ... Used when LoRA is active so the
+        // O-projection LoRA delta can be applied with `attn_out` as
+        // input").
+        //
+        // Cost of the re-run (riir-ai Issue 687 H8): per layer per
+        // position the re-dispatch rebuilds the combined KV window
+        // (+1 CPU copy), re-uploads Q + KV (+2 uploads), re-launches
+        // attention (+1 launch), adds its own GPU→CPU sync (+1 sync) —
+        // ×48 layers × seq_len per step. Distinct from
+        // merge-dispatches-into-single-compute-pass (merging passes —
+        // this is the RETURN SURFACE of an already-fused chain) and from
+        // fan-out-shared-input-single-sync (N siblings of one input —
+        // this is ONE chain with two outputs of different lifetimes).
+        KernelRule {
+            rule_id: "split-dispatch-expose-fused-intermediate".to_string(),
+            gpu_concept: "a fused dispatch chain (attention → Wo) that returns only the final output makes its intermediate invisible to callers who need it (activation saving for an analytic backward, LoRA insertion at the chain seam, tracing) — forcing them to re-launch the whole producer. Provide a split entry that returns both outputs from ONE execution (both read in the same sync); the fused entry stays the default for consumers that don't need the intermediate. The intermediate already exists on-device — the fused entry reads only the chain tail and discards it; the split entry is the same two kernels plus one extra readback, never a second launch + second KV-window build + second sync. Distinct from merge-dispatches-into-single-compute-pass (merging dependent dispatches into fewer passes — this is the return surface of one already-fused chain) and from fan-out-shared-input-single-sync (N sibling consumers of one input — this is one chain with two outputs of different lifetimes).".to_string(),
+            ref_shape: "// naive: the fused dispatch returns only the chain's final output; a\n// consumer that also needs the intermediate (training saves attn_out\n// for the backward) re-launches the whole producer — extra launch +\n// extra KV-window rebuild + extra sync, per layer per position.\nfn training_layer_naive(gpu: &Gpu, q: &[f32], layer: usize) -> (Vec<f32>, Vec<f32>) {\n    let wo_out = gpu.dispatch_attention_wo(layer, q); // attn_out computed, DISCARDED\n    let attn_out = gpu.dispatch_attention_only(layer, q); // SECOND attention launch\n    (wo_out, attn_out)\n}\n".to_string(),
+            opt_pattern: "// optimized: a split entry on the dispatch surface — same two\n// kernels, ONE execution, both outputs read in the same sync. Inference\n// consumers keep the fused entry (cheaper); training/LoRA/trace\n// consumers take the split entry and never re-launch.\nfn dispatch_attention_wo_split(gpu: &Gpu, layer: usize, q: &[f32]) -> (Vec<f32>, Vec<f32>) {\n    let attn_handle = gpu.launch_attention(layer, q); // kernel 1\n    let wo_handle = gpu.launch_gemv_consuming(&attn_handle); // kernel 2, chain intact\n    let attn_out = gpu.read_handle(&attn_handle); // one sync reads both\n    let wo_out = gpu.read_handle(&wo_handle);\n    (wo_out, attn_out)\n}\n".to_string(),
+        },
+        // ── preallocated-activation-slots-inplace-save — push-Vec storage → pre-sized in-place slots (A) ──
+        // Source: riir-gpu gemma4_cubecl_train/mod.rs — 16 save sites,
+        // all the same shape: L190/L208 (logits), L245-246 (x_input),
+        // L256 (normed_attn), L263-265 (q/k/v pre_norm), L278-279
+        // (q/k pre_rope), L284 (v_cached), L290 (q_post_rope), L345
+        // (attn_out), L348 (x_after_wo), L357 (x_after_attn), L367
+        // (normed_mlp), L372-373 (gate/up), L381 (hidden), L392
+        // (x_after_down) — every one `layer_act.field[pos][..dim]
+        // .copy_from_slice(&src[..dim])` into the caller-allocated
+        // Gemma4TrainingActivations, size-asserted once (L115-119) and
+        // constructed for the whole sequence up front. Every saved tensor
+        // is consumed by the backward (verified: hidden feeds the
+        // down_proj weight-grad outer product, gate/up + normed_mlp feed
+        // the gate/up grads) — the save set is complete, not speculative.
+        //
+        // Distinct from activation-recompute-budget (H — the WHAT to
+        // store vs recompute axis; this is the HOW to store axis:
+        // pre-sized slots, in-place copies, zero alloc) and from
+        // staging-reuse-grow-only-map-prefix (GPU readback staging —
+        // this is forward-side activation storage).
+        KernelRule {
+            rule_id: "preallocated-activation-slots-inplace-save".to_string(),
+            gpu_concept: "a training forward followed by an analytic backward should write every intermediate it will need directly into pre-allocated activation storage indexed [layer][pos][..dim] via copy_from_slice at the moment it is produced — the save is a bounded memcpy into already-reserved memory, so the per-position loop performs zero allocations regardless of how many tensors are saved; size is asserted once up front (activations.seq_len == seq_len) instead of per-site. The caller allocates for the whole sequence at construction; the save sites become branch-free bounded copies with no push/Vec::new in the loop. Distinct from activation-recompute-budget (the WHAT to store vs recompute axis — this is the HOW-to-store axis) and from staging-reuse-grow-only-map-prefix (GPU readback staging growth — this is forward-side activation storage).".to_string(),
+            ref_shape: "// naive: save activations by pushing fresh Vecs into per-step\n// storage — allocator churn scales with layers * positions * tensors.\nfn save_naive(storage: &mut Vec<Vec<Vec<f32>>>, layer: usize, pos: usize, x: &[f32]) {\n    while storage.len() <= layer {\n        storage.push(Vec::new());\n    }\n    while storage[layer].len() <= pos {\n        storage[layer].push(Vec::new());\n    }\n    storage[layer][pos] = x.to_vec(); // alloc per save site\n}\n".to_string(),
+            opt_pattern: "// optimized: pre-sized [seq_len][dim] slots at construction; every\n// save is a bounded in-place copy — the forward loop is allocation-free\n// no matter how many intermediates are captured.\nstruct LayerAct {\n    x_input: Vec<Vec<f32>>, // [seq_len][n], pre-allocated\n}\nfn save_opt(act: &mut LayerAct, pos: usize, n: usize, hidden: &[f32]) {\n    act.x_input[pos][..n].copy_from_slice(&hidden[..n]); // no alloc\n}\n".to_string(),
+        },
+        // ── hybrid-cpu-elementwise-gpu-throughput-sync-points — all-GPU elementwise → GPU throughput ops only, CPU fills sync gaps (D) ──
+        // Source: riir-gpu gemma4_cubecl_train/mod.rs L16-32 (the phase
+        // table: "Training forward | GPU (this module) | GEMV (Q/K/V, Wo,
+        // gate/up/down, lm_head) + flash attention + CPU RMSNorm/RoPE/
+        // QKNorm/GeGLU" + "The forward dominates compute ... GPU-
+        // accelerating just the forward GEMVs captures most of the
+        // speedup") + the explicit per-sync annotations L258 ("// GPU:
+        // QKV GEMVs (batched, 1 sync) → Sync 1."), L311 ("// GPU:
+        // Attention + Wo (2 launches, 1 sync) → Sync 2."), L369 ("// GPU:
+        // Gate + Up GEMVs (batched, 1 sync) → Sync 3."), L383 ("// GPU:
+        // Down GEMV (1 sync) → Sync 4.") with CPU ops filling every gap
+        // (L254, L267, L286, L350, L375, L394). The sibling module's
+        // header records the measured claim for the same split on the
+        // backward side (gemma2_cubecl_train: "~5-10× speedup over the
+        // pure-CPU backward ... without writing any new GPU kernels").
+        //
+        // Distinct from offload-cpu-bottleneck-to-gpu-kernel (the
+        // INVERSE decision — move a CPU data-prep bottleneck INTO a GPU
+        // kernel; this rule is the decision BOUNDARY + sync-point
+        // choreography for keeping elementwise on the CPU side).
+        KernelRule {
+            rule_id: "hybrid-cpu-elementwise-gpu-throughput-sync-points".to_string(),
+            gpu_concept: "in a hybrid training forward, route only the throughput-bound kernels (GEMVs, attention — batched where siblings share an input) to the GPU and keep latency-bound elementwise ops (norms, RoPE, activation) on the CPU BETWEEN dispatches — each sync point returns data the CPU transforms immediately and the next dispatch re-uploads, so launch overhead is paid only where compute dominates it. The sync-point choreography is the design artifact: per layer per position exactly 4 syncs (qkv → attn+wo → gate_up → down), each a batched dispatch of the expensive ops, with every elementwise op executing launch-free in the gaps. Pushing the elementwise ops to GPU instead costs upload+launch+sync for a few µs of work each; keeping the GEMVs on CPU forfeits the entire throughput win. Distinct from offload-cpu-bottleneck-to-gpu-kernel (the inverse decision — moving a CPU data-prep bottleneck into a GPU kernel; this is the boundary + choreography for what stays CPU).".to_string(),
+            ref_shape: "// naive: all-GPU — every elementwise op becomes its own kernel\n// launch + sync; at n_embd ~ 4K the launch overhead exceeds the op's\n// cost.\nfn rmsnorm_gpu_dispatch(gpu: &Gpu, x: &mut Vec<f32>, gamma: &[f32], eps: f32) {\n    let h = gpu.upload(x); // upload\n    let o = gpu.launch_rmsnorm(&h, gamma, eps); // launch for a ~us pass\n    *x = gpu.read(&o); // sync + download — all for microseconds of work\n}\n".to_string(),
+            opt_pattern: "// optimized: hybrid split with sync-point choreography — GPU takes\n// only the throughput-bound kernels (batched where siblings share an\n// input); the CPU transforms data AT the sync points between\n// dispatches. Elementwise ops never launch.\nfn layer_hybrid(gpu: &Gpu, hidden: &mut Vec<f32>, pos: usize) {\n    let (mut q, mut k, _v) = gpu.dispatch_qkv(hidden); // GPU, 1 sync (batched)\n    qk_norm_rope_cpu(&mut q, &mut k, pos); // CPU in the gap — no launch\n    let wo_out = gpu.dispatch_attention_wo(&q); // GPU, 1 sync\n    post_attn_norm_residual_cpu(hidden, &wo_out); // CPU\n    let (gate, up) = gpu.dispatch_gate_up(hidden); // GPU, 1 sync (batched)\n    let h = geglu_cpu(&gate, &up); // CPU\n    let down = gpu.dispatch_gemv_down(&h); // GPU, 1 sync\n    post_mlp_norm_residual_cpu(hidden, &down); // CPU\n}\n".to_string(),
+        },
+        // ── pre-transposed-consumer-layout-handles-build-once — per-step transpose → build-once dual-layout residency (L) ──
+        // Source: riir-gpu gemma4_cubecl_train/backward_gpu.rs L20-26
+        // ("The backward GEMV `g_input = W^T @ g_output` is computed as
+        // `dispatch_gemv(&w_t, &g_output, cols, rows)` ... The
+        // pre-transpose is a one-time cost at training setup (call
+        // `build_backward_handles` once)."), L69-79 (Gemma4BackwardHandles
+        // struct: 7 per-layer transposed handles + wte_t, "Built once ...
+        // and reused across training steps"), L92-166 (the builder: read
+        // handle → CPU transpose_f32 → re-upload, per weight). Triple
+        // cross-model recurrence: gemma2_cubecl_train/mod.rs L93-103 +
+        // L931-935 ("Build backward handles ONCE — this transposes all 7
+        // weights per layer (+ lm_head) and uploads to GPU. ~2× weight
+        // storage, one-time cost.") and gemma4_q4k_train/mod.rs L570-578
+        // (the memoized `if self.backward_handles.is_none()` variant).
+        //
+        // Honest caveats: (1) the setup transpose is a naive CPU scalar
+        // transpose — at 12B scale (47.8 GB) that is minute-class; the
+        // transpose itself should be a GPU tiled kernel when setup cost
+        // matters (offload-cpu-bottleneck-to-gpu-kernel). (2) The
+        // frozen-base contract needs enforcement — a weight replacement
+        // does NOT invalidate the handles (riir-ai Issue 687 H2).
+        // Distinct from host-cache-immutable-device-weights (host CPU
+        // copy of device bytes — this materializes DIFFERENT bytes, the
+        // transpose), from immutable-operand-upload-at-set-creation
+        // (upload placement — this is the derived second LAYOUT), and
+        // from block-contiguous-weight-layout (one layout for one
+        // kernel — this is dual-layout residency for two pipeline
+        // stages).
+        KernelRule {
+            rule_id: "pre-transposed-consumer-layout-handles-build-once".to_string(),
+            gpu_concept: "when a frozen operand is consumed by a different pipeline stage in the OPPOSITE layout (backward needs W^T @ g while forward stores W row-major), materialize the consumer-layout copy ONCE at training setup into resident handles and reuse it across all steps — trading ~2× weight memory for zero per-step transposes or strided reads. Validity rests on the frozen-base contract: rebuild only when the base weights are replaced (and ENFORCE that — a hot-swap must invalidate the handles or they silently transpose stale bytes). The alternative shapes are both worse: per-step CPU transpose (read+transpose+upload every step) or a GEMV kernel reading row-major W with transposed/strided access (cache-hostile). Distinct from host-cache-immutable-device-weights (caches the SAME bytes on host — this materializes different bytes, the transpose), from immutable-operand-upload-at-set-creation (upload placement of a never-changing operand — this is the derived second layout), and from block-contiguous-weight-layout (one layout for one kernel — this is dual-layout residency for two pipeline stages).".to_string(),
+            ref_shape: "// naive: the backward GEMV needs W^T — pay the transpose (or a\n// strided-read GEMV) every step.\nfn backward_step_per_step_transpose(gpu: &Gpu, w: &Handle, g_out: &[f32], rows: usize, cols: usize) -> Vec<f32> {\n    let cpu_w = gpu.read_handle(w); // device -> host, EVERY step\n    let w_t = transpose_f32(&cpu_w, rows, cols); // CPU transpose, EVERY step\n    let w_t_handle = gpu.create_from_slice(&w_t); // host -> device, EVERY step\n    gpu.dispatch_gemv(&w_t_handle, g_out, cols, rows)\n}\n".to_string(),
+            opt_pattern: "// optimized: materialize the consumer-layout copy ONCE at setup and\n// keep both layouts resident (~2x memory); the frozen-base contract\n// makes it valid — rebuild only when the base weights are replaced,\n// and invalidate on hot-swap so stale handles cannot be used.\nstruct BackwardHandles {\n    w_t: Handle, // the pre-transposed [cols x rows] resident copy\n}\nfn build_backward_handles(gpu: &Gpu, w: &Handle, rows: usize, cols: usize) -> BackwardHandles {\n    let cpu_w = gpu.read_handle(w); // one-time\n    let w_t = transpose_f32(&cpu_w, rows, cols);\n    BackwardHandles { w_t: gpu.create_from_slice(&w_t) }\n}\nfn backward_step(gpu: &Gpu, h: &BackwardHandles, g_out: &[f32], cols: usize, rows: usize) -> Vec<f32> {\n    gpu.dispatch_gemv(&h.w_t, g_out, cols, rows) // zero per-step transpose\n}\n".to_string(),
+        },
+        // ── shape-matched-sibling-weight-grads-share-input-loop — two walks of x → one loop, two FMA streams (C) ──
+        // Source: riir-gpu gemma4_cubecl_train/backward_gpu.rs L532-540
+        // (wk+wv: `for row in 0..kvd { let gr_k = g_k_pre_norm[row]; let
+        // gr_v = g_v_pre_norm[row]; ... layer_grad.attn_wk[w_off + col]
+        // += gr_k * normed_attn[col]; layer_grad.attn_wv[w_off + col] +=
+        // gr_v * normed_attn[col]; }`) and L358-366 (gate+up over
+        // normed_mlp, same shape); the precondition is visible in the
+        // code — wq gets its OWN loop (L525-531) because q_dim != kvd;
+        // only the row-count-matched pairs merge.
+        //
+        // Honest caveat: at this CPU instantiation with n=3840 (15 KB,
+        // L1-resident) the bandwidth win is marginal — the win is loop-
+        // overhead halving; the load-traffic win is real on device or
+        // when the shared input exceeds cache. Distinct from
+        // fuse-weight-grad-input-grad-single-matrix-visit (ONE matrix,
+        // two gradient ROLES — this is TWO matrices, one input, same
+        // role) and from fuse-sibling-target-grads-single-kernel (N
+        // sibling TARGETS fused per kernel kind on device — this is the
+        // host-loop axis: the shared INPUT operand visited once).
+        KernelRule {
+            rule_id: "shape-matched-sibling-weight-grads-share-input-loop".to_string(),
+            gpu_concept: "when two sibling weight matrices have identical output-row counts AND consume the identical saved input operand (g_W_k += g_k ⊗ x and g_W_v += g_v ⊗ x), accumulate both rank-1 updates in ONE pass over the shared input — load x[col] once, feed two FMA streams — instead of walking the input (and the whole index space) twice. Precondition is shape-matched rows (q_dim ≠ kvd keeps wq in its own loop — only row-count-matched pairs merge). Honest regime note: at CPU scale with an L1-resident input the win is loop-overhead halving; the load-traffic win is real on device or when the shared input exceeds cache. Distinct from fuse-weight-grad-input-grad-single-matrix-visit (one matrix, two gradient roles — this is two matrices, one input, same role) and from fuse-sibling-target-grads-single-kernel (N sibling targets fused per kernel kind on device — this is the host-loop axis where the shared input is visited once).".to_string(),
+            ref_shape: "// naive: two separate accumulations, each walks the shared input\nfn grad_wk_wv_naive(g_k: &[f32], g_v: &[f32], x: &[f32], wk: &mut [f32], wv: &mut [f32], kvd: usize, n: usize) {\n    for row in 0..kvd {\n        let off = row * n;\n        for col in 0..n {\n            wk[off + col] += g_k[row] * x[col]; // x walked 1st time\n        }\n    }\n    for row in 0..kvd {\n        let off = row * n;\n        for col in 0..n {\n            wv[off + col] += g_v[row] * x[col]; // x walked AGAIN\n        }\n    }\n}\n".to_string(),
+            opt_pattern: "// optimized: shape-matched siblings share ONE loop — x[col] loaded\n// once, two FMA streams (two output matrices) per iteration.\n// Precondition: identical row counts (wq stays separate: q_dim != kvd).\nfn grad_wk_wv_shared(g_k: &[f32], g_v: &[f32], x: &[f32], wk: &mut [f32], wv: &mut [f32], kvd: usize, n: usize) {\n    for row in 0..kvd {\n        let gr_k = g_k[row];\n        let gr_v = g_v[row];\n        let off = row * n;\n        for col in 0..n {\n            let xc = x[col]; // ONE load of the shared input\n            wk[off + col] += gr_k * xc; // sibling 1\n            wv[off + col] += gr_v * xc; // sibling 2\n        }\n    }\n}\n".to_string(),
+        },
+        // ── op-major-backward-loop-inversion-batch-sequence-axis — position-major syncs → op-stage batching (D) ──
+        // Source: riir-gpu gemma4_cubecl_train/backward_gpu.rs — the
+        // position loop L305-429 interleaves 4 blocking GEMVs with CPU
+        // ops (down L338, gate L354, up L355, wo L418) and loop C adds 3
+        // more (wq/wk/wv L520-522); the ONLY cross-position coupling is
+        // attention backward (L436-453), which already takes all
+        // positions and sits BETWEEN the per-position stages — proving
+        // the sequence axis is free inside each stage. dispatch_gemv is
+        // a full round-trip per call (gemma4_cubecl/dispatch.rs L19-43:
+        // create_from_slice + empty + launch + read_handle).
+        //
+        // Quantified (12B: 48 layers, vocab 262144; seq_len 1024):
+        // 7 GEMVs × 48 × 1024 + 1024 lm_head = 345,088 blocking
+        // upload+launch+readback round-trips per training step; each
+        // wte_t GEMV re-reads the 4 GB transposed embedding per position
+        // (~4 TB device traffic/step for Phase 1 alone — the
+        // row-tile-amortize-input-load win at matrix scale).
+        // Distinct from weight-grad-batched-outer-product (H — batches
+        // the WEIGHT-grad accumulation; this is the host loop-nest
+        // inversion that exposes batchability for ALL stages), from
+        // row-tile-amortize-input-load (in-kernel M-widening — this is
+        // the host restructure that turns N GEMVs into one GEMM), from
+        // derive-params-from-global-invocation-id (per-item params in
+        // the grid — composes with this), and from
+        // batched-downloads-single-sync-cycle (batches N readbacks —
+        // this removes the per-item structure that made them N).
+        KernelRule {
+            rule_id: "op-major-backward-loop-inversion-batch-sequence-axis".to_string(),
+            gpu_concept: "a per-position backward loop that interleaves GPU GEMV + blocking readback with CPU elementwise ops pays one device round-trip per item per op; when the sequence axis is free (positions independent within each op stage — the only cross-position op, attention backward, sits BETWEEN stages), invert the loop nest from (layer → position → op-chain) to (layer → op-stage → all positions) so every per-item GEMV becomes one sequence-batched GEMM with ONE dispatch and ONE readback: 7 round-trips per layer per step instead of 7 × seq_len. The attention-backward-between-stages placement is the proof the axis is free — it already consumes all positions jointly. Distinct from weight-grad-batched-outer-product (batches the weight-grad accumulation — this is the loop-nest inversion that exposes batchability for ALL stages), from row-tile-amortize-input-load (in-kernel M-widening of one GEMV — this is the host restructure turning N GEMVs into one GEMM), and from batched-downloads-single-sync-cycle (batches N readbacks into one sync — this removes the per-item structure that made them N).".to_string(),
+            ref_shape: "// naive: position-major — every position pays the full\n// upload/launch/readback round-trip for EVERY GEMV in the chain\n// (positions are independent; the loop structure serializes them).\nfn backward_item_major(gpu: &Gpu, bw: &Handles, g_x_out_all: &[Vec<f32>]) {\n    for p in 0..g_x_out_all.len() {\n        let g_x_down = rmsnorm_bwd(&g_x_out_all[p]);\n        let g_hidden = gpu.dispatch_gemv(&bw.down_t, &g_x_down, 0, 0); // SYNC per item\n        let (g_gate, g_up) = gegelu_bwd(&g_hidden);\n        let a = gpu.dispatch_gemv(&bw.gate_t, &g_gate, 0, 0); // SYNC per item\n        let b = gpu.dispatch_gemv(&bw.up_t, &g_up, 0, 0); // SYNC per item\n        // ... 4 more round-trips for this one position\n    }\n}\n".to_string(),
+            opt_pattern: "// optimized: op-major — the dependency chain is op->op, NOT\n// position->position (the only cross-position op, attention backward,\n// sits BETWEEN stages). Batch each stage across ALL positions: each\n// GEMV stage becomes one [seq x in] @ [in x out] GEMM — one dispatch +\n// one readback per stage per layer (was 7 * seq_len).\nfn backward_op_major(gpu: &Gpu, bw: &Handles, g_x_out_all: &[Vec<f32>], seq: usize) {\n    let g_x_down_all = all_positions_norm_bwd(g_x_out_all); // CPU, independent\n    let g_hidden_all = gpu.dispatch_gemm(&bw.down_t, &g_x_down_all, seq); // 1 sync\n    let (g_gate_all, g_up_all) = all_positions_geglu_bwd(&g_hidden_all); // CPU\n    let _gu = gpu.dispatch_gemm_pair(&bw.gate_t, &bw.up_t, &g_gate_all, &g_up_all, seq); // 1 sync\n    // cross-position attention backward runs BETWEEN stages as before\n}\n".to_string(),
+        },
+        // ── backward-helper-expose-shared-norm-statistic — hidden inv_rms → helper returns the statistic (H) ──
+        // Source: riir-engine gemma4_train/backward.rs L39-49
+        // (rmsnorm_backward computes `let sum_sq: f32 = x.iter().map(|&v|
+        // v * v).sum(); let rms_sq = sum_sq / n as f32 + eps; let inv_rms
+        // = 1.0 / rms_sq.sqrt();` then returns ONLY g_x) + all the
+        // gemma4_cubecl_train/backward_gpu.rs gamma-grad sites that
+        // recompute it right after calling the helper: L274-279
+        // (final_norm), L325-330 (post_mlp), L381-387 (pre_mlp),
+        // L404-411 (post_attn), L486-492 (attn_q, per head), L506-512
+        // (attn_k, per head), L552-558 (input_norm). Worst case 3× at
+        // the final norm (L250 x_normed recompute + inside L271's helper
+        // + L274-276).
+        //
+        // ~393K redundant n-element reduction passes per step at 12B ×
+        // seq 1024. Distinct from precompute-scalar-reduction (hoists a
+        // LOOP-INVARIANT row reduction — here the reduction is
+        // per-position/per-call, NOT invariant; the waste is the
+        // helper's return shape hiding a value the same call site needs)
+        // and from derived-scalar-host-computed-in-uniform (config-
+        // derived constants — this is a data-dependent reduction).
+        KernelRule {
+            rule_id: "backward-helper-expose-shared-norm-statistic".to_string(),
+            gpu_concept: "an elementwise-backward helper that internally computes a normalization statistic (inv_rms from sum_sq) which the parameter-gradient path at the SAME call site also needs must return or expose that statistic (or fuse the gamma-grad accumulation into the helper) — otherwise every call site recomputes the full reduction pass, doubling (at the final norm: tripling) reduction work per norm per position. The fix is the helper's return shape: (g_x, inv_rms) instead of g_x alone. Distinct from precompute-scalar-reduction (hoists a loop-INVARIANT row reduction — this reduction is per-position/per-call; the waste is the return shape hiding a value the same site needs) and from derived-scalar-host-computed-in-uniform (config-derived constants — this is a data-dependent reduction over activations).".to_string(),
+            ref_shape: "// naive: the helper computes inv_rms internally and returns only\n// g_x; the caller needs inv_rms AGAIN for the gamma gradient —\n// recomputing the full reduction pass at every call site.\nfn rmsnorm_backward(g_y: &[f32], x: &[f32], gamma: &[f32], eps: f32) -> Vec<f32> {\n    let n = x.len();\n    let sum_sq: f32 = x.iter().map(|&v| v * v).sum(); // reduction pass 1\n    let inv_rms = 1.0 / (sum_sq / n as f32 + eps).sqrt();\n    let mut g_x = vec![0.0f32; n];\n    // ... g_x math using inv_rms ...\n    g_x // statistic hidden from the caller\n}\nfn caller(g_y: &[f32], x: &[f32], gamma: &[f32], g_gamma: &mut [f32], eps: f32) {\n    let _g_x = rmsnorm_backward(g_y, x, gamma, eps);\n    let n = x.len();\n    let sum_sq: f32 = x.iter().map(|&v| v * v).sum(); // pass 2 — SAME reduction\n    let inv_rms = 1.0 / (sum_sq / n as f32 + eps).sqrt();\n    for i in 0..n {\n        g_gamma[i] += g_y[i] * inv_rms * x[i];\n    }\n}\n".to_string(),
+            opt_pattern: "// optimized: the helper exposes the statistic it already computed —\n// the gamma-grad accumulation consumes it without a second reduction.\nstruct RmsBwd {\n    g_x: Vec<f32>,\n    inv_rms: f32,\n}\nfn rmsnorm_backward_with_stat(g_y: &[f32], x: &[f32], gamma: &[f32], eps: f32) -> RmsBwd {\n    let n = x.len();\n    let sum_sq: f32 = x.iter().map(|&v| v * v).sum(); // reduction ONCE\n    let inv_rms = 1.0 / (sum_sq / n as f32 + eps).sqrt();\n    let mut g_x = vec![0.0f32; n];\n    // ... g_x math ...\n    RmsBwd { g_x, inv_rms }\n}\nfn caller(g_y: &[f32], x: &[f32], gamma: &[f32], g_gamma: &mut [f32], eps: f32) {\n    let r = rmsnorm_backward_with_stat(g_y, x, gamma, eps);\n    for i in 0..x.len() {\n        g_gamma[i] += g_y[i] * r.inv_rms * x[i]; // no 2nd reduction pass\n    }\n}\n".to_string(),
+        },
     ])
 }
 
@@ -4982,7 +5289,7 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 258-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 267-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -4990,7 +5297,7 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (44 rules)
+    // A: Memory access patterns (46 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -5039,6 +5346,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "latent-encode-at-capture",
             "slot-offset-partial-buffer-write",
             "immutable-operand-upload-at-set-creation",
+            "mirror-ring-store-sliding-window-contiguity",
+            "preallocated-activation-slots-inplace-save",
         ],
     ),
     // B: Compute patterns (44 rules)
@@ -5092,7 +5401,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "rademacher-signs-over-gaussian-projection",
         ],
     ),
-    // C: Fusion patterns (27 rules)
+    // C: Fusion patterns (28 rules)
     (
         KernelCategory::Fusion,
         "C: fusion",
@@ -5124,9 +5433,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fuse-weight-grad-input-grad-single-matrix-visit",
             "incremental-centroid-running-sum",
             "one-sweep-spatial-feature-fanout",
+            "shape-matched-sibling-weight-grads-share-input-loop",
         ],
     ),
-    // D: Dispatch patterns (40 rules)
+    // D: Dispatch patterns (43 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -5171,6 +5481,9 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "domain-as-data-not-algorithm-fork",
             "timeout-scalar-tiebreak-decisive-outcome",
             "buffer-set-struct-two-tier-dispatch",
+            "split-dispatch-expose-fused-intermediate",
+            "hybrid-cpu-elementwise-gpu-throughput-sync-points",
+            "op-major-backward-loop-inversion-batch-sequence-axis",
         ],
     ),
     // E: Parallelism patterns (16 rules)
@@ -5239,7 +5552,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "reverse-running-decay-weight",
         ],
     ),
-    // H: MoE dispatch + backward pass (10 rules)
+    // H: MoE dispatch + backward pass (11 rules)
     (
         KernelCategory::MoeDispatchBackward,
         "H: MoE dispatch + backward",
@@ -5254,6 +5567,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "csr-index-via-prefix-sum",
             "autotune-aggregate-workload-key",
             "active-index-grad-scatter-subset-backward",
+            "backward-helper-expose-shared-norm-statistic",
         ],
     ),
     // I: NSA block-sparse selection (4 rules)
@@ -5290,7 +5604,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "vector-width-pow2-sweep",
         ],
     ),
-    // L: Conv-as-GEMM + memory layout (8 rules)
+    // L: Conv-as-GEMM + memory layout (9 rules)
     (
         KernelCategory::ConvGemmLayout,
         "L: conv-as-GEMM + layout",
@@ -5303,6 +5617,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "carry-dual-layout-dead-slot",
             "twin-projection-shared-delta-adapter",
             "bool-fields-over-bitset-hot-reads",
+            "pre-transposed-consumer-layout-handles-build-once",
         ],
     ),
     // M: Kernel parametric polymorphism (9 rules)
@@ -5321,7 +5636,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "debug-only-gpu-label-macro",
         ],
     ),
-    // N: dtype + alignment specialization (14 rules)
+    // N: dtype + alignment specialization (15 rules)
     (
         KernelCategory::DtypeAlignment,
         "N: dtype + alignment",
@@ -5340,6 +5655,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "pad-uniform-pod-to-min-binding-size",
             "dtype-normalize-once-at-upload",
             "derived-scalar-host-computed-in-uniform",
+            "exact-op-parity-for-analytic-backward",
         ],
     ),
     // O: IR strength reduction (4 rules)
@@ -5360,7 +5676,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
 /// Returns 15 buckets (one per category), each containing the `KernelRule`s whose
 /// `rule_id` appears in that category's slice of [`KERNEL_CATEGORIES`]. This is
 /// the category-scoped view of the corpus — a future heal pipeline can consult
-/// routed expert's rules first without scanning all 209.
+/// routed expert's rules first without scanning all 267.
 ///
 /// # Allocation
 ///
@@ -5436,8 +5752,8 @@ mod tests {
         // Batch 27 (6): riir-gpu production kernels — staging-packed-uniforms-encoder-ordered-copies, identical-uniforms-share-single-slot, persistent-zeros-source-encoder-copy-clear, fuse-sibling-target-grads-single-kernel, per-layer-strided-grad-destination, snapshot-transient-grad-for-deferred-download (backward/ + backward_dflash/ — the backward-pass orchestration clusters: staging-packed uniform distribution, the idempotent-write exemption, encoder-ordered zero clears, sibling-target grad fusion, consumer-selected grad destinations, transient snapshotting for deferred readback).
         // Batch 29 (10): riir-gpu production kernels — defer-readback-gated-by-live-output-size, weight-handle-cache-keyed-by-allocation-identity, first-readback-pays-queue-drain, epilogue-at-register-write-phase, delay-rms-scale-past-gemv-epilogue, pack-scalar-params-into-combined-buffer, enum-dispatch-separate-kernel-per-variant, epilogue-must-be-workgroup-local, launch-unchecked-caller-owned-size-contract, fast-math-contraction-behind-feature-flag (deltanet_input_proj_fused.rs + epilogue/ — the decode-path fusion cluster: Issue 602 sibling-GEMV fan-out + Plan 106 Track 3 CODA epilogue fusion).
         // Batch 30 (6): riir-gpu production kernels — zero-init-side-branch-frozen-base-path, counter-derived-seed-stateless-noise, predicate-gated-skip-empty-workset-step, share-pipeline-set-across-subsystems, pad-uniform-pod-to-min-binding-size, fuse-count-into-mutation-pass (dllm/mod.rs — the D2F training cluster: Plan 068 discrete-diffusion trainers + RePlaid schedule).
-        // Total: 209.
-        assert_eq!(corpus.entries.len(), 258, "batches 1-33 should have 258 rules");
+        // Total: 209. // (historical batch-30 snapshot; current 267)
+        assert_eq!(corpus.entries.len(), 267, "batches 1-34 should have 267 rules");
     }
 
     #[test]
@@ -7144,6 +7460,113 @@ mod tests {
         }
     }
 
+    #[test]
+    fn batch34_rules_present() {
+        // Verify the 9 batch-34 rules across A/C/D/H/L/N.
+        let corpus = build_kernel_seed_corpus();
+        let ids: Vec<&str> =
+            corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        // N (1 new): exact-op parity
+        assert!(ids.contains(&"exact-op-parity-for-analytic-backward"), "exact-op parity");
+        // A (2 new): mirror ring + activation slots
+        assert!(ids.contains(&"mirror-ring-store-sliding-window-contiguity"), "mirror ring store");
+        assert!(ids.contains(&"preallocated-activation-slots-inplace-save"), "activation slots");
+        // D (3 new): split dispatch + hybrid sync points + op-major inversion
+        assert!(ids.contains(&"split-dispatch-expose-fused-intermediate"), "split dispatch");
+        assert!(ids.contains(&"hybrid-cpu-elementwise-gpu-throughput-sync-points"), "hybrid sync points");
+        assert!(ids.contains(&"op-major-backward-loop-inversion-batch-sequence-axis"), "op-major inversion");
+        // L (1 new): pre-transposed handles
+        assert!(ids.contains(&"pre-transposed-consumer-layout-handles-build-once"), "pre-transposed handles");
+        // C (1 new): sibling weight-grads share input
+        assert!(ids.contains(&"shape-matched-sibling-weight-grads-share-input-loop"), "sibling grads share input");
+        // H (1 new): norm-statistic exposure
+        assert!(ids.contains(&"backward-helper-expose-shared-norm-statistic"), "norm statistic exposure");
+    }
+
+    #[test]
+    fn batch34_concepts_covered() {
+        // Verify the batch-34 Gemma-4 training-cluster concepts via
+        // distinctive ASCII substrings located by rule_id (the 32a
+        // convention — immune to prose-evolution churn).
+        let corpus = build_kernel_seed_corpus();
+        let concept = |id: &str| -> String {
+            corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-34 rule '{id}' missing"))
+                .gpu_concept
+                .clone()
+        };
+        // N: exact-op-parity (mod.rs L44-48 + engine backward tanh)
+        let c = concept("exact-op-parity-for-analytic-backward");
+        assert!(c.contains("two different functions")
+            && c.contains("train-vs-infer"), "exact-op parity concept");
+        // A: mirror-ring (mod.rs L473-500 + kv_cache contract)
+        let c = concept("mirror-ring-store-sliding-window-contiguity");
+        assert!(c.contains("contiguous by construction")
+            && c.contains("2·sw"), "mirror-ring concept");
+        // D: split-dispatch (mod.rs L325-344 + dispatch.rs discard)
+        let c = concept("split-dispatch-expose-fused-intermediate");
+        assert!(c.contains("re-launch the whole producer")
+            && c.contains("never a second launch"), "split-dispatch concept");
+        // A: activation slots (16 save sites)
+        let c = concept("preallocated-activation-slots-inplace-save");
+        assert!(c.contains("zero allocations")
+            && c.contains("size is asserted once"), "activation slots concept");
+        // D: hybrid sync points (L258/L311/L369/L383)
+        let c = concept("hybrid-cpu-elementwise-gpu-throughput-sync-points");
+        assert!(c.contains("exactly 4 syncs")
+            && c.contains("launch-free"), "hybrid sync concept");
+        // L: pre-transposed handles (backward_gpu L20-26 + gemma2/q4k recurrence)
+        let c = concept("pre-transposed-consumer-layout-handles-build-once");
+        assert!(c.contains("OPPOSITE layout")
+            && c.contains("frozen-base contract"), "pre-transposed handles concept");
+        // C: sibling weight-grads (L532-540 + L358-366)
+        let c = concept("shape-matched-sibling-weight-grads-share-input-loop");
+        assert!(c.contains("identical output-row counts")
+            && c.contains("ONE pass over the shared input"), "sibling grads concept");
+        // D: op-major inversion (L305-522 + dispatch round-trip)
+        let c = concept("op-major-backward-loop-inversion-batch-sequence-axis");
+        assert!(c.contains("sequence axis is free")
+            && c.contains("7 × seq_len"), "op-major concept");
+        // H: norm-statistic exposure (engine rmsnorm + 7 sites)
+        let c = concept("backward-helper-expose-shared-norm-statistic");
+        assert!(c.contains("return shape")
+            && c.contains("SAME call site"), "norm statistic concept");
+    }
+
+    #[test]
+    #[cfg(not(feature = "kernel_verify"))]
+    fn batch34_pseudocode_parses() {
+        // G1 for Batch 34: every new rule's ref_shape AND opt_pattern must
+        // syn-parse as valid Rust (the L2 pruner verdict).
+        use crate::domain::HealDomain;
+        let corpus = build_kernel_seed_corpus();
+        let ids = [
+            "exact-op-parity-for-analytic-backward",
+            "mirror-ring-store-sliding-window-contiguity",
+            "split-dispatch-expose-fused-intermediate",
+            "preallocated-activation-slots-inplace-save",
+            "hybrid-cpu-elementwise-gpu-throughput-sync-points",
+            "pre-transposed-consumer-layout-handles-build-once",
+            "shape-matched-sibling-weight-grads-share-input-loop",
+            "op-major-backward-loop-inversion-batch-sequence-axis",
+            "backward-helper-expose-shared-norm-statistic",
+        ];
+        for id in ids {
+            let entry = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-34 rule '{id}' missing"));
+            let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+            assert!(ref_verdict.parses, "batch-34 ref_shape for '{id}' must parse");
+            let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+            assert!(opt_verdict.parses, "batch-34 opt_pattern for '{id}' must parse");
+        }
+    }
+
     // ════════════════════════════════════════════════════════════════════
     // Plan 003 — Router ↔ corpus wiring tests
     // ════════════════════════════════════════════════════════════════════
@@ -7155,7 +7578,7 @@ mod tests {
 
     #[test]
     fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-        // Every rule_id in the 258-rule corpus must appear in exactly one category.
+        // Every rule_id in the 267-rule corpus must appear in exactly one category.
         let corpus = build_kernel_seed_corpus();
         let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
         let mut categorized: Vec<&str> = Vec::new();
@@ -7186,22 +7609,22 @@ mod tests {
 
     #[test]
     fn kernel_categories_counts_match_plan_003_table() {
-        // Pin per-category rule counts to the Plan 003 table (updated for Batch 32c).
+        // Pin per-category rule counts to the Plan 003 table (updated for Batch 34).
         let expected = [
-            (KernelCategory::MemoryAccess, 44),
+            (KernelCategory::MemoryAccess, 46),
             (KernelCategory::Compute, 44),
-            (KernelCategory::Fusion, 27),
-            (KernelCategory::Dispatch, 40),
+            (KernelCategory::Fusion, 28),
+            (KernelCategory::Dispatch, 43),
             (KernelCategory::Parallelism, 16),
             (KernelCategory::FlashAttnTiling, 10),
             (KernelCategory::LinearAttnRecurrence, 19),
-            (KernelCategory::MoeDispatchBackward, 10),
+            (KernelCategory::MoeDispatchBackward, 11),
             (KernelCategory::NsaBlockSparse, 4),
             (KernelCategory::VarlenChunkedReduction, 5),
             (KernelCategory::AutotuneDispatch, 4),
-            (KernelCategory::ConvGemmLayout, 8),
+            (KernelCategory::ConvGemmLayout, 9),
             (KernelCategory::KernelPolymorphism, 9),
-            (KernelCategory::DtypeAlignment, 14),
+            (KernelCategory::DtypeAlignment, 15),
             (KernelCategory::IrStrengthReduction, 4),
         ];
         for (cat, count) in expected {
@@ -7211,9 +7634,9 @@ mod tests {
                 "Plan 003: category {cat:?} has {} rules, expected {count}",
                 entry.2.len());
         }
-        // Sum must equal 258.
+        // Sum must equal 267.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 258, "Plan 003: category totals must sum to 258");
+        assert_eq!(total, 267, "Plan 003: category totals must sum to 267");
     }
 
     #[test]
@@ -7223,7 +7646,7 @@ mod tests {
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 258, "Plan 003: grouped corpus has {total} rules, expected 258");
+        assert_eq!(total, 267, "Plan 003: grouped corpus has {total} rules, expected 267");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");

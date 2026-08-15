@@ -188,25 +188,66 @@ global = symlink only.
     .rs comments can describe unimplemented behavior (the
     "multi-pass accumulation" docs describe a path the kernel never
     implements).
+- **Batch 34 DONE (2026-08-15, Research 038):** the Gemma-4 TRAINING
+  cluster (`gemma4_cubecl_train/mod.rs` + `backward_gpu.rs`, 1,316 LOC —
+  hybrid GPU training forward + Phase 2.5 GPU backward; the training
+  counterpart of Batch 25's inference-side Gemma cluster) — **9 rules,
+  corpus 258 → 267** (A 46, B 44, C 28, D 43, E 16, H 11, L 9, N 15):
+  exact-op-parity-for-analytic-backward, mirror-ring-store-sliding-window-
+  contiguity, split-dispatch-expose-fused-intermediate,
+  preallocated-activation-slots-inplace-save,
+  hybrid-cpu-elementwise-gpu-throughput-sync-points,
+  pre-transposed-consumer-layout-handles-build-once,
+  shape-matched-sibling-weight-grads-share-input-loop,
+  op-major-backward-loop-inversion-batch-sequence-axis,
+  backward-helper-expose-shared-norm-statistic. TWO seeds resolved by
+  verification: the softcap "recompute" hypothesis FALSIFIED (the
+  backward algebraically recovers tanh from cached POST-cap logits —
+  already sigmoid-deriv-recovered-from-output) + the dual-KV-cache
+  "pattern" REJECTED as wisdom (avoidable 2-3× duplication → hazard
+  H9). Bug yield filed as riir-ai Issue 687 (13 hazards): mirrored-ring
+  backward OOB panic for seq_len > 2·sw (index algebra verified —
+  correct below the boundary, no assertion), backward-handle staleness
+  + the self-contradictory LoRA doc (base-only transposes drop ΔW^T·g
+  under the merged-weight convention — found independently by BOTH
+  subagents), Phase 2 processing zero-grad positions, ~2.06M allocs /
+  27 GB per step + 345,088 blocking GPU round-trips per step
+  (quantified at real 12B dims), the CPU weight-grad accumulation as
+  the ACTUAL bottleneck (wte 17× largest layer grad; the header's GEMV
+  claim per-op true / per-step misleading), the 24-line byte-identical
+  CE-backward duplication, + 7 more. GOAT: 318 kernel_heal + 201
+  default tests, clippy 0 in all 4 states (8 doc warnings fixed
+  pre-commit incl. a NEW variant: a leading `+` on a wrapped doc line
+  parses as a markdown list item). Generator note: the one-shot Python
+  script hit TWO anchor bugs before write (a %-format collision with
+  literal `%` in concept text — fixed by plain concatenation; a
+  double-update of the D-header comment) — both aborted cleanly, zero
+  pollution, then first-compile after fix.
 - **NEXT mining target**: `ls` the riir-gpu tree for the next unmined
-  cluster (~72 of ~200 files mined). Candidates: `gemma*_cubecl_train/`
-  + `gemma2_d2f*` + `gemma4_q4k_train` (the Gemma training residuals),
-  `kimi_k3_gpu_*` (4 files), `weaver_gpu*` (4 files), `kvarn/`,
-  `hypernet/`, `maxsim/`. Pick 1-2 files, ~8-12 rules, Batch 34
-  (Research 038).
+  cluster (~74 of ~200 files mined). Candidates: `gemma2_cubecl_train/`
+  (mod.rs 1,286 + resident.rs 1,639 + attention_gpu.rs 349 — the Gemma-2
+  training residuals, natural continuation; note Batch 34 already read
+  its build_backward_handles + build-once comment as recurrence
+  evidence, so expect dedup pressure from the shared patterns),
+  `gemma4_q4k_train/` (4 files ~160 KB), `gemma2_d2f*`, `kimi_k3_gpu_*`
+  (4 files), `weaver_gpu*` (4 files), `kvarn/`, `hypernet/`, `maxsim/`.
+  Pick 1-2 files, ~8-12 rules, Batch 35 (Research 039).
   - Validation pattern (proven T4 + 32a + 32b-1 + 32c): corpus files are NOT
     sibling WIP — edit + run GOAT in the main checkout with
     `CARGO_TARGET_DIR=/tmp/riir-clippy-bNN`; `--features kernel_heal`
-    for the corpus suite (312 at 32c, 315 at 33), default for the 201 suite.
+    for the corpus suite (312 at 32c, 315 at 33, 318 at 34), default for
+    the 201 suite.
     `--all-features` is currently broken by SIBLING WIP
     (`rust_perf/bench.rs:335 alloc_axis`) — pre-existing, not yours.
   - Count-pin sites when adding rules (complete list, re-verified 32c):
     corpus.rs `entries.len()` assert + KERNEL_CATEGORIES rows + per-category
     count test + 2 grouped-total tests + router.rs `rules_for_expert` total
     + the corpus-count mentions in router.rs doc header + the Plan 003
-    doc-comment `258-rule corpus` line above KERNEL_CATEGORIES + the
-    file-level `//!` header batch block + the stale `228-rule` comment in
-    kernel_categories_cover_all_corpus_rules_exhaustively (keep in sync).
+    doc-comment `267-rule corpus` line above KERNEL_CATEGORIES + the
+    file-level `//!` header batch block + the stale-count comments (the
+    `228-rule` comment in kernel_categories_cover_all_corpus_rules_
+    exhaustively + the `209` in the build_corpus_categorized doc — both
+    now in sync at 267; keep in sync).
   - **Landing lesson (32b-1, self-caught)**: after a large multi-entry
     corpus edit, `awk`-scan for `rule_id:` lines NOT preceded by a
     standalone `KernelRule {` BEFORE the first compile — JSON `\n`
@@ -218,8 +259,9 @@ global = symlink only.
   WIP STILL ACTIVE as of 2026-08-15 evening: qv_lora.rs + cudarc_kernels/
   + riir-gpu/lib.rs + ternary_deltanet_gpu_forward_cudarc.rs all dirty)
   — mine only after their WIP lands.
-- **Progress**: riir-gpu ~69 of ~200 files mined. Corpus: 251 rules.
-  edge_lora module FULLY MINED (32a + 32b-1 + 32c).
+- **Progress**: riir-gpu ~74 of ~200 files mined. Corpus: 267 rules.
+  edge_lora module FULLY MINED (32a + 32b-1 + 32c). spectralquant/
+  FULLY MINED (15 + 33). gemma4_cubecl_train/ DONE (34).
 - **Also open (riir-clippy issues)**: 014 (rust_perf v4, 12 tasks), 016
   (clippy structural expansion, 6), 017 (retrieval precision at scale,
   5), 018 (self_evolve promotion, 6). 015 = sibling's ACTIVE WIP
