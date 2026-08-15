@@ -791,6 +791,55 @@
 //!   Vecs ~1.2 GB/step download churn with the `read_handle_into` fix
 //!   substrate already in-tree, missed CPU/GPU overlap windows, the
 //!   rmsnorm scratch→dest copy API asymmetry, + more).
+//! - **Batch 37 (2026-08-15):** the `Q4_K` TRAINING cluster — the trainer
+//!   core and weight-buffer management (`gemma4_q4k_train/`: `mod.rs` 1,389 +
+//!   `weight_buffers.rs` 553; the `QLoRA` frozen-`Q4_K`-base + `f32`-LoRA-delta
+//!   Gemma-4 trainer; `forward_batched.rs` + `backward.rs` deferred to Batch 38
+//!   on predicted dedup pressure) — **8 rules, corpus 282 → 290**
+//!   (A 52, C 31, D 50, L 10, N 17): `kv-window-device-resident-ring-append`
+//!   (A — a KV cache mutated by append + consumed every position lives ON
+//!   the device as a persistent ring; only the NEW row crosses the bus —
+//!   append-vs-snapshot transfer), `lm-head-loss-positions-only` (D — the
+//!   loss-support set is known before the forward; prompt positions' vocab
+//!   GEMV + readback + save are provably dead via the backward's
+//!   `d_logits[p].is_empty()` skip), `verbatim-upload-on-format-match`
+//!   (N — on-disk quant format == device target format → cast the mmap +
+//!   upload raw blocks; NEVER dequantize-to-f32-and-requantize — the 4090
+//!   OOM class; proposed independently by BOTH agents, merged),
+//!   `stream-drain-free-source-during-build` (L — drain the source per
+//!   unit during a one-time build: peak host memory O(unit), not O(model)),
+//!   `identical-tensor-handle-clone-zero-reupload` (A — a tensor legally
+//!   absent from the export because identical to a sibling → clone the
+//!   device handle (refcount), never re-upload the bytes),
+//!   `sparse-gather-scale-at-read-not-table-prepass` (B — a sparse read
+//!   set plus a shared unscaled consumer select the GATHER as the fold
+//!   point — the deliberately inverse regime of B36's upload-copy fold),
+//!   `tiled-host-transpose-before-quantize` (A — cache-block the host
+//!   transpose: naive inner-c store strides 15 KB; every store a cold
+//!   line), `materialized-fast-path-bulk-slice-accessor` (D — a bulk
+//!   `Option<&[f32]>` accessor branches ONCE per step; the materialized
+//!   arm runs direct-index + rayon, not per-row enum dispatch). SIX seeds
+//!   falsified by verification (highest-per-agent yet: `mod.rs` F1 the rope
+//!   tables ARE cached once — 48 layers share 2 via `rope_table_idx`; F3
+//!   `LoraSite::none()` is the correct frozen-base skip, not B31's inert
+//!   adapter; F4 gammas built once at construction; F5 the 3 backward
+//!   constructors are field-identical — no `merkle_root`-class miss;
+//!   `weight_buffers.rs` F4 the setup path is pure enqueue, 0 round-trips;
+//!   F5 the GEMV path already ships packed `Q4_K` + in-kernel dequant =
+//!   the B15 direction) + 2 confirmations with regime corrections
+//!   (scale-at-gather is CORRECT for a sparse read set; quantize runs
+//!   once — but the one-time cost is paid TWICE: forward + transposed
+//!   backward handles ≈ 14 GB GPU residency on a 24 GB 4090). 1 rule
+//!   dropped as dedup (`variant-dedup-constant-table-by-index` —
+//!   `share-pipeline-set-across-subsystems` + B17's rope-table-drop
+//!   precedent). Bug yield filed as riir-ai Issue 690 (~19 hazards:
+//!   43,008 blocking reads/step on the unbatched path (the file's own
+//!   Bench 433 doc), ~127 MB/step dead `lm_head` readback at prompt=127,
+//!   the dual-KV-cache quadruple-write ~402 MB/step, the O(S^2)
+//!   full-attention window collect ~537 MB/step/layer — pure waste,
+//!   rows already contiguous, ~40 GB/step sliding-window re-upload, the
+//!   2× GPU weight residency, one-time dead zero-inits 7 GB + 48 GB,
+//!   two doc-lies, + more).
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
@@ -5675,6 +5724,182 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
             ref_shape: "// naive/WRONG: apply the softcap Jacobian to the CE term, then add\n// the aux gradient AFTER — the aux term never receives the\n// (1 - t^2) scaling\nfn head_backward_wrong(g_ce: &[f32], g_aux: &[f32], logits: &[f32],\n                       cap: f32, g_out: &mut [f32]) {\n    for v in 0..g_ce.len() {\n        let t = logits[v] / cap;\n        g_out[v] = g_ce[v] * (1.0 - t * t); // CE scaled by the Jacobian...\n    }\n    for v in 0..g_aux.len() {\n        g_out[v] += g_aux[v]; // ...aux added UNSCALED — silently wrong grad\n    }\n}\n".to_string(),
             opt_pattern: "// optimized: sum all upstream grads at the link INPUT, apply the\n// shared Jacobian ONCE to the sum — correct by linearity, one\n// fused sweep\nfn head_backward_merged(g_ce: &[f32], g_aux: &[f32], logits: &[f32],\n                        cap: f32, g_out: &mut [f32]) {\n    for v in 0..g_ce.len() {\n        let gl = g_ce[v] + g_aux[v]; // both w.r.t. the SAME capped logits\n        let t = logits[v] / cap; // tanh recovered from the cached output\n        g_out[v] = gl * (1.0 - t * t); // ONE Jacobian for BOTH terms\n    }\n}\n".to_string(),
         },
+        // ── kv-window-device-resident-ring-append — append row, not window (A) ──
+        // Source: riir-gpu gemma4_q4k_train/mod.rs L1246-1251 (the sliding
+        // path: "let combined_kv = self.kv_cache.get_window(layer_idx,
+        // t_start, n_pos);" → host copy of the WHOLE window per position)
+        // + L979-980 (the re-upload: "let query_handle = ...create_from_slice"
+        // + "let kv_handle = ...create_from_slice(f32::as_bytes(combined_kv))")
+        // + CpuKVCache::get_window L263-272 (the per-t extend interleave).
+        //
+        // Distinct from mirror-ring-store-sliding-window-contiguity (B34 —
+        // CPU-side LAYOUT so any <=sw window is contiguous; silent on where
+        // the ring lives or how often it crosses the bus — this rule MOVES
+        // B34's layout across the bus boundary), combined-kv-buffer-keys-
+        // then-values (B23 — kernel-side layout for decode flash-attention;
+        // here the interleave copy is the symptom, re-upload is the disease),
+        // host-cache-immutable-device-weights (B26 — immutable operands; KV
+        // is append-mutated every position), side-branch-operand-residency-
+        // matches-mutation-lifetime (B36 — aux-branch step-lifetime rung; KV
+        // is the main-path operand mutated intra-step).
+        KernelRule {
+            rule_id: "kv-window-device-resident-ring-append".to_string(),
+            gpu_concept: "a KV cache mutated by append and consumed by attention EVERY position must live ON THE DEVICE as a persistent ring — only the NEW row crosses the bus per position. Re-copying the whole visible window to a host buffer and re-uploading it for every query position costs O(sw · kv_dim · 2 · 4 B) host→device bytes per position per sliding layer — the mutable-operand analog of host-cache-immutable-device-weights (immutable lifecycle there; append-mutated here) and the transfer-side complement of mirror-ring-store-sliding-window-contiguity (which fixes the CPU-side layout that this anti-pattern then re-uploads every call). Distinct from combined-kv-buffer-keys-then-values (kernel-side combined-buffer LAYOUT for a decode flash-attention kernel — here the per-call interleave copy is the SYMPTOM; the disease is re-uploading a mutable operand on every consumer call) and from kv-block-streaming (in-kernel smem streaming, not host↔device transfer). The append-vs-snapshot transfer rule: an operand mutated incrementally crosses the bus incrementally.".to_string(),
+            ref_shape: "// naive: copy the whole visible window out of the host cache and\n// re-upload it for EVERY query position\nfn attention_window_reupload(cache: &CpuKv, layer: usize, t_start: usize,\n                             n_pos: usize, q: &[f32], gpu: &Gpu) -> Vec<f32> {\n    let mut combined = Vec::with_capacity(n_pos * 2 * cache.row_len(layer));\n    for t in t_start..t_start + n_pos {\n        combined.extend_from_slice(cache.k_row(layer, t)); // host copy of\n        combined.extend_from_slice(cache.v_row(layer, t)); // the WHOLE window\n    }\n    let kv = gpu.upload(&combined); // O(sw) host->device EVERY position\n    let qh = gpu.upload(q);\n    gpu.launch_attention(qh, kv)\n}".to_string(),
+            opt_pattern: "// optimized: the ring lives on the device; ONLY the new row crosses\n// the bus per position\nfn attention_ring_append(kv_ring: &mut GpuRing, new_k: &[f32], new_v: &[f32],\n                         pos: usize, capacity: usize, q: &[f32],\n                         gpu: &Gpu) -> Vec<f32> {\n    let row = kv_ring.row_bytes;\n    let k_off = (pos % capacity) * row;\n    let v_off = (capacity + pos % capacity) * row;\n    kv_ring.write_region(k_off, new_k); // ONE row up per position\n    kv_ring.write_region(v_off, new_v); // (k and v)\n    let qh = gpu.upload(q);\n    gpu.launch_attention(qh, kv_ring.handle()) // device-resident ring\n}".to_string(),
+        },
+        // ── lm-head-loss-positions-only — dead prompt logits never launch (D) ──
+        // Source: riir-gpu gemma4_q4k_train/mod.rs L1123 ("let logits =
+        // self.dispatch_gemv_q4k(&self.weights_q4k.wte_q4k, &hidden);" —
+        // inside training_forward_one_position_q4k, i.e. for EVERY position)
+        // + L1077-1080 (the loss consumes only pred_pos = n_in-1+i) +
+        // backward.rs L73-76 (the dead-proof: "if d_logits[p].is_empty()
+        // { continue; }"). The batched path has the same shape
+        // (forward_batched.rs L271-302: lm_head for ALL seq_len positions).
+        //
+        // Distinct from device-side-argmax-minimal-download (B25 — shrinks
+        // a download; this never launches), predicate-gated-skip-empty-
+        // workset-step (B30 — whole-step skip; this is a per-position
+        // subset inside a live step), monotone-transform-elision-under-
+        // argmax (B25 — skips an op under a consumer; this skips the
+        // largest GEMV + readback + save under the loss-support set).
+        KernelRule {
+            rule_id: "lm-head-loss-positions-only".to_string(),
+            gpu_concept: "the loss-support set (positions >= n_in - 1 in teacher forcing) is known BEFORE the forward runs — positions outside it never produce a loss term, and their gradients are provably empty (the backward already skips them with an is_empty guard), so the vocab-head GEMV — the single largest GEMV in the model — plus its V-wide readback and its V-wide activation save must be gated to the support set. This is dispatch-level elision under a consumer-set predicate: NOT output reduction (device-side-argmax-minimal-download shrinks a download that still runs; this never launches), NOT a whole-step skip (predicate-gated-skip-empty-workset-step gates an entire training step on an empty workset; this gates a per-position subset INSIDE a live step), and NOT a monotone-consumer elision (monotone-transform-elision-under-argmax skips an OP under a downstream transform; here the skipped work is the model's largest GEMV + its readback + its save).".to_string(),
+            ref_shape: "// naive: vocab GEMV + V-wide readback + activation save for EVERY\n// position — prompt positions' logits are never read by the loss OR\n// the backward (their d_logits are provably empty)\nfn lm_head_all_positions(hidden_all: &[Vec<f32>], vocab_head: &Handle,\n                         logits_out: &mut [Vec<f32>]) {\n    for pos in 0..hidden_all.len() {\n        logits_out[pos] = gemv_readback(vocab_head, &hidden_all[pos]);\n    } // (n_in - 1) full vocab GEMVs + readbacks + saves are DEAD per step\n}".to_string(),
+            opt_pattern: "// optimized: dispatch the vocab head ONLY at loss-support positions\nfn lm_head_loss_positions_only(hidden_all: &[Vec<f32>], vocab_head: &Handle,\n                               n_in: usize, n_tgt: usize,\n                               logits_out: &mut [Vec<f32>]) {\n    for i in 0..n_tgt {\n        let pos = n_in - 1 + i; // the ONLY positions with a loss term\n        logits_out[pos] = gemv_readback(vocab_head, &hidden_all[pos]);\n    } // prompt positions: no dispatch, no readback, no save — dead by\n} // the backward's d_logits[p].is_empty() skip".to_string(),
+        },
+        // ── verbatim-upload-on-format-match — Q4_K on disk → Q4_K on GPU (N) ──
+        // Source: riir-gpu gemma4_q4k_train/weight_buffers.rs L498-509
+        // (upload_q4k_gguf: "if info.ggml_type == GgmlType::Q4_K { //
+        // Zero-copy path: cast mmap bytes to blocks + upload." →
+        // Q4KHandle::from_blocks verbatim) + the Q6_K fallback L510-521 +
+        // mod.rs L433-444 (the from_gguf doc: "This constructor skips the
+        // f32 round-trip: Q4_K blocks are read from the GGUF mmap and
+        // uploaded verbatim." — the 4090 OOM fix, ~48 GB → one tensor's
+        // blocks) + the tiny-operand exception (norm gammas dequantized
+        // normally, L442). Proposed independently by BOTH mining agents
+        // (merged on collision).
+        //
+        // Distinct from dtype-normalize-once-at-upload (B31 — where a
+        // NEEDED conversion lives; this rule is the decision to not
+        // convert at all on format match), mapped-at-creation-init-upload
+        // (B31 — one-shot upload mechanics), alignment-gated-zero-copy-view
+        // (view gating, not load-path format negotiation),
+        // host-cache-immutable-device-weights (B26 — residency).
+        KernelRule {
+            rule_id: "verbatim-upload-on-format-match".to_string(),
+            gpu_concept: "when the on-disk artifact is ALREADY in the device's target quant format, the load path must negotiate on the stored ggml_type and upload the raw blocks verbatim (cast the mmap slice to the block type) — never dequantize the whole tensor to f32 and re-quantize it back. The transcode round-trip materializes the full-precision model in host RAM (GGUF Q4_K -> ~48 GB f32 -> re-quantize: the 4090 OOM class) vs one tensor's block array (~150 MB). dtype-normalize-once-at-upload decides WHERE a needed conversion happens; this rule decides the conversion must NOT happen at all when source format == destination format — with a size-gated exception for tiny operands (norm gammas stay dequantized) and a format-dispatch fallback for mixed-quant files (a Q6_K embedding falls through to dequant+requant). Not mapped-at-creation-init-upload (upload mechanics, orthogonal) and not host-cache-immutable-device-weights (residency, not transcoding).".to_string(),
+            ref_shape: "// naive: every tensor goes through f32 regardless of its stored\n// format — Q4_K on disk -> full-precision host buffer -> re-quantize\nfn load_weight_transcode(client: &Client, gguf: &Gguf, name: &str,\n                         m: usize, n: usize) -> Handle {\n    let f32_all: Vec<f32> = gguf.dequant_to_f32(name); // ~48 GB peak\n    let blocks: Vec<Block> = quantize_rows(&f32_all, m, n); // re-quantize\n    Handle::from_blocks(client, &blocks, m, n)\n}".to_string(),
+            opt_pattern: "// optimized: negotiate on the stored format — verbatim upload on\n// match, transcode only on mismatch\nfn load_weight_verbatim(client: &Client, gguf: &Gguf, name: &str,\n                        m: usize, n: usize) -> Result<Handle, String> {\n    let info = gguf.tensor_info(name)\n        .ok_or_else(|| format!(\"tensor {name} missing\"))?;\n    if info.ggml_type == GgmlType::Q4K {\n        let blocks: &[Block] = gguf.q4k_blocks(name)?; // cast the mmap\n        return Ok(Handle::from_blocks(client, blocks, m, n)); // verbatim\n    }\n    let f32_all: Vec<f32> = gguf.dequant_to_f32(name); // mismatch only\n    Ok(Handle::from_blocks(client, &quantize_rows(&f32_all, m, n), m, n))\n}".to_string(),
+        },
+        // ── stream-drain-free-source-during-build — peak O(unit), not O(model) (L) ──
+        // Source: riir-gpu gemma4_q4k_train/mod.rs L610-635
+        // (build_backward_handles_owned: "// Process wte first, then free
+        // its f32 data." → weights.wte.clear() + shrink_to_fit() →
+        // "for l in weights.layers.drain(..)" → "// l is dropped here,
+        // freeing this layer's f32 data (~800 MB).") + weight_buffers.rs
+        // L370-380 (the from_gguf analog: "The f32 buffer is dropped
+        // before the next tensor starts").
+        //
+        // Distinct from superset-sized-scratch-across-variants (B32a —
+        // sizes REUSED scratch; this frees the SOURCE during a one-shot
+        // transform), staging-reuse-grow-only-map-prefix (B31 — reuse
+        // across calls; nothing is consumed),
+        // activation-checkpoint-as-handle-clone-deferred-batch-readback
+        // (B36 — compute-time activation lifetime; this is construction-
+        // time source lifetime).
+        KernelRule {
+            rule_id: "stream-drain-free-source-during-build".to_string(),
+            gpu_concept: "a one-time build that transforms + uploads N independent units (layers) from a source representation must DRAIN the source per unit — process, upload, drop — so peak host memory is O(one unit), not O(model). Holding the full source alive while every unit's transformed copy accumulates pays the sum (full f32 model + per-layer transposes); the drain caps it at max(one unit's source + one transform buffer) and is what makes a 32 GB-RAM box able to build a 12B model's GPU buffers at all. The build-time analog of activation-checkpoint-as-handle-clone-deferred-batch-readback (compute-time lifetime) and NOT scratch sizing (superset-sized-scratch-across-variants sizes REUSED scratch; this frees the SOURCE during a one-shot transform) nor staging reuse (staging-reuse-grow-only-map-prefix reuses a buffer across calls; no source is consumed).".to_string(),
+            ref_shape: "// naive: source alive for the WHOLE build + each unit's transformed\n// copy accumulates — peak = full model + one transform\nfn build_all_then_hold(layers: &[LayerSrc]) -> Vec<Handle> {\n    let mut handles = Vec::with_capacity(layers.len());\n    for layer in layers {\n        handles.push(transpose_quantize_upload(layer));\n    }\n    handles\n}".to_string(),
+            opt_pattern: "// optimized: drain the source — each unit is dropped after its\n// upload, so peak = one unit + one transform buffer\nfn build_draining(layers: &mut Vec<LayerSrc>) -> Vec<Handle> {\n    let mut handles = Vec::with_capacity(layers.len());\n    for layer in layers.drain(..) {\n        handles.push(transpose_quantize_upload(&layer));\n    } // `layer` (and its f32 data) dropped per iteration\n    handles\n}".to_string(),
+        },
+        // ── identical-tensor-handle-clone-zero-reupload — absent V ≡ K (A) ──
+        // Source: riir-gpu gemma4_q4k_train/weight_buffers.rs L229-232
+        // ("// V is optional (may share K). Fall back to K's blocks." →
+        // "let attn_wv = match gguf_ref.tensor_info(&ln.attn_v) {
+        // Some(_) => upload_q4k_gguf(...)?, None => attn_wk.clone(), };")
+        // + the backward analog L410-415 (wv_t = wk_t.clone()) +
+        // gemv_q4k_cubecl.rs L794-796 (Q4KHandle is #[derive(Clone)] —
+        // the clone is a refcount bump on the two device buffers).
+        //
+        // Distinct from twin-projection-shared-delta-adapter (B31 — two
+        // DISTINCT tensors with shape-twin projections share one LoRA
+        // ADAPTER: compute sharing; here the SAME tensor is referenced
+        // twice and the share is the device BUFFER: memory sharing,
+        // absence-detected), pool-buffer-aliasing-dedicated-output (B21 —
+        // forces a dedicated output to dodge an aliasing hazard: the
+        // opposite direction).
+        KernelRule {
+            rule_id: "identical-tensor-handle-clone-zero-reupload".to_string(),
+            gpu_concept: "when a source format legally OMITS a tensor because it is IDENTICAL to a sibling (GGUF exports that skip attn_v when it shares attn_k), the load path must detect the absence and CLONE the sibling's device handle — a refcount bump — never re-read the sibling's bytes and upload a second copy. The share is the device BUFFER itself: zero re-upload, zero duplicate device memory, and the aliasing is detected by the tensor's ABSENCE in the source. Distinct from twin-projection-shared-delta-adapter (two DISTINCT tensors with shape-twin projections sharing one LoRA ADAPTER — compute sharing; here it is the SAME tensor referenced twice — memory sharing) and from pool-buffer-aliasing-dedicated-output (an output-aliasing hazard workaround — the opposite direction: forcing a dedicated output, not exploiting an identity).".to_string(),
+            ref_shape: "// naive: V absent from the export == identical to K, but the loader\n// re-reads K's bytes and uploads a SECOND device copy anyway\nfn load_kv_naive(gguf: &Gguf, names: &Names, kv_dim: usize,\n                 n: usize, client: &Client) -> (Handle, Handle) {\n    let wk = upload(client, gguf, &names.attn_k, kv_dim, n);\n    let wv = upload(client, gguf, &names.attn_k, kv_dim, n); // duplicate\n    (wk, wv) // bytes + duplicate device memory for the same tensor\n}".to_string(),
+            opt_pattern: "// optimized: absence means identity — clone the handle (refcount)\nfn load_kv_aliased(gguf: &Gguf, names: &Names, kv_dim: usize,\n                   n: usize, client: &Client) -> (Handle, Handle) {\n    let wk = upload(client, gguf, &names.attn_k, kv_dim, n);\n    let wv = match gguf.tensor_info(&names.attn_v) {\n        Some(_) => upload(client, gguf, &names.attn_v, kv_dim, n), // real\n        None => wk.clone(), // refcount bump: zero re-upload, zero\n    }; // duplicate device memory for the identical twin\n    (wk, wv)\n}".to_string(),
+        },
+        // ── sparse-gather-scale-at-read-not-table-prepass — fold at the gather (B) ──
+        // Source: riir-gpu gemma4_q4k_train/weight_buffers.rs L77-96
+        // (WteLookup::row_scaled_into: "*o = v[off + i] * scale;" — the
+        // multiply fused into the row-copy loop, BOTH variants) + the
+        // shared-consumer proof L147-148 (wte_q4k is quantized from the
+        // UNSCALED weights.wte BEFORE the Owned clone — pre-scaling the
+        // table would need a permanent second ~4 GB host copy) + hot-path
+        // callsites (mod.rs L1102-1103 per position; forward_batched.rs
+        // L216 inlines the same multiply on the Owned fast path).
+        //
+        // Distinct from constant-scale-folded-into-upload-copy (B36 — the
+        // INVERSE regime: dense hot-path operand + sole consumer → fold
+        // at the upload copy, never the shared source; here sparse read
+        // set + shared unscaled consumer → the gather is the ONLY correct
+        // fold point) and fold-norm-scalar-into-matmul (B14 — folds INTO
+        // weights: exactly the full-table pre-pass this rule refuses).
+        KernelRule {
+            rule_id: "sparse-gather-scale-at-read-not-table-prepass".to_string(),
+            gpu_concept: "when a constant scale must meet gathered rows (an embedding lookup scaled by sqrt(n)), the fold point is decided by READ-SET DENSITY and by OTHER CONSUMERS of the table: sparse reads (seq_len rows of vocab — ~4096x fewer elements) plus a shared UNSCALED consumer (the lm_head quantized from the raw table before it is cloned) select the GATHER loop as the only correct fold — the multiply rides a copy that must happen anyway (the FMA is free next to the memory movement), while pre-scaling would either add a full-table pass or force a permanent second host copy. This is the deliberately INVERSE regime of constant-scale-folded-into-upload-copy (dense hot-path operand with a sole consumer — fold at the upload copy, never the shared source) and the refusal of fold-norm-scalar-into-matmul's full-table pre-pass (which folds INTO weights — exactly the dense regime).".to_string(),
+            ref_shape: "// naive: full-table scale pre-pass to serve a sparse read set —\n// and the unscaled table is still needed by the lm_head quantization\nfn embed_prepass_then_copy(table: &[f32], scale: f32, tokens: &[usize],\n                           hidden: &mut [f32], n: usize) {\n    let mut scaled: Vec<f32> = table.iter().map(|v| v * scale).collect();\n    for (pos, &tok) in tokens.iter().enumerate() { // vocab*n scaled to\n        let off = tok * n; // serve a seq_len*n read set (+ a second\n        hidden[pos * n..pos * n + n] // host copy of the table)\n            .copy_from_slice(&scaled[off..off + n]);\n    }\n}".to_string(),
+            opt_pattern: "// optimized: fold the scale into the sparse gather itself — the\n// multiply rides the copy that must happen anyway\nfn embed_scale_at_gather(table: &[f32], scale: f32, tokens: &[usize],\n                         hidden: &mut [f32], n: usize) {\n    for (pos, &tok) in tokens.iter().enumerate() {\n        let off = tok * n;\n        let row = &mut hidden[pos * n..pos * n + n];\n        for (i, o) in row.iter_mut().enumerate() {\n            *o = table[off + i] * scale; // seq_len*n multiplies; the\n        } // table stays UNSCALED for the lm_head consumer\n    }\n}".to_string(),
+        },
+        // ── tiled-host-transpose-before-quantize — cache-block the transpose (A) ──
+        // Source: riir-gpu gemma4_q4k_train/weight_buffers.rs L460-466
+        // (transpose_quantize_upload: the naive loop — "let mut
+        // transposed = vec![0.0f32; rows * cols]; for r in 0..rows {
+        // for c in 0..cols { transposed[c * rows + r] = data[r * cols
+        // + c]; } }" — inner-c store strides by rows*4 B = 15,360 B at
+        // n_embd=3840). Runs once per tensor × ~337 tensors per backward
+        // build (7×48 layers + wte), the largest tensor 221 MB.
+        //
+        // Distinct from pre-transposed-consumer-layout-handles-build-once
+        // (B34 — the residency DECISION that a transposed handle must
+        // exist; this file already ships it — this rule is the transpose
+        // ALGORITHM that runs under that decision), layout-permute-for-
+        // coalescing (B8/M — GPU-side layout choice, not the host loop).
+        KernelRule {
+            rule_id: "tiled-host-transpose-before-quantize".to_string(),
+            gpu_concept: "a host-side transpose feeding a quantize+upload pipeline must be cache-BLOCKED (tiled), not naive-indexed: the naive inner loop stores with stride rows*4 B (15,360 B at n_embd=3840), so every store lands on a cold line and each 64 B destination line is write-allocated 16 separate times; 64x64 tiling makes both the load stream and the store stream sequential within a hot tile window. This is the transpose ALGORITHM that runs UNDER pre-transposed-consumer-layout-handles-build-once (the residency DECISION that mandates a transposed handle at build time — a different axis), and the host-side sibling of layout-permute-for-coalescing (GPU-side layout choice). At one transpose per tensor x ~337 tensors per backward-handles build, the naive loop is seconds of pure line-traffic waste.".to_string(),
+            ref_shape: "// naive: inner-loop store strides by rows*4 B — every store a cold\n// line; each 64 B destination line written 16 separate times\nfn transpose_naive(data: &[f32], rows: usize, cols: usize) -> Vec<f32> {\n    let mut t = vec![0.0f32; rows * cols];\n    for r in 0..rows {\n        for c in 0..cols {\n            t[c * rows + r] = data[r * cols + c];\n        }\n    }\n    t\n}".to_string(),
+            opt_pattern: "// optimized: 64x64 cache-blocked transpose — loads AND stores walk\n// a hot tile window instead of striding the whole matrix\nfn transpose_tiled(data: &[f32], rows: usize, cols: usize) -> Vec<f32> {\n    let mut t = vec![0.0f32; rows * cols];\n    const TILE: usize = 64;\n    for r0 in (0..rows).step_by(TILE) {\n        for c0 in (0..cols).step_by(TILE) {\n            let r_hi = (r0 + TILE).min(rows);\n            let c_hi = (c0 + TILE).min(cols);\n            for r in r0..r_hi {\n                for c in c0..c_hi {\n                    t[c * rows + r] = data[r * cols + c];\n                }\n            }\n        }\n    }\n    t\n}".to_string(),
+        },
+        // ── materialized-fast-path-bulk-slice-accessor — branch once per step (D) ──
+        // Source: riir-gpu gemma4_q4k_train/weight_buffers.rs L100-105
+        // (WteLookup::owned_slice: "pub fn owned_slice(&self) ->
+        // Option<&[f32]> { match self { WteLookup::Owned(v) => Some(v),
+        // WteLookup::GgufBacked { .. } => None } }") + the consumer
+        // forward_batched.rs L208-227 (ONE per-step branch → the Owned
+        // arm runs scratch.hidden.par_chunks_mut(n) direct indexing; the
+        // GgufBacked arm falls back to per-row row_scaled_into).
+        //
+        // Distinct from static-classification-hoist-to-routing-table
+        // (B32b — hoists to CONSTRUCTION; impossible here: the
+        // representation is a per-load-path property and the hoist is
+        // legitimately per-step), enum-dispatch-separate-kernel-per-
+        // variant (B29 — GPU kernel specialization; this is the host API
+        // shape that unlocks zero per-row dispatch + rayon).
+        KernelRule {
+            rule_id: "materialized-fast-path-bulk-slice-accessor".to_string(),
+            gpu_concept: "when an enum wraps a materialized-vs-backed representation (an owned f32 table vs an mmap-backed lazy-row variant), the hot path must branch ONCE PER STEP on a bulk zero-copy accessor (Option<&[f32]>) and run a representation-specialized loop body — direct indexing + parallel chunking over the destination on the materialized arm — instead of dispatching every row through the method that internally matches the enum. The accessor shape is what makes the fast path both zero-dispatch and rayon-parallelizable. Distinct from static-classification-hoist-to-routing-table (hoists classification to CONSTRUCTION — impossible here: the representation is a per-load-path property and the branch is legitimately per-step) and from enum-dispatch-separate-kernel-per-variant (GPU kernel specialization per variant — this is the host API shape).".to_string(),
+            ref_shape: "// naive: per-row method dispatch — the enum is matched and the\n// method called for EVERY row even when the table is materialized\nfn embed_via_method(lookup: &WteLookup, tokens: &[usize], scale: f32,\n                    hidden: &mut [f32], n: usize) {\n    for (pos, &tok) in tokens.iter().enumerate() {\n        let row = &mut hidden[pos * n..pos * n + n];\n        lookup.row_scaled_into(tok, scale, row); // per-row match + call\n    }\n}".to_string(),
+            opt_pattern: "// optimized: ONE branch per step on a bulk zero-copy accessor; the\n// materialized arm runs a specialized direct-index + parallel loop\nfn embed_specialized(lookup: &WteLookup, tokens: &[usize], scale: f32,\n                     hidden: &mut [f32], n: usize) {\n    if let Some(slice) = lookup.owned_slice() {\n        hidden.par_chunks_mut(n).enumerate().for_each(|(pos, row)| {\n            let off = tokens[pos] * n;\n            for (i, o) in row.iter_mut().enumerate() {\n                *o = slice[off + i] * scale; // direct indexing + rayon\n            }\n        });\n    } else {\n        for (pos, &tok) in tokens.iter().enumerate() {\n            let row = &mut hidden[pos * n..pos * n + n];\n            lookup.row_scaled_into(tok, scale, row); // backed fallback\n        }\n    }\n}".to_string(),
+        },
     ])
 }
 
@@ -5687,7 +5912,7 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 282-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 290-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -5695,7 +5920,7 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (49 rules)
+    // A: Memory access patterns (52 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -5749,6 +5974,9 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "smem-staging-gated-by-cross-thread-reuse",
             "side-consumer-readback-alias-live-handle-for-dependent-dispatch",
             "quadratic-attention-intermediates-recompute-from-linear-saves",
+            "kv-window-device-resident-ring-append",
+            "identical-tensor-handle-clone-zero-reupload",
+            "tiled-host-transpose-before-quantize",
         ],
     ),
     // B: Compute patterns (45 rules)
@@ -5803,7 +6031,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "block-reduction-separate-scratch-runtime-strides",
         ],
     ),
-    // C: Fusion patterns (30 rules)
+    // C: Fusion patterns (31 rules)
     (
         KernelCategory::Fusion,
         "C: fusion",
@@ -5838,9 +6066,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "shape-matched-sibling-weight-grads-share-input-loop",
             "kernelize-host-chain-after-sync-batching-floor",
             "constant-scale-folded-into-upload-copy",
+            "sparse-gather-scale-at-read-not-table-prepass",
         ],
     ),
-    // D: Dispatch patterns (48 rules)
+    // D: Dispatch patterns (50 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -5893,6 +6122,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "training-forward-shed-decode-loop-shape",
             "sibling-dispatches-before-any-readback",
             "independent-cpu-work-fills-dispatch-read-window",
+            "lm-head-loss-positions-only",
+            "materialized-fast-path-bulk-slice-accessor",
         ],
     ),
     // E: Parallelism patterns (17 rules)
@@ -6016,7 +6247,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "vector-width-pow2-sweep",
         ],
     ),
-    // L: Conv-as-GEMM + memory layout (9 rules)
+    // L: Conv-as-GEMM + memory layout (10 rules)
     (
         KernelCategory::ConvGemmLayout,
         "L: conv-as-GEMM + layout",
@@ -6030,6 +6261,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "twin-projection-shared-delta-adapter",
             "bool-fields-over-bitset-hot-reads",
             "pre-transposed-consumer-layout-handles-build-once",
+            "stream-drain-free-source-during-build",
         ],
     ),
     // M: Kernel parametric polymorphism (9 rules)
@@ -6048,7 +6280,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "debug-only-gpu-label-macro",
         ],
     ),
-    // N: dtype + alignment specialization (16 rules)
+    // N: dtype + alignment specialization (17 rules)
     (
         KernelCategory::DtypeAlignment,
         "N: dtype + alignment",
@@ -6069,6 +6301,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "derived-scalar-host-computed-in-uniform",
             "exact-op-parity-for-analytic-backward",
             "saturating-nonlinearity-recovery-breaks-near-cap",
+            "verbatim-upload-on-format-match",
         ],
     ),
     // O: IR strength reduction (4 rules)
@@ -6089,7 +6322,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
 /// Returns 15 buckets (one per category), each containing the `KernelRule`s whose
 /// `rule_id` appears in that category's slice of [`KERNEL_CATEGORIES`]. This is
 /// the category-scoped view of the corpus — a future heal pipeline can consult
-/// routed expert's rules first without scanning all 282.
+/// routed expert's rules first without scanning all 290.
 ///
 /// # Allocation
 ///
@@ -6166,9 +6399,10 @@ mod tests {
         // Batch 29 (10): riir-gpu production kernels — defer-readback-gated-by-live-output-size, weight-handle-cache-keyed-by-allocation-identity, first-readback-pays-queue-drain, epilogue-at-register-write-phase, delay-rms-scale-past-gemv-epilogue, pack-scalar-params-into-combined-buffer, enum-dispatch-separate-kernel-per-variant, epilogue-must-be-workgroup-local, launch-unchecked-caller-owned-size-contract, fast-math-contraction-behind-feature-flag (deltanet_input_proj_fused.rs + epilogue/ — the decode-path fusion cluster: Issue 602 sibling-GEMV fan-out + Plan 106 Track 3 CODA epilogue fusion).
         // Batch 30 (6): riir-gpu production kernels — zero-init-side-branch-frozen-base-path, counter-derived-seed-stateless-noise, predicate-gated-skip-empty-workset-step, share-pipeline-set-across-subsystems, pad-uniform-pod-to-min-binding-size, fuse-count-into-mutation-pass (dllm/mod.rs — the D2F training cluster: Plan 068 discrete-diffusion trainers + RePlaid schedule).
         // Batch 36 (7): riir-gpu production kernels — constant-scale-folded-into-upload-copy, side-branch-operand-residency-matches-mutation-lifetime, activation-checkpoint-as-handle-clone-deferred-batch-readback, training-forward-shed-decode-loop-shape, sibling-dispatches-before-any-readback, independent-cpu-work-fills-dispatch-read-window, grad-terms-merge-before-shared-link-jacobian (gemma2_cubecl_train/resident.rs — the Gemma-2 RESIDENT training cluster: Plan 481/482 all-GPU LoRA forward (per-position + batched) + batched backward; completes the Batch 35 cluster).
+// Batch 37 (8): riir-gpu production kernels — kv-window-device-resident-ring-append, lm-head-loss-positions-only, verbatim-upload-on-format-match, stream-drain-free-source-during-build, identical-tensor-handle-clone-zero-reupload, sparse-gather-scale-at-read-not-table-prepass, tiled-host-transpose-before-quantize, materialized-fast-path-bulk-slice-accessor (gemma4_q4k_train/ mod.rs + weight_buffers.rs — the Q4_K TRAINING cluster: QLoRA frozen-Q4_K-base + f32-LoRA-delta Gemma-4 trainer; forward_batched + backward deferred to Batch 38).
         // Batch 35 (8): riir-gpu production kernels — mask-sentinel-matches-reduction-identity, smem-staging-gated-by-cross-thread-reuse, kernelize-host-chain-after-sync-batching-floor, block-reduction-separate-scratch-runtime-strides, saturating-nonlinearity-recovery-breaks-near-cap, adapter-grad-join-mirrors-forward-delta-insertion-point, side-consumer-readback-alias-live-handle-for-dependent-dispatch, quadratic-attention-intermediates-recompute-from-linear-saves (gemma2_cubecl_train/ — the Gemma-2 training cluster: fused causal attention kernel Issue 430 Option B + hybrid LoRA training fwd/bwd).
-        // Total: 209. // (historical batch-30 snapshot; current 282)
-        assert_eq!(corpus.entries.len(), 282, "batches 1-36 should have 282 rules");
+        // Total: 209. // (historical batch-30 snapshot; current 290)
+        assert_eq!(corpus.entries.len(), 290, "batches 1-37 should have 290 rules");
     }
 
     #[test]
@@ -8157,6 +8391,105 @@ mod tests {
         }
     }
 
+    #[test]
+    fn batch37_rules_present() {
+        let corpus = build_kernel_seed_corpus();
+        let ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        // A (3 new): device-resident KV ring, aliased-tensor handle clone,
+        // cache-blocked host transpose
+        assert!(ids.contains(&"kv-window-device-resident-ring-append"), "KV ring append");
+        assert!(ids.contains(&"identical-tensor-handle-clone-zero-reupload"), "absent-V handle clone");
+        assert!(ids.contains(&"tiled-host-transpose-before-quantize"), "tiled transpose");
+        // B (1 new): scale folded at the sparse gather
+        assert!(ids.contains(&"sparse-gather-scale-at-read-not-table-prepass"), "gather-side scale fold");
+        // D (2 new): loss-position gating, bulk-slice fast path
+        assert!(ids.contains(&"lm-head-loss-positions-only"), "lm-head loss gating");
+        assert!(ids.contains(&"materialized-fast-path-bulk-slice-accessor"), "bulk slice accessor");
+        // L (1 new): draining build
+        assert!(ids.contains(&"stream-drain-free-source-during-build"), "draining build");
+        // N (1 new): verbatim upload on format match
+        assert!(ids.contains(&"verbatim-upload-on-format-match"), "verbatim upload");
+    }
+
+    #[test]
+    fn batch37_concepts_covered() {
+        // Verify the batch-37 Q4_K-training-cluster concepts via
+        // distinctive ASCII substrings located by rule_id (the 32a
+        // convention — immune to prose-evolution churn).
+        let corpus = build_kernel_seed_corpus();
+        let concept = |id: &str| -> String {
+            corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-37 rule '{id}' missing"))
+                .gpu_concept
+                .clone()
+        };
+        // A: kv-window-device-resident-ring-append (mod.rs L1246-1251 + L979-980)
+        let c = concept("kv-window-device-resident-ring-append");
+        assert!(c.contains("append-vs-snapshot")
+            && c.contains("only the NEW row crosses the bus"), "KV ring concept");
+        // D: lm-head-loss-positions-only (mod.rs L1123 + backward.rs L73-76)
+        let c = concept("lm-head-loss-positions-only");
+        assert!(c.contains("loss-support set")
+            && c.contains("never launches"), "lm-head gating concept");
+        // N: verbatim-upload-on-format-match (weight_buffers.rs L498-509)
+        let c = concept("verbatim-upload-on-format-match");
+        assert!(c.contains("source format == destination format")
+            && c.contains("never dequantize"), "verbatim upload concept");
+        // L: stream-drain-free-source-during-build (mod.rs L610-635)
+        let c = concept("stream-drain-free-source-during-build");
+        assert!(c.contains("O(one unit), not O(model)")
+            && c.contains("process, upload, drop"), "draining build concept");
+        // A: identical-tensor-handle-clone-zero-reupload (weight_buffers.rs L229-232)
+        let c = concept("identical-tensor-handle-clone-zero-reupload");
+        assert!(c.contains("refcount bump")
+            && c.contains("zero re-upload"), "handle clone concept");
+        // B: sparse-gather-scale-at-read-not-table-prepass (weight_buffers.rs L77-96 + L147-148)
+        let c = concept("sparse-gather-scale-at-read-not-table-prepass");
+        assert!(c.contains("READ-SET DENSITY")
+            && c.contains("INVERSE regime"), "gather-side scale concept");
+        // A: tiled-host-transpose-before-quantize (weight_buffers.rs L460-466)
+        let c = concept("tiled-host-transpose-before-quantize");
+        assert!(c.contains("write-allocated")
+            && c.contains("cache-BLOCKED"), "tiled transpose concept");
+        // D: materialized-fast-path-bulk-slice-accessor (weight_buffers.rs L100-105)
+        let c = concept("materialized-fast-path-bulk-slice-accessor");
+        assert!(c.contains("ONCE PER STEP")
+            && c.contains("representation-specialized"), "bulk accessor concept");
+    }
+
+    #[test]
+    #[cfg(not(feature = "kernel_verify"))]
+    fn batch37_pseudocode_parses() {
+        // G1 for Batch 37: every new rule's ref_shape AND opt_pattern must
+        // syn-parse as valid Rust (the L2 pruner verdict).
+        use crate::domain::HealDomain;
+        let corpus = build_kernel_seed_corpus();
+        let ids = [
+            "kv-window-device-resident-ring-append",
+            "lm-head-loss-positions-only",
+            "verbatim-upload-on-format-match",
+            "stream-drain-free-source-during-build",
+            "identical-tensor-handle-clone-zero-reupload",
+            "sparse-gather-scale-at-read-not-table-prepass",
+            "tiled-host-transpose-before-quantize",
+            "materialized-fast-path-bulk-slice-accessor",
+        ];
+        for id in ids {
+            let entry = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-37 rule '{id}' missing"));
+            let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+            assert!(ref_verdict.parses, "batch-37 ref_shape for '{id}' must parse");
+            let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+            assert!(opt_verdict.parses, "batch-37 opt_pattern for '{id}' must parse");
+        }
+    }
+
 
     // ════════════════════════════════════════════════════════════════════
     // Plan 003 — Router ↔ corpus wiring tests
@@ -8202,10 +8535,10 @@ mod tests {
     fn kernel_categories_counts_match_plan_003_table() {
         // Pin per-category rule counts to the Plan 003 table (updated for Batch 36).
         let expected = [
-            (KernelCategory::MemoryAccess, 49),
+            (KernelCategory::MemoryAccess, 52),
             (KernelCategory::Compute, 45),
-            (KernelCategory::Fusion, 30),
-            (KernelCategory::Dispatch, 48),
+            (KernelCategory::Fusion, 31),
+            (KernelCategory::Dispatch, 50),
             (KernelCategory::Parallelism, 17),
             (KernelCategory::FlashAttnTiling, 10),
             (KernelCategory::LinearAttnRecurrence, 19),
@@ -8213,9 +8546,9 @@ mod tests {
             (KernelCategory::NsaBlockSparse, 4),
             (KernelCategory::VarlenChunkedReduction, 5),
             (KernelCategory::AutotuneDispatch, 4),
-            (KernelCategory::ConvGemmLayout, 9),
+            (KernelCategory::ConvGemmLayout, 10),
             (KernelCategory::KernelPolymorphism, 9),
-            (KernelCategory::DtypeAlignment, 16),
+            (KernelCategory::DtypeAlignment, 17),
             (KernelCategory::IrStrengthReduction, 4),
         ];
         for (cat, count) in expected {
@@ -8225,9 +8558,9 @@ mod tests {
                 "Plan 003: category {cat:?} has {} rules, expected {count}",
                 entry.2.len());
         }
-        // Sum must equal 282.
+        // Sum must equal 290.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 282, "Plan 003: category totals must sum to 282");
+        assert_eq!(total, 290, "Plan 003: category totals must sum to 290");
     }
 
     #[test]
@@ -8237,7 +8570,7 @@ mod tests {
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 282, "Plan 003: grouped corpus has {total} rules, expected 282");
+        assert_eq!(total, 290, "Plan 003: grouped corpus has {total} rules, expected 290");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");

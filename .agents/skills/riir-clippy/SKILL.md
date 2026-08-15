@@ -292,18 +292,64 @@ global = symlink only.
   distinctive opt-pattern TEXT, not the rule id — `rindex` of the id
   resolves to its occurrence in the TESTS, after the vec) — clean
   abort, zero pollution, first compile after fix.
+- **Batch 37 DONE (2026-08-15, Research 041):** the Q4_K TRAINING cluster
+  (`gemma4_q4k_train/mod.rs` 1,389 + `weight_buffers.rs` 553 — the QLoRA
+  frozen-Q4_K-base + f32-LoRA-delta Gemma-4 trainer;
+  `forward_batched.rs` + `backward.rs` deliberately deferred to a future
+  batch on predicted dedup pressure) — **8 rules, corpus 282 → 290**
+  (A 52, C 31, D 50, L 10, N 17 — sparse-gather landed in C beside its
+  inverse twin constant-scale-folded-into-upload-copy, not the proposed
+  B): kv-window-device-resident-ring-append, lm-head-loss-positions-only,
+  verbatim-upload-on-format-match, stream-drain-free-source-during-build,
+  identical-tensor-handle-clone-zero-reupload,
+  sparse-gather-scale-at-read-not-table-prepass,
+  tiled-host-transpose-before-quantize,
+  materialized-fast-path-bulk-slice-accessor. SIX seeds falsified
+  (highest-per-agent yet: F1 rope tables ARE cached once — 48 layers
+  share 2 via `rope_table_idx`; F3 `LoraSite::none()` is the correct
+  frozen-base skip, not B31's inert adapter; F4 gammas built once at
+  construction; F5 the 3 backward constructors field-identical — no
+  `merkle_root`-class miss; F4' the setup path is pure enqueue, 0
+  round-trips; F5' the GEMV path already ships packed Q4_K + in-kernel
+  dequant = the B15 direction) + 2 confirmations with regime corrections
+  that became rules (scale-at-gather is CORRECT for a sparse read set;
+  quantize runs once but is paid TWICE: forward + transposed backward ≈
+  14 GB on a 24 GB 4090). 1 dropped as dedup
+  (variant-dedup-constant-table-by-index — share-pipeline-set + B17's
+  rope-table-drop precedent). Bug yield filed as riir-ai Issue 690
+  (~19 hazards: 43,008 blocking reads/step on the unbatched path (the
+  file's own Bench 433 doc), the dead lm_head for prompt positions
+  (~127 MB/step), the dual-KV quadruple-write ~402 MB/step, the O(S²)
+  window collects on already-contiguous rows ~537 MB/step/layer, ~40
+  GB/step sliding-window re-upload, 2× GPU residency, 7 GB + 48 GB
+  one-time dead zero-inits, 2 doc-lies, + more, 6-step fix order).
+  GOAT: 327 kernel_heal + 201 default tests, clippy 0 in all 4 states
+  (45 `doc_lazy_continuation` + 8 backtick warnings fixed — ROOT CAUSE:
+  a line-initial `+ ` in `//!` list-item continuations parses as a NEW
+  markdown list item, flagging EVERY subsequent line; backtick
+  `lm_head`/`Q4_K`/`QLoRA`/`.rs` names in header prose). Generator
+  lessons: TWO slice-anchor misplacements caught by the count-pin
+  test — slice-tail anchors are ONLY safe when extracted from the
+  enclosing `KernelCategory::X` block (regex), never by line-number
+  proximity (all 15 slices end with the identical `],\n    ),` shape);
+  ONE malformed edit_file op (schema-foreign key) silently truncated
+  a header sentence — caught by re-reading; a `git stash` near-miss
+  (pop verified complete — use `git show HEAD:file` for comparisons,
+  NEVER stash with sibling WIP present).
 - **NEXT mining target**: `ls` the riir-gpu tree for the next unmined
-  cluster (~77 of ~200 files mined). Candidates:
-  `gemma4_q4k_train/` (4 files ~160 KB — the Q4_K training cluster;
-  expect dedup pressure from B34/B35/B36: the B35 alias-live-handle
-  rule's standing proof IS the Q4_K sibling), `gemma2_d2f*`,
-  `kimi_k3_gpu_*` (4 files), `weaver_gpu*` (4 files), `kvarn/`,
-  `hypernet/`, `maxsim/`. Pick 1-2 files, ~8-12 rules, Batch 37
-  (Research 041).
+  cluster (~79 of ~200 files mined). Candidates:
+  `gemma4_q4k_train/forward_batched.rs` + `backward.rs` (the deferred
+  remainder of the Q4_K cluster — expect heavy dedup vs B34/B35/B36/
+  B37: the batched path IS the 43,008→337 fix + the backward mirrors
+  the mined backward shapes), then `gemma2_d2f*`, `kimi_k3_gpu_*`
+  (4 files), `weaver_gpu*` (4 files), `kvarn/`, `hypernet/`, `maxsim/`.
+  Pick 1-2 files, ~6-10 rules (dedup pressure high), Batch 38
+  (Research 042).
   - Validation pattern (proven T4 + 32a + 32b-1 + 32c + 36): corpus files are NOT
     sibling WIP — edit + run GOAT in the main checkout with
     `CARGO_TARGET_DIR=/tmp/riir-clippy-bNN`; `--features kernel_heal`
-    for the corpus suite (318 at 34, 321 at 35, 324 at 36), default for
+    for the corpus suite (318 at 34, 321 at 35, 324 at 36, 327 at 37),
+    default for
     the 201 suite.
     `--all-features` is currently broken by SIBLING WIP
     (`rust_perf/bench.rs:335 alloc_axis`) — pre-existing, not yours.
@@ -315,7 +361,7 @@ global = symlink only.
     `rules_for_expert` total + the corpus-count mentions in router.rs
     doc header + the Plan 003 doc-comment `NNN-rule corpus` line above
     KERNEL_CATEGORIES + the `Total: 209 ... current NNN` comment + the
-    file-level `//!` header batch block. All in sync at 282.
+    file-level `//!` header batch block. All in sync at 290.
   - **Landing lesson (32b-1, self-caught)**: after a large multi-entry
     corpus edit, `awk`-scan for `rule_id:` lines NOT preceded by a
     standalone `KernelRule {` BEFORE the first compile — JSON `\n`
@@ -327,11 +373,13 @@ global = symlink only.
   WIP STILL ACTIVE as of 2026-08-15 evening: qv_lora.rs + cudarc_kernels/
   + riir-gpu/lib.rs + ternary_deltanet_gpu_forward_cudarc.rs all dirty)
   — mine only after their WIP lands.
-- **Progress**: riir-gpu ~77 of ~200 files mined. Corpus: 282 rules.
+- **Progress**: riir-gpu ~79 of ~200 files mined. Corpus: 290 rules.
   edge_lora module FULLY MINED (32a + 32b-1 + 32c). spectralquant/
   FULLY MINED (15 + 33). gemma4_cubecl_train/ DONE (34).
   gemma2_cubecl_train/ FULLY MINED (35: mod.rs + attention_gpu.rs;
-  36: resident.rs).
+  36: resident.rs). gemma4_q4k_train/ HALF-MINED (37: mod.rs +
+  weight_buffers.rs; forward_batched.rs + backward.rs remain — Batch 38
+  first candidate).
 - **Also open (riir-clippy issues)**: 014 (rust_perf v4, 12 tasks), 016
   (clippy structural expansion, 6), 017 (retrieval precision at scale,
   5), 018 (self_evolve promotion, 6). 015 = sibling's ACTIVE WIP
