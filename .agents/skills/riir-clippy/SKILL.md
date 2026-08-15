@@ -159,21 +159,52 @@ global = symlink only.
     the 32b-1 session forgot the write-back). Fixed. Never trust the
     highwater file alone; re-scan the folder at write time (the standing
     rule, now with its own observed failure).
+- **Batch 33 DONE (2026-08-15, Research 037):** the spectralquant
+  calibration cluster (calibration.rs + rotation.rs + qjl.rs — the
+  calibration path Research 016 explicitly deferred; the spectralquant/
+  directory is now FULLY MINED; bench-only today, sole consumer
+  spectralquant_bench.rs) — **7 rules, corpus 251 → 258** (A 44, B 44,
+  C 27, D 40, E 16, N 14): grid-over-output-thread-private-sweep,
+  buffer-set-struct-two-tier-dispatch, slot-offset-partial-buffer-write,
+  immutable-operand-upload-at-set-creation,
+  selective-projection-effective-rank-head,
+  derived-scalar-host-computed-in-uniform,
+  rademacher-signs-over-gaussian-projection. **ONE seed REJECTED on
+  verification** (the load-bearing call): two-stage tile→reduce is NOT
+  what covariance.wgsl does — the producer writes no tile partials, so
+  n_tiles > 1 would reduce uninitialized memory (filed as riir-ai Issue
+  686 H1 instead of becoming a rule). 11 further candidates dropped as
+  duplicates/thin. Bug yield filed as riir-ai Issue 686 (15 hazards:
+  n_tiles>1 silent corruption + layer_offset dead in the rotation kernel
+  + per-dispatch bind groups + create_uniform_buffer doc-lie + …).
+  GOAT: 315 kernel_heal + 201 default tests, clippy 0 in all 4 states
+  (8 doc warnings fixed pre-commit; drive-by fix of the stale
+  M-category (7→9) comment).
+  - **Method note (33): the subagent verification protocol overturned a
+    coordinator seed** — subagent 1 read the WGSL kernels on its own
+    initiative and produced line evidence that rejected the
+    two-stage-tile seed BEFORE it landed. Always let subagents verify
+    against the KERNEL side, not just the .rs dispatch wrappers; the
+    .rs comments can describe unimplemented behavior (the
+    "multi-pass accumulation" docs describe a path the kernel never
+    implements).
 - **NEXT mining target**: `ls` the riir-gpu tree for the next unmined
-  cluster (~69 of ~200 files mined). Candidates: `spectralquant/`
-  residuals, gemma*_cubecl residuals, or the wasm/ffi edge files. Pick 1-2
-  files, ~8-12 rules, Batch 33 (Research 037).
+  cluster (~72 of ~200 files mined). Candidates: `gemma*_cubecl_train/`
+  + `gemma2_d2f*` + `gemma4_q4k_train` (the Gemma training residuals),
+  `kimi_k3_gpu_*` (4 files), `weaver_gpu*` (4 files), `kvarn/`,
+  `hypernet/`, `maxsim/`. Pick 1-2 files, ~8-12 rules, Batch 34
+  (Research 038).
   - Validation pattern (proven T4 + 32a + 32b-1 + 32c): corpus files are NOT
     sibling WIP — edit + run GOAT in the main checkout with
     `CARGO_TARGET_DIR=/tmp/riir-clippy-bNN`; `--features kernel_heal`
-    for the corpus suite (312 tests at 32c), default for the 201 suite.
+    for the corpus suite (312 at 32c, 315 at 33), default for the 201 suite.
     `--all-features` is currently broken by SIBLING WIP
     (`rust_perf/bench.rs:335 alloc_axis`) — pre-existing, not yours.
   - Count-pin sites when adding rules (complete list, re-verified 32c):
     corpus.rs `entries.len()` assert + KERNEL_CATEGORIES rows + per-category
     count test + 2 grouped-total tests + router.rs `rules_for_expert` total
     + the corpus-count mentions in router.rs doc header + the Plan 003
-    doc-comment `251-rule corpus` line above KERNEL_CATEGORIES + the
+    doc-comment `258-rule corpus` line above KERNEL_CATEGORIES + the
     file-level `//!` header batch block + the stale `228-rule` comment in
     kernel_categories_cover_all_corpus_rules_exhaustively (keep in sync).
   - **Landing lesson (32b-1, self-caught)**: after a large multi-entry

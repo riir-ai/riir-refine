@@ -615,6 +615,47 @@
 //!   dataset deep-clone + the false-premise sigmoid comment + the dead
 //!   init-touch loop + the Wait-vs-continue mismatch + the wasted
 //!   encodes — filed as a riir-ai issue.
+//! - **Batch 33 (Research 037):** 7 rules from the `spectralquant`
+//!   calibration cluster — `calibration.rs`, `rotation.rs`, `qjl.rs`
+//!   (the calibration path Research 016 explicitly deferred; the
+//!   cluster is bench-only today, sole consumer
+//!   `benches/spectralquant_bench.rs`):
+//!   `grid-over-output-thread-private-sweep` (E — grid over the OUTPUT
+//!   matrix, the long `seq_len` axis swept thread-private in registers,
+//!   one store per element: zero cross-thread reduction, no partials
+//!   buffer, no reduce kernel), `buffer-set-struct-two-tier-dispatch`
+//!   (D — all buffers a kernel family needs hoisted into ONE struct
+//!   bound to the config; the preferred entry only writes uniform
+//!   content, the raw entry self-allocates for cold callers),
+//!   `slot-offset-partial-buffer-write` (A — update one (pos, head)
+//!   slot via a computed byte offset mirroring the kernel's base
+//!   index; `d_h`×4 bytes, not the whole tensor),
+//!   `immutable-operand-upload-at-set-creation` (A — V^T / codebooks /
+//!   sign-matrix uploaded ONCE in the buffer-set constructor; mutable
+//!   buffers created empty; dispatch never sees operand bytes again),
+//!   `selective-projection-effective-rank-head` (B — after an
+//!   energy-concentrating transform, the projection operator runs on
+//!   the top `d_eff` coords only; operator + FLOPs scale with effective
+//!   rank, not ambient dim), `derived-scalar-host-computed-in-uniform`
+//!   (N — config-derived scalars computed once on the host + shipped
+//!   in the uniform: CPU reference and kernel consume bit-identical
+//!   f32 by construction; WGSL sqrt is 2.5-ULP, not correctly
+//!   rounded), `rademacher-signs-over-gaussian-projection` (B — ±1
+//!   entries: one coin flip per entry, ±1.0 exact in f32 so every
+//!   product is exact; conditional-negate strength reduction licensed
+//!   but unrealized in the source kernel). Corpus: **258 rules across
+//!   15 categories (A–O)**. ONE seed REJECTED on verification:
+//!   two-stage tile→reduce is NOT what covariance.wgsl does — the
+//!   producer writes no tile partials, so `n_tiles` > 1 would reduce
+//!   uninitialized memory (filed as riir-ai Issue 686 H1, not a rule —
+//!   encoding it would have put a bug in the corpus as wisdom). 11
+//!   further candidates dropped as duplicates/thin (`offset_of!` pin
+//!   tests → completion of pad-uniform-pod; flat-1D modulo decode →
+//!   derive-params + token-flattened; sign-matrix bitpacking →
+//!   bool-fields regime boundary; smem staging + coalescing variants →
+//!   covered). Mining ALSO surfaced the layer_offset-dead-in-kernel
+//!   multi-layer hazard + the `create_uniform_buffer` doc-lie + the
+//!   per-dispatch bind-group family — filed as riir-ai Issue 686.
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
@@ -4742,6 +4783,193 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
             ref_shape: "// naive: timeout emits a flat draw — every capped game lands on the same\n// uninformative 0.5 label no matter how lopsided the state was when the\n// clock ran out; the reward signal drowns in draws\nfn terminal_naive(state: &Battle) -> f32 {\n    match state.check_winner() {\n        Some(w) if w == MY_TEAM => 1.0,\n        Some(_) => 0.0,\n        None => 0.5, // timeout AND true draw AND mutual destruction: all 0.5\n    }\n}\n".to_string(),
             opt_pattern: "// optimized: timeout falls through to an EXISTING state scalar tiebreak —\n// the outcome stays decisive (0.5 only on an exact tie), so capped games\n// still carry directional signal with zero extra state maintained\nfn terminal_with_tiebreak(state: &Battle) -> f32 {\n    match state.check_winner() {\n        Some(w) if w == MY_TEAM => 1.0,\n        Some(_) => 0.0,\n        None => {\n            // draw or timeout — HP tiebreak\n            let my_hp = state.team_hp(MY_TEAM); // scalar the state\n            let enemy_hp = state.team_hp(ENEMY); // already maintains\n            if my_hp > enemy_hp {\n                1.0\n            } else if my_hp < enemy_hp {\n                0.0\n            } else {\n                0.5 // exact tie only\n            }\n        }\n    }\n}\n".to_string(),
         },
+        // ══ Batch 33 (Research 037): the spectralquant calibration cluster — ══
+        // calibration.rs + rotation.rs + qjl.rs (the calibration path
+        // Research 016 explicitly deferred; the cluster is bench-only
+        // today, sole consumer benches/spectralquant_bench.rs). Host-side
+        // wgpu dispatch orchestration + the WGSL kernels they drive. One
+        // seed REJECTED during verification: two-stage tile→reduce is NOT
+        // what covariance.wgsl does — the producer writes no tile
+        // partials, so n_tiles > 1 would reduce uninitialized memory
+        // (filed as riir-ai Issue 686 H1, not a rule — encoding it would
+        // put a bug in the corpus as wisdom).
+        // ── grid-over-output-thread-private-sweep — parallelize-long-axis → grid over output (E) ──
+        // Source: riir-gpu spectralquant/calibration.rs L288-290 ("//
+        // Workgroup 16×16: dispatch ceil(d_h/16) × ceil(d_h/16)" +
+        // dispatch_2d(d_h, d_h, 16, 16)) + covariance.wgsl L50-79 (kernel
+        // side: "var accum: f32 = 0.0;" then the loop "for (var i = 0u; i
+        // < params.seq_len; i = i + 1u)" sweeping ALL positions
+        // in-register, "accum += s_row[local_row] * s_col[local_col];" per
+        // position, and ONE final store "output_cov[global_row * d_h +
+        // global_col] = accum;" — each output element owned by exactly one
+        // thread). The bench consumer pins the single-pass shape
+        // (spectralquant_bench.rs L166: "let n_tiles = 1; // single-pass
+        // for d_h=128").
+        //
+        // Distinct from tree-reduction-depth-over-sequential-accumulate and
+        // workgroup-equals-plane-native-reduction (both govern reductions
+        // that SPAN threads — here sequential accumulation is optimal
+        // precisely because no thread ever shares reduction work), from
+        // split-reduction-scalar-prepass (splits a scalar reduction OUT
+        // into a second pass — this avoids splitting at all by
+        // privatizing the sweep), and from single-plane-sufficient-
+        // reduction (redundant-plane elimination for cooperative
+        // reductions).
+        KernelRule {
+            rule_id: "grid-over-output-thread-private-sweep".to_string(),
+            gpu_concept: "when a reduction's output is a full matrix (a d_h × d_h covariance, Gram matrix, attention statistic) and one input axis is long (seq_len), size the dispatch grid over the OUTPUT elements and keep the long axis entirely thread-private: each output element is owned by exactly one thread, which sweeps the reduction axis sequentially in a register accumulator and stores exactly once at the end — zero cross-thread reduction, zero reduction barriers, no atomics, no partials buffer, no second reduce kernel. This is the dual of split-K: instead of parallelizing the long axis and then combining per-tile partials, parallelize the (short) output axis and serialize the (long) sweep inside the thread — correct whenever the output fits the grid and the per-element sweep fits the time budget, and it removes the entire partials + reduce machinery by construction. Distinct from tree-reduction-depth-over-sequential-accumulate and workgroup-equals-plane-native-reduction (both govern reductions that span threads — sequential accumulation here is optimal precisely because no thread shares reduction work), from split-reduction-scalar-prepass (splits a scalar reduction out into a second pass — this avoids splitting at all by privatizing the sweep), and from single-plane-sufficient-reduction (redundant-plane elimination for cooperative reductions).".to_string(),
+            ref_shape: "// naive: parallelize over the LONG axis (sequence tiles), then combine\n// per-element partials across workgroups — atomic contention, or an\n// n_tiles partials buffer + a second reduce kernel; every output\n// element is written by many threads\nfn covariance_split_axis(x: &[f32], seq_len: usize, d_h: usize,\n                         n_tiles: usize, cov: &mut [f32]) {\n    for tile in 0..n_tiles {\n        // parallel over seq_len tiles: each computes a PARTIAL matrix\n        let per_tile = seq_len / n_tiles;\n        for row in 0..d_h {\n            for col in 0..d_h {\n                let mut partial = 0.0f32;\n                for i in tile * per_tile..(tile + 1) * per_tile {\n                    partial += x[i * d_h + row] * x[i * d_h + col];\n                }\n                cov[row * d_h + col] += partial; // cross-workgroup combine\n            }\n        }\n    }\n}\n".to_string(),
+            opt_pattern: "// optimized: grid over the OUTPUT matrix (dispatch_2d(d_h, d_h, 16, 16));\n// each output element has exactly ONE owning thread, which sweeps ALL\n// seq_len positions in a register accumulator and stores once — zero\n// cross-thread reduction, no partials buffer, no reduce kernel\nfn covariance_output_owned(x: &[f32], seq_len: usize, d_h: usize,\n                           cov: &mut [f32]) {\n    // dispatch: one workgroup per output tile; thread (row, col) owns\n    // cov[row][col] for its whole lifetime\n    for row in 0..d_h {\n        for col in 0..d_h {\n            let mut accum = 0.0f32; // register-private per element\n            for i in 0..seq_len {\n                // the long axis swept IN-THREAD (covariance.wgsl L53-74)\n                accum += x[i * d_h + row] * x[i * d_h + col];\n            }\n            cov[row * d_h + col] = accum; // each element written ONCE\n        }\n    }\n}\n".to_string(),
+        },
+        // ── buffer-set-struct-two-tier-dispatch — loose buffers per call → buffer-set struct + preferred entry (D) ──
+        // Source: riir-gpu spectralquant/rotation.rs L74-79 ("/// GPU
+        // buffers for eigenbasis rotation dispatch. ... /// Created once
+        // per (layer, head) calibration; reused across sequence
+        // positions.") + L198-205 ("/// Dispatch eigenbasis rotation
+        // kernel using pre-allocated buffers. ... /// This is the
+        // preferred dispatch method — reuses pre-allocated GPU buffers /
+        // /// from [GpuEigenbasisRotationBuffers].") + L212-216 (the
+        // preferred path only WRITES the uniform — write_buffer, no
+        // create) vs L263-269 (the raw path: create_uniform_buffer +
+        // write_buffer per call). Same shape in qjl.rs L186-200.
+        //
+        // Distinct from prebuilt-bind-groups-fixed-buffer-combos (that
+        // rule pre-builds the bind-group OBJECTS at init for fixed
+        // combos — this rule's reuse unit is the buffer-set struct
+        // itself plus the two-tier API discipline; note the shipped
+        // code still creates its bind group per call, a missed
+        // application of that adjacent rule, filed as Issue 686 H4).
+        KernelRule {
+            rule_id: "buffer-set-struct-two-tier-dispatch".to_string(),
+            gpu_concept: "hoist ALL device buffers a kernel family needs (input, immutable operand, output, uniform) into ONE struct whose lifetime is bound to the config (created once per layer/head/dims), and expose a two-tier dispatch API: the preferred entry takes the pre-allocated struct and only writes uniform CONTENT (write, never allocate), while the raw entry takes loose buffers and self-allocates a uniform per call — a convenience for cold/one-shot callers whose per-call device allocation is exactly what makes it secondary. The struct is the reuse unit: buffer identity is stable across dispatches, so bind groups over it are also stable (prebuilt-bind-groups is the natural next step once combos are fixed). Distinct from prebuilt-bind-groups-fixed-buffer-combos (that rule pre-builds the bind-group objects at init — this rule's unit is the buffer-set struct plus the two-tier API discipline that makes the allocating path explicitly secondary).".to_string(),
+            ref_shape: "// naive: the ONLY entry takes loose buffers and allocates a uniform\n// buffer on EVERY dispatch — no reuse unit; hot and cold callers pay\n// the same per-call device allocation\nfn dispatch(gpu: &Gpu, encoder: &mut Encoder, input: &Buffer, vt: &Buffer,\n            out: &Buffer, cfg: &Cfg) {\n    let bytes = bytemuck::cast_slice(std::slice::from_ref(cfg));\n    let uniform = create_uniform_buffer(&gpu.device, bytes, \"cfg\"); // per call\n    gpu.queue.write_buffer(&uniform, 0, bytes);\n    let bg = simple_bind_group(&gpu.device, &layout,\n        &[(0, input), (1, vt), (2, out), (3, &uniform)]);\n    dispatch_pass(encoder, &bg, cfg.seq_len, cfg.n_heads);\n}\n".to_string(),
+            opt_pattern: "// optimized: the buffer SET is a struct created once per config; the\n// preferred entry takes the struct and only WRITES uniform content —\n// the raw loose-buffer entry remains for cold/one-shot callers\nstruct RotationBuffers {\n    input_kv: Buffer,\n    eigenbasis: Buffer,\n    output: Buffer,\n    uniform: Buffer,\n}\n// RotationBuffers::new(device, queue, dims, vt_data) creates all four ONCE\n\nfn dispatch_buffers(gpu: &Gpu, encoder: &mut Encoder,\n                    bufs: &RotationBuffers, cfg: &Cfg) {\n    // preferred entry: write, not allocate\n    let bytes = bytemuck::cast_slice(std::slice::from_ref(cfg));\n    gpu.queue.write_buffer(&bufs.uniform, 0, bytes);\n    let bg = simple_bind_group(&gpu.device, &layout,\n        &[(0, &bufs.input_kv), (1, &bufs.eigenbasis),\n          (2, &bufs.output), (3, &bufs.uniform)]);\n    dispatch_pass(encoder, &bg, cfg.seq_len, cfg.n_heads);\n}\n\nfn dispatch(gpu: &Gpu, encoder: &mut Encoder, input: &Buffer, vt: &Buffer,\n            out: &Buffer, cfg: &Cfg) {\n    // cold path: self-allocates a uniform + bind group per call\n    let _ = (gpu, encoder, input, vt, out, cfg);\n}\n".to_string(),
+        },
+        // ── slot-offset-partial-buffer-write — full re-upload → computed-offset delta write (A) ──
+        // Source: riir-gpu spectralquant/rotation.rs L146-160
+        // (upload_input: "let offset = ((pos * n_heads + head) * d_h *
+        // std::mem::size_of::<f32>()) as u64;" +
+        // "queue.write_buffer(&self.input_kv, offset,
+        // bytemuck::cast_slice(data));" — d_h×4 bytes written, not the
+        // whole seq_len*n_heads*d_h tensor) + eigenbasis_rotation.wgsl
+        // L44-45 (the kernel-side twin the offset must mirror: "// Base
+        // offset into flat [seq_len * n_heads * d_h] for this (pos,
+        // head)" + "let base = pos * total_dim + head * d_h;").
+        //
+        // Distinct from mapped-at-creation-init-upload (a one-shot
+        // FULL-buffer initialization mechanism at creation — this is
+        // incremental delta updates into an already-live buffer during
+        // steady state) and from per-slot-uniform-buffer-write-ordering
+        // (uniform slots racing one encoder — this is a storage-tensor
+        // slot update; distinct slots cannot collide).
+        KernelRule {
+            rule_id: "slot-offset-partial-buffer-write".to_string(),
+            gpu_concept: "keep the destination tensor resident in one persistent storage buffer and update only the changed slot via queue.write_buffer at a computed byte offset, instead of re-uploading the whole tensor: one (position, head) slot of a [seq_len × n_heads × d_h] KV tensor is d_h×4 bytes; the full tensor is seq_len×n_heads×d_h×4 — the delta write is n_heads×seq_len× cheaper. The offset formula is the host-side mirror of the kernel's indexing base (pos * total_dim + head * d_h), so a slot written by the host lands exactly where the kernel reads it — the same flat-layout contract, evaluated on both sides of the boundary. Distinct from mapped-at-creation-init-upload (a one-shot full-buffer initialization mechanism at creation — this is incremental delta updates into an already-live buffer during steady state) and from per-slot-uniform-buffer-write-ordering (uniform slots racing one encoder — this is a storage-tensor slot update; distinct slots cannot collide).".to_string(),
+            ref_shape: "// naive: refresh the ENTIRE KV tensor when one (pos, head) slot changes\nfn upload_slot_full(queue: &Queue, buf: &Buffer, kv_flat: &[f32],\n                    pos: usize, head: usize, n_heads: usize,\n                    d_h: usize, data: &[f32]) {\n    let mut flat = kv_flat.to_vec(); // whole-tensor copy on the host\n    let base = (pos * n_heads + head) * d_h;\n    flat[base..base + d_h].copy_from_slice(data);\n    // seq_len * n_heads * d_h * 4 bytes over the bus for ONE slot\n    queue.write_buffer(buf, 0, bytemuck::cast_slice(&flat));\n}\n".to_string(),
+            opt_pattern: "// optimized: persistent buffer + byte-offset delta write of just the\n// slot; the offset mirrors the kernel's base = pos * total_dim + head * d_h\nstruct RotationBuffers {\n    input_kv: Buffer,\n    _pad: u8,\n}\nimpl RotationBuffers {\n    pub fn upload_input(&self, queue: &Queue, pos: usize, head: usize,\n                        n_heads: usize, d_h: usize, data: &[f32]) {\n        let offset =\n            ((pos * n_heads + head) * d_h * std::mem::size_of::<f32>()) as u64;\n        // d_h * 4 bytes over the bus — that is the whole update\n        queue.write_buffer(&self.input_kv, offset, bytemuck::cast_slice(data));\n    }\n}\n".to_string(),
+        },
+        // ── immutable-operand-upload-at-set-creation — per-dispatch operand upload → constructor-owned once (A) ──
+        // Source: riir-gpu spectralquant/rotation.rs L121-129 (new():
+        // "let eigenbasis = { let buf = make_storage(d_h * d_h,
+        // \"sq_rot_eigenbasis\"); queue.write_buffer(&buf, 0,
+        // bytemuck::cast_slice(eigenbasis_data)); buf };" while input_kv
+        // and output are created EMPTY) + L79 ("/// Created once per
+        // (layer, head) calibration; reused across sequence positions.")
+        // + calibration.rs L187-199 (upload_calibration: the same
+        // create-then-upload-once shape for eigenbasis, per_dim_bits,
+        // codebooks) + qjl.rs L126-130 (sign_matrix uploaded inside
+        // GpuSelectiveQjlBuffers::new).
+        //
+        // Distinct from mapped-at-creation-init-upload (the upload
+        // MECHANISM — mapped_at_creation avoiding staging; this rule is
+        // the upload PLACEMENT: bind the operand to the buffer-set's
+        // lifetime, whichever mechanism writes it) and from
+        // host-cache-immutable-device-weights (the host keeps a copy to
+        // avoid device DOWNLOADS — this avoids device re-UPLOADS of a
+        // never-changing operand).
+        KernelRule {
+            rule_id: "immutable-operand-upload-at-set-creation".to_string(),
+            gpu_concept: "bind an immutable-per-config operand (the eigenbasis V^T matrix, calibration codebooks, per-dim bit widths, a Rademacher sign matrix) to the buffer-set's lifetime: upload it exactly once inside the constructor, immediately after creating its buffer, while mutable buffers (input, output) are created empty. The dispatch path never sees the operand's bytes again — no per-dispatch re-upload, and operand freshness becomes the constructor's guarantee rather than every caller's responsibility. The constructor is the single place where config-derived constants cross the bus. Distinct from mapped-at-creation-init-upload (the upload mechanism — mapped_at_creation avoiding staging; this rule is the upload placement: bind the operand to the set's lifetime, whichever mechanism writes it) and from host-cache-immutable-device-weights (the host keeps a copy to avoid device downloads — this avoids device re-uploads of a never-changing operand).".to_string(),
+            ref_shape: "// naive: the never-changing V^T matrix crosses the bus on EVERY dispatch\nfn rotate(gpu: &Gpu, encoder: &mut Encoder, input: &Buffer,\n          out: &Buffer, vt: &[f32], cfg: &Cfg) {\n    let vt_buf = gpu.device.create_buffer(&desc(vt.len() * 4));\n    gpu.queue.write_buffer(&vt_buf, 0, bytemuck::cast_slice(vt)); // every call\n    dispatch_rotation(gpu, encoder, input, &vt_buf, out, cfg);\n}\n".to_string(),
+            opt_pattern: "// optimized: the constructor owns the immutable operand + uploads ONCE;\n// mutable buffers are created empty — the dispatch path never sees vt bytes\nstruct RotationBuffers {\n    input_kv: Buffer,\n    eigenbasis: Buffer,\n    output: Buffer,\n}\nimpl RotationBuffers {\n    pub fn new(device: &Device, queue: &Queue, seq_len: usize,\n               d_h: usize, n_heads: usize, vt: &[f32]) -> Self {\n        let input_kv = make_storage(device, seq_len * n_heads * d_h); // empty\n        let eigenbasis = {\n            let buf = make_storage(device, d_h * d_h);\n            queue.write_buffer(&buf, 0, bytemuck::cast_slice(vt)); // ONCE\n            buf\n        };\n        let output = make_storage(device, seq_len * n_heads * d_h); // empty\n        Self { input_kv, eigenbasis, output }\n    }\n}\n".to_string(),
+        },
+        // ── selective-projection-effective-rank-head — project all d_h → project top d_eff only (B) ──
+        // Source: riir-gpu spectralquant/qjl.rs L3+L5 ("//! Applies JL
+        // projection only on the top d_eff coordinates of rotated
+        // vectors." + "//! Bottom (d_h - d_eff) coords are NOT projected
+        // — quantized separately at b_low bits.") + L166-168 ("/// The
+        // sign matrix is (qjl_dim × d_eff) Rademacher ±1 — much smaller
+        // than / /// full (qjl_dim × d_h) when d_eff ≈ 4–6.") +
+        // selective_qjl.wgsl L57-62 ("// Only sum over top d_eff
+        // coordinates, NOT full d_h" + "for (var j = 0u; j < d_eff; j =
+        // j + 1u) { sum += sign_matrix[out_dim * d_eff + j] *
+        // input[input_base + j]; }") + L13-14 ("// The sign matrix is
+        // small: (qjl_dim × d_eff) where d_eff ≈ 4-6, qjl_dim ≈ 32, / //
+        // so the inner loop is short and register-friendly.").
+        //
+        // Distinct from water-fill-tail-dim-shared-codebook (allocates
+        // BITS by spectral importance — this allocates PROJECTION WORK
+        // by spectral importance: the operator itself shrinks from
+        // [qjl_dim × d_h] to [qjl_dim × d_eff]) and from
+        // block-compression-before-routing (selection from coarse block
+        // POOLING — here selection comes from a prior transform's energy
+        // concentration, no pooling pass).
+        KernelRule {
+            rule_id: "selective-projection-effective-rank-head".to_string(),
+            gpu_concept: "when a preceding concentrating transform (an eigenbasis rotation) has already packed the energy into the top d_eff coordinates, apply the random projection operator ONLY to those top coordinates — the (d_h − d_eff) tail bypasses projection entirely and quantizes directly at low bits in a separate path. Projection FLOPs and projection-matrix size scale with the effective rank (d_eff ≈ 4–6), not the ambient dimension (d_h = 128): the inner loop shrinks from 128 to ~6 multiply-adds (~21×) and the projection operator shrinks from [qjl_dim × d_h] = 4096 to [qjl_dim × d_eff] = 192 f32 (~21×, cache-trivially resident). The general shape: after any spectral/energy-concentrating transform, gate downstream expensive operators by the transform's effective rank instead of running them over the whole ambient space. Distinct from water-fill-tail-dim-shared-codebook (allocates bits by spectral importance — this allocates projection work by spectral importance: the operator itself shrinks) and from block-compression-before-routing (selection from coarse block pooling — here selection comes from a prior transform's energy concentration, no pooling pass).".to_string(),
+            ref_shape: "// naive: full-dimension JL projection — the projection operator spans\n// ALL d_h coordinates, so the sign matrix is [qjl_dim × d_h] and every\n// output element reduces over the whole vector even though the\n// rotation already concentrated the energy into the top few coords\nfn project_full(input: &[f32], signs: &[f32], qjl_dim: usize,\n                d_h: usize, scale: f32) -> Vec<f32> {\n    // signs: [qjl_dim * d_h] = 32 * 128 = 4096 f32\n    let mut out = vec![0.0; qjl_dim];\n    for m in 0..qjl_dim {\n        let mut sum = 0.0;\n        for j in 0..d_h {\n            sum += signs[m * d_h + j] * input[j]; // d_h = 128 MACs\n        }\n        out[m] = sum * scale;\n    }\n    out\n}\n".to_string(),
+            opt_pattern: "// optimized: the rotation concentrated the energy in the top d_eff\n// coords — project ONLY those; the tail bypasses projection (quantized\n// directly at b_low bits in a separate kernel). The operator shrinks\n// to [qjl_dim × d_eff]; the inner loop is d_eff (~6) long, not d_h (128)\nfn project_selective(input: &[f32], signs: &[f32], qjl_dim: usize,\n                     d_eff: usize, scale: f32) -> Vec<f32> {\n    // signs: [qjl_dim * d_eff] = 32 * 6 = 192 f32 (~21× smaller)\n    let mut out = vec![0.0; qjl_dim];\n    for m in 0..qjl_dim {\n        let mut sum = 0.0;\n        for j in 0..d_eff {\n            // only the top d_eff coordinates participate\n            sum += signs[m * d_eff + j] * input[j];\n        }\n        out[m] = sum * scale;\n    }\n    out\n    // tail input[d_eff..d_h] is never read here: it feeds the low-bit\n    // quantizer directly — no projection work, no projection storage\n}\n".to_string(),
+        },
+        // ── derived-scalar-host-computed-in-uniform — per-thread/device recompute → host-once + uniform (N) ──
+        // Source: riir-gpu spectralquant/qjl.rs L48-49 ("/// JL correction
+        // scale: `sqrt(d_eff / qjl_dim)`." + "pub scale: f32,") + L59
+        // ("let scale = (d_eff as f32 / qjl_dim as f32).sqrt();" inside
+        // SelectiveQjlConfig::new — host, once, at construction) +
+        // selective_qjl.wgsl L22 ("scale: f32, // sqrt(d_eff / qjl_dim)
+        // for JL correction") + L66 ("output[output_base + out_dim] =
+        // sum * config.scale;" — the kernel READS the uniform field; no
+        // sqrt anywhere in the kernel body).
+        //
+        // Distinct from precompute-scalar-reduction (hoists a
+        // DATA-dependent kernel row-reduction out of a per-block loop —
+        // this derives a CONFIG-derived constant on the host before any
+        // data exists), from pack-scalar-params-into-combined-buffer
+        // (packing layout for the array budget — same computation site,
+        // different concern), and from broadcast-uniform-skip-reduce
+        // (thread-uniform values must not be REDUCED — this is about
+        // where the value is COMPUTED).
+        KernelRule {
+            rule_id: "derived-scalar-host-computed-in-uniform".to_string(),
+            gpu_concept: "a scalar derived purely from config/shape metadata (a JL correction sqrt(d_eff/qjl_dim), a stride, a scale factor) is computed ONCE on the host at config construction and shipped as a uniform field; the kernel reads it and never recomputes. The perf half is trivial — the load-bearing half is cross-implementation bit-identity: with a single computation site, the CPU reference and the GPU kernel consume bit-identical f32 bits by construction. WGSL's mandated f32 sqrt accuracy is 2.5 ULP (not correctly rounded), so an in-shader sqrt can legitimately differ from the host's — CPU-vs-GPU parity assertions would drift by ulps for reasons no code review would catch. One computation site is one source of truth: bit-stable parity, zero per-thread recompute. Distinct from precompute-scalar-reduction (hoists a data-dependent kernel row-reduction out of a per-block loop — this derives a config-derived constant on the host before any data exists), from pack-scalar-params-into-combined-buffer (packing layout for the array budget — same computation site, different concern), and from broadcast-uniform-skip-reduce (thread-uniform values must not be reduced — this is about where the value is computed).".to_string(),
+            ref_shape: "// naive: each consumer recomputes the derived correction scalar itself.\n// An in-shader sqrt is only 2.5-ULP accurate in WGSL — it can differ\n// from the host's correctly-rounded sqrt, so CPU reference and GPU\n// output drift by ulps and parity tests flap. Every thread burns a sqrt.\nfn kernel_side(d_eff: u32, qjl_dim: u32, sums: &[f32]) -> Vec<f32> {\n    sums.iter()\n        .map(|&s| {\n            let scale = (d_eff as f32 / qjl_dim as f32).sqrt(); // per-thread\n            s * scale // GPU sqrt != host sqrt (ulp-level) -> parity drift\n        })\n        .collect()\n}\n".to_string(),
+            opt_pattern: "// optimized: compute the config-derived scalar ONCE on the host at\n// config construction; ship it as a uniform field. One computation\n// site means the CPU reference and the WGSL kernel consume\n// bit-identical f32 bits.\nstruct Config {\n    d_eff: u32,\n    qjl_dim: u32,\n    scale: f32, // host-computed — the single source of truth\n}\nimpl Config {\n    fn new(d_eff: u32, qjl_dim: u32) -> Self {\n        Self {\n            d_eff,\n            qjl_dim,\n            scale: (d_eff as f32 / qjl_dim as f32).sqrt(),\n        }\n    }\n}\nfn kernel_side(config: &Config, sums: &[f32]) -> Vec<f32> {\n    // the kernel reads the uniform field, never recomputes\n    sums.iter().map(|&s| s * config.scale).collect()\n}\n".to_string(),
+        },
+        // ── rademacher-signs-over-gaussian-projection — Gaussian entries → ±1 entries (B) ──
+        // Source: riir-gpu spectralquant/qjl.rs L4 ("//! Uses Rademacher ±1
+        // random signs (not Gaussian) for the sign matrix.") + L84 ("///
+        // Rademacher ±1 sign matrix: `[qjl_dim * d_eff]` f32 (storage,
+        // read).") + selective_qjl.wgsl L8 + L28 ("sign_matrix:
+        // array<f32>; // [qjl_dim * d_eff] (±1.0)") +
+        // spectralquant_bench.rs L264-267 ("// Rademacher ±1 sign
+        // matrix" + "let sign_matrix: Vec<f32> = (0..QJL_DIM * D_EFF as
+        // usize)" + ".map(|_| if fastrand::bool() { 1.0 } else { -1.0
+        // })" + ".collect();" — one coin flip per entry).
+        //
+        // Honest caveat: the shipped kernel does a plain f32 multiply
+        // (selective_qjl.wgsl L61) — the conditional-negate strength
+        // reduction is an unrealized follow-up, not a shipped win; the
+        // exactness argument is what ships today. Distinct from
+        // deterministic-tiling-projection-tables (deterministic
+        // CONSTRUCTION of fixed projections — this is the entry
+        // DISTRIBUTION choice) and from the packing rules (per the
+        // bool-fields-over-bitset-hot-reads regime boundary, the 768 B
+        // sign matrix is correctly NOT packed).
+        KernelRule {
+            rule_id: "rademacher-signs-over-gaussian-projection".to_string(),
+            gpu_concept: "for random projection matrices, prefer two-valued Rademacher ±1 entries over Gaussian entries when the math license exists (the JL guarantee holds up to constants for ±1 — Achlioptas' database-friendly construction). Three concrete wins: (1) generation is one coin flip per entry (one random bit) instead of a Gaussian sampler (several RNG words + Box-Muller/Ziggurat transcendentals); (2) ±1.0 is exact in f32, so both the stored coefficient and every product s×x are exact — a Gaussian coefficient and its products each round; (3) in a hotter consumer the multiply strength-reduces to a conditional negate / sign-bit flip (an unrealized follow-up in the source kernel, which does a plain multiply — recorded as the licensed direction, not a shipped win). Distinct from deterministic-tiling-projection-tables (deterministic construction of fixed projections — this is the entry distribution choice) and from the packing rules (per the bool-fields-over-bitset-hot-reads regime boundary, the 768-byte sign matrix is correctly not packed).".to_string(),
+            ref_shape: "// naive: Gaussian projection entries — each entry needs a Gaussian\n// sample (Box-Muller/Ziggurat: several RNG words + transcendentals),\n// and the f32 coefficient is itself rounded, so coefficient * x rounds\n// twice.\nfn gaussian_signs(n: usize) -> Vec<f32> {\n    (0..n).map(|_| gaussian_sample()).collect() // expensive per-entry RNG\n}\nfn project(input: &[f32], signs: &[f32]) -> f32 {\n    signs.iter().zip(input).map(|(s, x)| s * x).sum() // inexact product\n}\n".to_string(),
+            opt_pattern: "// optimized: Rademacher ±1 entries — the JL guarantee holds up to\n// constants (Achlioptas); generation is one coin flip per entry, ±1.0\n// is exact in f32, and s * x is exact (sign-bit-only effect) —\n// strength-reducible to a conditional negate in a hotter consumer\nfn rademacher_signs(n: usize) -> Vec<f32> {\n    (0..n)\n        .map(|_| if coin_flip() { 1.0 } else { -1.0 }) // 1 random bit/entry\n        .collect()\n}\nfn project(input: &[f32], signs: &[f32]) -> f32 {\n    // as shipped: plain multiply (exact for ±1 operands)\n    signs.iter().zip(input).map(|(s, x)| s * x).sum()\n}\n".to_string(),
+        },
     ])
 }
 
@@ -4754,7 +4982,7 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 251-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 258-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -4762,7 +4990,7 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (42 rules)
+    // A: Memory access patterns (44 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -4809,9 +5037,11 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "make-unmake-over-clone-per-candidate",
             "deterministic-tiling-projection-tables",
             "latent-encode-at-capture",
+            "slot-offset-partial-buffer-write",
+            "immutable-operand-upload-at-set-creation",
         ],
     ),
-    // B: Compute patterns (42 rules)
+    // B: Compute patterns (44 rules)
     (
         KernelCategory::Compute,
         "B: compute",
@@ -4858,6 +5088,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "length-prefix-shape-faithful-hash",
             "argmax-rng-tie-break-collect-ties",
             "non-saturating-outcome-reward-floor",
+            "selective-projection-effective-rank-head",
+            "rademacher-signs-over-gaussian-projection",
         ],
     ),
     // C: Fusion patterns (27 rules)
@@ -4894,7 +5126,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "one-sweep-spatial-feature-fanout",
         ],
     ),
-    // D: Dispatch patterns (39 rules)
+    // D: Dispatch patterns (40 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -4938,9 +5170,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "shape-gated-warm-start-slot-copy",
             "domain-as-data-not-algorithm-fork",
             "timeout-scalar-tiebreak-decisive-outcome",
+            "buffer-set-struct-two-tier-dispatch",
         ],
     ),
-    // E: Parallelism patterns (15 rules)
+    // E: Parallelism patterns (16 rules)
     (
         KernelCategory::Parallelism,
         "E: parallelism",
@@ -4960,6 +5193,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "counter-derived-seed-stateless-noise",
             "additive-sigmoid-gates-not-softmax-routing",
             "collect-then-resolve-snapshot-batch",
+            "grid-over-output-thread-private-sweep",
         ],
     ),
     // F: Flash-attention tiling (10 rules)
@@ -5071,7 +5305,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "bool-fields-over-bitset-hot-reads",
         ],
     ),
-    // M: Kernel parametric polymorphism (7 rules)
+    // M: Kernel parametric polymorphism (9 rules)
     (
         KernelCategory::KernelPolymorphism,
         "M: kernel polymorphism",
@@ -5087,7 +5321,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "debug-only-gpu-label-macro",
         ],
     ),
-    // N: dtype + alignment specialization (13 rules)
+    // N: dtype + alignment specialization (14 rules)
     (
         KernelCategory::DtypeAlignment,
         "N: dtype + alignment",
@@ -5105,6 +5339,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "base-3-trit-packing-5-per-byte",
             "pad-uniform-pod-to-min-binding-size",
             "dtype-normalize-once-at-upload",
+            "derived-scalar-host-computed-in-uniform",
         ],
     ),
     // O: IR strength reduction (4 rules)
@@ -5202,7 +5437,7 @@ mod tests {
         // Batch 29 (10): riir-gpu production kernels — defer-readback-gated-by-live-output-size, weight-handle-cache-keyed-by-allocation-identity, first-readback-pays-queue-drain, epilogue-at-register-write-phase, delay-rms-scale-past-gemv-epilogue, pack-scalar-params-into-combined-buffer, enum-dispatch-separate-kernel-per-variant, epilogue-must-be-workgroup-local, launch-unchecked-caller-owned-size-contract, fast-math-contraction-behind-feature-flag (deltanet_input_proj_fused.rs + epilogue/ — the decode-path fusion cluster: Issue 602 sibling-GEMV fan-out + Plan 106 Track 3 CODA epilogue fusion).
         // Batch 30 (6): riir-gpu production kernels — zero-init-side-branch-frozen-base-path, counter-derived-seed-stateless-noise, predicate-gated-skip-empty-workset-step, share-pipeline-set-across-subsystems, pad-uniform-pod-to-min-binding-size, fuse-count-into-mutation-pass (dllm/mod.rs — the D2F training cluster: Plan 068 discrete-diffusion trainers + RePlaid schedule).
         // Total: 209.
-        assert_eq!(corpus.entries.len(), 251, "batches 1-32 should have 251 rules");
+        assert_eq!(corpus.entries.len(), 258, "batches 1-33 should have 258 rules");
     }
 
     #[test]
@@ -6815,6 +7050,100 @@ mod tests {
         }
     }
 
+
+    #[test]
+    fn batch33_rules_present() {
+        // Verify the 7 batch-33 rules across A/B/D/E/N.
+        let corpus = build_kernel_seed_corpus();
+        let ids: Vec<&str> =
+            corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        // E (1 new): output-owned grid family
+        assert!(ids.contains(&"grid-over-output-thread-private-sweep"), "output-owned grid sweep");
+        // D (1 new): buffer-set reuse family
+        assert!(ids.contains(&"buffer-set-struct-two-tier-dispatch"), "buffer-set two-tier dispatch");
+        // A (2 new): slot-write + immutable-operand family
+        assert!(ids.contains(&"slot-offset-partial-buffer-write"), "slot-offset partial write");
+        assert!(ids.contains(&"immutable-operand-upload-at-set-creation"), "immutable operand at creation");
+        // B (2 new): selective projection + rademacher family
+        assert!(ids.contains(&"selective-projection-effective-rank-head"), "selective projection head");
+        assert!(ids.contains(&"rademacher-signs-over-gaussian-projection"), "rademacher signs");
+        // N (1 new): host-computed derived scalar
+        assert!(ids.contains(&"derived-scalar-host-computed-in-uniform"), "derived scalar host-computed");
+    }
+
+    #[test]
+    fn batch33_concepts_covered() {
+        // Verify the batch-33 spectralquant calibration-cluster concepts
+        // via distinctive ASCII substrings located by rule_id (the 32a
+        // convention — immune to prose-evolution churn).
+        let corpus = build_kernel_seed_corpus();
+        let concept = |id: &str| -> String {
+            corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-33 rule '{id}' missing"))
+                .gpu_concept
+                .clone()
+        };
+        // E: grid-over-output-thread-private-sweep (calibration.rs L288-290 + covariance.wgsl L50-79)
+        let c = concept("grid-over-output-thread-private-sweep");
+        assert!(c.contains("owned by exactly one thread")
+            && c.contains("zero cross-thread reduction"), "output-owned sweep concept");
+        // D: buffer-set-struct-two-tier-dispatch (rotation.rs L74-79 + L198-216 vs L263-269)
+        let c = concept("buffer-set-struct-two-tier-dispatch");
+        assert!(c.contains("reuse unit")
+            && c.contains("makes the allocating path explicitly secondary"), "buffer-set concept");
+        // A: slot-offset-partial-buffer-write (rotation.rs L146-160 + eigenbasis_rotation.wgsl L44-45)
+        let c = concept("slot-offset-partial-buffer-write");
+        assert!(c.contains("host-side mirror of the kernel's indexing base")
+            && c.contains("delta write"), "slot-offset concept");
+        // A: immutable-operand-upload-at-set-creation (rotation.rs L121-129 + calibration.rs L187-199)
+        let c = concept("immutable-operand-upload-at-set-creation");
+        assert!(c.contains("lifetime")
+            && c.contains("never sees the operand's bytes again"), "immutable-operand concept");
+        // B: selective-projection-effective-rank-head (qjl.rs L3/L5/L166-168 + selective_qjl.wgsl L57-62)
+        let c = concept("selective-projection-effective-rank-head");
+        assert!(c.contains("bypasses projection entirely")
+            && c.contains("effective rank"), "selective-projection concept");
+        // N: derived-scalar-host-computed-in-uniform (qjl.rs L48-49/L59 + selective_qjl.wgsl L22/L66)
+        let c = concept("derived-scalar-host-computed-in-uniform");
+        assert!(c.contains("bit-identical")
+            && c.contains("2.5 ULP"), "derived-scalar concept");
+        // B: rademacher-signs-over-gaussian-projection (qjl.rs L4/L84 + bench L264-267)
+        let c = concept("rademacher-signs-over-gaussian-projection");
+        assert!(c.contains("coin flip") && c.contains("exact in f32"), "rademacher concept");
+    }
+
+    #[test]
+    #[cfg(not(feature = "kernel_verify"))]
+    fn batch33_pseudocode_parses() {
+        // G1 for Batch 33: every new rule's ref_shape AND opt_pattern must
+        // syn-parse as valid Rust (the L2 pruner verdict).
+        use crate::domain::HealDomain;
+        let corpus = build_kernel_seed_corpus();
+        let ids = [
+            "grid-over-output-thread-private-sweep",
+            "buffer-set-struct-two-tier-dispatch",
+            "slot-offset-partial-buffer-write",
+            "immutable-operand-upload-at-set-creation",
+            "selective-projection-effective-rank-head",
+            "derived-scalar-host-computed-in-uniform",
+            "rademacher-signs-over-gaussian-projection",
+        ];
+        for id in ids {
+            let entry = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-33 rule '{id}' missing"));
+            let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+            assert!(ref_verdict.parses, "batch-33 ref_shape for '{id}' must parse");
+            let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+            assert!(opt_verdict.parses, "batch-33 opt_pattern for '{id}' must parse");
+        }
+    }
+
     // ════════════════════════════════════════════════════════════════════
     // Plan 003 — Router ↔ corpus wiring tests
     // ════════════════════════════════════════════════════════════════════
@@ -6826,7 +7155,7 @@ mod tests {
 
     #[test]
     fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-        // Every rule_id in the 251-rule corpus must appear in exactly one category.
+        // Every rule_id in the 258-rule corpus must appear in exactly one category.
         let corpus = build_kernel_seed_corpus();
         let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
         let mut categorized: Vec<&str> = Vec::new();
@@ -6859,11 +7188,11 @@ mod tests {
     fn kernel_categories_counts_match_plan_003_table() {
         // Pin per-category rule counts to the Plan 003 table (updated for Batch 32c).
         let expected = [
-            (KernelCategory::MemoryAccess, 42),
-            (KernelCategory::Compute, 42),
+            (KernelCategory::MemoryAccess, 44),
+            (KernelCategory::Compute, 44),
             (KernelCategory::Fusion, 27),
-            (KernelCategory::Dispatch, 39),
-            (KernelCategory::Parallelism, 15),
+            (KernelCategory::Dispatch, 40),
+            (KernelCategory::Parallelism, 16),
             (KernelCategory::FlashAttnTiling, 10),
             (KernelCategory::LinearAttnRecurrence, 19),
             (KernelCategory::MoeDispatchBackward, 10),
@@ -6872,7 +7201,7 @@ mod tests {
             (KernelCategory::AutotuneDispatch, 4),
             (KernelCategory::ConvGemmLayout, 8),
             (KernelCategory::KernelPolymorphism, 9),
-            (KernelCategory::DtypeAlignment, 13),
+            (KernelCategory::DtypeAlignment, 14),
             (KernelCategory::IrStrengthReduction, 4),
         ];
         for (cat, count) in expected {
@@ -6882,9 +7211,9 @@ mod tests {
                 "Plan 003: category {cat:?} has {} rules, expected {count}",
                 entry.2.len());
         }
-        // Sum must equal 251.
+        // Sum must equal 258.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 251, "Plan 003: category totals must sum to 251");
+        assert_eq!(total, 258, "Plan 003: category totals must sum to 258");
     }
 
     #[test]
@@ -6894,7 +7223,7 @@ mod tests {
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 251, "Plan 003: grouped corpus has {total} rules, expected 251");
+        assert_eq!(total, 258, "Plan 003: grouped corpus has {total} rules, expected 258");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");
