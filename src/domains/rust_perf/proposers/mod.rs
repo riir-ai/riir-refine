@@ -21,15 +21,21 @@
 //! | `entry-vs-contains-insert` | `if !m.contains_key(&k) { m.insert(k, v); }` → `m.entry(k).or_insert(v);` | no |
 //! | `static-str` | `-> String { "lit".to_string() }` → `-> &'static str { "lit" }` | **yes** (return type) |
 //! | `bool-to-bitpack` | `fn(flags: &[bool]) { flags.iter().filter(..).count() }` → `fn(flags: &[u64]) { .. count_ones().sum() }` | **yes** (param type) |
-//! | `fxhashmap` | `use std::collections::HashMap;` + body `HashMap` refs → `rustc_hash::FxHashMap` | no (needs the `rustc-hash` dep in the healed crate) |
+//! | `fxhashmap` | `use std::collections::HashMap;` + body `HashMap` refs → `rustc_hash::FxHashMap` | no (self-gated: fires only when the file already imports `rustc_hash` — a splice cannot add the Cargo.toml dep) |
 //!
 //! ## Honest caveats (Proposal 002 caveats 3-4, restated for this domain)
 //!
 //! - **`--fix` only applies CONFIRMED visitor matches** (these proposers).
 //!   Latent-space suggestions from `--suggest` never auto-apply — the
 //!   proposer's detector is the gate, retrieval only reports/prioritizes.
-//! - **`rustc-hash` must be a dependency** of the healed crate for the
-//!   `fxhashmap` rewrite to compile; parse-only validation cannot check this.
+//! - **`fxhashmap` self-gates on an existing `rustc_hash` import** in the
+//!   target file (Gate 0 in the proposer): a span-preserving splice can
+//!   add a `use` line but cannot add the `rustc-hash` dependency to the
+//!   crate's `Cargo.toml`, so the rewrite only fires where the crate path
+//!   already resolves. Enforced since the 2026-08-15 game-sdk G5 smoke
+//!   caught an E0432 (`bevy_shared.rs`, crate without `rustc-hash`).
+//!   Cold-start adoption (first file in a crate + the dep addition) stays
+//!   manual.
 //! - `static-str` + `bool-to-bitpack` change fn signatures — the rewrite is
 //!   span-local (the one fn) but semantically ripples to callers. Same
 //!   exposure class as the clippy proposers' rewrites; the pruner validates
@@ -184,7 +190,7 @@ mod tests {
             ),
             (
                 "fxhashmap",
-                "use std::collections::HashMap;\nfn lookup(map: &HashMap<u32, u32>, k: u32) \
+                "use rustc_hash::FxHashSet;\nuse std::collections::HashMap;\nfn lookup(map: &HashMap<u32, u32>, k: u32) \
                  -> Option<u32> {\n    map.get(&k).copied()\n}",
                 "FxHashMap",
             ),

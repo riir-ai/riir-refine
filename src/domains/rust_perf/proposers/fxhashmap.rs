@@ -17,8 +17,13 @@
 //! used pervasively in rustc itself (Bench 013: ParetoDominant 3.3-4.2x).
 //!
 //! **Honest scope limits:**
-//! - The healed crate must have `rustc-hash` in its `Cargo.toml` — a
-//!   parse-only pruner cannot check this (documented module caveat).
+//! - The proposer self-gates on an existing `rustc_hash` import in the
+//!   target file — a span-preserving splice can add a `use` line but
+//!   cannot add the `rustc-hash` dependency to the crate's `Cargo.toml`,
+//!   so the edit is only guaranteed to compile where the crate path
+//!   already resolves. Cold-start adoption (first file in a crate, dep
+//!   addition) stays manual. Enforced since the 2026-08-15 game-sdk G5
+//!   smoke caught an E0432 (`bevy_shared.rs`, crate without `rustc-hash`).
 //! - `pub use` re-exports, glob uses (`use std::collections::*;`),
 //!   `pub(crate)` visibility, fn-local `use` stmts, and nested-mod uses are
 //!   skipped (each either changes public semantics or needs sibling-item
@@ -36,6 +41,16 @@ use syn::{File, Item, ItemUse, Path, UseTree, Visibility};
 use super::{line_indent, span_range, SourceEdit};
 
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
+    // Gate 0: the file must already import from `rustc_hash` — the splice
+    // can rewrite uses but cannot add the crate dependency, so emitting
+    // where the path doesn't already resolve produces E0432 (the
+    // 2026-08-15 game-sdk smoke: `bevy_shared.rs`, no `rustc-hash` dep).
+    // Any file-level `rustc_hash` import (plain, group, aliased, glob,
+    // any visibility) proves the dep is available to this compilation
+    // unit under its current feature gates.
+    if !file_imports_rustc_hash(file) {
+        return Vec::new();
+    }
     // Gate 1: a private file-level use that handle_use can actually
     // transform (plain HashMap leaf, or a group containing one). Glob /
     // deeper-path / nested-group uses are honestly skipped — rewriting body
@@ -70,6 +85,22 @@ pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
 }
 
 // ── Use-item surgery (direct iteration over file.items) ──────────────────
+
+/// Any file-level `use rustc_hash::<...>` (or the top-level alias form
+/// `use rustc_hash as rh;`) — the proof that the crate path resolves
+/// (dependency present + feature-reachable). The tree shape under the
+/// first segment is irrelevant to dep presence, so only the root ident is
+/// inspected.
+fn file_imports_rustc_hash(file: &File) -> bool {
+    file.items.iter().any(|i| match i {
+        Item::Use(u) => match &u.tree {
+            UseTree::Path(p) => p.ident == "rustc_hash",
+            UseTree::Rename(r) => r.ident == "rustc_hash",
+            _ => false,
+        },
+        _ => false,
+    })
+}
 
 /// Private (inherited-visibility) `use std::collections::<...>` — plain
 /// HashMap leaf or a group that may contain it.
@@ -236,18 +267,47 @@ impl<'ast> Visit<'ast> for PathScan {
 mod tests {
     use super::super::propose_fix;
 
+    /// Gate 0 precondition for enabling fixtures: a pre-existing
+    /// `rustc_hash` import proves the `rustc-hash` dependency resolves in
+    /// this compilation unit. Negative tests keep the precondition
+    /// satisfied so their own gate is the reason a rewrite does not fire.
+    const RH: &str = "use rustc_hash::FxHashSet;\n";
+
     fn squash(s: &str) -> String {
         s.split_whitespace().collect::<String>()
     }
 
     #[test]
+    fn no_rustc_hash_import_unchanged() {
+        // The 2026-08-15 game-sdk E0432 regression: std HashMap use + body
+        // refs, but the crate has no `rustc-hash` dep (no import anywhere
+        // in the file) — the splice cannot add the dependency, so the
+        // rewrite must not fire.
+        assert!(
+            propose_fix(
+                "fxhashmap",
+                "use std::collections::HashMap;\nfn lookup(map: &HashMap<u32, u32>, k: u32) \
+                 -> Option<u32> {\n    map.get(&k).copied()\n}"
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn aliased_rustc_hash_import_enables() {
+        // `use rustc_hash as rh;` still proves the dep resolves.
+        let src = "use rustc_hash as rh;\nuse std::collections::{HashMap, HashSet};\nfn f() -> \
+             HashMap<u32, u32> { HashMap::new() }";
+        assert!(propose_fix("fxhashmap", src).is_some());
+    }
+
+    #[test]
     fn corpus_fixture_rewrites() {
-        let out = propose_fix(
-            "fxhashmap",
-            "use std::collections::HashMap;\nfn lookup(map: &HashMap<u32, u32>, k: u32) \
-             -> Option<u32> {\n    map.get(&k).copied()\n}",
-        )
-        .expect("pattern matched");
+        let src = format!(
+            "{RH}use std::collections::HashMap;\nfn lookup(map: &HashMap<u32, u32>, k: u32) \
+             -> Option<u32> {{\n    map.get(&k).copied()\n}}"
+        );
+        let out = propose_fix("fxhashmap", &src).expect("pattern matched");
         assert!(out.contains("use rustc_hash::FxHashMap;"), "{out}");
         assert!(out.contains("map: &FxHashMap<u32, u32>"), "{out}");
         assert!(!out.contains("std::collections"), "{out}");
@@ -257,34 +317,31 @@ mod tests {
 
     #[test]
     fn new_call_rewrites() {
-        let out = propose_fix(
-            "fxhashmap",
-            "use std::collections::HashMap;\nfn make() -> HashMap<u8, u8> { HashMap::new() }",
-        )
-        .expect("pattern matched");
+        let src = format!(
+            "{RH}use std::collections::HashMap;\nfn make() -> HashMap<u8, u8> {{ HashMap::new() }}"
+        );
+        let out = propose_fix("fxhashmap", &src).expect("pattern matched");
         assert!(out.contains("FxHashMap<u8, u8>"), "{out}");
         assert!(out.contains("FxHashMap::new()"), "{out}");
     }
 
     #[test]
     fn turbofish_preserved() {
-        let out = propose_fix(
-            "fxhashmap",
-            "use std::collections::HashMap;\nfn make() -> HashMap<u8, u8> {\n    \
-             HashMap::<u8, u8>::new()\n}",
-        )
-        .expect("pattern matched");
+        let src = format!(
+            "{RH}use std::collections::HashMap;\nfn make() -> HashMap<u8, u8> {{\n    \
+             HashMap::<u8, u8>::new()\n}}"
+        );
+        let out = propose_fix("fxhashmap", &src).expect("pattern matched");
         assert!(out.contains("FxHashMap::<u8, u8>::new()"), "{out}");
     }
 
     #[test]
     fn group_use_slims_with_indented_append() {
-        let out = propose_fix(
-            "fxhashmap",
-            "use std::collections::{HashMap, HashSet};\nfn f() -> HashMap<u32, u32> { \
-             HashMap::new() }",
-        )
-        .expect("pattern matched");
+        let src = format!(
+            "{RH}use std::collections::{{HashMap, HashSet}};\nfn f() -> HashMap<u32, u32> {{ \
+             HashMap::new() }}"
+        );
+        let out = propose_fix("fxhashmap", &src).expect("pattern matched");
         // HashSet import preserved (group stays).
         assert!(out.contains("HashSet"), "{out}");
         assert!(out.contains("use std::collections::{HashSet};"), "{out}");
@@ -294,24 +351,22 @@ mod tests {
 
     #[test]
     fn group_only_hashmap_collapses() {
-        let out = propose_fix(
-            "fxhashmap",
-            "use std::collections::{HashMap};\nfn f() -> HashMap<u32, u32> { HashMap::new() }",
-        )
-        .expect("pattern matched");
-        // Exactly one use remains — the FxHashMap one.
-        assert_eq!(squash(&out).matches("use").count(), 1, "{out}");
+        let src = format!(
+            "{RH}use std::collections::{{HashMap}};\nfn f() -> HashMap<u32, u32> {{ HashMap::new() }}"
+        );
+        let out = propose_fix("fxhashmap", &src).expect("pattern matched");
+        // Exactly TWO uses remain — the FxHashSet one + the FxHashMap one.
+        assert_eq!(squash(&out).matches("use").count(), 2, "{out}");
         assert!(out.contains("use rustc_hash::FxHashMap;"), "{out}");
     }
 
     #[test]
     fn fully_qualified_body_path_rewrites() {
-        let out = propose_fix(
-            "fxhashmap",
-            "use std::collections::HashMap;\nfn f() -> std::collections::HashMap<u16, u16> {\n    \
-             std::collections::HashMap::new()\n}",
-        )
-        .expect("pattern matched");
+        let src = format!(
+            "{RH}use std::collections::HashMap;\nfn f() -> std::collections::HashMap<u16, u16> {{\n    \
+             std::collections::HashMap::new()\n}}"
+        );
+        let out = propose_fix("fxhashmap", &src).expect("pattern matched");
         assert!(out.contains("rustc_hash::FxHashMap<u16, u16>"), "{out}");
         assert!(out.contains("rustc_hash::FxHashMap::new()"), "{out}");
         assert!(!out.contains("std::collections"), "{out}");
@@ -319,13 +374,12 @@ mod tests {
 
     #[test]
     fn output_reparses() {
-        let out = propose_fix(
-            "fxhashmap",
-            "use std::collections::HashMap;\nstruct Store { counts: HashMap<String, \
-             Vec<u32>> }\nimpl Store {\n    fn new() -> Self { Store { counts: \
-             HashMap::new() } }\n}",
-        )
-        .expect("pattern matched");
+        let src = format!(
+            "{RH}use std::collections::HashMap;\nstruct Store {{ counts: HashMap<String, \
+             Vec<u32>> }}\nimpl Store {{\n    fn new() -> Self {{ Store {{ counts: \
+             HashMap::new() }} }}\n}}"
+        );
+        let out = propose_fix("fxhashmap", &src).expect("pattern matched");
         let reparsed = syn::parse_file(&out).expect("output must re-parse");
         assert!(!reparsed.items.is_empty());
     }
@@ -336,7 +390,7 @@ mod tests {
         assert!(
             propose_fix(
                 "fxhashmap",
-                "fn f() -> std::collections::HashMap<u32, u32> {\n    \
+                "use rustc_hash::FxHashSet;\nfn f() -> std::collections::HashMap<u32, u32> {\n    \
                  std::collections::HashMap::new()\n}"
             )
             .is_none()
@@ -346,7 +400,13 @@ mod tests {
     #[test]
     fn dead_use_unchanged() {
         // Use exists but zero body refs — swapping is noise.
-        assert!(propose_fix("fxhashmap", "use std::collections::HashMap;\nfn f() -> u32 { 42 }").is_none());
+        assert!(
+            propose_fix(
+                "fxhashmap",
+                "use rustc_hash::FxHashSet;\nuse std::collections::HashMap;\nfn f() -> u32 { 42 }"
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -354,7 +414,7 @@ mod tests {
         assert!(
             propose_fix(
                 "fxhashmap",
-                "use std::collections::*;\nfn f(m: &HashMap<u32, u32>) -> u32 { 0 }"
+                "use rustc_hash::FxHashSet;\nuse std::collections::*;\nfn f(m: &HashMap<u32, u32>) -> u32 { 0 }"
             )
             .is_none()
         );
@@ -366,7 +426,7 @@ mod tests {
         assert!(
             propose_fix(
                 "fxhashmap",
-                "pub use std::collections::HashMap;\nfn f(m: &HashMap<u32, u32>) -> u32 { 0 }"
+                "use rustc_hash::FxHashSet;\npub use std::collections::HashMap;\nfn f(m: &HashMap<u32, u32>) -> u32 { 0 }"
             )
             .is_none()
         );

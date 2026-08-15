@@ -561,8 +561,8 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
             rule_id: "fxhashmap".to_string(),
             name: "std HashMap (SipHash) → FxHashMap (FxHash) for non-adversarial keys".to_string(),
             category: "complexity".to_string(),
-            buggy_code: "use std::collections::HashMap;\nfn lookup(map: &HashMap<u32, u32>, k: u32) -> Option<u32> {\n    map.get(&k).copied()\n}".to_string(),
-            fixed_code: "use rustc_hash::FxHashMap;\nfn lookup(map: &FxHashMap<u32, u32>, k: u32) -> Option<u32> {\n    map.get(&k).copied()\n}".to_string(),
+            buggy_code: "use rustc_hash::FxHashSet;\nuse std::collections::HashMap;\nfn lookup(map: &HashMap<u32, u32>, k: u32) -> Option<u32> {\n    map.get(&k).copied()\n}".to_string(),
+            fixed_code: "use rustc_hash::FxHashMap;\nuse rustc_hash::FxHashSet;\nfn lookup(map: &FxHashMap<u32, u32>, k: u32) -> Option<u32> {\n    map.get(&k).copied()\n}".to_string(),
             context_notes: None,
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: Some(fxhashmap_bench_spec()),
