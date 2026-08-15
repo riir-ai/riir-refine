@@ -191,14 +191,40 @@ impl EvolveRecorder {
     ///
     /// Callers must only pass `success` from a sound verdict source
     /// (a compile gate's revert, a real clippy re-run, manual review).
+    ///
+    /// This path carries NO verification context (Issue 021): the outcome
+    /// counts toward stats + the Withdrawn streak, but never certifies. The
+    /// current CLI call sites are compile-gate reverts (failures) where the
+    /// flag is behaviorally irrelevant — a failure withdraws regardless. A
+    /// future caller whose success verdict comes from a full validator
+    /// (clippy re-run proving resolution) should use
+    /// [`record_outcome_verified`](Self::record_outcome_verified) so the
+    /// trajectory's evidential tier promotes to Certified.
     pub fn record_outcome(&mut self, rule_id: &str, buggy: &str, fixed: &str, success: bool) {
+        self.record_outcome_verified(rule_id, buggy, fixed, success, false);
+    }
+
+    /// Record an outcome WITH its verification context (Issue 021).
+    ///
+    /// `verified: true` only when the verdict came from a full validator —
+    /// a verified success certifies the trajectory's
+    /// [`EvidenceTier`](crate::memory::EvidenceTier) (the only promotion
+    /// path, and the only exit from Withdrawn).
+    pub fn record_outcome_verified(
+        &mut self,
+        rule_id: &str,
+        buggy: &str,
+        fixed: &str,
+        success: bool,
+        verified: bool,
+    ) {
         if self.opted_out {
             return;
         }
         // 1. Memory first — the always-on half.
         self.memory
             .insert(FixTrajectory::new(rule_id.to_string(), buggy.to_string(), fixed.to_string()));
-        self.memory.record_outcome(rule_id, fixed, success);
+        self.memory.record_outcome(rule_id, fixed, success, verified);
         self.recorded += 1;
 
         // 2. Learning — oracle-gated.

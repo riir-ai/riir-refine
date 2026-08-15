@@ -1,18 +1,19 @@
 # 10 — Self-evolve (Issue 004 / Issue 018)
 
 > **Purpose:** the latent-first self-evolution loop that composes on top
-> of the frozen L0–L2 pipeline. `LatentFixMemory` (3-axis retrieval over
-> past fix trajectories) + `LatentSkillEvolution` (EMA direction-vector
-> update) + `HealPipeline` (the composition) + `EvolveRecorder` (the
-> standalone oracle-split recorder). **DEFAULT-ON + unconditional since
-> Issue 018** (graceful oracle degradation — see below).
+> of the frozen L0–L2 pipeline. `LatentFixMemory` (4-axis retrieval over
+> past fix trajectories — latent + BM25 + the Issue 021 evidential-tier
+> trust axis) + `LatentSkillEvolution` (EMA direction-vector update) +
+> `HealPipeline` (the composition) + `EvolveRecorder` (the standalone
+> oracle-split recorder). **DEFAULT-ON + unconditional since Issue 018**
+> (graceful oracle degradation — see below).
 
 ## Files
 
 | File | Scope |
 |---|---|
 | [`heal_pipeline.md`](heal_pipeline.md) | `HealPipeline` + `HealResult` + `HealSource` — the composition |
-| [`latent_fix_memory.md`](latent_fix_memory.md) | `LatentFixMemory` + `FixTrajectory` + 3-axis retrieval + JSON persistence (Issue 018) |
+| [`latent_fix_memory.md`](latent_fix_memory.md) | `LatentFixMemory` + `FixTrajectory` + `EvidenceTier` (Issue 021) + 4-axis retrieval + JSON persistence (Issue 018) |
 | [`latent_skill_evolution.md`](latent_skill_evolution.md) | `LatentSkillEvolution` + `EvolveConfig` + EMA rule |
 | [`evolve_recorder.md`](evolve_recorder.md) | `EvolveRecorder` — the oracle-split recorder + the `cargo heal --fix` wiring (Issue 018) |
 
@@ -64,3 +65,4 @@ pre-existing by corpus drift (Issue 022).
 
 - [`../03_drafter/embedder.md`](../03_drafter/embedder.md) — the BLAKE3 embedder (shared)
 - [`../09_lessons/modelless_first.md`](../09_lessons/modelless_first.md) — why this is modelless
+- [Bench 026](../../.benchmarks/026_evidential_status_axis_goat.md) — the Issue 021 evidential-tier GOAT (retelling-bias defense; the honest A/B finding)

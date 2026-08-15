@@ -156,8 +156,10 @@ L2 — VALIDATOR (always-on, domain-specific verifier opt-in)
          │
          ▼ (opt-in, additive — feature `self_evolve`)
 SE — SELF-EVOLUTION LOOP (composes on top of L0–L2)
-  LatentFixMemory   : 3-axis retrieval over past fix trajectories
-                     (latent dot+sigmoid, BM25 lexical, identical-triple dedup)
+  LatentFixMemory   : 4-axis retrieval over past fix trajectories
+                     (latent dot+sigmoid, BM25 lexical, evidential-tier
+                     trust prior — Certified/Heuristic/Withdrawn — with
+                     Withdrawn never suggested; identical-triple dedup)
   LatentSkillEvolution: EMA per-lint direction-vector update
   Heals + records outcome → next-call retrieval benefits
   Degenerates to static-corpus path when memory is empty

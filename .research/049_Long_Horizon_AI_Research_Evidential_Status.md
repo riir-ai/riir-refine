@@ -1,8 +1,8 @@
 # Research 049: Long-Horizon AI Research Harness — Evidential Status & State-Representation Findings
 
 > **Source:** "Long-Horizon AI Research for Grothendieck Constant: A Case Study in Human–AI Mathematical Collaboration" — [arXiv:2608.11195](https://arxiv.org/abs/2608.11195) — Li, Saha, Xue, Chaudhuri, Klivans, Kothari, Meka (UT Austin / Princeton / UCLA), 2026-08-14
-> **Date:** 2026-08-15
-> **Status:** Active
+**Date:** 2026-08-15
+**Status:** Implemented — Issue 021 shipped 2026-08-16 (Bench 026); the §2.3 game-side provenance note remains a research lead only
 > **Related Research:** katgpt-rs R461 (PRO-LONG — the lossless-log thesis), riir-ai R169 (AgentMemBench F6/F7/F9), riir-ai R333 (Prime Agent continual-harness verdict), katgpt-rs R473 (GAMER dual-stream Q+/Q−), katgpt-rs R104/R088 (AlphaProof Nexus), katgpt-rs R368 (AutoMem)
 > **Related Plans:** riir-clippy Plan 005 (latent retrieval + `cargo heal --suggest`)
 > **Cross-ref:** companion math paper [arXiv:2608.11158] "New Lower and Upper Bounds for the Grothendieck Constant" — **PASS** (no SDP/rounding surface in the stack; certification methodology already covered by Lean + spec-match; interval arithmetic explicitly rejected in katgpt-rs R220). Redirects landed in katgpt-rs R087 (ConvexTok) + riir-chain R004 (LatCal Lean bridge).
@@ -89,6 +89,8 @@ The only certified/uncertified split in the crate is one level up (`adaptive_dra
 - **The paper's taxonomy:** Certified / Heuristic / Withdrawn, with transitions that make status **monotone under retelling** — the property whose absence caused both named incidents. Withdrawn should be absorbing (like riir-chain's slashing monotonicity, proven in Lean: once slashed, never un-slashed) — a retracted fix is never re-emitted as a suggestion without an explicit re-certification event.
 
 Game-side fusion idea (**novelty TBD, not claimed**): the retelling-bias mechanism applies to NPC memory consolidation too — Raven/δ-Mem sleep-cycles compress raw experience; a provenance axis (witnessed vs heard vs inferred) would keep hearsay from consolidating into ground-truth beliefs. R169 already mapped the compression half; the provenance half is unexplored. Filing as a note here only — needs its own substrate-first pass before any claim (the two-brain confidence decay + coverage-mask work in `coverage_curiosity` are the nearest shipped substrate).
+
+**Close-out (2026-08-16):** Issue 021 shipped — see [Bench 026](../.benchmarks/026_evidential_status_axis_goat.md). `EvidenceTier` (Certified/Heuristic/Withdrawn) + absorbing-Withdrawn transitions + trust-weighted retrieval (Withdrawn never suggested; Certified beats a small-similarity-edge Heuristic at default weights) landed with the full-validator admission wired through the Stage 2 tuning loop. The honest A/B finding: exactly-equal similarity between two distinct-tier entries is NOT constructible through the real API (`record_outcome` matches by `(lint, fixed)` — one stats bucket), so the falsifiable A/B is the within-subject certification delta (exactly the 0.1 trust gap) + the cross-entry small-edge flip. Scope-of-validity (the stretch goal) deferred. The game-side provenance note above remains unclaimed/unshipped.
 
 ---
 

@@ -352,9 +352,11 @@ fn g5_self_evolution_gain_at_least_5pp() {
 
         // Simulate: the "oracle" always reports the correct fix as a success.
         // This models the scenario where an external cargo-clippy check
-        // confirms which fix works, and we feed that back.
+        // confirms which fix works, and we feed that back. Simulated ground
+        // truth — no validator actually ran, so verified: false (Issue 021
+        // keeps the tier honest: these stay Heuristic).
         if let Some(correct_fix) = fixture.correct_fix(lint_name) {
-            evolved_pipeline.report_outcome(lint_name, &buggy, correct_fix, true);
+            evolved_pipeline.report_outcome(lint_name, &buggy, correct_fix, true, false);
         }
     }
 

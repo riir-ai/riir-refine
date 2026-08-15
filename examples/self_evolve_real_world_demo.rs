@@ -230,11 +230,14 @@ fn main() {
             if let Some(result) = evolved_pipeline.heal(lint_name, buggy_code, &corpus_entries) {
                 let vr = verifier.verify(&result.fixed_code, lint_name);
                 let success = vr.ran && vr.lint_resolved;
+                // Issue 021: the verdict came from the real verifier — a
+                // resolved lint is a certification, not a heuristic success.
                 evolved_pipeline.report_outcome(
                     lint_name,
                     buggy_code,
                     &result.fixed_code,
                     success,
+                    vr.ran,
                 );
                 if success {
                     round_resolved += 1;

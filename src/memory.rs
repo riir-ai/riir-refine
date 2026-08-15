@@ -14,8 +14,21 @@
 //!   This is the "same lint, different code" signal. (A full BM25 over code
 //!   tokens would add complexity for marginal POC gain; the latent axis
 //!   already captures code similarity.)
+//! - **Trust** (Issue 021): a bounded per-entry evidential prior derived from
+//!   the trajectory's [`EvidenceTier`] — Certified (full-validator admission)
+//!   ranks above Heuristic (syn-parse only) at equal similarity, and
+//!   **Withdrawn entries are never emitted as suggestions** (they stay
+//!   reachable via [`LatentFixMemory::iter`]/[`get`](LatentFixMemory::get)
+//!   for the adaptation loop's failure analysis). The prior is a per-entry
+//!   bounded term (sigmoid-family, never a softmax across entries — scores
+//!   stay independent, no cross-entry normalization).
 //! - **Graph**: deferred (out of scope per Issue 004 — defer until G5 passes
 //!   with latent + BM25 only).
+//!
+//! The trust axis is the retelling-bias defense from arXiv:2608.11195
+//! (Research 049): without it, an early heuristic success is
+//! indistinguishable in memory from a full-validator pass, and iterated
+//! retrieval launders the former into the latter.
 //!
 //! ## Alloc-free read path
 //!
@@ -26,6 +39,81 @@
 use crate::embedder::{Direction, EMBED_DIM, embed_into};
 use blake3::Hasher;
 use serde::{Deserialize, Serialize};
+
+/// Consecutive post-hoc failures after which a trajectory is Withdrawn
+/// (Issue 021). Withdrawn is an **absorbing** tier — outcome counts alone can
+/// never leave it; only a fresh full-validator pass (re-certification) can.
+const WITHDRAW_CONSECUTIVE_FAILS: u32 = 3;
+
+/// Evidential status of a stored fix trajectory (Issue 021).
+///
+/// Distinguishes HOW a fix's outcome was established, which plain
+/// `success_count`/`fail_count` cannot: an early syn-parse-only success and a
+/// full-validator admission are indistinguishable under outcome counts alone,
+/// and iterated retrieval launders the former into the latter (the
+/// retelling-bias failure mode, arXiv:2608.11195 session-44 incident;
+/// Research 049).
+///
+/// Transition discipline (mirrors riir-chain's slashing monotonicity):
+///
+/// - `(success && verified)` → **Certified** — the ONLY promotion and the ONLY
+///   exit from Withdrawn. A full-validator pass re-certifies any tier.
+/// - Consecutive failures ≥ [`WITHDRAW_CONSECUTIVE_FAILS`] → **Withdrawn**.
+/// - Everything else leaves the tier unchanged (Withdrawn included —
+///   absorbing under outcome counts alone).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[repr(u8)]
+pub enum EvidenceTier {
+    /// Admitted by the full validator (`clippy_verify` / `rust_perf_verify`
+    /// re-run, or the Stage 2 tuning loop's verifier pass — the
+    /// `adaptive_drafter` verified-pool admission rule).
+    Certified = 0,
+    /// Syn-parse only, or unverified history. The constructor default — and
+    /// the decode default for pre-Issue-021 serialized memories, which is
+    /// the honest tier for unverified history.
+    #[default]
+    Heuristic = 1,
+    /// Retracted after repeated post-hoc failures. Absorbing: never re-emitted
+    /// as a suggestion without an explicit re-certification event.
+    Withdrawn = 2,
+}
+
+impl EvidenceTier {
+    /// Pure tier transition — a function of `(tier, success, verified,
+    /// consecutive_fails)` only, never wall-clock (G1 determinism holds:
+    /// transitions depend only on recorded events).
+    #[must_use]
+    #[inline]
+    pub fn advance(self, success: bool, verified: bool, consecutive_fails: u32) -> Self {
+        // Re-certification: a fresh full-validator pass. The ONLY promotion
+        // path and the ONLY exit from Withdrawn.
+        if success && verified {
+            return Self::Certified;
+        }
+        match self {
+            // Absorbing: no outcome-count path leaves Withdrawn.
+            Self::Withdrawn => Self::Withdrawn,
+            _ if consecutive_fails >= WITHDRAW_CONSECUTIVE_FAILS => Self::Withdrawn,
+            _ => self,
+        }
+    }
+
+    /// Bounded trust prior for retrieval blending (Issue 021).
+    ///
+    /// Certified 1.0, Heuristic 0.5 (neutral — the established
+    /// untried-neutral convention), Withdrawn 0.0 (excluded from suggestions
+    /// before scoring ever sees it; the 0.0 only matters if a future caller
+    /// opts back in).
+    #[must_use]
+    #[inline]
+    pub fn trust_prior(self) -> f32 {
+        match self {
+            Self::Certified => 1.0,
+            Self::Heuristic => 0.5,
+            Self::Withdrawn => 0.0,
+        }
+    }
+}
 
 /// A stored fix trajectory — one past fix attempt with its outcome stats.
 ///
@@ -53,6 +141,16 @@ pub struct FixTrajectory {
     pub success_count: u32,
     /// How many times this trajectory's fix failed.
     pub fail_count: u32,
+    /// Consecutive failures since the last success (drives the Withdrawn
+    /// transition, Issue 021). Reset to 0 on any success.
+    #[serde(default)]
+    pub consecutive_fails: u32,
+    /// Evidential status (Issue 021). Defaults to [`EvidenceTier::Heuristic`]
+    /// — for fresh trajectories (syn-parse only until a validator admits
+    /// them) AND for pre-Issue-021 serialized memories (`#[serde(default)]`
+    /// decodes missing fields as the honest tier for unverified history).
+    #[serde(default)]
+    pub tier: EvidenceTier,
 }
 
 impl FixTrajectory {
@@ -77,6 +175,8 @@ impl FixTrajectory {
             direction,
             success_count: 0,
             fail_count: 0,
+            consecutive_fails: 0,
+            tier: EvidenceTier::Heuristic,
         }
     }
 
@@ -139,14 +239,21 @@ pub struct RetrievalWeights {
     pub latent: f32,
     /// Weight on the BM25 (exact `lint_name` match) axis.
     pub bm25: f32,
+    /// Weight on the trust (evidential-tier prior) axis (Issue 021).
+    pub trust: f32,
 }
 
 impl Default for RetrievalWeights {
     fn default() -> Self {
         // BM25 gets higher weight because exact lint_name match is a strong
         // signal for clippy fixes (the fix space is lint-specific). The latent
-        // axis adds a "similar code pattern" refinement.
-        Self { latent: 0.4, bm25: 0.6 }
+        // axis adds a "similar code pattern" refinement. Trust (Issue 021) is
+        // deliberately the SMALLEST axis: it must break ties + small
+        // similarity edges in favor of Certified entries without overriding
+        // relevance — at 0.2, a different-lint Certified entry (≤ 0.4 + 0.2)
+        // can never outrank a same-lint Heuristic one (≥ 0.6 + 0.1), and the
+        // Certified-over-Heuristic gap is 0.1 (0.5 prior difference × 0.2).
+        Self { latent: 0.4, bm25: 0.6, trust: 0.2 }
     }
 }
 
@@ -227,20 +334,53 @@ impl LatentFixMemory {
     }
 
     /// Record a success or failure outcome for a specific (lint, `fixed_code`)
-    /// pair. If no matching trajectory exists, it's a no-op (the trajectory
-    /// must be inserted first via `insert`).
-    pub fn record_outcome(&mut self, lint_name: &str, fixed_code: &str, success: bool) {
+    /// pair, with its verification context (Issue 021). If no matching
+    /// trajectory exists, it's a no-op (the trajectory must be inserted first
+    /// via `insert`).
+    ///
+    /// The tier transition is a pure function of `(tier, success, verified,
+    /// consecutive_fails)` — see [`EvidenceTier::advance`]. `verified: true`
+    /// means the verdict came from a full validator (clippy re-run proving the
+    /// lint resolved, domain validator, tuning-loop verifier); a syn-parse
+    /// pass or a manual "looked right" is `verified: false`.
+    pub fn record_outcome(
+        &mut self,
+        lint_name: &str,
+        fixed_code: &str,
+        success: bool,
+        verified: bool,
+    ) {
         for t in &mut self.trajectories {
             if t.lint_name == lint_name && t.fixed_code == fixed_code {
                 if success {
                     t.success_count = t.success_count.saturating_add(1);
+                    t.consecutive_fails = 0;
                 } else {
                     t.fail_count = t.fail_count.saturating_add(1);
+                    t.consecutive_fails = t.consecutive_fails.saturating_add(1);
                 }
+                t.tier = t.tier.advance(success, verified, t.consecutive_fails);
                 return;
             }
         }
         // No matching trajectory — caller should have inserted it first.
+    }
+
+    /// Record a **certification event** — a full-validator admission (Issue 021).
+    ///
+    /// Inserts the trajectory if absent, then records `(success = true,
+    /// verified = true)`: `success_count` bumps and the tier becomes
+    /// [`EvidenceTier::Certified`] (or re-certifies a Withdrawn entry — the
+    /// only exit). This is the memory-side admission rule for callers that
+    /// already ran the full validator (the Stage 2 tuning loop's verifier
+    /// pass, `insert_verified`-style external verification paths).
+    pub fn record_certified(&mut self, lint_name: &str, buggy_code: &str, fixed_code: &str) {
+        self.insert(FixTrajectory::new(
+            lint_name.to_string(),
+            buggy_code.to_string(),
+            fixed_code.to_string(),
+        ));
+        self.record_outcome(lint_name, fixed_code, true, true);
     }
 
     /// Retrieve the top-K trajectories for a query, writing their indices +
@@ -273,6 +413,13 @@ impl LatentFixMemory {
         // we do 1000 comparisons + at most 5×1000 insertions (worst case
         // is all ascending, but typical is ~50 insertions total).
         for (idx, traj) in self.trajectories.iter().enumerate() {
+            // Trust axis gate (Issue 021): Withdrawn entries are never emitted
+            // as suggestions — skip before scoring. They stay reachable for
+            // failure analysis via `iter()`/`get()`.
+            if traj.tier == EvidenceTier::Withdrawn {
+                continue;
+            }
+
             // Latent axis: dot(query.direction, traj.direction), then sigmoid.
             let dot = scalar_dot_8(&query.direction, &traj.direction);
             let latent_score = katgpt_core::sigmoid(dot);
@@ -280,7 +427,14 @@ impl LatentFixMemory {
             // BM25 axis: exact lint_name match via pre-computed hash (O(1)).
             let bm25_score = if traj.lint_name_hash == query.lint_name_hash { 1.0 } else { 0.0 };
 
-            let combined = self.weights.latent * latent_score + self.weights.bm25 * bm25_score;
+            // Trust axis (Issue 021): bounded per-entry prior from the
+            // evidential tier. Additive + sigmoid-family bounded — never a
+            // softmax across entries (scores stay independent).
+            let trust_score = traj.tier.trust_prior();
+
+            let combined = self.weights.latent * latent_score
+                + self.weights.bm25 * bm25_score
+                + self.weights.trust * trust_score;
 
             // Inline top-K insertion: if `out` has < K entries, push.
             // Otherwise, if this score beats the minimum in `out`, replace it.
@@ -486,9 +640,9 @@ mod tests {
         let mut mem = LatentFixMemory::default();
         mem.insert(make_traj("needless_return", "return 42;", "42"));
 
-        mem.record_outcome("needless_return", "42", true);
-        mem.record_outcome("needless_return", "42", true);
-        mem.record_outcome("needless_return", "42", false);
+        mem.record_outcome("needless_return", "42", true, false);
+        mem.record_outcome("needless_return", "42", true, false);
+        mem.record_outcome("needless_return", "42", false, false);
 
         let traj = mem.get(0).unwrap();
         assert_eq!(traj.success_count, 2);
@@ -541,8 +695,8 @@ mod tests {
         let mut mem = LatentFixMemory::default();
         mem.insert(make_traj("needless_return", "return 42;", "42"));
         mem.insert(make_traj("collapsible_if", "if a { if b { x(); } }", "if a && b { x(); }"));
-        mem.record_outcome("needless_return", "42", true);
-        mem.record_outcome("needless_return", "42", false);
+        mem.record_outcome("needless_return", "42", true, false);
+        mem.record_outcome("needless_return", "42", false, false);
 
         let json = mem.to_json().expect("serialize");
         let mut loaded = LatentFixMemory::default();
@@ -556,6 +710,8 @@ mod tests {
             assert_eq!(a.lint_name_hash, b.lint_name_hash);
             assert_eq!(a.success_count, b.success_count);
             assert_eq!(a.fail_count, b.fail_count);
+            assert_eq!(a.consecutive_fails, b.consecutive_fails);
+            assert_eq!(a.tier, b.tier, "evidential tier must round-trip");
             assert_eq!(a.direction, b.direction, "direction must round-trip bit-identically");
         }
     }
@@ -574,7 +730,7 @@ mod tests {
 
         // Save → load round-trip via the file system.
         mem.insert(make_traj("needless_return", "return 1;", "1"));
-        mem.record_outcome("needless_return", "1", true);
+        mem.record_outcome("needless_return", "1", true, false);
         mem.save(&path).expect("save");
         let mut mem2 = LatentFixMemory::default();
         mem2.load(&path).expect("load");
@@ -583,7 +739,7 @@ mod tests {
 
         // Merge semantics: loading an identical triple keeps LIVE stats;
         // a new triple is appended.
-        mem2.record_outcome("needless_return", "1", true);
+        mem2.record_outcome("needless_return", "1", true, false);
         mem2.load(&path).expect("re-load");
         assert_eq!(mem2.len(), 1);
         assert_eq!(mem2.get(0).unwrap().success_count, 2, "live stats win over persisted");
@@ -603,5 +759,226 @@ mod tests {
         assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
         assert!(mem.is_empty(), "failed load must leave the memory untouched");
         let _ = std::fs::remove_file(&path);
+    }
+
+    // ── Issue 021: evidential-status axis ────────────────────────────
+
+    #[test]
+    fn tier_transitions_follow_the_admission_rules() {
+        use EvidenceTier::{Certified, Heuristic, Withdrawn};
+
+        // Fresh trajectories are Heuristic.
+        assert_eq!(make_traj("l", "b", "f").tier, Heuristic);
+
+        // Verified success → Certified (the only promotion).
+        assert_eq!(Heuristic.advance(true, true, 0), Certified);
+        assert_eq!(Certified.advance(true, true, 0), Certified);
+
+        // Unverified success never promotes.
+        assert_eq!(Heuristic.advance(true, false, 0), Heuristic);
+
+        // 3 consecutive fails (any verification) → Withdrawn.
+        assert_eq!(Heuristic.advance(false, true, 3), Withdrawn);
+        assert_eq!(Heuristic.advance(false, false, 3), Withdrawn);
+        assert_eq!(Certified.advance(false, true, 3), Withdrawn);
+        assert_eq!(Heuristic.advance(false, false, 2), Heuristic, "2 fails is under the bar");
+
+        // Success resets the consecutive-fail streak — modelled by the caller
+        // passing the reset streak (0) — and only verified success re-certifies.
+        assert_eq!(Withdrawn.advance(true, true, 0), Certified, "re-certification is the only exit");
+    }
+
+    #[test]
+    fn withdrawn_is_absorbing_under_outcome_counts_alone() {
+        // T1 absorbing property: from Withdrawn, NO sequence of outcomes that
+        // lacks a (success && verified) event can leave Withdrawn. Exhaustive
+        // over every (success, verified) combo × streak regime — plus a long
+        // deterministic sequence of unverified successes.
+        for success in [false, true] {
+            for verified in [false, true] {
+                for streak in [0u32, 1, 3, 100] {
+                    let next = EvidenceTier::Withdrawn.advance(success, verified, streak);
+                    if success && verified {
+                        assert_eq!(next, EvidenceTier::Certified);
+                    } else {
+                        assert_eq!(next, EvidenceTier::Withdrawn, "absorbing under ({success}, {verified}, {streak})");
+                    }
+                }
+            }
+        }
+
+        // End-to-end through the memory: reach Withdrawn, then 100 unverified
+        // successes — the tier must stay Withdrawn (retelling-bias defense:
+        // headline successes cannot launder a retraction away).
+        let mut mem = LatentFixMemory::default();
+        mem.insert(make_traj("needless_return", "return 42;", "42"));
+        for _ in 0..3 {
+            mem.record_outcome("needless_return", "42", false, true);
+        }
+        assert_eq!(mem.get(0).unwrap().tier, EvidenceTier::Withdrawn);
+        for _ in 0..100 {
+            mem.record_outcome("needless_return", "42", true, false);
+        }
+        let traj = mem.get(0).unwrap();
+        assert_eq!(traj.tier, EvidenceTier::Withdrawn, "unverified successes must not un-withdraw");
+        assert_eq!(traj.success_count, 100, "stats still record honestly");
+        assert_eq!(traj.consecutive_fails, 0, "streak reset is honest bookkeeping");
+
+        // One re-certification exits.
+        mem.record_outcome("needless_return", "42", true, true);
+        assert_eq!(mem.get(0).unwrap().tier, EvidenceTier::Certified);
+    }
+
+    #[test]
+    fn certified_outranks_heuristic_at_equal_similarity() {
+        // T2 falsifiable A/B — within-subject design. Trajectories sharing
+        // (lint, fixed) are one stats bucket (`record_outcome` matches on that
+        // pair), so two distinct-tier entries with EXACTLY equal similarity
+        // are not constructible through the real API. The honest equivalent:
+        // the SAME entry queried before vs after certification — the only
+        // changed variable is the tier, so the score delta must be EXACTLY
+        // the trust gap (0.5 prior × 0.2 weight = 0.1). Fails if the trust
+        // axis is not wired (delta would be 0).
+        let mut mem = LatentFixMemory::default();
+        mem.insert(make_traj("needless_return", "return 42;", "42"));
+        assert_eq!(mem.get(0).unwrap().tier, EvidenceTier::Heuristic);
+
+        let q = make_query("needless_return", "return 43;");
+        let before = mem.retrieve(&q, 1);
+        assert_eq!(before.len(), 1);
+
+        // Certify (full-validator admission).
+        mem.record_outcome("needless_return", "42", true, true);
+        assert_eq!(mem.get(0).unwrap().tier, EvidenceTier::Certified);
+
+        let after = mem.retrieve(&q, 1);
+        assert_eq!(after.len(), 1);
+        let delta = after[0].score - before[0].score;
+        assert!((delta - 0.1).abs() < 1e-5, "certification must add exactly the trust gap (0.1), got {delta}");
+
+        // And the cross-entry ordering proof lives in the small-edge test
+        // below: a Certified entry beats a strictly-more-similar Heuristic
+        // one when the edge is under the gap.
+    }
+
+    #[test]
+    fn certified_beats_small_similarity_edge_of_heuristic() {
+        // T2 (higher-similarity regime): a Heuristic entry whose latent score
+        // is STRICTLY higher than the Certified one's must still lose when the
+        // edge is smaller than the trust gap. The embedder is hash-based (no
+        // locality), so the higher-similarity candidate is FOUND at runtime:
+        // enumerate fixed codes, pick one with latent strictly inside the
+        // (certified, certified + gap) window. Self-adapting across embedder
+        // changes; asserts found so a silent no-op can't pass.
+        let lint = "needless_return";
+        let cert_fixed = "42";
+        let mut mem = LatentFixMemory::default();
+        mem.record_certified(lint, "return 42;", cert_fixed);
+
+        let q = make_query(lint, "return 7;");
+        let base = mem.retrieve(&q, 1);
+        let cert_latent = base[0].latent_score;
+
+        let weights = RetrievalWeights::default();
+        let trust_gap = weights.trust * (EvidenceTier::Certified.trust_prior()
+            - EvidenceTier::Heuristic.trust_prior());
+        let latent_edge_max = trust_gap / weights.latent; // 0.25 at defaults
+
+        let mut heuristic_fixed = None;
+        for i in 0..200u32 {
+            let code = format!("let heuristic = {i};");
+            let mut dir = [0.0f32; EMBED_DIM];
+            crate::embedder::embed_into(lint, &code, &mut dir);
+            let latent = katgpt_core::sigmoid(scalar_dot_8(&q.direction, &dir));
+            if latent > cert_latent && latent - cert_latent < latent_edge_max {
+                heuristic_fixed = Some(code);
+                break;
+            }
+        }
+        let heuristic_fixed =
+            heuristic_fixed.expect("a higher-but-close latent candidate must exist in 200 draws");
+
+        mem.insert(make_traj(lint, "return 8;", &heuristic_fixed));
+        assert_eq!(mem.get(1).unwrap().tier, EvidenceTier::Heuristic);
+
+        let results = mem.retrieve(&q, 2);
+        assert_eq!(results.len(), 2);
+        let winner = mem.get(results[0].idx).unwrap();
+        assert_eq!(
+            winner.tier,
+            EvidenceTier::Certified,
+            "trust gap must dominate a small similarity edge"
+        );
+        assert!(results[0].latent_score < results[1].latent_score,
+            "sanity: the runner-up really was more similar");
+    }
+
+    #[test]
+    fn withdrawn_entries_are_never_suggested() {
+        // T2: a Withdrawn entry is excluded from suggestions entirely, even
+        // when it is the ONLY match; it stays reachable via iter()/get().
+        let mut mem = LatentFixMemory::default();
+        mem.insert(make_traj("needless_return", "return 42;", "42"));
+        for _ in 0..3 {
+            mem.record_outcome("needless_return", "42", false, true);
+        }
+        assert_eq!(mem.get(0).unwrap().tier, EvidenceTier::Withdrawn);
+
+        // Only match is Withdrawn → no suggestions at all.
+        let q = make_query("needless_return", "return 43;");
+        assert!(mem.retrieve(&q, 5).is_empty(), "Withdrawn must never be suggested");
+
+        // Mixed memory: only the non-withdrawn entry surfaces.
+        mem.insert(make_traj("needless_return", "return 44;", "44"));
+        let results = mem.retrieve(&q, 5);
+        assert_eq!(results.len(), 1);
+        assert_eq!(mem.get(results[0].idx).unwrap().fixed_code, "44");
+
+        // Still reachable for failure analysis.
+        assert_eq!(mem.len(), 2, "Withdrawn entry stays in memory");
+        assert!(mem.iter().any(|t| t.tier == EvidenceTier::Withdrawn));
+    }
+
+    #[test]
+    fn record_certified_admits_and_recertifies() {
+        let mut mem = LatentFixMemory::default();
+        mem.record_certified("needless_return", "return 42;", "42");
+        let traj = mem.get(0).unwrap();
+        assert_eq!(traj.tier, EvidenceTier::Certified);
+        assert_eq!(traj.success_count, 1);
+
+        // Re-certifying an existing (lint, fixed) pair bumps + stays Certified.
+        mem.record_certified("needless_return", "return 42;", "42");
+        assert_eq!(mem.len(), 1, "dedup on the identical triple");
+        assert_eq!(mem.get(0).unwrap().success_count, 2);
+        assert_eq!(mem.get(0).unwrap().tier, EvidenceTier::Certified);
+    }
+
+    #[test]
+    fn pre_issue021_json_decodes_as_heuristic() {
+        // Back-compat: a v1 envelope written BEFORE Issue 021 (no
+        // `tier`/`consecutive_fails` fields) must decode as Heuristic — the
+        // honest tier for unverified history. Hand-written v1 JSON mirrors
+        // the old serde output shape exactly.
+        let old_json = r#"{
+            "version": 1,
+            "trajectories": [
+                {
+                    "lint_name": "needless_return",
+                    "lint_name_hash": 12345,
+                    "buggy_code": "return 42;",
+                    "fixed_code": "42",
+                    "direction": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8],
+                    "success_count": 3,
+                    "fail_count": 0
+                }
+            ]
+        }"#;
+        let mut mem = LatentFixMemory::default();
+        mem.load_json(old_json).expect("old-format file must load");
+        let traj = mem.get(0).unwrap();
+        assert_eq!(traj.tier, EvidenceTier::Heuristic, "old history decodes as Heuristic");
+        assert_eq!(traj.consecutive_fails, 0);
+        assert_eq!(traj.success_count, 3, "stats survive");
     }
 }

@@ -328,12 +328,20 @@ impl HealPipeline {
     /// This is the "`L_evolve`" step — it records the trajectory (if new),
     /// updates the trajectory's success/fail stats, and applies the EMA
     /// direction update.
+    ///
+    /// `verified` (Issue 021) carries the outcome's verification context:
+    /// `true` only when the verdict came from a full validator (a real
+    /// clippy re-run proving the lint resolved, the domain validator, the
+    /// tuning-loop verifier). A verified success certifies the trajectory's
+    /// [`EvidenceTier`](crate::memory::EvidenceTier); a syn-parse pass or a
+    /// simulated outcome is `verified: false`.
     pub fn report_outcome(
         &mut self,
         rule_id: &str,
         buggy_code: &str,
         fixed_code: &str,
         success: bool,
+        verified: bool,
     ) {
         // 1. Compute the fix's direction.
         let mut fix_dir = [0.0f32; EMBED_DIM];
@@ -347,8 +355,8 @@ impl HealPipeline {
         );
         self.memory.insert(traj);
 
-        // 3. Update the trajectory's success/fail stats.
-        self.memory.record_outcome(rule_id, fixed_code, success);
+        // 3. Update the trajectory's success/fail stats + evidential tier.
+        self.memory.record_outcome(rule_id, fixed_code, success, verified);
 
         // 4. EMA direction update (the actual "evolution").
         self.evolution.record_outcome(rule_id, &fix_dir, success);
@@ -412,6 +420,10 @@ impl HealPipeline {
             let stage1_ok = if let Some(draft) = self.drafter.draft_fix(rule_id, buggy_code, &empty) {
                 let v = verifier.verify(&draft.code, rule_id);
                 if v.ran && v.lint_resolved {
+                    // Issue 021: a verifier-passed fix is a certification —
+                    // record a Certified trajectory in memory (the tier's
+                    // admission rule IS the verified-pool admission).
+                    self.memory.record_certified(rule_id, buggy_code, &draft.code);
                     self.adaptive.insert(rule_id, buggy_code, draft.code);
                     report.stage1_verified += 1;
                     true
@@ -432,6 +444,8 @@ impl HealPipeline {
                 report.stage2_proposed += 1;
                 let v = verifier.verify(&proposed, rule_id);
                 if v.ran && v.lint_resolved {
+                    // Issue 021: same certification on the proposer path.
+                    self.memory.record_certified(rule_id, buggy_code, &proposed);
                     self.adaptive.insert(rule_id, buggy_code, proposed);
                     report.stage2_verified += 1;
                 }
@@ -549,7 +563,7 @@ mod tests {
         assert_eq!(r1.evolution_score, 0.5);
 
         // Report a success with the correct fix.
-        p.report_outcome("needless_return", "return 42;", "fn foo() -> i32 { 42 }", true);
+        p.report_outcome("needless_return", "return 42;", "fn foo() -> i32 { 42 }", true, false);
 
         // After a success: the evolved direction should favor the correct fix.
         let r2 = p.heal("needless_return", "return 42;", &corpus).unwrap();
@@ -702,7 +716,8 @@ mod tests {
         // Seed memory with a trajectory so the memory path is available.
         p.seed_from_corpus(&entries);
         // Report a success on the memory fix so its success_rate > drafter's.
-        p.report_outcome("annotated-rule", "let buggy = 1;", "let fixed = 1;", true);
+        // Simulated outcome (no validator ran) — verified: false.
+        p.report_outcome("annotated-rule", "let buggy = 1;", "let fixed = 1;", true, false);
 
         let result = p.heal("annotated-rule", "let buggy = 1;", &entries);
         assert!(result.is_some(), "must produce a result");

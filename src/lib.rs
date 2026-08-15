@@ -179,7 +179,7 @@ pub use domains::kernel_opt::verify::{KernelVerifyResult, KernelVerifier};
 pub use ruliology_search::{RuliologySearch, ScoredCandidate};
 
 pub use evolve::{EvolveConfig, LatentSkillEvolution};
-pub use memory::{FixTrajectory, LatentFixMemory, LatentQuery, ScoredTrajectory};
+pub use memory::{EvidenceTier, FixTrajectory, LatentFixMemory, LatentQuery, ScoredTrajectory};
 pub use recorder::EvolveRecorder;
 pub use self_evolve::{HealPipeline, HealResult, HealSource, TuneReport};
 

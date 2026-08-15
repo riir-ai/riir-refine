@@ -302,6 +302,47 @@ fixtures, is the live failure mode. 408/435/592 tests + clippy 0 in all
 states. See
 [`.benchmarks/025`](.benchmarks/025_router_spectral_poc_kill.md).
 
+**Issue 021 (2026-08-16, RESOLVED) — evidential-status axis for
+`LatentFixMemory`.** The retelling-bias defense (arXiv:2608.11195 /
+Research 049): the old schema (success/fail u32s + boolean
+`record_outcome`) could not distinguish a full-validator admission from a
+syn-parse-only success, and iterated retrieval launders the latter into
+the former. Shipped (Bench 026): `EvidenceTier` (`#[repr(u8)]`
+Certified/Heuristic/Withdrawn) on `FixTrajectory` with
+absorbing-Withdrawn transitions (the riir-chain slashing-monotonicity
+pattern: 3 consecutive post-hoc failures → Withdrawn; ONLY
+`(success && verified)` — a fresh full-validator pass — promotes or
+exits); `consecutive_fails` streak driver (reset on success — stats
+climb honestly while the tier decides); trust-weighted retrieval
+(`RetrievalWeights.trust` default 0.2: Certified 1.0 / Heuristic 0.5 /
+Withdrawn EXCLUDED from suggestions, still reachable via `iter()`/`get()`
+for failure analysis); certification admission
+`record_certified` wired into the Stage 2 tuning loop (verifier-passed
+fixes now land in memory as Certified — previously the tuning loop only
+fed the adaptive pool); `record_outcome` gains `verified` on
+`LatentFixMemory` + `HealPipeline::report_outcome` (the demo passes
+`vr.ran`; G5's simulated outcomes honestly pass `false`);
+`EvolveRecorder` keeps its 4-arg CLI shape (`heal.rs` untouched — its
+call sites are compile-gate reverts where the flag is behaviorally
+irrelevant) + `record_outcome_verified` for future full-validator
+callers. Pre-021 memory files decode as Heuristic (`#[serde(default)]`).
+**The honest A/B finding:** the issue's original A/B ("two entries,
+equal similarity, different tiers") is NOT constructible through the
+real API — `record_outcome` matches by `(lint_name, fixed_code)`, so
+entries sharing that pair are ONE stats bucket (the first test run
+failed on exactly this, proving the gate is load-bearing). The
+falsifiable A/B is the within-subject certification delta (exactly the
+0.1 trust gap, tolerance 1e-5) + the cross-entry small-edge flip (a
+Heuristic entry with STRICTLY higher latent, found by runtime search —
+the hash embedder has no locality — still loses when the edge is under
+the gap). Design constraint measured: at trust 0.2, a different-lint
+Certified entry can never outrank a same-lint Heuristic one — trust
+breaks ties, relevance dominates. Scope-of-validity (the stretch goal)
+deferred per the issue's own defer clause. 415/429 lib + full CI guard
+all-layers (668 combined) + clippy 0 in default/clippy_verify/
+latent_retrieval states. See
+[`.benchmarks/026`](.benchmarks/026_evidential_status_axis_goat.md).
+
 ## The `riir-clippy` skill (auto-continue idle loop)
 
 `.agents/skills/riir-clippy/SKILL.md` (symlinked into `~/.agents/skills/`

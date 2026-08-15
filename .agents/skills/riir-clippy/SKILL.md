@@ -826,7 +826,18 @@ global = symlink only.
   weaver_gpu_dflash.rs DONE (43). weaver_gpu/ mod.rs + FULL kvarn/
   DONE (44 — weaver_gpu/tests.rs test-only, not mined).
 - **Also open (riir-clippy issues)**: 019 (idle-loop skill close-out,
-  T6 remainder), 021 (evidential status axis, P2).
+  T6 remainder).
+  021 (evidential status axis) RESOLVED 2026-08-16 (Bench 026 —
+  `EvidenceTier` Certified/Heuristic/Withdrawn + absorbing-Withdrawn
+  transitions + trust-weighted retrieval; Withdrawn never suggested;
+  certification admission wired through the Stage 2 tuning loop;
+  `record_outcome` gains `verified` on LatentFixMemory + HealPipeline,
+  EvolveRecorder keeps the 4-arg CLI shape + `record_outcome_verified`;
+  honest A/B finding: equal-similarity distinct-tier pairs are NOT
+  constructible — `record_outcome` matches by (lint, fixed) = one stats
+  bucket — so the falsifiable A/B is the within-subject certification
+  delta (exactly the 0.1 trust gap) + the cross-entry small-edge flip;
+  scope-of-validity stretch goal deferred).
   014 (rust_perf v4) RESOLVED 2026-08-16 (Bench 020); 016 (clippy
   structural expansion) RESOLVED 2026-08-16 (Bench 021 — corpus 10→40,
   FIXABLE 6→33, VERIFY 1→4); 017 (retrieval precision at scale) RESOLVED
@@ -851,7 +862,10 @@ global = symlink only.
   clippy proposers mod.rs). NOTE (2026-08-16, Issue 018 session): the
   tree was clean + fix_verify had landed, so `Cargo.toml`/`lib.rs`/
   `heal.rs` were safely touched for 018 — re-verify sibling WIP state
-  before touching them again.
+  before touching them again. NOTE (2026-08-16, Issue 021 session):
+  tree clean again; 021 deliberately avoided `heal.rs` (EvolveRecorder's
+  4-arg shape kept) — only `lib.rs` (EvidenceTier re-export) was touched
+  from the protected list.
 
 ## Manual invocation
 
