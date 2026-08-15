@@ -562,6 +562,59 @@
 //!   borrow workaround) + the O(E·L²) routing re-derivation + dead
 //!   scratch clears + a false-premise aliasing comment — filed as a
 //!   riir-ai issue.
+//! - **Batch 32c (Research 036):** 13 rules from the `edge_lora`
+//!   self-play/arena/consolidation half — `sleep_consolidation.rs`,
+//!   `arena_eval.rs`, `cross_game_edge.rs`, `cross_game_real.rs`,
+//!   `{go,bomber,fft}_self_play.rs`:
+//!   `incremental-centroid-running-sum` (C — the greedy clustering loop
+//!   recomputes each cluster centroid from scratch per comparison: full
+//!   member sweep + fresh Vec per (item, cluster) pair; maintain
+//!   (sum, count) per cluster instead — the numeric-aggregate twin of
+//!   digest maintenance), `length-prefix-shape-faithful-hash` (B —
+//!   payload-only multi-part hashing is shape-blind: a=[1,2],b=[3] and
+//!   a=[1],b=[2,3] collide; feed part lengths into the stream FIRST),
+//!   `order-stable-topk-via-index-sort` (D — sort an INDEX array by
+//!   score, truncate to the top-K set, re-sort indices ascending: the
+//!   items never move + the output is canonical original order),
+//!   `make-unmake-over-clone-per-candidate` (A — candidate search
+//!   clones the whole state per probe; apply in place + roll back the
+//!   recorded delta, bit-identical, zero per-candidate allocation),
+//!   `argmax-rng-tie-break-collect-ties` (B — `max_by` returns the first
+//!   max (hidden move-order priority) and softmax sampling adds
+//!   normalization to solve a tie problem; one sweep collects
+//!   epsilon-ties + one seeded RNG draw), `shape-gated-warm-start-
+//!   slot-copy` (D — warm-start copies slot-by-slot only when the full
+//!   shape tuple matches; mismatched slots learn during training),
+//!   `domain-as-data-not-algorithm-fork` (D — the cross-game aspect is
+//!   in the DATA, not the algorithm: convert episodes, delegate to the
+//!   unchanged loop; no forked trainer), `one-sweep-spatial-feature-
+//!   fanout` (C — 12 spatial statistics from ONE board visit via
+//!   per-cell classification indices + a signed indicator + geometry-
+//!   derived denominators), `deterministic-tiling-projection-tables`
+//!   (A — a modelless fixed projection as construction-time tables:
+//!   modulo schedule + even-spacing-with-jitter phases, same seed
+//!   rebuilds the identical encoder), `latent-encode-at-capture` (A —
+//!   snapshot the latent encoding at capture instead of buffering raw
+//!   states: peak memory moves × `hidden_dim`, not moves × full state),
+//!   `non-saturating-outcome-reward-floor` (B — raw 0/1 outcomes zero
+//!   the gradient weight of every losing episode; 0.15 + 0.70 · clamp
+//!   keeps losses teaching), `collect-then-resolve-snapshot-batch` (E —
+//!   simultaneous-turn loops collect ALL selections against the frozen
+//!   pre-tick snapshot (read-only, parallelizable) then resolve in
+//!   fixed order: no information leak, order-independent outcomes), and
+//!   `timeout-scalar-tiebreak-decisive-outcome` (D — a capped game
+//!   falls through to a maintained-scalar (HP) tiebreak instead of a
+//!   flat draw: signal density at zero maintenance cost). Corpus:
+//!   **251 rules across 15 categories (A–O)**. 14 candidates dropped
+//!   as duplicates/thin (scratch reuse + `legal_buf` hoisting + seed
+//!   derivation + 3-accumulator sweeps + modulo zip-cycling + digest
+//!   audit trail + per-tick grid-view rebuild etc. — all covered by
+//!   existing rules; the grid-view rebuild went to the issue as the
+//!   naive side). Mining ALSO surfaced the quadratic centroid storm +
+//!   swallowed failed move + `warm_start` weight duplication + per-call
+//!   dataset deep-clone + the false-premise sigmoid comment + the dead
+//!   init-touch loop + the Wait-vs-continue mismatch + the wasted
+//!   encodes — filed as a riir-ai issue.
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
@@ -4400,6 +4453,295 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
             ref_shape: "// Naive: shape truth stored as a cached field next to the payload.\nstruct GateNaive {\n    in_dim: usize, // cached copy of gate_vectors[i].len()\n    gate_vectors: Vec<Box<[f32]>>,\n}\nfn forward_naive(g: &GateNaive, hidden: &[f32], out_gates: &mut [f32]) -> bool {\n    // Trusts the cached field. If any construction path forgets to set\n    // in_dim (or a mutation resizes one vector), the cache drifts from\n    // the payload: silent OOB reads or garbage shapes that 'validate'.\n    if hidden.len() != g.in_dim {\n        return false;\n    }\n    for (i, u) in g.gate_vectors.iter().enumerate() {\n        let mut dot = 0.0f32;\n        for (a, b) in u.iter().zip(hidden.iter()) {\n            dot += a * b;\n        }\n        out_gates[i] = 1.0 / (1.0 + (-dot).exp());\n    }\n    true\n}".to_string(),
             opt_pattern: "// Optimized: no cached shape field — derive it from the payload.\nstruct GateOpt {\n    gate_vectors: Vec<Box<[f32]>>,\n}\nimpl GateOpt {\n    fn in_dim(&self) -> Option<usize> {\n        self.gate_vectors.first().map(|v| v.len())\n    }\n    fn gate_values(&self, hidden: &[f32], out_gates: &mut [f32]) -> bool {\n        let in_dim = match self.in_dim() {\n            Some(d) => d,\n            None => return false,\n        };\n        // Validation compares against the DERIVED truth — a stale cache\n        // cannot exist because there is nothing to go stale.\n        if hidden.len() != in_dim || out_gates.len() != self.gate_vectors.len() {\n            return false;\n        }\n        for (i, u) in self.gate_vectors.iter().enumerate() {\n            let mut dot = 0.0f32;\n            for (a, b) in u.iter().zip(hidden.iter()) {\n                dot += a * b;\n            }\n            out_gates[i] = 1.0 / (1.0 + (-dot).exp());\n        }\n        true\n    }\n}".to_string(),
         },
+        // ── incremental-centroid-running-sum — per-comparison recompute → maintained aggregate (C) ──
+        // Source: riir-gpu edge_lora/sleep_consolidation.rs L317-337 (the
+        // assignment loop: "for (ci, cluster) in clusters.iter().enumerate() {
+        // let centroid = centroid_activation(cluster, activations); let sim =
+        // cosine_similarity(act_i, &centroid);" — the helper is called inside
+        // the innermost loop) + L342-357 ("fn centroid_activation(members:
+        // &[usize], activations: &[Vec<f32>]) -> Vec<f32>" whose body does
+        // "let mut sum = vec![0.0f32; dim];" then sweeps ALL members × dim —
+        // a fresh Vec per call, per comparison).
+        //
+        // Distinct from commit-over-maintained-item-digests (the same
+        // maintain-at-mutation discipline for hash digests — this is numeric
+        // aggregates in a hot comparison loop), from
+        // dual-accumulator-single-reduction-sweep (fuses accumulators within
+        // ONE sweep — this eliminates entire repeated sweeps across
+        // iterations), and from needless-swap-temp-hoist-to-scratch (temp
+        // hygiene — this removes both the sweep and the per-comparison temp).
+        KernelRule {
+            rule_id: "incremental-centroid-running-sum".to_string(),
+            gpu_concept: "greedy agglomerative assignment compares every incoming item against every existing cluster's centroid — the naive form recomputes that centroid from scratch inside the comparison loop: a full sweep over all members × dim per (item, cluster) pair, plus a fresh heap allocation per comparison because the centroid helper returns an owned Vec. That is O(items × clusters × avg_members × dim) time and O(items × clusters) allocations for what is fundamentally an append-only aggregate. Maintain the running sum and count per cluster instead: a push updates the aggregate in O(dim), the centroid is sum / count materialized into one reused scratch buffer, and both the member re-sweep and the per-comparison allocation disappear. This is the numeric-aggregate twin of maintaining digests at mutation time: the aggregate is updated exactly when membership changes, never recomputed from the member list at query time. On device this is the maintain-block-sums-divide-once reduction-maintenance shape vs re-reducing the full block per query. Distinct from commit-over-maintained-item-digests (same maintain-at-mutation discipline for hash digests — this is numeric aggregates in a hot comparison loop), from dual-accumulator-single-reduction-sweep (fuses accumulators within ONE sweep — this eliminates entire repeated sweeps across iterations), and from needless-swap-temp-hoist-to-scratch (temp hygiene — this removes both the sweep and the temp).".to_string(),
+            ref_shape: "// Naive: centroid recomputed from scratch for EVERY (item, cluster)\n// comparison — a full member sweep plus a fresh heap Vec each time.\nfn centroid_mean(members: &[usize], activations: &[Vec<f32>]) -> Vec<f32> {\n    let dim = activations[members[0]].len();\n    let mut sum = vec![0.0f32; dim]; // fresh allocation PER COMPARISON\n    for &m in members {\n        for (s, &v) in sum.iter_mut().zip(activations[m].iter()) {\n            *s += v; // O(members * dim) re-sweep of the same data\n        }\n    }\n    let n = members.len() as f32;\n    for v in sum.iter_mut() {\n        *v /= n;\n    }\n    sum\n}\nfn assign_naive(items: &[usize], activations: &[Vec<f32>],\n                threshold: f32) -> Vec<Vec<usize>> {\n    let mut clusters: Vec<Vec<usize>> = Vec::new();\n    for &i in items {\n        let mut best: Option<usize> = None;\n        let mut best_sim = -1.0f32;\n        for (ci, cluster) in clusters.iter().enumerate() {\n            let centroid = centroid_mean(cluster, activations); // recompute\n            let sim = cosine(&activations[i], &centroid);\n            if sim > best_sim {\n                best_sim = sim;\n                best = Some(ci);\n            }\n        }\n        match best {\n            Some(ci) if best_sim >= threshold => clusters[ci].push(i),\n            _ => clusters.push(vec![i]),\n        }\n    }\n    clusters\n}\n".to_string(),
+            opt_pattern: "// Optimized: each cluster MAINTAINS (sum, count) at mutation time.\n// Push updates the aggregate in O(dim); the centroid is sum / count\n// materialized into ONE reused scratch — no member re-sweep, no\n// per-comparison allocation.\nstruct Cluster {\n    members: Vec<usize>,\n    sum: Vec<f32>, // running aggregate, one alloc per CLUSTER\n    count: f32,\n}\nfn assign_incremental(items: &[usize], activations: &[Vec<f32>],\n                      threshold: f32, scratch: &mut Vec<f32>) -> Vec<Vec<usize>> {\n    scratch.resize(activations[items[0]].len(), 0.0); // sized once\n    let mut clusters: Vec<Cluster> = Vec::new();\n    for &i in items {\n        let act = &activations[i];\n        let mut best: Option<usize> = None;\n        let mut best_sim = -1.0f32;\n        for (ci, c) in clusters.iter().enumerate() {\n            for (s, v) in scratch.iter_mut().zip(c.sum.iter()) {\n                *s = v / c.count; // centroid from the maintained sum\n            }\n            let sim = cosine(act, scratch);\n            if sim > best_sim {\n                best_sim = sim;\n                best = Some(ci);\n            }\n        }\n        match best {\n            Some(ci) if best_sim >= threshold => {\n                let c = &mut clusters[ci];\n                for (s, v) in c.sum.iter_mut().zip(act.iter()) {\n                    *s += v;\n                }\n                c.count += 1.0; // aggregate updated AT THE MUTATION\n                c.members.push(i);\n            }\n            _ => {\n                let mut sum = vec![0.0f32; act.len()];\n                for (s, v) in sum.iter_mut().zip(act.iter()) {\n                    *s += v;\n                }\n                clusters.push(Cluster { members: vec![i], sum, count: 1.0 });\n            }\n        }\n    }\n    clusters.into_iter().map(|c| c.members).collect()\n}\n".to_string(),
+        },
+        // ── length-prefix-shape-faithful-hash — payload-only stream → lengths-first stream (B) ──
+        // Source: riir-gpu edge_lora/sleep_consolidation.rs L404-415
+        // (`hash_edge_weights`: "// Hash the lengths first to disambiguate
+        // shapes." followed by `hasher.update(&(a.len() as u64).to_le_bytes());`
+        // + `hasher.update(&(b.len() as u64).to_le_bytes());` BEFORE the
+        // payload updates).
+        //
+        // Distinct from incremental-multi-part-hash-no-concat (streaming
+        // update vs materialized concatenation — same pass count; this ADDS
+        // shape metadata to the stream so differently-shaped payloads cannot
+        // collide; the two compose), from
+        // derive-shape-from-payload-not-cached-field (where shape TRUTH lives
+        // for validation — this makes the COMMITMENT encode shape), and from
+        // commit-over-maintained-item-digests (digest hierarchy for container
+        // cost — orthogonal, composes).
+        KernelRule {
+            rule_id: "length-prefix-shape-faithful-hash".to_string(),
+            gpu_concept: "commitment-hashing a multi-part record by streaming only the payload bytes is shape-blind: two records with different structure but the same flat byte stream hash identically — a=[1.0, 2.0], b=[3.0] and a=[1.0], b=[2.0, 3.0] concatenate to the same bytes, so the split point (which IS the shape) is not committed. A merged-edge digest that collides across shapes silently breaks the tamper-evidence and provenance contract: the verification path compares equal on a structurally different weight set. Feed the part lengths (or the full shape tuple) into the hasher FIRST, as little-endian fixed-width integers, then the payload: shape becomes part of the committed identity at the cost of two tiny updates on the same hasher, zero extra allocation, and the digest stays a pure streaming computation. This matters wherever a commitment must distinguish rank/in_dim/out_dim recombinations of the same parameter count — LoRA A/B pairs, tensor + metadata bundles, checkpoint records where the same parameters could be re-split. Distinct from incremental-multi-part-hash-no-concat (streaming update vs materialized concatenation — same pass count; this ADDS shape metadata to the stream so differently-shaped payloads cannot collide; the two compose), from derive-shape-from-payload-not-cached-field (where shape TRUTH lives for validation — this makes the COMMITMENT encode shape), and from commit-over-maintained-item-digests (digest hierarchy for container cost — orthogonal, composes).".to_string(),
+            ref_shape: "// Naive: hash the payload bytes only. Two DIFFERENT weight sets with\n// the same flat byte stream produce the SAME digest — the split point\n// between parts is not committed.\nfn hash_parts_naive(a: &[f32], b: &[f32]) -> [u8; 32] {\n    let mut hasher = Hasher::new();\n    hasher.update(bytemuck::cast_slice::<f32, u8>(a));\n    hasher.update(bytemuck::cast_slice::<f32, u8>(b));\n    *hasher.finalize().as_bytes()\n}\nfn collision_demo() {\n    let a = vec![1.0f32, 2.0];\n    let b = vec![3.0f32];\n    let c = vec![1.0f32];\n    let d = vec![2.0f32, 3.0];\n    let h1 = hash_parts_naive(&a, &b);\n    let h2 = hash_parts_naive(&c, &d);\n    assert_eq!(h1, h2); // shape-blind digest collides across splits\n}\n".to_string(),
+            opt_pattern: "// Optimized: feed the part LENGTHS into the stream FIRST — shape\n// metadata becomes part of the committed identity at zero extra\n// allocation (two small fixed-width updates on the same hasher).\nfn hash_parts_shape_faithful(a: &[f32], b: &[f32]) -> [u8; 32] {\n    let mut hasher = Hasher::new();\n    // Hash the lengths first to disambiguate shapes.\n    hasher.update(&(a.len() as u64).to_le_bytes());\n    hasher.update(&(b.len() as u64).to_le_bytes());\n    hasher.update(bytemuck::cast_slice::<f32, u8>(a));\n    hasher.update(bytemuck::cast_slice::<f32, u8>(b));\n    *hasher.finalize().as_bytes()\n}\n// The verify path recomputes + compares — never stores a second copy:\nfn verify_shape_faithful(a: &[f32], b: &[f32], stored: &[u8; 32]) -> bool {\n    &hash_parts_shape_faithful(a, b) == stored\n}\n// Generalizes: hash the FULL shape tuple (rank, in_dim, out_dim) as\n// fixed-width LE integers before the payload whenever a re-split of\n// the same parameters must not verify against the old commitment.\n".to_string(),
+        },
+        // ── order-stable-topk-via-index-sort — sort items → sort indices, re-sort survivors (D) ──
+        // Source: riir-gpu edge_lora/sleep_consolidation.rs L235-253 ("// Step
+        // 4: Retain top-K most diverse clusters (by total activation
+        // weight)." + "indexed.sort_by(|&a, &b| { cluster_reports[b]
+        // .total_weight .partial_cmp(&cluster_reports[a].total_weight)
+        // .unwrap_or(std::cmp::Ordering::Equal) });" + "indexed.truncate(
+        // config.top_k);" + "// Sort retained indices ascending so the output
+        // is deterministic. / indexed.sort_unstable();").
+        //
+        // Distinct from softmax-topk-renormalize-scatter (MoE gate math over
+        // probabilities — this is selection mechanics plus an ordering
+        // contract), from device-side-argmax-minimal-download
+        // (boundary-crossing size — this is host-side selection structure),
+        // and from csr-index-via-prefix-sum (building a sparse index layout —
+        // this is rank-select-reorder over an existing collection).
+        KernelRule {
+            rule_id: "order-stable-topk-via-index-sort".to_string(),
+            gpu_concept: "selecting the top-K items by score naively sorts the item collection itself and truncates — this destroys the original ordering contract downstream consumers rely on (deterministic output order, reproducible reports), leaves tie order at the mercy of the sort's internals, and physically moves every payload during the sort even though only K survive. Sort an INDEX array by score instead: the items never move (cheap usize permutation), truncate the index array to the top-K SET, then re-sort the surviving indices ascending — the output is the top-K by score presented in canonical original order, fully deterministic across runs and sort implementations. Two load-bearing details: the comparator uses partial_cmp(...).unwrap_or(Ordering::Equal) so a NaN score degrades to equal instead of panicking or poisoning the total order, and the final sort_unstable is safe precisely because it operates on the already-selected set where only order (not membership) is being fixed. On device this is the gather-permutation shape: rank indices, compact the selection, restore a canonical layout for the consumer. Distinct from softmax-topk-renormalize-scatter (MoE gate math over probabilities — this is selection mechanics plus an ordering contract), from device-side-argmax-minimal-download (boundary-crossing size — this is host-side selection structure), and from csr-index-via-prefix-sum (building a sparse index layout — this is rank-select-reorder over an existing collection).".to_string(),
+            ref_shape: "// Naive: sort the ITEMS by score and truncate — the survivors are now\n// in SCORE order (ties in whatever order the sort left them), the\n// original order contract is destroyed, and every payload was moved\n// by the sort even though only K survive.\nfn retain_topk_naive(items: &mut Vec<Item>, k: usize) {\n    items.sort_by(|a, b| {\n        b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal)\n    });\n    items.truncate(k);\n    // consumer now sees score-order, not the canonical input order;\n    // re-deriving original order requires the payloads to carry it\n}\n".to_string(),
+            opt_pattern: "// Optimized: sort an INDEX array by score (items never move),\n// truncate to the top-K SET, then re-sort the indices ascending —\n// survivors keep their canonical original order, deterministic\n// under ties, NaN-safe comparator.\nfn retain_topk_order_stable(scores: &[f32], k: usize) -> Vec<usize> {\n    let mut idx: Vec<usize> = (0..scores.len()).collect();\n    idx.sort_by(|&a, &b| {\n        scores[b]\n            .partial_cmp(&scores[a])\n            .unwrap_or(std::cmp::Ordering::Equal) // NaN -> Equal, total order holds\n    });\n    idx.truncate(k.min(scores.len()));\n    // Sort retained indices ascending so the output is deterministic.\n    idx.sort_unstable(); // membership already fixed; order-only pass\n    idx // consumers index into the UNMOVED item collection\n}\n".to_string(),
+        },
+        // ── make-unmake-over-clone-per-candidate — clone-per-probe → in-place + rollback (A) ──
+        // Source: riir-gpu edge_lora/arena_eval.rs L225-232 ("let mut
+        // candidate_state = state_before.clone(); if !
+        // candidate_state.play_move(row, col) { return None; }" — the NAIVE
+        // form in production: one full GoState clone per candidate move per
+        // turn) — the classic make/unmake fix applies in place + rolls back
+        // the recorded delta.
+        //
+        // Distinct from needless-swap-temp-hoist-to-scratch (false-premise
+        // temps in a transform — this is branch-state management in a search),
+        // from the reuse-allocation-clear buffer-reuse family (no rollback
+        // correctness burden — here the unmake must be exact or the search
+        // silently corrupts), and from nonlinearity-forces-raw-input-buffers
+        // (buffer contract under batching — this is sequential rollback
+        // discipline).
+        KernelRule {
+            rule_id: "make-unmake-over-clone-per-candidate".to_string(),
+            gpu_concept: "candidate search over a game/simulation state (score each legal move by applying it and encoding the result) naively clones the ENTIRE state per candidate — one full board-sized heap allocation plus copy plus free per candidate per turn, multiplied by branching factor × turns × episodes. The classic make/unmake discipline applies the move IN PLACE on the one shared state, records the mutation delta (changed cells, captured stones, to-play, move count) into a reusable log before mutating, evaluates directly on the mutated state, then rolls back exactly the recorded delta — restoring bit-identical pre-move state with zero per-candidate allocation. The correctness requirement is strict: unmake must restore the EXACT prior state (deterministic replay and downstream candidates depend on it), which is why the delta is captured at mutation time rather than reconstructed. A rejected move that mutated nothing needs no undo. This is the state-search twin of scratch-buffer reuse: the search frontier reuses one state buffer instead of allocating a copy per branch. Distinct from needless-swap-temp-hoist-to-scratch (false-premise temps in a transform — this is branch-state management in a search), from the reuse-allocation-clear buffer-reuse family (no rollback correctness burden — here the unmake must be exact or the search silently corrupts), and from nonlinearity-forces-raw-input-buffers (buffer contract under batching — this is sequential rollback discipline).".to_string(),
+            ref_shape: "// Naive: score each candidate by cloning the ENTIRE state, applying\n// the move to the copy, encoding, then dropping the copy — one\n// full-state heap alloc + copy per candidate per turn.\nfn score_move_naive(state: &GameState, row: usize, col: usize) -> Option<f32> {\n    let mut candidate_state = state.clone(); // full board copy PER CANDIDATE\n    if !candidate_state.play_move(row, col) {\n        return None;\n    }\n    let candidate = encode(&candidate_state);\n    Some(evaluate(&candidate)) // copy dropped: alloc + copy + free each probe\n}\n".to_string(),
+            opt_pattern: "// Optimized: make/unmake — apply the move IN PLACE, evaluate, then\n// roll back exactly the delta captured before mutation. Zero\n// per-candidate allocation; one state buffer for the whole sweep.\nfn score_move_make_unmake(state: &mut GameState, row: usize, col: usize,\n                          delta: &mut DeltaLog) -> Option<f32> {\n    if !state.play_move_recording(row, col, delta) {\n        return None; // rejected: nothing mutated, nothing to undo\n    }\n    let candidate = encode(state); // evaluate the mutated state directly\n    state.unmake(delta); // restore the EXACT pre-move state\n    Some(evaluate(&candidate))\n}\nfn sweep_legal(state: &mut GameState, legal: &[(usize, usize)]) -> Option<(usize, usize)> {\n    let mut delta = DeltaLog::new(); // one log, reused per candidate\n    let mut best: Option<(usize, usize, f32)> = None;\n    for &(r, c) in legal {\n        if let Some(s) = score_move_make_unmake(state, r, c, &mut delta) {\n            let better = match best {\n                None => true,\n                Some((_, _, bs)) => s > bs,\n            };\n            if better {\n                best = Some((r, c, s));\n            }\n        }\n    }\n    best.map(|(r, c, _)| (r, c))\n}\n".to_string(),
+        },
+        // ── argmax-rng-tie-break-collect-ties — first-max or softmax → collect epsilon-ties + one draw (B) ──
+        // Source: riir-gpu edge_lora/arena_eval.rs L298-319 ("// Score each
+        // legal move, track the best score + all ties." + "let mut
+        // best_moves: Vec<(usize, usize)> = Vec::with_capacity(8);" + the
+        // sweep keeping ties via "else if (score - best_score).abs() < 1e-9 {
+        // best_moves.push((r, c)); }" + "// 4. Argmax with RNG tie-break." +
+        // "let (r, c) = best_moves[rng.usize(0..best_moves.len())];").
+        //
+        // Distinct from additive-sigmoid-gates-not-softmax-routing (removes a
+        // shared denominator from ROUTING semantics — this removes
+        // normalization from SELECTION under ties), from
+        // device-side-argmax-minimal-download (crossing size — this is the
+        // host-side selection algorithm), and from
+        // counter-derived-seed-stateless-noise (derives the RNG seed —
+        // composes as the seed source feeding this tie-break draw).
+        KernelRule {
+            rule_id: "argmax-rng-tie-break-collect-ties".to_string(),
+            gpu_concept: "picking the best candidate with max_by returns the FIRST maximum — when scores tie (common with coarse encodings and small boards), move-generation order becomes a hidden priority and the policy degenerately repeats the same move every visit; the tempting fix of softmax sampling over scores adds a max reduction + exp pass + normalization + a temperature knob to solve what is actually a tie problem. Instead run ONE sweep that tracks the best score and COLLECTS every candidate within an epsilon of it into a small preallocated buffer: a new strict maximum clears the tie set (earlier epsilon-ties against the old best are correctly invalidated), an epsilon-tie joins it, and a single RNG draw picks uniformly among the survivors. The result is deterministic GIVEN the seed (arena matches replay bit-identically), unbiased under ties, allocation-bounded (the tie buffer is tiny and capacity-stable), and free of any normalization pass — the epsilon comparison is two flops. The empty-set check doubles as the illegal/all-rejected guard. Distinct from additive-sigmoid-gates-not-softmax-routing (removes a shared denominator from ROUTING semantics — this removes normalization from SELECTION under ties), from device-side-argmax-minimal-download (crossing size — this is the host-side selection algorithm), and from counter-derived-seed-stateless-noise (derives the RNG seed — composes as the seed source feeding this tie-break draw).".to_string(),
+            ref_shape: "// Naive: `max_by` returns the FIRST maximum — identical scores always\n// resolve to the same move (move-generation order becomes a hidden\n// priority list). The softmax \"fix\" adds a normalization pass and a\n// temperature knob for what is really a tie problem.\nfn pick_first_max(scores: &[(usize, f32)]) -> Option<usize> {\n    scores\n        .iter()\n        .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap())\n        .map(|(i, _)| *i) // tie -> always the earliest move\n}\nfn pick_softmax(scores: &[(usize, f32)], temperature: f32) -> usize {\n    let max = scores.iter().fold(f32::NEG_INFINITY, |m, s| m.max(s.1));\n    let exps: Vec<f32> = scores\n        .iter()\n        .map(|(_, s)| ((s - max) / temperature).exp())\n        .collect(); // extra pass + buffer + normalization...\n    let sum: f32 = exps.iter().sum();\n    let r = rand01() * sum;\n    let mut acc = 0.0f32;\n    for (i, e) in exps.iter().enumerate() {\n        acc += e;\n        if r < acc {\n            return scores[i].0;\n        }\n    }\n    scores[scores.len() - 1].0\n}\n".to_string(),
+            opt_pattern: "// Optimized: ONE sweep tracks the best score and COLLECTS all\n// candidates within epsilon of it; a single seeded RNG draw breaks\n// the tie uniformly. Deterministic GIVEN the seed; zero normalization.\nfn pick_tie_break_rng(scores: &[(usize, f32)], rng: &mut Rng) -> Option<usize> {\n    let mut best_score = f32::NEG_INFINITY;\n    let mut best_moves: Vec<usize> = Vec::with_capacity(8); // small, bounded\n    for &(i, s) in scores {\n        if s > best_score {\n            best_score = s;\n            best_moves.clear(); // new max invalidates earlier ties\n            best_moves.push(i);\n        } else if (s - best_score).abs() < 1e-9 {\n            best_moves.push(i); // epsilon-tie joins the candidate set\n        }\n    }\n    if best_moves.is_empty() {\n        return None; // nothing scored (all illegal) — caller passes\n    }\n    Some(best_moves[rng.usize(0..best_moves.len())]) // uniform among ties\n}\n".to_string(),
+        },
+        // ── shape-gated-warm-start-slot-copy — blind or zero init → per-slot shape-matched copy (D) ──
+        // Source: riir-gpu edge_lora/cross_game_edge.rs L160-185
+        // (`with_warm_start`: "let n_copy = warm_start.len().min(
+        // trainer.inner.trainer.edges.len());" + "// Only copy if shapes
+        // match. / if warm_start[i].in_dim == ... .in_dim && warm_start[i]
+        // .out_dim == ... .out_dim && warm_start[i].rank() == ... .rank() {
+        // ... .edges[i] = warm_start[i].clone(); }").
+        //
+        // Distinct from width-invariant-superset-training (one superset weight
+        // set trained ACROSS widths — this INITIALIZES fresh slots from prior
+        // learned weights, a different lifecycle), from
+        // hot-swap-weights-preserve-autotune-caches (runtime swap preserving
+        // compiled caches — this is training-time initialization), and from
+        // twin-projection-shared-delta-adapter (structural sharing at build
+        // time — no prior-weight transfer involved).
+        KernelRule {
+            rule_id: "shape-gated-warm-start-slot-copy".to_string(),
+            gpu_concept: "transferring learned capacity into a new trainer naively goes one of two ways: start from zero initialization and throw the learned prior away (paying full convergence cost for knowledge already encoded), or blindly copy prior modules into slots by index and silently corrupt any slot whose dimensions differ. The disciplined form clamps the copy count to min(provided, slots) and copies slot-by-slot ONLY when the full shape tuple matches — mismatched and surplus slots keep their zero initialization and learn the domain transfer during training, so the prior is reused exactly where it is dimensionally legal and never where aliasing would corrupt semantics. The membership decision is a pure per-slot predicate evaluated once at construction (not per step), the copy count clamp makes the operation total over any input sizes, and influence is recorded as a count rather than by duplicating the weights. This is the initialization-lifecycle counterpart of runtime weight hot-swaps: structure-compatible priors slot in, the rest learn. Distinct from width-invariant-superset-training (one superset weight set trained ACROSS widths — this INITIALIZES fresh slots from prior learned weights, a different lifecycle), from hot-swap-weights-preserve-autotune-caches (runtime swap preserving compiled caches — this is training-time initialization), and from twin-projection-shared-delta-adapter (structural sharing at build time — no prior-weight transfer involved).".to_string(),
+            ref_shape: "// Naive pole 1: fresh trainer, zero init — the bank of pre-trained\n// per-domain modules is ignored, full convergence cost repaid.\nfn init_from_scratch(slots: &mut [Module]) {\n    for s in slots.iter_mut() {\n        *s = Module::zeroed(); // learned prior thrown away\n    }\n}\n// Naive pole 2: blind index copy — shapes never checked, a\n// dimensionally incompatible prior silently corrupts the slot.\nfn init_blind_copy(slots: &mut [Module], prior: &[Module]) {\n    for i in 0..prior.len().min(slots.len()) {\n        slots[i] = prior[i].clone(); // rank/in_dim/out_dim never compared\n    }\n}\n".to_string(),
+            opt_pattern: "// Optimized: clamp the copy count, then copy slot-by-slot ONLY when\n// (in_dim, out_dim, rank) all match. Non-matching and surplus slots\n// keep their zero initialization and learn the transfer during\n// training — the prior is reused exactly where it is legal.\nfn init_warm_start(slots: &mut [Module], prior: &[Module]) -> usize {\n    let n_copy = prior.len().min(slots.len()); // total over any sizes\n    let mut copied = 0usize;\n    for i in 0..n_copy {\n        let fits = prior[i].in_dim == slots[i].in_dim\n            && prior[i].out_dim == slots[i].out_dim\n            && prior[i].rank == slots[i].rank;\n        if fits {\n            slots[i] = prior[i].clone(); // dimensionally legal reuse\n            copied += 1;\n        } // else: slot stays zero-initialized and learns in training\n    }\n    copied // record INFLUENCE as a count, not a weight duplication\n}\n".to_string(),
+        },
+        // ── domain-as-data-not-algorithm-fork — forked trainer → one loop + episode conversion (D) ──
+        // Source: riir-gpu edge_lora/cross_game_edge.rs L122-131 (the doc:
+        // "The "cross-game" aspect is in the DATA, not the algorithm:
+        // cross-game episodes have inputs from one game's distribution and
+        // targets from another. The edge weights that minimize loss on this
+        // data are the cross-game edges.") + L196-209 ("// Convert cross-game
+        // episodes to standard GameEpisodes." ... "// Delegate to the inner
+        // Phase 4 training loop. / self.inner.train(&standard, config)").
+        //
+        // Distinct from static-classification-hoist-to-routing-table (hoists
+        // per-call classification into precomputed tables — this eliminates
+        // the forked code path itself), from width-invariant-superset-training
+        // (one weight set across widths — this is one ALGORITHM across
+        // domain-composed data), and from monomorphize-per-element-trait-calls
+        // (dispatch generality within one loop — no data-transformation
+        // angle).
+        KernelRule {
+            rule_id: "domain-as-data-not-algorithm-fork".to_string(),
+            gpu_concept: "when a trainer must handle a new domain composition (cross-game episodes: input from game A's distribution, target from game B's), the reflex fork builds a second trainer with its own forward/backward/optimizer because the data is different now — a duplicated training substrate that drifts from the core loop on every bugfix and doubles the correctness surface. The composed form keeps ONE training loop and expresses the domain variation entirely in the DATA: convert each cross-domain episode into the standard episode shape (preserving input/target/reward) and delegate to the unchanged algorithm — the weights that minimize loss on this data ARE the cross-domain weights, no new training code required. The only new surface is the conversion adapter, so the core loop's correctness, benchmarks, and fixes are inherited for free, and per-domain vs cross-domain training differ by a data transformation, not a code path. The honest caveat from the source: the adapter as shipped deep-clones every episode's vectors (2× dataset memory per invocation) — a borrowing view/adapter keeps the no-fork property without the copy. Distinct from static-classification-hoist-to-routing-table (hoists per-call classification into precomputed tables — this eliminates the forked code path itself), from width-invariant-superset-training (one weight set across widths — this is one ALGORITHM across domain-composed data), and from monomorphize-per-element-trait-calls (dispatch generality within one loop — no data-transformation angle).".to_string(),
+            ref_shape: "// Naive: because \"the data is cross-game now\", fork a parallel\n// trainer with its own forward/backward/optimizer — a duplicated\n// training substrate that drifts from the core loop on every bugfix.\nstruct CrossGameTrainerNaive {\n    edges: Vec<Module>,\n    optimizer: Optimizer, // a SECOND copy of the whole training stack\n}\nimpl CrossGameTrainerNaive {\n    fn train(&mut self, eps: &[CrossEpisode]) -> Report {\n        let mut grads = Gradients::zeroed(&self.edges);\n        for ep in eps {\n            // forked backward path — fixes to the core loop don't land here\n            backward_cross(&self.edges, ep, &mut grads);\n        }\n        self.optimizer.step(&mut self.edges, &grads);\n        Report::new()\n    }\n}\n".to_string(),
+            opt_pattern: "// Optimized: ONE training loop. The domain variation is expressed as\n// converted EPISODES (input from A's distribution, target from B's)\n// fed to the unchanged algorithm — zero new training code; the core\n// loop's correctness is inherited for free.\nstruct CrossGameTrainer {\n    inner: TrainingLoop, // the SAME loop per-game training uses\n}\nimpl CrossGameTrainer {\n    fn train(&mut self, dataset: &[CrossEpisode], cfg: &Config)\n             -> Result<Report, TrainError> {\n        let mut standard = EpisodeSet::with_capacity(dataset.len());\n        for ep in dataset {\n            if ep.input.len() != ep.target_output.len() {\n                return Err(TrainError::ShapeMismatch);\n            }\n            // The ONLY new surface: the episode conversion.\n            standard.push(Episode::with_reward(\n                ep.input.clone(), // (a borrowing view drops these clones)\n                ep.target.clone(),\n                ep.reward,\n            ));\n        }\n        self.inner.train(&standard, cfg) // unchanged core algorithm\n    }\n}\n".to_string(),
+        },
+        // ── one-sweep-spatial-feature-fanout — per-feature scans → one classified sweep (C) ──
+        // Source: riir-gpu edge_lora/go_self_play.rs L229-232 ("// Single pass
+        // over the board accumulates: stone-indicator-weighted row/col / //
+        // sums (for center-of-mass), per-quadrant our/opp counts, and
+        // edge/interior / // our/opp counts. O(size²) — matches the existing
+        // stone_count cost.") + L256-271 ("let indicator = if cell == color {
+        // 1.0f32 } else { -1.0f32 };" + "// Quadrant index: 0=TL, 1=TR,
+        // 2=BL, 3=BR. / let q = (row_half as usize) * 2 + (col_half as
+        // usize);") + L308-314 ("// Quadrant cell counts are fixed by board
+        // geometry (independent of stones), / // so we compute them from
+        // `size` directly.").
+        //
+        // Distinct from dual-accumulator-single-reduction-sweep (two GPU
+        // block reductions sharing a barrier tree — this is an N-bucket
+        // spatial scan with index routing + signed weights on a host
+        // encoder), from fuse-weight-grad-input-grad-single-matrix-visit
+        // (two gradient roles of one matrix — here many statistics of one
+        // grid), and from token-flattened-elementwise-modulo-shared-weights
+        // (modulo indexing to flatten dispatches — indices here route
+        // accumulators, not weight tables).
+        KernelRule {
+            rule_id: "one-sweep-spatial-feature-fanout".to_string(),
+            gpu_concept: "the naive feature extractor walks the grid once per feature — 12 statistics means 12 full O(size²) scans, each re-reading identical cells and re-deriving identical classification (row >= half, row == 0 || row == last). The optimized form makes a single sweep the sole owner of the data visit: per-cell classification is computed once into small integers (a quadrant index, an edge boolean) and that index routes the cell into multiple accumulator buckets; a signed indicator (+1 ours / −1 theirs) makes one center-of-mass accumulation discriminate layout for both colors simultaneously; and normalizers that are functions of board geometry only (quadrant areas) are computed from size arithmetic, never by counting cells. This is the multi-statistic generalization of fused-reduction: the expensive resource is the data visit, and every output that can share it must. Distinct from dual-accumulator-single-reduction-sweep (two GPU block reductions sharing a barrier tree — this is an N-bucket spatial scan with index routing + signed weights on a host encoder), from fuse-weight-grad-input-grad-single-matrix-visit (two gradient roles of one matrix — here many statistics of one grid), and from token-flattened-elementwise-modulo-shared-weights (modulo indexing to flatten dispatches — indices here route accumulators, not weight tables).".to_string(),
+            ref_shape: "// naive: one full board scan PER feature — 12 features = 12 walks, each\n// re-reading the same cells and re-deriving the same classification\nfn features_naive(board: &[u8], size: usize) -> [f32; 3] {\n    let mut com_num = 0.0f32;\n    for r in 0..size {\n        for c in 0..size {\n            com_num += board[r * size + c] as f32 * r as f32; // walk 1\n        }\n    }\n    let mut quad0 = 0u32;\n    for r in 0..size {\n        for c in 0..size {\n            let half = (size / 2) as i32; // re-derived per cell, per feature\n            if (r as i32) < half && (c as i32) < half {\n                quad0 += board[r * size + c] as u32; // walk 2\n            }\n        }\n    }\n    let mut area = 0u32;\n    for r in 0..size {\n        for c in 0..size {\n            if (r as i32) < (size / 2) as i32 && (c as i32) < (size / 2) as i32 {\n                area += 1; // walk 3 JUST to count a geometry constant\n            }\n        }\n    }\n    [com_num, quad0 as f32, area as f32]\n}\n".to_string(),
+            opt_pattern: "// optimized: ONE sweep owns the data visit — per-cell classification\n// indices computed once and reused by every accumulator; a signed\n// indicator serves both perspectives; geometry-only denominators\n// come from `size`, not a scan\nfn features_one_sweep(board: &[u8], size: usize) -> [f32; 3] {\n    let half = (size / 2) as i32;\n    let last = size - 1;\n    let mut com_num = 0.0f32;\n    let mut stone_abs = 0.0f32;\n    let mut quad_ours = [0u32; 4];\n    let mut quad_theirs = [0u32; 4];\n    for row in 0..size {\n        let row_half = row as i32 >= half; // hoisted row-invariant terms\n        let row_edge = row == 0 || row == last;\n        for col in 0..size {\n            let cell = board[row * size + col];\n            if cell == 0 {\n                continue; // empty cell touches no accumulator\n            }\n            let indicator = if cell == 1 { 1.0f32 } else { -1.0f32 };\n            com_num += indicator * row as f32; // one pass, both colors\n            stone_abs += 1.0;\n            let col_half = col as i32 >= half;\n            let q = (row_half as usize) * 2 + (col_half as usize);\n            if cell == 1 {\n                quad_ours[q] += 1;\n            } else {\n                quad_theirs[q] += 1;\n            }\n            let _ = row_edge; // edge/interior buckets follow the same shape\n        }\n    }\n    // geometry-derived denominator: quadrant area is a function of `size`,\n    // never counted from data\n    let q_rows = half.max(1) as usize;\n    let quad_area_tl = (q_rows * q_rows).max(1) as f32;\n    let com = com_num / stone_abs;\n    let q0_bal = (quad_ours[0] as f32 - quad_theirs[0] as f32) / quad_area_tl;\n    [com, q0_bal, stone_abs]\n}\n".to_string(),
+        },
+        // ── deterministic-tiling-projection-tables — per-call schedule → construction-time tables (A) ──
+        // Source: riir-gpu edge_lora/go_self_play.rs L94-99 ("/// Not a
+        // learned embedding — a fixed sinusoidal tiling seeded by `seed`." +
+        // "/// Construction is O(hidden_dim); forward is O(hidden_dim).") +
+        // L137-145 ("// Even spacing across [0, 2π) plus a small seed jitter
+        // — guarantees / // distinct phases and avoids the degenerate
+        // all-zero column. / phases.push(base + next() * 0.1); /
+        // src_idx.push(i % base_features.max(1));") + L166-170 ("let b =
+        // base[self.src_idx[i]]; let p = self.phases[i]; out[i] = b * p.cos()
+        // + p.sin();").
+        //
+        // Distinct from counter-derived-seed-stateless-noise (reproducible
+        // noise streams per ITERATION — this is one-time reproducible
+        // parameter tables), from static-classification-hoist-to-routing-table
+        // (hoisting an existing per-call classification scan — here the
+        // mapping never existed as a scan, it is constructed), from
+        // precompute-scalar-reduction (hoists a data-dependent scalar
+        // invariant — these are parameter schedules constructed from the seed,
+        // not reductions of data), and from
+        // threadgroup-subset-sum-lut-keyed-by-activation (runtime-built LUT in
+        // threadgroup memory — these are host construction-time tables).
+        KernelRule {
+            rule_id: "deterministic-tiling-projection-tables".to_string(),
+            gpu_concept: "a modelless fixed projection is built once as construction-time tables — the modulo schedule (src_idx[i] = i % base_features) and a phase schedule of even spacing plus seed jitter — so the forward pass is indexed loads + arithmetic and the same seed rebuilds the identical encoder. The naive form either learns an embedding (violating modelless discipline) or recomputes the projection schedule per call: fresh RNG draws make the fixed encoder non-deterministic across calls, and per-element modulo index math repeats every forward. Construction is O(hidden_dim), forward is O(hidden_dim) with zero per-call index math or randomness, and identical seeds produce bit-identical encoders (pinned by tests). Being generic over the base-feature count lets every game adapter share one projection primitive instead of duplicating the tiling. The even-spacing-plus-jitter phase schedule is the load-bearing detail: pure grids and unlucky random draws can produce a degenerate all-zero output column, and the jitter guarantees distinct phases. Natural completion: fold cos(phase)/sin(phase) into construction-time tables too, eliminating the two per-dim transcendentals. Distinct from counter-derived-seed-stateless-noise (reproducible noise streams per ITERATION — this is one-time reproducible parameter tables), from static-classification-hoist-to-routing-table (hoisting an existing per-call classification scan — here the mapping never existed as a scan, it is constructed), from precompute-scalar-reduction (hoists a data-dependent scalar invariant — these are parameter schedules constructed from the seed, not reductions of data), and from threadgroup-subset-sum-lut-keyed-by-activation (runtime-built LUT in threadgroup memory — these are host construction-time tables).".to_string(),
+            ref_shape: "// naive: per-call randomness + on-the-fly index math — the \"fixed\" encoder\n// is neither deterministic across calls nor cheap: same input, different\n// output every projection, modulo recomputed every dim every call\nfn project_naive(base: &[f32], out: &mut [f32], seed: u64) {\n    let mut s = seed;\n    let mut next = move || {\n        s ^= s << 13;\n        s ^= s >> 7;\n        s ^= s << 17;\n        (s >> 32) as f32\n    };\n    for i in 0..out.len() {\n        let src = i % base.len(); // modulo every call, every dim\n        let phase = next() * 6.28318; // FRESH randomness per call\n        out[i] = base[src] * phase.cos() + phase.sin();\n    }\n}\n".to_string(),
+            opt_pattern: "// optimized: construction-time tables — src_idx hoists the modulo\n// schedule, phases = even grid + deterministic jitter (distinct,\n// non-degenerate); forward is pure indexed loads + arithmetic, and\n// the same seed rebuilds the identical encoder\nstruct Projection {\n    hidden_dim: usize,\n    base_features: usize,\n    src_idx: Vec<usize>, // hoisted i % base_features\n    phases: Vec<f32>,    // even spacing + seed jitter\n}\nimpl Projection {\n    fn new(hidden_dim: usize, base_features: usize, seed: u64) -> Self {\n        let mut s = seed.wrapping_add(0x9E37_79B9_7F4A_7C15);\n        let mut next = || {\n            s ^= s << 13;\n            s ^= s >> 7;\n            s ^= s << 17;\n            (s >> 32) as f32\n        };\n        let mut src_idx = Vec::with_capacity(hidden_dim);\n        let mut phases = Vec::with_capacity(hidden_dim);\n        for i in 0..hidden_dim {\n            // even spacing across [0, 2pi) + small seed jitter: distinct\n            // phases, no degenerate all-zero column\n            let base = (i as f32) * (core::f32::consts::TAU / hidden_dim.max(1) as f32);\n            phases.push(base + next() * 0.1);\n            src_idx.push(i % base_features.max(1));\n        }\n        Self { hidden_dim, base_features, src_idx, phases }\n    }\n    fn project(&self, base: &[f32], out: &mut [f32]) {\n        for i in 0..self.hidden_dim {\n            let b = base[self.src_idx[i]]; // table lookup, no per-call modulo\n            let p = self.phases[i];\n            out[i] = b * p.cos() + p.sin();\n        }\n    }\n}\n".to_string(),
+        },
+        // ── latent-encode-at-capture — buffer raw states → snapshot the latent now (A) ──
+        // Source: riir-gpu edge_lora/go_self_play.rs L436-438 ("// We snapshot
+        // the latent encoding immediately to avoid holding many GoStates.")
+        // + bomber_self_play.rs L267-269 ("// Snapshot latent encodings
+        // immediately to avoid holding many BomberStates.") +
+        // fft_self_play.rs L309-313 ("// Encode BEFORE the action. / let
+        // input_enc = encode_fft_position(&battle, unit_id, projection);") —
+        // the same capture discipline across all three game adapters.
+        //
+        // Distinct from snapshot-transient-grad-for-deferred-download (pins a
+        // doomed temp to extend its lifetime — this avoids retaining the
+        // heavy object at all), from caller-owned-split-scratch (scratch
+        // reuse across calls — this is about WHAT is stored, not reuse), and
+        // from host-cache-immutable-device-weights (caching an asset
+        // host-side — here the raw state is deliberately not the asset).
+        KernelRule {
+            rule_id: "latent-encode-at-capture".to_string(),
+            gpu_concept: "the naive replay/episode collector clones the raw state before and after every move and defers encoding to a final pass — peak memory is the entire game's state history held simultaneously (board Vecs, bomb lists, effect stacks per move). Encode while the state is live instead: the projection runs at capture, the raw state is mutated in place and never retained, and the transition log stores only (player_id, input_latent, target_latent). Peak memory becomes moves × hidden_dim floats instead of moves × full state, with a determinism bonus — the encoding is a pure function of the live state at a known tick, so there is no risk of post-hoc encoding drifting against a mutated state. The same discipline applies at GPU boundaries: compress to the representation the consumer needs at the boundary, drop the producer-side heavyweight object immediately after. Distinct from snapshot-transient-grad-for-deferred-download (pins a doomed temp to extend its lifetime — this avoids retaining the heavy object at all), from caller-owned-split-scratch (scratch reuse across calls — this is about WHAT is stored, not reuse), and from host-cache-immutable-device-weights (caching an asset host-side — here the raw state is deliberately not the asset).".to_string(),
+            ref_shape: "// naive: buffer the RAW heavyweight states for the whole episode, encode\n// after the game ends — peak memory = moves x full state (board Vec, bomb\n// lists, effect stacks), all retained simultaneously for one final pass\nfn episodes_deferred(state: &mut GameState, moves: usize) -> Vec<Episode> {\n    let mut raw_before: Vec<GameState> = Vec::new();\n    let mut raw_after: Vec<GameState> = Vec::new();\n    for _ in 0..moves {\n        raw_before.push(state.clone()); // full state clone per move\n        state.step();\n        raw_after.push(state.clone()); // another full clone per move\n    }\n    raw_before.into_iter().zip(raw_after).map(|(a, b)| {\n        Episode { input: encode(&a), target: encode(&b) } // encode at the END\n    }).collect()\n}\n".to_string(),
+            opt_pattern: "// optimized: encode at CAPTURE — the compact latent vector is computed\n// while the state is live and the raw state is dropped immediately;\n// peak memory = moves x hidden_dim floats instead of moves x full\n// game state\nfn episodes_encode_at_capture(\n    state: &mut GameState,\n    moves: usize,\n    proj: &Projection,\n) -> Vec<Episode> {\n    // snapshot the latent encoding immediately to avoid holding many states\n    let mut transitions: Vec<(u8, Vec<f32>, Vec<f32>)> = Vec::new();\n    for _ in 0..moves {\n        let pid = state.current_player();\n        let input = encode(state, pid, proj); // latent snapshot NOW\n        state.step(); // raw state mutates in place —\n        let target = encode(state, pid, proj); // no heavy clone\n        transitions.push((pid, input, target)); // ever retained\n    }\n    transitions\n        .into_iter()\n        .map(|(pid, input, target)| {\n            let reward = sigmoid_outcome_reward(state.reward(pid));\n            Episode { input, target, reward }\n        })\n        .collect()\n}\n".to_string(),
+        },
+        // ── non-saturating-outcome-reward-floor — raw 0/1 outcome → affine ramp off the extremes (B) ──
+        // Source: riir-gpu edge_lora/go_self_play.rs L410-421 (the doc:
+        // "win → 0.85, draw → 0.5, loss → 0.15. The 0.15/0.85 split (rather
+        // than 0.0/1.0) keeps the gradient magnitude non-vanishing on losses
+        // — losing games still teach "avoid this direction" with
+        // non-trivial weight." + the body "0.15 + 0.70 *
+        // terminal_reward.clamp(0.0, 1.0)") + bomber_self_play.rs L170-178 +
+        // fft_self_play.rs L196-199 (the identical mapping triplicated — the
+        // dedup is tracked in the batch's riir-ai issue).
+        //
+        // Distinct from sign-branch-stable-sigmoid (how to compute a sigmoid
+        // without exp overflow — this is whether the outcome map should
+        // saturate at all), from additive-sigmoid-gates-not-softmax-routing
+        // (composition of multiple gates vs softmax — this is the bounds of a
+        // single outcome-to-scalar map), and from
+        // sigmoid-deriv-recovered-from-output (derivative reuse — no
+        // derivative involved, pure label shaping).
+        KernelRule {
+            rule_id: "non-saturating-outcome-reward-floor".to_string(),
+            gpu_concept: "feeding the raw terminal outcome (0.0 loss / 1.0 win) straight into a reward-weighted training objective puts the weight on every losing episode's gradient at exactly zero — the learner is never taught what to avoid, and win-side targets sit on the objective's saturated edge. Map terminal outcomes through a one-line affine clamp-ramp off the extremes instead: 0.15 + 0.70 · clamp(terminal, 0, 1), bounded in [0,1] like a sigmoid-shaped scalar (never softmax) but never saturating — draws stay centered at 0.5 and losses retain 15% weight, enough for the avoid-this-direction signal to survive. This is label-shaping discipline for reward-weighted regression: the map is monotone, order-preserving, and constant-cost. Distinct from sign-branch-stable-sigmoid (how to compute a sigmoid without exp overflow — this is whether the outcome map should saturate at all), from additive-sigmoid-gates-not-softmax-routing (composition of multiple gates vs softmax — this is the bounds of a single outcome-to-scalar map), and from sigmoid-deriv-recovered-from-output (derivative reuse — no derivative involved, pure label shaping).".to_string(),
+            ref_shape: "// naive: identity outcome mapping — losses map to exactly 0.0 and the\n// reward-weighted objective multiplies the loss-side gradient by zero:\n// losing trajectories teach nothing\nfn outcome_raw(terminal: f32) -> f32 {\n    terminal.clamp(0.0, 1.0)\n}\nfn episode_loss_naive(out: f32, target: f32, terminal: f32) -> f32 {\n    let reward = outcome_raw(terminal); // loss -> 0.0\n    reward * (out - target).powi(2) // 0.0 * anything == 0.0 gradient\n}\n".to_string(),
+            opt_pattern: "// optimized: affine clamp-ramp off the extremes — losses sit at 0.15,\n// wins at 0.85, draws at 0.5; bounded in [0,1] (sigmoid-style shape,\n// no softmax) but never saturating, so every episode keeps\n// non-zero gradient weight\nfn sigmoid_outcome_reward(terminal_reward: f32) -> f32 {\n    0.15 + 0.70 * terminal_reward.clamp(0.0, 1.0)\n}\nfn episode_loss_floored(out: f32, target: f32, terminal: f32) -> f32 {\n    let reward = sigmoid_outcome_reward(terminal); // loss -> 0.15, not 0.0\n    reward * (out - target).powi(2) // losing moves still teach\n} // \"avoid this direction\" with non-trivial weight\n".to_string(),
+        },
+        // ── collect-then-resolve-snapshot-batch — interleaved select/resolve → two frozen phases (E) ──
+        // Source: riir-gpu edge_lora/fft_self_play.rs L297-300 ("//
+        // Collect-then-resolve ordering (deterministic ATB rule from
+        // arena_runner). / // Encode BEFORE → select → resolve (mutate) →
+        // encode AFTER, per ready unit.") + L316-317 ("// Resolve actions in
+        // collected order, emitting one episode per action. / for (unit_id,
+        // action, input_enc) in actions {").
+        //
+        // Distinct from merge-dispatches-into-single-compute-pass (merging
+        // dependent GPU dispatches into one pass — this batches decision
+        // reads then confines mutation for determinism), from
+        // chain-dispatches-single-sync-point (sync amortization — no syncs
+        // here; the win is snapshot consistency + parallel select), and from
+        // row-owned-register-blocked-recurrence (independence within a
+        // recurrence — the independence here is manufactured by freezing the
+        // state).
+        KernelRule {
+            rule_id: "collect-then-resolve-snapshot-batch".to_string(),
+            gpu_concept: "in simultaneous-turn loops the naive interleaved form selects and resolves per actor — every actor after the first sees earlier actors' mutations (information leak), outcomes become order-dependent, and the select phase cannot be batched because the state moves underneath it. Split the tick into two phases: a collect phase where every ready unit selects against the identical frozen pre-tick snapshot — the phase is read-only over shared state, so it is embarrassingly parallel and iteration order provably cannot leak information — and a resolve phase that applies the collected actions in fixed order, the single place where mutation happens. This is the phased-execution analogue of read/write phase separation in kernels: batching reads against an immutable view removes false dependencies and buys determinism for free. The episode encode rides the same structure (encode BEFORE in the collect phase, encode AFTER in the resolve phase), so each transition captures exactly one unit's action against the snapshot it was chosen from. Distinct from merge-dispatches-into-single-compute-pass (merging dependent GPU dispatches into one pass — this batches decision reads then confines mutation for determinism), from chain-dispatches-single-sync-point (sync amortization — no syncs here; the win is snapshot consistency + parallel select), and from row-owned-register-blocked-recurrence (independence within a recurrence — the independence here is manufactured by freezing the state).".to_string(),
+            ref_shape: "// naive: select-and-resolve interleaved — each actor sees the mutations of\n// every earlier actor in the same tick (information leak, order-dependent\n// outcomes), and select cannot be batched because state moves under it\nfn tick_interleaved(\n    battle: &mut Battle,\n    players: &mut [Player],\n    ready: &[u8],\n    rng: &mut Rng,\n) {\n    for &unit in ready {\n        // battle already mutated by earlier units this tick\n        let action = players[unit as usize].select(unit, battle, rng);\n        resolve_action(battle, unit, &action, rng); // mutates for NEXT selector\n    }\n}\n".to_string(),
+            opt_pattern: "// optimized: collect-then-resolve — phase 1 selects ALL actions against\n// the frozen pre-tick snapshot (read-only, order-independent, batchable);\n// phase 2 applies them in fixed collected order (deterministic resolution)\nfn tick_collect_then_resolve(\n    battle: &mut Battle,\n    players: &mut [Player],\n    ready: &[u8],\n    rng: &mut Rng,\n) {\n    // phase 1: SELECT against the frozen state — no mutation in this loop,\n    // so iteration order cannot leak information and the phase parallelizes\n    let mut actions: Vec<(u8, Action, Vec<f32>)> = Vec::with_capacity(ready.len());\n    for &unit in ready {\n        let input_enc = encode(battle, unit); // encode BEFORE, same snapshot\n        let action = players[unit as usize].select(unit, battle, rng);\n        actions.push((unit, action, input_enc));\n    }\n    // phase 2: RESOLVE in collected order — all mutation confined here,\n    // identical outcome for a fixed action list\n    for (unit, action, input_enc) in actions {\n        resolve_action(battle, unit, &action, rng);\n        let target_enc = encode(battle, unit); // encode AFTER\n        record(unit, input_enc, target_enc);\n        if battle.check_winner().is_some() {\n            break;\n        }\n    }\n}\n".to_string(),
+        },
+        // ── timeout-scalar-tiebreak-decisive-outcome — flat draw on cap → maintained-scalar tiebreak (D) ──
+        // Source: riir-gpu edge_lora/fft_self_play.rs L201-205 ("/// On
+        // timeout (no winner from `check_winner`), fall back to HP-tiebreak —
+        // / /// matches `arena_runner.rs` L120-129 semantics.") + L211-228
+        // (the None arm: "// Draw or timeout — HP tiebreak." comparing
+        // `state.team_hp(my_team)` vs `state.team_hp(enemy_team)` — decisive
+        // 1.0/0.0 except exact tie).
+        //
+        // Distinct from non-saturating-outcome-reward-floor (bounds of the
+        // reward map — this decides the value feeding the map), from
+        // predicate-gated-skip-empty-workset-step (eliding whole steps when
+        // idle — this salvages signal from a capped step rather than skipping
+        // it), and from argmax-rng-tie-break-collect-ties (selection among
+        // candidates — this derives the terminal label itself).
+        KernelRule {
+            rule_id: "timeout-scalar-tiebreak-decisive-outcome".to_string(),
+            gpu_concept: "the naive terminal classifier maps every non-win — timeout, true draw, mutual destruction — to the same flat 0.5, so capped games drown the reward signal in uninformative draws no matter how lopsided the state was when the clock expired. Gate the fallback path: when the primary win condition returns None, compare an existing maintained scalar (team HP totals) and emit 1.0/0.0/0.5 — decisive except on an exact tie. The win is signal density at zero maintenance cost: no extra accumulators, no new state, the tiebreak reads two sums the state already tracks, and the semantics stay consistent with the evaluation runner so training episodes and arena scoring agree on what timeout means. Placement matters: the tiebreak belongs on the None arm of the outcome match, not baked into the reward map — the reward map stays a pure monotone function of the terminal value, and this rule decides which terminal value a capped game produces. Distinct from non-saturating-outcome-reward-floor (bounds of the reward map — this decides the value feeding the map), from predicate-gated-skip-empty-workset-step (eliding whole steps when idle — this salvages signal from a capped step rather than skipping it), and from argmax-rng-tie-break-collect-ties (selection among candidates — this derives the terminal label itself).".to_string(),
+            ref_shape: "// naive: timeout emits a flat draw — every capped game lands on the same\n// uninformative 0.5 label no matter how lopsided the state was when the\n// clock ran out; the reward signal drowns in draws\nfn terminal_naive(state: &Battle) -> f32 {\n    match state.check_winner() {\n        Some(w) if w == MY_TEAM => 1.0,\n        Some(_) => 0.0,\n        None => 0.5, // timeout AND true draw AND mutual destruction: all 0.5\n    }\n}\n".to_string(),
+            opt_pattern: "// optimized: timeout falls through to an EXISTING state scalar tiebreak —\n// the outcome stays decisive (0.5 only on an exact tie), so capped games\n// still carry directional signal with zero extra state maintained\nfn terminal_with_tiebreak(state: &Battle) -> f32 {\n    match state.check_winner() {\n        Some(w) if w == MY_TEAM => 1.0,\n        Some(_) => 0.0,\n        None => {\n            // draw or timeout — HP tiebreak\n            let my_hp = state.team_hp(MY_TEAM); // scalar the state\n            let enemy_hp = state.team_hp(ENEMY); // already maintains\n            if my_hp > enemy_hp {\n                1.0\n            } else if my_hp < enemy_hp {\n                0.0\n            } else {\n                0.5 // exact tie only\n            }\n        }\n    }\n}\n".to_string(),
+        },
     ])
 }
 
@@ -4412,7 +4754,7 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 238-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 251-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -4420,7 +4762,7 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (39 rules)
+    // A: Memory access patterns (42 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -4464,9 +4806,12 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "needless-swap-temp-hoist-to-scratch",
             "scoped-init-at-consume-site",
             "derive-shape-from-payload-not-cached-field",
+            "make-unmake-over-clone-per-candidate",
+            "deterministic-tiling-projection-tables",
+            "latent-encode-at-capture",
         ],
     ),
-    // B: Compute patterns (39 rules)
+    // B: Compute patterns (42 rules)
     (
         KernelCategory::Compute,
         "B: compute",
@@ -4510,9 +4855,12 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "inplace-grad-accumulate-deferred-postscale",
             "monomorphize-per-element-trait-calls",
             "commit-over-maintained-item-digests",
+            "length-prefix-shape-faithful-hash",
+            "argmax-rng-tie-break-collect-ties",
+            "non-saturating-outcome-reward-floor",
         ],
     ),
-    // C: Fusion patterns (25 rules)
+    // C: Fusion patterns (27 rules)
     (
         KernelCategory::Fusion,
         "C: fusion",
@@ -4542,9 +4890,11 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "inplace-gate-scale-at-funnel-bottleneck",
             "fuse-loss-and-output-grad-one-pass",
             "fuse-weight-grad-input-grad-single-matrix-visit",
+            "incremental-centroid-running-sum",
+            "one-sweep-spatial-feature-fanout",
         ],
     ),
-    // D: Dispatch patterns (35 rules)
+    // D: Dispatch patterns (39 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -4584,9 +4934,13 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "width-invariant-superset-training",
             "static-classification-hoist-to-routing-table",
             "verify-once-at-trust-boundary",
+            "order-stable-topk-via-index-sort",
+            "shape-gated-warm-start-slot-copy",
+            "domain-as-data-not-algorithm-fork",
+            "timeout-scalar-tiebreak-decisive-outcome",
         ],
     ),
-    // E: Parallelism patterns (14 rules)
+    // E: Parallelism patterns (15 rules)
     (
         KernelCategory::Parallelism,
         "E: parallelism",
@@ -4605,6 +4959,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "epilogue-must-be-workgroup-local",
             "counter-derived-seed-stateless-noise",
             "additive-sigmoid-gates-not-softmax-routing",
+            "collect-then-resolve-snapshot-batch",
         ],
     ),
     // F: Flash-attention tiling (10 rules)
@@ -4847,7 +5202,7 @@ mod tests {
         // Batch 29 (10): riir-gpu production kernels — defer-readback-gated-by-live-output-size, weight-handle-cache-keyed-by-allocation-identity, first-readback-pays-queue-drain, epilogue-at-register-write-phase, delay-rms-scale-past-gemv-epilogue, pack-scalar-params-into-combined-buffer, enum-dispatch-separate-kernel-per-variant, epilogue-must-be-workgroup-local, launch-unchecked-caller-owned-size-contract, fast-math-contraction-behind-feature-flag (deltanet_input_proj_fused.rs + epilogue/ — the decode-path fusion cluster: Issue 602 sibling-GEMV fan-out + Plan 106 Track 3 CODA epilogue fusion).
         // Batch 30 (6): riir-gpu production kernels — zero-init-side-branch-frozen-base-path, counter-derived-seed-stateless-noise, predicate-gated-skip-empty-workset-step, share-pipeline-set-across-subsystems, pad-uniform-pod-to-min-binding-size, fuse-count-into-mutation-pass (dllm/mod.rs — the D2F training cluster: Plan 068 discrete-diffusion trainers + RePlaid schedule).
         // Total: 209.
-        assert_eq!(corpus.entries.len(), 238, "batches 1-32 should have 238 rules");
+        assert_eq!(corpus.entries.len(), 251, "batches 1-32 should have 251 rules");
     }
 
     #[test]
@@ -6329,6 +6684,137 @@ mod tests {
         }
     }
 
+
+    #[test]
+    fn batch32c_rules_present() {
+        // Verify the 13 batch-32c rules across A/B/C/D/E.
+        let corpus = build_kernel_seed_corpus();
+        let ids: Vec<&str> =
+            corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        // A (3 new): state-search / projection-table / capture-footprint family
+        assert!(ids.contains(&"make-unmake-over-clone-per-candidate"), "make/unmake over clone");
+        assert!(ids.contains(&"deterministic-tiling-projection-tables"), "tiling projection tables");
+        assert!(ids.contains(&"latent-encode-at-capture"), "latent encode at capture");
+        // B (3 new): hash-shape / tie-break / reward-floor family
+        assert!(ids.contains(&"length-prefix-shape-faithful-hash"), "length-prefix hash");
+        assert!(ids.contains(&"argmax-rng-tie-break-collect-ties"), "argmax rng tie-break");
+        assert!(ids.contains(&"non-saturating-outcome-reward-floor"), "outcome reward floor");
+        // C (2 new): aggregate-maintenance / one-sweep family
+        assert!(ids.contains(&"incremental-centroid-running-sum"), "incremental centroid");
+        assert!(ids.contains(&"one-sweep-spatial-feature-fanout"), "one-sweep feature fanout");
+        // D (4 new): selection-order / warm-start / data-not-fork / timeout family
+        assert!(ids.contains(&"order-stable-topk-via-index-sort"), "order-stable topk");
+        assert!(ids.contains(&"shape-gated-warm-start-slot-copy"), "shape-gated warm start");
+        assert!(ids.contains(&"domain-as-data-not-algorithm-fork"), "domain as data");
+        assert!(ids.contains(&"timeout-scalar-tiebreak-decisive-outcome"), "timeout scalar tiebreak");
+        // E (1 new)
+        assert!(ids.contains(&"collect-then-resolve-snapshot-batch"), "collect-then-resolve");
+    }
+
+    #[test]
+    fn batch32c_concepts_covered() {
+        // Verify the batch-32c edge_lora self-play/arena/consolidation-half
+        // concepts via distinctive ASCII substrings located by rule_id (the
+        // 32a convention — immune to prose-evolution churn).
+        let corpus = build_kernel_seed_corpus();
+        let concept = |id: &str| -> String {
+            corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-32c rule '{id}' missing"))
+                .gpu_concept
+                .clone()
+        };
+        // C: incremental-centroid-running-sum (sleep_consolidation.rs L317-357)
+        let c = concept("incremental-centroid-running-sum");
+        assert!(c.contains("append-only aggregate")
+            && c.contains("never recomputed from the member list at query time"), "centroid concept");
+        // B: length-prefix-shape-faithful-hash (sleep_consolidation.rs L404-415)
+        let c = concept("length-prefix-shape-faithful-hash");
+        assert!(c.contains("shape-blind")
+            && c.contains("shape becomes part of the committed identity"), "length-prefix concept");
+        // D: order-stable-topk-via-index-sort (sleep_consolidation.rs L235-253)
+        let c = concept("order-stable-topk-via-index-sort");
+        assert!(c.contains("destroys the original ordering contract")
+            && c.contains("canonical original order"), "order-stable topk concept");
+        // A: make-unmake-over-clone-per-candidate (arena_eval.rs L225-232)
+        let c = concept("make-unmake-over-clone-per-candidate");
+        assert!(c.contains("restoring bit-identical pre-move state")
+            && c.contains("zero per-candidate allocation"), "make/unmake concept");
+        // B: argmax-rng-tie-break-collect-ties (arena_eval.rs L298-319)
+        let c = concept("argmax-rng-tie-break-collect-ties");
+        assert!(c.contains("move-generation order becomes a hidden priority")
+            && c.contains("deterministic GIVEN the seed"), "tie-break concept");
+        // D: shape-gated-warm-start-slot-copy (cross_game_edge.rs L160-185)
+        let c = concept("shape-gated-warm-start-slot-copy");
+        assert!(c.contains("dimensionally legal")
+            && c.contains("the copy count clamp makes the operation total"), "warm-start concept");
+        // D: domain-as-data-not-algorithm-fork (cross_game_edge.rs L122-131 + L196-209)
+        let c = concept("domain-as-data-not-algorithm-fork");
+        assert!(c.contains("the domain variation entirely in the DATA")
+            && c.contains("differ by a data transformation, not a code path"), "data-not-fork concept");
+        // C: one-sweep-spatial-feature-fanout (go_self_play.rs L229-314)
+        let c = concept("one-sweep-spatial-feature-fanout");
+        assert!(c.contains("the sole owner of the data visit")
+            && c.contains("never by counting cells"), "one-sweep concept");
+        // A: deterministic-tiling-projection-tables (go_self_play.rs L94-170)
+        let c = concept("deterministic-tiling-projection-tables");
+        assert!(c.contains("the same seed rebuilds the identical encoder")
+            && c.contains("degenerate all-zero output column"), "projection-tables concept");
+        // A: latent-encode-at-capture (go/bomber/fft self-play)
+        let c = concept("latent-encode-at-capture");
+        assert!(c.contains("Encode while the state is live")
+            && c.contains("no risk of post-hoc encoding drifting"), "encode-at-capture concept");
+        // B: non-saturating-outcome-reward-floor (go/bomber/fft sigmoid_outcome_reward)
+        let c = concept("non-saturating-outcome-reward-floor");
+        assert!(c.contains("never taught what to avoid")
+            && c.contains("losses retain 15% weight"), "reward-floor concept");
+        // E: collect-then-resolve-snapshot-batch (fft_self_play.rs L297-328)
+        let c = concept("collect-then-resolve-snapshot-batch");
+        assert!(c.contains("read-only over shared state")
+            && c.contains("the single place where mutation happens"), "collect-then-resolve concept");
+        // D: timeout-scalar-tiebreak-decisive-outcome (fft_self_play.rs L201-228)
+        let c = concept("timeout-scalar-tiebreak-decisive-outcome");
+        assert!(c.contains("drown the reward signal in uninformative draws")
+            && c.contains("signal density at zero maintenance cost"), "timeout-tiebreak concept");
+    }
+
+    #[test]
+    #[cfg(not(feature = "kernel_verify"))]
+    fn batch32c_pseudocode_parses() {
+        // G1 for Batch 32c: every new rule's ref_shape AND opt_pattern must
+        // syn-parse as valid Rust (the L2 pruner verdict).
+        use crate::domain::HealDomain;
+        let corpus = build_kernel_seed_corpus();
+        let ids = [
+            "incremental-centroid-running-sum",
+"length-prefix-shape-faithful-hash",
+"order-stable-topk-via-index-sort",
+"make-unmake-over-clone-per-candidate",
+"argmax-rng-tie-break-collect-ties",
+"shape-gated-warm-start-slot-copy",
+"domain-as-data-not-algorithm-fork",
+"one-sweep-spatial-feature-fanout",
+"deterministic-tiling-projection-tables",
+"latent-encode-at-capture",
+"non-saturating-outcome-reward-floor",
+"collect-then-resolve-snapshot-batch",
+"timeout-scalar-tiebreak-decisive-outcome",
+        ];
+        for id in ids {
+            let entry = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-32c rule '{id}' missing"));
+            let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+            assert!(ref_verdict.parses, "batch-32c ref_shape for '{id}' must parse");
+            let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+            assert!(opt_verdict.parses, "batch-32c opt_pattern for '{id}' must parse");
+        }
+    }
+
     // ════════════════════════════════════════════════════════════════════
     // Plan 003 — Router ↔ corpus wiring tests
     // ════════════════════════════════════════════════════════════════════
@@ -6340,7 +6826,7 @@ mod tests {
 
     #[test]
     fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-        // Every rule_id in the 228-rule corpus must appear in exactly one category.
+        // Every rule_id in the 251-rule corpus must appear in exactly one category.
         let corpus = build_kernel_seed_corpus();
         let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
         let mut categorized: Vec<&str> = Vec::new();
@@ -6371,13 +6857,13 @@ mod tests {
 
     #[test]
     fn kernel_categories_counts_match_plan_003_table() {
-        // Pin per-category rule counts to the Plan 003 table (updated for Batch 32a).
+        // Pin per-category rule counts to the Plan 003 table (updated for Batch 32c).
         let expected = [
-            (KernelCategory::MemoryAccess, 39),
-            (KernelCategory::Compute, 39),
-            (KernelCategory::Fusion, 25),
-            (KernelCategory::Dispatch, 35),
-            (KernelCategory::Parallelism, 14),
+            (KernelCategory::MemoryAccess, 42),
+            (KernelCategory::Compute, 42),
+            (KernelCategory::Fusion, 27),
+            (KernelCategory::Dispatch, 39),
+            (KernelCategory::Parallelism, 15),
             (KernelCategory::FlashAttnTiling, 10),
             (KernelCategory::LinearAttnRecurrence, 19),
             (KernelCategory::MoeDispatchBackward, 10),
@@ -6396,9 +6882,9 @@ mod tests {
                 "Plan 003: category {cat:?} has {} rules, expected {count}",
                 entry.2.len());
         }
-        // Sum must equal 238.
+        // Sum must equal 251.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 238, "Plan 003: category totals must sum to 238");
+        assert_eq!(total, 251, "Plan 003: category totals must sum to 251");
     }
 
     #[test]
@@ -6408,7 +6894,7 @@ mod tests {
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 238, "Plan 003: grouped corpus has {total} rules, expected 238");
+        assert_eq!(total, 251, "Plan 003: grouped corpus has {total} rules, expected 251");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");

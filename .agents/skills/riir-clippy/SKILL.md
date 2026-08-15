@@ -135,24 +135,47 @@ global = symlink only.
   staging buffer + the O(E·L²) routing re-derivation ×3 loops + dead
   scratch clears + triple-BLAKE3 load path + 7-site sigmoid duplication
   + discarded topology validation error + u32→u16 narrowing).
-- **Batch 32b-2 (NEXT)**: the edge_lora self-play/arena/consolidation
-  half — `sleep_consolidation.rs` (615L), `arena_eval.rs` (604L),
-  `{go,bomber,fft}_self_play.rs` (730/521/506L), `cross_game_{edge,real}.rs`
-  (504/224L) + `kernels/` Rust wrappers → Research 036, corpus 238 → ~246.
-  - Note: `sigmoid_outcome_reward` is triplicated across the self-play
-    files (part of the Issue 684 7-site sigmoid family) — dedup candidate,
-    not a rule candidate.
-  - Validation pattern (proven T4 + 32a + 32b-1): corpus files are NOT
+- **Batch 32c DONE (2026-08-15, Research 036)** — landed as "32b-2": the edge_lora
+  self-play/arena/consolidation half (sleep_consolidation + arena_eval +
+  cross_game_edge/real + {go,bomber,fft}_self_play) — **13 rules, corpus 238 → 251**
+  (A 42, B 42, C 27, D 39, E 15). The edge_lora module is now FULLY MINED
+  (32a core + 32b-1 training + 32c self-play). Bug yield filed as riir-ai
+  Issue 685: the quadratic centroid storm (P1) + swallowed failed move +
+  wasted Pass encodes + warm_start weight duplication + per-call dataset
+  deep-clone + false-premise sigmoid comment (named sigmoid, computes an
+  affine ramp) + dead init-touch loop + Wait-vs-continue mismatch +
+  per-tick nested-Vec grid rebuild + the adapter-skeleton triplication
+  family (7 shapes × 3 game adapters — the self-play half of the Issue 684
+  sigmoid dedup). GOAT: 312 kernel_heal + 201 default tests, clippy 0 both
+  states (4 doc_markdown backtick fixes pre-commit).
+  - **Landing method (proven 32c — supersedes manual edit_file for big
+    corpus edits)**: a one-shot Python generator (script → run → delete)
+    with `json.dumps(s, ensure_ascii=False)` for string literals (correct
+    `\n` escapes by construction) + comment blocks as real multi-line
+    strings + `assert count==1` anchors on every replace. First-compile
+    clean vs the 32b-1 manual-escape incident. The awk orphan-`rule_id:`
+    pre-compile scan stays as the standing defense.
+  - `.research/.highwater` was STALE at 32c start (34 while 035 existed —
+    the 32b-1 session forgot the write-back). Fixed. Never trust the
+    highwater file alone; re-scan the folder at write time (the standing
+    rule, now with its own observed failure).
+- **NEXT mining target**: `ls` the riir-gpu tree for the next unmined
+  cluster (~69 of ~200 files mined). Candidates: `spectralquant/`
+  residuals, gemma*_cubecl residuals, or the wasm/ffi edge files. Pick 1-2
+  files, ~8-12 rules, Batch 33 (Research 037).
+  - Validation pattern (proven T4 + 32a + 32b-1 + 32c): corpus files are NOT
     sibling WIP — edit + run GOAT in the main checkout with
     `CARGO_TARGET_DIR=/tmp/riir-clippy-bNN`; `--features kernel_heal`
-    for the corpus suite (309 tests at 32b-1), default for the 201 suite.
+    for the corpus suite (312 tests at 32c), default for the 201 suite.
     `--all-features` is currently broken by SIBLING WIP
     (`rust_perf/bench.rs:335 alloc_axis`) — pre-existing, not yours.
-  - Count-pin sites when adding rules (complete list, re-verified 32b-1):
+  - Count-pin sites when adding rules (complete list, re-verified 32c):
     corpus.rs `entries.len()` assert + KERNEL_CATEGORIES rows + per-category
     count test + 2 grouped-total tests + router.rs `rules_for_expert` total
     + the corpus-count mentions in router.rs doc header + the Plan 003
-    doc-comment `238-rule corpus` line above KERNEL_CATEGORIES.
+    doc-comment `251-rule corpus` line above KERNEL_CATEGORIES + the
+    file-level `//!` header batch block + the stale `228-rule` comment in
+    kernel_categories_cover_all_corpus_rules_exhaustively (keep in sync).
   - **Landing lesson (32b-1, self-caught)**: after a large multi-entry
     corpus edit, `awk`-scan for `rule_id:` lines NOT preceded by a
     standalone `KernelRule {` BEFORE the first compile — JSON `\n`
@@ -164,7 +187,8 @@ global = symlink only.
   WIP STILL ACTIVE as of 2026-08-15 evening: qv_lora.rs + cudarc_kernels/
   + riir-gpu/lib.rs + ternary_deltanet_gpu_forward_cudarc.rs all dirty)
   — mine only after their WIP lands.
-- **Progress**: riir-gpu ~62 of ~200 files mined. Corpus: 238 rules.
+- **Progress**: riir-gpu ~69 of ~200 files mined. Corpus: 251 rules.
+  edge_lora module FULLY MINED (32a + 32b-1 + 32c).
 - **Also open (riir-clippy issues)**: 014 (rust_perf v4, 12 tasks), 016
   (clippy structural expansion, 6), 017 (retrieval precision at scale,
   5), 018 (self_evolve promotion, 6). 015 = sibling's ACTIVE WIP
