@@ -74,6 +74,14 @@ cargo run --features latent_retrieval --bin cargo-heal -- --fix --write <target-
 - Validate in the TARGET repo: `cargo clippy --all-targets` +
   `cargo test --lib`. Use `CARGO_TARGET_DIR=/tmp/<repo>-heal` if the
   repo's target dir is locked by a sibling build; clean it up after.
+- **Feature-aware validation (the bevy_shared lesson, 2026-08-15):** a
+  cfg-gated edit site is INVISIBLE to default `cargo check`/`--all-targets`
+  when the gate is a non-test feature — an E0432 sat green in
+  `riir-game-sdk/src/backend/bevy_shared.rs` until validated with
+  `--features backend_bevy`. After a heal, compile the edited files under
+  the features that actually include them (grep the `#[cfg(...)]` on the
+  enclosing `mod`); a passing default check proves nothing about gated
+  code. Same class as the count-assertion rule below.
 - cfg-gated test files: assert COUNTS, not exit codes — a green run can
   mean "ran nothing" (riir-chain lesson).
 - **Wrong suggestion → fix the proposer at root cause** (rule/pattern in

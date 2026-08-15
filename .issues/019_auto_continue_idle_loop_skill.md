@@ -70,7 +70,28 @@ at 6/7 + doc-sync as the closing pass).
 - [x] T2 Symlink global: `~/.agents/skills/riir-clippy` → this repo's skill dir (manual `/riir-clippy` invocation + cross-project discovery)
 - [x] T3 Reference the skill from `AGENTS.md` so repo-local sessions see it
 - [x] T3b Canonicalize skill homes: `boundary-guard` moved global → `katgpt-rs/.agents/skills/` (git-tracked); `substrate-first` global duplicate removed → symlink to the katgpt-rs canonical (copies diff-verified identical first); `riir-clippy` → repo-local + global symlink. `doc-sync` + `rust-optimize` remain global-only real dirs — no repo home yet (pending user call, see G15)
-- [ ] T4 Smoke run: activate the skill, execute queue item 3 (clippy sweep) on one small repo via `cargo-heal --suggest` → `--fix` → validate → adapt proposer if any suggestion is wrong (proves G3 end-to-end)
+- [x] T4 Smoke run: activate the skill, execute queue item 3 (clippy sweep) on one small repo via `cargo-heal --suggest` → `--fix` → validate → adapt proposer if any suggestion is wrong (proves G3 end-to-end)
+  - **DONE 2026-08-15** (riir-viewbridge → riir-game-sdk target). Full loop proven:
+    `--suggest` (76 spans, recall-fuzzy by design) → `--fix` preview
+    (77 edits across 10 files) → `--fix --write` (2 edits to
+    `bevy_shared.rs`) → **validation caught E0432** (`rustc_hash`
+    unresolved — game-sdk has no `rustc-hash` dep) → **proposer adapted
+    at root cause** (Gate 0: fxhashmap self-gates on an existing
+    `rustc_hash` import; splice cannot add a Cargo.toml dep) → fixtures
+    rewritten + regression added (`no_rustc_hash_import_unchanged`,
+    `aliased_rustc_hash_import_enables` — the alias form caught a real
+    gate blind spot) → suite 196 pass / clippy 0 → **re-proof: 77
+    proposed edits → 2** (75 were dep-breaking fxhashmap rewrites).
+    The 2 surviving `vec-with-capacity` edits landed in game-sdk
+    (`0b96f67`, example self-checks 8/8 PASS). Proposer fix:
+    riir-clippy `4c4dd8c`.
+  - **Bonus finding (validation must be feature-aware):** the E0432 was
+    INVISIBLE to default `cargo check` — `bevy_shared.rs` is cfg-gated
+    behind `backend_bevy`. Recorded in SKILL.md Protocol B.
+  - Sibling-WIP surgical commit used for `proposers/mod.rs` (fixture in
+    their WIP file): saved their copy → committed base + my 3 edits →
+    re-applied their WIP with my fixture fix merged. Their diff vs new
+    HEAD = exactly their 2 hunks.
 - [ ] T5 Batch 32 via the skill: mine `riir-ai/crates/riir-gpu/src/edge_lora/` + `kernels/` wrappers → Research 034, corpus 217 → ~227, full GOAT + docs + push
 - [ ] T6 Sweep remaining idle-queue items in order (issues → plans → benches → unblock → defer-marking) at least one full cycle; record friction back into the skill
 - [ ] T8 First boundary-guard routine check via the idle queue (item 6, before bench regression): `ci_boundary_guard.sh` + 7-surface greps, file violations, log the run
