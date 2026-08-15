@@ -447,22 +447,56 @@ global = symlink only.
   fix: `2+2k_r`-style math with subscript underscores needs backticks — a new
   gotcha variant). Generator: dry-run caught 1 bad anchor (header text
   mismatch) — second consecutive clean landing.
+- **Batch 41 DONE (2026-08-15, Research 045):** the KimiK3 backward SEQUENCE
+  (`kimi_k3_gpu_backward_sequence.rs` 1,328 — the PRODUCTION full-model backward
+  caller path, Issue 390 T6.7) + `weight_buffer_cache.rs` (459 — the write
+  substrate; the ORIGIN of the B39 hotswap-cache pattern, never itself mined) —
+  **6 rules, corpus 310 → 316** (A 69, E 18):
+  `concurrent-disjoint-write-buffer-parallelizes-uploads` (E),
+  `aliased-slot-allocate-replace-fallback-severs-binding` (A),
+  `pool-slot-write-coalescing-owns-only-declared-ranges` (A),
+  `pool-reservation-token-outlives-raw-view` (A),
+  `gpu-type-bridge-borrows-not-clones` (A),
+  `superseded-primitive-machinery-zombie` (A). **Issue 693 H1/H2 production
+  routing PINNED** (Lane B): the sequence path has NO inline MLA/MoE math — it
+  delegates 100% to the batched twin (`mla_backward_gpu_batched` seq L914-923 →
+  H1; `moe_backward_gpu_batched` seq L1151-1159 → H2); production callers
+  confirmed in riir-train (kimi_k3_train.rs L2014-2066/L2403-2413/L2481-2491,
+  kimi_k3_ouro.rs L1387-1391); the sequence's own inline RMSNorm is the CORRECT
+  shared helper; KDA bypasses both bugs. Bug yield filed as riir-ai **Issue
+  694**: the orphaned-write fallback (CRITICAL on cuda_backend — `extract_buffer`
+  is a no-op Ok so EVERY update takes the allocate-replace fallback which severs
+  the aliased-handle binding → GEMVs read boot weights forever + a fresh orphaned
+  buffer per step; latent on Metal CPU-fallback), the zombie LM-head machinery
+  (~640 MB-class staging upload + GPU transpose dispatch EVERY step with ZERO
+  production readers + ~1.3 GB dead VRAM + the stale perf-justification comment
+  in riir-train L2200-2210 + the stale header doc-lie seq L13), the Ouro update
+  path routing through the GPU-source `update()` paying ~237 read syncs
+  (kimi_k3_ouro.rs L1198-1202), the activation double-clone storms (MLA/Dense/KDA),
+  debug_assert-only size contracts (release-mode cross-slot corruption), dead
+  `update_from_cpu`, per-layer alloc churn, mutex-poisoning unwraps. GOAT: 339
+  kernel_heal + 201 default tests, clippy 0 in all 4 states (1 latent_retrieval
+  warning = the sibling's WIP heal.rs:415, pre-existing). **Generator NEW
+  LESSON — anchor-replacement must REPRODUCE consumed prefix**: the entries-vec
+  anchor includes the LAST ENTRY's closing tail; the replacement dropped it →
+  unterminated string literal → "mismatched closing delimiter" pointing at the
+  vec close (symptom), not the entry ~150 lines above (cause). Fix: restore the
+  anchor's prefix content at the head of the replacement. Plus 1 G1 parse fix
+  (pseudocode fns need bodies — `fn f(...)` with a trailing comment is invalid
+  inside the `_wrap` fn; give it `{}`).
 - **NEXT mining target**: `ls` the riir-gpu tree for the next unmined
-  cluster (~83 of ~200 files mined). Candidates:
-  `kimi_k3_gpu_backward_batched.rs` (1,394) +
-  `kimi_k3_gpu_backward_sequence.rs` (1,328) — the 2 backward siblings
-  (NOTE: the batched twin shares the 2 wrong-math bugs + the broken LCG per
-  Issue 693 — its mining value is now lower; the sequence file is the
-  PRODUCTION backward caller path); `gemma2_d2f*` (mod 1,579 + _sc 800),
-  `weaver_gpu*` (dflash 576 + corrector 1,449), `kvarn/`, `hypernet/`,
-  `maxsim/`, `weight_buffer_cache.rs` (the write substrate — flagged as
-  unmined by Batch 40's lane A). Pick 1-2 files, ~6-10 rules (dedup pressure
-  high), Batch 41 (Research 045).
+  cluster (~85 of ~200 files mined). Candidates:
+  `gemma2_d2f*` (mod 1,579 + _sc 800), `weaver_gpu*` (dflash 576 +
+  corrector 1,449), `kvarn/`, `hypernet/`, `maxsim/`,
+  `kimi_k3_gpu_backward_batched.rs` (1,394 — LOW value: shares Issue 693's
+  H1/H2 + the broken LCG with the module file; mine only if the better
+  clusters are exhausted). Pick 1-2 files, ~6-10 rules (dedup pressure
+  high), Batch 42 (Research 046).
   - Validation pattern (proven T4 + 32a + 32b-1 + 32c + 36 + 38): corpus files are NOT
     sibling WIP — edit + run GOAT in the main checkout with
     `CARGO_TARGET_DIR=/tmp/riir-clippy-bNN`; `--features kernel_heal`
     for the corpus suite (318 at 34, 321 at 35, 324 at 36, 327 at 37,
-    330 at 38, 333 at 39, 336 at 40), default for
+    330 at 38, 333 at 39, 336 at 40, 339 at 41), default for
     the 201 suite.
     `--all-features` is currently broken by SIBLING WIP
     (`rust_perf/bench.rs:335 alloc_axis`) — pre-existing, not yours.
@@ -477,7 +511,7 @@ global = symlink only.
     router.rs `rules_for_expert` total + the corpus-count mentions in
     router.rs doc header + the Plan 003 doc-comment `NNN-rule corpus`
     line above KERNEL_CATEGORIES + the `Total: 209 ... current NNN`
-    comment + the file-level `//!` header batch block. All in sync at 310 (A 64, D 54, H 14, N 18 after Batch 40).
+    comment + the file-level `//!` header batch block. All in sync at 316 (A 69, E 18 after Batch 41; B 45, C 32, D 54, F 10, G 19, H 14, I 4, J 5, K 5, L 10, M 9, N 18).
   - **Landing lesson (32b-1, self-caught)**: after a large multi-entry
     corpus edit, `awk`-scan for `rule_id:` lines NOT preceded by a
     standalone `KernelRule {` BEFORE the first compile — JSON `\n`
@@ -489,14 +523,15 @@ global = symlink only.
   WIP STILL ACTIVE as of 2026-08-15 evening: qv_lora.rs + cudarc_kernels/
   + riir-gpu/lib.rs + ternary_deltanet_gpu_forward_cudarc.rs all dirty)
   — mine only after their WIP lands.
-- **Progress**: riir-gpu ~83 of ~200 files mined. Corpus: 310 rules.
+- **Progress**: riir-gpu ~85 of ~200 files mined. Corpus: 316 rules.
   edge_lora module FULLY MINED (32a + 32b-1 + 32c). spectralquant/
   FULLY MINED (15 + 33). gemma4_cubecl_train/ DONE (34).
   gemma2_cubecl_train/ FULLY MINED (35: mod.rs + attention_gpu.rs;
   36: resident.rs). gemma4_q4k_train/ FULLY MINED (37: mod.rs +
   weight_buffers.rs; 38: forward_batched.rs + backward.rs).
-  kimi_k3_gpu_forward.rs DONE (39); kimi_k3_gpu_backward.rs DONE (40 —
-  the 2 batched/sequence siblings remain).
+  kimi_k3_gpu_forward.rs DONE (39); kimi_k3_gpu_backward.rs DONE (40);
+  kimi_k3_gpu_backward_sequence.rs + weight_buffer_cache.rs DONE (41 —
+  the batched twin remains, LOW value).
 - **Also open (riir-clippy issues)**: 014 (rust_perf v4, 12 tasks), 016
   (clippy structural expansion, 6), 017 (retrieval precision at scale,
   5), 018 (self_evolve promotion, 6). 015 = sibling's ACTIVE WIP

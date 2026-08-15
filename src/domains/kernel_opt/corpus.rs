@@ -943,6 +943,29 @@
 //!   bugs (MLA `d_attn_w` spurious attention-weight factor + `MoE` latent
 //!   norm gamma over-application) + a NaN-vacuous parity suite + one
 //!   actively-failing KDA test filed as riir-ai Issue 693.
+//! - **Batch 41 (2026-08-15, Research 045):** the `KimiK3` GPU backward
+//!   sequence — the PRODUCTION full-model backward caller (`kimi_k3_gpu_backward_sequence.rs`,
+//!   1,328 LOC) + the write substrate it updates through (`weight_buffer_cache.rs`,
+//!   459 LOC) — **6 rules, corpus 310 → 316** (A 69, E 18):
+//!   `concurrent-disjoint-write-buffer-parallelizes-uploads` (E — native
+//!   backends do not serialize disjoint `write_buffer` calls; 256-aligned
+//!   chunks from rayon workers, ~8× per-layer update parallelism),
+//!   `aliased-slot-allocate-replace-fallback-severs-binding` (A — the B39
+//!   boundary condition: an aliased slot's allocate-replace fallback orphans
+//!   every subsequent write; `cuda_backend` hits it on EVERY update),
+//!   `pool-slot-write-coalescing-owns-only-declared-ranges` (A — the writer-side
+//!   complement of the B40 build-side rule: discover contiguous runs at
+//!   runtime, never write gap bytes owned by other pool tenants),
+//!   `pool-reservation-token-outlives-raw-view` (A — the raw view is not
+//!   ownership; drop the wrapper `Handle` and the pool re-issues the range
+//!   under the still-alive view), `gpu-type-bridge-borrows-not-clones` (A —
+//!   the CPU→GPU type seam borrows activations instead of double-cloning
+//!   field-identical types), `superseded-primitive-machinery-zombie` (A —
+//!   retire support machinery with its consumer; the tell is a test-only
+//!   caller — the zombie LM-head pipeline uploads ~640 MB/step with zero
+//!   production readers). Issue 693 H1/H2 production routing PINNED (both
+//!   wrong-math bugs inherited via `mla_backward_gpu_batched`/
+//!   `moe_backward_gpu_batched`); new hazards filed as riir-ai Issue 694.
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
@@ -6497,6 +6520,129 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
             ref_shape: "// naive: full foreign-state alloc + copy-in/out PER TOKEN\nfor token in 0..seq {\n    let mut cpu_grads = ForeignGradients::zeros_like(&weights); // fresh 14-Vec alloc\n    cpu_grads.q_proj.copy_from_slice(&grads.q_proj);            // full-state copy-in\n    cpu_grads.k_proj.copy_from_slice(&grads.k_proj);\n    // ... 12 more fields ...\n    foreign_backward_token(&mut cpu_grads, &saved[token], &activations[token]);\n    grads.q_proj.copy_from_slice(&cpu_grads.q_proj);            // full-state copy-out\n    grads.k_proj.copy_from_slice(&cpu_grads.k_proj);\n    // ... 12 more fields ...\n}".to_string(),
             opt_pattern: "// optimized: the bridge lives at SEQUENCE scope — one copy-in, one copy-out\nlet mut cpu_grads = ForeignGradients::zeros_like(&weights);\ncpu_grads.q_proj.copy_from_slice(&grads.q_proj);                // copy-in ONCE\ncpu_grads.k_proj.copy_from_slice(&grads.k_proj);\n// ... 12 more fields ...\nfor token in 0..seq {\n    foreign_backward_token(&mut cpu_grads, &saved[token], &activations[token]); // in place\n}\ngrads.q_proj.copy_from_slice(&cpu_grads.q_proj);                // copy-out ONCE\ngrads.k_proj.copy_from_slice(&cpu_grads.k_proj);\n// ... 12 more fields ...".to_string(),
         },
+        // ── concurrent-disjoint-write-buffer-parallelizes-uploads — host-side
+        // upload parallelism: native backends do not serialize disjoint writes (E) ──
+        //
+        // Source: riir-gpu weight_buffer_cache.rs — POSITIVE: L237-L257
+        // (parallel_write_buffer: 256-aligned chunks from rayon workers, clamp 16
+        // threads, single-write fallback) + kimi_k3_gpu_backward_sequence.rs
+        // L546-L555 (per-layer update parallelism docs: "~8x parallelism for the
+        // per-layer update... ~49ms sequential to ~8ms parallel on M3 Max") +
+        // kimi_k3_gpu_backward.rs L342-L345 (3 Dense FFN matrices transposed in
+        // parallel under rayon::scope, ~2-3x on multi-core).
+        //
+        // Distinct from chunk-encoder-submits-below-driver-limit (B26) and
+        // per-slot-uniform-buffer-write-ordering (B26) — neither covers concurrent
+        // upload bandwidth; independent-cpu-work-fills-dispatch-read-window (B36)
+        // overlaps CPU work inside a dispatch-read window instead.
+        KernelRule {
+            rule_id: "concurrent-disjoint-write-buffer-parallelizes-uploads".to_string(),
+            gpu_concept: "A large host-to-device upload serialized on one thread is host-bandwidth-bound, not device-bound. Native wgpu backends (Metal/Vulkan/DX12) do NOT serialize queue.write_buffer calls that target disjoint offsets, so one big upload splits into 256-byte-aligned chunks written concurrently from rayon workers (the Queue and ComputeClient are both Sync, proven in the expert loop), and N independent per-unit update+upload tasks (per-layer weight transposes) parallelize under rayon::scope with a first-error Mutex<Option<E>> collector. Chunk size must round UP to COPY_BUFFER_ALIGNMENT (256) - a mis-aligned chunk offset panics wgpu validation - and the code must fall back to a single write when n_chunks <= 1 or chunk_bytes >= total. Measured on M3 Max: ~8x parallelism for 8 per-layer updates (~49ms -> ~8ms). Distinct from chunk-encoder-submits-below-driver-limit (B26 - encoder submit count vs driver limit; this is upload bandwidth), from independent-cpu-work-fills-dispatch-read-window (B36 - overlap inside a dispatch-read window; this is parallelizing the upload itself), and from per-slot-uniform-buffer-write-ordering (B26 - uniform-write collision inside one encoder; disjoint weight ranges never collide).".to_string(),
+            ref_shape: "// naive: one thread writes the whole upload serially - host-bandwidth-bound\nfn update_all(queue: &Queue, buffer: &wgpu::Buffer, data: &[u8]) {\n    queue.write_buffer(buffer, 0, data); // 640 MB from a single thread\n}\nfn update_layers(&mut self) {\n    for layer in &mut self.layers {\n        layer.transpose_and_upload(); // sequential: ~49 ms for 8 layers\n    }\n}".to_string(),
+            opt_pattern: "// optimized: disjoint-offset writes parallelize on native backends\nfn parallel_write_buffer(queue: &Queue, buffer: &wgpu::Buffer, base: u64, data: &[u8]) {\n    let total = data.len();\n    let n = rayon::current_num_threads().clamp(1, 16);\n    let chunk = total.div_ceil(n);\n    let chunk = (chunk + 255) & !255; // round UP to COPY_BUFFER_ALIGNMENT\n    if n > 1 && chunk < total {\n        rayon::scope(|s| {\n            for off in (0..total).step_by(chunk) {\n                let end = (off + chunk).min(total);\n                let part = &data[off..end];\n                s.spawn(move |_| queue.write_buffer(buffer, base + off as u64, part));\n            }\n        });\n    } else {\n        queue.write_buffer(buffer, base, data);\n    }\n}".to_string(),
+        },
+        // ── aliased-slot-allocate-replace-fallback-severs-binding — the
+        // boundary condition B39 omitted: aliased slots cannot fall back (A) ──
+        //
+        // Source: riir-gpu weight_buffer_cache.rs L158-L161 (the severing fallback:
+        // `self.handle = client.create_from_slice(...)` replaces the SLOT's handle
+        // clone while the consumer binds the original) + L128-L132 (cuda_backend
+        // extract_buffer is a no-op Ok(()) - the fast path can never engage);
+        // kimi_k3_gpu_backward_sequence.rs L478-L481 (from_handle aliasing
+        // self.lm_head.lm_head_t) + L527-L535 (the CPU-fallback branch feeds this);
+        // kimi_k3_gpu_backward.rs L321-L325 (per-layer systemic instance).
+        //
+        // Distinct from slow-path-bootstraps-raw-buffer-hotswap-cache (B39 - that
+        // rule PRESCRIBES the two-tier fallback for slots the consumer reads via
+        // the slot's own handle; this rule is when the fallback is WRONG) and
+        // per-dispatch-pointer-re-extraction (B21 - movement, not control flow).
+        KernelRule {
+            rule_id: "aliased-slot-allocate-replace-fallback-severs-binding".to_string(),
+            gpu_concept: "A two-tier in-place write cache slot built from a handle CLONE (from_handle, aliasing a handle owned by another struct) must treat 'raw view unavailable' as a hard error - never fall back to allocate-and-replace. The fallback branch writes into the slot's OWN fresh allocation while the consumer keeps binding the ORIGINAL handle elsewhere: every subsequent in-place update is orphaned and the consumer silently reads boot weights forever. The fallback is only sound for slots whose own handle is the sole consumer-read reference (from_data). On backends where raw-view extraction is a no-op returning Ok (cuda_backend), the fast path can never engage - disable in-place writes entirely rather than let every update take the severing fallback. Distinct from slow-path-bootstraps-raw-buffer-hotswap-cache (B39 - the two-tier pattern for slots the consumer reads through the slot's own handle; this is the boundary condition that makes the fallback semantically wrong for ALIASED slots), from per-dispatch-pointer-re-extraction (B21 - pool-movement staleness; this is fallback control flow severing the alias).".to_string(),
+            ref_shape: "// naive: the fallback silently severs the alias\nfn write_in_place(&mut self, client: &ComputeClient, data: &[f32]) {\n    if let Some((buf, off)) = &self.extracted {\n        self.queue.write_buffer(buf, *off, f32::as_bytes(data)); // fast path\n    } else {\n        // SLOW PATH: replaces the SLOT's handle - but the consumer binds\n        // the ORIGINAL handle elsewhere: these writes are orphaned forever\n        self.handle = client.create_from_slice(f32::as_bytes(data));\n    }\n}".to_string(),
+            opt_pattern: "// optimized: aliased slots refuse the fallback - fail loudly instead\nfn write_in_place(&mut self, client: &ComputeClient, queue: &Queue, data: &[f32]) -> Result<(), String> {\n    let (buf, off) = self.extracted.as_ref().ok_or_else(|| {\n        \"aliased slot: raw view not extracted - create_from_slice would orphan writes\".to_string()\n    })?;\n    debug_assert_eq!(data.len(), self.size_bytes, \"slot size contract\");\n    queue.write_buffer(buf, off, f32::as_bytes(data)); // lands where the consumer reads\n    Ok(())\n}\n// construction: extraction must succeed BEFORE any fast-path call\nslot.extract_buffer(client)?; // hard error on backends that cannot extract".to_string(),
+        },
+        // ── pool-slot-write-coalescing-owns-only-declared-ranges — writer-side
+        // complement of the B40 build-side rule: never write gap bytes (A) ──
+        //
+        // Source: riir-gpu weight_buffer_cache.rs write_slots_batched — L263-L283
+        // (the doc contract: group by buffer identity, sort by offset, coalesce
+        // exact-adjacency runs; "we don't write padding bytes that might belong
+        // to other allocations") + L309-L311 (grouping) + L325 (sort) +
+        // L334-L335 (prev_end == offset adjacency test) + L415-L416 (ONE
+        // write_buffer per run).
+        //
+        // Distinct from host-scratch-mirrors-slot-order-for-coalesced-writes
+        // (B40 - build-side scratch layout; this is the writer-side algorithm +
+        // gap-ownership contract) and batched-downloads-single-sync-cycle (B26 -
+        // the READ side).
+        KernelRule {
+            rule_id: "pool-slot-write-coalescing-owns-only-declared-ranges".to_string(),
+            gpu_concept: "When N cached slots are sub-allocations inside pool-managed device buffers, per-slot write_buffer calls coalesce at runtime: group slots by parent buffer identity, sort by offset, and merge runs where prev_end == next offset into ONE staging copy + ONE write per run. The load-bearing safety contract: a coalesced write may cover ONLY the union of declared slot ranges - gap bytes between non-contiguous slots may belong to OTHER pool tenants and must never be written. Contiguity is an opportunistic pool-placement property, so the writer must DISCOVER it (group + sort + extend only on exact adjacency), never assume it from construction order. Isolated slots and gapped runs fall back to per-slot writes. Reduces ~246 calls/step to a handful when the pool places consecutive allocations in the same page. Distinct from host-scratch-mirrors-slot-order-for-coalesced-writes (B40 - the BUILD-side enabler: host scratch laid out in slot order; this is the writer-side algorithm + the never-widen-beyond-owned-ranges contract), from batched-downloads-single-sync-cycle (B26 - the READ side).".to_string(),
+            ref_shape: "// naive: N independent write calls - one per slot, every step\nfor (slot, data) in slots.iter().zip(data_slices) {\n    queue.write_buffer(slot.buffer(), slot.offset, f32::as_bytes(data)); // ~246 calls/step\n}".to_string(),
+            opt_pattern: "// optimized: discover contiguous runs at runtime, write ONE call per run\nlet mut groups: Vec<(wgpu::Buffer, Vec<usize>)> = Vec::new();\nfor (i, slot) in slots.iter().enumerate() {\n    let buf = slot.buffer().clone();\n    match groups.iter_mut().find(|(b, _)| *b == buf) {\n        Some((_, idxs)) => idxs.push(i),\n        None => groups.push((buf, vec![i])),\n    }\n}\nfor (_, idxs) in &mut groups {\n    idxs.sort_by_key(|&i| slots[i].offset); // adjacency by offset, not construction order\n    let mut run: Vec<usize> = Vec::new();\n    for &i in idxs.iter() {\n        match run.last() {\n            Some(&p) if slots[p].offset + slots[p].size_bytes as u64 == slots[i].offset => run.push(i),\n            Some(_) => { flush_run(&run); run.clear(); run.push(i); } // GAP - never widen into neighbor bytes\n            None => run.push(i),\n        }\n    }\n    flush_run(&run); // one staging copy + ONE write_buffer for the whole run\n}".to_string(),
+        },
+        // ── pool-reservation-token-outlives-raw-view — the raw view is not
+        // ownership; the wrapper Handle is the title (A) ──
+        //
+        // Source: riir-gpu weight_buffer_cache.rs L40-L43 ("The Handle must stay
+        // alive (held by the cache) to prevent CubeCL from recycling the buffer")
+        // + L56-L62 ("The Handle owns the CubeCL pool reservation that backs the
+        // buffer") + L61-L62 (pub handle: Handle - the load-bearing field).
+        //
+        // Distinct from per-dispatch-pointer-re-extraction (B21 - pool MOVEMENT
+        // staleness; this is the drop-re-issues direction) and
+        // slow-path-bootstraps-raw-buffer-hotswap-cache (B39 - builds slots;
+        // this keeps them sound).
+        KernelRule {
+            rule_id: "pool-reservation-token-outlives-raw-view".to_string(),
+            gpu_concept: "A cached raw sub-allocation view (native buffer + offset) is NOT an ownership token for the pooled range. The wrapper Handle owns the pool reservation; if it drops, the manager marks the range free and re-issues it to the next allocation - the still-alive raw view then aliases a DIFFERENT tenant's bytes. The cache struct must carry the wrapper handle as a load-bearing field: it looks vestigial (nothing binds it), but deleting it corrupts unrelated tensors. Keep handle and view together in the slot struct, document the handle as the reservation token, and on wrapper-runtime swap re-derive the view from a live handle. Distinct from per-dispatch-pointer-re-extraction (B21 - the pool may MOVE the allocation, so re-extract pointers; this is the opposite direction: DROP the handle and the range is re-issued while the view survives), from slow-path-bootstraps-raw-buffer-hotswap-cache (B39 - builds the slot cache; this states the retention invariant that keeps it sound).".to_string(),
+            ref_shape: "// naive: \"cleaning up\" the seemingly-unused wrapper handle\nstruct Slot {\n    buffer: wgpu::Buffer, // raw view - kept\n    offset: u64,\n    // handle: Handle,  <- deleted as \"unused\": the pool frees the range\n    //           and re-issues it - this slot now writes a NEIGHBOR's bytes\n}".to_string(),
+            opt_pattern: "// optimized: the wrapper handle is the reservation token - load-bearing\nstruct WeightBufferSlot {\n    handle: Handle,       // OWNS the pool reservation - never drop\n    buffer: wgpu::Buffer, // raw view for queue.write_buffer\n    offset: u64,\n    size_bytes: usize,\n    // doc: buffer+offset is a VIEW, handle is the TITLE. Deleting the\n    // handle re-issues the range; the view silently aliases a new tenant.\n}".to_string(),
+        },
+        // ── gpu-type-bridge-borrows-not-clones — the CPU-to-GPU type seam
+        // borrows activations instead of cloning them twice (A) ──
+        //
+        // Source: kimi_k3_gpu_backward_sequence.rs L892-L896 (MLA double clone:
+        // all_saved_cpu via .clone().unwrap() then convert_mla_saved over .iter()
+        // - the owned Vec is dead after the map) + L1082-L1095 (Dense: 4 field
+        // clones per token per layer into a field-identical type) + L941-L943
+        // (KDA clone forced by the owned-slice API of kda_backward_sequence) +
+        // L1179-L1227 (convert_mla_saved/convert_moe_saved clone every field -
+        // zero transformation anywhere).
+        //
+        // Distinct from foreign-accumulator-bridge-copy-hoist-to-outer-loop (B40 -
+        // accumulator copy-in/out per call; this is conversion field-cloning) and
+        // variant-owned-output-buffer-clone-escape (B39 - match-arm escape).
+        KernelRule {
+            rule_id: "gpu-type-bridge-borrows-not-clones".to_string(),
+            gpu_concept: "Bridging CPU reference types to GPU module types around per-layer batched calls by cloning the saved-activation payload multiplies activation memory traffic per layer per step. The worst shape clones TWICE: first materialize an owned copy of the source collection, then run a converter that clones every field again into the GPU type - the first clone is 100% dead when the converter only takes &T. GPU 'backward saved' types are frequently field-identical to the CPU types (pure copy, zero math), so the bridge can borrow the source (per-element as_ref, or lifetime-parameterized bridge types) instead of owning. Where a batched callee's owned-slice API (&[T]) forces the clone, the fix is the API (&[&T] when the callee only reads), not the clone. Distinct from foreign-accumulator-bridge-copy-hoist-to-outer-loop (B40 - cross-crate accumulator copy-in/out per call; this is type-conversion field cloning at the CPU-GPU seam), from variant-owned-output-buffer-clone-escape (B39 - match-arm ownership escape).".to_string(),
+            ref_shape: "// naive: double clone - the owned intermediate is dead after the map\nlet all_saved_cpu: Vec<CpuSaved> = (0..l)\n    .map(|t| tokens[t].layers[i].mla_saved.clone().unwrap()) // clone #1 (owned)\n    .collect();\nlet all_saved_gpu: Vec<GpuSaved> = all_saved_cpu.iter().map(convert).collect(); // clone #2 per field".to_string(),
+            opt_pattern: "// optimized: borrow the source - the converter only needs &T\nlet all_saved_gpu: Vec<GpuSaved> = (0..l)\n    .map(|t| convert(tokens[t].layers[i].mla_saved.as_ref().unwrap())) // &T in, one clone out\n    .collect();\n// where the callee's owned-slice API forces the clone, fix the API instead:\n// callee reads - takes refs, not an owned Vec<CpuSaved>\nfn backward_batched(saved: &[&CpuSaved], grads: &mut Grads) {}".to_string(),
+        },
+        // ── superseded-primitive-machinery-zombie — retire support machinery
+        // with its consumer; test-only callers are the tell (A) ──
+        //
+        // Source: kimi_k3_gpu_backward_sequence.rs L13 (header still claims
+        // "LM head backward: lm_head_backward_gpu (T6.5) - 1 GPU GEMV") vs
+        // L735-L741 + L790-L796 (production LM head is CPU:
+        // batched_transpose_matvec + batched_outer_product_acc) + L476-L481
+        // (boot builds the handle) + L489-L526 (per-step 640 MB-class staging
+        // upload + GPU transpose dispatch + submit) + L281-L286 (staging buffer
+        // sized hidden*vocab*4); lm_head_backward_gpu itself
+        // (kimi_k3_gpu_backward.rs L457) has exactly one caller - its own test
+        // (L3617). riir-train kimi_k3_train.rs L2200-L2210 still justifies the
+        // wiring with the pre-replacement perf claim (~641ms vs ~17ms).
+        //
+        // Distinct from derive-shape-from-payload-not-cached-field (B32b) and
+        // pre-transposed-consumer-layout-handles-build-once (B34 - LIVE-handle
+        // staleness; this handle has no reader at all).
+        KernelRule {
+            rule_id: "superseded-primitive-machinery-zombie".to_string(),
+            gpu_concept: "When a composition path replaces a per-module GPU primitive with a new one (per-token GEMV -> CPU batched primitives), the superseded primitive's support machinery - pre-built handle, per-step transpose + re-upload pipeline, caches, staging buffers - keeps executing every step because its lifecycle hangs off a long-lived struct's update schedule, not the now-replaced call site. The tell: the superseded fn's only remaining caller is its own parity test. A maintained-but-never-read pub handle is invisible to dead-code lints, and the cost scales with the largest matrix it maintains (a 640 MB-class staging upload + dispatch every step, plus ~2x that in permanently-dead device memory). Retire the consumer and the machinery together, or gate the machinery behind the test/bench that still consumes it; at minimum sync the architecture header that still describes the dead path. Distinct from derive-shape-from-payload-not-cached-field (B32b - stale metadata), from pre-transposed-consumer-layout-handles-build-once (B34 - handle staleness under hot-swap of LIVE handles; this handle has no reader at all).".to_string(),
+            ref_shape: "// naive: superseded GPU primitive, machinery still maintained every step\nstruct BackwardHandles {\n    lm_head: LmHeadHandle,         // built at boot...\n    lm_head_cache: Option<Slot>,   // ...transposed + re-uploaded EVERY step\n    staging: Option<wgpu::Buffer>, // 640 MB staging buffer for the transpose\n}\nfn update(&mut self, w: &Weights, queue: &Queue) {\n    // GPU transpose + parallel upload - for a GEMV that production\n    // no longer calls (the CPU batched path replaced it)\n    self.write_lm_head_transposed(w, queue); // ~640 MB upload/step, zero readers\n}".to_string(),
+            opt_pattern: "// optimized: retire the consumer and the machinery together\nfn update(&mut self, w: &Weights, queue: &Queue) {\n    // LM head gradient is CPU batched now (batched_outer_product_acc) -\n    // the GPU transpose pipeline, staging buffer, and handle cache are\n    // deleted with the primitive they served. Zero per-step upload.\n}\n// keep the parity test honest: gate the primitive behind the test feature\n#[cfg(any(test, feature = \"lm_head_gpu_parity\"))]\nfn lm_head_backward_gpu(handle: &LmHeadHandle, d_logits: &[f32]) -> Vec<f32> {\n    vec![0.0; d_logits.len()]\n}".to_string(),
+        },
     ])
 }
 
@@ -6509,7 +6655,7 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 310-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 316-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -6517,7 +6663,7 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (64 rules)
+    // A: Memory access patterns (69 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -6586,6 +6732,11 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "write-plan-derived-from-cache-slots-not-recomputed",
             "cpu-source-builder-skips-device-roundtrip",
             "foreign-accumulator-bridge-copy-hoist-to-outer-loop",
+            "aliased-slot-allocate-replace-fallback-severs-binding",
+            "pool-slot-write-coalescing-owns-only-declared-ranges",
+            "pool-reservation-token-outlives-raw-view",
+            "gpu-type-bridge-borrows-not-clones",
+            "superseded-primitive-machinery-zombie",
         ],
     ),
     // B: Compute patterns (45 rules)
@@ -6740,7 +6891,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "per-position-scalar-factored-gemv-collapse",
         ],
     ),
-    // E: Parallelism patterns (17 rules)
+    // E: Parallelism patterns (18 rules)
     (
         KernelCategory::Parallelism,
         "E: parallelism",
@@ -6762,6 +6913,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "collect-then-resolve-snapshot-batch",
             "grid-over-output-thread-private-sweep",
             "mask-sentinel-matches-reduction-identity",
+            "concurrent-disjoint-write-buffer-parallelizes-uploads",
         ],
     ),
     // F: Flash-attention tiling (10 rules)
@@ -7020,9 +7172,10 @@ mod tests {
         // Batch 38 (4): env-flag-resolved-once-not-per-dispatch, flat-activation-slots-as-readback-target, transient-spike-pins-persistent-scratch, transposed-consumption-accumulate-not-gather (gemma4_q4k_train/ forward_batched.rs + backward.rs — completes the Q4_K cluster).
         // Batch 39 (9): riir-gpu production kernels — autotune-cache-extract-outlives-owner, append-cache-rewind-overwrite-in-place, slow-path-bootstraps-raw-buffer-hotswap-cache, entrypoint-variants-share-layer-body, elementwise-offload-needs-device-side-anchor, tiny-param-buffer-rebuild-over-cache, readback-destination-passing-free-fn, variant-owned-output-buffer-clone-escape, pipeline-layer-boundary-device-handle (kimi_k3_gpu_forward.rs — the KimiK3 full-model decode forward: variant family + hot-swap + rewind + readback + borrow-escape cluster).
         // Batch 40 (7): riir-gpu production kernels — host-scratch-mirrors-slot-order-for-coalesced-writes, write-plan-derived-from-cache-slots-not-recomputed, cpu-source-builder-skips-device-roundtrip, expert-loop-two-phase-split-batch-across-iterations, rmsnorm-backward-gamma-scope-correction-term, per-position-scalar-factored-gemv-collapse, foreign-accumulator-bridge-copy-hoist-to-outer-loop (kimi_k3_gpu_backward.rs — the KimiK3 GPU backward: handle/update infrastructure + dense SiTU FFN + MoE + MLA + KDA backward compute; 2 critical wrong-math bugs + NaN-vacuous parity suite filed as Issue 693).
+        // Batch 41 (6): riir-gpu production kernels — concurrent-disjoint-write-buffer-parallelizes-uploads, aliased-slot-allocate-replace-fallback-severs-binding, pool-slot-write-coalescing-owns-only-declared-ranges, pool-reservation-token-outlives-raw-view, gpu-type-bridge-borrows-not-clones, superseded-primitive-machinery-zombie (weight_buffer_cache.rs + kimi_k3_gpu_backward_sequence.rs — the KimiK3 backward sequence PRODUCTION caller path + the write substrate; Issue 693 H1/H2 production routing pinned + orphaned-write fallback + zombie LM-head machinery filed as Issue 694).
         // Batch 35 (8): riir-gpu production kernels — mask-sentinel-matches-reduction-identity, smem-staging-gated-by-cross-thread-reuse, kernelize-host-chain-after-sync-batching-floor, block-reduction-separate-scratch-runtime-strides, saturating-nonlinearity-recovery-breaks-near-cap, adapter-grad-join-mirrors-forward-delta-insertion-point, side-consumer-readback-alias-live-handle-for-dependent-dispatch, quadratic-attention-intermediates-recompute-from-linear-saves (gemma2_cubecl_train/ — the Gemma-2 training cluster: fused causal attention kernel Issue 430 Option B + hybrid LoRA training fwd/bwd).
-        // Total: 209. // (historical batch-30 snapshot; current 310)
-        assert_eq!(corpus.entries.len(), 310, "batches 1-40 should have 310 rules");
+        // Total: 209. // (historical batch-30 snapshot; current 316)
+        assert_eq!(corpus.entries.len(), 316, "batches 1-41 should have 316 rules");
     }
 
     #[test]
@@ -9373,6 +9526,87 @@ mod tests {
         }
     }
 
+    #[test]
+    fn batch41_rules_present() {
+        let corpus = build_kernel_seed_corpus();
+        let ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        // A (5 new): aliased-slot fallback, write coalescing, reservation token, type bridge, zombie machinery
+        assert!(ids.contains(&"aliased-slot-allocate-replace-fallback-severs-binding"), "aliased slot fallback");
+        assert!(ids.contains(&"pool-slot-write-coalescing-owns-only-declared-ranges"), "pool slot coalescing");
+        assert!(ids.contains(&"pool-reservation-token-outlives-raw-view"), "reservation token");
+        assert!(ids.contains(&"gpu-type-bridge-borrows-not-clones"), "type bridge borrows");
+        assert!(ids.contains(&"superseded-primitive-machinery-zombie"), "zombie machinery");
+        // E (1 new): concurrent disjoint uploads
+        assert!(ids.contains(&"concurrent-disjoint-write-buffer-parallelizes-uploads"), "concurrent uploads");
+    }
+
+    #[test]
+    fn batch41_concepts_covered() {
+        // Distinctive ASCII substrings located by rule_id (the 32a convention).
+        let corpus = build_kernel_seed_corpus();
+        let concept = |id: &str| -> String {
+            corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-41 rule '{id}' missing"))
+                .gpu_concept
+                .clone()
+        };
+        // E: concurrent-disjoint-write-buffer-parallelizes-uploads
+        let c = concept("concurrent-disjoint-write-buffer-parallelizes-uploads");
+        assert!(c.contains("disjoint offsets")
+            && c.contains("host-bandwidth-bound"), "concurrent-disjoint-write-buffer-parallelizes-uploads concept");
+        // A: aliased-slot-allocate-replace-fallback-severs-binding
+        let c = concept("aliased-slot-allocate-replace-fallback-severs-binding");
+        assert!(c.contains("never fall back to allocate-and-replace")
+            && c.contains("boot weights"), "aliased-slot-allocate-replace-fallback-severs-binding concept");
+        // A: pool-slot-write-coalescing-owns-only-declared-ranges
+        let c = concept("pool-slot-write-coalescing-owns-only-declared-ranges");
+        assert!(c.contains("union of declared slot ranges")
+            && c.contains("DISCOVER it"), "pool-slot-write-coalescing-owns-only-declared-ranges concept");
+        // A: pool-reservation-token-outlives-raw-view
+        let c = concept("pool-reservation-token-outlives-raw-view");
+        assert!(c.contains("NOT an ownership token")
+            && c.contains("re-issues it"), "pool-reservation-token-outlives-raw-view concept");
+        // A: gpu-type-bridge-borrows-not-clones
+        let c = concept("gpu-type-bridge-borrows-not-clones");
+        assert!(c.contains("field-identical")
+            && c.contains("the first clone is 100% dead"), "gpu-type-bridge-borrows-not-clones concept");
+        // A: superseded-primitive-machinery-zombie
+        let c = concept("superseded-primitive-machinery-zombie");
+        assert!(c.contains("only remaining caller")
+            && c.contains("never-read"), "superseded-primitive-machinery-zombie concept");
+    }
+
+    #[test]
+    #[cfg(not(feature = "kernel_verify"))]
+    fn batch41_pseudocode_parses() {
+        // G1 for Batch 41: every new rule's ref_shape AND opt_pattern must
+        // syn-parse as valid Rust (the L2 pruner verdict).
+        use crate::domain::HealDomain;
+        let corpus = build_kernel_seed_corpus();
+        let ids = [
+            "concurrent-disjoint-write-buffer-parallelizes-uploads",
+            "aliased-slot-allocate-replace-fallback-severs-binding",
+            "pool-slot-write-coalescing-owns-only-declared-ranges",
+            "pool-reservation-token-outlives-raw-view",
+            "gpu-type-bridge-borrows-not-clones",
+            "superseded-primitive-machinery-zombie",
+        ];
+        for id in ids {
+            let entry = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-41 rule '{id}' missing"));
+            let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+            assert!(ref_verdict.parses, "batch-41 ref_shape for '{id}' must parse");
+            let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+            assert!(opt_verdict.parses, "batch-41 opt_pattern for '{id}' must parse");
+        }
+    }
+
 
 
     // ════════════════════════════════════════════════════════════════════
@@ -9386,7 +9620,7 @@ mod tests {
 
     #[test]
     fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-        // Every rule_id in the 310-rule corpus must appear in exactly one category.
+        // Every rule_id in the 316-rule corpus must appear in exactly one category.
         let corpus = build_kernel_seed_corpus();
         let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
         let mut categorized: Vec<&str> = Vec::new();
@@ -9419,11 +9653,11 @@ mod tests {
     fn kernel_categories_counts_match_plan_003_table() {
         // Pin per-category rule counts to the Plan 003 table (updated for Batch 40).
         let expected = [
-            (KernelCategory::MemoryAccess, 64),
+            (KernelCategory::MemoryAccess, 69),
             (KernelCategory::Compute, 45),
             (KernelCategory::Fusion, 32),
             (KernelCategory::Dispatch, 54),
-            (KernelCategory::Parallelism, 17),
+            (KernelCategory::Parallelism, 18),
             (KernelCategory::FlashAttnTiling, 10),
             (KernelCategory::LinearAttnRecurrence, 19),
             (KernelCategory::MoeDispatchBackward, 14),
@@ -9442,9 +9676,9 @@ mod tests {
                 "Plan 003: category {cat:?} has {} rules, expected {count}",
                 entry.2.len());
         }
-        // Sum must equal 303.
+        // Sum must equal 316.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 310, "Plan 003: category totals must sum to 310");
+        assert_eq!(total, 316, "Plan 003: category totals must sum to 316");
     }
 
     #[test]
@@ -9454,7 +9688,7 @@ mod tests {
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 310, "Plan 003: grouped corpus has {total} rules, expected 310");
+        assert_eq!(total, 316, "Plan 003: grouped corpus has {total} rules, expected 316");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");
