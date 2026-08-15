@@ -92,7 +92,7 @@ at 6/7 + doc-sync as the closing pass).
     their WIP file): saved their copy → committed base + my 3 edits →
     re-applied their WIP with my fixture fix merged. Their diff vs new
     HEAD = exactly their 2 hunks.
-- [ ] T5 Batch 32 via the skill: mine `riir-ai/crates/riir-gpu/src/edge_lora/` + `kernels/` wrappers → Research 034, corpus 217 → ~227, full GOAT + docs + push
+- [-] T5 Batch 32 via the skill: mine `riir-ai/crates/riir-gpu/src/edge_lora/` + `kernels/` wrappers → Research 034, corpus 217 → ~227, full GOAT + docs + push. **32a DONE (2026-08-15, commit 154025c):** core cluster (edge_module + types + training + adaptive_width), 11 rules, corpus 217→228, Research 034, GOAT G1/G2/G3 PASS, bug yield filed as riir-ai Issue 683. **32b remains** (self-play/arena/consolidation half + kernels/ wrappers) — tracked as the NEXT entry in the skill's mining-queue snapshot; needs a fresh session's budget. Unblock: none — pick up from the snapshot.
 - [ ] T6 Sweep remaining idle-queue items in order (issues → plans → benches → unblock → defer-marking) at least one full cycle; record friction back into the skill
 - [ ] T8 First boundary-guard routine check via the idle queue (item 6, before bench regression): `ci_boundary_guard.sh` + 7-surface greps, file violations, log the run
 - [ ] T9 First substrate-first drift audit via the idle queue (item 7): Mode 2 parallel-system scan, classify findings, file issues
