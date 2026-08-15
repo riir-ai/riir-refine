@@ -121,6 +121,16 @@ cargo run --features latent_retrieval --bin cargo-heal -- --fix --write <target-
   "cargo|riir|katgpt" | grep -v grep` — no second compute consumer
   (Unity Editor + Zed are exempt). Bench 649: 12.3× correctness swing
   under contention.
+- **Long-running measurement on this box → grep/doc/web units only** (the
+  Plan 337 lesson, 2026-08-15): while a measurement saturates the machine
+  (e.g. a 32K precompute at ~13 cores + 13 GB RSS with the measurement
+  previously pushed into swap), run ONLY zero-contention queue units —
+  items 4 (hygiene), 6 (boundary-guard), 7 (substrate-first), 9-13 (web /
+  defer-marking / research / doc-sync). Defer build-dependent units (3, 5,
+  8 — sweeps, mining GOAT, benches) until it completes; a cargo build both
+  steals CPU from the measurement AND risks re-triggering the swap tax.
+  The GPU-exclusivity check above covers benches; this extends it to
+  CPU/memory-heavy measurements.
 - Don't fix unrelated bugs — note them in the final summary.
 - Low confidence → STOP, emit the 4-part `## Summary` (the auto_prompt
   harness depends on that exact format), let the user re-aim.

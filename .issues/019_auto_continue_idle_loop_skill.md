@@ -93,7 +93,22 @@ at 6/7 + doc-sync as the closing pass).
     re-applied their WIP with my fixture fix merged. Their diff vs new
     HEAD = exactly their 2 hunks.
 - [x] T5 Batch 32 via the skill: mine `riir-ai/crates/riir-gpu/src/edge_lora/` + `kernels/` wrappers → Research 034, corpus 217 → ~227, full GOAT + docs + push. **32a DONE (2026-08-15, commit 154025c):** core cluster (edge_module + types + training + adaptive_width), 11 rules, corpus 217→228, Research 034, GOAT G1/G2/G3 PASS, bug yield filed as riir-ai Issue 683. **32b-1 DONE (2026-08-15, commit e6bbe81):** training half (topology_trainer + chain_commit + sigmoid_gate + mod), 10 rules, corpus 228→238, Research 035, GOAT G1/G2/G3 PASS (3 new batch32b tests), bug yield filed as riir-ai Issue 684. **32c DONE (2026-08-15, landed as "32b-2"):** self-play/arena/consolidation half (sleep_consolidation, arena_eval, {go,bomber,fft}_self_play, cross_game_{edge,real} — no kernels/ subdir existed, the snapshot note was stale), 13 rules, corpus 238→251, Research 036, GOAT G1/G2/G3 PASS (312 kernel_heal + 201 default, 3 new batch32c tests, clippy 0 both states), bug yield filed as riir-ai Issue 685 (quadratic centroid storm + adapter-skeleton triplication). The edge_lora module is now FULLY MINED — Batch 32 COMPLETE across 3 sessions (34 rules total, 217→251).
-- [ ] T6 Sweep remaining idle-queue items in order (issues → plans → benches → unblock → defer-marking) at least one full cycle; record friction back into the skill
+- [-] T6 Sweep remaining idle-queue items in order (issues → plans → benches → unblock → defer-marking) at least one full cycle; record friction back into the skill
+  - **DEFERRED mid-cycle (2026-08-15 evening) — reason: the Plan 337 32K
+    measurement saturates this box until ~06:00-10:00 Aug 16; per the new
+    discipline note, build-dependent items (3 clippy sweep, 5 mining GOAT,
+    8 benches) are deferred to protect the measurement (swap-tax lesson).**
+  - **Partial-cycle progress recorded:** item 1 issues scan DONE (all open
+    issues across 7 repos need builds — none actionable tonight); item 2
+    plans scan DONE (Plan 337 gated on measurement; no other in-flight);
+    item 6 boundary-guard DONE (T8, 7/7 clean); item 7 substrate-first
+    audit DONE (T9, no violations); items 9 (unblock search) scanned —
+    zero blocked items with online-searchable blockers. Items 10-13 remain
+    for the next cycle.
+  - **Friction recorded back into the skill (this cycle's finding):** new
+    discipline note "Long-running measurement on this box → grep/doc/web
+    units only" — the queue previously had no carve-out for measurement
+    runs (the GPU-exclusivity check covered benches only).
 - [x] T8 First boundary-guard routine check via the idle queue (item 6, before bench regression): `ci_boundary_guard.sh` + 7-surface greps, file violations, log the run
   - **DONE 2026-08-15 (evening).** First idle-queue invocation. A same-day
     morning quarterly gate (different session, katgpt-rs handoff) had already
