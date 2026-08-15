@@ -692,6 +692,55 @@
 //!   (P1), Phase 2 processing zero-gradient positions, the
 //!   ~2.06M-alloc and 345,088-round-trip storms, the CPU weight-grad
 //!   dominance contradicting the header's bottleneck claim, plus 8 more.
+//! - **Batch 35 (2026-08-15, Research 039):** the Gemma-2 TRAINING
+//!   cluster (`gemma2_cubecl_train/`: `mod.rs` + `attention_gpu.rs` — the
+//!   fused causal attention kernel of Issue 430 Option B + the hybrid
+//!   `LoRA` training forward/backward; the training counterpart of Batch
+//!   25's inference-side cluster, with resident.rs deferred to a later
+//!   batch): `mask-sentinel-matches-reduction-identity` (E — masked
+//!   lanes PARTICIPATE in a block reduction by writing the identity
+//!   element, and the sentinel is REWRITTEN between reductions with
+//!   different identities: -inf for max, then 0.0 before the sum),
+//!   `smem-staging-gated-by-cross-thread-reuse` (A — stage an operand
+//!   into smem iff its within-workgroup reuse exceeds one; single-use
+//!   operands stream from global in the same dot loop),
+//!   `kernelize-host-chain-after-sync-batching-floor` (C — a
+//!   host-serviced segment floors at 2 syncs (down+up) after all
+//!   batching; kernelize it when intermediates are chain-local and the
+//!   host does no work in the gap — the 52 = 26 layers x 2 proof),
+//!   `block-reduction-separate-scratch-runtime-strides` (B — reduce
+//!   into separate scratch (the source feeds a later pass) + strides
+//!   derived from the runtime extent, never a hardcoded unroll — both
+//!   failure modes shipped and failed G1 on 4090),
+//!   `saturating-nonlinearity-recovery-breaks-near-cap` (N — recovering
+//!   a derivative from the cached output yields exactly 0 once the
+//!   output rounds to 1.0 in f32; recompute the RAW argument when
+//!   saturation is reachable — the codebase makes the opposite choice
+//!   at its two sites), `adapter-grad-join-mirrors-forward-delta-
+//!   insertion-point` (H — additive CPU-side `LoRA` deltas on GEMV
+//!   outputs mean the backward joins the adapter grad at the same
+//!   point and the base transposes are immortal by construction; the
+//!   merged convention silently drops the term — Issue 687 H2),
+//!   `side-consumer-readback-alias-live-handle-for-dependent-dispatch`
+//!   (A — read an intermediate for side consumers but hand the next
+//!   dispatch the still-live handle; the re-upload burns ~53 MB/step),
+//!   `quadratic-attention-intermediates-recompute-from-linear-saves`
+//!   (A — save the Theta(N x d) tensors, recompute the Theta(N^2)
+//!   chain in hoisted scratch; the recompute also yields the raw
+//!   pre-softcap argument the saturating backward needs). Corpus:
+//!   **275 rules across 15 categories (A–O)**. ONE coordinator seed
+//!   KILLED by verification ("thread role rotation" is ambient fused-
+//!   kernel structure, not decision content — falsification 3-for-3);
+//!   Seed 2 CORRECTED (the 52 is post-batching, not pre — that's what
+//!   makes the floor rule distinct). 12 candidates dropped as
+//!   duplicates/thin. Bug yield filed as riir-ai Issue 688 (15
+//!   hazards: the 3-way sync-count doc inconsistency, ~1.1 GB/step
+//!   alloc churn from unused `_into` variants + the engine doc-lie,
+//!   ~82 MB dead activation slots, the per-launch params buffer, the
+//!   256-constant triplication, un-asserted `q_dim`/`kv_dim` derivation,
+//!   KV-cache liveness contract, per-layer grad-buffer churn, 262 MB
+//!   `EngineActivations` per step, the 2.6x handle-memory doc
+//!   understatement, the h-recompute ~9.7 G MACs, and more).
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
@@ -5277,6 +5326,122 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
             ref_shape: "// naive: the helper computes inv_rms internally and returns only\n// g_x; the caller needs inv_rms AGAIN for the gamma gradient —\n// recomputing the full reduction pass at every call site.\nfn rmsnorm_backward(g_y: &[f32], x: &[f32], gamma: &[f32], eps: f32) -> Vec<f32> {\n    let n = x.len();\n    let sum_sq: f32 = x.iter().map(|&v| v * v).sum(); // reduction pass 1\n    let inv_rms = 1.0 / (sum_sq / n as f32 + eps).sqrt();\n    let mut g_x = vec![0.0f32; n];\n    // ... g_x math using inv_rms ...\n    g_x // statistic hidden from the caller\n}\nfn caller(g_y: &[f32], x: &[f32], gamma: &[f32], g_gamma: &mut [f32], eps: f32) {\n    let _g_x = rmsnorm_backward(g_y, x, gamma, eps);\n    let n = x.len();\n    let sum_sq: f32 = x.iter().map(|&v| v * v).sum(); // pass 2 — SAME reduction\n    let inv_rms = 1.0 / (sum_sq / n as f32 + eps).sqrt();\n    for i in 0..n {\n        g_gamma[i] += g_y[i] * inv_rms * x[i];\n    }\n}\n".to_string(),
             opt_pattern: "// optimized: the helper exposes the statistic it already computed —\n// the gamma-grad accumulation consumes it without a second reduction.\nstruct RmsBwd {\n    g_x: Vec<f32>,\n    inv_rms: f32,\n}\nfn rmsnorm_backward_with_stat(g_y: &[f32], x: &[f32], gamma: &[f32], eps: f32) -> RmsBwd {\n    let n = x.len();\n    let sum_sq: f32 = x.iter().map(|&v| v * v).sum(); // reduction ONCE\n    let inv_rms = 1.0 / (sum_sq / n as f32 + eps).sqrt();\n    let mut g_x = vec![0.0f32; n];\n    // ... g_x math ...\n    RmsBwd { g_x, inv_rms }\n}\nfn caller(g_y: &[f32], x: &[f32], gamma: &[f32], g_gamma: &mut [f32], eps: f32) {\n    let r = rmsnorm_backward_with_stat(g_y, x, gamma, eps);\n    for i in 0..x.len() {\n        g_gamma[i] += g_y[i] * r.inv_rms * x[i]; // no 2nd reduction pass\n    }\n}\n".to_string(),
         },
+        // ── mask-sentinel-matches-reduction-identity — skip → identity-element
+        // participation (E) ──
+        // Source: riir-gpu gemma2_cubecl_train/attention_gpu.rs L149-152 (masked
+        // lanes write neg_inf into smem_scores), L194-198 (the neg-inf → 0.0
+        // sentinel REWRITE between the max and sum reductions), L222-225 (the
+        // normalize pass re-zeroes the sum identity), L235 (phase 3 bounds at
+        // `while j3 <= i` — the non-reduction consumer).
+        KernelRule {
+            rule_id: "mask-sentinel-matches-reduction-identity".to_string(),
+            gpu_concept: "when a block-wide reduction runs over a masked/variable-extent domain (causal attention: only j <= i is valid), masked lanes must PARTICIPATE by writing the reduction's IDENTITY element (neg-inf for max, 0.0 for sum) rather than skipping — the tree stays full-width and extent-independent, and no lane ever reduces garbage — and when the same buffer feeds two reductions with DIFFERENT identities, rewrite the sentinel between them (neg-inf for the max pass, then 0.0 before the sum pass). Consumers outside the reduction may bound at the valid extent instead (the weighted-sum loop iterates j <= i directly). Distinct from derive-params-from-global-invocation-id (derives WHICH lanes are masked — this governs what the masked lanes WRITE) and from tree-reduction-depth-over-sequential-accumulate (tree vs sequential for accuracy — this is participation shape) and from broadcast-uniform-skip-reduce (post-reduction thread-uniformity — this is pre-reduction filling).".to_string(),
+            ref_shape: "// naive: masked lanes opt out entirely — their slots stay uninitialized\n// (or hold stale values), and the full-width reduction tree reads them\nfn score_masked_naive(j: usize, i: usize, score: f32, smem_scores: &mut [f32]) {\n    if j <= i {\n        smem_scores[j] = score;\n    } // else: SKIP — slot left uninitialized; the max tree reads ALL lanes\n}\n// max over every lane up to seq_len: max(score, garbage) == garbage\nfn max_tree_full_width(smem: &[f32], seq_len: usize) -> f32 {\n    let mut m = f32::NEG_INFINITY;\n    for t in 0..seq_len {\n        m = m.max(smem[t]); // masked slots poison the max (or the sum)\n    }\n    m\n}\n".to_string(),
+            opt_pattern: "// optimized: masked lanes PARTICIPATE — writing the reduction's identity\nfn score_masked_identity(j: usize, i: usize, score: f32, neg_inf: f32, smem_scores: &mut [f32]) {\n    if j <= i {\n        smem_scores[j] = score;\n    } else {\n        smem_scores[j] = neg_inf; // identity for max: max(x, -inf) == x\n    }\n}\n// BEFORE the sum-reduction, REWRITE the sentinel (different identity!)\nfn exp_masked_identity(j: usize, i: usize, max_score: f32, smem_scores: &mut [f32]) {\n    if j <= i {\n        let diff = smem_scores[j] - max_score;\n        smem_scores[j] = diff.exp();\n    } else {\n        smem_scores[j] = 0.0; // identity for sum: + 0.0 is an exact no-op\n    }\n}\n// outside reductions, bound at the valid extent (skip IS safe there)\nfn weighted_sum_bounded(weights: &[f32], v: &[f32], kv_dim: usize, i: usize, kv_off: usize, d: usize) -> f32 {\n    let mut acc = 0.0;\n    let mut j3 = 0;\n    while j3 <= i {\n        acc += weights[j3] * v[j3 * kv_dim + kv_off + d];\n        j3 += 1;\n    }\n    acc\n}\n".to_string(),
+        },
+        // ── smem-staging-gated-by-cross-thread-reuse — stage everything →
+        // stage iff multi-reader (A) ──
+        // Source: riir-gpu gemma2_cubecl_train/attention_gpu.rs L123-129 (phase-0
+        // cooperative staging of Q[i,h,:] into smem_q) + L141 (the SAME dot loop
+        // reads Q from smem (multi-reader) while K streams from global
+        // (single-reader)) + L18-19 (the doc stating the asymmetry).
+        KernelRule {
+            rule_id: "smem-staging-gated-by-cross-thread-reuse".to_string(),
+            gpu_concept: "stage an operand into shared memory iff its within-workgroup reuse count exceeds one — each element read by MULTIPLE threads (a per-workgroup-invariant row such as Q[i,h,:] is re-read by every scoring thread, up to block x head_dim reads) — while operands read exactly once by exactly one thread (each K row j is private to thread j) stream directly from global: staging them buys nothing and costs smem plus a barrier. The selection gate (including the negative half) is the distinct content: one dot loop legitimately reads Q from smem and K from global in the same breath. Distinct from cooperative-block-wide-quantize-staging (the mechanics of staging when reuse exists — this is the WHEN/when-not gate) and from kv-block-streaming (blocks streamed THROUGH smem for capacity — the single-use operand here never enters smem at all).".to_string(),
+            ref_shape: "// naive: (a) every thread pulls the shared row from global inside its dot\n// loop — block x head_dim redundant global reads for ONE row; or (b) the\n// symmetric over-correction — stage BOTH operands, wasting smem + a barrier\n// on the single-use one\nfn dot_naive_global(q_global: &[f32], k: &[f32], q_off: usize, head_dim: usize, j: usize, kv_dim: usize) -> f32 {\n    let mut dot = 0.0f32;\n    for d in 0..head_dim {\n        dot += q_global[q_off + d] * k[j * kv_dim + d]; // q re-read by EVERY thread\n    }\n    dot\n}\nfn dot_naive_stage_both(smem_q: &[f32], smem_k_row: &[f32], head_dim: usize) -> f32 {\n    // K row j was staged into smem — but ONLY thread j ever reads it:\n    // the staging pass + barrier bought nothing\n    let mut dot = 0.0f32;\n    for d in 0..head_dim {\n        dot += smem_q[d] * smem_k_row[d];\n    }\n    dot\n}\n".to_string(),
+            opt_pattern: "// optimized: stage ONLY the cross-thread-shared operand; the single-use\n// one streams from global in the same dot loop — the asymmetry is the rule\nfn dot_asymmetric(smem_q: &[f32], k: &[f32], k_off: usize, head_dim: usize, j: usize, kv_dim: usize) -> f32 {\n    let mut dot = 0.0f32;\n    for d in 0..head_dim {\n        // Q from SHARED (every thread re-reads all of it — reuse = block)\n        // K from GLOBAL (read by exactly one thread — reuse = 1, no stage)\n        dot += smem_q[d] * k[j * kv_dim + k_off + d];\n    }\n    dot\n}\n".to_string(),
+        },
+        // ── kernelize-host-chain-after-sync-batching-floor — post-batching
+        // floor of 2 → one fused dispatch (C) ──
+        // Source: riir-gpu gemma2_cubecl_train/attention_gpu.rs L3-4 ("Eliminates
+        // the 52 GPU↔CPU sync points per forward") + resident.rs L687-688 (the
+        // decomposition: "Attention is computed on CPU (2 syncs per layer for QKV
+        // readback and attn_out upload)") + L844-851 (Option C ALREADY reads QKV
+        // in one batched sync — the floor is post-batching) + L862
+        // (attn_out_clone — the external-consumer boundary) + dispatch.rs
+        // L1583-1617 (dispatch_attention_fused_gpu). n_layer=26 → 52.
+        KernelRule {
+            rule_id: "kernelize-host-chain-after-sync-batching-floor".to_string(),
+            gpu_concept: "a host-serviced op-chain inside a GPU-resident pipeline has a sync floor of 2 per invocation (download operands + upload result) — download batching can collapse N operand reads into 1 but never below 2 — so when the segment repeats per outer-loop iteration (2 syncs x 26 layers = 52 per forward), its intermediates are chain-local (the seq-squared x heads score matrix is consumed only by the next op, never inspected by the host), and the host does no productive work in the gap, kernelize the whole chain into one dispatch with zero syncs — placing the output boundary at the first tensor consumed OUTSIDE the chain (attn_out stays a handle for the backward; the scores never materialize anywhere at all). Distinct from merge-dispatches-into-single-compute-pass / chain-dispatches-single-sync-point (fuse GPU-to-GPU dispatches that never touched the host), from batched-downloads-single-sync-cycle (reduces sync count but KEEPS the host boundary — this rule is the floor that proves batching alone cannot win), and from hybrid-cpu-elementwise-gpu-throughput-sync-points (the complement: when the boundary should STAY because the host fills the gaps with real work).".to_string(),
+            ref_shape: "// naive: the host-serviced segment AFTER batching was already applied —\n// downloads collapsed to ONE batched sync, but a host round trip floors\n// at 2 (down + up). 2 syncs x 26 layers = 52 per forward, and batching\n// cannot reduce it further.\nfn attention_cpu_path(client: &Client, q: &Handle, k: &Handle, v: &Handle) -> Handle {\n    let qkv = read_batched(client, vec![q.clone(), k.clone(), v.clone()]); // sync 1 (down)\n    let attn = compute_attention_cpu(&qkv[0], &qkv[1], &qkv[2]); // host transforms only\n    client.create_from_slice(&attn) // sync 2 (up) — the floor; nothing left to batch\n}\n".to_string(),
+            opt_pattern: "// optimized: intermediates are chain-local and the host does no work in\n// the gap -> kernelize the chain; the output boundary is the first tensor\n// consumed OUTSIDE the chain.\nfn attention_fused(client: &Client, q: &Handle, k: &Handle, v: &Handle) -> Handle {\n    let attn_out = dispatch_attention_fused(client, q, k, v); // ONE dispatch, 0 syncs\n    // attn_out is the boundary: the backward clones the handle; the\n    // seq-squared x heads score matrix never materializes ANYWHERE\n    attn_out\n}\n".to_string(),
+        },
+        // ── block-reduction-separate-scratch-runtime-strides — in-place +
+        // hardcoded steps → scratch + runtime strides (B) ──
+        // Source: riir-gpu gemma2_cubecl_train/attention_gpu.rs L157-167 (the
+        // shipped bug-fix record: Issue 430 G1 FAIL on 4090 — in-place reduction
+        // destroyed scores; the 7-step unroll was incomplete at 256 and
+        // double-counted at 4) + L168-188 (separate smem_reduce + while-loop
+        // stride from seq_len/2) + L193 ("smem_scores still holds the ORIGINAL
+        // scores") + L204-216 (the sum tree repeats the shape).
+        KernelRule {
+            rule_id: "block-reduction-separate-scratch-runtime-strides".to_string(),
+            gpu_concept: "a multi-pass reduction consumer (softmax: max-pass then exp then sum-pass, both passes needing the ORIGINAL scores) must reduce into a SEPARATE scratch buffer, never in-place — the first tree overwrites values the later elementwise pass still reads — and the tree's stride sequence must be derived from the runtime extent (stride = extent/2, halving while stride > 0), never a hardcoded unrolled step count: a 7-step unroll on 256 lanes needs 8 (silently reducing only half the buffer), and the same hardcode at extent 4 executes the final step redundantly and double-counts in the sum (systematic 2/3 scaling of the output). Both failure modes shipped and failed G1 on real hardware before the fix. Distinct from tree-reduction-depth-over-sequential-accumulate (choosing tree vs sequential for accuracy — this is aliasing plus size-genericity) and from dual-accumulator-single-reduction-sweep (fusing two INDEPENDENT reductions — softmax's max and sum cannot fuse: the sum depends on the max).".to_string(),
+            ref_shape: "// naive: both shipped failure modes — (1) reduce IN-PLACE on the source\n// buffer, destroying the scores the exp pass still needs; (2) hardcoded\n// unrolled step count for one assumed extent (7 steps; extent 256 needs 8,\n// extent 4 double-counts the tail)\nfn max_reduce_naive(smem_scores: &mut [f32], tid: usize) {\n    if tid < 128 {\n        let a = smem_scores[tid];\n        let b = smem_scores[tid + 128];\n        smem_scores[tid] = if a > b { a } else { b }; // source destroyed in place\n    }\n    if tid < 64 {\n        let a = smem_scores[tid];\n        let b = smem_scores[tid + 64];\n        smem_scores[tid] = if a > b { a } else { b };\n    }\n    // ... 5 more hardcoded steps — wrong count for any other extent, and\n    // smem_scores no longer holds the scores the exp pass reads\n}\n".to_string(),
+            opt_pattern: "// optimized: separate scratch + strides derived from the runtime extent\nfn max_reduce_generic(smem_scores: &[f32], smem_reduce: &mut [f32], tid: usize, seq_len: usize) -> f32 {\n    if tid < seq_len {\n        smem_reduce[tid] = smem_scores[tid]; // source PRESERVED for the exp pass\n    }\n    sync_cube();\n    let mut stride = seq_len / 2;\n    while stride > 0 {\n        // log2(extent) steps — correct for ANY power-of-2 extent\n        if tid < stride {\n            let a = smem_reduce[tid];\n            let b = smem_reduce[tid + stride];\n            smem_reduce[tid] = if a > b { a } else { b };\n        }\n        sync_cube();\n        stride /= 2;\n    }\n    smem_reduce[0]\n}\n".to_string(),
+        },
+        // ── saturating-nonlinearity-recovery-breaks-near-cap — recovery from
+        // cached output → raw-arg recompute when saturation reachable (N) ──
+        // Source: riir-engine transformer/gemma2_train/backward.rs L354-358 (the
+        // comment: "recovering tanh from the clamped score (score/softcap) loses
+        // all precision when the score saturates near the softcap ceiling") +
+        // L408-416 (the raw recompute: d/dot = scale*(1 - tanh^2(dot*scale/
+        // softcap)) evaluated on the raw dot) — CONTRASTED with the recovery
+        // form at the LM head (riir-gpu gemma2_cubecl_train/mod.rs L572-578,
+        // tanh_val = logits[v]/logit_cap), kept there because 9 x cap ~ 270
+        // is unreachable for LM-head logits.
+        KernelRule {
+            rule_id: "saturating-nonlinearity-recovery-breaks-near-cap".to_string(),
+            gpu_concept: "recovering a saturating nonlinearity's derivative from its cached OUTPUT (sech-squared from tanh via 1 - t*t, sigmoid-prime from sigma) is exact algebra but numerically void in the saturation region: once the cached output rounds to 1.0 in f32 (tanh arg >= 9, sigmoid arg >= 17), 1 - t*t yields EXACTLY 0 while the true derivative is ~1e-7 and decaying — silently zeroing gradients precisely where the forward clamped hardest. When saturation is REACHABLE in your domain (attention scores x scale can plausibly hit 9 x softcap), cache or recompute the RAW pre-nonlinearity argument instead (recomputing the dot from saved Q,K is Theta(t x d) and vanishes next to the GEMVs); reserve the recovery trick for paths where saturation is unreachable (LM-head logits reaching 9 x cap is ~270 — the recovery form is fine there). Delimits sigmoid-deriv-recovered-from-output (the recovery family) by naming the f32 saturation boundary where it silently fails — the codebase itself makes the opposite choice at the two sites. Distinct from exact-op-parity-for-analytic-backward (forward/backward op identity — this is the cached-value recovery boundary).".to_string(),
+            ref_shape: "// naive (the recovery form): derivative from the CACHED post-cap output —\n// exact algebra, numerically void once the cached output rounds to 1.0\nfn softcap_bwd_recovery(g: &[f32], logits_post_cap: &[f32], logit_cap: f32, g_raw: &mut [f32]) {\n    for v in 0..g.len() {\n        let tanh_val = logits_post_cap[v] / logit_cap; // == 1.0f32 exactly in saturation\n        g_raw[v] = g[v] * (1.0 - tanh_val * tanh_val); // 1 - 1 = exactly 0: gradient dead\n        // the true sech^2(arg) at the same point is ~1e-7 and decaying, never 0\n    }\n}\n".to_string(),
+            opt_pattern: "// optimized (the recompute form): when saturation is reachable, rebuild the\n// RAW pre-nonlinearity argument from the linear saves and evaluate there\nfn softcap_bwd_raw_recompute(g_s: &[f32], q: &[f32], k_cache: &[f32], q_off: usize, k_off: usize, head_dim: usize, scale: f32, softcap: f32, g_dot: &mut [f32], t_n: usize) {\n    for t in 0..t_n {\n        let mut dot = 0.0f32;\n        for d in 0..head_dim {\n            dot += q[q_off + d] * k_cache[t * head_dim + k_off + d]; // raw pre-cap arg\n        }\n        let arg = dot * scale / softcap;\n        let t_val = arg.tanh(); // full precision in the saturation region\n        g_dot[t] = g_s[t] * scale * (1.0 - t_val * t_val); // never collapses early\n    }\n}\n".to_string(),
+        },
+        // ── adapter-grad-join-mirrors-forward-delta-insertion-point — merged
+        // convention → additive join + immortal handles (H) ──
+        // Source: riir-gpu gemma2_cubecl_train/mod.rs L197-204 (forward:
+        // apply_lora_delta on GEMV outputs — additive CPU deltas) + L613-630
+        // (backward: lora_proj_backward + dispatch_gemv(down_t) + elementwise
+        // join — repeated at all 7 sites: L636-669, L693-709, L746-810) +
+        // L931-933 (build_backward_handles ONCE — no invalidation surface: no
+        // replace_weights exists on this class; the optimizer touches only CPU
+        // adapter params). Contrast: Issue 687 H2 (the Gemma-4 merged-weight
+        // variant DROPS the adapter input-grad term).
+        KernelRule {
+            rule_id: "adapter-grad-join-mirrors-forward-delta-insertion-point".to_string(),
+            gpu_concept: "when LoRA adapters are applied as additive CPU-side deltas on GEMV outputs (not merged into weights), the backward must add the adapter's input-gradient at exactly the forward's insertion point — base W^T @ g on the GPU via pre-transposed handles PLUS A^T(scale x B^T x g) on the CPU, summed elementwise — which keeps the base transposes immortal by construction (optimizer steps mutate only CPU adapter params, so the build-once handles have no invalidation surface at all) and keeps adapter traffic off the GPU. The handle contract is a direct consequence of the application convention, not a free choice: under the MERGED-weight convention the same base-only handles silently DROP the delta-W^T x g input-grad term (the Issue 687 H2 class — the gradient is wrong, not just slower). Distinct from pre-transposed-consumer-layout-handles-build-once (build-once mechanics + invalidation — this is the convention-to-contract implication that determines whether invalidation is even needed) and from zero-init-side-branch-frozen-base-path (B=0 value identity — this is the gradient-join placement).".to_string(),
+            ref_shape: "// naive: MERGED convention — adapter baked into the weight; the backward\n// handle built from the base only silently drops the adapter grad term\nfn forward_merged(w_base: &Mat, lora: &Lora, x: &[f32]) -> Vec<f32> {\n    let w_merged = w_base.add_scaled_outer(&lora.b, &lora.a, lora.scale); // baked in\n    gemv(&w_merged, x)\n}\nfn backward_merged_handles(w_base_t: &Mat, g_y: &[f32]) -> Vec<f32> {\n    gemv_t(w_base_t, g_y) // base term only — the delta-W^T x g term is DROPPED\n}\n".to_string(),
+            opt_pattern: "// optimized: ADDITIVE convention — base GEMV on GPU + CPU delta at the\n// output; the backward joins the adapter input-grad at the same point\nfn forward_additive(gpu: &Gpu, w: &Handle, lora: &Lora, x: &[f32]) -> Vec<f32> {\n    let mut y = gpu.dispatch_gemv(w, x); // frozen base — handle immortal by construction\n    apply_lora_delta(&mut y, x, lora); // y += scale * B(A x), CPU-side\n    y\n}\nfn backward_additive(gpu: &Gpu, w_t: &Handle, lora: &Lora, g_y: &[f32], x_saved: &[f32], g_a: &mut [f32], g_b: &mut [f32]) -> Vec<f32> {\n    let g_lora = lora_proj_backward(g_y, x_saved, lora, g_a, g_b); // A^T(scale B^T g), CPU\n    let mut g_x = gpu.dispatch_gemv(w_t, g_y); // base term, GPU, build-once handle\n    for i in 0..g_x.len() {\n        g_x[i] += g_lora[i]; // the JOIN mirrors the forward's insertion point\n    }\n    g_x\n}\n".to_string(),
+        },
+        // ── side-consumer-readback-alias-live-handle-for-dependent-dispatch —
+        // read-then-reupload → read + alias the live handle (A) ──
+        // Source: riir-gpu gemma2_cubecl/dispatch.rs L387-392 ("Sync attn_out
+        // (needed for O-LoRA input)" followed by "Re-upload for Wo GEMV" —
+        // create_from_slice of bytes still resident) vs the Q4_K sibling
+        // L498-503 ("passes attn_out_handle directly to the Wo Q4_K GEMV
+        // without reading to CPU") — consumed by gemma2_cubecl_train/mod.rs
+        // L223-226 (dispatch_attention_wo_split, Sync 2 of the training
+        // forward). q_dim x 4 B x 26 layers x seq = ~53 MB/step at seq 256.
+        KernelRule {
+            rule_id: "side-consumer-readback-alias-live-handle-for-dependent-dispatch".to_string(),
+            gpu_concept: "when a GPU-resident intermediate must be read to CPU for side consumers (a LoRA input, an activation save) AND fed to the next dependent dispatch, read it for the side consumers but hand the dependent launch the still-live device handle — re-uploading the CPU copy burns an extra device allocation plus an upload of bytes that never left the device, and the read sync already establishes ordering so the alias is safe (the Q4_K sibling path passes the handle directly as its standing proof). At Gemma-2-2B seq 256 the wasted re-upload is ~53 MB per forward step (~213 MB at seq 1024). Distinct from fan-out-shared-input-single-sync (N parallel siblings share one UPLOAD — here the data never left the device at all), from defer-readback-until-after-submit (readback timing — the read here is needed and kept), and from split-dispatch-expose-fused-intermediate (avoids a producer re-launch — here the producer runs exactly once and the waste is the re-upload of its still-live output).".to_string(),
+            ref_shape: "// naive: read the intermediate for its side consumers, then re-upload the\n// CPU copy for the dependent dispatch — an allocation + upload of bytes\n// that never left the device\nfn chain_naive(client: &Client, attn_out_handle: &Handle) -> Handle {\n    let attn_out = client.read_handle(attn_out_handle); // sync — needed (LoRA input + save)\n    let rehandle = client.create_from_slice(&attn_out); // WASTEFUL re-upload\n    dispatch_gemv(client, &rehandle) // ~53 MB/step of pure re-upload traffic\n}\n".to_string(),
+            opt_pattern: "// optimized: read for the side consumers, ALIAS the live handle for the\n// dependent launch — the read sync already ordered the writes\nfn chain_alias(client: &Client, attn_out_handle: &Handle) -> Handle {\n    let _attn_out_cpu = client.read_handle(attn_out_handle); // side consumers only\n    dispatch_gemv(client, &attn_out_handle.clone()) // the device copy is still live\n}\n".to_string(),
+        },
+        // ── quadratic-attention-intermediates-recompute-from-linear-saves —
+        // save-all → save linear, recompute quadratic (A) ──
+        // Source: riir-gpu gemma2_cubecl_train/mod.rs L216-220 (the linear
+        // save-set: q_post_rope + kv_cache.store — K/V ride the cache that
+        // already holds them) + riir-engine transformer/gemma2_train/backward.rs
+        // L333-344 (hoisted scratch: "buffers sized to seq_len cover every
+        // (p, h) iteration... Hoisting here eliminates 7 x seq_len x n_head
+        // allocations per call") + L361-372 (the Theta(t x d) recompute inside
+        // the (p, h) loop).
+        KernelRule {
+            rule_id: "quadratic-attention-intermediates-recompute-from-linear-saves".to_string(),
+            gpu_concept: "checkpoint the attention save-set at exactly the Theta(N x d) tensors (post-RoPE Q, plus K and V via the already-resident KV cache) and recompute every Theta(N-squared) intermediate (raw dots, capped scores, softmax weights) at backward in hoisted per-(position, head) scratch — storing the weights instead costs seq-squared x n_head x 4 bytes per layer (~33 MB/layer, ~870 MB across a 26-layer model at seq 1024) while the recompute is Theta(t x d) FLOPs per (p, h) that vanish next to the GEMVs, and the recompute additionally yields the RAW pre-softcap argument that the numerically-correct saturating backward requires — a save-the-scores design would both blow memory AND force the lossy recovery. Distinct from preallocated-activation-slots-inplace-save (slot mechanics for what you DO save — this is the save/recompute size-class boundary that decides WHAT to save) and from latent-encode-at-capture (stores a lossy projection instead of full state — this saves the exact linear inputs and recomputes the rest exactly).".to_string(),
+            ref_shape: "// naive: checkpoint every intermediate the backward touches — the\n// Theta(N^2) softmax weights alone cost seq^2 x n_head x 4B per layer\n// (~33 MB/layer at seq 1024; ~870 MB across 26 layers)\nfn forward_save_everything(weights: &mut Vec<Vec<f32>>, q: &[f32], k: &[f32], seq_len: usize, n_head: usize) {\n    for p in 0..seq_len {\n        for h in 0..n_head {\n            let w = softmax(softcap(dot_rows(q, k, p, h))); // Theta(seq) per (p, h)\n            weights.push(w); // Theta(N^2) total per layer — memory blows up\n        }\n    }\n}\n".to_string(),
+            opt_pattern: "// optimized: save ONLY the Theta(N x d) linear tensors; recompute the\n// quadratic chain at backward in hoisted per-(p, h) scratch\nfn forward_save_linear(layer_act: &mut LayerAct, kv: &mut KvCache, layer: usize, pos: usize, q_post_rope: &[f32], k: &[f32], v: &[f32], q_dim: usize) {\n    layer_act.q_post_rope[pos][..q_dim].copy_from_slice(&q_post_rope[..q_dim]); // Theta(d)\n    kv.store(layer, pos, k, v); // K/V were already resident in the KV cache\n}\nfn backward_recompute(dots: &mut [f32], q: &[f32], k_cache: &[Vec<f32>], p: usize, n_head: usize, head_dim: usize) {\n    // scratch hoisted once per call, sized to seq_len, fully overwritten —\n    // 7 x seq_len x n_head allocations eliminated\n    for h in 0..n_head {\n        for t in 0..=p {\n            let mut d = 0.0f32;\n            for dd in 0..head_dim {\n                d += q[p * n_head * head_dim + h * head_dim + dd] * k_cache[t][h * head_dim + dd];\n            }\n            dots[t] = d; // raw dot — also feeds the saturation-safe softcap backward\n        }\n    }\n}\n".to_string(),
+        },
     ])
 }
 
@@ -5289,7 +5454,7 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 267-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 275-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -5297,7 +5462,7 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (46 rules)
+    // A: Memory access patterns (49 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -5348,9 +5513,12 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "immutable-operand-upload-at-set-creation",
             "mirror-ring-store-sliding-window-contiguity",
             "preallocated-activation-slots-inplace-save",
+            "smem-staging-gated-by-cross-thread-reuse",
+            "side-consumer-readback-alias-live-handle-for-dependent-dispatch",
+            "quadratic-attention-intermediates-recompute-from-linear-saves",
         ],
     ),
-    // B: Compute patterns (44 rules)
+    // B: Compute patterns (45 rules)
     (
         KernelCategory::Compute,
         "B: compute",
@@ -5399,9 +5567,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "non-saturating-outcome-reward-floor",
             "selective-projection-effective-rank-head",
             "rademacher-signs-over-gaussian-projection",
+            "block-reduction-separate-scratch-runtime-strides",
         ],
     ),
-    // C: Fusion patterns (28 rules)
+    // C: Fusion patterns (29 rules)
     (
         KernelCategory::Fusion,
         "C: fusion",
@@ -5434,6 +5603,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "incremental-centroid-running-sum",
             "one-sweep-spatial-feature-fanout",
             "shape-matched-sibling-weight-grads-share-input-loop",
+            "kernelize-host-chain-after-sync-batching-floor",
         ],
     ),
     // D: Dispatch patterns (43 rules)
@@ -5486,7 +5656,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "op-major-backward-loop-inversion-batch-sequence-axis",
         ],
     ),
-    // E: Parallelism patterns (16 rules)
+    // E: Parallelism patterns (17 rules)
     (
         KernelCategory::Parallelism,
         "E: parallelism",
@@ -5507,6 +5677,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "additive-sigmoid-gates-not-softmax-routing",
             "collect-then-resolve-snapshot-batch",
             "grid-over-output-thread-private-sweep",
+            "mask-sentinel-matches-reduction-identity",
         ],
     ),
     // F: Flash-attention tiling (10 rules)
@@ -5552,7 +5723,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "reverse-running-decay-weight",
         ],
     ),
-    // H: MoE dispatch + backward pass (11 rules)
+    // H: MoE dispatch + backward pass (12 rules)
     (
         KernelCategory::MoeDispatchBackward,
         "H: MoE dispatch + backward",
@@ -5568,6 +5739,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "autotune-aggregate-workload-key",
             "active-index-grad-scatter-subset-backward",
             "backward-helper-expose-shared-norm-statistic",
+            "adapter-grad-join-mirrors-forward-delta-insertion-point",
         ],
     ),
     // I: NSA block-sparse selection (4 rules)
@@ -5636,7 +5808,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "debug-only-gpu-label-macro",
         ],
     ),
-    // N: dtype + alignment specialization (15 rules)
+    // N: dtype + alignment specialization (16 rules)
     (
         KernelCategory::DtypeAlignment,
         "N: dtype + alignment",
@@ -5656,6 +5828,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "dtype-normalize-once-at-upload",
             "derived-scalar-host-computed-in-uniform",
             "exact-op-parity-for-analytic-backward",
+            "saturating-nonlinearity-recovery-breaks-near-cap",
         ],
     ),
     // O: IR strength reduction (4 rules)
@@ -5676,7 +5849,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
 /// Returns 15 buckets (one per category), each containing the `KernelRule`s whose
 /// `rule_id` appears in that category's slice of [`KERNEL_CATEGORIES`]. This is
 /// the category-scoped view of the corpus — a future heal pipeline can consult
-/// routed expert's rules first without scanning all 267.
+/// routed expert's rules first without scanning all 275.
 ///
 /// # Allocation
 ///
@@ -5752,8 +5925,9 @@ mod tests {
         // Batch 27 (6): riir-gpu production kernels — staging-packed-uniforms-encoder-ordered-copies, identical-uniforms-share-single-slot, persistent-zeros-source-encoder-copy-clear, fuse-sibling-target-grads-single-kernel, per-layer-strided-grad-destination, snapshot-transient-grad-for-deferred-download (backward/ + backward_dflash/ — the backward-pass orchestration clusters: staging-packed uniform distribution, the idempotent-write exemption, encoder-ordered zero clears, sibling-target grad fusion, consumer-selected grad destinations, transient snapshotting for deferred readback).
         // Batch 29 (10): riir-gpu production kernels — defer-readback-gated-by-live-output-size, weight-handle-cache-keyed-by-allocation-identity, first-readback-pays-queue-drain, epilogue-at-register-write-phase, delay-rms-scale-past-gemv-epilogue, pack-scalar-params-into-combined-buffer, enum-dispatch-separate-kernel-per-variant, epilogue-must-be-workgroup-local, launch-unchecked-caller-owned-size-contract, fast-math-contraction-behind-feature-flag (deltanet_input_proj_fused.rs + epilogue/ — the decode-path fusion cluster: Issue 602 sibling-GEMV fan-out + Plan 106 Track 3 CODA epilogue fusion).
         // Batch 30 (6): riir-gpu production kernels — zero-init-side-branch-frozen-base-path, counter-derived-seed-stateless-noise, predicate-gated-skip-empty-workset-step, share-pipeline-set-across-subsystems, pad-uniform-pod-to-min-binding-size, fuse-count-into-mutation-pass (dllm/mod.rs — the D2F training cluster: Plan 068 discrete-diffusion trainers + RePlaid schedule).
-        // Total: 209. // (historical batch-30 snapshot; current 267)
-        assert_eq!(corpus.entries.len(), 267, "batches 1-34 should have 267 rules");
+        // Batch 35 (8): riir-gpu production kernels — mask-sentinel-matches-reduction-identity, smem-staging-gated-by-cross-thread-reuse, kernelize-host-chain-after-sync-batching-floor, block-reduction-separate-scratch-runtime-strides, saturating-nonlinearity-recovery-breaks-near-cap, adapter-grad-join-mirrors-forward-delta-insertion-point, side-consumer-readback-alias-live-handle-for-dependent-dispatch, quadratic-attention-intermediates-recompute-from-linear-saves (gemma2_cubecl_train/ — the Gemma-2 training cluster: fused causal attention kernel Issue 430 Option B + hybrid LoRA training fwd/bwd).
+        // Total: 209. // (historical batch-30 snapshot; current 275)
+        assert_eq!(corpus.entries.len(), 275, "batches 1-35 should have 275 rules");
     }
 
     #[test]
@@ -7567,6 +7741,97 @@ mod tests {
         }
     }
 
+    #[test]
+    fn batch35_rules_present() {
+        let corpus = build_kernel_seed_corpus();
+        let ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        // E (1 new): mask sentinel identity participation
+        assert!(ids.contains(&"mask-sentinel-matches-reduction-identity"), "mask sentinel");
+        // A (3 new): staging gate, alias live handle, quadratic recompute
+        assert!(ids.contains(&"smem-staging-gated-by-cross-thread-reuse"), "staging gate");
+        assert!(ids.contains(&"side-consumer-readback-alias-live-handle-for-dependent-dispatch"), "alias live handle");
+        assert!(ids.contains(&"quadratic-attention-intermediates-recompute-from-linear-saves"), "quadratic recompute");
+        // C (1 new): kernelize past the batching floor
+        assert!(ids.contains(&"kernelize-host-chain-after-sync-batching-floor"), "kernelize floor");
+        // B (1 new): separate scratch + runtime strides
+        assert!(ids.contains(&"block-reduction-separate-scratch-runtime-strides"), "runtime strides");
+        // N (1 new): saturation boundary of output-recovery
+        assert!(ids.contains(&"saturating-nonlinearity-recovery-breaks-near-cap"), "saturation boundary");
+        // H (1 new): adapter grad join mirrors insertion point
+        assert!(ids.contains(&"adapter-grad-join-mirrors-forward-delta-insertion-point"), "adapter grad join");
+    }
+
+    #[test]
+    fn batch35_concepts_covered() {
+        // Verify the batch-35 Gemma-2 training-cluster concepts via
+        // distinctive ASCII substrings located by rule_id (the 32a
+        // convention — immune to prose-evolution churn).
+        let corpus = build_kernel_seed_corpus();
+        let concept = |id: &str| -> String {
+            corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-35 rule '{id}' missing"))
+                .gpu_concept
+                .clone()
+        };
+        // E: mask sentinel (attention_gpu.rs L149-152 + L194-198 + L235)
+        let c = concept("mask-sentinel-matches-reduction-identity");
+        assert!(c.contains("IDENTITY element") && c.contains("rewrite the sentinel"), "mask sentinel concept");
+        // A: staging gate (L123-129 + L141)
+        let c = concept("smem-staging-gated-by-cross-thread-reuse");
+        assert!(c.contains("reuse count exceeds one") && c.contains("never enters smem"), "staging gate concept");
+        // C: kernelize floor (header 52 + resident.rs L687-688)
+        let c = concept("kernelize-host-chain-after-sync-batching-floor");
+        assert!(c.contains("sync floor of 2") && c.contains("2 syncs x 26 layers = 52"), "kernelize floor concept");
+        // B: separate scratch + runtime strides (L157-188)
+        let c = concept("block-reduction-separate-scratch-runtime-strides");
+        assert!(c.contains("SEPARATE scratch") && c.contains("runtime extent"), "runtime strides concept");
+        // N: saturation boundary (engine L354-358 + mod.rs L572-578 contrast)
+        let c = concept("saturating-nonlinearity-recovery-breaks-near-cap");
+        assert!(c.contains("rounds to 1.0") && c.contains("~270"), "saturation concept");
+        // H: adapter grad join (mod.rs L197-204 + L613-630 + L931-933)
+        let c = concept("adapter-grad-join-mirrors-forward-delta-insertion-point");
+        assert!(c.contains("immortal by construction") && c.contains("Issue 687 H2"), "adapter join concept");
+        // A: alias live handle (dispatch.rs L387-392 + L498-503)
+        let c = concept("side-consumer-readback-alias-live-handle-for-dependent-dispatch");
+        assert!(c.contains("never left the device") && c.contains("~53 MB"), "alias handle concept");
+        // A: quadratic recompute (mod.rs L216-220 + backward.rs L333-344)
+        let c = concept("quadratic-attention-intermediates-recompute-from-linear-saves");
+        assert!(c.contains("Theta(N x d)") && c.contains("~870 MB"), "quadratic recompute concept");
+    }
+
+    #[test]
+    #[cfg(not(feature = "kernel_verify"))]
+    fn batch35_pseudocode_parses() {
+        // G1 for Batch 35: every new rule's ref_shape AND opt_pattern must
+        // syn-parse as valid Rust (the L2 pruner verdict).
+        use crate::domain::HealDomain;
+        let corpus = build_kernel_seed_corpus();
+        let ids = [
+            "mask-sentinel-matches-reduction-identity",
+            "smem-staging-gated-by-cross-thread-reuse",
+            "kernelize-host-chain-after-sync-batching-floor",
+            "block-reduction-separate-scratch-runtime-strides",
+            "saturating-nonlinearity-recovery-breaks-near-cap",
+            "adapter-grad-join-mirrors-forward-delta-insertion-point",
+            "side-consumer-readback-alias-live-handle-for-dependent-dispatch",
+            "quadratic-attention-intermediates-recompute-from-linear-saves",
+        ];
+        for id in ids {
+            let entry = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-35 rule '{id}' missing"));
+            let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+            assert!(ref_verdict.parses, "batch-35 ref_shape for '{id}' must parse");
+            let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+            assert!(opt_verdict.parses, "batch-35 opt_pattern for '{id}' must parse");
+        }
+    }
+
     // ════════════════════════════════════════════════════════════════════
     // Plan 003 — Router ↔ corpus wiring tests
     // ════════════════════════════════════════════════════════════════════
@@ -7578,7 +7843,7 @@ mod tests {
 
     #[test]
     fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-        // Every rule_id in the 267-rule corpus must appear in exactly one category.
+        // Every rule_id in the 275-rule corpus must appear in exactly one category.
         let corpus = build_kernel_seed_corpus();
         let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
         let mut categorized: Vec<&str> = Vec::new();
@@ -7609,22 +7874,22 @@ mod tests {
 
     #[test]
     fn kernel_categories_counts_match_plan_003_table() {
-        // Pin per-category rule counts to the Plan 003 table (updated for Batch 34).
+        // Pin per-category rule counts to the Plan 003 table (updated for Batch 35).
         let expected = [
-            (KernelCategory::MemoryAccess, 46),
-            (KernelCategory::Compute, 44),
-            (KernelCategory::Fusion, 28),
+            (KernelCategory::MemoryAccess, 49),
+            (KernelCategory::Compute, 45),
+            (KernelCategory::Fusion, 29),
             (KernelCategory::Dispatch, 43),
-            (KernelCategory::Parallelism, 16),
+            (KernelCategory::Parallelism, 17),
             (KernelCategory::FlashAttnTiling, 10),
             (KernelCategory::LinearAttnRecurrence, 19),
-            (KernelCategory::MoeDispatchBackward, 11),
+            (KernelCategory::MoeDispatchBackward, 12),
             (KernelCategory::NsaBlockSparse, 4),
             (KernelCategory::VarlenChunkedReduction, 5),
             (KernelCategory::AutotuneDispatch, 4),
             (KernelCategory::ConvGemmLayout, 9),
             (KernelCategory::KernelPolymorphism, 9),
-            (KernelCategory::DtypeAlignment, 15),
+            (KernelCategory::DtypeAlignment, 16),
             (KernelCategory::IrStrengthReduction, 4),
         ];
         for (cat, count) in expected {
@@ -7634,9 +7899,9 @@ mod tests {
                 "Plan 003: category {cat:?} has {} rules, expected {count}",
                 entry.2.len());
         }
-        // Sum must equal 267.
+        // Sum must equal 275.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 267, "Plan 003: category totals must sum to 267");
+        assert_eq!(total, 275, "Plan 003: category totals must sum to 275");
     }
 
     #[test]
@@ -7646,7 +7911,7 @@ mod tests {
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 267, "Plan 003: grouped corpus has {total} rules, expected 267");
+        assert_eq!(total, 275, "Plan 003: grouped corpus has {total} rules, expected 275");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");

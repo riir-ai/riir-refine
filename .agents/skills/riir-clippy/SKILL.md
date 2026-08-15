@@ -223,31 +223,59 @@ global = symlink only.
   literal `%` in concept text — fixed by plain concatenation; a
   double-update of the D-header comment) — both aborted cleanly, zero
   pollution, then first-compile after fix.
+- **Batch 35 DONE (2026-08-15, Research 039):** the Gemma-2 TRAINING
+  cluster (`gemma2_cubecl_train/`: mod.rs 1,286 + attention_gpu.rs 349 —
+  the Issue 430 Option B fused causal attention kernel + the hybrid LoRA
+  training forward/backward; resident.rs 1,639 deferred) — **8 rules,
+  corpus 267 → 275** (A 49, B 45, C 29, D 43, E 17, H 12, L 9, N 16):
+  mask-sentinel-matches-reduction-identity, smem-staging-gated-by-
+  cross-thread-reuse, kernelize-host-chain-after-sync-batching-floor,
+  block-reduction-separate-scratch-runtime-strides,
+  saturating-nonlinearity-recovery-breaks-near-cap,
+  adapter-grad-join-mirrors-forward-delta-insertion-point,
+  side-consumer-readback-alias-live-handle-for-dependent-dispatch,
+  quadratic-attention-intermediates-recompute-from-linear-saves. ONE
+  coordinator seed KILLED ("thread role rotation" = ambient fused-kernel
+  structure — falsification 3-for-3) + ONE CORRECTED (the 52 syncs is
+  the POST-batching floor of 2/segment, not pre-batching — that is what
+  makes the floor rule distinct). 12 candidates dropped as
+  duplicates/thin (the predicted dedup pressure). Bug yield filed as
+  riir-ai Issue 688 (15 hazards: 3-way sync-count doc inconsistency,
+  ~1.1 GB/step churn from unused `_into` variants + engine doc-lie,
+  ~82 MB dead activation slots, per-launch params buffer, 256
+  triplication, un-asserted q_dim/kv_dim, KV liveness contract,
+  per-layer grad churn, 262 MB EngineActivations/step, 2.6× doc
+  understatement, h-recompute ~9.7 G MACs, sliding-window note). GOAT:
+  321 kernel_heal + 201 default tests, clippy 0 in all 4 states (4 doc
+  backticks fixed). Generator: ONE anchor bug caught pre-write (category
+  arrays need the string-literal closing quote in anchors) — clean
+  abort, zero pollution. **A SIXTEENTH count-pin site surfaced via test
+  failure (not grep): the `kernel_categories_counts_match_plan_003_table`
+  per-category expected-counts table — added to the list below.**
 - **NEXT mining target**: `ls` the riir-gpu tree for the next unmined
-  cluster (~74 of ~200 files mined). Candidates: `gemma2_cubecl_train/`
-  (mod.rs 1,286 + resident.rs 1,639 + attention_gpu.rs 349 — the Gemma-2
-  training residuals, natural continuation; note Batch 34 already read
-  its build_backward_handles + build-once comment as recurrence
-  evidence, so expect dedup pressure from the shared patterns),
-  `gemma4_q4k_train/` (4 files ~160 KB), `gemma2_d2f*`, `kimi_k3_gpu_*`
-  (4 files), `weaver_gpu*` (4 files), `kvarn/`, `hypernet/`, `maxsim/`.
-  Pick 1-2 files, ~8-12 rules, Batch 35 (Research 039).
+  cluster (~76 of ~200 files mined). Candidates:
+  `gemma2_cubecl_train/resident.rs` (1,639 — the Plan 481 all-GPU LoRA
+  path + batched activation readback; expect dedup pressure from
+  B26/B29/B34 + the B35 floor rule), `gemma4_q4k_train/` (4 files
+  ~160 KB), `gemma2_d2f*`, `kimi_k3_gpu_*` (4 files), `weaver_gpu*`
+  (4 files), `kvarn/`, `hypernet/`, `maxsim/`. Pick 1-2 files, ~8-12
+  rules, Batch 36 (Research 040).
   - Validation pattern (proven T4 + 32a + 32b-1 + 32c): corpus files are NOT
     sibling WIP — edit + run GOAT in the main checkout with
     `CARGO_TARGET_DIR=/tmp/riir-clippy-bNN`; `--features kernel_heal`
-    for the corpus suite (312 at 32c, 315 at 33, 318 at 34), default for
+    for the corpus suite (318 at 34, 321 at 35), default for
     the 201 suite.
     `--all-features` is currently broken by SIBLING WIP
     (`rust_perf/bench.rs:335 alloc_axis`) — pre-existing, not yours.
-  - Count-pin sites when adding rules (complete list, re-verified 32c):
-    corpus.rs `entries.len()` assert + KERNEL_CATEGORIES rows + per-category
-    count test + 2 grouped-total tests + router.rs `rules_for_expert` total
-    + the corpus-count mentions in router.rs doc header + the Plan 003
-    doc-comment `267-rule corpus` line above KERNEL_CATEGORIES + the
-    file-level `//!` header batch block + the stale-count comments (the
-    `228-rule` comment in kernel_categories_cover_all_corpus_rules_
-    exhaustively + the `209` in the build_corpus_categorized doc — both
-    now in sync at 267; keep in sync).
+  - Count-pin sites when adding rules (complete list, re-verified 35):
+    corpus.rs `entries.len()` assert + KERNEL_CATEGORIES rows + the 6
+    per-category count COMMENTS + the `kernel_categories_counts_match_
+    plan_003_table` expected-counts table (the 16th site — caught by
+    test failure at 35, not grep) + 2 grouped-total tests + router.rs
+    `rules_for_expert` total + the corpus-count mentions in router.rs
+    doc header + the Plan 003 doc-comment `NNN-rule corpus` line above
+    KERNEL_CATEGORIES + the `Total: 209 ... current NNN` comment + the
+    file-level `//!` header batch block. All in sync at 275.
   - **Landing lesson (32b-1, self-caught)**: after a large multi-entry
     corpus edit, `awk`-scan for `rule_id:` lines NOT preceded by a
     standalone `KernelRule {` BEFORE the first compile — JSON `\n`
@@ -259,9 +287,11 @@ global = symlink only.
   WIP STILL ACTIVE as of 2026-08-15 evening: qv_lora.rs + cudarc_kernels/
   + riir-gpu/lib.rs + ternary_deltanet_gpu_forward_cudarc.rs all dirty)
   — mine only after their WIP lands.
-- **Progress**: riir-gpu ~74 of ~200 files mined. Corpus: 267 rules.
+- **Progress**: riir-gpu ~76 of ~200 files mined. Corpus: 275 rules.
   edge_lora module FULLY MINED (32a + 32b-1 + 32c). spectralquant/
   FULLY MINED (15 + 33). gemma4_cubecl_train/ DONE (34).
+  gemma2_cubecl_train/ mod.rs + attention_gpu.rs DONE (35; resident.rs
+  remains).
 - **Also open (riir-clippy issues)**: 014 (rust_perf v4, 12 tasks), 016
   (clippy structural expansion, 6), 017 (retrieval precision at scale,
   5), 018 (self_evolve promotion, 6). 015 = sibling's ACTIVE WIP
