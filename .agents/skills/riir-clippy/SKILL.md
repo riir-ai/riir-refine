@@ -65,8 +65,9 @@ findings are cheaper to fix before you benchmark around them.
    - **retrieval-precision re-measure (Issue 017, kernel batches):** run
      `CARGO_TARGET_DIR=/tmp/riir-clippy-bNN cargo test --features
      kernel_heal,latent_retrieval --lib retrieval -- --nocapture` (~1 min) —
-     the gate floors (Bench 022 baseline: kernel self-variants 100%, blended
-     78.8/88.1/94.1) must hold; a decay FAILS the batch → fix retrieval
+     the gate floors (re-pinned by Issue 022/Bench 024: kernel self-variants
+     100%, blended 3-domain 77.1/86.4/92.4) must hold; a decay FAILS the
+     batch → fix retrieval
      quality, or re-pin the floors + record the delta in the Research note
      (never weaken silently).
    - rust_perf rules: the Pareto bench (`rust_perf_bench` feature) +
@@ -827,9 +828,7 @@ global = symlink only.
 - **Also open (riir-clippy issues)**: 019 (idle-loop skill close-out,
   T6 remainder), 020 (spectral routing POC — kill-bar data landed: needs
   ≥85% routing accuracy vs the 53.4%/46.6% measured baseline), 021
-  (evidential status axis, P2), 022 (corpus real-clippy drift — 5
-  Issue-016 entries' buggy_code doesn't trigger under real clippy; blocks
-  the G7 demo re-run).
+  (evidential status axis, P2).
   014 (rust_perf v4) RESOLVED 2026-08-16 (Bench 020); 016 (clippy
   structural expansion) RESOLVED 2026-08-16 (Bench 021 — corpus 10→40,
   FIXABLE 6→33, VERIFY 1→4); 017 (retrieval precision at scale) RESOLVED
@@ -837,7 +836,11 @@ global = symlink only.
   measured 58.3% at scale, floors pinned); 018 (self_evolve promotion)
   RESOLVED 2026-08-16 (Bench 023 — DEFAULT-ON + unconditional modules,
   EvolveRecorder oracle split, JSON persistence, `RIIR_HEAL_SELF_EVOLVE=0`
-  opt-out; found + filed Issue 022 along the way).
+  opt-out; found + filed Issue 022 along the way); 022 (corpus real-clippy
+  drift) RESOLVED 2026-08-16 (Bench 024 — 5 corpus shapes corrected to
+  real-clippy-1.97-firing forms; G6 40/40, G7 50%→100% restored over the
+  full 40-lint corpus; retrieval floors re-pinned clippy 58.3→54.2 top-1 —
+  truthfulness wins).
   015 = sibling's ACTIVE WIP
   (fix_verify mode — do not touch `src/bin/heal.rs`, `src/fix_verify.rs`,
   `src/lib.rs`, `Cargo.toml`, proposers mod.rs/vec_with_capacity, bench.rs,

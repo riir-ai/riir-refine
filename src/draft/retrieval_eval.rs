@@ -368,6 +368,23 @@ fn domain_index(d: DomainId) -> usize {
     }
 }
 
+/// Canonical order for the matcher's returned rules: score-descending with
+/// a `rule_id` tie-break. The matcher's own ordering resolves score TIES by
+/// backing-map iteration order, which can flip between runs — the eval is a
+/// MEASUREMENT, so it must be reproducible (Issue 022: a corpus change put
+/// a tie exactly on the top-5 boundary + the in-process determinism test
+/// caught it). A substrate-level deterministic tie-break in riir-rag remains
+/// a documented follow-up; this keeps the eval self-contained.
+fn canonical_rank(rules: &[crate::draft::ScoredRule]) -> Vec<&crate::draft::ScoredRule> {
+    let mut v: Vec<&crate::draft::ScoredRule> = rules.iter().collect();
+    v.sort_by(|a, b| {
+        b.score
+            .total_cmp(&a.score)
+            .then_with(|| a.rule_id.cmp(&b.rule_id))
+    });
+    v
+}
+
 /// Assemble + run the full eval against every feature-enabled domain.
 ///
 /// # Panics
@@ -406,7 +423,7 @@ pub fn run_eval() -> EvalReport {
         let ranked = by_domain
             .iter()
             .find(|(d, _)| *d == span.domain)
-            .map_or(&[][..], |(_, rules)| rules.as_slice());
+            .map_or(Vec::new(), |(_, rules)| canonical_rank(rules));
         let rank = ranked.iter().position(|r| r.rule_id == span.label);
         let top1 = ranked.first().map(|r| r.rule_id.clone());
 
@@ -453,7 +470,11 @@ pub fn run_eval() -> EvalReport {
         let _ = routed;
         let tops: Vec<(DomainId, String)> = by_domain
             .iter()
-            .filter_map(|(d, rules)| rules.first().map(|r| (*d, r.rule_id.clone())))
+            .filter_map(|(d, rules)| {
+                canonical_rank(rules)
+                    .first()
+                    .map(|r| (*d, r.rule_id.clone()))
+            })
             .collect();
         report.clean_profile.push((tag, tops));
     }
@@ -535,24 +556,35 @@ pub fn print_report(report: &EvalReport) {
 mod tests {
     use super::*;
 
-    /// Baseline floors for the regression gate (Bench 022, 2026-08-16).
-    /// A corpus batch that decays precision below these fails the suite —
-    /// re-measure + re-pin (and record the delta in the batch's Research
-    /// note) rather than weakening silently. Values are ratios (0.0-1.0).
+    /// Baseline floors for the regression gate (Bench 022, 2026-08-16;
+    /// RE-PINNED by Issue 022 same day — see Bench 024). A corpus batch that
+    /// decays precision below these fails the suite — re-measure + re-pin
+    /// (and record the delta) rather than weakening silently. Values are
+    /// ratios (0.0-1.0).
     ///
-    /// Baseline (clippy+perf state, 88 spans): blended 71.6/84.1/92.0,
+    /// Original baseline (clippy+perf state, 88 spans): blended 71.6/84.1/92.0,
     /// clippy 58.3/75.0/87.5, perf 87.5/95.0/97.5; kernel (combined state,
-    /// 30 self-variants) 100/100/100. Floors = baseline − ONE span — the
-    /// ranking's tie-break drains a `HashMap` (`RandomState` per process),
-    /// so a tie at a hit boundary can flip across processes (3-process
-    /// re-runs were identical; the margin is cheap robustness, not noise
-    /// cover).
+    /// 30 self-variants) 100/100/100.
+    ///
+    /// Issue 022 re-pin (corpus truthfulness trade): 5 clippy corpus entries'
+    /// buggy shapes were corrected to forms REAL clippy 1.97 fires (the
+    /// `comparison_to_empty` entry's text moved from `.len() == 0` — real
+    /// clippy's `len_zero` — to the real `s == ""` shape). Cost: the 2
+    /// len-shaped fixtures retrieve `comparison_to_empty` at lower rank
+    /// (rank 3 + rank 7). New baseline: blended 69.3/81.8/88.6,
+    /// clippy 54.2/70.8/81.2, perf unchanged. Truthfulness wins — a corpus
+    /// that misrepresents lint behavior poisons `self_evolve` learning.
+    ///
+    /// Floors = baseline − ONE span — the ranking's tie-break drains a
+    /// `HashMap` (`RandomState` per process), so a tie at a hit boundary can
+    /// flip across processes (3-process re-runs were identical; the margin
+    /// is cheap robustness, not noise cover).
     mod floors {
-        pub const BLENDED_TOP1: f32 = 62.0 / 88.0;
-        pub const BLENDED_TOP3: f32 = 73.0 / 88.0;
-        pub const BLENDED_TOP5: f32 = 80.0 / 88.0;
-        pub const CLIPPY_TOP1: f32 = 27.0 / 48.0;
-        pub const CLIPPY_TOP3: f32 = 35.0 / 48.0;
+        pub const BLENDED_TOP1: f32 = 60.0 / 88.0;
+        pub const BLENDED_TOP3: f32 = 71.0 / 88.0;
+        pub const BLENDED_TOP5: f32 = 77.0 / 88.0;
+        pub const CLIPPY_TOP1: f32 = 25.0 / 48.0;
+        pub const CLIPPY_TOP3: f32 = 33.0 / 48.0;
         pub const PERF_TOP3: f32 = 37.0 / 40.0;
         #[cfg(feature = "kernel_heal")]
         pub const KERNEL_TOP3: f32 = 29.0 / 30.0;

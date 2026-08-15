@@ -84,13 +84,20 @@ cargo test --features latent_retrieval --lib retrieval_precision_regression_gate
 cargo test --features latent_retrieval,kernel_heal --lib retrieval -- --nocapture
 ```
 
-**Baseline (Bench 022, 2026-08-16):** clippy 58.3/75.0/87.5 (top-1/3/5),
-perf 87.5/95.0/97.5, kernel self-variants 100/100/100. The 12-fixture 100%
+**Baseline (Bench 022, 2026-08-16; RE-PINNED same day by Issue 022 — Bench
+024):** clippy **54.2/70.8/83.3** (top-1/3/5), perf 87.5/95.0/97.5, kernel
+self-variants 100/100/100. The 12-fixture 100%
 top-1 claim is dead at scale — crowding is real, concentrated in tiny-token
 clippy patterns (`identity_op` alone tops 5 misses). Router annotation
 accuracy: 53.4% (2 domains) / 46.6% (3) — fan-out stays correct. Floors are
 pinned in the eval module (baseline − 1 span); a batch that decays them
-fails the suite and must re-pin with a recorded delta.
+fails the suite and must re-pin with a recorded delta. **The Issue 022
+re-pin's −2 clippy spans are the corpus-truthfulness trade**: 5 corpus
+entries' buggy shapes were corrected to forms real clippy 1.97 actually
+fires (the `comparison_to_empty` text moved to the real `s == ""` shape);
+the 2 len-shaped fixtures retrieve at lower rank by design now. Ranking is
+canonicalized (`score` desc, `rule_id` tie-break) — the measurement is
+reproducible across backing-map iteration orders.
 
 ## Known limitations (honest scope, Bench 018 + addendum)
 

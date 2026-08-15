@@ -126,8 +126,12 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
         ClippyFixEntry {
             lint_name: "single_match_else".to_string(),
             lint_group: "pedantic".to_string(),
-            buggy_code: "fn f(x: Option<u8>) -> u8 { match x { Some(v) => v, _ => 0 } }".to_string(),
-            fixed_code: "fn f(x: Option<u8>) -> u8 { if let Some(v) = x { v } else { 0 } }".to_string(),
+            // Shape discipline (Issue 022): real clippy 1.97 only fires this
+            // when the else arm is a STATEMENT BLOCK — a bare-default else
+            // routes to manual_unwrap_or[_default] instead. Verified against
+            // real clippy (the G6 demo path).
+            buggy_code: "fn score(g: u8) -> u8 { g * 2 }\nfn f(kind: Option<u8>) -> u8 { match kind { Some(k) => score(k), _ => { let fallback = 2; score(fallback) } } }".to_string(),
+            fixed_code: "fn score(g: u8) -> u8 { g * 2 }\nfn f(kind: Option<u8>) -> u8 { if let Some(k) = kind { score(k) } else { let fallback = 2; score(fallback) } }".to_string(),
         },
         ClippyFixEntry {
             lint_name: "redundant_pattern_matching".to_string(),
@@ -216,8 +220,12 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
         ClippyFixEntry {
             lint_name: "iter_nth_zero".to_string(),
             lint_group: "style".to_string(),
-            buggy_code: "fn f(xs: &[u8]) -> Option<&u8> { xs.iter().nth(0) }".to_string(),
-            fixed_code: "fn f(xs: &[u8]) -> Option<&u8> { xs.iter().next() }".to_string(),
+            // Shape discipline (Issue 022): `.iter().nth(0)` on a SLICE
+            // receiver routes to clippy 1.97's more-specific `iter_nth` —
+            // `iter_nth_zero` fires on non-slice iterators (IntoIter, ranges).
+            // Verified against real clippy.
+            buggy_code: "fn f(mut lane: std::vec::IntoIter<u8>) -> Option<u8> { lane.nth(0) }".to_string(),
+            fixed_code: "fn f(mut lane: std::vec::IntoIter<u8>) -> Option<u8> { lane.next() }".to_string(),
         },
         ClippyFixEntry {
             lint_name: "manual_unwrap_or".to_string(),
@@ -258,23 +266,29 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
         ClippyFixEntry {
             lint_name: "iter_next_loop".to_string(),
             lint_group: "correctness".to_string(),
-            buggy_code: "fn f(it: std::vec::IntoIter<u8>) -> u8 { let mut s = 0; for x in it.next() { s += x; } s }".to_string(),
-            fixed_code: "fn f(it: std::vec::IntoIter<u8>) -> u8 { let mut s = 0; for x in it { s += x; } s }".to_string(),
+            // `mut` discipline (Issue 022): `.next()` needs `&mut self` — the
+            // pre-fix entry didn't compile, so real clippy could never lint
+            // it (parse-only proposers never noticed).
+            buggy_code: "fn f(mut it: std::vec::IntoIter<u8>) -> u8 { let mut s = 0; for x in it.next() { s += x; } s }".to_string(),
+            fixed_code: "fn f(mut it: std::vec::IntoIter<u8>) -> u8 { let mut s = 0; for x in it { s += x; } s }".to_string(),
         },
         ClippyFixEntry {
             lint_name: "comparison_to_empty".to_string(),
             lint_group: "style".to_string(),
-            // VERIFY-tier: 12 live `.len() == 0` hits in our own workspace
-            // grep (katgpt-rs + riir-clippy) — type-blind on `is_empty`
-            // existence, rustc reverts under `--verify`.
-            buggy_code: "fn f(v: &[u8]) -> bool { v.len() == 0 }".to_string(),
-            fixed_code: "fn f(v: &[u8]) -> bool { v.is_empty() }".to_string(),
+            // Shape discipline (Issue 022): the REAL comparison_to_empty is
+            // `s == ""` → `s.is_empty()` (verified against real clippy). The
+            // `.len() == 0` form is real clippy's `len_zero` — the proposer
+            // still detects + heals BOTH shapes (same fix either way).
+            buggy_code: "fn f(s: &str) -> bool { s == \"\" }".to_string(),
+            fixed_code: "fn f(s: &str) -> bool { s.is_empty() }".to_string(),
         },
         ClippyFixEntry {
             lint_name: "while_let_on_iterator".to_string(),
             lint_group: "style".to_string(),
-            buggy_code: "fn f(it: std::vec::IntoIter<u8>) -> u8 { let mut s = 0; while let Some(x) = it.next() { s += x; } s }".to_string(),
-            fixed_code: "fn f(it: std::vec::IntoIter<u8>) -> u8 { let mut s = 0; for x in it { s += x; } s }".to_string(),
+            // `mut` discipline (Issue 022): same as iter_next_loop — the
+            // pre-fix entry didn't compile under real clippy.
+            buggy_code: "fn f(mut it: std::vec::IntoIter<u8>) -> u8 { let mut s = 0; while let Some(x) = it.next() { s += x; } s }".to_string(),
+            fixed_code: "fn f(mut it: std::vec::IntoIter<u8>) -> u8 { let mut s = 0; for x in it { s += x; } s }".to_string(),
         },
         ClippyFixEntry {
             lint_name: "single_char_pattern".to_string(),

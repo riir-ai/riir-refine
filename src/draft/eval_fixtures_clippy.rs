@@ -286,6 +286,12 @@ pub const WAVE_PREFIX: &'static str = "wrath";
     false
 }
 "#),
+    // `pending.len() == 0` is real clippy's `len_zero` shape — labeled
+    // comparison_to_empty because that's OUR rule that heals it (the
+    // proposer's Form 2; Issue 022 kept the detection, moved the corpus
+    // text to the real `== ""` shape — this fixture now measures how the
+    // len-shaped span retrieves against the truthful corpus; rank decays
+    // were accepted + re-pinned per the floor contract).
     ("comparison_to_empty", r#"pub fn queue_ready(pending: &[Task]) -> bool {
     pending.len() == 0
 }

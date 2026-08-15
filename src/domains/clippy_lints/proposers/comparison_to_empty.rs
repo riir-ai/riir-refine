@@ -1,9 +1,10 @@
-//! `clippy::comparison_to_empty` — `v.len() == 0` → `v.is_empty()`; also
-//! `!=` (→ `!v.is_empty()`) and the reversed `0 == v.len()` shape.
-//!
-//! VERIFY-tier: `is_empty` existence is type-blind — a custom type could
-//! have `len()` without `is_empty()`; rustc backs the revert under
-//! `--verify`.
+//! `clippy::comparison_to_empty` — `s == ""` → `s.is_empty()`; also `!=`
+//! (→ `!s.is_empty()`) and the reversed `"" == s` shape (Issue 022: this is
+//! the REAL `comparison_to_empty` shape, verified against real clippy).
+//! The `.len() == 0` form is real clippy's `len_zero` — still detected +
+//! healed here (same fix either way; it stays useful for workspace healing).
+//! Type-blind on `is_empty` existence — rustc backs the revert under
+//! `--verify` (VERIFY-tier).
 //!
 //! Any integer-suffix spelling of zero fires (`0`, `0usize`).
 //! Span-preserving (T6.4): the whole binary expression's byte range is
@@ -41,7 +42,16 @@ impl<'ast> Visit<'ast> for Collector<'_> {
         if !b.attrs.is_empty() {
             return; // attrs would be dropped by the splice
         }
-        // `len()` on one side, literal `0` on the other — either order.
+        // Form 1 (real `comparison_to_empty`): empty-string literal on one
+        // side, any expression on the other — either order.
+        if let Some(operand) = empty_literal_other_side(&b.left, &b.right) {
+            if let Some(replacement) = self.expr_is_empty_text(operand, negated) {
+                self.edits.push(edit(b, replacement));
+            }
+            return;
+        }
+        // Form 2 (real clippy calls this `len_zero`): `len()` on one side,
+        // literal `0` on the other — either order.
         let len_call = if let Some(call) = bare_len_call(&b.left) {
             if is_zero(&b.right) {
                 call
@@ -66,16 +76,27 @@ impl<'ast> Visit<'ast> for Collector<'_> {
 impl Collector<'_> {
     fn is_empty_text(&self, len: &ExprMethodCall, negated: bool) -> Option<String> {
         let recv = src(self.source, &*len.receiver)?;
-        let recv = if is_postfix_safe(&len.receiver) {
-            recv
-        } else {
-            format!("({recv})")
-        };
-        Some(if negated {
-            format!("!{recv}.is_empty()")
-        } else {
-            format!("{recv}.is_empty()")
-        })
+        Some(finish_is_empty(&recv, &len.receiver, negated))
+    }
+
+    fn expr_is_empty_text(&self, operand: &Expr, negated: bool) -> Option<String> {
+        let recv = src(self.source, operand)?;
+        Some(finish_is_empty(&recv, operand, negated))
+    }
+}
+
+/// Wrap `recv` for the `.is_empty()` replacement — parenthesized unless the
+/// operand is postfix-safe.
+fn finish_is_empty(recv: &str, operand: &Expr, negated: bool) -> String {
+    let recv = if is_postfix_safe(operand) {
+        recv.to_string()
+    } else {
+        format!("({recv})")
+    };
+    if negated {
+        format!("!{recv}.is_empty()")
+    } else {
+        format!("{recv}.is_empty()")
     }
 }
 
@@ -89,6 +110,25 @@ fn bare_len_call(e: &Expr) -> Option<&ExprMethodCall> {
     } else {
         None
     }
+}
+
+/// If one side is an empty-string literal (`""`), return the OTHER side
+/// (the operand whose `is_empty()` we call) — either order.
+fn empty_literal_other_side<'e>(left: &'e Expr, right: &'e Expr) -> Option<&'e Expr> {
+    match (is_empty_str_lit(left), is_empty_str_lit(right)) {
+        (true, false) => Some(right),
+        (false, true) => Some(left),
+        _ => None, // neither, or both literals (`"" == ""` — leave alone)
+    }
+}
+
+/// Is this an empty string literal? (Raw/byte-string forms count: `value()`
+/// is semantic.)
+fn is_empty_str_lit(e: &Expr) -> bool {
+    let Expr::Lit(l) = e else {
+        return false;
+    };
+    matches!(&l.lit, syn::Lit::Str(s) if s.value().is_empty())
 }
 
 /// Is this the literal `0` (any integer suffix)?
@@ -106,6 +146,34 @@ mod tests {
         let out = propose_fix("comparison_to_empty", input).expect("matched");
         assert!(out.contains("v.is_empty()"), "is_empty not produced: {out}");
         syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn converts_empty_str_comparison() {
+        // The REAL comparison_to_empty shape (Issue 022; verified against
+        // real clippy 1.97).
+        let input = "fn f(s: &str) -> bool { s == \"\" }";
+        let out = propose_fix("comparison_to_empty", input).expect("matched");
+        assert!(out.contains("s.is_empty()"), "is_empty not produced: {out}");
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn converts_reversed_empty_str_with_negation() {
+        let input = "fn f(s: &str) -> bool { \"\" != s }";
+        let out = propose_fix("comparison_to_empty", input).expect("matched");
+        assert!(
+            out.contains("!s.is_empty()"),
+            "reversed negated form not produced: {out}"
+        );
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn nonempty_str_comparison_unchanged() {
+        let input = "fn f(s: &str) -> bool { s == \"x\" }";
+        let out = propose_fix("comparison_to_empty", input);
+        assert!(out.is_none(), "non-empty literal must not fire: {out:?}");
     }
 
     #[test]

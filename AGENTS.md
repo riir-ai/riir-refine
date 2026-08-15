@@ -227,11 +227,46 @@ real-bin e2e (1→3 trajectories across runs, one degradation line per run,
 inert opt-out); G3 405 default / 419 clippy_verify / 652 combined lib tests
 + clippy 0 warnings in 5 states + `ci_feature_guard.sh` all-layers; G4
 `cargo tree` diff EMPTY (dep surface unchanged). **Honest finding:** the
-G7 demo re-run aborts G6 at 35/40 PRE-EXISTING (proven by baseline
-worktree at `a532b7c` — 5 Issue-016 corpus entries' `buggy_code` doesn't
-trigger under real clippy; filed as Issue 022). See
+G7 demo re-run aborted G6 at 35/40 PRE-EXISTING (proven by baseline
+worktree at `a532b7c` — 5 Issue-016 corpus entries' `buggy_code` didn't
+trigger under real clippy; filed as Issue 022 — **RESOLVED same day, see
+the Issue 022 section below: G7 now runs end-to-end at 40/40 truthfulness
++ 50%→100% healing**). See
 [`.benchmarks/023`](.benchmarks/023_self_evolve_promotion_goat.md) +
 [`.docs/10_self_evolve/evolve_recorder.md`](.docs/10_self_evolve/evolve_recorder.md).
+
+**Issue 022 (2026-08-16, RESOLVED same day) — corpus real-clippy drift
+(5 Issue-016 entries).** Found during the Issue 018 GOAT: the G6 demo
+aborted at 35/40 — 5 corpus entries' `buggy_code` didn't trigger the named
+lint under real cargo clippy **1.97** (the toolchain upgraded since the
+Issue 016 authoring; proven pre-existing via a baseline worktree run at
+`a532b7c`). Root causes, each verified by temp-crate + JSON-probe:
+`iter_next_loop` + `while_let_on_iterator` code **didn't compile**
+(missing `mut it` — `.next()` needs `&mut self`; invisible to parse-only
+proposers); `.iter().nth(0)` on a slice routes to 1.97's more-specific
+`iter_nth` (`iter_nth_zero` needs a non-slice iterator — fixed to the
+IntoIter shape); `single_match_else` fires only when the else arm is a
+STATEMENT BLOCK (a bare-default else routes to `manual_unwrap_or[_
+default]` — 10 shapes probed; the Issue 017 fixture had the firing form all
+along); `comparison_to_empty`'s real shape is `s == ""` (ours was
+`.len() == 0` = real clippy's `len_zero` — the proposer was WIDENED to
+detect both forms, the corpus moved to the truthful shape). **GOAT (Bench
+024): G6 40/40; G7 restored — baseline 50.0% → evolved 100.0% (40/40,
++50.0pp) on real cargo clippy, now over the full 40-lint corpus** (the
+strongest oracle-present evidence for Issue 018's promotion); 408/429 lib
+tests + clippy 0 in 4 states + CI guard all-layers; retrieval floors
+RE-PINNED per the Issue 017 contract (clippy 58.3→54.2 top-1, blended
+3-domain 78.8→77.1; the −2 spans are the len-shaped
+`comparison_to_empty` fixtures — truthfulness wins, a corpus that
+misrepresents lint behavior poisons `self_evolve` learning). Bonus
+root-cause fix: the eval's determinism test caught a score TIE on the
+top-5 boundary flipping via backing-map iteration order → `canonical_rank`
+(score desc via `total_cmp`, `rule_id` tie-break) makes the measurement
+reproducible (a substrate-level riir-rag tie-break remains a documented
+follow-up). Probe-harness lesson: command-line-requested lints render
+HYPHENATED in human output (`clippy::needless-return`) — grep JSON
+(`"code":"clippy::..."`) instead. See
+[`.benchmarks/024`](.benchmarks/024_corpus_real_clippy_drift_goat.md).
 
 ## The `riir-clippy` skill (auto-continue idle loop)
 
@@ -417,7 +452,7 @@ cargo run --example ruliology_search_demo --features ruliology_search --release
 - `kernel_verify` (opt-in): CubeCL compile check. **STUB** — delegates to shared `RustAnalyzerPruner`; full numeric compare deferred (Proposal 012 §Phase 0). Implies `kernel_heal`.
 - `ruliology_search` (opt-in): L3 Pareto-front candidate search. Reuses the algorithm pattern from `katgpt-ruliology` (Bench 572) without a code-level dep. Runs once per lint invocation (~400µs/10 candidates), not per-tick. Implies `clippy_lints`.
 - `latent_retrieval` (opt-in, Plan 005 Phase 1): real-file span-level latent retrieval — the `--suggest` MVP. Indexes every enabled domain's corpus via riir-rag (`RuleIndex`: `ShardIndex` Clifford-wedge KNN + BM25, multi-scale), routes spans via corpus-derived domain centroids (`DomainRouter`, annotation only), retrieves ranked rules (`LatentMatcher`, fan-out across enabled domains). The suggest path itself has ZERO proposer code — suggestions are the corpus pattern texts; the proposers live in each domain's `proposers/` module (rust_perf Phase 4, clippy T6.4) + the shared `src/edit_emitter.rs` substrate, gated by the proposers' own Cargo features. Gates `dep:riir-rag` (heavy tree: riir-rag + transitively riir-neuron-db — the default build stays light). Powers the `cargo-heal` bin (`--suggest` / `--fix` / `--domain auto|clippy|perf|kernel` / `--top-k`). **GOAT G1–G4 ALL PASS (Bench 018, 2026-08-14):** G1 100% (12/12 top-1, target ≥80%), G2 349µs/chunk (<1ms, 2.9× headroom), G3 104 lib tests, G4 `SuggestScratch` stable across 50 repeat scans. Known limits: fan-out routing (no gate), no minimum-score threshold (every span suggests), 12-item G1 fixture.
-- `self_evolve` (DEFAULT-ON since Issue 018, 2026-08-16; Bench 023): latent-first self-evolution loop — `LatentFixMemory` (3-axis retrieval over fix trajectories) + `LatentSkillEvolution` (EMA direction-vector update) + `EvolveRecorder` (the oracle-split standalone recorder for the `cargo heal --fix` path). GOAT G1-G5 PASS (G5: 70pp healing rate improvement in controlled fixture). **G6/G7 validated against real cargo clippy feedback (Issue 008): G6 10/10 corpus truthfulness PASS, G7 50.0pp improvement (50% → 100%) PASS** (the G7 demo re-run is currently blocked pre-existing by Issue 022 corpus drift). The modules are UNCONDITIONAL — the memory half runs wherever fixes are applied (+ persists across runs via the v1 JSON envelope); the EMA learning half no-ops with one log line without the `clippy_verify` oracle. The feature flag is a default-on back-compat alias (required-features lists). Opt-out: `RIIR_HEAL_SELF_EVOLVE=0`.
+- `self_evolve` (DEFAULT-ON since Issue 018, 2026-08-16; Bench 023): latent-first self-evolution loop — `LatentFixMemory` (3-axis retrieval over fix trajectories) + `LatentSkillEvolution` (EMA direction-vector update) + `EvolveRecorder` (the oracle-split standalone recorder for the `cargo heal --fix` path). GOAT G1-G5 PASS (G5: 70pp healing rate improvement in controlled fixture). **G6/G7 validated against real cargo clippy feedback (Issue 008): G6 10/10 corpus truthfulness PASS, G7 50.0pp improvement (50% → 100%) PASS** (re-validated 2026-08-16 post-promotion at the 40-lint corpus scale after the Issue 022 corpus-truthfulness fix — G6 40/40, G7 50%→100%, Bench 024). The modules are UNCONDITIONAL — the memory half runs wherever fixes are applied (+ persists across runs via the v1 JSON envelope); the EMA learning half no-ops with one log line without the `clippy_verify` oracle. The feature flag is a default-on back-compat alias (required-features lists). Opt-out: `RIIR_HEAL_SELF_EVOLVE=0`.
 - `wasm_pruner` (opt-in, deferred): L2 WASM rust-analyzer variant (blocked on rubrc)
 - `clippy_lora` (opt-in, deferred): L4 adaptive LoRA fallback (blocked on riir-train integration)
 - `ternary_inference` (opt-in, Bench 010): katgpt ternary generation on clippy prompts. The pre-existing compile error (`attn_sub_on` not found in riir-gpu) was **FIXED** in riir-ai commit `4bfe3b30` — the cfg gate on `attn_sub_on` + `ATTN_SUBSTAGE_MASK` + `ATTN_SUBSTAGE_ALL` was relaxed from `all(cubecl_runtime, ternary_gemm_batched)` to just `cubecl_runtime` (behavior-preserving: the mask defaults to all-on). `--all-features` CI layer 4 now passes clean.
