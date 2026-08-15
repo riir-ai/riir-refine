@@ -648,22 +648,58 @@ global = symlink only.
   pre-edit — NOT sibling WIP). Plus the THIRD concepts-covered
   case-sensitivity occurrence ("TWO" vs "two" — assert the EXACT case of
   the prose) + 2 doc_markdown fixes (`seq_len` in `<= 16` prose, `VarN`).
+- **Batch 45 DONE (2026-08-15, Research 050):** the SHINE hypernet
+  meta-LoRA cluster, first half (`hypernet/meta_lora.rs` 732 — the CPU
+  reference bidirectional forward for memory extraction, Plan 098/104 +
+  `hypernet/train_meta_lora.rs` 601 — the CPU finite-difference Meta-LoRA
+  trainer) — **3 rules, corpus 334 → 337** (A 77, B 50):
+  `scratch-depth-matches-shape-invariance` (A — allocation depth must
+  match shape invariance: a layer × position × head nest allocates every
+  scratch at the deepest convenient point though all shapes are bound by
+  (seq_len, dim) fixed for the whole call; the tell is two same-shaped
+  residuals at different depths),
+  `softmax-denominator-hoist-out-of-weighted-v` (B — scores[t]/sum_exp
+  recomputed head_dim times per key position in the PV loop; hoist
+  inv_sum once per (position, head); the in-tree optimized twin is
+  attention.rs attention_head pass 3),
+  `frozen-cooperand-hoist-out-of-perturbation-loop` (A — materialization
+  cadence must match mutation cadence: the FD sweep rebuilds the frozen
+  co-operand per candidate + the callee re-derives its own
+  sweep-invariants per eval; build a LossPrelude at sweep entry;
+  complements make-unmake which fixes the VARYING operand). 9+
+  falsifications (adapter-conversion-clone = the immutable-operand
+  family's CPU twin — mechanism is not decision content; FD
+  unflatten-per-perturbation = make-unmake instance; etc). Bug yield
+  filed as riir-ai **Issue 699** (H1: lora_buf sized by
+  model_config.lora_rank vs adapter rank 128 → silent get_unchecked_mut
+  OOB when real configs set lora_rank: 0 — masked by a 4==4 test
+  coincidence; H2: GQA kvd < out_dim slice OOB; H3: apply_meta_lora
+  dead-but-public + 16× scaling + same-bytes-TRANSPOSED A/B layout vs
+  the production path; FD clone storm 1.4 MB/step test scale; baseline
+  ctx-8 hardcode + single-sample GOAT estimator). GOAT: 351 kernel_heal
+  + 201 default tests, clippy 0 in both feature states. **Numbering
+  collision caught at write time**: `.research/049_*.md` was
+  dual-allocated by a concurrent session before this batch landed (the
+  highwater was stale at 49) — this batch's note is **050** (the
+  standing re-scan rule's second observed save). First-compile clean
+  (dry-run discipline); 10 doc_markdown backtick fixes pre-commit.
 - **NEXT mining target**: `ls` the riir-gpu tree for the next unmined
-  cluster (~97 of ~200 files mined). Candidates:
-  `hypernet/` (~3,300: meta_lora 25 KB + train_meta_lora 20 KB +
-  m2p_transformer 21 KB + gpu_m2p 20 KB + shine 15 KB + routing 8 KB +
-  types 8 KB), `maxsim/` (~1,049: spectralquant.rs 20 KB + dispatch.rs
+  cluster (~99 of ~200 files mined). Candidates:
+  `hypernet/` second half (~2,108: m2p_transformer.rs 611 +
+  gpu_m2p.rs 568 + shine.rs 402 + routing.rs 268 + types.rs 269 — the
+  meta-LoRA pair is DONE at Batch 45), `maxsim/` (~1,049: spectralquant.rs 20 KB + dispatch.rs
   14 KB — NOTE distinct from the mined `spectralquant/` dir),
   `kimi_k3_gpu_backward_batched.rs` (1,394 — LOW value: shares Issue 693's
   H1/H2 + the broken LCG with the module file; mine only if the better
   clusters are exhausted). Pick 1-2 files, ~4-8 rules (dedup pressure high
-  after 43 batches), Batch 44 (Research 048).
+  after 45 batches), Batch 46 (Research 051 — RE-SCAN `.research/` at
+  write time; the highwater was stale at 49 when 049 already existed).
   - Validation pattern (proven T4 + 32a + 32b-1 + 32c + 36 + 38): corpus files are NOT
     sibling WIP — edit + run GOAT in the main checkout with
     `CARGO_TARGET_DIR=/tmp/riir-clippy-bNN`; `--features kernel_heal`
     for the corpus suite (318 at 34, 321 at 35, 324 at 36, 327 at 37,
     330 at 38, 333 at 39, 336 at 40, 339 at 41, 342 at 42, 345 at 43,
-    348 at 44), default for
+    348 at 44, 351 at 45), default for
     the 201 suite.
     `--all-features` is currently broken by SIBLING WIP
     (`rust_perf/bench.rs:335 alloc_axis`) — pre-existing, not yours.
@@ -678,7 +714,7 @@ global = symlink only.
     router.rs `rules_for_expert` total + the corpus-count mentions in
     router.rs doc header + the Plan 003 doc-comment `NNN-rule corpus`
     line above KERNEL_CATEGORIES + the `Total: 209 ... current NNN`
-    comment + the file-level `//!` header batch block. All in sync at 334 (A 75, B 49, C 33, D 59, E 19, L 11 after Batch 44; F 10, G 19, H 14, I 4, J 5, K 5, M 9, N 18, O 4).
+    comment + the file-level `//!` header batch block. All in sync at 337 (A 77, B 50, C 33, D 59, E 19, L 11 after Batch 45; F 10, G 19, H 14, I 4, J 5, K 5, M 9, N 18, O 4).
   - **Landing lesson (32b-1, self-caught)**: after a large multi-entry
     corpus edit, `awk`-scan for `rule_id:` lines NOT preceded by a
     standalone `KernelRule {` BEFORE the first compile — JSON `\n`
@@ -690,9 +726,11 @@ global = symlink only.
   WIP STILL ACTIVE as of 2026-08-15 evening: qv_lora.rs + cudarc_kernels/
   + riir-gpu/lib.rs + ternary_deltanet_gpu_forward_cudarc.rs all dirty)
   — mine only after their WIP lands.
-- **Progress**: riir-gpu ~97 of ~200 files mined. Corpus: 334 rules.
+- **Progress**: riir-gpu ~99 of ~200 files mined. Corpus: 337 rules.
   edge_lora module FULLY MINED (32a + 32b-1 + 32c). spectralquant/
-  FULLY MINED (15 + 33). gemma4_cubecl_train/ DONE (34).
+  FULLY MINED (15 + 33). hypernet/ meta-LoRA pair DONE (45 —
+  meta_lora.rs + train_meta_lora.rs; m2p_transformer + gpu_m2p + shine +
+  routing + types remain). gemma4_cubecl_train/ DONE (34).
   gemma2_cubecl_train/ FULLY MINED (35: mod.rs + attention_gpu.rs;
   36: resident.rs). gemma4_q4k_train/ FULLY MINED (37: mod.rs +
   weight_buffers.rs; 38: forward_batched.rs + backward.rs).

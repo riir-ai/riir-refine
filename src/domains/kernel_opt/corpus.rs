@@ -1047,6 +1047,29 @@
 //!   — masked by vacuous tolerances; the CPU/GPU auto-route doc-lie; the
 //!   drifted unpack fork corrupting non-pow2 widths; `GpuWeaverScratch`
 //!   dead with known-wrong sizing; the dot-per-row perf cliff).
+//! - **Batch 45 (2026-08-15, Research 050):** the SHINE hypernet
+//!   meta-LoRA cluster, first half (`hypernet/meta_lora.rs` 732 — the
+//!   CPU reference bidirectional forward for memory extraction, Plan
+//!   098/104 + `hypernet/train_meta_lora.rs` 601 — the CPU
+//!   finite-difference Meta-LoRA trainer) — **3 rules, corpus 334 →
+//!   337** (A 77, B 50): `scratch-depth-matches-shape-invariance` (A —
+//!   a layer x position x head nest allocates each scratch at the
+//!   deepest convenient point though every shape is bound by
+//!   (`seq_len`, dim) fixed for the whole call; the tell is two
+//!   same-shaped residuals at different depths), `softmax-denominator-
+//!   hoist-out-of-weighted-v` (B — `scores[t] / sum_exp` recomputed
+//!   `head_dim` times per key position inside the PV loop; the in-tree
+//!   optimized twin is `attention.rs` `attention_head` pass 3),
+//!   `frozen-cooperand-hoist-out-of-perturbation-loop` (A — the FD
+//!   sweep rebuilds the frozen co-operand per candidate and the callee
+//!   re-derives its own sweep-invariants per eval; materialization
+//!   cadence must match mutation cadence). Hazards filed as riir-ai
+//!   Issue 699 (`lora_buf` sized by model `lora_rank` vs adapter rank →
+//!   silent `get_unchecked_mut` OOB with real configs' `lora_rank`: 0;
+//!   GQA `kvd < out_dim` OOB; `apply_meta_lora` dead + 16x scaling +
+//!   transposed A/B layout vs the production path; FD clone storm
+//!   quantified; baseline ctx-8 hardcode + single-sample GOAT
+//!   estimator).
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
@@ -7210,6 +7233,97 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
             ref_shape: "// naive: HashMap iteration order leaks into the bytes — identical\n// content, different digest per process (RandomState seeding)\nfn serialize_hashmap_order_naive(bundles: &HashMap<u32, Vec<u8>>) -> Vec<u8> {\n    let mut buf = Vec::new();\n    for bundle in bundles.values() {\n        buf.extend_from_slice(&(bundle.len() as u32).to_le_bytes());\n        buf.extend_from_slice(bundle);\n    }\n    buf\n}\n".to_string(),
             opt_pattern: "// optimized: canonical key order — the bytes become a pure function of\n// CONTENT; commitments + round-trip byte-diffs are stable across processes\nfn serialize_canonical_order(bundles: &HashMap<u32, Vec<u8>>) -> Vec<u8> {\n    let mut ids: Vec<u32> = bundles.keys().copied().collect();\n    ids.sort_unstable();\n    let mut buf = Vec::new();\n    for id in ids {\n        let bundle = &bundles[&id];\n        buf.extend_from_slice(&(bundle.len() as u32).to_le_bytes());\n        buf.extend_from_slice(bundle);\n    }\n    buf\n}\n".to_string(),
         },
+        // ══ Batch 45 (hypernet cluster, first half) ════════════════════
+        // ── scratch-depth-matches-shape-invariance — allocation depth
+        // must match shape invariance, not convenience (A) ──
+        //
+        // Source: riir-gpu hypernet/meta_lora.rs forward_extract_layers
+        // (L246 lora_buf + L249-252 q/k/v/attn_residuals per LAYER, L322
+        // attn_out per POSITION, L330 scores per HEAD per POSITION,
+        // L388/L395 mlp_residual/mlp_hidden per position) — a layer x
+        // position x head nest where every scratch shape is bound by
+        // (total_seq, dims) fixed for the whole call; the scores buffer
+        // alone is num_layers x total_seq x n_head allocations. The tell:
+        // two same-shaped residuals at different depths (attn_residuals
+        // per-layer vs mlp_residual per-position) while hidden/grid
+        // already sit at fn scope; the same crate's dllm.rs
+        // forward_bidirectional runs the same bidirectional prefill on
+        // context-owned scratch (ctx.q/ctx.k/ctx.v + prefill.lora_buf).
+        //
+        // Distinct from caller-owned-split-scratch (ownership protocol,
+        // not depth), superset-sized-scratch-across-variants (sizing
+        // across variants, not nest depth), scoped-init-at-consume-site
+        // (zeroing scope — the complementary clear discipline), and
+        // needless-swap-temp-hoist-to-scratch (false-premise temps; this
+        // is the general placement criterion of which that rule's clause
+        // 2 is one instance).
+        KernelRule {
+            rule_id: "scratch-depth-matches-shape-invariance".to_string(),
+            gpu_concept: "A multi-level loop nest (layer x position x head) allocates each scratch at the deepest convenient point even when the buffer's shape is bound by quantities fixed for the whole call: shapes derived only from (seq_len, dim) are layer-invariant, position-invariant, and head-invariant, so each scratch belongs at the SHALLOWEST nest whose bounds determine its shape — allocation depth must match shape invariance. The tell is two same-shaped buffers allocated at different depths (a per-layer attn_residuals beside a per-position mlp_residual) while sibling buffers already sit at fn scope; hoisting is free of clearing duties whenever the producer fully overwrites the slots it touches. GPU translation: per-layer device-buffer creation and per-workgroup temps are the same disease. Distinct from caller-owned-split-scratch (ownership protocol, not depth), superset-sized-scratch-across-variants (sizing across variants), scoped-init-at-consume-site (zeroing scope), and needless-swap-temp-hoist-to-scratch (false-premise temps — this is the general placement criterion).".to_string(),
+            ref_shape: "// naive: every scratch allocated at the DEEPEST loop nest that touches it,\n// even though its shape is bound by quantities fixed for the whole call\nfn forward_naive(layers: usize, seq: usize, n: usize, heads: usize) -> f32 {\n    let mut hidden = vec![0.0f32; seq * n]; // fn scope: the one done right\n    let mut sink = 0.0f32;\n    for l in 0..layers {\n        // shapes depend ONLY on (seq, n) — layer-invariant, yet per-layer:\n        let mut q = vec![0.0f32; seq * n];\n        let mut attn_residuals = vec![0.0f32; seq * n];\n        for pos in 0..seq {\n            // shape depends only on n — position-invariant, yet per-position:\n            let mut attn_out = vec![0.0f32; n];\n            for h in 0..heads {\n                // shape depends only on seq — head-invariant, yet per-head:\n                let mut scores = vec![0.0f32; seq];\n                for t in 0..seq {\n                    scores[t] = q[pos * n + h] + hidden[t * n] + attn_residuals[t * n];\n                }\n                sink += scores[l % seq];\n            }\n            attn_out[0] = sink;\n            sink += attn_out[0];\n        }\n        q[0] += sink;\n    }\n    sink\n}\n".to_string(),
+            opt_pattern: "// optimized: allocation depth matches shape invariance — each scratch\n// lives at the SHALLOWEST loop whose bounds determine its shape; no\n// clearing between reuses: every producer fully overwrites its slots\nfn forward_hoisted(layers: usize, seq: usize, n: usize, heads: usize) -> f32 {\n    struct Scratch {\n        q: Vec<f32>,              // [seq*n] — layer-invariant shape\n        attn_residuals: Vec<f32>, // [seq*n] — layer-invariant shape\n        attn_out: Vec<f32>,       // [n]     — position-invariant shape\n        scores: Vec<f32>,         // [seq]   — head-invariant shape\n    }\n    let mut s = Scratch {\n        q: vec![0.0f32; seq * n],\n        attn_residuals: vec![0.0f32; seq * n],\n        attn_out: vec![0.0f32; n],\n        scores: vec![0.0f32; seq],\n    };\n    let mut hidden = vec![0.0f32; seq * n];\n    let mut sink = 0.0f32;\n    for l in 0..layers {\n        for pos in 0..seq {\n            for h in 0..heads {\n                for t in 0..seq {\n                    s.scores[t] = s.q[pos * n + h] + hidden[t * n] + s.attn_residuals[t * n];\n                }\n                sink += s.scores[l % seq];\n            }\n            s.attn_out[0] = sink; // plain store: slot written once per reuse\n            sink += s.attn_out[0];\n        }\n        s.q[0] += sink;\n    }\n    sink\n}\n".to_string(),
+        },
+        // ── softmax-denominator-hoist-out-of-weighted-v — normalize
+        // once, multiply in the PV loop (B) ──
+        //
+        // Source: riir-gpu hypernet/meta_lora.rs L345-358 — after the
+        // exp pass, the weighted-V loop computes
+        // val += scores[t_pos] / sum_exp * v[...] — a DIVISION per
+        // (d, t_pos) pair, the same scores[t_pos] / sum_exp recomputed
+        // head_dim times per key position (f32 divide is roughly an
+        // order of magnitude costlier than multiply). The in-tree
+        // optimized twin is riir-engine attention.rs attention_head
+        // pass 3: inv_sum = 1.0 / sum hoisted once per (position,
+        // head), per-t weight as scores_buf[t] * inv_sum, t-outer/
+        // d-inner so V reads and the attn_out accumulation are both
+        // contiguous — meta_lora.rs re-implemented it naively one
+        // crate away. sum_exp >= exp(0) = 1 by construction (the max
+        // score subtracts out), so the reciprocal is always finite.
+        //
+        // Distinct from fold-norm-scalar-into-matmul (folds an external
+        // scalar INTO a dot to kill a buffer — this hoists a redundant
+        // division OUT of the loop), from hoist-group-invariant-scale-
+        // out-of-word-loop (dequant scale load-hoisting — this is
+        // div-to-reciprocal-mul on a softmax denominator), from
+        // online-softmax-streaming (streaming memory tiling — this is
+        // the normalize-once fix inside one tile), and from
+        // matvec-coalesce (the memory-stride half that the same
+        // restructure delivers for free).
+        KernelRule {
+            rule_id: "softmax-denominator-hoist-out-of-weighted-v".to_string(),
+            gpu_concept: "The softmax-weighted value accumulation divides by the softmax denominator inside the innermost (d x t) nest: val += scores[t] / sum_exp * v[...] recomputes the same division head_dim times per key position. Hoist the reciprocal once per (position, head) — inv_sum = 1.0 / sum_exp, then a per-t weight w = scores[t] * inv_sum (or premultiply the whole scores array before the consumer loop) — so the PV loop multiplies, never divides: f32 divide is an order of magnitude costlier than multiply and the denominator is loop-invariant by construction (the max score subtracts out, so sum_exp >= 1 and the reciprocal is always finite). The same restructure naturally swaps to t-outer/d-inner, making the V reads and the attn_out accumulation contiguous — the memory-stride half alone is the matvec-coalesce principle; the division hoist is the compute half. Distinct from fold-norm-scalar-into-matmul (folds an external scalar INTO a dot to kill a buffer — this hoists a redundant division OUT of the loop), from hoist-group-invariant-scale-out-of-word-loop (dequant scale load-hoisting), and from online-softmax-streaming (streaming tiling — this is the normalize-once fix inside one tile).".to_string(),
+            ref_shape: "// naive: division per (d, t_pos) pair — the same scores[t_pos] / sum_exp\n// computed head_dim times per key position; V read strides by kvd\nfn weighted_v_naive(scores: &[f32], v: &[f32], attn_out: &mut [f32],\n                    sum_exp: f32, hd: usize, kvd: usize, k_head_off: usize,\n                    q_head_off: usize, total_seq: usize) {\n    for d in 0..hd {\n        let mut val = 0.0f32;\n        for t_pos in 0..total_seq {\n            // division INSIDE the innermost nest: hd x redundant divides\n            val += scores[t_pos] / sum_exp * v[t_pos * kvd + k_head_off + d];\n        }\n        attn_out[q_head_off + d] += val;\n    }\n}\n".to_string(),
+            opt_pattern: "// optimized: reciprocal hoisted ONCE per (position, head); the per-t\n// weight is a multiply; t-outer/d-inner makes V reads contiguous in d\nfn weighted_v_hoisted(scores: &[f32], v: &[f32], attn_out: &mut [f32],\n                      sum_exp: f32, hd: usize, kvd: usize, k_head_off: usize,\n                      q_head_off: usize, total_seq: usize) {\n    let inv_sum = 1.0f32 / sum_exp; // ONE division; sum_exp >= 1.0 always\n    for t_pos in 0..total_seq {\n        let w = scores[t_pos] * inv_sum; // per-t weight, computed once\n        for d in 0..hd {\n            // v access contiguous in d; attn_out accumulates across t\n            attn_out[q_head_off + d] += w * v[t_pos * kvd + k_head_off + d];\n        }\n    }\n}\n".to_string(),
+        },
+        // ── frozen-cooperand-hoist-out-of-perturbation-loop —
+        // materialization cadence must match mutation cadence (A) ──
+        //
+        // Source: riir-gpu hypernet/train_meta_lora.rs FD sweeps — the
+        // meta-grad loop (L276-321) rebuilds MemoryEmbeddings { data:
+        // mem_flat.clone(), .. } at L290-294/L310-314 for an operand
+        // mutated once per optimizer step (frozenness proven: mem_flat
+        // mutates only at L328/L346/L365 + L370); the mem-grad loop
+        // (L325-366) mirror-images it with unflatten_meta_lora of the
+        // frozen meta operand at L331-336/L349-354. The callee re-derives
+        // its own sweep-invariants too: compute_loss recomputes the
+        // context-embedding target per eval (train L170-182) and
+        // extract_memory_states re-converts the LoraAdapter set per call
+        // (meta_lora.rs L485-490). The mem-loop half is 100% pure waste —
+        // hoistable with zero semantic change.
+        //
+        // Complements make-unmake-over-clone-per-candidate (that rule
+        // fixes the VARYING operand's per-candidate clone via in-place
+        // perturb + rollback — this fixes the frozen co-operand: no
+        // delta, no rollback, just hoist). Host-materialization twin of
+        // side-branch-operand-residency-matches-mutation-lifetime
+        // (device upload cadence) and immutable-operand-upload-at-set-
+        // creation (config-lifetime constructor binding).
+        KernelRule {
+            rule_id: "frozen-cooperand-hoist-out-of-perturbation-loop".to_string(),
+            gpu_concept: "A finite-difference or perturbation sweep whose eval API takes structured operands rebuilds the frozen co-operand per candidate: the sweep materializes unflatten(meta) and MemoryEmbeddings { data: mem.clone() } 2*P and 2*M times per step for operands mutated once per optimizer step, and the callee re-derives its own sweep-invariants (adapter conversion of the frozen operand, the context-embedding target) on every eval. Materialization cadence must match mutation cadence: build the frozen co-operand plus the callee-derived invariants ONCE at sweep entry into a prelude and thread it through — adding a callee seam (a loss_with_prelude entry point) when the invariant is derived inside the eval — so only the perturbed operand is re-materialized per candidate. Complements make-unmake-over-clone-per-candidate (that rule fixes the varying operand; this fixes the frozen co-operand — no delta, no rollback, just hoist). Host-materialization twin of side-branch-operand-residency-matches-mutation-lifetime (device upload cadence) and immutable-operand-upload-at-set-creation (config-lifetime constructor binding).".to_string(),
+            ref_shape: "// naive: FD sweep rebuilds the FROZEN co-operand per eval — mem is\n// mutated once per optimizer step but materialized 2*P times per step;\n// the callee re-derives its own sweep-invariants (target, adapters) too\nfn fd_grad_naive(meta_flat: &mut [f32], mem_flat: &[f32], ctx: &[u32],\n                 w: &Weights, cfg: &Cfg, eps: f32, grads: &mut [f32]) {\n    for i in 0..meta_flat.len() {\n        let saved = meta_flat[i];\n        meta_flat[i] = saved + eps;\n        let lp = loss(ctx, &unflatten_meta(meta_flat),\n                      &MemoryEmb { data: mem_flat.to_vec(), m: cfg.m }, w);\n        meta_flat[i] = saved - eps;\n        let lm = loss(ctx, &unflatten_meta(meta_flat),\n                      &MemoryEmb { data: mem_flat.to_vec(), m: cfg.m }, w);\n        grads[i] = (lp - lm) / (2.0 * eps);\n        meta_flat[i] = saved;\n    }\n}\n".to_string(),
+            opt_pattern: "// optimized: materialization cadence matches mutation cadence — the\n// frozen co-operand + callee-derived invariants are built ONCE at sweep\n// entry into a prelude; the varying operand stays make/unmake in place\nstruct LossPrelude {\n    mem: MemoryEmb,             // frozen this sweep: built once\n    target: Vec<f32>,           // ctx-only: invariant under BOTH operands\n    adapters: Vec<LoraAdapter>, // callee seam: pre-converted frozen meta\n}\nfn fd_grad_hoisted(meta_flat: &mut [f32], ctx: &[u32], w: &Weights,\n                   pre: &LossPrelude, eps: f32, grads: &mut [f32]) {\n    for i in 0..meta_flat.len() {\n        let saved = meta_flat[i];\n        meta_flat[i] = saved + eps;\n        let lp = loss_with_prelude(ctx, meta_flat, w, pre);\n        meta_flat[i] = saved - eps;\n        let lm = loss_with_prelude(ctx, meta_flat, w, pre);\n        grads[i] = (lp - lm) / (2.0 * eps);\n        meta_flat[i] = saved;\n    }\n}\n// The mem-grad sweep is the mirror image: meta is the frozen co-operand —\n// hoist unflatten_meta + adapter conversion; only mem_flat perturbs.\n".to_string(),
+        },
     ])
 }
 
@@ -7222,7 +7336,7 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 334-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 337-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -7230,7 +7344,7 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (75 rules)
+    // A: Memory access patterns (77 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -7310,9 +7424,11 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "stack-array-row-view-bridge",
             "stash-kernel-internal-intermediate-in-smem",
             "bit-cursor-unpack-to-width-specialized-byte-batch",
+            "scratch-depth-matches-shape-invariance",
+            "frozen-cooperand-hoist-out-of-perturbation-loop",
         ],
     ),
-    // B: Compute patterns (49 rules)
+    // B: Compute patterns (50 rules)
     (
         KernelCategory::Compute,
         "B: compute",
@@ -7366,6 +7482,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "topk-select-nth-over-full-vocab-sort",
             "hoist-bit-address-out-of-packed-row-sweep",
             "single-sweep-minmax-for-quant-scale",
+            "softmax-denominator-hoist-out-of-weighted-v",
         ],
     ),
     // C: Fusion patterns (33 rules)
@@ -7761,9 +7878,10 @@ mod tests {
         // Batch 35 (8): riir-gpu production kernels — mask-sentinel-matches-reduction-identity, smem-staging-gated-by-cross-thread-reuse, kernelize-host-chain-after-sync-batching-floor, block-reduction-separate-scratch-runtime-strides, saturating-nonlinearity-recovery-breaks-near-cap, adapter-grad-join-mirrors-forward-delta-insertion-point, side-consumer-readback-alias-live-handle-for-dependent-dispatch, quadratic-attention-intermediates-recompute-from-linear-saves (gemma2_cubecl_train/ — the Gemma-2 training cluster: fused causal attention kernel Issue 430 Option B + hybrid LoRA training fwd/bwd).
         // Batch 42 (4): riir-gpu production kernels — refine-loop-invariant-prefix-elision, softmax-entropy-via-shift-identity, runtime-identity-gate-cached-verdict-elides-side-projection, expected-embedding-transposed-gemv-resident-head (gemma2_d2f/ mod.rs + gemma2_d2f_sc.rs — the Gemma-2 D2F block-causal decode cluster + Self-Conditioning; hazards filed as Issue 695).
         // Batch 43 (5): riir-gpu production kernels — mutable-input-scratch-residency-write-per-call, topk-select-nth-over-full-vocab-sort, post-scatter-renorm-support-set-only, stack-array-row-view-bridge, empty-slice-sentinel-launders-shape-violation (weaver_gpu_corrector.rs + weaver_gpu_dflash.rs — the Weaver speculative-decode GPU corrector cluster; hazards filed as Issue 697).
+        // Batch 45 (3): riir-gpu hypernet — scratch-depth-matches-shape-invariance, softmax-denominator-hoist-out-of-weighted-v, frozen-cooperand-hoist-out-of-perturbation-loop (hypernet/meta_lora.rs + train_meta_lora.rs — the SHINE meta-LoRA CPU reference forward + FD trainer; hazards filed as Issue 699).
         // Batch 44 (9): riir-gpu production kernels — row-dot-split-inner-axis-block-reduce, fuse-indirect-gather-into-dot-consumer, share-cube-size-const-between-kernel-and-launcher, stash-kernel-internal-intermediate-in-smem, hoist-bit-address-out-of-packed-row-sweep, fold-tile-transpose-into-dequant-scatter, bit-cursor-unpack-to-width-specialized-byte-batch, single-sweep-minmax-for-quant-scale, serialize-container-canonical-order (weaver_gpu/mod.rs — the 19-dispatch kernel substrate behind the Batch 43 corrector + kvarn/ — the KVarN CPU reference + zone-scale registry; hazards filed as Issue 698).
-        // Total: 209. // (historical batch-30 snapshot; current 334)
-        assert_eq!(corpus.entries.len(), 334, "batches 1-44 should have 334 rules");
+        // Total: 209. // (historical batch-30 snapshot; current 337)
+        assert_eq!(corpus.entries.len(), 337, "batches 1-45 should have 337 rules");
     }
 
     #[test]
@@ -10447,6 +10565,70 @@ mod tests {
         }
     }
 
+
+    #[test]
+    fn batch45_rules_present() {
+        let corpus = build_kernel_seed_corpus();
+        let ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        // A (2 new): allocation depth + FD frozen co-operand
+        assert!(ids.contains(&"scratch-depth-matches-shape-invariance"), "scratch depth");
+        assert!(ids.contains(&"frozen-cooperand-hoist-out-of-perturbation-loop"), "frozen co-operand");
+        // B (1 new): softmax denominator hoist
+        assert!(ids.contains(&"softmax-denominator-hoist-out-of-weighted-v"), "denominator hoist");
+    }
+
+    #[test]
+    fn batch45_concepts_covered() {
+        // Distinctive ASCII substrings located by rule_id (the 32a convention).
+        let corpus = build_kernel_seed_corpus();
+        let concept = |id: &str| -> String {
+            corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-45 rule '{id}' missing"))
+                .gpu_concept
+                .clone()
+        };
+        // A: scratch-depth-matches-shape-invariance (meta_lora.rs L246/L249-252/L322/L330/L388/L395)
+        let c = concept("scratch-depth-matches-shape-invariance");
+        assert!(c.contains("allocation depth must match shape invariance")
+            && c.contains("layer-invariant"), "scratch-depth concept");
+        // B: softmax-denominator-hoist-out-of-weighted-v (meta_lora.rs L345-358 vs attention.rs L63-76)
+        let c = concept("softmax-denominator-hoist-out-of-weighted-v");
+        assert!(c.contains("an order of magnitude costlier than multiply")
+            && c.contains("Hoist the reciprocal once"), "denominator-hoist concept");
+        // A: frozen-cooperand-hoist-out-of-perturbation-loop (train_meta_lora.rs L276-321/L325-366)
+        let c = concept("frozen-cooperand-hoist-out-of-perturbation-loop");
+        assert!(c.contains("Materialization cadence must match mutation cadence")
+            && c.contains("frozen co-operand"), "frozen-cooperand concept");
+    }
+
+    #[test]
+    #[cfg(not(feature = "kernel_verify"))]
+    fn batch45_pseudocode_parses() {
+        // G1 for Batch 45: every new rule's ref_shape AND opt_pattern must
+        // syn-parse as valid Rust (the L2 pruner verdict).
+        use crate::domain::HealDomain;
+        let corpus = build_kernel_seed_corpus();
+        let ids = [
+            "scratch-depth-matches-shape-invariance",
+            "softmax-denominator-hoist-out-of-weighted-v",
+            "frozen-cooperand-hoist-out-of-perturbation-loop",
+        ];
+        for id in ids {
+            let entry = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-45 rule '{id}' missing"));
+            let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+            assert!(ref_verdict.parses, "batch-45 ref_shape for '{id}' must parse");
+            let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+            assert!(opt_verdict.parses, "batch-45 opt_pattern for '{id}' must parse");
+        }
+    }
+
     // ════════════════════════════════════════════════════════════════════
     // Plan 003 — Router ↔ corpus wiring tests
     // ════════════════════════════════════════════════════════════════════
@@ -10458,7 +10640,7 @@ mod tests {
 
     #[test]
     fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-        // Every rule_id in the 334-rule corpus must appear in exactly one category.
+        // Every rule_id in the 337-rule corpus must appear in exactly one category.
         let corpus = build_kernel_seed_corpus();
         let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
         let mut categorized: Vec<&str> = Vec::new();
@@ -10489,10 +10671,10 @@ mod tests {
 
     #[test]
     fn kernel_categories_counts_match_plan_003_table() {
-        // Pin per-category rule counts to the Plan 003 table (updated for Batch 44).
+        // Pin per-category rule counts to the Plan 003 table (updated for Batch 45).
         let expected = [
-            (KernelCategory::MemoryAccess, 75),
-            (KernelCategory::Compute, 49),
+            (KernelCategory::MemoryAccess, 77),
+            (KernelCategory::Compute, 50),
             (KernelCategory::Fusion, 33),
             (KernelCategory::Dispatch, 59),
             (KernelCategory::Parallelism, 19),
@@ -10516,7 +10698,7 @@ mod tests {
         }
         // Sum must equal 334.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 334, "Plan 003: category totals must sum to 334");
+        assert_eq!(total, 337, "Plan 003: category totals must sum to 337");
     }
 
     #[test]
@@ -10526,7 +10708,7 @@ mod tests {
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 334, "Plan 003: grouped corpus has {total} rules, expected 334");
+        assert_eq!(total, 337, "Plan 003: grouped corpus has {total} rules, expected 337");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");
