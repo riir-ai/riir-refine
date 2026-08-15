@@ -2,7 +2,7 @@
 //! Pure data moved verbatim from the former corpus.rs monolith
 //! (2026-08-15 split); append new batches to the LAST gpu slice or
 //! open a new one past ~900 lines. Category membership lives ONLY in
-//! KERNEL_CATEGORIES (mod.rs) — never encode it here.
+//! `KERNEL_CATEGORIES` (mod.rs) — never encode it here.
 
 use crate::domains::kernel_opt::KernelRule;
 

@@ -55,8 +55,9 @@
         // Batch 45 (3): riir-gpu hypernet — scratch-depth-matches-shape-invariance, softmax-denominator-hoist-out-of-weighted-v, frozen-cooperand-hoist-out-of-perturbation-loop (hypernet/meta_lora.rs + train_meta_lora.rs — the SHINE meta-LoRA CPU reference forward + FD trainer; hazards filed as Issue 699).
         // Batch 44 (9): riir-gpu production kernels — row-dot-split-inner-axis-block-reduce, fuse-indirect-gather-into-dot-consumer, share-cube-size-const-between-kernel-and-launcher, stash-kernel-internal-intermediate-in-smem, hoist-bit-address-out-of-packed-row-sweep, fold-tile-transpose-into-dequant-scatter, bit-cursor-unpack-to-width-specialized-byte-batch, single-sweep-minmax-for-quant-scale, serialize-container-canonical-order (weaver_gpu/mod.rs — the 19-dispatch kernel substrate behind the Batch 43 corrector + kvarn/ — the KVarN CPU reference + zone-scale registry; hazards filed as Issue 698).
         // Batch 46 (3): riir-gpu maxsim — size-gate-covers-every-cost-factor, declared-max-array-taxed-per-thread-under-runtime-bound, shared-operand-side-pair-batch-index-decomposition (maxsim/dispatch.rs + spectralquant.rs + both WGSL kernels — the MaxSim size-gated CPU/GPU dispatcher + the fused SpectralQuant dequantize+MaxSim single-pass scorer, Plan 085; hazards filed as Issue 700).
-        // Total: 209. // (historical batch-30 snapshot; current 340)
-        assert_eq!(corpus.entries.len(), 340, "batches 1-46 should have 340 rules");
+        // Batch 47 (3): riir-gpu hypernet — per-key-projection-hoist-out-of-query-sweep, multi-head-out-proj-consumes-head-concat, shared-producer-prefix-extract-once-per-input (hypernet/ shine.rs + routing.rs + types.rs + m2p_transformer.rs + gpu_m2p.rs + kernels/m2p_attention.wgsl — the SHINE second half: the context-to-LoRA pipeline + expert routing + the M2P CPU/GPU attention pair; hazards filed as Issue 701).
+        // Total: 209. // (historical batch-30 snapshot; current 343)
+        assert_eq!(corpus.entries.len(), 343, "batches 1-47 should have 343 rules");
     }
 
     #[test]
@@ -2867,6 +2868,70 @@
         }
     }
 
+    #[test]
+    fn batch47_rules_present() {
+        let corpus = build_kernel_seed_corpus();
+        let ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        // B (1 new): K/V projection hoist out of the query sweep
+        assert!(ids.contains(&"per-key-projection-hoist-out-of-query-sweep"), "per-key projection hoist");
+        // E (1 new): head-concat out-projection phase boundary
+        assert!(ids.contains(&"multi-head-out-proj-consumes-head-concat"), "head-concat out-proj");
+        // D (1 new): shared producer extract-once
+        assert!(ids.contains(&"shared-producer-prefix-extract-once-per-input"), "shared producer extract-once");
+    }
+
+    #[test]
+    fn batch47_concepts_covered() {
+        // Distinctive ASCII substrings located by rule_id (the 32a convention).
+        let corpus = build_kernel_seed_corpus();
+        let concept = |id: &str| -> String {
+            corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-47 rule '{id}' missing"))
+                .gpu_concept
+                .clone()
+        };
+        // B: per-key-projection-hoist-out-of-query-sweep (gpu_m2p.rs L97-112/L121-133 + m2p_attention.wgsl L55-91)
+        let c = concept("per-key-projection-hoist-out-of-query-sweep");
+        assert!(c.contains("re-derives the per-key projection inside the query loop")
+            && c.contains("Project all K (and V) once per slice"), "per-key hoist concept");
+        // E: multi-head-out-proj-consumes-head-concat (m2p_attention.wgsl L92-98/L167-172 + gpu_m2p.rs L134-141)
+        let c = concept("multi-head-out-proj-consumes-head-concat");
+        assert!(c.contains("consumes the CONCATENATION of all heads")
+            && c.contains("scalar-times-rowsum"), "head-concat concept");
+        // D: shared-producer-prefix-extract-once-per-input (shine.rs L229-230 + L138-144/L196-202)
+        let c = concept("shared-producer-prefix-extract-once-per-input");
+        assert!(c.contains("extract once and thread the shared artifact")
+            && c.contains("the producer is pure"), "shared producer concept");
+    }
+
+    #[test]
+    #[cfg(not(feature = "kernel_verify"))]
+    fn batch47_pseudocode_parses() {
+        // G1 for Batch 47: every new rule's ref_shape AND opt_pattern must
+        // syn-parse as valid Rust (the L2 pruner verdict).
+        use crate::domain::HealDomain;
+        let corpus = build_kernel_seed_corpus();
+        let ids = [
+            "per-key-projection-hoist-out-of-query-sweep",
+            "multi-head-out-proj-consumes-head-concat",
+            "shared-producer-prefix-extract-once-per-input",
+        ];
+        for id in ids {
+            let entry = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-47 rule '{id}' missing"));
+            let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+            assert!(ref_verdict.parses, "batch-47 ref_shape for '{id}' must parse");
+            let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+            assert!(opt_verdict.parses, "batch-47 opt_pattern for '{id}' must parse");
+        }
+    }
+
     // ════════════════════════════════════════════════════════════════════
     // Plan 003 — Router ↔ corpus wiring tests
     // ════════════════════════════════════════════════════════════════════
@@ -2878,7 +2943,7 @@
 
     #[test]
     fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-        // Every rule_id in the 340-rule corpus must appear in exactly one category.
+        // Every rule_id in the 343-rule corpus must appear in exactly one category.
         let corpus = build_kernel_seed_corpus();
         let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
         let mut categorized: Vec<&str> = Vec::new();
@@ -2909,13 +2974,13 @@
 
     #[test]
     fn kernel_categories_counts_match_plan_003_table() {
-        // Pin per-category rule counts to the Plan 003 table (updated for Batch 46).
+        // Pin per-category rule counts to the Plan 003 table (updated for Batch 47).
         let expected = [
             (KernelCategory::MemoryAccess, 79),
-            (KernelCategory::Compute, 50),
+            (KernelCategory::Compute, 51),
             (KernelCategory::Fusion, 33),
-            (KernelCategory::Dispatch, 60),
-            (KernelCategory::Parallelism, 19),
+            (KernelCategory::Dispatch, 61),
+            (KernelCategory::Parallelism, 20),
             (KernelCategory::FlashAttnTiling, 10),
             (KernelCategory::LinearAttnRecurrence, 19),
             (KernelCategory::MoeDispatchBackward, 14),
@@ -2934,9 +2999,9 @@
                 "Plan 003: category {cat:?} has {} rules, expected {count}",
                 entry.2.len());
         }
-        // Sum must equal 340.
+        // Sum must equal 343.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 340, "Plan 003: category totals must sum to 340");
+        assert_eq!(total, 343, "Plan 003: category totals must sum to 343");
     }
 
     #[test]
@@ -2946,7 +3011,7 @@
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 340, "Plan 003: grouped corpus has {total} rules, expected 340");
+        assert_eq!(total, 343, "Plan 003: grouped corpus has {total} rules, expected 343");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");

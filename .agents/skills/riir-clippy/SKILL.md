@@ -702,23 +702,66 @@ global = symlink only.
   first, then open). **Rule 0b removed same day (owner's call)** — the
   overnight-window gate is gone; the idle queue runs at any hour, with
   collision protection via the standing write-time discipline only.
+- **Batch 47 DONE (2026-08-15, Research 052):** the SHINE hypernet SECOND
+  half (`shine.rs` 402 + `routing.rs` 268 + `types.rs` 269 +
+  `m2p_transformer.rs` 611 + `gpu_m2p.rs` 568 +
+  `kernels/m2p_attention.wgsl` 173 — completes the hypernet module
+  alongside Batch 45; meta_lora/train_meta_lora were ACTIVE sibling WIP
+  (Issue 699 fix pass) — quotes drawn only from clean files; bench-only
+  consumers, zero production wiring) — **3 rules, corpus 340 → 343**
+  (B 51, D 61, E 20): `per-key-projection-hoist-out-of-query-sweep`
+  (B — K/V projections re-derived inside the query loop multiply
+  projection work by seq; the optimized twin projects ALL QKV once at
+  sweep entry in the same module family),
+  `multi-head-out-proj-consumes-head-concat` (E — the out-projection
+  needs the head concat; a per-head thread degenerates to
+  scalar-times-rowsum, masked by identity fixtures),
+  `shared-producer-prefix-extract-once-per-input` (D — two sibling
+  methods sharing an expensive pure producer pay it twice under one
+  composed call; extract once, thread the artifact). ~17 dedups (the
+  workgroup(1,1,1) shape = B44/B23/B28 composite; per-column weight
+  re-upload = B33/B28/B26/B40 with the dead `grid_stride` as the
+  fossil; the size gate = B46's pre-recorded 2nd instance; Vec churn =
+  B45 depth; powf freq table = 3rd-strike cos/sin; routing norms =
+  norm-decoupled; shape metadata = derive-shape-from-payload). Bug
+  yield filed as riir-ai **Issue 701** (headline: the WRONG
+  out-projection math in BOTH WGSL kernels AND the CPU fallback —
+  `attn_val * rowsum(wo)` instead of the matvec + the head-local
+  `wo_row` indexing bug, masked by identity fixtures + a print-only
+  pseudo-parity bench; release-mode stack OOB at DEFAULT head_dim 512
+  vs the `[f32; 128]` array; WGSL `array<f32, 256>` scores overflow at
+  seq > 256; the ~251 GB default memory grid + the TRIPLE-inconsistent
+  13/15/19H provision constant (99.96% of the grid discarded at
+  default); structurally-dead all-zero LoRA modules at toy scale via
+  the `min()` clamp; row-attention dispatch exceeding the 65535
+  workgroup limit; no test compiles either WGSL kernel). GOAT: 357
+  kernel_heal + 201 default, clippy 0 both states (10 doc fixes — the
+  B37 line-initial `+` struck a 4TH time + 7 pre-existing
+  `KERNEL_CATEGORIES` slice-header backticks from the B46 split —
+  whole-crate clippy after ANY corpus-layout change is the standing
+  check). Both lanes' quotes re-verified by the coordinator in clean
+  files.
 - **NEXT mining target**: `ls` the riir-gpu tree for the next unmined
-  cluster (~102 of ~200 files mined). Candidates:
-  `hypernet/` second half (~1,568: shine.rs 402 + routing.rs 268 +
-  types.rs 269 + m2p_transformer.rs 611 — NOTE gpu_m2p.rs was
-  pattern-checked at B46 + its per-column dispatch loop L298-319 flagged
-  as a likely B40 instance; re-verify sibling meta_lora work has landed
-  first), `kimi_k3_gpu_backward_batched.rs` (1,394 — LOW value: shares
+  cluster (~104 of ~200 files mined). Candidates:
+  `kimi_k3_gpu_backward_batched.rs` (1,394 — LOW value: shares
   Issue 693's H1/H2 + the broken LCG with the module file; mine only if
-  the better clusters are exhausted). Pick 1-2 files, ~4-8 rules
-  (dedup pressure high after 46 batches), Batch 47 (Research 052 —
-  RE-SCAN `.research/` at write time).
+  the better clusters are exhausted), the small unmined leaves
+  (`game_mux.rs`, `domino_gpu.rs`, `domain_latent.rs`, `depth_tier.rs`,
+  `elf.rs`, `cpu_reference.rs`, `config.rs`, `context.rs` — size-check
+  first; several may be thin), the standalone `forward*/` twins
+  (forward_prefill.rs / forward_sp_kv.rs / forward_target_extract.rs /
+  forward_dflash.rs / forward_flashprefill.rs — NOTE the forward/ DIR
+  was mined at B26; these are the standalone twins, expect dedup),
+  `attention_q8kv_cubecl.rs` (sibling of the B23 attention cluster —
+  dedup pressure HIGH). Pick 1-2 files, ~3-6 rules (dedup pressure
+  very high after 47 batches), Batch 48 (Research 053 — RE-SCAN
+  `.research/` at write time).
   - Validation pattern (proven T4 + 32a + 32b-1 + 32c + 36 + 38): corpus files are NOT
     sibling WIP — edit + run GOAT in the main checkout with
     `CARGO_TARGET_DIR=/tmp/riir-clippy-bNN`; `--features kernel_heal`
     for the corpus suite (318 at 34, 321 at 35, 324 at 36, 327 at 37,
     330 at 38, 333 at 39, 336 at 40, 339 at 41, 342 at 42, 345 at 43,
-    348 at 44, 351 at 45, 354 at 46), default for
+    348 at 44, 351 at 45, 354 at 46, 357 at 47), default for
     the 201 suite.
     **Corpus layout since Batch 46 (2026-08-15 split, owner-approved):**
     `corpus/` module dir replaces the 10.9K-line monolith — `mod.rs`
@@ -744,7 +787,7 @@ global = symlink only.
     router.rs `rules_for_expert` total + the corpus-count mentions in
     router.rs doc header + the Plan 003 doc-comment `NNN-rule corpus`
     line above KERNEL_CATEGORIES + the `Total: 209 ... current NNN`
-    comment + the file-level `//!` header batch block. All in sync at 340 (A 79, B 50, C 33, D 60, E 19, L 11 after Batch 46; F 10, G 19, H 14, I 4, J 5, K 5, M 9, N 18, O 4).
+    comment + the file-level `//!` header batch block. All in sync at 343 (A 79, B 51, C 33, D 61, E 20, L 11 after Batch 47; F 10, G 19, H 14, I 4, J 5, K 5, M 9, N 18, O 4).
   - **Landing lesson (32b-1, self-caught)**: after a large multi-entry
     corpus edit, `awk`-scan for `rule_id:` lines NOT preceded by a
     standalone `KernelRule {` BEFORE the first compile — JSON `\n`
@@ -752,15 +795,17 @@ global = symlink only.
     swallowing the `KernelRule {` opener into the comment (9/10 entries
     broken; rustc's `vec![` unclosed-delimiter error points at the symptom,
     not the cause).
-- **BLOCKED**: `ternary_deltanet_gpu_forward.rs` (+ `_cudarc.rs` — sibling
-  WIP STILL ACTIVE as of 2026-08-15 evening: qv_lora.rs + cudarc_kernels/
-  + riir-gpu/lib.rs + ternary_deltanet_gpu_forward_cudarc.rs all dirty)
-  — mine only after their WIP lands.
-- **Progress**: riir-gpu ~102 of ~200 files mined. Corpus: 340 rules.
+- **BLOCKED**: `ternary_deltanet_gpu_forward.rs` (+ `_cudarc.rs` —
+  RE-BLOCKED 2026-08-15 late evening: `c5a49da0b` landed the Issue 697
+  kernel-efficiency pass but the file + `cudarc_kernels/mod.rs` went
+  dirty AGAIN with fresh sibling WIP (mtime ~18:38) — a ~200K-line
+  cluster, verify clean at batch start) — mine only after their WIP
+  lands.
+- **Progress**: riir-gpu ~104 of ~200 files mined. Corpus: 343 rules.
   edge_lora module FULLY MINED (32a + 32b-1 + 32c). spectralquant/
-  FULLY MINED (15 + 33). hypernet/ meta-LoRA pair DONE (45 —
-  meta_lora.rs + train_meta_lora.rs; m2p_transformer + gpu_m2p + shine +
-  routing + types remain). maxsim/ FULLY MINED (46 — dispatch.rs +
+  FULLY MINED (15 + 33). hypernet/ FULLY MINED (45: meta_lora.rs +
+  train_meta_lora.rs; 47: shine.rs + routing.rs + types.rs +
+  m2p_transformer.rs + gpu_m2p.rs + the M2P WGSL kernels). maxsim/ FULLY MINED (46 — dispatch.rs +
   spectralquant.rs + both WGSL kernels; gpu_m2p pattern-checked, its
   per-column loop flagged for the hypernet second-half batch). gemma4_cubecl_train/ DONE (34).
   gemma2_cubecl_train/ FULLY MINED (35: mod.rs + attention_gpu.rs;

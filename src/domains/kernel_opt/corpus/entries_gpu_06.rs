@@ -1,8 +1,8 @@
-//! Entries slice — Batches 14-46 era (rules 325-340 of 340) — riir-gpu production-kernel mining.
+//! Entries slice — Batches 14-47 era (rules 325-343 of 343) — riir-gpu production-kernel mining.
 //! Pure data moved verbatim from the former corpus.rs monolith
 //! (2026-08-15 split); append new batches to the LAST gpu slice or
 //! open a new one past ~900 lines. Category membership lives ONLY in
-//! KERNEL_CATEGORIES (mod.rs) — never encode it here.
+//! `KERNEL_CATEGORIES` (mod.rs) — never encode it here.
 
 use crate::domains::kernel_opt::KernelRule;
 
@@ -477,6 +477,113 @@ pub(super) fn entries() -> Vec<KernelRule> {
             gpu_concept: "A 'score N (query, doc) pairs' kernel whose input tensor is [batch x lq x d_h] bakes a per-pair copy of the shared side into the batch geometry (q_base = batch_idx * lq * d_h). The canonical MaxSim/ColBERT workload is one query vs N candidate docs: the caller must replicate the query N times on the host, upload N times the bytes, and every thread redundantly re-transforms identical tokens. Decompose the invocation index into (query_idx, doc_idx) — a 2D dispatch or divide/mod — with a [n_q x lq x d_h] query operand plus per-pair doc offsets, and the shared side crosses the bus once: share-by-indexing instead of replication, at the batch-geometry level. Distinct from gqa-kv-head-sharing-bandwidth-reduction (head-index mapping within attention — this is batch-tensor geometry), fan-out-shared-input-single-sync (N dispatches sharing one upload — this is one kernel's input layout), and twin-projection-shared-delta-adapter (param sharing between shape twins).".to_string(),
             ref_shape: "// naive: the pair API bakes the shared query into every pair —\n// [batch x lq x d] forces the caller to replicate the query batch-times\n// before upload (N x host bytes, N x bus traffic, per-thread re-transform)\nfn score_pairs_replicated(queries: &[f32], docs: &[f32], batch: usize,\n                          lq: usize, ld: usize, d: usize, out: &mut [f32]) {\n    for b in 0..batch {\n        let q = &queries[b * lq * d..(b + 1) * lq * d]; // SAME query, batch copies\n        let k = &docs[b * ld * d..(b + 1) * ld * d];\n        out[b] = maxsim(q, k, lq, ld, d);\n    }\n}\n".to_string(),
             opt_pattern: "// optimized: decompose the pair index — the shared query is uploaded\n// ONCE and selected by query_idx; each pair carries only its doc offset\nfn score_pairs_shared(query: &[f32], docs: &[f32], doc_offsets: &[usize],\n                      pair_q: &[u16], lq: usize, ld: usize, d: usize,\n                      out: &mut [f32]) {\n    for pair in 0..pair_q.len() {\n        let qi = pair_q[pair] as usize; // index into the n_q shared queries\n        let q = &query[qi * lq * d..(qi + 1) * lq * d]; // one copy on device\n        let off = doc_offsets[pair];\n        let k = &docs[off..off + ld * d];\n        out[pair] = maxsim(q, k, lq, ld, d);\n    }\n}\n".to_string(),
+        },
+        // ── per-key-projection-hoist-out-of-query-sweep — K/V
+        // projections re-derived inside the query loop multiply the
+        // projection work by seq (B) ──
+        //
+        // Source: riir-gpu hypernet/gpu_m2p.rs L97-112 (the CPU
+        // fallback's score loop re-projects K[t] for EVERY query pos:
+        // a GEMV nest `for k in 0..hidden_dim { k_val += input[t_off
+        // + k] * wqkv[...] }` inside `for pos`) + L121-133 (the V
+        // twin: v_val re-projected inside the d_out loop for every t)
+        // + kernels/m2p_attention.wgsl L55-70 + L82-91 (the GPU form:
+        // each (pos, head) thread re-derives ALL K and V rows —
+        // projection work multiplied by seq per thread). The OPTIMIZED
+        // twin ships in the sibling file: hypernet/m2p_transformer.rs
+        // L313-323 projects ALL QKV for all positions once at sweep
+        // entry, and the score loop reads `qkv[s * 3 * h + h +
+        // head_offset + d]` with no weight in the inner loop. Column
+        // attention at default shape (seq=36, H=4096): 43.3 G MACs
+        // naive vs 1.2 G hoisted; row attention (seq=M): factor M —
+        // arithmetically infeasible at production M=425,984.
+        //
+        // Distinct from frozen-cooperand-hoist-out-of-perturbation-loop
+        // (Batch 45 — a frozen operand RE-MATERIALIZED (cloned or
+        // uploaded) per candidate; here the operand is re-DERIVED by
+        // GEMV per query — a clone-detection healer never fires on
+        // this shape), from row-tile-amortize-input-load (Batch 15 —
+        // amortize input LOADS across tiles; this is projection
+        // COMPUTE), and from fan-out-shared-input-single-sync (Batch
+        // 25 — sibling dispatches sharing one upload; this is one
+        // sweep's inner loop).
+        KernelRule {
+            rule_id: "per-key-projection-hoist-out-of-query-sweep".to_string(),
+            gpu_concept: "A per-query sweep (attention scores, similarity search) re-derives the per-key projection inside the query loop: for each query position, each key's vector is re-computed by a full-width GEMV against the projection weight (K[t] = Wk . input[t] recomputed for every query pos; the V twin nests the same re-projection inside the per-output-dim loop), turning O(seq * H^2) projection work into O(seq^2 * H^2). On GPU the same shape multiplies per-thread: each (pos, head) thread re-derives ALL key and value rows, so projection work scales with the thread count again. Project all K (and V) once per slice at sweep entry — exactly what the reference CPU attention does: materialize the projected key/value rows (or the packed QKV) before the query loop, so the score sweep reads projected vectors at O(head_dim) per pair instead of re-deriving them at O(H * head_dim) per pair. On GPU, either a pre-projection kernel writing a scratch buffer or a hoist above the per-position dispatch axis. Detection shape: a GEMV nest (inner loop over the full H against a weight row) nested inside a loop over query positions whose induction variable the projection does not depend on. Distinct from frozen-cooperand-hoist-out-of-perturbation-loop (a frozen operand re-MATERIALIZED per candidate — clone/upload cadence; here the operand is re-DERIVED by GEMV per query, and a clone-detection healer never fires on this shape), from row-tile-amortize-input-load (amortize input loads across tiles — this is projection compute), and from fan-out-shared-input-single-sync (sibling dispatches sharing one upload — this is one sweep's inner loop).".to_string(),
+            ref_shape: "// naive: K[t] re-derived by GEMV for EVERY query pos — O(seq^2 * H * hd)\nfn attention_scores_reproject_naive(input: &[f32], wk: &[f32], seq: usize,\n                                    h: usize, hd: usize, scores: &mut [f32]) {\n    for q_pos in 0..seq {\n        for t in 0..seq {\n            let mut dot = 0.0f32;\n            for d in 0..hd {\n                let mut k_val = 0.0f32;\n                for k in 0..h {\n                    // the GEMV nest does not depend on q_pos — recomputed\n                    // seq times per (t, d): projection work x seq\n                    k_val += input[t * h + k] * wk[d * h + k];\n                }\n                dot += input[q_pos * h + d] * k_val;\n            }\n            scores[q_pos * seq + t] = dot;\n        }\n    }\n}\n".to_string(),
+            opt_pattern: "// optimized: project ALL keys once at sweep entry — O(seq * H * hd) —\n// then the score sweep reads projected rows at O(hd) per pair\nfn attention_scores_hoisted(input: &[f32], wk: &[f32], seq: usize,\n                            h: usize, hd: usize, k_proj: &mut [f32],\n                            scores: &mut [f32]) {\n    for t in 0..seq {\n        for d in 0..hd {\n            let mut k_val = 0.0f32;\n            for k in 0..h {\n                k_val += input[t * h + k] * wk[d * h + k];\n            }\n            k_proj[t * hd + d] = k_val;\n        }\n    }\n    for q_pos in 0..seq {\n        for t in 0..seq {\n            let mut dot = 0.0f32;\n            for d in 0..hd {\n                dot += input[q_pos * h + d] * k_proj[t * hd + d];\n            }\n            scores[q_pos * seq + t] = dot;\n        }\n    }\n}\n".to_string(),
+        },
+        // ── multi-head-out-proj-consumes-head-concat — the
+        // attention output projection needs the head concat; a
+        // per-head thread cannot express it (E) ──
+        //
+        // Source: riir-gpu kernels/m2p_attention.wgsl L92-98 (column)
+        // + L167-172 (row): `proj_val = proj_val + attn_val *
+        // out_weight[d_out * h + kk]` — attn_val is INVARIANT in kk,
+        // so the "projection" computes attn_val * rowsum(wo_row), a
+        // scalar-times-rowsum, NOT the matvec. hypernet/gpu_m2p.rs
+        // L134-141 mirrors it faithfully (adding a second bug:
+        // `let wo_row = d_out;` uses the head-local index, so heads
+        // 1..n re-read wo rows [0, head_dim)). The CORRECT form ships
+        // in the sibling file: hypernet/m2p_transformer.rs L371-381
+        // sums over the FULL attn_out row (`sum += attn_out[t * h +
+        // k] * layer.wo[d * h + k]`). Masked by the identity-weight
+        // fixtures (gpu_m2p.rs L499-505: identity rows have rowsum
+        // 1.0) and a print-only CPU-vs-GPU pseudo-parity check that
+        // compares the two wrong implementations against each other
+        // (benches/alternating_2d_bench.rs L515-553). Filed as riir-ai
+        // Issue 701 — the rule is the mechanism, the issue is the
+        // live wrong math.
+        //
+        // Distinct from broadcast-uniform-skip-reduce (Batch 24 — a
+        // REDUNDANT reduction of a thread-uniform whose fix is to
+        // broadcast; here the invariant operand makes the result WRONG
+        // and the fix restructures the phase boundary), from
+        // epilogue-must-be-workgroup-local (Batch 29 — fusion legality
+        // by ownership scope; this is fusion legality by DATA
+        // dependency across the head axis), and from
+        // split-dispatch-expose-fused-intermediate (Batch 34 —
+        // exposing a fused intermediate for a second consumer; here
+        // the intermediate is per-head PARTIALS of one output row).
+        KernelRule {
+            rule_id: "multi-head-out-proj-consumes-head-concat".to_string(),
+            gpu_concept: "Fusing the attention output projection into per-(pos, head) threads produces wrong math silently: the projection O[d] = sum_k attn_out_full[k] * wo[d][k] consumes the CONCATENATION of all heads' outputs, but a per-head thread owns only its own head_dim dims — so the in-thread projection loop degenerates to attn_val (a scalar) times the summed weight row, a scalar-times-rowsum that is not the matvec, while every identity-weight fixture returns the right answer anyway (identity rowsum = 1.0) and a CPU-vs-GPU pseudo-parity check that compares the two wrong implementations against each other stays green. The fix: keep the per-head decomposition for the score/V mixing (legal there — each head's output dims are disjoint), write per-head attention outputs to a scratch buffer, and run the output projection as a separate phase (kernel, dispatch axis, or host pass) that owns the full H-length row and computes the true matvec sum_k attn_out[k] * wo[d][k]. Detection tells: a projection loop whose multiplicative operand is invariant in the summation index (a dot-shaped loop with a loop-invariant operand), and per-head threads writing disjoint output slices while indexing the projection weight by only the head-local dim. Distinct from broadcast-uniform-skip-reduce (a redundant reduction of a thread-uniform whose fix is to broadcast the value — here the invariant operand makes the result wrong and the fix moves the phase boundary), from epilogue-must-be-workgroup-local (fusion legality by ownership scope — this is fusion legality by data dependency across the head axis), and from split-dispatch-expose-fused-intermediate (exposing a fused intermediate for a second consumer — here the intermediate is per-head partials of one output row).".to_string(),
+            ref_shape: "// naive: fused into the per-head thread — the projection operand\n// attn_head[d_out] is INVARIANT in kk, so this computes\n// attn_val * rowsum(wo_row): a scalar-times-rowsum, not a matvec\nfn per_head_out_proj_naive(attn_head: &[f32], wo: &[f32], h: usize,\n                           head_off: usize, hd: usize, out: &mut [f32]) {\n    for d_out in 0..hd {\n        let attn_val = attn_head[d_out];\n        let mut proj_val = 0.0f32;\n        for kk in 0..h {\n            proj_val += attn_val * wo[d_out * h + kk];\n        }\n        // silently wrong under real weights; identity fixtures mask it\n        out[head_off + d_out] = proj_val;\n    }\n}\n".to_string(),
+            opt_pattern: "// optimized: two phases — per-head threads stage THEIR dims into the\n// concat buffer (disjoint slices, legal decomposition); a separate\n// full-row pass computes the true matvec over the head CONCAT\nfn attention_out_proj_two_phase(head_outputs: &[f32], wo: &[f32],\n                                seq: usize, h: usize, heads: usize,\n                                hd: usize, scratch: &mut [f32],\n                                out: &mut [f32]) {\n    for pos in 0..seq {\n        for head in 0..heads {\n            let head_off = head * hd;\n            for d in 0..hd {\n                scratch[pos * h + head_off + d] =\n                    head_outputs[(pos * heads + head) * hd + d];\n            }\n        }\n        for d in 0..h {\n            let mut sum = 0.0f32;\n            for k in 0..h {\n                sum += scratch[pos * h + k] * wo[d * h + k];\n            }\n            out[pos * h + d] = sum;\n        }\n    }\n}\n".to_string(),
+        },
+        // ── shared-producer-prefix-extract-once-per-input — two
+        // sibling methods sharing an expensive pure producer pay it
+        // N times under one composed call (D) ──
+        //
+        // Source: riir-gpu hypernet/shine.rs L229-230 — the composed
+        // entry `context_to_lora_with_span_width` calls
+        // `self.context_to_lora(context_tokens)` then
+        // `self.estimate_difficulty(context_tokens)`, and BOTH
+        // internally run `extract_memory_states(context_tokens, ...)`
+        // (L138-144 + L196-202) — a full frozen-backbone transformer
+        // forward producing the [L, M, H] grid, the dominant cost of
+        // both methods, executed twice for one input (feature
+        // mux_training). The producer is pure w.r.t. repeat calls (all
+        // inputs are &self immutable fields + the context), so the
+        // second run is bit-identical wasted work.
+        //
+        // Distinct from split-dispatch-expose-fused-intermediate
+        // (Batch 34 — ONE fused chain discards its intermediate; here
+        // TWO independent methods each fully use the artifact), from
+        // fan-out-shared-input-single-sync (Batch 25 — N sibling
+        // KERNELS sharing one uploaded input buffer; this is the
+        // host-API twin: N sibling METHODS sharing one COMPUTED
+        // artifact), from frozen-cooperand-hoist-out-of-perturbation-
+        // loop (Batch 45 — an input-INDEPENDENT operand rebuilt per
+        // perturbation candidate; this producer varies with the input
+        // and there is no sweep), and from refine-loop-invariant-
+        // prefix-elision (Batch 42 — iteration invariance inside a
+        // loop; here two sequential calls).
+        KernelRule {
+            rule_id: "shared-producer-prefix-extract-once-per-input".to_string(),
+            gpu_concept: "When two sibling public methods share an expensive pure producer as their first stage, a composed entry that calls both pays the producer N times for one input: each method internally re-runs the identical expensive call (a full frozen-backbone transformer forward) on the identical context, and the producer is pure w.r.t. repeat calls — all inputs are immutable receiver fields plus the argument — so the second run is bit-identical wasted work, the dominant cost of the composition doubled. The fix: extract once and thread the shared artifact — keep both public methods unchanged for standalone callers, add internal *_from_<artifact> variants that take the producer's output directly, make the public methods thin wrappers that extract then delegate, and have every composed entry extract the artifact once and pass it to both variants. Detection tell: a composer invoking two sibling APIs whose first stage is the identical expensive call on the identical input. Distinct from split-dispatch-expose-fused-intermediate (one fused chain discards its intermediate — here two independent methods each fully use the artifact), from fan-out-shared-input-single-sync (N sibling kernels sharing one uploaded buffer — this is the host-API twin: N sibling methods sharing one computed artifact), from frozen-cooperand-hoist-out-of-perturbation-loop (an input-independent operand rebuilt per perturbation candidate — this producer varies with the input and there is no sweep), and from refine-loop-invariant-prefix-elision (iteration invariance inside a loop — here two sequential calls).".to_string(),
+            ref_shape: "// naive: both siblings internally run the SAME expensive producer\n// (a full frozen-backbone forward) on the same input — paid twice\nfn composed_entry_naive(ctx: &Engine, tokens: &[u32]) -> (Weights, f32) {\n    let weights = ctx.generate_weights(tokens);\n    let difficulty = ctx.estimate_difficulty(tokens);\n    (weights, difficulty)\n}\n".to_string(),
+            opt_pattern: "// optimized: extract the shared artifact ONCE, thread it into the\n// *_from variants; the public methods become thin extract+delegate\n// wrappers so standalone callers are unchanged\nfn composed_entry_extract_once(ctx: &Engine, tokens: &[u32]) -> (Weights, f32) {\n    let grid = ctx.extract_memory_grid(tokens);\n    let weights = ctx.generate_weights_from_grid(&grid);\n    let difficulty = ctx.difficulty_from_grid(&grid);\n    (weights, difficulty)\n}\n".to_string(),
         },
     ]
 }

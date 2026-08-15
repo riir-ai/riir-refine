@@ -1106,6 +1106,38 @@
 //!   feature-forward away; the bench's own crossover finder
 //!   warning against the shipped constant; zero production
 //!   callers).
+//! - **Batch 47 (Research 052):** the SHINE hypernet second half
+//!   (`hypernet/shine.rs` 402 + `routing.rs` 268 + `types.rs` 269 +
+//!   `m2p_transformer.rs` 611 + `gpu_m2p.rs` 568 +
+//!   `kernels/m2p_attention.wgsl` 173 — the end-to-end
+//!   context-to-LoRA pipeline + expert routing + the M2P
+//!   alternating-attention CPU reference + its size-gated GPU
+//!   dispatch twin; completes the hypernet module alongside Batch
+//!   45's meta-LoRA pair) — **3 rules, corpus 340 → 343** (B 51,
+//!   D 61, E 20): `per-key-projection-hoist-out-of-query-sweep`
+//!   (B — K/V projections re-derived inside the query loop
+//!   multiply projection work by seq; the reference twin projects
+//!   all QKV once at sweep entry), `multi-head-out-proj-consumes-
+//!   head-concat` (E — the attention out-projection needs the head
+//!   concat; a per-head thread degenerates to scalar-times-rowsum,
+//!   masked by identity-weight fixtures), `shared-producer-prefix-
+//!   extract-once-per-input` (D — two sibling methods sharing an
+//!   expensive pure producer pay it twice under a composed call;
+//!   extract once, thread the artifact). ~17 dedups (the
+//!   workgroup(1,1,1) shape = B44/B23/B28 composite; per-column
+//!   weight re-upload + round-trip = B33/B28/B26/B40; the size gate
+//!   = B46's pre-recorded 2nd instance; the scores/column/hidden
+//!   Vec churn = B45 depth instances; the powf freq table =
+//!   3rd-strike cos/sin; routing norms = norm-decoupled; the shape
+//!   metadata = derive-shape-from-payload). Hazards filed as riir-ai
+//!   Issue 701 (WRONG out-projection math in both WGSL kernels AND
+//!   the CPU fallback, masked by identity fixtures + a print-only
+//!   pseudo-parity check; release-mode stack OOB at default
+//!   `head_dim` 512 vs the `[f32; 128]` array; WGSL `array<f32, 256>`
+//!   scores overflow at seq > 256; the ~251 GB default memory grid
+//!   and the triple-inconsistent 13/15/19H provision constant;
+//!   structurally-dead zero modules at toy scale; row-attention
+//!   dispatch exceeding the 65535 workgroup limit).
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
@@ -1156,7 +1188,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 340-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 343-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1250,7 +1282,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "shared-operand-side-pair-batch-index-decomposition",
         ],
     ),
-    // B: Compute patterns (50 rules)
+    // B: Compute patterns (51 rules)
     (
         KernelCategory::Compute,
         "B: compute",
@@ -1305,6 +1337,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "hoist-bit-address-out-of-packed-row-sweep",
             "single-sweep-minmax-for-quant-scale",
             "softmax-denominator-hoist-out-of-weighted-v",
+            "per-key-projection-hoist-out-of-query-sweep",
         ],
     ),
     // C: Fusion patterns (33 rules)
@@ -1347,7 +1380,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fuse-indirect-gather-into-dot-consumer",
         ],
     ),
-    // D: Dispatch patterns (60 rules)
+    // D: Dispatch patterns (61 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -1412,9 +1445,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "share-cube-size-const-between-kernel-and-launcher",
             "serialize-container-canonical-order",
             "size-gate-covers-every-cost-factor",
+            "shared-producer-prefix-extract-once-per-input",
         ],
     ),
-    // E: Parallelism patterns (19 rules)
+    // E: Parallelism patterns (20 rules)
     (
         KernelCategory::Parallelism,
         "E: parallelism",
@@ -1438,6 +1472,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "mask-sentinel-matches-reduction-identity",
             "concurrent-disjoint-write-buffer-parallelizes-uploads",
             "row-dot-split-inner-axis-block-reduce",
+            "multi-head-out-proj-consumes-head-concat",
         ],
     ),
     // F: Flash-attention tiling (10 rules)
