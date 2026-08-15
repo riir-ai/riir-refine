@@ -720,6 +720,17 @@ global = symlink only.
     330 at 38, 333 at 39, 336 at 40, 339 at 41, 342 at 42, 345 at 43,
     348 at 44, 351 at 45, 354 at 46), default for
     the 201 suite.
+    **Corpus layout since Batch 46 (2026-08-15 split, owner-approved):**
+    `corpus/` module dir replaces the 10.9K-line monolith — `mod.rs`
+    (header + build fn chaining slices + KERNEL_CATEGORIES — the ONE
+    category table) + `entries_popcorn.rs` (B1-13, 119 rules, FROZEN) +
+    `entries_gpu_01..06.rs` (~900 lines each, whole-rule boundaries) +
+    `tests.rs`. **New batches append entries to the LAST gpu slice**
+    (`entries_gpu_06.rs`, rules 325-340 — open `entries_gpu_07.rs` past
+    ~900 lines). Count-pin sites unchanged, now at corpus/mod.rs +
+    corpus/tests.rs. NEVER encode category membership in file layout.
+    Split lesson: the generator's slice tail must be `]` NOT `])` — the
+    bare `vec![` opener has no wrapping `(` (one cold-compile catch).
     `--all-features` is currently broken by SIBLING WIP
     (`rust_perf/bench.rs:335 alloc_axis`) — pre-existing, not yours.
   - Count-pin sites when adding rules (complete list, re-verified 38):
