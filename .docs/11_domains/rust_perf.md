@@ -19,60 +19,72 @@
 
 ## Corpus
 
-39 seed rules across 11 categories (rust-optimize skill checklist +
-nnethercote/perf-book + rustc-hash/bevy real-world patterns). Allocation is the
-deepest category (12 rules). Complexity has 10. Layout, simd, iterators have 4
-each; concurrency has 2; the rest have 1 each. 31 are benchable (carry a
-`BenchSpec`); 8 are honestly `NotBenchable` (need external runtimes or are
-structural — size_of, memory, fairness). 4 of the 31 benchable rules carry
-`context_notes` (Bench 015 finalization: 2 `ParetoDominated` —
-`precompute-table` + `papaya-lockfree` — are honestly slower in the default
-config; 2 regime-fragile — `dedupe-hashset-vs-vec` + `reuse-allocation-clear`
-— pass ParetoDominant but have 1 slower size each, flagging them as
-scale-dependent. Consumers should treat annotated rules as context-dependent,
-not unconditional suggestions).
+50 rules across 12 categories (rust-optimize skill checklist +
+nnethercote/perf-book + rustc-hash/bevy real-world patterns + the hotpath-rs
+profiling guide, Research 032). Allocation is the deepest category (14
+rules). Complexity has 12. Simd, layout, iterators have 4-5 each;
+concurrency has 4 (Issue 014 added the two metric-mismatch rules); caching has
+2 (Issue 014 added `regex-hoist-lazylock`); the rest have 1 each. 40 are
+benchable (carry a `BenchSpec`); 10 are honestly `NotBenchable` — 8 need
+external runtimes or are structural (size_of, memory, fairness), 2 are
+**metric-mismatch** (Issue 014 T2.3/T2.4: the cost is contention latency /
+queue depth, not wall-clock). 8 of 50 carry `context_notes` — 6 verdict-class
+(2 `ParetoDominated` + 4 regime-fragile/Mixed) + 2 metric-mismatch-class.
+Consumers should treat annotated rules as context-dependent, not
+unconditional suggestions.
 
 | Rule ID | Category | Bench verdict | Context? | Pattern |
 |---|---|---|---|---|
 | `o1-lookup` | complexity | ✅ 570x ParetoDominant | — | O(n) `Vec` scan → O(1) `HashMap` lookup |
 | `bsearch-sorted-slice` | complexity | ✅ 16-2709x ParetoDominant | — | O(n) `.contains()` on sorted slice → O(log n) `binary_search()` |
-| `dedupe-hashset-vs-vec` | complexity | ~ ParetoDominant (3/4 Faster; 1 slower @ n=500) | ⚠️ `context_notes` | O(n²) `Vec::contains` dedup loop → O(n) `HashSet` collect (wins at N ≥ 1000; HashSet overhead dominates at small N; regime-fragile — see Bench 015) |
+| `dedupe-hashset-vs-vec` | complexity | ~ ParetoDominant (regime-fragile) | ⚠️ `context_notes` | O(n²) `Vec::contains` dedup loop → O(n) `HashSet` collect (wins at N ≥ 1000; HashSet overhead dominates at small N — see Bench 015/020) |
 | `entry-vs-contains-insert` | complexity | ✅ 1.5x ParetoDominant | — | `contains_key()` + `insert()` → `entry().or_insert()` (merge HashMap lookups: 2 hashes → 1 hash) |
 | `loop-fusion` | complexity | ✅ 1.5x ParetoDominant | — | Two iterator passes (`.sum()` + `.max()`) over same data → one fused `for` loop (cache locality; compiler can't fuse separate iterator consumers) |
 | `prefix-sum-2d` | complexity | ✅ 34-30000x ParetoDominant | — | O(n) 2D region-sum scan per query → O(1) prefix sum (boundary-vs-volume: prefix encodes boundary cumulative sum, each query reads 4 corners instead of scanning interior) |
 | `swap-remove` | complexity | ✅ 2-18485x ParetoDominant | — | `Vec::remove(i)` O(n) shift → `Vec::swap_remove(i)` O(1) swap (order doesn't matter; win grows with N) |
 | `fxhashmap` | complexity | ✅ 1.6-4.2x ParetoDominant | — | std `HashMap` (SipHash, DoS-resistant) → `FxHashMap` (FxHash, 1 mul + xor) for non-adversarial keys (compiler can't swap hashers; used pervasively in rustc) |
+| `sort-unstable` | complexity | ✅ 1.08-1.25x ParetoDominant | — | Stable `sort()` (allocates) → `sort_unstable()` in-place (Issue 012 / Bench 016) |
+| `vec-remove-front-to-vecdeque` | complexity | ✅ 3.65-1270x ParetoDominant | — | `Vec::remove(0)` O(n²) drain → `VecDeque::pop_front` O(n) (Issue 013 / Bench 017) |
+| `btreemap-sorted-iteration` | complexity | ✅ 3.73-6.91x ParetoDominant | — | `HashMap` + sort per query → `BTreeMap` natural order (Issue 013 / Bench 017) |
 | `static-str` | allocation | ✅ 42x ParetoDominant | — | `String` return → `&'static str` for constant labels |
-| `vec-with-capacity` | allocation | ✅ 1.1-4.3x ParetoDominant | — | `Vec::new()` + push loop → `Vec::with_capacity(n)` (realloc cost) |
-| `format-concat-loop` | allocation | ✅ 42-95x ParetoDominant | — | `format!("{s}{x}")` concat in loop → `String::push_str` (O(n²) → O(n)) |
-| `ok-or-else` | allocation | ✅ 97x ParetoDominant | — | `ok_or(expensive())` eager error construction → `ok_or_else(\|\| expensive())` lazy closure (avoids unused error allocation; source: nnethercote/perf-book) |
-| `mem-take` | allocation | ✅ 1.9-2.6x ParetoDominant | — | `buf.clone()` + `buf.clear()` → `mem::take(&mut buf)` (moves Vec allocation O(1), no deep clone) |
+| `vec-with-capacity` | allocation | ✅ 1.1-4.3x ParetoDominant | — | `Vec::new()` + push loop → `Vec::with_capacity(n)` (realloc cost; Bench 020 alloc axis: 16→1 allocs, 1,048,560→400,000 B) |
+| `format-concat-loop` | allocation | ✅ 42-95x ParetoDominant | — | `format!("{s}{x}")` concat in loop → `String::push_str` (O(n²) → O(n); Bench 020 alloc axis: 1999→1 allocs, 1498× bytes) |
+| `ok-or-else` | allocation | ✅ 97x ParetoDominant | — | `ok_or(expensive())` eager error construction → `ok_or_else(|| expensive())` lazy closure (avoids unused error allocation; Bench 020 alloc axis: 3.7M→37K allocs, 100×) |
+| `mem-take` | allocation | ✅ 1.9-2.6x ParetoDominant | — | `buf.clone()` + `buf.clear()` → `mem::take(&mut buf)` (moves Vec allocation O(1), no deep clone; Bench 020 alloc axis: exactly 2× both axes) |
 | `avoid-clone` | allocation | ✅ 1.3-3.0x ParetoDominant | — | `fn(data: Vec<T>)` clone-on-call → `fn(data: &[T])` borrow (clone does heap alloc + memcpy; compiler can't elide) |
-| `box-str-immutable` | allocation | ✅ 1.1-1.3x ParetoDominant | — | `Vec<String>` (3-word handle) → `Vec<Box<str>>` (2-word, drops capacity field) for immutable string collections |
-| `reuse-allocation-clear` | allocation | ~ ParetoDominant (3/4 Faster; 1 slower @ n=100K) | ⚠️ `context_notes` | `fn() { Vec::new() }` alloc-per-call → `fn(buf: &mut Vec<T>)` clear-reuse (wins ≤10K; loses at 100K due to L2 cache pressure; regime-fragile — see Bench 015) |
+| `box-str-immutable` | allocation | ✅ 1.1-1.3x ParetoDominant | — | `Vec<String>` (3-word handle) → `Vec<Box<str>>` (2-word, drops capacity field) for immutable string collections (Bench 020: no steady-state alloc delta — the win is width/cache density) |
+| `reuse-allocation-clear` | allocation | ~ ParetoDominant (regime-fragile) | ⚠️ `context_notes` | `fn() { Vec::new() }` alloc-per-call → `fn(buf: &mut Vec<T>)` clear-reuse (wins ≤10K; loses at 100K due to L2 cache pressure — see Bench 015/020) |
 | `box-avoid` | allocation | ✅ 9.6-42x ParetoDominant | — | `Vec<Box<i64>>` (heap per elem) → `Vec<i64>` (stack values) — heap alloc per element dwarfs the data work |
 | `smallvec-stack` | allocation | ✅ 27-75x ParetoDominant | — | `Vec<T>::new()` (always heap) → stack array for ≤8 typical (SmallVec pattern); heap alloc dominates at small N |
+| `log-write-direct` | allocation | ✅ 1.9-2.0x ParetoDominant | — | `buf.push_str(&format!(...))` (temp String per iter) → `write!(buf, ...)` direct (zero temp alloc; Bench 020 alloc axis: 10,015→15 allocs) |
+| `cow-conditional-alloc` | allocation | ✅ 1.32-1.49x ParetoDominant | — | `String` return (always alloc) → `Cow<str>` borrow when no transform (Issue 013 / Bench 017; Bench 020 alloc axis: 75,000→30,000) |
+| `arc-str-payload` | allocation | ✅ 5.38-11.38x ParetoDominant | — | Clone-per-message immutable payload → `Arc<str>` (clone the handle, not the bytes; Issue 014 / Bench 020: allocs 1001→2, bytes 42×) |
 | `buffered-io` | iterators | ✅ 99-132x ParetoDominant | — | `File::read(&mut [u8; 1])` syscall per byte → `BufReader` 8KB batched reads (syscall overhead dominates) |
-| `log-write-direct` | allocation | ✅ 1.9-2.0x ParetoDominant | — | `buf.push_str(&format!(...))` (temp String per iter) → `write!(buf, ...)` direct (zero temp alloc; distinct from `format-concat-loop` which is about quadratic accumulation) |
 | `layout-reorder` | layout | ❌ NotBenchable | — | Field reorder to eliminate padding (deterministic `size_of`, not a runtime microbench) |
 | `repr-u8-enum` | layout | ❌ NotBenchable | — | Field-less enum → `#[repr(u8)]` (deterministic `size_of`, same class as layout-reorder) |
-| `mutex-to-atomic` | concurrency | ✅ 2.5x ParetoDominant | — | `Mutex<u32>` counter inc → `AtomicU32::fetch_add` (Mutex lock/unlock is opaque; ~2.5× single-threaded) |
+| `mutex-to-atomic` | concurrency | ✅ 2.5x ParetoDominant | — | `Mutex<u32>` counter inc → `AtomicU32::fetch_add` (Mutex lock/unlock is opaque; ~2.5× single-threaded; Bench 020 alloc axis: 1→0 allocs) |
 | `papaya-lockfree` | concurrency | ❌ 0.55-0.79x ParetoDominated | ⚠️ `context_notes` | `Arc<RwLock<HashMap>>` → `papaya` lock-free map (benefit needs multi-threaded contention) |
+| `tokio-guard-across-await` | concurrency | ❌ NotBenchable (**metric mismatch**) | ⚠️ `context_notes` | Guard held across `.await` → fetch-before-guard (cost is OTHER tasks' wait latency, not wall-clock — Issue 014 T2.3; clippy `await_holding_lock` covers std guards only) |
+| `bounded-channel-backpressure` | concurrency | ❌ NotBenchable (**metric mismatch**) | ⚠️ `context_notes` | Unbounded channel + hot producer → bounded `channel(cap)` (win is bounded queue depth; semantics-changing backpressure — Issue 014 T2.4) |
 | `simd-chunk` | simd | ✅ 3.9x ParetoDominant | — | Scalar loop → 4-wide chunked loop for LLVM auto-vectorization |
 | `bool-to-bitpack` | simd | ✅ 7-11x ParetoDominant | — | `Vec<bool>` set-bit count → packed `Vec<u64>` + `count_ones()` (data density + hardware POPCNT) |
 | `branchless-conditional` | simd | ✅ 10x ParetoDominant | — | Data-dependent `if` in hot loop → `val * cond as u64` branchless multiply (LLVM vectorizes the multiply but cannot vectorize the branchy loop) |
 | `chunks-exact` | simd | ✅ 13-16x ParetoDominant | — | `slice::chunks` (variable last chunk) → `slice::chunks_exact` (uniform chunks, enables vectorization; source: nnethercote/perf-book) |
+| `copy-from-slice` | simd | ~ Mixed (regime-fragile) | ⚠️ `context_notes` | Manual index-loop copy → `slice::copy_from_slice` (LLVM auto-vectorizes the manual loop for u8 — small throughput delta; the idiom still guarantees SIMD + no bounds check — Issue 012 / Bench 016) |
 | `f32-counter-to-int` | arithmetic | ✅ 7.5-11x ParetoDominant | — | f32 accumulator for integer tally → u64 accumulator (f32 add dep chain can't be broken without fast-math) |
-| `collect-avoidance` | iterators | ✅ 2.3-3.0x ParetoDominant | — | Unnecessary `.collect()` intermediate → chained iterator (allocation + double pass → single pass, zero alloc) |
+| `collect-avoidance` | iterators | ✅ 2.3-3.0x ParetoDominant | — | Unnecessary `.collect()` intermediate → chained iterator (allocation + double pass → single pass, zero alloc; Bench 020 alloc axis: 8,000,000→0 B) |
 | `retain-inplace` | iterators | ✅ 1.5-2.1x ParetoDominant | — | `iter().filter().collect()` new Vec → `Vec::retain()` in-place filter (no allocation, single pass; ~1.5-2× across all sizes) |
+| `sort-by-key` | complexity | ~ Mixed (regime-fragile) | ⚠️ `context_notes` | `sort_by` repeated closure → `sort_by_key` single extraction (Issue 012 / Bench 016) |
 | `dyn-to-enum` | dispatch | ✅ 2.5-2.9x ParetoDominant | — | `Box<dyn Trait>` dispatch → enum dispatch (devirtualize: vtable indirection → direct match, compiler can inline) |
 | `precompute-table` | caching | ❌ 0.20-0.40x ParetoDominated | ⚠️ `context_notes` | Recompute-per-call → `const` lookup table (compiler optimizes popcount to POPCNT in release) |
+| `regex-hoist-lazylock` | caching | ✅ 5443-5675x ParetoDominant | — | `Regex::new` per call → `static LazyLock<Regex>` (compile once; Issue 014 / Bench 020: allocs 1.3M→0, bytes 563.6M→0 per 1000 calls — the largest deterministic win in the corpus) |
 | `bevy-reactive-loop` | bevy | ❌ NotBenchable | — | `WinitSettings::default()` (Continuous, 100% CPU) → `reactive_low_power` (needs Bevy runtime) |
 | `wasm-batch-ffi` | wasm | ❌ NotBenchable | — | Per-call FFI (250ns floor × N×M) → single batch invocation (needs WASM runtime) |
 | `shrink-to-fit-after-build` | allocation | ❌ NotBenchable | — | Vec with over-allocated capacity → `shrink_to_fit()` after build (memory win, not speed; the realloc may even make build slower) |
 | `box-large-enum-variant` | layout | ❌ NotBenchable | — | Enum with one `[u8; 1024]` variant → `Box<[u8; 1024]>` (shrinks common case from 1032→16 bytes; size_of win improves cache density) |
 | `async-yield-point` | iterators | ❌ NotBenchable | — | Long async fn (no `.await`) → cooperative `yield_now()` every 100 iters (fairness/p99-latency win under contention, not single-task throughput) |
 | `async-future-size` | layout | ❌ NotBenchable | — | Large locals across `.await` → scoped blocks (drops before next await; shrinks future state machine via `size_of_val`) |
+| `bufwriter-batched` | io | ✅ 2.48-21.57x ParetoDominant | — | `File::write` per record → `BufWriter` batched (syscall amortization; Issue 012 / Bench 016) |
 
 ## Validator (cargo test — behind `rust_perf_verify`)
 
@@ -89,24 +101,38 @@ returns `(0, 0)` → `test_passes = true` (vacuously). The exit status +
 `compiler-message` error count distinguish "compile failure" from "no tests,
 all good".
 
-## Bench validator (Pareto verdict — behind `rust_perf_bench`)
+## Bench validator (Pareto verdict + deterministic alloc axis — behind `rust_perf_bench`)
 
 `PerfBenchValidator` (the **promotion gate** for the domain):
 1. Generate a temp **bin** crate embedding the rule's `BenchSpec.harness` +
-   a timing loop (dynamic calibration → warmup → median-of-samples).
+   a timing loop (dynamic calibration → warmup → median-of-samples) + a
+   counting `#[global_allocator]` (Issue 014 T1 — fully-qualified paths, zero
+   `use` statements, so injected code can never collide with harness imports).
 2. Run `cargo run --release` on the temp crate.
-3. Parse JSON lines: `{"size":N,"buggy_ns":X,"fixed_ns":Y}`.
+3. Parse JSON lines:
+   `{"size":N,"buggy_ns":X,"fixed_ns":Y,"buggy_allocs":A,"buggy_bytes":B,"fixed_allocs":C,"fixed_bytes":D}`.
 4. Compute per-size outcome (Faster/Slower/Tie at ±5% threshold).
 5. Aggregate into a `ParetoVerdict` (ParetoDominant if faster on majority).
+6. **Alloc axis** (Issue 014 T1): after the timing loops, one steady-state
+   call of each side with the counters reset — exact integers (warmup has
+   settled one-time init like LazyLock compilation).
+   `run_bench_with_determinism(n)` re-executes + asserts the axis is
+   bit-identical across runs — the determinism proof (variance = harness
+   bug, not noise).
 
 Rules without a `BenchSpec` are honestly marked `NotBenchable` — they need
-external runtimes (Bevy, WASM) a temp crate cannot provide.
+external runtimes (Bevy, WASM) a temp crate cannot provide, or (the Issue 014
+class) their cost metric is not wall-clock.
 
 See [Bench 013](../../.benchmarks/013_rust_perf_bench_pareto_goat.md) for
-the original promotion-gate results, and [Bench 015](../../.benchmarks/015_rust_perf_expansion_phase4_goat.md)
-for the Phase 4 finalization on the expanded 39-rule corpus.
+the original promotion-gate results, [Bench 015](../../.benchmarks/015_rust_perf_expansion_phase4_goat.md)
+for the Phase 4 finalization, [Bench 016](../../.benchmarks/016_rust_perf_v2_sorting_io_copy_goat.md)
++ [Bench 017](../../.benchmarks/017_rust_perf_v3_data_structure_choice_goat.md)
+for the Issue 012/013 expansions, and [Bench 020](../../.benchmarks/020_rust_perf_v4_alloc_axis_goat.md)
+for the alloc-axis sweep on the 50-rule corpus (G-det: 40/40 rules stable
+across 3 repeat runs).
 
-## Caveat (Proposal 001 caveat 3 — closed by Bench 013, re-confirmed by Bench 015)
+## Caveat (Proposal 001 caveat 3 — closed by Bench 013, re-confirmed by Benches 015/016/017/020)
 
 The original caveat called perf "the weakest link" because perf has no
 single ground truth. **Bench 013 closes this**: the Pareto validator now
@@ -115,6 +141,10 @@ corpus**: 29/31 benchable rules are Pareto-dominant (clear wins); 2/31 are
 honestly Pareto-dominated (compiler optimizations, regime-dependent benefits);
 2 of the 29 ParetoDominant are regime-fragile (1 slower size each, kept
 annotated) — exactly the kind of honest signal the caveat predicted.
+**Bench 020 adds the deterministic complement**: the alloc axis (exact
+integers, stable across repeat runs on 40/40 rules) removes the noise floor
+from the second half of every perf claim — timing still decides the verdict,
+but allocation cost is now a provable integer, not a probabilistic estimate.
 
 ## Drafter + pipeline integration (`context_notes` propagation, 2026-08-13)
 

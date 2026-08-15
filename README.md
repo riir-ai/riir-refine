@@ -8,7 +8,7 @@ space, drafts fixes via a modelless ternary SIMD matvec, and validates with a
 | Domain | Feature | Status | Corpus |
 |---|---|---|---|
 | **clippy_lints** (default) | `clippy_lints` | ✅ Production | 10 common lints (style/complexity/perf/nursery) |
-| **rust_perf** (default since 2026-08-13) | `rust_perf` | ✅ Phase 2 (GOAT G1+G5 PASS, Bench 013 promotion + Bench 015 finalization + Bench 016 Issue 012 + Bench 017 Issue 013) | 46 rules from `rust-optimize` skill + nnethercote/perf-book + rustc-hash/bevy patterns (complexity/allocation/layout/concurrency/simd/arithmetic/iterators/dispatch/caching/io/bevy/wasm); 6 carry `context_notes` (2 ParetoDominated + 4 regime-fragile/Mixed in default config) |
+| **rust_perf** (default since 2026-08-13) | `rust_perf` | ✅ Phase 2 (GOAT G1+G5 PASS, Bench 013 promotion + Bench 015 finalization + Bench 016 Issue 012 + Bench 017 Issue 013 + Bench 020 Issue 014) | 50 rules from `rust-optimize` skill + nnethercote/perf-book + rustc-hash/bevy patterns + the hotpath-rs profiling guide (complexity/allocation/layout/concurrency/simd/arithmetic/iterators/dispatch/caching/io/bevy/wasm); 8 carry `context_notes` (2 ParetoDominated + 4 regime-fragile/Mixed + 2 NotBenchable metric-mismatch). Bench 020 added the deterministic alloc-count axis (exact integers, stable across repeat runs on 40/40 benchable rules) |
 | **kernel_opt** (opt-in) | `kernel_heal` | ✅ Phase 3 + Batch 1-8 corpus | 68 rules (50 popcorn-distilled Research 002-007 + 9 burn-cubecl Rust-native Research 008 + 9 burn-cubecl/cubecl-opt kernel-polymorphism/dtype-alignment/IR-strength-reduction Research 009); full distillation ~300-500 rules in ~15-25 batches |
 
 Heavyweight LoRA is the last-resort fallback, not the co-equal path. Plan 005

@@ -207,6 +207,27 @@ fn aggregate_outcomes(results: &[SizeResult]) -> BenchOverall {
     }
 }
 
+/// The deterministic alloc axis of a bench run (Issue 014 T1.4): the
+/// `(size, buggy_allocs, buggy_alloc_bytes, fixed_allocs, fixed_alloc_bytes)`
+/// tuple per size. Two runs with equal axes allocated identically — the
+/// determinism proof behind [`PerfBenchValidator::run_bench_with_determinism`].
+/// Timing medians are deliberately excluded (wall-clock noise is the axis's
+/// whole reason to exist).
+fn alloc_axis(results: &[SizeResult]) -> Vec<(usize, u64, u64, u64, u64)> {
+    results
+        .iter()
+        .map(|r| {
+            (
+                r.size,
+                r.buggy_allocs,
+                r.buggy_alloc_bytes,
+                r.fixed_allocs,
+                r.fixed_alloc_bytes,
+            )
+        })
+        .collect()
+}
+
 /// The bench validator — generates + runs microbenchmarks for perf rules.
 pub struct PerfBenchValidator {
     cargo_bin: String,
@@ -317,6 +338,19 @@ impl PerfBenchValidator {
     ///
     /// The first run pays the cargo build; repeats reuse the cached build
     /// (BLAKE3-keyed crate dir) and only re-execute the binary.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` when any run's crate preparation or `cargo run` fails
+    /// (propagated from [`PerfBenchValidator::run_bench`]); the error string
+    /// carries the truncated cargo stderr.
+    ///
+    /// # Panics
+    ///
+    /// Panics only on an internal invariant violation (`first_results` is
+    /// always populated before the comparison loop, so the trailing
+    /// `unwrap_or_default` is unreachable in practice).
+    #[allow(clippy::too_many_lines)] // linear template assembler; splitting hurts readability
     pub fn run_bench_with_determinism(
         &self,
         rule_id: &str,
@@ -415,6 +449,7 @@ impl PerfBenchValidator {
     /// Uses raw-string templates with `__SIZES__` placeholder + `.replace()`
     /// instead of nested `format!` — avoids the brace-escaping hell that
     /// comes from generating Rust source containing `println!` format strings.
+    #[allow(clippy::too_many_lines)] // linear template assembler (harness + allocator + timing loop); splitting hurts readability
     fn generate_main_rs(spec: &BenchSpec) -> String {
         // Raw-string template — `{{` and `}}` here are LITERAL characters in
         // the generated Rust source (the runtime `println!` format string uses
@@ -471,17 +506,17 @@ fn main() {
         // (LazyLock compilation, first-use lazies), so ONE call measures
         // the steady-state per-call allocation traffic exactly. Counters
         // are read into locals BEFORE println's own allocations.
-        ALLOC_COUNT.store(0, Ordering::Relaxed);
-        ALLOC_BYTES.store(0, Ordering::Relaxed);
+        ALLOC_COUNT.store(0, std::sync::atomic::Ordering::Relaxed);
+        ALLOC_BYTES.store(0, std::sync::atomic::Ordering::Relaxed);
         run_buggy(&input);
-        let buggy_allocs = ALLOC_COUNT.load(Ordering::Relaxed);
-        let buggy_alloc_bytes = ALLOC_BYTES.load(Ordering::Relaxed);
+        let buggy_allocs = ALLOC_COUNT.load(std::sync::atomic::Ordering::Relaxed);
+        let buggy_alloc_bytes = ALLOC_BYTES.load(std::sync::atomic::Ordering::Relaxed);
 
-        ALLOC_COUNT.store(0, Ordering::Relaxed);
-        ALLOC_BYTES.store(0, Ordering::Relaxed);
+        ALLOC_COUNT.store(0, std::sync::atomic::Ordering::Relaxed);
+        ALLOC_BYTES.store(0, std::sync::atomic::Ordering::Relaxed);
         run_fixed(&input);
-        let fixed_allocs = ALLOC_COUNT.load(Ordering::Relaxed);
-        let fixed_alloc_bytes = ALLOC_BYTES.load(Ordering::Relaxed);
+        let fixed_allocs = ALLOC_COUNT.load(std::sync::atomic::Ordering::Relaxed);
+        let fixed_alloc_bytes = ALLOC_BYTES.load(std::sync::atomic::Ordering::Relaxed);
 
         // Emit JSON line for the validator to parse.
         // {{ and }} are escape sequences in the runtime println! format string.
@@ -511,38 +546,41 @@ fn calibrate<F: Fn()>(f: F, target_ns: u64) -> u64 {
         // through our alloc); dealloc is not counted (traffic axis, not heap-
         // residency axis). Overhead: two relaxed atomic RMWs per allocation —
         // amortized against the underlying malloc cost (~tens of ns).
+        //
+        // Fully-qualified paths, NO `use` statements: the injected block sits
+        // at module scope next to the harness's own imports — a `use` here
+        // collides with any harness importing the same name (E0252 on
+        // `Ordering`, caught by the mutex-to-atomic sweep in Bench 020).
         const ALLOCATOR_BLOCK: &str = r#"
 // ── Counting allocator (deterministic alloc axis — Issue 014 T1) ────────
 // Exact integers, identical on every run; variance here is a harness bug.
-use std::alloc::{GlobalAlloc, Layout, System};
-use std::sync::atomic::{AtomicU64, Ordering};
-
-static ALLOC_COUNT: AtomicU64 = AtomicU64::new(0);
-static ALLOC_BYTES: AtomicU64 = AtomicU64::new(0);
+// Fully-qualified paths only — no `use` (see generate_main_rs doc above).
+static ALLOC_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static ALLOC_BYTES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 struct CountingAlloc;
 
 #[inline]
 fn bump_counting_alloc(size: usize) {
-    ALLOC_COUNT.fetch_add(1, Ordering::Relaxed);
-    ALLOC_BYTES.fetch_add(size as u64, Ordering::Relaxed);
+    ALLOC_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    ALLOC_BYTES.fetch_add(size as u64, std::sync::atomic::Ordering::Relaxed);
 }
 
-unsafe impl GlobalAlloc for CountingAlloc {
-    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+unsafe impl std::alloc::GlobalAlloc for CountingAlloc {
+    unsafe fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {
         bump_counting_alloc(layout.size());
-        unsafe { System.alloc(layout) }
+        unsafe { std::alloc::System.alloc(layout) }
     }
-    unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout) {
-        unsafe { System.dealloc(ptr, _layout) }
+    unsafe fn dealloc(&self, ptr: *mut u8, _layout: std::alloc::Layout) {
+        unsafe { std::alloc::System.dealloc(ptr, _layout) }
     }
-    unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
+    unsafe fn realloc(&self, ptr: *mut u8, layout: std::alloc::Layout, new_size: usize) -> *mut u8 {
         bump_counting_alloc(new_size);
-        unsafe { System.realloc(ptr, layout, new_size) }
+        unsafe { std::alloc::System.realloc(ptr, layout, new_size) }
     }
-    unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
+    unsafe fn alloc_zeroed(&self, layout: std::alloc::Layout) -> *mut u8 {
         bump_counting_alloc(layout.size());
-        unsafe { System.alloc_zeroed(layout) }
+        unsafe { std::alloc::System.alloc_zeroed(layout) }
     }
 }
 
@@ -672,8 +710,8 @@ mod tests {
     #[test]
     fn aggregate_all_faster_is_dominant() {
         let results = vec![
-            SizeResult { size: 10, buggy_ns: 100, fixed_ns: 50, speedup: 2.0, outcome: SizeOutcome::Faster },
-            SizeResult { size: 100, buggy_ns: 200, fixed_ns: 80, speedup: 2.5, outcome: SizeOutcome::Faster },
+            SizeResult { size: 10, buggy_ns: 100, fixed_ns: 50, speedup: 2.0, outcome: SizeOutcome::Faster, buggy_allocs: 0, buggy_alloc_bytes: 0, fixed_allocs: 0, fixed_alloc_bytes: 0 },
+            SizeResult { size: 100, buggy_ns: 200, fixed_ns: 80, speedup: 2.5, outcome: SizeOutcome::Faster, buggy_allocs: 0, buggy_alloc_bytes: 0, fixed_allocs: 0, fixed_alloc_bytes: 0 },
         ];
         assert_eq!(aggregate_outcomes(&results), BenchOverall::ParetoDominant);
     }
@@ -682,10 +720,10 @@ mod tests {
     fn aggregate_majority_faster_is_dominant() {
         // 3 faster, 1 slower out of 4 → faster*2 (6) > total (4) → dominant.
         let results = vec![
-            SizeResult { size: 10, buggy_ns: 100, fixed_ns: 50, speedup: 2.0, outcome: SizeOutcome::Faster },
-            SizeResult { size: 100, buggy_ns: 200, fixed_ns: 80, speedup: 2.5, outcome: SizeOutcome::Faster },
-            SizeResult { size: 1000, buggy_ns: 300, fixed_ns: 100, speedup: 3.0, outcome: SizeOutcome::Faster },
-            SizeResult { size: 10000, buggy_ns: 100, fixed_ns: 200, speedup: 0.5, outcome: SizeOutcome::Slower },
+            SizeResult { size: 10, buggy_ns: 100, fixed_ns: 50, speedup: 2.0, outcome: SizeOutcome::Faster, buggy_allocs: 0, buggy_alloc_bytes: 0, fixed_allocs: 0, fixed_alloc_bytes: 0 },
+            SizeResult { size: 100, buggy_ns: 200, fixed_ns: 80, speedup: 2.5, outcome: SizeOutcome::Faster, buggy_allocs: 0, buggy_alloc_bytes: 0, fixed_allocs: 0, fixed_alloc_bytes: 0 },
+            SizeResult { size: 1000, buggy_ns: 300, fixed_ns: 100, speedup: 3.0, outcome: SizeOutcome::Faster, buggy_allocs: 0, buggy_alloc_bytes: 0, fixed_allocs: 0, fixed_alloc_bytes: 0 },
+            SizeResult { size: 10000, buggy_ns: 100, fixed_ns: 200, speedup: 0.5, outcome: SizeOutcome::Slower, buggy_allocs: 0, buggy_alloc_bytes: 0, fixed_allocs: 0, fixed_alloc_bytes: 0 },
         ];
         assert_eq!(aggregate_outcomes(&results), BenchOverall::ParetoDominant);
     }
@@ -694,8 +732,8 @@ mod tests {
     fn aggregate_half_and_half_is_mixed() {
         // 2 faster, 2 slower → neither dominant.
         let results = vec![
-            SizeResult { size: 10, buggy_ns: 100, fixed_ns: 50, speedup: 2.0, outcome: SizeOutcome::Faster },
-            SizeResult { size: 100, buggy_ns: 100, fixed_ns: 200, speedup: 0.5, outcome: SizeOutcome::Slower },
+            SizeResult { size: 10, buggy_ns: 100, fixed_ns: 50, speedup: 2.0, outcome: SizeOutcome::Faster, buggy_allocs: 0, buggy_alloc_bytes: 0, fixed_allocs: 0, fixed_alloc_bytes: 0 },
+            SizeResult { size: 100, buggy_ns: 100, fixed_ns: 200, speedup: 0.5, outcome: SizeOutcome::Slower, buggy_allocs: 0, buggy_alloc_bytes: 0, fixed_allocs: 0, fixed_alloc_bytes: 0 },
         ];
         assert_eq!(aggregate_outcomes(&results), BenchOverall::Mixed);
     }
@@ -703,8 +741,8 @@ mod tests {
     #[test]
     fn aggregate_all_slower_is_dominated() {
         let results = vec![
-            SizeResult { size: 10, buggy_ns: 50, fixed_ns: 100, speedup: 0.5, outcome: SizeOutcome::Slower },
-            SizeResult { size: 100, buggy_ns: 80, fixed_ns: 200, speedup: 0.4, outcome: SizeOutcome::Slower },
+            SizeResult { size: 10, buggy_ns: 50, fixed_ns: 100, speedup: 0.5, outcome: SizeOutcome::Slower, buggy_allocs: 0, buggy_alloc_bytes: 0, fixed_allocs: 0, fixed_alloc_bytes: 0 },
+            SizeResult { size: 100, buggy_ns: 80, fixed_ns: 200, speedup: 0.4, outcome: SizeOutcome::Slower, buggy_allocs: 0, buggy_alloc_bytes: 0, fixed_allocs: 0, fixed_alloc_bytes: 0 },
         ];
         assert_eq!(aggregate_outcomes(&results), BenchOverall::ParetoDominated);
     }
@@ -712,6 +750,31 @@ mod tests {
     #[test]
     fn aggregate_empty_is_mixed() {
         assert_eq!(aggregate_outcomes(&[]), BenchOverall::Mixed);
+    }
+
+    #[test]
+    fn alloc_axis_equal_for_identical_results() {
+        let mk = |allocs: u64, bytes: u64| SizeResult {
+            size: 100,
+            buggy_ns: 10,
+            fixed_ns: 5,
+            speedup: 2.0,
+            outcome: SizeOutcome::Faster,
+            buggy_allocs: allocs,
+            buggy_alloc_bytes: bytes,
+            fixed_allocs: 1,
+            fixed_alloc_bytes: 16,
+        };
+        // Identical alloc integers → identical axes (the determinism proof).
+        assert_eq!(alloc_axis(&[mk(7, 256)]), alloc_axis(&[mk(7, 256)]));
+        // Different timing is IRRELEVANT to the axis (noise is excluded).
+        let mut noisy = mk(7, 256);
+        noisy.buggy_ns = 999;
+        noisy.fixed_ns = 998;
+        assert_eq!(alloc_axis(&[mk(7, 256)]), alloc_axis(&[noisy]));
+        // Any alloc-integer difference → different axes.
+        assert_ne!(alloc_axis(&[mk(7, 256)]), alloc_axis(&[mk(8, 256)]));
+        assert_ne!(alloc_axis(&[mk(7, 256)]), alloc_axis(&[mk(7, 512)]));
     }
 
     #[test]

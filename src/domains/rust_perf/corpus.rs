@@ -5,13 +5,14 @@
 //! tuple representing a real perf pattern from the skill. The corpus is
 //! BLAKE3-committed via [`Corpus::new`](crate::corpus::Corpus::new). The
 //! `context_notes` field is `Option<String>` — `Some(...)` for rules the bench
-//! validator found ParetoDominated in the default config (Bench 013), `None`
-//! for unconditional wins + honestly NotBenchable rules.
+//! validator found ParetoDominated in the default config (Bench 013) or that
+//! are NotBenchable-with-a-metric-mismatch (Issue 014 T2), `None` for
+//! unconditional wins + honestly NotBenchable rules.
 //!
-//! 46 entries across 12 categories (complexity 14, allocation 13, simd 5,
-//! layout 4, iterators 4, concurrency 2, io 3, arithmetic 1, dispatch 1,
-//! caching 1, bevy 1, wasm 1). 38 are benchable (32 ParetoDominant + 2
-//! ParetoDominated + 4 Mixed); 8 are honestly NotBenchable.
+//! 50 entries across 12 categories (complexity 12, allocation 14, simd 5,
+//! layout 4, iterators 4, concurrency 4, io 1, arithmetic 1, dispatch 1,
+//! caching 2, bevy 1, wasm 1). 40 are benchable; 10 are honestly
+//! NotBenchable (8 external-runtime/size-class + 2 metric-mismatch, Issue 014).
 //!
 //! ## Bench specs (behind `rust_perf_bench`)
 //!
@@ -20,7 +21,7 @@
 //! `run_buggy` / `run_fixed` entry points. The bench validator generates a
 //! temp bin crate from the spec + runs a timing loop at multiple sizes.
 //!
-//! Currently benchable (38/46):
+//! Currently benchable (40/50):
 //! - `o1-lookup` (Vec scan vs HashMap lookup — clear O(n) vs O(1))
 //! - `bsearch-sorted-slice` (linear scan vs binary search — O(n) vs O(log n) on sorted data)
 //! - `dedupe-hashset-vs-vec` (Vec::contains loop vs HashSet collect — O(n²) vs O(n))
@@ -61,8 +62,10 @@
 //! - `bufwriter-batched` (File::write per-record → BufWriter batched — syscall amortization)
 //! - `log-write-direct` (push_str(&format!(...)) temp alloc → write! direct — ~1.7×)
 //! - `cow-conditional-alloc` (String always-alloc → Cow<str> borrow when no transform — N vs 0.1N allocations)
+//! - `regex-hoist-lazylock` (Regex::new per call → static LazyLock — compile once, Issue 014 T2.1)
+//! - `arc-str-payload` (per-recipient payload clone → Arc<str> handle clone — N×bytes → 1 alloc, Issue 014 T2.2)
 //!
-//! Not benchable (8/46) — honest:
+//! Not benchable (10/50) — honest:
 //! - `layout-reorder` (struct size — deterministic `size_of`, not a runtime
 //!   microbench; the cache-utilization claim needs a specific access pattern)
 //! - `repr-u8-enum` (enum size — deterministic `size_of`, same class as
@@ -75,14 +78,21 @@
 //! - `async-future-size` (future state-machine size — deterministic `size_of_val`)
 //! - `bevy-reactive-loop` (needs the Bevy runtime — can't run in a temp crate)
 //! - `wasm-batch-ffi` (needs a WASM runtime — can't run in a temp crate)
+//! - `tokio-guard-across-await` (**metric mismatch**, Issue 014 T2.3 — cost is
+//!   OTHER tasks' wait latency under contention, not this task's wall-clock)
+//! - `bounded-channel-backpressure` (**metric mismatch + semantics-changing**,
+//!   Issue 014 T2.4 — win is bounded queue depth; the buggy path is often
+//!   FASTER on wall-clock precisely because it buffers unboundedly)
 //!
 //! ## Context-dependent rules (`context_notes`)
 //!
-//! Six rules carry a `context_notes: Some(...)` annotation recording that the
-//! Pareto validator found them **ParetoDominated** or **Mixed** in the default
-//! configuration. The original 4 from Bench 013 (`precompute-table`,
+//! Eight rules carry a `context_notes: Some(...)` annotation. Six record that
+//! the Pareto validator found them **ParetoDominated** or **Mixed** in the
+//! default configuration: the original 4 from Bench 013 (`precompute-table`,
 //! `papaya-lockfree`, `dedupe-hashset-vs-vec`, `reuse-allocation-clear`) + 2
-//! from Bench 016 / Issue 012 (`sort-by-key`, `copy-from-slice`). The patterns
+//! from Bench 016 / Issue 012 (`sort-by-key`, `copy-from-slice`). Two more
+//! (Issue 014 T2.3/T2.4) annotate the NotBenchable metric-mismatch class:
+//! `tokio-guard-across-await` + `bounded-channel-backpressure`. The patterns
 //! are genuine wins in their respective regimes and are kept in the corpus as
 //! documented patterns, but consumers should treat them as context-dependent
 //! — not unconditional suggestions.
@@ -92,11 +102,12 @@ use crate::domains::rust_perf::{PerfRule, RustPerfDomain};
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 46 entries
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 50 entries
 /// covering the main perf pattern categories (complexity, allocation, simd,
 /// layout, iterators, concurrency, io, arithmetic, dispatch, caching, bevy,
-/// wasm). Complexity + allocation are the deepest (14 + 13 rules); simd has 5;
-/// layout + iterators have 4 each; io has 3; concurrency has 2; the rest have 1.
+/// wasm). Allocation is the deepest (14 rules); complexity has 12; simd has 5;
+/// layout + iterators have 4 each; concurrency has 4 (Issue 014 added the two
+/// metric-mismatch rules); caching has 2; the rest have 1.
 #[must_use]
 #[allow(clippy::too_many_lines)] // seed corpus is a data table; length scales with rule count
 pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
@@ -899,6 +910,73 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
             context_notes: None,
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: Some(cow_conditional_alloc_bench_spec()),
+        },
+        // ── caching: Regex::new per call → static LazyLock<Regex> ─────────────
+        // Source: Research 032 (hotpath-rs profiling guide). Regex compilation
+        // is runtime NFA construction — ~µs of real work the compiler cannot
+        // elide (unlike `precompute-table`'s POPCNT shape). Hoisting to a
+        // `static LazyLock` compiles ONCE; every call after is a match-only.
+        // The guide's prior: ~555× per call. Bench 020 verifies on our harness.
+        PerfRule {
+            rule_id: "regex-hoist-lazylock".to_string(),
+            name: "Regex::new per call → static LazyLock<Regex> (compile once)".to_string(),
+            category: "caching".to_string(),
+            buggy_code: "use regex::Regex;\nfn is_valid(code: &str) -> bool {\n    let re = Regex::new(r\"^[A-Z]{2}-\\d{4}$\").unwrap(); // recompiles every call\n    re.is_match(code)\n}".to_string(),
+            fixed_code: "use regex::Regex;\nuse std::sync::LazyLock;\nstatic RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r\"^[A-Z]{2}-\\d{4}$\").unwrap());\nfn is_valid(code: &str) -> bool {\n    RE.is_match(code)\n}".to_string(),
+            context_notes: None,
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(regex_hoist_lazylock_bench_spec()),
+        },
+        // ── allocation: clone-per-message payload → Arc<str> shared ──────────
+        // Source: Research 032 (hotpath-rs profiling guide). Fanning out an
+        // immutable payload to N recipients via `to_string()` clones copies N
+        // × payload-bytes. `Arc<str>` allocates the payload ONCE; recipients
+        // hold refcount-bumped handles (pointer copies). Timing prior ~1.3×
+        // (memcpy-bound) may Tie — the deterministic alloc axis carries the
+        // gate: N×payload bytes → ~1 allocation. Distinct from `avoid-clone`
+        // (borrow vs clone at fn boundary) + `box-str-immutable` (struct width).
+        PerfRule {
+            rule_id: "arc-str-payload".to_string(),
+            name: "Clone-per-message immutable payload → Arc<str> (clone the handle, not the bytes)".to_string(),
+            category: "allocation".to_string(),
+            buggy_code: "fn fan_out(payload: &str, ids: &[u32]) -> Vec<(u32, String)> {\n    ids.iter().map(|&id| (id, payload.to_string())).collect() // N payload clones\n}".to_string(),
+            fixed_code: "use std::sync::Arc;\nfn fan_out(payload: &str, ids: &[u32]) -> Vec<(u32, Arc<str>)> {\n    let shared: Arc<str> = Arc::from(payload); // ONE allocation\n    ids.iter().map(|&id| (id, Arc::clone(&shared))).collect() // refcount bumps\n}".to_string(),
+            context_notes: None,
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(arc_str_payload_bench_spec()),
+        },
+        // ── concurrency: guard held across .await → fetch-before-guard ───────
+        // Source: Research 032 (hotpath-rs profiling guide). Holding a
+        // parking_lot/tokio MutexGuard across a slow .await serializes every
+        // OTHER task that touches the lock — the fix fetches what's needed,
+        // drops the guard, THEN awaits. clippy's `await_holding_lock` covers
+        // std guards only; this rule targets the ecosystem lock crates.
+        PerfRule {
+            rule_id: "tokio-guard-across-await".to_string(),
+            name: "MutexGuard held across .await → fetch data, drop guard, then await".to_string(),
+            category: "concurrency".to_string(),
+            buggy_code: "async fn update(cache: &tokio::sync::Mutex<Config>, key: String) {\n    let mut cfg = cache.lock().await;\n    let upstream = fetch(&key).await; // guard held across await — blocks all other lockers\n    cfg.apply(upstream);\n}".to_string(),
+            fixed_code: "async fn update(cache: &tokio::sync::Mutex<Config>, key: String) {\n    let upstream = fetch(&key).await; // await FIRST — no guard held\n    let mut cfg = cache.lock().await;\n    cfg.apply(upstream);\n    // guard drops at scope end, after the slow path\n}".to_string(),
+            context_notes: Some("NotBenchable (metric mismatch): the cost is OTHER tasks' wait latency while the guard is held across a slow await, not this task's wall-clock. A single-threaded harness measures no regression on the buggy path; the win only appears under concurrent lock contention (same class as the park-vs-spin rejection + bevy-reactive-loop NotBenchable precedent). Also note clippy's await_holding_lock lint covers std sync guards only — this rule targets tokio/parking_lot/async-lock guards.".to_string()),
+            // Not benchable: contention-latency metric, not wall-clock.
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: None,
+        },
+        // ── concurrency: unbounded channel → bounded (backpressure) ──────────
+        // Source: Research 032 (hotpath-rs profiling guide). An unbounded
+        // channel + a send loop that outpaces the consumer grows the queue
+        // without bound (memory blowup + consumer sees stale data). A bounded
+        // channel applies backpressure: send().await suspends the producer.
+        PerfRule {
+            rule_id: "bounded-channel-backpressure".to_string(),
+            name: "Unbounded channel + hot producer → bounded channel (backpressure)".to_string(),
+            category: "concurrency".to_string(),
+            buggy_code: "let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();\nfor event in events {\n    tx.send(event).unwrap(); // never blocks — queue grows unboundedly if consumer is slow\n}".to_string(),
+            fixed_code: "let (tx, mut rx) = tokio::sync::mpsc::channel(1024);\nfor event in events {\n    tx.send(event).await.unwrap(); // backpressure: suspends producer when full\n}".to_string(),
+            context_notes: Some("NotBenchable (metric mismatch): the win is bounded queue depth + fresh-data latency under producer>consumer overload, not throughput — the buggy path is often FASTER on wall-clock precisely because it buffers unboundedly (that is the bug). Semantics-changing: bounded send applies backpressure (producer suspends) vs unbounded buffering; adopt deliberately, size the bound to your latency budget.".to_string()),
+            // Not benchable: queue-depth/backpressure metric + semantics-changing.
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: None,
         },
     ])
 }
@@ -3009,6 +3087,139 @@ pub fn run_fixed(input: &Input) {
     }
 }
 
+/// Bench spec for `regex-hoist-lazylock`: Regex::new per call vs static LazyLock.
+///
+/// Regex compilation is runtime NFA construction — real work (μs-scale, plus
+/// KB of allocation) the compiler cannot elide or cache. The buggy path
+/// recompiles the SAME pattern per call; the fixed path compiles once into a
+/// `static LazyLock` (initialized during warmup, so the steady-state alloc
+/// axis is 0 for the fixed side) and pays only the match. Guide prior ~555×
+/// per call (Research 032); verified on this harness in Bench 020.
+#[cfg(feature = "rust_perf_bench")]
+fn regex_hoist_lazylock_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![10, 100, 1_000],
+        harness: r#"
+// [dep: regex = "1"]
+mod buggy {
+    use regex::Regex;
+    pub fn is_valid(code: &str) -> bool {
+        let re = Regex::new(r"^[A-Z]{2}-\d{4}$").unwrap();
+        re.is_match(code)
+    }
+}
+
+mod fixed {
+    use regex::Regex;
+    use std::sync::LazyLock;
+    static RE: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"^[A-Z]{2}-\d{4}$").unwrap());
+    pub fn is_valid(code: &str) -> bool {
+        RE.is_match(code)
+    }
+}
+
+pub struct Input {
+    codes: Vec<String>,
+}
+
+pub fn make_input(n: usize) -> Input {
+    // Half valid (match path), half invalid (scan-to-end path) — a realistic
+    // mix rather than a best-case all-match workload.
+    let codes: Vec<String> = (0..n)
+        .map(|i| {
+            if i % 2 == 0 {
+                format!("AB-{:04}", i % 10_000)
+            } else {
+                format!("invalid code {}!", i)
+            }
+        })
+        .collect();
+    Input { codes }
+}
+
+pub fn run_buggy(input: &Input) {
+    let mut hits = 0usize;
+    for code in &input.codes {
+        if buggy::is_valid(code) {
+            hits += 1;
+        }
+    }
+    std::hint::black_box(hits);
+}
+
+pub fn run_fixed(input: &Input) {
+    let mut hits = 0usize;
+    for code in &input.codes {
+        if fixed::is_valid(code) {
+            hits += 1;
+        }
+    }
+    std::hint::black_box(hits);
+}
+"#
+        .to_string(),
+    }
+}
+
+/// Bench spec for `arc-str-payload`: per-recipient payload clone vs Arc<str>.
+///
+/// A 1 KiB immutable payload fanned out to N recipients. Buggy: `to_string()`
+/// per recipient — N allocations + N × 1024 bytes of copying. Fixed: ONE
+/// `Arc::from` allocation + refcount-bump clones. Timing prior ~1.3× (the
+/// buggy side is memcpy-bound, ~GB/s) may land in the Tie band; the
+/// deterministic alloc axis carries the gate (N×1024 B → ~1 alloc + the Vec).
+#[cfg(feature = "rust_perf_bench")]
+fn arc_str_payload_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![10, 100, 1_000],
+        harness: r#"
+use std::sync::Arc;
+
+mod buggy {
+    pub fn fan_out(payload: &str, ids: &[u32]) -> Vec<(u32, String)> {
+        ids.iter().map(|&id| (id, payload.to_string())).collect()
+    }
+}
+
+mod fixed {
+    use std::sync::Arc;
+    pub fn fan_out(payload: &str, ids: &[u32]) -> Vec<(u32, Arc<str>)> {
+        let shared: Arc<str> = Arc::from(payload);
+        ids.iter().map(|&id| (id, Arc::clone(&shared))).collect()
+    }
+}
+
+pub struct Input {
+    payload: String,
+    ids: Vec<u32>,
+}
+
+pub fn make_input(n: usize) -> Input {
+    // 1 KiB immutable payload (config snapshot, telemetry batch, ...).
+    let payload = "0123456789abcdef".repeat(64);
+    let ids: Vec<u32> = (0..n as u32).collect();
+    Input { payload, ids }
+}
+
+pub fn run_buggy(input: &Input) {
+    let out = buggy::fan_out(&input.payload, &input.ids);
+    // Touch every message's payload length so the strings are materialized,
+    // not just the Vec scaffold.
+    let total: usize = out.iter().map(|(id, s)| *id as usize + s.len()).sum();
+    std::hint::black_box(total);
+}
+
+pub fn run_fixed(input: &Input) {
+    let out = fixed::fan_out(&input.payload, &input.ids);
+    let total: usize = out.iter().map(|(id, s)| *id as usize + s.len()).sum();
+    std::hint::black_box(total);
+}
+"#
+        .to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3024,17 +3235,19 @@ mod tests {
     }
 
     #[test]
-    fn seed_corpus_has_forty_six_entries_across_twelve_categories() {
+    fn seed_corpus_has_fifty_entries_across_twelve_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 46);
+        assert_eq!(corpus.entries.len(), 50);
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
         categories.dedup();
-        // 12 distinct categories. Complexity is the deepest (14 rules,
-        // including Issue 013's data-structure-choice rules); allocation has 13;
-        // simd has 5; layout has 4; iterators has 4; concurrency has 2; io
-        // has 3; arithmetic, dispatch, caching, bevy, wasm have 1 each.
+        // 12 distinct categories. Allocation is the deepest (14 rules,
+        // including Issue 014's arc-str-payload); complexity has 12;
+        // simd has 5; layout + iterators have 4 each; concurrency has 4
+        // (Issue 014 added the two metric-mismatch rules); caching has 2
+        // (Issue 014 added regex-hoist-lazylock); io, arithmetic, dispatch,
+        // bevy, wasm have 1 each.
         assert_eq!(categories.len(), 12);
     }
 
@@ -3103,15 +3316,15 @@ mod tests {
 
     #[cfg(feature = "rust_perf_bench")]
     #[test]
-    fn thirty_eight_rules_have_bench_specs() {
+    fn forty_rules_have_bench_specs() {
         let corpus = build_perf_seed_corpus();
         let with_spec = corpus.entries.iter().filter(|e| e.bench_spec.is_some()).count();
-        assert_eq!(with_spec, 38, "expected 38 benchable rules, got {with_spec}");
+        assert_eq!(with_spec, 40, "expected 40 benchable rules, got {with_spec}");
     }
 
     #[cfg(feature = "rust_perf_bench")]
     #[test]
-    fn eight_rules_are_not_benchable() {
+    fn ten_rules_are_not_benchable() {
         let corpus = build_perf_seed_corpus();
         let without_spec: Vec<&str> = corpus
             .entries
@@ -3119,7 +3332,7 @@ mod tests {
             .filter(|e| e.bench_spec.is_none())
             .map(|e| e.rule_id.as_str())
             .collect();
-        assert_eq!(without_spec.len(), 8);
+        assert_eq!(without_spec.len(), 10);
         assert!(without_spec.contains(&"layout-reorder"));
         assert!(without_spec.contains(&"repr-u8-enum"));
         assert!(without_spec.contains(&"bevy-reactive-loop"));
@@ -3128,16 +3341,21 @@ mod tests {
         assert!(without_spec.contains(&"box-large-enum-variant"));
         assert!(without_spec.contains(&"async-yield-point"));
         assert!(without_spec.contains(&"async-future-size"));
+        // Issue 014 T2.3/T2.4 — NotBenchable metric-mismatch class.
+        assert!(without_spec.contains(&"tokio-guard-across-await"));
+        assert!(without_spec.contains(&"bounded-channel-backpressure"));
     }
 
     /// Bench 013 found 4 rules with non-dominant verdicts in the default
     /// config (2 ParetoDominated + 2 Mixed). Their `context_notes` annotation
     /// records the finding so consumers don't unconditionally suggest them.
     /// Bench 016 (Issue 012) added 2 more annotated rules (sort-by-key,
-    /// copy-from-slice). The other 37 have `context_notes: None` (unconditional
-    /// wins or honestly NotBenchable).
+    /// copy-from-slice). Issue 014 T2.3/T2.4 added 2 more in the
+    /// NotBenchable metric-mismatch class (tokio-guard-across-await,
+    /// bounded-channel-backpressure). The other 42 have `context_notes: None`
+    /// (unconditional wins or honestly NotBenchable).
     #[test]
-    fn six_annotated_rules_carry_context_notes() {
+    fn eight_annotated_rules_carry_context_notes() {
         let corpus = build_perf_seed_corpus();
         let annotated: Vec<&str> = corpus
             .entries
@@ -3145,13 +3363,15 @@ mod tests {
             .filter(|e| e.context_notes.is_some())
             .map(|e| e.rule_id.as_str())
             .collect();
-        assert_eq!(annotated.len(), 6, "expected 6 context-annotated rules");
+        assert_eq!(annotated.len(), 8, "expected 8 context-annotated rules");
         assert!(annotated.contains(&"precompute-table"));
         assert!(annotated.contains(&"papaya-lockfree"));
         assert!(annotated.contains(&"dedupe-hashset-vs-vec"));
         assert!(annotated.contains(&"reuse-allocation-clear"));
         assert!(annotated.contains(&"sort-by-key"));
         assert!(annotated.contains(&"copy-from-slice"));
+        assert!(annotated.contains(&"tokio-guard-across-await"));
+        assert!(annotated.contains(&"bounded-channel-backpressure"));
     }
 
     /// The 35 non-annotated rules (28 ParetoDominant + 8 NotBenchable - 1 mixed reuse) must
@@ -3160,14 +3380,14 @@ mod tests {
     /// ParetoDominated + 2 Mixed) + 8 NotBenchable = 39 total. The 4 annotated
     /// + 35 unannotated = 39.
     #[test]
-    fn forty_rules_have_no_context_notes() {
+    fn forty_two_rules_have_no_context_notes() {
         let corpus = build_perf_seed_corpus();
         let unannotated = corpus
             .entries
             .iter()
             .filter(|e| e.context_notes.is_none())
             .count();
-        assert_eq!(unannotated, 40, "expected 40 unannotated rules");
+        assert_eq!(unannotated, 42, "expected 42 unannotated rules");
     }
 
     /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -3179,7 +3399,7 @@ mod tests {
         let json = serde_json::to_string(&corpus.entries).unwrap();
         let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
         let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-        assert_eq!(annotated, 6);
+        assert_eq!(annotated, 8);
 
         // Simulate a pre-field snapshot: strip `context_notes` from JSON.
         // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -3191,18 +3411,18 @@ mod tests {
 
     /// Integration: the drafter propagates `context_notes` from `PerfRule`
     /// through `DraftedFix` for the annotated rules, and `None` for the
-    /// unconditional wins. The original 4 annotations (Bench 013: 2
-    /// ParetoDominated + 2 Mixed) + the 2 new annotations from Issue 012 /
-    /// Bench 016 (sort-by-key, copy-from-slice).
+    /// unconditional wins. Six verdict annotations (Bench 013's 2
+    /// ParetoDominated + 2 Mixed + Bench 016's sort-by-key/copy-from-slice)
+    /// + the two Issue 014 NotBenchable metric-mismatch annotations.
     #[test]
     fn drafter_propagates_context_notes_from_perf_corpus() {
         use crate::domain::HealEntry;
 
         let corpus = build_perf_seed_corpus();
 
-        // Filter to the 6 annotated rules.
+        // Filter to the 8 annotated rules.
         let annotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_some()).collect();
-        assert_eq!(annotated.len(), 6, "expected 6 annotated rules");
+        assert_eq!(annotated.len(), 8, "expected 8 annotated rules");
 
         // The HealEntry trait override must agree with the struct field.
         for rule in &annotated {
@@ -3214,15 +3434,17 @@ mod tests {
             );
             assert!(
                 rule.context_notes.as_ref().unwrap().contains("ParetoDominated")
-                    || rule.context_notes.as_ref().unwrap().contains("Mixed"),
-                "annotation should mention ParetoDominated or Mixed for {}",
+                    || rule.context_notes.as_ref().unwrap().contains("Mixed")
+                    || rule.context_notes.as_ref().unwrap().contains("NotBenchable"),
+                "annotation should mention ParetoDominated, Mixed, or the \
+                 NotBenchable metric-mismatch class for {}",
                 rule.rule_id
             );
         }
 
-        // The 40 unannotated rules must return None from the trait too.
+        // The 42 unannotated rules must return None from the trait too.
         let unannotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_none()).collect();
-        assert_eq!(unannotated.len(), 40, "expected 40 unannotated rules");
+        assert_eq!(unannotated.len(), 42, "expected 42 unannotated rules");
         for rule in &unannotated {
             assert!(HealEntry::context_notes(*rule).is_none(), "{} should have no context_notes", rule.rule_id);
         }
