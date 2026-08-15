@@ -602,11 +602,58 @@ global = symlink only.
   match MID-LINE from distinctive tail text (wrapped `//!` continuations
   share the prefix; a line-start assumption fails). 2 doc_markdown fixes
   (`T4.1`/`T4.2` + `DFlash` — the CamelCase-adjacent family).
+- **Batch 44 DONE (2026-08-15, Research 048):** the Weaver GPU KERNEL
+  substrate + the FULL kvarn/ cluster (`weaver_gpu/mod.rs` 1,657 — the
+  19-dispatch kernel implementations behind the Batch 43 corrector:
+  `GpuWeaverWeights` upload/download, pos-emb add, batched SwiGLU, causal
+  MHA with smem softmax, indirect embedding gather, dot-per-row,
+  softmax-over-K with the Issue 468 `P0` `probs_offset` write-shift +
+  `kvarn/` — kvarn_zone_weights.rs + kvarn_dequant.rs + kvarn_quant.rs +
+  the small siblings, the game-side CPU reference + zone-scale registry
+  for `KVarN` KV-cache quantization; Lane B cross-verified every fix-shape
+  against the canonical `katgpt-kv` kv_cache.rs/var_norm.rs) — **9 rules,
+  corpus 325 → 334** (A 75, B 49, C 33, D 59, E 19, L 11):
+  `row-dot-split-inner-axis-block-reduce` (E — one-thread-per-row pins 128
+  threads to a SINGLE workgroup at production + 16× read amplification;
+  split the reduction axis — the INVERSE regime of grid-over-output),
+  `fuse-indirect-gather-into-dot-consumer` (C — a materialized `D*K*h`
+  gather whose only consumer re-reads it in a dot → gather in-loop via
+  the device-resident index array), `share-cube-size-const-between-kernel-
+  and-launcher` (D — 4 kernels vs 6 launchers restating the 256 literal is
+  a silent stride contract), `stash-kernel-internal-intermediate-in-smem`
+  (A — a global write + re-read nobody outside the kernel observes),
+  `hoist-bit-address-out-of-packed-row-sweep` (B — the per-row unpack
+  re-derives an identical bit address; decompose once per position),
+  `fold-tile-transpose-into-dequant-scatter` (L — materialize-then-
+  transpose = 2 reads + 2 writes/element → scatter at production),
+  `bit-cursor-unpack-to-width-specialized-byte-batch` (A — a software bit
+  cursor re-derives what a per-width arm makes compile-time-constant),
+  `single-sweep-minmax-for-quant-scale` (B — two folds scan twice for the
+  (lo, hi) pair; the canonical var_norm comment documents the identical
+  fix), `serialize-container-canonical-order` (D — `HashMap` iteration
+  order leaks into serialized bytes, breaking BLAKE3 commitment
+  stability). 22 falsifications (documented trade-offs + 8 dedup kills +
+  canonical positives). Bug yield filed as riir-ai **Issue 698** (25
+  hazards: the legacy `KVarN` round-trip DROPS the `VarN` inversion —
+  scales discarded at kvarn_quant.rs L160, ~3.67× error masked by vacuous
+  tolerances; the CPU/GPU auto-route doc-lie; the drifted unpack fork
+  corrupting non-pow2 widths (no cross-byte handling); `GpuWeaverScratch`
+  dead with known-wrong sizing; the dot-per-row cliff; `hot_swap_zone`
+  inconsistent state; `memory_bytes` off-by-4). GOAT: 348 kernel_heal +
+  201 default tests, clippy 0 in all 4 states. **Generator lesson (FIFTH
+  post-write defect class, caught by first compile)**: the `lit()` helper
+  must append `.to_string()` — json.dumps produces only the quoted
+  literal; 36 E0308s pointed at every new field. Clean revert + fix +
+  re-run (the revert-verify discipline held; corpus/router were pristine
+  pre-edit — NOT sibling WIP). Plus the THIRD concepts-covered
+  case-sensitivity occurrence ("TWO" vs "two" — assert the EXACT case of
+  the prose) + 2 doc_markdown fixes (`seq_len` in `<= 16` prose, `VarN`).
 - **NEXT mining target**: `ls` the riir-gpu tree for the next unmined
-  cluster (~89 of ~200 files mined). Candidates:
-  `weaver_gpu/` dir (mod.rs ~62 KB + tests 57 KB — the 19-dispatch kernel
-  implementations, the corrector cluster's substrate), `kvarn/` (~1,838),
-  `hypernet/` (~3,300), `maxsim/` (~1,049),
+  cluster (~97 of ~200 files mined). Candidates:
+  `hypernet/` (~3,300: meta_lora 25 KB + train_meta_lora 20 KB +
+  m2p_transformer 21 KB + gpu_m2p 20 KB + shine 15 KB + routing 8 KB +
+  types 8 KB), `maxsim/` (~1,049: spectralquant.rs 20 KB + dispatch.rs
+  14 KB — NOTE distinct from the mined `spectralquant/` dir),
   `kimi_k3_gpu_backward_batched.rs` (1,394 — LOW value: shares Issue 693's
   H1/H2 + the broken LCG with the module file; mine only if the better
   clusters are exhausted). Pick 1-2 files, ~4-8 rules (dedup pressure high
@@ -615,7 +662,8 @@ global = symlink only.
     sibling WIP — edit + run GOAT in the main checkout with
     `CARGO_TARGET_DIR=/tmp/riir-clippy-bNN`; `--features kernel_heal`
     for the corpus suite (318 at 34, 321 at 35, 324 at 36, 327 at 37,
-    330 at 38, 333 at 39, 336 at 40, 339 at 41, 342 at 42, 345 at 43), default for
+    330 at 38, 333 at 39, 336 at 40, 339 at 41, 342 at 42, 345 at 43,
+    348 at 44), default for
     the 201 suite.
     `--all-features` is currently broken by SIBLING WIP
     (`rust_perf/bench.rs:335 alloc_axis`) — pre-existing, not yours.
@@ -630,7 +678,7 @@ global = symlink only.
     router.rs `rules_for_expert` total + the corpus-count mentions in
     router.rs doc header + the Plan 003 doc-comment `NNN-rule corpus`
     line above KERNEL_CATEGORIES + the `Total: 209 ... current NNN`
-    comment + the file-level `//!` header batch block. All in sync at 325 (A 73, B 47, D 57 after Batch 43; C 32, E 18, F 10, G 19, H 14, I 4, J 5, K 5, L 10, M 9, N 18, O 4).
+    comment + the file-level `//!` header batch block. All in sync at 334 (A 75, B 49, C 33, D 59, E 19, L 11 after Batch 44; F 10, G 19, H 14, I 4, J 5, K 5, M 9, N 18, O 4).
   - **Landing lesson (32b-1, self-caught)**: after a large multi-entry
     corpus edit, `awk`-scan for `rule_id:` lines NOT preceded by a
     standalone `KernelRule {` BEFORE the first compile — JSON `\n`
@@ -642,7 +690,7 @@ global = symlink only.
   WIP STILL ACTIVE as of 2026-08-15 evening: qv_lora.rs + cudarc_kernels/
   + riir-gpu/lib.rs + ternary_deltanet_gpu_forward_cudarc.rs all dirty)
   — mine only after their WIP lands.
-- **Progress**: riir-gpu ~89 of ~200 files mined. Corpus: 325 rules.
+- **Progress**: riir-gpu ~97 of ~200 files mined. Corpus: 334 rules.
   edge_lora module FULLY MINED (32a + 32b-1 + 32c). spectralquant/
   FULLY MINED (15 + 33). gemma4_cubecl_train/ DONE (34).
   gemma2_cubecl_train/ FULLY MINED (35: mod.rs + attention_gpu.rs;
@@ -652,7 +700,8 @@ global = symlink only.
   kimi_k3_gpu_backward_sequence.rs + weight_buffer_cache.rs DONE (41 —
   the batched twin remains, LOW value). gemma2_d2f/ FULLY MINED
   (42: mod.rs + gemma2_d2f_sc.rs). weaver_gpu_corrector.rs +
-  weaver_gpu_dflash.rs DONE (43 — the weaver_gpu/ kernel dir remains).
+  weaver_gpu_dflash.rs DONE (43). weaver_gpu/ mod.rs + FULL kvarn/
+  DONE (44 — weaver_gpu/tests.rs test-only, not mined).
 - **Also open (riir-clippy issues)**: 014 (rust_perf v4, 12 tasks), 016
   (clippy structural expansion, 6), 017 (retrieval precision at scale,
   5), 018 (self_evolve promotion, 6). 015 = sibling's ACTIVE WIP

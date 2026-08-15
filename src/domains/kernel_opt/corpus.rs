@@ -1006,6 +1006,47 @@
 //!   as riir-ai Issue 697 (the 3-layer silent no-correction chain, the
 //!   release-mode embedding OOB window, ~29 alloc requests/call, test-only
 //!   reachability with no CI row).
+//! - **Batch 44 (2026-08-15, Research 048):** the Weaver GPU kernel
+//!   substrate + the `KVarN` quantization cluster — `weaver_gpu/mod.rs`
+//!   (1,657 LOC — the 19-dispatch kernel implementations backing the Batch
+//!   43 corrector: `GpuWeaverWeights` upload/download, pos-emb add, batched
+//!   `SwiGLU`, causal `MHA` with smem softmax, indirect embedding gather,
+//!   dot-per-row, softmax-over-K with the Issue 468 `P0` `probs_offset`
+//!   write-shift) + the `kvarn/` dir (`kvarn_zone_weights.rs` +
+//!   `kvarn_dequant.rs` + `kvarn_quant.rs` — the game-side CPU reference +
+//!   zone-scale registry for `KVarN` KV-cache quantization, post-Issue-042
+//!   orchestration over canonical `katgpt-kv` primitives) — **9 rules,
+//!   corpus 325 → 334** (A 75, B 49, C 33, D 59, E 19, L 11):
+//!   `row-dot-split-inner-axis-block-reduce` (E — one thread per output row
+//!   pins 128 threads to a single workgroup at production + 16x read
+//!   amplification; split the reduction axis instead — workgroup per row,
+//!   lane-strided, block-reduced), `fuse-indirect-gather-into-dot-consumer`
+//!   (C — a materialized `D*K*h` gather whose only consumer re-reads it in
+//!   a dot; gather in-loop via the device-resident index array),
+//!   `share-cube-size-const-between-kernel-and-launcher` (D — the
+//!   workgroup-size literal restated in 4 kernels vs 6 launchers is a
+//!   silent stride contract; one shared const), `stash-kernel-internal-
+//!   intermediate-in-smem` (A — a global write + re-read nobody outside
+//!   the kernel observes; stash in smem + drop the buffer),
+//!   `hoist-bit-address-out-of-packed-row-sweep` (B — the per-row unpack
+//!   call re-derives an identical bit address; decompose once per
+//!   position), `fold-tile-transpose-into-dequant-scatter` (L —
+//!   materialize-then-transpose = 2 reads + 2 writes per element; scatter
+//!   the consumer layout at production), `bit-cursor-unpack-to-width-
+//!   specialized-byte-batch` (A — a software bit cursor re-derives what a
+//!   per-width arm makes compile-time-constant), `single-sweep-minmax-
+//!   for-quant-scale` (B — two folds scan the group twice for the (lo, hi)
+//!   pair every RTN scale prep needs; one joint sweep),
+//!   `serialize-container-canonical-order` (D — `HashMap` iteration order
+//!   leaks into serialized bytes, breaking commitment stability; sorted
+//!   keys). 22 falsifications (the file's own documented trade-offs —
+//!   thread-0 softmax at tiny K, naive-per-head MHA at `seq_len` <= 16 —
+//!   plus 8 dedup kills + the canonical `katgpt-kv` positives). Hazards
+//!   filed as riir-ai Issue 698 (the legacy `KVarN` round-trip drops the
+//!   `VarN` inversion — quantized scales discarded at `kvarn_quant.rs` L160
+//!   — masked by vacuous tolerances; the CPU/GPU auto-route doc-lie; the
+//!   drifted unpack fork corrupting non-pow2 widths; `GpuWeaverScratch`
+//!   dead with known-wrong sizing; the dot-per-row perf cliff).
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
@@ -6913,6 +6954,262 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
             ref_shape: "// naive: the defensive &[] sentinel — type-correct, shape-INVALID\nfn build_views_sentinel(buf: &[f32], count: usize, row_len: usize) -> [&[f32]; 64] {\n    let mut views: [&[f32]; 64] = [&[]; 64];\n    for (i, slot) in views.iter_mut().enumerate().take(count) {\n        let start = i * row_len;\n        let end = start + row_len;\n        *slot = if end <= buf.len() { &buf[start..end] } else { &[] };\n        // the &[] row sails past the borrow checker into the consumer's\n        // shape validation -> Err -> caller swallows -> silent no-op\n    }\n    views\n}\n".to_string(),
             opt_pattern: "// optimized: hard slice — indexing IS the assertion — + an explicit contract\nfn build_views_asserted(buf: &[f32], count: usize, row_len: usize) -> [&[f32]; 64] {\n    debug_assert!(\n        count * row_len <= buf.len(),\n        \"capture buffer undersized: need {count} x {row_len}, have {}\",\n        buf.len()\n    );\n    let mut views: [&[f32]; 64] = [&[]; 64];\n    for (i, slot) in views.iter_mut().enumerate().take(count) {\n        let start = i * row_len;\n        let end = start + row_len;\n        *slot = &buf[start..end]; // panics loudly on OOB in every profile\n    }\n    views\n}\n".to_string(),
         },
+        // ── row-dot-split-inner-axis-block-reduce — when the output count
+        // is too small to fill the machine, split the reduction axis (E) ──
+        //
+        // Source: riir-gpu weaver_gpu/mod.rs L1283-1306 (dot_per_row_f32:
+        // one thread per output row, `let g_base = tid * h;` — each thread
+        // serially loops the full row length h) + L1332-1333 (`num_wg =
+        // (total as u32).div_ceil(256u32).max(1)` — at production D=4, K=32
+        // that is 128 threads inside a SINGLE workgroup) + the file's own
+        // doc L1259-1260 presenting it as fine ("this is 128 threads doing
+        // 2048 FMAs each — a single workgroup of 256 threads suffices").
+        // Adjacent threads read h*4B = 8 KB apart — every warp load touches
+        // 32 distinct cache lines. The per-depth corrector path is worse:
+        // d_depth=1 -> 32 threads, run depth x per correction.
+        //
+        // Distinct from grid-over-output-thread-private-sweep (B33 — the
+        // INVERSE regime: sweep-axis long, output-owned grid with NO
+        // cross-thread reduction; here the output count is too SHORT to
+        // fill the machine, so the reduction axis is the one to split),
+        // from block-reduction-separate-scratch-runtime-strides (B35 —
+        // WHERE partials live + stride derivation; this is WHETHER to
+        // split the axis at all), from swap-large-axis-to-x (B? — 2D grid
+        // axis ordering, not axis splitting for occupancy),
+        // from tree-reduction-depth-over-sequential-accumulate (B25 —
+        // reduction TREE depth vs sequential, assuming the split exists).
+        KernelRule {
+            rule_id: "row-dot-split-inner-axis-block-reduce".to_string(),
+            gpu_concept: "A per-row dot product is mapped one-thread-per-row: thread tid owns output row tid and serially loops the full row length h, with the row base computed as g_base = tid * h. When the output count (rows) is small relative to the machine — at production (D=4, K=32, h=2048) that is 128 threads inside a SINGLE workgroup of 256, i.e. one SM while the rest of the GPU idles — the mapping simultaneously destroys coalescing: adjacent threads read addresses h * 4B (8 KB) apart, so every warp load touches 32 distinct cache lines (16x read amplification). The fix: when the output count is too small to fill the machine, split the REDUCTION axis instead — dispatch one workgroup per row, have lanes stride over h (adjacent lanes read adjacent elements, coalesced), accumulate per-lane partials in registers, and block-reduce the partials through shared memory; lane 0 writes the scalar. This fixes occupancy (D*K workgroups spread across SMs instead of 1) and coalescing at once, and shrinks the per-thread serial chain from h FMAs to h/cube_size. Distinct from grid-over-output-thread-private-sweep (the inverse regime — there the sweep axis is long and the output-owned grid needs NO cross-thread reduction; here the output count is too short to fill the machine so the reduction axis is the one to split), from block-reduction-separate-scratch-runtime-strides (where partials live once the split exists), and from tree-reduction-depth-over-sequential-accumulate (the reduction tree shape, assuming the split was already made).".to_string(),
+            ref_shape: "// naive: one thread per output row — 128 threads in 1 workgroup at\n// production (D=4, K=32); adjacent threads stride h*4B = 8 KB apart\nfn dot_per_row_serial(u_final: &[f32], gathered: &[f32], residual: &mut [f32], h: u32, k: u32, total: u32) {\n    let cube_size = 256u32;\n    let tid = CUBE_POS_X * cube_size + UNIT_POS;\n    if tid >= total {\n        terminate!();\n    }\n    let di = tid / k;\n    let uf_base = (di + 1u32) * h;\n    let g_base = tid * h;\n    let mut acc = f32::new(0.0f32);\n    let mut j = 0u32;\n    while j < h {\n        acc = acc + u_final[(uf_base + j) as usize] * gathered[(g_base + j) as usize];\n        j += 1u32;\n    }\n    residual[tid as usize] = acc;\n}\n".to_string(),
+            opt_pattern: "// optimized: one WORKGROUP per row — lanes stride h coalesced, partials\n// block-reduced through shared memory; D*K workgroups fill the machine\nfn dot_per_row_block_reduce(u_final: &[f32], gathered: &[f32], residual: &mut [f32], partials: &mut [f32], h: u32, k: u32) {\n    let row = CUBE_POS_X;\n    let lane = UNIT_POS;\n    let cube_size = 256u32;\n    let uf_base = (row / k + 1u32) * h;\n    let g_base = row * h;\n    let mut acc = f32::new(0.0f32);\n    let mut j = lane;\n    while j < h {\n        acc = acc + u_final[(uf_base + j) as usize] * gathered[(g_base + j) as usize];\n        j += cube_size;\n    }\n    partials[lane as usize] = acc;\n    sync_cube();\n    if lane == 0u32 {\n        let mut total = f32::new(0.0f32);\n        let mut l = 0u32;\n        while l < cube_size {\n            total = total + partials[l as usize];\n            l += 1u32;\n        }\n        residual[row as usize] = total;\n    }\n}\n".to_string(),
+        },
+        // ── fuse-indirect-gather-into-dot-consumer — delete the
+        // materialized gather when the sole consumer is a reduction (C) ──
+        //
+        // Source: riir-gpu weaver_gpu/mod.rs L1195-1196 (the gather kernel:
+        // `let id = topk_ids[(di * k + ki) as usize] as u32;` /
+        // `gathered[tid as usize] = embedding[(id * h + j) as usize];`)
+        // + L1237 (dispatched with `BufferArg::from_raw_parts(gathered_handle,
+        // total)`) -> L1303 (the ONLY consumer re-reads the whole buffer in
+        // the dot loop: `acc = acc + u_final[...] * gathered[(g_base + j)]`)
+        // + L1344 (`BufferArg::from_raw_parts(gathered_handle, d_depth * k *
+        // h)`). At production ~1 MB written + ~1 MB re-read per batched call
+        // + a persistent D*K*h scratch, for data whose only destiny is to be
+        // multiplied by u_final and summed.
+        //
+        // Distinct from sparse-gather-scale-at-read-not-table-prepass (B37 —
+        // WHERE to fold a scale in a sparse gather; this deletes the gather
+        // pass entirely), from gather-selective-reduction (I-category NSA
+        // block-sparse selection semantics), from split-dispatch-expose-
+        // fused-intermediate (B34 — the INVERSE: when a SECOND consumer
+        // needs the intermediate, expose it from one execution instead of
+        // re-launching; here there is no second consumer), from quadratic-
+        // attention-intermediates-recompute-from-linear-saves (B35 — save
+        // linear vs recompute quadratic; here nothing downstream needs the
+        // gathered rows at all).
+        KernelRule {
+            rule_id: "fuse-indirect-gather-into-dot-consumer".to_string(),
+            gpu_concept: "An indirect gather materializes D*K*h rows to a global buffer (gathered[tid] = embedding[id*h + j]), and the ONLY consumer is a subsequent per-row dot kernel that re-reads the entire buffer. That is a full global-memory round-trip (write D*K*h + read D*K*h), one extra dispatch, and a persistent scratch allocation for data whose only destiny is to be multiplied by u_final and summed. The fix: when the gather has exactly one reduction-shaped consumer and the index array is already device-resident, delete the gather kernel and pass topk_ids + embedding into the consumer — each row's owning workgroup computes its id once (topk_ids[di*k + ki]) and reads embedding[id*h + j] directly inside its dot loop. This removes one dispatch, both directions of the global round-trip, and the gathered scratch buffer entirely; the index load amortizes to one broadcast-friendly read per row. Distinct from sparse-gather-scale-at-read-not-table-preprocess (where to fold a scale within a sparse gather — this deletes the gather pass), from split-dispatch-expose-fused-intermediate (the inverse regime: a second consumer genuinely needs the intermediate), and from quadratic-attention-intermediates-recompute-from-linear-saves (a save-vs-recompute trade-off; here nothing downstream needs the gathered rows at all).".to_string(),
+            ref_shape: "// naive: gather kernel materializes D*K*h rows to global, then the dot\n// kernel re-reads the whole buffer — two dispatches, two full passes\nfn gather_rows_naive(embedding: &[f32], topk_ids: &[f32], gathered: &mut [f32], h: u32, k: u32, total: u32) {\n    let tid = ABSOLUTE_POS;\n    if tid >= total * h {\n        terminate!();\n    }\n    let j = tid % h;\n    let flat = tid / h;\n    let di = flat / k;\n    let ki = flat % k;\n    let id = topk_ids[(di * k + ki) as usize] as u32;\n    gathered[tid as usize] = embedding[(id * h + j) as usize];\n}\n\nfn dot_reads_gathered(u_final: &[f32], gathered: &[f32], residual: &mut [f32], h: u32, k: u32, total: u32) {\n    let tid = ABSOLUTE_POS;\n    if tid >= total {\n        terminate!();\n    }\n    let di = tid / k;\n    let uf_base = (di + 1u32) * h;\n    let g_base = tid * h;\n    let mut acc = f32::new(0.0f32);\n    let mut j = 0u32;\n    while j < h {\n        acc = acc + u_final[(uf_base + j) as usize] * gathered[(g_base + j) as usize];\n        j += 1u32;\n    }\n    residual[tid as usize] = acc;\n}\n".to_string(),
+            opt_pattern: "// optimized: the dot kernel gathers in-loop via the device-resident\n// index array — zero intermediate, one fewer dispatch, no scratch\nfn dot_gather_fused(u_final: &[f32], embedding: &[f32], topk_ids: &[f32], residual: &mut [f32], h: u32, k: u32, total: u32) {\n    let tid = ABSOLUTE_POS;\n    if tid >= total {\n        terminate!();\n    }\n    let di = tid / k;\n    let ki = tid % k;\n    let id = topk_ids[(di * k + ki) as usize] as u32;\n    let uf_base = (di + 1u32) * h;\n    let emb_base = id * h;\n    let mut acc = f32::new(0.0f32);\n    let mut j = 0u32;\n    while j < h {\n        acc = acc + u_final[(uf_base + j) as usize] * embedding[(emb_base + j) as usize];\n        j += 1u32;\n    }\n    residual[tid as usize] = acc;\n}\n".to_string(),
+        },
+        // ── share-cube-size-const-between-kernel-and-launcher — the
+        // workgroup-size literal is a silent cross-file stride contract (D) ──
+        //
+        // Source: riir-gpu weaver_gpu/mod.rs L391, L983, L1180, L1283 (four
+        // kernels each restate `let cube_size = 256u32;` as a bare magic
+        // literal) vs L452, L751, L1125, L1234, L1342, L1493 (six launchers
+        // each independently pass `CubeDim::new_1d(256)`). The kernel uses
+        // its local cube_size for stride reconstruction (`tid = CUBE_POS_X *
+        // cube_size + UNIT_POS`) and strided loops (`j += cube_size`), so
+        // the two literals form a silent contract: change any launcher's
+        // CubeDim and every kernel that hardcodes 256 mis-strides — skipped/
+        // duplicated elements, wrong results, no error, in launch_unchecked
+        // code with no runtime tripwire.
+        //
+        // Distinct from derive-shape-from-payload-not-cached-field (B32b —
+        // shape TRUTH must come from the payload, a cached-field desync;
+        // here NEITHER side is derived — two independent literals that must
+        // agree), from launch-unchecked-caller-owned-size-contract (B29 —
+        // documenting + asserting element-count contracts; this is the
+        // GEOMETRY contract between grid shape and in-kernel indexing),
+        // from pad-uniform-pod-to-min-binding-size (B30 — buffer layout).
+        KernelRule {
+            rule_id: "share-cube-size-const-between-kernel-and-launcher".to_string(),
+            gpu_concept: "The workgroup size is restated as a bare magic literal inside several kernel bodies (let cube_size = 256u32;) while every corresponding launcher independently passes CubeDim::new_1d(256). The kernel uses its local cube_size for stride reconstruction (tid = CUBE_POS_X * cube_size + UNIT_POS) and strided loops (j += cube_size), so the two literals form a silent cross-file contract: change any launcher's CubeDim (e.g. to 128 for occupancy tuning) and every kernel that hardcodes 256 mis-strides — skipped or duplicated elements, wrong results, no error, in launch_unchecked code with no runtime tripwire. The fix: hoist ONE shared constant (e.g. pub const CUBE_SIZE: u32 = 256;) and use it in BOTH the kernel body and the launcher's CubeDim, so the pair cannot drift. If the DSL exposes the compile-time cube dim in-kernel, prefer that; the shared const is the minimal portable form. The invariant: exactly one source of truth for the stride that ties grid geometry to indexing math. Distinct from derive-shape-from-payload-not-cached-field (shape truth derivation — here neither side is derived, two literals that must agree), from launch-unchecked-caller-owned-size-contract (element-count contracts — this is the geometry contract between grid shape and in-kernel indexing).".to_string(),
+            ref_shape: "// naive: two independent literals that must agree — change the launcher's\n// CubeDim and the kernel silently mis-strides (wrong results, no error)\nfn kernel_hardcoded_cube_size(input: &[f32], output: &mut [f32], n: usize) {\n    let cube_size = 256u32;\n    let tid = CUBE_POS_X * cube_size + UNIT_POS;\n    if tid >= n as u32 {\n        terminate!();\n    }\n    output[tid as usize] = input[tid as usize] * 2.0f32;\n}\n\npub unsafe fn launch_own_literal(client: &Client, input: Handle, output: Handle, n: usize) {\n    let num_wg = (n as u32).div_ceil(256u32).max(1);\n    unsafe {\n        kernel_hardcoded_cube_size::launch::<R>(\n            client,\n            CubeCount::Static(num_wg, 1, 1),\n            CubeDim::new_1d(256),\n            BufferArg::from_raw_parts(input, n),\n            BufferArg::from_raw_parts(output, n),\n        );\n    }\n}\n".to_string(),
+            opt_pattern: "// optimized: one shared const feeds BOTH the launcher's CubeDim and the\n// kernel's stride reconstruction — the pair cannot drift\npub const CUBE_SIZE: u32 = 256;\n\npub unsafe fn launch_shared_const(client: &Client, input: Handle, output: Handle, n: usize) {\n    let num_wg = (n as u32).div_ceil(CUBE_SIZE).max(1);\n    unsafe {\n        kernel_shared_cube_size::launch::<R>(\n            client,\n            CubeCount::Static(num_wg, 1, 1),\n            CubeDim::new_1d(CUBE_SIZE as usize),\n            BufferArg::from_raw_parts(input, n),\n            BufferArg::from_raw_parts(output, n),\n        );\n    }\n}\n\nfn kernel_shared_cube_size(input: &[f32], output: &mut [f32], n: usize) {\n    let cube_size = CUBE_SIZE;\n    let tid = CUBE_POS_X * cube_size + UNIT_POS;\n    if tid >= n as u32 {\n        terminate!();\n    }\n    output[tid as usize] = input[tid as usize] * 2.0f32;\n}\n".to_string(),
+        },
+        // ── stash-kernel-internal-intermediate-in-smem — a global
+        // round-trip nobody outside the kernel observes (A) ──
+        //
+        // Source: riir-gpu weaver_gpu/mod.rs L1413-1414 (softmax_k_f32:
+        // thread 0 computes `let cl = dflash_logits[...] + residual[...]`
+        // and writes it to the corrected_logits GLOBAL buffer) -> L1429
+        // (the very next loop re-reads the same elements back:
+        // `let e = f32::exp(corrected_logits[(base + ki) as usize] -
+        // max_c);`) + L1471 (the buffer is contractually write-only to the
+        // outside world: "`corrected_logits_handle`: `d_depth * K` f32
+        // (write-only)" — verified the corrector only ever read_ones
+        // corrected_probs). Same thread, no cross-workgroup consumer: the
+        // global round-trip costs a D*K write + D*K read per call and
+        // forces the caller to allocate + thread a scratch handle whose
+        // contents nobody observes.
+        //
+        // Distinct from smem-staging-gated-by-cross-thread-reuse (B35 —
+        // when to stage an INPUT in smem, gated by within-workgroup reuse;
+        // this is a kernel-INTERNAL intermediate whose global round-trip is
+        // pure waste because no external reader exists), from smem-
+        // broadcast-scalar-then-parallel-scatter (B28 — publishing a
+        // reduced scalar through the reduced slot), from variant-owned-
+        // output-buffer-clone-escape (B39 — host-side ownership), from
+        // side-consumer-readback-alias-live-handle (B35 — when a real side
+        // consumer DOES exist).
+        KernelRule {
+            rule_id: "stash-kernel-internal-intermediate-in-smem".to_string(),
+            gpu_concept: "A kernel materializes a kernel-internal intermediate through global memory: thread 0 computes corrected = a + b, writes it to a global buffer, then in the very next loop re-reads the same elements back from global — same thread, no cross-workgroup consumer, and the buffer is contractually write-only to the outside world (the caller only ever reads a DIFFERENT output). The global round-trip buys nothing: it costs a D*K write plus a D*K read per call and forces the caller to allocate and thread a scratch handle whose contents nobody observes. The fix: if an intermediate is produced and consumed inside one kernel invocation and has no external reader, keep it in shared memory (or recompute it — often one add — in the consuming loop) and drop the global buffer from the signature entirely. For K bounded by config a fixed Shared slice sized MAX_K is the natural stash; the caller-side win is one fewer scratch allocation and parameter, the device-side win is two fewer global passes. Distinct from smem-staging-gated-by-cross-thread-reuse (when to stage an INPUT in smem — this is an internal intermediate whose round-trip is pure waste because no external reader exists), and from side-consumer-readback-alias-live-handle (for when a real side consumer DOES exist).".to_string(),
+            ref_shape: "// naive: write the corrected logits to GLOBAL, re-read them in the next\n// loop of the SAME kernel — a round-trip no external reader observes\nfn softmax_global_reread(dflash_logits: &[f32], residual: &[f32], corrected_logits: &mut [f32], corrected_probs: &mut [f32], k: u32) {\n    let tid = CUBE_POS_X;\n    if tid == 0u32 {\n        let mut max_c = f32::new(-1e30f32);\n        let mut ki = 0u32;\n        while ki < k {\n            let cl = dflash_logits[ki as usize] + residual[ki as usize];\n            corrected_logits[ki as usize] = cl;\n            if cl > max_c {\n                max_c = cl;\n            }\n            ki += 1u32;\n        }\n        let mut sum_e = f32::new(0.0f32);\n        let mut ki = 0u32;\n        while ki < k {\n            let e = f32::exp(corrected_logits[ki as usize] - max_c);\n            corrected_probs[ki as usize] = e;\n            sum_e = sum_e + e;\n            ki += 1u32;\n        }\n        let inv_sum = f32::new(1.0f32) / sum_e;\n        let mut ki = 0u32;\n        while ki < k {\n            corrected_probs[ki as usize] = corrected_probs[ki as usize] * inv_sum;\n            ki += 1u32;\n        }\n    }\n}\n".to_string(),
+            opt_pattern: "// optimized: stash the intermediate in SHARED memory — the global buffer\n// disappears from the signature; one fewer scratch handle to allocate\nfn softmax_smem_stash(dflash_logits: &[f32], residual: &[f32], corrected_probs: &mut [f32], stash: &mut [f32], k: u32) {\n    let tid = CUBE_POS_X;\n    if tid == 0u32 {\n        let mut max_c = f32::new(-1e30f32);\n        let mut ki = 0u32;\n        while ki < k {\n            let cl = dflash_logits[ki as usize] + residual[ki as usize];\n            stash[ki as usize] = cl;\n            if cl > max_c {\n                max_c = cl;\n            }\n            ki += 1u32;\n        }\n        let mut sum_e = f32::new(0.0f32);\n        let mut ki = 0u32;\n        while ki < k {\n            let e = f32::exp(stash[ki as usize] - max_c);\n            corrected_probs[ki as usize] = e;\n            sum_e = sum_e + e;\n            ki += 1u32;\n        }\n        let inv_sum = f32::new(1.0f32) / sum_e;\n        let mut ki = 0u32;\n        while ki < k {\n            corrected_probs[ki as usize] = corrected_probs[ki as usize] * inv_sum;\n            ki += 1u32;\n        }\n    }\n}\n".to_string(),
+        },
+        // ── hoist-bit-address-out-of-packed-row-sweep — the bit address
+        // is loop-invariant when the position is fixed (B) ──
+        //
+        // Source: riir-gpu kvarn/kvarn_dequant.rs L41-47 (kvarn_dequantize_
+        // key: `for ch in 0..kv_dim { ... let q = unpack_value(packed_row,
+        // pos_in_tile, bits_usize); }` — inside that call, bit_offset =
+        // pos*bits, byte_offset, bit_shift, the bits > lo_bits split branch,
+        // and two row.len() bounds checks are ALL identical on every
+        // iteration because pos_in_tile never varies in the loop) + L51 (the
+        // loop-invariant s_col lookup re-fetched per row). The canonical
+        // form proves the fix: katgpt-kv kv_cache.rs L444-461 (dequantize_
+        // key_into hoists `let var_col = tile.var_scales.s_col[pos_in_tile];`
+        // then does `((quantized[ch * bpr + byte_off] >> shift) & mask)`
+        // with byte_off/shift strength-reduced per the 4-bit arm).
+        //
+        // Distinct from hoist-group-invariant-scale-out-of-word-loop (B17 —
+        // hoists a VALUE (the scale) out of a word loop; this hoists an
+        // ADDRESS DECOMPOSITION — div/mod + branch + bounds checks — whose
+        // result is identical for every row), from strength-reduce-div-pow2
+        // (compile-time divisor; here the divisor is runtime but
+        // loop-invariant), from factor-affine-quant-scale-out-of-element-
+        // loop (B18 — algebraic factoring, not address hoisting).
+        KernelRule {
+            rule_id: "hoist-bit-address-out-of-packed-row-sweep".to_string(),
+            gpu_concept: "A per-position dequant sweeps all kv_dim rows of a bit-packed tile, calling a generic unpack_value(packed_row, pos_in_tile, bits) per row. Inside that call the bit address — bit_offset = pos*bits, byte_offset = bit_offset/8, bit_shift = bit_offset%8, the bits > lo_bits cross-byte split branch, and two row.len() bounds checks — is identical on every iteration, because pos_in_tile never varies in the loop; the loop-invariant column-scale lookup is also re-fetched per row. The fix: decompose the bit address ONCE per position (byte_off, shift, mask — strength-reducible via per_byte = 8/bits), hoist the column scale, then per row do a single strided load + shift + mask directly into the FMA chain. Eliminates a call, ~3 div/mod, 3 branches, and 2 bounds checks per row. The canonical katgpt-kv dequantize_key_into is the proven form: var_col hoisted, then ((quantized[ch * bpr + byte_off] >> shift) & mask) with byte_off/shift computed once per position per bit-width arm. Distinct from hoist-group-invariant-scale-out-of-word-loop (hoists a VALUE — this hoists an ADDRESS DECOMPOSITION whose result is identical for every row) and from factor-affine-quant-scale-out-of-element-loop (algebraic factoring, not address hoisting).".to_string(),
+            ref_shape: "// naive: per-row call re-derives the SAME bit address (div/mod + branch +\n// bounds checks) because pos_in_tile never varies inside the loop\nfn dequant_row_sweep_naive(packed: &[u8], bpr: usize, pos_in_tile: usize, bits: usize, out: &mut [f32]) {\n    for ch in 0..out.len() {\n        let row_off = ch * bpr;\n        let packed_row = &packed[row_off..row_off + bpr];\n        let q = unpack_value(packed_row, pos_in_tile, bits);\n        out[ch] = q as f32;\n    }\n}\n".to_string(),
+            opt_pattern: "// optimized: decompose the bit address ONCE per position — per row a\n// single strided load + constant shift + mask feeding the FMA chain\nfn dequant_row_sweep_hoisted(packed: &[u8], bpr: usize, pos_in_tile: usize, bits: u32, s_col_pos: f32, out: &mut [f32]) {\n    let per_byte = 8 / bits as usize;\n    let byte_off = pos_in_tile / per_byte;\n    let shift = (pos_in_tile % per_byte) * bits as usize;\n    let mask: u8 = ((1u32 << bits) - 1u32) as u8;\n    for ch in 0..out.len() {\n        let q = ((packed[ch * bpr + byte_off] >> shift) & mask) as f32;\n        out[ch] = q.mul_add(1.0f32, 0.0f32) * s_col_pos;\n    }\n}\n".to_string(),
+        },
+        // ── fold-tile-transpose-into-dequant-scatter — scatter the
+        // consumer layout at production, delete the transpose pass (L) ──
+        //
+        // Source: riir-gpu kvarn/kvarn_dequant.rs L120-133 (kvarn_dequantize_
+        // key_tile: materializes the whole tile position-major into an
+        // intermediate `result` Vec — one fresh Vec<f32> per position via
+        // kvarn_dequantize_key + extend — then runs a SECOND full double
+        // loop scattering into a second full-size `transposed` buffer:
+        // `transposed[ch * actual_cols + pos] = result[pos * kv_dim + ch];`).
+        // 2 full reads + 2 full writes per element, actual_cols + 2
+        // allocations, and a branchy transpose pass — for a layout the
+        // producing loop could have written directly.
+        //
+        // Distinct from tiled-host-transpose-before-quantize (B37 — the
+        // INVERSE direction: pre-transpose BEFORE a strided-store consumer;
+        // here the transpose is ELIMINATED by scattering at production),
+        // from per-layer-strided-grad-destination (B27 — consumer-selected
+        // destinations falling out of an existing pass; same spirit, the
+        // grad-tensor instance), from transposed-consumption-accumulate-
+        // not-gather (B38 — read-side access pattern; this is write-side
+        // layout), from needless-swap-temp-hoist-to-scratch (B32a).
+        KernelRule {
+            rule_id: "fold-tile-transpose-into-dequant-scatter".to_string(),
+            gpu_concept: "A tile dequantizer materializes the whole tile position-major into an intermediate buffer (one fresh Vec per position, extended into a result Vec), then runs a SECOND full double loop scattering into a second full-size transposed buffer. That is 2 full reads + 2 full writes per element, actual_cols + 2 allocations, and a branchy transpose pass — for a layout the producing loop could have written directly. The fix: one reusable per-position column scratch; unpack each position into it, apply the inverse transform, and scatter out[ch * cols + pos] = col[ch] inside the SAME sweep. Eliminates the intermediate buffer, the entire transpose pass, and all per-position allocations while producing the identical row-major layout the quantizer consumed. The general form: when a producer emits one axis order and the consumer wants another, and the mismatch is a pure permutation, write the consumer's layout at production time instead of materialize-then-transpose. Distinct from tiled-host-transpose-before-quantize (the inverse direction — pre-transposing before a strided-store consumer; here the transpose pass is eliminated) and from per-layer-strided-grad-destination (the grad-tensor instance of consumer-selected destinations).".to_string(),
+            ref_shape: "// naive: materialize position-major, then a SECOND full pass transposes\n// into a second full-size buffer — 2 reads + 2 writes per element\nfn dequant_tile_transpose_naive(packed: &[u8], cols: usize, kv_dim: usize, out: &mut [f32]) {\n    let mut result = Vec::with_capacity(kv_dim * cols);\n    for pos in 0..cols {\n        let deq = dequant_position(packed, pos, kv_dim);\n        result.extend(deq[..kv_dim].iter().copied());\n    }\n    let mut transposed = vec![0.0f32; kv_dim * cols];\n    for pos in 0..cols {\n        for ch in 0..kv_dim {\n            transposed[ch * cols + pos] = result[pos * kv_dim + ch];\n        }\n    }\n    out.copy_from_slice(&transposed);\n}\n".to_string(),
+            opt_pattern: "// optimized: one reusable column scratch; scatter the consumer layout\n// inside the SAME sweep — no intermediate, no transpose pass\nfn dequant_tile_scatter_direct(packed: &[u8], cols: usize, kv_dim: usize, out: &mut [f32]) {\n    let mut col = vec![0.0f32; kv_dim];\n    for pos in 0..cols {\n        dequant_position_into(packed, pos, kv_dim, &mut col);\n        for ch in 0..kv_dim {\n            out[ch * cols + pos] = col[ch];\n        }\n    }\n}\n".to_string(),
+        },
+        // ── bit-cursor-unpack-to-width-specialized-byte-batch — a
+        // software bit cursor re-derives what a per-width arm makes const (A) ──
+        //
+        // Source: riir-gpu kvarn/kvarn_dequant.rs L162-186 (kvarn_dequantize_
+        // cpu: unpacks ONE quantized value per iteration through a software
+        // bit cursor — per-element bounds check `let q = if byte_idx <
+        // packed.len() { ((packed[byte_idx] >> bit_offset) & mask as u8) as
+        // f32 } else { 0.0 };`, per-element `output.push`, the
+        // data-dependent `if bit_offset >= 8` branch, + a manual
+        // byte-realign after each tile). For pow2 bit widths the extraction
+        // pattern per byte is fixed (2/4/8 values per byte), so the cursor
+        // re-derives what a per-width arm makes compile-time-constant. The
+        // canonical form: katgpt-kv kv_cache.rs L1345-1397 (unpack_row:
+        // `match bits { 8 => ..., 4 => out[2*i] = (b & 0x0F) ..., 2 => ...,
+        // 1 => ... }`).
+        //
+        // Distinct from vectorized-pack-load (B14-era — loading PACKED data
+        // vectorized on the GPU; this is CPU-side scalar extraction made
+        // branch-free), from strength-reduce-mod-pow2 (O — IR-level; this
+        // is the branch + bounds-check elimination via width dispatch),
+        // from ternary-bit-plane-u64-as-2x-u32 (B22 — bit-PLANE splitting;
+        // this is bit-PACKED nibble extraction), from dtype-specialized-
+        // float-kind (N — dtype dispatch for floats; this is bitwidth
+        // dispatch for packed ints).
+        KernelRule {
+            rule_id: "bit-cursor-unpack-to-width-specialized-byte-batch".to_string(),
+            gpu_concept: "A dequantizer unpacks ONE quantized value per iteration through a software bit cursor: per-element bounds check, per-element shift + mask, per-element output.push, plus a data-dependent if bit_offset >= 8 branch and a manual byte-realign after each tile. For pow2 bit widths the extraction pattern per byte is fixed (2/4/8 values per byte), so the cursor re-derives at runtime what a per-width arm makes compile-time-constant. The fix: dispatch once on bits into width-specialized arms that load a byte and emit 8/bits values with constant shifts into a pre-sized output slice — the shape of the canonical unpack_row (match bits { 8 => ..., 4 => out[2*i] = (b & 0x0F) ..., 2 => ..., 1 => ... }), keeping the per-tile byte alignment as the row boundary. Removes the per-element branch, the per-element bounds check, and the push reallocation; also removes inline duplication of a canonical unpack helper imported nearby (a drifted fork that can silently lose the cross-byte bits > lo_bits handling the canonical copy has — non-pow2 widths then corrupt while the quant side packs correctly). Distinct from vectorized-pack-load (GPU vectorized packed loads), from strength-reduce-mod-pow2 (IR-level operator reduction — this is branch + bounds elimination via width dispatch), and from ternary-bit-plane-u64-as-2x-u32 (bit-plane splitting vs bit-packed nibble extraction).".to_string(),
+            ref_shape: "// naive: software bit cursor — one value per iteration, per-element\n// bounds check + data-dependent byte-advance branch + push\nfn unpack_bit_cursor_naive(packed: &[u8], bits: u32, out: &mut Vec<f32>) {\n    let mask = (1u32 << bits) - 1;\n    let mut byte_idx = 0usize;\n    let mut bit_offset: u32 = 0;\n    for slot in out.iter_mut() {\n        let q = if byte_idx < packed.len() {\n            ((packed[byte_idx] >> bit_offset) & mask as u8) as f32\n        } else {\n            0.0\n        };\n        *slot = q;\n        bit_offset += bits;\n        if bit_offset >= 8 {\n            bit_offset = 0;\n            byte_idx += 1;\n        }\n    }\n}\n".to_string(),
+            opt_pattern: "// optimized: dispatch once on width — a byte emits 8/bits values with\n// CONSTANT shifts into a pre-sized slice; no cursor, no per-element branch\nfn unpack_4bit_byte_batch(packed: &[u8], out: &mut [f32]) {\n    let n = out.len();\n    let mut o = 0usize;\n    for &b in packed.iter().take(n.div_ceil(2)) {\n        out[o] = (b & 0x0F) as f32;\n        if o + 1 < n {\n            out[o + 1] = ((b >> 4) & 0x0F) as f32;\n        }\n        o += 2;\n    }\n}\n".to_string(),
+        },
+        // ── single-sweep-minmax-for-quant-scale — the (lo, hi) pair is
+        // one traversal, not two folds (B) ──
+        //
+        // Source: riir-gpu kvarn/kvarn_zone_weights.rs L67-68 (KvarnZone-
+        // ScaleBundle::from_tile_sequence computes each tile's RTN range
+        // with TWO separate full traversals: `let lo = chunk.iter().cloned()
+        // .fold(f32::MAX, f32::min);` / `let hi = chunk.iter().cloned()
+        // .fold(f32::MIN, f32::max);`). Range stats are the entry point of
+        // every asymmetric quantizer; two sweeps double the memory traffic
+        // of scale preparation for zero benefit. The canonical fixed
+        // exactly this shape and documented it: katgpt-kv var_norm.rs L513
+        // ("Single-pass min/max fold (was two separate `fold` calls
+        // scanning `vals` twice).") + kv_cache.rs L1155-1160 (rtn_quantize_
+        // rows_into does the same single-sweep min/max per row).
+        //
+        // Distinct from one-sweep-spatial-feature-fanout (B32c — 12 spatial
+        // statistics from one board sweep; this is the two-statistic min/max
+        // PAIR every RTN/AWQ-style scale prep needs), from precompute-
+        // scalar-reduction (scalar reductions hoisted out of loops), from
+        // dual-accumulator-single-reduction-sweep (B24 — GPU two-partials-
+        // one-sweep sharing loads; the CPU/GPU-agnostic host-side instance).
+        KernelRule {
+            rule_id: "single-sweep-minmax-for-quant-scale".to_string(),
+            gpu_concept: "A quantizer's scale preparation computes each group's range with TWO separate full traversals — one fold for min, a second fold for max. Range stats are the entry point of every asymmetric quantizer (RTN, AWQ-style grouped scales), so the two-sweep form doubles the global-memory traffic of scale preparation across the whole weight tensor for zero benefit. The fix: track (lo, hi) jointly in one pass with lo = lo.min(v); hi = hi.max(v) — branchless on GPUs via native min/max instructions. The canonical katgpt-kv code fixed exactly this shape and documented it in-source: 'Single-pass min/max fold (was two separate fold calls scanning vals twice)', and rtn_quantize_rows_into does the same single-sweep min/max per row. Distinct from one-sweep-spatial-feature-fanout (12 spatial statistics from one sweep — this is the two-statistic min/max pair specifically) and from dual-accumulator-single-reduction-sweep (the GPU two-partials-one-sweep form; this is the host-side quant-scale instance).".to_string(),
+            ref_shape: "// naive: two separate folds scan the chunk TWICE for a (lo, hi) pair\nfn rtn_scale_two_folds(chunk: &[f32]) -> (f32, f32) {\n    let lo = chunk.iter().cloned().fold(f32::MAX, f32::min);\n    let hi = chunk.iter().cloned().fold(f32::MIN, f32::max);\n    (lo, hi)\n}\n".to_string(),
+            opt_pattern: "// optimized: one traversal tracks the pair jointly — branchless via\n// native min/max; halves the scale-prep memory traffic\nfn rtn_scale_single_sweep(chunk: &[f32]) -> (f32, f32) {\n    let mut lo = f32::MAX;\n    let mut hi = f32::MIN;\n    for &v in chunk {\n        lo = lo.min(v);\n        hi = hi.max(v);\n    }\n    (lo, hi)\n}\n".to_string(),
+        },
+        // ── serialize-container-canonical-order — HashMap iteration
+        // order is not a wire format (D) ──
+        //
+        // Source: riir-gpu kvarn/kvarn_zone_weights.rs L284-287 (KvarnZone-
+        // Registry::serialize_all emits bundles by iterating
+        // `self.bundles.values()` — a HashMap<u32, _> whose iteration order
+        // is seeded by RandomState and differs between processes; two runs
+        // with identical registry content produce different bytes). In a
+        // BLAKE3-commitment ecosystem (the bundles are documented "stored
+        // alongside NeuronShard ternary weights") any digest taken over the
+        // serialization is unreproducible + serialize->deserialize->
+        // serialize byte-diffs are meaningless noise.
+        //
+        // Distinct from order-stable-topk-via-index-sort (B32c — canonical
+        // output order for a top-K selection; the serialization instance of
+        // the same determinism class), from length-prefix-shape-faithful-
+        // hash (B32c — shape-blind hashing; this is ORDER-blind
+        // serialization), from incremental-multi-part-hash-no-concat (B32a —
+        // allocation; this is determinism), from deterministic-tiling-
+        // projection-tables (B32c — same seed -> same table).
+        KernelRule {
+            rule_id: "serialize-container-canonical-order".to_string(),
+            gpu_concept: "A container serializer emits entries by iterating a HashMap's values() — iteration order seeded by RandomState, differing between processes. Two runs with identical container content produce different bytes, so any digest or commitment taken over the serialization is unreproducible, and serialize -> deserialize -> serialize byte-diffs are meaningless noise. In a BLAKE3-commitment stack (weight bundles stored alongside committed shards) that breaks commitment stability silently. The fix: iterate in canonical order — collect keys and sort_unstable (or hold the map as a BTreeMap so order is structural). The wire format is unchanged; only emission order becomes deterministic. The invariant: a serialization that feeds a digest must be a pure function of container CONTENT, never of container iteration order. Distinct from order-stable-topk-via-index-sort (the top-K selection instance of canonical ordering) and from length-prefix-shape-faithful-hash (shape-blind hashing — this is order-blind serialization).".to_string(),
+            ref_shape: "// naive: HashMap iteration order leaks into the bytes — identical\n// content, different digest per process (RandomState seeding)\nfn serialize_hashmap_order_naive(bundles: &HashMap<u32, Vec<u8>>) -> Vec<u8> {\n    let mut buf = Vec::new();\n    for bundle in bundles.values() {\n        buf.extend_from_slice(&(bundle.len() as u32).to_le_bytes());\n        buf.extend_from_slice(bundle);\n    }\n    buf\n}\n".to_string(),
+            opt_pattern: "// optimized: canonical key order — the bytes become a pure function of\n// CONTENT; commitments + round-trip byte-diffs are stable across processes\nfn serialize_canonical_order(bundles: &HashMap<u32, Vec<u8>>) -> Vec<u8> {\n    let mut ids: Vec<u32> = bundles.keys().copied().collect();\n    ids.sort_unstable();\n    let mut buf = Vec::new();\n    for id in ids {\n        let bundle = &bundles[&id];\n        buf.extend_from_slice(&(bundle.len() as u32).to_le_bytes());\n        buf.extend_from_slice(bundle);\n    }\n    buf\n}\n".to_string(),
+        },
     ])
 }
 
@@ -6925,7 +7222,7 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 325-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 334-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -6933,7 +7230,7 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (73 rules)
+    // A: Memory access patterns (75 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -7011,9 +7308,11 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "mutable-input-scratch-residency-write-per-call",
             "post-scatter-renorm-support-set-only",
             "stack-array-row-view-bridge",
+            "stash-kernel-internal-intermediate-in-smem",
+            "bit-cursor-unpack-to-width-specialized-byte-batch",
         ],
     ),
-    // B: Compute patterns (47 rules)
+    // B: Compute patterns (49 rules)
     (
         KernelCategory::Compute,
         "B: compute",
@@ -7065,9 +7364,11 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "block-reduction-separate-scratch-runtime-strides",
             "softmax-entropy-via-shift-identity",
             "topk-select-nth-over-full-vocab-sort",
+            "hoist-bit-address-out-of-packed-row-sweep",
+            "single-sweep-minmax-for-quant-scale",
         ],
     ),
-    // C: Fusion patterns (32 rules)
+    // C: Fusion patterns (33 rules)
     (
         KernelCategory::Fusion,
         "C: fusion",
@@ -7104,9 +7405,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "constant-scale-folded-into-upload-copy",
             "sparse-gather-scale-at-read-not-table-prepass",
             "elementwise-offload-needs-device-side-anchor",
+            "fuse-indirect-gather-into-dot-consumer",
         ],
     ),
-    // D: Dispatch patterns (57 rules)
+    // D: Dispatch patterns (59 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -7168,9 +7470,11 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "refine-loop-invariant-prefix-elision",
             "runtime-identity-gate-cached-verdict-elides-side-projection",
             "empty-slice-sentinel-launders-shape-violation",
+            "share-cube-size-const-between-kernel-and-launcher",
+            "serialize-container-canonical-order",
         ],
     ),
-    // E: Parallelism patterns (18 rules)
+    // E: Parallelism patterns (19 rules)
     (
         KernelCategory::Parallelism,
         "E: parallelism",
@@ -7193,6 +7497,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "grid-over-output-thread-private-sweep",
             "mask-sentinel-matches-reduction-identity",
             "concurrent-disjoint-write-buffer-parallelizes-uploads",
+            "row-dot-split-inner-axis-block-reduce",
         ],
     ),
     // F: Flash-attention tiling (10 rules)
@@ -7294,7 +7599,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "autotune-cache-extract-outlives-owner",
         ],
     ),
-    // L: Conv-as-GEMM + memory layout (10 rules)
+    // L: Conv-as-GEMM + memory layout (11 rules)
     (
         KernelCategory::ConvGemmLayout,
         "L: conv-as-GEMM + layout",
@@ -7309,6 +7614,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "bool-fields-over-bitset-hot-reads",
             "pre-transposed-consumer-layout-handles-build-once",
             "stream-drain-free-source-during-build",
+            "fold-tile-transpose-into-dequant-scatter",
         ],
     ),
     // M: Kernel parametric polymorphism (9 rules)
@@ -7455,8 +7761,9 @@ mod tests {
         // Batch 35 (8): riir-gpu production kernels — mask-sentinel-matches-reduction-identity, smem-staging-gated-by-cross-thread-reuse, kernelize-host-chain-after-sync-batching-floor, block-reduction-separate-scratch-runtime-strides, saturating-nonlinearity-recovery-breaks-near-cap, adapter-grad-join-mirrors-forward-delta-insertion-point, side-consumer-readback-alias-live-handle-for-dependent-dispatch, quadratic-attention-intermediates-recompute-from-linear-saves (gemma2_cubecl_train/ — the Gemma-2 training cluster: fused causal attention kernel Issue 430 Option B + hybrid LoRA training fwd/bwd).
         // Batch 42 (4): riir-gpu production kernels — refine-loop-invariant-prefix-elision, softmax-entropy-via-shift-identity, runtime-identity-gate-cached-verdict-elides-side-projection, expected-embedding-transposed-gemv-resident-head (gemma2_d2f/ mod.rs + gemma2_d2f_sc.rs — the Gemma-2 D2F block-causal decode cluster + Self-Conditioning; hazards filed as Issue 695).
         // Batch 43 (5): riir-gpu production kernels — mutable-input-scratch-residency-write-per-call, topk-select-nth-over-full-vocab-sort, post-scatter-renorm-support-set-only, stack-array-row-view-bridge, empty-slice-sentinel-launders-shape-violation (weaver_gpu_corrector.rs + weaver_gpu_dflash.rs — the Weaver speculative-decode GPU corrector cluster; hazards filed as Issue 697).
-        // Total: 209. // (historical batch-30 snapshot; current 325)
-        assert_eq!(corpus.entries.len(), 325, "batches 1-43 should have 325 rules");
+        // Batch 44 (9): riir-gpu production kernels — row-dot-split-inner-axis-block-reduce, fuse-indirect-gather-into-dot-consumer, share-cube-size-const-between-kernel-and-launcher, stash-kernel-internal-intermediate-in-smem, hoist-bit-address-out-of-packed-row-sweep, fold-tile-transpose-into-dequant-scatter, bit-cursor-unpack-to-width-specialized-byte-batch, single-sweep-minmax-for-quant-scale, serialize-container-canonical-order (weaver_gpu/mod.rs — the 19-dispatch kernel substrate behind the Batch 43 corrector + kvarn/ — the KVarN CPU reference + zone-scale registry; hazards filed as Issue 698).
+        // Total: 209. // (historical batch-30 snapshot; current 334)
+        assert_eq!(corpus.entries.len(), 334, "batches 1-44 should have 334 rules");
     }
 
     #[test]
@@ -10036,6 +10343,110 @@ mod tests {
 
 
 
+
+    #[test]
+    fn batch44_rules_present() {
+        let corpus = build_kernel_seed_corpus();
+        let ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        // E (1 new): split the reduction axis when rows are too few
+        assert!(ids.contains(&"row-dot-split-inner-axis-block-reduce"), "reduction-axis split");
+        // C (1 new): gather fused into the dot consumer
+        assert!(ids.contains(&"fuse-indirect-gather-into-dot-consumer"), "fused indirect gather");
+        // D (2 new): shared cube-size const + canonical serialization order
+        assert!(ids.contains(&"share-cube-size-const-between-kernel-and-launcher"), "shared cube-size const");
+        assert!(ids.contains(&"serialize-container-canonical-order"), "canonical serialization order");
+        // A (2 new): smem stash + width-specialized unpack
+        assert!(ids.contains(&"stash-kernel-internal-intermediate-in-smem"), "smem intermediate stash");
+        assert!(ids.contains(&"bit-cursor-unpack-to-width-specialized-byte-batch"), "width-specialized unpack");
+        // B (2 new): bit-address hoist + single-sweep minmax
+        assert!(ids.contains(&"hoist-bit-address-out-of-packed-row-sweep"), "bit-address hoist");
+        assert!(ids.contains(&"single-sweep-minmax-for-quant-scale"), "single-sweep minmax");
+        // L (1 new): scatter consumer layout at production
+        assert!(ids.contains(&"fold-tile-transpose-into-dequant-scatter"), "scatter at production");
+    }
+
+    #[test]
+    fn batch44_concepts_covered() {
+        // Distinctive ASCII substrings located by rule_id (the 32a convention).
+        let corpus = build_kernel_seed_corpus();
+        let concept = |id: &str| -> String {
+            corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-44 rule '{id}' missing"))
+                .gpu_concept
+                .clone()
+        };
+        // E: row-dot-split-inner-axis-block-reduce (mod.rs L1283-1306 + L1332-1333)
+        let c = concept("row-dot-split-inner-axis-block-reduce");
+        assert!(c.contains("one SM while the rest of the GPU idles")
+            && c.contains("split the REDUCTION axis instead"), "reduction-axis-split concept");
+        // C: fuse-indirect-gather-into-dot-consumer (mod.rs L1195-1196 -> L1303)
+        let c = concept("fuse-indirect-gather-into-dot-consumer");
+        assert!(c.contains("whose only destiny is to be multiplied")
+            && c.contains("delete the gather kernel and pass"), "fused-gather concept");
+        // D: share-cube-size-const-between-kernel-and-launcher (4 kernels vs 6 launchers)
+        let c = concept("share-cube-size-const-between-kernel-and-launcher");
+        assert!(c.contains("silent cross-file contract")
+            && c.contains("exactly one source of truth for the stride"), "cube-size-const concept");
+        // A: stash-kernel-internal-intermediate-in-smem (mod.rs L1413-1414 -> L1429)
+        let c = concept("stash-kernel-internal-intermediate-in-smem");
+        assert!(c.contains("no external reader")
+            && c.contains("keep it in shared memory"), "smem-stash concept");
+        // B: hoist-bit-address-out-of-packed-row-sweep (kvarn_dequant.rs L41-47 + L51)
+        let c = concept("hoist-bit-address-out-of-packed-row-sweep");
+        assert!(c.contains("identical on every iteration")
+            && c.contains("decompose the bit address ONCE"), "bit-address-hoist concept");
+        // L: fold-tile-transpose-into-dequant-scatter (kvarn_dequant.rs L120-133)
+        let c = concept("fold-tile-transpose-into-dequant-scatter");
+        assert!(c.contains("write the consumer's layout at production time")
+            && c.contains("materialize-then-transpose"), "scatter-at-production concept");
+        // A: bit-cursor-unpack-to-width-specialized-byte-batch (kvarn_dequant.rs L162-186)
+        let c = concept("bit-cursor-unpack-to-width-specialized-byte-batch");
+        assert!(c.contains("compile-time-constant")
+            && c.contains("drifted fork"), "width-specialized-unpack concept");
+        // B: single-sweep-minmax-for-quant-scale (kvarn_zone_weights.rs L67-68)
+        let c = concept("single-sweep-minmax-for-quant-scale");
+        assert!(c.contains("TWO separate full traversals")
+            && c.contains("track (lo, hi) jointly in one pass"), "single-sweep-minmax concept");
+        // D: serialize-container-canonical-order (kvarn_zone_weights.rs L284-287)
+        let c = concept("serialize-container-canonical-order");
+        assert!(c.contains("iteration order seeded by RandomState")
+            && c.contains("pure function of container CONTENT"), "canonical-order concept");
+    }
+
+    #[test]
+    #[cfg(not(feature = "kernel_verify"))]
+    fn batch44_pseudocode_parses() {
+        // G1 for Batch 44: every new rule's ref_shape AND opt_pattern must
+        // syn-parse as valid Rust (the L2 pruner verdict).
+        use crate::domain::HealDomain;
+        let corpus = build_kernel_seed_corpus();
+        let ids = [
+            "row-dot-split-inner-axis-block-reduce",
+            "fuse-indirect-gather-into-dot-consumer",
+            "share-cube-size-const-between-kernel-and-launcher",
+            "stash-kernel-internal-intermediate-in-smem",
+            "hoist-bit-address-out-of-packed-row-sweep",
+            "fold-tile-transpose-into-dequant-scatter",
+            "bit-cursor-unpack-to-width-specialized-byte-batch",
+            "single-sweep-minmax-for-quant-scale",
+            "serialize-container-canonical-order",
+        ];
+        for id in ids {
+            let entry = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-44 rule '{id}' missing"));
+            let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+            assert!(ref_verdict.parses, "batch-44 ref_shape for '{id}' must parse");
+            let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+            assert!(opt_verdict.parses, "batch-44 opt_pattern for '{id}' must parse");
+        }
+    }
+
     // ════════════════════════════════════════════════════════════════════
     // Plan 003 — Router ↔ corpus wiring tests
     // ════════════════════════════════════════════════════════════════════
@@ -10047,7 +10458,7 @@ mod tests {
 
     #[test]
     fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-        // Every rule_id in the 325-rule corpus must appear in exactly one category.
+        // Every rule_id in the 334-rule corpus must appear in exactly one category.
         let corpus = build_kernel_seed_corpus();
         let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
         let mut categorized: Vec<&str> = Vec::new();
@@ -10078,20 +10489,20 @@ mod tests {
 
     #[test]
     fn kernel_categories_counts_match_plan_003_table() {
-        // Pin per-category rule counts to the Plan 003 table (updated for Batch 43).
+        // Pin per-category rule counts to the Plan 003 table (updated for Batch 44).
         let expected = [
-            (KernelCategory::MemoryAccess, 73),
-            (KernelCategory::Compute, 47),
-            (KernelCategory::Fusion, 32),
-            (KernelCategory::Dispatch, 57),
-            (KernelCategory::Parallelism, 18),
+            (KernelCategory::MemoryAccess, 75),
+            (KernelCategory::Compute, 49),
+            (KernelCategory::Fusion, 33),
+            (KernelCategory::Dispatch, 59),
+            (KernelCategory::Parallelism, 19),
             (KernelCategory::FlashAttnTiling, 10),
             (KernelCategory::LinearAttnRecurrence, 19),
             (KernelCategory::MoeDispatchBackward, 14),
             (KernelCategory::NsaBlockSparse, 4),
             (KernelCategory::VarlenChunkedReduction, 5),
             (KernelCategory::AutotuneDispatch, 5),
-            (KernelCategory::ConvGemmLayout, 10),
+            (KernelCategory::ConvGemmLayout, 11),
             (KernelCategory::KernelPolymorphism, 9),
             (KernelCategory::DtypeAlignment, 18),
             (KernelCategory::IrStrengthReduction, 4),
@@ -10103,9 +10514,9 @@ mod tests {
                 "Plan 003: category {cat:?} has {} rules, expected {count}",
                 entry.2.len());
         }
-        // Sum must equal 320.
+        // Sum must equal 334.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 325, "Plan 003: category totals must sum to 325");
+        assert_eq!(total, 334, "Plan 003: category totals must sum to 334");
     }
 
     #[test]
@@ -10115,7 +10526,7 @@ mod tests {
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 325, "Plan 003: grouped corpus has {total} rules, expected 325");
+        assert_eq!(total, 334, "Plan 003: grouped corpus has {total} rules, expected 334");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");
