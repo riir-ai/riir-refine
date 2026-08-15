@@ -110,6 +110,15 @@ kernel_heal = ["katgpt-core/variable_rank_domain_expert"]
 # Opt-in: heavy dep tree (riir-rag + riir-neuron-db + syn-pulled chunker).
 latent_retrieval = ["dep:riir-rag"]
 
+# Issue 015: `--fix --verify` — the compile gate as tooling. Apply edits,
+# cargo check --all-targets, map rustc JSON errors to files/lines, revert
+# only the offending edits (line-matched span-level), re-check, report.
+# Under --verify the vec-with-capacity usize gate loosens (plain-path
+# bounds attempted; E0308 backs the revert) + redundant_closure returns
+# as an attempted lint (VERIFY_LINTS). Implies latent_retrieval (extends
+# the cargo-heal bin surface).
+fix_verify = ["latent_retrieval"]
+
 # Kernel rule resolution verification via CubeCL compile (Phase 3).
 # **STUB** — currently delegates to the shared RustAnalyzerPruner (syntax
 # check only). Full CubeCL compile + numeric compare vs reference deferred

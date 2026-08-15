@@ -38,12 +38,20 @@
 //!    - `<expr>.len()` (the std `len` convention; a custom non-usize
 //!      `len` is out of scope for this rule),
 //!    - usize-preserving arithmetic (`.saturating_sub/.saturating_add/
-//!      .wrapping_sub/.wrapping_add`) on a provably-usize receiver with
+//!      `.wrapping_sub/.wrapping_add`) on a provably-usize receiver with
 //!      an integer-literal argument,
 //!    - a plain path naming a fn param explicitly annotated `usize`.
 //!      Plain-path bounds that are consts, associated consts, or locals
 //!      (`0..n` where `n` is a `let`) are skipped — syn cannot know their
 //!      type.
+//!
+//!    **Verify-mode loosening (Issue 015):** under `--fix --verify`
+//!    (`ProposerOpts::untyped_paths`), the usize gate accepts ANY plain
+//!    path (single-segment consts/locals, multi-segment associated consts
+//!    like `Strategy::COUNT`) — a wrong type surfaces as rustc E0308 and
+//!    the [`crate::fix_verify`] loop auto-reverts just that edit. The
+//!    scope gate stays ON in both modes (use-before-decl is a real
+//!    correctness issue, not a type question).
 //!
 //! Span-preserving: the edit replaces exactly the `Vec::new()` init text;
 //! the capacity fragment is the ORIGINAL source text of the inferred node.
@@ -52,15 +60,27 @@ use super::{edit, src, SourceEdit};
 use syn::visit::Visit;
 use syn::{Expr, ExprLit, File, Lit, Local, Pat, RangeLimits, Signature, Stmt};
 
-pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
+use super::ProposerOpts;
+
+pub(crate) fn collect_edits_opts(
+    source: &str,
+    file: &File,
+    opts: ProposerOpts,
+) -> Vec<SourceEdit> {
     let mut edits = Vec::new();
     super::for_each_fn(file, |sig, block| {
-        collect_block_edits(source, sig, block, &mut edits);
+        collect_block_edits(source, sig, block, &mut edits, opts);
     });
     edits
 }
 
-fn collect_block_edits(source: &str, sig: &Signature, block: &syn::Block, edits: &mut Vec<SourceEdit>) {
+fn collect_block_edits(
+    source: &str,
+    sig: &Signature,
+    block: &syn::Block,
+    edits: &mut Vec<SourceEdit>,
+    opts: ProposerOpts,
+) {
     let stmts = &block.stmts;
     let usize_params = usize_typed_params(sig);
     for (i, stmt) in stmts.iter().enumerate() {
@@ -79,7 +99,8 @@ fn collect_block_edits(source: &str, sig: &Signature, block: &syn::Block, edits:
                 break;
             }
             if let Some(cap) = loop_capacity(later, ident) {
-                if let Some(replacement) = cap_replacement(source, &cap, &usize_params, &later_bound)
+                if let Some(replacement) =
+                    cap_replacement(source, &cap, &usize_params, &later_bound, opts)
                 {
                     if let Some(init) = &local.init {
                         edits.push(edit(&init.expr, replacement));
@@ -230,21 +251,28 @@ fn capacity_from_iter(expr: &Expr) -> Option<Cap> {
 
 /// Build `Vec::with_capacity(<cap text>)` from the ORIGINAL source text of
 /// the capacity node, gated by the parse-only safety checks (scope + usize).
+/// Under `opts.untyped_paths` (verify-mode), the usize gate accepts any
+/// plain path — rustc's E0308 backs the auto-revert.
 fn cap_replacement(
     source: &str,
     cap: &Cap,
     usize_params: &[String],
     later_bound: &[String],
+    opts: ProposerOpts,
 ) -> Option<String> {
     let node = match cap {
         Cap::Node(node) => {
-            if !capacity_is_usize(node, usize_params) || references_later_let(node, later_bound) {
+            if !capacity_is_usize(node, usize_params, opts)
+                || references_later_let(node, later_bound)
+            {
                 return None;
             }
             format!("Vec::with_capacity({})", src(source, node)?)
         }
         Cap::NodePlusOne(node) => {
-            if !capacity_is_usize(node, usize_params) || references_later_let(node, later_bound) {
+            if !capacity_is_usize(node, usize_params, opts)
+                || references_later_let(node, later_bound)
+            {
                 return None;
             }
             format!("Vec::with_capacity({} + 1)", src(source, node)?)
@@ -262,7 +290,12 @@ fn cap_replacement(
 }
 
 /// Parse-only usize proof (see module docs for the whitelist).
-fn capacity_is_usize(expr: &Expr, usize_params: &[String]) -> bool {
+///
+/// With `opts.untyped_paths` (verify-mode, Issue 015): ANY plain path is
+/// accepted — single-segment consts/locals AND multi-segment associated
+/// consts (`Strategy::COUNT`). Wrong types surface as rustc E0308 and the
+/// verifier auto-reverts the edit; the scope gate is unaffected.
+fn capacity_is_usize(expr: &Expr, usize_params: &[String], opts: ProposerOpts) -> bool {
     match expr {
         Expr::Lit(ExprLit { lit: Lit::Int(_), .. }) => true,
         // `x.len()` — usize by the std `len` convention.
@@ -274,16 +307,21 @@ fn capacity_is_usize(expr: &Expr, usize_params: &[String]) -> bool {
                 "saturating_sub" | "saturating_add" | "wrapping_sub" | "wrapping_add"
             ) && mc.args.len() == 1
                 && matches!(mc.args.first(), Some(Expr::Lit(ExprLit { lit: Lit::Int(_), .. })))
-                && capacity_is_usize(&mc.receiver, usize_params) =>
+                && capacity_is_usize(&mc.receiver, usize_params, opts) =>
         {
             true
         }
         // A plain path is usize only when it names an explicitly-`usize`
-        // fn param. Consts / locals / associated consts are type-blind.
-        Expr::Path(p) => p
-            .path
-            .get_ident()
-            .is_some_and(|i| usize_params.iter().any(|param| param == &i.to_string())),
+        // fn param. Consts / locals / associated consts are type-blind —
+        // UNLESS verify-mode loosened the gate (any path, any arity).
+        Expr::Path(p) => {
+            if opts.untyped_paths {
+                return true;
+            }
+            p.path
+                .get_ident()
+                .is_some_and(|i| usize_params.iter().any(|param| param == &i.to_string()))
+        }
         _ => false,
     }
 }
@@ -537,10 +575,86 @@ mod tests {
         assert!(
             propose_fix(
                 "vec-with-capacity",
-                "fn build(items: &[u32]) -> Vec<u32> {\n    let mut v = Vec::new();\n    \
-                 for x in items { v.push(*x); }\n    v\n}"
+                "fn build(items: &[u32]) -> Vec<u32> {\n    let mut v = Vec::new();\n    \n                 for x in items { v.push(*x); }\n    v\n}"
             )
             .is_none()
         );
+    }
+
+    // ── Verify-mode (Issue 015): untyped_paths loosens the usize gate,
+    // rustc E0308 backs the revert. The scope gate stays ON. ────────────
+
+    fn propose_verify(src: &str) -> Option<String> {
+        let file = syn::parse_file(src).ok()?;
+        let edits = super::collect_edits_opts(
+            src,
+            &file,
+            super::super::ProposerOpts { untyped_paths: true },
+        );
+        if edits.is_empty() {
+            return None;
+        }
+        Some(super::super::apply_edits(src, edits.clone()))
+    }
+
+    #[test]
+    fn untyped_const_bound_fires_under_verify() {
+        // The collapse_detector `N_TRACES: usize` shape — skipped by the
+        // usize gate, attempted under --verify (compiles: it IS usize).
+        let out = propose_verify(
+            "fn traces() -> Vec<u32> {\n    const N_TRACES: usize = 24;\n    \n             let mut v = Vec::new();\n    for i in 0..N_TRACES { v.push(i as u32); }\n    v\n}"
+        )
+        .expect("verify-mode fires on the const bound");
+        assert!(squash(&out).contains(&squash("Vec::with_capacity(N_TRACES)")), "{out}");
+    }
+
+    #[test]
+    fn untyped_associated_const_fires_under_verify() {
+        // The monopoly `Strategy::COUNT` shape — multi-segment associated
+        // const, skipped by the usize gate (get_ident() is None).
+        let out = propose_verify(
+            "fn picks() -> Vec<u32> {\n    let mut v = Vec::new();\n    \n             for i in 0..Strategy::COUNT { v.push(i as u32); }\n    v\n}"
+        )
+        .expect("verify-mode fires on the associated const");
+        assert!(
+            squash(&out).contains(&squash("Vec::with_capacity(Strategy::COUNT)")),
+            "{out}"
+        );
+    }
+
+    #[test]
+    fn untyped_earlier_local_fires_under_verify() {
+        // The episode_pruner `min_len` shape — a local `let` BEFORE the vec
+        // binding (in scope at the init position, so the scope gate passes).
+        let out = propose_verify(
+            "fn diff(a: &[u32], b: &[u32]) -> Vec<u32> {\n    let min_len = \n             a.len().min(b.len());\n    let mut v = Vec::new();\n    for pos in 0..min_len { v.push(a[pos]); }\n    v\n}"
+        )
+        .expect("verify-mode fires on the earlier local");
+        assert!(squash(&out).contains(&squash("Vec::with_capacity(min_len)")), "{out}");
+    }
+
+    #[test]
+    fn untyped_scope_gate_still_blocks_later_let() {
+        // Verify-mode does NOT loosen the scope gate — the E0425 class is a
+        // correctness issue, not a type question.
+        let src = "fn build(a: &[u32], b: &[u32]) -> Vec<u32> {\n    let mut v = Vec::new();\n    \n             let m = a.len().min(b.len());\n    for i in 0..m { v.push(a[i]); }\n    v\n}";
+        let file = syn::parse_file(src).unwrap();
+        let edits = super::collect_edits_opts(
+            src,
+            &file,
+            super::super::ProposerOpts { untyped_paths: true },
+        );
+        assert!(edits.is_empty(), "scope gate must hold under verify-mode");
+    }
+
+    #[test]
+    fn untyped_u8_const_also_fires_relying_on_revert() {
+        // The monopoly BOARD_SIZE u8 shape — the E0308 case. Under verify it
+        // FIRES (the revert handles it); under parse-only it must not.
+        let src = "fn cells() -> Vec<u8> {\n    let mut v = Vec::new();\n    \n             for i in 0..BOARD_SIZE { v.push(i); }\n    v\n}";
+        let out = propose_verify(src).expect("verify-mode attempts the u8 const");
+        assert!(squash(&out).contains(&squash("Vec::with_capacity(BOARD_SIZE)")), "{out}");
+        // Parse-only (the default) still skips it.
+        assert!(propose_fix("vec-with-capacity", src).is_none());
     }
 }

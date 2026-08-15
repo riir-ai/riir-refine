@@ -84,6 +84,13 @@ pub mod self_evolve;
 #[cfg(feature = "latent_retrieval")]
 pub mod draft;
 
+// Issue 015: `--fix --verify` — the compile gate as tooling for the edit
+// path (apply → cargo check → rustc-JSON error attribution → span-level
+// revert → re-check → report). Opt-in; implies latent_retrieval (extends
+// the cargo-heal bin surface).
+#[cfg(feature = "fix_verify")]
+pub mod fix_verify;
+
 // ── Back-compat re-exports (preserve pre-refactor API names) ───────────────
 // These type aliases + re-exports keep existing call sites compiling unchanged
 // after the Plan 001 Phase 1 framework refactor.

@@ -15,11 +15,31 @@
 //! ## Methodology
 //!
 //! 1. Generate a temp **bin** crate embedding the rule's `BenchSpec.harness`
-//!    + a timing loop (dynamic calibration → warmup → median-of-samples).
+//!    + a timing loop (dynamic calibration → warmup → median-of-samples)
+//!    + a counting `#[global_allocator]` (Issue 014 T1).
 //! 2. Run `cargo run --release` on the temp crate.
-//! 3. Parse JSON lines: `{"size":N,"buggy_ns":X,"fixed_ns":Y}`.
+//! 3. Parse JSON lines:
+//!    `{"size":N,"buggy_ns":X,"fixed_ns":Y,"buggy_allocs":A,"buggy_bytes":B,"fixed_allocs":C,"fixed_bytes":D}`.
 //! 4. Compute per-size outcome (Faster/Slower/Tie at ±5% threshold).
 //! 5. Aggregate into a [`ParetoVerdict`] (ParetoDominant if faster on majority).
+//!
+//! ## The deterministic alloc axis (Issue 014 T1, Research 032)
+//!
+//! Wall-clock timing is noisy (±5% Tie band; documented regime-fragility in
+//! Benches 015/016). Allocation count + bytes are **exact integers that are
+//! identical on every run** — the same code path allocates the same bytes
+//! deterministically. The generated crate installs a counting
+//! `#[global_allocator]` (alloc + realloc + alloc_zeroed counted; dealloc
+//! is free) and, after the timing loops, measures one steady-state call of
+//! each side with the counters reset — warmup has already settled one-time
+//! init paths (LazyLock compilation, first-use lazies).
+//!
+//! **Verdict axis unchanged**: timing stays the Pareto verdict axis; the alloc
+//! integers are reported + recorded, and gate rules whose timing is Tie-class
+//! (e.g. `arc-str-payload`, Bench 020). Determinism is assertable across
+//! repeat runs via [`PerfBenchValidator::run_bench_with_determinism`] — any
+//! variance there is a harness bug, not noise. Precedent shapes: dhat-rs
+//! heap-usage testing; riir-mmorpg-examples G4 `CountingAllocator` gates.
 //!
 //! ## Modelless-first
 //!
@@ -76,6 +96,20 @@ pub struct SizeResult {
     /// `buggy_ns / fixed_ns` (>1.0 = fixed is faster).
     pub speedup: f64,
     pub outcome: SizeOutcome,
+    /// Steady-state allocation count for ONE `run_buggy` call (deterministic
+    /// second axis, Issue 014 T1). Measured after warmup so one-time init
+    /// paths (LazyLock compile, first-use lazies) are excluded.
+    #[serde(default)]
+    pub buggy_allocs: u64,
+    /// Steady-state allocated bytes for ONE `run_buggy` call.
+    #[serde(default)]
+    pub buggy_alloc_bytes: u64,
+    /// Steady-state allocation count for ONE `run_fixed` call.
+    #[serde(default)]
+    pub fixed_allocs: u64,
+    /// Steady-state allocated bytes for ONE `run_fixed` call.
+    #[serde(default)]
+    pub fixed_alloc_bytes: u64,
 }
 
 /// The overall Pareto verdict across all sizes.
@@ -272,6 +306,40 @@ impl PerfBenchValidator {
         Ok(Self::parse_bench_output(&stdout))
     }
 
+    /// Run the bench `repeats` times and verify the alloc axis is
+    /// bit-identical across runs (Issue 014 T1.4 — the determinism proof).
+    ///
+    /// Timing medians are NOT expected to match (wall-clock noise — that is
+    /// the whole point of the axis); only the alloc integers must. Returns
+    /// the FIRST run's full results plus whether every subsequent run's alloc
+    /// axis agreed. A `false` here means a harness bug (background-thread
+    /// allocation, timing-dependent lazy init), not measurement noise.
+    ///
+    /// The first run pays the cargo build; repeats reuse the cached build
+    /// (BLAKE3-keyed crate dir) and only re-execute the binary.
+    pub fn run_bench_with_determinism(
+        &self,
+        rule_id: &str,
+        spec: &BenchSpec,
+        repeats: usize,
+    ) -> Result<(Vec<SizeResult>, bool), String> {
+        let mut first_results: Option<Vec<SizeResult>> = None;
+        let mut deterministic = true;
+        for _ in 0..repeats.max(1) {
+            let results = self.run_bench(rule_id, spec)?;
+            if first_results.is_none() {
+                first_results = Some(results);
+                continue;
+            }
+            let first = first_results.as_ref().expect("set on first iteration");
+            if alloc_axis(first) != alloc_axis(&results) {
+                deterministic = false;
+                break;
+            }
+        }
+        Ok((first_results.unwrap_or_default(), deterministic))
+    }
+
     /// Prepare the temp bin crate.
     ///
     /// BLAKE3-keyed dir name → cargo reuses build cache on repeat calls.
@@ -342,9 +410,9 @@ impl PerfBenchValidator {
     }
 
     /// Generate the complete `src/main.rs`: harness (with dep markers stripped)
-    /// + the timing loop.
+    /// + the counting allocator + the timing loop.
     ///
-    /// Uses a raw-string template with `__SIZES__` placeholder + `.replace()`
+    /// Uses raw-string templates with `__SIZES__` placeholder + `.replace()`
     /// instead of nested `format!` — avoids the brace-escaping hell that
     /// comes from generating Rust source containing `println!` format strings.
     fn generate_main_rs(spec: &BenchSpec) -> String {
@@ -398,10 +466,28 @@ fn main() {
         fixed_samples.sort_unstable();
         let fixed_median = fixed_samples[sample_count / 2];
 
+        // Alloc-count pass (deterministic second axis, Issue 014 T1).
+        // Warmup + timing above already settled one-time init paths
+        // (LazyLock compilation, first-use lazies), so ONE call measures
+        // the steady-state per-call allocation traffic exactly. Counters
+        // are read into locals BEFORE println's own allocations.
+        ALLOC_COUNT.store(0, Ordering::Relaxed);
+        ALLOC_BYTES.store(0, Ordering::Relaxed);
+        run_buggy(&input);
+        let buggy_allocs = ALLOC_COUNT.load(Ordering::Relaxed);
+        let buggy_alloc_bytes = ALLOC_BYTES.load(Ordering::Relaxed);
+
+        ALLOC_COUNT.store(0, Ordering::Relaxed);
+        ALLOC_BYTES.store(0, Ordering::Relaxed);
+        run_fixed(&input);
+        let fixed_allocs = ALLOC_COUNT.load(Ordering::Relaxed);
+        let fixed_alloc_bytes = ALLOC_BYTES.load(Ordering::Relaxed);
+
         // Emit JSON line for the validator to parse.
         // {{ and }} are escape sequences in the runtime println! format string.
-        println!("{{\"size\":{},\"buggy_ns\":{},\"fixed_ns\":{}}}",
-            n, buggy_median, fixed_median);
+        println!("{{\"size\":{},\"buggy_ns\":{},\"fixed_ns\":{},\"buggy_allocs\":{},\"buggy_bytes\":{},\"fixed_allocs\":{},\"fixed_bytes\":{}}}",
+            n, buggy_median, fixed_median,
+            buggy_allocs, buggy_alloc_bytes, fixed_allocs, fixed_alloc_bytes);
     }
 }
 
@@ -416,6 +502,52 @@ fn calibrate<F: Fn()>(f: F, target_ns: u64) -> u64 {
     let iters = target_ns / per_iter_ns.max(1);
     iters.clamp(1, 10_000_000)
 }
+"#;
+
+        // Counting global allocator injected into every generated bench crate
+        // (Issue 014 T1 — the deterministic alloc-count axis). Counts alloc +
+        // realloc + alloc_zeroed (alloc_zeroed is overridden so it keeps
+        // System's fast calloc path instead of the trait default that routes
+        // through our alloc); dealloc is not counted (traffic axis, not heap-
+        // residency axis). Overhead: two relaxed atomic RMWs per allocation —
+        // amortized against the underlying malloc cost (~tens of ns).
+        const ALLOCATOR_BLOCK: &str = r#"
+// ── Counting allocator (deterministic alloc axis — Issue 014 T1) ────────
+// Exact integers, identical on every run; variance here is a harness bug.
+use std::alloc::{GlobalAlloc, Layout, System};
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static ALLOC_COUNT: AtomicU64 = AtomicU64::new(0);
+static ALLOC_BYTES: AtomicU64 = AtomicU64::new(0);
+
+struct CountingAlloc;
+
+#[inline]
+fn bump_counting_alloc(size: usize) {
+    ALLOC_COUNT.fetch_add(1, Ordering::Relaxed);
+    ALLOC_BYTES.fetch_add(size as u64, Ordering::Relaxed);
+}
+
+unsafe impl GlobalAlloc for CountingAlloc {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        bump_counting_alloc(layout.size());
+        unsafe { System.alloc(layout) }
+    }
+    unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout) {
+        unsafe { System.dealloc(ptr, _layout) }
+    }
+    unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
+        bump_counting_alloc(new_size);
+        unsafe { System.realloc(ptr, layout, new_size) }
+    }
+    unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
+        bump_counting_alloc(layout.size());
+        unsafe { System.alloc_zeroed(layout) }
+    }
+}
+
+#[global_allocator]
+static GLOBAL_COUNTING_ALLOCATOR: CountingAlloc = CountingAlloc;
 "#;
 
         // Strip dep-marker lines from the harness source.
@@ -436,7 +568,7 @@ fn calibrate<F: Fn()>(f: F, target_ns: u64) -> u64 {
         let timing_loop = TIMING_LOOP.replace("__SIZES__", &sizes_array);
 
         format!(
-            "// Auto-generated by PerfBenchValidator — do not hand-edit.\n{harness_clean}\n{timing_loop}"
+            "// Auto-generated by PerfBenchValidator — do not hand-edit.\n{harness_clean}\n{ALLOCATOR_BLOCK}\n{timing_loop}"
         )
     }
 
@@ -482,6 +614,24 @@ fn calibrate<F: Fn()>(f: F, target_ns: u64) -> u64 {
             let Some(fixed_ns) = v.get("fixed_ns").and_then(serde_json::Value::as_u64) else {
                 continue;
             };
+            // Alloc axis (Issue 014 T1): fields default to 0 when absent
+            // (old-format output / harness without the counting pass).
+            let buggy_allocs = v
+                .get("buggy_allocs")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(0);
+            let buggy_alloc_bytes = v
+                .get("buggy_bytes")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(0);
+            let fixed_allocs = v
+                .get("fixed_allocs")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(0);
+            let fixed_alloc_bytes = v
+                .get("fixed_bytes")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(0);
             let speedup = if fixed_ns == 0 {
                 1.0
             } else {
@@ -494,6 +644,10 @@ fn calibrate<F: Fn()>(f: F, target_ns: u64) -> u64 {
                 fixed_ns,
                 speedup,
                 outcome,
+                buggy_allocs,
+                buggy_alloc_bytes,
+                fixed_allocs,
+                fixed_alloc_bytes,
             });
         }
         results

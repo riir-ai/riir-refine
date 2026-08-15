@@ -51,17 +51,21 @@
 //! | `needless_range_loop` | `0..v.len()` + index-only usage (exact AST analysis) |
 //! | `needless_lifetimes` | single elidable lifetime (elision-rule verified) |
 //!
-//! The remaining four proposers fire on **type-blind** detection — they are
+//! The remaining three proposers fire on **type-blind** detection — they are
 //! correct when the types line up, but a parse-only validator cannot know
 //! that. They stay available to the `self_evolve` tuning loop (whose output
 //! IS verified by a real `cargo clippy` run) and are excluded from `--fix`:
 //!
 //! | Lint | Why not `--fix` |
 //! |---|---|
-//! | `redundant_closure` | `\|x\| f(x)` → `f` only compiles when the closure arg's type matches `f`'s param EXACTLY — the closure body may rely on a coercion (deref `&Vec<T>` → `&[T]`, autoref) that a fn item does not get. **Demoted from `FIXABLE_LINTS` by the Bench 019 G5 real-file run** (katgpt-pruners `roaring_membership.rs`: `.map(\|v\| CompactBitmap::from_bool_vec(v))` with `from_bool_vec(&[bool])` — the rewrite is E0631). |
 //! | `needless_borrow` | whether `&x` is needless depends on the callee's expected type |
 //! | `useless_conversion` | `.into()` is only useless if source type == annotated type |
 //! | `unnecessary_mut_passed` | `&mut v` → `&v` depends on the callee's signature; the param-`mut` strip is file-wide |
+//!
+//! `redundant_closure` sits between the two sets: demoted from
+//! `FIXABLE_LINTS` by the G5 run, but restored under `--verify` via
+//! [`VERIFY_LINTS`] — the E0631 failure class is exactly what the
+//! verify loop reverts.
 //!
 //! ## Scope
 //!
@@ -100,6 +104,14 @@ pub const FIXABLE_LINTS: &[&str] = &[
     "needless_range_loop",
     "needless_lifetimes",
 ];
+
+/// Lints attempted ONLY under `cargo heal --fix --verify` (Issue 015) —
+/// type-blind rewrites whose failure mode (E0631/E0599) the
+/// [`crate::fix_verify`] loop auto-reverts. `redundant_closure` was demoted
+/// from `FIXABLE_LINTS` by the Bench 019 G5 run (the deref-coercion
+/// E0631 on katgpt-pruners `roaring_membership.rs`); verify-mode restores
+/// it as an attempted edit with rustc backing the revert.
+pub const VERIFY_LINTS: &[&str] = &["redundant_closure"];
 
 /// Propose a fix for `(lint_name, buggy_code)` by applying the lint's
 /// span-preserving edits.

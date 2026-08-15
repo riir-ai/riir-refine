@@ -69,6 +69,20 @@ pub const FIXABLE_RULES: &[&str] = &[
     "fxhashmap",
 ];
 
+/// Proposer option flags (Issue 015 verify-mode).
+///
+/// `--fix` defaults to the conservative parse-only gates; `--fix
+/// --verify` (rustc backing the revert) passes `untyped_paths = true` to
+/// attempt plain-path capacity bounds the usize gate cannot prove.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ProposerOpts {
+    /// Attempt plain-path capacity bounds whose type syn cannot prove
+    /// (consts, associated consts, locals). rustc's E0308 backs the
+    /// auto-revert in verify-mode. The scope gate (no later-let
+    /// references) stays ON regardless.
+    pub untyped_paths: bool,
+}
+
 /// Propose a fix for `(rule_id, buggy_code)` by applying the rule's
 /// span-preserving edits.
 ///
@@ -97,8 +111,21 @@ pub fn propose_fix(rule_id: &str, buggy_code: &str) -> Option<String> {
 /// Collect one rule's edits against the original source. Empty = no match.
 #[must_use]
 pub fn collect_edits(rule_id: &str, source: &str, file: &File) -> Vec<RuleEdit> {
+    collect_edits_opts(rule_id, source, file, ProposerOpts::default())
+}
+
+/// [`collect_edits`] with explicit proposer options (Issue 015: the CLI's
+/// `--verify` path loosens the vec-with-capacity usize gate — see
+/// [`ProposerOpts::untyped_paths`]).
+#[must_use]
+pub fn collect_edits_opts(
+    rule_id: &str,
+    source: &str,
+    file: &File,
+    opts: ProposerOpts,
+) -> Vec<RuleEdit> {
     let edits = match rule_id {
-        "vec-with-capacity" => vec_with_capacity::collect_edits(source, file),
+        "vec-with-capacity" => vec_with_capacity::collect_edits_opts(source, file, opts),
         "entry-vs-contains-insert" => entry_vs_contains::collect_edits(source, file),
         "static-str" => static_str::collect_edits(source, file),
         "bool-to-bitpack" => bool_to_bitpack::collect_edits(source, file),
