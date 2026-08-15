@@ -127,11 +127,31 @@ global = symlink only.
 
 ## Mining queue snapshot (update per batch — this is the resume state)
 
-- **Batch 32**: `riir-ai/crates/riir-gpu/src/edge_lora/` + `kernels/`
+- **Batch 32**: `riir-ai/crates/riir-gpu/src/edge_lora/` + `kernels/` RUST
   wrappers → Research 034, corpus 217 → ~227.
+  - Pre-flight (2026-08-15): `edge_lora/` = 14 .rs files, 8,945 LOC —
+    host-side training orchestrators (`topology_trainer.rs` 1468L,
+    `training.rs` 953L, `types.rs` 627L, `sleep_consolidation.rs` 615L,
+    `arena_eval.rs`, `edge_module.rs`, `adaptive_width.rs`,
+    `chain_commit.rs`, `cross_game_{edge,real}.rs`, `{go,bomber,fft}_self_play.rs`,
+    `sigmoid_gate.rs`). `kernels/` is mostly `.wgsl` — mine the Rust
+    wrappers only.
+  - Suggested split if too big for one session: 32a = core
+    (`edge_module` + `types` + `training` + `adaptive_width`), 32b =
+    self-play/arena/consolidation.
+  - Validation pattern (proven in T4): commit corpus edits in the main
+    checkout (kernel_opt corpus files are NOT sibling WIP), then
+    `git worktree add /tmp/... <commit>` + symlink `/tmp/{katgpt-rs,riir-ai,riir-neuron-db}`
+    → the real `/git` dirs for path-dep resolution → run GOAT there.
 - **BLOCKED**: `ternary_deltanet_gpu_forward.rs` — sibling agent actively
   working there (Batch 31 note). Mine only after their WIP lands.
 - **Progress**: riir-gpu ~54 of ~200 files mined. Corpus: 217 rules.
+- **Also open (riir-clippy issues)**: 014 (rust_perf v4, 12 tasks), 016
+  (clippy structural expansion, 6), 017 (retrieval precision at scale,
+  5), 018 (self_evolve promotion, 6). 015 = sibling's ACTIVE WIP
+  (fix_verify mode — do not touch `src/bin/heal.rs`, `src/fix_verify.rs`,
+  `src/lib.rs`, `Cargo.toml`, proposers mod.rs/vec_with_capacity, bench.rs,
+  clippy proposers mod.rs).
 
 ## Manual invocation
 
