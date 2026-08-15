@@ -106,7 +106,26 @@ at 6/7 + doc-sync as the closing pass).
     doc-comments only; S7 no game coupling. Run logged in the boundary-guard
     skill's Run log (katgpt-rs). Method note: grep-only execution — safe
     during the Plan 337 32K measurement (no cargo builds).
-- [ ] T9 First substrate-first drift audit via the idle queue (item 7): Mode 2 parallel-system scan, classify findings, file issues
+- [x] T9 First substrate-first drift audit via the idle queue (item 7): Mode 2 parallel-system scan, classify findings, file issues
+  - **DONE 2026-08-15 (evening), grep-only (safe during the Plan 337 32K
+    measurement).** Surfaces: riir-mmorpg-examples/src/ + riir-game-sdk/src/.
+    Substrate inventory verified: `GenericSpatialBelief` + `decay_confidence`
+    + `target_within_visible_radius` (riir-games-shared/src/game_traits/
+    spatial.rs); `tick_swarm_emotions{,_with_aura,_collective,_collective_
+    with_aura}` + `SwarmEmotionSystem*` + `ThreatSource` (riir-games/src/
+    swarm/emotion.rs); `MapPos3D::distance_2d_to` (consumed + tested).
+    Parallel-system greps: HashMap spatial = ZERO (ThreatField pattern has
+    NOT returned since Issue 047); inline sigmoid = ZERO; parallel emotion
+    types = ZERO; SDK src/ = clean (only a substrate self-test hit).
+    Non-test distance-math hits classified: heightfield terrain AUTHORING
+    via substrate `from_fn` (config data, false positive); debug-panel
+    display distance (view concern, false positive); one shop-proximity
+    gate using the sqrt-free squared form (consumer-thin glue, acceptable —
+    no `distance_sq` substrate helper exists to consume). Belief-type hits:
+    `QuestRestockBelief` = temporal restock-interval EMA (quest domain, not
+    spatial perception — different concept, false positive);
+    `EntityVisibility` = render flag array (view, false positive).
+    **Verdict: NO DRY violations, zero issues filed.**
 - [-] T7 Mine `ternary_deltanet_gpu_forward.rs` — BLOCKED: sibling agent actively working there (Batch 31 note); mine only after their WIP lands
 
 ## Resolution note
