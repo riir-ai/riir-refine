@@ -338,7 +338,17 @@ pub fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {
             .find(|(d, _)| *d == DomainId::Clippy)
             .expect("clippy index enabled by default");
         assert!(!clippy.1.is_empty());
-        assert_eq!(clippy.1[0].rule_id, "needless_return");
+        // Top-3 membership, not top-1: corpus growth shifts rankings (the
+        // Issue 016 expansion 10→40 entries made `manual_unwrap_or`'s fixture
+        // — `fn f(x: Option<u8>) -> u8 { match .. 7 }` — a stronger BM25
+        // token match for this query than needless_return's `fn foo() -> i32
+        // { return 42; }`). Precision@1 over curated fixtures is the Phase 3
+        // G1 gate's job (Bench 018); this test pins routing + retrievability.
+        assert!(
+            clippy.1.iter().take(3).any(|r| r.rule_id == "needless_return"),
+            "needless_return not in top-3: {:?}",
+            clippy.1.iter().map(|r| r.rule_id.clone()).collect::<Vec<_>>()
+        );
         let _ = routed;
     }
 

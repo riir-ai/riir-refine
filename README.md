@@ -45,7 +45,7 @@ domain-pluggable behind the `HealDomain` trait.
 | L2 — Compile check (kernel_opt) | ✅ Stub (Plan 001 Phase 3, `kernel_verify` feature, delegates to shared `RustAnalyzerPruner`; full CubeCL compile + numeric compare deferred per Proposal 012 §Phase 0) |
 | L3 — Ruliology search | ✅ Done (Issue 005, `ruliology_search` feature, Pareto-front from katgpt-ruliology pattern, ~400µs/10-candidate search) |
 | SE — Self-evolution loop (additive) | ✅ Done (Issue 004 + Issue 008; `self_evolve` feature, opt-in; G1–G5 + G6/G7 ALL PASS — 50.0pp healing-rate improvement on real `cargo clippy` feedback) |
-| Latent — span retrieval + suggest/fix CLI (Plan 005) | ✅ Phases 1–4 + 6 T6.1/T6.4 Done (`latent_retrieval` feature, opt-in; `cargo heal --suggest` — riir-rag `AstChunker`/`ModellessEmbedder`/`NeuronDbRetriever`, fan-out routing; GOAT G1–G4 PASS, Bench 018. Phase 4: top-5 rust_perf `propose_fix` proposers. Phase 6 T6.1: `cargo heal --fix [--write]` — **span-preserving** edit splice, visitor-gated; GOAT G1–G4 PASS, Bench 019 — G5 real-sibling-fix blocked on the riir-ai rebase. T6.4: clippy proposers migrated to the shared emitter (`src/edit_emitter.rs`); `--fix` covers 5 perf rules + 7 structural clippy lints with fixpoint composition; 3 type-blind clippy lints stay suggest-only). Phase 5 kernel proposers DEFERRED (concept-grade corpus — see Plan 005 §Phase 5) |
+| Latent — span retrieval + suggest/fix CLI (Plan 005) | ✅ Phases 1–4 + 6 T6.1/T6.4 Done (`latent_retrieval` feature, opt-in; `cargo heal --suggest` — riir-rag `AstChunker`/`ModellessEmbedder`/`NeuronDbRetriever`, fan-out routing; GOAT G1–G4 PASS, Bench 018. Phase 4: top-5 rust_perf `propose_fix` proposers. Phase 6 T6.1: `cargo heal --fix [--write]` — **span-preserving** edit splice, visitor-gated; GOAT G1–G4 PASS, Bench 019 — G5 real-sibling-fix blocked on the riir-ai rebase. T6.4: clippy proposers migrated to the shared emitter (`src/edit_emitter.rs`); `--fix` covers 5 perf rules + 33 structural clippy lints with fixpoint composition (Issue 016 expanded 7->33 + a 4-lint --verify tier, Bench 021); 3 type-blind clippy lints stay suggest-only). Phase 5 kernel proposers DEFERRED (concept-grade corpus — see Plan 005 §Phase 5) |
 | Router — kernel_opt expert routing | ✅ Corpus-wired (Plan 003, `KernelExpertRouter` wraps `pick_domain<15,5>` from Plan 558; 15 category centroids wired to 68-rule corpus; 13/15 reachable, 2 documented unreachable) |
 | Thermal — kernel_opt tier dispatch | ✅ Stub (Plan 001 Phase 3, `KernelThermalRouter` + `ThermalTier` enum; Plasma→Hot→Warm→Cold→Freeze; returns Plasma for all calls) |
 | L4 — LoRA fallback (all domains) | ⏳ Deferred to riir-train |
@@ -53,7 +53,10 @@ domain-pluggable behind the `HealDomain` trait.
 ## Scope limit (measured, Bench 009)
 
 The pipeline is a **fast cache over corpus-resident lint fixes**, not a general
-clippy fixer. Measured on 10 lints:
+clippy fixer. Measured on 10 lints (the seed corpus at bench time — since
+
+grown to 40 via the Issue 016 structural expansion; the measurement's
+scope-limit conclusion is unchanged):
 
 | | in-distribution (corpus holds the fix) | held-out (same lints, unseen code) |
 |---|---|---|

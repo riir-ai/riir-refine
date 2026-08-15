@@ -140,6 +140,38 @@ positions + receivers; needless_range_loop `&v`-on-ref-param `&&Vec`
 non-iterator + token-heuristic `v[v[i]]` false positive; unnecessary_unwrap
 receiver mismatch) — see Plan 005 §Phase 6 T6.4 notes.
 
+**Issue 016 (2026-08-16) — structural lint expansion 6→33 + `--verify`
+tier 1→4.** 30 new lints distilled frequency-ranked from kornel's
+100K-crate clippy run (v1.80–v1.83; `semicolon_if_nothing_returned`
+41,601× — the most frequent structural lint in its top-10) + Li et al.'s
+8.09M-warning crates.io study (top-5 lints = >80% of all warnings) ∩
+clippy 1.93's `MachineApplicable` axis ∩ parse-only provability. 27
+landed in `FIXABLE_LINTS` (semicolon_if_nothing_returned,
+collapsible_if, collapsible_else_if, single_match, single_match_else,
+redundant_pattern_matching, question_mark, range_plus_one,
+uninlined_format_args, identity_op, needless_bool, needless_bool_assign,
+match_bool, needless_match, redundant_static_lifetimes, double_parens,
+unnecessary_lazy_evaluations, map_unwrap_or, filter_next, iter_nth_zero,
+manual_unwrap_or, unused_unit, useless_format, deref_addrof,
+wildcard_in_or_patterns, unnecessary_sort_by, iter_next_loop) + 3 in
+`VERIFY_LINTS` (comparison_to_empty — 12 live `.len() == 0` hits in our
+own workspace; while_let_on_iterator; single_char_pattern — type-blind
+shapes the Issue 015 compile gate auto-reverts). Notable spec guards:
+identity_op's IEEE-754 split (`+0.0` is NOT identity for `-0.0`, so
+unsuffixed `+ 0` never fires; `- 0`, `* 1`, `/ 1` are float-safe),
+manual_unwrap_or/unnecessary_lazy_evaluations purity gates (eager-vs-lazy
+evaluation timing), uninlined_format_args' trait-bound identity +
+abort-on-any-spec conservativeness, iter_next_loop as the one correctness
+lint (the rewrite IS the intended semantics fix). Corpus 10→40;
+per-lint proposers under `proposers/` with buggy/clean fixture tests;
+corpus-lockstep test (`all_buggy_codes_fire_their_lint`) + suggest
+gretrieval test (`every_lint_retrievable_via_suggest`, latent+BM25 top-5).
+One pre-existing latent_matcher span test relaxed top-1 → top-3 (corpus
+growth legitimately re-ranked one query — manual_unwrap_or's fixture is a
+stronger BM25 token match). GOAT: 369 default + 383 latent_retrieval lib
+tests, clippy 0 both states. See
+[`.benchmarks/021`](.benchmarks/021_clippy_structural_expansion_goat.md).
+
 ## The `riir-clippy` skill (auto-continue idle loop)
 
 `.agents/skills/riir-clippy/SKILL.md` (symlinked into `~/.agents/skills/`

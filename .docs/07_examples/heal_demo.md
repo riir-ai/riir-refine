@@ -8,7 +8,8 @@
 
 The full L0→L1→L2 pipeline on the seed corpus:
 
-1. **L0**: Builds a `ClippyCorpus` from `build_seed_corpus()` (10 lints).
+1. **L0**: Builds a `ClippyCorpus` from `build_seed_corpus()` (40 lints —
+   10 seed + 30 Issue 016 structural-expansion).
 2. **L1**: Drafts fixes using `ClippyTernaryDrafter::with_weights()` with
    a small deterministic demo weight matrix (8 rows × 16 cols).
 3. **L2**: Validates each drafted fix with `RustAnalyzerPruner::validate()`.
@@ -64,5 +65,5 @@ Lint: needless_return [TernaryMatvec]
 
 ## See also
 
-- [`../02_corpus/seed_corpus.md`](../02_corpus/seed_corpus.md) — the 10 seed lints
+- [`../02_corpus/seed_corpus.md`](../02_corpus/seed_corpus.md) — the 40-entry corpus (10 seed + 30 Issue 016)
 - [`../03_drafter/clippy_ternary_drafter.md`](../03_drafter/clippy_ternary_drafter.md) — the drafter

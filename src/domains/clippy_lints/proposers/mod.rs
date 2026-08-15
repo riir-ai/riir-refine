@@ -40,24 +40,55 @@
 //!
 //! `--fix` applies edits without a type checker — the L2 pruner only validates
 //! syntax. Rules whose **detection is purely structural** (the pattern match
-//! alone guarantees the rewrite preserves semantics) are `--fix` eligible:
+//! alone guarantees the rewrite preserves semantics) are `--fix` eligible.
+//! The 33 rows below (6 seed + 27 from the Issue 016 expansion, selected
+//! frequency-ranked from kornel's 100K-crate clippy run + Li et al.'s
+//! 8.09M-warning crates.io study ∩ clippy's `MachineApplicable` axis ∩
+//! parse-only provability; see `.benchmarks/021`):
 //!
 //! | Lint | Detection |
-//! |---|---|
+//!|---|---|
 //! | `needless_return` | trailing `return expr;` → tail `expr` (syntax-local) |
 //! | `redundant_field_names` | `Foo { x: x }` → `Foo { x }` (structural) |
 //! | `manual_map` | exact `match`/`Some`/`None` shape (structural) |
 //! | `unnecessary_unwrap` | exact `is_some`/`unwrap`/else shape (structural, receiver-matched) |
 //! | `needless_range_loop` | `0..v.len()` + index-only usage (exact AST analysis) |
 //! | `needless_lifetimes` | single elidable lifetime (elision-rule verified) |
+//! | `semicolon_if_nothing_returned` | unit fn + bare non-block tail stmt → append `;` (41,601× in kornel's 100K-crate run — the most frequent structural lint) |
+//! | `collapsible_if` | outer if, no else, single-if then-block → `if a && b` (structural; logic-paren reconstruction) |
+//! | `collapsible_else_if` | `else { if .. }` single-stmt block → `else if` (structural) |
+//! | `single_match` | 2-arm match, wildcard arm unit → `if let` (structural) |
+//! | `single_match_else` | 2-arm match, wildcard arm expr → `if let .. else` (structural) |
+//! | `redundant_pattern_matching` | `if let Ok(_) = x` → `x.is_ok()` (wildcard-only variant pats; bindings never fire) |
+//! | `question_mark` | `if x.is_none() { return None; }` / identity match → `x?` (structural; compilability of the original proves the shapes) |
+//! | `range_plus_one` | `a..b+1` → `a..=b` (structural; `Lit::Int`-only) |
+//! | `uninlined_format_args` | `{}` + plain-ident args → `{ident}` (trait bound identical — if the original compiled, the inline form compiles; aborts on any spec/named/positional placeholder or non-ident arg) |
+//! | `identity_op` | `x * 1`, `x / 1`, `x - 0` (+ `0 + x` int-suffixed) → operand (IEEE-754-verified float-safety split: `+0.0` is NOT identity for `-0.0`, so unsuffixed `+ 0` never fires) |
+//! | `needless_bool` | bool-literal if arms → `cond` / `!cond` (structural; else-position retraction) |
+//! | `needless_bool_assign` | same shape under assignment (structural) |
+//! | `match_bool` | `true`/`false` arm pats → `if`/`else` (structural) |
+//! | `needless_match` | identity-passthrough match (Some/Ok/bool) → scrutinee (structural) |
+//! | `redundant_static_lifetimes` | `&'static` in static/const type → elide (elision is always `'static` there) |
+//! | `double_parens` | nested `((x))` → `(x)` (structural) |
+//! | `unnecessary_lazy_evaluations` | lazy-twin closure with PURE body → eager twin (purity whitelist: no calls/macros/indexing) |
+//! | `map_unwrap_or` | `map(f).unwrap_or(d)` → `map_or(d, f)` (both evaluate `d` eagerly, `f` lazily — semantics preserved) |
+//! | `filter_next` | `filter(p).next()` → `find(p)` (structural method chain) |
+//! | `iter_nth_zero` | `.nth(0)` → `.next()` (structural) |
+//! | `manual_unwrap_or` | identity `Some` arm + PURE default → `unwrap_or` (purity gate: match-evaluated → arg-evaluated must be side-effect-free) |
+//! | `unused_unit` | `-> ()` return type → elide (structural) |
+//! | `useless_format` | `format!("lit")` with no braces → literal `.to_string()` / `String::new()` (structural) |
+//! | `deref_addrof` | `*&x` → `x` (structural) |
+//! | `wildcard_in_or_patterns` | `A | _ =>` → `_ =>` (structural) |
+//! | `unnecessary_sort_by` | `sort_by(|a, b| a.cmp(b))` → `sort()` (exact closure shape; compilability proves `Ord`) |
+//! | `iter_next_loop` | `for x in it.next()` → `for x in it` (correctness lint — the rewrite IS the intended semantics fix) |
 //!
-//! The remaining three proposers fire on **type-blind** detection — they are
+//! The remaining four proposers fire on **type-blind** detection — they are
 //! correct when the types line up, but a parse-only validator cannot know
 //! that. They stay available to the `self_evolve` tuning loop (whose output
 //! IS verified by a real `cargo clippy` run) and are excluded from `--fix`:
 //!
 //! | Lint | Why not `--fix` |
-//! |---|---|
+//!|---|---|
 //! | `needless_borrow` | whether `&x` is needless depends on the callee's expected type |
 //! | `useless_conversion` | `.into()` is only useless if source type == annotated type |
 //! | `unnecessary_mut_passed` | `&mut v` → `&v` depends on the callee's signature; the param-`mut` strip is file-wide |
@@ -67,42 +98,115 @@
 //! [`VERIFY_LINTS`] — the E0631 failure class is exactly what the
 //! verify loop reverts.
 //!
+//! ## `--verify` tier ([`VERIFY_LINTS`], Issue 015)
+//!
+//! Type-blind rewrites whose structural shape is still worth attempting
+//! under the Issue 015 compile gate (rustc auto-reverts the edits that fail
+//! to compile): `redundant_closure` (E0631 deref-coercion closures),
+//! `comparison_to_empty` (`is_empty` existence — 12 live hits in our own
+//! workspace), `while_let_on_iterator` (receiver could be a non-`Iterator`
+//! custom type with a `next()` method), `single_char_pattern` (method
+//! resolution is receiver-type-dependent — a custom type can have
+//! `contains(&str)` without `contains(char)`).
+//!
 //! ## Scope
 //!
 //! Each proposer handles ONE lint. Adding a new lint = adding a new proposer
 //! module + a row in `collect_rule_edits`' match (and, when detection is
-//! structural, a row in [`FIXABLE_LINTS`]). The 10 seed-corpus lints ship
-//! today; future lints drop in by extending the match.
+//! structural, a row in [`FIXABLE_LINTS`]). 40 lints ship today (10 seed +
+//! 30 from the Issue 016 expansion); future lints drop in by extending the
+//! match.
 
+pub mod collapsible_else_if;
+pub mod collapsible_if;
+pub mod comparison_to_empty;
+pub mod deref_addrof;
+pub mod double_parens;
+pub mod filter_next;
+pub mod helpers;
+pub mod identity_op;
+pub mod iter_next_loop;
+pub mod iter_nth_zero;
 pub mod manual_map;
+pub mod manual_unwrap_or;
+pub mod map_unwrap_or;
+pub mod match_bool;
 pub mod needless_borrow;
+pub mod needless_bool_assign;
+pub mod needless_bool;
 pub mod needless_lifetimes;
+pub mod needless_match;
 pub mod needless_range_loop;
 pub mod needless_return;
+pub mod question_mark;
+pub mod range_plus_one;
 pub mod redundant_closure;
 pub mod redundant_field_names;
+pub mod redundant_pattern_matching;
+pub mod redundant_static_lifetimes;
+pub mod semicolon_if_nothing_returned;
+pub mod single_char_pattern;
+pub mod single_match_else;
+pub mod single_match;
+pub mod unnecessary_lazy_evaluations;
 pub mod unnecessary_mut_passed;
+pub mod unnecessary_sort_by;
 pub mod unnecessary_unwrap;
+pub mod uninlined_format_args;
+pub mod unused_unit;
 pub mod useless_conversion;
+pub mod useless_format;
+pub mod while_let_on_iterator;
+pub mod wildcard_in_or_patterns;
 
 pub use crate::edit_emitter::{
     apply_edits, edit, for_each_fn, src, swallow_following_space, RuleEdit, SourceEdit,
 };
 
 /// Lints whose proposers are `cargo heal --fix` eligible — detection is
-/// purely structural (see module docs). The other four proposers
+/// purely structural (see module docs). The seed six + the 27 Issue 016
+/// structural expansion rows. The four type-blind lints
 /// (`redundant_closure`, `needless_borrow`, `useless_conversion`,
-/// `unnecessary_mut_passed`) are type-blind and only fire through the
-/// `self_evolve` verified loop. `redundant_closure` was demoted here after
-/// the Bench 019 G5 run caught an E0631 on a deref-coercion closure
-/// (katgpt-pruners `roaring_membership.rs`).
+/// `unnecessary_mut_passed`) are excluded from `--fix` and only fire
+/// through the `self_evolve` verified loop / the `--verify` tier
+/// (`redundant_closure` was demoted after the Bench 019 G5 run caught an
+/// E0631 on a deref-coercion closure, katgpt-pruners `roaring_membership.rs`).
 pub const FIXABLE_LINTS: &[&str] = &[
+    // ── seed six (T6.4) ──
     "needless_return",
     "redundant_field_names",
     "manual_map",
     "unnecessary_unwrap",
     "needless_range_loop",
     "needless_lifetimes",
+    // ── Issue 016 expansion (27) ──
+    "semicolon_if_nothing_returned",
+    "collapsible_if",
+    "collapsible_else_if",
+    "single_match",
+    "single_match_else",
+    "redundant_pattern_matching",
+    "question_mark",
+    "range_plus_one",
+    "uninlined_format_args",
+    "identity_op",
+    "needless_bool",
+    "needless_bool_assign",
+    "match_bool",
+    "needless_match",
+    "redundant_static_lifetimes",
+    "double_parens",
+    "unnecessary_lazy_evaluations",
+    "map_unwrap_or",
+    "filter_next",
+    "iter_nth_zero",
+    "manual_unwrap_or",
+    "unused_unit",
+    "useless_format",
+    "deref_addrof",
+    "wildcard_in_or_patterns",
+    "unnecessary_sort_by",
+    "iter_next_loop",
 ];
 
 /// Lints attempted ONLY under `cargo heal --fix --verify` (Issue 015) —
@@ -110,8 +214,15 @@ pub const FIXABLE_LINTS: &[&str] = &[
 /// [`crate::fix_verify`] loop auto-reverts. `redundant_closure` was demoted
 /// from `FIXABLE_LINTS` by the Bench 019 G5 run (the deref-coercion
 /// E0631 on katgpt-pruners `roaring_membership.rs`); verify-mode restores
-/// it as an attempted edit with rustc backing the revert.
-pub const VERIFY_LINTS: &[&str] = &["redundant_closure"];
+/// it as an attempted edit with rustc backing the revert. Issue 016 added
+/// three more type-blind shapes whose structural detection is still worth
+/// attempting under the compile gate.
+pub const VERIFY_LINTS: &[&str] = &[
+    "redundant_closure",
+    "comparison_to_empty",
+    "while_let_on_iterator",
+    "single_char_pattern",
+];
 
 /// Propose a fix for `(lint_name, buggy_code)` by applying the lint's
 /// span-preserving edits.
@@ -148,11 +259,13 @@ pub fn collect_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<Rul
         .collect()
 }
 
-/// Dispatch to one lint's proposer. All 10 lints are reachable here (the
+/// Dispatch to one lint's proposer. All 40 lints are reachable here (the
 /// `self_evolve` loop verifies output with cargo clippy); `--fix` callers
 /// filter through [`FIXABLE_LINTS`] instead.
+#[allow(clippy::too_many_lines)]
 fn collect_rule_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<SourceEdit> {
     match lint_name {
+        // ── seed ten (T6.4 emitter migration) ──
         "needless_return" => needless_return::collect_edits(source, file),
         "redundant_closure" => redundant_closure::collect_edits(source, file),
         "needless_lifetimes" => needless_lifetimes::collect_edits(source, file),
@@ -163,6 +276,37 @@ fn collect_rule_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<So
         "manual_map" => manual_map::collect_edits(source, file),
         "unnecessary_unwrap" => unnecessary_unwrap::collect_edits(source, file),
         "needless_range_loop" => needless_range_loop::collect_edits(source, file),
+        // ── Issue 016 expansion (30) ──
+        "semicolon_if_nothing_returned" => semicolon_if_nothing_returned::collect_edits(source, file),
+        "collapsible_if" => collapsible_if::collect_edits(source, file),
+        "collapsible_else_if" => collapsible_else_if::collect_edits(source, file),
+        "single_match" => single_match::collect_edits(source, file),
+        "single_match_else" => single_match_else::collect_edits(source, file),
+        "redundant_pattern_matching" => redundant_pattern_matching::collect_edits(source, file),
+        "question_mark" => question_mark::collect_edits(source, file),
+        "range_plus_one" => range_plus_one::collect_edits(source, file),
+        "uninlined_format_args" => uninlined_format_args::collect_edits(source, file),
+        "identity_op" => identity_op::collect_edits(source, file),
+        "needless_bool" => needless_bool::collect_edits(source, file),
+        "needless_bool_assign" => needless_bool_assign::collect_edits(source, file),
+        "match_bool" => match_bool::collect_edits(source, file),
+        "needless_match" => needless_match::collect_edits(source, file),
+        "redundant_static_lifetimes" => redundant_static_lifetimes::collect_edits(source, file),
+        "double_parens" => double_parens::collect_edits(source, file),
+        "unnecessary_lazy_evaluations" => unnecessary_lazy_evaluations::collect_edits(source, file),
+        "map_unwrap_or" => map_unwrap_or::collect_edits(source, file),
+        "filter_next" => filter_next::collect_edits(source, file),
+        "iter_nth_zero" => iter_nth_zero::collect_edits(source, file),
+        "manual_unwrap_or" => manual_unwrap_or::collect_edits(source, file),
+        "unused_unit" => unused_unit::collect_edits(source, file),
+        "useless_format" => useless_format::collect_edits(source, file),
+        "deref_addrof" => deref_addrof::collect_edits(source, file),
+        "wildcard_in_or_patterns" => wildcard_in_or_patterns::collect_edits(source, file),
+        "unnecessary_sort_by" => unnecessary_sort_by::collect_edits(source, file),
+        "iter_next_loop" => iter_next_loop::collect_edits(source, file),
+        "comparison_to_empty" => comparison_to_empty::collect_edits(source, file),
+        "while_let_on_iterator" => while_let_on_iterator::collect_edits(source, file),
+        "single_char_pattern" => single_char_pattern::collect_edits(source, file),
         _ => Vec::new(),
     }
 }
@@ -185,6 +329,8 @@ mod tests {
     /// type-blind lints must stay out (parse-only `--fix` cannot check
     /// types). `redundant_closure` joined this set after the Bench 019 G5
     /// real-file run caught an E0631 (deref-coercion closure → fn path).
+    /// The three Issue 016 VERIFY-tier lints (type-blind shapes) are
+    /// excluded here too — they only fire under `--fix --verify`.
     #[test]
     fn fixable_lints_exclude_type_blind_rules() {
         for excluded in [
@@ -192,18 +338,24 @@ mod tests {
             "useless_conversion",
             "unnecessary_mut_passed",
             "redundant_closure",
+            "comparison_to_empty",
+            "while_let_on_iterator",
+            "single_char_pattern",
         ] {
             assert!(
                 !FIXABLE_LINTS.contains(&excluded),
                 "{excluded} must not be --fix eligible"
             );
         }
-        assert_eq!(FIXABLE_LINTS.len(), 6);
+        // 6 seed + 27 Issue 016 structural rows.
+        assert_eq!(FIXABLE_LINTS.len(), 33);
     }
 
     /// Every proposer lint round-trips through the shared dispatch (fires on
     /// its fixture + output re-parses — the L2 pruner check `--fix` runs).
+    /// 40-row fixture table — length is the point.
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn all_lints_fire_and_parse() {
         let cases: &[(&str, &str, &str)] = &[
             (
@@ -255,6 +407,166 @@ mod tests {
                 "needless_range_loop",
                 "fn d(v: &Vec<i32>) -> i32 { let mut s = 0; for i in 0..v.len() { s += v[i]; } s }",
                 "in v",
+            ),
+            // ── Issue 016 expansion (30) ──
+            (
+                "semicolon_if_nothing_returned",
+                "fn greet() {}
+fn main() {
+    greet()
+}",
+                "greet();",
+            ),
+            (
+                "collapsible_if",
+                "fn work() {}
+fn f(a: bool, b: bool) { if a { if b { work(); } } }",
+                "if a && b {",
+            ),
+            (
+                "collapsible_else_if",
+                "fn work() {}
+fn f(a: bool, b: bool) { if a { work(); } else { if b { work(); } } }",
+                "else if b {",
+            ),
+            (
+                "single_match",
+                "fn use_v(v: u8) {}
+fn f(x: Option<u8>) { match x { Some(v) => use_v(v), _ => () } }",
+                "if let Some(v) = x {",
+            ),
+            (
+                "single_match_else",
+                "fn f(x: Option<u8>) -> u8 { match x { Some(v) => v, _ => 0 } }",
+                "else { 0 }",
+            ),
+            (
+                "redundant_pattern_matching",
+                "fn f(r: Result<u8, u8>) -> bool { if let Ok(_) = r { true } else { false } }",
+                "r.is_ok()",
+            ),
+            (
+                "question_mark",
+                "fn f(x: Option<u8>) -> Option<u8> { if x.is_none() { return None; } Some(x.unwrap() + 1) }",
+                "x?;",
+            ),
+            (
+                "range_plus_one",
+                "fn f(n: usize) -> usize { let mut s = 0; for i in 0..n+1 { s += i; } s }",
+                "0..=n",
+            ),
+            (
+                "uninlined_format_args",
+                "fn f(name: &str) -> String { format!(\"{}\", name) }",
+                "format!(\"{name}\")",
+            ),
+            (
+                "identity_op",
+                "fn f(x: u32) -> u32 { x * 1 }",
+                "{ x }",
+            ),
+            (
+                "needless_bool",
+                "fn f(b: bool) -> bool { if b { true } else { false } }",
+                "{ b }",
+            ),
+            (
+                "needless_bool_assign",
+                "fn f(c: bool) { let mut x = false; x = if c { true } else { false }; }",
+                "x = c;",
+            ),
+            (
+                "match_bool",
+                "fn f(b: bool) -> u8 { match b { true => 1, false => 0 } }",
+                "if b { 1 } else { 0 }",
+            ),
+            (
+                "needless_match",
+                "fn f(x: Option<u8>) -> Option<u8> { match x { Some(v) => Some(v), None => None } }",
+                "{ x }",
+            ),
+            (
+                "redundant_static_lifetimes",
+                "static GREETING: &'static str = \"hi\";",
+                "&str",
+            ),
+            (
+                "double_parens",
+                "fn f(x: i32) -> i32 { ((x + 1)) }",
+                "(x + 1)",
+            ),
+            (
+                "unnecessary_lazy_evaluations",
+                "fn f(x: Option<u8>) -> u8 { x.unwrap_or_else(|| 5) }",
+                "x.unwrap_or(5)",
+            ),
+            (
+                "map_unwrap_or",
+                "fn f(x: Option<u8>) -> u8 { x.map(|v| v + 1).unwrap_or(0) }",
+                "x.map_or(0, |v| v + 1)",
+            ),
+            (
+                "filter_next",
+                "fn f(xs: &[u8]) -> Option<&u8> { xs.iter().filter(|c| **c > 3).next() }",
+                ".find(|c| **c > 3)",
+            ),
+            (
+                "iter_nth_zero",
+                "fn f(xs: &[u8]) -> Option<&u8> { xs.iter().nth(0) }",
+                ".next()",
+            ),
+            (
+                "manual_unwrap_or",
+                "fn f(x: Option<u8>) -> u8 { match x { Some(v) => v, None => 7 } }",
+                "x.unwrap_or(7)",
+            ),
+            (
+                "unused_unit",
+                "struct S;
+impl S {
+    fn m(&self) -> () {}
+}",
+                "fn m(&self) {}",
+            ),
+            (
+                "useless_format",
+                "fn f() -> String { format!(\"done\") }",
+                "\"done\".to_string()",
+            ),
+            (
+                "deref_addrof",
+                "fn f(x: u8) -> u8 { let y = *&x; y }",
+                "let y = x;",
+            ),
+            (
+                "wildcard_in_or_patterns",
+                "fn f(n: u8) -> u8 { match n { 1 | _ => 9, } }",
+                "{ _ => 9, }",
+            ),
+            (
+                "unnecessary_sort_by",
+                "fn f(mut v: Vec<u8>) { v.sort_by(|a, b| a.cmp(b)); }",
+                "v.sort();",
+            ),
+            (
+                "iter_next_loop",
+                "fn f(it: std::vec::IntoIter<u8>) -> u8 { let mut s = 0; for x in it.next() { s += x; } s }",
+                "for x in it {",
+            ),
+            (
+                "comparison_to_empty",
+                "fn f(v: &[u8]) -> bool { v.len() == 0 }",
+                "v.is_empty()",
+            ),
+            (
+                "while_let_on_iterator",
+                "fn f(it: std::vec::IntoIter<u8>) -> u8 { let mut s = 0; while let Some(x) = it.next() { s += x; } s }",
+                "for x in it {",
+            ),
+            (
+                "single_char_pattern",
+                "fn f(s: &str) -> bool { s.contains(\"x\") }",
+                "s.contains('x')",
             ),
         ];
         let pruner = crate::pruner::RustAnalyzerPruner::new();

@@ -817,9 +817,11 @@ global = symlink only.
   (42: mod.rs + gemma2_d2f_sc.rs). weaver_gpu_corrector.rs +
   weaver_gpu_dflash.rs DONE (43). weaver_gpu/ mod.rs + FULL kvarn/
   DONE (44 — weaver_gpu/tests.rs test-only, not mined).
-- **Also open (riir-clippy issues)**: 014 (rust_perf v4, 12 tasks), 016
-  (clippy structural expansion, 6), 017 (retrieval precision at scale,
-  5), 018 (self_evolve promotion, 6). 015 = sibling's ACTIVE WIP
+- **Also open (riir-clippy issues)**: 017 (retrieval precision at scale,
+  5), 018 (self_evolve promotion, 6). 014 (rust_perf v4) RESOLVED
+  2026-08-16 (Bench 020); 016 (clippy structural expansion) RESOLVED
+  2026-08-16 (Bench 021 — corpus 10→40, FIXABLE 6→33, VERIFY 1→4).
+  015 = sibling's ACTIVE WIP
   (fix_verify mode — do not touch `src/bin/heal.rs`, `src/fix_verify.rs`,
   `src/lib.rs`, `Cargo.toml`, proposers mod.rs/vec_with_capacity, bench.rs,
   clippy proposers mod.rs).

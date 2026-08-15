@@ -23,14 +23,16 @@ fn/impl/struct boundaries, retrieves matching corpus rules via the latent
 substrate, and prints top-K rules per span with scores + the
 fixed/optimized pattern snippet head for manual review.
 
-`--fix` mode (Phase 6 T6.1 + T6.4): runs the compiled-in proposers'
-visitors on each file + applies their **span-preserving** edits — the 5
-rust_perf rules PLUS the 6 structural clippy lints (T6.4 migrated the
-clippy proposers from AST-mutation + whole-file re-emission to the same
-edit-splice emitter; the T6.2 G5 real-file run later demoted
+`--fix` mode (Phase 6 T6.1 + T6.4 + Issue 016): runs the compiled-in
+proposers' visitors on each file + applies their **span-preserving** edits
+— the 5 rust_perf rules PLUS the 33 structural clippy lints (T6.4
+migrated the clippy proposers from AST-mutation + whole-file re-emission
+to the same edit-splice emitter; the T6.2 G5 real-file run later demoted
 `redundant_closure` to the type-blind set after it caught an E0631
 fn-path coercion break — see
-[Bench 019 §G5 addendum](../../.benchmarks/019_plan005_phase6_fix_span_preserving_goat.md)). Everything outside a matched span stays
+[Bench 019 §G5 addendum](../../.benchmarks/019_plan005_phase6_fix_span_preserving_goat.md); Issue 016
+expanded the set 6→33 + grew the `--verify` tier 1→4 — see
+[Bench 021](../../.benchmarks/021_clippy_structural_expansion_goat.md)). Everything outside a matched span stays
 byte-identical (no reformat; see
 [Bench 019](../../.benchmarks/019_plan005_phase6_fix_span_preserving_goat.md)).
 The proposer's visitor is the gate: latent suggestions never auto-apply.
