@@ -94,7 +94,18 @@ at 6/7 + doc-sync as the closing pass).
     HEAD = exactly their 2 hunks.
 - [x] T5 Batch 32 via the skill: mine `riir-ai/crates/riir-gpu/src/edge_lora/` + `kernels/` wrappers → Research 034, corpus 217 → ~227, full GOAT + docs + push. **32a DONE (2026-08-15, commit 154025c):** core cluster (edge_module + types + training + adaptive_width), 11 rules, corpus 217→228, Research 034, GOAT G1/G2/G3 PASS, bug yield filed as riir-ai Issue 683. **32b-1 DONE (2026-08-15, commit e6bbe81):** training half (topology_trainer + chain_commit + sigmoid_gate + mod), 10 rules, corpus 228→238, Research 035, GOAT G1/G2/G3 PASS (3 new batch32b tests), bug yield filed as riir-ai Issue 684. **32c DONE (2026-08-15, landed as "32b-2"):** self-play/arena/consolidation half (sleep_consolidation, arena_eval, {go,bomber,fft}_self_play, cross_game_{edge,real} — no kernels/ subdir existed, the snapshot note was stale), 13 rules, corpus 238→251, Research 036, GOAT G1/G2/G3 PASS (312 kernel_heal + 201 default, 3 new batch32c tests, clippy 0 both states), bug yield filed as riir-ai Issue 685 (quadratic centroid storm + adapter-skeleton triplication). The edge_lora module is now FULLY MINED — Batch 32 COMPLETE across 3 sessions (34 rules total, 217→251).
 - [ ] T6 Sweep remaining idle-queue items in order (issues → plans → benches → unblock → defer-marking) at least one full cycle; record friction back into the skill
-- [ ] T8 First boundary-guard routine check via the idle queue (item 6, before bench regression): `ci_boundary_guard.sh` + 7-surface greps, file violations, log the run
+- [x] T8 First boundary-guard routine check via the idle queue (item 6, before bench regression): `ci_boundary_guard.sh` + 7-surface greps, file violations, log the run
+  - **DONE 2026-08-15 (evening).** First idle-queue invocation. A same-day
+    morning quarterly gate (different session, katgpt-rs handoff) had already
+    run the full 7 surfaces — 1 finding (Issue 682, Surface 4 half-gated dep)
+    fixed same session. The idle-queue run re-verified the CURRENT tree
+    (delta since morning: only sibling WIP, no boundary-surface changes):
+    **7/7 CLEAN, zero violations, zero new issues.** S1 `ci_boundary_guard.sh`
+    exit 0; S2/S3 SDK deps all optional; S4 Issue 682 fix holding; S5 user C#
+    clean (WireProtocol.cs = documented open debt, user-gated); S6 guard
+    doc-comments only; S7 no game coupling. Run logged in the boundary-guard
+    skill's Run log (katgpt-rs). Method note: grep-only execution — safe
+    during the Plan 337 32K measurement (no cargo builds).
 - [ ] T9 First substrate-first drift audit via the idle queue (item 7): Mode 2 parallel-system scan, classify findings, file issues
 - [-] T7 Mine `ternary_deltanet_gpu_forward.rs` — BLOCKED: sibling agent actively working there (Batch 31 note); mine only after their WIP lands
 
