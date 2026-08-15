@@ -413,19 +413,56 @@ global = symlink only.
   run (all unique) — the new standing step; one post-run fix (concept
   substring asserted lowercase vs caps — the concepts_covered test
   caught it).
+- **Batch 40 DONE (2026-08-15, Research 044):** the KimiK3 GPU backward
+  (`kimi_k3_gpu_backward.rs` 4,332 LOC — the LARGEST FILE in the crate; hybrid
+  CPU/GPU gradient stack: transposed-GEMV backward via harvested
+  WeightBufferSlot caches + dense SiTU FFN / MoE / MLA / KDA backwards; the
+  backward half of the Batch 39 forward) — **7 rules, corpus 303 → 310**
+  (A 64, D 54, H 14, N 18): `host-scratch-mirrors-slot-order-for-coalesced-
+  writes`, `write-plan-derived-from-cache-slots-not-recomputed`,
+  `cpu-source-builder-skips-device-roundtrip`,
+  `expert-loop-two-phase-split-batch-across-iterations`,
+  `rmsnorm-backward-gamma-scope-correction-term`,
+  `per-position-scalar-factored-gemv-collapse`,
+  `foreign-accumulator-bridge-copy-hoist-to-outer-loop`. ONE proposal dropped
+  (rayon parallel transforms — thin vs rust_perf generic guidance; the missed
+  MLA instance lives in Issue 693 H11). **PRUNER root-cause fix shipped**: the
+  L2 wrap strategy (`fn _wrap() {{ {code} }}`) glued the closing brace into a
+  trailing line-comment → false parse failure for statements-only snippets
+  ending in a comment (rule 7 was the first hit); hardened with boundary
+  newlines — the corpus found a pruner bug. Bug yield filed as riir-ai
+  **Issue 693 — the biggest of the mining program**: TWO coordinator-verified
+  critical wrong-math bugs on the production training path (MLA `d_attn_w`
+  spurious attention-weight factor L2576-2584 — the Issue-393 scalar-factoring
+  reused the aw-scaled term for the unscaled consumer; MoE latent-norm gamma
+  over-application L1537 — gamma outside the parenthesis, masked by
+  near-unity gamma init + 1.5e-2 tolerance + two-wrongs-agree parity) + a
+  NaN-VACUOUS parity suite (the LCG test generator leaks random bits into
+  the f32 exponent field — the "[2,4)" comment is false; both max-statistics
+  silently skip NaN → 4/5 tests pass vacuously) + one ACTIVELY-FAILING KDA
+  test (diff 4.95e27, empirically observed) + the feature in NO CI gate + 15
+  more hazards (MLA slot-plan drift, production-dead KDA/LM-head subsystems,
+  MoE zip without assert, sequential MLA transposes, doc-lies, ...). GOAT:
+  336 kernel_heal + 201 default tests, clippy 0 in all 4 states (1 doc_markdown
+  fix: `2+2k_r`-style math with subscript underscores needs backticks — a new
+  gotcha variant). Generator: dry-run caught 1 bad anchor (header text
+  mismatch) — second consecutive clean landing.
 - **NEXT mining target**: `ls` the riir-gpu tree for the next unmined
-  cluster (~82 of ~200 files mined). Candidates:
-  `kimi_k3_gpu_backward.rs` (4,332 — the largest file in the crate; the
-  backward this batch's saved activations feed), `kimi_k3_gpu_backward_
-  batched.rs` (1,394) + `kimi_k3_gpu_backward_sequence.rs` (1,328) — the
-  backward cluster; `gemma2_d2f*` (mod 1,579 + _sc 800), `weaver_gpu*`
-  (dflash 576 + corrector 1,449), `kvarn/`, `hypernet/`, `maxsim/`. Pick
-  1-2 files, ~6-10 rules (dedup pressure high), Batch 40 (Research 044).
+  cluster (~83 of ~200 files mined). Candidates:
+  `kimi_k3_gpu_backward_batched.rs` (1,394) +
+  `kimi_k3_gpu_backward_sequence.rs` (1,328) — the 2 backward siblings
+  (NOTE: the batched twin shares the 2 wrong-math bugs + the broken LCG per
+  Issue 693 — its mining value is now lower; the sequence file is the
+  PRODUCTION backward caller path); `gemma2_d2f*` (mod 1,579 + _sc 800),
+  `weaver_gpu*` (dflash 576 + corrector 1,449), `kvarn/`, `hypernet/`,
+  `maxsim/`, `weight_buffer_cache.rs` (the write substrate — flagged as
+  unmined by Batch 40's lane A). Pick 1-2 files, ~6-10 rules (dedup pressure
+  high), Batch 41 (Research 045).
   - Validation pattern (proven T4 + 32a + 32b-1 + 32c + 36 + 38): corpus files are NOT
     sibling WIP — edit + run GOAT in the main checkout with
     `CARGO_TARGET_DIR=/tmp/riir-clippy-bNN`; `--features kernel_heal`
     for the corpus suite (318 at 34, 321 at 35, 324 at 36, 327 at 37,
-    330 at 38, 333 at 39), default for
+    330 at 38, 333 at 39, 336 at 40), default for
     the 201 suite.
     `--all-features` is currently broken by SIBLING WIP
     (`rust_perf/bench.rs:335 alloc_axis`) — pre-existing, not yours.
@@ -440,7 +477,7 @@ global = symlink only.
     router.rs `rules_for_expert` total + the corpus-count mentions in
     router.rs doc header + the Plan 003 doc-comment `NNN-rule corpus`
     line above KERNEL_CATEGORIES + the `Total: 209 ... current NNN`
-    comment + the file-level `//!` header batch block. All in sync at 303 (A 60, C 32, D 53, K 5 after Batch 39).
+    comment + the file-level `//!` header batch block. All in sync at 310 (A 64, D 54, H 14, N 18 after Batch 40).
   - **Landing lesson (32b-1, self-caught)**: after a large multi-entry
     corpus edit, `awk`-scan for `rule_id:` lines NOT preceded by a
     standalone `KernelRule {` BEFORE the first compile — JSON `\n`
@@ -452,12 +489,14 @@ global = symlink only.
   WIP STILL ACTIVE as of 2026-08-15 evening: qv_lora.rs + cudarc_kernels/
   + riir-gpu/lib.rs + ternary_deltanet_gpu_forward_cudarc.rs all dirty)
   — mine only after their WIP lands.
-- **Progress**: riir-gpu ~82 of ~200 files mined. Corpus: 303 rules.
+- **Progress**: riir-gpu ~83 of ~200 files mined. Corpus: 310 rules.
   edge_lora module FULLY MINED (32a + 32b-1 + 32c). spectralquant/
   FULLY MINED (15 + 33). gemma4_cubecl_train/ DONE (34).
   gemma2_cubecl_train/ FULLY MINED (35: mod.rs + attention_gpu.rs;
   36: resident.rs). gemma4_q4k_train/ FULLY MINED (37: mod.rs +
   weight_buffers.rs; 38: forward_batched.rs + backward.rs).
+  kimi_k3_gpu_forward.rs DONE (39); kimi_k3_gpu_backward.rs DONE (40 —
+  the 2 batched/sequence siblings remain).
 - **Also open (riir-clippy issues)**: 014 (rust_perf v4, 12 tasks), 016
   (clippy structural expansion, 6), 017 (retrieval precision at scale,
   5), 018 (self_evolve promotion, 6). 015 = sibling's ACTIVE WIP

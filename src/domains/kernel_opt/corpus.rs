@@ -913,6 +913,36 @@
 //!   ONE coordinator-verified divergence pair + the merged-both-agents rule
 //!   ×2 (the anchor rule + the clone-escape rule — each found independently
 //!   by both agents). Bug yield filed as riir-ai Issue 692.
+//! - **Batch 40 (2026-08-15, Research 044):** the `KimiK3` GPU backward
+//!   (`kimi_k3_gpu_backward.rs`, 4,332 LOC — the largest file in the crate;
+//!   hybrid CPU/GPU gradient stack: transposed-GEMV backward via harvested
+//!   weight-buffer slots + dense `SiTU` FFN / `MoE` / `MLA` / `KDA` backwards)
+//!   — **7 rules, corpus 303 → 310** (A 64, D 54, H 14, N 18):
+//!   `host-scratch-mirrors-slot-order-for-coalesced-writes` (A — the host
+//!   scratch layout IS the write-call count; slot-ordered contiguity lets the
+//!   batched writer coalesce adjacent device buffers), `write-plan-derived-
+//!   from-cache-slots-not-recomputed` (A — the mirrored hand-maintained slot
+//!   list IS the bug factory; derive the plan from the cache's own
+//!   `size_bytes`), `cpu-source-builder-skips-device-roundtrip` (A — when the
+//!   host owns the source bytes, the `*_from_cpu` twin deletes the per-matrix
+//!   `read_one` syncs entirely; batching them is the lesser fix),
+//!   `expert-loop-two-phase-split-batch-across-iterations` (H — split the
+//!   per-expert helper at the CPU-dependency point and batch each half across
+//!   ALL experts: `2+2·k_r` syncs → ~3), `rmsnorm-backward-gamma-scope-
+//!   correction-term` (N — gamma multiplies ONLY the direct `dy` term, never
+//!   the normalization correction; the slip is invisible at near-unity gamma
+//!   init under percent tolerances — found LIVE wrong in the production `MoE`
+//!   backward while the same file carried the correct form),
+//!   `per-position-scalar-factored-gemv-collapse` (D — factor data-dependent
+//!   per-position scalars out of GEMVs by linearity, but keep scaled and
+//!   unscaled consumers on separate accumulators — the fused form is the live
+//!   `d_attn_w` wrong-math bug), `foreign-accumulator-bridge-copy-hoist-to-
+//!   outer-loop` (A — bridging to a foreign crate's whole-struct gradient
+//!   accumulator via full-state copy-in/out per token is a gradient
+//!   ping-pong; hoist the bridge to the outer loop). TWO critical wrong-math
+//!   bugs (MLA `d_attn_w` spurious attention-weight factor + `MoE` latent
+//!   norm gamma over-application) + a NaN-vacuous parity suite + one
+//!   actively-failing KDA test filed as riir-ai Issue 693.
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
@@ -6290,6 +6320,183 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
             ref_shape: "// naive: the boundary passes HOST state — every internal fusion attempt\n// re-introduces the host round trip at the boundary\nfn forward_layer(&mut self, idx: usize) {\n    let normed = rmsnorm_cpu(&self.hidden, &self.gammas[idx]);\n    let attn_out = self.attn(idx, &normed); // slice in, Vec out\n    for (h, a) in self.hidden.iter_mut().zip(attn_out.iter()) { *h += a; }\n}\nfn forward_token(&mut self, token: u32) -> Vec<f32> {\n    self.hidden.copy_from_slice(&self.embed_row(token));\n    for idx in 0..self.n_layers { self.forward_layer(idx); } // host currency\n    self.lm_head(&self.hidden)\n}".to_string(),
             opt_pattern: "// optimized: the Handle IS the currency — host materialization becomes an\n// internal detail; later fusion composes WITHOUT boundary changes\nfn forward_layer_resident(&mut self, hidden_h: Handle, idx: usize) -> Handle {\n    read_handle_into(&self.client, hidden_h, &mut self.hidden); // internal: CPU glue needs it\n    let normed_h = self.dispatch_rmsnorm_gpu(upload(&self.hidden), &self.gamma_h[idx], self.d);\n    let fused_h = self.fused_ffn_handle(idx, normed_h); // fused later — boundary untouched\n    let out_h = launch_gemv_handle(&self.client, &self.w_down, fused_h, self.d);\n    read_handle_into(&self.client, out_h, &mut self.ffn_out);\n    self.accumulate_hidden();\n    self.client.create_from_slice(&self.hidden) // internal: re-upload at exit\n}\nfn forward_token(&mut self, token: u32) -> Vec<f32> {\n    let mut h = self.client.create_from_slice(&self.embed_row(token));\n    for idx in 0..self.n_layers { h = self.forward_layer_resident(h, idx); } // handle currency\n    read_handle(&self.client, self.lm_head_handle(h))\n}".to_string(),
         },
+        // ── host-scratch-mirrors-slot-order-for-coalesced-writes — upload-side
+        // coalescing enabler: the scratch layout IS the write-call count (A) ──
+        //
+        // Source: kimi_k3_gpu_backward.rs — POSITIVE instances: L109-L116 (the
+        // dense `batch_scratch` doc: "Reusable CPU scratch holding ALL 3
+        // transposed weights contiguously (Phase 9f). Enables
+        // write_slots_batched to coalesce contiguous GPU buffer slots into the
+        // minimum number of queue.write_buffer calls.") + L346-L365 (the
+        // split_at_mut carve -> data_slices -> write_slots_batched), L1963-L1966
+        // (MLA sizes batch_scratch to the SUM: `let total_elems: usize =
+        // slot_lens.iter().sum();`) + L2033-L2035. ANTI-instance in the SAME
+        // file: L973-L986 (MoE latent path) — `let max_len = rd.len().max(ru.len());`
+        // then two sequential `cache[idx].write_in_place(...)` calls that can
+        // never coalesce despite the sibling paths proving the pattern.
+        //
+        // Distinct from batched-downloads-single-sync-cycle (B26 — READ-side
+        // sync count; this is WRITE-side call count), from
+        // flat-activation-slots-as-readback-target (B38 — readback destination
+        // container), from readback-destination-passing-free-fn (B39 — helper
+        // signature).
+        KernelRule {
+            rule_id: "host-scratch-mirrors-slot-order-for-coalesced-writes".to_string(),
+            gpu_concept: "When a per-step weight update writes N derived matrices (transposes) into N harvested device slots, size ONE persistent CPU scratch to the SUM of slot lengths — not the max — carve it with split_at_mut into sub-slices in cache slot order, transform directly into the sub-slices (no intermediate copy), and hand the slice array to the coalescing batched writer. The host scratch layout IS the write-call count: slot-ordered contiguity is what lets adjacent device buffers merge into one staging copy + one write_buffer per contiguous run. The anti-pattern is a max-sized scratch reused sequentially per slot: N transforms into the same buffer + N independent write calls that can never coalesce — observed as the latent-MoE path in the same file whose sibling paths 60 lines earlier ship the sum-carve. Distinct from batched-downloads-single-sync-cycle (B26 — the READ side sync count; this is the WRITE side call count), from flat-activation-slots-as-readback-target (B38 — the readback destination container; this is the upload source layout), and from readback-destination-passing-free-fn (B39 — the helper signature; this is the buffer layout policy that makes coalescing possible at all).".to_string(),
+            ref_shape: "// naive: max-sized scratch reused sequentially — N transforms + N independent writes\nfn update(&mut self, cache: &mut Vec<WeightBufferSlot>, client: &Client, queue: &Queue) {\n    let max_len = self.w_down.len().max(self.w_up.len());\n    if self.scratch.len() < max_len { self.scratch.resize(max_len, 0.0); }\n    let mut idx = 0;\n    transpose_f32_into(&w_down, d_moe, d, &mut self.scratch);\n    cache[idx].write_in_place(client, queue, &self.scratch[..w_down.len()]); idx += 1;\n    transpose_f32_into(&w_up, d, d_moe, &mut self.scratch);\n    cache[idx].write_in_place(client, queue, &self.scratch[..w_up.len()]);\n    // two independent write calls — the two slots can never coalesce\n}".to_string(),
+            opt_pattern: "// optimized: scratch = SUM of slot lengths, carved in slot order, ONE coalescing write\nfn update(&mut self, cache: &mut Vec<WeightBufferSlot>, client: &Client, queue: &Queue) {\n    let total: usize = cache.iter().map(|s| s.size_bytes / 4).sum();\n    if self.batch_scratch.len() < total { self.batch_scratch.resize(total, 0.0); }\n    let (down_slice, rest) = self.batch_scratch.split_at_mut(w_down.len());\n    let up_slice = &mut rest[..w_up.len()];\n    transpose_f32_into(&w_down, d_moe, d, down_slice);\n    transpose_f32_into(&w_up, d, d_moe, up_slice);\n    let data_slices: [&[f32]; 2] = [\n        &self.batch_scratch[..w_down.len()],\n        &self.batch_scratch[w_down.len()..w_down.len() + w_up.len()],\n    ];\n    write_slots_batched(cache, client, queue, &data_slices); // contiguous run merges\n}".to_string(),
+        },
+        // ── write-plan-derived-from-cache-slots-not-recomputed — the mirrored
+        // enumeration is the drift surface; derive from the cache (A) ──
+        //
+        // Source: kimi_k3_gpu_backward.rs MLA update_from_cpu_in_place — the
+        // boot cache pushes the w_g slot iff the HANDLE exists (L1907-L1909)
+        // while the fast-path slot_lens includes it only if handle AND source
+        // exist (L1952-L1954). The ONLY tripwire is L1961
+        // `debug_assert_eq!(slot_lens.len(), n_slots, "MLA slot count mismatch")`
+        // — compiled out in release, where the shifted writes land in the WRONG
+        // buffers and the tail write goes out of bounds (the downstream
+        // write_slots_batched check in weight_buffer_cache.rs L290 is ALSO a
+        // debug_assert). Today's builders make the mismatch unreachable, but
+        // the drift surface is the pattern, not the current reachability.
+        //
+        // Distinct from slow-path-bootstraps-raw-buffer-hotswap-cache (B39 —
+        // PRESCRIBES the mirror-with-assert shape; this rule eliminates the
+        // mirror), from derive-shape-from-payload-not-cached-field (B32b — the
+        // inverse direction: payload truth over cached field).
+        KernelRule {
+            rule_id: "write-plan-derived-from-cache-slots-not-recomputed".to_string(),
+            gpu_concept: "A bootstrapped update path has two natural enumerations of the same slot set: the boot loop that pushes WeightBufferSlots (guard: handle presence) and the fast path that recomputes lengths from config (guard: handle AND source presence — they drift). The mirrored hand-maintained list IS the bug factory: when the guards diverge, the only tripwire is a debug_assert compiled out in release — every slot after the drift point receives the previous slot's data (wrong-length bytes into the wrong buffer, stale tail) and the final write indexes out of bounds. The fix is structural: the slot cache already stores size_bytes per slot — derive the write plan (count, order, lengths) from the cache itself and assert only that the provided data matches. One enumeration, zero drift surface. Distinct from slow-path-bootstraps-raw-buffer-hotswap-cache (B39 — prescribes the two-tier bootstrap and says the fast path must mirror the build loop exactly, add a length assert; this rule says the prescribed mirror is itself the defect class and eliminates it by deriving from the cache) and from derive-shape-from-payload-not-cached-field (B32b — payload truth over a cached field; here the harvested cache IS the authoritative plan and the config-derived recomputation is the redundant copy).".to_string(),
+            ref_shape: "// naive: two hand-maintained lists — boot pushes slots, fast path recomputes lens\nfn boot(&mut self, cache: &mut Vec<WeightBufferSlot>) {\n    if let Some(ref h) = self.w_g_t { cache.push(WeightBufferSlot::from_handle(h.clone(), d * v)); }\n    cache.push(WeightBufferSlot::from_handle(self.w_kr_t.clone(), r * d));\n}\nfn update(&mut self, cache: &mut Vec<WeightBufferSlot>, w: &Weights) {\n    let mut lens: Vec<usize> = vec![];\n    if self.w_g_t.is_some() && w.w_g.is_some() { lens.push(v * d); } // guard DRIFTED vs boot\n    lens.push(r * d);\n    debug_assert_eq!(lens.len(), cache.len()); // debug-only tripwire\n    write_plan(cache, &lens); // release: shifted writes + tail out-of-bounds\n}".to_string(),
+            opt_pattern: "// optimized: the cache IS the plan — lengths derived from stored size_bytes\nfn update(&mut self, cache: &mut Vec<WeightBufferSlot>, w: &Weights) {\n    let lens: Vec<usize> = cache.iter().map(|s| s.size_bytes / 4).collect(); // ONE list\n    let total: usize = lens.iter().sum();\n    if self.scratch.len() < total { self.scratch.resize(total, 0.0); }\n    fill_scratch_in_slot_order(&mut self.scratch, &lens, w); // asserts data.len() matches\n    write_slots_batched(cache, client, queue, &scratch_slices(&self.scratch, &lens));\n}".to_string(),
+        },
+        // ── cpu-source-builder-skips-device-roundtrip — when the host owns the
+        // source bytes, the *_from_cpu twin deletes the per-matrix syncs (A) ──
+        //
+        // Source: kimi_k3_gpu_backward.rs — the from_cpu family exists exactly
+        // for this (L253-L256: "Identical to [build_dense_ffn_handles] except
+        // it takes the CPU weight slices directly instead of reading them back
+        // from GPU handles. This skips the synchronous client.read_one()
+        // round-trip (one per weight matrix) that dominates the per-step
+        // backward_handles.update() cost."). The GPU-source builders remain
+        // un-batched: dense L225-L237 (3 sequential read_f32), MoE L1153-L1195
+        // (3 x (N_routed + N_shared) + router + latent — ~195 sequential syncs
+        // at the 63-expert config), MLA L2179-L2225, KDA L2965-L2994. The
+        // trainer already routes per-step through from_cpu (kimi_k3_train.rs
+        // L2320-L2331) — the GPU-source twins are boot-only.
+        //
+        // Distinct from batched-downloads-single-sync-cycle (B26 — N syncs -> 1;
+        // this is N -> 0 when the host owns the bytes), from
+        // verbatim-upload-on-format-match (B37 — format conversion skip),
+        // from identical-tensor-handle-clone-zero-reupload (B37 — identical
+        // tensors need no transform; derived artifacts do).
+        KernelRule {
+            rule_id: "cpu-source-builder-skips-device-roundtrip".to_string(),
+            gpu_concept: "Every derived-handle builder that reads device handles back to CPU, transforms, and re-uploads pays one blocking read_one sync per matrix (~1.3 ms measured — dominates wall-clock at scale: thousands of GEMVs x per-matrix reads). When the caller holds the authoritative CPU weights — training is exactly this case, the optimizer just mutated them — ship a parallel *_from_cpu constructor that transposes + uploads directly from host slices and route the per-step update path through it; keep the GPU-source variant only for boot-from-device or no-CPU-copy consumers. This deletes the round-trips entirely: batching them (batched-downloads-single-sync-cycle) is the lesser fix — the host already owns the bytes, so the from_cpu path is the strictly better tier. Distinct from batched-downloads-single-sync-cycle (B26 — reduces N syncs to 1; this deletes all N when the host already owns the source), from verbatim-upload-on-format-match (B37 — skips a format conversion; this skips the readback itself), and from identical-tensor-handle-clone-zero-reupload (B37 — handle clone for byte-identical tensors; here the artifact is derived/transformed so a host transform is genuinely required).".to_string(),
+            ref_shape: "// naive: read every GPU handle back, transform, re-upload — 1 blocking sync per matrix\nfn update(&mut self, client: &ComputeClient, w: &GpuWeights) -> Result<(), String> {\n    let gate_cpu = read_f32(client, &w.w_gate)?;  // client.read_one — ~1.3ms each\n    let up_cpu = read_f32(client, &w.w_up)?;\n    let down_cpu = read_f32(client, &w.w_down)?;\n    self.w_gate_t = transpose_and_upload(client, &gate_cpu)?;\n    self.w_up_t = transpose_and_upload(client, &up_cpu)?;\n    self.w_down_t = transpose_and_upload(client, &down_cpu)?;\n    Ok(())\n}".to_string(),
+            opt_pattern: "// optimized: the host already owns the source — transform + upload directly, ZERO syncs\nfn update_from_cpu(&mut self, client: &ComputeClient, w: &CpuWeights) -> Result<(), String> {\n    self.w_gate_t = transpose_and_upload(client, w.w_gate)?;   // no read_one\n    self.w_up_t = transpose_and_upload(client, w.w_up)?;\n    self.w_down_t = transpose_and_upload(client, w.w_down)?;\n    Ok(())\n}\n// per-step: update_from_cpu(&optimizer_weights) — the GPU-source build_* runs at BOOT only".to_string(),
+        },
+        // ── expert-loop-two-phase-split-batch-across-iterations — the helper's
+        // encapsulated syncs serialize independent experts (H) ──
+        //
+        // Source: kimi_k3_gpu_backward.rs moe_backward_gpu + expert_backward_into
+        // — L1682-L1684 ("d_act = down_proj^T @ d_output (1 sync — needed for
+        // CPU SiTU)" + the launch_gemv -> read_batched pair) and L1707-L1710
+        // ("Issue 393: launch BOTH independent GEMVs, then read both in ONE
+        // batched sync." — the WITHIN-iteration batching landed; the
+        // cross-iteration dimension did not). Every expert's stage-A input is
+        // loop-entry-ready: L1563-L1564 builds `d_expert_out` from
+        // `d_latent_prenorm` computed BEFORE the loop (L1522-L1542). Per MoE
+        // layer per token: shared 2 + k_r x 2 + routed_up 1 + routed_down 1
+        // syncs; the two-phase split achieves ~3.
+        //
+        // Distinct from sibling-dispatches-before-any-readback (B36 — one code
+        // point, not loop-carried), from op-major-backward-loop-inversion-
+        // batch-sequence-axis (B34 — needs a FREE axis + converts GEMV->GEMM;
+        // here only the stage halves are free), from
+        // fan-out-shared-input-single-sync (B25 — shared upload, not loop
+        // structure).
+        KernelRule {
+            rule_id: "expert-loop-two-phase-split-batch-across-iterations".to_string(),
+            gpu_concept: "A per-iteration helper that encapsulates launch head-GEMV -> sync-read -> CPU transform -> launch tail-GEMVs -> sync-read hides cross-iteration independence: the reads inside iteration k block the launches of iteration k+1 even though every iteration's stage-A input is ready at loop entry (in the MoE case each expert's d_output is a scalar multiple of a vector computed BEFORE the loop). Restructure to a two-phase split: launch ALL stage-A GEMVs -> ONE batched read -> all CPU transforms (the outer products fill the read window per independent-cpu-work-fills-dispatch-read-window) -> launch ALL stage-B GEMVs -> ONE batched read. A shared + k_r routed experts + the routed up/down projections drop from 2 + 2*k_r + 2 syncs per layer per token to ~3. Distinct from sibling-dispatches-before-any-readback (B36 — siblings at ONE code point; here the serialization is loop-carried ACROSS iterations), from op-major-backward-loop-inversion-batch-sequence-axis (B34 — requires a free axis within the loop body AND converts GEMVs to GEMMs; here the axis is blocked mid-iteration by the CPU transform, only the stage halves are free, and the fix keeps GEMVs), and from fan-out-shared-input-single-sync (B25 — one shared upload fanning out; this is loop structure).".to_string(),
+            ref_shape: "// naive: per-expert helper encapsulates launch -> read -> CPU -> launch -> read\nfor k in 0..k_routed {\n    let d_act_h = launch_gemv(client, tune, &h[k].w_down_t, &d_out[k], d_ffn, d);\n    let d_act = read_batched(client, vec![d_act_h]).remove(0); // sync blocks expert k+1\n    let (d_gate, d_up) = situ_backward(&d_act, &saved[k]);\n    let g_h = launch_gemv(client, tune, &h[k].w_gate_t, &d_gate, d, d_ffn);\n    let u_h = launch_gemv(client, tune, &h[k].w_up_t, &d_up, d, d_ffn);\n    let d_h = read_batched(client, vec![g_h, u_h]);            // sync blocks expert k+1\n    accumulate_dh(d_h, &mut d_h_acc);\n}".to_string(),
+            opt_pattern: "// optimized: split at the CPU-dependency point, batch each half across ALL experts\nlet mut stage_a = Vec::with_capacity(k_routed);\nfor k in 0..k_routed {\n    stage_a.push(launch_gemv(client, tune, &h[k].w_down_t, &d_out[k], d_ffn, d));\n}\nlet d_acts = read_batched(client, stage_a);                   // ONE sync for all k\nlet mut cpu_out = Vec::with_capacity(k_routed);\nfor k in 0..k_routed {\n    cpu_out.push(situ_backward(&d_acts[k], &saved[k]));       // fills the read window\n    outer_products(&d_out[k], &saved[k], &mut grads[k]);      // independent CPU work\n}\nlet mut stage_b = Vec::with_capacity(2 * k_routed);\nfor k in 0..k_routed {\n    stage_b.push(launch_gemv(client, tune, &h[k].w_gate_t, &cpu_out[k].0, d, d_ffn));\n    stage_b.push(launch_gemv(client, tune, &h[k].w_up_t, &cpu_out[k].1, d, d_ffn));\n}\nlet d_hs = read_batched(client, stage_b);                     // ONE sync for all k\nfor k in 0..k_routed { accumulate_dh(&d_hs[2 * k..2 * k + 2], &mut d_h_acc); }".to_string(),
+        },
+        // ── rmsnorm-backward-gamma-scope-correction-term — gamma scopes to the
+        // direct term, never the normalization correction (N) ──
+        //
+        // Source: kimi_k3_gpu_backward.rs — WRONG (production MoE latent norm
+        // backward): L1537 `dx[i] = norm_w[i] * r * (d_latent_postnorm[i] -
+        // x_i * r2 * dot * inv_d_moe);` (gamma outside the parenthesis). RIGHT
+        // (same file, the shared helper): L2839 `dx[i] = r * (gamma[i] *
+        // d_y[i] - x_raw[i] * r2 * dot * inv_n);`. The workspace's own
+        // katgpt-attn mla_backward.rs L681-L684 names the exact incorrect
+        // form: "NOTE: gamma multiplies ONLY d_y[k], NOT the dot term. The
+        // common incorrect form `gamma * r * (d_y - x*r2*dot*inv_n)`
+        // over-applies gamma to the normalization correction." The slip ALSO
+        // lives in the batched twin (kimi_k3_gpu_backward_batched.rs L407) and
+        // the CPU reference (katgpt-transformer moe_backward.rs L627) — masked
+        // by moe_backward_grad_check.rs tolerance 1.5e-2 vs gamma init
+        // 1.0 +/- 0.1. Verified by finite difference: gamma=(1,2), x=(1,1),
+        // dy=(1,0), n=2 -> true dx2 = -0.5, the slipped form gives -1.0.
+        //
+        // Distinct from exact-op-parity-for-analytic-backward (B34 — the
+        // forward/backward op axis), from
+        // saturating-nonlinearity-recovery-breaks-near-cap (B35 — numeric
+        // saturation, not symbolic scope).
+        KernelRule {
+            rule_id: "rmsnorm-backward-gamma-scope-correction-term".to_string(),
+            gpu_concept: "For RMSNorm y_i = gamma_i * x_i * r with r = 1/rms(x), the input gradient is dx_i = r * (gamma_i * dy_i - x_i * r2 * dot / n) with dot = sum_j gamma_j * x_j * dy_j: gamma multiplies ONLY the direct dy term — the normalization correction term must NOT carry gamma. The common slip factors gamma outside the whole parenthesis: gamma_i * r * (dy_i - x_i * r2 * dot / n), an error of (gamma_i - 1) * correction that is invisible when gamma initializes near 1 (typical 1.0 +/- 0.1) under percent-level grad-check tolerances — so it ships silently and corrupts every downstream gradient fed by the norm's dx. The same workspace usually holds a correct sibling implementation (diff them); gate with finite-difference checks at the widest affordable gamma range (0.5 to 2.0), where the slip is unmistakable. Found live-wrong in a production MoE backward while the SAME FILE carried the correct form sixty lines away in a helper for a different norm. Distinct from exact-op-parity-for-analytic-backward (B34 — forward/backward op identity; this is backward-internal algebra scope) and from saturating-nonlinearity-recovery-breaks-near-cap (B35 — an f32 saturation boundary; this is symbolic scope, exact at every magnitude).".to_string(),
+            ref_shape: "// naive: gamma factored outside the WHOLE parenthesis — spurious on the correction\nfn moe_latent_norm_backward(x: &[f32], dy: &[f32], gamma: &[f32], r: f32) -> Vec<f32> {\n    let n = x.len() as f32;\n    let r2 = r * r;\n    let post: Vec<f32> = (0..x.len()).map(|j| x[j] * gamma[j] * r).collect();\n    let dot = (0..x.len()).map(|j| post[j] * dy[j]).sum::<f32>() / r; // dot itself is fine\n    let mut dx = vec![0.0f32; x.len()];\n    for i in 0..x.len() {\n        dx[i] = gamma[i] * r * (dy[i] - x[i] * r2 * dot / n); // WRONG: (gamma_i-1)*correction\n    }\n    dx\n}".to_string(),
+            opt_pattern: "// optimized: gamma multiplies ONLY the direct dy term — the correction stays bare\nfn rmsnorm_backward_into(x: &[f32], dy: &[f32], gamma: &[f32], r: f32,\n                         dx: &mut [f32], dgamma: &mut [f32]) {\n    let inv_n = 1.0 / x.len() as f32;\n    let r2 = r * r;\n    let dot: f32 = (0..x.len()).map(|j| x[j] * gamma[j] * dy[j]).sum();\n    for i in 0..x.len() {\n        dgamma[i] += x[i] * r * dy[i];\n        dx[i] = r * (gamma[i] * dy[i] - x[i] * r2 * dot * inv_n); // gamma scopes to dy ONLY\n    }\n}".to_string(),
+        },
+        // ── per-position-scalar-factored-gemv-collapse — linearity collapses
+        // the GEMV loop; consumer polarity is the hazard (D) ──
+        //
+        // Source: kimi_k3_gpu_backward.rs mla_backward_gpu — the CORRECT form
+        // ships twice: L2557-L2559 ("Issue 393 scalar factoring: since
+        // d_v_c_j_h = attn_w_h[j] * d_o_h for all j, the per-position GEMV
+        // W_UV^T @ d_v_c_j_h = attn_w_h[j] * (W_UV^T @ d_o_h)") and L2596-L2598
+        // (the W_UK twin, whose consumer L2621-L2623 correctly re-applies ds).
+        // The FAILURE MODE is live at L2576-L2584: `let scaled = aw *
+        // base_uv[i]; d_ckv_j[i] += scaled; s += scaled * c_kv_j[i];` — the
+        // same scaled term feeds the UNSCALED consumer, so d_attn_w[j]
+        // carries a spurious attention-weight factor (the correct form is
+        // `s += base_uv[i] * c_kv_j[i];`). Filed as riir-ai Issue 693 H1.
+        //
+        // Distinct from fold-norm-scalar-into-matmul (B14 — per-row CONSTANT
+        // folded in; this factors a data-dependent per-position scalar OUT),
+        // from constant-scale-folded-into-upload-copy (B36 — config constant),
+        // from sparse-gather-scale-at-read-not-table-prepass (B37 — sparse
+        // gather fold-point).
+        KernelRule {
+            rule_id: "per-position-scalar-factored-gemv-collapse".to_string(),
+            gpu_concept: "When every position j's GEMV input is a scalar multiple of one fixed vector (d_v_j = w_j * d_o), factor the scalar out by linearity — W_T(s * x) = s * (W_T x) — collapsing n_h x seq GEMVs into n_h base GEMVs plus O(seq * d) scalar multiplies on CPU (observed 32 round-trips -> 1 per token). The hazard is consumer polarity: consumers of the SCALED gradient take w_j * base (the d_c_kv accumulation wants the weight-scaled gradient), while consumers of the UNSCALED projection — attention-weight gradients dL/d(attn_w[j]) = dot(d_o, v_j) — take base RAW with NO weight factor. Fusing both onto one scaled accumulator smuggles the scalar into the unscaled consumer and silently corrupts every downstream gradient it feeds; keep two accumulator expressions (or rescale deliberately at the second consumer). Distinct from fold-norm-scalar-into-matmul (B14 — folds a per-row CONSTANT into dot elements; this factors a data-dependent per-position scalar OUT of the GEMV input), from constant-scale-folded-into-upload-copy (B36 — a config constant folded into a copy), and from sparse-gather-scale-at-read-not-table-prepass (B37 — fold-point selection for sparse gathers).".to_string(),
+            ref_shape: "// naive: one GEMV per (head, position) — n_h * seq dispatches + round-trips\nfor h in 0..n_h {\n    for j in 0..seq {\n        let mut d_v = d_o[h].clone();\n        for i in 0..d_v.len() { d_v[i] *= attn_w[h][j]; }   // scale BEFORE the GEMV\n        let d_ckv_h = launch_gemv(client, tune, &w_uv_t[h], &d_v, d_c, v_h);\n        let d_ckv = read_batched(client, vec![d_ckv_h]).remove(0);\n        for i in 0..d_c { d_c_kv[j][i] += d_ckv[i]; }\n        d_attn_w[h][j] = dot(&d_ckv, &c_kv[j]);             // WRONG: carries the attn_w scale\n    }\n}".to_string(),
+            opt_pattern: "// optimized: linearity — one base GEMV per head; scalars applied AT CONSUMPTION,\n// scaled and unscaled consumers kept on separate accumulator expressions\nlet mut bases = Vec::with_capacity(n_h);\nfor h in 0..n_h { bases.push(launch_gemv(client, tune, &w_uv_t[h], &d_o[h], d_c, v_h)); }\nlet base_uv = read_batched(client, bases);                   // ONE sync for all heads\nfor h in 0..n_h {\n    for j in 0..seq {\n        let aw = attn_w[h][j];\n        let mut s = 0.0f32;\n        for i in 0..d_c {\n            d_c_kv[j][i] += aw * base_uv[h][i];              // scaled consumer: re-apply aw\n            s += base_uv[h][i] * c_kv[j][i];                 // unscaled consumer: base RAW\n        }\n        d_attn_w[h][j] = s;                                  // dot(d_o, v_j) — NO aw factor\n    }\n}".to_string(),
+        },
+        // ── foreign-accumulator-bridge-copy-hoist-to-outer-loop — the KDA
+        // 14-field gradient ping-pong, hoisted to sequence scope (A) ──
+        //
+        // Source: kimi_k3_gpu_backward.rs kda_backward_gpu — L3082 (`let mut
+        // cpu_grads = CpuKdaGradients::zeros_like(weights);` — fresh 14-Vec
+        // allocation per token), L3085-L3098 (fourteen copy_from_slice
+        // copy-in lines), L3256-L3269 (the same fourteen reversed — copy-out).
+        // The comment at L3079-L3081 justifies the bridge by naming FOUR
+        // fields ("The core backward accumulates into o_proj, o_norm_weight,
+        // a_log, dt_bias") while the code copies all fourteen both ways.
+        //
+        // Distinct from variant-owned-output-buffer-clone-escape (B39 —
+        // enum-arm ownership, not cross-crate API shape), from
+        // transient-spike-pins-persistent-scratch (B38 — sizing policy, not
+        // copy traffic), from adapter-grad-join-mirrors-forward-delta-
+        // insertion-point (B35 — LoRA join placement).
+        KernelRule {
+            rule_id: "foreign-accumulator-bridge-copy-hoist-to-outer-loop".to_string(),
+            gpu_concept: "Bridging a GPU path to a foreign crate's whole-struct gradient accumulator via alloc-zeros + copy-in every field -> compute -> copy-out every field, per CALL, makes the full gradient state ping-pong across the loop: one fresh 14-Vec allocation + 2x full-state memcpy per token, doubling the memory traffic of the projection-gradient matrices the bridge exists to serve. When the caller's loop is the only writer between calls, hoist the bridge: persist the foreign accumulator across the outer loop (copy-in once at sequence start, copy-out once at sequence end) or accumulate directly into the caller's granular fields. The comment that justifies the bridge usually under-counts the fields the core actually accumulates — copy what the contract says, not what the type contains. Distinct from variant-owned-output-buffer-clone-escape (B39 — enum-match-arm buffer ownership; this is a cross-crate API shape), from transient-spike-pins-persistent-scratch (B38 — scratch sizing policy; this is copy traffic), and from adapter-grad-join-mirrors-forward-delta-insertion-point (B35 — LoRA join placement).".to_string(),
+            ref_shape: "// naive: full foreign-state alloc + copy-in/out PER TOKEN\nfor token in 0..seq {\n    let mut cpu_grads = ForeignGradients::zeros_like(&weights); // fresh 14-Vec alloc\n    cpu_grads.q_proj.copy_from_slice(&grads.q_proj);            // full-state copy-in\n    cpu_grads.k_proj.copy_from_slice(&grads.k_proj);\n    // ... 12 more fields ...\n    foreign_backward_token(&mut cpu_grads, &saved[token], &activations[token]);\n    grads.q_proj.copy_from_slice(&cpu_grads.q_proj);            // full-state copy-out\n    grads.k_proj.copy_from_slice(&cpu_grads.k_proj);\n    // ... 12 more fields ...\n}".to_string(),
+            opt_pattern: "// optimized: the bridge lives at SEQUENCE scope — one copy-in, one copy-out\nlet mut cpu_grads = ForeignGradients::zeros_like(&weights);\ncpu_grads.q_proj.copy_from_slice(&grads.q_proj);                // copy-in ONCE\ncpu_grads.k_proj.copy_from_slice(&grads.k_proj);\n// ... 12 more fields ...\nfor token in 0..seq {\n    foreign_backward_token(&mut cpu_grads, &saved[token], &activations[token]); // in place\n}\ngrads.q_proj.copy_from_slice(&cpu_grads.q_proj);                // copy-out ONCE\ngrads.k_proj.copy_from_slice(&cpu_grads.k_proj);\n// ... 12 more fields ...".to_string(),
+        },
     ])
 }
 
@@ -6302,7 +6509,7 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 303-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 310-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -6310,7 +6517,7 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (60 rules)
+    // A: Memory access patterns (64 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -6375,6 +6582,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "tiny-param-buffer-rebuild-over-cache",
             "readback-destination-passing-free-fn",
             "variant-owned-output-buffer-clone-escape",
+            "host-scratch-mirrors-slot-order-for-coalesced-writes",
+            "write-plan-derived-from-cache-slots-not-recomputed",
+            "cpu-source-builder-skips-device-roundtrip",
+            "foreign-accumulator-bridge-copy-hoist-to-outer-loop",
         ],
     ),
     // B: Compute patterns (45 rules)
@@ -6468,7 +6679,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "elementwise-offload-needs-device-side-anchor",
         ],
     ),
-    // D: Dispatch patterns (53 rules)
+    // D: Dispatch patterns (54 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -6526,6 +6737,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "env-flag-resolved-once-not-per-dispatch",
             "entrypoint-variants-share-layer-body",
             "pipeline-layer-boundary-device-handle",
+            "per-position-scalar-factored-gemv-collapse",
         ],
     ),
     // E: Parallelism patterns (17 rules)
@@ -6595,7 +6807,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "reverse-running-decay-weight",
         ],
     ),
-    // H: MoE dispatch + backward pass (13 rules)
+    // H: MoE dispatch + backward pass (14 rules)
     (
         KernelCategory::MoeDispatchBackward,
         "H: MoE dispatch + backward",
@@ -6613,6 +6825,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "backward-helper-expose-shared-norm-statistic",
             "adapter-grad-join-mirrors-forward-delta-insertion-point",
             "grad-terms-merge-before-shared-link-jacobian",
+            "expert-loop-two-phase-split-batch-across-iterations",
         ],
     ),
     // I: NSA block-sparse selection (4 rules)
@@ -6683,7 +6896,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "debug-only-gpu-label-macro",
         ],
     ),
-    // N: dtype + alignment specialization (17 rules)
+    // N: dtype + alignment specialization (18 rules)
     (
         KernelCategory::DtypeAlignment,
         "N: dtype + alignment",
@@ -6705,6 +6918,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "exact-op-parity-for-analytic-backward",
             "saturating-nonlinearity-recovery-breaks-near-cap",
             "verbatim-upload-on-format-match",
+            "rmsnorm-backward-gamma-scope-correction-term",
         ],
     ),
     // O: IR strength reduction (4 rules)
@@ -6805,9 +7019,10 @@ mod tests {
 // Batch 37 (8): riir-gpu production kernels — kv-window-device-resident-ring-append, lm-head-loss-positions-only, verbatim-upload-on-format-match, stream-drain-free-source-during-build, identical-tensor-handle-clone-zero-reupload, sparse-gather-scale-at-read-not-table-prepass, tiled-host-transpose-before-quantize, materialized-fast-path-bulk-slice-accessor (gemma4_q4k_train/ mod.rs + weight_buffers.rs — the Q4_K TRAINING cluster: QLoRA frozen-Q4_K-base + f32-LoRA-delta Gemma-4 trainer; forward_batched + backward deferred to Batch 38).
         // Batch 38 (4): env-flag-resolved-once-not-per-dispatch, flat-activation-slots-as-readback-target, transient-spike-pins-persistent-scratch, transposed-consumption-accumulate-not-gather (gemma4_q4k_train/ forward_batched.rs + backward.rs — completes the Q4_K cluster).
         // Batch 39 (9): riir-gpu production kernels — autotune-cache-extract-outlives-owner, append-cache-rewind-overwrite-in-place, slow-path-bootstraps-raw-buffer-hotswap-cache, entrypoint-variants-share-layer-body, elementwise-offload-needs-device-side-anchor, tiny-param-buffer-rebuild-over-cache, readback-destination-passing-free-fn, variant-owned-output-buffer-clone-escape, pipeline-layer-boundary-device-handle (kimi_k3_gpu_forward.rs — the KimiK3 full-model decode forward: variant family + hot-swap + rewind + readback + borrow-escape cluster).
+        // Batch 40 (7): riir-gpu production kernels — host-scratch-mirrors-slot-order-for-coalesced-writes, write-plan-derived-from-cache-slots-not-recomputed, cpu-source-builder-skips-device-roundtrip, expert-loop-two-phase-split-batch-across-iterations, rmsnorm-backward-gamma-scope-correction-term, per-position-scalar-factored-gemv-collapse, foreign-accumulator-bridge-copy-hoist-to-outer-loop (kimi_k3_gpu_backward.rs — the KimiK3 GPU backward: handle/update infrastructure + dense SiTU FFN + MoE + MLA + KDA backward compute; 2 critical wrong-math bugs + NaN-vacuous parity suite filed as Issue 693).
         // Batch 35 (8): riir-gpu production kernels — mask-sentinel-matches-reduction-identity, smem-staging-gated-by-cross-thread-reuse, kernelize-host-chain-after-sync-batching-floor, block-reduction-separate-scratch-runtime-strides, saturating-nonlinearity-recovery-breaks-near-cap, adapter-grad-join-mirrors-forward-delta-insertion-point, side-consumer-readback-alias-live-handle-for-dependent-dispatch, quadratic-attention-intermediates-recompute-from-linear-saves (gemma2_cubecl_train/ — the Gemma-2 training cluster: fused causal attention kernel Issue 430 Option B + hybrid LoRA training fwd/bwd).
-        // Total: 209. // (historical batch-30 snapshot; current 303)
-        assert_eq!(corpus.entries.len(), 303, "batches 1-39 should have 303 rules");
+        // Total: 209. // (historical batch-30 snapshot; current 310)
+        assert_eq!(corpus.entries.len(), 310, "batches 1-40 should have 310 rules");
     }
 
     #[test]
@@ -9069,6 +9284,95 @@ mod tests {
         }
     }
 
+    #[test]
+    fn batch40_rules_present() {
+        let corpus = build_kernel_seed_corpus();
+        let ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        // A (4 new): coalesced-write scratch, cache-derived write plan, from_cpu builders, bridge hoist
+        assert!(ids.contains(&"host-scratch-mirrors-slot-order-for-coalesced-writes"), "coalesced write scratch");
+        assert!(ids.contains(&"write-plan-derived-from-cache-slots-not-recomputed"), "cache-derived write plan");
+        assert!(ids.contains(&"cpu-source-builder-skips-device-roundtrip"), "cpu source builder");
+        assert!(ids.contains(&"foreign-accumulator-bridge-copy-hoist-to-outer-loop"), "foreign bridge hoist");
+        // H (1 new): two-phase expert loop
+        assert!(ids.contains(&"expert-loop-two-phase-split-batch-across-iterations"), "two-phase expert loop");
+        // N (1 new): gamma scope in RMSNorm backward
+        assert!(ids.contains(&"rmsnorm-backward-gamma-scope-correction-term"), "gamma scope correction");
+        // D (1 new): scalar-factored GEMV collapse
+        assert!(ids.contains(&"per-position-scalar-factored-gemv-collapse"), "scalar factored gemv");
+    }
+
+    #[test]
+    fn batch40_concepts_covered() {
+        // Distinctive ASCII substrings located by rule_id (the 32a convention).
+        let corpus = build_kernel_seed_corpus();
+        let concept = |id: &str| -> String {
+            corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-40 rule '{id}' missing"))
+                .gpu_concept
+                .clone()
+        };
+        // A: host-scratch-mirrors-slot-order-for-coalesced-writes (L109-L116/L346-L365 vs L973-L986)
+        let c = concept("host-scratch-mirrors-slot-order-for-coalesced-writes");
+        assert!(c.contains("SUM of slot lengths")
+            && c.contains("the write-call count"), "coalesced scratch concept");
+        // A: write-plan-derived-from-cache-slots-not-recomputed (L1907-L1909 vs L1952-L1961)
+        let c = concept("write-plan-derived-from-cache-slots-not-recomputed");
+        assert!(c.contains("size_bytes")
+            && c.contains("bug factory"), "cache-derived plan concept");
+        // A: cpu-source-builder-skips-device-roundtrip (L253-L256 vs L225-L237)
+        let c = concept("cpu-source-builder-skips-device-roundtrip");
+        assert!(c.contains("read_one")
+            && c.contains("the host already owns"), "cpu source builder concept");
+        // H: expert-loop-two-phase-split-batch-across-iterations (L1682-L1710 + L1563-L1564)
+        let c = concept("expert-loop-two-phase-split-batch-across-iterations");
+        assert!(c.contains("cross-iteration")
+            && c.contains("stage-A"), "two-phase loop concept");
+        // N: rmsnorm-backward-gamma-scope-correction-term (L1537 wrong vs L2839 right)
+        let c = concept("rmsnorm-backward-gamma-scope-correction-term");
+        assert!(c.contains("ONLY the direct dy term")
+            && c.contains("near 1"), "gamma scope concept");
+        // D: per-position-scalar-factored-gemv-collapse (L2557-L2559 + L2576-L2584 the failure)
+        let c = concept("per-position-scalar-factored-gemv-collapse");
+        assert!(c.contains("consumer polarity")
+            && c.contains("by linearity"), "scalar factoring concept");
+        // A: foreign-accumulator-bridge-copy-hoist-to-outer-loop (L3082/L3085-L3098/L3256-L3269)
+        let c = concept("foreign-accumulator-bridge-copy-hoist-to-outer-loop");
+        assert!(c.contains("ping-pong")
+            && c.contains("copy-in"), "foreign bridge concept");
+    }
+
+    #[test]
+    #[cfg(not(feature = "kernel_verify"))]
+    fn batch40_pseudocode_parses() {
+        // G1 for Batch 40: every new rule's ref_shape AND opt_pattern must
+        // syn-parse as valid Rust (the L2 pruner verdict).
+        use crate::domain::HealDomain;
+        let corpus = build_kernel_seed_corpus();
+        let ids = [
+            "host-scratch-mirrors-slot-order-for-coalesced-writes",
+            "write-plan-derived-from-cache-slots-not-recomputed",
+            "cpu-source-builder-skips-device-roundtrip",
+            "expert-loop-two-phase-split-batch-across-iterations",
+            "rmsnorm-backward-gamma-scope-correction-term",
+            "per-position-scalar-factored-gemv-collapse",
+            "foreign-accumulator-bridge-copy-hoist-to-outer-loop",
+        ];
+        for id in ids {
+            let entry = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-40 rule '{id}' missing"));
+            let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+            assert!(ref_verdict.parses, "batch-40 ref_shape for '{id}' must parse");
+            let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+            assert!(opt_verdict.parses, "batch-40 opt_pattern for '{id}' must parse");
+        }
+    }
+
 
 
     // ════════════════════════════════════════════════════════════════════
@@ -9082,7 +9386,7 @@ mod tests {
 
     #[test]
     fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-        // Every rule_id in the 303-rule corpus must appear in exactly one category.
+        // Every rule_id in the 310-rule corpus must appear in exactly one category.
         let corpus = build_kernel_seed_corpus();
         let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
         let mut categorized: Vec<&str> = Vec::new();
@@ -9113,22 +9417,22 @@ mod tests {
 
     #[test]
     fn kernel_categories_counts_match_plan_003_table() {
-        // Pin per-category rule counts to the Plan 003 table (updated for Batch 39).
+        // Pin per-category rule counts to the Plan 003 table (updated for Batch 40).
         let expected = [
-            (KernelCategory::MemoryAccess, 60),
+            (KernelCategory::MemoryAccess, 64),
             (KernelCategory::Compute, 45),
             (KernelCategory::Fusion, 32),
-            (KernelCategory::Dispatch, 53),
+            (KernelCategory::Dispatch, 54),
             (KernelCategory::Parallelism, 17),
             (KernelCategory::FlashAttnTiling, 10),
             (KernelCategory::LinearAttnRecurrence, 19),
-            (KernelCategory::MoeDispatchBackward, 13),
+            (KernelCategory::MoeDispatchBackward, 14),
             (KernelCategory::NsaBlockSparse, 4),
             (KernelCategory::VarlenChunkedReduction, 5),
             (KernelCategory::AutotuneDispatch, 5),
             (KernelCategory::ConvGemmLayout, 10),
             (KernelCategory::KernelPolymorphism, 9),
-            (KernelCategory::DtypeAlignment, 17),
+            (KernelCategory::DtypeAlignment, 18),
             (KernelCategory::IrStrengthReduction, 4),
         ];
         for (cat, count) in expected {
@@ -9140,7 +9444,7 @@ mod tests {
         }
         // Sum must equal 303.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 303, "Plan 003: category totals must sum to 303");
+        assert_eq!(total, 310, "Plan 003: category totals must sum to 310");
     }
 
     #[test]
@@ -9150,7 +9454,7 @@ mod tests {
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 303, "Plan 003: grouped corpus has {total} rules, expected 303");
+        assert_eq!(total, 310, "Plan 003: grouped corpus has {total} rules, expected 310");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");

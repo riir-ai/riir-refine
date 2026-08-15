@@ -136,7 +136,9 @@ impl RustAnalyzerPruner {
             Err(file_err) => {
                 // Strategy 2: wrap in a fn body for expression/statement snippets.
                 // This handles cases like `42`, `return x + 1;`, `let y = foo();`.
-                let wrapped = format!("fn _wrap() {{ {code} }}");
+                // The boundary newlines keep the wrapper braces out of a
+                // trailing line-comment when the snippet ends with one.
+                let wrapped = format!("fn _wrap() {{\n{code}\n}}");
                 match syn::parse_file(&wrapped) {
                     Ok(_wrapped_file) => Ok(()),
                     // Both strategies failed — return the original (unwrapped)
