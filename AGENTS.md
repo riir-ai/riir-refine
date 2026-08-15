@@ -116,6 +116,25 @@ positions + receivers; needless_range_loop `&v`-on-ref-param `&&Vec`
 non-iterator + token-heuristic `v[v[i]]` false positive; unnecessary_unwrap
 receiver mismatch) — see Plan 005 §Phase 6 T6.4 notes.
 
+## The `riir-clippy` skill (auto-continue idle loop)
+
+`.agents/skills/riir-clippy/SKILL.md` (symlinked into `~/.agents/skills/`
+for global discovery — canonical home is THIS repo, global is a symlink
+never a copy) encodes the idle-time workflow for the whole workspace:
+(1) fix open issues, (2) finish in-flight plans, (3) clippy sweep across
+repos (heal-driven), (4) resolved-issue hygiene (doc then rm), (5) batch
+mining + heal dry-run (the centerpiece — includes the proposer adaptation
+loop: wrong suggestion → fix the proposer + fixture, never suppress),
+(6) boundary-guard routine check, (7) substrate-first drift audit,
+(8) benchmark regression sweep, (9) online unblock search, (10)
+defer-marking sweep, (11) online perf search, (12) paper research via the
+research skill, (13) doc-sync. One unit per cycle, commit + push each
+unit. The cross-session resume state (mining queue snapshot: Batch 32
+targets, sibling-blocked files, corpus count) lives IN the SKILL.md and
+is updated in the same commit as each batch. Triggers: "continue",
+"auto continue", "idle", "nothing to do", "next batch", "Batch 32+".
+See `.issues/019` for the gap analysis that shaped it.
+
 ## Source secrecy & binary-only distribution (non-negotiable)
 
 **Per [Research 003](../riir-ai/.research/003_Commercial_Open_Source_Strategy_Verdict.md):
