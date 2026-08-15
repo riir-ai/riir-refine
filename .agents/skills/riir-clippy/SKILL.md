@@ -383,17 +383,49 @@ global = symlink only.
   as non-optional in the generator template. A 17th count-pin site
   surfaced (stale "282-rule" comment in
   kernel_categories_cover_all_corpus_rules_exhaustively — B37 missed it).
+- **Batch 39 DONE (2026-08-15, Research 043):** the KimiK3 full-model
+  decode forward (`kimi_k3_gpu_forward.rs` 2,601 LOC — the largest single
+  unmined file; hybrid CPU/GPU decode stack: GPU GEMVs + CPU elementwise
+  glue, 7 forward entry-point variants, dual weight-update paths, MLA KV
+  cache rewind for the Ouro loop, + the dense SiTU FFN helper family) —
+  **9 rules, corpus 294 → 303** (A 60, C 32, D 53, K 5):
+  `autotune-cache-extract-outlives-owner` (K), `append-cache-rewind-
+  overwrite-in-place` (A), `slow-path-bootstraps-raw-buffer-hotswap-cache`
+  (A), `entrypoint-variants-share-layer-body` (D),
+  `elementwise-offload-needs-device-side-anchor` (C),
+  `tiny-param-buffer-rebuild-over-cache` (A),
+  `readback-destination-passing-free-fn` (A),
+  `variant-owned-output-buffer-clone-escape` (A),
+  `pipeline-layer-boundary-device-handle` (D). TWO rules merged from
+  independent two-agent convergence (the anchor rule + the clone-escape
+  rule — the coordinator merge for the latter read the actual borrow
+  structure: the file's existing free-fn extraction did NOT fix the
+  clones, proving ownership placement is the load-bearing half). 13 dedup
+  kills/falsifications. Bug yield filed as riir-ai Issue 692 (14 hazards:
+  dead 640 MB embed_handle at construction, the FFN clone/fresh-alloc
+  storm (6+4 sites), the saved forwards' ~310-line divergence with LOST
+  OURO env dispatch, contradictory sync docs 7→3 vs 3→1, gate+up
+  duplicated GPU upload vs doc claim, vocab logits double-copy, + 8
+  more). GOAT: 333 kernel_heal + 201 default tests, clippy 0 in all 4
+  states (4 doc_markdown backtick fixes: `KimiK3`, `SiTU`,
+  `O(max_seq)`, `O(iters × max_seq)` — O() expressions are a new gotcha
+  variant). Generator: 25 anchors verified in a DRY-RUN before the real
+  run (all unique) — the new standing step; one post-run fix (concept
+  substring asserted lowercase vs caps — the concepts_covered test
+  caught it).
 - **NEXT mining target**: `ls` the riir-gpu tree for the next unmined
-  cluster (~81 of ~200 files mined). Candidates:
-  `gemma2_d2f*`, `kimi_k3_gpu_*` (4 files — partially surveyed: the
-  env-flag instances at L1861-1948), `weaver_gpu*` (4 files), `kvarn/`,
-  `hypernet/`, `maxsim/`. Pick 1-2 files, ~6-10 rules (dedup pressure
-  high), Batch 39 (Research 043).
+  cluster (~82 of ~200 files mined). Candidates:
+  `kimi_k3_gpu_backward.rs` (4,332 — the largest file in the crate; the
+  backward this batch's saved activations feed), `kimi_k3_gpu_backward_
+  batched.rs` (1,394) + `kimi_k3_gpu_backward_sequence.rs` (1,328) — the
+  backward cluster; `gemma2_d2f*` (mod 1,579 + _sc 800), `weaver_gpu*`
+  (dflash 576 + corrector 1,449), `kvarn/`, `hypernet/`, `maxsim/`. Pick
+  1-2 files, ~6-10 rules (dedup pressure high), Batch 40 (Research 044).
   - Validation pattern (proven T4 + 32a + 32b-1 + 32c + 36 + 38): corpus files are NOT
     sibling WIP — edit + run GOAT in the main checkout with
     `CARGO_TARGET_DIR=/tmp/riir-clippy-bNN`; `--features kernel_heal`
     for the corpus suite (318 at 34, 321 at 35, 324 at 36, 327 at 37,
-    330 at 38), default for
+    330 at 38, 333 at 39), default for
     the 201 suite.
     `--all-features` is currently broken by SIBLING WIP
     (`rust_perf/bench.rs:335 alloc_axis`) — pre-existing, not yours.
@@ -408,7 +440,7 @@ global = symlink only.
     router.rs `rules_for_expert` total + the corpus-count mentions in
     router.rs doc header + the Plan 003 doc-comment `NNN-rule corpus`
     line above KERNEL_CATEGORIES + the `Total: 209 ... current NNN`
-    comment + the file-level `//!` header batch block. All in sync at 294.
+    comment + the file-level `//!` header batch block. All in sync at 303 (A 60, C 32, D 53, K 5 after Batch 39).
   - **Landing lesson (32b-1, self-caught)**: after a large multi-entry
     corpus edit, `awk`-scan for `rule_id:` lines NOT preceded by a
     standalone `KernelRule {` BEFORE the first compile — JSON `\n`
@@ -420,7 +452,7 @@ global = symlink only.
   WIP STILL ACTIVE as of 2026-08-15 evening: qv_lora.rs + cudarc_kernels/
   + riir-gpu/lib.rs + ternary_deltanet_gpu_forward_cudarc.rs all dirty)
   — mine only after their WIP lands.
-- **Progress**: riir-gpu ~81 of ~200 files mined. Corpus: 294 rules.
+- **Progress**: riir-gpu ~82 of ~200 files mined. Corpus: 303 rules.
   edge_lora module FULLY MINED (32a + 32b-1 + 32c). spectralquant/
   FULLY MINED (15 + 33). gemma4_cubecl_train/ DONE (34).
   gemma2_cubecl_train/ FULLY MINED (35: mod.rs + attention_gpu.rs;

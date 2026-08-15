@@ -882,6 +882,37 @@
 //!   ~380 MB/step redundant `hidden` re-uploads (5× per layer), the 134 MB
 //!   scratch pinning, the dead `attn_scores` field, 97 env lookups/step,
 //!   the strided `LoRA` z-gather at 2 sites, 2 doc inconsistencies.
+//! - **Batch 39 (2026-08-15, Research 043):** the `KimiK3` full-model decode
+//!   forward (`kimi_k3_gpu_forward.rs`, 2,601 LOC — the largest single
+//!   unmined file; hybrid CPU/GPU decode stack: GPU GEMVs + CPU elementwise
+//!   glue, 7 forward entry-point variants, dual weight-update paths, MLA KV
+//!   cache rewind for the Ouro loop, + the dense `SiTU` FFN helper family) —
+//!   **9 rules, corpus 294 → 303** (A 60, C 32, D 53, K 5):
+//!   `autotune-cache-extract-outlives-owner` (K — salvage the tuning cache
+//!   across owner destruction via Arc inject/extract; re-benchmarking costs
+//!   ~5-10 min, the upload ~64 ms), `append-cache-rewind-overwrite-in-place`
+//!   (A — re-execution workloads overwrite, never re-append; `O(max_seq)` not
+//!   `O(iters × max_seq)`)), `slow-path-bootstraps-raw-buffer-hotswap-cache`
+//!   (A — first call boots via the slow path + harvests raw buffers into
+//!   order-keyed slots; subsequent calls write in place, zero alloc),
+//!   `entrypoint-variants-share-layer-body` (D — versioned entry points
+//!   multiply, loop bodies stay shared per axis; forks diverge — observed
+//!   twice in one file), `elementwise-offload-needs-device-side-anchor`
+//!   (C — a GPU op sandwiched between upload + readback is compute-offload
+//!   ONLY; the win is the handle chain — found independently by both mining
+//!   agents), `tiny-param-buffer-rebuild-over-cache` (A — 3 f32 = 12 bytes:
+//!   rebuild beats caching below a cache line),
+//!   `readback-destination-passing-free-fn` (A — `dst: &mut [f32]`, not
+//!   `-> Vec<f32>`; the free-fn form also splits the struct borrow),
+//!   `variant-owned-output-buffer-clone-escape` (A — enum-variant-owned
+//!   output buffers force per-layer-per-token clones out of the match arm;
+//!   hoist to the parent + dispatch via free fns over disjoint fields;
+//!   merged from both agents), `pipeline-layer-boundary-device-handle`
+//!   (D — the Handle is the pipeline currency; host materialization becomes
+//!   an internal detail, later fusion composes without boundary changes).
+//!   ONE coordinator-verified divergence pair + the merged-both-agents rule
+//!   ×2 (the anchor rule + the clone-escape rule — each found independently
+//!   by both agents). Bug yield filed as riir-ai Issue 692.
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
@@ -6031,6 +6062,234 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
             ref_shape: "// naive: z[k] = sum_i B[i,k]*g[i] with k OUTER — column gather at stride rank\nfn lora_z_gather(b: &[f32], g: &[f32], out_dim: usize, rank: usize,\n                 z: &mut [f32]) {\n    for k in 0..rank { // for each k, walk ALL of B's rows\n        let mut sum = 0.0;\n        for i in 0..out_dim {\n            sum += b[i * rank + k] * g[i]; // stride rank*4B: 256B at rank 64\n        } // — 4 useful bytes per 64B line\n        z[k] = sum;\n    }\n}".to_string(),
             opt_pattern: "// optimized: i-outer row accumulation — B streams row-major, same as the\n// forward's dot; z built by axpy into a zeroed row\nfn lora_z_accumulate(b: &[f32], g: &[f32], out_dim: usize, rank: usize,\n                     z_row: &mut [f32]) {\n    z_row[..rank].fill(0.0);\n    for i in 0..out_dim {\n        let gi = g[i];\n        let b_row = &b[i * rank..(i + 1) * rank]; // sequential, cache-line dense\n        for (z, &bv) in z_row.iter_mut().zip(b_row) {\n            *z += bv * gi;\n        }\n    } // same flops; summation order differs (fine for grads, not bit-gates)\n}".to_string(),
         },
+        // ── autotune-cache-extract-outlives-owner — salvage the tuning cache across owner destruction (K) ──
+        // Source: riir-gpu kimi_k3_gpu_forward.rs L296-L302 (the training-loop
+        // constructor doc: re-benchmarking every unique GEMV shape costs
+        // ~5-10 min at d=2560; the weight upload is only ~64 ms),
+        // L324-L329 (the Arc inject contract: all per-layer kernels share ONE
+        // cache instance; reconstructed-per-step owners extract via
+        // into_autotune + pass to the next constructor), L344-L346/L352-L354/
+        // L393-L395 (the three per-layer kernel constructors each take
+        // Arc::clone(&gemv_autotune)), + L1735-L1743 (into_autotune consumes
+        // self and returns the Arc).
+        //
+        // Distinct from hot-swap-weights-preserve-autotune-caches (B25 keeps a
+        // persistent object alive while mutating weights; here the owner is
+        // DESTROYED per step and the cache is salvaged/transplanted across
+        // lifetimes) and from share-pipeline-set-across-subsystems (B30 shares
+        // compile artifacts within one run; this shares across owner
+        // lifetimes via an inject/extract pair).
+        KernelRule {
+            rule_id: "autotune-cache-extract-outlives-owner".to_string(),
+            gpu_concept: "When a struct owning a GPU pipeline is destroyed and reconstructed every training step, the expensive benchmark-derived state (autotune variant selections — minutes of re-benchmarking) must not live and die with the owner. Wrap the tuning cache in an Arc, inject it through a new_with_* constructor, share ONE instance across all sub-kernels, and provide a consuming into_*() extractor so the caller can salvage the cache at drop time and transplant it into the next construction. The upload is cheap (~64 ms); the re-tuning is not (~5-10 min). This is the ownership-lifecycle complement to hot-swap: instead of keeping the object alive to preserve its caches, decouple the cache lifetime from the object lifetime. Distinct from hot-swap-weights-preserve-autotune-caches (keeps a persistent object alive while mutating weights; here the owner is destroyed per step and the cache is salvaged across lifetimes) and from share-pipeline-set-across-subsystems (shares compile artifacts within one run; this shares across owner lifetimes via an inject/extract pair).".to_string(),
+            ref_shape: "// naive: struct + its autotune cache reconstructed every training step —\n// every unique GEMV shape is re-benchmarked each time (~minutes)\nstruct Forwarder { autotune: GemvAutotune, client: Client }\nfn train_step(weights: &Weights, token: u32) -> Logits {\n    let mut fwd = Forwarder { autotune: GemvAutotune::new(), client: connect() };\n    fwd.upload_weights(weights);\n    fwd.forward_token(token) // cold autotune EVERY step\n}".to_string(),
+            opt_pattern: "// optimized: the cache is Arc-shared, injected, + extractable — its\n// lifetime is decoupled from the owner's\nstruct Forwarder { autotune: Arc<GemvAutotune>, client: Client }\nimpl Forwarder {\n    fn new_with_autotune(cache: Arc<GemvAutotune>, w: &Weights) -> Self {\n        Self { autotune: cache, client: connect(), kernels: build(w, &cache) } // ONE instance\n    }\n    fn into_autotune(self) -> Arc<GemvAutotune> { self.autotune } // salvage at drop\n}\nfn train_step(prev: Arc<GemvAutotune>, w: &Weights, token: u32) -> (Logits, Arc<GemvAutotune>) {\n    let mut fwd = Forwarder::new_with_autotune(Arc::clone(&prev), w); // warm: no re-bench\n    let logits = fwd.forward_token(token);\n    (logits, fwd.into_autotune()) // transplant into the next step\n}".to_string(),
+        },
+        // ── append-cache-rewind-overwrite-in-place — re-execution overwrites, never re-appends (A) ──
+        // Source: riir-gpu kimi_k3_gpu_forward.rs L2061-L2066 (rewind_mla_caches_to
+        // doc: "Used by the Ouro looped forward (Plan 324) before each
+        // iteration t >= 1, so the forward overwrites the cache entry at
+        // position pos instead of appending a new entry. Without this, the
+        // cache grows T-x per token. KDA layers are not affected (recurrent
+        // state, no append-only cache).") + L2068-L2073 (the impl: only the
+        // Mla variant's cache rewinds; Kda is a structural no-op) +
+        // L2084-L2089 (the caller contract: set_hidden -> rewind ->
+        // forward_token_hidden_saved per iteration).
+        //
+        // Distinct from kv-window-device-resident-ring-append (B37 — DEVICE
+        // RESIDENCY of the ring buffer; this is the LOGICAL pointer rollback
+        // for re-execution) and from mirror-ring-store-sliding-window-
+        // contiguity (B34 — LAYOUT contiguity for windows; this is cache
+        // EXTENT management).
+        KernelRule {
+            rule_id: "append-cache-rewind-overwrite-in-place".to_string(),
+            gpu_concept: "An append-only autoregressive cache (KV cache) grows monotonically — which is wrong for re-execution workloads (looped/prediction-style passes over the same position, speculative-decode draft rejection, beam rollback). Expose a rewind_to(pos) that rolls the append pointer back so re-execution overwrites the existing slot instead of appending: memory stays O(max_seq) instead of O(iters x max_seq). The rewind is heterogeneous-aware: only append-only caches (KV) rewind; fixed-size recurrent-state layers (SSM/linear-attention state) are structurally unaffected no-ops — document which is which so callers do not try to rewind state that has no position axis. Distinct from kv-window-device-resident-ring-append (device residency of the ring buffer; this is the logical pointer rollback for re-execution) and from mirror-ring-store-sliding-window-contiguity (layout contiguity for windows; this is cache extent management).".to_string(),
+            ref_shape: "// naive: append-only KV cache under a looped forward — every iteration\n// appends a fresh slot at pos; cache grows iters-x per token\nfn looped_pass(fwd: &mut Forward, hidden: &[f32], iters: usize, pos: usize) -> Logits {\n    let mut saved = Saved::default();\n    for t in 0..iters {\n        fwd.set_hidden(hidden);\n        fwd.forward_token_saved(pos as u32, &mut saved); // APPENDS at pos each t\n    } // cache len ~= iters * max_seq — memory exhaustion\n    saved.final_logits\n}".to_string(),
+            opt_pattern: "// optimized: roll the append pointer back — re-execution OVERWRITES the\n// slot; cache stays O(max_seq)\nfn looped_pass(fwd: &mut Forward, hidden: &[f32], iters: usize, pos: usize) -> Logits {\n    let mut saved = Saved::default();\n    for t in 0..iters {\n        fwd.set_hidden(hidden);\n        fwd.rewind_mla_caches_to(pos); // append pointer -> pos; recurrent-state layers are no-ops\n        fwd.forward_token_hidden_saved(pos, t, &mut saved); // OVERWRITES slot pos\n    } // cache len stays max_seq\n    saved.final_logits\n}".to_string(),
+        },
+        // ── slow-path-bootstraps-raw-buffer-hotswap-cache — boot harvests, fast path writes in place (A) ──
+        // Source: riir-gpu kimi_k3_gpu_forward.rs L1551-L1558 (the two-tier doc:
+        // first call delegates to update_weights (boot allocation) +
+        // populates weight_cache by extracting wgpu::Buffer references via
+        // client.get_resource; subsequent calls write directly into the
+        // cached buffers via queue.write_buffer, bypassing CubeCL's per-call
+        // allocation), L1585-L1627 (the boot: update_weights + build the
+        // slot vec + extract_buffer lazy->eager), L1630-L1647 (the fast path:
+        // write_in_place[_parallel] per slot), + L1650-L1653 ("The cache was
+        // built with the same iteration order (layer-major, gate->up->down
+        // per dense layer), so we mirror it here").
+        //
+        // Distinct from hot-swap-weights-preserve-autotune-caches (B25 —
+        // preserves the TUNING caches; this preserves the raw device buffers
+        // themselves, eliminating allocation churn), from
+        // weight-handle-cache-keyed-by-allocation-identity (B29 — pointer-keys
+        // UNCHANGED CPU weights for dedup; training weights change every step,
+        // so stable slot ORDER replaces keying), and from
+        // cross-runtime-raw-handle-extraction (B21 — the extraction MECHANIC;
+        // this rule is the two-tier bootstrap + order-keyed replaceable slots
+        // built on it).
+        KernelRule {
+            rule_id: "slow-path-bootstraps-raw-buffer-hotswap-cache".to_string(),
+            gpu_concept: "For per-step weight updates (training), allocate-and-replace handle swapping churns the device allocator on every optimizer step. Land the in-place path as a two-tier method: the FIRST call delegates to the existing allocate-and-replace path (boot), then harvests the raw native buffers out of the runtime handles (lazy-to-eager extraction) into a persistent slot cache keyed by stable construction order; SUBSEQUENT calls write new bytes directly into the cached raw buffers via the raw queue (write_buffer), zero allocation. In training the CPU weight buffers change identity every step, so pointer/key-based dedup caching is useless — the stable slot ORDER is the key, and the fast path must mirror the build loop's iteration order exactly (add a length/dtype assert so a build-loop reorder fails loudly instead of writing weights into the WRONG buffers silently). Distinct from hot-swap-weights-preserve-autotune-caches (preserves tuning caches; this preserves the raw device buffers themselves), from weight-handle-cache-keyed-by-allocation-identity (pointer-keys unchanged weights for dedup; changing weights need order-keyed replaceable slots), and from cross-runtime-raw-handle-extraction (the extraction mechanic this rule builds its two-tier policy on).".to_string(),
+            ref_shape: "// naive: allocate-and-replace EVERY optimizer step — the device allocator\n// churns a fresh buffer per weight per step\nimpl Forward {\n    fn update_weights(&mut self, w: &Weights) {\n        self.w_a = self.client.create_from_slice(bytes(&w.a)); // fresh device alloc\n        self.w_b = self.client.create_from_slice(bytes(&w.b)); // + old buffer freed\n    } // x N weights x steps — allocator churn all run long\n}".to_string(),
+            opt_pattern: "// optimized: first call BOOT-harvests the raw buffers into order-keyed\n// slots; later calls write new bytes in place — zero allocation\nimpl Forward {\n    fn update_in_place(&mut self, w: &Weights) -> Result<(), String> {\n        if self.slots.is_none() {\n            self.update_weights(w); // boot: slow path allocates\n            let mut slots = self.handles_in_build_order().map(Slot::from_handle).collect::<Vec<_>>();\n            for s in &mut slots { s.extract_buffer(&self.client)?; } // lazy -> eager\n            self.slots = Some(slots); // slot ORDER is the key\n            return Ok(());\n        }\n        let queue = self.raw_queue();\n        let slots = self.slots.as_mut().unwrap();\n        slots[0].write_in_place(&self.client, &queue, &w.lm_head); // zero-alloc overwrite\n        for (i, data) in w.matrices_in_build_order().enumerate() { // MUST mirror build order\n            slots[i + 1].write_in_place(&self.client, &queue, data);\n        }\n        Ok(())\n    }\n}".to_string(),
+        },
+        // ── tiny-param-buffer-rebuild-over-cache — below a cache line, rebuild beats caching (A) ──
+        // Source: riir-gpu kimi_k3_gpu_forward.rs L2437-L2441 (the fused SiTU
+        // doc: "The 3-element [beta, linear_beta, has_linear_beta] buffer is
+        // constructed per call (3 f32 = 12 bytes — cheaper to rebuild than to
+        // cache a Handle)") + L2473-L2476 + L2539-L2542 (both fused FFN
+        // variants rebuild the params buffer per call from fresh scalars —
+        // no Option<Handle> state, nothing to invalidate).
+        //
+        // Distinct from identical-uniforms-share-single-slot (B27 — share one
+        // slot when writes are identical AND large enough to matter; this is
+        // the threshold BELOW which even sharing loses) and from
+        // pack-scalar-params-into-combined-buffer (B29 — packing many scalars
+        // to fit an Array budget; this is the rebuild-vs-cache POLICY
+        // decision).
+        KernelRule {
+            rule_id: "tiny-param-buffer-rebuild-over-cache".to_string(),
+            gpu_concept: "Caching a device buffer for a kernel's scalar-parameter block (a handful of f32s) costs more than the upload it saves: the Option<Handle> state, the invalidation bookkeeping, and the lifetime plumbing exceed a ~12-byte create_from_slice. Below roughly a cache line or two, rebuild the params buffer per call from fresh scalars and state the threshold in a comment so a future 'optimization' does not cache it. This is the size-threshold complement to the sharing/packing rules: share when identical-and-large, pack when count-bound, rebuild when tiny. Distinct from identical-uniforms-share-single-slot (share when identical and large enough to matter; this is the threshold below which even sharing loses) and from pack-scalar-params-into-combined-buffer (packing many scalars to fit an Array budget; this is the rebuild-vs-cache policy decision).".to_string(),
+            ref_shape: "// naive: cache EVERY param buffer, however tiny — state + invalidation\n// exceed the upload saved\nstruct SituKernel { params_h: Option<Handle> }\nimpl SituKernel {\n    fn launch(&mut self, beta: f32, lb: Option<f32>) {\n        if self.params_h.is_none() {\n            let p = [beta, lb.unwrap_or(1.0), flag(lb)]; // beta varies per config\n            self.params_h = Some(self.client.create_from_slice(bytes(&p)));\n        } // miss path + stale-cache trap: a config change silently reuses old bytes\n        dispatch(self.params_h.clone());\n    }\n}".to_string(),
+            opt_pattern: "// optimized: 3 f32 = 12 bytes — rebuild per call; nothing to invalidate\nimpl SituKernel {\n    fn launch(&self, beta: f32, lb: Option<f32>) {\n        let has_lb = if lb.is_some() { 1.0f32 } else { 0.0f32 };\n        let lb = lb.unwrap_or(1.0); // unused when has_lb == 0.0\n        let params = [beta, lb, has_lb];\n        let params_h = self.client.create_from_slice(bytes(&params)); // 12B upload\n        dispatch(params_h); // stateless launch: no cache to invalidate\n    }\n}".to_string(),
+        },
+        // ── readback-destination-passing-free-fn — dst: &mut [f32], not -> Vec<f32> (A) ──
+        // Source: riir-gpu kimi_k3_gpu_forward.rs L807-L828 (read_handle_into:
+        // the destination-passing free fn — "Free function (not a method) so
+        // the caller can split the borrow: pass &self.client + &mut
+        // self.hidden without locking the whole self"; feature-gated + single
+        // handle only) vs the still-live naive shapes in the SAME file:
+        // L505-L523 (dispatch_gemv returns f32::from_bytes(&bytes).to_vec()),
+        // L613-L614/L662-L663/L763-L764/L914-L915 (read_batched(...).remove(0)
+        // then self.logits.copy_from_slice — fresh vocab-sized Vec + copy per
+        // token), + gemv_batched.rs L96-L105 (read_batched maps every handle
+        // to a fresh Vec) / L110-L112 (read_handle — the single-handle
+        // convenience wrapper with the same churn).
+        //
+        // Distinct from flat-activation-slots-as-readback-target (B38 — fixes
+        // the destination CONTAINER layout so the slot is the readback
+        // target; this fixes the HELPER SIGNATURE to destination-passing),
+        // from staging-reuse-grow-only-map-prefix (B31 — staging-buffer reuse
+        // at the map level, below this API), and from
+        // batched-downloads-single-sync-cycle (B26 — sync batching,
+        // orthogonal: an into-variant can still batch).
+        KernelRule {
+            rule_id: "readback-destination-passing-free-fn".to_string(),
+            gpu_concept: "A GPU-to-host readback helper should be destination-passing — fn(client, handle, dst: &mut [f32]) — not value-returning — fn(client, handle) -> Vec<f32>. The value-returning shape forces every read to allocate a fresh output Vec, and when the caller owns a persistent buffer (logits, hidden, scratch) it additionally forces a second copy out of the fresh Vec. The destination-passing shape eliminates both — and for terminal vocab-sized drains (the LM head logits, ~640 KB per token) that is a fresh allocation + full copy deleted per token. Critically, the helper should be a FREE function over the context pointer, not a method — so callers can pass &ctx and &mut self.dst simultaneously without locking the whole orchestration struct (a method takes &self/&mut self and re-collapses the borrow). Batched readers should expose an into variant too, so per-token terminal drains do not allocate + copy a Vec every token. Distinct from flat-activation-slots-as-readback-target (fixes the destination container layout; this fixes the helper signature), from staging-reuse-grow-only-map-prefix (staging reuse below this API), and from batched-downloads-single-sync-cycle (sync batching, orthogonal: an into-variant can still batch).".to_string(),
+            ref_shape: "// naive: value-returning readback — every read allocates a fresh Vec,\n// + a second copy when the caller owns a persistent buffer\nfn read_handle(client: &Client, h: Handle) -> Vec<f32> {\n    let bytes = client.read_one(h).unwrap();\n    f32::from_bytes(&bytes).to_vec() // fresh Vec per read\n}\nfn forward(model: &mut Model, client: &Client, w: &Handle) {\n    let logits = dispatch_gemv(client, w, &model.hidden, model.vocab); // -> Vec\n    model.logits.copy_from_slice(&logits); // copy 2: fresh Vec -> persistent buffer\n}".to_string(),
+            opt_pattern: "// optimized: destination-passing FREE FN — zero fresh Vecs, zero second\n// copies; the borrow splits so caller + dst coexist\nfn read_handle_into(client: &Client, h: Handle, dst: &mut [f32]) {\n    let bytes = client.read_one(h).unwrap();\n    dst.copy_from_slice(f32::from_bytes(&bytes)); // direct into the persistent buffer\n}\nfn read_batched_into(client: &Client, handles: Vec<Handle>, dsts: &mut [&mut [f32]]) {\n    let bufs = client.read(handles); // still ONE sync for the whole batch\n    for (b, d) in bufs.into_iter().zip(dsts.iter_mut()) {\n        d.copy_from_slice(f32::from_bytes(&b));\n    }\n}\nfn forward(model: &mut Model, client: &Client, w: &Handle) {\n    let h = launch_gemv(client, w, &model.hidden, model.vocab);\n    read_handle_into(client, h, &mut model.logits); // one read, one copy, zero allocs\n}".to_string(),
+        },
+        // ── variant-owned-output-buffer-clone-escape — match-arm borrows force clones; hoist + split (A) ──
+        // Source: riir-gpu kimi_k3_gpu_forward.rs — the enum-variant output
+        // buffers (GpuFfn::Dense { out_buf, ... } at L109-L129) forced out of
+        // the match arm because the result must outlive the &mut
+        // self.ffn_layers[idx] borrow: out_buf.clone() at L1069/L1192/L1304/
+        // L1416 (+ (out_buf.clone(), None, Some(ds)) at L1979/L2240) and
+        // fresh vec![0.0; d] per MoE arm at L1072/L1195/L1307/L1419 — one
+        // heap alloc per layer per token across ALL forward variants. The
+        // consumer forcing the escape: L1201-L1204 (prefix-sum needs &mut
+        // self.hidden while ffn_out borrows self.ffn_layers). The file's own
+        // half-fix: L2308-L2315 ("Standalone helpers (avoid borrow-checker
+        // conflicts with &mut self.ffn_layers)... Extracted from the method
+        // so the caller can hold &mut self.ffn_layers[idx] while dispatching
+        // GEMVs through &self.client + &self.gemv_autotune") — the free fns
+        // split the client borrow but the OUTPUT still escapes by clone
+        // because out_buf is owned by the VARIANT.
+        //
+        // Merged from BOTH mining agents (independently proposed as the
+        // free-fn borrow split + the ownership-placement halves of one fix).
+        //
+        // Distinct from caller-owned-split-scratch (B31 — callee-side scratch
+        // carving via split_at_mut with a borrowed-view return; this is the
+        // caller-side ownership placement vs enum variants) and from
+        // needless-swap-temp-hoist-to-scratch (B32b — deleting a
+        // false-premise temp).
+        KernelRule {
+            rule_id: "variant-owned-output-buffer-clone-escape".to_string(),
+            gpu_concept: "When a per-layer op is dispatched by matching on &mut self.layers[idx] (an enum of kernel variants), any output buffer owned INSIDE the variant cannot be referenced after the match arm ends — the result must outlive the &mut self.layers borrow because the caller subsequently mutates sibling state (the hidden accumulator). The common escape is materialization: out_buf.clone() per Dense arm + a fresh vec![0.0; d] per MoE arm — a heap allocation per layer per token, purely to satisfy the borrow checker. The fix is ownership placement + borrow splitting: hoist the output buffer to the parent struct (a persistent ffn_out), dispatch via free functions over the DISJOINT fields (client, autotune, the variant borrow, the caller-owned out buffer) so everything coexists in one method — the arm writes into memory the caller can read independently, zero clones, zero fresh allocs. The tell that the fix is missing: a free-fn helper family extracted 'to avoid borrow-checker conflicts' while the match arms STILL clone their results out. Distinct from caller-owned-split-scratch (callee-side scratch carving with a borrowed-view return; this is caller-side ownership placement) and from needless-swap-temp-hoist-to-scratch (deleting a false-premise temp).".to_string(),
+            ref_shape: "// naive: output buffer owned by the VARIANT — the result must outlive the\n// &mut self.ffn_layers[idx] borrow, so every arm materializes it\nfn forward_layer(model: &mut Model, idx: usize) {\n    let ffn_out = match &mut model.ffn_layers[idx] {\n        LayerFfn::Dense { w_gate, out_buf, .. } => {\n            run_ffn(&model.client, w_gate, out_buf);\n            out_buf.clone() // heap alloc per layer per token — borrow escape\n        }\n        LayerFfn::Moe { kernel } => {\n            let mut out = vec![0.0f32; model.d]; // fresh alloc per layer per token\n            kernel.run(&model.hidden, &mut out);\n            out\n        }\n    };\n    for (h, f) in model.hidden.iter_mut().zip(ffn_out.iter()) { *h += f; } // needs &mut hidden\n}".to_string(),
+            opt_pattern: "// optimized: output buffer hoisted to the PARENT + free fn over the\n// disjoint fields — zero clones, zero fresh allocs\nstruct Model { ffn_layers: Vec<LayerFfn>, ffn_out: Vec<f32>, hidden: Vec<f32>, client: Client }\nfn dense_ffn(client: &Client, w: &Handle, out: &mut [f32]) {\n    launch_into(client, w, out); // writes IN PLACE into the caller-owned buffer\n}\nfn forward_layer(model: &mut Model, idx: usize) {\n    match &mut model.ffn_layers[idx] {\n        LayerFfn::Dense { w_gate, .. } => dense_ffn(&model.client, w_gate, &mut model.ffn_out),\n        LayerFfn::Moe { kernel } => kernel.run(&model.hidden, &mut model.ffn_out),\n    } // disjoint-field borrows: variant + client + ffn_out coexist\n    for (h, f) in model.hidden.iter_mut().zip(model.ffn_out.iter()) { *h += f; }\n}".to_string(),
+        },
+        // ── elementwise-offload-needs-device-side-anchor — a sandwiched GPU op is compute-offload ONLY (C) ──
+        // Source: riir-gpu kimi_k3_gpu_forward.rs L969-L972 + L1011-L1014 (the
+        // unanchored per-layer norms: upload scratch -> GPU RMSNorm -> read
+        // back into the SAME buffer — 2 bus crossings replacing 0), L930-L935
+        // (the file's own honest label: "This is the honest intermediate
+        // state: the RMSNorm CPU compute is eliminated, but the attention/FFN
+        // GEMV input still takes a CPU slice (future phases will make those
+        // kernels accept Handles to eliminate that readback too)"), vs the
+        // ANCHORED contrast at L737-L741 + L747-L762 (fused final norm feeds
+        // the LM head GEMV directly on device — "This eliminates 1 sync point
+        // per token"), + L2492 (launch_gemv_handle — the handle-input
+        // consumer entry that closes the chain later without re-plumbing).
+        //
+        // Found independently by BOTH mining agents (convergent discovery).
+        //
+        // Distinct from hybrid-cpu-elementwise-gpu-throughput-sync-points
+        // (B34 — the division-of-labor policy; this is the payoff condition
+        // for the exception), from kernelize-host-chain-after-sync-batching-
+        // floor (B35 — when to fuse a CHAIN of host ops; this is the
+        // single-op guard), and from chain-dispatches-single-sync-point
+        // (B19 — the chaining mechanic; this is the migration accounting
+        // rule: which migrations actually reduce the sync count).
+        KernelRule {
+            rule_id: "elementwise-offload-needs-device-side-anchor".to_string(),
+            gpu_concept: "In a hybrid CPU/GPU pipeline, migrating one elementwise op to GPU removes a host round trip ONLY when at least one adjacent consumer stays device-side — the offloaded op's output must feed another GPU dispatch directly (a device-side anchor), so the offload forms a handle chain. A GPU op sandwiched between an upload and a readback (upload slice, GPU kernel, read back to the same slice) keeps the sync count identical: it is compute-offload only — 2 bus crossings replacing 0 while saving only CPU compute, a net loss whenever the round trip exceeds the elementwise cost. Ship such intermediate states deliberately and label them honestly in the doc ('the honest intermediate state') instead of claiming a sync win — and provide the handle-input variant of the consumer op (launch_gemv_handle beside launch_gemv) so the chain can close later without re-plumbing. Distinct from hybrid-cpu-elementwise-gpu-throughput-sync-points (the division-of-labor policy; this is the payoff condition for the exception), from kernelize-host-chain-after-sync-batching-floor (when to fuse a chain of host ops; this is the single-op guard), and from chain-dispatches-single-sync-point (the chaining mechanic; this is the migration accounting rule).".to_string(),
+            ref_shape: "// naive: migrate ONE op to GPU, neighbors stay host-side — book it as a\n// win. It isn't: sync count UNCHANGED, 2 bus crossings ADDED\nfn layer(&mut self, x: &mut [f32]) {\n    let xh = self.upload(x);                 // host -> device\n    let normed = self.gpu_rmsnorm(xh);       // device compute\n    self.read_into(normed, x);               // device -> host (sync unchanged!)\n    let attn = self.attn_from_slice(x);      // consumer takes &[f32]\n}".to_string(),
+            opt_pattern: "// optimized: offload only when a device-side ANCHOR consumes the output\nfn layer(&mut self, x: &[f32]) -> Vec<f32> {\n    let xh = self.upload(x);\n    let normed = self.gpu_rmsnorm(xh);          // handle -> handle\n    let out_h = self.launch_gemv_handle(&self.w_attn, normed); // ANCHOR: consumer takes the Handle\n    self.read_one(out_h)                        // the ONE sync for the whole chain\n}\n// until the consumer accepts handles, keep the op on CPU — or fuse it\n// into the adjacent GEMV so its output never crosses back".to_string(),
+        },
+        // ── entrypoint-variants-share-layer-body — versioned entry points, ONE shared layer body (D) ──
+        // Source: riir-gpu kimi_k3_gpu_forward.rs L566-L576 (forward_token_batched
+        // doc: "Produces bit-identical results... The sync reduction (7->3 for
+        // MLA, 8->3 for KDA, 3->2 for Dense FFN, ~12->4 for MoE)"),
+        // L619-L627 (batched_v2: "near-identical... < 1e-5 relative" — each
+        // variant's doc states its parity class), + the two failure modes:
+        // L977-L983/L986-L992 (Issue 401 Phase 2.1: the batched kernels "were
+        // already shipped by Issue 396 but was not wired into the resident
+        // forward" — a fork initially shipped calling the OLD kernels) and
+        // the saved-forward divergence: forward_token_saved L1862-L1896
+        // dispatches on OURO_* env vars while its ~310-line clone
+        // forward_token_hidden_saved L2162-L2177/L2220 calls the batched
+        // kernel unconditionally — same model, same saved contract, different
+        // kernel selection by entry point.
+        //
+        // Distinct from shape-kind-dispatch / heuristic-compile-dispatch /
+        // op-family-type-dispatch (runtime SELECTION among impls inside one
+        // entry point; this is the AUTHORING discipline for API-surface
+        // evolution) and from hardcoded-fast-path-jit-specialization
+        // (kernel-internal fast path; this is host API structure).
+        KernelRule {
+            rule_id: "entrypoint-variants-share-layer-body".to_string(),
+            gpu_concept: "Evolving a GPU pipeline's sync behavior lands as version-suffixed entry points (forward, ..._batched, ..._batched_v2, ..._fused_x, ..._resident) rather than in-place rewrites — each variant's doc quantifies the sync delta ('7 to 3') and states the parity class (bit-identical vs <1e-5 GPU-fp non-associativity), which is what makes A/B benches and regression gates possible. But the per-layer body must stay factored into ONE shared method per axis (forward_layer_gpu, forward_layer_gpu_batched, ...); forking the whole loop body per variant guarantees divergence — improvements shipped in one fork silently fail to reach the others (observed twice in one file: a resident fork that initially called the OLD unbatched kernels, and two saved forwards whose kernel-variant selection diverged under the same env vars). Bounded fix-space: entry points may multiply; loop bodies are shared per variant axis.".to_string(),
+            ref_shape: "// naive: each new optimization forks the WHOLE loop body; the forks drift\npub fn forward_saved(&mut self, tok: u32, saved: &mut Saved) -> &[f32] {\n    for l in 0..self.n_layers {\n        self.saved_layer_body_v1(l, saved); // 150-line body, pasted\n    }\n    self.head()\n}\npub fn forward_saved_hidden(&mut self, tok: u32, saved: &mut Saved) -> &[f32] {\n    for l in 0..self.n_layers {\n        self.saved_layer_body_v1_copy(l, saved); // stale fork: misses the v2 fix\n    } // + silently selects a DIFFERENT kernel variant than its sibling\n    self.head()\n}".to_string(),
+            opt_pattern: "// optimized: entry points multiply, loop bodies are SHARED per axis —\n// the variant axis owns only the sync strategy\n/// Sync: 3 (was 7). Bit-identical to [forward_token].\npub fn forward_token_batched(&mut self, tok: u32) -> &[f32] {\n    for l in 0..self.n_layers { self.forward_layer_gpu_batched(l); } // ONE body\n    self.head()\n}\n/// Sync: 2 (was 3). Parity < 1e-5 (GEMM vs GEMV fp non-associativity).\npub fn forward_token_batched_v2(&mut self, tok: u32) -> &[f32] {\n    for l in 0..self.n_layers { self.forward_layer_gpu_batched_v2(l); } // ONE body\n    self.head()\n}\n// saved entry points compose the SAME layer bodies + a save adapter —\n// kernel-variant selection can never diverge between siblings".to_string(),
+        },
+        // ── pipeline-layer-boundary-device-handle — the Handle IS the pipeline currency (D) ──
+        // Source: riir-gpu kimi_k3_gpu_forward.rs L937 (the boundary signature:
+        // fn forward_layer_gpu_resident(&mut self, hidden_handle: Handle,
+        // layer_idx: usize) -> Handle), L871-L874 (the loop threading the
+        // handle: hidden_handle = self.forward_layer_gpu_resident(
+        // hidden_handle, layer_idx)), L944-L945 + L1086-L1087 (the internal
+        // read/upload at CPU-consume/produce sites — host materialization is
+        // an INTERNAL detail of each layer), + L1018-L1024 (the payoff: the
+        // Dense FFN later fused to ONE sync WITHOUT touching any layer
+        // boundary or caller).
+        //
+        // Distinct from hybrid-cpu-elementwise-gpu-throughput-sync-points
+        // (B34 — op placement POLICY cpu-vs-gpu within a layer; this is the
+        // boundary TYPE between layers), from training-forward-shed-decode-
+        // loop-shape (B36 — loop granularity, not boundary typing), from
+        // chain-dispatches-single-sync-point (B19 — intra-command-buffer
+        // chaining, below this level), and from side-consumer-readback-
+        // alias-live-handle-for-dependent-dispatch (B35 — a side consumer +
+        // main chain at ONE op; this is pipeline-wide currency).
+        KernelRule {
+            rule_id: "pipeline-layer-boundary-device-handle".to_string(),
+            gpu_concept: "In a sequential multi-layer pipeline where each layer mixes GPU kernels with CPU glue ops, the inter-layer boundary signature should be fn layer(hidden: Handle, idx) -> Handle — the device handle is the pipeline currency, moved by value. Even when every layer still reads the activation back internally (CPU glue ops require it) and re-uploads at exit, this signature makes host materialization an INTERNAL detail of each layer rather than a property of the pipeline. That is the unlock: downstream kernels can later be migrated to consume handles (fusing norm + GEMV + activation + GEMV into one terminal sync) without touching any layer boundary or caller — observed when a 4-dispatch fused FFN landed inside one layer with ZERO boundary changes. If the boundary instead passes host slices/Vecs, every internal fusion attempt re-introduces the host round trip at the boundary and the migration never composes. The handle crossing the boundary costs a refcount bump; the host round trips it saves are per-layer, per-token. Distinct from hybrid-cpu-elementwise-gpu-throughput-sync-points (op placement policy within a layer; this is the boundary type between layers), from training-forward-shed-decode-loop-shape (loop granularity, not boundary typing), from chain-dispatches-single-sync-point (intra-command-buffer chaining, below this level), and from side-consumer-readback-alias-live-handle-for-dependent-dispatch (one op's side consumer; this is pipeline-wide currency).".to_string(),
+            ref_shape: "// naive: the boundary passes HOST state — every internal fusion attempt\n// re-introduces the host round trip at the boundary\nfn forward_layer(&mut self, idx: usize) {\n    let normed = rmsnorm_cpu(&self.hidden, &self.gammas[idx]);\n    let attn_out = self.attn(idx, &normed); // slice in, Vec out\n    for (h, a) in self.hidden.iter_mut().zip(attn_out.iter()) { *h += a; }\n}\nfn forward_token(&mut self, token: u32) -> Vec<f32> {\n    self.hidden.copy_from_slice(&self.embed_row(token));\n    for idx in 0..self.n_layers { self.forward_layer(idx); } // host currency\n    self.lm_head(&self.hidden)\n}".to_string(),
+            opt_pattern: "// optimized: the Handle IS the currency — host materialization becomes an\n// internal detail; later fusion composes WITHOUT boundary changes\nfn forward_layer_resident(&mut self, hidden_h: Handle, idx: usize) -> Handle {\n    read_handle_into(&self.client, hidden_h, &mut self.hidden); // internal: CPU glue needs it\n    let normed_h = self.dispatch_rmsnorm_gpu(upload(&self.hidden), &self.gamma_h[idx], self.d);\n    let fused_h = self.fused_ffn_handle(idx, normed_h); // fused later — boundary untouched\n    let out_h = launch_gemv_handle(&self.client, &self.w_down, fused_h, self.d);\n    read_handle_into(&self.client, out_h, &mut self.ffn_out);\n    self.accumulate_hidden();\n    self.client.create_from_slice(&self.hidden) // internal: re-upload at exit\n}\nfn forward_token(&mut self, token: u32) -> Vec<f32> {\n    let mut h = self.client.create_from_slice(&self.embed_row(token));\n    for idx in 0..self.n_layers { h = self.forward_layer_resident(h, idx); } // handle currency\n    read_handle(&self.client, self.lm_head_handle(h))\n}".to_string(),
+        },
     ])
 }
 
@@ -6043,7 +6302,7 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 294-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 303-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -6051,7 +6310,7 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (55 rules)
+    // A: Memory access patterns (60 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -6111,6 +6370,11 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "flat-activation-slots-as-readback-target",
             "transient-spike-pins-persistent-scratch",
             "transposed-consumption-accumulate-not-gather",
+            "append-cache-rewind-overwrite-in-place",
+            "slow-path-bootstraps-raw-buffer-hotswap-cache",
+            "tiny-param-buffer-rebuild-over-cache",
+            "readback-destination-passing-free-fn",
+            "variant-owned-output-buffer-clone-escape",
         ],
     ),
     // B: Compute patterns (45 rules)
@@ -6165,7 +6429,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "block-reduction-separate-scratch-runtime-strides",
         ],
     ),
-    // C: Fusion patterns (31 rules)
+    // C: Fusion patterns (32 rules)
     (
         KernelCategory::Fusion,
         "C: fusion",
@@ -6201,9 +6465,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "kernelize-host-chain-after-sync-batching-floor",
             "constant-scale-folded-into-upload-copy",
             "sparse-gather-scale-at-read-not-table-prepass",
+            "elementwise-offload-needs-device-side-anchor",
         ],
     ),
-    // D: Dispatch patterns (51 rules)
+    // D: Dispatch patterns (53 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -6259,6 +6524,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "lm-head-loss-positions-only",
             "materialized-fast-path-bulk-slice-accessor",
             "env-flag-resolved-once-not-per-dispatch",
+            "entrypoint-variants-share-layer-body",
+            "pipeline-layer-boundary-device-handle",
         ],
     ),
     // E: Parallelism patterns (17 rules)
@@ -6371,7 +6638,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "ragged-chunk-pad",
         ],
     ),
-    // K: Autotune dispatch (4 rules)
+    // K: Autotune dispatch (5 rules)
     (
         KernelCategory::AutotuneDispatch,
         "K: autotune dispatch",
@@ -6380,6 +6647,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "multi-priority-tune-groups",
             "shape-kind-dispatch",
             "vector-width-pow2-sweep",
+            "autotune-cache-extract-outlives-owner",
         ],
     ),
     // L: Conv-as-GEMM + memory layout (10 rules)
@@ -6457,7 +6725,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
 /// Returns 15 buckets (one per category), each containing the `KernelRule`s whose
 /// `rule_id` appears in that category's slice of [`KERNEL_CATEGORIES`]. This is
 /// the category-scoped view of the corpus — a future heal pipeline can consult
-/// routed expert's rules first without scanning all 294.
+/// routed expert's rules first without scanning all 303.
 ///
 /// # Allocation
 ///
@@ -6536,9 +6804,10 @@ mod tests {
         // Batch 36 (7): riir-gpu production kernels — constant-scale-folded-into-upload-copy, side-branch-operand-residency-matches-mutation-lifetime, activation-checkpoint-as-handle-clone-deferred-batch-readback, training-forward-shed-decode-loop-shape, sibling-dispatches-before-any-readback, independent-cpu-work-fills-dispatch-read-window, grad-terms-merge-before-shared-link-jacobian (gemma2_cubecl_train/resident.rs — the Gemma-2 RESIDENT training cluster: Plan 481/482 all-GPU LoRA forward (per-position + batched) + batched backward; completes the Batch 35 cluster).
 // Batch 37 (8): riir-gpu production kernels — kv-window-device-resident-ring-append, lm-head-loss-positions-only, verbatim-upload-on-format-match, stream-drain-free-source-during-build, identical-tensor-handle-clone-zero-reupload, sparse-gather-scale-at-read-not-table-prepass, tiled-host-transpose-before-quantize, materialized-fast-path-bulk-slice-accessor (gemma4_q4k_train/ mod.rs + weight_buffers.rs — the Q4_K TRAINING cluster: QLoRA frozen-Q4_K-base + f32-LoRA-delta Gemma-4 trainer; forward_batched + backward deferred to Batch 38).
         // Batch 38 (4): env-flag-resolved-once-not-per-dispatch, flat-activation-slots-as-readback-target, transient-spike-pins-persistent-scratch, transposed-consumption-accumulate-not-gather (gemma4_q4k_train/ forward_batched.rs + backward.rs — completes the Q4_K cluster).
+        // Batch 39 (9): riir-gpu production kernels — autotune-cache-extract-outlives-owner, append-cache-rewind-overwrite-in-place, slow-path-bootstraps-raw-buffer-hotswap-cache, entrypoint-variants-share-layer-body, elementwise-offload-needs-device-side-anchor, tiny-param-buffer-rebuild-over-cache, readback-destination-passing-free-fn, variant-owned-output-buffer-clone-escape, pipeline-layer-boundary-device-handle (kimi_k3_gpu_forward.rs — the KimiK3 full-model decode forward: variant family + hot-swap + rewind + readback + borrow-escape cluster).
         // Batch 35 (8): riir-gpu production kernels — mask-sentinel-matches-reduction-identity, smem-staging-gated-by-cross-thread-reuse, kernelize-host-chain-after-sync-batching-floor, block-reduction-separate-scratch-runtime-strides, saturating-nonlinearity-recovery-breaks-near-cap, adapter-grad-join-mirrors-forward-delta-insertion-point, side-consumer-readback-alias-live-handle-for-dependent-dispatch, quadratic-attention-intermediates-recompute-from-linear-saves (gemma2_cubecl_train/ — the Gemma-2 training cluster: fused causal attention kernel Issue 430 Option B + hybrid LoRA training fwd/bwd).
-        // Total: 209. // (historical batch-30 snapshot; current 294)
-        assert_eq!(corpus.entries.len(), 294, "batches 1-38 should have 294 rules");
+        // Total: 209. // (historical batch-30 snapshot; current 303)
+        assert_eq!(corpus.entries.len(), 303, "batches 1-39 should have 303 rules");
     }
 
     #[test]
@@ -8698,6 +8967,109 @@ mod tests {
         }
     }
 
+    #[test]
+    fn batch39_rules_present() {
+        let corpus = build_kernel_seed_corpus();
+        let ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        // K (1 new): autotune cache salvage across owner lifetimes
+        assert!(ids.contains(&"autotune-cache-extract-outlives-owner"), "autotune cache extract");
+        // A (5 new): rewind, boot-harvest hotswap, tiny params, dst-passing readback, clone escape
+        assert!(ids.contains(&"append-cache-rewind-overwrite-in-place"), "append cache rewind");
+        assert!(ids.contains(&"slow-path-bootstraps-raw-buffer-hotswap-cache"), "slow path bootstrap hotswap");
+        assert!(ids.contains(&"tiny-param-buffer-rebuild-over-cache"), "tiny param rebuild");
+        assert!(ids.contains(&"readback-destination-passing-free-fn"), "readback destination passing");
+        assert!(ids.contains(&"variant-owned-output-buffer-clone-escape"), "variant output clone escape");
+        // C (1 new): device-side anchor payoff condition
+        assert!(ids.contains(&"elementwise-offload-needs-device-side-anchor"), "device side anchor");
+        // D (2 new): shared layer body, handle boundary
+        assert!(ids.contains(&"entrypoint-variants-share-layer-body"), "entrypoint shared body");
+        assert!(ids.contains(&"pipeline-layer-boundary-device-handle"), "pipeline handle boundary");
+    }
+
+    #[test]
+    fn batch39_concepts_covered() {
+        // Distinctive ASCII substrings located by rule_id (the 32a
+        // convention — immune to prose-evolution churn).
+        let corpus = build_kernel_seed_corpus();
+        let concept = |id: &str| -> String {
+            corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-39 rule '{id}' missing"))
+                .gpu_concept
+                .clone()
+        };
+        // K: autotune-cache-extract-outlives-owner (kimi_k3_gpu_forward.rs L296-L302/L324-L329/L1735-L1743)
+        let c = concept("autotune-cache-extract-outlives-owner");
+        assert!(c.contains("decouple the cache lifetime")
+            && c.contains("re-tuning is not"), "autotune extract concept");
+        // A: append-cache-rewind-overwrite-in-place (L2061-L2074 + L2084-L2089)
+        let c = concept("append-cache-rewind-overwrite-in-place");
+        assert!(c.contains("rewind_to(pos)")
+            && c.contains("O(max_seq)"), "rewind concept");
+        // A: slow-path-bootstraps-raw-buffer-hotswap-cache (L1551-L1558/L1585-L1627/L1630-L1653)
+        let c = concept("slow-path-bootstraps-raw-buffer-hotswap-cache");
+        assert!(c.contains("harvests the raw native buffers")
+            && c.contains("slot ORDER is the key"), "boot harvest concept");
+        // D: entrypoint-variants-share-layer-body (L566-L576/L977-L992/L1862-L1896 vs L2162-L2177)
+        let c = concept("entrypoint-variants-share-layer-body");
+        assert!(c.contains("ONE shared method")
+            && c.contains("guarantees divergence"), "shared body concept");
+        // C: elementwise-offload-needs-device-side-anchor (L969-L972/L930-L935 vs L737-L741)
+        let c = concept("elementwise-offload-needs-device-side-anchor");
+        assert!(c.contains("device-side anchor")
+            && c.contains("compute-offload"), "anchor concept");
+        // A: tiny-param-buffer-rebuild-over-cache (L2437-L2441/L2473-L2476)
+        let c = concept("tiny-param-buffer-rebuild-over-cache");
+        assert!(c.contains("rebuild the params")
+            && c.contains("cache line"), "tiny params concept");
+        // A: readback-destination-passing-free-fn (L807-L828 vs L505-L523/L613-L614)
+        let c = concept("readback-destination-passing-free-fn");
+        assert!(c.contains("destination-passing")
+            && c.contains("FREE function over the context"), "dst passing concept");
+        // A: variant-owned-output-buffer-clone-escape (L1069/L1192/L1304/L1416/L1979/L2240 + L2308-L2315)
+        let c = concept("variant-owned-output-buffer-clone-escape");
+        assert!(c.contains("ownership placement")
+            && c.contains("per layer per token"), "clone escape concept");
+        // D: pipeline-layer-boundary-device-handle (L937/L871-L874/L944-L945/L1086-L1087/L1018-L1024)
+        let c = concept("pipeline-layer-boundary-device-handle");
+        assert!(c.contains("pipeline currency")
+            && c.contains("INTERNAL detail"), "handle boundary concept");
+    }
+
+    #[test]
+    #[cfg(not(feature = "kernel_verify"))]
+    fn batch39_pseudocode_parses() {
+        // G1 for Batch 39: every new rule's ref_shape AND opt_pattern must
+        // syn-parse as valid Rust (the L2 pruner verdict).
+        use crate::domain::HealDomain;
+        let corpus = build_kernel_seed_corpus();
+        let ids = [
+            "autotune-cache-extract-outlives-owner",
+            "append-cache-rewind-overwrite-in-place",
+            "slow-path-bootstraps-raw-buffer-hotswap-cache",
+            "entrypoint-variants-share-layer-body",
+            "elementwise-offload-needs-device-side-anchor",
+            "tiny-param-buffer-rebuild-over-cache",
+            "readback-destination-passing-free-fn",
+            "variant-owned-output-buffer-clone-escape",
+            "pipeline-layer-boundary-device-handle",
+        ];
+        for id in ids {
+            let entry = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-39 rule '{id}' missing"));
+            let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+            assert!(ref_verdict.parses, "batch-39 ref_shape for '{id}' must parse");
+            let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+            assert!(opt_verdict.parses, "batch-39 opt_pattern for '{id}' must parse");
+        }
+    }
+
+
 
     // ════════════════════════════════════════════════════════════════════
     // Plan 003 — Router ↔ corpus wiring tests
@@ -8710,7 +9082,7 @@ mod tests {
 
     #[test]
     fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-        // Every rule_id in the 294-rule corpus must appear in exactly one category.
+        // Every rule_id in the 303-rule corpus must appear in exactly one category.
         let corpus = build_kernel_seed_corpus();
         let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
         let mut categorized: Vec<&str> = Vec::new();
@@ -8741,19 +9113,19 @@ mod tests {
 
     #[test]
     fn kernel_categories_counts_match_plan_003_table() {
-        // Pin per-category rule counts to the Plan 003 table (updated for Batch 38).
+        // Pin per-category rule counts to the Plan 003 table (updated for Batch 39).
         let expected = [
-            (KernelCategory::MemoryAccess, 55),
+            (KernelCategory::MemoryAccess, 60),
             (KernelCategory::Compute, 45),
-            (KernelCategory::Fusion, 31),
-            (KernelCategory::Dispatch, 51),
+            (KernelCategory::Fusion, 32),
+            (KernelCategory::Dispatch, 53),
             (KernelCategory::Parallelism, 17),
             (KernelCategory::FlashAttnTiling, 10),
             (KernelCategory::LinearAttnRecurrence, 19),
             (KernelCategory::MoeDispatchBackward, 13),
             (KernelCategory::NsaBlockSparse, 4),
             (KernelCategory::VarlenChunkedReduction, 5),
-            (KernelCategory::AutotuneDispatch, 4),
+            (KernelCategory::AutotuneDispatch, 5),
             (KernelCategory::ConvGemmLayout, 10),
             (KernelCategory::KernelPolymorphism, 9),
             (KernelCategory::DtypeAlignment, 17),
@@ -8766,9 +9138,9 @@ mod tests {
                 "Plan 003: category {cat:?} has {} rules, expected {count}",
                 entry.2.len());
         }
-        // Sum must equal 294.
+        // Sum must equal 303.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 294, "Plan 003: category totals must sum to 294");
+        assert_eq!(total, 303, "Plan 003: category totals must sum to 303");
     }
 
     #[test]
@@ -8778,7 +9150,7 @@ mod tests {
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 294, "Plan 003: grouped corpus has {total} rules, expected 294");
+        assert_eq!(total, 303, "Plan 003: grouped corpus has {total} rules, expected 303");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");
