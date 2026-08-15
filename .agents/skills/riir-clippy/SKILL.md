@@ -127,34 +127,44 @@ global = symlink only.
 
 ## Mining queue snapshot (update per batch — this is the resume state)
 
-- **Batch 32a DONE (2026-08-15, Research 034):** the edge_lora CORE cluster
-  (edge_module + types + training + adaptive_width) — 11 rules, corpus
-  217 → 228. Bug yield filed as riir-ai Issue 683 (AdaptiveWidthTrainer
-  per-episode construction storm + ignored TrainingConfig fields +
-  misreported mean_weighted_loss + minor hazards).
-- **Batch 32b (NEXT)**: the edge_lora self-play/arena/consolidation half —
-  `topology_trainer.rs` (1468L), `sleep_consolidation.rs` (615L),
-  `arena_eval.rs` (604L), `{go,bomber,fft}_self_play.rs` (730/521/506L),
-  `cross_game_{edge,real}.rs` (504/224L), `chain_commit.rs` (394L),
-  `sigmoid_gate.rs` (394L), `mod.rs` (249L) → Research 035, corpus
-  228 → ~236. `kernels/` = mostly `.wgsl` — mine the Rust wrappers only.
-  - Suggested split if too big: 32b-1 = topology_trainer + training
-    remnants (chain_commit, sigmoid_gate, mod), 32b-2 = self-play/arena
-    (go/bomber/fft_self_play, cross_game_*, arena_eval,
-    sleep_consolidation).
-  - Validation pattern (proven T4 + Batch 32a): corpus files are NOT
+- **Batch 32b-1 DONE (2026-08-15, Research 035):** the edge_lora training
+  half (topology_trainer + chain_commit + sigmoid_gate + mod) — 10 rules,
+  corpus 228 → 238 (A 39, B 39, C 25, D 35, E 14). Bug yield filed as
+  riir-ai Issue 684 (hot-loop allocation storm: per-node `vec!` on a FALSE
+  aliasing premise ×2 + per-edge `to_vec()` borrow workaround + backward
+  staging buffer + the O(E·L²) routing re-derivation ×3 loops + dead
+  scratch clears + triple-BLAKE3 load path + 7-site sigmoid duplication
+  + discarded topology validation error + u32→u16 narrowing).
+- **Batch 32b-2 (NEXT)**: the edge_lora self-play/arena/consolidation
+  half — `sleep_consolidation.rs` (615L), `arena_eval.rs` (604L),
+  `{go,bomber,fft}_self_play.rs` (730/521/506L), `cross_game_{edge,real}.rs`
+  (504/224L) + `kernels/` Rust wrappers → Research 036, corpus 238 → ~246.
+  - Note: `sigmoid_outcome_reward` is triplicated across the self-play
+    files (part of the Issue 684 7-site sigmoid family) — dedup candidate,
+    not a rule candidate.
+  - Validation pattern (proven T4 + 32a + 32b-1): corpus files are NOT
     sibling WIP — edit + run GOAT in the main checkout with
     `CARGO_TARGET_DIR=/tmp/riir-clippy-bNN`; `--features kernel_heal`
-    for the corpus suite (306 tests at 32a), default for the 201 suite.
+    for the corpus suite (309 tests at 32b-1), default for the 201 suite.
     `--all-features` is currently broken by SIBLING WIP
     (`rust_perf/bench.rs:335 alloc_axis`) — pre-existing, not yours.
-  - Count-pin sites when adding rules (Batch 32a found them all):
+  - Count-pin sites when adding rules (complete list, re-verified 32b-1):
     corpus.rs `entries.len()` assert + KERNEL_CATEGORIES rows + per-category
     count test + 2 grouped-total tests + router.rs `rules_for_expert` total
-    + the `217`/`228` mentions in router.rs doc header.
+    + the corpus-count mentions in router.rs doc header + the Plan 003
+    doc-comment `238-rule corpus` line above KERNEL_CATEGORIES.
+  - **Landing lesson (32b-1, self-caught)**: after a large multi-entry
+    corpus edit, `awk`-scan for `rule_id:` lines NOT preceded by a
+    standalone `KernelRule {` BEFORE the first compile — JSON `\n`
+    escaping in comment blocks can land as literal 2-char `\n` text,
+    swallowing the `KernelRule {` opener into the comment (9/10 entries
+    broken; rustc's `vec![` unclosed-delimiter error points at the symptom,
+    not the cause).
 - **BLOCKED**: `ternary_deltanet_gpu_forward.rs` (+ `_cudarc.rs` — sibling
-  WIP active there as of 2026-08-15) — mine only after their WIP lands.
-- **Progress**: riir-gpu ~58 of ~200 files mined. Corpus: 228 rules.
+  WIP STILL ACTIVE as of 2026-08-15 evening: qv_lora.rs + cudarc_kernels/
+  + riir-gpu/lib.rs + ternary_deltanet_gpu_forward_cudarc.rs all dirty)
+  — mine only after their WIP lands.
+- **Progress**: riir-gpu ~62 of ~200 files mined. Corpus: 238 rules.
 - **Also open (riir-clippy issues)**: 014 (rust_perf v4, 12 tasks), 016
   (clippy structural expansion, 6), 017 (retrieval precision at scale,
   5), 018 (self_evolve promotion, 6). 015 = sibling's ACTIVE WIP

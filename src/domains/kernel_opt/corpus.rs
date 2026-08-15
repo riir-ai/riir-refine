@@ -513,6 +513,55 @@
 //!   `TrainingConfig` fields (`weight_decay`/`grad_clip_norm`/
 //!   `per_layer_lr_scale`) + misreported `mean_weighted_loss` — filed as a
 //!   riir-ai issue.
+//! - **Batch 32b (Research 035):** 10 rules from the `edge_lora` training
+//!   half — `topology_trainer.rs` (1468L, the topology-evolution trainer),
+//!   `chain_commit.rs`, `sigmoid_gate.rs`, and `mod.rs` (chain commitment
+//!   and per-edge additive gating):
+//!   `static-classification-hoist-to-routing-table` (D — the hot loop
+//!   re-classifies immutable topology per call via an O(L) scan per edge
+//!   plus a fresh Vec per call; classify ONCE at construction into CSR-style
+//!   buckets — notably `edge_source_layers()` already computed the exact
+//!   mapping but only a cold path consumed it), `sigmoid-deriv-recovered-
+//!   from-output` (A — σ'(x) = σ(x)·(1−σ(x)) makes the derivative a pure
+//!   function of the OUTPUT: cache only the post-activation, recover the
+//!   derivative algebraically incl. through a scale factor — halves
+//!   activation-cache traffic), `fuse-weight-grad-input-grad-single-
+//!   matrix-visit` (C — the weight-grad outer product WRITES B's grads
+//!   while the input-grad transposed matvec READS B: one visit per row
+//!   serves both roles), `needless-swap-temp-hoist-to-scratch` (A — a
+//!   'defensive' per-iteration `vec![0.0; hd]` motivated by a FALSE
+//!   aliasing premise (read buffer ≠ write buffer): write the destination
+//!   directly; genuine ping-pong temps are loop-carried state in the
+//!   persistent scratch), `scoped-init-at-consume-site` (A — blanket
+//!   whole-scratch `clear()` memsets dead lanes + buffers the consumer
+//!   re-zeroes anyway: only ACCUMULATION targets need pre-zeroing, scoped
+//!   to the live window at the consume site), `monomorphize-per-element-
+//!   trait-calls` (B — per-node `&dyn` vtable indirection in the hot loop
+//!   → generic `+ ?Sized` (the same file's backward is already generic;
+//!   the inconsistent pair was the evidence)), `additive-sigmoid-gates-
+//!   not-softmax-routing` (E — softmax routing forces a cross-edge
+//!   reduction barrier (max+sum) before ANY gate is final; per-edge
+//!   independent sigmoid gates compose additively — embarrassingly
+//!   parallel, multiple edges simultaneously near 1.0 by design; the
+//!   house sigmoid-not-softmax rule as a kernel-corpus rule),
+//!   `commit-over-maintained-item-digests` (B — container commitment
+//!   digests the maintained 32-byte per-item digests: O(items), not
+//!   O(total payload bytes) per commit), `verify-once-at-trust-boundary`
+//!   (D — the load path re-verifies at every layer (deserialize →
+//!   `edges_from_bundle` → per-artifact re-hash): verify ONCE where
+//!   untrusted bytes become trusted state, return a capability type;
+//!   the canonical path paid up to 3 full BLAKE3 passes per load), and
+//!   `derive-shape-from-payload-not-cached-field` (A — no cached `in_dim`
+//!   field that can drift: `gate_vectors.first().map(|v| v.len())` at the
+//!   API boundary is the single source of shape truth; the desync bug
+//!   class becomes structurally impossible). Corpus: **238 rules across
+//!   15 categories (A–O)**. 21 candidates dropped as duplicates/thin
+//!   (routing-table-per-call → covered combos; unroll/scratch/prepass
+//!   patterns already in corpus). Mining ALSO surfaced the hot-loop
+//!   allocation storm (per-node `vec!` ×2 sites + per-edge `to_vec()`
+//!   borrow workaround) + the O(E·L²) routing re-derivation + dead
+//!   scratch clears + a false-premise aliasing comment — filed as a
+//!   riir-ai issue.
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
@@ -4250,6 +4299,107 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
             ref_shape: "// Naive: two passes over the residual.\nfn loss_and_grad_naive(out: &[f32], target: &[f32], w: f32) -> (f32, Vec<f32>) {\n    let mut loss = 0.0;\n    for i in 0..out.len() {          // pass 1: loss only\n        let d = out[i] - target[i];\n        loss += w * d * d;\n    }\n    let mut grad_out = vec![0.0; out.len()];\n    for i in 0..out.len() {          // pass 2: recompute the residual\n        let d = out[i] - target[i]; // same subtraction AGAIN\n        grad_out[i] = 2.0 * w * d;\n    }\n    (loss, grad_out)\n}".to_string(),
             opt_pattern: "// One residual pass produces both the scalar loss (telemetry) and\n// its exact output-gradient (for backward). diff computed once,\n// written into a persistent scratch buffer.\nfn loss_and_grad_fused(out: &[f32], target: &[f32], reward: f32,\n                       grad_out: &mut [f32]) -> f32 {\n    let mut sq_err = 0.0f32;\n    for i in 0..out.len() {\n        let diff = out[i] - target[i];     // ONE subtraction\n        sq_err += diff * diff;             // loss accumulates\n        grad_out[i] = 2.0 * reward * diff; // d(r*sq_err)/d(out[i])\n    }\n    sq_err // no second pass, no diff temp\n}".to_string(),
         },
+        // ══ Batch 32b (Research 035): the edge_lora training half — ══
+        // topology_trainer.rs + chain_commit.rs + sigmoid_gate.rs + mod.rs.
+        // Host-side training orchestration + commitment + additive gating.
+        // ── static-classification-hoist-to-routing-table — per-call scan → classify-once table (D) ──
+        // Source: riir-gpu edge_lora/topology_trainer.rs L569-579 (the
+        // `layer_of` closure re-built per call: "// Build cumulative node
+        // offsets per layer for edge routing.\n        // let offsets = self.layer_offsets();" + the O(n_layers) linear probe)
+        // + L596-604 ("for (edge_idx, &(from, to)) in
+        //   self.topology.connectivity.iter().enumerate() { let from_layer =
+        //   match layer_of(from) {" — the per-edge classification inside the
+        //   hot loop) + L1046-1056 (`layer_offsets` allocates a fresh Vec per
+        // call). The same closure+scan is duplicated verbatim at L680-689
+        // (forward_cached) and L830-839 (backward). Notably
+        // `edge_source_layers()` (L1063-1079) ALREADY computes the exact
+        // edge→layer mapping — but only the LR-multiplier path consumes it.
+        //
+        // Distinct from prebuilt-bind-groups-fixed-buffer-combos and
+        // host-cache-immutable-device-weights (cache GPU OBJECTS at init —
+        // bind groups, device buffers; this computes a CLASSIFICATION TABLE
+        // whose naive form is an embedded scan), and from
+        // csr-index-via-prefix-sum / ragged-pack-offset-table-fused-dispatch
+        // (build CSR indices for a one-shot pack/dispatch; here the table is
+        // a persistent routing structure replacing a repeated filter-scan).
+        KernelRule {
+            rule_id: "static-classification-hoist-to-routing-table".to_string(),
+            gpu_concept: "when the hot loop filters items against an immutable structure (a fixed topology, a fixed layering, a fixed tile grid), the naive form re-classifies inside the loop: every item is linearly probed against an offset/range table (O(n_ranges) per lookup) on every call, and the offset table itself is heap-allocated per call. For E edges across L layer transitions that is O(E·L²) classification work per training step for metadata that never changes. Classify once at construction: a flat item→class table plus per-class buckets of item indices (CSR-style start/index arrays) so each transition visits only its active items with O(1) lookups and zero per-call allocation. On device this is the build-the-launch-routing-table-once-at-pipeline-build pattern; on host it deletes a whole class of per-call scans. When a helper that already computes the mapping exists but only a cold path consumes it, wiring the hot loops to it is the fix. Distinct from prebuilt-bind-groups-fixed-buffer-combos and host-cache-immutable-device-weights (cache GPU objects at init — this computes a classification table whose naive form is an embedded scan), and from csr-index-via-prefix-sum / ragged-pack-offset-table-fused-dispatch (one-shot CSR pack/dispatch — here the table is a persistent routing structure replacing a repeated filter-scan)".to_string(),
+            ref_shape: "// Naive: the hot loop re-derives routing metadata from an immutable\n// topology on EVERY call, via an O(n_layers) linear probe PER EDGE,\n// plus a fresh Vec for the offset table per call.\nfn forward_naive(layer_widths: &[u16], connectivity: &[(u16, u16)]) {\n    let mut offsets: Vec<u16> = Vec::with_capacity(layer_widths.len() + 1);\n    offsets.push(0);\n    let mut acc: u16 = 0;\n    for &w in layer_widths {\n        acc = acc.saturating_add(w);\n        offsets.push(acc);\n    }\n    let layer_of = |node_id: u16| -> Option<usize> {\n        for (layer, &start) in offsets.iter().enumerate() {\n            let next = offsets.get(layer + 1).copied().unwrap_or(u16::MAX);\n            if node_id >= start && node_id < next {\n                return Some(layer);\n            }\n        }\n        None\n    };\n    for layer_idx in 0..layer_widths.len() {\n        for &edge in connectivity.iter() {\n            let from_layer = match layer_of(edge.0) {\n                Some(l) => l,\n                None => continue,\n            };\n            if from_layer != layer_idx {\n                continue; // scanned, classified, then skipped — every step\n            }\n            run_edge(edge);\n        }\n    }\n}".to_string(),
+            opt_pattern: "// Optimized: classify ONCE at construction — flat edge→class table +\n// per-class buckets (CSR start/index arrays). Each transition visits\n// ONLY its active edges; O(1) lookups, zero per-call allocation.\nstruct EdgeRouting {\n    edge_from_layer: Vec<u16>,   // edge -> source layer, O(1)\n    layer_edge_start: Vec<u32>,  // layer -> first idx in layer_edge_idx\n    layer_edge_idx: Vec<u32>,    // bucketed edge indices\n}\nfn build_routing(layer_widths: &[u16], connectivity: &[(u16, u16)]) -> EdgeRouting {\n    let mut offsets: Vec<u16> = Vec::with_capacity(layer_widths.len() + 1);\n    offsets.push(0);\n    let mut acc: u16 = 0;\n    for &w in layer_widths {\n        acc = acc.saturating_add(w);\n        offsets.push(acc);\n    }\n    let mut edge_from_layer = vec![0u16; connectivity.len()];\n    for (i, &(from, _)) in connectivity.iter().enumerate() {\n        for (l, &start) in offsets.iter().enumerate() {\n            let next = offsets.get(l + 1).copied().unwrap_or(u16::MAX);\n            if from >= start && from < next {\n                edge_from_layer[i] = l as u16;\n                break;\n            }\n        }\n    }\n    let mut counts = vec![0u32; layer_widths.len()];\n    for &l in &edge_from_layer {\n        counts[l as usize] += 1;\n    }\n    let mut layer_edge_start = Vec::with_capacity(counts.len() + 1);\n    let mut run: u32 = 0;\n    for &c in &counts {\n        layer_edge_start.push(run);\n        run += c;\n    }\n    layer_edge_start.push(run);\n    let mut cursor = layer_edge_start.clone();\n    let mut layer_edge_idx = vec![0u32; connectivity.len()];\n    for (i, &l) in edge_from_layer.iter().enumerate() {\n        layer_edge_idx[cursor[l as usize] as usize] = i as u32;\n        cursor[l as usize] += 1;\n    }\n    EdgeRouting { edge_from_layer, layer_edge_start, layer_edge_idx }\n}\nfn forward_opt(routing: &EdgeRouting, layer_widths: &[u16]) {\n    for layer_idx in 0..layer_widths.len() {\n        let s = routing.layer_edge_start[layer_idx] as usize;\n        let e = routing.layer_edge_start[layer_idx + 1] as usize;\n        for &ei in &routing.layer_edge_idx[s..e] {\n            run_edge_idx(ei); // only active edges — no scan, no skip\n        }\n    }\n}".to_string(),
+        },
+        // ── sigmoid-deriv-recovered-from-output — cache pre+post activation → recover algebraically (A) ──
+        // Source: riir-gpu edge_lora/topology_trainer.rs L966-987 (the\n        // comment block: "// We don't cache inter directly; we cache sig =\n        // sigmoid(inter) · scale. / // sigmoid(inter) = sig / scale (recover\n        // raw sigmoid). / // sigmoid'(inter) = sigmoid(inter) · (1 −\n        // sigmoid(inter)).") + L171-182 (ForwardCache: "pub edge_sig_inter:\n        // Vec<Vec<f32>>" with doc "Per-edge post-sigmoid intermediate\n        // `σ(A·h)·scale`" — and NO pre-activation field).\n        //\n        // Distinct from sign-branch-stable-sigmoid (numerical stability of\n        // EVALUATING sigmoid — this is about which activation tensor is\n        // CACHED for backward), from activation-recompute-budget (the\n        // cache-vs-recompute axis for ordinary activations — this is the\n        // derivative-recoverability special case that DELETES a cache lane),\n        // and from monotone-transform-elision-under-argmax (elides a transform\n        // under a specific consumer — here the cached tensor changes).
+        KernelRule {
+            rule_id: "sigmoid-deriv-recovered-from-output".to_string(),
+            gpu_concept: "activation backward needs sigmoid'(x), so the naive forward pass caches BOTH the pre-activation x and the post-activation σ(x) — an extra tensor written every forward step and read every backward step. The identity σ'(x) = σ(x)·(1 − σ(x)) makes the derivative a pure function of the OUTPUT: only the post-activation needs storing (it is already needed for the weight-gradient outer product anyway), and the derivative is recovered with one divide + two FMA — including through a scale factor (sig = σ·scale ⇒ scale·σ' = sig − sig²/scale, with the scale=0 degenerate guarded). This halves activation-cache traffic for the sigmoid/tanh class whose derivative is expressible via its own output: one fewer tensor written in forward, one fewer read in backward, ~3 flops per element on recovery. On device this is the standard sigmoid/tanh backward kernel not loading the pre-activation. Distinct from sign-branch-stable-sigmoid (numerical stability of evaluating sigmoid — this is about which activation tensor is cached for backward), from activation-recompute-budget (the cache-vs-recompute axis — this is the derivative-recoverability special case that deletes a cache lane), and from monotone-transform-elision-under-argmax (elides a transform under a consumer — here the cached tensor changes)".to_string(),
+            ref_shape: "// Naive: cache BOTH pre- and post-activation so backward has the\n// pre-activation handy for sigmoid'(x).\nstruct CacheNaive {\n    inter: Vec<f32>, // pre-activation A·h — EXTRA buffer per edge per step\n    sig: Vec<f32>,   // post-activation σ(A·h)·scale\n}\nfn forward_cache_naive(a: &[f32], h: &[f32], rank: usize, scale: f32,\n                       cache: &mut CacheNaive) {\n    for r in 0..rank {\n        let mut dot = 0.0f32;\n        for j in 0..h.len() {\n            dot += a[r * h.len() + j] * h[j];\n        }\n        cache.inter[r] = dot;               // store pre-activation...\n        let s = 1.0 / (1.0 + (-dot).exp());\n        cache.sig[r] = s * scale;           // ...AND post-activation (2 tensors)\n    }\n}\nfn backward_naive(cache: &CacheNaive, grad_sig: &mut [f32], rank: usize,\n                  scale: f32) {\n    for r in 0..rank {\n        // sigmoid' needs the PRE-activation => the extra buffer must be\n        // written in forward and read here (extra traffic every step).\n        let s = 1.0 / (1.0 + (-cache.inter[r]).exp());\n        let d = s * (1.0 - s);\n        grad_sig[r] *= scale * d;\n    }\n}".to_string(),
+            opt_pattern: "// Optimized: σ'(x) = σ(x)·(1−σ(x)) — the derivative is a function of\n// the OUTPUT. Cache only the post-activation; recover the derivative\n// algebraically. Through a scale: scale·σ' = sig − sig²/scale.\nstruct CacheOpt {\n    sig: Vec<f32>, // post-activation σ(A·h)·scale — the ONLY activation cache\n}\nfn forward_cache_opt(a: &[f32], h: &[f32], rank: usize, scale: f32,\n                     cache: &mut CacheOpt) {\n    for r in 0..rank {\n        let mut dot = 0.0f32;\n        for j in 0..h.len() {\n            dot += a[r * h.len() + j] * h[j];\n        }\n        let s = 1.0 / (1.0 + (-dot).exp());\n        cache.sig[r] = s * scale; // pre-activation is NEVER stored\n    }\n}\nfn backward_opt(cache: &CacheOpt, grad_sig: &mut [f32], rank: usize,\n                scale: f32) {\n    if scale.abs() > 1e-12 {\n        for r in 0..rank {\n            let s = cache.sig[r];\n            let sigmoid_raw = s / scale;                  // recover σ(x)\n            let sigmoid_deriv = sigmoid_raw * (1.0 - sigmoid_raw);\n            grad_sig[r] *= scale * sigmoid_deriv;         // == s − s·s/scale\n        }\n    } else {\n        for v in grad_sig[..rank].iter_mut() {\n            *v = 0.0; // degenerate scale: edge produces no output\n        }\n    }\n}".to_string(),
+        },
+        // ── fuse-weight-grad-input-grad-single-matrix-visit — two B passes → one fused visit (C) ──
+        // Source: riir-gpu edge_lora/topology_trainer.rs L932-963 ("//\n        // grad_B[o,r] += grad_out_edge[o] · sig[r]; grad_sig[r] = Σ_o B[o,r]\n        // · grad_out_edge[o]" followed by ONE loop over o whose body does\n        // BOTH `g_b_row[r] += go * sig[r];` AND `scratch.grad_sig[r] +=\n        // b_row[r] * go;` in the same 8-wide unrolled iteration).\n        //\n        // Distinct from dual-grad-same-pass (two gradient PARTIALS of a\n        // product rule share one activation eval — here it is two gradient\n        // ROLES of one weight matrix: the write-role outer product and the\n        // read-role transposed matvec), from weight-grad-batched-outer-product\n        // (batching outer products across ITEMS — this fuses roles within one\n        // item), and from fuse-sibling-target-grads-single-kernel (fusing\n        // gradients of sibling TARGETS — here both gradients belong to the\n        // SAME op).
+        KernelRule {
+            rule_id: "fuse-weight-grad-input-grad-single-matrix-visit".to_string(),
+            gpu_concept: "the backward of out = B · sig needs two gradients over the same weight matrix B: the weight-gradient grad_B[o,r] = g[o]·sig[r] (an outer product that WRITES grad_B and never reads B) and the input-gradient grad_sig[r] = Σ_o B[o,r]·g[o] (a transposed matvec that READS B). As two separate passes they walk the out_dim × rank index space twice, loading sig[] and g[] twice and doubling loop overhead. Fuse them into one visit per B row: the same iteration performs the outer-product write and the transposed-read accumulation, loading sig[r] and go once for both uses and sharing all index arithmetic — halving loop overhead and sig[]/g[] load traffic for the pair. On device, one traversal of B's rows serves both the write-role and the read-role while b_row is resident. Distinct from dual-grad-same-pass (two gradient partials of a product rule share one activation eval — here two gradient ROLES of one weight matrix), from weight-grad-batched-outer-product (batching outer products across items — this fuses roles within one item), and from fuse-sibling-target-grads-single-kernel (sibling TARGETS — here both gradients belong to the same op)".to_string(),
+            ref_shape: "// Naive: two separate passes over the same weight matrix B.\n// Pass 1 writes the weight-grad (never reads B). Pass 2 reads ALL\n// of B again for the input-grad reduction.\nfn grad_b_then_grad_sig_naive(b: &[f32], g_out: &[f32], sig: &[f32],\n                             g_b: &mut [f32], grad_sig: &mut [f32],\n                             out_dim: usize, rank: usize) {\n    for o in 0..out_dim {\n        let go = g_out[o];\n        for r in 0..rank {\n            g_b[o * rank + r] += go * sig[r]; // write-role\n        }\n    }\n    for r in 0..rank {\n        let mut acc = 0.0f32;\n        for o in 0..out_dim {\n            acc += b[o * rank + r] * g_out[o]; // read-role: B walked AGAIN\n        }\n        grad_sig[r] = acc;\n    }\n}".to_string(),
+            opt_pattern: "// Optimized: ONE visit per B row serves BOTH gradient roles — the\n// outer-product write (needs sig[], go) and the transposed-matvec\n// read (needs b_row). Same index space walked once.\nfn grad_b_and_grad_sig_fused(b: &[f32], g_out: &[f32], sig: &[f32],\n                             g_b: &mut [f32], grad_sig: &mut [f32],\n                             out_dim: usize, rank: usize) {\n    for v in grad_sig[..rank].iter_mut() {\n        *v = 0.0;\n    }\n    for o in 0..out_dim {\n        let go = g_out[o];\n        let b_row = &b[o * rank..(o + 1) * rank];\n        let g_b_row = &mut g_b[o * rank..(o + 1) * rank];\n        for r in 0..rank {\n            g_b_row[r] += go * sig[r];    // weight-grad write...\n            grad_sig[r] += b_row[r] * go; // ...input-grad read, same visit\n        }\n    }\n}".to_string(),
+        },
+        // ── needless-swap-temp-hoist-to-scratch — per-iteration defensive temp → direct write / scratch (A) ──
+        // Source: riir-gpu edge_lora/topology_trainer.rs L627-639 ("// Vertex\n        // reads from next_node_hidden, writes back into the same slot\n        // (in-place). We use a small swap buffer to avoid aliasing.\n        // let mut tmp = vec![0.0f32; hd];" — the comment's premise is FALSE:\n        // the read is from `next_node_hidden` and the write to `node_hidden`,\n        // DIFFERENT buffers) + the identical pattern at L758-769\n        // (forward_cached).\n        //\n        // Distinct from inplace-output-alias (teaches WHEN to alias output\n        // onto input to save a buffer — the complementary direction, says\n        // nothing about false-alarm temps or loop-carried temps), from\n        // nonlinearity-forces-raw-input-buffers (batching legality under\n        // nonlinearity), and from caller-owned-split-scratch (callee\n        // returning borrowed views of a split scratch — here the temp should\n        // not exist at all, and genuine temps belong in the persistent\n        // scratch).
+        KernelRule {
+            rule_id: "needless-swap-temp-hoist-to-scratch".to_string(),
+            gpu_concept: "an in-loop transform that reads one buffer and writes another allocates a 'defensive' temporary vec![0.0; n] per iteration (per node, per layer, per step) out of fear of aliasing — then copies the temp into the destination, paying one heap allocation plus two extra memory passes per element. Two fixes: (1) verify whether aliasing actually exists — when input and output live in different buffers (accumulator vs layer buffer, ping-pong pair), write the destination directly with zero temps and zero extra copies; the comment claiming 'in-place' is often describing different arrays at the same index, a false premise that motivated the temp; (2) when aliasing is genuine, the swap temp is loop-carried state and belongs in the persistent scratch struct, allocated once — never inside the loop. Deletes a per-iteration allocator round-trip and a full read+write of the element range from the hot path. Distinct from inplace-output-alias (teaches when to alias output onto input — the complementary direction, nothing about false-alarm temps), from nonlinearity-forces-raw-input-buffers (batching legality under nonlinearity), and from caller-owned-split-scratch (split-scratch views — here the temp should not exist at all, and genuine temps belong in the persistent scratch)".to_string(),
+            ref_shape: "// Naive: a 'defensive' swap temp allocated PER NODE PER LAYER inside\n// the training loop — even though input and output live in DIFFERENT\n// buffers, so no aliasing exists at all.\nfn apply_vertex_naive(next_node_hidden: &[f32], node_hidden: &mut [f32],\n                      hd: usize, next_width: usize,\n                      apply: fn(&[f32], &mut [f32])) {\n    for node in 0..next_width {\n        let start = node * hd;\n        // Heap allocation in the hot loop — every node, every layer:\n        let mut tmp = vec![0.0f32; hd];\n        apply(&next_node_hidden[start..start + hd], &mut tmp);\n        // ...followed by a redundant copy into the (distinct!) destination:\n        node_hidden[start..start + hd].copy_from_slice(&tmp);\n    }\n}".to_string(),
+            opt_pattern: "// Optimized: (1) input (accumulator) and output (layer buffer) are\n// distinct — write the destination DIRECTLY: zero temps, zero extra\n// copies. (2) any GENUINE in-place ping-pong temp is loop-carried\n// state and lives in the persistent scratch, never inside the loop.\nstruct Scratch {\n    node_hidden: Vec<f32>,\n    next_node_hidden: Vec<f32>,\n    swap_tmp: Vec<f32>, // hoisted: allocated once with the scratch\n}\nfn apply_vertex_opt(scratch: &mut Scratch, hd: usize, next_width: usize,\n                    apply: fn(&[f32], &mut [f32]), genuinely_in_place: bool) {\n    for node in 0..next_width {\n        let start = node * hd;\n        if genuinely_in_place {\n            // real aliasing: bounce through the scratch-owned temp\n            apply(&scratch.next_node_hidden[start..start + hd],\n                  &mut scratch.swap_tmp[start..start + hd]);\n            scratch.node_hidden[start..start + hd]\n                .copy_from_slice(&scratch.swap_tmp[start..start + hd]);\n        } else {\n            // no aliasing: read one buffer, write the other directly\n            apply(&scratch.next_node_hidden[start..start + hd],\n                  &mut scratch.node_hidden[start..start + hd]);\n        }\n    }\n}".to_string(),
+        },
+        // ── scoped-init-at-consume-site — whole-scratch clear → zero only accumulation windows (A) ──
+        // Source: riir-gpu edge_lora/topology_trainer.rs L400-421 (`clear()`\n        // zeroes ALL five scratch families: "/// Reset all scratch buffers to\n        // zero (plasma tier pattern).") + L581-583 ("scratch.clear();" at\n        // forward entry — including `gates_scratch` + `edge_outputs`, which\n        // are NEVER read by any production path in this module; the only\n        // reader is the clear() self-test at L1405-1445) + L590-594 (the\n        // consumer re-zeroes the live window anyway: "// Zero the next-layer\n        // accumulator. / for v in scratch.next_node_hidden[..next_width *\n        // hd].iter_mut() { *v = 0.0; }").\n        //\n        // Distinct from persistent-zeros-source-encoder-copy-clear (MAINTAINS\n        // persistent zeros as an accumulation source via encoder-timeline\n        // copies — a correctness mechanism for buffers that must stay zero;\n        // this ELIMINATES blanket clears because most consumers don't need\n        // them), from zero-init-side-branch-frozen-base-path (frozen base-path\n        // semantics, not init scoping), and from predicate-gated-skip-\n        // empty-workset-step (skips whole steps — this trims init within a\n        // step).
+        KernelRule {
+            rule_id: "scoped-init-at-consume-site".to_string(),
+            gpu_concept: "a whole-scratch clear() at function entry memsets EVERY buffer the scratch owns — including buffers the current code path never touches, and buffers the consumer immediately re-zeroes itself — so each call pays a full-scratch memset of which most bytes are dead lanes or duplicated work. Only ACCUMULATION targets need pre-zeroed memory, and that zeroing is scoped to the window actually accumulated into, performed at the consume site; producers that fully overwrite their output (copy or write-per-element) need no initialization at all, and stale data past the active width is never read because reads are width-bounded. Cuts per-call memset traffic from O(total scratch) to O(active window). Same discipline as zeroing only the live prefix of a staging buffer or the active region of a device scratch instead of the full allocation. Distinct from persistent-zeros-source-encoder-copy-clear (maintains persistent zeros as an accumulation source — a correctness mechanism; this eliminates blanket clears because most consumers don't need them), from zero-init-side-branch-frozen-base-path (frozen base-path semantics, not init scoping), and from predicate-gated-skip-empty-workset-step (skips whole steps — this trims init within a step)".to_string(),
+            ref_shape: "// Naive: blanket clear of the ENTIRE scratch (including buffers this\n// code path never touches), then the consumer re-zeroes its\n// accumulation window anyway. Double memset + dead-lane memset.\nstruct BigScratch {\n    node_hidden: Vec<f32>,\n    next_node_hidden: Vec<f32>,\n    gates: Vec<f32>,        // unused by this path\n    edge_outputs: Vec<f32>, // unused by this path\n}\nfn clear_all(s: &mut BigScratch) {\n    for v in s.node_hidden.iter_mut() { *v = 0.0; }\n    for v in s.next_node_hidden.iter_mut() { *v = 0.0; }\n    for v in s.gates.iter_mut() { *v = 0.0; }\n    for v in s.edge_outputs.iter_mut() { *v = 0.0; }\n}\nfn step_naive(scratch: &mut BigScratch, layer_widths: &[usize], hd: usize) {\n    clear_all(scratch); // whole-scratch memset up front, every call\n    for l in 0..layer_widths.len().saturating_sub(1) {\n        let w = layer_widths[l + 1];\n        for v in scratch.next_node_hidden[..w * hd].iter_mut() {\n            *v = 0.0; // consumer zeroes its accumulation window AGAIN\n        }\n        accumulate_into(&mut scratch.next_node_hidden[..w * hd]);\n    }\n}".to_string(),
+            opt_pattern: "// Optimized: producers that fully overwrite need no pre-zeroed\n// scratch. Only ACCUMULATION targets need zeroing — scoped to the\n// window actually accumulated into, at the consume site. The\n// blanket clear disappears; unused buffers are never touched.\nfn step_opt(scratch: &mut BigScratch, layer_widths: &[usize], hd: usize) {\n    // no clear_all(): every buffer is either fully overwritten by its\n    // producer or zeroed scoped-at-consume below. Stale data past the\n    // active width is never read (reads are width-bounded).\n    for l in 0..layer_widths.len().saturating_sub(1) {\n        let w = layer_widths[l + 1];\n        for v in scratch.next_node_hidden[..w * hd].iter_mut() {\n            *v = 0.0; // scoped zero: ONLY the live prefix, ONLY because we +=\n        }\n        accumulate_into(&mut scratch.next_node_hidden[..w * hd]);\n    }\n}".to_string(),
+        },
+        // ── monomorphize-per-element-trait-calls — &dyn per-element → generic + ?Sized (B) ──
+        // Source: riir-gpu edge_lora/topology_trainer.rs L558-563\n        // (`forward_with_vertex(vertex: &dyn VertexForward, ...)`) + L634\n        // (`vertex.forward_dense(&scratch.next_node_hidden[in_start..in_end],\n        // &mut tmp);` — the per-node dyn call in the hot loop) vs the SAME\n        // FILE's backward at L812-819 which is already generic: `pub fn\n        // backward<V: VertexBackward + ?Sized>(vertex: &V, ...)` — the\n        // inconsistent pair is the evidence.\n        //\n        // Distinct from enum-dispatch-separate-kernel-per-variant /\n        // op-family-type-dispatch / shape-kind-dispatch (all GPU-side\n        // dispatch STRUCTURE — per-variant kernels, type-keyed routing; this\n        // is host-side devirtualization of a per-element callback). No\n        // existing host dyn-vs-generic rule in the corpus.
+        KernelRule {
+            rule_id: "monomorphize-per-element-trait-calls".to_string(),
+            gpu_concept: "a per-element callback dispatched through a trait OBJECT (&dyn Trait) inside the hot loop costs one vtable indirection per node per layer per step, and the optimizer sees an opaque function pointer — the trivial fast-path impl (identity vertex = a copy) can never be inlined or folded away. Make the hot loop generic over the trait (fn step<V: Trait + ?Sized>(vertex: &V, ...)): static dispatch, monomorphized per concrete vertex, inlinable. The + ?Sized bound keeps &dyn callers compiling through the same API, so it is a strict generalization, not a fork — when one entry point of a pair is already generic, make its sibling match rather than maintaining both styles. Removes an indirect call per element and unlocks downstream specialization (identity folds to nothing; GPU-backed vertices inline their launch prep). Distinct from enum-dispatch-separate-kernel-per-variant / op-family-type-dispatch / shape-kind-dispatch (GPU-side dispatch structure — per-variant kernels, type-keyed routing; this is host-side devirtualization of a per-element callback)".to_string(),
+            ref_shape: "// Naive: per-node trait-object call in the hot loop — one vtable\n// indirection per node per layer; the identity fast path can never\n// be inlined/folded to a copy.\ntrait VertexFwd {\n    fn forward_dense(&self, input: &[f32], out: &mut [f32]);\n}\nfn step_dyn(vertex: &dyn VertexFwd, next_node_hidden: &[f32],\n            node_hidden: &mut [f32], hd: usize, width: usize) {\n    for node in 0..width {\n        let s = node * hd;\n        vertex.forward_dense(&next_node_hidden[s..s + hd],\n                             &mut node_hidden[s..s + hd]);\n        // ^ dynamic dispatch per node; optimizer sees an opaque fn ptr\n    }\n}".to_string(),
+            opt_pattern: "// Optimized: make the hot loop GENERIC over the vertex — static\n// dispatch, inlinable; `?Sized` keeps `&dyn` callers working through\n// the same API (a strict generalization).\ntrait VertexFwd2 {\n    fn forward_dense(&self, input: &[f32], out: &mut [f32]);\n}\nfn step_mono<V: VertexFwd2 + ?Sized>(vertex: &V, next_node_hidden: &[f32],\n                                    node_hidden: &mut [f32], hd: usize,\n                                    width: usize) {\n    for node in 0..width {\n        let s = node * hd;\n        vertex.forward_dense(&next_node_hidden[s..s + hd],\n                             &mut node_hidden[s..s + hd]);\n        // ^ monomorphized: identity vertex folds to a copy (or nothing)\n    }\n}".to_string(),
+        },
+        // ── additive-sigmoid-gates-not-softmax-routing — shared-denominator barrier → independent gates (E) ──
+        // Source: riir-gpu edge_lora/sigmoid_gate.rs L3-16 (module doc: "//!\n        // Softmax would force edges to compete for a fixed budget (Σg = 1), so\n        // if the Go edge is active, the Bomber edge must be quiet. That is\n        // wrong for our use-case: a position may legitimately benefit from\n        // both Go-style strategic reasoning and Bomber-style tactical\n        // reasoning simultaneously. Sigmoid gates let both contribute at\n        // full strength when warranted.") + L70-83 (`gate_values`: one independent\n        // dot+sigmoid per edge, `out_gates[i] = sigmoid(dot);`) + L141-147\n        // (the additive compose: `out[j] += g * eo[j];`) + mod.rs L16-18\n        // ("sigmoid not softmax per AGENTS.md — multiple edges active\n        // simultaneously").\n        //\n        // Distinct from online-softmax-streaming / softmax-topk-renormalize-\n        // scatter / fuse-softmax-mask (all make softmax itself CHEAPER —\n        // this removes the shared denominator from the dataflow altogether),\n        // and from the recurrence gate rules (gate-then-correct-delta-rule\n        // etc. — gate MATH inside a recurrence, not routing topology).
+        KernelRule {
+            rule_id: "additive-sigmoid-gates-not-softmax-routing".to_string(),
+            gpu_concept: "routing N parallel experts/edges through softmax makes every gate value depend on a denominator computed from ALL scores — two whole-set reductions (max, then sum) across edges before ANY gate is final, a cross-edge synchronization barrier forcing a two-phase schedule (compute all scores → reduce → dispatch) and preventing the gate from fusing into each edge's own epilogue. Per-edge independent sigmoid gates composed additively (out = Σ_i sigmoid(u_i·h) × edge_i(h)) need only their own dot product: edges are embarrassingly parallel, the gate computes inside each edge's kernel/epilogue, and the semantics change deliberately (gates don't sum to 1; multiple edges can be simultaneously near 1.0 — competitive normalization would force the Go edge quiet whenever the Bomber edge is active, which is wrong when a position legitimately benefits from both). Eliminates the reduction barrier entirely and removes the need to materialize all scores before dispatch. Distinct from online-softmax-streaming / softmax-topk-renormalize-scatter / fuse-softmax-mask (make softmax itself cheaper — this removes the shared denominator from the dataflow altogether), and from the recurrence gate rules (gate math inside a recurrence, not routing topology)".to_string(),
+            ref_shape: "// Naive: competitive softmax routing over N edges. Every gate\n// depends on a denominator computed from ALL edges' scores —\n// no gate is final until two whole-set reductions complete.\nfn route_softmax(scores: &[f32], edge_outputs: &[&[f32]], out: &mut [f32]) {\n    let mut max = f32::NEG_INFINITY;\n    for s in scores.iter() {\n        if *s > max {\n            max = *s; // reduction 1: global max (cross-edge sync point)\n        }\n    }\n    let mut denom = 0.0f32;\n    let mut gated = vec![0.0f32; scores.len()]; // heap temp on the hot path\n    for i in 0..scores.len() {\n        gated[i] = (scores[i] - max).exp();\n        denom += gated[i]; // reduction 2: global sum\n    }\n    for g in gated.iter_mut() {\n        *g /= denom; // only NOW is any single gate usable\n    }\n    for v in out.iter_mut() {\n        *v = 0.0;\n    }\n    for (i, eo) in edge_outputs.iter().enumerate() {\n        for (o, x) in out.iter_mut().zip(eo.iter()) {\n            *o += gated[i] * x; // edges compete: raising one lowers the rest\n        }\n    }\n}".to_string(),
+            opt_pattern: "// Optimized: per-edge independent sigmoid gates + additive composition.\n// Each gate needs ONLY its own dot product — no max, no shared\n// denominator, no cross-edge reduction barrier. Gates compute inside\n// each edge's own epilogue; multiple edges may be simultaneously\n// near 1.0 (gates don't sum to 1 by design).\nfn sigmoid(x: f32) -> f32 {\n    if x >= 0.0 {\n        1.0 / (1.0 + (-x).exp())\n    } else {\n        let e = x.exp();\n        e / (1.0 + e)\n    }\n}\nfn compose_additive(gate_vectors: &[Box<[f32]>], hidden: &[f32],\n                    edge_outputs: &[&[f32]], gates_scratch: &mut [f32],\n                    out: &mut [f32]) {\n    // Scalar phase: N independent dots. No reduction across edges — each\n    // gate is final the moment its own dot+sigmoid is done.\n    for (i, u_i) in gate_vectors.iter().enumerate() {\n        let mut dot = 0.0f32;\n        for (a, b) in u_i.iter().zip(hidden.iter()) {\n            dot += a * b;\n        }\n        gates_scratch[i] = sigmoid(dot);\n    }\n    // Bandwidth phase: pure streaming axpy per edge, gate scalar broadcast.\n    for v in out.iter_mut() {\n        *v = 0.0;\n    }\n    for (i, eo) in edge_outputs.iter().enumerate() {\n        let g = gates_scratch[i];\n        for (o, x) in out.iter_mut().zip(eo.iter()) {\n            *o += g * x;\n        }\n    }\n}".to_string(),
+        },
+        // ── commit-over-maintained-item-digests — re-hash payloads → digest the digests (B) ──
+        // Source: riir-gpu edge_lora/chain_commit.rs L66-76\n        // (`edge_artifact_from_edge` carries `blake3_hash:\n        // edge.weights.blake3_hash` — the PRE-COMPUTED per-edge digest,\n        // maintained at mutation time per types.rs `recompute_hash`) +\n        // L83-92 (`edge_artifact_to_edge` reconstructs + verifies against the\n        // carried digest) + the leaf-crate bundle (whose `verify_bundle_hash`\n        // composes per-artifact digests into the root — O(artifacts), not\n        // O(total weight bytes)).\n        //\n        // Distinct from incremental-multi-part-hash-no-concat (streaming\n        // multi-part update vs materializing a concatenation — same hash\n        // PASS count, allocation delta only; this eliminates payload hash\n        // passes entirely via a digest hierarchy), and from\n        // weight-handle-cache-keyed-by-allocation-identity (caches device\n        // handles keyed by POINTER, not content digests).
+        KernelRule {
+            rule_id: "commit-over-maintained-item-digests".to_string(),
+            gpu_concept: "computing a container commitment (checkpoint hash, bundle root, step commitment) by re-hashing every item's FULL payload at commit time costs O(total payload bytes) per commit even when items are unchanged since the last hash. Maintain a per-item digest at the mutation site (recompute the item hash exactly when the item's bytes change) and make the container commitment digest the 32-byte digests: commit cost drops to O(num_items) with zero payload re-reads, and per-item identity comparison becomes a 32-byte compare (cheap dedup/change-detection). Full payload hashing happens only at trust boundaries where untrusted bytes must be verified by reconstruction. Distinct from incremental-multi-part-hash-no-concat (streaming update vs materializing a concatenation — same pass count, allocation delta only; this eliminates payload hash passes entirely via a digest hierarchy), and from weight-handle-cache-keyed-by-allocation-identity (caches device handles keyed by pointer, not content digests)".to_string(),
+            ref_shape: "// Naive: container commitment re-hashes every item's FULL payload —\n// O(total weight bytes) per commit, even for unchanged items.\nfn commit_bundle_naive(edges: &[EdgeWeights]) -> u64 {\n    let mut h = 0u64;\n    for e in edges {\n        for f in e.a.iter() {\n            h = h.wrapping_mul(31).wrapping_add(f.to_bits() as u64);\n        }\n        for f in e.b.iter() {\n            h = h.wrapping_mul(31).wrapping_add(f.to_bits() as u64);\n        }\n    }\n    h\n}".to_string(),
+            opt_pattern: "// Optimized: per-item digests are MAINTAINED at mutation time; the\n// container commitment digests the 32-byte digests — O(items), not\n// O(total payload).\nstruct EdgeWeights {\n    a: Vec<f32>,\n    b: Vec<f32>,\n    digest: u64, // maintained: recomputed exactly when a/b change\n}\nimpl EdgeWeights {\n    fn step(&mut self, i: usize, v: f32) {\n        self.a[i] = v;\n        // Hash maintenance happens ONCE at the mutation site...\n        let mut h = 0u64;\n        for f in self.a.iter() {\n            h = h.wrapping_mul(31).wrapping_add(f.to_bits() as u64);\n        }\n        for f in self.b.iter() {\n            h = h.wrapping_mul(31).wrapping_add(f.to_bits() as u64);\n        }\n        self.digest = h;\n    }\n}\nfn commit_bundle_over_digests(edges: &[EdgeWeights]) -> u64 {\n    let mut h = 0u64;\n    for e in edges {\n        // ...so the commit path only ever touches the 8-byte digest.\n        h = h.wrapping_mul(31).wrapping_add(e.digest);\n    }\n    h\n}".to_string(),
+        },
+        // ── verify-once-at-trust-boundary — layered re-verification → capability type (D) ──
+        // Source: riir-gpu edge_lora/chain_commit.rs L156-166 (`edges_from_bundle`\n        // doc: "/// Reconstruct `Vec<EdgeModule>` from an [`EdgeArtifactBundle`]\n        // (verifies the bundle hash, then each artifact's BLAKE3 hash)." +\n        // the `bundle.verify_bundle_hash()` call) — on top of `deserialize`\n        // ALREADY verifying (evidence: the corruption test at L236-243 where\n        // a single flipped byte is rejected by deserialize alone), on top of\n        // per-artifact `recompute_hash()` at L89. The canonical load path\n        // (L360-362: deserialize → edges_from_bundle) pays up to 3 full\n        // BLAKE3 passes over the same weight bytes per load.\n        //\n        // Distinct from commit-over-maintained-item-digests (makes each hash\n        // CHEAP by digest reuse — this rule removes duplicate verification\n        // EVENTS; they compose) and from panic-safe-autotune-candidate\n        // (panic safety, not re-verification cost).
+        KernelRule {
+            rule_id: "verify-once-at-trust-boundary".to_string(),
+            gpu_concept: "the naive load pipeline re-verifies integrity at every layer: the deserializer verifies the commitment, the next function re-verifies the same container hash over the same bytes, and each per-item constructor re-hashes its payload again — each redundant check is a full O(payload) hash pass producing the same answer on untouched bytes. Perform verification exactly ONCE at the trust boundary where untrusted bytes become trusted state, and return a marker/capability type (e.g. Verified<Bundle>) that downstream reconstruction consumes — re-verification becomes structurally unnecessary because the type carries the proof. 2-3× fewer full hash passes per load; generalizes to host code that re-validates descriptors at loader → dispatcher → launcher layers. Defense-in-depth at a genuine chain boundary may justify one extra layer, but then it is a deliberate security decision documented as such, not accidental layering. Distinct from commit-over-maintained-item-digests (makes each hash cheap by digest reuse — this removes duplicate verification events; they compose) and from panic-safe-autotune-candidate (panic safety, not re-verification cost)".to_string(),
+            ref_shape: "// Naive: every layer re-verifies the same bytes on the load path.\nfn deserialize(bytes: &[u8]) -> Result<Bundle, LoadError> {\n    let b = decode_bundle(bytes);\n    // Layer 1: the deserializer already verifies the root (one full hash\n    // pass over the payload).\n    if bundle_root(&b.artifacts) != b.root_hash {\n        return Err(LoadError::Tampered);\n    }\n    Ok(b)\n}\nfn load_naive(bytes: &[u8]) -> Result<Vec<Item>, LoadError> {\n    let bundle = match deserialize(bytes) {\n        Ok(b) => b,\n        Err(e) => return Err(e),\n    };\n    // Layer 2: redundant re-verification — full re-hash of everything,\n    // same bytes, same answer as layer 1.\n    if bundle_root(&bundle.artifacts) != bundle.root_hash {\n        return Err(LoadError::Tampered);\n    }\n    let mut out = Vec::new();\n    for a in bundle.artifacts.iter() {\n        // Layer 3: per-item re-hash, ALSO covered by the verified root.\n        if hash_of(&a.weights) != a.item_hash {\n            return Err(LoadError::Tampered);\n        }\n        out.push(a.weights.clone());\n    }\n    Ok(out)\n}".to_string(),
+            opt_pattern: "// Optimized: verify ONCE at the trust boundary; the verified type is\n// the capability downstream code consumes — redundant O(payload)\n// hash passes are structurally unnecessary.\nstruct VerifiedBundle(Bundle); // constructing it REQUIRES the check\nfn deserialize_verified(bytes: &[u8]) -> Result<VerifiedBundle, LoadError> {\n    let b = decode_bundle(bytes);\n    // Single full verification lives HERE — at the boundary where\n    // untrusted bytes become trusted state.\n    if bundle_root(&b.artifacts) != b.root_hash {\n        return Err(LoadError::Tampered);\n    }\n    Ok(VerifiedBundle(b))\n}\nfn load_fast(v: &VerifiedBundle) -> Vec<Item> {\n    // No hash calls at all: the type carries the proof.\n    let mut out = Vec::with_capacity(v.0.artifacts.len());\n    for a in v.0.artifacts.iter() {\n        out.push(a.weights.clone());\n    }\n    out\n}".to_string(),
+        },
+        // ── derive-shape-from-payload-not-cached-field — cached dims → payload-derived truth (A) ──
+        // Source: riir-gpu edge_lora/sigmoid_gate.rs L31-38 (`SigmoidGate` has\n        // NO in_dim FIELD: "/// One gate direction vector per edge.\n        // `gate_vectors[i].len() == in_dim`. / pub gate_vectors:\n        // Vec<Box<[f32]>>,") + L57-61 ("/// Input dimension of each gate\n        // vector. / pub fn in_dim(&self) -> Option<usize> {\n        // self.gate_vectors.first().map(|v| v.len()) }") + L70-77\n        // (validation against the DERIVED value: `let in_dim =\n        // self.in_dim()?; if hidden.len() != in_dim { return None; }`).\n        //\n        // Distinct from launch-unchecked-caller-owned-size-contract (assigns\n        // WHO owns the size check, caller vs kernel — this rule is about\n        // WHERE shape truth lives, payload vs cached field; the two\n        // compose).
+        KernelRule {
+            rule_id: "derive-shape-from-payload-not-cached-field".to_string(),
+            gpu_concept: "storing shape metadata as a cached field next to the payload (in_dim: usize beside the vectors it describes) forces every constructor and mutation path to keep the cache in sync — any path that forgets (the merkle_root lesson class; the shared-uniform truncation bug class) silently drifts, producing OOB reads or shapes that 'validate' against the stale cache. Keep exactly ONE source of shape truth — the payload — and derive dims at the API boundary (first().map(|v| v.len())), validating incoming shapes against the derived value. The desync bug class becomes structurally impossible, descriptors get smaller, and pairing with an unchecked inner kernel means release builds pay the derivation once per call, not per element. Distinct from launch-unchecked-caller-owned-size-contract (assigns WHO owns the size check — this is about WHERE shape truth lives; the two compose)".to_string(),
+            ref_shape: "// Naive: shape truth stored as a cached field next to the payload.\nstruct GateNaive {\n    in_dim: usize, // cached copy of gate_vectors[i].len()\n    gate_vectors: Vec<Box<[f32]>>,\n}\nfn forward_naive(g: &GateNaive, hidden: &[f32], out_gates: &mut [f32]) -> bool {\n    // Trusts the cached field. If any construction path forgets to set\n    // in_dim (or a mutation resizes one vector), the cache drifts from\n    // the payload: silent OOB reads or garbage shapes that 'validate'.\n    if hidden.len() != g.in_dim {\n        return false;\n    }\n    for (i, u) in g.gate_vectors.iter().enumerate() {\n        let mut dot = 0.0f32;\n        for (a, b) in u.iter().zip(hidden.iter()) {\n            dot += a * b;\n        }\n        out_gates[i] = 1.0 / (1.0 + (-dot).exp());\n    }\n    true\n}".to_string(),
+            opt_pattern: "// Optimized: no cached shape field — derive it from the payload.\nstruct GateOpt {\n    gate_vectors: Vec<Box<[f32]>>,\n}\nimpl GateOpt {\n    fn in_dim(&self) -> Option<usize> {\n        self.gate_vectors.first().map(|v| v.len())\n    }\n    fn gate_values(&self, hidden: &[f32], out_gates: &mut [f32]) -> bool {\n        let in_dim = match self.in_dim() {\n            Some(d) => d,\n            None => return false,\n        };\n        // Validation compares against the DERIVED truth — a stale cache\n        // cannot exist because there is nothing to go stale.\n        if hidden.len() != in_dim || out_gates.len() != self.gate_vectors.len() {\n            return false;\n        }\n        for (i, u) in self.gate_vectors.iter().enumerate() {\n            let mut dot = 0.0f32;\n            for (a, b) in u.iter().zip(hidden.iter()) {\n                dot += a * b;\n            }\n            out_gates[i] = 1.0 / (1.0 + (-dot).exp());\n        }\n        true\n    }\n}".to_string(),
+        },
     ])
 }
 
@@ -4262,7 +4412,7 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 228-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 238-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -4270,7 +4420,7 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (35 rules)
+    // A: Memory access patterns (39 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -4310,9 +4460,13 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "caller-owned-split-scratch",
             "incremental-multi-part-hash-no-concat",
             "superset-sized-scratch-across-variants",
+            "sigmoid-deriv-recovered-from-output",
+            "needless-swap-temp-hoist-to-scratch",
+            "scoped-init-at-consume-site",
+            "derive-shape-from-payload-not-cached-field",
         ],
     ),
-    // B: Compute patterns (37 rules)
+    // B: Compute patterns (39 rules)
     (
         KernelCategory::Compute,
         "B: compute",
@@ -4354,9 +4508,11 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "sign-branch-stable-sigmoid",
             "per-layer-grad-norm-lr-equalization",
             "inplace-grad-accumulate-deferred-postscale",
+            "monomorphize-per-element-trait-calls",
+            "commit-over-maintained-item-digests",
         ],
     ),
-    // C: Fusion patterns (24 rules)
+    // C: Fusion patterns (25 rules)
     (
         KernelCategory::Fusion,
         "C: fusion",
@@ -4385,9 +4541,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fuse-count-into-mutation-pass",
             "inplace-gate-scale-at-funnel-bottleneck",
             "fuse-loss-and-output-grad-one-pass",
+            "fuse-weight-grad-input-grad-single-matrix-visit",
         ],
     ),
-    // D: Dispatch patterns (33 rules)
+    // D: Dispatch patterns (35 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -4425,9 +4582,11 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "share-pipeline-set-across-subsystems",
             "ragged-pack-offset-table-fused-dispatch",
             "width-invariant-superset-training",
+            "static-classification-hoist-to-routing-table",
+            "verify-once-at-trust-boundary",
         ],
     ),
-    // E: Parallelism patterns (13 rules)
+    // E: Parallelism patterns (14 rules)
     (
         KernelCategory::Parallelism,
         "E: parallelism",
@@ -4445,6 +4604,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "smem-broadcast-scalar-then-parallel-scatter",
             "epilogue-must-be-workgroup-local",
             "counter-derived-seed-stateless-noise",
+            "additive-sigmoid-gates-not-softmax-routing",
         ],
     ),
     // F: Flash-attention tiling (10 rules)
@@ -4687,7 +4847,7 @@ mod tests {
         // Batch 29 (10): riir-gpu production kernels — defer-readback-gated-by-live-output-size, weight-handle-cache-keyed-by-allocation-identity, first-readback-pays-queue-drain, epilogue-at-register-write-phase, delay-rms-scale-past-gemv-epilogue, pack-scalar-params-into-combined-buffer, enum-dispatch-separate-kernel-per-variant, epilogue-must-be-workgroup-local, launch-unchecked-caller-owned-size-contract, fast-math-contraction-behind-feature-flag (deltanet_input_proj_fused.rs + epilogue/ — the decode-path fusion cluster: Issue 602 sibling-GEMV fan-out + Plan 106 Track 3 CODA epilogue fusion).
         // Batch 30 (6): riir-gpu production kernels — zero-init-side-branch-frozen-base-path, counter-derived-seed-stateless-noise, predicate-gated-skip-empty-workset-step, share-pipeline-set-across-subsystems, pad-uniform-pod-to-min-binding-size, fuse-count-into-mutation-pass (dllm/mod.rs — the D2F training cluster: Plan 068 discrete-diffusion trainers + RePlaid schedule).
         // Total: 209.
-        assert_eq!(corpus.entries.len(), 228, "batches 1-32 should have 228 rules");
+        assert_eq!(corpus.entries.len(), 238, "batches 1-32 should have 238 rules");
     }
 
     #[test]
@@ -6027,6 +6187,84 @@ mod tests {
     }
 
     #[test]
+    fn batch32b_rules_present() {
+        // Verify the 10 batch-32b rules across A/B/C/D/E.
+        let corpus = build_kernel_seed_corpus();
+        let ids: Vec<&str> =
+            corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        // A (4 new): activation-cache/temp/init/shape-truth family
+        assert!(ids.contains(&"sigmoid-deriv-recovered-from-output"), "sigmoid deriv from output");
+        assert!(ids.contains(&"needless-swap-temp-hoist-to-scratch"), "needless swap temp");
+        assert!(ids.contains(&"scoped-init-at-consume-site"), "scoped init at consume site");
+        assert!(ids.contains(&"derive-shape-from-payload-not-cached-field"), "shape from payload");
+        // B (2 new): devirt + digest family
+        assert!(ids.contains(&"monomorphize-per-element-trait-calls"), "monomorphize trait calls");
+        assert!(ids.contains(&"commit-over-maintained-item-digests"), "commit over digests");
+        // C (1 new), D (2 new), E (1 new)
+        assert!(ids.contains(&"fuse-weight-grad-input-grad-single-matrix-visit"), "fused B visit");
+        assert!(ids.contains(&"static-classification-hoist-to-routing-table"), "classification hoist");
+        assert!(ids.contains(&"verify-once-at-trust-boundary"), "verify once");
+        assert!(ids.contains(&"additive-sigmoid-gates-not-softmax-routing"), "additive sigmoid gates");
+    }
+
+    #[test]
+    fn batch32b_concepts_covered() {
+        // Verify the batch-32b edge_lora training-half concepts via
+        // distinctive ASCII substrings located by rule_id (the 32a
+        // convention — immune to prose-evolution churn).
+        let corpus = build_kernel_seed_corpus();
+        let concept = |id: &str| -> String {
+            corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-32b rule '{id}' missing"))
+                .gpu_concept
+                .clone()
+        };
+        // D: static-classification-hoist-to-routing-table (topology_trainer.rs L569-604 + L1046-1056)
+        let c = concept("static-classification-hoist-to-routing-table");
+        assert!(c.contains("classification work per training step for metadata that never changes")
+            && c.contains("only its active items with O(1) lookups"), "routing-table hoist concept");
+        // A: sigmoid-deriv-recovered-from-output (topology_trainer.rs L966-987 + L171-182)
+        let c = concept("sigmoid-deriv-recovered-from-output");
+        assert!(c.contains("pure function of the OUTPUT")
+            && c.contains("halves activation-cache traffic"), "deriv-recovery concept");
+        // C: fuse-weight-grad-input-grad-single-matrix-visit (topology_trainer.rs L932-963)
+        let c = concept("fuse-weight-grad-input-grad-single-matrix-visit");
+        assert!(c.contains("one visit per B row")
+            && c.contains("the outer-product write and the transposed-read accumulation"), "fused-B-visit concept");
+        // A: needless-swap-temp-hoist-to-scratch (topology_trainer.rs L627-639 + L758-769)
+        let c = concept("needless-swap-temp-hoist-to-scratch");
+        assert!(c.contains("false premise that motivated the temp")
+            && c.contains("loop-carried state and belongs in the persistent scratch"), "swap-temp concept");
+        // A: scoped-init-at-consume-site (topology_trainer.rs L400-421 + L581-594)
+        let c = concept("scoped-init-at-consume-site");
+        assert!(c.contains("scoped to the window actually accumulated into")
+            && c.contains("O(total scratch) to O(active window)"), "scoped-init concept");
+        // B: monomorphize-per-element-trait-calls (topology_trainer.rs L558-563 + L812-819)
+        let c = concept("monomorphize-per-element-trait-calls");
+        assert!(c.contains("strict generalization, not a fork")
+            && c.contains("one vtable indirection per node"), "monomorphize concept");
+        // E: additive-sigmoid-gates-not-softmax-routing (sigmoid_gate.rs L3-16 + L70-83)
+        let c = concept("additive-sigmoid-gates-not-softmax-routing");
+        assert!(c.contains("cross-edge synchronization barrier")
+            && c.contains("embarrassingly parallel"), "additive-gates concept");
+        // B: commit-over-maintained-item-digests (chain_commit.rs L66-76 + L83-92)
+        let c = concept("commit-over-maintained-item-digests");
+        assert!(c.contains("zero payload re-reads")
+            && c.contains("only at trust boundaries"), "digest-hierarchy concept");
+        // D: verify-once-at-trust-boundary (chain_commit.rs L156-166 + L236-243)
+        let c = concept("verify-once-at-trust-boundary");
+        assert!(c.contains("the type carries the proof")
+            && c.contains("where untrusted bytes become trusted state"), "verify-once concept");
+        // A: derive-shape-from-payload-not-cached-field (sigmoid_gate.rs L31-38 + L57-61)
+        let c = concept("derive-shape-from-payload-not-cached-field");
+        assert!(c.contains("ONE source of shape truth")
+            && c.contains("structurally impossible"), "payload-shape-truth concept");
+    }
+
+    #[test]
     #[cfg(not(feature = "kernel_verify"))]
     fn batch32_pseudocode_parses() {
         // G1 for Batch 32a: every new rule's ref_shape AND opt_pattern must
@@ -6056,6 +6294,38 @@ mod tests {
             assert!(ref_verdict.parses, "batch-32 ref_shape for '{id}' must parse");
             let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
             assert!(opt_verdict.parses, "batch-32 opt_pattern for '{id}' must parse");
+        }
+    }
+
+    #[test]
+    #[cfg(not(feature = "kernel_verify"))]
+    fn batch32b_pseudocode_parses() {
+        // G1 for Batch 32b: every new rule's ref_shape AND opt_pattern must
+        // syn-parse as valid Rust (the L2 pruner verdict).
+        use crate::domain::HealDomain;
+        let corpus = build_kernel_seed_corpus();
+        let ids = [
+            "static-classification-hoist-to-routing-table",
+            "sigmoid-deriv-recovered-from-output",
+            "fuse-weight-grad-input-grad-single-matrix-visit",
+            "needless-swap-temp-hoist-to-scratch",
+            "scoped-init-at-consume-site",
+            "monomorphize-per-element-trait-calls",
+            "additive-sigmoid-gates-not-softmax-routing",
+            "commit-over-maintained-item-digests",
+            "verify-once-at-trust-boundary",
+            "derive-shape-from-payload-not-cached-field",
+        ];
+        for id in ids {
+            let entry = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-32b rule '{id}' missing"));
+            let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+            assert!(ref_verdict.parses, "batch-32b ref_shape for '{id}' must parse");
+            let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+            assert!(opt_verdict.parses, "batch-32b opt_pattern for '{id}' must parse");
         }
     }
 
@@ -6103,11 +6373,11 @@ mod tests {
     fn kernel_categories_counts_match_plan_003_table() {
         // Pin per-category rule counts to the Plan 003 table (updated for Batch 32a).
         let expected = [
-            (KernelCategory::MemoryAccess, 35),
-            (KernelCategory::Compute, 37),
-            (KernelCategory::Fusion, 24),
-            (KernelCategory::Dispatch, 33),
-            (KernelCategory::Parallelism, 13),
+            (KernelCategory::MemoryAccess, 39),
+            (KernelCategory::Compute, 39),
+            (KernelCategory::Fusion, 25),
+            (KernelCategory::Dispatch, 35),
+            (KernelCategory::Parallelism, 14),
             (KernelCategory::FlashAttnTiling, 10),
             (KernelCategory::LinearAttnRecurrence, 19),
             (KernelCategory::MoeDispatchBackward, 10),
@@ -6126,9 +6396,9 @@ mod tests {
                 "Plan 003: category {cat:?} has {} rules, expected {count}",
                 entry.2.len());
         }
-        // Sum must equal 228.
+        // Sum must equal 238.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 228, "Plan 003: category totals must sum to 228");
+        assert_eq!(total, 238, "Plan 003: category totals must sum to 238");
     }
 
     #[test]
@@ -6138,7 +6408,7 @@ mod tests {
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 228, "Plan 003: grouped corpus has {total} rules, expected 228");
+        assert_eq!(total, 238, "Plan 003: grouped corpus has {total} rules, expected 238");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");
