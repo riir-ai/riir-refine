@@ -67,14 +67,17 @@ pub mod domains;
 #[cfg(feature = "ruliology_search")]
 pub mod ruliology_search;
 
-// Issue 004 + Issue 008: latent-first self-evolution loop (memory + EMA direction update).
-// Opt-in (deployment constraint: clippy_verify is itself opt-in).
+// Issue 004 + 008 + 018: latent-first self-evolution layer (memory + EMA
+// direction update + the HealPipeline + the standalone EvolveRecorder).
+// UNCONDITIONAL since Issue 018 (promotion with graceful oracle degradation):
+// the memory half needs no oracle and records wherever fixes are applied;
+// the EMA learning half no-ops with ONE log line when the clippy_verify
+// oracle is unavailable (see `recorder`). The `self_evolve` feature stays
+// as a default-on back-compat alias (benches/examples required-features).
 // Validated: G1-G5 PASS (Issue 004) + G6/G7 real cargo clippy PASS (Issue 008).
-#[cfg(feature = "self_evolve")]
 pub mod evolve;
-#[cfg(feature = "self_evolve")]
 pub mod memory;
-#[cfg(feature = "self_evolve")]
+pub mod recorder;
 pub mod self_evolve;
 
 // Plan 005: real-file span-level latent retrieval (`--suggest` MVP).
@@ -175,11 +178,9 @@ pub use domains::kernel_opt::verify::{KernelVerifyResult, KernelVerifier};
 #[cfg(feature = "ruliology_search")]
 pub use ruliology_search::{RuliologySearch, ScoredCandidate};
 
-#[cfg(feature = "self_evolve")]
 pub use evolve::{EvolveConfig, LatentSkillEvolution};
-#[cfg(feature = "self_evolve")]
 pub use memory::{FixTrajectory, LatentFixMemory, LatentQuery, ScoredTrajectory};
-#[cfg(feature = "self_evolve")]
+pub use recorder::EvolveRecorder;
 pub use self_evolve::{HealPipeline, HealResult, HealSource, TuneReport};
 
 // Plan 005: latent retrieval surface (`--suggest` MVP).

@@ -198,6 +198,41 @@ recorded, not fixed: `comparison_to_empty` implements `.len() == 0` (real
 (370 default / 391 latent_retrieval / 526 kernel_heal, clippy 0 new
 warnings). See [`.benchmarks/022`](.benchmarks/022_retrieval_precision_eval_at_scale.md).
 
+**Issue 018 (2026-08-16) — `self_evolve` promoted to DEFAULT-ON with
+graceful oracle degradation.** The mechanism/ oracle split: the memory
+half (`LatentFixMemory` — every applied fix is a trajectory, every
+compile-revert a definitive fail) needs NO oracle and now runs in EVERY
+build (modules unconditional incl. `--no-default-features`); the EMA
+learning half needs trustworthy verdicts and no-ops with **exactly ONE**
+log line when the `clippy_verify` oracle is unavailable (the same shape as
+Issue 015's verify-absent path). New `EvolveRecorder`
+([`src/recorder.rs`](src/recorder.rs)) — the standalone consumer for the
+`cargo heal --fix` path (the HealPipeline is untouched): `record_applied`/
+`record_reviewed` (memory-only), `record_outcome` (stats always, EMA
+gated), `disable_learning(reason)` (runtime oracle failure), plus
+**persistence** — a CLI process is short-lived, so the memory persists as
+a v1 JSON envelope (`RIIR_HEAL_MEMORY` override, else the platform cache
+dir → `riir-clippy/memory.json`; merge-on-load keeps live stats;
+corrupt/unknown-version → `InvalidData` + continue fresh, never aborts a
+run). `--fix --write` records written edits; `--verify` records kept edits
+memory-only (a rustc pass proves non-breakage, not lint resolution) +
+reverted edits as `success=false` (sound verdicts — the clippy verifier
+cannot soundly verify span edits standalone, a non-compiling crate reports
+"lint absent" = false success). Opt-out: `RIIR_HEAL_SELF_EVOLVE=0|off|
+false|no` — fully inert (no recording, no persistence, no log). The
+`self_evolve` feature stays as a default-on back-compat alias
+(benches'/examples' `required-features`). GOAT (Bench 023): G1 contract
+tests both oracle states + the production `--fix` accumulation path; G2
+real-bin e2e (1→3 trajectories across runs, one degradation line per run,
+inert opt-out); G3 405 default / 419 clippy_verify / 652 combined lib tests
++ clippy 0 warnings in 5 states + `ci_feature_guard.sh` all-layers; G4
+`cargo tree` diff EMPTY (dep surface unchanged). **Honest finding:** the
+G7 demo re-run aborts G6 at 35/40 PRE-EXISTING (proven by baseline
+worktree at `a532b7c` — 5 Issue-016 corpus entries' `buggy_code` doesn't
+trigger under real clippy; filed as Issue 022). See
+[`.benchmarks/023`](.benchmarks/023_self_evolve_promotion_goat.md) +
+[`.docs/10_self_evolve/evolve_recorder.md`](.docs/10_self_evolve/evolve_recorder.md).
+
 ## The `riir-clippy` skill (auto-continue idle loop)
 
 `.agents/skills/riir-clippy/SKILL.md` (symlinked into `~/.agents/skills/`
@@ -382,7 +417,7 @@ cargo run --example ruliology_search_demo --features ruliology_search --release
 - `kernel_verify` (opt-in): CubeCL compile check. **STUB** — delegates to shared `RustAnalyzerPruner`; full numeric compare deferred (Proposal 012 §Phase 0). Implies `kernel_heal`.
 - `ruliology_search` (opt-in): L3 Pareto-front candidate search. Reuses the algorithm pattern from `katgpt-ruliology` (Bench 572) without a code-level dep. Runs once per lint invocation (~400µs/10 candidates), not per-tick. Implies `clippy_lints`.
 - `latent_retrieval` (opt-in, Plan 005 Phase 1): real-file span-level latent retrieval — the `--suggest` MVP. Indexes every enabled domain's corpus via riir-rag (`RuleIndex`: `ShardIndex` Clifford-wedge KNN + BM25, multi-scale), routes spans via corpus-derived domain centroids (`DomainRouter`, annotation only), retrieves ranked rules (`LatentMatcher`, fan-out across enabled domains). The suggest path itself has ZERO proposer code — suggestions are the corpus pattern texts; the proposers live in each domain's `proposers/` module (rust_perf Phase 4, clippy T6.4) + the shared `src/edit_emitter.rs` substrate, gated by the proposers' own Cargo features. Gates `dep:riir-rag` (heavy tree: riir-rag + transitively riir-neuron-db — the default build stays light). Powers the `cargo-heal` bin (`--suggest` / `--fix` / `--domain auto|clippy|perf|kernel` / `--top-k`). **GOAT G1–G4 ALL PASS (Bench 018, 2026-08-14):** G1 100% (12/12 top-1, target ≥80%), G2 349µs/chunk (<1ms, 2.9× headroom), G3 104 lib tests, G4 `SuggestScratch` stable across 50 repeat scans. Known limits: fan-out routing (no gate), no minimum-score threshold (every span suggests), 12-item G1 fixture.
-- `self_evolve` (opt-in, Issue 004 + Issue 008): latent-first self-evolution loop — `LatentFixMemory` (3-axis retrieval over fix trajectories) + `LatentSkillEvolution` (EMA direction-vector update). GOAT G1-G5 ALL PASS (G5: 70pp healing rate improvement in controlled fixture). **G6/G7 validated against real cargo clippy feedback (Issue 008): G6 10/10 corpus truthfulness PASS, G7 50.0pp improvement (50% → 100%) PASS.** Borrows `dot+sigmoid` from riir-agents + 3-axis retrieval from riir-rag, reimplemented locally (~730 LOC, boundary-compliant). Stays opt-in (deployment-environment constraint: `clippy_verify` is itself opt-in). The mechanism is validated; the opt-in gate is not a correctness concern.
+- `self_evolve` (DEFAULT-ON since Issue 018, 2026-08-16; Bench 023): latent-first self-evolution loop — `LatentFixMemory` (3-axis retrieval over fix trajectories) + `LatentSkillEvolution` (EMA direction-vector update) + `EvolveRecorder` (the oracle-split standalone recorder for the `cargo heal --fix` path). GOAT G1-G5 PASS (G5: 70pp healing rate improvement in controlled fixture). **G6/G7 validated against real cargo clippy feedback (Issue 008): G6 10/10 corpus truthfulness PASS, G7 50.0pp improvement (50% → 100%) PASS** (the G7 demo re-run is currently blocked pre-existing by Issue 022 corpus drift). The modules are UNCONDITIONAL — the memory half runs wherever fixes are applied (+ persists across runs via the v1 JSON envelope); the EMA learning half no-ops with one log line without the `clippy_verify` oracle. The feature flag is a default-on back-compat alias (required-features lists). Opt-out: `RIIR_HEAL_SELF_EVOLVE=0`.
 - `wasm_pruner` (opt-in, deferred): L2 WASM rust-analyzer variant (blocked on rubrc)
 - `clippy_lora` (opt-in, deferred): L4 adaptive LoRA fallback (blocked on riir-train integration)
 - `ternary_inference` (opt-in, Bench 010): katgpt ternary generation on clippy prompts. The pre-existing compile error (`attn_sub_on` not found in riir-gpu) was **FIXED** in riir-ai commit `4bfe3b30` — the cfg gate on `attn_sub_on` + `ATTN_SUBSTAGE_MASK` + `ATTN_SUBSTAGE_ALL` was relaxed from `all(cubecl_runtime, ternary_gemm_batched)` to just `cubecl_runtime` (behavior-preserving: the mask defaults to all-on). `--all-features` CI layer 4 now passes clean.

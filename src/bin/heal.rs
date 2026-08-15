@@ -34,9 +34,25 @@ use riir_clippy::domains::clippy_lints::proposers::FIXABLE_LINTS;
 use riir_clippy::domains::rust_perf::proposers::FIXABLE_RULES;
 use riir_clippy::edit_emitter::RuleEdit;
 use riir_clippy::draft::{DomainId, LatentMatcher, SpanSuggestion};
+use riir_clippy::EvolveRecorder;
 
 #[cfg(feature = "fix_verify")]
 use riir_clippy::domains::clippy_lints::proposers::VERIFY_LINTS;
+
+/// Resolve the self-evolve memory file (Issue 018): `RIIR_HEAL_MEMORY`
+/// overrides; otherwise the platform cache dir
+/// (`$XDG_CACHE_HOME` / `~/.cache` / `%LOCALAPPDATA%` / temp fallback).
+fn default_memory_path() -> PathBuf {
+    if let Ok(p) = std::env::var("RIIR_HEAL_MEMORY") {
+        return PathBuf::from(p);
+    }
+    let base = std::env::var_os("XDG_CACHE_HOME")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".cache")))
+        .or_else(|| std::env::var_os("LOCALAPPDATA").map(PathBuf::from))
+        .unwrap_or_else(std::env::temp_dir);
+    base.join("riir-clippy").join("memory.json")
+}
 
 /// Print the per-edit fix review + (with --write) write the spliced file.
 /// `edits` are `(rule_id, final line, replacement, restore)` — only the
@@ -301,6 +317,21 @@ fn main() {
         std::process::exit(1);
     }
 
+    // Issue 018: self-evolve recording — the memory half runs in every
+    // build (records applied/reverted fix trajectories + persists across
+    // runs); the EMA learning half degrades gracefully without an oracle
+    // (one log line). `RIIR_HEAL_SELF_EVOLVE=0` makes this fully inert.
+    let mut evolve_rec = EvolveRecorder::from_env();
+    let memory_path = default_memory_path();
+    if evolve_rec.is_enabled() {
+        if let Err(e) = evolve_rec.load(&memory_path) {
+            eprintln!(
+                "self-evolve: ignoring unreadable memory file ({}): {e}",
+                memory_path.display()
+            );
+        }
+    }
+
     let mut n_chunks = 0usize;
     let mut n_suggestions = 0usize;
     let mut n_fixed_files = 0usize;
@@ -412,7 +443,11 @@ fn main() {
                         ));
                     }
                 }
+                // `mut` only under fix_verify (the VERIFY_LINTS extend below).
+                #[cfg(feature = "fix_verify")]
                 let mut lint_set: Vec<&str> = FIXABLE_LINTS.to_vec();
+                #[cfg(not(feature = "fix_verify"))]
+                let lint_set: Vec<&str> = FIXABLE_LINTS.to_vec();
                 #[cfg(feature = "fix_verify")]
                 if args.verify {
                     lint_set.extend(VERIFY_LINTS.iter().copied());
@@ -505,6 +540,11 @@ fn main() {
                 n_fixed_files += 1;
                 n_fixed_edits += all_edits.len();
             }
+            // Issue 018: only WRITTEN edits are applied fixes — review-only
+            // runs record nothing.
+            if args.write {
+                evolve_rec.record_reviewed(&all_edits);
+            }
         }
 
         #[cfg(not(feature = "fix_verify"))]
@@ -513,6 +553,11 @@ fn main() {
             if !all_edits.is_empty() {
                 n_fixed_files += 1;
                 n_fixed_edits += all_edits.len();
+            }
+            // Issue 018: only WRITTEN edits are applied fixes — review-only
+            // runs record nothing.
+            if args.write {
+                evolve_rec.record_reviewed(&all_edits);
             }
         }
 
@@ -585,6 +630,12 @@ fn main() {
                 for e in &b.edits {
                     println!("  [{:<24}] line {} (reverted)", e.rule_id, e.final_line);
                 }
+                // Issue 018: a whole-file revert is a definitive fail verdict
+                // for every edit in the file (attribution impossible — the
+                // compile failure itself is the verdict).
+                for e in &b.edits {
+                    evolve_rec.record_outcome(&e.rule_id, &e.restore, &e.replacement, false);
+                }
                 continue;
             }
             let kept: Vec<&riir_clippy::fix_verify::EditAtLine> = b
@@ -597,12 +648,40 @@ fn main() {
             }
             n_fixed_files += 1;
             n_fixed_edits += kept.len();
+            // Issue 018: kept edits join the memory (a rustc pass proves
+            // non-breakage, not lint resolution — memory-only, no verdict);
+            // span-level reverts are definitive fails (sound to learn from
+            // when an oracle build enabled learning).
+            for e in &kept {
+                evolve_rec.record_applied(&e.rule_id, &e.restore, &e.replacement);
+            }
+            for e in b.edits.iter().filter(|e| reverted_lines.contains(&e.final_line)) {
+                evolve_rec.record_outcome(&e.rule_id, &e.restore, &e.replacement, false);
+            }
             println!("fix {} ({} edit(s) verified):", b.path.display(), kept.len());
             for e in &kept {
                 println!("  [{:<24}] line {}", e.rule_id, e.final_line);
             }
         }
     }
+    // Issue 018: persist recorded trajectories (skip when nothing new).
+    if evolve_rec.recorded_count() > 0 {
+        if let Some(parent) = memory_path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        match evolve_rec.save(&memory_path) {
+            Ok(()) => eprintln!(
+                "self-evolve: {} trajectory(ies) → {}",
+                evolve_rec.recorded_count(),
+                memory_path.display()
+            ),
+            Err(e) => eprintln!(
+                "self-evolve: memory save failed ({}): {e}",
+                memory_path.display()
+            ),
+        }
+    }
+
     let mode = if args.fix {
         #[cfg(feature = "fix_verify")]
         let applied_note = if args.verify {

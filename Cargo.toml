@@ -63,7 +63,7 @@ riir-rag = { path = "../riir-ai/crates/riir-rag", optional = true, default-featu
 [dev-dependencies]
 
 [features]
-default = ["clippy_lints", "rust_perf"]
+default = ["clippy_lints", "rust_perf", "self_evolve"]
 
 # Domain features (Plan 001 multi-domain framework refactor).
 # clippy_lints is the first domain; default-on. Phase 2 adds `rust_perf`
@@ -147,9 +147,15 @@ clippy_lora = []
 ternary_inference = ["dep:riir-engine", "dep:riir-gpu"]
 
 # Issue 004 + Issue 008: latent-first self-evolution loop (memory + EMA direction update).
-# Default-off (deployment constraint: clippy_verify is itself opt-in).
-# G1-G5 PASS (Issue 004) + G6/G7 validated against real cargo clippy (Issue 008):
+# DEFAULT-ON since Issue 018 (promotion with graceful oracle degradation): the
+# memory half runs wherever fixes are applied + persists across runs; the EMA
+# learning half no-ops with one log line when the clippy_verify oracle is
+# unavailable. The modules are UNCONDITIONAL — this flag is a back-compat alias
+# so the benches'/examples' required-features lists keep resolving; a build
+# with --no-default-features still gets the full layer.
+# Validated: G1-G5 PASS (Issue 004) + G6/G7 real cargo clippy PASS (Issue 008):
 # G6 10/10 corpus truthfulness, G7 50.0pp improvement (50% → 100%).
+# Opt-out (pure loop): RIIR_HEAL_SELF_EVOLVE=0.
 self_evolve = []
 
 [[bench]]

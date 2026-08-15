@@ -110,7 +110,34 @@ drafter candidate's rate drops to 0.0 and the correct candidate wins.
 Linear scan over all trajectories — acceptable for POC scale, worth
 profiling at production volume.
 
+## Persistence (Issue 018)
+
+```rust
+pub fn to_json(&self) -> serde_json::Result<String>
+pub fn load_json(&mut self, json: &str) -> serde_json::Result<()>
+pub fn save(&self, path: &Path) -> std::io::Result<()>
+pub fn load(&mut self, path: &Path) -> std::io::Result<()>
+```
+
+A CLI process is short-lived — an in-RAM memory would be permanently
+starved (the exact problem Issue 018's promotion fixes). The v1 JSON
+envelope (`{"version":1,"trajectories":[…]}`) round-trips losslessly:
+
+- `direction` f32 components serialize via ryu's shortest round-trip form
+  → bit-identical recovery.
+- **Merge-on-load**: each file trajectory is `insert`ed — identical
+  `(lint, buggy, fixed)` triples keep the LIVE stats (newer observations
+  win); new triples append with their persisted stats.
+- `NotFound` = fresh memory `Ok(())` (first run); malformed JSON or an
+  unknown `version` = `InvalidData` (never aborts a heal run — the CLI
+  warns + continues fresh).
+- Retrieval weights are config, not state — never serialized.
+
+The `cargo heal` bin resolves the path: `RIIR_HEAL_MEMORY` override, else
+`$XDG_CACHE_HOME`/`~/.cache`/`%LOCALAPPDATA%`/temp → `riir-clippy/memory.json`.
+
 ## See also
 
 - [`heal_pipeline.md`](heal_pipeline.md) — how the memory is composed
+- [`evolve_recorder.md`](evolve_recorder.md) — the oracle-split consumer (Issue 018)
 - [`../03_drafter/embedder.md`](../03_drafter/embedder.md) — the BLAKE3 embedder

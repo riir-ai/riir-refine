@@ -25,13 +25,18 @@
 
 use crate::embedder::{Direction, EMBED_DIM, embed_into};
 use blake3::Hasher;
+use serde::{Deserialize, Serialize};
 
 /// A stored fix trajectory — one past fix attempt with its outcome stats.
 ///
 /// The `direction` field is the latent embedding of `(lint_name, buggy_code,
 /// fixed_code)` computed once at insert time and cached for O(1) retrieval
 /// scoring.
-#[derive(Debug, Clone)]
+///
+/// `Serialize`/`Deserialize` (Issue 018): trajectories persist to a local
+/// JSON file so the memory accumulates across `cargo heal` invocations —
+/// an in-process-only memory would be permanently starved in a CLI.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FixTrajectory {
     /// The clippy lint name (e.g., "`needless_return`").
     pub lint_name: String,
@@ -337,6 +342,86 @@ impl LatentFixMemory {
     pub fn iter(&self) -> impl Iterator<Item = &FixTrajectory> {
         self.trajectories.iter()
     }
+
+    /// Serialize the memory state to a JSON string (v1 envelope, Issue 018).
+    ///
+    /// Round-trips losslessly: `direction` f32 components serialize via
+    /// ryu's shortest round-trip form, so [`load_json`](Self::load_json)
+    /// recovers bit-identical values. Retrieval weights are config, not
+    /// state — they are NOT serialized; the loaded memory keeps its own.
+    ///
+    /// # Errors
+    ///
+    /// Only if a direction component is non-finite (`serde_json` rejects
+    /// `NaN`/`∞`; the embedder never produces them — a corrupted in-memory
+    /// state surfaces as an error rather than a silently-lossy file).
+    pub fn to_json(&self) -> serde_json::Result<String> {
+        serde_json::to_string(&MemoryFileV1 { version: 1, trajectories: self.trajectories.clone() })
+    }
+
+    /// Restore trajectories from JSON written by [`to_json`](Self::to_json).
+    ///
+    /// Merge semantics: each file trajectory is [`insert`](Self::insert)ed,
+    /// so entries whose `(lint, buggy, fixed)` triple already exists keep
+    /// the live stats (the caller's newer observations win) and new triples
+    /// are appended with their persisted stats.
+    ///
+    /// # Errors
+    ///
+    /// Malformed JSON, or an unknown envelope `version` (a future format
+    /// change must fail loudly, not silently misread fields).
+    pub fn load_json(&mut self, json: &str) -> serde_json::Result<()> {
+        let file: MemoryFileV1 = serde_json::from_str(json)?;
+        for traj in file.trajectories {
+            self.insert(traj);
+        }
+        Ok(())
+    }
+
+    /// Write the memory state to `path` (v1 JSON envelope, Issue 018).
+    ///
+    /// Creates no directories — callers that want parent-dir creation
+    /// handle it themselves (keeps this method a plain file write).
+    ///
+    /// # Errors
+    ///
+    /// I/O errors from the write, or serialization failure (non-finite
+    /// direction component — see [`to_json`](Self::to_json)).
+    pub fn save(&self, path: &std::path::Path) -> std::io::Result<()> {
+        let json = self.to_json().map_err(std::io::Error::other)?;
+        std::fs::write(path, json)
+    }
+
+    /// Load trajectories from `path` (best-effort merge, Issue 018).
+    ///
+    /// - Missing file: no-op `Ok(())` (a fresh memory is the normal first run).
+    /// - Malformed JSON: the caller decides whether to warn + continue fresh
+    ///   (the CLI does; a corrupt file must not abort a heal run).
+    ///
+    /// # Errors
+    ///
+    /// `InvalidData` for malformed JSON or an unknown envelope version;
+    /// raw I/O errors for everything except `NotFound` (which is `Ok`).
+    pub fn load(&mut self, path: &std::path::Path) -> std::io::Result<()> {
+        match std::fs::read_to_string(path) {
+            Ok(json) => self
+                .load_json(&json)
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e)),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(e),
+        }
+    }
+}
+
+/// The persisted memory file envelope (v1, Issue 018).
+///
+/// `version` guards future format changes — a loader that sees an unknown
+/// version fails loudly (mapped to `InvalidData` by [`LatentFixMemory::load`])
+/// instead of silently misreading fields.
+#[derive(Serialize, Deserialize)]
+struct MemoryFileV1 {
+    version: u32,
+    trajectories: Vec<FixTrajectory>,
 }
 
 #[cfg(test)]
@@ -447,5 +532,76 @@ mod tests {
         let q = make_query("needless_return", "return 0;");
         let results = mem.retrieve(&q, 5);
         assert_eq!(results.len(), 5, "must return exactly k=5 results");
+    }
+
+    // ── Issue 018: persistence ─────────────────────────────────────────
+
+    #[test]
+    fn json_round_trip_is_lossless() {
+        let mut mem = LatentFixMemory::default();
+        mem.insert(make_traj("needless_return", "return 42;", "42"));
+        mem.insert(make_traj("collapsible_if", "if a { if b { x(); } }", "if a && b { x(); }"));
+        mem.record_outcome("needless_return", "42", true);
+        mem.record_outcome("needless_return", "42", false);
+
+        let json = mem.to_json().expect("serialize");
+        let mut loaded = LatentFixMemory::default();
+        loaded.load_json(&json).expect("deserialize");
+
+        assert_eq!(loaded.len(), mem.len(), "entry count must round-trip");
+        for (a, b) in mem.iter().zip(loaded.iter()) {
+            assert_eq!(a.lint_name, b.lint_name);
+            assert_eq!(a.buggy_code, b.buggy_code);
+            assert_eq!(a.fixed_code, b.fixed_code);
+            assert_eq!(a.lint_name_hash, b.lint_name_hash);
+            assert_eq!(a.success_count, b.success_count);
+            assert_eq!(a.fail_count, b.fail_count);
+            assert_eq!(a.direction, b.direction, "direction must round-trip bit-identically");
+        }
+    }
+
+    #[test]
+    fn file_save_load_missing_and_merge() {
+        let dir = std::env::temp_dir().join(format!("riir-clippy-mem-{}-save-load", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("memory.json");
+        let _ = std::fs::remove_file(&path);
+
+        // Missing file → no-op Ok.
+        let mut mem = LatentFixMemory::default();
+        mem.load(&path).expect("missing file must be a no-op Ok");
+        assert!(mem.is_empty());
+
+        // Save → load round-trip via the file system.
+        mem.insert(make_traj("needless_return", "return 1;", "1"));
+        mem.record_outcome("needless_return", "1", true);
+        mem.save(&path).expect("save");
+        let mut mem2 = LatentFixMemory::default();
+        mem2.load(&path).expect("load");
+        assert_eq!(mem2.len(), 1);
+        assert_eq!(mem2.get(0).unwrap().success_count, 1, "stats must persist");
+
+        // Merge semantics: loading an identical triple keeps LIVE stats;
+        // a new triple is appended.
+        mem2.record_outcome("needless_return", "1", true);
+        mem2.load(&path).expect("re-load");
+        assert_eq!(mem2.len(), 1);
+        assert_eq!(mem2.get(0).unwrap().success_count, 2, "live stats win over persisted");
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn corrupt_file_is_invalid_data() {
+        let dir = std::env::temp_dir().join(format!("riir-clippy-mem-{}-corrupt", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("memory.json");
+        std::fs::write(&path, "{ not json").expect("write corrupt file");
+
+        let mut mem = LatentFixMemory::default();
+        let err = mem.load(&path).expect_err("corrupt file must error");
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
+        assert!(mem.is_empty(), "failed load must leave the memory untouched");
+        let _ = std::fs::remove_file(&path);
     }
 }

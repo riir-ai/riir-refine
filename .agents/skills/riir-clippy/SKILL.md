@@ -824,16 +824,27 @@ global = symlink only.
   (42: mod.rs + gemma2_d2f_sc.rs). weaver_gpu_corrector.rs +
   weaver_gpu_dflash.rs DONE (43). weaver_gpu/ mod.rs + FULL kvarn/
   DONE (44 — weaver_gpu/tests.rs test-only, not mined).
-- **Also open (riir-clippy issues)**: 018 (self_evolve promotion, 6).
+- **Also open (riir-clippy issues)**: 019 (idle-loop skill close-out,
+  T6 remainder), 020 (spectral routing POC — kill-bar data landed: needs
+  ≥85% routing accuracy vs the 53.4%/46.6% measured baseline), 021
+  (evidential status axis, P2), 022 (corpus real-clippy drift — 5
+  Issue-016 entries' buggy_code doesn't trigger under real clippy; blocks
+  the G7 demo re-run).
   014 (rust_perf v4) RESOLVED 2026-08-16 (Bench 020); 016 (clippy
   structural expansion) RESOLVED 2026-08-16 (Bench 021 — corpus 10→40,
   FIXABLE 6→33, VERIFY 1→4); 017 (retrieval precision at scale) RESOLVED
   2026-08-16 (Bench 022 — 130-span eval + regression gate; clippy top-1
-  measured 58.3% at scale, floors pinned).
+  measured 58.3% at scale, floors pinned); 018 (self_evolve promotion)
+  RESOLVED 2026-08-16 (Bench 023 — DEFAULT-ON + unconditional modules,
+  EvolveRecorder oracle split, JSON persistence, `RIIR_HEAL_SELF_EVOLVE=0`
+  opt-out; found + filed Issue 022 along the way).
   015 = sibling's ACTIVE WIP
   (fix_verify mode — do not touch `src/bin/heal.rs`, `src/fix_verify.rs`,
   `src/lib.rs`, `Cargo.toml`, proposers mod.rs/vec_with_capacity, bench.rs,
-  clippy proposers mod.rs).
+  clippy proposers mod.rs). NOTE (2026-08-16, Issue 018 session): the
+  tree was clean + fix_verify had landed, so `Cargo.toml`/`lib.rs`/
+  `heal.rs` were safely touched for 018 — re-verify sibling WIP state
+  before touching them again.
 
 ## Manual invocation
 
