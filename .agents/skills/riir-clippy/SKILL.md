@@ -672,23 +672,53 @@ global = symlink only.
   highwater was stale at 49) — this batch's note is **050** (the
   standing re-scan rule's second observed save). First-compile clean
   (dry-run discipline); 10 doc_markdown backtick fixes pre-commit.
+- **Batch 46 DONE (2026-08-15, Research 051):** the MaxSim cluster
+  (`maxsim/dispatch.rs` 449 + `maxsim/spectralquant.rs` 581 + both WGSL
+  kernels + the Benchmark 002 crossover bench) — **3 rules, corpus 337 →
+  340** (A 79, D 60): `size-gate-covers-every-cost-factor` (D — CPU/GPU
+  size gates must gate on the FULL work term, not a partial shape product;
+  the pinned constant bakes in both implementations' current overheads;
+  2 in-tree instances: maxsim `ld*batch` + gpu_m2p `rows*num_heads`),
+  `declared-max-array-taxed-per-thread-under-runtime-bound` (A — runtime-
+  bounded function-scope `array<f32, 256>` pays the declared max in
+  thread-local per thread; pipeline override constants fix it),
+  `shared-operand-side-pair-batch-index-decomposition` (A — pair-batch
+  `[batch × lq × d_h]` replicates the shared query side; decompose the
+  launch index instead; CPU twin `maxsim_score_packed` exists). 14
+  falsifications (d_eff unpack-bounds hypothesis KILLED by kernel read —
+  the unpack bound IS d_eff; per-call churn = B33/B43 documented trade-off;
+  one-thread-per-pair = B44 regime split). Bug yield filed as riir-ai
+  **Issue 700** (15 hazards, all latent-until-adopted — zero production
+  callers: validate() never checks compressed_k; the +1-padding OOB read
+  executes in tests; d_eff bounds unchecked anywhere; the FALSE
+  no-katgpt-dep premise hiding the SIMD twin one feature-forward away;
+  the bench's own finder warning against the shipped constant; the 800K
+  doc example ~133 GB infeasible). GOAT: 354 kernel_heal + 201 default,
+  clippy 0 both states (15 doc fixes — line-initial `+` RECURRED).
+  **Generator NEW lesson (live-caught):** `open(p, "w").write(apply(...))`
+  TRUNCATES at open-time before apply() runs — the anchor gate saved the
+  content but left a 0-byte file (restored via `git checkout HEAD --`;
+  dry-run green does NOT prove the write path safe — compute content
+  first, then open). **Rule 0b removed same day (owner's call)** — the
+  overnight-window gate is gone; the idle queue runs at any hour, with
+  collision protection via the standing write-time discipline only.
 - **NEXT mining target**: `ls` the riir-gpu tree for the next unmined
-  cluster (~99 of ~200 files mined). Candidates:
-  `hypernet/` second half (~2,108: m2p_transformer.rs 611 +
-  gpu_m2p.rs 568 + shine.rs 402 + routing.rs 268 + types.rs 269 — the
-  meta-LoRA pair is DONE at Batch 45), `maxsim/` (~1,049: spectralquant.rs 20 KB + dispatch.rs
-  14 KB — NOTE distinct from the mined `spectralquant/` dir),
-  `kimi_k3_gpu_backward_batched.rs` (1,394 — LOW value: shares Issue 693's
-  H1/H2 + the broken LCG with the module file; mine only if the better
-  clusters are exhausted). Pick 1-2 files, ~4-8 rules (dedup pressure high
-  after 45 batches), Batch 46 (Research 051 — RE-SCAN `.research/` at
-  write time; the highwater was stale at 49 when 049 already existed).
+  cluster (~102 of ~200 files mined). Candidates:
+  `hypernet/` second half (~1,568: shine.rs 402 + routing.rs 268 +
+  types.rs 269 + m2p_transformer.rs 611 — NOTE gpu_m2p.rs was
+  pattern-checked at B46 + its per-column dispatch loop L298-319 flagged
+  as a likely B40 instance; re-verify sibling meta_lora work has landed
+  first), `kimi_k3_gpu_backward_batched.rs` (1,394 — LOW value: shares
+  Issue 693's H1/H2 + the broken LCG with the module file; mine only if
+  the better clusters are exhausted). Pick 1-2 files, ~4-8 rules
+  (dedup pressure high after 46 batches), Batch 47 (Research 052 —
+  RE-SCAN `.research/` at write time).
   - Validation pattern (proven T4 + 32a + 32b-1 + 32c + 36 + 38): corpus files are NOT
     sibling WIP — edit + run GOAT in the main checkout with
     `CARGO_TARGET_DIR=/tmp/riir-clippy-bNN`; `--features kernel_heal`
     for the corpus suite (318 at 34, 321 at 35, 324 at 36, 327 at 37,
     330 at 38, 333 at 39, 336 at 40, 339 at 41, 342 at 42, 345 at 43,
-    348 at 44, 351 at 45), default for
+    348 at 44, 351 at 45, 354 at 46), default for
     the 201 suite.
     `--all-features` is currently broken by SIBLING WIP
     (`rust_perf/bench.rs:335 alloc_axis`) — pre-existing, not yours.
@@ -703,7 +733,7 @@ global = symlink only.
     router.rs `rules_for_expert` total + the corpus-count mentions in
     router.rs doc header + the Plan 003 doc-comment `NNN-rule corpus`
     line above KERNEL_CATEGORIES + the `Total: 209 ... current NNN`
-    comment + the file-level `//!` header batch block. All in sync at 337 (A 77, B 50, C 33, D 59, E 19, L 11 after Batch 45; F 10, G 19, H 14, I 4, J 5, K 5, M 9, N 18, O 4).
+    comment + the file-level `//!` header batch block. All in sync at 340 (A 79, B 50, C 33, D 60, E 19, L 11 after Batch 46; F 10, G 19, H 14, I 4, J 5, K 5, M 9, N 18, O 4).
   - **Landing lesson (32b-1, self-caught)**: after a large multi-entry
     corpus edit, `awk`-scan for `rule_id:` lines NOT preceded by a
     standalone `KernelRule {` BEFORE the first compile — JSON `\n`
@@ -715,11 +745,13 @@ global = symlink only.
   WIP STILL ACTIVE as of 2026-08-15 evening: qv_lora.rs + cudarc_kernels/
   + riir-gpu/lib.rs + ternary_deltanet_gpu_forward_cudarc.rs all dirty)
   — mine only after their WIP lands.
-- **Progress**: riir-gpu ~99 of ~200 files mined. Corpus: 337 rules.
+- **Progress**: riir-gpu ~102 of ~200 files mined. Corpus: 340 rules.
   edge_lora module FULLY MINED (32a + 32b-1 + 32c). spectralquant/
   FULLY MINED (15 + 33). hypernet/ meta-LoRA pair DONE (45 —
   meta_lora.rs + train_meta_lora.rs; m2p_transformer + gpu_m2p + shine +
-  routing + types remain). gemma4_cubecl_train/ DONE (34).
+  routing + types remain). maxsim/ FULLY MINED (46 — dispatch.rs +
+  spectralquant.rs + both WGSL kernels; gpu_m2p pattern-checked, its
+  per-column loop flagged for the hypernet second-half batch). gemma4_cubecl_train/ DONE (34).
   gemma2_cubecl_train/ FULLY MINED (35: mod.rs + attention_gpu.rs;
   36: resident.rs). gemma4_q4k_train/ FULLY MINED (37: mod.rs +
   weight_buffers.rs; 38: forward_batched.rs + backward.rs).

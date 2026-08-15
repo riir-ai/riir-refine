@@ -1070,6 +1070,42 @@
 //!   transposed A/B layout vs the production path; FD clone storm
 //!   quantified; baseline ctx-8 hardcode + single-sample GOAT
 //!   estimator).
+
+//! - **Batch 46 (2026-08-15, Research 051):** the `MaxSim` cluster
+//!   (`maxsim/dispatch.rs` 449 + `maxsim/spectralquant.rs` 581 + both
+//!   WGSL kernels — size-gated CPU/GPU `MaxSim` late-interaction scoring
+//!   Plan 085 + the fused `SpectralQuant` dequantize+`MaxSim` single-pass
+//!   scorer T5) — **3 rules, corpus 337 → 340** (A 79, D 60):
+//!   `size-gate-covers-every-cost-factor` (D — a CPU/GPU size gate
+//!   that reads a partial work product `ld * batch` while CPU cost
+//!   scales with `lq * ld * dim * batch` silently transposes the
+//!   crossover at unbenched shapes; the pinned constant bakes in BOTH
+//!   sides' current overheads — SIMD-izing the CPU path or removing
+//!   the per-call GPU alloc floor each invalidate it; two in-tree
+//!   instances: maxsim `ld*batch` + `gpu_m2p` `rows*num_heads`),
+//!   `declared-max-array-taxed-per-thread-under-runtime-bound` (A — a
+//!   WGSL function-scope array sized to a hard max `array<f32, 256>`
+//!   but bounded at runtime by `d_eff` pays the DECLARED max in
+//!   indexable thread-local per thread; pipeline override constants
+//!   make the bound compile-time per class),
+//!   `shared-operand-side-pair-batch-index-decomposition` (A — a
+//!   `[batch × lq × d_h]` pair API bakes per-pair replication of the
+//!   shared query side into the batch geometry; decompose the launch
+//!   index `(query_idx, doc_idx)` so the shared side crosses the bus
+//!   once — share-by-indexing, not replication). 14 falsifications
+//!   (per-call buffer churn = documented trade-off + B33/B43
+//!   families; `d_eff` scoring = B33 selective-projection;
+//!   one-thread-per-pair = B44 row-dot-split regime; unpack bounds
+//!   already match scoring bounds — the hypothesized gap does not
+//!   exist). Hazards filed as riir-ai Issue 700 (`validate()` never
+//!   checks `compressed_k`; the word-vs-byte `bitstream_offset`
+//!   doc-lie; the documented-but-unenforced "+1 padding" one-word
+//!   OOB read executing in tests; unchecked `d_eff` ≤ 256 and
+//!   `d_eff` ≤ `d_h`; the scalar-CPU-fallback substrate-first
+//!   violation while `katgpt_core::simd::maxsim_score` sits one
+//!   feature-forward away; the bench's own crossover finder
+//!   warning against the shipped constant; zero production
+//!   callers).
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
@@ -7324,6 +7360,99 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
             ref_shape: "// naive: FD sweep rebuilds the FROZEN co-operand per eval — mem is\n// mutated once per optimizer step but materialized 2*P times per step;\n// the callee re-derives its own sweep-invariants (target, adapters) too\nfn fd_grad_naive(meta_flat: &mut [f32], mem_flat: &[f32], ctx: &[u32],\n                 w: &Weights, cfg: &Cfg, eps: f32, grads: &mut [f32]) {\n    for i in 0..meta_flat.len() {\n        let saved = meta_flat[i];\n        meta_flat[i] = saved + eps;\n        let lp = loss(ctx, &unflatten_meta(meta_flat),\n                      &MemoryEmb { data: mem_flat.to_vec(), m: cfg.m }, w);\n        meta_flat[i] = saved - eps;\n        let lm = loss(ctx, &unflatten_meta(meta_flat),\n                      &MemoryEmb { data: mem_flat.to_vec(), m: cfg.m }, w);\n        grads[i] = (lp - lm) / (2.0 * eps);\n        meta_flat[i] = saved;\n    }\n}\n".to_string(),
             opt_pattern: "// optimized: materialization cadence matches mutation cadence — the\n// frozen co-operand + callee-derived invariants are built ONCE at sweep\n// entry into a prelude; the varying operand stays make/unmake in place\nstruct LossPrelude {\n    mem: MemoryEmb,             // frozen this sweep: built once\n    target: Vec<f32>,           // ctx-only: invariant under BOTH operands\n    adapters: Vec<LoraAdapter>, // callee seam: pre-converted frozen meta\n}\nfn fd_grad_hoisted(meta_flat: &mut [f32], ctx: &[u32], w: &Weights,\n                   pre: &LossPrelude, eps: f32, grads: &mut [f32]) {\n    for i in 0..meta_flat.len() {\n        let saved = meta_flat[i];\n        meta_flat[i] = saved + eps;\n        let lp = loss_with_prelude(ctx, meta_flat, w, pre);\n        meta_flat[i] = saved - eps;\n        let lm = loss_with_prelude(ctx, meta_flat, w, pre);\n        grads[i] = (lp - lm) / (2.0 * eps);\n        meta_flat[i] = saved;\n    }\n}\n// The mem-grad sweep is the mirror image: meta is the frozen co-operand —\n// hoist unflatten_meta + adapter conversion; only mem_flat perturbs.\n".to_string(),
         },
+        // ══ Batch 46 (maxsim cluster) ═════════════════════════════
+        // ── size-gate-covers-every-cost-factor — a CPU/GPU size gate
+        // must gate on the full work term, not a partial shape
+        // product (D) ──
+        //
+        // Source: riir-gpu maxsim/dispatch.rs L16-23 + L215-216 (the
+        // gate `ld * batch < threshold` ignores lq and dim — both
+        // multiply CPU cost; the constant 256 was pinned at lq=8,
+        // dim=64 on M3 Max) + hypernet/gpu_m2p.rs L307/L363 (the same
+        // partial-product shape: `rows * num_heads < threshold`,
+        // ignoring head width). Benchmark 002 anchors the two-term
+        // cost model: GPU floor ~1.6-1.8 ms/call (per-call allocs +
+        // fresh staging readback), CPU ~8.5 us per (ld x batch) unit
+        // at the benched shape; realistic shapes move the true
+        // crossover from ~27 to ~6,900 in the gate's units while the
+        // constant stays 256. Mis-dispatch is asymmetric: GPU at
+        // too-small work pays the bounded floor (~6x/call); CPU at
+        // too-large work forfeits an unbounded parallel win (73.86x
+        // measured at the top of the bench).
+        //
+        // Distinct from recurrent-vs-chunk-dispatch (Batch 3 — the
+        // size-gated-dispatch STRUCTURE between two GPU algorithms
+        // whose domain has a single variable factor n; this adds
+        // CPU-vs-GPU sides with different cost scaling + gate
+        // completeness + calibration lifecycle),
+        // defer-readback-gated-by-live-output-size (Batch 29 —
+        // gate-on-the-right-quantity applied to readback), and
+        // hybrid-cpu-elementwise-gpu-throughput-sync-points (Batch 34
+        // — routes op CLASSES to sides; this routes the SAME op by
+        // size).
+        KernelRule {
+            rule_id: "size-gate-covers-every-cost-factor".to_string(),
+            gpu_concept: "When one op has both a CPU and a GPU implementation and a size gate routes between them, the empirically-pinned crossover constant is only valid if the gate quantity scales with BOTH sides' costs: CPU cost is proportional to total MACs (every shape factor — lq, ld, dim, batch), while GPU cost is a launch/alloc/readback floor plus MACs at the GPU rate. Gating on a partial product (ld * batch, ignoring lq and dim) silently transposes the crossover at unbenched shapes — and the failure is latency-only, so no test detects it. The mis-dispatch is asymmetric: routing too-small work to GPU pays the bounded floor (~6x per call); routing too-large work to CPU forfeits an unbounded parallel win (73.86x measured at the top of the bench). The constant also bakes in BOTH implementations' current overheads — making the CPU path 4x faster (SIMD) or removing the per-call GPU alloc floor moves the crossover in opposite directions — so the bench citation must name hardware AND shape, and the crossover bench must re-run when either side changes. Distinct from recurrent-vs-chunk-dispatch (the size-dispatch structure between two GPU algorithms with one variable factor), defer-readback-gated-by-live-output-size (gate-on-the-right-quantity applied to readback), and hybrid-cpu-elementwise-gpu-throughput-sync-points (op-class routing, not size routing of one op).".to_string(),
+            ref_shape: "// naive: the gate reads a PARTIAL work product (ld * batch) while the CPU\n// side's cost scales with lq * ld * dim * batch — the pinned constant is\n// only valid at the benched shape\nconst THRESHOLD: usize = 256; // pinned once at lq=8, dim=64 — never re-derived\nfn score(queries: &[f32], docs: &[f32], lq: usize, ld: usize, dim: usize, batch: usize) -> Vec<f32> {\n    let work_size = ld * batch; // lq and dim missing — up to 4096x of CPU cost unaccounted\n    if work_size < THRESHOLD {\n        cpu_score(queries, docs, lq, ld, dim, batch) // scalar rate: cost ∝ lq*ld*dim*batch\n    } else {\n        gpu_score(queries, docs, lq, ld, dim, batch) // fixed floor ~1.8ms + MACs at GPU rate\n    }\n}\n".to_string(),
+            opt_pattern: "// optimized: gate on the FULL work term (or a two-term cost model) so the\n// crossover tracks shape; re-pin the measured constants when either side's\n// implementation changes (SIMD CPU twin ⇒ re-measure the CPU rate; scratch-\n// resident GPU buffers ⇒ re-measure the floor)\nconst CPU_US_PER_MAC: f64 = 8.5e-9;   // measured at the bench shape, cited w/ hardware\nconst GPU_FLOOR_US: f64 = 1_800.0;    // measured: submit + per-call allocs + readback\nconst GPU_US_PER_MAC: f64 = 0.11e-9;  // measured GPU rate at the bench shape\nfn score(queries: &[f32], docs: &[f32], lq: usize, ld: usize, dim: usize, batch: usize) -> Vec<f32> {\n    let macs = (lq * ld * dim * batch) as f64;\n    let cpu_us = macs * CPU_US_PER_MAC;\n    let gpu_us = GPU_FLOOR_US + macs * GPU_US_PER_MAC;\n    if cpu_us < gpu_us {\n        cpu_score(queries, docs, lq, ld, dim, batch)\n    } else {\n        gpu_score(queries, docs, lq, ld, dim, batch)\n    }\n}\n".to_string(),
+        },
+        // ── declared-max-array-taxed-per-thread-under-runtime-bound —
+        // runtime-bounded function-scope array → declared-max
+        // thread-local placement (A) ──
+        //
+        // Source: riir-gpu kernels/spectralquant_maxsim.wgsl L110-117 +
+        // L130-151 — `var rotated_q: array<f32, 256>` (1 KB/thread)
+        // written under a RUNTIME uniform bound (d_eff, default 6) and
+        // read inside the j-loop: the compiler can neither unroll nor
+        // promote it to registers, so every thread pays the DECLARED
+        // max in indexable thread-local memory regardless of the
+        // runtime value. wgpu pipeline override constants close the
+        // gap with zero kernel-source forks (one pipeline per bound
+        // class). The tax composes with axis-splitting fixes — more
+        // resident threads = more paid footprints.
+        //
+        // Distinct from hardcoded-fast-path-jit-specialization (Batch
+        // 23 — throughput constant-folding; this is the ADDRESS-SPACE
+        // consequence of runtime vs compile-time bounds),
+        // stash-kernel-internal-intermediate-in-smem (Batch 44 — a
+        // global write+re-read moved to smem; this is function-scope
+        // private placement + declared-max sizing), and
+        // stack-array-row-view-bridge (Batch 43 — CPU-side fixed
+        // stack bridge).
+        KernelRule {
+            rule_id: "declared-max-array-taxed-per-thread-under-runtime-bound".to_string(),
+            gpu_concept: "A function-scope array sized to a hard maximum (array<f32, 256> = 1 KB per thread) but bounded at runtime by a uniform (d_eff, default 6) is dynamically indexed across two separately-bounded loops, so the compiler can neither unroll nor promote it to registers — every thread pays the DECLARED max in indexable thread-local memory regardless of the runtime value. Specialize the bound at pipeline creation (wgpu pipeline override constants; one pipeline per bound-class) so the array is compile-time sized: unrollable, register-promotable, zero kernel-source forks. The tax composes with parallelism fixes — splitting the reduction axis multiplies resident threads, multiplying the thread-local footprint. Distinct from hardcoded-fast-path-jit-specialization (throughput constant-folding — this is the address-space consequence of runtime vs compile-time bounds), stash-kernel-internal-intermediate-in-smem (a global intermediate moved to smem — this is function-scope private placement), and stack-array-row-view-bridge (CPU-side stack bridge).".to_string(),
+            ref_shape: "// naive: declared-max local array under a RUNTIME bound — the compiler\n// cannot unroll or promote it; every thread pays 256 slots of indexable\n// thread-local even when d_eff is 6\nfn score_naive(d_eff: u32, q_rot: &[f32; 256], k_row: &[f32; 256]) -> f32 {\n    let mut rotated_q = [0.0f32; 256]; // 1 KB/thread, always fully paid\n    for d in 0..d_eff {\n        rotated_q[d as usize] = q_rot[d as usize]; // runtime index into local\n    }\n    let mut dot = 0.0f32;\n    for j in 0..d_eff {\n        dot += rotated_q[j as usize] * k_row[j as usize]; // runtime index again\n    }\n    dot\n}\n".to_string(),
+            opt_pattern: "// optimized: the bound is a pipeline OVERRIDE CONSTANT (one pipeline per\n// d_eff class) — compile-time-sized array unrolls / register-promotes;\n// threads pay only the used size\nfn score_specialized(q_rot: &[f32; 256], k_row: &[f32; 256]) -> f32 {\n    const D_EFF: usize = 6; // pipeline override constant — NOT a runtime uniform\n    let mut rotated_q = [0.0f32; D_EFF]; // compile-time bound\n    for d in 0..D_EFF {\n        rotated_q[d] = q_rot[d]; // statically indexed — unrollable\n    }\n    let mut dot = 0.0f32;\n    for j in 0..D_EFF {\n        dot += rotated_q[j] * k_row[j];\n    }\n    dot\n}\n".to_string(),
+        },
+        // ── shared-operand-side-pair-batch-index-decomposition —
+        // a pair-batch tensor replicates the shared side; decompose
+        // the launch index instead (A) ──
+        //
+        // Source: riir-gpu maxsim/spectralquant.rs L190 + kernels/
+        // spectralquant_maxsim.wgsl L27/L109 — the pair API's
+        // [batch x lq x d_h] query tensor bakes a per-pair copy of the
+        // shared side into the batch geometry (q_base = batch_idx *
+        // lq * d_h); the canonical MaxSim/ColBERT workload is ONE
+        // query vs N candidate docs, so the caller replicates the
+        // query N x on the host, uploads N x the bytes, and every
+        // thread redundantly re-rotates identical tokens. The CPU
+        // substrate twin already solves it: katgpt-types
+        // maxsim_score_packed takes offsets + per-pair query-ids.
+        //
+        // Distinct from gqa-kv-head-sharing-bandwidth-reduction (Batch
+        // 23 — head-index mapping WITHIN attention; this is
+        // batch-tensor geometry for pair tasks),
+        // fan-out-shared-input-single-sync (Batch 25 — N sibling
+        // DISPATCHES sharing one upload; this is ONE kernel's input
+        // layout), and twin-projection-shared-delta-adapter (Batch 31
+        // — param sharing between shape twins).
+        KernelRule {
+            rule_id: "shared-operand-side-pair-batch-index-decomposition".to_string(),
+            gpu_concept: "A 'score N (query, doc) pairs' kernel whose input tensor is [batch x lq x d_h] bakes a per-pair copy of the shared side into the batch geometry (q_base = batch_idx * lq * d_h). The canonical MaxSim/ColBERT workload is one query vs N candidate docs: the caller must replicate the query N times on the host, upload N times the bytes, and every thread redundantly re-transforms identical tokens. Decompose the invocation index into (query_idx, doc_idx) — a 2D dispatch or divide/mod — with a [n_q x lq x d_h] query operand plus per-pair doc offsets, and the shared side crosses the bus once: share-by-indexing instead of replication, at the batch-geometry level. Distinct from gqa-kv-head-sharing-bandwidth-reduction (head-index mapping within attention — this is batch-tensor geometry), fan-out-shared-input-single-sync (N dispatches sharing one upload — this is one kernel's input layout), and twin-projection-shared-delta-adapter (param sharing between shape twins).".to_string(),
+            ref_shape: "// naive: the pair API bakes the shared query into every pair —\n// [batch x lq x d] forces the caller to replicate the query batch-times\n// before upload (N x host bytes, N x bus traffic, per-thread re-transform)\nfn score_pairs_replicated(queries: &[f32], docs: &[f32], batch: usize,\n                          lq: usize, ld: usize, d: usize, out: &mut [f32]) {\n    for b in 0..batch {\n        let q = &queries[b * lq * d..(b + 1) * lq * d]; // SAME query, batch copies\n        let k = &docs[b * ld * d..(b + 1) * ld * d];\n        out[b] = maxsim(q, k, lq, ld, d);\n    }\n}\n".to_string(),
+            opt_pattern: "// optimized: decompose the pair index — the shared query is uploaded\n// ONCE and selected by query_idx; each pair carries only its doc offset\nfn score_pairs_shared(query: &[f32], docs: &[f32], doc_offsets: &[usize],\n                      pair_q: &[u16], lq: usize, ld: usize, d: usize,\n                      out: &mut [f32]) {\n    for pair in 0..pair_q.len() {\n        let qi = pair_q[pair] as usize; // index into the n_q shared queries\n        let q = &query[qi * lq * d..(qi + 1) * lq * d]; // one copy on device\n        let off = doc_offsets[pair];\n        let k = &docs[off..off + ld * d];\n        out[pair] = maxsim(q, k, lq, ld, d);\n    }\n}\n".to_string(),
+        },
     ])
 }
 
@@ -7336,7 +7465,7 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 337-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 340-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -7344,7 +7473,7 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (77 rules)
+    // A: Memory access patterns (79 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -7426,6 +7555,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "bit-cursor-unpack-to-width-specialized-byte-batch",
             "scratch-depth-matches-shape-invariance",
             "frozen-cooperand-hoist-out-of-perturbation-loop",
+            "declared-max-array-taxed-per-thread-under-runtime-bound",
+            "shared-operand-side-pair-batch-index-decomposition",
         ],
     ),
     // B: Compute patterns (50 rules)
@@ -7525,7 +7656,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fuse-indirect-gather-into-dot-consumer",
         ],
     ),
-    // D: Dispatch patterns (59 rules)
+    // D: Dispatch patterns (60 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -7589,6 +7720,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "empty-slice-sentinel-launders-shape-violation",
             "share-cube-size-const-between-kernel-and-launcher",
             "serialize-container-canonical-order",
+            "size-gate-covers-every-cost-factor",
         ],
     ),
     // E: Parallelism patterns (19 rules)
@@ -7880,8 +8012,9 @@ mod tests {
         // Batch 43 (5): riir-gpu production kernels — mutable-input-scratch-residency-write-per-call, topk-select-nth-over-full-vocab-sort, post-scatter-renorm-support-set-only, stack-array-row-view-bridge, empty-slice-sentinel-launders-shape-violation (weaver_gpu_corrector.rs + weaver_gpu_dflash.rs — the Weaver speculative-decode GPU corrector cluster; hazards filed as Issue 697).
         // Batch 45 (3): riir-gpu hypernet — scratch-depth-matches-shape-invariance, softmax-denominator-hoist-out-of-weighted-v, frozen-cooperand-hoist-out-of-perturbation-loop (hypernet/meta_lora.rs + train_meta_lora.rs — the SHINE meta-LoRA CPU reference forward + FD trainer; hazards filed as Issue 699).
         // Batch 44 (9): riir-gpu production kernels — row-dot-split-inner-axis-block-reduce, fuse-indirect-gather-into-dot-consumer, share-cube-size-const-between-kernel-and-launcher, stash-kernel-internal-intermediate-in-smem, hoist-bit-address-out-of-packed-row-sweep, fold-tile-transpose-into-dequant-scatter, bit-cursor-unpack-to-width-specialized-byte-batch, single-sweep-minmax-for-quant-scale, serialize-container-canonical-order (weaver_gpu/mod.rs — the 19-dispatch kernel substrate behind the Batch 43 corrector + kvarn/ — the KVarN CPU reference + zone-scale registry; hazards filed as Issue 698).
-        // Total: 209. // (historical batch-30 snapshot; current 337)
-        assert_eq!(corpus.entries.len(), 337, "batches 1-45 should have 337 rules");
+        // Batch 46 (3): riir-gpu maxsim — size-gate-covers-every-cost-factor, declared-max-array-taxed-per-thread-under-runtime-bound, shared-operand-side-pair-batch-index-decomposition (maxsim/dispatch.rs + spectralquant.rs + both WGSL kernels — the MaxSim size-gated CPU/GPU dispatcher + the fused SpectralQuant dequantize+MaxSim single-pass scorer, Plan 085; hazards filed as Issue 700).
+        // Total: 209. // (historical batch-30 snapshot; current 340)
+        assert_eq!(corpus.entries.len(), 340, "batches 1-46 should have 340 rules");
     }
 
     #[test]
@@ -10629,6 +10762,69 @@ mod tests {
         }
     }
 
+    #[test]
+    fn batch46_rules_present() {
+        let corpus = build_kernel_seed_corpus();
+        let ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        // A (2 new): declared-max thread-local tax + shared-side pair-batch decomposition
+        assert!(ids.contains(&"declared-max-array-taxed-per-thread-under-runtime-bound"), "declared-max array tax");
+        assert!(ids.contains(&"shared-operand-side-pair-batch-index-decomposition"), "shared-side decomposition");
+        // D (1 new): full-cost-factor size gate
+        assert!(ids.contains(&"size-gate-covers-every-cost-factor"), "size-gate cost factors");
+    }
+
+    #[test]
+    fn batch46_concepts_covered() {
+        // Distinctive ASCII substrings located by rule_id (the 32a convention).
+        let corpus = build_kernel_seed_corpus();
+        let concept = |id: &str| -> String {
+            corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-46 rule '{id}' missing"))
+                .gpu_concept
+                .clone()
+        };
+        // A: declared-max-array-taxed-per-thread-under-runtime-bound (spectralquant_maxsim.wgsl L110/L111/L151)
+        let c = concept("declared-max-array-taxed-per-thread-under-runtime-bound");
+        assert!(c.contains("every thread pays the DECLARED max")
+            && c.contains("pipeline override constant"), "declared-max concept");
+        // A: shared-operand-side-pair-batch-index-decomposition (spectralquant.rs L190 + wgsl L109)
+        let c = concept("shared-operand-side-pair-batch-index-decomposition");
+        assert!(c.contains("share-by-indexing instead of replication")
+            && c.contains("Decompose the invocation index"), "shared-side concept");
+        // D: size-gate-covers-every-cost-factor (dispatch.rs L215-216 + gpu_m2p.rs L307)
+        let c = concept("size-gate-covers-every-cost-factor");
+        assert!(c.contains("Gating on a partial product")
+            && c.contains("crossover bench must re-run"), "size-gate concept");
+    }
+
+    #[test]
+    #[cfg(not(feature = "kernel_verify"))]
+    fn batch46_pseudocode_parses() {
+        // G1 for Batch 46: every new rule's ref_shape AND opt_pattern must
+        // syn-parse as valid Rust (the L2 pruner verdict).
+        use crate::domain::HealDomain;
+        let corpus = build_kernel_seed_corpus();
+        let ids = [
+            "size-gate-covers-every-cost-factor",
+            "declared-max-array-taxed-per-thread-under-runtime-bound",
+            "shared-operand-side-pair-batch-index-decomposition",
+        ];
+        for id in ids {
+            let entry = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-46 rule '{id}' missing"));
+            let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+            assert!(ref_verdict.parses, "batch-46 ref_shape for '{id}' must parse");
+            let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+            assert!(opt_verdict.parses, "batch-46 opt_pattern for '{id}' must parse");
+        }
+    }
+
     // ════════════════════════════════════════════════════════════════════
     // Plan 003 — Router ↔ corpus wiring tests
     // ════════════════════════════════════════════════════════════════════
@@ -10640,7 +10836,7 @@ mod tests {
 
     #[test]
     fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-        // Every rule_id in the 337-rule corpus must appear in exactly one category.
+        // Every rule_id in the 340-rule corpus must appear in exactly one category.
         let corpus = build_kernel_seed_corpus();
         let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
         let mut categorized: Vec<&str> = Vec::new();
@@ -10671,12 +10867,12 @@ mod tests {
 
     #[test]
     fn kernel_categories_counts_match_plan_003_table() {
-        // Pin per-category rule counts to the Plan 003 table (updated for Batch 45).
+        // Pin per-category rule counts to the Plan 003 table (updated for Batch 46).
         let expected = [
-            (KernelCategory::MemoryAccess, 77),
+            (KernelCategory::MemoryAccess, 79),
             (KernelCategory::Compute, 50),
             (KernelCategory::Fusion, 33),
-            (KernelCategory::Dispatch, 59),
+            (KernelCategory::Dispatch, 60),
             (KernelCategory::Parallelism, 19),
             (KernelCategory::FlashAttnTiling, 10),
             (KernelCategory::LinearAttnRecurrence, 19),
@@ -10696,9 +10892,9 @@ mod tests {
                 "Plan 003: category {cat:?} has {} rules, expected {count}",
                 entry.2.len());
         }
-        // Sum must equal 334.
+        // Sum must equal 340.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 337, "Plan 003: category totals must sum to 337");
+        assert_eq!(total, 340, "Plan 003: category totals must sum to 340");
     }
 
     #[test]
@@ -10708,7 +10904,7 @@ mod tests {
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 337, "Plan 003: grouped corpus has {total} rules, expected 337");
+        assert_eq!(total, 340, "Plan 003: grouped corpus has {total} rules, expected 340");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");
