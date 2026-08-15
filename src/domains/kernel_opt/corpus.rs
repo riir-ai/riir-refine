@@ -473,6 +473,46 @@
 //!   of `Mlp1.B`/`Mlp2.A` in every GPU `LoRA` loop — FIXED as riir-ai Issue
 //!   679A (per-slot uniforms) + 10 residual hazards filed (Issue 679
 //!   B1-B10).
+//! - **Batch 32a (Research 034):** 11 rules from the `edge_lora` CORE cluster —
+//!   `edge_module.rs` + `types.rs` + `training.rs` + `adaptive_width.rs`
+//!   (host-side training orchestrators; the first half of the `edge_lora`
+//!   module, the 32b half = self-play/arena/consolidation):
+//!   `caller-owned-split-scratch` (A — hot-path fn takes ONE caller-owned
+//!   scratch, `split_at_mut` carves intermediate+output, returns a
+//!   borrowed view; trait-shaped allocating paths quarantined as cold
+//!   adapters), `inplace-gate-scale-at-funnel-bottleneck` (C — the sigmoid
+//!   gate runs IN PLACE on the rank-wide intermediate AND absorbs the
+//!   broadcast scale: rank ops, not `out_dim`, and no wide second pass),
+//!   `sign-branch-stable-sigmoid` (B — branch on sign so exp's argument is
+//!   always <= 0; the naive form overflows f32 exp at x < -88.7),
+//!   `incremental-multi-part-hash-no-concat` (A — BLAKE3 `hasher.update`
+//!   per tensor replaces materializing `a || b`: the streaming update IS
+//!   the concatenation, zero per-step allocation on the commitment path),
+//!   `bool-fields-over-bitset-hot-reads` (L — the REGIME BOUNDARY of
+//!   packing: per-tick-read flags stay as bools (decode ALU dominates);
+//!   pack only when bytes streamed dominate), `per-layer-grad-norm-lr-
+//!   equalization` (B — per-step per-layer grad-norm LR scaling
+//!   `min(max_norm/layer_norm, cap)` combats a measured ~1000× vanishing
+//!   gradient; zero-norm → 1.0 rails), `width-invariant-superset-
+//!   training` (D — ONE superset weight set trained across sampled widths
+//!   serves every inference budget; gate: width-1 ≥ 95% of width-4),
+//!   `superset-sized-scratch-across-variants` (A — scratch sized ONCE for
+//!   the worst-case variant; caveat: consumers with exact-length checks
+//!   force per-variant allocs instead), `active-index-grad-scatter-
+//!   subset-backward` (H — backward in dense sub-space + precomputed
+//!   index scatter into the full buffer; inactive params zero by
+//!   construction, no masks, no atomics), `inplace-grad-accumulate-
+//!   deferred-postscale` (B — accumulate RAW per sample, ONE post-loop
+//!   reciprocal sweep: 1 division total, not batch×params), and
+//!   `fuse-loss-and-output-grad-one-pass` (C — loss scalar + analytic
+//!   output-gradient from the SAME diff in one sweep). Corpus: **228
+//!   rules across 15 categories (A–O)**. Mining ALSO surfaced the
+//!   `AdaptiveWidthTrainer` per-episode construction storm (`edges.clone()` +
+//!   fresh `TopologyTrainer` + fresh `ForwardCache` + fresh `EdgeGradients`
+//!   per EPISODE, root cause = exact-length cache check) + silently ignored
+//!   `TrainingConfig` fields (`weight_decay`/`grad_clip_norm`/
+//!   `per_layer_lr_scale`) + misreported `mean_weighted_loss` — filed as a
+//!   riir-ai issue.
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
@@ -4012,6 +4052,204 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
             ref_shape: "// naive: ship the storage dtype to the device and convert on the\n// fly, per dispatch, forever\nfn forward_naive(w_bf16: &GpuBuffer, x: &GpuBuffer, out: &mut GpuBuffer) {\n    // every kernel that touches w pays the u16->f32 shift per\n    // element, every layer, every step\n    dispatch(w_bf16, x, out, CONVERT_ON_LOAD);\n}".to_string(),
             opt_pattern: "// optimized: normalize dtype ONCE at ingestion. bf16 -> f32 is a\n// pure bit shift (upper 16 bits), so the upload pass is\n// memcpy-class\nfn upload_bf16_as_f32(data: &[u16]) -> Vec<f32> {\n    let mut f32_data = Vec::with_capacity(data.len());\n    for &bits in data {\n        f32_data.push(f32::from_bits((bits as u32) << 16));\n    }\n    f32_data // upload once; kernels never convert again\n}".to_string(),
         },
+        // ══ Batch 32a (Research 034): the edge_lora core cluster — ══
+        // edge_module.rs + types.rs + training.rs + adaptive_width.rs
+        // (host-side training orchestrators). Mining also surfaced the
+        // AdaptiveWidthTrainer per-episode construction storm + silently
+        // ignored TrainingConfig fields — filed as a riir-ai issue.
+        //
+        // ── caller-owned-split-scratch — per-call alloc → borrow-split scratch (A) ──
+        // Source: riir-gpu edge_lora/edge_module.rs L173-177 ("`scratch` must
+        // hold at least `rank + out_dim` f32 slots" + the two-region layout)
+        // + L187 (`pub fn forward<'a>(&self, hidden: &[f32], scratch: &'a mut
+        // [f32]) -> Option<&'a [f32]>`) + L194-199 (`let needed =
+        // rank.checked_add(out_dim)?; ... let (inter, out) =
+        // scratch.split_at_mut(rank);`) + L301-304 ("Cold-path adapter: the
+        // trait signature ... doesn't take a scratch parameter, so we allocate
+        // a transient `[rank + out_dim]` buffer here. The trainer's hot path
+        // calls `EdgeModule::forward` with reusable scratch instead.").
+        //
+        // Distinct from staging-reuse-grow-only-map-prefix (device-side
+        // grow-only staging with a mapping-prefix policy — this is a
+        // borrow-split protocol carving two logical buffers out of ONE
+        // caller allocation with a borrowed return) and from
+        // inplace-output-alias (aliases input with output within one kernel —
+        // these two regions are deliberately DISJOINT, split by the borrow
+        // checker).
+        KernelRule {
+            rule_id: "caller-owned-split-scratch".to_string(),
+            gpu_concept: "when a per-tick hot-path computation needs an intermediate AND an output buffer, allocate NEITHER inside the call: take one caller-owned scratch slice, carve it into the two logical regions with split_at_mut (the borrow checker proves the regions disjoint — no aliasing hazard), and return the output as a borrowed view of the scratch so nothing is copied out of the callee. The size contract is a real release-mode check (checked_add + len compare returning None), not a debug assert. Where a trait signature forces an owned/allocating shape, quarantine it as a documented cold adapter and route the hot loop through the scratch-taking entry point instead. This is the host-side twin of scratch reuse in kernel pipelines: zero allocation per tick, zero ownership handoff. Distinct from staging-reuse-grow-only-map-prefix (device-side grow-only staging for async map reads — this is a borrow-split protocol over one caller allocation with a borrowed return) and from inplace-output-alias (aliases input with output within one kernel — these two regions are deliberately disjoint, split by the borrow checker)".to_string(),
+            ref_shape: "// Naive: every call allocates, and the result escapes as an owned Vec.\nfn forward(&self, hidden: &[f32]) -> Option<Vec<f32>> {\n    let rank = self.rank();\n    let out_dim = self.out_dim as usize;\n    if hidden.len() != self.in_dim as usize { return None; }\n    let mut inter = vec![0.0f32; rank];      // heap alloc per call\n    self.matvec_a(hidden, &mut inter);\n    for v in inter.iter_mut() { *v = sigmoid(*v); }\n    let mut out = vec![0.0f32; out_dim];     // second heap alloc per call\n    self.matvec_b(&inter, &mut out);\n    Some(out)                                // caller must clone to keep it\n}".to_string(),
+            opt_pattern: "// Optimized: one caller-owned scratch, borrow-split into intermediate +\n// output; output returned as a view — zero alloc, zero copy, caller\n// reuses the same buffer forever.\nfn forward<'a>(&self, hidden: &[f32], scratch: &'a mut [f32]) -> Option<&'a [f32]> {\n    let rank = self.rank();\n    let out_dim = self.out_dim as usize;\n    if hidden.len() != self.in_dim as usize { return None; }\n    let needed = rank.checked_add(out_dim)?;       // overflow-safe contract\n    if scratch.len() < needed { return None; }     // real release-mode check\n    let (inter, out) = scratch.split_at_mut(rank); // disjoint views, one buffer\n    self.matvec_a(hidden, inter);\n    for v in inter.iter_mut() { *v = sigmoid(*v) * self.scale; }\n    self.matvec_b(inter, out);\n    Some(out)                                      // borrowed slice, not a Vec\n}\n\n// Cold adapter (trait signature without scratch): pays ONE transient alloc,\n// documented as cold — hot loops never route through it.\nfn route_into(&self, from: &[f32], out: &mut [f32]) {\n    let rank = self.rank();\n    let mut buf = vec![0.0f32; rank + out.len()];\n    if self.forward(from, &mut buf).is_some() {\n        out.copy_from_slice(&buf[rank..]);\n    }\n}".to_string(),
+        },
+        // ── inplace-gate-scale-at-funnel-bottleneck — wide second pass → narrowest-tensor gate (C) ──
+        // Source: riir-gpu edge_lora/edge_module.rs L203-212 ("Apply sigmoid
+        // + scale in place on inter." / `for v in inter.iter_mut() {
+        // *v = sigmoid(*v) * self.scale; }` between matvec_a and matvec_b).
+        //
+        // Distinct from epilogue-at-register-write-phase (fuses the
+        // elementwise INTO the producing kernel's register phase, eliminating
+        // the pass — here the pass remains a separate host-orchestrated step
+        // between two dispatches; the win is WHERE it runs and what it
+        // absorbs, applicable when the kernels can't be fused) and from
+        // fused-activation-quantize-for-gemv-consumer (fuses into the
+        // CONSUMER kernel — this keeps both matvecs untouched and in-places
+        // the standalone gate on the reused intermediate).
+        KernelRule {
+            rule_id: "inplace-gate-scale-at-funnel-bottleneck".to_string(),
+            gpu_concept: "when a mandatory elementwise gate sits between a down-projection (producing rank values) and an up-projection (producing out_dim values, often 100-1000× wider), run the gate IN PLACE on the reused rank-wide intermediate and absorb any broadcast scale into the same pass — the gate loop must touch rank elements regardless, so the scale rides free. The naive alternatives both cost more: a fresh gated buffer (extra allocation + copy) or a second pass scaling the WIDE output (out_dim elements instead of rank), and pre-folding the scale into the up-projection weights is illegal when those weights are frozen/committed. This is placement-of-work at the funnel's narrowest point: the unavoidable pass also carries the free work. Distinct from epilogue-at-register-write-phase (fuses the elementwise into the producing kernel's register phase, eliminating the pass — here the pass stays a separate host step between dispatches; the win is where it runs and what it absorbs) and from fused-activation-quantize-for-gemv-consumer (fuses into the consumer kernel — this keeps both matvecs untouched and in-places the gate on the reused intermediate)".to_string(),
+            ref_shape: "// Naive: gate into a fresh buffer, then scale the WIDE output in a\n// second pass.\nfn forward_naive(inter: &[f32], out: &mut [f32], rank: usize, scale: f32) {\n    let mut gated = vec![0.0f32; rank];    // extra allocation\n    for r in 0..rank {\n        gated[r] = sigmoid(inter[r]);      // inter kept, gated copied\n    }\n    matvec_b(&gated, out);\n    for o in 0..out.len() {                // out_dim >> rank (4096 vs 16)\n        out[o] *= scale;                   // wide second pass, broadcast mul\n    }\n}".to_string(),
+            opt_pattern: "// Optimized: the unavoidable gate pass runs IN PLACE on the reused\n// rank-wide intermediate AND absorbs the scale — rank ops total, zero\n// extra passes, zero extra buffers, the wide output is never revisited.\nfn forward_opt(inter: &mut [f32], out: &mut [f32], scale: f32) {\n    for v in inter.iter_mut() {\n        *v = sigmoid(*v) * scale;          // rank elements, not out_dim\n    }\n    matvec_b(inter, out);                  // consumes gated values directly\n}\n// The scale cannot be pre-folded into a frozen/committed up-projection —\n// the narrowest runtime tensor is the cheapest legal spot for it.".to_string(),
+        },
+        // ── sign-branch-stable-sigmoid — exp(+large) overflow → sign-branched exact form (B) ──
+        // Source: riir-gpu edge_lora/edge_module.rs L182-186 ("Sigmoid uses
+        // the numerically-stable two-branch form (positive vs negative
+        // argument) to avoid overflow in `exp` — matches katgpt-rs
+        // `latent_to_raw_scalar`.") + L328-337 (the two-branch fn).
+        //
+        // Distinct from softplus-piecewise-saturation-clamp (clamps the
+        // OUTPUT of softplus in the far tail — this bounds the ARGUMENT
+        // domain of exp via a sign branch; no output clamping, both
+        // branches exact) and from exp2-log2-base2 (base change of the
+        // transcendental family — orthogonal and combinable; each branch
+        // can use exp2).
+        KernelRule {
+            rule_id: "sign-branch-stable-sigmoid".to_string(),
+            gpu_concept: "the one-expression sigmoid 1/(1+exp(-x)) feeds exp a large POSITIVE argument whenever x is very negative — f32 exp overflows to +inf past ~88.7, triggering inf-arithmetic slow paths, overflow flags, and precision loss on the way to the (correct) limit 0. Branch once on the sign so exp's argument is always <= 0 and its result always lies in (0, 1]: for x >= 0 compute 1/(1+exp(-x)), for x < 0 compute e/(1+e) with e = exp(x). Both branches are exact at their limits, the single sign compare is predictable (or compiles to a select), and the form composes with base-2 tricks. This is standard gate-math hygiene for ANY sigmoid used as a routing/gating nonlinearity — the latent-space rules of this stack project through sigmoid constantly, so the stable form is the house style (matches katgpt-rs latent_to_raw_scalar). Distinct from softplus-piecewise-saturation-clamp (clamps the OUTPUT in the far tail — this bounds the ARGUMENT domain of exp via a sign branch, no output clamping, both branches exact) and from exp2-log2-base2 (base change — orthogonal and combinable; each branch can use exp2)".to_string(),
+            ref_shape: "// Naive: exp() receives large POSITIVE arguments for very negative x.\nfn sigmoid_naive(x: f32) -> f32 {\n    1.0 / (1.0 + (-x).exp())\n    // x = -100: (-x).exp() = exp(100) overflows f32 past ~88.7 to +inf\n    // -> inf arithmetic, overflow flags, slow paths, precision loss\n}".to_string(),
+            opt_pattern: "// Optimized: branch on sign so exp()'s argument is ALWAYS <= 0 —\n// result in (0, 1], never overflows, exact at both limits.\n#[inline]\nfn sigmoid(x: f32) -> f32 {\n    if x >= 0.0 {\n        1.0 / (1.0 + (-x).exp())   // arg in (-inf, 0] -> exp in (0, 1]\n    } else {\n        let e = x.exp();            // arg in (-inf, 0) -> e in (0, 1)\n        e / (1.0 + e)               // numerator bounded -> no inf anywhere\n    }\n}".to_string(),
+        },
+        // ── incremental-multi-part-hash-no-concat — joined temp buffer → streaming update (A) ──
+        // Source: riir-gpu edge_lora/types.rs L476-487 ("Recompute and store
+        // the BLAKE3 hash of `a || b`. / Call after any in-place weight
+        // mutation (gradient step, merge, etc)." + the two `hasher.update(
+        // bytemuck::cast_slice::<f32, u8>(...))` calls) + L381 ("`blake3_hash`:
+        // commitment of the concatenated `[a || b]` bytes").
+        //
+        // Distinct from alignment-gated-zero-copy-view (covers creating the
+        // safe reinterpret view itself — here the views are merely inputs;
+        // the pattern is the streaming multi-part update protocol that
+        // eliminates the concatenation allocation, which no existing rule
+        // covers).
+        KernelRule {
+            rule_id: "incremental-multi-part-hash-no-concat".to_string(),
+            gpu_concept: "commitment-hashing a multi-tensor record (a || b — the full LoRA weight set) naively materializes the concatenation first: a full-size temp byte buffer plus two memcpys, per hash computation, and this runs after EVERY gradient step. Stream each part straight into the hasher via its incremental update API, reading through zero-copy cast_slice views of the f32 tensors — no joined buffer, no copies, identical digest (BLAKE3's streaming interface makes hash(a || b) bit-identical to hash(joined), so the wire commitment is unchanged) while the per-step allocation drops to zero. Applies anywhere a commitment/checksum spans multiple buffers (weights + optimizer state, tensor + metadata): the streaming update IS the concatenation. Distinct from alignment-gated-zero-copy-view (covers creating the safe reinterpret view itself — here the views are merely inputs; the pattern is the streaming multi-part update protocol that eliminates the concatenation allocation, which no existing rule covers)".to_string(),
+            ref_shape: "// Naive: materialize the concatenation to hash it — full-size temp\n// buffer + two memcpys, paid on EVERY weight mutation (per step).\nfn recompute_hash_naive(a: &[f32], b: &[f32]) -> [u8; 32] {\n    let mut joined = Vec::with_capacity(a.len() * 4 + b.len() * 4);\n    joined.extend_from_slice(bytemuck::cast_slice::<f32, u8>(a));\n    joined.extend_from_slice(bytemuck::cast_slice::<f32, u8>(b));\n    *blake3::hash(&joined).as_bytes() // peak memory = 2x the weight set\n}".to_string(),
+            opt_pattern: "// Optimized: stream the parts into the hasher incrementally through\n// zero-copy casts — hash(a || b) with no joined buffer, no copies,\n// same digest as the concatenated form.\nfn recompute_hash(a: &[f32], b: &[f32]) -> [u8; 32] {\n    let mut hasher = Hasher::new();\n    hasher.update(bytemuck::cast_slice::<f32, u8>(a)); // view, not a copy\n    hasher.update(bytemuck::cast_slice::<f32, u8>(b)); // 2nd update = ||\n    *hasher.finalize().as_bytes()\n}\n\n// The verify path is allocation-free too: recompute + compare, no store.\nfn verify_hash(a: &[f32], b: &[f32], stored: &[u8; 32]) -> bool {\n    let mut hasher = Hasher::new();\n    hasher.update(bytemuck::cast_slice::<f32, u8>(a));\n    hasher.update(bytemuck::cast_slice::<f32, u8>(b));\n    hasher.finalize().as_bytes() == stored\n}".to_string(),
+        },
+        // ── bool-fields-over-bitset-hot-reads — reflexive bitset packing → read-regime bools (L) ──
+        // Source: riir-gpu edge_lora/types.rs L35-38 ("Stored as four bools
+        // (cheaper than a `u8` bitset to read branch-free in the trainer's
+        // hot path).") + L40-45 (the four-bool struct) + L69-84 (const fn
+        // count with plain bool ifs).
+        //
+        // Distinct from ternary-weight-quant / int2-pack-weights /
+        // base-3-trit-packing-5-per-byte (all pack data whose bytes are
+        // STREAMED once per use — bandwidth-bound, decode cost amortizes
+        // over memory saved; this is the inverse regime: a handful of flags
+        // whose 3 saved bytes are worthless next to per-read decode cost).
+        KernelRule {
+            rule_id: "bool-fields-over-bitset-hot-reads".to_string(),
+            gpu_concept: "the reflexive 'optimization' for a small flag set is packing it into a bitset (u8 bits + count_ones + masked tests). That wins only when the struct is bandwidth- or storage-bound. For a flag set READ every training iteration (which projections to attach edges to), packing costs shift+mask+compare decode ALU on every read, while the unpacked form is four direct 1-byte loads sharing one cache line — and count()/iteration stay const fn with plain branches the compiler emits branch-free. The rule documents the REGIME BOUNDARY of packing: pack when bytes streamed dominate (weights on the wire), do NOT pack when read frequency dominates (config flags consulted per tick). A necessary condition (fewer bytes) is not sufficient — the access pattern decides. Distinct from ternary-weight-quant / int2-pack-weights / base-3-trit-packing-5-per-byte (all pack data whose bytes are streamed once per use — bandwidth-bound, decode amortizes over memory saved; this is the inverse regime where per-read decode cost dominates the trivial memory saved)".to_string(),
+            ref_shape: "// Naive 'optimization': pack flags into a bitset — every hot read pays\n// shift + mask + compare to decode what a bool load would give directly.\n#[repr(u8)]\nstruct ProjectionSetPacked { bits: u8 }\nimpl ProjectionSetPacked {\n    fn query(&self) -> bool { self.bits & 0b0001 != 0 } // decode per read\n    fn count(&self) -> u8 { self.bits.count_ones() as u8 }\n}\n\n// Trainer hot loop, per iteration:\nfn attach_loop(set: &ProjectionSetPacked) {\n    if set.query() { attach_edge(ProjectionKind::Query); } // decode again\n}".to_string(),
+            opt_pattern: "// Optimized for the READ-bound regime: parallel bool fields — direct\n// 1-byte loads, no decode ALU; all four share one cache line.\n#[derive(Clone, Copy)]\npub struct ProjectionSet {\n    pub query: bool,\n    pub key: bool,\n    pub value: bool,\n    pub output: bool,\n}\nimpl ProjectionSet {\n    // const fn -> usable in const contexts; plain bool ifs compile\n    // branch-free.\n    pub const fn count(self) -> u8 {\n        let mut n = 0u8;\n        if self.query { n += 1; }\n        if self.key { n += 1; }\n        if self.value { n += 1; }\n        if self.output { n += 1; }\n        n\n    }\n}\n// Rule of thumb: pack when BYTES STREAMED dominates (weights, wire\n// payloads); keep bools when READ FREQUENCY dominates (per-tick flags).".to_string(),
+        },
+        // ── per-layer-grad-norm-lr-equalization — uniform LR → gradient-state equalization (B) ──
+        // Source: riir-gpu edge_lora/training.rs L388-392 ("If per-layer LR
+        // scaling is enabled (Issue 342 Phase 2), compute per-layer grad
+        // norms and scale each edge's LR by min(max_grad_norm /
+        // layer_grad_norm, cap). This combats the vanishing gradient
+        // (measured ~1000× ratio last/first in deep topologies — see
+        // bench_298_edge_underfitting_diagnostic D6).") + L441-449 ("This
+        // equalises the effective learning rate across layers ... `
+        // layer_norm == 0`: the multiplier is irrelevant (0 grad × anything =
+        // 0 update), so we set it to 1.0 to avoid NaN.") + L510-513 ("Capped
+        // scaling: boost small-grad layers, but bound the boost to prevent
+        // divergence. / (max_norm / layer_norm).min(cap)") + L207-209 (the
+        // edge→layer map "Computed once at construction; avoids recomputing
+        // `layer_offsets` per training step").
+        //
+        // Distinct from layer-depth-decay-schedule (a FIXED per-depth decay
+        // prior, independent of gradient state — this is gradient-state-
+        // dependent normalization recomputed every step) and from global
+        // grad clipping (one uniform rescale factor — this produces
+        // DIFFERENT per-layer factors).
+        KernelRule {
+            rule_id: "per-layer-grad-norm-lr-equalization".to_string(),
+            gpu_concept: "one global LR (or a fixed depth schedule) applied to all layers underfits deep topologies: the last layer's gradient is ~1000× the first's (measured), so early layers barely move. Recompute, PER STEP, each layer-group's gradient L2 norm and scale each edge's effective LR by min(max_norm / layer_norm, cap) — every layer's update magnitude then tracks the largest layer and all layers converge at the same rate. The correctness rails are load-bearing: layer_norm == 0 → multiplier 1.0 (never NaN; irrelevant since 0×anything = 0), max_norm ~ 0 → all 1.0, and a finite cap prevents a near-zero-grad layer from getting an effectively infinite LR in the first steps. The enabling precompute: the edge→source-layer map is built once at construction, so the per-step cost is one O(params) sum-of-squares sweep. Distinct from layer-depth-decay-schedule (a fixed per-depth decay prior independent of gradient state — this is gradient-state-dependent normalization recomputed every step) and from global grad clipping (one uniform rescale factor — this produces different per-layer factors)".to_string(),
+            ref_shape: "// Naive: one LR for all layers (or a fixed depth-decay schedule).\n// Deep topology: last-layer grads ~1000x first-layer grads\n// (vanishing gradient) -> early layers barely move -> underfitting.\nfn sgd_step_uniform(edges: &mut [Edge], grads: &Gradients, lr: f32) {\n    for e in 0..edges.len() {\n        for (w, g) in edges[e].a.iter_mut().zip(&grads.a[e]) {\n            *w -= lr * g; // same lr everywhere\n        }\n        for (w, g) in edges[e].b.iter_mut().zip(&grads.b[e]) {\n            *w -= lr * g;\n        }\n    }\n}".to_string(),
+            opt_pattern: "// Per-step, per-layer gradient-norm equalization:\n// lr_effective(edge) = lr * min(max_layer_norm / own_layer_norm, cap)\nfn compute_per_layer_multipliers(\n    grads: &Gradients,\n    edge_source_layer: &[usize], // precomputed once at construction\n    layer_sq: &mut Vec<f32>,     // reused scratch: one entry per layer\n    multipliers: &mut [f32],     // reused across steps\n    cap: f32,\n) {\n    layer_sq.fill(0.0);\n    // 1. Accumulate sum-of-squares per layer.\n    for (e, &layer) in edge_source_layer.iter().enumerate() {\n        let sq: f32 = grads.a[e].iter().chain(&grads.b[e])\n            .map(|v| v * v).sum();\n        layer_sq[layer] += sq;\n    }\n    let max_sq = layer_sq.iter().cloned().fold(0.0f32, f32::max);\n    // 2. Zero-guard: all-zero grads -> multipliers stay 1.0 (never NaN).\n    if max_sq <= 1e-12 {\n        multipliers.fill(1.0);\n        return;\n    }\n    let max_norm = max_sq.sqrt(); // sqrt ONCE for the reference norm\n    // 3. Boost small-grad layers, bounded by cap (a near-zero-grad\n    //    layer early in training must not get an infinite LR).\n    for (e, &layer) in edge_source_layer.iter().enumerate() {\n        let ln = layer_sq[layer].sqrt();\n        multipliers[e] = if ln <= 1e-12 {\n            1.0                       // 0 grad x anything = 0 update\n        } else if cap > 0.0 {\n            (max_norm / ln).min(cap) // capped boost\n        } else {\n            max_norm / ln            // uncapped: not recommended\n        };\n    }\n}\n// Effect: every layer's update magnitude ~= lr * max_layer_norm.".to_string(),
+        },
+        // ── width-invariant-superset-training — N models for N budgets → one superset (D) ──
+        // Source: riir-gpu edge_lora/adaptive_width.rs L2-6 ("Train edges to
+        // be **width-invariant** — work equally well at depth 1 (fast
+        // inference) and depth 4 (max quality). At training time, sample the
+        // topology width per episode conditioned on a difficulty score.
+        // Inactive edges get zero gradient") + L20-23 ("At inference time,
+        // the caller picks a width (e.g. width=1 for fast search, width=4
+        // for tactical decisions). The trained edges produce near-identical
+        // quality because they've seen all widths during training.") +
+        // L407-409 ("the GOAT gate is that width-1 retains ≥ 95% of width-4
+        // quality").
+        //
+        // Distinct from anchor-shape-bucketing (buckets INPUTS by shape to
+        // reuse compiled kernels — the superset removes the need for
+        // per-shape models entirely) and from hardcoded-fast-path-jit-
+        // specialization (specializes code paths, not amortizing one weight
+        // set across compute budgets).
+        KernelRule {
+            rule_id: "width-invariant-superset-training".to_string(),
+            gpu_concept: "training and storing one model per inference budget (a width-1 model, a width-4 model) costs N× parameter memory, N× training runs, and the narrow models never benefit from the full signal. Instead train ONE superset weight set whose per-episode active sub-topology is sampled from a difficulty scalar (threshold ladder: easy → minimal, medium → mid, hard → full diamond), so every edge receives gradient across many widths and the weights become width-invariant. At inference the caller DISPATCHES to a width by compute budget (width-1 for fast search, width-4 for tactical decisions) against the same weights — anytime-inference with zero extra storage. The falsifiable gate is explicit: width-1 must retain >= 95% of width-4 quality; if it doesn't, the sampling coverage was insufficient, not the concept. Distinct from anchor-shape-bucketing (buckets inputs by shape to reuse compiled kernels — the superset removes the need for per-shape models entirely) and from hardcoded-fast-path-jit-specialization (specializes code paths, not amortizing one weight set across compute budgets)".to_string(),
+            ref_shape: "// Naive: one model per inference budget.\nstruct WidthBench {\n    model_w1: Weights, // 2 edges — trained alone on all data\n    model_w2: Weights, // 4 edges — trained alone on all data\n    model_w4: Weights, // 8+ edges — trained alone on all data\n}\n// - 3x parameter memory, 3x full training runs\n// - the w1 model cannot borrow strength from the w4 signal\n// - adding a new budget = train + store a new model".to_string(),
+            opt_pattern: "// ONE superset weight set; training samples the active sub-topology\n// per episode conditioned on a difficulty scalar. Every edge sees\n// gradient across many widths -> weights become width-invariant.\nfn train_step_superset(trainer: &mut Trainer, ep: &Episode, rng: &mut Rng) {\n    let d = ep.difficulty.unwrap_or_else(|| rng.next_f32());\n    // threshold ladder -> (sub_topology, active_edge_ids)\n    let sched = if d < 0.3 { easy() }\n        else if d < 0.7 { medium() }\n        else { hard() };\n    // forward/backward through ONLY the active subset\n    let sub_grads = forward_backward(&sched.topo, &trainer.edges, ep);\n    // scatter into the one full gradient buffer; inactive edges\n    // implicitly keep zero grad\n    scatter_add(&mut trainer.grads, &sub_grads, &sched.active);\n}\n// Inference: pick width per decision (w1 = fast search, w4 = tactics)\n// from the SAME weights — no per-width storage or retraining.\n// Gate: width-1 must retain >= 95% of width-4 quality.".to_string(),
+        },
+        // ── superset-sized-scratch-across-variants — per-variant alloc → worst-case-sized once (A) ──
+        // Source: riir-gpu edge_lora/adaptive_width.rs L202-205 ("Pre-
+        // allocate scratch sized for the WORST-CASE sub-topology (= the full
+        // topology's max number of edges / max layer width). The sub-topology
+        // is re-built per episode but the scratch is reused — sizing it for
+        // the worst case avoids reallocation and accommodates any
+        // sub-topology.") + L207-210 ("the largest sub-topology is the full topology\n// itself (= \"hard\" width). Allocate sized for the full topology so any\n// sub-topology fits.") + L216-218 (the exact-length-check caveat, "BUT\n// forward_cached checks `cache.edge_src_hidden.len() != self.edges.len()`\n// exactly — so we need per-sub-topology cache").
+        //
+        // Distinct from staging-reuse-grow-only-map-prefix (grow-only\n        // staging resized by OBSERVED demand — here the max is known up\n        // front, so size-once with zero growth) and from anchor-shape-\n        // bucketing (per-exact-shape bucketing — the superset exists\n        // precisely to avoid needing buckets).
+        KernelRule {
+            rule_id: "superset-sized-scratch-across-variants".to_string(),
+            gpu_concept: "when the active compute graph varies per iteration (sampled sub-topology, routed expert subset, cropped resolution), allocating scratch per variant sized to that variant is an allocation per iteration. The variant space has a STATICALLY KNOWN MAXIMUM (the full superset): allocate the scratch once at construction at that maximum and let every smaller variant run inside it — no growth logic, no reallocation, variants can switch every iteration. The critical caveat (documented in the source and violated by its own cache): this only works for buffers whose consumers accept a PREFIX of the allocation; a consumer that checks exact length equality forces per-variant allocation instead — the fix is relaxing the check to prefix-view semantics, not allocating per variant. Distinct from staging-reuse-grow-only-map-prefix (grow-only staging resized by observed demand — here the max is known up front, so size-once with zero growth) and from anchor-shape-bucketing (per-exact-shape bucketing — the superset exists precisely to avoid needing buckets)".to_string(),
+            ref_shape: "// Naive: allocate scratch per variant, sized to the variant.\nfn train_variants(batch: &[Episode]) {\n    for episode in batch {\n        let sched = sample_width(difficulty(episode));\n        let mut fwd = TopologyScratch::new(&sched.topology); // alloc EVERY episode\n        let mut bwd = BackwardScratch::new(&sched.topology); // alloc EVERY episode\n        run_episode(&sched, &mut fwd, &mut bwd);\n    }\n}".to_string(),
+            opt_pattern: "// Optimized: allocate ONCE for the worst-case variant (the full\n// superset); every smaller variant fits inside it. No growth, no realloc.\nstruct Trainer {\n    fwd_scratch: TopologyScratch, // full-size, reused every episode\n    bwd_scratch: BackwardScratch, // full-size, reused every episode\n}\nimpl Trainer {\n    fn new(full: &Topology) -> Self {\n        // the largest sub-topology IS the full topology (\"hard\" width)\n        Self {\n            fwd_scratch: TopologyScratch::new(full),\n            bwd_scratch: BackwardScratch::new(full),\n        }\n    }\n}\n// Caveat: buffers whose consumers check EXACT length equality (not >=)\n// cannot share a superset — relax the check to prefix-view semantics or\n// fall back to per-exact-shape reuse.".to_string(),
+        },
+        // ── active-index-grad-scatter-subset-backward — mask-and-zero → dense sub-space + index scatter (H) ──
+        // Source: riir-gpu edge_lora/adaptive_width.rs L44-46 ("Indices\n        // (into the full trainer's `edges` Vec) of edges that are active in\n        // this topology. Edges NOT in this list get zero gradient this\n        // episode.") + L329-335 ("Scatter sub_grads back into self.grads_full at\n        // active indices." + the two zip-scatter loops with `*d += v;`).
+        //
+        // Distinct from atomic-scatter-reduction (device-side atomic\n        // scatter for CONCURRENT writers — here slots are disjoint per\n        // step so plain accumulation suffices) and from per-layer-strided-\n        // grad-destination (destinations selected by stride/layout — here\n        // by active-subset MEMBERSHIP through an explicit index list).
+        KernelRule {
+            rule_id: "active-index-grad-scatter-subset-backward".to_string(),
+            gpu_concept: "to train a parameter subset, the naive shape materializes gradients for ALL parameters and masks — a per-parameter bool branch every step, or a post-backward pass zeroing inactive entries (wasted writes, mask storage, branchy inner loop). Instead run backward in DENSE sub-space (contiguous grads for the active subset only), then route them into the single full-width gradient buffer through a precomputed active-index map with a plain += scatter. The full buffer is zeroed at batch start and only active slots are touched, so inactive parameters are zero BY CONSTRUCTION — no mask memory, no zeroing pass, no atomics (each full-index is written by at most one active slot per accumulation step). This is the host-side shape of MoE backward: only routed experts receive gradient, scattered by routing index into the dense master buffer; the index list is fixed per variant so it precomputes once. Distinct from atomic-scatter-reduction (device-side atomic scatter for concurrent writers — here slots are disjoint per step so plain accumulation suffices) and from per-layer-strided-grad-destination (destinations selected by stride/layout — here by active-subset membership through an explicit index list)".to_string(),
+            ref_shape: "// Naive: mask-based — grads for ALL params, then zero the inactive.\nfn backward_masked(all_edges: &[Edge], active_mask: &[bool]) {\n    let mut grads = Gradients::zeroed(all_edges); // full-size buffer\n    backward_sub(&mut grads);                     // writes subset slots\n    for e in 0..all_edges.len() {\n        if !active_mask[e] {                      // mask storage + branch\n            grads.a[e].fill(0.0);                 // wasted writes\n            grads.b[e].fill(0.0);\n        }\n    }\n}".to_string(),
+            opt_pattern: "// Index-map scatter: grads live in DENSE sub-space during backward,\n// then one precomputed index list routes them into the full buffer.\n// Inactive entries are never touched — zero by construction.\n// No atomics: each full index is written by at most one active slot\n// per accumulation step.\nfn scatter_sub_grads(\n    grads_full: &mut Gradients,\n    sub_grads: &Gradients,\n    active_edge_indices: &[usize], // fixed per schedule variant\n) {\n    for (slot, &full_idx) in active_edge_indices.iter().enumerate() {\n        for (dst, &v) in grads_full.a[full_idx].iter_mut()\n            .zip(sub_grads.a[slot].iter()) {\n            *dst += v; // accumulate across the batch\n        }\n        for (dst, &v) in grads_full.b[full_idx].iter_mut()\n            .zip(sub_grads.b[slot].iter()) {\n            *dst += v;\n        }\n    }\n}".to_string(),
+        },
+        // ── inplace-grad-accumulate-deferred-postscale — per-sample normalize → raw accumulate + one post-scale (B) ──
+        // Source: riir-gpu edge_lora/training.rs L297 (`self.grads.zero();`) +
+        // L325-332 ("Backward (accumulate into self.grads)." + the backward\n        // call taking `&mut self.grads`) + L335-336 ("// Average gradient over\n        // batch." + `let inv_batch = 1.0 / batch_size;` then the in-place\n        // `*v *= inv_batch;` sweeps).
+        //
+        // Distinct from split-sign-accumulators-defer-subtraction (defers\n        // an arithmetic correction inside a kernel's inner loop — this\n        // defers STATISTICAL NORMALIZATION across a training accumulation\n        // loop, batch-level not element-level) and from snapshot-transient-\n        // grad-for-deferred-download (defers a device download for\n        // lifetime reasons — nothing here crosses a device boundary).
+        KernelRule {
+            rule_id: "inplace-grad-accumulate-deferred-postscale".to_string(),
+            gpu_concept: "naive mini-batching materializes per-sample gradients in temporaries, normalizes each by 1/batch (a division per element per sample), and sums into a third buffer — O(batch) allocations and O(batch×params) divisions. Give the gradient buffer a strict in-place lifecycle instead: zero() at batch start, backward ACCUMULATES raw (+=) per sample, and ONE post-loop sweep multiplies by a single precomputed reciprocal (one division total, multiplies thereafter); optional decay-add and clip-rescale run as further in-place sweeps on the same buffer, and the step reads without moving. Zero per-sample temporaries, and the averaging/decay/clip passes all share one buffer-walk shape. Distinct from split-sign-accumulators-defer-subtraction (defers an arithmetic correction inside a kernel's inner loop — this defers statistical normalization across a training accumulation loop, batch-level not element-level) and from snapshot-transient-grad-for-deferred-download (defers a device download for lifetime reasons — nothing here crosses a device boundary)".to_string(),
+            ref_shape: "// Naive: per-sample normalized gradients in temp buffers.\nfn accumulate_naive(batch: &[Episode], grads: &mut Gradients) {\n    for ep in batch {\n        let raw = backward(ep);          // fresh Vec per sample\n        let normalized = raw.scale(1.0 / batch.len() as f32); // another buffer\n        add_into(grads, &normalized);    // third buffer, allocates\n    }\n}".to_string(),
+            opt_pattern: "// One buffer, in-place lifecycle: zero -> accumulate raw -> ONE post-scale.\nfn train_batch(batch: &[Episode], trainer: &Trainer, grads: &mut Gradients,\n               bwd_scratch: &mut BackwardScratch, weight_decay: f32, clip: f32) {\n    grads.zero();                      // batch start (not batch end)\n    for ep in batch {\n        // backward ACCUMULATES (+=) in place; no per-sample temps\n        trainer.backward(ep, grads, bwd_scratch);\n    }\n    // single sweep: multiply by precomputed reciprocal — 1 division total,\n    // not batch*params; the same in-place sweep shape is reused for the\n    // decay add and the clip rescale before the step\n    let inv_batch = 1.0 / batch.len() as f32;\n    for g in grads.a.iter_mut().flat_map(|g| g.iter_mut()) { *g *= inv_batch; }\n    for g in grads.b.iter_mut().flat_map(|g| g.iter_mut()) { *g *= inv_batch; }\n    if weight_decay > 0.0 { decay_add_inplace(grads, weight_decay); }\n    if clip > 0.0 { clip_rescale_inplace(grads, clip); }\n    grads.sgd_step(trainer.edges_mut()); // reads, doesn't move\n}".to_string(),
+        },
+        // ── fuse-loss-and-output-grad-one-pass — two residual passes → one fused sweep (C) ──
+        // Source: riir-gpu edge_lora/training.rs L312-320 ("// Loss = reward ·
+        // Σ (output − target)²." + the single loop computing `sq_err +=\n        // diff * diff;` AND `grad_out[i] = 2.0 * episode.reward * diff;` from\n        // the same `diff`).
+        //
+        // Distinct from dual-grad-same-pass (two GRADIENT PARTIALS of a\n        // product rule share one activation eval — here it is the loss\n        // SCALAR and its output-gradient, different output kinds sharing\n        // the residual) and from upcast-before-loss (precision policy\n        // feeding the loss — orthogonal to pass fusion).
+        KernelRule {
+            rule_id: "fuse-loss-and-output-grad-one-pass".to_string(),
+            gpu_concept: "computing the loss first (one pass over the residual) and then d(loss)/d(output) for backward in a second pass re-derives the same residual — two sweeps, two subtractions per element, typically a temporary diff buffer. Fuse them: one loop over the residual computes the scalar loss accumulation (telemetry/objective) and the exact analytic output-gradient from the SAME diff, halving residual traffic and the arithmetic. This is the standard fused-loss-grad shape framework loss kernels use: whenever a metric and its derivative share the residual, produce both in one sweep — and write the gradient into a persistent scratch buffer, not a per-sample Vec. Distinct from dual-grad-same-pass (two gradient partials of a product rule share one activation eval — here it is the loss scalar and its output-gradient, different output kinds sharing the residual) and from upcast-before-loss (precision policy feeding the loss — orthogonal to pass fusion)".to_string(),
+            ref_shape: "// Naive: two passes over the residual.\nfn loss_and_grad_naive(out: &[f32], target: &[f32], w: f32) -> (f32, Vec<f32>) {\n    let mut loss = 0.0;\n    for i in 0..out.len() {          // pass 1: loss only\n        let d = out[i] - target[i];\n        loss += w * d * d;\n    }\n    let mut grad_out = vec![0.0; out.len()];\n    for i in 0..out.len() {          // pass 2: recompute the residual\n        let d = out[i] - target[i]; // same subtraction AGAIN\n        grad_out[i] = 2.0 * w * d;\n    }\n    (loss, grad_out)\n}".to_string(),
+            opt_pattern: "// One residual pass produces both the scalar loss (telemetry) and\n// its exact output-gradient (for backward). diff computed once,\n// written into a persistent scratch buffer.\nfn loss_and_grad_fused(out: &[f32], target: &[f32], reward: f32,\n                       grad_out: &mut [f32]) -> f32 {\n    let mut sq_err = 0.0f32;\n    for i in 0..out.len() {\n        let diff = out[i] - target[i];     // ONE subtraction\n        sq_err += diff * diff;             // loss accumulates\n        grad_out[i] = 2.0 * reward * diff; // d(r*sq_err)/d(out[i])\n    }\n    sq_err // no second pass, no diff temp\n}".to_string(),
+        },
     ])
 }
 
@@ -4024,7 +4262,7 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 209-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 228-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -4032,7 +4270,7 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (32 rules)
+    // A: Memory access patterns (35 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -4069,9 +4307,12 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "sync-map-result-stack-cell",
             "staging-reuse-grow-only-map-prefix",
             "mapped-at-creation-init-upload",
+            "caller-owned-split-scratch",
+            "incremental-multi-part-hash-no-concat",
+            "superset-sized-scratch-across-variants",
         ],
     ),
-    // B: Compute patterns (34 rules)
+    // B: Compute patterns (37 rules)
     (
         KernelCategory::Compute,
         "B: compute",
@@ -4110,9 +4351,12 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "tree-reduction-depth-over-sequential-accumulate",
             "softplus-piecewise-saturation-clamp",
             "fast-math-contraction-behind-feature-flag",
+            "sign-branch-stable-sigmoid",
+            "per-layer-grad-norm-lr-equalization",
+            "inplace-grad-accumulate-deferred-postscale",
         ],
     ),
-    // C: Fusion patterns (22 rules)
+    // C: Fusion patterns (24 rules)
     (
         KernelCategory::Fusion,
         "C: fusion",
@@ -4139,9 +4383,11 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "epilogue-at-register-write-phase",
             "delay-rms-scale-past-gemv-epilogue",
             "fuse-count-into-mutation-pass",
+            "inplace-gate-scale-at-funnel-bottleneck",
+            "fuse-loss-and-output-grad-one-pass",
         ],
     ),
-    // D: Dispatch patterns (32 rules)
+    // D: Dispatch patterns (33 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -4178,6 +4424,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "predicate-gated-skip-empty-workset-step",
             "share-pipeline-set-across-subsystems",
             "ragged-pack-offset-table-fused-dispatch",
+            "width-invariant-superset-training",
         ],
     ),
     // E: Parallelism patterns (13 rules)
@@ -4243,7 +4490,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "reverse-running-decay-weight",
         ],
     ),
-    // H: MoE dispatch + backward pass (9 rules)
+    // H: MoE dispatch + backward pass (10 rules)
     (
         KernelCategory::MoeDispatchBackward,
         "H: MoE dispatch + backward",
@@ -4257,6 +4504,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "weight-grad-batched-outer-product",
             "csr-index-via-prefix-sum",
             "autotune-aggregate-workload-key",
+            "active-index-grad-scatter-subset-backward",
         ],
     ),
     // I: NSA block-sparse selection (4 rules)
@@ -4293,7 +4541,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "vector-width-pow2-sweep",
         ],
     ),
-    // L: Conv-as-GEMM + memory layout (6 rules)
+    // L: Conv-as-GEMM + memory layout (8 rules)
     (
         KernelCategory::ConvGemmLayout,
         "L: conv-as-GEMM + layout",
@@ -4305,6 +4553,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "anchor-shape-bucketing",
             "carry-dual-layout-dead-slot",
             "twin-projection-shared-delta-adapter",
+            "bool-fields-over-bitset-hot-reads",
         ],
     ),
     // M: Kernel parametric polymorphism (7 rules)
@@ -4438,7 +4687,7 @@ mod tests {
         // Batch 29 (10): riir-gpu production kernels — defer-readback-gated-by-live-output-size, weight-handle-cache-keyed-by-allocation-identity, first-readback-pays-queue-drain, epilogue-at-register-write-phase, delay-rms-scale-past-gemv-epilogue, pack-scalar-params-into-combined-buffer, enum-dispatch-separate-kernel-per-variant, epilogue-must-be-workgroup-local, launch-unchecked-caller-owned-size-contract, fast-math-contraction-behind-feature-flag (deltanet_input_proj_fused.rs + epilogue/ — the decode-path fusion cluster: Issue 602 sibling-GEMV fan-out + Plan 106 Track 3 CODA epilogue fusion).
         // Batch 30 (6): riir-gpu production kernels — zero-init-side-branch-frozen-base-path, counter-derived-seed-stateless-noise, predicate-gated-skip-empty-workset-step, share-pipeline-set-across-subsystems, pad-uniform-pod-to-min-binding-size, fuse-count-into-mutation-pass (dllm/mod.rs — the D2F training cluster: Plan 068 discrete-diffusion trainers + RePlaid schedule).
         // Total: 209.
-        assert_eq!(corpus.entries.len(), 217, "batches 1-31 should have 217 rules");
+        assert_eq!(corpus.entries.len(), 228, "batches 1-32 should have 228 rules");
     }
 
     #[test]
@@ -5699,6 +5948,117 @@ mod tests {
         }
     }
 
+    #[test]
+    fn batch32_rules_present() {
+        // Verify the 11 batch-32a rules across A/B/C/D/H/L.
+        let corpus = build_kernel_seed_corpus();
+        let ids: Vec<&str> =
+            corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        // A (3 new): scratch/alloc/hash family
+        assert!(ids.contains(&"caller-owned-split-scratch"), "caller owned split scratch");
+        assert!(ids.contains(&"incremental-multi-part-hash-no-concat"), "incremental multi part hash");
+        assert!(ids.contains(&"superset-sized-scratch-across-variants"), "superset sized scratch");
+        // B (3 new): compute/numerics family
+        assert!(ids.contains(&"sign-branch-stable-sigmoid"), "sign branch stable sigmoid");
+        assert!(ids.contains(&"per-layer-grad-norm-lr-equalization"), "per layer grad norm lr");
+        assert!(ids.contains(&"inplace-grad-accumulate-deferred-postscale"), "inplace grad deferred postscale");
+        // C (2 new): fusion family
+        assert!(ids.contains(&"inplace-gate-scale-at-funnel-bottleneck"), "inplace gate at bottleneck");
+        assert!(ids.contains(&"fuse-loss-and-output-grad-one-pass"), "fuse loss and grad one pass");
+        // D (1 new), H (1 new), L (1 new)
+        assert!(ids.contains(&"width-invariant-superset-training"), "width invariant superset");
+        assert!(ids.contains(&"active-index-grad-scatter-subset-backward"), "active index grad scatter");
+        assert!(ids.contains(&"bool-fields-over-bitset-hot-reads"), "bool fields over bitset");
+    }
+
+    #[test]
+    fn batch32_concepts_covered() {
+        // Verify the batch-32a edge_lora core cluster concepts. Unlike earlier
+        // batches (full-string equality), this pins each rule's concept via
+        // distinctive substrings located by rule_id — same cross-rule pinning
+        // power, immune to prose-evolution churn.
+        let corpus = build_kernel_seed_corpus();
+        let concept = |id: &str| -> String {
+            corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-32 rule '{id}' missing"))
+                .gpu_concept
+                .clone()
+        };
+        // A: caller-owned-split-scratch (edge_module.rs L173-199 + L301-313)
+        let c = concept("caller-owned-split-scratch");
+        assert!(c.contains("split_at_mut (the borrow checker proves the regions disjoint")
+            && c.contains("quarantine it as a documented cold adapter"), "split-scratch concept");
+        // C: inplace-gate-scale-at-funnel-bottleneck (edge_module.rs L203-212)
+        let c = concept("inplace-gate-scale-at-funnel-bottleneck");
+        assert!(c.contains("IN PLACE on the reused rank-wide intermediate and absorb any broadcast scale")
+            && c.contains("placement-of-work at the funnel's narrowest point"), "bottleneck gate concept");
+        // B: sign-branch-stable-sigmoid (edge_module.rs L182-186 + L328-337)
+        let c = concept("sign-branch-stable-sigmoid");
+        assert!(c.contains("exp's argument is always <= 0"), "sign-branch anchor");
+        assert!(c.contains("overflows to +inf past ~88.7"), "sigmoid overflow anchor");
+        // A: incremental-multi-part-hash-no-concat (types.rs L476-487 + L381)
+        let c = concept("incremental-multi-part-hash-no-concat");
+        assert!(c.contains("incremental update API") && c.contains("the streaming update IS the concatenation"), "streaming hash concept");
+        // L: bool-fields-over-bitset-hot-reads (types.rs L35-45 + L69-84)
+        let c = concept("bool-fields-over-bitset-hot-reads");
+        assert!(c.contains("REGIME BOUNDARY of packing") && c.contains("read frequency dominates"), "bool-regime concept");
+        // B: per-layer-grad-norm-lr-equalization (training.rs L388-392 + L441-449 + L510-513)
+        let c = concept("per-layer-grad-norm-lr-equalization");
+        assert!(c.contains("~1000\u{d7}") || c.contains("~1000x"), "vanishing-grad anchor");
+        assert!(c.contains("min(max_norm / layer_norm, cap)") && c.contains("never NaN"), "capped-equalization concept");
+        // D: width-invariant-superset-training (adaptive_width.rs L2-6 + L20-23 + L407-409)
+        let c = concept("width-invariant-superset-training");
+        assert!(c.contains("width-1 must retain >= 95% of width-4 quality") && c.contains("anytime-inference with zero extra storage"), "superset-training concept");
+        // A: superset-sized-scratch-across-variants (adaptive_width.rs L202-210 + L216-218)
+        let c = concept("superset-sized-scratch-across-variants");
+        assert!(c.contains("STATICALLY KNOWN MAXIMUM") && c.contains("exact length equality"), "worst-case scratch concept");
+        // H: active-index-grad-scatter-subset-backward (adaptive_width.rs L44-46 + L329-335)
+        let c = concept("active-index-grad-scatter-subset-backward");
+        assert!(c.contains("zero BY CONSTRUCTION") && c.contains("host-side shape of MoE backward"), "index-scatter concept");
+        // B: inplace-grad-accumulate-deferred-postscale (training.rs L297 + L325-336)
+        let c = concept("inplace-grad-accumulate-deferred-postscale");
+        assert!(c.contains("ONE post-loop sweep") && c.contains("one division total"), "deferred-postscale concept");
+        // C: fuse-loss-and-output-grad-one-pass (training.rs L312-320)
+        let c = concept("fuse-loss-and-output-grad-one-pass");
+        assert!(c.contains("the SAME diff") && c.contains("standard fused-loss-grad shape"), "fused-loss concept");
+    }
+
+    #[test]
+    #[cfg(not(feature = "kernel_verify"))]
+    fn batch32_pseudocode_parses() {
+        // G1 for Batch 32a: every new rule's ref_shape AND opt_pattern must
+        // syn-parse as valid Rust (the L2 pruner verdict).
+        use crate::domain::HealDomain;
+        let corpus = build_kernel_seed_corpus();
+        let ids = [
+            "caller-owned-split-scratch",
+            "inplace-gate-scale-at-funnel-bottleneck",
+            "sign-branch-stable-sigmoid",
+            "incremental-multi-part-hash-no-concat",
+            "bool-fields-over-bitset-hot-reads",
+            "per-layer-grad-norm-lr-equalization",
+            "width-invariant-superset-training",
+            "superset-sized-scratch-across-variants",
+            "active-index-grad-scatter-subset-backward",
+            "inplace-grad-accumulate-deferred-postscale",
+            "fuse-loss-and-output-grad-one-pass",
+        ];
+        for id in ids {
+            let entry = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-32 rule '{id}' missing"));
+            let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+            assert!(ref_verdict.parses, "batch-32 ref_shape for '{id}' must parse");
+            let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+            assert!(opt_verdict.parses, "batch-32 opt_pattern for '{id}' must parse");
+        }
+    }
+
     // ════════════════════════════════════════════════════════════════════
     // Plan 003 — Router ↔ corpus wiring tests
     // ════════════════════════════════════════════════════════════════════
@@ -5710,7 +6070,7 @@ mod tests {
 
     #[test]
     fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-        // Every rule_id in the 217-rule corpus must appear in exactly one category.
+        // Every rule_id in the 228-rule corpus must appear in exactly one category.
         let corpus = build_kernel_seed_corpus();
         let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
         let mut categorized: Vec<&str> = Vec::new();
@@ -5741,20 +6101,20 @@ mod tests {
 
     #[test]
     fn kernel_categories_counts_match_plan_003_table() {
-        // Pin per-category rule counts to the Plan 003 table (updated for Batch 30).
+        // Pin per-category rule counts to the Plan 003 table (updated for Batch 32a).
         let expected = [
-            (KernelCategory::MemoryAccess, 32),
-            (KernelCategory::Compute, 34),
-            (KernelCategory::Fusion, 22),
-            (KernelCategory::Dispatch, 32),
+            (KernelCategory::MemoryAccess, 35),
+            (KernelCategory::Compute, 37),
+            (KernelCategory::Fusion, 24),
+            (KernelCategory::Dispatch, 33),
             (KernelCategory::Parallelism, 13),
             (KernelCategory::FlashAttnTiling, 10),
             (KernelCategory::LinearAttnRecurrence, 19),
-            (KernelCategory::MoeDispatchBackward, 9),
+            (KernelCategory::MoeDispatchBackward, 10),
             (KernelCategory::NsaBlockSparse, 4),
             (KernelCategory::VarlenChunkedReduction, 5),
             (KernelCategory::AutotuneDispatch, 4),
-            (KernelCategory::ConvGemmLayout, 7),
+            (KernelCategory::ConvGemmLayout, 8),
             (KernelCategory::KernelPolymorphism, 9),
             (KernelCategory::DtypeAlignment, 13),
             (KernelCategory::IrStrengthReduction, 4),
@@ -5766,9 +6126,9 @@ mod tests {
                 "Plan 003: category {cat:?} has {} rules, expected {count}",
                 entry.2.len());
         }
-        // Sum must equal 209.
+        // Sum must equal 228.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 217, "Plan 003: category totals must sum to 217");
+        assert_eq!(total, 228, "Plan 003: category totals must sum to 228");
     }
 
     #[test]
@@ -5778,7 +6138,7 @@ mod tests {
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 217, "Plan 003: grouped corpus has {total} rules, expected 217");
+        assert_eq!(total, 228, "Plan 003: grouped corpus has {total} rules, expected 228");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");

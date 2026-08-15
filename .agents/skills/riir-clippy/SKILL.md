@@ -127,25 +127,34 @@ global = symlink only.
 
 ## Mining queue snapshot (update per batch — this is the resume state)
 
-- **Batch 32**: `riir-ai/crates/riir-gpu/src/edge_lora/` + `kernels/` RUST
-  wrappers → Research 034, corpus 217 → ~227.
-  - Pre-flight (2026-08-15): `edge_lora/` = 14 .rs files, 8,945 LOC —
-    host-side training orchestrators (`topology_trainer.rs` 1468L,
-    `training.rs` 953L, `types.rs` 627L, `sleep_consolidation.rs` 615L,
-    `arena_eval.rs`, `edge_module.rs`, `adaptive_width.rs`,
-    `chain_commit.rs`, `cross_game_{edge,real}.rs`, `{go,bomber,fft}_self_play.rs`,
-    `sigmoid_gate.rs`). `kernels/` is mostly `.wgsl` — mine the Rust
-    wrappers only.
-  - Suggested split if too big for one session: 32a = core
-    (`edge_module` + `types` + `training` + `adaptive_width`), 32b =
-    self-play/arena/consolidation.
-  - Validation pattern (proven in T4): commit corpus edits in the main
-    checkout (kernel_opt corpus files are NOT sibling WIP), then
-    `git worktree add /tmp/... <commit>` + symlink `/tmp/{katgpt-rs,riir-ai,riir-neuron-db}`
-    → the real `/git` dirs for path-dep resolution → run GOAT there.
-- **BLOCKED**: `ternary_deltanet_gpu_forward.rs` — sibling agent actively
-  working there (Batch 31 note). Mine only after their WIP lands.
-- **Progress**: riir-gpu ~54 of ~200 files mined. Corpus: 217 rules.
+- **Batch 32a DONE (2026-08-15, Research 034):** the edge_lora CORE cluster
+  (edge_module + types + training + adaptive_width) — 11 rules, corpus
+  217 → 228. Bug yield filed as riir-ai Issue 683 (AdaptiveWidthTrainer
+  per-episode construction storm + ignored TrainingConfig fields +
+  misreported mean_weighted_loss + minor hazards).
+- **Batch 32b (NEXT)**: the edge_lora self-play/arena/consolidation half —
+  `topology_trainer.rs` (1468L), `sleep_consolidation.rs` (615L),
+  `arena_eval.rs` (604L), `{go,bomber,fft}_self_play.rs` (730/521/506L),
+  `cross_game_{edge,real}.rs` (504/224L), `chain_commit.rs` (394L),
+  `sigmoid_gate.rs` (394L), `mod.rs` (249L) → Research 035, corpus
+  228 → ~236. `kernels/` = mostly `.wgsl` — mine the Rust wrappers only.
+  - Suggested split if too big: 32b-1 = topology_trainer + training
+    remnants (chain_commit, sigmoid_gate, mod), 32b-2 = self-play/arena
+    (go/bomber/fft_self_play, cross_game_*, arena_eval,
+    sleep_consolidation).
+  - Validation pattern (proven T4 + Batch 32a): corpus files are NOT
+    sibling WIP — edit + run GOAT in the main checkout with
+    `CARGO_TARGET_DIR=/tmp/riir-clippy-bNN`; `--features kernel_heal`
+    for the corpus suite (306 tests at 32a), default for the 201 suite.
+    `--all-features` is currently broken by SIBLING WIP
+    (`rust_perf/bench.rs:335 alloc_axis`) — pre-existing, not yours.
+  - Count-pin sites when adding rules (Batch 32a found them all):
+    corpus.rs `entries.len()` assert + KERNEL_CATEGORIES rows + per-category
+    count test + 2 grouped-total tests + router.rs `rules_for_expert` total
+    + the `217`/`228` mentions in router.rs doc header.
+- **BLOCKED**: `ternary_deltanet_gpu_forward.rs` (+ `_cudarc.rs` — sibling
+  WIP active there as of 2026-08-15) — mine only after their WIP lands.
+- **Progress**: riir-gpu ~58 of ~200 files mined. Corpus: 228 rules.
 - **Also open (riir-clippy issues)**: 014 (rust_perf v4, 12 tasks), 016
   (clippy structural expansion, 6), 017 (retrieval precision at scale,
   5), 018 (self_evolve promotion, 6). 015 = sibling's ACTIVE WIP
