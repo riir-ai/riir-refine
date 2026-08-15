@@ -966,6 +966,23 @@
 //!   production readers). Issue 693 H1/H2 production routing PINNED (both
 //!   wrong-math bugs inherited via `mla_backward_gpu_batched`/
 //!   `moe_backward_gpu_batched`); new hazards filed as riir-ai Issue 694.
+//! - **Batch 42 (2026-08-15, Research 046):** the Gemma-2 D2F block-causal
+//!   decode cluster — `gemma2_d2f/mod.rs` (1,579 LOC, the CPU-orchestrated
+//!   hybrid decode loop) + `gemma2_d2f_sc.rs` (800, Self-Conditioning,
+//!   Plan 250) — **4 rules, corpus 316 → 320** (A 70, B 46, D 56):
+//!   `refine-loop-invariant-prefix-elision` (D — the denoise loop re-forwards
+//!   the provably-invariant prompt prefix every step; masking closes it,
+//!   mutation-set closure proves it), `softmax-entropy-via-shift-identity`
+//!   (B — `ln(e_t)` = `logit_t` − max, ONE transcendental for the whole entropy
+//!   sum), `runtime-identity-gate-cached-verdict-elides-side-projection`
+//!   (D — content-classified inertness cached write-through at the mutation
+//!   boundary gates whole-stage elision; the gate must cover producer AND
+//!   consumer), `expected-embedding-transposed-gemv-resident-head` (A — the
+//!   soft-token expectation is the tied `lm_head`'s transposed GEMV on the
+//!   already-resident table, not a host mirror walk). Hazards filed as
+//!   riir-ai Issue 695 (KV GPU→CPU→GPU round-trip 1.7 GB/block, invariant-
+//!   prefix recompute ~227 GMACs, 46.6K blocking reads, hardcoded softcap
+//!   divergence, truncate panic, the unreachable trained-SC path).
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
@@ -6643,6 +6660,108 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
             ref_shape: "// naive: superseded GPU primitive, machinery still maintained every step\nstruct BackwardHandles {\n    lm_head: LmHeadHandle,         // built at boot...\n    lm_head_cache: Option<Slot>,   // ...transposed + re-uploaded EVERY step\n    staging: Option<wgpu::Buffer>, // 640 MB staging buffer for the transpose\n}\nfn update(&mut self, w: &Weights, queue: &Queue) {\n    // GPU transpose + parallel upload - for a GEMV that production\n    // no longer calls (the CPU batched path replaced it)\n    self.write_lm_head_transposed(w, queue); // ~640 MB upload/step, zero readers\n}".to_string(),
             opt_pattern: "// optimized: retire the consumer and the machinery together\nfn update(&mut self, w: &Weights, queue: &Queue) {\n    // LM head gradient is CPU batched now (batched_outer_product_acc) -\n    // the GPU transpose pipeline, staging buffer, and handle cache are\n    // deleted with the primitive they served. Zero per-step upload.\n}\n// keep the parity test honest: gate the primitive behind the test feature\n#[cfg(any(test, feature = \"lm_head_gpu_parity\"))]\nfn lm_head_backward_gpu(handle: &LmHeadHandle, d_logits: &[f32]) -> Vec<f32> {\n    vec![0.0; d_logits.len()]\n}".to_string(),
         },
+        // ── refine-loop-invariant-prefix-elision — an iterative refinement
+        // loop whose mutation set is closed must persist the complement's
+        // forward artifacts (D) ──
+        //
+        // Source: riir-gpu gemma2_d2f/mod.rs — the D2F denoise loop re-forwards
+        // the FULL sequence every step: L499-502 (design doc admits it: "The KV
+        // cache is reset at the start of each call. Each call is independent
+        // (suitable for D2F denoising where each step re-runs the full sequence
+        // with different masks)") + L525-529 (fresh CpuKVCache per call) +
+        // L1488/L1491-1493 (full forward per step) vs L1498+L1528 (tokens
+        // mutated ONLY in block_start..seq_len). The invariance PROOF is the
+        // kernel's own masking: attention_cubecl/mod.rs L1214-1217 t_n closes
+        // prompt attention within the prompt (pos < prompt_len => t_n =
+        // prompt_len), so prompt K/V + hidden states are bit-identical across
+        // steps. Precondition boundary: gemma2_d2f_sc.rs L158 — with SC
+        // enabled, prompt x0 estimates feed prompt embeddings and break the
+        // invariance (restrict SC to the refine set to restore it).
+        //
+        // Distinct from append-cache-rewind-overwrite-in-place (B39 — cache
+        // EXTENT management; still recomputes everything, saving memory) and
+        // lm-head-loss-positions-only (B37 — the per-position consumer-set
+        // sibling; this is the cross-iteration producer-invariance complement
+        // in the same dispatch-elision class).
+        KernelRule {
+            rule_id: "refine-loop-invariant-prefix-elision".to_string(),
+            gpu_concept: "In an iterative refinement loop over a sequence (denoise loops, speculative re-ranks, any re-run-until-stable decode), the mutation set is usually a proper subset S (here: only the generation block's tokens are rewritten between iterations). When the attention mask closes the complement against S - block-causal: prompt positions attend only to 0..prompt_len - the complement's per-layer K/V and hidden states are PROVABLY identical across iterations. Compute the prefix's forward artifacts ONCE before the loop, persist them (device-resident KV + hidden slots), and run each iteration's forward over S only, reading the persisted prefix state. Iteration cost drops from O(steps x seq) to O(seq + steps x |S|) in FLOPs, dispatches, AND bus traffic. The invariance is provable from the coupling structure (masking + mutation-set closure), not heuristic - work with a proven-identical result is pure waste. Precondition: the refine set must be closed (SC-style conditioning that feeds prompt embeddings next step breaks it - restrict the conditioning to S). Distinct from append-cache-rewind-overwrite-in-place (B39 - cache extent management for re-execution, still recomputes; this ELIDES the recompute), from lm-head-loss-positions-only (B37 - per-position consumer-set elision; this is the cross-iteration producer-invariance complement), from training-forward-shed-decode-loop-shape (B36 - batches the position axis WITHIN one forward; this hoists across loop ITERATIONS).".to_string(),
+            ref_shape: "// naive: each refinement iteration resets the cache and re-forwards EVERYTHING\nfor step in 0..max_steps {\n    self.kv_cache = CpuKVCache::new(n_layer, kv_dim); // reset per step\n    let logits = self.forward_all(&tokens, prompt_len); // prompt + block, all layers\n    for pos in block_start..seq_len {\n        tokens[pos] = sample(logits[pos]); // the ONLY mutation site\n    }\n}\n// prompt K/V are bit-identical every step (mask closes prompt vs block)\n// -> 7/8 of prompt work is pure waste at defaults (8 steps)".to_string(),
+            opt_pattern: "// optimized: forward the invariant prefix ONCE, iterate over the refine set only\nlet prefix_state = self.forward_prefix_persist(&tokens[..prompt_len]); // once\nfor step in 0..max_steps {\n    let logits = self.forward_block_against(&tokens[block_start..seq_len], &prefix_state);\n    for pos in block_start..seq_len {\n        tokens[pos] = sample(logits[pos - block_start]);\n    }\n}\n// cost: O(seq) once + O(steps x |S|) instead of O(steps x seq)".to_string(),
+        },
+        // ── softmax-entropy-via-shift-identity — ln(e_t) = logit_t - max,
+        // so the entropy sum needs ONE transcendental, not N (B) ──
+        //
+        // Source: riir-gpu gemma2_d2f/mod.rs L103-109 + L121-127 + L151-154
+        // (SamplerFeatures::from_logits — the POSITIVE instance: a single fused
+        // sweep over the vocab computes sum_exp, sum_e_ln_e via
+        // e * logit_shifted, and a top-3 cascade, all off one e_t = exp(shift)
+        // evaluation per token; entropy recovered as ln(S) - (1/S)*sum_e_ln_e).
+        //
+        // Distinct from fuse-xent-logsumexp / fuse-jsd-logsumexp (pass FUSION
+        // of softmax+log+NLL — this is transcendental-count elimination via an
+        // algebraic identity) and exp2-log2-base2 (base conversion).
+        KernelRule {
+            rule_id: "softmax-entropy-via-shift-identity".to_string(),
+            gpu_concept: "To accumulate an entropy-style sum over a softmax, never materialize probabilities and call ln() per element: with e_t = exp(logit_t - max), ln(e_t) = logit_t - max EXACTLY (the shift is exp's argument, so its log is the shift itself). Accumulate sum_e_ln_e as e_t * logit_shifted in the SAME sweep that builds the softmax denominator and any top-k cascade, then recover the entropy as ln(S) - (1/S) * sum_e_ln_e - ONE transcendental for the whole distribution instead of N. Guard the underflow tail before accumulating (e > 0 && shift.is_finite(): 0 * -inf = NaN). Max-shifted stability is preserved. Composes with one-sweep statistics fanouts over the same e_t. Distinct from fuse-xent-logsumexp / fuse-jsd-logsumexp (fusing softmax+log+NLL into one kernel - a pass-count concern; this is per-element transcendental COUNT via algebraic identity) and exp2-log2-base2 (base conversion of exp/ln - this ELIMINATES the ln calls).".to_string(),
+            ref_shape: "// naive: materialize probs, then N log evaluations\nlet probs = softmax(logits); // N exps + division\nlet mut entropy = 0.0;\nfor t in 0..vocab {\n    if t != mask { entropy -= probs[t] * probs[t].ln(); } // N ln() calls\n}".to_string(),
+            opt_pattern: "// optimized: ln(e_t) = logit_t - max_logit — the shift IS the log\nlet max_logit = logits.iter().copied().fold(f32::NEG_INFINITY, f32::max);\nlet mut sum_exp = 0.0; let mut sum_e_ln_e = 0.0;\nfor t in 0..vocab {\n    if t == mask { continue; }\n    let shift = logits[t] - max_logit;\n    let e = shift.exp();\n    sum_exp += e;\n    if e > 0.0 && shift.is_finite() { sum_e_ln_e += e * shift; } // 0*(-inf)=NaN guard\n}\n// ONE ln for the whole distribution:\nlet entropy = sum_exp.ln() - sum_e_ln_e / sum_exp; // -Sum p ln p".to_string(),
+        },
+        // ── runtime-identity-gate-cached-verdict-elides-side-projection —
+        // content-classified inertness cached write-through at the mutation
+        // boundary gates whole-stage elision (D) ──
+        //
+        // Source: riir-gpu gemma2_d2f/mod.rs + gemma2_d2f_sc.rs — the POSITIVE
+        // instance: mod.rs L556 (`apply_projection = apply_sc &&
+        // !self.w_sc_is_identity`) + L543-546 (lazy init sets the flag
+        // directly) + L671-674 (set_w_sc RE-DERIVES the verdict from buffer
+        // contents at the only mutation boundary, so an externally-supplied
+        // identity-shaped buffer still earns the fast path) + L350-355 (the
+        // cached bool field) + sc.rs L281-287 (the O(n^2) scan NEVER touches
+        // the hot loop — the doc contract, honored). The completeness hazard
+        // this file also demonstrates: the producer (update_from_logits,
+        // mod.rs L1541-1543) is gated only by sc_enabled, NOT by the identity
+        // verdict — a gated consumer with an ungated producer computes data
+        // the loop provably discards (riir-ai Issue 695 H16).
+        //
+        // Distinct from zero-init-side-branch-frozen-base-path (B30 — the
+        // VALUE contract: B=0 makes the math exact while the SAME code RUNS;
+        // this ELIDES the math under a runtime check) and
+        // min-rank-inert-adapter-zero-alpha (B31 — the ALLOCATION contract,
+        // annihilated by scale, no gate). Composes with
+        // derive-shape-from-payload-not-cached-field (the cached bool is
+        // write-through so it cannot desync).
+        KernelRule {
+            rule_id: "runtime-identity-gate-cached-verdict-elides-side-projection".to_string(),
+            gpu_concept: "A learnable side component initialized to an algebraically-neutral value (identity/zero-padded: W_sc = [I|0]) ships with a runtime content-classification: the still-neutral verdict is computed ONCE per WRITE of the buffer (at the sole mutation/setter boundary - re-derived from CONTENTS so externally-supplied buffers are re-classified honestly and a trained-to-nothing buffer still earns the fast path), cached as a plain bool, and every stage of the side channel - the side-input PRODUCTION and the projection CONSUMPTION - branches on the cached flag to ELIDE its work. The hot loop never re-scans (O(1) branch per position); the O(n^2) classification amortizes to one pass per write. This turns enabled-but-untrained = free from a construction-time hope into a runtime invariant that SURVIVES arbitrary buffer writes. The gate must be COMPLETE: a gated consumer with an ungated producer computes inputs nothing reads (the D2F file's own update_from_logits hazard). Distinct from zero-init-side-branch-frozen-base-path (B30 - VALUE contract, the inert math still RUNS in one shared path; this elides the math entirely) and min-rank-inert-adapter-zero-alpha (B31 - ALLOCATION contract, scale-annihilated, no gate). Composes with derive-shape-from-payload-not-cached-field (write-through cache cannot desync by construction).".to_string(),
+            ref_shape: "// naive: always run the side math; inertness is only a construction-time hope\nfn embed_step(&mut self, tokens: &[usize], sc: Option<&[Vec<f32>]>) -> Vec<Vec<f32>> {\n    let mut out = Vec::with_capacity(tokens.len());\n    for (pos, &tok) in tokens.iter().enumerate() {\n        let mut h = self.lookup_scale(tok);\n        if let Some(sc) = sc { // enabled check only — trained-ness never checked\n            h = project_sc(&h, &sc[pos], &self.w_sc); // O(n^2) matvec on EVERY position,\n        }                                  // provably identity while untrained\n        out.push(h);\n    }\n    out\n}".to_string(),
+            opt_pattern: "// optimized: cached content-classified verdict, re-derived at the write boundary,\n// gating BOTH producer and consumer\nstruct Engine { w_sc: Option<Vec<f32>>, w_sc_is_identity: bool }\nimpl Engine {\n    fn set_w_sc(&mut self, w: Vec<f32>) { // the ONLY mutation boundary\n        self.w_sc_is_identity = is_identity_padded(&w, self.n); // re-derive from CONTENTS\n        self.w_sc = Some(w);\n    }\n    fn step(&mut self, logits: &[Vec<f32>], sc_on: bool) {\n        let identity = self.w_sc_is_identity; // O(1) branch, cached\n        if sc_on && !identity { self.update_sc_input(logits); } // producer gated\n        // consumer gated by the same flag — skip the O(n^2) projection while identity\n    }\n}".to_string(),
+        },
+        // ── expected-embedding-transposed-gemv-resident-head — the soft-token
+        // expectation is the tied lm_head's transposed GEMV on the
+        // already-resident table (A) ──
+        //
+        // Source: riir-gpu gemma2_d2f_sc.rs L225 + L229-246
+        // (compute_x0_estimate: x0[i] = Sum_t softmax_t * wte[t*n_embd + i] —
+        // a host loop streaming the ENTIRE V x N CPU mirror per position per
+        // step, 2.36 GB + 590M MAC per position at Gemma-2-2B) + mod.rs L605-610
+        // (the SAME table device-resident + GEMV'd per position for the tied
+        // lm_head: logits = wte @ h) + L455 (wte_cpu: weights.wte.clone() — the
+        // CPU mirror kept alongside) + L1541-1543 (update_from_logits walks
+        // the mirror per step). The vocabulary translation is load-bearing:
+        // "expected embedding over softmax" reads as a gather idiom but
+        // factors as the transposed GEMV of the tied head.
+        //
+        // Distinct from offload-cpu-bottleneck-to-gpu-kernel (B14 — data-PREP
+        // transforms; no resident-operand reuse, no orientation flip) and
+        // device-side-argmax-minimal-download (B25 — small result of a large
+        // DEVICE array; here the host-mirror WALK is deleted).
+        KernelRule {
+            rule_id: "expected-embedding-transposed-gemv-resident-head".to_string(),
+            gpu_concept: "A probability-weighted embedding expectation (x_hat = Sum_v softmax(logits)_v * wte[v, :]) is algebraically the TRANSPOSED GEMV of the tied lm_head the forward just dispatched: logits = wte @ h implies x_hat = wte^T @ p. Recognize the identity, compute the probs on the host (softmax over already-read logits), upload only the vector (V floats), run ONE transposed-GEMV dispatch against the table that is ALREADY device-resident, and read back only the n-float result. The host mirror of the table is never walked: at Gemma-2-2B (V=256128, N=2304) the naive host loop streams 2.36 GB and 590M MAC PER POSITION PER STEP while the GPU copy sits resident having just been GEMV'd in the same orientation family for the logits. One dispatch replaces the entire stream; only V floats up and n floats back cross the bus. The vocabulary translation is the load-bearing insight: expected-embedding-over-softmax reads as a scatter/gather idiom but factors as a GEMV against a weight the device already holds. Distinct from offload-cpu-bottleneck-to-gpu-kernel (B14 - data-prep transforms into pooled memory; no resident-operand reuse, no orientation flip), from device-side-argmax-minimal-download (B25 - shrinking a device-array download; this DELETES a host mirror walk), from transposed-consumption-accumulate-not-gather (B40 - host loop ORDER for B^T g; this moves the op across the bus).".to_string(),
+            ref_shape: "// naive: host loop over every vocab row per position per step\nfn x0_estimate(logits: &[f32], wte_cpu: &[f32], n: usize, mask: usize) -> Vec<f32> {\n    let probs = softmax_masked(logits, mask);\n    let mut est = vec![0.0f32; n];\n    for t in 0..vocab {\n        if t == mask { continue; }\n        let off = t * n;\n        for i in 0..n { est[i] += probs[t] * wte_cpu[off + i]; } // full V x N stream\n    }                                                           // PER POSITION PER STEP\n    est // 2.36 GB host walk + 590M MAC at Gemma-2-2B, per position\n}".to_string(),
+            opt_pattern: "// optimized: x_hat = wte^T @ p — ONE transposed GEMV on the resident tied head\nfn x0_estimate_gpu(&mut self, logits: &[f32], mask: usize) -> Vec<f32> {\n    let p = softmax_masked(logits, mask);          // host, over read-back logits\n    let p_handle = self.client.create_from_slice(&p); // V floats up\n    // wte is ALREADY resident — the forward just GEMV'd it for logits = wte @ h\n    let out = self.dispatch_gemv_t(&self.wte_handle, &p_handle); // wte^T @ p\n    self.read_into(&out, self.n_embd)              // n floats back — no mirror walk\n}".to_string(),
+        },
     ])
 }
 
@@ -6655,7 +6774,7 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 316-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 320-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -6663,7 +6782,7 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (69 rules)
+    // A: Memory access patterns (70 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -6737,9 +6856,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "pool-reservation-token-outlives-raw-view",
             "gpu-type-bridge-borrows-not-clones",
             "superseded-primitive-machinery-zombie",
+            "expected-embedding-transposed-gemv-resident-head",
         ],
     ),
-    // B: Compute patterns (45 rules)
+    // B: Compute patterns (46 rules)
     (
         KernelCategory::Compute,
         "B: compute",
@@ -6789,6 +6909,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "selective-projection-effective-rank-head",
             "rademacher-signs-over-gaussian-projection",
             "block-reduction-separate-scratch-runtime-strides",
+            "softmax-entropy-via-shift-identity",
         ],
     ),
     // C: Fusion patterns (32 rules)
@@ -6830,7 +6951,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "elementwise-offload-needs-device-side-anchor",
         ],
     ),
-    // D: Dispatch patterns (54 rules)
+    // D: Dispatch patterns (56 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -6889,6 +7010,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "entrypoint-variants-share-layer-body",
             "pipeline-layer-boundary-device-handle",
             "per-position-scalar-factored-gemv-collapse",
+            "refine-loop-invariant-prefix-elision",
+            "runtime-identity-gate-cached-verdict-elides-side-projection",
         ],
     ),
     // E: Parallelism patterns (18 rules)
@@ -7174,8 +7297,9 @@ mod tests {
         // Batch 40 (7): riir-gpu production kernels — host-scratch-mirrors-slot-order-for-coalesced-writes, write-plan-derived-from-cache-slots-not-recomputed, cpu-source-builder-skips-device-roundtrip, expert-loop-two-phase-split-batch-across-iterations, rmsnorm-backward-gamma-scope-correction-term, per-position-scalar-factored-gemv-collapse, foreign-accumulator-bridge-copy-hoist-to-outer-loop (kimi_k3_gpu_backward.rs — the KimiK3 GPU backward: handle/update infrastructure + dense SiTU FFN + MoE + MLA + KDA backward compute; 2 critical wrong-math bugs + NaN-vacuous parity suite filed as Issue 693).
         // Batch 41 (6): riir-gpu production kernels — concurrent-disjoint-write-buffer-parallelizes-uploads, aliased-slot-allocate-replace-fallback-severs-binding, pool-slot-write-coalescing-owns-only-declared-ranges, pool-reservation-token-outlives-raw-view, gpu-type-bridge-borrows-not-clones, superseded-primitive-machinery-zombie (weight_buffer_cache.rs + kimi_k3_gpu_backward_sequence.rs — the KimiK3 backward sequence PRODUCTION caller path + the write substrate; Issue 693 H1/H2 production routing pinned + orphaned-write fallback + zombie LM-head machinery filed as Issue 694).
         // Batch 35 (8): riir-gpu production kernels — mask-sentinel-matches-reduction-identity, smem-staging-gated-by-cross-thread-reuse, kernelize-host-chain-after-sync-batching-floor, block-reduction-separate-scratch-runtime-strides, saturating-nonlinearity-recovery-breaks-near-cap, adapter-grad-join-mirrors-forward-delta-insertion-point, side-consumer-readback-alias-live-handle-for-dependent-dispatch, quadratic-attention-intermediates-recompute-from-linear-saves (gemma2_cubecl_train/ — the Gemma-2 training cluster: fused causal attention kernel Issue 430 Option B + hybrid LoRA training fwd/bwd).
-        // Total: 209. // (historical batch-30 snapshot; current 316)
-        assert_eq!(corpus.entries.len(), 316, "batches 1-41 should have 316 rules");
+        // Batch 42 (4): riir-gpu production kernels — refine-loop-invariant-prefix-elision, softmax-entropy-via-shift-identity, runtime-identity-gate-cached-verdict-elides-side-projection, expected-embedding-transposed-gemv-resident-head (gemma2_d2f/ mod.rs + gemma2_d2f_sc.rs — the Gemma-2 D2F block-causal decode cluster + Self-Conditioning; hazards filed as Issue 695).
+        // Total: 209. // (historical batch-30 snapshot; current 320)
+        assert_eq!(corpus.entries.len(), 320, "batches 1-42 should have 320 rules");
     }
 
     #[test]
@@ -9607,6 +9731,76 @@ mod tests {
         }
     }
 
+    #[test]
+    fn batch42_rules_present() {
+        let corpus = build_kernel_seed_corpus();
+        let ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        // D (2 new): invariant-prefix elision + runtime identity gate
+        assert!(ids.contains(&"refine-loop-invariant-prefix-elision"), "invariant prefix elision");
+        assert!(ids.contains(&"runtime-identity-gate-cached-verdict-elides-side-projection"), "identity gate elision");
+        // B (1 new): entropy via the exp shift identity
+        assert!(ids.contains(&"softmax-entropy-via-shift-identity"), "entropy shift identity");
+        // A (1 new): expected embedding as resident-head transposed GEMV
+        assert!(ids.contains(&"expected-embedding-transposed-gemv-resident-head"), "x0 transposed gemv");
+    }
+
+    #[test]
+    fn batch42_concepts_covered() {
+        // Distinctive ASCII substrings located by rule_id (the 32a convention).
+        let corpus = build_kernel_seed_corpus();
+        let concept = |id: &str| -> String {
+            corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-42 rule '{id}' missing"))
+                .gpu_concept
+                .clone()
+        };
+        // D: refine-loop-invariant-prefix-elision (mod.rs L1488/L1491-1493 vs L1498/L1528 + t_n L1214-1217)
+        let c = concept("refine-loop-invariant-prefix-elision");
+        assert!(c.contains("mutation set is usually a proper subset")
+            && c.contains("O(steps x seq) to O(seq + steps x |S|)"), "prefix-elision concept");
+        // B: softmax-entropy-via-shift-identity (mod.rs L103-109/L121-127/L151-154)
+        let c = concept("softmax-entropy-via-shift-identity");
+        assert!(c.contains("the shift is exp's argument, so its log is the shift itself")
+            && c.contains("ONE transcendental"), "entropy-shift concept");
+        // D: runtime-identity-gate-cached-verdict-elides-side-projection (mod.rs L556/L671-674 + sc.rs L281-287)
+        let c = concept("runtime-identity-gate-cached-verdict-elides-side-projection");
+        assert!(c.contains("re-derived from CONTENTS")
+            && c.contains("gated consumer with an ungated producer"), "identity-gate concept");
+        // A: expected-embedding-transposed-gemv-resident-head (sc.rs L229-246 + mod.rs L605-610)
+        let c = concept("expected-embedding-transposed-gemv-resident-head");
+        assert!(c.contains("TRANSPOSED GEMV of the tied lm_head")
+            && c.contains("reads as a scatter/gather idiom"), "x0-gemv concept");
+    }
+
+    #[test]
+    #[cfg(not(feature = "kernel_verify"))]
+    fn batch42_pseudocode_parses() {
+        // G1 for Batch 42: every new rule's ref_shape AND opt_pattern must
+        // syn-parse as valid Rust (the L2 pruner verdict).
+        use crate::domain::HealDomain;
+        let corpus = build_kernel_seed_corpus();
+        let ids = [
+            "refine-loop-invariant-prefix-elision",
+            "softmax-entropy-via-shift-identity",
+            "runtime-identity-gate-cached-verdict-elides-side-projection",
+            "expected-embedding-transposed-gemv-resident-head",
+        ];
+        for id in ids {
+            let entry = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-42 rule '{id}' missing"));
+            let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+            assert!(ref_verdict.parses, "batch-42 ref_shape for '{id}' must parse");
+            let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+            assert!(opt_verdict.parses, "batch-42 opt_pattern for '{id}' must parse");
+        }
+    }
+
 
 
     // ════════════════════════════════════════════════════════════════════
@@ -9620,7 +9814,7 @@ mod tests {
 
     #[test]
     fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-        // Every rule_id in the 316-rule corpus must appear in exactly one category.
+        // Every rule_id in the 320-rule corpus must appear in exactly one category.
         let corpus = build_kernel_seed_corpus();
         let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
         let mut categorized: Vec<&str> = Vec::new();
@@ -9653,10 +9847,10 @@ mod tests {
     fn kernel_categories_counts_match_plan_003_table() {
         // Pin per-category rule counts to the Plan 003 table (updated for Batch 40).
         let expected = [
-            (KernelCategory::MemoryAccess, 69),
-            (KernelCategory::Compute, 45),
+            (KernelCategory::MemoryAccess, 70),
+            (KernelCategory::Compute, 46),
             (KernelCategory::Fusion, 32),
-            (KernelCategory::Dispatch, 54),
+            (KernelCategory::Dispatch, 56),
             (KernelCategory::Parallelism, 18),
             (KernelCategory::FlashAttnTiling, 10),
             (KernelCategory::LinearAttnRecurrence, 19),
@@ -9676,9 +9870,9 @@ mod tests {
                 "Plan 003: category {cat:?} has {} rules, expected {count}",
                 entry.2.len());
         }
-        // Sum must equal 316.
+        // Sum must equal 320.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 316, "Plan 003: category totals must sum to 316");
+        assert_eq!(total, 320, "Plan 003: category totals must sum to 320");
     }
 
     #[test]
@@ -9688,7 +9882,7 @@ mod tests {
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 316, "Plan 003: grouped corpus has {total} rules, expected 316");
+        assert_eq!(total, 320, "Plan 003: grouped corpus has {total} rules, expected 320");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");

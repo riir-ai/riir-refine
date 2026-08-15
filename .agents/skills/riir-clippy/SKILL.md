@@ -484,19 +484,58 @@ global = symlink only.
   anchor's prefix content at the head of the replacement. Plus 1 G1 parse fix
   (pseudocode fns need bodies — `fn f(...)` with a trailing comment is invalid
   inside the `_wrap` fn; give it `{}`).
+- **Batch 42 DONE (2026-08-15, Research 046):** the Gemma-2 D2F block-causal
+  decode cluster (`gemma2_d2f/mod.rs` 1,579 — the CPU-orchestrated hybrid
+  decode loop, Plan 108, cloned from the legacy dispatch shape instead of the
+  in-tree device-resident substrate + `gemma2_d2f_sc.rs` 800 — Self-Conditioning,
+  Plan 250 T1-T4) — **4 rules, corpus 316 → 320** (A 70, B 46, D 56):
+  `refine-loop-invariant-prefix-elision` (D — the denoise loop re-forwards the
+  PROVABLY-invariant prompt prefix every step; block-causal t_n closes it +
+  mutation-set closure proves it; O(steps × seq) → O(seq + steps × |S|);
+  precondition: refine-set closure — SC feeding prompt embeddings breaks it),
+  `softmax-entropy-via-shift-identity` (B — ln(e_t) = logit_t − max exactly;
+  ONE transcendental for the whole entropy sum; the file's own from_logits is
+  the POSITIVE instance), `runtime-identity-gate-cached-verdict-elides-side-
+  projection` (D — content-classified inertness cached write-through at the
+  mutation boundary gates whole-stage elision; the gate must cover producer
+  AND consumer — the file's own ungated update_from_logits computes 2.36
+  GB/position/step the loop provably discards), `expected-embedding-transposed-
+  gemv-resident-head` (A — the soft-token expectation x̂ = Σ p_v · wte[v,:]
+  factors as the tied lm_head's transposed GEMV on the already-resident table;
+  the vocabulary translation is load-bearing). 18 falsifications (the file is a
+  museum of already-mined anti-patterns — incl. the DiffusionSampler learned
+  gate judged outside the 15 categories + the KV re-upload being B37's
+  ref_shape verbatim). Bug yield filed as riir-ai **Issue 695** (25 hazards:
+  1.7 GB/block KV GPU→CPU→GPU round-trip, ~227 GMACs invariant-prefix
+  recompute, 46,592 blocking read_one/block decode, dead prompt lm_head 151
+  GFLOPs, hardcoded softcap/scale with dead host fields + no CPU-parity test,
+  the truncate-the-wrong-end reachable panic, the unreachable trained-SC path —
+  `ScTrainingForwardResult` never constructed + `set_w_sc` zero production
+  callers + riir-train's separate synthetic SC impl). GOAT: 342 kernel_heal +
+  201 default tests, clippy 0 in all 4 states (the 1 latent_retrieval warning
+  = the sibling's WIP heal.rs:415, pre-existing). **Generator lesson (third
+  anchor class): the entries-vec tail anchor MIXES literal 2-char `\n` escapes
+  (INSIDE the Rust string literal) with REAL file newlines (after
+  `.to_string(),`)** — treating them uniformly returns count=0; the dry-run
+  caught it (2 aborted attempts, zero pollution). Plus 3 doc_markdown fixes
+  (`ln(e_t)`/`logit_t`/`lm_head`'s in `//!` prose need backticks — the
+  underscore-identifier family). The 2-lane split (decode structure + SC
+  substrate) resolved its one overlap cleanly: the identity INIT is the B30/B31
+  instance, the runtime GATE mechanism is the rule.
 - **NEXT mining target**: `ls` the riir-gpu tree for the next unmined
-  cluster (~85 of ~200 files mined). Candidates:
-  `gemma2_d2f*` (mod 1,579 + _sc 800), `weaver_gpu*` (dflash 576 +
-  corrector 1,449), `kvarn/`, `hypernet/`, `maxsim/`,
+  cluster (~87 of ~200 files mined). Candidates:
+  `weaver_gpu*` (dflash 576 + corrector 1,449; NOTE the `weaver_gpu/` dir
+  mod.rs ~62 KB + tests 57 KB are a SEPARATE cluster), `kvarn/` (~1,838),
+  `hypernet/` (~3,300), `maxsim/` (~1,049),
   `kimi_k3_gpu_backward_batched.rs` (1,394 — LOW value: shares Issue 693's
   H1/H2 + the broken LCG with the module file; mine only if the better
-  clusters are exhausted). Pick 1-2 files, ~6-10 rules (dedup pressure
-  high), Batch 42 (Research 046).
+  clusters are exhausted). Pick 1-2 files, ~4-8 rules (dedup pressure high
+  after 42 batches), Batch 43 (Research 047).
   - Validation pattern (proven T4 + 32a + 32b-1 + 32c + 36 + 38): corpus files are NOT
     sibling WIP — edit + run GOAT in the main checkout with
     `CARGO_TARGET_DIR=/tmp/riir-clippy-bNN`; `--features kernel_heal`
     for the corpus suite (318 at 34, 321 at 35, 324 at 36, 327 at 37,
-    330 at 38, 333 at 39, 336 at 40, 339 at 41), default for
+    330 at 38, 333 at 39, 336 at 40, 339 at 41, 342 at 42), default for
     the 201 suite.
     `--all-features` is currently broken by SIBLING WIP
     (`rust_perf/bench.rs:335 alloc_axis`) — pre-existing, not yours.
@@ -511,7 +550,7 @@ global = symlink only.
     router.rs `rules_for_expert` total + the corpus-count mentions in
     router.rs doc header + the Plan 003 doc-comment `NNN-rule corpus`
     line above KERNEL_CATEGORIES + the `Total: 209 ... current NNN`
-    comment + the file-level `//!` header batch block. All in sync at 316 (A 69, E 18 after Batch 41; B 45, C 32, D 54, F 10, G 19, H 14, I 4, J 5, K 5, L 10, M 9, N 18).
+    comment + the file-level `//!` header batch block. All in sync at 320 (A 70, B 46, D 56 after Batch 42; C 32, E 18, F 10, G 19, H 14, I 4, J 5, K 5, L 10, M 9, N 18, O 4).
   - **Landing lesson (32b-1, self-caught)**: after a large multi-entry
     corpus edit, `awk`-scan for `rule_id:` lines NOT preceded by a
     standalone `KernelRule {` BEFORE the first compile — JSON `\n`
@@ -523,7 +562,7 @@ global = symlink only.
   WIP STILL ACTIVE as of 2026-08-15 evening: qv_lora.rs + cudarc_kernels/
   + riir-gpu/lib.rs + ternary_deltanet_gpu_forward_cudarc.rs all dirty)
   — mine only after their WIP lands.
-- **Progress**: riir-gpu ~85 of ~200 files mined. Corpus: 316 rules.
+- **Progress**: riir-gpu ~87 of ~200 files mined. Corpus: 320 rules.
   edge_lora module FULLY MINED (32a + 32b-1 + 32c). spectralquant/
   FULLY MINED (15 + 33). gemma4_cubecl_train/ DONE (34).
   gemma2_cubecl_train/ FULLY MINED (35: mod.rs + attention_gpu.rs;
@@ -531,7 +570,8 @@ global = symlink only.
   weight_buffers.rs; 38: forward_batched.rs + backward.rs).
   kimi_k3_gpu_forward.rs DONE (39); kimi_k3_gpu_backward.rs DONE (40);
   kimi_k3_gpu_backward_sequence.rs + weight_buffer_cache.rs DONE (41 —
-  the batched twin remains, LOW value).
+  the batched twin remains, LOW value). gemma2_d2f/ FULLY MINED
+  (42: mod.rs + gemma2_d2f_sc.rs).
 - **Also open (riir-clippy issues)**: 014 (rust_perf v4, 12 tasks), 016
   (clippy structural expansion, 6), 017 (retrieval precision at scale,
   5), 018 (self_evolve promotion, 6). 015 = sibling's ACTIVE WIP
