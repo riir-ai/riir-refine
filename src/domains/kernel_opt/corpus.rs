@@ -840,6 +840,48 @@
 //!   rows already contiguous, ~40 GB/step sliding-window re-upload, the
 //!   2× GPU weight residency, one-time dead zero-inits 7 GB + 48 GB,
 //!   two doc-lies, + more).
+//! - **Batch 38 (2026-08-15, Research 042):** the `Q4_K` TRAINING cluster,
+//!   second half (`gemma4_q4k_train/`: `forward_batched.rs` 1,077 +
+//!   `backward.rs` 941 — the layer-major batched forward, the 43,008 to 337
+//!   dispatch fix, + the per-position and batched backwards; completes the
+//!   cluster, `gemma4_q4k_train/` now FULLY MINED) — **4 rules, corpus
+//!   290 → 294** (A 55, D 51): `env-flag-resolved-once-not-per-dispatch`
+//!   (D — `std::env::var` on the hot path takes the global env lock +
+//!   allocates a `String` per lookup; one instance sits IN FRONT of the
+//!   autotuner's deliberately lock-free papaya cache hit),
+//!   `flat-activation-slots-as-readback-target` (A — nested
+//!   `[pos] → Vec<f32>` activation slots force a scratch + scatter two-copy
+//!   tail after every batched readback; the container layout IS the copy
+//!   count), `transient-spike-pins-persistent-scratch` (A — a one-shot
+//!   `resize(batch × vocab)` ≈ 134 MB pins a persistent scratch at ~8× its
+//!   recurring max; grow-only is right for recurring sizes and wrong for a
+//!   non-recurring spike), `transposed-consumption-accumulate-not-gather`
+//!   (A — `z = Bᵀ·g` against row-major B: k-outer column gather at stride
+//!   `rank × 4B`, up to 16× read amplification, → i-outer row accumulation;
+//!   summation order changes — fine for grads, NOT for bit-identity gates).
+//!   ONE subagent rule KILLED by coordinator math (zero-gradient-position
+//!   elision: K/V cross-position coupling re-introduces non-zero gradient at
+//!   prompt positions after the topmost layer — support queries attend to
+//!   prompt keys — so only the topmost layer's pre-attention chain + the
+//!   head can skip; the same flag applies to Issue 687 H3's magnitude
+//!   claim). Dedup kills: the backward's per-layer `RoPE` `powf` table rebuild
+//!   (third strike — B17 drop + B36-F4 + B37-F1), sibling-batch region
+//!   packing (composition of superset-sized + slot-offset), resize-churn
+//!   (superset-sized unapplied), rayon-attention direct-write (a 2nd
+//!   instance of materialized-fast-path in the SAME file), LoRA-delta
+//!   add-pass fusion (B19), the RefCell-scratch API shape (ambient in 3
+//!   rules' `opt_pattern`s), the B36 `sibling-dispatches` rule (a measured
+//!   NON-application — Bench 437 found the noread combo ~16% slower on
+//!   Metal; B29's live-output gate explains it). Bug yield filed as riir-ai
+//!   Issue 691:
+//!   the headline is that BOTH backward variants have ZERO in-tree callers
+//!   (the 941-LOC file is unreached, which is how its dead `x_normed`
+//!   compute survived), then dead `x_normed` in both Phase 1s, 48× per-layer
+//!   `RoPE` table rebuilds while the trainer caches bit-identical tables, the
+//!   ~94 MB/step clone storm, ~380 MB/step fresh output-Vec churn +
+//!   ~380 MB/step redundant `hidden` re-uploads (5× per layer), the 134 MB
+//!   scratch pinning, the dead `attn_scores` field, 97 env lookups/step,
+//!   the strided `LoRA` z-gather at 2 sites, 2 doc inconsistencies.
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
@@ -5900,6 +5942,95 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
             ref_shape: "// naive: per-row method dispatch — the enum is matched and the\n// method called for EVERY row even when the table is materialized\nfn embed_via_method(lookup: &WteLookup, tokens: &[usize], scale: f32,\n                    hidden: &mut [f32], n: usize) {\n    for (pos, &tok) in tokens.iter().enumerate() {\n        let row = &mut hidden[pos * n..pos * n + n];\n        lookup.row_scaled_into(tok, scale, row); // per-row match + call\n    }\n}".to_string(),
             opt_pattern: "// optimized: ONE branch per step on a bulk zero-copy accessor; the\n// materialized arm runs a specialized direct-index + parallel loop\nfn embed_specialized(lookup: &WteLookup, tokens: &[usize], scale: f32,\n                     hidden: &mut [f32], n: usize) {\n    if let Some(slice) = lookup.owned_slice() {\n        hidden.par_chunks_mut(n).enumerate().for_each(|(pos, row)| {\n            let off = tokens[pos] * n;\n            for (i, o) in row.iter_mut().enumerate() {\n                *o = slice[off + i] * scale; // direct indexing + rayon\n            }\n        });\n    } else {\n        for (pos, &tok) in tokens.iter().enumerate() {\n            let row = &mut hidden[pos * n..pos * n + n];\n            lookup.row_scaled_into(tok, scale, row); // backed fallback\n        }\n    }\n}".to_string(),
         },
+        // ── env-flag-resolved-once-not-per-dispatch — per-dispatch env lookup → resolve once (D) ──
+        // Source: riir-gpu gemma4_q4k_train/forward_batched.rs L382+L385
+        // (RAYON_FWD + FUSED_RMSNORM read INSIDE the per-layer fn = 48x/step
+        // each; RAYON_FWD read AGAIN at L203 in the outer fn) +
+        // gemv_autotune.rs L121-131 (the GEMV_FORCE_TILED env check executes
+        // BEFORE the L130 papaya lock-free cache hit, once per autotuned
+        // dispatch) + kimi_k3_gpu_forward.rs L1861-1872/L1938-1948 (OURO_*
+        // per token per layer) + the correct live-toggle form at
+        // gemma2_cubecl/mod.rs L1353-1358 (cheap layer/pos guard ordered
+        // BEFORE the env read so the lookup fires only in the narrow window).
+        //
+        // Distinct from predicate-gated-backend (WHICH kernel is safe for a
+        // shape — this is WHERE the decision input is resolved), from
+        // derived-scalar-host-computed-in-uniform (a config-derived NUMERIC
+        // constant computed once — this is a path-selection boolean resolved
+        // once), and from the B36-F5 falsification note (killed "an env var
+        // selects path A/B" as rule CONTENT; this rule's content is
+        // resolution timing + per-dispatch cost).
+        KernelRule {
+            rule_id: "env-flag-resolved-once-not-per-dispatch".to_string(),
+            gpu_concept: "A runtime path-selection flag read from the environment (a rayon on/off switch, a fused-kernel experiment toggle, a diagnostic force-variant) is CONFIG, not data: it cannot meaningfully change mid-step, so resolve it ONCE — a bool/enum field on the orchestrator filled at construction, or a OnceLock<bool> for a process-lifetime flag — never per dispatch, per layer, or per token. std::env::var takes the global environment lock and heap-allocates a String per lookup; on the dispatch path that cost multiplies by sites x layers x positions (97 lookups/step in one trainer), and one instance sits IN FRONT of a deliberately lock-free papaya cache hit in the autotuner — the env lock poisons the exact property the cache was chosen for. When a flag genuinely must stay live-togglable mid-run (a trace switch), order the CHEAP guard before the env read so the lookup fires only inside the narrow window (layer == 0 && pos <= 1 && env::var(..) is the correct live-toggle form; env-before-cache is the anti-form). Distinct from predicate-gated-backend (WHICH kernel is safe for a shape — this is WHERE the decision input is resolved), from derived-scalar-host-computed-in-uniform (a config-derived NUMERIC constant computed once — this is a path-selection boolean resolved once), and from the B36-F5 falsification note (that killed an env-var A/B gate as rule CONTENT — this rule's content is resolution timing + per-dispatch cost).".to_string(),
+            ref_shape: "// naive: the flag is re-resolved on the hot path — env lock + String\n// alloc per lookup, multiplied by layers/sites/tokens\nstruct TrainerNaive { /* ... */ }\nimpl TrainerNaive {\n    fn forward_layer(&mut self, layer: usize, hidden: &mut [f32]) {\n        let use_rayon = std::env::var(\"RAYON_FWD\").as_deref() != Ok(\"0\"); // 48x/step\n        if use_rayon { /* parallel path */ } else { /* sequential path */ }\n    }\n}\nfn select_variant(cache: &AutotuneCache, m: usize, n: usize) -> Variant {\n    if std::env::var(\"FORCE_VARIANT\").as_deref() == Ok(\"1\") {\n        return Variant::Tiled; // EVERY dispatch — in front of the lock-free\n    }                          // papaya cache hit the design chose\n    if let Some(v) = cache.pin().get(&(m, n)) { return *v; }\n    Variant::Plane /* slow path */\n}".to_string(),
+            opt_pattern: "// optimized: flags are CONFIG — resolved once at construction (or OnceLock\n// for process-lifetime); live-togglable flags guard the env read narrowly\nstruct Trainer {\n    use_rayon: bool,\n    fused_rmsnorm: bool,\n}\nimpl Trainer {\n    fn new() -> Self {\n        Self {\n            use_rayon: std::env::var(\"RAYON_FWD\").as_deref() != Ok(\"0\"), // ONCE\n            fused_rmsnorm: std::env::var(\"FUSED_RMSNORM\").as_deref() == Ok(\"1\"),\n        }\n    }\n    fn forward_layer(&mut self, layer: usize, hidden: &mut [f32]) {\n        if self.use_rayon { /* parallel path */ } else { /* sequential path */ }\n    }\n}\nstatic FORCE_VARIANT: std::sync::OnceLock<bool> = std::sync::OnceLock::new();\nfn select_variant_fast(m: usize, n: usize, force: &std::sync::OnceLock<bool>,\n                       cache: &AutotuneCache) -> Variant {\n    if *force.get_or_init(|| std::env::var(\"FORCE_VARIANT\").as_deref() == Ok(\"1\")) {\n        return Variant::Tiled; // first call resolves; the rest are a bool read\n    }\n    if let Some(v) = cache.pin().get(&(m, n)) { return *v; } // lock-free hit\n    Variant::Plane\n}\n// genuinely live toggle: cheap guard FIRST, env read only inside the window\nfn maybe_trace(layer: usize, pos: usize) {\n    if layer == 0 && pos <= 1 && std::env::var(\"TRACE\").is_ok() { /* emit */ }\n}".to_string(),
+        },
+        // ── flat-activation-slots-as-readback-target — nested slots force scratch + scatter → flat slots ARE the target (A) ──
+        // Source: riir-gpu gemma4_q4k_train/forward_batched.rs — the ~15
+        // per-position save sweeps into nested [pos][..dim] slots (L348-351
+        // x_input, L424-427+L441-444 normed_attn, L525-531 q/k/v_pre_norm,
+        // L567-572 q/k_pre_rope, L586-589 v_cached, L622-625 q_post_rope,
+        // L726-729 attn_out, L758-761 x_after_wo, L787-790 x_after_attn,
+        // L812-815 normed_mlp, L871-875 gate/up, L897-900 hidden, L929-932
+        // x_after_down, L299-303 logits) + mod.rs L753-755 (the batched
+        // dispatch's readback lands in a FLAT caller slice, which nested
+        // [pos] -> Vec<f32> slots cannot BE — the forcing cause).
+        //
+        // Distinct from preallocated-activation-slots-inplace-save (pre-sizes
+        // NESTED slots and keeps the per-position bounded memcpy — its
+        // optimized form retains the nesting and therefore the post-readback
+        // scatter; this rule's fix is the flatness that deletes the second
+        // pass), from per-layer-strided-grad-destination (backward-side
+        // consumer-selected grad destinations — this is the forward-side
+        // activation mirror), and from batched-downloads-single-sync-cycle
+        // (readback SYNC mechanics — this is the DESTINATION layout those
+        // reads write into).
+        KernelRule {
+            rule_id: "flat-activation-slots-as-readback-target".to_string(),
+            gpu_concept: "Activation containers shaped as nested per-position Vecs ([pos] -> Vec<f32>) force every batched GPU producer into a two-copy tail: the dispatch helper's readback lands in a flat caller slice, then a per-position save sweep scatters that slice into the nested slots — ~15 such sweeps per layer in one trainer, each a full seq x dim memcpy. Flattening the container to row-major [seq x dim] with stride indexing makes the activation slot itself the readback target: the dispatch writes the slot sub-slice directly, deleting the scratch intermediary AND the scatter sweep. The container layout IS the copy count. Honest cost note: when the container is shared cross-crate with a CPU reference path and the backward, flattening is a coordinated refactor — the rule fixes the destination contract, not one call site. Distinct from preallocated-activation-slots-inplace-save (pre-sizes NESTED slots and keeps the per-position bounded memcpy — its optimized form retains the nesting and therefore the post-readback scatter; this rule's fix is the flatness that deletes the second pass), from per-layer-strided-grad-destination (backward-side consumer-selected grad destinations — this is the forward-side activation mirror), and from batched-downloads-single-sync-cycle (readback SYNC mechanics — this is the DESTINATION layout those reads write into).".to_string(),
+            ref_shape: "// naive: nested activation slots cannot be a readback target — every\n// batched producer pays scratch + scatter (2 copies per saved tensor)\nfn save_layer(act: &mut LayerAct, scratch: &[f32], seq: usize, dim: usize) {\n    for pos in 0..seq { // copy 2: flat scratch ->\n        act.q_pre_norm[pos][..dim] // NESTED per-pos Vecs\n            .copy_from_slice(&scratch[pos * dim..pos * dim + dim]);\n    } // x15 save sweeps per layer; the nesting forces every one\n}".to_string(),
+            opt_pattern: "// optimized: activation slots are FLAT [seq x dim] row-major — the slot\n// sub-slice IS the dispatch output buffer; one readback, zero scatters\nstruct LayerActFlat { q_pre_norm: Vec<f32> /* [seq * q_dim], pre-allocated */ }\nimpl LayerActFlat {\n    fn q_pre_norm_slot(&mut self, seq: usize, q_dim: usize) -> &mut [f32] {\n        &mut self.q_pre_norm[..seq * q_dim] // contiguous — a legal GEMV target\n    }\n}\nfn layer_forward(gpu: &Gpu, w: &Handle, input: &[f32], act: &mut LayerActFlat,\n                 seq: usize, q_dim: usize) {\n    // the readback writes the activation slot DIRECTLY — no scratch, no sweep\n    gpu.dispatch_gemv_batched_into(w, input, act.q_pre_norm_slot(seq, q_dim), seq);\n}".to_string(),
+        },
+        // ── transient-spike-pins-persistent-scratch — one-shot oversized phase routes around the reused scratch (A) ──
+        // Source: riir-gpu gemma4_q4k_train/backward.rs L409 (Phase-1-ONLY
+        // scratch_in.resize(batch * vocab, 0.0) ~= 134 MB at vocab 262144)
+        // vs L557 (batch * mlp * 2 = the Phase-2 recurring max ~16 MB) +
+        // L750; bw_scratch_in is a persistent RefCell<Vec<f32>> field
+        // (mod.rs L377, constructed Vec::new() at L426, never shrunk) — the
+        // transient Phase-1 spike pins its capacity ~8x above the recurring
+        // watermark for the trainer's lifetime.
+        //
+        // Distinct from superset-sized-scratch-across-variants (sizes UP to
+        // cover recurring variants — this forbids a NON-recurring consumer
+        // from setting the superset) and from staging-reuse-grow-only-map-
+        // prefix (grow-only is the mechanism being poisoned — this rule
+        // decides who is allowed to grow it).
+        KernelRule {
+            rule_id: "transient-spike-pins-persistent-scratch".to_string(),
+            gpu_concept: "A persistent, reused scratch buffer's capacity is pinned at its historical maximum — so a one-shot phase that needs an order-of-magnitude larger buffer must NOT route through it. A multi-phase pipeline whose phases are dimensioned by different quantities (one by vocab, the rest by hidden/mlp) otherwise retains the transient peak for the lifetime of the object: one resize(batch x vocab) ~= 134 MB pins an ~8x over-retention (~16 MB recurring max) on a trainer that lives for the whole run. Grow-only reuse is the right policy for RECURRING sizes and exactly the wrong policy for a non-recurring spike — the fix is caller discipline: transient oversized phases use a local buffer dropped at phase end; the persistent scratch's watermark is set only by the recurring maximum. Distinct from superset-sized-scratch-across-variants (sizes UP to cover recurring variants — this forbids a NON-recurring consumer from setting the superset) and from staging-reuse-grow-only-map-prefix (grow-only is the mechanism being poisoned — this rule decides who is allowed to grow it).".to_string(),
+            ref_shape: "// naive: Phase 1 (one-shot) routes its batch*vocab buffer through the\n// persistent scratch reused by every later phase\nstruct Trainer { scratch: Vec<f32> } // persistent, reused across layers\nfn backward(t: &mut Trainer, batch: usize, vocab: usize, mlp: usize) {\n    t.scratch.resize(batch * vocab, 0.0); // 134MB — ONCE, but pins capacity\n    phase1_lm_head(&mut t.scratch);\n    for _layer in 0..48 {\n        t.scratch.resize(batch * mlp * 2, 0.0); // 17MB recurring — but the\n        phase2_layer(&mut t.scratch); // 134MB capacity is retained\n    } // forever: ~117MB dead RSS\n}".to_string(),
+            opt_pattern: "// optimized: transient oversized phases use a LOCAL buffer; the persistent\n// scratch's watermark is set only by the RECURRING maximum\nfn backward(t: &mut Trainer, batch: usize, vocab: usize, mlp: usize) {\n    let mut logits_batch = vec![0.0f32; batch * vocab]; // local — dropped at\n    phase1_lm_head(&mut logits_batch); // phase end\n    for _layer in 0..48 {\n        t.scratch.resize(batch * mlp * 2, 0.0); // recurring max only:\n        phase2_layer(&mut t.scratch); // persistent footprint stays ~17MB\n    }\n}".to_string(),
+        },
+        // ── transposed-consumption-accumulate-not-gather — k-outer column gather → i-outer row accumulation (A) ──
+        // Source: riir-gpu gemma4_q4k_train/backward.rs L923-930 (the LoRA
+        // z-pass: sum += lora.b[i * rank + k] * gi with k OUTER — column
+        // access at stride rank*4B) vs the forward's row-major consumer of
+        // the SAME B layout at forward_batched.rs L1013-1018 (b_row = &lora_b
+        // [i*rank..(i+1)*rank] then a sequential zip dot); the identical
+        // strided shape duplicated at mod.rs L695-701 (per-position path).
+        //
+        // Distinct from pre-transposed-consumer-layout-handles-build-once
+        // (materializes a transposed copy once at build — this is a
+        // zero-copy loop reorder) and from tiled-host-transpose-before-
+        // quantize (a materialized transpose ALGORITHM feeding a kernel —
+        // here no transpose exists at all).
+        KernelRule {
+            rule_id: "transposed-consumption-accumulate-not-gather".to_string(),
+            gpu_concept: "When a host-side backward needs z = B^T g against a matrix stored row-major [out_dim x rank] (the layout the forward's row-dot consumes), the naive k-outer loop gathers columns at stride rank x 4B — at rank >= 16 every 64B cache line contributes 4 useful bytes (up to 16x read amplification, and the whole B matrix is re-streamed once per k). Interchange the loops: zero the z row, then i-outer accumulate z_row += b_row x g[i] — same flops, B streams sequentially exactly as the forward does. The tell is the forward/backward asymmetry on the SAME buffer: one consumer streams rows while the sibling strided-gathers columns. Bounded fix-space: loop interchange only (no transposed copy — that is the heavier materialize-once option). Caveat: interchange changes floating-point summation order — fine for gradient accumulation, NOT for bit-identity gates. Distinct from pre-transposed-consumer-layout-handles-build-once (materializes a transposed copy once at build; this is zero-copy loop reorder) and from tiled-host-transpose-before-quantize (a materialized transpose algorithm feeding a kernel — here no transpose exists at all).".to_string(),
+            ref_shape: "// naive: z[k] = sum_i B[i,k]*g[i] with k OUTER — column gather at stride rank\nfn lora_z_gather(b: &[f32], g: &[f32], out_dim: usize, rank: usize,\n                 z: &mut [f32]) {\n    for k in 0..rank { // for each k, walk ALL of B's rows\n        let mut sum = 0.0;\n        for i in 0..out_dim {\n            sum += b[i * rank + k] * g[i]; // stride rank*4B: 256B at rank 64\n        } // — 4 useful bytes per 64B line\n        z[k] = sum;\n    }\n}".to_string(),
+            opt_pattern: "// optimized: i-outer row accumulation — B streams row-major, same as the\n// forward's dot; z built by axpy into a zeroed row\nfn lora_z_accumulate(b: &[f32], g: &[f32], out_dim: usize, rank: usize,\n                     z_row: &mut [f32]) {\n    z_row[..rank].fill(0.0);\n    for i in 0..out_dim {\n        let gi = g[i];\n        let b_row = &b[i * rank..(i + 1) * rank]; // sequential, cache-line dense\n        for (z, &bv) in z_row.iter_mut().zip(b_row) {\n            *z += bv * gi;\n        }\n    } // same flops; summation order differs (fine for grads, not bit-gates)\n}".to_string(),
+        },
     ])
 }
 
@@ -5912,7 +6043,7 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 290-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 294-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -5920,7 +6051,7 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (52 rules)
+    // A: Memory access patterns (55 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -5977,6 +6108,9 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "kv-window-device-resident-ring-append",
             "identical-tensor-handle-clone-zero-reupload",
             "tiled-host-transpose-before-quantize",
+            "flat-activation-slots-as-readback-target",
+            "transient-spike-pins-persistent-scratch",
+            "transposed-consumption-accumulate-not-gather",
         ],
     ),
     // B: Compute patterns (45 rules)
@@ -6069,7 +6203,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "sparse-gather-scale-at-read-not-table-prepass",
         ],
     ),
-    // D: Dispatch patterns (50 rules)
+    // D: Dispatch patterns (51 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -6124,6 +6258,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "independent-cpu-work-fills-dispatch-read-window",
             "lm-head-loss-positions-only",
             "materialized-fast-path-bulk-slice-accessor",
+            "env-flag-resolved-once-not-per-dispatch",
         ],
     ),
     // E: Parallelism patterns (17 rules)
@@ -6322,7 +6457,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
 /// Returns 15 buckets (one per category), each containing the `KernelRule`s whose
 /// `rule_id` appears in that category's slice of [`KERNEL_CATEGORIES`]. This is
 /// the category-scoped view of the corpus — a future heal pipeline can consult
-/// routed expert's rules first without scanning all 290.
+/// routed expert's rules first without scanning all 294.
 ///
 /// # Allocation
 ///
@@ -6400,9 +6535,10 @@ mod tests {
         // Batch 30 (6): riir-gpu production kernels — zero-init-side-branch-frozen-base-path, counter-derived-seed-stateless-noise, predicate-gated-skip-empty-workset-step, share-pipeline-set-across-subsystems, pad-uniform-pod-to-min-binding-size, fuse-count-into-mutation-pass (dllm/mod.rs — the D2F training cluster: Plan 068 discrete-diffusion trainers + RePlaid schedule).
         // Batch 36 (7): riir-gpu production kernels — constant-scale-folded-into-upload-copy, side-branch-operand-residency-matches-mutation-lifetime, activation-checkpoint-as-handle-clone-deferred-batch-readback, training-forward-shed-decode-loop-shape, sibling-dispatches-before-any-readback, independent-cpu-work-fills-dispatch-read-window, grad-terms-merge-before-shared-link-jacobian (gemma2_cubecl_train/resident.rs — the Gemma-2 RESIDENT training cluster: Plan 481/482 all-GPU LoRA forward (per-position + batched) + batched backward; completes the Batch 35 cluster).
 // Batch 37 (8): riir-gpu production kernels — kv-window-device-resident-ring-append, lm-head-loss-positions-only, verbatim-upload-on-format-match, stream-drain-free-source-during-build, identical-tensor-handle-clone-zero-reupload, sparse-gather-scale-at-read-not-table-prepass, tiled-host-transpose-before-quantize, materialized-fast-path-bulk-slice-accessor (gemma4_q4k_train/ mod.rs + weight_buffers.rs — the Q4_K TRAINING cluster: QLoRA frozen-Q4_K-base + f32-LoRA-delta Gemma-4 trainer; forward_batched + backward deferred to Batch 38).
+        // Batch 38 (4): env-flag-resolved-once-not-per-dispatch, flat-activation-slots-as-readback-target, transient-spike-pins-persistent-scratch, transposed-consumption-accumulate-not-gather (gemma4_q4k_train/ forward_batched.rs + backward.rs — completes the Q4_K cluster).
         // Batch 35 (8): riir-gpu production kernels — mask-sentinel-matches-reduction-identity, smem-staging-gated-by-cross-thread-reuse, kernelize-host-chain-after-sync-batching-floor, block-reduction-separate-scratch-runtime-strides, saturating-nonlinearity-recovery-breaks-near-cap, adapter-grad-join-mirrors-forward-delta-insertion-point, side-consumer-readback-alias-live-handle-for-dependent-dispatch, quadratic-attention-intermediates-recompute-from-linear-saves (gemma2_cubecl_train/ — the Gemma-2 training cluster: fused causal attention kernel Issue 430 Option B + hybrid LoRA training fwd/bwd).
-        // Total: 209. // (historical batch-30 snapshot; current 290)
-        assert_eq!(corpus.entries.len(), 290, "batches 1-37 should have 290 rules");
+        // Total: 209. // (historical batch-30 snapshot; current 294)
+        assert_eq!(corpus.entries.len(), 294, "batches 1-38 should have 294 rules");
     }
 
     #[test]
@@ -8491,6 +8627,78 @@ mod tests {
     }
 
 
+    #[test]
+    fn batch38_rules_present() {
+        let corpus = build_kernel_seed_corpus();
+        let ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        // A (3 new): flat activation slots, transient-scratch pinning,
+        // row-accumulate transposed consumption
+        assert!(ids.contains(&"flat-activation-slots-as-readback-target"), "flat activation slots");
+        assert!(ids.contains(&"transient-spike-pins-persistent-scratch"), "transient spike pinning");
+        assert!(ids.contains(&"transposed-consumption-accumulate-not-gather"), "row-accumulate z pass");
+        // D (1 new): env-flag resolution timing
+        assert!(ids.contains(&"env-flag-resolved-once-not-per-dispatch"), "env flag resolved once");
+    }
+
+    #[test]
+    fn batch38_concepts_covered() {
+        // Distinctive ASCII substrings located by rule_id (the 32a
+        // convention — immune to prose-evolution churn).
+        let corpus = build_kernel_seed_corpus();
+        let concept = |id: &str| -> String {
+            corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-38 rule '{id}' missing"))
+                .gpu_concept
+                .clone()
+        };
+        // D: env-flag-resolved-once-not-per-dispatch (forward_batched.rs L203/L382/L385 + gemv_autotune.rs L121-131)
+        let c = concept("env-flag-resolved-once-not-per-dispatch");
+        assert!(c.contains("resolve it ONCE")
+            && c.contains("papaya"), "env-flag resolution concept");
+        // A: flat-activation-slots-as-readback-target (forward_batched.rs save sweeps + mod.rs L753-755)
+        let c = concept("flat-activation-slots-as-readback-target");
+        assert!(c.contains("container layout IS the copy count")
+            && c.contains("readback target"), "flat slots concept");
+        // A: transient-spike-pins-persistent-scratch (backward.rs L409 vs L557; mod.rs L377/L426)
+        let c = concept("transient-spike-pins-persistent-scratch");
+        assert!(c.contains("historical maximum")
+            && c.contains("non-recurring"), "scratch pinning concept");
+        // A: transposed-consumption-accumulate-not-gather (backward.rs L923-930 vs forward_batched.rs L1013-1018)
+        let c = concept("transposed-consumption-accumulate-not-gather");
+        assert!(c.contains("loop interchange")
+            && c.contains("read amplification"), "row-accumulate concept");
+    }
+
+    #[test]
+    #[cfg(not(feature = "kernel_verify"))]
+    fn batch38_pseudocode_parses() {
+        // G1 for Batch 38: every new rule's ref_shape AND opt_pattern must
+        // syn-parse as valid Rust (the L2 pruner verdict).
+        use crate::domain::HealDomain;
+        let corpus = build_kernel_seed_corpus();
+        let ids = [
+            "env-flag-resolved-once-not-per-dispatch",
+            "flat-activation-slots-as-readback-target",
+            "transient-spike-pins-persistent-scratch",
+            "transposed-consumption-accumulate-not-gather",
+        ];
+        for id in ids {
+            let entry = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-38 rule '{id}' missing"));
+            let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+            assert!(ref_verdict.parses, "batch-38 ref_shape for '{id}' must parse");
+            let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+            assert!(opt_verdict.parses, "batch-38 opt_pattern for '{id}' must parse");
+        }
+    }
+
+
     // ════════════════════════════════════════════════════════════════════
     // Plan 003 — Router ↔ corpus wiring tests
     // ════════════════════════════════════════════════════════════════════
@@ -8502,7 +8710,7 @@ mod tests {
 
     #[test]
     fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-        // Every rule_id in the 282-rule corpus must appear in exactly one category.
+        // Every rule_id in the 294-rule corpus must appear in exactly one category.
         let corpus = build_kernel_seed_corpus();
         let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
         let mut categorized: Vec<&str> = Vec::new();
@@ -8533,12 +8741,12 @@ mod tests {
 
     #[test]
     fn kernel_categories_counts_match_plan_003_table() {
-        // Pin per-category rule counts to the Plan 003 table (updated for Batch 36).
+        // Pin per-category rule counts to the Plan 003 table (updated for Batch 38).
         let expected = [
-            (KernelCategory::MemoryAccess, 52),
+            (KernelCategory::MemoryAccess, 55),
             (KernelCategory::Compute, 45),
             (KernelCategory::Fusion, 31),
-            (KernelCategory::Dispatch, 50),
+            (KernelCategory::Dispatch, 51),
             (KernelCategory::Parallelism, 17),
             (KernelCategory::FlashAttnTiling, 10),
             (KernelCategory::LinearAttnRecurrence, 19),
@@ -8558,9 +8766,9 @@ mod tests {
                 "Plan 003: category {cat:?} has {} rules, expected {count}",
                 entry.2.len());
         }
-        // Sum must equal 290.
+        // Sum must equal 294.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 290, "Plan 003: category totals must sum to 290");
+        assert_eq!(total, 294, "Plan 003: category totals must sum to 294");
     }
 
     #[test]
@@ -8570,7 +8778,7 @@ mod tests {
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 290, "Plan 003: grouped corpus has {total} rules, expected 290");
+        assert_eq!(total, 294, "Plan 003: grouped corpus has {total} rules, expected 294");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");

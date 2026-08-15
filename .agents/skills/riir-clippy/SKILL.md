@@ -336,32 +336,79 @@ global = symlink only.
   a header sentence — caught by re-reading; a `git stash` near-miss
   (pop verified complete — use `git show HEAD:file` for comparisons,
   NEVER stash with sibling WIP present).
+- **Batch 38 DONE (2026-08-15, Research 042):** the Q4_K TRAINING cluster,
+  second half (`gemma4_q4k_train/forward_batched.rs` 1,077 + `backward.rs`
+  941 — the layer-major batched forward, the 43,008 → 337 dispatch fix, +
+  the per-position and batched backwards; the cluster is now FULLY MINED) —
+  **4 rules, corpus 290 → 294** (A 55, D 51):
+  `env-flag-resolved-once-not-per-dispatch` (D — `std::env::var` on the
+  hot path takes the global env lock + allocates a String per lookup; one
+  instance sits IN FRONT of the autotuner's papaya lock-free cache hit),
+  `flat-activation-slots-as-readback-target` (A — nested
+  `[pos] → Vec<f32>` activation slots force a scratch + scatter two-copy
+  tail after every batched readback; the container layout IS the copy
+  count), `transient-spike-pins-persistent-scratch` (A — a one-shot
+  `resize(batch × vocab)` ≈ 134 MB pins a persistent `RefCell` scratch at
+  ~8× its recurring max; grow-only is right for recurring sizes and wrong
+  for a non-recurring spike), `transposed-consumption-accumulate-not-gather`
+  (A — `z = Bᵀ·g` against row-major B: k-outer column gather at stride
+  `rank × 4B`, up to 16× read amplification, → i-outer row accumulation;
+  summation order changes — fine for grads, NOT for bit-identity gates).
+  ONE subagent rule KILLED by coordinator math (zero-gradient-position
+  elision: K/V cross-position coupling re-introduces non-zero gradient at
+  prompt positions after the topmost layer — support queries attend to
+  prompt keys — so only the topmost layer's pre-attention chain + the head
+  can skip; the SAME flag applies to Issue 687 H3's ~50% magnitude claim,
+  which is ~1/48 — 687 flagged for its owner, not modified). Dedup kills:
+  the backward's per-layer RoPE `powf` table rebuild (third strike — B17
+  drop + B36-F4 + B37-F1), sibling-batch region packing, resize-churn,
+  rayon-attention direct-write (2nd in-file instance of
+  materialized-fast-path), LoRA-delta add-pass fusion (B19), the
+  RefCell-scratch API shape (ambient in 3 rules' opt_patterns), B36
+  sibling-dispatches (a MEASURED non-application — Bench 437 found the
+  noread combo ~16% slower on Metal; B29's live-output gate explains it).
+  Bug yield filed as riir-ai Issue 691 (headline: BOTH backward variants
+  have ZERO in-tree callers — the 941-LOC file is unreached, its math
+  unpinned; then dead `x_normed` in both Phase 1s, 48× per-layer RoPE
+  table rebuilds while the trainer caches bit-identical tables, the
+  ~94 MB/step clone storm, ~380 MB/step fresh output-Vec churn +
+  ~380 MB/step redundant `hidden` re-uploads (5×/layer), the 134 MB
+  scratch pinning, the dead `attn_scores` field, 97 env lookups/step,
+  the strided LoRA z-gather at 2 sites, 2 doc inconsistencies, + the
+  Issue-690-H2 magnitude refinement (prompt-logits waste is zero at
+  n_in=1)). GOAT: 330 kernel_heal + 201 default tests, clippy 0 in all 4
+  states. **Generator lesson re-learned (now twice-observed)**: bare
+  `json.dumps` WITHOUT `ensure_ascii=False` produced `\u2014` escapes in
+  Rust string literals → 33 compile errors — treat `ensure_ascii=False`
+  as non-optional in the generator template. A 17th count-pin site
+  surfaced (stale "282-rule" comment in
+  kernel_categories_cover_all_corpus_rules_exhaustively — B37 missed it).
 - **NEXT mining target**: `ls` the riir-gpu tree for the next unmined
-  cluster (~79 of ~200 files mined). Candidates:
-  `gemma4_q4k_train/forward_batched.rs` + `backward.rs` (the deferred
-  remainder of the Q4_K cluster — expect heavy dedup vs B34/B35/B36/
-  B37: the batched path IS the 43,008→337 fix + the backward mirrors
-  the mined backward shapes), then `gemma2_d2f*`, `kimi_k3_gpu_*`
-  (4 files), `weaver_gpu*` (4 files), `kvarn/`, `hypernet/`, `maxsim/`.
-  Pick 1-2 files, ~6-10 rules (dedup pressure high), Batch 38
-  (Research 042).
-  - Validation pattern (proven T4 + 32a + 32b-1 + 32c + 36): corpus files are NOT
+  cluster (~81 of ~200 files mined). Candidates:
+  `gemma2_d2f*`, `kimi_k3_gpu_*` (4 files — partially surveyed: the
+  env-flag instances at L1861-1948), `weaver_gpu*` (4 files), `kvarn/`,
+  `hypernet/`, `maxsim/`. Pick 1-2 files, ~6-10 rules (dedup pressure
+  high), Batch 39 (Research 043).
+  - Validation pattern (proven T4 + 32a + 32b-1 + 32c + 36 + 38): corpus files are NOT
     sibling WIP — edit + run GOAT in the main checkout with
     `CARGO_TARGET_DIR=/tmp/riir-clippy-bNN`; `--features kernel_heal`
-    for the corpus suite (318 at 34, 321 at 35, 324 at 36, 327 at 37),
-    default for
+    for the corpus suite (318 at 34, 321 at 35, 324 at 36, 327 at 37,
+    330 at 38), default for
     the 201 suite.
     `--all-features` is currently broken by SIBLING WIP
     (`rust_perf/bench.rs:335 alloc_axis`) — pre-existing, not yours.
-  - Count-pin sites when adding rules (complete list, re-verified 36):
+  - Count-pin sites when adding rules (complete list, re-verified 38):
     corpus.rs `entries.len()` assert + KERNEL_CATEGORIES rows + the 6
     per-category count COMMENTS + the `kernel_categories_counts_match_
     plan_003_table` expected-counts table (the 16th site — caught by
-    test failure at 35, not grep) + 2 grouped-total tests + router.rs
-    `rules_for_expert` total + the corpus-count mentions in router.rs
-    doc header + the Plan 003 doc-comment `NNN-rule corpus` line above
-    KERNEL_CATEGORIES + the `Total: 209 ... current NNN` comment + the
-    file-level `//!` header batch block. All in sync at 290.
+    test failure at 35, not grep) + the per-batch comment line in the
+    entry-count test + the STALE-corpus-comment in
+    kernel_categories_cover_all_corpus_rules_exhaustively (the 17th site
+    — "282-rule" survived B37; caught at 38) + 2 grouped-total tests +
+    router.rs `rules_for_expert` total + the corpus-count mentions in
+    router.rs doc header + the Plan 003 doc-comment `NNN-rule corpus`
+    line above KERNEL_CATEGORIES + the `Total: 209 ... current NNN`
+    comment + the file-level `//!` header batch block. All in sync at 294.
   - **Landing lesson (32b-1, self-caught)**: after a large multi-entry
     corpus edit, `awk`-scan for `rule_id:` lines NOT preceded by a
     standalone `KernelRule {` BEFORE the first compile — JSON `\n`
@@ -373,13 +420,12 @@ global = symlink only.
   WIP STILL ACTIVE as of 2026-08-15 evening: qv_lora.rs + cudarc_kernels/
   + riir-gpu/lib.rs + ternary_deltanet_gpu_forward_cudarc.rs all dirty)
   — mine only after their WIP lands.
-- **Progress**: riir-gpu ~79 of ~200 files mined. Corpus: 290 rules.
+- **Progress**: riir-gpu ~81 of ~200 files mined. Corpus: 294 rules.
   edge_lora module FULLY MINED (32a + 32b-1 + 32c). spectralquant/
   FULLY MINED (15 + 33). gemma4_cubecl_train/ DONE (34).
   gemma2_cubecl_train/ FULLY MINED (35: mod.rs + attention_gpu.rs;
-  36: resident.rs). gemma4_q4k_train/ HALF-MINED (37: mod.rs +
-  weight_buffers.rs; forward_batched.rs + backward.rs remain — Batch 38
-  first candidate).
+  36: resident.rs). gemma4_q4k_train/ FULLY MINED (37: mod.rs +
+  weight_buffers.rs; 38: forward_batched.rs + backward.rs).
 - **Also open (riir-clippy issues)**: 014 (rust_perf v4, 12 tasks), 016
   (clippy structural expansion, 6), 017 (retrieval precision at scale,
   5), 018 (self_evolve promotion, 6). 015 = sibling's ACTIVE WIP
