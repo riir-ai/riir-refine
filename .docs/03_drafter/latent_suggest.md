@@ -68,6 +68,30 @@ variants scored 12/12. Lesson (Issue 669 class): **audit fixture
 faithfulness BEFORE tuning the retriever** — a retrieval gate is only as
 honest as its fixture.
 
+## Retrieval-precision eval at scale (Issue 017, Bench 022)
+
+The Plan 005 G1 gate's small fixture (12 → 24 items, 96% top-1) is a
+point estimate that corpus growth silently invalidates. The scaled eval —
+[`src/draft/retrieval_eval.rs`](../../src/draft/retrieval_eval.rs) — measures
+ranking precision on **130 spans** (48 clippy + 40 perf labeled variants,
+30 kernel self-variant probes, 12 real production clean excerpts) at the
+current corpus scale, and re-measures on every batch via the committed
+gate test:
+
+```bash
+cargo test --features latent_retrieval --lib retrieval_precision_regression_gate -- --nocapture
+# kernel-inclusive (on-demand, ~54 s at 343 rules):
+cargo test --features latent_retrieval,kernel_heal --lib retrieval -- --nocapture
+```
+
+**Baseline (Bench 022, 2026-08-16):** clippy 58.3/75.0/87.5 (top-1/3/5),
+perf 87.5/95.0/97.5, kernel self-variants 100/100/100. The 12-fixture 100%
+top-1 claim is dead at scale — crowding is real, concentrated in tiny-token
+clippy patterns (`identity_op` alone tops 5 misses). Router annotation
+accuracy: 53.4% (2 domains) / 46.6% (3) — fan-out stays correct. Floors are
+pinned in the eval module (baseline − 1 span); a batch that decays them
+fails the suite and must re-pin with a recorded delta.
+
 ## Known limitations (honest scope, Bench 018 + addendum)
 
 - Routing is fan-out + annotation, not gating (deviation 1 above).

@@ -62,6 +62,13 @@ findings are cheaper to fix before you benchmark around them.
    - G1: parse/syn check (all new rules)
    - G2: lib tests pass
    - G3: no-regression — clippy 0 in BOTH feature states + CI guard
+   - **retrieval-precision re-measure (Issue 017, kernel batches):** run
+     `CARGO_TARGET_DIR=/tmp/riir-clippy-bNN cargo test --features
+     kernel_heal,latent_retrieval --lib retrieval -- --nocapture` (~1 min) —
+     the gate floors (Bench 022 baseline: kernel self-variants 100%, blended
+     78.8/88.1/94.1) must hold; a decay FAILS the batch → fix retrieval
+     quality, or re-pin the floors + record the delta in the Research note
+     (never weaken silently).
    - rust_perf rules: the Pareto bench (`rust_perf_bench` feature) +
      `context_notes` annotations on regime-fragile/Mixed verdicts;
      demote/annotate losers. Never promote a perf gain on a wrong result.
@@ -817,10 +824,12 @@ global = symlink only.
   (42: mod.rs + gemma2_d2f_sc.rs). weaver_gpu_corrector.rs +
   weaver_gpu_dflash.rs DONE (43). weaver_gpu/ mod.rs + FULL kvarn/
   DONE (44 — weaver_gpu/tests.rs test-only, not mined).
-- **Also open (riir-clippy issues)**: 017 (retrieval precision at scale,
-  5), 018 (self_evolve promotion, 6). 014 (rust_perf v4) RESOLVED
-  2026-08-16 (Bench 020); 016 (clippy structural expansion) RESOLVED
-  2026-08-16 (Bench 021 — corpus 10→40, FIXABLE 6→33, VERIFY 1→4).
+- **Also open (riir-clippy issues)**: 018 (self_evolve promotion, 6).
+  014 (rust_perf v4) RESOLVED 2026-08-16 (Bench 020); 016 (clippy
+  structural expansion) RESOLVED 2026-08-16 (Bench 021 — corpus 10→40,
+  FIXABLE 6→33, VERIFY 1→4); 017 (retrieval precision at scale) RESOLVED
+  2026-08-16 (Bench 022 — 130-span eval + regression gate; clippy top-1
+  measured 58.3% at scale, floors pinned).
   015 = sibling's ACTIVE WIP
   (fix_verify mode — do not touch `src/bin/heal.rs`, `src/fix_verify.rs`,
   `src/lib.rs`, `Cargo.toml`, proposers mod.rs/vec_with_capacity, bench.rs,

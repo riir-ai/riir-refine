@@ -172,6 +172,32 @@ stronger BM25 token match). GOAT: 369 default + 383 latent_retrieval lib
 tests, clippy 0 both states. See
 [`.benchmarks/021`](.benchmarks/021_clippy_structural_expansion_goat.md).
 
+**Issue 017 (2026-08-16) — retrieval-precision eval at scale.** Closes the
+12-fixture gap: the Plan 005 G1 claim (100% top-1 on 12 fixtures) is **dead
+at scale — measured 58.3% clippy top-1 on 48 spans / 40-rule corpus**
+(nearest-neighbor crowding is real; concentrated in tiny-token patterns —
+`identity_op` alone tops 5 misses). The eval
+([`src/draft/retrieval_eval.rs`](src/draft/retrieval_eval.rs) + the two
+fixture data files) ships **130 spans** (48 clippy variants real-clippy-
+verified at authoring + proposer-verified standing, 40 perf variants, 30
+kernel self-variant probes via the deterministic `mutate_shape` rename map,
+12 REAL production clean excerpts), per-domain + blended top-1/3/5 recall,
+a miss taxonomy, the clean false-positive profile, router-annotation
+accuracy (53.4% 2-domain / 46.6% 3-domain — feeds Issue 020), and a
+committed regression gate with floors = baseline − 1 span (tie-order
+slack). One command: `cargo test --features latent_retrieval --lib
+retrieval_precision_regression_gate -- --nocapture`; kernel-inclusive
+(~54 s): `--features latent_retrieval,kernel_heal`. Baseline: clippy
+58.3/75.0/87.5, perf 87.5/95.0/97.5, kernel self-variants 100/100/100
+(crowding alarm if it drops). **Side-effect root-cause fix:** the fixture
+pass exposed our `needless_bool_assign` proposer matching the assign-RHS
+form (real clippy calls that `needless_bool`) — proposer rewritten to the
+real branch-assign shape + corpus/row/fixtures updated. Known drift
+recorded, not fixed: `comparison_to_empty` implements `.len() == 0` (real
+`len_zero`); widening to `== ""` is a small follow-up. GOAT G1–G4 PASS
+(370 default / 391 latent_retrieval / 526 kernel_heal, clippy 0 new
+warnings). See [`.benchmarks/022`](.benchmarks/022_retrieval_precision_eval_at_scale.md).
+
 ## The `riir-clippy` skill (auto-continue idle loop)
 
 `.agents/skills/riir-clippy/SKILL.md` (symlinked into `~/.agents/skills/`

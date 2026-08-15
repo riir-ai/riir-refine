@@ -12,11 +12,18 @@
 //! - [`corpus_index`] — T1.2: per-domain rule index (`ShardIndex` KNN + BM25).
 //! - [`domain_router`] — T1.4: centroid `MoE` routing across enabled domains.
 //! - [`latent_matcher`] — T1.3 + T1.5: the composed file/span → rules pipeline.
+//! - [`retrieval_eval`] — Issue 017: scaled precision eval (≥100 labeled
+//!   spans, top-1/3/5 recall per domain, regression-gate floors) that
+//!   re-measures on every corpus batch.
 
 pub mod corpus_index;
 pub mod domain_router;
+pub mod eval_fixtures_clippy;
+pub mod eval_fixtures_perf;
 pub mod latent_matcher;
+pub mod retrieval_eval;
 
 pub use corpus_index::{RuleIndex, ScoredRule, SuggestScratch};
 pub use domain_router::{DomainId, DomainRouter};
 pub use latent_matcher::{LatentMatcher, RuleInfo, SpanSuggestion};
+pub use retrieval_eval::{run_eval, EvalReport, DomainMetrics as EvalDomainMetrics};
