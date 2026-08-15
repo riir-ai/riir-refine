@@ -728,7 +728,7 @@
 //!   (A — save the Theta(N x d) tensors, recompute the Theta(N^2)
 //!   chain in hoisted scratch; the recompute also yields the raw
 //!   pre-softcap argument the saturating backward needs). Corpus:
-//!   **275 rules across 15 categories (A–O)**. ONE coordinator seed
+//!   **282 rules across 15 categories (A–O)**. ONE coordinator seed
 //!   KILLED by verification ("thread role rotation" is ambient fused-
 //!   kernel structure, not decision content — falsification 3-for-3);
 //!   Seed 2 CORRECTED (the 52 is post-batching, not pre — that's what
@@ -741,6 +741,56 @@
 //!   KV-cache liveness contract, per-layer grad-buffer churn, 262 MB
 //!   `EngineActivations` per step, the 2.6x handle-memory doc
 //!   understatement, the h-recompute ~9.7 G MACs, and more).
+//! - **Batch 36 (2026-08-15, Research 040):** the Gemma-2 RESIDENT
+//!   training cluster (`gemma2_cubecl_train/resident.rs` — the Plan `481/482`
+//!   all-GPU `LoRA` training path: per-position GEMV forward + batched GEMM
+//!   forward + batched backward; the deferred third file of the Batch 35
+//!   cluster, completing it): `constant-scale-folded-into-upload-copy`
+//!   (C — a hyperparameter-derived CONSTANT scale is folded into the
+//!   upload COPY so no kernel ever applies it; the backward keeps the
+//!   unscaled original — fold-into-copy, never into the source operand),
+//!   `side-branch-operand-residency-matches-mutation-lifetime` (D — an
+//!   aux computation riding a GPU hot path keeps ITS operands
+//!   device-resident at the step boundary; the hybrid CPU-LoRA path paid
+//!   ~70K sync round-trips and ran 4.8x slower than pure CPU),
+//!   `activation-checkpoint-as-handle-clone-deferred-batch-readback` (D —
+//!   the checkpoint medium during compute is the handle clone (a
+//!   refcount bump), never an inline read; the tail `read_batched`
+//!   collapses 364 syncs to 26),
+//!   `training-forward-shed-decode-loop-shape` (D — the per-position
+//!   loop + incremental KV cache is inherited DECODE structure; free the
+//!   axis by making attention whole-sequence, ~55K dispatches → ~182),
+//!   `sibling-dispatches-before-any-readback` (D — queue ALL independent
+//!   sibling dispatches before the FIRST readback; the interleave
+//!   serializes completely; applies with DIFFERENT input buffers),
+//!   `independent-cpu-work-fills-dispatch-read-window` (D — CPU work
+//!   independent of the readback belongs INSIDE the dispatch→read
+//!   window; the `LoRA` `param-grad` half is the canonical hoistable work;
+//!   visible-but-unexploited in source),
+//!   `grad-terms-merge-before-shared-link-jacobian` (H — multiple loss
+//!   terms through the SAME nonlinear link must SUM at the link input
+//!   with ONE Jacobian application; adding a term after the Jacobian is
+//!   silently WRONG, not just slower). Corpus: **282 rules across 15
+//!   categories (A–O)**. FOUR seeds falsified by verification (F4 the
+//!   per-position path already caches its cos/sin table via
+//!   `RopeCosSinCache` + Batch 17 explicitly dropped cos/sin-table
+//!   rules; F5 the env-var A/B gate is promotion process, its kernel
+//!   content already in the B35 floor rule; B2 the ping-pong swap is
+//!   `needless-swap-temp` fix(2)'s loop-carried scratch; B4 the scratch
+//!   hoist is a 3-rule composition) + 2 premise corrections (F3 the
+//!   per-position path's "ONLY sync point" doc-lie — it issues 93,440
+//!   unbatched reads; B1 q/k/v consume different inputs so fan-out's
+//!   premise doesn't apply). 1 weak candidate dropped (phase-disjoint
+//!   buffer aliasing — 9 KB local win). Bug yield filed as riir-ai
+//!   Issue 689 (15 hazards: ~10.2M-transcendental CPU `RoPE` recompute
+//!   per forward from not saving `k_post_rope` (P2, cheapest fix), the
+//!   93,440-read unbatched legacy readback, the 262 MB `g_logits_all`
+//!   fresh alloc + dead zero-fill per backward step, the
+//!   comment-lie `g_attn_out_vecs` per-layer allocations, the
+//!   nested↔flat reshape round-trip ~327 MB/step, `read_handle` fresh
+//!   Vecs ~1.2 GB/step download churn with the `read_handle_into` fix
+//!   substrate already in-tree, missed CPU/GPU overlap windows, the
+//!   rmsnorm scratch→dest copy API asymmetry, + more).
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
@@ -5442,6 +5492,189 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
             ref_shape: "// naive: checkpoint every intermediate the backward touches — the\n// Theta(N^2) softmax weights alone cost seq^2 x n_head x 4B per layer\n// (~33 MB/layer at seq 1024; ~870 MB across 26 layers)\nfn forward_save_everything(weights: &mut Vec<Vec<f32>>, q: &[f32], k: &[f32], seq_len: usize, n_head: usize) {\n    for p in 0..seq_len {\n        for h in 0..n_head {\n            let w = softmax(softcap(dot_rows(q, k, p, h))); // Theta(seq) per (p, h)\n            weights.push(w); // Theta(N^2) total per layer — memory blows up\n        }\n    }\n}\n".to_string(),
             opt_pattern: "// optimized: save ONLY the Theta(N x d) linear tensors; recompute the\n// quadratic chain at backward in hoisted per-(p, h) scratch\nfn forward_save_linear(layer_act: &mut LayerAct, kv: &mut KvCache, layer: usize, pos: usize, q_post_rope: &[f32], k: &[f32], v: &[f32], q_dim: usize) {\n    layer_act.q_post_rope[pos][..q_dim].copy_from_slice(&q_post_rope[..q_dim]); // Theta(d)\n    kv.store(layer, pos, k, v); // K/V were already resident in the KV cache\n}\nfn backward_recompute(dots: &mut [f32], q: &[f32], k_cache: &[Vec<f32>], p: usize, n_head: usize, head_dim: usize) {\n    // scratch hoisted once per call, sized to seq_len, fully overwritten —\n    // 7 x seq_len x n_head allocations eliminated\n    for h in 0..n_head {\n        for t in 0..=p {\n            let mut d = 0.0f32;\n            for dd in 0..head_dim {\n                d += q[p * n_head * head_dim + h * head_dim + dd] * k_cache[t][h * head_dim + dd];\n            }\n            dots[t] = d; // raw dot — also feeds the saturation-safe softcap backward\n        }\n    }\n}\n".to_string(),
         },
+
+        // ── constant-scale-folded-into-upload-copy — scale kernel → fold into the upload copy (C) ──
+        // Source: riir-gpu gemma2_cubecl_train/resident.rs L85-90 ("let
+        // scale = adp.alpha / adp.rank as f32;" + "// Pre-scale B by
+        // alpha/rank: b_scaled[r][k] = b[r][k] * scale" + the
+        // create_from_slice of b_scaled) + L78-79 ("B is pre-scaled so the
+        // GPU GEMV `B @ (A @ input)` directly produces the scaled delta
+        // without an extra scale kernel."). Backward contract verified:
+        // the backward calls lora_proj_backward_into with the ORIGINAL CPU
+        // adapter (resident.rs L1336-1358, L1539-1580) — the engine
+        // backward re-derives scale + produces g_b w.r.t. UNSCALED b, so
+        // the fold is forward-only and complete.
+        //
+        // Distinct from factor-affine-quant-scale-out-of-element-loop
+        // (hoists the scale out of the loop but still APPLIES it per
+        // launch — operand bytes stay unscaled), from
+        // delay-rms-scale-past-gemv-epilogue (that scale is DATA-DEPENDENT
+        // per-row so it cannot be folded into bytes — constant vs
+        // data-dependent is the axis), and from
+        // inplace-gate-scale-at-funnel-bottleneck (runtime placement; its
+        // frozen-committed-weights prohibition is exactly why THIS rule
+        // folds into a per-step COPY, never the source operand).
+        KernelRule {
+            rule_id: "constant-scale-folded-into-upload-copy".to_string(),
+            gpu_concept: "a per-operand scale that is a CONSTANT derived from hyperparameters (LoRA alpha/rank — known at upload time, input-independent) is folded into the byte-level COPY being uploaded, so no kernel ever applies it: the GEMV B_scaled @ (A @ x) directly produces the scaled delta with zero extra scale dispatches and zero in-loop multiplies. The load-bearing safety condition: fold into the upload COPY, never the source operand — the backward and optimizer must still see the unscaled original (the backward re-derives scale from the ORIGINAL adapter and produces gradients w.r.t. the unscaled b). Distinct from factor-affine-quant-scale-out-of-element-loop (hoists the scale out of the loop but still applies it per launch — operand bytes stay unscaled), from delay-rms-scale-past-gemv-epilogue (that scale is DATA-DEPENDENT per-row so it cannot be folded into bytes — constant vs data-dependent is the placement axis), and from inplace-gate-scale-at-funnel-bottleneck (runtime placement of a scale that must stay runtime-visible; its frozen-committed-weights prohibition is exactly why this rule folds into a per-step copy).".to_string(),
+            ref_shape: "// naive: upload unscaled B + apply alpha/rank at use — either a\n// scale dispatch per adapter per call, or an in-loop multiply in\n// every consumer\nfn upload_adapter_naive(client: &Client, adp: &LoraAdapter) -> AdapterHandles {\n    let a = client.create_from_slice(f32::as_bytes(&adp.a));\n    let b = client.create_from_slice(f32::as_bytes(&adp.b)); // unscaled\n    // every consumer must apply the scale itself:\n    // inter = gemv(a, x); raw = gemv(b, inter);\n    // delta = scale_mul(raw, alpha / rank) // extra dispatch, every call\n    AdapterHandles { a, b }\n}\n".to_string(),
+            opt_pattern: "// optimized: constant scale folded into the UPLOAD COPY — zero\n// scale ops in any kernel; the source operand stays unscaled for\n// the backward / optimizer\nfn upload_adapter_folded(client: &Client, adp: &LoraAdapter) -> AdapterHandles {\n    let scale = adp.alpha / adp.rank as f32; // hyperparameter-derived\n    let b_scaled: Vec<f32> = adp.b.iter().map(|&v| v * scale).collect(); // COPY\n    AdapterHandles {\n        a: client.create_from_slice(f32::as_bytes(&adp.a)),\n        b: client.create_from_slice(f32::as_bytes(&b_scaled)), // pre-scaled\n    }\n}\n// delta = gemv(b_scaled, gemv(a, x)) — no scale anywhere;\n// the backward keeps using the ORIGINAL unscaled adp.b + re-derived scale\n".to_string(),
+        },
+        // ── side-branch-operand-residency-matches-mutation-lifetime — CPU side branch → per-step device handles (D) ──
+        // Source: riir-gpu gemma2_cubecl_train/resident.rs L12-14 ("This
+        // eliminates all CPU sync points from the LoRA computation — the
+        // previous hybrid approach (CPU LoRA) added ~70K sync round-trips
+        // per forward, making the GPU-resident path 4.8× slower than CPU
+        // (Issue 004).") + L56-58 ("Call this once per training step (LoRA
+        // params change each step).") + L383-385 / L742-743 (the
+        // once-per-forward build_lora_gpu_handles call at step entry) +
+        // L97-101 ("entirely on GPU (handle-to-handle, zero CPU sync)").
+        //
+        // Distinct from immutable-operand-upload-at-set-creation (the
+        // config-lifetime rung — a constructor cannot host step-mutable
+        // operands), from weight-handle-cache-keyed-by-allocation-identity
+        // (a reuse cache sound only for immutable contents — an in-place
+        // optimizer update keeps pointer identity while changing bytes,
+        // staling it), and from hot-swap-weights-preserve-autotune-caches
+        // (what to PRESERVE given a refresh cadence — this rule establishes
+        // WHERE the upload lives: the step boundary).
+        KernelRule {
+            rule_id: "side-branch-operand-residency-matches-mutation-lifetime".to_string(),
+            gpu_concept: "an auxiliary computation riding a GPU hot path (the LoRA delta beside the base GEMV) must keep ITS OWN operands device-resident, with upload cadence matched to mutation cadence — three rungs: config-lifetime immutable → upload once in the constructor; step-lifetime mutable (LoRA params change each optimizer step) → upload ONCE per step at step entry, amortized across every use site in the step; call-local → per call. A CPU-resident side branch on a GPU pipeline pays a readback+upload round-trip PER USE SITE — the hybrid CPU-LoRA approach added ~70K sync round-trips per forward and ran 4.8x SLOWER than pure CPU. Distinct from immutable-operand-upload-at-set-creation (the config-lifetime rung — cannot host step-mutable operands), from weight-handle-cache-keyed-by-allocation-identity (a reuse cache sound only for immutable contents — an in-place optimizer update stales it), and from hot-swap-weights-preserve-autotune-caches (what to preserve given a refresh — this rule fixes where the upload lives).".to_string(),
+            ref_shape: "// naive: side branch computed on CPU while the base runs on GPU —\n// every use site pays read-back + compute + re-upload; syncs scale\n// with USES, not with data\nfn gemv_with_lora_hybrid(client: &Client, w: &Handle, x_cpu: &[f32],\n                         lora: &LoraAdapter) -> Vec<f32> {\n    let base = client.read_one(client.dispatch_gemv(w, upload(x_cpu))); // sync 1\n    let inter = cpu_matvec(&lora.a, x_cpu); // side-branch operands CPU-side\n    let delta = cpu_matvec(&lora.b, &inter);\n    let mut out = base;\n    for i in 0..out.len() {\n        out[i] += delta[i]; // + re-upload merge = sync 2 per use site\n    }\n    out // 7 adapters x 26 layers x seq positions ~= 70K syncs / forward\n}\n".to_string(),
+            opt_pattern: "// optimized: adapter operands uploaded ONCE per step at step entry;\n// the delta chain composes handle-to-handle with zero syncs at use\n// sites\nfn step_entry(client: &Client, lora: &GemmaLora) -> Vec<LayerLoraHandles> {\n    lora.layers.iter().map(|l| upload_all_7_adapters(client, l)).collect()\n}\nfn gemv_lora_device(client: &Client, w: &Handle, x: &Handle,\n                    adp: Option<&AdapterHandles>) -> Handle {\n    let base = client.dispatch_gemv(w, x.clone());\n    match adp {\n        Some(a) => {\n            let inter = client.dispatch_gemv(&a.a_handle, x.clone()); // no sync\n            let delta = client.dispatch_gemv(&a.b_handle, inter); // no sync\n            client.dispatch_add(base, delta) // still no sync — handles only\n        }\n        None => base,\n    }\n}\n".to_string(),
+        },
+        // ── activation-checkpoint-as-handle-clone-deferred-batch-readback — inline reads → clone now, batch-read at tail (D) ──
+        // Source: riir-gpu gemma2_cubecl_train/resident.rs L36-37 ("These
+        // are GPU handles cloned during the forward pass. They're read
+        // back to CPU in a batch at the end of the full forward.") +
+        // L959-963 ("Read all 14 activation handles in ONE batched sync
+        // (Issue 430 Option C). Previously 14 separate read_handle calls
+        // = 14 blocking GPU↔CPU syncs per layer (26 layers × 14 = 364
+        // syncs/forward). read_batched issues a single client.read() for
+        // all 14 handles = 1 sync per layer (26 total).") + L403-404
+        // ("Clone the wte handle before the loop ... Handle::clone is
+        // cheap (reference count).").
+        //
+        // Distinct from batched-downloads-single-sync-cycle (the READ
+        // mechanics — this is the save-side contract that makes the batch
+        // possible and the compute phase sync-free), from
+        // preallocated-activation-slots-inplace-save (the CPU-side
+        // destination slots — this is the GPU-side source medium; the two
+        // compose: the tail read lands in exactly those slots), and from
+        // side-consumer-readback-alias-live-handle-for-dependent-dispatch
+        // (inline reads for side consumers — here NOTHING is read during
+        // the forward at all).
+        KernelRule {
+            rule_id: "activation-checkpoint-as-handle-clone-deferred-batch-readback".to_string(),
+            gpu_concept: "in a GPU-resident training forward that must checkpoint every intermediate for the backward, the checkpoint medium DURING COMPUTE is the device-handle clone (a refcount bump — zero bytes move, no stall is possible), never an inline readback: this keeps the forward zero-sync and defers all materialization decisions to a tail phase after every dispatch is queued, where read_batched collapses 14 handles per layer into ONE client.read — 364 syncs collapse to 26. Honest footprint caveat: the clones keep ~1.2 GiB of activation handles device-resident at seq 256 / 26 layers, but those bytes must reach the CPU anyway; what the handle medium buys is the freedom to choose the read SHAPE at the tail. Distinct from batched-downloads-single-sync-cycle (the read mechanics — this is the save-side contract that enables them and keeps compute sync-free), from preallocated-activation-slots-inplace-save (the CPU-side destination slots — this is the GPU-side source medium; they compose), and from side-consumer-readback-alias-live-handle-for-dependent-dispatch (inline reads for side consumers — here nothing is read during the forward at all).".to_string(),
+            ref_shape: "// naive: read each activation back inline at the production site —\n// the forward serializes on the GPU at every save; syncs scale with\n// saves (14 x layers x positions)\nfn save_inline(client: &Client, produced: &Handle, act: &mut CpuSlots,\n               layer: usize, pos: usize, n: usize) {\n    // blocking read at EVERY production site:\n    act.x[layer][pos][..n].copy_from_slice(&client.read_one(produced.clone()));\n}\n".to_string(),
+            opt_pattern: "// optimized: clone the handle at production (a refcount bump — zero\n// bytes move); batch-read at the tail, N handles per ONE client.read\nstruct LayerActHandles {\n    x_input: Handle, // + 13 more, one per saved activation\n}\nfn forward_save(produced: &Handle) -> Handle {\n    produced.clone() // in-loop save — cannot stall\n}\nfn tail_readback(client: &Client, all: &[LayerActHandles], act: &mut CpuSlots) {\n    for (li, h) in all.iter().enumerate() {\n        let v = read_batched(client, vec![h.x_input.clone() /* + 13 more */]);\n        for pos in 0..SEQ {\n            act.layers[li].x_input[pos].copy_from_slice(&v[0][pos * N..(pos + 1) * N]);\n        }\n    } // 14 handles -> 1 sync per layer (was 14); 26 layers: 26 (was 364)\n}\n".to_string(),
+        },
+        // ── training-forward-shed-decode-loop-shape — per-position loop → whole-sequence tensors (D) ──
+        // Source: riir-gpu gemma2_cubecl_train/resident.rs L545-557 (the
+        // Plan 482 header: "Processes the full sequence as batched
+        // `[seq_len × n_embd]` matrix operations instead of per-position
+        // GEMVs. Reduces ~55K per-position dispatches to ~182 batched GEMM
+        // dispatches + ~26 CPU attention syncs." + the architecture
+        // table) + L683-685 (same claim on the fn) + the decode-shaped
+        // contrast (L411-428 the per-position loop + per-position upload;
+        // L211-223 the incremental KvStoreCubeCL::launch per (layer, pos))
+        // + L757-769 (one-shot embedding build + ONE upload) + L1055-1070
+        // (the tail CPU-KV pass from saved activations).
+        //
+        // Distinct from op-major-backward-loop-inversion-batch-sequence-
+        // axis (the BACKWARD instance — here the coupling op is attention
+        // itself, and the incremental KV cache is the structural blocker
+        // the restructure must shed), from
+        // kernelize-host-chain-after-sync-batching-floor (the attention
+        // CPU-vs-GPU decision WITHIN the batched shape), and from
+        // token-flattened-elementwise-modulo-shared-weights (in-kernel
+        // flattening — this is the host-side loop restructure).
+        KernelRule {
+            rule_id: "training-forward-shed-decode-loop-shape".to_string(),
+            gpu_concept: "a teacher-forcing training forward that inherits the DECODE loop shape — per-position iteration, incrementally-written KV cache, per-position GEMVs, per-position input uploads — pays dispatch overhead x layers x positions (~55K dispatches) for work whose only position coupling is causal attention. The axis is freed by making the coupling op whole-sequence too: hoist attention to a full-sequence computation (CPU two-pass or a fused GPU kernel), batch every GEMV into a [seq_len x dim] GEMM, build + upload the embedding block once, and populate whatever cache the backward needs in a single tail pass from saved activations. The incremental KV cache is the structural blocker: it exists for decode, not training. Distinct from op-major-backward-loop-inversion-batch-sequence-axis (the BACKWARD instance — here the coupling op is attention itself and the added content is HOW the axis gets freed), from kernelize-host-chain-after-sync-batching-floor (the attention CPU-vs-GPU decision WITHIN the batched shape), and from token-flattened-elementwise-modulo-shared-weights (in-kernel flattening — this is the host-side loop restructure).".to_string(),
+            ref_shape: "// naive (decode shape): per-position loop, incremental KV store,\n// per-position GEMVs + per-position input upload — dispatches scale\n// with layers x positions\nfn forward_decode_shaped(client: &Client, wte: &[f32], tokens: &[usize],\n                         seq_len: usize, n_layer: usize) {\n    for pos in 0..seq_len {\n        let hidden = embed_row(wte, tokens[pos]); // n floats, per pos\n        let x = client.create_from_slice(&hidden); // upload PER POSITION\n        for layer in 0..n_layer {\n            // 7+ GEMV dispatches per (layer, pos);\n            // kv_store.launch(...) into the cache at pos — decode-shaped\n        }\n    } // ~55K dispatches per forward at 26 layers / seq 256\n}\n".to_string(),
+            opt_pattern: "// optimized: whole-sequence tensors; attention hoisted to a\n// full-seq op; the backward's cache written in ONE tail pass\nfn forward_batched(client: &Client, wte_cpu: &[f32], tokens: &[usize],\n                   seq_len: usize, n_layer: usize) {\n    let embeds = gather_all_positions(wte_cpu, tokens); // one CPU build\n    let mut x = client.create_from_slice(&embeds); // ONE upload\n    for layer in 0..n_layer {\n        let normed = dispatch_rmsnorm_batched(x, seq_len);\n        let q = gemm_lora(wq(layer), &normed, seq_len); // GEMM, not GEMV\n        // ... k, v, rope_batched(cos_sin_table), wo, gate/up/down ...\n        let attn = full_seq_attention(q, k, v, seq_len); // coupling op\n    }\n    populate_cpu_kv_cache_from_activations(); // tail pass, no per-pos store\n}\n".to_string(),
+        },
+        // ── sibling-dispatches-before-any-readback — dispatch-read interleave → all dispatches, then all reads (D) ──
+        // Source: riir-gpu gemma2_cubecl_train/resident.rs L1087-1095 (the
+        // dispatch_gemm_backward_gpu doc: "Returns a GPU handle
+        // (non-blocking — call `read_handle` to get the result). This
+        // allows dispatching multiple independent GEMVs (e.g. gate+up, or
+        // Q+K+V) before reading any of them, so the GPU can pipeline
+        // them.") + L1125-1126 ("Independent GEMMs (gate+up, Q+K+V) are
+        // dispatched before any readback, allowing the GPU to pipeline
+        // them.") + L1363-1372 (gate+up dispatched, THEN both read) +
+        // L1515-1525 (q/k/v — three DIFFERENT input buffers — dispatched,
+        // then all read).
+        //
+        // Distinct from fan-out-shared-input-single-sync (premise is ONE
+        // shared uploaded input — q/k/v here consume three different
+        // gradient buffers, so only the ordering applies), from
+        // first-readback-pays-queue-drain (the read-side cost model that
+        // MOTIVATES this ordering — it assumes the burst exists; this rule
+        // is the code shape that CREATES it), and from
+        // chain-dispatches-single-sync-point (dependent chains — these are
+        // independent siblings).
+        KernelRule {
+            rule_id: "sibling-dispatches-before-any-readback".to_string(),
+            gpu_concept: "when a non-blocking dispatch helper returns a handle, queue ALL independent sibling dispatches BEFORE issuing the FIRST readback — the interleaved form (dispatch A, read A, dispatch B, read B) serializes completely: read A blocks until sibling A completes, so sibling B's upload + launch latency lands on the critical path after the GPU has gone idle, while the batched form hides siblings 2..N's upload/launch behind sibling 1's on-device execution (one queue executes back-to-back). Applies verbatim when siblings consume DIFFERENT input buffers — the shared-input case is a different rule's premise. API prerequisite: the dispatch helper must return a Handle WITHOUT reading. Distinct from fan-out-shared-input-single-sync (premise is ONE shared uploaded input — here q/k/v consume three different gradient buffers, only the ordering applies), from first-readback-pays-queue-drain (the cost model that MOTIVATES the ordering — it assumes the burst exists; this rule is the code shape that creates it), and from chain-dispatches-single-sync-point (dependent chains — these are independent siblings).".to_string(),
+            ref_shape: "// naive: dispatch-read interleave — each read drains before the\n// next sibling is even uploaded; the GPU idles between pairs\nfn gate_up_naive(gpu: &Gpu, bw: &Handles, g_gate: &[f32], g_up: &[f32]) -> (Vec<f32>, Vec<f32>) {\n    let g_normed_gate = gpu.read(gpu.dispatch_gemm(&bw.gate_t, g_gate)); // drain 1\n    let g_normed_up = gpu.read(gpu.dispatch_gemm(&bw.up_t, g_up)); // drain 2 —\n    (g_normed_gate, g_normed_up) // GPU was idle during upload+launch of 2\n}\n".to_string(),
+            opt_pattern: "// optimized: dispatch ALL independent siblings, THEN read —\n// siblings' upload+launch latency hides behind sibling 1's\n// on-device execution\nfn gate_up_batched(gpu: &Gpu, bw: &Handles, g_gate: &[f32], g_up: &[f32]) -> (Vec<f32>, Vec<f32>) {\n    let h_gate = gpu.dispatch_gemm(&bw.gate_t, g_gate); // non-blocking Handle\n    let h_up = gpu.dispatch_gemm(&bw.up_t, g_up); // launch overlapped w/ GEMM-1\n    let g_normed_gate = gpu.read_handle(&h_gate); // read 1 drains the burst\n    let g_normed_up = gpu.read_handle(&h_up); // already complete — free\n    (g_normed_gate, g_normed_up)\n}\n".to_string(),
+        },
+        // ── independent-cpu-work-fills-dispatch-read-window — CPU after read → CPU inside the window (D) ──
+        // Source: riir-gpu gemma2_cubecl_train/resident.rs L1326-1351 (the
+        // visible-but-unexploited window: Step A2 dispatches the down-GEMM
+        // non-blocking, Step A3's read is the very next statement, and the
+        // LoRA-down CPU backward then runs — but its inputs are
+        // g_x_down_all (the stage input, written in A1) + layer_act.hidden
+        // (a saved activation), NEITHER depends on the readback; only the
+        // join-add needs it) + the same window at L1365-1372. The
+        // non-blocking dispatch API (L1087-1095) makes the hoist legal;
+        // the file leaves it unexploited (hazard-class source — the rule
+        // teaches the reordering the source misses).
+        //
+        // Distinct from hybrid-cpu-elementwise-gpu-throughput-sync-points
+        // (WHICH side each op runs on — its CPU ops are the DEPENDENT
+        // post-read transforms that consume the readback; this rule hoists
+        // INDEPENDENT work INTO the dispatch→read window) and from
+        // first-readback-pays-queue-drain (the cost model — silent on what
+        // the CPU does inside the window).
+        KernelRule {
+            rule_id: "independent-cpu-work-fills-dispatch-read-window".to_string(),
+            gpu_concept: "between a non-blocking dispatch and its blocking read the host is IDLE if the next statement is the read; any CPU work in the same stage that does NOT depend on the read result belongs INSIDE that window — hoisted above the read — so CPU compute overlaps GPU execution and wall time becomes max(GPU, CPU) + join instead of GPU + CPU + join. In a hybrid backward the param-gradient half of an adapter backward is exactly this work: it depends only on the stage INPUT and the saved activation, never on the base-GEMM readback — only the join-add must wait for the read. Distinct from hybrid-cpu-elementwise-gpu-throughput-sync-points (the which-side routing choreography — its CPU ops are the DEPENDENT transforms that consume the read; this hoists INDEPENDENT work INTO the window) and from first-readback-pays-queue-drain (the cost model — says nothing about what the CPU does inside the window).".to_string(),
+            ref_shape: "// naive: dispatch -> read immediately -> CPU work that never\n// needed the read result — GPU executes unobserved, then the CPU\n// works unobserved\nfn down_backward_naive(gpu: &Gpu, bw: &Handles, g_x_down_all: &[f32],\n                       hidden: &[Vec<f32>], adp: &Adapter, ga: &mut [f32],\n                       gb: &mut [f32], lora_scratch: &mut [f32]) -> Vec<f32> {\n    let h = gpu.dispatch_gemm(&bw.down_t, g_x_down_all); // non-blocking\n    let g_hidden_all = gpu.read_handle(&h); // host blocks HERE, then...\n    for p in 0..hidden.len() {\n        lora_param_grad(&g_x_down_all[p], &hidden[p], adp, ga, gb); // CPU runs\n        g_hidden_all[p..].copy_from_slice(&lora_scratch[..M]); // AFTER the\n    } // read — but the param-grad half depends on the stage input only\n    g_hidden_all\n}\n".to_string(),
+            opt_pattern: "// optimized: split the adapter backward — param-grads (independent\n// of the read) fill the dispatch->read window; only the join waits\nfn down_backward_windowed(gpu: &Gpu, bw: &Handles, g_x_down_all: &[f32],\n                          hidden: &[Vec<f32>], adp: &Adapter, ga: &mut [f32],\n                          gb: &mut [f32], lora_scratch: &mut [f32]) -> Vec<f32> {\n    let h = gpu.dispatch_gemm(&bw.down_t, g_x_down_all); // non-blocking\n    for p in 0..hidden.len() {\n        lora_param_grad(&g_x_down_all[p], &hidden[p], adp, ga, gb); // overlaps\n    } // the GEMM — deps: stage input + saved activation only\n    let g_hidden_all = gpu.read_handle(&h); // blocks AFTER the CPU work\n    for p in 0..hidden.len() {\n        g_hidden_all[p..].copy_from_slice(&lora_scratch[..M]); // join — needs read\n    }\n    g_hidden_all // wall time ~= max(GEMM, CPU LoRA) + join\n}\n".to_string(),
+        },
+        // ── grad-terms-merge-before-shared-link-jacobian — aux after Jacobian → sum at link input (H) ──
+        // Source: riir-gpu gemma2_cubecl_train/resident.rs L1229-1248 (the
+        // merge: "// Aux-loss backward, merged into g_logits BEFORE the
+        // softcap backward — the same merge point as the CPU path. This
+        // loop keeps the softcap fused into the CE expression, so the aux
+        // term is added to `gl` rather than to `g_out`." + the fused
+        // expression "let gl = softmax_scratch[v] * inv_sum * inv_n_tgt +
+        // aux_grad_logits[v] * inv_n_tgt; ... g_out[v] = gl * (1.0 -
+        // tanh_val * tanh_val);") + L1210-1212 (the NoAux +0.0
+        // degeneration: the aux scratch stays zero so the merged add is
+        // +0.0). Both terms are gradients w.r.t. the SAME capped logits —
+        // activations.logits stores POST-cap values (L1047-1051), which is
+        // exactly why they must merge pre-Jacobian.
+        //
+        // Distinct from exact-op-parity-for-analytic-backward (the
+        // forward/backward op-MATCH axis — this is the merge ORDER of two
+        // gradient sources under a shared Jacobian), from
+        // fuse-loss-and-output-grad-one-pass (loss scalar + output-grad in
+        // one sweep — here no loss scalar is produced at all), and from
+        // adapter-grad-join-mirrors-forward-delta-insertion-point (the
+        // same placement-matters family, different join: LoRA additive
+        // convention, not multi-term linearity).
+        KernelRule {
+            rule_id: "grad-terms-merge-before-shared-link-jacobian".to_string(),
+            gpu_concept: "when multiple loss terms (cross-entropy + an auxiliary loss) reach the parameters through the SAME nonlinear link (logit softcap), their upstream gradients must be SUMMED at the link's INPUT and the link Jacobian applied ONCE to the sum: g_raw = (g_ce + g_aux) * (1 - tanh^2(x/cap)). Adding a term AFTER the Jacobian application silently drops its scaling — the gradient is WRONG, not just slower (the aux term would miss the 1-t^2 factor entirely). Linearity of differentiation makes the pre-link merge both correct and cheapest (one Jacobian application for all terms), and the merge point must mirror the forward's composition order — both terms are gradients w.r.t. the SAME capped logits. The NoAux degeneration is free: the aux scratch stays zero, so the merged add is +0.0. Distinct from exact-op-parity-for-analytic-backward (the op-match axis — this is the merge ORDER of two gradient sources under a shared Jacobian), from fuse-loss-and-output-grad-one-pass (loss scalar + output-grad in one sweep — here no loss scalar is produced), and from adapter-grad-join-mirrors-forward-delta-insertion-point (the same placement-matters family, different join).".to_string(),
+            ref_shape: "// naive/WRONG: apply the softcap Jacobian to the CE term, then add\n// the aux gradient AFTER — the aux term never receives the\n// (1 - t^2) scaling\nfn head_backward_wrong(g_ce: &[f32], g_aux: &[f32], logits: &[f32],\n                       cap: f32, g_out: &mut [f32]) {\n    for v in 0..g_ce.len() {\n        let t = logits[v] / cap;\n        g_out[v] = g_ce[v] * (1.0 - t * t); // CE scaled by the Jacobian...\n    }\n    for v in 0..g_aux.len() {\n        g_out[v] += g_aux[v]; // ...aux added UNSCALED — silently wrong grad\n    }\n}\n".to_string(),
+            opt_pattern: "// optimized: sum all upstream grads at the link INPUT, apply the\n// shared Jacobian ONCE to the sum — correct by linearity, one\n// fused sweep\nfn head_backward_merged(g_ce: &[f32], g_aux: &[f32], logits: &[f32],\n                        cap: f32, g_out: &mut [f32]) {\n    for v in 0..g_ce.len() {\n        let gl = g_ce[v] + g_aux[v]; // both w.r.t. the SAME capped logits\n        let t = logits[v] / cap; // tanh recovered from the cached output\n        g_out[v] = gl * (1.0 - t * t); // ONE Jacobian for BOTH terms\n    }\n}\n".to_string(),
+        },
     ])
 }
 
@@ -5454,7 +5687,7 @@ fn native_dispatch_via_host(client: &CubeCLClient, input: &Handle, weights: &Han
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 275-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 282-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -5570,7 +5803,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "block-reduction-separate-scratch-runtime-strides",
         ],
     ),
-    // C: Fusion patterns (29 rules)
+    // C: Fusion patterns (30 rules)
     (
         KernelCategory::Fusion,
         "C: fusion",
@@ -5604,9 +5837,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "one-sweep-spatial-feature-fanout",
             "shape-matched-sibling-weight-grads-share-input-loop",
             "kernelize-host-chain-after-sync-batching-floor",
+            "constant-scale-folded-into-upload-copy",
         ],
     ),
-    // D: Dispatch patterns (43 rules)
+    // D: Dispatch patterns (48 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -5654,6 +5888,11 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "split-dispatch-expose-fused-intermediate",
             "hybrid-cpu-elementwise-gpu-throughput-sync-points",
             "op-major-backward-loop-inversion-batch-sequence-axis",
+            "side-branch-operand-residency-matches-mutation-lifetime",
+            "activation-checkpoint-as-handle-clone-deferred-batch-readback",
+            "training-forward-shed-decode-loop-shape",
+            "sibling-dispatches-before-any-readback",
+            "independent-cpu-work-fills-dispatch-read-window",
         ],
     ),
     // E: Parallelism patterns (17 rules)
@@ -5723,7 +5962,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "reverse-running-decay-weight",
         ],
     ),
-    // H: MoE dispatch + backward pass (12 rules)
+    // H: MoE dispatch + backward pass (13 rules)
     (
         KernelCategory::MoeDispatchBackward,
         "H: MoE dispatch + backward",
@@ -5740,6 +5979,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "active-index-grad-scatter-subset-backward",
             "backward-helper-expose-shared-norm-statistic",
             "adapter-grad-join-mirrors-forward-delta-insertion-point",
+            "grad-terms-merge-before-shared-link-jacobian",
         ],
     ),
     // I: NSA block-sparse selection (4 rules)
@@ -5849,7 +6089,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
 /// Returns 15 buckets (one per category), each containing the `KernelRule`s whose
 /// `rule_id` appears in that category's slice of [`KERNEL_CATEGORIES`]. This is
 /// the category-scoped view of the corpus — a future heal pipeline can consult
-/// routed expert's rules first without scanning all 275.
+/// routed expert's rules first without scanning all 282.
 ///
 /// # Allocation
 ///
@@ -5925,9 +6165,10 @@ mod tests {
         // Batch 27 (6): riir-gpu production kernels — staging-packed-uniforms-encoder-ordered-copies, identical-uniforms-share-single-slot, persistent-zeros-source-encoder-copy-clear, fuse-sibling-target-grads-single-kernel, per-layer-strided-grad-destination, snapshot-transient-grad-for-deferred-download (backward/ + backward_dflash/ — the backward-pass orchestration clusters: staging-packed uniform distribution, the idempotent-write exemption, encoder-ordered zero clears, sibling-target grad fusion, consumer-selected grad destinations, transient snapshotting for deferred readback).
         // Batch 29 (10): riir-gpu production kernels — defer-readback-gated-by-live-output-size, weight-handle-cache-keyed-by-allocation-identity, first-readback-pays-queue-drain, epilogue-at-register-write-phase, delay-rms-scale-past-gemv-epilogue, pack-scalar-params-into-combined-buffer, enum-dispatch-separate-kernel-per-variant, epilogue-must-be-workgroup-local, launch-unchecked-caller-owned-size-contract, fast-math-contraction-behind-feature-flag (deltanet_input_proj_fused.rs + epilogue/ — the decode-path fusion cluster: Issue 602 sibling-GEMV fan-out + Plan 106 Track 3 CODA epilogue fusion).
         // Batch 30 (6): riir-gpu production kernels — zero-init-side-branch-frozen-base-path, counter-derived-seed-stateless-noise, predicate-gated-skip-empty-workset-step, share-pipeline-set-across-subsystems, pad-uniform-pod-to-min-binding-size, fuse-count-into-mutation-pass (dllm/mod.rs — the D2F training cluster: Plan 068 discrete-diffusion trainers + RePlaid schedule).
+        // Batch 36 (7): riir-gpu production kernels — constant-scale-folded-into-upload-copy, side-branch-operand-residency-matches-mutation-lifetime, activation-checkpoint-as-handle-clone-deferred-batch-readback, training-forward-shed-decode-loop-shape, sibling-dispatches-before-any-readback, independent-cpu-work-fills-dispatch-read-window, grad-terms-merge-before-shared-link-jacobian (gemma2_cubecl_train/resident.rs — the Gemma-2 RESIDENT training cluster: Plan 481/482 all-GPU LoRA forward (per-position + batched) + batched backward; completes the Batch 35 cluster).
         // Batch 35 (8): riir-gpu production kernels — mask-sentinel-matches-reduction-identity, smem-staging-gated-by-cross-thread-reuse, kernelize-host-chain-after-sync-batching-floor, block-reduction-separate-scratch-runtime-strides, saturating-nonlinearity-recovery-breaks-near-cap, adapter-grad-join-mirrors-forward-delta-insertion-point, side-consumer-readback-alias-live-handle-for-dependent-dispatch, quadratic-attention-intermediates-recompute-from-linear-saves (gemma2_cubecl_train/ — the Gemma-2 training cluster: fused causal attention kernel Issue 430 Option B + hybrid LoRA training fwd/bwd).
-        // Total: 209. // (historical batch-30 snapshot; current 275)
-        assert_eq!(corpus.entries.len(), 275, "batches 1-35 should have 275 rules");
+        // Total: 209. // (historical batch-30 snapshot; current 282)
+        assert_eq!(corpus.entries.len(), 282, "batches 1-36 should have 282 rules");
     }
 
     #[test]
@@ -7832,6 +8073,91 @@ mod tests {
         }
     }
 
+    #[test]
+    fn batch36_rules_present() {
+        let corpus = build_kernel_seed_corpus();
+        let ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        // C (1 new): constant scale folded into the upload copy
+        assert!(ids.contains(&"constant-scale-folded-into-upload-copy"), "fold scale into upload");
+        // D (5 new): residency rung, handle checkpoints, decode-shape shed,
+        // sibling ordering, dispatch-read window
+        assert!(ids.contains(&"side-branch-operand-residency-matches-mutation-lifetime"), "residency rung");
+        assert!(ids.contains(&"activation-checkpoint-as-handle-clone-deferred-batch-readback"), "handle checkpoints");
+        assert!(ids.contains(&"training-forward-shed-decode-loop-shape"), "decode-shape shed");
+        assert!(ids.contains(&"sibling-dispatches-before-any-readback"), "sibling ordering");
+        assert!(ids.contains(&"independent-cpu-work-fills-dispatch-read-window"), "dispatch-read window");
+        // H (1 new): multi-term merge under a shared Jacobian
+        assert!(ids.contains(&"grad-terms-merge-before-shared-link-jacobian"), "grad merge before Jacobian");
+    }
+
+    #[test]
+    fn batch36_concepts_covered() {
+        // Verify the batch-36 Gemma-2 resident-cluster concepts via
+        // distinctive ASCII substrings located by rule_id (the 32a
+        // convention — immune to prose-evolution churn).
+        let corpus = build_kernel_seed_corpus();
+        let concept = |id: &str| -> String {
+            corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-36 rule '{id}' missing"))
+                .gpu_concept
+                .clone()
+        };
+        // C: fold into the upload copy (L85-90 + L78-79)
+        let c = concept("constant-scale-folded-into-upload-copy");
+        assert!(c.contains("upload COPY") && c.contains("unscaled original"), "fold-into-copy concept");
+        // D: residency rung (L12-14 + L56-58)
+        let c = concept("side-branch-operand-residency-matches-mutation-lifetime");
+        assert!(c.contains("mutation cadence") && c.contains("~70K sync round-trips"), "residency concept");
+        // D: handle checkpoints (L36-37 + L959-963)
+        let c = concept("activation-checkpoint-as-handle-clone-deferred-batch-readback");
+        assert!(c.contains("refcount bump") && c.contains("364 syncs"), "checkpoint concept");
+        // D: decode-shape shed (L545-557)
+        let c = concept("training-forward-shed-decode-loop-shape");
+        assert!(c.contains("DECODE loop shape") && c.contains("~55K dispatches"), "decode-shed concept");
+        // D: sibling ordering (L1087-1095 + L1515-1525)
+        let c = concept("sibling-dispatches-before-any-readback");
+        assert!(c.contains("FIRST readback") && c.contains("DIFFERENT input buffers"), "sibling ordering concept");
+        // D: dispatch-read window (L1326-1351)
+        let c = concept("independent-cpu-work-fills-dispatch-read-window");
+        assert!(c.contains("host is IDLE") && c.contains("max(GPU, CPU)"), "window concept");
+        // H: merge before Jacobian (L1229-1248)
+        let c = concept("grad-terms-merge-before-shared-link-jacobian");
+        assert!(c.contains("ONCE to the sum") && c.contains("WRONG, not just slower"), "merge concept");
+    }
+
+    #[test]
+    #[cfg(not(feature = "kernel_verify"))]
+    fn batch36_pseudocode_parses() {
+        // G1 for Batch 36: every new rule's ref_shape AND opt_pattern must
+        // syn-parse as valid Rust (the L2 pruner verdict).
+        use crate::domain::HealDomain;
+        let corpus = build_kernel_seed_corpus();
+        let ids = [
+            "constant-scale-folded-into-upload-copy",
+            "side-branch-operand-residency-matches-mutation-lifetime",
+            "activation-checkpoint-as-handle-clone-deferred-batch-readback",
+            "training-forward-shed-decode-loop-shape",
+            "sibling-dispatches-before-any-readback",
+            "independent-cpu-work-fills-dispatch-read-window",
+            "grad-terms-merge-before-shared-link-jacobian",
+        ];
+        for id in ids {
+            let entry = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-36 rule '{id}' missing"));
+            let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+            assert!(ref_verdict.parses, "batch-36 ref_shape for '{id}' must parse");
+            let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+            assert!(opt_verdict.parses, "batch-36 opt_pattern for '{id}' must parse");
+        }
+    }
+
+
     // ════════════════════════════════════════════════════════════════════
     // Plan 003 — Router ↔ corpus wiring tests
     // ════════════════════════════════════════════════════════════════════
@@ -7843,7 +8169,7 @@ mod tests {
 
     #[test]
     fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-        // Every rule_id in the 275-rule corpus must appear in exactly one category.
+        // Every rule_id in the 282-rule corpus must appear in exactly one category.
         let corpus = build_kernel_seed_corpus();
         let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
         let mut categorized: Vec<&str> = Vec::new();
@@ -7874,16 +8200,16 @@ mod tests {
 
     #[test]
     fn kernel_categories_counts_match_plan_003_table() {
-        // Pin per-category rule counts to the Plan 003 table (updated for Batch 35).
+        // Pin per-category rule counts to the Plan 003 table (updated for Batch 36).
         let expected = [
             (KernelCategory::MemoryAccess, 49),
             (KernelCategory::Compute, 45),
-            (KernelCategory::Fusion, 29),
-            (KernelCategory::Dispatch, 43),
+            (KernelCategory::Fusion, 30),
+            (KernelCategory::Dispatch, 48),
             (KernelCategory::Parallelism, 17),
             (KernelCategory::FlashAttnTiling, 10),
             (KernelCategory::LinearAttnRecurrence, 19),
-            (KernelCategory::MoeDispatchBackward, 12),
+            (KernelCategory::MoeDispatchBackward, 13),
             (KernelCategory::NsaBlockSparse, 4),
             (KernelCategory::VarlenChunkedReduction, 5),
             (KernelCategory::AutotuneDispatch, 4),
@@ -7899,9 +8225,9 @@ mod tests {
                 "Plan 003: category {cat:?} has {} rules, expected {count}",
                 entry.2.len());
         }
-        // Sum must equal 275.
+        // Sum must equal 282.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 275, "Plan 003: category totals must sum to 275");
+        assert_eq!(total, 282, "Plan 003: category totals must sum to 282");
     }
 
     #[test]
@@ -7911,7 +8237,7 @@ mod tests {
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 275, "Plan 003: grouped corpus has {total} rules, expected 275");
+        assert_eq!(total, 282, "Plan 003: grouped corpus has {total} rules, expected 282");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");

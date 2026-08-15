@@ -252,22 +252,62 @@ global = symlink only.
   abort, zero pollution. **A SIXTEENTH count-pin site surfaced via test
   failure (not grep): the `kernel_categories_counts_match_plan_003_table`
   per-category expected-counts table — added to the list below.**
+- **Batch 36 DONE (2026-08-15, Research 040):** the Gemma-2 RESIDENT
+  training cluster (`gemma2_cubecl_train/resident.rs` 1,639 — the Plan
+  481/482 all-GPU LoRA training path: per-position GEMV forward + batched
+  GEMM forward + batched backward; completes the Batch 35 cluster,
+  `gemma2_cubecl_train/` now FULLY MINED) — **7 rules, corpus 275 → 282**
+  (A 49, B 45, C 30, D 48, E 17, H 13, L 9, N 16):
+  constant-scale-folded-into-upload-copy,
+  side-branch-operand-residency-matches-mutation-lifetime,
+  activation-checkpoint-as-handle-clone-deferred-batch-readback,
+  training-forward-shed-decode-loop-shape,
+  sibling-dispatches-before-any-readback,
+  independent-cpu-work-fills-dispatch-read-window,
+  grad-terms-merge-before-shared-link-jacobian. FOUR coordinator seeds
+  falsified — the highest count yet (F4 the per-position path already
+  caches its cos/sin table via `RopeCosSinCache` + Batch 17 had dropped
+  cos/sin-table rules; F5 the env-var A/B gate is GOAT-gate process;
+  B2 the ping-pong swap is needless-swap-temp fix(2)'s loop-carried
+  scratch; B4 the scratch hoist is a 3-rule composition) + 2 premise
+  corrections (F3 the per-position path's "ONLY sync point" doc-lie —
+  93,440 unbatched reads; B1 q/k/v consume DIFFERENT inputs so
+  fan-out's premise doesn't apply). 1 weak candidate dropped
+  (phase-disjoint buffer aliasing — 9 KB local win). Bug yield filed
+  as riir-ai Issue 689 (15 hazards: headline the DEFAULT-path
+  ~10.2M-transcendental CPU RoPE recompute from not saving
+  `k_post_rope` (P2, cheapest fix — one handle clone), the 93,440-read
+  unbatched legacy readback + doc-lie, 262 MB `g_logits_all` fresh
+  alloc + dead zero-fill per backward step, the comment-lie
+  `g_attn_out_vecs` per-layer allocs, the nested↔flat reshape
+  round-trip ~327 MB/step, `read_handle` fresh-Vec ~1.2 GB/step
+  download churn (the `read_handle_into` fix substrate already in-tree
+  at kimi_k3), missed CPU/GPU overlap windows, the rmsnorm
+  scratch→dest API asymmetry, + 7 more). GOAT: 324 kernel_heal + 201
+  default tests, clippy 0 in all 4 states (7 doc backticks fixed:
+  `481/482`, `read_batched`, `param-grad`, `g_logits_all`, `LoRA`,
+  `RoPE`, `all-GPU` — NOTE: backtick `LoRA`/`RoPE` inside `//!` header
+  prose or clippy flags them). Generator: ONE anchor bug caught
+  pre-write (the entries-vec close anchor must use the LAST ENTRY's
+  distinctive opt-pattern TEXT, not the rule id — `rindex` of the id
+  resolves to its occurrence in the TESTS, after the vec) — clean
+  abort, zero pollution, first compile after fix.
 - **NEXT mining target**: `ls` the riir-gpu tree for the next unmined
-  cluster (~76 of ~200 files mined). Candidates:
-  `gemma2_cubecl_train/resident.rs` (1,639 — the Plan 481 all-GPU LoRA
-  path + batched activation readback; expect dedup pressure from
-  B26/B29/B34 + the B35 floor rule), `gemma4_q4k_train/` (4 files
-  ~160 KB), `gemma2_d2f*`, `kimi_k3_gpu_*` (4 files), `weaver_gpu*`
-  (4 files), `kvarn/`, `hypernet/`, `maxsim/`. Pick 1-2 files, ~8-12
-  rules, Batch 36 (Research 040).
-  - Validation pattern (proven T4 + 32a + 32b-1 + 32c): corpus files are NOT
+  cluster (~77 of ~200 files mined). Candidates:
+  `gemma4_q4k_train/` (4 files ~160 KB — the Q4_K training cluster;
+  expect dedup pressure from B34/B35/B36: the B35 alias-live-handle
+  rule's standing proof IS the Q4_K sibling), `gemma2_d2f*`,
+  `kimi_k3_gpu_*` (4 files), `weaver_gpu*` (4 files), `kvarn/`,
+  `hypernet/`, `maxsim/`. Pick 1-2 files, ~8-12 rules, Batch 37
+  (Research 041).
+  - Validation pattern (proven T4 + 32a + 32b-1 + 32c + 36): corpus files are NOT
     sibling WIP — edit + run GOAT in the main checkout with
     `CARGO_TARGET_DIR=/tmp/riir-clippy-bNN`; `--features kernel_heal`
-    for the corpus suite (318 at 34, 321 at 35), default for
+    for the corpus suite (318 at 34, 321 at 35, 324 at 36), default for
     the 201 suite.
     `--all-features` is currently broken by SIBLING WIP
     (`rust_perf/bench.rs:335 alloc_axis`) — pre-existing, not yours.
-  - Count-pin sites when adding rules (complete list, re-verified 35):
+  - Count-pin sites when adding rules (complete list, re-verified 36):
     corpus.rs `entries.len()` assert + KERNEL_CATEGORIES rows + the 6
     per-category count COMMENTS + the `kernel_categories_counts_match_
     plan_003_table` expected-counts table (the 16th site — caught by
@@ -275,7 +315,7 @@ global = symlink only.
     `rules_for_expert` total + the corpus-count mentions in router.rs
     doc header + the Plan 003 doc-comment `NNN-rule corpus` line above
     KERNEL_CATEGORIES + the `Total: 209 ... current NNN` comment + the
-    file-level `//!` header batch block. All in sync at 275.
+    file-level `//!` header batch block. All in sync at 282.
   - **Landing lesson (32b-1, self-caught)**: after a large multi-entry
     corpus edit, `awk`-scan for `rule_id:` lines NOT preceded by a
     standalone `KernelRule {` BEFORE the first compile — JSON `\n`
@@ -287,11 +327,11 @@ global = symlink only.
   WIP STILL ACTIVE as of 2026-08-15 evening: qv_lora.rs + cudarc_kernels/
   + riir-gpu/lib.rs + ternary_deltanet_gpu_forward_cudarc.rs all dirty)
   — mine only after their WIP lands.
-- **Progress**: riir-gpu ~76 of ~200 files mined. Corpus: 275 rules.
+- **Progress**: riir-gpu ~77 of ~200 files mined. Corpus: 282 rules.
   edge_lora module FULLY MINED (32a + 32b-1 + 32c). spectralquant/
   FULLY MINED (15 + 33). gemma4_cubecl_train/ DONE (34).
-  gemma2_cubecl_train/ mod.rs + attention_gpu.rs DONE (35; resident.rs
-  remains).
+  gemma2_cubecl_train/ FULLY MINED (35: mod.rs + attention_gpu.rs;
+  36: resident.rs).
 - **Also open (riir-clippy issues)**: 014 (rust_perf v4, 12 tasks), 016
   (clippy structural expansion, 6), 017 (retrieval precision at scale,
   5), 018 (self_evolve promotion, 6). 015 = sibling's ACTIVE WIP
