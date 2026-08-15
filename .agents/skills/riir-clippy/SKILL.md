@@ -14,24 +14,13 @@ before starting the next.**
 regressions/bugs/questions in the current conversation always go first.
 The queue is for idle time only.
 
-**Rule 0b — the overnight window (owner's call, 2026-08-15).** The idle
-queue runs **00:00–11:59 local time ONLY**. A session woken by auto_prompt
-/ "continue"-style handoff between **12:00 and 23:59** must NOT run queue
-units and must NOT commit to any repo. Daytime is sibling-agent territory
-— daytime idle wake-ups are how commit collisions happen (Bench 675/677
-same-night dual-allocations, the git-stash near-misses). Check:
-
-```bash
-H=$(date +%H); [ "$H" -ge 12 ] && echo "OUTSIDE overnight window — read-only check, then idle summary only"
-```
-
-Outside the window an idle session may do at most a READ-ONLY health
-check of armed overnight pipelines (`ps` + done-marker `ls` — no builds,
-no edits), then immediately emit the 4-part `## Summary` and stop.
-**Rule 0 exemption:** a session with an explicit user task in the current
-conversation is NOT subject to the window — a user asking at 15:00 for a
-fix gets the fix. The gate restricts autonomous idle work only. The
-overnight-measurement carve-out (below) still applies inside the window.
+**Rule 0b — REMOVED (owner's call, 2026-08-15 evening).** The former
+00:00–11:59 overnight-window gate is deleted — the idle queue now runs
+at **any hour**. Collision protection shifts from time-gating to the
+standing discipline (re-scan folders at WRITE time, commit only your own
+hunks, isolate builds under `/tmp`, never `git stash` sibling WIP — see
+Discipline below). The Plan 337 measurement carve-out (Discipline below)
+still applies whenever a measurement saturates the box, at any hour.
 
 ## The idle priority queue
 
