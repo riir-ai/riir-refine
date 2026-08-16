@@ -71,7 +71,12 @@ fn reliability(mode: SelectionMode, c: &Cand) -> f32 {
                 c.s as f32 / total as f32
             }
         }
-        SelectionMode::BetaPosterior => katgpt_core::best_belief_score(c.s, c.f, EPSILON),
+        // Entropic is pool-shaped; its per-candidate form is the loud
+        // BetaPosterior degradation (mirrored from production). Its regime
+        // is the MAX metric, measured in t26_entropic_max_metric.
+        SelectionMode::BetaPosterior | SelectionMode::Entropic => {
+            katgpt_core::best_belief_score(c.s, c.f, EPSILON)
+        }
     }
 }
 

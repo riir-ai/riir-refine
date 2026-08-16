@@ -78,6 +78,7 @@ pub mod ruliology_search;
 pub mod evolve;
 pub mod memory;
 pub mod recorder;
+pub mod selection_entropic;
 pub mod self_evolve;
 
 // Plan 005: real-file span-level latent retrieval (`--suggest` MVP).
@@ -183,6 +184,7 @@ pub use memory::{
     CommitmentStatus, EvidenceTier, FixTrajectory, LatentFixMemory, LatentQuery, ScoredTrajectory,
 };
 pub use recorder::EvolveRecorder;
+pub use selection_entropic::{solve_beta, tilt_advantages_into, tilted_weights, KL_BUDGET_LN2};
 pub use self_evolve::{HealPipeline, HealResult, HealSource, SelectionMode, TuneReport};
 
 // Plan 005: latent retrieval surface (`--suggest` MVP).

@@ -137,14 +137,68 @@ pub enum SelectionMode {
     /// [`LinearBlend`](Self::LinearBlend) if that ever stops being true.
     #[default]
     BetaPosterior,
+    /// `W_EVO·evolution + W_RATE·sigmoid(w_β − 1)` — the KL-budgeted
+    /// Boltzmann tilt over the POOL's belief scores (Issue 026;
+    /// TTT-Discover's within-batch max-seeking objective, β solved by
+    /// bisection so `KL(q_β ‖ uniform) = ln 2`).
+    ///
+    /// Unlike the two history-only modes, the entropic score depends on the
+    /// SHAPE of the current candidate pool: consistent-improvement pools
+    /// tilt aggressively toward the best candidate (tiny belief gaps get
+    /// amplified into decisive selection); outlier-dominated pools flatten,
+    /// and the KL budget bounds the maximum weight regardless of gap
+    /// magnitude (one lucky 1/1 candidate cannot own selection). The tilt
+    /// consumes the belief scores as rewards, so the history axis still
+    /// feeds selection — the paper itself stacks PUCT history + the
+    /// entropic within-batch objective the same way.
+    ///
+    /// Degrades loudly to [`BetaPosterior`](Self::BetaPosterior) where no
+    /// scored pool exists (pools of size ≤ 1, per-candidate-only call
+    /// sites) — exactly one log line, never silent.
+    ///
+    /// **Measured NEGATIVE on the max metric (Bench 035, Issue 026 T3/T4):**
+    /// discovery-within-budget 0.9091/0.9173 (sigmoid mapping) vs
+    /// [`BetaPosterior`](Self::BetaPosterior) 0.9240/0.9379 — and ALL four
+    /// reward-source × mapping variants lose to both [`LinearBlend`](Self::LinearBlend)
+    /// and [`BetaPosterior`](Self::BetaPosterior) across both evo-noise
+    /// regimes. The tilt amplifies thin-evidence pool-shape noise (belief
+    /// rankings from 0-3 observations) and drowns the correlated evo axis;
+    /// the paper's regime (dense reward batches) does not have starved
+    /// pools. NOT promoted — [`BetaPosterior`](Self::BetaPosterior) stays
+    /// the default. Kept opt-in as the reproducible negative-result
+    /// artifact (the `gemma2_directions` precedent); the harness lives in
+    /// `tests/t26_entropic_max_metric.rs`.
+    Entropic,
+}
+
+/// One-time loud degradation notice when `Entropic` is scored per-candidate
+/// (no candidate pool at the call site) — mirrors the `self_evolve`
+/// oracle-degradation pattern: exactly one line, never silent (Issue 026 T2).
+fn warn_entropic_degraded_once() {
+    use std::sync::Once;
+    static DEGRADE_NOTICE: Once = Once::new();
+    DEGRADE_NOTICE.call_once(|| {
+        eprintln!(
+            "riir-clippy: SelectionMode::Entropic scored without a candidate pool — \
+             degrading to BetaPosterior (per-candidate history score)"
+        );
+    });
 }
 
 /// Score the reliability axis for a candidate under `mode`.
+///
+/// Per-candidate form. `Entropic` has no per-candidate form (its score is
+/// pool-shaped) — it degrades loudly to the Beta belief score here; the
+/// pool-bearing path in [`HealPipeline::heal`] computes the true tilt.
 #[inline]
 fn reliability_score(mode: SelectionMode, counts: (u32, u32), rate: f32) -> f32 {
     match mode {
         SelectionMode::LinearBlend => rate,
         SelectionMode::BetaPosterior => {
+            katgpt_core::best_belief_score(counts.0, counts.1, BELIEF_EPSILON)
+        }
+        SelectionMode::Entropic => {
+            warn_entropic_degraded_once();
             katgpt_core::best_belief_score(counts.0, counts.1, BELIEF_EPSILON)
         }
     }
@@ -174,6 +228,12 @@ pub struct HealPipeline {
     retrieve_scratch: Vec<usize>,
     /// Reusable scratch buffer for retrieval results (alloc-free after warm-up).
     retrieve_out: Vec<crate::memory::ScoredTrajectory>,
+    /// Reusable scratch: per-candidate tilt rewards (belief scores) for the
+    /// `Entropic` selection mode (alloc-free after warm-up, Issue 026).
+    tilt_rewards: Vec<f32>,
+    /// Reusable scratch: tilted advantages for the `Entropic` selection
+    /// mode (alloc-free after warm-up, Issue 026).
+    tilt_advantages: Vec<f32>,
 }
 
 impl HealPipeline {
@@ -197,6 +257,8 @@ impl HealPipeline {
             adaptive: AdaptiveDrafter::new(),
             retrieve_scratch: Vec::new(),
             retrieve_out: Vec::new(),
+            tilt_rewards: Vec::new(),
+            tilt_advantages: Vec::new(),
         }
     }
 
@@ -375,11 +437,39 @@ impl HealPipeline {
         // W_RATE = 0.4 (historical reliability is a strong secondary signal).
         // For unseen rules (evolution returns 0.5), success_rate dominates —
         // this means the first fix attempt picks the most reliable past fix.
+        //
+        // Entropic (Issue 026): the reliability axis is scored from the
+        // POOL's shape instead of per-candidate history alone — the
+        // KL-budgeted Boltzmann tilt over the pool's belief scores
+        // (max-seeking; adaptive β per pool shape). Pools of size ≤ 1 have
+        // no shape and fall through to the per-candidate path, which
+        // degrades loudly to BetaPosterior there.
+        let entropic_pool =
+            matches!(self.selection_mode, SelectionMode::Entropic) && candidates.len() > 1;
+        if entropic_pool {
+            self.tilt_rewards.clear();
+            for cand in &candidates {
+                self.tilt_rewards.push(katgpt_core::best_belief_score(
+                    cand.counts.0,
+                    cand.counts.1,
+                    BELIEF_EPSILON,
+                ));
+            }
+            crate::selection_entropic::tilt_advantages_into(
+                &self.tilt_rewards,
+                crate::selection_entropic::KL_BUDGET_LN2,
+                &mut self.tilt_advantages,
+            );
+        }
+
         let mut best = None::<(usize, f32)>;
         for (i, cand) in candidates.iter().enumerate() {
             let evo_score = self.evolution.score_candidate(rule_id, &cand.direction);
-            let reliability =
-                reliability_score(self.selection_mode, cand.counts, cand.success_rate);
+            let reliability = if entropic_pool {
+                katgpt_core::sigmoid(self.tilt_advantages[i])
+            } else {
+                reliability_score(self.selection_mode, cand.counts, cand.success_rate)
+            };
             let combined = W_EVO * evo_score + W_RATE * reliability;
             if best.is_none_or(|(_, best_score)| combined > best_score) {
                 best = Some((i, combined));

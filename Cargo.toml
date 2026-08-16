@@ -225,6 +225,13 @@ required-features = ["kernel_heal"]
 name = "wgsl_scan_smoke"
 required-features = ["kernel_heal"]
 
+# Issue 025 T6: the WGSL/cube git-history mining harness (default+experimental
+# patterns; the diff adjudicates). Same gating as wgsl_scan_smoke — the
+# scanner lives behind kernel_heal.
+[[example]]
+name = "wgsl_mine"
+required-features = ["kernel_heal"]
+
 [[example]]
 name = "ruliology_search_demo"
 required-features = ["ruliology_search"]
