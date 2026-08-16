@@ -197,7 +197,44 @@ clippy only (the domain that fails), whole-span scale on **both** arms so the
 comparison is apples-to-apples, dense vectors cached once so the weight sweep
 (0.5 / 1 / 5 / 20 / 100) is free.
 
-<!-- T3.5-OPTION3-RESULT -->
+**Measured 2026-08-16 — the run took 60.2 minutes wall (3613.87 s):** 170.0 s
+model load, 22.3 min for the 40 pattern embeds, 35.1 min for the 48 span
+embeds.
+
+| dense weight | clippy top-1 | vs matched floor |
+|---:|---:|---:|
+| 0.0 (matched modelless floor) | **70.8%** | — |
+| 0.5 | 70.8% | +0.0pp |
+| 1.0 | 70.8% | +0.0pp |
+| 5.0 | 70.8% | +0.0pp |
+| 20.0 | 70.8% | +0.0pp |
+| 100.0 | 68.8% | **−2.1pp** |
+
+**Verdict: the 768-D dense rerank does NOT beat the matched modelless floor.**
+Best across the whole sweep is 70.8% — *exactly* the floor, to the span.
+
+The shape of the result is as informative as the number. The dense term changes
+**nothing at all** for every weight from 0.5 to 20, then *hurts* once it is
+large enough to dominate (−2.1pp at 100). A signal that never flips a ranking
+until it overrides everything, and then makes things worse, is not a weak
+signal — it is an **uncorrelated** one. Bonsai's mean-pooled semantic embedding
+carries no information about *which clippy anti-pattern a span instantiates*,
+which is unsurprising in hindsight: all 40 corpus patterns are minimal Rust
+functions that mean roughly the same thing semantically, and they differ
+syntactically.
+
+**Cost/benefit is therefore unambiguous.** 6.7 GB of GGUF, a 170 s load, ~48 s
+per embed, and 60 minutes for one scope-limited configuration, in exchange for
++0.0pp. The `bonsai_retrieval` feature stays opt-in and un-promoted; it exists
+so this measurement is reproducible, not because it is usable.
+
+This is a direct vindication of riir-rag's own rule that the modelless path is
+the permanent floor a model must *beat* to justify its cost. It did not beat
+it — it tied it, at roughly 10^5 times the latency.
+
+**What actually closed the gap** was the modelless work: the operator-aware BM25
+tokenizer (T3.5.2, +16.6pp) and proposer-instantiation re-ranking (T3.5.5,
++12.0pp uncontaminated), neither of which loads a model at all.
 
 ---
 

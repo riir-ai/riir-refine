@@ -277,6 +277,20 @@ queue + the proposers stay the only instantiation gate. Full record: Bench
         Measured on the largest matched subset that is feasible instead
         (clippy only, whole-span scale on both arms, dense vectors cached once
         so the weight sweep is free) — `tests/bonsai_retrieval_probe.rs`.
+        **PRECISION RESULT (2026-08-16, 60.2 min wall): dense rerank does NOT
+        beat the matched modelless floor.** clippy top-1 is **70.8% at dense
+        weights 0.5 / 1 / 5 / 20 — identical to the 70.8% floor, to the span —
+        and 68.8% (−2.1pp) at weight 100.** A term that never flips a ranking
+        until it overrides everything, and then *hurts*, is uncorrelated rather
+        than weak: Bonsai's mean-pooled semantic embedding carries no
+        information about which clippy anti-pattern a span instantiates, since
+        all 40 corpus patterns mean roughly the same thing semantically and
+        differ *syntactically*.
+        Cost for +0.0pp: 6.7 GB GGUF, 170 s load, ~48 s per embed, 60 min per
+        scope-limited config. `bonsai_retrieval` stays opt-in and un-promoted —
+        it exists so the measurement is reproducible, not because it is usable.
+        Direct vindication of riir-rag's rule that the modelless path is the
+        permanent floor a model must BEAT; it tied, at ~10^5x the latency.
   - [x] **T3.5.4 Instantiation re-ranker — BUILT + BENCHMARKED; gain proven
         UNMEASURABLE on the then-current oracle. (Promotion followed in
         T3.5.5, once an independent oracle existed.)** Shipped as
