@@ -22,6 +22,12 @@ serde_json = "1"
 # Stage 2 adaptive drafter: lock-free pool (per AGENTS.md: papaya over Arc<RwLock<HashMap>>).
 papaya = "0.2"
 
+# Issue 025 T2: native regex for the non-syn WGSL surface scanner (the only
+# sanctioned new dep per the issue's anti-goals — already in the tree
+# transitively via riir-rag under `latent_retrieval`; optional so the default
+# build stays dependency-light).
+regex = { version = "1", optional = true }
+
 # L2 pruner: pure Rust syntax parser (modelless, zero ML).
 # L3 ruliology search: AST delta-size computation via `syn::visit`.
 # `visit` feature gates the AST traversal walker; `full` + `parsing` are
@@ -105,8 +111,9 @@ rust_perf_bench = ["rust_perf"]
 # to default until a domain-specific GOAT (real corpus + full numeric
 # validator) passes.
 # Enables `variable_rank_domain_expert` on katgpt-core for the latent-MoE
-# expert router (`pick_domain`, Plan 558).
-kernel_heal = ["katgpt-core/variable_rank_domain_expert"]
+# expert router (`pick_domain`, Plan 558). Also gates `dep:regex` for the
+# Issue 025 T2 WGSL scanner (`kernel_opt::wgsl_scan`).
+kernel_heal = ["katgpt-core/variable_rank_domain_expert", "dep:regex"]
 
 # Plan 005 Phase 1: real-file span-level latent retrieval (`--suggest` MVP).
 # Indexes every enabled domain's corpus via riir-rag, routes spans via
@@ -209,6 +216,13 @@ required-features = ["clippy_verify"]
 #   cargo run --example kernel_heal_demo --features kernel_heal
 [[example]]
 name = "kernel_heal_demo"
+required-features = ["kernel_heal"]
+
+# Issue 025 T2: WGSL scanner calibration smoke (default = the riir-gpu
+# kernels dir). Run with:
+#   cargo run --example wgsl_scan_smoke --features kernel_heal -- [dir]
+[[example]]
+name = "wgsl_scan_smoke"
 required-features = ["kernel_heal"]
 
 [[example]]

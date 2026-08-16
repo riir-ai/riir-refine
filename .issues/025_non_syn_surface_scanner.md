@@ -1,8 +1,9 @@
 # Issue 025 — Non-syn surface scanner (`.wgsl` files + `#[cube]` macro bodies)
 
-**Status:** OPEN (candidate; filed 2026-08-16 from user direction) — **T1 DONE
-2026-08-16: surface ≈ 20.5k+ lines, NOT downgraded** (see T1 below). T2–T6
-remain.
+**Status:** OPEN (candidate; filed 2026-08-16 from user direction) — **T1+T2
+DONE 2026-08-16: surface ≈ 20.5k+ lines (NOT downgraded); the WGSL scanner
+prototype ships 3 precision-vetted default patterns + 1 experimental + 1
+honestly-excluded (see tasks below).** T3–T6 remain.
 **Origin:** user proposed "regex wasm" as a new tool. Rescoped on filing per the
 measured evidence: the *job* is real (the non-syn blind spot), but **WASM is the
 wrong layer for v1** — native-first; WASM reserved for third-party sandboxing,
@@ -65,10 +66,36 @@ A scanner over these surfaces opens three things, in value order:
       `.rs` (256 prod lines), 2 live `.metal` files (305 lines), inline CUDA C
       raw strings on the cudarc path (2,879 lines / 49 `__global__`
       kernels — same non-syn family, candidate T2 scope extension).
-- [ ] **T2 — WGSL scanner prototype.** Native `regex` patterns for the corpus
+- [x] **T2 — WGSL scanner prototype.** Native `regex` patterns for the corpus
       rules that have literal WGSL shapes (start list: B44's four + B47's
       out-projection shape). Pattern source = the corpus rows themselves; each
       pattern must cite the rule_id it fronts.
+      **DONE 2026-08-16 — `src/domains/kernel_opt/wgsl_scan.rs` (behind
+      `kernel_heal` + new optional `dep:regex`) + `examples/wgsl_scan_smoke.rs`.**
+      Evidence-driven disposition of the start list (live calibration smoke
+      over all 123 kernel files, 28 findings / 15 files):
+      - ✅ default patterns (zero observed FPs): `row-dot-split-inner-axis-
+        block-reduce` (B44; `@workgroup_size(1…)` — 13 findings, real carriers
+        m2p ×3 + spectralquant + attention_score family), `declared-max-array-
+        taxed-per-thread-under-runtime-bound` (B46 — the issue's "B44 four"
+        list named the `array<f32,256>` shape, which is B46's rule; 14
+        findings incl. the m2p `scores`/`q` instances Issue 701 H-B documents
+        as deferred), `share-cube-size-const-between-kernel-and-launcher`
+        (B44; let-restatement form only — mux_kl_loss `let n = 64u;`).
+      - ⚠️ experimental, OFF by default: `multi-head-out-proj-consumes-head-
+        concat` (B47 out-projection). The calibration smoke caught its ONLY
+        live firing on a legitimate `alpha`-lerp (`layer_fuse.wgsl` L61) —
+        the documented imprecision class materialized on the first real
+        corpus, so it ships behind `WgslScanner::with_experimental()` for
+        git-history mining (where the shape IS the bug — Issue 701 pre-fix
+        m2p), never the live suggest path.
+      - ❌ not regex-expressible in v1: `smem-staging-gated-by-cross-thread-
+        reuse` (B35 — needs within-workgroup reuse counts, i.e. dataflow).
+      6 unit tests (buggy fires / fixed silent / lerp-FP demotion pinned /
+      corpus-citation contract); clippy clean; 419 default / 587 kernel_heal /
+      713 all-features lib tests pass. Comment-stripping applied to the
+      line patterns (a `// …@workgroup_size(1,1,1)` doc mention must not
+      fire — caught in the smoke by `attention_batched.wgsl` L12).
 - [ ] **T3 — `#[cube]` body extraction.** Token-tree span location via
       `proc-macro2` (a `TokenStream` walk finds the attribute + item span
       without parsing the body as Rust), then the same regex pass over the

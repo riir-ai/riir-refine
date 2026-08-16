@@ -41,6 +41,7 @@ use crate::domain::{HealDomain, HealEntry};
 pub mod corpus;
 pub mod router;
 pub mod thermal;
+pub mod wgsl_scan;
 
 #[cfg(feature = "kernel_verify")]
 pub mod verify;
