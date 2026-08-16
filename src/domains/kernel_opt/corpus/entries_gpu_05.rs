@@ -525,10 +525,12 @@ pub(super) fn entries() -> Vec<KernelRule> {
         // katgpt-attn mla_backward.rs L681-L684 names the exact incorrect
         // form: "NOTE: gamma multiplies ONLY d_y[k], NOT the dot term. The
         // common incorrect form `gamma * r * (d_y - x*r2*dot*inv_n)`
-        // over-applies gamma to the normalization correction." The slip ALSO
-        // lives in the batched twin (kimi_k3_gpu_backward_batched.rs L407) and
-        // the CPU reference (katgpt-transformer moe_backward.rs L627) — masked
-        // by moe_backward_grad_check.rs tolerance 1.5e-2 vs gamma init
+        // over-applies gamma to the normalization correction." The slip lived
+        // in the batched twin at mining time (kimi_k3_gpu_backward_batched.rs
+        // L407) — the fix has since landed at exactly that line (verified
+        // Batch 51, corrective comment + gamma scoped to the dy term only) —
+        // and in the CPU reference (katgpt-transformer moe_backward.rs L627) —
+        // masked by moe_backward_grad_check.rs tolerance 1.5e-2 vs gamma init
         // 1.0 +/- 0.1. Verified by finite difference: gamma=(1,2), x=(1,1),
         // dy=(1,0), n=2 -> true dx2 = -0.5, the slipped form gives -1.0.
         //

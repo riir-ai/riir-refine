@@ -1,4 +1,4 @@
-//! Entries slice — Batches 14-47 era (rules 325-343 of 343) — riir-gpu production-kernel mining.
+//! Entries slice — Batches 14-49+51 era (rules 325-347 of 347) — riir-gpu production-kernel mining.
 //! Pure data moved verbatim from the former corpus.rs monolith
 //! (2026-08-15 split); append new batches to the LAST gpu slice or
 //! open a new one past ~900 lines. Category membership lives ONLY in
@@ -584,6 +584,136 @@ pub(super) fn entries() -> Vec<KernelRule> {
             gpu_concept: "When two sibling public methods share an expensive pure producer as their first stage, a composed entry that calls both pays the producer N times for one input: each method internally re-runs the identical expensive call (a full frozen-backbone transformer forward) on the identical context, and the producer is pure w.r.t. repeat calls — all inputs are immutable receiver fields plus the argument — so the second run is bit-identical wasted work, the dominant cost of the composition doubled. The fix: extract once and thread the shared artifact — keep both public methods unchanged for standalone callers, add internal *_from_<artifact> variants that take the producer's output directly, make the public methods thin wrappers that extract then delegate, and have every composed entry extract the artifact once and pass it to both variants. Detection tell: a composer invoking two sibling APIs whose first stage is the identical expensive call on the identical input. Distinct from split-dispatch-expose-fused-intermediate (one fused chain discards its intermediate — here two independent methods each fully use the artifact), from fan-out-shared-input-single-sync (N sibling kernels sharing one uploaded buffer — this is the host-API twin: N sibling methods sharing one computed artifact), from frozen-cooperand-hoist-out-of-perturbation-loop (an input-independent operand rebuilt per perturbation candidate — this producer varies with the input and there is no sweep), and from refine-loop-invariant-prefix-elision (iteration invariance inside a loop — here two sequential calls).".to_string(),
             ref_shape: "// naive: both siblings internally run the SAME expensive producer\n// (a full frozen-backbone forward) on the same input — paid twice\nfn composed_entry_naive(ctx: &Engine, tokens: &[u32]) -> (Weights, f32) {\n    let weights = ctx.generate_weights(tokens);\n    let difficulty = ctx.estimate_difficulty(tokens);\n    (weights, difficulty)\n}\n".to_string(),
             opt_pattern: "// optimized: extract the shared artifact ONCE, thread it into the\n// *_from variants; the public methods become thin extract+delegate\n// wrappers so standalone callers are unchanged\nfn composed_entry_extract_once(ctx: &Engine, tokens: &[u32]) -> (Weights, f32) {\n    let grid = ctx.extract_memory_grid(tokens);\n    let weights = ctx.generate_weights_from_grid(&grid);\n    let difficulty = ctx.difficulty_from_grid(&grid);\n    (weights, difficulty)\n}\n".to_string(),
+        },
+        // ── runtime-arg-loop-bound-demotes-arrays-to-local-memory —
+        // a correctly-sized per-thread array whose per-element loops
+        // are bounded by a RUNTIME kernel arg (constant at every call
+        // site) is demoted to local memory (A) ──
+        //
+        // Source: riir-gpu cudarc_kernels/mod.rs rmsnorm_quantize_f32
+        // L211-235 (Issue 706 / Bench 686, 2026-08-16) — the Issue-623
+        // kernel shipped `float vals[16]` (exactly sized) with
+        // `for (int i = 0; i < ablock; i++)` where `ablock` is a kernel
+        // ARG that is 16 at EVERY call site (the launcher's Rust
+        // ACTIVATION_BLOCK const). nvcc cannot unroll a runtime-bounded
+        // loop, and a dynamically-indexed per-thread array has no
+        // register form — every vals[]/gam[] access was a local-memory
+        // round-trip since Issue 623, hidden under the phase-4 global
+        // re-read. The pathology surfaced only when Issue 706 v1 (gamma
+        // prefetch) ADDED a second spilled array and measured 0.6-1%
+        // SLOWER in paired interleaved A/B — trading L1-hot global
+        // reads for more local-memory traffic is a LOSS. v2
+        // (compile-time bound `i < 16` + `#pragma unroll` on all three
+        // per-element loops) keeps vals+gam in registers: kernel
+        // −18.4% (nsys 5,460.9 → 4,455.7 ns avg, 20,702 launches,
+        // same-code-drift controlled), ppl bit-exact.
+        //
+        // Distinct from declared-max-array-taxed-per-thread-under-
+        // runtime-bound (Batch 46 — the array's DECLARED SIZE exceeds
+        // the runtime bound, taxing thread-local footprint; here the
+        // array is exactly sized and the tax is per-ACCESS
+        // local-memory addressing + lost unrolling; fix differs:
+        // specialize the SIZE via pipeline overrides vs hoist the
+        // BOUND to a compile-time const + unroll), from
+        // bit-cursor-unpack-to-width-specialized-byte-batch (Batch 44
+        // — per-width arms make BIT ADDRESSES compile-time-constant;
+        // here the LOOP BOUND itself is the runtime value), and from
+        // hardcoded-fast-path-jit-specialization (Batch 23 —
+        // throughput constant-folding; this is address-space
+        // placement of per-thread state).
+        KernelRule {
+            rule_id: "runtime-arg-loop-bound-demotes-arrays-to-local-memory".to_string(),
+            gpu_concept: "A per-thread array whose per-element loops are bounded by a RUNTIME kernel argument is demoted to local memory even when the array is exactly sized and the argument is constant at every call site: the compiler cannot unroll a runtime-bounded loop, and a dynamically-indexed per-thread array has no register form — every access becomes a local-memory (spill) round-trip, and every array the loop touches inherits the demotion. The invariant is a LAUNCHER fact the kernel cannot see (the host passes a Rust const as an int arg), so the fix is to hoist it into the kernel as a compile-time constant and unroll the loops (#pragma unroll): statically-indexed arrays promote to registers, and unrolling preserves the ascending accumulation order so outputs stay bit-identical (keep the (i < len) tail-guard for partial tiles). The pathology is invisible by default — it hides under whatever global traffic the kernel already does, and only surfaces when a neighboring change ADDS traffic to the same address space: a fix that trades L1-hot global reads for more local-memory traffic measures SLOWER (the paired interleaved A/B is the detection instrument; nsys local-memory counters quantify it). Measured on the fused rmsnorm+quantize decode kernel: −18.4% kernel time (5,460.9 → 4,455.7 ns avg) at ppl bit-exact. Distinct from declared-max-array-taxed-per-thread-under-runtime-bound (the declared SIZE exceeds the runtime bound, taxing thread-local footprint — here the array is exactly sized and the tax is per-access local addressing plus lost unrolling; fix: specialize size via pipeline overrides vs hoist the bound to a compile-time const), from bit-cursor-unpack-to-width-specialized-byte-batch (per-width arms make bit addresses compile-time-constant — here the loop bound itself is the runtime value), and from hardcoded-fast-path-jit-specialization (throughput constant-folding — this is address-space placement of per-thread state).".to_string(),
+            ref_shape: "// naive: the loop bound is the RUNTIME kernel arg `ablock` (16 at\n// every call site, but the compiler cannot know that) — no unroll,\n// and a dynamically-indexed per-thread array has no register form:\n// every vals[]/gam[] access is a local-memory round-trip\nfn load_partial_sq_naive(input: &[f32], gamma: &[f32], start: usize,\n                         len: usize, ablock: usize) -> ([f32; 16], [f32; 16], f32) {\n    let mut vals = [0.0f32; 16]; // exactly sized — still demoted\n    let mut gam = [0.0f32; 16];\n    let mut partial_sq = 0.0f32;\n    for i in 0..ablock { // RUNTIME bound → dynamic indexing → local memory\n        let ok = i < len;\n        let v = if ok { input[start + i] } else { 0.0 };\n        vals[i] = v;\n        gam[i] = if ok { gamma[start + i] } else { 0.0 };\n        partial_sq += v * v;\n    }\n    (vals, gam, partial_sq)\n}\n".to_string(),
+            opt_pattern: "// optimized: the bound is the compile-time ACTIVATION_BLOCK const\n// (the launcher's Rust const — a launcher invariant, not a kernel\n// arg) + unroll: statically-indexed arrays promote to registers;\n// the (i < len) tail-guard preserves partial-tile semantics, and\n// unrolling preserves the ascending accumulation order (bit-identical)\nfn load_partial_sq_unrolled(input: &[f32], gamma: &[f32], start: usize,\n                            len: usize) -> ([f32; 16], [f32; 16], f32) {\n    const ACTIVATION_BLOCK: usize = 16; // compile-time, NOT a runtime arg\n    let mut vals = [0.0f32; ACTIVATION_BLOCK]; // registers\n    let mut gam = [0.0f32; ACTIVATION_BLOCK]; // registers\n    let mut partial_sq = 0.0f32;\n    for i in 0..ACTIVATION_BLOCK { // const bound → unrolled → registers\n        let ok = i < len;\n        let v = if ok { input[start + i] } else { 0.0 };\n        vals[i] = v;\n        gam[i] = if ok { gamma[start + i] } else { 0.0 };\n        partial_sq += v * v;\n    }\n    (vals, gam, partial_sq)\n}\n".to_string(),
+        },
+
+        // ── batched-read-slot-membership-decided-at-launch —
+        // read-batch slot membership must be decided at ONE site
+        // (the launch), never re-derived differently at extraction (D) ──
+        //
+        // Source: riir-gpu kimi_k3_gpu_backward_batched.rs sync2
+        // L1037-1099 (Batch 51 / Research 057, 2026-08-16) — the push
+        // site guards the w_g GEMM on the local Option PAIR
+        // `(Some(d_gate_pre), Some(w_g_t))` while the extraction site
+        // guards consumption on `config.use_output_gate` — a flag that
+        // IMPLIES the pair but is not implied by it. The builder
+        // (build_mla_handles_from_cpu, kimi_k3_gpu_backward.rs L2345-2351)
+        // propagates `w_g_t = if config.use_output_gate {
+        // weights.w_g.as_ref().map(...) } else { None }`, so
+        // use_output_gate=true + weights.w_g=None yields w_g_t=None:
+        // push skips the slot while extraction consumes one — every
+        // subsequent result shifts by one (d_h_g reads base_uv[0],
+        // mislabeled) and the running index walks one past the end
+        // (guaranteed OOB panic at base_uk extraction, far from root
+        // cause). The dead `sync2_layout` vec (pushed 1+2n_h times,
+        // never read) is the UNWIRED version of this rule's fix; the
+        // same file's t6_meta (L524-641) is the wired positive
+        // contrast. The write-side twin of this drift class is
+        // write-plan-derived-from-cache-slots-not-recomputed (B40) —
+        // but a READ list has no persistent state to derive from (the
+        // handles vec is consumed by the read), so the fix shape is
+        // genuinely different: decide membership ONCE into a named
+        // binding consumed at both ends, or record a tag/metadata vec
+        // at push time and drive extraction by iterating it.
+        KernelRule {
+            rule_id: "batched-read-slot-membership-decided-at-launch".to_string(),
+            gpu_concept: "When a batched readback collects handles that were pushed under conditional guards, the extraction side must replay the EXACT slot membership the launch side decided — but the two ends naturally express the decision differently: the push site guards on a local Option pair (source handle AND weight handle present), while the extraction site guards on the config flag that merely IMPLIES it. When the implying-but-not-implied-by case fires (flag true, handle absent — constructible whenever a builder propagates an optional weight through .map()), every subsequent result slot shifts by one: contents get read under the wrong label and the running index walks one past the end (OOB panic far from the root cause). Unlike the write-plan drift family, a read list has NO persistent state to derive from (the handles vec is consumed by the read), so the fix is to make the launch site the single decision point: compute membership ONCE into a named binding consumed at both ends, or record a tag/metadata vec alongside the pushes and drive extraction by iterating it in lockstep. The tell: a running result_idx plus an if-chain at extraction re-deriving conditions that were decided differently at push time — while a sibling sync point in the same file already ships the recorded-meta shape. Minimum guard when refactoring is not immediate: assert at entry that the flag and the handle presence agree, hard-erroring on the builder mismatch. Distinct from write-plan-derived-from-cache-slots-not-recomputed (B40: write-side host-to-device plan where the fix DERIVES from persistent cache state — here the read list is consumed, nothing to derive from; fix = record/decide-at-launch), from batched-downloads-single-sync-cycle (B26: amortizes sync count, silent on extraction indexing), and from enum-dispatch-separate-kernel-per-variant (B29: kernel-side specialization metadata, not host read-batch membership).".to_string(),
+            ref_shape: "// naive: push guards on the Option PAIR, extraction guards on the CONFIG\n// FLAG that only implies it — one decision, two expressions, they drift\nfn backward_layer(client: &Client, h: &Handles, cfg: &Config) {\n    let mut handles: Vec<Handle> = Vec::new();\n    if let (Some(dg), Some(wg)) = (&d_gate_pre, &h.w_g_t) {\n        handles.push(launch_gemm(client, dg, wg, l, proj, d)); // flag && handle\n    }\n    for head in 0..n_h {\n        handles.push(launch_gemm(client, &d_o[head], &h.w_uv[head], l, v_h, d_c));\n        handles.push(launch_gemm(client, &q_c[head], &h.w_uk[head], l, d_h, d_c));\n    }\n    let results = read_batched(client, handles);\n    let mut idx = 0usize;\n    if cfg.use_output_gate { // flag ONLY — handle may be absent: drift\n        let d_h_g = &results[idx]; // reads base_uv[0] under the wrong label\n        idx += 1;\n        accumulate(d_h_g);\n    }\n    for head in 0..n_h {\n        let uv = &results[idx]; idx += 1; // every slot shifted by one\n        let uk = &results[idx]; idx += 1; // final read: index OOB panic\n        base_uv[head] = uv; base_uk[head] = uk;\n    }\n}\n".to_string(),
+            opt_pattern: "// optimized: the launch site is the ONLY decision point — a recorded\n// tag vec drives extraction in lockstep; drift is structurally impossible\nfn backward_layer(client: &Client, h: &Handles, _cfg: &Config) {\n    let has_w_g = matches!((&d_gate_pre, &h.w_g_t), (Some(_), Some(_)));\n    let mut handles: Vec<Handle> = Vec::new();\n    let mut tags: Vec<Kind> = Vec::new(); // layout recorded AT PUSH time\n    if has_w_g {\n        handles.push(launch_gemm(client, d_gate_pre.as_ref().unwrap(),\n                                 h.w_g_t.as_ref().unwrap(), l, proj, d));\n        tags.push(Kind::DhG);\n    }\n    for head in 0..n_h {\n        handles.push(launch_gemm(client, &d_o[head], &h.w_uv[head], l, v_h, d_c));\n        tags.push(Kind::BaseUv(head));\n        handles.push(launch_gemm(client, &q_c[head], &h.w_uk[head], l, d_h, d_c));\n        tags.push(Kind::BaseUk(head));\n    }\n    let results = read_batched(client, handles);\n    for (tag, r) in tags.iter().zip(results.iter()) { // extraction REPLAYS\n        match tag {                                     // the recorded layout\n            Kind::DhG => accumulate(r),\n            Kind::BaseUv(hd) => base_uv[*hd] = r,\n            Kind::BaseUk(hd) => base_uk[*hd] = r,\n        }\n    }\n}\n".to_string(),
+        },
+        // ── unpack-loop-indexed-by-container-word —
+        // index the unpack loop by the CONTAINER word, not the logical
+        // element (A) ──
+        //
+        // Source: riir-gpu attention_q8kv_cubecl.rs Phase 1 Q·K loop
+        // L212-224 (Batch 51 / Research 057, 2026-08-16) — the Q8_0 KV
+        // dot loop indexes `e` over the 32 LOGICAL bytes of a block:
+        // `word_idx = base + e/4`, `byte_in_word = e%4`,
+        // `word = kv_qs[word_idx]` — the SAME u32 re-loaded 4 times,
+        // plus a runtime div/mod and a runtime-variable shift amount
+        // per element. GPU compilers cannot merge these loads without
+        // unrolling-by-4, which is not guaranteed for while loops in
+        // WGSL/CubeCL. Honest scope: the redundant loads are cache-hit
+        // (L1) loads — the win is L1 bandwidth + issue slots in a
+        // latency-bound decode kernel, not DRAM traffic. Generalizes
+        // by container:value ratio (nibbles 8/u32, 2-bit 16/u32).
+        KernelRule {
+            rule_id: "unpack-loop-indexed-by-container-word".to_string(),
+            gpu_concept: "When unpacking byte-packed quantized values (i8 x4 per u32), a loop indexed by the LOGICAL element reloads the same container word once per byte — 4 global loads where 1 suffices — and re-derives the word/byte position with runtime div/mod (e/4, e%4) plus a runtime-variable shift amount. GPU compilers cannot merge these loads without unrolling-by-4, which is not guaranteed for while loops in WGSL/CubeCL. The fix indexes the loop by the CONTAINER word: one load serves all its bytes, and the byte shifts become compile-time immediates in the (manual) unrolled extraction. Honest scope: the redundant loads are cache-hit (L1) loads — the win is L1 bandwidth + issue slots in a latency-bound decode kernel, not DRAM traffic. Generalizes by container:value ratio: nibbles pack 8 per u32 (one load serves 8), 2-bit values 16 per u32. Distinct from bit-cursor-unpack-to-width-specialized-byte-batch (B44: WIDTH DISPATCH — per-bits arms eliminating a software cursor's branches; here width is FIXED 8-bit and the decision is loop GRANULARITY = container granularity), from hoist-bit-address-out-of-packed-row-sweep (B44: hoists an address decomposition invariant ACROSS a whole row sweep — here nothing is loop-invariant, the load target legitimately changes every 4 iterations; the fix is load-batching, not invariant hoisting), and from vectorized-pack-load (popcorn: the pack-side cousin — 4 f32 loads merged into 1 packed load for vectorization; this is the unpack twin over a pre-packed quantized container). Note the file's Phase 1 already applies hoist-group-invariant-scale-out-of-word-loop (B17) correctly — block_scale loaded once per block; this rule is orthogonal (the payload load, not the scale).".to_string(),
+            ref_shape: "// naive: loop indexed by the LOGICAL element (byte) — the container\n// word is re-loaded once per byte; div/mod + shift amount are runtime\nfn qk_dot_by_byte(query: &[f32], kv_qs: &[u32], qs_base: usize, scale: f32) -> f32 {\n    let mut dot = 0.0f32;\n    let mut e = 0usize;\n    while e < 32 {\n        let word_idx = qs_base + e / 4; // identical for e in [0..4), [4..8)...\n        let byte_in_word = e % 4; // runtime div/mod per element\n        let word = kv_qs[word_idx]; // LOAD #1..#4 of the SAME word\n        let byte = (word >> (byte_in_word * 8)) & 0xFF; // runtime shift\n        let i8v = if byte >= 128 { byte as f32 - 256.0 } else { byte as f32 };\n        dot += query[e] * (scale * i8v);\n        e += 1;\n    }\n    dot // 32 loads (8 unique) + 32 div/mod + 32 runtime shifts per block\n}\n".to_string(),
+            opt_pattern: "// optimized: loop indexed by the CONTAINER word — one load serves 4\n// bytes; byte shifts are compile-time immediates (manual 4-way unroll)\nfn qk_dot_by_word(query: &[f32], kv_qs: &[u32], qs_base: usize, scale: f32) -> f32 {\n    let mut dot = 0.0f32;\n    let mut w = 0usize;\n    while w < 8 {\n        let word = kv_qs[qs_base + w]; // ONE load per 4 values\n        let b0 = word & 0xFF; // immediate shifts\n        let b1 = (word >> 8) & 0xFF;\n        let b2 = (word >> 16) & 0xFF;\n        let b3 = (word >> 24) & 0xFF;\n        for (e, b) in [b0, b1, b2, b3].iter().enumerate() {\n            let i8v = if *b >= 128 { *b as f32 - 256.0 } else { *b as f32 };\n            dot += query[w * 4 + e] * (scale * i8v);\n        }\n        w += 1;\n    }\n    dot // 8 loads per block (was 32) + constant shifts\n}\n".to_string(),
+        },
+        // ── dequant-placement-by-component-traffic-share —
+        // values stay packed + dequant in registers; scales pre-decode
+        // at upload — the placement is decided per component by
+        // traffic share (N) ──
+        //
+        // Source: riir-gpu attention_q8kv_cubecl.rs (Batch 51 /
+        // Research 057, 2026-08-16) — the Q8_0 KV cache deliberately
+        // splits representation: values stay packed i8 (kv_qs:
+        // Vec<u32>, inline dequant per read, header L4-5) while scales
+        // are CPU pre-decoded f16->f32 at upload (kv_scales: Vec<f32>,
+        // L398-400 + L514-517). The deciding inequality per component:
+        // expected reads x bytes saved vs conversion cost x reads.
+        // Values dominate bytes (1 B/elem vs 4 B f32 -> 4x less
+        // bandwidth for the dominant traffic at ~2 ALU ops/element;
+        // within-workgroup reuse of a dequantized K row is 1 — each
+        // thread owns a distinct position — so tile-staging buys
+        // nothing). Scales are a tiny sidecar (1 f16 per 32 values,
+        // 1/16 the traffic of even the packed values): pre-decode once
+        // — the negligible +2 B/32 elems removes the per-block-
+        // per-thread f16 decode from both consumer loops. The naive
+        // shapes are both real: (a) dequantize the whole cache to f32
+        // to reuse the f32 kernel — 4x KV bandwidth forever
+        // (quantization bought memory but not bandwidth); (b) keep
+        // scales in storage dtype and decode in-kernel per block per
+        // thread per step.
+        KernelRule {
+            rule_id: "dequant-placement-by-component-traffic-share".to_string(),
+            gpu_concept: "A quantized persistent operand (e.g. a Q8_0 KV cache read by attention every decode step) has two components with OPPOSITE optimal dequant placements, decided per component by traffic share x conversion cost x read count. The VALUES dominate bytes (1 B/elem vs 4 B f32): keep them packed on device and dequant in registers at every read — 4x less bandwidth for the dominant traffic at ~2 ALU ops/element, and within-workgroup reuse of a dequantized row is 1 (each thread owns a distinct position), so tile-staging buys nothing. The SCALES are a tiny sidecar (1 f16 per 32 values, 1/16 the traffic of even the packed values): pre-decode f16-to-f32 once at upload — the negligible +2 B per 32 elems removes the per-block-per-thread decode from every consumer loop. The naive shapes are both real: (a) dequantize the whole cache to f32 to reuse the f32 kernel — quantization bought memory but not bandwidth; (b) keep scales in storage dtype and decode in-kernel — redundant conversion per block per thread per step. Note the tension with dtype-normalize-once-at-upload (B31): B31 is CORRECT for the sidecar and WRONG for the payload — normalizing the whole operand at upload is exactly naive shape (a); this rule encodes when each half applies. Distinct from dequant-once-per-k-tile-into-shared-memory (B14: amortizes dequant across M output rows sharing a weight tile — reuse > 1 regime; a KV-cache K row has reuse 1 within the scoring workgroup, so inline-in-registers is the correct placement here — the smem-staging-gated-by-cross-thread-reuse (B35) gate applied to dequant placement), from verbatim-upload-on-format-match (B37: load-path transcode decision; this is per-read consumption placement), and from kv-window-device-resident-ring-append (B37: WHERE the cache lives; this is what REPRESENTATION it is stored in).".to_string(),
+            ref_shape: "// naive (a): one placement for the whole operand — materialize the\n// cache at f32 before attention to reuse the f32 kernel\nfn attention_with_dequantized_cache(query: &[f32], kv_q8: &Q8Cache, out: &mut [f32]) {\n    let mut keys_f32 = vec![0.0f32; kv_q8.n * KV_DIM];\n    let mut values_f32 = vec![0.0f32; kv_q8.n * KV_DIM];\n    kv_q8.dequantize_into(&mut keys_f32, &mut values_f32); // f16 decode + i8 mul\n    f32_attention(query, &keys_f32, &values_f32, out); // 4 B/value read forever\n}\n// naive (b): both components in storage dtype — the scale f16 decoded\n// in-kernel per block per thread per step\n".to_string(),
+            opt_pattern: "// optimized: split placement per component by traffic share\nstruct Q8KvBuffers {\n    kv_qs: Vec<u32>, // VALUES stay packed (1 B/elem, inline dequant)\n    kv_scales: Vec<f32>, // SCALES pre-decoded f16->f32 at upload\n}\n\nfn qk_score_inline(query: &[f32], kv: &Q8KvBuffers, pos: usize) -> f32 {\n    let mut dot = 0.0f32;\n    for blk in 0..8 {\n        let d = kv.kv_scales[pos * 8 + blk]; // f32 read — no f16 decode\n        let base = pos * 64 + blk * 8;\n        for e in 0..32 {\n            let i8v = unpack_byte(&kv.kv_qs, base, e); // dequant at read\n            dot += query[blk * 32 + e] * (d * i8v);\n        }\n    }\n    dot\n}\n// decision: values -> inline (4:1 bytes ratio x every-step reads\n// outweighs 2 ALU/elem); scales -> pre-decode (sidecar traffic\n// negligible, decode would be per-block-per-thread)\n".to_string(),
         },
     ]
 }

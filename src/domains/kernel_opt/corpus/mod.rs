@@ -1138,6 +1138,22 @@
 //!   and the triple-inconsistent 13/15/19H provision constant;
 //!   structurally-dead zero modules at toy scale; row-attention
 //!   dispatch exceeding the 65535 workgroup limit).
+//! - **Batch 49 (Research 055):** 1 rule, corpus 343 → 344 (A 80) —
+//! - **Batch 51 (Research 057):** 3 rules, corpus 344 → 347 (A 81, D 62, N 19) —
+//!   the FINAL riir-gpu file-mining batch (`kimi_k3_gpu_backward_batched.rs` +
+//!   `attention_q8kv_cubecl.rs`): batched-read-slot-membership-decided-at-launch (D),
+//!   unpack-loop-indexed-by-container-word (A), dequant-placement-by-component-
+//!   traffic-share (N). Declares the riir-gpu corpus COMPLETE (~115 files mined).
+//!   the Bench-686 measured-lesson distillation (not file mining):
+//!   `runtime-arg-loop-bound-demotes-arrays-to-local-memory`
+//!   (A — a correctly-sized per-thread array whose per-element
+//!   loops are bounded by a RUNTIME kernel arg that is constant at
+//!   every call site is demoted to local memory: no unroll, no
+//!   register form for dynamically-indexed arrays; hoist the bound
+//!   to a compile-time const + unroll — measured −18.4% kernel at
+//!   ppl bit-exact; the paired A/B that CAUGHT it is part of the
+//!   rule: trading L1-hot global reads for more local-memory
+//!   traffic is a LOSS).
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
@@ -1188,7 +1204,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 343-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 347-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1196,7 +1212,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (79 rules)
+    // A: Memory access patterns (81 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -1280,6 +1296,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "frozen-cooperand-hoist-out-of-perturbation-loop",
             "declared-max-array-taxed-per-thread-under-runtime-bound",
             "shared-operand-side-pair-batch-index-decomposition",
+            "runtime-arg-loop-bound-demotes-arrays-to-local-memory",
+            "unpack-loop-indexed-by-container-word",
         ],
     ),
     // B: Compute patterns (51 rules)
@@ -1380,7 +1398,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fuse-indirect-gather-into-dot-consumer",
         ],
     ),
-    // D: Dispatch patterns (61 rules)
+    // D: Dispatch patterns (62 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -1436,6 +1454,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "lm-head-loss-positions-only",
             "materialized-fast-path-bulk-slice-accessor",
             "env-flag-resolved-once-not-per-dispatch",
+            "batched-read-slot-membership-decided-at-launch",
             "entrypoint-variants-share-layer-body",
             "pipeline-layer-boundary-device-handle",
             "per-position-scalar-factored-gemv-collapse",
@@ -1608,7 +1627,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "debug-only-gpu-label-macro",
         ],
     ),
-    // N: dtype + alignment specialization (18 rules)
+    // N: dtype + alignment specialization (19 rules)
     (
         KernelCategory::DtypeAlignment,
         "N: dtype + alignment",
@@ -1631,6 +1650,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "saturating-nonlinearity-recovery-breaks-near-cap",
             "verbatim-upload-on-format-match",
             "rmsnorm-backward-gamma-scope-correction-term",
+            "dequant-placement-by-component-traffic-share",
         ],
     ),
     // O: IR strength reduction (4 rules)
@@ -1651,7 +1671,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
 /// Returns 15 buckets (one per category), each containing the `KernelRule`s whose
 /// `rule_id` appears in that category's slice of [`KERNEL_CATEGORIES`]. This is
 /// the category-scoped view of the corpus — a future heal pipeline can consult
-/// routed expert's rules first without scanning all 303.
+/// routed expert's rules first without scanning all 347.
 ///
 /// # Allocation
 ///

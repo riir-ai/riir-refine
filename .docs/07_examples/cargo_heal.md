@@ -61,7 +61,7 @@ parse-only validation). They stay suggest-only at the CLI.
 
 ```text
 cargo heal --suggest [--domain <auto|clippy|perf|kernel>] [--top-k <N>] <path>...
-cargo heal --fix [--write] [--quiet] <path>...
+cargo heal --fix [--write] [--quiet] [--verify [--verify-args <s>]] <path>...
 
 --suggest    Suggest mode: print matching rules per code span (no edits).
 --fix        Fix mode: apply the compiled-in proposers' span-preserving edits
@@ -71,6 +71,17 @@ cargo heal --fix [--write] [--quiet] <path>...
              unnecessary_unwrap, needless_range_loop, needless_lifetimes).
 --write      With --fix: write the spliced file in place (default: review only).
 --quiet      With --fix: skip the --suggest pass.
+--verify     With --fix (needs --features fix_verify): write, cargo-check,
+             auto-revert ONLY the offending edits (rustc JSON errors mapped
+             to file/line), re-check, report. Implies --write. Loosens the
+             vec-with-capacity usize gate (plain-path bounds attempted;
+             E0308 backs the revert) + adds the 4 VERIFY_LINTS
+             (redundant_closure, comparison_to_empty, while_let_on_iterator,
+             single_char_pattern).
+--verify-args <s>  Extra cargo args for --verify (whitespace-split, e.g.
+             "--features a,b,c" — MUST cover every edited module; a
+             default-features check is vacuous when `default = []` gates
+             the edited modules, the Bench 019 G5 lesson).
 --domain     Filter suggest output to one domain (default: auto — all enabled).
 --top-k <N>  Rules per span per domain (default 3).
 <path>...    Files or directories to scan (.rs files only).
@@ -78,7 +89,27 @@ cargo heal --fix [--write] [--quiet] <path>...
 
 The `fxhashmap` fix requires the healed crate to have the `rustc-hash`
 dependency — parse-only validation cannot check this (documented per-rule
-caveat; review mode is the safety net).
+caveat; review mode is the safety net). Under `--fix --verify` the dep gate
+is automatic: the owning crate's `Cargo.toml` is text-scanned for
+`rustc-hash` and the rule hard-skips when absent (no cargo run needed).
+
+## Verify mode (Issue 015)
+
+`--fix --verify` is the compile gate as tooling — the
+`rust_perf_verify`/`clippy_verify` pattern applied to the edit path
+instead of the draft path. Algorithm: baseline check on the unmodified
+tree (a broken tree cannot host a verification) → write every fixed file
+→ check → revert only the edits whose lines carry rustc errors
+(line-matched span-level; whole-file fallback when attribution is
+impossible) → re-check → repeat until clean (bounded by edit count + 2).
+The `#[ignore]`d e2e fixture test (`fix_verify_e2e_bad_edits_reverted_good_survive`,
+spawns real cargo) is the standing acceptance proof; the real-repo GOAT
+(katgpt-pruners, the Bench 019 G5 crate: 14 edits / 12 kept / 2
+auto-reverted — the u8-capacity E0308 + the fn-path coercion E0631, the
+exact G5 run-1 failure classes — every named skipped site landed
+compile-confirmed usize, 1245/1245 tests) is
+[Bench 027](../../.benchmarks/027_fix_verify_mode_goat.md) (landed as
+katgpt-rs `212ed7942`).
 
 ## Domain gating (T2.4)
 
