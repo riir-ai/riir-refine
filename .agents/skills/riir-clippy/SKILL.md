@@ -751,24 +751,49 @@ global = symlink only.
   files.
 - **NEXT mining target**: `ls` the riir-gpu tree for the next unmined
   cluster (~104 of ~200 files mined).
-- **Batch 48 rust_perf half — 8 online-search candidates QUEUED (idle-queue
-  item 11, 2026-08-16; sources + dedup verified against the 393-rule corpus):**
-  `hashset-insert-bool-return` (insert's bool return = one lookup vs
-  contains+insert two; distinct from entry-vs-contains-insert which is
-  HashMap-only), `unwrap-or-else-lazy` (eager default computation; sibling
-  of ok-or-else, different method member), `filter-count-to-any`
-  (filter(p).count()>0 → any(p) short-circuit), `vec-macro-zero-fill`
-  (new+resize(0) → vec![0;n] calloc path), `iter-copied-deref-map`
-  (.map(|x| *x) → .copied()), `filter-map-fuse` (two adapters → one
-  filter_map; perf-book hedges — Pareto bench decides),
-  `collect-append-to-extend` (collect+append → extend; perf-book names
-  both patterns), `vec-insert-front-deque` (insert(0,_) loop →
-  VecDeque::push_front; write-side sibling of vec-remove-front).
-  Sources: nnethercote/perf-book std-types + iterators chapters, std docs.
-  Honest drops already verified: powi(2)→x*x (LLVM lowers identically),
-  lock-hoist-out-of-loop (not parse-provable safe), parking_lot swap
-  (perf-book: measure first). Land as PerfRule entries + proposers +
-  fixtures + Pareto bench gate. Candidates:
+- **Batch 48 rust_perf half DONE (2026-08-16, Research 054):** the 8
+  online-search candidates landed as `PerfRule` entries + `BenchSpec`
+  harnesses + eval spans + Pareto bench verdicts + floors re-pin. Corpus
+  50→58 rules (complexity 12→14, allocation 14→17, iterators 4→7),
+  benchable 40→48, annotated 8→10. **6/8 ParetoDominant:**
+  collect-append-to-extend 8.5-12.8× (allocs 6251→1), vec-insert-front-
+  deque 7.8-115.3×, vec-macro-zero-fill 32-2505× (calloc lazy pages vs
+  explicit memset), unwrap-or-else-lazy 1.9-2.3×, hashset-insert-bool-
+  return 1.19-1.31×, filter-map-fuse 1.37-1.64×. **2 honest annotations:**
+  filter-count-to-any ParetoDominated 0.82-0.90× (the FOLK-WISDOM
+  REFUTATION — LLVM vectorizes filter().count() into batched scanning
+  while any()'s early-exit forces scalar iteration; at a 50% hit position
+  the vectorized full count WINS; any wins only ≲10%-position hits or
+  non-vectorizable predicates) + iter-copied-deref-map Mixed (0.80× at 1M
+  on sum folds — Copied's length-tracking overhead loses to the unrolled
+  Map+sum; the idiom matters for collect's TrustedLen sizing, not folds).
+  **Harness lessons (Research 054 §3-§4):** (1) pure-compute harnesses get
+  HOISTED out of the timing loop by LICM (same input every iteration →
+  perfect 1.00× ties at impossible per-call costs) — the standing anti-
+  LICM idiom is `let input = std::hint::black_box(input);` at the top of
+  every run_* (allocation-bearing harnesses never hit this); a pure fn of
+  a constant arg also const-folds away (black_box the arg). (2) `use` is
+  NOT inherited by child modules — a harness typing a container in BOTH a
+  mod signature and a top-level run_* needs the use at BOTH levels.
+  (3) A position-0 short-circuit drives any() to a literal sub-ns call,
+  tripping the validator's div-by-zero Tie guard — position the hit at
+  n/2 for a measurable regime. Tooling: `perf_bench_demo` gained
+  `PERF_BENCH_FILTER` (comma-separated rule-id substrings) for
+  batch-scoped gate runs. Retrieval floors RE-PINNED (96/126 blended
+  denominators): perf 87.5/95.8/97.9 (top-1 UNCHANGED vs 40-span set —
+  zero batch decay after 3 spans were re-authored to the fixture
+  convention: variant names, canonical predicate shapes — filter-map-
+  fuse's first draft didn't retrieve its own rule in top-8), blended
+  70.8/83.3/90.6 (2d) + 77.8/87.3/92.9 (3d) — ALL above the old
+  baseline. Proposers honestly deferred (bench-verdict-first, the
+  Issues 012/013/014 precedent): the parse-clean ParetoDominant
+  proposer candidates are hashset-insert-bool-return, collect-append-
+  to-extend, vec-macro-zero-fill; filter-count-to-any must NEVER get an
+  unconditional proposer (ParetoDominated). The full-corpus re-run was
+  killed ~15 min in: pre-existing btreemap-sorted-iteration alone costs
+  ~40+ min (5000 inner queries × ~1-2ms at n=50K ≈ 5-10s per call ×
+  calibration × samples × 3 repeats — slow-by-design, not a bug).
+  Candidates:
   `kimi_k3_gpu_backward_batched.rs` (1,394 — LOW value: shares
   Issue 693's H1/H2 + the broken LCG with the module file; mine only if
   the better clusters are exhausted), the small unmined leaves
@@ -780,7 +805,7 @@ global = symlink only.
   was mined at B26; these are the standalone twins, expect dedup),
   `attention_q8kv_cubecl.rs` (sibling of the B23 attention cluster —
   dedup pressure HIGH). Pick 1-2 files, ~3-6 rules (dedup pressure
-  very high after 47 batches), Batch 48 (Research 053 — RE-SCAN
+  very high after 47 batches), Batch 49 (Research 055 — RE-SCAN
   `.research/` at write time).
   - Validation pattern (proven T4 + 32a + 32b-1 + 32c + 36 + 38): corpus files are NOT
     sibling WIP — edit + run GOAT in the main checkout with
@@ -827,7 +852,9 @@ global = symlink only.
   dirty AGAIN with fresh sibling WIP (mtime ~18:38) — a ~200K-line
   cluster, verify clean at batch start) — mine only after their WIP
   lands.
-- **Progress**: riir-gpu ~104 of ~200 files mined. Corpus: 343 rules.
+- **Progress**: riir-gpu ~104 of ~200 files mined. Corpus: 343 kernel rules
+  + 58 rust_perf rules (Batch 48 landed the rust_perf half — the kernel half
+  is Batch 49).
   edge_lora module FULLY MINED (32a + 32b-1 + 32c). spectralquant/
   FULLY MINED (15 + 33). hypernet/ FULLY MINED (45: meta_lora.rs +
   train_meta_lora.rs; 47: shine.rs + routing.rs + types.rs +

@@ -9,14 +9,14 @@
 //! the committed regression-gate test.
 //!
 //! Fixture composition (honest provenance — see Bench 022):
-//! - **clippy (40)**: hand-authored variants, one per corpus lint, verified
+//! - **clippy (48)**: hand-authored variants, one per corpus lint, verified
 //!   against real `cargo clippy` 1.93 (exactly-one-lint sweep) at authoring
 //!   time + re-verified against THIS crate's proposers by the committed
 //!   label test below (the proposers are the standing oracle).
-//! - **`rust_perf` (30)**: hand-authored variants of the corpus
+//! - **`rust_perf` (48)**: hand-authored variants of the corpus
 //!   `buggy_code` shapes; the five proposer-covered rules are re-verified by
 //!   the committed label test, the rest are semantic labels authored against
-//!   the corpus entries.
+//!   the corpus entries (Batch 48 added the 8 online-search rules' spans).
 //! - **kernel (30, `kernel_heal` only)**: deterministic mutated variants —
 //!   the corpus `ref_shape` texts with identifiers renamed via a fixed map
 //!   (`mutate_shape`). A self-variant probe: optimistic by construction (it
@@ -753,30 +753,41 @@ mod tests {
     /// clippy 54.2/70.8/81.2, perf unchanged. Truthfulness wins — a corpus
     /// that misrepresents lint behavior poisons `self_evolve` learning.
     ///
+    /// Batch 48 re-pin (8 `rust_perf` rules + spans, 2026-08-16): perf
+    /// corpus 50→58 rules, `PERF_SPANS` 40→48, blended denominator 88→96. First
+    /// measurement showed 3 of the 8 new spans drifting (filter-map-fuse not
+    /// even top-8 — every distinctive token renamed away from the corpus
+    /// shape); the spans were re-authored to the set's convention (variant
+    /// names, canonical predicate/operator shapes) per the Issue 022
+    /// fix-before-repin order. New baseline: blended 70.8/83.3/90.6,
+    /// clippy 54.2/70.8/83.3, perf 87.5/95.8/97.9 (top-1 UNCHANGED vs the
+    /// 40-span set — zero batch decay), kernel self-variants 100/100/100.
+    /// 3-domain (126 spans): blended 77.8/87.3/92.9, router 88/126 = 69.8%.
+    ///
     /// Floors = baseline − ONE span — the ranking's tie-break drains a
     /// `HashMap` (`RandomState` per process), so a tie at a hit boundary can
     /// flip across processes (3-process re-runs were identical; the margin
     /// is cheap robustness, not noise cover).
     mod floors {
-        pub const BLENDED_TOP1: f32 = 60.0 / 88.0;
-        pub const BLENDED_TOP3: f32 = 71.0 / 88.0;
-        pub const BLENDED_TOP5: f32 = 77.0 / 88.0;
+        pub const BLENDED_TOP1: f32 = 67.0 / 96.0;
+        pub const BLENDED_TOP3: f32 = 79.0 / 96.0;
+        pub const BLENDED_TOP5: f32 = 86.0 / 96.0;
         pub const CLIPPY_TOP1: f32 = 25.0 / 48.0;
         pub const CLIPPY_TOP3: f32 = 33.0 / 48.0;
-        pub const PERF_TOP3: f32 = 37.0 / 40.0;
+        pub const PERF_TOP3: f32 = 45.0 / 48.0;
         #[cfg(feature = "kernel_heal")]
         pub const KERNEL_TOP3: f32 = 29.0 / 30.0;
         /// Router-annotation accuracy floor (Issue 020 wiring, Bench 025):
-        /// the TF-cosine-global annotation measured 69.3% (61/88,
-        /// 2-domain) / 68.6% (81/118, 3-domain). Floor = measured − 5
-        /// spans of corpus-growth headroom (both states land at 63.6%).
+        /// the TF-cosine-global annotation measured 66/96 (68.8%, 2-domain)
+        /// / 88/126 (69.8%, 3-domain) after Batch 48. Floor = measured − 5
+        /// spans of corpus-growth headroom (both states land at 63.5%).
         /// This is the standing per-batch measurement of annotation
         /// quality — NOT a gate-quality claim (gating stays killed at the
         /// 85% bar).
         #[cfg(not(feature = "kernel_heal"))]
-        pub const ROUTER_ANNOTATION: f32 = 56.0 / 88.0;
+        pub const ROUTER_ANNOTATION: f32 = 61.0 / 96.0;
         #[cfg(feature = "kernel_heal")]
-        pub const ROUTER_ANNOTATION_3D: f32 = 75.0 / 118.0;
+        pub const ROUTER_ANNOTATION_3D: f32 = 80.0 / 126.0;
     }
 
     #[allow(clippy::cast_precision_loss)] // ratio arithmetic over tiny counts

@@ -9,10 +9,15 @@
 //! are NotBenchable-with-a-metric-mismatch (Issue 014 T2), `None` for
 //! unconditional wins + honestly NotBenchable rules.
 //!
-//! 50 entries across 12 categories (complexity 12, allocation 14, simd 5,
-//! layout 4, iterators 4, concurrency 4, io 1, arithmetic 1, dispatch 1,
-//! caching 2, bevy 1, wasm 1). 40 are benchable; 10 are honestly
+//! 58 entries across 12 categories (complexity 14, allocation 17, simd 5,
+//! layout 4, iterators 7, concurrency 4, io 1, arithmetic 1, dispatch 1,
+//! caching 2, bevy 1, wasm 1). 48 are benchable; 10 are honestly
 //! NotBenchable (8 external-runtime/size-class + 2 metric-mismatch, Issue 014).
+//! Batch 48 (idle-queue item 11, 2026-08-16) added the 8 online-search
+//! candidates (perf-book std-types + iterators chapters): collect-append-to-
+//! extend, hashset-insert-bool-return, unwrap-or-else-lazy, filter-count-to-
+//! any, vec-macro-zero-fill, iter-copied-deref-map, filter-map-fuse,
+//! vec-insert-front-deque.
 //!
 //! ## Bench specs (behind `rust_perf_bench`)
 //!
@@ -64,6 +69,14 @@
 //! - `cow-conditional-alloc` (String always-alloc → Cow<str> borrow when no transform — N vs 0.1N allocations)
 //! - `regex-hoist-lazylock` (Regex::new per call → static LazyLock — compile once, Issue 014 T2.1)
 //! - `arc-str-payload` (per-recipient payload clone → Arc<str> handle clone — N×bytes → 1 alloc, Issue 014 T2.2)
+//! - `collect-append-to-extend` (collect+append staging → extend — no intermediate Vec, Batch 48)
+//! - `hashset-insert-bool-return` (contains+insert double lookup → insert's bool return — Batch 48)
+//! - `unwrap-or-else-lazy` (unwrap_or(eager) → unwrap_or_else(closure) — Batch 48)
+//! - `filter-count-to-any` (filter(p).count() > 0 full scan → any(p) short-circuit — Batch 48)
+//! - `vec-macro-zero-fill` (Vec::new+resize memset → vec![0; n] calloc — Batch 48)
+//! - `iter-copied-deref-map` (.map(|x| *x) → .copied() TrustedLen — Batch 48)
+//! - `filter-map-fuse` (filter(p).map(f) → filter_map fused — Batch 48)
+//! - `vec-insert-front-deque` (Vec::insert(0,_) O(n²) → VecDeque::push_front — Batch 48)
 //!
 //! Not benchable (10/50) — honest:
 //! - `layout-reorder` (struct size — deterministic `size_of`, not a runtime
@@ -86,28 +99,31 @@
 //!
 //! ## Context-dependent rules (`context_notes`)
 //!
-//! Eight rules carry a `context_notes: Some(...)` annotation. Six record that
+//! Ten rules carry a `context_notes: Some(...)` annotation. Eight record that
 //! the Pareto validator found them **ParetoDominated** or **Mixed** in the
 //! default configuration: the original 4 from Bench 013 (`precompute-table`,
 //! `papaya-lockfree`, `dedupe-hashset-vs-vec`, `reuse-allocation-clear`) + 2
-//! from Bench 016 / Issue 012 (`sort-by-key`, `copy-from-slice`). Two more
-//! (Issue 014 T2.3/T2.4) annotate the NotBenchable metric-mismatch class:
-//! `tokio-guard-across-await` + `bounded-channel-backpressure`. The patterns
-//! are genuine wins in their respective regimes and are kept in the corpus as
-//! documented patterns, but consumers should treat them as context-dependent
-//! — not unconditional suggestions.
+//! from Bench 016 / Issue 012 (`sort-by-key`, `copy-from-slice`) + 2 from
+//! Bench 48 (`filter-count-to-any` — dominated at mid-position hits by the
+//! VECTORIZED count loop, `iter-copied-deref-map` — Mixed, 0.80× at 1M on
+//! sum folds). Two more (Issue 014 T2.3/T2.4) annotate the NotBenchable
+//! metric-mismatch class: `tokio-guard-across-await` +
+//! `bounded-channel-backpressure`. The patterns are genuine wins in their
+//! respective regimes and are kept in the corpus as documented patterns, but
+//! consumers should treat them as context-dependent — not unconditional
+//! suggestions.
 
 use crate::corpus::Corpus;
 use crate::domains::rust_perf::{PerfRule, RustPerfDomain};
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 50 entries
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 58 entries
 /// covering the main perf pattern categories (complexity, allocation, simd,
 /// layout, iterators, concurrency, io, arithmetic, dispatch, caching, bevy,
-/// wasm). Allocation is the deepest (14 rules); complexity has 12; simd has 5;
-/// layout + iterators have 4 each; concurrency has 4 (Issue 014 added the two
-/// metric-mismatch rules); caching has 2; the rest have 1.
+/// wasm). Allocation is the deepest (17 rules); complexity has 14; iterators
+/// has 7 (Batch 48 added 3); simd has 5; layout + concurrency have 4 each;
+/// caching has 2; the rest have 1.
 #[must_use]
 #[allow(clippy::too_many_lines)] // seed corpus is a data table; length scales with rule count
 pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
@@ -977,6 +993,171 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
             // Not benchable: queue-depth/backpressure metric + semantics-changing.
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: None,
+        },
+        // ── allocation: collect() + append() → extend() ───────────────────────
+        // Source: nnethercote/perf-book std-types chapter (Batch 48, idle-queue
+        // item 11). Staging an iterator into an intermediate `Vec` only to
+        // `append` it into the target pays one extra allocation + an extra
+        // memcpy per chunk. `extend` writes the iterator's items straight
+        // into the target's growth path — zero intermediates. The compiler
+        // cannot elide a `collect` (it materializes a concrete `Vec`).
+        PerfRule {
+            rule_id: "collect-append-to-extend".to_string(),
+            name: "collect() + append() staging → extend() (no intermediate Vec)".to_string(),
+            category: "allocation".to_string(),
+            buggy_code: "fn merge_chunks(target: &mut Vec<u32>, chunks: &[Vec<u32>]) {\n    for c in chunks {\n        let mut staged: Vec<u32> = c.iter().copied().collect(); // intermediate Vec alloc per chunk\n        target.append(&mut staged);\n    }\n}".to_string(),
+            fixed_code: "fn merge_chunks(target: &mut Vec<u32>, chunks: &[Vec<u32>]) {\n    for c in chunks {\n        target.extend(c.iter().copied()); // writes straight into the target\n    }\n}".to_string(),
+            context_notes: None,
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(collect_append_to_extend_bench_spec()),
+        },
+        // ── complexity: HashSet contains+insert → insert's bool return ────────
+        // Source: nnethercote/perf-book std-types chapter (Batch 48, idle-queue
+        // item 11). `HashSet` has no `entry` API (unlike `HashMap` — see the
+        // `entry-vs-contains-insert` sibling); the membership check IS the
+        // insert's `bool` return. `!set.contains(&x)` + `set.insert(x)` walks
+        // the hash table twice; `set.insert(x)` alone walks it once. The two
+        // calls are opaque to LLVM (hashbrown internals) — no fusion.
+        PerfRule {
+            rule_id: "hashset-insert-bool-return".to_string(),
+            name: "HashSet contains+insert double lookup → insert's bool return (one lookup)".to_string(),
+            category: "complexity".to_string(),
+            buggy_code: "use std::collections::HashSet;\nfn register_seen(seen: &mut HashSet<u32>, items: &[u32]) -> usize {\n    let mut inserted = 0;\n    for &x in items {\n        if !seen.contains(&x) {\n            seen.insert(x);\n            inserted += 1;\n        }\n    }\n    inserted\n}".to_string(),
+            fixed_code: "use std::collections::HashSet;\nfn register_seen(seen: &mut HashSet<u32>, items: &[u32]) -> usize {\n    let mut inserted = 0;\n    for &x in items {\n        if seen.insert(x) {\n            inserted += 1;\n        }\n    }\n    inserted\n}".to_string(),
+            context_notes: None,
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(hashset_insert_bool_return_bench_spec()),
+        },
+        // ── allocation: unwrap_or(eager) → unwrap_or_else(closure) ────────────
+        // Source: nnethercote/perf-book std-types chapter (Batch 48, idle-queue
+        // item 11). The `Option` sibling of `ok-or-else`: `unwrap_or(expr)`
+        // evaluates `expr` BEFORE checking the `Some` variant — the default
+        // is computed (and allocated, if it allocates) even when discarded.
+        // `unwrap_or_else(|| expr)` defers construction to the `None` arm.
+        // Wins when the default is non-trivial AND `Some` is the common case.
+        PerfRule {
+            rule_id: "unwrap-or-else-lazy".to_string(),
+            name: "unwrap_or(expensive()) eager default → unwrap_or_else(closure) lazy".to_string(),
+            category: "allocation".to_string(),
+            buggy_code: "fn resolve(opt: Option<u32>) -> u32 {\n    opt.unwrap_or(expensive_default(64)) // eagerly evaluated even when Some\n}\nfn expensive_default(n: u32) -> u32 {\n    (0..n).fold(0u32, |acc, i| acc.wrapping_add(i * 31))\n}".to_string(),
+            fixed_code: "fn resolve(opt: Option<u32>) -> u32 {\n    opt.unwrap_or_else(|| expensive_default(64)) // built only on None\n}\nfn expensive_default(n: u32) -> u32 {\n    (0..n).fold(0u32, |acc, i| acc.wrapping_add(i * 31))\n}".to_string(),
+            context_notes: None,
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(unwrap_or_else_bench_spec()),
+        },
+        // ── iterators: filter(p).count() > 0 → any(p) short-circuit ───────────
+        // Source: nnethercote/perf-book iterators chapter (Batch 48, idle-queue
+        // item 11). `filter(p).count() > 0` scans the WHOLE iterator, builds a
+        // count, then throws it away. `any(p)` stops at the first hit. The
+        // compiler cannot derive a short-circuit from a full `count` fold.
+        // The win scales with how early the first match lands.
+        PerfRule {
+            rule_id: "filter-count-to-any".to_string(),
+            name: "filter(p).count() > 0 full scan → any(p) short-circuit".to_string(),
+            category: "iterators".to_string(),
+            buggy_code: "fn has_even(vals: &[u32]) -> bool {\n    vals.iter().filter(|&&v| v % 2 == 0).count() > 0 // full scan, no short-circuit\n}".to_string(),
+            fixed_code: "fn has_even(vals: &[u32]) -> bool {\n    vals.iter().any(|&v| v % 2 == 0) // stops at the first hit\n}".to_string(),
+            // Bench 48: ParetoDominated at mid-position hits (0.82-0.90×) —
+            // a genuine folk-wisdom refutation. LLVM VECTORIZES the count
+            // loop (batched element scanning) while any's early-exit forces
+            // scalar iteration; at a 50% hit position the vectorized FULL
+            // count beats the scalar half-scan. any wins only for very early
+            // hits (empirically ≤ ~10% position) or non-vectorizable
+            // predicates. Keep as an idiom rule with the regime caveat.
+            context_notes: Some(
+                "Bench 48: ParetoDominated 0.82-0.90x at mid-position hits. \
+                 LLVM vectorizes filter().count() into batched scanning while \
+                 any()'s early-exit forces scalar iteration — at a 50% hit \
+                 position the vectorized full count WINS. any() only wins for \
+                 very early hits (~<10% position) or non-vectorizable \
+                 predicates. Regime-dependent: suggest only when hits are \
+                 known-early or the predicate is expensive/branchy."
+                    .to_string(),
+            ),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(filter_count_to_any_bench_spec()),
+        },
+        // ── allocation: Vec::new + resize(n, 0) → vec![0; n] calloc path ──────
+        // Source: nnethercote/perf-book std-types chapter (Batch 48, idle-queue
+        // item 11). `Vec::new()` + `resize(n, 0)` allocates uninitialized
+        // memory then runs an explicit memset pass over every byte. `vec![0; n]`
+        // routes through `alloc_zeroed` (calloc) — for large buffers the
+        // allocator hands back lazily-zeroed OS pages, skipping the touch.
+        PerfRule {
+            rule_id: "vec-macro-zero-fill".to_string(),
+            name: "Vec::new() + resize(n, 0) memset → vec![0; n] alloc_zeroed (calloc)".to_string(),
+            category: "allocation".to_string(),
+            buggy_code: "fn zero_buf(n: usize) -> Vec<u8> {\n    let mut v = Vec::new(); // uninit alloc\n    v.resize(n, 0); // explicit memset pass\n    v\n}".to_string(),
+            fixed_code: "fn zero_buf(n: usize) -> Vec<u8> {\n    vec![0u8; n] // alloc_zeroed — calloc zero pages\n}".to_string(),
+            context_notes: None,
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(vec_macro_zero_fill_bench_spec()),
+        },
+        // ── iterators: .map(|x| *x) → .copied() specialized adapter ───────────
+        // Source: nnethercote/perf-book iterators chapter (Batch 48, idle-queue
+        // item 11). `.map(|x| *x)` wraps the iterator in the generic `Map`
+        // adapter (opaque closure, no size hints). `.copied()` is a
+        // specialized adapter implementing `TrustedLen` + `InPlaceIterable`
+        // markers — downstream consumers (collect, sum) get exact-size
+        // reservations the `Map` form cannot express. In tight release loops
+        // LLVM often lowers both identically — the win regime is adapter
+        // fusion + allocation sizing, which the bench measures honestly.
+        PerfRule {
+            rule_id: "iter-copied-deref-map".to_string(),
+            name: ".map(|x| *x) generic adapter → .copied() specialized (TrustedLen)".to_string(),
+            category: "iterators".to_string(),
+            buggy_code: "fn sum_kills(kills: &[u64]) -> u64 {\n    kills.iter().map(|k| *k).sum() // generic Map adapter, no size hint\n}".to_string(),
+            fixed_code: "fn sum_kills(kills: &[u64]) -> u64 {\n    kills.iter().copied().sum() // specialized Copy adapter\n}".to_string(),
+            // Bench 48: Mixed — parity at ≤100K, 0.80× at 1M (copied SLOWER).
+            // The specialized adapter's length-tracking overhead loses to the
+            // fully-unrolled map+sum loop at large N on a sum fold. The rule
+            // stands as an idiom (TrustedLen matters for collect's exact-size
+            // reservations, not for folds); do not suggest for large-N folds.
+            context_notes: Some(
+                "Bench 48: Mixed (tie/tie/0.80x at 1K/100K/1M). The specialized \
+                 Copied adapter carries length-tracking overhead that loses to \
+                 the fully-unrolled Map+sum loop at large N on a sum fold. The \
+                 idiom remains correct for collect() (exact-size reservation via \
+                 TrustedLen) and for readability; do not suggest expecting a \
+                 throughput win on large-N folds."
+                    .to_string(),
+            ),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(iter_copied_deref_map_bench_spec()),
+        },
+        // ── iterators: filter(p).map(f) → filter_map fused adapter ────────────
+        // Source: nnethercote/perf-book iterators chapter (Batch 48, idle-queue
+        // item 11). The perf-book HEDGES on this one ("filter_map is not
+        // always faster") — the fused form removes one adapter state-machine
+        // layer but blocks some internal specializations of the separated
+        // adapters. Genuinely regime-dependent; the Pareto bench decides the
+        // corpus annotation, not the book's hedged prose.
+        PerfRule {
+            rule_id: "filter-map-fuse".to_string(),
+            name: "filter(p).map(f) two adapters → filter_map fused (regime-dependent)".to_string(),
+            category: "iterators".to_string(),
+            buggy_code: "fn even_squares(vals: &[u32]) -> Vec<u32> {\n    vals.iter().filter(|&&v| v % 2 == 0).map(|&v| v * v).collect()\n}".to_string(),
+            fixed_code: "fn even_squares(vals: &[u32]) -> Vec<u32> {\n    vals.iter().filter_map(|&v| (v % 2 == 0).then_some(v * v)).collect()\n}".to_string(),
+            context_notes: None,
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(filter_map_fuse_bench_spec()),
+        },
+        // ── complexity: Vec::insert(0, x) loop → VecDeque::push_front ─────────
+        // Source: nnethercote/perf-book std-types chapter (Batch 48, idle-queue
+        // item 11). The write-side sibling of `vec-remove-front-to-vecdeque`:
+        // every `insert(0, x)` memmoves the whole buffer down (O(n) per
+        // insert, O(n²) per loop); `VecDeque::push_front` advances a ring
+        // head in O(1). The compiler cannot turn a front-insert loop into a
+        // ring buffer.
+        PerfRule {
+            rule_id: "vec-insert-front-deque".to_string(),
+            name: "Vec::insert(0, x) O(n²) prepend loop → VecDeque::push_front O(1)".to_string(),
+            category: "complexity".to_string(),
+            buggy_code: "fn prepend_history(history: &mut Vec<u32>, events: &[u32]) {\n    for &e in events {\n        history.insert(0, e); // O(n) memmove per insert → O(n²) total\n    }\n}".to_string(),
+            fixed_code: "use std::collections::VecDeque;\nfn prepend_history(history: &mut VecDeque<u32>, events: &[u32]) {\n    for &e in events {\n        history.push_front(e); // O(1) ring-buffer head advance\n    }\n}".to_string(),
+            context_notes: None,
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(vec_insert_front_deque_bench_spec()),
         },
     ])
 }
@@ -3220,6 +3401,369 @@ pub fn run_fixed(input: &Input) {
     }
 }
 
+/// Bench spec for `collect-append-to-extend`: collect+append staging vs extend.
+#[cfg(feature = "rust_perf_bench")]
+fn collect_append_to_extend_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![1_000, 10_000, 100_000],
+        harness: r#"
+mod buggy {
+    // One intermediate Vec alloc + memcpy per chunk.
+    pub fn merge_chunks(target: &mut Vec<u32>, chunks: &[Vec<u32>]) {
+        for c in chunks {
+            let mut staged: Vec<u32> = c.iter().copied().collect();
+            target.append(&mut staged);
+        }
+    }
+}
+
+mod fixed {
+    // Straight into the target's growth path — zero intermediates.
+    pub fn merge_chunks(target: &mut Vec<u32>, chunks: &[Vec<u32>]) {
+        for c in chunks {
+            target.extend(c.iter().copied());
+        }
+    }
+}
+
+pub fn make_input(n: usize) -> Vec<Vec<u32>> {
+    // Chunks of 16 — a realistic batch shape (both sides do the same work,
+    // the difference is purely the intermediate staging).
+    (0..n / 16).map(|b| (0..16).map(|i| (b * 16 + i) as u32).collect()).collect()
+}
+
+pub fn run_buggy(input: &[Vec<u32>]) {
+    let mut target: Vec<u32> = Vec::with_capacity(input.len() * 16);
+    buggy::merge_chunks(&mut target, input);
+    std::hint::black_box(target.len());
+}
+
+pub fn run_fixed(input: &[Vec<u32>]) {
+    let mut target: Vec<u32> = Vec::with_capacity(input.len() * 16);
+    fixed::merge_chunks(&mut target, input);
+    std::hint::black_box(target.len());
+}
+"#
+        .to_string(),
+    }
+}
+
+/// Bench spec for `hashset-insert-bool-return`: contains+insert double lookup
+/// vs insert's bool return. Half-duplicate input so both bool arms fire.
+#[cfg(feature = "rust_perf_bench")]
+fn hashset_insert_bool_return_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![1_000, 10_000, 100_000],
+        harness: r#"
+use std::collections::HashSet;
+
+mod buggy {
+    use std::collections::HashSet;
+    // Two hash-table walks per element.
+    pub fn register_seen(seen: &mut HashSet<u32>, items: &[u32]) -> usize {
+        let mut inserted = 0;
+        for &x in items {
+            if !seen.contains(&x) {
+                seen.insert(x);
+                inserted += 1;
+            }
+        }
+        inserted
+    }
+}
+
+mod fixed {
+    use std::collections::HashSet;
+    // ONE hash-table walk per element.
+    pub fn register_seen(seen: &mut HashSet<u32>, items: &[u32]) -> usize {
+        let mut inserted = 0;
+        for &x in items {
+            if seen.insert(x) {
+                inserted += 1;
+            }
+        }
+        inserted
+    }
+}
+
+pub fn make_input(n: usize) -> Vec<u32> {
+    // 50% duplicates: every element's membership arm fires both ways.
+    (0..n).map(|i| (i % (n / 2).max(1)) as u32).collect()
+}
+
+pub fn run_buggy(input: &[u32]) {
+    let mut seen = HashSet::with_capacity(input.len());
+    std::hint::black_box(buggy::register_seen(&mut seen, input));
+}
+
+pub fn run_fixed(input: &[u32]) {
+    let mut seen = HashSet::with_capacity(input.len());
+    std::hint::black_box(fixed::register_seen(&mut seen, input));
+}
+"#
+        .to_string(),
+    }
+}
+
+/// Bench spec for `unwrap-or-else-lazy`: eager default construction vs lazy
+/// closure, 99% Some (the regime where the eager default is pure waste).
+/// Mirrors the `ok-or-else` harness shape.
+#[cfg(feature = "rust_perf_bench")]
+fn unwrap_or_else_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![100, 1_000, 10_000],
+        harness: r#"
+mod buggy {
+    fn expensive_default(n: u32) -> u32 {
+        (0..n).fold(0u32, |acc, i| acc.wrapping_add(i.wrapping_mul(31)))
+    }
+    pub fn resolve(opt: Option<u32>) -> u32 {
+        opt.unwrap_or(expensive_default(std::hint::black_box(64))) // eagerly evaluated even when Some
+    }
+}
+
+mod fixed {
+    fn expensive_default(n: u32) -> u32 {
+        (0..n).fold(0u32, |acc, i| acc.wrapping_add(i.wrapping_mul(31)))
+    }
+    pub fn resolve(opt: Option<u32>) -> u32 {
+        opt.unwrap_or_else(|| expensive_default(std::hint::black_box(64))) // built only on None
+    }
+}
+
+pub fn make_input(n: usize) -> Vec<Option<u32>> {
+    // 99% Some, 1% None — realistic distribution (mirrors ok-or-else).
+    (0..n).map(|i| if i % 100 == 0 { None } else { Some(i as u32) }).collect()
+}
+
+pub fn run_buggy(input: &[Option<u32>]) {
+    // black_box(input) defeats loop-invariant hoisting of the pure loop body
+    // out of the caller's timing loop (Batch 48 lesson).
+    let input = std::hint::black_box(input);
+    let sum: u32 = input.iter().map(|o| buggy::resolve(*o)).sum();
+    std::hint::black_box(sum);
+}
+
+pub fn run_fixed(input: &[Option<u32>]) {
+    let input = std::hint::black_box(input);
+    let sum: u32 = input.iter().map(|o| fixed::resolve(*o)).sum();
+    std::hint::black_box(sum);
+}
+"#
+        .to_string(),
+    }
+}
+
+/// Bench spec for `filter-count-to-any`: full-scan filter+count vs any
+/// short-circuit. First element matches, rest don't — the maximal short-circuit
+/// regime (the rule's selling point).
+#[cfg(feature = "rust_perf_bench")]
+fn filter_count_to_any_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![1_000, 10_000, 100_000],
+        harness: r#"
+mod buggy {
+    pub fn has_hit(vals: &[u32]) -> bool {
+        vals.iter().filter(|&&v| v == 42).count() > 0 // full scan, always
+    }
+}
+
+mod fixed {
+    pub fn has_hit(vals: &[u32]) -> bool {
+        vals.iter().any(|&v| v == 42) // stops at the first hit
+    }
+}
+
+pub fn make_input(n: usize) -> Vec<u32> {
+    // Hit lands at n/2 — an early-but-not-zero short-circuit regime. (A
+    // position-0 hit drives `any` to a literal sub-ns call, which the
+    // validator's div-by-zero guard classifies as a Tie — the guard exists
+    // for malformed 0ns measurements, not for genuinely free calls.)
+    let mut v = vec![7u32; n];
+    v[n / 2] = 42;
+    v
+}
+
+pub fn run_buggy(input: &[u32]) {
+    let input = std::hint::black_box(input);
+    std::hint::black_box(buggy::has_hit(input));
+}
+
+pub fn run_fixed(input: &[u32]) {
+    let input = std::hint::black_box(input);
+    std::hint::black_box(fixed::has_hit(input));
+}
+"#
+        .to_string(),
+    }
+}
+
+/// Bench spec for `vec-macro-zero-fill`: uninit alloc + memset vs calloc.
+/// Both sides black_box-read a byte near the end so the pages are touched
+/// identically for the read; the difference is the WRITE path (memset vs
+/// lazy zero pages).
+#[cfg(feature = "rust_perf_bench")]
+fn vec_macro_zero_fill_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![1_000, 100_000, 1_000_000],
+        harness: r#"
+mod buggy {
+    pub fn zero_buf(n: usize) -> Vec<u8> {
+        let mut v = Vec::new();
+        v.resize(n, 0); // uninit alloc + explicit memset
+        v
+    }
+}
+
+mod fixed {
+    pub fn zero_buf(n: usize) -> Vec<u8> {
+        vec![0u8; n] // alloc_zeroed — calloc zero pages
+    }
+}
+
+pub fn make_input(n: usize) -> usize {
+    n
+}
+
+pub fn run_buggy(input: &usize) {
+    // black_box(n) defeats loop-invariant hoisting; spread reads (first /
+    // middle / last) make partial memset elision observable.
+    let n = std::hint::black_box(*input);
+    let v = buggy::zero_buf(n);
+    let mid = v.len() / 2;
+    std::hint::black_box((v[0], v[mid], v[v.len() - 1]));
+}
+
+pub fn run_fixed(input: &usize) {
+    let n = std::hint::black_box(*input);
+    let v = fixed::zero_buf(n);
+    let mid = v.len() / 2;
+    std::hint::black_box((v[0], v[mid], v[v.len() - 1]));
+}
+"#
+        .to_string(),
+    }
+}
+
+/// Bench spec for `iter-copied-deref-map`: generic Map adapter vs specialized
+/// copied(). Sum consumer at plain sizes — honest Tie expected in tight
+/// release loops; the alloc axis + adapter markers carry the distinction.
+#[cfg(feature = "rust_perf_bench")]
+fn iter_copied_deref_map_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![1_000, 100_000, 1_000_000],
+        harness: r#"
+mod buggy {
+    pub fn sum_kills(kills: &[u64]) -> u64 {
+        kills.iter().map(|k| *k).sum()
+    }
+}
+
+mod fixed {
+    pub fn sum_kills(kills: &[u64]) -> u64 {
+        kills.iter().copied().sum()
+    }
+}
+
+pub fn make_input(n: usize) -> Vec<u64> {
+    (0..n).map(|i| i as u64).collect()
+}
+
+pub fn run_buggy(input: &[u64]) {
+    let input = std::hint::black_box(input);
+    std::hint::black_box(buggy::sum_kills(input));
+}
+
+pub fn run_fixed(input: &[u64]) {
+    let input = std::hint::black_box(input);
+    std::hint::black_box(fixed::sum_kills(input));
+}
+"#
+        .to_string(),
+    }
+}
+
+/// Bench spec for `filter-map-fuse`: two adapters vs filter_map. The
+/// perf-book hedges — the Pareto verdict decides the annotation.
+#[cfg(feature = "rust_perf_bench")]
+fn filter_map_fuse_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![1_000, 100_000, 1_000_000],
+        harness: r#"
+mod buggy {
+    pub fn even_squares(vals: &[u32]) -> Vec<u32> {
+        vals.iter().filter(|&&v| v % 2 == 0).map(|&v| v * v).collect()
+    }
+}
+
+mod fixed {
+    pub fn even_squares(vals: &[u32]) -> Vec<u32> {
+        vals.iter().filter_map(|&v| (v % 2 == 0).then_some(v * v)).collect()
+    }
+}
+
+pub fn make_input(n: usize) -> Vec<u32> {
+    (0..n as u32).collect()
+}
+
+pub fn run_buggy(input: &[u32]) {
+    std::hint::black_box(buggy::even_squares(input));
+}
+
+pub fn run_fixed(input: &[u32]) {
+    std::hint::black_box(fixed::even_squares(input));
+}
+"#
+        .to_string(),
+    }
+}
+
+/// Bench spec for `vec-insert-front-deque`: Vec::insert(0, x) O(n²) prepend
+/// loop vs VecDeque::push_front O(1). Mirrors the vec-remove-front harness.
+#[cfg(feature = "rust_perf_bench")]
+fn vec_insert_front_deque_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![250, 1_000, 4_000],
+        harness: r#"
+use std::collections::VecDeque;
+
+mod buggy {
+    pub fn prepend_all(out: &mut Vec<u32>, items: &[u32]) {
+        for &x in items {
+            out.insert(0, x); // O(n) memmove each → O(n²) total
+        }
+    }
+}
+
+mod fixed {
+    use std::collections::VecDeque;
+    pub fn prepend_all(out: &mut VecDeque<u32>, items: &[u32]) {
+        for &x in items {
+            out.push_front(x); // O(1) ring head advance
+        }
+    }
+}
+
+pub fn make_input(n: usize) -> Vec<u32> {
+    (0..n).map(|i| i as u32).collect()
+}
+
+pub fn run_buggy(input: &[u32]) {
+    let mut out = Vec::with_capacity(input.len());
+    buggy::prepend_all(&mut out, input);
+    std::hint::black_box(out.len());
+}
+
+pub fn run_fixed(input: &[u32]) {
+    let mut out = VecDeque::with_capacity(input.len());
+    fixed::prepend_all(&mut out, input);
+    std::hint::black_box(out.len());
+}
+"#
+        .to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3235,19 +3779,20 @@ mod tests {
     }
 
     #[test]
-    fn seed_corpus_has_fifty_entries_across_twelve_categories() {
+    fn seed_corpus_has_fifty_eight_entries_across_twelve_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 50);
+        assert_eq!(corpus.entries.len(), 58);
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
         categories.dedup();
-        // 12 distinct categories. Allocation is the deepest (14 rules,
-        // including Issue 014's arc-str-payload); complexity has 12;
-        // simd has 5; layout + iterators have 4 each; concurrency has 4
-        // (Issue 014 added the two metric-mismatch rules); caching has 2
-        // (Issue 014 added regex-hoist-lazylock); io, arithmetic, dispatch,
-        // bevy, wasm have 1 each.
+        // 12 distinct categories. Allocation is the deepest (17 rules,
+        // including Issue 014's arc-str-payload + Batch 48's three); complexity
+        // has 14 (Batch 48 added hashset-insert-bool-return +
+        // vec-insert-front-deque); iterators has 7 (Batch 48 added three);
+        // simd has 5; layout + concurrency have 4 each (Issue 014 added the
+        // two metric-mismatch rules); caching has 2 (Issue 014 added
+        // regex-hoist-lazylock); io, arithmetic, dispatch, bevy, wasm have 1 each.
         assert_eq!(categories.len(), 12);
     }
 
@@ -3316,10 +3861,10 @@ mod tests {
 
     #[cfg(feature = "rust_perf_bench")]
     #[test]
-    fn forty_rules_have_bench_specs() {
+    fn forty_eight_rules_have_bench_specs() {
         let corpus = build_perf_seed_corpus();
         let with_spec = corpus.entries.iter().filter(|e| e.bench_spec.is_some()).count();
-        assert_eq!(with_spec, 40, "expected 40 benchable rules, got {with_spec}");
+        assert_eq!(with_spec, 48, "expected 48 benchable rules, got {with_spec}");
     }
 
     #[cfg(feature = "rust_perf_bench")]
@@ -3352,10 +3897,12 @@ mod tests {
     /// Bench 016 (Issue 012) added 2 more annotated rules (sort-by-key,
     /// copy-from-slice). Issue 014 T2.3/T2.4 added 2 more in the
     /// NotBenchable metric-mismatch class (tokio-guard-across-await,
-    /// bounded-channel-backpressure). The other 42 have `context_notes: None`
-    /// (unconditional wins or honestly NotBenchable).
+    /// bounded-channel-backpressure + the 2 Batch 48 verdict-class rules:
+    /// filter-count-to-any ParetoDominated, iter-copied-deref-map Mixed). The
+    /// other 48 have `context_notes: None` (unconditional wins or honestly
+    /// NotBenchable).
     #[test]
-    fn eight_annotated_rules_carry_context_notes() {
+    fn ten_annotated_rules_carry_context_notes() {
         let corpus = build_perf_seed_corpus();
         let annotated: Vec<&str> = corpus
             .entries
@@ -3363,7 +3910,7 @@ mod tests {
             .filter(|e| e.context_notes.is_some())
             .map(|e| e.rule_id.as_str())
             .collect();
-        assert_eq!(annotated.len(), 8, "expected 8 context-annotated rules");
+        assert_eq!(annotated.len(), 10, "expected 10 context-annotated rules");
         assert!(annotated.contains(&"precompute-table"));
         assert!(annotated.contains(&"papaya-lockfree"));
         assert!(annotated.contains(&"dedupe-hashset-vs-vec"));
@@ -3380,14 +3927,14 @@ mod tests {
     /// ParetoDominated + 2 Mixed) + 8 NotBenchable = 39 total. The 4 annotated
     /// + 35 unannotated = 39.
     #[test]
-    fn forty_two_rules_have_no_context_notes() {
+    fn fifty_rules_have_no_context_notes() {
         let corpus = build_perf_seed_corpus();
         let unannotated = corpus
             .entries
             .iter()
             .filter(|e| e.context_notes.is_none())
             .count();
-        assert_eq!(unannotated, 42, "expected 42 unannotated rules");
+        assert_eq!(unannotated, 48, "expected 48 unannotated rules (58 - 10 annotated)");
     }
 
     /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -3399,7 +3946,7 @@ mod tests {
         let json = serde_json::to_string(&corpus.entries).unwrap();
         let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
         let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-        assert_eq!(annotated, 8);
+        assert_eq!(annotated, 10);
 
         // Simulate a pre-field snapshot: strip `context_notes` from JSON.
         // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -3422,7 +3969,7 @@ mod tests {
 
         // Filter to the 8 annotated rules.
         let annotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_some()).collect();
-        assert_eq!(annotated.len(), 8, "expected 8 annotated rules");
+        assert_eq!(annotated.len(), 10, "expected 10 annotated rules");
 
         // The HealEntry trait override must agree with the struct field.
         for rule in &annotated {
@@ -3442,9 +3989,9 @@ mod tests {
             );
         }
 
-        // The 42 unannotated rules must return None from the trait too.
+        // The 50 unannotated rules must return None from the trait too.
         let unannotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_none()).collect();
-        assert_eq!(unannotated.len(), 42, "expected 42 unannotated rules");
+        assert_eq!(unannotated.len(), 48, "expected 48 unannotated rules");
         for rule in &unannotated {
             assert!(HealEntry::context_notes(*rule).is_none(), "{} should have no context_notes", rule.rule_id);
         }

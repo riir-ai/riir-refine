@@ -56,6 +56,23 @@ fn main() {
     let corpus = RustPerfDomain::build_corpus();
     println!("Corpus: {} rules\n", corpus.len());
 
+    // Optional substring filter (Batch 48): bench only matching rules —
+    // a batch-scoped gate run without re-running the whole corpus.
+    // `PERF_BENCH_FILTER=hashset,filter-map cargo run --example ...`
+    let filter = std::env::var("PERF_BENCH_FILTER").ok();
+    let selected: Vec<&_> = match filter.as_deref() {
+        Some(f) if !f.is_empty() => {
+            let parts: Vec<&str> = f.split(',').map(str::trim).filter(|s| !s.is_empty()).collect();
+            let sel: Vec<_> = corpus
+                .iter()
+                .filter(|e| parts.iter().any(|p| e.rule_id.contains(p)))
+                .collect();
+            println!("FILTER {f:?}: {}/{} rules selected\n", sel.len(), corpus.len());
+            sel
+        }
+        _ => corpus.iter().collect(),
+    };
+
     let mut pareto_dominant = 0usize;
     let mut mixed = 0usize;
     let mut dominated = 0usize;
@@ -65,7 +82,7 @@ fn main() {
     // Machine-readable per-rule rows for the bench doc (Issue 014 T1.3).
     let mut report_rows: Vec<String> = Vec::new();
 
-    for entry in &corpus {
+    for entry in &selected {
         println!("--- Rule: {} ({}) ---", entry.rule_id, entry.name);
 
         let Some(spec) = entry.bench_spec.as_ref() else {

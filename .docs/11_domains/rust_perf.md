@@ -19,19 +19,22 @@
 
 ## Corpus
 
-50 rules across 12 categories (rust-optimize skill checklist +
+58 rules across 12 categories (rust-optimize skill checklist +
 nnethercote/perf-book + rustc-hash/bevy real-world patterns + the hotpath-rs
-profiling guide, Research 032). Allocation is the deepest category (14
-rules). Complexity has 12. Simd, layout, iterators have 4-5 each;
-concurrency has 4 (Issue 014 added the two metric-mismatch rules); caching has
-2 (Issue 014 added `regex-hoist-lazylock`); the rest have 1 each. 40 are
-benchable (carry a `BenchSpec`); 10 are honestly `NotBenchable` — 8 need
-external runtimes or are structural (size_of, memory, fairness), 2 are
-**metric-mismatch** (Issue 014 T2.3/T2.4: the cost is contention latency /
-queue depth, not wall-clock). 8 of 50 carry `context_notes` — 6 verdict-class
-(2 `ParetoDominated` + 4 regime-fragile/Mixed) + 2 metric-mismatch-class.
-Consumers should treat annotated rules as context-dependent, not
-unconditional suggestions.
+profiling guide, Research 032; Batch 48 added the 8 online-search candidates
+from the perf-book std-types + iterators chapters). Allocation is the deepest
+category (17 rules). Complexity has 14. Iterators has 7. Simd, layout have
+4-5 each; concurrency has 4 (Issue 014 added the two metric-mismatch rules);
+caching has 2 (Issue 014 added `regex-hoist-lazylock`); the rest have 1
+each. 48 are benchable (carry a `BenchSpec`); 10 are honestly
+`NotBenchable` — 8 need external runtimes or are structural (size_of,
+memory, fairness), 2 are **metric-mismatch** (Issue 014 T2.3/T2.4: the cost
+is contention latency / queue depth, not wall-clock). 10 of 58 carry
+`context_notes` — 8 verdict-class (3 `ParetoDominated` + 5
+regime-fragile/Mixed — Batch 48 added the `filter-count-to-any` folk-wisdom
+refutation: the VECTORIZED count loop beats `any()`'s scalar early-exit at
+mid-position hits) + 2 metric-mismatch-class. Consumers should treat
+annotated rules as context-dependent, not unconditional suggestions.
 
 | Rule ID | Category | Bench verdict | Context? | Pattern |
 |---|---|---|---|---|
@@ -80,6 +83,14 @@ unconditional suggestions.
 | `regex-hoist-lazylock` | caching | ✅ 5443-5675x ParetoDominant | — | `Regex::new` per call → `static LazyLock<Regex>` (compile once; Issue 014 / Bench 020: allocs 1.3M→0, bytes 563.6M→0 per 1000 calls — the largest deterministic win in the corpus) |
 | `bevy-reactive-loop` | bevy | ❌ NotBenchable | — | `WinitSettings::default()` (Continuous, 100% CPU) → `reactive_low_power` (needs Bevy runtime) |
 | `wasm-batch-ffi` | wasm | ❌ NotBenchable | — | Per-call FFI (250ns floor × N×M) → single batch invocation (needs WASM runtime) |
+| `collect-append-to-extend` | allocation | ✅ 9.8-13.1x ParetoDominant | — | `collect()` + `append()` staging → `extend()` (no intermediate Vec; Batch 48 alloc axis: 6251→1 allocs, bytes halved @100K) |
+| `hashset-insert-bool-return` | complexity | ✅ 1.19-1.31x ParetoDominant | — | `!set.contains(&x)` + `set.insert(x)` double lookup → `insert`'s bool return (one hash-table walk; Batch 48) |
+| `unwrap-or-else-lazy` | allocation | ✅ 1.9-2.3x ParetoDominant | — | `unwrap_or(expensive())` eager default → `unwrap_or_else(closure)` lazy (99%-Some regime; Batch 48 — sibling of `ok-or-else`) |
+| `filter-count-to-any` | iterators | ❌ 0.82-0.90x ParetoDominated | ⚠️ `context_notes` | `filter(p).count() > 0` → `any(p)` — **refuted at mid-position hits** (Batch 48): LLVM vectorizes the count loop while `any`'s early-exit forces scalar iteration; wins only for ≲10%-position hits or non-vectorizable predicates |
+| `vec-macro-zero-fill` | allocation | ✅ 32-2505x ParetoDominant | — | `Vec::new()` + `resize(n, 0)` explicit memset → `vec![0; n]` `alloc_zeroed`/calloc lazy zero pages (Batch 48) |
+| `iter-copied-deref-map` | iterators | ⚠️ Mixed (0.80x @1M) | ⚠️ `context_notes` | `.map(|x| *x)` → `.copied()` (Batch 48): parity ≤100K, SLOWER at 1M on sum folds — the idiom's TrustedLen matters for `collect`, not folds |
+| `filter-map-fuse` | iterators | ✅ ParetoDominant | — | `filter(p).map(f)` two adapters → `filter_map` fused (Batch 48: timing-only win, allocs parity — the perf-book's hedge resolved by measurement) |
+| `vec-insert-front-deque` | complexity | ✅ 7.8-115.3x ParetoDominant | — | `Vec::insert(0, x)` O(n²) prepend loop → `VecDeque::push_front` O(1) (Batch 48 — the write-side sibling of `vec-remove-front-to-vecdeque`) |
 | `shrink-to-fit-after-build` | allocation | ❌ NotBenchable | — | Vec with over-allocated capacity → `shrink_to_fit()` after build (memory win, not speed; the realloc may even make build slower) |
 | `box-large-enum-variant` | layout | ❌ NotBenchable | — | Enum with one `[u8; 1024]` variant → `Box<[u8; 1024]>` (shrinks common case from 1032→16 bytes; size_of win improves cache density) |
 | `async-yield-point` | iterators | ❌ NotBenchable | — | Long async fn (no `.await`) → cooperative `yield_now()` every 100 iters (fairness/p99-latency win under contention, not single-task throughput) |

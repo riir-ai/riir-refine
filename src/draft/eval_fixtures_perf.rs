@@ -319,4 +319,68 @@ pub fn ladder_board(scores: &HashMap<u32, u32>) -> Vec<u32> {
     Snapshot([u8; 1024]),
 }
 "#),
+    // ── Batch 48 (idle-queue item 11): the 8 online-search perf rules ────
+    ("collect-append-to-extend", r#"pub fn merge_loot(bag: &mut Vec<u32>, drops: &[Vec<u32>]) {
+    for chunk in drops {
+        let mut staged: Vec<u32> = chunk.iter().copied().collect();
+        bag.append(&mut staged);
+    }
+}
+"#),
+    ("hashset-insert-bool-return", r#"use std::collections::HashSet;
+
+pub fn track_visited_zones(visited: &mut HashSet<ZoneId>, path: &[ZoneId]) -> usize {
+    let mut added = 0;
+    for zone in path {
+        if !visited.contains(zone) {
+            visited.insert(*zone);
+            added += 1;
+        }
+    }
+    added
+}
+"#),
+    ("unwrap-or-else-lazy", r#"pub fn spawn_count(prefab: Option<u32>) -> u32 {
+    prefab.unwrap_or(default_spawns(96))
+}
+
+fn default_spawns(n: u32) -> u32 {
+    (0..n).fold(0u32, |acc, i| acc.wrapping_add(i * 13))
+}
+"#),
+    ("filter-count-to-any", r#"pub fn any_even_kill(kills: &[u32]) -> bool {
+    kills
+        .iter()
+        .filter(|&&v| v % 2 == 0)
+        .count()
+        > 0
+}
+"#),
+    ("vec-macro-zero-fill", r#"pub fn blank_visibility_map(cells: usize) -> Vec<u8> {
+    let mut fog = Vec::new();
+    fog.resize(cells, 0);
+    fog
+}
+"#),
+    ("iter-copied-deref-map", r#"pub fn total_kills(kills: &[u64]) -> u64 {
+    kills
+        .iter()
+        .map(|k| *k)
+        .sum()
+}
+"#),
+    ("filter-map-fuse", r#"pub fn even_kill_squares(kills: &[u32]) -> Vec<u32> {
+    kills
+        .iter()
+        .filter(|&&v| v % 2 == 0)
+        .map(|&v| v * v)
+        .collect()
+}
+"#),
+    ("vec-insert-front-deque", r#"pub fn prepend_kill_history(history: &mut Vec<u32>, events: &[u32]) {
+    for &e in events {
+        history.insert(0, e);
+    }
+}
+"#),
 ];
