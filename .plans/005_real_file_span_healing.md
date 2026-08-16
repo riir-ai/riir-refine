@@ -707,7 +707,30 @@ primitives fuse: `ConformalIntervalCalibrator<F>`, `select_best_belief`, `clr_vo
 All three are verified to ship via direct grep (2026-08-14). All are floor-tested.
 
 **Status: not started. Substrate verified. Warm-up cost + false-confidence
-failure mode MEASURED — see Issue 023.**
+failure mode MEASURED (Issue 023). Pre-flight scope check done 2026-08-16 —
+read it before writing code.**
+
+> **PRE-FLIGHT (2026-08-16): T9.1/T9.2 target a value nothing consumes.**
+> Grep across `src/` and `tests/`: `DraftedFix.confidence` is *written* in
+> `src/drafter.rs:246` and read **nowhere outside that file** except its own
+> unit tests. Calibrating it would produce a beautifully-conformal number that
+> no decision reads — the same decorative-metric trap that sank T3.5.1 (router
+> verdict is display-only) and T7.2 (evolved directions are off the shipped
+> router path). Three times now this plan has proposed improving a value with
+> no consumer; check for one FIRST.
+>
+> **The real decision point is T9.3's blend**, `W_EVO * evolution_score +
+> W_RATE * success_rate` at `src/self_evolve.rs:304`, which actually selects
+> the winning candidate in `HealPipeline::heal`. That is where
+> `select_best_belief` would change behaviour, and where a UQ gain would be
+> measurable.
+>
+> Suggested re-scope when this phase starts: do **T9.3 first** (real consumer,
+> real decision), and treat T9.1/T9.2/T9.2b as prerequisites only if T9.3's
+> Beta-posterior selection needs a calibrated per-candidate score — otherwise
+> they are opt-in instrumentation, not a shipped path. T9.5's gate should then
+> measure *selection regret at the blend*, not interval coverage on an unread
+> field.
 
 > **Issue 023 POC (2026-08-16) — two corrections before this phase starts.**
 >
