@@ -2,7 +2,21 @@
 
 **Proposal:** [002](../.proposals/002_real_file_span_healing.md)
 **Branch:** `develop` (per global rule — no feature branches)
-**Status:** proposed (awaiting go-ahead)
+**Status:** Phases 1-2, 4, 6 SHIPPED · **Phase 3 REOPENED** (G1 dead at scale,
+Bench 022) · Phase 5 DEFERRED · Phase 7 partially shipped (Issue 018) ·
+Phase 8 BLOCKED (rubrc) · Phases 9-14 not started
+**Last reviewed:** 2026-08-16 — see [Issue 023](../.issues/023_plan005_design_question_poc.md)
+for the POC that settled the Phase 9 and Phase 11 design questions.
+
+> **Read this first if you are picking the plan up.** Three things are not
+> where the phase bodies below imply:
+> 1. **Phase 3's G1 is FAILING** at scale (clippy 58.3% vs its own ≥80% bar).
+>    Its stated contingency is live as **T3.5** and blocks Phase 9+.
+> 2. **Phase 7 is partially shipped** via Issue 018 — the outcome recorder and
+>    cross-run persistence already exist. Do not rebuild them.
+> 3. **Phase 11's latency justification is dead** (measured 1.07× ceiling vs a
+>    1.5× gate, Issue 023). It survives as a quality-only phase, demoted below
+>    Phase 12 and dependent on Phase 10 T10.1.
 
 ## Goal
 
@@ -131,7 +145,24 @@ permanent shape of `--suggest`.
 
 Measure the retrieval quality + latency before investing in proposers.
 
-**Status: DONE 2026-08-14 — ALL FOUR GATES PASS** (Bench 018):
+> **REOPENED 2026-08-16 — G1 IS DEAD AT SCALE.** Issue 017 / Bench 022
+> re-measured top-1 retrieval precision on **130 spans against the full
+> 40-rule corpus** (vs the 12- then 24-item hand-built fixture below) and
+> got **clippy 58.3%** — under this phase's own ≥80% bar. Perf holds at
+> **87.5%**; kernel self-variant probes are 100% but are a weaker test
+> (self-variants, not independent instantiations). Root cause is
+> nearest-neighbour crowding concentrated in tiny-token patterns
+> (`identity_op` alone tops 5 misses) — the same text-similarity-vs-rule-
+> instantiation limit that refuted the min-score threshold below.
+> `AGENTS.md` records the claim as "dead at scale".
+>
+> **This phase's own contingency is therefore live and MUST be executed
+> before Phase 9+ starts:** *"If G1 (precision) is <80%, tune the domain
+> directions or switch to `BonsaiEmbedder` (768-D, opt-in)."* Tracked as
+> **T3.5** below. G2/G3/G4 are unaffected and remain PASS.
+
+**Status (superseded — kept as the record of the fixture-scale gate):
+DONE 2026-08-14 — ALL FOUR GATES PASS** (Bench 018):
 G1 100% (12/12, target ≥80%), G2 349µs/chunk (target <1ms, 2.9× headroom),
 G3 104 lib tests, G4 scratch stable. Notable: the first G1 run FAILED at
 75% — audit showed the FIXTURE mis-instantiated 3 rules (method-closure vs
@@ -162,7 +193,11 @@ queue + the proposers stay the only instantiation gate. Full record: Bench
       **Expanded 12 → 24 (2026-08-14, Bench 018 Addendum 2): 23/24 = 96%** — all
       10 clippy rules + 14 perf rules covered; single miss = `retain-inplace` →
       `collect-avoidance` (near-miss sibling pair, same text-similarity root
-      cause as the threshold refutation). Gate still PASS.
+      cause as the threshold refutation). Gate still PASS **on the fixture**.
+      **SUPERSEDED at scale (2026-08-16, Issue 017 / Bench 022): clippy 58.3%
+      top-1 on 48 spans / 40-rule corpus — FAIL vs the ≥80% bar.** Perf 87.5%
+      PASS; kernel self-variants 100% (weaker test). The 24-item fixture was
+      too small and too clean to expose nearest-neighbour crowding.
 - [x] **T3.2 (G2 latency)** Chunk + embed + route + retrieve < 1ms per chunk (Clifford
       wedge KNN is O(log N); Bench 575 measured 123µs p50 @ N=1000).
       Measured 349µs/chunk end-to-end (multi-scale + 2-domain fan-out), release.
@@ -173,11 +208,26 @@ queue + the proposers stay the only instantiation gate. Full record: Bench
       capacities stable across 50 repeat scans. Remaining allocs bounded +
       documented (Bench 018 §G4).
 
+- [ ] **T3.5 (G1 recovery — the live contingency, blocks Phase 9+)** Lift clippy
+      top-1 from 58.3% to ≥80% against the Bench 022 130-span eval. Ordered by
+      cost, stop at the first that clears the bar:
+      1. **Tune the domain centroids** — the corpus-derived centroids (T1.4)
+         were never re-fit after the corpus went 10 → 40 rules.
+      2. **Attack the crowding directly** — the misses concentrate in
+         tiny-token patterns (`identity_op` tops 5). A per-rule minimum token
+         count, or a length-normalized score term, is cheaper than re-embedding.
+      3. **Switch to `BonsaiEmbedder` (768-D, opt-in)** — this phase's stated
+         fallback. Costs a heavier dep + a re-measured G2; only pay it if 1-2 fail.
+      Re-run the committed regression gate
+      (`cargo test --features latent_retrieval --lib retrieval_precision_regression_gate`)
+      and record the new baseline in a fresh `.benchmarks/` entry.
+
 ### Phase 3 exit criteria
 - G1-G4 PASS for `--suggest` mode. If G1 (precision) is <80%, tune the domain directions
   or switch to `BonsaiEmbedder` (768-D, opt-in) before proceeding to proposers.
-  **MET 2026-08-14 (Bench 018)** — G1 100% on the faithful fixture after the
-  fixture-faithfulness audit (the 75% first run was fixture error, not retrieval).
+  **MET 2026-08-14 on the 24-item fixture (Bench 018); NOT MET at scale
+  (2026-08-16, Bench 022 — clippy 58.3%).** The contingency clause is live;
+  the phase closes when T3.5 lands. G2/G3/G4 remain PASS.
 
 ## Phase 4 — Top-5 perf proposers (the `--fix` upgrade for perf)
 
@@ -236,7 +286,7 @@ concepts, but proposer-grade). Until then `--fix` covers perf + the clippy
 structural set (T6.4) and kernel stays suggest-only.
 
 ### Tasks
-- [ ] **T5.1-T5.6** The 5 kernel proposers (launch/dispatch/layout only, outside `#[cube]`).
+- [-] **T5.1-T5.6** The 5 kernel proposers (launch/dispatch/layout only, outside `#[cube]`).
       **DEFERRED** — no honest 5 exist in the current corpus (see status).
       (See original Plan 005 Phase 3 — unchanged.)
 
@@ -347,8 +397,20 @@ was demoted from `FIXABLE_LINTS` (7 → 6 structural lints).
       regression that caught the first `map_through_splices` draft's frame
       bug + a two-pass composition case).
 
+> **Count refresh (2026-08-16).** The narrative above records the state at
+> T6.4 landing. Since then Issue 015 shipped `--fix --verify` (the
+> `fix_verify` feature: apply → `cargo check --all-targets` → revert only
+> the offending edits → re-check) and Issue 016 expanded the structural set.
+> Current shipped surface, verified against source:
+> `FIXABLE_LINTS` = **33** (the 6 seed + 27 from Issue 016,
+> `src/domains/clippy_lints/proposers/mod.rs:174`), `VERIFY_LINTS` = **4**
+> (`redundant_closure` restored here under the compile gate), plus the **5**
+> rust_perf proposers. Read "6 structural lints" and "10 shipped proposers"
+> below as historical, not current.
+
 ### Phase 6 exit criteria
-- G5 PASS. `cargo heal --fix` is production-usable for the 10 shipped proposers +
+- G5 PASS. `cargo heal --fix` is production-usable for the shipped proposers
+  (**33 structural clippy lints + 4 verify-tier + 5 perf**, as of 2026-08-16) +
   `--suggest` covers the rest of the corpus.
 - **Public distribution (if this milestone ships to users) is BINARY-ONLY via a
   separate public dist repo** — source stays private per Research 003. See
@@ -363,7 +425,22 @@ retrieval + routing from every fix outcome. **All substrate ships** (`LatentSkil
 + `LatentFixMemory` in riir-clippy Issue 004/008); this phase generalizes the key from
 per-lint to per-domain + wires the outcome recorder into the `--fix` path.
 
-**Status: not started.**
+**Status: PARTIALLY SHIPPED (corrected 2026-08-16) — do not rebuild the
+recorder.** Issue 018 already landed the outcome-recording half and cross-run
+persistence, via `src/recorder.rs` (`SelfEvolveRecorder`) rather than the
+`HealPipeline::heal` entry point this phase assumed:
+`src/bin/heal.rs:637,659` calls `evolve_rec.record_outcome(...)` on both
+reverted and kept edits, and `:672` saves to `memory.json` (path overridable
+via `RIIR_HEAL_MEMORY`). Issue 018 also promoted the memory half to
+unconditional, with the EMA half degrading gracefully (one log line) when the
+`clippy_verify` verdict oracle is absent. Issue 021 added the `EvidenceTier`
+trust axis to `LatentFixMemory`.
+
+**What actually remains** is the *domain-level* half — the recorded outcomes
+currently evolve **per-lint** directions, not the `DOMAIN_DIRECTIONS` the dMoE
+router reads, so the router does not yet get smarter with use:
+`src/evolve.rs:67` is still `directions: HashMap<String, Direction>` and
+`:132` is still `record_outcome(&mut self, lint_name: &str, ...)`.
 
 ### Tasks
 
@@ -371,10 +448,13 @@ per-lint to per-domain + wires the outcome recorder into the `--fix` path.
       `domain_key: &str` (where domain_key = "clippy"/"perf"/"kernel" OR the
       domain+rule_id composite). The EMA mechanism is domain-agnostic; only the key shape
       changes. Back-compat: existing per-lint callers pass `lint_name` as the key.
-- [ ] **T7.2** Wire `HealPipeline::heal()` to record the outcome after validation:
-      `evolution.record_outcome(domain, fix_direction, validated)`. The fix_direction =
-      `ModellessEmbedder.embed(fixed_code)`. This evolves the DOMAIN_DIRECTIONS used by
-      `pick_domain<3,8>` — the dMoE router gets smarter with use.
+- [-] **T7.2 (recording half — SHIPPED via Issue 018)** Outcome recording is
+      already wired into the `--fix` path through `SelfEvolveRecorder`
+      (`src/bin/heal.rs:637,659`), not `HealPipeline::heal`. **Remaining
+      sub-task, folded into T7.1:** make the recorded outcome also update the
+      DOMAIN_DIRECTIONS that `pick_domain` reads (`fix_direction =
+      ModellessEmbedder.embed(fixed_code)`), so the dMoE router — not just the
+      per-lint EMA — gets smarter with use.
 - [ ] **T7.3** Wire `LatentFixMemory` into the retrieval path (step 4↻ in the pipeline):
       before the corpus index retrieve, check if a past trajectory matches (same domain +
       similar code span). If a high-confidence past fix exists, prefer it (it was
@@ -382,6 +462,10 @@ per-lint to per-domain + wires the outcome recorder into the `--fix` path.
 - [ ] **T7.4** The freeze/thaw: evolved directions + memory persist across runs (via
       `freeze()`/`thaw()` on `Corpus` + the existing BLAKE3 commitment). The healer's
       learned directions are reproducible + auditable.
+      **Partially shipped:** cross-run persistence exists as a plain JSON
+      save/load (`memory.json`, Issue 018). What remains is the *committed*
+      form — routing it through `Corpus::freeze()` so the learned state carries
+      a BLAKE3 commitment and is auditable, not just durable.
 - [ ] **T7.5** GOAT gate (self-healing): after N=100 fix cycles on a fixture corpus, the
       retrieval precision (G1 from Phase 3) improves ≥10% vs the cold-start hand-crafted
       directions. Record in `.benchmarks/`. This is the MAG "does unsupervised direction
@@ -392,13 +476,33 @@ per-lint to per-domain + wires the outcome recorder into the `--fix` path.
   `--suggest` retrieves better. The dMoE router + corpus retrieval both improve with use.
   GOAT: ≥10% precision improvement after 100 cycles.
 
-## Phase 8 — WASM pruner fast-validation hook (Proposal 011, gated on rubrc)
+## Phase 8 — WASM pruner fast-validation hook (katgpt-rs Proposal 011, gated on rubrc)
 
-The fast `--fix` validator. Blocked on `rubrc` maturity (Proposal 011 Phase 3) — this
+The fast `--fix` validator. Blocked on `rubrc` maturity
+([katgpt-rs Proposal 011](../../katgpt-rs/.proposals/011_rust_swe_bench_latent_space_via_wasm_pruner.md)
+Phase 3 — a *sibling-repo* proposal, not one of this repo's three) — this
 phase is SKETCHED, not started. Until it lands, `cargo test` (slow) + `RustAnalyzerPruner`
 (syntax-only, fast) are the validators.
 
-**Status: blocked on rubrc (Proposal 011).**
+**Status: blocked on rubrc (katgpt-rs Proposal 011).**
+
+> **Sizing note (Issue 023, 2026-08-16).** The measured `RustAnalyzerPruner`
+> fast path is **~21-23 µs per fix** — so "replace the slow validator" only
+> describes the `clippy_verify` / `fix_verify` *subprocess* paths, not the
+> default one. T8.3's "<10ms vs ~seconds for cargo test" bar is the right
+> comparison; do **not** justify this phase against the default L2.
+
+### Tasks (sketch — not started)
+
+- [-] **T8.1** `WasmPruner: ConstraintPruner` impl (katgpt-rs) — compiles the test suite
+      to WASM, runs the proposed fix's token sequence against it, returns valid/invalid.
+- [-] **T8.2** Wire into `cargo heal --fix` as the fast validator (replaces `cargo test`
+      subprocess for the common case). Fallback to `cargo test` if WASM pruner declines.
+- [-] **T8.3** GOAT: WasmPruner validation < 10ms (vs ~seconds for cargo test).
+
+### Phase 8 exit criteria
+- BLOCKED. Reopens when rubrc lands (katgpt-rs Proposal 011 Phase 3). Until then, the slow path
+  (`cargo test`) is the validator; the self-healing loop (Phase 7) works with either.
 
 ## Phase 9 — Calibrated UQ layer (Deep fusion A: conformal + select_best_belief + clr_vote)
 
@@ -407,7 +511,35 @@ calibrated, distribution-free confidence intervals. Three DEFAULT-ON katgpt-core
 primitives fuse: `ConformalIntervalCalibrator<F>`, `select_best_belief`, `clr_vote`.
 All three are verified to ship via direct grep (2026-08-14). All are floor-tested.
 
-**Status: not started. Substrate verified.**
+**Status: not started. Substrate verified. Warm-up cost + false-confidence
+failure mode MEASURED — see Issue 023.**
+
+> **Issue 023 POC (2026-08-16) — two corrections before this phase starts.**
+>
+> 1. **No new dependency is needed.** `conformal_predictive_intervals` is
+>    DEFAULT-ON in katgpt-core and riir-clippy already deps katgpt-core with
+>    default features. The `calibrated_uq` gate is a riir-clippy-side feature
+>    only; it pulls nothing new.
+> 2. **A cold calibrator emits a ZERO-WIDTH interval, not a wide one.**
+>    `weighted_quantile_pair` returns `(0.0, 0.0)` on an empty pool, so an
+>    unwarmed key silently claims *perfect* confidence — measured **0.0%
+>    coverage at n=0 and n=1**. This is a false-confidence signature, the exact
+>    thing the floor rule exists to catch. The implementation MUST refuse to
+>    emit an interval below the warm-up count rather than emit the degenerate one.
+>
+> Measured warm-up curve (5 seeds, 4000 held-out evals/point, 3 repeat runs,
+> all agreeing): coverage crosses T9.5's ≥90% bar at **exactly n = 19
+> residuals** — identical to the analytic split-conformal bound
+> `⌈(n+1)(1−α)⌉ ≤ n`. Full table in Issue 023.
+>
+> | n | 0 | 1 | 2 | 4 | 8 | 16 | **19** | 24 | 64 |
+> |---|---|---|---|---|---|---|---|---|---|
+> | coverage | 0.0% | 0.0% | 27.6% | 59.0% | 80.7% | 88.9% | **92.2%** | 95.8% | 96.3% |
+>
+> **Consequence: per-rule keying is the wrong default.** 19 residuals × 38
+> `--fix`-eligible rules = **~722 verified fixes** before T9.5 is measurable at
+> all. T9.2 is amended to key **per-domain** (3 keys → ~57 fixes); per-rule
+> becomes an opt-in upgrade once the trajectory corpus is deep enough.
 
 ### Tasks
 
@@ -415,10 +547,20 @@ All three are verified to ship via direct grep (2026-08-14). All are floor-teste
       `(rule_id, buggy_hash) → f32` predicted-correctness score. The forecast
       target = 1.0 if the fix was actually correct (post-verify), 0.0 otherwise.
       Wrap `TernaryDrafter`'s existing `confidence` output as the point forecast.
+      Supply the point via `interval_from_point_into` (the caller-supplied-ŷ
+      path); `forecast_into` stays a stub.
 - [ ] **T9.2** Wrap with `ConformalIntervalCalibrator<FixForecaster>` behind a
-      `calibrated_uq` feature gate. Per-rule residual ring buffer (capacity 64).
+      `calibrated_uq` feature gate (riir-clippy-side only — katgpt-core already
+      ships the primitive default-on). **Key per-DOMAIN, not per-rule**
+      (`n_channels = 3`), residual ring capacity 64. Per-rule keying is a
+      documented opt-in upgrade, gated on ≥19 verified fixes per rule.
       The calibrated output replaces `DraftedFix.confidence` with a true 95%
       interval `[lo, hi]`.
+- [ ] **T9.2b (warm-up guard — blocks T9.5)** Below `MIN_RESIDUALS = 19` for a
+      key, return `None`/`Unknown` and fall back to the raw sigmoid confidence
+      with an explicit "uncalibrated" marker. **Never emit the degenerate
+      zero-width interval.** Add a test asserting a cold key does not produce
+      a `[point, point]` interval — the Issue 023 regression witness.
 - [ ] **T9.3** Replace the `0.6·evolution + 0.4·success_rate` linear blend in
       `HealPipeline::heal` with `select_best_belief(candidates, ε, incumbent)`.
       Each candidate carries `(successes, failures)` as Beta posterior counts.
@@ -426,15 +568,27 @@ All three are verified to ship via direct grep (2026-08-14). All are floor-teste
       (currently 1) via QMC perturbation of the ternary matvec, cluster by
       syntactic similarity (Levenshtein on AST node-kind sequence), run L2
       pruner on each, `clr_vote` picks the most-reliable cluster's winner.
-- [ ] **T9.5** GOAT gate (calibrated_uq): empirical coverage of the 95%
-      interval ≥ 90% on a fixture corpus; `select_best_belief` selection-regret
-      ≤ the linear-blend baseline (Bench 010 T5 floor). Record in
-      `.benchmarks/017_calibrated_uq_goat.md`.
+- [ ] **T9.5** GOAT gate (calibrated_uq), measured **only on keys past the
+      T9.2b warm-up count** (a cold key's 0.0% coverage would otherwise sink
+      the gate for the wrong reason):
+      - **G1 (coverage)** empirical coverage of the 95% interval ≥ 90%.
+      - **G2 (regret)** `select_best_belief` selection-regret ≤ the
+        linear-blend baseline (Bench 010 T5 floor).
+      - **G3 (conformal-naive floor)** beat
+        `ConformalIntervalCalibrator<SeasonalNaiveForecaster>` (m=1, plain
+        split conformal) on CRPS / coverage / Winkler. This is katgpt-rs's
+        "Report the Floor" rule — not binding on riir-clippy, but this phase
+        ships exactly the claim class the rule exists for, and the floor is
+        already in-tree. Cheap to include; expensive to retrofit.
+      - **G4 (no false confidence)** zero degenerate zero-width intervals
+        emitted, at any pool size (the Issue 023 failure mode).
+      Record in the next `.benchmarks/` slot (`.benchmarks/.highwater` + 1).
 
 ### Phase 9 exit criteria
-- `DraftedFix.confidence` is a calibrated interval, not a raw sigmoid.
+- `DraftedFix.confidence` is a calibrated interval, not a raw sigmoid —
+  or an explicit "uncalibrated" marker when the key is below warm-up.
 - `HealPipeline::heal` selects fixes via Beta-posterior, not linear blend.
-- GOAT G1 (coverage) + G2 (regret vs linear blend) PASS.
+- GOAT G1-G4 PASS.
 
 ## Phase 10 — Sleep-cycle consolidation layer (Deep fusion B: mine_motifs_at_sleep_cycle + LocalKvStore + can_freeze)
 
@@ -465,7 +619,7 @@ persistence of frozen motifs). All three verified via direct grep (2026-08-14).
 - [ ] **T10.6** GOAT gate (sleep_consolidation): on a fixture corpus with N=100
       fix cycles, `cargo heal --sleep` extracts ≥1 motif that the next `--fix`
       cycle retrieves (precision improvement ≥10% vs cold-start). Record in
-      `.benchmarks/018_sleep_consolidation_goat.md`.
+      the next `.benchmarks/` slot (`.benchmarks/.highwater` + 1).
 
 ### Phase 10 exit criteria
 - `cargo heal --sleep` mines motifs from past trajectories, freezes them,
@@ -474,18 +628,61 @@ persistence of frozen motifs). All three verified via direct grep (2026-08-14).
 
 ## Phase 11 — Poincaré fix-imagination layer (Deep fusion C: imagine_belief_into + ViableManifoldGraph)
 
-**THE NOVEL ANGLE.** The healer imagines the fix in Poincaré space BEFORE the
-expensive L2 validate. Two substrates compose: `poincare_navigate_into`
-(single-step imagination) + `ViableManifoldGraph` (safe fix-neighborhood graph).
-Both verified via direct grep (2026-08-14).
+**THE NOVEL ANGLE — but a QUALITY one, not a latency one.** The healer imagines
+the fix in Poincaré space before the L2 validate. Two substrates compose:
+`poincare_navigate_into` (single-step imagination) + `ViableManifoldGraph` (safe
+fix-neighborhood graph). Both verified via direct grep (2026-08-14).
 
-**Status: not started. Substrate verified. Honest risk documented (Plan 497 Phase 2 quality REFUTE for NPC HLA; latency win stands; code-healing nonlinearity bar is lower but not zero).**
+**Status: not started, RESCOPED 2026-08-16. Substrate verified. The latency
+justification is DEAD (measured, Issue 023). Quality claim survives, unproven.**
+
+> **Issue 023 POC (2026-08-16) — the latency premise is false by ~43×.**
+>
+> T11.5 assumed "the imagination gate is µs-scale; the L2 pruner is ms-scale".
+> Measured (median of 200 reps over 5 real spans, 3 repeat runs):
+>
+> | stage | per fix | share of pipeline |
+> |---|---:|---:|
+> | L2 (`RustAnalyzerPruner` fast path = in-process `syn` parse) | **21-23 µs** | ~6% |
+> | imagination gate (`poincare_navigate_into` + dot + sigmoid) | **0.09-0.11 µs** | ~0% |
+> | retrieval (Bench 018 G2) | 349 µs | **~94%** |
+>
+> L2 is **µs-scale, not ms-scale** — it is not a subprocess, it is a `syn`
+> parse. Imagination only avoids an L2 call on the fixes it *rejects*, so
+> `speedup = T_base / (T_base − base_rate·recall·T_L2 + T_imag)`. Even at a
+> **100% bad-fix rate with 100% recall the ceiling is 1.0655×**, against
+> T11.6's ≥1.5× gate. At a realistic 5% bad-fix rate it is 1.0007×.
+>
+> **The gate cannot pass. This is the wrong denominator, not a tuning
+> problem.** The ≥1.5× latency gate is REMOVED. Any future latency work on
+> this pipeline must target **retrieval** (349 µs, 94% of budget) — which is
+> also where the live Phase 3 G1 problem lives.
+>
+> Two further defects the POC surfaced:
+> - **T11.5 cited an API that does not exist.** Real signature is
+>   `poincare_navigate_into(z_src, delta_target, adapter, z_out, phi_scratch,
+>   hidden_scratch)` — a *delta* target plus a fitted adapter and two scratch
+>   buffers, not a `(src_pos, dst_pos)` pair. Corrected in T11.5 below.
+> - **T11.6 mislabelled its own metric** — "accepting ≥90% of would-pass-L2"
+>   is specificity / TNR, not precision. Corrected below.
+>
+> **Ordering:** this phase now depends on **Phase 10 T10.1** (T11.1 needs the
+> PTG-shaped trajectory that T10.1 produces) and is demoted below Phase 12 —
+> Phase 12 answers a cheaper version of the same "will this fix hold?"
+> question from data this phase would have to collect anyway.
+
+**Prior-art risk (unchanged):** Plan 497 Phase 2 REFUTED the quality claim for
+NPC HLA. That refutation kept its latency win; here the latency win is measured
+away, so **quality is the only surviving claim**. If G1/G2 below fail, this
+phase closes as a negative result rather than shipping opt-in.
 
 ### Tasks
 
 - [ ] **T11.1** Collect (pre-fix embedding, post-fix embedding) trajectory
       pairs from past `--fix` cycles. The corpus needs trajectory shape — the
       current flat `FixTrajectory` is insufficient (blocker for T11.2).
+      **Hard dependency on Phase 10 T10.1**, which produces exactly that
+      PTG-shaped trajectory. Do not start this phase before T10.1 lands.
 - [ ] **T11.2** Fit `PoincareAdapter` offline via `fit_poincare_adapter(
       z_samples, target_samples, latent_dim=8, target_dim=8, ...)`. Closed-form
       PCA + ridge regression, no GD. The adapter is BLAKE3-committed + frozen.
@@ -496,23 +693,41 @@ Both verified via direct grep (2026-08-14).
       embeddings. Predicate = "does this state compile?". Curiosity walk =
       "what's the nearest compile-passing neighbor of the proposed fix?".
 - [ ] **T11.5** Compose: chunk → embed → route → retrieve → draft fix →
-      **IMAGINE via `poincare_navigate_into(z_src, src_pos, dst_pos, z_out)`** →
-      score → if score < τ, reject + try next retrieved rule → if score ≥ τ,
-      L2-validate. The imagination gate is µs-scale; the L2 pruner is ms-scale;
-      net throughput rises if imagination rejects ≥20% of bad fixes.
-- [ ] **T11.6** GOAT gate (poincare_imagination): on a fixture corpus,
-      imagination rejects ≥30% of "would-fail-L2" fixes (recall) while accepting
-      ≥90% of "would-pass-L2" fixes (precision). Latency improvement ≥1.5× vs
-      no-imagination baseline. Record in `.benchmarks/019_poincare_imagination_goat.md`.
+      **IMAGINE via `poincare_navigate_into(z_src, delta_target, &adapter,
+      &mut z_out, &mut phi_scratch, &mut hidden_scratch)`** → score → if
+      score < τ, reject + try next retrieved rule → if score ≥ τ, L2-validate.
+      (Signature corrected per Issue 023 — a *delta* target plus the fitted
+      adapter and two scratch buffers, not a src/dst position pair. Scratch
+      lengths are `adapter.phi_out()` / `adapter.phi_hidden()`; hoist both out
+      of the loop per the alloc-free rule.)
+      **The rationale is quality, not throughput** — measured, imagination
+      saves at most 1.07× even in the best case (Issue 023). The reason to
+      reject early is to try the *next retrieved rule* instead of burning the
+      fix attempt, which matters because Phase 3's at-scale top-1 is 58.3%
+      on clippy: the right rule is often rank 2-3, not rank 1.
+- [ ] **T11.6** GOAT gate (poincare_imagination) — **quality only, latency gate
+      removed per Issue 023**:
+      - **G1 (rejection recall)** imagination rejects ≥30% of "would-fail-L2" fixes.
+      - **G2 (specificity / TNR)** it accepts ≥90% of "would-pass-L2" fixes.
+        (Previously mislabelled "precision" — it is TNR.)
+      - **G3 (rank recovery)** on spans where top-1 is wrong but a top-3 rule
+        is right, the reject-and-advance path lands the correct rule ≥X% of
+        the time. Set X from the Bench 022 rank distribution once T3.5 lands.
+      - **~~latency ≥1.5×~~** — REMOVED. Measured ceiling is 1.0655× at a 100%
+        bad-fix rate (Issue 023); the gate was arithmetically unreachable.
+        A no-regression check (imagination costs <5% wall-clock) replaces it.
+      Record in the next `.benchmarks/` slot (`.benchmarks/.highwater` + 1).
 - [ ] **T11.7** Multi-step imagination (`poincare_multi_step_into`) for large
       fixes that span multiple chunks: split the fix into N sub-steps, imagine
       each, reject if any sub-step diverges.
 
 ### Phase 11 exit criteria
 - Imagination gate ships behind `poincare_imagination` feature gate (opt-in).
-- GOAT G1 (recall ≥30%) + G2 (precision ≥90%) + G3 (latency ≥1.5×) PASS.
-- If quality REFUTED (like Plan 497 Phase 2 for NPC HLA): document honestly,
-  keep the latency win, demote the quality claim, do NOT promote.
+- GOAT G1 (rejection recall ≥30%) + G2 (specificity ≥90%) + G3 (rank recovery) PASS.
+- **If quality is REFUTED** (as Plan 497 Phase 2 was for NPC HLA): close this
+  phase as a **negative result**. There is no latency win to fall back on —
+  Issue 023 measured it away — so a quality refutation leaves nothing to ship.
+  Document it and do NOT keep an opt-in flag alive for its own sake.
 
 ## Phase 12 — Trajectory-archetype classifier (Deep fusion E: SweTrajectoryFreezer)
 
@@ -533,7 +748,7 @@ via direct grep (2026-08-14, Bench 013 G3 + Bench 014 G5 PASS).
       (Phase 9).
 - [ ] **T12.4** GOAT gate: cross-archetype discrimination (Bench 013 G3
       methodology) PASS on the fixture corpus. Record in
-      `.benchmarks/020_trajectory_archetype_goat.md`.
+      the next `.benchmarks/` slot (`.benchmarks/.highwater` + 1).
 
 ### Phase 12 exit criteria
 - `committed_wrong` + `oscillation` archetypes escalate to human review.
@@ -614,7 +829,7 @@ they are NOW CONFIRMED via direct grep (2026-08-14):
 - [ ] **T14.5** GOAT gate (verified_substrates): on the fixture corpus,
       memory-steered drafting (T14.1) + Hebbian fact recall (T14.2) + graph-indexed
       priors (T14.3) collectively improve G1 precision ≥5% over Phase 9 alone.
-      Record in `.benchmarks/021_verified_substrates_goat.md`.
+      Record in the next `.benchmarks/` slot (`.benchmarks/.highwater` + 1).
 
 ### Phase 14 exit criteria
 - All three substrates wired. The healer's memory layer is no longer flat +
@@ -622,39 +837,57 @@ they are NOW CONFIRMED via direct grep (2026-08-14):
   drafter.
 - GOAT G1 PASS (≥5% improvement over Phase 9).
 
-### Tasks (sketch — not started)
-
-- [ ] **T8.1** `WasmPruner: ConstraintPruner` impl (katgpt-rs) — compiles the test suite
-      to WASM, runs the proposed fix's token sequence against it, returns valid/invalid.
-- [ ] **T8.2** Wire into `cargo heal --fix` as the fast validator (replaces `cargo test`
-      subprocess for the common case). Fallback to `cargo test` if WASM pruner declines.
-- [ ] **T8.3** GOAT: WasmPruner validation < 10ms (vs ~seconds for cargo test).
-
-### Phase 8 exit criteria
-- BLOCKED. Reopens when rubrc lands (Proposal 011 Phase 3). Until then, the slow path
-  (`cargo test`) is the validator; the self-healing loop (Phase 7) works with either.
-
 ## Out of scope (per Proposal 002 revised + deep fusion layer)
 
-- Full proposer coverage (all 34 perf + ~30 kernel) — decoupled; `--suggest` covers them.
+- Full proposer coverage (all perf + kernel rules — 58 perf and 282+ kernel as of
+  2026-08-16, not the 34/~30 this plan was written against) — decoupled;
+  `--suggest` covers them.
 - CubeCL `#[cube]` macro-body proposers — `--suggest` still works (embedding captures the
   signature); only `--fix` is limited.
 - L4 LoRA — deferred across all domains.
 - `--watch` mode — deferred.
-- Domain-direction mining via `CommittedFieldBlend` — hand-crafted vectors ship first.
+- Domain-direction mining via `CommittedFieldBlend` — **corpus-derived centroids**
+  ship first. (Corrected 2026-08-16: the original "hand-crafted vectors ship
+  first" never happened — T1.4 shipped L2-normalized corpus-pattern centroids
+  instead, and re-fitting those after the 10 → 40 rule corpus growth is now
+  option 1 of the live T3.5 contingency.)
 - **ConvexTok-AST implementation** — Phase 13 is research-only. The implementation
   plan (Phase 15+) opens only if the encoding design + corpus experiment (T13.3)
   shows ≥2× compression.
 
 ## Risks
 
-1. **Span-preserving patch is harder than it looks.** `syn` spans are byte-offsets; re-emitting only the changed span while keeping surrounding bytes intact needs care. Mitigation: `prettyplease` fallback (T1.3) ships first; span-preserving is the upgrade.
-2. **Visitor false positives.** A `vec-with-capacity` visitor might match a vec that's intentionally un-sized. Mitigation: visitors are conservative (only rewrite when the size is statically known); uncertain cases go to `--suggest`.
-3. **CubeCL parse failure.** A real riir-gpu file with `#[cube]` macros won't parse with vanilla `syn`. Mitigation: the scanner skips files that fail to parse (with a warning); proposers run only on parseable files. Kernel proposers are tested on EXTRACTED snippets, not whole kernel files.
-4. **G5 might fail.** If no real anti-pattern exists in the sibling repos for the 10 shipped rules, G5 can't pass. Mitigation: the rule selection (Phase 2/3 candidates) is chosen BECAUSE the patterns are common; if G5 fails, expand the rule set or target a different repo.
+1. ~~**Span-preserving patch is harder than it looks.**~~ **CLOSED 2026-08-14
+   (Phase 6 T6.1).** The span-preserving edit-splice emitter shipped directly;
+   the `prettyplease` fallback was never needed and never built. (The original
+   text pointed at "T1.3" — that referred to the *pre-revision* task numbering;
+   in this plan T1.3 is `latent_matcher.rs`.)
+2. **Visitor false positives.** A `vec-with-capacity` visitor might match a vec that's intentionally un-sized. Mitigation: visitors are conservative (only rewrite when the size is statically known); uncertain cases go to `--suggest`. **LIVE** — three real instances were caught by the T6.2 G5 run (use-before-decl capacity, non-usize bounds, fn-path coercion) and fixed at root cause; `--fix --verify` (Issue 015) is the standing net.
+3. **CubeCL parse failure.** A real riir-gpu file with `#[cube]` macros won't parse with vanilla `syn`. Mitigation: the scanner skips files that fail to parse (with a warning); proposers run only on parseable files. Kernel proposers are tested on EXTRACTED snippets, not whole kernel files. **LIVE**, and it is the reason Phase 5 is deferred.
+4. ~~**G5 might fail.**~~ **CLOSED 2026-08-14 (T6.2).** G5 passed in katgpt-rs
+   (`katgpt-pruners`, 12 files / 20 edits, commit `8c331cd9`, pushed);
+   1233/1233 tests green on the gated re-run.
+5. **NEW — retrieval precision does not survive corpus growth.** G1 was 100% on
+   a 24-item fixture and **58.3% on 130 real spans** once the corpus reached 40
+   rules (Bench 022). The failure mode is nearest-neighbour crowding, which gets
+   *worse* with every corpus batch — and this repo adds batches continuously.
+   Mitigation: T3.5 (the live Phase 3 contingency) plus the committed
+   regression gate, which now floors every future corpus batch at baseline − 1
+   span. Treat corpus growth as a precision liability, not a free win.
+6. **NEW — false confidence from cold UQ state.** Any calibrated-confidence
+   layer (Phase 9) emits a **zero-width, 0%-coverage interval** on an unwarmed
+   key rather than an honestly-wide one (measured, Issue 023). Mitigation:
+   T9.2b's warm-up guard is a blocking prerequisite for T9.5, not a polish item.
 
 ## Numbering discipline
 
 - Proposal 002: `riir-clippy/.proposals/002_real_file_span_healing.md`
 - Plan 005: this file.
-- Highwater: `.plans/.highwater` = `5`, `.proposals/.highwater` = `2` (written back after this plan lands).
+- Issue 023: the Phase 9 / Phase 11 design-question POC (`tests/poc_023_plan005_design_questions.rs`).
+- Highwater at last edit (2026-08-16): `.plans` = `5`, `.proposals` = `3`,
+  `.benchmarks` = `26`, `.issues` = `23`, `.research` = `54`.
+- **Forward-declared benchmark filenames are banned in this plan.** Phases 9-14
+  originally hard-coded `017`-`021`; every one of those numbers was taken by an
+  unrelated bench before the phase started. Future tasks say "the next
+  `.benchmarks/` slot (`.benchmarks/.highwater` + 1)" and resolve the number at
+  landing time.
