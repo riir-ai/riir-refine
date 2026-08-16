@@ -227,9 +227,9 @@ retrieval floors PASS (corpus unchanged). Record:
 [Bench 033](.benchmarks/033_non_syn_scanner_goat.md) +
 [Bench 034](.benchmarks/034_wgsl_mining_integration.md). Remaining: the
 Phase-5 reopen trigger (future fix commits enter the harness automatically,
-one command per surface); optional dead-`.wgsl` cleanup (6 files, 211 lines,
-gram.wgsl among them — its fixture-pinned shape test survives deletion);
-inline-CUDA surface as scope extension.
+one command per surface); the dead-`.wgsl` cleanup is DONE (riir-ai
+`738dc2a66`, 2026-08-16 — 6 files / 211 lines removed, `wgsl_mine_pairs`
+re-run 10/10 green); inline-CUDA surface as scope extension.
 
 **Issue 026 (2026-08-17, RESOLVED-NEGATIVE + removed per noise-reduction rule;
 commit `bedf795`) — entropic (max-seeking) selection mode (TTT-Discover
