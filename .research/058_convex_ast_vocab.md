@@ -2,7 +2,8 @@
 
 **Date:** 2026-08-16
 **Plan:** [005](../.plans/005_real_file_span_healing.md) Phase 13 (research-gated)
-**Status:** design filed; the corpus experiment (T13.3) is NOT run — see §5.
+**Status:** DISTILLED — pending owner decision (design filed; the T13.3 corpus
+experiment NOT run — reopen conditions §5).
 
 Phase 13 is explicitly research-only ("this is a research question, not a
 plan"), and T13.1 — *file the design of the AST-node colouring scheme* — is its

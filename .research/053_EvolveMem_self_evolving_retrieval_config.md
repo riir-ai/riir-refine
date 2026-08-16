@@ -2,7 +2,7 @@
 
 > **Source:** "EvolveMem: Self-Evolving Memory Architecture via AutoResearch for LLM Agents" — [arXiv:2605.13941](https://arxiv.org/abs/2605.13941) (Liu et al., 2026-05-13, cs.LG; code: aiming-lab/SimpleMem)
 **Date:** 2026-08-16
-**Status:** Distilled — actionable delta identified; no implementation yet (owner decides filing; no new .issue per queue-item rule)
+**Status:** DISTILLED — pending owner decision (actionable delta identified; no implementation yet — owner decides filing; no new .issue per queue-item rule)
 > **Related Research:** R001 (self-evolving agents survey → LatentFixMemory origin), R049 (evidential status → Issue 021 trust axis)
 > **Related Benchmarks:** Bench 022 (retrieval precision at scale — the eval), Bench 025 (router spectral POC KILL), Bench 024 (floor re-pin)
 > **Classification:** Private
