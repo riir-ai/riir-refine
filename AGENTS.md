@@ -200,8 +200,64 @@ SwitchCostTable consumer (the issue's anticipated gap branch) is REFUTED by
 mechanism — ordering fixes targets edit interference, the gap was pool
 crowding.** T3 (fix-axis) honestly skipped — the measured gap lives entirely
 on the retrieval axis and the cross-fire label test already pins disjoint
-proposer edits. Record: [Bench 032](.benchmarks/032_cross_domain_switch_cost.md)
+Record: [Bench 032](.benchmarks/032_cross_domain_switch_cost.md)
 + the Research 484 healer-consumer row (katgpt-rs) resolves CLOSED.
+
+**Issue 025 (2026-08-16, RESOLVED + removed per noise-reduction rule; commits
+`589b0c9` + the `wgsl_mine` required-features fix in `bedf795`) — non-syn
+surface scanner (`.wgsl` + `#[cube]` bodies).** T1–T6 all shipped: the
+WGSL/cube scanner (`wgsl_scan.rs` — regex-pattern surface scanning with
+precision guards discovered by live adjudication), the T5 control gate
+(`tests/wgsl_t5_control.rs`), and the T6 mining integration
+(`examples/wgsl_mine.rs` — git-history differential scan over both surfaces,
+finding-level pairing, MOVED auto-refutation, Removed/Hunk diff association).
+Two new patterns mined from the fix pairs: `scan_single_slot_staging` (DEFAULT,
+fronts B35 — 2 live findings / 0 FPs across 33 `var<workgroup>` files; the
+computed-write role_transport, tree reductions, transpose compounds, and
+domino multi-phase are all guarded silent) + `scan_serial_row_dot` (P7
+experimental, mining-only — 11 live serial-K GEMV instances textually
+unadjudicable). Pair inventory 1 → **3 validated** (B47×Issue 701 H-C,
+B35×Issue 686 H7, B44-body×Issue 698 A-H1); Phase 5 reopen trigger honestly
+open at 3/5. Mechanized survey finding: ZERO `.wgsl` commits ever removed a
+default-pattern shape (Bench 033's caveat now a proven fact); the genuine fix
+pairs live on `#[cube]` bodies + other shapes. Live default-set 30 → 32
+(gram.wgsl dead-file carriers, adjudicated real). Gates: 419 default / 602
+kernel_heal / 727 all-features + t5_control 4/4 + mine_pairs 6/6 + Issue 017
+retrieval floors PASS (corpus unchanged). Record:
+[Bench 033](.benchmarks/033_non_syn_scanner_goat.md) +
+[Bench 034](.benchmarks/034_wgsl_mining_integration.md). Remaining: the
+Phase-5 reopen trigger (future fix commits enter the harness automatically,
+one command per surface); optional dead-`.wgsl` cleanup (6 files, 211 lines,
+gram.wgsl among them — its fixture-pinned shape test survives deletion);
+inline-CUDA surface as scope extension.
+
+**Issue 026 (2026-08-17, RESOLVED-NEGATIVE + removed per noise-reduction rule;
+commit `bedf795`) — entropic (max-seeking) selection mode (TTT-Discover
+arXiv:2601.16175 transferred to heal-loop selection).** Shipped
+`src/selection_entropic.rs` (KL-budgeted Boltzmann tilt: `solve_beta`
+streaming zero-alloc bisection, `tilted_weights`, `tilt_advantages_into`; 9
+unit tests incl. shift/scale invariance + exact KL budget + degenerate pools +
+rare-success upweighting + auto-adaptation) + `SelectionMode::Entropic` opt-in
+wired at `heal()` Step 4. **T2 wiring-site honesty:** the issue's proposed
+sites were file-guesses — `AdaptiveDrafter` is an exact-key KV cache,
+`RuliologySearch` is a structural Pareto ranking; neither has an outcome axis;
+the ONLY outcome-scored pool is `heal()` Step 4 (loud degradation everywhere
+else). **T3/T4 measured NEGATIVE (Bench 035): ALL FOUR reward-source ×
+mapping variants (sigmoid(A)/w-max-norm × belief/raw-rate) lose the max
+metric to BetaPosterior (0.9240/0.9379 vs best entropic 0.9132/0.9226) AND to
+LinearBlend, across both evo-noise regimes.** Mechanism: heal-loop pools are
+starved (0–3 observations) — the belief ranking the tilt consumes is mostly
+thin-evidence noise; amplifying it drowns the correlated evo axis
+(BetaPosterior's moderate swing leaves room for evo to rescue good
+candidates). The paper's regime (dense reward batches, 512 rollouts/step)
+does not have starved pools — same failure class as the `gemma2_directions`
+GOAT (real signal, wrong regime). NOT promoted; variant + harness kept as the
+reproducible negative-result artifact. B=10 saturated (~0.99 every mode);
+B=3 discriminates. Also fixed in passing: the `wgsl_mine` example's missing
+`required-features = ["kernel_heal"]` (latent `--all-targets` break from
+`589b0c9`). Gates: 428 default lib / 448 full suite / 663
+kernel_heal+latent_retrieval (floors HELD) / clippy 0 `--all-targets` / t93
+unchanged. Record: [Bench 035](.benchmarks/035_entropic_selection_negative.md).
 
 **Plan 005 (2026-08-14) — latent retrieval + `cargo heal --suggest` CLI
 (Phases 1–4 DONE).** `src/draft/` ships the span-level retrieval layer:
