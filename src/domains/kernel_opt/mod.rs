@@ -39,6 +39,7 @@ use serde::{Deserialize, Serialize};
 use crate::domain::{HealDomain, HealEntry};
 
 pub mod corpus;
+pub mod cube_extract;
 pub mod router;
 pub mod thermal;
 pub mod wgsl_scan;

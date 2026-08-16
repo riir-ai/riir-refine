@@ -1,9 +1,12 @@
 # Issue 025 — Non-syn surface scanner (`.wgsl` files + `#[cube]` macro bodies)
 
-**Status:** OPEN (candidate; filed 2026-08-16 from user direction) — **T1+T2
-DONE 2026-08-16: surface ≈ 20.5k+ lines (NOT downgraded); the WGSL scanner
-prototype ships 3 precision-vetted default patterns + 1 experimental + 1
-honestly-excluded (see tasks below).** T3–T6 remain.
+**Status:** OPEN (candidate; filed 2026-08-16 from user direction) — **T1–T5
+DONE 2026-08-16 (T5 GOAT: Bench 033 ALL PASS — 30 live findings, 0 control
+FPs, 41µs/file): surface ≈ 20.5k+ lines (NOT downgraded); 3 precision-vetted
+default patterns + 1 experimental + 1 honestly-excluded; `#[cube]` body
+extraction live with exact T1 reconciliation; the scanner wired into
+`cargo heal --suggest` as kernel-domain suggest-only (see tasks below).**
+T6 remains.
 **Origin:** user proposed "regex wasm" as a new tool. Rescoped on filing per the
 measured evidence: the *job* is real (the non-syn blind spot), but **WASM is the
 wrong layer for v1** — native-first; WASM reserved for third-party sandboxing,
@@ -96,18 +99,95 @@ A scanner over these surfaces opens three things, in value order:
       713 all-features lib tests pass. Comment-stripping applied to the
       line patterns (a `// …@workgroup_size(1,1,1)` doc mention must not
       fire — caught in the smoke by `attention_batched.wgsl` L12).
-- [ ] **T3 — `#[cube]` body extraction.** Token-tree span location via
+- [x] **T3 — `#[cube]` body extraction.** Token-tree span location via
       `proc-macro2` (a `TokenStream` walk finds the attribute + item span
       without parsing the body as Rust), then the same regex pass over the
       span text. Edge cases to pin: nested macros, raw strings, `#[cube(launch)]`.
-- [ ] **T4 — Wire as suggest-only.** New scanner output keyed to the `kernel`
+      **DONE 2026-08-16 — `src/domains/kernel_opt/cube_extract.rs` +
+      `WgslScanner::scan_cube_rust` (absolute-line mapping) + the example's
+      `--rs` mode.** Evidence:
+      - Extraction reconciles EXACTLY with T1's independent grep inventory
+        on the live tree (253 rs files scanned → **38 files / 142 items /
+        9,810 item lines**; 130 launch + 12 plain — matching 177 text matches
+        − 35 comment mentions, 134−4 launch, 43−31 plain). The two-method
+        agreement is the correctness proof.
+      - 9 unit tests pin the issue's edge-case list: nested macros
+        (`comptime!`/`terminate!` are token groups — brace matching
+        unaffected), raw strings opaque (one Literal token — unbalanced
+        braces + fake `#[cube]` text inside never mis-extract), comment
+        mentions dropped (lexer), attrs BETWEEN cube and fn (real shape
+        `cubecl_runtime.rs:361`), attrs BEFORE cube excluded from the item,
+        `mod`-nested items keep absolute lines, multi-byte chars, degenerate
+        inputs, WGSL-shaped synthetic body line (tokenizes — mapping pinned).
+      - **Two empirical `proc-macro2` fallback span facts discovered, now
+        test-pinned** (the anticipated "token-tree edge cases"): fallback
+        columns are **0-based** (a documented divergence from `proc_macro`'s
+        1-based — caught by the indented-item test extracting one char
+        early), and a group's `Span::end()` points **AT** the closing
+        delimiter char (exclusive-end conversion required — the first run
+        was missing exactly the final `}`). Both are encoded in
+        `line_col_to_byte{,_exclusive}` docs + the exact-text tests.
+      - Live findings: **0** on all 142 cube bodies (expected + correct —
+        the precision-vetted patterns are WGSL-syntax-shaped; cube bodies
+        are Rust-shaped; no speculative Rust-text pattern was added).
+        The extraction + mapping pipeline is the T6 mining substrate;
+        cube-shaped patterns land with the mined buggy→fixed pairs.
+      - Gates: 419 default / 597 `kernel_heal` / 723 all-features lib tests;
+        clippy 0 warnings in this crate (`--features kernel_heal
+        --all-targets`). Zero new deps (`proc-macro2` + `span-locations`
+        already unconditional).
+- [x] **T4 — Wire as suggest-only.** New scanner output keyed to the `kernel`
       domain, zero proposer surface. `--fix` must NOT touch these files.
-- [ ] **T5 — GOAT gate (falsifiable, precision-first):** on riir-gpu's own
+      **DONE 2026-08-16 — the `cargo heal --suggest` walk now scans `.wgsl`
+      files + `#[cube]` bodies (behind `kernel_heal`; zero new deps).**
+      Evidence:
+      - `collect_rs_files` generalized to `collect_source_files(path, ext)`;
+        the empty-path error now fires only when BOTH `.rs` and `.wgsl` are
+        absent (a .wgsl-only target previously errored "no .rs files").
+        Without `kernel_heal`, finding .wgsl files prints a one-line note
+        pointing at the feature (no silent ignore).
+      - The non-syn pass is **suggest-only by construction**: it runs ONLY in
+        pure `--suggest` mode (`args.suggest` — under `--fix` the pass is
+        skipped entirely), only when the domain filter is `auto` or `kernel`,
+        and its output is rule citations — no proposer exists for these
+        surfaces and the `--fix` edit path never consumes them.
+      - Findings print in the suggest format (`path:L [kernel ] rule_id —
+        excerpt`, cube-body findings suffixed) and the run summary carries
+        `+N non-syn (wgsl/cube) finding(s)`.
+      - E2E verified on the live tree: `--suggest --domain kernel` over
+        `riir-gpu/src/kernels` → 30 findings / 24 files; `--domain perf`
+        → the pass correctly skips (0 non-syn output); `fix_verify` state
+        compiles; retrieval regression gate PASS (no corpus change).
+      - Gates: 419 default / 597 kernel_heal / 723 all-features lib tests;
+        clippy 0 warnings in this crate across `latent_retrieval`,
+        `kernel_heal`, and `latent_retrieval,kernel_heal` states; no-dep
+        check clean.
+- [x] **T5 — GOAT gate (falsifiable, precision-first):** on riir-gpu's own
       `.wgsl` files, the scanner flags ≥5 real anti-patterns drawn from the
       Batch 14–51 rule set, with **zero false positives on the clean-file
       control** (the post-fix versions of the same files must not fire —
       garbage-in guard for the mining loop). Latency: < 1ms/file (the G2 bar).
       Record in the next `.benchmarks/` slot at landing time.
+      **DONE 2026-08-16 — [Bench 033](../.benchmarks/033_non_syn_scanner_goat.md);
+      ALL GATES PASS.**
+      - **G1**: 30 live findings / 16 files (bar was ≥5) — the m2p findings
+        cite anti-patterns the file's own header documents (Issue 701 H-B
+        deferred caps + the phase-1 workgroup design).
+      - **G-clean**: the git-history fix pair `8bb716954^`/`8bb716954`
+        (Issue 701 H-C) committed as fixtures
+        (`tests/fixtures/m2p_attention_{prefix,postfix}_701.wgsl`) +
+        `tests/wgsl_t5_control.rs` (4 tests): the experimental B47 pattern
+        fires pre-fix / silent post-fix (the mining pair is detectable, the
+        fixed side is a genuine clean control); all 7 post-fix default
+        findings adjudicated REAL + count-pinned (0 FPs). Honest caveat
+        recorded: no git-history pair yet exists where a DEFAULT-pattern
+        shape was removed — the default set's fixed-forms are pinned by unit
+        tests; the live m2p is not a fully-clean default control (caps
+        unfixed in-tree).
+      - **G2**: 41.19 µs/file (201-line fixture, 2000 iters, release) — 24×
+        under the 1 ms bar; release-gated test per repo convention.
+      - **G3**: 419 default / 598 kernel_heal / 724 all-features lib tests +
+        4 t5_control integration tests; clippy 0 this crate.
 - [ ] **T6 — Mining integration.** With the scanner live, mine WGSL buggy→fixed
       pairs from riir-gpu fix history toward Phase 5's reopen trigger (≥5
       proposer-grade pairs). Every batch re-runs the Issue 017 retrieval

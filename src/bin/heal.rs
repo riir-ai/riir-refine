@@ -105,7 +105,10 @@ USAGE:
     --quiet         With --fix: skip the --suggest pass (only show fixes).
 {}    --domain        Filter suggest output to one domain (default: auto — all enabled).
     --top-k <N>     Rules per span per domain (default 3).
-    <path>...       Files or directories to scan (.rs files only).
+    <path>...       Files or directories to scan. `.rs` always; with the
+                    kernel_heal feature, `--suggest` ALSO scans `.wgsl` files
+                    + `#[cube]` kernel bodies in `.rs` files (Issue 025 —
+                    suggest-only citations, never touched by --fix).
 
 Domains are feature-gated: clippy + perf are default-on; kernel needs
 --features kernel_heal. Requesting a domain whose feature is off is an
@@ -198,11 +201,14 @@ fn parse_args() -> Args {
     args
 }
 
-/// Recursively collect `.rs` files (std-only walker — no new dep). Skips
-/// hidden dirs + `target`/`vendor` build noise.
-fn collect_rs_files(root: &Path, out: &mut Vec<PathBuf>) {
+/// Recursively collect source files with the given extension (std-only
+/// walker — no new dep). Skips hidden dirs + `target`/`vendor` build noise.
+fn collect_source_files(root: &Path, ext: &str, out: &mut Vec<PathBuf>) {
     if root.is_file() {
-        out.push(root.to_path_buf());
+        let name = root.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        if name.ends_with(ext) {
+            out.push(root.to_path_buf());
+        }
         return;
     }
     let mut queue: VecDeque<PathBuf> = VecDeque::new();
@@ -221,7 +227,7 @@ fn collect_rs_files(root: &Path, out: &mut Vec<PathBuf>) {
             }
             if path.is_dir() {
                 queue.push_back(path);
-            } else if name.ends_with(".rs") {
+            } else if name.ends_with(ext) {
                 out.push(path);
             }
         }
@@ -310,11 +316,24 @@ fn main() {
 
     let mut files = Vec::new();
     for path in &args.paths {
-        collect_rs_files(path, &mut files);
+        collect_source_files(path, ".rs", &mut files);
     }
-    if files.is_empty() {
-        eprintln!("no .rs files under the given paths");
+    // Issue 025 T4: the non-syn surface (.wgsl kernel files) joins the
+    // suggest walk when kernel_heal is enabled.
+    let mut wgsl_files = Vec::new();
+    for path in &args.paths {
+        collect_source_files(path, ".wgsl", &mut wgsl_files);
+    }
+    if files.is_empty() && wgsl_files.is_empty() {
+        eprintln!("no .rs/.wgsl files under the given paths");
         std::process::exit(1);
+    }
+    #[cfg(not(feature = "kernel_heal"))]
+    if !wgsl_files.is_empty() {
+        eprintln!(
+            "note: {} .wgsl file(s) found but the non-syn scanner needs --features kernel_heal (Issue 025)",
+            wgsl_files.len()
+        );
     }
 
     // Issue 018: self-evolve recording — the memory half runs in every
@@ -585,6 +604,55 @@ fn main() {
         }
     }
 
+    // ── Issue 025 T4: the non-syn surface suggest pass — `.wgsl` kernel
+    // files + `#[cube]` bodies inside `.rs` files, keyed to the kernel
+    // domain. SUGGEST-ONLY by construction: findings are corpus-rule
+    // citations, no proposer exists for these surfaces, and this pass
+    // runs outside the --fix edit path entirely (pure --suggest mode).
+    #[cfg(feature = "kernel_heal")]
+    let n_non_syn = if args.suggest && args.domain.is_none_or(|d| d == DomainId::Kernel) {
+        let scanner = riir_clippy::domains::kernel_opt::wgsl_scan::WgslScanner::default();
+        let mut n = 0usize;
+        for path in &wgsl_files {
+            let Ok(src) = std::fs::read_to_string(path) else {
+                continue;
+            };
+            for f in scanner.scan(&src) {
+                println!(
+                    "{}:{} [kernel ] {:<44} — {}",
+                    path.display(),
+                    f.line,
+                    f.rule_id,
+                    f.excerpt.trim()
+                );
+                n += 1;
+            }
+        }
+        for path in &files {
+            let Ok(src) = std::fs::read_to_string(path) else {
+                continue;
+            };
+            for f in scanner.scan_cube_rust(&src) {
+                println!(
+                    "{}:{} [kernel ] {:<44} — {} (cube body)",
+                    path.display(),
+                    f.line,
+                    f.rule_id,
+                    f.excerpt.trim()
+                );
+                n += 1;
+            }
+        }
+        if n > 0 {
+            eprintln!("non-syn surface (wgsl + cube bodies): {n} finding(s)");
+        }
+        n
+    } else {
+        0
+    };
+    #[cfg(not(feature = "kernel_heal"))]
+    let n_non_syn = 0usize;
+
     // ── Issue 015: the verify loop — write, cargo check, auto-revert.
     #[cfg(feature = "fix_verify")]
     if args.verify {
@@ -713,12 +781,18 @@ fn main() {
     } else {
         String::new()
     };
+    let non_syn_note = if n_non_syn > 0 {
+        format!(", +{n_non_syn} non-syn (wgsl/cube) finding(s)")
+    } else {
+        String::new()
+    };
     println!(
-        "\nscanned {} file(s), {} span(s), {} with suggestions (top-{} per domain){}",
+        "\nscanned {} file(s), {} span(s), {} with suggestions (top-{} per domain){}{}",
         files.len(),
         n_chunks,
         n_suggestions,
         args.top_k,
-        mode
+        mode,
+        non_syn_note
     );
 }

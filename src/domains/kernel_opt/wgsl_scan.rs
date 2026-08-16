@@ -310,12 +310,41 @@ impl WgslScanner {
     }
 
     /// Enable the experimental pattern set (see [`WGSL_EXPERIMENTAL_RULES`])
-    /// — for git-history mining where the loop-invariant-operand shape IS
-    /// the bug, not for the live-tree suggest path.
+    /// — for git-history mining where the loop-invariant-operand shape IS the
+    /// bug, not for the live-tree suggest path.
     #[must_use]
     pub fn with_experimental(mut self) -> Self {
         self.include_experimental = true;
         self
+    }
+
+    /// Scan the `#[cube]` kernel bodies inside a Rust source (Issue 025 T3).
+    ///
+    /// Items are located by the [`crate::domains::kernel_opt::cube_extract`]
+    /// token-tree walk (never parsed as Rust — `syn` refuses the `CubeCL`
+    /// DSL), each item's text is scanned with the same pattern set as
+    /// [`Self::scan`], and finding lines are mapped back to ABSOLUTE file
+    /// lines. Same precision stance as the `.wgsl` surface: the current
+    /// patterns are WGSL-syntax-shaped, so live cube bodies (Rust-shaped)
+    /// fire nothing — the mapping is exercised by synthetic corpus text and
+    /// the pipeline is the T6 mining substrate (cube-shaped patterns land
+    /// with the mined buggy→fixed pairs).
+    ///
+    /// Limitation (same class as [`Self::scan`]): the pass is over raw span
+    /// TEXT, so a WGSL-shaped snippet inside a cube-body string literal
+    /// would fire — accepted, same as the `.wgsl` scanner's `//`-in-string
+    /// limitation.
+    #[must_use]
+    pub fn scan_cube_rust(&self, rs_source: &str) -> Vec<WgslFinding> {
+        let mut out = Vec::new();
+        for item in super::cube_extract::extract_cube_items(rs_source) {
+            for mut f in self.scan(&item.text) {
+                f.line = item.start_line + f.line - 1;
+                out.push(f);
+            }
+        }
+        out.sort_by(|a, b| (a.line, a.rule_id).cmp(&(b.line, b.rule_id)));
+        out
     }
 }
 
@@ -449,5 +478,46 @@ mod tests {
                 "pattern cites non-corpus rule {id}"
             );
         }
+    }
+
+    /// T3 — cube-body findings map back to ABSOLUTE file lines, and
+    /// comment/attr noise around the item never fires.
+    #[test]
+    fn cube_rust_scan_maps_lines_to_absolute_file_lines() {
+        // A cube body carrying a WGSL-shaped declared-max line (synthetic:
+        // real cube bodies are Rust-shaped and fire nothing — this pins the
+        // mapping, not the live tree).
+        let src = "// `#[cube]` mention in a comment\n#[cfg(feature = \"cubecl_runtime\")]\n#[cube(launch_unchecked)]\nfn k(input: &[f32]) {\n    var buf: array<f32, 256>;\n}\n";
+        let found = WgslScanner::default().scan_cube_rust(src);
+        assert_eq!(found.len(), 1, "got {found:?}");
+        assert_eq!(found[0].rule_id, "declared-max-array-taxed-per-thread-under-runtime-bound");
+        // The body line is file line 5 (attr at 3, body decl at 5).
+        assert_eq!(found[0].line, 5);
+        assert!(found[0].excerpt.contains("array<f32, 256>"));
+
+        // Determinism.
+        assert_eq!(found, WgslScanner::default().scan_cube_rust(src));
+    }
+
+    /// G2 (Bench 033) — the per-file scan budget: < 1 ms/file on the largest
+    /// committed fixture (201 lines, the post-fix m2p control), amortized
+    /// over 200 scans. Release-only per the repo's G2 convention (debug
+    /// regex timing is meaningless for the budget).
+    #[test]
+    #[cfg_attr(debug_assertions, ignore = "release-only: debug regex timing is meaningless for the budget gate")]
+    #[allow(clippy::cast_precision_loss)]
+    fn g2_scan_latency_under_1ms_per_file() {
+        const FIXTURE: &str = include_str!("../../../tests/fixtures/m2p_attention_postfix_701.wgsl");
+        let s = WgslScanner::default();
+        let n = 200usize;
+        let t = std::time::Instant::now();
+        for _ in 0..n {
+            let _ = s.scan(FIXTURE);
+        }
+        let per_file = t.elapsed().as_secs_f64() * 1_000.0 / n as f64;
+        assert!(
+            per_file < 1000.0,
+            "scan budget exceeded: {per_file:.1} µs/file (target < 1000)"
+        );
     }
 }
