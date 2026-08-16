@@ -16,6 +16,7 @@
 
 use super::helpers::needs_logic_parens;
 use super::{edit, src, SourceEdit};
+use syn::spanned::Spanned;
 use syn::visit::Visit;
 use syn::{Expr, ExprIf, File, Stmt};
 
@@ -50,6 +51,27 @@ impl Collector<'_> {
         };
         if inner.else_branch.is_some() || !inner.attrs.is_empty() {
             return None; // inner else has nowhere to go in the merge
+        }
+        // Issue 027: real clippy skips when a comment would be displaced by
+        // the merge — empirically, a comment between the outer block's open
+        // brace and the inner `if` suppresses the lint (probe: inner_comment
+        // silent, outer_comment/comment_inside_inner fire). syn has no
+        // comment nodes, so scan the raw gap slices. A trailing comment
+        // between the inner if's end and the close brace would also be
+        // dropped by the splice — same guard.
+        let open_end = i.then_branch.brace_token.span.open().byte_range().end;
+        let inner_start = inner.span().byte_range().start;
+        let close_start = i.then_branch.brace_token.span.close().byte_range().start;
+        let inner_end = inner.span().byte_range().end;
+        if let (Some(lead), Some(trail)) = (
+            self.source.get(open_end..inner_start),
+            self.source.get(inner_end..close_start),
+        ) {
+            if lead.contains("//") || lead.contains("/*") || trail.contains("//") || trail.contains("/*") {
+                return None;
+            }
+        } else {
+            return None; // span bookkeeping broke — refuse rather than displace
         }
         let c1 = self.cond_text(&i.cond)?;
         let c2 = self.cond_text(&inner.cond)?;
@@ -104,5 +126,34 @@ mod tests {
         let input = "fn f(a: bool, b: bool) { if a { first(); if b { work(); } } }";
         let out = propose_fix("collapsible_if", input);
         assert!(out.is_none(), "multi-stmt then must block: {out:?}");
+    }
+
+    #[test]
+    fn comment_between_outer_brace_and_inner_if_blocks() {
+        // Issue 027 probe: real clippy is SILENT when a comment sits between
+        // the outer block's open brace and the inner `if` (the merge would
+        // displace it) — the katgpt-rs cluster_build.rs false-positive shape.
+        let input = "fn f(o: Option<i32>) -> bool { if let Some(x) = o {\n            // Storage identity, not content equality.\n            if x > 0 {\n                return true;\n            }\n        }\n        false\n    }";
+        let out = propose_fix("collapsible_if", input);
+        assert!(out.is_none(), "interleaved comment must block: {out:?}");
+    }
+
+    #[test]
+    fn trailing_comment_after_inner_if_blocks() {
+        // Issue 027: a comment after the inner if (before the outer close
+        // brace) would be dropped by the splice — same guard.
+        let input = "fn f(a: bool, b: bool) { if a { if b { work(); }\n            // why\n        } }";
+        let out = propose_fix("collapsible_if", input);
+        assert!(out.is_none(), "trailing comment must block: {out:?}");
+    }
+
+    #[test]
+    fn comment_above_outer_if_still_collapses() {
+        // Issue 027 probe control: a comment OUTSIDE the outer block does
+        // NOT suppress real clippy — must keep firing.
+        let input = "fn f(a: bool, b: bool) {\n            // comment above\n            if a { if b { work(); } }\n        }";
+        let out = propose_fix("collapsible_if", input).expect("matched");
+        assert!(out.contains("if a && b {"), "{out}");
+        syn::parse_file(&out).expect("re-parses");
     }
 }

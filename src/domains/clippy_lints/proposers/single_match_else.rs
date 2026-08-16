@@ -1,10 +1,17 @@
-//! `clippy::single_match_else` — `match x { Some(v) => f(v), _ => fallback() }`
+//! `clippy::single_match_else` — `match x { Some(v) => f(v), _ => { fallback() } }`
 //! → `if let Some(v) = x { f(v) } else { fallback() }`.
 //!
-//! Pattern: a two-arm match, no attributes, no guards, where the SECOND arm
-//! is a wildcard (`_`) with a NON-unit body (the unit shape is
-//! `single_match`, a sibling lint) and the FIRST arm is any non-wildcard
-//! pattern.
+//! Pattern: a two-arm match, no attributes, no guards, where the SECOND
+//! arm is a wildcard (`_`) whose body is a NON-UNIT STATEMENT BLOCK and
+//! the FIRST arm is a non-wildcard, non-literal pattern. (The unit shape
+//! is `single_match`, a sibling lint.)
+//!
+//! Shape discipline (Issue 027, empirical vs real clippy 1.93): the lint
+//! only fires when the wildcard arm is a statement BLOCK — an expression
+//! wildcard (`_ => 0`) is SILENT under `-W clippy::pedantic` (probe P2/P4).
+//! A literal first arm (`0 => ..`) fires under a DIFFERENT fix shape
+//! (equality `if x == 0`, not `if let 0 = x`), so literal arms are skipped
+//! entirely — the proposer stays within the validated if-let fix shape.
 //!
 //! Span-preserving (Issue 016): the whole match's byte range is replaced by
 //! `if let <pat> = <scrutinee> <then> else <else>` — pattern, scrutinee, and
@@ -47,6 +54,17 @@ impl Collector<'_> {
         if !matches!(m.arms[1].pat, Pat::Wild(_)) || is_unit_expr(&m.arms[1].body) {
             return None; // unit wildcard is `single_match`, not this lint
         }
+        // Issue 027: real clippy only fires when the wildcard arm is a
+        // statement BLOCK (expression wildcards are silent even under
+        // pedantic) — probe P2/P4 vs P3.
+        if !matches!(&*m.arms[1].body, Expr::Block(_)) {
+            return None;
+        }
+        // Issue 027: a literal first arm fires under a different fix shape
+        // (equality `if x == 0`), out of this proposer's validated scope.
+        if matches!(m.arms[0].pat, Pat::Lit(_)) {
+            return None;
+        }
         if matches!(m.arms[0].pat, Pat::Wild(_)) {
             return None;
         }
@@ -74,10 +92,12 @@ mod tests {
 
     #[test]
     fn converts_to_if_let_else() {
-        let input = "fn g(x: Option<u8>) { match x { Some(v) => drop(v), _ => fallback() } }";
+        // Issue 027: the wildcard arm must be a statement BLOCK (real clippy
+        // is silent on expression wildcards even under pedantic).
+        let input = "fn g(x: Option<u8>) { match x { Some(v) => drop(v), _ => { let f = fallback(); f } } }";
         let out = propose_fix("single_match_else", input).expect("matched");
         assert!(
-            out.contains("if let Some(v) = x { drop(v) } else { fallback() }"),
+            out.contains("if let Some(v) = x { drop(v) } else { let f = fallback(); f }"),
             "not converted: {out}"
         );
         syn::parse_file(&out).expect("re-parses");
@@ -92,6 +112,25 @@ mod tests {
             "{out}"
         );
         syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn expression_wildcard_arm_untouched() {
+        // Issue 027 probe P2/P4: real clippy is SILENT on expression
+        // wildcards (`_ => 0`) — the canonical false-positive shape from
+        // the katgpt-rs cluster_build.rs run (`match bits & 1 { 0 => -1.0, _ => 1.0 }`).
+        let input = "fn g(x: Option<u8>) -> u8 { match x { Some(v) => v + 1, _ => 0 } }";
+        let out = propose_fix("single_match_else", input);
+        assert!(out.is_none(), "expression wildcard must not fire: {out:?}");
+    }
+
+    #[test]
+    fn literal_first_arm_untouched() {
+        // Issue 027 probe P1: a literal first arm fires under a DIFFERENT
+        // fix shape (equality `if x & 1 == 0`), out of scope here.
+        let input = "fn g(x: u64) -> f32 { match x & 1 { 0 => -1.0, _ => { let f = 1.0; f } } }";
+        let out = propose_fix("single_match_else", input);
+        assert!(out.is_none(), "literal first arm must not fire: {out:?}");
     }
 
     #[test]
@@ -110,7 +149,7 @@ mod tests {
 
     #[test]
     fn guarded_arm_untouched() {
-        let input = "fn g(x: Option<u8>) { match x { Some(v) if v > 0 => drop(v), _ => fallback() } }";
+        let input = "fn g(x: Option<u8>) { match x { Some(v) if v > 0 => drop(v), _ => { fallback() } } }";
         let out = propose_fix("single_match_else", input);
         assert!(out.is_none(), "guarded arm must not fire: {out:?}");
     }

@@ -58,7 +58,7 @@
 //! | `collapsible_if` | outer if, no else, single-if then-block → `if a && b` (structural; logic-paren reconstruction) |
 //! | `collapsible_else_if` | `else { if .. }` single-stmt block → `else if` (structural) |
 //! | `single_match` | 2-arm match, wildcard arm unit → `if let` (structural) |
-//! | `single_match_else` | 2-arm match, wildcard arm expr → `if let .. else` (structural) |
+//! | `single_match_else` | 2-arm match, wildcard arm statement BLOCK → `if let .. else` (structural; Issue 027 — expression wildcards never fire under real clippy) |
 //! | `redundant_pattern_matching` | `if let Ok(_) = x` → `x.is_ok()` (wildcard-only variant pats; bindings never fire) |
 //! | `question_mark` | `if x.is_none() { return None; }` / identity match → `x?` (structural; compilability of the original proves the shapes) |
 //! | `range_plus_one` | `a..b+1` → `a..=b` (structural; `Lit::Int`-only) |
@@ -437,8 +437,11 @@ fn f(x: Option<u8>) { match x { Some(v) => use_v(v), _ => () } }",
             ),
             (
                 "single_match_else",
-                "fn f(x: Option<u8>) -> u8 { match x { Some(v) => v, _ => 0 } }",
-                "else { 0 }",
+                // Issue 027: real clippy only fires when the wildcard arm is a
+                // statement BLOCK (expression wildcards are silent even under
+                // pedantic) — the fixture shape matches the corpus entry.
+                "fn f(x: Option<u8>) -> u8 { match x { Some(v) => v, _ => { let d = 0; d } } }",
+                "else { let d = 0; d }",
             ),
             (
                 "redundant_pattern_matching",

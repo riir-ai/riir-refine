@@ -259,6 +259,39 @@ B=3 discriminates. Also fixed in passing: the `wgsl_mine` example's missing
 kernel_heal+latent_retrieval (floors HELD) / clippy 0 `--all-targets` / t93
 unchanged. Record: [Bench 035](.benchmarks/035_entropic_selection_negative.md).
 
+**Issue 027 (2026-08-17, RESOLVED same day + removed per noise-reduction
+rule) — `--fix --write` false-positive cluster: single_match_else /
+collapsible_if proposers fired where real clippy is silent.** Found live
+during the queue-3 clippy sweep on katgpt-rs: `cargo heal --fix --write` on
+`cluster_build.rs` applied 4 edits — 3 outright false positives + 1
+pedantic-legit match_bool with mangled formatting (all reverted pre-commit;
+katgpt-rs landed only the manual sweep fix `380aa9fc`). Root causes pinned
+by an empirical probe matrix against real clippy 1.93 (minimal probe crate,
+default + pedantic): **(1) single_match_else** — real clippy fires ONLY when
+the wildcard arm is a statement BLOCK (expression wildcards `_ => 0` are
+silent even under pedantic; a literal first arm fires under a DIFFERENT fix
+shape — equality `if x == 0`, not `if let 0 = x`); the proposer fired on any
+non-unit wildcard + any non-wildcard first pattern, and its own unit test
+encoded the false-positive shape. Guards added: block-wildcard arm +
+non-literal first arm. **(2) collapsible_if** — real clippy skips when a
+comment sits between the outer block's open brace and the inner `if` (the
+merge would displace it); the proposer now scans the lead + trail gap
+slices textually (syn has no comment nodes). **(3) match_bool formatting**
+DEFERRED `[-]` — span-preserving edits keep original text verbatim by
+design; mitigation is rustfmt-after-write. The pedantic-lints-in-default-
+runs policy is BY DESIGN (corpus includes pedantic lints; G6 truthfulness
+runs all groups). NOT bugs: the needless_range_loop miss (indexing inside
+`assert!` — syn cannot see into macro token streams; conservative skip is
+correct, real clippy only fires on post-expansion HIR) + span coverage
+(proposers scan whole files; the displayed spans are retrieval-only).
+Memory cleanup: the 4 polluted Heuristic-tier trajectories removed
+(memory.json restored to pre-incident state). Gates: 433 default lib / 484
+latent_retrieval lib (retrieval floors + composite eval + corpus truthfulness
+PASS) / 453 full default suite / clippy 0 both states; end-to-end re-verified
+— the healer now proposes exactly 1 edit on the same file (the
+pedantic-legit match_bool), zero false positives. The probe matrix extends
+the `clean_spans_fire_no_lint` sample with the four rejected shapes.
+
 **Plan 005 (2026-08-14) — latent retrieval + `cargo heal --suggest` CLI
 (Phases 1–4 DONE).** `src/draft/` ships the span-level retrieval layer:
 real `.rs` files → `AstChunker` spans → 8-D modelless embedding →
