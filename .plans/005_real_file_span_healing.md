@@ -2,12 +2,19 @@
 
 **Proposal:** [002](../.proposals/002_real_file_span_healing.md)
 **Branch:** `develop` (per global rule — no feature branches)
-**Status:** Phases 1-4, 6 SHIPPED (**Phase 3 CLOSED 2026-08-16** — G1 re-met
-after the full T3.5 contingency, Bench 027) · Phase 5 DEFERRED ·
-Phase 7 partially shipped (Issue 018) · Phase 8 BLOCKED (rubrc) ·
-Phases 9-14 not started
-**Last reviewed:** 2026-08-16 — see [Issue 023](../.issues/023_plan005_design_question_poc.md)
-for the POC that settled the Phase 9 and Phase 11 design questions.
+**Status:** COMPLETE as a document 2026-08-16 — every task is shipped,
+refuted, or defer-marked with a measured reason. Phases 1-4, 6 SHIPPED
+(**Phase 3 CLOSED** — G1 re-met after the full T3.5 contingency, Bench 027) ·
+Phase 5 DEFERRED (corpus not proposer-grade) · **Phase 7 CLOSED as a negative
+result** (T7.4 BLAKE3 commitment shipped) · Phase 8 BLOCKED (rubrc) ·
+**Phase 9 CLOSED** (T9.3 Beta-posterior shipped, Bench 028; T9.4 refuted,
+Bench 029; T9.1/T9.2/T9.2b deferred — no consumer) · **Phases 10, 11, 12, 14
+DEFERRED after pre-flight** (Bench 030 — gates unreachable, target sets
+empty, or headroom exhausted) · **Phase 13 research half MET** (Research 058;
+experiment deferred on headroom)
+**Last reviewed:** 2026-08-16 (final closeout) — see Issue 023 (resolved +
+removed; POC commit `1f23f1f`, verdicts absorbed into the Phase 9/11 bodies)
+for the measurements that settled the Phase 9 and Phase 11 design questions.
 
 > **Read this first if you are picking the plan up.** Three things are not
 > where the phase bodies below imply:
@@ -15,11 +22,16 @@ for the POC that settled the Phase 9 and Phase 11 design questions.
 >    recovered by the full T3.5 contingency to **87.5%** on the committed eval
 >    and **96.0%** on an uncontaminated composite set. Quote the second number:
 >    the committed clippy rows are inflated by the fixture's single-lint shape.
-> 2. **Phase 7 is partially shipped** via Issue 018 — the outcome recorder and
->    cross-run persistence already exist. Do not rebuild them.
-> 3. **Phase 11's latency justification is dead** (measured 1.07× ceiling vs a
->    1.5× gate, Issue 023). It survives as a quality-only phase, demoted below
->    Phase 12 and dependent on Phase 10 T10.1.
+> 2. **Phase 7 is CLOSED as a negative result** (2026-08-16). The outcome
+>    recorder + cross-run persistence it assumed DO ship (Issue 018) — do not
+>    rebuild them — but the *learning* half (evolved directions, trajectory-
+>    memory axis) measured flat-to-negative and is recorded as refuted, not
+>    pending. One piece shipped from the phase: T7.4 (BLAKE3-committed
+>    memory state).
+> 3. **Phase 11 is DEFERRED, not pending** (Bench 030). The latency
+>    justification is dead (measured 1.07× ceiling, Issue 023) AND the
+>    quality gate targets an empty set (L2 accepts 100% of real proposer
+>    drafts). The reopen condition is recorded in the phase body.
 
 ## Goal
 
@@ -1038,8 +1050,10 @@ the fix in Poincaré space before the L2 validate. Two substrates compose:
 `poincare_navigate_into` (single-step imagination) + `ViableManifoldGraph` (safe
 fix-neighborhood graph). Both verified via direct grep (2026-08-14).
 
-**Status: not started, RESCOPED 2026-08-16. Substrate verified. The latency
-justification is DEAD (measured, Issue 023). Quality claim survives, unproven.**
+**Status: DEFERRED 2026-08-16 after pre-flight (Bench 030). Substrate real,
+latency justification DEAD (Issue 023), quality gate unmeasurable as
+specified — its target set is empty. Every task defer-marked below with its
+measured reason; the reopen condition is in the exit criteria.**
 
 > **Issue 023 POC (2026-08-16) — the latency premise is false by ~43×.**
 >
@@ -1097,21 +1111,46 @@ phase closes as a negative result rather than shipping opt-in.
 
 ### Tasks
 
-- [ ] **T11.1** Collect (pre-fix embedding, post-fix embedding) trajectory
+- [-] **T11.1 DEFERRED — no consumer until the gate itself reopens.** The
+      (pre, post) pairs are derivable from the flat `FixTrajectory` (the
+      "hard dependency on T10.1" below was superseded — see the ordering
+      note above), but collecting them now would be data with no reader:
+      the same decorative-metric trap that sank T3.5.1 (display-only
+      verdict), T7.2 (off-path directions), and T9.1 (unconsumed
+      confidence). Original text:
+      Collect (pre-fix embedding, post-fix embedding) trajectory
       pairs from past `--fix` cycles. The corpus needs trajectory shape — the
       current flat `FixTrajectory` is insufficient (blocker for T11.2).
       **Hard dependency on Phase 10 T10.1**, which produces exactly that
       PTG-shaped trajectory. Do not start this phase before T10.1 lands.
-- [ ] **T11.2** Fit `PoincareAdapter` offline via `fit_poincare_adapter(
+- [-] **T11.2 DEFERRED** with T11.1 — an adapter fitted on pairs nothing
+      consumes certifies nothing. Original text:
+      Fit `PoincareAdapter` offline via `fit_poincare_adapter(
       z_samples, target_samples, latent_dim=8, target_dim=8, ...)`. Closed-form
       PCA + ridge regression, no GD. The adapter is BLAKE3-committed + frozen.
-- [ ] **T11.3** Define `score_fix_goodness(z_out: &[f32;8]) -> f32` —
+- [-] **T11.3 DEFERRED — this IS the unproven quality claim.** The learned
+      "correct code" direction is exactly the claim class Plan 497 Phase 2
+      refuted for NPC HLA; with the latency claim measured away (Issue 023),
+      a refutation here leaves the phase nothing to ship (see exit
+      criteria). Original text:
+      Define `score_fix_goodness(z_out: &[f32;8]) -> f32` —
       `dot(z_out, goodness_direction) + sigmoid` onto a learned "correct code"
       direction. The direction is mined from past verified fixes.
-- [ ] **T11.4** Build `SafeManifoldGraph` from a corpus of compile-passing code
+- [-] **T11.4 DEFERRED** with the phase — the graph's predicate ("does this
+      state compile?") is only discriminative under a validator that
+      rejects; L2 doesn't (Bench 030: accepts 33/33), and `fix_verify`'s
+      ground truth is 2 reverted edits deep (n=2, Bench 031). Original text:
+      Build `SafeManifoldGraph` from a corpus of compile-passing code
       embeddings. Predicate = "does this state compile?". Curiosity walk =
       "what's the nearest compile-passing neighbor of the proposed fix?".
-- [ ] **T11.5** Compose: chunk → embed → route → retrieve → draft fix →
+- [-] **T11.5 DEFERRED — both rationales measured away.** Latency: ceiling
+      1.0655× (Issue 023). Rank-recovery: the "top-1 is often wrong" premise
+      cited below (58.3%) is gone after T3.5.5 — clippy top-1 is 87.5%
+      committed / 96.0% uncontaminated, so reject-and-advance competes for
+      ~3 recoverable spans (6 wrong-top-1 of which 3 have the right rule at
+      top-3, committed eval) — the same 4.0pp headroom block as
+      T10.6/T14.5. Original text:
+      Compose: chunk → embed → route → retrieve → draft fix →
       **IMAGINE via `poincare_navigate_into(z_src, delta_target, &adapter,
       &mut z_out, &mut phi_scratch, &mut hidden_scratch)`** → score → if
       score < τ, reject + try next retrieved rule → if score ≥ τ, L2-validate.
@@ -1124,7 +1163,15 @@ phase closes as a negative result rather than shipping opt-in.
       reject early is to try the *next retrieved rule* instead of burning the
       fix attempt, which matters because Phase 3's at-scale top-1 is 58.3%
       on clippy: the right rule is often rank 2-3, not rank 1.
-- [ ] **T11.6** GOAT gate (poincare_imagination) — **quality only, latency gate
+- [-] **T11.6 GOAT gate — EVALUATED, UNMEASURABLE AS SPECIFIED.** G1 is a
+      recall over a measured-EMPTY positive set (L2 accepted 33/33 real
+      proposer drafts, Bench 030) — undefined, not hard. G2 degenerates to
+      trivially-true (an accept-everything gate has TNR 1.0 when
+      would-fail-L2 has no members). G3's evaluable population is ~3 spans
+      (committed eval) / ≤1 (held-out set). Recorded as
+      unmeasurable-by-construction rather than left open — same treatment as
+      T10.6/T12.4/T14.5. Original text:
+      GOAT gate (poincare_imagination) — **quality only, latency gate
       removed per Issue 023**:
       - **G1 (rejection recall)** imagination rejects ≥30% of "would-fail-L2" fixes.
       - **G2 (specificity / TNR)** it accepts ≥90% of "would-pass-L2" fixes.
@@ -1136,17 +1183,32 @@ phase closes as a negative result rather than shipping opt-in.
         bad-fix rate (Issue 023); the gate was arithmetically unreachable.
         A no-regression check (imagination costs <5% wall-clock) replaces it.
       Record in the next `.benchmarks/` slot (`.benchmarks/.highwater` + 1).
-- [ ] **T11.7** Multi-step imagination (`poincare_multi_step_into`) for large
+- [-] **T11.7 DEFERRED** with the phase. Original text:
+      Multi-step imagination (`poincare_multi_step_into`) for large
       fixes that span multiple chunks: split the fix into N sub-steps, imagine
       each, reject if any sub-step diverges.
 
 ### Phase 11 exit criteria
-- Imagination gate ships behind `poincare_imagination` feature gate (opt-in).
-- GOAT G1 (rejection recall ≥30%) + G2 (specificity ≥90%) + G3 (rank recovery) PASS.
-- **If quality is REFUTED** (as Plan 497 Phase 2 was for NPC HLA): close this
-  phase as a **negative result**. There is no latency win to fall back on —
-  Issue 023 measured it away — so a quality refutation leaves nothing to ship.
-  Document it and do NOT keep an opt-in flag alive for its own sake.
+- **DEFERRED 2026-08-16 after pre-flight (Bench 030) — nothing ships, no
+  feature gate is created, and none should be.**
+- ~~Imagination gate ships behind `poincare_imagination` feature gate~~ — the
+  gate it would gate has an empty target set: L2 accepts 100% of real proposer
+  drafts (33/33, Bench 030), so "would-fail-L2" has zero members and G1 is a
+  recall over nothing. The validator that DOES reject is `fix_verify`'s cargo
+  check — first measured rejection rate **2/14 = 14.3%** (Bench 031), with
+  exactly 2 reverted edits as fit/certify ground truth (n=2).
+- ~~GOAT G1 (rejection recall ≥30%) + G2 (specificity ≥90%) + G3 (rank
+  recovery) PASS~~ — unmeasurable as specified (T11.6).
+- **Reopen condition (both legs required):** (1) re-specify G1/G2 against
+  `fix_verify` — the only validator with real rejection power; AND (2)
+  accumulate enough verify-tier revert data to fit AND certify a rejection
+  predictor — the current n=2 ground truth supports neither. The latency
+  case stays dead regardless (Amdahl ceiling 1.06×, Issue 023).
+- If, on reopen, quality is REFUTED (as Plan 497 Phase 2 was for NPC HLA):
+  close this phase as a **negative result**. There is no latency win to fall
+  back on — Issue 023 measured it away — so a quality refutation leaves
+  nothing to ship. Document it and do NOT keep an opt-in flag alive for its
+  own sake.
 
 ## Phase 12 — Trajectory-archetype classifier (Deep fusion E: SweTrajectoryFreezer)
 
@@ -1413,9 +1475,19 @@ unreachable (Bench 030). Deferred.**
 
 - Proposal 002: `riir-clippy/.proposals/002_real_file_span_healing.md`
 - Plan 005: this file.
-- Issue 023: the Phase 9 / Phase 11 design-question POC (`tests/poc_023_plan005_design_questions.rs`).
-- Highwater at last edit (2026-08-16): `.plans` = `5`, `.proposals` = `3`,
-  `.benchmarks` = `26`, `.issues` = `23`, `.research` = `54`.
+- Issue 023: the Phase 9 / Phase 11 design-question POC (`tests/poc_023_plan005_design_questions.rs`,
+  commit `1f23f1f`) — RESOLVED + removed at plan closeout per the
+  noise-reduction rule; its measurements live on in the Phase 9/11 bodies
+  and the tests file.
+- Highwater at final closeout (2026-08-16): `.plans` = `5`, `.proposals` = `3`,
+  `.benchmarks` = `31`, `.issues` = `23`, `.research` = `58`.
+- **027 collision resolved at closeout:** two benches were allocated `027` on
+  the same day — T3.5's G1 recovery (commit `0c5af53`, first) and Issue 015's
+  verify-mode GOAT (commit `4b5c465`, second). Per the collision tie-breaker
+  (fewer live references moves), the verify-mode bench was renumbered
+  **027 → 031**; T3.5 keeps 027. Plan-body citations of "Bench 027" are all
+  T3.5-intent and unchanged; Phase 11's exit criteria cite the verify-mode
+  numbers as Bench 031.
 - **Forward-declared benchmark filenames are banned in this plan.** Phases 9-14
   originally hard-coded `017`-`021`; every one of those numbers was taken by an
   unrelated bench before the phase started. Future tasks say "the next

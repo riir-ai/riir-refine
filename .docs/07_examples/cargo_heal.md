@@ -108,7 +108,7 @@ spawns real cargo) is the standing acceptance proof; the real-repo GOAT
 auto-reverted — the u8-capacity E0308 + the fn-path coercion E0631, the
 exact G5 run-1 failure classes — every named skipped site landed
 compile-confirmed usize, 1245/1245 tests) is
-[Bench 027](../../.benchmarks/027_fix_verify_mode_goat.md) (landed as
+[Bench 031](../../.benchmarks/031_fix_verify_mode_goat.md) (landed as
 katgpt-rs `212ed7942`).
 
 ## Domain gating (T2.4)

@@ -213,6 +213,71 @@ positions + receivers; needless_range_loop `&v`-on-ref-param `&&Vec`
 non-iterator + token-heuristic `v[v[i]]` false positive; unnecessary_unwrap
 receiver mismatch) — see Plan 005 §Phase 6 T6.4 notes.
 
+**Plan 005 Phases 7–14 closeout (2026-08-16) — the plan is COMPLETE as a
+document: every task shipped, refuted, or defer-marked with a measured
+reason.** No phase is left "not started".
+- **Phase 7 CLOSED as a NEGATIVE RESULT** (commits `92b8436`+`76d5ad2`):
+  every "the healer learns its way to better retrieval" mechanism measured
+  flat-to-negative — domain-keyed EMA evolution **−1.0pp** vs the corpus
+  centroid (T7.1, `tests/t71_evolved_directions.rs`; the class mean IS the
+  cosine optimum, so online EMA is a noisier estimate of the same quantity);
+  the router half rests on two stale premises (T7.2 — router is display-only
+  + the 8-D directions are off the shipped TfCosine path); the
+  trajectory-memory axis has **0/25 improvable held-out rankings and would
+  break 19/25 correct ones** (T7.3, `tests/t73_memory_axis_headroom.rs`).
+  What actually lifted retrieval was EVIDENCE, not learning (tokenizer
+  +16.6pp, instantiation re-rank +12.0pp). Shipped from the phase: **T7.4** —
+  `LatentFixMemory::to_json` emits a BLAKE3 commitment over the canonical
+  trajectory serialization; `load_json_verified` reports
+  `CommitmentStatus::{Absent, Verified, Mismatch}` (advisory not gate, per
+  the `Corpus::thaw` precedent; pre-T7.4 files load as Absent).
+- **Phase 9 CLOSED** — **T9.3 SHIPPED + GOAT PASS (Bench 028)**:
+  `HealPipeline` candidate selection is now `SelectionMode::BetaPosterior`
+  (DEFAULT) — the ε-quantile of Beta(1+S, 1+F) replaces the raw S/(S+F)
+  rate, so a lucky 1/1 (Beta 0.224) no longer outranks a proven 18/20
+  (Beta 0.729); selection regret **−8.4%** over the 1–5-attempt regime
+  (−23.8% at 1 attempt; honest +2.9% crossover at 30 attempts documented at
+  the enum variant — BetaPosterior is right for the thin-evidence regime
+  the healer occupies, not universally). Unseen candidates now score 0.32,
+  not 0.5. **T9.4 REFUTED four ways (Bench 029)**: `clr_vote` doesn't exist
+  (ships as `clr_reliability_scores` + a `clr_vote` *parameter* on
+  `compaction::gate`), a "draft" is a verbatim corpus row (no generative
+  diversity to sample), the K=8 ensemble collapses (identity guard declines
+  189/192, distinct drafts per producing case 1.00 of 8), and L2 accepts
+  3/3 (no discriminative power). T9.1/T9.2/T9.2b DEFERRED —
+  `DraftedFix.confidence` is written (`src/drafter.rs:246`) and read by
+  nothing; Issue 023's findings (a cold calibrator emits a ZERO-WIDTH
+  0%-coverage interval; coverage crosses 90% at exactly n=19 residuals)
+  are recorded and binding for any reopen. Per-domain keying (not per-rule)
+  is the amended default if T9.2 reopens.
+- **Phases 10, 12, 14 DEFERRED after pre-flight (Bench 030)** — substrates
+  verified REAL except `ConsolidationPipeline::can_freeze` (does not exist;
+  4th stale substrate claim in the plan). Blockers are measured: T10.6's
+  ≥10% gate vs **4.0pp total headroom** (24/25 held-out already correct at
+  96.0% top-1); Phase 12 has no multi-step trajectories to classify (33/33
+  single-step; `oscillation` unreachable by construction; `--fix --verify`
+  already ships the escalation it wanted); T14.2's O(N)-scan premise is
+  false (HashMap lookup 1.40× over a 100× size increase), T14.3 refuted by
+  T7.3's measurement, T14.5 demands ≥5% from the same 4.0pp budget.
+- **Phase 11 DEFERRED with a reopen condition (Bench 030)** — latency
+  justification measured dead (ceiling 1.0655× vs the ≥1.5× gate,
+  Issue 023); the quality gate targets an EMPTY set (L2 accepts 33/33 real
+  proposer drafts — would-fail-L2 has zero members, G1 is a recall over
+  nothing, G2 degenerates to trivially-true). The validator that does
+  reject is `fix_verify`'s cargo check: first measured rejection rate
+  **2/14 = 14.3%** (Bench 031), ground truth n=2. Reopen = re-specify G1/G2
+  against `fix_verify` AND accumulate enough verify-tier revert data to fit
+  + certify a rejection predictor. No `poincare_imagination` feature gate
+  was created.
+- **Phase 13 research half MET** — [Research 058](.research/058_convex_ast_vocab.md)
+  (`kind + arity` colouring; compression gate re-specified to downstream
+  retrieval top-1); experiment deferred on headroom (4.0pp).
+- **Bench 027 collision resolved at closeout:** T3.5's G1-recovery bench
+  (commit `0c5af53`, first) and Issue 015's verify-mode GOAT (commit
+  `4b5c465`) were both allocated 027 same-day. Verify-mode renumbered
+  **027 → 031** per the tie-breaker (fewer live references moves); T3.5
+  keeps 027. Highwater now 31.
+
 **Issue 016 (2026-08-16) — structural lint expansion 6→33 + `--verify`
 tier 1→4.** 30 new lints distilled frequency-ranked from kornel's
 100K-crate clippy run (v1.80–v1.83; `semicolon_if_nothing_returned`
@@ -430,7 +495,7 @@ STAYS ON: use-before-decl is a correctness issue, not a type question);
 `while_let_on_iterator`, `single_char_pattern`) join the fix set; the
 `fxhashmap` dep gate text-scans the owning crate manifest for `rustc-hash`
 (hard-skip without cargo — the measured 422-edit instance class). **GOAT
-(Bench 027):** real-repo run on the 6 katgpt-pruners files holding the
+(Bench 031):** real-repo run on the 6 katgpt-pruners files holding the
 Bench 019 G5 skipped sites — 14 edits proposed / 12 kept / **2
 auto-reverted on the real repo** (the u8 `BOARD_SIZE` E0308 + the
 `|v| from_bool_vec(v)` E0631 coercion, exactly the G5 run-1 failure
@@ -447,7 +512,7 @@ real cargo) is the standing acceptance proof. Honest scope note: a
 full-crate katgpt-pruners scan now proposes **293 edits / 104 files**
 (Issue 016's expansion) — full-repo verify batches are a consumer
 decision, not a tool default; this GOAT was deliberately file-scoped.
-See [`.benchmarks/027`](.benchmarks/027_fix_verify_mode_goat.md).
+See [`.benchmarks/031`](.benchmarks/031_fix_verify_mode_goat.md).
 
 ## The `riir-clippy` skill (auto-continue idle loop)
 

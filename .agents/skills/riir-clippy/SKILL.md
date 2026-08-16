@@ -934,7 +934,7 @@ global = symlink only.
   at 0.96µs, standing 63.6% floor in the Issue 017 gate; 7-variant matrix
   kept as the reproducible negative-result artifact).
   015 = RESOLVED 2026-08-16
-  (Bench 027 — verify-mode GOAT on the real repo: katgpt-pruners 14 edits /
+  (Bench 031 — verify-mode GOAT on the real repo: katgpt-pruners 14 edits /
   12 kept / 2 auto-reverted (the u8 E0308 + fn-path E0631, the G5 run-1
   failure classes), every named skipped site landed compile-confirmed
   usize, 1245/1245 tests, landed as katgpt-rs `212ed7942`; root-cause fix

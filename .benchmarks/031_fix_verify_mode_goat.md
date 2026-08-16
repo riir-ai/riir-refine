@@ -1,4 +1,9 @@
-# Bench 027 — Issue 015: `--fix --verify` compile-gate GOAT (real-repo revert proof + the skipped G5 sites land)
+# Bench 031 — Issue 015: `--fix --verify` compile-gate GOAT (real-repo revert proof + the skipped G5 sites land)
+
+> **Renumbered from 027 (2026-08-16).** A same-day collision: T3.5's G1-recovery
+> bench (`.benchmarks/027_t35_g1_recovery.md`, commit `0c5af53`) allocated 027
+> first and carries ~2× the live references, so this bench moved to the free
+> 031 slot per the collision tie-breaker (fewer references moves).
 
 **Date:** 2026-08-16.
 **Scope:** Issue 015 acceptance — the `cargo heal --fix --verify` mode (feature
