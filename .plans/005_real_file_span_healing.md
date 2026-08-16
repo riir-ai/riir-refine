@@ -923,34 +923,113 @@ The healer stops re-learning from scratch each session. Three substrates compose
 `ConsolidationPipeline::can_freeze` (gate) → `LocalKvStore` (BLAKE3-committed
 persistence of frozen motifs). All three verified via direct grep (2026-08-14).
 
-**Status: not started. Substrate verified.**
+**Status: PRE-FLIGHTED 2026-08-16 — one substrate claim is stale, and T10.6's
+gate is arithmetically unreachable against the current baseline. Deferred with
+reasons; read before writing code.**
+
+> **PRE-FLIGHT 1 — substrate re-verified (the "verified 2026-08-14" claim is
+> now 3-of-4).**
+> | claimed substrate | status |
+> |---|---|
+> | `mine_motifs_at_sleep_cycle` | **EXISTS** — `katgpt-core` `closure/mining.rs:101`, exported |
+> | `MotifAdmitter` / `SleepCycleClosureReport` | **EXISTS** — exported from `closure::{admit, mining}` |
+> | `LocalKvStore::put_pod` | **EXISTS** — `riir-neuron-db` `src/local_kv/mod.rs:638` |
+> | `ConsolidationPipeline::can_freeze` | **DOES NOT EXIST** — no `ConsolidationPipeline` type anywhere in katgpt-rs, and no `pub fn can_freeze`. Only a *private test helper* `can_freeze_formula(n, d, flatness)` inside `compaction/rubrics/shard_freeze.rs:323`. T10.4 would have to write the gate, not compose it. |
+>
+> Fourth stale substrate claim in this plan, after T7.2's `pick_domain<3,8>`,
+> T3.5.3's `BonsaiEmbedder` 768-D, and T9.4's `clr_vote`.
+>
+> **PRE-FLIGHT 2 — T10.6's gate cannot pass, by arithmetic on measured data.**
+> The gate asks for a **≥10% precision improvement** from mined motifs. But
+> retrieval precision after T3.5.5 is **96.0% top-1 on held-out multi-lint
+> spans (24/25 already correct)** — re-confirmed 2026-08-16 via
+> `tests/t73_memory_axis_headroom.rs`. The entire remaining headroom is
+> **1/25 = 4.0pp**, so even a *perfect* motif library that fixed every
+> remaining miss would gain 4.0pp — **less than half the 10% the gate
+> demands**. Same Amdahl-shaped impossibility as Phase 11's ≥1.5× latency
+> gate (Issue 023).
+>
+> **PRE-FLIGHT 3 — motifs cannot beat the trajectories they are mined from.**
+> T7.3 measured raw fix-trajectory evidence at **0/25 improvable, 19/25
+> breakable** on the same held-out set. A motif library is a *lossy summary*
+> of those trajectories, so it cannot contain information they lacked. The
+> zero-headroom result transfers by construction.
+>
+> **What Phase 10 actually wanted is already shipped.** Its stated purpose —
+> "the healer stops re-learning from scratch each session" — is *persistence*,
+> and that ships today: Issue 018's `memory.json` save/load plus T7.4's
+> BLAKE3 commitment (`CommitmentStatus::{Absent, Verified, Mismatch}`).
+> `LocalKvStore` would be a different backend for a capability that already
+> works, not a new capability.
+>
+> **Reopen when** retrieval precision drops materially (restoring headroom
+> above 10pp), or when a motif consumer exists that is NOT retrieval ranking —
+> the gate would then need re-specifying to whatever that consumer moves,
+> exactly as T9.5 was re-specified to selection regret.
 
 ### Tasks
 
-- [ ] **T10.1** Generalize `FixTrajectory` to PTG-shape (primitive transition
+- [-] **T10.1 DEFERRED** — blocked by pre-flight 2/3 (the gate it feeds cannot
+      pass; motifs cannot beat the trajectories T7.3 measured at zero headroom).
+      Original text: Generalize `FixTrajectory` to PTG-shape (primitive transition
       graph) — the input shape `mine_motifs_at_sleep_cycle` expects. Each fix
       becomes a 3-node PTG: `(retrieve_rule) → (draft_fix) → (verify_outcome)`.
-- [ ] **T10.2** Persist fix trajectories via `LocalKvStore::put_pod<FixOutcome>`
+- [-] **T10.2 DEFERRED — the capability already ships.** Cross-run persistence
+      of fix trajectories exists via Issue 018 (`memory.json`) + T7.4 (BLAKE3
+      commitment). `LocalKvStore` would be a different backend for a working
+      capability, not a new one. Original text:
+      Persist fix trajectories via `LocalKvStore::put_pod<FixOutcome>`
       keyed by `BLAKE3(lint_name ∥ rule_id ∥ buggy_hash)`. Survives restart.
       Native-only (no WASM — `LocalKvStore` uses std::fs).
-- [ ] **T10.3** Implement `cargo heal --sleep` CLI: drain accumulated trajectories
+- [-] **T10.3 DEFERRED** with T10.1 — a `--sleep` CLI that mines motifs no
+      consumer can profit from (pre-flight 2/3). Original text:
+      Implement `cargo heal --sleep` CLI: drain accumulated trajectories
       → `mine_motifs_at_sleep_cycle(miner, admitter, dl_old_bits)` →
       `SleepCycleClosureReport` → admit high-PRI motifs via `MotifAdmitter`.
-- [ ] **T10.4** Gate motif graduation with `ConsolidationPipeline::can_freeze`
+- [-] **T10.4 DEFERRED — substrate does not exist.** There is no
+      `ConsolidationPipeline` type and no `pub fn can_freeze` in katgpt-rs; only
+      a private test helper `can_freeze_formula(n, d, flatness)`. This task
+      would have to WRITE the gate. Original text:
+      Gate motif graduation with `ConsolidationPipeline::can_freeze`
       semantics: only freeze motifs with `n_wake_events ≥ d AND flatness < τ`.
       Prevents premature freezing of noisy patterns.
-- [ ] **T10.5** Freeze admitted motifs via the existing `freeze()`/`thaw()` on
+- [-] **T10.5 DEFERRED** with T10.1 — nothing admitted to freeze. The
+      BLAKE3-committed-freeze *pattern* it wanted is already demonstrated by
+      T7.4 on the memory state. Original text:
+      Freeze admitted motifs via the existing `freeze()`/`thaw()` on
       `Corpus` (BLAKE3-committed). The healer's learned skill library is
       reproducible + auditable.
-- [ ] **T10.6** GOAT gate (sleep_consolidation): on a fixture corpus with N=100
+- [x] **T10.6 GOAT gate — EVALUATED, UNREACHABLE BY ARITHMETIC.** The gate
+      asks for **≥10% precision improvement**; measured remaining headroom on
+      the held-out multi-lint set is **4.0pp total** (24/25 spans already
+      correct at 96.0% top-1, re-confirmed 2026-08-16). A perfect motif
+      library gains at most 4.0pp — under half the bar. No implementation can
+      pass it, so the gate is recorded as failed-by-construction rather than
+      left open. Original text:
+      GOAT gate (sleep_consolidation): on a fixture corpus with N=100
       fix cycles, `cargo heal --sleep` extracts ≥1 motif that the next `--fix`
       cycle retrieves (precision improvement ≥10% vs cold-start). Record in
       the next `.benchmarks/` slot (`.benchmarks/.highwater` + 1).
 
 ### Phase 10 exit criteria
-- `cargo heal --sleep` mines motifs from past trajectories, freezes them,
-  persists them across restart.
-- The healer's skill library improves overnight.
+- **DEFERRED 2026-08-16 after pre-flight — not started, and it should not
+  start in this state.**
+- ~~`cargo heal --sleep` mines motifs, freezes them, persists across restart~~
+  — the *persistence* half already ships (Issue 018 `memory.json` + T7.4
+  BLAKE3 commitment). The *mining* half is blocked on a substrate gap
+  (`ConsolidationPipeline::can_freeze` does not exist) and a gate that cannot
+  pass (≥10% demanded, 4.0pp of headroom exists).
+- ~~The healer's skill library improves overnight~~ — this is the same claim
+  Phase 7 made and Phase 7 measured at flat-to-negative. T7.3 tested the raw
+  trajectory evidence directly: **0/25 held-out rankings improvable, 19/25
+  breakable.** Motifs are a lossy summary of those same trajectories.
+- **The pattern across Phases 7, 9 and 10 is now unmistakable and worth stating
+  once:** every "the healer learns and gets better" mechanism in this plan has
+  measured flat or negative, while every "use a stronger signal you already
+  have" mechanism has measured large and positive (operator-aware tokenizer
+  +16.6pp, instantiation re-rank +12.0pp uncontaminated, Beta-posterior
+  selection −8.4% regret). Retrieval is at 96.0% because of *evidence*, not
+  *learning* — and at 96.0% there is almost nothing left for learning to win.
 
 ## Phase 11 — Poincaré fix-imagination layer (Deep fusion C: imagine_belief_into + ViableManifoldGraph)
 
