@@ -406,7 +406,10 @@ fn domain_index(d: DomainId) -> usize {
 /// a tie exactly on the top-5 boundary + the in-process determinism test
 /// caught it). A substrate-level deterministic tie-break in riir-rag remains
 /// a documented follow-up; this keeps the eval self-contained.
-fn canonical_rank(rules: &[crate::draft::ScoredRule]) -> Vec<&crate::draft::ScoredRule> {
+///
+/// `pub(crate)` — shared by the Issue 024 switch-cost measurement so both
+/// evals rank identically.
+pub(crate) fn canonical_rank(rules: &[crate::draft::ScoredRule]) -> Vec<&crate::draft::ScoredRule> {
     let mut v: Vec<&crate::draft::ScoredRule> = rules.iter().collect();
     // MUST match `instantiation_rerank::rerank`'s key order — instantiation
     // first, then similarity, then rule_id. Sorting by score alone here would
@@ -930,21 +933,24 @@ mod tests {
     /// is cheap robustness, not noise cover).
     mod floors {
         // Rebased 2026-08-16 by Plan 005 T3.5 (operator-aware BM25 tokenizer +
-        // adjacency bigrams) and again by T3.5.5 (instantiation re-rank
-        // promoted to default). Measured blended 89/92/92 of 96, clippy
-        // 42/45/45 of 48, perf 47/47/47 of 48; floors are measured − ONE span,
-        // the documented convention.
+        // adjacency bigrams), again by T3.5.5 (instantiation re-rank promoted
+        // to default; measured blended 89/92/92 of 96, clippy 42/45/45 of 48,
+        // perf 47/47/47 of 48), and again by Issue 024 (Bench 032: RERANK_POOL
+        // 8→12 after the cross-domain crowding casualty at raw rank 9;
+        // measured blended 90/93/93 of 96, clippy 43/46/46 of 48, perf
+        // 47/47/47 of 48). Floors are measured − ONE span, the documented
+        // convention.
         //
         // NOTE these clippy rows are INFLATED by the fixture's single-lint /
         // zero-cross-fire shape (T3.5.4's finding) — they are a fine
         // REGRESSION floor but not an effect size. The re-rank promotion was
         // justified by the uncontaminated composite measurement instead
         // (`tests/uncontaminated_g1.rs`, +12.0pp).
-        pub const BLENDED_TOP1: f32 = 88.0 / 96.0;
-        pub const BLENDED_TOP3: f32 = 91.0 / 96.0;
-        pub const BLENDED_TOP5: f32 = 91.0 / 96.0;
-        pub const CLIPPY_TOP1: f32 = 41.0 / 48.0;
-        pub const CLIPPY_TOP3: f32 = 44.0 / 48.0;
+        pub const BLENDED_TOP1: f32 = 89.0 / 96.0;
+        pub const BLENDED_TOP3: f32 = 92.0 / 96.0;
+        pub const BLENDED_TOP5: f32 = 92.0 / 96.0;
+        pub const CLIPPY_TOP1: f32 = 42.0 / 48.0;
+        pub const CLIPPY_TOP3: f32 = 45.0 / 48.0;
         pub const PERF_TOP3: f32 = 46.0 / 48.0;
         #[cfg(feature = "kernel_heal")]
         pub const KERNEL_TOP3: f32 = 29.0 / 30.0;

@@ -129,11 +129,20 @@ pub enum RerankMode {
 
 /// Number of candidates retrieved per domain before re-ranking.
 ///
-/// Re-ranking can only promote a rule that was retrieved, so the pool must be
-/// deeper than the `top_k` the caller wants to display. Retrieve-deep →
-/// re-rank → truncate is the standard two-stage shape. 8 covers the residual
-/// miss distribution (all 9 near-misses sat at rank 2-3).
-pub const RERANK_POOL: usize = 8;
+/// Re-ranking can only promote a rule that was retrieved, so the pool must
+/// be deeper than the `top_k` the caller wants to display. Retrieve-deep →
+/// re-rank → truncate is the standard two-stage shape.
+///
+/// 8 covered the T3.5.4 residual miss distribution (all 9 near-misses sat
+/// at rank 2-3). Issue 024 (Bench 032) measured the first casualty OUTSIDE
+/// that bound: under cross-domain co-presence (`needless_return` merged
+/// with `vec-with-capacity`, both orders) loop-shaped clippy rules crowd
+/// the correct rule to raw similarity rank **9** — one position past the
+/// pool of 8, evicting it before the re-ranker ever sees it (the 8.3pp
+/// switch-cost signal). 12 restores the rescue with margin; deeper pools
+/// only add visitor walks, never new promotions (a structural proposer
+/// that does not match stays `false` at any depth).
+pub const RERANK_POOL: usize = 12;
 
 /// Does `rule_id`'s proposer visitor actually match `file`?
 ///
