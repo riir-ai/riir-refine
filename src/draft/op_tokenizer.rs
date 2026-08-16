@@ -222,7 +222,44 @@ mod tests {
     }
 
     #[test]
+    fn bigrams_are_a_strict_superset_of_unigrams() {
+        // The promoted default must never LOSE evidence relative to the
+        // unigram tokenizer — it only adds.
+        let text = "pub fn recalibrate(drift: u32) -> () { let _ = drift; }";
+        let uni = RustOpTokenizer.tokenize(text);
+        let bi = RustOpBigramTokenizer.tokenize(text);
+        for t in &uni {
+            assert!(bi.contains(t), "bigram output dropped unigram {t}");
+        }
+        assert!(bi.len() > uni.len(), "bigrams must add terms");
+    }
+
+    #[test]
+    fn the_sequence_signal_unigrams_cannot_express_is_captured() {
+        // `unused_unit` is defined by `-> ()`. Both halves are individually
+        // ubiquitous (every `fn f()` has `op:()`), so only the BIGRAM can
+        // separate it — this is the reason RustOpBigramTokenizer exists.
+        let bi = RustOpBigramTokenizer.tokenize("pub fn f() -> () { }");
+        assert!(
+            bi.iter().any(|t| t == "op:->|op:()"),
+            "the `-> ()` sequence must survive as one term, got {bi:?}"
+        );
+    }
+
+    #[test]
+    fn bigrams_require_an_operator_side() {
+        // ident/ident pairs are ordinary n-gram noise and must not be emitted.
+        let bi = RustOpBigramTokenizer.tokenize("let alpha beta gamma");
+        assert!(
+            !bi.iter().any(|t| t == "alpha|beta"),
+            "ident/ident bigram leaked into the term set: {bi:?}"
+        );
+    }
+
+    #[test]
     fn non_ascii_does_not_panic() {
-        let _ = tok("let s = \"héllo→wörld\"; // ünicode ✓");
+        let text = "let s = \"héllo→wörld\"; // ünicode ✓";
+        let _ = tok(text);
+        let _ = RustOpBigramTokenizer.tokenize(text);
     }
 }

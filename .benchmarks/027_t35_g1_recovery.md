@@ -6,9 +6,12 @@
 **One command:** `cargo test --features latent_retrieval --lib retrieval_sweep_report -- --nocapture`
 
 **Verdict: clippy top-1 54.2% → 70.8% (+16.6pp), perf 87.5% → 97.9% (+10.4pp),
-blended 70.8% → 84.4% (+13.6pp). The G1 bar of 80% is NOT met — Phase 3 stays
-open.** Option 1 is refuted by architecture, option 2 delivered the whole gain
-and is promoted to default, option 3 is measured and rejected on cost/benefit.
+blended 70.8% → 84.4% (+13.6pp). The G1 bar of 80% is NOT met on valid
+evidence — Phase 3 stays open.** Option 1 refuted by architecture; option 2
+delivered the whole shipped gain and is promoted; option 3 measured and
+rejected on cost; T3.5.4 (instantiation re-ranker) ships opt-in with its gain
+**unmeasurable** — the fixture oracle is the same proposer set the re-ranker
+uses, proven to the digit by `rerank_circularity_diagnostic`.
 
 ## Baseline (the state T3.5 was opened against)
 
@@ -115,6 +118,21 @@ hook. **Zero substrate code reimplemented.**
 
 **Determinism:** bit-identical across 3 separate processes.
 
+**All three domains, kernel-inclusive state** (`--features
+latent_retrieval,kernel_heal`, ~52 s):
+
+| domain | labeled | top-1 | top-3 | top-5 |
+|---|---:|---:|---:|---:|
+| clippy | 48 | 70.8% | 89.6% | 91.7% |
+| perf | 48 | 97.9% | 97.9% | 97.9% |
+| kernel | 30 | 100.0% | 100.0% | 100.0% |
+| blended | 126 | **88.1%** | 95.2% | 96.0% |
+
+Kernel self-variants hold at 100% — the standing crowding alarm did NOT fire,
+confirming that adding operator tokens costs identifier-rich domains nothing.
+3-domain blended rose 78.8% → 88.1% vs Bench 022; router annotation 69.8% →
+70.6% (unchanged mechanism — the fixture and corpus moved, not the router).
+
 **Secondary result — the latent fusion weight is an inert lever, REFUTED.**
 clippy top-1 is identical at weight 1.0, 0.5, 0.25 and 0.0: the 8-D
 `ModellessEmbedder` term never changes a ranking, because BM25 dominates and
@@ -179,10 +197,87 @@ comparison is apples-to-apples, dense vectors cached once so the weight sweep
 
 ---
 
+## T3.5.4 — instantiation re-ranker: MECHANISM SHIPPED, GAIN UNMEASURABLE, NOT PROMOTED
+
+### The target
+
+T3.5.2 left a specific failure *shape*, not just a number: 9 of the 14 residual
+clippy top-1 misses had the correct rule at **rank 2-3**, with top-3 at 89.6%.
+Right answer present, wrong answer first — a re-ranking problem. A better
+first-stage retriever cannot fix that; different *evidence* can.
+
+Every score in the stack is text similarity, and Bench 018 already established
+its ceiling: the *correct* `Vec::with_capacity` function scored higher on
+`vec-with-capacity` than the buggy `Vec::new` one. The proposers' `syn`
+visitors answer the question similarity cannot — *does this rule actually
+apply?* `src/draft/instantiation_rerank.rs` runs the candidate rules' visitors
+over the span (one parse, K visitor walks) and lets a firing visitor outrank a
+non-firing one. Retrieve pool of 8 → mark instantiation → re-rank → truncate.
+
+### Measured — and why the numbers are NOT an effect size
+
+| mode | clippy@1 | clippy@3 | perf@1 | blend@1 | blend@3 |
+|---|---:|---:|---:|---:|---:|
+| off (shipped) | 70.8% | 89.6% | 97.9% | 84.4% | 93.8% |
+| structural | 87.5% | 93.8% | 97.9% | 92.7% | 95.8% |
+| all | 95.8% | 95.8% | 97.9% | 96.9% | 96.9% |
+
+**This measurement is contaminated and the deltas must not be quoted as a
+gain.** `clippy_fixture_labels_verify_via_proposers` — a committed, passing
+test — asserts that for all 48 clippy fixtures the OWN proposer fires and
+**zero** of the other 40 cross-fire. That is exactly the property the
+re-ranker exploits: the oracle that defined the labels is the oracle doing the
+ranking.
+
+`rerank_circularity_diagnostic` states the falsifiable version and it **holds
+exactly**:
+
+```
+pool recall @8        : 95.8% (46/48)
+RerankMode::All top-1 : 95.8%
+verdict: CONTAMINATED — All-mode top-1 IS pool recall
+```
+
+`All`-mode top-1 equals pool recall to the digit. The table is measuring *"was
+the correct rule retrieved?"*, not *"did re-ranking pick it?"*. Under the
+repo's GOAT rule — a gain measured on a biased oracle is not a modelless gain —
+**the gate has not passed, so this is NOT promoted.** `RerankMode::default()`
+is `Off`, asserted by a test so nobody flips it by reading the table.
+
+### What IS established, non-circularly
+
+- **Safety.** The structural proposers are verified *not* to fire on real
+  production code by `clean_spans_fire_no_lint` (12 real excerpts from this
+  crate) — an oracle with no connection to the labeled fixtures. `Structural`
+  therefore cannot promote a spurious rule on clean input; worst case it does
+  nothing.
+- **Coherence.** `--fix` already treats a firing visitor as the decision
+  (Phase 6 T6.1). Enabling this makes `--suggest` rank by the same evidence
+  `--fix` acts on, rather than by a score that cannot tell a bug from its fix.
+- **Cost.** One parse + K visitor walks per span; no allocation beyond the
+  candidates already held. `Off` short-circuits before the parse, so the
+  shipped path pays nothing.
+
+### What a valid gate needs
+
+1. Clippy fixtures labeled by an oracle **independent of our proposers** —
+   real `cargo clippy` output. The harness already exists for the `self_evolve`
+   G7 gate (Bench 024), so this is wiring, not invention.
+2. Spans where **several lints genuinely co-apply**. Zero-cross-fire is the
+   artificial part; real code trips multiple lints, and that is precisely
+   where a re-ranker either earns its place or does not.
+
+Until then the honest claim is "mechanism sound, effect size unknown", and
+`Off` is the correct default.
+
+---
+
 ## Reproduce
 
 ```bash
-# options 1-2 (seconds)
+# options 1-2 + T3.5.4 (seconds)
+cargo test --features latent_retrieval --lib rerank_sweep_report -- --nocapture
+cargo test --features latent_retrieval --lib rerank_circularity_diagnostic -- --nocapture
 cargo test --features latent_retrieval --lib retrieval_sweep_report -- --nocapture
 cargo test --features latent_retrieval --lib retrieval_precision_regression_gate -- --nocapture
 cargo test --features latent_retrieval --lib router -- --nocapture

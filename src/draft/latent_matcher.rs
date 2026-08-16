@@ -72,6 +72,8 @@ pub struct RuleInfo {
 /// kernel ~155 rules — one modelless embedding each; milliseconds).
 pub struct LatentMatcher {
     router: DomainRouter,
+    /// How much proposer evidence counts when ordering candidates (T3.5.4).
+    rerank_mode: super::instantiation_rerank::RerankMode,
     clippy: Option<RuleIndex>,
     perf: Option<RuleIndex>,
     kernel: Option<RuleIndex>,
@@ -206,6 +208,7 @@ impl LatentMatcher {
                     order: SpectralOrder::GlobalFreq,
                 },
             ),
+            rerank_mode: super::instantiation_rerank::RerankMode::default(),
             clippy,
             perf,
             kernel,
@@ -219,6 +222,15 @@ impl LatentMatcher {
     /// `--suggest` prints the `fixed_code` snippet for manual review
     /// (Plan 005 T2.3); `--fix` (Phase 4/5) will consume the same book.
     #[must_use]
+    /// Set the instantiation re-rank policy — the Plan 005 T3.5.4 A/B knob.
+    /// Defaults to [`RerankMode::Off`](super::instantiation_rerank::RerankMode::Off)
+    /// — the gain is real mechanically but its effect size is unmeasurable on
+    /// the current fixture (see the `instantiation_rerank` module docs).
+    pub fn with_rerank_mode(mut self, mode: super::instantiation_rerank::RerankMode) -> Self {
+        self.rerank_mode = mode;
+        self
+    }
+
     pub fn rule_book(&self, rule_id: &str) -> Option<&RuleInfo> {
         self.rule_book.get(rule_id)
     }
@@ -287,9 +299,19 @@ impl LatentMatcher {
                 DomainId::Kernel => self.kernel.as_ref(),
             };
             if let Some(index) = index {
-                let rules = index
-                    .suggest_deep_into(code, top_k, &mut self.scratch)
-                    .to_vec();
+                // Retrieve a POOL deeper than the caller's top_k: re-ranking
+                // can only promote a rule that was retrieved, and the residual
+                // T3.5.2 misses sat at rank 2-3 (T3.5.4).
+                let pool = top_k.max(super::instantiation_rerank::RERANK_POOL);
+                let mut rules = index.suggest_deep_into(code, pool, &mut self.scratch).to_vec();
+                super::instantiation_rerank::mark_instantiation(
+                    domain,
+                    code,
+                    &mut rules,
+                    self.rerank_mode,
+                );
+                super::instantiation_rerank::rerank(&mut rules);
+                rules.truncate(top_k);
                 out.push((domain, rules));
             }
         }

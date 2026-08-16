@@ -408,9 +408,13 @@ fn domain_index(d: DomainId) -> usize {
 /// a documented follow-up; this keeps the eval self-contained.
 fn canonical_rank(rules: &[crate::draft::ScoredRule]) -> Vec<&crate::draft::ScoredRule> {
     let mut v: Vec<&crate::draft::ScoredRule> = rules.iter().collect();
+    // MUST match `instantiation_rerank::rerank`'s key order — instantiation
+    // first, then similarity, then rule_id. Sorting by score alone here would
+    // silently undo the T3.5.4 re-rank before it was ever measured.
     v.sort_by(|a, b| {
-        b.score
-            .total_cmp(&a.score)
+        b.instantiates
+            .cmp(&a.instantiates)
+            .then_with(|| b.score.total_cmp(&a.score))
             .then_with(|| a.rule_id.cmp(&b.rule_id))
     });
     v
@@ -428,6 +432,12 @@ pub fn run_eval() -> EvalReport {
     run_eval_with(crate::draft::RetrievalConfig::default())
 }
 
+/// [`run_eval`] against an explicit re-rank mode (Plan 005 T3.5.4 A/B).
+#[must_use]
+pub fn run_eval_reranked(mode: crate::draft::RerankMode) -> EvalReport {
+    run_eval_inner(crate::draft::RetrievalConfig::default(), mode)
+}
+
 /// [`run_eval`] against an explicit retrieval config — the Plan 005 T3.5 A/B
 /// entry point. `run_eval` delegates with the promoted default.
 ///
@@ -436,8 +446,22 @@ pub fn run_eval() -> EvalReport {
 /// Panics if [`LatentMatcher::from_enabled_domains_with`] fails.
 #[must_use]
 pub fn run_eval_with(config: crate::draft::RetrievalConfig) -> EvalReport {
-    let mut matcher =
-        LatentMatcher::from_enabled_domains_with(config).expect("build matcher");
+    run_eval_inner(config, crate::draft::RerankMode::default())
+}
+
+/// The shared eval body — both A/B axes explicit.
+///
+/// # Panics
+///
+/// Panics if [`LatentMatcher::from_enabled_domains_with`] fails.
+#[must_use]
+pub fn run_eval_inner(
+    config: crate::draft::RetrievalConfig,
+    rerank: crate::draft::RerankMode,
+) -> EvalReport {
+    let mut matcher = LatentMatcher::from_enabled_domains_with(config)
+        .expect("build matcher")
+        .with_rerank_mode(rerank);
     let mut report = EvalReport::default();
 
     let spans = labeled_eval_spans();
@@ -812,6 +836,60 @@ pub fn print_retrieval_sweep(rows: &[RetrievalSweepRow]) {
     }
 }
 
+/// One row of the Plan 005 T3.5.4 re-rank sweep.
+#[derive(Debug, Clone, Copy)]
+pub struct RerankSweepRow {
+    /// The mode that produced the row.
+    pub mode: crate::draft::RerankMode,
+    /// Per-domain metrics, indexed as [`EvalReport::per_domain`].
+    pub per_domain: [DomainMetrics; 3],
+    /// Blended metrics across every labeled span.
+    pub blended: DomainMetrics,
+}
+
+/// Run the eval under each re-rank mode — the T3.5.4 benchmark.
+#[must_use]
+pub fn run_rerank_sweep() -> Vec<RerankSweepRow> {
+    [
+        crate::draft::RerankMode::Off,
+        crate::draft::RerankMode::Structural,
+        crate::draft::RerankMode::All,
+    ]
+    .into_iter()
+    .map(|mode| {
+        let r = run_eval_reranked(mode);
+        RerankSweepRow { mode, per_domain: r.per_domain, blended: r.blended }
+    })
+    .collect()
+}
+
+/// Human-readable T3.5.4 sweep table.
+#[allow(clippy::cast_precision_loss)] // display percentages over tiny counts
+pub fn print_rerank_sweep(rows: &[RerankSweepRow]) {
+    println!("== Plan 005 T3.5.4 instantiation re-rank sweep ==");
+    println!("  G1 bar: clippy top-1 >= 80%");
+    println!(
+        "{:<12} {:>9} {:>9} {:>9} {:>9} {:>9}",
+        "mode", "clippy@1", "clippy@3", "perf@1", "blend@1", "blend@3"
+    );
+    let pct = |v: Option<f32>| v.map_or("-".to_string(), |x| format!("{:.1}%", x * 100.0));
+    for row in rows {
+        let tag = match row.mode {
+            crate::draft::RerankMode::Off => "off",
+            crate::draft::RerankMode::Structural => "structural",
+            crate::draft::RerankMode::All => "all",
+        };
+        println!(
+            "{tag:<12} {:>9} {:>9} {:>9} {:>9} {:>9}",
+            pct(row.per_domain[0].recall(1)),
+            pct(row.per_domain[0].recall(3)),
+            pct(row.per_domain[1].recall(1)),
+            pct(row.blended.recall(1)),
+            pct(row.blended.recall(3)),
+        );
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -879,6 +957,115 @@ mod tests {
     #[allow(clippy::cast_precision_loss)] // ratio arithmetic over tiny counts
     fn ratio(hits: usize, n: usize) -> f32 {
         if n == 0 { 1.0 } else { hits as f32 / n as f32 }
+    }
+
+    #[test]
+    fn rerank_circularity_diagnostic() {
+        // The T3.5.4 gain must be checked for ORACLE CONTAMINATION before it
+        // can be believed. `clippy_fixture_labels_verify_via_proposers` is a
+        // committed, passing test asserting that for every clippy fixture the
+        // OWN proposer fires and NO other proposer cross-fires. That is
+        // exactly the property the instantiation re-ranker exploits, so on
+        // this fixture set `RerankMode::All` degenerates to "was the correct
+        // rule retrieved into the pool at all?".
+        //
+        // The falsifiable prediction: All-mode top-1 == pool recall @
+        // RERANK_POOL, exactly. If it holds, the measured gain is not an
+        // effect size and must not be reported as one.
+        use crate::draft::{RerankMode, RERANK_POOL};
+        let mut matcher = LatentMatcher::from_enabled_domains()
+            .expect("build matcher")
+            .with_rerank_mode(RerankMode::Off);
+
+        let mut in_pool = 0usize;
+        let mut labeled = 0usize;
+        for span in super::labeled_eval_spans() {
+            if span.domain != crate::draft::DomainId::Clippy || !matcher.has_domain(span.domain) {
+                continue;
+            }
+            labeled += 1;
+            let (_, by_domain) = matcher.suggest_span(&span.code, RERANK_POOL);
+            let found = by_domain
+                .iter()
+                .find(|(d, _)| *d == span.domain)
+                .is_some_and(|(_, rules)| rules.iter().any(|r| r.rule_id == span.label));
+            if found {
+                in_pool += 1;
+            }
+        }
+        #[allow(clippy::cast_precision_loss)]
+        let pool_recall = in_pool as f32 / labeled as f32;
+
+        let all = super::run_eval_reranked(RerankMode::All);
+        let all_top1 = all.per_domain[0].recall(1).expect("clippy labeled");
+
+        println!("\n== T3.5.4 circularity diagnostic (clippy) ==");
+        println!("  pool recall @{RERANK_POOL:<2}      : {:.1}% ({in_pool}/{labeled})", pool_recall * 100.0);
+        println!("  RerankMode::All top-1 : {:.1}%", all_top1 * 100.0);
+        println!(
+            "  verdict: {}",
+            if (all_top1 - pool_recall).abs() < 1e-6 {
+                "CONTAMINATED — All-mode top-1 IS pool recall; the fixture's \
+                 one-proposer-fires invariant decides the ranking, not the re-ranker"
+            } else {
+                "not fully explained by pool recall"
+            }
+        );
+        assert!(
+            (all_top1 - pool_recall).abs() < 1e-6,
+            "the contamination prediction failed (all {all_top1:.4} vs pool {pool_recall:.4}) \
+             — re-examine the oracle before trusting either number"
+        );
+    }
+
+    #[test]
+    fn rerank_sweep_report() {
+        // Plan 005 T3.5.4 benchmark: does proposer-visitor evidence beat pure
+        // text similarity? Prints the A/B table and pins the shipped gain.
+        let rows = super::run_rerank_sweep();
+        super::print_rerank_sweep(&rows);
+
+        let get = |m: crate::draft::RerankMode| {
+            *rows.iter().find(|r| r.mode == m).expect("row present")
+        };
+        let off = get(crate::draft::RerankMode::Off);
+        let structural = get(crate::draft::RerankMode::Structural);
+
+        let off_clippy = off.per_domain[0].recall(1).expect("clippy labeled");
+        let on_clippy = structural.per_domain[0].recall(1).expect("clippy labeled");
+        let off_perf = off.per_domain[1].recall(1).expect("perf labeled");
+        let on_perf = structural.per_domain[1].recall(1).expect("perf labeled");
+
+        // MECHANICAL check only. These numbers are CONTAMINATED — the clippy
+        // fixtures are label-verified by the very proposers doing the ranking
+        // (`clippy_fixture_labels_verify_via_proposers` asserts own-fires +
+        // zero-cross-fires), and `rerank_circularity_diagnostic` shows
+        // All-mode top-1 IS pool recall, exactly. So this asserts only that
+        // the wiring is live and does no harm — NOT an effect size.
+        assert!(
+            on_clippy > off_clippy,
+            "the re-rank wiring appears dead: clippy top-1 unchanged \
+             (on {on_clippy:.3} vs off {off_clippy:.3})"
+        );
+        assert!(
+            on_perf >= off_perf,
+            "perf top-1 must not regress from re-ranking \
+             (on {on_perf:.3} vs off {off_perf:.3})"
+        );
+        // The gate did NOT pass on valid evidence, so the shipped default must
+        // stay unpromoted. This assertion is the guard against someone reading
+        // the table above and flipping the default without a clean oracle.
+        assert_eq!(
+            crate::draft::RerankMode::default(),
+            crate::draft::RerankMode::Off,
+            "RerankMode must stay Off until an oracle INDEPENDENT of our \
+             proposers measures the gain (see instantiation_rerank module docs)"
+        );
+        println!(
+            "  NOTE: these deltas are CONTAMINATED (see rerank_circularity_diagnostic); \
+             default stays Off. Shipped path is unchanged at clippy@1 {:.1}%.",
+            off_clippy * 100.0
+        );
     }
 
     #[test]

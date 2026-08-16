@@ -40,6 +40,17 @@ pub struct ScoredRule {
     /// only rule-instantiation gate (`--fix`); `--suggest` output is ranked
     /// candidates for a human.
     pub score: f32,
+    /// Whether this rule's proposer visitor ACTUALLY MATCHED the span —
+    /// rule *instantiation*, as opposed to the text similarity in `score`
+    /// (Plan 005 T3.5.4).
+    ///
+    /// Always `false` until
+    /// [`mark_instantiation`](super::instantiation_rerank::mark_instantiation)
+    /// runs, and always `false` for rules with no proposer (kernel, and the
+    /// perf rules outside the shipped five) — "no proposer" is deliberately
+    /// indistinguishable from "no match", because absence of evidence is not
+    /// evidence.
+    pub instantiates: bool,
 }
 
 /// Reusable buffers for the suggest loop (Plan 005 T3.4 / G4).
@@ -398,7 +409,7 @@ impl RuleIndex {
         // drain() moves the owned rule-id Strings straight into the output —
         // no per-rule re-allocation for keys.
         for (rule_id, score) in best.drain() {
-            ranked.push(ScoredRule { rule_id, score });
+            ranked.push(ScoredRule { rule_id, score, instantiates: false });
         }
         ranked.sort_unstable_by(|a, b| {
             b.score

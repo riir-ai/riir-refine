@@ -129,6 +129,27 @@ still 9.2pp away — Phase 3 stays open on T3.5.4** (a top-k re-ranker: 9 of
 Sweep: `cargo test --features latent_retrieval --lib retrieval_sweep_report
 -- --nocapture`.
 
+**Plan 005 T3.5.4 (2026-08-16) — instantiation re-ranker: built, benchmarked,
+NOT promoted (Bench 027).** `src/draft/instantiation_rerank.rs` re-ranks the
+retrieved top-8 by running each candidate rule's `propose_fix` visitor over the
+span (one parse, K visitor walks) — rule *instantiation* instead of text
+similarity, the distinction Bench 018's threshold refutation named as the
+ceiling. On paper it clears the G1 bar: clippy top-1 70.8% → 87.5%
+(`Structural`) → 95.8% (`All`), blended 84.4% → 96.9%. **Those deltas are
+CONTAMINATED and must not be quoted as a gain**:
+`clippy_fixture_labels_verify_via_proposers` asserts every clippy fixture fires
+its OWN proposer and zero of the other 40 cross-fire — exactly the property the
+re-ranker exploits. `rerank_circularity_diagnostic` proves it to the digit
+(`All` top-1 = pool recall @8 = 95.8% = 46/48), so the table measures "was the
+right rule retrieved", not "did re-ranking pick it". Per the GOAT rule the gate
+did NOT pass → **`RerankMode::default()` stays `Off`, asserted by a test**.
+Established non-circularly: safety (`clean_spans_fire_no_lint` — structural
+proposers don't fire on 12 real production excerpts), coherence (`--fix`
+already gates on the same visitor), zero cost when `Off`. **Unblocking it needs
+an oracle independent of our proposers** (real `cargo clippy` labels — the
+Bench 024 G7 harness already exists) plus spans where several lints genuinely
+co-apply. Tracked as Plan 005 T3.5.5.
+
 **Plan 005 (2026-08-14) — latent retrieval + `cargo heal --suggest` CLI
 (Phases 1–4 DONE).** `src/draft/` ships the span-level retrieval layer:
 real `.rs` files → `AstChunker` spans → 8-D modelless embedding →

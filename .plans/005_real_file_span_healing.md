@@ -211,10 +211,18 @@ queue + the proposers stay the only instantiation gate. Full record: Bench
 - [ ] **T3.5 (G1 recovery — the live contingency, blocks Phase 9+)** Lift clippy
       top-1 to ≥80%. **All three options worked and benchmarked 2026-08-16
       (Bench 027). Clippy top-1 54.2% → 70.8% (+16.6pp), perf 87.5% → 97.9%,
-      blended 70.8% → 84.4%. The 80% bar is NOT met — T3.5 stays open at
-      9.2pp short.** (Baseline reads 54.2% not Bench 022's 58.3% because the
+      blended 70.8% → 84.4%. The 80% bar is NOT met on valid evidence — T3.5
+      stays open.** (Baseline reads 54.2% not Bench 022's 58.3% because the
       fixture grew 88 → 96 labeled spans in between; all T3.5 numbers use the
       96-span fixture throughout.)
+
+      **The follow-up (T3.5.4) changed what "open" means.** The instantiation
+      re-ranker clears the bar on paper (87.5% / 95.8%) but its measurement is
+      *circular* — proven to the digit — because the fixture labels are
+      verified by the same proposers the re-ranker consults. So the blocker is
+      no longer "retrieval is not good enough"; it is **"the fixture set cannot
+      measure a re-ranker"** (T3.5.5). That is a cheaper, better-understood
+      problem than the one T3.5 opened with, and it is the honest state.
 
   - [x] **T3.5.1 Re-fit the domain centroids — REFUTED BY ARCHITECTURE, no
         change shipped.** Two independent reasons this option could not work,
@@ -266,15 +274,43 @@ queue + the proposers stay the only instantiation gate. Full record: Bench
         Measured on the largest matched subset that is feasible instead
         (clippy only, whole-span scale on both arms, dense vectors cached once
         so the weight sweep is free) — `tests/bonsai_retrieval_probe.rs`.
-  - [ ] **T3.5.4 The remaining 9.2pp.** 9 of the 14 top-1 misses have the
-        correct rule at **rank 2-3** — near-miss crowding, not absent signal —
-        and clippy top-3 is already 89.6%. The next lever is therefore a
-        *re-ranker over the top-k*, not a better first-stage retriever. The
-        cheapest untried candidate is the AST shape the proposers already
-        compute: run the top-3 rules' `propose_fix` visitors and promote the
-        one that actually matches, which is rule *instantiation* rather than
-        text similarity — the exact distinction the Bench 018 threshold
-        refutation identified as the ceiling of the current approach.
+  - [x] **T3.5.4 Instantiation re-ranker — BUILT + BENCHMARKED; gain proven
+        UNMEASURABLE on the current oracle, so NOT promoted.** Shipped as
+        `src/draft/instantiation_rerank.rs` behind `RerankMode` (default
+        `Off`): retrieve a pool of 8 → run the candidate rules' `propose_fix`
+        visitors over the span (one parse, K visitor walks) → a firing visitor
+        outranks a non-firing one → truncate. This is rule *instantiation*
+        rather than text similarity — the exact distinction Bench 018's
+        threshold refutation named as the ceiling.
+        **Measured: clippy top-1 70.8% → 87.5% (`Structural`) → 95.8%
+        (`All`), blended 84.4% → 92.7% → 96.9%. These are NOT effect sizes.**
+        `clippy_fixture_labels_verify_via_proposers` (committed, passing)
+        asserts every clippy fixture fires its OWN proposer and **zero** of the
+        other 40 cross-fire — precisely the property the re-ranker exploits, so
+        the oracle that defined the labels is the oracle doing the ranking.
+        `rerank_circularity_diagnostic` states the falsifiable version and it
+        holds **exactly**: `All` top-1 = pool recall @8 = 95.8% = 46/48. The
+        table measures "was the right rule retrieved", not "did re-ranking pick
+        it". Per the repo GOAT rule (a gain on a biased oracle is not a
+        modelless gain) the gate did NOT pass, so the default stays `Off` —
+        guarded by an assertion so the table cannot be acted on by itself.
+        **Established non-circularly:** safety (`clean_spans_fire_no_lint` — the
+        structural proposers do not fire on 12 real production excerpts, an
+        oracle unrelated to the fixtures), coherence (`--fix` already gates on
+        the same visitor, Phase 6 T6.1), and cost (`Off` short-circuits before
+        the parse, so the shipped path pays nothing).
+  - [ ] **T3.5.5 An uncontaminated G1 oracle (the real remaining work).**
+        T3.5.4 did not fail — it revealed that the *fixture set cannot measure
+        a re-ranker at all*. Two things are needed, neither of which is
+        invention:
+        1. Label the clippy fixtures from **real `cargo clippy` output**
+           instead of from our proposers. The harness already exists for the
+           `self_evolve` G7 gate (Bench 024) — this is wiring.
+        2. Add spans where **several lints genuinely co-apply**. Zero-cross-fire
+           is the artificial property; real code trips multiple lints, and that
+           is exactly where a re-ranker earns its place or does not.
+        With that oracle, re-run `rerank_sweep_report`; if `Structural` still
+        wins it is a genuine modelless gain and promotes on the spot.
 
 ### Phase 3 exit criteria
 - G1-G4 PASS for `--suggest` mode. If G1 (precision) is <80%, tune the domain directions
