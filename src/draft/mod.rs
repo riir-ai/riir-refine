@@ -12,6 +12,8 @@
 //! - [`corpus_index`] — T1.2: per-domain rule index (`ShardIndex` KNN + BM25).
 //! - [`op_tokenizer`] — T3.5: operator-aware BM25 tokenizer (the
 //!   tiny-token-crowding fix; clippy top-1 54.2% -> 91.7%, Bench 027).
+//! - [`clippy_oracle`] — T3.5.5: real-`cargo clippy` labeling oracle, the
+//!   uncontaminated ground truth the re-ranker must be measured against.
 //! - [`instantiation_rerank`] — T3.5.4: proposer-visitor re-ranking over the
 //!   retrieved top-k (rule instantiation, not text similarity).
 //! - [`domain_router`] — T1.4: centroid `MoE` routing across enabled domains.
@@ -23,8 +25,11 @@
 pub mod corpus_index;
 pub mod domain_router;
 pub mod eval_fixtures_clippy;
+pub mod eval_fixtures_composite;
 pub mod eval_fixtures_perf;
 pub mod latent_matcher;
+#[cfg(feature = "clippy_verify")]
+pub mod clippy_oracle;
 pub mod instantiation_rerank;
 pub mod op_tokenizer;
 pub mod retrieval_eval;
@@ -35,6 +40,8 @@ pub use domain_router::{
     SPECTRAL_K, SPECTRAL_VOCAB_N,
 };
 pub use latent_matcher::{LatentMatcher, RuleInfo, SpanSuggestion};
+#[cfg(feature = "clippy_verify")]
+pub use clippy_oracle::{ClippyOracle, OracleVerdict};
 pub use instantiation_rerank::{RerankMode, RERANK_POOL};
 pub use op_tokenizer::{RustOpBigramTokenizer, RustOpTokenizer, BIGRAM_SEP, OP_PREFIX};
 pub use retrieval_eval::{run_eval, run_eval_with, run_retrieval_sweep, run_router_eval, EvalReport, DomainMetrics as EvalDomainMetrics};

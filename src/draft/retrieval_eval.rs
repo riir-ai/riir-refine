@@ -929,15 +929,22 @@ mod tests {
     /// flip across processes (3-process re-runs were identical; the margin
     /// is cheap robustness, not noise cover).
     mod floors {
-        // Rebased 2026-08-16 by Plan 005 T3.5 (Bench 027): the operator-aware
-        // BM25 tokenizer + adjacency bigrams moved every row. Measured
-        // blended 81/90/91 of 96, clippy 34/43/45 of 48, perf 47/47/47 of 48;
-        // floors are measured − ONE span, the documented convention.
-        pub const BLENDED_TOP1: f32 = 80.0 / 96.0;
-        pub const BLENDED_TOP3: f32 = 89.0 / 96.0;
-        pub const BLENDED_TOP5: f32 = 90.0 / 96.0;
-        pub const CLIPPY_TOP1: f32 = 33.0 / 48.0;
-        pub const CLIPPY_TOP3: f32 = 42.0 / 48.0;
+        // Rebased 2026-08-16 by Plan 005 T3.5 (operator-aware BM25 tokenizer +
+        // adjacency bigrams) and again by T3.5.5 (instantiation re-rank
+        // promoted to default). Measured blended 89/92/92 of 96, clippy
+        // 42/45/45 of 48, perf 47/47/47 of 48; floors are measured − ONE span,
+        // the documented convention.
+        //
+        // NOTE these clippy rows are INFLATED by the fixture's single-lint /
+        // zero-cross-fire shape (T3.5.4's finding) — they are a fine
+        // REGRESSION floor but not an effect size. The re-rank promotion was
+        // justified by the uncontaminated composite measurement instead
+        // (`tests/uncontaminated_g1.rs`, +12.0pp).
+        pub const BLENDED_TOP1: f32 = 88.0 / 96.0;
+        pub const BLENDED_TOP3: f32 = 91.0 / 96.0;
+        pub const BLENDED_TOP5: f32 = 91.0 / 96.0;
+        pub const CLIPPY_TOP1: f32 = 41.0 / 48.0;
+        pub const CLIPPY_TOP3: f32 = 44.0 / 48.0;
         pub const PERF_TOP3: f32 = 46.0 / 48.0;
         #[cfg(feature = "kernel_heal")]
         pub const KERNEL_TOP3: f32 = 29.0 / 30.0;
@@ -1052,19 +1059,19 @@ mod tests {
             "perf top-1 must not regress from re-ranking \
              (on {on_perf:.3} vs off {off_perf:.3})"
         );
-        // The gate did NOT pass on valid evidence, so the shipped default must
-        // stay unpromoted. This assertion is the guard against someone reading
-        // the table above and flipping the default without a clean oracle.
+        // Promoted 2026-08-16 by T3.5.5 on UNCONTAMINATED evidence (+12.0pp
+        // top-1 over real-clippy-labeled multi-lint spans — see
+        // `tests/uncontaminated_g1.rs`). This assertion pins the promotion so
+        // a silent revert to Off is caught.
         assert_eq!(
             crate::draft::RerankMode::default(),
-            crate::draft::RerankMode::Off,
-            "RerankMode must stay Off until an oracle INDEPENDENT of our \
-             proposers measures the gain (see instantiation_rerank module docs)"
+            crate::draft::RerankMode::Structural,
+            "RerankMode::Structural is the T3.5.5-promoted default"
         );
         println!(
-            "  NOTE: these deltas are CONTAMINATED (see rerank_circularity_diagnostic); \
-             default stays Off. Shipped path is unchanged at clippy@1 {:.1}%.",
-            off_clippy * 100.0
+            "  NOTE: the clippy deltas in this table are INFLATED by the fixture's \
+             single-lint shape (see rerank_circularity_diagnostic). The promotion \
+             rests on tests/uncontaminated_g1.rs (+12.0pp), not on this table."
         );
     }
 

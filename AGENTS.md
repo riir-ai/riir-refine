@@ -150,6 +150,32 @@ an oracle independent of our proposers** (real `cargo clippy` labels — the
 Bench 024 G7 harness already exists) plus spans where several lints genuinely
 co-apply. Tracked as Plan 005 T3.5.5.
 
+**Plan 005 T3.5.5 (2026-08-16) — uncontaminated oracle; re-ranker PROMOTED;
+PHASE 3 CLOSED (Bench 027).** `src/draft/clippy_oracle.rs` asks real
+`cargo clippy` (all three lint groups, JSON, compile-failure detection) what
+fires on a span — an oracle with no connection to our corpus or proposers.
+**It overturned half of the T3.5.4 diagnosis:** the labels were never wrong
+(real clippy confirms 43/43 of the compiling fixtures); the defect is SAMPLE
+SELECTION — 0/43 fixtures trip more than one corpus lint, so exactly one rule
+can be right and a ranker has nothing to decide. Re-running G1 against real
+labels reproduced the degeneracy exactly. Fixed by authoring the missing
+sample: `src/draft/eval_fixtures_composite.rs`, 28 multi-anti-pattern spans
+**labeled by the oracle, not by hand** (27 compile, 25 genuinely multi-lint;
+a second batch avoids the first's `needless_return` pairing bias).
+**Uncontaminated G1: off 84.0% → Structural 96.0% (+12.0pp)**, with the
+degeneracy check now failing to fire (`all` 96.0% != pool recall 100.0%).
+GOAT: G1 PASS, G2 +52-64us/span (+5.6-7.2%), G3 415/461/481/471 lib tests
+across four feature states + clippy 0, G4 one `syn::File` per span, modelless
+throughout → **`RerankMode::Structural` promoted to default**, pinned by
+assertion. Committed eval after promotion: clippy 87.5/93.8/93.8, perf
+97.9/97.9/97.9, blended 92.7/95.8/95.8; floors rebased (blended 88/91/91 of
+96, clippy 41/44 of 48). **Phase 3's >=80% G1 bar is MET on both the committed
+eval (87.5%) and the honest composite set (96.0%) — Phase 3 CLOSES.** Two
+caveats carried forward: the committed clippy rows are a regression floor, not
+an effect size; and 5 of the 48 original fixtures do not compile, so no
+independent oracle can validate them. Run:
+`cargo test --release --features latent_retrieval,clippy_verify --test uncontaminated_g1 -- --nocapture --test-threads=1`.
+
 **Plan 005 (2026-08-14) — latent retrieval + `cargo heal --suggest` CLI
 (Phases 1–4 DONE).** `src/draft/` ships the span-level retrieval layer:
 real `.rs` files → `AstChunker` spans → 8-D modelless embedding →

@@ -5,13 +5,17 @@
 **Feature:** `latent_retrieval` (+ `bonsai_retrieval` for option 3)
 **One command:** `cargo test --features latent_retrieval --lib retrieval_sweep_report -- --nocapture`
 
-**Verdict: clippy top-1 54.2% → 70.8% (+16.6pp), perf 87.5% → 97.9% (+10.4pp),
-blended 70.8% → 84.4% (+13.6pp). The G1 bar of 80% is NOT met on valid
-evidence — Phase 3 stays open.** Option 1 refuted by architecture; option 2
-delivered the whole shipped gain and is promoted; option 3 measured and
-rejected on cost; T3.5.4 (instantiation re-ranker) ships opt-in with its gain
-**unmeasurable** — the fixture oracle is the same proposer set the re-ranker
-uses, proven to the digit by `rerank_circularity_diagnostic`.
+**Verdict: the G1 bar is MET.** Clippy top-1 54.2% → 70.8% (tokenizer) →
+**87.5%** (re-rank) on the committed eval, and **96.0%** on the uncontaminated
+composite set; perf 87.5% → 97.9%; blended 70.8% → 92.7%.
+
+Route: option 1 refuted by architecture; option 2 (operator-aware BM25
+tokenizer) delivered the retrieval half and is promoted; option 3 measured and
+rejected on cost; T3.5.4 built an instantiation re-ranker whose apparent +25pp
+was proven **circular**; T3.5.5 built an independent real-`cargo clippy` oracle,
+found the labels were fine but the *sample* was degenerate (0/43 multi-lint),
+authored the missing multi-lint spans, and re-measured: **+12.0pp on
+uncontaminated evidence → GOAT PASS → `RerankMode::Structural` promoted.**
 
 ## Baseline (the state T3.5 was opened against)
 
@@ -272,9 +276,100 @@ Until then the honest claim is "mechanism sound, effect size unknown", and
 
 ---
 
+## T3.5.5 — the uncontaminated oracle: G1 BAR MET, re-ranker PROMOTED
+
+### What the independent oracle actually found
+
+`src/draft/clippy_oracle.rs` asks real `cargo clippy`
+(`--message-format=json -- -W clippy::all -W clippy::pedantic -W clippy::nursery`)
+what fires on a span, intersects with the corpus vocabulary, and reports
+compile failures separately (a span rustc rejects yields no trustworthy
+labels). Clippy knows nothing about our corpus, proposers, or scores.
+
+Run over the 48 existing clippy fixtures:
+
+| | result |
+|---|---:|
+| compile under rustc | 43/48 (89.6%) |
+| **our label confirmed by real clippy** | **43/43 (100.0%)** |
+| real clippy reports no corpus lint | 0/43 |
+| **spans tripping >1 corpus lint** | **0/43 (0.0%)** |
+
+**This overturns half of T3.5.4's diagnosis.** The labels were never wrong —
+an oracle with no connection to our proposers confirms every one. The defect is
+**sample selection**: every fixture is a *minimal single-lint example*, so
+exactly one rule can possibly be right and a ranker has nothing to decide.
+Re-running the G1 against real labels reproduced the degeneracy exactly
+(`all` top-1 97.7% == pool recall 97.7%), confirming the fixture *shape*, not
+the labels, was the blocker.
+
+Side finding: 5 fixtures (`needless_return`, `collapsible_if`, `single_match`,
+`comparison_to_empty`, `semicolon_if_nothing_returned`) do not compile, so no
+independent oracle can validate them. Recorded, not fixed here.
+
+### The missing sample, authored
+
+`src/draft/eval_fixtures_composite.rs` — 28 spans that trip several corpus
+anti-patterns at once, the way real code does. **Deliberately not hand-labeled:**
+the labels come from the oracle at measurement time, because hand-labeling
+would reintroduce the coupling T3.5.5 exists to remove. 27 compile, **25 are
+genuinely multi-lint** per real clippy. The second batch pairs non-`return`
+rules, because the first leaned on `needless_return` as the partner (16 of 19
+sets) and a ranker biased toward one popular rule would have scored well.
+
+### Uncontaminated G1 (25 multi-lint spans, real-clippy labels)
+
+| mode | top-1 | top-3 |
+|---|---:|---:|
+| `Off` | 84.0% | 96.0% |
+| **`Structural`** | **96.0%** | 96.0% |
+| `All` | 96.0% | 96.0% |
+
+**+12.0pp top-1**, and the degeneracy check now *fails to fire*: `all` top-1
+(96.0%) **≠** pool recall (100.0%). Retrieval already has a true rule in the
+pool for every span, so top-1 is purely an ordering decision — exactly the
+thing the old fixture could not test. The gain is the re-ranker's.
+
+`Structural` ties `All` while excluding the known over-matchers, so the safer
+arm is also an equal-best one.
+
+### GOAT gate
+
+| gate | result |
+|---|---|
+| **G1 quality** | **PASS** — +12.0pp top-1 on uncontaminated multi-lint evidence |
+| **G2 latency** | **PASS** — +52-64 µs/span (+5.6-7.2%) for one parse + K visitor walks |
+| **G3 no-regression** | **PASS** — 415 / 461 / 481 / 471 lib tests green (default / `latent_retrieval` / +`clippy_verify` / `fix_verify`), clippy 0 warnings |
+| **G4 bounded alloc** | **PASS** — one `syn::File` per span; no growth in the candidate path |
+| **modelless** | **YES** — `syn` visitors, deterministic, no weights or training |
+
+**→ `RerankMode::Structural` PROMOTED TO DEFAULT.** Pinned by an assertion so a
+silent revert is caught.
+
+### Phase 3 G1 bar: MET
+
+| measurement | clippy top-1 | ≥80% bar |
+|---|---:|:--|
+| committed eval (single-lint fixture, inflated) | **87.5%** | PASS |
+| uncontaminated composites (real-clippy labels) | **96.0%** | PASS |
+
+Both clear it, and the honest one clears it by more. Committed eval after
+promotion: clippy 87.5/93.8/93.8, perf 97.9/97.9/97.9, blended 92.7/95.8/95.8.
+Floors rebased to measured − 1 (blended 88/91/91 of 96, clippy 41/44 of 48).
+
+The committed clippy rows remain inflated by the fixture shape and are a
+**regression floor, not an effect size** — the promotion rests on the composite
+measurement.
+
+---
+
 ## Reproduce
 
 ```bash
+# T3.5.5 uncontaminated oracle (~10 s warm, spawns cargo clippy per span)
+cargo test --release --features latent_retrieval,clippy_verify \
+  --test uncontaminated_g1 -- --nocapture --test-threads=1
+
 # options 1-2 + T3.5.4 (seconds)
 cargo test --features latent_retrieval --lib rerank_sweep_report -- --nocapture
 cargo test --features latent_retrieval --lib rerank_circularity_diagnostic -- --nocapture

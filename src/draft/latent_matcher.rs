@@ -223,9 +223,9 @@ impl LatentMatcher {
     /// (Plan 005 T2.3); `--fix` (Phase 4/5) will consume the same book.
     #[must_use]
     /// Set the instantiation re-rank policy — the Plan 005 T3.5.4 A/B knob.
-    /// Defaults to [`RerankMode::Off`](super::instantiation_rerank::RerankMode::Off)
-    /// — the gain is real mechanically but its effect size is unmeasurable on
-    /// the current fixture (see the `instantiation_rerank` module docs).
+    /// Defaults to
+    /// [`RerankMode::Structural`](super::instantiation_rerank::RerankMode::Structural)
+    /// — promoted on the T3.5.5 uncontaminated measurement (+12.0pp top-1).
     pub fn with_rerank_mode(mut self, mode: super::instantiation_rerank::RerankMode) -> Self {
         self.rerank_mode = mode;
         self

@@ -34,33 +34,42 @@
 //!   candidates; it never adds or removes one. A span whose visitors all stay
 //!   silent keeps its similarity ranking untouched.
 //!
-//! ## Why this is opt-in (`RerankMode::Off` by default)
+//! ## The measurement, and why the first one was wrong
 //!
-//! On the committed eval this re-ranker looks spectacular — clippy top-1
-//! 70.8% → 87.5% (`Structural`) → 95.8% (`All`). **Those numbers are not an
-//! effect size, and must not be quoted as one.**
+//! On the ORIGINAL fixture set this re-ranker looked like a +25pp win. It was
+//! not one. `clippy_fixture_labels_verify_via_proposers` asserts that for all
+//! 48 clippy fixtures the OWN proposer fires and **zero** of the other 40
+//! cross-fire — exactly the property this module exploits, so the re-ranker
+//! could not be wrong whenever the correct rule was retrieved at all.
+//! `rerank_circularity_diagnostic` proved it to the digit: `RerankMode::All`
+//! top-1 == pool recall @[`RERANK_POOL`] (46/48).
 //!
-//! The clippy fixtures are label-verified by
-//! `clippy_fixture_labels_verify_via_proposers`, a committed passing test that
-//! asserts, for all 48 spans: the OWN proposer fires, and **zero** of the
-//! other 40 proposers cross-fire. That is precisely the property this module
-//! exploits, so on that fixture set the re-ranker cannot be wrong whenever the
-//! correct rule is retrieved at all — the oracle that defined the labels is
-//! the same oracle doing the ranking.
+//! T3.5.5 then built an independent oracle ([`super::clippy_oracle`]) and
+//! found the labels were never the problem — real `cargo clippy` confirms
+//! **43/43** of the compiling fixtures. The problem was **sample selection**:
+//! `0/43` of them trip more than one corpus lint. A set where exactly one rule
+//! can possibly be right cannot discriminate a ranker, so the degeneracy
+//! persisted even against real labels.
 //!
-//! `rerank_circularity_diagnostic` states the falsifiable version and it
-//! **holds exactly**: `RerankMode::All` top-1 equals pool recall @
-//! [`RERANK_POOL`] to the digit (95.8% = 46/48). The "gain" is measuring
-//! *"was the right rule retrieved?"*, not *"did re-ranking pick it?"*.
+//! The fix was to author the missing sample —
+//! [`super::eval_fixtures_composite`], spans that trip several anti-patterns
+//! at once, labeled by real clippy rather than by hand. On those, top-1 is a
+//! genuine ordering decision (pool recall is 100%, so retrieval is never the
+//! limiting factor):
 //!
-//! Per the repo's GOAT rule — a gain measured on a biased oracle is not a
-//! modelless gain — the gate has NOT passed, so this is not promoted.
+//! | mode | top-1 | vs off |
+//! |---|---:|---:|
+//! | `Off` | 84.0% | — |
+//! | `Structural` | **96.0%** | **+12.0pp** |
+//! | `All` | 96.0% | +12.0pp |
 //!
-//! **What a valid gate needs:** clippy fixtures labeled by an oracle
-//! INDEPENDENT of our proposers (real `cargo clippy` output — the harness
-//! already exists for the `self_evolve` G7 gate, Bench 024), plus spans where
-//! several lints genuinely co-apply, since zero-cross-fire is the artificial
-//! part. Until then the honest claim is the one below, not a percentage.
+//! and the degeneracy check now *fails to fire* — `All` top-1 (96.0%) ≠ pool
+//! recall (100%) — i.e. the ranking is doing work retrieval did not do. The
+//! result survives removing the authoring bias of the first batch (which
+//! over-used `needless_return` as the pairing partner).
+//!
+//! `Structural` ties `All` on quality while excluding the known over-matchers,
+//! so the safer arm is also an equal-best one. That is the promoted default.
 //!
 //! ## What IS established, non-circularly
 //!
@@ -94,11 +103,7 @@ use super::domain_router::DomainId;
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum RerankMode {
     /// No re-ranking — pure text similarity (the pre-T3.5.4 behaviour).
-    ///
-    /// **The shipped default.** Not because the mechanism is doubted, but
-    /// because its effect size is currently unmeasurable — see the
-    /// "Why this is opt-in" section in the module docs.
-    #[default]
+    /// Kept as the A/B baseline and an escape hatch.
     Off,
     /// Only **structurally sound** proposers count as evidence: clippy's
     /// `FIXABLE_LINTS`, whose detection alone guarantees semantics and which
@@ -109,6 +114,13 @@ pub enum RerankMode {
     /// which over-match on parse-only information *by design* — Bench 022
     /// measured them tripping on ordinary production code. Their firing is
     /// weak evidence and would add noise, not signal.
+    ///
+    /// **Promoted to default 2026-08-16 (T3.5.5, Bench 027)** on
+    /// uncontaminated evidence: +12.0pp top-1 (84.0% → 96.0%) over 25
+    /// real-clippy-labeled multi-lint spans, at +5.6% latency. Ties `All`
+    /// on quality while excluding the known over-matchers, so it is the
+    /// strictly safer of two equally good arms.
+    #[default]
     Structural,
     /// Every dispatchable proposer counts, including the type-blind ones.
     /// Measured as the A/B arm; see the bench note for why it is not default.
