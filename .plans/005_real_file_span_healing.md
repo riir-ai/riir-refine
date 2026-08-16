@@ -775,20 +775,35 @@ read it before writing code.**
 
 ### Tasks
 
-- [ ] **T9.1** Define `FixForecaster: PointForecaster` impl that maps
+- [-] **T9.1 DEFERRED — the calibration target has no consumer.** Grep across
+      `src/` and `tests/`: `DraftedFix.confidence` is written at
+      `src/drafter.rs:246` and read **nowhere outside that file** except its own
+      unit tests. A conformal interval over it would be instrumentation nothing
+      reads — the decorative-metric trap that already sank T3.5.1 (display-only
+      router verdict) and T7.2 (off-path directions). **Reopen when a consumer
+      exists**; the obvious one is a `--suggest`/`--fix` surface that shows or
+      thresholds per-fix confidence, at which point T9.2's warm-up guard
+      (≥19 residuals, Issue 023) becomes load-bearing rather than theoretical.
+      Original task text:
+      Define `FixForecaster: PointForecaster` impl that maps
       `(rule_id, buggy_hash) → f32` predicted-correctness score. The forecast
       target = 1.0 if the fix was actually correct (post-verify), 0.0 otherwise.
       Wrap `TernaryDrafter`'s existing `confidence` output as the point forecast.
       Supply the point via `interval_from_point_into` (the caller-supplied-ŷ
       path); `forecast_into` stays a stub.
-- [ ] **T9.2** Wrap with `ConformalIntervalCalibrator<FixForecaster>` behind a
+- [-] **T9.2 DEFERRED** (same reason as T9.1 — no consumer). Original task text:
+      Wrap with `ConformalIntervalCalibrator<FixForecaster>` behind a
       `calibrated_uq` feature gate (riir-clippy-side only — katgpt-core already
       ships the primitive default-on). **Key per-DOMAIN, not per-rule**
       (`n_channels = 3`), residual ring capacity 64. Per-rule keying is a
       documented opt-in upgrade, gated on ≥19 verified fixes per rule.
       The calibrated output replaces `DraftedFix.confidence` with a true 95%
       interval `[lo, hi]`.
-- [ ] **T9.2b (warm-up guard — blocks T9.5)** Below `MIN_RESIDUALS = 19` for a
+- [-] **T9.2b DEFERRED** with T9.1/T9.2 — it guards an interval that is not
+      emitted. The Issue 023 measurement behind it (a cold pool emits a
+      **zero-width, 0%-coverage** interval, and coverage crosses 90% at exactly
+      n=19) stands and must be honoured the moment T9.1 reopens. Original text:
+      Below `MIN_RESIDUALS = 19` for a
       key, return `None`/`Unknown` and fall back to the raw sigmoid confidence
       with an explicit "uncalibrated" marker. **Never emit the degenerate
       zero-width interval.** Add a test asserting a cold key does not produce
@@ -830,11 +845,46 @@ read it before writing code.**
       Beta bound reports "no evidence" as 0.05, not a neutral 0.5). The two
       `HealResult` assertions that pinned 0.5 were re-pinned to 0.32
       deliberately, not loosened.
-- [ ] **T9.4 (clr_vote, opt-in `clr_voting`)** Generate K=8 drafted fixes
-      (currently 1) via QMC perturbation of the ternary matvec, cluster by
-      syntactic similarity (Levenshtein on AST node-kind sequence), run L2
-      pruner on each, `clr_vote` picks the most-reliable cluster's winner.
-- [ ] **T9.5** GOAT gate (calibrated_uq), measured **only on keys past the
+- [x] **T9.4 K=8 drafts + CLR voting — MEASURED, REFUTED FOUR WAYS, NOT BUILT
+      (Bench 029).** Pre-flighted rather than built, and every load-bearing
+      assumption in the task sentence failed:
+      1. **`clr_vote` does not exist.** No such function in katgpt-core. What
+         ships is `clr_reliability_scores(...)` plus a `clr_vote: Option<f32>`
+         *parameter* on `compaction::gate`. Third stale substrate claim in this
+         plan after T7.2's `pick_domain<3,8>` and T3.5.3's `BonsaiEmbedder` 768-D.
+      2. **A "draft" is a selected corpus row, not a generated fix.**
+         `TernaryDrafter` BLAKE3-hashes the input, runs a matvec, FNV-folds the
+         output into an *index*, and returns `candidates[idx].fixed_code()`
+         verbatim. There is no generative diversity to sample.
+      3. **The ensemble collapses — effective K = 0.12, not 8** (24 fixtures ×
+         K=8 = 192 attempts): the Issue 010 identity guard declines
+         **189/192 (98.4%)**, only 3/24 fixtures yield any draft, distinct
+         drafts per producing case is **1.00 of 8**, and **0/3** are the target
+         lint's fix. Voting needs alternatives; there is one survivor and it is
+         wrong.
+      4. **The L2 filter is a no-op.** L2 is a `syn` parse with `lint_resolved`
+         hardcoded true; every corpus `fixed_code` is valid Rust, so L2
+         **accepted 3/3 (100%)**. It cannot discriminate.
+      **Reopen only if** the drafter becomes generative AND a validator with
+      real discriminative power replaces parse-only L2 (`clippy_verify` /
+      `fix_verify` both qualify). Until both hold there is nothing to cluster
+      and nothing to vote on.
+- [x] **T9.5 Phase gate — RE-SPECIFIED to selection regret, and PASSED by
+      T9.3 (Bench 028).** The original gate measured *interval coverage* on
+      `DraftedFix.confidence`; the pre-flight established that field has no
+      consumer, so coverage there would certify nothing. Re-specified to the
+      metric the phase can actually move — **selection regret at the blend**,
+      the real decision point in `HealPipeline::heal`.
+      **Result: −8.4% mean regret over the 1–5-attempt regime (−23.8% at a
+      single attempt), 20 000 randomized trials → PASS.** G2 (LUT hot path),
+      G3 (419/465/485/475 lib tests, clippy 0), G4 (alloc-free) and the
+      modelless requirement (closed-form Beta quantile) all PASS.
+      The conformal-floor leg (G3 in the original text) is **not applicable**:
+      with T9.1/T9.2 deferred, this phase ships no UQ-bearing primitive — no
+      interval, quantile, or coverage claim is emitted, so there is nothing for
+      the "Report the Floor" rule to bind. It re-binds the moment T9.1 reopens.
+      Original task text:
+      GOAT gate (calibrated_uq), measured **only on keys past the
       T9.2b warm-up count** (a cold key's 0.0% coverage would otherwise sink
       the gate for the wrong reason):
       - **G1 (coverage)** empirical coverage of the 95% interval ≥ 90%.
@@ -851,10 +901,20 @@ read it before writing code.**
       Record in the next `.benchmarks/` slot (`.benchmarks/.highwater` + 1).
 
 ### Phase 9 exit criteria
-- `DraftedFix.confidence` is a calibrated interval, not a raw sigmoid —
-  or an explicit "uncalibrated" marker when the key is below warm-up.
-- `HealPipeline::heal` selects fixes via Beta-posterior, not linear blend.
-- GOAT G1-G4 PASS.
+- **CLOSED 2026-08-16 — one task shipped, one refuted, three deferred.**
+- ~~`DraftedFix.confidence` is a calibrated interval~~ — **deferred**
+  (T9.1/T9.2/T9.2b): the field has no consumer, so calibrating it would ship
+  instrumentation nothing reads. The Issue 023 warm-up findings are recorded
+  and binding for whenever a consumer appears.
+- **`HealPipeline::heal` selects fixes via Beta-posterior, not linear blend —
+  DONE (T9.3).** Raw rate `S/(S+F)` → `best_belief_score(S, F, ε)`, so a lucky
+  1/1 (Beta 0.224) no longer outranks a proven 18/20 (Beta 0.729).
+- **GOAT PASS on the re-specified gate (T9.5): −8.4% selection regret**, with
+  the large-sample crossover (+2.9% at 30 attempts) documented rather than
+  tuned away.
+- The phase's honest yield is **one real improvement at the one place a
+  decision is made**. The rest of Phase 9 aimed at `DraftedFix.confidence`
+  (unread) and an ensemble the identity guard declines 98.4% of the time.
 
 ## Phase 10 — Sleep-cycle consolidation layer (Deep fusion B: mine_motifs_at_sleep_cycle + LocalKvStore + can_freeze)
 
