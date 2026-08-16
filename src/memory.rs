@@ -510,7 +510,12 @@ impl LatentFixMemory {
     /// `NaN`/`∞`; the embedder never produces them — a corrupted in-memory
     /// state surfaces as an error rather than a silently-lossy file).
     pub fn to_json(&self) -> serde_json::Result<String> {
-        serde_json::to_string(&MemoryFileV1 { version: 1, trajectories: self.trajectories.clone() })
+        let commitment = commit_trajectories(&self.trajectories)?;
+        serde_json::to_string(&MemoryFileV1 {
+            version: 1,
+            commitment: Some(commitment),
+            trajectories: self.trajectories.clone(),
+        })
     }
 
     /// Restore trajectories from JSON written by [`to_json`](Self::to_json).
@@ -525,11 +530,36 @@ impl LatentFixMemory {
     /// Malformed JSON, or an unknown envelope `version` (a future format
     /// change must fail loudly, not silently misread fields).
     pub fn load_json(&mut self, json: &str) -> serde_json::Result<()> {
+        self.load_json_verified(json).map(|_| ())
+    }
+
+    /// [`load_json`](Self::load_json), reporting the BLAKE3 commitment check
+    /// (Plan 005 T7.4).
+    ///
+    /// The trajectories are loaded either way — see [`CommitmentStatus`] for
+    /// why a mismatch is advisory. Callers that care (the `cargo heal` CLI)
+    /// warn on [`CommitmentStatus::Mismatch`].
+    ///
+    /// # Errors
+    ///
+    /// Malformed JSON, or an unknown envelope `version`.
+    pub fn load_json_verified(&mut self, json: &str) -> serde_json::Result<CommitmentStatus> {
         let file: MemoryFileV1 = serde_json::from_str(json)?;
+        let status = match &file.commitment {
+            None => CommitmentStatus::Absent,
+            Some(expected) => {
+                let actual = commit_trajectories(&file.trajectories)?;
+                if &actual == expected {
+                    CommitmentStatus::Verified
+                } else {
+                    CommitmentStatus::Mismatch
+                }
+            }
+        };
         for traj in file.trajectories {
             self.insert(traj);
         }
-        Ok(())
+        Ok(status)
     }
 
     /// Write the memory state to `path` (v1 JSON envelope, Issue 018).
@@ -557,11 +587,23 @@ impl LatentFixMemory {
     /// `InvalidData` for malformed JSON or an unknown envelope version;
     /// raw I/O errors for everything except `NotFound` (which is `Ok`).
     pub fn load(&mut self, path: &std::path::Path) -> std::io::Result<()> {
+        self.load_verified(path).map(|_| ())
+    }
+
+    /// [`load`](Self::load), reporting the BLAKE3 commitment check (T7.4).
+    ///
+    /// A missing file reports [`CommitmentStatus::Absent`] — nothing was read,
+    /// so nothing could be verified.
+    ///
+    /// # Errors
+    ///
+    /// Same as [`load`](Self::load).
+    pub fn load_verified(&mut self, path: &std::path::Path) -> std::io::Result<CommitmentStatus> {
         match std::fs::read_to_string(path) {
             Ok(json) => self
-                .load_json(&json)
+                .load_json_verified(&json)
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e)),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(CommitmentStatus::Absent),
             Err(e) => Err(e),
         }
     }
@@ -575,7 +617,39 @@ impl LatentFixMemory {
 #[derive(Serialize, Deserialize)]
 struct MemoryFileV1 {
     version: u32,
+    /// BLAKE3 commitment over the canonical `trajectories` serialization
+    /// (Plan 005 T7.4). Absent in v1 files written before the commitment
+    /// landed; `#[serde(default)]` keeps those loadable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    commitment: Option<String>,
     trajectories: Vec<FixTrajectory>,
+}
+
+/// Result of checking a loaded file's BLAKE3 commitment (Plan 005 T7.4).
+///
+/// Mirrors [`Corpus::thaw`](crate::corpus::Corpus::thaw)'s documented
+/// precedent: a mismatch is **advisory, not a hard gate**. The learned state
+/// is a performance hint, and refusing to heal because a hint file was edited
+/// would be a worse failure than proceeding with a warning. Callers decide.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CommitmentStatus {
+    /// Pre-T7.4 file with no commitment field — loadable, unverifiable.
+    Absent,
+    /// Commitment present and matches the payload.
+    Verified,
+    /// Commitment present and does NOT match — the file was truncated,
+    /// corrupted, or edited after it was written.
+    Mismatch,
+}
+
+/// BLAKE3 over the canonical serialization of `trajectories`.
+///
+/// Committing the trajectory array rather than the whole envelope keeps the
+/// commitment stable across envelope-level additions (a new optional field
+/// must not invalidate every existing file).
+fn commit_trajectories(trajectories: &[FixTrajectory]) -> serde_json::Result<String> {
+    let payload = serde_json::to_vec(trajectories)?;
+    Ok(blake3::hash(&payload).to_hex().to_string())
 }
 
 #[cfg(test)]
@@ -589,6 +663,68 @@ mod tests {
 
     fn make_query(lint: &str, buggy: &str) -> LatentQuery {
         LatentQuery::new(lint.to_string(), buggy)
+    }
+
+
+    // ── T7.4: BLAKE3 commitment over the learned state ────────────────────
+
+    #[test]
+    fn commitment_round_trips_as_verified() {
+        let mut m = LatentFixMemory::new(RetrievalWeights::default());
+        m.insert(make_traj("needless_return", "return x;", "x"));
+        m.insert(make_traj("single_match", "match v { _ => {} }", "()"));
+        let json = m.to_json().expect("serialize");
+
+        let mut loaded = LatentFixMemory::new(RetrievalWeights::default());
+        assert_eq!(
+            loaded.load_json_verified(&json).expect("load"),
+            CommitmentStatus::Verified
+        );
+        assert_eq!(loaded.len(), m.len());
+    }
+
+    #[test]
+    fn a_tampered_payload_is_detected() {
+        let mut m = LatentFixMemory::new(RetrievalWeights::default());
+        m.insert(make_traj("needless_return", "return x;", "x"));
+        let json = m.to_json().expect("serialize");
+
+        // Edit the payload without touching the commitment — exactly what a
+        // corrupted write or a hand-edit looks like.
+        let tampered = json.replace("needless_return", "single_match");
+        assert_ne!(tampered, json, "the test edit must actually change the file");
+
+        let mut loaded = LatentFixMemory::new(RetrievalWeights::default());
+        assert_eq!(
+            loaded.load_json_verified(&tampered).expect("load"),
+            CommitmentStatus::Mismatch
+        );
+        // Advisory, not a gate: the data still loads (see CommitmentStatus).
+        assert_eq!(loaded.len(), 1);
+    }
+
+    #[test]
+    fn pre_commitment_files_still_load() {
+        // Back-compat: a v1 file written before T7.4 has no commitment field.
+        let legacy = r#"{"version":1,"trajectories":[]}"#;
+        let mut loaded = LatentFixMemory::new(RetrievalWeights::default());
+        assert_eq!(
+            loaded.load_json_verified(legacy).expect("load"),
+            CommitmentStatus::Absent
+        );
+    }
+
+    #[test]
+    fn commitment_is_deterministic_across_instances() {
+        // Two memories built the same way must commit to the same hash —
+        // otherwise the commitment is not reproducible and cannot be audited.
+        let build = || {
+            let mut m = LatentFixMemory::new(RetrievalWeights::default());
+            m.insert(make_traj("needless_return", "return x;", "x"));
+            m.insert(make_traj("identity_op", "x * 1", "x"));
+            m.to_json().expect("serialize")
+        };
+        assert_eq!(build(), build());
     }
 
     #[test]

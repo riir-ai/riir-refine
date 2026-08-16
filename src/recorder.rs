@@ -262,7 +262,19 @@ impl EvolveRecorder {
     /// See [`LatentFixMemory::load`] — `InvalidData` for malformed files,
     /// raw I/O otherwise (`NotFound` is `Ok`).
     pub fn load(&mut self, path: &std::path::Path) -> std::io::Result<()> {
-        self.memory.load(path)
+        self.load_verified(path).map(|_| ())
+    }
+
+    /// [`load`](Self::load), reporting the BLAKE3 commitment check (T7.4).
+    ///
+    /// # Errors
+    ///
+    /// See [`LatentFixMemory::load_verified`].
+    pub fn load_verified(
+        &mut self,
+        path: &std::path::Path,
+    ) -> std::io::Result<crate::memory::CommitmentStatus> {
+        self.memory.load_verified(path)
     }
 
     /// Persist the memory to `path` (v1 JSON envelope).

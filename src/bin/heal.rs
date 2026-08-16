@@ -324,11 +324,20 @@ fn main() {
     let mut evolve_rec = EvolveRecorder::from_env();
     let memory_path = default_memory_path();
     if evolve_rec.is_enabled() {
-        if let Err(e) = evolve_rec.load(&memory_path) {
-            eprintln!(
+        match evolve_rec.load_verified(&memory_path) {
+            Err(e) => eprintln!(
                 "self-evolve: ignoring unreadable memory file ({}): {e}",
                 memory_path.display()
-            );
+            ),
+            // T7.4: the commitment is advisory (the learned state is a hint,
+            // not ground truth), so a mismatch warns and continues rather
+            // than aborting a heal run.
+            Ok(riir_clippy::CommitmentStatus::Mismatch) => eprintln!(
+                "self-evolve: WARNING — memory file ({}) failed its BLAKE3 commitment; \
+                 it was edited or corrupted since it was written. Continuing with it.",
+                memory_path.display()
+            ),
+            Ok(_) => {}
         }
     }
 

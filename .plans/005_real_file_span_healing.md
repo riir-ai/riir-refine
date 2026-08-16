@@ -618,13 +618,27 @@ router reads, so the router does not yet get smarter with use:
       evidence axis (proposer instantiation, 96.0% top-1) consumed the
       headroom a weaker one would have needed. Reopen only if the instantiation
       axis is removed or retrieval precision regresses materially.
-- [ ] **T7.4** The freeze/thaw: evolved directions + memory persist across runs (via
-      `freeze()`/`thaw()` on `Corpus` + the existing BLAKE3 commitment). The healer's
-      learned directions are reproducible + auditable.
-      **Partially shipped:** cross-run persistence exists as a plain JSON
-      save/load (`memory.json`, Issue 018). What remains is the *committed*
-      form — routing it through `Corpus::freeze()` so the learned state carries
-      a BLAKE3 commitment and is auditable, not just durable.
+- [x] **T7.4 BLAKE3-committed learned state — SHIPPED.** The one Phase 7 task
+      that survived, and it stands on its own: T7.1/T7.2/T7.3 are refuted, but
+      the **per-lint** EMA they sit next to genuinely works (Bench 024 G7:
+      50% → 100% on real cargo clippy over the 40-lint corpus), and its
+      persisted state had no integrity check at all — a truncated or edited
+      `memory.json` was silently trusted.
+      `LatentFixMemory::to_json` now emits a BLAKE3 commitment over the
+      canonical trajectory serialization, and `load_json_verified` /
+      `load_verified` report [`CommitmentStatus`] (`Absent` / `Verified` /
+      `Mismatch`). The commitment covers the trajectory array rather than the
+      whole envelope, so adding an optional envelope field later does not
+      invalidate every existing file.
+      **Mismatch is advisory, not a gate** — following `Corpus::thaw`'s
+      documented precedent. The learned state is a performance hint; refusing
+      to heal because a hint file was edited would be a worse failure than
+      proceeding with a warning. `cargo heal` prints that warning and
+      continues. Pre-T7.4 files load as `Absent` (back-compat via
+      `#[serde(default)]`).
+      4 tests: verified round-trip, tamper detection, legacy-file
+      back-compat, and cross-instance determinism (an uncommittable-to-the-
+      same-hash state would not be auditable).
 - [x] **T7.5 GOAT gate — RUN, and it FAILS on an unreachable premise.** The
       gate as written ("retrieval precision (G1) improves ≥10% after N=100
       cycles vs cold-start directions") is **not reachable by the mechanism it
@@ -637,9 +651,25 @@ router reads, so the router does not yet get smarter with use:
       honest gate result is FAIL.** Recorded rather than quietly rescoped.
 
 ### Phase 7 exit criteria
-- Self-healing loop ships: `--fix` records outcomes → directions evolve → next `--fix`/
-  `--suggest` retrieves better. The dMoE router + corpus retrieval both improve with use.
-  GOAT: ≥10% precision improvement after 100 cycles.
+- **CLOSED 2026-08-16 as a NEGATIVE RESULT, with one shipped piece (T7.4).**
+  The stated exit — "directions evolve → next `--suggest` retrieves better,
+  ≥10% precision improvement" — is **not achievable, and was measured rather
+  than assumed**:
+  - the router cannot move retrieval precision at all (fan-out + display-only
+    verdict, T3.5.1), so the gate's own causal chain is broken;
+  - direction evolution scores **−1.0pp** vs the corpus centroid on the metric
+    it *can* move, because a class mean is already the cosine optimum (T7.1);
+  - the trajectory-memory axis has **0/25** improvable held-out rankings and
+    would break **19/25** correct ones (T7.3).
+- What actually made `--suggest` better was **evidence, not learning**: the
+  operator-aware tokenizer (T3.5.2) and proposer-instantiation re-ranking
+  (T3.5.5) took clippy top-1 from 54.2% to 96.0%. Phase 7's premise — that the
+  healer should *learn* its way to better retrieval — was displaced by simply
+  using stronger signals it already had.
+- Shipped from this phase: **T7.4** (BLAKE3-committed learned state) and, via
+  Issue 018, the per-lint EMA + cross-run persistence that Bench 024 G7 shows
+  working. Reopen the evolution half only under **distribution shift** (a user
+  codebase unlike the corpus), which a static fixture set cannot measure.
 
 ## Phase 8 — WASM pruner fast-validation hook (katgpt-rs Proposal 011, gated on rubrc)
 
