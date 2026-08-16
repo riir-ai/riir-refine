@@ -343,6 +343,38 @@ all-layers (668 combined) + clippy 0 in default/clippy_verify/
 latent_retrieval states. See
 [`.benchmarks/026`](.benchmarks/026_evidential_status_axis_goat.md).
 
+**Issue 015 (2026-08-16, RESOLVED) — `--fix --verify` compile-gate mode.**
+The mode (feature `fix_verify`, implies `latent_retrieval`; landed in
+`2ace442`) closes the loop IN the tool: apply edits with loosened gates →
+baseline `cargo check --all-targets --message-format=json` → write → map
+rustc JSON errors to file/line → revert ONLY the offending edits
+(line-matched span-level, whole-file fallback) → re-check → report. Under
+`--verify`: the vec-with-capacity usize gate loosens to `untyped_paths`
+(plain-path bounds attempted; E0308 backs the revert — the scope gate
+STAYS ON: use-before-decl is a correctness issue, not a type question);
+`VERIFY_LINTS` (`redundant_closure`, `comparison_to_empty`,
+`while_let_on_iterator`, `single_char_pattern`) join the fix set; the
+`fxhashmap` dep gate text-scans the owning crate manifest for `rustc-hash`
+(hard-skip without cargo — the measured 422-edit instance class). **GOAT
+(Bench 027):** real-repo run on the 6 katgpt-pruners files holding the
+Bench 019 G5 skipped sites — 14 edits proposed / 12 kept / **2
+auto-reverted on the real repo** (the u8 `BOARD_SIZE` E0308 + the
+`|v| from_bool_vec(v)` E0631 coercion, exactly the G5 run-1 failure
+classes), every named skipped site landed compile-confirmed usize
+(`hydra_budget` n, `collapse_detector` N_TRACES, `rosetta` len,
+`episode_pruner` min_len, `monopoly` `Strategy::COUNT`), **1245/1245 tests
+pass + no new clippy warnings** under the 15-feature covering set; landed
+as katgpt-rs `212ed7942`. The GOAT run itself surfaced + fixed a root
+cause: relative path args made `owning_package_root` walk to the EMPTY
+path (os error 123 from `current_dir("")`) — now normalized via
+`std::path::absolute` with a regression test. The `#[ignore]`d e2e
+fixture test (`fix_verify_e2e_bad_edits_reverted_good_survive`, spawns
+real cargo) is the standing acceptance proof. Honest scope note: a
+full-crate katgpt-pruners scan now proposes **293 edits / 104 files**
+(Issue 016's expansion) — full-repo verify batches are a consumer
+decision, not a tool default; this GOAT was deliberately file-scoped.
+See [`.benchmarks/027`](.benchmarks/027_fix_verify_mode_goat.md).
+
 ## The `riir-clippy` skill (auto-continue idle loop)
 
 `.agents/skills/riir-clippy/SKILL.md` (symlinked into `~/.agents/skills/`

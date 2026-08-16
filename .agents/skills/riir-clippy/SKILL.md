@@ -907,10 +907,16 @@ global = symlink only.
   annotation-only salvage: TF-cosine-global wired, 53.4%→69.3%/48.3%→68.6%
   at 0.96µs, standing 63.6% floor in the Issue 017 gate; 7-variant matrix
   kept as the reproducible negative-result artifact).
-  015 = sibling's ACTIVE WIP
-  (fix_verify mode — do not touch `src/bin/heal.rs`, `src/fix_verify.rs`,
-  `src/lib.rs`, `Cargo.toml`, proposers mod.rs/vec_with_capacity, bench.rs,
-  clippy proposers mod.rs). NOTE (2026-08-16, Issue 018 session): the
+  015 = RESOLVED 2026-08-16
+  (Bench 027 — verify-mode GOAT on the real repo: katgpt-pruners 14 edits /
+  12 kept / 2 auto-reverted (the u8 E0308 + fn-path E0631, the G5 run-1
+  failure classes), every named skipped site landed compile-confirmed
+  usize, 1245/1245 tests, landed as katgpt-rs `212ed7942`; root-cause fix
+  `owning_package_root` relative-path → absolute (os error 123); issue
+  file removed per noise-reduction rule — the `src/fix_verify.rs` +
+  `heal.rs` --verify surfaces are now fair game, not sibling WIP).
+  Earlier WIP notes (kept for history): NOTE (2026-08-16, Issue 018
+  session): the
   tree was clean + fix_verify had landed, so `Cargo.toml`/`lib.rs`/
   `heal.rs` were safely touched for 018 — re-verify sibling WIP state
   before touching them again. NOTE (2026-08-16, Issue 021 session):

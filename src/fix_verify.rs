@@ -518,6 +518,12 @@ fn find_replacement_on_line(text: &str, line: usize, replacement: &str) -> Optio
 /// into).
 #[must_use]
 pub fn owning_package_root(file: &Path) -> Option<PathBuf> {
+    // Normalize to an absolute path first: with a relative input like
+    // `src/foo.rs` (files collected from CLI args), `pop()` walks down to
+    // the EMPTY path whose `Cargo.toml` join resolves against the process
+    // cwd — returning `Some("")` whose `Command::current_dir` then fails
+    // with os error 123 (the Issue 015 GOAT run's spawn failure).
+    let file = std::path::absolute(file).ok()?;
     let mut dir = file.parent()?.to_path_buf();
     loop {
         if dir.join("Cargo.toml").is_file() {
@@ -764,6 +770,34 @@ mod tests {
             workspace_root(&pkg).as_deref(),
             Some(tmp.join("ws").as_path())
         );
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// Issue 015 GOAT-run regression: a RELATIVE input (`src/lib.rs`, the
+    /// form CLI path args produce) must resolve to the absolute package
+    /// root — not the empty path whose `current_dir` fails with os error
+    /// 123. The walk-down-to-`""` case bites when the manifest sits at
+    /// the process cwd ("src/x.rs" → "src" → "" → "Cargo.toml").
+    #[test]
+    fn owning_package_root_relative_input_is_absolute() {
+        let tmp = std::env::temp_dir().join(format!("fv_pkg_rel_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(tmp.join("src")).unwrap();
+        std::fs::write(tmp.join("Cargo.toml"), "[package]\nname = \"a\"\n").unwrap();
+        std::fs::write(tmp.join("src").join("lib.rs"), "").unwrap();
+        let prev = std::env::current_dir().unwrap();
+        std::env::set_current_dir(&tmp).unwrap();
+        let rel = Path::new("src/lib.rs");
+        let got = owning_package_root(rel).expect("package root found");
+        std::env::set_current_dir(prev).unwrap();
+        assert!(
+            got.is_absolute(),
+            "relative input must return an absolute package root, got {got:?}"
+        );
+        // Form-independent checks (canonicalize would return a \\?\ prefix
+        // on Windows while std::path::absolute preserves the plain form).
+        assert_eq!(got.file_name(), tmp.file_name());
+        assert!(got.join("Cargo.toml").is_file());
         let _ = std::fs::remove_dir_all(&tmp);
     }
 
