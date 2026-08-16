@@ -563,21 +563,61 @@ router reads, so the router does not yet get smarter with use:
 
 ### Tasks
 
-- [ ] **T7.1** Generalize `LatentSkillEvolution` key from `lint_name: &str` to
-      `domain_key: &str` (where domain_key = "clippy"/"perf"/"kernel" OR the
-      domain+rule_id composite). The EMA mechanism is domain-agnostic; only the key shape
-      changes. Back-compat: existing per-lint callers pass `lint_name` as the key.
-- [-] **T7.2 (recording half — SHIPPED via Issue 018)** Outcome recording is
-      already wired into the `--fix` path through `SelfEvolveRecorder`
-      (`src/bin/heal.rs:637,659`), not `HealPipeline::heal`. **Remaining
-      sub-task, folded into T7.1:** make the recorded outcome also update the
-      DOMAIN_DIRECTIONS that `pick_domain` reads (`fix_direction =
-      ModellessEmbedder.embed(fixed_code)`), so the dMoE router — not just the
-      per-lint EMA — gets smarter with use.
-- [ ] **T7.3** Wire `LatentFixMemory` into the retrieval path (step 4↻ in the pipeline):
-      before the corpus index retrieve, check if a past trajectory matches (same domain +
-      similar code span). If a high-confidence past fix exists, prefer it (it was
-      validated). This is the 3-axis retrieval (latent + BM25 + trajectory) already shipped.
+- [x] **T7.1 Domain-keyed evolution — ALREADY SUPPORTED; MEASURED; REFUTED as
+      a router improvement.** The "generalization" turned out to be a no-op:
+      `LatentSkillEvolution` stores `HashMap<String, Direction>` and
+      `record_outcome` takes `&str`, so a domain key works today — what was
+      missing was a *consumer*, not a key shape.
+      Benchmarked before wiring one (`tests/t71_evolved_directions.rs`), both
+      arms trained on the same signal (98 corpus patterns) and scored on 96
+      spans neither saw:
+      | estimator | routing accuracy |
+      |---|---:|
+      | corpus centroid (shipped) | **53.1%** |
+      | EMA-evolved, domain-keyed | 52.1% (**−1.0pp**) |
+      **Evolution does not beat the centroid**, and the centroid reproduces
+      Issue 020's baseline-8d 53.1% exactly (harness cross-check). The reason
+      is structural: for cosine routing the L2-normalized class mean IS the
+      least-squares optimum, so an online EMA over the same distribution is a
+      *noisier estimate of the same quantity*, never a better one. Its only
+      theoretical value is adapting to distribution SHIFT (a user codebase
+      unlike the corpus), which a static fixture set cannot measure.
+- [x] **T7.2 (recording half SHIPPED via Issue 018; router half REFUTED on
+      two stale premises).** Recording is already wired into `--fix` through
+      `SelfEvolveRecorder` (`src/bin/heal.rs:637,659`), not `HealPipeline::heal`.
+      The remaining "evolve the DOMAIN_DIRECTIONS" half rests on two premises
+      that no longer hold:
+      1. **"the dMoE router gets smarter"** — the router cannot affect G1 at
+         all; retrieval is fan-out and the verdict is display-only
+         (`heal.rs:241`), established in T3.5.1. It can only move a decorative
+         annotation metric.
+      2. **"the DOMAIN_DIRECTIONS used by `pick_domain<3,8>`"** — Issue 020
+         replaced the 8-D `pick_domain` baseline with `TfCosine` 128-D
+         centroids (68.8% vs 53.1%). The 8-D directions this task would evolve
+         are **not on the shipped router path at all**.
+      Combined with T7.1's measurement (evolution −1.0pp vs centroid, both far
+      under the 85% gating bar), there is nothing here worth wiring. The
+      per-lint EMA that DOES work stays as Issue 018 shipped it (Bench 024 G7:
+      50% → 100% on real cargo clippy over the 40-lint corpus).
+- [x] **T7.3 Trajectory-memory retrieval axis — MEASURED, REFUTED, NOT BUILT.**
+      Probed before wiring (`tests/t73_memory_axis_headroom.rs`), with the
+      populate/evaluate split held out to avoid repeating the T3.5.4 mistake:
+      memory populated from the 48 single-lint fixtures (48 CERTIFIED
+      trajectories — the strongest tier, so the axis is measured at its best),
+      evaluated on the 25 held-out multi-lint composites.
+      **Result: zero headroom and real risk.**
+      - shipped ranking already correct: **24/25 (96.0%)**
+      - cases memory COULD fix: **0/25 (0.0%)**
+      - cases memory would OVERRIDE a correct top-1 with a false rule:
+        **19/25 (76.0%)**
+      There is not a single ranking on held-out spans that a memory axis could
+      improve, and giving it authority would break three quarters of the ones
+      that are already right — memory is lint-keyed, so it returns a hit for
+      any rule with history regardless of span relevance.
+      **T7.3 was refuted by the SUCCESS of T3.5.5**: shipping a strong
+      evidence axis (proposer instantiation, 96.0% top-1) consumed the
+      headroom a weaker one would have needed. Reopen only if the instantiation
+      axis is removed or retrieval precision regresses materially.
 - [ ] **T7.4** The freeze/thaw: evolved directions + memory persist across runs (via
       `freeze()`/`thaw()` on `Corpus` + the existing BLAKE3 commitment). The healer's
       learned directions are reproducible + auditable.
@@ -585,10 +625,16 @@ router reads, so the router does not yet get smarter with use:
       save/load (`memory.json`, Issue 018). What remains is the *committed*
       form — routing it through `Corpus::freeze()` so the learned state carries
       a BLAKE3 commitment and is auditable, not just durable.
-- [ ] **T7.5** GOAT gate (self-healing): after N=100 fix cycles on a fixture corpus, the
-      retrieval precision (G1 from Phase 3) improves ≥10% vs the cold-start hand-crafted
-      directions. Record in `.benchmarks/`. This is the MAG "does unsupervised direction
-      mining help" gate — modelless, online.
+- [x] **T7.5 GOAT gate — RUN, and it FAILS on an unreachable premise.** The
+      gate as written ("retrieval precision (G1) improves ≥10% after N=100
+      cycles vs cold-start directions") is **not reachable by the mechanism it
+      gates**: direction evolution moves the router, and the router cannot
+      move G1 (T3.5.1). Measured anyway on the metric it *can* move — router
+      annotation accuracy — evolution scores **−1.0pp**, not +10% (T7.1).
+      And the retrieval half it was meant to certify (T7.3) has **zero
+      headroom**: 0/25 held-out rankings improvable, 19/25 breakable.
+      **Verdict: the self-healing loop does not improve retrieval, and the
+      honest gate result is FAIL.** Recorded rather than quietly rescoped.
 
 ### Phase 7 exit criteria
 - Self-healing loop ships: `--fix` records outcomes → directions evolve → next `--fix`/
