@@ -360,7 +360,17 @@ unit. The cross-session resume state (mining queue snapshot: Batch 32
 targets, sibling-blocked files, corpus count) lives IN the SKILL.md and
 is updated in the same commit as each batch. Triggers: "continue",
 "auto continue", "idle", "nothing to do", "next batch", "Batch 32+".
-See `.issues/019` for the gap analysis that shaped it.
+**Issue 019 RESOLVED 2026-08-16 (removed per noise-reduction rule; gap
+analysis in git history — `git log -- .issues/019_*.md`):** T6's full
+clean cycle completed via queue items 10–13 — item 10 defer-marking sweep
+(riir-train 387 defer-marked with unblock conditions; riir-ai 529
+queued-not-stalled note; riir-chain 026 §5.5 checkbox fix), item 11 online
+perf search (8 rust_perf candidates → the Batch 48 pipeline, recorded in
+the SKILL.md mining snapshot), item 12 paper research (Research 053
+EvolveMem retrieval-config co-evolution, Gain verdict), item 13 doc-sync
+(5 repos clean/deferred-by-rule + game-sdk vocabulary fix `40f0971`).
+All 13 queue items have now been exercised ≥1× through the idle loop.
+T7 stays blocked on sibling WIP (`ternary_deltanet_gpu_forward.rs`).
 
 ## Source secrecy & binary-only distribution (non-negotiable)
 

@@ -750,7 +750,25 @@ global = symlink only.
   check). Both lanes' quotes re-verified by the coordinator in clean
   files.
 - **NEXT mining target**: `ls` the riir-gpu tree for the next unmined
-  cluster (~104 of ~200 files mined). Candidates:
+  cluster (~104 of ~200 files mined).
+- **Batch 48 rust_perf half — 8 online-search candidates QUEUED (idle-queue
+  item 11, 2026-08-16; sources + dedup verified against the 393-rule corpus):**
+  `hashset-insert-bool-return` (insert's bool return = one lookup vs
+  contains+insert two; distinct from entry-vs-contains-insert which is
+  HashMap-only), `unwrap-or-else-lazy` (eager default computation; sibling
+  of ok-or-else, different method member), `filter-count-to-any`
+  (filter(p).count()>0 → any(p) short-circuit), `vec-macro-zero-fill`
+  (new+resize(0) → vec![0;n] calloc path), `iter-copied-deref-map`
+  (.map(|x| *x) → .copied()), `filter-map-fuse` (two adapters → one
+  filter_map; perf-book hedges — Pareto bench decides),
+  `collect-append-to-extend` (collect+append → extend; perf-book names
+  both patterns), `vec-insert-front-deque` (insert(0,_) loop →
+  VecDeque::push_front; write-side sibling of vec-remove-front).
+  Sources: nnethercote/perf-book std-types + iterators chapters, std docs.
+  Honest drops already verified: powi(2)→x*x (LLVM lowers identically),
+  lock-hoist-out-of-loop (not parse-provable safe), parking_lot swap
+  (perf-book: measure first). Land as PerfRule entries + proposers +
+  fixtures + Pareto bench gate. Candidates:
   `kimi_k3_gpu_backward_batched.rs` (1,394 — LOW value: shares
   Issue 693's H1/H2 + the broken LCG with the module file; mine only if
   the better clusters are exhausted), the small unmined leaves
@@ -825,8 +843,14 @@ global = symlink only.
   (42: mod.rs + gemma2_d2f_sc.rs). weaver_gpu_corrector.rs +
   weaver_gpu_dflash.rs DONE (43). weaver_gpu/ mod.rs + FULL kvarn/
   DONE (44 — weaver_gpu/tests.rs test-only, not mined).
-- **Also open (riir-clippy issues)**: 019 (idle-loop skill close-out,
-  T6 remainder).
+- **Also open (riir-clippy issues)**: NONE — queue empty as of 2026-08-16.
+  019 (idle-loop skill close-out) RESOLVED 2026-08-16 (T6 full cycle:
+  items 10–13 — defer-marking sweep landed riir-train 387 + riir-ai 529
+  + riir-chain 026 fixes; item 11 perf search → 8 rust_perf Batch 48
+  candidates below; item 12 → Research 053; item 13 doc-sync → game-sdk
+  `40f0971`; all 13 queue items exercised ≥1×; T7 stays blocked on
+  sibling WIP `ternary_deltanet_gpu_forward.rs`; record: AGENTS.md +
+  `git log -- .issues/019_*.md`).
   021 (evidential status axis) RESOLVED 2026-08-16 (Bench 026 —
   `EvidenceTier` Certified/Heuristic/Withdrawn + absorbing-Withdrawn
   transitions + trust-weighted retrieval; Withdrawn never suggested;
