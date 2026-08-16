@@ -751,6 +751,31 @@ global = symlink only.
   files.
 - **NEXT mining target**: `ls` the riir-gpu tree for the next unmined
   cluster (~104 of ~200 files mined).
+- **Batch 49 DONE (2026-08-16, Research 055):** the Bench-686 measured-lesson
+  distillation (single rule, NOT file mining — riir-ai Issue 706 / Bench 686,
+  the rmsnorm_quantize_f32 single-pass + register-unroll fix on the 4090 cudarc
+  decode path): `runtime-arg-loop-bound-demotes-arrays-to-local-memory`
+  (A — a correctly-sized per-thread array whose per-element loops are bounded
+  by a RUNTIME kernel arg that is constant at every call site is demoted to
+  local memory: no unroll, no register form for dynamically-indexed arrays,
+  every array the loop touches inherits the demotion; the invariant is a
+  LAUNCHER fact the kernel cannot see — fix: compile-time const bound +
+  #pragma unroll, bit-identical by preserved ascending accumulation order;
+  the pathology is invisible until a neighbor adds same-address-space
+  traffic — the v1 naive fix measured 0.6-1% SLOWER in paired A/B; evidence:
+  kernel −18.4% nsys drift-controlled at ppl bit-exact; distinct from B46 on
+  three axes: SIZE footprint tax vs BOUND per-access addressing, oversized vs
+  exactly-sized array, pipeline-override vs const+unroll fix). Corpus
+  343 → 344 (A 80). GOAT: 574 kernel_heal + 415 default + 9 retrieval
+  (floors held), clippy 0 both states, all-but-ternary combo check passes;
+  CI guard layers 3/4/5 on the 4090 box blocked by the PRE-EXISTING un-gated
+  metal dep in riir-gpu → filed riir-ai Issue 707 (one-line fix spelled out;
+  needs M3 re-verification). **4090 toolchain note:** this box resolves the
+  repo's 1.97.0 pin to the GNU host with NO mingw linker — every cargo
+  invocation needs `+1.97.0-x86_64-pc-windows-msvc` (or
+  RUSTUP_TOOLCHAIN=...msvc for scripts); cargo-hack is NOT installed (guard
+  layer 3 self-skips).
+
 - **Batch 48 rust_perf half DONE (2026-08-16, Research 054):** the 8
   online-search candidates landed as `PerfRule` entries + `BenchSpec`
   harnesses + eval spans + Pareto bench verdicts + floors re-pin. Corpus
@@ -805,7 +830,7 @@ global = symlink only.
   was mined at B26; these are the standalone twins, expect dedup),
   `attention_q8kv_cubecl.rs` (sibling of the B23 attention cluster —
   dedup pressure HIGH). Pick 1-2 files, ~3-6 rules (dedup pressure
-  very high after 47 batches), Batch 49 (Research 055 — RE-SCAN
+  very high after 47 batches), Batch 50 (Research 056 — RE-SCAN
   `.research/` at write time).
   - Validation pattern (proven T4 + 32a + 32b-1 + 32c + 36 + 38): corpus files are NOT
     sibling WIP — edit + run GOAT in the main checkout with
@@ -838,7 +863,7 @@ global = symlink only.
     router.rs `rules_for_expert` total + the corpus-count mentions in
     router.rs doc header + the Plan 003 doc-comment `NNN-rule corpus`
     line above KERNEL_CATEGORIES + the `Total: 209 ... current NNN`
-    comment + the file-level `//!` header batch block. All in sync at 343 (A 79, B 51, C 33, D 61, E 20, L 11 after Batch 47; F 10, G 19, H 14, I 4, J 5, K 5, M 9, N 18, O 4).
+    comment + the file-level `//!` header batch block. All in sync at 344 (A 80, B 51, C 33, D 61, E 20, L 11 after Batch 49; F 10, G 19, H 14, I 4, J 5, K 5, M 9, N 18, O 4).
   - **Landing lesson (32b-1, self-caught)**: after a large multi-entry
     corpus edit, `awk`-scan for `rule_id:` lines NOT preceded by a
     standalone `KernelRule {` BEFORE the first compile — JSON `\n`
@@ -852,9 +877,10 @@ global = symlink only.
   dirty AGAIN with fresh sibling WIP (mtime ~18:38) — a ~200K-line
   cluster, verify clean at batch start) — mine only after their WIP
   lands.
-- **Progress**: riir-gpu ~104 of ~200 files mined. Corpus: 343 kernel rules
-  + 58 rust_perf rules (Batch 48 landed the rust_perf half — the kernel half
-  is Batch 49).
+- **Progress**: riir-gpu ~104 of ~200 files mined. Corpus: 344 kernel rules
+  + 58 rust_perf rules (Batch 48 = rust_perf online-search half; Batch 49 =
+  the Bench-686 kernel distillation — the file-mining kernel half is
+  Batch 50).
   edge_lora module FULLY MINED (32a + 32b-1 + 32c). spectralquant/
   FULLY MINED (15 + 33). hypernet/ FULLY MINED (45: meta_lora.rs +
   train_meta_lora.rs; 47: shine.rs + routing.rs + types.rs +

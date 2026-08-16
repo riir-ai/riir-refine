@@ -56,8 +56,9 @@
         // Batch 44 (9): riir-gpu production kernels — row-dot-split-inner-axis-block-reduce, fuse-indirect-gather-into-dot-consumer, share-cube-size-const-between-kernel-and-launcher, stash-kernel-internal-intermediate-in-smem, hoist-bit-address-out-of-packed-row-sweep, fold-tile-transpose-into-dequant-scatter, bit-cursor-unpack-to-width-specialized-byte-batch, single-sweep-minmax-for-quant-scale, serialize-container-canonical-order (weaver_gpu/mod.rs — the 19-dispatch kernel substrate behind the Batch 43 corrector + kvarn/ — the KVarN CPU reference + zone-scale registry; hazards filed as Issue 698).
         // Batch 46 (3): riir-gpu maxsim — size-gate-covers-every-cost-factor, declared-max-array-taxed-per-thread-under-runtime-bound, shared-operand-side-pair-batch-index-decomposition (maxsim/dispatch.rs + spectralquant.rs + both WGSL kernels — the MaxSim size-gated CPU/GPU dispatcher + the fused SpectralQuant dequantize+MaxSim single-pass scorer, Plan 085; hazards filed as Issue 700).
         // Batch 47 (3): riir-gpu hypernet — per-key-projection-hoist-out-of-query-sweep, multi-head-out-proj-consumes-head-concat, shared-producer-prefix-extract-once-per-input (hypernet/ shine.rs + routing.rs + types.rs + m2p_transformer.rs + gpu_m2p.rs + kernels/m2p_attention.wgsl — the SHINE second half: the context-to-LoRA pipeline + expert routing + the M2P CPU/GPU attention pair; hazards filed as Issue 701).
-        // Total: 209. // (historical batch-30 snapshot; current 343)
-        assert_eq!(corpus.entries.len(), 343, "batches 1-47 should have 343 rules");
+        // Batch 49 (1): riir-gpu cudarc — runtime-arg-loop-bound-demotes-arrays-to-local-memory (cudarc_kernels/mod.rs rmsnorm_quantize_f32, the Bench-686 measured lesson from Issue 706: compile-time loop bounds + #pragma unroll keep per-thread arrays in registers — kernel −18.4% at ppl bit-exact).
+        // Total: 209. // (historical batch-30 snapshot; current 344)
+        assert_eq!(corpus.entries.len(), 344, "batches 1-49 should have 344 rules");
     }
 
     #[test]
@@ -2932,6 +2933,56 @@
         }
     }
 
+    #[test]
+    fn batch49_rules_present() {
+        let corpus = build_kernel_seed_corpus();
+        let ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        // A (1 new): runtime-arg loop bound demotes per-thread arrays to local memory
+        assert!(ids.contains(&"runtime-arg-loop-bound-demotes-arrays-to-local-memory"), "runtime-arg local-memory demotion");
+    }
+
+    #[test]
+    fn batch49_concepts_covered() {
+        // Distinctive ASCII substrings located by rule_id (the 32a convention).
+        let corpus = build_kernel_seed_corpus();
+        let concept = |id: &str| -> String {
+            corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-49 rule '{id}' missing"))
+                .gpu_concept
+                .clone()
+        };
+        // A: runtime-arg-loop-bound-demotes-arrays-to-local-memory (cudarc_kernels/mod.rs L211-235, Issue 706 / Bench 686)
+        let c = concept("runtime-arg-loop-bound-demotes-arrays-to-local-memory");
+        assert!(c.contains("no register form")
+            && c.contains("hoist it into the kernel as a compile-time constant"), "runtime-arg bound concept");
+    }
+
+    #[test]
+    #[cfg(not(feature = "kernel_verify"))]
+    fn batch49_pseudocode_parses() {
+        // G1 for Batch 49: every new rule's ref_shape AND opt_pattern must
+        // syn-parse as valid Rust (the L2 pruner verdict).
+        use crate::domain::HealDomain;
+        let corpus = build_kernel_seed_corpus();
+        let ids = [
+            "runtime-arg-loop-bound-demotes-arrays-to-local-memory",
+        ];
+        for id in ids {
+            let entry = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-49 rule '{id}' missing"));
+            let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+            assert!(ref_verdict.parses, "batch-49 ref_shape for '{id}' must parse");
+            let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+            assert!(opt_verdict.parses, "batch-49 opt_pattern for '{id}' must parse");
+        }
+    }
+
     // ════════════════════════════════════════════════════════════════════
     // Plan 003 — Router ↔ corpus wiring tests
     // ════════════════════════════════════════════════════════════════════
@@ -2943,7 +2994,7 @@
 
     #[test]
     fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-        // Every rule_id in the 343-rule corpus must appear in exactly one category.
+        // Every rule_id in the 344-rule corpus must appear in exactly one category.
         let corpus = build_kernel_seed_corpus();
         let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
         let mut categorized: Vec<&str> = Vec::new();
@@ -2974,9 +3025,9 @@
 
     #[test]
     fn kernel_categories_counts_match_plan_003_table() {
-        // Pin per-category rule counts to the Plan 003 table (updated for Batch 47).
+        // Pin per-category rule counts to the Plan 003 table (updated for Batch 49).
         let expected = [
-            (KernelCategory::MemoryAccess, 79),
+            (KernelCategory::MemoryAccess, 80),
             (KernelCategory::Compute, 51),
             (KernelCategory::Fusion, 33),
             (KernelCategory::Dispatch, 61),
@@ -2999,9 +3050,9 @@
                 "Plan 003: category {cat:?} has {} rules, expected {count}",
                 entry.2.len());
         }
-        // Sum must equal 343.
+        // Sum must equal 344.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 343, "Plan 003: category totals must sum to 343");
+        assert_eq!(total, 344, "Plan 003: category totals must sum to 344");
     }
 
     #[test]
@@ -3011,7 +3062,7 @@
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 343, "Plan 003: grouped corpus has {total} rules, expected 343");
+        assert_eq!(total, 344, "Plan 003: grouped corpus has {total} rules, expected 344");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");

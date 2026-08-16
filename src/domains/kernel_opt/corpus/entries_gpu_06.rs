@@ -1,4 +1,4 @@
-//! Entries slice — Batches 14-47 era (rules 325-343 of 343) — riir-gpu production-kernel mining.
+//! Entries slice — Batches 14-49 era (rules 325-344 of 344) — riir-gpu production-kernel mining.
 //! Pure data moved verbatim from the former corpus.rs monolith
 //! (2026-08-15 split); append new batches to the LAST gpu slice or
 //! open a new one past ~900 lines. Category membership lives ONLY in
@@ -584,6 +584,48 @@ pub(super) fn entries() -> Vec<KernelRule> {
             gpu_concept: "When two sibling public methods share an expensive pure producer as their first stage, a composed entry that calls both pays the producer N times for one input: each method internally re-runs the identical expensive call (a full frozen-backbone transformer forward) on the identical context, and the producer is pure w.r.t. repeat calls — all inputs are immutable receiver fields plus the argument — so the second run is bit-identical wasted work, the dominant cost of the composition doubled. The fix: extract once and thread the shared artifact — keep both public methods unchanged for standalone callers, add internal *_from_<artifact> variants that take the producer's output directly, make the public methods thin wrappers that extract then delegate, and have every composed entry extract the artifact once and pass it to both variants. Detection tell: a composer invoking two sibling APIs whose first stage is the identical expensive call on the identical input. Distinct from split-dispatch-expose-fused-intermediate (one fused chain discards its intermediate — here two independent methods each fully use the artifact), from fan-out-shared-input-single-sync (N sibling kernels sharing one uploaded buffer — this is the host-API twin: N sibling methods sharing one computed artifact), from frozen-cooperand-hoist-out-of-perturbation-loop (an input-independent operand rebuilt per perturbation candidate — this producer varies with the input and there is no sweep), and from refine-loop-invariant-prefix-elision (iteration invariance inside a loop — here two sequential calls).".to_string(),
             ref_shape: "// naive: both siblings internally run the SAME expensive producer\n// (a full frozen-backbone forward) on the same input — paid twice\nfn composed_entry_naive(ctx: &Engine, tokens: &[u32]) -> (Weights, f32) {\n    let weights = ctx.generate_weights(tokens);\n    let difficulty = ctx.estimate_difficulty(tokens);\n    (weights, difficulty)\n}\n".to_string(),
             opt_pattern: "// optimized: extract the shared artifact ONCE, thread it into the\n// *_from variants; the public methods become thin extract+delegate\n// wrappers so standalone callers are unchanged\nfn composed_entry_extract_once(ctx: &Engine, tokens: &[u32]) -> (Weights, f32) {\n    let grid = ctx.extract_memory_grid(tokens);\n    let weights = ctx.generate_weights_from_grid(&grid);\n    let difficulty = ctx.difficulty_from_grid(&grid);\n    (weights, difficulty)\n}\n".to_string(),
+        },
+        // ── runtime-arg-loop-bound-demotes-arrays-to-local-memory —
+        // a correctly-sized per-thread array whose per-element loops
+        // are bounded by a RUNTIME kernel arg (constant at every call
+        // site) is demoted to local memory (A) ──
+        //
+        // Source: riir-gpu cudarc_kernels/mod.rs rmsnorm_quantize_f32
+        // L211-235 (Issue 706 / Bench 686, 2026-08-16) — the Issue-623
+        // kernel shipped `float vals[16]` (exactly sized) with
+        // `for (int i = 0; i < ablock; i++)` where `ablock` is a kernel
+        // ARG that is 16 at EVERY call site (the launcher's Rust
+        // ACTIVATION_BLOCK const). nvcc cannot unroll a runtime-bounded
+        // loop, and a dynamically-indexed per-thread array has no
+        // register form — every vals[]/gam[] access was a local-memory
+        // round-trip since Issue 623, hidden under the phase-4 global
+        // re-read. The pathology surfaced only when Issue 706 v1 (gamma
+        // prefetch) ADDED a second spilled array and measured 0.6-1%
+        // SLOWER in paired interleaved A/B — trading L1-hot global
+        // reads for more local-memory traffic is a LOSS. v2
+        // (compile-time bound `i < 16` + `#pragma unroll` on all three
+        // per-element loops) keeps vals+gam in registers: kernel
+        // −18.4% (nsys 5,460.9 → 4,455.7 ns avg, 20,702 launches,
+        // same-code-drift controlled), ppl bit-exact.
+        //
+        // Distinct from declared-max-array-taxed-per-thread-under-
+        // runtime-bound (Batch 46 — the array's DECLARED SIZE exceeds
+        // the runtime bound, taxing thread-local footprint; here the
+        // array is exactly sized and the tax is per-ACCESS
+        // local-memory addressing + lost unrolling; fix differs:
+        // specialize the SIZE via pipeline overrides vs hoist the
+        // BOUND to a compile-time const + unroll), from
+        // bit-cursor-unpack-to-width-specialized-byte-batch (Batch 44
+        // — per-width arms make BIT ADDRESSES compile-time-constant;
+        // here the LOOP BOUND itself is the runtime value), and from
+        // hardcoded-fast-path-jit-specialization (Batch 23 —
+        // throughput constant-folding; this is address-space
+        // placement of per-thread state).
+        KernelRule {
+            rule_id: "runtime-arg-loop-bound-demotes-arrays-to-local-memory".to_string(),
+            gpu_concept: "A per-thread array whose per-element loops are bounded by a RUNTIME kernel argument is demoted to local memory even when the array is exactly sized and the argument is constant at every call site: the compiler cannot unroll a runtime-bounded loop, and a dynamically-indexed per-thread array has no register form — every access becomes a local-memory (spill) round-trip, and every array the loop touches inherits the demotion. The invariant is a LAUNCHER fact the kernel cannot see (the host passes a Rust const as an int arg), so the fix is to hoist it into the kernel as a compile-time constant and unroll the loops (#pragma unroll): statically-indexed arrays promote to registers, and unrolling preserves the ascending accumulation order so outputs stay bit-identical (keep the (i < len) tail-guard for partial tiles). The pathology is invisible by default — it hides under whatever global traffic the kernel already does, and only surfaces when a neighboring change ADDS traffic to the same address space: a fix that trades L1-hot global reads for more local-memory traffic measures SLOWER (the paired interleaved A/B is the detection instrument; nsys local-memory counters quantify it). Measured on the fused rmsnorm+quantize decode kernel: −18.4% kernel time (5,460.9 → 4,455.7 ns avg) at ppl bit-exact. Distinct from declared-max-array-taxed-per-thread-under-runtime-bound (the declared SIZE exceeds the runtime bound, taxing thread-local footprint — here the array is exactly sized and the tax is per-access local addressing plus lost unrolling; fix: specialize size via pipeline overrides vs hoist the bound to a compile-time const), from bit-cursor-unpack-to-width-specialized-byte-batch (per-width arms make bit addresses compile-time-constant — here the loop bound itself is the runtime value), and from hardcoded-fast-path-jit-specialization (throughput constant-folding — this is address-space placement of per-thread state).".to_string(),
+            ref_shape: "// naive: the loop bound is the RUNTIME kernel arg `ablock` (16 at\n// every call site, but the compiler cannot know that) — no unroll,\n// and a dynamically-indexed per-thread array has no register form:\n// every vals[]/gam[] access is a local-memory round-trip\nfn load_partial_sq_naive(input: &[f32], gamma: &[f32], start: usize,\n                         len: usize, ablock: usize) -> ([f32; 16], [f32; 16], f32) {\n    let mut vals = [0.0f32; 16]; // exactly sized — still demoted\n    let mut gam = [0.0f32; 16];\n    let mut partial_sq = 0.0f32;\n    for i in 0..ablock { // RUNTIME bound → dynamic indexing → local memory\n        let ok = i < len;\n        let v = if ok { input[start + i] } else { 0.0 };\n        vals[i] = v;\n        gam[i] = if ok { gamma[start + i] } else { 0.0 };\n        partial_sq += v * v;\n    }\n    (vals, gam, partial_sq)\n}\n".to_string(),
+            opt_pattern: "// optimized: the bound is the compile-time ACTIVATION_BLOCK const\n// (the launcher's Rust const — a launcher invariant, not a kernel\n// arg) + unroll: statically-indexed arrays promote to registers;\n// the (i < len) tail-guard preserves partial-tile semantics, and\n// unrolling preserves the ascending accumulation order (bit-identical)\nfn load_partial_sq_unrolled(input: &[f32], gamma: &[f32], start: usize,\n                            len: usize) -> ([f32; 16], [f32; 16], f32) {\n    const ACTIVATION_BLOCK: usize = 16; // compile-time, NOT a runtime arg\n    let mut vals = [0.0f32; ACTIVATION_BLOCK]; // registers\n    let mut gam = [0.0f32; ACTIVATION_BLOCK]; // registers\n    let mut partial_sq = 0.0f32;\n    for i in 0..ACTIVATION_BLOCK { // const bound → unrolled → registers\n        let ok = i < len;\n        let v = if ok { input[start + i] } else { 0.0 };\n        vals[i] = v;\n        gam[i] = if ok { gamma[start + i] } else { 0.0 };\n        partial_sq += v * v;\n    }\n    (vals, gam, partial_sq)\n}\n".to_string(),
         },
     ]
 }

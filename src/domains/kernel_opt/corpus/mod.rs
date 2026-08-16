@@ -1138,6 +1138,17 @@
 //!   and the triple-inconsistent 13/15/19H provision constant;
 //!   structurally-dead zero modules at toy scale; row-attention
 //!   dispatch exceeding the 65535 workgroup limit).
+//! - **Batch 49 (Research 055):** 1 rule, corpus 343 → 344 (A 80) —
+//!   the Bench-686 measured-lesson distillation (not file mining):
+//!   `runtime-arg-loop-bound-demotes-arrays-to-local-memory`
+//!   (A — a correctly-sized per-thread array whose per-element
+//!   loops are bounded by a RUNTIME kernel arg that is constant at
+//!   every call site is demoted to local memory: no unroll, no
+//!   register form for dynamically-indexed arrays; hoist the bound
+//!   to a compile-time const + unroll — measured −18.4% kernel at
+//!   ppl bit-exact; the paired A/B that CAUGHT it is part of the
+//!   rule: trading L1-hot global reads for more local-memory
+//!   traffic is a LOSS).
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
@@ -1188,7 +1199,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 343-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 344-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1196,7 +1207,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (79 rules)
+    // A: Memory access patterns (80 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -1280,6 +1291,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "frozen-cooperand-hoist-out-of-perturbation-loop",
             "declared-max-array-taxed-per-thread-under-runtime-bound",
             "shared-operand-side-pair-batch-index-decomposition",
+            "runtime-arg-loop-bound-demotes-arrays-to-local-memory",
         ],
     ),
     // B: Compute patterns (51 rules)
