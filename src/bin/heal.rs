@@ -12,7 +12,10 @@
 //! suggest-only; see the clippy proposers' module docs). Without `--write`,
 //! fixed files print a per-edit review (rule + the changed span); with
 //! `--write`, the spliced file is written in place. Everything outside a
-//! matched span stays byte-identical. `--fix` ALSO runs the suggest pass
+//! matched span stays byte-identical — so written output keeps pre-existing
+//! indentation verbatim where rustfmt would reindent (e.g. match_bool mixed
+//! block/expr arms); run rustfmt on the written files afterwards (Issue 027
+//! T3 deferral). `--fix` ALSO runs the suggest pass
 //! unless `--quiet` is given, so rules without proposers still surface.
 //!
 //! Run (in-repo):
@@ -101,7 +104,9 @@ USAGE:
                     ({} perf rules + {} clippy lints: {} | {}). The proposer's visitor
                     is the gate — latent suggestions never auto-apply.
     --write         With --fix: write the spliced file in place. Without it, print a
-                    per-edit review (default: review only).
+                    per-edit review (default: review only). Output preserves the
+                    surrounding text verbatim — run rustfmt afterwards for final
+                    formatting (Issue 027 T3).
     --quiet         With --fix: skip the --suggest pass (only show fixes).
 {}    --domain        Filter suggest output to one domain (default: auto — all enabled).
     --top-k <N>     Rules per span per domain (default 3).

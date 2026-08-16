@@ -70,6 +70,10 @@ cargo heal --fix [--write] [--quiet] [--verify [--verify-args <s>]] <path>...
              redundant_field_names, manual_map,
              unnecessary_unwrap, needless_range_loop, needless_lifetimes).
 --write      With --fix: write the spliced file in place (default: review only).
+             Output preserves surrounding text verbatim outside edited spans —
+             run rustfmt on written files afterwards for final formatting
+             (span-preserving edits keep pre-existing indentation where rustfmt
+             would reindent, e.g. match_bool mixed block/expr arms; Issue 027 T3).
 --quiet      With --fix: skip the --suggest pass.
 --verify     With --fix (needs --features fix_verify): write, cargo-check,
              auto-revert ONLY the offending edits (rustc JSON errors mapped
