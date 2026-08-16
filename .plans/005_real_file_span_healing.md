@@ -1071,10 +1071,24 @@ justification is DEAD (measured, Issue 023). Quality claim survives, unproven.**
 > - **T11.6 mislabelled its own metric** — "accepting ≥90% of would-pass-L2"
 >   is specificity / TNR, not precision. Corrected below.
 >
-> **Ordering:** this phase now depends on **Phase 10 T10.1** (T11.1 needs the
-> PTG-shaped trajectory that T10.1 produces) and is demoted below Phase 12 —
-> Phase 12 answers a cheaper version of the same "will this fix hold?"
-> question from data this phase would have to collect anyway.
+> **Ordering (SUPERSEDED 2026-08-16 — the real blocker is measured, Bench 030).**
+> The previously-recorded block was a dependency on Phase 10 T10.1. On
+> re-verification that dependency is **softer than stated**: T11.1 needs
+> `(pre, post)` embedding pairs, and both are derivable from the existing flat
+> `FixTrajectory` (`buggy_code` / `fixed_code`) with no PTG shape required.
+>
+> **The real blocker: Phase 11's gate targets an empty set.** G1 is "imagination
+> rejects ≥30% of *would-fail-L2* fixes". Fed real proposer output — what
+> `--fix` actually hands L2 — **L2 accepted 33/33 (100.0%) and rejected 0**.
+> The would-fail-L2 set is EMPTY, so G1 is a recall over zero positives:
+> undefined, not merely hard. L2 is a `syn` parse and span-spliced proposer
+> output is valid Rust by construction. The validator that *does* reject is
+> `fix_verify`'s `cargo check` (Issue 015), which this phase does not target.
+>
+> **Reopen condition:** re-specify the gate against `fix_verify` (a validator
+> with real rejection power) AND establish that its rejection rate is high
+> enough for early rejection to pay — Issue 023 already measured the Amdahl
+> ceiling at 1.06×, so the latency case stays dead regardless.
 
 **Prior-art risk (unchanged):** Plan 497 Phase 2 REFUTED the quality claim for
 NPC HLA. That refutation kept its latency win; here the latency win is measured
@@ -1140,24 +1154,67 @@ Each fix attempt is classified into an archetype (`converged_correct`,
 `committed_wrong`, `oscillation`) via `SweTrajectoryFreezer<N, D>`. Verified
 via direct grep (2026-08-14, Bench 013 G3 + Bench 014 G5 PASS).
 
-**Status: not started. Substrate verified.**
+**Status: PRE-FLIGHTED 2026-08-16 — substrate is REAL, but the data shape it
+needs does not exist (Bench 030). Deferred with a measured reason.**
+
+> **The substrate genuinely ships** — `SweTrajectoryFreezer<N, D>` +
+> `freeze_attempt` at `katgpt-core/src/swe_trajectory_freeze.rs:929`, exported.
+> This is not another missing-symbol case.
+>
+> **But there are no trajectories to classify.** `freeze_attempt` takes
+> `trajectory: &[&[f32]]` — a SEQUENCE of states, from which it derives
+> displacement geometry. Measured by re-applying each proposer to its own
+> output (the `--fix` fixpoint loop's second pass): **33/33 (100.0%) of fix
+> attempts converge in exactly ONE step; 0 are multi-step.**
+>
+> A one-element sequence has no displacement geometry, so the three archetypes
+> collapse — **`oscillation` cannot occur by construction**, since it is
+> *defined* by a fix that keeps changing across passes.
+>
+> This is a consequence of the design, not a defect: `FIXABLE_LINTS` are
+> structural rules whose detection guarantees semantics, and they are
+> idempotent. Phase 6's note that "fix application iterates to a bounded
+> fixpoint so nested fixes compose" describes *different rules* composing
+> across passes — not one rule iterating, which is what an archetype
+> trajectory would need.
+>
+> **Reopen when** the healer gains a genuinely iterative fix path — an
+> LLM-drafted or search-based proposer that revises its own output — at which
+> point multi-step attempts exist and the archetypes become measurable.
 
 ### Tasks
 
-- [ ] **T12.1** Define the 3 archetypes as a `FixArchetype` enum.
-- [ ] **T12.2** Fit `SweTrajectoryFreezer<3, 8>` from past `--fix` trajectories
+- [-] **T12.1 DEFERRED** — no multi-step trajectories exist to classify
+      (100% single-step, Bench 030). Original text:
+      Define the 3 archetypes as a `FixArchetype` enum.
+- [-] **T12.2 DEFERRED** — nothing to fit: every attempt is one step, and
+      `oscillation` cannot occur by construction. Original text:
+      Fit `SweTrajectoryFreezer<3, 8>` from past `--fix` trajectories
       labelled by outcome (converged_correct = post-fix passes L2; committed_wrong
       = post-fix fails L2; oscillation = drafter flip-flops across cycles).
-- [ ] **T12.3** Wire `freezer.freeze_attempt(trajectory) → archetype` into the
+- [-] **T12.3 DEFERRED** with T12.2. Original text:
+      Wire `freezer.freeze_attempt(trajectory) → archetype` into the
       `--fix` path as a complementary confidence signal to the conformal one
       (Phase 9).
-- [ ] **T12.4** GOAT gate: cross-archetype discrimination (Bench 013 G3
+- [x] **T12.4 GOAT gate — EVALUATED, UNMEASURABLE.** Cross-archetype
+      discrimination requires ≥2 distinguishable archetypes; measured, only one
+      is reachable (`converged_correct`), since 100% of attempts are
+      single-step and `oscillation` is definitionally impossible without
+      multi-step data. Recorded as unmeasurable-by-construction rather than
+      left open. Original text:
+      GOAT gate: cross-archetype discrimination (Bench 013 G3
       methodology) PASS on the fixture corpus. Record in
       the next `.benchmarks/` slot (`.benchmarks/.highwater` + 1).
 
 ### Phase 12 exit criteria
-- `committed_wrong` + `oscillation` archetypes escalate to human review.
-- `converged_correct` archetype unlocks the high-confidence auto-apply path.
+- **DEFERRED 2026-08-16 after pre-flight (Bench 030).** The substrate is real;
+  the data is not. 100% of fix attempts are single-step, so `oscillation` is
+  definitionally unreachable and `committed_wrong` vs `converged_correct`
+  cannot be separated by trajectory geometry.
+- Note the escalation the exit criteria wanted **already exists by another
+  route**: `--fix --verify` (Issue 015) applies, runs `cargo check`, and
+  reverts only the offending edits — a compile-grounded version of "escalate
+  the wrong ones" that needs no archetype classifier.
 
 ## Phase 13 — ConvexTok AST vocabulary (Deep fusion D: research-gated, NOT a plan yet)
 
@@ -1172,22 +1229,48 @@ infrastructure (`GraphBuilder`, `ConvexSolver`, `Rounder`, `Certifier`) is
 
 ### Tasks (research, not implementation)
 
-- [ ] **T13.1** File `.research/NNN_convex_ast_vocab.md` — design the AST-node
-      colouring scheme (node-kind vs kind+arity vs kind+child-shape). Cite
-      ConvexTok paper. Sketch the encoding.
-- [ ] **T13.2** Build a 1000-fix-corpus AST node-kind sequence dataset (extract
+- [x] **T13.1 DONE — [`.research/058_convex_ast_vocab.md`](../.research/058_convex_ast_vocab.md).**
+      Substrate re-verified present (`GraphBuilder` / `ConvexSolver` /
+      `Rounder` / `Certifier` in `katgpt-tokenizer/src/convex_*.rs`).
+      Colouring scheme designed and a recommendation made: **kind + arity**.
+      Kind-only is too lossy for exactly the patterns this repo cares about
+      (`identity_op` and `double_parens` are both "an expression inside an
+      expression" under it); kind+child-shape has a long tail that would make
+      the LP find mostly singleton colours over a 40-rule corpus. Arity is what
+      separates the operator shapes T3.5.2 found load-bearing.
+      The note also re-specifies the gate: **compression ratio is the wrong
+      metric** (it is a property of the vocabulary, not of anything the healer
+      does) — the honest gate is downstream retrieval top-1 vs the
+      operator-aware BM25 tokenizer.
+- [-] **T13.2 DEFERRED — blocked on HEADROOM, not effort.** The downstream gate
+      is unreachable: retrieval top-1 is 96.0% on held-out multi-lint spans
+      (24/25 correct), leaving 4.0pp total, so a new tokenisation scheme would
+      be competing for 1 span. Original text:
+      Build a 1000-fix-corpus AST node-kind sequence dataset (extract
       via `syn` visitor from the existing `ClippyCorpus` + perf + kernel rules).
-- [ ] **T13.3** Run `GraphBuilder::build(ast_sequences, max_len=8)` +
+- [-] **T13.3 DEFERRED** with T13.2 (same headroom block). Original text:
+      Run `GraphBuilder::build(ast_sequences, max_len=8)` +
       `ConvexSolver::solve(graph, budget_k=64)` + `Rounder::det` on the dataset.
       Measure: how many recurring AST motifs does the LP find? What's the
       compression ratio vs the flat per-rule corpus?
-- [ ] **T13.4** If T13.3 shows ≥2× compression: file a `.proposals/` for the
+- [-] **T13.4 DEFERRED** with T13.2/T13.3, and its ≥2× **compression** bar is
+      re-specified in Research 058 to a downstream retrieval gate — compression
+      alone measures the vocabulary, not the product. Original text:
+      If T13.3 shows ≥2× compression: file a `.proposals/` for the
       ConvexTok-AST vocabulary as a Phase 14 implementation plan. Else:
       document the negative result + close.
 
 ### Phase 13 exit criteria
-- Research note filed. Either a follow-up plan is opened (T13.4 positive) or
-  the avenue is documented as a negative result (T13.4 negative).
+- **MET 2026-08-16 (the research half).** The note is filed
+  ([Research 058](../.research/058_convex_ast_vocab.md)) with the colouring
+  scheme designed, a recommendation (kind + arity) argued from this repo's own
+  measured failure modes, and the gate re-specified from compression to
+  downstream retrieval.
+- The experiment (T13.2-T13.4) is **deferred on headroom**: at 96.0% top-1
+  there is 4.0pp to win, so a globally-optimal AST vocabulary would be a more
+  sophisticated answer to a question that is currently 96% answered. Reopen
+  when the corpus grows enough to drop precision, or when a non-retrieval
+  consumer (proposer dispatch, corpus dedup) needs AST motifs.
 
 ## Phase 14 — Verified additional substrates (HebbianKernelMemory + DeltaMemoryState + ExperienceReuseHook)
 
@@ -1213,34 +1296,76 @@ they are NOW CONFIRMED via direct grep (2026-08-14):
   Dual-stream = "these fixes worked" + "these fixes caused cargo build breakage —
   avoid". The natural sink for `cargo clippy`/`cargo build` verify feedback.
 
-**Status: substrate verified. Not started.**
+**Status: PRE-FLIGHTED 2026-08-16 — substrate REAL, motivation false, gate
+unreachable (Bench 030). Deferred.**
+
+> **All five substrates verified present** (`HebbianKernelMemory`,
+> `DeltaMemoryState`, `MemorySteeredPruner`, `ExperienceReuseHook`,
+> `query_priors_dual`). The problems are elsewhere.
+>
+> **T14.2's stated motivation is false, measured.** It proposes replacing
+> `LatentSkillEvolution`'s `HashMap<String, Direction>` with
+> `HebbianKernelMemory<8>` for *"O(1) associative recall vs O(N) hash scan"*.
+> There is no O(N) scan — it is a `HashMap`. Lookup latency across a **100×**
+> increase in store size: 10.8 ns @ 40 keys → 15.1 ns @ 4000 keys, a **1.40×**
+> ratio (cache drift, not complexity). The cost being removed does not exist.
+>
+> **T14.5's gate is unreachable by arithmetic**, the same way T10.6's was: it
+> asks for **≥5% G1 precision improvement**, while measured remaining headroom
+> on the held-out multi-lint set is **4.0pp total** (24/25 already correct at
+> 96.0% top-1). A perfect implementation is under the bar.
+>
+> **T14.3 is already refuted** — it replaces `LatentFixMemory`'s flat scan with
+> graph-indexed priors, but T7.3 measured that entire evidence axis at
+> **0/25 improvable, 19/25 breakable** on held-out spans.
+>
+> **Reopen when** retrieval precision drops materially (restoring >5pp of
+> headroom), or for T14.1/T14.4 specifically if a *latency* case is made —
+> those two are about drafting and RL signal, not retrieval ranking, so they
+> would need their own gate rather than inheriting T14.5's.
 
 ### Tasks (additive — these compose on top of Phases 9-12)
 
-- [ ] **T14.1** Wrap `TernaryDrafter` in `MemorySteeredPruner<P>` so each draft
+- [-] **T14.1 DEFERRED** — gated by T14.5, which is unreachable (4.0pp of
+      headroom vs ≥5% demanded). Also note `MemorySteeredPruner<P: ScreeningPruner>`
+      lives in **katgpt-pruners**, a different crate from the rest of the
+      Phase 14 substrate, and its trait bound is not our `RustAnalyzerPruner`.
+      Original text: Wrap `TernaryDrafter` in `MemorySteeredPruner<P>` so each draft
       is corrected by `DeltaMemoryState::read(context)` keyed on
       `(lint_name_hash, buggy_code_latent)`. The `write()` happens on each
       verified fix (success → +α toward the correction, fail → -α away).
-- [ ] **T14.2** Replace `HashMap<String, Direction>` in `LatentSkillEvolution` with
+- [-] **T14.2 DEFERRED — motivation REFUTED by measurement.** The claimed
+      "O(N) hash scan" does not exist: lookup is flat (1.40×) under a 100×
+      store-size increase, i.e. O(1). Original text:
+      Replace `HashMap<String, Direction>` in `LatentSkillEvolution` with
       `HebbianKernelMemory<8>` for the verified-fix fact store. O(1) associative
       recall vs O(N) hash scan. The fact corpus = (rule_id, buggy_hash) → fixed_code.
-- [ ] **T14.3** Replace the flat `Vec<FixTrajectory>` in `LatentFixMemory` with
+- [-] **T14.3 DEFERRED — already refuted by T7.3**, which measured this exact
+      evidence axis at 0/25 improvable and 19/25 breakable on held-out spans.
+      Original text: Replace the flat `Vec<FixTrajectory>` in `LatentFixMemory` with
       `ExperienceReuseHook`. The hook gives graph-indexed prior lookup +
       dual-stream (positive + negative priors) for free.
-- [ ] **T14.4** Wire `cargo build` failure outcomes into the dual-stream's
+- [-] **T14.4 DEFERRED** with T14.3 (same dual-stream). Worth noting the
+      signal it wants already flows: `--fix --verify` records reverted vs kept
+      edits into the memory (Issue 018, `heal.rs:637,659`). Original text:
+      Wire `cargo build` failure outcomes into the dual-stream's
       `record_observation_outcome_dual`: `cargo build` fail = strong negative prior.
       `cargo clippy` fail = weak negative prior. `cargo test` pass = strong
       positive prior. This is the modelless RL signal layer.
-- [ ] **T14.5** GOAT gate (verified_substrates): on the fixture corpus,
+- [x] **T14.5 GOAT gate — EVALUATED, UNREACHABLE BY ARITHMETIC.** Asks for
+      **≥5%** G1 precision improvement; measured total remaining headroom is
+      **4.0pp** (96.0% top-1, 24/25 held-out spans already correct). No
+      implementation can pass. Recorded as failed-by-construction. Original
+      text: GOAT gate (verified_substrates): on the fixture corpus,
       memory-steered drafting (T14.1) + Hebbian fact recall (T14.2) + graph-indexed
       priors (T14.3) collectively improve G1 precision ≥5% over Phase 9 alone.
       Record in the next `.benchmarks/` slot (`.benchmarks/.highwater` + 1).
 
 ### Phase 14 exit criteria
-- All three substrates wired. The healer's memory layer is no longer flat +
-  in-memory; it's Hebbian fact store + graph-indexed dual-stream + memory-steered
-  drafter.
-- GOAT G1 PASS (≥5% improvement over Phase 9).
+- **DEFERRED 2026-08-16 after pre-flight (Bench 030).** The substrates are all
+  real — this phase fails on *motivation* and *headroom*, not availability:
+  T14.2's O(N) premise is measurably false (lookup is O(1)), T14.3's axis was
+  refuted by T7.3 (0/25 improvable), and T14.5 demands ≥5% from a 4.0pp budget.
 
 ## Out of scope (per Proposal 002 revised + deep fusion layer)
 
