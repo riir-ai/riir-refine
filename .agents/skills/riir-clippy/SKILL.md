@@ -768,8 +768,10 @@ global = symlink only.
   343 → 344 (A 80). GOAT: 574 kernel_heal + 415 default + 9 retrieval
   (floors held), clippy 0 both states, all-but-ternary combo check passes;
   CI guard layers 3/4/5 on the 4090 box blocked by the PRE-EXISTING un-gated
-  metal dep in riir-gpu → filed riir-ai Issue 707 (one-line fix spelled out;
-  needs M3 re-verification). **4090 toolchain note:** this box resolves the
+  metal dep in riir-gpu → filed riir-ai Issue 707 — RESOLVED 2026-08-16
+  (`7c8b69045` dep move landed + M3 T2 verified: metal_tensor_gemm resolves
+  + bench_663_zero_copy_interop green, riir-ai `c15cb947d`; guard green on
+  both hosts). **4090 toolchain note:** this box resolves the
   repo's 1.97.0 pin to the GNU host with NO mingw linker — every cargo
   invocation needs `+1.97.0-x86_64-pc-windows-msvc` (or
   RUSTUP_TOOLCHAIN=...msvc for scripts); cargo-hack is NOT installed (guard
