@@ -1,0 +1,94 @@
+# Issue 025 — Non-syn surface scanner (`.wgsl` files + `#[cube]` macro bodies)
+
+**Status:** OPEN (candidate; filed 2026-08-16 from user direction)
+**Origin:** user proposed "regex wasm" as a new tool. Rescoped on filing per the
+measured evidence: the *job* is real (the non-syn blind spot), but **WASM is the
+wrong layer for v1** — native-first; WASM reserved for third-party sandboxing,
+which no requirement exists for yet.
+**Related:** [Plan 005](../.plans/005_real_file_span_healing.md) §Phase 5 (deferral
+reason = this blind spot; reopen trigger = ≥5 proposer-grade kernel rules),
+§Phase 8 (`wasm_pruner` blocked on rubrc — the precedent for deferring WASM
+layers on external-runtime maturity).
+
+## Why
+
+The healer AND the mining program are blind to every surface `syn` cannot parse:
+
+1. **`.wgsl` kernel files** — the actual GPU kernel implementations behind the
+   host-side orchestration rules mined in Batches 14–51. Several corpus rules
+   have literal WGSL shapes (B44: shared cube-size const, smem-staging gate,
+   one-thread-per-row anti-pattern, `array<f32,256>` declared-max tax; B47: the
+   m2p out-projection fix shape).
+2. **`#[cube]` macro bodies** — Plan 005 Phase 5's recorded deferral reason:
+   vanilla `syn` cannot parse them (Proposal 002 caveat 1).
+
+A scanner over these surfaces opens three things, in value order:
+- **New mining material** — WGSL buggy→fixed pairs from riir-gpu git history
+  (the fix commits behind Issues 697/698/701 have literal before/after `.wgsl`),
+  feeding Phase 5's ≥5-proposer-grade-rules reopen trigger.
+- **`--suggest` coverage on real kernel code** (suggest-only, same shape as the
+  kernel domain today).
+- Eventual proposer-grade rules for surfaces no Rust AST tool can reach.
+
+## Scope ruling (the regex-WASM verdict, recorded)
+
+- **Rust-code detection stays AST-exact.** Regex/token heuristics over Rust are
+  a measured regression vector: the old `needless_range_loop` token-substring
+  counter false-positived on `v[v[i]]` and on `minimum` containing `i` — fixed
+  by exact `Expr::Index` analysis (Plan 005 T6.4 note 3). Do not regress this.
+- **Non-syn surfaces: native `regex` crate first.** No WASM boundary for
+  first-party rules — serialization tax + a rubrc-class external-runtime risk,
+  for zero benefit while rules are ours.
+- **WASM upgrade path (deferred sub-feature, not v1):** justified only when
+  third-party user-supplied rules need sandboxing. Do not build it before a
+  consumer exists (the decorative-metric trap, 4th occurrence guard).
+
+## Tasks
+
+- [ ] **T1 — Inventory the surface.** Count `.wgsl` files + total lines across
+      riir-gpu (and any WGSL elsewhere in the stack); count `#[cube]` macro
+      bodies + their line ranges. Output: the mining target size. If the
+      surface is tiny (< ~2k lines total), downgrade the issue honestly.
+- [ ] **T2 — WGSL scanner prototype.** Native `regex` patterns for the corpus
+      rules that have literal WGSL shapes (start list: B44's four + B47's
+      out-projection shape). Pattern source = the corpus rows themselves; each
+      pattern must cite the rule_id it fronts.
+- [ ] **T3 — `#[cube]` body extraction.** Token-tree span location via
+      `proc-macro2` (a `TokenStream` walk finds the attribute + item span
+      without parsing the body as Rust), then the same regex pass over the
+      span text. Edge cases to pin: nested macros, raw strings, `#[cube(launch)]`.
+- [ ] **T4 — Wire as suggest-only.** New scanner output keyed to the `kernel`
+      domain, zero proposer surface. `--fix` must NOT touch these files.
+- [ ] **T5 — GOAT gate (falsifiable, precision-first):** on riir-gpu's own
+      `.wgsl` files, the scanner flags ≥5 real anti-patterns drawn from the
+      Batch 14–51 rule set, with **zero false positives on the clean-file
+      control** (the post-fix versions of the same files must not fire —
+      garbage-in guard for the mining loop). Latency: < 1ms/file (the G2 bar).
+      Record in the next `.benchmarks/` slot at landing time.
+- [ ] **T6 — Mining integration.** With the scanner live, mine WGSL buggy→fixed
+      pairs from riir-gpu fix history toward Phase 5's reopen trigger (≥5
+      proposer-grade pairs). Every batch re-runs the Issue 017 retrieval
+      regression gate (corpus growth = crowding liability, Plan 005 Risk 5).
+
+## Anti-goals
+
+- No WASM in v1; no `wasm-*` dep additions.
+- No proposers/auto-fix on non-syn surfaces (suggest-only).
+- No replacement of AST analysis on parseable Rust.
+- No new deps beyond `regex` (already in the tree via riir-rag) unless
+  `tree-sitter-wgsl` proves necessary on T2 evidence.
+
+## Risks
+
+- **Regex false positives** — mitigated by the T5 clean-file control + the
+  mining adaptation loop precedent (wrong suggestion → fix the pattern, never
+  suppress).
+- **Token-tree edge cases** (nested macros, raw strings) — pinned by T3 tests.
+- **Surface too small to matter** — T1 decides; honest downgrade if so.
+
+## References
+
+- Plan 005 §Phase 5 + §Phase 8 + Risk 3 (the `#[cube]` parse-failure record)
+- Batches 44/47 (WGSL rule shapes) — `.research/048`/`.research/052`
+- Plan 005 T6.4 note 3 (the token-heuristic false-positive lesson)
+- Issue 017 (the retrieval regression gate every corpus batch must re-run)
