@@ -481,6 +481,25 @@ impl LatentFixMemory {
     /// Returns `0.5` (neutral) if no trajectory exists for this pair — the
     /// caller should treat this as "no information". This lets the heal
     /// pipeline look up the ACTUAL trajectory stats for a drafter candidate,
+    /// Beta-Bernoulli counts `(successes, failures)` for a `(lint, fixed_code)`
+    /// pair — the sample size that [`success_rate_for`](Self::success_rate_for)
+    /// discards (Plan 005 T9.3).
+    ///
+    /// `(0, 0)` for an unseen pair, which `best_belief_score` reads as the
+    /// uniform `Beta(1, 1)` prior — the honest "no evidence" position.
+    #[must_use]
+    pub fn counts_for(&self, lint_name: &str, fixed_code: &str) -> (u32, u32) {
+        self.trajectories
+            .iter()
+            .find(|t| t.lint_name == lint_name && t.fixed_code == fixed_code)
+            .map_or((0, 0), |t| (t.success_count, t.fail_count))
+    }
+
+    /// Look up the success rate for a specific (`lint_name`, `fixed_code`) pair.
+    ///
+    /// Returns `0.5` (neutral) if no trajectory exists for this pair — the
+    /// caller should treat this as "no information". This lets the heal
+    /// pipeline look up the ACTUAL trajectory stats for a drafter candidate,
     /// instead of assuming a hardcoded neutral 0.5.
     #[must_use]
     pub fn success_rate_for(&self, lint_name: &str, fixed_code: &str) -> f32 {

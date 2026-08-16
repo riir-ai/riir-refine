@@ -183,7 +183,7 @@ pub use memory::{
     CommitmentStatus, EvidenceTier, FixTrajectory, LatentFixMemory, LatentQuery, ScoredTrajectory,
 };
 pub use recorder::EvolveRecorder;
-pub use self_evolve::{HealPipeline, HealResult, HealSource, TuneReport};
+pub use self_evolve::{HealPipeline, HealResult, HealSource, SelectionMode, TuneReport};
 
 // Plan 005: latent retrieval surface (`--suggest` MVP).
 #[cfg(feature = "latent_retrieval")]

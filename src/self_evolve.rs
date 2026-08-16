@@ -80,12 +80,75 @@ struct Candidate {
     /// The trajectory's historical success rate (if from memory).
     /// Drafter candidates have no trajectory → neutral 0.5.
     success_rate: f32,
+    /// Beta-Bernoulli counts backing `success_rate` (Plan 005 T9.3).
+    ///
+    /// `success_rate` alone cannot distinguish 1/1 from 100/100 — both are
+    /// 1.0 — so a single lucky attempt outranks a long reliable history. The
+    /// counts preserve the sample size that the rate throws away.
+    counts: (u32, u32),
 }
 
 /// Weight on the evolution-score axis in candidate selection.
 const W_EVO: f32 = 0.6;
-/// Weight on the success-rate axis in candidate selection.
+/// Weight on the reliability axis in candidate selection.
 const W_RATE: f32 = 0.4;
+
+/// Conservatism of the Beta lower bound in [`SelectionMode::BetaPosterior`].
+///
+/// `best_belief_score` returns the ε-quantile of `Beta(1+S, 1+F)`; 0.05 is the
+/// primitive's own documented default and matches the 95% convention used by
+/// the conformal layer (Issue 023).
+const BELIEF_EPSILON: f32 = 0.05;
+
+/// How the reliability axis of candidate selection is scored (Plan 005 T9.3).
+///
+/// The evolution axis is unchanged in both modes — this replaces only the
+/// *reliability* term, because discarding the direction signal wholesale
+/// (as a bare `select_best_belief` call would) throws away the blend's
+/// primary input and degenerates to first-index whenever every candidate is
+/// unseen.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum SelectionMode {
+    /// `W_EVO·evolution + W_RATE·(S/(S+F))` — the raw success rate.
+    ///
+    /// Overconfident on small samples: 1 success out of 1 attempt scores a
+    /// perfect 1.0, tying a candidate with 100 successes out of 100.
+    ///
+    /// Kept as the A/B baseline and an escape hatch for large-sample regimes
+    /// (see [`BetaPosterior`](Self::BetaPosterior)'s crossover note).
+    LinearBlend,
+    /// `W_EVO·evolution + W_RATE·best_belief_score(S, F, ε)` — the ε-quantile
+    /// of `Beta(1+S, 1+F)`, a conservative lower bound on true reliability.
+    ///
+    /// Sample size is respected: 1/1 scores 0.224 where the raw rate scores a
+    /// perfect 1.000, so an 18/20 candidate (Beta 0.729) correctly outranks it.
+    ///
+    /// **Promoted to default by the T9.3 gate (Bench 028):** mean selection
+    /// regret −8.4% over the 1–5-attempt regime, and −23.8% at a single
+    /// attempt, across 20 000 randomized trials.
+    ///
+    /// **Documented crossover:** the advantage shrinks monotonically as
+    /// evidence accumulates (−23.8% / −14.4% / −6.8% / −1.9% at max attempts
+    /// 1 / 3 / 5 / 10) and *reverses* to +2.9% at 30 attempts, where the raw
+    /// rate has converged and the lower bound's conservatism is pure cost.
+    /// That reversal is a correctness check on the model, not a defect — and
+    /// the healer's regime is the thin-evidence end, where per-(lint, fix)
+    /// pairs are seen a handful of times. Switch to
+    /// [`LinearBlend`](Self::LinearBlend) if that ever stops being true.
+    #[default]
+    BetaPosterior,
+}
+
+/// Score the reliability axis for a candidate under `mode`.
+#[inline]
+fn reliability_score(mode: SelectionMode, counts: (u32, u32), rate: f32) -> f32 {
+    match mode {
+        SelectionMode::LinearBlend => rate,
+        SelectionMode::BetaPosterior => {
+            katgpt_core::best_belief_score(counts.0, counts.1, BELIEF_EPSILON)
+        }
+    }
+}
 
 /// The self-evolving heal pipeline.
 ///
@@ -93,6 +156,8 @@ const W_RATE: f32 = 0.4;
 /// memory + evolution layers. The frozen layers are NEVER mutated — the
 /// evolution layer is a reader-side overlay.
 pub struct HealPipeline {
+    /// How the reliability axis is scored (Plan 005 T9.3).
+    selection_mode: SelectionMode,
     /// The frozen L1 ternary drafter (existing — not modified by evolution).
     drafter: TernaryDrafter,
     /// The frozen L2 syntax pruner (existing — not modified by evolution).
@@ -113,9 +178,18 @@ pub struct HealPipeline {
 
 impl HealPipeline {
     /// Construct a new pipeline with the given drafter + pruner + empty memory.
+    /// Set how the reliability axis is scored — the Plan 005 T9.3 A/B knob.
+    /// Defaults to [`SelectionMode::BetaPosterior`].
+    #[must_use]
+    pub fn with_selection_mode(mut self, mode: SelectionMode) -> Self {
+        self.selection_mode = mode;
+        self
+    }
+
     #[must_use]
     pub fn new(drafter: TernaryDrafter, pruner: RustAnalyzerPruner) -> Self {
         Self {
+            selection_mode: SelectionMode::default(),
             drafter,
             pruner,
             memory: LatentFixMemory::default(),
@@ -264,11 +338,13 @@ impl HealPipeline {
             // that (not a hardcoded 0.5). This lets fail feedback bias
             // selection away from repeatedly-failed drafter picks.
             let success_rate = self.memory.success_rate_for(rule_id, &draft.code);
+            let counts = self.memory.counts_for(rule_id, &draft.code);
             candidates.push(Candidate {
                 code: draft.code,
                 direction: dir,
                 source: HealSource::Drafter,
                 success_rate,
+                counts,
             });
         }
 
@@ -284,6 +360,7 @@ impl HealPipeline {
                     direction: traj.direction,
                     source: HealSource::Memory,
                     success_rate: traj.success_rate(),
+                    counts: (traj.success_count, traj.fail_count),
                 });
             }
         }
@@ -301,7 +378,9 @@ impl HealPipeline {
         let mut best = None::<(usize, f32)>;
         for (i, cand) in candidates.iter().enumerate() {
             let evo_score = self.evolution.score_candidate(rule_id, &cand.direction);
-            let combined = W_EVO * evo_score + W_RATE * cand.success_rate;
+            let reliability =
+                reliability_score(self.selection_mode, cand.counts, cand.success_rate);
+            let combined = W_EVO * evo_score + W_RATE * reliability;
             if best.is_none_or(|(_, best_score)| combined > best_score) {
                 best = Some((i, combined));
             }
@@ -537,7 +616,11 @@ mod tests {
         assert!(result.is_some(), "corpus-only must produce a candidate");
         let r = result.unwrap();
         assert_eq!(r.source, HealSource::Drafter, "no memory → must come from drafter");
-        assert_eq!(r.evolution_score, 0.5, "unseen lint → neutral evolution score");
+        // T9.3: an unseen candidate now scores 0.6·0.5 + 0.4·beta(0,0) =
+        // 0.32, not 0.5. The Beta lower bound reports "no evidence" as a
+        // conservative 0.05 rather than a neutral 0.5 — that is the point of
+        // the change, so this pins the new value deliberately.
+        assert_eq!(r.evolution_score, 0.320_000_02, "unseen lint → no-evidence score");
     }
 
     #[test]
@@ -560,7 +643,7 @@ mod tests {
 
         // Before any outcome: evolution score for this lint is neutral (0.5).
         let r1 = p.heal("needless_return", "return 42;", &corpus).unwrap();
-        assert_eq!(r1.evolution_score, 0.5);
+        assert_eq!(r1.evolution_score, 0.320_000_02); // T9.3 no-evidence score
 
         // Report a success with the correct fix.
         p.report_outcome("needless_return", "return 42;", "fn foo() -> i32 { 42 }", true, false);

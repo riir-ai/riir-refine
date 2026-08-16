@@ -793,9 +793,43 @@ read it before writing code.**
       with an explicit "uncalibrated" marker. **Never emit the degenerate
       zero-width interval.** Add a test asserting a cold key does not produce
       a `[point, point]` interval — the Issue 023 regression witness.
-- [ ] **T9.3** Replace the `0.6·evolution + 0.4·success_rate` linear blend in
-      `HealPipeline::heal` with `select_best_belief(candidates, ε, incumbent)`.
-      Each candidate carries `(successes, failures)` as Beta posterior counts.
+- [x] **T9.3 Beta-posterior candidate selection — SHIPPED, GOAT PASS
+      (Bench 028).** Done per the pre-flight: the real decision point, not the
+      unconsumed confidence field.
+      **Deviation, deliberate:** the plan says "replace the blend with
+      `select_best_belief`", but that primitive returns an index from counts
+      ALONE — with every candidate unseen it degenerates to first-index and
+      discards the blend's *primary* signal (`W_EVO` = 0.6, the evolved
+      direction). Replaced only the **reliability term** instead:
+      `S/(S+F)` → `best_belief_score(S, F, ε=0.05)`, the ε-quantile of
+      `Beta(1+S, 1+F)`. Same reading that kept instantiation and similarity as
+      separate keys in T3.5.5 rather than mashing them into one number.
+      **The defect fixed:** a raw rate cannot tell 1/1 from 100/100 — both are
+      1.0 — so one lucky attempt outranks a long history. Measured on exactly
+      that case: lucky 1/1 scores rate **1.000** / Beta **0.224**; proven 18/20
+      scores rate 0.900 / Beta **0.729**. The rate picks lucky, Beta picks
+      proven; both directions are asserted.
+      **Gate — selection regret** (`p(best) − p(chosen)`, 20 000 randomized
+      trials with `p` known by construction, counts sampled from it, and a
+      *noisy* evolution score so the reliability axis actually matters):
+      | max attempts | 1 | 3 | 5 | 10 | 30 |
+      |---|---:|---:|---:|---:|---:|
+      | delta | **−23.8%** | −14.4% | −6.8% | −1.9% | **+2.9%** |
+      **Gate (1–5 attempts): −8.4% → PASS → `SelectionMode::BetaPosterior`
+      promoted to default.** G2 (LUT hot path, a few ns), G3 (419/465/485/475
+      lib tests green, clippy 0), G4 (allocation-free), modelless (closed-form
+      Beta quantile) all PASS.
+      **Honest crossover:** the advantage decays monotonically with evidence
+      and *reverses* at 30 attempts, where the converged rate beats a
+      conservative bound. That is what theory predicts, so its appearance is a
+      correctness check on the simulation rather than a defect — and it bounds
+      the claim: BetaPosterior is right for the thin-evidence regime the healer
+      occupies, not universally. `LinearBlend` stays as the escape hatch with
+      the crossover documented at the enum variant.
+      **Behaviour change:** an unseen candidate now scores 0.32, not 0.5 (the
+      Beta bound reports "no evidence" as 0.05, not a neutral 0.5). The two
+      `HealResult` assertions that pinned 0.5 were re-pinned to 0.32
+      deliberately, not loosened.
 - [ ] **T9.4 (clr_vote, opt-in `clr_voting`)** Generate K=8 drafted fixes
       (currently 1) via QMC perturbation of the ternary matvec, cluster by
       syntactic similarity (Levenshtein on AST node-kind sequence), run L2
