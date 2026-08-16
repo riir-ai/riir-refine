@@ -76,6 +76,72 @@ impl SuggestScratch {
     }
 }
 
+/// Which BM25 tokenizer an index is built with (Plan 005 T3.5).
+///
+/// A/B-able because the choice is a measured one, not an assumed one — see
+/// [`super::retrieval_eval::run_tokenizer_sweep`] and Bench 027.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum IndexTokenizer {
+    /// The substrate default `CodeTokenizer` — identifiers only, all
+    /// punctuation discarded. The pre-T3.5 shipped behaviour.
+    CodeDefault,
+    /// [`RustOpTokenizer`](super::op_tokenizer::RustOpTokenizer) — identifiers
+    /// plus one token per maximal punctuation run.
+    OpAware,
+    /// [`RustOpBigramTokenizer`](super::op_tokenizer::RustOpBigramTokenizer) —
+    /// `OpAware` plus operator-adjacency bigrams. **Default since T3.5**
+    /// (Bench 027).
+    #[default]
+    OpAwareBigram,
+}
+
+/// How a [`RuleIndex`] scores and tokenizes (Plan 005 T3.5).
+///
+/// Both knobs are A/B-able because both defaults are *measured* choices, not
+/// assumed ones — see [`super::retrieval_eval::run_retrieval_sweep`] and
+/// Bench 027.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RetrievalConfig {
+    /// BM25 tokenizer. See [`IndexTokenizer`].
+    pub tokenizer: IndexTokenizer,
+    /// Weight on the latent term in the fused score
+    /// (`latent_weight * latent + bm25`).
+    ///
+    /// The 8-D `ModellessEmbedder` is BLAKE3+DFT — on the short, structurally
+    /// near-identical texts of the clippy corpus its similarity is close to a
+    /// hash, so at weight 1.0 it injects noise on top of the (discriminative)
+    /// BM25 term. Swept in T3.5; see [`Self::DEFAULT_LATENT_WEIGHT`].
+    pub latent_weight: f32,
+    /// Weight on the 768-D Bonsai dense-rerank term
+    /// (`... + dense_weight * dense_cosine`). `0.0` disables the dense path
+    /// entirely — no GGUF is loaded. Requires the `bonsai_retrieval` feature
+    /// to have any effect; ignored (with the index built modellessly) without it.
+    pub dense_weight: f32,
+}
+
+impl RetrievalConfig {
+    /// The T3.5-measured latent weight (Bench 027).
+    ///
+    /// **The sweep REFUTED this lever**: with the operator-aware tokenizer,
+    /// clippy top-1 is 66.7% at every weight in {1.0, 0.5, 0.25, 0.0} — the
+    /// 8-D latent term never changes a ranking, because BM25 dominates and
+    /// latent-only hits (`exact_score: None`) never win. Kept at 1.0 (the
+    /// pre-T3.5 shipped value) so the promotion carries no gratuitous
+    /// behaviour change; the knob survives only to keep the sweep runnable
+    /// and the refutation reproducible.
+    pub const DEFAULT_LATENT_WEIGHT: f32 = 1.0;
+}
+
+impl Default for RetrievalConfig {
+    fn default() -> Self {
+        Self {
+            tokenizer: IndexTokenizer::default(),
+            latent_weight: Self::DEFAULT_LATENT_WEIGHT,
+            dense_weight: 0.0,
+        }
+    }
+}
+
 /// One domain's corpus indexed for latent retrieval.
 ///
 /// Build cost is proportional to corpus size (clippy ~10, perf ~46, kernel
@@ -83,6 +149,12 @@ impl SuggestScratch {
 /// per process at suggest time, not per query.
 pub struct RuleIndex {
     retriever: NeuronDbRetriever,
+    /// The dense embedder, when the Bonsai rerank path is active. Held so
+    /// query-side `embed_dense` uses the SAME model the index was built with.
+    #[cfg(feature = "bonsai_retrieval")]
+    dense: Option<std::sync::Arc<riir_rag::BonsaiEmbedder>>,
+    /// Scoring/tokenizing knobs this index was built with.
+    config: RetrievalConfig,
     /// `BLAKE3(pattern_text_or_line)` → `rule_id` (the same key the retriever
     /// stores). Multi-scale: one rule contributes its whole pattern + each
     /// significant pattern line.
@@ -106,6 +178,21 @@ impl RuleIndex {
     /// Returns the substrate's indexing error (as a `String`) if
     /// `NeuronDbRetriever::index_chunks` fails.
     pub fn build(patterns: Vec<(String, String)>) -> Result<Self, String> {
+        Self::build_with(patterns, RetrievalConfig::default())
+    }
+
+    /// [`build`](Self::build) with an explicit BM25 tokenizer — the A/B
+    /// constructor the T3.5 sweep drives. `build` delegates with the
+    /// promoted default.
+    ///
+    /// # Errors
+    ///
+    /// Returns the substrate's indexing error (as a `String`) if
+    /// `NeuronDbRetriever::index_chunks` fails.
+    pub fn build_with(
+        patterns: Vec<(String, String)>,
+        config: RetrievalConfig,
+    ) -> Result<Self, String> {
         let embedder = ModellessEmbedder;
         let n_rules = patterns.len();
         let mut by_zone_hash = HashMap::with_capacity(n_rules);
@@ -132,12 +219,50 @@ impl RuleIndex {
                 }
             }
         }
-        let retriever = NeuronDbRetriever::new(NeuronDbRetrieverConfig::default());
+        // `with_bm25_tokenizer` MUST precede `index_chunks` — the tokenizer is
+        // used at both index and search time, and swapping it after indexing
+        // silently desyncs the postings from the queries (substrate contract).
+        let retriever = match config.tokenizer {
+            IndexTokenizer::CodeDefault => NeuronDbRetriever::new(NeuronDbRetrieverConfig::default()),
+            IndexTokenizer::OpAware => NeuronDbRetriever::new(NeuronDbRetrieverConfig::default())
+                .with_bm25_tokenizer(Box::new(super::op_tokenizer::RustOpTokenizer)),
+            IndexTokenizer::OpAwareBigram => {
+                NeuronDbRetriever::new(NeuronDbRetrieverConfig::default())
+                    .with_bm25_tokenizer(Box::new(super::op_tokenizer::RustOpBigramTokenizer))
+            }
+        };
+        #[cfg(feature = "bonsai_retrieval")]
+        {
+            if config.dense_weight > 0.0 {
+                use riir_rag::{BonsaiEmbedStrategy, BonsaiEmbedder};
+                let path = riir_rag::bonsai_embedder::default_gguf_path();
+                let bonsai = BonsaiEmbedder::load(&path, BonsaiEmbedStrategy::MeanPool)
+                    .map_err(|e| format!("bonsai load ({}): {e}", path.display()))?;
+                let bonsai = std::sync::Arc::new(bonsai);
+                let dense_idx = std::sync::Arc::new(
+                    riir_neuron_db::dense_embed::DenseEmbedIndex::with_capacity(chunks.len()),
+                );
+                let retriever = retriever.with_dense_index(dense_idx);
+                retriever
+                    .index_chunks_dense(chunks, bonsai.as_ref())
+                    .map_err(|e| e.to_string())?;
+                return Ok(Self {
+                    retriever,
+                    config,
+                    dense: Some(bonsai),
+                    by_zone_hash,
+                    n_rules,
+                });
+            }
+        }
         retriever
             .index_chunks(chunks, &embedder)
             .map_err(|e| e.to_string())?;
         Ok(Self {
             retriever,
+            config,
+            #[cfg(feature = "bonsai_retrieval")]
+            dense: None,
             by_zone_hash,
             n_rules,
         })
@@ -173,8 +298,7 @@ impl RuleIndex {
         scratch: &'s mut SuggestScratch,
     ) -> &'s [ScoredRule] {
         scratch.retrieved.clear();
-        let activity = ModellessEmbedder.embed(code);
-        let query = LatentQuery::from_direction(activity).with_text(code);
+        let query = self.query_for(code);
         let mut retrieved = self.retriever.retrieve(&query, TokenBudget(usize::MAX));
         scratch.retrieved.append(&mut retrieved);
         self.rank_into(&scratch.retrieved, top_k, &mut scratch.best, &mut scratch.ranked)
@@ -208,8 +332,7 @@ impl RuleIndex {
     ) -> &'s [ScoredRule] {
         scratch.retrieved.clear();
         {
-            let activity = ModellessEmbedder.embed(code);
-            let query = LatentQuery::from_direction(activity).with_text(code);
+            let query = self.query_for(code);
             let mut retrieved_vec = self.retriever.retrieve(&query, TokenBudget(usize::MAX));
             scratch.retrieved.append(&mut retrieved_vec);
         }
@@ -218,8 +341,7 @@ impl RuleIndex {
             if trimmed.len() <= 8 {
                 continue;
             }
-            let activity = ModellessEmbedder.embed(trimmed);
-            let query = LatentQuery::from_direction(activity).with_text(trimmed);
+            let query = self.query_for(trimmed);
             let mut line_vec = self.retriever.retrieve(&query, TokenBudget(usize::MAX));
             scratch.retrieved.append(&mut line_vec);
         }
@@ -231,6 +353,19 @@ impl RuleIndex {
     /// Split-field params (not `&mut SuggestScratch`) so call sites can
     /// field-split the borrow alongside `&scratch.retrieved`.
     #[allow(clippy::type_complexity)]
+    /// Build the query for `text`, attaching the 768-D dense direction when
+    /// the Bonsai rerank path is active.
+    #[cfg_attr(not(feature = "bonsai_retrieval"), allow(clippy::unused_self))]
+    fn query_for(&self, text: &str) -> LatentQuery {
+        let q = LatentQuery::from_direction(ModellessEmbedder.embed(text)).with_text(text);
+        #[cfg(feature = "bonsai_retrieval")]
+        if let Some(bonsai) = &self.dense {
+            use riir_rag::DenseEmbedder;
+            return q.with_dense_direction(bonsai.embed_dense(text));
+        }
+        q
+    }
+
     fn rank_into<'s>(
         &self,
         retrieved: &[riir_rag::RetrievedChunk],
@@ -243,9 +378,17 @@ impl RuleIndex {
             let Some(rule_id) = self.by_zone_hash.get(&chunk.zone_hash) else {
                 continue;
             };
-            let score = chunk
-                .exact_score
-                .map_or(chunk.latent_score, |exact| chunk.latent_score + exact);
+            let latent = self.config.latent_weight * chunk.latent_score;
+            #[allow(unused_mut)] // `mut` is only exercised under `bonsai_retrieval`
+            let mut score = chunk.exact_score.map_or(latent, |exact| latent + exact);
+            // `dense_score` only exists on RetrievedChunk under riir-rag's
+            // `bonsai_embedder` cfg — gate the read, not just the weight.
+            #[cfg(feature = "bonsai_retrieval")]
+            if self.config.dense_weight > 0.0 {
+                if let Some(dense) = chunk.dense_score {
+                    score += self.config.dense_weight * dense;
+                }
+            }
             let entry = best.entry(rule_id.clone()).or_insert(f32::NEG_INFINITY);
             if score > *entry {
                 *entry = score;

@@ -425,7 +425,19 @@ fn canonical_rank(rules: &[crate::draft::ScoredRule]) -> Vec<&crate::draft::Scor
 /// `clippy_lints` + `rust_perf`).
 #[must_use]
 pub fn run_eval() -> EvalReport {
-    let mut matcher = LatentMatcher::from_enabled_domains().expect("build matcher");
+    run_eval_with(crate::draft::RetrievalConfig::default())
+}
+
+/// [`run_eval`] against an explicit retrieval config — the Plan 005 T3.5 A/B
+/// entry point. `run_eval` delegates with the promoted default.
+///
+/// # Panics
+///
+/// Panics if [`LatentMatcher::from_enabled_domains_with`] fails.
+#[must_use]
+pub fn run_eval_with(config: crate::draft::RetrievalConfig) -> EvalReport {
+    let mut matcher =
+        LatentMatcher::from_enabled_domains_with(config).expect("build matcher");
     let mut report = EvalReport::default();
 
     let spans = labeled_eval_spans();
@@ -730,6 +742,76 @@ pub fn print_router_eval(rows: &[RouterEvalRow]) {
     }
 }
 
+/// One row of the Plan 005 T3.5 retrieval sweep.
+#[derive(Debug, Clone)]
+pub struct RetrievalSweepRow {
+    /// The config that produced the row.
+    pub config: crate::draft::RetrievalConfig,
+    /// Per-domain metrics, indexed as [`EvalReport::per_domain`].
+    pub per_domain: [DomainMetrics; 3],
+    /// Blended metrics across every labeled span.
+    pub blended: DomainMetrics,
+}
+
+/// The T3.5 option-2 grid: BM25 tokenizer x latent fusion weight.
+///
+/// This is the measurement that decided both shipped defaults. It stays
+/// committed so a substrate change that erases the gain (e.g. riir-rag
+/// dropping `with_bm25_tokenizer`) reds the gate instead of silently
+/// regressing precision.
+#[must_use]
+pub fn run_retrieval_sweep() -> Vec<RetrievalSweepRow> {
+    let mut rows = Vec::new();
+    for tokenizer in [
+        crate::draft::IndexTokenizer::CodeDefault,
+        crate::draft::IndexTokenizer::OpAware,
+        crate::draft::IndexTokenizer::OpAwareBigram,
+    ] {
+        for latent_weight in [1.0_f32, 0.0] {
+            let config = crate::draft::RetrievalConfig {
+                tokenizer,
+                latent_weight,
+                ..crate::draft::RetrievalConfig::default()
+            };
+            let r = run_eval_with(config);
+            rows.push(RetrievalSweepRow {
+                config,
+                per_domain: r.per_domain,
+                blended: r.blended,
+            });
+        }
+    }
+    rows
+}
+
+/// Human-readable T3.5 sweep table.
+#[allow(clippy::cast_precision_loss)] // display percentages over tiny counts
+pub fn print_retrieval_sweep(rows: &[RetrievalSweepRow]) {
+    println!("== Plan 005 T3.5 retrieval sweep (option 2: tiny-token crowding) ==");
+    println!("  G1 bar: clippy top-1 >= 80%");
+    println!(
+        "{:<13} {:>7} {:>9} {:>9} {:>9} {:>9} {:>9}",
+        "tokenizer", "latent", "clippy@1", "clippy@3", "perf@1", "blend@1", "blend@3"
+    );
+    let pct = |v: Option<f32>| v.map_or("-".to_string(), |x| format!("{:.1}%", x * 100.0));
+    for row in rows {
+        let tag = match row.config.tokenizer {
+            crate::draft::IndexTokenizer::CodeDefault => "code-default",
+            crate::draft::IndexTokenizer::OpAware => "op-aware",
+            crate::draft::IndexTokenizer::OpAwareBigram => "op-bigram",
+        };
+        println!(
+            "{tag:<13} {:>7.2} {:>9} {:>9} {:>9} {:>9} {:>9}",
+            row.config.latent_weight,
+            pct(row.per_domain[0].recall(1)),
+            pct(row.per_domain[0].recall(3)),
+            pct(row.per_domain[1].recall(1)),
+            pct(row.blended.recall(1)),
+            pct(row.blended.recall(3)),
+        );
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -769,12 +851,16 @@ mod tests {
     /// flip across processes (3-process re-runs were identical; the margin
     /// is cheap robustness, not noise cover).
     mod floors {
-        pub const BLENDED_TOP1: f32 = 67.0 / 96.0;
-        pub const BLENDED_TOP3: f32 = 79.0 / 96.0;
-        pub const BLENDED_TOP5: f32 = 86.0 / 96.0;
-        pub const CLIPPY_TOP1: f32 = 25.0 / 48.0;
-        pub const CLIPPY_TOP3: f32 = 33.0 / 48.0;
-        pub const PERF_TOP3: f32 = 45.0 / 48.0;
+        // Rebased 2026-08-16 by Plan 005 T3.5 (Bench 027): the operator-aware
+        // BM25 tokenizer + adjacency bigrams moved every row. Measured
+        // blended 81/90/91 of 96, clippy 34/43/45 of 48, perf 47/47/47 of 48;
+        // floors are measured − ONE span, the documented convention.
+        pub const BLENDED_TOP1: f32 = 80.0 / 96.0;
+        pub const BLENDED_TOP3: f32 = 89.0 / 96.0;
+        pub const BLENDED_TOP5: f32 = 90.0 / 96.0;
+        pub const CLIPPY_TOP1: f32 = 33.0 / 48.0;
+        pub const CLIPPY_TOP3: f32 = 42.0 / 48.0;
+        pub const PERF_TOP3: f32 = 46.0 / 48.0;
         #[cfg(feature = "kernel_heal")]
         pub const KERNEL_TOP3: f32 = 29.0 / 30.0;
         /// Router-annotation accuracy floor (Issue 020 wiring, Bench 025):
@@ -793,6 +879,57 @@ mod tests {
     #[allow(clippy::cast_precision_loss)] // ratio arithmetic over tiny counts
     fn ratio(hits: usize, n: usize) -> f32 {
         if n == 0 { 1.0 } else { hits as f32 / n as f32 }
+    }
+
+    #[test]
+    fn retrieval_sweep_report() {
+        // Plan 005 T3.5 option-2 benchmark. Prints the grid and pins the
+        // load-bearing claims so a substrate change that erases the gain
+        // (e.g. riir-rag reverting `with_bm25_tokenizer`) reds this test.
+        const T35_G1_BAR: f32 = 0.80;
+        let rows = super::run_retrieval_sweep();
+        super::print_retrieval_sweep(&rows);
+
+        let get = |t: crate::draft::IndexTokenizer, w: f32| {
+            rows.iter()
+                .find(|r| r.config.tokenizer == t && (r.config.latent_weight - w).abs() < 1e-6)
+                .expect("row present")
+                .clone()
+        };
+        // The pre-T3.5 shipped config vs the promoted one.
+        let base = get(crate::draft::IndexTokenizer::CodeDefault, 1.0);
+        // The PROMOTED config — the gate must test what actually ships.
+        let promoted = crate::draft::RetrievalConfig::default();
+        let op = get(promoted.tokenizer, promoted.latent_weight);
+
+        let clippy_base = base.per_domain[0].recall(1).expect("clippy labeled");
+        let clippy_op = op.per_domain[0].recall(1).expect("clippy labeled");
+        assert!(
+            clippy_op > clippy_base,
+            "the promoted config must beat the substrate default on clippy top-1 \
+             (promoted {clippy_op:.3} vs base {clippy_base:.3})"
+        );
+        // T3.5's G1 bar is 80%. The tokenizer work closed most but not all of
+        // the gap (54.2% -> 70.8%), so this asserts the MEASURED gain as
+        // regression protection and reports the residual gap rather than
+        // asserting a target that is not yet met — a red permanent test
+        // would just be a TODO that blocks the suite.
+        if clippy_op < T35_G1_BAR {
+            println!(
+                "  NOTE: clippy top-1 {:.1}% is still {:.1}pp under the T3.5 G1 bar of {:.0}% \
+                 — Phase 3 stays open (see Plan 005 T3.5 / Bench 027).",
+                clippy_op * 100.0,
+                (T35_G1_BAR - clippy_op) * 100.0,
+                T35_G1_BAR * 100.0
+            );
+        }
+        // Identifier-rich domains must not pay for the operator additions.
+        let perf_base = base.per_domain[1].recall(1).expect("perf labeled");
+        let perf_op = op.per_domain[1].recall(1).expect("perf labeled");
+        assert!(
+            perf_op >= perf_base,
+            "perf top-1 must not regress (op {perf_op:.3} vs base {perf_base:.3})"
+        );
     }
 
     #[test]

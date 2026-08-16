@@ -106,6 +106,29 @@ The pipeline (shared across all domains):
 4. **L3 — Ruliology candidate search** (opt-in): Pareto-front enumeration
 5. **L4 — LoRA fallback** (deferred): adaptive learning, last resort
 
+**Plan 005 T3.5 (2026-08-16) — the G1 recovery contingency (Bench 027).**
+Root-caused the clippy crowding to the BM25 tokenizer: the substrate default
+`CodeTokenizer` discards ALL punctuation, but the clippy corpus is 40 minimal
+generic functions whose entire discriminative signal IS punctuation
+(`identity_op` = `* 1`, `unused_unit` = `-> ()`, `deref_addrof` = `&*`) — so
+every rule collapsed to the same `fn f x` bag and the most generic one
+(`identity_op`) topped 7 of 22 misses. Perf/kernel never had the problem
+because they are identifier-rich. Fix: `src/draft/op_tokenizer.rs`
+(`RustOpTokenizer` / `RustOpBigramTokenizer`) — identifier tokens
+byte-identical to `CodeTokenizer` plus one token per maximal punctuation run
+plus operator-adjacency bigrams, injected via the substrate's own
+`with_bm25_tokenizer` hook; BM25's IDF decides what discriminates, no tuned
+weights. **clippy top-1 54.2% → 70.8%, perf 87.5% → 97.9%, blended
+70.8% → 84.4%; bit-identical across 3 runs.** Floors rebased (blended
+80/89/90 of 96, clippy 33/42 of 48, perf top-3 46/48). Two REFUTATIONS
+recorded: the latent fusion weight is inert (identical top-1 at 1.0/0.5/
+0.25/0.0 — BM25 dominates), and centroid re-fitting cannot move G1 at all
+(retrieval is fan-out, the router is annotation-only). **The ≥80% G1 bar is
+still 9.2pp away — Phase 3 stays open on T3.5.4** (a top-k re-ranker: 9 of
+14 top-1 misses have the right rule at rank 2-3, and top-3 is 89.6%).
+Sweep: `cargo test --features latent_retrieval --lib retrieval_sweep_report
+-- --nocapture`.
+
 **Plan 005 (2026-08-14) — latent retrieval + `cargo heal --suggest` CLI
 (Phases 1–4 DONE).** `src/draft/` ships the span-level retrieval layer:
 real `.rs` files → `AstChunker` spans → 8-D modelless embedding →
@@ -190,9 +213,10 @@ accuracy (53.4% 2-domain / 46.6% 3-domain — feeds Issue 020), and a
 committed regression gate with floors = baseline − 1 span (tie-order
 slack). One command: `cargo test --features latent_retrieval --lib
 retrieval_precision_regression_gate -- --nocapture`; kernel-inclusive
-(~54 s): `--features latent_retrieval,kernel_heal`. Baseline: clippy
-58.3/75.0/87.5, perf 87.5/95.0/97.5, kernel self-variants 100/100/100
-(crowding alarm if it drops). **Side-effect root-cause fix:** the fixture
+(~54 s): `--features latent_retrieval,kernel_heal`. Baseline at Issue 017
+land time: clippy 58.3/75.0/87.5, perf 87.5/95.0/97.5, kernel
+self-variants 100/100/100 (crowding alarm if it drops). **SUPERSEDED by
+Plan 005 T3.5 (Bench 027, 2026-08-16) — see the block below.** **Side-effect root-cause fix:** the fixture
 pass exposed our `needless_bool_assign` proposer matching the assign-RHS
 form (real clippy calls that `needless_bool`) — proposer rewritten to the
 real branch-assign shape + corpus/row/fixtures updated. Known drift

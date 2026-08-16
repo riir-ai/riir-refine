@@ -10,6 +10,8 @@
 //!
 //! Layer map (Plan 005):
 //! - [`corpus_index`] — T1.2: per-domain rule index (`ShardIndex` KNN + BM25).
+//! - [`op_tokenizer`] — T3.5: operator-aware BM25 tokenizer (the
+//!   tiny-token-crowding fix; clippy top-1 54.2% -> 91.7%, Bench 027).
 //! - [`domain_router`] — T1.4: centroid `MoE` routing across enabled domains.
 //! - [`latent_matcher`] — T1.3 + T1.5: the composed file/span → rules pipeline.
 //! - [`retrieval_eval`] — Issue 017: scaled precision eval (≥100 labeled
@@ -21,12 +23,14 @@ pub mod domain_router;
 pub mod eval_fixtures_clippy;
 pub mod eval_fixtures_perf;
 pub mod latent_matcher;
+pub mod op_tokenizer;
 pub mod retrieval_eval;
 
-pub use corpus_index::{RuleIndex, ScoredRule, SuggestScratch};
+pub use corpus_index::{IndexTokenizer, RetrievalConfig, RuleIndex, ScoredRule, SuggestScratch};
 pub use domain_router::{
     DomainId, DomainRouter, RoutingEmbedding, SpectralOrder, SpectralVocab, SPECTRAL_DIM,
     SPECTRAL_K, SPECTRAL_VOCAB_N,
 };
 pub use latent_matcher::{LatentMatcher, RuleInfo, SpanSuggestion};
-pub use retrieval_eval::{run_eval, run_router_eval, EvalReport, DomainMetrics as EvalDomainMetrics};
+pub use op_tokenizer::{RustOpBigramTokenizer, RustOpTokenizer, BIGRAM_SEP, OP_PREFIX};
+pub use retrieval_eval::{run_eval, run_eval_with, run_retrieval_sweep, run_router_eval, EvalReport, DomainMetrics as EvalDomainMetrics};

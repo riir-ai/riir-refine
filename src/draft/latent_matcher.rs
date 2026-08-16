@@ -92,6 +92,20 @@ impl LatentMatcher {
     /// enabled domain's [`RuleIndex::build`] fails.
     #[allow(clippy::too_many_lines)]
     pub fn from_enabled_domains() -> Result<Self, String> {
+        Self::from_enabled_domains_with(super::corpus_index::RetrievalConfig::default())
+    }
+
+    /// [`from_enabled_domains`](Self::from_enabled_domains) with an explicit
+    /// retrieval config — the Plan 005 T3.5 A/B constructor.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error `String` if no domain is feature-enabled, or if any
+    /// enabled domain's [`RuleIndex::build_with`] fails.
+    #[allow(clippy::too_many_lines)]
+    pub fn from_enabled_domains_with(
+        config: super::corpus_index::RetrievalConfig,
+    ) -> Result<Self, String> {
         let mut router_domains = Vec::new();
         let mut rule_book = std::collections::HashMap::new();
 
@@ -115,7 +129,7 @@ impl LatentMatcher {
                     .into_iter()
                     .map(|(rule_id, buggy, _fixed)| (rule_id, buggy))
                     .collect();
-                Some(RuleIndex::build(patterns)?)
+                Some(RuleIndex::build_with(patterns, config)?)
             }};
         }
 

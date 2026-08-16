@@ -209,25 +209,88 @@ queue + the proposers stay the only instantiation gate. Full record: Bench
       documented (Bench 018 §G4).
 
 - [ ] **T3.5 (G1 recovery — the live contingency, blocks Phase 9+)** Lift clippy
-      top-1 from 58.3% to ≥80% against the Bench 022 130-span eval. Ordered by
-      cost, stop at the first that clears the bar:
-      1. **Tune the domain centroids** — the corpus-derived centroids (T1.4)
-         were never re-fit after the corpus went 10 → 40 rules.
-      2. **Attack the crowding directly** — the misses concentrate in
-         tiny-token patterns (`identity_op` tops 5). A per-rule minimum token
-         count, or a length-normalized score term, is cheaper than re-embedding.
-      3. **Switch to `BonsaiEmbedder` (768-D, opt-in)** — this phase's stated
-         fallback. Costs a heavier dep + a re-measured G2; only pay it if 1-2 fail.
-      Re-run the committed regression gate
-      (`cargo test --features latent_retrieval --lib retrieval_precision_regression_gate`)
-      and record the new baseline in a fresh `.benchmarks/` entry.
+      top-1 to ≥80%. **All three options worked and benchmarked 2026-08-16
+      (Bench 027). Clippy top-1 54.2% → 70.8% (+16.6pp), perf 87.5% → 97.9%,
+      blended 70.8% → 84.4%. The 80% bar is NOT met — T3.5 stays open at
+      9.2pp short.** (Baseline reads 54.2% not Bench 022's 58.3% because the
+      fixture grew 88 → 96 labeled spans in between; all T3.5 numbers use the
+      96-span fixture throughout.)
+
+  - [x] **T3.5.1 Re-fit the domain centroids — REFUTED BY ARCHITECTURE, no
+        change shipped.** Two independent reasons this option could not work,
+        both verified rather than argued:
+        (a) **It cannot move G1 at all.** Retrieval is fan-out and the router
+        is annotation-only — `run_eval` ranks within the span's *own* domain
+        (`retrieval_eval.rs:441`) and the router verdict feeds only
+        `router_correct`. Centroid quality cannot change any top-1/3/5 number
+        by construction. (Bench 022 said the same from the miss side: "0
+        misses caused" by wrong-domain routing.)
+        (b) **The centroids were never stale.** `DomainRouter::with_embedding`
+        recomputes each centroid from the *live* corpus at every construction;
+        there is no cached centroid file, so "re-fit after the 10 → 40 growth"
+        was already in effect on every run. The premise was wrong.
+        The fit space was also already swept by Issue 020 (Bench 025, still
+        re-runnable): best available is dft8-global at 75.0%, under the 85%
+        gating bar, so gating stays killed and the router stays an annotation.
+  - [x] **T3.5.2 Attack tiny-token crowding — ROOT-CAUSED, FIXED, PROMOTED.**
+        The whole gain came from here. Root cause: the substrate default
+        `CodeTokenizer` splits on `!alphanumeric && != '_'` and **discards all
+        punctuation** — but the clippy corpus is 40 minimal generic functions
+        whose entire signal IS punctuation (`identity_op` = `* 1`,
+        `unused_unit` = `-> ()`, `deref_addrof` = `&*`, `double_parens` = `((`).
+        Stripped of it, every rule collapses to the same `fn f x` bag and the
+        most generic one wins — `identity_op` topped 7 of the 22 misses. This
+        also explains why perf/kernel never had the problem (identifier-rich).
+        Fix: `src/draft/op_tokenizer.rs` — identifier tokens byte-identical to
+        `CodeTokenizer` (pinned by test, so identifier-rich domains cannot
+        regress) plus **one token per maximal punctuation run**, plus
+        operator-adjacency bigrams (needed because `op:()` is ubiquitous while
+        `op:->|op:()` is rare). Runs rather than a hand-picked operator table
+        so **BM25's own IDF** decides what discriminates — no tuned weights.
+        Injected via `NeuronDbRetriever::with_bm25_tokenizer`, a designed
+        substrate hook; zero substrate code reimplemented.
+        **Secondary REFUTATION:** the latent fusion weight is an inert lever —
+        clippy top-1 is identical at 1.0/0.5/0.25/0.0, because BM25 dominates
+        and latent-only hits never win. `DEFAULT_LATENT_WEIGHT` stays at 1.0
+        so the promotion carries no gratuitous behaviour change.
+  - [x] **T3.5.3 `BonsaiEmbedder` 768-D — MEASURED, REJECTED ON COST.**
+        The option as written was a no-op: `BonsaiEmbedder::embed` (the
+        `Embedder` trait) returns **8-D**, i.e. exactly the term T3.5.2 proved
+        inert; the 768-D vector is on the separate `DenseEmbedder` trait. Wired
+        the real dense-rerank path instead (`bonsai_retrieval` feature,
+        `RetrievalConfig::dense_weight`, `index_chunks_dense` + `rerank_dense`).
+        **Cost probe: 166 s model load, 16.6 s per short embed, 48.1 s per long
+        embed** — the full eval needs ~1018 embeds/config = **~13.6 h/config**,
+        ~41 h for a 3-weight sweep, on CPU. There is no Metal path for
+        `BonsaiEmbedder`; adding one is a riir-ai project.
+        Measured on the largest matched subset that is feasible instead
+        (clippy only, whole-span scale on both arms, dense vectors cached once
+        so the weight sweep is free) — `tests/bonsai_retrieval_probe.rs`.
+  - [ ] **T3.5.4 The remaining 9.2pp.** 9 of the 14 top-1 misses have the
+        correct rule at **rank 2-3** — near-miss crowding, not absent signal —
+        and clippy top-3 is already 89.6%. The next lever is therefore a
+        *re-ranker over the top-k*, not a better first-stage retriever. The
+        cheapest untried candidate is the AST shape the proposers already
+        compute: run the top-3 rules' `propose_fix` visitors and promote the
+        one that actually matches, which is rule *instantiation* rather than
+        text similarity — the exact distinction the Bench 018 threshold
+        refutation identified as the ceiling of the current approach.
 
 ### Phase 3 exit criteria
 - G1-G4 PASS for `--suggest` mode. If G1 (precision) is <80%, tune the domain directions
   or switch to `BonsaiEmbedder` (768-D, opt-in) before proceeding to proposers.
   **MET 2026-08-14 on the 24-item fixture (Bench 018); NOT MET at scale
-  (2026-08-16, Bench 022 — clippy 58.3%).** The contingency clause is live;
-  the phase closes when T3.5 lands. G2/G3/G4 remain PASS.
+  (2026-08-16, Bench 022 — clippy 58.3%).** The contingency ran in full
+  (T3.5.1-T3.5.3, Bench 027) and recovered clippy top-1 to **70.8%** — a
+  +16.6pp gain, with perf lifted to 97.9% and blended to 84.4% as a
+  side-effect — but **the 80% bar is still 9.2pp away, so Phase 3 remains
+  open** on T3.5.4. G2/G3/G4 remain PASS.
+- **Honest status of the "blocks Phase 9+" clause:** the blocker was written
+  to stop proposer/UQ work being built on a retriever nobody had measured at
+  scale. That measurement now exists and is committed as a regression gate,
+  and the failure is characterized (near-miss re-ranking, not absent signal).
+  Treat Phase 9+ as unblocked for work that does not consume top-1 as truth —
+  `--fix` never did (the proposer visitor is the gate, Phase 6 T6.1).
 
 ## Phase 4 — Top-5 perf proposers (the `--fix` upgrade for perf)
 
