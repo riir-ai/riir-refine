@@ -1,6 +1,8 @@
 # Issue 025 — Non-syn surface scanner (`.wgsl` files + `#[cube]` macro bodies)
 
-**Status:** OPEN (candidate; filed 2026-08-16 from user direction)
+**Status:** OPEN (candidate; filed 2026-08-16 from user direction) — **T1 DONE
+2026-08-16: surface ≈ 20.5k+ lines, NOT downgraded** (see T1 below). T2–T6
+remain.
 **Origin:** user proposed "regex wasm" as a new tool. Rescoped on filing per the
 measured evidence: the *job* is real (the non-syn blind spot), but **WASM is the
 wrong layer for v1** — native-first; WASM reserved for third-party sandboxing,
@@ -45,10 +47,24 @@ A scanner over these surfaces opens three things, in value order:
 
 ## Tasks
 
-- [ ] **T1 — Inventory the surface.** Count `.wgsl` files + total lines across
+- [x] **T1 — Inventory the surface.** Count `.wgsl` files + total lines across
       riir-gpu (and any WGSL elsewhere in the stack); count `#[cube]` macro
       bodies + their line ranges. Output: the mining target size. If the
       surface is tiny (< ~2k lines total), downgrade the issue honestly.
+      **DONE 2026-08-16 (subagent inventory + coordinator re-verification of
+      every reachability claim):** 128 `.wgsl` files / 11,036 lines (riir-gpu
+      kernels 123 files / 10,830 lines; riir-train 3 / 118; vendor 2 / 88 —
+      excluded), 117/123 riir-gpu kernels live via `include_str!` (6 dead:
+      `attention.wgsl` + `lora.wgsl` 0-byte placeholders, `gram.wgsl`,
+      `speft_masked_grad.wgsl`, `wall_mla_gate_project.wgsl` 0-ref,
+      `speft_forward.wgsl` comment-only — all 6 coordinator-grep-verified);
+      `#[cube]` production surface 142 items / ~9,810 body lines across 38
+      riir-gpu files (brace-depth estimate). **Combined non-syn surface ≈
+      20.5–21.1k lines ≈ 10× the 2k threshold → the issue is NOT downgraded;
+      T2 proceeds.** Bonus adjacent classes found: inline WGSL raw strings in
+      `.rs` (256 prod lines), 2 live `.metal` files (305 lines), inline CUDA C
+      raw strings on the cudarc path (2,879 lines / 49 `__global__`
+      kernels — same non-syn family, candidate T2 scope extension).
 - [ ] **T2 — WGSL scanner prototype.** Native `regex` patterns for the corpus
       rules that have literal WGSL shapes (start list: B44's four + B47's
       out-projection shape). Pattern source = the corpus rows themselves; each

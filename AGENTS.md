@@ -176,6 +176,32 @@ an effect size; and 5 of the 48 original fixtures do not compile, so no
 independent oracle can validate them. Run:
 `cargo test --release --features latent_retrieval,clippy_verify --test uncontaminated_g1 -- --nocapture --test-threads=1`.
 
+**Issue 024 (2026-08-16, RESOLVED + removed per noise-reduction rule; commit `e34ade9`) —
+cross-domain switch-cost measurement + `RERANK_POOL` 8→12.** Research 484's
+switch-cost question asked of our healer: 12 directed clippy×perf pairs × 2
+orders, paired fresh-baseline (`src/draft/switch_cost.rs` +
+`eval_fixtures_cross_domain.rs`; real-clippy truth via
+`tests/cross_domain_oracle_truth.rs` — 24/24 merged spans compile + carry
+exactly the one labeled lint). At pool 8: perf→clippy **+8.3pp** (exactly one
+pair, `needless_return`+`vec-with-capacity`, BOTH orders), clippy→perf 0.0pp.
+Mechanism probed = **retrieval pool crowding, NOT fix interference**: the
+correct rule crowded to raw similarity rank 9 by loop-shaped rules scoring 3×
+its solo winner — one position past the re-rank pool, evicted before the
+instantiation re-ranker ever saw it. Mitigation: `RERANK_POOL` 8→12 (deeper
+pools add visitor walks, never new promotions). Post-mitigation **0.0pp both
+directions, zero drops**; the Issue 017 eval IMPROVED (clippy 87.5/93.8 →
+89.6/95.8, blended 92.7→93.8 — other latent near-misses rescued too; floors
+re-pinned to blended 89/92/92, clippy 42/45/45); T3.5.5 composite G1 unchanged
+at 96.0% (+12.0pp); rerank latency +39.6µs/span (+7.1%, same envelope);
+`pool_depth_rescue_guard` pins the rescue. **Verdict: dense fan-out is
+switching-cost-free at the corrected pool depth; the fix-ordering
+SwitchCostTable consumer (the issue's anticipated gap branch) is REFUTED by
+mechanism — ordering fixes targets edit interference, the gap was pool
+crowding.** T3 (fix-axis) honestly skipped — the measured gap lives entirely
+on the retrieval axis and the cross-fire label test already pins disjoint
+proposer edits. Record: [Bench 032](.benchmarks/032_cross_domain_switch_cost.md)
++ the Research 484 healer-consumer row (katgpt-rs) resolves CLOSED.
+
 **Plan 005 (2026-08-14) — latent retrieval + `cargo heal --suggest` CLI
 (Phases 1–4 DONE).** `src/draft/` ships the span-level retrieval layer:
 real `.rs` files → `AstChunker` spans → 8-D modelless embedding →
