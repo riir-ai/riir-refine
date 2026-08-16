@@ -34,7 +34,8 @@
 //! | `declared-max-array-taxed-per-thread-under-runtime-bound` (B46; the m2p `array<f32, 256>` scores instance behind Issue 701 H-B) | private/function-scope `var x: array<T, N>;` with `N ≥ 128` (threshold = floor of observed corpus instances: 128, 256); `var<workgroup>`/storage/uniform excluded — those are legitimately shared | ✅ pattern |
 //! | `share-cube-size-const-between-kernel-and-launcher` (B44) | `@workgroup_size(N)` with `N > 1` AND the same `N` restated as a `let` binding in the body — the silent cross-site stride contract (the arithmetic-only form is deliberately NOT flagged: a bare `N` may be a tensor dim) | ✅ pattern (let-form only) |
 //! | `multi-head-out-proj-consumes-head-concat` (B47; Issue 701 H-C) | an accumulation `acc (+)= scalar * w[…loop var…]` inside a nested `for` — the multiplicative operand invariant in the summation index (the scalar-times-rowsum that is not a matvec) | ⚠️ **experimental, OFF by default** — the first live calibration materialized the documented FP class: its ONLY firing on the current tree is `layer_fuse.wgsl` L61, a legitimate `alpha`-lerp (`val = val + alpha * target_hiddens[…]`), textually identical to the bug. Enabled only via [`WgslScanner::with_experimental`] for git-history mining where the shape IS the bug (the Issue 701 pre-fix `m2p`) |
-//! | `smem-staging-gated-by-cross-thread-reuse` (B35) | — needs within-workgroup **reuse counts** (dataflow), not text | ❌ not regex-expressible in v1 |
+//! | `smem-staging-gated-by-cross-thread-reuse` (B35) | **single-slot staging** (mined from the Issue 686 H7 fix pair, T6): a `var<workgroup>` array whose write is a BARE pass-through load (`A[i] = src[…]` — no top-level arithmetic) and whose every read uses ONE non-varying index expression — no thread reads two distinct slots, so the staging buys nothing a direct global read doesn't (same-address reads broadcast) while costing barriers. The computed-write form (`A[i] = x * w[…]`, the live `role_transport.wgsl`) is deliberately NOT flagged — staging a value computed once and reused by 16 threads IS cross-thread reuse > 1 | ✅ pattern (T6; upgraded from "not regex-expressible" — the 686 fix pair supplied the textual tell: bare-load write + single-slot reads) |
+//! | `row-dot-split-inner-axis-block-reduce` (B44) — **body form** | a serial-stride dual-index dot (`acc = acc + x[base + j] * y[base2 + j]` with `j += 1` evidence nearby) — one thread serially looping the whole row length (the Issue 698 pre-fix `dot_per_row_f32` cube body, B44's own mining source) | ⚠️ **experimental, OFF by default** — 11 live instances sit under parallel grids (serial-K GEMV shapes: `spectralquant_maxsim`, `muon_fused`, `eigenbasis_rotation`, …) where the fix regime (output count too small to fill the machine) is a workload fact the text does not carry. The attribute form above stays default |
 //!
 //! Conservative misses are acceptable (the mining loop can widen a pattern
 //! when a real buggy file proves it too narrow); a false positive on a clean
@@ -62,6 +63,7 @@ pub const WGSL_PATTERN_RULES: &[&str] = &[
     "row-dot-split-inner-axis-block-reduce",
     "declared-max-array-taxed-per-thread-under-runtime-bound",
     "share-cube-size-const-between-kernel-and-launcher",
+    "smem-staging-gated-by-cross-thread-reuse",
 ];
 
 /// The experimental pattern set — implemented and tested, but OFF by
@@ -69,7 +71,15 @@ pub const WGSL_PATTERN_RULES: &[&str] = &[
 /// a legitimate `alpha`-lerp (`layer_fuse.wgsl` L61). Enabled via
 /// [`WgslScanner::with_experimental`] for git-history mining where the
 /// loop-invariant-operand shape IS the bug (the Issue 701 pre-fix m2p).
-pub const WGSL_EXPERIMENTAL_RULES: &[&str] = &["multi-head-out-proj-consumes-head-concat"];
+pub const WGSL_EXPERIMENTAL_RULES: &[&str] = &[
+    "multi-head-out-proj-consumes-head-concat",
+    // The body-form twin of the default attribute pattern (`@workgroup_size(1…)`):
+    // a serial-stride dual-index dot. OFF by default because a serial inner
+    // dot under a parallel grid (the serial-K GEMV shape, 11 live instances)
+    // is textually unadjudicable — whether the output count is too small to
+    // fill the machine is a workload fact. Mining-only (the diff adjudicates).
+    "row-dot-split-inner-axis-block-reduce",
+];
 
 /// Private-array declared-size threshold: the floor of observed corpus
 /// instances (`array<f32, 128>`, `array<f32, 256>` in `m2p_attention.wgsl`).
@@ -104,6 +114,128 @@ fn scan_single_thread_workgroup(source: &str) -> Vec<WgslFinding> {
                 });
             }
         }
+    }
+    out
+}
+
+/// P6 — single-slot staging (`smem-staging-gated-by-cross-thread-reuse`, the
+/// Issue 686 H7 fix shape, mined in T6): a `var<workgroup>` array whose
+/// staging buys nothing a direct global read doesn't. The 686 fix removed
+/// exactly this from `covariance.wgsl` with the justification "each thread
+/// reads exactly one row element per position — same-address reads broadcast
+/// in one transaction — so the staging saved no global traffic while costing
+/// 2 barriers/position". The textual tell it left behind:
+/// - every write is a BARE pass-through load (`A[i] = src[…]…]` — a single
+///   array access, no top-level arithmetic: staging a COMPUTED value
+///   (`A[i] = x * w[…]`, the live `role_transport.wgsl`) amortizes work across
+///   threads and is deliberate reuse > 1 — not flagged);
+/// - every read uses ONE identical index expression (no thread reads two
+///   distinct slots — tree reductions read `[t]` AND `[t + stride]`, GEMM
+///   tiles read compound `[r * 16 + k]` indexes, both not flagged);
+/// - that read index is a single bare identifier that never self-increments
+///   (a per-thread-constant slot; compound indexes like the transpose's
+///   `[local_col * N + local_row]` give each thread a UNIQUE slot — the
+///   staging there exists precisely to coalesce, not flagged).
+///
+/// Under those three guards the staged value is either the thread's own
+/// register (write index == read index) or a same-address broadcast (threads
+/// sharing the coordinate) — the staging is pure barrier cost. Finding at the
+/// DECL line (the actionable site: delete the array, read global directly).
+fn scan_single_slot_staging(source: &str) -> Vec<WgslFinding> {
+    static DECL: OnceLock<Regex> = OnceLock::new();
+    static BARE_LOAD_WRITE: OnceLock<Regex> = OnceLock::new();
+    static INC_ADD: OnceLock<Regex> = OnceLock::new();
+    static INC_SELF: OnceLock<Regex> = OnceLock::new();
+    let decl =
+        DECL.get_or_init(|| Regex::new(r"var<workgroup>\s+(\w+)\s*:").expect("valid regex"));
+    let bare_load_write = BARE_LOAD_WRITE.get_or_init(|| {
+        // `A[...] = src[...];` and NOTHING else on the line (an optional `as`
+        // cast on the RHS index is Rust-cube text; WGSL has none).
+        Regex::new(r"^\s*\w+\s*\[[^]]*\]\s*=\s*\w+\s*\[[^]]*\]\s*(?:as\s+\w+\s*)?;\s*$")
+            .expect("valid regex")
+    });
+    let inc_add = INC_ADD.get_or_init(|| Regex::new(r"(\w+)\s*\+=").expect("valid regex"));
+    // `X = X + …` — the regex crate has no backreferences, so the two
+    // identifiers are captured separately and compared in code.
+    let inc_self =
+        INC_SELF.get_or_init(|| Regex::new(r"(\w+)\s*=\s*(\w+)\s*\+").expect("valid regex"));
+
+    let lines: Vec<String> = source.lines().map(strip_line_comment).collect();
+
+    // Self-incremented identifiers anywhere (for-loop headers via `k = k + 1u`,
+    // while-loops via `j += 1u32`) — a read index drawn from this set is a
+    // loop-varying slot, i.e. the thread reads MANY slots (legit staging).
+    let mut incremented: Vec<String> = Vec::new();
+    for l in &lines {
+        for m in inc_add.captures_iter(l) {
+            if let Some(v) = m.get(1) {
+                incremented.push(v.as_str().to_string());
+            }
+        }
+        for m in inc_self.captures_iter(l) {
+            if let (Some(a), Some(b)) = (m.get(1), m.get(2)) {
+                if a.as_str() == b.as_str() {
+                    incremented.push(a.as_str().to_string());
+                }
+            }
+        }
+    }
+
+    let mut out = Vec::new();
+    for (li, raw) in lines.iter().enumerate() {
+        let Some(dm) = decl.captures(raw) else { continue };
+        let Some(name) = dm.get(1).map(|g| g.as_str()) else { continue };
+
+        // Occurrence scan: `name[…]` on every line; classify write (followed
+        // by `=` not `==`) vs read; collect the read-index texts.
+        let open = format!("{name}[");
+        let mut has_write = false;
+        let mut all_writes_bare_load = true;
+        let mut read_idx: Vec<String> = Vec::new();
+        for l in &lines {
+            let mut from = 0usize;
+            while let Some(p) = l[from..].find(&open) {
+                let start = from + p + open.len();
+                let Some(rel) = l[start..].find(']') else { break };
+                let idx = l[start..start + rel].trim().to_string();
+                let after = l[start + rel + 1..].trim_start();
+                if let Some(rest) = after.strip_prefix('=') {
+                    if rest.starts_with('=') {
+                        read_idx.push(idx); // `A[i] == …` comparison reads A
+                    } else {
+                        has_write = true;
+                        if !bare_load_write.is_match(l.trim()) {
+                            all_writes_bare_load = false;
+                        }
+                    }
+                } else {
+                    read_idx.push(idx);
+                }
+                from = start + rel + 1;
+            }
+        }
+        if !has_write || !all_writes_bare_load || read_idx.is_empty() {
+            continue;
+        }
+        // ONE identical read-index text across every read.
+        let first = read_idx[0].clone();
+        if !read_idx.iter().all(|r| r == &first) {
+            continue;
+        }
+        // The index is a single bare identifier (no compound transpose/tile
+        // expressions) that never self-increments (per-thread-constant slot).
+        let is_bare_ident = first
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '_')
+            && first.chars().next().is_some_and(|c| c.is_alphabetic() || c == '_');
+        if !is_bare_ident || incremented.iter().any(|v| v == &first) {
+            continue;
+        }
+        out.push(WgslFinding {
+            rule_id: "smem-staging-gated-by-cross-thread-reuse",
+            line: li + 1,
+            excerpt: raw.trim().to_string(),
+        });
     }
     out
 }
@@ -275,6 +407,91 @@ fn scan_invariant_operand_accumulation(source: &str) -> Vec<WgslFinding> {
     out
 }
 
+/// P7 — serial-stride dual-index dot (`row-dot-split-inner-axis-block-reduce`,
+/// BODY form; the Issue 698 pre-fix `dot_per_row_f32` cube body — B44's own
+/// mining source): an accumulation `acc = acc + x[base + j] * y[base2 + j]`
+/// where BOTH operands are indexed and share the loop variable `j`, with
+/// serial-stride evidence (`j += 1u` / `j = j + 1u`) within a ±8-line window
+/// — one thread serially looping the whole row length. The fixed form strides
+/// by the lane/plane width (`j += PLANE_DIM`, `j += cube_size`) and is silent.
+///
+/// EXPERIMENTAL (mining-only): 11 live instances sit under PARALLEL grids
+/// (serial-K GEMV shapes — `spectralquant_maxsim`, `muon_fused`,
+/// `eigenbasis_rotation`, …) where the fix regime (output count too small to
+/// fill the machine) is a workload fact the text does not carry. In git-history
+/// mining the DIFF adjudicates: the pattern firing pre-fix and silent post-fix
+/// on a commit that removed the line is a validated pair.
+fn scan_serial_row_dot(source: &str) -> Vec<WgslFinding> {
+    static ACC: OnceLock<Regex> = OnceLock::new();
+    static DUAL: OnceLock<Regex> = OnceLock::new();
+    let acc = ACC.get_or_init(|| {
+        Regex::new(r"^\s*(?:var\s+)?(\w+)\s*(\+=|=)\s*(.*?)\s*;\s*$").expect("valid regex")
+    });
+    let dual = DUAL.get_or_init(|| {
+        Regex::new(
+            r"^(\w+)\s*\[([^]]*)\]\s*(?:as\s+\w+\s*)?\*\s*(\w+)\s*\[([^]]*)\]\s*(?:as\s+\w+\s*)?$",
+        )
+        .expect("valid regex")
+    });
+
+    let lines: Vec<String> = source.lines().map(strip_line_comment).collect();
+    let idents = |idx: &str| -> Vec<String> {
+        idx.split(|c: char| !(c.is_alphanumeric() || c == '_'))
+            .filter(|t| t.chars().next().is_some_and(|c| c.is_alphabetic() || c == '_'))
+            .map(str::to_string)
+            .collect()
+    };
+
+    let mut out = Vec::new();
+    for (i, code) in lines.iter().enumerate() {
+        let Some(m) = acc.captures(code) else { continue };
+        let acc_var = m.get(1).map_or(String::new(), |g| g.as_str().to_string());
+        let op = m.get(2).map_or("", |g| g.as_str());
+        let mut rhs = m.get(3).map_or(String::new(), |g| g.as_str().trim().to_string());
+        if op == "=" {
+            let prefix = format!("{acc_var} + ");
+            if let Some(stripped) = rhs.strip_prefix(&prefix) {
+                rhs = stripped.trim().to_string();
+            } else {
+                continue; // plain assignment, not an accumulation
+            }
+        }
+        let Some(d) = dual.captures(&rhs) else { continue };
+        let (idx_a, idx_b) = (
+            d.get(2).map_or("", |g| g.as_str()),
+            d.get(4).map_or("", |g| g.as_str()),
+        );
+        let common: Vec<String> = idents(idx_a)
+            .into_iter()
+            .filter(|t| idents(idx_b).contains(t))
+            .collect();
+        if common.is_empty() {
+            continue;
+        }
+        // Serial-stride evidence within ±8 lines: `j += 1u;` / `j += 1u32;`
+        // (cube Rust) / `j = j + 1u)` (WGSL for-header).
+        let lo = i.saturating_sub(8);
+        let hi = (i + 9).min(lines.len());
+        let window: String = lines[lo..hi].join("\n");
+        for j in &common {
+            let esc = regex::escape(j);
+            let stride = Regex::new(&format!(
+                r"{esc}\s*(?:\+=\s*1[a-z0-9]*|\s*=\s*{esc}\s*\+\s*1[a-z0-9]*)\s*[;)]"
+            ))
+            .expect("valid stride regex");
+            if stride.is_match(&window) {
+                out.push(WgslFinding {
+                    rule_id: "row-dot-split-inner-axis-block-reduce",
+                    line: i + 1,
+                    excerpt: code.trim().to_string(),
+                });
+                break; // one finding per accumulation line
+            }
+        }
+    }
+    out
+}
+
 /// Strip a trailing `//` line comment (WGSL block comments are rare on code
 /// lines in these kernels; a `//` inside a string would be pathological in a
 /// kernel file and is accepted as a limitation).
@@ -302,8 +519,10 @@ impl WgslScanner {
         out.extend(scan_single_thread_workgroup(source));
         out.extend(scan_declared_max_private_array(source));
         out.extend(scan_cube_size_restatement(source));
+        out.extend(scan_single_slot_staging(source));
         if self.include_experimental {
             out.extend(scan_invariant_operand_accumulation(source));
+            out.extend(scan_serial_row_dot(source));
         }
         out.sort_by(|a, b| (a.line, a.rule_id).cmp(&(b.line, b.rule_id)));
         out
@@ -453,6 +672,131 @@ mod tests {
         let lerp = "fn fuse(alpha: f32, target: array<f32>, p: u32, j: u32, dim: u32) -> f32 {\n    var val: f32 = 0.0;\n    for (var i = 0u; i < p; i = i + 1u) {\n        for (var jj = 0u; jj < j; jj = jj + 1u) {\n            val = val + alpha * target[p * j + jj + dim];\n        }\n    }\n    return val;\n}";
         assert!(!rules(&WgslScanner::default().scan(lerp))
             .contains(&"multi-head-out-proj-consumes-head-concat"));
+    }
+
+    /// P6 — single-slot staging (the Issue 686 H7 fix shape): the bare-load
+    /// write + single-bare-ident read form fires; the computed-write staging
+    /// Computed-write staging (the live `role_transport.wgsl`), tree
+    /// reductions (multi-form reads), compound
+    /// transpose indexes, loop-varying indexes, and non-bare-load writes are
+    /// all silent.
+    #[test]
+    fn single_slot_staging_detected() {
+        // The 686-pre / gram shape: bare pass-through load + single-slot reads.
+        let buggy = "var<workgroup> s_row: array<f32, 16>;
+fn covariance() {
+    s_row[local_row] = input_kv[pos_base + global_row];
+    accum += s_row[local_row] * s_col[local_col];
+}";
+        let found = WgslScanner::default().scan(buggy);
+        assert!(
+            rules(&found).contains(&"smem-staging-gated-by-cross-thread-reuse"),
+            "the 686-pre shape must fire, got {found:?}"
+        );
+
+        // The 686-post form: direct global reads (no workgroup staging).
+        let fixed = "fn covariance() {
+    accum += input_kv[pos_base + global_row] * input_kv[pos_base + global_col];
+}";
+        assert!(!rules(&WgslScanner::default().scan(fixed))
+            .contains(&"smem-staging-gated-by-cross-thread-reuse"));
+
+        // Computed-write staging (the LIVE role_transport.wgsl): staging a
+        // value computed once + reused by 16 threads IS reuse > 1 — silent.
+        let computed = "var<workgroup> s_row: array<f32, 16>;
+fn k() {
+    s_row[local_row] = val * role_emb[role_offset + global_row];
+    accum += s_row[local_row] * s_col[local_col];
+}";
+        assert!(!rules(&WgslScanner::default().scan(computed))
+            .contains(&"smem-staging-gated-by-cross-thread-reuse"));
+
+        // Tree reduction: reads at [t] AND [t + stride] — multi-form — silent.
+        let tree = "var<workgroup> row_sq: array<f32, 16>;
+fn k() {
+    row_sq[local_id] = partial_sq;
+    row_sq[local_id] = row_sq[local_id] + row_sq[local_id + stride];
+}";
+        assert!(!rules(&WgslScanner::default().scan(tree))
+            .contains(&"smem-staging-gated-by-cross-thread-reuse"));
+
+        // Compound transpose index: unique slot per thread — the staging
+        // exists to coalesce — silent.
+        let transpose = "var<workgroup> tile: array<f32, 256>;
+fn k() {
+    tile[local_row * 16u + local_col] = input[global_row * 16u + local_col];
+    output[global_col * 16u + global_row] = tile[local_col * 16u + local_row];
+}";
+        assert!(!rules(&WgslScanner::default().scan(transpose))
+            .contains(&"smem-staging-gated-by-cross-thread-reuse"));
+
+        // Loop-varying read index (the thread reads MANY slots) — silent.
+        let loop_var = "var<workgroup> buf: array<f32, 64>;
+fn k() {
+    buf[lane] = src[lane];
+    for (var i = 0u; i < 64u; i = i + 1u) {
+        sum += buf[i];
+    }
+}";
+        assert!(!rules(&WgslScanner::default().scan(loop_var))
+            .contains(&"smem-staging-gated-by-cross-thread-reuse"));
+
+        // Non-bare-load write (computed RHS via function call) — silent.
+        let fn_write = "var<workgroup> tile: array<f32, 16>;
+fn k() {
+    tile[col] = f32(row);
+    out[row * 16u + col] = tile[col] * 2.0;
+}";
+        assert!(!rules(&WgslScanner::default().scan(fn_write))
+            .contains(&"smem-staging-gated-by-cross-thread-reuse"));
+    }
+
+    /// P7 — serial-stride dual-index dot (the Issue 698 pre-fix cube body,
+    /// B44 body form): fires ONLY under `with_experimental`; the strided
+    /// (plane-parallel) fixed form and single-index operands stay silent.
+    #[test]
+    fn serial_row_dot_experimental() {
+        // The 698-pre shape: serial stride over the full row length.
+        let buggy = "fn dot_per_row(u: &[f32], g: &[f32], h: u32) {
+    let mut acc = f32::new(0.0f32);
+    let mut j = 0u32;
+    while j < h {
+        acc = acc + u[(base + j) as usize] * g[(g_base + j) as usize];
+        j += 1u32;
+    }
+}";
+        let experimental = WgslScanner::default().with_experimental();
+        let found = experimental.scan(buggy);
+        assert!(
+            rules(&found).contains(&"row-dot-split-inner-axis-block-reduce"),
+            "the 698-pre serial dot must fire under experimental, got {found:?}"
+        );
+        // Default scan: OFF (serial-K GEMV ambiguity — mining-only).
+        assert!(!rules(&WgslScanner::default().scan(buggy))
+            .contains(&"row-dot-split-inner-axis-block-reduce"));
+
+        // The 698-post form: lane-strided (PLANE_DIM) — silent.
+        let fixed = "fn dot_per_row(u: &[f32], g: &[f32], h: u32) {
+    let mut acc = f32::new(0.0f32);
+    let mut j = lane;
+    while j < h {
+        acc = acc + u[(base + j) as usize] * g[(g_base + j) as usize];
+        j += PLANE_DIM;
+    }
+}";
+        assert!(!rules(&experimental.scan(fixed))
+            .contains(&"row-dot-split-inner-axis-block-reduce"));
+
+        // WGSL for-header serial stride — fires (the m2p phase-1 shape).
+        let wgsl_buggy = "fn qkv(input_seq: array<f32>, w: array<f32>, h: u32) -> f32 {
+    var sum: f32 = 0.0;
+    for (var k = 0u; k < h; k = k + 1u) {
+        sum = sum + input_seq[pos * h + k] * w[off * h + k];
+    }
+    return sum;
+}";
+        assert!(rules(&experimental.scan(wgsl_buggy))
+            .contains(&"row-dot-split-inner-axis-block-reduce"));
     }
 
     /// Determinism + a clean control: a healthy tiled kernel fires nothing.

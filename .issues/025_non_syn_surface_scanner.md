@@ -1,12 +1,14 @@
 # Issue 025 — Non-syn surface scanner (`.wgsl` files + `#[cube]` macro bodies)
 
-**Status:** OPEN (candidate; filed 2026-08-16 from user direction) — **T1–T5
-DONE 2026-08-16 (T5 GOAT: Bench 033 ALL PASS — 30 live findings, 0 control
-FPs, 41µs/file): surface ≈ 20.5k+ lines (NOT downgraded); 3 precision-vetted
-default patterns + 1 experimental + 1 honestly-excluded; `#[cube]` body
-extraction live with exact T1 reconciliation; the scanner wired into
-`cargo heal --suggest` as kernel-domain suggest-only (see tasks below).**
-T6 remains.
+**Status:** RESOLVED (T1–T6 all DONE 2026-08-16; issue file retained until the
+next doc-hygiene pass — the Phase-5 reopen trigger it feeds stays honestly
+open at 3/5 pairs). **T5 GOAT: Bench 033 ALL PASS** — 30→32 live findings
+(after T6's P6 default pattern), 0 control FPs, 41µs/file. **T6: Bench 034**
+— the repeatable mining harness + 2 mined patterns (P6 default / P7
+experimental) + **3 validated buggy→fixed pairs** committed as fixtures
+(701 B47, 686 B35, 698 B44-body). Surface ≈ 20.5k+ lines (NOT downgraded);
+`#[cube]` body extraction live with exact T1 reconciliation; the scanner
+wired into `cargo heal --suggest` as kernel-domain suggest-only.
 **Origin:** user proposed "regex wasm" as a new tool. Rescoped on filing per the
 measured evidence: the *job* is real (the non-syn blind spot), but **WASM is the
 wrong layer for v1** — native-first; WASM reserved for third-party sandboxing,
@@ -188,10 +190,52 @@ A scanner over these surfaces opens three things, in value order:
         under the 1 ms bar; release-gated test per repo convention.
       - **G3**: 419 default / 598 kernel_heal / 724 all-features lib tests +
         4 t5_control integration tests; clippy 0 this crate.
-- [ ] **T6 — Mining integration.** With the scanner live, mine WGSL buggy→fixed
+- [x] **T6 — Mining integration.** With the scanner live, mine WGSL buggy→fixed
       pairs from riir-gpu fix history toward Phase 5's reopen trigger (≥5
       proposer-grade pairs). Every batch re-runs the Issue 017 retrieval
       regression gate (corpus growth = crowding liability, Plan 005 Risk 5).
+      **DONE 2026-08-16 — [Bench 034](../.benchmarks/034_wgsl_mining_integration.md);
+      3 validated pairs (was 1), trigger honestly at 3/5.**
+      - **The harness** (`examples/wgsl_mine.rs`, repeatable): walks git
+        history per surface (`.wgsl` default; `#[cube]` bodies via `--rs` +
+        `--extra-path` for the pre-split `weaver_gpu.rs` seam), scans each
+        commit's pre/post with the FULL pattern set, and pairs at FINDING
+        level (±10-line persistence window) with two mechanized refutation
+        classes — MOVED auto-refuted (identical excerpt re-appears in post)
+        and diff-association required (removed directly OR inside a changed
+        hunk's span — the 698 stride fix leaves the accumulation as unchanged
+        context). Two enumeration traps found by the run itself: `-G'#[cube'`
+        matches attr-line touches only (the 698 body fix was invisible to
+        it), and file-level rule silence never pairs in multi-kernel files.
+      - **Two new patterns, mined from the fix pairs themselves:**
+        `scan_single_slot_staging` (P6, **DEFAULT** — fronts B35
+        `smem-staging-gated-by-cross-thread-reuse`, upgraded from the T2
+        "not regex-expressible" verdict: bare-load writes + single-bare-ident
+        non-varying reads = zero-reuse staging; live calibration 2 findings
+        / 0 FPs across the 33 `var<workgroup>` files — the computed-write
+        `role_transport`, tree reductions, compound transpose indexes, and
+        `domino` multi-phase staging are all guarded silent) and
+        `scan_serial_row_dot` (P7, **experimental** mining-only — fronts B44
+        body form; 11 live serial-K-under-parallel-grid instances are
+        textually unadjudicable).
+      - **The mining run** (28 `.wgsl` + 673 cube-body pairs): 6 candidates →
+        **3 GENUINE pairs** — B47×`8bb716954` (701 H-C, T5 fixture), B35×
+        `2befc873e` (686 H7, new `covariance_{prefix,postfix}_686.wgsl`
+        fixtures), B44-body×`959b6a0a9` (698 A-H1, new
+        `dot_per_row_{prefix,postfix}_698.rs` cube-body fixtures) — + 1
+        human-refuted (b75dd53c8: B47's documented legit look-alike —
+        `grad_input_d` computed inside the loop — in a feature rewrite) +
+        11 auto-refuted moves. **Phase 5 reopen trigger: 3/5, honestly
+        open.**
+      - **Corpus unchanged** (patterns front existing rules; no new entries
+        → no crowding); Issue 017 retrieval gate re-run PASS (floors held).
+        Live default-set count 30 → **32** (the +2 `gram.wgsl` s_row/s_col
+        findings — the dead-file carrier of the exact 686-pre shape,
+        adjudicated REAL).
+      - Gates: 419 default / 602 kernel_heal / 727 all-features lib tests +
+        wgsl_t5_control 4/4 + wgsl_mine_pairs 6/6; clippy 0 this crate;
+        pattern-set citation contract held (6 ids, all in the 348-rule
+        corpus).
 
 ## Anti-goals
 
