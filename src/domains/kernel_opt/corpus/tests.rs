@@ -57,8 +57,8 @@
         // Batch 46 (3): riir-gpu maxsim — size-gate-covers-every-cost-factor, declared-max-array-taxed-per-thread-under-runtime-bound, shared-operand-side-pair-batch-index-decomposition (maxsim/dispatch.rs + spectralquant.rs + both WGSL kernels — the MaxSim size-gated CPU/GPU dispatcher + the fused SpectralQuant dequantize+MaxSim single-pass scorer, Plan 085; hazards filed as Issue 700).
         // Batch 47 (3): riir-gpu hypernet — per-key-projection-hoist-out-of-query-sweep, multi-head-out-proj-consumes-head-concat, shared-producer-prefix-extract-once-per-input (hypernet/ shine.rs + routing.rs + types.rs + m2p_transformer.rs + gpu_m2p.rs + kernels/m2p_attention.wgsl — the SHINE second half: the context-to-LoRA pipeline + expert routing + the M2P CPU/GPU attention pair; hazards filed as Issue 701).
         // Batch 49 (1): riir-gpu cudarc — runtime-arg-loop-bound-demotes-arrays-to-local-memory (cudarc_kernels/mod.rs rmsnorm_quantize_f32, the Bench-686 measured lesson from Issue 706: compile-time loop bounds + #pragma unroll keep per-thread arrays in registers — kernel −18.4% at ppl bit-exact).
-        // Total: 209. // (historical batch-30 snapshot; current 344)
-        assert_eq!(corpus.entries.len(), 344, "batches 1-49 should have 344 rules");
+        // Total: 209. // (historical batch-30 snapshot; current 347)
+        assert_eq!(corpus.entries.len(), 347, "batches 1-51 should have 347 rules");
     }
 
     #[test]
@@ -2983,6 +2983,70 @@
         }
     }
 
+    #[test]
+    fn batch51_rules_present() {
+        let corpus = build_kernel_seed_corpus();
+        let ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        // D (1 new): read-batch slot membership decided at launch
+        assert!(ids.contains(&"batched-read-slot-membership-decided-at-launch"), "read-slot membership");
+        // A (1 new): unpack loop indexed by container word
+        assert!(ids.contains(&"unpack-loop-indexed-by-container-word"), "container-word unpack loop");
+        // N (1 new): dequant placement per component by traffic share
+        assert!(ids.contains(&"dequant-placement-by-component-traffic-share"), "per-component dequant placement");
+    }
+
+    #[test]
+    fn batch51_concepts_covered() {
+        // Distinctive ASCII substrings located by rule_id (the 32a convention).
+        let corpus = build_kernel_seed_corpus();
+        let concept = |id: &str| -> String {
+            corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-51 rule '{id}' missing"))
+                .gpu_concept
+                .clone()
+        };
+        // D: batched-read-slot-membership-decided-at-launch (kimi_k3_gpu_backward_batched.rs sync2 L1037-1099)
+        let c = concept("batched-read-slot-membership-decided-at-launch");
+        assert!(c.contains("NO persistent state to derive from")
+            && c.contains("tag/metadata vec alongside the pushes"), "read-slot membership concept");
+        // A: unpack-loop-indexed-by-container-word (attention_q8kv_cubecl.rs L212-224)
+        let c = concept("unpack-loop-indexed-by-container-word");
+        assert!(c.contains("one load serves all its bytes")
+            && c.contains("loop GRANULARITY = container granularity"), "container-word unpack concept");
+        // N: dequant-placement-by-component-traffic-share (attention_q8kv_cubecl.rs L4-5 + L398-400)
+        let c = concept("dequant-placement-by-component-traffic-share");
+        assert!(c.contains("OPPOSITE optimal dequant placements")
+            && c.contains("B31 is CORRECT for the sidecar and WRONG for the payload"), "per-component placement concept");
+    }
+
+    #[test]
+    #[cfg(not(feature = "kernel_verify"))]
+    fn batch51_pseudocode_parses() {
+        // G1 for Batch 51: every new rule's ref_shape AND opt_pattern must
+        // syn-parse as valid Rust (the L2 pruner verdict).
+        use crate::domain::HealDomain;
+        let corpus = build_kernel_seed_corpus();
+        let ids = [
+            "batched-read-slot-membership-decided-at-launch",
+            "unpack-loop-indexed-by-container-word",
+            "dequant-placement-by-component-traffic-share",
+        ];
+        for id in ids {
+            let entry = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-51 rule '{id}' missing"));
+            let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+            assert!(ref_verdict.parses, "batch-51 ref_shape for '{id}' must parse");
+            let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+            assert!(opt_verdict.parses, "batch-51 opt_pattern for '{id}' must parse");
+        }
+    }
+
     // ════════════════════════════════════════════════════════════════════
     // Plan 003 — Router ↔ corpus wiring tests
     // ════════════════════════════════════════════════════════════════════
@@ -2994,7 +3058,7 @@
 
     #[test]
     fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-        // Every rule_id in the 344-rule corpus must appear in exactly one category.
+        // Every rule_id in the 347-rule corpus must appear in exactly one category.
         let corpus = build_kernel_seed_corpus();
         let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
         let mut categorized: Vec<&str> = Vec::new();
@@ -3025,12 +3089,12 @@
 
     #[test]
     fn kernel_categories_counts_match_plan_003_table() {
-        // Pin per-category rule counts to the Plan 003 table (updated for Batch 49).
+        // Pin per-category rule counts to the Plan 003 table (updated for Batch 51).
         let expected = [
-            (KernelCategory::MemoryAccess, 80),
+            (KernelCategory::MemoryAccess, 81),
             (KernelCategory::Compute, 51),
             (KernelCategory::Fusion, 33),
-            (KernelCategory::Dispatch, 61),
+            (KernelCategory::Dispatch, 62),
             (KernelCategory::Parallelism, 20),
             (KernelCategory::FlashAttnTiling, 10),
             (KernelCategory::LinearAttnRecurrence, 19),
@@ -3040,7 +3104,7 @@
             (KernelCategory::AutotuneDispatch, 5),
             (KernelCategory::ConvGemmLayout, 11),
             (KernelCategory::KernelPolymorphism, 9),
-            (KernelCategory::DtypeAlignment, 18),
+            (KernelCategory::DtypeAlignment, 19),
             (KernelCategory::IrStrengthReduction, 4),
         ];
         for (cat, count) in expected {
@@ -3052,7 +3116,7 @@
         }
         // Sum must equal 344.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 344, "Plan 003: category totals must sum to 344");
+        assert_eq!(total, 347, "Plan 003: category totals must sum to 347");
     }
 
     #[test]
@@ -3062,7 +3126,7 @@
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 344, "Plan 003: grouped corpus has {total} rules, expected 344");
+        assert_eq!(total, 347, "Plan 003: grouped corpus has {total} rules, expected 347");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");

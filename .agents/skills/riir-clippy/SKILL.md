@@ -749,7 +749,7 @@ global = symlink only.
   whole-crate clippy after ANY corpus-layout change is the standing
   check). Both lanes' quotes re-verified by the coordinator in clean
   files.
-- **NEXT mining target**: the FINAL kernel file batch — `kimi_k3_gpu_backward_batched.rs` (1,394, LOW value: shares Issue 693's H1/H2 + the broken LCG with the module file) + `attention_q8kv_cubecl.rs` (967, HIGH dedup: B23 attention sibling). Expect 0-2 rules (Batch 50 returned 0 on fresher files); after this pair, declare the riir-gpu corpus COMPLETE and shift the queue to rust_perf + issue-driven work (~112 of ~200 files mined; the remainder is the sibling-blocked ternary_deltanet cluster + test files + B26-covered forward/ internals).
+- **NEXT mining target**: the riir-gpu file-mining program is COMPLETE (Batch 51, Research 057 — corpus 347). The idle-loop mining item shifts to rust_perf + issue-driven work + measured-GOAT distillations (the Batch 49 path: a measured fix in riir-ai/riir-train becomes a rule the same day). kernel_opt reopens ONLY on: (a) the ternary_deltanet_gpu_forward.rs sibling-WIP unlock (re-verify clean at batch start), (b) new production kernel files landing in riir-gpu, or (c) a measured-GOAT distillation opportunity.
 - **Batch 49 DONE (2026-08-16, Research 055):** the Bench-686 measured-lesson
   distillation (single rule, NOT file mining — riir-ai Issue 706 / Bench 686,
   the rmsnorm_quantize_f32 single-pass + register-unroll fix on the 4090 cudarc
@@ -775,6 +775,7 @@ global = symlink only.
   RUSTUP_TOOLCHAIN=...msvc for scripts); cargo-hack is NOT installed (guard
   layer 3 self-skips).
 - **Batch 50 DONE (2026-08-16, Research 056):** the file-mining ZERO-RULE batch — 8 files across 2 lanes (small leaves: game_mux/domain_latent/context/cpu_reference/depth_tier/elf; standalone twins: forward_dflash/forward_flashprefill + 5 WGSL kernels verified). Every candidate was a positive instance (context.rs IS B21 construction-side; domain_latent.rs IS B33; elf's sigmoid IS B32a; flashprefill mean_k IS B35-applied) or an ANTI-instance (forward_dflash's stale uniforms are B26's live ref_shape — the SAME bug class Batch 27 filed in backward_dflash, forward twin; the two-pass softmax is popcorn online-softmax-streaming's ref_shape; the one-thread-per-row reductions are B44's) — 28 drop-table rows. Corpus stays 344. Hazard yield: 31 hazards filed as riir-ai Issues 708 (forward_dflash = UNFINISHED MVP presenting as a forward pass: two no-op stubs (rmsnorm L1027-1047 + attention L1212-1225) + stale uniform_qkv.pos = seq_len-1 for ALL Phase-A dispatches + one shared uniform_matmul across wo/w1/w2/lm_head + tests asserting only nonzero+finite on garbage logits; dflash_training opt-in, latent-until-adopted) + 709 (game_mux demux math UNJUSTIFIED — softmax after the weighted sum + non-negative hash distributions → h_i·h_j > 0 cross-contamination, live riir-games consumer, is_finite()-only tests; cpu_reference f64 doc-lie (all f32 accumulators) + lora_forward doc omits lora_b.wgsl's BASE GEMV (parity trap); elf rms_norm is L2-normalize mislabeled (sqrt(d) factor, collides with cpu_reference's true RMSNorm) + elf embedding-SDAR silent zero-loss stub at its riir-train consumer). Coordinator verified all 9 load-bearing claims against source before filing. LESSON: zero-rule batches at max dedup pressure are a corpus COVERAGE signal — the close read that finds no new rules still finds live bugs; judge mining batches by rules+hazards, never rules alone.
+- **Batch 51 DONE (2026-08-16, Research 057):** the FINAL riir-gpu file-mining batch — 3 rules, corpus 344 → 347 (A 81, D 62, N 19): batched-read-slot-membership-decided-at-launch (D — push guards on the Option PAIR, extraction on the implying config flag; flag=true+handle=absent shifts every slot + guaranteed OOB; READ lists have no persistent state to derive from, so fix = decide-once/tag-vec-at-launch, distinct from B40's derive-from-cache write side), unpack-loop-indexed-by-container-word (A — byte-packed unpack indexed by the logical element re-loads the same u32 4× + runtime div/mod + runtime shift; index by the CONTAINER word; honest L1-scope), dequant-placement-by-component-traffic-share (N — values packed + inline dequant (reuse 1, B14 regime doesn't apply), scales pre-decoded f16→f32 at upload; encodes the tension with B31: correct for the sidecar, wrong for the payload). Coordinator verification REFUTED the lane-B orphaned-module CRITICAL (production-wired: lib.rs L895-898 + 3 launch sites in gemma2_cubecl/dispatch.rs) — subagent repo-grep silently failed on the multi-root workspace; every CRITICAL reachability claim gets a coordinator grep (standing rule). Issue 693 closeout: H1/H2 fixes present in both twins + LCG fixed + the stale B40 corpus note refreshed. Hazards → riir-ai Issue 710 (sync2 guard drift, 9-site MLA CPU weight-grad backlog, q8kv multi-tile path untested at n>256 — production-reachable). GOAT: 577 kernel_heal + 415 default, retrieval floors HELD (kernel 100/100/100, blended 77.8/87.3/92.9 above the Issue 022 minimums), clippy 0 both states, combo clean. THE RIIR-GPU CORPUS IS COMPLETE — queue shifts to rust_perf + issue-driven + measured-GOAT distillations; kernel_opt reopens only on ternary_deltanet unlock / new kernel files / measured GOATs.
 
 - **Batch 48 rust_perf half DONE (2026-08-16, Research 054):** the 8
   online-search candidates landed as `PerfRule` entries + `BenchSpec`
@@ -874,11 +875,12 @@ global = symlink only.
   dirty AGAIN with fresh sibling WIP (mtime ~18:38) — a ~200K-line
   cluster, verify clean at batch start) — mine only after their WIP
   lands.
-- **Progress**: riir-gpu ~112 of ~200 files mined. Corpus: 344 kernel rules
-  + 58 rust_perf rules (Batch 48 = rust_perf online-search half; Batch 49 =
-  the Bench-686 kernel distillation; Batch 50 = the file-mining ZERO-RULE batch
-  — 8 leaves/twins closed, 31 hazards → Issues 708/709, corpus COMPLETE
-  pending the final pair kimi_k3_gpu_backward_batched + attention_q8kv_cubecl).
+- **Progress**: riir-gpu file-mining COMPLETE (Batch 51, Research 057; ~115 files
+  mined by line-weight). Corpus: 347 kernel rules + 58 rust_perf rules (Batch 48
+  = rust_perf online-search half; Batch 49 = the Bench-686 distillation; Batch 50
+  = zero-rule leaves/twins, 31 hazards → Issues 708/709; Batch 51 = final
+  pair, 3 rules + Issue 710 — the queue now shifts to rust_perf + issue-
+  driven work + measured-GOAT distillations).
   edge_lora module FULLY MINED (32a + 32b-1 + 32c). spectralquant/
   FULLY MINED (15 + 33). hypernet/ FULLY MINED (45: meta_lora.rs +
   train_meta_lora.rs; 47: shine.rs + routing.rs + types.rs +
