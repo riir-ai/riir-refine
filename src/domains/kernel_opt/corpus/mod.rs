@@ -1144,6 +1144,11 @@
 //!   `attention_q8kv_cubecl.rs`): batched-read-slot-membership-decided-at-launch (D),
 //!   unpack-loop-indexed-by-container-word (A), dequant-placement-by-component-
 //!   traffic-share (N). Declares the riir-gpu corpus COMPLETE (~115 files mined).
+//! - **Batch 52 (measured-GOAT distillation, riir-ai Issue 708 H4):** 1 rule, corpus
+//!   347 → 348 (D 62 → 63) — phase-split-per-position-data-liveness-row-storage (a
+//!   Phase-A loop writing a single-row buffer per position followed by a Phase-B
+//!   per-position consumer only preserves the LAST write; fix = `[seq_len × dim]` row
+//!   storage. Distinct from B26/B27 uniform staleness — `DATA` liveness, not values).
 //!   the Bench-686 measured-lesson distillation (not file mining):
 //!   `runtime-arg-loop-bound-demotes-arrays-to-local-memory`
 //!   (A — a correctly-sized per-thread array whose per-element
@@ -1204,7 +1209,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 347-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 348-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1398,7 +1403,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fuse-indirect-gather-into-dot-consumer",
         ],
     ),
-    // D: Dispatch patterns (62 rules)
+    // D: Dispatch patterns (63 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -1465,6 +1470,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "serialize-container-canonical-order",
             "size-gate-covers-every-cost-factor",
             "shared-producer-prefix-extract-once-per-input",
+            "phase-split-per-position-data-liveness-row-storage",
         ],
     ),
     // E: Parallelism patterns (20 rules)
@@ -1671,7 +1677,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
 /// Returns 15 buckets (one per category), each containing the `KernelRule`s whose
 /// `rule_id` appears in that category's slice of [`KERNEL_CATEGORIES`]. This is
 /// the category-scoped view of the corpus — a future heal pipeline can consult
-/// routed expert's rules first without scanning all 347.
+/// routed expert's rules first without scanning all 348.
 ///
 /// # Allocation
 ///

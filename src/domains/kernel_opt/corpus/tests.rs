@@ -57,8 +57,8 @@
         // Batch 46 (3): riir-gpu maxsim — size-gate-covers-every-cost-factor, declared-max-array-taxed-per-thread-under-runtime-bound, shared-operand-side-pair-batch-index-decomposition (maxsim/dispatch.rs + spectralquant.rs + both WGSL kernels — the MaxSim size-gated CPU/GPU dispatcher + the fused SpectralQuant dequantize+MaxSim single-pass scorer, Plan 085; hazards filed as Issue 700).
         // Batch 47 (3): riir-gpu hypernet — per-key-projection-hoist-out-of-query-sweep, multi-head-out-proj-consumes-head-concat, shared-producer-prefix-extract-once-per-input (hypernet/ shine.rs + routing.rs + types.rs + m2p_transformer.rs + gpu_m2p.rs + kernels/m2p_attention.wgsl — the SHINE second half: the context-to-LoRA pipeline + expert routing + the M2P CPU/GPU attention pair; hazards filed as Issue 701).
         // Batch 49 (1): riir-gpu cudarc — runtime-arg-loop-bound-demotes-arrays-to-local-memory (cudarc_kernels/mod.rs rmsnorm_quantize_f32, the Bench-686 measured lesson from Issue 706: compile-time loop bounds + #pragma unroll keep per-thread arrays in registers — kernel −18.4% at ppl bit-exact).
-        // Total: 209. // (historical batch-30 snapshot; current 347)
-        assert_eq!(corpus.entries.len(), 347, "batches 1-51 should have 347 rules");
+        // Total: 209. // (historical batch-30 snapshot; current 348)
+        assert_eq!(corpus.entries.len(), 348, "batches 1-52 should have 348 rules");
     }
 
     #[test]
@@ -3047,6 +3047,60 @@
         }
     }
 
+    #[test]
+    fn batch52_rules_present() {
+        let corpus = build_kernel_seed_corpus();
+        let ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        // D (1 new): phase-split per-position data liveness (Issue 708 H4)
+        assert!(
+            ids.contains(&"phase-split-per-position-data-liveness-row-storage"),
+            "phase-split data liveness"
+        );
+    }
+
+    #[test]
+    fn batch52_concepts_covered() {
+        // Distinctive ASCII substrings located by rule_id (the 32a convention).
+        let corpus = build_kernel_seed_corpus();
+        let concept = |id: &str| -> String {
+            corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-52 rule '{id}' missing"))
+                .gpu_concept
+                .clone()
+        };
+        // D: phase-split-per-position-data-liveness-row-storage
+        // (riir-ai forward_dflash.rs Phase-A project_q single-row q buffer)
+        let c = concept("phase-split-per-position-data-liveness-row-storage");
+        assert!(
+            c.contains("the right value is NEVER STORED")
+                && c.contains("DATA liveness"),
+            "phase-split data-liveness concept"
+        );
+    }
+
+    #[test]
+    #[cfg(not(feature = "kernel_verify"))]
+    fn batch52_pseudocode_parses() {
+        // G1 for Batch 52 (measured-GOAT distillation): syn-parse gate.
+        use crate::domain::HealDomain;
+        let corpus = build_kernel_seed_corpus();
+        let ids = ["phase-split-per-position-data-liveness-row-storage"];
+        for id in ids {
+            let entry = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-52 rule '{id}' missing"));
+            let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+            assert!(ref_verdict.parses, "batch-52 ref_shape for '{id}' must parse");
+            let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+            assert!(opt_verdict.parses, "batch-52 opt_pattern for '{id}' must parse");
+        }
+    }
+
     // ════════════════════════════════════════════════════════════════════
     // Plan 003 — Router ↔ corpus wiring tests
     // ════════════════════════════════════════════════════════════════════
@@ -3058,7 +3112,7 @@
 
     #[test]
     fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-        // Every rule_id in the 347-rule corpus must appear in exactly one category.
+        // Every rule_id in the 348-rule corpus must appear in exactly one category.
         let corpus = build_kernel_seed_corpus();
         let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
         let mut categorized: Vec<&str> = Vec::new();
@@ -3089,12 +3143,12 @@
 
     #[test]
     fn kernel_categories_counts_match_plan_003_table() {
-        // Pin per-category rule counts to the Plan 003 table (updated for Batch 51).
+        // Pin per-category rule counts to the Plan 003 table (updated for Batch 52).
         let expected = [
             (KernelCategory::MemoryAccess, 81),
             (KernelCategory::Compute, 51),
             (KernelCategory::Fusion, 33),
-            (KernelCategory::Dispatch, 62),
+            (KernelCategory::Dispatch, 63),
             (KernelCategory::Parallelism, 20),
             (KernelCategory::FlashAttnTiling, 10),
             (KernelCategory::LinearAttnRecurrence, 19),
@@ -3116,7 +3170,7 @@
         }
         // Sum must equal 344.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 347, "Plan 003: category totals must sum to 347");
+        assert_eq!(total, 348, "Plan 003: category totals must sum to 348");
     }
 
     #[test]
@@ -3126,7 +3180,7 @@
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 347, "Plan 003: grouped corpus has {total} rules, expected 347");
+        assert_eq!(total, 348, "Plan 003: grouped corpus has {total} rules, expected 348");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");
