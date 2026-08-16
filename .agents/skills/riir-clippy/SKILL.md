@@ -749,8 +749,7 @@ global = symlink only.
   whole-crate clippy after ANY corpus-layout change is the standing
   check). Both lanes' quotes re-verified by the coordinator in clean
   files.
-- **NEXT mining target**: `ls` the riir-gpu tree for the next unmined
-  cluster (~104 of ~200 files mined).
+- **NEXT mining target**: the FINAL kernel file batch — `kimi_k3_gpu_backward_batched.rs` (1,394, LOW value: shares Issue 693's H1/H2 + the broken LCG with the module file) + `attention_q8kv_cubecl.rs` (967, HIGH dedup: B23 attention sibling). Expect 0-2 rules (Batch 50 returned 0 on fresher files); after this pair, declare the riir-gpu corpus COMPLETE and shift the queue to rust_perf + issue-driven work (~112 of ~200 files mined; the remainder is the sibling-blocked ternary_deltanet cluster + test files + B26-covered forward/ internals).
 - **Batch 49 DONE (2026-08-16, Research 055):** the Bench-686 measured-lesson
   distillation (single rule, NOT file mining — riir-ai Issue 706 / Bench 686,
   the rmsnorm_quantize_f32 single-pass + register-unroll fix on the 4090 cudarc
@@ -775,6 +774,7 @@ global = symlink only.
   invocation needs `+1.97.0-x86_64-pc-windows-msvc` (or
   RUSTUP_TOOLCHAIN=...msvc for scripts); cargo-hack is NOT installed (guard
   layer 3 self-skips).
+- **Batch 50 DONE (2026-08-16, Research 056):** the file-mining ZERO-RULE batch — 8 files across 2 lanes (small leaves: game_mux/domain_latent/context/cpu_reference/depth_tier/elf; standalone twins: forward_dflash/forward_flashprefill + 5 WGSL kernels verified). Every candidate was a positive instance (context.rs IS B21 construction-side; domain_latent.rs IS B33; elf's sigmoid IS B32a; flashprefill mean_k IS B35-applied) or an ANTI-instance (forward_dflash's stale uniforms are B26's live ref_shape — the SAME bug class Batch 27 filed in backward_dflash, forward twin; the two-pass softmax is popcorn online-softmax-streaming's ref_shape; the one-thread-per-row reductions are B44's) — 28 drop-table rows. Corpus stays 344. Hazard yield: 31 hazards filed as riir-ai Issues 708 (forward_dflash = UNFINISHED MVP presenting as a forward pass: two no-op stubs (rmsnorm L1027-1047 + attention L1212-1225) + stale uniform_qkv.pos = seq_len-1 for ALL Phase-A dispatches + one shared uniform_matmul across wo/w1/w2/lm_head + tests asserting only nonzero+finite on garbage logits; dflash_training opt-in, latent-until-adopted) + 709 (game_mux demux math UNJUSTIFIED — softmax after the weighted sum + non-negative hash distributions → h_i·h_j > 0 cross-contamination, live riir-games consumer, is_finite()-only tests; cpu_reference f64 doc-lie (all f32 accumulators) + lora_forward doc omits lora_b.wgsl's BASE GEMV (parity trap); elf rms_norm is L2-normalize mislabeled (sqrt(d) factor, collides with cpu_reference's true RMSNorm) + elf embedding-SDAR silent zero-loss stub at its riir-train consumer). Coordinator verified all 9 load-bearing claims against source before filing. LESSON: zero-rule batches at max dedup pressure are a corpus COVERAGE signal — the close read that finds no new rules still finds live bugs; judge mining batches by rules+hazards, never rules alone.
 
 - **Batch 48 rust_perf half DONE (2026-08-16, Research 054):** the 8
   online-search candidates landed as `PerfRule` entries + `BenchSpec`
@@ -818,20 +818,17 @@ global = symlink only.
   killed ~15 min in: pre-existing btreemap-sorted-iteration alone costs
   ~40+ min (5000 inner queries × ~1-2ms at n=50K ≈ 5-10s per call ×
   calibration × samples × 3 repeats — slow-by-design, not a bug).
-  Candidates:
-  `kimi_k3_gpu_backward_batched.rs` (1,394 — LOW value: shares
-  Issue 693's H1/H2 + the broken LCG with the module file; mine only if
-  the better clusters are exhausted), the small unmined leaves
-  (`game_mux.rs`, `domino_gpu.rs`, `domain_latent.rs`, `depth_tier.rs`,
-  `elf.rs`, `cpu_reference.rs`, `config.rs`, `context.rs` — size-check
-  first; several may be thin), the standalone `forward*/` twins
-  (forward_prefill.rs / forward_sp_kv.rs / forward_target_extract.rs /
-  forward_dflash.rs / forward_flashprefill.rs — NOTE the forward/ DIR
-  was mined at B26; these are the standalone twins, expect dedup),
-  `attention_q8kv_cubecl.rs` (sibling of the B23 attention cluster —
-  dedup pressure HIGH). Pick 1-2 files, ~3-6 rules (dedup pressure
-  very high after 47 batches), Batch 50 (Research 056 — RE-SCAN
-  `.research/` at write time).
+  Batch 50 CONSUMED: game_mux, domain_latent, context, cpu_reference,
+  depth_tier, elf (domino_gpu.rs = 85-line stub + config.rs = pure config
+  types — judged out-of-scope without a dedicated read), forward_dflash,
+  forward_flashprefill — 0 rules, 31 hazards → Issues 708/709.
+  REMAINING for the FINAL kernel file batch: `kimi_k3_gpu_backward_
+  batched.rs` (1,394 — LOW value: shares Issue 693's H1/H2 + the broken
+  LCG with the module file), `attention_q8kv_cubecl.rs` (967, B23 sibling,
+  dedup HIGH), + optionally forward_prefill.rs / forward_sp_kv.rs /
+  forward_target_extract.rs (the remaining standalone twins). Expect 0-2
+  rules; after this pair declare the riir-gpu corpus COMPLETE (Research
+  057 — RE-SCAN `.research/` at write time).
   - Validation pattern (proven T4 + 32a + 32b-1 + 32c + 36 + 38): corpus files are NOT
     sibling WIP — edit + run GOAT in the main checkout with
     `CARGO_TARGET_DIR=/tmp/riir-clippy-bNN`; `--features kernel_heal`
@@ -877,10 +874,11 @@ global = symlink only.
   dirty AGAIN with fresh sibling WIP (mtime ~18:38) — a ~200K-line
   cluster, verify clean at batch start) — mine only after their WIP
   lands.
-- **Progress**: riir-gpu ~104 of ~200 files mined. Corpus: 344 kernel rules
+- **Progress**: riir-gpu ~112 of ~200 files mined. Corpus: 344 kernel rules
   + 58 rust_perf rules (Batch 48 = rust_perf online-search half; Batch 49 =
-  the Bench-686 kernel distillation — the file-mining kernel half is
-  Batch 50).
+  the Bench-686 kernel distillation; Batch 50 = the file-mining ZERO-RULE batch
+  — 8 leaves/twins closed, 31 hazards → Issues 708/709, corpus COMPLETE
+  pending the final pair kimi_k3_gpu_backward_batched + attention_q8kv_cubecl).
   edge_lora module FULLY MINED (32a + 32b-1 + 32c). spectralquant/
   FULLY MINED (15 + 33). hypernet/ FULLY MINED (45: meta_lora.rs +
   train_meta_lora.rs; 47: shine.rs + routing.rs + types.rs +
