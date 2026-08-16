@@ -763,6 +763,24 @@ Issue, plan, doc, benchmark, and research numbers are **monotonic and never
 reused**. Before creating a new `.issues/` file, read `.issues/.highwater`, use
 `value + 1`, write back. Same for `.plans/`, `.docs/`, `.benchmarks/`, `.research/`.
 
+### Research-note shape (convention, adopted 2026-08-16)
+
+`.research/` notes are **born-complete distillation records**, not task
+trackers — no `- [ ]` checkboxes (pending work lives in `.issues/`, the
+SKILL.md mining queue, or the plan the note feeds). Two header rules:
+
+1. Every new note carries a `**Status:**` line (not `**Outcome:**` — legacy
+   notes using it are grandfathered) from a small vocabulary: `RECORD`
+   (batch landed, closed) · `DISTILLED — pending owner decision` (has an
+   actionable unimplemented delta) · `NEGATIVE` (measured refutation).
+2. A note whose delta gets filed/implemented later gets a one-line status
+   update pointing at the issue/commit — the note itself stays a record.
+
+Rationale: 36/58 historical notes have no Status line, which is benign only
+because they are closed records; the two genuinely-pending notes (053, 058)
+DO carry explicit Status lines. The vocabulary makes that distinction
+machine-skimmable for future sessions.
+
 ## Branch
 
 `develop` is the working branch. Commit directly on `develop` per the global rule.
