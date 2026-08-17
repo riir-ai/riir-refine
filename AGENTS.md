@@ -438,10 +438,28 @@ the whole header + **mod-level `#[cfg(feature` greps cross-referenced
 against the default feature set** — then exercise each non-default gate
 (goat_090 @ unit_distance: 10/10; bench_ldt/bench_217 @ 5-feature union:
 compile clean + green). ~1238 findings remain across ~132 root-tests/
+~1238 findings remain across ~132 root-tests/
 files; the gated giants are slice 3: goat_234 (103 @ manifold_pruner),
 bench_245 (41 @ still_kv), parallax_sigmoid_stability_grad_clip (29 @
 parallax_attn — gate at line 49, below the header); all-`#[ignore]`
 bench_block_diagonal/bench_octopus stay skipped (compile-only validation).
+**slice 3 landed 2026-08-18** (katgpt-rs `cea73d5d`): the 3 gated giants /
+173 edits (all uninlined_format_args), net −87 lines. The healer's
+`--verify` is blind to all 3 (default-features check strips them), so each
+gate was exercised via a full test RUN pre/post-heal, count-identical:
+goat_234 11/0 (debug), bench_245 12/0 (debug; `t22_still_kv_compression`
+alone ~17 min — check per-file test runtime BEFORE picking slice members,
+a 17-min test doubles validation cost), parallax 3/0 (**RELEASE — its doc
+marks release REQUIRED: debug is ~30× slower and the divergence steps
+shift, a 4th validation-mode class: mode-locked, not just feature-locked**).
+Real clippy @ feature-on: 0 uninlined_format_args remaining on all 3
+(remaining per-file warnings = pre-existing out-of-scope pedantic:
+cast-precision, doc backticks, single-char names). **Clippy-target lesson:
+`cargo clippy --features X --test NAME` lints the LIB dependency too — the
+target's total warning count is dominated by `src/` findings (69
+uninlined_format_args from the lib appear in a goat_234 target run);
+per-file confirmation needs a file-path grep, not the run total.**
+~1065 findings remain across ~129 root-tests/ files.
 **T5 — DONE same day** (benches/ swept,
 katgpt-rs `4ccb2f280`:
 bench_424:97 range_plus_one + bench_136:208 uninlined — range_plus_one
