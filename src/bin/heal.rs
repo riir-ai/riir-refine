@@ -679,6 +679,35 @@ fn main() {
             .map(|s| s.split_whitespace().map(str::to_string).collect())
             .unwrap_or_default();
         let verifier = riir_clippy::fix_verify::FixVerifier::new().with_extra_args(extra);
+        // Issue 031 H3: the verify baseline is default-features cargo check
+        // — code behind non-default features is NOT compile-gated (the
+        // katgpt-pruners batch shipped 2 feature-gated breaks past verify:
+        // a u8-const with_capacity E0308 + an E0631 fn-path coercion). Warn
+        // loudly when an owning package has non-default features and the
+        // caller did not override the baseline via --verify-args.
+        if args.verify_args.is_none() {
+            let mut warned: std::collections::HashSet<PathBuf> =
+                std::collections::HashSet::new();
+            for b in &verify_batches {
+                let Some(pkg) = riir_clippy::fix_verify::owning_package_root(&b.path) else {
+                    continue;
+                };
+                if !warned.insert(pkg.clone()) {
+                    continue;
+                }
+                let Ok(text) = std::fs::read_to_string(pkg.join("Cargo.toml")) else {
+                    continue;
+                };
+                let n = riir_clippy::fix_verify::manifest_nondefault_feature_count(&text);
+                if n > 0 {
+                    eprintln!(
+                        "verify: WARNING — {} declares {} non-default feature(s); gated modules are NOT compile-gated by this baseline. Pass --verify-args \"--all-features\" to cover them (if the crate's all-features set compiles).",
+                        pkg.display(),
+                        n
+                    );
+                }
+            }
+        }
         eprintln!(
             "verify: {} file(s) / {} edit(s) — baseline + compile-gated apply",
             verify_batches.len(),

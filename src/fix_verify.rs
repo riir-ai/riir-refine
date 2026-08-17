@@ -574,6 +574,60 @@ pub fn manifest_has_dep(manifest_text: &str, dep: &str) -> bool {
         || manifest_text.contains(&format!("\"{dep}\""))
 }
 
+/// Issue 031 H3: count the package's non-default declared features (cheap
+/// text scan of the `[features]` table — keys not covered by `default`'s
+/// dependency list). The `--verify` baseline runs default-features
+/// `cargo check`, so code behind these features is NOT compile-gated; the
+/// caller warns + suggests `--verify-args "--all-features"`. A misparse
+/// yields 0 (silent) or a spurious warning — never a wrong gate.
+#[must_use]
+pub fn manifest_nondefault_feature_count(manifest_text: &str) -> usize {
+    let mut in_features = false;
+    let mut default_deps: Vec<String> = Vec::new();
+    let mut keys: Vec<&str> = Vec::new();
+    // `default = [\n "a",\n "b",\n]` spans lines — accumulate the value
+    // until the next key or section.
+    let mut pending_default: Option<String> = None;
+    let finalize_default = |pending: &mut Option<String>, out: &mut Vec<String>| {
+        if let Some(value) = pending.take() {
+            for part in value.trim_matches(['[', ']']).split(',') {
+                let p = part.trim().trim_matches('"');
+                if !p.is_empty() {
+                    out.push(p.to_string());
+                }
+            }
+        }
+    };
+    for line in manifest_text.lines() {
+        let t = line.trim();
+        if t.starts_with('[') {
+            in_features = t == "[features]";
+            finalize_default(&mut pending_default, &mut default_deps);
+            continue;
+        }
+        if !in_features {
+            continue;
+        }
+        if let Some(eq) = t.find('=') {
+            finalize_default(&mut pending_default, &mut default_deps);
+            let key = t[..eq].trim().trim_matches('"');
+            let value = t[eq + 1..].trim();
+            if key == "default" {
+                pending_default = Some(value.to_string());
+            } else {
+                keys.push(key);
+            }
+        } else if let Some(pd) = pending_default.as_mut() {
+            pd.push(' ');
+            pd.push_str(t);
+        }
+    }
+    finalize_default(&mut pending_default, &mut default_deps);
+    keys.into_iter()
+        .filter(|k| !default_deps.iter().any(|d| d == k))
+        .count()
+}
+
 // ── rustc JSON parsing ────────────────────────────────────────────────────
 
 #[derive(Deserialize)]
@@ -742,6 +796,23 @@ mod tests {
         // workspace-dependency inheritance form
         let inherited = "[dependencies]\nrustc-hash = { workspace = true }\n";
         assert!(manifest_has_dep(inherited, "rustc-hash"));
+    }
+
+    #[test]
+    fn manifest_feature_count_shapes() {
+        // Issue 031 H3: the warning's signal — non-default feature count.
+        // katgpt-pruners shape: `default = []` + many opt-ins.
+        let gated = "[features]\ndefault = []\npartial_scoring = []\nmonopoly = []\n";
+        assert_eq!(manifest_nondefault_feature_count(gated), 2);
+        // Default-on features don't count (they ARE the baseline).
+        let defaulted = "[features]\ndefault = [\"a\"]\na = []\nb = []\n";
+        assert_eq!(manifest_nondefault_feature_count(defaulted), 1);
+        // No features table → 0 (silent).
+        let none = "[dependencies]\nserde = \"1\"\n";
+        assert_eq!(manifest_nondefault_feature_count(none), 0);
+        // Multi-line default list (quoted members).
+        let multiline = "[features]\ndefault = [\n    \"a\",\n    \"b\",\n]\na = []\nb = []\nc = []\n";
+        assert_eq!(manifest_nondefault_feature_count(multiline), 1);
     }
 
     #[test]
