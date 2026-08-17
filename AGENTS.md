@@ -460,6 +460,38 @@ target's total warning count is dominated by `src/` findings (69
 uninlined_format_args from the lib appear in a goat_234 target run);
 per-file confirmation needs a file-path grep, not the run total.**
 ~1065 findings remain across ~129 root-tests/ files.
+**slice 4 landed 2026-08-18** (katgpt-rs `ccf9fb98`): 48 default-compiled
+files / 277 edits applied (268 single-pass sites: uninlined_format_args 224,
+match_bool 24, map_unwrap_or 20; +9 bounded-fixpoint compositions), net −27
+lines post-rustfmt. Validation: 41 debug + 7 release test runs count-identical
+pre/post. **Gate-scan lesson (5th class): mod-level `#[cfg(any/all(feature…))`
+around the test mod** — the 3-part scan (required-features + `^#!\[cfg` header
++ mod-level `#[cfg(feature` cross-ref) still missed it because these gates wrap
+`mod tests` with `any(` lists of NON-default features; under default features
+the binary compiles EMPTY ("0 passed; 0 failed") — 14 such files found
+(bench_dflare_modelless dflare*, test_rubric_scalar_collapse ropd_rubric,
+test_122_toast_goat toast_tokenizer, stepcode, …), all excluded (compile-only
+validation class). **The reliable detector is the baseline run itself: "0
+passed" ⇒ exclude.** **Debug-slow class (6th validation nuance): a
+default-compiled file can be debug-unrunnable** — funcattn_g6_bug_poc burned
+33+ min CPU in debug (doc says `--release`, ~30× slow) vs 390 s green in
+release; bench_657/574/246/275/104/176 all baselined in release mode instead.
+**Flake rule addition:** bfcf_lsh_cms_goat's baseline failed once under load
+(9p/1f; `g5_roaring_batch_speedup` timing flap — the slice-2 bench_290
+class), 3/3 green post-heal — a mismatch on a perf-gated test needs a re-run
+before it counts as a regression. **Pre-existing failure left unfixed:**
+bench_104_mls_k_sweep::bench_mls_k_sweep fails deterministically at HEAD
+(K=1 cos 0.8839 vs 0.9 threshold, Plan-104-era tuning, machine-marginal) —
+fails IDENTICALLY pre/post; heal validated on same-signature.
+**Clippy group note: `uninlined_format_args` is PEDANTIC-group in clippy
+1.93** — default `cargo clippy` emits ZERO of them; per-file confirmation
+needs `-- -W clippy::uninlined_format_args` (that run: 0 remaining in every
+tests/ dir workspace-wide; ~376 remain in crates' src/ — katgpt-core 27,
+katgpt-spectral 16, attn-match 6, pruners 5, root 3 — the future src/ sweep).**
+~788 findings remain across ~81 root-tests/ files — ALL in feature-gated
+files now (~50 gate groups; biggest: bomber-wasm 31, mech_attribution 30,
+hla_attention 30, msa_adaptive_k 29, parallax_attn 25); standing exclusions:
+14 empty-under-default binaries + 6 all-#[ignore] files.
 **riir-train slice 1 landed 2026-08-18** (riir-train `e6084429`, this repo
 `7ed7c6c`): the sweep's first riir-train unit — engine `src/`
 default-compiled files only, 30 files / 183 edits (131 uninlined_format_args,
