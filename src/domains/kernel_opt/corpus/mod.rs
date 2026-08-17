@@ -1167,6 +1167,20 @@
 //!   the repair is a second FULL-schedule pass with the Gram re-formed from the DATA
 //!   iterate — each knob alone measured FAIL; guard corollary: `t < 1e-20` is false
 //!   for NaN, write `!t.is_finite() || t < threshold`).
+//! - **Batch 55 (measured-GOAT distillation, riir-ai Issue 716 / Bench 691):** 2 rules,
+//!   corpus 349 -> 351 (N 19 -> 20, D 63 -> 64) - outlier-span-escapes-
+//!   quantization-via-lossless-sidecar (N - 1-2 massive-activation channels in a
+//!   32-block collapse non-outlier neighbors 58x; the KNOWN outlier span (attention
+//!   sinks, known a priori) escapes quantization into a lossless f32 sidecar, dead
+//!   q8 rows keep strides fixed, 6850x quality at 0.96x perf; Hadamard rotation
+//!   loses on BOTH axes - nonzero residual ~MA/16 + strictly larger kernel cost)
+//!   and buffer-length-derived-from-allocation-not-binding (D - cubecl derives the
+//!   kernel-visible length from `handle.size_in_used()`, NOT the bound `BufferArg`
+//!   length; two root-caused occurrences: over-length bindings consume FOLLOWING
+//!   rows (Bench 642 rmsnorm, fix = both-ends trims) and zero-length-over-a-real-
+//!   handle reads the WRONG buffer (Bench 691 dummy sidecar, fix = real 4-byte
+//!   allocation floor-dividing to zero rows); probe corollary: a benign-case-only
+//!   probe is worse than no probe).
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
@@ -1217,7 +1231,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 349-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 351-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1412,7 +1426,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fuse-indirect-gather-into-dot-consumer",
         ],
     ),
-    // D: Dispatch patterns (63 rules)
+    // D: Dispatch patterns (64 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -1480,6 +1494,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "size-gate-covers-every-cost-factor",
             "shared-producer-prefix-extract-once-per-input",
             "phase-split-per-position-data-liveness-row-storage",
+            "buffer-length-derived-from-allocation-not-binding",
         ],
     ),
     // E: Parallelism patterns (20 rules)
@@ -1642,7 +1657,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "debug-only-gpu-label-macro",
         ],
     ),
-    // N: dtype + alignment specialization (19 rules)
+    // N: dtype + alignment specialization (20 rules)
     (
         KernelCategory::DtypeAlignment,
         "N: dtype + alignment",
@@ -1666,6 +1681,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "verbatim-upload-on-format-match",
             "rmsnorm-backward-gamma-scope-correction-term",
             "dequant-placement-by-component-traffic-share",
+            "outlier-span-escapes-quantization-via-lossless-sidecar",
         ],
     ),
     // O: IR strength reduction (4 rules)
@@ -1686,7 +1702,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
 /// Returns 15 buckets (one per category), each containing the `KernelRule`s whose
 /// `rule_id` appears in that category's slice of [`KERNEL_CATEGORIES`]. This is
 /// the category-scoped view of the corpus — a future heal pipeline can consult
-/// routed expert's rules first without scanning all 349.
+/// routed expert's rules first without scanning all 351.
 ///
 /// # Allocation
 ///
