@@ -292,6 +292,32 @@ PASS) / 453 full default suite / clippy 0 both states; end-to-end re-verified
 pedantic-legit match_bool), zero false positives. The probe matrix extends
 the `clean_spans_fire_no_lint` sample with the four rejected shapes.
 
+**Issue 028 (2026-08-17, RESOLVED same day + removed per noise-reduction
+rule) — the `collapsible_else_if` comment-guard gap (Issue 027 class in the
+sibling proposer).** Found during the katgpt-speculative heal sweep (landed
+katgpt-rs `e8cefad44`): 8 proposed `collapsible_else_if` edits where real
+clippy (`--all-features`, pedantic) had ZERO findings — every site has a
+comment between `else {` and the inner `if`, the exact Issue 027
+`collapsible_if` shape the sibling proposer never got the guard for. Fix:
+the lead + trail gap-slice comment scan ported verbatim (syn has no comment
+nodes — the raw source slices between `{`/`if`/`}` are scanned; a broken
+span range refuses rather than displaces). Root-cause note on the issue's
+"match-arm guard" spec: the proposer structurally only visits `ExprIf`
+else-branches — it can never fire on a match arm DIRECTLY; the observed
+`and_or_builder.rs:228` comment deletion happened through composition (a
+`match_bool` edit turns `false => { // c \n if let .. }` into an else-block
+in the fixpoint pass, where the comment-blind proposer then collapsed
+through the comment) — the comment guard blocks exactly that path, pinned
+by the `match_bool_composed_arm_comment_blocks` fixture. A would-be label
+guard on the else ExprBlock was verified UNREACHABLE (syn's else grammar
+accepts only `if` or `{` — labeled blocks cannot be else branches) and
+dropped, not shipped dead. Gates: 17 collapsible tests (6 new fixtures)
+/ 477 default lib / `clean_spans_fire_no_lint` extended with the real
+`find_decomposition_regions` shape / retrieval floors unchanged / clippy 0
+in default + latent_retrieval states / the katgpt-speculative dry `--fix`
+re-run: **0 edits proposed** (was 44 — 36 landed last session, the 8
+comment-guarded sites now correctly silent).
+
 **Plan 005 (2026-08-14) — latent retrieval + `cargo heal --suggest` CLI
 (Phases 1–4 DONE).** `src/draft/` ships the span-level retrieval layer:
 real `.rs` files → `AstChunker` spans → 8-D modelless embedding →

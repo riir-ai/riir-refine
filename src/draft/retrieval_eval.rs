@@ -286,6 +286,34 @@ pub struct SpanSuggestion {
 }
 "#,
     ),
+    (
+        // Issue 028: the katgpt-speculative find_decomposition_regions shape
+        // (real production excerpt, simplified to a free fn) — comment-
+        // guarded single-if blocks in BOTH arms; real clippy 1.97 is SILENT
+        // on both collapsible_if and collapsible_else_if here.
+        "clean:comment_guarded_if_else_arms",
+        r#"fn find_decomposition_regions(profile: &[f32]) -> Vec<(usize, usize)> {
+    let mut regions = Vec::new();
+    let mut region_start: Option<usize> = None;
+
+    for (i, &rel) in profile.iter().enumerate() {
+        if rel < 0.3 {
+            // Low relevance — extend or start region.
+            if region_start.is_none() {
+                region_start = Some(i);
+            }
+        } else {
+            // High relevance — close any open region.
+            if let Some(start) = region_start.take() {
+                regions.push((start, i));
+            }
+        }
+    }
+
+    regions
+}
+"#,
+    ),
 ];
 
 /// Deterministic identifier-renaming map for the kernel self-variant probe.
