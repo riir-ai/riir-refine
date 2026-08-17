@@ -2,8 +2,23 @@
 //! → `if let Some(v) = x { f(v) } else { fallback() }`.
 //!
 //! Pattern: a two-arm match, no attributes, no guards, where the SECOND
-//! arm is a wildcard (`_`) whose body is a NON-UNIT STATEMENT BLOCK.
-//! (The unit shape is `single_match`, a sibling lint.)
+//! arm is a wildcard arm whose body is a NON-UNIT STATEMENT BLOCK (the
+//! unit shape is `single_match`, a sibling lint).
+//!
+//! Wildcard-arm shapes (Issue 027 + Issue 029 T3 probe matrix vs real
+//! clippy 1.97 pedantic):
+//! - **`_`** — any scrutinee, any non-wild first arm (the 027-validated
+//!   shape);
+//! - **std Option/Result no-binding arms** — when the FIRST arm pins a std
+//!   Option/Result scrutinee (`Some(v)`, `Ok(_)`, `Err(e)`, `None`,
+//!   `Option::…`/`Result::…`-qualified): the second arm fires iff it has
+//!   NO bindings — `None`, `Option::None`, `Err(_)`, `Err(..)`, `Some(_)`,
+//!   `Ok(_)`. Silent (probe-verified): binding payloads (`Err(e)`,
+//!   `Some(v)` in arm2), user-enum arms (`R2::Ok(_)`, `E3::None`,
+//!   glob-imported `None` — clippy is type-informed), and expression arm2
+//!   bodies. The emitted `if let P1 = scrut { .. } else { .. }` needs no
+//!   trait bounds, so it is sound for every shape that compiles (a
+//!   compiling 2-arm exhaustive match proves P2 ≡ ¬P1).
 //!
 //! Two fix shapes (Issue 027/029, empirical vs real clippy):
 //! - **non-literal first pattern** → the `if let` form (the 027-validated
@@ -58,7 +73,7 @@ impl Collector<'_> {
         if m.arms.iter().any(|a| !a.attrs.is_empty() || a.guard.is_some()) {
             return None; // guards/arm-attrs would be lost by the splice
         }
-        if !matches!(m.arms[1].pat, Pat::Wild(_)) || is_unit_expr(&m.arms[1].body) {
+        if !is_wildcard_second_arm(&m.arms[0].pat, &m.arms[1].pat) || is_unit_expr(&m.arms[1].body) {
             return None; // unit wildcard is `single_match`, not this lint
         }
         // Issue 027: real clippy only fires when the wildcard arm is a
@@ -126,6 +141,73 @@ fn is_nonnegative_int_lit(l: &Lit) -> bool {
         Lit::Int(i) => !i.token().to_string().starts_with('-'),
         _ => false,
     }
+}
+
+/// Does the second arm act as the wildcard arm of a `single_match_else`?
+///
+/// `_` is unconditionally wildcard (any scrutinee). Additionally, on a std
+/// Option/Result scrutinee clippy fires on a NO-BINDING constructor arm
+/// (`None`, `Err(_)`, `Err(..)`, `Some(_)`, `Ok(_)`) — approximated here by
+/// requiring the FIRST arm to be a std-shaped Some/Ok/Err/None pattern that
+/// pins the scrutinee type. Probe matrix (Issue 029 T3, clippy 1.97
+/// pedantic): fires on Some(v)+None, Ok(v)+Err(_), None+Some(_),
+/// `Err(_)`+`Ok(_)`, Ok(v)+Err(..), Some(_)+None, `Option::None`; silent on
+/// binding arm2s, user-enum arms (`R2::Ok(_)`, `E3::None`), and expression
+/// arm2 bodies.
+fn is_wildcard_second_arm(first: &Pat, second: &Pat) -> bool {
+    if matches!(second, Pat::Wild(_)) {
+        return true;
+    }
+    is_std_optres_variant(first) && is_std_no_binding_ctor(second)
+}
+
+/// A pattern that pins a std Option/Result scrutinee: `Some(..)`, `Ok(..)`,
+/// `Err(..)`, `None` — bare or `Option::`/`Result::`-qualified. Or-patterns
+/// and anything else (user enums) return false, keeping the lint silent
+/// where type-informed clippy is (parse-only approximation).
+fn is_std_optres_variant(p: &Pat) -> bool {
+    match p {
+        Pat::Ident(pi) => pi.ident == "None" && pi.subpat.is_none(),
+        Pat::Path(pp) => is_none_path(&pp.path),
+        Pat::TupleStruct(ts) => !ts.elems.is_empty() && is_ctor_path(&ts.path),
+        _ => false,
+    }
+}
+
+/// A std Option/Result constructor arm with NO bindings — the
+/// probe-verified wildcard-equivalent second arms. `Err(_e)`/`Some(v)`
+/// (bindings) and user-enum constructors stay out.
+fn is_std_no_binding_ctor(p: &Pat) -> bool {
+    match p {
+        Pat::Ident(pi) => pi.ident == "None" && pi.subpat.is_none(),
+        Pat::Path(pp) => is_none_path(&pp.path),
+        Pat::TupleStruct(ts) => {
+            !ts.elems.is_empty()
+                && is_ctor_path(&ts.path)
+                && ts.elems.iter().all(|e| matches!(e, Pat::Wild(_) | Pat::Rest(_)))
+        }
+        _ => false,
+    }
+}
+
+fn is_none_path(path: &syn::Path) -> bool {
+    path.is_ident("None") || is_std_qualified(path, "None", "Option")
+}
+
+fn is_ctor_path(path: &syn::Path) -> bool {
+    ["Some", "Ok", "Err"].iter().any(|n| path.is_ident(n))
+        || is_std_qualified(path, "Some", "Option")
+        || is_std_qualified(path, "Ok", "Result")
+        || is_std_qualified(path, "Err", "Result")
+}
+
+/// Exactly `Ty::Name` with no generic arguments (`Option::None`,
+/// `Result::Ok`).
+fn is_std_qualified(path: &syn::Path, last: &str, ty: &str) -> bool {
+    path.segments.len() == 2
+        && path.segments[0].ident == ty
+        && path.segments[1].ident == last
+        && path.segments.iter().all(|s| s.arguments.is_none())
 }
 
 #[cfg(test)]
@@ -265,5 +347,124 @@ mod tests {
         let input = "fn g(x: Option<u8>) { match x { Some(v) if v > 0 => drop(v), _ => { fallback() } } }";
         let out = propose_fix("single_match_else", input);
         assert!(out.is_none(), "guarded arm must not fire: {out:?}");
+    }
+
+    #[test]
+    fn none_second_arm_fires() {
+        // Issue 029 T3 probe P1/P2: Some-first + None-second fires real
+        // clippy (MachineApplicable `if let Some(v) = x .. else ..`).
+        let input =
+            "fn g(x: Option<u8>) -> u8 { match x { Some(v) => v + 1, None => { let b = 2; b } } }";
+        let out = propose_fix("single_match_else", input).expect("matched");
+        assert!(
+            out.contains("if let Some(v) = x { v + 1 } else { let b = 2; b }"),
+            "None-second not converted: {out}"
+        );
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn err_wildcard_second_fires() {
+        // Issue 029 T3 probe P4: Ok-first + Err(_) second fires.
+        let input =
+            "fn g(r: Result<u8, u8>) -> u8 { match r { Ok(v) => v, Err(_) => { let b = 2; b } } }";
+        let out = propose_fix("single_match_else", input).expect("matched");
+        assert!(
+            out.contains("if let Ok(v) = r { v } else { let b = 2; b }"),
+            "Err(_) not converted: {out}"
+        );
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn err_rest_payload_second_fires() {
+        // Issue 029 T3 probe P15: `Err(..)` rest payload fires too.
+        let input =
+            "fn g(r: Result<u8, u8>) -> u8 { match r { Ok(v) => v, Err(..) => { let b = 2; b } } }";
+        let out = propose_fix("single_match_else", input).expect("matched");
+        assert!(
+            out.contains("if let Ok(v) = r { v } else { let b = 2; b }"),
+            "Err(..) not converted: {out}"
+        );
+    }
+
+    #[test]
+    fn success_wildcard_second_fires_reversed() {
+        // Issue 029 T3 probe P13/P14: the DEFAULT first + success-wildcard
+        // second also fires (clippy suggests `if x == None` — we emit the
+        // trait-free `if let None = x` form, sound for every payload type).
+        let option =
+            "fn g(x: Option<u8>) -> u8 { match x { None => { let b = 2; b }, Some(_) => { let a = 1; a } } }";
+        let out = propose_fix("single_match_else", option).expect("matched");
+        assert!(
+            out.contains("if let None = x { let b = 2; b } else { let a = 1; a }"),
+            "reversed Some(_) not converted: {out}"
+        );
+        syn::parse_file(&out).expect("re-parses");
+        let result =
+            "fn g(r: Result<u8, u8>) -> u8 { match r { Err(_) => { let b = 2; b }, Ok(_) => { let a = 1; a } } }";
+        let out = propose_fix("single_match_else", result).expect("matched");
+        assert!(
+            out.contains("if let Err(_) = r { let b = 2; b } else { let a = 1; a }"),
+            "reversed Ok(_) not converted: {out}"
+        );
+    }
+
+    #[test]
+    fn qualified_option_none_second_fires() {
+        // Issue 029 T3 probe P9: qualified `Option::None` fires.
+        let input =
+            "fn g(x: Option<u8>) -> u8 { match x { Some(v) => v, Option::None => { let b = 2; b } } }";
+        let out = propose_fix("single_match_else", input).expect("matched");
+        assert!(
+            out.contains("if let Some(v) = x { v } else { let b = 2; b }"),
+            "Option::None not converted: {out}"
+        );
+    }
+
+    #[test]
+    fn binding_second_arm_stays_silent() {
+        // Issue 029 T3 probes P5/P6/P18/P19: a BINDING in the second arm
+        // loses the binding under `else` — real clippy stays silent.
+        let err_e =
+            "fn g(r: Result<u8, u8>) -> u8 { match r { Ok(v) => v, Err(e) => { let b = e as u8; b } } }";
+        assert!(propose_fix("single_match_else", err_e).is_none());
+        let some_v =
+            "fn g(x: Option<u8>) -> u8 { match x { None => { let b = 2; b }, Some(v) => { let a = v + 1; a } } }";
+        assert!(propose_fix("single_match_else", some_v).is_none());
+    }
+
+    #[test]
+    fn expression_none_second_body_stays_silent() {
+        // Issue 029 T3 probes P3/P12: expression arm2 bodies are silent
+        // (consistent with the 027 expression-wildcard finding).
+        let input =
+            "fn g(x: Option<u8>) -> u8 { match x { Some(v) => v + 1, None => 2 } }";
+        let out = propose_fix("single_match_else", input);
+        assert!(out.is_none(), "expression None arm must not fire: {out:?}");
+    }
+
+    #[test]
+    fn user_enum_arms_stay_silent() {
+        // Issue 029 T3 probes P7/P16/P17: user-enum arms never fire —
+        // clippy is type-informed (only std Option/Result scrutineers fire);
+        // the parse-only approximation gates on std-shaped FIRST arms.
+        let qualified = "enum R2 { Ok(u8), Err(u8) }\nfn g(r: R2) -> u8 { match r { R2::Ok(_) => { let a = 1; a }, R2::Err(_) => { let b = 2; b } } }";
+        assert!(propose_fix("single_match_else", qualified).is_none());
+        let none_named = "enum E3 { Foo, None }\nfn g(e: E3) -> u8 { match e { E3::Foo => { let a = 1; a }, E3::None => { let b = 2; b } } }";
+        assert!(propose_fix("single_match_else", none_named).is_none());
+    }
+
+    #[test]
+    fn none_first_with_wildcard_second_still_fires() {
+        // Pre-existing `_`-second behavior extends to a None FIRST arm —
+        // the if-let form keeps the unit-path pattern verbatim.
+        let input =
+            "fn g(x: Option<u8>) -> u8 { match x { None => 2, _ => { let a = 1; a } } }";
+        let out = propose_fix("single_match_else", input).expect("matched");
+        assert!(
+            out.contains("if let None = x { 2 } else { let a = 1; a }"),
+            "None-first wildcard not converted: {out}"
+        );
     }
 }

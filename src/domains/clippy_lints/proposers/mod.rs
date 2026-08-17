@@ -58,7 +58,7 @@
 //! | `collapsible_if` | outer if, no else, single-if then-block → `if a && b` (structural; logic-paren reconstruction) |
 //! | `collapsible_else_if` | `else { if .. }` single-stmt block → `else if` (structural) |
 //! | `single_match` | 2-arm match, wildcard arm unit → `if let` (structural) |
-//! | `single_match_else` | 2-arm match, wildcard arm statement BLOCK → `if let .. else` (structural; Issue 027 — expression wildcards never fire under real clippy) |
+//! | `single_match_else` | 2-arm match, wildcard arm statement BLOCK → `if let .. else` (structural; Issue 027 — expression wildcards never fire; Issue 029 T3 — on std Option/Result scrutinees the no-binding ctor arms `None`/`Err(_)`/`Err(..)`/`Some(_)`/`Ok(_)` count as the wildcard, gated on a std-shaped first arm) |
 //! | `redundant_pattern_matching` | `if let Ok(_) = x` → `x.is_ok()` (wildcard-only variant pats; bindings never fire) |
 //! | `question_mark` | `if x.is_none() { return None; }` / identity match → `x?` (structural; compilability of the original proves the shapes) |
 //! | `range_plus_one` | `a..b+1` → `a..=b` (structural; `Lit::Int`-only) |

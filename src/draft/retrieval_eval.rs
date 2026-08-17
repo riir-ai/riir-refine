@@ -314,6 +314,40 @@ pub struct SpanSuggestion {
 }
 "#,
     ),
+    (
+        // Issue 029 T3: the probe-verified SILENT shapes for the extended
+        // single_match_else wildcard set — user-enum constructor arms (clippy
+        // is type-informed: only std Option/Result scrutinees fire) and a
+        // BINDING second arm (the binding would be lost under `else`).
+        // Real clippy 1.97 pedantic is silent on both; every structural
+        // proposer must be too.
+        "clean:user_enum_and_binding_second_arms",
+        r#"#[derive(Clone, Copy)]
+pub enum SlotState { Ok(u8), Err(u8) }
+pub enum NodeKind { Leaf, None }
+
+fn classify_slot(s: SlotState) -> u8 {
+    match s {
+        SlotState::Ok(v) => { let scaled = v * 2; scaled }
+        SlotState::Err(e) => { let penalty = e as u8; penalty }
+    }
+}
+
+fn node_weight(k: NodeKind) -> u8 {
+    match k {
+        NodeKind::Leaf => { let base = 1; base }
+        NodeKind::None => { let zero = 0; zero }
+    }
+}
+
+fn probe(cache_hit: Option<u8>) -> u8 {
+    match cache_hit {
+        None => { let miss = 2; miss }
+        Some(v) => { let hit = v + 1; hit }
+    }
+}
+"#,
+    ),
 ];
 
 /// Deterministic identifier-renaming map for the kernel self-variant probe.
