@@ -825,6 +825,47 @@ token text. Gates: 36 range/single_match tests (23 single_match_else) +
 28 uninlined tests / 514 default lib / retrieval floors PASS / clippy 0
 lib + all-targets.
 
+**riir-train slice 9 landed 2026-08-18** (riir-train `d64bc8ae`): engine
+tests/ **the manifold/bake/archetype family union** — ONE 9-feature cycle
+(boundary_stages,federated_alignment,curvature_regularization,symmetric_boundary,
+dual_direction + manifold_lora,tjs_lora + bake_lora + archetype_library_training;
+all CPU — archetype pulls dep:riir-neuron-db + katgpt-core/committed_field_blend,
+in-tree, no models). 12 test binaries scanned; 7 clean → skipped (slice-3
+rule). **5 test files / 150 edits + 2 gated-src stragglers / 38 edits**:
+uninlined 184 (placeholder-level), match_bool 3 (goat_manifold_261 + msa
+rescue — `match cond { true => X, false => Y }` → if/else, spot-checked),
+vec-with-capacity 1 (deep_manifold_integration_test:99, the 1000-push
+losses vec). The src delta (slice-6 standing rule): archetype_library_train.rs
+(16 — incl. the PRODUCTION hex_encode `{:02x}` at 1182) + tjs_lora.rs (22,
+box-drawing GOAT tables in cfg(test)). **Filename gotcha re-hit:**
+bench_300_t4_4_msa_rescue is a `.goat.rs` file (target name
+bench_300_t4_4_msa_rescue_goat via the [[test]] name field) — a wrong-path
+scan silently covers 4-of-5 files (the slice-5 lesson, now twice-observed).
+**Test-artifact hazard (new):** issue_307_archetype_library_gates REGENERATES
+`models/archetype_library_v1/*.neuron` + manifest on every run (Bin 400→432
+bytes) — restored via `git checkout -- models/` before both commits; future
+slices touching archetype tests must NOT stage models/ churn.
+**Validation (all count-identical pre/post):** the 5 edited binaries 1/2/13/1/5
+(msa rescue 1, deep_manifold_integration 2, bake 13, manifold_261 1, archetype
+5), union lib 1339+1i (pre/post via the copy-out/revert/baseline/restore dance
+— the src heal landed before the lib baseline), default lib 1253+1i. Union +
+default `--tests` residue 0 in the engine; plain clippy 0 new warnings.
+rustfmt applied to all 7 (all fmt-clean at HEAD); post-fmt re-run
+count-identical. Known divergence recorded: `match sphere_pass { true =>
+"PASS", ... }` inside println! args stays healer-silent (macro-arg descent
+is format-family-only) — real clippy would flag it; the documented
+we-stay-silent class.
+**Remaining in riir-train** (~2958 edits): engine tests/ gated remainder
+~38 files / ~664 (the prior ~26-file estimate undercounted; the honest
+enumeration: lota_ternary x2, lr_qat, dl_qat, coa_meta, osc_rat_plus,
+zero_qat, gpart, rosetta_lora, rosetta_filter, polarization_stop,
+adapter_centroid, nf_riir, snr_filter, eql x2, curvature_curriculum, nitp,
+peira, set_diffusion x3, multi_precision_npc, latent_functor, fol,
+dendritic, d2f_quality, ccar x2, integration_244, memory_soup family x8,
+bench_401 sibling-caution; ciacot 4 AVOID — real-model deps (gemma2/qwen25)),
+examples/ 88 / 926, gpu 84 / 562 + the 4 excluded sibling src files (~206 —
+re-check sibling state at slice time).
+
 **Issue 031 (2026-08-17, RESOLVED same day + removed per noise-reduction
 rule) — 3 healer defects from the katgpt-pruners 587-edit heal
 validation (katgpt-rs `4b6675dc5`).** **H1 (CRITICAL)** — the
