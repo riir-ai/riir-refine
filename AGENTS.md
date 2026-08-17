@@ -766,6 +766,55 @@ pattern; re-indents the single_match_else body), net −49 lines.
 mdl 2 each; ciacot 4 AVOID — real-model deps (gemma2/qwen25)), examples/
 88 / 926, gpu 84 / 562 + the 4 excluded sibling src files (~206 — re-check
 sibling state at slice time).
+
+**riir-train slice 8 landed 2026-08-18** (riir-train `07f39f27` + the
+proposer root-cause fix riir-clippy `fa820d0`): engine tests/ **the 5 small
+clusters — degrpo / wasm_reward_shaping / ted / posterior / mdl — ONE
+5-feature-union cycle** (all pure-CPU; posterior_training pulls
+rank_one_spectral, ted_regularized_lora implies rule_init_lora). 10 test
+binaries scanned (the ted cluster = goat_244_rule_init_lora +
+rule_init_convergence — goat_244's gate is the INNER
+ted_regularized_lora, not rule_init_lora); 7 clean → skipped (slice-3
+rule). **8 files / 48 edits** = 20 clippy findings: uninlined 9 (37
+placeholder-level edits), match_bool 4, map_unwrap_or 6, single_match_else
+1 (goat_posterior_264:602 — the diagnostic's "equality check" text is the
+single_match_ELSE lint per its help URL; the healer's rule choice was
+correct).
+**TWO proposer root-cause fixes shipped mid-slice** (the bench_241 sites
+were invisible to the old proposer): (1) the `unwrap_or_else` arm —
+`x.map(f).unwrap_or_else(g)` → `x.map_or_else(g, f)` (default closure
+FIRST, mapper second — probe-verified against clippy 1.95's own
+suggestion on the live sites); (2) **macro-argument descent** — the 4
+bench_241 sites sit inside `writeln!` args, which are OPAQUE token
+streams to syn's visitor (real clippy matches post-expansion HIR);
+visit_expr_macro/visit_stmt_macro now reuse the format-family table via
+the shared `post_template_expr_args` helper, parse each post-template
+arg as an Expr, run the same matcher — proc-macro2 spans survive the
+token round-trip so edits slice the ORIGINAL file bytes. Named/
+non-parsing args are skipped, not aborting. 8 new fixtures; 568 lib
+tests (+8); clippy 0.
+**Third slice-1 miss class closed: nested-path default file.**
+lattice_operad/bench.rs is default-visible (ungated `pub mod` +
+non-cfg(test) `pub mod bench`) — its map_unwrap_or_else fired under
+default `--lib`; invisible to slice 1's parse+dep-info map. Post-slice-8
+the engine default `--tests` residue is ZERO (fully clean).
+**Validation (all count-identical pre/post):** bench_246_mdl 7/0,
+goat_posterior_264 6/0, posterior_arena_proof 5/0, default lib 1253+1i,
+union lib 1386+1i, bench_241's own 12 tests green under
+wasm_reward_shaping. Union `--tests` residue 0 in healed files.
+rustfmt applied ONLY to the 4 files fmt-clean at HEAD (mdl_curriculum,
+ted_regularizer, lattice_operad/bench, degrpo); the 3 test files +
+bench_241 carry pre-existing fmt drift (scoped out, the slice-2 rule);
+post-fmt lib re-run count-identical (the slice-6 spot-check rule).
+**Side observation:** the gpu-crate findings visible under this union
+(loss_sdar 5, compress 3, training_loop/types 2, + 4 singles —
+DEFAULT-visible in riir-train-gpu) belong to the gpu 84/562 bucket,
+confirmed not lost — the gpu slice owns them.
+**Remaining in riir-train** (~3146 edits): engine tests/ gated remainder
+~26 files / ~814 (ciacot 4 AVOID — real-model deps (gemma2/qwen25); the
+remainder is the long tail of 1-file gates + the manifold/bake/archetype
+families), examples/ 88 / 926, gpu 84 / 562 + the 4 excluded sibling src
+files (~206 — re-check sibling state at slice time).
 **T5 — DONE same day** (benches/ swept,
 katgpt-rs `4ccb2f280`:
 bench_424:97 range_plus_one + bench_136:208 uninlined — range_plus_one
