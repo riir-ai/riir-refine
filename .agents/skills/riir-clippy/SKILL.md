@@ -790,34 +790,34 @@ global = symlink only.
 - **Batch 51 DONE (2026-08-16, Research 057):** the FINAL riir-gpu file-mining batch — 3 rules, corpus 344 → 347 (A 81, D 62, N 19): batched-read-slot-membership-decided-at-launch (D — push guards on the Option PAIR, extraction on the implying config flag; flag=true+handle=absent shifts every slot + guaranteed OOB; READ lists have no persistent state to derive from, so fix = decide-once/tag-vec-at-launch, distinct from B40's derive-from-cache write side), unpack-loop-indexed-by-container-word (A — byte-packed unpack indexed by the logical element re-loads the same u32 4× + runtime div/mod + runtime shift; index by the CONTAINER word; honest L1-scope), dequant-placement-by-component-traffic-share (N — values packed + inline dequant (reuse 1, B14 regime doesn't apply), scales pre-decoded f16→f32 at upload; encodes the tension with B31: correct for the sidecar, wrong for the payload). Coordinator verification REFUTED the lane-B orphaned-module CRITICAL (production-wired: lib.rs L895-898 + 3 launch sites in gemma2_cubecl/dispatch.rs) — subagent repo-grep silently failed on the multi-root workspace; every CRITICAL reachability claim gets a coordinator grep (standing rule). Issue 693 closeout: H1/H2 fixes present in both twins + LCG fixed + the stale B40 corpus note refreshed. Hazards → riir-ai Issue 710 (sync2 guard drift, 9-site MLA CPU weight-grad backlog, q8kv multi-tile path untested at n>256 — production-reachable). GOAT: 577 kernel_heal + 415 default, retrieval floors HELD (kernel 100/100/100, blended 77.8/87.3/92.9 above the Issue 022 minimums), clippy 0 both states, combo clean. THE RIIR-GPU CORPUS IS COMPLETE — queue shifts to rust_perf + issue-driven + measured-GOAT distillations; kernel_opt reopens only on ternary_deltanet unlock / new kernel files / measured GOATs.
 - **Batch 52 DONE (2026-08-16, Research 059):** 1 rule, corpus 347 → 348 (D 62 → 63) — `phase-split-per-position-data-liveness-row-storage`, the FIRST measured-GOAT distillation after corpus-complete (reopen path (c), same-day as the fix): a Phase-A dispatch loop writing a SINGLE-ROW buffer per position followed by a Phase-B per-position consumer only preserves the LAST write; fix = `[seq_len × dim]` row storage (row-pos writes riding the existing pos-in-uniform; backward reads row pos). Distinct from B26/B27 (uniform staleness = wrong VALUES; this is DATA liveness = right value never stored). Source: riir-ai Issue 708 H4 (dflash forward, fixed in `42b564759` — forward FUNCTIONAL, CPU-reference parity max_rel=5e-6, 565/565 tests, 3 backward tests un-ignored). GOAT: 600 kernel_heal lib + 135 corpus tests, clippy 0 both states (the `[x × y]` bracket family joins the doc_markdown backtick gotchas), retrieval floors HELD (kernel 100/100/100, blended 95.2/97.6/97.6). Generator lesson: multi-line doc-bullet anchors must match the FULL bullet — the first B52 header insert split B51's bullet mid-narrative (B49/B51 exhibit the same pre-existing interleave in that header).
 
-- **Batch 53 candidates (2026-08-17 evening, queue item 11 — online perf
-  search + corpus gap analysis; BENCH DEFERRED: builds parked during the
-  sibling bonsai GPU run, zero-contention units only):** 4 candidate rules
-  for the next rust_perf batch, dedup-grepped against the 58-rule corpus
-  (no pow / sqrt / map-capacity / SoA rule exists):
-  1. `powi-vs-powf` (arithmetic) — `x.powf(2.0)` → `x.powi(2)` / `x * x`
-     for small integer exponents (powf lowers to libm exp/log; direct
-     multiply measured ~2 orders faster in the C++ std::pow study).
-     Sources: users.rust-lang.org/t/56451 ("powf is extremely slow… powi
-     generally faster"), baptiste-wicht.com/posts/2017/09 (C++ std::pow).
-  2. `distance-sq-no-sqrt` (arithmetic) — `(dx*dx+dy*dy).sqrt() < r` →
-     `dx*dx+dy*dy < r*r` (compare squared distances; sqrt is monotonic on
-     non-negatives so ordering is preserved — semantic guard needed for NaN
-     + the returned-value case). Source: the Box2D squared-distance
-     convention (box2d.org/posts/2024/08/simd-matters/).
-  3. `hashmap-with-capacity` (allocation) — `HashMap::new()` + known-count
-     insert loop → `HashMap::with_capacity(n)` (avoids the incremental
-     rehash-resize ladder; DISTINCT from vec-with-capacity: different
-     container, rehash vs realloc cost class). Source:
-     users.rust-lang.org/t/44322 ("preallocate your Vecs and HashMap… using
-     the with_capacity method").
-  4. `soa-hot-field` (layout/simd — spec harder, candidate only) — AoS
-     iteration over one hot field → SoA split for the SIMD-parallel field;
-     access-pattern dependent (needs a careful bench design + likely a
-     context_notes regime caveat). Sources: box2d SIMD Matters + the Julia
-     SoA-vs-AoS SIMD discourse.
-  Next batch run validates via the Pareto bench (Protocol A GOAT) + proposers
-  honestly deferred per the Issues 012/013/014 precedent.
+- **Batch 53 DONE (2026-08-17 evening, queue item 11 — online perf search +
+  Bench 038):** the 4 online-search candidates landed as `PerfRule` entries +
+  `BenchSpec` harnesses + eval spans + Pareto bench verdicts + floors re-pin.
+  Corpus 58→62 rules (allocation 17→18, layout 4→5, arithmetic 1→3),
+  benchable 48→52, annotated 10→12, `PERF_SPANS` 48→52 (all 4 new spans
+  retrieve top-1). **2/4 ParetoDominant:** distance-sq-no-sqrt 1.21-1.24×
+  (compare-squared beats sqrt-then-compare even on aarch64's single-instruction
+  fsqrt — the fixed form vectorizes), hashmap-with-capacity 2.4-3.1× (allocs
+  12→1 @ 4096 — the rehash ladder re-SipHashes ALL entries per resize, not a
+  realloc+memcpy like the Vec sibling). **2/4 honest annotations:**
+  powi-vs-powf ALL-TIE 1.00× (the folk-wisdom refutation — LLVM instcombine
+  lowers pow(x, 2.0) to the same x*x as powi(2) in release; the advice only
+  holds for debug profiles / exponents ≥ 3 where pow stays a libm call),
+  soa-hot-field latency-bound Mixed 1.07×/tie/0.96× (a serial f32
+  add-reduction chain dominates BOTH layouts — OoO hides the 40-byte-stride
+  load latency; the SoA win lives on throughput-bound field consumers —
+  count/min-max/transform — or multi-field scans). G5 batch bar 2/4 FAIL
+  recorded honestly (the filter-count-to-any precedent). Environment: benched
+  with the sibling's 1-core CPU-deterministic bonsai parity running;
+  discharged by an independent re-run reproducing verdict + ratios exactly.
+  Floors re-pinned both states (2-domain blended 92/96/96 of 100, perf top-3
+  50/52, router 65/100; 3-domain kernel 100/100/100, blended 94.6/97.7/97.7
+  of 130, router 89/130 → floor 84/130). Gates: 496 default / 514
+  rust_perf_bench lib tests, clippy 0, retrieval gate PASS both states.
+  Proposers honestly deferred (`powi` clean local swap; `distance-sq`
+  structural but tractable; `hashmap-with-capacity` needs known-count flow
+  analysis — safe subset only; `soa` architectural, suggestion-only by
+  design). Record: Bench 038.
 
 
 - **Batch 48 rust_perf half DONE (2026-08-16, Research 054):** the 8

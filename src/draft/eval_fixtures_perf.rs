@@ -383,4 +383,38 @@ fn default_spawns(n: u32) -> u32 {
     }
 }
 "#),
+    ("powi-vs-powf", r#"pub fn threat_energy(dist: &[f32]) -> f32 {
+    dist
+        .iter()
+        .map(|d| d.powf(2.0))
+        .sum()
+}
+"#),
+    ("distance-sq-no-sqrt", r#"pub fn pet_within_leash(dx: f32, dy: f32, leash: f32) -> bool {
+    (dx * dx + dy * dy).sqrt() < leash
+}
+"#),
+    ("hashmap-with-capacity", r#"pub fn zone_lookup_table(zone_ids: &[ZoneId]) -> HashMap<ZoneId, u32> {
+    let mut weights = HashMap::new();
+    for &z in zone_ids {
+        weights.insert(z, z.index() as u32);
+    }
+    weights
+}
+"#),
+    ("soa-hot-field", r#"struct NpcEntry {
+    x: f32,
+    y: f32,
+    vx: f32,
+    vy: f32,
+    hp: u32,
+    level: u32,
+    flags: u64,
+    id: u64,
+}
+
+pub fn centroid_x(npcs: &[NpcEntry]) -> f32 {
+    npcs.iter().map(|n| n.x).sum()
+}
+"#),
 ];

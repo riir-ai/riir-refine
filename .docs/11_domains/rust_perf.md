@@ -19,21 +19,29 @@
 
 ## Corpus
 
-58 rules across 12 categories (rust-optimize skill checklist +
+62 rules across 12 categories (rust-optimize skill checklist +
 nnethercote/perf-book + rustc-hash/bevy real-world patterns + the hotpath-rs
 profiling guide, Research 032; Batch 48 added the 8 online-search candidates
-from the perf-book std-types + iterators chapters). Allocation is the deepest
-category (17 rules). Complexity has 14. Iterators has 7. Simd, layout have
-4-5 each; concurrency has 4 (Issue 014 added the two metric-mismatch rules);
-caching has 2 (Issue 014 added `regex-hoist-lazylock`); the rest have 1
-each. 48 are benchable (carry a `BenchSpec`); 10 are honestly
+from the perf-book std-types + iterators chapters; Batch 53 added the 4
+online-search candidates of [Bench 038](../../.benchmarks/038_batch53_rust_perf_online_search_goat.md)).
+Allocation is the deepest
+category (18 rules). Complexity has 14. Iterators has 7. Simd 5, layout 5;
+concurrency has 4 (Issue 014 added the two metric-mismatch rules);
+caching has 2 (Issue 014 added `regex-hoist-lazylock`); arithmetic has 3
+(Batch 53 added `powi-vs-powf` + `distance-sq-no-sqrt`); the rest have 1
+each. 52 are benchable (carry a `BenchSpec`); 10 are honestly
 `NotBenchable` — 8 need external runtimes or are structural (size_of,
 memory, fairness), 2 are **metric-mismatch** (Issue 014 T2.3/T2.4: the cost
-is contention latency / queue depth, not wall-clock). 10 of 58 carry
-`context_notes` — 8 verdict-class (3 `ParetoDominated` + 5
+is contention latency / queue depth, not wall-clock). 12 of 62 carry
+`context_notes` — 10 verdict-class (3 `ParetoDominated` + 7
 regime-fragile/Mixed — Batch 48 added the `filter-count-to-any` folk-wisdom
 refutation: the VECTORIZED count loop beats `any()`'s scalar early-exit at
-mid-position hits) + 2 metric-mismatch-class. Consumers should treat
+mid-position hits; Batch 53 added the `powi-vs-powf` refutation — LLVM
+lowers `powf(2.0)` to the same multiply as `powi(2)` in release, the folk
+wisdom only holds for debug profiles / exponents ≥ 3 — and the
+`soa-hot-field` latency-bound scoping — a serial f32 add-reduction hides the
+layout win; SoA pays on throughput-bound field consumers) + 2
+metric-mismatch-class. Consumers should treat
 annotated rules as context-dependent, not unconditional suggestions.
 
 | Rule ID | Category | Bench verdict | Context? | Pattern |
@@ -91,6 +99,10 @@ annotated rules as context-dependent, not unconditional suggestions.
 | `iter-copied-deref-map` | iterators | ⚠️ Mixed (0.80x @1M) | ⚠️ `context_notes` | `.map(|x| *x)` → `.copied()` (Batch 48): parity ≤100K, SLOWER at 1M on sum folds — the idiom's TrustedLen matters for `collect`, not folds |
 | `filter-map-fuse` | iterators | ✅ ParetoDominant | — | `filter(p).map(f)` two adapters → `filter_map` fused (Batch 48: timing-only win, allocs parity — the perf-book's hedge resolved by measurement) |
 | `vec-insert-front-deque` | complexity | ✅ 7.8-115.3x ParetoDominant | — | `Vec::insert(0, x)` O(n²) prepend loop → `VecDeque::push_front` O(1) (Batch 48 — the write-side sibling of `vec-remove-front-to-vecdeque`) |
+| `distance-sq-no-sqrt` | arithmetic | ✅ 1.21-1.24x ParetoDominant | — | `(dx²+dy²).sqrt() < r` → `dx²+dy² < r²` compare-squared (Batch 53 — monotonic sqrt; keep the sqrt when the VALUE is consumed) |
+| `hashmap-with-capacity` | allocation | ✅ 2.4-3.1x ParetoDominant | — | `HashMap::new()` + known-count insert loop → `HashMap::with_capacity(n)` (Batch 53 — rehash ladder re-SipHashes all entries per resize; allocs 12→1) |
+| `powi-vs-powf` | arithmetic | ~ Mixed (all-Tie) | ⚠️ `context_notes` | `x.powf(2.0)` → `x.powi(2)` (Batch 53 refutation: LLVM lowers both identically in release; idiom value = debug profiles + exponents ≥ 3) |
+| `soa-hot-field` | layout | ~ Mixed (latency-bound) | ⚠️ `context_notes` | AoS wide-struct single-field scan → SoA split (Batch 53: serial f32 add-chains hide the win; pays on throughput-bound field consumers — count/min-max/transform) |
 | `shrink-to-fit-after-build` | allocation | ❌ NotBenchable | — | Vec with over-allocated capacity → `shrink_to_fit()` after build (memory win, not speed; the realloc may even make build slower) |
 | `box-large-enum-variant` | layout | ❌ NotBenchable | — | Enum with one `[u8; 1024]` variant → `Box<[u8; 1024]>` (shrinks common case from 1032→16 bytes; size_of win improves cache density) |
 | `async-yield-point` | iterators | ❌ NotBenchable | — | Long async fn (no `.await`) → cooperative `yield_now()` every 100 iters (fairness/p99-latency win under contention, not single-task throughput) |

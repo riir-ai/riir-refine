@@ -5,19 +5,21 @@
 //! tuple representing a real perf pattern from the skill. The corpus is
 //! BLAKE3-committed via [`Corpus::new`](crate::corpus::Corpus::new). The
 //! `context_notes` field is `Option<String>` — `Some(...)` for rules the bench
-//! validator found ParetoDominated in the default config (Bench 013) or that
-//! are NotBenchable-with-a-metric-mismatch (Issue 014 T2), `None` for
+//! validator found ParetoDominated/Mixed/Tie in the default config (Bench 013 /
+//! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //! unconditional wins + honestly NotBenchable rules.
 //!
-//! 58 entries across 12 categories (complexity 14, allocation 17, simd 5,
-//! layout 4, iterators 7, concurrency 4, io 1, arithmetic 1, dispatch 1,
-//! caching 2, bevy 1, wasm 1). 48 are benchable; 10 are honestly
+//! 62 entries across 12 categories (complexity 14, allocation 18, simd 5,
+//! layout 5, iterators 7, concurrency 4, io 1, arithmetic 3, dispatch 1,
+//! caching 2, bevy 1, wasm 1). 52 are benchable; 10 are honestly
 //! NotBenchable (8 external-runtime/size-class + 2 metric-mismatch, Issue 014).
 //! Batch 48 (idle-queue item 11, 2026-08-16) added the 8 online-search
 //! candidates (perf-book std-types + iterators chapters): collect-append-to-
 //! extend, hashset-insert-bool-return, unwrap-or-else-lazy, filter-count-to-
 //! any, vec-macro-zero-fill, iter-copied-deref-map, filter-map-fuse,
-//! vec-insert-front-deque.
+//! vec-insert-front-deque. Batch 53 (idle-queue item 11, 2026-08-17) added
+//! the 4 online-search candidates: powi-vs-powf, distance-sq-no-sqrt,
+//! hashmap-with-capacity, soa-hot-field.
 //!
 //! ## Bench specs (behind `rust_perf_bench`)
 //!
@@ -26,7 +28,7 @@
 //! `run_buggy` / `run_fixed` entry points. The bench validator generates a
 //! temp bin crate from the spec + runs a timing loop at multiple sizes.
 //!
-//! Currently benchable (40/50):
+//! Currently benchable (52/62):
 //! - `o1-lookup` (Vec scan vs HashMap lookup — clear O(n) vs O(1))
 //! - `bsearch-sorted-slice` (linear scan vs binary search — O(n) vs O(log n) on sorted data)
 //! - `dedupe-hashset-vs-vec` (Vec::contains loop vs HashSet collect — O(n²) vs O(n))
@@ -77,6 +79,10 @@
 //! - `iter-copied-deref-map` (.map(|x| *x) → .copied() TrustedLen — Batch 48)
 //! - `filter-map-fuse` (filter(p).map(f) → filter_map fused — Batch 48)
 //! - `vec-insert-front-deque` (Vec::insert(0,_) O(n²) → VecDeque::push_front — Batch 48)
+//! - `powi-vs-powf` (x.powf(2.0) libm call → x.powi(2) multiply — Batch 53)
+//! - `distance-sq-no-sqrt` (sqrt-then-compare → squared compare — Batch 53)
+//! - `hashmap-with-capacity` (HashMap::new() rehash ladder → with_capacity(n) — Batch 53)
+//! - `soa-hot-field` (AoS strided single-field scan → SoA contiguous column — Batch 53)
 //!
 //! Not benchable (10/50) — honest:
 //! - `layout-reorder` (struct size — deterministic `size_of`, not a runtime
@@ -1158,6 +1164,112 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
             context_notes: None,
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: Some(vec_insert_front_deque_bench_spec()),
+        },
+        // ── arithmetic: x.powf(2.0) constant exponent → x.powi(2) ──────────────
+        // Source: users.rust-lang.org/t/56451 + baptiste-wicht.com std::pow C++
+        // study (Batch 53, idle-queue item 11). `powf` lowers to a libm `pow`
+        // call — an opaque scheduling barrier in a hot loop; `powi(2)` compiles
+        // to a single multiply. The candidate risk (recorded honestly by the
+        // bench, not assumed): LLVM's instcombine rewrites `pow(x, 2.0)` to
+        // `x * x` in release — the verdict axis decides whether this is a
+        // runtime win or an idiom-only rule.
+        PerfRule {
+            rule_id: "powi-vs-powf".to_string(),
+            name: "x.powf(2.0) libm call → x.powi(2) single multiply (constant exponent)".to_string(),
+            category: "arithmetic".to_string(),
+            buggy_code: "fn sum_squares(vals: &[f32]) -> f32 {\n    vals.iter().map(|v| v.powf(2.0)).sum() // libm pow call per element\n}".to_string(),
+            fixed_code: "fn sum_squares(vals: &[f32]) -> f32 {\n    vals.iter().map(|v| v.powi(2)).sum() // single multiply\n}".to_string(),
+            // Bench 53 (Bench 038): all-Tie at 1.00x across 1K/100K/1M —
+            // LLVM instcombine lowers pow(x, 2.0) to the same x*x multiply
+                       // as powi(2) in release, so the classic "powf is slow" advice
+            // does NOT hold for the constant-exponent-2 release case. The
+            // idiom still matters for: debug-profile hot loops (no instcombine
+            // — powf stays a libm call), exponents >= 3 (LLVM does NOT lower
+            // pow(x, 3.0) — correctly-rounded pow differs from x*x*x, so it
+            // stays a libm call while powi(3) becomes two multiplies), and
+            // non-constant exponents where powi is not applicable.
+            context_notes: Some(
+                "Bench 53: Mixed — all-Tie 1.00x (1K/100K/1M) — LLVM lowers powf(2.0) \
+                 to the same x*x as powi(2) in release; the folk wisdom \
+                 ('powf is extremely slow') does not hold for \
+                 constant-exponent-2 release code. Suggest as an idiom for \
+                 debug-profile hot loops (powf stays a libm call without \
+                 instcombine) and exponents >= 3 (pow(x,3.0) is NOT lowered — \
+                 it stays a libm call while powi(3) is two multiplies); do \
+                 not suggest expecting a release-throughput win at exponent 2."
+                    .to_string(),
+            ),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(powi_vs_powf_bench_spec()),
+        },
+        // ── arithmetic: (dx²+dy²).sqrt() < r → dx²+dy² < r² ────────────────────
+        // Source: the Box2D squared-distance convention (box2d.org SIMD
+        // matters). sqrt is monotonic on non-negative inputs, so comparing
+        // squared distances preserves ordering — the sqrt is pure waste when
+        // only the COMPARISON is consumed. Guard: if the distance VALUE is
+        // consumed downstream, keep the sqrt; NaN inputs order differently
+        // under the two forms (both false in practice for <).
+        PerfRule {
+            rule_id: "distance-sq-no-sqrt".to_string(),
+            name: "(dx*dx+dy*dy).sqrt() < r → dx*dx+dy*dy < r*r (compare squared)".to_string(),
+            category: "arithmetic".to_string(),
+            buggy_code: "fn in_range(dx: f32, dy: f32, r: f32) -> bool {\n    (dx * dx + dy * dy).sqrt() < r // sqrt only to compare\n}".to_string(),
+            fixed_code: "fn in_range(dx: f32, dy: f32, r: f32) -> bool {\n    dx * dx + dy * dy < r * r // monotonic on non-negatives — ordering preserved\n}".to_string(),
+            context_notes: None,
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(distance_sq_no_sqrt_bench_spec()),
+        },
+        // ── allocation: HashMap::new() + known-count loop → with_capacity ────
+        // Source: users.rust-lang.org/t/44322 ("preallocate your Vecs and
+        // HashMaps"). The HashMap sibling of `vec-with-capacity` but a
+        // DIFFERENT cost class: growth rehashes — every resize re-runs the
+        // hasher (SipHash) over ALL stored elements to place them in the new
+        // bucket set, not just a realloc+memcpy. `with_capacity(n)` with a
+        // known count pays one table alloc + zero rehash passes.
+        PerfRule {
+            rule_id: "hashmap-with-capacity".to_string(),
+            name: "HashMap::new() + known-count insert loop → HashMap::with_capacity(n)".to_string(),
+            category: "allocation".to_string(),
+            buggy_code: "use std::collections::HashMap;\nfn index_items(items: &[u32]) -> HashMap<u32, u32> {\n    let mut map = HashMap::new(); // starts at capacity ~3\n    for &it in items {\n        map.insert(it, it.wrapping_mul(31)); // rehash ladder: ~log2(n) resizes, each re-SipHashing all entries\n    }\n    map\n}".to_string(),
+            fixed_code: "use std::collections::HashMap;\nfn index_items(items: &[u32]) -> HashMap<u32, u32> {\n    let mut map = HashMap::with_capacity(items.len()); // one table alloc, zero resizes\n    for &it in items {\n        map.insert(it, it.wrapping_mul(31));\n    }\n    map\n}".to_string(),
+            context_notes: None,
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(hashmap_with_capacity_bench_spec()),
+        },
+        // ── layout: AoS iteration over one hot field → SoA split ─────────────
+        // Source: nnethercote/perf-book data-structure layout + the Box2D SIMD
+        // post (Batch 53, idle-queue item 11). Iterating ONE field of a wide
+        // AoS struct touches every cache line but consumes 4 of 32 bytes
+        // (12.5% utilization) and defeats auto-vectorization (strided
+        // gather). The SoA split makes the hot field contiguous — 16 floats
+        // per cache line + a clean SIMD sum. The cold fields pay one pointer
+        // indirection on THEIR (rare) access.
+        PerfRule {
+            rule_id: "soa-hot-field".to_string(),
+            name: "AoS Vec<WideStruct> single-field scan → SoA split (hot field contiguous)".to_string(),
+            category: "layout".to_string(),
+            buggy_code: "struct Agent { x: f32, y: f32, vx: f32, vy: f32, hp: u32, level: u32, flags: u64, id: u64 } // 40 bytes\nfn total_x(agents: &[Agent]) -> f32 {\n    agents.iter().map(|a| a.x).sum() // 4 useful bytes per 40-byte struct — strided, scalar\n}".to_string(),
+            fixed_code: "struct Agents { xs: Vec<f32>, ys: Vec<f32>, vxs: Vec<f32>, vys: Vec<f32>, hps: Vec<u32>, levels: Vec<u32>, flags: Vec<u64>, ids: Vec<u64> }\nfn total_x(agents: &Agents) -> f32 {\n    agents.xs.iter().sum() // contiguous — 16 floats/line, SIMD-able\n}".to_string(),
+            // Bench 53 (Bench 038): Mixed 1.07x/tie/0.96x — a serial f32
+            // add-reduction (~3-4 cycle dependency chain per element) dominates
+            // BOTH sides; the 40-byte-stride load latency is fully hidden by
+            // out-of-order execution, so the bandwidth+vectorization win never
+            // materializes on a latency-bound scalar sum. SoA wins materialize
+            // on THROUGHPUT-bound field consumers (count/filter over the field,
+            // min/max, batch transform — vectorizable, no serial chain) or when
+            // multiple hot fields are scanned together.
+            context_notes: Some(
+                "Bench 53: Mixed (1.07x/tie/0.96x at 1K/100K/1M) — a serial f32 \
+                 add-reduction dominates both layouts; the strided-load penalty \
+                 is hidden by OoO execution, so SoA buys nothing on \
+                 latency-bound scalar sums. The layout win materializes on \
+                 throughput-bound field consumers (count/filter, min/max, batch \
+                 transform — vectorizable, no serial chain) or multi-field scans; \
+                 suggest for those shapes, not for scalar sum folds."
+                    .to_string(),
+            ),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(soa_hot_field_bench_spec()),
         },
     ])
 }
@@ -3764,6 +3876,248 @@ pub fn run_fixed(input: &[u32]) {
     }
 }
 
+/// Bench spec for `powi-vs-powf`: libm pow call vs single multiply. The
+/// honest risk the bench adjudicates: LLVM instcombine may rewrite
+/// `pow(x, 2.0)` to `x * x` in release, collapsing the win (Batch 53).
+#[cfg(feature = "rust_perf_bench")]
+fn powi_vs_powf_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![1_000, 100_000, 1_000_000],
+        harness: r#"
+mod buggy {
+    pub fn sum_squares(vals: &[f32]) -> f32 {
+        vals.iter().map(|v| v.powf(2.0)).sum()
+    }
+}
+
+mod fixed {
+    pub fn sum_squares(vals: &[f32]) -> f32 {
+        vals.iter().map(|v| v.powi(2)).sum()
+    }
+}
+
+pub fn make_input(n: usize) -> Vec<f32> {
+    (0..n).map(|i| i as f32 * 0.5 - 0.25).collect()
+}
+
+pub fn run_buggy(input: &[f32]) {
+    std::hint::black_box(buggy::sum_squares(input));
+}
+
+pub fn run_fixed(input: &[f32]) {
+    std::hint::black_box(fixed::sum_squares(input));
+}
+"#
+        .to_string(),
+    }
+}
+
+/// Bench spec for `distance-sq-no-sqrt`: sqrt-then-compare vs squared
+/// compare. On aarch64 f32 sqrt is a single NEON instruction — the bench
+/// decides whether the scalar-ARM reality matches the Box2D x86-SIMD
+/// rationale (Batch 53).
+#[cfg(feature = "rust_perf_bench")]
+fn distance_sq_no_sqrt_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![1_000, 100_000, 1_000_000],
+        harness: r#"
+pub struct Query {
+    pub cx: f32,
+    pub cy: f32,
+    pub r: f32,
+}
+
+mod buggy {
+    pub fn count_in_range(pts: &[(f32, f32)], cx: f32, cy: f32, r: f32) -> usize {
+        pts.iter()
+            .filter(|&&(x, y)| {
+                let dx = x - cx;
+                let dy = y - cy;
+                (dx * dx + dy * dy).sqrt() < r
+            })
+            .count()
+    }
+}
+
+mod fixed {
+    pub fn count_in_range(pts: &[(f32, f32)], cx: f32, cy: f32, r: f32) -> usize {
+        let r2 = r * r;
+        pts.iter()
+            .filter(|&&(x, y)| {
+                let dx = x - cx;
+                let dy = y - cy;
+                dx * dx + dy * dy < r2
+            })
+            .count()
+    }
+}
+
+pub struct Input {
+    pts: Vec<(f32, f32)>,
+    q: Query,
+}
+
+pub fn make_input(n: usize) -> Input {
+    let pts = (0..n).map(|i| (i as f32 * 0.013, i as f32 * 0.029)).collect();
+    Input {
+        pts,
+        q: Query { cx: 0.0, cy: 0.0, r: 5000.0 },
+    }
+}
+
+pub fn run_buggy(input: &Input) {
+    std::hint::black_box(buggy::count_in_range(&input.pts, input.q.cx, input.q.cy, input.q.r));
+}
+
+pub fn run_fixed(input: &Input) {
+    std::hint::black_box(fixed::count_in_range(&input.pts, input.q.cx, input.q.cy, input.q.r));
+}
+"#
+        .to_string(),
+    }
+}
+
+/// Bench spec for `hashmap-with-capacity`: rehash ladder vs single exact
+/// reservation. The alloc axis gates this even where SipHash timing
+/// dominates (Batch 53).
+#[cfg(feature = "rust_perf_bench")]
+fn hashmap_with_capacity_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![8, 64, 512, 4096],
+        harness: r#"
+mod buggy {
+    use std::collections::HashMap;
+    pub fn build(n: usize) -> usize {
+        let mut m: HashMap<u64, u64> = HashMap::new();
+        for i in 0..n as u64 {
+            m.insert(i, i.wrapping_mul(2_654_435_761));
+        }
+        m.len()
+    }
+}
+
+mod fixed {
+    use std::collections::HashMap;
+    pub fn build(n: usize) -> usize {
+        let mut m: HashMap<u64, u64> = HashMap::with_capacity(n);
+        for i in 0..n as u64 {
+            m.insert(i, i.wrapping_mul(2_654_435_761));
+        }
+        m.len()
+    }
+}
+
+pub fn make_input(n: usize) -> usize {
+    n
+}
+
+pub fn run_buggy(input: &usize) {
+    std::hint::black_box(buggy::build(*input));
+}
+
+pub fn run_fixed(input: &usize) {
+    std::hint::black_box(fixed::build(*input));
+}
+"#
+        .to_string(),
+    }
+}
+
+/// Bench spec for `soa-hot-field`: 40-byte AoS stride scan vs contiguous
+/// SoA column sum (Batch 53).
+#[cfg(feature = "rust_perf_bench")]
+fn soa_hot_field_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![1_000, 100_000, 1_000_000],
+        harness: r#"
+mod buggy {
+    pub struct Agent {
+        pub x: f32,
+        pub y: f32,
+        pub vx: f32,
+        pub vy: f32,
+        pub hp: u32,
+        pub level: u32,
+        pub flags: u64,
+        pub id: u64,
+    }
+    pub fn total_x(agents: &[Agent]) -> f32 {
+        agents.iter().map(|a| a.x).sum()
+    }
+}
+
+mod fixed {
+    pub struct Agents {
+        pub xs: Vec<f32>,
+        pub ys: Vec<f32>,
+        pub vxs: Vec<f32>,
+        pub vys: Vec<f32>,
+        pub hps: Vec<u32>,
+        pub levels: Vec<u32>,
+        pub flags: Vec<u64>,
+        pub ids: Vec<u64>,
+    }
+    pub fn total_x(agents: &Agents) -> f32 {
+        agents.xs.iter().sum()
+    }
+}
+
+pub struct Input {
+    aos: Vec<buggy::Agent>,
+    soa: fixed::Agents,
+}
+
+pub fn make_input(n: usize) -> Input {
+    let mut aos = Vec::with_capacity(n);
+    let mut soa = fixed::Agents {
+        xs: Vec::with_capacity(n),
+        ys: Vec::with_capacity(n),
+        vxs: Vec::with_capacity(n),
+        vys: Vec::with_capacity(n),
+        hps: Vec::with_capacity(n),
+        levels: Vec::with_capacity(n),
+        flags: Vec::with_capacity(n),
+        ids: Vec::with_capacity(n),
+    };
+    for i in 0..n as u64 {
+        let x = i as f32 * 0.5;
+        let y = i as f32 * 0.25;
+        let vx = i as f32 * 0.125;
+        let vy = i as f32 * 0.0625;
+        aos.push(buggy::Agent {
+            x,
+            y,
+            vx,
+            vy,
+            hp: (i % 1000) as u32,
+            level: (i % 50) as u32,
+            flags: i,
+            id: i,
+        });
+        soa.xs.push(x);
+        soa.ys.push(y);
+        soa.vxs.push(vx);
+        soa.vys.push(vy);
+        soa.hps.push((i % 1000) as u32);
+        soa.levels.push((i % 50) as u32);
+        soa.flags.push(i);
+        soa.ids.push(i);
+    }
+    Input { aos, soa }
+}
+
+pub fn run_buggy(input: &Input) {
+    std::hint::black_box(buggy::total_x(&input.aos));
+}
+
+pub fn run_fixed(input: &Input) {
+    std::hint::black_box(fixed::total_x(&input.soa));
+}
+"#
+        .to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3779,20 +4133,22 @@ mod tests {
     }
 
     #[test]
-    fn seed_corpus_has_fifty_eight_entries_across_twelve_categories() {
+    fn seed_corpus_has_sixty_two_entries_across_twelve_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 58);
+        assert_eq!(corpus.entries.len(), 62);
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
         categories.dedup();
-        // 12 distinct categories. Allocation is the deepest (17 rules,
-        // including Issue 014's arc-str-payload + Batch 48's three); complexity
-        // has 14 (Batch 48 added hashset-insert-bool-return +
-        // vec-insert-front-deque); iterators has 7 (Batch 48 added three);
-        // simd has 5; layout + concurrency have 4 each (Issue 014 added the
-        // two metric-mismatch rules); caching has 2 (Issue 014 added
-        // regex-hoist-lazylock); io, arithmetic, dispatch, bevy, wasm have 1 each.
+        // 12 distinct categories. Allocation is the deepest (18 rules,
+        // including Issue 014's arc-str-payload + Batch 48's three + Batch
+        // 53's hashmap-with-capacity); complexity has 14 (Batch 48 added
+        // hashset-insert-bool-return + vec-insert-front-deque); iterators
+        // has 7 (Batch 48 added three); simd has 5; layout has 5 (Batch 53
+        // added soa-hot-field) + concurrency has 4 (Issue 014 added the two
+        // metric-mismatch rules); arithmetic has 3 (Batch 53 added
+        // powi-vs-powf + distance-sq-no-sqrt); caching has 2 (Issue 014
+        // added regex-hoist-lazylock); io, dispatch, bevy, wasm have 1 each.
         assert_eq!(categories.len(), 12);
     }
 
@@ -3861,10 +4217,10 @@ mod tests {
 
     #[cfg(feature = "rust_perf_bench")]
     #[test]
-    fn forty_eight_rules_have_bench_specs() {
+    fn fifty_two_rules_have_bench_specs() {
         let corpus = build_perf_seed_corpus();
         let with_spec = corpus.entries.iter().filter(|e| e.bench_spec.is_some()).count();
-        assert_eq!(with_spec, 48, "expected 48 benchable rules, got {with_spec}");
+        assert_eq!(with_spec, 52, "expected 52 benchable rules, got {with_spec}");
     }
 
     #[cfg(feature = "rust_perf_bench")]
@@ -3897,12 +4253,13 @@ mod tests {
     /// Bench 016 (Issue 012) added 2 more annotated rules (sort-by-key,
     /// copy-from-slice). Issue 014 T2.3/T2.4 added 2 more in the
     /// NotBenchable metric-mismatch class (tokio-guard-across-await,
-    /// bounded-channel-backpressure + the 2 Batch 48 verdict-class rules:
-    /// filter-count-to-any ParetoDominated, iter-copied-deref-map Mixed). The
-    /// other 48 have `context_notes: None` (unconditional wins or honestly
-    /// NotBenchable).
+    /// bounded-channel-backpressure). Batch 48 added 2 verdict-class rules
+    /// (filter-count-to-any ParetoDominated, iter-copied-deref-map Mixed).
+    /// Batch 53 (Bench 038) added 2 more (powi-vs-powf all-Tie Mixed,
+    /// soa-hot-field latency-bound Mixed). The other 50 have
+    /// `context_notes: None` (unconditional wins or honestly NotBenchable).
     #[test]
-    fn ten_annotated_rules_carry_context_notes() {
+    fn twelve_annotated_rules_carry_context_notes() {
         let corpus = build_perf_seed_corpus();
         let annotated: Vec<&str> = corpus
             .entries
@@ -3910,7 +4267,7 @@ mod tests {
             .filter(|e| e.context_notes.is_some())
             .map(|e| e.rule_id.as_str())
             .collect();
-        assert_eq!(annotated.len(), 10, "expected 10 context-annotated rules");
+        assert_eq!(annotated.len(), 12, "expected 12 context-annotated rules");
         assert!(annotated.contains(&"precompute-table"));
         assert!(annotated.contains(&"papaya-lockfree"));
         assert!(annotated.contains(&"dedupe-hashset-vs-vec"));
@@ -3919,22 +4276,24 @@ mod tests {
         assert!(annotated.contains(&"copy-from-slice"));
         assert!(annotated.contains(&"tokio-guard-across-await"));
         assert!(annotated.contains(&"bounded-channel-backpressure"));
+        assert!(annotated.contains(&"filter-count-to-any"));
+        assert!(annotated.contains(&"iter-copied-deref-map"));
+        assert!(annotated.contains(&"powi-vs-powf"));
+        assert!(annotated.contains(&"soa-hot-field"));
     }
 
-    /// The 35 non-annotated rules (28 ParetoDominant + 8 NotBenchable - 1 mixed reuse) must
+    /// The non-annotated rules (ParetoDominant + honestly NotBenchable) must
     /// have `context_notes: None` — they are either unconditional wins or
-    /// honestly unmeasurable. Actually: 31 benchable (27 ParetoDominant + 2
-    /// ParetoDominated + 2 Mixed) + 8 NotBenchable = 39 total. The 4 annotated
-    /// + 35 unannotated = 39.
+    /// honestly unmeasurable.
     #[test]
-    fn fifty_rules_have_no_context_notes() {
+    fn unannotated_rules_have_no_context_notes() {
         let corpus = build_perf_seed_corpus();
         let unannotated = corpus
             .entries
             .iter()
             .filter(|e| e.context_notes.is_none())
             .count();
-        assert_eq!(unannotated, 48, "expected 48 unannotated rules (58 - 10 annotated)");
+        assert_eq!(unannotated, 50, "expected 50 unannotated rules (62 - 12 annotated)");
     }
 
     /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -3946,7 +4305,7 @@ mod tests {
         let json = serde_json::to_string(&corpus.entries).unwrap();
         let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
         let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-        assert_eq!(annotated, 10);
+        assert_eq!(annotated, 12);
 
         // Simulate a pre-field snapshot: strip `context_notes` from JSON.
         // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -3958,18 +4317,19 @@ mod tests {
 
     /// Integration: the drafter propagates `context_notes` from `PerfRule`
     /// through `DraftedFix` for the annotated rules, and `None` for the
-    /// unconditional wins. Six verdict annotations (Bench 013's 2
-    /// ParetoDominated + 2 Mixed + Bench 016's sort-by-key/copy-from-slice)
-    /// + the two Issue 014 NotBenchable metric-mismatch annotations.
+    /// unconditional wins. Twelve annotations: Bench 013 (2 ParetoDominated
+    /// and 2 Mixed), Bench 016 (sort-by-key and copy-from-slice), Issue 014
+    /// (2 NotBenchable metric-mismatch), Batch 48 (2 verdict-class), and
+    /// Batch 53 (Bench 038, 2 verdict-class).
     #[test]
     fn drafter_propagates_context_notes_from_perf_corpus() {
         use crate::domain::HealEntry;
 
         let corpus = build_perf_seed_corpus();
 
-        // Filter to the 8 annotated rules.
+        // Filter to the 12 annotated rules.
         let annotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_some()).collect();
-        assert_eq!(annotated.len(), 10, "expected 10 annotated rules");
+        assert_eq!(annotated.len(), 12, "expected 12 annotated rules");
 
         // The HealEntry trait override must agree with the struct field.
         for rule in &annotated {
@@ -3989,9 +4349,9 @@ mod tests {
             );
         }
 
-        // The 50 unannotated rules must return None from the trait too.
+        // The unannotated rules must return None from the trait too.
         let unannotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_none()).collect();
-        assert_eq!(unannotated.len(), 48, "expected 48 unannotated rules");
+        assert_eq!(unannotated.len(), 50, "expected 50 unannotated rules");
         for rule in &unannotated {
             assert!(HealEntry::context_notes(*rule).is_none(), "{} should have no context_notes", rule.rule_id);
         }

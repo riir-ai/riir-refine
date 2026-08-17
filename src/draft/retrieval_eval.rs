@@ -1015,36 +1015,40 @@ mod tests {
         // Rebased 2026-08-16 by Plan 005 T3.5 (operator-aware BM25 tokenizer +
         // adjacency bigrams), again by T3.5.5 (instantiation re-rank promoted
         // to default; measured blended 89/92/92 of 96, clippy 42/45/45 of 48,
-        // perf 47/47/47 of 48), and again by Issue 024 (Bench 032: RERANK_POOL
+        // perf 47/47/47 of 48), again by Issue 024 (Bench 032: RERANK_POOL
         // 8→12 after the cross-domain crowding casualty at raw rank 9;
         // measured blended 90/93/93 of 96, clippy 43/46/46 of 48, perf
-        // 47/47/47 of 48). Floors are measured − ONE span, the documented
-        // convention.
+        // 47/47/47 of 48), and again by Batch 53 (4 `rust_perf` rules + spans,
+        // 2026-08-17: perf corpus 58→62 rules, `PERF_SPANS` 48→52, blended
+        // denominator 96→100; measured blended 93.0/97.0/97.0 of 100, clippy
+        // 43/46/46 of 48, perf 50/51/51 of 52, router 70/100 — all 4 new
+        // spans retrieve their rule top-1). Floors are measured − ONE span,
+        // the documented convention.
         //
         // NOTE these clippy rows are INFLATED by the fixture's single-lint /
         // zero-cross-fire shape (T3.5.4's finding) — they are a fine
         // REGRESSION floor but not an effect size. The re-rank promotion was
         // justified by the uncontaminated composite measurement instead
         // (`tests/uncontaminated_g1.rs`, +12.0pp).
-        pub const BLENDED_TOP1: f32 = 89.0 / 96.0;
-        pub const BLENDED_TOP3: f32 = 92.0 / 96.0;
-        pub const BLENDED_TOP5: f32 = 92.0 / 96.0;
+        pub const BLENDED_TOP1: f32 = 92.0 / 100.0;
+        pub const BLENDED_TOP3: f32 = 96.0 / 100.0;
+        pub const BLENDED_TOP5: f32 = 96.0 / 100.0;
         pub const CLIPPY_TOP1: f32 = 42.0 / 48.0;
         pub const CLIPPY_TOP3: f32 = 45.0 / 48.0;
-        pub const PERF_TOP3: f32 = 46.0 / 48.0;
+        pub const PERF_TOP3: f32 = 50.0 / 52.0;
         #[cfg(feature = "kernel_heal")]
         pub const KERNEL_TOP3: f32 = 29.0 / 30.0;
         /// Router-annotation accuracy floor (Issue 020 wiring, Bench 025):
-        /// the TF-cosine-global annotation measured 66/96 (68.8%, 2-domain)
-        /// / 88/126 (69.8%, 3-domain) after Batch 48. Floor = measured − 5
-        /// spans of corpus-growth headroom (both states land at 63.5%).
+        /// the TF-cosine-global annotation measured 70/100 (70.0%, 2-domain,
+        /// Batch 53) / 89/130 (68.5%, 3-domain) after the +4-span growth.
+        /// Floor = measured − 5 spans of corpus-growth headroom.
         /// This is the standing per-batch measurement of annotation
         /// quality — NOT a gate-quality claim (gating stays killed at the
         /// 85% bar).
         #[cfg(not(feature = "kernel_heal"))]
-        pub const ROUTER_ANNOTATION: f32 = 61.0 / 96.0;
+        pub const ROUTER_ANNOTATION: f32 = 65.0 / 100.0;
         #[cfg(feature = "kernel_heal")]
-        pub const ROUTER_ANNOTATION_3D: f32 = 80.0 / 126.0;
+        pub const ROUTER_ANNOTATION_3D: f32 = 84.0 / 130.0;
     }
 
     #[allow(clippy::cast_precision_loss)] // ratio arithmetic over tiny counts
