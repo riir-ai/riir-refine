@@ -612,6 +612,32 @@ class as the pre-existing ones). **Remaining in riir-train** (~3463 edits):
 engine tests/ gated remainder ~60 files / ~1077 (each needs its gate's
 build+run — the 5-config pattern scales), examples/ 88 / 926, gpu 84 / 562
 + the 4 excluded sibling src files (~206).
+**riir-train slice 3 landed 2026-08-18** (riir-train `91c5f68b`): engine
+`tests/` **xhc_pretraining gate cluster** — the largest single-feature
+cluster in the gated remainder. 7 files share the gate (phase1-6c),
+5 carried edits: **64 edits (61 uninlined_format_args + 3
+vec-with-capacity)**; phase2/phase3 were clean. **Gate-map completion
+lesson:** a whole-file `grep -n '#!\[cfg'` is required — phase1's gate
+sits at line 38 BELOW the head-30 doc-comment window, so a head-N scan
+under-reports; the complete map = Cargo.toml `[[test]] required-features`
+rows AND a whole-file inner-cfg grep (files can have BOTH — xhc does).
+**Validation under `--features xhc_pretraining`** (isolated /tmp target):
+compile 0 errors, clippy 0 warnings in healed files, 0 remaining
+uninlined_format_args (pedantic -W check); tests count-identical pre/
+post-heal all green: phase1 5/0/0 (0.15s), phase4 4/0/1 (67s), phase6
+4/0/1 (534s), phase6b 2/0/1 (938s), phase6c 2/0/2 (494s). **Slow-binary
+lesson:** the cluster runs ~35 min/side (phase6b 15.4 min alone) — check
+per-file runtime BEFORE the baseline (the slice-2 rule), then (a) split
+post-heal runs one binary per command under the 20-min timeout, (b) SKIP
+re-running binaries whose files got 0 edits (phase2 108s + phase3 25s
+saved — content unchanged means the baseline run stands), (c) unscoped
+`cargo test -p` builds the 1253-test lib suite too — always scope with
+`--test <name>` (an unscoped run OOM-killed here).
+**Remaining in riir-train** (~3399 edits): engine tests/ gated remainder
+~53 files / ~1013 (largest next clusters: lora_still 4 files, nextlat 3,
+ciacot 4 AVOID real-model deps, goat_296 family ~7 via per-file feature
+gates, degrpo/wasm_reward_shaping/ted/posterior/mdl 2 each), examples/
+88 / 926, gpu 84 / 562 + the 4 excluded sibling src files (~206).
 **T5 — DONE same day** (benches/ swept,
 katgpt-rs `4ccb2f280`:
 bench_424:97 range_plus_one + bench_136:208 uninlined — range_plus_one
