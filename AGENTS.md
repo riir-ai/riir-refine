@@ -421,6 +421,25 @@ not just line 1. Feature-gated files are invisible to default-features
 feature-on test RUN — stronger than check. Slice selection rule: prefer
 default-compiled + 0-ignored files (validation = verify + plain test run);
 feature-gated files are fine but need their gate identified + exercised.
+**slice 2 landed 2026-08-18** (katgpt-rs `7751f771`): 23 default-compiled
+files / 556 edits (uninlined_format_args 552, map_unwrap_or 4), net −217
+lines. Validation: `--verify` 0 reverts; all 23 binaries count-identical to
+pre-heal baseline (113 tests); rustfmt applied + clean; ONE pre-existing
+flaky gate documented (`bench_290 g2_motif_mining_overhead_under_5pct` —
+debug-timing flap, failed a pre-heal baseline run too, passes on re-run).
+**Second gate lesson (slice 2)**: whole-file `#![cfg]` + `required-features`
+are NOT the only invisibility class — goat_090_tower_search has a MOD-level
+`#[cfg(feature = "unit_distance")]` at line 12 (compiles EMPTY under
+default, 0 tests run; the header scan classified it default-compiled).
+The complete gate scan = `required-features` in Cargo.toml + `^#!\[cfg` over
+the whole header + **mod-level `#[cfg(feature` greps cross-referenced
+against the default feature set** — then exercise each non-default gate
+(goat_090 @ unit_distance: 10/10; bench_ldt/bench_217 @ 5-feature union:
+compile clean + green). ~1238 findings remain across ~132 root-tests/
+files; the gated giants are slice 3: goat_234 (103 @ manifold_pruner),
+bench_245 (41 @ still_kv), parallax_sigmoid_stability_grad_clip (29 @
+parallax_attn — gate at line 49, below the header); all-`#[ignore]`
+bench_block_diagonal/bench_octopus stay skipped (compile-only validation).
 **T5 — DONE same day** (benches/ swept,
 katgpt-rs `4ccb2f280`:
 bench_424:97 range_plus_one + bench_136:208 uninlined — range_plus_one
