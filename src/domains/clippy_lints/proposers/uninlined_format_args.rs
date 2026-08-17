@@ -240,6 +240,34 @@ fn is_comma(t: &TokenTree) -> bool {
     matches!(t, TokenTree::Punct(p) if p.as_char() == ',')
 }
 
+/// One top-level macro argument's token slice (shared with sibling
+/// proposers' macro-arg descent — `map_unwrap_or` scans the same
+/// expression positions real clippy sees post-expansion).
+pub(super) struct ExprMacroArg {
+    pub(super) toks: Vec<TokenTree>,
+}
+
+/// The EXPRESSION arguments of a known format-family macro invocation —
+/// everything after the template position. `None` when the macro isn't in
+/// the family or the arg list is malformed. The args of these macros are
+/// expressions by definition (same family table `inline_args` uses), so a
+/// sibling proposer can parse each arg as an `Expr` and match inside it;
+/// proc-macro2 spans survive the token round-trip, so nodes parsed from
+/// these tokens carry FILE-relative byte ranges that `src`/`edit` slice
+/// correctly. Args that don't parse as expressions (e.g. `key = value`
+/// named args) are simply omitted — the caller skips them.
+pub(super) fn post_template_expr_args(mac: &Macro) -> Option<Vec<ExprMacroArg>> {
+    let pos = macro_family(&mac.path)?;
+    let toks: Vec<TokenTree> = mac.tokens.clone().into_iter().collect();
+    let args = split_args(&toks)?;
+    Some(
+        args.into_iter()
+            .skip(pos.index() + 1)
+            .map(|a| ExprMacroArg { toks: a.toks })
+            .collect(),
+    )
+}
+
 /// Build the inlined RAW literal text + the number of args consumed.
 /// `None` aborts: an uninlinable placeholder (explicit index, positional
 /// `$` ref, malformed content), malformed braces, or an arg-count
