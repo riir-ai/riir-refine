@@ -1,31 +1,48 @@
 //! `clippy::uninlined_format_args` — `format!("{}", name)` →
-//! `format!("{name}")` (Issue 016).
+//! `format!("{name}")` (Issue 016; T4 extension 2026-08-17).
 //!
 //! Token-level surgery on the macro args (the args are opaque to `syn`'s
 //! AST, so the proposer walks `mac.tokens` as `proc_macro2::TokenTree`s —
 //! `Group`s hide their inner commas, making a linear top-level walk sound):
 //!
-//! 1. The first token must be a plain string literal (a `"`-opening one —
-//!    raw/byte/c-strings are rejected) — the TEMPLATE.
-//! 2. After it: `(Comma, arg-tokens…)` repeats; each arg must parse as a
-//!    `syn::Expr` that is a single-ident path. Anything else (field
-//!    access, calls, casts, literals, `r#raw` or `self` idents) aborts
-//!    the WHOLE macro — no partial inlining. A trailing comma is allowed
-//!    and left alone.
-//! 3. The template is scanned char-by-char over its RAW literal text
-//!    (the bytes between the quotes, escapes intact — scanning the
-//!    UNESCAPED `.value()` would erase the `{{`-vs-`{}` distinction):
-//!    escape payloads (`\n`, `\xNN`, `\u{…}` — braces inside!) copy
-//!    verbatim, `{{`/`}}` copy verbatim, an EMPTY placeholder `{}`
-//!    consumes the next arg and emits `{ident}`, any NON-empty
-//!    placeholder (`{:?}`, `{0}`, `{name}`) aborts. Placeholder count
-//!    must equal arg count.
+//! 1. Macro args are split into top-level comma-separated slices. The
+//!    TEMPLATE slice position depends on the macro family (Issue 029 T4
+//!    probe matrix, all `MachineApplicable` vs real clippy 1.97 pedantic):
+//!    first for `format`/`println`/`print`/`eprintln`/`eprint`/`panic`/
+//!    `format_args`, SECOND for `assert`/`debug_assert`/`write`/`writeln`
+//!    (condition/target first), THIRD for `assert_eq`/`assert_ne`/
+//!    `debug_assert_eq`/`debug_assert_ne` (two operands first).
+//!    `unreachable!` stays OUT — the probe shows clippy is silent there
+//!    while `panic!` fires.
+//! 2. The template slice must be a plain `"`-opening string literal.
+//!    Everything after it: format args, each parsed as a `syn::Expr`
+//!    that is a single-ident path. Anything else (field access, calls,
+//!    casts, literals, named args `w = 5`, `r#raw`/`self` idents) aborts
+//!    the WHOLE macro — no partial inlining. A trailing comma is allowed.
+//! 3. The template is scanned char-by-char over its RAW literal text:
+//!    escape payloads copy verbatim, `{{`/`}}` copy verbatim, then the
+//!    placeholder classifier (T4 extension — spec'd placeholders are now
+//!    inlined, carrying the spec verbatim):
+//!    - `{}` → consumes the next arg, emits `{ident}`;
+//!    - `{:spec}` → consumes the next arg, emits `{ident:spec}` — the
+//!      spec rides along unchanged (`{:?}` → `{v:?}`, `{:.1}` →
+//!      `{x:.1}`; same arg, same trait bounds). ABORTS if the spec
+//!      carries a positional `$` ref (`{:1$}`): the referenced arg is
+//!      deleted by the inline, dangling the index. Scope-captured NAME
+//!      refs (`{:>width$}`) are sound and carried.
+//!    - `{name}` / `{name:spec}` → already named; copies verbatim,
+//!      consumes NOTHING (mixed already-named + positional templates
+//!      inline only the positional side).
+//!    - `{0}` (explicit index) → aborts (deferred — reordering breaks
+//!      the linear consumption model).
+//!
+//!    Placeholder count must equal the consumed arg count.
 //!
 //! Rewrites: the template literal's byte range is replaced by the NEW
-//! literal — `"` + the rebuilt raw text + `"`, where every untouched byte
-//! is an ORIGINAL source fragment (escapes keep the caller's spelling);
-//! each arg is deleted from its preceding comma's start through its last
-//! token's end.
+//! literal — `"` + the rebuilt raw text + `"`; each consumed arg is
+//! deleted from its preceding comma's start through its last token's
+//! end. The template's OWN preceding comma (assert/write families) is
+//! kept — only consumed args' commas go.
 
 use super::SourceEdit;
 use proc_macro2::{TokenStream, TokenTree};
@@ -58,22 +75,47 @@ impl<'ast> Visit<'ast> for Collector {
     }
 }
 
+/// Where the template literal sits in the macro's argument list.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum TemplatePos {
+    First,
+    Second,
+    Third,
+}
+
+impl TemplatePos {
+    fn index(self) -> usize {
+        match self {
+            TemplatePos::First => 0,
+            TemplatePos::Second => 1,
+            TemplatePos::Third => 2,
+        }
+    }
+}
+
 impl Collector {
     fn try_inline(&mut self, mac: &Macro) {
-        if !is_format_family(&mac.path) {
+        let Some(pos) = macro_family(&mac.path) else {
             return;
-        }
-        if let Some(edits) = inline_args(&mac.tokens) {
+        };
+        if let Some(edits) = inline_args(&mac.tokens, pos) {
             self.edits.extend(edits);
         }
     }
 }
 
-/// The macro family this rewrite applies to.
-fn is_format_family(path: &Path) -> bool {
-    ["format", "println", "print", "eprintln", "eprint"]
-        .iter()
-        .any(|name| path.is_ident(name))
+/// The macro family this rewrite applies to (Issue 029 T4 probe matrix —
+/// every listed macro fires real clippy on inlineable format args;
+/// `unreachable!` is probe-verified SILENT and stays out).
+fn macro_family(path: &Path) -> Option<TemplatePos> {
+    use TemplatePos::{First, Second, Third};
+    let name = path.get_ident()?.to_string();
+    Some(match name.as_str() {
+        "format" | "println" | "print" | "eprintln" | "eprint" | "panic" | "format_args" => First,
+        "assert" | "debug_assert" | "write" | "writeln" => Second,
+        "assert_eq" | "assert_ne" | "debug_assert_eq" | "debug_assert_ne" => Third,
+        _ => return None,
+    })
 }
 
 /// One inlineable argument: its preceding comma's start byte, its last
@@ -84,25 +126,59 @@ struct ArgSpan {
     name: String,
 }
 
+/// One top-level macro argument (token slice + span bookkeeping).
+struct MacroArg {
+    toks: Vec<TokenTree>,
+    /// Start byte of the comma separating this arg from the previous one.
+    comma_start: usize,
+    /// End byte of this arg's last token.
+    end: usize,
+}
+
 /// Compute the edits for one macro invocation. `None` = abort (the macro
 /// keeps its original text).
-fn inline_args(tokens: &TokenStream) -> Option<Vec<SourceEdit>> {
+fn inline_args(tokens: &TokenStream, pos: TemplatePos) -> Option<Vec<SourceEdit>> {
     let toks: Vec<TokenTree> = tokens.clone().into_iter().collect();
-    let first = toks.first()?;
-    let text = match first {
+    let args = split_args(&toks)?;
+    let template_arg = args.get(pos.index())?;
+
+    // The template must be a single plain string literal (a `"`-opening
+    // one — raw/byte/c-strings are rejected; also rejects suffixed or
+    // malformed shapes).
+    if template_arg.toks.len() != 1 {
+        return None;
+    }
+    let text = match &template_arg.toks[0] {
         TokenTree::Literal(l) if l.to_string().starts_with('"') => l.to_string(),
-        _ => return None, // raw/byte/c-string or non-literal first token
+        _ => return None, // no template here (e.g. bare `assert!(cond)`) — not ours
     };
-    // Validate the token is a well-formed plain string literal (also
-    // rejects suffixed/malformed shapes), then take its raw inner text.
     syn::parse_str::<LitStr>(&text).ok()?;
     let raw = &text[1..text.len() - 1];
-    let template_range = first.span().byte_range();
-    let args = scan_args(&toks)?;
+    let template_range = template_arg.toks[0].span().byte_range();
 
-    let (new_raw, used) = build_inlined(raw, &args)?;
+    // Everything after the template is a format arg — ident paths only.
+    let mut fmt_args = Vec::new();
+    for arg in &args[pos.index() + 1..] {
+        let stream: TokenStream = arg.toks.iter().cloned().collect();
+        let expr = syn::parse2::<Expr>(stream).ok()?;
+        let Expr::Path(p) = &expr else {
+            return None; // field access / call / cast / literal / named-arg … — no partial inlining
+        };
+        let ident = p.path.get_ident()?.to_string();
+        // `{r#raw}` and `{self}` are not valid format-arg names — skip.
+        if ident.contains('#') || ident == "self" {
+            return None;
+        }
+        fmt_args.push(ArgSpan {
+            comma_start: arg.comma_start,
+            arg_end: arg.end,
+            name: ident,
+        });
+    }
+
+    let (new_raw, used) = build_inlined(raw, &fmt_args)?;
     if used == 0 {
-        return None; // zero placeholders — nothing to inline here
+        return None; // nothing consumed — nothing to inline here
     }
 
     let mut edits = vec![SourceEdit {
@@ -110,7 +186,7 @@ fn inline_args(tokens: &TokenStream) -> Option<Vec<SourceEdit>> {
         end: template_range.end,
         replacement: format!("\"{new_raw}\""),
     }];
-    for a in &args {
+    for a in &fmt_args {
         edits.push(SourceEdit {
             start: a.comma_start,
             end: a.arg_end,
@@ -120,41 +196,34 @@ fn inline_args(tokens: &TokenStream) -> Option<Vec<SourceEdit>> {
     Some(edits)
 }
 
-/// Walk `(Comma, arg…)*` after the template. `None` on any malformed
-/// shape or non-inlinable argument (all-or-nothing).
-fn scan_args(toks: &[TokenTree]) -> Option<Vec<ArgSpan>> {
+/// Split the macro's top-level token stream on commas. `None` on shapes
+/// that can't be an arg list (leading comma, empty arg before the end).
+/// A trailing comma is dropped from consideration (kept in the source —
+/// nothing after it is an arg).
+fn split_args(toks: &[TokenTree]) -> Option<Vec<MacroArg>> {
     let mut args = Vec::new();
-    let mut i = 1;
+    let mut i = 0usize;
+    let mut pending_comma: Option<usize> = None;
     while i < toks.len() {
-        let comma_start = match &toks[i] {
-            TokenTree::Punct(p) if p.as_char() == ',' => p.span().byte_range().start,
-            _ => return None,
-        };
-        i += 1;
         let start = i;
         while i < toks.len() && !is_comma(&toks[i]) {
             i += 1;
         }
         if start == i {
-            // Nothing between this comma and the next/end. A trailing
-            // comma after the last arg is fine; anything else is malformed.
-            return if i == toks.len() { Some(args) } else { None };
+            // A comma with nothing before it in this slot: acceptable ONLY
+            // as the final trailing comma; anywhere else it is malformed.
+            return if i == toks.len() - 1 { Some(args) } else { None };
         }
-        let stream: TokenStream = toks[start..i].iter().cloned().collect();
-        let expr = syn::parse2::<Expr>(stream).ok()?;
-        let Expr::Path(p) = &expr else {
-            return None; // field access / call / cast / literal … — no partial inlining
-        };
-        let ident = p.path.get_ident()?.to_string();
-        // `{r#raw}` and `{self}` are not valid format-arg names — skip.
-        if ident.contains('#') || ident == "self" {
-            return None;
-        }
-        args.push(ArgSpan {
-            comma_start,
-            arg_end: toks[i - 1].span().byte_range().end,
-            name: ident,
+        args.push(MacroArg {
+            toks: toks[start..i].to_vec(),
+            comma_start: pending_comma.unwrap_or(0),
+            end: toks[i - 1].span().byte_range().end,
         });
+        pending_comma = match toks.get(i) {
+            Some(t) if is_comma(t) => Some(t.span().byte_range().start),
+            _ => None,
+        };
+        i += 1; // step over the comma (or the end marker)
     }
     Some(args)
 }
@@ -164,8 +233,9 @@ fn is_comma(t: &TokenTree) -> bool {
 }
 
 /// Build the inlined RAW literal text + the number of args consumed.
-/// `None` aborts: non-empty placeholder content, malformed braces, or an
-/// arg-count mismatch.
+/// `None` aborts: an uninlinable placeholder (explicit index, positional
+/// `$` ref, malformed content), malformed braces, or an arg-count
+/// mismatch.
 fn build_inlined(raw: &str, args: &[ArgSpan]) -> Option<(String, usize)> {
     let chars: Vec<char> = raw.chars().collect();
     let mut out = String::with_capacity(raw.len());
@@ -230,14 +300,38 @@ fn build_inlined(raw: &str, args: &[ArgSpan]) -> Option<(String, usize)> {
                         None => return None, // unterminated — unreachable in compiled code
                     }
                 }
-                if !content.is_empty() {
-                    return None; // `{:?}` / `{0}` / `{name}` — conservative v1
+                match classify_placeholder(&content) {
+                    Placeholder::Empty => {
+                        let arg = args.get(next_arg)?;
+                        next_arg += 1;
+                        out.push('{');
+                        out.push_str(&arg.name);
+                        out.push('}');
+                    }
+                    Placeholder::Spec(spec) => {
+                        // T4: the spec rides along verbatim — same arg,
+                        // same trait bounds, same formatting.
+                        if has_dynamic_spec_ref(spec) {
+                            return None; // `{:1$}` / `{:.*}` — the spec itself consumes/references another positional arg
+                        }
+                        let arg = args.get(next_arg)?;
+                        next_arg += 1;
+                        out.push('{');
+                        out.push_str(&arg.name);
+                        out.push(':');
+                        out.push_str(spec);
+                        out.push('}');
+                    }
+                    Placeholder::AlreadyNamed => {
+                        // `{name}` / `{name:spec}` — copies verbatim,
+                        // consumes nothing (its binding is not one of the
+                        // positional args).
+                        out.push('{');
+                        out.push_str(&content);
+                        out.push('}');
+                    }
+                    Placeholder::NotInlinable => return None,
                 }
-                let arg = args.get(next_arg)?;
-                next_arg += 1;
-                out.push('{');
-                out.push_str(&arg.name);
-                out.push('}');
             }
             '}' => return None, // lone `}` — invalid in a format string
             _ => {
@@ -250,6 +344,71 @@ fn build_inlined(raw: &str, args: &[ArgSpan]) -> Option<(String, usize)> {
         return None; // leftover args (or placeholders ≠ args) — defensive
     }
     Some((out, next_arg))
+}
+
+enum Placeholder<'a> {
+    /// `{}` — implicit positional, consumes the next arg.
+    Empty,
+    /// `{:spec}` — implicit positional with a format spec, consumes the
+    /// next arg.
+    Spec(&'a str),
+    /// `{name}` or `{name:spec}` — already named; consumes nothing.
+    AlreadyNamed,
+    /// `{0}` / `{1}` (explicit index) or anything malformed — abort.
+    NotInlinable,
+}
+
+fn classify_placeholder(content: &str) -> Placeholder<'_> {
+    if content.is_empty() {
+        return Placeholder::Empty;
+    }
+    if let Some(spec) = content.strip_prefix(':') {
+        return Placeholder::Spec(spec);
+    }
+    if is_named_content(content) {
+        return Placeholder::AlreadyNamed;
+    }
+    Placeholder::NotInlinable
+}
+
+/// `{name}` or `{name:spec}` — a valid ident prefix (explicit indices
+/// `{0}` are NOT this: digits are not ident starts).
+fn is_named_content(content: &str) -> bool {
+    let mut chars = content.chars();
+    match chars.next() {
+        Some(c) if c.is_ascii_alphabetic() || c == '_' => {}
+        _ => return false,
+    }
+    for c in chars.by_ref() {
+        if c == ':' {
+            break; // the rest is the spec — verbatim either way
+        }
+        if !(c.is_ascii_alphanumeric() || c == '_') {
+            return false;
+        }
+    }
+    true
+}
+
+/// A spec that references or consumes ANOTHER positional arg — the inline
+/// would delete that arg, corrupting the reference:
+///
+/// - `{:1$}` — width/precision from positional arg 1 (digit before `$`);
+/// - `{:.*}` — precision from the NEXT positional arg (dot-star).
+///
+/// Scope-captured NAME refs (`{:>width$}`) and fill chars (`{:*<5}` — a
+/// `*` NOT preceded by `.`) carry fine.
+fn has_dynamic_spec_ref(spec: &str) -> bool {
+    let chars: Vec<char> = spec.chars().collect();
+    for (i, &c) in chars.iter().enumerate() {
+        if c == '$' && i > 0 && chars[i - 1].is_ascii_digit() {
+            return true;
+        }
+        if c == '*' && i > 0 && chars[i - 1] == '.' {
+            return true;
+        }
+    }
+    false
 }
 
 #[cfg(test)]
@@ -322,12 +481,259 @@ mod tests {
     }
 
     #[test]
-    fn format_spec_aborts() {
+    fn debug_spec_carried_verbatim() {
+        // T4 (probe P1): `{:?}` fires MachineApplicable — the spec rides
+        // along after the inlined name.
         let out = propose_fix(
             "uninlined_format_args",
             "fn f(v: u8) -> String { format!(\"{:?}\", v) }",
+        )
+        .expect("pattern matched");
+        assert_eq!(out, "fn f(v: u8) -> String { format!(\"{v:?}\") }");
+        assert!(syn::parse_file(&out).is_ok(), "{out}");
+    }
+
+    #[test]
+    fn precision_and_width_specs_carried() {
+        // T4 (probes P2/P3/P15/P23): `{:.1}`, `{:>12}`, `{:#x}`, `{:5}`.
+        let p = propose_fix(
+            "uninlined_format_args",
+            "fn f(x: f32) -> String { format!(\"{:.1}\", x) }",
+        )
+        .expect("pattern matched");
+        assert_eq!(p, "fn f(x: f32) -> String { format!(\"{x:.1}\") }");
+        let w = propose_fix(
+            "uninlined_format_args",
+            "fn f(s: &str) -> String { format!(\"{:>12}\", s) }",
+        )
+        .expect("pattern matched");
+        assert_eq!(w, "fn f(s: &str) -> String { format!(\"{s:>12}\") }");
+        let h = propose_fix(
+            "uninlined_format_args",
+            "fn f(v: u32) -> String { format!(\"{:#x}\", v) }",
+        )
+        .expect("pattern matched");
+        assert_eq!(h, "fn f(v: u32) -> String { format!(\"{v:#x}\") }");
+    }
+
+    #[test]
+    fn mixed_spec_and_plain_inlined_in_order() {
+        // T4 (probe P4/P7): the nf_flow_goat miss class —
+        // `"{:?} {}"` and `"{} {:.1}"` with ident args.
+        let out = propose_fix(
+            "uninlined_format_args",
+            "fn f(a: u8, b: f32) -> String { format!(\"{:?} {:.1}\", a, b) }",
+        )
+        .expect("pattern matched");
+        assert_eq!(out, "fn f(a: u8, b: f32) -> String { format!(\"{a:?} {b:.1}\") }");
+        assert!(syn::parse_file(&out).is_ok(), "{out}");
+    }
+
+    #[test]
+    fn already_named_placeholder_untouched() {
+        // T4 (probe P12/P13): `{name}` copies verbatim, consumes nothing;
+        // only the positional `{}` side inlines.
+        let out = propose_fix(
+            "uninlined_format_args",
+            "fn f(name: &str, v: u8) -> String { format!(\"{name} got {} {:?}\", v, v) }",
+        )
+        .expect("pattern matched");
+        assert!(
+            out.contains("\"{name} got {v} {v:?}\""),
+            "named placeholder mangled: {out}"
         );
-        assert!(out.is_none(), "{{:?}} spec is not inlinable: {out:?}");
+        assert!(syn::parse_file(&out).is_ok(), "{out}");
+    }
+
+    #[test]
+    fn named_with_spec_untouched() {
+        let out = propose_fix(
+            "uninlined_format_args",
+            "fn f(w: usize) -> String { format!(\"{w:>4} {}\", w) }",
+        )
+        .expect("pattern matched");
+        assert!(out.contains("\"{w:>4} {w}\""), "{out}");
+        assert!(syn::parse_file(&out).is_ok(), "{out}");
+    }
+
+    #[test]
+    fn scope_captured_dollar_name_ref_carried() {
+        // T4 (probe P24): `{:>width$}` with NO explicit width arg — the
+        // ref is scope-captured; carrying it verbatim is sound.
+        let out = propose_fix(
+            "uninlined_format_args",
+            "fn f(x: u8, width: usize) -> String { format!(\"{:>width$}\", x) }",
+        )
+        .expect("pattern matched");
+        assert_eq!(
+            out,
+            "fn f(x: u8, width: usize) -> String { format!(\"{x:>width$}\") }"
+        );
+        assert!(syn::parse_file(&out).is_ok(), "{out}");
+    }
+
+    #[test]
+    fn positional_dollar_ref_aborts() {
+        // T4 (probe P20 fires in clippy, we stay silent): `{:1$}` refs
+        // positional arg 1 — inlining deletes that arg, dangling the
+        // index. Documented conservative divergence.
+        let out = propose_fix(
+            "uninlined_format_args",
+            "fn f(x: f64, p: usize) -> String { format!(\"{:1$}\", x, p) }",
+        );
+        assert!(out.is_none(), "positional $ ref must abort: {out:?}");
+    }
+
+    #[test]
+    fn dot_star_precision_aborts() {
+        // `{:.*}` consumes the NEXT positional arg as precision — a
+        // two-arg placeholder the linear model cannot express.
+        let out = propose_fix(
+            "uninlined_format_args",
+            "fn f(p: usize, x: f64) -> String { format!(\"{:.*}\", p, x) }",
+        );
+        assert!(out.is_none(), ".* precision must abort: {out:?}");
+    }
+
+    #[test]
+    fn star_fill_char_carries() {
+        // A `*` NOT after a `.` is a FILL character — constant spec, safe.
+        let out = propose_fix(
+            "uninlined_format_args",
+            "fn f(s: &str) -> String { format!(\"{:*<5}\", s) }",
+        )
+        .expect("pattern matched");
+        assert!(out.contains("\"{s:*<5}\""), "{out}");
+        assert!(syn::parse_file(&out).is_ok(), "{out}");
+    }
+
+    #[test]
+    fn explicit_index_aborts() {
+        // T4 (probe P5 fires in clippy, we stay silent): `{0}` reordering
+        // breaks the linear consumption model — deferred.
+        let out = propose_fix(
+            "uninlined_format_args",
+            "fn f(x: u8) -> String { format!(\"{0}\", x) }",
+        );
+        assert!(out.is_none(), "explicit index must abort: {out:?}");
+    }
+
+    #[test]
+    fn assert_message_inlined() {
+        // T4 (probe P8): template at SECOND position (after the cond).
+        let out = propose_fix(
+            "uninlined_format_args",
+            "fn f(x: u8) { assert!(x > 0, \"got {}\", x); }",
+        )
+        .expect("pattern matched");
+        assert_eq!(out, "fn f(x: u8) { assert!(x > 0, \"got {x}\"); }");
+        assert!(syn::parse_file(&out).is_ok(), "{out}");
+    }
+
+    #[test]
+    fn assert_cond_string_literal_not_mistaken_for_template() {
+        // The condition's own string literal must not be picked as the
+        // template — the template is the SECOND top-level arg.
+        let out = propose_fix(
+            "uninlined_format_args",
+            "fn f(s: &str) { assert!(s == \"x\", \"got {}\", s); }",
+        )
+        .expect("pattern matched");
+        assert!(out.contains("\"got {s}\""), "{out}");
+        assert!(out.contains("s == \"x\""), "cond mangled: {out}");
+        assert!(syn::parse_file(&out).is_ok(), "{out}");
+    }
+
+    #[test]
+    fn assert_eq_template_at_third_position() {
+        // T4 (probe P9): two operands, then the template.
+        let out = propose_fix(
+            "uninlined_format_args",
+            "fn f(a: u8, b: u8) { assert_eq!(a, b, \"mismatch {} vs {}\", a, b); }",
+        )
+        .expect("pattern matched");
+        assert!(out.contains("\"mismatch {a} vs {b}\""), "{out}");
+        assert!(syn::parse_file(&out).is_ok(), "{out}");
+    }
+
+    #[test]
+    fn assert_ne_and_debug_variants_inlined() {
+        let ne = propose_fix(
+            "uninlined_format_args",
+            "fn f(a: u8, b: u8) { assert_ne!(a, b, \"{} != {}\", a, b); }",
+        )
+        .expect("pattern matched");
+        assert!(ne.contains("\"{a} != {b}\""), "{ne}");
+        let d = propose_fix(
+            "uninlined_format_args",
+            "fn f(a: u8, b: u8) { debug_assert_eq!(a, b, \"d {} {}\", a, b); }",
+        )
+        .expect("pattern matched");
+        assert!(d.contains("\"d {a} {b}\""), "{d}");
+    }
+
+    #[test]
+    fn write_and_writeln_inlined() {
+        // T4 (probes P10/P16): target first, template second. A literal
+        // arg aborts (not an ident) — the target slice itself may be any
+        // expression, it is never touched.
+        let lit = propose_fix(
+            "uninlined_format_args",
+            "use std::fmt; fn f(f: &mut fmt::Formatter) -> fmt::Result { write!(f, \"val {}\", 1) }",
+        );
+        assert!(lit.is_none(), "literal arg must abort: {lit:?}");
+        let out = propose_fix(
+            "uninlined_format_args",
+            "use std::fmt; fn f(f: &mut fmt::Formatter, v: u8) -> fmt::Result { write!(f, \"val {}\", v) }",
+        )
+        .expect("pattern matched");
+        assert!(out.contains("\"val {v}\""), "{out}");
+        assert!(out.contains("write!(f,"), "target mangled: {out}");
+        assert!(syn::parse_file(&out).is_ok(), "{out}");
+        let wl = propose_fix(
+            "uninlined_format_args",
+            "use std::fmt; fn f(f: &mut fmt::Formatter, v: u8) -> fmt::Result { writeln!(f, \"line {}\", v) }",
+        )
+        .expect("pattern matched");
+        assert!(wl.contains("\"line {v}\""), "{wl}");
+    }
+
+    #[test]
+    fn panic_and_format_args_inlined() {
+        // T4 (probes P11/P19): template-first like format!.
+        let p = propose_fix(
+            "uninlined_format_args",
+            "fn f(x: u8) { if x > 100 { panic!(\"too big {}\", x); } }",
+        )
+        .expect("pattern matched");
+        assert!(p.contains("\"too big {x}\""), "{p}");
+        let fa = propose_fix(
+            "uninlined_format_args",
+            "fn f(v: u8) { let _ = format_args!(\"plain {}\", v); }",
+        )
+        .expect("pattern matched");
+        assert!(fa.contains("\"plain {v}\""), "{fa}");
+    }
+
+    #[test]
+    fn unreachable_stays_silent() {
+        // T4 probe P21: real clippy is SILENT on unreachable! (while
+        // panic! fires) — we match.
+        let out = propose_fix(
+            "uninlined_format_args",
+            "fn f(x: u8) -> u8 { match x { 0 => 1, _ => unreachable!(\"no {}\", x) } }",
+        );
+        assert!(out.is_none(), "unreachable! must stay silent: {out:?}");
+    }
+
+    #[test]
+    fn assert_without_message_untouched() {
+        // Probe P25 control: no template at position 1 — nothing to do.
+        let out = propose_fix(
+            "uninlined_format_args",
+            "fn f(x: u8) { assert!(x > 0); }",
+        );
+        assert!(out.is_none(), "no-template assert must not fire: {out:?}");
     }
 
     #[test]
@@ -347,6 +753,16 @@ mod tests {
             "fn f(x: u8) -> String { format!(\"{x}\") }",
         );
         assert!(out.is_none(), "named placeholder is not our pattern: {out:?}");
+    }
+
+    #[test]
+    fn already_inlined_spec_unchanged() {
+        // `{x:?}` fully named+spec — nothing to consume.
+        let out = propose_fix(
+            "uninlined_format_args",
+            "fn f(x: u8) -> String { format!(\"{x:?}\") }",
+        );
+        assert!(out.is_none(), "fully-named placeholder must not fire: {out:?}");
     }
 
     #[test]
