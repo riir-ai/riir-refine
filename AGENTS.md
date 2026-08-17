@@ -344,19 +344,51 @@ real clippy 1.97 pedantic `--all-features --all-targets` (single_match_else
 `e8cefad44`, verified via detached worktree; timing-sensitive debug-mode
 test, unrelated). **Deliberate divergence documented:** decomp_reviewer:62
 fires real clippy but stays healer-silent (interior comment between arms
-would be displaced — our tool is SAFER than clippy there). **Open (kept
-in the issue's task list, tracked by the T-numbers):** T3 — the
-`None`/`Err(_)` second-arm single_match_else class (~30 findings in
-katgpt-speculative; type-informed wildcard detection — needs a probe
-matrix before any parse-only implementation); T4 — `uninlined_format_args`
-~60 miss shapes (diagnose from ground truth, extend only the verified
-subset); T5 — **DONE same day** (benches/ swept, katgpt-rs `4ccb2f280`:
+would be displaced — our tool is SAFER than clippy there). **T3 — DONE
+same day** (riir-clippy `ea76b3c`/`3983c15` + katgpt-rs `2215cac06`): the
+`None`/`Err(_)` second-arm class, closed by a 20-probe matrix vs real
+clippy 1.97 pedantic. **Probe verdict:** on std Option/Result scrutinees
+clippy treats a NO-BINDING constructor arm as the wildcard — fires on
+`None`, `Option::None`, `Err(_)`, `Err(..)`, `Some(_)`, `Ok(_)` as the
+second arm (incl. reversed pairs `None`+`Some(_)`, `Err(_)`+`Ok(_)`);
+SILENT on binding arm2s (`Err(e)`/`Some(v)`), user-enum arms
+(`R2::Ok(_)`, `E3::None`, glob-imported `None` — clippy is
+TYPE-INFORMED), expression arm2 bodies, and `None`-first + binding
+second. All firing shapes suggest MachineApplicable `if let P1 = scrut
+{..} else {..}`. **Parse-only approximation:** the extended arms fire
+only when the FIRST arm is a std-shaped Some/Ok/Err/None pattern (bare
+or `Option::`/`Result::`-qualified) pinning the scrutinee type — user
+enums stay silent exactly like clippy; the emitted if-let form needs no
+trait bounds (a compiling 2-arm exhaustive match proves P2 ≡ ¬P1, so
+the rewrite is sound for every shape that compiles). 13 new fixtures;
+clean_spans extended with the user-enum + binding-second silent shapes.
+**Healed end-to-end:** 18 sites (katgpt-speculative 8 incl. the original
+belief_cache/dd_tree misses, src/pruners/bomber 4, benches 4,
+katgpt-pruners 2) — ground truth 118 → 96 repo-wide, EXACTLY −22
+diagnostics for 18 edits (the 4 bomber sites each counted twice across
+lib+test targets); zero remaining findings in healed files; no new
+findings introduced. Healer-silences that AGREE with real clippy:
+fft/sr2am_player HarnessUpdate (expression arm2 body) + comment-guarded
+matches. Empirical syn facts: bare `None` parses as `Pat::Ident` in
+syn (the `is_none_pat` three-arm lesson), `Err(..)` elems hold
+`Pat::Rest`. Discovered in passing: the `cargo test -p katgpt-speculative
+-p katgpt-pruners --lib` dual-crate invocation has a PRE-EXISTING
+feature-unification break (katgpt-speculative's dev-dep
+`echo_env_predictor` unifies into katgpt-pruners; the un-gated
+`test_prediction_scorer_basic` references the `partial_scoring`-gated
+`EchoPredictionScorer`) — verified identical at HEAD `4ccb2f280` via
+detached worktree; candidate for its own issue. Remaining backlog
+(next sweep unit): 96 repo-wide (31 in unswept katgpt-pruners files +
+katgpt-forward/dd_tree + katgpt-core). **T4 — `uninlined_format_args`
+~96 findings (all targets) miss-shape diagnosis from ground truth;
+extend only the verified subset. T5 — DONE same day** (benches/ swept,
+katgpt-rs `4ccb2f280`:
 bench_424:97 range_plus_one + bench_136:208 uninlined — range_plus_one
 now ZERO findings across all targets).
 Note: syn 2.0.119's `PatLit.lit` holds a `Lit` (not `Box<Expr>`) whose
 token preserves a leading `-` — the negative-literal exclusion checks the
-token text. Gates: 30 range/single_match tests / 487 default lib / 539
-latent_retrieval lib / retrieval floors unchanged / clippy 0 both states.
+token text. Gates: 36 range/single_match tests (23 single_match_else) /
+496 default lib / retrieval floors PASS / clippy 0 lib + all-targets.
 
 **Plan 005 (2026-08-14) — latent retrieval + `cargo heal --suggest` CLI
 (Phases 1–4 DONE).** `src/draft/` ships the span-level retrieval layer:
