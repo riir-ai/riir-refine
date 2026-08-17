@@ -492,6 +492,37 @@ katgpt-spectral 16, attn-match 6, pruners 5, root 3 — the future src/ sweep).*
 files now (~50 gate groups; biggest: bomber-wasm 31, mech_attribution 30,
 hla_attention 30, msa_adaptive_k 29, parallax_attn 25); standing exclusions:
 14 empty-under-default binaries + 6 all-#[ignore] files.
+**slice 5 landed 2026-08-18** (katgpt-rs `a75dc385`): 12 files / 205 edits
+across 8 validation cycles, cheapest-feature-first ordering — default
+(bench_105_gdn2_goat 5 + bench_core_optimization 33), hla_attention (25,
+zero-dep feature — the cheapest possible cycle), ict_branching (20), ega_attn
+(19), sink_aware_attn (18), msa_adaptive_k (29), parallax_attn (25),
+dynamic_rank,bandit (31, one superset cycle covers both the bandit-only and
+the both-features gates). All runs count-identical pre/post; 1 edit
+auto-reverted by the compile gate (redundant_closure @ bench_483:506).
+**Gate-cycle method (the load-bearing lesson): feature-gated heals MUST pass
+`--verify-args "--features F"`** — the default-features cargo check compiles
+gated files EMPTY (0 tests), so a plain --verify proves nothing about them;
+the same feature set must drive baseline run, verify check, + post-heal run.
+**bench_core_optimization validation nuance (7th class): all-#[ignore]
+no-assertion benches CAN be cheaply validated** — its 9 tests are pure
+measurement ("no assertions" per their ignore reasons) but a release
+`--ignored` run completes in ~6 s, giving panic-checking validation where the
+all-#[ignore] exclusion class would otherwise defer the file wholesale.
+**New divergence class recorded (named-arg-with-rename):** 3 sites in 2 files
+(bench_105:416/420, bench_256:496) — `{spread:.3}` + `spread =
+gdn2_max_spread` where real clippy inlines the variable into the template
+(`{gdn2_max_spread:.3}`); our proposer documents already-named args as
+copy-verbatim (Issue 029 T4's conservative rule). Extending the proposer to
+rewrite named templates is future work (needs template-string transformation
++ fixtures). **Tooling notes:** `.goat`-suffixed files map to underscored
+cargo target names (bench_256_adaptive_k.goat.rs →
+bench_256_adaptive_k_goat — check the [[test]] name field, not the
+filename); a dry-run's per-file edit attribution MUST be parsed from the
+`fix <path> (N edits):` review sections, NOT from suggest-span headers (a
+session wasted baselining 36 mis-attributed files before catching it —
+the suggest pass interleaves per-file, so edit lines following a span header
+belong to the PREVIOUS file's fix section).
 **riir-train slice 1 landed 2026-08-18** (riir-train `e6084429`, this repo
 `7ed7c6c`): the sweep's first riir-train unit — engine `src/`
 default-compiled files only, 30 files / 183 edits (131 uninlined_format_args,
