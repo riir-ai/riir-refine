@@ -1,5 +1,10 @@
 # Bench 036 — interleaved per-pair A/B: llama.cpp vs katgpt ternary on clippy prompts (M3 Max Metal)
 
+> **Headline (3 clean pairs, 2026-08-17):** prefill **5.343×** (5.192–5.556), decode
+> **1.512×** (1.446–1.513), total **2.523×** (2.405–2.575). Prefill genuinely narrowed
+> from Bench 014's 8.01×; **decode is unchanged** once Arm A's 11% thermal drift is
+> accounted for (honest bracket 1.45–1.70× vs 1.63×). Still behind llama.cpp.
+
 **Date:** 2026-08-17
 **Parents:** [Bench 010](./010_llamacpp_vs_katgpt_ternary_clippy_tps.md) (2026-08-12), [Bench 014](./014_bench010_rerun_llamacpp_vs_katgpt_ternary.md) (2026-08-13)
 **Hardware:** M3 Max, Metal only
@@ -23,6 +28,66 @@
 llama.cpp remains ahead on every axis. **The prefill gap genuinely narrowed** (8.01× → 6.05×), which is the batched simdgroup prefill landing and is directionally consistent with commit `a566255`'s isolated claim of 5.88×. The decode ratio *appears* to have regressed, but it did not — see §"The decode ratio moved the wrong way, and why that is load".
 
 **These ratios are an UPPER BOUND on llama.cpp's lead, not a point estimate.** Arm B is disproportionately load-depressed (§below), so the true quiet-box ratios are smaller than every number in this table.
+
+---
+
+## ✅ THREE-CLEAN-PAIR RUN (2026-08-17, per-pair re-gated driver) — the point estimate
+
+Re-run after adding per-pair load re-gating. **All three pairs cleared the 12.6
+ceiling** (loads 8.35 / 5.59 / 11.10) and the driver recorded
+`absolutes_comparable_to_bench_014 = true`. Token parity 349/349 prompt, 192/192
+decode in every pair.
+
+| pair | order | loadavg | Arm A prefill/decode | Arm B prefill/decode | ratio prefill/decode/total |
+|---|---|---:|---:|---:|---:|
+| pair0 | B→A | 8.35 ✅ | 149.51 / 29.35 | 26.91 / 19.41 | 5.556 / 1.512 / 2.575 |
+| pair1 | A→B | 5.59 ✅ | 139.29 / 27.43 | 26.07 / 18.13 | 5.343 / 1.513 / 2.523 |
+| pair2 | B→A | 11.10 ✅ | 132.19 / 25.01 | 25.46 / 17.30 | 5.192 / 1.446 / 2.405 |
+| **median** | | | **139.29 / 27.43** | **26.07 / 18.13** | **5.343 / 1.512 / 2.523** |
+| spread | | | | | 5.192–5.556 / 1.446–1.513 / 2.405–2.575 |
+
+**Headline vs Bench 014:**
+
+| metric | Bench 014 | **median (3 clean pairs)** | spread |
+|---|---:|---:|---:|
+| prefill | 8.01× | **5.343×** | 5.192–5.556 |
+| decode | 1.63× | **1.512×** | 1.446–1.513 |
+| total | 3.41× | **2.523×** | 2.405–2.575 |
+
+The spread is now **±3.4% on prefill and ±2.2% on decode**, against the previous
+attempt's ±13% / ±32%. That is the per-pair gate working: it paused before pair0
+at loadavg 20.6 rather than measuring, so every pair here was taken inside the
+window.
+
+### One caveat that matters, and it cuts against us
+
+Arm A degraded monotonically across the run — decode **29.35 → 27.43 → 25.01**
+(−15% end to end) — and that is *not* explained by load, which went 8.35 → 5.59 →
+11.10 (non-monotonic). Sustained GPU work heating the M3 is the likely cause. Arm
+A's median decode (27.43) therefore sits **11.2% below** Bench 014's 30.89, while
+Arm B's (18.13) is only **4.3% below** its 18.95.
+
+So the decode ratio is **flattered** this run — the opposite direction from the
+loaded run's inflation. Normalising Arm A to its Bench 014 baseline gives
+`30.89 / 18.13 = 1.703×`. Honest bracket:
+
+> **decode gap is 1.45–1.70×, i.e. materially unchanged from Bench 014's 1.63×.**
+> Do not read 1.512× as a decode improvement.
+
+Prefill is robust to the same correction because Arm B's gain dominates: Arm B
+prefill **18.12 → 26.07 (+43.9%)**, and normalising Arm A gives
+`145.11 / 26.07 = 5.566×`. So:
+
+> **prefill gap is 5.34–5.57×, genuinely narrowed from 8.01× (~1.44–1.50×).**
+> This is the batched simdgroup prefill, independently reproducing commit
+> `a566255`'s 25.49 tok/s through a third protocol.
+
+### Verdict
+
+**Still not faster than llama.cpp on Metal**, on three clean interleaved pairs:
+behind by **~5.3–5.6× on prefill** and **~1.45–1.70× on decode**. The prefill gap
+has genuinely closed by about a third since Bench 014; the decode gap has not
+moved. Prefill remains the dominant deficit, so Bench 010's ordering still holds.
 
 ---
 
