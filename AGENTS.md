@@ -523,6 +523,44 @@ filename); a dry-run's per-file edit attribution MUST be parsed from the
 session wasted baselining 36 mis-attributed files before catching it —
 the suggest pass interleaves per-file, so edit lines following a span header
 belong to the PREVIOUS file's fix section).
+**slice 6 landed 2026-08-18** (katgpt-rs `a02b68c1` + the Issue-669 fix commit
+`a7bf7c0d`): 32 gated files / 223 edits across 8 feature-gate cycles,
+cheapest-feature-first — (1) hardware_aware_scheduler,smear_classifier,
+adaptive_gamma_forecast,dllm combined 42 (light/zero-dep features combine
+safely in one cycle); (2) kimi_k3_backward SUPERSET 46 — it implies
+kimi_k3_loader, so one cycle covered both gate populations (5 files);
+(3) elf_sde,bandit 24; (4) dense_mesh 23; (5) mux_latent_wire 16;
+(6) tiled_attention,kog_cpu_fusion,toast_tokenizer 21; (7) slod,engram,
+event_log,vocab_channel_pruner,coexplain_riir 26; (8) the bandit-family
+stragglers (committee_boost,delta_mem,partial_scoring,proof_sketch_evolution,
+bfcf_tree,and_or_dtree) 25. All runs count-identical pre/post; 0 compile-gate
+reverts; per-file real-clippy grep clean on all 32.
+**Bug found at baseline (Issue 669, fixed same day):**
+bench_delta_mem_modelless::test_phase1_state_interference ABORTED pre-heal —
+the test passed 3-element value vectors to a single feature_dim=5 hasher
+(production uses TWO hashers: key dim=feature_dim, val dim=3 per
+OutcomeFeatures), so simd_dot_f32 read 2 floats past the features slice:
+SIGABRT in debug, SILENT UB in release (stack garbage folded into every
+hash_value). The abort killed the whole 16-test binary; the feature sits in
+no pinned CI suite (the gate-coverage lesson again). Fix: pad the test
+vectors + add `assert_eq!(features.len(), self.feature_dim)` in
+project_into (mirroring the existing out.len() assert — the guard belongs at
+the typed boundary where the intended dimension is known, not inside
+simd_dot_f32 where caller bugs are indistinguishable from intent).
+**Validation-class additions:** (8th) `#[cfg_attr(debug_assertions, ignore)]`
+release-required files (ugc_g1b_gate: 0p/3i debug, 3/3 release in 1.4 s);
+(9th) `harness = false` + `fn main()` targets have NO test-result line —
+validate by exit code + output diff (bench_299_engram_goat: byte-diff showed
+only compile-line + debug-timing jitter 698→756 ns, same PASS verdicts);
+(10th) heavy-manual all-ignored files (kimi_k3_4b_a3_forward_verify ~17.7 GB
+alloc, kimi_k3_phase6_perf 1.5 GB model download) are compile-only — the
+aborting-test class needs `-- --skip test_name` for count-identity when the
+failure is pre-existing (or fix it, as Issue 669 did). **fmt note:** several
+slice-6 files carried pre-existing rustfmt drift, so post-heal fmt converged
+them (net +108 lines incl. fmt churn — the heal itself is line-neutral);
+post-heal test runs predate the fmt pass, so spot-check one heavily-reformatted
+target post-fmt (rustfmt is semantics-preserving by construction but the
+spot-check is cheap insurance).
 **riir-train slice 1 landed 2026-08-18** (riir-train `e6084429`, this repo
 `7ed7c6c`): the sweep's first riir-train unit — engine `src/`
 default-compiled files only, 30 files / 183 edits (131 uninlined_format_args,
