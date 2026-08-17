@@ -703,6 +703,40 @@ re-check sibling state at slice time). The lib-side gated-surface scan
 (other features' src residue) remains a standing follow-up — enumerate
 per feature the same way (default diff vs feature-on diff) before
 assuming a finding class is gated.
+**riir-train slice 6 landed 2026-08-18** (riir-train `0f76ae41`): engine
+tests/ **nextlat-family gate slice** — the map's "nextlat 3" cluster was
+actually a **7-file gate family**: the 3 nextlat_training binaries + 3
+superset-feature siblings (substrate_nextlat / dagger_lora /
+compression_sweep — all `= ["nextlat_training"]`) + the 4-feature-union
+goat_gate. **One feature cycle covers the whole family** (the kimi_k3_backward
+superset pattern): `--features nextlat_training,substrate_nextlat,dagger_lora,
+compression_sweep`. 6 files / 35 edits: 4 test files / 30 (uninlined 28 +
+map_unwrap_or→map_or 2) + 2 SRC stragglers / 5. goat_248_nextlat /
+bench_248_nextlat_mlp / bench_254_goat_gate scanned clean (0 edits — no
+validation runs needed, the slice-3 skip rule).
+**The cheap all-ignored validation win:** all 4 edited binaries are
+all-#[ignore] benches — a debug `--ignored` run gives full panic-checking
+validation at 0.5-13 s per binary (~16 s total; the bench_core_optimization
+pattern from the katgpt-rs slice 6).
+**Third enumeration blind-spot class (the slice-5 lesson extended):** the
+union `--tests` residue check exposed 2 src files that BOTH prior
+enumerations missed — `src/compression_sweep.rs` (439 map_or in PRODUCTION
+code + 731 assert) + `src/collimation_game_attribution.rs` (400 assert,
+default-VISIBLE via the training_verification→collimation_lora chain).
+Chain-default + cfg(test)-mod = invisible to slice 1's parse-only gate map
+(said gated), slice 5's `--lib` clippy scan (no cfg(test)), AND default
+`--lib` sweeps. **Enumeration rule for any gate slice: run `--tests` (not
+just `--lib`) under the gate's feature union, then heal the union-minus-default
+delta INCLUDING src cfg(test) mods.** Validation: lib count-identical
+(default 1253 / union 1382 pre+post), benches 4/7/4/6 `--ignored`, clippy 0
+residue union `--tests` + plain default.
+**Remaining in riir-train** (~3300 edits): engine tests/ gated remainder
+~43 files / ~968 (next clusters: goat_296 family ~7 via per-file feature
+gates, degrpo/wasm_reward_shaping/ted/posterior/mdl 2 each; ciacot 4 AVOID
+— real-model deps (gemma2/qwen25)), examples/ 88 / 926, gpu 84 / 562 +
+the 4 excluded sibling src files (~206 — re-check sibling state at slice
+time). The lib-side gated-surface scan remains the standing follow-up
+(now with the --tests cfg(test) component folded into every gate slice).
 **T5 — DONE same day** (benches/ swept,
 katgpt-rs `4ccb2f280`:
 bench_424:97 range_plus_one + bench_136:208 uninlined — range_plus_one
