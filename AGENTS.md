@@ -866,6 +866,57 @@ bench_401 sibling-caution; ciacot 4 AVOID — real-model deps (gemma2/qwen25)),
 examples/ 88 / 926, gpu 84 / 562 + the 4 excluded sibling src files (~206 —
 re-check sibling state at slice time).
 
+**riir-train slice 10 landed 2026-08-18** (riir-train `ac082be1`): engine
+tests/ **the long-tail + memory_soup mega-slice — the named list from the
+slice-9 map is now COMPLETE**. ONE 23-feature-union cycle (latent_functor-
+rank_k-transfer, osc_rat_plus, coa_meta_adapter, dl_qat_magnitude,
+lota_ternary_lora, lr_qat_lora, fol_extraction+game_concept_graph, gpart,
+adapter_centroid [papaya], nf_riir_lora, dendritic_lora+ns_csg, eql_explain,
+multi_precision_npc, nitp_loss, peira_loss+peira_metrics,
+memory_soup_training+collimation_lora, set_diffusion, ccar_routing_goat
+[katgpt-band], multi_source_lora — all CPU, in-tree). 38 files scanned /
+26 edited (433 edits: 412 uninlined_format_args + 10 match_bool + 6
+identity_op + 3 single_match_else + 1 vec-with-capacity + 1
+collapsible_else_if) + **5 gated-src stragglers** (93 edits: eql_symbolic 20,
+eql_explain 15, loss_nitp 3, multi_source_lora 1, dendritic_training 1 —
+incl. 2 PRODUCTION single_match_else if-let rewrites in eql_symbolic.rs,
+spot-checked semantically identical) + 12 clean files skipped (slice-3
+rule).
+
+**Exclusions honored:** bench_253_rosetta_memory_soup DEFERRED
+(rosetta_cross_crate = dep:riir-gpu — belongs to the gpu bucket), ciacot 4
+AVOID (real-model deps), bench_401 sibling-caution (Plan 339/340 territory).
+
+**Validation (all count-identical pre/post):** all 26 binaries +
+goat_240_eql_symbolic (src-affected CLEAN file — copy-out/revert/baseline/
+restore dance, 10/0/0 both sides; the slice-9 method, now twice-proven);
+union lib 1523+1i (the biggest union lib yet — memory_soup/rosetta/gpart
+enable many cfg(test) mods); default lib 1253+1i (src edits confirmed
+union-gated); clippy `--tests` union residue: **2 documented divergences**
+(eql_explain.rs:243 — raw-string template `r#"{{...}}"#` w/ escaped braces,
+the conservative JSON guard; eql_symbolic.rs:1036 — `format!("{}", x)`
+nested inside assert_eq! COMPARISON args, second-level macro nesting the
+descent doesn't recurse into; both join the we-stay-silent class — 2/526 =
+99.6% coverage) + 2 riir-train-gpu sites (loss_sdar.rs:304, training_loop/
+types.rs:621 — the gpu bucket's known property). rustfmt applied to all 31
+(all fmt-clean at HEAD); post-fmt spot-check count-identical. No models/
+churn (no archetype tests run). Pre-existing noted-not-fixed: unused `b_len`
+at multi_source_lora.rs:113 (gated-src warning, not a heal-class lint).
+
+**Terminal-tool workaround confirmed:** `'.' is ambiguous in multi-root
+workspaces` fires RELIABLY on `cd <abs-path> && <cmd-with-relative-paths>`
+but NOT on the tool's `cd` parameter + absolute paths in the command body —
+the slice-9 "transient" is deterministic; use the parameter form.
+
+**Remaining in riir-train** (~2432 by arithmetic: 2958 − 433 − 93): engine
+tests/ exceptions only (ciacot 4 AVOID real-model deps; bench_401
+sibling-caution; bench_253_rosetta_memory_soup gpu-gated) — **the engine
+tests/ long tail is DONE**; engine examples/ 88 / 926; riir-train-gpu 84 /
+562 (owns the known loss_sdar/compress/training_loop findings + the 2 sites
+above); the 4 excluded sibling src files (~206 — re-check sibling state at
+slice time); standing follow-up: lib-side gated-surface scan per feature
+(this slice retired 5 of the gated-src surface files).
+
 **Issue 031 (2026-08-17, RESOLVED same day + removed per noise-reduction
 rule) — 3 healer defects from the katgpt-pruners 587-edit heal
 validation (katgpt-rs `4b6675dc5`).** **H1 (CRITICAL)** — the
