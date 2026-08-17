@@ -6,6 +6,15 @@
 //! Type-blind on `is_empty` existence — rustc backs the revert under
 //! `--verify` (VERIFY-tier).
 //!
+//! Self-recursion guard (Issue 031 H1): when the receiver is exactly `self`
+//! AND the innermost enclosing function is `is_empty`, the rewrite
+//! (`self.len() == 0` → `self.is_empty()`) would be infinite recursion — a
+//! runtime stack overflow the `--verify` compile gate is structurally blind
+//! to (it compiles fine). Real clippy stays silent on this shape too.
+//! `self == ""` inside `fn is_empty` is the same recursion (Form 1).
+//! Non-`self` receivers inside `is_empty` still fire (different object);
+//! `self.len() == 0` inside any other fn still fires.
+//!
 //! Any integer-suffix spelling of zero fires (`0`, `0usize`).
 //! Span-preserving (T6.4): the whole binary expression's byte range is
 //! replaced by `<R>.is_empty()` / `!<R>.is_empty()` — no parens after `!`,
@@ -21,6 +30,7 @@ pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
     let mut v = Collector {
         source,
         edits: Vec::new(),
+        fn_stack: Vec::new(),
     };
     v.visit_file(file);
     v.edits
@@ -29,9 +39,28 @@ pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
 struct Collector<'a> {
     source: &'a str,
     edits: Vec<SourceEdit>,
+    /// Innermost-last stack of enclosing function names (Issue 031 H1).
+    fn_stack: Vec<String>,
 }
 
 impl<'ast> Visit<'ast> for Collector<'_> {
+    fn visit_item_fn(&mut self, i: &'ast syn::ItemFn) {
+        self.fn_stack.push(i.sig.ident.to_string());
+        syn::visit::visit_item_fn(self, i);
+        self.fn_stack.pop();
+    }
+
+    fn visit_impl_item_fn(&mut self, i: &'ast syn::ImplItemFn) {
+        self.fn_stack.push(i.sig.ident.to_string());
+        syn::visit::visit_impl_item_fn(self, i);
+        self.fn_stack.pop();
+    }
+
+    fn visit_trait_item_fn(&mut self, i: &'ast syn::TraitItemFn) {
+        self.fn_stack.push(i.sig.ident.to_string());
+        syn::visit::visit_trait_item_fn(self, i);
+        self.fn_stack.pop();
+    }
     fn visit_expr_binary(&mut self, b: &'ast syn::ExprBinary) {
         syn::visit::visit_expr_binary(self, b);
         let negated = match b.op {
@@ -74,13 +103,25 @@ impl<'ast> Visit<'ast> for Collector<'_> {
 }
 
 impl Collector<'_> {
+    /// Issue 031 H1: `self.<expr>` rewritten to `self.is_empty()` inside
+    /// `fn is_empty` is infinite recursion — refuse the edit.
+    fn would_self_recurse(&self, recv: &str) -> bool {
+        recv == "self" && self.fn_stack.last().is_some_and(|n| n == "is_empty")
+    }
+
     fn is_empty_text(&self, len: &ExprMethodCall, negated: bool) -> Option<String> {
         let recv = src(self.source, &*len.receiver)?;
+        if self.would_self_recurse(&recv) {
+            return None;
+        }
         Some(finish_is_empty(&recv, &len.receiver, negated))
     }
 
     fn expr_is_empty_text(&self, operand: &Expr, negated: bool) -> Option<String> {
         let recv = src(self.source, operand)?;
+        if self.would_self_recurse(&recv) {
+            return None;
+        }
         Some(finish_is_empty(&recv, operand, negated))
     }
 }
@@ -209,5 +250,59 @@ mod tests {
         let input = "fn g(v: &Vec<u8>) -> bool { v.len() >= 0 }";
         let out = propose_fix("comparison_to_empty", input);
         assert!(out.is_none(), ">= 0 must not fire: {out:?}");
+    }
+
+    #[test]
+    fn self_recursion_guard_len_form() {
+        // Issue 031 H1: `self.len() == 0` inside `fn is_empty` rewritten to
+        // `self.is_empty()` is infinite recursion (runtime stack overflow,
+        // invisible to the compile gate). Must stay silent.
+        let input = "struct S;\nimpl S {\n    pub fn is_empty(&self) -> bool {\n        self.len() == 0\n    }\n}";
+        let out = propose_fix("comparison_to_empty", input);
+        assert!(out.is_none(), "self-recursion shape must not fire: {out:?}");
+    }
+
+    #[test]
+    fn self_recursion_guard_str_form() {
+        // Form 1 twin: `self == ""` inside `fn is_empty` is the same
+        // recursion.
+        let input = "struct S;\nimpl S {\n    fn is_empty(&self) -> bool {\n        self == \"\"\n    }\n}";
+        let out = propose_fix("comparison_to_empty", input);
+        assert!(out.is_none(), "self-recursion str form must not fire: {out:?}");
+    }
+
+    #[test]
+    fn self_recursion_guard_trait_default_body() {
+        // Trait default bodies are the same class (visit_trait_item_fn).
+        let input = "trait T {\n    fn is_empty(&self) -> bool {\n        self.len() == 0\n    }\n}";
+        let out = propose_fix("comparison_to_empty", input);
+        assert!(out.is_none(), "trait default body must not fire: {out:?}");
+    }
+
+    #[test]
+    fn other_receiver_inside_is_empty_still_fires() {
+        // Positive control: non-`self` receiver inside `fn is_empty` is a
+        // different object — no recursion — and must still fire.
+        let input =
+            "struct S;\nimpl S {\n    fn is_empty(&self, other: &Vec<u8>) -> bool {\n        other.len() == 0\n    }\n}";
+        let out = propose_fix("comparison_to_empty", input).expect("matched");
+        assert!(
+            out.contains("other.is_empty()"),
+            "other-receiver form lost: {out}"
+        );
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn self_receiver_outside_is_empty_still_fires() {
+        // Positive control: `self` receiver inside a differently-named fn
+        // must still fire.
+        let input = "struct S;\nimpl S {\n    fn check(&self) -> bool {\n        self.len() == 0\n    }\n}";
+        let out = propose_fix("comparison_to_empty", input).expect("matched");
+        assert!(
+            out.contains("self.is_empty()"),
+            "self-receiver outside is_empty lost: {out}"
+        );
+        syn::parse_file(&out).expect("re-parses");
     }
 }

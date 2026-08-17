@@ -162,6 +162,24 @@ impl SuggestScratch {
 "#,
     ),
     (
+        // Issue 031 H1: the exact katgpt-rs SensitivityCache production shape —
+        // `self.len() == 0` inside `fn is_empty` is the ONLY legitimate spelling
+        // of that method body; rewriting it to `self.is_empty()` is infinite
+        // recursion. comparison_to_empty (and every other structural lint) must
+        // stay silent here.
+        "clean:is_empty_len_zero_body",
+        r#"impl SensitivityCache {
+    pub fn len(&self) -> usize {
+        self.cache.pin().len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+"#,
+    ),
+    (
         "clean:kernel_rule_entry",
         r#"#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KernelRule {
