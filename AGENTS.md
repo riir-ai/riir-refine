@@ -412,6 +412,41 @@ token text. Gates: 36 range/single_match tests (23 single_match_else) +
 28 uninlined tests / 514 default lib / retrieval floors PASS / clippy 0
 lib + all-targets.
 
+**Issue 031 (2026-08-17, RESOLVED same day + removed per noise-reduction
+rule) — 3 healer defects from the katgpt-pruners 587-edit heal
+validation (katgpt-rs `4b6675dc5`).** **H1 (CRITICAL)** — the
+`comparison_to_empty` proposer rewrote `self.len() == 0` →
+`self.is_empty()` INSIDE `fn is_empty` (3 sites: decision_explainer,
+bfcp_region_cache, skill_catalog) → infinite recursion →
+`STATUS_STACK_OVERFLOW` at test runtime — the first false-positive class
+that produces a RUNTIME CRASH, structurally invisible to the `--verify`
+compile gate (it compiles fine; only tests catch it; real clippy is
+silent on the shape). Fix (`94cecbd`): enclosing-fn stack on the visitor
+(`visit_item_fn`/`visit_impl_item_fn`/`visit_trait_item_fn`) + refuse
+when receiver text is exactly `self` AND innermost fn is `is_empty`
+(both forms: `len()==0` and `== ""`); non-self receivers inside
+is_empty + self receivers elsewhere still fire (positive-control
+fixtures); `clean_spans_fire_no_lint` extended with the exact production
+shape. **H2** — `--domain` never scoped the `--fix` path: the proposer
+loops ran BOTH `FIXABLE_RULES` (rust_perf) + `FIXABLE_LINTS` (clippy)
+unconditionally (vec-with-capacity edits landed under `--domain clippy`).
+Fix (`4a72c79`): `fix_domain_scopes()` — auto/None keeps both; explicit
+domain runs only its own proposers; kernel runs neither; 4 bin tests
+(`cargo test --bins` under the bin's required features). **H3** — the
+verify baseline is default-features `cargo check`, so feature-gated
+modules are NOT compile-gated (2 breaks shipped past verify: u8-const
+`with_capacity` E0308 in monopoly + E0631 fn-path coercion in
+roaring_membership — the exact Bench 031 classes escaping via module
+gating). Fix (`f78dceb`): `manifest_nondefault_feature_count()` text
+scan (multi-line default lists accumulate); verify warns + suggests
+`--verify-args "--all-features"` when an owning package declares
+non-default features and the caller passed no override — a warning, not
+a default flip, because broken all-features sets exist (katgpt-dec `-D
+warnings`). Gates: 519 default / 582 fix_verify / 4 bin tests / clippy 0
+lib+bin under latent_retrieval,fix_verify. The katgpt-rs heal itself:
+single_match_else 49→13 (remainder = documented deliberate skips), 8
+fixable lints at 0, 3006/3006 lib tests.
+
 **Plan 005 (2026-08-14) — latent retrieval + `cargo heal --suggest` CLI
 (Phases 1–4 DONE).** `src/draft/` ships the span-level retrieval layer:
 real `.rs` files → `AstChunker` spans → 8-D modelless embedding →
