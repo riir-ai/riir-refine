@@ -428,6 +428,12 @@ fn main() {
         // Per-pass INPUT texts (the span-revert restore source).
         let mut pass_texts: Vec<String> = Vec::new();
         if args.fix {
+            // Issue 031 H2: --domain scopes the fix path. Previously the
+            // proposer loops ran BOTH domains unconditionally — `--domain
+            // clippy` applied rust_perf rules (vec-with-capacity edits landed
+            // in katgpt-pruners under --domain clippy). `auto` (None) keeps
+            // both; `kernel` runs neither (kernel proposers are Phase 5).
+            let (run_perf, run_clippy) = fix_domain_scopes(args.domain);
             // fxhashmap dep gate (Issue 015): skip the rule for files in
             // crates without the rustc-hash dependency.
             #[cfg(feature = "fix_verify")]
@@ -454,26 +460,30 @@ fn main() {
                     break;
                 };
                 let mut edits: Vec<RuleEdit> = Vec::new();
-                for rule in FIXABLE_RULES {
-                    if *rule == "fxhashmap" && !fxhashmap_allowed {
-                        continue;
-                    }
-                    #[cfg(feature = "fix_verify")]
-                    {
-                        edits.extend(
-                            riir_clippy::domains::rust_perf::proposers::collect_edits_opts(
-                                rule,
-                                &current,
-                                &parsed,
-                                proposer_opts,
-                            ),
-                        );
-                    }
-                    #[cfg(not(feature = "fix_verify"))]
-                    {
-                        edits.extend(riir_clippy::domains::rust_perf::proposers::collect_edits(
-                            rule, &current, &parsed,
-                        ));
+                if run_perf {
+                    for rule in FIXABLE_RULES {
+                        if *rule == "fxhashmap" && !fxhashmap_allowed {
+                            continue;
+                        }
+                        #[cfg(feature = "fix_verify")]
+                        {
+                            edits.extend(
+                                riir_clippy::domains::rust_perf::proposers::collect_edits_opts(
+                                    rule,
+                                    &current,
+                                    &parsed,
+                                    proposer_opts,
+                                ),
+                            );
+                        }
+                        #[cfg(not(feature = "fix_verify"))]
+                        {
+                            edits.extend(
+                                riir_clippy::domains::rust_perf::proposers::collect_edits(
+                                    rule, &current, &parsed,
+                                ),
+                            );
+                        }
                     }
                 }
                 // `mut` only under fix_verify (the VERIFY_LINTS extend below).
@@ -485,12 +495,14 @@ fn main() {
                 if args.verify {
                     lint_set.extend(VERIFY_LINTS.iter().copied());
                 }
-                for lint in lint_set {
-                    edits.extend(
-                        riir_clippy::domains::clippy_lints::proposers::collect_edits(
-                            lint, &current, &parsed,
-                        ),
-                    );
+                if run_clippy {
+                    for lint in lint_set {
+                        edits.extend(
+                            riir_clippy::domains::clippy_lints::proposers::collect_edits(
+                                lint, &current, &parsed,
+                            ),
+                        );
+                    }
                 }
                 if edits.is_empty() {
                     break;
@@ -800,4 +812,43 @@ fn main() {
         mode,
         non_syn_note
     );
+}
+
+/// Issue 031 H2: `--domain` scopes the `--fix` proposer loops. Returns
+/// `(run_perf, run_clippy)`. `auto` (None) runs both compiled-in domains
+/// (the historical behavior); an explicit domain runs ONLY its own
+/// proposers; `kernel` runs neither (kernel proposers are Phase 5).
+fn fix_domain_scopes(domain: Option<DomainId>) -> (bool, bool) {
+    (
+        domain.is_none_or(|d| d == DomainId::Perf),
+        domain.is_none_or(|d| d == DomainId::Clippy),
+    )
+}
+
+#[cfg(test)]
+mod fix_domain_tests {
+    use super::*;
+
+    #[test]
+    fn auto_runs_both() {
+        assert_eq!(fix_domain_scopes(None), (true, true));
+    }
+
+    #[test]
+    fn clippy_scopes_out_perf() {
+        // The Issue 031 H2 regression: `--domain clippy` must not run
+        // rust_perf proposers (vec-with-capacity applied under
+        // `--domain clippy` in the katgpt-pruners batch).
+        assert_eq!(fix_domain_scopes(Some(DomainId::Clippy)), (false, true));
+    }
+
+    #[test]
+    fn perf_scopes_out_clippy() {
+        assert_eq!(fix_domain_scopes(Some(DomainId::Perf)), (true, false));
+    }
+
+    #[test]
+    fn kernel_runs_neither_syn_domain() {
+        assert_eq!(fix_domain_scopes(Some(DomainId::Kernel)), (false, false));
+    }
 }
