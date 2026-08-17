@@ -917,6 +917,77 @@ above); the 4 excluded sibling src files (~206 — re-check sibling state at
 slice time); standing follow-up: lib-side gated-surface scan per feature
 (this slice retired 5 of the gated-src surface files).
 
+**riir-train slice 11 landed 2026-08-18** (riir-train `a1197e06` + the
+proposer root-cause fix riir-clippy `c73770e`): engine **examples/** cheap-
+gate slice — **49 examples / 578 edits + 11 gated-src / 139 edits (60
+files, +737/−1087 post-fmt, net −350 lines)**. ONE 36-feature-union cycle
+(all CPU, in-tree). **Gate-map discovery:** the examples tree is 120/124
+GATED (only 4 default-compiled) — the healer dry-run found 90 files / 985
+edits, classified by feature-dep chain into cheap (57 files/616 —
+cpu_lora_train ×15 is zero-dep; game_llmexec + wasm_proof_witness + a dozen
+more are EMPTY features) vs heavy (31/358 — kimi/gemma4/gemma2_lora_gpu/
+shine/weaver/flashmemory/teacher/strandset/go, deferred) vs sibling-WIP
+(13 src/370 — the Plan-339 kimi/muon/weaver/xhc family, last commit 00:04,
+no fresh WIP but their plans 339/340/341 are live). **Dep-info src delta
+(the slice-6 standing rule, examples variant):** `cargo build --examples
+--features <union>` `.d` files → 131 src files compiled → intersect the
+healer's 74-file src list → exactly 12 in-scope (reward_projection_data 60,
+svr_driver 38, loss_latent_pred 9, csp_answer_pruner 7, svr 6,
+token_sampler 4, smooth_latent 4, svr_answer 3, g_rollout 3,
+rust_syntax_pruner 3, action_hoare 2, lora_outlier_guard 2 = 141; minus
+action_hoare after the proposer fix below = 139 landed). 49 src files /
+208 edits are NOT in this union (gated by other features — the standing
+follow-up owns them). **Validation (all count-identical):** union examples
+build exit 0 (65 binaries — dev-deps incl. riir-games/civ compile anyway,
+making the civ/dual_leo examples cheap); default lib 1253/0/1i; union lib
+**1802/0/1i** (the biggest union yet); spot-runs: trajectory_evolve_demo +
+zero_qat_calibration byte-identical, ties_merge_bench timing-only diff
+with ALL gate verdicts PASS both sides; clippy residue 0 across
+uninlined_format_args/match_bool/map_unwrap_or (examples + src); rustfmt
+applied to the 32 fmt-clean-at-HEAD files.
+
+**THE HEADLINE — first live compile-gate catch ROOT-CAUSED in the healer
+(the action_hoare.rs E0308):** the `bool-to-bitpack` proposer rewrote
+`count_satisfied(&[bool])` → `&[u64]` while its live same-file caller still
+passed `&[bool]`. A signature-changing rewrite cannot be applied
+mechanically — it breaks every time the pattern has a live caller (the
+NORMAL case; a zero-caller fn is dead code). **Fix (riir-clippy `c73770e`):
+both signature-changing proposers (`bool-to-bitpack` param type +
+`static-str` return type) now carry a caller gate — they refuse when the
+fn ident occurs more than once in the file (word-boundary scan; call
+sites, fn-as-value, macro args, comments all count). New fixtures for
+both (mirroring the production shape) + `param_name_preserved` renamed
+`fn count` → `count_bits` (its own `.count()` tripped the gate). 570/0
+default lib, clippy 0, verified end-to-end (0 edits on action_hoare.rs).
+`fxhashmap` is now the one remaining body-local type-changing rewrite
+without a caller gate (type-flow exposure, self-gated on an existing
+rustc_hash import).**
+
+**Process lessons (both self-inflicted, both recovered):** (1) a
+"dry-check" fmt loop accidentally executed `git stash push -- $f` per
+file (62 stash entries; the sibling's pre-existing autostash sat at the
+bottom — `.plans/320`, Cargo.lock, plan320 example, svr_driver — PRESERVED,
+its pop correctly aborted on conflict). Recovery = sequential `git stash
+pop` (60/60 restored, verified file-set-exact vs the planned scope).
+NEVER put a stash call in a check script — the check ran it before the
+intended `git show` fallback; use `git show HEAD:<f>` only. (2) One
+timing-gate flake (`lattice_operad::transfer::tests::bench_transfer_overhead`
+111.9x vs 100x) fired in the full parallel suite while the katgpt-rs
+sibling's release bench ran at 298% CPU (load 7.7-9.3) — passes isolated
+AND at `--test-threads=2` (the slice-5 flake rule + bench_290 precedent;
+untouched file).
+
+**Remaining in riir-train** (~1715 by arithmetic: 2432 − 578 − 139):
+engine examples/ heavy remainder 41 files / 407 edits (kimi ×13/202,
+gemma4 ×17/56, gemma2_lora_gpu + gemma2_latent_cot ×6/36, shine ×2/20,
+weaver ×2/6, teacher ×2/3, strandset 1/5, go ×2/4, flashmemory ×2/4);
+sibling-WIP src (kimi/muon/weaver/xhc family ~366 — re-check at slice
+time, plans 339/340/341 live); 49 out-of-union src / 208 edits (the
+standing gated-surface follow-up); engine tests/ exceptions (ciacot 4
+AVOID real-model deps; bench_401 sibling-caution; bench_253_rosetta gpu-
+gated); riir-train-gpu 84 / 562 (owns loss_sdar/compress/training_loop +
+the 2 known sites).
+
 **Issue 031 (2026-08-17, RESOLVED same day + removed per noise-reduction
 rule) — 3 healer defects from the katgpt-pruners 587-edit heal
 validation (katgpt-rs `4b6675dc5`).** **H1 (CRITICAL)** — the
