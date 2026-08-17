@@ -26,6 +26,67 @@ llama.cpp remains ahead on every axis. **The prefill gap genuinely narrowed** (8
 
 ---
 
+## Quiet-box re-run (2026-08-17, `--max-load 12.6`) — one clean pair, not three
+
+The follow-up this bench asked for was run. It **partially succeeded**, and the
+partial failure is the more useful finding.
+
+| pair | order | **loadavg** | Arm A prefill/decode/total | Arm B prefill/decode/total | ratio prefill/decode/total |
+|---|---|---:|---:|---:|---:|
+| warmup0 | A→B | ~11.5 | 150.90 / 30.57 / 62.96 | 26.14 / 18.53 / 22.82 | *discarded* |
+| **pair0** | B→A | **12.06** ✅ | **150.04 / 30.70 / 63.05** | **26.17 / 18.38 / 22.75** | **5.733 / 1.670 / 2.771** |
+| pair1 | A→B | 24.61 ❌ | 142.03 / 27.29 / 56.98 | 23.21 / 15.17 / 19.54 | 6.120 / 1.799 / 2.917 |
+| pair2 | B→A | 35.29 ❌ | 116.29 / 19.90 / 42.77 | 16.14 / 7.01 / 11.04 | 7.203 / 2.840 / 3.875 |
+| median (all 3) | | | | | 6.120 / 1.799 / 2.917 |
+| spread | | | | | 5.733..7.203 / 1.670..2.840 / 2.771..3.875 |
+
+**Do not quote the median.** The window opened at loadavg 11.47, then a sibling's
+`cargo build` (bevy — `rustc --crate-name bevy_render` at 587% CPU) drove load to
+24.61 and 35.29 during pairs 1 and 2. Only **pair0 (12.06)** met the ≤12.6
+ceiling. Because the median of three pairs *is the middle pair*, the headline
+median is pair1's number — **a load-24.61 measurement wearing a quiet-box label**.
+The driver recorded `absolutes_comparable_to_bench_014 = false` (it requires ALL
+pairs under the ceiling), which is the correct verdict for the run as a whole.
+
+### The defensible quiet-box numbers are pair0's (n=1)
+
+pair0's absolutes land on top of Bench 014's, which is what earns it:
+
+| | Bench 014 (load 3.2–5.1) | pair0 (load 12.06) | Δ |
+|---|---:|---:|---:|
+| Arm A prefill / decode | 145.11 / 30.89 | 150.04 / 30.70 | +3.4% / **−0.6%** |
+| Arm B prefill / decode | 18.12 / 18.95 | **26.17** / 18.38 | **+44.4%** / −3.0% |
+
+| metric | Bench 014 | **pair0 quiet** | movement |
+|---|---:|---:|---|
+| prefill | 8.01× | **5.733×** | **narrowed 1.40×** |
+| decode | 1.63× | **1.670×** | **unchanged** (+2.5%, within run-to-run) |
+| total | 3.41× | **2.771×** | narrowed |
+
+Two conclusions, both now on comparable absolutes:
+
+1. **The prefill gain is real and reproduced.** Arm B prefill 18.12 → 26.17
+   (+44.4%) independently reproduces commit `a566255`'s 25.49 through a different
+   protocol, and cuts the prefill gap 8.01× → 5.733×.
+2. **Decode has not moved.** 1.63× → 1.670× with Arm B decode 18.95 → 18.38. This
+   **retires the loaded run's apparent decode regression** (1.980×, and 2.840× in
+   the load-35 pair) as pure load artifact — exactly as the asymmetric-sensitivity
+   section predicted. Our decode gap to llama.cpp is where it was.
+
+### Method fix this exposed
+
+The driver gated loadavg **only at startup**, so a mid-run spike could not abort or
+pause it. Fixed: it now **re-gates before every pair** and waits for the window to
+reopen (`--pair-load-timeout`, default 1800 s), stopping with the clean pairs it
+already has rather than appending contaminated ones. Startup-only gating is what
+turned three pairs into one usable pair here.
+
+**Still open:** a run with three pairs all under the ceiling, to give the ratios an
+honest spread instead of a single pair. pair0 and Bench 014 agree closely, so the
+expected value is not in doubt — the *variance* is unmeasured.
+
+---
+
 ## Per-pair data (the primary metric)
 
 Order alternates within pairs so monotonic drift cancels instead of accumulating into one arm. 1 discarded warmup pair + 3 measured.

@@ -296,6 +296,17 @@ def main() -> int:
         ),
     )
     ap.add_argument(
+        "--pair-load-timeout",
+        type=int,
+        default=1800,
+        metavar="SECONDS",
+        help=(
+            "How long to wait for loadavg to fall back under --max-load BEFORE "
+            "each pair. Prevents a mid-run load spike from contaminating the "
+            "median. Default 1800."
+        ),
+    )
+    ap.add_argument(
         "--wait-for-window",
         type=int,
         default=0,
@@ -367,6 +378,36 @@ def main() -> int:
                 f"\n=== {label} ({order}){' [DISCARDED]' if warm else ''} ===",
                 file=sys.stderr,
             )
+            # Re-gate the load BEFORE each pair, not just at startup. Learned the
+            # hard way: the first quiet-box run opened at loadavg 11.47 and a
+            # sibling's `cargo build` (bevy, 587% CPU) then drove it to 12.06 ->
+            # 24.61 -> 35.29 across the three pairs. Startup-only gating produced
+            # one clean pair and two contaminated ones, and since the median of 3
+            # is the MIDDLE pair, the headline silently became a load-24.61
+            # measurement. Waiting here keeps every pair inside the ceiling
+            # instead of quietly reporting a contaminated median.
+            waited = 0
+            while loadavg() > args.max_load:
+                if waited == 0:
+                    print(
+                        f"  [pause] loadavg {loadavg():.1f} > {args.max_load} — "
+                        "waiting for the window to reopen before measuring this "
+                        "pair (startup-only gating is what contaminated the "
+                        "first quiet-box run)",
+                        file=sys.stderr,
+                    )
+                if waited >= args.pair_load_timeout:
+                    print(
+                        f"\n!! ABORT at {label}: loadavg stayed above "
+                        f"{args.max_load} for {waited}s. "
+                        f"{len(pairs)} clean pair(s) measured so far are in the "
+                        "output; the run stops rather than appending "
+                        "contaminated pairs.",
+                        file=sys.stderr,
+                    )
+                    raise SystemExit(4 if not pairs else 0)
+                time.sleep(30)
+                waited += 30
 
             def visit_a() -> dict:
                 require_exclusive(f"{label}/armA", {llama.pid})
