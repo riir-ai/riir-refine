@@ -264,6 +264,16 @@ name = "bench_e2e_tokps"
 harness = false
 required-features = ["self_evolve", "clippy_lints"]
 
+# Bench 003 (riir-train Plan 336 T5.1): the modelless MISS RATE — the only
+# quantity that can justify or retire an L4 generative fallback, because the
+# composition seam consults L4 ONLY on misses (no candidate, or non-parsing).
+# A parsing-but-wrong modelless fix never reaches L4, so EM is not the metric.
+# CPU-only, no GPU, no cargo clippy — fast enough to run on a busy box.
+[[bench]]
+name = "bench_003_modelless_miss_rate"
+harness = false
+required-features = ["self_evolve", "clippy_lints"]
+
 # Bench 010: llama.cpp vs katgpt ternary, both generating on clippy prompts.
 [[bench]]
 name = "bench_clippy_ternary_tps"
