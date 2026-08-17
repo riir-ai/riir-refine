@@ -334,6 +334,42 @@ impl HealPipeline {
         })
     }
 
+    /// Resolve a modelless miss: offer it to L4 first, then decide what to do
+    /// when L4 is absent or declines.
+    ///
+    /// `relevant` separates the two miss kinds (Issue 030):
+    /// - **relevant but non-parsing** — hand the answer back anyway, exactly as
+    ///   the pipeline did before L4 existed, so the worst case is unchanged.
+    /// - **irrelevant** — DECLINE. Serving unrelated code that merely parses
+    ///   looks like a fix, and makes the caller's verifier pay to discover it is
+    ///   not; `None` lets the caller escalate honestly.
+    ///
+    /// The non-parsing answer is built lazily so the decline path allocates
+    /// nothing (`heal_is_alloc_free_after_warmup` covers the hot path).
+    fn resolve_miss(
+        &mut self,
+        rule_id: &str,
+        buggy_code: &str,
+        rule_context_notes: Option<&str>,
+        candidate: (&str, f32, HealSource),
+        relevant: bool,
+    ) -> Option<HealResult> {
+        if let Some(l4) = self.consult_l4(rule_id, buggy_code, rule_context_notes) {
+            return Some(l4);
+        }
+        if !relevant {
+            return None;
+        }
+        let (code, evolution_score, source) = candidate;
+        Some(HealResult {
+            fixed_code: code.to_string(),
+            parses: false,
+            evolution_score,
+            source,
+            context_notes: rule_context_notes.map(str::to_string),
+        })
+    }
+
     /// No-op when the `l4_lora` feature is off — the miss path compiles to the
     /// same `None` it returned before the stage existed.
     #[cfg(not(feature = "l4_lora"))]
@@ -441,10 +477,12 @@ impl HealPipeline {
         // paths (drafter / memory / Stage2) — the annotation describes the
         // RULE, not a specific fix, so it's the same regardless of which path
         // serves the fix.
-        let rule_context_notes: Option<&str> = corpus
-            .iter()
-            .find(|e| e.rule_id() == rule_id)
-            .and_then(HealEntry::context_notes);
+        // One scan serves both the annotation lookup and the relevance gate
+        // below (Issue 030) — `rule_in_corpus` is the cheap, exact signal for
+        // "has this pipeline ever been given ground truth for this rule".
+        let corpus_entry = corpus.iter().find(|e| e.rule_id() == rule_id);
+        let rule_in_corpus = corpus_entry.is_some();
+        let rule_context_notes: Option<&str> = corpus_entry.and_then(HealEntry::context_notes);
 
         // Stage 2 routing: if the adaptive drafter has a verified entry, return it.
         // This is the ~µs serve path (hash lookup) after the tuning loop populated
@@ -571,22 +609,38 @@ impl HealPipeline {
         // Step 5: validate with the L2 pruner.
         let validation = self.pruner.validate(&cand.code, rule_id);
 
-        // Modelless miss #2: the best candidate does not parse. L4 gets a
-        // chance to beat it — but only a PARSING L4 answer replaces it
-        // (invariant 3), so the worst case is the same non-parsing result the
-        // pipeline returned before the stage existed.
+        // ── Relevance gate (Issue 030) ────────────────────────────────────
+        // `parses` is a SYNTACTIC test, and using it alone as the serve/decline
+        // decision breaks silently off-distribution. When the corpus has no
+        // entry for `rule_id`, the candidate pool collapses to memory's nearest
+        // trajectory — valid Rust belonging to some OTHER rule. It parses, so
+        // the old code served it and suppressed L4 entirely. Measured before
+        // this gate: miss rate 0/29, including 0/9 on real lints with no corpus
+        // entry, where e.g. `ptr_arg` was answered with
+        // `fn f() -> String { "done".to_string() }` (Bench 037).
         //
-        // Note the ordering: this runs only when `parses` is false, so a
-        // healthy modelless fix never reaches the fallback (invariant 1).
-        if !validation.parses {
-            let modelless = HealResult {
-                fixed_code: cand.code.clone(),
-                parses: false,
-                evolution_score: best_score,
-                source: cand.source,
-                context_notes: rule_context_notes.map(str::to_string),
-            };
-            return Some(self.consult_l4(rule_id, buggy_code, rule_context_notes).unwrap_or(modelless));
+        // Provenance is the cheap, exact signal: a Memory candidate for a rule
+        // the corpus has never covered has no claim to relevance. The other
+        // sources are unaffected by construction — Stage 2 hits return earlier
+        // (verifier-certified during tuning, so the Issue 010 path that reached
+        // 10/10 held-out cannot regress), and Drafter candidates are derived
+        // from the corpus slice for this very rule.
+        let relevant = rule_in_corpus || cand.source != HealSource::Memory;
+
+        // Modelless miss #2: the best candidate does not parse, OR it is not
+        // relevant to the rule. L4 gets a chance to beat it — but only a PARSING
+        // L4 answer replaces it (invariant 3, enforced inside `consult_l4`).
+        //
+        // Note the ordering: a modelless fix that both parses AND is relevant
+        // never reaches the fallback (invariant 1).
+        if !validation.parses || !relevant {
+            return self.resolve_miss(
+                rule_id,
+                buggy_code,
+                rule_context_notes,
+                (&cand.code, best_score, cand.source),
+                relevant,
+            );
         }
 
         Some(HealResult {

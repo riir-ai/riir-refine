@@ -252,3 +252,97 @@ fn counting_double_records_what_it_was_asked() {
     assert_eq!(double.seen.borrow()[0].0, "needless_return");
     drop(corpus);
 }
+
+// ── Invariant 5: relevance, not just syntax (Issue 030) ────────────────────
+//
+// The seam used to decide serve-vs-decline on `parses` alone. Off-distribution
+// that is not a relevance test: with no corpus entry for the rule, the pool
+// collapses to memory's nearest trajectory — valid Rust for a DIFFERENT rule —
+// which parses, so it was served and L4 was suppressed. Measured before the
+// gate: 0/9 misses on real lints with no corpus entry (Bench 037).
+
+/// A real clippy lint the seed corpus has no entry for. Asserted, not assumed,
+/// so this test fails loudly if the corpus later grows to cover it.
+fn out_of_corpus_rule() -> (&'static str, &'static str) {
+    let corpus = build_seed_corpus();
+    let rule = "ptr_arg";
+    assert!(
+        !corpus.entries.iter().any(|e| e.lint_name == rule),
+        "`{rule}` was expected to be OUT of the seed corpus; pick another lint"
+    );
+    (rule, "fn f(v: &Vec<u8>) -> usize { v.len() }")
+}
+
+#[test]
+fn an_out_of_corpus_rule_declines_instead_of_serving_unrelated_code() {
+    let corpus = build_seed_corpus();
+    let (rule, buggy) = out_of_corpus_rule();
+
+    let mut p = pipeline();
+    p.seed_from_corpus(&corpus.entries); // populate memory — the pre-fix trap
+    let result = p.heal(rule, buggy, &corpus.entries);
+
+    assert!(
+        result.is_none(),
+        "an out-of-corpus rule must DECLINE, not serve an unrelated memory \
+         trajectory that merely parses; got {result:?}"
+    );
+}
+
+#[test]
+fn an_out_of_corpus_rule_reaches_l4() {
+    let corpus = build_seed_corpus();
+    let (rule, buggy) = out_of_corpus_rule();
+
+    let probe = Probe::new(Some("fn f(v: &[u8]) -> usize { v.len() }"));
+    let mut p = pipeline().with_l4_fallback(Box::new(probe.clone()));
+    p.seed_from_corpus(&corpus.entries);
+    let result = p.heal(rule, buggy, &corpus.entries);
+
+    assert_eq!(
+        probe.count(),
+        1,
+        "the whole point of the gate: an out-of-corpus rule must REACH L4 \
+         (it was suppressed entirely before Issue 030)"
+    );
+    let r = result.expect("L4 replied with a parsing fix, so heal must serve it");
+    assert_eq!(r.source, HealSource::L4Lora, "the served fix must come from L4");
+    assert!(r.parses);
+}
+
+#[test]
+fn the_relevance_gate_does_not_disturb_in_distribution_healing() {
+    let corpus = build_seed_corpus();
+
+    // Every corpus rule must still be served by the modelless path, and L4 must
+    // still never be consulted for any of them. This is the regression guard on
+    // invariant 1 for the WHOLE corpus, not just its first entry.
+    let probe = Probe::new(Some("fn generated() {}"));
+    let mut p = pipeline().with_l4_fallback(Box::new(probe.clone()));
+    p.seed_from_corpus(&corpus.entries);
+
+    let mut served = 0usize;
+    for e in &corpus.entries {
+        let r = p.heal(&e.lint_name, &e.buggy_code, &corpus.entries);
+        assert!(
+            r.is_some(),
+            "in-distribution rule `{}` must still be served after the gate",
+            e.lint_name
+        );
+        if let Some(r) = r {
+            assert_ne!(
+                r.source,
+                HealSource::L4Lora,
+                "in-distribution rule `{}` must not be served by L4",
+                e.lint_name
+            );
+            served += 1;
+        }
+    }
+    assert_eq!(served, corpus.entries.len(), "every corpus entry must heal");
+    assert_eq!(
+        probe.count(),
+        0,
+        "L4 must not be consulted for ANY in-distribution rule"
+    );
+}
