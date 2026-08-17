@@ -638,6 +638,28 @@ saved — content unchanged means the baseline run stands), (c) unscoped
 ciacot 4 AVOID real-model deps, goat_296 family ~7 via per-file feature
 gates, degrpo/wasm_reward_shaping/ted/posterior/mdl 2 each), examples/
 88 / 926, gpu 84 / 562 + the 4 excluded sibling src files (~206).
+**riir-train slice 4 landed 2026-08-18** (riir-train `1c03e1eb`): engine
+`tests/` **lora_still gate cluster** — the largest next single-feature
+cluster. 4 files share the gate (goat_267 family, BOTH mechanisms again:
+Cargo.toml required-rows + inner `#![cfg]`); 3 carried edits: **10 edits
+(all uninlined_format_args)**; goat_267_lora_still_training clean (0 edits).
+Pure CPU feature (`lora_still = ["riir-engine/lora_still"]`, 0 GPU deps).
+Cluster is FAST — every binary sub-second (4+4+7+8 tests, 0.03/0.02/0.11/
+0.02s), so combined post-heal runs in ONE command are fine here (the
+slow-binary split-run pattern from slice 3 applies only when per-binary
+runtime demands it). Validated under `--features lora_still` (isolated
+/tmp target): tests count-identical pre/post (7/4/4 green both sides,
+training 8 green baseline), clippy 0 warnings in healed files, 0 remaining
+uninlined_format_args. **Side observation (follow-up candidate):** the
+pedantic -W check surfaced **17 pre-existing lib-side uninlined_format_args
+in lora_still-compiled src files** (collimation_lora.rs etc.) — feature-
+gated lib surface the default-compiled src slice 1 never saw; candidate
+for a future src/ gated-lib slice.
+**Remaining in riir-train** (~3389 edits): engine tests/ gated remainder
+~49 files / ~1003 (largest next clusters: nextlat 3, ciacot 4 AVOID
+real-model deps (gemma2/qwen25), goat_296 family ~7 via per-file feature
+gates, degrpo/wasm_reward_shaping/ted/posterior/mdl 2 each), examples/
+88 / 926, gpu 84 / 562 + the 4 excluded sibling src files (~206).
 **T5 — DONE same day** (benches/ swept,
 katgpt-rs `4ccb2f280`:
 bench_424:97 range_plus_one + bench_136:208 uninlined — range_plus_one
