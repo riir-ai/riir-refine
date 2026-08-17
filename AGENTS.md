@@ -406,7 +406,20 @@ already-named** `{name}`/`{name:spec}` copy verbatim + consume nothing
 `$` refs (scan_args aborts on `w = expr`). Coverage on the ground-truth
 sample `tests/nf_flow_goat.rs`: 4/34 proposable before → **34/34**, healed
 end-to-end 34 → 0 (compiles clean, 7/7 tests pass). Remaining: the
-~1400-finding / 339-file sweep (high-coverage now; the next sweep unit).
+~1400-finding / 339-file sweep (high-coverage now; the next sweep unit) —
+**slice 1 landed 2026-08-18** (katgpt-rs `9e9e1f89`): the root `tests/` dir
+measured 2348 findings / 165 files (94% uninlined_format_args); 10 files /
+554 edits healed with 77/77 tests post-heal, incl. 4 feature-gated binaries
+compiled+run WITH their gates (ega_attn 11/11, parallax_attn 5/5,
+kimi_k3_backward 5/5, bake_precision+bfcf_tree 10/10). ~1794 findings remain
+across ~155 root-tests/ files. **Gate-identification lesson**: 3 of the 4
+whole-file gates are `#![cfg(feature)]` inner attrs sitting BELOW the
+doc-comment header (lines 11/19) — grep `^#!\[cfg` over the whole header,
+not just line 1. Feature-gated files are invisible to default-features
+`--verify` (the riir-chain gate-coverage trap), so their gate is a
+feature-on test RUN — stronger than check. Slice selection rule: prefer
+default-compiled + 0-ignored files (validation = verify + plain test run);
+feature-gated files are fine but need their gate identified + exercised.
 **T5 — DONE same day** (benches/ swept,
 katgpt-rs `4ccb2f280`:
 bench_424:97 range_plus_one + bench_136:208 uninlined — range_plus_one
