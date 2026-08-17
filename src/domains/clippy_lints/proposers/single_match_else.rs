@@ -2,25 +2,32 @@
 //! → `if let Some(v) = x { f(v) } else { fallback() }`.
 //!
 //! Pattern: a two-arm match, no attributes, no guards, where the SECOND
-//! arm is a wildcard (`_`) whose body is a NON-UNIT STATEMENT BLOCK and
-//! the FIRST arm is a non-wildcard, non-literal pattern. (The unit shape
-//! is `single_match`, a sibling lint.)
+//! arm is a wildcard (`_`) whose body is a NON-UNIT STATEMENT BLOCK.
+//! (The unit shape is `single_match`, a sibling lint.)
 //!
-//! Shape discipline (Issue 027, empirical vs real clippy 1.93): the lint
-//! only fires when the wildcard arm is a statement BLOCK — an expression
-//! wildcard (`_ => 0`) is SILENT under `-W clippy::pedantic` (probe P2/P4).
-//! A literal first arm (`0 => ..`) fires under a DIFFERENT fix shape
-//! (equality `if x == 0`, not `if let 0 = x`), so literal arms are skipped
-//! entirely — the proposer stays within the validated if-let fix shape.
+//! Two fix shapes (Issue 027/029, empirical vs real clippy):
+//! - **non-literal first pattern** → the `if let` form (the 027-validated
+//!   shape);
+//! - **INTEGER-literal first pattern** (`0 => ..`, non-negative) → the
+//!   **equality** form `if x == 0 { .. } else { .. }` (the 027 probe P1
+//!   finding: literal arms fire under a different fix shape; the 029 fix
+//!   closes the miss). Bool/char/str literal arms stay skipped (unprobed).
 //!
-//! Span-preserving (Issue 016): the whole match's byte range is replaced by
-//! `if let <pat> = <scrutinee> <then> else <else>` — pattern, scrutinee, and
-//! both bodies keep their ORIGINAL source text; non-block bodies are braced.
+//! Interior-comment guard (Issue 029, the 027/028 comment-deletion class in
+//! a third proposer): the whole-match splice keeps only the scrutinee,
+//! pattern, and arm-body fragments verbatim — a comment anywhere else in
+//! the match (e.g. between arms, `0 => true, // why`) would be deleted.
+//! Such matches are refused.
+//!
+//! Span-preserving (Issue 016): the whole match's byte range is replaced —
+//! pattern, scrutinee, and both bodies keep their ORIGINAL source text;
+//! non-block bodies are braced.
 
-use super::helpers::is_unit_expr;
+use super::helpers::{byte_range, drops_interior_comment, is_postfix_safe, is_unit_expr};
 use super::{edit, src, SourceEdit};
+use syn::spanned::Spanned;
 use syn::visit::Visit;
-use syn::{Expr, ExprMatch, File, Pat};
+use syn::{Expr, ExprMatch, File, Lit, Pat};
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
@@ -60,19 +67,45 @@ impl Collector<'_> {
         if !matches!(&*m.arms[1].body, Expr::Block(_)) {
             return None;
         }
-        // Issue 027: a literal first arm fires under a different fix shape
-        // (equality `if x == 0`), out of this proposer's validated scope.
-        if matches!(m.arms[0].pat, Pat::Lit(_)) {
-            return None;
-        }
         if matches!(m.arms[0].pat, Pat::Wild(_)) {
             return None;
         }
-        let pat = src(self.source, &m.arms[0].pat)?;
+        // Issue 029: only the scrutinee, pattern, and arm-body fragments
+        // survive the splice — a comment in any dropped gap would be
+        // deleted outright. Refuse those matches (real clippy stays silent
+        // on comment-displacing rewrites).
+        let kept = [
+            byte_range(&*m.expr),
+            byte_range(&m.arms[0].pat),
+            byte_range(&*m.arms[0].body),
+            byte_range(&*m.arms[1].body),
+        ];
+        if drops_interior_comment(self.source, m.span().byte_range(), &kept) {
+            return None;
+        }
         let scrutinee = src(self.source, &*m.expr)?;
         let then = braced_body(self.source, &m.arms[0].body)?;
         let else_ = braced_body(self.source, &m.arms[1].body)?;
-        Some(format!("if let {pat} = {scrutinee} {then} else {else_}"))
+        match &m.arms[0].pat {
+            // Issue 029: literal INTEGER first arms fire under the equality
+            // form (`if x == 0`). This syn's `PatLit` holds a `Lit` whose
+            // token text preserves any leading `-` — non-negative only
+            // (negatives unprobed); bool/char/str literals stay skipped.
+            Pat::Lit(l) if is_nonnegative_int_lit(&l.lit) => {
+                let lit = src(self.source, &l.lit)?;
+                let cond = if is_postfix_safe(&m.expr) {
+                    format!("{scrutinee} == {lit}")
+                } else {
+                    format!("({scrutinee}) == {lit}")
+                };
+                Some(format!("if {cond} {then} else {else_}"))
+            }
+            Pat::Lit(_) => None, // bool/char/str literal — unprobed, skip
+            _ => {
+                let pat = src(self.source, &m.arms[0].pat)?;
+                Some(format!("if let {pat} = {scrutinee} {then} else {else_}"))
+            }
+        }
     }
 }
 
@@ -84,6 +117,15 @@ fn braced_body(source: &str, body: &Expr) -> Option<String> {
         Expr::Block(_) => text,
         _ => format!("{{ {text} }}"),
     })
+}
+
+/// A `Lit::Int` whose token text carries no leading `-` (the token can hold
+/// a sign; negative-literal arms are unprobed vs real clippy and skipped).
+fn is_nonnegative_int_lit(l: &Lit) -> bool {
+    match l {
+        Lit::Int(i) => !i.token().to_string().starts_with('-'),
+        _ => false,
+    }
 }
 
 #[cfg(test)]
@@ -126,11 +168,82 @@ mod tests {
 
     #[test]
     fn literal_first_arm_untouched() {
-        // Issue 027 probe P1: a literal first arm fires under a DIFFERENT
-        // fix shape (equality `if x & 1 == 0`), out of scope here.
-        let input = "fn g(x: u64) -> f32 { match x & 1 { 0 => -1.0, _ => { let f = 1.0; f } } }";
+        // Negative int literals parse as Unary inside Pat::Lit — excluded
+        // from the equality form (unprobed vs real clippy).
+        let input = "fn g(x: i64) -> u8 { match x { -1 => 1, _ => { let v = 2; v } } }";
         let out = propose_fix("single_match_else", input);
-        assert!(out.is_none(), "literal first arm must not fire: {out:?}");
+        assert!(out.is_none(), "negative literal arm must stay skipped: {out:?}");
+    }
+
+    #[test]
+    fn int_literal_with_binary_scrutinee_gets_parens() {
+        // Issue 027 probe P1 fixture — it FIRES under the equality form
+        // (Issue 029); the Binary scrutinee is parenthesized (Rust's `&`
+        // binds tighter than `==`, but explicit parens are unambiguous).
+        let input =
+            "fn g(x: u64) -> f32 { match x & 1 { 0 => -1.0, _ => { let f = 1.0; f } } }";
+        let out = propose_fix("single_match_else", input).expect("matched");
+        assert!(
+            out.contains("if (x & 1) == 0 { -1.0 } else { let f = 1.0; f }"),
+            "parenthesized equality not produced: {out}"
+        );
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn int_literal_first_arm_becomes_equality() {
+        // Issue 029: the decomp_reviewer.rs:62 miss shape — int-literal first
+        // arm + block wildcard fires real clippy under the EQUALITY form.
+        let input = "fn g(total: u32) -> bool { match total { 0 => true, _ => { let n = 1.0; n >= 0.5 } } }";
+        let out = propose_fix("single_match_else", input).expect("matched");
+        assert!(
+            out.contains("if total == 0 { true } else { let n = 1.0; n >= 0.5 }"),
+            "equality form not produced: {out}"
+        );
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn complex_scrutinee_gets_parens_in_equality() {
+        // A scrutinee that binds looser than `==` must be parenthesized.
+        let input =
+            "fn g(x: u8, y: u8) -> u8 { match x | y { 0 => 1, _ => { let v = 2; v } } }";
+        let out = propose_fix("single_match_else", input).expect("matched");
+        assert!(out.contains("if (x | y) == 0"), "scrutinee not parenthesized: {out}");
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn bool_literal_first_arm_still_skipped() {
+        // Unprobed vs real clippy — bool literal arms stay out of scope.
+        let input =
+            "fn g(x: bool) -> u8 { match x { true => 1, _ => { let v = 2; v } } }";
+        let out = propose_fix("single_match_else", input);
+        assert!(out.is_none(), "bool literal arm must stay skipped: {out:?}");
+    }
+
+    #[test]
+    fn interior_comment_blocks_both_forms() {
+        // Issue 029 (the 027/028 comment-deletion class in this proposer):
+        // a comment between arms sits in a DROPPED gap — the whole-match
+        // splice would delete it. The decomp_reviewer.rs:62 site carries
+        // exactly this comment and must stay silent.
+        let equality =
+            "fn g(total: u32) -> bool { match total { 0 => true, // no data yet\n            _ => { let n = 1.0; n >= 0.5 } } }";
+        assert!(propose_fix("single_match_else", equality).is_none());
+        let if_let = "fn g(x: Option<u8>) { match x { // leading comment\n            Some(v) => drop(v), _ => { fallback(); } } }";
+        assert!(propose_fix("single_match_else", if_let).is_none());
+    }
+
+    #[test]
+    fn comment_inside_arm_body_survives() {
+        // A comment INSIDE a kept fragment (arm body) survives the splice —
+        // must keep firing.
+        let input =
+            "fn g(x: Option<u8>) { match x { Some(v) => { drop(v); // why\n }, _ => { fallback(); } } }";
+        let out = propose_fix("single_match_else", input).expect("matched");
+        assert!(out.contains("// why"), "interior arm-body comment lost: {out}");
+        syn::parse_file(&out).expect("re-parses");
     }
 
     #[test]

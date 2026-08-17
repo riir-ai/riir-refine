@@ -2,9 +2,10 @@
 //!
 //! Pattern: a half-open range whose end is `<E> + 1` (or `1 + <E>`) where
 //! the `1` is an INTEGER literal — a float `1.0` never fires (a different
-//! value class, not just a different bound). The whole range node is
-//! replaced by `<start>..=<E>` built from the ORIGINAL source fragments;
-//! an open-start range rewrites to `..=E`.
+//! value class, not just a different bound). Parenthesized ends (Issue 029:
+//! `0..(depth + 1)`, the weaver.rs miss shape) are unwrapped first. The whole
+//! range node is replaced by `<start>..=<E>` built from the ORIGINAL source
+//! fragments; an open-start range rewrites to `..=E`.
 
 use super::helpers::int_lit;
 use super::{edit, src, SourceEdit};
@@ -32,7 +33,14 @@ impl<'ast> Visit<'ast> for Collector<'_> {
         let Some(end_expr) = r.end.as_deref() else {
             return;
         };
-        let Expr::Binary(end) = end_expr else {
+        // Issue 029: `0..(n + 1)` parses the end as `Expr::Paren` wrapping
+        // the Binary — unwrap paren layers before the Binary match (real
+        // clippy fires on the parenthesized shape; weaver.rs:2642 miss).
+        let mut unwrapped = end_expr;
+        while let Expr::Paren(p) = unwrapped {
+            unwrapped = &p.expr;
+        }
+        let Expr::Binary(end) = unwrapped else {
             return;
         };
         let Some(new_end) = plus_one_end(end) else {
@@ -100,6 +108,46 @@ mod tests {
             propose_fix("range_plus_one", "fn f(limit: usize) { let r = 0..limit+1; let _ = r; }")
                 .expect("pattern matched");
         assert_eq!(out, "fn f(limit: usize) { let r = 0..=limit; let _ = r; }");
+    }
+
+    #[test]
+    fn parenthesized_plus_one_end_fires() {
+        // Issue 029: the weaver.rs:2642 miss shape — a paren-wrapped `+1`
+        // end parses as Expr::Paren, which the Binary match used to reject.
+        let out = propose_fix(
+            "range_plus_one",
+            "fn f(depth: usize) { let v: Vec<u8> = (0..(depth + 1)).map(|_| 1u8).collect(); let _ = v; }",
+        )
+        .expect("pattern matched");
+        assert!(out.contains("(0..=depth)"), "paren end not unwrapped: {out}");
+        assert!(syn::parse_file(&out).is_ok(), "{out}");
+    }
+
+    #[test]
+    fn doubly_parenthesized_end_fires() {
+        let out = propose_fix("range_plus_one", "fn f(n: u32) { let r = 0..((n + 1)); let _ = r; }")
+            .expect("pattern matched");
+        assert!(out.contains("0..=n"), "nested parens not unwrapped: {out}");
+        assert!(syn::parse_file(&out).is_ok(), "{out}");
+    }
+
+    #[test]
+    fn parenthesized_non_plus_one_unchanged() {
+        // Unwrapping parens must not loosen the +1 requirement.
+        let out =
+            propose_fix("range_plus_one", "fn f(n: u32) { let r = 0..(n + 2); let _ = r; }");
+        assert!(out.is_none(), "(n+2) must not fire: {out:?}");
+    }
+
+    #[test]
+    fn parenthesized_mul_end_unchanged() {
+        // `(j + 1) * n` — the end is a Mul, not `<E> + 1`; real clippy does
+        // not fire this shape (caddtree_budget.rs:952 is NOT a miss).
+        let out = propose_fix(
+            "range_plus_one",
+            "fn f(j: usize, n: usize) { let s = &wte[j * n..(j + 1) * n]; let _ = s; }",
+        );
+        assert!(out.is_none(), "mul end must not fire: {out:?}");
     }
 
     #[test]

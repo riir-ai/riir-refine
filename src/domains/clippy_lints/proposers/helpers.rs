@@ -8,6 +8,7 @@
 //! (the `manual_map` precedent kept these private — with 30 lints the
 //! duplication stopped being trivial).
 
+use syn::spanned::Spanned;
 use syn::{Expr, ExprLit, Lit, Pat};
 
 /// Can `<expr>.method(...)` be appended without changing grouping? Postfix
@@ -90,4 +91,53 @@ pub(crate) fn is_none_pat(p: &Pat) -> bool {
     matches!(p, Pat::Path(pp) if pp.path.is_ident("None"))
         || matches!(p, Pat::TupleStruct(ts) if ts.path.is_ident("None") && ts.elems.is_empty())
         || matches!(p, Pat::Ident(pi) if pi.ident == "None")
+}
+
+/// Does a whole-node splice replacement DROP a comment? Scans the replaced
+/// span's source for comment markers and reports any that is NOT inside a
+/// kept fragment (Issue 027/028/029 class — real clippy stays silent on
+/// comment-displacing rewrites, and our emitter deletes the comment
+/// outright). Kept fragments are byte ranges that survive verbatim in the
+/// replacement (e.g. scrutinee, patterns, arm bodies).
+pub(crate) fn drops_interior_comment(
+    source: &str,
+    span: std::ops::Range<usize>,
+    kept: &[std::ops::Range<usize>],
+) -> bool {
+    let Some(text) = source.get(span.clone()) else {
+        return true; // broken span bookkeeping — refuse rather than displace
+    };
+    let offset = span.start;
+    for pos in comment_marker_positions(text) {
+        let abs = offset + pos;
+        if !kept.iter().any(|k| k.contains(&abs)) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Byte offsets of `//` and `/*` comment OPENERS in `text` (syn has no
+/// comment nodes). Dropped-gap regions of a rewritten node contain only
+/// keywords/punctuation, so string-literal false positives cannot occur
+/// there; kept fragments are checked verbatim so a `//` inside a string in a
+/// kept fragment is covered by its own range.
+fn comment_marker_positions(text: &str) -> Vec<usize> {
+    let mut out = Vec::new();
+    let bytes = text.as_bytes();
+    let mut i = 0;
+    while i + 1 < bytes.len() {
+        if bytes[i] == b'/' && (bytes[i + 1] == b'/' || bytes[i + 1] == b'*') {
+            out.push(i);
+            i += 2;
+        } else {
+            i += 1;
+        }
+    }
+    out
+}
+
+/// Span helper: byte range of any spanned node (kept-fragment input).
+pub(crate) fn byte_range<T: Spanned>(t: &T) -> std::ops::Range<usize> {
+    t.span().byte_range()
 }

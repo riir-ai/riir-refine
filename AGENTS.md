@@ -318,6 +318,44 @@ in default + latent_retrieval states / the katgpt-speculative dry `--fix`
 re-run: **0 edits proposed** (was 44 — 36 landed last session, the 8
 comment-guarded sites now correctly silent).
 
+**Issue 029 (2026-08-17, RESOLVED-PARTIAL same day + removed per
+noise-reduction rule) — the healer MISS side of the sweep truth-diff
+(the inverse of 027/028: real clippy fires, the healer stays silent).**
+Two classes FIXED + one live hazard closed, three documented open:
+**(T1) `range_plus_one` paren ends** — `0..(depth + 1)` parses the end as
+`Expr::Paren` wrapping the Binary, rejected by the Binary-only match;
+paren layers are now unwrapped first (weaver.rs:2642 class).
+**(T2) `single_match_else` equality form** — int-literal first arms
+(non-negative `Pat::Lit` holding `Lit::Int`) + block wildcard now fire as
+`if scrut == lit { } else { }` (the Issue 027 probe P1 finding made
+implementable); scrutinee parenthesized unless postfix-safe
+(`helpers::is_postfix_safe` reused); bool/char/str literal arms stay
+skipped (unprobed). **The live hazard: whole-match splices drop interior
+comments** — `single_match_else` now refuses any match whose comment sits
+outside kept fragments (scrutinee/pattern/arm bodies) via the new
+`helpers::drops_interior_comment` (kept-range check; broken span
+bookkeeping refuses). caddtree_budget.rs:232 was the guard's first
+production test — `// First observation: use directly` survives verbatim
+inside the kept arm body while the match still fires. Both fixes
+LANDED end-to-end (katgpt-rs `c9c626120`): ground-truth confirmed vs
+real clippy 1.97 pedantic `--all-features --all-targets` (single_match_else
+33→31, range_plus_one 2→1), 1092/1093 lib tests (the 1 failure —
+`peira_pruner::hot_path_overhead_vs_baseline` — PRE-EXISTING at HEAD
+`e8cefad44`, verified via detached worktree; timing-sensitive debug-mode
+test, unrelated). **Deliberate divergence documented:** decomp_reviewer:62
+fires real clippy but stays healer-silent (interior comment between arms
+would be displaced — our tool is SAFER than clippy there). **Open (kept
+in the issue's task list, tracked by the T-numbers):** T3 — the
+`None`/`Err(_)` second-arm single_match_else class (~30 findings in
+katgpt-speculative; type-informed wildcard detection — needs a probe
+matrix before any parse-only implementation); T4 — `uninlined_format_args`
+~60 miss shapes (diagnose from ground truth, extend only the verified
+subset); T5 — sweep `benches/` dirs (bench_424:97 is proposable today).
+Note: syn 2.0.119's `PatLit.lit` holds a `Lit` (not `Box<Expr>`) whose
+token preserves a leading `-` — the negative-literal exclusion checks the
+token text. Gates: 30 range/single_match tests / 487 default lib / 539
+latent_retrieval lib / retrieval floors unchanged / clippy 0 both states.
+
 **Plan 005 (2026-08-14) — latent retrieval + `cargo heal --suggest` CLI
 (Phases 1–4 DONE).** `src/draft/` ships the span-level retrieval layer:
 real `.rs` files → `AstChunker` spans → 8-D modelless embedding →
