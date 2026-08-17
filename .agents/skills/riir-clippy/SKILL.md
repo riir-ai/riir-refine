@@ -113,6 +113,16 @@ cargo run --features latent_retrieval --bin cargo-heal -- --fix --write <target-
   `develop` (`main` for riir-train); rebase non-interactive only.
 - **Numbering**: read `.highwater`, +1, AND re-scan the folder at WRITE
   time — concurrent sessions dual-allocated 675 AND 677 in one night.
+- **Queue-item dual-allocation (Issue 665, 2026-08-17)**: two idle sessions
+  can pick the SAME queue-1 issue within minutes. Before writing any code,
+  `git status` + `ls -lat` the target crate for uncommitted hunks / fresh
+  mtimes that match your chosen issue (a feature line, a module gate, a new
+  file with different design names = someone is mid-flight). If sibling
+  hunks appear AFTER you started (a duplicate feature key materializes
+  beside yours), YIELD immediately: revert ONLY your hunks, delete your
+  untracked files, verify the tree is 100% theirs, pick a different unit.
+  Never commit through a duplicate (two `feature = []` keys = broken
+  manifest for both sessions).
 - **Sibling safety**: never `git stash` sibling WIP; commit only your own
   hunks; isolate builds under `/tmp`; before blaming CI on riir-clippy,
   check whether `src/domains/*/bench.rs` WIP is the sibling's.
