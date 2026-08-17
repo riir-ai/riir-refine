@@ -379,16 +379,38 @@ feature-unification break (katgpt-speculative's dev-dep
 `EchoPredictionScorer`) — verified identical at HEAD `4ccb2f280` via
 detached worktree; candidate for its own issue. Remaining backlog
 (next sweep unit): 96 repo-wide (31 in unswept katgpt-pruners files +
-katgpt-forward/dd_tree + katgpt-core). **T4 — `uninlined_format_args`
-~96 findings (all targets) miss-shape diagnosis from ground truth;
-extend only the verified subset. T5 — DONE same day** (benches/ swept,
+katgpt-forward/dd_tree + katgpt-core). **T4 — DONE same day** (riir-clippy
+`337b0fa`/`7554d7b` + katgpt-rs `436cdda10`): the `uninlined_format_args`
+miss classes closed by a 30-probe matrix (all `MachineApplicable` vs real
+clippy 1.97 pedantic). Real scale measured: **1434 findings / 339 files**
+repo-wide (the earlier ~96 estimate was one target subset; tests/benches/
+examples dominate). The three extensions: **(1) spec carryover** — `{:?}`
+`{:.1}` `{:>12}` `{:#x}` `{:5}` `{:+}` with ident args inline as `{v:?}`
+etc. (spec verbatim; same arg, same trait bounds); ABORTS on dynamic
+specs referencing/consuming another positional arg — `{:1$}` (digit-$)
+and `{:.*}` (dot-star precision-from-next) — the inline deletes the
+referenced arg; scope-captured name refs `{:>width$}` + fill chars
+`{:*<5}` carry. **(2) macro family** — `panic!`/`format_args!`
+(template-first) + `assert!`/`debug_assert!`/`write!`/`writeln!`
+(template SECOND) + `assert_eq`-family (template THIRD); top-level
+comma-sliced args with leading slices untouched; `unreachable!` stays
+OUT (probe-verified clippy-SILENT while `panic!` fires). **(3)
+already-named** `{name}`/`{name:spec}` copy verbatim + consume nothing
+(mixed templates inline only the positional side). Documented divergences
+(clippy fires, we stay silent): `{0}` indices, `{:1$}`/`{:.*}`, named-arg
+`$` refs (scan_args aborts on `w = expr`). Coverage on the ground-truth
+sample `tests/nf_flow_goat.rs`: 4/34 proposable before → **34/34**, healed
+end-to-end 34 → 0 (compiles clean, 7/7 tests pass). Remaining: the
+~1400-finding / 339-file sweep (high-coverage now; the next sweep unit).
+**T5 — DONE same day** (benches/ swept,
 katgpt-rs `4ccb2f280`:
 bench_424:97 range_plus_one + bench_136:208 uninlined — range_plus_one
 now ZERO findings across all targets).
 Note: syn 2.0.119's `PatLit.lit` holds a `Lit` (not `Box<Expr>`) whose
 token preserves a leading `-` — the negative-literal exclusion checks the
-token text. Gates: 36 range/single_match tests (23 single_match_else) /
-496 default lib / retrieval floors PASS / clippy 0 lib + all-targets.
+token text. Gates: 36 range/single_match tests (23 single_match_else) +
+28 uninlined tests / 514 default lib / retrieval floors PASS / clippy 0
+lib + all-targets.
 
 **Plan 005 (2026-08-14) — latent retrieval + `cargo heal --suggest` CLI
 (Phases 1–4 DONE).** `src/draft/` ships the span-level retrieval layer:
