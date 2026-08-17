@@ -460,6 +460,30 @@ target's total warning count is dominated by `src/` findings (69
 uninlined_format_args from the lib appear in a goat_234 target run);
 per-file confirmation needs a file-path grep, not the run total.**
 ~1065 findings remain across ~129 root-tests/ files.
+**riir-train slice 1 landed 2026-08-18** (riir-train `e6084429`, this repo
+`7ed7c6c`): the sweep's first riir-train unit — engine `src/`
+default-compiled files only, 30 files / 183 edits (131 uninlined_format_args,
+37 match_bool, 5 map_unwrap_or, 4 single_match, 3 vec-with-capacity,
+3 single_match_else). **Scope discipline (the empirical-gate method):** the
+engine src/ tree is ~75% feature-gated (~25 distinct gates; only 31 of 118
+preview files are default-compiled by parser, 30 confirmed empirically via
+rustc dep-info `.d` files after the parse — `csp_answer_pruner.rs` +
+`rust_syntax_pruner.rs` parse-DEFAULT but are gated inside `pruner_aux`-style
+parents; never trust a parse-only gate map when dep-info can prove it).
+Sibling Plan 339/340 files excluded (kimi_k3_train.rs 162 edits,
+optimizer_lora_muon{,_sf,_tests}.rs). Validation: check --lib + clippy --lib
+0 warnings + 1253/1253 lib tests (default build only — no gate runs needed
+by construction). **Root-cause proposer fix landed same cycle** (riir-clippy
+`7ed7c6c`): map_unwrap_or on a provably-bool closure + `false` default now
+emits `is_some_and` (real clippy 1.97 pedantic's own suggestion; the old
+`map_or(false, f)` output triggered the DEFAULT-group unnecessary_map_or —
+the heal had created a warning where the original was clean, Issue 027
+class, probe-verified on /tmp/probe_mapor); bool+`true` skipped (clippy's
+own suggestion there leaves its own warning); 7 fixtures; 555/555 lib.
+**Remaining in riir-train** (~3645 edits): engine tests/ 71 files / 1259,
+examples/ 88 / 926, gpu 84 / 562 + the excluded sibling files — each needs
+its own gate map (tests/ carry `required-features`; gpu pulls cubecl),
+slice 2+ material.
 **T5 — DONE same day** (benches/ swept,
 katgpt-rs `4ccb2f280`:
 bench_424:97 range_plus_one + bench_136:208 uninlined — range_plus_one
