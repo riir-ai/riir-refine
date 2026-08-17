@@ -104,6 +104,12 @@ pub mod fix_verify;
 #[cfg(feature = "l4_lora")]
 pub mod l4_fallback;
 
+// Plan 336 T4.4 transport client: talks to riir-train's
+// `bonsai_clippy_l4_eval --serve` daemon (load once, serve many). std-only —
+// no model dependency reaches this crate.
+#[cfg(feature = "l4_lora")]
+pub mod l4_daemon;
+
 // ── Back-compat re-exports (preserve pre-refactor API names) ───────────────
 // These type aliases + re-exports keep existing call sites compiling unchanged
 // after the Plan 001 Phase 1 framework refactor.
