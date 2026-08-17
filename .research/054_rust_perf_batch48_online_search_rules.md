@@ -1,6 +1,7 @@
 # Research 054 — Batch 48 (rust_perf half): the 8 online-search perf rules + the two harness lessons
 
 **Date:** 2026-08-16
+**Status:** RECORD — proposer follow-up IMPLEMENTED 2026-08-17 (the 3 parse-clean ParetoDominant proposers landed: `hashset-insert-bool-return` + `collect-append-to-extend` + `vec-macro-zero-fill`, `FIXABLE_RULES` 5→8, see §8)
 **Source:** idle-queue item 11 (online rust/kernel perf search, Issue 019 close-out) — the 8 deduped candidates queued in the SKILL.md mining snapshot (nnethercote/perf-book std-types + iterators chapters, std docs).
 **Scope:** `src/domains/rust_perf/corpus.rs` (8 new `PerfRule` entries + 8 `BenchSpec` harnesses), `src/draft/eval_fixtures_perf.rs` (8 new eval spans), `src/draft/retrieval_eval.rs` (floors re-pin), `examples/perf_bench_demo.rs` (`PERF_BENCH_FILTER`).
 **Verdict:** GOAT G1/G2/G3/G5/G-det PASS — 6/8 ParetoDominant, 2 honestly annotated (1 ParetoDominated folk-wisdom refutation + 1 Mixed). Corpus 50→58 rules, 40→48 benchable, PERF_SPANS 40→48.
@@ -82,5 +83,5 @@ Floors re-pinned: BLENDED 67/96, 79/96, 86/96; PERF_TOP3 45/48 (tightened from 3
 
 ## 8. Follow-ups
 
-- **Proposers deferred** (honest scope): the queue note sketched "entries + proposers + fixtures + bench gate", but the domain's own methodology is bench-verdict-first (Phase 4 landed proposers only after Bench 013 identified the top-5; Issues 012/013/014 batch additions all landed corpus-only). The bench verdicts now exist: the parse-clean ParetoDominant candidates for a future proposer batch are `hashset-insert-bool-return` (`!s.contains(&x) { s.insert(x) }` → `s.insert(x)`), `collect-append-to-extend` (two-statement staging), and `vec-macro-zero-fill` (two-statement init). `filter-count-to-any` must NEVER get an unconditional proposer (ParetoDominated).
+- **Proposers deferred** (honest scope): the queue note sketched "entries + proposers + fixtures + bench gate", but the domain's own methodology is bench-verdict-first (Phase 4 landed proposers only after Bench 013 identified the top-5; Issues 012/013/014 batch additions all landed corpus-only). The bench verdicts now exist: **LANDED 2026-08-17** — `hashset-insert-bool-return` (`!s.contains(&x) { s.insert(x) }` → `if s.insert(x) { .. }`), `collect-append-to-extend` (two-statement staging, single-use gate), and `vec-macro-zero-fill` (two-statement init) all ship proposers (`FIXABLE_RULES` 5→8; `delete_stmt_edit` added to the shared emitter; fixture + clean-span + cross-domain gates). `filter-count-to-any` must NEVER get an unconditional proposer (ParetoDominated) — still proposer-less BY DESIGN.
 - The validator's `fixed_ns == 0 → Tie` guard could distinguish "sub-ns measurement noise" from "genuinely free call" (e.g. a `fixed_ns < buggy_ns/1000 → Faster` fast-path) — deferred; harnesses can always position the hit to stay measurable.

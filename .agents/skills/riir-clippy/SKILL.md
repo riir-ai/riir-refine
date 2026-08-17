@@ -827,8 +827,13 @@ global = symlink only.
   baseline. Proposers honestly deferred (bench-verdict-first, the
   Issues 012/013/014 precedent): the parse-clean ParetoDominant
   proposer candidates are hashset-insert-bool-return, collect-append-
-  to-extend, vec-macro-zero-fill; filter-count-to-any must NEVER get an
-  unconditional proposer (ParetoDominated). The full-corpus re-run was
+  to-extend, vec-macro-zero-fill — **LANDED 2026-08-17** (Batch 48
+  follow-up: 3 proposers + `delete_stmt_edit` emitter helper + fixture/
+  clean-span/cross-domain gates; `FIXABLE_RULES` 5→8; two syn facts:
+  type-annotated lets parse as `Pat::Type`, `LitFloat::base10_digits`
+  keeps `.`/`e`; filter-count-to-any stays proposer-less BY DESIGN).
+  filter-count-to-any must NEVER get an unconditional proposer
+  (ParetoDominated). The full-corpus re-run was
   killed ~15 min in: pre-existing btreemap-sorted-iteration alone costs
   ~40+ min (5000 inner queries × ~1-2ms at n=50K ≈ 5-10s per call ×
   calibration × samples × 3 repeats — slow-by-design, not a bug).

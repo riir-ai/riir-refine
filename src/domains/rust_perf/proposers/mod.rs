@@ -23,6 +23,21 @@
 //! | `bool-to-bitpack` | `fn(flags: &[bool]) { flags.iter().filter(..).count() }` → `fn(flags: &[u64]) { .. count_ones().sum() }` | **yes** (param type) |
 //! | `fxhashmap` | `use std::collections::HashMap;` + body `HashMap` refs → `rustc_hash::FxHashMap` | no (self-gated: fires only when the file already imports `rustc_hash` — a splice cannot add the Cargo.toml dep) |
 //!
+//! ## Batch 48 follow-up (2026-08-17): +3 proposer-covered rules
+//!
+//! The three parse-clean ParetoDominant candidates whose proposers were
+//! deferred pending bench verdicts (Bench 020/B48 — all three measured
+//! ParetoDominant, so they are now `--fix` eligible):
+//!
+//! | Rule | Rewrite | Signature-visible change? |
+//! |---|---|---|
+//! | `hashset-insert-bool-return` | `if !s.contains(k) { s.insert(k); .. }` → `if s.insert(k) { .. }` (insert's bool return; the insert stmt is deleted) | no |
+//! | `collect-append-to-extend` | `let mut staged = it.collect(); recv.append(&mut staged);` → `recv.extend(it);` (the staging `let` is deleted) | no |
+//! | `vec-macro-zero-fill` | `let mut v = Vec::new(); v.resize(n, 0);` → `let mut v = vec![0; n];` (resize stmt deleted; `v` stays alive) | no |
+//!
+//! `filter-count-to-any` stays proposer-less BY DESIGN (ParetoDominated
+//! 0.82-0.90x — never give a losing rewrite a `--fix` path).
+//!
 //! ## Honest caveats (Proposal 002 caveats 3-4, restated for this domain)
 //!
 //! - **`--fix` only applies CONFIRMED visitor matches** (these proposers).
@@ -46,17 +61,20 @@
 use syn::File;
 
 pub mod bool_to_bitpack;
+pub mod collect_append_to_extend;
 pub mod entry_vs_contains;
 pub mod fxhashmap;
+pub mod hashset_insert_bool_return;
 pub mod static_str;
+pub mod vec_macro_zero_fill;
 pub mod vec_with_capacity;
 
 // Shared emitter substrate (T6.4): re-exported so the pre-T6.4 import path
 // `rust_perf::proposers::{apply_edits, collect_edits, SourceEdit, ...}`
 // keeps compiling. The helpers stay `pub(crate)`-visible via the crate root.
 pub use crate::edit_emitter::{
-    apply_edits, edit, for_each_fn, line_indent, src, span_range, swallow_following_space,
-    RuleEdit, SourceEdit,
+    apply_edits, delete_stmt_edit, edit, for_each_fn, line_indent, src, span_range,
+    swallow_following_space, RuleEdit, SourceEdit,
 };
 
 /// Rule ids with compiled-in proposers (`--fix` eligible). A visitor match
@@ -67,6 +85,9 @@ pub const FIXABLE_RULES: &[&str] = &[
     "static-str",
     "bool-to-bitpack",
     "fxhashmap",
+    "hashset-insert-bool-return",
+    "collect-append-to-extend",
+    "vec-macro-zero-fill",
 ];
 
 /// Proposer option flags (Issue 015 verify-mode).
@@ -130,6 +151,9 @@ pub fn collect_edits_opts(
         "static-str" => static_str::collect_edits(source, file),
         "bool-to-bitpack" => bool_to_bitpack::collect_edits(source, file),
         "fxhashmap" => fxhashmap::collect_edits(source, file),
+        "hashset-insert-bool-return" => hashset_insert_bool_return::collect_edits(source, file),
+        "collect-append-to-extend" => collect_append_to_extend::collect_edits(source, file),
+        "vec-macro-zero-fill" => vec_macro_zero_fill::collect_edits(source, file),
         _ => Vec::new(),
     };
     edits
@@ -185,8 +209,8 @@ mod tests {
         assert_eq!(diffs, 1, "expected exactly one changed line: {out}");
     }
 
-    /// End-to-end: each of the 5 corpus fixtures fires its proposer, the
-    /// output carries the fixed-form marker, AND the output parses (L2
+    /// End-to-end: each proposer-covered corpus fixture fires its proposer,
+    /// the output carries the fixed-form marker, AND the output parses (L2
     /// pruner — the same validation `RustPerfDomain::validate` runs).
     #[test]
     fn corpus_fixtures_fire_and_parse() {
@@ -220,6 +244,27 @@ mod tests {
                 "use rustc_hash::FxHashSet;\nuse std::collections::HashMap;\nfn lookup(map: &HashMap<u32, u32>, k: u32) \
                  -> Option<u32> {\n    map.get(&k).copied()\n}",
                 "FxHashMap",
+            ),
+            (
+                "hashset-insert-bool-return",
+                "use std::collections::HashSet;\nfn register_seen(seen: &mut \
+                 HashSet<u32>, items: &[u32]) -> usize {\n    let mut inserted = 0;\n    \
+                 for &x in items {\n        if !seen.contains(&x) {\n            \
+                 seen.insert(x);\n            inserted += 1;\n        }\n    }\n    inserted\n}",
+                "if seen.insert(x) {",
+            ),
+            (
+                "collect-append-to-extend",
+                "fn merge_chunks(target: &mut Vec<u32>, chunks: &[Vec<u32>]) {\n    for c in \
+                 chunks {\n        let mut staged: Vec<u32> = c.iter().copied().collect();\n        \
+                 target.append(&mut staged);\n    }\n}",
+                "target.extend(c.iter().copied())",
+            ),
+            (
+                "vec-macro-zero-fill",
+                "fn zero_buf(n: usize) -> Vec<u8> {\n    let mut v = Vec::new();\n    \
+                 v.resize(n, 0);\n    v\n}",
+                "vec![0; n]",
             ),
         ];
         let pruner = crate::pruner::RustAnalyzerPruner::new();

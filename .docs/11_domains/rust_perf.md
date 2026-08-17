@@ -267,19 +267,33 @@ auto-apply.
 | `static-str` | `-> String { "lit".to_string() }` → `-> &'static str { "lit" }` | signature-visible (return type); `.to_owned()` + `String::from` forms too |
 | `bool-to-bitpack` | `flags: &[bool]` count → `flags: &[u64]` + `count_ones().sum()` | signature-visible (param type); param name preserved (no rename hazards) |
 | `fxhashmap` | std `HashMap` → `rustc_hash::FxHashMap` (use swap + group slimming + path rewrite) | healed crate needs the `rustc-hash` dep; glob/`pub use`/fn-local forms skipped |
+| `hashset-insert-bool-return` | `if !s.contains(k) { s.insert(k); .. }` → `if s.insert(k) { .. }` | insert stmt deleted via the shared `delete_stmt_edit`; key equivalence modulo leading `&`/`*` layers (2026-08-17) |
+| `collect-append-to-extend` | `let mut staged = it.collect(); recv.append(&mut staged);` → `recv.extend(it);` | single-use staging gate (exactly 2 ident occurrences file-wide); first-mention adjacency in one block (2026-08-17) |
+| `vec-macro-zero-fill` | `let mut v = Vec::new(); v.resize(n, 0);` → `let mut v = vec![0; n];` | zero int/float literals only; `v` stays alive for later uses; a read-only-after binding may surface a rustc `unused_mut` warning — dropping `mut` unconditionally would risk E0596 on unknown mutators, which is strictly worse (2026-08-17) |
+
+The 2026-08-17 additions are the Batch 48 follow-up: the three parse-clean
+ParetoDominant rules whose proposers were deferred pending bench verdicts
+(measured ParetoDominant in Bench 020 — now `--fix` eligible). Two syn facts
+learned landing them: **a type annotation wraps the pattern** (`let mut v:
+Vec<u8> = ..` parses as `Pat::Type` around the ident — unwrap before
+matching), and **`LitFloat::base10_digits` keeps `.`/`e`/sign separators**
+(`"0.0"` → `"0.0"` — filter to digit chars before the all-zero check).
+`filter-count-to-any` stays proposer-less BY DESIGN (ParetoDominated
+0.82-0.90x — a losing rewrite never gets a `--fix` path).
 
 The `for_each_fn` shared helper (now in
 [`edit_emitter.rs`](../../src/edit_emitter.rs)) scans free fns + impl
 methods + nested inline `mod` blocks. `--fix` CLI wiring shipped with
 Phase 6 T6.1 (Bench 019); the clippy proposers joined the same emitter in
-T6.4. The G5 real-fix-in-a-sibling-repo gate remains blocked on the
-riir-ai rebase.
+T6.4; `delete_stmt_edit` (the line-scaffolding-aware statement deletion)
+joined in the 2026-08-17 batch. G5 real-repo validation precedent: Bench 019
+(katgpt-pruners, 20 edits landed) + Bench 031 (`--fix --verify`, 14/12/2).
 
 ## Source
 
 - [`src/domains/rust_perf/mod.rs`](../../src/domains/rust_perf/mod.rs) — `PerfRule` + `RustPerfDomain`
 - [`src/domains/rust_perf/corpus.rs`](../../src/domains/rust_perf/corpus.rs) — `build_perf_seed_corpus()` + 31 `BenchSpec`s (8 rules are honestly NotBenchable)
-- [`src/domains/rust_perf/proposers/`](../../src/domains/rust_perf/proposers/) — the Phase 4 top-5 `syn` AST proposers + `propose_fix` dispatch
+- [`src/domains/rust_perf/proposers/`](../../src/domains/rust_perf/proposers/) — the 8 `syn` AST proposers (Phase 4 top-5 + the 2026-08-17 Batch 48 follow-up) + `propose_fix` dispatch
 - [`src/domains/rust_perf/verify.rs`](../../src/domains/rust_perf/verify.rs) — `PerfVerifier` (cargo test)
 - [`src/domains/rust_perf/bench.rs`](../../src/domains/rust_perf/bench.rs) — `PerfBenchValidator` (Pareto verdict)
 - [`examples/perf_heal_demo.rs`](../../examples/perf_heal_demo.rs) — scaffold end-to-end demo

@@ -162,6 +162,43 @@ pub fn swallow_following_space(source: &str, mut e: SourceEdit) -> SourceEdit {
     e
 }
 
+/// Build a deletion edit for a statement that also removes the line's
+/// scaffolding when the stmt owns its line: trailing same-line spaces are
+/// always swallowed; when the rest of the line is empty AND the stmt's line
+/// prefix is all whitespace, the deletion extends back over the indentation
+/// and the preceding newline — the line vanishes with no blank-line residue.
+/// A stmt sharing its line with other code (or a trailing comment) deletes
+/// only its own span + trailing spaces (the `collect-append-to-extend`
+/// proposer's `let .. // comment` case: the comment survives on its own
+/// line, still attached to the statement that replaced the pattern).
+pub fn delete_stmt_edit(source: &str, node: &impl Spanned) -> SourceEdit {
+    let (mut start, mut end) = span_range(node);
+    // Swallow trailing same-line spaces only — the newline's fate is decided
+    // by the line-ownership branch below.
+    while end < source.len() && source.as_bytes()[end] == b' ' {
+        end += 1;
+    }
+    let after = &source[end..];
+    let line_rest_empty =
+        after.is_empty() || after.starts_with('\n') || after.starts_with("\r\n");
+    if line_rest_empty {
+        let line_start = source[..start].rfind('\n').map_or(0, |i| i + 1);
+        let prefix_ws = source[line_start..start].chars().all(|c| c == ' ' || c == '\t');
+        if prefix_ws && line_start > 0 {
+            start = line_start;
+            // Eat the preceding newline (and its \r under CRLF) so the whole
+            // line disappears instead of leaving an indentation-only line.
+            if source.as_bytes()[start - 1] == b'\n' {
+                start -= 1;
+                if start > 0 && source.as_bytes()[start - 1] == b'\r' {
+                    start -= 1;
+                }
+            }
+        }
+    }
+    SourceEdit { start, end, replacement: String::new() }
+}
+
 /// Visit every fn-like item in the file (free fns, impl methods, fns in
 /// nested inline `mod` blocks) with `(sig, block)`.
 ///
@@ -261,6 +298,55 @@ mod tests {
         let lt = r.lifetime.as_ref().expect("lifetime present");
         let e = swallow_following_space(source, edit(lt, String::new()));
         assert_eq!(&source[e.start..e.end], "'a ");
+    }
+
+    #[test]
+    fn delete_stmt_edit_removes_own_line() {
+        let source = "fn f() {\n    a();\n    b();\n}\n";
+        let file = syn::parse_file(source).unwrap();
+        let Item::Fn(f) = &file.items[0] else { panic!() };
+        // a(); is the first stmt of the body.
+        let e = delete_stmt_edit(source, &f.block.stmts[0]);
+        let out = apply_edits(source, vec![e]);
+        assert_eq!(out, "fn f() {\n    b();\n}\n");
+    }
+
+    #[test]
+    fn delete_stmt_edit_consecutive_lines_compose() {
+        // Two deletions computed against the ORIGINAL source must both apply
+        // cleanly (disjoint ranges) and leave no blank lines behind.
+        let source = "fn f() {\n    a();\n    b();\n    c();\n}\n";
+        let file = syn::parse_file(source).unwrap();
+        let Item::Fn(f) = &file.items[0] else { panic!() };
+        let e1 = delete_stmt_edit(source, &f.block.stmts[0]);
+        let e2 = delete_stmt_edit(source, &f.block.stmts[1]);
+        let out = apply_edits(source, vec![e1, e2]);
+        assert_eq!(out, "fn f() {\n    c();\n}\n");
+    }
+
+    #[test]
+    fn delete_stmt_edit_mid_line_keeps_siblings() {
+        let source = "fn f() { a(); b(); }";
+        let file = syn::parse_file(source).unwrap();
+        let Item::Fn(f) = &file.items[0] else { panic!() };
+        let e = delete_stmt_edit(source, &f.block.stmts[0]);
+        let out = apply_edits(source, vec![e]);
+        assert_eq!(out, "fn f() { b(); }");
+    }
+
+    #[test]
+    fn delete_stmt_edit_trailing_comment_survives() {
+        // The `collect-append-to-extend` corpus shape: a comment after the
+        // `;` keeps the deletion mid-line; the comment stays (on the line's
+        // remaining indentation), byte-identical.
+        let source = "fn f(x: u32) {\n    let s = x; // note\n    x\n}\n";
+        let file = syn::parse_file(source).unwrap();
+        let Item::Fn(f) = &file.items[0] else { panic!() };
+        let e = delete_stmt_edit(source, &f.block.stmts[0]);
+        let out = apply_edits(source, vec![e]);
+        assert!(out.contains("    // note\n    x"), "{out}");
+        assert!(!out.contains("let s"), "{out}");
+        assert!(syn::parse_file(&out).is_ok(), "{out}");
     }
 
     #[test]

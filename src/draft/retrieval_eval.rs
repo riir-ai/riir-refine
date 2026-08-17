@@ -1248,6 +1248,30 @@ mod tests {
         }
     }
 
+    /// Clean-span truth for the 2026-08-17 proposer additions: no real
+    /// production excerpt fires the three new rewrites (the perf-domain
+    /// analog of [`Self::clean_spans_fire_no_lint`], scoped to the NEW
+    /// proposers — the pre-existing five are Bench-019-G5-validated on real
+    /// files instead).
+    #[cfg(feature = "rust_perf")]
+    #[test]
+    fn clean_spans_fire_no_new_perf_proposer() {
+        use crate::domains::rust_perf::proposers::propose_fix;
+        const NEW_RULES: &[&str] = &[
+            "hashset-insert-bool-return",
+            "collect-append-to-extend",
+            "vec-macro-zero-fill",
+        ];
+        for (tag, code) in CLEAN_SPANS {
+            for &rule in NEW_RULES {
+                assert!(
+                    propose_fix(rule, code).is_none(),
+                    "clean span {tag} fires {rule}"
+                );
+            }
+        }
+    }
+
     /// Clean-span truth: no real-code excerpt contains any of the 37
     /// STRUCTURAL lint patterns (FIXABLE + VERIFY). The three type-blind
     /// self_evolve-only proposers (`needless_borrow`, `useless_conversion`,
