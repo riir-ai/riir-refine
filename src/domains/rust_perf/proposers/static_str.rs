@@ -28,6 +28,12 @@ pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
 
 /// Push the fn's edits (0 or 2) if it matches.
 fn fn_edits(source: &str, sig: &syn::Signature, block: &syn::Block, edits: &mut Vec<SourceEdit>) {
+    // Caller gate (the action_hoare.rs E0308 lesson, applied to the return-
+    // type ripple): any other reference to this fn in the file is a caller
+    // whose `let s: String = label()` binding a span-local edit cannot adapt.
+    if super::count_ident_occurrences(source, &sig.ident.to_string()) > 1 {
+        return;
+    }
     // Return type must be `String` (or `std::string::String`).
     let ReturnType::Type(_, ty) = &sig.output else { return };
     if !is_string_ty(ty) {
@@ -156,6 +162,20 @@ mod tests {
         assert!(out.contains("-> &'static str"), "{out}");
         assert!(out.contains("\"ready\""), "{out}");
         assert!(squash(&out).contains(&squash("-> &'static str { \"ready\" }")), "{out}");
+    }
+
+    #[test]
+    fn live_caller_blocks_rewrite() {
+        // The return-type ripple: a caller binding the result as owned
+        // `String` breaks when the signature becomes `&'static str` — a
+        // span-local edit cannot adapt the caller. Refuse.
+        assert!(
+            propose_fix(
+                "static-str",
+                "fn label() -> String { \"ready\".to_string() }\nfn user() -> String { label() }",
+            )
+            .is_none()
+        );
     }
 
     #[test]

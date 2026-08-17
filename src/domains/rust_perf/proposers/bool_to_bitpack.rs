@@ -8,7 +8,11 @@
 //! 8-12.5x).
 //!
 //! **Signature-visible change** (documented per the module caveat): callers
-//! must pass packed bits (`pack_bools` at the boundary). The param name is
+//! must pass packed bits (`pack_bools` at the boundary). **Caller gate
+//! (2026-08-18)**: fires ONLY when the fn ident occurs exactly once in the
+//! file — a referenced fn (live caller, fn-as-value, macro arg) is refused,
+//! because a span-local edit cannot adapt the caller's `&[bool]` argument
+//! (the `action_hoare.rs` E0308 lesson). The param name is
 //! deliberately preserved (no capture-avoiding rename needed); `&Vec<bool>`
 //! params + non-tail count forms are out of scope.
 //!
@@ -19,16 +23,22 @@ use syn::{Expr, File, FnArg, Pat, Stmt, Type};
 
 use super::{edit, SourceEdit};
 
-pub(crate) fn collect_edits(_source: &str, file: &File) -> Vec<SourceEdit> {
+pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
     let mut edits = Vec::new();
     super::for_each_fn(file, |sig, block| {
-        fn_edits(sig, block, &mut edits);
+        fn_edits(source, sig, block, &mut edits);
     });
     edits
 }
 
 /// Push the fn's edits (0 or 2) if it matches.
-fn fn_edits(sig: &syn::Signature, block: &syn::Block, edits: &mut Vec<SourceEdit>) {
+fn fn_edits(source: &str, sig: &syn::Signature, block: &syn::Block, edits: &mut Vec<SourceEdit>) {
+    // Caller gate (the action_hoare.rs E0308 lesson): the rewrite changes the
+    // param type — any other reference to this fn in the file (call site,
+    // fn-as-value, macro arg) is somewhere a span-local edit cannot adapt.
+    if super::count_ident_occurrences(source, &sig.ident.to_string()) > 1 {
+        return;
+    }
     let Some((param, param_ty)) = bool_slice_param(sig) else { return };
 
     // Body must be exactly the tail chain `<param>.iter().filter(1 arg).count()`.
@@ -113,15 +123,32 @@ mod tests {
     fn param_name_preserved() {
         // A param named like the closure var exercises the shadowing-safety
         // choice (no rename): `w.iter().map(|w| ..)` re-parses + stays
-        // correct (the closure shadows within its own body only).
+        // correct (the closure shadows within its own body only). The fn is
+        // named `count_bits` (NOT `count`) so the ident occurs exactly once
+        // — `.count()` in the body would trip the caller gate.
         let out = propose_fix(
             "bool-to-bitpack",
-            "fn count(w: &[bool]) -> usize {\n    w.iter().filter(|&&b| b).count()\n}",
+            "fn count_bits(w: &[bool]) -> usize {\n    w.iter().filter(|&&b| b).count()\n}",
         )
         .expect("pattern matched");
         assert!(out.contains("w: &[u64]"), "{out}");
         let reparsed = syn::parse_file(&out).expect("output must re-parse");
         assert!(!reparsed.items.is_empty());
+    }
+
+    #[test]
+    fn live_caller_blocks_rewrite() {
+        // The action_hoare.rs E0308 shape: a private counting helper WITH a
+        // live same-file caller must NOT be rewritten — the caller still
+        // passes `&[bool]` and a span-local edit cannot adapt it.
+        assert!(
+            propose_fix(
+                "bool-to-bitpack",
+                "fn count_satisfied(satisfied: &[bool]) -> usize {\n    \
+                 satisfied.iter().filter(|&&s| s).count()\n}\n\nfn reward(pre: &[bool]) -> f32 {\n    count_satisfied(pre) as f32 * 0.5\n}",
+            )
+            .is_none()
+        );
     }
 
     #[test]

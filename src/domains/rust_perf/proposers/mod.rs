@@ -68,9 +68,16 @@
 //!   Cold-start adoption (first file in a crate + the dep addition) stays
 //!   manual.
 //! - `static-str` + `bool-to-bitpack` change fn signatures — the rewrite is
-//!   span-local (the one fn) but semantically ripples to callers. Same
-//!   exposure class as the clippy proposers' rewrites; the pruner validates
-//!   syntax, `rust_perf_verify` (cargo test) validates semantics.
+//!   span-local (the one fn) but semantically ripples to callers. Since the
+//!   2026-08-18 `action_hoare.rs` E0308 lesson BOTH carry a caller gate:
+//!   they refuse when the fn ident occurs more than once in the file
+//!   ([`count_ident_occurrences`]) — a signature a span-local edit cannot
+//!   adapt is a compile break waiting to fire in every `--fix --write`
+//!   sweep. `fxhashmap` remains the one body-local type-changing rewrite
+//!   without a caller gate (type-flow exposure, not signature exposure;
+//!   heavily self-gated on an existing `rustc_hash` import — compile-gate
+//!   it if it ever fires wrong); `rust_perf_verify` (cargo test) validates
+//!   semantics either way.
 //! - Since T6.4 the clippy_lints proposers use the same edit-splice emitter
 //!   (they were mutation-based + whole-file `ToTokens` re-emission before).
 
@@ -94,6 +101,37 @@ pub use crate::edit_emitter::{
     apply_edits, delete_stmt_edit, edit, for_each_fn, line_indent, src, span_range,
     swallow_following_space, RuleEdit, SourceEdit,
 };
+
+/// Count word-boundary occurrences of `ident` in `source` (Rust ident
+/// charset on both sides; `fn name` self-references count).
+///
+/// Caller gate for the signature-changing proposers (`static-str`,
+/// `bool-to-bitpack`): a fn whose ident appears MORE THAN ONCE in the file
+/// (call site, fn-as-value, macro arg, even a comment) is referenced from
+/// somewhere a span-local edit cannot reach — rewriting its signature would
+/// break the caller (the 2026-08-18 `action_hoare.rs` E0308 lesson: the heal
+/// changed `count_satisfied(&[bool])` to `&[u64]` while its live caller still
+/// passed `&[bool]`). Refusing is the only mechanically-safe direction.
+pub(crate) fn count_ident_occurrences(source: &str, ident: &str) -> usize {
+    let bytes = source.as_bytes();
+    let mut count = 0;
+    let mut from = 0;
+    while let Some(rel) = source[from..].find(ident) {
+        let at = from + rel;
+        let end = at + ident.len();
+        let before_ok = at == 0 || !is_ident_byte(bytes[at - 1]);
+        let after_ok = end >= bytes.len() || !is_ident_byte(bytes[end]);
+        if before_ok && after_ok {
+            count += 1;
+        }
+        from = end;
+    }
+    count
+}
+
+fn is_ident_byte(b: u8) -> bool {
+    b.is_ascii_alphanumeric() || b == b'_'
+}
 
 /// Rule ids with compiled-in proposers (`--fix` eligible). A visitor match
 /// is the confirmation — retrieval scores only report/prioritize.
