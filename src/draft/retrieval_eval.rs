@@ -366,6 +366,28 @@ fn probe(cache_hit: Option<u8>) -> u8 {
 }
 "#,
     ),
+    (
+        // Slice-5 extension (2026-08-18): the real riir-train gpart.rs
+        // production shapes for the newly-covered `anyhow::ensure!` macro
+        // family — an already-inlined `{version}` template and a
+        // no-placeholder template. Both must stay silent.
+        "clean:anyhow_ensure_already_inlined",
+        r#"fn check_oscpt_header(data: &[u8], pos: &mut usize) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        data.len() >= 5 && data[..5] == b"OSCPT",
+        "Invalid OSCPT magic"
+    );
+    *pos += 5;
+    let version = u32::from_le_bytes(data[*pos..*pos + 4].try_into()?);
+    anyhow::ensure!(
+        version == 9,
+        "Unsupported OSCPT version: {version}"
+    );
+    *pos += 4;
+    Ok(())
+}
+"#,
+    ),
 ];
 
 /// Deterministic identifier-renaming map for the kernel self-variant probe.

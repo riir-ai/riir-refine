@@ -9,11 +9,17 @@
 //!    TEMPLATE slice position depends on the macro family (Issue 029 T4
 //!    probe matrix, all `MachineApplicable` vs real clippy 1.97 pedantic):
 //!    first for `format`/`println`/`print`/`eprintln`/`eprint`/`panic`/
-//!    `format_args`, SECOND for `assert`/`debug_assert`/`write`/`writeln`
-//!    (condition/target first), THIRD for `assert_eq`/`assert_ne`/
-//!    `debug_assert_eq`/`debug_assert_ne` (two operands first).
+//!    `format_args`/`bail`, SECOND for `assert`/`debug_assert`/`write`/
+//!    `writeln`/`ensure` (condition/target first), THIRD for `assert_eq`/
+//!    `assert_ne`/`debug_assert_eq`/`debug_assert_ne` (two operands first).
 //!    `unreachable!` stays OUT — the probe shows clippy is silent there
-//!    while `panic!` fires.
+//!    while `panic!` fires. Family matching is on the LAST path segment
+//!    (2026-08-18 slice-5 extension) so qualified invocations work:
+//!    `anyhow::ensure!(cond, "… {}", x)` / `anyhow::bail!("… {}", x)`
+//!    fire real clippy exactly like their `use`-imported bare forms
+//!    (probe evidence: the riir-train `rosetta`/`game_concept_graph`
+//!    findings). Other qualified families (`std::format!` etc.) match the
+//!    same way — real clippy is qualifier-agnostic (post-expansion).
 //! 2. The template slice must be a plain `"`-opening string literal.
 //!    Everything after it: format args, each parsed as a `syn::Expr`
 //!    that is a single-ident path. Anything else (field access, calls,
@@ -106,13 +112,15 @@ impl Collector {
 
 /// The macro family this rewrite applies to (Issue 029 T4 probe matrix —
 /// every listed macro fires real clippy on inlineable format args;
-/// `unreachable!` is probe-verified SILENT and stays out).
+/// `unreachable!` is probe-verified SILENT and stays out). Matching is on
+/// the LAST path segment, so `anyhow::ensure!`/`anyhow::bail!` and other
+/// qualified invocations resolve the same as bare names.
 fn macro_family(path: &Path) -> Option<TemplatePos> {
     use TemplatePos::{First, Second, Third};
-    let name = path.get_ident()?.to_string();
+    let name = path.segments.last()?.ident.to_string();
     Some(match name.as_str() {
-        "format" | "println" | "print" | "eprintln" | "eprint" | "panic" | "format_args" => First,
-        "assert" | "debug_assert" | "write" | "writeln" => Second,
+        "format" | "println" | "print" | "eprintln" | "eprint" | "panic" | "format_args" | "bail" => First,
+        "assert" | "debug_assert" | "write" | "writeln" | "ensure" => Second,
         "assert_eq" | "assert_ne" | "debug_assert_eq" | "debug_assert_ne" => Third,
         _ => return None,
     })
@@ -713,6 +721,83 @@ mod tests {
         )
         .expect("pattern matched");
         assert!(fa.contains("\"plain {v}\""), "{fa}");
+    }
+
+    #[test]
+    fn bail_and_ensure_inlined() {
+        // Slice-5 extension (2026-08-18): anyhow's `bail!` is template-first
+        // (like panic!), `ensure!` is condition-first (like assert!). Probe
+        // evidence: the riir-train rosetta/game_concept_graph findings.
+        let b = propose_fix(
+            "uninlined_format_args",
+            "fn f(x: u8) -> anyhow::Result<()> { bail!(\"bad {}\", x) }",
+        )
+        .expect("pattern matched");
+        assert!(b.contains("\"bad {x}\""), "{b}");
+        let e = propose_fix(
+            "uninlined_format_args",
+            "fn f(x: u8) -> anyhow::Result<()> { ensure!(x > 0, \"must be positive: {}\", x); Ok(()) }",
+        )
+        .expect("pattern matched");
+        assert!(e.contains("\"must be positive: {x}\""), "{e}");
+        assert!(e.contains("x > 0"), "cond mangled: {e}");
+        assert!(syn::parse_file(&e).is_ok(), "{e}");
+    }
+
+    #[test]
+    fn qualified_anyhow_bail_inlined_with_escaped_quotes() {
+        // The production shape from riir-train game_concept_graph.rs: a
+        // qualified path + escaped quotes around the placeholder. Last-
+        // segment family matching resolves `anyhow::bail` to `bail`.
+        let out = propose_fix(
+            "uninlined_format_args",
+            "fn f(other: &str) -> anyhow::Result<()> { anyhow::bail!(\"Unknown concept class: \\\"{}\\\"\", other) }",
+        )
+        .expect("pattern matched");
+        assert!(
+            out.contains("\\\"{other}\\\""),
+            "escaped quotes must survive: {out}"
+        );
+        assert!(out.contains("anyhow::bail!"), "path mangled: {out}");
+        assert!(syn::parse_file(&out).is_ok(), "{out}");
+    }
+
+    #[test]
+    fn qualified_anyhow_ensure_inlined() {
+        // The production shape from riir-train rosetta/mod.rs: qualified
+        // ensure! with a comparison condition (no top-level comma).
+        let out = propose_fix(
+            "uninlined_format_args",
+            "fn f(v: u32, V: u32) -> anyhow::Result<()> { anyhow::ensure!(v == V, \"Unsupported version: {}\", v); Ok(()) }",
+        )
+        .expect("pattern matched");
+        assert!(out.contains("\"Unsupported version: {v}\""), "{out}");
+        assert!(out.contains("v == V"), "cond mangled: {out}");
+        assert!(syn::parse_file(&out).is_ok(), "{out}");
+    }
+
+    #[test]
+    fn qualified_std_format_inlined() {
+        // Last-segment matching is qualifier-agnostic: `std::format!` is
+        // the same macro real clippy fires on.
+        let out = propose_fix(
+            "uninlined_format_args",
+            "fn f(x: u8) -> String { std::format!(\"{}\", x) }",
+        )
+        .expect("pattern matched");
+        assert!(out.contains("\"{x}\""), "{out}");
+        assert!(out.contains("std::format!"), "path mangled: {out}");
+    }
+
+    #[test]
+    fn ensure_without_message_untouched() {
+        // Mirrors `assert_without_message_untouched`: no template at
+        // position 1 - nothing to do.
+        let out = propose_fix(
+            "uninlined_format_args",
+            "fn f(x: u8) -> anyhow::Result<()> { ensure!(x > 0); Ok(()) }",
+        );
+        assert!(out.is_none(), "no-template ensure must not fire: {out:?}");
     }
 
     #[test]
