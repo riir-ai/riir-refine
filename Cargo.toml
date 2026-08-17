@@ -131,6 +131,13 @@ latent_retrieval = ["dep:riir-rag", "dep:riir-neuron-db"]
 # the cargo-heal bin surface).
 fix_verify = ["latent_retrieval"]
 
+# Plan 336 T4.4/T5.3: the L4 generative fallback stage. Ships the composition
+# SEAM only (trait + pipeline wiring) — no model, no GPU, no heavy deps. Inert
+# unless a fallback is installed via `HealPipeline::with_l4_fallback`.
+# Opt-in per the promotion rule: default-on requires Plan 336's G1-G4 to pass,
+# and G1 is unproven (riir-train Bench 462/465).
+l4_lora = []
+
 # Plan 005 T3.5 option 3: 768-D Bonsai dense rerank on top of the 8-D
 # ShardIndex pre-filter. HEAVY — loads the ~6.7 GB Ternary-Bonsai-27B GGUF
 # and runs a CPU ternary forward pass per embedded text. NEVER default; the

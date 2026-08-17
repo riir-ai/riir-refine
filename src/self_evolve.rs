@@ -70,7 +70,22 @@ pub enum HealSource {
     /// (Issue 010 fix direction). Highest-confidence source: the fix was
     /// validated by the domain validator during the tuning phase.
     Stage2Adaptive,
+    /// The L4 generative fallback (Plan 336). Reached ONLY when the modelless
+    /// L0-L3 path could not serve a parsing fix — see
+    /// [`crate::l4_fallback`] for the four-invariant contract.
+    #[cfg(feature = "l4_lora")]
+    L4Lora,
 }
+
+/// The `evolution_score` reported for an L4 fix.
+///
+/// L4 answers carry no evolution evidence — the layer has never scored this
+/// direction and the fix has no trajectory history. 0.5 is the pipeline's
+/// existing "no evidence" value: an unseen rule scores `W_EVO * 0.5 +
+/// W_RATE * 0.5 = 0.5` on the modelless path too, so L4 lands on the same
+/// neutral point rather than inventing confidence it has not earned.
+#[cfg(feature = "l4_lora")]
+const L4_EVOLUTION_SCORE: f32 = 0.5;
 
 /// Internal candidate for the heal pipeline's selection step.
 struct Candidate {
@@ -234,6 +249,11 @@ pub struct HealPipeline {
     /// Reusable scratch: tilted advantages for the `Entropic` selection
     /// mode (alloc-free after warm-up, Issue 026).
     tilt_advantages: Vec<f32>,
+    /// The L4 generative fallback (Plan 336 T4.4). `None` by default — the
+    /// pipeline is then byte-identical to the L0-L3 path. Consulted only on a
+    /// modelless miss; see [`crate::l4_fallback`] for the contract.
+    #[cfg(feature = "l4_lora")]
+    l4: Option<Box<dyn crate::l4_fallback::L4Fallback>>,
 }
 
 impl HealPipeline {
@@ -259,7 +279,73 @@ impl HealPipeline {
             retrieve_out: Vec::new(),
             tilt_rewards: Vec::new(),
             tilt_advantages: Vec::new(),
+            #[cfg(feature = "l4_lora")]
+            l4: None,
         }
+    }
+
+    /// Install the L4 generative fallback (Plan 336 T4.4).
+    ///
+    /// Without this the pipeline never leaves the modelless path. With it, L4
+    /// is consulted **only** when L0-L3 fail to produce a parsing fix, and its
+    /// answer is kept only if it parses — see [`crate::l4_fallback`].
+    #[cfg(feature = "l4_lora")]
+    #[must_use]
+    pub fn with_l4_fallback(mut self, l4: Box<dyn crate::l4_fallback::L4Fallback>) -> Self {
+        self.l4 = Some(l4);
+        self
+    }
+
+    /// Whether an L4 fallback is installed (for inspection / benchmarks).
+    #[cfg(feature = "l4_lora")]
+    #[must_use]
+    pub fn has_l4_fallback(&self) -> bool {
+        self.l4.is_some()
+    }
+
+    /// Consult the L4 fallback for a fix the modelless path could not serve.
+    ///
+    /// Returns `Some` only when a fallback is installed, it produced a fix,
+    /// AND that fix passes the L2 pruner — invariant 3 (never degrade a
+    /// modelless answer) is enforced here, at the single point where an L4
+    /// result can enter the pipeline.
+    #[cfg(feature = "l4_lora")]
+    fn consult_l4(
+        &mut self,
+        rule_id: &str,
+        buggy_code: &str,
+        rule_context_notes: Option<&str>,
+    ) -> Option<HealResult> {
+        let fix = self.l4.as_mut()?.generate_fix(rule_id, buggy_code)?;
+        // The pruner is the same L2 gate every other source passes through.
+        // A non-parsing L4 answer is discarded, not returned with parses=false:
+        // the caller already has (or has not) a modelless answer, and replacing
+        // it with an equally-broken generated one buys nothing for ~48 s.
+        let validation = self.pruner.validate(&fix, rule_id);
+        if !validation.parses {
+            return None;
+        }
+        Some(HealResult {
+            fixed_code: fix,
+            parses: true,
+            evolution_score: L4_EVOLUTION_SCORE,
+            source: HealSource::L4Lora,
+            context_notes: rule_context_notes.map(str::to_string),
+        })
+    }
+
+    /// No-op when the `l4_lora` feature is off — the miss path compiles to the
+    /// same `None` it returned before the stage existed.
+    #[cfg(not(feature = "l4_lora"))]
+    #[inline]
+    #[allow(clippy::unused_self, clippy::needless_pass_by_ref_mut)]
+    fn consult_l4(
+        &mut self,
+        _rule_id: &str,
+        _buggy_code: &str,
+        _rule_context_notes: Option<&str>,
+    ) -> Option<HealResult> {
+        None
     }
 
     /// Borrow the Stage 2 adaptive drafter (for inspection / testing).
@@ -428,7 +514,10 @@ impl HealPipeline {
         }
 
         if candidates.is_empty() {
-            return None;
+            // Modelless miss #1: nothing to serve at all. This is the case L4
+            // exists for — an input the corpus, drafter and memory have never
+            // seen. Returns None when no fallback is installed.
+            return self.consult_l4(rule_id, buggy_code, rule_context_notes);
         }
 
         // Step 4: score each candidate.
@@ -481,6 +570,24 @@ impl HealPipeline {
 
         // Step 5: validate with the L2 pruner.
         let validation = self.pruner.validate(&cand.code, rule_id);
+
+        // Modelless miss #2: the best candidate does not parse. L4 gets a
+        // chance to beat it — but only a PARSING L4 answer replaces it
+        // (invariant 3), so the worst case is the same non-parsing result the
+        // pipeline returned before the stage existed.
+        //
+        // Note the ordering: this runs only when `parses` is false, so a
+        // healthy modelless fix never reaches the fallback (invariant 1).
+        if !validation.parses {
+            let modelless = HealResult {
+                fixed_code: cand.code.clone(),
+                parses: false,
+                evolution_score: best_score,
+                source: cand.source,
+                context_notes: rule_context_notes.map(str::to_string),
+            };
+            return Some(self.consult_l4(rule_id, buggy_code, rule_context_notes).unwrap_or(modelless));
+        }
 
         Some(HealResult {
             fixed_code: cand.code.clone(),

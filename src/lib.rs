@@ -15,8 +15,10 @@
 //!    (`clippy_verify` for the clippy domain).
 //! 4. **L3 — Ruliology candidate search** (opt-in): Pareto-front enumeration
 //!    when multiple valid fixes exist.
-//! 5. **L4 — `LoRA` fallback** (deferred): adaptive learning on the residual
-//!    cases L0-L3 miss. Last resort, not co-equal path.
+//! 5. **L4 — `LoRA` fallback** (opt-in, `l4_lora`): a generative model for the
+//!    residual cases L0-L3 miss. Last resort, not co-equal path. The
+//!    composition seam ships in [`l4_fallback`]; the adapter itself lives in
+//!    riir-train (Plan 336).
 //!
 //! ## Architecture
 //!
@@ -94,6 +96,13 @@ pub mod draft;
 // the cargo-heal bin surface).
 #[cfg(feature = "fix_verify")]
 pub mod fix_verify;
+
+// Plan 336 T4.4: the L0-L3 → L4 composition seam. Opt-in and inert without an
+// installed fallback; the adapter lives in riir-train (needs the 27B GGUF + a
+// GPU). Splitting the contract from the adapter is what makes G4 measurable
+// here without the model — see the module docs for the four invariants.
+#[cfg(feature = "l4_lora")]
+pub mod l4_fallback;
 
 // ── Back-compat re-exports (preserve pre-refactor API names) ───────────────
 // These type aliases + re-exports keep existing call sites compiling unchanged
