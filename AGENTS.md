@@ -484,6 +484,33 @@ own suggestion there leaves its own warning); 7 fixtures; 555/555 lib.
 examples/ 88 / 926, gpu 84 / 562 + the excluded sibling files — each needs
 its own gate map (tests/ carry `required-features`; gpu pulls cubecl),
 slice 2+ material.
+**riir-train slice 2 landed 2026-08-18** (riir-train `22447d9d`): engine
+`tests/` default-runnable slice — 11 files / 182 edits (176
+uninlined_format_args + 6 map_unwrap_or→map_or chain collapses; zero
+control-flow rewrites). **Gate-map lesson for TEST files (supersedes
+dep-info alone):** a `#![cfg(feature)]`-gated test file COMPILES to an
+EMPTY binary under default features and still emits a `.d` file — dep-info
+said 17 default-compiled files, but `cargo test -- --list` proved only 2
+run by default (goat_247 via collimation_lora riding `training_verification`
+transitively + plan_313 ungated). Ground truth for "what runs" is the
+per-config `--list` count, not the .d file. **5 validation configs, all
+count-identical pre/post-heal (47 tests green both sides):** default
+(goat_247 7 + plan_313 1 — the slowest single test at 433s),
+jvp_velocity_supervision (6 a5b files / 22 tests; full_go_arena 7 @ 299s),
+weaver (bench_314: 1 run + 5 ignored), gemma4_lora (plan320_c2: 4), remax_ppo
+(remax_ppo_convnet_minatar: 10). **Pre-existing breakage found:**
+plan320_c2_goat_losses under `--features gemma4_train` ALONE fails E0432
+(unresolved `gemma4_lora` — the file's inner cfg names gemma4_train but the
+import needs the separate gemma4_lora feature, which implies gemma4_train;
+the gemma4_train-only combo is a broken gate nobody runs). Clippy 0
+warnings in healed files across all 5 configs. **Fmt scoped OUT with
+reason:** the 11 files carry 94 pre-existing rustfmt diffs at HEAD + no
+rustfmt.toml + no CI fmt gate — wholesale fmt would drag unrelated
+formatting into a mechanical diff (the heal adds ~10 net-new diffs, same
+class as the pre-existing ones). **Remaining in riir-train** (~3463 edits):
+engine tests/ gated remainder ~60 files / ~1077 (each needs its gate's
+build+run — the 5-config pattern scales), examples/ 88 / 926, gpu 84 / 562
++ the 4 excluded sibling src files (~206).
 **T5 — DONE same day** (benches/ swept,
 katgpt-rs `4ccb2f280`:
 bench_424:97 range_plus_one + bench_136:208 uninlined — range_plus_one
