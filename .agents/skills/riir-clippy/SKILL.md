@@ -759,6 +759,30 @@ global = symlink only.
   whole-crate clippy after ANY corpus-layout change is the standing
   check). Both lanes' quotes re-verified by the coordinator in clean
   files.
+- **Plan 339 handoff (riir-train, T5.1, 2026-08-18)** — 5 kernel-rule candidates
+  from Research 417 §2.3, now WITH measured verdicts from Benches 469/470/472
+  so the loop doesn't mine refuted ones:
+  - `symmetric-half-gemm-mirror-epilogue` — **REFUTED as a gain** on Ada
+    (Bench 469: `cublasSsyrk_v2` gives up 2.2×/FLOP throughput for the 2× FLOP
+    cut; 1.01–1.09× SLOWER at every shape). Only mineable as a
+    negative-annotation/context_notes entry if the corpus wants one.
+  - `gram-domain-iteration` — **REFUTED numerically** (Bench 470: the
+    Gram-domain restart `P = X·P₀·X` needs 4 digits of cancellation in TF32's
+    3; broke the well-conditioned control 16/26 → 6/26). Recorded in-source at
+    `muon_dense_cuda_ns.rs` run_gpu_ns.
+  - `restart-to-kill-spurious-eigenvalues` — **measured WORKS with
+    constraints** (Bench 470: ε=1e-3 + 2 full passes → 26/26 adversarial +
+    0.9587 > 0.9454 production; constraints `ε ≤ γ−1`, full coefficient
+    schedule, data-domain Gram re-form). The strongest distillation candidate
+    of the five — reopen path (c), same shape as the B49/B52 measured-GOAT
+    distillations.
+  - `error-feedback-subset-selection` — shipped (Plan 339 Phases 2–3, Bench
+    472) but is optimizer-loop algorithm content, not kernel content —
+    out of kernel_opt scope; the loop decides if it fits rust_perf at all.
+  - `fp16-mantissa-over-bf16-range` — untested by Plan 339 (no fp16 work
+    landed); still an open candidate, no in-repo evidence either way.
+  In-repo proof refs: riir-train `.benchmarks/469/470/472`,
+  `crates/riir-train-gpu/src/muon_dense_cuda{,_ns,_sampled}.rs`.
 - **NEXT mining target**: the riir-gpu file-mining program is COMPLETE (Batch 51, Research 057 — corpus 347). The idle-loop mining item shifts to rust_perf + issue-driven work + measured-GOAT distillations (the Batch 49 path: a measured fix in riir-ai/riir-train becomes a rule the same day). kernel_opt reopens ONLY on: (a) the ternary_deltanet_gpu_forward.rs sibling-WIP unlock (re-verify clean at batch start), (b) new production kernel files landing in riir-gpu, or (c) a measured-GOAT distillation opportunity.
 - **Batch 49 DONE (2026-08-16, Research 055):** the Bench-686 measured-lesson
   distillation (single rule, NOT file mining — riir-ai Issue 706 / Bench 686,
