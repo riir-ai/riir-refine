@@ -1138,7 +1138,16 @@
 //!   and the triple-inconsistent 13/15/19H provision constant;
 //!   structurally-dead zero modules at toy scale; row-attention
 //!   dispatch exceeding the 65535 workgroup limit).
-//! - **Batch 49 (Research 055):** 1 rule, corpus 343 → 344 (A 80) —
+//! - **Batch 49 (Research 055, the Bench-686 measured-lesson distillation):** 1 rule,
+//!   corpus 343 → 344 (A 80) — `runtime-arg-loop-bound-demotes-arrays-to-local-memory`
+//!   (A — a correctly-sized per-thread array whose per-element
+//!   loops are bounded by a RUNTIME kernel arg that is constant at
+//!   every call site is demoted to local memory: no unroll, no
+//!   register form for dynamically-indexed arrays; hoist the bound
+//!   to a compile-time const + unroll — measured −18.4% kernel at
+//!   ppl bit-exact; the paired A/B that CAUGHT it is part of the
+//!   rule: trading L1-hot global reads for more local-memory
+//!   traffic is a LOSS).
 //! - **Batch 51 (Research 057):** 3 rules, corpus 344 → 347 (A 81, D 62, N 19) —
 //!   the FINAL riir-gpu file-mining batch (`kimi_k3_gpu_backward_batched.rs` +
 //!   `attention_q8kv_cubecl.rs`): batched-read-slot-membership-decided-at-launch (D),
@@ -1149,16 +1158,15 @@
 //!   Phase-A loop writing a single-row buffer per position followed by a Phase-B
 //!   per-position consumer only preserves the LAST write; fix = `[seq_len × dim]` row
 //!   storage. Distinct from B26/B27 uniform staleness — `DATA` liveness, not values).
-//!   the Bench-686 measured-lesson distillation (not file mining):
-//!   `runtime-arg-loop-bound-demotes-arrays-to-local-memory`
-//!   (A — a correctly-sized per-thread array whose per-element
-//!   loops are bounded by a RUNTIME kernel arg that is constant at
-//!   every call site is demoted to local memory: no unroll, no
-//!   register form for dynamically-indexed arrays; hoist the bound
-//!   to a compile-time const + unroll — measured −18.4% kernel at
-//!   ppl bit-exact; the paired A/B that CAUGHT it is part of the
-//!   rule: trading L1-hot global reads for more local-memory
-//!   traffic is a LOSS).
+//! - **Batch 54 (measured-GOAT distillation, riir-train Plan 339 T1.5 / Bench 470):**
+//!   1 rule, corpus 348 → 349 (B 51 → 52) — regularizer-above-noise-floor-coupled-
+//!   to-damping-cap (B — a reduced-precision matrix-polynomial iteration on a
+//!   rank-deficient Gram gets spurious null-space eigenvalues from SIGNED per-GEMM
+//!   format noise (~1e-3 TF32), not from the eps regulariser: eps must sit ABOVE the
+//!   noise floor AND below the damping budget (eps <= gamma-1, asserted in code), and
+//!   the repair is a second FULL-schedule pass with the Gram re-formed from the DATA
+//!   iterate — each knob alone measured FAIL; guard corollary: `t < 1e-20` is false
+//!   for NaN, write `!t.is_finite() || t < threshold`).
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
@@ -1209,7 +1217,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 348-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 349-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1305,7 +1313,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "unpack-loop-indexed-by-container-word",
         ],
     ),
-    // B: Compute patterns (51 rules)
+    // B: Compute patterns (52 rules)
     (
         KernelCategory::Compute,
         "B: compute",
@@ -1361,6 +1369,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "single-sweep-minmax-for-quant-scale",
             "softmax-denominator-hoist-out-of-weighted-v",
             "per-key-projection-hoist-out-of-query-sweep",
+            "regularizer-above-noise-floor-coupled-to-damping-cap",
         ],
     ),
     // C: Fusion patterns (33 rules)
@@ -1677,7 +1686,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
 /// Returns 15 buckets (one per category), each containing the `KernelRule`s whose
 /// `rule_id` appears in that category's slice of [`KERNEL_CATEGORIES`]. This is
 /// the category-scoped view of the corpus — a future heal pipeline can consult
-/// routed expert's rules first without scanning all 348.
+/// routed expert's rules first without scanning all 349.
 ///
 /// # Allocation
 ///

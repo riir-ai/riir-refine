@@ -57,8 +57,8 @@
         // Batch 46 (3): riir-gpu maxsim — size-gate-covers-every-cost-factor, declared-max-array-taxed-per-thread-under-runtime-bound, shared-operand-side-pair-batch-index-decomposition (maxsim/dispatch.rs + spectralquant.rs + both WGSL kernels — the MaxSim size-gated CPU/GPU dispatcher + the fused SpectralQuant dequantize+MaxSim single-pass scorer, Plan 085; hazards filed as Issue 700).
         // Batch 47 (3): riir-gpu hypernet — per-key-projection-hoist-out-of-query-sweep, multi-head-out-proj-consumes-head-concat, shared-producer-prefix-extract-once-per-input (hypernet/ shine.rs + routing.rs + types.rs + m2p_transformer.rs + gpu_m2p.rs + kernels/m2p_attention.wgsl — the SHINE second half: the context-to-LoRA pipeline + expert routing + the M2P CPU/GPU attention pair; hazards filed as Issue 701).
         // Batch 49 (1): riir-gpu cudarc — runtime-arg-loop-bound-demotes-arrays-to-local-memory (cudarc_kernels/mod.rs rmsnorm_quantize_f32, the Bench-686 measured lesson from Issue 706: compile-time loop bounds + #pragma unroll keep per-thread arrays in registers — kernel −18.4% at ppl bit-exact).
-        // Total: 209. // (historical batch-30 snapshot; current 348)
-        assert_eq!(corpus.entries.len(), 348, "batches 1-52 should have 348 rules");
+        // Total: 209. // (historical batch-30 snapshot; current 349)
+        assert_eq!(corpus.entries.len(), 349, "kernel batches through Batch 54 should have 349 rules");
     }
 
     #[test]
@@ -3101,6 +3101,60 @@
         }
     }
 
+    #[test]
+    fn batch54_rules_present() {
+        // Batch 54 (measured-GOAT distillation, riir-train Bench 470).
+        let corpus = build_kernel_seed_corpus();
+        let ids = ["regularizer-above-noise-floor-coupled-to-damping-cap"];
+        for id in ids {
+            assert!(
+                corpus.entries.iter().any(|e| e.rule_id == id),
+                "batch-54 rule '{id}' missing from corpus"
+            );
+        }
+    }
+
+    #[test]
+    fn batch54_concepts_covered() {
+        let corpus = build_kernel_seed_corpus();
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == "regularizer-above-noise-floor-coupled-to-damping-cap")
+            .expect("batch-54 rule missing");
+        for concept in [
+            "noise floor",
+            "damping budget",
+            "FULL-coefficient-schedule",
+            "GRAM-DOMAIN restart",
+            "is_finite",
+        ] {
+            assert!(
+                entry.gpu_concept.contains(concept),
+                "batch-54 concept '{concept}' not covered"
+            );
+        }
+    }
+
+    #[test]
+    fn batch54_pseudocode_parses() {
+        // G1 for Batch 54 (measured-GOAT distillation): syn-parse gate.
+        use crate::domain::HealDomain;
+        let corpus = build_kernel_seed_corpus();
+        let ids = ["regularizer-above-noise-floor-coupled-to-damping-cap"];
+        for id in ids {
+            let entry = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-54 rule '{id}' missing"));
+            let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+            assert!(ref_verdict.parses, "batch-54 ref_shape for '{id}' must parse");
+            let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+            assert!(opt_verdict.parses, "batch-54 opt_pattern for '{id}' must parse");
+        }
+    }
+
     // ════════════════════════════════════════════════════════════════════
     // Plan 003 — Router ↔ corpus wiring tests
     // ════════════════════════════════════════════════════════════════════
@@ -3112,7 +3166,7 @@
 
     #[test]
     fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-        // Every rule_id in the 348-rule corpus must appear in exactly one category.
+        // Every rule_id in the 349-rule corpus must appear in exactly one category.
         let corpus = build_kernel_seed_corpus();
         let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
         let mut categorized: Vec<&str> = Vec::new();
@@ -3143,10 +3197,10 @@
 
     #[test]
     fn kernel_categories_counts_match_plan_003_table() {
-        // Pin per-category rule counts to the Plan 003 table (updated for Batch 52).
+        // Pin per-category rule counts to the Plan 003 table (updated for Batch 54).
         let expected = [
             (KernelCategory::MemoryAccess, 81),
-            (KernelCategory::Compute, 51),
+            (KernelCategory::Compute, 52),
             (KernelCategory::Fusion, 33),
             (KernelCategory::Dispatch, 63),
             (KernelCategory::Parallelism, 20),
@@ -3168,9 +3222,9 @@
                 "Plan 003: category {cat:?} has {} rules, expected {count}",
                 entry.2.len());
         }
-        // Sum must equal 344.
+        // Sum must equal 349.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 348, "Plan 003: category totals must sum to 348");
+        assert_eq!(total, 349, "Plan 003: category totals must sum to 349");
     }
 
     #[test]
@@ -3180,7 +3234,7 @@
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 348, "Plan 003: grouped corpus has {total} rules, expected 348");
+        assert_eq!(total, 349, "Plan 003: grouped corpus has {total} rules, expected 349");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");
