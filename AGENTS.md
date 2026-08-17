@@ -660,6 +660,49 @@ for a future src/ gated-lib slice.
 real-model deps (gemma2/qwen25), goat_296 family ~7 via per-file feature
 gates, degrpo/wasm_reward_shaping/ted/posterior/mdl 2 each), examples/
 88 / 926, gpu 84 / 562 + the 4 excluded sibling src files (~206).
+
+**riir-train slice 5 landed 2026-08-18** (riir-train `6ed32675` +
+riir-clippy proposer `6aa0c82`): engine `src/` **lora_still lib slice —
+the slice-4 side observation, corrected + closed**. The "17 gated lib
+findings" framing was WRONG in an instructive way: enumerating the
+findings under `--features lora_still` then under DEFAULT showed **12 of
+13 are default-visible** — `collimation_lora.rs` (7 findings) sits behind
+`#[cfg(feature = "collimation_lora")]` in lib.rs but `training_verification`
+(the ONLY default feature) transitively enables `collimation_lora` — a
+**parse-only gate-map failure in the REVERSE direction** from the slice-1
+lesson (slice 1: parser said default, dep-info proved gated; here:
+lib.rs cfg said gated, feature-chain reality said default). Gate truth =
+resolve the feature CHAIN (default → implied features → compiled mod
+set), never the cfg attribute alone. The remaining finding split:
+3 × `game_concept_graph.rs` `bail!` + 2 × `rosetta/mod.rs`
+`anyhow::ensure!` were sites slice 1's heal structurally could NOT touch,
+and only 1 (`lora_still_training.rs`) was genuinely lora_still-gated.
+**Proposer extension (the root-cause half, riir-clippy `6aa0c82`):**
+anyhow's `bail!` (template-first, like panic!) + `ensure!` (cond-first,
+like assert!) joined the macro family table, + `macro_family` now
+resolves the LAST path segment instead of `get_ident()` (single-segment
+only) so qualified `anyhow::ensure!`/`anyhow::bail!` — the production
+spelling — reach the family match; qualifier-agnostic like real clippy's
+post-expansion behavior. Probe evidence = the live findings themselves.
+5 new fixtures (bare bail/ensure, qualified bail with escaped quotes,
+qualified ensure, qualified std::format, ensure-without-message negative
+control) + a real gpart.rs clean-span entry (already-inlined `{version}`
++ no-placeholder templates must stay silent). Gates: 560 default / 612
+latent_retrieval / 623 fix_verify lib tests, clippy 0; consumer proof:
+all 13 sites healed end-to-end. **Heal: 4 files / 54 edits** (the extra
+41 beyond the 13 lib findings = cfg(test) mod sites the `--lib` clippy
+scan doesn't see + 3 map_unwrap_or→map_or) — lib tests count-identical
+pre/post (default 1253, lora_still 1271), clippy 0 both states, pedantic
+-W residue 0 both states.
+**Remaining in riir-train** (~3335 edits): engine tests/ gated remainder
+~49 files / ~1003 (largest next clusters: nextlat 3, ciacot 4 AVOID
+real-model deps (gemma2/qwen25), goat_296 family ~7 via per-file feature
+gates, degrpo/wasm_reward_shaping/ted/posterior/mdl 2 each), examples/
+88 / 926, gpu 84 / 562 + the 4 excluded sibling src files (~206 —
+re-check sibling state at slice time). The lib-side gated-surface scan
+(other features' src residue) remains a standing follow-up — enumerate
+per feature the same way (default diff vs feature-on diff) before
+assuming a finding class is gated.
 **T5 — DONE same day** (benches/ swept,
 katgpt-rs `4ccb2f280`:
 bench_424:97 range_plus_one + bench_136:208 uninlined — range_plus_one
