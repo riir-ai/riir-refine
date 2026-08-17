@@ -737,6 +737,35 @@ gates, degrpo/wasm_reward_shaping/ted/posterior/mdl 2 each; ciacot 4 AVOID
 the 4 excluded sibling src files (~206 — re-check sibling state at slice
 time). The lib-side gated-surface scan remains the standing follow-up
 (now with the --tests cfg(test) component folded into every gate slice).
+**riir-train slice 7 landed 2026-08-18** (riir-train `639d2eec`): engine
+tests/ **goat_296 per-file-gate family slice** — the map's largest named
+cluster: 7 test binaries, each behind its OWN feature gate (no supersets —
+7 independent gates). One feature cycle with the 7-feature union covers
+all: sparse_subnetwork_training (zero-dep), off_principal_init
+(katgpt-core/newton_schulz), pion_optimizer_goat (riir-gpu/pion_optimizer
+— compiles clean on M3 Metal; CPU clippy+test cycle, no GPU-exclusivity
+concern), module_rank_profile_goat, sparse_lora_export_goat,
+cross_game_mask_transfer_goat, cross_game_retention_goat (= cpu_lora_train
++ cross_game_mask_transfer). **6 files / 104 edits**: uninlined_format_args
+38 clippy findings = 104 placeholder-level edits + 1 single_match_else
+collapse (cross_game_retention run_game); goat_296_module_rank scanned
+clean (0 findings, no validation run — the slice-3 skip rule). Per-file
+edit counts (the `fix <path> (N edits)` review sections): pion 36,
+off_principal 34, sparse_subnetwork 22, mask 5, retention 5, export 2.
+**Validation:** 6 binaries count-identical pre/post (3/2/5/5/2/3 all
+green, ~2min/side — cross_game_retention 105s the slow one); clippy
+--tests union residue 0 in healed files; src-side union-minus-default
+residue 0 (the slice-6 standing rule check — NO stragglers this time,
+the src surface for these 7 gates is already clean); default-features
+run skipped with reason (test-file-only edits — the lib is bit-identical
+under any feature set, so a default cycle proves nothing about them).
+All 6 files rustfmt-clean at HEAD → rustfmt applied post-heal (the katgpt
+pattern; re-indents the single_match_else body), net −49 lines.
+**Remaining in riir-train** (~3196 edits): engine tests/ gated remainder
+~36 files / ~864 (next clusters: degrpo/wasm_reward_shaping/ted/posterior/
+mdl 2 each; ciacot 4 AVOID — real-model deps (gemma2/qwen25)), examples/
+88 / 926, gpu 84 / 562 + the 4 excluded sibling src files (~206 — re-check
+sibling state at slice time).
 **T5 — DONE same day** (benches/ swept,
 katgpt-rs `4ccb2f280`:
 bench_424:97 range_plus_one + bench_136:208 uninlined — range_plus_one
