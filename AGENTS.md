@@ -350,7 +350,9 @@ in the issue's task list, tracked by the T-numbers):** T3 — the
 katgpt-speculative; type-informed wildcard detection — needs a probe
 matrix before any parse-only implementation); T4 — `uninlined_format_args`
 ~60 miss shapes (diagnose from ground truth, extend only the verified
-subset); T5 — sweep `benches/` dirs (bench_424:97 is proposable today).
+subset); T5 — **DONE same day** (benches/ swept, katgpt-rs `4ccb2f280`:
+bench_424:97 range_plus_one + bench_136:208 uninlined — range_plus_one
+now ZERO findings across all targets).
 Note: syn 2.0.119's `PatLit.lit` holds a `Lit` (not `Box<Expr>`) whose
 token preserves a leading `-` — the negative-literal exclusion checks the
 token text. Gates: 30 range/single_match tests / 487 default lib / 539
