@@ -163,11 +163,11 @@ MAX_LOADAVG = 16.0
 LOAD_COMPARABLE_CEILING = 12.6
 
 
-def require_sane_load(stage: str) -> None:
+def require_sane_load(stage: str, ceiling: float) -> None:
     la = loadavg()
-    if la > MAX_LOADAVG:
+    if la > ceiling:
         print(
-            f"\n!! ABORT at {stage}: loadavg {la:.1f} > {MAX_LOADAVG} "
+            f"\n!! ABORT at {stage}: loadavg {la:.1f} > {ceiling} "
             "(outside Bench 010's validated insensitivity band of ~12.6).\n"
             "   Both arms are partly CPU-dispatch-bound; a saturated box does "
             "not perturb them equally, so\n   neither the absolute tok/s nor "
@@ -284,6 +284,18 @@ def main() -> int:
     ap.add_argument("--target-dir", default="/tmp/b036_clippy_tps")
     ap.add_argument("--out", type=Path, default=Path("/tmp/bench036.json"))
     ap.add_argument(
+        "--max-load",
+        type=float,
+        default=MAX_LOADAVG,
+        metavar="LOADAVG",
+        help=(
+            f"Hard-abort ceiling (default {MAX_LOADAVG}). Pass "
+            f"{LOAD_COMPARABLE_CEILING} for a QUIET-BOX run whose absolute tok/s "
+            "are comparable to Bench 010/014 — that converts the per-pair ratios "
+            "from an upper bound into a point estimate."
+        ),
+    )
+    ap.add_argument(
         "--wait-for-window",
         type=int,
         default=0,
@@ -309,7 +321,7 @@ def main() -> int:
         while True:
             hits = gpu_consumers(set())
             la = loadavg()
-            if not hits and la <= MAX_LOADAVG:
+            if not hits and la <= args.max_load:
                 print(
                     f"[window] OPEN after {waited}s (loadavg {la:.1f}, "
                     "no GPU consumers)",
@@ -328,7 +340,7 @@ def main() -> int:
             if waited % 300 == 0:
                 print(
                     f"[window] waiting... loadavg {la:.1f} "
-                    f"(need <= {MAX_LOADAVG}), "
+                    f"(need <= {args.max_load}), "
                     f"{len(hits)} GPU consumer(s), {waited}s elapsed",
                     file=sys.stderr,
                 )
@@ -336,7 +348,7 @@ def main() -> int:
             waited += 30
 
     require_exclusive("startup", exclude_pids=set())
-    require_sane_load("startup")
+    require_sane_load("startup", args.max_load)
     load_start = loadavg()
 
     llama = start_llama(args.port)
@@ -451,6 +463,7 @@ def main() -> int:
         "loadavg_end": loadavg(),
         "loadavg_per_pair": [p["loadavg"] for p in pairs],
         "load_comparable_ceiling": LOAD_COMPARABLE_CEILING,
+        "max_load_ceiling_used": args.max_load,
         # If any pair ran above the ceiling, the per-pair ratios still stand
         # (that is what interleaving buys) but the absolute tok/s are depressed
         # and must NOT be compared to Bench 010/014 absolutes.

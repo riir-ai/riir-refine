@@ -1,4 +1,4 @@
-# Bench 037 — the modelless MISS RATE: L4 is unreachable, and the gate is syntactic
+# Bench 037 — the modelless MISS RATE: L4 was unreachable (syntactic gate) — FOUND and FIXED
 
 **Date:** 2026-08-17
 **Purpose:** riir-train [Plan 336](../../riir-train/.plans/336_code_llm_rlvr_clippy_l4_lora.md) T5.1 — measure the residual gap that could justify or retire Phase 5 (the L4 generative fallback)
@@ -23,7 +23,7 @@ L4 would help. Only the miss rate is.
 
 ---
 
-## Results
+## Results — BEFORE the fix (the measurement that found the defect)
 
 | arm | cases | served/parses | miss #1 | miss #2 | **miss rate** | EM (context only) |
 |---|---:|---:|---:|---:|---:|---:|
@@ -32,9 +32,38 @@ L4 would help. Only the miss rate is.
 | **out-of-corpus** (real lints with NO corpus entry) | 9 | 9 | 0 | 0 | **0.0%** | n/a |
 | **combined** | **29** | **29** | **0** | **0** | **0.0%** | — |
 
-**Verdict: the L4-addressable gap is 0/29. L4 is UNREACHABLE in the shipped
+**Verdict: the L4-addressable gap was 0/29. L4 was UNREACHABLE in the shipped
 configuration** — not for lack of a good checkpoint, but because the pipeline
-never declines. No adapter, however well trained, can be consulted.
+never declined.
+
+## Results — AFTER the relevance gate (commit `d8440f6`)
+
+The defect this bench found was fixed in the same session. Same harness, same
+fixtures, re-run against the gated pipeline:
+
+| arm | cases | served/parses | miss #1 | miss #2 | **miss rate** | EM (context only) |
+|---|---:|---:|---:|---:|---:|---:|
+| seed (in-distribution) | 10 | 10 | 0 | 0 | **0.0%** *(unchanged)* | 10/10 (100%) *(unchanged)* |
+| heldout (generalization) | 10 | 10 | 0 | 0 | **0.0%** *(unchanged)* | 0/10 (0%) *(unchanged)* |
+| **out-of-corpus** | 9 | **0** | **9** | 0 | **100.0%** *(was 0.0%)* | n/a |
+| **combined** | **29** | **20** | **9** | **0** | **31.0%** | — |
+
+`l4_reachable = true`. **The L4-addressable gap is now 9/29 (31.0%)**, and it is
+entirely the out-of-corpus arm — exactly where it should be. In-distribution
+behaviour is bit-for-bit unchanged: seed still serves 10/10 at 100% EM, held-out
+still serves 10/10, and L4 is never consulted for any corpus rule.
+
+**The fix** (`src/self_evolve.rs`, commit `d8440f6`): the serve/decline decision
+gains a provenance term, `relevant = rule_in_corpus || cand.source != Memory`,
+computed from the corpus scan that already existed for `rule_context_notes`. Miss
+handling moved to `HealPipeline::resolve_miss`, which distinguishes *relevant but
+non-parsing* (hand it back, pre-existing behaviour) from *irrelevant* (decline).
+Verified by 3 new tests in `tests/g4_l4_composition.rs` (13/13 pass, including all
+10 original invariants) and 11/11 `self_evolve` lib tests.
+
+**Consequence for Plan 336 Phase 5:** it flips from *unjustifiable* to *justified
+if a checkpoint can beat decline*. G1 (0/60) still has to clear before promotion —
+the gap being real does not make the adapter good.
 
 ---
 
@@ -52,11 +81,12 @@ So the harness adds 9 real clippy lints verified absent from the corpus
 `ptr_arg`). The harness **asserts** `candidates.is_empty()` for each rather than
 assuming it, so the arm fails loudly if the corpus grows to cover one.
 
-**All 9 were still served a parsing fix. Miss rate 0/9.**
+**Before the fix: all 9 were served a parsing fix. Miss rate 0/9.** After the
+relevance gate (`d8440f6`): all 9 decline. Miss rate 9/9.
 
 ---
 
-## Mechanism — and why this is a gating defect, not a success
+## Mechanism (pre-fix) — and why this was a gating defect, not a success
 
 With zero corpus candidates the only remaining paths are memory/evolution, and
 memory always returns its nearest trajectory. Diagnostics from the run
@@ -90,7 +120,9 @@ snippet instead of declining. Two consequences:
    downstream — but the L4 decision happens *inside* `heal()`, before any
    verification, so L4 stays suppressed regardless.
 
-Filed as [Issue 030](../.issues/030_l4_seam_syntactic_gate_suppresses_fallback.md).
+Filed as Issue 030 — **RESOLVED and removed** per the noise-reduction rule; the
+fix is commit `d8440f6` and this bench is the record. See §"Results — AFTER the
+relevance gate".
 
 ---
 
@@ -104,9 +136,11 @@ parsing-but-wrong fixes. The two numbers do not conflict; they describe tuned vs
 untuned. The blanket phrasing was imprecise and the distinction matters, because
 Stage-2 tuning is what buys generalization.
 
-It does **not** affect this bench's verdict: Stage-2 tuning can only *reduce* the
-miss rate, and the miss rate is already 0. So the untuned run is a valid **upper
-bound**, and 0% is 0% either way.
+It does **not** affect the pre-fix verdict: Stage-2 tuning can only *reduce* a
+miss rate, and the pre-fix rate was already 0, so the untuned run was a valid
+**upper bound** and 0% is 0% either way. Post-fix it is a genuine caveat on the
+9/29 figure — tuning Stage 2 could serve some out-of-corpus rules and lower the
+31.0%, so **9/29 is an upper bound on the addressable gap**, not a floor.
 
 ---
 
@@ -120,18 +154,29 @@ bound**, and 0% is 0% either way.
   Direction of the bias is known and stated above.
 - **Fix quality on the out-of-corpus arm.** Deliberately not scored — those
   inputs have no `want`, and the question asked was reachability, not accuracy.
-- **Whether a relevance gate is cheap.** Issue 030's job, not this bench's.
+- **Whether a relevance gate is cheap.** Answered by the fix itself: it reuses an
+  existing corpus scan and adds one boolean, and `heal_is_alloc_free_after_warmup`
+  still passes — so the gate costs nothing measurable on the hot path.
 
 ## Recommendation for Plan 336 Phase 5
 
-**Do not train toward T5.1.** The prerequisite is a decline path in the seam
-(Issue 030). Order of operations:
+Steps 1 and 2 below are **DONE** in this session; step 3 is where Phase 5 now sits.
 
-1. Fix the gate so out-of-distribution input yields a miss instead of an
-   unrelated parsing snippet.
-2. Re-run this bench. The miss rate then becomes the real L4-addressable gap.
-3. Only if that gap is non-trivial does T5.1/T5.3/T5.4 have a justification —
-   and G1 (currently 0/60) still has to clear before promotion.
+1. ~~Fix the gate so out-of-distribution input yields a miss instead of an
+   unrelated parsing snippet.~~ **DONE** — commit `d8440f6`, Issue 030 resolved.
+2. ~~Re-run this bench. The miss rate then becomes the real L4-addressable gap.~~
+   **DONE** — **9/29 (31.0%)**, all of it the out-of-corpus arm.
+3. **The gap is real, so T5.1/T5.3/T5.4 now have a justification — but the
+   adapter still does not.** G1 is 0/60 (T4.1) and T2.7's re-gate repeated 0/60
+   DEGENERATE (Bench 467). The bar is now concrete and stricter than "score
+   something": on the 9 reachable cases the adapter must beat **decline**, and
+   declining is a *correct* answer. A wrong-but-parsing L4 fix is worse than the
+   `None` the pipeline now returns, because it re-introduces exactly the
+   false-confidence failure this bench was written to catch.
+
+**So promotion of `l4_lora` still fails its gate, for an unchanged reason (G1),
+not for want of reachability.** What changed is that the work is no longer
+pointless — it is merely unproven.
 
 ## Reproduce
 
