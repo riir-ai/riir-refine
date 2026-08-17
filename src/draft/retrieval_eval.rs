@@ -1333,7 +1333,7 @@ mod tests {
     }
 
     /// Clean-span truth for the 2026-08-17 proposer additions: no real
-    /// production excerpt fires the three new rewrites (the perf-domain
+    /// production excerpt fires the five new rewrites (the perf-domain
     /// analog of [`Self::clean_spans_fire_no_lint`], scoped to the NEW
     /// proposers — the pre-existing five are Bench-019-G5-validated on real
     /// files instead).
@@ -1345,6 +1345,8 @@ mod tests {
             "hashset-insert-bool-return",
             "collect-append-to-extend",
             "vec-macro-zero-fill",
+            "distance-sq-no-sqrt",
+            "hashmap-with-capacity",
         ];
         for (tag, code) in CLEAN_SPANS {
             for &rule in NEW_RULES {

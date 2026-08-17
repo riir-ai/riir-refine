@@ -38,6 +38,22 @@
 //! `filter-count-to-any` stays proposer-less BY DESIGN (ParetoDominated
 //! 0.82-0.90x — never give a losing rewrite a `--fix` path).
 //!
+//! ## Batch 53 follow-up (2026-08-17): +2 proposer-covered rules
+//!
+//! The two Batch 53 ParetoDominant rules (Bench 038) land proposers:
+//!
+//! | Rule | Rewrite | Signature-visible change? |
+//! |---|---|---|
+//! | `distance-sq-no-sqrt` | `(x*x + y*y).sqrt() < r` → `(x*x + y*y) < r * r` (either operand order; sum-of-squares receiver + pure-path/literal threshold gates) | no |
+//! | `hashmap-with-capacity` | `let mut m = HashMap::new();` + first-mention for-loop over a len-able iterable → `HashMap::with_capacity(iter.len())` | no |
+//!
+//! The other two Batch 53 rules stay proposer-less BY DESIGN, each with a
+//! measured reason: `powi-vs-powf` is ALL-TIE 1.00x in release (LLVM
+//! instcombine lowers `pow(x, 2.0)` to the same multiply as `powi(2)` — a
+//! zero-gain rewrite gets no `--fix` path; the `filter-count-to-any`
+//! rationale applied to a tie instead of a loss), and `soa-hot-field` is
+//! architectural (a struct layout change, suggestion-only).
+//!
 //! ## Honest caveats (Proposal 002 caveats 3-4, restated for this domain)
 //!
 //! - **`--fix` only applies CONFIRMED visitor matches** (these proposers).
@@ -62,8 +78,10 @@ use syn::File;
 
 pub mod bool_to_bitpack;
 pub mod collect_append_to_extend;
+pub mod distance_sq_no_sqrt;
 pub mod entry_vs_contains;
 pub mod fxhashmap;
+pub mod hashmap_with_capacity;
 pub mod hashset_insert_bool_return;
 pub mod static_str;
 pub mod vec_macro_zero_fill;
@@ -88,6 +106,8 @@ pub const FIXABLE_RULES: &[&str] = &[
     "hashset-insert-bool-return",
     "collect-append-to-extend",
     "vec-macro-zero-fill",
+    "distance-sq-no-sqrt",
+    "hashmap-with-capacity",
 ];
 
 /// Proposer option flags (Issue 015 verify-mode).
@@ -154,6 +174,8 @@ pub fn collect_edits_opts(
         "hashset-insert-bool-return" => hashset_insert_bool_return::collect_edits(source, file),
         "collect-append-to-extend" => collect_append_to_extend::collect_edits(source, file),
         "vec-macro-zero-fill" => vec_macro_zero_fill::collect_edits(source, file),
+        "distance-sq-no-sqrt" => distance_sq_no_sqrt::collect_edits(source, file),
+        "hashmap-with-capacity" => hashmap_with_capacity::collect_edits(source, file),
         _ => Vec::new(),
     };
     edits

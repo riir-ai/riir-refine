@@ -814,10 +814,15 @@ global = symlink only.
   50/52, router 65/100; 3-domain kernel 100/100/100, blended 94.6/97.7/97.7
   of 130, router 89/130 → floor 84/130). Gates: 496 default / 514
   rust_perf_bench lib tests, clippy 0, retrieval gate PASS both states.
-  Proposers honestly deferred (`powi` clean local swap; `distance-sq`
-  structural but tractable; `hashmap-with-capacity` needs known-count flow
-  analysis — safe subset only; `soa` architectural, suggestion-only by
-  design). Record: Bench 038.
+  Proposers: the two ParetoDominant rules LANDED same-evening (Batch 53
+  follow-up — `distance-sq-no-sqrt` sum-of-squares + pure-threshold gates;
+  `hashmap-with-capacity` first-mention for-loop + len-base gates,
+  capacity-is-a-hint semantics; `FIXABLE_RULES` 8→10, gates 549 default /
+  601 latent_retrieval / 612 fix_verify / 4 bins, clippy 0 in all three
+  states); `powi-vs-powf` stays proposer-less BY DESIGN (ALL-TIE in
+  release — zero gain, the filter-count-to-any rationale applied to a
+  tie) + `soa-hot-field` stays suggestion-only (architectural). Record:
+  Bench 038.
 
 
 - **Batch 48 rust_perf half DONE (2026-08-16, Research 054):** the 8

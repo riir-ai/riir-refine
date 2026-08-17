@@ -282,6 +282,8 @@ auto-apply.
 | `hashset-insert-bool-return` | `if !s.contains(k) { s.insert(k); .. }` → `if s.insert(k) { .. }` | insert stmt deleted via the shared `delete_stmt_edit`; key equivalence modulo leading `&`/`*` layers (2026-08-17) |
 | `collect-append-to-extend` | `let mut staged = it.collect(); recv.append(&mut staged);` → `recv.extend(it);` | single-use staging gate (exactly 2 ident occurrences file-wide); first-mention adjacency in one block (2026-08-17) |
 | `vec-macro-zero-fill` | `let mut v = Vec::new(); v.resize(n, 0);` → `let mut v = vec![0; n];` | zero int/float literals only; `v` stays alive for later uses; a read-only-after binding may surface a rustc `unused_mut` warning — dropping `mut` unconditionally would risk E0596 on unknown mutators, which is strictly worse (2026-08-17) |
+| `distance-sq-no-sqrt` | `(x*x + y*y).sqrt() < r` → `(x*x + y*y) < r * r` (either operand order) | sum-of-squares receiver gate (textually-identical mul operands — provably non-negative); pure threshold only (path or non-negative literal — the text is duplicated as `t * t`, so side-effecting exprs skip); negative threshold + 1-ulp boundary caveats documented in the proposer (2026-08-17) |
+| `hashmap-with-capacity` | `let mut m = HashMap::new();` + first-mention for-loop over a len-able iterable → `HashMap::with_capacity(iter.len())` | capacity is semantically a hint (any n is behavior-neutral); bare-path/`&path`/`iter()`/`iter_mut()` iterables with path-or-field-chain bases; range loops + `into_iter` skip; plain `HashMap::new()` path only (turbofish/qualified skip — the splice must not rewrite the path) (2026-08-17) |
 
 The 2026-08-17 additions are the Batch 48 follow-up: the three parse-clean
 ParetoDominant rules whose proposers were deferred pending bench verdicts
@@ -292,6 +294,19 @@ matching), and **`LitFloat::base10_digits` keeps `.`/`e`/sign separators**
 (`"0.0"` → `"0.0"` — filter to digit chars before the all-zero check).
 `filter-count-to-any` stays proposer-less BY DESIGN (ParetoDominated
 0.82-0.90x — a losing rewrite never gets a `--fix` path).
+
+The Batch 53 follow-up (same day) landed the two Batch 53 ParetoDominant
+proposers (`distance-sq-no-sqrt` 1.21-1.24x, `hashmap-with-capacity`
+2.4-3.1x — Bench 038). The other two Batch 53 rules stay proposer-less BY
+DESIGN with measured reasons: `powi-vs-powf` is ALL-TIE 1.00x in release
+(zero gain gets no `--fix` path — the `filter-count-to-any` rationale
+applied to a tie) and `soa-hot-field` is architectural (struct layout,
+suggestion-only). One precedence pitfall learned landing the distance-sq
+proposer: the reversed form must emit `t * t OP sos` — emitting `t OP
+sos` after a bare `t` (`t OP t * sos`) parses as `t OP (t * sos)` because
+`*` binds tighter than every comparison; the squared threshold must be a
+complete left operand before the op appears (caught by the
+`reversed_operands_fire` fixture).
 
 The `for_each_fn` shared helper (now in
 [`edit_emitter.rs`](../../src/edit_emitter.rs)) scans free fns + impl
@@ -305,7 +320,7 @@ joined in the 2026-08-17 batch. G5 real-repo validation precedent: Bench 019
 
 - [`src/domains/rust_perf/mod.rs`](../../src/domains/rust_perf/mod.rs) — `PerfRule` + `RustPerfDomain`
 - [`src/domains/rust_perf/corpus.rs`](../../src/domains/rust_perf/corpus.rs) — `build_perf_seed_corpus()` + 31 `BenchSpec`s (8 rules are honestly NotBenchable)
-- [`src/domains/rust_perf/proposers/`](../../src/domains/rust_perf/proposers/) — the 8 `syn` AST proposers (Phase 4 top-5 + the 2026-08-17 Batch 48 follow-up) + `propose_fix` dispatch
+- [`src/domains/rust_perf/proposers/`](../../src/domains/rust_perf/proposers/) — the 10 `syn` AST proposers (Phase 4 top-5 + the 2026-08-17 Batch 48 + Batch 53 follow-ups) + `propose_fix` dispatch
 - [`src/domains/rust_perf/verify.rs`](../../src/domains/rust_perf/verify.rs) — `PerfVerifier` (cargo test)
 - [`src/domains/rust_perf/bench.rs`](../../src/domains/rust_perf/bench.rs) — `PerfBenchValidator` (Pareto verdict)
 - [`examples/perf_heal_demo.rs`](../../examples/perf_heal_demo.rs) — scaffold end-to-end demo
