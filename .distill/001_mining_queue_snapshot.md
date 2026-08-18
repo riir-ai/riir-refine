@@ -930,7 +930,7 @@
     swallowing the `KernelRule {` opener into the comment (9/10 entries
     broken; rustc's `vec![` unclosed-delimiter error points at the symptom,
     not the cause).
-- **UNBLOCKED 2026-08-19 → next FILE-batch target (after Batch 62, which
+- **DONE 2026-08-19 as Batch 63 (Plan 009 / Research 071; corpus 364→367, 3 rules — the weight-concat third branch of the merge family, the deferred-residual loop-boundary fusion, the reset-in-place pool rule; Lane B structurally empty; 10 hazards filed as a riir-ai issue). HISTORICAL ENTRY:** was the next FILE-batch target (after Batch 62, which
   holds plan-first priority)**: `ternary_deltanet_gpu_forward.rs` (the CubeCL
   twin, now **5,432 lines** on origin/develop). The 2026-08-18 BLOCK condition
   ("mine only after 721 lands + tree verified clean") FIRED: Issue 721 CLOSED

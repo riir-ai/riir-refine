@@ -1298,6 +1298,35 @@
 //!   boundaries; detection tell: the NaN localizes to the single weight
 //!   matrix consuming the reconstruction while every post-gate-reading
 //!   gradient stays clean).
+//! - **Batch 63 (2026-08-19, the `CubeCL` twin unlock — Plan 009 / Research
+//!   071):** 3 rules from `ternary_deltanet_gpu_forward.rs` (5,432 lines,
+//!   the `CubeCL` decode-forward orchestration twin; the 721-closeout
+//!   unblock fired). Two-lane mining, Lane B returned ZERO candidates
+//!   (structurally empty: the chunked-recurrence/tree-verify kernels live
+//!   in sibling modules already mined at B28, and the spec-decode
+//!   mechanisms at B58 from the cudarc twin). Lane A's 3 (coordinator-
+//!   verified distinct against the B58/B9/B19/B27/B39 rule texts):
+//!   same-input-gemv-weight-concat-at-upload (D 70 -> 71 - N same-input
+//!   GEMVs merged by baking the weight CONCAT into the upload; the stock
+//!   kernel dispatches it, offset-consumers pay zero extra dispatches,
+//!   separate-buffer consumers pay ONE split; the substrate-constrained
+//!   third branch of the merge family — B58's segments need a
+//!   multi-segment launcher, B15's fusion needs a bespoke kernel, this
+//!   needs only frozen weights; Issues 642 F3/F2 + 648 F9);
+//!   deferred-residual-fused-into-next-layer-norm (C 33 -> 34 - the
+//!   post-FFN residual add deferred ACROSS the layer-loop boundary into
+//!   the next iteration's fused add+norm kernel, -63 dispatches/token,
+//!   first-layer + tail special cases, the composition ladder documents
+//!   B19's producer-side fusion as the better rung; Issue 645 T3);
+//!   reset-state-in-place-fill-never-realloc (A 86 -> 87 - sequence reset
+//!   via in-place zero-fill kernels over process-lifetime buffer identity,
+//!   never re-allocation (128 `create_from_slice` per reset fragmented the
+//!   pool to SIGKILL under the Go arena); cursor-bounded caches skip even
+//!   the fill; Plan 528 T0.2). 11 Lane-A dedup drops + 24 Lane-B
+//!   examinations all mapped to covering rules. Hazard yield filed as
+//!   riir-ai Issue (the dead wk/wv device upload, dual/triple weight
+//!   residency, the ResidualAdd-as-copy doc-lie, the un-ported B58
+//!   rotation pool, the aliasing-UB probe default-off).
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
@@ -1350,7 +1379,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 364-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 367-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1358,7 +1387,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (86 rules)
+    // A: Memory access patterns (87 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -1449,6 +1478,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "async-htod-host-source-outlives-copy",
             "output-buffer-rotation-pool-multi-forward",
             "write-before-read-state-skips-checkpoint",
+            "reset-state-in-place-fill-never-realloc",
         ],
     ),
     // B: Compute patterns (52 rules)
@@ -1510,7 +1540,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "regularizer-above-noise-floor-coupled-to-damping-cap",
         ],
     ),
-    // C: Fusion patterns (33 rules)
+    // C: Fusion patterns (34 rules)
     (
         KernelCategory::Fusion,
         "C: fusion",
@@ -1529,6 +1559,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fuse-gate-up-gemv-activation",
             "chain-dispatches-single-sync-point",
             "fuse-residual-via-in-place-output-array",
+            "deferred-residual-fused-into-next-layer-norm",
             "fused-activation-quantize-for-gemv-consumer",
             "dual-grad-same-pass",
             "fan-out-shared-input-single-sync",
@@ -1550,7 +1581,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fuse-indirect-gather-into-dot-consumer",
         ],
     ),
-    // D: Dispatch patterns (70 rules)
+    // D: Dispatch patterns (71 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -1625,6 +1656,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "mid-pipeline-device-alloc-is-implicit-sync",
             "capture-region-dispatch-only",
             "same-input-gemv-segments-single-launch",
+            "same-input-gemv-weight-concat-at-upload",
         ],
     ),
     // E: Parallelism patterns (21 rules)

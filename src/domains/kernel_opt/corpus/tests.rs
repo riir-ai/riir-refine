@@ -60,8 +60,8 @@
         // Batch 57 (2): measured-GOAT distillation (riir-ai Issue 715 — smem-slot-role-reversal-needs-barrier, tile-loop-back-edge-needs-multi-tile-bitexact-gate; the flash-attention tile-loop smem races + the multi-tile bit-exact regression gate; commits 9f9e68402 + 93d853582).
         // Batch 58 (8): ternary_deltanet sibling-WIP unlock — the LAST never-mined riir-gpu orchestration file (ternary_deltanet_gpu_forward_cudarc.rs, 5,691 lines — raw-CUDA decode-forward twin; async-htod-host-source-outlives-copy, captured-graph-bakes-buffer-addresses, output-buffer-rotation-pool-multi-forward, mid-pipeline-device-alloc-is-implicit-sync, capture-region-dispatch-only, occupancy-grid-cap-refuted-uncapped-default, write-before-read-state-skips-checkpoint, same-input-gemv-segments-single-launch; hazards filed as Issue 722).
         // Batch 60 (1): measured-GOAT distillation (riir-train Issue 460 / katgpt-rs e2853fbf — pre-gate-recovery-by-division-cancels-algebraically; the MLA backward's saturated output-gate 0/0 NaN, fixed by algebraic cancellation; Bench 475: 6/10 -> 10/10 usable backward passes).
-        // Total: 209. // (historical batch-30 snapshot; current 364)
-        assert_eq!(corpus.entries.len(), 364, "kernel batches through Batch 60 should have 364 rules");
+        // Total: 209. // (historical batch-30 snapshot; current 367)
+        assert_eq!(corpus.entries.len(), 367, "kernel batches through Batch 63 should have 367 rules");
     }
 
     #[test]
@@ -3614,13 +3614,99 @@
     }
 
     #[test]
+    fn batch63_rules_present() {
+        // Batch 63 (the CubeCL twin unlock — ternary_deltanet_gpu_forward.rs
+        // orchestration twin; Lane B structurally empty, Lane A's 3).
+        let corpus = build_kernel_seed_corpus();
+        let ids = [
+            "same-input-gemv-weight-concat-at-upload",
+            "deferred-residual-fused-into-next-layer-norm",
+            "reset-state-in-place-fill-never-realloc",
+        ];
+        for id in ids {
+            assert!(
+                corpus.entries.iter().any(|e| e.rule_id == id),
+                "batch-63 rule '{id}' missing from corpus"
+            );
+        }
+    }
+
+    #[test]
+    fn batch63_concepts_covered() {
+        let corpus = build_kernel_seed_corpus();
+        let checks: [(&str, [&str; 5]); 3] = [
+            (
+                "same-input-gemv-weight-concat-at-upload",
+                [
+                    "[Wa; Wb]",
+                    "stock kernel",
+                    "offset-consumers",
+                    "frozen",
+                    "multi-segment launcher",
+                ],
+            ),
+            (
+                "deferred-residual-fused-into-next-layer-norm",
+                [
+                    "NEXT loop iteration",
+                    "tail",
+                    "first iteration",
+                    "composition ladder",
+                    "fuse-add-rms-norm",
+                ],
+            ),
+            (
+                "reset-state-in-place-fill-never-realloc",
+                [
+                    "SIGKILL",
+                    "zero-fill",
+                    "cursor",
+                    "pool",
+                    "rewind-overwrite-in-place",
+                ],
+            ),
+        ];
+        for (id, needles) in checks {
+            let e = corpus.entries.iter().find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-63 rule '{id}' missing"));
+            let c = e.gpu_concept.as_str();
+            for n in needles {
+                assert!(c.contains(n), "batch-63 concept for '{id}' missing phrase '{n}'");
+            }
+        }
+    }
+
+    #[test]
+    fn batch63_pseudocode_parses() {
+        // G1 for Batch 63 (the CubeCL twin): syn-parse gate.
+        use crate::domain::HealDomain;
+        let corpus = build_kernel_seed_corpus();
+        let ids = [
+            "same-input-gemv-weight-concat-at-upload",
+            "deferred-residual-fused-into-next-layer-norm",
+            "reset-state-in-place-fill-never-realloc",
+        ];
+        for id in ids {
+            let entry = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-63 rule '{id}' missing"));
+            let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+            assert!(ref_verdict.parses, "batch-63 ref_shape for '{id}' must parse");
+            let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+            assert!(opt_verdict.parses, "batch-63 opt_pattern for '{id}' must parse");
+        }
+    }
+
+    #[test]
     fn kernel_categories_table_has_15_entries() {
         assert_eq!(KERNEL_CATEGORIES.len(), 15, "Plan 003: 15 categories (A–O)");
     }
 
     #[test]
     fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-        // Every rule_id in the 364-rule corpus must appear in exactly one category.
+        // Every rule_id in the 367-rule corpus must appear in exactly one category.
         let corpus = build_kernel_seed_corpus();
         let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
         let mut categorized: Vec<&str> = Vec::new();
@@ -3653,10 +3739,10 @@
     fn kernel_categories_counts_match_plan_003_table() {
         // Pin per-category rule counts to the Plan 003 table (updated for Batch 58).
         let expected = [
-            (KernelCategory::MemoryAccess, 86),
+            (KernelCategory::MemoryAccess, 87),
             (KernelCategory::Compute, 52),
-            (KernelCategory::Fusion, 33),
-            (KernelCategory::Dispatch, 70),
+            (KernelCategory::Fusion, 34),
+            (KernelCategory::Dispatch, 71),
             (KernelCategory::Parallelism, 21),
             (KernelCategory::FlashAttnTiling, 10),
             (KernelCategory::LinearAttnRecurrence, 19),
@@ -3676,9 +3762,9 @@
                 "Plan 003: category {cat:?} has {} rules, expected {count}",
                 entry.2.len());
         }
-        // Sum must equal 364.
+        // Sum must equal 367.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 364, "Plan 003: category totals must sum to 364");
+        assert_eq!(total, 367, "Plan 003: category totals must sum to 367");
     }
 
     #[test]
@@ -3688,7 +3774,7 @@
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 364, "Plan 003: grouped corpus has {total} rules, expected 364");
+        assert_eq!(total, 367, "Plan 003: grouped corpus has {total} rules, expected 367");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");
