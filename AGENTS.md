@@ -1371,11 +1371,12 @@ Caught at the `git show --stat` check; fixed via soft reset + unstage theirs
 Residue 0 in healed classes (healer dry-run: only the 2 deferred ternary
 files); rustfmt on 20 fmt-clean-at-HEAD files (36 pre-existing drift scoped
 out, 0 CRLF); post-fmt spot-checks count-identical. **Campaign remaining
-(~6.7K edits):** riir-engine src DONE 2026-08-19 (`1e050442a`, see the
-engine slice record below — 174/979 + tests/benches/examples remainder
-~1.6K), games-civ 1549/146, games 799/87 (2 files sibling WIP), poc
-769/64 (ane_t0.rs sibling-active), examples 725/75, wasm tail, gpu
-1175/163 sibling-adjacent, mmorpg excluded until wire_router settles.
+(~6.5K edits):** riir-engine src DONE 2026-08-19 (`1e050442a`, see the
+engine slice record below — 174/979; examples DONE `85224024f` 15/151;
+tests/benches remainder ~1480), games-civ 1549/146, games 799/87 (2 files
+sibling WIP), poc 769/64 (ane_t0.rs sibling-active), examples 725/75,
+wasm tail, gpu 1175/163 sibling-adjacent, mmorpg excluded until
+wire_router settles.
 
 **riir-ai engine/src slice landed 2026-08-19** (riir-ai `1e050442a`, via
 the worktree dance): **174 files / 979 edits** — the first riir-ai giant
@@ -1432,6 +1433,25 @@ the silent class), 2× map_unwrap_or array-literal `&[]` (dual_gram_pca
 over-conservative but can't see context), 2× uninlined second-level
 macro nesting (cwm_runtime/refinement.rs:557-558 — inner format! inside
 outer format! args, the standing backlog).
+
+**riir-ai engine/examples slice landed 2026-08-19** (riir-ai `85224024f`):
+**15 files / 151 edits** — the examples territory CLOSED (23 examples,
+8 clean). 9 gate clusters healed under ONE 8-feature example union
+(entity_cognition_stack ×4, ane_npc ×3, sense_composition_bench ×2,
+cwm_runtime/domino_lora/channel_conditioned_draft/motor_gated_rehearsal/
+octree_ctc/none ×1 each). Validation = the katgpt-rs root-examples method:
+all 15 exit-identical pre/post (11× exit 0; 3 pre-existing exit=1 —
+motor_gated_rehearsal_smoke_gate SMOKE GATE FAILED, wasm_simd_bench
+native-usage-error BY DESIGN (wasm-target helper), g8_crowd_scale GOAT
+FAIL; train_domino timeout=124 both sides, a trainer loop) + 15/15
+normalized-output-identical (digits/hex stripped). **Clippy residue in
+examples/ = ZERO** — the `--examples` scan lints the LIB deps too (the
+clippy-target lesson): the 8 warnings were 4 documented engine-src
+divergences + 3 riir-wasm wasm_pruner single_match dep findings (NOT
+this slice's territory — the wasm tail's). rustfmt on the 7 fmt-clean
+files (8 drift, 0 CRLF). **Engine territory remaining: tests/ +
+benches/ (~95 files / ~1480 edits — the [[test]]/[[bench]] required-
+features gate map is the long pole).**
 
 **Redundant identical named-arg class shipped** (riir-clippy `73ab2c2`):
 `format!("{x:?}", x = x)` — the named arg EQUALS its ident — is redundant
