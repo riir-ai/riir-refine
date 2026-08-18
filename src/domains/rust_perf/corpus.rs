@@ -9,9 +9,9 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //! unconditional wins + honestly NotBenchable rules.
 //!
-//! 71 entries across 12 categories (complexity 15, allocation 18, simd 7,
-//! layout 6, iterators 8, concurrency 4, io 1, arithmetic 6, dispatch 2,
-//! caching 2, bevy 1, wasm 1). 61 are benchable; 10 are honestly
+//! 72 entries across 12 categories (complexity 15, allocation 18, simd 7,
+//! layout 6, iterators 9, concurrency 4, io 1, arithmetic 6, dispatch 2,
+//! caching 2, bevy 1, wasm 1). 62 are benchable; 10 are honestly
 //! NotBenchable (8 external-runtime/size-class + 2 metric-mismatch, Issue 014).
 //! Batch 48 (idle-queue item 11, 2026-08-16) added the 8 online-search
 //! candidates (perf-book std-types + iterators chapters): collect-append-to-
@@ -31,6 +31,8 @@
 //! loop-order-innermost-contiguous + debug-assert-length-hoist. Batch 66
 //! (2026-08-19, Research 073 — the polars kernel-idiom distill) added
 //! sparse-set-bit-iteration-tz-blsr + sortedness-check-branchless-accumulate.
+//! Batch 67 (2026-08-19, Research 074 — the regex-automata distill) added
+//! byte-find-position-to-memchr.
 //!
 //! ## Bench specs (behind `rust_perf_bench`)
 //!
@@ -39,7 +41,7 @@
 //! `run_buggy` / `run_fixed` entry points. The bench validator generates a
 //! temp bin crate from the spec + runs a timing loop at multiple sizes.
 //!
-//! Currently benchable (61/71):
+//! Currently benchable (62/72):
 //! - `o1-lookup` (Vec scan vs HashMap lookup — clear O(n) vs O(1))
 //! - `bsearch-sorted-slice` (linear scan vs binary search — O(n) vs O(log n) on sorted data)
 //! - `dedupe-hashset-vs-vec` (Vec::contains loop vs HashSet collect — O(n²) vs O(n))
@@ -103,8 +105,9 @@
 //! - `debug-assert-length-hoist` (`debug_assert!` mentioning `.len()` is erased in release, dropping the constraint bounds-check elision needed → `assert!` — Mixed regime-split 1.13x@1K / 0.67-0.71x@100K stable on aarch64; Batch 64, annotated)
 //! - `sparse-set-bit-iteration-tz-blsr` (64-iteration set-bit scan → trailing_zeros+BLSR, popcount iterations — sparse-mask regime, Batch 66)
 //! - `sortedness-check-branchless-accumulate` (early-exit sortedness validation → branchless `sorted &=` full scan, vectorizes — usually-sorted regime, Batch 66)
+//! - `byte-find-position-to-memchr` (u8 slice iter().position byte scan → memchr::memchr SIMD block scan — position is NOT specialized in std, contains is; dep-gated, Batch 67)
 //!
-//! Not benchable (10/71) — honest:
+//! Not benchable (10/72) — honest:
 //! - `layout-reorder` (struct size — deterministic `size_of`, not a runtime
 //!   microbench; the cache-utilization claim needs a specific access pattern)
 //! - `repr-u8-enum` (enum size — deterministic `size_of`, same class as
@@ -1538,6 +1541,33 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
             ),
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: Some(sortedness_check_branchless_bench_spec()),
+        },
+        // ── iterators: byte-find position scan → memchr primitive ──────
+        // Source: regex-automata (Batch 67, Research 074 — rust-lang/regex,
+        // regex-automata/src/util/memchr.rs + dfa/accel.rs; the engine's own
+        // naive fallback IS this rule's buggy shape). `xs.iter().position(|&b| b == lit)`
+        // on a `&[u8]` cannot dispatch to a byte-search primitive — the predicate
+        // is opaque to the iterator machinery + early-exit blocks vectorization —
+        // so std runs a scalar compare-per-byte scan. The memchr crate's
+        // memchr/memrchr (and 2/3-needle variants for `||` chains, the engine's
+        // exact arity ladder) scan 16-32B blocks with SIMD + movemask. Same
+        // `Option<usize>` — bit-identical. EXCLUDES `xs.contains(&b)`: std
+        // ALREADY specializes contains for u8 via `SliceContains` -> core's SWAR
+        // memchr (core/src/slice/cmp.rs) — contains is already fast; the
+        // position/rposition shape is where the win lives (the asymmetry IS the
+        // rule). Dep-gated (the fxhashmap precedent): fire only when the target
+        // manifest declares memchr, else suggestion-only. Regime: wash below
+        // ~16-32B haystacks (call overhead eats the win; the engine's own
+        // fallback concedes naive is fine small).
+        PerfRule {
+            rule_id: "byte-find-position-to-memchr".to_string(),
+            name: "u8 slice iter().position(|&b| b == lit) → memchr::memchr".to_string(),
+            category: "iterators".to_string(),
+            buggy_code: "fn find_delim(buf: &[u8]) -> Option<usize> {\n    buf.iter().position(|&b| b == b';')\n}".to_string(),
+            fixed_code: "fn find_delim(buf: &[u8]) -> Option<usize> {\n    memchr::memchr(b';', buf) // SIMD block scan + movemask early exit\n}".to_string(),
+            context_notes: None,
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(byte_find_position_to_memchr_bench_spec()),
         },
     ])
 }
@@ -4766,6 +4796,22 @@ fn sortedness_check_branchless_bench_spec() -> BenchSpec {
     }
 }
 
+/// Bench spec for `byte-find-position-to-memchr`: scalar early-exit
+/// position scan vs the memchr crate's SIMD block scan.
+///
+/// Needle at n-16 (~90% position on the larger sizes — both arms do a
+/// ~full scan; stray delimiters scrubbed in setup so both arms find the
+/// same index). 32B = the honest small-regime arm (the Teddy-bound wash
+/// where call overhead eats the win); 4K/64K = the SIMD win regime.
+/// Deterministic positions; `Option<usize>` identical (bit-identical).
+#[cfg(feature = "rust_perf_bench")]
+fn byte_find_position_to_memchr_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![32, 256, 4_096, 65_536],
+        harness: "// [dep: memchr = \"2\"]\nmod buggy {\n    pub fn find_delim(buf: &[u8]) -> Option<usize> {\n        buf.iter().position(|&b| b == b';')\n    }\n}\n\nmod fixed {\n    pub fn find_delim(buf: &[u8]) -> Option<usize> {\n        memchr::memchr(b';', buf)\n    }\n}\n\npub fn make_input(n: usize) -> Vec<u8> {\n    // Pseudo-random bytes; stray delimiters scrubbed so the FIRST ';' sits\n    // at n-16 (both arms do ~full scan — the representative regime; the\n    // scrub runs in setup, never measured).\n    let mut v: Vec<u8> = (0..n)\n        .map(|i| ((i as u32).wrapping_mul(2654435761) >> 24) as u8)\n        .collect();\n    for b in &mut v {\n        if *b == b';' { *b = b':'; }\n    }\n    if n >= 16 {\n        v[n - 16] = b';';\n    }\n    v\n}\n\npub fn run_buggy(input: &[u8]) {\n    let input = std::hint::black_box(input);\n    let at = buggy::find_delim(input);\n    std::hint::black_box(at);\n}\n\npub fn run_fixed(input: &[u8]) {\n    let input = std::hint::black_box(input);\n    let at = fixed::find_delim(input);\n    std::hint::black_box(at);\n}\n".to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -4781,9 +4827,9 @@ mod tests {
     }
 
     #[test]
-    fn seed_corpus_has_seventy_one_entries_across_twelve_categories() {
+    fn seed_corpus_has_seventy_two_entries_across_twelve_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 71);
+        assert_eq!(corpus.entries.len(), 72);
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
@@ -4793,8 +4839,9 @@ mod tests {
         // 53's hashmap-with-capacity); complexity has 15 (Batch 48 added
         // hashset-insert-bool-return + vec-insert-front-deque; Batch 64
         // added debug-assert-length-hoist); iterators
-        // has 8 (Batch 48 added three; Batch 66 added
-        // sortedness-check-branchless-accumulate); simd has 7 (Batch 62 added
+        // has 9 (Batch 48 added three; Batch 66 added
+        // sortedness-check-branchless-accumulate; Batch 67 added
+        // byte-find-position-to-memchr); simd has 7 (Batch 62 added
         // transposed-weight-register-gemv; Batch 64 added
         // loop-order-innermost-contiguous); layout has 6 (Batch 53 added
         // soa-hot-field; Batch 61 added usize-index-to-u32) + concurrency
@@ -5004,10 +5051,10 @@ mod tests {
 
     #[cfg(feature = "rust_perf_bench")]
     #[test]
-    fn sixty_one_rules_have_bench_specs() {
+    fn sixty_two_rules_have_bench_specs() {
         let corpus = build_perf_seed_corpus();
         let with_spec = corpus.entries.iter().filter(|e| e.bench_spec.is_some()).count();
-        assert_eq!(with_spec, 61, "expected 61 benchable rules, got {with_spec}");
+        assert_eq!(with_spec, 62, "expected 62 benchable rules, got {with_spec}");
     }
 
     #[cfg(feature = "rust_perf_bench")]
@@ -5087,7 +5134,7 @@ mod tests {
             .iter()
             .filter(|e| e.context_notes.is_none())
             .count();
-        assert_eq!(unannotated, 56, "expected 56 unannotated rules (71 - 15 annotated)");
+        assert_eq!(unannotated, 57, "expected 57 unannotated rules (72 - 15 annotated)");
     }
 
     /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -5147,7 +5194,7 @@ mod tests {
 
         // The unannotated rules must return None from the trait too.
         let unannotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_none()).collect();
-        assert_eq!(unannotated.len(), 56, "expected 56 unannotated rules");
+        assert_eq!(unannotated.len(), 57, "expected 57 unannotated rules");
         for rule in &unannotated {
             assert!(HealEntry::context_notes(*rule).is_none(), "{} should have no context_notes", rule.rule_id);
         }

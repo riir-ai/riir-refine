@@ -1,6 +1,6 @@
 # Batch 67 candidate pool — regex-automata memchr byte-find (distill verdict)
 
-**Status:** DISTILLED — pending owner decision (the mining batch is the unimplemented delta; plan-first at batch start)
+**Status:** RECORD (Batch 67 landed 2026-08-19 same day — corpus 71→72, Plan 012; ParetoDominant 4/0/0 at 5.00×/19.25×/25.31×/25.37× — the predicted 32B wash did NOT materialize, memchr's tiny-input fast path wins even at 32B. GOAT 612/630/664 lib, floors HELD, clippy 0, G-det stable, 0 allocs. The rider (heal our own 3 proposer-helper positive instances) DEFERRED: memchr is transitive-only in riir-clippy — a direct dep for non-hot healer-internal scans fails cost/benefit. Generator lesson recorded: `// [dep: crate]` markers need the FULL spec `[dep: memchr = "2"]` — bare names generate invalid TOML. The secondary ascii-class-chain-to-const-lut: expected-skip per the pool's own note.)
 
 ## Source
 
