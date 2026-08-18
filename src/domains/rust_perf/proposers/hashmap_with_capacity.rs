@@ -72,7 +72,7 @@ impl BlockScan<'_> {
             let Some(var) = fresh_hashmap_binding(local) else { continue };
             let Some(init) = &local.init else { continue };
 
-            for later in stmts.iter().skip(i + 1) {
+            for (j, later) in stmts.iter().enumerate().skip(i + 1) {
                 if stmt_binds_ident(later, &var) {
                     break; // shadowing re-bind — stop the scan
                 }
@@ -88,6 +88,18 @@ impl BlockScan<'_> {
                 }
                 // Iterable must yield a len.
                 let Some(len_expr) = len_expr_text(&fl.expr, self.source) else { break };
+                // The iterable's root local must be in scope AT the new()
+                // site: a `let` binding it between the map creation and the
+                // loop makes the emitted `with_capacity(base.len())` a
+                // use-before-declaration (E0425). Found live in katgpt-rs
+                // bomber_17_feedback_goat — `all_names` first-bound after
+                // the three `HashMap::new()`s, looped over further down;
+                // unrelated-statement skipping had sailed past its `let`.
+                if let Some(root) = iterable_root_ident(&fl.expr) {
+                    if (i + 1..j).any(|k| stmt_binds_ident(&stmts[k], &root)) {
+                        break;
+                    }
+                }
                 self.edits.push(edit(
                     &init.expr,
                     format!("HashMap::with_capacity({len_expr})"),
@@ -184,6 +196,25 @@ fn stmt_binds_ident(stmt: &Stmt, ident: &str) -> bool {
             matches!(pat, Pat::Ident(pi) if pi.ident == ident)
         }
         _ => false,
+    }
+}
+
+/// The root LOCAL ident of a len-able iterable: `&xs`, `xs`, `xs.iter()`,
+/// `xs.iter_mut()` and field chains rooted at one all reduce to `xs`; the
+/// root is what must be in scope at the map-creation site. `None` when the
+/// root is not a single-segment path (`self`, multi-segment item paths —
+/// those cannot be use-before-decl).
+fn iterable_root_ident(e: &Expr) -> Option<String> {
+    match e {
+        Expr::Reference(r) => iterable_root_ident(&r.expr),
+        Expr::MethodCall(mc) if mc.method == "iter" || mc.method == "iter_mut" => {
+            iterable_root_ident(&mc.receiver)
+        }
+        Expr::Field(f) => iterable_root_ident(&f.base),
+        Expr::Path(p) if p.path.segments.len() == 1 => {
+            Some(p.path.segments[0].ident.to_string())
+        }
+        _ => None,
     }
 }
 
@@ -433,6 +464,37 @@ mod tests {
             "use std::collections::HashMap;\nfn f(items: Vec<u32>) -> HashMap<u32, u32> {\n    \
              let mut m = HashMap::new();\n    for it in items.into_iter() {\n        \
              m.insert(it, 1);\n    }\n    m\n}",
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn iterable_bound_after_map_stays() {
+        // `names` is first-bound AFTER the HashMap::new(): emitting
+        // `with_capacity(names.len())` at the new() site is a
+        // use-before-declaration (E0425). Found live in katgpt-rs
+        // bomber_17_feedback_goat — three maps, `all_names` declared after,
+        // looped over further down; unrelated-statement skipping had
+        // sailed past its `let`.
+        assert!(propose_fix(
+            "hashmap-with-capacity",
+            "use std::collections::HashMap;\nfn f() -> HashMap<String, u32> {\n    \
+             let mut m = HashMap::new();\n    let names: Vec<String> = vec![\"a\".into()];\n    \
+             for n in &names {\n        m.insert(n.clone(), 1);\n    }\n    m\n}",
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn iterable_rebound_after_map_stays() {
+        // Even when an outer `names` exists, a re-bind between the map and
+        // the loop shadows it — the .len() at the new() site would measure
+        // the wrong (outer) binding. Same guard, shadowing flavor.
+        assert!(propose_fix(
+            "hashmap-with-capacity",
+            "use std::collections::HashMap;\nfn f(names: Vec<String>) -> HashMap<String, u32> {\n    \
+             let mut m = HashMap::new();\n    let names: Vec<String> = names.into_iter().take(2).collect();\n    \
+             for n in &names {\n        m.insert(n.clone(), 1);\n    }\n    m\n}",
         )
         .is_none());
     }

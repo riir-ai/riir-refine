@@ -28,7 +28,7 @@ use quote::ToTokens;
 use syn::visit::Visit;
 use syn::{Expr, ExprIf, File, Stmt, UnOp};
 
-use super::{edit, src, SourceEdit};
+use super::{count_ident_occurrences, edit, src, SourceEdit};
 
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
     // The statement can nest anywhere (match-arm blocks, closures, loop
@@ -96,11 +96,27 @@ impl IfScan<'_> {
             Expr::Reference(eref) => &eref.expr,
             other => other,
         };
+        let key_txt = src(self.source, key_node)?;
+        let val_txt = src(self.source, val)?;
+
+        // The key/value must not reference the receiver map: `entry()` holds
+        // a &mut borrow for the whole statement, so `m.entry(k).or_insert(
+        // m.len())` is E0502 where the original contains_key + insert
+        // sequence was legal (their immutable borrows end before insert's
+        // mutable one). Found live in katgpt-rs datrie_01_bench —
+        // `vocab.entry(key).or_insert(vocab.len())`.
+        let recv_ident = recv.path.segments.last().map(|s| s.ident.to_string())?;
+        if count_ident_occurrences(&key_txt, &recv_ident) > 0
+            || count_ident_occurrences(&val_txt, &recv_ident) > 0
+        {
+            return None;
+        }
+
         let replacement = format!(
             "{}.entry({}).or_insert({});",
             src(self.source, recv)?,
-            src(self.source, key_node)?,
-            src(self.source, val)?
+            key_txt,
+            val_txt
         );
         Some(edit(eif, replacement))
     }
@@ -224,6 +240,32 @@ mod tests {
             "entry-vs-contains-insert",
             "#[allow(unused)]\nfn f(map: &mut std::collections::HashMap<u32, u32>, k: u32) {\n    \
              #[allow(clippy::all)]\n    if !map.contains_key(&k) { map.insert(k, 1); }\n}"
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn value_borrows_receiver_stays() {
+        // The value references the receiver: `vocab.entry(key).or_insert(
+        // vocab.len())` is E0502 — entry() holds the &mut borrow while
+        // vocab.len() needs &. Found live in katgpt-rs datrie_01_bench.
+        assert!(propose_fix(
+            "entry-vs-contains-insert",
+            "fn f(vocab: &mut std::collections::HashMap<Vec<u8>, usize>) {\n    \
+             let key = vec![1u8];\n    \
+             if !vocab.contains_key(&key) { vocab.insert(key, vocab.len()); }\n}",
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn key_borrows_receiver_stays() {
+        // Same E0502 class on the key side: entry(map.len()) borrows
+        // immutably while entry() holds &mut.
+        assert!(propose_fix(
+            "entry-vs-contains-insert",
+            "fn f(map: &mut std::collections::HashMap<usize, u32>) {\n    \
+             if !map.contains_key(&map.len()) { map.insert(map.len(), 1); }\n}",
         )
         .is_none());
     }
