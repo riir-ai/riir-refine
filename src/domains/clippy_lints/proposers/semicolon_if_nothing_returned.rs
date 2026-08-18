@@ -276,4 +276,20 @@ mod tests {
         assert!(out.matches("helper();").count() >= 1, "{out}");
         syn::parse_file(&out).expect("re-parses");
     }
+
+    #[test]
+    fn nested_fn_body_fires() {
+        // The katgpt-attn block_topk.rs miss: the unsafe-wrapper pattern
+        // (`fn f() { unsafe fn inner() { … } inner() }`) puts real code inside
+        // a fn declared in another fn's body — for_each_fn must descend into
+        // Stmt::Item(Item::Fn) at any block depth.
+        let input = "fn helper() {}\nfn f() {\n    unsafe fn inner() {\n        for x in 0..8 {\n            unsafe {\n                helper()\n            };\n        }\n    }\n    unsafe { inner() };\n}";
+        let out = propose_fix("semicolon_if_nothing_returned", input).expect("matched");
+        assert!(out.contains("helper();"), "nested-fn tail must fire: {out}");
+        // The OUTER fn's own tail (`unsafe { inner() };`) is semicol'd and its
+        // block body `inner()` is single-line — must NOT gain a semicolon
+        // (single-line gate).
+        assert!(out.contains("unsafe { inner() };"), "{out}");
+        syn::parse_file(&out).expect("re-parses");
+    }
 }

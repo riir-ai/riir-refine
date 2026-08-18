@@ -1551,9 +1551,56 @@ all-features count-identical; zero residue. The 36 = 2× the clippy-visible
 count (the aarch64 twins are cfg'd out on this box — the extension fires on
 them via the same soundness argument the cfg-guard validates).
 
-**Remaining katgpt-rs sweep territory**: root-src 114/35 (kimi_k3/dllm
-dirs are sibling-adjacent; worktree fallback proven). **The katgpt-rs src/
-surface (member crates + core) is now COMPLETE.**
+**katgpt-rs root-src slice landed 2026-08-18 later session** (katgpt-rs
+`0716c2909`): **53 files / 137 edits, net −111 — THE katgpt-rs src/ SWEEP
+IS NOW FULLY COMPLETE** (root-src was the last unit). Root-src: 36 files /
+117 edits (63 uninlined + 25 map_unwrap_or + 14 match_bool + 6 single_match
++ 5 vec-with-capacity + 2 semicolon + 1 hashmap-with-capacity + 1
+manual_unwrap_or) + member-crate semicolon-class residue 17 edits (attn
+dash_attn 13 — the gated surface the member slice never saw + 2 in a
+NESTED fn, kv cs_kv_probe 2, percepta hull 2, core causal_id 1, pruners
+12) + 4 manual terminal fixes (is_some_and ×2 incl
+self_distilling_bandit:202 unnecessary_map_or, context-forced map_or ×2
+twins step_paged:60 + forward step:156). **Gate-map correction:** dllm is
+transitively DEFAULT via `dmax_spd = ["dllm", …]` (the parse-only cfg map
+said gated — the reverse of the riir-train slice-5 lesson); inference_router
+is UNGATED (the compression_drafter cfg above it gates a re-export, not the
+mod); kimi_k3/tiktoken's real gate is `kimi_k3_loader`. 8 validation configs
+ALL count-identical (root default 201 + 6-feature union 399, attn union 193,
+forward 124, kv 24, percepta 84, core 1897, pruners 587/611).
+**Compiler-proof of the array-literal guard:** `map_or(&[], f)` E0308s in
+plain-let position (`expected &[_; 0], found &[f32]` — the default arg
+unifies U FIRST, then the closure's concrete type conflicts) while the
+twin at a context-forced call site compiles clean — tried live on both
+step_paged twins; :129 reverted with an in-source comment, forward
+step.rs:196 stays documented. The healer's refusal to convert array-literal
+defaults is PROVABLY safer than clippy's own MachineApplicable autofix
+there. **Residue terminal state (all classes):** the documented divergences
+only — 3× array-literal `&[]` (breakeven/fidelity:249, step_paged:132,
+forward step:196), named-arg-with-rename (reflection ×3, backlog),
+percepta len_zero:115 (verify-only), + 2 OUT-OF-CLASS default lints left
+for the owner (rule_extractor:180 + slod:745 if_same_then_else — semantic
+duplication, not a heal class). Rustfmt on 17 fmt-clean files (35 drift
+scoped out, 0 CRLF).
+
+**THE for_each_fn NESTED-FN ROOT-CAUSE FIX (riir-clippy `5875b81`
+follow-up, this session)**: the semicolon residue scan surfaced 2 live
+sites in katgpt-attn block_topk.rs the proposer missed — root cause:
+`for_each_fn` (the SHARED fn-enumeration helper, both domains) never
+descended into fns declared inside fn bodies (`Stmt::Item(Item::Fn)` at
+any block depth — the `fn argtopk_simd() { unsafe fn inner() { … } }`
+unsafe-wrapper pattern). Fix: `nested_fns_in_block`/`nested_fns_in_expr`
+recursion through every block-bearing statement (if/match/loop bodies,
+semicol'd + bare blocks, unsafe blocks); `let x = { … }` initializers +
+closure bodies are the documented under-approximation. Fixture
+`nested_fn_body_fires` pins the production shape; 592/0 lib tests; the
+extension benefits EVERY fn-scoped proposer in both domains.
+
+**katgpt-rs sweep FINAL state — src/ (root + all 30 member crates),
+tests/, benches/, examples/: ALL COMPLETE.** Remaining known surface:
+the 2 out-of-class if_same_then_else sites + the standing proposer backlog
+(named-arg-with-rename, second-level macro nesting) + M3-deferred backend
+macOS examples.
 
 **Issue 031 (2026-08-17, RESOLVED same day + removed per noise-reduction
 rule) — 3 healer defects from the katgpt-pruners 587-edit heal

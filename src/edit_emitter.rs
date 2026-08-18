@@ -28,7 +28,7 @@
 //! panicked on.
 
 use syn::spanned::Spanned;
-use syn::{File, Item, Signature};
+use syn::{Expr, File, Item, Signature, Stmt};
 
 /// One span-preserving source edit: replace `source[start..end]` with
 /// `replacement`. Byte offsets index the exact original source the file was
@@ -200,10 +200,15 @@ pub fn delete_stmt_edit(source: &str, node: &impl Spanned) -> SourceEdit {
 }
 
 /// Visit every fn-like item in the file (free fns, impl methods, fns in
-/// nested inline `mod` blocks) with `(sig, block)`.
+/// nested inline `mod` blocks, AND fns declared inside another fn's body)
+/// with `(sig, block)`.
 ///
 /// Shared by the fn-scoped proposers (both domains); a plain `file.items`
-/// scan misses impl methods + nested mods, which real files exercise.
+/// scan misses impl methods + nested mods, which real files exercise. The
+/// nested-fn half (`Stmt::Item(Item::Fn)` at any block depth) was added after
+/// the katgpt-attn `block_topk.rs` miss: `fn argtopk_simd() { unsafe fn
+/// inner() { … } inner(…) }` — the unsafe-wrapper pattern — put 2 live
+/// semicolon sites outside every fn-scoped proposer's reach.
 pub fn for_each_fn<'a>(file: &'a File, mut f: impl FnMut(&'a Signature, &'a syn::Block)) {
     for_each_item(&file.items, &mut f);
 }
@@ -211,11 +216,15 @@ pub fn for_each_fn<'a>(file: &'a File, mut f: impl FnMut(&'a Signature, &'a syn:
 fn for_each_item<'a>(items: &'a [Item], f: &mut impl FnMut(&'a Signature, &'a syn::Block)) {
     for item in items {
         match item {
-            Item::Fn(fn_item) => f(&fn_item.sig, &fn_item.block),
+            Item::Fn(fn_item) => {
+                f(&fn_item.sig, &fn_item.block);
+                nested_fns_in_block(&fn_item.block, f);
+            }
             Item::Impl(imp) => {
                 for ii in &imp.items {
                     if let syn::ImplItem::Fn(m) = ii {
                         f(&m.sig, &m.block);
+                        nested_fns_in_block(&m.block, f);
                     }
                 }
             }
@@ -228,6 +237,46 @@ fn for_each_item<'a>(items: &'a [Item], f: &mut impl FnMut(&'a Signature, &'a sy
             }
             _ => {}
         }
+    }
+}
+
+/// Fns declared inside another fn's body (`fn outer() { fn inner() {} }`).
+/// Item statements are legal at any block depth; the unsafe-wrapper pattern
+/// puts real code there. Walks every block-bearing statement recursively.
+/// `let x = { … }` initializer blocks and closure bodies are a documented
+/// under-approximation (no observed production instances).
+fn nested_fns_in_block<'a>(block: &'a syn::Block, f: &mut impl FnMut(&'a Signature, &'a syn::Block)) {
+    for stmt in &block.stmts {
+        match stmt {
+            Stmt::Item(Item::Fn(nested)) => {
+                f(&nested.sig, &nested.block);
+                nested_fns_in_block(&nested.block, f);
+            }
+            Stmt::Expr(e, _) => nested_fns_in_expr(e, f),
+            _ => {}
+        }
+    }
+}
+
+fn nested_fns_in_expr<'a>(e: &'a Expr, f: &mut impl FnMut(&'a Signature, &'a syn::Block)) {
+    match e {
+        Expr::Block(b) => nested_fns_in_block(&b.block, f),
+        Expr::Unsafe(u) => nested_fns_in_block(&u.block, f),
+        Expr::If(i) => {
+            nested_fns_in_block(&i.then_branch, f);
+            if let Some((_, e)) = &i.else_branch {
+                nested_fns_in_expr(e, f);
+            }
+        }
+        Expr::Loop(l) => nested_fns_in_block(&l.body, f),
+        Expr::While(w) => nested_fns_in_block(&w.body, f),
+        Expr::ForLoop(fl) => nested_fns_in_block(&fl.body, f),
+        Expr::Match(m) => {
+            for arm in &m.arms {
+                nested_fns_in_expr(&arm.body, f);
+            }
+        }
+        _ => {}
     }
 }
 
