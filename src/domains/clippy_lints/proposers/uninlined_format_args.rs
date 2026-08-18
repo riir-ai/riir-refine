@@ -169,14 +169,33 @@ fn inline_args(tokens: &TokenStream, pos: TemplatePos) -> Option<Vec<SourceEdit>
     let template_range = template_arg.toks[0].span().byte_range();
 
     // Everything after the template is a format arg — ident paths only.
+    // A named arg `n = n` (BOTH sides the same plain ident) is REDUNDANT
+    // under implicit capture: real clippy's MachineApplicable fix deletes
+    // the arg and leaves the template untouched (probe-verified clippy
+    // 1.95 on the live riir-data sites). Any other assign shape (rename
+    // `a = b`, complex value) still aborts — the rename class is backlog.
     let mut fmt_args = Vec::new();
+    let mut redundant_named: Vec<(usize, usize)> = Vec::new();
     for arg in &args[pos.index() + 1..] {
         let stream: TokenStream = arg.toks.iter().cloned().collect();
         let expr = syn::parse2::<Expr>(stream).ok()?;
-        let Expr::Path(p) = &expr else {
-            return None; // field access / call / cast / literal / named-arg … — no partial inlining
+        let ident = match &expr {
+            Expr::Path(p) => p.path.get_ident()?.to_string(),
+            Expr::Assign(a) => {
+                let (Expr::Path(l), Expr::Path(r)) = (&*a.left, &*a.right) else {
+                    return None; // named arg with a complex value — abort
+                };
+                let (Some(l), Some(r)) = (l.path.get_ident(), r.path.get_ident()) else {
+                    return None;
+                };
+                if l != r {
+                    return None; // named-arg-with-rename — the backlog class
+                }
+                redundant_named.push((arg.comma_start, arg.end));
+                continue;
+            }
+            _ => return None, // field access / call / cast / literal … — no partial inlining
         };
-        let ident = p.path.get_ident()?.to_string();
         // `{r#raw}` is not a valid format-arg name — skip. (`{self}` IS
         // valid: rustc explicitly allows `self` as an implicit capture —
         // probe-verified 2026-08-18, `format!("{self:?}")` compiles + real
@@ -192,21 +211,27 @@ fn inline_args(tokens: &TokenStream, pos: TemplatePos) -> Option<Vec<SourceEdit>
     }
 
     let (new_raw, used) = build_inlined(raw, &fmt_args)?;
-    if used == 0 {
+    if used == 0 && redundant_named.is_empty() {
         return None; // nothing consumed — nothing to inline here
     }
 
-    let mut edits = vec![SourceEdit {
-        start: template_range.start,
-        end: template_range.end,
-        replacement: format!("\"{new_raw}\""),
-    }];
-    for a in &fmt_args {
+    let mut edits = Vec::new();
+    if used > 0 {
         edits.push(SourceEdit {
-            start: a.comma_start,
-            end: a.arg_end,
-            replacement: String::new(),
+            start: template_range.start,
+            end: template_range.end,
+            replacement: format!("\"{new_raw}\""),
         });
+        for a in &fmt_args {
+            edits.push(SourceEdit {
+                start: a.comma_start,
+                end: a.arg_end,
+                replacement: String::new(),
+            });
+        }
+    }
+    for (start, end) in redundant_named {
+        edits.push(SourceEdit { start, end, replacement: String::new() });
     }
     Some(edits)
 }
@@ -586,6 +611,52 @@ mod tests {
             "named placeholder mangled: {out}"
         );
         assert!(syn::parse_file(&out).is_ok(), "{out}");
+    }
+
+    #[test]
+    fn redundant_identical_named_arg_deleted() {
+        // `n = n` (BOTH sides the same plain ident) is redundant under
+        // implicit capture — clippy's MachineApplicable fix deletes the arg
+        // and leaves the template untouched (probe-verified clippy 1.95 on
+        // the live riir-data `compression = compression` sites).
+        let out = propose_fix(
+            "uninlined_format_args",
+            "fn f(c: f64) { eprintln!(\"ratio {c:.6}\", c = c); }",
+        )
+        .expect("pattern matched");
+        assert!(
+            out.contains("eprintln!(\"ratio {c:.6}\");"),
+            "redundant named arg not deleted: {out}"
+        );
+        assert!(syn::parse_file(&out).is_ok(), "{out}");
+    }
+
+    #[test]
+    fn redundant_named_arg_composes_with_positional_inline() {
+        // Mixed shape: a positional `{}` inlines while the trailing `x = x`
+        // deletes — both edits in one invocation (named args are always
+        // last per rustc's named-after-positional rule, so indices hold).
+        let out = propose_fix(
+            "uninlined_format_args",
+            "fn f(y: u8, x: u8) -> String { format!(\"{} {x}\", y, x = x) }",
+        )
+        .expect("pattern matched");
+        assert!(
+            out.contains("format!(\"{y} {x}\")"),
+            "composed inline+delete wrong: {out}"
+        );
+        assert!(syn::parse_file(&out).is_ok(), "{out}");
+    }
+
+    #[test]
+    fn named_arg_with_rename_still_untouched() {
+        // `a = b` (different idents) is the documented backlog class — the
+        // fix needs template rewriting, not arg deletion.
+        let out = propose_fix(
+            "uninlined_format_args",
+            "fn f(w: usize) { println!(\"{:<width$}\", 1, width = w); }",
+        );
+        assert!(out.is_none(), "rename must not fire: {out:?}");
     }
 
     #[test]
