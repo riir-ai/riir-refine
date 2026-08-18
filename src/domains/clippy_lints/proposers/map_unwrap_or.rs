@@ -41,6 +41,7 @@ pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
     let mut v = Collector {
         source,
         edits: Vec::new(),
+        param_kinds: Vec::new(),
     };
     v.visit_file(file);
     v.edits
@@ -49,12 +50,28 @@ pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
 struct Collector<'a> {
     source: &'a str,
     edits: Vec<SourceEdit>,
+    /// Enclosing-fn parameter types (Option/Result classification for
+    /// plain-path receivers of the bool-literal terminal forms). Stack of
+    /// scopes — the Issue 031 H1 enclosing-fn-stack pattern.
+    param_kinds: Vec<std::collections::HashMap<String, ReceiverKind>>,
 }
 
 impl<'ast> Visit<'ast> for Collector<'_> {
+    fn visit_item_fn(&mut self, f: &'ast syn::ItemFn) {
+        self.param_kinds.push(fn_param_kinds(&f.sig));
+        syn::visit::visit_item_fn(self, f);
+        self.param_kinds.pop();
+    }
+
+    fn visit_impl_item_fn(&mut self, f: &'ast syn::ImplItemFn) {
+        self.param_kinds.push(fn_param_kinds(&f.sig));
+        syn::visit::visit_impl_item_fn(self, f);
+        self.param_kinds.pop();
+    }
+
     fn visit_expr_method_call(&mut self, m: &'ast ExprMethodCall) {
         syn::visit::visit_expr_method_call(self, m);
-        if let Some(replacement) = try_map_or(self.source, m) {
+        if let Some(replacement) = try_map_or(self.source, m, self.innermost_params()) {
             self.edits.push(edit(m, replacement));
         }
     }
@@ -83,13 +100,18 @@ impl Collector<'_> {
         let Some(args) = post_template_expr_args(mac) else {
             return;
         };
+        let params = self.innermost_params().cloned();
         for arg in args {
             let stream: TokenStream = arg.toks.iter().cloned().collect();
             let Ok(expr) = syn::parse2::<Expr>(stream) else {
                 continue; // named args / non-expression tokens — skip
             };
-            scan_expr_for_matches(self.source, &mut self.edits, &expr);
+            scan_expr_for_matches(self.source, &mut self.edits, &expr, params.as_ref());
         }
+    }
+
+    fn innermost_params(&self) -> Option<&std::collections::HashMap<String, ReceiverKind>> {
+        self.param_kinds.last()
     }
 }
 
@@ -97,26 +119,67 @@ impl Collector<'_> {
 /// matches. The lifetimes tie the AST borrow to the source/edits borrows
 /// (all share the caller's frame); spans are file-relative by token
 /// round-trip, so `src`/`edit` operate on the WHOLE-file source.
-fn scan_expr_for_matches(source: &str, edits: &mut Vec<SourceEdit>, expr: &Expr) {
+fn scan_expr_for_matches(
+    source: &str,
+    edits: &mut Vec<SourceEdit>,
+    expr: &Expr,
+    params: Option<&std::collections::HashMap<String, ReceiverKind>>,
+) {
     struct Sub<'a> {
         source: &'a str,
         edits: &'a mut Vec<SourceEdit>,
+        params: Option<&'a std::collections::HashMap<String, ReceiverKind>>,
     }
     impl<'ast> Visit<'ast> for Sub<'ast> {
         fn visit_expr_method_call(&mut self, m: &'ast ExprMethodCall) {
             syn::visit::visit_expr_method_call(self, m);
-            if let Some(replacement) = try_map_or(self.source, m) {
+            if let Some(replacement) = try_map_or(self.source, m, self.params) {
                 self.edits.push(edit(m, replacement));
             }
         }
     }
-    let mut sub = Sub { source, edits };
+    let mut sub = Sub { source, edits, params };
     sub.visit_expr(expr);
+}
+
+/// Extract Option/Result classification from a fn signature's parameter
+/// types. Only simple `ident: Type` patterns (incl. `&`-wrapped) are
+/// recorded — complex destructuring patterns are skipped (Unknown).
+fn fn_param_kinds(sig: &syn::Signature) -> std::collections::HashMap<String, ReceiverKind> {
+    let mut out = std::collections::HashMap::new();
+    for arg in sig.inputs.iter() {
+        let syn::FnArg::Typed(pt) = arg else { continue };
+        let syn::Pat::Ident(id) = &*pt.pat else { continue };
+        let kind = param_type_kind(&pt.ty);
+        if let Some(kind) = kind {
+            out.insert(id.ident.to_string(), kind);
+        }
+    }
+    out
+}
+
+fn param_type_kind(ty: &syn::Type) -> Option<ReceiverKind> {
+    let ty = match ty {
+        syn::Type::Reference(r) => &*r.elem,
+        _ => ty,
+    };
+    let syn::Type::Path(tp) = ty else { return None };
+    // Last path segment: `Option` / `Result` bare or `std::option::Option`.
+    // Generic args are ignored — `Option<T>` is OptionLike for every T.
+    match tp.path.segments.last().map(|s| s.ident.to_string()).as_deref() {
+        Some("Option") => Some(ReceiverKind::OptionLike),
+        Some("Result") => Some(ReceiverKind::ResultLike),
+        _ => None,
+    }
 }
 
 /// `x.map(f).unwrap_or(d)` → `x.map_or(d, f)` / `is_some_and(f)`;
 /// `x.map(f).unwrap_or_else(g)` → `x.map_or_else(g, f)`.
-fn try_map_or(source: &str, m: &ExprMethodCall) -> Option<String> {
+fn try_map_or(
+    source: &str,
+    m: &ExprMethodCall,
+    params: Option<&std::collections::HashMap<String, ReceiverKind>>,
+) -> Option<String> {
         let else_form = if m.method == "unwrap_or" {
             false
         } else if m.method == "unwrap_or_else" {
@@ -169,20 +232,96 @@ fn try_map_or(source: &str, m: &ExprMethodCall) -> Option<String> {
         }
         let bool_default = bool_literal(&m.args[0]);
         let mapper_is_bool = closure_body_is_bool(&map.args[0]);
-        if bool_default == Some(false) && mapper_is_bool {
-            // Real clippy 1.93's own suggestion for this shape: the `map_or`
-            // output would be re-flagged by `unnecessary_map_or` (a
-            // default-group lint).
-            return Some(format!("{recv}.is_some_and({mapper})"));
-        }
-        if bool_default == Some(true) && mapper_is_bool {
-            // Terminal form of clippy's two-step chain (`map_or(true, f)` →
-            // `is_none_or`); probe-verified lint-clean on 1.93. The old
-            // behavior SKIPPED the shape entirely, leaving the original
-            // `map(f).unwrap_or(true)` — which real clippy still rewrites.
-            return Some(format!("{recv}.is_none_or({mapper})"));
+        if let Some(default) = bool_default {
+            if mapper_is_bool {
+                // Terminal forms fire only on PROVABLY-typed receivers:
+                // `is_some_and`/`is_none_or` are Option-only, `is_ok_and` is
+                // Result-only — the wrong pick is a COMPILE error (E0599, the
+                // bench_440 env::var catch, 2026-08-18). Unknown receivers
+                // fall back to the always-compiling `map_or` (one step short
+                // of real clippy's terminal suggestion — the documented
+                // SAFER-than-clippy divergence, same class as the type-blind
+                // lint demotions).
+                match classify_receiver(&recv, params) {
+                    ReceiverKind::OptionLike => {
+                        if default {
+                            // clippy chain: `map_or(true, f)` → `is_none_or`
+                            // (probe-verified lint-clean on 1.93).
+                            return Some(format!("{recv}.is_none_or({mapper})"));
+                        }
+                        // Real clippy 1.93's own suggestion for this shape:
+                        // the `map_or` output would be re-flagged by
+                        // `unnecessary_map_or` (a default-group lint).
+                        return Some(format!("{recv}.is_some_and({mapper})"));
+                    }
+                    ReceiverKind::ResultLike => {
+                        if default {
+                            // Real clippy is SILENT on Result + true default
+                            // (probe 2026-08-18: no `is_err_or` suggestion —
+                            // not stable); `map_or(true, f)` IS the terminal
+                            // state for this receiver kind.
+                            return Some(format!("{recv}.map_or(true, {mapper})"));
+                        }
+                        // Real clippy suggests `is_ok_and` directly for
+                        // `Result.map(f).unwrap_or(false)` (probe-verified:
+                        // skips the map_or intermediate entirely).
+                        return Some(format!("{recv}.is_ok_and({mapper})"));
+                    }
+                    ReceiverKind::Unknown => {
+                        // Cannot prove Option vs Result — emit the form that
+                        // compiles on BOTH. May leave an `unnecessary_map_or`
+                        // warning for Option receivers, but never breaks the
+                        // build (compile-safety over terminal completeness).
+                        return Some(format!("{recv}.map_or({default}, {mapper})"));
+                    }
+                }
+            }
         }
         Some(format!("{recv}.map_or({default}, {mapper})"))
+}
+
+/// Parse-only receiver classification for the bool-literal terminal forms.
+/// Last-match-wins over the receiver text: a chain like
+/// `env::var(k).ok()` is Option-producing (`.ok()` converts to Option), so
+/// the OUTERMOST (last) known-shape call decides. Evidence-based allowlists:
+/// Option shapes are the dominant `.get(`/`.find(` accessors; Result shapes
+/// are the std APIs seen in production heals (`env::var`, `.parse`).
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+enum ReceiverKind {
+    OptionLike,
+    ResultLike,
+    Unknown,
+}
+
+fn classify_receiver(recv: &str, params: Option<&std::collections::HashMap<String, ReceiverKind>>) -> ReceiverKind {
+    // A plain-path receiver typed by an enclosing fn parameter: the parse
+    // tree's own type annotation is authoritative (`fn f(x: Option<u8>)`).
+    if !recv.contains('.') && !recv.contains('(') {
+        if let Some(kind) = params.and_then(|p| p.get(recv.trim())) {
+            return *kind;
+        }
+        return ReceiverKind::Unknown;
+    }
+    const OPTION_SHAPES: [&str; 7] = [
+        ".get(", ".find(", ".first(", ".last(", ".pop()", ".next()", ".ok()",
+    ];
+    const RESULT_SHAPES: [&str; 3] = ["env::var(", ".parse(", ".parse::<"];
+    let mut best: Option<(usize, ReceiverKind)> = None;
+    for shape in OPTION_SHAPES {
+        if let Some(pos) = recv.rfind(shape) {
+            if best.is_none_or(|(p, _)| pos > p) {
+                best = Some((pos, ReceiverKind::OptionLike));
+            }
+        }
+    }
+    for shape in RESULT_SHAPES {
+        if let Some(pos) = recv.rfind(shape) {
+            if best.is_none_or(|(p, _)| pos > p) {
+                best = Some((pos, ReceiverKind::ResultLike));
+            }
+        }
+    }
+    best.map(|(_, kind)| kind).unwrap_or(ReceiverKind::Unknown)
 }
 
 /// True for `&[...]` / `&mut [...]` defaults (recursing through parens).
@@ -401,6 +540,75 @@ mod tests {
         assert!(
             out.contains("x.is_some_and(|v| v > 3)"),
             "is_some_and not produced: {out}"
+        );
+    }
+
+    // Result-receiver terminal states (bench_440 catch, 2026-08-18: the
+    // heal emitted `is_some_and` on a `std::env::var` Result receiver —
+    // E0599 compile break). Probe-verified on clippy 1.97: Result
+    // receivers get `is_ok_and` directly; Result + true default is
+    // clippy-SILENT (no stable `is_err_or`), so `map_or(true, f)` IS the
+    // terminal state there. Unknown receivers (no param type, no known
+    // shape) fall back to the always-compiling `map_or`.
+    #[test]
+    fn env_var_receiver_becomes_is_ok_and() {
+        // Live shape from katgpt-core bench_440_lllg_paper_repro.rs:456.
+        let input = "fn f() -> bool { std::env::var(\"LLLG_MULTISTEP\").map(|v| v == \"1\" || v.eq_ignore_ascii_case(\"true\")).unwrap_or(false) }";
+        let out = propose_fix("map_unwrap_or", input).expect("matched");
+        assert!(
+            out.contains("std::env::var(\"LLLG_MULTISTEP\").is_ok_and(|v|"),
+            "is_ok_and not produced: {out}"
+        );
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn parse_receiver_becomes_is_ok_and() {
+        let input = "fn f() -> bool { \"5\".parse::<i32>().map(|v| v > 3).unwrap_or(false) }";
+        let out = propose_fix("map_unwrap_or", input).expect("matched");
+        assert!(
+            out.contains("\"5\".parse::<i32>().is_ok_and(|v| v > 3)"),
+            "is_ok_and not produced: {out}"
+        );
+    }
+
+    #[test]
+    fn result_param_true_default_stays_map_or() {
+        // Real clippy is SILENT on Result + true default (probe: no
+        // `is_err_or` suggestion — not stable); `map_or(true, f)` is the
+        // terminal state. Emitting `is_none_or` would be an E0599.
+        let input = "fn f(x: Result<u8, u8>) -> bool { x.map(|v| v > 3).unwrap_or(true) }";
+        let out = propose_fix("map_unwrap_or", input).expect("matched");
+        assert!(
+            out.contains("x.map_or(true, |v| v > 3)"),
+            "map_or(true, ..) not produced: {out}"
+        );
+    }
+
+    #[test]
+    fn result_param_false_default_becomes_is_ok_and() {
+        let input = "fn f(x: Result<u8, u8>) -> bool { x.map(|v| v > 3).unwrap_or(false) }";
+        let out = propose_fix("map_unwrap_or", input).expect("matched");
+        assert!(
+            out.contains("x.is_ok_and(|v| v > 3)"),
+            "is_ok_and not produced: {out}"
+        );
+    }
+
+    #[test]
+    fn unknown_receiver_falls_back_to_map_or() {
+        // A receiver the classifier cannot prove Option vs Result (custom
+        // fn call, no param type): the always-compiling `map_or` — never a
+        // terminal form that could be an E0599 on the wrong receiver kind.
+        let input = "fn f(k: u32) -> bool { lookup(k).map(|v| v > 3).unwrap_or(false) }";
+        let out = propose_fix("map_unwrap_or", input).expect("matched");
+        assert!(
+            out.contains("lookup(k).map_or(false, |v| v > 3)"),
+            "map_or fallback not produced: {out}"
+        );
+        assert!(
+            !out.contains("is_some_and"),
+            "terminal form on unknown receiver must not be produced: {out}"
         );
     }
 
