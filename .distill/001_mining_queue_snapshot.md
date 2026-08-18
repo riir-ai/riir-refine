@@ -930,13 +930,27 @@
     swallowing the `KernelRule {` opener into the comment (9/10 entries
     broken; rustc's `vec![` unclosed-delimiter error points at the symptom,
     not the cause).
-- **BLOCKED**: `ternary_deltanet_gpu_forward.rs` ONLY (the CubeCL twin,
-  5,416 lines — BLOCKED on open riir-ai Issue 721 T3, which will rewrite its
-  chunked-recurrence kernels (IntraOutput/CrossChunk/StateTransition at
-  L3676); mine only after 721 lands + tree verified clean). The cudarc twin
-  `ternary_deltanet_gpu_forward_cudarc.rs` was MINED as Batch 58 (2026-08-18,
-  Research 065 — the sibling-WIP unlock fired when the Issue 717/715 work
-  landed; 721's Non-goals exclude the CUDA port so it was collision-free).
+- **UNBLOCKED 2026-08-19 → next FILE-batch target (after Batch 62, which
+  holds plan-first priority)**: `ternary_deltanet_gpu_forward.rs` (the CubeCL
+  twin, now **5,432 lines** on origin/develop). The 2026-08-18 BLOCK condition
+  ("mine only after 721 lands + tree verified clean") FIRED: Issue 721 CLOSED
+  2026-08-18 as an honest negative (G2 STRUCTURAL FAIL; no chunked-recurrence
+  rewrite shipped — the file grew 5,416 → 5,432, +16 lines = additive
+  tree-verify hooks, not the feared kernel rewrite). Its last 3 commits are
+  721's own (`aa7879ff7` T2-T4, `28ac37fa2` T4a, `1eb211ad2` T6+T7),
+  committed clean, and it is NOT in the sibling's dirty set as of 2026-08-19 —
+  but the sibling remains ACTIVE on the CUDA twin
+  (`ternary_deltanet_gpu_forward_cudarc.rs`, modified), so RE-VERIFY
+  tree-clean at batch start (standing `git status`/mtime check). Expected
+  yield LOW-MEDIUM: B58 (the cudarc twin) already took the
+  transport-graph/capture/staging/rotation-pool rules; the CubeCL twin's
+  unique surface is its CubeCL-specific dispatch + the chunked-recurrence
+  kernels (IntraOutput/CrossChunk/StateTransition). The cudarc twin was
+  MINED as Batch 58 (2026-08-18, Research 065 — the sibling-WIP unlock fired
+  when the Issue 717/715 work landed; 721's Non-goals exclude the CUDA port
+  so it was collision-free). No batch executed at unblock time — the box is
+  saturated by the sibling's p335 LoRA measurement; item-5 GOAT builds
+  deferred per the Plan 337 discipline.
 - **Batch 62 QUEUED (2026-08-18, Research 070, Plan 008 — the SECOND external-source distill via the `distill` skill):** the microGPT-C CPU-SIMD distill (github.com/vixhal-baraiya/microgpt-c, MIT, complete; verdict corrected MARGINAL B− → YES B on user challenge — the LOPD/NQF rescue class, record in the note). Route `rust_perf`, 2 candidates: lead `transposed-weight-register-gemv` (column-major pack at weight-freeze, broadcast-FMA into output registers, zero horizontal reduction; live in-tree shapes: `katgpt-types/src/simd/binary.rs` per-row `y[r] = vaddvq(acc)` matvec + `dot.rs` + `math.rs` matmul family) + `newton-refinement-vs-hardware-transcendental` (honest-annotation rule — GPU fast-math recipe inverts on CPU, measured 2–4% slower on 5600H). Drops recorded in Research 070 (Schraudolph exp tier: Cephes already ships at the tier we need + the trains-with-approx catch; sampling: `gumbel_max_sample` strictly better; prefix-table: `precompute-table` instance). Yield 1–2. Plan-first: Plan 008 created BEFORE any corpus edit.
 - **Batch 63 candidate pool (2026-08-18, queue item 11 online perf search — the ARM Neon / CPU-SIMD / bounds-check axis; recorded for the NEXT batch session, plan-first applies at promotion time):** 2 candidates, both verified ABSENT from the 65-rule rust_perf list at sweep time (full rule-id list grepped):
   - **`loop-order-innermost-contiguous`** (simd; STRONG) — source: Arun Nagaraj, "Matrix Multiplication in Rust with SIMD: From Naive to 126× Faster" (medium @aruntamiln 2026-02-12; repo ArunTamil21/matmul-simd; x86 AVX measured, technique ISA-independent — it is memory-hierarchy, not ISA): nested-loop accumulation `c[i][j] += a[i][k] * b[k][j]` where the INNERMOST loop varies an index that strides a 2D access's OUTER axis (i-j-k: inner k walks `b[k][j]` column-wise at stride-n) → reorder the loops (i-k-j) so the innermost varies the LAST index (contiguous row walk). Measured in source: 9× alone, L1 misses 45%→12%, 0.47→5 GFLOPS. Parse-detectable (triple nest + `+=` over a double-indexed access whose inner-loop index sits on the outer axis); bounded fix = swap loop headers + hoist the row anchor. Distinct from `simd-chunk` (chunking for vectorization), `layout-reorder` (struct padding), `soa-hot-field` (AoS→SoA data layout), and kernel_opt's `matvec-coalesce` (GPU-side, distinct-by-substrate — the B62-plan GPU-twin note pattern). Caveats to encode: float sum-order changes → rel-error tolerance gate NOT bit-identity (`distance-sq-no-sqrt` 1-ulp precedent); legal only without loop-carried deps across the swapped axes (the `c[i][j] +=` shape is the canonical legal case). **Dedup note for the batch session: ADJACENT to B62's queued lead `transposed-weight-register-gemv`** (which achieves coalescing by repacking weights column-major) — this rule is the NO-repack general nested-accumulation case (matmul/2D-conv/image-kernel shapes where repacking is not wanted); scope fixtures to non-repacked shapes, or fold into the B62 rule if it lands first and generalizes.
