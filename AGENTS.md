@@ -1355,10 +1355,63 @@ Validation: all configs count-identical pre/post — spectral default 85 + AF
 in healed classes all 4 crates; rustfmt on the 34 fmt-clean-at-HEAD files
 (8 carry pre-existing drift, 0 CRLF).
 
+**katgpt-rs crates src/ slice 2 landed 2026-08-18 evening** (katgpt-rs
+`3ffc71215` + `9be3bb751`; the map_or terminal-state proposer fix riir-clippy
+below): **speculative + attn + transformer + percepta + types + ALL 16
+small-tail crates src/ — 91 files / 411 edits, net −279 post-fmt. THE
+KATGPT-RS MEMBER-CRATE src/ SURFACE IS NOW DONE** (only the katgpt-core
+giant 2775/239 + root-src 114/35 remain). Slice composition (src-only
+sizing; the prior whole-tree counts included tests/benches): speculative
+12/120, attn 8/43, transformer 7/19, percepta 9/49, types 9/15, sleep 3/28,
+claim 5/24, moka-wasm 4/11, canon 1/2, band 2/12, sense 2/11, backend 2/4,
+deprecated 2/9, proof-cert 1/8, micro-belief 1/8, tokenizer 4/7, sparse 1/5,
+ruliology 3/4, quant 1/4, pruners 4/7 (587-heal stragglers), forward 10/21.
+**The map_unwrap_or bool-default terminal-state fix shipped mid-slice**
+(found as 2 live heal-created residue sites in percepta): (1) `contains_key`
+joined the `is_bool_method` allowlist (the percepta scheduler.rs:550
+`|&op| k.contains_key(&op)` ref-pattern closure shape); (2) `matches!` macro
+bodies recognized as bool via `Expr::Macro` path check (the graph/types
+`|d| matches!(d.kind, ..)` shape); (3) the stale `true`-default SKIP replaced
+with direct `is_none_or({mapper})` emission — probe-verified on clippy 1.93:
+both `map_or(false, bool_f)` → `is_some_and` and `map_or(true, bool_f)` →
+`is_none_or` are clippy's own one-step terminal states (both outputs
+lint-clean; `is_none_or` stable since 1.82; the old skip rationale "no
+single parse-only step matches" predates emitting the terminal form). The 2
+percepta sites fixed to terminal forms manually (the proposer fires on
+`map().unwrap_or()` chains, not on already-fused `map_or`). 3 new fixtures;
+577 default / 640 fix_verify / 629 latent_retrieval lib tests; clippy 0.
+**Pre-existing conditions found + documented (owner calls):** katgpt-attn
+AF was a BROKEN GATE at HEAD (E0433 TreePath missing import in gdn2
+`tree_forward.rs` tests — invisible under empty default features) — repaired
+mechanically (`3ffc71215`, unblocking AF validation; attn AF 386/0);
+katgpt-forward AF has 3 deterministic failures (d2f_verifier q-row sum
+1.06130 / dflash kv_routing step 6 / dflash conditioned_valid_probs — top
+dflash.rs commit is the Jul-20 SIMD renormalization, d2f_verifier's Aug-15;
+validated same-signature 279/3 pre+post); katgpt-pruners AF flake:
+`go::tournament player_type_creates_instances` uses UNSEEDED
+`fastrand::Rng::new()` — nondeterministic (green 3006/0 run on record,
+6/6 isolated; author should seed it). **Toolchain discovery (the Batch-49
+trap re-hit):** the box default host is GNU + `E:/git/.cargo/config.toml`
+injects MSVC-syntax `msvc_stl_shim` link args globally — GNU ld chokes on
+`/LIBPATH:`; every riir-clippy build on this box needs
+`RUSTUP_TOOLCHAIN=1.97.0-x86_64-pc-windows-msvc` (matches the pin's channel;
+katgpt-rs has no pin → rustup default msvc, unaffected). **Disk-full
+incident mid-slice** (E: hit 100%, os error 112 killed tokenizer AF build):
+freed 33G by deleting the disposable `target/debug/incremental` caches
+(katgpt-rs + riir-clippy) — safe by design, cost is recompile time only.
+Validation: all configs count-identical pre/post (def + AF per crate;
+backend default-only — `ane`/`gpu_inference` are macOS metal/coreml traps);
+rustfmt on 60 fmt-clean-at-HEAD files (32 pre-existing drift, 0 CRLF).
+Documented divergences: 3 named-arg-with-rename (pruners reflection.rs —
+2nd occurrence of the class, still backlog), 2 array-literal-default
+(forward step.rs `&[1.0]`/`&[]` — the exact `2bf2a44` guard class), 1
+len_zero verify-only (percepta legacy/mod.rs).
+
 Remaining sweep territory: katgpt-rs src/ — katgpt-core 2775/239 (the giant,
-multi-slice), speculative 139, attn 130, root-src 114/35, transformer 63,
-percepta 49, types 42, + small tail ~340 across 16 crates; + the benches/ +
-examples/ surfaces of the member crates (the 4115 sizing includes them).
+multi-slice) + root-src 114/35 (kimi_k3/dllm dirs are sibling-adjacent;
+worktree fallback proven); + the benches/ + examples/ surfaces of the
+member crates (the 4115 sizing includes them). The member-crate src/
+surface is COMPLETE.
 
 **Issue 031 (2026-08-17, RESOLVED same day + removed per noise-reduction
 rule) — 3 healer defects from the katgpt-pruners 587-edit heal

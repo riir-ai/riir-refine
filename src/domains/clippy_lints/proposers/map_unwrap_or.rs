@@ -19,12 +19,15 @@
 //! `map_or_else(<G>, <F>)`), each fragment being the ORIGINAL source text
 //! of the matched node.
 //!
-//! Bool-default guard (Issue 027 probe class, 2026-08-18): a provably-bool
-//! closure with a `true` default is SKIPPED — real clippy suggests `map_or`
-//! there, but that output triggers `unnecessary_map_or` → `is_none_or`, so
-//! no parse-only fix we can emit matches both of clippy's steps. Closures
-//! whose bool-ness cannot be proven syntactically (e.g. a bare path) keep
-//! the `map_or` form — a parse-only limitation, not a wrong fix.
+//! Bool-default terminal states (clippy 1.93 probe, 2026-08-18 evening):
+//! a provably-bool closure with `false`/`true` defaults emits the TERMINAL
+//! form directly — `is_some_and(<f>)` / `is_none_or(<f>)`. The earlier
+//! `true`-default SKIP was based on the two-step clippy chain
+//! (`map_or(true, f)` → `is_none_or`), but emitting the terminal state
+//! directly is one clean step (probe: both outputs lint-clean on 1.93;
+//! `is_none_or` stable since 1.82). Closures whose bool-ness cannot be
+//! proven syntactically (e.g. a bare path) keep the `map_or` form — a
+//! parse-only limitation, not a wrong fix.
 
 use super::helpers::is_postfix_safe;
 use super::uninlined_format_args::post_template_expr_args;
@@ -166,17 +169,18 @@ fn try_map_or(source: &str, m: &ExprMethodCall) -> Option<String> {
         }
         let bool_default = bool_literal(&m.args[0]);
         let mapper_is_bool = closure_body_is_bool(&map.args[0]);
-        if bool_default == Some(true) && mapper_is_bool {
-            // Real clippy's own suggestion here (`map_or(true, f)`) is
-            // re-flagged by `unnecessary_map_or` → `is_none_or`; no single
-            // parse-only step matches clippy, so skip (probe-verified).
-            return None;
-        }
         if bool_default == Some(false) && mapper_is_bool {
-            // Real clippy 1.97 suggests `is_some_and(<f>)` for this shape
-            // (the `map_or` output would be re-flagged by
-            // `unnecessary_map_or`, a default-group lint).
+            // Real clippy 1.93's own suggestion for this shape: the `map_or`
+            // output would be re-flagged by `unnecessary_map_or` (a
+            // default-group lint).
             return Some(format!("{recv}.is_some_and({mapper})"));
+        }
+        if bool_default == Some(true) && mapper_is_bool {
+            // Terminal form of clippy's two-step chain (`map_or(true, f)` →
+            // `is_none_or`); probe-verified lint-clean on 1.93. The old
+            // behavior SKIPPED the shape entirely, leaving the original
+            // `map(f).unwrap_or(true)` — which real clippy still rewrites.
+            return Some(format!("{recv}.is_none_or({mapper})"));
         }
         Some(format!("{recv}.map_or({default}, {mapper})"))
 }
@@ -240,6 +244,10 @@ fn expr_is_bool(e: &Expr) -> bool {
                 | syn::BinOp::Ge(_)
         ),
         Expr::MethodCall(m) => is_bool_method(&m.method),
+        // `matches!(e, p)` evaluates to a bool by definition (post-expansion
+        // it's an `is`-match expression) — found as live residue in katgpt
+        // percepta's `.map(|d| matches!(d.kind, ..)).unwrap_or(true)`.
+        Expr::Macro(mac) => mac.mac.path.is_ident("matches"),
         _ => false,
     }
 }
@@ -249,8 +257,8 @@ fn is_bool_method(name: &syn::Ident) -> bool {
     n.starts_with("is_")
         || matches!(
             n.as_str(),
-            "contains" | "starts_with" | "ends_with" | "any" | "all" | "eq" | "ne" | "lt"
-                | "le" | "gt" | "ge"
+            "contains" | "contains_key" | "starts_with" | "ends_with" | "any" | "all" | "eq"
+                | "ne" | "lt" | "le" | "gt" | "ge"
         )
 }
 
@@ -301,13 +309,13 @@ mod tests {
         assert!(out.is_none(), "filter receiver must not fire: {out:?}");
     }
 
-    // Bool-default guards (Issue 027 probe class, 2026-08-18; real clippy
-    // 1.97 pedantic verified):
-    // - `.map(bool-f).unwrap_or(false)` → clippy suggests `is_some_and(f)`;
-    //   the old `map_or(false, f)` output was re-flagged by the DEFAULT-group
-    //   `unnecessary_map_or` (a new warning where the original had none).
-    // - `.map(bool-f).unwrap_or(true)` → clippy suggests `map_or`, whose
-    //   output is itself flagged → no clean single step; skip.
+    // Bool-default terminal states (Issue 027 probe class + 2026-08-18
+    // evening re-probe on clippy 1.93; live residue in katgpt percepta):
+    // - `.map(bool-f).unwrap_or(false)` → `is_some_and(f)` (the `map_or`
+    //   output is re-flagged by the DEFAULT-group `unnecessary_map_or`);
+    // - `.map(bool-f).unwrap_or(true)` → `is_none_or(f)` — the terminal
+    //   form of clippy's two-step chain, emitted directly (the old skip
+    //   left the original warned shape in place).
     // Array-literal defaults stay on the unwrap_or form (E0308 class,
     // probe-verified 2026-08-18 — see the guard comment in `try_map_or`).
     // The sibling katgpt-rs heal WIP broke on exactly this shape at
@@ -349,11 +357,41 @@ mod tests {
     }
 
     #[test]
-    fn bool_closure_true_default_skipped() {
+    fn bool_closure_true_default_becomes_is_none_or() {
         let input =
             "fn f(x: Option<(bool, bool)>) -> bool { x.map(|s| s.0 || s.1).unwrap_or(true) }";
-        let out = propose_fix("map_unwrap_or", input);
-        assert!(out.is_none(), "bool+true must not fire (no clean fix): {out:?}");
+        let out = propose_fix("map_unwrap_or", input).expect("matched");
+        assert!(
+            out.contains("x.is_none_or(|s| s.0 || s.1)"),
+            "is_none_or not produced: {out}"
+        );
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn contains_key_ref_pattern_closure_becomes_is_some_and() {
+        // Live shape from katgpt percepta scheduler.rs:550 — the ref-pattern
+        // closure `|&op| k.contains_key(&op)` over `Option<&T>`.
+        let input = "fn f(x: Option<u32>, k: std::collections::HashMap<u32, u32>) -> bool { x.map(|&op| k.contains_key(&op)).unwrap_or(false) }";
+        let out = propose_fix("map_unwrap_or", input).expect("matched");
+        assert!(
+            out.contains("x.is_some_and(|&op| k.contains_key(&op))"),
+            "is_some_and not produced: {out}"
+        );
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn matches_macro_closure_true_default_becomes_is_none_or() {
+        // Live shape from katgpt percepta graph/types/mod.rs:1170 —
+        // `.map(|d| matches!(d.kind, DimensionKind::Input)).unwrap_or(true)`.
+        let input = "enum K { Input } fn f(x: Option<u32>) -> bool { x.map(|d| matches!(d, 1..=3)).unwrap_or(true) }";
+        let out = propose_fix("map_unwrap_or", input).expect("matched");
+        assert!(
+            out.contains("x.is_none_or(|d| matches!(d, 1..=3))"),
+            "is_none_or not produced: {out}"
+        );
+        syn::parse_file(&out).expect("re-parses");
     }
 
     #[test]
