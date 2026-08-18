@@ -1,6 +1,6 @@
 # Batch 66 candidate pool — polars kernel idioms (distill verdict)
 
-**Status:** DISTILLED — pending owner decision (the mining batch is the unimplemented delta; plan-first `.plans/011` at batch start)
+**Status:** RECORD (Batch 66 landed 2026-08-19 same day — corpus 69→71, Plan 011; both co-leads ParetoDominant; the float-sum kill + simd-chunk rider executed as adjudicated; GOAT 612/630/664 lib tests, retrieval floors HELD, clippy 0, G-det stable, 0 allocs. Measured numbers: tz-blsr 4.08×@1K → 1.34×@1M (win largest cache-resident, shrinks toward memory-streaming — the pool's 4–20× was the small-N estimate); sortedness 2.98×/2.72× @100K/1M, ANNOTATED regime-split (early-violation data flips it — the filter-count-to-any mirrored-regime class, 15th annotated rule). The B-tier candidates (transmute/funnel/grouping) were NOT evaluated this batch — they remain optional seeds in the ranked table below for a future touch, expected defer.)
 
 ## Source
 

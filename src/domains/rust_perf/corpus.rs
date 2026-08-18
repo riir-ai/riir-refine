@@ -9,9 +9,9 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //! unconditional wins + honestly NotBenchable rules.
 //!
-//! 65 entries across 12 categories (complexity 14, allocation 18, simd 5,
-//! layout 6, iterators 7, concurrency 4, io 1, arithmetic 4, dispatch 2,
-//! caching 2, bevy 1, wasm 1). 59 are benchable; 10 are honestly
+//! 71 entries across 12 categories (complexity 15, allocation 18, simd 7,
+//! layout 6, iterators 8, concurrency 4, io 1, arithmetic 6, dispatch 2,
+//! caching 2, bevy 1, wasm 1). 61 are benchable; 10 are honestly
 //! NotBenchable (8 external-runtime/size-class + 2 metric-mismatch, Issue 014).
 //! Batch 48 (idle-queue item 11, 2026-08-16) added the 8 online-search
 //! candidates (perf-book std-types + iterators chapters): collect-append-to-
@@ -28,7 +28,9 @@
 //! distill) added the 2 CPU-SIMD rules: transposed-weight-register-gemv +
 //! newton-refinement-vs-hardware-transcendental. Batch 64 (2026-08-19,
 //! Research 072 — the ARM Neon / bounds-check online-search pool) added
-//! loop-order-innermost-contiguous + debug-assert-length-hoist.
+//! loop-order-innermost-contiguous + debug-assert-length-hoist. Batch 66
+//! (2026-08-19, Research 073 — the polars kernel-idiom distill) added
+//! sparse-set-bit-iteration-tz-blsr + sortedness-check-branchless-accumulate.
 //!
 //! ## Bench specs (behind `rust_perf_bench`)
 //!
@@ -37,7 +39,7 @@
 //! `run_buggy` / `run_fixed` entry points. The bench validator generates a
 //! temp bin crate from the spec + runs a timing loop at multiple sizes.
 //!
-//! Currently benchable (55/65):
+//! Currently benchable (61/71):
 //! - `o1-lookup` (Vec scan vs HashMap lookup — clear O(n) vs O(1))
 //! - `bsearch-sorted-slice` (linear scan vs binary search — O(n) vs O(log n) on sorted data)
 //! - `dedupe-hashset-vs-vec` (Vec::contains loop vs HashSet collect — O(n²) vs O(n))
@@ -99,8 +101,10 @@
 //! - `newton-refinement-vs-hardware-transcendental` (Newton-refined recip/rsqrt (the GPU fast-math recipe) → hardware single-instruction `fdiv`/`fsqrt` on CPU — Mixed 1.01-1.09x, hardware never loses; Batch 62, annotated)
 //! - `loop-order-innermost-contiguous` (i-j-k nested accumulation with a column-striding inner access → i-k-j reorder so the innermost varies the LAST index — 7.1-13.8x ParetoDominant, grows with n; Batch 64)
 //! - `debug-assert-length-hoist` (`debug_assert!` mentioning `.len()` is erased in release, dropping the constraint bounds-check elision needed → `assert!` — Mixed regime-split 1.13x@1K / 0.67-0.71x@100K stable on aarch64; Batch 64, annotated)
+//! - `sparse-set-bit-iteration-tz-blsr` (64-iteration set-bit scan → trailing_zeros+BLSR, popcount iterations — sparse-mask regime, Batch 66)
+//! - `sortedness-check-branchless-accumulate` (early-exit sortedness validation → branchless `sorted &=` full scan, vectorizes — usually-sorted regime, Batch 66)
 //!
-//! Not benchable (10/69) — honest:
+//! Not benchable (10/71) — honest:
 //! - `layout-reorder` (struct size — deterministic `size_of`, not a runtime
 //!   microbench; the cache-utilization claim needs a specific access pattern)
 //! - `repr-u8-enum` (enum size — deterministic `size_of`, same class as
@@ -1493,6 +1497,48 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: Some(debug_assert_length_hoist_bench_spec()),
         },
+        // ── arithmetic: sparse set-bit iteration — trailing_zeros + BLSR ──
+        // Source: polars kernel idioms (Batch 66, Research 073 —
+        // polars-compute/src/filter/boolean.rs + polars-arrow bitmap
+        // TrueIdxIter). The buggy shape tests ALL 64 bit positions with a
+        // shift+mask each; the fixed loop consumes the least significant
+        // set bit per iteration (trailing_zeros + `m &= m.wrapping_sub(1)`
+        // — the BLSR instruction where available) so it runs popcount(m)
+        // iterations, not 64 — a ~16x iteration cut at 4/64 density. The
+        // compiler cannot derive the tz-loop from the shift-test loop (the
+        // trip count is data-dependent). Both forms emit identical indices.
+        PerfRule {
+            rule_id: "sparse-set-bit-iteration-tz-blsr".to_string(),
+            name: "64-iteration set-bit scan → trailing_zeros + BLSR loop".to_string(),
+            category: "arithmetic".to_string(),
+            buggy_code: "fn sum_set_positions(mask: u64) -> u32 {\n    let mut sum = 0;\n    for i in 0..64 {\n        if (mask >> i) & 1 != 0 {\n            sum += i as u32;\n        }\n    }\n    sum\n}".to_string(),
+            fixed_code: "fn sum_set_positions(mask: u64) -> u32 {\n    let mut sum = 0;\n    let mut m = mask;\n    while m != 0 {\n        let i = m.trailing_zeros(); // TZCNT\n        sum += i;\n        m &= m.wrapping_sub(1); // BLSR: clear least significant set bit\n    }\n    sum\n}".to_string(),
+            context_notes: None,
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(sparse_set_bit_iteration_bench_spec()),
+        },
+        // ── iterators: sortedness early-exit → branchless accumulate ────
+        // Source: polars SortedSlice::is_sorted_ascending (Batch 66,
+        // Research 073 — polars-utils/src/slice.rs: "don't early stop or
+        // branch so it autovectorizes"). The buggy early-exit is the
+        // natural idiom but the per-element branch defeats vectorization;
+        // the accumulate form scans all N as compare+AND and
+        // auto-vectorizes. The mirrored regime of `filter-count-to-any`
+        // (same vectorization mechanism, opposite direction: REMOVING an
+        // early exit buys vectorization when the predicate rarely fires).
+        PerfRule {
+            rule_id: "sortedness-check-branchless-accumulate".to_string(),
+            name: "sortedness early-exit validation → branchless accumulate full scan".to_string(),
+            category: "iterators".to_string(),
+            buggy_code: "fn validate_sorted(vals: &[u64]) -> bool {\n    let mut prev = u64::MIN;\n    for &v in vals {\n        if v < prev {\n            return false; // early exit blocks vectorization\n        }\n        prev = v;\n    }\n    true\n}".to_string(),
+            fixed_code: "fn validate_sorted(vals: &[u64]) -> bool {\n    let mut sorted = true;\n    let mut prev = u64::MIN;\n    for &v in vals {\n        sorted &= prev <= v; // no branch: compare + AND, auto-vectorizes\n        prev = v;\n    }\n    sorted\n}".to_string(),
+            context_notes: Some(
+                "Regime-split (Batch 66 bench, M3 Max aarch64, load-recorded ~4-6): ParetoDominant 2.98x@100K / 2.72x@1M on USUALLY-SORTED data — the early-exit branch never fires but still forces scalar compare+branch per element, while the accumulate form vectorizes (batched compare+AND). On data with an EARLY violation the branchless form is ParetoDominated (it scans all N; the early exit stops at the first violation) — the mirrored regime of `filter-count-to-any`. Suggest only for usually-sorted validation (post-sort invariant checks, monotonic timestamps); prefer the early-exit form when violations are expected."
+                    .to_string(),
+            ),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(sortedness_check_branchless_bench_spec()),
+        },
     ])
 }
 
@@ -1700,6 +1746,17 @@ pub fn run_fixed(input: &Input) {
 }
 
 /// Bench spec for `simd-chunk`: scalar sum vs 4-wide chunked sum.
+///
+/// Batch 66 enhancement note (Research 073 — polars `float_sum.rs`
+/// provenance): for FLOAT sums the mechanism is subtler than plain
+/// auto-vectorization — strict FP forbids reassociation, so the serial
+/// form is a single 3-4-cycle-latency dependency chain LLVM can never
+/// vectorize. The chunked form wins because N independent accumulator
+/// chains (STRIPE=16 in polars) are each legal sequential FP; the
+/// vectorizer interleaves them, and the tree-reduce finisher
+/// (`(v[0]+v[2])+(v[1]+v[3])`, shuffle-friendly) collapses the tail
+/// without re-introducing a long serial chain. The win GROWS with N —
+/// the same mechanism documented for `transposed-weight-register-gemv`.
 #[cfg(feature = "rust_perf_bench")]
 fn simd_chunk_bench_spec() -> BenchSpec {
     BenchSpec {
@@ -4675,6 +4732,40 @@ fn debug_assert_length_hoist_bench_spec() -> BenchSpec {
     }
 }
 
+/// Bench spec for `sparse-set-bit-iteration-tz-blsr`: 64-iteration
+/// shift-test scan vs trailing_zeros+BLSR loop over sparse masks.
+///
+/// ~4/64 set bits per word (the rule's applicable sparse regime —
+/// `0x0101..` selects bit 0 of each byte, each set with p~1/2). The
+/// buggy form always executes 64 shift+test iterations; the fixed form
+/// executes popcount iterations (~4). Both emit identical index sums
+/// (bit-identical G1 by construction). At dense masks the two converge —
+/// the honest regime boundary recorded in the rule's annotation.
+#[cfg(feature = "rust_perf_bench")]
+fn sparse_set_bit_iteration_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![1_000, 10_000, 100_000, 1_000_000],
+        harness: "\nmod buggy {\n    pub fn sum_set_positions(mask: u64) -> u32 {\n        let mut sum = 0;\n        for i in 0..64 {\n            if (mask >> i) & 1 != 0 { sum += i as u32; }\n        }\n        sum\n    }\n}\n\nmod fixed {\n    pub fn sum_set_positions(mask: u64) -> u32 {\n        let mut sum = 0;\n        let mut m = mask;\n        while m != 0 {\n            let i = m.trailing_zeros();\n            sum += i;\n            m &= m.wrapping_sub(1);\n        }\n        sum\n    }\n}\n\npub fn make_input(n: usize) -> Vec<u64> {\n    // ~4/64 set bits per word (sparse regime — the rule's applicable\n    // window): 0x0101.. selects bit 0 of each byte, each set with p~1/2\n    // under the multiplicative hash.\n    (0..n)\n        .map(|i| (i as u64).wrapping_mul(0x9E37_79B9_97F4_A7C1) & 0x0101_0101_0101_0101)\n        .collect()\n}\n\npub fn run_buggy(input: &[u64]) {\n    let input = std::hint::black_box(input);\n    let mut acc = 0u32;\n    for &m in input {\n        acc = acc.wrapping_add(buggy::sum_set_positions(m));\n    }\n    std::hint::black_box(acc);\n}\n\npub fn run_fixed(input: &[u64]) {\n    let input = std::hint::black_box(input);\n    let mut acc = 0u32;\n    for &m in input {\n        acc = acc.wrapping_add(fixed::sum_set_positions(m));\n    }\n    std::hint::black_box(acc);\n}\n".to_string(),
+    }
+}
+
+/// Bench spec for `sortedness-check-branchless-accumulate`: early-exit
+/// branch-per-element validation vs branchless compare+AND accumulate
+/// on USUALLY-SORTED data.
+///
+/// Strictly increasing u64s (the applicable regime — the early-exit
+/// branch never fires, so the buggy form pays scalar compare+branch per
+/// element for nothing; the accumulate form has no exit and vectorizes).
+/// On early-violation data the regime flips (early exit wins) — the
+/// mirrored regime of `filter-count-to-any`, recorded in the annotation.
+#[cfg(feature = "rust_perf_bench")]
+fn sortedness_check_branchless_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![100_000, 1_000_000],
+        harness: "\nmod buggy {\n    pub fn validate_sorted(vals: &[u64]) -> bool {\n        let mut prev = u64::MIN;\n        for &v in vals {\n            if v < prev { return false; }\n            prev = v;\n        }\n        true\n    }\n}\n\nmod fixed {\n    pub fn validate_sorted(vals: &[u64]) -> bool {\n        let mut sorted = true;\n        let mut prev = u64::MIN;\n        for &v in vals {\n            sorted &= prev <= v;\n            prev = v;\n        }\n        sorted\n    }\n}\n\npub fn make_input(n: usize) -> Vec<u64> {\n    // Strictly increasing (usually-sorted regime — the applicable window:\n    // the early-exit branch never fires, so the buggy form pays a scalar\n    // compare+branch per element for nothing).\n    (0..n).map(|i| (i as u64).wrapping_mul(2)).collect()\n}\n\npub fn run_buggy(input: &[u64]) {\n    let input = std::hint::black_box(input);\n    let ok = buggy::validate_sorted(input);\n    std::hint::black_box(ok);\n}\n\npub fn run_fixed(input: &[u64]) {\n    let input = std::hint::black_box(input);\n    let ok = fixed::validate_sorted(input);\n    std::hint::black_box(ok);\n}\n".to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -4690,9 +4781,9 @@ mod tests {
     }
 
     #[test]
-    fn seed_corpus_has_sixty_nine_entries_across_twelve_categories() {
+    fn seed_corpus_has_seventy_one_entries_across_twelve_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 69);
+        assert_eq!(corpus.entries.len(), 71);
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
@@ -4702,12 +4793,13 @@ mod tests {
         // 53's hashmap-with-capacity); complexity has 15 (Batch 48 added
         // hashset-insert-bool-return + vec-insert-front-deque; Batch 64
         // added debug-assert-length-hoist); iterators
-        // has 7 (Batch 48 added three); simd has 7 (Batch 62 added
+        // has 8 (Batch 48 added three; Batch 66 added
+        // sortedness-check-branchless-accumulate); simd has 7 (Batch 62 added
         // transposed-weight-register-gemv; Batch 64 added
         // loop-order-innermost-contiguous); layout has 6 (Batch 53 added
         // soa-hot-field; Batch 61 added usize-index-to-u32) + concurrency
         // has 4 (Issue 014 added the two metric-mismatch rules); arithmetic
-        // has 5 (Batch 53 added powi-vs-powf + distance-sq-no-sqrt; Batch 59
+        // has 6 (Batch 53 added powi-vs-powf + distance-sq-no-sqrt; Batch 59
         // added division-by-invariant-multiplication; Batch 62 added
         // newton-refinement-vs-hardware-transcendental); dispatch has 2
         // (Batch 61 added keyword-map-to-match); caching has 2 (Issue 014
@@ -4912,10 +5004,10 @@ mod tests {
 
     #[cfg(feature = "rust_perf_bench")]
     #[test]
-    fn fifty_nine_rules_have_bench_specs() {
+    fn sixty_one_rules_have_bench_specs() {
         let corpus = build_perf_seed_corpus();
         let with_spec = corpus.entries.iter().filter(|e| e.bench_spec.is_some()).count();
-        assert_eq!(with_spec, 59, "expected 59 benchable rules, got {with_spec}");
+        assert_eq!(with_spec, 61, "expected 61 benchable rules, got {with_spec}");
     }
 
     #[cfg(feature = "rust_perf_bench")]
@@ -4953,10 +5045,12 @@ mod tests {
     /// Batch 53 (Bench 038) added 2 more (powi-vs-powf all-Tie Mixed,
     /// soa-hot-field latency-bound Mixed). Batch 62 added 1 (the
     /// newton-refinement regime-inversion annotation) + Batch 64 added 1
-    /// (debug-assert-length-hoist, the release-erasure class). The other 55
+    /// (debug-assert-length-hoist, the release-erasure class) + Batch 66
+    /// added 1 (sortedness-check-branchless-accumulate, the regime-split
+    /// class — the mirrored regime of filter-count-to-any). The other 56
     /// have `context_notes: None` (unconditional wins or honestly NotBenchable).
     #[test]
-    fn fourteen_annotated_rules_carry_context_notes() {
+    fn fifteen_annotated_rules_carry_context_notes() {
         let corpus = build_perf_seed_corpus();
         let annotated: Vec<&str> = corpus
             .entries
@@ -4964,7 +5058,7 @@ mod tests {
             .filter(|e| e.context_notes.is_some())
             .map(|e| e.rule_id.as_str())
             .collect();
-        assert_eq!(annotated.len(), 14, "expected 14 context-annotated rules");
+        assert_eq!(annotated.len(), 15, "expected 15 context-annotated rules");
         assert!(annotated.contains(&"precompute-table"));
         assert!(annotated.contains(&"papaya-lockfree"));
         assert!(annotated.contains(&"dedupe-hashset-vs-vec"));
@@ -4978,6 +5072,7 @@ mod tests {
         assert!(annotated.contains(&"powi-vs-powf"));
         assert!(annotated.contains(&"soa-hot-field"));
         assert!(annotated.contains(&"newton-refinement-vs-hardware-transcendental"));
+        assert!(annotated.contains(&"sortedness-check-branchless-accumulate"));
         assert!(annotated.contains(&"debug-assert-length-hoist"));
     }
 
@@ -4992,7 +5087,7 @@ mod tests {
             .iter()
             .filter(|e| e.context_notes.is_none())
             .count();
-        assert_eq!(unannotated, 55, "expected 55 unannotated rules (69 - 14 annotated)");
+        assert_eq!(unannotated, 56, "expected 56 unannotated rules (71 - 15 annotated)");
     }
 
     /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -5004,7 +5099,7 @@ mod tests {
         let json = serde_json::to_string(&corpus.entries).unwrap();
         let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
         let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-        assert_eq!(annotated, 14);
+        assert_eq!(annotated, 15);
 
         // Simulate a pre-field snapshot: strip `context_notes` from JSON.
         // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -5016,11 +5111,12 @@ mod tests {
 
     /// Integration: the drafter propagates `context_notes` from `PerfRule`
     /// through `DraftedFix` for the annotated rules, and `None` for the
-    /// unconditional wins. Thirteen annotations: Bench 013 (2 ParetoDominated
+    /// unconditional wins. Fifteen annotations: Bench 013 (2 ParetoDominated
     /// and 2 Mixed), Bench 016 (sort-by-key and copy-from-slice), Issue 014
     /// (2 NotBenchable metric-mismatch), Batch 48 (2 verdict-class),
     /// Batch 53 (Bench 038, 2 verdict-class), Batch 62 (1 regime-class),
-    /// and Batch 64 (1 release-erasure class).
+    /// Batch 64 (1 release-erasure class), and Batch 66 (1 regime-split
+    /// class).
     #[test]
     fn drafter_propagates_context_notes_from_perf_corpus() {
         use crate::domain::HealEntry;
@@ -5029,7 +5125,7 @@ mod tests {
 
         // Filter to the 12 annotated rules.
         let annotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_some()).collect();
-        assert_eq!(annotated.len(), 14, "expected 14 annotated rules");
+        assert_eq!(annotated.len(), 15, "expected 15 annotated rules");
 
         // The HealEntry trait override must agree with the struct field.
         for rule in &annotated {
@@ -5051,7 +5147,7 @@ mod tests {
 
         // The unannotated rules must return None from the trait too.
         let unannotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_none()).collect();
-        assert_eq!(unannotated.len(), 55, "expected 55 unannotated rules");
+        assert_eq!(unannotated.len(), 56, "expected 56 unannotated rules");
         for rule in &unannotated {
             assert!(HealEntry::context_notes(*rule).is_none(), "{} should have no context_notes", rule.rule_id);
         }
