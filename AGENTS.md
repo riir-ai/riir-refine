@@ -1771,14 +1771,67 @@ never use-before-decl) + skip when any stmt in (new()..loop) (re)binds it
 — covers first-bind E0425 + shadowing wrong-length (bomber_17_feedback_goat,
 3 maps). 4 fixtures; 12/12 + 18/18 proposer, 607/607 lib, clippy 0.
 
-**katgpt-rs sweep CORRECTED FINAL state — src/ (root + all 30 member
-crates), root tests/, root benches/, ROOT examples/ (2026-08-19), member
-benches+examples: COMPLETE.** Member-crate `tests/` dirs are NOT yet
-swept (katgpt-core/tests/ alone: 543 edits / 37 files; ~19 more files in
-spectral/attn/transformer/types/etc.) — the next katgpt-rs unit. Remaining
-known surface otherwise: the 2 out-of-class if_same_then_else sites + the
-standing proposer backlog (named-arg-with-rename, second-level macro
-nesting) + M3-deferred backend macOS examples.
+**katgpt-rs member-crate tests/ slice landed 2026-08-19** (katgpt-rs
+`f2265e092`) — **53 files / 787 edits (758 uninlined_format_args + 11
+match_bool + 7 vec-with-capacity + 6 map_unwrap_or + 3 single_match_else +
+2 range_plus_one), net −298 post-fmt; THE katgpt-rs CLIPPY SWEEP IS NOW
+FULLY COMPLETE** (src/ root + all 30 members, root tests/benches/examples,
+member benches/examples, member tests — every surface swept).
+
+**Gate-map corrections (2 enumeration blind-spot classes):** (1) katgpt-core
+carries a ~70-feature `default = [...]` — most [[test]] required-features
+(conformal, karc_forecaster, mag_mining, tilr, clr_weighted, linking_fold,
+best_belief, bom_sampling, committed_field_blend, velocity_field_ensemble...)
+are DEFAULT-ON, so their tests build+run under plain `cargo test -p
+katgpt-core` — the "45 entries ALL gated" prior intel conflated required-
+features with opt-in. Empirical ground truth = the `--no-run` built-target
+list (52 test binaries under default). (2) **The inner `#![cfg]` scan MUST be
+whole-file** — 12 more files gate via `#![cfg(feature)]` sitting at lines
+10-41 AFTER doc headers (kda_backward:16, mla_backward:11, moe_backward:14,
+moe_g1:18, bench_455_qb:41, weaver_real:27, data_probe:10, heterogeneous:14,
+bench_578_avx2:29 all()/target_arch, capacity:31, bench_453:14,
+velocity_uq:36 all()); a `head -60` scan is UNSOUND both directions (missed
+these AND the terminal ate earlier grep output silently — the "0 passed" run
+is the only reliable detector, twice re-confirmed).
+
+**8 validation cycles, all count-identical or same-signature:** A core
+default 24 binaries (7m45s; karc_g1_dh18720 285s + set_attention 76s the
+heavies; data_probe + heterogeneous ran 0 tests under default — empty-cfg
+binaries, compile-only) — COUNT-IDENTICAL; B core 12-feature union 15
+binaries (analytic_lattice, babel_codec, variable_rank_domain_expert,
+selection_propagation, engram_privilege, causal_head_importance,
+heat_kernel_trajectory, sleep_time_anticipation, karc_batched_matvec,
+karc_householder_eig_par, sink_aware_attn,
+velocity_field_ensemble_heterogeneous) — COUNT-IDENTICAL; C attn
+kda_backward,mla_backward; D transformer moe_backward,transformer_moe; E
+spectral quantile_balance_router,manifold_power_iter_router; F speculative
+weaver_runtime; G types ternary_group_scale,plasma_path,sigmoid_margin (debug
++ release); H moka-wasm default (native_puct_winrate 807s — the 13-min
+lesson in action).
+
+**3 pre-existing failures documented (bench_104 precedent, all
+same-signature pre/post):** (1) kda_backward_grad_check
+`gradient_check_multitoken_all_params` — numeric grad-check FAIL at HEAD,
+max relative error **0.036237 BIT-IDENTICAL pre/post** across 70 edits in
+the file (strongest-possible evidence the heal left computation untouched);
+(2) bench_583_scale_hoist_goat `g2_hoisted_vs_folded` — FAILS IN RELEASE TOO
+(its documented mode) — genuine pre-existing break, not mode-lock;
+(3) bench_578_avx2_goat `g2_avx2_vs_scalar_speedup` — debug-fail/release-pass
+(mode-locked, documented `--release` in header; validated green in release
+both sides). All 6 map_or emissions carry INT defaults (no
+unnecessary_map_or risk); vec-with-capacity sites all have in-scope iterables
+(the d0d301a guards held — ZERO compile-gate catches, the first 53-file heal
+with no proposer bug surfaced). Residue 0 (fresh healer dry-run). rustfmt on
+18 fmt-clean-at-HEAD files (35 pre-existing drift scoped out, 0 CRLF);
+post-fmt spot-checks green (6p/4p/1p).
+
+**katgpt-rs sweep TERMINAL state (2026-08-19):** every clippy-class surface
+swept — root src/tests/benches/examples + all 30 member crates'
+src/tests/benches/examples. Remaining known: the 2 out-of-class
+if_same_then_else sites (owner call), the documented divergence backlog
+(named-arg-with-rename ×5+, second-level macro nesting, array-literal
+vec-with-capacity ×4, comment-guard match refusals — healer SAFER than
+clippy), + M3-deferred macOS backend examples.
 
 **Issue 031 (2026-08-17, RESOLVED same day + removed per noise-reduction
 rule) — 3 healer defects from the katgpt-pruners 587-edit heal
