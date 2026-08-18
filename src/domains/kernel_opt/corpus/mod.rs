@@ -1181,6 +1181,30 @@
 //!   handle reads the WRONG buffer (Bench 691 dummy sidecar, fix = real 4-byte
 //!   allocation floor-dividing to zero rows); probe corollary: a benign-case-only
 //!   probe is worse than no probe).
+//! - **Batch 56 (measured-GOAT distillation, riir-ai Issues 719 + 714/720):**
+//!   2 rules, corpus 351 -> 353 (A 81 -> 82, D 64 -> 65) -
+//!   concurrent-context-init-needs-process-wide-lock (D - the
+//!   init-outside-publish-on-success pattern does NOT serialize construction:
+//!   every first-caller that misses the fast path runs the full driver-level
+//!   sequence (Instance/Adapter/Device + server registration) concurrently,
+//!   which wedges NON-DETERMINISTICALLY at the driver level on
+//!   4090/Windows/Vulkan (7-thread race: 4 wedged forever inside
+//!   `request_device`, another run 1/7 inside `init_device`; a parallel test
+//!   suite froze with every worker blocked behind first-call init) AND every
+//!   loser leaks its device + server for process lifetime (no deregistration);
+//!   the cross-path half: multiple constructors each with their OWN cache
+//!   running the SAME sequence need ONE shared process-wide init Mutex with a
+//!   double-checked fast path, poison de-fanged, failure not cached) and
+//!   superseded-format-constructor-live-fields-only (A - a constructor that
+//!   accepts an optional second weight format while unconditionally uploading
+//!   the primary f32 set uploads DEAD WEIGHT (~9.7 GiB device stacking on a
+//!   ~1.4 GiB `Q4_K` set; 14,089 -> ~3,500 MiB peak); the dead-set proof is a
+//!   DISPATCH-SITE audit, never the constructor alone; fix = tiered
+//!   live-fields-only variants (`skipped()` / `norms_only()`) with zero-size
+//!   placeholder TRIPWIRES (accidental bind fails validation loudly), wired
+//!   automatically in the shared constructor; the class shipped twice
+//!   back-to-back (Issue 714 cubecl half-skip, Issue 720 the WGSL `Q4_K`
+//!   constructors) - bit-identical logits, -10.3 GiB device + -2.2 GiB host).
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
@@ -1231,7 +1255,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 351-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 353-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1239,7 +1263,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (81 rules)
+    // A: Memory access patterns (82 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -1325,6 +1349,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "shared-operand-side-pair-batch-index-decomposition",
             "runtime-arg-loop-bound-demotes-arrays-to-local-memory",
             "unpack-loop-indexed-by-container-word",
+            "superseded-format-constructor-live-fields-only",
         ],
     ),
     // B: Compute patterns (52 rules)
@@ -1426,7 +1451,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fuse-indirect-gather-into-dot-consumer",
         ],
     ),
-    // D: Dispatch patterns (64 rules)
+    // D: Dispatch patterns (65 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -1495,6 +1520,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "shared-producer-prefix-extract-once-per-input",
             "phase-split-per-position-data-liveness-row-storage",
             "buffer-length-derived-from-allocation-not-binding",
+            "concurrent-context-init-needs-process-wide-lock",
         ],
     ),
     // E: Parallelism patterns (20 rules)
