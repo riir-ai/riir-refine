@@ -147,7 +147,7 @@ fn scan_expr_for_matches(
 /// recorded — complex destructuring patterns are skipped (Unknown).
 fn fn_param_kinds(sig: &syn::Signature) -> std::collections::HashMap<String, ReceiverKind> {
     let mut out = std::collections::HashMap::new();
-    for arg in sig.inputs.iter() {
+    for arg in &sig.inputs {
         let syn::FnArg::Typed(pt) = arg else { continue };
         let syn::Pat::Ident(id) = &*pt.pat else { continue };
         let kind = param_type_kind(&pt.ty);
@@ -294,6 +294,10 @@ enum ReceiverKind {
 }
 
 fn classify_receiver(recv: &str, params: Option<&std::collections::HashMap<String, ReceiverKind>>) -> ReceiverKind {
+    const OPTION_SHAPES: [&str; 7] = [
+        ".get(", ".find(", ".first(", ".last(", ".pop()", ".next()", ".ok()",
+    ];
+    const RESULT_SHAPES: [&str; 3] = ["env::var(", ".parse(", ".parse::<"];
     // A plain-path receiver typed by an enclosing fn parameter: the parse
     // tree's own type annotation is authoritative (`fn f(x: Option<u8>)`).
     if !recv.contains('.') && !recv.contains('(') {
@@ -302,10 +306,6 @@ fn classify_receiver(recv: &str, params: Option<&std::collections::HashMap<Strin
         }
         return ReceiverKind::Unknown;
     }
-    const OPTION_SHAPES: [&str; 7] = [
-        ".get(", ".find(", ".first(", ".last(", ".pop()", ".next()", ".ok()",
-    ];
-    const RESULT_SHAPES: [&str; 3] = ["env::var(", ".parse(", ".parse::<"];
     let mut best: Option<(usize, ReceiverKind)> = None;
     for shape in OPTION_SHAPES {
         if let Some(pos) = recv.rfind(shape) {
@@ -321,7 +321,7 @@ fn classify_receiver(recv: &str, params: Option<&std::collections::HashMap<Strin
             }
         }
     }
-    best.map(|(_, kind)| kind).unwrap_or(ReceiverKind::Unknown)
+    best.map_or(ReceiverKind::Unknown, |(_, kind)| kind)
 }
 
 /// True for `&[...]` / `&mut [...]` defaults (recursing through parens).
