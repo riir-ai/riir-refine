@@ -188,6 +188,66 @@ on n=4. **T5.3 stays unchecked**, now for a sharper reason: `p_reg > 0` and
 `p_dest > 0` both flip the sign of the promotion arithmetic independently of
 `p_win`.
 
+## Update 2026-08-18 — both next levers BUILT (CPU-only); re-run pending
+
+Both levers below were implemented and their instruments validated. The re-run
+that would convert them into new counts is blocked on an unrelated external
+condition (below), so **the verdict in this document is unchanged**.
+
+**Lever 1 — a reachable-set fixture that actually compiles.** All 9 fixtures were
+replaced with item-level equivalents for the *same 9 lints* and each was verified
+to trip its lint in the verifier's scaffold:
+
+```
+or_fun_call fires=True     large_enum_variant fires=True   too_many_arguments fires=True
+redundant_clone fires=True vec_init_then_push fires=True   manual_strip fires=True
+box_collection fires=True  option_if_let_else fires=True   ptr_arg fires=True
+```
+
+So the scoreable denominator becomes **9/9 instead of 4/9**. Two needed care:
+`redundant_clone` only fires when the clone is genuinely dead
+(`let s = String::from("hi"); let s2 = s.clone(); drop(s2);`), and
+**`box_collection` only fires on a PRIVATE, constructed field** — clippy skips
+`pub` fields because they are public API. The lint names are unchanged, so the
+out-of-corpus premise still holds and arm 0 still measures **9/9 decline**.
+
+**Lever 2 — the semantic-preservation check, which closes route 2.** Implemented
+as `contract_preserved` over `syn`: it compares *contract* identifiers — function
+names, function parameter names, struct/enum names, field names, variant names —
+and fails when the fix drops one.
+
+It deliberately **excludes local `let` bindings**, and that exclusion is what
+makes it usable: deleting a local binding is the *correct* fix for
+`redundant_clone`, so the naive "no identifier may disappear" rule would reject
+correct fixes. Parameters and fields are the item's interface; locals are not.
+
+A destructive edit is counted as **harm, not as a win**. That does not amend the
+pre-registered rule — WIN was always defined as "strictly better than decline",
+and a silent behaviour change never qualified. **Only the detector changed.**
+
+**The detector has its own guard test, on real data** — six cases drawn from the
+actual 2026-08-17 generations, not invented strings: the real destructive edit
+(deleted parameter `f`) must be flagged; the two real fixes (`&Vec<u8>`→`&[u8]`,
+`Box<Vec<u8>>`→`Vec<u8>`) must not; a correct `redundant_clone` fix that drops a
+local must not; dropping a whole function or a struct field must be. This is
+deliberate: the previous instrument was validated on a single positive example
+and silently mis-scored an entire class, so a detector added to catch that gets
+positive *and* negative cases or it repeats the mistake.
+
+`cargo test` (fast arms): **2 passed** — arm 0 at 9/9 decline, detector guard green.
+
+**Why the re-run has not happened yet.** The 27B eval binary
+(`bonsai_clippy_l4_eval`) must be rebuilt, and the katgpt-rs workspace currently
+does not compile: `crates/katgpt-forward/src/step.rs:196` has an uncommitted
+`E0308` (`map_or(&[], |m| m.as_slice())` inferring `&[_; 0]`) belonging to a
+concurrent session. Per the repo's no-touching-sibling-WIP rule it was left
+alone. It is a build-environment blocker, not a result: no GPU is owed, and the
+re-run is a ~10 minute CPU job once the workspace compiles.
+
+(The staged checkpoint and prior binary were also reaped from `/tmp` mid-session;
+the checkpoint has been re-fetched to `~/.cache/t51/` — SHA256 `2c4bd5d1…`,
+identical to the original — so only the binary rebuild is outstanding.)
+
 ## Next lever (not run here)
 
 The scoreable denominator is 4, which is too small to carry a promotion

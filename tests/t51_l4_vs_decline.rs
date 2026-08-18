@@ -92,27 +92,36 @@ use riir_clippy::{
 /// rewrite this gate's fixture. The `corpus.lookup(...).is_empty()` premise is
 /// re-asserted below, so drift is caught loudly instead of assumed away.
 const REACHABLE: &[(&str, &str)] = &[
-    ("or_fun_call", "let x = opt.unwrap_or(expensive());"),
-    ("large_enum_variant", "enum E { A(u8), B([u8; 4096]) }"),
+    (
+        "or_fun_call",
+        "pub fn f(opt: Option<u32>) -> u32 { opt.unwrap_or(expensive()) }\npub fn expensive() -> u32 { 42 }",
+    ),
+    ("large_enum_variant", "pub enum E { A(u8), B([u8; 4096]) }"),
     (
         "too_many_arguments",
-        "fn f(a: u8, b: u8, c: u8, d: u8, e: u8, f: u8, g: u8, h: u8) {}",
+        "pub fn f(a: u8, b: u8, c: u8, d: u8, e: u8, f: u8, g: u8, h: u8) { let _ = (a,b,c,d,e,f,g,h); }",
     ),
-    ("redundant_clone", "let s2 = s.clone(); drop(s2);"),
+    (
+        "redundant_clone",
+        "pub fn f() { let s = String::from(\"hi\"); let s2 = s.clone(); drop(s2); }",
+    ),
     (
         "vec_init_then_push",
-        "let mut v = Vec::new(); v.push(1); v.push(2);",
+        "pub fn f() -> Vec<i32> { let mut v = Vec::new(); v.push(1); v.push(2); v }",
     ),
     (
         "manual_strip",
-        "if s.starts_with(\"ab\") { let t = &s[2..]; }",
+        "pub fn f(s: &str) -> Option<&str> { if s.starts_with(\"ab\") { Some(&s[2..]) } else { None } }",
     ),
-    ("box_collection", "struct S { v: Box<Vec<u8>> }"),
+    (
+        "box_collection",
+        "pub struct S { v: Box<Vec<u8>> }\npub fn mk() -> S { S { v: Box::new(Vec::new()) } }",
+    ),
     (
         "option_if_let_else",
-        "if let Some(x) = o { x + 1 } else { 0 }",
+        "pub fn f(o: Option<u32>) -> u32 { if let Some(x) = o { x + 1 } else { 0 } }",
     ),
-    ("ptr_arg", "fn f(v: &Vec<u8>) -> usize { v.len() }"),
+    ("ptr_arg", "pub fn f(v: &Vec<u8>) -> usize { v.len() }"),
 ];
 
 /// Matches the G1 gate's decode budget so a fix produced here is the same shape
@@ -157,6 +166,93 @@ enum Outcome {
 /// these fragments reference undefined names (`opt`, `s`, `o`), so a wrapper
 /// still would not compile — it would just move the false negative somewhere
 /// less visible.
+/// Identifiers that form an item's **public contract**: function names, function
+/// parameter names, struct/enum names, field names, variant names.
+///
+/// Deliberately EXCLUDES local `let` bindings. Removing a local binding is the
+/// legitimate fix for several lints here (`redundant_clone`'s whole point is to
+/// delete the redundant `let`), so treating a lost `let` as destructive would
+/// reject correct fixes. Parameters and fields are different: they are the
+/// item's interface, and silently dropping one changes behaviour for every
+/// caller.
+fn contract_idents(code: &str) -> std::collections::BTreeSet<String> {
+    use syn::visit::Visit;
+
+    #[derive(Default)]
+    struct V(std::collections::BTreeSet<String>);
+
+    impl<'ast> Visit<'ast> for V {
+        fn visit_signature(&mut self, sig: &'ast syn::Signature) {
+            self.0.insert(format!("fn:{}", sig.ident));
+            for arg in &sig.inputs {
+                if let syn::FnArg::Typed(pt) = arg {
+                    if let syn::Pat::Ident(pi) = &*pt.pat {
+                        // `_`-prefixed params are conventionally throwaway; a fix
+                        // that drops one is not changing meaningful behaviour.
+                        let name = pi.ident.to_string();
+                        if !name.starts_with('_') {
+                            self.0.insert(format!("arg:{}:{}", sig.ident, name));
+                        }
+                    }
+                }
+            }
+            syn::visit::visit_signature(self, sig);
+        }
+        fn visit_field(&mut self, f: &'ast syn::Field) {
+            if let Some(i) = &f.ident {
+                self.0.insert(format!("field:{i}"));
+            }
+            syn::visit::visit_field(self, f);
+        }
+        fn visit_item_struct(&mut self, i: &'ast syn::ItemStruct) {
+            self.0.insert(format!("type:{}", i.ident));
+            syn::visit::visit_item_struct(self, i);
+        }
+        fn visit_item_enum(&mut self, i: &'ast syn::ItemEnum) {
+            self.0.insert(format!("type:{}", i.ident));
+            syn::visit::visit_item_enum(self, i);
+        }
+        fn visit_variant(&mut self, v: &'ast syn::Variant) {
+            self.0.insert(format!("variant:{}", v.ident));
+            syn::visit::visit_variant(self, v);
+        }
+    }
+
+    let mut v = V::default();
+    // Same two-strategy parse the pruner uses, so this sees exactly what the
+    // pruner accepted (`RustAnalyzerPruner::parse_rust` falls back to wrapping
+    // a fragment in `fn _wrap() { .. }`).
+    match syn::parse_file(code) {
+        Ok(f) => v.visit_file(&f),
+        Err(_) => {
+            if let Ok(f) = syn::parse_file(&format!("fn _wrap() {{\n{code}\n}}")) {
+                v.visit_file(&f);
+            }
+        }
+    }
+    v.0
+}
+
+/// **Semantic-preservation check (the second route to a false WIN).**
+///
+/// `RustAnalyzerPruner` checks the output parses; `ClippyVerifier` checks the
+/// lint cleared. **Neither checks that behaviour is preserved**, so a fallback
+/// can "fix" a lint by deleting code and pass every gate in the tree. This ran
+/// live: `too_many_arguments` went `fn f(a..h)` -> `fn f(a,b,c,d,e,g,h)`,
+/// resolving the lint by **deleting parameter `f`**.
+///
+/// That asymmetry is why it is treated as harm rather than a win: a regression
+/// is *caught* (the lint still fires, the caller escalates), a destructive edit
+/// is *silent*.
+///
+/// Returns `false` when the fix drops a contract identifier the input had.
+/// Additions are fine — only losses are destructive.
+fn contract_preserved(buggy: &str, fixed: &str) -> bool {
+    let before = contract_idents(buggy);
+    let after = contract_idents(fixed);
+    before.is_subset(&after)
+}
+
 fn control_fires(verifier: &ClippyVerifier, buggy: &str, lint: &str) -> bool {
     let c = verifier.verify(buggy, lint);
     // `lint_resolved == true` means "lint NOT present". For the control we need
@@ -235,6 +331,54 @@ fn arm0_baseline_declines_on_every_reachable_case() {
     );
 }
 
+/// Guard for the destructive-edit detector, using the ACTUAL generations from
+/// the 2026-08-17 run rather than invented strings.
+///
+/// This exists because the previous instrument (`ClippyVerifier` alone) was
+/// validated on a single positive example and silently mis-scored a whole class.
+/// A detector added to catch that failure gets its own positive AND negative
+/// cases, on real data, or it is just the same mistake with more steps.
+#[test]
+fn contract_detector_separates_real_fixes_from_the_real_destructive_edit() {
+    // NEGATIVE — the destructive edit actually emitted: parameter `f` deleted.
+    let buggy = "pub fn f(a: u8, b: u8, c: u8, d: u8, e: u8, f: u8, g: u8, h: u8) { let _ = (a,b,c,d,e,f,g,h); }";
+    let destructive = "fn f(a: u8, b: u8, c: u8, d: u8, e: u8, g: u8, h: u8) {}";
+    assert!(
+        !contract_preserved(buggy, destructive),
+        "must flag the deleted parameter"
+    );
+
+    // POSITIVE — the two genuine fixes emitted in the same run.
+    assert!(contract_preserved(
+        "pub fn f(v: &Vec<u8>) -> usize { v.len() }",
+        "fn f(v: &[u8]) -> usize { v.len() }"
+    ));
+    assert!(contract_preserved(
+        "pub struct S { v: Box<Vec<u8>> }",
+        "struct S { v: Vec<u8> }"
+    ));
+
+    // POSITIVE — deleting a LOCAL binding is the correct fix for redundant_clone
+    // and must not be flagged. This is the case that rules out the naive
+    // "no identifier may disappear" check.
+    assert!(contract_preserved(
+        "pub fn f() { let s = String::from(\"hi\"); let s2 = s.clone(); drop(s2); }",
+        "pub fn f() { let s = String::from(\"hi\"); drop(s); }"
+    ));
+
+    // NEGATIVE — dropping a whole function is destructive.
+    assert!(!contract_preserved(
+        "pub fn a() {}\npub fn b() {}",
+        "pub fn a() {}"
+    ));
+
+    // NEGATIVE — dropping a struct field is destructive.
+    assert!(!contract_preserved(
+        "pub struct S { x: u8, y: u8 }",
+        "pub struct S { x: u8 }"
+    ));
+}
+
 /// **Arm 1 — L4 on the reachable set.** The measurement T5.1 is blocked on.
 #[test]
 #[ignore = "loads a ~7 GB GGUF and decodes on CPU; run explicitly with --ignored"]
@@ -287,6 +431,7 @@ fn arm1_l4_vs_decline_on_the_reachable_set() {
     }
 
     let (mut wins, mut neutrals, mut regressions) = (0usize, 0usize, 0usize);
+    let mut destructive = 0usize;
     let mut rows: Vec<(String, Outcome, String)> = Vec::new();
 
     for ((lint, buggy), &ok) in REACHABLE.iter().zip(&scoreable) {
@@ -321,13 +466,34 @@ fn arm1_l4_vs_decline_on_the_reachable_set() {
                 // L4 got past the pruner, and the control proved the scaffold can
                 // see this lint. Now the only question that matters: is it right?
                 let noop = r.fixed_code.trim() == buggy.trim();
+                let preserved = contract_preserved(buggy, &r.fixed_code);
                 let v = verifier.verify(&r.fixed_code, lint);
-                match v.ran && v.lint_resolved && !noop {
-                    true => (Outcome::Win, format!("lint resolved: {}", r.fixed_code)),
+                let cleared = v.ran && v.lint_resolved;
+                match (cleared && !noop, preserved) {
+                    (true, true) => (Outcome::Win, format!("lint resolved: {}", r.fixed_code)),
+                    // DESTRUCTIVE: the lint genuinely cleared, but the fix dropped
+                    // a contract identifier. Counted as harm, NOT as a win — the
+                    // pre-registered rule defines WIN as "strictly better than
+                    // decline", and a silent behaviour change never was. Only the
+                    // detector changed here, not the rule.
+                    (true, false) => {
+                        destructive += 1;
+                        let lost: Vec<_> = contract_idents(buggy)
+                            .difference(&contract_idents(&r.fixed_code))
+                            .cloned()
+                            .collect();
+                        (
+                            Outcome::Regression,
+                            format!(
+                                "DESTRUCTIVE — lint cleared but contract broken, lost {lost:?}: {}",
+                                r.fixed_code
+                            ),
+                        )
+                    }
                     // A no-op cannot be a fix. With a valid control it would be
                     // caught by the verifier anyway; labelling it explicitly keeps
                     // "echoed the input" distinguishable from "tried and failed".
-                    false => (
+                    (false, _) => (
                         Outcome::Regression,
                         format!(
                             "SURFACED but unresolved (noop={}, ran={}, present={:?}, err={:?}): {}",
@@ -358,6 +524,9 @@ fn arm1_l4_vs_decline_on_the_reachable_set() {
     println!("[T5.1] WIN        {wins}/{n}  (strictly better than decline)");
     println!("[T5.1] NEUTRAL    {neutrals}/{n}  (identical to decline)");
     println!("[T5.1] REGRESSION {regressions}/{n}  (strictly worse than decline)");
+    println!(
+        "[T5.1]   of which DESTRUCTIVE {destructive}/{n}  (lint cleared, contract broken \u{2014} silent harm)"
+    );
 
     // Pre-registered verdict rule — stated in this file's header BEFORE the run.
     let beats_decline = wins >= 1 && regressions == 0;
