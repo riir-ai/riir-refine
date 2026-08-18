@@ -114,12 +114,16 @@ impl Collector {
 /// every listed macro fires real clippy on inlineable format args;
 /// `unreachable!` is probe-verified SILENT and stays out). Matching is on
 /// the LAST path segment, so `anyhow::ensure!`/`anyhow::bail!` and other
-/// qualified invocations resolve the same as bare names.
+/// qualified invocations resolve the same as bare names. The log family
+/// (`log::info/warn/error/debug/trace`, same-named `tracing` macros) is
+/// template-first like `format!` — real clippy fires on it (probe evidence:
+/// katgpt-spectral `outlier_guard.rs` `log::warn!`/`log::error!` sites); the
+/// tracing `target:`/`parent:` named-arg forms abort via the named-arg guard.
 fn macro_family(path: &Path) -> Option<TemplatePos> {
     use TemplatePos::{First, Second, Third};
     let name = path.segments.last()?.ident.to_string();
     Some(match name.as_str() {
-        "format" | "println" | "print" | "eprintln" | "eprint" | "panic" | "format_args" | "bail" | "anyhow" => First,
+        "format" | "println" | "print" | "eprintln" | "eprint" | "panic" | "format_args" | "bail" | "anyhow" | "info" | "warn" | "error" | "debug" | "trace" => First,
         "assert" | "debug_assert" | "write" | "writeln" | "ensure" => Second,
         "assert_eq" | "assert_ne" | "debug_assert_eq" | "debug_assert_ne" => Third,
         _ => return None,
@@ -833,6 +837,65 @@ mod tests {
         assert!(out.contains("\"bad node {x} failed\""), "{out}");
         assert!(out.contains("anyhow::anyhow!"), "path mangled: {out}");
         assert!(syn::parse_file(&out).is_ok(), "{out}");
+    }
+
+    #[test]
+    fn qualified_log_macros_inlined() {
+        // The log family (`log::info/warn/error/debug/trace`) is template-first
+        // exactly like `format!`. Production shape from katgpt-spectral
+        // outlier_guard.rs (2 live sites stayed healer-silent until the family
+        // table gained the log names — real clippy fires on them).
+        let w = propose_fix(
+            "uninlined_format_args",
+            "fn f(layer_idx: usize, name: &str, ks_d: f32) { log::warn!(\"OutlierGuard: layer {} ({}) flagged with D={:.4}\", layer_idx, name, ks_d); }",
+        )
+        .expect("pattern matched");
+        assert!(
+            w.contains("\"OutlierGuard: layer {layer_idx} ({name}) flagged with D={ks_d:.4}\""),
+            "{w}"
+        );
+        assert!(w.contains("log::warn!"), "path mangled: {w}");
+        assert!(syn::parse_file(&w).is_ok(), "{w}");
+        let e = propose_fix(
+            "uninlined_format_args",
+            "fn f(x: u8) { log::error!(\"bad value {}\", x); }",
+        )
+        .expect("pattern matched");
+        assert!(e.contains("\"bad value {x}\""), "{e}");
+        assert!(e.contains("log::error!"), "path mangled: {e}");
+        assert!(syn::parse_file(&e).is_ok(), "{e}");
+    }
+
+    #[test]
+    fn tracing_named_target_arg_stays_silent() {
+        // `info!(target: "x", "msg {}", v)` — the tracing named-arg prefix is
+        // NOT a plain string literal at the template position, so the whole
+        // invocation aborts (no partial inlining). The log-family extension
+        // must not touch this shape.
+        let out = propose_fix(
+            "uninlined_format_args",
+            "fn f(v: u8) { info!(target: \"my_target\", \"msg {}\", v); }",
+        );
+        assert!(out.is_none(), "tracing named-target form must abort: {out:?}");
+    }
+
+    #[test]
+    fn log_macro_bare_debug_fires() {
+        // Bare (unqualified) log-family names resolve the same — `debug!`
+        // with a string template + ident args is the format shape; a
+        // non-format `debug!(code, "msg")` shape aborts because the template
+        // slot holds an ident, not a string literal.
+        let fires = propose_fix(
+            "uninlined_format_args",
+            "fn f(step: u32) { debug!(\"at step {}\", step); }",
+        )
+        .expect("pattern matched");
+        assert!(fires.contains("\"at step {step}\""), "{fires}");
+        let silent = propose_fix(
+            "uninlined_format_args",
+            "fn f(code: i32) { debug!(code, \"plain message\", ); }",
+        );
+        assert!(silent.is_none(), "ident-first non-format shape must abort: {silent:?}");
     }
 
     #[test]

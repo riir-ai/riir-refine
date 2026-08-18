@@ -1331,8 +1331,34 @@ push used the worktree-rebase-then-push dance (`git push origin
 HEAD:develop` from a temp branch) because the shared checkout's dirty
 sibling WIP blocked in-place rebase.
 
-Remaining sweep territory: src/ ~376 findings in workspace crates + the
-benches/ + examples/ surfaces of the member crates.
+**katgpt-rs crates src/ slice 1 landed 2026-08-18** (katgpt-rs `23c3b7a9a`; the
+log-family proposer fix riir-clippy below): **spectral + dec + kv + attn-match
+src/ — 42 files / 515 edits (507 pass-1 + 8 pass-2), net −256 post-fmt**.
+Fresh full-workspace dry-run sizing first: **429 files / 4115 edits** across
+all katgpt-rs src surfaces (katgpt-core 2775/239 the giant; then spectral 266,
+speculative 139, attn 130, dec 122, kv 118, attn-match 111, root-src 114/35,
+transformer 63, percepta 49, types 42, + a ~340-edit small tail across 16
+crates). **The log-family proposer root-cause fix shipped mid-slice** (found
+as 2 live residue sites): the `uninlined_format_args` macro-family table
+lacked the ENTIRE log family — `log::info/warn/error/debug/trace` (+
+same-named `tracing` macros), template-first like `format!`; real clippy
+fires on them (probe evidence: katgpt-spectral `outlier_guard.rs` `log::warn!`
++ `log::error!` sites). Added `"info"|"warn"|"error"|"debug"|"trace"` to the
+First arm — last-segment matching covers the qualified production spelling;
+the tracing `target:`/`parent:` named-arg forms abort via the
+template-must-be-single-string-literal guard (`template_arg.toks.len() != 1`);
+3 new fixtures (qualified log fires / tracing target: silent / bare debug!
+fires + ident-first non-format shape silent). The extension also widens
+`map_unwrap_or`'s macro-arg descent to log-macro args (same family table).
+Validation: all configs count-identical pre/post — spectral default 85 + AF
+261, dec default 225 + AF 251, kv AF 254, attn-match AF 146; clippy residue 0
+in healed classes all 4 crates; rustfmt on the 34 fmt-clean-at-HEAD files
+(8 carry pre-existing drift, 0 CRLF).
+
+Remaining sweep territory: katgpt-rs src/ — katgpt-core 2775/239 (the giant,
+multi-slice), speculative 139, attn 130, root-src 114/35, transformer 63,
+percepta 49, types 42, + small tail ~340 across 16 crates; + the benches/ +
+examples/ surfaces of the member crates (the 4115 sizing includes them).
 
 **Issue 031 (2026-08-17, RESOLVED same day + removed per noise-reduction
 rule) — 3 healer defects from the katgpt-pruners 587-edit heal
