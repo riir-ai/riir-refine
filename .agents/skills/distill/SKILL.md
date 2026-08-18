@@ -1,0 +1,113 @@
+---
+name: distill
+description: Verdict workflow for evaluating external code sources (GitHub repos, crates, kernel libraries, benchmark suites, perf articles) as mining candidates for riir-clippy's rule corpora — kernel_opt, rust_perf, clippy_lints, and proposed future domains (sec, wasm). Use when the user asks whether a repo/crate is a good distill source or mining candidate, before opening a mining batch on an external source, when deciding which domain a source routes to, or when grading rule candidates and estimating batch yield. Enforces corpus dedup grep, domain routing, decision-content testing, GOAT candidate identification, and honest WIP/provenance caveats.
+---
+
+# Distillation-Source Verdict Workflow — riir-clippy Mining
+
+This skill does for CODE SOURCES what the `research` skill does for papers: a disciplined verdict on whether an external source is worth mining, which domain it feeds, what the rule candidates are, and what will falsify. The unit of value is a **corpus rule** — a named pattern with a bounded fix-space — not a summary of the source.
+
+## When to use
+
+- The user asks "is `<repo/crate>` a good distill source / mining candidate?" (canonical case: raygon-renderer/thermite, 2026-08-18).
+- Before opening any mining batch on a NEW external source (already-approved in-repo mining is the `riir-clippy` skill's workflow, not this one).
+- Deciding which domain a source routes to (the CPU-SIMD-vs-kernel_opt trap).
+- Grading individual rule candidates + estimating realistic batch yield.
+- A new domain is being proposed (sec, wasm, ...) and the source would be its seed.
+
+Do NOT activate for: in-repo hazard audits of already-mined files, proposer bug fixes, clippy heal sweeps, or paper distillation (that is `research`).
+
+## The domains — routing table
+
+| Domain | Corpus | Accepts | Rejects / reroutes |
+|---|---|---|---|
+| `kernel_opt` | GPU kernel rules (`src/domains/kernel_opt/`, corpus COMPLETE for riir-gpu files since Batch 51) | CubeCL/WGSL/CUDA/Metal kernel patterns, host-orchestration around GPU, measured-GOAT distillations of landed fixes | CPU SIMD → `rust_perf`; generic Rust → `rust_perf` |
+| `rust_perf` | CPU hot-path rules (`src/domains/rust_perf/`) | simd, allocation, layout, concurrency, arithmetic, iterators, dispatch, caching, io, bevy, wasm categories | GPU kernels → `kernel_opt` |
+| `clippy_lints` | Structural lint fix patterns | Parse-only provable lint shapes | Perf patterns |
+| Proposed (`sec`, ...) | **DOES NOT EXIST YET** | — | A security-shaped source is NOT mineable today. The verdict may RECOMMEND opening the domain (Proposal + `HealDomain` trait extension per Plan 001), but must state the gap explicitly — never pretend the domain exists. |
+
+**Routing rule of thumb:** CPU SIMD tiering/polyfill libraries → `rust_perf` simd. GPU shader/kernel code → `kernel_opt`. Lint-shaped fix patterns → `clippy_lints`. A source landed a perf fix we can re-measure → measured-GOAT distillation (B49/B52/B54/B55 precedent), any domain.
+
+**Domain-complete state awareness:** the kernel_opt riir-gpu file-mining frontier is CLOSED. Live intake paths are (a) `rust_perf` external sources, (b) measured-GOAT distillations, (c) new-domain proposals. A verdict proposing "mine this GPU repo file-by-file" must check the mining queue snapshot first.
+
+## Pre-flight — MANDATORY before any verdict
+
+1. Read the mining queue snapshot in `riir-clippy/.agents/skills/riir-clippy/SKILL.md` (corpus counts, sibling-blocked files, active frontier).
+2. Grep the target domain's corpus file (`src/domains/<domain>/corpus.rs`) to know the category taxonomy + current rule count.
+3. Internalize the falsification history: coordinator verification kills ~50% of seeds (ambient structure, dedup, wrong regime, unreachable code). Recent batches land 1-3 rules. Yield claims above ~5 rules need extraordinary evidence.
+
+## Source inspection protocol
+
+Parallelize round 1: repo structure fetch (2-3 levels deep) + web search (what is it, crates.io presence, maintenance) + nothing local yet. Round 2 after structure: read `Cargo.toml` + `lib.rs` + the 3-5 files **whose names carry mechanism** (`divider.rs`, `dp.rs`, `policy.rs` — the load-bearing heuristic). Round 3: dedup greps (below).
+
+Inspection checklist:
+
+- **Workspace + release profile** — `opt-level = 3`, `lto`, `codegen-units = 1` in Cargo.toml means they benchmark their code. Good signal, cite it.
+- **Completeness signals** — README presence, `todo!()`/`unimplemented!()` density, `#![allow(unused)]`, commented-out impls. WIP *modules* are not mineable; *completed modules inside a WIP repo* are (thermite: `divider.rs` complete while `thermite-special` was mostly `todo!()`). Grade at MODULE level, not repo level.
+- **Provenance chain** — is it a port of a known technique? Cite BOTH the port and the upstream (thermite divider ← libdivide). The upstream often holds the deeper variant set; if mining the pattern, cite upstream for the math and the repo for the Rust shape.
+- **Maintenance** — stars/last commit matter only for the provenance note, never for the grade. Patterns are timeless; abandoned repos still mine fine.
+- **Unread files** — anything that timed out or wasn't read gets marked "unverified — re-read at mine time" in the verdict. Never grade an unread file.
+
+## Dedup gate — MANDATORY before claiming any candidate is new
+
+For EACH candidate pattern, grep `riir-clippy/src/` under BOTH vocabularies:
+
+- The source's own term (`divider`, `libdivide`, `double pump`, `target_feature`).
+- The corpus's operator-name variant (`invariant multiplication`, `register pairing`, `cpu feature tier`).
+
+Vocabulary translation is load-bearing — corpus concepts ship under rule_ids, not library names (same defense as the research skill's R296 lesson). Zero hits under BOTH vocabularies = passes. Record one line of evidence per pattern in the verdict. A single hit is a LEAD, not coverage — read the hit before calling it a duplicate.
+
+## Decision-content test — the #1 kill reason
+
+Every candidate must be a **named pattern with a bounded fix-space + regime conditions** (when it applies AND when it does not).
+
+- KEEP: two-regime shapes (constant-vs-dynamic divisor, sparse-vs-dense read sets, lane-local-vs-cross-lane ops) — the corpus's favorite.
+- KEEP: placement decisions (fold-at-gather vs fold-at-upload; branchful vs branchfree).
+- KILL: ambient structure — type boilerplate, import organization, macro plumbing, "uses const fn", API surface area.
+- KILL: positive instances of existing rules (the file IS rule N) — that is not a new rule; it may be a hazard filing instead.
+
+## GOAT candidate identification
+
+The verdict MUST name the single strongest benchable candidate and test it against:
+
+1. **Benchable** on an existing validator (rust_perf → perf-bench Pareto validator + exact alloc-count axis; kernel_opt → measured-GOAT distillation shape).
+2. **Exact semantics achievable** — integer math → bit-identical G1 trivially; float → needs a tolerance strategy stated up front.
+3. **Magnitude story** — a mechanism-level cycle/instruction/allocation argument (hardware div 20-40+ cycles vs mul+shift ~5), not "probably faster".
+4. **Deterministic** — same input, same output, no timing-dependent verdicts.
+
+If no candidate passes all four, the source is MARGINAL at best — say so.
+
+## Verdict format — exact output shape, in conversation
+
+1. **Verdict line** — YES / NO / MARGINAL + letter grade (A, B+, B, C).
+2. **Domain routing** — target corpus + category, explicitly naming the tempting WRONG domain (the CPU-SIMD-is-not-kernel_opt trap).
+3. **Ranked candidate table** — pattern | source file | grade | notes. Include the Drop rows (killed candidates) for transparency.
+4. **Yield estimate** — expected rules landing after ~50% coordinator falsification.
+5. **Honest caveats** — WIP status, provenance, maintenance, consumer-base narrowness, unread files.
+6. **Bottom line** — "mine as one batch (next batch number), lead with `<GOAT rule>`" + offer to add to the mining queue.
+
+## Recording the verdict
+
+- **NO / MARGINAL** → conversation only. No files, no queue entry.
+- **YES (grade B or better)** → two artifacts, same commit:
+  1. One line in the mining queue snapshot at `riir-clippy/.agents/skills/riir-clippy/SKILL.md`.
+  2. A `.research/` note in riir-clippy following the repo's research-note shape — `**Status:** DISTILLED — pending owner decision` (the vocabulary is RECORD / DISTILLED / NEGATIVE), born-complete, no checkboxes. Number per `.research/.highwater` monotonic discipline. The note records: source URL, inspection date, provenance chain, ranked table, dedup-grep evidence, caveats, queue slot. Future mining batches cite it.
+
+## Canonical worked example (thermite, 2026-08-18)
+
+User: "is raygon-renderer/thermite a good distill source?" Verdict: **YES, B+, route `rust_perf` NOT kernel_opt.**
+
+- Inspection: no_std portable-SIMD lib, tiered x86 backends (v1/v2/v3 + polyfills), libdivide-derived `divider.rs`, `DoublePump` register pairing, capability-gated approx ops, benched release profile. WIP signals: no README, `todo!()`s in thermite-special.
+- Dedup grep: zero corpus hits for divider / branch-hint / double-pump under both vocabularies → all novel.
+- GOAT: `division-by-invariant-multiplication` — branchful-for-constant vs branchfree-for-dynamic two-regime design; integer → bit-identical G1; 5-10x expected; trivially benchable on the Pareto validator.
+- Ranked: divider A (GOAT) · capability-gated-approx-op B · double-pump B− · input-domain algorithm selection C · branch-hint-cold-fn C · MM_SHUFFLE macros + packed-struct drop.
+- Caveats: WIP repo (mine completed modules only), CPU-SIMD-only domain fit, cite libdivide upstream, `math/policy.rs` unread (timed out — verify at mine time).
+- Yield: 1-3 rules. Record: `.research/` note + queue line, same commit.
+
+## Constraints (non-negotiable)
+
+- Corpus fixtures are ORIGINAL minimal reproductions. Never paste external source verbatim into `buggy_code`/`fixed_code` — license hygiene + the binary-only distribution rule.
+- WIP sources: snapshot/quote at mine time (siblings drift), mine completed modules only.
+- New domains (sec, wasm, ...) require a Proposal + `HealDomain` trait extension before any corpus entry — a verdict may recommend opening one but must not assume it.
+- Large sources: split inspection across 2 subagent lanes by module tree with disjoint scopes (the established 2-lane mining pattern); the coordinator verifies every CRITICAL reachability claim with its own grep (the Research 057 lesson — a subagent's failed grep is not evidence of absence).
+- Commit the queue update + research note in the same unit (idle-loop commit discipline), `feat:`/`docs:` prefix per convention, on `develop`.
