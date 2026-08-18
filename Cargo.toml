@@ -12,7 +12,7 @@ path = "src/lib.rs"
 
 [dependencies]
 # Public substrate: ConstraintPruner trait + ternary SIMD matvec
-katgpt-core = { path = "../katgpt-rs/crates/katgpt-core" }
+katgpt-core = { path = "../katgpt-rs/crates/katgpt-core", features = ["entropic_tilt"] }
 
 # Serialization for corpus freeze/thaw (BLAKE3-committed)
 blake3 = "1"
