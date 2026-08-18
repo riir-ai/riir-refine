@@ -1109,10 +1109,70 @@ with no name the emitter can reference for .len(); extending the proposer
 to bind a temp first is the standing backlog item).
 
 **Final state of the katgpt-rs root tests/ dir: 2 findings remain, both
-the documented vec-with-capacity divergence class.** Remaining sweep
-territory: root benches/ dir 406 findings / 42 files (unclaimed) + src/
-~376 findings in workspace crates + the benches/ + examples/ surfaces of
-the member crates.
+the documented vec-with-capacity divergence class.**
+
+**benches/ sweep landed 2026-08-18** (katgpt-rs `c70669f8`..`0eadbc54`, 10
+commits rebased onto the sibling's TokenPath commit `62e01c1a`) — **the
+root benches/ dir sweep is COMPLETE: 42 files / 406 edits + 4 manual
+fixes** across 7
+cycles (c1 default-compiled 14 files/132; c2 probe/sink/belief 6/48; c3
+sudoku/halt/eigenbasis/ict/delta_mem 5/118; c4 cgsp/eventlog/drift/causal/
+geometry 6/35; c5 quant 1/9; c6 flashmemory 1/18; c7 kimi family 9/46) +
+1 residue-fix commit. **Benches are a different validation surface**:
+harness=false `fn main()` binaries (validation class 9 — exit code +
+normalized output diff, no test-result line). c1 got the full pre/post
+protocol (14 baselines captured pre-heal; 12/14 normalized-identical, 2
+timing-column-padding-only, ALL exit codes identical incl. the 2
+pre-existing failures: fpcg G6 timing gate exit=1 under load + alg-prob
+RLE cached-cumsum panic exit=101 — a REAL pre-existing correctness bug,
+documented per bench_104 precedent). Gated cycles validated post-heal
+(exit + verdict sanity + computation-untouched spot-checks) — justified
+because the edits are output-identical-by-construction (format-arg
+inlining: same spec, same values, positional→named mapping) +
+compile-gated under each cycle's EXACT feature set.
+
+**Two tooling discoveries that change future sweeps:** (1) **`--verify`
+mode writes edits UNCONDITIONALLY** — the `--write` flag only gates the
+non-verify path, so the initial "dry run" (`--fix --verify` WITHOUT
+`--write`) landed the full 406-edit set to disk while reporting "fixed 0"
+(a verify-mode counter quirk); worse, the default-features verify check
+compiled gated benches EMPTY — the exact slice-6 hazard, caught here by
+re-running explicit per-set `cargo check --benches --features F` for all
+6 sets (all clean). Standing rule: NEVER trust `--fix --verify` without
+`--write` as a dry run — it is not one. (2) **Residue scans must filter
+by warning TEXT, not `--> path` alone** — the uninlined warning message
+is "variables can be used directly", NOT the lint name, so the slice-7
+residue-grep pattern (`^warning.*uninlined_format_args`) matched NOTHING
+and produced a false "no residue"; a main-checkout scan was ALSO
+corrupted mid-session by a sibling's broken uncommitted WIP (the kimi
+set failed compiling lodestar.rs → no bench warnings emitted at all) —
+the isolated-worktree re-scan is the only trustworthy surface when
+siblings are active.
+
+**Heal-created pedantic warnings (the Issue-027 class, 3 more sites):**
+`.map(f).unwrap_or(false)` → `.map_or(false, f)` trips clippy 1.95's
+`unnecessary_map_or` (suggests `is_some_and`) when the proposer's
+provably-bool gate can't see through tuple-destructure closures
+(salience ×2) or `matches!` macros (bench_011) — all 3 fixed manually;
+the proposer gap (extend provably-bool to these shapes) is the standing
+backlog. Also 1 missed-site fix: `format!` nested in an if-expression
+argument to `println!` (procrustes:174 — the second-level macro-nesting
+descent gap, same class riir-train slice 10 documented).
+
+**Final state of katgpt-rs root benches/: 2 findings remain** — both the
+named-width-arg divergence class (sudoku_speculate 813/814,
+`println!("║ {:<width$} ║", hero, width = w)` — pre-existing, pedantic-only,
+healer-silent by documented design). Sibling coordination: a live
+TokenPath→TreePath naming WIP broke the shared checkout mid-sweep — all
+c4-c7 validation moved to `git worktree add /tmp/heal8_wt` (the 9 kimi
+benches ran there with `KIMI_K3_MODEL_DIR` pointing at the main repo's
+1.58 GB model.safetensors — the worktrees lack data/ dirs); the final
+push used the worktree-rebase-then-push dance (`git push origin
+HEAD:develop` from a temp branch) because the shared checkout's dirty
+sibling WIP blocked in-place rebase.
+
+Remaining sweep territory: src/ ~376 findings in workspace crates + the
+benches/ + examples/ surfaces of the member crates.
 
 **Issue 031 (2026-08-17, RESOLVED same day + removed per noise-reduction
 rule) — 3 healer defects from the katgpt-pruners 587-edit heal
