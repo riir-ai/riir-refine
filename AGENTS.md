@@ -1038,6 +1038,36 @@ src (kimi/muon/weaver/xhc family ~366); 49 out-of-union src / 208; the
 broken gates need owner fixes, not heals); engine tests/ exceptions
 (ciacot AVOID, bench_401 sibling-caution); engine benches/ unswept.
 
+**riir-train slice 13 landed 2026-08-18** (riir-train `df0ab789`): the
+examples/ heavy remainder MINUS kimi/gemma4 — **16 files / 78 edits**
+(15 examples + shine_d2l_train.rs src, 1 edit) across ONE 8-feature-union
+cycle (shine_training, go_training_arena, weaver, teacher_data_gen,
+strandset_data, gemma2_lora_gpu, gemma2_latent_cot,
+flashmemory_indexer_train). **Pre-existing broken gates found at HEAD +
+repaired** (all riir-ai Issue 701/699 API drift, fixes determined by the
+API's own docs): shine_train_meta_lora + bomber_14
+`compute_baseline_loss` ctx_len arg; go_11_shine_routing ×2
+`route_context_to_expert` Option return (let-else); **shine_d2l_train
+test gate was 7/17-red at HEAD** (Issue 701 H-K hard error on the toy
+config's under-provisioning) — `memory_length: Some(4)` → `None` (derive,
+the sanctioned shape) → 17/17 green. Validation: union examples build
+EXIT 0; shine_d2l 17/17 pre+post; default lib check clean; clippy residue
+0 in healed classes. **CRLF trap (new fmt class):** issue429_logit_drift.rs
+has CRLF line terminators at HEAD — `rustfmt --check` calls it CLEAN but a
+write-mode fmt CONVERTS EOL, exploding the diff to the whole file
+(`@@ -1,574 +1,552 @@`, every line). Caught via diff-stat; recovered with
+`perl -i -pe 's/\n/\r\n/'`. Check EOL before fmt-write: `git show HEAD:f |
+head -c 400 | xxd | grep '0d 0a'`. **Exclusions:** plan320_gemma4_q4k_gpu_train
+(mtime Aug 17 = sibling plan320 territory), issue446_single_layer_lora_poc
+(mtime Aug 18 06:48 = sibling-fresh; its 1 uninlined site stays), weaver.rs
++ weaver/autograd.rs ×5 (sibling Plan-339/340 src), riir-ai gpu-dep
+residue ×4 (not this repo). 2 residual `unnecessary_sort_by` (default-on
+lint, no corpus proposer — the manual_is_multiple_of corpus-gap class).
+**Remaining:** ~1212 by arithmetic (1290 − 78): kimi ×13/202 + gemma4 ×17/56
++ plan320 (sibling-adjacent, re-check at slice time); sibling-WIP src
+~366; 49 out-of-union src / 208; the 7 gpu exclusions; tests/ exceptions;
+benches/ unswept.
+
 **slice 7 landed 2026-08-18** (katgpt-rs `805feb22`..`81ef2631`, 12
 commits) — **the katgpt-rs root tests/ sweep is COMPLETE**: 40 files /
 358 heal edits + 1 manual lint + 3 manual import-gate fixes across 12
