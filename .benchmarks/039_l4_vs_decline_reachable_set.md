@@ -248,6 +248,47 @@ re-run is a ~10 minute CPU job once the workspace compiles.
 the checkpoint has been re-fetched to `~/.cache/t51/` — SHA256 `2c4bd5d1…`,
 identical to the original — so only the binary rebuild is outstanding.)
 
+## Corrections from the n=9 re-run (2026-08-18)
+
+Two claims in the n=4 sections above need qualifying. Both were found by the
+re-run and are recorded here rather than by editing the original text, so the
+sequence of what was believed when stays legible.
+
+### 1. The destructive edit was FIXTURE-DEPENDENT, not a stable adapter property
+
+The n=4 write-up presents `too_many_arguments` deleting parameter `f` as a live
+example of route 2. On the compiling fixture the same lint, same checkpoint, same
+decoder produced a **different failure**: it echoed the input back
+(`pub fn f(a: u8, …, h: u8) { let _ = (a, b, c, d, e, f, g, h); }`), the lint
+still fires, and it scores REGRESSION rather than a destructive win.
+
+So the destructive edit **did not reproduce once the input changed shape**. The
+route-2 hazard is real and the harness must keep detecting it — but this run
+provides no evidence that this adapter reliably produces destructive edits, and
+the n=4 reading ("1 destructive in 4") should not be quoted as a rate. **A single
+observation of a failure mode on a single fixture is an existence proof, not a
+frequency.**
+
+### 2. The contract-preservation detector is validated on a real generation
+
+`redundant_clone` is the case that decides whether the detector's central design
+choice was right. The adapter emitted
+
+```rust
+pub fn f() { let s = String::from("hi"); drop(s); }
+```
+
+which is the **correct** fix — and it works by *deleting the local binding `s2`*.
+A naive "no identifier from the input may disappear" rule would have flagged this
+as destructive and scored a correct fix as harm. The shipped rule excludes local
+`let` bindings and counts only contract identifiers (fn names, parameter names,
+type names, field names, variant names), so it passed the case as a **WIN**.
+
+That is the design decision justified against real data rather than against my own
+reasoning, and it is why the exclusion is not a loophole: parameters and fields
+are the item's interface, locals are implementation detail, and several clippy
+lints are *defined* as "remove this local".
+
 ## Next lever (not run here)
 
 The scoreable denominator is 4, which is too small to carry a promotion
