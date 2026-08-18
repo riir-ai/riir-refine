@@ -2117,9 +2117,11 @@ loop: wrong suggestion → fix the proposer + fixture, never suppress),
 (8) benchmark regression sweep, (9) online unblock search, (10)
 defer-marking sweep, (11) online perf search, (12) paper research via the
 research skill, (13) doc-sync. One unit per cycle, commit + push each
-unit. The cross-session resume state (mining queue snapshot: Batch 32
-targets, sibling-blocked files, corpus count) lives IN the SKILL.md and
-is updated in the same commit as each batch. Triggers: "continue",
+unit. The cross-session resume state (mining queue snapshot: next batch
+targets, sibling-blocked files, corpus count) lives in
+`.distill/001_mining_queue_snapshot.md` (moved out of the skill file
+2026-08-18 after it grew to 104KB and broke Zed's loader) and is
+updated in the same commit as each batch. Triggers: "continue",
 "auto continue", "idle", "nothing to do", "next batch", "Batch 32+".
 **Issue 019 RESOLVED 2026-08-16 (removed per noise-reduction rule; gap
 analysis in git history — `git log -- .issues/019_*.md`):** T6's full

@@ -32,7 +32,7 @@ Do NOT activate for: in-repo hazard audits of already-mined files, proposer bug 
 
 ## Pre-flight — MANDATORY before any verdict
 
-1. Read the mining queue snapshot in `riir-clippy/.agents/skills/riir-clippy/SKILL.md` (corpus counts, sibling-blocked files, active frontier).
+1. Read the mining queue snapshot in `riir-clippy/.distill/001_mining_queue_snapshot.md` (corpus counts, sibling-blocked files, active frontier).
 2. Grep the target domain's corpus file (`src/domains/<domain>/corpus.rs`) to know the category taxonomy + current rule count.
 3. Internalize the falsification history: coordinator verification kills ~50% of seeds (ambient structure, dedup, wrong regime, unreachable code). Recent batches land 1-3 rules. Yield claims above ~5 rules need extraordinary evidence.
 
@@ -90,7 +90,7 @@ If no candidate passes all four, the source is MARGINAL at best — say so.
 
 - **NO / MARGINAL** → conversation only. No files, no queue entry.
 - **YES (grade B or better)** → three artifacts, same commit:
-  1. One line in the mining queue snapshot at `riir-clippy/.agents/skills/riir-clippy/SKILL.md`.
+  1. One line in the mining queue snapshot at `riir-clippy/.distill/001_mining_queue_snapshot.md`.
   2. A `.research/` note in riir-clippy following the repo's research-note shape — `**Status:** DISTILLED — pending owner decision` (the vocabulary is RECORD / DISTILLED / NEGATIVE), born-complete, no checkboxes. Number per `.research/.highwater` monotonic discipline. The note records: source URL, inspection date, provenance chain, ranked table, dedup-grep evidence, caveats, queue slot. Future mining batches cite it.
   3. **The batch plan** — `riir-clippy/.plans/NNN_*.md` (next number per `.plans/.highwater`, re-scan the folder at write time), created BEFORE any corpus edit when the verdict proceeds to a mining batch. `- [ ]` checkbox tasks for: dedup re-verification, entry authoring, standing gates, count pins, GOAT (G1/G2/G3 + retrieval floors), research note, docs/AGENTS/queue-snapshot updates, commit+push. Mark `[x]` on completion, `- [-]` for defers with a reason. The verdict note + queue line cite the plan number. (Adopted 2026-08-18, owner call — the canonical retroactive plan is 006/Batch 60; every batch after it is plan-FIRST.)
 
