@@ -1224,6 +1224,56 @@ fmt-clean-at-HEAD files (15 pre-existing drift, left unfmt'd); no CRLF; lib
 untouched by construction; `--no-default-features` + the default-compiled
 healed example check green post-commit.
 
+**Parallel-session collision on the SAME unit (Issue 665 class, yielded
+cleanly 2026-08-18):** a second idle session sized + healed the identical
+ndb benches/examples unit CONCURRENTLY (deterministic healer, identical
+input → byte-identical 730-edit output; sibling pushed `501288f` mid-cycle).
+Detected at PUSH time via `git diff origin/develop` post-fetch — the delta
+was exactly ONE unique hunk. Yield: `git reset --hard origin/develop` +
+re-apply only the delta. **Standing lesson: `git fetch origin` BEFORE any
+sizing/dry-run on a repo not touched this session** — this clone's reflog
+showed last pull Aug-17 (stale by 8 commits incl. the sibling's slice-1
+heal `5db2e3d`); the initial 77-finding src residue + ~180-proposal dry-run
+were measured against the PRE-slice-1 base and were phantom territory
+(already healed). Real current-tree residue after fetch: 12 findings, all
+classified below.
+
+**match_bool guarded-fallback extension** (riir-clippy `b221ab8` + ndb
+`6685329`): the sibling's 730-edit heal left bench_478:299 unconverted —
+`match under { true => A, false if g => B, false => {} }` — a 3-arm shape
+real clippy 1.93 FIRES on (with no autofix of its own) that the old
+proposer's 2-arm/no-guards gate skipped. Root-cause extension: the
+`try_guarded_fallback` arm (middle arm carries the guard, last arm = EMPTY
+same-polarity fallback → `if s { A } else if g { B }`, the empty arm is the
+implicit else; mirror polarity `if !s` supported; guard-on-first-arm stays
+silent — needs a nested rewrite). 5 new fixtures (production shape + mirror
++ non-empty-last/same-polarity/first-guard negatives); 12/12 match_bool,
+597/597 lib. **NOT the array-literal hazard class**: match_bool restructures
+branch SYNTAX only — the coercion context (typed `let`) is preserved, unlike
+`map_or(&[], f)` which moves the literal into a new inference position.
+
+**ndb terminal residue classification (2026-08-18, current tree):** 7×
+match-in-macro-args (`ed_freeze_gate_poc.rs:895,901,920,924,1034,1038,1042`
+— match_bool inside println!/format! args, the documented macro-nesting
+divergence class, 3rd+ occurrence) + 1× same class (bench_478:372) + 1×
+named-arg-with-rename (merkle.rs:1135→1137 `movement_proof_bytes =
+movement_proof_size`, the standing backlog class) + 1× pre-existing
+unused_assignments (index/mod.rs:397 `best_sim`, not a heal class, slice-1
+already documented) + sense_training.rs HEALED (`b693f64`, 2 uninlined
+incl. the `anyhow::anyhow!` ident site; residue 0 under
+`--features sense_training`; lib 412/0/4 count-identical). **ndb is
+TERMINALLY classified: zero healable residue remains.**
+
+**Additional baseline facts the sibling record lacks (my independent
+pre/post runs):** bench_133 exits 101 BOTH sides (G4 clean-heal 53.677ns →
+52.426ns vs 50ns target — machine-marginal timing FAIL, pre-existing,
+same-verdict). bench_003's WARN→PASS verdict flip root-caused as a COLD-RUN
+artifact, NOT a heal effect: first-execution-after-cold-build measured
+645µs (WARN, above the 500µs soft gate); post-heal warm runs stable
+415-419µs; the ORIGINAL pre-heal source rebuilt + run warm gives the same
+405-443µs PASS band — the two versions are timing-identical. (Method:
+save healed copy → `git checkout -- <file>` → rebuild → run ×2 → restore.)
+
 
 **riir-chain slice 1 landed 2026-08-18** (riir-chain `7421245a` merged `ec610745`, pushed develop) — **root lib src/: 47 files / +243−325 (net −82 post-fmt)**. Composition: 159 uninlined_format_args sites (156 first-pass + 2 `anyhow::anyhow!` + 1 `{self:?}` newly reachable via the proposer fixes below) + 21 match_bool + 17 single_match_else + 14 map_unwrap_or + 1 redundant_pattern_matching + 1 range_plus_one + 1 collapsible_else_if. **Exclusions (sibling 031-T0.1 territory, named by the t01-durability remediation review):** `src/asset_lifecycle/` (4 files / 57 edits — the sibling's freshest code, Aug-18 mtime detector) + `src/wallet/tx_log.rs`. **Branch discipline honored:** branch `fix/clippy-heal-root-lib-src` → 1 commit → rebase onto origin/develop (10 sibling commits landed mid-cycle — 21 files, ZERO src/ overlap, verified before rebase) → `git merge --no-ff` → push. **Validation (all count-identical pre/post):** default lib 320/0/0 (== the pinned `test_gate.sh` suite count); all-features lib **1848/1/2** — the 1 failure is PRE-EXISTING at HEAD (`consensus::rsm_fv::fv_gates::g1_c1_offline_correctness`, panics `rsm_fv.rs:54` assert 0 vs 1000000, `chain_fv`-gated so invisible in default; NOT the heal's — flagged for the owner, plausibly the sibling's 031 durability work); check --all-features clean; clippy residue in-scope = 0 for healed classes except **2 documented comment-guard divergences** (`guard_gossip.rs:231` interior arm comments + `slashing.rs:326` trailing arm comment — the rewrite would displace them, healer stays silent, SAFER than clippy); 32/47 files rustfmt'd (fmt-clean-at-HEAD only, 15 carry pre-existing drift); post-fmt spot-check (slashing module 42/42 green on rebuilt lib). **Gate-map method:** lib.rs cfg walk + per-parent-mod inner-gate walk → 25 distinct feature gates spanned → validated under `--all-features` (a first-class supported config here, unlike feature-union reconstruction). **Healer counter gotcha:** the second `--fix --write` pass reported "74 edits / 7 files" but the git-diff delta was exactly +1 file/+3/−7 (the 3 newly-unblocked sites) — the counter is CUMULATIVE per touched file, not new edits; the git diff is the ground truth.
 
@@ -1234,7 +1284,9 @@ healed example check green post-commit.
 **riir-chain slice 2 landed 2026-08-18** (riir-chain `b225ca70` merged `bb3082cc`, pushed develop) — **tests/ + crates/: 56 files / +190−371 post-rebase** (57 pre-rebase; the chaind node.rs overlap resolved to THEIRS wholesale — the sibling's 032-R3 replaced a heal site with a 40-line reviewed error block, and `--ours` during rebase takes the new base's file, dropping my 6 other format edits there — acceptable, their active file). Composition: 16 root test files (spec_match family, goat_322 family, catchup family, goat_307, bench_014) + 24 chaind src + 6 chaind e2e + 6 chain-sdk (found by the WRITE pass's fixpoint — the dry-run per-file counter UNDER-reports; the sdk wasn't in the dry-run list at all) + 4 wallet-family files. **Gate-map correction (slice-3 lesson re-confirmed): `nd` in test_gate.sh rows is a MARKER COLUMN meaning `--no-default-features`, NOT a feature** — passing it to cargo errors "does not contain this feature: nd". Inner `#![cfg]` gates found BELOW the header in 4 files (settlement_conservation:57, spec_match:17, e2e_wallet_sync:16, e2e_siwr_attest:29) — the [[test]] required-features list alone under-reports. **Validation — 13 cycles, all count-identical or same-signature:** spec_match pins all == (spec_match 8, quorum 6, shard 6, slashing 8, split_key 7, settlement 17); goat_322 g1-g7 all pass; chaind lib default 167 == pin (pre+post rebase); e2e_node_cert 11p + siwr_attest 11p/1i == pins; e2e union same-signature (e2e_browser 0p/2f env-needs-browser, visibility 3p/1f env-port — pre-existing at baseline); wallet lib 128p; sdk goat@auction 5p/2f **same-signature — 2 PRE-EXISTING failures** (`g3_wallet_and_program_operations_interleave` + `g3_only_program_receipts_carry_program_provenance`, panics in UNEDITED lines — noted for the owner); clippy residue 0 in all healed files (union scans per gate; lib residue = excluded asset_lifecycle territory only). **Baseline discipline note: unpinned binaries need PRE-heal runs** — the e2e failures would have been indistinguishable from heal breakage without them. **Residue-scan gotcha re-learned:** uninlined warning TEXT ("variables can be used directly") ≠ lint name — grep the `index.html#lint` URL lines or count `warning:` + `-->` pairs, never the name alone.
 
 **Remaining heal territory:** ndb DONE (slice 1 src+tests `5db2e3d` +
-slice 2 benches/examples `501288f` — 2026-08-18); **riir-chain DONE**
+slice 2 benches/examples `501288f` + terminal residue classification with
+sense_training `b693f64` + the guarded-fallback site `6685329` — 2026-08-18,
+zero healable residue); **riir-chain DONE**
 (slice 1 root lib src/ `7421245a` + slice 2 tests/crates `bb3082cc` —
 2026-08-18; residual = the excluded sibling 031/032 territory
 [asset_lifecycle/, tx_log.rs, platform_gaps.rs, naive_replay.rs,
