@@ -1332,6 +1332,56 @@ Batch-49 trap, riir-ai flavor). Clippy residue 0 in healed classes
 named-arg sites); rustfmt on the 14 fmt-clean-at-HEAD files (3 CRLF in
 riir-agents + 13 pre-existing drift scoped out).
 
+**riir-ai games-quest + games-shared slice landed 2026-08-19** (riir-ai
+`1992bde61` via the worktree dance — origin moved TWICE mid-session (ANE
+726 + 459-T2); cherry-pick applied clean, zero overlap): **56 files / 611
+edits** (quest 426 across 34 files + shared 185 across 24; core-wasm scanned
+clean 0) — quest: uninlined_format_args + single_match/else + match_bool +
+map_unwrap_or + range_plus_one; shared across src/tests/examples incl. every
+gated module. The 2 quest_ternary files (1 edit each) DEFERRED — the
+quest_ternary_adapter gate compiles riir-gpu (active sibling 721 WIP).
+
+**7 validation cycles, all count-identical or same-signature:** quest default
+(lib 179 + 8 binaries), quest 7-feature union (lib 524 + bench_038/285/287/
+349/455/lora binaries), waypoint_vs_tile_astar bench (harness=false, exit+
+criterion verdicts), quest_grammar_demo (exit 0, timing jitter only), shared
+default (560/0/2i + doctests), shared all-features (906/0/2i + quant 26 +
+doctests 14i), zone_expert_demo (byte-identical). 5 pre-existing failures
+same-signature: bench_038 g4 (debug-fail/release-pass mode-locked timing,
+the bench_578 class), bench_285 g1+g2 + bench_287 g2 (the documented
+GOAT-FAILED compression-drafter family), quest_lora t4_1. 1 pre-existing
+needless_range_loop documented (quest_style_bridge:471 — counter drives
+forward-position semantics; real clippy's zip suggestion is an owner call).
+
+**THE HEADLINE — let-chain fold bug found live + root-caused (riir-clippy
+`5d24795`):** the Q2 union compile gate caught `if ((cond) && (let "collect"
+| "gather" = words[0].as_str())) && (let Ok(q) = ...)` — the bounded-fixpoint
+composition single_match → collapsible_if → collapsible_if parenthesized
+let operands, and a parenthesized `let` NEVER parses. The un-parenthesized
+let-chain form is edition-2024-only; the parse-only proposer can't see the
+target's edition → refuse (helpers::contains_let, the map_unwrap_or
+array-literal guard class; real clippy also gates the fold on edition ≥
+2024). Same guard on needless_bool(+assign) (`!(let a = b)` doesn't parse).
+5 fixtures; 612/0 lib. The 3 refused folds in fol_quest applied MANUALLY
+(workspace edition 2024, clippy's own suggestions — the manual-is-multiple-of
+precedent: hand-apply where the proposer legitimately can't see the info).
+
+**COMMIT-SWEEP LESSON (new):** `git add <my-paths>` + `git commit` commits
+the WHOLE INDEX — the sibling had staged riir-poc/lib.rs +
+ci_feature_guard.sh mid-session and my first commit swept them (58 files).
+Caught at the `git show --stat` check; fixed via soft reset + unstage theirs
++ re-commit. Standing guard for shared checkouts: `git diff --cached
+--name-only | grep -v <my-paths>` MUST return empty before commit.
+
+Residue 0 in healed classes (healer dry-run: only the 2 deferred ternary
+files); rustfmt on 20 fmt-clean-at-HEAD files (36 pre-existing drift scoped
+out, 0 CRLF); post-fmt spot-checks count-identical. **Campaign remaining
+(~7.7K edits):** riir-engine 2620/285 (sibling sized src at 174/979, control-
+flow-heavy — their next lane per the mining queue), games-civ 1549/146,
+games 799/87 (2 files sibling WIP), poc 769/64 (ane_t0.rs sibling-active),
+examples 725/75, wasm tail, gpu 1175/163 sibling-adjacent, mmorpg excluded
+until wire_router settles.
+
 **Redundant identical named-arg class shipped** (riir-clippy `73ab2c2`):
 `format!("{x:?}", x = x)` — the named arg EQUALS its ident — is redundant
 under implicit capture; real clippy 1.95's MachineApplicable fix DELETES
