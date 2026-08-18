@@ -139,6 +139,19 @@ fn try_map_or(source: &str, m: &ExprMethodCall) -> Option<String> {
         let recv = src(source, &*map.receiver)?;
         let default = src(source, &m.args[0])?;
         let mapper = src(source, &map.args[0])?;
+        // Array-literal defaults (`&[...]`, incl. `&[]`) must stay on the
+        // `map(f).unwrap_or(&[...])` form: `map_or`'s U unification needs the
+        // CALL SITE to force the type for the unsize coercion `&[T; N] ->
+        // &[T]`. In inference-transparent positions (plain `let`, generic
+        // args) rustc fixes U from the array literal and the closure's slice
+        // return E0308s — probe-verified 2026-08-18: `map_or(&[], |m|
+        // m.as_slice())` AND `map_or(&[1.0], ...)` both fail in `let`
+        // position while both compile context-forced; the original always
+        // compiles. The proposer cannot see call-site context, so skip the
+        // shape entirely (joins the documented we-stay-silent class).
+        if is_array_lit_default(&m.args[0], else_form) {
+            return None;
+        }
         let recv = if is_postfix_safe(&map.receiver) {
             recv
         } else {
@@ -166,6 +179,31 @@ fn try_map_or(source: &str, m: &ExprMethodCall) -> Option<String> {
             return Some(format!("{recv}.is_some_and({mapper})"));
         }
         Some(format!("{recv}.map_or({default}, {mapper})"))
+}
+
+/// True for `&[...]` / `&mut [...]` defaults (recursing through parens).
+/// Casts are safe — `as` ascribes the target type, resolving the coercion
+/// locally.
+fn is_array_lit_ref(e: &Expr) -> bool {
+    match e {
+        Expr::Reference(r) => matches!(&*r.expr, Expr::Array(_)),
+        Expr::Paren(p) => is_array_lit_ref(&p.expr),
+        _ => false,
+    }
+}
+
+/// Array-literal default check across both rewrite forms: direct for
+/// `unwrap_or` (`&[...]`), inside the default closure's body for
+/// `unwrap_or_else` (`|| &[...]`).
+fn is_array_lit_default(arg: &Expr, else_form: bool) -> bool {
+    if else_form {
+        match arg {
+            Expr::Closure(c) => is_array_lit_ref(&c.body),
+            _ => false,
+        }
+    } else {
+        is_array_lit_ref(arg)
+    }
 }
 
 /// `Some(false)`/`Some(true)` for a `false`/`true` literal, else `None`.
@@ -270,6 +308,34 @@ mod tests {
     //   `unnecessary_map_or` (a new warning where the original had none).
     // - `.map(bool-f).unwrap_or(true)` → clippy suggests `map_or`, whose
     //   output is itself flagged → no clean single step; skip.
+    // Array-literal defaults stay on the unwrap_or form (E0308 class,
+    // probe-verified 2026-08-18 — see the guard comment in `try_map_or`).
+    // The sibling katgpt-rs heal WIP broke on exactly this shape at
+    // katgpt-forward/src/step.rs:196 (`map_or(&[], |m| m.as_slice())`).
+    #[test]
+    fn empty_array_lit_default_skipped() {
+        let input =
+            "fn f(m: Vec<Vec<f32>>) -> usize { m.get(1).map(|s| s.as_slice()).unwrap_or(&[]).len() }";
+        let out = propose_fix("map_unwrap_or", input);
+        assert!(out.is_none(), "empty `&[]` default must not fire: {out:?}");
+    }
+
+    #[test]
+    fn nonempty_array_lit_default_skipped() {
+        let input =
+            "fn f(m: Vec<Vec<f32>>) -> usize { m.first().map(|s| s.as_slice()).unwrap_or(&[1.0]).len() }";
+        let out = propose_fix("map_unwrap_or", input);
+        assert!(out.is_none(), "non-empty `&[1.0]` default must not fire: {out:?}");
+    }
+
+    #[test]
+    fn or_else_array_lit_body_skipped() {
+        let input =
+            "fn f(m: Vec<Vec<f32>>) -> usize { m.get(1).map(|s| s.as_slice()).unwrap_or_else(|| &[]).len() }";
+        let out = propose_fix("map_unwrap_or", input);
+        assert!(out.is_none(), "`|| &[]` default-closure body must not fire: {out:?}");
+    }
+
     #[test]
     fn bool_closure_false_default_becomes_is_some_and() {
         let input =
