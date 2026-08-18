@@ -11,7 +11,7 @@
 //!
 //! 65 entries across 12 categories (complexity 14, allocation 18, simd 5,
 //! layout 6, iterators 7, concurrency 4, io 1, arithmetic 4, dispatch 2,
-//! caching 2, bevy 1, wasm 1). 55 are benchable; 10 are honestly
+//! caching 2, bevy 1, wasm 1). 57 are benchable; 10 are honestly
 //! NotBenchable (8 external-runtime/size-class + 2 metric-mismatch, Issue 014).
 //! Batch 48 (idle-queue item 11, 2026-08-16) added the 8 online-search
 //! candidates (perf-book std-types + iterators chapters): collect-append-to-
@@ -24,7 +24,9 @@
 //! division-by-invariant-multiplication (libdivide via the
 //! raygon-renderer/thermite Rust port). Batch 61 (idle-queue item 11,
 //! 2026-08-18) added the 2 oxc-article rules: keyword-map-to-match +
-//! usize-index-to-u32.
+//! usize-index-to-u32. Batch 62 (2026-08-19, Research 070 microGPT-C
+//! distill) added the 2 CPU-SIMD rules: transposed-weight-register-gemv +
+//! newton-refinement-vs-hardware-transcendental.
 //!
 //! ## Bench specs (behind `rust_perf_bench`)
 //!
@@ -91,8 +93,10 @@
 //! - `division-by-invariant-multiplication` (hardware integer div by loop-invariant RUNTIME d → libdivide-style magic mulhi+shift — Batch 59, thermite distill)
 //! - `keyword-map-to-match` (static-keyword HashMap dispatch → plain match on literals — LLVM length-switch, Batch 61)
 //! - `usize-index-to-u32` (16B usize spans → 8B u32 spans — cache density under bandwidth-bound scans, Batch 61)
+//! - `transposed-weight-register-gemv` (row-major per-row dot + horizontal reduce → transposed weights, per-input broadcast FMA into output accumulators — 1.18-6.08x ParetoDominant, Batch 62, microGPT-C distill; the win GROWS at large nin — the scalar accumulator's serial FP chain is the real cost, not the horizontal reduce)
+//! - `newton-refinement-vs-hardware-transcendental` (Newton-refined recip/rsqrt (the GPU fast-math recipe) → hardware single-instruction `fdiv`/`fsqrt` on CPU — Mixed 1.01-1.09x, hardware never loses; Batch 62, annotated)
 //!
-//! Not benchable (10/50) — honest:
+//! Not benchable (10/67) — honest:
 //! - `layout-reorder` (struct size — deterministic `size_of`, not a runtime
 //!   microbench; the cache-utilization claim needs a specific access pattern)
 //! - `repr-u8-enum` (enum size — deterministic `size_of`, same class as
@@ -1347,6 +1351,67 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
             context_notes: None,
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: Some(usize_index_to_u32_bench_spec()),
+        },
+        // ── simd: transposed-weight register GEMV ─────────────────────────────────────
+        // Source: microGPT-C (MIT, Research 070, Batch 62). The row-major
+        // matvec dots every row into ONE scalar accumulator and pays a
+        // horizontal reduction per row (the in-tree `binary.rs`
+        // `vaddvq_f32(acc0)` shape); packing weights transposed once at
+        // weight-freeze lets each input element broadcast and FMA into
+        // output-vector accumulators — zero horizontal reduction, sequential
+        // weight streaming, output registers held across the column loop
+        // (the ryg 2015 transposed-lane Mv analysis). Distinct from the
+        // kernel_opt GPU plane-per-row family (`workgroup-equals-plane-
+        // native-reduction`, `single-plane-sufficient-reduction`): those are
+        // GPU workgroup/shuffle concerns — this is the CPU SIMD register
+        // twin. Architectural (weight storage packs at model-load; per-call
+        // `&[f32]` params cannot pack in place) — suggestion-quality, no
+        // proposer (the `soa-hot-field` class). Tail tiles 16/8/4 rows keep
+        // lanes full at non-multiple nout.
+        PerfRule {
+            rule_id: "transposed-weight-register-gemv".to_string(),
+            name: "Row-major per-row dot + horizontal reduce → transposed weights, per-input broadcast FMA (register GEMV)".to_string(),
+            category: "simd".to_string(),
+            buggy_code: "// Row-major GEMV: each row is a dot product into ONE scalar\nfn matvec(w: &[f32], x: &[f32], y: &mut [f32], nout: usize, nin: usize) {\n    for r in 0..nout {\n        let row = &w[r * nin..(r + 1) * nin];\n        let mut acc = 0.0f32;\n        for c in 0..nin {\n            acc += row[c] * x[c]; // horizontal reduce at the end of EVERY row\n        }\n        y[r] = acc;\n    }\n}".to_string(),
+            fixed_code: "// Transposed (column-major) weights: each input element x[c] broadcasts\n// once and FMAs into the whole output vector — lane-parallel, ZERO\n// horizontal reduction anywhere. Pack weights transposed ONCE at\n// weight-freeze; the pack cost amortizes over every call.\nfn matvec(w_t: &[f32], x: &[f32], y: &mut [f32], nout: usize, nin: usize) {\n    for r in 0..nout { y[r] = 0.0; }\n    for c in 0..nin {\n        let xc = x[c]; // one load, nout lane FMAs\n        let col = &w_t[c * nout..(c + 1) * nout];\n        for r in 0..nout {\n            y[r] += xc * col[r]; // auto-vectorizes: no per-row reduce\n        }\n    }\n}".to_string(),
+            context_notes: None,
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(transposed_weight_register_gemv_bench_spec()),
+        },
+        // ── arithmetic: Newton refinement loses to hardware on CPU ───────────
+        // Source: microGPT-C PERFORMANCE.md dead-ends (Research 070,
+        // Batch 62) — the honest-annotation class (`filter-count-to-any`
+        // precedent): the rule exists to STOP a plausible-looking GPU→CPU
+        // port. On GPU, div/sqrt are multi-cycle → approximate + refine
+        // wins; on CPU they are single-instruction + correctly rounded →
+        // every Newton step is pure extra work (source measured 2-4%
+        // slower on Ryzen 5 5600H). Distinct from
+        // `regularizer-above-noise-floor-coupled-to-damping-cap` (that is
+        // Newton-Schulz ITERATION robustness — different concern). The
+        // relaxed-precision-estimate axis (`rsqrtss` 12-bit / `frecpe`) is
+        // a SEPARATE valid optimization where accuracy can relax — never
+        // suggest replacing precision-required divs.
+        PerfRule {
+            rule_id: "newton-refinement-vs-hardware-transcendental".to_string(),
+            name: "Newton-refined recip/rsqrt (the GPU fast-math recipe) → hardware single-instruction div/sqrt on CPU".to_string(),
+            category: "arithmetic".to_string(),
+            buggy_code: "// GPU-ported fast-math recip + rsqrt: seed + Newton refinement steps.\n// On GPU this wins (div/sqrt are multi-cycle → approx + refine);\n// on CPU the hardware op is single-instruction + correctly rounded,\n// so every refinement step is pure extra work.\nfn fast_inv(x: f32) -> f32 {\n    let r = 1.0 / x; // seed (estimate-tier on GPU)\n    let r = r * (2.0 - x * r); // Newton step 1\n    r * (2.0 - x * r) // Newton step 2\n}\nfn fast_rsqrt(x: f32) -> f32 {\n    let r = 1.0 / x.sqrt();\n    r * (0.5 * (3.0 - x * r * r)) // one Newton refinement\n}".to_string(),
+            fixed_code: "// On CPU, `fdiv`/`fsqrt` are single-instruction and correctly rounded\n// — the refinement chain is pure extra work (measured 2-4% slower\n// than plain division on modern x86/ARM). Use the hardware op directly.\nfn fast_inv(x: f32) -> f32 { 1.0 / x }\nfn fast_rsqrt(x: f32) -> f32 { 1.0 / x.sqrt() }".to_string(),
+            context_notes: Some(
+                "Mixed (Batch 62 bench, M3 Max): hardware `fdiv`/`fsqrt` never \
+                 lose to the refinement chain — 1.09x at 1K, 1.01x at 100K \
+                 (source measured 2-4% on Ryzen 5 5600H). On CPU div/sqrt are \
+                 single-instruction + correctly rounded, so every Newton step is \
+                 pure extra work; the verdict INVERTS on GPU (multi-cycle \
+                 div/sqrt → approximate+refine wins). Suggest the hardware op on \
+                 CPU hot paths; never port GPU fast-math refinement chains. The \
+                 relaxed-precision-estimate axis (12-bit estimate intrinsics) is a \
+                 separate optimization valid ONLY where accuracy can relax — not \
+                 for precision-required divs."
+                .to_string(),
+            ),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(newton_refinement_vs_hardware_bench_spec()),
         },
     ])
 }
@@ -4452,6 +4517,49 @@ pub fn run_fixed(input: &Input) {
     }
 }
 
+/// Bench spec for `transposed-weight-register-gemv`: row-major per-row dot
+/// with its horizontal reduce, vs transposed weights with per-input
+/// broadcast FMA
+/// into output-vector accumulators (the ryg 2015 transposed-lane Mv
+/// analysis; microGPT-C `mv16_blk16v(4)` shape, portable-Rust form).
+/// NOUT fixed at 64 (4 NEON / 2 AVX2 full lanes); `n` sweeps NIN
+/// 16 / 64 / 4096. **Measured (Batch 62, M3 Max): ParetoDominant 1.18x /
+/// 2.09x / 6.08x — the research's "wash at large nin" expectation was
+/// WRONG-DIRECTION**: in strict-FP Rust the row-dot's scalar accumulator is
+/// a serial dependency chain LLVM cannot vectorize without reassociation,
+/// so it degrades FURTHER at large nin (llama.cpp's fine row-major dots use
+/// explicit multi-accumulator SIMD — not what portable scalar code gets).
+/// NOT bit-identical (float sum order changes under transposition) — the
+/// validator's rel-error tolerance covers it (the `distance-sq-no-sqrt`
+/// 1-ulp caveat precedent). `y` is cloned per run (identical alloc count
+/// both sides — the alloc axis compares shapes, not the steady-state
+/// discipline).
+#[cfg(feature = "rust_perf_bench")]
+fn transposed_weight_register_gemv_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![16, 64, 4096],
+        harness: "\nconst NOUT: usize = 64; // 4 NEON vectors / 2 AVX2 vectors of lanes — tile stays full\n\nmod buggy {\n    pub fn matvec(w: &[f32], x: &[f32], y: &mut [f32], nout: usize, nin: usize) {\n        for r in 0..nout {\n            let row = &w[r * nin..(r + 1) * nin];\n            let mut acc = 0.0f32;\n            for c in 0..nin {\n                acc += row[c] * x[c];\n            }\n            y[r] = acc;\n        }\n    }\n}\n\nmod fixed {\n    pub fn matvec(w_t: &[f32], x: &[f32], y: &mut [f32], nout: usize, nin: usize) {\n        for r in 0..nout { y[r] = 0.0; }\n        for c in 0..nin {\n            let xc = x[c];\n            let col = &w_t[c * nout..(c + 1) * nout];\n            for r in 0..nout {\n                y[r] += xc * col[r];\n            }\n        }\n    }\n}\n\npub struct Input { w_row: Vec<f32>, w_col: Vec<f32>, x: Vec<f32>, y: Vec<f32> }\n\npub fn make_input(n: usize) -> Input {\n    let nin = n; // n is the input dimension; NOUT fixed at 64\n    let nout = NOUT;\n    // Same values both layouts — only the layout differs.\n    let vals = |i: usize, j: usize| {\n        let h = (i as u32).wrapping_mul(0x9E37_79B9) ^ (j as u32).wrapping_mul(0x85EB_CA6B);\n        ((h >> 8) as f32) / 16777216.0 - 0.5\n    };\n    let w_row: Vec<f32> = (0..nout).flat_map(|r| (0..nin).map(move |c| vals(r, c))).collect();\n    let w_col: Vec<f32> = (0..nin).flat_map(|c| (0..nout).map(move |r| vals(r, c))).collect();\n    let x: Vec<f32> = (0..nin).map(|c| vals(9999, c)).collect();\n    Input { w_row, w_col, x, y: vec![0.0; nout] }\n}\n\npub fn run_buggy(input: &Input) {\n    let input = std::hint::black_box(input);\n    let nin = input.x.len();\n    buggy::matvec(&input.w_row, &input.x, &mut input.y.clone(), NOUT, nin);\n}\n\npub fn run_fixed(input: &Input) {\n    let input = std::hint::black_box(input);\n    let nin = input.x.len();\n    fixed::matvec(&input.w_col, &input.x, &mut input.y.clone(), NOUT, nin);\n}".to_string(),
+    }
+}
+
+/// Bench spec for `newton-refinement-vs-hardware-transcendental`:
+/// seed + Newton-refined `inv`/`rsqrt` vs the plain hardware ops. On CPU
+/// the hardware op is single-instruction + correctly rounded, so the
+/// refinement steps are pure extra work. **Measured (Batch 62, M3 Max):
+/// Mixed — hardware never loses: 1.09x at 1K, 1.01x at 100K** (source
+/// measured 2-4% on Ryzen 5 5600H; the M3's fdiv/sqrt latency flattens
+/// the gap at 100K where the pipeline hides it). The rule's purpose is
+/// stopping the plausible-looking GPU→CPU fast-math port — the annotation
+/// class (`filter-count-to-any` precedent). Well-conditioned [0.5, 2.0]
+/// inputs — deterministic.
+#[cfg(feature = "rust_perf_bench")]
+fn newton_refinement_vs_hardware_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![1_000, 100_000],
+        harness: "\nmod buggy {\n    pub fn fast_inv(x: f32) -> f32 {\n        let r = 1.0 / x;\n        let r = r * (2.0 - x * r);\n        r * (2.0 - x * r)\n    }\n    pub fn fast_rsqrt(x: f32) -> f32 {\n        let r = 1.0 / x.sqrt();\n        r * (0.5 * (3.0 - x * r * r))\n    }\n}\n\nmod fixed {\n    pub fn fast_inv(x: f32) -> f32 { 1.0 / x }\n    pub fn fast_rsqrt(x: f32) -> f32 { 1.0 / x.sqrt() }\n}\n\npub fn make_input(n: usize) -> Vec<f32> {\n    // Values in [0.5, 2.0]: no inf/nan/underflow in inv or rsqrt —\n    // deterministic, well-conditioned.\n    (0..n)\n        .map(|i| {\n            let h = (i as u32).wrapping_mul(0x9E37_79B9);\n            0.5 + ((h >> 8) as f32) / 8388608.0\n        })\n        .collect()\n}\n\npub fn run_buggy(input: &[f32]) {\n    let input = std::hint::black_box(input);\n    let acc: f32 = input\n        .iter()\n        .map(|&x| buggy::fast_inv(x) + buggy::fast_rsqrt(x))\n        .sum();\n    std::hint::black_box(acc);\n}\n\npub fn run_fixed(input: &[f32]) {\n    let input = std::hint::black_box(input);\n    let acc: f32 = input\n        .iter()\n        .map(|&x| fixed::fast_inv(x) + fixed::fast_rsqrt(x))\n        .sum();\n    std::hint::black_box(acc);\n}".to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -4467,9 +4575,9 @@ mod tests {
     }
 
     #[test]
-    fn seed_corpus_has_sixty_five_entries_across_twelve_categories() {
+    fn seed_corpus_has_sixty_seven_entries_across_twelve_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 65);
+        assert_eq!(corpus.entries.len(), 67);
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
@@ -4479,10 +4587,12 @@ mod tests {
         // 53's hashmap-with-capacity); complexity has 14 (Batch 48 added
         // hashset-insert-bool-return + vec-insert-front-deque); iterators
         // has 7 (Batch 48 added three); layout has 6 (Batch 53 added
-        // soa-hot-field; Batch 61 added usize-index-to-u32) + concurrency
+        // soa-hot-field; Batch 61 added usize-index-to-u32); simd has 6
+        // (Batch 62 added transposed-weight-register-gemv) + concurrency
         // has 4 (Issue 014 added the two metric-mismatch rules); arithmetic
-        // has 4 (Batch 53 added powi-vs-powf + distance-sq-no-sqrt; Batch 59
-        // added division-by-invariant-multiplication); dispatch has 2
+        // has 5 (Batch 53 added powi-vs-powf + distance-sq-no-sqrt; Batch 59
+        // added division-by-invariant-multiplication; Batch 62 added
+        // newton-refinement-vs-hardware-transcendental); dispatch has 2
         // (Batch 61 added keyword-map-to-match); caching has 2 (Issue 014
         // added regex-hoist-lazylock); io, bevy, wasm have 1 each.
         assert_eq!(categories.len(), 12);
@@ -4496,11 +4606,13 @@ mod tests {
     /// `rust_perf_bench` a substring canary additionally pins the harness
     /// string to the same construction lines so the two cannot drift.
     #[test]
+    #[allow(clippy::too_many_lines)] // exhaustive gate: the u32/u64 twins + shared edge data belong together
     fn division_magic_matches_hardware_div_exhaustive_low_d() {
         struct FastDivU32 { magic: u32, shift: u32, add: bool }
+        #[allow(clippy::cast_possible_truncation)] // libdivide magic: the high-word extraction + magic wrap ARE the algorithm
         impl FastDivU32 {
             fn new(d: u32) -> Self {
-                let l = 31 - d.leading_zeros();
+                let l = d.ilog2();
                 if d.is_power_of_two() { return Self { magic: 0, shift: l, add: false }; }
                 let k = 1u64 << l;
                 let base = (k << 32) / u64::from(d);
@@ -4521,9 +4633,10 @@ mod tests {
             }
         }
         struct FastDivU64 { magic: u64, shift: u32, add: bool }
+        #[allow(clippy::cast_possible_truncation)] // libdivide magic: the high-word extraction + magic wrap ARE the algorithm
         impl FastDivU64 {
             fn new(d: u64) -> Self {
-                let l = 63 - d.leading_zeros();
+                let l = d.ilog2();
                 if d.is_power_of_two() { return Self { magic: 0, shift: l, add: false }; }
                 let k = 1u128 << l;
                 let base = (k << 64) / u128::from(d);
@@ -4547,17 +4660,17 @@ mod tests {
         struct Lcg(u64);
         impl Lcg {
             fn next_u64(&mut self) -> u64 {
-                self.0 = self.0.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                self.0 = self.0.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695_040_888_963_407);
                 self.0
             }
             fn next_u32(&mut self) -> u32 { (self.next_u64() >> 33) as u32 }
         }
-        let mut rng = Lcg(0x2545F4914F6CDD1D);
+        let mut rng = Lcg(0x2545_F491_4F6C_DD1D);
 
         // Exhaustive low divisors (all u32 d in 1..=4096, all u64 d in 1..=257)
         for d in 1u32..=4096 {
             let fd = FastDivU32::new(d);
-            let mut probe = |x: u32| {
+            let probe = |x: u32| {
                 assert_eq!(fd.div(x), x / d, "u32 mismatch at d={d} x={x}");
             };
             probe(0); probe(1); probe(d - 1); probe(d); probe(d + 1);
@@ -4566,7 +4679,7 @@ mod tests {
         }
         for d in 1u64..=257 {
             let fd = FastDivU64::new(d);
-            let mut probe = |x: u64| {
+            let probe = |x: u64| {
                 assert_eq!(fd.div(x), x / d, "u64 mismatch at d={d} x={x}");
             };
             probe(0); probe(1); probe(d - 1); probe(d); probe(d + 1);
@@ -4578,20 +4691,20 @@ mod tests {
         // Selected large/edge divisors: powers of two, primes near 2^31,
         // 2^32, 2^63, 2^64, and values that exercise the ADD branch + the
         // sentinel boundary (magic wrapping near 0).
-        let edge32: &[u32] = &[65535, 65536, 65537, 1000003, 2147483647, 2147483648, 3000000001, 4294967291, 4294967295, 3, 5, 7, 9, 11];
+        let edge32: &[u32] = &[65_535, 65_536, 65_537, 1_000_003, 2_147_483_647, 2_147_483_648, 3_000_000_001, 4_294_967_291, 4_294_967_295, 3, 5, 7, 9, 11];
         for &d in edge32 {
             let fd = FastDivU32::new(d);
-            let mut probe = |x: u32| {
+            let probe = |x: u32| {
                 assert_eq!(fd.div(x), x / d, "u32 edge mismatch at d={d} x={x}");
             };
             probe(0); probe(1); probe(d - 1); probe(d); probe(d.saturating_add(1));
             probe(u32::MAX - 1); probe(u32::MAX);
             for _ in 0..16 { probe(rng.next_u32()); }
         }
-        let edge64: &[u64] = &[3, 5, 7, 9, 11, 65537, 1000003, 4294967291, 4294967296, 4294967311, 9223372036854775783, 9223372036854775808, 9223372036854775809, 18446744073709551557, u64::MAX - 1, u64::MAX];
+        let edge64: &[u64] = &[3, 5, 7, 9, 11, 65_537, 1_000_003, 4_294_967_291, 4_294_967_296, 4_294_967_311, 9_223_372_036_854_775_783, 9_223_372_036_854_775_808, 9_223_372_036_854_775_809, 18_446_744_073_709_551_557, u64::MAX - 1, u64::MAX];
         for &d in edge64 {
             let fd = FastDivU64::new(d);
-            let mut probe = |x: u64| {
+            let probe = |x: u64| {
                 assert_eq!(fd.div(x), x / d, "u64 edge mismatch at d={d} x={x}");
             };
             probe(0); probe(1); probe(d - 1); probe(d); probe(d.saturating_add(1));
@@ -4682,10 +4795,10 @@ mod tests {
 
     #[cfg(feature = "rust_perf_bench")]
     #[test]
-    fn fifty_three_rules_have_bench_specs() {
+    fn fifty_seven_rules_have_bench_specs() {
         let corpus = build_perf_seed_corpus();
         let with_spec = corpus.entries.iter().filter(|e| e.bench_spec.is_some()).count();
-        assert_eq!(with_spec, 53, "expected 53 benchable rules, got {with_spec}");
+        assert_eq!(with_spec, 57, "expected 57 benchable rules, got {with_spec}");
     }
 
     #[cfg(feature = "rust_perf_bench")]
@@ -4721,11 +4834,11 @@ mod tests {
     /// bounded-channel-backpressure). Batch 48 added 2 verdict-class rules
     /// (filter-count-to-any ParetoDominated, iter-copied-deref-map Mixed).
     /// Batch 53 (Bench 038) added 2 more (powi-vs-powf all-Tie Mixed,
-    /// soa-hot-field latency-bound Mixed). Batch 61's 2 oxc rules measured
-    /// ParetoDominant (5.2-5.6× + 1.8-2.0×) — no annotations. The other 53
+    /// soa-hot-field latency-bound Mixed). Batch 62 added 1 (the
+    /// newton-refinement regime-inversion annotation). The other 54
     /// have `context_notes: None` (unconditional wins or honestly NotBenchable).
     #[test]
-    fn twelve_annotated_rules_carry_context_notes() {
+    fn thirteen_annotated_rules_carry_context_notes() {
         let corpus = build_perf_seed_corpus();
         let annotated: Vec<&str> = corpus
             .entries
@@ -4733,7 +4846,7 @@ mod tests {
             .filter(|e| e.context_notes.is_some())
             .map(|e| e.rule_id.as_str())
             .collect();
-        assert_eq!(annotated.len(), 12, "expected 12 context-annotated rules");
+        assert_eq!(annotated.len(), 13, "expected 13 context-annotated rules");
         assert!(annotated.contains(&"precompute-table"));
         assert!(annotated.contains(&"papaya-lockfree"));
         assert!(annotated.contains(&"dedupe-hashset-vs-vec"));
@@ -4746,6 +4859,7 @@ mod tests {
         assert!(annotated.contains(&"iter-copied-deref-map"));
         assert!(annotated.contains(&"powi-vs-powf"));
         assert!(annotated.contains(&"soa-hot-field"));
+        assert!(annotated.contains(&"newton-refinement-vs-hardware-transcendental"));
     }
 
     /// The non-annotated rules (ParetoDominant + honestly NotBenchable) must
@@ -4759,7 +4873,7 @@ mod tests {
             .iter()
             .filter(|e| e.context_notes.is_none())
             .count();
-        assert_eq!(unannotated, 53, "expected 53 unannotated rules (65 - 12 annotated)");
+        assert_eq!(unannotated, 54, "expected 54 unannotated rules (67 - 13 annotated)");
     }
 
     /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -4771,7 +4885,7 @@ mod tests {
         let json = serde_json::to_string(&corpus.entries).unwrap();
         let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
         let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-        assert_eq!(annotated, 12);
+        assert_eq!(annotated, 13);
 
         // Simulate a pre-field snapshot: strip `context_notes` from JSON.
         // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -4783,10 +4897,10 @@ mod tests {
 
     /// Integration: the drafter propagates `context_notes` from `PerfRule`
     /// through `DraftedFix` for the annotated rules, and `None` for the
-    /// unconditional wins. Twelve annotations: Bench 013 (2 ParetoDominated
+    /// unconditional wins. Thirteen annotations: Bench 013 (2 ParetoDominated
     /// and 2 Mixed), Bench 016 (sort-by-key and copy-from-slice), Issue 014
-    /// (2 NotBenchable metric-mismatch), Batch 48 (2 verdict-class), and
-    /// Batch 53 (Bench 038, 2 verdict-class).
+    /// (2 NotBenchable metric-mismatch), Batch 48 (2 verdict-class),
+    /// Batch 53 (Bench 038, 2 verdict-class), and Batch 62 (1 regime-class).
     #[test]
     fn drafter_propagates_context_notes_from_perf_corpus() {
         use crate::domain::HealEntry;
@@ -4795,7 +4909,7 @@ mod tests {
 
         // Filter to the 12 annotated rules.
         let annotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_some()).collect();
-        assert_eq!(annotated.len(), 12, "expected 12 annotated rules");
+        assert_eq!(annotated.len(), 13, "expected 13 annotated rules");
 
         // The HealEntry trait override must agree with the struct field.
         for rule in &annotated {
@@ -4817,7 +4931,7 @@ mod tests {
 
         // The unannotated rules must return None from the trait too.
         let unannotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_none()).collect();
-        assert_eq!(unannotated.len(), 53, "expected 53 unannotated rules");
+        assert_eq!(unannotated.len(), 54, "expected 54 unannotated rules");
         for rule in &unannotated {
             assert!(HealEntry::context_notes(*rule).is_none(), "{} should have no context_notes", rule.rule_id);
         }
