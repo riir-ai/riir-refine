@@ -14,7 +14,7 @@
 //! outer-first overlap rule drops the nested edit; the bounded fixpoint
 //! re-runs).
 
-use super::helpers::needs_logic_parens;
+use super::helpers::{contains_let, needs_logic_parens};
 use super::{edit, src, SourceEdit};
 use syn::spanned::Spanned;
 use syn::visit::Visit;
@@ -51,6 +51,16 @@ impl Collector<'_> {
         };
         if inner.else_branch.is_some() || !inner.attrs.is_empty() {
             return None; // inner else has nowhere to go in the merge
+        }
+        // Let-chain fold guard (found live on riir-ai fol_quest.rs:387): the
+        // fixpoint composition single_match -> collapsible_if -> collapsible_if
+        // produced `if (c) && (let a = b)` — a parenthesized `let` never parses,
+        // and the un-parenthesized let-chain form is edition-2024-only (the
+        // parse-only proposer can't see the target edition). Refuse when either
+        // condition contains a `let`; real clippy also gates this fold on
+        // edition >= 2024. The documented we-stay-silent divergence class.
+        if contains_let(&i.cond) || contains_let(&inner.cond) {
+            return None;
         }
         // Issue 027: real clippy skips when a comment would be displaced by
         // the merge — empirically, a comment between the outer block's open
@@ -155,5 +165,35 @@ mod tests {
         let out = propose_fix("collapsible_if", input).expect("matched");
         assert!(out.contains("if a && b {"), "{out}");
         syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn let_inner_condition_stays_silent() {
+        // Found live on riir-ai fol_quest.rs:387 (quest+shared slice): the
+        // fixpoint composition single_match -> collapsible_if emitted
+        // `if c && (let a = b)` — a parenthesized `let` never parses. The
+        // un-parenthesized let-chain is edition-2024-only; parse-only
+        // proposers can't see the target edition → refuse.
+        let input = "fn f(a: bool, o: Option<i32>) { if a { if let Some(v) = o { work(v); } } }";
+        let out = propose_fix("collapsible_if", input);
+        assert!(out.is_none(), "inner let condition must block: {out:?}");
+    }
+
+    #[test]
+    fn let_outer_condition_stays_silent() {
+        // No comment in this one — isolates the let guard from the Issue 027
+        // comment guard (the fixture above coincidentally overlaps).
+        let input = "fn f(o: Option<i32>) { if let Some(v) = o { if v > 0 { work(); } } }";
+        let out = propose_fix("collapsible_if", input);
+        assert!(out.is_none(), "outer let condition must block: {out:?}");
+    }
+
+    #[test]
+    fn let_chain_pair_stays_silent() {
+        // The double-fold shape (both conditions are lets) — the exact
+        // second-pass composition from the fol_quest incident.
+        let input = "fn f(o: Option<i32>, r: Result<u32, ()>) { if let Some(v) = o { if let Ok(q) = r { work(v, q); } } }";
+        let out = propose_fix("collapsible_if", input);
+        assert!(out.is_none(), "let/let pair must block: {out:?}");
     }
 }

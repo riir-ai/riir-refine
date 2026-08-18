@@ -15,7 +15,7 @@
 //! statement requires one (when the source form ends with a stray `;`, it
 //! sits inside the statement span and is swallowed with it).
 
-use super::helpers::{bool_lit, needs_logic_parens};
+use super::helpers::{bool_lit, contains_let, needs_logic_parens};
 use super::{edit, src, SourceEdit};
 use syn::visit::Visit;
 use syn::{Expr, ExprAssign, ExprIf, File, Stmt};
@@ -54,6 +54,12 @@ impl Collector<'_> {
         let Some(else_lhs) = src(self.source, &*else_assign.left) else { return };
         // Same LHS, differing literals — otherwise this is not the lint.
         if then_lhs != else_lhs || then_value == else_value {
+            return;
+        }
+        // A `let` condition has no expression-position form: `!(let a = b)`
+        // does not parse and a bare `let` statement is not an expression.
+        // Edition-blind guard (see helpers::contains_let).
+        if contains_let(&i.cond) {
             return;
         }
         let Some(cond) = src(self.source, &i.cond) else { return };
@@ -156,5 +162,15 @@ mod tests {
         let input = "fn f(x: &mut bool, c: bool) { if c { *x = true; } else { *x = true; } }";
         let out = propose_fix("needless_bool_assign", input);
         assert!(out.is_none(), "constant arms must not fire: {out:?}");
+    }
+
+    #[test]
+    fn let_cond_stays_silent() {
+        // A `let` condition has no expression-position form (`!(let a = b)`
+        // does not parse). Edition-blind guard class (helpers::contains_let).
+        let input =
+            "fn f(x: &mut bool, o: Option<i32>) { if let Some(v) = o { *x = true; } else { *x = false; } }";
+        let out = propose_fix("needless_bool_assign", input);
+        assert!(out.is_none(), "let condition must not fire: {out:?}");
     }
 }

@@ -39,6 +39,29 @@ pub(crate) fn needs_logic_parens(e: &Expr) -> bool {
     !is_postfix_safe(e)
 }
 
+/// Does the expression contain a `let` condition anywhere (directly or in
+/// `&&`/paren operands)? Rewrites that move such a condition into `&&`-join
+/// or negation position are unrepresentable: `x && (let a = b)` and
+/// `!(let a = b)` do not parse (a parenthesized `let` is never valid Rust),
+/// and the un-parenthesized let-chain form is edition-2024-only — a
+/// parse-only proposer cannot see the target crate's edition. Proposers
+/// refuse instead (the `map_unwrap_or` array-literal guard class: our output
+/// must compile on every edition; real clippy gates the let-chain fold on
+/// edition >= 2024).
+pub(crate) fn contains_let(e: &Expr) -> bool {
+    struct Seeker {
+        found: bool,
+    }
+    impl<'ast> syn::visit::Visit<'ast> for Seeker {
+        fn visit_expr_let(&mut self, _i: &'ast syn::ExprLet) {
+            self.found = true;
+        }
+    }
+    let mut s = Seeker { found: false };
+    syn::visit::Visit::visit_expr(&mut s, e);
+    s.found
+}
+
 /// Side-effect-free expression whitelist — for rewrites that move an
 /// expression from a lazily-evaluated position (match arm, closure body)
 /// into an eagerly-evaluated one (argument position). Paths, literals,

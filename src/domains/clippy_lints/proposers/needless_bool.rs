@@ -16,7 +16,7 @@
 //! seen — so each if RETRACTS any whole-span edit made on its direct
 //! else-child after the fact.
 
-use super::helpers::{bool_lit, needs_logic_parens};
+use super::helpers::{bool_lit, contains_let, needs_logic_parens};
 use super::{edit, src, SourceEdit};
 use syn::spanned::Spanned;
 use syn::visit::Visit;
@@ -58,6 +58,12 @@ impl Collector<'_> {
         let else_bool = single_bool_lit(&eb.block)?;
         if then_bool == else_bool {
             return None; // constant arms — a different rewrite
+        }
+        // A `let` condition has no expression-position form: `!(let a = b)`
+        // does not parse and a bare `let` statement is not an expression.
+        // Edition-blind guard (see helpers::contains_let).
+        if contains_let(&i.cond) {
+            return None;
         }
         let cond = src(self.source, &i.cond)?;
         Some(match then_bool {
@@ -137,5 +143,15 @@ mod tests {
             "fn f(a: bool, b: bool) -> bool { if a { true } else if b { false } else { true } }";
         let out = propose_fix("needless_bool", input);
         assert!(out.is_none(), "else-if chain member must not fire: {out:?}");
+    }
+
+    #[test]
+    fn let_cond_stays_silent() {
+        // A `let` condition has no expression-position form (`!(let a = b)`
+        // does not parse; a bare `let` statement is not an expression).
+        // Edition-blind guard class (see helpers::contains_let).
+        let input = "fn f(o: Option<i32>) -> bool { if let Some(v) = o { true } else { false } }";
+        let out = propose_fix("needless_bool", input);
+        assert!(out.is_none(), "let condition must not fire: {out:?}");
     }
 }
