@@ -1291,7 +1291,44 @@ zero healable residue); **riir-chain DONE**
 2026-08-18; residual = the excluded sibling 031/032 territory
 [asset_lifecycle/, tx_log.rs, platform_gaps.rs, naive_replay.rs,
 e2e_replay_recovery.rs, wallet_store_crash_atomicity] — re-dry-run when
-their plans close).
+their plans close); **riir-ai small-crates slice OPENED the riir-ai
+campaign** (see below).
+
+**riir-ai small-crates slice landed 2026-08-18** (riir-ai `883d51825` via
+the worktree dance — the sibling's live WIP on ffi/gpu/games/721 blocked
+in-place rebase; cherry-pick from `/tmp/ai_wt` onto origin/develop, ZERO
+overlap with their 5 mid-cycle commits; clone state restored per the
+discipline: update-ref + reset --mixed + checkout of the 8
+committed-elsewhere files): **29 files / 164 edits across riir-data (29) +
+riir-tools (14) + riir-rag (28) + riir-agents (26) + riir-router (25) +
+riir-rest (2) + riir-net (5) + riir-validator-sdk (35)** — the FIRST
+riir-ai heal of the campaign (the workspace was never swept; full sizing
+~8.5K edits, riir-engine 2620 / games-civ 1549 / gpu 1175 the giants).
+Excluded: riir-games-mmorpg (sibling WIP on wire_router.rs) + riir-ffi
+(excluded from workspace, standalone build). All 8 crates count-identical
+pre/post (data 158, tools 20-bin, rag 38, agents 16, router 67, rest 30,
+net 29, validator-sdk 27). **Toolchain: riir-ai pins 1.95.0 but the box
+resolved GNU + the global msvc_stl_shim config breaks GNU ld — every
+build needs `RUSTUP_TOOLCHAIN=1.95.0-x86_64-pc-windows-msvc`** (the
+Batch-49 trap, riir-ai flavor). Clippy residue 0 in healed classes
+(riir-data re-healed post-extension: 8 more edits incl. the new redundant
+named-arg sites); rustfmt on the 14 fmt-clean-at-HEAD files (3 CRLF in
+riir-agents + 13 pre-existing drift scoped out).
+
+**Redundant identical named-arg class shipped** (riir-clippy `73ab2c2`):
+`format!("{x:?}", x = x)` — the named arg EQUALS its ident — is redundant
+under implicit capture; real clippy 1.95's MachineApplicable fix DELETES
+the arg, template untouched (probe-verified on the live riir-data
+`compression = compression` / `h2 = h2` sites). The proposer previously
+aborted on ALL assign-shaped args; now `n = n` (both sides the same plain
+ident) deletes, composing with positional inlining (rustc's
+named-after-positional rule keeps indices stable). The RENAME class
+(`a = b`, e.g. merkle.rs `movement_proof_bytes = movement_proof_size`)
+stays backlog — its fix needs template rewriting. 3 fixtures (delete +
+compose + rename-negative); 41/41 uninlined, 603/603 lib. **Follow-up
+sweep opportunity: re-dry-run the already-healed repos (ndb, katgpt-rs)
+for the new class — the identical-name sites there were left as "named-arg"
+divergences by the older proposer.**
 
 **slice 7 landed 2026-08-18** (katgpt-rs `805feb22`..`81ef2631`, 12
 commits) — **the katgpt-rs root tests/ sweep is COMPLETE**: 40 files /
