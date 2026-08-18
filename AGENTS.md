@@ -1488,6 +1488,70 @@ instead; a missing feature in the union (latent_trajectory_geometry was
 dropped during composition) is invisible until an explicit run — always
 cross-check the built-vs-expected target list.
 
+**katgpt-core src slice landed 2026-08-18 night** (katgpt-rs `941c0d896`):
+**135 files / ~1270 edits** (1170 uninlined + ~60 control-flow + 13
+semicolon), net −697 post-fmt. Fresh src-only sizing first (the old 2775/239
+included tests+benches+examples, already healed): 132 files / 1245 edits.
+Baselines warm from the mega-union: default lib **1897/0/6** + all-features
+lib **3974/0/13**, both count-identical post-heal and post-fmt. Residue
+scan (all-features -W over every healed class): **7 documented divergences
+only** — 2× map_unwrap_or array-literal `&[]` guard (breakeven/fidelity,
+mux/freeze_thaw — the `2bf2a44` class) + 5× comment-guard match refusals
+(curator:86, simplex:160, loop_:741, in_memory:107, cache:97 — comments
+between arms / comment-only None arms; clippy's own note says "you might
+want to preserve the comments" — healer SAFER). 2 manual is_some_and
+terminal fixes (multi_agent_path/flow.rs — Unknown-receiver `map_or(false,·)`
+emissions where clippy's type info proves Option; the Issue-027 manual-fix
+precedent). rustfmt on the 106 fmt-clean-at-HEAD files (29 pre-existing
+drift scoped out).
+
+**THE semicolon_if_nothing_returned DISCARDED-POSITION EXTENSION + THE
+CFG-PROMOTION LESSON (riir-clippy `5875b81`)**: the slice's -W residue scan
+found 9 semicolon sites the old proposer never claimed — probe matrix
+(`target/probe_semi`, 3 rounds vs real clippy 1.93) established the ACTUAL
+lint scope: fires on the semicolon-less tail of ANY syntactically-discarded
+block (if/match arms incl. else-if chains, unsafe/bare blocks, loop bodies,
+semicol'd block-statements) gated on the block being **MULTILINE** (the
+"consistent formatting" rationale — single-line fn tails/arms/blocks stay
+SILENT, incl. `fn main() { helper() }`; the old proposer over-fired there —
+2 fixtures corrected; the corpus entry was already multiline so G6 stands).
+Valued positions never fire (E0308 soundness: valued fn tails, `let x =
+unsafe {…}` bindings). The one clippy quirk NOT replicated: single-line
+`while` bodies fire in real clippy but stay silent here (documented
+under-approximation, zero observed production instances).
+
+**The headline hazard — CFG-PROMOTION**: the first extension draft recursed
+into ALL grammar-discarded block-like statements — and broke compilation
+with 5 E0308s + invisible M3 landmines. Root cause: `fn block_max(…) -> f32`
+with THREE `#[cfg(target_arch)]` switched blocks (aarch64 / x86_64 /
+generic) — at PARSE time the earlier cfg blocks are mid-block statements
+(grammar-discarded), but sibling cfg elision PROMOTES the survivor to the
+fn's valued tail; adding `;` inside its arm breaks the target that compiles
+it (x86_64 caught by the compile gate; the aarch64 twin at temp.rs:671
+compiled nowhere on this box — an M3-only landmine caught by analysis, not
+by any local gate). Fix: `carries_cfg(e)` — a mid-block `#[cfg]`-attributed
+block-like statement recurses ONLY when the enclosing tail is already
+discarded (unit fns stay sound: the promoted tail is still discarded).
+Parse-time discarded ≠ cfg-time discarded — the grammar argument for
+mid-block statements is only valid for NON-cfg'd blocks. 4 new fixtures
+(both cfg shapes + multiline firing shapes); 15 proposer tests; 591/0
+default + 654/0 fix_verify+latent_retrieval lib; clippy 0. Also 4 clippy
+warnings fixed in the morning's map_unwrap_or.rs (explicit_iter_loop,
+items_after_statements ×2, its own map_unwrap_or → map_or terminal).
+
+**katgpt-types simd semicolon follow-up landed same night** (katgpt-rs
+`f3c03bd6c`): 4 files / 36 edits (activations/research/elementwise/dot) —
+the -W scan's dependency-crate residue, all `semicolon_if_nothing_returned`
+in target-arch-switched UNIT fns (inplace mutators — promoted tails stay
+discarded; sound on every target, spot-checked). 130/0 default + 244/0
+all-features count-identical; zero residue. The 36 = 2× the clippy-visible
+count (the aarch64 twins are cfg'd out on this box — the extension fires on
+them via the same soundness argument the cfg-guard validates).
+
+**Remaining katgpt-rs sweep territory**: root-src 114/35 (kimi_k3/dllm
+dirs are sibling-adjacent; worktree fallback proven). **The katgpt-rs src/
+surface (member crates + core) is now COMPLETE.**
+
 **Issue 031 (2026-08-17, RESOLVED same day + removed per noise-reduction
 rule) — 3 healer defects from the katgpt-pruners 587-edit heal
 validation (katgpt-rs `4b6675dc5`).** **H1 (CRITICAL)** — the
