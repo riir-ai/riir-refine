@@ -267,7 +267,7 @@ fn cap_replacement(
             {
                 return None;
             }
-            format!("Vec::with_capacity({})", src(source, node)?)
+            format!("Vec::with_capacity({})", usize_text(source, node)?)
         }
         Cap::NodePlusOne(node) => {
             if !capacity_is_usize(node, usize_params, opts)
@@ -275,7 +275,7 @@ fn cap_replacement(
             {
                 return None;
             }
-            format!("Vec::with_capacity({} + 1)", src(source, node)?)
+            format!("Vec::with_capacity({} + 1)", usize_text(source, node)?)
         }
         // The emitted text is `<node>.len()` — always usize; the receiver
         // still must not reference a later `let`.
@@ -287,6 +287,22 @@ fn cap_replacement(
         }
     };
     Some(node)
+}
+
+/// Source text for a capacity node, with a non-`usize` integer-literal
+/// suffix stripped (`5u64` → `5`): `with_capacity` takes `usize`, and an
+/// unsuffixed decimal literal infers it in that position (riir-train
+/// gepo_goat lesson — the suffixed emit was an E0308).
+fn usize_text(source: &str, node: &Expr) -> Option<String> {
+    if let Expr::Lit(ExprLit { lit: Lit::Int(li), .. }) = node {
+        let text = src(source, node)?;
+        let suffix = li.suffix();
+        if suffix.is_empty() || suffix == "usize" {
+            return Some(text);
+        }
+        return Some(text.strip_suffix(suffix).map(str::to_string).unwrap_or(text));
+    }
+    src(source, node)
 }
 
 /// Parse-only usize proof (see module docs for the whitelist).
@@ -380,6 +396,26 @@ mod tests {
 
     fn squash(s: &str) -> String {
         s.split_whitespace().collect::<String>()
+    }
+
+    #[test]
+    fn suffixed_int_bound_gets_suffix_stripped() {
+        // riir-train gepo_goat lesson: `0..5u64` emitted `with_capacity(5u64)`
+        // — an E0308 (capacity is usize). The bare digits carry the same
+        // value and infer usize in that position.
+        let src = "fn steps() -> Vec<u64> {\n    let mut v = Vec::new();\n    for i in 0..5u64 { v.push(i); }\n    v\n}";
+        let out = propose_fix("vec-with-capacity", src).expect("pattern matched");
+        assert!(out.contains("Vec::with_capacity(5)"), "{out}");
+        assert!(!out.contains("5u64)"), "suffix must be stripped: {out}");
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn usize_suffix_bound_kept() {
+        let src = "fn steps() -> Vec<usize> {\n    let mut v = Vec::new();\n    for i in 0..5usize { v.push(i); }\n    v\n}";
+        let out = propose_fix("vec-with-capacity", src).expect("pattern matched");
+        assert!(out.contains("Vec::with_capacity(5usize)"), "{out}");
+        syn::parse_file(&out).expect("re-parses");
     }
 
     #[test]

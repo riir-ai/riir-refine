@@ -14,6 +14,17 @@
 //! A match can never sit in direct else-position (`else match` is invalid
 //! Rust), so the bare `x?` replacement is structurally safe; the if-shape
 //! lands in statement position, which takes any expression.
+//!
+//! Reference scrutinees (the `match &self.field { Some(s) => s, None =>
+//! return None }` idiom — match ergonomics bind `s: &T`) are rewritten to
+//! `inner.as_ref()` + try (the `riir-train` `gzero_loop` lesson): the try operator
+//! needs `Option<T>` by value, so `(&self.field)?` is an E0277. Real
+//! clippy's own suggestion for the shape (borrowing the field, then try)
+//! is `MaybeIncorrect` for the same reason — it moves out of the shared
+//! ref. `as_ref()` reproduces the `&T` binding
+//! exactly and compiles for every payload. A plain-path scrutinee that is
+//! TYPE-inferred to `&Option<T>` (invisible at parse time) keeps clippy's
+//! diagnosis; the rare mis-fire surfaces as E0277 in the compile gate.
 
 use super::helpers::{is_none_pat, is_postfix_safe};
 use super::{edit, src, SourceEdit};
@@ -65,8 +76,7 @@ impl Collector<'_> {
         if !returns_none(r) {
             return None;
         }
-        let recv = src(self.source, &*mc.receiver)?;
-        let recv = if is_postfix_safe(&mc.receiver) { recv } else { format!("({recv})") };
+        let recv = self.try_operand(&mc.receiver)?;
         Some(edit(stmt, format!("{recv}?;")))
     }
 
@@ -80,13 +90,31 @@ impl Collector<'_> {
         }
         for (a, b) in [(&m.arms[0], &m.arms[1]), (&m.arms[1], &m.arms[0])] {
             if is_some_identity(a) && is_none_return(b) {
-                let scrutinee = src(self.source, &*m.expr)?;
-                let scrutinee =
-                    if is_postfix_safe(&m.expr) { scrutinee } else { format!("({scrutinee})") };
+                let scrutinee = self.try_operand(&m.expr)?;
                 return Some(edit(m, format!("{scrutinee}?")));
             }
         }
         None
+    }
+
+    /// The `?`-operand text for a receiver/scrutinee: original source,
+    /// parenthesized when it doesn't bind tighter than `?` — except a
+    /// REFERENCE operand, which becomes `<inner>.as_ref()` (parens on the
+    /// inner when IT isn't postfix-safe) so `?` gets `Option<T>` by value
+    /// while the bound value stays `&T` (match-ergonomics parity).
+    fn try_operand(&self, expr: &Expr) -> Option<String> {
+        let mut inner = expr;
+        while let Expr::Paren(p) = inner {
+            inner = &p.expr;
+        }
+        if let Expr::Reference(r) = inner {
+            let text = src(self.source, &*r.expr)?;
+            let text = if is_postfix_safe(&r.expr) { text } else { format!("({text})") };
+            return Some(format!("{text}.as_ref()"));
+        }
+        let text = src(self.source, expr)?;
+        let text = if is_postfix_safe(expr) { text } else { format!("({text})") };
+        Some(text)
     }
 }
 
@@ -156,6 +184,34 @@ mod tests {
             "fn g(r: &Option<u8>) -> Option<u8> { match *r { Some(v) => v, None => return None, } }";
         let out = propose_fix("question_mark", input).expect("matched");
         assert!(out.contains("(*r)?"), "deref must be parenthesized: {out}");
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn ref_scrutinee_field_becomes_as_ref_try() {
+        // The production shape (riir-train gzero_loop): match ergonomics bind
+        // `s: &T`, so the rewrite must keep the borrow — `(&self.opt)?` is an
+        // E0277 (`?` needs `Option<T>` by value) and real clippy's own
+        // `&self.opt?` suggestion moves out of the shared ref.
+        let input = "impl S { fn f(&self) -> Option<u8> { let v = match &self.opt { Some(s) => s, None => return None, }; Some(*v) } }";
+        let out = propose_fix("question_mark", input).expect("matched");
+        assert!(
+            out.contains("self.opt.as_ref()?"),
+            "reference scrutinee must become .as_ref()?: {out}"
+        );
+        assert!(!out.contains("match"), "match must be gone: {out}");
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn ref_scrutinee_deref_inner_gets_parens() {
+        let input =
+            "fn g(r: &Option<u8>) -> Option<u8> { match &*r { Some(v) => v, None => return None, } }";
+        let out = propose_fix("question_mark", input).expect("matched");
+        assert!(
+            out.contains("(*r).as_ref()?"),
+            "non-postfix-safe inner must be parenthesized before .as_ref(): {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 
