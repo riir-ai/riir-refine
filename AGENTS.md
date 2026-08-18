@@ -988,6 +988,56 @@ AVOID real-model deps; bench_401 sibling-caution; bench_253_rosetta gpu-
 gated); riir-train-gpu 84 / 562 (owns loss_sdar/compress/training_loop +
 the 2 known sites).
 
+**riir-train slice 12 landed 2026-08-18** (riir-train `67a77667` + the
+proposer root-cause fixes riir-clippy `f0b47b3`): the **riir-train-gpu
+crate slice** — the 84/562 bucket closed as **56 files / 425 edits**
+(dry-run ground truth 63/468; 7 files/43 edits excluded). ONE
+32-feature-union cycle. **Exclusions:** 3 sibling-WIP (muon_dense_cuda.rs
++ _sampled.rs at fresh Plan-339 mtimes 00:03, bench_335_hyperball_goat.rs
+Plan-335 — the Aug-17+ mtime find is the detector) + 4 pre-existing
+broken gates (dllm+gdsd_loss: distill_gdsd.rs:337 E0063 DllmTrainingReport
+missing eval_errors/eval_masked_positions/train_loss_errors — the
+bench_gdsd_gpu_goat gate compiles NOTHING at HEAD; sft_warmup:
+bench_sft_rl_pipeline 6× E0063 mux_config + E0432 loss_asft — unfixable
+by feature selection). **Union shape lessons:** the union needed
+dion3_row_selection added (the sibling's committed muon tests reference
+dion3-gated slab_l1_norms/gram_ns_ortho_slab — muon_dense_cuda without
+its dev feature is another broken-at-HEAD gate) + asft_loss +
+lora_outlier_guard (dasd_lora_goat's stale feature row); katgpt-rs is
+STRUCTURALLY in the dep graph (riir-engine → katgpt-rs → katgpt-backend →
+katgpt-forward) — dropping kimi features does NOT avoid it, so the
+sibling's mid-flight TreePath migration blocked batch-2 for ~15 min
+(poll `cargo check -p katgpt-forward` until coherent, then race the
+build). **TWO proposer root-cause fixes** (the slice's compile-gate
+catches): question_mark reference-scrutinee (match &self.field →
+`self.field.as_ref()?`, not `(&self.field)?` — real clippy's own
+suggestion is MaybeIncorrect here, probe-verified via JSON applicability)
++ vec-with-capacity suffixed literals (0..5u64 → with_capacity(5), bare
+digits infer usize). **Validation all count-identical:** union lib
+576/16/3i @ threads=2 (16 = 15 CUDA-absent + distill_attention_hla_
+converges CPU divergence, both pre-existing), default lib 186/0/0, all
+23 runnable test binaries (incl. goat_195's pre-existing 0/2 red),
+test_kimi_k3_cublas_forward_g1 compile-only; 3 full-parallel flakes (2×
+muon optimizer gpu_step + training_loop toy) all pass isolated + at
+threads=2 — contention class, sibling bench at 200% CPU concurrent.
+**Fmt-scoping lesson:** the stdin-mode `rustfmt --check` (git show |
+rustfmt) is LENIENT vs file-mode — 11 files classified CLEAN were
+actually drift at HEAD; caught post-fmt via file-mode re-check, fixed by
+revert + re-heal (11 files land unfmt'd per the slice-2 drift rule;
+45 fmt'd). Always fmt-check via `git show > tmp; rustfmt --check tmp`.
+**Test-artifact hazard:** bench_interventional_sft writes a results CSV
+(rm'd, unstaged). Clippy residue 0 in healed classes (union + default).
+
+**Remaining in riir-train** (~1290 by arithmetic: 1715 − 425): engine
+examples/ heavy remainder 41 / 407 (kimi ×13 needs sibling Plan-339/340
+files settled; gemma4 ×17/56 plan320-autostash-adjacent — re-check at
+slice time; gemma2_lora_gpu+latent_cot ×6/36, shine ×2/20, weaver ×2/6
+teacher ×2/3, strandset 1/5, go ×2/4, flashmemory ×2/4); sibling-WIP
+src (kimi/muon/weaver/xhc family ~366); 49 out-of-union src / 208; the
+7 gpu-crate exclusions (43 edits: 3 sibling + 4 broken-gate — the
+broken gates need owner fixes, not heals); engine tests/ exceptions
+(ciacot AVOID, bench_401 sibling-caution); engine benches/ unswept.
+
 **slice 7 landed 2026-08-18** (katgpt-rs `805feb22`..`81ef2631`, 12
 commits) — **the katgpt-rs root tests/ sweep is COMPLETE**: 40 files /
 358 heal edits + 1 manual lint + 3 manual import-gate fixes across 12
