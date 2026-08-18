@@ -1229,6 +1229,54 @@
 //!   validated BOTH directions: fails run 0 with `max_diff=0.0586`
 //!   barriers-removed, passes with them; second instance: the `q8kv`
 //!   multi-tile path, Issue 710 H10).
+//! - **Batch 58 (the `ternary_deltanet` sibling-WIP unlock, file mining):**
+//!   8 rules, corpus 355 -> 363 (A 83 -> 86, D 66 -> 70, E 20 -> 21) —
+//!   `ternary_deltanet_gpu_forward_cudarc.rs` (5,691 lines, the raw-CUDA
+//!   decode-forward twin — the LAST never-mined riir-gpu orchestration
+//!   file; unblocked when the Issue 717/715 work landed; the `CubeCL` twin
+//!   stays blocked on Issue 721 T3, which rewrites its chunked-recurrence
+//!   kernels): async-htod-host-source-outlives-copy (A - an async `HtoD`
+//!   memcpy reads the host pointer at GPU-COMPLETION time; a stack local
+//!   dangles and the GPU silently reads the dead stack slot — persistent
+//!   host staging fields + `slice::from_ref`; the host-side complement of
+//!   the readback-timing family), captured-graph-bakes-buffer-addresses
+//!   (D - state mutators split into address-stable (in-place `memset_zeros`
+//!   (the graph SURVIVES) vs identity-changing (alloc/free; the graph
+//!   MUST be dropped for lazy re-capture, else replay runs against freed
+//!   pointers), output-buffer-rotation-pool-multi-forward (A - K pipelined
+//!   forwards writing the same output field: swap the field's handle with
+//!   pool[i] per dispatch — an O(1) ownership exchange; ONE sync, K+1
+//!   position-aligned reads; the field KEEPS the last buffer between
+//!   cycles so the next cycle's out[0] is the live pre-speculation
+//!   prediction), mid-pipeline-device-alloc-is-implicit-sync (D -
+//!   `cuMemAlloc` can implicitly synchronize the device: an allocation
+//!   inside a no-intermediate-sync dispatch sequence is a HIDDEN BARRIER;
+//!   pre-allocate the whole cycle at construction sized to the max K),
+//!   capture-region-dispatch-only (D - the captured region records GPU
+//!   work ONLY: host effects run ONCE at capture and NEVER on replay
+//!   (a baked `pos += 1` freezes position silently); syncs/dtoh are not
+//!   capturable; preconditions: event tracking off BEFORE any allocation,
+//!   non-default stream, pre-upload), occupancy-grid-cap-refuted-uncapped-
+//!   default (E - the Issue 705/Bench 684 measured negative, never
+//!   distilled at resolution time: the occupancy-derived cap measured a
+//!   1-2% LOSS at every size; wavefront locality beats the wave tail; the
+//!   cap stays env-gated as measurement apparatus), write-before-read-
+//!   state-skips-checkpoint (A - a speculative checkpoint backs up ONLY
+//!   the read-modify state; write-before-read append-only caches (KV at
+//!   position p) are repaired by re-execution itself — async dtod, ZERO
+//!   CPU-GPU sync, host bookkeeping snapshotted by the caller), and
+//!   same-input-gemv-segments-single-launch (D - same-input GEMV groups
+//!   batched into ONE multi-segment launch, at most 4 segments; nsys
+//!   measured 497 GEMV launches/token with m=48 projections at the ~5.6
+//!   microsecond latency floor; pad unused slots with segment 0's pointers
+//!   (m=0 matches no rows); the generic middle between shared-upload-N-
+//!   launches and the bespoke fused pair). Mining yield filed as riir-ai
+//!   Issue 722 (13 hazards: the `spec_restore_buffers`/`spec_unrotate`
+//!   doc-lie (referenced but nonexistent); `set_lora` release-mode silent
+//!   no-op; capture-error-path stream leak; conv1d backward full-buffer
+//!   download to recover host-owned data; attention-backward per-token
+//!   alloc storm; uncached `lm_head` `dequant_transpose` per backward call;
+//!   plus 7 more).
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
@@ -1281,7 +1329,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 355-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 363-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1289,7 +1337,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (83 rules)
+    // A: Memory access patterns (86 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -1377,6 +1425,9 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "unpack-loop-indexed-by-container-word",
             "superseded-format-constructor-live-fields-only",
             "smem-slot-role-reversal-needs-barrier",
+            "async-htod-host-source-outlives-copy",
+            "output-buffer-rotation-pool-multi-forward",
+            "write-before-read-state-skips-checkpoint",
         ],
     ),
     // B: Compute patterns (52 rules)
@@ -1478,7 +1529,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fuse-indirect-gather-into-dot-consumer",
         ],
     ),
-    // D: Dispatch patterns (66 rules)
+    // D: Dispatch patterns (70 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -1549,9 +1600,13 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "buffer-length-derived-from-allocation-not-binding",
             "concurrent-context-init-needs-process-wide-lock",
             "tile-loop-back-edge-needs-multi-tile-bitexact-gate",
+            "captured-graph-bakes-buffer-addresses",
+            "mid-pipeline-device-alloc-is-implicit-sync",
+            "capture-region-dispatch-only",
+            "same-input-gemv-segments-single-launch",
         ],
     ),
-    // E: Parallelism patterns (20 rules)
+    // E: Parallelism patterns (21 rules)
     (
         KernelCategory::Parallelism,
         "E: parallelism",
@@ -1576,6 +1631,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "concurrent-disjoint-write-buffer-parallelizes-uploads",
             "row-dot-split-inner-axis-block-reduce",
             "multi-head-out-proj-consumes-head-concat",
+            "occupancy-grid-cap-refuted-uncapped-default",
         ],
     ),
     // F: Flash-attention tiling (10 rules)

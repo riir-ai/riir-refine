@@ -58,8 +58,9 @@
         // Batch 47 (3): riir-gpu hypernet — per-key-projection-hoist-out-of-query-sweep, multi-head-out-proj-consumes-head-concat, shared-producer-prefix-extract-once-per-input (hypernet/ shine.rs + routing.rs + types.rs + m2p_transformer.rs + gpu_m2p.rs + kernels/m2p_attention.wgsl — the SHINE second half: the context-to-LoRA pipeline + expert routing + the M2P CPU/GPU attention pair; hazards filed as Issue 701).
         // Batch 49 (1): riir-gpu cudarc — runtime-arg-loop-bound-demotes-arrays-to-local-memory (cudarc_kernels/mod.rs rmsnorm_quantize_f32, the Bench-686 measured lesson from Issue 706: compile-time loop bounds + #pragma unroll keep per-thread arrays in registers — kernel −18.4% at ppl bit-exact).
         // Batch 57 (2): measured-GOAT distillation (riir-ai Issue 715 — smem-slot-role-reversal-needs-barrier, tile-loop-back-edge-needs-multi-tile-bitexact-gate; the flash-attention tile-loop smem races + the multi-tile bit-exact regression gate; commits 9f9e68402 + 93d853582).
-        // Total: 209. // (historical batch-30 snapshot; current 355)
-        assert_eq!(corpus.entries.len(), 355, "kernel batches through Batch 57 should have 355 rules");
+        // Batch 58 (8): ternary_deltanet sibling-WIP unlock — the LAST never-mined riir-gpu orchestration file (ternary_deltanet_gpu_forward_cudarc.rs, 5,691 lines — raw-CUDA decode-forward twin; async-htod-host-source-outlives-copy, captured-graph-bakes-buffer-addresses, output-buffer-rotation-pool-multi-forward, mid-pipeline-device-alloc-is-implicit-sync, capture-region-dispatch-only, occupancy-grid-cap-refuted-uncapped-default, write-before-read-state-skips-checkpoint, same-input-gemv-segments-single-launch; hazards filed as Issue 722).
+        // Total: 209. // (historical batch-30 snapshot; current 363)
+        assert_eq!(corpus.entries.len(), 363, "kernel batches through Batch 58 should have 363 rules");
     }
 
     #[test]
@@ -3396,6 +3397,159 @@
         }
     }
 
+
+    #[test]
+    fn batch58_rules_present() {
+        // Batch 58 (ternary_deltanet sibling-WIP unlock — the cudarc forward
+        // orchestration twin: staging lifetime, graph lifecycle, the speculative
+        // rotation/checkpoint seam, the multi-segment GEMV launcher).
+        let corpus = build_kernel_seed_corpus();
+        let ids = [
+            "async-htod-host-source-outlives-copy",
+            "output-buffer-rotation-pool-multi-forward",
+            "write-before-read-state-skips-checkpoint",
+            "captured-graph-bakes-buffer-addresses",
+            "mid-pipeline-device-alloc-is-implicit-sync",
+            "capture-region-dispatch-only",
+            "same-input-gemv-segments-single-launch",
+            "occupancy-grid-cap-refuted-uncapped-default",
+        ];
+        for id in ids {
+            assert!(
+                corpus.entries.iter().any(|e| e.rule_id == id),
+                "batch-58 rule '{id}' missing from corpus"
+            );
+        }
+    }
+
+    #[test]
+    fn batch58_concepts_covered() {
+        let corpus = build_kernel_seed_corpus();
+        let checks: [(&str, [&str; 5]); 8] = [
+            (
+                "async-htod-host-source-outlives-copy",
+                [
+                    "GPU-completion time",
+                    "persistent host staging",
+                    "dead stack slot",
+                    "host-side complement",
+                    "slice::from_ref",
+                ],
+            ),
+            (
+                "captured-graph-bakes-buffer-addresses",
+                [
+                    "bakes in every buffer",
+                    "Address-stable",
+                    "Identity-changing",
+                    "freed pointers",
+                    "in-place",
+                ],
+            ),
+            (
+                "output-buffer-rotation-pool-multi-forward",
+                [
+                    "ownership exchange",
+                    "never un-rotated mid-run",
+                    "pre-speculation prediction",
+                    "K+1 position-aligned",
+                    "O(1)",
+                ],
+            ),
+            (
+                "mid-pipeline-device-alloc-is-implicit-sync",
+                [
+                    "implicitly synchronize",
+                    "HIDDEN BARRIER",
+                    "no-intermediate-sync",
+                    "statically known maximum",
+                    "correctness precondition",
+                ],
+            ),
+            (
+                "capture-region-dispatch-only",
+                [
+                    "ONCE at capture time",
+                    "NEVER on replay",
+                    "not capturable",
+                    "non-default stream",
+                    "host-side position advancement",
+                ],
+            ),
+            (
+                "occupancy-grid-cap-refuted-uncapped-default",
+                [
+                    "REFUTED by measurement",
+                    "wavefront locality",
+                    "87.1",
+                    "768",
+                    "measurement/tuning apparatus",
+                ],
+            ),
+            (
+                "write-before-read-state-skips-checkpoint",
+                [
+                    "READ-MODIFY",
+                    "WRITE-BEFORE-READ",
+                    "re-execution",
+                    "append-only",
+                    "ZERO CPU",
+                ],
+            ),
+            (
+                "same-input-gemv-segments-single-launch",
+                [
+                    "kernel-latency floor",
+                    "497 GEMV launches",
+                    "multi-segment",
+                    "m=0",
+                    "ride along",
+                ],
+            ),
+        ];
+        for (id, concepts) in checks {
+            let entry = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-58 rule '{id}' missing"));
+            for concept in concepts {
+                assert!(
+                    entry.gpu_concept.contains(concept),
+                    "batch-58 concept '{concept}' not covered in '{id}'"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn batch58_pseudocode_parses() {
+        // G1 for Batch 58 (ternary_deltanet unlock, file mining): syn-parse gate.
+        use crate::domain::HealDomain;
+        let corpus = build_kernel_seed_corpus();
+        let ids = [
+            "async-htod-host-source-outlives-copy",
+            "output-buffer-rotation-pool-multi-forward",
+            "write-before-read-state-skips-checkpoint",
+            "captured-graph-bakes-buffer-addresses",
+            "mid-pipeline-device-alloc-is-implicit-sync",
+            "capture-region-dispatch-only",
+            "same-input-gemv-segments-single-launch",
+            "occupancy-grid-cap-refuted-uncapped-default",
+        ];
+        for id in ids {
+            let entry = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-58 rule '{id}' missing"));
+            let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+            assert!(ref_verdict.parses, "batch-58 ref_shape for '{id}' must parse");
+            let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+            assert!(opt_verdict.parses, "batch-58 opt_pattern for '{id}' must parse");
+        }
+    }
+
     #[test]
     fn kernel_categories_table_has_15_entries() {
         assert_eq!(KERNEL_CATEGORIES.len(), 15, "Plan 003: 15 categories (A–O)");
@@ -3403,7 +3557,7 @@
 
     #[test]
     fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-        // Every rule_id in the 355-rule corpus must appear in exactly one category.
+        // Every rule_id in the 363-rule corpus must appear in exactly one category.
         let corpus = build_kernel_seed_corpus();
         let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
         let mut categorized: Vec<&str> = Vec::new();
@@ -3434,13 +3588,13 @@
 
     #[test]
     fn kernel_categories_counts_match_plan_003_table() {
-        // Pin per-category rule counts to the Plan 003 table (updated for Batch 57).
+        // Pin per-category rule counts to the Plan 003 table (updated for Batch 58).
         let expected = [
-            (KernelCategory::MemoryAccess, 83),
+            (KernelCategory::MemoryAccess, 86),
             (KernelCategory::Compute, 52),
             (KernelCategory::Fusion, 33),
-            (KernelCategory::Dispatch, 66),
-            (KernelCategory::Parallelism, 20),
+            (KernelCategory::Dispatch, 70),
+            (KernelCategory::Parallelism, 21),
             (KernelCategory::FlashAttnTiling, 10),
             (KernelCategory::LinearAttnRecurrence, 19),
             (KernelCategory::MoeDispatchBackward, 14),
@@ -3459,9 +3613,9 @@
                 "Plan 003: category {cat:?} has {} rules, expected {count}",
                 entry.2.len());
         }
-        // Sum must equal 355.
+        // Sum must equal 363.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 355, "Plan 003: category totals must sum to 355");
+        assert_eq!(total, 363, "Plan 003: category totals must sum to 363");
     }
 
     #[test]
@@ -3471,7 +3625,7 @@
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 355, "Plan 003: grouped corpus has {total} rules, expected 355");
+        assert_eq!(total, 363, "Plan 003: grouped corpus has {total} rules, expected 363");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");

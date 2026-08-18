@@ -822,6 +822,64 @@ global = symlink only.
 - **Batch 57 DONE (2026-08-18, Research 064):** 2 rules, corpus 353 → 355 (A 82 → 83, D 65 → 66) — the FIFTH measured-GOAT distillation after corpus-complete (reopen path (c)), from riir-ai Issue 715 (resolved+removed; commits `9f9e68402` + `93d853582`; the fixes predate B56's queue scan but were never evaluated — found by this session's git-log re-scan). Rule 1 `smem-slot-role-reversal-needs-barrier` (A): a shared-memory scratch whose slot ROLES reverse between phases needs a barrier at each reversal — (a) intra-iteration: every thread reads the reduction result `smem[0]`, then thread 0 overwrites that slot with its weight (a slow warp reads a weight as the tile max; threads disagree on the softmax shift; length-independent); (b) loop back-edge: the last phase reads every `smem[p]` while the next tile's Phase 1 writes `smem[tid]` (only `n_tiles >= 2`); measured 27B / 256-token probe: NONDETERMINISTIC before (first divergent token 71), BIT-IDENTICAL (3/3) after; both barriers in BLOCK-UNIFORM control flow; five kernels shipped the races (3 CubeCL + 2 cudarc twins) — the CubeCL fix did NOT reach the cudarc arm (it dispatches hand-written CUDA; grepping one source tree proves nothing about which kernels an arm dispatches); recurring class: Issue 612's fix removed the destructive reduction but left both windows open; the corpus's prior barrier content is ALL perf-side (eliminate/fuse via warp-shuffle/plane-sizing) — this is the correctness complement. Rule 2 `tile-loop-back-edge-needs-multi-tile-bitexact-gate` (D): a loop that trips twice only past a size threshold hides every back-edge defect from fixtures that fit inside ONE iteration — every prior decode test used `n_positions <= 200` < the 256-wide tile (untestable BY CONSTRUCTION; tests passed because the code never ran); the gate needs BOTH a boundary-crossing fixture (`n_positions=300` → `n_tiles=2`) AND a bit-exact reproducibility assert over repeats (a tolerance-only assert cannot see a race in the low mantissa bits); validated BOTH directions (fails run 0 with max_diff=0.0586 barriers-removed); second instance: Issue 710 H10 (q8kv multi-tile, zero coverage at n > 256 until a 2-tile fixture). Dropped: RoPE table-dim (3rd-strike rope territory, driver-contract), reduction-tree copy-paste slips, twin-propagation-as-standalone (folded into rule 1; B39 carries the structural half). GOAT: 766/0/1 kernel_heal + 571/0/0 default, clippy 0 both states (zero post-write fixes), retrieval floors HELD with zero decay (kernel 100/100/100, blend 94.6/97.7). Opens `entries_gpu_07.rs` (gpu_06 at 843 lines). Count-baseline note: B56's 760/568 predate the sibling's `c85ff1c` fixtures (+3 tests via the `d8e614d` rebase); true HEAD baseline 763/571. `.research/.highwater` 63 → 64.
 
 
+- **Batch 58 DONE (2026-08-18, Research 065):** 8 rules, corpus 355 → 363
+  (A 83 → 86, D 66 → 70, E 20 → 21) — **the ternary_deltanet sibling-WIP
+  unlock (reopen trigger (a)): the LAST never-mined riir-gpu orchestration
+  file** (`ternary_deltanet_gpu_forward_cudarc.rs`, 5,691 lines — the
+  raw-CUDA decode-forward twin; unblocked when the Issue 717 speculative
+  seam + Issue 715 barrier fixes landed; the CubeCL twin stays blocked on
+  Issue 721 T3, whose Non-goals exclude the CUDA port — collision-free by
+  design). Heavy two-lane convergence (4 mechanisms found independently by
+  both subagents, merged by the coordinator): `async-htod-host-source-
+  outlives-copy` (A — an async HtoD memcpy reads the host pointer at
+  GPU-COMPLETION time; a stack-local source dangles and the GPU silently
+  reads the dead stack slot; persistent host staging fields +
+  `slice::from_ref`; the HOST-side complement of the readback-timing
+  family), `captured-graph-bakes-buffer-addresses` (D — mutators split
+  into address-stable (in-place `memset_zeros`, graph SURVIVES) vs
+  identity-changing (alloc/free, graph MUST die for lazy re-capture, else
+  replay runs against freed pointers); the inverse-facing half of B25),
+  `output-buffer-rotation-pool-multi-forward` (A — K pipelined forwards
+  writing the same output field: swap the field's handle with pool[i] per
+  dispatch, an O(1) ownership exchange; ONE sync, K+1 position-aligned
+  reads; the field KEEPS the last buffer between cycles so the next
+  cycle's out[0] is the live pre-speculation prediction),
+  `mid-pipeline-device-alloc-is-implicit-sync` (D — `cuMemAlloc` can
+  implicitly synchronize the device: an allocation inside a
+  no-intermediate-sync dispatch sequence is a HIDDEN BARRIER;
+  pre-allocate the whole cycle at construction sized to SPEC_MAX_K),
+  `capture-region-dispatch-only` (D — the captured region records GPU work
+  ONLY: host effects run ONCE at capture and NEVER on replay (a baked
+  `pos += 1` freezes position silently); syncs/dtoh not capturable;
+  preconditions: event tracking off BEFORE any allocation, non-default
+  stream, pre-upload), `occupancy-grid-cap-refuted-uncapped-default` (E —
+  the Issue 705/Bench 684 measured NEGATIVE never distilled at resolution
+  time: the occupancy cap measured a 1-2% LOSS at every size; wavefront
+  locality beats the wave tail; the cap stays env-gated as measurement
+  apparatus), `write-before-read-state-skips-checkpoint` (A — a
+  speculative checkpoint backs up ONLY read-modify state; write-before-
+  read append-only caches (KV at position p) are repaired by re-execution
+  itself; async dtod, ZERO CPU-GPU sync), `same-input-gemv-segments-
+  single-launch` (D — same-input GEMV groups batched into ONE multi-
+  segment launch (≤4 segments); nsys: 497 GEMV launches/token with m=48
+  projections at the ~5.6 µs latency floor; pad unused slots with segment
+  0's pointers (m=0 matches no rows); the generic middle between B25's
+  shared-upload-N-launches and B15's bespoke fused pair). 23 dropped as
+  dups/thin. Mining yield → riir-ai Issue 722 (13 hazards: the
+  `spec_restore_buffers`/`spec_unrotate` doc-lie (referenced but
+  nonexistent), set_lora release-mode silent no-op, capture-error-path
+  stream leak, conv1d backward full-buffer download, attention-backward
+  per-token alloc storm, uncached lm_head dequant_transpose, + 7 more).
+  GOAT: 769/0/1 kernel_heal + 571/0/0 default, clippy 0 both states (one
+  post-write fix round: the B37 line-initial `+ `/`- ` lesson struck a 5TH
+  time — 3 trigger lines cascading 33 doc-list warnings + 6 backtick
+  items; plus the B51 case-sensitivity lesson in the concepts test),
+  retrieval floors HELD with zero decay (kernel 100/100/100, blend
+  94.6/97.7 — sixth consecutive batch). Generator: all anchors unique on
+  the FIRST dry run (fourth consecutive). The riir-gpu corpus is now
+  COMPLETE-minus-one (only the CubeCL twin, blocked on Issue 721).
+  `.research/.highwater` 64 → 65.
+
 - **Batch 53 DONE (2026-08-17 evening, queue item 11 — online perf search +
   Bench 038):** the 4 online-search candidates landed as `PerfRule` entries +
   `BenchSpec` harnesses + eval spans + Pareto bench verdicts + floors re-pin.
@@ -954,14 +1012,27 @@ global = symlink only.
     swallowing the `KernelRule {` opener into the comment (9/10 entries
     broken; rustc's `vec![` unclosed-delimiter error points at the symptom,
     not the cause).
-- **BLOCKED**: `ternary_deltanet_gpu_forward.rs` (+ `_cudarc.rs` —
-  RE-BLOCKED 2026-08-15 late evening: `c5a49da0b` landed the Issue 697
-  kernel-efficiency pass but the file + `cudarc_kernels/mod.rs` went
-  dirty AGAIN with fresh sibling WIP (mtime ~18:38) — a ~200K-line
-  cluster, verify clean at batch start) — mine only after their WIP
-  lands.
-- **Progress**: riir-gpu file-mining COMPLETE (Batch 51, Research 057; ~115 files
-  mined by line-weight). Corpus: 355 kernel rules + 62 rust_perf rules (Batch 57 = the fifth measured-GOAT distillation, Research 064 (Issue 715 — the smem role-reversal barrier + the multi-tile bit-exact gate); Batch 56 = the fourth measured-GOAT distillation, Research 063 (Issues 719 + 714/720 — the cross-path init lock + the superseded-format live-fields ctor); Batch 55 = the third measured-GOAT distillation, Research 062; Batch 54 = the second measured-GOAT distillation, Research 061; Batch 48
+- **BLOCKED**: `ternary_deltanet_gpu_forward.rs` ONLY (the CubeCL twin,
+  5,416 lines — BLOCKED on open riir-ai Issue 721 T3, which will rewrite its
+  chunked-recurrence kernels (IntraOutput/CrossChunk/StateTransition at
+  L3676); mine only after 721 lands + tree verified clean). The cudarc twin
+  `ternary_deltanet_gpu_forward_cudarc.rs` was MINED as Batch 58 (2026-08-18,
+  Research 065 — the sibling-WIP unlock fired when the Issue 717/715 work
+  landed; 721's Non-goals exclude the CUDA port so it was collision-free).
+- **Progress**: riir-gpu file-mining COMPLETE-minus-one (Batch 51, Research
+  057; ~115 files mined by line-weight; the sole remainder is the CubeCL
+  ternary twin, blocked on Issue 721). Corpus: 363 kernel rules + 62
+  rust_perf rules (Batch 58 = the ternary_deltanet sibling-WIP unlock, the
+  LAST never-mined riir-gpu orchestration file — Research 065, 8 rules
+  (staging lifetime, graph lifecycle, rotation pool, implicit-sync, capture
+  region, occupancy refutation, checkpoint liveness, multi-segment GEMV) +
+  Issue 722's 13 hazards; Batch 57 = the fifth measured-GOAT distillation,
+  Research 064 (Issue 715 — the smem role-reversal barrier + the multi-tile
+  bit-exact gate); Batch 56 = the fourth measured-GOAT distillation,
+  Research 063 (Issues 719 + 714/720 — the cross-path init lock + the
+  superseded-format live-fields ctor); Batch 55 = the third measured-GOAT
+  distillation, Research 062; Batch 54 = the second measured-GOAT
+  distillation, Research 061; Batch 48
   = rust_perf online-search half; Batch 49 = the Bench-686 distillation; Batch 50
   = zero-rule leaves/twins, 31 hazards → Issues 708/709; Batch 51 = final
   pair, 3 rules + Issue 710 — the queue now shifts to rust_perf + issue-
