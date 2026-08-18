@@ -988,6 +988,82 @@ AVOID real-model deps; bench_401 sibling-caution; bench_253_rosetta gpu-
 gated); riir-train-gpu 84 / 562 (owns loss_sdar/compress/training_loop +
 the 2 known sites).
 
+**slice 7 landed 2026-08-18** (katgpt-rs `805feb22`..`81ef2631`, 12
+commits) — **the katgpt-rs root tests/ sweep is COMPLETE**: 40 files /
+358 heal edits + 1 manual lint + 3 manual import-gate fixes across 12
+feature-gate cycles, all count-identical or same-signature validated, 0
+compile-gate reverts in the applied set. Cycle shape (cheapest-first,
+unrelated light features combined per the slice-6 method): c1 11 files/45
+edits (9 forward-only features in ONE cycle — dec_operators +
+dflare_kv_routing + cs_kv_probe + rat_plus_bridge + toast_tokenizer +
+vocab_coreset + interval_pruner + parallel_probe + unit_distance);
+c2 7/17 (bandit warm: ropd_rubric, sdpg_bandit, stepcode,
+sense_composition, questbench, fpcg_selector + go — reqwest is a lib-level
+dep only, the tests are offline analytics); c3 2/15 (bfcf_lfu_shard implies
+bfcf_tree; speculative_generator default-on satisfies the cargo gate);
+c4 3/10 (d2f_3sr_warm_start + flashar_consensus, dllm warm); c5 1/7
+(shard_kv); c6 2/21 (bench_277's 5-feature gate reduced to 3 explicit —
+temporal_deriv + collapse_aware_thinking are default-on; + causal head);
+c7 6/15 (bomber family incl. bomber-agent + g_zero); 8a 1/30
+(mech_attribution); 8b 2/31 (bomber-wasm); 8c 1/2 (percepta_compile);
+c9 2/163 (the two ex-"compile-only giants"); c10 1/2+1 (the missed
+maxsim straggler, caught by the final verification dry-run).
+
+**The headline — the "compile-only giants" were misclassified by two
+prior slices and heal like anything else**: bench_block_diagonal_goat (93)
++ bench_octopus_goat (70) carry `#[ignore = "pure measurement benchmark
+(no assertions), slow in debug; run with --release --ignored"]` — the
+attribute-value form a literal `#\[ignore\]` grep misses, which is how
+they got labeled compile-only. A release `--ignored` run validates BOTH
+in ~15 s total (9.2 s + 5.7 s) — the slice-6 bench_core_optimization
+class. Standing rule confirmed again: the baseline run itself ("0 passed;
+9 ignored") is the only reliable gate detector; grep on attribute FORMS
+lies.
+
+**Three pre-existing failures found at baseline, documented not fixed**
+(the bench_104 precedent — test semantics are the author's call):
+(1) bench_fixed_vs_procedural fails DETERMINISTICALLY (ratio 15.39 vs the
+1.5× CV bound; identical pre/post + on re-run) — the CV-ratio statistic is
+broken at mean≈0: fixed-map mean is +0.06 so CV explodes to 72.7 while the
+actual StdDevs (fixed 4.51 vs procedural ~5.0) SATISFY the variance claim;
+the file's own history shows prior assertion softening (a5a4278f).
+(2) bench_064_futamura_evaluator::proof_futamura_specialized_has_fewer_
+dimensions — specialized=300 dims vs universal=216 (expects REDUCTION);
+dormant direction (percepta_compile not in full/default); ALSO
+debug-unrunnable (15+ min for 3 transformer-eval tests → release 235 s —
+the funcattn class; release is the practical baseline mode).
+(3) bomber_wasm_bench is MODE-LOCKED: debug fails 3 WASM perf gates
+(is_safe_action 198µs vs <10µs etc.), release 11/11 — the file's own
+header documents `--release` (the ugc_g1b class; validated in release,
+debug same-signature).
+
+**Tooling lessons:** (1) rustfmt on bare test files needs `--edition 2024`
+(let-chains in bench_stepcode_modelless.rs:644 — bare-file rustfmt defaults
+to a pre-2024 edition and hard-fails; first recurrence in the sweep).
+(2) CPU contention splits cycles: the combined bomber-wasm +
+mech_attribution + percepta_compile compile timed out at 25 min under the
+sibling's parallel load — split into 8a/8b/8c and each compiled fine
+(mech_attribution was even warm already); heavy WASM/MILP feature sets get
+their OWN cycle, backgrounded with nohup + log polling. (3) A sibling
+rebased my 9 in-flight commits mid-session (origin/develop moved under me;
+reflog shows the clean replay, c10 committed on top, push fast-forwarded) —
+the shared-checkout reality; validations all ran post-rebase so the final
+tree is what was validated. (4) `manual_is_multiple_of` is a rust-1.93
+default-on lint with NO healer proposer — fixed manually at bench_maxsim_
+rerank.rs:131 ((rng.next() % 4) == 0 → rng.next().is_multiple_of(4));
+corpus-gap candidate (the Issue-060 drive-by class, now with a second
+occurrence). (5) The vec-with-capacity array-literal divergence now has
+FOUR recorded sites (2 prior + bench_120_renyi_efficiency:159 +
+test_120_toast_renyi_goat:31 — the iterable is a multi-line array literal
+with no name the emitter can reference for .len(); extending the proposer
+to bind a temp first is the standing backlog item).
+
+**Final state of the katgpt-rs root tests/ dir: 2 findings remain, both
+the documented vec-with-capacity divergence class.** Remaining sweep
+territory: root benches/ dir 406 findings / 42 files (unclaimed) + src/
+~376 findings in workspace crates + the benches/ + examples/ surfaces of
+the member crates.
+
 **Issue 031 (2026-08-17, RESOLVED same day + removed per noise-reduction
 rule) — 3 healer defects from the katgpt-pruners 587-edit heal
 validation (katgpt-rs `4b6675dc5`).** **H1 (CRITICAL)** — the
