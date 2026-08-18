@@ -1036,7 +1036,8 @@ teacher ×2/3, strandset 1/5, go ×2/4, flashmemory ×2/4); sibling-WIP
 src (kimi/muon/weaver/xhc family ~366); 49 out-of-union src / 208; the
 7 gpu-crate exclusions (43 edits: 3 sibling + 4 broken-gate — the
 broken gates need owner fixes, not heals); engine tests/ exceptions
-(ciacot AVOID, bench_401 sibling-caution); engine benches/ unswept.
+(ciacot AVOID, bench_401 sibling-caution); engine benches/ DONE
+(`4306aeab`, this cycle).
 
 **riir-train slice 13 landed 2026-08-18** (riir-train `df0ab789`): the
 examples/ heavy remainder MINUS kimi/gemma4 — **16 files / 78 edits**
@@ -1063,10 +1064,10 @@ head -c 400 | xxd | grep '0d 0a'`. **Exclusions:** plan320_gemma4_q4k_gpu_train
 + weaver/autograd.rs ×5 (sibling Plan-339/340 src), riir-ai gpu-dep
 residue ×4 (not this repo). 2 residual `unnecessary_sort_by` (default-on
 lint, no corpus proposer — the manual_is_multiple_of corpus-gap class).
-**Remaining:** ~1212 by arithmetic (1290 − 78): kimi ×13/202 + gemma4 ×17/56
+**Remaining:** ~1168 by arithmetic (1212 − 44): kimi ×13/202 + gemma4 ×17/56
 + plan320 (sibling-adjacent, re-check at slice time); sibling-WIP src
 ~366; 49 out-of-union src / 208; the 7 gpu exclusions; tests/ exceptions;
-benches/ unswept.
+benches/ DONE (`4306aeab`).
 
 **map_unwrap_or array-literal guard landed 2026-08-18** (`2bf2a44`, found
 live in a concurrent session's WIP): `x.map(f).unwrap_or(&[...])` →
@@ -1100,6 +1101,36 @@ applied + surgically fmt'd, then REVERTED unvalidated per the discipline
 the sibling's tree compiles, the full 44-edit slice is ~30 min** (heal
 re-application is 1 command; baselines: 382 exit-code/output, 317
 exit-0-all-pass semantics, 381+421 exit+output).
+
+**RESOLVED same day ~2h later** (riir-train `4306aeab`, pushed): the
+sibling fixed their E0308 (step.rs mtime moved 09:29:27 → 10:05:41;
+`cargo check -p katgpt-forward` clean — the mtime CHANGE was the fix
+landing, so a moved mtime is not itself a block signal, only the compile
+probe is). The 44-edit slice landed exactly as mapped: 42×
+uninlined_format_args (output-identical) + 1× match_bool (382's
+`sigmoid_f32_reference` — the rewrite RESTORES the "verbatim copy of
+`crate::math::sigmoid_f32`" comment's truth, broken since slice 1 healed
+the centralized fn to if/else while the bench reference kept `match`) + 1×
+single_match_else (421's verdict match on `(r8, r16)` → `if let ... else`,
+2-arm wildcard-second, sound for any compiling 2-arm match). Validation
+(class 9, exit + output): all 4 pre/post exit=0; **b317 verdicts + R²
+BIT-IDENTICAL** (0.9989/0.9255/0.7168 — the trained-phi fixture is
+deterministic); b381 ALL PASS; b421 HYPOTHESIS CONFIRMED both sides
+(io_pct 80.9/65.7 pre vs 73.0/58.3 post — same verdict, GPU timing
+variance); b382 criterion structure identical (noise annotations only).
+Post-fmt re-runs green (b317+b381) + --no-run compile checks (b382+b421);
+rustfmt applied to all 4 (fmt-clean at HEAD; hunks confined to healed
+regions — 421's single hunk @332-372 = exactly the rewritten block).
+Clippy residue 0 under each bench's exact gate. **Two measurement notes:**
+(1) cargo's `Running benches/...-<hash>` filename hash is crate+features
+identity, NOT source content — pre/post logs show the SAME hash while the
+`Compiling <pkg>` line in each post log proves the rebuild (do not
+mis-read identical hashes as "the heal never ran"); (2) normalized-output
+diffs on criterion benches show noise-threshold annotation churn
+(`(%) high mild` vs `low mild`, `No change in performance detected`) —
+these lines differ between ANY two runs of the same unmodified bench;
+verdict lines are the load-bearing comparison. **The engine benches/
+surface is now DONE** (0 findings remain across both crates' benches/).
 
 **riir-neuron-db slice 1 landed 2026-08-18** (riir-neuron-db `5db2e3d`) —
 the re-probe confirmed the block STILL LIVE (step.rs mtime unchanged
