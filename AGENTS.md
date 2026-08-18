@@ -1373,10 +1373,10 @@ files); rustfmt on 20 fmt-clean-at-HEAD files (36 pre-existing drift scoped
 out, 0 CRLF); post-fmt spot-checks count-identical. **Campaign remaining
 (~6.5K edits):** riir-engine src DONE 2026-08-19 (`1e050442a`, see the
 engine slice record below — 174/979; examples DONE `85224024f` 15/151;
-tests/benches remainder ~1480), games-civ 1549/146, games 799/87 (2 files
-sibling WIP), poc 769/64 (ane_t0.rs sibling-active), examples 725/75,
-wasm tail, gpu 1175/163 sibling-adjacent, mmorpg excluded until
-wire_router settles.
+wasm tail DONE `f43545fde` 5/23; tests/benches remainder ~1480),
+games-civ 1549/146, games 799/87 (2 files sibling WIP), poc 769/64
+(ane_t0.rs sibling-active), examples 725/75, gpu 1175/163 sibling-
+adjacent, mmorpg excluded until wire_router settles.
 
 **riir-ai engine/src slice landed 2026-08-19** (riir-ai `1e050442a`, via
 the worktree dance): **174 files / 979 edits** — the first riir-ai giant
@@ -1452,6 +1452,14 @@ this slice's territory — the wasm tail's). rustfmt on the 7 fmt-clean
 files (8 drift, 0 CRLF). **Engine territory remaining: tests/ +
 benches/ (~95 files / ~1480 edits — the [[test]]/[[bench]] required-
 features gate map is the long pole).**
+
+**riir-ai wasm tail landed 2026-08-19** (riir-ai `f43545fde`): **5 files /
+23 edits** — the wasm crate CLEAN (14 files total). Includes the 3
+wasm_pruner single_match sites the engine examples union scan flagged.
+Validation: wasm lib 88/0/0 count-identical pre/post (incl. post-fmt);
+clippy residue in riir-wasm = 0 (the `-p riir-wasm` scan lints the
+engine dep too — the 5 warnings shown are the documented engine-src
+divergences).
 
 **Redundant identical named-arg class shipped** (riir-clippy `73ab2c2`):
 `format!("{x:?}", x = x)` — the named arg EQUALS its ident — is redundant
