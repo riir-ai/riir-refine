@@ -5,6 +5,14 @@
 //! are the boolean literals `true` and `false` (either order; bodies are
 //! arbitrary).
 //!
+//! Extended shape (Issue-029 miss class, found live in riir-neuron-db
+//! `bench_478`): a three-arm match `[P => A, !P if g => B, !P => {}]` — the
+//! guarded middle arm plus an EMPTY same-polarity fallback — rewrites to
+//! `if s { A } else if g { B }` (the empty fallback is the implicit else;
+//! real clippy fires `match_bool` on this shape with no autofix of its
+//! own). Only this exact polarity layout is converted: a guard on the
+//! FIRST arm would need a nested `if`, which is a different rewrite.
+//!
 //! Span-preserving (Issue 016): the whole match's byte range is replaced by
 //! `if <scrutinee> <true-body> else <false-body>` — scrutinee and bodies
 //! keep their ORIGINAL source text; non-block bodies are braced. The if
@@ -37,9 +45,21 @@ impl<'ast> Visit<'ast> for Collector<'_> {
 
 impl Collector<'_> {
     fn try_match_bool(&self, m: &ExprMatch) -> Option<String> {
-        if m.arms.len() != 2 || !m.attrs.is_empty() {
+        if !m.attrs.is_empty() {
             return None;
         }
+        if m.arms.len() == 2 {
+            return self.try_two_arm(m);
+        }
+        if m.arms.len() == 3 {
+            return self.try_guarded_fallback(m);
+        }
+        None
+    }
+
+    /// The classic two-arm form: `[true => A, false => B]` (either order,
+    /// no guards).
+    fn try_two_arm(&self, m: &ExprMatch) -> Option<String> {
         if m.arms.iter().any(|a| !a.attrs.is_empty() || a.guard.is_some()) {
             return None; // guards/arm-attrs would be lost by the splice
         }
@@ -52,6 +72,49 @@ impl Collector<'_> {
             }
         }
         None
+    }
+
+    /// The guarded-fallback form (the `bench_478` shape): `[P => A, !P if g => B,
+    /// !P => {}]` → `if s { A } else if g { B }` (or `if !s { A } else if
+    /// g { B }` when the first arm is the `false` arm). The empty last arm
+    /// is the implicit else; the guard becomes the `else if` condition.
+    fn try_guarded_fallback(&self, m: &ExprMatch) -> Option<String> {
+        let (first, mid, last) = (&m.arms[0], &m.arms[1], &m.arms[2]);
+        if m.arms.iter().any(|a| !a.attrs.is_empty()) {
+            return None;
+        }
+        if first.guard.is_some() || last.guard.is_some() || mid.guard.is_none() {
+            return None; // only the middle arm carries the guard
+        }
+        let first_is_true = pat_is_bool(&first.pat, true);
+        let mid_lit = if pat_is_bool(&mid.pat, true) {
+            true
+        } else if pat_is_bool(&mid.pat, false) {
+            false
+        } else {
+            return None;
+        };
+        // The middle + last arms must share the polarity complementary to
+        // the first arm, and the last arm must be the EMPTY fallback.
+        if mid_lit == first_is_true {
+            return None;
+        }
+        if !pat_is_bool(&last.pat, mid_lit) {
+            return None;
+        }
+        if !body_is_empty(&last.body) {
+            return None;
+        }
+        let scrutinee = src(self.source, &*m.expr)?;
+        let guard = src(self.source, &*mid.guard.as_ref().unwrap().1)?;
+        let first_body = braced_body(self.source, &first.body)?;
+        let mid_body = braced_body(self.source, &mid.body)?;
+        let cond = if first_is_true {
+            format!("if {scrutinee}")
+        } else {
+            format!("if !{scrutinee}")
+        };
+        Some(format!("{cond} {first_body} else if {guard} {mid_body}"))
     }
 }
 
@@ -68,6 +131,15 @@ fn braced_body(source: &str, body: &Expr) -> Option<String> {
         Expr::Block(_) => text,
         _ => format!("{{ {text} }}"),
     })
+}
+
+/// Is this arm body the empty fallback (`{}` block or unit `()`)?
+fn body_is_empty(body: &Expr) -> bool {
+    match body {
+        Expr::Block(b) => b.block.stmts.is_empty(),
+        Expr::Tuple(t) => t.elems.is_empty(),
+        _ => false,
+    }
 }
 
 #[cfg(test)]
@@ -103,6 +175,54 @@ mod tests {
         let input = "fn f(b: bool) -> u8 { match b { true => 1, false => 0, _ => 2 } }";
         let out = propose_fix("match_bool", input);
         assert!(out.is_none(), "3-arm match must not fire: {out:?}");
+    }
+
+    #[test]
+    fn guarded_fallback_true_first_rewrites() {
+        // The bench_478 production shape: guarded middle arm + empty
+        // same-polarity fallback becomes an if / else-if chain.
+        let input = "fn f(b: bool, g: bool) { match b { true => x(), false if g => y(), false => {} } }";
+        let out = propose_fix("match_bool", input).expect("matched");
+        assert!(
+            out.contains("if b { x() } else if g { y() }"),
+            "guarded fallback not converted: {out}"
+        );
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn guarded_fallback_false_first_rewrites() {
+        let input = "fn f(b: bool, g: bool) { match b { false => x(), true if g => y(), true => {} } }";
+        let out = propose_fix("match_bool", input).expect("matched");
+        assert!(
+            out.contains("if !b { x() } else if g { y() }"),
+            "mirror polarity not converted: {out}"
+        );
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn guarded_fallback_nonempty_last_untouched() {
+        let input =
+            "fn f(b: bool, g: bool) { match b { true => x(), false if g => y(), false => z() } }";
+        let out = propose_fix("match_bool", input);
+        assert!(out.is_none(), "non-empty fallback must not fire: {out:?}");
+    }
+
+    #[test]
+    fn guarded_fallback_same_polarity_untouched() {
+        let input =
+            "fn f(b: bool, g: bool) { match b { true => x(), true if g => y(), false => {} } }";
+        let out = propose_fix("match_bool", input);
+        assert!(out.is_none(), "same-polarity guard must not fire: {out:?}");
+    }
+
+    #[test]
+    fn guarded_fallback_first_guard_untouched() {
+        let input =
+            "fn f(b: bool, g: bool) { match b { true if g => x(), false => y(), false => {} } }";
+        let out = propose_fix("match_bool", input);
+        assert!(out.is_none(), "guard on the first arm needs a nested rewrite: {out:?}");
     }
 
     #[test]
