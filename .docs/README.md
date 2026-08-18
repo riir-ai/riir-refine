@@ -27,6 +27,7 @@ co-equal path.
 | 09 | [`09_lessons/`](09_lessons/README.md) | Canonical patterns + honest POC caveats |
 | 10 | [`10_self_evolve/`](10_self_evolve/README.md) | Issue 004 + Issue 008: latent-first self-evolution loop (G1–G7 ALL PASS) |
 | 11 | [`11_domains/`](11_domains/README.md) | **Plan 001:** multi-domain architecture — `rust_perf` (Phase 2) + `kernel_opt` (Phase 3, absorbs Proposal 012) |
+| 12 | [`12_ane/`](12_ane/README.md) | Apple Neural Engine substrate knowledge — private runtime API, MIL/blob formats, M3 Max (h15g) hardware findings, the Rust-bridge negative result + working ObjC substrate, ecosystem map (Issue 726 T0 distillation) |
 
 ## Pipeline overview
 
