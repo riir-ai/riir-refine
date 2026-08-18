@@ -1116,6 +1116,7 @@ global = symlink only.
   `ternary_deltanet_gpu_forward_cudarc.rs` was MINED as Batch 58 (2026-08-18,
   Research 065 — the sibling-WIP unlock fired when the Issue 717/715 work
   landed; 721's Non-goals exclude the CUDA port so it was collision-free).
+- **Batch 62 QUEUED (2026-08-18, Research 070, Plan 008 — the SECOND external-source distill via the `distill` skill):** the microGPT-C CPU-SIMD distill (github.com/vixhal-baraiya/microgpt-c, MIT, complete; verdict corrected MARGINAL B− → YES B on user challenge — the LOPD/NQF rescue class, record in the note). Route `rust_perf`, 2 candidates: lead `transposed-weight-register-gemv` (column-major pack at weight-freeze, broadcast-FMA into output registers, zero horizontal reduction; live in-tree shapes: `katgpt-types/src/simd/binary.rs` per-row `y[r] = vaddvq(acc)` matvec + `dot.rs` + `math.rs` matmul family) + `newton-refinement-vs-hardware-transcendental` (honest-annotation rule — GPU fast-math recipe inverts on CPU, measured 2–4% slower on 5600H). Drops recorded in Research 070 (Schraudolph exp tier: Cephes already ships at the tier we need + the trains-with-approx catch; sampling: `gumbel_max_sample` strictly better; prefix-table: `precompute-table` instance). Yield 1–2. Plan-first: Plan 008 created BEFORE any corpus edit.
 - **Progress**: riir-gpu file-mining COMPLETE-minus-one (Batch 51, Research
   057; ~115 files mined by line-weight; the sole remainder is the CubeCL
   ternary twin, blocked on Issue 721). Corpus: 364 kernel rules + 65
