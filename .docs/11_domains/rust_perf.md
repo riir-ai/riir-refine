@@ -19,7 +19,7 @@
 
 ## Corpus
 
-67 rules across 12 categories (rust-optimize skill checklist +
+69 rules across 12 categories (rust-optimize skill checklist +
 nnethercote/perf-book + rustc-hash/bevy real-world patterns + the hotpath-rs
 profiling guide, Research 032; Batch 48 added the 8 online-search candidates
 from the perf-book std-types + iterators chapters; Batch 53 added the 4
@@ -29,10 +29,9 @@ Batch 59 (2026-08-18) added the first EXTERNAL-source distill via the
 the raygon-renderer/thermite Rust port; Batch 61 (2026-08-18) added the 2
 oxc-article rules: `keyword-map-to-match` + `usize-index-to-u32`; Batch 62
 (2026-08-19, Research 070 microGPT-C distill) added the 2 CPU-SIMD rules:
-`transposed-weight-register-gemv` + `newton-refinement-vs-hardware-transcendental`).
+`transposed-weight-register-gemv` + `newton-refinement-vs-hardware-transcendental`; Batch 64 (2026-08-19, Research 072 — the ARM Neon / bounds-check pool) added `loop-order-innermost-contiguous` + `debug-assert-length-hoist`).
 Allocation is the deepest
-category (18 rules). Complexity has 14. Iterators has 7. Simd 6 (Batch 62
-added `transposed-weight-register-gemv`), layout 6
+category (18 rules). Complexity has 15 (Batch 64 added `debug-assert-length-hoist`). Iterators has 7. Simd 7 (Batch 62 added `transposed-weight-register-gemv`; Batch 64 added `loop-order-innermost-contiguous`), layout 6
 (Batch 61 added `usize-index-to-u32`);
 concurrency has 4 (Issue 014 added the two metric-mismatch rules);
 caching has 2 (Issue 014 added `regex-hoist-lazylock`); arithmetic has 5
@@ -40,10 +39,10 @@ caching has 2 (Issue 014 added `regex-hoist-lazylock`); arithmetic has 5
 `division-by-invariant-multiplication`; Batch 62 added the annotated
 `newton-refinement-vs-hardware-transcendental`); dispatch has 2 (Batch 61 added
 `keyword-map-to-match`); the rest have 1
-each. 57 are benchable (carry a `BenchSpec`); 10 are honestly
+each. 59 are benchable (carry a `BenchSpec`); 10 are honestly
 `NotBenchable` — 8 need external runtimes or are structural (size_of,
 memory, fairness), 2 are **metric-mismatch** (Issue 014 T2.3/T2.4: the cost
-is contention latency / queue depth, not wall-clock). 13 of 67 carry
+is contention latency / queue depth, not wall-clock). 14 of 69 carry
 `context_notes` — 10 verdict-class (3 `ParetoDominated` + 7
 regime-fragile/Mixed — Batch 48 added the `filter-count-to-any` folk-wisdom
 refutation: the VECTORIZED count loop beats `any()`'s scalar early-exit at
@@ -116,6 +115,8 @@ annotated rules as context-dependent, not unconditional suggestions.
 | `keyword-map-to-match` | dispatch | ✅ 5.23-5.58x ParetoDominant | — | static-keyword `LazyLock<HashMap<&str, V>>` dispatch → plain `match` on string literals (Batch 61, oxc distill — LLVM lowers the match to a switch on string LENGTH + inline compares; the HashMap pays SipHash per lookup; oxc failed to beat the match with a gperf-style perfect hash, then found the length-switch in `--emit=llvm-ir`; static key sets only) |
 | `usize-index-to-u32` | layout | ✅ 1.81-1.99x ParetoDominant | — | `usize` index/offset fields in high-volume structs → `u32` (Batch 61, oxc Span distill — halves the struct: 16B → 8B, twice the elements per cache line; oxc measured +5% on large parser files; domain must genuinely bound below 2³²) |
 | `transposed-weight-register-gemv` | simd | ✅ 1.18-6.08x ParetoDominant | — | row-major per-row dot (serial scalar accumulator chain + horizontal reduce) → transposed weights, per-input broadcast FMA into output-vector accumulators (Batch 62, microGPT-C distill — the win GROWS at large nin: strict-FP Rust cannot vectorize the scalar accumulator chain without reassociation, so the row-dot degrades further; llama.cpp's fine row-major dots use explicit multi-accumulator SIMD — not what portable scalar code gets; architectural rule — weights pack transposed once at weight-freeze, no proposer) |
+| `loop-order-innermost-contiguous` | simd | ✅ 7.14-13.80x ParetoDominant | — | i-j-k nested accumulation with a column-striding inner access → i-k-j reorder (Batch 64, Arun Nagaraj matmul-simd distill — the innermost loop must vary the LAST index: contiguous row walk; L1 misses 45%→12% in source; the win GROWS with n; float sum-order changes → rel-error gate; distinct from B62's repack rule — this reorders loops over an unchanged layout) |
+| `debug-assert-length-hoist` | complexity | ⚠️ Mixed regime-split (annotated) | — | `debug_assert!` mentioning `.len()` is erased in release, dropping the constraint bounds-check elision needed → `assert!` (Batch 64, Shnatsel bounds-check-cookbook — 1.13x@1K / stable 0.67-0.71x@100K on aarch64; scope: parameter/range-pinned indices ONLY — data-dependent index arrays can never propagate the constraint) |
 | `newton-refinement-vs-hardware-transcendental` | arithmetic | ⚠️ Mixed (annotated) | — | Newton-refined recip/rsqrt (the GPU fast-math recipe) → hardware single-instruction `fdiv`/`fsqrt` on CPU (Batch 62, microGPT-C distill — 1.09x at 1K / 1.01x at 100K, hardware never loses; the annotation carries the regime inversion: on GPU div/sqrt are multi-cycle so approximate+refine inverts the verdict — the rule exists to STOP the plausible-looking GPU→CPU fast-math port; the relaxed-precision-estimate axis is separate + valid only where accuracy can relax) |
 | `powi-vs-powf` | arithmetic | ~ Mixed (all-Tie) | ⚠️ `context_notes` | `x.powf(2.0)` → `x.powi(2)` (Batch 53 refutation: LLVM lowers both identically in release; idiom value = debug profiles + exponents ≥ 3) |
 | `soa-hot-field` | layout | ~ Mixed (latency-bound) | ⚠️ `context_notes` | AoS wide-struct single-field scan → SoA split (Batch 53: serial f32 add-chains hide the win; pays on throughput-bound field consumers — count/min-max/transform) |

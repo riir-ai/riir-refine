@@ -11,7 +11,7 @@
 //!
 //! 65 entries across 12 categories (complexity 14, allocation 18, simd 5,
 //! layout 6, iterators 7, concurrency 4, io 1, arithmetic 4, dispatch 2,
-//! caching 2, bevy 1, wasm 1). 57 are benchable; 10 are honestly
+//! caching 2, bevy 1, wasm 1). 59 are benchable; 10 are honestly
 //! NotBenchable (8 external-runtime/size-class + 2 metric-mismatch, Issue 014).
 //! Batch 48 (idle-queue item 11, 2026-08-16) added the 8 online-search
 //! candidates (perf-book std-types + iterators chapters): collect-append-to-
@@ -26,7 +26,9 @@
 //! 2026-08-18) added the 2 oxc-article rules: keyword-map-to-match +
 //! usize-index-to-u32. Batch 62 (2026-08-19, Research 070 microGPT-C
 //! distill) added the 2 CPU-SIMD rules: transposed-weight-register-gemv +
-//! newton-refinement-vs-hardware-transcendental.
+//! newton-refinement-vs-hardware-transcendental. Batch 64 (2026-08-19,
+//! Research 072 — the ARM Neon / bounds-check online-search pool) added
+//! loop-order-innermost-contiguous + debug-assert-length-hoist.
 //!
 //! ## Bench specs (behind `rust_perf_bench`)
 //!
@@ -95,8 +97,10 @@
 //! - `usize-index-to-u32` (16B usize spans → 8B u32 spans — cache density under bandwidth-bound scans, Batch 61)
 //! - `transposed-weight-register-gemv` (row-major per-row dot + horizontal reduce → transposed weights, per-input broadcast FMA into output accumulators — 1.18-6.08x ParetoDominant, Batch 62, microGPT-C distill; the win GROWS at large nin — the scalar accumulator's serial FP chain is the real cost, not the horizontal reduce)
 //! - `newton-refinement-vs-hardware-transcendental` (Newton-refined recip/rsqrt (the GPU fast-math recipe) → hardware single-instruction `fdiv`/`fsqrt` on CPU — Mixed 1.01-1.09x, hardware never loses; Batch 62, annotated)
+//! - `loop-order-innermost-contiguous` (i-j-k nested accumulation with a column-striding inner access → i-k-j reorder so the innermost varies the LAST index — 7.1-13.8x ParetoDominant, grows with n; Batch 64)
+//! - `debug-assert-length-hoist` (`debug_assert!` mentioning `.len()` is erased in release, dropping the constraint bounds-check elision needed → `assert!` — Mixed regime-split 1.13x@1K / 0.67-0.71x@100K stable on aarch64; Batch 64, annotated)
 //!
-//! Not benchable (10/67) — honest:
+//! Not benchable (10/69) — honest:
 //! - `layout-reorder` (struct size — deterministic `size_of`, not a runtime
 //!   microbench; the cache-utilization claim needs a specific access pattern)
 //! - `repr-u8-enum` (enum size — deterministic `size_of`, same class as
@@ -137,11 +141,12 @@ use crate::domains::rust_perf::{PerfRule, RustPerfDomain};
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 65 entries
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 69 entries
 /// covering the main perf pattern categories (complexity, allocation, simd,
 /// layout, iterators, concurrency, io, arithmetic, dispatch, caching, bevy,
-/// wasm). Allocation is the deepest (18 rules); complexity has 14; iterators
-/// has 7; simd has 5; layout has 6 (Batch 61 added 1); concurrency has 4;
+/// wasm). Allocation is the deepest (18 rules); complexity has 15; iterators
+/// has 7; simd has 7 (Batch 62 added 1 + Batch 64 added 1); layout has 6
+/// (Batch 61 added 1); concurrency has 4;
 /// dispatch has 2 (Batch 61 added 1); caching has 2; the rest have 1.
 #[must_use]
 #[allow(clippy::too_many_lines)] // seed corpus is a data table; length scales with rule count
@@ -1412,6 +1417,81 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
             ),
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: Some(newton_refinement_vs_hardware_bench_spec()),
+        },
+        // ── simd: loop-order-innermost-contiguous ──
+        // Source: Arun Nagaraj, 'Matrix Multiplication in Rust with
+        // SIMD: From Naive to 126x Faster' (medium @aruntamiln
+        // 2026-02-12; repo ArunTamil21/matmat-simd typo ArunTamil21/matmul-simd;
+        // x86 AVX measured, technique ISA-independent — it is
+        // memory-hierarchy, not ISA). The i-j-k nest's INNERMOST loop
+        // (k) strides `b`'s OUTER axis (`b[k][j]` at stride-n) — every
+        // access a new cache line, L1 misses 45%->12% after the reorder.
+        // Distinct from `transposed-weight-register-gemv` (B62: repacks
+        // the WEIGHTS column-major for GEMV — that changes the data
+        // layout; this reorders the LOOPS over an unchanged layout, the
+        // no-repack general nested-accumulation case), `simd-chunk`
+        // (chunking for vectorization width), `layout-reorder` (struct
+        // field padding), `soa-hot-field` (AoS->SoA). Legality: no
+        // loop-carried deps across the swapped axes (the `c[i][j] +=`
+        // accumulation shape is the canonical legal case). Float
+        // sum-order changes under the reorder — rel-error tolerance
+        // gate, NOT bit-identity (the `distance-sq-no-sqrt` precedent).
+        PerfRule {
+            rule_id: "loop-order-innermost-contiguous".to_string(),
+            name: "i-j-k nested accumulation with a column-striding inner access → i-k-j reorder (innermost varies the LAST index)".to_string(),
+            category: "simd".to_string(),
+            buggy_code: "// i-j-k nest: the INNERMOST loop (k) walks b[k][j] COLUMN-wise at stride-n\nfn matmul(a: &[f32], b: &[f32], c: &mut [f32], n: usize) {\n    for i in 0..n {\n        for j in 0..n {\n            for k in 0..n {\n                c[i * n + j] += a[i * n + k] * b[k * n + j]; // stride-n inner\n            }\n        }\n    }\n}".to_string(),
+            fixed_code: "// i-k-j reorder: the innermost loop (j) varies the LAST index — a\n// CONTIGUOUS row walk through b, c, and the hoisted a row anchor.\nfn matmul(a: &[f32], b: &[f32], c: &mut [f32], n: usize) {\n    for i in 0..n {\n        let a_row = &a[i * n..(i + 1) * n]; // hoist the row anchor\n        for k in 0..n {\n            let a_ik = a_row[k];\n            for j in 0..n {\n                c[i * n + j] += a_ik * b[k * n + j]; // j strides by 1\n            }\n        }\n    }\n}".to_string(),
+            context_notes: None,
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(loop_order_innermost_contiguous_bench_spec()),
+        },
+        // ── complexity: debug-assert-length-hoist ──
+        // Source: Shnatsel, 'How to avoid bounds checks in Rust
+        // (without unsafe!)' (2023-01-17, the canonical article;
+        // repo Shnatsel/bounds-check-cookbook). A `debug_assert!`
+        // mentioning `.len()` is COMPILED OUT in release — dropping
+        // exactly the length constraint the optimizer needed to
+        // eliminate the subsequent bounds checks, so release retains
+        // ALL of them ('Ironically, this makes the code slower'). The
+        // fix is the macro swap: `assert!` survives release, and
+        // redundant asserts are optimizer-removed ('you cannot have
+        // too many'). The counter-intuition is the value: `debug_assert!`
+        // FEELS free (it vanishes!) but its vanishing is the pessimization.
+        // Sibling fact encoded: an `assert!` in front of the hot loop is
+        // the cheapest bounds-check hoist (check once, not per-iteration).
+        // Honest expectation (annotation): aarch64 gains are the 1.03x
+        // class (the 15% headline was an x86 unrolling secondary
+        // effect) — the rule exists to stop the release-mode
+        // pessimization, not to promise throughput.
+        PerfRule {
+            rule_id: "debug-assert-length-hoist".to_string(),
+            name: "debug_assert! mentioning .len() is erased in release (dropping the constraint bounds-check elision needed) → assert!".to_string(),
+            category: "complexity".to_string(),
+            buggy_code: "// debug_assert! is ERASED in release — the optimizer loses exactly the\n// range constraint it needed to eliminate the loop's bounds checks\nfn checksum(rows: &[(u64, u64)], first: usize, count: usize) -> u64 {\n    debug_assert!(first + count <= rows.len());\n    let mut acc = 0;\n    for i in first..first + count {\n        acc ^= rows[i].0.wrapping_add(rows[i].1); // release keeps the bounds check\n    }\n    acc\n}".to_string(),
+            fixed_code: "// assert! SURVIVES release: the range constraint stays visible and the\n// bounds checks are elided (\"you cannot have too many asserts\" — the\n// redundant ones are optimizer-removed, never re-checked)\nfn checksum(rows: &[(u64, u64)], first: usize, count: usize) -> u64 {\n    assert!(first + count <= rows.len());\n    let mut acc = 0;\n    for i in first..first + count {\n        acc ^= rows[i].0.wrapping_add(rows[i].1); // checks elided in release\n    }\n    acc\n}".to_string(),
+            context_notes: Some(
+                "Mixed, regime-split (Batch 64 bench, M3 Max aarch64): the \
+                 canonical range-pinned shape measures 1.13x at n=1K \
+                 (elision win) but a STABLE 0.67-0.71x LOSS at n=100K \
+                 (3-run verified) — on aarch64 the swap is shape- and \
+                 scale-dependent, NOT a free win; the article's own aarch64 \
+                 runs measured 1.03x (the 15% headline was an x86 unrolling \
+                 secondary effect). Scope: the assert's constraint must be \
+                 PROPAGATABLE to the indexed accesses (parameter/range-pinned \
+                 indices) — a `debug_assert!` over a DATA-DEPENDENT index \
+                 array can never enable elision (the compiler cannot \
+                 propagate through runtime index values), so the swap there \
+                 is pure cost. The rule's VALUE is stopping the \
+                 counter-intuitive release-mode pessimization \
+                 (`debug_assert!` feels free — its vanishing drops the \
+                 length constraint bounds-check elision needed) while warning \
+                 that the fix itself needs measuring per shape. Suggest \
+                 `assert!` (redundant asserts are optimizer-removed) on \
+                 range-pinned shapes; MEASURE before expecting throughput.".to_string(),
+            ),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(debug_assert_length_hoist_bench_spec()),
         },
     ])
 }
@@ -4560,6 +4640,41 @@ fn newton_refinement_vs_hardware_bench_spec() -> BenchSpec {
     }
 }
 
+/// Bench spec for `loop-order-innermost-contiguous`: i-j-k vs i-k-j
+/// nested-accumulation matmul. The inner loop's access pattern is the
+/// whole story: column-stride-n vs contiguous row walk (L1 misses
+/// 45%->12% in the source). Square sizes 64/128/256 — L1/L2-resident so
+/// the access-pattern effect dominates. Float sum-order differs between
+/// the orders — the validator's rel-error tolerance covers it (NOT
+/// bit-identity; the `distance-sq-no-sqrt` 1-ulp caveat precedent).
+#[cfg(feature = "rust_perf_bench")]
+fn loop_order_innermost_contiguous_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![64, 128, 256],
+        harness: "\nmod buggy {\n    pub fn matmul(a: &[f32], b: &[f32], c: &mut [f32], n: usize) {\n        for i in 0..n {\n            for j in 0..n {\n                let mut acc = 0.0f32;\n                for k in 0..n {\n                    acc += a[i * n + k] * b[k * n + j]; // k strides b's OUTER axis\n                }\n                c[i * n + j] = acc;\n            }\n        }\n    }\n}\n\nmod fixed {\n    pub fn matmul(a: &[f32], b: &[f32], c: &mut [f32], n: usize) {\n        for i in 0..n {\n            for j in 0..n {\n                c[i * n + j] = 0.0;\n            }\n        }\n        for i in 0..n {\n            let a_row = &a[i * n..(i + 1) * n];\n            for k in 0..n {\n                let a_ik = a_row[k];\n                let b_row = &b[k * n..(k + 1) * n];\n                let c_row = &mut c[i * n..(i + 1) * n];\n                for j in 0..n {\n                    c_row[j] += a_ik * b_row[j]; // j strides by 1 everywhere\n                }\n            }\n        }\n    }\n}\n\npub struct Input { a: Vec<f32>, b: Vec<f32>, c: Vec<f32> }\n\npub fn make_input(n: usize) -> Input {\n    let vals = |s: u32| (0..n * n)\n        .map(move |i| {\n            let h = (i as u32).wrapping_mul(0x9E37_79B9).wrapping_add(s);\n            ((h >> 8) as f32) / 16_777_216.0 - 0.5\n        })\n        .collect();\n    Input { a: vals(1), b: vals(2), c: vec![0.0; n * n] }\n}\n\npub fn run_buggy(input: &Input) {\n    let input = std::hint::black_box(input);\n    let n = (input.a.len() as f64).sqrt() as usize;\n    buggy::matmul(&input.a, &input.b, &mut input.c.clone(), n);\n}\n\npub fn run_fixed(input: &Input) {\n    let input = std::hint::black_box(input);\n    let n = (input.a.len() as f64).sqrt() as usize;\n    fixed::matmul(&input.a, &input.b, &mut input.c.clone(), n);\n}".to_string(),
+    }
+}
+
+/// Bench spec for `debug-assert-length-hoist`: debug_assert vs assert
+/// before an indexing loop. The whole point is RELEASE behavior
+/// (debug_assert is erased there — in debug both assert forms run);
+/// the validator builds generated crates in release, so the buggy side
+/// retains every bounds check. **Measured (Batch 64, M3 aarch64):
+/// Mixed regime-split — 1.13x at n=1K (elision win) but a STABLE
+/// 0.67-0.71x LOSS at n=100K** (3-run verified; the article's own
+/// aarch64 number was 1.03x). The canonical range-pinned shape
+/// (first+count <= len feeding the induction loop); data-dependent
+/// index arrays cannot propagate the constraint at all (measured
+/// 0.74-0.80x dominated on the first harness shape — elision is
+/// impossible there, the assert is pure cost).
+#[cfg(feature = "rust_perf_bench")]
+fn debug_assert_length_hoist_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![1_000, 100_000],
+        harness: "\nmod buggy {\n    pub fn range_checksum(rows: &[(u64, u64)], first: usize, count: usize,\n                          out: &mut Vec<u64>) {\n        debug_assert!(first + count <= rows.len()); // ERASED in release —\n        // the optimizer loses exactly this range constraint\n        for i in first..first + count {\n            out.push(rows[i].0 ^ rows[i].1); // bounds checks RETAINED\n        }\n    }\n}\n\nmod fixed {\n    pub fn range_checksum(rows: &[(u64, u64)], first: usize, count: usize,\n                          out: &mut Vec<u64>) {\n        assert!(first + count <= rows.len()); // SURVIVES release — the range\n        // constraint stays visible to the optimizer\n        for i in first..first + count {\n            out.push(rows[i].0 ^ rows[i].1); // bounds checks ELIDED\n        }\n    }\n}\n\npub struct Input { rows: Vec<(u64, u64)>, scratch: Vec<u64> }\n\npub fn make_input(n: usize) -> Input {\n    let rows: Vec<(u64, u64)> = (0..n)\n        .map(|i| {\n            let h = (i as u64).wrapping_mul(0x9E37_79B9_97F4_A7C1);\n            (h ^ (h >> 31), h.wrapping_mul(3))\n        })\n        .collect();\n    Input { rows, scratch: Vec::with_capacity(n) }\n}\n\npub fn run_buggy(input: &Input) {\n    let input = std::hint::black_box(input);\n    let mut out = input.scratch.clone();\n    buggy::range_checksum(&input.rows, 3, input.rows.len() - 3, &mut out);\n    std::hint::black_box(&out);\n}\n\npub fn run_fixed(input: &Input) {\n    let input = std::hint::black_box(input);\n    let mut out = input.scratch.clone();\n    fixed::range_checksum(&input.rows, 3, input.rows.len() - 3, &mut out);\n    std::hint::black_box(&out);\n}".to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -4575,20 +4690,22 @@ mod tests {
     }
 
     #[test]
-    fn seed_corpus_has_sixty_seven_entries_across_twelve_categories() {
+    fn seed_corpus_has_sixty_nine_entries_across_twelve_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 67);
+        assert_eq!(corpus.entries.len(), 69);
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
         categories.dedup();
         // 12 distinct categories. Allocation is the deepest (18 rules,
         // including Issue 014's arc-str-payload + Batch 48's three + Batch
-        // 53's hashmap-with-capacity); complexity has 14 (Batch 48 added
-        // hashset-insert-bool-return + vec-insert-front-deque); iterators
-        // has 7 (Batch 48 added three); layout has 6 (Batch 53 added
-        // soa-hot-field; Batch 61 added usize-index-to-u32); simd has 6
-        // (Batch 62 added transposed-weight-register-gemv) + concurrency
+        // 53's hashmap-with-capacity); complexity has 15 (Batch 48 added
+        // hashset-insert-bool-return + vec-insert-front-deque; Batch 64
+        // added debug-assert-length-hoist); iterators
+        // has 7 (Batch 48 added three); simd has 7 (Batch 62 added
+        // transposed-weight-register-gemv; Batch 64 added
+        // loop-order-innermost-contiguous); layout has 6 (Batch 53 added
+        // soa-hot-field; Batch 61 added usize-index-to-u32) + concurrency
         // has 4 (Issue 014 added the two metric-mismatch rules); arithmetic
         // has 5 (Batch 53 added powi-vs-powf + distance-sq-no-sqrt; Batch 59
         // added division-by-invariant-multiplication; Batch 62 added
@@ -4795,10 +4912,10 @@ mod tests {
 
     #[cfg(feature = "rust_perf_bench")]
     #[test]
-    fn fifty_seven_rules_have_bench_specs() {
+    fn fifty_nine_rules_have_bench_specs() {
         let corpus = build_perf_seed_corpus();
         let with_spec = corpus.entries.iter().filter(|e| e.bench_spec.is_some()).count();
-        assert_eq!(with_spec, 57, "expected 57 benchable rules, got {with_spec}");
+        assert_eq!(with_spec, 59, "expected 59 benchable rules, got {with_spec}");
     }
 
     #[cfg(feature = "rust_perf_bench")]
@@ -4835,10 +4952,11 @@ mod tests {
     /// (filter-count-to-any ParetoDominated, iter-copied-deref-map Mixed).
     /// Batch 53 (Bench 038) added 2 more (powi-vs-powf all-Tie Mixed,
     /// soa-hot-field latency-bound Mixed). Batch 62 added 1 (the
-    /// newton-refinement regime-inversion annotation). The other 54
+    /// newton-refinement regime-inversion annotation) + Batch 64 added 1
+    /// (debug-assert-length-hoist, the release-erasure class). The other 55
     /// have `context_notes: None` (unconditional wins or honestly NotBenchable).
     #[test]
-    fn thirteen_annotated_rules_carry_context_notes() {
+    fn fourteen_annotated_rules_carry_context_notes() {
         let corpus = build_perf_seed_corpus();
         let annotated: Vec<&str> = corpus
             .entries
@@ -4846,7 +4964,7 @@ mod tests {
             .filter(|e| e.context_notes.is_some())
             .map(|e| e.rule_id.as_str())
             .collect();
-        assert_eq!(annotated.len(), 13, "expected 13 context-annotated rules");
+        assert_eq!(annotated.len(), 14, "expected 14 context-annotated rules");
         assert!(annotated.contains(&"precompute-table"));
         assert!(annotated.contains(&"papaya-lockfree"));
         assert!(annotated.contains(&"dedupe-hashset-vs-vec"));
@@ -4860,6 +4978,7 @@ mod tests {
         assert!(annotated.contains(&"powi-vs-powf"));
         assert!(annotated.contains(&"soa-hot-field"));
         assert!(annotated.contains(&"newton-refinement-vs-hardware-transcendental"));
+        assert!(annotated.contains(&"debug-assert-length-hoist"));
     }
 
     /// The non-annotated rules (ParetoDominant + honestly NotBenchable) must
@@ -4873,7 +4992,7 @@ mod tests {
             .iter()
             .filter(|e| e.context_notes.is_none())
             .count();
-        assert_eq!(unannotated, 54, "expected 54 unannotated rules (67 - 13 annotated)");
+        assert_eq!(unannotated, 55, "expected 55 unannotated rules (69 - 14 annotated)");
     }
 
     /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -4885,7 +5004,7 @@ mod tests {
         let json = serde_json::to_string(&corpus.entries).unwrap();
         let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
         let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-        assert_eq!(annotated, 13);
+        assert_eq!(annotated, 14);
 
         // Simulate a pre-field snapshot: strip `context_notes` from JSON.
         // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -4900,7 +5019,8 @@ mod tests {
     /// unconditional wins. Thirteen annotations: Bench 013 (2 ParetoDominated
     /// and 2 Mixed), Bench 016 (sort-by-key and copy-from-slice), Issue 014
     /// (2 NotBenchable metric-mismatch), Batch 48 (2 verdict-class),
-    /// Batch 53 (Bench 038, 2 verdict-class), and Batch 62 (1 regime-class).
+    /// Batch 53 (Bench 038, 2 verdict-class), Batch 62 (1 regime-class),
+    /// and Batch 64 (1 release-erasure class).
     #[test]
     fn drafter_propagates_context_notes_from_perf_corpus() {
         use crate::domain::HealEntry;
@@ -4909,7 +5029,7 @@ mod tests {
 
         // Filter to the 12 annotated rules.
         let annotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_some()).collect();
-        assert_eq!(annotated.len(), 13, "expected 13 annotated rules");
+        assert_eq!(annotated.len(), 14, "expected 14 annotated rules");
 
         // The HealEntry trait override must agree with the struct field.
         for rule in &annotated {
@@ -4931,7 +5051,7 @@ mod tests {
 
         // The unannotated rules must return None from the trait too.
         let unannotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_none()).collect();
-        assert_eq!(unannotated.len(), 54, "expected 54 unannotated rules");
+        assert_eq!(unannotated.len(), 55, "expected 55 unannotated rules");
         for rule in &unannotated {
             assert!(HealEntry::context_notes(*rule).is_none(), "{} should have no context_notes", rule.rule_id);
         }
