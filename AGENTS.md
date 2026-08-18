@@ -1177,12 +1177,17 @@ cold build); warm re-runs passed clean 412/0 + 1090/0 twice each. The
 slice-5 re-run rule applies: a post-heal perf-gate mismatch needs a
 re-run before it counts as a regression.
 
+**riir-chain slice 1 landed 2026-08-18** (riir-chain `7421245a` merged `ec610745`, pushed develop) — **root lib src/: 47 files / +243−325 (net −82 post-fmt)**. Composition: 159 uninlined_format_args sites (156 first-pass + 2 `anyhow::anyhow!` + 1 `{self:?}` newly reachable via the proposer fixes below) + 21 match_bool + 17 single_match_else + 14 map_unwrap_or + 1 redundant_pattern_matching + 1 range_plus_one + 1 collapsible_else_if. **Exclusions (sibling 031-T0.1 territory, named by the t01-durability remediation review):** `src/asset_lifecycle/` (4 files / 57 edits — the sibling's freshest code, Aug-18 mtime detector) + `src/wallet/tx_log.rs`. **Branch discipline honored:** branch `fix/clippy-heal-root-lib-src` → 1 commit → rebase onto origin/develop (10 sibling commits landed mid-cycle — 21 files, ZERO src/ overlap, verified before rebase) → `git merge --no-ff` → push. **Validation (all count-identical pre/post):** default lib 320/0/0 (== the pinned `test_gate.sh` suite count); all-features lib **1848/1/2** — the 1 failure is PRE-EXISTING at HEAD (`consensus::rsm_fv::fv_gates::g1_c1_offline_correctness`, panics `rsm_fv.rs:54` assert 0 vs 1000000, `chain_fv`-gated so invisible in default; NOT the heal's — flagged for the owner, plausibly the sibling's 031 durability work); check --all-features clean; clippy residue in-scope = 0 for healed classes except **2 documented comment-guard divergences** (`guard_gossip.rs:231` interior arm comments + `slashing.rs:326` trailing arm comment — the rewrite would displace them, healer stays silent, SAFER than clippy); 32/47 files rustfmt'd (fmt-clean-at-HEAD only, 15 carry pre-existing drift); post-fmt spot-check (slashing module 42/42 green on rebuilt lib). **Gate-map method:** lib.rs cfg walk + per-parent-mod inner-gate walk → 25 distinct feature gates spanned → validated under `--all-features` (a first-class supported config here, unlike feature-union reconstruction). **Healer counter gotcha:** the second `--fix --write` pass reported "74 edits / 7 files" but the git-diff delta was exactly +1 file/+3/−7 (the 3 newly-unblocked sites) — the counter is CUMULATIVE per touched file, not new edits; the git diff is the ground truth.
+
+**Two proposer root-cause fixes shipped same cycle** (riir-clippy `c85ff1c`): (1) `anyhow!` joined the template-first macro family (last-segment matching made `anyhow::anyhow!(…)` resolve to `anyhow` → not in table → silent, while real clippy fires — found as 2 live residue sites in riir-chain shard_quorum.rs); (2) the `{self} is not a valid format-arg name` guard was a **FALSE PREMISE** — probe-verified (temp crate, clippy 1.93): real clippy fires on `format!("{:?}", self)` sites AND `format!("{self:?}")` compiles + runs (rustc explicitly allows `self` as an implicit capture). Guard removed (`r#raw` exclusion kept); 2 fixtures; 571/571 default lib, clippy 0.
+
 **Remaining heal territory (both unblocked during the katgpt-rs WIP):**
 ndb benches/ 27 files / ~730 edits (validation class 9 per bench — slow,
-future slice) + ndb examples/ 2 files; riir-chain 105 files / 420 edits
-(root lib src/ first, then tests/, then chaind + wallet crates — NOTE the
-riir-chain branch rule: one branch per ticket + `git merge --no-ff` into
-develop, NOT direct commit).
+future slice) + ndb examples/ 2 files; **riir-chain remainder: tests/ +
+chaind + wallet/staker/sdk crates (~58 files / ~205+ edits by subtraction
+from the 105/420 sizing — re-dry-run at slice time; tests/ grew +4 e2e
+files via the sibling's 031-T0.3 landing mid-cycle; branch-per-ticket +
+`--no-ff` flow)**.
 
 **slice 7 landed 2026-08-18** (katgpt-rs `805feb22`..`81ef2631`, 12
 commits) — **the katgpt-rs root tests/ sweep is COMPLETE**: 40 files /
