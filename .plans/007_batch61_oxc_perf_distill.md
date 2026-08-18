@@ -63,4 +63,6 @@ caller-gate lesson class).
 - [x] AGENTS.md: Batch 61 entry + rust_perf count 63 → 65
 - [x] `.docs/11_domains/rust_perf.md` rule table update
 - [x] SKILL.md mining-queue snapshot update (same commit)
-- [ ] Commit `feat: batch 61: oxc distill — keyword-map-to-match + usize-index-to-u32 (2 rules, corpus 63→65)` + push
+- [x] Commit `feat: batch 61: oxc distill — keyword-map-to-match + usize-index-to-u32 (2 rules, corpus 63→65)` + push
+      (landed as `2455855`; push raced a sibling's `d388600` which committed
+      on top of it in the shared checkout + pushed — both on origin/develop)
