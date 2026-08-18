@@ -1413,6 +1413,81 @@ worktree fallback proven); + the benches/ + examples/ surfaces of the
 member crates (the 4115 sizing includes them). The member-crate src/
 surface is COMPLETE.
 
+**Member-crate benches/examples + katgpt-core benches/examples slices
+landed 2026-08-18 evening** (katgpt-rs `b2f3ea933` + `0377ad22c`):
+(1) non-core member benches/examples — 6 files / 65 edits (canon/dec/
+speculative/spectral benches + types example); the 2 backend examples
+(ane/gpu_inference, 6 edits) are macOS-only metal/coreml — SKIPPED on this
+box, left for M3. Validation modes discovered per-target: canon_goat +
+spectral 475 are RELEASE-REQUIRED (debug fails perf gates 242µs>50µs /
+1000µs budget; release 17.9µs / 5/5 PASS — validate in release); dec560 +
+spec136 are debug-verdict benches (exit 0 with designed "G2 FAIL"
+measured-verdict output — same-signature target); types test_autovec
+output BIT-IDENTICAL ("result = -0.84619355"). One bench per command:
+multiple `--bench` flags run only the LAST (cargo quirk, twice-observed).
+(2) katgpt-core benches+examples — **71 files / 990 edits in ONE mega-union
+cycle** (52 features, all CPU/in-tree; ~50 distinct gates gate-mapped from
+Cargo.toml [[bench]]/[[example]] sections — katgpt-core has NO `default =
+[...]` line so ALL gated benches need explicit features). Composition: 971
+uninlined_format_args + 14 map_unwrap_or + 3 single_match_else. Validation:
+19 binaries FULL pre/post (the 14 control-flow-edit files + 5 biggest
+format-only) — 6 examples bit-identical (0 diff lines), bench_420 sweep
+table BIT-IDENTICAL (its "Quality claim NOT confirmed" exit-1 is the
+PoC's designed verdict), GOAT benches same-signature (debug latency-gate
+FAILs: 1349ns>500, 3112ns≥200ns, 88765ns>10µs, 3383ns>1000ns — the
+release-required class; latency numbers jitter, verdicts identical); 52
+files post-only (exit + verdict sanity — justified by the output-identical-
+by-construction format-arg class + compile-gated under the exact union;
+17 examples all exit 0); bench_440 debug-unrunnable (800 agents × 500 steps
+never finishes) — release run completes post-heal (its G1 MARGINAL verdict
+is the bench's own honest output). rustfmt on 38 fmt-clean files (33 drift,
+0 CRLF); net −329 lines.
+
+**THE PROPOSER ROOT-CAUSE FIX the slice's compile gate caught** (riir-clippy
+`17622d2`): the a081b49 bool-default terminal-state emission was
+RECEIVER-TYPE-BLIND — it emitted `is_some_and` on a `std::env::var` Result
+receiver (katgpt-core bench_440:456, E0599 + follow-on E0282 — `is_some_and`
+is Option-only). Fix: `classify_receiver` with three-way ReceiverKind —
+(1) a param-type stack (the Issue-031-H1 enclosing-fn-stack pattern:
+visit_item_fn/visit_impl_item_fn push `HashMap<ident, Option|Result>` from
+signature annotations; a plain-path receiver consults the innermost scope);
+(2) shape allowlists last-match-wins over the receiver text — Option
+(`.get(`, `.find(`, `.first(`, `.last(`, `.pop()`, `.next()`, `.ok()`) vs
+Result (`env::var(`, `.parse(`, `.parse::<` — the turbofish form broke the
+naive pattern and was caught by its own fixture); (3) Unknown → the
+always-compiling `map_or` (never a terminal form that could E0599).
+Probe-verified on real clippy 1.97: Result receivers get `is_ok_and`
+directly (skipping the map_or intermediate); Result + true default is
+clippy-SILENT (no stable `is_err_or`) so `map_or(true, f)` IS terminal
+there. 5 new fixtures (env::var, parse+turbofish, Result param false/true,
+unknown fallback); 582 default / 645 fix_verify / 634 latent_retrieval lib
+tests, clippy 0. **Residue divergence classes recorded (3rd/4th
+occurrences)**: 2× named-arg-with-rename (bench_337_tropical_perf —
+`println!("{iters}", iters = ITERS)` rebinding) + 2× second-level macro
+nesting (bench_367 — `format!("{}={:.4}", k, p)` inside println! args,
+the descent parses but doesn't recurse into nested Expr::Macro args) —
+both join the standing backlog (the probe proved the healer fires on the
+bare shape; the nesting is the gap).
+
+**Environment lessons (this box, 3rd session)**: (1) /tmp is UNRELIABLE
+here — some heredoc-created dirs vanished mid-session (Windows temp
+cleaner selects by age/handles; `rel440` + `probe_res` deleted while
+`pre_base`/`post_run` persisted) — probe crates + anything load-bearing
+goes under `target/` (gitignored, stable), never /tmp; (2) background
+`nohup ... &` jobs DIE with the tool's shell teardown (process-group
+kill — the "vanishing" rel440 log was this, not the temp cleaner) — long
+builds must run foreground with generous timeout, or the next invocation
+re-runs them; (3) the multi-root `.` ambiguity + `cd` restrictions:
+`cargo --manifest-path <abs>` from a project root is the escape hatch for
+out-of-tree probes; (4) mega-union builds eat ~14G target disk (debug
+lib + 71 binaries + release core ≈ 22G total) — reclaim `target/*/incremental`
+after each union cycle (14G recovered twice this session); (5) `cargo build
+--benches --features F` SILENTLY SKIPS benches whose required-features
+aren't satisfied by F — naming the target (`cargo test --bench X`) errors
+instead; a missing feature in the union (latent_trajectory_geometry was
+dropped during composition) is invisible until an explicit run — always
+cross-check the built-vs-expected target list.
+
 **Issue 031 (2026-08-17, RESOLVED same day + removed per noise-reduction
 rule) — 3 healer defects from the katgpt-pruners 587-edit heal
 validation (katgpt-rs `4b6675dc5`).** **H1 (CRITICAL)** — the
