@@ -1833,6 +1833,31 @@ if_same_then_else sites (owner call), the documented divergence backlog
 vec-with-capacity ×4, comment-guard match refusals — healer SAFER than
 clippy), + M3-deferred macOS backend examples.
 
+**Parallel-session collision on the SAME unit (Issue 665 class, third
+occurrence — yielded cleanly 2026-08-19):** a second idle session healed the
+identical surface CONCURRENTLY (local chain `d9d53dc0`..`418337a2`, 7
+slice commits, 51 files / 781 edits — avx2 skipped as x86-gated; preserved
+on local branch `sweep-backup-0819` in the katgpt-rs clone). Their
+`f2265e092` pushed first (53 files / 787 — they included avx2 + their
+rustfmt pass = the 11-file delta). Adjudicated at push time: theirs is the
+superset → mixed-reset to origin + adopted their content wholesale;
+spot-verified green post-yield. **Two facts from the losing side worth
+keeping:** (1) the two healer runs produced DIFFERENT output on 11 files
+(≈ same edit count, minor shape differences) — the d0d301a/12a168e guard
+landings between the two builds changed proposer output; "deterministic
+healer" is build-pinned, not eternal — same-unit collisions can no longer
+assume byte-identical output. (2) **kda_backward_grad_check
+`gradient_check_multitoken_all_params` is FLAKY, not deterministically
+broken**: the winning session recorded it FAILING pre+post (max rel err
+0.036 bit-identical), while the losing session's baseline AND post-heal
+runs both PASSED 7/0 under the identical feature set — a numeric
+tolerance sitting near the machine-state boundary. Cite it as flaky, not
+broken-at-HEAD. (Losing side's process note: multi-binary `cargo test`
+attribution — verify per-file `#[test]`/`#[ignore]` counts BEFORE judging
+a "hang"; the moka-wasm baseline lines were misattributed (native_puct's
+2 slow self-play tests were the 1117s runner, NOT wasmi; cost 3 timeouts +
+a wrong lock-contention theory before the per-file grep resolved it).)
+
 **Issue 031 (2026-08-17, RESOLVED same day + removed per noise-reduction
 rule) — 3 healer defects from the katgpt-pruners 587-edit heal
 validation (katgpt-rs `4b6675dc5`).** **H1 (CRITICAL)** — the
