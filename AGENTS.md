@@ -1068,6 +1068,39 @@ lint, no corpus proposer — the manual_is_multiple_of corpus-gap class).
 ~366; 49 out-of-union src / 208; the 7 gpu exclusions; tests/ exceptions;
 benches/ unswept.
 
+**map_unwrap_or array-literal guard landed 2026-08-18** (`2bf2a44`, found
+live in a concurrent session's WIP): `x.map(f).unwrap_or(&[...])` →
+`x.map_or(&[...], f)` relies on the CALL SITE forcing U for the unsize
+coercion `&[T; N] -> &[T]` — probe-verified both `&[]` AND `&[1.0]`
+defaults E0308 in inference-transparent positions (plain `let`) while both
+compile context-forced (function arg with known `&[f32]` param); the
+original `map(f).unwrap_or` form ALWAYS compiles (`map` resolves the type
+before `unwrap_or` unifies). The proposer cannot see call-site context →
+guard skips ALL array-literal defaults, both forms (direct for `unwrap_or`,
+default-closure body for `unwrap_or_else`); casts exempt (`as` ascribes).
+3 new fixtures; 577 default lib tests; joins the we-stay-silent divergence
+class (real clippy still flags the shape; our output would not compile).
+
+**engine benches/ slice BLOCKED-DEFERRED 2026-08-18** (dry-run ground
+truth: bench_382_math_dedup ×1 [default-compiled] + bench_317_poincare_g2_strict
+×23 [`poincare_phi_train`] + gpu benches bench_381_artifact_freeze_goat ×19
+[`artifact_freeze`] + bench_421_muon_ns_dispatch ×1 [`lora_muon_optimizer`]
+= 44 edits across 4 files): **every non-default build path is blocked by a
+concurrent session's live katgpt-rs src/ heal WIP** (137 modified files,
+mid-flight since ~09:29) carrying the exact E0308 the guard above now
+prevents — `katgpt-forward/src/step.rs:196` `map_or(&[], |m| m.as_slice())`
+(3 instances in their diff) breaks every riir-train build whose dep chain
+compiles katgpt-forward (poincare, gpu-crate, AND — after fingerprint
+invalidation — the default path too; the default-path baseline squeaked
+through at 09:28, ~60s before their 09:29:27 edit). bench_382's heal was
+applied + surgically fmt'd, then REVERTED unvalidated per the discipline
+(an unvalidated heal is not a heal — their tree is the live demonstration).
+**Re-scan at next cycle WRITE time: `stat step.rs` + one default-features
+`cargo bench -p riir-train-engine --bench bench_382_math_dedup` probe; once
+the sibling's tree compiles, the full 44-edit slice is ~30 min** (heal
+re-application is 1 command; baselines: 382 exit-code/output, 317
+exit-0-all-pass semantics, 381+421 exit+output).
+
 **slice 7 landed 2026-08-18** (katgpt-rs `805feb22`..`81ef2631`, 12
 commits) — **the katgpt-rs root tests/ sweep is COMPLETE**: 40 files /
 358 heal edits + 1 manual lint + 3 manual import-gate fixes across 12
