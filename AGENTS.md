@@ -1101,6 +1101,58 @@ the sibling's tree compiles, the full 44-edit slice is ~30 min** (heal
 re-application is 1 command; baselines: 382 exit-code/output, 317
 exit-0-all-pass semantics, 381+421 exit+output).
 
+**riir-neuron-db slice 1 landed 2026-08-18** (riir-neuron-db `5db2e3d`) —
+the re-probe confirmed the block STILL LIVE (step.rs mtime unchanged
+09:29:27, E0308 reproduced via a direct `cargo check -p katgpt-forward`),
+so the sweep pivoted to the only buildable heal surfaces while katgpt-rs
+WIP is broken: **riir-chain + riir-neuron-db (neither depends on
+katgpt-forward — leaf crates on katgpt-core only)**. Dry-run sizing:
+chain 105 files / 420 edits, ndb 66 files / 978 edits (946 uninlined —
+pedantic-group, invisible to default clippy, hence the accumulation).
+This cycle: **ndb src/+tests/ — 37 files / 248 edits** (uninlined 231,
+match_bool 12, map_unwrap_or 8, single_match_else 5, range_plus_one 1;
+rustfmt on the 14 fmt-clean-at-HEAD files, 23 carry pre-existing drift
+→ left unfmt'd per the slice-2 rule). Validation ALL count-identical:
+lib default 412p/0f/4i + lib --all-features 1090p/0f/14i + all 7 test
+binaries under their exact gates (elastic_lifecycle, limit_recall,
+dense_embed+diverse_retrieval+local_kv, ed_freeze_poc, seed_recall,
+item_funcattn_scorer, hebbian_fact_store+spectral_shard). Clippy
+all-features: 1 PRE-EXISTING warning (index/mod.rs:397 unused_assignments
+— untouched line, heal was at 1665), 0 uninlined residue.
+
+**Tooling lesson (cargo tree --bench is a FALSE-negative probe):**
+`cargo tree -p <pkg> --bench <name>` FAILS with "unexpected argument"
+(exit 1, stderr) — piped `2>&1 | grep -c katgpt-forward` counts 0 matches
+in the ERROR TEXT and reads as "not in graph". This cycle that
+false-negative nearly overturned the (correct) block diagnosis: all four
+bench targets showed "0 katgpt-forward" while the actual build failed on
+katgpt-forward via `riir-train-engine → riir-engine → katgpt-rs →
+katgpt-backend → katgpt-forward` (+ riir-engine → katgpt-forward direct).
+Correct probes: `cargo tree -p <pkg>` (no --bench) or an actual build.
+
+**Gate-map lesson re-confirmed (3rd time) + the shared-checkout interleave:**
+4 ndb test files carry inner `#![cfg(feature)]` gates at lines 36-97 —
+BELOW the head-30 doc-comment window (slice-3 lesson); the whole-file
+`grep -n '#!\[cfg'` is mandatory and "0 passed" on a default run is the
+reliable detector. A sibling commit (`7d19917`, Issue 603) landed on the
+shared checkout mid-cycle touching only `.benchmarks/`+`.issues/` (dot-dir
+benches never compile into --lib/--test runs) — 0 file overlap, baselines
+unaffected; `git add src tests` scoping kept my commit exactly 37 files.
+
+**Baseline flake documented (thermal/load class, user-suggested):** the
+first COLD build+test run failed 1 timing test in BOTH lib configs
+(411p/1f + 1089p/1f — compile load + M3 thermal throttle under the 503s
+cold build); warm re-runs passed clean 412/0 + 1090/0 twice each. The
+slice-5 re-run rule applies: a post-heal perf-gate mismatch needs a
+re-run before it counts as a regression.
+
+**Remaining heal territory (both unblocked during the katgpt-rs WIP):**
+ndb benches/ 27 files / ~730 edits (validation class 9 per bench — slow,
+future slice) + ndb examples/ 2 files; riir-chain 105 files / 420 edits
+(root lib src/ first, then tests/, then chaind + wallet crates — NOTE the
+riir-chain branch rule: one branch per ticket + `git merge --no-ff` into
+develop, NOT direct commit).
+
 **slice 7 landed 2026-08-18** (katgpt-rs `805feb22`..`81ef2631`, 12
 commits) — **the katgpt-rs root tests/ sweep is COMPLETE**: 40 files /
 358 heal edits + 1 manual lint + 3 manual import-gate fixes across 12
