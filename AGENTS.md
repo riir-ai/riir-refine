@@ -1725,11 +1725,54 @@ closure bodies are the documented under-approximation. Fixture
 `nested_fn_body_fires` pins the production shape; 592/0 lib tests; the
 extension benefits EVERY fn-scoped proposer in both domains.
 
-**katgpt-rs sweep FINAL state — src/ (root + all 30 member crates),
-tests/, benches/, examples/: ALL COMPLETE.** Remaining known surface:
-the 2 out-of-class if_same_then_else sites + the standing proposer backlog
-(named-arg-with-rename, second-level macro nesting) + M3-deferred backend
-macOS examples.
+**katgpt-rs root examples/ slice landed 2026-08-19 (katgpt-rs `5b2d42970`)** —
+the "examples/: ALL COMPLETE" claim was WRONG in an instructive way: it
+covered member-crate + core examples; the ROOT `examples/` dir (227 files)
+was never swept. Found via the identical-named-arg follow-up grep
+(`bomber_13_reflection_qa.rs` `x = x, y = y`), which the dry-run then
+exploded into **147 files / ~1011 edit sites** (849 uninlined incl. the new
+identical class + 38 map_unwrap_or + 28 match_bool + 26 single_match_else +
+1 collapsible_else_if + ~73 rust_perf). Validation = ONE 80-feature
+mega-union cycle (all 80 distinct required-features + 20 no-entry files):
+compile gate 0 errors / 147 built (0 silently skipped, verified against
+`target/debug/examples/*.exe` enumeration — remember example binaries land
+in `debug/examples/`, not `debug/`); direct-.exe runs (no cargo overhead)
+pre/post: **147/147 exit codes identical; 90 byte-identical; 57
+timing-noise; 16 structural ALL exonerated** (6 TUI frame-timing + 10
+nondeterministic via the same-binary post-x2 control — the bench_133
+method extended: if the post binary's own two runs differ structurally,
+pre-vs-post single-run diffs carry zero attribution power; 7 of the 10
+were uninlined-only edits = output-identical by construction, incl.
+core_02_raven's ⚡/🐢 RNG flip). Residue scan (union + `-W` on all 5 healed
+classes): **0 findings in examples/** (110 findings elsewhere in the
+workspace — lib src — confirm the scan itself ran). rustfmt on the 144
+fmt-clean-at-HEAD files (0 CRLF, 3 drift scoped out).
+
+**Two proposer guard gaps root-caused same session (riir-clippy
+`d0d301a`)** — both caught by the union compile gate, both
+compile-visible-only (no silent wrongness):
+(1) **entry-vs-contains-insert E0502**: value/key referencing the receiver
+(`vocab.entry(key).or_insert(vocab.len())` — the Entry's &mut outlives the
+inner & borrow; the ORIGINAL contains_key+insert was legal because the
+immutable borrows end before insert). Guard: word-boundary receiver-ident
+check on key+val text (datrie_01_bench).
+(2) **hashmap-with-capacity E0425**: the iterable's root local bound
+BETWEEN the map creation and the loop (unrelated-statement skipping
+sailed past its `let`) — `with_capacity(all_names.len())` emitted before
+the declaration. Guard: `iterable_root_ident` (reduces `&xs`/
+`xs.iter()`/field-chains to the root local; `self`/multi-segment paths are
+never use-before-decl) + skip when any stmt in (new()..loop) (re)binds it
+— covers first-bind E0425 + shadowing wrong-length (bomber_17_feedback_goat,
+3 maps). 4 fixtures; 12/12 + 18/18 proposer, 607/607 lib, clippy 0.
+
+**katgpt-rs sweep CORRECTED FINAL state — src/ (root + all 30 member
+crates), root tests/, root benches/, ROOT examples/ (2026-08-19), member
+benches+examples: COMPLETE.** Member-crate `tests/` dirs are NOT yet
+swept (katgpt-core/tests/ alone: 543 edits / 37 files; ~19 more files in
+spectral/attn/transformer/types/etc.) — the next katgpt-rs unit. Remaining
+known surface otherwise: the 2 out-of-class if_same_then_else sites + the
+standing proposer backlog (named-arg-with-rename, second-level macro
+nesting) + M3-deferred backend macOS examples.
 
 **Issue 031 (2026-08-17, RESOLVED same day + removed per noise-reduction
 rule) — 3 healer defects from the katgpt-pruners 587-edit heal
