@@ -1205,6 +1205,30 @@
 //!   automatically in the shared constructor; the class shipped twice
 //!   back-to-back (Issue 714 cubecl half-skip, Issue 720 the WGSL `Q4_K`
 //!   constructors) - bit-identical logits, -10.3 GiB device + -2.2 GiB host).
+//! - **Batch 57 (measured-GOAT distillation, riir-ai Issue 715):**
+//!   2 rules, corpus 353 -> 355 (A 82 -> 83, D 65 -> 66) -
+//!   smem-slot-role-reversal-needs-barrier (A - a shared-memory scratch
+//!   whose slot roles reverse between phases needs a barrier at each
+//!   reversal: (a) every thread reads the reduction result `smem[0]`, then
+//!   thread 0 overwrites that slot with its weight - a slow warp reads a
+//!   weight as the tile max and threads disagree on the softmax shift,
+//!   length-independent; (b) the last phase reads every `smem[p]` while the
+//!   next tile's first phase writes `smem[tid]` with no barrier on the loop
+//!   back-edge (reachable only `n_tiles >= 2`); measured 27B / 256-token
+//!   probe: NONDETERMINISTIC before (first divergent token 71),
+//!   BIT-IDENTICAL (3/3) after; barriers in BLOCK-UNIFORM control flow; the
+//!   fix must be audited against every implementation twin - the `CubeCL`
+//!   fix did not reach the `cudarc` arm, which dispatches hand-written CUDA)
+//!   and tile-loop-back-edge-needs-multi-tile-bitexact-gate (D - a loop that
+//!   trips twice only past a size threshold hides every back-edge defect
+//!   from fixtures that fit inside ONE iteration: every prior decode test
+//!   used `n_positions <= 200` < the 256-wide tile, so the back-edge never
+//!   ran; the gate needs a fixture crossing the boundary (`n_positions=300`
+//!   -> `n_tiles=2`) AND a bit-exact reproducibility assert over repeats - a
+//!   tolerance-only assert cannot see a race in the low mantissa bits;
+//!   validated BOTH directions: fails run 0 with `max_diff=0.0586`
+//!   barriers-removed, passes with them; second instance: the `q8kv`
+//!   multi-tile path, Issue 710 H10).
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
@@ -1225,6 +1249,7 @@ mod entries_gpu_03;
 mod entries_gpu_04;
 mod entries_gpu_05;
 mod entries_gpu_06;
+mod entries_gpu_07;
 
 #[cfg(test)]
 mod tests;
@@ -1243,6 +1268,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
         entries.extend(entries_gpu_04::entries());
         entries.extend(entries_gpu_05::entries());
         entries.extend(entries_gpu_06::entries());
+        entries.extend(entries_gpu_07::entries());
         Corpus::new(entries)
 }
 
@@ -1255,7 +1281,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 353-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 355-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1263,7 +1289,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (82 rules)
+    // A: Memory access patterns (83 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -1350,6 +1376,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "runtime-arg-loop-bound-demotes-arrays-to-local-memory",
             "unpack-loop-indexed-by-container-word",
             "superseded-format-constructor-live-fields-only",
+            "smem-slot-role-reversal-needs-barrier",
         ],
     ),
     // B: Compute patterns (52 rules)
@@ -1451,7 +1478,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fuse-indirect-gather-into-dot-consumer",
         ],
     ),
-    // D: Dispatch patterns (65 rules)
+    // D: Dispatch patterns (66 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -1521,6 +1548,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "phase-split-per-position-data-liveness-row-storage",
             "buffer-length-derived-from-allocation-not-binding",
             "concurrent-context-init-needs-process-wide-lock",
+            "tile-loop-back-edge-needs-multi-tile-bitexact-gate",
         ],
     ),
     // E: Parallelism patterns (20 rules)

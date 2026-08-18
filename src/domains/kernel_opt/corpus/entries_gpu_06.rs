@@ -1,4 +1,4 @@
-//! Entries slice — Batches 14-49+51+52+54+55 era (rules 325-351 of 351) — riir-gpu production-kernel mining + measured-GOAT distillations.
+//! Entries slice — Batches 14-49+51+52+54+55+56 era (rules 325-353 of 355) — riir-gpu production-kernel mining + measured-GOAT distillations.
 //! Pure data moved verbatim from the former corpus.rs monolith
 //! (2026-08-15 split); append new batches to the LAST gpu slice or
 //! open a new one past ~900 lines. Category membership lives ONLY in
