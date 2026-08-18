@@ -119,7 +119,7 @@ fn macro_family(path: &Path) -> Option<TemplatePos> {
     use TemplatePos::{First, Second, Third};
     let name = path.segments.last()?.ident.to_string();
     Some(match name.as_str() {
-        "format" | "println" | "print" | "eprintln" | "eprint" | "panic" | "format_args" | "bail" => First,
+        "format" | "println" | "print" | "eprintln" | "eprint" | "panic" | "format_args" | "bail" | "anyhow" => First,
         "assert" | "debug_assert" | "write" | "writeln" | "ensure" => Second,
         "assert_eq" | "assert_ne" | "debug_assert_eq" | "debug_assert_ne" => Third,
         _ => return None,
@@ -173,8 +173,11 @@ fn inline_args(tokens: &TokenStream, pos: TemplatePos) -> Option<Vec<SourceEdit>
             return None; // field access / call / cast / literal / named-arg … — no partial inlining
         };
         let ident = p.path.get_ident()?.to_string();
-        // `{r#raw}` and `{self}` are not valid format-arg names — skip.
-        if ident.contains('#') || ident == "self" {
+        // `{r#raw}` is not a valid format-arg name — skip. (`{self}` IS
+        // valid: rustc explicitly allows `self` as an implicit capture —
+        // probe-verified 2026-08-18, `format!("{self:?}")` compiles + real
+        // clippy fires on `format!("{:?}", self)` sites.)
+        if ident.contains('#') {
             return None;
         }
         fmt_args.push(ArgSpan {
@@ -815,6 +818,38 @@ mod tests {
         .expect("pattern matched");
         assert!(out.contains("\"{x}\""), "{out}");
         assert!(out.contains("std::format!"), "path mangled: {out}");
+    }
+
+    #[test]
+    fn qualified_anyhow_macro_inlined() {
+        // `anyhow::anyhow!` is template-first exactly like `bail!`/`panic!`.
+        // Production shape from riir-chain catchup/shard_quorum.rs (2 live
+        // sites stayed healer-silent until the family table gained `anyhow`).
+        let out = propose_fix(
+            "uninlined_format_args",
+            "fn f(x: u8) -> anyhow::Error { anyhow::anyhow!(\"bad node {} failed\", x) }",
+        )
+        .expect("pattern matched");
+        assert!(out.contains("\"bad node {x} failed\""), "{out}");
+        assert!(out.contains("anyhow::anyhow!"), "path mangled: {out}");
+        assert!(syn::parse_file(&out).is_ok(), "{out}");
+    }
+
+    #[test]
+    fn self_arg_inlined() {
+        // `format!("{self:?}")` is VALID: rustc explicitly allows `self` as
+        // an implicit format-arg capture (probe-verified 2026-08-18 —
+        // compiles + runs; real clippy fires on `format!("{:?}", self)`).
+        // Production shape from riir-chain deploy/lifecycle.rs. The old
+        // `ident == "self"` guard was a false premise.
+        let out = propose_fix(
+            "uninlined_format_args",
+            "#[derive(Debug)] struct S; impl S { fn f(&self, t: &S) -> String { format!(\"transition {:?} -> {:?}\", self, t) } }",
+        )
+        .expect("pattern matched");
+        assert!(out.contains("{self:?}"), "{out}");
+        assert!(out.contains("{t:?}"), "{out}");
+        assert!(syn::parse_file(&out).is_ok(), "{out}");
     }
 
     #[test]
