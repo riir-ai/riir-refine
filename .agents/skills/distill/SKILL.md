@@ -107,6 +107,7 @@ User: "is raygon-renderer/thermite a good distill source?" Verdict: **YES, B+, r
 ## Constraints (non-negotiable)
 
 - Corpus fixtures are ORIGINAL minimal reproductions. Never paste external source verbatim into `buggy_code`/`fixed_code` — license hygiene + the binary-only distribution rule.
+- **Ported numeric algorithm ⇒ exhaustive equivalence gate.** When a batch ports a numeric construction (magic-number division, approx identities, bit tricks), an exhaustive/boundary equivalence test against the reference op (e.g. all divisors 1..=4096 × boundary + LCG numerators vs hardware `/`) is MANDATORY before landing — casual tests miss subtle wrongness (Batch 59: floor-vs-ceil magic at d=3 x=3 + u32-wrap carry loss at d=7 x=u32::MAX, both caught pre-landing, both invisible at small random tests).
 - WIP sources: snapshot/quote at mine time (siblings drift), mine completed modules only.
 - New domains (sec, wasm, ...) require a Proposal + `HealDomain` trait extension before any corpus entry — a verdict may recommend opening one but must not assume it.
 - Large sources: split inspection across 2 subagent lanes by module tree with disjoint scopes (the established 2-lane mining pattern); the coordinator verifies every CRITICAL reachability claim with its own grep (the Research 057 lesson — a subagent's failed grep is not evidence of absence).
