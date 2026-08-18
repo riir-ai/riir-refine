@@ -1302,14 +1302,9 @@ zero healable residue); **riir-chain DONE**
 [asset_lifecycle/, tx_log.rs, platform_gaps.rs, naive_replay.rs,
 e2e_replay_recovery.rs, wallet_store_crash_atomicity] — re-dry-run when
 their plans close); **riir-ai small-crates slice OPENED the riir-ai
-campaign** (see below). **riir-ai giants: SIZED 2026-08-19** —
-riir-engine/src dry-run = **174 files / 979 edits** (src-only; the stale
-~2620 estimate included tests/benches/examples), mix ≈ 809 uninlined + 58
-single_match_else + 44 map_unwrap_or + 43 match_bool + 7 misc — the
-CONTROL-FLOW share (~145) is far higher than the katgpt sweeps, needs the
-map_or terminal-state + unnecessary_map_or checks per site; sibling-free
-as of sizing (the 726 family works riir-gpu only). games-civ + gpu +
-engine tests/benches/examples remain unsized.
+campaign** (see below). **riir-ai giants: engine/src DONE 2026-08-19**
+(`1e050442a`, 174 files / 979 edits — see the engine slice record below).
+games-civ + gpu + engine tests/benches/examples remain unsized.
 
 **riir-ai small-crates slice landed 2026-08-18** (riir-ai `883d51825` via
 the worktree dance — the sibling's live WIP on ffi/gpu/games/721 blocked
@@ -1376,11 +1371,67 @@ Caught at the `git show --stat` check; fixed via soft reset + unstage theirs
 Residue 0 in healed classes (healer dry-run: only the 2 deferred ternary
 files); rustfmt on 20 fmt-clean-at-HEAD files (36 pre-existing drift scoped
 out, 0 CRLF); post-fmt spot-checks count-identical. **Campaign remaining
-(~7.7K edits):** riir-engine 2620/285 (sibling sized src at 174/979, control-
-flow-heavy — their next lane per the mining queue), games-civ 1549/146,
-games 799/87 (2 files sibling WIP), poc 769/64 (ane_t0.rs sibling-active),
-examples 725/75, wasm tail, gpu 1175/163 sibling-adjacent, mmorpg excluded
-until wire_router settles.
+(~6.7K edits):** riir-engine src DONE 2026-08-19 (`1e050442a`, see the
+engine slice record below — 174/979 + tests/benches/examples remainder
+~1.6K), games-civ 1549/146, games 799/87 (2 files sibling WIP), poc
+769/64 (ane_t0.rs sibling-active), examples 725/75, wasm tail, gpu
+1175/163 sibling-adjacent, mmorpg excluded until wire_router settles.
+
+**riir-ai engine/src slice landed 2026-08-19** (riir-ai `1e050442a`, via
+the worktree dance): **174 files / 979 edits** — the first riir-ai giant
+healed. Composition: 809 uninlined_format_args + 58 single_match_else +
+44 map_unwrap_or + 43 match_bool + 2 identity_op + 1 range_plus_one +
+1 manual_unwrap_or. rustfmt on the 61 fmt-clean-at-HEAD files (113
+drift, **4 CRLF deltanet files** — flashmemory_gqa/model_backward_recompute/
+qv_lora/qv_lora_train, the slice-13 trap, excluded from fmt).
+
+**THE WORKTREE PACKAGE-COLLISION DISCOVERY (the load-bearing lesson for
+any future riir-ai worktree):** `git worktree add` at a sibling-resolving
+location (`/Users/katopz/git/riir-ai-wt` — NOT /tmp) still collides:
+riir-chain/Cargo.toml:734 `riir-engine = { path = "../riir-ai/crates/riir-engine" }`
+resolves to the MAIN checkout from any worktree, so workspace resolution
+(with -p, even for unrelated packages — optional deps of members are
+locked too) puts BOTH engines in one graph → "package collision in the
+lockfile". Fix: scratch-edit the wt root Cargo.toml members to the
+minimal engine closure (engine + wasm + router + data; gpu-async
+auto-joins via path-dep auto-membership — none reach riir-chain) +
+remove default-members; restore before commit (never pushed). Engine's
+own `riir-chain` mentions are all comments — the collision is purely the
+sibling back-ref.
+
+**Gate-map method for a 244-feature crate (parse-only is hopeless):**
+dep-info ground truth from the default build — 94 default-compiled /
+80 gated of the healed files. **The .d files list WORKSPACE-RELATIVE
+paths (`crates/riir-engine/src/...`) — an absolute-path intersection
+returns ZERO matches** (first classification said all-174-gated until
+inspected). Straggler gate forms the cfg-walk missed: `all(not(wasm32),
+feature)` (cached_kv→quest_style_bridge), `all(target_os="macos",
+feature)` (npc_ane_backend→ane, coreml-native builds fine on M3),
+`#[cfg + #[path]]` includes (transformer_still→lora_still, default-on),
+and parent-mod gate propagation bugs — walk fixes by inheriting parent
+feats. Validation = default lib (3155/1/3) + ONE 66-feature union lib
+(4566/4/9) covering all 80 gated files — both count-identical pre/post,
+same-signature pre-existing failures (transformer cluster-map fallback +
+3× sheaf_personality_bridge).
+
+**5 heal-created Unknown-receiver map_or sites** — the katgpt-core manual-
+fix class struck at scale: `.as_ref().map(f).unwrap_or(true/false)` on
+field-chain receivers (classify_receiver Unknown → conservative map_or
+emission) where clippy's type info proves Option+bool. Manually promoted
+to terminal forms (is_some_and ×4 / is_none_or ×1): fourier/
+path_periodic.rs:291, ict_runtime/runtime.rs:377/380/400, npc_ane_backend
+:197. The closure-bool detector ALSO misses plain bool expressions
+(`p.wraps_x || p.wraps_y`) — the is_bool_method allowlist covers method
+calls only; candidate proposer extension.
+
+**Residue = 8 findings, all documented divergence classes:** 2× single_
+match comment-only None arms, 1× single_match_else comment-guard
+(transposition.rs:67), 1× match_bool guard-on-FIRST-arm (events.rs:235 —
+the silent class), 2× map_unwrap_or array-literal `&[]` (dual_gram_pca
+— context-forced return positions where the 2bf2a44 guard is provably
+over-conservative but can't see context), 2× uninlined second-level
+macro nesting (cwm_runtime/refinement.rs:557-558 — inner format! inside
+outer format! args, the standing backlog).
 
 **Redundant identical named-arg class shipped** (riir-clippy `73ab2c2`):
 `format!("{x:?}", x = x)` — the named arg EQUALS its ident — is redundant
