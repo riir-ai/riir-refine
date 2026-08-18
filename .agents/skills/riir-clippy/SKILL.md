@@ -944,6 +944,39 @@ global = symlink only.
   distill skill's plan step, both added same-commit). `.research/.highwater`
   66 → 67; `.plans/.highwater` 5 → 6.
 
+- **Batch 61 DONE (2026-08-18, Research 068, Plan 007 — the FIRST plan-FIRST
+  batch):** 2 `rust_perf` rules, corpus 63 → 65 (dispatch 1 → 2, layout 5 →
+  6; benchable 53 → 55, annotated stays 12) — the oxc "Pursuit of Performance
+  on Building a JavaScript Compiler" distill (oxc.rs/docs/learn/performance,
+  fetched via queue item 11 online perf search; the first FRESH-online-search
+  batch after B48/B53/B59). **Both ParetoDominant:** `keyword-map-to-match`
+  (dispatch; **5.23-5.58×**, zero allocs) — static-keyword
+  `LazyLock<HashMap<&str, V>>` dispatch → plain `match` on string literals;
+  LLVM lowers string-literal matches to a switch on string LENGTH + one
+  inline compare per length group (oxc tried a gperf-style perfect hash,
+  COULD NOT beat the match, then found the length-switch in
+  `--emit=llvm-ir`); the HashMap pays SipHash per lookup — the folk wisdom
+  "string match is O(n), use a hash map" is refuted for STATIC key sets
+  (literal-initialized maps only); proposer deferred (key-set extraction).
+  `usize-index-to-u32` (layout; **1.81-1.99×**, zero allocs) — usize
+  index/offset fields in high-volume structs → u32 (the oxc Span 16B→8B
+  change, +5% on large parser files); wins ~2× even at 1K where both arrays
+  are L1-resident (twice the elements per cache line); domain must bound
+  below 2³²; proposer deferred (type ripple — the B58 caller-gate class).
+  8 other oxc candidates DROPPED at dedup (5 duplicates of existing rules:
+  box-enum-variants / Box<str> / SIMD-skip / BufWriter / jbecker
+  buffer-reuse; 3 architectural/external: arena-AST, interning-sharding,
+  string-inlining). GOAT: 595/0 default lib, clippy 0 default +
+  rust_perf_bench states, retrieval floors HELD (12/12; perf@1 94.3%,
+  blend@1 92.1% structural — no crowding). Generator lessons: the B37
+  line-initial `+ ` lesson struck a 6th time (header rewrap); NEW LESSON —
+  edit_file fuzzy matching silently DROPPED a `#` from an unrelated
+  raw-string terminator (`}"` vs `}"#`), un-terminating the division
+  harness 100 lines away (E0425 + phantom E0308s) — raw-string `#`
+  terminators are load-bearing; re-read file state after edits near `}"#`
+  boundaries. Also: `match {...} as u64` does not parse (bind `let k = match
+  ...; k as u64`). `.research/.highwater` 67 → 68; `.plans/.highwater` 6 → 7.
+
 - **Batch 53 DONE (2026-08-17 evening, queue item 11 — online perf search +
   Bench 038):** the 4 online-search candidates landed as `PerfRule` entries +
   `BenchSpec` harnesses + eval spans + Pareto bench verdicts + floors re-pin.
@@ -1085,8 +1118,10 @@ global = symlink only.
   landed; 721's Non-goals exclude the CUDA port so it was collision-free).
 - **Progress**: riir-gpu file-mining COMPLETE-minus-one (Batch 51, Research
   057; ~115 files mined by line-weight; the sole remainder is the CubeCL
-  ternary twin, blocked on Issue 721). Corpus: 364 kernel rules + 63
-  rust_perf rules (Batch 59 = the first external-source distill via the
+  ternary twin, blocked on Issue 721). Corpus: 364 kernel rules + 65
+  rust_perf rules (Batch 61 = the oxc article distill, the first plan-FIRST
+  batch — keyword-map-to-match 5.23-5.58× + usize-index-to-u32 1.81-1.99×,
+  both ParetoDominant, Research 068 / Plan 007; Batch 59 = the first external-source distill via the
   `distill` skill: thermite divider → division-by-invariant-multiplication,
   2.03-2.13× ParetoDominant, Research 066; Batch 58 = the ternary_deltanet sibling-WIP unlock, the
   LAST never-mined riir-gpu orchestration file — Research 065, 8 rules

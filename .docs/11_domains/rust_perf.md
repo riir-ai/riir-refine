@@ -19,24 +19,27 @@
 
 ## Corpus
 
-63 rules across 12 categories (rust-optimize skill checklist +
+65 rules across 12 categories (rust-optimize skill checklist +
 nnethercote/perf-book + rustc-hash/bevy real-world patterns + the hotpath-rs
 profiling guide, Research 032; Batch 48 added the 8 online-search candidates
 from the perf-book std-types + iterators chapters; Batch 53 added the 4
 online-search candidates of [Bench 038](../../.benchmarks/038_batch53_rust_perf_online_search_goat.md);
 Batch 59 (2026-08-18) added the first EXTERNAL-source distill via the
 `distill` skill: `division-by-invariant-multiplication`, from libdivide via
-the raygon-renderer/thermite Rust port).
+the raygon-renderer/thermite Rust port; Batch 61 (2026-08-18) added the 2
+oxc-article rules: `keyword-map-to-match` + `usize-index-to-u32`).
 Allocation is the deepest
-category (18 rules). Complexity has 14. Iterators has 7. Simd 5, layout 5;
+category (18 rules). Complexity has 14. Iterators has 7. Simd 5, layout 6
+(Batch 61 added `usize-index-to-u32`);
 concurrency has 4 (Issue 014 added the two metric-mismatch rules);
 caching has 2 (Issue 014 added `regex-hoist-lazylock`); arithmetic has 4
 (Batch 53 added `powi-vs-powf` + `distance-sq-no-sqrt`; Batch 59 added
-`division-by-invariant-multiplication`); the rest have 1
-each. 53 are benchable (carry a `BenchSpec`); 10 are honestly
+`division-by-invariant-multiplication`); dispatch has 2 (Batch 61 added
+`keyword-map-to-match`); the rest have 1
+each. 55 are benchable (carry a `BenchSpec`); 10 are honestly
 `NotBenchable` — 8 need external runtimes or are structural (size_of,
 memory, fairness), 2 are **metric-mismatch** (Issue 014 T2.3/T2.4: the cost
-is contention latency / queue depth, not wall-clock). 12 of 63 carry
+is contention latency / queue depth, not wall-clock). 12 of 65 carry
 `context_notes` — 10 verdict-class (3 `ParetoDominated` + 7
 regime-fragile/Mixed — Batch 48 added the `filter-count-to-any` folk-wisdom
 refutation: the VECTORIZED count loop beats `any()`'s scalar early-exit at
@@ -106,6 +109,8 @@ annotated rules as context-dependent, not unconditional suggestions.
 | `distance-sq-no-sqrt` | arithmetic | ✅ 1.21-1.24x ParetoDominant | — | `(dx²+dy²).sqrt() < r` → `dx²+dy² < r²` compare-squared (Batch 53 — monotonic sqrt; keep the sqrt when the VALUE is consumed) |
 | `hashmap-with-capacity` | allocation | ✅ 2.4-3.1x ParetoDominant | — | `HashMap::new()` + known-count insert loop → `HashMap::with_capacity(n)` (Batch 53 — rehash ladder re-SipHashes all entries per resize; allocs 12→1) |
 | `division-by-invariant-multiplication` | arithmetic | ✅ 2.03-2.13x ParetoDominant (M3 aarch64) | — | loop of `x / d` with RUNTIME-invariant `d` → precomputed libdivide-style magic multiplier + shift (Batch 59, thermite distill — CONSTANT divisors are already strength-reduced by LLVM, the regime is exclusively the runtime-invariant case; setup pays one hardware div, amortized after ~3 applications; expected wider on x86 where DIV is 30-90+ cycles vs aarch64 UDIV) |
+| `keyword-map-to-match` | dispatch | ✅ 5.23-5.58x ParetoDominant | — | static-keyword `LazyLock<HashMap<&str, V>>` dispatch → plain `match` on string literals (Batch 61, oxc distill — LLVM lowers the match to a switch on string LENGTH + inline compares; the HashMap pays SipHash per lookup; oxc failed to beat the match with a gperf-style perfect hash, then found the length-switch in `--emit=llvm-ir`; static key sets only) |
+| `usize-index-to-u32` | layout | ✅ 1.81-1.99x ParetoDominant | — | `usize` index/offset fields in high-volume structs → `u32` (Batch 61, oxc Span distill — halves the struct: 16B → 8B, twice the elements per cache line; oxc measured +5% on large parser files; domain must genuinely bound below 2³²) |
 | `powi-vs-powf` | arithmetic | ~ Mixed (all-Tie) | ⚠️ `context_notes` | `x.powf(2.0)` → `x.powi(2)` (Batch 53 refutation: LLVM lowers both identically in release; idiom value = debug profiles + exponents ≥ 3) |
 | `soa-hot-field` | layout | ~ Mixed (latency-bound) | ⚠️ `context_notes` | AoS wide-struct single-field scan → SoA split (Batch 53: serial f32 add-chains hide the win; pays on throughput-bound field consumers — count/min-max/transform) |
 | `shrink-to-fit-after-build` | allocation | ❌ NotBenchable | — | Vec with over-allocated capacity → `shrink_to_fit()` after build (memory win, not speed; the realloc may even make build slower) |

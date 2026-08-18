@@ -9,9 +9,9 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //! unconditional wins + honestly NotBenchable rules.
 //!
-//! 63 entries across 12 categories (complexity 14, allocation 18, simd 5,
-//! layout 5, iterators 7, concurrency 4, io 1, arithmetic 4, dispatch 1,
-//! caching 2, bevy 1, wasm 1). 53 are benchable; 10 are honestly
+//! 65 entries across 12 categories (complexity 14, allocation 18, simd 5,
+//! layout 6, iterators 7, concurrency 4, io 1, arithmetic 4, dispatch 2,
+//! caching 2, bevy 1, wasm 1). 55 are benchable; 10 are honestly
 //! NotBenchable (8 external-runtime/size-class + 2 metric-mismatch, Issue 014).
 //! Batch 48 (idle-queue item 11, 2026-08-16) added the 8 online-search
 //! candidates (perf-book std-types + iterators chapters): collect-append-to-
@@ -22,7 +22,9 @@
 //! hashmap-with-capacity, soa-hot-field. Batch 59 (2026-08-18, the first
 //! EXTERNAL-source distill via the `distill` skill) added
 //! division-by-invariant-multiplication (libdivide via the
-//! raygon-renderer/thermite Rust port).
+//! raygon-renderer/thermite Rust port). Batch 61 (idle-queue item 11,
+//! 2026-08-18) added the 2 oxc-article rules: keyword-map-to-match +
+//! usize-index-to-u32.
 //!
 //! ## Bench specs (behind `rust_perf_bench`)
 //!
@@ -31,7 +33,7 @@
 //! `run_buggy` / `run_fixed` entry points. The bench validator generates a
 //! temp bin crate from the spec + runs a timing loop at multiple sizes.
 //!
-//! Currently benchable (53/63):
+//! Currently benchable (55/65):
 //! - `o1-lookup` (Vec scan vs HashMap lookup — clear O(n) vs O(1))
 //! - `bsearch-sorted-slice` (linear scan vs binary search — O(n) vs O(log n) on sorted data)
 //! - `dedupe-hashset-vs-vec` (Vec::contains loop vs HashSet collect — O(n²) vs O(n))
@@ -87,6 +89,8 @@
 //! - `hashmap-with-capacity` (HashMap::new() rehash ladder → with_capacity(n) — Batch 53)
 //! - `soa-hot-field` (AoS strided single-field scan → SoA contiguous column — Batch 53)
 //! - `division-by-invariant-multiplication` (hardware integer div by loop-invariant RUNTIME d → libdivide-style magic mulhi+shift — Batch 59, thermite distill)
+//! - `keyword-map-to-match` (static-keyword HashMap dispatch → plain match on literals — LLVM length-switch, Batch 61)
+//! - `usize-index-to-u32` (16B usize spans → 8B u32 spans — cache density under bandwidth-bound scans, Batch 61)
 //!
 //! Not benchable (10/50) — honest:
 //! - `layout-reorder` (struct size — deterministic `size_of`, not a runtime
@@ -109,15 +113,16 @@
 //!
 //! ## Context-dependent rules (`context_notes`)
 //!
-//! Ten rules carry a `context_notes: Some(...)` annotation. Eight record that
+//! Twelve rules carry a `context_notes: Some(...)` annotation. Eight record that
 //! the Pareto validator found them **ParetoDominated** or **Mixed** in the
 //! default configuration: the original 4 from Bench 013 (`precompute-table`,
 //! `papaya-lockfree`, `dedupe-hashset-vs-vec`, `reuse-allocation-clear`) + 2
 //! from Bench 016 / Issue 012 (`sort-by-key`, `copy-from-slice`) + 2 from
 //! Bench 48 (`filter-count-to-any` — dominated at mid-position hits by the
 //! VECTORIZED count loop, `iter-copied-deref-map` — Mixed, 0.80× at 1M on
-//! sum folds). Two more (Issue 014 T2.3/T2.4) annotate the NotBenchable
-//! metric-mismatch class: `tokio-guard-across-await` +
+//! sum folds) + 2 from Batch 53 / Bench 038 (`powi-vs-powf` all-Tie,
+//! `soa-hot-field` latency-bound Mixed). Two more (Issue 014 T2.3/T2.4)
+//! annotate the NotBenchable metric-mismatch class: `tokio-guard-across-await` +
 //! `bounded-channel-backpressure`. The patterns are genuine wins in their
 //! respective regimes and are kept in the corpus as documented patterns, but
 //! consumers should treat them as context-dependent — not unconditional
@@ -128,12 +133,12 @@ use crate::domains::rust_perf::{PerfRule, RustPerfDomain};
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 58 entries
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 65 entries
 /// covering the main perf pattern categories (complexity, allocation, simd,
 /// layout, iterators, concurrency, io, arithmetic, dispatch, caching, bevy,
-/// wasm). Allocation is the deepest (17 rules); complexity has 14; iterators
-/// has 7 (Batch 48 added 3); simd has 5; layout + concurrency have 4 each;
-/// caching has 2; the rest have 1.
+/// wasm). Allocation is the deepest (18 rules); complexity has 14; iterators
+/// has 7; simd has 5; layout has 6 (Batch 61 added 1); concurrency has 4;
+/// dispatch has 2 (Batch 61 added 1); caching has 2; the rest have 1.
 #[must_use]
 #[allow(clippy::too_many_lines)] // seed corpus is a data table; length scales with rule count
 pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
@@ -1299,6 +1304,49 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
             context_notes: None,
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: Some(division_invariant_bench_spec()),
+        },
+        // ── dispatch: static-keyword HashMap lookup → plain match (LLVM length-switch) ──
+        // Source: oxc "Pursuit of Performance on Building a JavaScript
+        // Compiler" (oxc.rs/docs/learn/performance, rustmagazine issue-3;
+        // Batch 61 online-search distill). oxc tried to beat a plain match on
+        // string literals with a gperf-style perfect hash (V8's approach) and
+        // COULD NOT — `--emit=llvm-ir` shows LLVM already lowers the match to
+        // a switch on string LENGTH + one inline compare per length group.
+        // The folk wisdom "string match is O(n) comparisons, use a hash map"
+        // is wrong on modern LLVM: the HashMap pays SipHash per lookup while
+        // the match pays a length switch + 1-2 byte compares. Bounded
+        // fix-space: STATIC key sets only (a literal-initialized map);
+        // dynamic keys keep the map.
+        PerfRule {
+            rule_id: "keyword-map-to-match".to_string(),
+            name: "Static-keyword LazyLock<HashMap<&str, V>> dispatch → plain match (LLVM lowers to a length switch)".to_string(),
+            category: "dispatch".to_string(),
+            buggy_code: "use std::collections::HashMap;\nuse std::sync::LazyLock;\n#[derive(Clone, Copy)]\nenum Kind { As, Do, If, Let, Fn, While, Constructor, Ident }\nstatic KEYWORDS: LazyLock<HashMap<&'static str, Kind>> = LazyLock::new(|| {\n    let mut m = HashMap::new();\n    m.insert(\"as\", Kind::As);\n    m.insert(\"do\", Kind::Do);\n    m.insert(\"if\", Kind::If);\n    m.insert(\"let\", Kind::Let);\n    m.insert(\"fn\", Kind::Fn);\n    m.insert(\"while\", Kind::While);\n    m.insert(\"constructor\", Kind::Constructor);\n    m\n});\nfn match_keyword(s: &str) -> Kind {\n    *KEYWORDS.get(s).unwrap_or(&Kind::Ident) // SipHash per lookup\n}".to_string(),
+            fixed_code: "#[derive(Clone, Copy)]\nenum Kind { As, Do, If, Let, Fn, While, Constructor, Ident }\nfn match_keyword(s: &str) -> Kind {\n    // LLVM lowers string-literal matches to a switch on length +\n    // inline compares per length group (oxc verified via --emit=llvm-ir)\n    match s {\n        \"as\" => Kind::As,\n        \"do\" => Kind::Do,\n        \"if\" => Kind::If,\n        \"let\" => Kind::Let,\n        \"fn\" => Kind::Fn,\n        \"while\" => Kind::While,\n        \"constructor\" => Kind::Constructor,\n        _ => Kind::Ident,\n    }\n}".to_string(),
+            context_notes: None,
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(keyword_map_to_match_bench_spec()),
+        },
+        // ── layout: usize index fields in high-volume structs → u32 ──────────
+        // Source: oxc Span optimization (same article, Batch 61). The AST
+        // leaf carried `struct Node { start: usize, end: usize }` — 16 bytes
+        // — for byte offsets that cannot exceed u32 (< 4GB source). Narrowing
+        // to u32 halved the node + measured up to +5% on large files (cache
+        // density on the hottest leaf type). The mechanism is bandwidth:
+        // half the bytes per element means twice the elements per cache
+        // line. Guard: the domain must genuinely bound below 2^32 (byte
+        // offsets, entity indexes, tick counters in long sessions need
+        // audit). Type ripple is caller-wide — suggestion-quality rewrite,
+        // no proposer (the Batch 58 signature-change lesson).
+        PerfRule {
+            rule_id: "usize-index-to-u32".to_string(),
+            name: "usize index/offset fields in high-volume structs → u32 (halve cache footprint)".to_string(),
+            category: "layout".to_string(),
+            buggy_code: "struct Span { start: usize, end: usize } // 16 bytes — pointer-sized for a < 4GB domain\nfn total_len(spans: &[Span]) -> u64 {\n    let mut acc = 0;\n    for s in spans { acc += (s.end - s.start) as u64; }\n    acc\n}".to_string(),
+            fixed_code: "struct Span { start: u32, end: u32 } // 8 bytes — same domain, half the cache line traffic\nfn total_len(spans: &[Span]) -> u64 {\n    let mut acc = 0;\n    for s in spans { acc += u64::from(s.end - s.start); }\n    acc\n}".to_string(),
+            context_notes: None,
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(usize_index_to_u32_bench_spec()),
         },
     ])
 }
@@ -4278,6 +4326,132 @@ pub fn run_fixed(input: &Input) {
     }
 }
 
+/// Bench spec for `keyword-map-to-match`: static-keyword HashMap dispatch vs
+/// plain match on string literals. The map pays SipHash per lookup; the match
+/// compiles to a switch on length + 1-2 inline compares (LLVM; oxc verified
+/// via --emit=llvm-ir after failing to beat it with a gperf-style perfect
+/// hash). Mixed identifier workload (7 keywords + 3 non-keywords cycling);
+/// the LazyLock init amortizes across the timing loop — the measured cost is
+/// per-lookup dispatch, not construction.
+#[cfg(feature = "rust_perf_bench")]
+fn keyword_map_to_match_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![1_000, 100_000],
+        harness: r#"
+mod buggy {
+    use std::collections::HashMap;
+    use std::sync::LazyLock;
+    #[derive(Clone, Copy)]
+    pub enum Kind { As, Do, If, Let, Fn, While, Constructor, Ident }
+    static KEYWORDS: LazyLock<HashMap<&'static str, Kind>> = LazyLock::new(|| {
+        let mut m = HashMap::new();
+        m.insert("as", Kind::As);
+        m.insert("do", Kind::Do);
+        m.insert("if", Kind::If);
+        m.insert("let", Kind::Let);
+        m.insert("fn", Kind::Fn);
+        m.insert("while", Kind::While);
+        m.insert("constructor", Kind::Constructor);
+        m
+    });
+    pub fn match_keyword(s: &str) -> u64 {
+        *KEYWORDS.get(s).unwrap_or(&Kind::Ident) as u64
+    }
+}
+
+mod fixed {
+    #[derive(Clone, Copy)]
+    pub enum Kind { As, Do, If, Let, Fn, While, Constructor, Ident }
+    pub fn match_keyword(s: &str) -> u64 {
+        let k = match s {
+            "as" => Kind::As,
+            "do" => Kind::Do,
+            "if" => Kind::If,
+            "let" => Kind::Let,
+            "fn" => Kind::Fn,
+            "while" => Kind::While,
+            "constructor" => Kind::Constructor,
+            _ => Kind::Ident,
+        };
+        k as u64
+    }
+}
+
+pub fn make_input(n: usize) -> Vec<&'static str> {
+    let words = ["as", "identifier", "do", "if", "some_long_name", "let", "fn", "while", "constructor", "another_name"];
+    (0..n).map(|i| words[i % words.len()]).collect()
+}
+
+pub fn run_buggy(input: &[&'static str]) {
+    let input = std::hint::black_box(input);
+    let acc: u64 = input.iter().map(|s| buggy::match_keyword(s)).sum();
+    std::hint::black_box(acc);
+}
+
+pub fn run_fixed(input: &[&'static str]) {
+    let input = std::hint::black_box(input);
+    let acc: u64 = input.iter().map(|s| fixed::match_keyword(s)).sum();
+    std::hint::black_box(acc);
+}"#
+        .to_string(),
+    }
+}
+
+/// Bench spec for `usize-index-to-u32`: 16-byte spans vs 8-byte spans under a
+/// bandwidth-bound sum pass. At 1K elements both arrays are L1-resident (16KB
+/// vs 8KB) — expected Tie. At 1M the wide array is 16MB (exceeds L2 on most
+/// cores) while the narrow is 8MB — the bandwidth win should materialize.
+/// Same access pattern both sides; only the field width differs (the oxc Span
+/// change, isolated).
+#[cfg(feature = "rust_perf_bench")]
+fn usize_index_to_u32_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![1_000, 1_000_000],
+        harness: r#"
+mod buggy {
+    pub struct Span { pub start: usize, pub end: usize }
+    pub fn total_len(spans: &[Span]) -> u64 {
+        let mut acc = 0u64;
+        for s in spans { acc += (s.end - s.start) as u64; }
+        acc
+    }
+}
+
+mod fixed {
+    pub struct Span { pub start: u32, pub end: u32 }
+    pub fn total_len(spans: &[Span]) -> u64 {
+        let mut acc = 0u64;
+        for s in spans { acc += u64::from(s.end - s.start); }
+        acc
+    }
+}
+
+pub struct Input { wide: Vec<buggy::Span>, narrow: Vec<fixed::Span> }
+
+pub fn make_input(n: usize) -> Input {
+    let wide: Vec<buggy::Span> = (0..n)
+        .map(|i| buggy::Span { start: i * 3, end: i * 3 + (i % 7) + 1 })
+        .collect();
+    let narrow: Vec<fixed::Span> = wide
+        .iter()
+        .map(|s| fixed::Span { start: s.start as u32, end: s.end as u32 })
+        .collect();
+    Input { wide, narrow }
+}
+
+pub fn run_buggy(input: &Input) {
+    let input = std::hint::black_box(input);
+    std::hint::black_box(buggy::total_len(&input.wide));
+}
+
+pub fn run_fixed(input: &Input) {
+    let input = std::hint::black_box(input);
+    std::hint::black_box(fixed::total_len(&input.narrow));
+}"#
+        .to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -4293,9 +4467,9 @@ mod tests {
     }
 
     #[test]
-    fn seed_corpus_has_sixty_three_entries_across_twelve_categories() {
+    fn seed_corpus_has_sixty_five_entries_across_twelve_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 63);
+        assert_eq!(corpus.entries.len(), 65);
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
@@ -4304,12 +4478,13 @@ mod tests {
         // including Issue 014's arc-str-payload + Batch 48's three + Batch
         // 53's hashmap-with-capacity); complexity has 14 (Batch 48 added
         // hashset-insert-bool-return + vec-insert-front-deque); iterators
-        // has 7 (Batch 48 added three); simd has 5; layout has 5 (Batch 53
-        // added soa-hot-field) + concurrency has 4 (Issue 014 added the two
-        // metric-mismatch rules); arithmetic has 4 (Batch 53 added
-        // powi-vs-powf + distance-sq-no-sqrt; Batch 59 added
-        // division-by-invariant-multiplication); caching has 2 (Issue 014
-        // added regex-hoist-lazylock); io, dispatch, bevy, wasm have 1 each.
+        // has 7 (Batch 48 added three); layout has 6 (Batch 53 added
+        // soa-hot-field; Batch 61 added usize-index-to-u32) + concurrency
+        // has 4 (Issue 014 added the two metric-mismatch rules); arithmetic
+        // has 4 (Batch 53 added powi-vs-powf + distance-sq-no-sqrt; Batch 59
+        // added division-by-invariant-multiplication); dispatch has 2
+        // (Batch 61 added keyword-map-to-match); caching has 2 (Issue 014
+        // added regex-hoist-lazylock); io, bevy, wasm have 1 each.
         assert_eq!(categories.len(), 12);
     }
 
@@ -4546,8 +4721,9 @@ mod tests {
     /// bounded-channel-backpressure). Batch 48 added 2 verdict-class rules
     /// (filter-count-to-any ParetoDominated, iter-copied-deref-map Mixed).
     /// Batch 53 (Bench 038) added 2 more (powi-vs-powf all-Tie Mixed,
-    /// soa-hot-field latency-bound Mixed). The other 50 have
-    /// `context_notes: None` (unconditional wins or honestly NotBenchable).
+    /// soa-hot-field latency-bound Mixed). Batch 61's 2 oxc rules measured
+    /// ParetoDominant (5.2-5.6× + 1.8-2.0×) — no annotations. The other 53
+    /// have `context_notes: None` (unconditional wins or honestly NotBenchable).
     #[test]
     fn twelve_annotated_rules_carry_context_notes() {
         let corpus = build_perf_seed_corpus();
@@ -4583,7 +4759,7 @@ mod tests {
             .iter()
             .filter(|e| e.context_notes.is_none())
             .count();
-        assert_eq!(unannotated, 51, "expected 51 unannotated rules (63 - 12 annotated)");
+        assert_eq!(unannotated, 53, "expected 53 unannotated rules (65 - 12 annotated)");
     }
 
     /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -4641,7 +4817,7 @@ mod tests {
 
         // The unannotated rules must return None from the trait too.
         let unannotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_none()).collect();
-        assert_eq!(unannotated.len(), 51, "expected 51 unannotated rules");
+        assert_eq!(unannotated.len(), 53, "expected 53 unannotated rules");
         for rule in &unannotated {
             assert!(HealEntry::context_notes(*rule).is_none(), "{} should have no context_notes", rule.rule_id);
         }
