@@ -1,4 +1,4 @@
-//! Entries slice — Batch 57+ era (rules 354-363 of 363) — measured-GOAT
+//! Entries slice — Batch 57+ era (rules 354-364 of 364) — measured-GOAT
 //! distillations. Opened 2026-08-18 when `entries_gpu_06.rs` reached the
 //! ~900-line threshold (Batches 43-56, rules 325-353). Category membership
 //! lives ONLY in `KERNEL_CATEGORIES` (mod.rs) — never encode it here.
@@ -174,6 +174,44 @@ pub(super) fn entries() -> Vec<KernelRule> {
             gpu_concept: "When several small GEMV projections consume the SAME quantized input vector (qkv+z+a+b; gate+up; q+k+v), one launch per projection pins every launch to the kernel-latency floor — nsys attribution measured 497 GEMV launches/token with the m=48 projections at the ~5.6 microsecond latency floor (540 microseconds/token for 6.6 MB of weights). Group same-input GEMVs into ONE multi-segment launch (a segment = weights+output+m descriptor, at most 4 per launch) so tiny rows ride along at ~zero marginal cost; pad unused segment slots by reusing segment 0's pointers (m=0 matches no rows — never dereferenced); caller invariant: every segment shares the same input dim n. The generic middle option between fan-out-shared-input-single-sync (shared upload, N separate launches) and the bespoke fused pair (fuse-gate-up-gemv-activation — one fixed pair WITH activation; this batches arbitrary same-input segments with NO bespoke kernel). Honest caveat in-source: the grid cap that rides along is refuted (occupancy-grid-cap-refuted-uncapped-default) — the batching is the win, not the cap.".to_string(),
             ref_shape: "// naive: one launch per projection — each pays launch latency + a wave tail\nstruct Kernels;\nstruct Buf;\nstruct Weights {\n    m: usize,\n}\nimpl Kernels {\n    fn launch_gemv(&self, _w: &Weights, _x: &Buf, _o: &mut Buf) {}\n}\nfn quantize_into(_k: &Kernels, _x: &mut Buf) {}\nfn project_naive(fns: &Kernels, x_quant: &mut Buf, outs: &mut [Buf]) {\n    quantize_into(fns, x_quant); // once (good)\n    fns.launch_gemv(&Weights { m: 3072 }, x_quant, &mut outs[0]); // ~5.6 us\n    fns.launch_gemv(&Weights { m: 48 }, x_quant, &mut outs[1]); // floor\n    fns.launch_gemv(&Weights { m: 48 }, x_quant, &mut outs[2]); // floor\n    fns.launch_gemv(&Weights { m: 48 }, x_quant, &mut outs[3]); // floor: launch\n} // overhead dominates tiny projections (497 launches/token measured)".to_string(),
             opt_pattern: "// optimized: ONE multi-segment launch per same-input group; pad to 4 slots\nstruct Kernels;\nstruct Buf;\n#[derive(Clone)]\nstruct Segment {\n    w_m: usize,\n    codes: Buf,\n    out: Buf,\n}\nimpl Kernels {\n    fn launch_multi(&self, _s: &[Segment], _m: &[i32; 4], _x: &Buf, _acc: bool) {}\n}\nfn gemv_prequantized_multi(fns: &Kernels, x_quant: &Buf, segs_in: &[Segment], accumulate: bool) {\n    debug_assert!(segs_in.len() <= 4, \"multi-GEMV supports up to 4 segments\");\n    let mut segs: Vec<Segment> = segs_in.to_vec();\n    while segs.len() < 4 {\n        // m=0 pads match no rows — their pointers are never dereferenced\n        segs.push(segs[0].clone()); // reuse segment 0's pointers\n    }\n    let m: [i32; 4] = segs.iter().map(|s| s.w_m as i32).collect::<Vec<_>>().try_into().unwrap();\n    fns.launch_multi(&segs, &m, x_quant, accumulate); // ONE launch: the tiny\n} // m rows ride along with the big rows at ~zero marginal launch cost".to_string(),
+        },
+        // ── pre-gate-recovery-by-division-cancels-algebraically ── distilled
+        // from the measured-GOAT katgpt-rs Issue 460 fix (riir-train
+        // Issue 460 / Bench 475; commit e2853fbf, 2026-08-18): the MLA
+        // backward reconstructed the pre-gate attention output as
+        // `attn_out_gated / gate` — `gate = sigmoid(W_g · h)` underflows
+        // to a HARD ZERO in f32 once the pre-activation drops below ~-88,
+        // and the reconstruction is 0/0 = NaN. Silent in the forward (a
+        // saturated gate is finite, the gated output is just 0) and common
+        // (4 of 10 real sequences at random init, 4 of 5 seeds); it
+        // surfaced far from the cause as an opaque NsInvSqrtFailed in the
+        // optimizer. Localization proof: the FIRST corrupt tensor was
+        // `mla.w_g` — the ONLY consumer of the reconstructed value; every
+        // other MLA grad reads `attn_out_gated` and stayed clean. Fix:
+        // `gated == pre * g` by construction, so `pre * g * (1-g) ==
+        // gated * (1-g)` — the division disappears with no epsilon,
+        // bit-identical wherever the old form was finite; the public
+        // `saved.attn_out` reconstruction is guarded to 0.0 where g == 0
+        // (the pre-gate value is information-theoretically unrecoverable
+        // there — gated is 0 too), and the checkpoint path SAVES the true
+        // value instead of dividing it back out. Bench 475 repro: 6/10 ->
+        // 10/10 usable backward passes; all 6 finite-difference gradient
+        // checks still pass.
+        //
+        // Distinct from saturating-nonlinearity-recovery-breaks-near-cap
+        // (B35 — the DERIVATIVE recovered from a cached output rounds to
+        // exactly 0 near cap, a dead gradient, fixed by raw-argument
+        // recompute; this is a VALUE reconstruction by DIVISION producing
+        // 0/0 NaN, fixed by algebraic elimination — the factor cancels, no
+        // recompute), from sigmoid-deriv-recovered-from-output (B32b — the
+        // optimization family this rule makes singular-free), and from
+        // sign-branch-stable-sigmoid (B32a — forward sigmoid computation
+        // hygiene; this is backward reconstruction discipline).
+        KernelRule {
+            rule_id: "pre-gate-recovery-by-division-cancels-algebraically".to_string(),
+            gpu_concept: "A backward pass that needs the pre-gate activation of a multiplicative gate (gated = g * x_pre with g = sigmoid(W_g . h)) must never reconstruct it by dividing the saved gated output by the gate: sigmoid underflows to a HARD ZERO in f32 once the pre-activation drops below ~-88, the reconstruction is then 0/0 = NaN, and the failure is doubly hidden — the forward stays perfectly normal (a saturated gate is finite; the gated output is simply 0) and the NaN surfaces far from its cause as an opaque optimizer failure steps later. The division is also unnecessary: every gradient consumer of the pre-gate value multiplies it by gate-derived factors, and gated == pre * g by construction, so the g cancels — the gate's own weight grad d_gate_pre = d_gated * pre * g * (1 - g) rewrites as d_gated * gated * (1 - g): bit-identical wherever the old form was finite, no epsilon, no clamp, one fewer divide per element. Where the gate is exactly 0 the pre-gate value is information-theoretically unrecoverable (gated is 0 too — 0/0 carries no information), so a public reconstruction field reports a guarded 0.0 instead of poisoning callers, and the checkpoint path SAVES the true pre-gate value rather than dividing it back out. Detection tell: the gradient NaN localizes to the single weight matrix that consumes the reconstructed value while every gradient reading the post-gate value stays clean — that asymmetry is the proof. Distinct from saturating-nonlinearity-recovery-breaks-near-cap (the derivative recovered from a cached output rounds to exactly 0 near cap — a dead gradient, fixed by recomputing the raw argument; this is a value reconstruction by division producing NaN — fixed by algebraic elimination, the factor cancels with no recompute), from sigmoid-deriv-recovered-from-output (the recovery optimization family this rule makes singular-free), and from sign-branch-stable-sigmoid (forward sigmoid computation hygiene — this is backward reconstruction discipline).".to_string(),
+            ref_shape: "// naive: backward reconstructs the pre-gate activation by DIVIDING the\n// saved gated output by the gate — singular exactly at saturation, and\n// silent: the forward stays finite (gated is just 0 where g underflowed)\nfn gate_backward_naive(d_gated: &[f32], gated: &[f32], gate: &[f32],\n                       h: &[f32], d_w_g: &mut [f32]) {\n    let mut pre = vec![0.0f32; gated.len()];\n    for i in 0..gated.len() {\n        // gate = sigmoid(W_g . h) underflows to a HARD ZERO in f32 below\n        // ~-88 pre-activation; gated[i] is 0 there too\n        pre[i] = gated[i] / gate[i]; // 0/0 = NaN — poisons every consumer\n    }\n    for i in 0..gated.len() {\n        // the gate's weight grad is the ONLY consumer of the reconstruction\n        let d_gate_pre = d_gated[i] * pre[i] * gate[i] * (1.0 - gate[i]);\n        for (k, &hk) in h.iter().enumerate() {\n            d_w_g[k] += d_gate_pre * hk; // NaN lands in ONE matrix, then\n        } // spreads step-later as an opaque optimizer failure\n    }\n}".to_string(),
+            opt_pattern: "// optimized: gated == pre * g by construction, so the g cancels in every\n// gradient consumer — the reconstruction (and its division) disappears\nfn gate_backward_cancelled(d_gated: &[f32], gated: &[f32], gate: &[f32],\n                           h: &[f32], d_w_g: &mut [f32]) {\n    for i in 0..gated.len() {\n        let g = gate[i];\n        // d_gated * pre * g * (1-g) == d_gated * (pre * g) * (1-g)\n        let d_gate_pre = d_gated[i] * gated[i] * (1.0 - g); // g == 0 gives\n        // exactly 0.0, never NaN — bit-identical where the old form was finite\n        for (k, &hk) in h.iter().enumerate() {\n            d_w_g[k] += d_gate_pre * hk;\n        }\n    }\n}\n// a public pre-gate reconstruction, if one must exist, is guarded: where\n// g == 0 the pre-gate value is information-theoretically unrecoverable\n// (gated is 0 too — 0/0 carries no information) — report 0.0, and SAVE\n// the true value at the checkpoint boundary instead of dividing it out\nfn pre_gate_reconstruct_guarded(gated: &[f32], gate: &[f32]) -> Vec<f32> {\n    (0..gated.len())\n        .map(|i| if gate[i] > 0.0 { gated[i] / gate[i] } else { 0.0 })\n        .collect()\n}".to_string(),
         },
     ]
 }

@@ -59,8 +59,9 @@
         // Batch 49 (1): riir-gpu cudarc — runtime-arg-loop-bound-demotes-arrays-to-local-memory (cudarc_kernels/mod.rs rmsnorm_quantize_f32, the Bench-686 measured lesson from Issue 706: compile-time loop bounds + #pragma unroll keep per-thread arrays in registers — kernel −18.4% at ppl bit-exact).
         // Batch 57 (2): measured-GOAT distillation (riir-ai Issue 715 — smem-slot-role-reversal-needs-barrier, tile-loop-back-edge-needs-multi-tile-bitexact-gate; the flash-attention tile-loop smem races + the multi-tile bit-exact regression gate; commits 9f9e68402 + 93d853582).
         // Batch 58 (8): ternary_deltanet sibling-WIP unlock — the LAST never-mined riir-gpu orchestration file (ternary_deltanet_gpu_forward_cudarc.rs, 5,691 lines — raw-CUDA decode-forward twin; async-htod-host-source-outlives-copy, captured-graph-bakes-buffer-addresses, output-buffer-rotation-pool-multi-forward, mid-pipeline-device-alloc-is-implicit-sync, capture-region-dispatch-only, occupancy-grid-cap-refuted-uncapped-default, write-before-read-state-skips-checkpoint, same-input-gemv-segments-single-launch; hazards filed as Issue 722).
-        // Total: 209. // (historical batch-30 snapshot; current 363)
-        assert_eq!(corpus.entries.len(), 363, "kernel batches through Batch 58 should have 363 rules");
+        // Batch 60 (1): measured-GOAT distillation (riir-train Issue 460 / katgpt-rs e2853fbf — pre-gate-recovery-by-division-cancels-algebraically; the MLA backward's saturated output-gate 0/0 NaN, fixed by algebraic cancellation; Bench 475: 6/10 -> 10/10 usable backward passes).
+        // Total: 209. // (historical batch-30 snapshot; current 364)
+        assert_eq!(corpus.entries.len(), 364, "kernel batches through Batch 60 should have 364 rules");
     }
 
     #[test]
@@ -3551,13 +3552,75 @@
     }
 
     #[test]
+    fn batch60_rules_present() {
+        // Batch 60 (measured-GOAT distillation — riir-train Issue 460 /
+        // katgpt-rs e2853fbf: the MLA backward's saturated output gate
+        // 0/0 NaN, fixed by algebraic cancellation).
+        let corpus = build_kernel_seed_corpus();
+        let ids = ["pre-gate-recovery-by-division-cancels-algebraically"];
+        for id in ids {
+            assert!(
+                corpus.entries.iter().any(|e| e.rule_id == id),
+                "batch-60 rule '{id}' missing from corpus"
+            );
+        }
+    }
+
+    #[test]
+    fn batch60_concepts_covered() {
+        let corpus = build_kernel_seed_corpus();
+        let checks: [(&str, [&str; 5]); 1] = [(
+            "pre-gate-recovery-by-division-cancels-algebraically",
+            [
+                "HARD ZERO",
+                "0/0 = NaN",
+                "the g cancels",
+                "information-theoretically unrecoverable",
+                "that asymmetry is the proof",
+            ],
+        )];
+        for (id, concepts) in checks {
+            let entry = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-60 rule '{id}' missing"));
+            for concept in concepts {
+                assert!(
+                    entry.gpu_concept.contains(concept),
+                    "batch-60 concept '{concept}' not covered in '{id}'"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn batch60_pseudocode_parses() {
+        // G1 for Batch 60 (measured-GOAT distillation): syn-parse gate.
+        use crate::domain::HealDomain;
+        let corpus = build_kernel_seed_corpus();
+        let ids = ["pre-gate-recovery-by-division-cancels-algebraically"];
+        for id in ids {
+            let entry = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-60 rule '{id}' missing"));
+            let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+            assert!(ref_verdict.parses, "batch-60 ref_shape for '{id}' must parse");
+            let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+            assert!(opt_verdict.parses, "batch-60 opt_pattern for '{id}' must parse");
+        }
+    }
+
+    #[test]
     fn kernel_categories_table_has_15_entries() {
         assert_eq!(KERNEL_CATEGORIES.len(), 15, "Plan 003: 15 categories (A–O)");
     }
 
     #[test]
     fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-        // Every rule_id in the 363-rule corpus must appear in exactly one category.
+        // Every rule_id in the 364-rule corpus must appear in exactly one category.
         let corpus = build_kernel_seed_corpus();
         let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
         let mut categorized: Vec<&str> = Vec::new();
@@ -3603,7 +3666,7 @@
             (KernelCategory::AutotuneDispatch, 5),
             (KernelCategory::ConvGemmLayout, 11),
             (KernelCategory::KernelPolymorphism, 9),
-            (KernelCategory::DtypeAlignment, 20),
+            (KernelCategory::DtypeAlignment, 21),
             (KernelCategory::IrStrengthReduction, 4),
         ];
         for (cat, count) in expected {
@@ -3613,9 +3676,9 @@
                 "Plan 003: category {cat:?} has {} rules, expected {count}",
                 entry.2.len());
         }
-        // Sum must equal 363.
+        // Sum must equal 364.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 363, "Plan 003: category totals must sum to 363");
+        assert_eq!(total, 364, "Plan 003: category totals must sum to 364");
     }
 
     #[test]
@@ -3625,7 +3688,7 @@
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 363, "Plan 003: grouped corpus has {total} rules, expected 363");
+        assert_eq!(total, 364, "Plan 003: grouped corpus has {total} rules, expected 364");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");

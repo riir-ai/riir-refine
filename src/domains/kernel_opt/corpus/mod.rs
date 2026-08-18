@@ -1277,6 +1277,27 @@
 //!   download to recover host-owned data; attention-backward per-token
 //!   alloc storm; uncached `lm_head` `dequant_transpose` per backward call;
 //!   plus 7 more).
+//! - **Batch 60 (measured-GOAT distillation, riir-train Issue 460):**
+//!   1 rule, corpus 363 -> 364 (N 20 -> 21) -
+//!   pre-gate-recovery-by-division-cancels-algebraically (N - a backward
+//!   that needs the pre-gate activation of a multiplicative gate
+//!   (`gated = g * pre`, `g = sigmoid(W_g · h)`) must never reconstruct it
+//!   by dividing the saved gated output by the gate: sigmoid underflows
+//!   to a HARD ZERO in f32 below ~-88 pre-activation and the
+//!   reconstruction is `0/0` NaN - silent (the forward stays finite; the
+//!   NaN surfaces steps later as an opaque optimizer failure) and common
+//!   (4 of 10 real sequences at random init, 4 of 5 seeds; measured
+//!   Bench 475, fixed katgpt-rs `e2853fbf`: 6/10 -> 10/10 usable
+//!   backward passes); the division is unnecessary because every
+//!   gradient consumer multiplies the pre-gate value by gate-derived
+//!   factors - `pre * g * (1-g) == gated * (1-g)`, the factor cancels,
+//!   bit-identical wherever the old form was finite; where `g == 0` the
+//!   pre-gate value is information-theoretically unrecoverable (`gated`
+//!   is 0 too - `0/0` carries no information): guard public
+//!   reconstructions to 0.0 and SAVE the true value at checkpoint
+//!   boundaries; detection tell: the NaN localizes to the single weight
+//!   matrix consuming the reconstruction while every post-gate-reading
+//!   gradient stays clean).
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
@@ -1329,7 +1350,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 363-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 364-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1767,7 +1788,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "debug-only-gpu-label-macro",
         ],
     ),
-    // N: dtype + alignment specialization (20 rules)
+    // N: dtype + alignment specialization (21 rules)
     (
         KernelCategory::DtypeAlignment,
         "N: dtype + alignment",
@@ -1792,6 +1813,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "rmsnorm-backward-gamma-scope-correction-term",
             "dequant-placement-by-component-traffic-share",
             "outlier-span-escapes-quantization-via-lossless-sidecar",
+            "pre-gate-recovery-by-division-cancels-algebraically",
         ],
     ),
     // O: IR strength reduction (4 rules)

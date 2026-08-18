@@ -89,9 +89,10 @@ If no candidate passes all four, the source is MARGINAL at best — say so.
 ## Recording the verdict
 
 - **NO / MARGINAL** → conversation only. No files, no queue entry.
-- **YES (grade B or better)** → two artifacts, same commit:
+- **YES (grade B or better)** → three artifacts, same commit:
   1. One line in the mining queue snapshot at `riir-clippy/.agents/skills/riir-clippy/SKILL.md`.
   2. A `.research/` note in riir-clippy following the repo's research-note shape — `**Status:** DISTILLED — pending owner decision` (the vocabulary is RECORD / DISTILLED / NEGATIVE), born-complete, no checkboxes. Number per `.research/.highwater` monotonic discipline. The note records: source URL, inspection date, provenance chain, ranked table, dedup-grep evidence, caveats, queue slot. Future mining batches cite it.
+  3. **The batch plan** — `riir-clippy/.plans/NNN_*.md` (next number per `.plans/.highwater`, re-scan the folder at write time), created BEFORE any corpus edit when the verdict proceeds to a mining batch. `- [ ]` checkbox tasks for: dedup re-verification, entry authoring, standing gates, count pins, GOAT (G1/G2/G3 + retrieval floors), research note, docs/AGENTS/queue-snapshot updates, commit+push. Mark `[x]` on completion, `- [-]` for defers with a reason. The verdict note + queue line cite the plan number. (Adopted 2026-08-18, owner call — the canonical retroactive plan is 006/Batch 60; every batch after it is plan-FIRST.)
 
 ## Canonical worked example (thermite, 2026-08-18)
 
@@ -111,4 +112,5 @@ User: "is raygon-renderer/thermite a good distill source?" Verdict: **YES, B+, r
 - WIP sources: snapshot/quote at mine time (siblings drift), mine completed modules only.
 - New domains (sec, wasm, ...) require a Proposal + `HealDomain` trait extension before any corpus entry — a verdict may recommend opening one but must not assume it.
 - Large sources: split inspection across 2 subagent lanes by module tree with disjoint scopes (the established 2-lane mining pattern); the coordinator verifies every CRITICAL reachability claim with its own grep (the Research 057 lesson — a subagent's failed grep is not evidence of absence).
+- **Plan-first for mining batches.** A YES verdict that proceeds to implementation opens its `.plans/NNN_*.md` plan (checkbox tasks per the global rule) BEFORE the first corpus edit; the batch's Research note and queue line reference the plan. A batch implemented without a plan is a process defect — record it honestly if it ever happens again (precedent: Plan 006 was created retroactively at owner request).
 - Commit the queue update + research note in the same unit (idle-loop commit discipline), `feat:`/`docs:` prefix per convention, on `develop`.

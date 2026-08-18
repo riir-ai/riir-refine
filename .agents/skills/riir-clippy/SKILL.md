@@ -45,6 +45,14 @@ findings are cheaper to fix before you benchmark around them.
 
 ## Protocol A — batch mining (queue item 5)
 
+0. **Create the batch plan FIRST** — `riir-clippy/.plans/NNN_*.md` (next
+   number per `.plans/.highwater`, re-scan the folder at write time) with
+   `- [ ]` checkbox tasks for: dedup, entry authoring, standing gates,
+   count pins, GOAT (G1/G2/G3 + retrieval), research note, docs/AGENTS/
+   queue-snapshot updates, commit+push. Mark `[x]` as tasks complete,
+   `- [-]` for defers with a reason. Adopted 2026-08-18 (owner call;
+   canonical retroactive plan: 006 for Batch 60 — every batch after it is
+   plan-FIRST).
 1. Read the **mining queue snapshot** below + `ls` the target tree. Pick
    the next unmined cluster (1–2 files, ~8–12 rules). NEVER mine a
    sibling-blocked file.
@@ -911,6 +919,31 @@ global = symlink only.
   exhaustive equivalence gate ships subtly wrong.** `.research/.highwater`
   65 → 66.
 
+- **Batch 60 DONE (2026-08-18, Research 067, Plan 006):** 1 rule, corpus 363 → 364
+  (N 20 → 21) — the SIXTH measured-GOAT distillation after corpus-complete
+  (reopen path (c), same-day): riir-train Issue 460 / katgpt-rs `e2853fbf` —
+  the MLA backward reconstructed the pre-gate attention output as
+  `attn_out_gated / gate`; `gate = sigmoid(W_g·h)` underflows to a HARD ZERO
+  in f32 below ~−88 → 0/0 NaN (silent in the forward; surfaced steps later as
+  an opaque NsInvSqrtFailed; 4 of 10 real sequences, 4 of 5 seeds;
+  localization: the FIRST corrupt tensor was `mla.w_g`, the ONLY consumer of
+  the reconstruction). Rule `pre-gate-recovery-by-division-cancels-
+  algebraically`: never reconstruct a pre-gate value by dividing by the gate —
+  every gradient consumer multiplies by gate-derived factors, so
+  `pre·g·(1−g) == gated·(1−g)` CANCELS (bit-identical where finite, no
+  epsilon); at g == 0 the value is information-theoretically unrecoverable —
+  guard public reconstructions to 0.0 + SAVE the true value at checkpoint
+  boundaries; detection tell: NaN localized to the single consuming weight
+  matrix while post-gate-reading grads stay clean. Distinct from B35 / B32b /
+  B32a (failure axis NaN-vs-0, operation division-vs-identity, fix
+  elimination-vs-recompute). GOAT: 778/0/1 kernel_heal + 577/0/0 default,
+  clippy 0 both states, retrieval floors HELD (kernel 100/100/100, blend
+  94.7/97.7/97.7 of 131; top-1 improved). **Plan-first discipline adopted
+  (owner call): Plan 006 created; every future batch creates its
+  `.plans/NNN_*.md` BEFORE implementation** (Protocol A step 0 below + the
+  distill skill's plan step, both added same-commit). `.research/.highwater`
+  66 → 67; `.plans/.highwater` 5 → 6.
+
 - **Batch 53 DONE (2026-08-17 evening, queue item 11 — online perf search +
   Bench 038):** the 4 online-search candidates landed as `PerfRule` entries +
   `BenchSpec` harnesses + eval spans + Pareto bench verdicts + floors re-pin.
@@ -1052,7 +1085,7 @@ global = symlink only.
   landed; 721's Non-goals exclude the CUDA port so it was collision-free).
 - **Progress**: riir-gpu file-mining COMPLETE-minus-one (Batch 51, Research
   057; ~115 files mined by line-weight; the sole remainder is the CubeCL
-  ternary twin, blocked on Issue 721). Corpus: 363 kernel rules + 63
+  ternary twin, blocked on Issue 721). Corpus: 364 kernel rules + 63
   rust_perf rules (Batch 59 = the first external-source distill via the
   `distill` skill: thermite divider → division-by-invariant-multiplication,
   2.03-2.13× ParetoDominant, Research 066; Batch 58 = the ternary_deltanet sibling-WIP unlock, the
