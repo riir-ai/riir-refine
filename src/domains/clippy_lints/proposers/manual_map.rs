@@ -7,6 +7,15 @@
 //! in parens when its expression form doesn't bind tighter than `.`
 //! (the old `parse_quote!` joiner could silently regroup `a + b` into
 //! `a + b.map(..)`).
+//!
+//! Control-flow guard (the riir-chain chainspec.rs E0277 lesson): the
+//! rewrite moves the Some-arm body into a NEW closure. `?`/`return`/
+//! `break`/`continue`/`await`/`yield` in the body change propagation or
+//! fail to compile there (`?` propagated through the enclosing fn in
+//! match-arm position → E0277 in closure position; `return` silently
+//! returns from the closure instead). Real clippy's `manual_map` refuses
+//! these bodies — probe-verified 1.97: the `?`-in-arm shape stays silent,
+//! the clean shape fires.
 
 use super::{edit, src, SourceEdit};
 use syn::visit::Visit;
@@ -54,6 +63,12 @@ impl Collector<'_> {
         };
         // none arm body must be the bare `None`.
         if !is_none_expr(&m.arms[none_idx].body) {
+            return None;
+        }
+        // The Some-arm body moves into a NEW closure: any control flow that
+        // depended on the enclosing fn (`?`, `return`, `break`, `continue`,
+        // `await`, `yield`) breaks there — refuse (real clippy does too).
+        if m.arms.iter().any(|a| body_has_closure_unsafe_control_flow(&a.body)) {
             return None;
         }
         // some arm body must be `Some(<expr>)`.
@@ -121,6 +136,37 @@ fn is_none_expr(e: &Expr) -> bool {
     matches!(e, Expr::Path(pp) if pp.path.is_ident("None"))
 }
 
+/// Does this expression contain control flow that cannot survive being
+/// spliced into a fresh closure body? Checked on BOTH arms (the None arm
+/// is a bare `None` literal by construction, so this is future-proofing).
+struct ClosureUnsafeFlow {
+    hit: bool,
+}
+
+impl<'ast> Visit<'ast> for ClosureUnsafeFlow {
+    fn visit_expr(&mut self, e: &'ast Expr) {
+        if matches!(
+            e,
+            Expr::Try(_)
+                | Expr::TryBlock(_)
+                | Expr::Await(_)
+                | Expr::Return(_)
+                | Expr::Break(_)
+                | Expr::Continue(_)
+                | Expr::Yield(_)
+        ) {
+            self.hit = true;
+        }
+        syn::visit::visit_expr(self, e);
+    }
+}
+
+fn body_has_closure_unsafe_control_flow(e: &Expr) -> bool {
+    let mut v = ClosureUnsafeFlow { hit: false };
+    v.visit_expr(e);
+    v.hit
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::propose_fix;
@@ -167,5 +213,32 @@ mod tests {
         let input = "fn f(x: Option<u8>) -> Option<u8> { match x { None => None, Some(v) => Some(v + 1), } }";
         let out = propose_fix("manual_map", input).expect("matched");
         assert!(out.contains("x.map(|v| v + 1)"), "{out}");
+    }
+
+    #[test]
+    fn try_in_arm_body_is_refused() {
+        // The riir-chain chainspec.rs production shape: `?` inside the
+        // Some-arm body propagated through the enclosing fn in match-arm
+        // position — moving it into a closure is E0277. Real clippy 1.97
+        // stays silent on this shape (probe-verified).
+        let input = "fn f(raw: Option<&str>) -> Result<Option<[u8; 32]>, E> {\n    let k = match raw {\n        None => None,\n        Some(hex) => Some(parse_hex32(hex).ok_or_else(|| E)?),\n    };\n    Ok(k)\n}";
+        let out = propose_fix("manual_map", input);
+        assert!(out.is_none(), "try-in-arm body must be refused: {out:?}");
+    }
+
+    #[test]
+    fn return_in_arm_body_is_refused() {
+        // `return` in a closure returns from the CLOSURE, not the fn —
+        // a silent semantic change, worse than the E0277.
+        let input = "fn f(x: Option<u8>) -> Option<u8> { match x { None => None, Some(v) => Some({ if v > 1 { return None; } v + 1 }) } }";
+        let out = propose_fix("manual_map", input);
+        assert!(out.is_none(), "return-in-arm body must be refused: {out:?}");
+    }
+
+    #[test]
+    fn await_in_arm_body_is_refused() {
+        let input = "async fn f(x: Option<Foo>) -> Option<Bar> { match x { None => None, Some(v) => Some(v.load().await) } }";
+        let out = propose_fix("manual_map", input);
+        assert!(out.is_none(), "await-in-arm body must be refused: {out:?}");
     }
 }
