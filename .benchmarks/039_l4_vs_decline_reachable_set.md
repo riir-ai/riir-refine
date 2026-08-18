@@ -1,6 +1,7 @@
 # Bench 039 — does L4 beat DECLINE on the reachable set? (Plan 336 T5.1)
 
 **Verdict:** **NO — L4 does not beat decline. T5.1 stays BLOCKED (measured, not argued).**
+**Final run: n=9, all scoreable. WIN 5 / NEUTRAL 0 / REGRESSION 4 — and 2 of the 5 wins are silently WRONG (see §Final result).**
 **Harness:** `riir-clippy/tests/t51_l4_vs_decline.rs` (3 arms; arm 0 fast, arms 1–2 `#[ignore]`d)
 **Checkpoint:** riir-train Plan 336 **T2.9 step-50 best** — rank 4 / alpha 8.0 / 48 DeltaNet layers,
 LORC SHA256 `2c4bd5d14fca6c31123fe39044e3aa4a16f052282dbb6a78e887ece3372c233a`
@@ -248,6 +249,82 @@ re-run is a ~10 minute CPU job once the workspace compiles.
 the checkpoint has been re-fetched to `~/.cache/t51/` — SHA256 `2c4bd5d1…`,
 identical to the original — so only the binary rebuild is outstanding.)
 
+## FINAL RESULT — n=9, every case scoreable (2026-08-18)
+
+The fixture rebuild worked: **0 excluded, 9/9 scoreable**, up from 4/9. This is
+the run the verdict rests on; the n=4 sections below are kept as history.
+
+```
+scoreable  9/9  (0 excluded)
+WIN        5/9
+NEUTRAL    0/9
+REGRESSION 4/9
+  of which DESTRUCTIVE 0/9
+VERDICT: L4 does NOT beat decline  (WIN>=1 AND REGRESSION==0)
+```
+
+| lint | outcome | L4 output |
+|---|---|---|
+| `or_fun_call` | **WIN** ✅ | `opt.unwrap_or_else(expensive)` |
+| `large_enum_variant` | REGRESSION | echoed input (`noop=true`) |
+| `too_many_arguments` | REGRESSION | echoed input |
+| `redundant_clone` | **WIN** ✅ | `let s = String::from("hi"); drop(s);` |
+| `vec_init_then_push` | REGRESSION | echoed input (`noop=true`) |
+| `manual_strip` | WIN ⚠️ **WRONG** | `s.get(2..)` |
+| `box_collection` | REGRESSION | echoed input |
+| `option_if_let_else` | WIN ⚠️ **WRONG** | `o.unwrap_or(0) + 1` |
+| `ptr_arg` | **WIN** ✅ | `fn f(v: &[u8]) -> usize { v.len() }` |
+
+### The headline: 2 of the 5 wins are silent semantic breaks
+
+Both pass `cargo clippy` **and** pass the contract-preservation check, because
+both preserve every contract identifier. Verified by compiling and running the
+original and the "fix" side by side:
+
+```
+option_if_let_else  None   : orig=0        l4=1          <- WRONG
+option_if_let_else  Some(5): orig=6        l4=6
+manual_strip        "xyz"  : orig=None     l4=Some("z")  <- WRONG
+manual_strip        "abc"  : orig=Some("c") l4=Some("c")
+```
+
+- `option_if_let_else`: `o.unwrap_or(0) + 1` adds 1 to the `None` branch. The
+  correct fix is `o.map_or(0, |x| x + 1)`.
+- `manual_strip`: `s.get(2..)` drops the `starts_with("ab")` guard entirely, so
+  it strips a prefix that was never there. The correct fix is
+  `s.strip_prefix("ab")`.
+
+**Admissible reading: 3 clean wins, 2 silent semantic breaks, 4 regressions.**
+The raw WIN count overstates by 40% on this run.
+
+### This is route 2 again, via a path the detector cannot see
+
+Bench 039's "two routes to a false WIN" needs a third entry. Route 2 was framed
+as *destructive edits* — deleting a named thing — and `contract_preserved` closes
+that: **DESTRUCTIVE fired 0/9**, and combined with the fixture-dependence finding
+below, the deletion class did not reproduce at all.
+
+But `manual_strip` and `option_if_let_else` are the same hazard reached by
+**changing logic while preserving every name**. No identifier is lost, so no
+name-based check can catch it. Closing it needs behavioural equivalence —
+property tests, differential execution, or a proof — none of which exist here.
+
+The asymmetry that made destructive edits worse than regressions applies with
+full force: a regression is *caught* (the lint still fires, the caller
+escalates); a silent semantic break ships a wrong answer that satisfies every
+gate in the tree. **Every WIN in this repo remains an upper bound**, and the
+semantic-preservation check narrowed that bound without removing it.
+
+### What the n=9 run settles
+
+- **The fixture was the limiting instrument, not the adapter.** 5 of 9 cases
+  produce a lint-clearing edit; at n=4 the verdict rested on 4.
+- **The adapter is not inert** — 3 verifiably correct fixes.
+- **It is nowhere near exportable.** 4 regressions and 2 silent wrong answers out
+  of 9 on the distribution it actually serves.
+- **`NEUTRAL == 0` a third time.** Nothing is declined or discarded; every
+  generation parses and is surfaced. The seam's parse gate suppresses nothing.
+
 ## Corrections from the n=9 re-run (2026-08-18)
 
 Two claims in the n=4 sections above need qualifying. Both were found by the
@@ -289,7 +366,22 @@ reasoning, and it is why the exclusion is not a loophole: parameters and fields
 are the item's interface, locals are implementation detail, and several clippy
 lints are *defined* as "remove this local".
 
-## Next lever (not run here)
+## Next lever
+
+**The scoreable-denominator lever is DONE** (n 4→9, this run). The remaining one
+is unchanged and is now the only thing standing between this harness and an
+admissible `p_win`: a **behavioural-equivalence check**. The contract check
+closes deletion; nothing here closes logic change, and this run produced two
+instances of it in nine cases.
+
+Cheapest credible option: property-test the original against the fix over
+generated inputs (both failures above are caught by a handful of random values —
+`None` for one, any string not starting with `"ab"` for the other). That is
+CPU-only and needs no model.
+
+Until it exists, **the WIN count is an upper bound and must be reported as one.**
+
+## Superseded: next lever as written at n=4
 
 The scoreable denominator is 4, which is too small to carry a promotion
 decision either way. The cheapest improvement is **not** another training run —
