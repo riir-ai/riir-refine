@@ -2368,7 +2368,11 @@ sort order; the filename provides identity. Add a new doc by dropping
 
 Issue, plan, doc, benchmark, and research numbers are **monotonic and never
 reused**. Before creating a new `.issues/` file, read `.issues/.highwater`, use
-`value + 1`, write back. Same for `.plans/`, `.docs/`, `.benchmarks/`, `.research/`.
+`value + 1`, write back. Same for `.plans/`, `.docs/`, `.benchmarks/`,
+`.research/`, and `.distill/` (the distill-program rolling resume state —
+edit-in-place per batch, NOT one file per batch; see
+`.distill/001_mining_queue_snapshot.md` and the pointer section in
+`.agents/skills/riir-clippy/SKILL.md`).
 
 ### Research-note shape (convention, adopted 2026-08-16)
 

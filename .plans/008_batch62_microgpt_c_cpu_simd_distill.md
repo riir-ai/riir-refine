@@ -34,6 +34,6 @@
 ## Phase 5 — records + commit
 
 - [x] Research note 070 (landed at verdict time, same commit as this plan + queue line).
-- [ ] Update AGENTS.md Batch 62 section + `.docs/` per the repo's doc shape; update the mining queue snapshot in `.agents/skills/riir-clippy/SKILL.md` (QUEUED → DONE with the measured numbers).
+- [ ] Update AGENTS.md Batch 62 section + `.docs/` per the repo's doc shape; update the mining queue snapshot at `.distill/001_mining_queue_snapshot.md` (QUEUED → DONE with the measured numbers; NEVER append to `.agents/skills/riir-clippy/SKILL.md` — instructions-only since 94655ac).
 - [ ] `.plans/.highwater` 7 → 8 (landed with this commit); `.research/.highwater` 69 → 70 (landed with this commit).
 - [ ] Commit `feat: batch 62: microgpt-c cpu simd distill (transposed-weight-register-gemv + newton-loses annotation)` + push, on `develop`.
