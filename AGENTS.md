@@ -1189,17 +1189,49 @@ cold build); warm re-runs passed clean 412/0 + 1090/0 twice each. The
 slice-5 re-run rule applies: a post-heal perf-gate mismatch needs a
 re-run before it counts as a regression.
 
+**riir-neuron-db slice 2 (benches/ + examples/) landed 2026-08-18** (riir-neuron-db
+`501288f`, pushed) — **29 files / 730 edits (729 uninlined_format_args + 1
+match_bool), net −300 post-fmt; the ndb heal territory is now DONE** (benches
+were the "slow future slice" + examples the 2-file tail). One `--all-features`
+mega-union cycle (supported ndb CI config; every required-features gate
+satisfied — ~19 distinct single-feature bench gates + 6 gated examples).
+**Composition note (the slice-5 parser lesson re-hit):** the dry-run's
+`[clippy] <rule> score …` lines are RETRIEVAL SUGGESTIONS interleaved after
+span headers, NOT edits — the first composition parse showed "82 iter_next_loop
++ 80 while_let_on_iterator" and looked like a proposer misfire; the REAL edits
+are the `[rule ] line N` entries (grep `\[[a-z_0-9]+ +\] line`), 729+1. Verified
+against ground truth: ZERO actual `while let .next()` / `0..(x+1)` patterns
+exist in the benches. **Validation (class 9, FULL pre/post baselines for all
+29 — captured in one loop; benches are fast measurement runs, seconds each):**
+exit codes identical for 28; `bench_466_commitment_baseline`'s soft timing
+gate (verify_commitment ≥ 2000 ns) FAILED at baseline (3040 ns) under box
+load 36-48 (3 sibling compute processes) and passes post-heal 4/4 (297 ns
+idle → 433 ns loaded — timing scales with load; the format-only heal cannot
+affect it). Normalized diffs benign (compile-log noise — 478's baseline
+included the cold bench-profile rebuild, `cargo bench` ≠ the dev-profile
+build; digit-width table padding; timing-row shuffles). Verdict flips all
+load-class + improvement-direction: 003 WARN→PASS, 466 FAIL→PASS, 478
+budget cells NO→yes. **The 1 control-flow edit** (bench_478:113 match_bool,
+`match i >= 5 {true=>&earlier[..], false=>&[]}` → if/else): the let-annotation
+`: &[[u8; 32]]` drives the coercion in both arms — compiles + verdict lines
+identical + it sits in graph CONSTRUCTION (setup), not the measured loop.
+Clippy residue 0 under --all-features benches+examples; rustfmt on the 14
+fmt-clean-at-HEAD files (15 pre-existing drift, left unfmt'd); no CRLF; lib
+untouched by construction; `--no-default-features` + the default-compiled
+healed example check green post-commit.
+
+
 **riir-chain slice 1 landed 2026-08-18** (riir-chain `7421245a` merged `ec610745`, pushed develop) — **root lib src/: 47 files / +243−325 (net −82 post-fmt)**. Composition: 159 uninlined_format_args sites (156 first-pass + 2 `anyhow::anyhow!` + 1 `{self:?}` newly reachable via the proposer fixes below) + 21 match_bool + 17 single_match_else + 14 map_unwrap_or + 1 redundant_pattern_matching + 1 range_plus_one + 1 collapsible_else_if. **Exclusions (sibling 031-T0.1 territory, named by the t01-durability remediation review):** `src/asset_lifecycle/` (4 files / 57 edits — the sibling's freshest code, Aug-18 mtime detector) + `src/wallet/tx_log.rs`. **Branch discipline honored:** branch `fix/clippy-heal-root-lib-src` → 1 commit → rebase onto origin/develop (10 sibling commits landed mid-cycle — 21 files, ZERO src/ overlap, verified before rebase) → `git merge --no-ff` → push. **Validation (all count-identical pre/post):** default lib 320/0/0 (== the pinned `test_gate.sh` suite count); all-features lib **1848/1/2** — the 1 failure is PRE-EXISTING at HEAD (`consensus::rsm_fv::fv_gates::g1_c1_offline_correctness`, panics `rsm_fv.rs:54` assert 0 vs 1000000, `chain_fv`-gated so invisible in default; NOT the heal's — flagged for the owner, plausibly the sibling's 031 durability work); check --all-features clean; clippy residue in-scope = 0 for healed classes except **2 documented comment-guard divergences** (`guard_gossip.rs:231` interior arm comments + `slashing.rs:326` trailing arm comment — the rewrite would displace them, healer stays silent, SAFER than clippy); 32/47 files rustfmt'd (fmt-clean-at-HEAD only, 15 carry pre-existing drift); post-fmt spot-check (slashing module 42/42 green on rebuilt lib). **Gate-map method:** lib.rs cfg walk + per-parent-mod inner-gate walk → 25 distinct feature gates spanned → validated under `--all-features` (a first-class supported config here, unlike feature-union reconstruction). **Healer counter gotcha:** the second `--fix --write` pass reported "74 edits / 7 files" but the git-diff delta was exactly +1 file/+3/−7 (the 3 newly-unblocked sites) — the counter is CUMULATIVE per touched file, not new edits; the git diff is the ground truth.
 
 **Two proposer root-cause fixes shipped same cycle** (riir-clippy `c85ff1c`): (1) `anyhow!` joined the template-first macro family (last-segment matching made `anyhow::anyhow!(…)` resolve to `anyhow` → not in table → silent, while real clippy fires — found as 2 live residue sites in riir-chain shard_quorum.rs); (2) the `{self} is not a valid format-arg name` guard was a **FALSE PREMISE** — probe-verified (temp crate, clippy 1.93): real clippy fires on `format!("{:?}", self)` sites AND `format!("{self:?}")` compiles + runs (rustc explicitly allows `self` as an implicit capture). Guard removed (`r#raw` exclusion kept); 2 fixtures; 571/571 default lib, clippy 0.
 
-**Remaining heal territory (both unblocked during the katgpt-rs WIP):**
-ndb benches/ 27 files / ~730 edits (validation class 9 per bench — slow,
-future slice) + ndb examples/ 2 files; **riir-chain remainder: tests/ +
-chaind + wallet/staker/sdk crates (~58 files / ~205+ edits by subtraction
-from the 105/420 sizing — re-dry-run at slice time; tests/ grew +4 e2e
-files via the sibling's 031-T0.3 landing mid-cycle; branch-per-ticket +
-`--no-ff` flow)**.
+**Remaining heal territory:** ndb DONE (slice 1 src+tests `5db2e3d` +
+slice 2 benches/examples `501288f` — 2026-08-18); **riir-chain remainder:
+tests/ + chaind + wallet/staker/sdk crates (~58 files / ~205+ edits by
+subtraction from the 105/420 sizing — re-dry-run at slice time; tests/
+grew +4 e2e files via the sibling's 031-T0.3 landing mid-cycle;
+branch-per-ticket + `--no-ff` flow; YIELDED 2026-08-18 22:05 — a sibling
+was live-running chaind e2e tests, re-check for quiescence first)**.
 
 **slice 7 landed 2026-08-18** (katgpt-rs `805feb22`..`81ef2631`, 12
 commits) — **the katgpt-rs root tests/ sweep is COMPLETE**: 40 files /
