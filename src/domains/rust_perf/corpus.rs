@@ -9,9 +9,9 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //! unconditional wins + honestly NotBenchable rules.
 //!
-//! 62 entries across 12 categories (complexity 14, allocation 18, simd 5,
-//! layout 5, iterators 7, concurrency 4, io 1, arithmetic 3, dispatch 1,
-//! caching 2, bevy 1, wasm 1). 52 are benchable; 10 are honestly
+//! 63 entries across 12 categories (complexity 14, allocation 18, simd 5,
+//! layout 5, iterators 7, concurrency 4, io 1, arithmetic 4, dispatch 1,
+//! caching 2, bevy 1, wasm 1). 53 are benchable; 10 are honestly
 //! NotBenchable (8 external-runtime/size-class + 2 metric-mismatch, Issue 014).
 //! Batch 48 (idle-queue item 11, 2026-08-16) added the 8 online-search
 //! candidates (perf-book std-types + iterators chapters): collect-append-to-
@@ -19,7 +19,10 @@
 //! any, vec-macro-zero-fill, iter-copied-deref-map, filter-map-fuse,
 //! vec-insert-front-deque. Batch 53 (idle-queue item 11, 2026-08-17) added
 //! the 4 online-search candidates: powi-vs-powf, distance-sq-no-sqrt,
-//! hashmap-with-capacity, soa-hot-field.
+//! hashmap-with-capacity, soa-hot-field. Batch 59 (2026-08-18, the first
+//! EXTERNAL-source distill via the `distill` skill) added
+//! division-by-invariant-multiplication (libdivide via the
+//! raygon-renderer/thermite Rust port).
 //!
 //! ## Bench specs (behind `rust_perf_bench`)
 //!
@@ -28,7 +31,7 @@
 //! `run_buggy` / `run_fixed` entry points. The bench validator generates a
 //! temp bin crate from the spec + runs a timing loop at multiple sizes.
 //!
-//! Currently benchable (52/62):
+//! Currently benchable (53/63):
 //! - `o1-lookup` (Vec scan vs HashMap lookup — clear O(n) vs O(1))
 //! - `bsearch-sorted-slice` (linear scan vs binary search — O(n) vs O(log n) on sorted data)
 //! - `dedupe-hashset-vs-vec` (Vec::contains loop vs HashSet collect — O(n²) vs O(n))
@@ -83,6 +86,7 @@
 //! - `distance-sq-no-sqrt` (sqrt-then-compare → squared compare — Batch 53)
 //! - `hashmap-with-capacity` (HashMap::new() rehash ladder → with_capacity(n) — Batch 53)
 //! - `soa-hot-field` (AoS strided single-field scan → SoA contiguous column — Batch 53)
+//! - `division-by-invariant-multiplication` (hardware integer div by loop-invariant RUNTIME d → libdivide-style magic mulhi+shift — Batch 59, thermite distill)
 //!
 //! Not benchable (10/50) — honest:
 //! - `layout-reorder` (struct size — deterministic `size_of`, not a runtime
@@ -1270,6 +1274,31 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
             ),
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: Some(soa_hot_field_bench_spec()),
+        },
+        // ── arithmetic: loop-invariant RUNTIME divisor → magic multiplication ──
+        // Source: libdivide (ridiculous_fish) via thermite's Rust port
+        // (raygon-renderer/thermite `divider.rs` — Batch 59, the first
+        // external-source distill via the `distill` skill). Hardware
+        // integer division is 20-90+ cycles and NOT vectorizable; a
+        // loop-INVARIANT runtime divisor (a function parameter — opaque to
+        // LLVM, so no strength reduction) converts once into a magic
+        // multiplier + shift (Granlund–Montgomery), then each division is
+        // mulhi + shifts (~4 cycles, pipelined). Two-regime rule (thermite's
+        // own split): CONSTANT divisors need nothing — LLVM already
+        // strength-reduces them to multiplication at compile time; the win
+        // is exclusively the RUNTIME-invariant case applied ≥~3 times
+        // (setup pays one hardware div). Guard: d must be nonzero + the
+        // same value for the whole batch (bucket counts, shard stripes,
+        // hash-then-div layouts).
+        PerfRule {
+            rule_id: "division-by-invariant-multiplication".to_string(),
+            name: "Loop of x / d with runtime-invariant d → precomputed magic multiplier + shift (libdivide)".to_string(),
+            category: "arithmetic".to_string(),
+            buggy_code: "fn bucket_sum(values: &[u32], d: u32) -> u32 {\n    let mut acc = 0;\n    for &x in values {\n        acc = acc.wrapping_add(x / d); // hardware udiv per element — d is a runtime invariant\n    }\n    acc\n}".to_string(),
+            fixed_code: "struct FastDivU32 { magic: u32, shift: u32, add: bool }\nimpl FastDivU32 {\n    fn new(d: u32) -> Self { // one hardware div, once — amortized after ~3 divisions\n        let l = 31 - d.leading_zeros();\n        if d.is_power_of_two() { return Self { magic: 0, shift: l, add: false }; }\n        let k = 1u64 << l;\n        let base = (k << 32) / u64::from(d);\n        let rem = (k << 32) % u64::from(d);\n        if u64::from(d) - rem < k {\n            Self { magic: base as u32 + 1, shift: l, add: false }\n        } else {\n            let mut m = base * 2;\n            let rem2 = rem * 2;\n            if rem2 >= u64::from(d) { m += 1; }\n            Self { magic: (m + 1) as u32, shift: l, add: true } // (m+1) wraps mod 2^32 — intended (m spans (2^32, 2^33))\n        }\n    }\n    #[inline(always)]\n    fn div(&self, x: u32) -> u32 {\n        if self.magic == 0 { return x >> self.shift; } // power-of-two divisor\n        let hi = ((u64::from(self.magic) * u64::from(x)) >> 32) as u32;\n        if self.add { ((u64::from(hi) + u64::from(x)) >> 1 >> self.shift) as u32 } else { hi >> self.shift } // widening add: u32 wrap drops the carry (d=7 x=MAX)\n    }\n}\nfn bucket_sum(values: &[u32], d: u32) -> u32 {\n    let fd = FastDivU32::new(d); // hoisted out of the loop\n    let mut acc = 0;\n    for &x in values {\n        acc = acc.wrapping_add(fd.div(x)); // mulhi + shift per element\n    }\n    acc\n}".to_string(),
+            context_notes: None,
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(division_invariant_bench_spec()),
         },
     ])
 }
@@ -4118,6 +4147,137 @@ pub fn run_fixed(input: &Input) {
     }
 }
 
+/// Bench spec for `division-by-invariant-multiplication`: hardware integer
+/// division by a loop-invariant RUNTIME divisor vs libdivide-style magic
+/// multiplication (Batch 59, thermite distill). The divisor is a runtime
+/// field passed through `black_box` at the call boundary — LLVM already
+/// strength-reduces compile-time-constant divisors, so the baseline must
+/// stay opaque for the bench to measure the rule's actual regime. Setup
+/// (one hardware div inside `FastDiv::new`) is INSIDE the timed call — the
+/// honest per-batch shape; it amortizes to noise at n >= 1000.
+#[cfg(feature = "rust_perf_bench")]
+const DIVISION_INVARIANT_FIXED_SRC: &str = r#"    pub struct FastDivU32 { magic: u32, shift: u32, add: bool }
+    impl FastDivU32 {
+        pub fn new(d: u32) -> Self {
+            let l = 31 - d.leading_zeros();
+            if d.is_power_of_two() { return Self { magic: 0, shift: l, add: false }; }
+            let k = 1u64 << l;
+            let base = (k << 32) / u64::from(d);
+            let rem = (k << 32) % u64::from(d);
+            if u64::from(d) - rem < k {
+                Self { magic: base as u32 + 1, shift: l, add: false } // ceil magic — the +1 is load-bearing
+            } else {
+                let mut m = base * 2;
+                let rem2 = rem * 2;
+                if rem2 >= u64::from(d) { m += 1; }
+                Self { magic: (m + 1) as u32, shift: l, add: true } // (m+1) wraps mod 2^32 — intended
+            }
+        }
+        #[inline(always)]
+        pub fn div(&self, x: u32) -> u32 {
+            if self.magic == 0 { return x >> self.shift; } // power-of-two divisor
+            let hi = ((u64::from(self.magic) * u64::from(x)) >> 32) as u32;
+            // widening add: hi + x reaches ~2^33 — a u32 wrap drops the carry bit
+            // (d=7 x=u32::MAX fails by 2^29). The theorem holds in wide math.
+            if self.add { ((u64::from(hi) + u64::from(x)) >> 1 >> self.shift) as u32 } else { hi >> self.shift }
+        }
+    }
+    pub struct FastDivU64 { magic: u64, shift: u32, add: bool }
+    impl FastDivU64 {
+        pub fn new(d: u64) -> Self {
+            let l = 63 - d.leading_zeros();
+            if d.is_power_of_two() { return Self { magic: 0, shift: l, add: false }; }
+            let k = 1u128 << l;
+            let base = (k << 64) / u128::from(d);
+            let rem = (k << 64) % u128::from(d);
+            if u128::from(d) - rem < k {
+                Self { magic: base as u64 + 1, shift: l, add: false } // ceil magic — the +1 is load-bearing
+            } else {
+                let mut m = base * 2;
+                let rem2 = rem * 2;
+                if rem2 >= u128::from(d) { m += 1; }
+                Self { magic: (m + 1) as u64, shift: l, add: true } // (m+1) wraps mod 2^64 — intended
+            }
+        }
+        #[inline(always)]
+        pub fn div(&self, x: u64) -> u64 {
+            if self.magic == 0 { return x >> self.shift; } // power-of-two divisor
+            let hi = ((u128::from(self.magic) * u128::from(x)) >> 64) as u64;
+            // widening add (see u32 twin): u64 wrap would drop the carry bit
+            if self.add { ((u128::from(hi) + u128::from(x)) >> 1 >> self.shift) as u64 } else { hi >> self.shift }
+        }
+    }
+    pub fn sum_quot_u32(data: &[u32], d: u32) -> u32 {
+        let fd = FastDivU32::new(d); // one hardware div, hoisted
+        let mut acc = 0u32;
+        for &x in data {
+            acc = acc.wrapping_add(fd.div(x)); // mulhi + shifts per element
+        }
+        acc
+    }
+    pub fn sum_quot_u64(data: &[u64], d: u64) -> u64 {
+        let fd = FastDivU64::new(d);
+        let mut acc = 0u64;
+        for &x in data {
+            acc = acc.wrapping_add(fd.div(x));
+        }
+        acc
+    }"#;
+
+#[cfg(feature = "rust_perf_bench")]
+fn division_invariant_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![1_000, 100_000, 1_000_000],
+        harness: r#"
+mod buggy {
+    pub fn sum_quot_u32(data: &[u32], d: u32) -> u32 {
+        let mut acc = 0u32;
+        for &x in data {
+            acc = acc.wrapping_add(x / d); // hardware udiv per element
+        }
+        acc
+    }
+    pub fn sum_quot_u64(data: &[u64], d: u64) -> u64 {
+        let mut acc = 0u64;
+        for &x in data {
+            acc = acc.wrapping_add(x / d);
+        }
+        acc
+    }
+}
+
+mod fixed {
+__FASTDIV_IMPLS__
+}
+
+pub struct Input {
+    data32: Vec<u32>,
+    data64: Vec<u64>,
+    d32: u32,
+    d64: u64,
+}
+
+pub fn make_input(n: usize) -> Input {
+    // diverse residues; the divisors are runtime fields (NOT constants —
+    // see the spec doc comment on strength reduction)
+    let data32 = (0..n).map(|i| (i as u32).wrapping_mul(2654435761)).collect();
+    let data64 = (0..n).map(|i| (i as u64).wrapping_mul(6364136223846793005)).collect();
+    Input { data32, data64, d32: 97, d64: 1000003 }
+}
+
+pub fn run_buggy(input: &Input) {
+    std::hint::black_box(buggy::sum_quot_u32(&input.data32, std::hint::black_box(input.d32)));
+    std::hint::black_box(buggy::sum_quot_u64(&input.data64, std::hint::black_box(input.d64)));
+}
+
+pub fn run_fixed(input: &Input) {
+    std::hint::black_box(fixed::sum_quot_u32(&input.data32, std::hint::black_box(input.d32)));
+    std::hint::black_box(fixed::sum_quot_u64(&input.data64, std::hint::black_box(input.d64)));
+}"#
+            .replace("__FASTDIV_IMPLS__", DIVISION_INVARIANT_FIXED_SRC),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -4133,9 +4293,9 @@ mod tests {
     }
 
     #[test]
-    fn seed_corpus_has_sixty_two_entries_across_twelve_categories() {
+    fn seed_corpus_has_sixty_three_entries_across_twelve_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 62);
+        assert_eq!(corpus.entries.len(), 63);
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
@@ -4146,10 +4306,140 @@ mod tests {
         // hashset-insert-bool-return + vec-insert-front-deque); iterators
         // has 7 (Batch 48 added three); simd has 5; layout has 5 (Batch 53
         // added soa-hot-field) + concurrency has 4 (Issue 014 added the two
-        // metric-mismatch rules); arithmetic has 3 (Batch 53 added
-        // powi-vs-powf + distance-sq-no-sqrt); caching has 2 (Issue 014
+        // metric-mismatch rules); arithmetic has 4 (Batch 53 added
+        // powi-vs-powf + distance-sq-no-sqrt; Batch 59 added
+        // division-by-invariant-multiplication); caching has 2 (Issue 014
         // added regex-hoist-lazylock); io, dispatch, bevy, wasm have 1 each.
         assert_eq!(categories.len(), 12);
+    }
+
+    /// G1 for `division-by-invariant-multiplication`: the magic-division
+    /// algorithm in the corpus fixture + bench harness must be exactly
+    /// equivalent to hardware `/` across an exhaustive low-divisor sweep +
+    /// boundary numerators + selected large divisors (Batch 59). A mirror
+    /// of the harness impl lives here (same math); under
+    /// `rust_perf_bench` a substring canary additionally pins the harness
+    /// string to the same construction lines so the two cannot drift.
+    #[test]
+    fn division_magic_matches_hardware_div_exhaustive_low_d() {
+        struct FastDivU32 { magic: u32, shift: u32, add: bool }
+        impl FastDivU32 {
+            fn new(d: u32) -> Self {
+                let l = 31 - d.leading_zeros();
+                if d.is_power_of_two() { return Self { magic: 0, shift: l, add: false }; }
+                let k = 1u64 << l;
+                let base = (k << 32) / u64::from(d);
+                let rem = (k << 32) % u64::from(d);
+                if u64::from(d) - rem < k {
+                    Self { magic: base as u32 + 1, shift: l, add: false }
+                } else {
+                    let mut m = base * 2;
+                    let rem2 = rem * 2;
+                    if rem2 >= u64::from(d) { m += 1; }
+                    Self { magic: (m + 1) as u32, shift: l, add: true }
+                }
+            }
+            fn div(&self, x: u32) -> u32 {
+                if self.magic == 0 { return x >> self.shift; }
+                let hi = ((u64::from(self.magic) * u64::from(x)) >> 32) as u32;
+                if self.add { ((u64::from(hi) + u64::from(x)) >> 1 >> self.shift) as u32 } else { hi >> self.shift }
+            }
+        }
+        struct FastDivU64 { magic: u64, shift: u32, add: bool }
+        impl FastDivU64 {
+            fn new(d: u64) -> Self {
+                let l = 63 - d.leading_zeros();
+                if d.is_power_of_two() { return Self { magic: 0, shift: l, add: false }; }
+                let k = 1u128 << l;
+                let base = (k << 64) / u128::from(d);
+                let rem = (k << 64) % u128::from(d);
+                if u128::from(d) - rem < k {
+                    Self { magic: base as u64 + 1, shift: l, add: false }
+                } else {
+                    let mut m = base * 2;
+                    let rem2 = rem * 2;
+                    if rem2 >= u128::from(d) { m += 1; }
+                    Self { magic: (m + 1) as u64, shift: l, add: true }
+                }
+            }
+            fn div(&self, x: u64) -> u64 {
+                if self.magic == 0 { return x >> self.shift; }
+                let hi = ((u128::from(self.magic) * u128::from(x)) >> 64) as u64;
+                if self.add { ((u128::from(hi) + u128::from(x)) >> 1 >> self.shift) as u64 } else { hi >> self.shift }
+            }
+        }
+
+        struct Lcg(u64);
+        impl Lcg {
+            fn next_u64(&mut self) -> u64 {
+                self.0 = self.0.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                self.0
+            }
+            fn next_u32(&mut self) -> u32 { (self.next_u64() >> 33) as u32 }
+        }
+        let mut rng = Lcg(0x2545F4914F6CDD1D);
+
+        // Exhaustive low divisors (all u32 d in 1..=4096, all u64 d in 1..=257)
+        for d in 1u32..=4096 {
+            let fd = FastDivU32::new(d);
+            let mut probe = |x: u32| {
+                assert_eq!(fd.div(x), x / d, "u32 mismatch at d={d} x={x}");
+            };
+            probe(0); probe(1); probe(d - 1); probe(d); probe(d + 1);
+            probe(d.saturating_mul(2).saturating_sub(1)); probe(u32::MAX);
+            for _ in 0..8 { probe(rng.next_u32()); }
+        }
+        for d in 1u64..=257 {
+            let fd = FastDivU64::new(d);
+            let mut probe = |x: u64| {
+                assert_eq!(fd.div(x), x / d, "u64 mismatch at d={d} x={x}");
+            };
+            probe(0); probe(1); probe(d - 1); probe(d); probe(d + 1);
+            probe(d.saturating_mul(2).saturating_sub(1)); probe(u64::MAX);
+            for _ in 0..8 {
+                probe(rng.next_u64());
+            }
+        }
+        // Selected large/edge divisors: powers of two, primes near 2^31,
+        // 2^32, 2^63, 2^64, and values that exercise the ADD branch + the
+        // sentinel boundary (magic wrapping near 0).
+        let edge32: &[u32] = &[65535, 65536, 65537, 1000003, 2147483647, 2147483648, 3000000001, 4294967291, 4294967295, 3, 5, 7, 9, 11];
+        for &d in edge32 {
+            let fd = FastDivU32::new(d);
+            let mut probe = |x: u32| {
+                assert_eq!(fd.div(x), x / d, "u32 edge mismatch at d={d} x={x}");
+            };
+            probe(0); probe(1); probe(d - 1); probe(d); probe(d.saturating_add(1));
+            probe(u32::MAX - 1); probe(u32::MAX);
+            for _ in 0..16 { probe(rng.next_u32()); }
+        }
+        let edge64: &[u64] = &[3, 5, 7, 9, 11, 65537, 1000003, 4294967291, 4294967296, 4294967311, 9223372036854775783, 9223372036854775808, 9223372036854775809, 18446744073709551557, u64::MAX - 1, u64::MAX];
+        for &d in edge64 {
+            let fd = FastDivU64::new(d);
+            let mut probe = |x: u64| {
+                assert_eq!(fd.div(x), x / d, "u64 edge mismatch at d={d} x={x}");
+            };
+            probe(0); probe(1); probe(d - 1); probe(d); probe(d.saturating_add(1));
+            probe(u64::MAX - 1); probe(u64::MAX);
+            for _ in 0..16 {
+                probe(rng.next_u64());
+            }
+        }
+
+        // Canary: the harness string must carry the same construction core
+        // (drift between this mirror + the spec = silent correctness rot).
+        #[cfg(feature = "rust_perf_bench")]
+        {
+            let spec = division_invariant_bench_spec();
+            for needle in [
+                "let base = (k << 32) / u64::from(d);",
+                "let base = (k << 64) / u128::from(d);",
+                "((u64::from(hi) + u64::from(x)) >> 1 >> self.shift) as u32",
+                "((u128::from(hi) + u128::from(x)) >> 1 >> self.shift) as u64",
+            ] {
+                assert!(spec.harness.contains(needle), "harness drifted from the equivalence-test mirror: missing `{needle}`");
+            }
+        }
     }
 
     #[test]
@@ -4217,10 +4507,10 @@ mod tests {
 
     #[cfg(feature = "rust_perf_bench")]
     #[test]
-    fn fifty_two_rules_have_bench_specs() {
+    fn fifty_three_rules_have_bench_specs() {
         let corpus = build_perf_seed_corpus();
         let with_spec = corpus.entries.iter().filter(|e| e.bench_spec.is_some()).count();
-        assert_eq!(with_spec, 52, "expected 52 benchable rules, got {with_spec}");
+        assert_eq!(with_spec, 53, "expected 53 benchable rules, got {with_spec}");
     }
 
     #[cfg(feature = "rust_perf_bench")]
@@ -4293,7 +4583,7 @@ mod tests {
             .iter()
             .filter(|e| e.context_notes.is_none())
             .count();
-        assert_eq!(unannotated, 50, "expected 50 unannotated rules (62 - 12 annotated)");
+        assert_eq!(unannotated, 51, "expected 51 unannotated rules (63 - 12 annotated)");
     }
 
     /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -4351,7 +4641,7 @@ mod tests {
 
         // The unannotated rules must return None from the trait too.
         let unannotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_none()).collect();
-        assert_eq!(unannotated.len(), 50, "expected 50 unannotated rules");
+        assert_eq!(unannotated.len(), 51, "expected 51 unannotated rules");
         for rule in &unannotated {
             assert!(HealEntry::context_notes(*rule).is_none(), "{} should have no context_notes", rule.rule_id);
         }

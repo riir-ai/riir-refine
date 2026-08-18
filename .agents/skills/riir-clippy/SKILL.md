@@ -880,6 +880,37 @@ global = symlink only.
   COMPLETE-minus-one (only the CubeCL twin, blocked on Issue 721).
   `.research/.highwater` 64 → 65.
 
+- **Batch 59 DONE (2026-08-18, Research 066):** 1 `rust_perf` rule, corpus 62 → 63
+  (arithmetic 3 → 4; 53rd benchable) — **the FIRST EXTERNAL-SOURCE distill
+  via the `distill` skill** (raygon-renderer/thermite `divider.rs`, a
+  libdivide port; verdict YES B+ from the same session's evaluation):
+  `division-by-invariant-multiplication` — loop of `x / d` with
+  RUNTIME-invariant `d` → precomputed Granlund–Montgomery magic multiplier +
+  shift (FastDivU32/U64; mulhi + shifts per element vs 20-90+ cycle hardware
+  div). Two-regime guard (thermite's own split): CONSTANT divisors are
+  already LLVM strength-reduced — the regime is exclusively runtime-invariant
+  `d` applied ≥~3× (setup pays one hardware div); the bench harness
+  black_boxes the divisor so the baseline can't be const-folded. **Measured
+  2.03/2.13/2.07× ParetoDominant (3/0/0, M3 aarch64; x86 DIV 30-90+ cycles
+  should be wider), allocs 0/0, G-det stable.** G1 = the NEW
+  exhaustive-equivalence-test class for ported numeric algorithms
+  (`division_magic_matches_hardware_div_exhaustive_low_d`: all u32 d 1..=4096
+  + u64 d 1..=257 + edge divisors × boundary+LCG numerators) — it caught TWO
+  pre-landing bugs in the ported construction: floor-vs-ceil magic (d=3 x=3:
+  thermite wraps `+1` on BOTH branches — the plain branch needs the CEIL
+  magic 0xAAAAAAAB, floor under-approximates at exact multiples) + u32-wrap
+  carry loss (d=7 x=u32::MAX: `(mulhi + x)` reaches ~2^33; a u32 wrap drops
+  the carry bit — fix = widening add in u64/u128). Fixture/harness/mirror
+  pinned by 4 substring canaries. Floors re-pinned (`PERF_SPANS` 52→53,
+  blended 100→101: measured 94/98/98, perf 51/52/52, router 71/101 — new span
+  top-1). Gates: 572 default / 590 rust_perf_bench / 624 latent_retrieval
+  lib, clippy 0 both states. Proposer DEFERRED (architectural rewrite —
+  follow-up candidate). Drops: approx-op (policy.rs unread), DoublePump
+  (architectural), branch-hint (PGO-class), tgamma input-domain (crate
+  mostly todo!()). Standing lesson: **a ported numeric algorithm without an
+  exhaustive equivalence gate ships subtly wrong.** `.research/.highwater`
+  65 → 66.
+
 - **Batch 53 DONE (2026-08-17 evening, queue item 11 — online perf search +
   Bench 038):** the 4 online-search candidates landed as `PerfRule` entries +
   `BenchSpec` harnesses + eval spans + Pareto bench verdicts + floors re-pin.
@@ -1021,8 +1052,10 @@ global = symlink only.
   landed; 721's Non-goals exclude the CUDA port so it was collision-free).
 - **Progress**: riir-gpu file-mining COMPLETE-minus-one (Batch 51, Research
   057; ~115 files mined by line-weight; the sole remainder is the CubeCL
-  ternary twin, blocked on Issue 721). Corpus: 363 kernel rules + 62
-  rust_perf rules (Batch 58 = the ternary_deltanet sibling-WIP unlock, the
+  ternary twin, blocked on Issue 721). Corpus: 363 kernel rules + 63
+  rust_perf rules (Batch 59 = the first external-source distill via the
+  `distill` skill: thermite divider → division-by-invariant-multiplication,
+  2.03-2.13× ParetoDominant, Research 066; Batch 58 = the ternary_deltanet sibling-WIP unlock, the
   LAST never-mined riir-gpu orchestration file — Research 065, 8 rules
   (staging lifetime, graph lifecycle, rotation pool, implicit-sync, capture
   region, occupancy refutation, checkpoint liveness, multi-segment GEMV) +

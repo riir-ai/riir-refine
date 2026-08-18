@@ -417,4 +417,12 @@ pub fn centroid_x(npcs: &[NpcEntry]) -> f32 {
     npcs.iter().map(|n| n.x).sum()
 }
 "#),
+    ("division-by-invariant-multiplication", r#"pub fn shard_sum(entity_ids: &[u32], shards: u32) -> u32 {
+    let mut acc = 0;
+    for &id in entity_ids {
+        acc = acc.wrapping_add(id / shards); // shards fixed per call — hardware udiv every element
+    }
+    acc
+}
+"#),
 ];
