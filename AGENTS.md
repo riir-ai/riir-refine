@@ -1298,7 +1298,14 @@ zero healable residue); **riir-chain DONE**
 [asset_lifecycle/, tx_log.rs, platform_gaps.rs, naive_replay.rs,
 e2e_replay_recovery.rs, wallet_store_crash_atomicity] — re-dry-run when
 their plans close); **riir-ai small-crates slice OPENED the riir-ai
-campaign** (see below).
+campaign** (see below). **riir-ai giants: SIZED 2026-08-19** —
+riir-engine/src dry-run = **174 files / 979 edits** (src-only; the stale
+~2620 estimate included tests/benches/examples), mix ≈ 809 uninlined + 58
+single_match_else + 44 map_unwrap_or + 43 match_bool + 7 misc — the
+CONTROL-FLOW share (~145) is far higher than the katgpt sweeps, needs the
+map_or terminal-state + unnecessary_map_or checks per site; sibling-free
+as of sizing (the 726 family works riir-gpu only). games-civ + gpu +
+engine tests/benches/examples remain unsized.
 
 **riir-ai small-crates slice landed 2026-08-18** (riir-ai `883d51825` via
 the worktree dance — the sibling's live WIP on ffi/gpu/games/721 blocked
