@@ -2192,6 +2192,40 @@ lib+bin under latent_retrieval,fix_verify. The katgpt-rs heal itself:
 single_match_else 49→13 (remainder = documented deliberate skips), 8
 fixable lints at 0, 3006/3006 lib tests.
 
+**Plan 014 + Issue 032 (2026-08-19, both RESOLVED same day; issue file
+removed per noise-reduction rule).** **Plan 014 — clippy-bench** (commit
+`17e3d8b`): the frozen real-code healing bench that can falsify "we're
+getting better" — 34 frozen fixtures (7 real pre-sweep mined + 27
+authored-composite T3.5.5 multi-lint spans + clean/decline), scored
+against real `cargo clippy` before/after on 4 axes (heal_rate,
+created_rate=false positives, parse_safety, decline_correctness) + the
+persist miss map; append-only `.benchmarks/score_history.jsonl` + a
+zero-dep byte-stable SVG curve embedded in README; run via `cargo run
+--features score_bench --bin cargo-heal -- --score-bench`. The
+denominator never grows with the corpus — the fake-coverage failure mode
+is structurally closed. Baseline run #1: heal 84.6% · created 3 (5.8%)
+· safety 92.9% · decline 100%. **Issue 032 — run #1 caught a REAL
+proposer bug on its first execution** (exactly what the bench exists
+for): the `needless_range_loop` rewrite emitted its header + body-slot
+substitutions as SEPARATE edits, so a foreign same-pass fix overlapping
+one slot (`identity_op` on `hits[i] * 1` — same start, longer end) was
+dropped by `apply_edits_traced`'s outer-first overlap selection while
+the header edits survived → `for __elem in hits { hits[i] }` (dangling
+`i`, non-compiling). Fix (`86ba7f1`): the rewrite is now ONE atomic
+whole-loop edit (replacement = the loop's original text with all
+substitutions spliced) — consistent with every other multi-site
+proposer (`single_match_else`, `manual_map`, `map_unwrap_or` rewrite
+the whole construct in one edit); a nested foreign edit is dropped
+instead and re-fires on the next fixpoint pass (the documented nesting
+semantics). **Run #2: heal 90.4% (+5.8pp) · safety 100% — the first
+upward step on the curve.** 3 new tests (atomicity + both frozen
+fixtures through the production fixpoint shape); 19/19 module, 623
+default / 707 score_bench lib tests. Standing workflow: run
+`--score-bench` after every proposer/corpus change so the history
+accumulates; Phases 2 (perf/format axes) + 3 (real-fraction growth:
+statement-wrap miner, stub manifests, crates.io source, cold/warm
+memory lines) defer-marked in the plan.
+
 **Plan 005 (2026-08-14) — latent retrieval + `cargo heal --suggest` CLI
 (Phases 1–4 DONE).** `src/draft/` ships the span-level retrieval layer:
 real `.rs` files → `AstChunker` spans → 8-D modelless embedding →

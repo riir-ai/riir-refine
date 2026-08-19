@@ -39,12 +39,19 @@ mine time; every run re-derives + warns loudly on toolchain drift.
 Plus the **miss map**: which lints persist where, most-frequent first —
 the diagnostic for WHERE healing still fails.
 
-## Baseline (run #1, 2026-08-19)
+## Score history (the curve so far)
 
-heal 84.6% · created 3 (5.8%) · safety 92.9% · decline 100% — and the run
-caught a REAL proposer bug (Issue 032: `needless_range_loop` ×
-`identity_op` composition breaks the loop variable) on its first
-execution. Fixing it is the first step the curve will show.
+| run | sha | heal | created | safety | decline | note |
+|---|---|---|---|---|---|---|
+| #1 2026-08-19 | `17e3d8b` | 84.6% | 3 (5.8%) | 92.9% | 100% | baseline — caught a REAL proposer bug on its first execution (Issue 032) |
+| #2 2026-08-19 | `86ba7f1` | **90.4%** | 3 (5.8%) | **100%** | 100% | Issue 032 fixed (atomic whole-loop edit) — the first step the curve shows: +5.8pp heal, safety back to 100 |
+
+Run #1's two parse-safety failures were exactly the Issue 032 fixtures
+(`needless_range_loop` × `identity_op`/`double_parens` same-pass composition
+half-applied the rewrite → dangling loop variable). The remaining miss map
+(needless_range_loop, double_parens, needless_return,
+redundant_pattern_matching, useless_format — one each) is the honest open
+heal surface; `created_rate` 3 is the separate false-positive class.
 
 ## Run
 
@@ -68,5 +75,5 @@ crate-internal spans (Phase 3 — grows the `real:` fraction).
 ## See also
 
 - [Plan 014](../../.plans/014_clippy_bench.md)
-- [Issue 032](../../.issues/032_needless_range_loop_composition_breaks_loop_var.md) — the bug baseline run #1 caught
+- Issue 032 (resolved + removed 2026-08-19, fix `86ba7f1`) — the partial-application composition bug baseline run #1 caught; the canonical record now lives in the score-history table above
 - [`clippy_oracle.rs`](../../src/draft/clippy_oracle.rs) — the T3.5.5 real-clippy oracle

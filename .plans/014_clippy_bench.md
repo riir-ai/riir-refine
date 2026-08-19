@@ -102,8 +102,16 @@ train/test-style split so corpus growth cannot inflate the score.
       **Baseline (run #1): heal 84.6% · created 3 (5.8%) · safety 92.9% ·
       decline 100% — and the run caught a REAL proposer bug** (Issue 032:
       needless_range_loop × identity_op composition breaks the loop var;
-      the 2 safety failures are exactly those fixtures). Fixing it is the
-      first step the curve will show.
+      the 2 safety failures are exactly those fixtures).
+- [x] **Issue 032 RESOLVED same day (fix `86ba7f1`)** — the range-loop
+      rewrite is now ONE atomic whole-loop edit (the header + every slot
+      substitution must land together; as separate edits a foreign
+      same-pass fix overlapping one slot was dropped by outer-first
+      selection while the headers survived → dangling `i`). **Run #2:
+      heal 90.4% (+5.8pp) · safety 100%** — the first upward step on the
+      curve, exactly as the bench was designed to show. 3 new tests
+      (atomicity + both frozen-fixture compositions through the production
+      fixpoint shape); 19/19 module, 623 default / 707 score_bench lib.
 
 ### GOAT (the harness itself)
 - [x] G1 measures what it claims: scores derive ONLY from real-clippy

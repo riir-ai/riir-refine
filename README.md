@@ -304,10 +304,11 @@ Run it after any proposer/corpus change; each run appends one point to
 cargo run --features score_bench --bin cargo-heal -- --score-bench
 ```
 
-Baseline (2026-08-19, run #1): heal 84.6% · created 3 · safety 92.9% ·
-decline 100% — and run #1 caught a REAL proposer bug (Issue 032:
-`needless_range_loop` × `identity_op` composition breaks the loop
-variable), which is exactly what the bench exists to surface. Expect a
+Run #1 (2026-08-19): heal 84.6% · created 3 · safety 92.9% · decline 100% —
+and it caught a REAL proposer bug on its first execution (Issue 032:
+`needless_range_loop` × `identity_op` same-pass composition half-applied
+the rewrite → dangling loop variable). **Run #2 (fix `86ba7f1`, same day):
+heal 90.4% · safety 100%** — the first upward step on the curve. Expect a
 STEP curve at root-cause fixes, not a training curve — the self-learning
 mechanisms measured negative and were killed; improvement is
 engineering-iterative and the curve makes it honest.
