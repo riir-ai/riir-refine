@@ -1568,6 +1568,56 @@ Remaining: engine tests/benches (~1480), games Layer-3 (2 files sibling
 WIP), poc (sibling-active), gpu (sibling-adjacent), mmorpg (blocked on
 wire_router), + this slice's ~436 deferred GPU-gated example edits.**
 
+**riir-ai engine tests/benches slice landed 2026-08-19** (riir-ai
+`e8f758995`): **95 files / 1481 edits — THE riir-engine TERRITORY IS NOW
+FULLY DONE** (src 174/979 + examples 15/151 + wasm 5/23 + tests/benches
+95/1481). Composition: 1437 uninlined_format_args + 21 single_match_else
++ 11 map_unwrap_or + 7 vec-with-capacity + 4 match_bool + 1 semicolon
+across 71 test files + 24 harness=false bench files. **Gate map (the long
+pole):** [[test]]/[[bench]] `required-features` from the manifest +
+whole-file `#![cfg]` scans → 5 default-compiled / 57 manifest-gated / 33
+inner-cfg-gated; ~68 distinct features validated under ONE release
+mega-union (the src-slice pattern applied to test targets — builds tests
+via `cargo test --release --no-run`, benches via `cargo bench --no-run`).
+**Validation (release, all 95 binaries pre/post):** 71 tests
+COUNT-IDENTICAL; 4 pre-existing failures same-signature at clean HEAD
+(bench_315 g3_throughput 2×-gate — debug-pass/release-FAIL mode-lock, the
+near-threshold class; bench_336 g6e_no_regression_light; bench_338_g9
+g9_perf_mmo_scale_10k_npcs; latent_functor_rank_k t41/t42/t43). 24
+benches exit + normalized-output identical (2 benign digit-width padding
+diffs; bench_363's 200ns latency gate LOAD-FLAKY — post-heal 3/3 green at
+125ns under the p335+r sibling-rustc load, the bench_133 class).
+Post-fmt spot-checks count-identical; rustfmt on 21/22 fmt-clean-at-HEAD
+files (3 CRLF + 70 pre-existing drift scoped out); residue 0 (fresh
+healer dry-run over all 220 files).
+
+**Slice lessons (tooling):** (1) DEBUG baselines unrunnable for karc —
+bench_332_karc_cross_game/goat are ~650s RELEASE runs (debug 30×+ — the
+first debug-baseline attempt burned a 20-min window); release test
+builds are CHEAP after the bench release build shares deps. (2) Direct
+binary execution beats `cargo test --test X` under a 68-feature union —
+each cargo invocation pays ~4 min of fingerprint checks; run the
+target/release/deps binaries with cwd = package root. (3) The
+base/post-output script bug (hardcoded `base_bench_out_` prefix — post
+overwrote base outputs) repaired via revert-benches → rebuild → rerun
+with mode-prefixed outputs → restore; always parametrize the output
+prefix by run mode. (4) **Cargo.lock noise in worktree diffs**: the
+minimal-members scratch surgery REGENERATES Cargo.lock (+2590/−12879
+under the union) — always `git checkout -- Cargo.toml Cargo.lock` before
+commit + filter diff stats by path. (5) `git diff --stat` without a path
+filter sweeps the Cargo.lock churn — the apparent 14k-deletion heal was
+actually 696/1152 across the 95 files.)
+
+**Campaign state after this slice (2026-08-19):** engine territory
+FULLY DONE (4 slices); games-civ landed by the sibling (`53afc933e`, 142
+files / ~1552 edits); riir-examples landed by the sibling (`50c084f61`,
+28 files). Remaining giants: games 799/87 (2 files sibling WIP), poc
+769/64 (sibling-active), root examples 725/75, gpu 1175/163
+(sibling-adjacent), mmorpg (blocked until wire_router settles) + the
+~436 GPU-gated example edits. **Native rustfmt landed FIRST this session**
+(riir-clippy `10b4ac6`) — future slices get automatic fmt; this slice
+applied it manually (the heal predated the feature).
+
 **Redundant identical named-arg class shipped** (riir-clippy `73ab2c2`):
 `format!("{x:?}", x = x)` — the named arg EQUALS its ident — is redundant
 under implicit capture; real clippy 1.95's MachineApplicable fix DELETES
