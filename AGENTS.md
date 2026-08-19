@@ -1519,6 +1519,55 @@ clippy residue in riir-wasm = 0 (the `-p riir-wasm` scan lints the
 engine dep too — the 5 warnings shown are the documented engine-src
 divergences).
 
+**riir-examples examples slice landed 2026-08-19** (riir-ai `50c084f61`):
+**28 files / 278 heal edits + 1 manual is_some_and terminal fix, +171/−291
+net −120** — mixed EOL (14 CRLF, 14 LF). Composition ≈ uninlined_format_args
++ map_unwrap_or + match_bool + single_match_else + single_match +
+vec-with-capacity + hashmap-with-capacity. **4 feature groups, all builds +
+clippy clean:** default (7), cheap union frame,percepta,go,plasma_binary,
+nextlat-go,neuron-vessel-aoi,action_generator (10), games union
+combat,quest-match,dungeon,plasma,npc-dialog,meta_routing (9),
+go-latent-steering (1). Validation: all 27 runnable examples exit-code
+identical pre/post — 15 byte-identical + 6 timing-noise + 5
+nondeterminism-control-exonerated (post-vs-post2 diff ≈ base-vs-post) +
+quest_match_tui TUI frame-timing + gemma2 trio + go_05 deterministic
+error paths (HF hub cache absent / AutoGo server absent).
+**Residue 0** on all 28 (dry-run: exactly the 43-file / 436-edit excluded set
+remains). Clippy: FS4 1 pre-existing needless_range_loop (go_16:316,
+heal-untouched region — the conservative healer-silent class); FS2 1
+heal-created unnecessary_map_or (neuron_vessel_aoi_demo v5 — the tuple-
+destructure closure gate class, Issue-027 precedent) fixed to is_some_and;
+1 pre-existing collapsible_if in src/realtime_arena.rs (src/ not examples —
+out of scope). **EOL LESSON (new):** header-only EOL sampling (first 200
+bytes) is UNSOUND — 8 files were CRLF below an LF header; rustfmt
+write-mode on Windows converts CRLF→LF whole-file. All 4 EOL-bombed files
+reverted byte-exact (content preserved via pre-fmt stash copies); 14
+originally-CRLF files scoped out; 1 file fmt-polished (gemma2_cpu_bench
+−2/+1). **Broken gates documented (owner flags):** arm_c E0601 (default
+`--examples` breaker — [[example]] block missing required-features while
+inner cfg gates out main), ane-arena ×4 E0599 (macOS-only CoreML backend),
+catchup_demo E0308 (stale riir-chain API), go_13 (empty-feature gate but
+body needs go-training→riir-gpu). **Deferred (~436 edits):** all
+riir-gpu-pulling example families (sibling 721/ANE WIP) + ane-arena (M3)
++ catchup_demo + arm_c + go_13 — re-arms when the sibling's GPU work
+lands. **Push lessons:** /tmp worktrees VANISH on this box (the previous
+session's commit object was lost with one — worktrees go under E:/git/
+like the siblings'); an E:/git worktree of riir-ai CANNOT build feature
+unions pulling riir-train-engine (riir-train's path deps resolve
+../riir-ai = the MAIN checkout → "package collision in the lockfile"
+between two riir-engines) — the main checkout is the only self-consistent
+build site for those; the push used the ref-move + reset --mixed dance
+(commit made in the worktree, pushed from the main repo, then sync).
+Origin moved TWICE mid-session (engine/wasm/issues commits — zero
+overlap, fast-forward clean). Post-push verification at final state: all
+4 groups built clean (6m50s / 9m48s / 6m45s / 4m04s). **Campaign state:
+examples DONE; sibling lanes active on games-civ (heal-civ2 branch,
+commit 53afc933e staged for push in the prunable ai_civ_wt worktree) and
+engine (src 174/979 + examples 15/151 + wasm 5/23 landed on origin).
+Remaining: engine tests/benches (~1480), games Layer-3 (2 files sibling
+WIP), poc (sibling-active), gpu (sibling-adjacent), mmorpg (blocked on
+wire_router), + this slice's ~436 deferred GPU-gated example edits.**
+
 **Redundant identical named-arg class shipped** (riir-clippy `73ab2c2`):
 `format!("{x:?}", x = x)` — the named arg EQUALS its ident — is redundant
 under implicit capture; real clippy 1.95's MachineApplicable fix DELETES
