@@ -111,6 +111,15 @@ pub mod l4_fallback;
 #[cfg(feature = "l4_lora")]
 pub mod l4_daemon;
 
+// Plan 014: clippy-bench — the frozen real-code healing bench + SVG score
+// history. Measures the PRODUCTION `--fix` path (bounded-fixpoint proposers)
+// against real-`cargo clippy` ground truth on frozen fixtures mined from
+// pre-sweep sibling commits; appends to `.benchmarks/score_history.jsonl`
+// and renders `.benchmarks/score_history.svg`. Opt-in: needs the oracle
+// (clippy_verify) and the cargo-heal fix-path surface (latent_retrieval).
+#[cfg(feature = "score_bench")]
+pub mod score_bench;
+
 // ── Back-compat re-exports (preserve pre-refactor API names) ───────────────
 // These type aliases + re-exports keep existing call sites compiling unchanged
 // after the Plan 001 Phase 1 framework refactor.

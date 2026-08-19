@@ -282,6 +282,36 @@ The same summary appears after `--write` (`fmt: 22 formatted, 70 skip
 pre-existing drift, 3 skip CRLF`). Under `--verify` the fmt pass applies
 after the compile gate, to files with kept edits only.
 
+## clippy-bench — the frozen healing score + SVG curve (Plan 014)
+
+The bench that answers "are we getting better?" with a number that can
+only move by healing better — **the denominator is frozen** (34 fixtures:
+real pre-sweep mined spans + the T3.5.5 realistic multi-lint composite set,
+provenance recorded per fixture), and the ground truth is real
+`cargo clippy` before/after, not our own proposers.
+
+![clippy-bench score](.benchmarks/score_history.svg)
+
+Axes: `heal_rate` (up) · `created_rate` (RED, down — false positives)
+· `parse_safety` (healed output compiles) · `decline_correctness` (clean
+code left untouched — declining is a correct answer). The console report
+also prints the **miss map** (which lints persist, where healing fails).
+
+Run it after any proposer/corpus change; each run appends one point to
+`.benchmarks/score_history.jsonl` and re-renders the SVG:
+
+```text
+cargo run --features score_bench --bin cargo-heal -- --score-bench
+```
+
+Baseline (2026-08-19, run #1): heal 84.6% · created 3 · safety 92.9% ·
+decline 100% — and run #1 caught a REAL proposer bug (Issue 032:
+`needless_range_loop` × `identity_op` composition breaks the loop
+variable), which is exactly what the bench exists to surface. Expect a
+STEP curve at root-cause fixes, not a training curve — the self-learning
+mechanisms measured negative and were killed; improvement is
+engineering-iterative and the curve makes it honest.
+
 ## Usage
 
 ```rust

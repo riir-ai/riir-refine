@@ -156,12 +156,17 @@ fn usage() -> ! {
     );
     #[cfg(not(feature = "fix_verify"))]
     let verify_help = String::new();
+    #[cfg(feature = "score_bench")]
+    let score_help = "    --score-bench   Run the frozen clippy-bench (real-code fixtures, real clippy ground\n                    truth — Plan 014), append to .benchmarks/score_history.jsonl,\n                    re-render .benchmarks/score_history.svg. No paths needed.\n    --score-report  Re-render the score-history SVG from the existing JSONL (no run).\n";
+    #[cfg(not(feature = "score_bench"))]
+    let score_help = String::new();
     eprintln!(
         "cargo-heal (Plan 005) — modelless code healing via latent corpus retrieval
 
 USAGE:
     cargo heal --suggest [--domain <auto|clippy|perf|kernel>] [--top-k <N>] <path>...
     cargo heal --fix [--write] [--no-fmt] [--quiet] [--verify [--verify-args <s>]] [--top-k <N>] <path>...
+    cargo heal --score-bench | --score-report        (needs --features score_bench)
 
     --suggest       Suggest mode: print matching rules per code span (no edits).
     --fix           Fix mode: apply the compiled-in proposers' span-preserving edits
@@ -175,7 +180,7 @@ USAGE:
     --quiet         With --fix: skip the --suggest pass (only show fixes).
     --no-fmt        Disable the automatic post-write rustfmt pass (it is
                     default-on; see src/fmt.rs for the discipline it encodes).
-{}    --domain        Filter suggest output to one domain (default: auto — all enabled).
+{}{}    --domain        Filter suggest output to one domain (default: auto — all enabled).
     --top-k <N>     Rules per span per domain (default 3).
     <path>...       Files or directories to scan. `.rs` always; with the
                     kernel_heal feature, `--suggest` ALSO scans `.wgsl` files
@@ -189,7 +194,8 @@ error (T2.4 gating). --verify needs --features fix_verify.",
         FIXABLE_RULES.join(", "),
         FIXABLE_LINTS.len(),
         FIXABLE_LINTS.join(", "),
-        verify_help
+        verify_help,
+        score_help
     );
     std::process::exit(2);
 }
@@ -208,6 +214,11 @@ struct Args {
     verify: bool,
     verify_args: Option<String>,
     paths: Vec<PathBuf>,
+    /// `--score-bench` (Plan 014): run the frozen clippy-bench, append the
+    /// score history, re-render the SVG. Standalone mode — no paths.
+    score_bench: bool,
+    /// `--score-report`: re-render the SVG from the existing history JSONL.
+    score_report: bool,
 }
 
 fn parse_args() -> Args {
@@ -222,6 +233,8 @@ fn parse_args() -> Args {
         verify: false,
         verify_args: None,
         paths: Vec::new(),
+        score_bench: false,
+        score_report: false,
     };
     let mut it = std::env::args().skip(1);
     while let Some(arg) = it.next() {
@@ -232,6 +245,8 @@ fn parse_args() -> Args {
             "--quiet" => args.quiet = true,
             "--no-fmt" => args.no_fmt = true,
             "--verify" => args.verify = true,
+            "--score-bench" => args.score_bench = true,
+            "--score-report" => args.score_report = true,
             "--verify-args" => {
                 let Some(value) = it.next() else {
                     eprintln!("--verify-args requires a value");
@@ -272,7 +287,10 @@ fn parse_args() -> Args {
             path => args.paths.push(PathBuf::from(path)),
         }
     }
-    if args.paths.is_empty() {
+    if args.paths.is_empty()
+        && !args.score_bench
+        && !args.score_report
+    {
         eprintln!("no paths given");
         usage();
     }
@@ -340,8 +358,76 @@ fn print_suggestion(s: &SpanSuggestion, matcher: &LatentMatcher, domain_filter: 
     }
 }
 
+/// Plan 014: run the frozen clippy-bench, append the score history,
+/// re-render the SVG. Feature-gated `score_bench`.
+#[cfg(feature = "score_bench")]
+fn run_score_bench() {
+    use riir_clippy::score_bench as sb;
+
+    let oracle = sb::draft_oracle();
+    if !oracle.is_available() {
+        eprintln!("score_bench: cargo not on PATH — cannot derive ground truth");
+        std::process::exit(1);
+    }
+    let fixture_list = sb::fixtures::fixtures();
+    println!(
+        "clippy-bench: {} frozen fixture(s), real-clippy ground truth…",
+        fixture_list.len()
+    );
+    let score = sb::run_bench(&oracle, &fixture_list);
+    sb::report::print_report(&score);
+
+    let rec = sb::report::HistoryRecord::from_score(&score, sb::report::git_sha());
+    let jsonl = std::path::Path::new(sb::report::HISTORY_JSONL);
+    if let Err(e) = sb::report::append_history(jsonl, &rec) {
+        eprintln!("score history append failed: {e}");
+    }
+    let history = sb::report::load_history(jsonl);
+    let svg = sb::report::render_svg(&history);
+    std::fs::write(sb::report::HISTORY_SVG, &svg)
+        .unwrap_or_else(|e| eprintln!("svg write failed: {e}"));
+    println!(
+        "history: {} run(s) → {} + {}",
+        history.len(),
+        sb::report::HISTORY_JSONL,
+        sb::report::HISTORY_SVG
+    );
+}
+
 fn main() {
     let args = parse_args();
+
+    // ── Plan 014: clippy-bench modes (standalone — no paths) ─────────────
+    #[cfg(feature = "score_bench")]
+    if args.score_report {
+        let history = riir_clippy::score_bench::report::load_history(
+            std::path::Path::new(riir_clippy::score_bench::report::HISTORY_JSONL),
+        );
+        if history.is_empty() {
+            eprintln!("no score history yet — run --score-bench first");
+            std::process::exit(1);
+        }
+        let svg = riir_clippy::score_bench::report::render_svg(&history);
+        std::fs::write(riir_clippy::score_bench::report::HISTORY_SVG, &svg)
+            .unwrap_or_else(|e| eprintln!("svg write failed: {e}"));
+        println!(
+            "rendered {} ({} run(s))",
+            riir_clippy::score_bench::report::HISTORY_SVG,
+            history.len()
+        );
+        return;
+    }
+    #[cfg(feature = "score_bench")]
+    if args.score_bench {
+        run_score_bench();
+        return;
+    }
+    #[cfg(not(feature = "score_bench"))]
+    if args.score_bench || args.score_report {
+        eprintln!("--score-bench / --score-report require a build with --features score_bench");
+        std::process::exit(2);
+    }
+
     if !args.suggest && !args.fix {
         eprintln!("no mode given — use --suggest or --fix");
         usage();

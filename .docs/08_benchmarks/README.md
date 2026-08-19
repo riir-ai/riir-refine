@@ -10,6 +10,7 @@
 |---|---|
 | [`goat_methodology.md`](goat_methodology.md) | The 4-gate pattern (G1 correctness, G2 perf, G3 no-regression, G4 alloc-free) |
 | [`measured_results.md`](measured_results.md) | Consolidated results (M3 Max, commit `5b46556`) |
+| [`clippy_bench.md`](clippy_bench.md) | The frozen real-code healing bench + SVG score curve (Plan 014 — the "are we getting better?" number) |
 
 ## Persisted results
 
@@ -37,6 +38,9 @@ cargo run --example clippy_verify_demo --features clippy_verify --release
 
 # self_evolve real-world validation (opt-in — requires cargo+clippy on PATH, ~30s)
 cargo run --example self_evolve_real_world_demo --features "self_evolve clippy_verify" --release
+
+# clippy-bench — the frozen healing score (Plan 014; run + append + render SVG)
+cargo run --features score_bench --bin cargo-heal -- --score-bench
 
 # Plan 005 latent suggest GOAT (opt-in; G2 gate is release-only)
 cargo test --features latent_retrieval --test latent_suggest_goat -- --nocapture

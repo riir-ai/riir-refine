@@ -131,6 +131,15 @@ latent_retrieval = ["dep:riir-rag", "dep:riir-neuron-db"]
 # the cargo-heal bin surface).
 fix_verify = ["latent_retrieval"]
 
+# Plan 014: clippy-bench — the frozen real-code healing bench + SVG score
+# history. Runs the production `--fix` proposer path over FROZEN fixtures
+# mined from pre-sweep sibling commits, scores heal_rate / created / safety /
+# decline against real-`cargo clippy` verdicts (the T3.5.5 oracle), appends
+# to .benchmarks/score_history.jsonl + renders .benchmarks/score_history.svg.
+# Opt-in: needs the oracle (clippy_verify) + the fix-path surface
+# (latent_retrieval; the cargo-heal bin hosts the --score-bench flag).
+score_bench = ["clippy_verify", "latent_retrieval"]
+
 # Plan 336 T4.4/T5.3: the L4 generative fallback stage. Ships the composition
 # SEAM only (trait + pipeline wiring) — no model, no GPU, no heavy deps. Inert
 # unless a fallback is installed via `HealPipeline::with_l4_fallback`.
@@ -242,6 +251,13 @@ required-features = ["kernel_heal"]
 [[example]]
 name = "ruliology_search_demo"
 required-features = ["ruliology_search"]
+
+# Plan 014: clippy-bench fixture mining — extract real spans from a sibling
+# repo's pre-sweep commit, label via the real-clippy oracle, emit RawFixture
+# entries. Run-once tool for freezing bench fixture sets.
+[[example]]
+name = "score_bench_mine"
+required-features = ["score_bench"]
 
 # Issue 008: real-world validation of self_evolve via cargo clippy ground truth.
 # Requires both self_evolve + clippy_verify. SLOW — spawns cargo clippy dozens of times.
