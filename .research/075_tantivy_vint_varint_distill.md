@@ -1,6 +1,7 @@
 # Research 075 — tantivy utility-layer distill: varint word-composition + 2 riders
 
-**Status:** DISTILLED — batch queued as Plan 013 (implementation load-gated; its benches are single-threaded wall-clock + exact-alloc, so it may run BEFORE Batch 65 under moderate load — Batch 65's contention bench needs a quiet box, this does not)
+**Status:** RECORD — Batch 68 LANDED 2026-08-19 (Plan 013): the lead GOAT candidate **measured ParetoDominated** (0/3 sizes × 3 writer regimes — Vec-push, inline-Cursor, Box<dyn Write>; the folk div-chain mechanism dies: 128 is a compile-time constant, LLVM strength-reduces it, and OoO hides the call chain) — the rule shipped as the corpus's 3rd annotated honest-loser (the `precompute-table` class: exists to STOP the tantivy folk port) + the tz-blsr xor-clear anti-shape rider landed. The distill verdict's B-grade GOAT claim was wrong on this box — the 2-regime evidence shipped in-source (ladder beside loop) does not make the ladder FASTER on modern aarch64.
+**Original queued status (superseded):** batch queued as Plan 013 (implementation load-gated; single-threaded benches)
 **Date:** 2026-08-19
 **Source:** `quickwit-oss/tantivy` @ main — scoped inspection of 5 files: root `Cargo.toml`, `common/src/vint.rs`, `common/src/bitset.rs`, `bitpacker/src/bitpacker.rs`, `bitpacker/src/lib.rs`. All load-bearing quotes coordinator-verified against raw.githubusercontent fetches (the Research 057 rule).
 **Routing:** `rust_perf` (io/arithmetic). NOT kernel_opt — these are CPU serialization utilities; "bitpacker" is not a GPU kernel despite the name.

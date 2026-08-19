@@ -9,9 +9,9 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //! unconditional wins + honestly NotBenchable rules.
 //!
-//! 72 entries across 12 categories (complexity 15, allocation 18, simd 7,
-//! layout 6, iterators 9, concurrency 4, io 1, arithmetic 6, dispatch 2,
-//! caching 2, bevy 1, wasm 1). 62 are benchable; 10 are honestly
+//! 73 entries across 12 categories (complexity 15, allocation 18, simd 7,
+//! layout 6, iterators 9, concurrency 4, io 2, arithmetic 6, dispatch 2,
+//! caching 2, bevy 1, wasm 1). 63 are benchable; 10 are honestly
 //! NotBenchable (8 external-runtime/size-class + 2 metric-mismatch, Issue 014).
 //! Batch 48 (idle-queue item 11, 2026-08-16) added the 8 online-search
 //! candidates (perf-book std-types + iterators chapters): collect-append-to-
@@ -32,7 +32,9 @@
 //! (2026-08-19, Research 073 — the polars kernel-idiom distill) added
 //! sparse-set-bit-iteration-tz-blsr + sortedness-check-branchless-accumulate.
 //! Batch 67 (2026-08-19, Research 074 — the regex-automata distill) added
-//! byte-find-position-to-memchr.
+//! byte-find-position-to-memchr. Batch 68 (2026-08-19, Research 075 — the
+//! tantivy utility-layer distill) added varint-compose-word-single-store
+//! (+ the tz-blsr xor-clear anti-shape rider note).
 //!
 //! ## Bench specs (behind `rust_perf_bench`)
 //!
@@ -41,7 +43,7 @@
 //! `run_buggy` / `run_fixed` entry points. The bench validator generates a
 //! temp bin crate from the spec + runs a timing loop at multiple sizes.
 //!
-//! Currently benchable (62/72):
+//! Currently benchable (63/73):
 //! - `o1-lookup` (Vec scan vs HashMap lookup — clear O(n) vs O(1))
 //! - `bsearch-sorted-slice` (linear scan vs binary search — O(n) vs O(log n) on sorted data)
 //! - `dedupe-hashset-vs-vec` (Vec::contains loop vs HashSet collect — O(n²) vs O(n))
@@ -106,6 +108,7 @@
 //! - `sparse-set-bit-iteration-tz-blsr` (64-iteration set-bit scan → trailing_zeros+BLSR, popcount iterations — sparse-mask regime, Batch 66)
 //! - `sortedness-check-branchless-accumulate` (early-exit sortedness validation → branchless `sorted &=` full scan, vectorizes — usually-sorted regime, Batch 66)
 //! - `byte-find-position-to-memchr` (u8 slice iter().position byte scan → memchr::memchr SIMD block scan — position is NOT specialized in std, contains is; dep-gated, Batch 67)
+//! - `varint-compose-word-single-store` (per-byte write_all varint loop → 5-threshold ladder + single write_all — MEASURED ParetoDominated on aarch64 across 3 writer regimes: the honest-loser annotation stops the tantivy folk port; Batch 68)
 //!
 //! Not benchable (10/72) — honest:
 //! - `layout-reorder` (struct size — deterministic `size_of`, not a runtime
@@ -1510,6 +1513,17 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
         // iterations, not 64 — a ~16x iteration cut at 4/64 density. The
         // compiler cannot derive the tz-loop from the shift-test loop (the
         // trip count is data-dependent). Both forms emit identical indices.
+        //
+        // ANTI-SHAPE (Batch 68 rider, Research 075 — tantivy
+        // common/src/bitset.rs `TinySet::pop_lowest`): code that ALREADY
+        // iterates by trailing_zeros but clears with `x ^= 1 << lowest` is
+        // ALSO this rule's territory — the xor-clear SERIALIZES the count
+        // and the clear (the shift needs the tz result: ARM64
+        // rbit→clz→lsl→eor, x86 tzcnt→btc), while `x &= x - 1` (Kernighan)
+        // makes the clear INDEPENDENT of the count (ARM64 sub→and, x86
+        // blsr — tzcnt runs in parallel; tantivy's in-source godbolt:
+        // godbolt.org/z/fnfrP1T5f). Same indices, same popcount trips —
+        // only the dependency chain changes.
         PerfRule {
             rule_id: "sparse-set-bit-iteration-tz-blsr".to_string(),
             name: "64-iteration set-bit scan → trailing_zeros + BLSR loop".to_string(),
@@ -1568,6 +1582,39 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
             context_notes: None,
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: Some(byte_find_position_to_memchr_bench_spec()),
+        },
+        // ── io: per-byte Write::write_all varint loop → ladder compose + one call ──
+        // Source: tantivy (Batch 68, Research 075 — common/src/vint.rs
+        // `write_u32_vint`/`serialize_vint_u32`; coordinator quote-verified
+        // 2026-08-19). **MEASURED HONEST LOSER on this box (M3 Max aarch64,
+        // load ~25-33, 3 regimes: Vec-push / inline-Cursor writer /
+        // Box<dyn Write> vtable writer — ParetoDominated 0/3 sizes in EACH,
+        // alloc axis equal + stable, outputs byte-identical).** The folk
+        // mechanism story dies twice: (1) 128 is a compile-time CONSTANT —
+        // LLVM strength-reduces `x % 128` / `x / 128` to `& 127` / `>> 7`
+        // (the Batch 59 two-regime note applied in reverse — there is no
+        // hardware-div chain to eliminate), and (2) even N vtable calls
+        // into a dyn writer are hidden by out-of-order execution behind the
+        // ladder's 5-deep branch chain. The entry stays as an ANNOTATED
+        // honest finding (the `precompute-table` class): it exists to STOP
+        // the plausible-looking "compose into a word, store once" port
+        // from tantivy's codebase — measured, it REGRESSES on modern
+        // aarch64. Untested on x86 (different div/branch costs — re-gate
+        // there before citing). Regime facts that remain true: the ladder
+        // is convention-faithful + bit-identical (exhaustive gate below),
+        // and the u64 width boundary (10 bytes > word) keeps the loop.
+        PerfRule {
+            rule_id: "varint-compose-word-single-store".to_string(),
+            name: "Per-byte write_all varint loop (N writer calls) → threshold-ladder compose + single write_all".to_string(),
+            category: "io".to_string(),
+            buggy_code: "use std::io::{Write, Result};\nfn write_vint<W: Write>(w: &mut W, mut val: u32) -> Result<()> {\n    loop {\n        let byte = (val % 128) as u8;\n        val /= 128;\n        if val == 0 {\n            w.write_all(&[byte | 128])?; // a writer call PER BYTE\n            return Ok(());\n        }\n        w.write_all(&[byte])?;\n    }\n}".to_string(),
+            fixed_code: "use std::io::{Write, Result};\nfn write_vint<W: Write>(w: &mut W, val: u32) -> Result<()> {\n    let v = u64::from(val);\n    // compose ALL bytes into one u64 (masked shifts), ONE writer call\n    let (res, len) = if v < (1 << 7) {\n        (v | 128, 1)\n    } else if v < (1 << 14) {\n        ((v & 127) | ((v & (127 << 7)) << 1) | (128 << 8), 2)\n    } else if v < (1 << 21) {\n        ((v & 127) | ((v & (127 << 7)) << 1) | ((v & (127 << 14)) << 2) | (128 << 16), 3)\n    } else if v < (1 << 28) {\n        ((v & 127) | ((v & (127 << 7)) << 1) | ((v & (127 << 14)) << 2) | ((v & (127 << 21)) << 3) | (128 << 24), 4)\n    } else {\n        ((v & 127) | ((v & (127 << 7)) << 1) | ((v & (127 << 14)) << 2) | ((v & (127 << 21)) << 3) | ((v & (127 << 28)) << 4) | (128u64 << 32), 5)\n    };\n    w.write_all(&res.to_le_bytes()[..len]) // ONE store, ONE call\n}".to_string(),
+            context_notes: Some(
+                "ParetoDominated (Batch 68 bench, M3 Max aarch64, load-recorded ~25-33, THREE regimes tested): the ladder LOSES 0/3 sizes on the Vec-push shape AND the inline-Cursor writer shape AND the Box<dyn Write> vtable shape — alloc axis equal + stable, outputs byte-identical. The folk mechanism story dies twice: (1) 128 is a compile-time constant, so LLVM strength-reduces x % 128 / x / 128 to & 127 / >> 7 — there is NO hardware-div chain to eliminate (the division-by-invariant-multiplication two-regime note applied in reverse); (2) even N dyn-dispatch writer calls are hidden by out-of-order execution behind the ladder's 5-deep branch chain. The rule exists to STOP the plausible-looking 'compose into a word, store once' port from tantivy's codebase — measured, it REGRESSES on modern aarch64. Untested on x86 (different div/branch costs — re-gate there before citing); re-gate on a quiet box before quoting ratios. Bit-identity remains proven (exhaustive gate: full u16 + 128^i boundaries + LCG u32, both conventions)."
+                    .to_string(),
+            ),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(varint_compose_word_single_store_bench_spec()),
         },
     ])
 }
@@ -4812,6 +4859,119 @@ fn byte_find_position_to_memchr_bench_spec() -> BenchSpec {
     }
 }
 
+/// Bench spec for `varint-compose-word-single-store` (Batch 68, Research
+/// 075 — the tantivy distill): per-byte `write_all` writer calls vs the
+/// 5-threshold ladder composing all bytes into one u64 + ONE `write_all`.
+///
+/// THE WRITER SHAPE IS THE RULE'S REGIME (first bench run, load-recorded:
+/// the Vec-push shape measures ParetoDominated 0/3 — 128 is a compile-time
+/// constant so LLVM strength-reduces the div/mod, and Vec::push-per-byte is
+/// cheap enough that the ladder's if-chain loses; the honest win is N
+/// writer calls → 1). Sink: `std::io::Cursor<&mut Vec<u8>>` — a real
+/// generic `Write` impl with per-call branching but no syscall noise; on a
+/// virtual `Box<dyn Write>` or a real file/socket writer the per-call cost
+/// — and therefore the win — only grows. Input mixes ALL five serialized
+/// widths deterministically (i % 5 selects the magnitude band). Stop-bit-
+/// on-last convention; outputs bit-identical by the exhaustive corpus gate.
+#[cfg(feature = "rust_perf_bench")]
+fn varint_compose_word_single_store_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![1_000, 100_000, 1_000_000],
+        harness: r#"
+use std::io::Write;
+
+// Dyn-dispatch sink: the write path is IDENTICAL work (extend_from_slice)
+// for both arms — the measured differential is purely N vtable calls vs 1
+// (the production shape for trait-object writers; fully-inlined generic
+// sinks measure ~parity, see the rule's context note).
+struct Sink(Vec<u8>);
+impl std::io::Write for Sink {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.0.extend_from_slice(buf);
+        Ok(buf.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> { Ok(()) }
+}
+fn new_sink(cap: usize) -> Box<dyn std::io::Write> {
+    Box::new(Sink(Vec::with_capacity(cap)))
+}
+
+mod buggy {
+    use std::io::{Result, Write};
+    pub fn write_vint<W: Write>(w: &mut W, mut val: u32) -> Result<()> {
+        loop {
+            let byte = (val % 128) as u8;
+            val /= 128;
+            if val == 0 {
+                w.write_all(&[byte | 128])?; // a writer call PER BYTE
+                return Ok(());
+            }
+            w.write_all(&[byte])?;
+        }
+    }
+}
+
+mod fixed {
+    use std::io::{Result, Write};
+    pub fn write_vint<W: Write>(w: &mut W, val: u32) -> Result<()> {
+        let v = u64::from(val);
+        let (res, len) = if v < (1 << 7) {
+            (v | 128, 1)
+        } else if v < (1 << 14) {
+            ((v & 127) | ((v & (127 << 7)) << 1) | (128 << 8), 2)
+        } else if v < (1 << 21) {
+            ((v & 127) | ((v & (127 << 7)) << 1) | ((v & (127 << 14)) << 2) | (128 << 16), 3)
+        } else if v < (1 << 28) {
+            ((v & 127) | ((v & (127 << 7)) << 1) | ((v & (127 << 14)) << 2) | ((v & (127 << 21)) << 3) | (128 << 24), 4)
+        } else {
+            ((v & 127) | ((v & (127 << 7)) << 1) | ((v & (127 << 14)) << 2) | ((v & (127 << 21)) << 3) | ((v & (127 << 28)) << 4) | (128u64 << 32), 5)
+        };
+        w.write_all(&res.to_le_bytes()[..len]) // ONE store, ONE call
+    }
+}
+
+pub struct Input {
+    values: Vec<u32>,
+    total_bytes: usize,
+}
+
+pub fn make_input(n: usize) -> Input {
+    // Deterministic mix across all five magnitude bands (every ladder arm +
+    // every loop trip count): band i%5 selects a value in the 1..5-byte range.
+    let mut values = Vec::with_capacity(n);
+    let mut total_bytes = 0usize;
+    for i in 0..n {
+        let band = (i % 5) as u32;
+        let val: u32 = if band == 4 {
+            u32::MAX - ((i as u32) % 64) // >= 2^28: 5-byte band
+        } else {
+            (1u32 << (7 * band)) + ((i as u32) & ((1u32 << (7 * band)) - 1))
+        };
+        values.push(val);
+        total_bytes += band as usize + 1;
+    }
+    Input { values, total_bytes }
+}
+
+pub fn run_buggy(input: &Input) {
+    let mut cur = new_sink(input.total_bytes + 16);
+    for &v in std::hint::black_box(&input.values) {
+        buggy::write_vint(&mut cur, v).unwrap();
+    }
+    std::hint::black_box(&cur);
+}
+
+pub fn run_fixed(input: &Input) {
+    let mut cur = new_sink(input.total_bytes + 16);
+    for &v in std::hint::black_box(&input.values) {
+        fixed::write_vint(&mut cur, v).unwrap();
+    }
+    std::hint::black_box(&cur);
+}"#
+            .to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -4827,9 +4987,9 @@ mod tests {
     }
 
     #[test]
-    fn seed_corpus_has_seventy_two_entries_across_twelve_categories() {
+    fn seed_corpus_has_seventy_three_entries_across_twelve_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 72);
+        assert_eq!(corpus.entries.len(), 73);
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
@@ -4850,8 +5010,147 @@ mod tests {
         // added division-by-invariant-multiplication; Batch 62 added
         // newton-refinement-vs-hardware-transcendental); dispatch has 2
         // (Batch 61 added keyword-map-to-match); caching has 2 (Issue 014
-        // added regex-hoist-lazylock); io, bevy, wasm have 1 each.
+        // added regex-hoist-lazylock); io has 2 (Batch 68 added
+        // varint-compose-word-single-store); bevy, wasm have 1 each.
         assert_eq!(categories.len(), 12);
+    }
+
+    /// G1 for `varint-compose-word-single-store` (Batch 68, Research 075 —
+    /// the tantivy distill): the 5-threshold ladder in the corpus fixture +
+    /// bench harness must be exactly equivalent to the reference per-byte
+    /// loop across a FULL u16 sweep + every 128^i band boundary + u32::MAX +
+    /// an LCG u32 sample — bit-identical output bytes (the Batch 59
+    /// ported-numeric exhaustive-gate rule; the source ships its own
+    /// equivalence test at 128^i boundaries — `aux_test_serialize_vint_u32`
+    /// — this gate is the stronger local mirror). BOTH conventions are
+    /// proven: (a) stop-bit-on-LAST (tantivy VInt — the shipped fixture)
+    /// and (b) continuation-bit-on-all-but-LAST (protobuf/LEB128 — the same
+    /// ladder mechanism with the convention bit placed where the loop put
+    /// it), demonstrating the fix is convention-faithful, not
+    /// convention-specific.
+    #[test]
+    #[allow(clippy::too_many_lines)] // exhaustive gate: both conventions + boundaries belong together
+    fn varint_ladder_matches_reference_loop_exhaustive() {
+        // (a) The SHIPPED ladder — mirror of the corpus fixture (same math).
+        fn ladder_stop_bit_last(val: u32, out: &mut Vec<u8>) {
+            let v = u64::from(val);
+            let (res, len) = if v < (1 << 7) {
+                (v | 128, 1)
+            } else if v < (1 << 14) {
+                ((v & 127) | ((v & (127 << 7)) << 1) | (128 << 8), 2)
+            } else if v < (1 << 21) {
+                ((v & 127) | ((v & (127 << 7)) << 1) | ((v & (127 << 14)) << 2) | (128 << 16), 3)
+            } else if v < (1 << 28) {
+                ((v & 127) | ((v & (127 << 7)) << 1) | ((v & (127 << 14)) << 2) | ((v & (127 << 21)) << 3) | (128 << 24), 4)
+            } else {
+                ((v & 127) | ((v & (127 << 7)) << 1) | ((v & (127 << 14)) << 2) | ((v & (127 << 21)) << 3) | ((v & (127 << 28)) << 4) | (128u64 << 32), 5)
+            };
+            let buf = res.to_le_bytes();
+            out.extend_from_slice(&buf[..len]);
+        }
+        // Reference per-byte loop (the buggy shape, used as ground truth).
+        fn reference_stop_bit_last(mut val: u32, out: &mut Vec<u8>) {
+            loop {
+                let byte = (val % 128) as u8;
+                val /= 128;
+                if val == 0 {
+                    out.push(byte | 128);
+                    return;
+                }
+                out.push(byte);
+            }
+        }
+        // (b) The protobuf/LEB128 convention ladder — same mechanism, the
+        // continuation bit lands on every byte EXCEPT the last (bit 7 set
+        // on bytes 0..len-2 of the composed word).
+        fn ladder_continuation(val: u32, out: &mut Vec<u8>) {
+            let v = u64::from(val);
+            let (res, len) = if v < (1 << 7) {
+                (v, 1)
+            } else if v < (1 << 14) {
+                ((v & 127) | 0x80 | ((v & (127 << 7)) << 1), 2)
+            } else if v < (1 << 21) {
+                ((v & 127) | 0x80 | ((v & (127 << 7)) << 1) | 0x80 << 8 | ((v & (127 << 14)) << 2), 3)
+            } else if v < (1 << 28) {
+                ((v & 127) | 0x80 | ((v & (127 << 7)) << 1) | 0x80 << 8 | ((v & (127 << 14)) << 2) | 0x80 << 16 | ((v & (127 << 21)) << 3), 4)
+            } else {
+                ((v & 127) | 0x80 | ((v & (127 << 7)) << 1) | 0x80 << 8 | ((v & (127 << 14)) << 2) | 0x80 << 16 | ((v & (127 << 21)) << 3) | 0x80 << 24 | ((v & (127 << 28)) << 4), 5)
+            };
+            let buf = res.to_le_bytes();
+            out.extend_from_slice(&buf[..len]);
+        }
+        fn reference_continuation(mut val: u32, out: &mut Vec<u8>) {
+            loop {
+                if val < 128 {
+                    out.push(val as u8); // final byte: NO continuation bit
+                    return;
+                }
+                out.push((val % 128) as u8 | 0x80);
+                val /= 128;
+            }
+        }
+
+        fn check_pair(val: u32) {
+            let mut a = Vec::new();
+            let mut b = Vec::new();
+            ladder_stop_bit_last(val, &mut a);
+            reference_stop_bit_last(val, &mut b);
+            assert_eq!(a, b, "stop-bit ladder diverged at val={val}");
+            let mut c = Vec::new();
+            let mut d = Vec::new();
+            ladder_continuation(val, &mut c);
+            reference_continuation(val, &mut d);
+            assert_eq!(c, d, "continuation ladder diverged at val={val}");
+        }
+
+        // Full u16 sweep (exhaustive low range).
+        for val in 0..=u16::MAX as u32 {
+            check_pair(val);
+        }
+        // Every band boundary ±1 (128^i) + the extremes.
+        for i in 1..5u32 {
+            let p: u32 = 1 << (7 * i);
+            for val in [p - 1, p, p + 1] {
+                check_pair(val);
+            }
+        }
+        check_pair(u32::MAX);
+        check_pair(u32::MAX - 1);
+        // LCG u32 sample (16K values across the full range).
+        let mut state = 0x853c49e6748fea9bu64;
+        for _ in 0..16_384 {
+            state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            check_pair((state >> 32) as u32);
+        }
+    }
+
+    /// Canaries: the corpus fixture + the bench harness must contain the
+    /// SAME ladder construction this exhaustive gate proves — a substring
+    /// pin so the three copies (fixture / harness / gate mirror) cannot
+    /// drift (the Batch 59 canary pattern).
+    #[test]
+    fn varint_fixture_and_harness_carry_the_proven_ladder() {
+        let corpus = build_perf_seed_corpus();
+        let rule = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == "varint-compose-word-single-store")
+            .expect("varint rule present");
+        let needle = "((v & 127) | ((v & (127 << 7)) << 1) | ((v & (127 << 14)) << 2)";
+        assert!(
+            rule.fixed_code.contains(needle),
+            "fixture fixed_code must carry the proven 3+-band ladder fragment"
+        );
+        assert!(rule.buggy_code.contains("val /= 128"),
+            "fixture buggy_code must be the per-byte div-chain loop");
+        #[cfg(feature = "rust_perf_bench")]
+        {
+            let spec = rule.bench_spec.as_ref().expect("bench spec");
+            assert!(
+                spec.harness.contains(needle),
+                "bench harness must carry the same ladder construction"
+            );
+        }
     }
 
     /// G1 for `division-by-invariant-multiplication`: the magic-division
@@ -5051,10 +5350,10 @@ mod tests {
 
     #[cfg(feature = "rust_perf_bench")]
     #[test]
-    fn sixty_two_rules_have_bench_specs() {
+    fn sixty_three_rules_have_bench_specs() {
         let corpus = build_perf_seed_corpus();
         let with_spec = corpus.entries.iter().filter(|e| e.bench_spec.is_some()).count();
-        assert_eq!(with_spec, 62, "expected 62 benchable rules, got {with_spec}");
+        assert_eq!(with_spec, 63, "expected 63 benchable rules, got {with_spec}");
     }
 
     #[cfg(feature = "rust_perf_bench")]
@@ -5105,7 +5404,7 @@ mod tests {
             .filter(|e| e.context_notes.is_some())
             .map(|e| e.rule_id.as_str())
             .collect();
-        assert_eq!(annotated.len(), 15, "expected 15 context-annotated rules");
+        assert_eq!(annotated.len(), 16, "expected 16 context-annotated rules");
         assert!(annotated.contains(&"precompute-table"));
         assert!(annotated.contains(&"papaya-lockfree"));
         assert!(annotated.contains(&"dedupe-hashset-vs-vec"));
@@ -5134,7 +5433,7 @@ mod tests {
             .iter()
             .filter(|e| e.context_notes.is_none())
             .count();
-        assert_eq!(unannotated, 57, "expected 57 unannotated rules (72 - 15 annotated)");
+        assert_eq!(unannotated, 57, "expected 57 unannotated rules (73 - 16 annotated)");
     }
 
     /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -5146,7 +5445,7 @@ mod tests {
         let json = serde_json::to_string(&corpus.entries).unwrap();
         let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
         let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-        assert_eq!(annotated, 15);
+        assert_eq!(annotated, 16);
 
         // Simulate a pre-field snapshot: strip `context_notes` from JSON.
         // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -5158,21 +5457,22 @@ mod tests {
 
     /// Integration: the drafter propagates `context_notes` from `PerfRule`
     /// through `DraftedFix` for the annotated rules, and `None` for the
-    /// unconditional wins. Fifteen annotations: Bench 013 (2 ParetoDominated
+    /// unconditional wins. Sixteen annotations: Bench 013 (2 ParetoDominated
     /// and 2 Mixed), Bench 016 (sort-by-key and copy-from-slice), Issue 014
     /// (2 NotBenchable metric-mismatch), Batch 48 (2 verdict-class),
     /// Batch 53 (Bench 038, 2 verdict-class), Batch 62 (1 regime-class),
-    /// Batch 64 (1 release-erasure class), and Batch 66 (1 regime-split
-    /// class).
+    /// Batch 64 (1 release-erasure class), Batch 66 (1 regime-split
+    /// class), and Batch 68 (1 ParetoDominated honest-loser — the tantivy
+    /// varint ladder regresses on aarch64 across 3 tested writer regimes).
     #[test]
     fn drafter_propagates_context_notes_from_perf_corpus() {
         use crate::domain::HealEntry;
 
         let corpus = build_perf_seed_corpus();
 
-        // Filter to the 12 annotated rules.
+        // Filter to the 16 annotated rules.
         let annotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_some()).collect();
-        assert_eq!(annotated.len(), 15, "expected 15 annotated rules");
+        assert_eq!(annotated.len(), 16, "expected 16 annotated rules");
 
         // The HealEntry trait override must agree with the struct field.
         for rule in &annotated {

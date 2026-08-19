@@ -19,7 +19,7 @@
 
 ## Corpus
 
-69 rules across 12 categories (rust-optimize skill checklist +
+73 rules across 12 categories (rust-optimize skill checklist +
 nnethercote/perf-book + rustc-hash/bevy real-world patterns + the hotpath-rs
 profiling guide, Research 032; Batch 48 added the 8 online-search candidates
 from the perf-book std-types + iterators chapters; Batch 53 added the 4
@@ -29,21 +29,27 @@ Batch 59 (2026-08-18) added the first EXTERNAL-source distill via the
 the raygon-renderer/thermite Rust port; Batch 61 (2026-08-18) added the 2
 oxc-article rules: `keyword-map-to-match` + `usize-index-to-u32`; Batch 62
 (2026-08-19, Research 070 microGPT-C distill) added the 2 CPU-SIMD rules:
-`transposed-weight-register-gemv` + `newton-refinement-vs-hardware-transcendental`; Batch 64 (2026-08-19, Research 072 — the ARM Neon / bounds-check pool) added `loop-order-innermost-contiguous` + `debug-assert-length-hoist`).
+`transposed-weight-register-gemv` + `newton-refinement-vs-hardware-transcendental`; Batch 64 (2026-08-19, Research 072 — the ARM Neon / bounds-check pool) added `loop-order-innermost-contiguous` + `debug-assert-length-hoist`; Batch 66
+(2026-08-19, Research 073 — the polars kernel-idiom distill) added
+`sparse-set-bit-iteration-tz-blsr` + `sortedness-check-branchless-accumulate`; Batch 67 (2026-08-19, Research 074 — the regex-automata distill) added
+`byte-find-position-to-memchr`; Batch 68 (2026-08-19, Research 075 — the
+tantivy utility-layer distill) added the annotated `varint-compose-word-single-store`).
 Allocation is the deepest
-category (18 rules). Complexity has 15 (Batch 64 added `debug-assert-length-hoist`). Iterators has 7. Simd 7 (Batch 62 added `transposed-weight-register-gemv`; Batch 64 added `loop-order-innermost-contiguous`), layout 6
+category (18 rules). Complexity has 15 (Batch 64 added `debug-assert-length-hoist`). Iterators has 9 (Batch 66 added `sortedness-check-branchless-accumulate`; Batch 67 added `byte-find-position-to-memchr`). Simd 7 (Batch 62 added `transposed-weight-register-gemv`; Batch 64 added `loop-order-innermost-contiguous`), layout 6
 (Batch 61 added `usize-index-to-u32`);
 concurrency has 4 (Issue 014 added the two metric-mismatch rules);
-caching has 2 (Issue 014 added `regex-hoist-lazylock`); arithmetic has 5
+caching has 2 (Issue 014 added `regex-hoist-lazylock`); arithmetic has 6
 (Batch 53 added `powi-vs-powf` + `distance-sq-no-sqrt`; Batch 59 added
 `division-by-invariant-multiplication`; Batch 62 added the annotated
-`newton-refinement-vs-hardware-transcendental`); dispatch has 2 (Batch 61 added
-`keyword-map-to-match`); the rest have 1
-each. 59 are benchable (carry a `BenchSpec`); 10 are honestly
+`newton-refinement-vs-hardware-transcendental`; Batch 66 added
+`sparse-set-bit-iteration-tz-blsr`); dispatch has 2 (Batch 61 added
+`keyword-map-to-match`); io has 2 (Batch 68 added
+`varint-compose-word-single-store`); the rest have 1
+each. 63 are benchable (carry a `BenchSpec`); 10 are honestly
 `NotBenchable` — 8 need external runtimes or are structural (size_of,
 memory, fairness), 2 are **metric-mismatch** (Issue 014 T2.3/T2.4: the cost
-is contention latency / queue depth, not wall-clock). 14 of 69 carry
-`context_notes` — 10 verdict-class (3 `ParetoDominated` + 7
+is contention latency / queue depth, not wall-clock). 16 of 73 carry
+`context_notes` — 11 verdict-class (4 `ParetoDominated` + 7
 regime-fragile/Mixed — Batch 48 added the `filter-count-to-any` folk-wisdom
 refutation: the VECTORIZED count loop beats `any()`'s scalar early-exit at
 mid-position hits; Batch 53 added the `powi-vs-powf` refutation — LLVM
@@ -112,6 +118,16 @@ annotated rules as context-dependent, not unconditional suggestions.
 | `distance-sq-no-sqrt` | arithmetic | ✅ 1.21-1.24x ParetoDominant | — | `(dx²+dy²).sqrt() < r` → `dx²+dy² < r²` compare-squared (Batch 53 — monotonic sqrt; keep the sqrt when the VALUE is consumed) |
 | `hashmap-with-capacity` | allocation | ✅ 2.4-3.1x ParetoDominant | — | `HashMap::new()` + known-count insert loop → `HashMap::with_capacity(n)` (Batch 53 — rehash ladder re-SipHashes all entries per resize; allocs 12→1) |
 | `division-by-invariant-multiplication` | arithmetic | ✅ 2.03-2.13x ParetoDominant (M3 aarch64) | — | loop of `x / d` with RUNTIME-invariant `d` → precomputed libdivide-style magic multiplier + shift (Batch 59, thermite distill — CONSTANT divisors are already strength-reduced by LLVM, the regime is exclusively the runtime-invariant case; setup pays one hardware div, amortized after ~3 applications; expected wider on x86 where DIV is 30-90+ cycles vs aarch64 UDIV) |
+| `keyword-map-to-match` | dispatch | ✅ 5.23-5.58x ParetoDominant | — | static-keyword `LazyLock<HashMap<&str, V>>` dispatch → plain `match` on string literals (Batch 61, oxc distill — LLVM lowers the match to a length switch + inline compares; the map pays SipHash per lookup; STATIC key sets only) |
+| `usize-index-to-u32` | layout | ✅ 1.81-1.99x ParetoDominant | — | usize index/offset fields in high-volume structs → u32 (Batch 61, oxc Span — halve the cache footprint; domain must bound below 2^32) |
+| `transposed-weight-register-gemv` | simd | ✅ 1.18/2.09/6.08x ParetoDominant (NIN 16/64/4096) | — | row-major per-row dot + horizontal reduce → transposed weights, per-input broadcast FMA into output registers (Batch 62, microGPT-C distill — architectural: pack at weight-freeze, no proposer) |
+| `newton-refinement-vs-hardware-transcendental` | arithmetic | ⚠️ Mixed (1.09x/1.01x, hardware never loses) | ⚠️ `context_notes` | GPU fast-math Newton-refined recip/rsqrt → hardware single-instruction div/sqrt on CPU (Batch 62, microGPT-C distill — the honest-annotation class: exists to STOP the GPU→CPU fast-math port) |
+| `loop-order-innermost-contiguous` | simd | ✅ 7.14-13.80x ParetoDominant | — | i-j-k nested accumulation whose innermost loop strides a 2D access's OUTER axis → i-k-j reorder (Batch 64 — innermost varies the LAST index; float sum-order changes → rel-error gate, not bit-identity) |
+| `debug-assert-length-hoist` | complexity | ⚠️ Mixed regime-split (1.13x@1K / 0.67-0.71x@100K aarch64) | ⚠️ `context_notes` | `debug_assert!` mentioning `.len()` erased in release drops the bounds-check-elision constraint → `assert!` (Batch 64 — the release-mode pessimization stop; scope: parameter/range-pinned indices only) |
+| `sparse-set-bit-iteration-tz-blsr` | arithmetic | ✅ 4.08/3.90/1.54/1.34x ParetoDominant (1K/10K/100K/1M) | — | `for i in 0..64 { if (mask>>i)&1 != 0 }` → trailing_zeros + `m &= m-1` (BLSR) loop, popcount iterations (Batch 66, polars distill — the B68 rider documents the `x ^= 1 << tz` anti-shape: the xor-clear SERIALIZES count+clear vs the parallel Kernighan chains) |
+| `sortedness-check-branchless-accumulate` | iterators | ✅ 2.98/2.72x ParetoDominant @100K/1M | ⚠️ `context_notes` | sortedness early-exit validation → branchless `sorted &= prev <= v` full scan (Batch 66, polars distill — usually-sorted regime; early-violation data flips it, the mirrored regime of `filter-count-to-any`) |
+| `byte-find-position-to-memchr` | iterators | ✅ 5.00/19.25/25.31/25.37x ParetoDominant (32B/256B/4K/64K) | — | `xs.iter().position(|&b| b == lit)` on `&[u8]` → `memchr::memchr` (Batch 67, regex-automata distill — position is NOT std-specialized, contains IS; dep-gated on a direct memchr dep) |
+| `varint-compose-word-single-store` | io | ❌ ParetoDominated (0/3 sizes × 3 regimes) | ⚠️ `context_notes` | per-byte `write_all` varint loop → 5-threshold ladder compose + single `write_all` (Batch 68, tantivy distill — **MEASURED HONEST LOSER on aarch64**: LLVM strength-reduces the constant `%128 /128`, and OoO hides the call chain; the entry exists to STOP the folk port — the `precompute-table` class) |
 | `keyword-map-to-match` | dispatch | ✅ 5.23-5.58x ParetoDominant | — | static-keyword `LazyLock<HashMap<&str, V>>` dispatch → plain `match` on string literals (Batch 61, oxc distill — LLVM lowers the match to a switch on string LENGTH + inline compares; the HashMap pays SipHash per lookup; oxc failed to beat the match with a gperf-style perfect hash, then found the length-switch in `--emit=llvm-ir`; static key sets only) |
 | `usize-index-to-u32` | layout | ✅ 1.81-1.99x ParetoDominant | — | `usize` index/offset fields in high-volume structs → `u32` (Batch 61, oxc Span distill — halves the struct: 16B → 8B, twice the elements per cache line; oxc measured +5% on large parser files; domain must genuinely bound below 2³²) |
 | `transposed-weight-register-gemv` | simd | ✅ 1.18-6.08x ParetoDominant | — | row-major per-row dot (serial scalar accumulator chain + horizontal reduce) → transposed weights, per-input broadcast FMA into output-vector accumulators (Batch 62, microGPT-C distill — the win GROWS at large nin: strict-FP Rust cannot vectorize the scalar accumulator chain without reassociation, so the row-dot degrades further; llama.cpp's fine row-major dots use explicit multi-accumulator SIMD — not what portable scalar code gets; architectural rule — weights pack transposed once at weight-freeze, no proposer) |
@@ -336,7 +352,7 @@ joined in the 2026-08-17 batch. G5 real-repo validation precedent: Bench 019
 ## Source
 
 - [`src/domains/rust_perf/mod.rs`](../../src/domains/rust_perf/mod.rs) — `PerfRule` + `RustPerfDomain`
-- [`src/domains/rust_perf/corpus.rs`](../../src/domains/rust_perf/corpus.rs) — `build_perf_seed_corpus()` + 31 `BenchSpec`s (8 rules are honestly NotBenchable)
+- [`src/domains/rust_perf/corpus.rs`](../../src/domains/rust_perf/corpus.rs) — `build_perf_seed_corpus()` + 63 `BenchSpec`s (10 rules are honestly NotBenchable)
 - [`src/domains/rust_perf/proposers/`](../../src/domains/rust_perf/proposers/) — the 10 `syn` AST proposers (Phase 4 top-5 + the 2026-08-17 Batch 48 + Batch 53 follow-ups) + `propose_fix` dispatch
 - [`src/domains/rust_perf/verify.rs`](../../src/domains/rust_perf/verify.rs) — `PerfVerifier` (cargo test)
 - [`src/domains/rust_perf/bench.rs`](../../src/domains/rust_perf/bench.rs) — `PerfBenchValidator` (Pareto verdict)
