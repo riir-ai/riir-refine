@@ -45,6 +45,7 @@ the diagnostic for WHERE healing still fails.
 |---|---|---|---|---|---|---|
 | #1 2026-08-19 | `17e3d8b` | 84.6% | 3 (5.8%) | 92.9% | 100% | baseline — caught a REAL proposer bug on its first execution (Issue 032) |
 | #2 2026-08-19 | `86ba7f1` | **90.4%** | 3 (5.8%) | **100%** | 100% | Issue 032 fixed (atomic whole-loop edit) — the first step the curve shows: +5.8pp heal, safety back to 100 |
+| #3 2026-08-19 | `c8d0d34` | **98.1%** | **1 (1.9%)** | 100% | 100% | the run-#2 miss map triaged to root causes — 5 proposer extensions (all probe-verified vs clippy 1.97 first) + a static-str trait-impl soundness fix |
 
 Run #1's two parse-safety failures were exactly the Issue 032 fixtures
 (`needless_range_loop` × `identity_op`/`double_parens` same-pass composition
@@ -52,6 +53,22 @@ half-applied the rewrite → dangling loop variable). The remaining miss map
 (needless_range_loop, double_parens, needless_return,
 redundant_pattern_matching, useless_format — one each) is the honest open
 heal surface; `created_rate` 3 is the separate false-positive class.
+
+### Run #3 — what the miss-map triage found (2026-08-19)
+
+Every run-#2 miss + created was probed against real clippy BEFORE any code
+changed (the per-fixture detail ships as the `#[ignore]`d
+`per_fixture_diagnostics` test — the standing triage workflow):
+
+| miss / created | root cause | outcome |
+|---|---|---|
+| `needless_return` persist | proposer skipped bare `return;` — clippy fires (probe: suggestion deletes the stmt) | **fixed** (deleted via `delete_stmt_edit`) |
+| `double_parens` persist | `push((v + 1))` single-wrap call arg — clippy fires; the old "tuple break" note confused token shape with AST shape (`(a,b)` is `Expr::Tuple`, never `Paren`) | **fixed** (arg wrap stripped) |
+| `redundant_pattern_matching` persist | proposer lacked the 2-arm bool-literal match shape (`Some(_) => true, None => false`) | **fixed** (→ `e.is_some()`, either arm order + wildcard opposite) |
+| `needless_range_loop` persist | `names[i]` inside `format!` args = opaque token stream → scan saw zero uses → refused | **fixed** (macro-arg descent: format-family args parse as exprs with file-relative spans; `{i}` named captures refuse; other macros mentioning `i` refuse; `__elem` collision check walks macro tokens — a pre-existing shadowing hole) |
+| `missing_const_for_fn` created ×2 | our `static-str` perf rewrite (beyond clippy's own fixes) made literal-returning fns const-able | **fixed** (`static-str` emits `const fn` — additive, probe-verified clean; also fixed a latent soundness hole: trait-impl fn signatures must match the trait, the old walker fired where the rewrite can never compile) |
+| `single_option_map` created | NURSERY design-opinion lint ("fn that only maps over argument") — fires on `manual_map`'s OUTPUT, which is exactly what clippy itself suggests | **documented benign** — `cargo clippy --fix` produces the same cascade; not fixable without refusing correct fixes |
+| `useless_format` persist (remains) | the String-typed inlined-named form `format!("{elem}")` still fires (probe) — clippy's own fix (`elem.to_string()`) then fires `implicit_clone` on `&String` (probe) — the true terminal `elem.clone()` needs the arg's TYPE | **documented boundary** — firing would trade the persist for an `implicit_clone` created (bench-symmetric +1.9pp each way); `created` is the trust axis, so the persist stays. The parse-only frontier: clippy's own `--fix` converges only because `implicit_clone` is ALSO a clippy fix |
 
 ## Run
 

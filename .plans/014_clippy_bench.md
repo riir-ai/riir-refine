@@ -112,6 +112,27 @@ train/test-style split so corpus growth cannot inflate the score.
       curve, exactly as the bench was designed to show. 3 new tests
       (atomicity + both frozen-fixture compositions through the production
       fixpoint shape); 19/19 module, 623 default / 707 score_bench lib.
+- [x] **Run #3 — the run-#2 miss map triaged to root causes (fix
+      `c8d0d34`, same day): heal 98.1% · created 1 (1.9%)** — 5 proposer
+      extensions, each probe-verified against real clippy 1.97 BEFORE
+      implementation (needless_return bare `return;`; double_parens
+      call-arg single wrap; redundant_pattern_matching 2-arm bool match;
+      needless_range_loop macro-arg descent — format-family args parse as
+      exprs, `{i}` captures refuse, opaque macros mentioning `i` refuse,
+      `__elem` collision check walks macro tokens; useless_format
+      single-positional-arg for non-ident args) + static-str `const fn`
+      emission (closing both `missing_const_for_fn` creations) + a latent
+      static-str trait-impl soundness fix (trait signatures must match —
+      the old walker fired where the rewrite can never compile). Two
+      residuals documented as boundaries: `single_option_map` (nursery,
+      clippy's own manual_map fix produces the same cascade) + one
+      String-typed `useless_format` persist (the type-aware terminal fix
+      is beyond parse-only reach; firing would trade the persist for an
+      `implicit_clone` created — bench-symmetric, and `created` is the
+      trust axis). Per-fixture triage ships as the `#[ignore]`d
+      `per_fixture_diagnostics` test (the standing workflow). 649 default
+      / 733 score_bench / 712 fix_verify / 701 latent_retrieval lib green;
+      clippy 0 all states.
 
 ### GOAT (the harness itself)
 - [x] G1 measures what it claims: scores derive ONLY from real-clippy

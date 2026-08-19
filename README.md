@@ -308,8 +308,17 @@ Run #1 (2026-08-19): heal 84.6% · created 3 · safety 92.9% · decline 100% —
 and it caught a REAL proposer bug on its first execution (Issue 032:
 `needless_range_loop` × `identity_op` same-pass composition half-applied
 the rewrite → dangling loop variable). **Run #2 (fix `86ba7f1`, same day):
-heal 90.4% · safety 100%** — the first upward step on the curve. Expect a
-STEP curve at root-cause fixes, not a training curve — the self-learning
+heal 90.4% · safety 100%** — the first upward step on the curve. **Run #3
+(`c8d0d34`, same day): heal 98.1% · created 1 (1.9%)** — the run-#2 miss map
+triaged to root causes: 5 probe-verified proposer extensions (bare `return;`,
+call-arg paren wraps, the 2-arm bool match shape, macro-arg descent for
+`needless_range_loop`, `useless_format` single-arg) + `static-str` emitting
+`const fn` (closing both `missing_const_for_fn` creations) + a latent
+`static-str` trait-impl soundness fix. The two residuals are documented
+boundaries: `single_option_map` (nursery — clippy's own `manual_map` fix
+produces the same cascade) and one String-typed `useless_format` persist
+(the type-aware terminal fix is beyond parse-only reach). Expect a STEP
+curve at root-cause fixes, not a training curve — the self-learning
 mechanisms measured negative and were killed; improvement is
 engineering-iterative and the curve makes it honest.
 

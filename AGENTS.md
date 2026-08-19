@@ -2228,6 +2228,58 @@ accumulates; Phases 2 (perf/format axes) + 3 (real-fraction growth:
 statement-wrap miner, stub manifests, crates.io source, cold/warm
 memory lines) defer-marked in the plan.
 
+**Run #3 (fix `c8d0d34`, same day): heal 98.1% · created 1 (1.9%) — the
+run-#2 miss map triaged to root causes.** Every persist + created was
+probed against real clippy 1.97 BEFORE any code changed (per-fixture
+detail ships as the `#[ignore]`d `per_fixture_diagnostics` test — the
+standing triage workflow):
+
+- **5 proposer extensions** (all probe-verified): `needless_return` bare
+  trailing `return;` deleted via `delete_stmt_edit` (the old "unit fns
+  keep it" note was wrong — clippy fires, suggestion deletes the stmt);
+  `double_parens` single-paren call/method-call ARG wraps stripped
+  (`push((v + 1))` fires in real clippy — the old "tuple break" note
+  confused token shape with AST shape: `(a, b)` is `Expr::Tuple`, never
+  `Expr::Paren`); `redundant_pattern_matching` 2-arm bool-literal match
+  shape (→ `e.is_some()`, either arm order, wildcard opposite arm);
+  `needless_range_loop` MACRO-ARG DESCENT — format-family macro args
+  parse as `Expr`s (file-relative spans survive the token round-trip,
+  the `post_template_expr_args` contract) and join the exact-slot scan;
+  `{i}` named captures refuse (would dangle after the pat rename);
+  non-family macros mentioning `i` refuse (conservative token walk);
+  the `__elem` collision check walks macro tokens too (a pre-existing
+  shadowing hole); `useless_format` single-positional-arg form
+  (`format!("{}", e)` → `e.to_string()`, clippy's own suggestion) for
+  non-bare-ident args — bare idents stay `uninlined_format_args`
+  territory (clippy's own precedence; racing siblings on the same span
+  would be nondeterministic).
+- **`static-str` emits `const fn`** — the rewritten shape is trivially
+  const-able and clippy's `missing_const_for_fn` (pedantic) fired on the
+  non-const result (2 of run #2's 3 created); `const` is additive
+  (callable everywhere a fn was, incl. fn-pointer coercion); skipped
+  for async/unsafe. ALSO fixed a latent soundness hole: a trait-impl
+  fn's signature MUST match the trait — the old `for_each_fn` walker
+  (`ImplItem::Fn` covers both impl kinds) fired where the rewrite can
+  never compile; static-str now walks trait-aware and skips trait impls.
+- **2 residuals documented as boundaries** (not bugs):
+  `single_option_map` (nursery design-opinion, "fn that only maps over
+  argument") fires on `manual_map`'s OUTPUT — exactly what clippy itself
+  suggests; `cargo clippy --fix` produces the same cascade. The one
+  `useless_format` persist (`composite-range_loop_plus_format_args`):
+  String-typed inlined-named `format!("{elem}")` still fires (probe —
+  clippy is type-aware; it does NOT fire for u32), clippy's own fix
+  (`elem.to_string()`) then fires `implicit_clone` on `&String`, and the
+  true terminal (`elem.clone()`) needs the arg's TYPE — firing would
+  trade the persist for an `implicit_clone` created (+1.9pp heal vs
+  +1.9pp created, bench-symmetric), and `created` is the trust axis, so
+  the persist stays. The parse-only frontier, honestly recorded.
+
+Validation: 649 default / 733 score_bench / 712 fix_verify / 701
+latent_retrieval lib tests green; clippy 0 warnings all states; every
+new shape has positive + negative fixtures (tuple args, guarded arms,
+named captures, bare-ident args, opaque macro mentions, `__elem`
+collisions, trait impls, async fns).
+
 **Plan 005 (2026-08-14) — latent retrieval + `cargo heal --suggest` CLI
 (Phases 1–4 DONE).** `src/draft/` ships the span-level retrieval layer:
 real `.rs` files → `AstChunker` spans → 8-D modelless embedding →
