@@ -13,6 +13,7 @@
 | File | Scope |
 |---|---|
 | [`heal_pipeline.md`](heal_pipeline.md) | `HealPipeline` + `HealResult` + `HealSource` — the composition |
+| [`scope_model.md`](scope_model.md) | `ScopeModel` — the input-scope gate at the heal seam (Bench 040 / Plan 016; the Bench 669 consumer adoption) |
 | [`latent_fix_memory.md`](latent_fix_memory.md) | `LatentFixMemory` + `FixTrajectory` + `EvidenceTier` (Issue 021) + 4-axis retrieval + JSON persistence (Issue 018) |
 | [`latent_skill_evolution.md`](latent_skill_evolution.md) | `LatentSkillEvolution` + `EvolveConfig` + EMA rule |
 | [`evolve_recorder.md`](evolve_recorder.md) | `EvolveRecorder` — the oracle-split recorder + the `cargo heal --fix` wiring (Issue 018) |

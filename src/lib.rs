@@ -111,6 +111,13 @@ pub mod l4_fallback;
 #[cfg(feature = "l4_lora")]
 pub mod l4_daemon;
 
+// Bench 669 consumer adoption (Plan 016): the input-scope gate at the heal()
+// seam. `ScopeModel` wraps katgpt-core's `contrastive_scope` primitive — the
+// 2D extension of the Issue 030 relevance gate (rule coverage × input scope).
+// Opt-in and inert without an installed model.
+#[cfg(feature = "contrastive_scope")]
+pub mod scope_model;
+
 // Plan 014: clippy-bench — the frozen real-code healing bench + SVG score
 // history. Measures the PRODUCTION `--fix` path (bounded-fixpoint proposers)
 // against real-`cargo clippy` ground truth on frozen fixtures mined from
@@ -211,6 +218,10 @@ pub use memory::{
 pub use recorder::EvolveRecorder;
 pub use selection_entropic::{solve_beta, tilt_advantages_into, tilted_weights, KL_BUDGET_LN2};
 pub use self_evolve::{HealPipeline, HealResult, HealSource, SelectionMode, TuneReport};
+
+// Bench 669 consumer adoption (Plan 016).
+#[cfg(feature = "contrastive_scope")]
+pub use scope_model::{ScopeModel, OUT_OF_SCOPE_DOCS, KAPPA, THETA};
 
 // Plan 005: latent retrieval surface (`--suggest` MVP).
 #[cfg(feature = "latent_retrieval")]

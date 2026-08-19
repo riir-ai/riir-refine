@@ -254,6 +254,21 @@ pub struct HealPipeline {
     /// modelless miss; see [`crate::l4_fallback`] for the contract.
     #[cfg(feature = "l4_lora")]
     l4: Option<Box<dyn crate::l4_fallback::L4Fallback>>,
+    /// The input-scope gate (Bench 669 consumer adoption, Plan 016). `None` by
+    /// default — the pipeline is then byte-identical to the pre-adoption
+    /// path. When installed, [`HealPipeline::heal`] first scores the INPUT
+    /// under the contrastive table: out-of-scope inputs (`D > θ`) decline
+    /// immediately (never served, L4 never consulted — declining is a CORRECT
+    /// answer off-distribution); in-scope inputs proceed unchanged with the
+    /// epistemic haircut applied to `evolution_score` (exactly `1.0` for
+    /// strongly in-scope docs, by f32 sigmoid saturation — bit-identical).
+    #[cfg(feature = "contrastive_scope")]
+    scope: Option<crate::scope_model::ScopeModel>,
+    /// Reusable token-id scratch for the scope check (alloc-free after
+    /// warm-up — the `mem::take` dance preserves capacity across the split
+    /// borrow between `self.scope` and the scratch buffer).
+    #[cfg(feature = "contrastive_scope")]
+    scope_scratch: Vec<u32>,
 }
 
 impl HealPipeline {
@@ -281,7 +296,31 @@ impl HealPipeline {
             tilt_advantages: Vec::new(),
             #[cfg(feature = "l4_lora")]
             l4: None,
+            #[cfg(feature = "contrastive_scope")]
+            scope: None,
+            #[cfg(feature = "contrastive_scope")]
+            scope_scratch: Vec::new(),
         }
+    }
+
+    /// Install the input-scope gate (Bench 669 consumer adoption, Plan 016).
+    ///
+    /// Typically built via [`ScopeModel::build_for_corpus`] over the same
+    /// corpus the pipeline serves. Without this the pipeline behaves exactly
+    /// as before the adoption — the gate is opt-in at BOTH the feature level
+    /// and the builder level.
+    #[cfg(feature = "contrastive_scope")]
+    #[must_use]
+    pub fn with_scope_model(mut self, model: crate::scope_model::ScopeModel) -> Self {
+        self.scope = Some(model);
+        self
+    }
+
+    /// Whether an input-scope model is installed (for inspection / benches).
+    #[cfg(feature = "contrastive_scope")]
+    #[must_use]
+    pub fn has_scope_model(&self) -> bool {
+        self.scope.is_some()
     }
 
     /// Install the L4 generative fallback (Plan 336 T4.4).
@@ -301,6 +340,87 @@ impl HealPipeline {
     #[must_use]
     pub fn has_l4_fallback(&self) -> bool {
         self.l4.is_some()
+    }
+
+    /// Step 4 of [`HealPipeline::heal`]: score each candidate and pick the
+    /// best.
+    ///
+    /// Combined score = `W_EVO`·evolution + `W_RATE`·reliability. `W_EVO =
+    /// 0.6` (the evolved direction is the primary signal); `W_RATE = 0.4`
+    /// (historical reliability is a strong secondary signal). For unseen
+    /// rules (evolution returns 0.5), reliability dominates — the first fix
+    /// attempt picks the most reliable past fix.
+    ///
+    /// Entropic (Issue 026): the reliability axis is scored from the POOL's
+    /// shape instead of per-candidate history alone — the KL-budgeted
+    /// Boltzmann tilt over the pool's belief scores (max-seeking; adaptive β
+    /// per pool shape). Pools of size ≤ 1 have no shape and fall through to
+    /// the per-candidate path, which degrades loudly to `BetaPosterior` there.
+    fn select_best_candidate(&mut self, rule_id: &str, candidates: &[Candidate]) -> (usize, f32) {
+        let entropic_pool =
+            matches!(self.selection_mode, SelectionMode::Entropic) && candidates.len() > 1;
+        if entropic_pool {
+            self.tilt_rewards.clear();
+            for cand in candidates {
+                self.tilt_rewards.push(katgpt_core::best_belief_score(
+                    cand.counts.0,
+                    cand.counts.1,
+                    BELIEF_EPSILON,
+                ));
+            }
+            crate::selection_entropic::tilt_advantages_into(
+                &self.tilt_rewards,
+                crate::selection_entropic::KL_BUDGET_LN2,
+                &mut self.tilt_advantages,
+            );
+        }
+
+        let mut best = None::<(usize, f32)>;
+        for (i, cand) in candidates.iter().enumerate() {
+            let evo_score = self.evolution.score_candidate(rule_id, &cand.direction);
+            let reliability = if entropic_pool {
+                katgpt_core::sigmoid(self.tilt_advantages[i])
+            } else {
+                reliability_score(self.selection_mode, cand.counts, cand.success_rate)
+            };
+            let combined = W_EVO * evo_score + W_RATE * reliability;
+            if best.is_none_or(|(_, best_score)| combined > best_score) {
+                best = Some((i, combined));
+            }
+        }
+        best.expect("candidates is non-empty, so best exists")
+    }
+
+    /// Score the input under the installed scope model and fold the verdict
+    /// into a haircut multiplier. `None` ⇒ DECLINE the heal entirely.
+    ///
+    /// The 2D complement of the Issue 030 relevance gate: rule coverage ×
+    /// INPUT scope. An out-of-scope input (`D > θ`: non-Rust code, config
+    /// files, prose) paired with an in-corpus rule id would otherwise be
+    /// SERVED confidently — the drafter serves the corpus template, it parses,
+    /// the rule is covered. A Rust fix for a Python input is a wrong answer
+    /// served with a straight face, and on the L4 path the same garbage burns
+    /// a ~48 s GPU call. Declining is the CORRECT answer off-distribution.
+    ///
+    /// No-regression: without a model installed this returns `Some(1.0)`;
+    /// with one, strongly in-scope docs saturate f32 sigmoid to exactly `1.0`
+    /// so the haircut is bit-identical (pinned by test).
+    #[cfg(feature = "contrastive_scope")]
+    fn scope_haircut_for(&mut self, buggy_code: &str) -> Option<f32> {
+        // Split-borrow workaround: the model is behind `&self.scope` while
+        // the scratch buffer is `&mut self.scope_scratch` — take the scratch
+        // out, use, put it back (capacity preserved — G4 alloc-free warm-up).
+        let mut scratch = std::mem::take(&mut self.scope_scratch);
+        let verdict = self
+            .scope
+            .as_ref()
+            .map(|m| m.verdict_str(buggy_code, 1.0, &mut scratch));
+        self.scope_scratch = scratch;
+        match verdict {
+            Some(v) if v.declined => None,
+            Some(v) => Some(v.haircut),
+            None => Some(1.0),
+        }
     }
 
     /// Consult the L4 fallback for a fix the modelless path could not serve.
@@ -472,6 +592,13 @@ impl HealPipeline {
         buggy_code: &str,
         corpus: &[E],
     ) -> Option<HealResult> {
+        // ── Input-scope gate (Bench 669 consumer adoption, Plan 016) ──────
+        // `None` ⇒ out-of-scope input (`D > θ`): decline the whole heal —
+        // never serve, never consult L4. See `scope_haircut_for` for the
+        // rationale. Compiles to nothing without the feature.
+        #[cfg(feature = "contrastive_scope")]
+        let scope_haircut: f32 = self.scope_haircut_for(buggy_code)?;
+
         // Look up rule-level context_notes from the corpus (the source of truth
         // for rule metadata). This ensures the annotation is surfaced on ALL
         // paths (drafter / memory / Stage2) — the annotation describes the
@@ -495,6 +622,11 @@ impl HealPipeline {
             return Some(HealResult {
                 fixed_code: verified,
                 parses: validation.parses,
+                // Verified = highest confidence, scaled by the input-scope
+                // haircut (exactly 1.0 for in-scope inputs — saturation).
+                #[cfg(feature = "contrastive_scope")]
+                evolution_score: scope_haircut,
+                #[cfg(not(feature = "contrastive_scope"))]
                 evolution_score: 1.0, // verified = highest confidence
                 source: HealSource::Stage2Adaptive,
                 context_notes: rule_context_notes.map(str::to_string),
@@ -558,52 +690,9 @@ impl HealPipeline {
             return self.consult_l4(rule_id, buggy_code, rule_context_notes);
         }
 
-        // Step 4: score each candidate.
-        // Combined score = W_EVO * evolution_score + W_RATE * success_rate.
-        // W_EVO = 0.6 (the evolved direction is the primary signal).
-        // W_RATE = 0.4 (historical reliability is a strong secondary signal).
-        // For unseen rules (evolution returns 0.5), success_rate dominates —
-        // this means the first fix attempt picks the most reliable past fix.
-        //
-        // Entropic (Issue 026): the reliability axis is scored from the
-        // POOL's shape instead of per-candidate history alone — the
-        // KL-budgeted Boltzmann tilt over the pool's belief scores
-        // (max-seeking; adaptive β per pool shape). Pools of size ≤ 1 have
-        // no shape and fall through to the per-candidate path, which
-        // degrades loudly to BetaPosterior there.
-        let entropic_pool =
-            matches!(self.selection_mode, SelectionMode::Entropic) && candidates.len() > 1;
-        if entropic_pool {
-            self.tilt_rewards.clear();
-            for cand in &candidates {
-                self.tilt_rewards.push(katgpt_core::best_belief_score(
-                    cand.counts.0,
-                    cand.counts.1,
-                    BELIEF_EPSILON,
-                ));
-            }
-            crate::selection_entropic::tilt_advantages_into(
-                &self.tilt_rewards,
-                crate::selection_entropic::KL_BUDGET_LN2,
-                &mut self.tilt_advantages,
-            );
-        }
-
-        let mut best = None::<(usize, f32)>;
-        for (i, cand) in candidates.iter().enumerate() {
-            let evo_score = self.evolution.score_candidate(rule_id, &cand.direction);
-            let reliability = if entropic_pool {
-                katgpt_core::sigmoid(self.tilt_advantages[i])
-            } else {
-                reliability_score(self.selection_mode, cand.counts, cand.success_rate)
-            };
-            let combined = W_EVO * evo_score + W_RATE * reliability;
-            if best.is_none_or(|(_, best_score)| combined > best_score) {
-                best = Some((i, combined));
-            }
-        }
-
-        let (best_idx, best_score) = best.expect("candidates is non-empty, so best exists");
+        // Step 4: score each candidate — see `select_best_candidate` for the
+        // weighting rationale + the Entropic pool tilt (Issue 026).
+        let (best_idx, best_score) = self.select_best_candidate(rule_id, &candidates);
         let cand = &candidates[best_idx];
 
         // Step 5: validate with the L2 pruner.
@@ -646,6 +735,9 @@ impl HealPipeline {
         Some(HealResult {
             fixed_code: cand.code.clone(),
             parses: validation.parses,
+            #[cfg(feature = "contrastive_scope")]
+            evolution_score: best_score * scope_haircut,
+            #[cfg(not(feature = "contrastive_scope"))]
             evolution_score: best_score,
             source: cand.source,
             context_notes: rule_context_notes.map(str::to_string),
