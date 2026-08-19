@@ -1,6 +1,6 @@
 # Research 072: Batch 64 — the ARM Neon / CPU-SIMD / bounds-check pool (2 online-search candidates)
 
-**Status:** RECORD — Batch 64 landed 2026-08-19 (corpus 67 → 69; 1 ParetoDominant + 1 annotated Mixed, both measured).
+**Status:** RECORD — Batch 64 landed 2026-08-19 (corpus 67 → 69; 1 ParetoDominant + 1 annotated Mixed, both measured). **x86 re-gate 2026-08-19 (4090 box, quiet): `debug-assert-length-hoist` regime CONFIRMED cross-arch — 1.00× tie @1K, 0.92× @100K (milder than aarch64's 0.67-0.71×; the article's x86 headline win does not reproduce on this harness shape).** Corpus annotation updated in the same commit.
 **Source:** the 2026-08-18 queue-item-11 pool (recorded in the mining snapshot with provenance + dedup + caveats; plan-first via Plan 010).
 
 ## Measured results (M3 Max, release, alloc-det stable)

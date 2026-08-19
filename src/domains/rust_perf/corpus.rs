@@ -102,13 +102,13 @@
 //! - `keyword-map-to-match` (static-keyword HashMap dispatch → plain match on literals — LLVM length-switch, Batch 61)
 //! - `usize-index-to-u32` (16B usize spans → 8B u32 spans — cache density under bandwidth-bound scans, Batch 61)
 //! - `transposed-weight-register-gemv` (row-major per-row dot + horizontal reduce → transposed weights, per-input broadcast FMA into output accumulators — 1.18-6.08x ParetoDominant, Batch 62, microGPT-C distill; the win GROWS at large nin — the scalar accumulator's serial FP chain is the real cost, not the horizontal reduce)
-//! - `newton-refinement-vs-hardware-transcendental` (Newton-refined recip/rsqrt (the GPU fast-math recipe) → hardware single-instruction `fdiv`/`fsqrt` on CPU — Mixed 1.01-1.09x, hardware never loses; Batch 62, annotated)
+//! - `newton-refinement-vs-hardware-transcendental` (Newton-refined recip/rsqrt (the GPU fast-math recipe) → hardware single-instruction `fdiv`/`fsqrt` on CPU — Mixed 1.01-1.09x M3 / ParetoDominant 1.64-1.66x x86 (re-gated), hardware never loses; Batch 62, annotated)
 //! - `loop-order-innermost-contiguous` (i-j-k nested accumulation with a column-striding inner access → i-k-j reorder so the innermost varies the LAST index — 7.1-13.8x ParetoDominant, grows with n; Batch 64)
-//! - `debug-assert-length-hoist` (`debug_assert!` mentioning `.len()` is erased in release, dropping the constraint bounds-check elision needed → `assert!` — Mixed regime-split 1.13x@1K / 0.67-0.71x@100K stable on aarch64; Batch 64, annotated)
+//! - `debug-assert-length-hoist` (`debug_assert!` mentioning `.len()` is erased in release, dropping the constraint bounds-check elision needed → `assert!` — Mixed regime-split 1.13x@1K / 0.67-0.71x@100K stable on aarch64 (x86 re-gate: 1.00x/0.92x, holds cross-arch); Batch 64, annotated)
 //! - `sparse-set-bit-iteration-tz-blsr` (64-iteration set-bit scan → trailing_zeros+BLSR, popcount iterations — sparse-mask regime, Batch 66)
 //! - `sortedness-check-branchless-accumulate` (early-exit sortedness validation → branchless `sorted &=` full scan, vectorizes — usually-sorted regime, Batch 66)
 //! - `byte-find-position-to-memchr` (u8 slice iter().position byte scan → memchr::memchr SIMD block scan — position is NOT specialized in std, contains is; dep-gated, Batch 67)
-//! - `varint-compose-word-single-store` (per-byte write_all varint loop → 5-threshold ladder + single write_all — MEASURED ParetoDominated on aarch64 across 3 writer regimes: the honest-loser annotation stops the tantivy folk port; Batch 68)
+//! - `varint-compose-word-single-store` (per-byte write_all varint loop → 5-threshold ladder + single write_all — MEASURED ParetoDominated on aarch64 AND x86 across writer regimes (the 4090-box re-gate: 0.40-0.50x there, HARDER): the honest-loser annotation stops the tantivy folk port; Batch 68)
 //!
 //! Not benchable (10/72) — honest:
 //! - `layout-reorder` (struct size — deterministic `size_of`, not a runtime
@@ -1422,7 +1422,7 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
                  CPU hot paths; never port GPU fast-math refinement chains. The \
                  relaxed-precision-estimate axis (12-bit estimate intrinsics) is a \
                  separate optimization valid ONLY where accuracy can relax — not \
-                 for precision-required divs."
+                 for precision-required divs. x86 re-gate (2026-08-19, 4090 box, quiet): never-loses is CROSS-ARCH and the win is LARGER there — ParetoDominant 1.64x/1.66x at 1K/100K; the near-tie is M3-aarch64-specific (fdiv latency, pipeline-hidden at 100K)."
                 .to_string(),
             ),
             #[cfg(feature = "rust_perf_bench")]
@@ -1498,7 +1498,7 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
                  length constraint bounds-check elision needed) while warning \
                  that the fix itself needs measuring per shape. Suggest \
                  `assert!` (redundant asserts are optimizer-removed) on \
-                 range-pinned shapes; MEASURE before expecting throughput.".to_string(),
+                 range-pinned shapes; MEASURE before expecting throughput. x86 re-gate (2026-08-19, 4090 box, quiet): regime CONFIRMED cross-arch — 1.00x tie at 1K, 0.92x at 100K (milder than aarch64's 0.67-0.71x but still no free win; the article's x86 headline does not reproduce on this harness shape either).".to_string(),
             ),
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: Some(debug_assert_length_hoist_bench_spec()),
@@ -1599,8 +1599,9 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
         // honest finding (the `precompute-table` class): it exists to STOP
         // the plausible-looking "compose into a word, store once" port
         // from tantivy's codebase — measured, it REGRESSES on modern
-        // aarch64. Untested on x86 (different div/branch costs — re-gate
-        // there before citing). Regime facts that remain true: the ladder
+        // aarch64 AND on x86 (re-gated 2026-08-19 on the 4090 box: dominated
+        // 0/3 there too, 0.40-0.50x — HARDER than aarch64). Regime facts
+        // that remain true: the ladder
         // is convention-faithful + bit-identical (exhaustive gate below),
         // and the u64 width boundary (10 bytes > word) keeps the loop.
         PerfRule {
@@ -1610,7 +1611,7 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
             buggy_code: "use std::io::{Write, Result};\nfn write_vint<W: Write>(w: &mut W, mut val: u32) -> Result<()> {\n    loop {\n        let byte = (val % 128) as u8;\n        val /= 128;\n        if val == 0 {\n            w.write_all(&[byte | 128])?; // a writer call PER BYTE\n            return Ok(());\n        }\n        w.write_all(&[byte])?;\n    }\n}".to_string(),
             fixed_code: "use std::io::{Write, Result};\nfn write_vint<W: Write>(w: &mut W, val: u32) -> Result<()> {\n    let v = u64::from(val);\n    // compose ALL bytes into one u64 (masked shifts), ONE writer call\n    let (res, len) = if v < (1 << 7) {\n        (v | 128, 1)\n    } else if v < (1 << 14) {\n        ((v & 127) | ((v & (127 << 7)) << 1) | (128 << 8), 2)\n    } else if v < (1 << 21) {\n        ((v & 127) | ((v & (127 << 7)) << 1) | ((v & (127 << 14)) << 2) | (128 << 16), 3)\n    } else if v < (1 << 28) {\n        ((v & 127) | ((v & (127 << 7)) << 1) | ((v & (127 << 14)) << 2) | ((v & (127 << 21)) << 3) | (128 << 24), 4)\n    } else {\n        ((v & 127) | ((v & (127 << 7)) << 1) | ((v & (127 << 14)) << 2) | ((v & (127 << 21)) << 3) | ((v & (127 << 28)) << 4) | (128u64 << 32), 5)\n    };\n    w.write_all(&res.to_le_bytes()[..len]) // ONE store, ONE call\n}".to_string(),
             context_notes: Some(
-                "ParetoDominated (Batch 68 bench, M3 Max aarch64, load-recorded ~25-33, THREE regimes tested): the ladder LOSES 0/3 sizes on the Vec-push shape AND the inline-Cursor writer shape AND the Box<dyn Write> vtable shape — alloc axis equal + stable, outputs byte-identical. The folk mechanism story dies twice: (1) 128 is a compile-time constant, so LLVM strength-reduces x % 128 / x / 128 to & 127 / >> 7 — there is NO hardware-div chain to eliminate (the division-by-invariant-multiplication two-regime note applied in reverse); (2) even N dyn-dispatch writer calls are hidden by out-of-order execution behind the ladder's 5-deep branch chain. The rule exists to STOP the plausible-looking 'compose into a word, store once' port from tantivy's codebase — measured, it REGRESSES on modern aarch64. Untested on x86 (different div/branch costs — re-gate there before citing); re-gate on a quiet box before quoting ratios. Bit-identity remains proven (exhaustive gate: full u16 + 128^i boundaries + LCG u32, both conventions)."
+                "ParetoDominated (Batch 68 bench, M3 Max aarch64, load-recorded ~25-33, THREE regimes tested): the ladder LOSES 0/3 sizes on the Vec-push shape AND the inline-Cursor writer shape AND the Box<dyn Write> vtable shape — alloc axis equal + stable, outputs byte-identical. The folk mechanism story dies twice: (1) 128 is a compile-time constant, so LLVM strength-reduces x % 128 / x / 128 to & 127 / >> 7 — there is NO hardware-div chain to eliminate (the division-by-invariant-multiplication two-regime note applied in reverse); (2) even N dyn-dispatch writer calls are hidden by out-of-order execution behind the ladder's 5-deep branch chain. The rule exists to STOP the plausible-looking 'compose into a word, store once' port from tantivy's codebase — measured, it REGRESSES on modern aarch64 AND x86 (4090-box re-gate 2026-08-19, quiet, load 10: dominated 0/3 there TOO, HARDER — 0.40x/0.43x/0.50x at 1K/100K/1M, the ladder 2.0-2.5x slower than the per-byte loop; alloc axis equal, G-det stable). Bit-identity remains proven (exhaustive gate: full u16 + 128^i boundaries + LCG u32, both conventions)."
                     .to_string(),
             ),
             #[cfg(feature = "rust_perf_bench")]
@@ -4762,7 +4763,9 @@ fn transposed_weight_register_gemv_bench_spec() -> BenchSpec {
 /// refinement steps are pure extra work. **Measured (Batch 62, M3 Max):
 /// Mixed — hardware never loses: 1.09x at 1K, 1.01x at 100K** (source
 /// measured 2-4% on Ryzen 5 5600H; the M3's fdiv/sqrt latency flattens
-/// the gap at 100K where the pipeline hides it). The rule's purpose is
+/// the gap at 100K where the pipeline hides it). **x86 re-gate
+/// (2026-08-19, 4090 box): ParetoDominant 1.64x/1.66x — the win is
+/// LARGER on x86; the near-tie is M3-aarch64-specific.** The rule's purpose is
 /// stopping the plausible-looking GPU→CPU fast-math port — the annotation
 /// class (`filter-count-to-any` precedent). Well-conditioned [0.5, 2.0]
 /// inputs — deterministic.
@@ -4796,7 +4799,10 @@ fn loop_order_innermost_contiguous_bench_spec() -> BenchSpec {
 /// retains every bounds check. **Measured (Batch 64, M3 aarch64):
 /// Mixed regime-split — 1.13x at n=1K (elision win) but a STABLE
 /// 0.67-0.71x LOSS at n=100K** (3-run verified; the article's own
-/// aarch64 number was 1.03x). The canonical range-pinned shape
+/// aarch64 number was 1.03x; x86 re-gate 2026-08-19 on the 4090 box:
+/// 1.00x tie @1K, 0.92x @100K — regime confirmed cross-arch, milder
+/// loss; the x86 headline win does not reproduce on this shape). The
+/// canonical range-pinned shape
 /// (first+count <= len feeding the induction loop); data-dependent
 /// index arrays cannot propagate the constraint at all (measured
 /// 0.74-0.80x dominated on the first harness shape — elision is
