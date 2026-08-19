@@ -441,4 +441,33 @@ mod tests {
         assert!(v.contains("uninlined_format_args"));
         assert!(!v.iter().any(|l| l.contains("clippy::")));
     }
+
+    /// Per-fixture miss-map triage (run with `--nocapture`):
+    /// `cargo test --features score_bench --lib score_bench::tests::per_fixture_diagnostics -- --nocapture --ignored`
+    ///
+    /// Ignored by default — it shells out to real cargo clippy for every
+    /// fixture (the full bench run). The standing workflow for curve steps:
+    /// read the aggregate map from `--score-bench`, then this test for the
+    /// per-fixture detail (which fixture creates/persists which lint).
+    #[test]
+    #[ignore = "shells out to real cargo clippy for all 34 fixtures (the full bench)"]
+    fn per_fixture_diagnostics() {
+        let oracle = draft_oracle();
+        assert!(oracle.is_available(), "cargo not on PATH");
+        let score = run_bench(&oracle, &fixtures::fixtures());
+        for o in &score.outcomes {
+            let created: Vec<&str> = o.created.iter().map(String::as_str).collect();
+            let persist: Vec<&str> = o.vocab_persist.iter().map(String::as_str).collect();
+            if created.is_empty() && persist.is_empty() {
+                continue;
+            }
+            println!("── {} (edits={}, passes={})", o.id, o.edits, o.passes);
+            if !created.is_empty() {
+                println!("   CREATED : {created:?}");
+            }
+            if !persist.is_empty() {
+                println!("   PERSIST : {persist:?}");
+            }
+        }
+    }
 }

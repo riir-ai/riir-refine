@@ -160,7 +160,8 @@ pub mod while_let_on_iterator;
 pub mod wildcard_in_or_patterns;
 
 pub use crate::edit_emitter::{
-    apply_edits, edit, for_each_fn, src, swallow_following_space, RuleEdit, SourceEdit,
+    apply_edits, delete_stmt_edit, edit, for_each_fn, src, swallow_following_space, RuleEdit,
+    SourceEdit,
 };
 
 /// Lints whose proposers are `cargo heal --fix` eligible — detection is
