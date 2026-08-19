@@ -39,7 +39,7 @@ near-trivial and the claim is small.
 - [x] T3 `HealPipeline` wiring behind `contrastive_scope` — `with_scope_model`, scratch reuse (`mem::take` dance, G4), gate at heal() top (decline → `None`, L4 never consulted), haircut applied to `evolution_score` on every serve path (Stage2/drafter/memory/L4).
 - [x] T4 `tests/scope_gate_adoption.rs` — G1 falsifiable A/B (without model: OOS served = the demonstrated bug; with model: declined); G3 bit-identity over the FULL corpus (`to_bits` on evolution_score, same fixed_code/source); L4-savings (CountingL4 probe, 0 calls on garbage); held-out probe battery (Report-the-Floor discipline); κ/θ separation pins.
 - [x] T5 G-gates + record — G1 defend-wrong delta, G2 overhead (< 10 µs/heal), G3 no-regression (default + all-features lib suites + bit-identity), G4 alloc (scope check 0 allocs; heal-with-model − heal-without = 0). Bench 040 + AGENTS.md.
-- [ ] T6 katgpt-rs promotion per the T5 rule — consumer adopted + gates pass ⇒ add `contrastive_scope` to katgpt-core `default`, update Bench 669 verdict + the feature-def comment.
+- [x] T6 katgpt-rs promotion per the T5 rule — consumer adopted + gates pass ⇒ add `contrastive_scope` to katgpt-core `default`, update Bench 669 verdict + the feature-def comment.
 
 ## Non-goals
 
