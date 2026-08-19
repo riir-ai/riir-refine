@@ -87,3 +87,5 @@ Distinct from `upcast-before-reduction` (raising input precision) — this chang
   - `dllm/`, `epilogue/`, `edge_lora/` — smaller clusters.
 - Centroid mining via `CommittedFieldBlend` — blocked on real kernel benchmarking data (unchanged).
 - `kernel_perf_bench` numeric validator — blocked on GPU (unchanged).
+
+> **PASS-Redirects (synthesis):** Kim, Jin & Kim [arXiv:2608.14333 "Beyond Capacity: Scalable MoE LLM Inference via High-Bandwidth Flash with Direct GPU and HBM Paths"] — independent published instance of `monotone-transform-elision-under-argmax`'s positive-rescaling arm: DASH elides the router's 1/RMS scale factor α for top-k-only consumers (expert ranking unchanged under a positive scalar) and further splits the unscaled logits into a pre-attention base term + post-attention correction so expert selection completes before out-proj/RMSNorm — a scheduling extension riding the rule's invariance class, not a new class. (Their scope gate excludes biased routers like our Kimi noaux_tc — bias-after-link breaks the α-invariance, correctly.)
