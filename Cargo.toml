@@ -137,8 +137,10 @@ fix_verify = ["latent_retrieval"]
 # decline against real-`cargo clippy` verdicts (the T3.5.5 oracle), appends
 # to .benchmarks/score_history.jsonl + renders .benchmarks/score_history.svg.
 # Opt-in: needs the oracle (clippy_verify) + the fix-path surface
-# (latent_retrieval; the cargo-heal bin hosts the --score-bench flag).
-score_bench = ["clippy_verify", "latent_retrieval"]
+# (latent_retrieval; the cargo-heal bin hosts the --score-bench flag) +
+# BOTH proposer domains (the bench scores clippy_lints AND rust_perf
+# fixtures through their respective FIXABLE_* proposer tables).
+score_bench = ["clippy_verify", "latent_retrieval", "clippy_lints", "rust_perf"]
 
 # Plan 336 T4.4/T5.3: the L4 generative fallback stage. Ships the composition
 # SEAM only (trait + pipeline wiring) — no model, no GPU, no heavy deps. Inert

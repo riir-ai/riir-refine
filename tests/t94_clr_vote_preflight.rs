@@ -30,6 +30,8 @@
 //! cargo test --release --test t94_clr_vote_preflight -- --nocapture
 //! ```
 
+#![cfg(feature = "clippy_lints")]
+
 use std::collections::BTreeSet;
 
 use riir_clippy::domain::{HealDomain, HealEntry};

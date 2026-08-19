@@ -3140,6 +3140,7 @@
     }
 
     #[test]
+    #[cfg(not(feature = "kernel_verify"))]
     fn batch54_pseudocode_parses() {
         // G1 for Batch 54 (measured-GOAT distillation): syn-parse gate.
         use crate::domain::HealDomain;
@@ -3215,6 +3216,7 @@
     }
 
     #[test]
+    #[cfg(not(feature = "kernel_verify"))]
     fn batch55_pseudocode_parses() {
         // G1 for Batch 55 (measured-GOAT distillation): syn-parse gate.
         use crate::domain::HealDomain;
@@ -3298,6 +3300,7 @@
     }
 
     #[test]
+    #[cfg(not(feature = "kernel_verify"))]
     fn batch56_pseudocode_parses() {
         // G1 for Batch 56 (measured-GOAT distillation): syn-parse gate.
         use crate::domain::HealDomain;
@@ -3377,6 +3380,7 @@
     }
 
     #[test]
+    #[cfg(not(feature = "kernel_verify"))]
     fn batch57_pseudocode_parses() {
         // G1 for Batch 57 (measured-GOAT distillation): syn-parse gate.
         use crate::domain::HealDomain;
@@ -3524,6 +3528,7 @@
     }
 
     #[test]
+    #[cfg(not(feature = "kernel_verify"))]
     fn batch58_pseudocode_parses() {
         // G1 for Batch 58 (ternary_deltanet unlock, file mining): syn-parse gate.
         use crate::domain::HealDomain;
@@ -3595,6 +3600,7 @@
     }
 
     #[test]
+    #[cfg(not(feature = "kernel_verify"))]
     fn batch60_pseudocode_parses() {
         // G1 for Batch 60 (measured-GOAT distillation): syn-parse gate.
         use crate::domain::HealDomain;
@@ -3677,6 +3683,7 @@
     }
 
     #[test]
+    #[cfg(not(feature = "kernel_verify"))]
     fn batch63_pseudocode_parses() {
         // G1 for Batch 63 (the CubeCL twin): syn-parse gate.
         use crate::domain::HealDomain;

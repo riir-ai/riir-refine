@@ -5147,40 +5147,40 @@ mod tests {
         // the shift/or assembly at EVERY byte alignment over a wide buffer,
         // u64 AND u32 (the cross-arch probe's exhaustive half, pinned as a
         // standing gate).
-        let n = 4096usize;
-        let data: Vec<u8> = (0..n as u32)
-            .map(|i| (i.wrapping_mul(2_654_435_761) >> 24) as u8)
-            .collect();
-
         fn assemble_u64(data: &[u8], addr: usize) -> u64 {
-            (data[addr] as u64)
-                | ((data[addr + 1] as u64) << 8)
-                | ((data[addr + 2] as u64) << 16)
-                | ((data[addr + 3] as u64) << 24)
-                | ((data[addr + 4] as u64) << 32)
-                | ((data[addr + 5] as u64) << 40)
-                | ((data[addr + 6] as u64) << 48)
-                | ((data[addr + 7] as u64) << 56)
+            u64::from(data[addr])
+                | (u64::from(data[addr + 1]) << 8)
+                | (u64::from(data[addr + 2]) << 16)
+                | (u64::from(data[addr + 3]) << 24)
+                | (u64::from(data[addr + 4]) << 32)
+                | (u64::from(data[addr + 5]) << 40)
+                | (u64::from(data[addr + 6]) << 48)
+                | (u64::from(data[addr + 7]) << 56)
         }
         fn load_u64(data: &[u8], addr: usize) -> u64 {
             let bytes: [u8; 8] = (&data[addr..addr + 8]).try_into().unwrap();
             u64::from_le_bytes(bytes)
         }
         fn assemble_u32(data: &[u8], addr: usize) -> u32 {
-            (data[addr] as u32)
-                | ((data[addr + 1] as u32) << 8)
-                | ((data[addr + 2] as u32) << 16)
-                | ((data[addr + 3] as u32) << 24)
+            u32::from(data[addr])
+                | (u32::from(data[addr + 1]) << 8)
+                | (u32::from(data[addr + 2]) << 16)
+                | (u32::from(data[addr + 3]) << 24)
         }
         fn load_u32(data: &[u8], addr: usize) -> u32 {
             let bytes: [u8; 4] = (&data[addr..addr + 4]).try_into().unwrap();
             u32::from_le_bytes(bytes)
         }
 
-        for addr in 0..(n - 8) {
+        let n = 4096u32;
+        let data: Vec<u8> = (0..n)
+            .map(|i| (i.wrapping_mul(2_654_435_761) >> 24) as u8)
+            .collect();
+
+        for addr in 0..((n - 8) as usize) {
             assert_eq!(assemble_u64(&data, addr), load_u64(&data, addr), "u64 @ {addr}");
         }
-        for addr in 0..(n - 4) {
+        for addr in 0..((n - 4) as usize) {
             assert_eq!(assemble_u32(&data, addr), load_u32(&data, addr), "u32 @ {addr}");
         }
     }
@@ -5238,7 +5238,9 @@ mod tests {
         fn reference_continuation(mut val: u32, out: &mut Vec<u8>) {
             loop {
                 if val < 128 {
-                    out.push(val as u8); // final byte: NO continuation bit
+                    // final byte: NO continuation bit (u8::try_from is
+                    // infallible here — guarded by the val < 128 check)
+                    out.push(u8::try_from(val).unwrap());
                     return;
                 }
                 out.push((val % 128) as u8 | 0x80);
@@ -5260,7 +5262,7 @@ mod tests {
         }
 
         // Full u16 sweep (exhaustive low range).
-        for val in 0..=u16::MAX as u32 {
+        for val in 0..=u32::from(u16::MAX) {
             check_pair(val);
         }
         // Every band boundary ±1 (128^i) + the extremes.
@@ -5273,9 +5275,11 @@ mod tests {
         check_pair(u32::MAX);
         check_pair(u32::MAX - 1);
         // LCG u32 sample (16K values across the full range).
-        let mut state = 0x853c49e6748fea9bu64;
+        let mut state = 0x853c_49e6_748f_ea9b_u64;
         for _ in 0..16_384 {
-            state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            state = state
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
             check_pair((state >> 32) as u32);
         }
     }
