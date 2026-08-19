@@ -667,7 +667,7 @@ mod tests {
 
     /// The rewrite is ONE atomic edit covering the whole loop. As separate
     /// header/slot edits, a foreign same-pass fix overlapping one slot
-    /// (identity_op on `hits[i] * 1`) dropped just that slot while the
+    /// (`identity_op` on `hits[i] * 1`) dropped just that slot while the
     /// header edits survived → `for __elem in hits { total += hits[i]; }`
     /// (dangling `i`). Found by clippy-bench run #1 (Issue 032).
     #[test]
@@ -771,7 +771,7 @@ mod tests {
         assert!(out.is_none(), "__elem collision inside macro must refuse: {out:?}");
     }
 
-    /// The production fixpoint shape from `src/bin/heal.rs` / score_bench's
+    /// The production fixpoint shape from `src/bin/heal.rs` / `score_bench`'s
     /// `heal_fixpoint`: per pass, collect every lint's edits against the
     /// current parse, apply with overlap selection, repeat until quiet.
     fn fixpoint_over(lints: &[&str], source: &str) -> String {
