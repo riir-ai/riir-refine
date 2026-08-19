@@ -55,6 +55,7 @@ pub mod domain;
 pub mod drafter;
 pub mod edit_emitter;
 pub mod embedder;
+pub mod fmt;
 pub mod pruner;
 
 // ── Domain modules (feature-gated) ─────────────────────────────────────────

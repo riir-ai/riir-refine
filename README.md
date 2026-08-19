@@ -245,6 +245,43 @@ cargo run --features latent_retrieval --bin cargo-heal -- --fix --quiet src/
 cargo run --features latent_retrieval --bin cargo-heal -- --fix --quiet --write src/
 ```
 
+## Automatic rustfmt (`--fix --write`)
+
+Healed files are **rustfmt'd automatically** after the write — default-on,
+`--no-fmt` to disable. No manual post-heal formatting step, no SKILL
+required — the discipline is built into the tool:
+
+- **fmt-clean-at-HEAD gate**: rustfmt only touches a healed file when the
+  *original* (pre-heal) content was already rustfmt-clean. Files with
+  pre-existing formatting drift are healed but **left unfmt'd** — a
+  mechanical heal never drags unrelated formatting churn into your diff.
+- **CRLF skip**: CRLF files are reported (`fmt: skip (CRLF)`) and never
+  converted (rustfmt would rewrite every line ending).
+- **Edition-aware**: the rustfmt edition comes from the owning package's
+  `Cargo.toml` (`edition = "..."`, default `2024`) — bare-file rustfmt
+  defaults to a pre-2024 edition and fails on let-chains.
+- **Never fatal**: rustfmt missing from PATH or a parse failure warns and
+  skips; the healed file is always left as valid Rust.
+
+Dry runs (`--fix` without `--write`) report the **fmt plan** per file
+(`fmt: would-format` / `skip (pre-existing drift)` / `skip (CRLF)`) plus a
+run summary:
+
+```text
+$ cargo-heal --fix src/crate/
+fix src/crate/foo.rs (12 edit(s)):
+  [uninlined_format_args   ] line 41
+  fmt: would-format
+fix src/crate/bar.rs (3 edit(s)):
+  ...
+  fmt: skip (pre-existing drift)
+scanned 2 file(s), ... fmt: 1 would-format, 1 skip pre-existing drift
+```
+
+The same summary appears after `--write` (`fmt: 22 formatted, 70 skip
+pre-existing drift, 3 skip CRLF`). Under `--verify` the fmt pass applies
+after the compile gate, to files with kept edits only.
+
 ## Usage
 
 ```rust

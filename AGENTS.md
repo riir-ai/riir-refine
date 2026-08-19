@@ -2177,6 +2177,21 @@ positions + receivers; needless_range_loop `&v`-on-ref-param `&&Vec`
 non-iterator + token-heuristic `v[v[i]]` false positive; unnecessary_unwrap
 receiver mismatch) — see Plan 005 §Phase 6 T6.4 notes.
 
+**Native rustfmt integration (2026-08-19, `src/fmt.rs`).** `--fix --write`
+now rustfmts healed files AUTOMATICALLY — default-on, `--no-fmt` opts out.
+This encodes the heal-slice formatting discipline as tool behavior so no
+SKILL is needed: (1) the **fmt-clean-at-HEAD gate** runs `rustfmt --check`
+against the ORIGINAL on-disk file pre-write — only files already clean get
+fmt'd post-write, so pre-existing drift never enters a mechanical diff;
+(2) **CRLF files are skipped** (rustfmt would convert every EOL — the
+slice-13 trap); (3) the **edition comes from the owning Cargo.toml** (the
+let-chain parse trap; default `2024`); (4) rustfmt missing / parse failure
+→ warning + skip, never fatal. Dry runs report the per-file **fmt plan**
+(`fmt: would-format` / `skip (pre-existing drift)` / `skip (CRLF)`) + a
+summary line; `--verify` applies fmt post-compile-gate to kept files only.
+Documented in README §"Automatic rustfmt" — the manual per-slice fmt-clean
+classification ritual is retired for future consumers.
+
 **Plan 005 Phases 7–14 closeout (2026-08-16) — the plan is COMPLETE as a
 document: every task shipped, refuted, or defer-marked with a measured
 reason.** No phase is left "not started".

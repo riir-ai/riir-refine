@@ -10,13 +10,17 @@
 //! each file + apply their span-preserving edits — rust_perf rules plus the
 //! structural clippy lints (the three type-blind clippy proposers stay
 //! suggest-only; see the clippy proposers' module docs). Without `--write`,
-//! fixed files print a per-edit review (rule + the changed span); with
-//! `--write`, the spliced file is written in place. Everything outside a
-//! matched span stays byte-identical — so written output keeps pre-existing
-//! indentation verbatim where rustfmt would reindent (e.g. match_bool mixed
-//! block/expr arms); run rustfmt on the written files afterwards (Issue 027
-//! T3 deferral). `--fix` ALSO runs the suggest pass
-//! unless `--quiet` is given, so rules without proposers still surface.
+//! fixed files print a per-edit review (rule + the changed span) plus the
+//! fmt plan; with `--write`, the spliced file is written in place and then
+//! rustfmt'd AUTOMATICALLY when the original was already rustfmt-clean
+//! (`--no-fmt` disables; pre-existing-drift + CRLF files are always skipped
+//! so no formatting churn enters a mechanical diff — see src/fmt.rs).
+//! Everything outside a matched span stays byte-identical — so written
+//! output keeps pre-existing indentation verbatim where rustfmt would
+//! reindent (e.g. match_bool mixed block/expr arms); the automatic fmt pass
+//! closes the old Issue 027 T3 manual-rustfmt deferral. `--fix` ALSO runs
+//! the suggest pass unless `--quiet` is given, so rules without proposers
+//! still surface.
 //!
 //! Run (in-repo):
 //!
@@ -57,15 +61,14 @@ fn default_memory_path() -> PathBuf {
     base.join("riir-clippy").join("memory.json")
 }
 
-/// Print the per-edit fix review + (with --write) write the spliced file.
-/// `edits` are `(rule_id, final line, replacement, restore)` — only the
-/// first two fields print here; the last two exist for the verify path.
+/// Print the per-edit fix review + fmt annotation. `edits` are
+/// `(rule_id, final line, replacement, restore)` — only the first two
+/// fields print here; the last two exist for the verify path.
+/// `fmt_note` is the per-file fmt-plan/outcome annotation (`None` disables).
 fn print_fix_review(
     display: &str,
     edits: &[(String, usize, String, String)],
-    write: bool,
-    file: &Path,
-    current: &str,
+    fmt_note: Option<&str>,
 ) {
     if edits.is_empty() {
         return;
@@ -74,10 +77,71 @@ fn print_fix_review(
     for (rule_id, line, _, _) in edits {
         println!("  [{:<24}] line {line}", rule_id);
     }
-    if write {
-        std::fs::write(file, current).unwrap_or_else(|e| {
-            eprintln!("write failed for {display}: {e}");
-        });
+    if let Some(note) = fmt_note {
+        println!("  fmt: {note}");
+    }
+}
+
+/// Write the healed file + run the automatic fmt pass when eligible
+/// (default-on; `--no-fmt` off). Returns the annotation for the review.
+/// `decision` is computed against the ORIGINAL on-disk file BEFORE this
+/// call (see `fmt::decide`).
+fn write_with_fmt(
+    file: &Path,
+    current: &str,
+    decision: Option<riir_clippy::fmt::FmtDecision>,
+    edition: &str,
+    write: bool,
+    fmt_summary: &mut riir_clippy::fmt::FmtSummary,
+) -> Option<String> {
+    use riir_clippy::fmt::FmtDecision;
+    if !write {
+        // Dry run: report the plan only (nothing written).
+        let decision = decision?;
+        fmt_summary.dry = true;
+        match decision {
+            FmtDecision::Format => fmt_summary.formatted += 1,
+            FmtDecision::SkipDrift => fmt_summary.skip_drift += 1,
+            FmtDecision::SkipCrlf => fmt_summary.skip_crlf += 1,
+        }
+        return Some(
+            match decision {
+                FmtDecision::Format => "would-format",
+                FmtDecision::SkipDrift => "skip (pre-existing drift)",
+                FmtDecision::SkipCrlf => "skip (CRLF)",
+            }
+            .to_string(),
+        );
+    }
+    // Write mode: ALWAYS write the healed text first — the fmt pass is
+    // strictly additive on top (`--no-fmt` / a missing decision must never
+    // block the write itself).
+    std::fs::write(file, current).unwrap_or_else(|e| {
+        eprintln!("write failed for {}: {e}", file.display());
+    });
+    let decision = decision?;
+    match decision {
+        FmtDecision::Format => {
+            match riir_clippy::fmt::apply(file, edition) {
+                Ok(()) => {
+                    fmt_summary.formatted += 1;
+                    Some("formatted".to_string())
+                }
+                Err(e) => {
+                    fmt_summary.failed += 1;
+                    eprintln!("fmt failed for {}: {e}", file.display());
+                    Some(format!("FAILED ({e})"))
+                }
+            }
+        }
+        FmtDecision::SkipDrift => {
+            fmt_summary.skip_drift += 1;
+            Some("skip (pre-existing drift)".to_string())
+        }
+        FmtDecision::SkipCrlf => {
+            fmt_summary.skip_crlf += 1;
+            Some("skip (CRLF)".to_string())
+        }
     }
 }
 
@@ -97,17 +161,20 @@ fn usage() -> ! {
 
 USAGE:
     cargo heal --suggest [--domain <auto|clippy|perf|kernel>] [--top-k <N>] <path>...
-    cargo heal --fix [--write] [--quiet] [--verify [--verify-args <s>]] [--top-k <N>] <path>...
+    cargo heal --fix [--write] [--no-fmt] [--quiet] [--verify [--verify-args <s>]] [--top-k <N>] <path>...
 
     --suggest       Suggest mode: print matching rules per code span (no edits).
     --fix           Fix mode: apply the compiled-in proposers' span-preserving edits
                     ({} perf rules + {} clippy lints: {} | {}). The proposer's visitor
                     is the gate — latent suggestions never auto-apply.
-    --write         With --fix: write the spliced file in place. Without it, print a
-                    per-edit review (default: review only). Output preserves the
-                    surrounding text verbatim — run rustfmt afterwards for final
-                    formatting (Issue 027 T3).
+    --write         With --fix: write the spliced file in place, then rustfmt it
+                    AUTOMATICALLY when the original was already rustfmt-clean
+                    (pre-existing drift + CRLF files are skipped — no formatting
+                    churn enters a mechanical diff). Without --write: per-edit
+                    review incl. the fmt plan (would-format / skip drift / skip CRLF).
     --quiet         With --fix: skip the --suggest pass (only show fixes).
+    --no-fmt        Disable the automatic post-write rustfmt pass (it is
+                    default-on; see src/fmt.rs for the discipline it encodes).
 {}    --domain        Filter suggest output to one domain (default: auto — all enabled).
     --top-k <N>     Rules per span per domain (default 3).
     <path>...       Files or directories to scan. `.rs` always; with the
@@ -132,6 +199,10 @@ struct Args {
     fix: bool,
     write: bool,
     quiet: bool,
+    /// `--no-fmt`: disable the automatic post-heal rustfmt pass (default
+    /// ON with --fix --write / --verify — see src/fmt.rs for the discipline
+    /// it encodes). Dry runs always report the fmt plan.
+    no_fmt: bool,
     domain: Option<DomainId>,
     top_k: usize,
     verify: bool,
@@ -145,6 +216,7 @@ fn parse_args() -> Args {
         fix: false,
         write: false,
         quiet: false,
+        no_fmt: false,
         domain: None,
         top_k: 3,
         verify: false,
@@ -158,6 +230,7 @@ fn parse_args() -> Args {
             "--fix" => args.fix = true,
             "--write" => args.write = true,
             "--quiet" => args.quiet = true,
+            "--no-fmt" => args.no_fmt = true,
             "--verify" => args.verify = true,
             "--verify-args" => {
                 let Some(value) = it.next() else {
@@ -393,6 +466,21 @@ fn main() {
     // loop (reverted edits must not appear as "fixed" in the review).
     #[cfg(feature = "fix_verify")]
     let mut verify_batches: Vec<riir_clippy::fix_verify::FileEditSet> = Vec::new();
+    // Native fmt (src/fmt.rs): per-batch decisions for the verify path —
+    // decided against the ORIGINAL file pre-verify, applied post-verify to
+    // batches with ≥1 kept edit (a fully-reverted file is back at its
+    // already-clean original — nothing to format).
+    #[cfg(feature = "fix_verify")]
+    let mut verify_fmt: Vec<(PathBuf, riir_clippy::fmt::FmtDecision, String)> = Vec::new();
+
+    // Native fmt pass: default-on with --fix (--no-fmt disables). Decisions
+    // only compute when rustfmt is reachable; one warning otherwise.
+    let fmt_enabled = args.fix && !args.no_fmt;
+    let fmt_active = fmt_enabled && riir_clippy::fmt::rustfmt_available();
+    if fmt_enabled && !fmt_active {
+        eprintln!("fmt: rustfmt not found on PATH — automatic formatting disabled (--no-fmt silences this)");
+    }
+    let mut fmt_summary = riir_clippy::fmt::FmtSummary::default();
 
     for file in &files {
         let Ok(src) = std::fs::read_to_string(file) else {
@@ -557,6 +645,20 @@ fn main() {
             })
             .collect();
 
+        // ── native fmt pass (src/fmt.rs): decide against the ORIGINAL
+        // on-disk file BEFORE anything is written. Dry runs report the
+        // plan; write/verify mode applies it after the final file state
+        // settles. `--no-fmt` or a missing rustfmt disables (one warning).
+        let fmt_decision = if args.fix && !all_edits.is_empty() && fmt_active {
+            let edition = riir_clippy::fmt::edition_for(file);
+            Some((
+                riir_clippy::fmt::decide(&src, file, &edition),
+                edition,
+            ))
+        } else {
+            None
+        };
+
         #[cfg(feature = "fix_verify")]
         if args.verify {
             if !all_edits.is_empty() {
@@ -576,11 +678,26 @@ fn main() {
                         })
                         .collect(),
                 });
+                if let Some((decision, edition)) = &fmt_decision {
+                    verify_fmt.push((file.clone(), *decision, edition.clone()));
+                }
             }
             // Suggest pass still runs below (unless --quiet) — the fix
             // review prints after verification.
         } else {
-            print_fix_review(&display, &all_edits, args.write, file, &current);
+            let note = if all_edits.is_empty() {
+                None
+            } else {
+                write_with_fmt(
+                    file,
+                    &current,
+                    fmt_decision.as_ref().map(|(d, _)| *d),
+                    fmt_decision.as_ref().map_or("2024", |(_, e)| e.as_str()),
+                    args.write,
+                    &mut fmt_summary,
+                )
+            };
+            print_fix_review(&display, &all_edits, note.as_deref());
             if !all_edits.is_empty() {
                 n_fixed_files += 1;
                 n_fixed_edits += all_edits.len();
@@ -594,7 +711,19 @@ fn main() {
 
         #[cfg(not(feature = "fix_verify"))]
         {
-            print_fix_review(&display, &all_edits, args.write, file, &current);
+            let note = if all_edits.is_empty() {
+                None
+            } else {
+                write_with_fmt(
+                    file,
+                    &current,
+                    fmt_decision.as_ref().map(|(d, _)| *d),
+                    fmt_decision.as_ref().map_or("2024", |(_, e)| e.as_str()),
+                    args.write,
+                    &mut fmt_summary,
+                )
+            };
+            print_fix_review(&display, &all_edits, note.as_deref());
             if !all_edits.is_empty() {
                 n_fixed_files += 1;
                 n_fixed_edits += all_edits.len();
@@ -785,6 +914,36 @@ fn main() {
             for e in &kept {
                 println!("  [{:<24}] line {}", e.rule_id, e.final_line);
             }
+            // Native fmt: the verified kept state is on disk — apply the
+            // decided pass now (default-on; decisions were made against the
+            // pre-heal originals above).
+            if let Some((_, decision, edition)) =
+                verify_fmt.iter().find(|(p, _, _)| *p == b.path)
+            {
+                use riir_clippy::fmt::FmtDecision;
+                match decision {
+                    FmtDecision::Format => {
+                        match riir_clippy::fmt::apply(&b.path, edition) {
+                            Ok(()) => {
+                                fmt_summary.formatted += 1;
+                                println!("  fmt: formatted");
+                            }
+                            Err(e) => {
+                                fmt_summary.failed += 1;
+                                eprintln!("fmt failed for {}: {e}", b.path.display());
+                            }
+                        }
+                    }
+                    FmtDecision::SkipDrift => {
+                        fmt_summary.skip_drift += 1;
+                        println!("  fmt: skip (pre-existing drift)");
+                    }
+                    FmtDecision::SkipCrlf => {
+                        fmt_summary.skip_crlf += 1;
+                        println!("  fmt: skip (CRLF)");
+                    }
+                }
+            }
         }
     }
     // Issue 018: persist recorded trajectories (skip when nothing new).
@@ -832,14 +991,20 @@ fn main() {
     } else {
         String::new()
     };
+    let fmt_note = if args.fix && fmt_summary.total() > 0 {
+        format!(", {}", fmt_summary.line())
+    } else {
+        String::new()
+    };
     println!(
-        "\nscanned {} file(s), {} span(s), {} with suggestions (top-{} per domain){}{}",
+        "\nscanned {} file(s), {} span(s), {} with suggestions (top-{} per domain){}{}{}",
         files.len(),
         n_chunks,
         n_suggestions,
         args.top_k,
         mode,
-        non_syn_note
+        non_syn_note,
+        fmt_note
     );
 }
 
