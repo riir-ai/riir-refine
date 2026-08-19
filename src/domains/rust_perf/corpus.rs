@@ -10,8 +10,8 @@
 //! unconditional wins + honestly NotBenchable rules.
 //!
 //! 73 entries across 12 categories (complexity 15, allocation 18, simd 7,
-//! layout 6, iterators 9, concurrency 4, io 2, arithmetic 6, dispatch 2,
-//! caching 2, bevy 1, wasm 1). 63 are benchable; 10 are honestly
+//! layout 6, iterators 9, concurrency 4, io 3, arithmetic 6, dispatch 2,
+//! caching 2, bevy 1, wasm 1). 64 are benchable; 10 are honestly
 //! NotBenchable (8 external-runtime/size-class + 2 metric-mismatch, Issue 014).
 //! Batch 48 (idle-queue item 11, 2026-08-16) added the 8 online-search
 //! candidates (perf-book std-types + iterators chapters): collect-append-to-
@@ -34,7 +34,9 @@
 //! Batch 67 (2026-08-19, Research 074 — the regex-automata distill) added
 //! byte-find-position-to-memchr. Batch 68 (2026-08-19, Research 075 — the
 //! tantivy utility-layer distill) added varint-compose-word-single-store
-//! (+ the tz-blsr xor-clear anti-shape rider note).
+//! (+ the tz-blsr xor-clear anti-shape rider note). Batch 69 (2026-08-19,
+//! Research 075 §Secondary — the T6 refutation) added
+//! unaligned-word-load-from-bytes.
 //!
 //! ## Bench specs (behind `rust_perf_bench`)
 //!
@@ -43,7 +45,7 @@
 //! `run_buggy` / `run_fixed` entry points. The bench validator generates a
 //! temp bin crate from the spec + runs a timing loop at multiple sizes.
 //!
-//! Currently benchable (63/73):
+//! Currently benchable (64/74):
 //! - `o1-lookup` (Vec scan vs HashMap lookup — clear O(n) vs O(1))
 //! - `bsearch-sorted-slice` (linear scan vs binary search — O(n) vs O(log n) on sorted data)
 //! - `dedupe-hashset-vs-vec` (Vec::contains loop vs HashSet collect — O(n²) vs O(n))
@@ -109,8 +111,9 @@
 //! - `sortedness-check-branchless-accumulate` (early-exit sortedness validation → branchless `sorted &=` full scan, vectorizes — usually-sorted regime, Batch 66)
 //! - `byte-find-position-to-memchr` (u8 slice iter().position byte scan → memchr::memchr SIMD block scan — position is NOT specialized in std, contains is; dep-gated, Batch 67)
 //! - `varint-compose-word-single-store` (per-byte write_all varint loop → 5-threshold ladder + single write_all — MEASURED ParetoDominated on aarch64 AND x86 across writer regimes (the 4090-box re-gate: 0.40-0.50x there, HARDER): the honest-loser annotation stops the tantivy folk port; Batch 68)
+//! - `unaligned-word-load-from-bytes` (shift/or byte-assembly word read → one unaligned from_le_bytes load — ParetoDominant cross-arch: u64 1.4-2.2x, u32 1.2-1.4x, both arches; the T6 defer refuted; Batch 69)
 //!
-//! Not benchable (10/72) — honest:
+//! Not benchable (10/74) — honest:
 //! - `layout-reorder` (struct size — deterministic `size_of`, not a runtime
 //!   microbench; the cache-utilization claim needs a specific access pattern)
 //! - `repr-u8-enum` (enum size — deterministic `size_of`, same class as
@@ -1616,6 +1619,31 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
             ),
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: Some(varint_compose_word_single_store_bench_spec()),
+        },
+        // ── io: shift/or byte-assembly word read → one unaligned from_le_bytes load ──
+        // Source: tantivy bitpacker (Batch 69, Research 075 §Secondary — the
+        // Plan 013 T6 defer MEASURED-REFUTED: the varint honest-loser was
+        // CALL-COUNT (OoO hides N dyn-dispatch writer calls); this is
+        // LOAD-COUNT (8 separately-loaded bytes vs 1 fused unaligned load)
+        // — a different mechanism class, and OoO cannot hide 8 L1 loads
+        // behind 1. LLVM does NOT fuse the shift/or assembly chain into a
+        // byte copy (the dependency chain + per-byte bounds checks block
+        // it). Cross-arch probe 2026-08-19 (M3 aarch64 load ~118 interleaved
+        // + 4090-box x86 load 7-31, median-of-5): u64 2.17-2.23x / 1.39-1.47x,
+        // u32 1.27-1.38x / 1.20-1.29x — ParetoDominant BOTH arches BOTH
+        // widths, G1 bit-identical at EVERY byte alignment. u16 excluded
+        // (2 bytes, unmeasured, diminishing). The bit-packed variant
+        // (tantivy `BitUnpacker::get`: + shift+mask after the load) is the
+        // same rule applied further along.
+        PerfRule {
+            rule_id: "unaligned-word-load-from-bytes".to_string(),
+            name: "Shift/or byte-assembly word read (8 loads + 7 shifts + 7 ors) → one unaligned slice from_le_bytes load".to_string(),
+            category: "io".to_string(),
+            buggy_code: "fn read_u64_le(data: &[u8], addr: usize) -> u64 {\n    // 8 indexed loads + 7 shifts + 7 ors — a serial assembly chain\n    (data[addr] as u64)\n        | ((data[addr + 1] as u64) << 8)\n        | ((data[addr + 2] as u64) << 16)\n        | ((data[addr + 3] as u64) << 24)\n        | ((data[addr + 4] as u64) << 32)\n        | ((data[addr + 5] as u64) << 40)\n        | ((data[addr + 6] as u64) << 48)\n        | ((data[addr + 7] as u64) << 56)\n}".to_string(),
+            fixed_code: "fn read_u64_le(data: &[u8], addr: usize) -> u64 {\n    // ONE unaligned 8-byte load — LLVM lowers from_le_bytes over a\n    // slice copy to a single unaligned u64 load\n    let bytes: [u8; 8] = (&data[addr..addr + 8]).try_into().unwrap();\n    u64::from_le_bytes(bytes)\n}".to_string(),
+            context_notes: None,
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(unaligned_word_load_from_bytes_bench_spec()),
         },
     ])
 }
@@ -4978,6 +5006,83 @@ pub fn run_fixed(input: &Input) {
     }
 }
 
+/// Bench spec for `unaligned-word-load-from-bytes` (Batch 69, Research
+/// 075 §Secondary — the Plan 013 T6 refutation): the 8-term
+/// shift/or byte-assembly chain vs ONE unaligned `from_le_bytes` load.
+///
+/// **Cross-arch probe 2026-08-19 (median-of-5, interleaved arms): u64
+/// 2.17-2.23x on aarch64 (M3, load ~118 shared) / 1.39-1.47x on x86 (4090
+/// box, load 7-31); u32 1.27-1.38x / 1.20-1.29x — ParetoDominant BOTH
+/// arches BOTH widths.** The mechanism is LOAD-COUNT (8 L1 loads + the
+/// serial shift/or chain vs 1 fused load) — distinct from the varint
+/// honest-loser's call-count class (OoO hides N dyn-dispatch calls; it
+/// cannot hide 8 loads behind 1). The u32 family shares the buffer; the
+/// harness measures the u64 headline (the family's worst-case-for-buggy
+/// shape). G1: bit-identical at EVERY byte alignment (the exhaustive corpus
+/// test below).
+#[cfg(feature = "rust_perf_bench")]
+fn unaligned_word_load_from_bytes_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![100_000, 1_000_000, 10_000_000],
+        harness: r#"
+mod buggy {
+    pub fn read_u64_le(data: &[u8], addr: usize) -> u64 {
+        (data[addr] as u64)
+            | ((data[addr + 1] as u64) << 8)
+            | ((data[addr + 2] as u64) << 16)
+            | ((data[addr + 3] as u64) << 24)
+            | ((data[addr + 4] as u64) << 32)
+            | ((data[addr + 5] as u64) << 40)
+            | ((data[addr + 6] as u64) << 48)
+            | ((data[addr + 7] as u64) << 56)
+    }
+}
+
+mod fixed {
+    pub fn read_u64_le(data: &[u8], addr: usize) -> u64 {
+        let bytes: [u8; 8] = (&data[addr..addr + 8]).try_into().unwrap();
+        u64::from_le_bytes(bytes)
+    }
+}
+
+pub struct Input {
+    data: Vec<u8>,
+    idxs: Vec<usize>,
+}
+
+pub fn make_input(n: usize) -> Input {
+    // 4 KiB buffer (L1-resident — the load-count mechanism isolated from
+    // cache-miss noise) + a deterministic address scatter hitting every
+    // byte alignment.
+    const BUF: usize = 4096;
+    let data: Vec<u8> = (0..BUF as u32)
+        .map(|i| (i.wrapping_mul(2_654_435_761) >> 24) as u8)
+        .collect();
+    let idxs: Vec<usize> = (0..n).map(|i| i.wrapping_mul(48_271) % (BUF - 8)).collect();
+    Input { data, idxs }
+}
+
+pub fn run_buggy(input: &Input) {
+    let input = std::hint::black_box(input);
+    let mut acc = 0u64;
+    for &a in &input.idxs {
+        acc = acc.wrapping_add(buggy::read_u64_le(&input.data, a));
+    }
+    std::hint::black_box(acc);
+}
+
+pub fn run_fixed(input: &Input) {
+    let input = std::hint::black_box(input);
+    let mut acc = 0u64;
+    for &a in &input.idxs {
+        acc = acc.wrapping_add(fixed::read_u64_le(&input.data, a));
+    }
+    std::hint::black_box(acc);
+}"#
+            .to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -4993,9 +5098,9 @@ mod tests {
     }
 
     #[test]
-    fn seed_corpus_has_seventy_three_entries_across_twelve_categories() {
+    fn seed_corpus_has_seventy_four_entries_across_twelve_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 73);
+        assert_eq!(corpus.entries.len(), 74);
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
@@ -5016,8 +5121,9 @@ mod tests {
         // added division-by-invariant-multiplication; Batch 62 added
         // newton-refinement-vs-hardware-transcendental); dispatch has 2
         // (Batch 61 added keyword-map-to-match); caching has 2 (Issue 014
-        // added regex-hoist-lazylock); io has 2 (Batch 68 added
-        // varint-compose-word-single-store); bevy, wasm have 1 each.
+        // added regex-hoist-lazylock); io has 3 (Batch 68 added
+        // varint-compose-word-single-store; Batch 69 added
+        // unaligned-word-load-from-bytes); bevy, wasm have 1 each.
         assert_eq!(categories.len(), 12);
     }
 
@@ -5036,6 +5142,50 @@ mod tests {
     /// convention-specific.
     #[test]
     #[allow(clippy::too_many_lines)] // exhaustive gate: both conventions + boundaries belong together
+    fn unaligned_word_load_matches_assembly_exhaustive() {
+        // Batch 69 G1: the from_le_bytes slice read must be bit-identical to
+        // the shift/or assembly at EVERY byte alignment over a wide buffer,
+        // u64 AND u32 (the cross-arch probe's exhaustive half, pinned as a
+        // standing gate).
+        let n = 4096usize;
+        let data: Vec<u8> = (0..n as u32)
+            .map(|i| (i.wrapping_mul(2_654_435_761) >> 24) as u8)
+            .collect();
+
+        fn assemble_u64(data: &[u8], addr: usize) -> u64 {
+            (data[addr] as u64)
+                | ((data[addr + 1] as u64) << 8)
+                | ((data[addr + 2] as u64) << 16)
+                | ((data[addr + 3] as u64) << 24)
+                | ((data[addr + 4] as u64) << 32)
+                | ((data[addr + 5] as u64) << 40)
+                | ((data[addr + 6] as u64) << 48)
+                | ((data[addr + 7] as u64) << 56)
+        }
+        fn load_u64(data: &[u8], addr: usize) -> u64 {
+            let bytes: [u8; 8] = (&data[addr..addr + 8]).try_into().unwrap();
+            u64::from_le_bytes(bytes)
+        }
+        fn assemble_u32(data: &[u8], addr: usize) -> u32 {
+            (data[addr] as u32)
+                | ((data[addr + 1] as u32) << 8)
+                | ((data[addr + 2] as u32) << 16)
+                | ((data[addr + 3] as u32) << 24)
+        }
+        fn load_u32(data: &[u8], addr: usize) -> u32 {
+            let bytes: [u8; 4] = (&data[addr..addr + 4]).try_into().unwrap();
+            u32::from_le_bytes(bytes)
+        }
+
+        for addr in 0..(n - 8) {
+            assert_eq!(assemble_u64(&data, addr), load_u64(&data, addr), "u64 @ {addr}");
+        }
+        for addr in 0..(n - 4) {
+            assert_eq!(assemble_u32(&data, addr), load_u32(&data, addr), "u32 @ {addr}");
+        }
+    }
+
+    #[test]
     fn varint_ladder_matches_reference_loop_exhaustive() {
         // (a) The SHIPPED ladder — mirror of the corpus fixture (same math).
         fn ladder_stop_bit_last(val: u32, out: &mut Vec<u8>) {
@@ -5356,10 +5506,10 @@ mod tests {
 
     #[cfg(feature = "rust_perf_bench")]
     #[test]
-    fn sixty_three_rules_have_bench_specs() {
+    fn sixty_four_rules_have_bench_specs() {
         let corpus = build_perf_seed_corpus();
         let with_spec = corpus.entries.iter().filter(|e| e.bench_spec.is_some()).count();
-        assert_eq!(with_spec, 63, "expected 63 benchable rules, got {with_spec}");
+        assert_eq!(with_spec, 64, "expected 64 benchable rules, got {with_spec}");
     }
 
     #[cfg(feature = "rust_perf_bench")]
@@ -5439,7 +5589,7 @@ mod tests {
             .iter()
             .filter(|e| e.context_notes.is_none())
             .count();
-        assert_eq!(unannotated, 57, "expected 57 unannotated rules (73 - 16 annotated)");
+        assert_eq!(unannotated, 58, "expected 58 unannotated rules (74 - 16 annotated)");
     }
 
     /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -5500,7 +5650,7 @@ mod tests {
 
         // The unannotated rules must return None from the trait too.
         let unannotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_none()).collect();
-        assert_eq!(unannotated.len(), 57, "expected 57 unannotated rules");
+        assert_eq!(unannotated.len(), 58, "expected 58 unannotated rules");
         for rule in &unannotated {
             assert!(HealEntry::context_notes(*rule).is_none(), "{} should have no context_notes", rule.rule_id);
         }

@@ -19,7 +19,7 @@
 
 ## Corpus
 
-73 rules across 12 categories (rust-optimize skill checklist +
+74 rules across 12 categories (rust-optimize skill checklist +
 nnethercote/perf-book + rustc-hash/bevy real-world patterns + the hotpath-rs
 profiling guide, Research 032; Batch 48 added the 8 online-search candidates
 from the perf-book std-types + iterators chapters; Batch 53 added the 4
@@ -33,7 +33,7 @@ oxc-article rules: `keyword-map-to-match` + `usize-index-to-u32`; Batch 62
 (2026-08-19, Research 073 — the polars kernel-idiom distill) added
 `sparse-set-bit-iteration-tz-blsr` + `sortedness-check-branchless-accumulate`; Batch 67 (2026-08-19, Research 074 — the regex-automata distill) added
 `byte-find-position-to-memchr`; Batch 68 (2026-08-19, Research 075 — the
-tantivy utility-layer distill) added the annotated `varint-compose-word-single-store`).
+tantivy utility-layer distill) added the annotated `varint-compose-word-single-store`; Batch 69 added `unaligned-word-load-from-bytes` — the T6 defer refuted, a cross-arch WINNER).
 Allocation is the deepest
 category (18 rules). Complexity has 15 (Batch 64 added `debug-assert-length-hoist`). Iterators has 9 (Batch 66 added `sortedness-check-branchless-accumulate`; Batch 67 added `byte-find-position-to-memchr`). Simd 7 (Batch 62 added `transposed-weight-register-gemv`; Batch 64 added `loop-order-innermost-contiguous`), layout 6
 (Batch 61 added `usize-index-to-u32`);
@@ -43,12 +43,12 @@ caching has 2 (Issue 014 added `regex-hoist-lazylock`); arithmetic has 6
 `division-by-invariant-multiplication`; Batch 62 added the annotated
 `newton-refinement-vs-hardware-transcendental`; Batch 66 added
 `sparse-set-bit-iteration-tz-blsr`); dispatch has 2 (Batch 61 added
-`keyword-map-to-match`); io has 2 (Batch 68 added
-`varint-compose-word-single-store`); the rest have 1
+`keyword-map-to-match`); io has 3 (Batch 68 added
+`varint-compose-word-single-store`; Batch 69 added `unaligned-word-load-from-bytes`); the rest have 1
 each. 63 are benchable (carry a `BenchSpec`); 10 are honestly
 `NotBenchable` — 8 need external runtimes or are structural (size_of,
 memory, fairness), 2 are **metric-mismatch** (Issue 014 T2.3/T2.4: the cost
-is contention latency / queue depth, not wall-clock). 16 of 73 carry
+is contention latency / queue depth, not wall-clock). 16 of 74 carry
 `context_notes` — 11 verdict-class (4 `ParetoDominated` + 7
 regime-fragile/Mixed — Batch 48 added the `filter-count-to-any` folk-wisdom
 refutation: the VECTORIZED count loop beats `any()`'s scalar early-exit at
@@ -128,6 +128,7 @@ annotated rules as context-dependent, not unconditional suggestions.
 | `sortedness-check-branchless-accumulate` | iterators | ✅ 2.98/2.72x ParetoDominant @100K/1M | ⚠️ `context_notes` | sortedness early-exit validation → branchless `sorted &= prev <= v` full scan (Batch 66, polars distill — usually-sorted regime; early-violation data flips it, the mirrored regime of `filter-count-to-any`) |
 | `byte-find-position-to-memchr` | iterators | ✅ 5.00/19.25/25.31/25.37x ParetoDominant (32B/256B/4K/64K) | — | `xs.iter().position(|&b| b == lit)` on `&[u8]` → `memchr::memchr` (Batch 67, regex-automata distill — position is NOT std-specialized, contains IS; dep-gated on a direct memchr dep) |
 | `varint-compose-word-single-store` | io | ❌ ParetoDominated (0/3 sizes × 3 regimes) | ⚠️ `context_notes` | per-byte `write_all` varint loop → 5-threshold ladder compose + single `write_all` (Batch 68, tantivy distill — **MEASURED HONEST LOSER on aarch64 AND x86 (0.40-0.50x there — harder; cross-arch re-gated 2026-08-19)**: LLVM strength-reduces the constant `%128 /128`, and OoO hides the call chain; the entry exists to STOP the folk port — the `precompute-table` class) |
+| `unaligned-word-load-from-bytes` | io | ✅ 3.67-3.76x ParetoDominant (cross-arch: u64 1.4-2.2x, u32 1.2-1.4x both arches) | — | shift/or byte-assembly word read (8 loads + 7 shifts + 7 ors) → ONE unaligned `from_le_bytes` slice load (Batch 69, tantivy bitpacker distill — the Plan 013 T6 defer refuted: LOAD-count vs the varint rule's CALL-count; OoO cannot hide 8 L1 loads behind 1) |
 | `keyword-map-to-match` | dispatch | ✅ 5.23-5.58x ParetoDominant | — | static-keyword `LazyLock<HashMap<&str, V>>` dispatch → plain `match` on string literals (Batch 61, oxc distill — LLVM lowers the match to a switch on string LENGTH + inline compares; the HashMap pays SipHash per lookup; oxc failed to beat the match with a gperf-style perfect hash, then found the length-switch in `--emit=llvm-ir`; static key sets only) |
 | `usize-index-to-u32` | layout | ✅ 1.81-1.99x ParetoDominant | — | `usize` index/offset fields in high-volume structs → `u32` (Batch 61, oxc Span distill — halves the struct: 16B → 8B, twice the elements per cache line; oxc measured +5% on large parser files; domain must genuinely bound below 2³²) |
 | `transposed-weight-register-gemv` | simd | ✅ 1.18-6.08x ParetoDominant | — | row-major per-row dot (serial scalar accumulator chain + horizontal reduce) → transposed weights, per-input broadcast FMA into output-vector accumulators (Batch 62, microGPT-C distill — the win GROWS at large nin: strict-FP Rust cannot vectorize the scalar accumulator chain without reassociation, so the row-dot degrades further; llama.cpp's fine row-major dots use explicit multi-accumulator SIMD — not what portable scalar code gets; architectural rule — weights pack transposed once at weight-freeze, no proposer) |
