@@ -1,10 +1,24 @@
 //! `clippy::needless_range_loop` — `for i in 0..v.len() { body_using(v[i]) }`
 //! → `for __elem in &v { body_with_elem }`.
 //!
-//! Span-preserving (T6.4): three edit kinds — the loop pat (`i` → the fresh
-//! binding), the iterable (`0..v.len()` → the collection, by-reference form
-//! chosen by param resolution), and each exact `v[i]` index expression (→
-//! the fresh binding). All replacement fragments are ORIGINAL source text.
+//! Span-preserving (T6.4): ONE atomic edit covering the whole loop, whose
+//! replacement is the loop's original text with three substitution kinds
+//! spliced in — the loop pat (`i` → the fresh binding), the iterable
+//! (`0..v.len()` → the collection, by-reference form chosen by param
+//! resolution), and each exact `v[i]` index expression (→ the fresh
+//! binding). All replacement fragments are ORIGINAL source text.
+//!
+//! ## Atomicity (Issue 032)
+//!
+//! The header + slot substitutions must land TOGETHER — the rewrite is
+//! invalid half-applied. As separate edits, a foreign same-pass fix
+//! overlapping one slot (`identity_op` on `hits[i] * 1` — same start, longer
+//! end) was dropped by `apply_edits_traced`'s outer-first overlap selection
+//! while the header edits survived → `for __elem in hits { hits[i] }`
+//! (dangling `i`). One whole-loop edit is all-or-nothing under the same
+//! selection; a nested foreign edit is dropped instead and re-fires on the
+//! next fixpoint pass (the documented nesting semantics — an outer edit's
+//! replacement keeps inner nodes' ORIGINAL text).
 //!
 //! ## Detection (exact AST analysis, replacing the token heuristic)
 //!
@@ -37,7 +51,8 @@
 //! a `&`-typed param iterates as `v`, an owned param as `&v`. Anything the
 //! resolver cannot pin (locals, fields, non-ident paths) skips the rewrite.
 
-use super::{edit, for_each_fn, src, SourceEdit};
+use super::{apply_edits, edit, for_each_fn, src, SourceEdit};
+use syn::spanned::Spanned;
 use syn::visit::Visit;
 use syn::{BinOp, Expr, ExprForLoop, ExprLit, ExprRange, File, Lit, Signature};
 
@@ -111,14 +126,33 @@ impl Collector<'_, '_> {
             None => return None,
         };
 
-        let mut edits = vec![
+        // Issue 032: ONE atomic edit spanning the whole loop. The header +
+        // every slot substitution must land together; as separate edits a
+        // foreign same-pass fix overlapping one slot (identity_op on
+        // `hits[i] * 1`) dropped just that slot while the headers survived
+        // → `for __elem in hits { hits[i] }` (dangling `i`). One edit is
+        // all-or-nothing under the outer-first overlap selection; nested
+        // foreign edits re-fire on the next fixpoint pass.
+        let span = fl.span().byte_range();
+        let loop_text = self.source.get(span.start..span.end)?;
+        let mut subs = vec![
             edit(&fl.pat, FRESH_PREFIX.to_string()),
             edit(&fl.expr, iter_text),
         ];
         for whole in usage.exact {
-            edits.push(edit(whole, FRESH_PREFIX.to_string()));
+            subs.push(edit(whole, FRESH_PREFIX.to_string()));
         }
-        Some(edits)
+        let replacement = apply_edits(
+            loop_text,
+            subs.into_iter()
+                .map(|e| SourceEdit {
+                    start: e.start - span.start,
+                    end: e.end - span.start,
+                    replacement: e.replacement,
+                })
+                .collect(),
+        );
+        Some(vec![SourceEdit { start: span.start, end: span.end, replacement }])
     }
 
     /// Is the single-ident path a fn parameter of reference type?
@@ -454,5 +488,81 @@ mod tests {
         let input = "struct S;\nimpl S {\n    fn total(&self, v: &Vec<i32>) -> i32 { let mut s = 0; for i in 0..v.len() { s += v[i]; } s }\n}";
         let out = propose_fix("needless_range_loop", input).expect("matched");
         assert!(out.contains("for __elem in v { s += __elem; }"), "{out}");
+    }
+
+    // ── Issue 032: same-pass composition must not half-apply the rewrite ──
+
+    /// The rewrite is ONE atomic edit covering the whole loop. As separate
+    /// header/slot edits, a foreign same-pass fix overlapping one slot
+    /// (identity_op on `hits[i] * 1`) dropped just that slot while the
+    /// header edits survived → `for __elem in hits { total += hits[i]; }`
+    /// (dangling `i`). Found by clippy-bench run #1 (Issue 032).
+    #[test]
+    fn rewrite_is_one_atomic_whole_loop_edit() {
+        let input =
+            "pub fn total_damage(hits: &[u32]) -> u32 {\n    let mut total = 0;\n    for i in 0..hits.len() {\n        total += hits[i];\n    }\n    total\n}";
+        let file = syn::parse_file(input).expect("fixture parses");
+        let edits = super::collect_edits(input, &file);
+        assert_eq!(edits.len(), 1, "must be exactly one edit: {edits:?}");
+        let e = &edits[0];
+        assert_eq!(&input[e.start..e.end],
+            "for i in 0..hits.len() {\n        total += hits[i];\n    }",
+            "the one edit must span the whole loop");
+        assert_eq!(e.replacement,
+            "for __elem in hits {\n        total += __elem;\n    }",
+            "replacement carries header + slot rewrites together");
+    }
+
+    /// Reproduces the frozen bench fixture `composite-range_loop_plus_identity_op`
+    /// through the production fixpoint shape (all lints collected per pass,
+    /// overlap-selected splices): the healed loop must compile-ready — every
+    /// `hits[i]` rewritten, no dangling `i`.
+    #[test]
+    fn composes_with_identity_op_without_dangling_index() {
+        let input = "pub fn total_damage(hits: &[u32]) -> u32 {\n    let mut total = 0;\n    for i in 0..hits.len() {\n        total += hits[i] * 1;\n    }\n    total\n}\n";
+        let healed = fixpoint_over(&["identity_op", "double_parens", "needless_range_loop"], input);
+        assert!(healed.contains("for __elem in hits"), "header rewritten: {healed}");
+        assert!(!healed.contains("hits["), "dangling index survived: {healed}");
+        assert!(!healed.contains("* 1"), "identity_op must land too: {healed}");
+    }
+
+    /// Reproduces the frozen bench fixture
+    /// `composite-range_loop_plus_double_parens` — the paren edit's span
+    /// contains the slot edit, same partial-application hazard.
+    #[test]
+    fn composes_with_double_parens_without_dangling_index() {
+        let input = "pub fn offsets(values: &[u32]) -> Vec<u32> {\n    let mut out = Vec::new();\n    for i in 0..values.len() {\n        out.push(((values[i] + 1)));\n    }\n    out\n}\n";
+        let healed = fixpoint_over(&["identity_op", "double_parens", "needless_range_loop"], input);
+        assert!(healed.contains("for __elem in values"), "header rewritten: {healed}");
+        assert!(!healed.contains("values["), "dangling index survived: {healed}");
+    }
+
+    /// The production fixpoint shape from `src/bin/heal.rs` / score_bench's
+    /// `heal_fixpoint`: per pass, collect every lint's edits against the
+    /// current parse, apply with overlap selection, repeat until quiet.
+    fn fixpoint_over(lints: &[&str], source: &str) -> String {
+        let mut current = source.to_string();
+        for _ in 0..4 {
+            let Ok(parsed) = syn::parse_file(&current) else {
+                panic!("intermediate pass stopped parsing: {current}");
+            };
+            let mut edits = Vec::new();
+            for lint in lints {
+                edits.extend(
+                    super::super::collect_edits(lint, &current, &parsed)
+                        .into_iter()
+                        .map(|re| re.edit),
+                );
+            }
+            if edits.is_empty() {
+                break;
+            }
+            let (next, _) = crate::edit_emitter::apply_edits_traced(&current, edits);
+            if next == current {
+                break;
+            }
+            current = next;
+        }
+        current
     }
 }
