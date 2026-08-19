@@ -1304,7 +1304,10 @@ e2e_replay_recovery.rs, wallet_store_crash_atomicity] — re-dry-run when
 their plans close); **riir-ai small-crates slice OPENED the riir-ai
 campaign** (see below). **riir-ai giants: engine/src DONE 2026-08-19**
 (`1e050442a`, 174 files / 979 edits — see the engine slice record below).
-games-civ + gpu + engine tests/benches/examples remain unsized.
+**games-civ DONE 2026-08-19** (`53afc933e`, 142 files / ~1552 edits — slice
+entry below). Remaining: gpu (sibling-adjacent), engine tests/benches,
+games Layer-3 (2 files sibling WIP), poc, mmorpg (excluded until
+wire_router settles).
 
 **riir-ai small-crates slice landed 2026-08-18** (riir-ai `883d51825` via
 the worktree dance — the sibling's live WIP on ffi/gpu/games/721 blocked
@@ -1347,6 +1350,61 @@ the bench_578 class), bench_285 g1+g2 + bench_287 g2 (the documented
 GOAT-FAILED compression-drafter family), quest_lora t4_1. 1 pre-existing
 needless_range_loop documented (quest_style_bridge:471 — counter drives
 forward-position semantics; real clippy's zip suggestion is an owner call).
+
+**riir-ai games-civ slice landed 2026-08-19** (riir-ai `53afc933e` via the
+worktree dance, rebased over 2 mid-session sibling commits): **142 files /
+~1552 edits** (dry-run ground truth 146/1549; mix ≈ 1420
+uninlined_format_args + 74 map_unwrap_or + 15 single_match_else + 7
+match_bool + 1 identity_op) across src (93) + tests (~50) + benches (10) +
+examples (4). **4 validation cycles, ALL count-identical (timing-stripped
+result-line diff = 0):** default 1821/0/33, U1 (npc_sleep_time,
+civ_spatial_cognition,karc_regime_mux) 1875/0/33, U2 (civ_economy,civ_roles,
+civ_commerce,civ_aging,civ_trajectory_collect,ict_bridge — the riir-chain
+cycle) 1960/0/33, benches-examples union. 10 benches exit+output identical
+(bench_005's 30-line latency/sink jitter proven INHERENT via same-binary
+control — post-vs-post2 diff = same 30 lines; bench_392 single wall-time
+line; bench_479 verdicts identical, ns-jitter only). per_npc_clr_demo
+byte-identical. **phase_profile PRE-EXISTING FLAKY (documented not fixed):**
+8 same-binary runs → 7×exit-0 + 1×exit-101 with VARYING overflow panic
+sites (spatial_cognition:141 / map_tick/history.rs:87) — HashMap-order-
+driven debug arithmetic-overflow panics, inherent to the example.
+**Excluded: 4 files / 10 edits behind UNDEFINED features** —
+crowd_attention_bench + crowd_coherence_bench are referenced by
+[[test]]/[[example]] required-features + lib.rs cfg gates but NEVER DEFINED
+in Cargo.toml → those targets can never build (cargo silently skips — the
+riir-train gemma4_lora broken-gate class; owner call to define or remove).
+6 manual fixes for documented divergence classes (2× `{ }`
+empty-placeholder-with-space adjacent to literal `#`; assert_eq! 2nd-level
+macro nesting; closure-inside-sim_msg! non-family-macro opacity; 1×
+map_unwrap_or_else→map_or_else; 2× heal-created map_or(false,·)→is_some_and
+terminal — the Unknown-receiver fallback tripping unnecessary_map_or, the
+Issue-027 class). Remaining documented divergences: 3× array-literal `&[]`
+map_unwrap_or (vocab_clusters.rs:46 in shared + cgsp_production_wiring.rs:
+26,30 — the 2bf2a44 E0308-proof guard class). rustfmt on 34 fmt-clean-at-
+HEAD files (108 pre-existing drift scoped out).
+**THE WORKTREE-BUILD DISCOVERY (exFAT):** E: is exFAT — NO junctions, NO
+symlinks, NO hardlinks (mklink /J → "Local NTFS volumes are required";
+PowerShell New-Item Junction → "Incorrect function") — the /tmp worktree
+dance is IMPOSSIBLE for riir-ai on this box (sibling path deps
+../../../katgpt-rs break at /tmp, and a same-drive worktree at E:\git\*
+collides in the lockfile via riir-chain's OPTIONAL back-refs
+`../riir-ai/crates/riir-engine|riir-wasm` — cargo loads optional deps at
+lock-generation time regardless of features, and two DIFFERENT paths for
+the same package = hard error). **The workaround: local-only manifest
+surgery in the worktree (never committed): trim workspace members to the
+civ closure [shared+civ] + redirect the closure's `../riir-engine`/
+`../riir-wasm` refs to `../../../riir-ai/crates/...` (the REAL repo
+paths — same package as chain's refs → no collision).** Validation
+fidelity holds: the real repo's engine/wasm differ from origin/develop
+only by format-only heal commits. Commit scoping: `git add crates/
+riir-games-civ` + the staged-path guard. Also: `cargo test --examples`
+builds examples as LIBTEST-wrapped unittest binaries in deps/ (running the
+hashed exe runs 0 tests, never main) — the canonical run needs the
+non-hashed `target/debug/examples/<name>.exe`. And a stale-clippy-cache
+trap on exFAT: incremental-cache hard-link failures made clippy re-report
+ALREADY-FIXED sites (sim/mod.rs 953/988 kept flagging after the patch
+until a fresh compile) — verify reported residue against file content
+before acting.
 
 **THE HEADLINE — let-chain fold bug found live + root-caused (riir-clippy
 `5d24795`):** the Q2 union compile gate caught `if ((cond) && (let "collect"
