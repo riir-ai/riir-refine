@@ -8,11 +8,15 @@
 Owner wants the DFlash2 drafter proven against our stack without the Qwen3.8-27B target. Research 077
 established (source receipts): the released GGUF cannot generate standalone — no `tok_embd`, no
 `lm_head`, encoder consumes 5×5120 target-feature floats/position; `llama-context.cpp:157` refuses
-standalone contexts outright. What transfers modellessly is the blog's selection-headroom mechanism
-(Recall@1 85.4% vs Recall@16 99.5%; +2.0M-param pairwise path selector) — the same phenomenon our
-Bench 024 measured as retrieval pool crowding. This issue tracks the POC; the artifact-based L4 arm
-(POC-B: llama.cpp dflash2 build @ `5ecbe1a` + drafter Q4_K_M already staged, needs ~17 GB target) is
-deferred to the next POC per owner call — local weights kept, untouched.
+standalone contexts outright. **Owner show-stopper call (2026-08-20): the in-house DSpark precedent
+already closed this artifact class negative — no new test needed.** DSpark (`Ternary-Bonsai-27B-dspark-Q4_1.gguf`,
+"DSpark = DFlash pattern" per Bench 656) is the same target-conditioned separate-drafter family:
+structural batch-1 non-amortization (Bench 656), corpus-proxy quality loss to the modelless bigram
+table (0.185 vs 0.065), wall-clock FAIL at the chain seam on both substrates (Issue 717 Benches
+693-697). All artifact-based DFlash2 work is `[-]` DEFERRED; local weights (drafter Q4_K_M + llama.cpp
+dflash2 build @ `5ecbe1a`) kept untouched for a conditional reopen (standalone-capable drafter, or
+multi-request consumer). **Only the DFlash2 primitive — the selection-headroom mechanism (POC-A
+below) — stays active.**
 
 ## Tasks
 
@@ -26,6 +30,10 @@ deferred to the next POC per owner call — local weights kept, untouched.
 - [ ] T3 gates G1-G5 (≥50% headroom recovery on real ground truth; created_rate no-regress;
       <100 µs/span; alloc-free; feature-off byte-identical)
 - [ ] T4 bench doc `.benchmarks/041_*` + Research 077 PoC-addendum backfill + promotion decision
+- [-] POC-B artifact L4 (DFlash2-accelerated target via llama-server, Bench 039 re-run) — DEFERRED,
+      show-stopper: parasitism (needs 17 GB target for embd/head/features) + DSpark precedent
+      (class closed-negative: Bench 656 structural batch-1 failure, Issue 717 wall-clock FAIL both
+      substrates). Weights + llama.cpp dflash2 build kept on disk for a conditional reopen.
 
 ## Close condition
 

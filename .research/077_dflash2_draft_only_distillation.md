@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-20
 **Sources:** Inco AI blog ["DFlash 2: Keep Drafting Parallel"](https://inco.ai/blog/dflash2/) · ggml-org/llama.cpp PR [#27342](https://github.com/ggml-org/llama.cpp/pull/27342) @ `5ecbe1a` (built locally at `/Users/katopz/git/llama.cpp`, branch `dflash2`, Metal) · `z-lab/Qwen3.8-27B-DFlash2-GGUF` Q4_K_M (1.14 GB, on disk at `riir-train/data/`) · DFlash paper (Chen et al., ICML 2026)
-**Status:** DISTILLED — POC-A plan filed ([Plan 017](../.plans/017_dflash2_selection_headroom_poc.md) + [Issue 034](../.issues/034_dflash2_selection_headroom_poc.md)); the artifact-based L4 arm (POC-B) is DEFERRED to the next POC by owner call — target weights deliberately unused, kept on disk.
+**Status:** DISTILLED — POC-A plan filed ([Plan 017](../.plans/017_dflash2_selection_headroom_poc.md) + [Issue 034](../.issues/034_dflash2_selection_headroom_poc.md)); the artifact-based L4 arm (POC-B) is **DEFERRED — show-stopper** (owner call, 2026-08-20: parasitism + the in-house DSpark precedent, §2.1). Only the DFlash2 *primitive* (selection headroom) stays active. Weights kept on disk, unused.
 
 ## TL;DR
 
@@ -67,6 +67,34 @@ explicitly deferred (weights that exist locally are kept but unused: the DFlash2
 for POC-B; `Qwen3.6-27B-UD-Q4_K_XL` was ruled out — wrong model generation, distillation targets
 Qwen3.8-27B states specifically).
 
+### 2.1 Precedent — we already ran this experiment class with DSpark (closed-negative, all axes)
+
+The owner's show-stopper call is backed by in-house measurement, not just the source analysis.
+The DSpark drafter artifact (`Ternary-Bonsai-27B-dspark-Q4_1.gguf`, the 6-layer block-denoising
+drafter + trained Markov head) is the **same architectural family** — katgpt-rs Bench 656 names
+it explicitly: *"**DSpark = DFlash pattern**"*, and its failure-mode table marks the
+**separate-drafter family: DFlash, DSpark** as **STRUCTURAL** failure mode 2 — *"drafter forward
+cost doesn't amortize at batch-1"* (loses on Apple Silicon; 1.34× only on 4090). Our L4 heal
+loop is exactly batch-1 single-request usage.
+
+The full artifact chain was already ported and measured (riir-ai Issue 717, Benches 693-697):
+the llama.cpp DSpark contract end-to-end (encoder fusion of target layers `[1,16,31,46,61]` →
+per-layer KV injection → non-causal noise block → markov-bias greedy chain + confidence head,
+with `forward_token_with_layer_capture` extracting the target features — the same target
+parasitism as §2), and the verdict was split-negative: TRUE acceptance with the target beat the
+baseline (+17.4%) but the **corpus-proxy quality lost to the modelless bigram table** (0.185 vs
+0.065) and the **wall-clock closed-negative at the chain seam on BOTH GPU substrates** (G3a
+0.326x/0.252x Metal; G3b 0.84x/0.32x vs the 87 tok/s CUDA-Graphs baseline on 4090). The
+modelless replacement (bigram Markov head, Bench 663: 23 ns/step vs ~129 µs/step, ~5,600×
+cheaper) shipped as the winning drafter primitive.
+
+**Lesson applied here:** a target-conditioned separate drafter in a batch-1 loop is
+structurally wrong for our economics, twice over — it cannot run standalone (§2) and it does
+not amortize with the target (Bench 656/696). The DFlash2 Q4_K_M artifact is this same class
+with a newer selector; no new test is needed to re-establish the class verdict. Reopens only
+if a standalone-capable drafter ships (own embd+head) or a concrete multi-request consumer
+changes the batch-1 premise.
+
 ## 3. Fusion — selection headroom is a phenomenon we already measured
 
 **Vocabulary translation** (paper → our stack):
@@ -101,13 +129,15 @@ stop rule if < 2pp).
   bilinear pair coherence + path trace) over our retrieval pool, composed with `BetaPosterior`
   selection (not replacing it). Gates in [Plan 017](../.plans/017_dflash2_selection_headroom_poc.md).
   No model, no target weights, stays µs-scale.
-- **POC-B — deferred by owner call, next POC.** DFlash2-accelerated Qwen3.8-27B as an
-  `L4Fallback` (llama-server HTTP), re-running the Bench 039 reachable-set harness where the
-  bonsai adapter scored WIN 5 / REGRESSION 4. Prerequisites already staged: llama.cpp dflash2
-  build done (`/Users/katopz/git/llama.cpp` @ `5ecbe1a`, Metal); drafter Q4_K_M on disk
-  (`riir-train/data/Qwen3.8-27B-DFlash2-Q4_K_M.gguf`, acceptance 5.39 per model card). Missing:
-  the ~17 GB `ggml-org/Qwen3.8-27B-GGUF:Q4_K_M` target (download was aborted; nothing partial
-  kept). The "draft quality" question for the *artifact* is answered there, not here.
+- **POC-B — DEFERRED, show-stopper (owner call 2026-08-20).** DFlash2-accelerated Qwen3.8-27B
+  as an `L4Fallback` (llama-server HTTP), re-running the Bench 039 reachable-set harness where
+  the bonsai adapter scored WIN 5 / REGRESSION 4. Blocked by §2 (parasitism: needs the ~17 GB
+  target for embd+head+features) AND the §2.1 precedent (the DSpark artifact class measured
+  closed-negative in our stack — structural batch-1 non-amortization + wall-clock FAIL on both
+  substrates). Staged infra kept for a future reopen: llama.cpp dflash2 build
+  (`/Users/katopz/git/llama.cpp` @ `5ecbe1a`, Metal) + drafter Q4_K_M (`riir-train/data/`,
+  acceptance 5.39 per model card). The "draft quality" question for the *artifact* stays
+  unanswered by choice — the class verdict answers it.
 - **katgpt-rs side-note:** the selector/conv ideas are also relevant to the Issue 717/721
   speculative-decode line (tree-drafting reopen path), but the no-GOAT-without-consumer rule
   applies — out of scope for this note.

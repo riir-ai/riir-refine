@@ -23,11 +23,19 @@ selector.
 
 - **No target model in this plan.** `Qwen3.8-27B-GGUF` is not downloaded/used; local
   `Qwen3.6-27B-UD-Q4_K_XL.gguf` is NOT a substitute (wrong generation — the drafter distills
-  Qwen3.8-27B states specifically). Weights on disk are kept untouched for the next POC.
-- **POC-B (deferred, next POC):** DFlash2-accelerated target as `L4Fallback` via llama-server,
-  re-running the Bench 039 reachable-set harness (bonsai: WIN 5 / REGRESSION 4). Prereqs staged:
-  llama.cpp dflash2 build @ `/Users/katopz/git/llama.cpp` (`5ecbe1a`, Metal) + drafter Q4_K_M at
-  `riir-train/data/` (acceptance 5.39 @ Q4_K_M per model card).
+  Qwen3.8-27B states specifically). Weights on disk are kept untouched.
+- [-] **POC-B (DEFERRED — show-stopper, owner call 2026-08-20):** DFlash2-accelerated target as
+  `L4Fallback` via llama-server, re-running the Bench 039 reachable-set harness (bonsai: WIN 5 /
+  REGRESSION 4). Two independent blockers: (a) the artifact cannot run standalone (Research 077 §2
+  — no `tok_embd`/`lm_head`, encoder consumes 5×5120 target features/position); (b) the in-house
+  DSpark precedent closed this class negative on ALL axes we measure (Bench 656: separate-drafter
+  family DFlash/DSpark = STRUCTURAL batch-1 non-amortization; Issue 717 Benches 693-697: corpus-proxy
+  quality LOST to the modelless bigram table 0.185 vs 0.065, wall-clock FAIL at the chain seam on
+  BOTH substrates 0.326x/0.252x Metal + 0.84x/0.32x 4090). **No new test needed — the class verdict
+  is established.** Reopen only if: a standalone-capable drafter ships (own embd+head), or a
+  multi-request consumer changes the batch-1 premise. Staged + kept for that reopen: llama.cpp
+  dflash2 build @ `/Users/katopz/git/llama.cpp` (`5ecbe1a`, Metal), drafter Q4_K_M at
+  `riir-train/data/`.
 - No new neural inference anywhere in riir-clippy (modelless-first mandate holds).
 
 ## Phase 1 — Measure the headroom (gate zero; honest stop rule)
@@ -84,6 +92,9 @@ selector.
 
 - Blog: https://inco.ai/blog/dflash2/ (Table 1 selection headroom; selector formula; conv)
 - PR: https://github.com/ggml-org/llama.cpp/pull/27342 (`5ecbe1a`)
+- DSpark precedent (the show-stopper class evidence): katgpt-rs Bench 656 ("DSpark = DFlash
+  pattern", separate-drafter batch-1 structural failure) + Bench 663 (modelless bigram winner,
+  23 ns/step); riir-ai Issue 717 Benches 693-697 (artifact ported + measured closed-negative).
 - Our prior art: Bench 024 (pool crowding, `RERANK_POOL` 8→12), Issue 017 (top-1 58.3% → 96.0%
   via T3.5.5 re-ranker — the individual-fit selector this plan complements), Bench 039
-  (L4-vs-decline harness, reused by deferred POC-B), Bench 014 (clippy-bench axes).
+  (L4-vs-decline harness, POC-B deferred target), Bench 014 (clippy-bench axes).
