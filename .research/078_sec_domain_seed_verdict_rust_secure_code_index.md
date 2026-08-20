@@ -1,6 +1,6 @@
 # Sec-Domain Seed Verdict — the rust-secure-code/projects index (all 39 links inspected)
 
-**Status:** DISTILLED — pending owner decision (the decision = open the `sec` domain via Proposal + `HealDomain` extension; NO corpus entry is legal before that lands)
+**Status:** DISTILLED — Proposal 004 + Plan 018 filed 2026-08-20 (the domain-opening decision is made; implementation pending via Plan 018's Phase 0/1 checkbox flow; NO corpus entry before Phase 0 lands)
 
 - **Source:** https://github.com/rust-secure-code/projects (the WG's index — single README link list, 268★, GPL-3.0)
 - **Inspected:** 2026-08-20, 4 parallel lanes (fuzzers / analyzers / supply-chain / input+side-channel+guides), every active link entered; 2 N/A skips (compiler sanitizers, org repos), 1 not-fetched (rust-vmm community — no code content by category)

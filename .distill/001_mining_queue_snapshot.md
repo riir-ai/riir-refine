@@ -9,16 +9,23 @@
 
 ## Mining queue snapshot (update per batch — this is the resume state)
 
-- **2026-08-20 — sec-domain seed verdict recorded (Research 078, no batch):**
+- **2026-08-20 — sec-domain seed verdict recorded (Research 078) + Proposal 004 +
+  Plan 018 filed (same day, owner call):**
   the rust-secure-code/projects index surveyed end-to-end (39 links, 4 lanes).
   Index repo itself = F (link list). Link graph = B+ domain-opening evidence:
   ANSSI rust-guide SEC_SEED A− (~10-12 novel lint-shaped rules, clippy-gap
   verified), Rudra taxonomy B+ (`unsafe-impl-send-sync-missing-bound` the
-  GOAT candidate), oracle ladder solved (geiger unsafe-count delta /
+  Phase-2 GOAT candidate), oracle ladder solved (geiger unsafe-count delta /
   Miri UB fixtures / dudect constant-time / Kani). First-batch estimate
-  8-12 rules. **Sec mining BLOCKED on Proposal + HealDomain extension —
-  do not open a sec batch before the domain exists.** Record:
-  `.research/078_sec_domain_seed_verdict_rust_secure_code_index.md`.
+  8-12 rules. **Proposal 004 opens the domain (trait signature holds — the
+  Proposal 001 caveat-1 revisit); Plan 018 = Phase 0 scaffold + Batch-1
+  FFI/Drop family (`ffi-extern-fn-catch-unwind` the GOAT candidate,
+  riir-viewbridge the live negative control). Phase 2 gated on ≥6 rules
+  post-falsification. NO corpus edit before Plan 018's checkbox flow.**
+  Record:
+  `.research/078_sec_domain_seed_verdict_rust_secure_code_index.md` +
+  `.proposals/004_sec_domain_fourth_heal_domain.md` +
+  `.plans/018_sec_domain_phase0_batch1.md`.
 
 - **Batch 32b-1 DONE (2026-08-15, Research 035):** the edge_lora training
   half (topology_trainer + chain_commit + sigmoid_gate + mod) — 10 rules,
