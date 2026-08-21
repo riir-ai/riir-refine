@@ -82,6 +82,7 @@ pub mod evolve;
 pub mod memory;
 pub mod recorder;
 pub mod selection_entropic;
+pub mod selection_tether;
 pub mod self_evolve;
 
 // Plan 005: real-file span-level latent retrieval (`--suggest` MVP).
@@ -126,6 +127,11 @@ pub mod scope_model;
 // (clippy_verify) and the cargo-heal fix-path surface (latent_retrieval).
 #[cfg(feature = "score_bench")]
 pub mod score_bench;
+
+/// Behavioural equivalence for candidate fixes (Plan 336 T5.1/T5.3's named
+/// blocker). Always compiled: it is CPU-only, needs no model, and a promotion
+/// gate must not be able to skip it via a feature flag.
+pub mod behavioural_equivalence;
 
 // ── Back-compat re-exports (preserve pre-refactor API names) ───────────────
 // These type aliases + re-exports keep existing call sites compiling unchanged
@@ -217,6 +223,7 @@ pub use memory::{
 };
 pub use recorder::EvolveRecorder;
 pub use selection_entropic::{solve_beta, tilt_advantages_into, tilted_weights, KL_BUDGET_LN2};
+pub use selection_tether::{fit_rho, sse, TetherFit, TetherStats, DEFAULT_EMA_DECAY, DEFAULT_RHO, DEFAULT_WINDOW};
 pub use self_evolve::{HealPipeline, HealResult, HealSource, SelectionMode, TuneReport};
 
 // Bench 669 consumer adoption (Plan 016).
