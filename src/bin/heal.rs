@@ -553,6 +553,37 @@ fn main() {
     // backend's own file. Redirectable: `cargo heal --dump-trajectories
     // > traj.jsonl`.
     if args.dump_trajectories {
+        // The neuron-db backend (`latent_retrieval` builds): the repo-local
+        // durable store. Requires a path (the repo root to resolve
+        // `.heal/trajectories.kv`) — `RIIR_HEAL_TRAJ_ROOT` overrides.
+        #[cfg(feature = "latent_retrieval")]
+        {
+            let root = std::env::var("RIIR_HEAL_TRAJ_ROOT")
+                .map(PathBuf::from)
+                .or_else(|_| std::env::current_dir())
+                .unwrap_or_default();
+            if root.join(".heal").join("trajectories.kv").exists() {
+                match riir_clippy::traj_store::TrajStore::open(&root) {
+                    Ok((store, bad)) => {
+                        if bad > 0 {
+                            eprintln!("dump-trajectories: {bad} corrupt row(s) skipped");
+                        }
+                        for row in store.dump() {
+                            match serde_json::to_string(&row) {
+                                Ok(line) => println!("{line}"),
+                                Err(e) => eprintln!("dump-trajectories: skip one: {e}"),
+                            }
+                        }
+                        return;
+                    }
+                    Err(e) => {
+                        eprintln!("dump-trajectories: store at {} unreadable: {e}", root.display());
+                        std::process::exit(1);
+                    }
+                }
+            }
+        }
+        // The JSON envelope backend (default builds).
         let path = default_memory_path();
         match std::fs::read_to_string(&path) {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
@@ -604,9 +635,48 @@ fn main() {
             .as_deref()
             .map(|s| s.split_whitespace().map(str::to_string).collect())
             .unwrap_or_default();
-        let driver = CompileDriver::isolated()
-            .with_max_iters(args.max_iters)
-            .with_extra_args(extra);
+        // Phase 4 T4.3/T4.2 (`latent_retrieval` builds): the durable
+        // neuron-db store — shape-conditional ordering in, outcomes out.
+        // One active backend per build: WITHOUT the feature the compile
+        // domain records to memory.json (below) — never both.
+        #[cfg(feature = "latent_retrieval")]
+        let (traj_store, mut traj_warnings) = args.paths.first().and_then(|p| {
+            riir_clippy::compile_oracle::owning_package_root(p)
+                .and_then(|pkg| riir_clippy::compile_oracle::workspace_root(&pkg))
+                .or_else(|| std::env::current_dir().ok())
+                .and_then(|root| {
+                    match riir_clippy::traj_store::TrajStore::open(&root) {
+                        Ok((s, bad)) => Some((
+                            std::sync::Arc::new(s),
+                            if bad > 0 {
+                                format!("trajectory store: {bad} corrupt row(s) skipped")
+                            } else {
+                                String::new()
+                            },
+                        )),
+                        Err(e) => {
+                            eprintln!("self-evolve: neuron store unavailable ({e}) — continuing without shape-conditional ordering");
+                            None
+                        }
+                    }
+                })
+        }).map_or_else(
+            || (None, String::new()),
+            |(s, w)| (Some(s), w),
+        );
+        #[cfg(feature = "latent_retrieval")]
+        if !traj_warnings.is_empty() {
+            eprintln!("self-evolve: {traj_warnings}");
+            traj_warnings.clear();
+        }
+        let mut driver = CompileDriver::isolated().with_max_iters(args.max_iters);
+        #[cfg(feature = "latent_retrieval")]
+        if let Some(store) = traj_store.clone() {
+            driver = driver.with_ordering(std::sync::Arc::new(move |cands| {
+                riir_clippy::traj_store::shape_conditional_order(cands, &store);
+            }));
+        }
+        let driver = driver.with_extra_args(extra);
         let playbooks = Playbooks::production();
         let report = driver.run(&args.paths, &playbooks, args.write);
         if let Some(e) = &report.error {
@@ -635,35 +705,63 @@ fn main() {
                     r.reason.label()
                 );
             }
-            // ── Phase 4 (T4.1): self-evolve around every fix. The keep
-            // criterion is a full cargo-check verdict, so applied fixes
-            // record as CERTIFIED; reverts record as failures. Only the
-            // write path records (review runs touch nothing — Issue 018).
+            // ── Phase 4 (T4.1/T4.3): self-evolve around every fix. The
+            // keep criterion is a full cargo-check verdict, so applied
+            // fixes are CERTIFIED; reverts are failures. Only the write
+            // path records (review runs touch nothing — Issue 018). ONE
+            // active backend per build: the neuron-db store under
+            // `latent_retrieval`, memory.json otherwise — never both.
             if !report.applied.is_empty() || !report.reverted.is_empty() {
-                let mut evolve_rec = EvolveRecorder::from_env();
-                let memory_path = default_memory_path();
-                if evolve_rec.is_enabled() {
-                    if let Err(e) = evolve_rec.load(&memory_path) {
-                        eprintln!(
-                            "self-evolve: ignoring unreadable memory ({}): {e}",
-                            memory_path.display()
-                        );
-                    }
-                    evolve::record_run(&mut evolve_rec, &report);
-                    if evolve_rec.recorded_count() > 0 {
-                        if let Some(parent) = memory_path.parent() {
-                            let _ = std::fs::create_dir_all(parent);
+                #[cfg(feature = "latent_retrieval")]
+                if let Some(store) = &traj_store {
+                    use riir_clippy::domains::rustc_errors::evolve::traj_key;
+                    for a in &report.applied {
+                        if let Err(e) =
+                            store.record(&traj_key(&a.code, &a.strategy_id), &a.shape, &a.fix, true, true)
+                        {
+                            eprintln!("self-evolve: store record failed: {e}");
                         }
-                        match evolve_rec.save(&memory_path) {
-                            Ok(()) => eprintln!(
-                                "self-evolve: {} trajectory(ies) → {}",
-                                evolve_rec.recorded_count(),
+                    }
+                    for r in &report.reverted {
+                        if let Err(e) =
+                            store.record(&traj_key(&r.code, &r.strategy_id), &r.shape, &r.fix, false, false)
+                        {
+                            eprintln!("self-evolve: store record failed: {e}");
+                        }
+                    }
+                    eprintln!(
+                        "self-evolve: {} event(s) → {}",
+                        report.applied.len() + report.reverted.len(),
+                        store.root.display()
+                    );
+                }
+                #[cfg(not(feature = "latent_retrieval"))]
+                {
+                    let mut evolve_rec = EvolveRecorder::from_env();
+                    let memory_path = default_memory_path();
+                    if evolve_rec.is_enabled() {
+                        if let Err(e) = evolve_rec.load(&memory_path) {
+                            eprintln!(
+                                "self-evolve: ignoring unreadable memory ({}): {e}",
                                 memory_path.display()
-                            ),
-                            Err(e) => eprintln!(
-                                "self-evolve: memory save failed ({}): {e}",
-                                memory_path.display()
-                            ),
+                            );
+                        }
+                        evolve::record_run(&mut evolve_rec, &report);
+                        if evolve_rec.recorded_count() > 0 {
+                            if let Some(parent) = memory_path.parent() {
+                                let _ = std::fs::create_dir_all(parent);
+                            }
+                            match evolve_rec.save(&memory_path) {
+                                Ok(()) => eprintln!(
+                                    "self-evolve: {} trajectory(ies) → {}",
+                                    evolve_rec.recorded_count(),
+                                    memory_path.display()
+                                ),
+                                Err(e) => eprintln!(
+                                    "self-evolve: memory save failed ({}): {e}",
+                                    memory_path.display()
+                                ),
+                            }
                         }
                     }
                 }

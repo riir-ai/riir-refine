@@ -183,10 +183,19 @@ fn tried_key(c: &FixCandidate) -> TriedKey {
     )
 }
 
+/// The T4.2 ordering-hook signature (see [`CompileDriver::with_ordering`]).
+pub type OrderingFn = std::sync::Arc<dyn Fn(&mut [FixCandidate]) + Send + Sync>;
+
 /// The bounded fix-compile loop driver (Plan 019 Phase 1).
 pub struct CompileDriver {
     runner: CheckRunner,
     max_iters: usize,
+    /// Optional candidate-ordering override (the T4.2 seam): when set,
+    /// replaces the static min-delta [`order_candidates`] — the
+    /// shape-conditional `BetaPosterior` ordering installs here (built by
+    /// the CLI over a [`crate::traj_store::TrajStore`], `latent_retrieval`
+    /// builds). The closure composes its own tiebreak.
+    ordering: Option<OrderingFn>,
 }
 
 impl Default for CompileDriver {
@@ -202,6 +211,7 @@ impl CompileDriver {
         Self {
             runner: CheckRunner::new(),
             max_iters: 5,
+            ordering: None,
         }
     }
 
@@ -212,6 +222,7 @@ impl CompileDriver {
         Self {
             runner: CheckRunner::isolated(),
             max_iters: 5,
+            ordering: None,
         }
     }
 
@@ -219,6 +230,16 @@ impl CompileDriver {
     #[must_use]
     pub fn with_max_iters(mut self, n: usize) -> Self {
         self.max_iters = n;
+        self
+    }
+
+    /// Install a candidate-ordering override (the T4.2 seam — see the
+    /// field docs). The closure receives every candidate of an
+    /// iteration, each carrying its trigger `shape` (filled at proposal
+    /// time), and must leave them in apply order.
+    #[must_use]
+    pub fn with_ordering(mut self, f: OrderingFn) -> Self {
+        self.ordering = Some(f);
         self
     }
 
@@ -295,7 +316,17 @@ impl CompileDriver {
             for d in &diags {
                 candidates.extend(collect_candidates(playbooks, d, &mut report, false));
             }
-            order_candidates(&mut candidates);
+            // Fill each candidate's trigger shape (the T4.2 ordering key)
+            // from the CURRENT source, then order.
+            for c in &mut candidates {
+                if let Ok(src) = std::fs::read_to_string(&c.file) {
+                    c.shape = src.get(c.byte_span.0..c.byte_span.1).unwrap_or("").to_string();
+                }
+            }
+            match &self.ordering {
+                Some(f) => f(&mut candidates),
+                None => order_candidates(&mut candidates),
+            }
             candidates.retain(|c| !tried.contains(&tried_key(c)));
             let Some(best) = candidates.first().cloned() else {
                 break; // no untried candidates left — stop (misses recorded)
@@ -598,6 +629,7 @@ mod tests {
             line,
             byte_span: (0, 0),
             replacement: repl.to_string(),
+            shape: String::new(),
             extra_edits: Vec::new(),
         };
         let mut cands = vec![
@@ -624,6 +656,7 @@ mod tests {
             line: 1,
             byte_span: (0, 0),
             replacement: String::new(),
+            shape: String::new(),
             extra_edits: extras,
         };
         // A two-byte deletion pair must sort BEFORE a `.clone()` insertion
@@ -665,6 +698,7 @@ mod tests {
             line: 1,
             byte_span: (3, 8),
             replacement: "x".to_string(),
+            shape: String::new(),
             extra_edits: Vec::new(),
         };
         let b = FixCandidate {

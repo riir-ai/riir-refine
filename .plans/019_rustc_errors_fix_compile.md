@@ -375,7 +375,7 @@ arbitrate; revert is one iteration).
   touch nothing, the Issue 018 rule). Live-verified end-to-end: applied
   fix → `tier: Certified` trajectory in the store → `--dump-trajectories`
   exports it.
-- [ ] T4.2 **Shape-conditional move-ordering policy (owner direction:
+- [x] T4.2 **Shape-conditional move-ordering policy (owner direction:
   consume the trajectory store directly):** on propose, hybrid-retrieve
   k-nearest past trajectories for the current error shape (BM25 lexical +
   8-D KNN via `DenseEmbedIndex`/`ModellessEmbedder` — the
@@ -389,7 +389,18 @@ arbitrate; revert is one iteration).
   ordering (the honest T9.4 precedent). Falls back to flat
   `(error_code, strategy_id)` BetaPosterior when the JsonBackend is active
   (default build).
-- [ ] T4.3 **Trajectory store = neuron-db substrate (primary, behind
+  **MECHANISM SHIPPED 2026-08-22** (`traj_store::shape_conditional_order`
+  + the driver's `with_ordering` hook — a closure seam, so the
+  `compile_oracle`-gated driver never references the `latent_retrieval`-
+  gated store type). Candidates carry their trigger `shape` (driver-filled
+  at proposal); the ordering = neighbor-weighted `best_belief_score`
+  pseudo-counts DESC → min-delta tiebreak; unseen = `Beta(1,1)` @ ε=0.32;
+  Withdrawn excluded upstream by `retrieve`. **Pinned by the flip test**:
+  reversed store history flips the candidate order — the property static
+  ordering can never have. **The G6 benefit measurement remains OPEN**
+  (Phase 6 G6.7) — until it passes, this ships as the installed-but-honest
+  mechanism with the negative-record clause standing.
+- [x] T4.3 **Trajectory store = neuron-db substrate (primary, behind
   `latent_retrieval`):** `LocalKvStore` at `<repo>/.heal/trajectories.kv`
   — encrypted WAL (stable per-repo key derived from a generated `.heal/key`
   seed; the threat model is integrity+durability, not secrecy),
@@ -402,6 +413,24 @@ arbitrate; revert is one iteration).
   experience. Zero-dep default build keeps the `memory.json` envelope
   (Issue 018 G4: dep surface unchanged) — the tiering is the constraint,
   one active backend per build, no dual-write drift.
+  **DONE 2026-08-22** (`src/traj_store.rs`, behind `latent_retrieval`) —
+  with TWO substrate-first corrections recorded in the module docs:
+  (1) `DenseEmbedIndex` is the 768-D Bonsai path (blocked on C13) while
+  the modelless embedders are 8-D — the honest latent axis is the
+  sigmoid-dot over stored 8-D directions (the memory's own retrieval
+  math, made durable); (2) `put_pod` would make bytemuck a NEW direct dep
+  for one struct — rows are one JSON doc each via plain `put` (the
+  dep-light rule wins; rows are tens-per-family, not a hot path). What
+  shipped as planned: `LocalKvStore` encrypted WAL at
+  `.heal/trajectories.kv` with the `.heal/key` seed, `traj:{code}:
+  {strategy}:{blake3_12(shape)}` keys, `scan_prefix` family scans, the
+  `Bm25Index` lexical axis rebuilt at open, the SAME `embed_into` 8-D
+  embedding, Issue 021 tier transitions durable (verified-success
+  certifies, 3 consecutive failures withdraw — absorbing), one backend
+  per build (the CLI picks by feature; never dual-writes).
+  `CompactionPolicy`/`CommitBatch` deferred to the watch-loop unit (T5.1)
+  where the flush cadence exists — single-event recording pays one WAL
+  append per event either way.
 - [x] T4.3b **Human grep surface = on-demand export, not a shadow log:**
   `cargo heal --dump-trajectories [--jsonl]` reads either backend →
   stdout (redirectable). One source of truth; `.heal/misses/*.md` stays
@@ -410,8 +439,11 @@ arbitrate; revert is one iteration).
   **JSON-backend half DONE 2026-08-22** — the flag is live: reads the
   v1 envelope (version-checked through `LatentFixMemory::load`), emits
   one trajectory per JSONL line (standalone mode, no paths needed,
-  `--write` rejected — pinned in the mode matrix). The neuron-backend
-  reader joins when T4.3 lands (the same flag, both backends).
+  `--write` rejected — pinned in the mode matrix). **The neuron-backend
+  reader landed the same day** (T4.3): `latent_retrieval` builds check
+  `.heal/trajectories.kv` first (`RIIR_HEAL_TRAJ_ROOT` overrides the
+  root), falling back to the JSON envelope — the same flag, both
+  backends, one source of truth per build.
 - [x] T4.4 **Miss capture — the corpus-growth loop:** when NO template fixes
   an error, dump the full diagnostic + source excerpt to
   `<repo>/.heal/misses/E0597-<ts>.md`. Misses are the authoring queue for

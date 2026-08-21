@@ -82,6 +82,7 @@ pub(crate) fn cand(
         line,
         byte_span,
         replacement,
+        shape: String::new(),
         extra_edits: Vec::new(),
     }
 }
@@ -123,6 +124,10 @@ pub struct FixCandidate {
     /// Byte range to replace in the CURRENT file content.
     pub byte_span: (usize, usize),
     pub replacement: String,
+    /// Trigger text at `byte_span` (filled by the DRIVER at proposal
+    /// time — the T4.2 shape-conditional ordering retrieves neighbors by
+    /// it). Playbooks leave it empty; the driver overwrites.
+    pub shape: String,
     /// Further edits applied atomically with the primary one (same file,
     /// non-overlapping with it and each other). Empty for the common
     /// single-edit candidate.
@@ -243,6 +248,7 @@ mod tests {
                 line: 1,
                 byte_span: (0, 0),
                 replacement: String::new(),
+                shape: String::new(),
                 extra_edits: Vec::new(),
             }]
         }

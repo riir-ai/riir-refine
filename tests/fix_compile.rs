@@ -53,6 +53,7 @@ impl CompileProposer for ReplacePlaybook {
             line: diag.primary.as_ref().map_or(1, |p| p.1),
             byte_span: (at, at + self.from.len()),
             replacement: self.to.to_string(),
+            shape: String::new(),
             extra_edits: Vec::new(),
         }]
     }

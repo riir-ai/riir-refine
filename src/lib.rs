@@ -128,6 +128,14 @@ pub mod l4_daemon;
 #[cfg(feature = "contrastive_scope")]
 pub mod scope_model;
 
+// Plan 019 T4.3: the neuron-db trajectory store — the DURABLE backend for
+// `--fix-compile` self-evolution (LocalKvStore encrypted WAL + BM25 + the
+// 8-D sigmoid-dot latent axis). Behind `latent_retrieval` (the dep-light
+// default keeps the memory.json envelope — one active backend per build,
+// no dual-write drift).
+#[cfg(feature = "latent_retrieval")]
+pub mod traj_store;
+
 // Plan 014: clippy-bench — the frozen real-code healing bench + SVG score
 // history. Measures the PRODUCTION `--fix` path (bounded-fixpoint proposers)
 // against real-`cargo clippy` ground truth on frozen fixtures mined from

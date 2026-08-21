@@ -62,7 +62,9 @@ riir-rag = { path = "../riir-ai/crates/riir-rag", optional = true, default-featu
 # injected via `NeuronDbRetriever::with_bm25_tokenizer` (a designed substrate
 # hook). Already pulled transitively by riir-rag/neuron_db — this only makes
 # the trait nameable; it adds nothing to the dep tree.
-riir-neuron-db = { path = "../riir-neuron-db", optional = true, default-features = false, features = ["bm25"] }
+# `local_kv` joined for Plan 019 T4.3 (the durable trajectory store — the
+# same substrate riir-dapps/riir-games persist through).
+riir-neuron-db = { path = "../riir-neuron-db", optional = true, default-features = false, features = ["bm25", "local_kv"] }
 # NOTE: metal_tensor_gemm (Issue 663 T5, +1.21× prefill on M3 Metal) needs the
 # vendored wgpu-hal fork (adds `raw_handle()` on metal::Buffer). The fork lives
 # at `riir-ai/vendor/wgpu-hal-30.0.0/`. Per cargo's patch-inheritance rules,

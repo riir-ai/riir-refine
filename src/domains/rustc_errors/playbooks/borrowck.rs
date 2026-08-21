@@ -240,6 +240,7 @@ impl CompileProposer for E0502DerefRemoval {
             line: borrow.line_start,
             byte_span: (rl.amp.start, rl.amp.end),
             replacement: String::new(),
+            shape: String::new(),
             extra_edits: extras,
         }]
     }
