@@ -1,5 +1,7 @@
 # riir-clippy
 
+> **Boundary contract:** [BOUNDARY.md](BOUNDARY.md) — what lives here, what may depend on it, known drift.
+
 **Multi-domain modelless code healer** — a pluggable framework behind the
 `HealDomain` trait that distills code rules into a ruliology-style search
 space, drafts fixes via a modelless ternary SIMD matvec, and validates with a
