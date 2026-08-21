@@ -177,8 +177,9 @@ USAGE:
                     cargo-check the owning packages, parse coded errors (E0597...),
                     propose per error via playbooks, apply best → recheck → keep/revert,
                     bounded by --max-iters. Review mode (default) prints the plan;
-                    --write applies. Registry ships empty (Phase 1) — every coded
-                    error reports as a miss until templates land (Phase 2-3).
+                    --write applies. Registry: the E0597 family (Phase 2) — six
+                    ranked templates keyed on the diagnostic's labeled spans; other
+                    codes report as misses until Phase 3.
     --max-iters <N> --fix-compile iteration bound (default 5).
     --write         With --fix/--fix-compile: write the edits in place (with --fix:
                     then rustfmt AUTOMATICALLY when the original was already
@@ -544,7 +545,7 @@ fn main() {
         let driver = CompileDriver::isolated()
             .with_max_iters(args.max_iters)
             .with_extra_args(extra);
-        let playbooks = Playbooks::empty(); // templates land Phase 2-3
+        let playbooks = Playbooks::production(); // Phase 2: the E0597 family
         let report = driver.run(&args.paths, &playbooks, args.write);
         if let Some(e) = &report.error {
             eprintln!("fix-compile: {e}");

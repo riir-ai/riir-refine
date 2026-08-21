@@ -71,6 +71,7 @@ fn diag_shape() -> RustcErrorDiag {
             applicability: Applicability::Unknown,
             message: String::new(),
         }],
+        labeled_spans: Vec::new(),
         rendered: None,
     }
 }

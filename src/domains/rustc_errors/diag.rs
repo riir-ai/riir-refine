@@ -78,6 +78,23 @@ pub struct SuggestionSpan {
     pub message: String,
 }
 
+/// One labeled span from the diagnostic's top-level `spans` — the
+/// oracle-provided anchors the E0597 playbooks key on. Unlike suggestions,
+/// these are rustc's OWN analysis output ("binding `x` declared here",
+/// "value captured here"), so a playbook that splices on them is consuming
+/// the oracle's location knowledge, not guessing.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LabeledSpan {
+    pub file: String,
+    pub line_start: usize,
+    pub is_primary: bool,
+    /// Byte range of the span in `file`. rustc JSON always carries these for
+    /// file spans; spans without them (macros, older cargo) are dropped.
+    pub byte_start: usize,
+    pub byte_end: usize,
+    pub label: String,
+}
+
 /// One `error[E….]` diagnostic, keyed by code, with every suggestion span
 /// found anywhere in its `children` tree.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -88,6 +105,9 @@ pub struct RustcErrorDiag {
     /// Primary span, when the diagnostic has one: `(file, line_start)`.
     pub primary: Option<(String, usize)>,
     pub suggestions: Vec<SuggestionSpan>,
+    /// Labeled spans of the top-level diagnostic (primary included, when it
+    /// carries a label + byte offsets). The Phase 2 playbooks' anchors.
+    pub labeled_spans: Vec<LabeledSpan>,
     /// The full pre-rendered diagnostic text, when cargo included it. The
     /// Phase 4 miss-capture dumps write this verbatim (`<repo>/.heal/misses/`).
     pub rendered: Option<String>,
@@ -187,6 +207,8 @@ struct JsonSpan {
     #[serde(default)]
     is_primary: bool,
     #[serde(default)]
+    label: Option<String>,
+    #[serde(default)]
     byte_start: Option<usize>,
     #[serde(default)]
     byte_end: Option<usize>,
@@ -231,11 +253,30 @@ pub fn parse_error_diags(json_stdout: &str) -> Vec<RustcErrorDiag> {
             .map(|s| (s.file_name.clone(), s.line_start));
         let mut suggestions = Vec::new();
         collect_suggestions(&diag, &mut suggestions);
+        let labeled_spans = diag
+            .spans
+            .iter()
+            .filter_map(|s| {
+                let label = s.label.as_deref()?;
+                if label.is_empty() {
+                    return None;
+                }
+                Some(LabeledSpan {
+                    file: s.file_name.clone(),
+                    line_start: s.line_start,
+                    is_primary: s.is_primary,
+                    byte_start: s.byte_start?,
+                    byte_end: s.byte_end?,
+                    label: label.to_string(),
+                })
+            })
+            .collect();
         out.push(RustcErrorDiag {
             code,
             message: diag.message.clone(),
             primary,
             suggestions,
+            labeled_spans,
             rendered: diag.rendered.clone(),
         });
     }
@@ -393,6 +434,32 @@ mod tests {
         let diags_old = parse_error_diags(E0596_LINE);
         assert_eq!(diags_old[0].rendered, None);
         assert_eq!(diags_old[0].suggestions[0].byte_start, None);
+    }
+
+    /// A real E0597 line — the top-level spans carry the labeled anchors the
+    /// Phase 2 playbooks key on ("binding … declared here", "value captured
+    /// here", "type annotation requires … 'static", the dropped-`}` span).
+    /// Spans without a label or without byte offsets are excluded.
+    #[test]
+    fn parses_labeled_spans_from_top_level() {
+        let line = r#"{"reason":"compiler-message","message":{"level":"error","message":"`x` does not live long enough","code":{"code":"E0597"},"spans":[{"file_name":"src/lib.rs","line_start":6,"is_primary":true,"byte_start":40,"byte_end":42,"label":"borrowed value does not live long enough"},{"file_name":"src/lib.rs","line_start":6,"byte_start":61,"byte_end":63,"label":"value captured here"},{"file_name":"src/lib.rs","line_start":5,"byte_start":30,"byte_end":34,"label":"binding `name` declared here"},{"file_name":"src/lib.rs","line_start":6,"byte_start":16,"byte_end":34,"label":"type annotation requires that `name` is borrowed for `'static`"},{"file_name":"src/lib.rs","line_start":6,"byte_start":50,"byte_end":54}],"children":[]}}"#;
+        let diags = parse_error_diags(line);
+        assert_eq!(diags.len(), 1);
+        let ls = &diags[0].labeled_spans;
+        assert_eq!(ls.len(), 4, "unlabeled span excluded: {ls:?}");
+        assert!(ls[0].is_primary);
+        assert!(!ls[1].is_primary);
+        let ann = ls.iter().find(|s| s.label.contains("type annotation")).unwrap();
+        assert_eq!((ann.byte_start, ann.byte_end), (16, 34));
+        let cap = ls.iter().find(|s| s.label == "value captured here").unwrap();
+        assert_eq!((cap.byte_start, cap.byte_end), (61, 63));
+        // A label WITHOUT byte offsets is dropped, not half-kept.
+        let no_bytes = line.replace(
+            "\"file_name\":\"src/lib.rs\",\"line_start\":6,\"byte_start\":61,\"byte_end\":63,\"label\":\"value captured here\"",
+            "\"file_name\":\"src/lib.rs\",\"line_start\":6,\"label\":\"value captured here\"",
+        );
+        let diags2 = parse_error_diags(&no_bytes);
+        assert_eq!(diags2[0].labeled_spans.len(), 3);
     }
 
     #[test]

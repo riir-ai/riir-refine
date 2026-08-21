@@ -278,15 +278,44 @@ arbitrate; revert is one iteration).
 
 ### Phase 2 — E0597 vertical slice to REAL USE
 
-- [ ] T2.1 Templates 1–6 above, each with fixture pairs + negative controls
+- [x] T2.1 Templates 1–6 above, each with fixture pairs + negative controls
   (`tests` per the proposer discipline; the `Box::leak` exclusion pinned by
   a never-emitted test).
-- [ ] T2.2 End-to-end: a real E0597 (the `settlement_goat.rs` shape, with
+  **DONE 2026-08-21** — `playbooks/e0597.rs`: six proposers (templates
+  2–6; template 1 stays demoted to `cargo fix`'s E0373 territory), 17
+  unit fixtures incl. negative controls + the
+  `box_leak_is_never_emitted` pin. **Oracle-first discipline held**: every
+  FIXED form was probe-verified to compile on rustc 1.93 BEFORE becoming a
+  fixture — and the probe refuted a textbook assumption en route (`let
+  f: Box<dyn Fn…> = Box::new(closure-borrowing-local)` now COMPILES on
+  1.93; the live shapes are the explicit-`'static` annotation + the
+  genuine scope escape + coercion-site captures). New anchor surface:
+  `RustcErrorDiag.labeled_spans` (the oracle's own labeled spans with byte
+  offsets — "type annotation requires…'static" indicts the annotation,
+  "value captured here" covers `||`, "binding `x` declared here",
+  "dropped here while still borrowed" covers the block's `}`). A rustc
+  that changes label texts makes the family go SILENT (misses), never
+  wrong — the floor gate re-measures on toolchain bumps.
+- [x] T2.2 End-to-end: a real E0597 (the `settlement_goat.rs` shape, with
   `Vec<Case<'static>>` as the injected broken state) → `--fix-compile
   --write` → compiles, tests pass, diff is the min-delta candidate.
-- [ ] T2.3 The incident's lesson as a standing gate: probe-1 = unchanged
+  **DONE** — `tests/fix_compile_e0597.rs::incident_shape_fixed_to_clean_with_min_delta`:
+  the incident shape → CLEAN via `e0597-anon-lifetime` (the `'static` →
+  `'_` token swap), the scaffold's own `cargo test` passes, `Vec<Case<'_>>`
+  on disk. Plus `scope_escape_hoisted_to_clean` (template 6, byte-exact
+  hoist form) and `ladder_reverts_move_and_keeps_move_clone` (the product
+  claim e2e: `move` tried → E0382 no-progress → byte-exact revert →
+  `move`+`.clone()` kept → CLEAN + tests pass). Live CLI verified:
+  `applied E0597 [e0597-anon-lifetime] (errors 1 → 0) — CLEAN`.
+- [x] T2.3 The incident's lesson as a standing gate: probe-1 = unchanged
   code that ALREADY compiles → driver reports "nothing to fix", zero edits
   (the check that would have caught my unnecessary fix).
+  **DONE** — driver-level pin landed with Phase 1
+  (`fix_compile.rs::driver_reports_nothing_on_clean_crate`); Phase 2 adds
+  the family-level pin
+  (`fix_compile_e0597.rs::already_compiling_incident_tree_is_untouched`:
+  the incident's FIXED tree re-run through the real family — one check,
+  zero iterations, zero edits, byte-identical file).
 
 ### Phase 3 — the rest of the borrowck family
 

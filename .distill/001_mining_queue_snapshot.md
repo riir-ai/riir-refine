@@ -42,9 +42,20 @@
   clippy --all-targets 0 both extremes (drive-by: the pre-existing
   `McNemar` doc_markdown at HEAD fixed — Layer 5a was red before this
   session), cargo-hack 23/23, fix_verify e2e + premise_probe both green
-  post-refactor. Idle loop: pick up at Phase 2 (the E0597 vertical slice
-  — templates 1-6 + the settlement_goat real-use gate; the plan is the
-  task list).**
+  post-refactor. **Phase 2 COMPLETE 2026-08-21 (the E0597 family):
+  `playbooks/e0597.rs` — six ranked proposers keyed on the diagnostic's
+  LABELED spans (new `diag.labeled_spans` surface; a toolchain label
+  change goes silent-miss, never wrong). Oracle-first discipline held —
+  every fixed form probe-verified BEFORE becoming a fixture, and the
+  probe REFUTED a textbook assumption (`let f: Box<dyn Fn…>` with a
+  local-borrowing closure now COMPILES on 1.93; live shapes = explicit-
+  'static annotation + scope escape + coercion-site capture). E2E: the
+  settlement_goat incident shape → CLEAN via the `'_` swap (min-delta
+  wins) + scaffold tests pass; the ladder e2e (move reverted on E0382
+  no-progress → move+clone kept); T2.3 pinned at family level. CLI
+  wired (`Playbooks::production()`). Idle loop: pick up at Phase 3
+  (E0499/E0502 uncontested first, contested codes gated on the T6.9
+  floor; the plan is the task list).**
 - **2026-08-20 — sec-domain seed verdict recorded (Research 078) + Proposal 004 +
   Plan 018 filed (same day, owner call):**
   the rust-secure-code/projects index surveyed end-to-end (39 links, 4 lanes).

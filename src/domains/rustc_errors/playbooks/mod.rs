@@ -19,10 +19,15 @@
 //!
 //! ## Phase status
 //!
-//! Phase 1 ships the SEAM only — [`Playbooks::empty()`]. The registry
-//! iterates empty, so `--fix-compile` today reports every coded error as
-//! a miss (`no playbook matched`). The E0597 family lands in Phase 2
-//! (`e0597.rs`), the rest of borrowck in Phase 3.
+//! Phase 1 shipped the seam; **Phase 2 ships the E0597 family**
+//! ([`e0597`]) — six proposers keyed on the oracle's labeled spans, with the
+//! incident's `Vec<Case<'static>>` shape fixed at min-delta (the `'_` swap).
+//! The rest of borrowck lands in Phase 3. `--fix-compile` still reports a
+//! miss for any code the family does not cover.
+
+pub mod e0597;
+
+pub use e0597::family;
 
 use std::path::{Path, PathBuf};
 
@@ -87,6 +92,13 @@ impl Playbooks {
         self
     }
 
+    /// The Phase 2 production registry (the E0597 family; Phase 3 adds the
+    /// rest of borrowck). What `--fix-compile` runs with.
+    #[must_use]
+    pub fn production() -> Self {
+        self::e0597::family()
+    }
+
     /// Number of registered playbooks.
     #[must_use]
     pub fn len(&self) -> usize {
@@ -148,6 +160,7 @@ mod tests {
                 applicability: crate::domains::rustc_errors::diag::Applicability::Unknown,
                 message: String::new(),
             }],
+            labeled_spans: Vec::new(),
             rendered: None,
         }
     }
