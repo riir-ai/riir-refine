@@ -18,8 +18,13 @@
   `BetaPosterior`; BUILDS only the per-error-code playbook proposers + the
   bounded fix-compile driver + the watch wrapper. Self-evolve is first-class
   (Phase 4: trajectories, move-ordering policy, `.heal/misses/` corpus-growth
-  loop). Real-use target: `scripts/watch_heal.sh` (Phase 5). Idle loop: pick up
-  at Phase 0 (substrate-first grep) — the plan is the task list.
+  loop). Real-use target: `scripts/watch_heal.sh` (Phase 5). **Phase 0
+  COMPLETE 2026-08-21 (T0.1 substrate-first grep PASS — no parallel system,
+  the riir-train ×3 inline clippy-JSON parses classified boundary-correct;
+  T0.2 verdict — ClippyOracle is a label extractor, NOT the base; driver
+  consumes `diag.rs` + `fix_verify` core, authors no new parser). Idle
+  loop: pick up at Phase 1 (the oracle driver — BUILD work, needs a quiet
+  box; the plan is the task list).**
 - **2026-08-20 — sec-domain seed verdict recorded (Research 078) + Proposal 004 +
   Plan 018 filed (same day, owner call):**
   the rust-secure-code/projects index surveyed end-to-end (39 links, 4 lanes).

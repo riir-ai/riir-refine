@@ -165,14 +165,48 @@ arbitrate; revert is one iteration).
 
 ### Phase 0 — substrate-first gate (run BEFORE any implementation; global-rule mandate)
 
-- [ ] T0.1 Vocabulary-translation grep across `*.rs` in all workspace repos
+- [x] T0.1 Vocabulary-translation grep across `*.rs` in all workspace repos
   (3+ name variants each): "repair loop", "error healing", "compile fix",
   "rustc json", "diagnostic parse", "E0597", "borrowck fix" — verify no
   parallel system exists beyond `fix_verify`/`ClippyOracle` (which this
   plan CONSUMES, not duplicates). Record the grep table in the bench doc.
-- [ ] T0.2 Confirm `ClippyOracle`'s JSON machinery is reusable for
+  **DONE 2026-08-21 (multi-root workspace grep, 3 pattern families ×
+  `*.rs`).** Verdict: **no parallel system — PASS.** Hit families:
+
+  | Family (variants greped) | Hits | Classification |
+  |---|---|---|
+  | `repair loop / error healing / fix-compile / broken-code / compile repair / RustcErrorDiag` | riir-clippy `rustc_errors/{diag,probe,floor}.rs` + `tests/premise_probe.rs` + `examples/rustc_errors_floor.rs` | the CONSUMED substrate (Issue 035 T1/T2) — expected |
+  | same | riir-clippy `fix_verify.rs` (apply→check→revert oracle), `clippy_lints/verify.rs`, `draft/clippy_oracle.rs`, `rust_perf/verify.rs` | the consumed/existing in-crate JSON consumers — expected |
+  | `message-format=json / compiler-message / parse_diag / cargo check --message` | **riir-train ×3**: `src/rlvr_reward.rs` + examples `bonsai_clippy_l4_sft_train.rs` / `clippy_l4_rlvr_train.rs` — inline clippy-JSON lint-code parse (~50 LOC, one site self-documents "reimplemented inline to avoid pulling riir-clippy as a dependency") | **boundary-correct duplicate (architectural)** — riir-train's allowlist has no riir-clippy dep (pattern-borrow ≠ dependency); consumer is the L4 RLVR reward signal, NOT compile repair. No action; recorded here as the one known out-of-crate sibling of the diagnostic-parse family |
+  | `E0499/E0502/E0505/E0507/E0382/E0596/E0597/E0373` | riir-ai comments explaining borrow-workarounds (dllm, lm_head_lora_gpu, crowd_motion_bridge) + riir-clippy proposer guard comments | prose ABOUT the codes, not repair systems |
+  | all families | katgpt-rs / riir-chain / riir-neuron-db / riir-game-sdk / mmorpg-examples / viewbridge / dapps: 0 relevant hits (one katgpt-percepta "compile pipeline" doc-comment false positive) | clean |
+- [x] T0.2 Confirm `ClippyOracle`'s JSON machinery is reusable for
   `cargo check` diagnostics (error-code field, spans, children) — extend,
   don't fork.
+  **DONE 2026-08-21 — verdict: NOT the right base, and no fork is needed;
+  the division of labor already landed.** `ClippyOracle::parse_verdict` is
+  a lint-LABEL extractor: `clippy::`-prefix codes only (rustc E-codes are
+  silently dropped — no prefix match), no spans, no children walk;
+  error-level messages only set the `compiles=false` flag. The three
+  fields this domain keys on (E-code, primary span, help-child
+  suggestions) are exactly the three it discards — "extending" it would
+  change `OracleVerdict`'s contract and perturb the T3.5.5 eval fixtures,
+  i.e. an extension that is a fork in disguise. The genuinely reusable
+  machinery exists elsewhere and is CONSUMED, not duplicated:
+  `rustc_errors/diag.rs` (Issue 035 T1) owns the coded-error parse
+  (spans + recursive child suggestions, pinned by the `E0596_LINE`
+  fixture — "the shape a non-recursive walk misses"), and `fix_verify.rs`'s
+  `parse_error_locations` + line-mapped revert IS the apply→check→revert
+  core (the pending `compile_oracle` extraction per T0.3). **Binding on
+  Phase 1:** the driver consumes `diag.rs` for parsing + `fix_verify`'s
+  core for apply/revert and authors NO new parser. In-crate JSON-consumer
+  census recorded (5 sites, one wire format, different fidelities):
+  `fix_verify` (error locations for revert), `clippy_oracle` (eval labels),
+  `clippy_lints/verify` (lint codes), `rust_perf/verify` (error count),
+  `rustc_errors/diag` (coded errors + suggestions) — the consolidation
+  boundary is the DRIVER, not a shared mega-parser; coupling the eval
+  harness to the repair parse would let one's changes perturb the other's
+  pinned tests.
 - [x] T0.3 **Feature graph** (DONE 2026-08-21) — name the flag `rustc_errors` and keep it OFF
   the `latent_retrieval` dep tree. Verified 2026-08-21: `src/fix_verify.rs`
   imports only `std` + `serde` (zero `riir_rag` / `riir_neuron_db`), so
