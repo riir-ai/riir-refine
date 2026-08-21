@@ -5,8 +5,10 @@
 //! - `rust_perf` (default since 2026-08-13, Phase 2) — `rust-optimize` perf
 //!   healing (promoted after Bench 013 GOAT G1+G5 PASS)
 //! - `kernel_heal` (opt-in, Phase 3) — GPU kernel optimization healing
-//! - `rustc_errors` (opt-in, Plan 019) — rustc compile-error repair. Ships
-//!   the measurement layer only so far (premise probe + `cargo fix` floor).
+//! - `rustc_errors` (opt-in, Plan 019) — rustc compile-error repair keyed
+//!   by error code: the E0597 + borrowck (E0502/E0499/E0505) playbook
+//!   families behind the `--fix-compile` driver, plus the premise probe
+//!   and the `cargo fix` floor that bound the territory.
 
 #[cfg(feature = "clippy_lints")]
 pub mod clippy_lints;

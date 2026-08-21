@@ -51,54 +51,10 @@ use syn::spanned::Spanned;
 use syn::visit::Visit;
 use syn::{Expr, ExprCall, ExprClosure, ItemFn, Pat, PatType, Stmt};
 
-use crate::domains::rustc_errors::diag::{LabeledSpan, RustcErrorDiag};
-use super::{CompileProposer, FixCandidate, Playbooks};
+use crate::domains::rustc_errors::diag::RustcErrorDiag;
+use super::{anchor, binding_name, cand, CompileProposer, FixCandidate, Playbooks};
 
-// ── shared anchor helpers ─────────────────────────────────────────────
-
-/// A labeled span in the same file as the diagnostic's primary span.
-fn anchor(
-    diag: &RustcErrorDiag,
-    pred: impl Fn(&str) -> bool,
-) -> Option<&LabeledSpan> {
-    let (pf, _) = diag.primary.as_ref()?;
-    diag.labeled_spans
-        .iter()
-        .find(|ls| &ls.file == pf && pred(&ls.label))
-}
-
-/// Label "binding 'x' declared here" → the binding name `x`.
-fn binding_name(label: &str) -> Option<&str> {
-    let start = label.find('`')? + 1;
-    let end = start + label[start..].find('`')?;
-    let name = &label[start..end];
-    if name.is_empty()
-        || !name
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '_')
-    {
-        return None;
-    }
-    Some(name)
-}
-
-fn cand(
-    diag: &RustcErrorDiag,
-    file: &std::path::Path,
-    line: usize,
-    byte_span: (usize, usize),
-    replacement: String,
-    strategy_id: &str,
-) -> FixCandidate {
-    FixCandidate {
-        strategy_id: strategy_id.to_string(),
-        code: diag.code.clone(),
-        file: file.to_path_buf(),
-        line,
-        byte_span,
-        replacement,
-    }
-}
+// ── shared syn helpers (closure + let extraction) ────────────────────
 
 /// The full byte range of the closure starting at `closure_start` (syn
 /// ground truth, not brace matching). `None` when the file does not parse
@@ -641,6 +597,7 @@ pub fn family() -> Playbooks {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domains::rustc_errors::diag::LabeledSpan;
     use std::path::Path;
 
     /// Build an E0597 diag for `source` with anchors located by finding the

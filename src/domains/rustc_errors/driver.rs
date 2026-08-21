@@ -42,7 +42,7 @@ use crate::compile_oracle::{
 };
 
 use super::diag::{dedupe_by_site, parse_error_diags, RustcErrorDiag};
-use super::playbooks::{FixCandidate, Playbooks};
+use super::playbooks::{FixCandidate, Playbooks, SpanEdit};
 
 /// One applied-and-kept fix, for the report.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -134,7 +134,8 @@ pub struct FixCompileReport {
 }
 
 /// Candidate-ordering key: stable (file, line, code) with the shortest
-/// replacement first — the Phase 1 "min-delta" heuristic. Phase 4 T4.2
+/// TOTAL replacement first — the Phase 1 "min-delta" heuristic (primary +
+/// extra edits; a two-byte pair beats a `.clone()` insertion). Phase 4 T4.2
 /// swaps in `BetaPosterior` ordering over `(error_code, strategy_id)`
 /// memory if it measures a gain; this function is the swappable seam.
 fn order_candidates(cands: &mut [FixCandidate]) {
@@ -143,14 +144,16 @@ fn order_candidates(cands: &mut [FixCandidate]) {
             .cmp(&b.file)
             .then(a.line.cmp(&b.line))
             .then(a.code.cmp(&b.code))
-            .then(a.replacement.len().cmp(&b.replacement.len()))
+            .then(a.total_len().cmp(&b.total_len()))
             .then(a.strategy_id.cmp(&b.strategy_id))
     });
 }
 
 /// Identity of a tried candidate — retries across iterations must not
-/// re-apply the same failed move at the same site.
-type TriedKey = (PathBuf, String, usize, usize, String);
+/// re-apply the same failed move at the same site. Includes every edit
+/// (primary + extras) so two strategies differing only in their extra
+/// edits stay distinct.
+type TriedKey = (PathBuf, String, usize, usize, String, Vec<((usize, usize), String)>);
 
 fn tried_key(c: &FixCandidate) -> TriedKey {
     (
@@ -159,6 +162,10 @@ fn tried_key(c: &FixCandidate) -> TriedKey {
         c.byte_span.0,
         c.byte_span.1,
         c.replacement.clone(),
+        c.extra_edits
+            .iter()
+            .map(|e| (e.byte_span, e.replacement.clone()))
+            .collect(),
     )
 }
 
@@ -295,7 +302,12 @@ impl CompileDriver {
                 tried.insert(tried_key(&best));
                 continue;
             };
-            let Some(applied_text) = splice(&original, best.byte_span, &best.replacement) else {
+            let Some(applied_text) = apply_edits(
+                &original,
+                best.byte_span,
+                &best.replacement,
+                &best.extra_edits,
+            ) else {
                 // Span drifted (should not happen — proposed against the
                 // same read) — treat as no-progress revert.
                 report.reverted.push(RevertedRecord {
@@ -451,18 +463,38 @@ fn file_name_placeholder(msg: &str) -> String {
     format!("(no primary span) {msg}")
 }
 
-/// Replace `text[span]` with `replacement`, returning the spliced text.
-/// `None` when the span is out of bounds or not on a char boundary (the
-/// caller treats it as a failed apply).
-fn splice(text: &str, span: (usize, usize), replacement: &str) -> Option<String> {
-    let (s, e) = span;
-    if !text.is_char_boundary(s) || !text.is_char_boundary(e) || e < s || e > text.len() {
-        return None;
-    }
+/// Replace `text[span]` with `replacement`, then apply `extra_edits` — all
+/// in one atomic pass (spans applied lowest-first with the consumed prefix
+/// tracked, so every offset is used exactly once against the ORIGINAL
+/// text). `None` when any span is out of bounds, off a char boundary, or
+/// OVERLAPS another (the caller treats it as a failed apply; a candidate
+/// whose edits collide is malformed and must never half-land).
+#[must_use]
+fn apply_edits(
+    text: &str,
+    span: (usize, usize),
+    replacement: &str,
+    extras: &[SpanEdit],
+) -> Option<String> {
+    let mut all: Vec<((usize, usize), &str)> = Vec::with_capacity(extras.len() + 1);
+    all.push((span, replacement));
+    all.extend(extras.iter().map(|e| (e.byte_span, e.replacement.as_str())));
+    all.sort_by_key(|((s, _), _)| *s);
+
     let mut out = String::with_capacity(text.len() + replacement.len());
-    out.push_str(&text[..s]);
-    out.push_str(replacement);
-    out.push_str(&text[e..]);
+    let mut cursor = 0usize;
+    for ((s, e), repl) in all {
+        if s < cursor {
+            return None; // overlapping edits
+        }
+        if !text.is_char_boundary(s) || !text.is_char_boundary(e) || e < s || e > text.len() {
+            return None;
+        }
+        out.push_str(&text[cursor..s]);
+        out.push_str(repl);
+        cursor = e;
+    }
+    out.push_str(&text[cursor..]);
     Some(out)
 }
 
@@ -471,23 +503,63 @@ mod tests {
     use super::*;
 
     #[test]
-    fn splice_replaces_exact_span() {
+    fn apply_edits_replaces_exact_span() {
         let text = "let r = v;";
         let at = text.find("r = v").unwrap();
-        let out = splice(text, (at, at + 5), "mut r = v").unwrap();
+        let out = apply_edits(text, (at, at + 5), "mut r = v", &[]).unwrap();
         assert_eq!(out, "let mut r = v;");
     }
 
     #[test]
-    fn splice_rejects_bad_spans() {
-        assert_eq!(splice("héllo", (1, 2), "x"), None, "non-char boundary");
-        assert_eq!(splice("abc", (2, 1), "x"), None, "end < start");
-        assert_eq!(splice("abc", (0, 9), "x"), None, "out of bounds");
-        assert_eq!(splice("abc", (0, 3), "x").as_deref(), Some("x"));
+    fn apply_edits_rejects_bad_spans() {
+        assert_eq!(apply_edits("héllo", (1, 2), "x", &[]), None, "non-char boundary");
+        assert_eq!(apply_edits("abc", (2, 1), "x", &[]), None, "end < start");
+        assert_eq!(apply_edits("abc", (0, 9), "x", &[]), None, "out of bounds");
+        assert_eq!(
+            apply_edits("abc", (0, 3), "x", &[]).as_deref(),
+            Some("x")
+        );
     }
 
     #[test]
-    fn ordering_is_file_line_then_shortest_replacement() {
+    fn apply_edits_applies_multi_edits_atomically() {
+        // The E0502 deref-removal shape: delete the `&` and the `*` in one
+        // candidate — half-landing must be impossible.
+        let text = "let first = &v[0];\n    v.push(1);\n    *first\n";
+        let amp = text.find('&').unwrap();
+        let star = text.find("*first").unwrap();
+        let out = apply_edits(
+            text,
+            (amp, amp + 1),
+            "",
+            &[SpanEdit {
+                byte_span: (star, star + 1),
+                replacement: String::new(),
+            }],
+        )
+        .unwrap();
+        assert_eq!(out, "let first = v[0];\n    v.push(1);\n    first\n");
+    }
+
+    #[test]
+    fn apply_edits_rejects_overlapping_edits() {
+        assert_eq!(
+            apply_edits(
+                "abcdef",
+                (1, 4),
+                "XY",
+                &[SpanEdit {
+                    byte_span: (3, 5),
+                    replacement: "Z".to_string(),
+                }],
+            ),
+            None,
+            "an edit starting inside the primary span must fail the whole candidate"
+        );
+    }
+
+    #[test]
+    fn ordering_is_file_line_then_shortest_total_replacement() {
         let mk = |file: &str, line: usize, repl: &str, strat: &str| FixCandidate {
             strategy_id: strat.to_string(),
             code: "E0597".to_string(),
@@ -495,6 +567,7 @@ mod tests {
             line,
             byte_span: (0, 0),
             replacement: repl.to_string(),
+            extra_edits: Vec::new(),
         };
         let mut cands = vec![
             mk("b.rs", 1, "short", "z"),
@@ -512,6 +585,47 @@ mod tests {
     }
 
     #[test]
+    fn ordering_counts_extra_edits_in_total_len() {
+        let base = |strat: &str, extras: Vec<SpanEdit>| FixCandidate {
+            strategy_id: strat.to_string(),
+            code: "E0597".to_string(),
+            file: PathBuf::from("a.rs"),
+            line: 1,
+            byte_span: (0, 0),
+            replacement: String::new(),
+            extra_edits: extras,
+        };
+        // A two-byte deletion pair must sort BEFORE a `.clone()` insertion
+        // even though the primary replacement is empty in both.
+        let pair = base(
+            "deref-removal",
+            vec![
+                SpanEdit {
+                    byte_span: (1, 2),
+                    replacement: String::new(),
+                },
+                SpanEdit {
+                    byte_span: (5, 6),
+                    replacement: String::new(),
+                },
+            ],
+        );
+        assert_eq!(pair.total_len(), 0, "deletions add no bytes");
+        let mut cands = vec![
+            base(
+                "clone-insert",
+                vec![SpanEdit {
+                    byte_span: (9, 9),
+                    replacement: ".clone()".to_string(),
+                }],
+            ),
+            pair,
+        ];
+        order_candidates(&mut cands);
+        assert_eq!(cands[0].strategy_id, "deref-removal");
+    }
+
+    #[test]
     fn tried_key_distinguishes_strategies_at_same_span() {
         let a = FixCandidate {
             strategy_id: "s1".to_string(),
@@ -520,6 +634,7 @@ mod tests {
             line: 1,
             byte_span: (3, 8),
             replacement: "x".to_string(),
+            extra_edits: Vec::new(),
         };
         let b = FixCandidate {
             strategy_id: "s2".to_string(),

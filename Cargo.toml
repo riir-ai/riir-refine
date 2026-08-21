@@ -199,8 +199,10 @@ clippy_verify = ["clippy_lints"]
 # What it currently gates: the measurement layer (suggestion-aware rustc
 # JSON parsing, the premise probe, the G-floor harness) + the Phase 1
 # `--fix-compile` driver (bounded check→propose→apply→recheck→revert loop,
-# the playbook seam, and the CLI). Playbook templates are Phase 2–3; the
-# registry ships empty, so `--fix-compile` today reports errors + misses.
+# the playbook seam, and the CLI) + the playbook families: E0597 (Phase 2)
+# and borrowck E0502/E0499/E0505 (Phase 3). E0596/E0382/E0507/E0373 ship
+# NO template by the measured floor (Bench 041 — `cargo fix` scores 100%
+# matched there); those codes report as misses and delegate to `cargo fix`.
 rustc_errors = ["compile_oracle"]
 
 # Ruliology candidate enumeration (L3 refinement layer).

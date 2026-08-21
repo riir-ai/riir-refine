@@ -106,6 +106,36 @@ it is "rustc is right 6 times out of 7 and silently wrong once."
   is a one-line arm swap. `NullFixer` scores 0.0% — the harness is measuring
   the fixer, not the mutation.
 
+## 3. The `--fix-compile` arm (measured 2026-08-22, Phase 3 landing)
+
+The pending arm above landed with Phase 3 (`DriverFixer` — the production
+driver + registry over the same corpus; E0502 deref-removal/clone-out, E0499
+swap, E0505 clone-at-move; the E0597 family from Phase 2).
+
+| code | mutants | cargo fix | `--fix-compile` | verdict |
+|---|---|---|---|---|
+| E0597 | 2 | **0%** unfixed | **100%** (2 diverged) | **net-new** — the uncontested head, covered |
+| E0499 | 1 | **0%** unfixed | **100%** (1 diverged) | **net-new** — the swap reorders instead of re-scoping |
+| E0502 | 2 | **0%** unfixed | **100%** (1 **matched** + 1 diverged) | **net-new** — deref-removal restores the `Copy` seed byte-identically |
+| E0505 | 1 | 100% but **100% diverged** | **100% MATCHED** | **the contested win** — clone-at-move keeps `r` borrowing `v`; rustc's `&v.clone()` silently changes aliasing |
+| E0596 | 2 | 100% matched | 0% (no template) | delegated to `cargo fix` by the floor gate |
+| E0382 | 1 | 100% matched | 0% (no template) | delegated |
+| E0507 | 1 | 100% matched | 0% (no template) | delegated |
+| E0373 | 2 | 100% matched | 0% (no template) | delegated |
+
+**Total: 6/12 fixed, 2 matched + 4 diverged.** The uncontested subset is
+6-for-6 counting E0505: every mutant `cargo fix` cannot fix (or fixes
+wrongly) is repaired, and the one where it diverges is repaired to the known
+inverse. The 4 diverged verdicts are semantically-equal-but-not-byte-seed
+reorders (E0597 hoist keeps an empty block; E0499 swaps instead of re-scoping;
+E0502 clone-out clones the element instead of reading `.len()` through the
+reference) — each named in the diff, per the plan's semantics-honesty rule.
+
+**The head-to-head that ships the product claim:** on the 5 uncontested
+mutants the floor scores 0/5 and `--fix-compile` scores 5/5; on E0505 the
+floor's only fix silently changes aliasing and ours matches the inverse.
+Nowhere does `--fix-compile` apply a fix the floor beats.
+
 ## Instrument credibility (the checks that fired)
 
 Three real bugs, all caught by the harness's own gates rather than by review:

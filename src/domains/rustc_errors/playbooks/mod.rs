@@ -19,25 +19,97 @@
 //!
 //! ## Phase status
 //!
-//! Phase 1 shipped the seam; **Phase 2 ships the E0597 family**
-//! ([`e0597`]) — six proposers keyed on the oracle's labeled spans, with the
-//! incident's `Vec<Case<'static>>` shape fixed at min-delta (the `'_` swap).
-//! The rest of borrowck lands in Phase 3. `--fix-compile` still reports a
-//! miss for any code the family does not cover.
+//! Phase 1 shipped the seam; Phase 2 shipped the E0597 family ([`e0597`]);
+//! **Phase 3 ships [`borrowck`]** — the rest of the uncontested territory
+//! (E0502, E0499) plus the one measured contested opening (E0505's
+//! aliasing-divergence, where `cargo fix` rewrites the borrow site and we
+//! clone at the move site, matching the known inverse). E0596/E0382/E0507/
+//! E0373 ship NO template by measurement (Bench 041: `cargo fix` scores
+//! 100% matched there — no headroom).
 
+pub mod borrowck;
 pub mod e0597;
 
+pub use borrowck::family as borrowck_family;
 pub use e0597::family;
 
 use std::path::{Path, PathBuf};
 
-use super::diag::RustcErrorDiag;
+use super::diag::{LabeledSpan, RustcErrorDiag};
 
-/// One proposed edit: replace `source[byte_span]` with `replacement`.
+/// A labeled span in the same file as the diagnostic's primary span —
+/// the shared anchor lookup every playbook family keys on (the oracle's
+/// own location knowledge, never guessed).
+pub(crate) fn anchor(
+    diag: &RustcErrorDiag,
+    pred: impl Fn(&str) -> bool,
+) -> Option<&LabeledSpan> {
+    let (pf, _) = diag.primary.as_ref()?;
+    diag.labeled_spans
+        .iter()
+        .find(|ls| &ls.file == pf && pred(&ls.label))
+}
+
+/// Label "binding `x` declared here" (or any label whose first backtick
+/// pair is a plain ident) → the binding name `x`.
+pub(crate) fn binding_name(label: &str) -> Option<&str> {
+    let start = label.find('`')? + 1;
+    let end = start + label[start..].find('`')?;
+    let name = &label[start..end];
+    if name.is_empty()
+        || !name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_')
+    {
+        return None;
+    }
+    Some(name)
+}
+
+/// Build a single-edit candidate (the common shape).
+pub(crate) fn cand(
+    diag: &RustcErrorDiag,
+    file: &Path,
+    line: usize,
+    byte_span: (usize, usize),
+    replacement: String,
+    strategy_id: &str,
+) -> FixCandidate {
+    FixCandidate {
+        strategy_id: strategy_id.to_string(),
+        code: diag.code.clone(),
+        file: file.to_path_buf(),
+        line,
+        byte_span,
+        replacement,
+        extra_edits: Vec::new(),
+    }
+}
+
+/// One atomic edit of a [`FixCandidate`]: replace `source[byte_span]`
+/// with `replacement`.
 ///
-/// The span is against the source text the playbook was handed (the
-/// driver re-proposes every iteration, so spans never go stale across
-/// kept fixes).
+/// A candidate may carry SEVERAL edits ([`FixCandidate::extra_edits`]) —
+/// they are applied as ONE unit and reverted as ONE unit. The E0502
+/// deref-removal is the motivating case: deleting the `&` at the binding
+/// without also deleting the `*` at the uses trades E0502 for E0614
+/// (no progress → revert), so the pair must land atomically or not at
+/// all.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SpanEdit {
+    /// Byte range to replace in the CURRENT file content.
+    pub byte_span: (usize, usize),
+    pub replacement: String,
+}
+
+/// One proposed edit: replace `source[byte_span]` with `replacement`,
+/// plus optional further edits in the SAME file applied atomically with
+/// it.
+///
+/// The primary span is against the source text the playbook was handed
+/// (the driver re-proposes every iteration, so spans never go stale across
+/// kept fixes). All edits of one candidate must be non-overlapping; the
+/// driver applies them in one pass and reverts all-or-nothing.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FixCandidate {
     /// Strategy identity for the report + the Phase 4 memory key
@@ -51,6 +123,24 @@ pub struct FixCandidate {
     /// Byte range to replace in the CURRENT file content.
     pub byte_span: (usize, usize),
     pub replacement: String,
+    /// Further edits applied atomically with the primary one (same file,
+    /// non-overlapping with it and each other). Empty for the common
+    /// single-edit candidate.
+    pub extra_edits: Vec<SpanEdit>,
+}
+
+impl FixCandidate {
+    /// Total replaced bytes across all edits — the min-delta ordering key
+    /// (shorter total wins).
+    #[must_use]
+    pub fn total_len(&self) -> usize {
+        self.replacement.len()
+            + self
+                .extra_edits
+                .iter()
+                .map(|e| e.replacement.len())
+                .sum::<usize>()
+    }
 }
 
 /// A playbook: proposes candidates for one diagnostic against the current
@@ -92,11 +182,22 @@ impl Playbooks {
         self
     }
 
-    /// The Phase 2 production registry (the E0597 family; Phase 3 adds the
-    /// rest of borrowck). What `--fix-compile` runs with.
+    /// The production registry (Phase 2's E0597 family + Phase 3's borrowck
+    /// family — E0502/E0499/E0505). What `--fix-compile` runs with.
     #[must_use]
     pub fn production() -> Self {
-        self::e0597::family()
+        let mut pb = self::e0597::family();
+        for p in self::borrowck::family().into_entries() {
+            pb = pb.with(p);
+        }
+        pb
+    }
+
+    /// The registered playbooks, as boxed entries (used by
+    /// [`Playbooks::production`] to compose families).
+    #[must_use]
+    pub fn into_entries(self) -> Vec<Box<dyn CompileProposer>> {
+        self.entries
     }
 
     /// Number of registered playbooks.
@@ -142,6 +243,7 @@ mod tests {
                 line: 1,
                 byte_span: (0, 0),
                 replacement: String::new(),
+                extra_edits: Vec::new(),
             }]
         }
     }

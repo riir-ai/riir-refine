@@ -323,10 +323,37 @@ arbitrate; revert is one iteration).
 
 ### Phase 3 — the rest of the borrowck family
 
-- [ ] T3.1 E0507 + E0382 (`.clone()` / borrow) templates + fixtures.
-- [ ] T3.2 E0596 + E0502 + E0499 + E0505 templates + fixtures.
-- [ ] T3.3 Cascade handling: fixes whose application reveals the NEXT error
+- [-] T3.1 E0507 + E0382 (`.clone()` / borrow) templates + fixtures.
+  **RESOLVED-NEGATIVE by the floor gate (T6.9, Bench 041):** `cargo fix
+  --broken-code` scores 100% MATCHED on both (no divergence, no headroom).
+  A template that cannot beat the floor does not ship — the gate, not
+  authoring ambition, decides the inventory. Re-opened only if a
+  toolchain bump regresses the floor (the premise probe is the standing
+  tripwire).
+- [x] T3.2 E0596 + E0502 + E0499 + E0505 templates + fixtures.
+  **DONE 2026-08-22** (`playbooks/borrowck.rs`) — scoped by measurement:
+  E0596 ships NO template (floor 100% matched × 2 — delegated); E0502
+  ships deref-removal (the atomic `&`+`*` deletion PAIR via the new
+  `FixCandidate::extra_edits` — half-landing trades E0502 for E0614, so
+  atomicity IS the correctness argument) + clone-out (`&e` → `e.clone()`,
+  the non-`Copy` rung); E0499 ships the decl/use swap (the adjacent-only
+  reorder; foreign-statement relocation refused); E0505 ships
+  clone-at-move (the contested-opening win: rustc's own
+  `MachineApplicable` fix rewrites the BORROW site — `let r = &v.clone()`,
+  aliasing silently changed — ours matches the known inverse). Oracle-
+  first discipline held: every label + every FIXED form probed on rustc
+  1.97.0 before authoring (the E0502 "immutable borrow" label covers the
+  borrowed PLACE, not the `&` — coverage varies by shape, so the
+  playbooks locate the `let` via syn and never splice on the label span).
+  13 unit fixtures incl. negative controls + the family no-leak pin.
+- [x] T3.3 Cascade handling: fixes whose application reveals the NEXT error
   (bounded by `--max-iters`); at least one two-level cascade fixture.
+  **DONE 2026-08-22** —
+  `fix_compile_borrowck.rs::cascade_two_e0502_errors_fixed_across_iterations`:
+  two independent E0502 errors, one fixed per iteration (2→1→0); the
+  first kept fix invalidates the first pass's byte spans and only
+  re-proposal (the Phase 1 loop design) keeps iteration 2's spans valid —
+  asserted via `report.iterations >= 2` + both seeds restored on disk.
 
 ### Phase 4 — self-evolution around every fix (the owner requirement: "ensure we self evolve around this")
 
@@ -438,14 +465,21 @@ arbitrate; revert is one iteration).
   exactly. Policy consequence: author NO templates for E0596/E0382/E0507/
   E0373 (no headroom); E0505's `&v.clone()` aliasing divergence is the only
   contested opening. The `--fix-compile` arm re-runs through the same
-  `CompileFixer` seam once Phase 1 lands. Original scope, for the record: on the mutation
+  `CompileFixer` seam once Phase 1 lands. **ARM MEASURED 2026-08-22 (Bench
+  041 §3, `DriverFixer`)**: uncontested subset 5/5 fixed where the floor is
+  0/5 (E0597 ×2, E0499 ×1, E0502 ×2 — the E0502 `Copy` case byte-matches
+  the seed); **E0505 100% MATCHED where the floor's only repair 100%
+  diverges** — the measured differentiator on the one contested opening;
+  the four delegated codes score 0 by design (no template — the floor owns
+  them). Original scope, for the record: on the mutation
   corpus, `cargo heal --fix-compile` vs `cargo fix --broken-code` head-to-head,
   reported PER ERROR CODE: fix rate, and — where both produce a fix — which
   diff a reviewer prefers (min-delta + semantics-preserving beats a blind
   `.clone()`). A contested code we do not beat ships NO template and is
   delegated to `cargo fix` in the driver. Publish the per-code table; the
   uncontested three are exempt from the comparison (floor rate = 0 by
-  measurement) but must still publish absolute coverage.
+  measurement) but must still publish absolute coverage. **Absolute
+  coverage on the uncontested head: 100% (5/5) at this corpus size.**
 - [ ] T6.10 **G-semantics:** the exclusion class (§Non-goals) is enforced by
   test, not prose — for each of `Box::leak`, aliasing-breaking `.clone()`
   insertion, and drop-order-changing scope restructure, either a never-emitted

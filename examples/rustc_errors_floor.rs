@@ -19,7 +19,7 @@
 //! moved the problem somewhere a compiler cannot see.
 
 use riir_clippy::domains::rustc_errors::floor::{
-    CargoFixBaseline, FixVerdict, FloorHarness, FloorReport, NullFixer, MUTANT_CASES,
+    CargoFixBaseline, DriverFixer, FixVerdict, FloorHarness, FloorReport, NullFixer, MUTANT_CASES,
 };
 use riir_clippy::domains::rustc_errors::probe::PremiseProbe;
 
@@ -29,6 +29,7 @@ fn main() {
 
     probe_section();
     let baseline = floor_section();
+    driver_arm_section();
     null_arm_section();
 
     println!("\n── Verdict ──");
@@ -172,10 +173,49 @@ fn floor_section() -> Option<FloorReport> {
     Some(report)
 }
 
+/// The product arm: the production `--fix-compile` driver + playbook
+/// registry, scored by the same harness against the same corpus — the
+/// head-to-head with [`CargoFixBaseline`] that T6.9 requires before any
+/// template may claim its code.
+fn driver_arm_section() {
+    println!(
+        "\n── 3. The `--fix-compile` arm over the same corpus ──\n"
+    );
+    let harness = FloorHarness::new().with_work_root(
+        std::env::temp_dir().join(format!("riir_floor_driver_arm_{}", std::process::id())),
+    );
+    if !harness.is_available() {
+        println!("  SKIP — cargo not on PATH.");
+        return;
+    }
+    match harness.measure(&DriverFixer) {
+        Err(e) => println!("  ERROR: {e}"),
+        Ok(report) => {
+            print_report(&report);
+            println!("\n  Per-mutant detail:");
+            for o in &report.outcomes {
+                let verdict = match o.verdict {
+                    FixVerdict::MatchedInverse => "matched-inverse",
+                    FixVerdict::Diverged => "DIVERGED",
+                    FixVerdict::Unfixed => "unfixed",
+                };
+                println!(
+                    "    {:<34} {:>6} {:<18} {:<15}",
+                    o.name,
+                    o.expect_code,
+                    o.mutator.label(),
+                    verdict
+                );
+            }
+        }
+    }
+    harness.cleanup();
+}
+
 /// The falsification arm: an arm that repairs nothing must score 0%.
 /// If it scores above zero the harness is measuring the mutation, not the fixer.
 fn null_arm_section() {
-    println!("\n── 3. Harness self-check: the no-op arm must score 0% ──\n");
+    println!("\n── 4. Harness self-check: the no-op arm must score 0% ──\n");
     let harness = FloorHarness::new().with_work_root(
         std::env::temp_dir().join(format!("riir_floor_null_arm_{}", std::process::id())),
     );

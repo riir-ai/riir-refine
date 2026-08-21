@@ -1,23 +1,20 @@
 //! `rustc_errors` — compile-error repair keyed by rustc error code
 //! (Plan 019; Issue 035).
 //!
-//! What ships here TODAY is the measurement layer, not the fixer:
-//!
 //! - [`diag`] — suggestion-aware rustc JSON parsing (error code +
 //!   `suggested_replacement` + applicability).
 //! - [`probe`] — the premise probe: does rustc already auto-fix this code?
 //! - [`floor`] — the G-floor harness: any [`floor::CompileFixer`] scored
-//!   against `cargo fix --broken-code` on a known-inverse mutation corpus.
+//!   against `cargo fix --broken-code` on a known-inverse mutation corpus
+//!   (arms: the [`floor::CargoFixBaseline`] floor, the [`floor::DriverFixer`]
+//!   product arm, the [`floor::NullFixer`] falsification control).
 //! - [`driver`] — the Phase 1 `--fix-compile` bounded repair loop
-//!   (check → propose → apply → recheck → keep/revert), with the
-//!   [`playbooks`] seam. The registry ships EMPTY — templates are Phase
-//!   2–3, so the driver today reports every coded error as a miss.
-//!
-//! The playbook templates are Plan 019 Phase 2–3; the ordering in which
-//! they landed is deliberate: the plan's founding premise ("rustc is
-//! structurally blind to the borrowck family") turned out to be false on
-//! 5 of 8 measured codes, so the floor is measured before templates are
-//! authored against it.
+//!   (check → propose → apply → recheck → keep/revert), over the
+//!   [`playbooks`] registry.
+//! - [`playbooks`] — the template families: [`playbooks::e0597`] (Phase 2,
+//!   six proposers) + [`playbooks::borrowck`] (Phase 3 — E0502/E0499/
+//!   E0505; E0596/E0382/E0507/E0373 ship NO template by the measured
+//!   floor, Bench 041).
 //!
 //! **Exact-keyed, so no retrieval.** The diagnostic carries the error code —
 //! nothing here needs latent lookup, which is why the `rustc_errors` feature

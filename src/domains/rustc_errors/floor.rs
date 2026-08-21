@@ -344,6 +344,35 @@ impl CompileFixer for NullFixer {
     }
 }
 
+/// The `--fix-compile` arm (Plan 019 T6.9's pending measurement): the
+/// production driver + production playbook registry over the scaffold
+/// crate's `src/lib.rs`. The one-line adapter the bench predicted — the
+/// [`CompileFixer`] seam was built for this.
+///
+/// `Ok` means the driver RAN (its own report carries the detail); the
+/// harness re-checks and scores, same as every arm.
+pub struct DriverFixer;
+
+impl CompileFixer for DriverFixer {
+    fn name(&self) -> &'static str {
+        "cargo heal --fix-compile"
+    }
+
+    fn fix(&self, dir: &Path) -> Result<(), String> {
+        let lib = dir.join("src").join("lib.rs");
+        if !lib.is_file() {
+            return Err(format!("no src/lib.rs in {}", dir.display()));
+        }
+        let driver = super::driver::CompileDriver::isolated();
+        let _report = driver.run(
+            &[lib],
+            &super::playbooks::Playbooks::production(),
+            true,
+        );
+        Ok(())
+    }
+}
+
 /// How a repair compares to the mutation's known inverse.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FixVerdict {
