@@ -9,6 +9,17 @@
 
 ## Mining queue snapshot (update per batch — this is the resume state)
 
+- **2026-08-21 — Plan 019 filed (owner call, same-day): the `rustc_errors` domain —
+  `cargo heal --fix-compile`, oracle-driven compile-error repair.** NOT a mining
+  batch — a domain build. Motivating evidence: the E0597 incident (a narrative
+  root-cause shipped + failed reproduction on 5 toolchains; the committed code
+  was never broken). Borrows vs. builds: CONSUMES `fix_verify` (the oracle
+  loop), `ClippyOracle` (cargo JSON), L3 `ast_delta_size`, `EvolveRecorder`,
+  `BetaPosterior`; BUILDS only the per-error-code playbook proposers + the
+  bounded fix-compile driver + the watch wrapper. Self-evolve is first-class
+  (Phase 4: trajectories, move-ordering policy, `.heal/misses/` corpus-growth
+  loop). Real-use target: `scripts/watch_heal.sh` (Phase 5). Idle loop: pick up
+  at Phase 0 (substrate-first grep) — the plan is the task list.
 - **2026-08-20 — sec-domain seed verdict recorded (Research 078) + Proposal 004 +
   Plan 018 filed (same day, owner call):**
   the rust-secure-code/projects index surveyed end-to-end (39 links, 4 lanes).
