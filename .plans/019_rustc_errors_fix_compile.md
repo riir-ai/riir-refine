@@ -173,7 +173,7 @@ arbitrate; revert is one iteration).
 - [ ] T0.2 Confirm `ClippyOracle`'s JSON machinery is reusable for
   `cargo check` diagnostics (error-code field, spans, children) — extend,
   don't fork.
-- [ ] T0.3 **Feature graph** — name the flag `rustc_errors` and keep it OFF
+- [x] T0.3 **Feature graph** (DONE 2026-08-21) — name the flag `rustc_errors` and keep it OFF
   the `latent_retrieval` dep tree. Verified 2026-08-21: `src/fix_verify.rs`
   imports only `std` + `serde` (zero `riir_rag` / `riir_neuron_db`), so
   `fix_verify = ["latent_retrieval"]` is a CLI-surface implication, not a code
@@ -181,10 +181,15 @@ arbitrate; revert is one iteration).
   extract the apply→check→revert core behind a retrieval-free
   `compile_oracle` feature that `fix_verify` and `rustc_errors` both consume,
   rather than dragging riir-rag + riir-neuron-db into a compile fixer.
-- [ ] T0.4 Re-run the premise probe (Issue 035) on the repo's pinned toolchain
+  **Shipped:** `rustc_errors = []` in Cargo.toml with zero implications; the
+  measurement layer (`diag`/`probe`/`floor`) uses std + serde only. The
+  `compile_oracle` extraction is still pending — needed only when the driver
+  consumes `fix_verify`'s apply→check→revert core (Phase 1).
+- [x] T0.4 Re-run the premise probe (Issue 035) on the repo's pinned toolchain
   and pin the measured table as a test, so a rustc bump that moves a code from
   uncontested → contested fails loudly instead of silently invalidating the
-  product claim.
+  product claim. **DONE 2026-08-21** — `tests/premise_probe.rs`, 6 tests green
+  on the pin (1.97.0) AND on 1.93.0. The table held on both; see Bench 041.
 
 ### Phase 1 — the oracle driver
 
@@ -279,7 +284,12 @@ arbitrate; revert is one iteration).
 
 - [ ] T6.1 Mutation corpus: N≥200 labeled (broken, known-inverse-fix) pairs
   under `tests/mutations/` (generated, committed for determinism) via
-  Rust-level compile-breaking mutators (drop `&`, add `move`, `'static`
+  Rust-level compile-breaking mutators. **PARTIAL 2026-08-21:** the mutator +
+  a 12-case committed corpus ship as
+  `rustc_errors::floor::{mutate_compile_break, MUTANT_CASES}` (6 mutator
+  kinds, stratified by territory, integrity-gated by
+  `tests/floor_corpus_integrity.rs`). N≥200 is NOT met and not claimed —
+  Bench 041's caveats bound every number to these 12 cases. (drop `&`, add `move`, `'static`
   injection, swap borrow for move, …) over a sample of THIS repo's +
   katgpt-rs's compiling code. **Correction:** the earlier draft said "extend
   `mutate_shape`" — that is a mis-citation. `mutate_shape`
@@ -300,7 +310,14 @@ arbitrate; revert is one iteration).
 - [ ] T6.5 **G4 alloc:** the propose/apply path itself alloc-free
   steady-state (counting allocator, the perf-bench axis) — cargo-check
   subprocess cost is out of scope (it's the oracle, not the healer).
-- [ ] T6.9 **G-floor (the gate the refuted premise forces):** on the mutation
+- [x] T6.9 **G-floor (the gate the refuted premise forces)** — harness DONE
+  2026-08-21, baseline arm MEASURED (Bench 041): 58.3% over 12 known-inverse
+  mutants, bimodal — **0% on E0597/E0499/E0502, 100% on E0596/E0382/E0507/
+  E0373/E0505**, and 7 of 8 contested repairs matched the known inverse
+  exactly. Policy consequence: author NO templates for E0596/E0382/E0507/
+  E0373 (no headroom); E0505's `&v.clone()` aliasing divergence is the only
+  contested opening. The `--fix-compile` arm re-runs through the same
+  `CompileFixer` seam once Phase 1 lands. Original scope, for the record: on the mutation
   corpus, `cargo heal --fix-compile` vs `cargo fix --broken-code` head-to-head,
   reported PER ERROR CODE: fix rate, and — where both produce a fix — which
   diff a reviewer prefers (min-delta + semantics-preserving beats a blind

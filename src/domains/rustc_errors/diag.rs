@@ -1,0 +1,324 @@
+//! rustc JSON diagnostics, suggestion-aware (Issue 035 T1; Plan 019 T1.1).
+//!
+//! [`crate::fix_verify::parse_error_locations`] already parses cargo's
+//! JSON-lines output, but it answers one question — *which lines have
+//! errors* — and deliberately drops everything else. The `rustc_errors`
+//! domain needs two fields it discards:
+//!
+//! - `code.code` — the `E0597`-style identifier. This domain is **exact-keyed**
+//!   by it (no retrieval; that is why the feature does not pull
+//!   `latent_retrieval`, per Plan 019 T0.3).
+//! - `spans[].suggested_replacement` + `suggestion_applicability` — whether
+//!   rustc already ships a fix, and whether `cargo fix` will apply it.
+//!
+//! That second field is the whole reason this module exists. Plan 019 opened
+//! by asserting rustc emits NO machine-applicable suggestions for the
+//! borrowck family; the assertion was false on 4 of 7 codes, and nothing in
+//! the tree could have told us so, because no parser here read the field.
+//! This module makes the premise measurable instead of assumed.
+//!
+//! Pure parsing only — no subprocess, no I/O. [`super::probe`] supplies the
+//! JSON.
+
+use serde::Deserialize;
+
+/// How confident rustc is that its suggestion can be applied mechanically.
+///
+/// Only [`Applicability::MachineApplicable`] is applied by `cargo fix`; the
+/// rest are display-only hints. The distinction is the contested/uncontested
+/// boundary of the whole `rustc_errors` product thesis.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Applicability {
+    /// `cargo fix` will apply this automatically.
+    MachineApplicable,
+    /// Has placeholders a human must fill in.
+    HasPlaceholders,
+    /// May not compile / may change semantics.
+    MaybeIncorrect,
+    /// rustc explicitly declines to say.
+    Unspecified,
+    /// Field absent or an unrecognized value.
+    Unknown,
+}
+
+impl Applicability {
+    /// Parse rustc's `suggestion_applicability` string.
+    #[must_use]
+    pub fn from_json(raw: Option<&str>) -> Self {
+        match raw {
+            Some("MachineApplicable") => Self::MachineApplicable,
+            Some("HasPlaceholders") => Self::HasPlaceholders,
+            Some("MaybeIncorrect") => Self::MaybeIncorrect,
+            Some("Unspecified") => Self::Unspecified,
+            _ => Self::Unknown,
+        }
+    }
+
+    /// Would `cargo fix` apply a suggestion at this applicability?
+    #[must_use]
+    pub fn is_auto_applied(self) -> bool {
+        matches!(self, Self::MachineApplicable)
+    }
+}
+
+/// One suggested replacement rustc attached to a span.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SuggestionSpan {
+    pub file: String,
+    pub line_start: usize,
+    pub replacement: String,
+    pub applicability: Applicability,
+    /// The `help:`/`note:` text the suggestion hung off — the human-readable
+    /// strategy name (`consider cloning the value ...`).
+    pub message: String,
+}
+
+/// One `error[E….]` diagnostic, keyed by code, with every suggestion span
+/// found anywhere in its `children` tree.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RustcErrorDiag {
+    /// `E0597`. Diagnostics without a code are dropped — this domain keys on it.
+    pub code: String,
+    pub message: String,
+    /// Primary span, when the diagnostic has one: `(file, line_start)`.
+    pub primary: Option<(String, usize)>,
+    pub suggestions: Vec<SuggestionSpan>,
+}
+
+impl RustcErrorDiag {
+    /// Suggestions `cargo fix` would apply without asking.
+    #[must_use]
+    pub fn machine_applicable(&self) -> Vec<&SuggestionSpan> {
+        self.suggestions
+            .iter()
+            .filter(|s| s.applicability.is_auto_applied())
+            .collect()
+    }
+
+    /// Is this code **uncontested** — i.e. rustc offers no auto-fix, so
+    /// `cargo fix` is genuinely blind and any coverage we add is net-new?
+    #[must_use]
+    pub fn is_uncontested(&self) -> bool {
+        self.machine_applicable().is_empty()
+    }
+}
+
+// ── JSON shapes (cargo's `--message-format=json` lines) ───────────────────
+
+#[derive(Deserialize)]
+struct CargoMessage {
+    #[serde(default)]
+    reason: Option<String>,
+    #[serde(default)]
+    message: Option<JsonDiag>,
+}
+
+#[derive(Deserialize)]
+struct JsonDiag {
+    #[serde(default)]
+    level: String,
+    #[serde(default)]
+    message: String,
+    #[serde(default)]
+    code: Option<JsonCode>,
+    #[serde(default)]
+    spans: Vec<JsonSpan>,
+    #[serde(default)]
+    children: Vec<JsonDiag>,
+}
+
+#[derive(Deserialize)]
+struct JsonCode {
+    #[serde(default)]
+    code: String,
+}
+
+#[derive(Deserialize)]
+struct JsonSpan {
+    file_name: String,
+    line_start: usize,
+    #[serde(default)]
+    is_primary: bool,
+    #[serde(default)]
+    suggested_replacement: Option<String>,
+    #[serde(default)]
+    suggestion_applicability: Option<String>,
+}
+
+/// Parse cargo JSON-lines into error diagnostics carrying an `E….` code.
+///
+/// - Only `reason == "compiler-message"` at `level` starting `error`.
+/// - Diagnostics with no `code` are dropped (unkeyable by this domain).
+/// - Suggestion spans are collected from the diagnostic AND, recursively,
+///   its children — rustc hangs replacements off `help:` children, never off
+///   the top-level span, so a non-recursive walk finds nothing.
+/// - Non-JSON lines are skipped (cargo interleaves plain progress output).
+#[must_use]
+pub fn parse_error_diags(json_stdout: &str) -> Vec<RustcErrorDiag> {
+    let mut out = Vec::new();
+    for line in json_stdout.lines() {
+        let Ok(msg) = serde_json::from_str::<CargoMessage>(line.trim()) else {
+            continue;
+        };
+        if msg.reason.as_deref() != Some("compiler-message") {
+            continue;
+        }
+        let Some(diag) = msg.message else { continue };
+        if !diag.level.starts_with("error") {
+            continue;
+        }
+        let Some(code) = diag.code.as_ref().map(|c| c.code.clone()) else {
+            continue;
+        };
+        if code.is_empty() {
+            continue;
+        }
+        let primary = diag
+            .spans
+            .iter()
+            .find(|s| s.is_primary)
+            .map(|s| (s.file_name.clone(), s.line_start));
+        let mut suggestions = Vec::new();
+        collect_suggestions(&diag, &mut suggestions);
+        out.push(RustcErrorDiag {
+            code,
+            message: diag.message.clone(),
+            primary,
+            suggestions,
+        });
+    }
+    out
+}
+
+fn collect_suggestions(diag: &JsonDiag, out: &mut Vec<SuggestionSpan>) {
+    for s in &diag.spans {
+        let Some(replacement) = s.suggested_replacement.as_ref() else {
+            continue;
+        };
+        out.push(SuggestionSpan {
+            file: s.file_name.clone(),
+            line_start: s.line_start,
+            replacement: replacement.clone(),
+            applicability: Applicability::from_json(s.suggestion_applicability.as_deref()),
+            message: diag.message.clone(),
+        });
+    }
+    for child in &diag.children {
+        collect_suggestions(child, out);
+    }
+}
+
+/// Group parsed diagnostics by error code, counting machine-applicable
+/// suggestions — the premise table's row shape.
+#[must_use]
+pub fn machine_applicable_by_code(diags: &[RustcErrorDiag]) -> Vec<(String, usize, usize)> {
+    let mut codes: Vec<String> = diags.iter().map(|d| d.code.clone()).collect();
+    codes.sort();
+    codes.dedup();
+    codes
+        .into_iter()
+        .map(|code| {
+            let matching: Vec<&RustcErrorDiag> =
+                diags.iter().filter(|d| d.code == code).collect();
+            let total: usize = matching.iter().map(|d| d.suggestions.len()).sum();
+            let auto: usize = matching.iter().map(|d| d.machine_applicable().len()).sum();
+            (code, total, auto)
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A real `cargo check --message-format=json` line, trimmed to the fields
+    /// this module reads. The suggestion hangs off a `help:` CHILD — the
+    /// shape a non-recursive walk misses.
+    const E0596_LINE: &str = r#"{"reason":"compiler-message","message":{"level":"error","message":"cannot borrow `x` as mutable","code":{"code":"E0596"},"spans":[{"file_name":"src/lib.rs","line_start":5,"is_primary":true}],"children":[{"level":"help","message":"consider changing this to be mutable","code":null,"spans":[{"file_name":"src/lib.rs","line_start":5,"is_primary":true,"suggested_replacement":"mut ","suggestion_applicability":"MachineApplicable"}],"children":[]}]}}"#;
+
+    const E0499_LINE: &str = r#"{"reason":"compiler-message","message":{"level":"error","message":"cannot borrow `*v` as mutable more than once at a time","code":{"code":"E0499"},"spans":[{"file_name":"src/lib.rs","line_start":9,"is_primary":true}],"children":[{"level":"note","message":"first borrow later used here","code":null,"spans":[{"file_name":"src/lib.rs","line_start":9,"is_primary":false}],"children":[]}]}}"#;
+
+    #[test]
+    fn parses_code_primary_and_child_suggestion() {
+        let diags = parse_error_diags(E0596_LINE);
+        assert_eq!(diags.len(), 1);
+        let d = &diags[0];
+        assert_eq!(d.code, "E0596");
+        assert_eq!(d.primary, Some(("src/lib.rs".to_string(), 5)));
+        assert_eq!(d.suggestions.len(), 1, "suggestion lives in a help child");
+        assert_eq!(d.suggestions[0].replacement, "mut ");
+        assert_eq!(
+            d.suggestions[0].applicability,
+            Applicability::MachineApplicable
+        );
+        assert!(!d.is_uncontested(), "E0596 is contested — cargo fix owns it");
+    }
+
+    #[test]
+    fn uncontested_code_has_no_machine_applicable_suggestion() {
+        let diags = parse_error_diags(E0499_LINE);
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].code, "E0499");
+        assert!(diags[0].suggestions.is_empty());
+        assert!(diags[0].is_uncontested());
+    }
+
+    #[test]
+    fn warnings_and_codeless_and_garbage_are_dropped() {
+        let warning = r#"{"reason":"compiler-message","message":{"level":"warning","message":"unused","code":{"code":"unused_variables"},"spans":[],"children":[]}}"#;
+        let codeless = r#"{"reason":"compiler-message","message":{"level":"error","message":"aborting","code":null,"spans":[],"children":[]}}"#;
+        let other = r#"{"reason":"compiler-artifact","target":{"name":"x"}}"#;
+        let input = format!("{warning}\n{codeless}\n{other}\nnot json at all\n\n{E0596_LINE}");
+        let diags = parse_error_diags(&input);
+        assert_eq!(diags.len(), 1, "only the coded error survives");
+        assert_eq!(diags[0].code, "E0596");
+    }
+
+    #[test]
+    fn applicability_maps_every_rustc_value() {
+        assert_eq!(
+            Applicability::from_json(Some("MachineApplicable")),
+            Applicability::MachineApplicable
+        );
+        assert_eq!(
+            Applicability::from_json(Some("MaybeIncorrect")),
+            Applicability::MaybeIncorrect
+        );
+        assert_eq!(
+            Applicability::from_json(Some("HasPlaceholders")),
+            Applicability::HasPlaceholders
+        );
+        assert_eq!(
+            Applicability::from_json(Some("Unspecified")),
+            Applicability::Unspecified
+        );
+        assert_eq!(Applicability::from_json(None), Applicability::Unknown);
+        assert_eq!(
+            Applicability::from_json(Some("SomethingNewInRustc")),
+            Applicability::Unknown
+        );
+        // Only MachineApplicable is auto-applied — the contested boundary.
+        assert!(Applicability::MachineApplicable.is_auto_applied());
+        for a in [
+            Applicability::MaybeIncorrect,
+            Applicability::HasPlaceholders,
+            Applicability::Unspecified,
+            Applicability::Unknown,
+        ] {
+            assert!(!a.is_auto_applied(), "{a:?} must not count as auto-applied");
+        }
+    }
+
+    #[test]
+    fn groups_counts_by_code() {
+        let input = format!("{E0596_LINE}\n{E0499_LINE}");
+        let table = machine_applicable_by_code(&parse_error_diags(&input));
+        assert_eq!(
+            table,
+            vec![
+                ("E0499".to_string(), 0, 0),
+                ("E0596".to_string(), 1, 1),
+            ]
+        );
+    }
+}

@@ -5,6 +5,8 @@
 //! - `rust_perf` (default since 2026-08-13, Phase 2) — `rust-optimize` perf
 //!   healing (promoted after Bench 013 GOAT G1+G5 PASS)
 //! - `kernel_heal` (opt-in, Phase 3) — GPU kernel optimization healing
+//! - `rustc_errors` (opt-in, Plan 019) — rustc compile-error repair. Ships
+//!   the measurement layer only so far (premise probe + `cargo fix` floor).
 
 #[cfg(feature = "clippy_lints")]
 pub mod clippy_lints;
@@ -14,3 +16,6 @@ pub mod rust_perf;
 
 #[cfg(feature = "kernel_heal")]
 pub mod kernel_opt;
+
+#[cfg(feature = "rustc_errors")]
+pub mod rustc_errors;

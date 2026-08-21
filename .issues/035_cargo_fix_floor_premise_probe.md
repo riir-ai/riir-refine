@@ -1,7 +1,8 @@
 # Issue 035 — `cargo fix --broken-code` is the floor for `rustc_errors`; premise probe + repro
 
 **Date:** 2026-08-21
-**Status:** OPEN — blocks Plan 019 Phase 3 (contested codes) and the product claim
+**Status:** OPEN — T1 + T2 DONE (Bench 041, 2026-08-21); T3 + T4 open. Still
+blocks Plan 019 Phase 3 (contested codes).
 **Refs:** `.plans/019_rustc_errors_fix_compile.md` (thesis revised in the same commit)
 
 ## Why
@@ -62,15 +63,36 @@ is available on stable — no nightly, no `-Z`.
 
 ## Tasks
 
-- [ ] T1 Port the probe to `tests/premise_probe.rs`: assert the per-code
+- [x] T1 Port the probe to `tests/premise_probe.rs`: assert the per-code
   suggestion counts on the pinned toolchain. A rustc bump that moves a code
   from uncontested → contested must FAIL, not silently void the product claim.
-- [ ] T2 G-floor harness (Plan 019 T6.9): head-to-head vs
+  **DONE** — 6 tests, all green on the repo pin (1.97.0) as well as the box
+  default (1.93.0), so the split is not a one-toolchain artifact. Ships
+  `src/domains/rustc_errors/{diag,probe}.rs` behind the retrieval-free
+  `rustc_errors` feature (T0.3 satisfied at birth). Includes the
+  fixture-mislabel gate that pins the E0597-vs-E0373 finding.
+- [x] T2 G-floor harness (Plan 019 T6.9): head-to-head vs
   `cargo fix --broken-code` on the mutation corpus, reported per error code.
+  **DONE** — `src/domains/rustc_errors/floor.rs` (`CompileFixer` seam,
+  `CargoFixBaseline`, `NullFixer`, known-inverse mutation corpus) +
+  `examples/rustc_errors_floor.rs` + `tests/floor_corpus_integrity.rs`.
+  **Measured (Bench 041): floor = 58.3% over 12 mutants, bimodal along the
+  territory line — 0% on all 3 uncontested codes, 100% on all 5 contested
+  ones.** Of 8 contested repairs, 7 reproduced the known inverse EXACTLY;
+  the lone divergence is E0505's `&v.clone()` (aliasing silently changed
+  under a MachineApplicable label). The `--fix-compile` arm is not measured
+  because Plan 019 Phase 1 is unimplemented — the seam is final, so landing
+  the driver is an arm swap.
 - [ ] T3 Driver delegation: for any contested code where the floor is not
   beaten, `--fix-compile` delegates to `cargo fix` instead of shipping a
-  template. No template authored ahead of a measured win.
+  template. No template authored ahead of a measured win. **Blocked on Plan
+  019 Phase 1 (no driver yet). Bench 041 already decides the policy: E0596,
+  E0382, E0507, E0373 have a 100%-at-0%-divergence floor and get NO
+  template — delegate. E0505 is the one contested code with an opening.**
 - [ ] T4 Re-measure on toolchain bumps. The contested set only grows.
+  Standing, not schedulable: `tests/premise_probe.rs` fails on the bump, which
+  IS the reminder. `rust-toolchain.toml` pins 1.97.0 across the stack, so a
+  bump is already a deliberate reviewed commit — re-run Bench 041 in it.
 
 ## Close condition
 

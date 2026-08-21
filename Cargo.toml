@@ -175,6 +175,22 @@ kernel_verify = ["kernel_heal"]
 # Implies `clippy_lints` (uses the clippy verifier + proposers).
 clippy_verify = ["clippy_lints"]
 
+# Plan 019 / Issue 035: the `rustc_errors` domain — compile-error repair keyed
+# by rustc error code. Opt-in (default-off) and NOT promotable until the
+# G-floor gate passes: `cargo fix --broken-code` already repairs 5 of the 8
+# measured codes, so a template that does not beat it must not ship.
+#
+# Deliberately does NOT imply `latent_retrieval` (Plan 019 T0.3): this domain
+# is exact-keyed by the error code in the diagnostic, so it needs no retrieval,
+# and `src/fix_verify.rs` (whose oracle loop it will consume) imports only
+# std + serde. Pulling riir-rag + riir-neuron-db into a compile fixer would be
+# dep-tree drift, not reuse.
+#
+# What it currently gates: the measurement layer only (suggestion-aware rustc
+# JSON parsing, the premise probe, the G-floor harness). The `--fix-compile`
+# driver is Plan 019 Phase 1 and is not implemented yet.
+rustc_errors = []
+
 # Ruliology candidate enumeration (L3 refinement layer).
 # Implies `clippy_lints` (searches over clippy corpus entries).
 ruliology_search = ["clippy_lints"]
@@ -249,6 +265,14 @@ required-features = ["kernel_heal"]
 [[example]]
 name = "wgsl_scan_smoke"
 required-features = ["kernel_heal"]
+
+# Issue 035 T2: the G-floor measurement — every arm scored against
+# `cargo fix --broken-code` on the known-inverse mutation corpus.
+# SLOW — scaffolds a temp crate and spawns cargo check/fix per mutant.
+#   cargo run --release --example rustc_errors_floor --features rustc_errors
+[[example]]
+name = "rustc_errors_floor"
+required-features = ["rustc_errors"]
 
 # Issue 025 T6: the WGSL/cube git-history mining harness (default+experimental
 # patterns; the diff adjudicates). Same gating as wgsl_scan_smoke — the
