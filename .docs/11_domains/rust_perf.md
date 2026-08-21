@@ -19,7 +19,7 @@
 
 ## Corpus
 
-74 rules across 12 categories (rust-optimize skill checklist +
+76 rules across 12 categories (rust-optimize skill checklist +
 nnethercote/perf-book + rustc-hash/bevy real-world patterns + the hotpath-rs
 profiling guide, Research 032; Batch 48 added the 8 online-search candidates
 from the perf-book std-types + iterators chapters; Batch 53 added the 4
@@ -33,22 +33,23 @@ oxc-article rules: `keyword-map-to-match` + `usize-index-to-u32`; Batch 62
 (2026-08-19, Research 073 — the polars kernel-idiom distill) added
 `sparse-set-bit-iteration-tz-blsr` + `sortedness-check-branchless-accumulate`; Batch 67 (2026-08-19, Research 074 — the regex-automata distill) added
 `byte-find-position-to-memchr`; Batch 68 (2026-08-19, Research 075 — the
-tantivy utility-layer distill) added the annotated `varint-compose-word-single-store`; Batch 69 added `unaligned-word-load-from-bytes` — the T6 defer refuted, a cross-arch WINNER).
+tantivy utility-layer distill) added the annotated `varint-compose-word-single-store`; Batch 69 added `unaligned-word-load-from-bytes` — the T6 defer refuted, a cross-arch WINNER; Batch 65 (2026-08-22, Research 081 — the hotpath.rs profiler distill) added the 2 contention rules: `align-64-false-sharing` + `channel-send-batching-unpark`, both measured ParetoDominant).
 Allocation is the deepest
 category (18 rules). Complexity has 15 (Batch 64 added `debug-assert-length-hoist`). Iterators has 9 (Batch 66 added `sortedness-check-branchless-accumulate`; Batch 67 added `byte-find-position-to-memchr`). Simd 7 (Batch 62 added `transposed-weight-register-gemv`; Batch 64 added `loop-order-innermost-contiguous`), layout 6
 (Batch 61 added `usize-index-to-u32`);
-concurrency has 4 (Issue 014 added the two metric-mismatch rules);
+concurrency has 6 (Issue 014 added the two metric-mismatch rules; Batch 65
+added the two measured contention rules);
 caching has 2 (Issue 014 added `regex-hoist-lazylock`); arithmetic has 6
 (Batch 53 added `powi-vs-powf` + `distance-sq-no-sqrt`; Batch 59 added
 `division-by-invariant-multiplication`; Batch 62 added the annotated
 `newton-refinement-vs-hardware-transcendental`; Batch 66 added
 `sparse-set-bit-iteration-tz-blsr`); dispatch has 2 (Batch 61 added
-`keyword-map-to-match`); io has 3 (Batch 68 added
+`keyword-map-to-match`); io is 3 (Batch 68 added
 `varint-compose-word-single-store`; Batch 69 added `unaligned-word-load-from-bytes`); the rest have 1
-each. 63 are benchable (carry a `BenchSpec`); 10 are honestly
+each. 66 are benchable (carry a `BenchSpec`); 10 are honestly
 `NotBenchable` — 8 need external runtimes or are structural (size_of,
 memory, fairness), 2 are **metric-mismatch** (Issue 014 T2.3/T2.4: the cost
-is contention latency / queue depth, not wall-clock). 16 of 74 carry
+is contention latency / queue depth, not wall-clock). 18 of 76 carry
 `context_notes` — 11 verdict-class (4 `ParetoDominated` + 7
 regime-fragile/Mixed — Batch 48 added the `filter-count-to-any` folk-wisdom
 refutation: the VECTORIZED count loop beats `any()`'s scalar early-exit at
@@ -57,7 +58,12 @@ lowers `powf(2.0)` to the same multiply as `powi(2)` in release, the folk
 wisdom only holds for debug profiles / exponents ≥ 3 — and the
 `soa-hot-field` latency-bound scoping — a serial f32 add-reduction hides the
 layout win; SoA pays on throughput-bound field consumers) + 2
-metric-mismatch-class. Consumers should treat
+metric-mismatch-class + 5 regime-caveat (Batch 62/64/66 winner-regime notes +
+Batch 65's two: the **arch-granularity caveat** on `align-64-false-sharing` —
+Apple Silicon lines are 128 B so `align(64)` recovers only 1.16-2.44× of
+the 3.3-10.8× win; and the pipeline-overlap margin on
+`channel-send-batching-unpark` — a 1P/1C harness hides the receiver's park
+latency off the critical path). Consumers should treat
 annotated rules as context-dependent, not unconditional suggestions.
 
 | Rule ID | Category | Bench verdict | Context? | Pattern |
@@ -93,6 +99,8 @@ annotated rules as context-dependent, not unconditional suggestions.
 | `papaya-lockfree` | concurrency | ❌ 0.55-0.79x ParetoDominated | ⚠️ `context_notes` | `Arc<RwLock<HashMap>>` → `papaya` lock-free map (benefit needs multi-threaded contention) |
 | `tokio-guard-across-await` | concurrency | ❌ NotBenchable (**metric mismatch**) | ⚠️ `context_notes` | Guard held across `.await` → fetch-before-guard (cost is OTHER tasks' wait latency, not wall-clock — Issue 014 T2.3; clippy `await_holding_lock` covers std guards only) |
 | `bounded-channel-backpressure` | concurrency | ❌ NotBenchable (**metric mismatch**) | ⚠️ `context_notes` | Unbounded channel + hot producer → bounded `channel(cap)` (win is bounded queue depth; semantics-changing backpressure — Issue 014 T2.4) |
+| `align-64-false-sharing` | concurrency | ✅ 4.7-9.4x ParetoDominant (2-12t; 1t tie) | ⚠️ `context_notes` | Adjacent 24 B per-thread atomic-counter slots → `#[repr(align)]` to **ARCH** line granularity (Batch 65 / Research 081 — hotpath.rs distill; **align(64) insufficient on 128B-line Apple Silicon**: recovers only 1.16-2.44× of the win; use align(128) there or `crossbeam_utils::CachePadded`) |
+| `channel-send-batching-unpark` | concurrency | ✅ 1.16-1.29x ParetoDominant + allocs 3232→1624 | ⚠️ `context_notes` | Per-item MPSC sends to a parked `select!` receiver → per-64 batch flush via `mem::replace` (Batch 65 / Research 081; the modest margin is pipeline-overlap-honest — the source's 6.25× needs the park pair ON the critical path; **never `mem::take`** — regrow costs ~7 allocs/batch) |
 | `simd-chunk` | simd | ✅ 3.9x ParetoDominant | — | Scalar loop → 4-wide chunked loop for LLVM auto-vectorization |
 | `bool-to-bitpack` | simd | ✅ 7-11x ParetoDominant | — | `Vec<bool>` set-bit count → packed `Vec<u64>` + `count_ones()` (data density + hardware POPCNT) |
 | `branchless-conditional` | simd | ✅ 10x ParetoDominant | — | Data-dependent `if` in hot loop → `val * cond as u64` branchless multiply (LLVM vectorizes the multiply but cannot vectorize the branchy loop) |

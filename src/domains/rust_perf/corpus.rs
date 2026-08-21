@@ -9,9 +9,9 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //! unconditional wins + honestly NotBenchable rules.
 //!
-//! 73 entries across 12 categories (complexity 15, allocation 18, simd 7,
-//! layout 6, iterators 9, concurrency 4, io 3, arithmetic 6, dispatch 2,
-//! caching 2, bevy 1, wasm 1). 64 are benchable; 10 are honestly
+//! 76 entries across 12 categories (complexity 15, allocation 18, simd 7,
+//! layout 6, iterators 9, concurrency 6, io 3, arithmetic 6, dispatch 2,
+//! caching 2, bevy 1, wasm 1). 66 are benchable; 10 are honestly
 //! NotBenchable (8 external-runtime/size-class + 2 metric-mismatch, Issue 014).
 //! Batch 48 (idle-queue item 11, 2026-08-16) added the 8 online-search
 //! candidates (perf-book std-types + iterators chapters): collect-append-to-
@@ -36,7 +36,11 @@
 //! tantivy utility-layer distill) added varint-compose-word-single-store
 //! (+ the tz-blsr xor-clear anti-shape rider note). Batch 69 (2026-08-19,
 //! Research 075 §Secondary — the T6 refutation) added
-//! unaligned-word-load-from-bytes.
+//! unaligned-word-load-from-bytes. Batch 65 (2026-08-22, Research 081 —
+//! the hotpath.rs profiler distill) added the 2 contention rules:
+//! align-64-false-sharing + channel-send-batching-unpark (both measured
+//! ParetoDominant, both context-annotated — the 128B-line arch caveat +
+//! the park-storm regime condition).
 //!
 //! ## Bench specs (behind `rust_perf_bench`)
 //!
@@ -45,7 +49,7 @@
 //! `run_buggy` / `run_fixed` entry points. The bench validator generates a
 //! temp bin crate from the spec + runs a timing loop at multiple sizes.
 //!
-//! Currently benchable (64/74):
+//! Currently benchable (66/76):
 //! - `o1-lookup` (Vec scan vs HashMap lookup — clear O(n) vs O(1))
 //! - `bsearch-sorted-slice` (linear scan vs binary search — O(n) vs O(log n) on sorted data)
 //! - `dedupe-hashset-vs-vec` (Vec::contains loop vs HashSet collect — O(n²) vs O(n))
@@ -112,8 +116,10 @@
 //! - `byte-find-position-to-memchr` (u8 slice iter().position byte scan → memchr::memchr SIMD block scan — position is NOT specialized in std, contains is; dep-gated, Batch 67)
 //! - `varint-compose-word-single-store` (per-byte write_all varint loop → 5-threshold ladder + single write_all — MEASURED ParetoDominated on aarch64 AND x86 across writer regimes (the 4090-box re-gate: 0.40-0.50x there, HARDER): the honest-loser annotation stops the tantivy folk port; Batch 68)
 //! - `unaligned-word-load-from-bytes` (shift/or byte-assembly word read → one unaligned from_le_bytes load — ParetoDominant cross-arch: u64 1.4-2.2x, u32 1.2-1.4x, both arches; the T6 defer refuted; Batch 69)
+//! - `align-64-false-sharing` (adjacent 24 B per-thread atomic counter slots → `#[repr(align)]` to ARCH line granularity — ParetoDominant 4.7-9.4x at 2-12t, **1t = tie (honest)**; align(64) insufficient on 128B-line Apple Silicon (measured 1.16-2.44x of the win) — pad to the arch granularity or CachePadded; Batch 65)
+//! - `channel-send-batching-unpark` (per-item MPSC sends to a parked `select!` receiver → per-64 batch flush via `mem::replace` — ParetoDominant 1.16-1.29x (pipeline-overlap honest margin; the source's 6.25x needs the park pair ON the critical path) + allocs 3232→1624; Batch 65)
 //!
-//! Not benchable (10/74) — honest:
+//! Not benchable (10/76) — honest:
 //! - `layout-reorder` (struct size — deterministic `size_of`, not a runtime
 //!   microbench; the cache-utilization claim needs a specific access pattern)
 //! - `repr-u8-enum` (enum size — deterministic `size_of`, same class as
@@ -134,7 +140,7 @@
 //!
 //! ## Context-dependent rules (`context_notes`)
 //!
-//! Twelve rules carry a `context_notes: Some(...)` annotation. Eight record that
+//! Eighteen rules carry a `context_notes: Some(...)` annotation. Ten record that
 //! the Pareto validator found them **ParetoDominated** or **Mixed** in the
 //! default configuration: the original 4 from Bench 013 (`precompute-table`,
 //! `papaya-lockfree`, `dedupe-hashset-vs-vec`, `reuse-allocation-clear`) + 2
@@ -144,22 +150,28 @@
 //! sum folds) + 2 from Batch 53 / Bench 038 (`powi-vs-powf` all-Tie,
 //! `soa-hot-field` latency-bound Mixed). Two more (Issue 014 T2.3/T2.4)
 //! annotate the NotBenchable metric-mismatch class: `tokio-guard-across-await` +
-//! `bounded-channel-backpressure`. The patterns are genuine wins in their
-//! respective regimes and are kept in the corpus as documented patterns, but
-//! consumers should treat them as context-dependent — not unconditional
-//! suggestions.
+//! `bounded-channel-backpressure`. The regime annotations from Batch 62/64
+//! (`newton-refinement-vs-hardware-transcendental`, `debug-assert-length-hoist`)
+//! and Batch 65's two (the arch-granularity caveat on `align-64-false-sharing`,
+//! a clean winner whose FIX is arch-dependent; and the pipeline-overlap
+//! regime on `channel-send-batching-unpark`) complete the set. The patterns
+//! are genuine wins in their respective regimes and are kept in the corpus as
+//! documented patterns, but consumers should treat annotated rules as
+//! context-dependent — not unconditional suggestions.
 
 use crate::corpus::Corpus;
 use crate::domains::rust_perf::{PerfRule, RustPerfDomain};
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 69 entries
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 76 entries
 /// covering the main perf pattern categories (complexity, allocation, simd,
 /// layout, iterators, concurrency, io, arithmetic, dispatch, caching, bevy,
 /// wasm). Allocation is the deepest (18 rules); complexity has 15; iterators
-/// has 7; simd has 7 (Batch 62 added 1 + Batch 64 added 1); layout has 6
-/// (Batch 61 added 1); concurrency has 4;
+/// has 9 (Batch 66/67 added 2); simd has 7 (Batch 62 added 1 + Batch 64
+/// added 1); layout has 6 (Batch 61 added 1); concurrency has 6
+/// (Issue 014 added the two metric-mismatch rules; Batch 65 added the two
+/// contention rules);
 /// dispatch has 2 (Batch 61 added 1); caching has 2; the rest have 1.
 #[must_use]
 #[allow(clippy::too_many_lines)] // seed corpus is a data table; length scales with rule count
@@ -1030,6 +1042,61 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
             // Not benchable: queue-depth/backpressure metric + semantics-changing.
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: None,
+        },
+        // ── concurrency: adjacent per-thread counter slots → align to cache line ──
+        // Source: hotpath.rs profiler blog (Batch 65, Research 081 — the
+        // profiler's own GlobalAlloc hook: `static STATS: [ThreadAllocStats;
+        // MAX_THREADS]`, 24 B each, indexed by thread ordinal). Two threads
+        // bumping atomics in slots that share a coherence line pay a line
+        // ping-pong per RMW; padding each slot to the line granularity makes
+        // every slot private. Source (x86, align(64)): 2t 70% / 4t 72% /
+        // 8t 86% / 12t 85%; single-thread 0% (honest — no contention, no cost).
+        // **Pad to the ARCH's line size, not 64 by reflex (measured, M3 Max,
+        // 2026-08-22): Apple Silicon lines are 128 B (`hw.cachelinesize`), so
+        // `#[repr(align(64))]` leaves even-index slot pairs sharing [0,128)
+        // lines — it recovered only 1.16×/0.98×/1.60×/2.44× at 2/4/8/12t
+        // where align(128) delivered 3.27×/3.88×/10.75×/5.93×.**
+        // `crossbeam_utils::CachePadded` picks per-target. Memory cost: 24 B
+        // → 64/128 B per slot (irrelevant at MAX_THREADS scale, load-bearing
+        // at millions-of-slots scale).
+        PerfRule {
+            rule_id: "align-64-false-sharing".to_string(),
+            name: "adjacent per-thread atomic counter slots → #[repr(align)] to cache-line granularity".to_string(),
+            category: "concurrency".to_string(),
+            buggy_code: "static STATS: [ThreadAllocStats; MAX_THREADS]; // 24 B each — several per cache line\n\nfn record_alloc(thread_ord: usize, bytes: u64) {\n    let s = &STATS[thread_ord]; // adjacent ordinals share a coherence line\n    s.allocs.fetch_add(1, Ordering::Relaxed); // line ping-pong under contention\n    s.bytes.fetch_add(bytes, Ordering::Relaxed);\n}".to_string(),
+            fixed_code: "#[repr(align(128))] // pad to the ARCH line size (64 on x86, 128 on Apple Silicon) — or crossbeam_utils::CachePadded\nstruct ThreadAllocStats {\n    allocs: AtomicU64,\n    bytes: AtomicU64,\n    frees: AtomicU64,\n}\n\nstatic STATS: [ThreadAllocStats; MAX_THREADS]; // every slot on its own line\n\nfn record_alloc(thread_ord: usize, bytes: u64) {\n    let s = &STATS[thread_ord]; // private line — no ping-pong\n    s.allocs.fetch_add(1, Ordering::Relaxed);\n    s.bytes.fetch_add(bytes, Ordering::Relaxed);\n}".to_string(),
+            context_notes: Some(
+                "Measured ParetoDominant 4.7-9.4x at 2-12 threads (M3 Max, align(128) fixed arm, load ~3.2, 2026-08-22; single-thread = tie — no contention, no cost, honest). ARCH GRANULARITY CAVEAT (the rule id carries the source's x86 form): Apple Silicon cache lines are 128 B (`hw.cachelinesize`), so `#[repr(align(64))]` leaves even-index slot pairs sharing [0,128) lines — measured it recovers only 1.16-2.44x of the 3.3-10.8x full-separation win. Pad to the ARCH's coherence granularity (align(64) x86 / align(128) Apple Silicon) or use `crossbeam_utils::CachePadded` which picks per-target. Memory trade: 24 B -> 64/128 B per slot (irrelevant at MAX_THREADS scale, load-bearing at millions-of-slots scale). Detection shape: a static/owned array of small structs with Atomic* fields indexed by thread ordinal."
+                    .to_string(),
+            ),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(align_64_false_sharing_bench_spec()),
+        },
+        // ── concurrency: per-item channel sends → per-producer batch flush ────
+        // Source: hotpath.rs profiler blog (Batch 65, Research 081 — the
+        // measurement channel: per-measurement `send` at µs intervals to a
+        // receiver parked in crossbeam `select!`). `select!` bypasses
+        // crossbeam's direct-subscribe spin-wait path, so the receiver PARKS
+        // between messages and every send pays a Thread::park/unpark pair
+        // (~22% of samples in `Thread::unpark`). Batching per producer
+        // thread (local Vec drained on flush) amortizes the wakeup: source
+        // 500ns → 80ns per measurement (6.25×). Adjacent-but-distinct from
+        // `bounded-channel-backpressure` (queue-fullness POLICY vs
+        // per-message WAKEUPS). The direct-subscribe receiver already spins
+        // — the storm is select!-specific (upstream PR submitted by the
+        // source author).
+        PerfRule {
+            rule_id: "channel-send-batching-unpark".to_string(),
+            name: "per-item MPSC sends to a parked select! receiver → per-producer batch flush".to_string(),
+            category: "concurrency".to_string(),
+            buggy_code: "fn record_measurement(tx: &crossbeam_channel::Sender<Sample>, s: Sample) {\n    tx.send(s).unwrap(); // 1 park/unpark pair per message when the\n                         // receiver sits in crossbeam select! (bypasses\n                         // the spin path) — ~22% of samples in Thread::unpark\n}".to_string(),
+            fixed_code: "fn record_measurement(buf: &mut Vec<Sample>, tx: &crossbeam_channel::Sender<Vec<Sample>>, s: Sample) {\n    buf.push(s); // batch per producer thread…\n    if buf.len() >= FLUSH_EVERY {\n        // replace keeps capacity for the next batch (take-then-regrow pays\n        // a ~7-alloc growth chain per batch — measured worse on the alloc\n        // axis than the buggy arm)\n        let batch = std::mem::replace(buf, Vec::with_capacity(FLUSH_EVERY));\n        tx.send(batch).unwrap(); // …ONE wakeup per FLUSH_EVERY messages\n    }\n}".to_string(),
+            context_notes: Some(
+                "Measured ParetoDominant 1.28-1.29x@10K / 1.16x@100K (M3 Max, load ~3.2-3.8, 2026-08-22; allocs 3232->1624 @100K, alloc-det stable). REGIME CAVEAT — the modest margin is honest: a 1P/1C pipeline overlaps the receiver's park/unpark latency with the producer's next-message work, hiding it off the critical path; the source's 6.25x (500ns->80ns per measurement) needs the receiver-side park pair ON the critical path (heavier consumer work per message, or the single-measurement µs-cadence API shape the profiler used). The mechanism is crossbeam-select!-specific — a direct `recv()` receiver spins and never storms (upstream PR filed by the source author). Batching also wins the alloc axis (fewer channel blocks + one Vec per 64 vs one block per ~32). Use `mem::replace` for the flush, NOT `mem::take` (take-then-regrow pays a ~7-alloc Vec growth chain per batch)."
+                    .to_string(),
+            ),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(channel_send_batching_unpark_bench_spec()),
         },
         // ── allocation: collect() + append() → extend() ───────────────────────
         // Source: nnethercote/perf-book std-types chapter (Batch 48, idle-queue
@@ -5083,6 +5150,279 @@ pub fn run_fixed(input: &Input) {
     }
 }
 
+/// Bench spec for `align-64-false-sharing` (Batch 65, Research 081 —
+/// the hotpath.rs profiler distill): adjacent 24 B per-thread atomic-counter
+/// slots vs `#[repr(align(128))]` slots, N scoped threads bumping their own
+/// slot.
+///
+/// sizes = THREAD COUNTS (the `n` threaded through `make_input` is the
+/// worker count, not an array length — the contention axis IS the size
+/// axis; 1t deliberately excluded: no contention, honest Tie, and the
+/// source measured 0% there). ITERS=10_000 iterations × 3 RMW per thread
+/// keeps the contended arm ≈1 ms/call (the calibration target) at 8t.
+/// The fixed arm pads to 128 B — the ARCH line size on this M3 Max
+/// (`hw.cachelinesize`; align(64) leaves even-index slot pairs sharing
+/// [0,128) lines on Apple Silicon — measured 1.16-2.44× vs the full
+/// 3.27-10.75× separation, the annotation's load-bearing caveat).
+/// G1: per-call checksum is deterministic (fetch_add totals cannot drift
+/// with layout) — asserted in-run against the closed form.
+#[cfg(feature = "rust_perf_bench")]
+#[allow(clippy::too_many_lines)] // data table: the harness is a single embedded raw string
+fn align_64_false_sharing_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![2, 4, 8, 12],
+        harness: r#"
+mod buggy {
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    pub struct Stats {
+        pub allocs: AtomicU64,
+        pub bytes: AtomicU64,
+        pub frees: AtomicU64,
+    }
+
+    pub const SLOTS: usize = 12; // several 24 B slots per coherence line
+
+    pub fn make_slots() -> Vec<Stats> {
+        (0..SLOTS)
+            .map(|_| Stats {
+                allocs: AtomicU64::new(0),
+                bytes: AtomicU64::new(0),
+                frees: AtomicU64::new(0),
+            })
+            .collect()
+    }
+
+    pub fn run(slots: &[Stats], n_threads: usize, iters: u64) -> u64 {
+        std::thread::scope(|s| {
+            for t in 0..n_threads {
+                s.spawn(move || {
+                    let slot = &slots[t];
+                    for i in 0..iters {
+                        slot.allocs.fetch_add(1, Ordering::Relaxed);
+                        slot.bytes.fetch_add(i, Ordering::Relaxed);
+                        slot.frees.fetch_add(1, Ordering::Relaxed);
+                    }
+                });
+            }
+        });
+        slots
+            .iter()
+            .map(|x| {
+                x.allocs.load(Ordering::Relaxed)
+                    + x.bytes.load(Ordering::Relaxed)
+                    + x.frees.load(Ordering::Relaxed)
+            })
+            .sum()
+    }
+}
+
+mod fixed {
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    #[repr(align(128))] // the ARCH line size (Apple Silicon; 64 on x86)
+    pub struct Stats {
+        pub allocs: AtomicU64,
+        pub bytes: AtomicU64,
+        pub frees: AtomicU64,
+    }
+
+    pub const SLOTS: usize = 12;
+
+    pub fn make_slots() -> Vec<Stats> {
+        (0..SLOTS)
+            .map(|_| Stats {
+                allocs: AtomicU64::new(0),
+                bytes: AtomicU64::new(0),
+                frees: AtomicU64::new(0),
+            })
+            .collect()
+    }
+
+    pub fn run(slots: &[Stats], n_threads: usize, iters: u64) -> u64 {
+        std::thread::scope(|s| {
+            for t in 0..n_threads {
+                s.spawn(move || {
+                    let slot = &slots[t]; // private line — no ping-pong
+                    for i in 0..iters {
+                        slot.allocs.fetch_add(1, Ordering::Relaxed);
+                        slot.bytes.fetch_add(i, Ordering::Relaxed);
+                        slot.frees.fetch_add(1, Ordering::Relaxed);
+                    }
+                });
+            }
+        });
+        slots
+            .iter()
+            .map(|x| {
+                x.allocs.load(Ordering::Relaxed)
+                    + x.bytes.load(Ordering::Relaxed)
+                    + x.frees.load(Ordering::Relaxed)
+            })
+            .sum()
+    }
+}
+
+const ITERS: u64 = 10_000; // 3 RMW per iteration per thread
+
+pub struct Input {
+    n_threads: usize,
+}
+
+pub fn make_input(n: usize) -> Input {
+    // n = THREAD COUNT (the contention axis is the size axis).
+    Input { n_threads: n }
+}
+
+fn expected(n_threads: usize) -> u64 {
+    // Deterministic closed form: active slots each get iters allocs
+    // + iters frees + sum(0..iters) bytes. Layout cannot change totals
+    // (fetch_add is atomic) — the G1 identity.
+    n_threads as u64 * (2 * ITERS + ITERS * (ITERS - 1) / 2)
+}
+
+pub fn run_buggy(input: &Input) {
+    let input = std::hint::black_box(input);
+    let slots = buggy::make_slots();
+    let cs = buggy::run(&slots, input.n_threads, ITERS);
+    std::hint::black_box(cs);
+    debug_assert_eq!(cs, expected(input.n_threads));
+}
+
+pub fn run_fixed(input: &Input) {
+    let input = std::hint::black_box(input);
+    let slots = fixed::make_slots();
+    let cs = fixed::run(&slots, input.n_threads, ITERS);
+    std::hint::black_box(cs);
+    debug_assert_eq!(cs, expected(input.n_threads));
+}"#
+            .to_string(),
+    }
+}
+
+/// Bench spec for `channel-send-batching-unpark` (Batch 65, Research 081):
+/// per-item unbounded-channel sends to a receiver parked in crossbeam
+/// `select!` vs per-64-item batch sends (one wakeup per batch).
+///
+/// The storm regime is load-bearing: the receiver must find the channel
+/// EMPTY when it re-polls, so the producer pays ~32 hash rounds per item
+/// (µs-scale intervals — the source's measurement cadence) while the
+/// receiver only counts. `select!` bypasses crossbeam's direct-subscribe
+/// spin path, so the empty poll parks the receiver — one park/unpark pair
+/// per message in the buggy arm, one per FLUSH_EVERY in the fixed arm.
+/// The ctrl arm exists to force the two-channel select! shape (held
+/// connected-but-silent until the receiver joins; the data channel's
+/// disconnect is the shutdown signal). G1: receiver item count == total
+/// in both arms (asserted in-run).
+#[cfg(feature = "rust_perf_bench")]
+fn channel_send_batching_unpark_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![10_000, 100_000],
+        harness: r#"// [dep: crossbeam-channel = "0.5"]
+const FLUSH_EVERY: usize = 64;
+
+#[inline]
+fn measurement_work(i: u64) -> u64 {
+    // µs-scale per-measurement cost (the profiler's sampling work) — keeps
+    // the producer interval above the receiver's processing time so the
+    // channel is EMPTY when the receiver re-polls (the park regime).
+    let mut h = i.wrapping_mul(0x9E37_79B9_97F4_A7C1);
+    for _ in 0..32 {
+        h = h.rotate_left(7) ^ h.wrapping_mul(0x2545_F491_4F6C_DD1D);
+    }
+    h
+}
+
+mod buggy {
+    pub fn produce(tx: &crossbeam_channel::Sender<u64>, total: u64) {
+        for i in 0..total {
+            std::hint::black_box(super::measurement_work(i));
+            tx.send(i).unwrap(); // ONE park/unpark pair per message
+        }
+    }
+}
+
+mod fixed {
+    pub fn produce(tx: &crossbeam_channel::Sender<Vec<u64>>, total: u64) {
+        let mut buf: Vec<u64> = Vec::with_capacity(super::FLUSH_EVERY);
+        for i in 0..total {
+            std::hint::black_box(super::measurement_work(i));
+            buf.push(i);
+            if buf.len() >= super::FLUSH_EVERY {
+                // replace keeps `buf`'s capacity for the next batch — the
+                // take-then-regrow variant pays a ~7-alloc growth chain per
+                // batch (measured 795 vs 329 allocs @10K — worse than the
+                // buggy arm on the alloc axis).
+                let batch =
+                    std::mem::replace(&mut buf, Vec::with_capacity(super::FLUSH_EVERY));
+                tx.send(batch).unwrap(); // one wakeup per 64
+            }
+        }
+        if !buf.is_empty() {
+            tx.send(buf).unwrap();
+        }
+    }
+}
+
+pub struct Input {
+    total: u64,
+}
+
+pub fn make_input(n: usize) -> Input {
+    Input { total: n as u64 }
+}
+
+pub fn run_buggy(input: &Input) {
+    let input = std::hint::black_box(input);
+    let (tx, rx) = crossbeam_channel::unbounded::<u64>();
+    let (_ctx, crx) = crossbeam_channel::unbounded::<()>(); // silent 2nd select arm
+    let receiver = std::thread::spawn(move || {
+        let mut count: u64 = 0;
+        loop {
+            crossbeam_channel::select! {
+                recv(rx) -> msg => match msg {
+                    Ok(_) => count += 1,
+                    Err(_) => break, // producer dropped — shutdown
+                },
+                recv(crx) -> _ => break,
+            }
+        }
+        count
+    });
+    buggy::produce(&tx, input.total);
+    drop(tx);
+    let count = receiver.join().unwrap();
+    std::hint::black_box(count);
+    debug_assert_eq!(count, input.total);
+}
+
+pub fn run_fixed(input: &Input) {
+    let input = std::hint::black_box(input);
+    let (tx, rx) = crossbeam_channel::unbounded::<Vec<u64>>();
+    let (_ctx, crx) = crossbeam_channel::unbounded::<()>(); // silent 2nd select arm
+    let receiver = std::thread::spawn(move || {
+        let mut count: u64 = 0;
+        loop {
+            crossbeam_channel::select! {
+                recv(rx) -> msg => match msg {
+                    Ok(batch) => count += batch.len() as u64,
+                    Err(_) => break,
+                },
+                recv(crx) -> _ => break,
+            }
+        }
+        count
+    });
+    fixed::produce(&tx, input.total);
+    drop(tx);
+    let count = receiver.join().unwrap();
+    std::hint::black_box(count);
+    debug_assert_eq!(count, input.total);
+}"#
+            .to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -5098,9 +5438,9 @@ mod tests {
     }
 
     #[test]
-    fn seed_corpus_has_seventy_four_entries_across_twelve_categories() {
+    fn seed_corpus_has_seventy_six_entries_across_twelve_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 74);
+        assert_eq!(corpus.entries.len(), 76);
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
@@ -5116,7 +5456,8 @@ mod tests {
         // transposed-weight-register-gemv; Batch 64 added
         // loop-order-innermost-contiguous); layout has 6 (Batch 53 added
         // soa-hot-field; Batch 61 added usize-index-to-u32) + concurrency
-        // has 4 (Issue 014 added the two metric-mismatch rules); arithmetic
+        // has 6 (Issue 014 added the two metric-mismatch rules; Batch 65
+        // added align-64-false-sharing + channel-send-batching-unpark); arithmetic
         // has 6 (Batch 53 added powi-vs-powf + distance-sq-no-sqrt; Batch 59
         // added division-by-invariant-multiplication; Batch 62 added
         // newton-refinement-vs-hardware-transcendental); dispatch has 2
@@ -5510,10 +5851,10 @@ mod tests {
 
     #[cfg(feature = "rust_perf_bench")]
     #[test]
-    fn sixty_four_rules_have_bench_specs() {
+    fn sixty_six_rules_have_bench_specs() {
         let corpus = build_perf_seed_corpus();
         let with_spec = corpus.entries.iter().filter(|e| e.bench_spec.is_some()).count();
-        assert_eq!(with_spec, 64, "expected 64 benchable rules, got {with_spec}");
+        assert_eq!(with_spec, 66, "expected 66 benchable rules, got {with_spec}");
     }
 
     #[cfg(feature = "rust_perf_bench")]
@@ -5553,10 +5894,13 @@ mod tests {
     /// newton-refinement regime-inversion annotation) + Batch 64 added 1
     /// (debug-assert-length-hoist, the release-erasure class) + Batch 66
     /// added 1 (sortedness-check-branchless-accumulate, the regime-split
-    /// class — the mirrored regime of filter-count-to-any). The other 56
-    /// have `context_notes: None` (unconditional wins or honestly NotBenchable).
+    /// class — the mirrored regime of filter-count-to-any). Batch 65 added 2
+    /// (align-64-false-sharing — the arch-granularity caveat on a clean
+    /// winner; channel-send-batching-unpark — the pipeline-overlap regime).
+    /// The other 58 have `context_notes: None` (unconditional wins or
+    /// honestly NotBenchable).
     #[test]
-    fn fifteen_annotated_rules_carry_context_notes() {
+    fn eighteen_annotated_rules_carry_context_notes() {
         let corpus = build_perf_seed_corpus();
         let annotated: Vec<&str> = corpus
             .entries
@@ -5564,7 +5908,7 @@ mod tests {
             .filter(|e| e.context_notes.is_some())
             .map(|e| e.rule_id.as_str())
             .collect();
-        assert_eq!(annotated.len(), 16, "expected 16 context-annotated rules");
+        assert_eq!(annotated.len(), 18, "expected 18 context-annotated rules");
         assert!(annotated.contains(&"precompute-table"));
         assert!(annotated.contains(&"papaya-lockfree"));
         assert!(annotated.contains(&"dedupe-hashset-vs-vec"));
@@ -5580,6 +5924,8 @@ mod tests {
         assert!(annotated.contains(&"newton-refinement-vs-hardware-transcendental"));
         assert!(annotated.contains(&"sortedness-check-branchless-accumulate"));
         assert!(annotated.contains(&"debug-assert-length-hoist"));
+        assert!(annotated.contains(&"align-64-false-sharing"));
+        assert!(annotated.contains(&"channel-send-batching-unpark"));
     }
 
     /// The non-annotated rules (ParetoDominant + honestly NotBenchable) must
@@ -5593,7 +5939,7 @@ mod tests {
             .iter()
             .filter(|e| e.context_notes.is_none())
             .count();
-        assert_eq!(unannotated, 58, "expected 58 unannotated rules (74 - 16 annotated)");
+        assert_eq!(unannotated, 58, "expected 58 unannotated rules (76 - 18 annotated)");
     }
 
     /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -5605,7 +5951,7 @@ mod tests {
         let json = serde_json::to_string(&corpus.entries).unwrap();
         let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
         let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-        assert_eq!(annotated, 16);
+        assert_eq!(annotated, 18);
 
         // Simulate a pre-field snapshot: strip `context_notes` from JSON.
         // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -5617,22 +5963,26 @@ mod tests {
 
     /// Integration: the drafter propagates `context_notes` from `PerfRule`
     /// through `DraftedFix` for the annotated rules, and `None` for the
-    /// unconditional wins. Sixteen annotations: Bench 013 (2 ParetoDominated
+    /// unconditional wins. Eighteen annotations: Bench 013 (2 ParetoDominated
     /// and 2 Mixed), Bench 016 (sort-by-key and copy-from-slice), Issue 014
     /// (2 NotBenchable metric-mismatch), Batch 48 (2 verdict-class),
     /// Batch 53 (Bench 038, 2 verdict-class), Batch 62 (1 regime-class),
     /// Batch 64 (1 release-erasure class), Batch 66 (1 regime-split
-    /// class), and Batch 68 (1 ParetoDominated honest-loser — the tantivy
-    /// varint ladder regresses on aarch64 across 3 tested writer regimes).
+    /// class), Batch 68 (1 ParetoDominated honest-loser — the tantivy
+    /// varint ladder regresses on aarch64 across 3 tested writer regimes),
+    /// and Batch 65 (2 measured-winner regime caveats — align-64's
+    /// arch-granularity + channel-send's pipeline-overlap margin; a NEW
+    /// annotation class: ParetoDominant verdict + applicability condition,
+    /// accepted by the token check below).
     #[test]
     fn drafter_propagates_context_notes_from_perf_corpus() {
         use crate::domain::HealEntry;
 
         let corpus = build_perf_seed_corpus();
 
-        // Filter to the 16 annotated rules.
+        // Filter to the 18 annotated rules.
         let annotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_some()).collect();
-        assert_eq!(annotated.len(), 16, "expected 16 annotated rules");
+        assert_eq!(annotated.len(), 18, "expected 18 annotated rules");
 
         // The HealEntry trait override must agree with the struct field.
         for rule in &annotated {
@@ -5644,9 +5994,11 @@ mod tests {
             );
             assert!(
                 rule.context_notes.as_ref().unwrap().contains("ParetoDominated")
+                    || rule.context_notes.as_ref().unwrap().contains("ParetoDominant")
                     || rule.context_notes.as_ref().unwrap().contains("Mixed")
                     || rule.context_notes.as_ref().unwrap().contains("NotBenchable"),
-                "annotation should mention ParetoDominated, Mixed, or the \
+                "annotation should mention ParetoDominated, ParetoDominant \
+                 (the Batch 65 measured-winner caveat class), Mixed, or the \
                  NotBenchable metric-mismatch class for {}",
                 rule.rule_id
             );
@@ -5658,5 +6010,140 @@ mod tests {
         for rule in &unannotated {
             assert!(HealEntry::context_notes(*rule).is_none(), "{} should have no context_notes", rule.rule_id);
         }
+    }
+
+    /// G1 for `align-64-false-sharing` (Batch 65, Research 081): the
+    /// per-thread counter totals are a deterministic closed form — layout
+    /// (and thread interleaving) cannot change them. fetch_add is atomic, so
+    /// each counter's final value is exactly its op count regardless of which
+    /// slot layout the atomics lived in. Pins the bench harness's in-run
+    /// debug_assert at the corpus level + documents the identity the wall-clock
+    /// arms share (the timing differential is PURELY the line ping-pong).
+    #[test]
+    fn align_64_false_sharing_totals_are_layout_invariant() {
+        use std::sync::atomic::Ordering;
+
+        #[repr(align(128))]
+        struct Padded {
+            allocs: std::sync::atomic::AtomicU64,
+            bytes: std::sync::atomic::AtomicU64,
+            frees: std::sync::atomic::AtomicU64,
+        }
+        #[derive(Default)]
+        struct Packed {
+            allocs: std::sync::atomic::AtomicU64,
+            bytes: std::sync::atomic::AtomicU64,
+            frees: std::sync::atomic::AtomicU64,
+        }
+
+        const SLOTS: usize = 12;
+        const ITERS: u64 = 500;
+
+        fn expected(n_threads: usize) -> u64 {
+            n_threads as u64 * (2 * ITERS + ITERS * (ITERS - 1) / 2)
+        }
+
+        // Multi-threaded on BOTH layouts (interleaving varies, totals cannot).
+        for n_threads in [2usize, 4, 8] {
+            let padded: Vec<Padded> = (0..SLOTS)
+                .map(|_| Padded {
+                    allocs: std::sync::atomic::AtomicU64::new(0),
+                    bytes: std::sync::atomic::AtomicU64::new(0),
+                    frees: std::sync::atomic::AtomicU64::new(0),
+                })
+                .collect();
+            let packed: Vec<Packed> = (0..SLOTS).map(|_| Packed::default()).collect();
+            std::thread::scope(|s| {
+                for t in 0..n_threads {
+                    let p = &padded;
+                    let q = &packed;
+                    s.spawn(move || {
+                        for i in 0..ITERS {
+                            p[t].allocs.fetch_add(1, Ordering::Relaxed);
+                            p[t].bytes.fetch_add(i, Ordering::Relaxed);
+                            p[t].frees.fetch_add(1, Ordering::Relaxed);
+                            q[t].allocs.fetch_add(1, Ordering::Relaxed);
+                            q[t].bytes.fetch_add(i, Ordering::Relaxed);
+                            q[t].frees.fetch_add(1, Ordering::Relaxed);
+                        }
+                    });
+                }
+            });
+            let cs_p: u64 = padded
+                .iter()
+                .map(|x| {
+                    x.allocs.load(Ordering::Relaxed)
+                        + x.bytes.load(Ordering::Relaxed)
+                        + x.frees.load(Ordering::Relaxed)
+                })
+                .sum();
+            let cs_q: u64 = packed
+                .iter()
+                .map(|x| {
+                    x.allocs.load(Ordering::Relaxed)
+                        + x.bytes.load(Ordering::Relaxed)
+                        + x.frees.load(Ordering::Relaxed)
+                })
+                .sum();
+            assert_eq!(cs_p, expected(n_threads), "padded totals @{n_threads}t");
+            assert_eq!(cs_q, expected(n_threads), "packed totals @{n_threads}t");
+        }
+
+        // The annotation must carry the arch-granularity caveat (the rule id
+        // says 64 — the honest fix is line-size-dependent).
+        let corpus = build_perf_seed_corpus();
+        let rule = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == "align-64-false-sharing")
+            .expect("align-64-false-sharing in corpus");
+        assert!(rule.context_notes.as_ref().unwrap().contains("128"));
+    }
+
+    /// G1 for `channel-send-batching-unpark` (Batch 65, Research 081): the
+    /// per-item and per-batch producer paths deliver the SAME item count —
+    /// the flush boundary cannot drop or double-count (the mem::replace
+    /// swap keeps the tail batch's capacity + the final flush covers the
+    /// remainder). Also pins the annotation's take-vs-replace warning: the
+    /// replace pattern is the one that wins the alloc axis (take-then-regrow
+    /// measured 795 vs 329 allocs @10K on the WRONG side).
+    #[test]
+    fn channel_send_batching_delivers_identical_counts() {
+        const FLUSH_EVERY: usize = 64;
+
+        fn buggy_delivered(total: u64) -> u64 {
+            total
+        }
+        fn fixed_delivered(total: u64) -> u64 {
+            let mut count: u64 = 0;
+            let mut tail: usize = 0;
+            for i in 0..total {
+                let _ = std::hint::black_box(i);
+                tail += 1;
+                if tail >= FLUSH_EVERY {
+                    count += tail as u64; // one batch delivered
+                    tail = 0;
+                }
+            }
+            count += tail as u64; // final flush covers the remainder
+            count
+        }
+
+        for total in [0u64, 1, 63, 64, 65, 10_000, 100_000] {
+            assert_eq!(
+                fixed_delivered(total),
+                buggy_delivered(total),
+                "batched delivery count drift at total={total}"
+            );
+        }
+
+        let corpus = build_perf_seed_corpus();
+        let rule = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == "channel-send-batching-unpark")
+            .expect("channel-send-batching-unpark in corpus");
+        let note = rule.context_notes.as_ref().unwrap();
+        assert!(note.contains("mem::replace"), "annotation must warn take-vs-replace");
     }
 }
