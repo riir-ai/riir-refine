@@ -142,6 +142,45 @@ stop rule if < 2pp).
   speculative-decode line (tree-drafting reopen path), but the no-GOAT-without-consumer rule
   applies — out of scope for this note.
 
-## PoC addendum
+## PoC addendum — POC-A measured NEGATIVE (2026-08-21)
 
-(to be filled when Plan 017 gates run — raw numbers, confirmed vs refuted axes)
+Filled by Plan 017 Phase 1. Raw tables: [Bench 043](../.benchmarks/043_dflash2_selection_headroom_negative.md).
+Harness: `src/draft/headroom_probe.rs` + the `t1_dflash2_*` tests in `tests/uncontaminated_g1.rs`.
+
+**§3's premise is CONFIRMED, and that is exactly why POC-A is closed.** Selection headroom is real
+in our domain — a 16-deep pool contains the correct rule for 100% of the 101 labeled spans, so
+every miss is an ordering failure and none is a retrieval failure. But the band is already
+harvested by shipped substrate:
+
+| re-rank mode | recall@1 (101 spans) | headroom to pool@16 | selection misses |
+|---|---|---|---|
+| `Off` | 84.2% | +15.8pp | 16 |
+| `Structural` (shipped) | 93.1% | +6.9pp | 7 |
+| `All` | 97.0% | +3.0pp | 3 |
+
+On the uncontaminated real-clippy surface the shipped mode reads **+0.0pp** (recall@1 100% of 25
+multi-lint spans) while a `rerank=off` control on the same spans reads **+16.0pp** — the metric has
+power; the band is genuinely gone.
+
+Decomposing the 7 residual misses by what would fix each: 4 = the measured price of excluding the
+type-blind proposers (Bench 022/027, recovered by `RerankMode::All`), 1 = `RERANK_POOL` depth
+(rank 15), 2 = perf rules with no proposer (selecting them heals nothing). **Selector-addressable:
+0 spans.** Plan 017's G1 ("recover ≥50% of the headroom") has an empty denominator, so Phases 2-4
+are closed unbuilt and Issue 034 is closed by the bench doc.
+
+**Axis verdicts**
+
+- CONFIRMED — selection headroom exists in a modelless retrieval pool (§3's Bench 024 reading).
+- CONFIRMED — the *mechanism class* is the right one: the `Off → Structural` step is a selector,
+  and it recovered 8.9pp of a 15.8pp band.
+- REFUTED — that a DFlash2-style **latent pairwise-coherence** selector adds anything on top. Our
+  T3.5.5 instantiation re-ranker is the same idea with strictly better evidence: a proposer-visitor
+  match is a *semantic* witness that the rule applies, where pair coherence is a similarity. The
+  residual band is precision-bounded (type-blind over-matchers), not ordering-bounded, and a
+  selector over the same parse-only features carries no type information with which to break it.
+- UNCHANGED — POC-B stays deferred on §2 + §2.1; weights untouched.
+
+**Transferable lesson.** "Recall@1 vs Recall@16" is not a selector opportunity by itself. Split the
+band by what would fix each miss before costing a mechanism: an already-shipped knob, a pool-depth
+constant, and a missing proposer are all cheaper than a new subsystem, and here they accounted for
+100% of it.

@@ -368,6 +368,192 @@ pub fn print_headroom_report(report: &HeadroomReport) {
     );
 }
 
+/// Why a residual selection miss survives the SHIPPED selector.
+///
+/// The raw `recall@K − recall@1` band is NOT the band a new selector could
+/// win: most of it is already reachable through knobs this crate ships. Only
+/// [`ResidualCause::SelectorAddressable`] is a genuine selection failure, so
+/// it is the honest denominator for a DFlash2-style recovery gate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ResidualCause {
+    /// [`RerankMode::All`](super::instantiation_rerank::RerankMode::All)
+    /// recovers it. The miss is the measured PRICE of excluding the four
+    /// type-blind proposers from instantiation evidence (Bench 022 measured
+    /// them over-matching on ordinary production code; Bench 027 kept the
+    /// exclusion because `All` only ties `Structural` on quality). A pairwise
+    /// selector reading the same parse-only features cannot beat that trade —
+    /// it has no type information either.
+    TypeBlindExclusion,
+    /// The correct rule is top-1 in a DEEPER pool but production selects at
+    /// [`RERANK_POOL`] depth. A `RERANK_POOL` bump fixes it; selection is not
+    /// involved.
+    PoolDepth,
+    /// Outranked under every shipped configuration, but the correct rule has
+    /// **no proposer** — so `--fix` declines even when it is selected. A
+    /// selector could reorder it; the reorder heals nothing, because there is
+    /// no edit to apply. Writing the proposer is the fix, not selecting
+    /// better.
+    UnfixableTarget,
+    /// The correct rule sits in the pool at rank ≥ 1 under the strongest
+    /// shipped configuration AND is fixable. The only band a new selector
+    /// could convert into healed coverage — the honest G1 denominator.
+    SelectorAddressable,
+}
+
+/// Does `rule_id` have a proposer that `--fix` can apply?
+///
+/// Mirrors the `--fix` eligibility tables rather than re-deriving them: a
+/// rule outside them yields a decline no matter how well it is ranked.
+#[allow(unused_variables)] // both arms vanish with their domain features off
+fn is_fixable(domain: DomainId, rule_id: &str) -> bool {
+    match domain {
+        #[cfg(feature = "clippy_lints")]
+        DomainId::Clippy => {
+            use crate::domains::clippy_lints::proposers::{FIXABLE_LINTS, VERIFY_LINTS};
+            FIXABLE_LINTS.contains(&rule_id) || VERIFY_LINTS.contains(&rule_id)
+        }
+        #[cfg(feature = "rust_perf")]
+        DomainId::Perf => {
+            crate::domains::rust_perf::proposers::FIXABLE_RULES.contains(&rule_id)
+        }
+        // Kernel ships no proposers (Plan 005 Phase 5 deferred).
+        _ => false,
+    }
+}
+
+/// The T1 residual decomposition — the deliverable the stop rule reads.
+#[derive(Debug, Default, Clone)]
+pub struct HeadroomDecomposition {
+    /// Spans scored.
+    pub labeled: usize,
+    /// Selection misses under the shipped default.
+    pub shipped: Vec<String>,
+    /// Misses `RerankMode::All` recovers.
+    pub type_blind: Vec<String>,
+    /// Misses a deeper pool recovers.
+    pub pool_depth: Vec<String>,
+    /// Misses whose target has no proposer — selecting it heals nothing.
+    pub unfixable: Vec<String>,
+    /// Misses nothing shipped recovers, on a FIXABLE target.
+    pub selector_addressable: Vec<String>,
+}
+
+impl HeadroomDecomposition {
+    /// The selector-addressable band in percentage points — what a `DFlash2`
+    /// selector could win at BEST (perfect recovery).
+    #[must_use]
+    pub fn addressable_pp(&self) -> f32 {
+        ratio(self.selector_addressable.len(), self.labeled).unwrap_or(0.0) * 100.0
+    }
+
+    /// Plan 017 T1.2 applied to the addressable band, not the raw one.
+    #[must_use]
+    pub fn stop(&self) -> bool {
+        self.addressable_pp() < HEADROOM_STOP_BAR_PP
+    }
+}
+
+/// Decompose the shipped selector's residual misses by what would fix them.
+///
+/// # Panics
+///
+/// Panics if [`LatentMatcher::from_enabled_domains`] fails.
+#[must_use]
+pub fn decompose_headroom() -> HeadroomDecomposition {
+    use super::instantiation_rerank::RerankMode;
+
+    let shipped = run_headroom_probe_with(RerankMode::default());
+    let strongest = run_headroom_probe_with(RerankMode::All);
+
+    // Key by (domain, expected rule) — the span identity for a labeled set
+    // with one label per span.
+    let key = |m: &HeadroomMiss| format!("{:?}/{}", m.domain, m.expected);
+    let strongest_misses: Vec<(String, Option<usize>)> = strongest
+        .misses
+        .iter()
+        .filter(|m| m.kind == MissKind::Selection)
+        .map(|m| (key(m), m.rank))
+        .collect();
+
+    let mut out = HeadroomDecomposition {
+        labeled: shipped.blended.labeled,
+        ..Default::default()
+    };
+
+    for m in shipped.misses.iter().filter(|m| m.kind == MissKind::Selection) {
+        let k = key(m);
+        let label = format!(
+            "{k} (rank {}, chosen {}{})",
+            m.rank.map_or_else(|| "?".to_string(), |r| r.to_string()),
+            m.chosen.as_deref().unwrap_or("(none)"),
+            if is_fixable(m.domain, &m.expected) { "" } else { ", NO PROPOSER" }
+        );
+        out.shipped.push(label.clone());
+        match strongest_misses.iter().find(|(sk, _)| *sk == k) {
+            // `All` recovered it: the exclusion price.
+            None => out.type_blind.push(label),
+            // Still missed, but it IS the top of the deepest pool — production
+            // just selects from a shallower one.
+            Some((_, Some(0))) => out.pool_depth.push(label),
+            // Genuinely outranked. Only counts toward the selector band if
+            // selecting it would actually heal the span.
+            Some(_) => {
+                if is_fixable(m.domain, &m.expected) {
+                    out.selector_addressable.push(label);
+                } else {
+                    out.unfixable.push(label);
+                }
+            }
+        }
+    }
+    out
+}
+
+/// The `--nocapture` decomposition table + the T1.2 verdict.
+pub fn print_headroom_decomposition(d: &HeadroomDecomposition) {
+    let pp = |n: usize| ratio(n, d.labeled).unwrap_or(0.0) * 100.0;
+    println!("== Issue 034 T1 — residual decomposition (what would actually fix each miss) ==");
+    println!(
+        "  labeled {} | shipped selection misses {} ({:.1}pp)",
+        d.labeled,
+        d.shipped.len(),
+        pp(d.shipped.len())
+    );
+    for (tag, rows) in [
+        ("type-blind exclusion (RerankMode::All recovers)", &d.type_blind),
+        ("pool depth (deeper RERANK_POOL recovers)", &d.pool_depth),
+        ("unfixable target (no proposer -> selecting it heals nothing)", &d.unfixable),
+        ("SELECTOR-ADDRESSABLE (nothing shipped recovers, target fixable)", &d.selector_addressable),
+    ] {
+        println!("\n  -- {tag}: {} ({:.1}pp) --", rows.len(), pp(rows.len()));
+        if rows.is_empty() {
+            println!("     none");
+        }
+        for r in rows {
+            println!("     {r}");
+        }
+    }
+    println!(
+        "\n  T1.2 stop rule (bar {HEADROOM_STOP_BAR_PP:.2}pp): addressable band {}/{} spans \
+         = {:.2}pp -> {}",
+        d.selector_addressable.len(),
+        d.labeled,
+        d.addressable_pp(),
+        if d.stop() {
+            "STOP — record the negative, build no selector"
+        } else {
+            "PROCEED — build the selector against this denominator"
+        }
+    );
+    println!(
+        "  Read the COUNT, not the percentage: with {} addressable span(s) a \
+         \"recover >= 50%\" G1 gate reduces to \"recover {} span(s)\", which is not a \
+         measurable effect at this denominator.",
+        d.selector_addressable.len(),
+        d.selector_addressable.len().div_ceil(2),
+    );
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -399,6 +585,97 @@ mod tests {
             ceiling >= top1,
             "pool ceiling {ceiling:.4} below recall@1 {top1:.4} — probe is inconsistent"
         );
+    }
+
+
+    /// Substrate-first check: is the residual band already explained by the
+    /// SHIPPED re-rank knob rather than by a missing selector?
+    ///
+    /// `RerankMode::Structural` (the default) counts only `FIXABLE_LINTS` as
+    /// instantiation evidence, deliberately excluding the four type-blind
+    /// proposers (`needless_borrow`, `useless_conversion`,
+    /// `unnecessary_mut_passed`, `redundant_closure`) that Bench 022 measured
+    /// over-matching on ordinary production code. `RerankMode::All` counts
+    /// them. If `All` closes the band, the headroom is the PRICE of a measured
+    /// precision decision, not an unexploited selection signal — and a
+    /// pairwise selector over the same parse-only features cannot do better,
+    /// because it has no type information either.
+    #[test]
+    fn t1_headroom_across_rerank_modes() {
+        use crate::draft::RerankMode;
+        println!("\n== Issue 034 T1 — headroom vs the SHIPPED re-rank knob ==");
+        println!(
+            "{:<12} {:>9} {:>9} {:>10} {:>11} {:>11}",
+            "mode", "recall@1", "pool@16", "headroom", "sel-misses", "ret-misses"
+        );
+        let mut rows = Vec::new();
+        for mode in [RerankMode::Off, RerankMode::Structural, RerankMode::All] {
+            let r = run_headroom_probe_with(mode);
+            let v = r.verdict();
+            println!(
+                "{:<12} {:>8.1}% {:>8.1}% {:>9.1}pp {:>11} {:>11}",
+                format!("{mode:?}"),
+                r.blended.recall_at_1().unwrap_or(0.0) * 100.0,
+                r.blended.ceiling().unwrap_or(0.0) * 100.0,
+                v.headroom_pp,
+                v.selection_misses,
+                v.retrieval_misses,
+            );
+            rows.push((mode, r));
+        }
+
+        println!("\n  -- residual selection misses per mode --");
+        for (mode, r) in &rows {
+            for m in r.misses.iter().filter(|m| m.kind == MissKind::Selection) {
+                println!(
+                    "  {mode:?}: expected={} rank={} chosen={}",
+                    m.expected,
+                    m.rank.map_or_else(|| "?".to_string(), |x| x.to_string()),
+                    m.chosen.as_deref().unwrap_or("(none)"),
+                );
+            }
+        }
+
+        let structural = rows.iter().find(|(m, _)| *m == RerankMode::Structural)
+            .map(|(_, r)| r.verdict()).expect("structural row");
+        let all = rows.iter().find(|(m, _)| *m == RerankMode::All)
+            .map(|(_, r)| r.verdict()).expect("all row");
+        println!(
+            "\n  substrate verdict: Structural {:+.1}pp -> All {:+.1}pp ({} -> {} selection misses) -- {}",
+            structural.headroom_pp,
+            all.headroom_pp,
+            structural.selection_misses,
+            all.selection_misses,
+            if all.selection_misses < structural.selection_misses {
+                "the SHIPPED knob already moves the band; the residual is the measured \
+                 price of excluding the type-blind over-matchers (Bench 022), not an \
+                 unexploited selection signal"
+            } else {
+                "the shipped knob does NOT move the band; the residual is orthogonal to \
+                 instantiation evidence"
+            }
+        );
+    }
+
+
+    /// The T1 deliverable: the addressable band, and the stop-rule verdict
+    /// read off it rather than off the raw band.
+    #[test]
+    fn t1_headroom_decomposition_report() {
+        let d = decompose_headroom();
+        print_headroom_decomposition(&d);
+
+        // The decomposition must be total — a miss with no cause means the
+        // addressable denominator is a guess.
+        assert_eq!(
+            d.shipped.len(),
+            d.type_blind.len()
+                + d.pool_depth.len()
+                + d.unfixable.len()
+                + d.selector_addressable.len(),
+            "every shipped selection miss must be attributed to exactly one cause"
+        );
+        assert!(d.labeled > 0, "no spans scored");
     }
 
     /// The probe is a MEASUREMENT: two runs in one process must agree, or the

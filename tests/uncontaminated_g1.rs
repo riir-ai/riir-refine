@@ -642,10 +642,7 @@ fn t1_dflash2_composite_headroom_fixable() {
                 .filter(|l| fixable.contains(l.as_str()))
                 .cloned()
                 .collect();
-            match accepted.is_empty() {
-                true => None,
-                false => Some((*t, accepted)),
-            }
+            if accepted.is_empty() { None } else { Some((*t, accepted)) }
         })
         .collect();
     println!(
@@ -714,4 +711,85 @@ fn t1_dflash2_composite_headroom_control() {
              selector, so it contributes NO evidence to the T1.2 stop rule"
         }
     );
+}
+
+/// T1 surface reconciliation: the fixture surface's headroom, re-labeled.
+///
+/// The lib-side probe reads +6.9pp blended headroom over the Issue 017
+/// fixtures while this file's composite surface reads +0.0pp. The surfaces
+/// cannot both be describing the product, so the disagreement has to be
+/// resolved rather than averaged.
+///
+/// The suspect is the ground truth, not the selector. The lib probe scores
+/// against ONE hand-authored label per span, so a top-1 that real clippy also
+/// reports for that span is counted as a miss purely because it is not the
+/// lint the fixture was written for. (The chosen rules in those misses are
+/// generic shapes — `identity_op`, `unnecessary_mut_passed` — exactly what a
+/// span can trip incidentally.) This test re-runs the SAME measurement on the
+/// SAME spans with real `cargo clippy` deciding what counts as correct.
+///
+/// - headroom collapses toward 0 → the fixture band is a labeling artifact and
+///   the uncontaminated 0.0pp is the product-relevant number.
+/// - headroom survives → the band is real and the composite surface is simply
+///   too lenient to show it.
+#[test]
+fn t1_dflash2_fixture_surface_headroom_real_labels() {
+    let oracle = ClippyOracle::new();
+    if !oracle.is_available() {
+        eprintln!("SKIP: cargo not available");
+        return;
+    }
+    println!("\n=== Issue 034 T1 — fixture-surface headroom under REAL clippy labels ===");
+    let truth = gather_truth();
+
+    // Same scorable rule as `t355_uncontaminated_rerank_g1`: an uncompilable
+    // span has no trustworthy labels, and a span with no corpus lint has no
+    // correct answer to rank first.
+    let scorable: Vec<&Truth> = truth
+        .iter()
+        .filter(|t| t.compiles && !t.real.is_empty())
+        .collect();
+    let pairs: Vec<(&Truth, BTreeSet<String>)> =
+        scorable.iter().map(|t| (*t, t.real.clone())).collect();
+    println!("  fixtures {} | scorable {}", truth.len(), pairs.len());
+    if pairs.len() < 5 {
+        println!("  INSUFFICIENT: fewer than 5 scorable spans — no verdict.");
+        return;
+    }
+
+    // Our-label control on the identical span subset, so the two numbers
+    // differ only in the ground truth and not in the denominator.
+    let ours: Vec<(&Truth, BTreeSet<String>)> = scorable
+        .iter()
+        .map(|t| {
+            let mut set = BTreeSet::new();
+            set.insert(t.our_label.to_string());
+            (*t, set)
+        })
+        .collect();
+
+    let h_ours = measure_composite_headroom(&ours);
+    let h_real = measure_composite_headroom(&pairs);
+    print_composite_headroom("our-single-label", &h_ours);
+    print_composite_headroom("real-clippy-label", &h_real);
+    structural_invariants(&h_ours);
+    structural_invariants(&h_real);
+
+    println!(
+        "\n  reconciliation: our-label {:+.1}pp vs real-clippy {:+.1}pp -> {}",
+        h_ours.headroom_pp(),
+        h_real.headroom_pp(),
+        if h_real.headroom_pp() < riul_bar() {
+            "LABELING ARTIFACT — the band vanishes once ground truth is real; the \
+             product-relevant headroom is the uncontaminated 0.0pp"
+        } else {
+            "REAL BAND — headroom survives real ground truth; the composite surface is \
+             merely too lenient to show it"
+        }
+    );
+}
+
+/// The T1.2 stop bar, named once.
+fn riul_bar() -> f32 {
+    riir_clippy::draft::HEADROOM_STOP_BAR_PP
 }

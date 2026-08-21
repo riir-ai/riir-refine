@@ -50,9 +50,9 @@ pub use latent_matcher::{LatentMatcher, RuleInfo, SpanSuggestion};
 #[cfg(feature = "clippy_verify")]
 pub use clippy_oracle::{ClippyOracle, OracleVerdict};
 pub use headroom_probe::{
-    print_headroom_report, run_headroom_probe, run_headroom_probe_with, HeadroomMetrics,
-    HeadroomMiss, HeadroomReport, HeadroomVerdict, MissKind, HEADROOM_DEPTHS,
-    HEADROOM_STOP_BAR_PP,
+    decompose_headroom, print_headroom_decomposition, print_headroom_report, run_headroom_probe,
+    run_headroom_probe_with, HeadroomDecomposition, HeadroomMetrics, HeadroomMiss, HeadroomReport,
+    HeadroomVerdict, MissKind, ResidualCause, HEADROOM_DEPTHS, HEADROOM_STOP_BAR_PP,
 };
 pub use instantiation_rerank::{RerankMode, RERANK_POOL};
 pub use op_tokenizer::{RustOpBigramTokenizer, RustOpTokenizer, BIGRAM_SEP, OP_PREFIX};
