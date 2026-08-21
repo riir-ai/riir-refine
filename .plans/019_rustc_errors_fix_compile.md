@@ -12,15 +12,76 @@ disagree, the oracle wins — and reasoning without an oracle in the loop
 doesn't just fail, it invents. This plan builds the oracle-in-the-loop
 system.
 
-**Product thesis:** rustc emits NO machine-applicable suggestions for the
-borrowck family (E0597/E0596/E0502/E0499/E0505/E0507/E0382) — `cargo fix` is
-structurally blind there; every LLM tool pays inference to fix exactly these
-errors. We fix them **modelless**: enumerate playbook candidate edits → apply
-→ `cargo check` → keep only what compiles. **Wrong fixes are impossible by
-construction** — the failure mode is "no fix found", never "fix broke your
-code". Coverage is partial by design and the coverage number is published —
-partial-but-never-wrong beats comprehensive-but-sometimes-wrong for a tool
-that edits your code.
+**Product thesis (REVISED 2026-08-21 — the original was refuted by the
+oracle; see the section below).** The thesis as first written ("rustc emits NO
+machine-applicable suggestions for the borrowck family
+E0597/E0596/E0502/E0499/E0505/E0507/E0382; `cargo fix` is structurally blind
+there") is FALSE on 4 of the 7 codes and was refuted the same day by the very
+instrument this plan is built around. The surviving thesis has two parts:
+
+1. **Uncontested territory (`cargo fix` is genuinely blind):** E0597 (true
+   local-lifetime), E0499, E0502. Zero suggestion spans, zero `cargo fix`
+   edits — measured. This is the head we own outright, and it INCLUDES the
+   motivating incident family, so the Phase 2 vertical slice stands.
+2. **Contested territory (rustc already ships a MachineApplicable fix):**
+   E0382, E0505, E0507, E0596, and E0373 (the closure-outlives shape). Here
+   the differentiator is NOT "we can fix it" — it is that rustc offers exactly
+   ONE suggestion, applied blind, and that suggestion is frequently a
+   semantics-changing `.clone()` (`&v.clone()` for E0505 inserts a temporary
+   whose borrow no longer aliases `v` at all). Our claim there is *ranked
+   alternatives + revert safety*, and it must be MEASURED against
+   `cargo fix --broken-code` as the floor (Issue 035) — not assumed.
+
+We fix both classes **modelless**: enumerate playbook candidate edits → apply
+→ `cargo check` → keep only what compiles. Coverage is partial by design and
+the coverage number is published.
+
+**"Wrong fixes are impossible by construction" is OVERSTATED and is hereby
+downgraded.** What the oracle guarantees is *compiles*, not *means the same
+thing*. `.clone()` breaks aliasing, `move` transfers ownership out of the
+enclosing scope, and scope-restructuring changes drop order and therefore
+observable `Drop` timing. `Box::leak` is not a lone outlier — it is the
+loudest member of a whole class. The honest claim is: **never leaves your tree
+non-compiling** (that IS by construction), and **never applies a fix from the
+semantics-changing exclusion class without saying so in the diff**.
+
+## Oracle verdict on the premise (measured 2026-08-21, rustc 1.93.0 stable)
+
+Per this plan's own founding lesson — *when reasoning and the compiler-oracle
+disagree, the oracle wins* — the premise was put to the oracle BEFORE any
+implementation. A probe crate with one minimal reproduction per error code was
+checked with `cargo check --message-format=json` (counting spans carrying
+`suggested_replacement` + their `suggestion_applicability`), then repaired with
+`cargo fix --broken-code --allow-dirty --allow-no-vcs` and diffed.
+
+| Code | rustc suggestion | `cargo fix --broken-code` result | Territory |
+|---|---|---|---|
+| E0597 (true local lifetime) | 0 spans | no change | **ours — uncontested** |
+| E0499 (two `&mut`) | 0 spans | no change | **ours — uncontested** |
+| E0502 (borrow + `&mut`) | 0 spans | no change | **ours — uncontested** |
+| E0382 (use of moved) | 1, `MachineApplicable` `.clone()` | fixed: `let w = v.clone();` | contested |
+| E0505 (move out of borrowed) | 1, `MachineApplicable` `.clone()` | fixed: `let r = &v.clone();` | contested |
+| E0507 (move out of `&`) | 1, `MachineApplicable` `.clone()` | fixed: `s.v.clone()` | contested |
+| E0596 (borrow as mutable) | 1, `MachineApplicable` `mut ` | fixed: `let mut x = v;` | contested |
+| E0373 (closure outlives) | 1, `MachineApplicable` `move ` | fixed: `Box::new(move || ...)` | contested |
+
+Three consequences, all binding on the tasks below:
+
+- **The addressable head is 3 codes, not 7.** Any claim of "~30–40 templates"
+  across the borrowck family must first prove per-family that it beats
+  `cargo fix`; templates for contested codes are speculative until then.
+- **Playbook template 1 (`move` closure) is already `cargo fix`'s job.** The
+  E0597-shaped closure case (`Box<dyn Fn>` capturing a local) is reported as
+  **E0373**, not E0597, and rustc's `move ` suggestion is MachineApplicable
+  and applied automatically. Demoted accordingly.
+- **`cargo fix --broken-code` is the mandatory floor**, exactly as the
+  conformal-naive floor is for UQ primitives. A family we do not beat, we
+  delegate to `cargo fix` and ship no template. Gate: G-floor (T6.9),
+  tracked in Issue 035.
+
+Repro: probe sources + the JSON extractor are reproduced in Issue 035; rerun on
+toolchain bumps, since the contested set only ever GROWS as rustc improves —
+this table has a shelf life and must be re-measured, not cited.
 
 ## What already exists (the inventory — this is why the verdict was "engineering, not research")
 
@@ -78,7 +139,10 @@ can't (e.g. "is this `Clone`?" — apply `move`+`.clone()`, let cargo check
 arbitrate; revert is one iteration).
 
 **E0597 (borrow outlives owner) — the motivating family, shipped first:**
-1. `move` closure (+ span-scan: binding unused after the closure)
+1. ~~`move` closure (+ span-scan: binding unused after the closure)~~ —
+   **DEMOTED**: this shape is diagnosed as E0373 and `cargo fix` already
+   applies `move ` (MachineApplicable). Ship only if the floor gate (T6.9)
+   shows a case rustc's single suggestion gets wrong.
 2. `move` + `.clone()` for multi-capture bindings (oracle-arbitrated Clone)
 3. drop-the-box restructure (`&mut dyn FnMut()` runner family — the shape
    that fixed the incident)
@@ -88,9 +152,14 @@ arbitrate; revert is one iteration).
 7. ~~`Box::leak`~~ — **excluded**: compiles, tests pass, leaks. Never
    auto-applied; documented as the canonical wrong-but-compiling example.
 
-**Then the rest of the borrowck family (Phase 3):** E0596 (`&mut`), E0502
-(borrow+move), E0499 (double mutable), E0505 (move out of borrow), E0507
-(`.clone()` out of ref), E0382 (clone/borrow). ~30–40 templates total.
+**Then the rest of the borrowck family (Phase 3), split by territory:**
+- **Uncontested, build unconditionally:** E0499 (double mutable), E0502
+  (borrow + `&mut`). No rustc suggestion exists; any coverage is net-new.
+- **Contested, build ONLY after the floor gate:** E0596 (`&mut`), E0505 (move
+  out of borrow), E0507 (`.clone()` out of ref), E0382 (clone/borrow). Each
+  needs a measured win over `cargo fix --broken-code` (T6.9) BEFORE templates
+  are authored. The template-count estimate is withdrawn — "~30–40" was sized
+  against a 7-code market that measurement cut to 3.
 
 ## Tasks
 
@@ -104,6 +173,18 @@ arbitrate; revert is one iteration).
 - [ ] T0.2 Confirm `ClippyOracle`'s JSON machinery is reusable for
   `cargo check` diagnostics (error-code field, spans, children) — extend,
   don't fork.
+- [ ] T0.3 **Feature graph** — name the flag `rustc_errors` and keep it OFF
+  the `latent_retrieval` dep tree. Verified 2026-08-21: `src/fix_verify.rs`
+  imports only `std` + `serde` (zero `riir_rag` / `riir_neuron_db`), so
+  `fix_verify = ["latent_retrieval"]` is a CLI-surface implication, not a code
+  dependency. This domain is exact-keyed by error code and needs no retrieval;
+  extract the apply→check→revert core behind a retrieval-free
+  `compile_oracle` feature that `fix_verify` and `rustc_errors` both consume,
+  rather than dragging riir-rag + riir-neuron-db into a compile fixer.
+- [ ] T0.4 Re-run the premise probe (Issue 035) on the repo's pinned toolchain
+  and pin the measured table as a test, so a rustc bump that moves a code from
+  uncontested → contested fails loudly instead of silently invalidating the
+  product claim.
 
 ### Phase 1 — the oracle driver
 
@@ -120,6 +201,13 @@ arbitrate; revert is one iteration).
 - [ ] T1.4 Revert path: a candidate whose application leaves the file
   non-compiling is reverted before the next candidate (the `fix_verify`
   semantics, per-error-site).
+- [ ] T1.5 **CLI validation matrix** — `src/bin/heal.rs` currently rejects
+  `--write` unless `--fix` is set and `--verify-args` unless `--verify` is set
+  (the `--write requires --fix` / `--verify-args requires --verify` guards).
+  As written, `--fix-compile --write --verify-args "..."` is rejected by the
+  existing argument checks. Extend both guards to accept `--fix-compile` as a
+  satisfying mode, and pin each accepted/rejected combination by test — this
+  is a silent-usability trap, not a compile error.
 
 ### Phase 2 — E0597 vertical slice to REAL USE
 
@@ -189,11 +277,19 @@ arbitrate; revert is one iteration).
 
 ### Phase 6 — GOAT + record
 
-- [ ] T6.1 Mutation corpus: extend `mutate_shape` to Rust-level mutators
-  (drop `&`, add `move`, `'static` injection, swap borrow for move, …) over
-  a sample of THIS repo's + katgpt-rs's compiling code → N≥200 labeled
-  (broken, known-inverse-fix) pairs under `tests/mutations/` (generated,
-  committed for determinism).
+- [ ] T6.1 Mutation corpus: N≥200 labeled (broken, known-inverse-fix) pairs
+  under `tests/mutations/` (generated, committed for determinism) via
+  Rust-level compile-breaking mutators (drop `&`, add `move`, `'static`
+  injection, swap borrow for move, …) over a sample of THIS repo's +
+  katgpt-rs's compiling code. **Correction:** the earlier draft said "extend
+  `mutate_shape`" — that is a mis-citation. `mutate_shape`
+  (`src/draft/retrieval_eval.rs:412`) is a token-RENAMER (`out` → `dst` via
+  `KERNEL_RENAMES`) used to probe retrieval invariance; it never breaks
+  compilation and has no reusable machinery here. Write a new
+  `mutate_compile_break` alongside it and reuse only the labeled-corpus
+  SHAPE (Issue 017), not the function.
+  Corpus must be stratified by territory (uncontested vs contested) so the
+  coverage number cannot be inflated by codes `cargo fix` already handles.
 - [ ] T6.2 **G1 correctness:** every shipped fix compiles (by construction —
   assert the invariant anyway) + `cargo test` green post-fix on the corpus
   + the T2.3 already-compiles no-op gate.
@@ -204,6 +300,20 @@ arbitrate; revert is one iteration).
 - [ ] T6.5 **G4 alloc:** the propose/apply path itself alloc-free
   steady-state (counting allocator, the perf-bench axis) — cargo-check
   subprocess cost is out of scope (it's the oracle, not the healer).
+- [ ] T6.9 **G-floor (the gate the refuted premise forces):** on the mutation
+  corpus, `cargo heal --fix-compile` vs `cargo fix --broken-code` head-to-head,
+  reported PER ERROR CODE: fix rate, and — where both produce a fix — which
+  diff a reviewer prefers (min-delta + semantics-preserving beats a blind
+  `.clone()`). A contested code we do not beat ships NO template and is
+  delegated to `cargo fix` in the driver. Publish the per-code table; the
+  uncontested three are exempt from the comparison (floor rate = 0 by
+  measurement) but must still publish absolute coverage.
+- [ ] T6.10 **G-semantics:** the exclusion class (§Non-goals) is enforced by
+  test, not prose — for each of `Box::leak`, aliasing-breaking `.clone()`
+  insertion, and drop-order-changing scope restructure, either a never-emitted
+  test or a diff annotation that names the semantic change. "Compiles + tests
+  pass" is NOT the same as "means the same thing", and the corpus's tests are
+  not complete.
 - [ ] T6.6 **G-coverage (the honest product metric):** % of the mutation
   corpus fixed, per error family, PUBLISHED in the bench doc + README. Also
   the never-wrong number: non-compiling edits surviving a run = 0 (pinned
@@ -236,9 +346,18 @@ arbitrate; revert is one iteration).
 
 ## Honest caveats (recorded up front, not discovered later)
 
-- Coverage will be partial. The pitch is never-wrong + free, not
-  universal. The mutation corpus bounds the claim; real-use misses feed
-  growth via T4.4.
+- Coverage will be partial. The pitch is **never-leaves-you-broken** + free,
+  not universal and not never-wrong (see the revised thesis). The mutation
+  corpus bounds the claim; real-use misses feed growth via T4.4.
+- **The market is 3 codes, measured, not 7 as first claimed** — and it shrinks
+  as rustc adds suggestions. The premise probe is a standing test (T0.4), not
+  a one-time finding. A future rustc that suggests for E0502 would delete a
+  third of the uncontested head; that is the main product risk and it is
+  outside our control.
+- A compiling fix can still change behavior (aliasing via `.clone()`,
+  ownership via `move`, drop order via scope restructure). rustc itself ships
+  this class as MachineApplicable (`&v.clone()` for E0505), so we cannot claim
+  the high ground by refusing it — only by naming it in the diff (T6.10).
 - The oracle is `cargo check` — the same feature-set blindness as
   `fix_verify` (a fix can compile under default features and break a gated
   config). `--verify-args` is the mitigation; the wrapper requires it.
