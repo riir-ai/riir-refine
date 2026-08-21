@@ -166,17 +166,26 @@ fn usage() -> ! {
 USAGE:
     cargo heal --suggest [--domain <auto|clippy|perf|kernel>] [--top-k <N>] <path>...
     cargo heal --fix [--write] [--no-fmt] [--quiet] [--verify [--verify-args <s>]] [--top-k <N>] <path>...
+    cargo heal --fix-compile [--write] [--max-iters <N>] [--verify-args <s>] <path>...
     cargo heal --score-bench | --score-report        (needs --features score_bench)
 
     --suggest       Suggest mode: print matching rules per code span (no edits).
     --fix           Fix mode: apply the compiled-in proposers' span-preserving edits
                     ({} perf rules + {} clippy lints: {} | {}). The proposer's visitor
                     is the gate — latent suggestions never auto-apply.
-    --write         With --fix: write the spliced file in place, then rustfmt it
-                    AUTOMATICALLY when the original was already rustfmt-clean
-                    (pre-existing drift + CRLF files are skipped — no formatting
-                    churn enters a mechanical diff). Without --write: per-edit
-                    review incl. the fmt plan (would-format / skip drift / skip CRLF).
+    --fix-compile   Compile-error repair (Plan 019, needs --features rustc_errors):
+                    cargo-check the owning packages, parse coded errors (E0597...),
+                    propose per error via playbooks, apply best → recheck → keep/revert,
+                    bounded by --max-iters. Review mode (default) prints the plan;
+                    --write applies. Registry ships empty (Phase 1) — every coded
+                    error reports as a miss until templates land (Phase 2-3).
+    --max-iters <N> --fix-compile iteration bound (default 5).
+    --write         With --fix/--fix-compile: write the edits in place (with --fix:
+                    then rustfmt AUTOMATICALLY when the original was already
+                    rustfmt-clean — pre-existing drift + CRLF files are skipped — no
+                    formatting churn enters a mechanical diff). Without --write:
+                    per-edit review incl. the fmt plan (would-format / skip drift /
+                    skip CRLF).
     --quiet         With --fix: skip the --suggest pass (only show fixes).
     --no-fmt        Disable the automatic post-write rustfmt pass (it is
                     default-on; see src/fmt.rs for the discipline it encodes).
@@ -189,7 +198,8 @@ USAGE:
 
 Domains are feature-gated: clippy + perf are default-on; kernel needs
 --features kernel_heal. Requesting a domain whose feature is off is an
-error (T2.4 gating). --verify needs --features fix_verify.",
+error (T2.4 gating). --verify needs --features fix_verify.
+--fix-compile needs --features rustc_errors.",
         FIXABLE_RULES.len(),
         FIXABLE_RULES.join(", "),
         FIXABLE_LINTS.len(),
@@ -203,6 +213,12 @@ error (T2.4 gating). --verify needs --features fix_verify.",
 struct Args {
     suggest: bool,
     fix: bool,
+    /// Plan 019 T1.3: `--fix-compile` — the rustc_errors oracle driver.
+    /// A separate mode (not a --fix modifier): it operates on packages,
+    /// needs no retrieval, and its loop has verification built in.
+    fix_compile: bool,
+    /// `--max-iters` for --fix-compile (default 5, the plan default).
+    max_iters: usize,
     write: bool,
     quiet: bool,
     /// `--no-fmt`: disable the automatic post-heal rustfmt pass (default
@@ -225,6 +241,8 @@ fn parse_args() -> Args {
     let mut args = Args {
         suggest: false,
         fix: false,
+        fix_compile: false,
+        max_iters: 5,
         write: false,
         quiet: false,
         no_fmt: false,
@@ -241,12 +259,23 @@ fn parse_args() -> Args {
         match arg.as_str() {
             "--suggest" => args.suggest = true,
             "--fix" => args.fix = true,
+            "--fix-compile" => args.fix_compile = true,
             "--write" => args.write = true,
             "--quiet" => args.quiet = true,
             "--no-fmt" => args.no_fmt = true,
             "--verify" => args.verify = true,
             "--score-bench" => args.score_bench = true,
             "--score-report" => args.score_report = true,
+            "--max-iters" => {
+                let Some(value) = it.next() else {
+                    eprintln!("--max-iters requires a value");
+                    usage();
+                };
+                args.max_iters = value.parse().unwrap_or_else(|_| {
+                    eprintln!("--max-iters expects a number, got {value:?}");
+                    usage();
+                });
+            }
             "--verify-args" => {
                 let Some(value) = it.next() else {
                     eprintln!("--verify-args requires a value");
@@ -297,6 +326,41 @@ fn parse_args() -> Args {
     args
 }
 
+/// Plan 019 T1.5: the mode-flag validation matrix, extracted so every
+/// accepted/rejected combination is pinnable by test.
+///
+/// The silent-usability trap this closes: the existing guards rejected
+/// `--fix-compile --write --verify-args "..."` because `--write` demanded
+/// `--fix` and `--verify-args` demanded `--verify` — the flags were parsed
+/// but unusable in the mode they were built for. Both guards now accept
+/// `--fix-compile` as a satisfying mode.
+///
+/// # Errors
+///
+/// Returns the exact message `main` prints before `usage()`.
+fn validate_mode_flags(
+    suggest: bool,
+    fix: bool,
+    fix_compile: bool,
+    write: bool,
+    verify: bool,
+    verify_args: bool,
+) -> Result<(), &'static str> {
+    if !suggest && !fix && !fix_compile {
+        return Err("no mode given — use --suggest, --fix, or --fix-compile");
+    }
+    if write && !fix && !fix_compile {
+        return Err("--write requires --fix (or --fix-compile)");
+    }
+    if verify && !fix {
+        return Err("--verify requires --fix");
+    }
+    if verify_args && !verify && !fix_compile {
+        return Err("--verify-args requires --verify (or --fix-compile)");
+    }
+    Ok(())
+}
+
 /// Recursively collect source files with the given extension (std-only
 /// walker — no new dep). Skips hidden dirs + `target`/`vendor` build noise.
 fn collect_source_files(root: &Path, ext: &str, out: &mut Vec<PathBuf>) {
@@ -336,6 +400,16 @@ fn snippet_head(text: &str) -> &str {
         .map(str::trim)
         .find(|l| l.len() > 8)
         .unwrap_or("…")
+}
+
+/// Clamp a message to `n` chars for one-line report output.
+fn truncate(s: &str, n: usize) -> String {
+    if s.chars().count() <= n {
+        s.to_string()
+    } else {
+        let cut: String = s.chars().take(n.saturating_sub(1)).collect();
+        format!("{cut}…")
+    }
 }
 
 fn print_suggestion(s: &SpanSuggestion, matcher: &LatentMatcher, domain_filter: Option<DomainId>) {
@@ -428,20 +502,17 @@ fn main() {
         std::process::exit(2);
     }
 
-    if !args.suggest && !args.fix {
-        eprintln!("no mode given — use --suggest or --fix");
-        usage();
-    }
-    if args.write && !args.fix {
-        eprintln!("--write requires --fix");
-        usage();
-    }
-    if args.verify && !args.fix {
-        eprintln!("--verify requires --fix");
-        usage();
-    }
-    if args.verify_args.is_some() && !args.verify {
-        eprintln!("--verify-args requires --verify");
+    // Plan 019 T1.5: the mode-flag matrix (pinned by
+    // `mode_flag_tests` below).
+    if let Err(msg) = validate_mode_flags(
+        args.suggest,
+        args.fix,
+        args.fix_compile,
+        args.write,
+        args.verify,
+        args.verify_args.is_some(),
+    ) {
+        eprintln!("{msg}");
         usage();
     }
     #[cfg(not(feature = "fix_verify"))]
@@ -452,6 +523,98 @@ fn main() {
     #[cfg(not(feature = "fix_verify"))]
     if args.verify_args.is_some() {
         eprintln!("--verify-args requires --verify (built with --features fix_verify)");
+        std::process::exit(2);
+    }
+
+    // ── Plan 019 Phase 1: --fix-compile — the oracle driver ──────────────
+    // A separate early-exit arm: it operates on PACKAGES (cargo check per
+    // owning package), needs no retrieval, and its loop carries its own
+    // verification. Review mode (no --write) prints the per-error plan;
+    // --write applies. No unconditional-write path exists (T1.3).
+    #[cfg(feature = "rustc_errors")]
+    if args.fix_compile {
+        use riir_clippy::domains::rustc_errors::driver::CompileDriver;
+        use riir_clippy::domains::rustc_errors::playbooks::Playbooks;
+
+        let extra = args
+            .verify_args
+            .as_deref()
+            .map(|s| s.split_whitespace().map(str::to_string).collect())
+            .unwrap_or_default();
+        let driver = CompileDriver::isolated()
+            .with_max_iters(args.max_iters)
+            .with_extra_args(extra);
+        let playbooks = Playbooks::empty(); // templates land Phase 2-3
+        let report = driver.run(&args.paths, &playbooks, args.write);
+        if let Some(e) = &report.error {
+            eprintln!("fix-compile: {e}");
+            std::process::exit(1);
+        }
+        if args.write {
+            for a in &report.applied {
+                println!(
+                    "applied {} [{}] at {}:{} (errors {} → {})",
+                    a.code,
+                    a.strategy_id,
+                    a.file.display(),
+                    a.line,
+                    a.errors.0,
+                    a.errors.1
+                );
+            }
+            for r in &report.reverted {
+                println!(
+                    "reverted {} [{}] at {}:{} ({})",
+                    r.code,
+                    r.strategy_id,
+                    r.file.display(),
+                    r.line,
+                    r.reason.label()
+                );
+            }
+            println!(
+                "fix-compile: {} applied, {} reverted, {} miss(es), {} remaining error(s){}",
+                report.applied.len(),
+                report.reverted.len(),
+                report.misses.len(),
+                report.remaining,
+                if report.clean { " — CLEAN" } else { "" }
+            );
+        } else {
+            if report.planned.is_empty() && report.clean {
+                println!("fix-compile: nothing to fix (no coded errors)");
+            }
+            for p in &report.planned {
+                println!(
+                    "plan {}:{} {} [{}] → {}",
+                    p.file.display(),
+                    p.line,
+                    p.code,
+                    p.strategy_id,
+                    p.replacement_head
+                );
+            }
+            if !report.misses.is_empty() {
+                println!(
+                    "fix-compile (review): {} error(s) with no playbook match —",
+                    report.misses.len()
+                );
+                for m in &report.misses {
+                    println!(
+                        "  miss {} at {}:{} — {}",
+                        m.code,
+                        m.file.display(),
+                        m.line,
+                        truncate(&m.message, 100)
+                    );
+                }
+            }
+        }
+        return;
+    }
+    #[cfg(not(feature = "rustc_errors"))]
+    if args.fix_compile {
+        eprintln!("--fix-compile requires a build with --features rustc_errors");
         std::process::exit(2);
     }
 
@@ -1130,5 +1293,54 @@ mod fix_domain_tests {
     #[test]
     fn kernel_runs_neither_syn_domain() {
         assert_eq!(fix_domain_scopes(Some(DomainId::Kernel)), (false, false));
+    }
+}
+
+/// Plan 019 T1.5: the mode-flag validation matrix — every accepted /
+/// rejected combination pinned, so a future guard change that breaks
+/// `--fix-compile --write --verify-args "..."` (the silent-usability trap
+/// this task closed) fails here instead of in a user's shell.
+#[cfg(test)]
+mod mode_flag_tests {
+    use super::validate_mode_flags as v;
+
+    #[test]
+    fn accepted_combinations() {
+        // The three modes alone.
+        assert!(v(true, false, false, false, false, false).is_ok(), "--suggest");
+        assert!(v(false, true, false, false, false, false).is_ok(), "--fix");
+        assert!(v(false, false, true, false, false, false).is_ok(), "--fix-compile");
+        // --write with each writing mode.
+        assert!(v(false, true, false, true, false, false).is_ok(), "--fix --write");
+        assert!(v(false, false, true, true, false, false).is_ok(), "--fix-compile --write");
+        // The trap this task closed: --fix-compile --write --verify-args.
+        assert!(
+            v(false, false, true, true, false, true).is_ok(),
+            "--fix-compile --write --verify-args \"...\""
+        );
+        // --verify still needs --fix (its batch semantics are --fix's).
+        assert!(v(false, true, false, true, true, false).is_ok(), "--fix --write --verify");
+        assert!(v(false, true, false, true, true, true).is_ok(), "--fix --verify --verify-args");
+    }
+
+    #[test]
+    fn rejected_combinations() {
+        assert!(v(false, false, false, false, false, false).is_err(), "no mode");
+        assert!(
+            v(false, false, false, true, false, false).is_err(),
+            "--write without a mode"
+        );
+        assert!(
+            v(false, false, false, false, true, false).is_err(),
+            "--verify without --fix"
+        );
+        assert!(
+            v(false, false, true, false, true, false).is_err(),
+            "--verify with --fix-compile does NOT satisfy the --fix requirement"
+        );
+        assert!(
+            v(true, false, false, false, false, true).is_err(),
+            "--verify-args without --verify/--fix-compile"
+        );
     }
 }

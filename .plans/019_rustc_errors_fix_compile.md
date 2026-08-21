@@ -227,26 +227,54 @@ arbitrate; revert is one iteration).
 
 ### Phase 1 — the oracle driver
 
-- [ ] T1.1 `diag.rs`: run `cargo check --message-format=json` (with
+- [x] T1.1 `diag.rs`: run `cargo check --message-format=json` (with
   `--verify-args` passthrough for feature sets), parse to `RustcErrorDiag
   { code, primary_span, spans, rendered }`, dedupe multi-span repeats.
-- [ ] T1.2 `driver.rs`: the bounded loop — collect errors → group by file →
+  **DONE 2026-08-21.** The run lives in the shared `compile_oracle`
+  substrate (`CheckRunner` — T0.3's pending extraction, landed with this
+  phase: `fix_verify` delegates its run_check to it; the driver consumes
+  it with `--all-targets` + extra-args passthrough). Parse gained the
+  `rendered` field + byte offsets on suggestion spans
+  (`parses_rendered_and_byte_offsets`), and `dedupe_by_site` collapses
+  same-`(code, file, line)` repeats merging differing suggestions
+  (`dedupe_by_site_merges_repeats`).
+- [x] T1.2 `driver.rs`: the bounded loop — collect errors → group by file →
   propose per error (Phase 2/3 templates) → order candidates (memory
   BetaPosterior, AST-delta tiebreak) → apply best → recheck → repeat ≤
   `--max-iters` (default 5). Stop early when clean.
-- [ ] T1.3 CLI: `cargo heal --fix-compile [--write] [--max-iters N]
+  **DONE 2026-08-21.** `CompileDriver::run` — ordering is the Phase 1
+  static min-delta seam (`order_candidates`: file → line → code →
+  shortest replacement → strategy id; `BetaPosterior` is T4.2's swap,
+  measured-benefit-gated). Keep criterion: coded-error count strictly
+  decreased; everything else reverts byte-exact. E2E-pinned by
+  `tests/fix_compile.rs` (applied-to-clean / reverted-byte-exact /
+  nothing-on-clean / miss / review-plans — real cargo, real E0596/E0597).
+- [x] T1.3 CLI: `cargo heal --fix-compile [--write] [--max-iters N]
   [--verify-args "..."] [PATHS]` — review mode prints the plan per file;
   `--write` applies. No unconditional-write path, verified by test.
-- [ ] T1.4 Revert path: a candidate whose application leaves the file
+  **DONE 2026-08-21.** Early-exit arm in `main` (before the matcher — no
+  retrieval). Review mode prints `plan` lines + misses; write mode prints
+  applied/reverted + the summary. `review_mode_plans_without_writing`
+  pins no-write; the CLI smoke (review + write on a real E0596 scaffold,
+  empty registry) exits 0 with the file untouched.
+- [x] T1.4 Revert path: a candidate whose application leaves the file
   non-compiling is reverted before the next candidate (the `fix_verify`
   semantics, per-error-site).
-- [ ] T1.5 **CLI validation matrix** — `src/bin/heal.rs` currently rejects
+  **DONE 2026-08-21** — generalized to "no strict progress" (a fix that
+  trades one error for another — the `Box::leak` shape — must not survive
+  arbitration either; stricter than non-compiling-only, by design).
+  `driver_reverts_no_progress_candidate` pins byte-exact restore.
+- [x] T1.5 **CLI validation matrix** — `src/bin/heal.rs` currently rejects
   `--write` unless `--fix` is set and `--verify-args` unless `--verify` is set
   (the `--write requires --fix` / `--verify-args requires --verify` guards).
   As written, `--fix-compile --write --verify-args "..."` is rejected by the
   existing argument checks. Extend both guards to accept `--fix-compile` as a
   satisfying mode, and pin each accepted/rejected combination by test — this
   is a silent-usability trap, not a compile error.
+  **DONE 2026-08-21.** `validate_mode_flags` extracted; `mode_flag_tests`
+  pins 9 accepted + 5 rejected combinations (incl. the trap:
+  `--fix-compile --write --verify-args "..."` now OK; `--verify` still
+  requires `--fix` — its batch semantics are `--fix`'s, not the driver's).
 
 ### Phase 2 — E0597 vertical slice to REAL USE
 

@@ -122,6 +122,16 @@ kernel_heal = ["katgpt-core/variable_rank_domain_expert", "dep:regex"]
 # Opt-in: heavy dep tree (riir-rag + riir-neuron-db + syn-pulled chunker).
 latent_retrieval = ["dep:riir-rag", "dep:riir-neuron-db"]
 
+# Plan 019 T0.3: the retrieval-free apply→check→revert substrate shared by
+# `fix_verify` (the `--fix --verify` batch gate) and the `rustc_errors`
+# `--fix-compile` driver (Phase 1). Owns the cargo-check subprocess, the
+# rustc-reported-path resolution, and the package/workspace root walk.
+# `fix_verify = ["compile_oracle", "latent_retrieval"]` keeps its CLI-surface
+# implication; `rustc_errors = ["compile_oracle"]` stays OFF the riir-rag /
+# riir-neuron-db tree — a compile fixer must not grow a retrieval dep (the
+# dep-tree drift T0.3 was filed to prevent).
+compile_oracle = []
+
 # Issue 015: `--fix --verify` — the compile gate as tooling. Apply edits,
 # cargo check --all-targets, map rustc JSON errors to files/lines, revert
 # only the offending edits (line-matched span-level), re-check, report.
@@ -129,7 +139,7 @@ latent_retrieval = ["dep:riir-rag", "dep:riir-neuron-db"]
 # bounds attempted; E0308 backs the revert) + redundant_closure returns
 # as an attempted lint (VERIFY_LINTS). Implies latent_retrieval (extends
 # the cargo-heal bin surface).
-fix_verify = ["latent_retrieval"]
+fix_verify = ["compile_oracle", "latent_retrieval"]
 
 # Plan 014: clippy-bench — the frozen real-code healing bench + SVG score
 # history. Runs the production `--fix` proposer path over FROZEN fixtures
@@ -186,10 +196,12 @@ clippy_verify = ["clippy_lints"]
 # std + serde. Pulling riir-rag + riir-neuron-db into a compile fixer would be
 # dep-tree drift, not reuse.
 #
-# What it currently gates: the measurement layer only (suggestion-aware rustc
-# JSON parsing, the premise probe, the G-floor harness). The `--fix-compile`
-# driver is Plan 019 Phase 1 and is not implemented yet.
-rustc_errors = []
+# What it currently gates: the measurement layer (suggestion-aware rustc
+# JSON parsing, the premise probe, the G-floor harness) + the Phase 1
+# `--fix-compile` driver (bounded check→propose→apply→recheck→revert loop,
+# the playbook seam, and the CLI). Playbook templates are Phase 2–3; the
+# registry ships empty, so `--fix-compile` today reports errors + misses.
+rustc_errors = ["compile_oracle"]
 
 # Ruliology candidate enumeration (L3 refinement layer).
 # Implies `clippy_lints` (searches over clippy corpus entries).

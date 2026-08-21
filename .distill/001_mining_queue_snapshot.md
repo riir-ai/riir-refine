@@ -18,13 +18,33 @@
   `BetaPosterior`; BUILDS only the per-error-code playbook proposers + the
   bounded fix-compile driver + the watch wrapper. Self-evolve is first-class
   (Phase 4: trajectories, move-ordering policy, `.heal/misses/` corpus-growth
-  loop). Real-use target: `scripts/watch_heal.sh` (Phase 5). **Phase 0
+  loop). Real-use target: `scripts/watch_heal.sh` (Phase 5). Phase 0
   COMPLETE 2026-08-21 (T0.1 substrate-first grep PASS — no parallel system,
   the riir-train ×3 inline clippy-JSON parses classified boundary-correct;
   T0.2 verdict — ClippyOracle is a label extractor, NOT the base; driver
-  consumes `diag.rs` + `fix_verify` core, authors no new parser). Idle
-  loop: pick up at Phase 1 (the oracle driver — BUILD work, needs a quiet
-  box; the plan is the task list).**
+  consumes `diag.rs` + `fix_verify` core, authors no new parser). **Phase 1
+  COMPLETE 2026-08-21 (the oracle driver — landed under the sibling's
+  RLVR-training load: correctness work, no timing gates). Landed: T0.3's
+  pending `compile_oracle` extraction (CheckRunner + path utils moved out
+  of `fix_verify`, re-exported for back-compat; `rustc_errors =
+  ["compile_oracle"]` stays OFF the riir-rag tree), `diag` gained
+  `rendered` + span byte offsets + `dedupe_by_site`, `driver.rs` (the
+  bounded loop: propose → order min-delta → apply → recheck → keep iff
+  strict progress, else byte-exact revert; tried-set bounds), the
+  `playbooks` seam (registry EMPTY — templates are Phase 2-3, so
+  `--fix-compile` reports every coded error as a miss today), the CLI
+  (`--fix-compile [--write] [--max-iters] [--verify-args]`, early-exit
+  arm, review mode never writes) + T1.5's guard matrix (9 accepted + 5
+  rejected pinned; `--fix-compile` satisfies `--write`/`--verify-args`).
+  E2E `tests/fix_compile.rs` (6 tests, real cargo, E0596/E0597 shapes:
+  applied-to-clean / reverted-byte-exact / nothing-on-clean / miss /
+  review-plans). Validation: lib 657/0 default + 1033/0/13i all-features,
+  clippy --all-targets 0 both extremes (drive-by: the pre-existing
+  `McNemar` doc_markdown at HEAD fixed — Layer 5a was red before this
+  session), cargo-hack 23/23, fix_verify e2e + premise_probe both green
+  post-refactor. Idle loop: pick up at Phase 2 (the E0597 vertical slice
+  — templates 1-6 + the settlement_goat real-use gate; the plan is the
+  task list).**
 - **2026-08-20 — sec-domain seed verdict recorded (Research 078) + Proposal 004 +
   Plan 018 filed (same day, owner call):**
   the rust-secure-code/projects index surveyed end-to-end (39 links, 4 lanes).

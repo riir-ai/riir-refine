@@ -92,6 +92,15 @@ pub mod self_evolve;
 #[cfg(feature = "latent_retrieval")]
 pub mod draft;
 
+// Plan 019 T0.3: the retrieval-free compile-oracle substrate shared by
+// `fix_verify` and the `rustc_errors` `--fix-compile` driver — the cargo
+// check runner, the rustc-reported-path resolution, and the package /
+// workspace root walk. Gated by its own feature so `rustc_errors` can
+// consume it WITHOUT pulling `latent_retrieval` (riir-rag + riir-neuron-db)
+// into a compile fixer.
+#[cfg(feature = "compile_oracle")]
+pub mod compile_oracle;
+
 // Issue 015: `--fix --verify` — the compile gate as tooling for the edit
 // path (apply → cargo check → rustc-JSON error attribution → span-level
 // revert → re-check → report). Opt-in; implies latent_retrieval (extends

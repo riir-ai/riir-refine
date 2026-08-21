@@ -8,12 +8,16 @@
 //! - [`probe`] — the premise probe: does rustc already auto-fix this code?
 //! - [`floor`] — the G-floor harness: any [`floor::CompileFixer`] scored
 //!   against `cargo fix --broken-code` on a known-inverse mutation corpus.
+//! - [`driver`] — the Phase 1 `--fix-compile` bounded repair loop
+//!   (check → propose → apply → recheck → keep/revert), with the
+//!   [`playbooks`] seam. The registry ships EMPTY — templates are Phase
+//!   2–3, so the driver today reports every coded error as a miss.
 //!
-//! The driver (`--fix-compile`) and the playbook templates are Plan 019
-//! Phase 1–3 and are NOT here yet. That ordering is deliberate: the plan's
-//! founding premise ("rustc is structurally blind to the borrowck family")
-//! turned out to be false on 5 of 8 measured codes, so the floor is measured
-//! before templates are authored against it.
+//! The playbook templates are Plan 019 Phase 2–3; the ordering in which
+//! they landed is deliberate: the plan's founding premise ("rustc is
+//! structurally blind to the borrowck family") turned out to be false on
+//! 5 of 8 measured codes, so the floor is measured before templates are
+//! authored against it.
 //!
 //! **Exact-keyed, so no retrieval.** The diagnostic carries the error code —
 //! nothing here needs latent lookup, which is why the `rustc_errors` feature
@@ -22,5 +26,7 @@
 //! CLI-surface artifact, not a code dependency.
 
 pub mod diag;
+pub mod driver;
 pub mod floor;
+pub mod playbooks;
 pub mod probe;

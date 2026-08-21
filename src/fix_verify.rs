@@ -60,9 +60,16 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use serde::Deserialize;
+
+// Plan 019 T0.3: the subprocess + path-walk substrate moved to
+// `compile_oracle` so the `rustc_errors` driver can consume it without the
+// `latent_retrieval` tree. Re-exported here for back-compat — the bin and
+// the tests reach them through `fix_verify::`.
+pub use crate::compile_oracle::{
+    owning_package_root, resolve_reported_path, workspace_root, CheckRunner,
+};
 
 /// One edit, positioned for revert: its final-source line, its replacement
 /// text (to locate it on the error line), and the original text to restore.
@@ -134,10 +141,7 @@ struct CheckOutcome {
 /// cargo's incremental cache). This is a landing-time tool, not a hot
 /// path.
 pub struct FixVerifier {
-    cargo_bin: String,
-    /// Extra args appended to every `cargo check` invocation (e.g.
-    /// `["--features", "a,b,c"]`). Whitespace-split by the caller.
-    extra_args: Vec<String>,
+    runner: CheckRunner,
 }
 
 impl Default for FixVerifier {
@@ -150,15 +154,14 @@ impl FixVerifier {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            cargo_bin: "cargo".to_string(),
-            extra_args: Vec::new(),
+            runner: CheckRunner::new(),
         }
     }
 
     /// Append extra cargo args to every check (feature sets etc.).
     #[must_use]
     pub fn with_extra_args(mut self, args: Vec<String>) -> Self {
-        self.extra_args = args;
+        self.runner = self.runner.with_extra_args(args);
         self
     }
 
@@ -302,42 +305,17 @@ impl FixVerifier {
         Ok(())
     }
 
-    /// One `cargo check --all-targets --message-format=json` run in `pkg`.
-    /// Fails (Err) only when cargo could not run at all (missing binary,
-    /// broken manifest, bad args) — compile errors come back as
+    /// One `cargo check --all-targets --message-format=json` run in `pkg`,
+    /// delegated to the shared [`CheckRunner`] (Plan 019 T0.3). Fails (Err)
+    /// only when cargo could not run at all — compile errors come back as
     /// `Ok(outcome)` with `exit_ok = false` + error diagnostics in the JSON.
     fn run_check(&self, pkg: &Path) -> Result<CheckOutcome, String> {
-        let mut cmd = Command::new(&self.cargo_bin);
-        cmd.current_dir(pkg)
-            .arg("check")
-            .arg("--all-targets")
-            .arg("--message-format=json");
-        for a in &self.extra_args {
-            cmd.arg(a);
-        }
-        let output = cmd
-            .output()
-            .map_err(|e| format!("cargo spawn failed: {e}"))?;
-        let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
-        if !output.status.success() && !stdout.lines().any(is_json_line) {
-            // cargo itself failed without emitting JSON (bad args, broken
-            // manifest) — surface stderr.
-            let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
-            return Err(format!(
-                "cargo check failed to run in {}: {}",
-                pkg.display(),
-                first_meaningful_line(&stderr)
-            ));
-        }
+        let outcome = self.runner.run_check(pkg)?;
         Ok(CheckOutcome {
-            json: stdout,
-            exit_ok: output.status.success(),
+            json: outcome.json,
+            exit_ok: outcome.exit_ok,
         })
     }
-}
-
-fn is_json_line(line: &str) -> bool {
-    line.trim_start().starts_with('{')
 }
 
 /// Mutable per-file state across verify rounds.
@@ -438,14 +416,6 @@ fn restore_all_state(touched: &[&FileEditSet], state: &mut LoopState) {
     }
 }
 
-fn first_meaningful_line(s: &str) -> String {
-    s.lines()
-        .map(str::trim)
-        .find(|l| !l.is_empty())
-        .unwrap_or("(no stderr)")
-        .to_string()
-}
-
 /// Is 1-based `line` inside any `(start, end)` inclusive range?
 fn line_in_ranges(line: usize, ranges: &[(usize, usize)]) -> bool {
     ranges.iter().any(|(s, e)| line >= *s && line <= *e)
@@ -512,54 +482,11 @@ fn find_replacement_on_line(text: &str, line: usize, replacement: &str) -> Optio
     Some(line_start + col)
 }
 
-/// Walk up from a `.rs` file to the nearest directory holding a
-/// `Cargo.toml` — the owning package root (cargo forbids nested packages,
-/// so the first manifest is THE manifest of the crate the file compiles
-/// into).
-#[must_use]
-pub fn owning_package_root(file: &Path) -> Option<PathBuf> {
-    // Normalize to an absolute path first: with a relative input like
-    // `src/foo.rs` (files collected from CLI args), `pop()` walks down to
-    // the EMPTY path whose `Cargo.toml` join resolves against the process
-    // cwd — returning `Some("")` whose `Command::current_dir` then fails
-    // with os error 123 (the Issue 015 GOAT run's spawn failure).
-    let file = std::path::absolute(file).ok()?;
-    let mut dir = file.parent()?.to_path_buf();
-    loop {
-        if dir.join("Cargo.toml").is_file() {
-            return Some(dir);
-        }
-        if !dir.pop() {
-            return None;
-        }
-    }
-}
+// Walk up from a package root to the workspace root is now
+// `crate::compile_oracle::workspace_root`; the manifest walk lives
+// beside it (Plan 019 T0.3).
 
-/// Walk up from a package root to the workspace root (the nearest
-/// ancestor — including the package itself — whose `Cargo.toml` declares
-/// a `[workspace]` table). Falls back to the package root for standalone
-/// crates. Used to resolve rustc's workspace-relative `file_name`s.
-#[must_use]
-pub fn workspace_root(pkg_root: &Path) -> Option<PathBuf> {
-    let mut dir = Some(pkg_root.to_path_buf());
-    while let Some(d) = dir {
-        let manifest = d.join("Cargo.toml");
-        if let Ok(text) = std::fs::read_to_string(&manifest) {
-            if manifest_declares_workspace(&text) {
-                return Some(d);
-            }
-        }
-        dir = d.parent().map(Path::to_path_buf);
-    }
-    // No [workspace] found above: the package stands alone.
-    Some(pkg_root.to_path_buf())
-}
-
-fn manifest_declares_workspace(text: &str) -> bool {
-    text.lines()
-        .any(|l| l.trim_start().starts_with("[workspace"))
-}
-
+// ── cheap manifest scans (verify-specific) ───────────────────────────────
 /// Cheap text scan: does this manifest text reference the dependency
 /// `dep`? Matches `dep = ...` / `dep = { ... }` under any dependencies
 /// table — precise enough for a hard-skip gate (the rewrite cannot
@@ -730,24 +657,8 @@ fn merge_error_locations(
     }
 }
 
-/// Resolve a rustc-reported `file_name` to a comparable absolute path:
-/// absolute → canonicalize; relative → try workspace-root join, then
-/// package-root join, then the raw path (comparison-safe miss rather than
-/// a wrong hit).
-fn resolve_reported_path(p: &Path, ws: &Path, pkg: &Path) -> PathBuf {
-    if p.is_absolute() {
-        return std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
-    }
-    let joined = ws.join(p);
-    if let Ok(c) = std::fs::canonicalize(&joined) {
-        return c;
-    }
-    let joined_pkg = pkg.join(p);
-    if let Ok(c) = std::fs::canonicalize(&joined_pkg) {
-        return c;
-    }
-    joined
-}
+// `resolve_reported_path` moved to `compile_oracle` (re-exported above)
+// — Plan 019 T0.3. The doc on it there describes the resolution order.
 
 #[cfg(test)]
 mod tests {
@@ -815,62 +726,9 @@ mod tests {
         assert_eq!(manifest_nondefault_feature_count(multiline), 1);
     }
 
-    #[test]
-    fn workspace_detection_reads_manifest_tables() {
-        assert!(manifest_declares_workspace(
-            "[package]\nname = \"x\"\n\n[workspace]\nmembers = [\"crates/a\"]\n"
-        ));
-        assert!(!manifest_declares_workspace("[package]\nname = \"x\"\n"));
-    }
-
-    #[test]
-    fn owning_package_root_walks_up() {
-        let tmp = std::env::temp_dir().join(format!("fv_pkg_root_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&tmp);
-        let pkg = tmp.join("ws").join("crates").join("a");
-        std::fs::create_dir_all(pkg.join("src")).unwrap();
-        std::fs::write(pkg.join("Cargo.toml"), "[package]\nname = \"a\"\n").unwrap();
-        std::fs::write(
-            tmp.join("ws").join("Cargo.toml"),
-            "[workspace]\nmembers = [\"crates/a\"]\n",
-        )
-        .unwrap();
-        let f = pkg.join("src").join("lib.rs");
-        assert_eq!(owning_package_root(&f).as_deref(), Some(pkg.as_path()));
-        assert_eq!(
-            workspace_root(&pkg).as_deref(),
-            Some(tmp.join("ws").as_path())
-        );
-        let _ = std::fs::remove_dir_all(&tmp);
-    }
-
-    /// Issue 015 GOAT-run regression: a RELATIVE input (`src/lib.rs`, the
-    /// form CLI path args produce) must resolve to the absolute package
-    /// root — not the empty path whose `current_dir` fails with os error
-    /// 123. The walk-down-to-`""` case bites when the manifest sits at
-    /// the process cwd ("src/x.rs" → "src" → "" → "Cargo.toml").
-    #[test]
-    fn owning_package_root_relative_input_is_absolute() {
-        let tmp = std::env::temp_dir().join(format!("fv_pkg_rel_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&tmp);
-        std::fs::create_dir_all(tmp.join("src")).unwrap();
-        std::fs::write(tmp.join("Cargo.toml"), "[package]\nname = \"a\"\n").unwrap();
-        std::fs::write(tmp.join("src").join("lib.rs"), "").unwrap();
-        let prev = std::env::current_dir().unwrap();
-        std::env::set_current_dir(&tmp).unwrap();
-        let rel = Path::new("src/lib.rs");
-        let got = owning_package_root(rel).expect("package root found");
-        std::env::set_current_dir(prev).unwrap();
-        assert!(
-            got.is_absolute(),
-            "relative input must return an absolute package root, got {got:?}"
-        );
-        // Form-independent checks (canonicalize would return a \\?\ prefix
-        // on Windows while std::path::absolute preserves the plain form).
-        assert_eq!(got.file_name(), tmp.file_name());
-        assert!(got.join("Cargo.toml").is_file());
-        let _ = std::fs::remove_dir_all(&tmp);
-    }
+    // `workspace_detection` / `owning_package_root_*` tests moved with the
+    // functions to `compile_oracle` (Plan 019 T0.3) — the re-exports above
+    // are the same functions, so the pins live beside the bodies.
 
     #[test]
     fn revert_single_edit_validates_and_splices() {

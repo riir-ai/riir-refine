@@ -66,6 +66,11 @@ impl Applicability {
 pub struct SuggestionSpan {
     pub file: String,
     pub line_start: usize,
+    /// Byte offsets of the replaced region in the reported file, when rustc
+    /// included them. The Phase 2+ playbooks splice on these; `None` on
+    /// older-format lines forces the playbooks to locate by text.
+    pub byte_start: Option<usize>,
+    pub byte_end: Option<usize>,
     pub replacement: String,
     pub applicability: Applicability,
     /// The `help:`/`note:` text the suggestion hung off — the human-readable
@@ -83,6 +88,9 @@ pub struct RustcErrorDiag {
     /// Primary span, when the diagnostic has one: `(file, line_start)`.
     pub primary: Option<(String, usize)>,
     pub suggestions: Vec<SuggestionSpan>,
+    /// The full pre-rendered diagnostic text, when cargo included it. The
+    /// Phase 4 miss-capture dumps write this verbatim (`<repo>/.heal/misses/`).
+    pub rendered: Option<String>,
 }
 
 impl RustcErrorDiag {
@@ -101,6 +109,41 @@ impl RustcErrorDiag {
     pub fn is_uncontested(&self) -> bool {
         self.machine_applicable().is_empty()
     }
+
+    /// Dedupe identity: `(code, primary file, primary line)`. rustc emits
+    /// the same site more than once (macro-expansion contexts, repeated
+    /// passes); a driver that proposed per-diagnostic would repair the same
+    /// site twice.
+    #[must_use]
+    pub fn site_key(&self) -> (String, String, usize) {
+        (
+            self.code.clone(),
+            self.primary.as_ref().map_or_else(String::new, |p| p.0.clone()),
+            self.primary.as_ref().map_or(0, |p| p.1),
+        )
+    }
+}
+
+/// Collapse diagnostics that share a [`RustcErrorDiag::site_key`] — the
+/// multi-span-repeat shape Plan 019 T1.1 dedupes. Suggestions of merged
+/// duplicates are concatenated (identical suggestions deduped); the first
+/// diagnostic's message + rendered text win.
+#[must_use]
+pub fn dedupe_by_site(diags: &[RustcErrorDiag]) -> Vec<RustcErrorDiag> {
+    let mut out: Vec<RustcErrorDiag> = Vec::new();
+    for d in diags {
+        match out.iter_mut().find(|o| o.site_key() == d.site_key()) {
+            Some(kept) => {
+                for s in &d.suggestions {
+                    if !kept.suggestions.contains(s) {
+                        kept.suggestions.push(s.clone());
+                    }
+                }
+            }
+            None => out.push(d.clone()),
+        }
+    }
+    out
 }
 
 // ── JSON shapes (cargo's `--message-format=json` lines) ───────────────────
@@ -125,6 +168,10 @@ struct JsonDiag {
     spans: Vec<JsonSpan>,
     #[serde(default)]
     children: Vec<JsonDiag>,
+    /// The full pre-rendered diagnostic text (the `rendered` field cargo
+    /// attaches at the top level of each compiler message).
+    #[serde(default)]
+    rendered: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -139,6 +186,10 @@ struct JsonSpan {
     line_start: usize,
     #[serde(default)]
     is_primary: bool,
+    #[serde(default)]
+    byte_start: Option<usize>,
+    #[serde(default)]
+    byte_end: Option<usize>,
     #[serde(default)]
     suggested_replacement: Option<String>,
     #[serde(default)]
@@ -185,6 +236,7 @@ pub fn parse_error_diags(json_stdout: &str) -> Vec<RustcErrorDiag> {
             message: diag.message.clone(),
             primary,
             suggestions,
+            rendered: diag.rendered.clone(),
         });
     }
     out
@@ -198,6 +250,8 @@ fn collect_suggestions(diag: &JsonDiag, out: &mut Vec<SuggestionSpan>) {
         out.push(SuggestionSpan {
             file: s.file_name.clone(),
             line_start: s.line_start,
+            byte_start: s.byte_start,
+            byte_end: s.byte_end,
             replacement: replacement.clone(),
             applicability: Applicability::from_json(s.suggestion_applicability.as_deref()),
             message: diag.message.clone(),
@@ -320,5 +374,50 @@ mod tests {
                 ("E0596".to_string(), 1, 1),
             ]
         );
+    }
+
+    /// A real cargo line with `rendered` + byte offsets on the span — the
+    /// Phase 1 parse-target shape (Plan 019 T1.1).
+    #[test]
+    fn parses_rendered_and_byte_offsets() {
+        let line = r#"{"reason":"compiler-message","message":{"level":"error","message":"cannot borrow `x` as mutable","rendered":"error[E0596]: cannot borrow `x` as mutable\n --> src/lib.rs:5:9\n","code":{"code":"E0596"},"spans":[{"file_name":"src/lib.rs","line_start":5,"is_primary":true,"byte_start":82,"byte_end":92,"suggested_replacement":"mut x","suggestion_applicability":"MachineApplicable"}],"children":[]}}"#;
+        let diags = parse_error_diags(line);
+        assert_eq!(diags.len(), 1);
+        let d = &diags[0];
+        assert!(d.rendered.as_deref().is_some_and(|r| r.contains("E0596")));
+        assert_eq!(d.suggestions.len(), 1);
+        let s = &d.suggestions[0];
+        assert_eq!(s.byte_start, Some(82));
+        assert_eq!(s.byte_end, Some(92));
+        // Absent fields decode as None (older toolchains emit no offsets).
+        let diags_old = parse_error_diags(E0596_LINE);
+        assert_eq!(diags_old[0].rendered, None);
+        assert_eq!(diags_old[0].suggestions[0].byte_start, None);
+    }
+
+    #[test]
+    fn dedupe_by_site_merges_repeats() {
+        // The same (code, file, line) twice — the multi-span-repeat shape
+        // (macro expansion, repeated passes). One differing suggestion on
+        // the second emission must SURVIVE the merge; the site must count
+        // once.
+        let second = E0596_LINE.replace(
+            "consider changing this to be mutable",
+            "consider changing this to be mutable (second pass)",
+        );
+        let input = format!("{E0596_LINE}\n{second}\n{E0499_LINE}");
+        let diags = dedupe_by_site(&parse_error_diags(&input));
+        assert_eq!(diags.len(), 2, "3 in → 2 out (one site merged)");
+        let e0596 = diags.iter().find(|d| d.code == "E0596").unwrap();
+        assert_eq!(
+            e0596.suggestions.len(),
+            2,
+            "differing suggestions merge; identical ones dedupe"
+        );
+        // Identical duplicates collapse.
+        let identical = format!("{E0596_LINE}\n{E0596_LINE}");
+        let diags = dedupe_by_site(&parse_error_diags(&identical));
+        assert_eq!(diags.len(), 1);
+        assert_eq!(diags[0].suggestions.len(), 1);
     }
 }

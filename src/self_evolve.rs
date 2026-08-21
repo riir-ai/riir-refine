@@ -206,7 +206,7 @@ pub enum SelectionMode {
     ///
     /// **Measured NEGATIVE (Bench 042, Issue 033 T4/T5) — NOT promoted.**
     /// Paired discovery under common random numbers: significantly WORSE at
-    /// evo-noise 0.6 (0.9207 vs 0.9239, McNemar z = −13.86) and only
+    /// evo-noise 0.6 (0.9207 vs 0.9239, `McNemar` z = −13.86) and only
     /// +0.0007 better at 0.2 (z = +4.29); selection regret worse in all three
     /// attempt budgets. The mechanism is sound — the in-sample guarantee holds
     /// exactly, ρ drifts 0.058 ↔ 0.565 with axis informativeness, the stream
