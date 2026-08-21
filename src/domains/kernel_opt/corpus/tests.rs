@@ -60,8 +60,10 @@
         // Batch 57 (2): measured-GOAT distillation (riir-ai Issue 715 — smem-slot-role-reversal-needs-barrier, tile-loop-back-edge-needs-multi-tile-bitexact-gate; the flash-attention tile-loop smem races + the multi-tile bit-exact regression gate; commits 9f9e68402 + 93d853582).
         // Batch 58 (8): ternary_deltanet sibling-WIP unlock — the LAST never-mined riir-gpu orchestration file (ternary_deltanet_gpu_forward_cudarc.rs, 5,691 lines — raw-CUDA decode-forward twin; async-htod-host-source-outlives-copy, captured-graph-bakes-buffer-addresses, output-buffer-rotation-pool-multi-forward, mid-pipeline-device-alloc-is-implicit-sync, capture-region-dispatch-only, occupancy-grid-cap-refuted-uncapped-default, write-before-read-state-skips-checkpoint, same-input-gemv-segments-single-launch; hazards filed as Issue 722).
         // Batch 60 (1): measured-GOAT distillation (riir-train Issue 460 / katgpt-rs e2853fbf — pre-gate-recovery-by-division-cancels-algebraically; the MLA backward's saturated output-gate 0/0 NaN, fixed by algebraic cancellation; Bench 475: 6/10 -> 10/10 usable backward passes).
-        // Total: 209. // (historical batch-30 snapshot; current 367)
-        assert_eq!(corpus.entries.len(), 367, "kernel batches through Batch 63 should have 367 rules");
+        // Batch 63 (3): the CubeCL twin unlock — same-input-gemv-weight-concat-at-upload, deferred-residual-fused-into-next-layer-norm, reset-state-in-place-fill-never-realloc (ternary_deltanet_gpu_forward.rs, Plan 009 / Research 071).
+        // Batch 70 (3): the arxiv barrier-free-sync paper distill (arXiv:2608.13757, Plan 020 / Research 080) — barrier-free-per-dependency-wait-from-loop-counters, shared-counter-decode-producer-progress, masked-branchless-wait-collapse.
+        // Total: 209. // (historical batch-30 snapshot; current 370)
+        assert_eq!(corpus.entries.len(), 370, "kernel batches through Batch 70 should have 370 rules");
     }
 
     #[test]
@@ -3707,13 +3709,106 @@
     }
 
     #[test]
+    fn batch70_rules_present() {
+        // Batch 70 (arXiv:2608.13757 — the barrier-free synchronization
+        // distill: per-dependency closed-form waits from monotone loop
+        // counters, shared-counter progress decode, masked wait collapse).
+        let corpus = build_kernel_seed_corpus();
+        let ids = [
+            "barrier-free-per-dependency-wait-from-loop-counters",
+            "shared-counter-decode-producer-progress",
+            "masked-branchless-wait-collapse",
+        ];
+        for id in ids {
+            assert!(
+                corpus.entries.iter().any(|e| e.rule_id == id),
+                "batch-70 rule '{id}' missing from corpus"
+            );
+        }
+    }
+
+    #[test]
+    fn batch70_concepts_covered() {
+        let corpus = build_kernel_seed_corpus();
+        let checks: [(&str, [&str; 5]); 3] = [
+            (
+                "barrier-free-per-dependency-wait-from-loop-counters",
+                [
+                    "all-worker barrier",
+                    "monotone entry count",
+                    "closed form",
+                    "stalls only",
+                    "per-dependency",
+                ],
+            ),
+            (
+                "shared-counter-decode-producer-progress",
+                [
+                    "shared counter",
+                    "N*r - (N - K)",
+                    "granularity ladder",
+                    "in-order retirement",
+                    "LICM",
+                ],
+            ),
+            (
+                "masked-branchless-wait-collapse",
+                [
+                    "disjunctive condition",
+                    "multiplicative 0/1 mask",
+                    "single threshold",
+                    "no branch",
+                    "is_gt",
+                ],
+            ),
+        ];
+        for (id, needles) in checks {
+            let entry = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-70 rule '{id}' missing"));
+            for needle in needles {
+                assert!(
+                    entry.gpu_concept.contains(needle),
+                    "batch-70 concept for '{id}' missing needle '{needle}'"
+                );
+            }
+        }
+    }
+
+    #[test]
+    #[cfg(not(feature = "kernel_verify"))]
+    fn batch70_pseudocode_parses() {
+        // G1 for Batch 70: syn-parse gate.
+        use crate::domain::HealDomain;
+        let corpus = build_kernel_seed_corpus();
+        let ids = [
+            "barrier-free-per-dependency-wait-from-loop-counters",
+            "shared-counter-decode-producer-progress",
+            "masked-branchless-wait-collapse",
+        ];
+        for id in ids {
+            let entry = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-70 rule '{id}' missing"));
+            let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+            assert!(ref_verdict.parses, "batch-70 ref_shape for '{id}' must parse");
+            let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+            assert!(opt_verdict.parses, "batch-70 opt_pattern for '{id}' must parse");
+        }
+    }
+
+    #[test]
     fn kernel_categories_table_has_15_entries() {
         assert_eq!(KERNEL_CATEGORIES.len(), 15, "Plan 003: 15 categories (A–O)");
     }
 
     #[test]
     fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-        // Every rule_id in the 367-rule corpus must appear in exactly one category.
+        // Every rule_id in the 370-rule corpus must appear in exactly one category.
         let corpus = build_kernel_seed_corpus();
         let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
         let mut categorized: Vec<&str> = Vec::new();
@@ -3744,12 +3839,12 @@
 
     #[test]
     fn kernel_categories_counts_match_plan_003_table() {
-        // Pin per-category rule counts to the Plan 003 table (updated for Batch 58).
+        // Pin per-category rule counts to the Plan 003 table (updated for Batch 70).
         let expected = [
             (KernelCategory::MemoryAccess, 87),
-            (KernelCategory::Compute, 52),
+            (KernelCategory::Compute, 53),
             (KernelCategory::Fusion, 34),
-            (KernelCategory::Dispatch, 71),
+            (KernelCategory::Dispatch, 73),
             (KernelCategory::Parallelism, 21),
             (KernelCategory::FlashAttnTiling, 10),
             (KernelCategory::LinearAttnRecurrence, 19),
@@ -3769,9 +3864,9 @@
                 "Plan 003: category {cat:?} has {} rules, expected {count}",
                 entry.2.len());
         }
-        // Sum must equal 367.
+        // Sum must equal 370.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 367, "Plan 003: category totals must sum to 367");
+        assert_eq!(total, 370, "Plan 003: category totals must sum to 370");
     }
 
     #[test]
@@ -3781,7 +3876,7 @@
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 367, "Plan 003: grouped corpus has {total} rules, expected 367");
+        assert_eq!(total, 370, "Plan 003: grouped corpus has {total} rules, expected 370");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");

@@ -1327,6 +1327,27 @@
 //!   riir-ai Issue (the dead wk/wv device upload, dual/triple weight
 //!   residency, the ResidualAdd-as-copy doc-lie, the un-ported B58
 //!   rotation pool, the aliasing-UB probe default-off).
+//! - **Batch 70 (2026-08-22, Plan 020 — the arxiv barrier-free-sync paper
+//!   distill, the Research-076 intake channel):** 3 rules, corpus 367 ->
+//!   370 (B 52 -> 53, D 71 -> 73) from arXiv:2608.13757 (Sung, Shyamsunder,
+//!   Zhang, Kroening, Choi — barrier-free semaphore allocation for
+//!   multi-engine accelerators, CGO '27; Lean 4 bisimulation ~15K lines
+//!   0 admitted; measured on real Trainium 2): barrier-free-per-
+//!   dependency-wait-from-loop-counters (D — no all-worker barriers at
+//!   iteration boundaries; monotone entry counters + the closed-form
+//!   wait thresholds of the three allocatable cases; 10-45% latency cut,
+//!   3.3x sync-bound microbench), shared-counter-decode-producer-progress
+//!   (D — one shared counter per (loop, worker) decoded as `N*r - (N - K)`
+//!   under in-order retirement; the per-instruction/per-loop/per-engine
+//!   granularity ladder + LICM/CSE reductions), masked-branchless-wait-
+//!   collapse (B — the no-wait OR threshold disjunction collapsed into a
+//!   single masked threshold via a 0/1 `isGT` multiply; the branchless-
+//!   select mechanism on a sync predicate). Honest applicability encoded:
+//!   wgpu/CubeCL/Metal expose no fine-grained semaphore (cudarc CUDA
+//!   events, host orchestration loops, worker threads are the live
+//!   surfaces); the 3.3x is Trainium-specific evidence, the rules encode
+//!   the mechanism; the fallback-to-barrier subset is stated in-rule.
+//!   Record: Research 080.
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
@@ -1379,7 +1400,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 367-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 370-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1481,7 +1502,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "reset-state-in-place-fill-never-realloc",
         ],
     ),
-    // B: Compute patterns (52 rules)
+    // B: Compute patterns (53 rules)
     (
         KernelCategory::Compute,
         "B: compute",
@@ -1538,6 +1559,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "softmax-denominator-hoist-out-of-weighted-v",
             "per-key-projection-hoist-out-of-query-sweep",
             "regularizer-above-noise-floor-coupled-to-damping-cap",
+            "masked-branchless-wait-collapse",
         ],
     ),
     // C: Fusion patterns (34 rules)
@@ -1581,7 +1603,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fuse-indirect-gather-into-dot-consumer",
         ],
     ),
-    // D: Dispatch patterns (71 rules)
+    // D: Dispatch patterns (73 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -1657,6 +1679,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "capture-region-dispatch-only",
             "same-input-gemv-segments-single-launch",
             "same-input-gemv-weight-concat-at-upload",
+            "barrier-free-per-dependency-wait-from-loop-counters",
+            "shared-counter-decode-producer-progress",
         ],
     ),
     // E: Parallelism patterns (21 rules)
