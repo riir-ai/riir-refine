@@ -167,6 +167,7 @@ USAGE:
     cargo heal --suggest [--domain <auto|clippy|perf|kernel>] [--top-k <N>] <path>...
     cargo heal --fix [--write] [--no-fmt] [--quiet] [--verify [--verify-args <s>]] [--top-k <N>] <path>...
     cargo heal --fix-compile [--write] [--max-iters <N>] [--verify-args <s>] <path>...
+    cargo heal --dump-trajectories > trajectories.jsonl
     cargo heal --score-bench | --score-report        (needs --features score_bench)
 
     --suggest       Suggest mode: print matching rules per code span (no edits).
@@ -181,6 +182,9 @@ USAGE:
                     ranked templates keyed on the diagnostic's labeled spans; other
                     codes report as misses until Phase 3.
     --max-iters <N> --fix-compile iteration bound (default 5).
+    --dump-trajectories  Export the self-evolve trajectory store to stdout as
+                    JSONL (Plan 019 T4.3b — the human grep surface; one source
+                    of truth, no shadow log). Reads the store the build ships.
     --write         With --fix/--fix-compile: write the edits in place (with --fix:
                     then rustfmt AUTOMATICALLY when the original was already
                     rustfmt-clean — pre-existing drift + CRLF files are skipped — no
@@ -218,6 +222,11 @@ struct Args {
     /// A separate mode (not a --fix modifier): it operates on packages,
     /// needs no retrieval, and its loop has verification built in.
     fix_compile: bool,
+    /// Plan 019 T4.3b: `--dump-trajectories` — export the trajectory
+    /// store to stdout as JSONL (one trajectory per line). Reads whichever
+    /// backend the build ships (the JSON envelope under `latent_retrieval`-
+    /// off; the neuron-db store joins when T4.3 lands).
+    dump_trajectories: bool,
     /// `--max-iters` for --fix-compile (default 5, the plan default).
     max_iters: usize,
     write: bool,
@@ -243,6 +252,7 @@ fn parse_args() -> Args {
         suggest: false,
         fix: false,
         fix_compile: false,
+        dump_trajectories: false,
         max_iters: 5,
         write: false,
         quiet: false,
@@ -261,6 +271,7 @@ fn parse_args() -> Args {
             "--suggest" => args.suggest = true,
             "--fix" => args.fix = true,
             "--fix-compile" => args.fix_compile = true,
+            "--dump-trajectories" => args.dump_trajectories = true,
             "--write" => args.write = true,
             "--quiet" => args.quiet = true,
             "--no-fmt" => args.no_fmt = true,
@@ -320,6 +331,7 @@ fn parse_args() -> Args {
     if args.paths.is_empty()
         && !args.score_bench
         && !args.score_report
+        && !args.dump_trajectories
     {
         eprintln!("no paths given");
         usage();
@@ -343,15 +355,22 @@ fn validate_mode_flags(
     suggest: bool,
     fix: bool,
     fix_compile: bool,
+    dump_trajectories: bool,
     write: bool,
     verify: bool,
     verify_args: bool,
 ) -> Result<(), &'static str> {
-    if !suggest && !fix && !fix_compile {
-        return Err("no mode given — use --suggest, --fix, or --fix-compile");
+    if !suggest && !fix && !fix_compile && !dump_trajectories {
+        return Err("no mode given — use --suggest, --fix, --fix-compile, or --dump-trajectories");
+    }
+    if dump_trajectories && (suggest || fix || fix_compile) {
+        return Err("--dump-trajectories is a standalone mode");
     }
     if write && !fix && !fix_compile {
         return Err("--write requires --fix (or --fix-compile)");
+    }
+    if write && dump_trajectories {
+        return Err("--write does not apply to --dump-trajectories (it reads)");
     }
     if verify && !fix {
         return Err("--verify requires --fix");
@@ -509,6 +528,7 @@ fn main() {
         args.suggest,
         args.fix,
         args.fix_compile,
+        args.dump_trajectories,
         args.write,
         args.verify,
         args.verify_args.is_some(),
@@ -527,7 +547,48 @@ fn main() {
         std::process::exit(2);
     }
 
-    // ── Plan 019 Phase 1: --fix-compile — the oracle driver ──────────────
+    // ── Plan 019 T4.3b: --dump-trajectories — the human grep surface ────
+    // On-demand export of the trajectory store (one JSONL line per
+    // trajectory) instead of a shadow log. ONE source of truth: the
+    // backend's own file. Redirectable: `cargo heal --dump-trajectories
+    // > traj.jsonl`.
+    if args.dump_trajectories {
+        let path = default_memory_path();
+        match std::fs::read_to_string(&path) {
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                eprintln!(
+                    "dump-trajectories: no store at {} — run --fix-compile --write first",
+                    path.display()
+                );
+                std::process::exit(1);
+            }
+            Err(e) => {
+                eprintln!("dump-trajectories: cannot read {}: {e}", path.display());
+                std::process::exit(1);
+            }
+            Ok(_json) => {
+                // Parse through the memory (envelope version check + the
+                // shapes stay canonical), then emit per-trajectory lines.
+                let mut mem = riir_clippy::memory::LatentFixMemory::default();
+                if let Err(e) = mem.load(&path) {
+                    eprintln!(
+                        "dump-trajectories: store at {} is unreadable: {e}",
+                        path.display()
+                    );
+                    std::process::exit(1);
+                }
+                for t in mem.iter() {
+                    match serde_json::to_string(t) {
+                        Ok(line) => println!("{line}"),
+                        Err(e) => eprintln!("dump-trajectories: skip one: {e}"),
+                    }
+                }
+                return;
+            }
+        }
+    }
+
+    // ── Plan 019 Phase 1: --fix-compile — the oracle driver ──────────
     // A separate early-exit arm: it operates on PACKAGES (cargo check per
     // owning package), needs no retrieval, and its loop carries its own
     // verification. Review mode (no --write) prints the per-error plan;
@@ -535,6 +596,7 @@ fn main() {
     #[cfg(feature = "rustc_errors")]
     if args.fix_compile {
         use riir_clippy::domains::rustc_errors::driver::CompileDriver;
+        use riir_clippy::domains::rustc_errors::evolve;
         use riir_clippy::domains::rustc_errors::playbooks::Playbooks;
 
         let extra = args
@@ -545,7 +607,7 @@ fn main() {
         let driver = CompileDriver::isolated()
             .with_max_iters(args.max_iters)
             .with_extra_args(extra);
-        let playbooks = Playbooks::production(); // Phase 2: the E0597 family
+        let playbooks = Playbooks::production();
         let report = driver.run(&args.paths, &playbooks, args.write);
         if let Some(e) = &report.error {
             eprintln!("fix-compile: {e}");
@@ -572,6 +634,61 @@ fn main() {
                     r.line,
                     r.reason.label()
                 );
+            }
+            // ── Phase 4 (T4.1): self-evolve around every fix. The keep
+            // criterion is a full cargo-check verdict, so applied fixes
+            // record as CERTIFIED; reverts record as failures. Only the
+            // write path records (review runs touch nothing — Issue 018).
+            if !report.applied.is_empty() || !report.reverted.is_empty() {
+                let mut evolve_rec = EvolveRecorder::from_env();
+                let memory_path = default_memory_path();
+                if evolve_rec.is_enabled() {
+                    if let Err(e) = evolve_rec.load(&memory_path) {
+                        eprintln!(
+                            "self-evolve: ignoring unreadable memory ({}): {e}",
+                            memory_path.display()
+                        );
+                    }
+                    evolve::record_run(&mut evolve_rec, &report);
+                    if evolve_rec.recorded_count() > 0 {
+                        if let Some(parent) = memory_path.parent() {
+                            let _ = std::fs::create_dir_all(parent);
+                        }
+                        match evolve_rec.save(&memory_path) {
+                            Ok(()) => eprintln!(
+                                "self-evolve: {} trajectory(ies) → {}",
+                                evolve_rec.recorded_count(),
+                                memory_path.display()
+                            ),
+                            Err(e) => eprintln!(
+                                "self-evolve: memory save failed ({}): {e}",
+                                memory_path.display()
+                            ),
+                        }
+                    }
+                }
+            }
+            // ── Phase 4 (T4.4): misses → the authoring queue.
+            if !report.misses.is_empty() {
+                let root = args
+                    .paths
+                    .first()
+                    .and_then(|p| {
+                        riir_clippy::compile_oracle::owning_package_root(p)
+                    })
+                    .and_then(|pkg| riir_clippy::compile_oracle::workspace_root(&pkg))
+                    .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+                let (written, warnings) = evolve::dump_misses(&root, &report.misses);
+                for w in &warnings {
+                    eprintln!("fix-compile: miss dump: {w}");
+                }
+                if !written.is_empty() {
+                    println!(
+                        "fix-compile: {} miss(es) → {}",
+                        written.len(),
+                        evolve::misses_dir(&root).display()
+                    );
+                }
             }
             println!(
                 "fix-compile: {} applied, {} reverted, {} miss(es), {} remaining error(s){}",
@@ -1307,41 +1424,50 @@ mod mode_flag_tests {
 
     #[test]
     fn accepted_combinations() {
-        // The three modes alone.
-        assert!(v(true, false, false, false, false, false).is_ok(), "--suggest");
-        assert!(v(false, true, false, false, false, false).is_ok(), "--fix");
-        assert!(v(false, false, true, false, false, false).is_ok(), "--fix-compile");
+        // The four modes alone (T4.3b adds --dump-trajectories).
+        assert!(v(true, false, false, false, false, false, false).is_ok(), "--suggest");
+        assert!(v(false, true, false, false, false, false, false).is_ok(), "--fix");
+        assert!(v(false, false, true, false, false, false, false).is_ok(), "--fix-compile");
+        assert!(v(false, false, false, true, false, false, false).is_ok(), "--dump-trajectories");
         // --write with each writing mode.
-        assert!(v(false, true, false, true, false, false).is_ok(), "--fix --write");
-        assert!(v(false, false, true, true, false, false).is_ok(), "--fix-compile --write");
+        assert!(v(false, true, false, false, true, false, false).is_ok(), "--fix --write");
+        assert!(v(false, false, true, false, true, false, false).is_ok(), "--fix-compile --write");
         // The trap this task closed: --fix-compile --write --verify-args.
         assert!(
-            v(false, false, true, true, false, true).is_ok(),
+            v(false, false, true, false, true, false, true).is_ok(),
             "--fix-compile --write --verify-args \"...\""
         );
         // --verify still needs --fix (its batch semantics are --fix's).
-        assert!(v(false, true, false, true, true, false).is_ok(), "--fix --write --verify");
-        assert!(v(false, true, false, true, true, true).is_ok(), "--fix --verify --verify-args");
+        assert!(v(false, true, false, false, true, true, false).is_ok(), "--fix --write --verify");
+        assert!(v(false, true, false, false, true, true, true).is_ok(), "--fix --verify --verify-args");
     }
 
     #[test]
     fn rejected_combinations() {
-        assert!(v(false, false, false, false, false, false).is_err(), "no mode");
+        assert!(v(false, false, false, false, false, false, false).is_err(), "no mode");
         assert!(
-            v(false, false, false, true, false, false).is_err(),
+            v(false, false, false, false, true, false, false).is_err(),
             "--write without a mode"
         );
         assert!(
-            v(false, false, false, false, true, false).is_err(),
+            v(false, false, false, false, false, true, false).is_err(),
             "--verify without --fix"
         );
         assert!(
-            v(false, false, true, false, true, false).is_err(),
+            v(false, false, true, false, false, true, false).is_err(),
             "--verify with --fix-compile does NOT satisfy the --fix requirement"
         );
         assert!(
-            v(true, false, false, false, false, true).is_err(),
+            v(true, false, false, false, false, false, true).is_err(),
             "--verify-args without --verify/--fix-compile"
+        );
+        assert!(
+            v(false, false, true, true, false, false, false).is_err(),
+            "--dump-trajectories is standalone (no other mode)"
+        );
+        assert!(
+            v(false, false, false, true, true, false, false).is_err(),
+            "--write does not apply to --dump-trajectories"
         );
     }
 }

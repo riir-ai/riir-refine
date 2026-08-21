@@ -53,6 +53,12 @@ pub struct AppliedRecord {
     pub strategy_id: String,
     /// Coded-error count before → after this fix.
     pub errors: (usize, usize),
+    /// The trigger text the candidate replaced (the ORIGINAL bytes at the
+    /// primary span) — the Phase 4 trajectory's `buggy` half.
+    pub shape: String,
+    /// The replacement text landed for the primary edit — the trajectory's
+    /// `fixed` half.
+    pub fix: String,
 }
 
 /// One tried-and-reverted candidate, for the report.
@@ -64,6 +70,11 @@ pub struct RevertedRecord {
     pub strategy_id: String,
     /// Why it reverted.
     pub reason: RevertReason,
+    /// The trigger text (trajectory `buggy`) — the oracle rejected THIS
+    /// move at THIS shape, which is exactly the fact the memory wants.
+    pub shape: String,
+    /// The attempted replacement (trajectory `fixed`).
+    pub fix: String,
 }
 
 /// Why a candidate was reverted.
@@ -94,6 +105,9 @@ pub struct MissRecord {
     pub file: PathBuf,
     pub line: usize,
     pub message: String,
+    /// The full pre-rendered diagnostic, when cargo included it — the
+    /// miss dump writes this verbatim (the plan's T4.4).
+    pub rendered: Option<String>,
 }
 
 /// A review-mode plan line (no writes happened).
@@ -298,10 +312,16 @@ impl CompileDriver {
                     code: best.code.clone(),
                     strategy_id: best.strategy_id.clone(),
                     reason: RevertReason::Io,
+                    shape: String::new(),
+                    fix: String::new(),
                 });
                 tried.insert(tried_key(&best));
                 continue;
             };
+            let shape = original
+                .get(best.byte_span.0..best.byte_span.1)
+                .unwrap_or("")
+                .to_string();
             let Some(applied_text) = apply_edits(
                 &original,
                 best.byte_span,
@@ -316,6 +336,8 @@ impl CompileDriver {
                     code: best.code.clone(),
                     strategy_id: best.strategy_id.clone(),
                     reason: RevertReason::NoProgress,
+                    shape,
+                    fix: best.replacement.clone(),
                 });
                 tried.insert(tried_key(&best));
                 continue;
@@ -327,6 +349,8 @@ impl CompileDriver {
                     code: best.code.clone(),
                     strategy_id: best.strategy_id.clone(),
                     reason: RevertReason::Io,
+                    shape,
+                    fix: best.replacement.clone(),
                 });
                 tried.insert(tried_key(&best));
                 continue;
@@ -350,6 +374,8 @@ impl CompileDriver {
                     code: best.code.clone(),
                     strategy_id: best.strategy_id.clone(),
                     errors: (before_errors, new_diags.len()),
+                    shape,
+                    fix: best.replacement.clone(),
                 });
                 diags = new_diags;
                 if diags.is_empty() {
@@ -365,6 +391,8 @@ impl CompileDriver {
                     code: best.code.clone(),
                     strategy_id: best.strategy_id.clone(),
                     reason: RevertReason::NoProgress,
+                    shape,
+                    fix: best.replacement.clone(),
                 });
                 tried.insert(tried_key(&best));
             }
@@ -421,6 +449,7 @@ fn collect_candidates(
             file: PathBuf::from(&file_name_placeholder(&d.message)),
             line: 0,
             message: d.message.clone(),
+            rendered: d.rendered.clone(),
         });
         return Vec::new();
     };
@@ -432,6 +461,7 @@ fn collect_candidates(
             file,
             line,
             message: format!("(unreadable) {}", d.message),
+            rendered: d.rendered.clone(),
         });
         return Vec::new();
     };
@@ -442,6 +472,7 @@ fn collect_candidates(
             file,
             line,
             message: d.message.clone(),
+            rendered: d.rendered.clone(),
         });
         return Vec::new();
     }

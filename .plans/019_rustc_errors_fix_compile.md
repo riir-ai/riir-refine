@@ -357,11 +357,24 @@ arbitrate; revert is one iteration).
 
 ### Phase 4 — self-evolution around every fix (the owner requirement: "ensure we self evolve around this")
 
-- [ ] T4.1 Trajectories: every applied/reverted candidate → `EvolveRecorder`
+- [x] T4.1 Trajectories: every applied/reverted candidate → `EvolveRecorder`
   (`record_applied` / `record_outcome(verified = cargo-check-passed)`) —
   outcome buckets keyed `(error_code, strategy_id)`. Evidential tiers apply
   (oracle-passed = the strongest tier we have — better than the clippy
   path's parse-only successes).
+  **DONE 2026-08-22** (`rustc_errors/evolve.rs` + CLI wiring). Trajectory
+  key `"{code}:{strategy_id}"` (the plan's lint_name/rule_id contract
+  folded into the memory's single id — strategy ids are already
+  family-prefixed so greps stay unambiguous). **Verdict soundness held:**
+  applied → `record_outcome_verified(success, verified=TRUE)` — the keep
+  criterion IS a full cargo-check verdict (Certified tier, the only
+  promotion path); reverted → `record_outcome(success=false)` (counts
+  toward the Withdrawn streak). Driver records now carry the trajectory
+  halves (`AppliedRecord.shape/fix`, `RevertedRecord.shape/fix` — the
+  trigger text + replacement); only the WRITE path records (review runs
+  touch nothing, the Issue 018 rule). Live-verified end-to-end: applied
+  fix → `tier: Certified` trajectory in the store → `--dump-trajectories`
+  exports it.
 - [ ] T4.2 **Shape-conditional move-ordering policy (owner direction:
   consume the trajectory store directly):** on propose, hybrid-retrieve
   k-nearest past trajectories for the current error shape (BM25 lexical +
@@ -389,17 +402,30 @@ arbitrate; revert is one iteration).
   experience. Zero-dep default build keeps the `memory.json` envelope
   (Issue 018 G4: dep surface unchanged) — the tiering is the constraint,
   one active backend per build, no dual-write drift.
-- [ ] T4.3b **Human grep surface = on-demand export, not a shadow log:**
+- [x] T4.3b **Human grep surface = on-demand export, not a shadow log:**
   `cargo heal --dump-trajectories [--jsonl]` reads either backend →
   stdout (redirectable). One source of truth; `.heal/misses/*.md` stays
   the human authoring queue (T4.4, unchanged). The watch wrapper pins the
   store path (not a JSONL append).
-- [ ] T4.4 **Miss capture — the corpus-growth loop:** when NO template fixes
+  **JSON-backend half DONE 2026-08-22** — the flag is live: reads the
+  v1 envelope (version-checked through `LatentFixMemory::load`), emits
+  one trajectory per JSONL line (standalone mode, no paths needed,
+  `--write` rejected — pinned in the mode matrix). The neuron-backend
+  reader joins when T4.3 lands (the same flag, both backends).
+- [x] T4.4 **Miss capture — the corpus-growth loop:** when NO template fixes
   an error, dump the full diagnostic + source excerpt to
   `<repo>/.heal/misses/E0597-<ts>.md`. Misses are the authoring queue for
   the next playbook templates (mine via git-log fix-pairs, the `wgsl_mine`
   precedent). A standing `misses/README.md` documents the manual-grab
   workflow.
+  **DONE 2026-08-22** (`evolve::dump_misses` + CLI wiring in the write
+  path): timestamped `{code}-{nanos}.md` with the RENDERED diagnostic
+  verbatim (the `rendered` field now rides `MissRecord`) + file:line +
+  message; idempotent README (written once — the documented contract,
+  not a growing log); empty-miss runs create nothing. Root = the
+  workspace root of the first input path's owning package (cwd fallback).
+  Live-verified: an E0596 (deliberately delegated code) miss produced the
+  full authoring entry with rustc's own `let mut` help rendered.
 - [ ] T4.5 EMA direction vectors for template retrieval: DEFER unless
   shape-matching within a family proves insufficient (error code is exact;
   the refuted-over-learning precedents — T9.4, `gemma2_directions` — are
