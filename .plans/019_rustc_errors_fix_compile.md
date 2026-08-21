@@ -458,10 +458,11 @@ arbitrate; revert is one iteration).
   workspace root of the first input path's owning package (cwd fallback).
   Live-verified: an E0596 (deliberately delegated code) miss produced the
   full authoring entry with rustc's own `let mut` help rendered.
-- [ ] T4.5 EMA direction vectors for template retrieval: DEFER unless
+- [-] T4.5 EMA direction vectors for template retrieval: DEFER unless
   shape-matching within a family proves insufficient (error code is exact;
   the refuted-over-learning precedents — T9.4, `gemma2_directions` — are
-  binding).
+  binding). **Reopen trigger:** real-use misses (`.heal/misses/`) showing
+  repeated shape families the exact-code anchor fails to discriminate.
 - [x] T4.6 Store scope: per-repo `.heal/trajectories.kv` (repo idiom
   locality) vs global `~/.cache/riir-clippy/trajectories.kv` (cross-project
   volume is where selection learning compounds) — decide via the G6

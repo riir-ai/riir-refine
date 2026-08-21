@@ -1108,7 +1108,11 @@
   (42: mod.rs + gemma2_d2f_sc.rs). weaver_gpu_corrector.rs +
   weaver_gpu_dflash.rs DONE (43). weaver_gpu/ mod.rs + FULL kvarn/
   DONE (44 — weaver_gpu/tests.rs test-only, not mined).
-- **Also open (riir-clippy issues)**: NONE — queue empty as of 2026-08-16.
+- **Also open (riir-clippy issues)**: NONE — queue empty as of 2026-08-22
+  (035, the rustc_errors premise-probe/floor issue, RESOLVED 2026-08-22 —
+  T3 delegation discharged by the Plan 019 Phase 3/6 landing, T4 standing;
+  file removed per the noise-reduction rule, record in AGENTS.md's
+  `rustc_errors` feature row).
   019 (idle-loop skill close-out) RESOLVED 2026-08-16 (T6 full cycle:
   items 10–13 — defer-marking sweep landed riir-train 387 + riir-ai 529
   + riir-chain 026 fixes; item 11 perf search → 8 rust_perf Batch 48
