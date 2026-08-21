@@ -74,9 +74,13 @@ fn reliability(mode: SelectionMode, c: &Cand) -> f32 {
         // Entropic is pool-shaped; its per-candidate form is the loud
         // BetaPosterior degradation (mirrored from production). Its regime
         // is the MAX metric, measured in t26_entropic_max_metric.
-        SelectionMode::BetaPosterior | SelectionMode::Entropic => {
-            katgpt_core::best_belief_score(c.s, c.f, EPSILON)
-        }
+        //
+        // TetherBlend shares this reliability axis verbatim — it changes only
+        // the MIX weight, which this harness holds fixed (its adaptive-ρ
+        // regret is measured in t33_tether_selection_ab).
+        SelectionMode::BetaPosterior
+        | SelectionMode::Entropic
+        | SelectionMode::TetherBlend => katgpt_core::best_belief_score(c.s, c.f, EPSILON),
     }
 }
 

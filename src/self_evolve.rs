@@ -184,6 +184,48 @@ pub enum SelectionMode {
     /// artifact (the `gemma2_directions` precedent); the harness lives in
     /// `tests/t26_entropic_max_metric.rs`.
     Entropic,
+    /// `(1−ρ)·evolution + ρ·best_belief_score(S, F, ε)` with **ρ fit from
+    /// realized outcomes** instead of pinned at 0.4 (Issue 033;
+    /// arXiv:2608.16739's TETHER baseline, see [`crate::selection_tether`]).
+    ///
+    /// The reliability axis is [`BetaPosterior`](Self::BetaPosterior)'s,
+    /// unchanged — only the MIX becomes adaptive. That is the whole
+    /// difference from [`Entropic`](Self::Entropic), which replaced the
+    /// per-candidate score itself with a pool-shaped one and measured
+    /// negative by amplifying thin-evidence noise (Bench 035). Here each
+    /// candidate keeps the thin-evidence-correct Beta score and ρ is fit
+    /// from a DENSER stream: one global scalar over all realized outcomes in
+    /// a window, not a per-candidate quantity estimated from 0-3
+    /// observations.
+    ///
+    /// ρ is fed by [`report_outcome`](HealPipeline::report_outcome) for the
+    /// candidate this mode actually selected, applied one window late (the
+    /// lag law — see the module docs), and starts at exactly `W_RATE`, so a
+    /// pipeline that never reports an outcome is bit-identical to
+    /// [`BetaPosterior`](Self::BetaPosterior).
+    ///
+    /// **Measured NEGATIVE (Bench 042, Issue 033 T4/T5) — NOT promoted.**
+    /// Paired discovery under common random numbers: significantly WORSE at
+    /// evo-noise 0.6 (0.9207 vs 0.9239, McNemar z = −13.86) and only
+    /// +0.0007 better at 0.2 (z = +4.29); selection regret worse in all three
+    /// attempt budgets. The mechanism is sound — the in-sample guarantee holds
+    /// exactly, ρ drifts 0.058 ↔ 0.565 with axis informativeness, the stream
+    /// is dense (0 degenerate windows over 18 351) — but ρ* minimizes
+    /// PREDICTION error while selection needs a RANKING, and
+    /// `best_belief_score` is deliberately biased low (that bias is why T9.3
+    /// promoted it). So the fit correctly downweights the reliability axis for
+    /// the loss it was given and incorrectly for the metric that pays.
+    ///
+    /// The fixed-ρ sweep in the same bench closes the question: discovery is
+    /// FLAT across ρ ∈ [0, 0.6] (spread 0.0067, SE ≈ 0.0018) and the pinned
+    /// 0.4 is the sweep max in the harsh regime. The hand-pinned constant was
+    /// never a live lever — "never swept" was a fair criticism with a null
+    /// answer.
+    ///
+    /// Kept opt-in as the reproducible negative-result artifact (the Issue 026
+    /// / `gemma2_directions` precedent); harnesses in
+    /// `tests/t33_tether_selection_ab.rs` + `tests/t33_tether_g4_alloc.rs`.
+    TetherBlend,
 }
 
 /// One-time loud degradation notice when `Entropic` is scored per-candidate
@@ -209,7 +251,9 @@ fn warn_entropic_degraded_once() {
 fn reliability_score(mode: SelectionMode, counts: (u32, u32), rate: f32) -> f32 {
     match mode {
         SelectionMode::LinearBlend => rate,
-        SelectionMode::BetaPosterior => {
+        // `TetherBlend` shares this axis verbatim — it changes the MIX weight,
+        // not the per-candidate score (Issue 033).
+        SelectionMode::BetaPosterior | SelectionMode::TetherBlend => {
             katgpt_core::best_belief_score(counts.0, counts.1, BELIEF_EPSILON)
         }
         SelectionMode::Entropic => {
@@ -217,6 +261,26 @@ fn reliability_score(mode: SelectionMode, counts: (u32, u32), rate: f32) -> f32 
             katgpt_core::best_belief_score(counts.0, counts.1, BELIEF_EPSILON)
         }
     }
+}
+
+/// The selection facts needed to attribute a realized outcome back to the
+/// [`SelectionMode::TetherBlend`] fit (Issue 033).
+///
+/// `p1` / `p2` are captured **at selection time**: the ρ fit regresses the
+/// return on the endpoint predictions that produced it, so post-outcome values
+/// (a reliability score already updated with this very outcome) would leak the
+/// return into its own baseline.
+///
+/// The `String`s are reused buffers (`clear` + `push_str`), so staging a pick
+/// is alloc-free after warm-up — G4.
+#[derive(Debug, Default)]
+struct TetherPending {
+    rule_id: String,
+    fixed_code: String,
+    p1: f32,
+    p2: f32,
+    /// Whether the buffers hold a live pick (a pick is consumed on report).
+    staged: bool,
 }
 
 /// The self-evolving heal pipeline.
@@ -249,6 +313,15 @@ pub struct HealPipeline {
     /// Reusable scratch: tilted advantages for the `Entropic` selection
     /// mode (alloc-free after warm-up, Issue 026).
     tilt_advantages: Vec<f32>,
+    /// The TETHER blend-weight fit for
+    /// [`SelectionMode::TetherBlend`](crate::SelectionMode) (Issue 033).
+    ///
+    /// Inert in every other mode: it is only read by the `TetherBlend`
+    /// scoring path and only written by [`Self::report_outcome`] after a
+    /// `TetherBlend` pick, so the other modes' arithmetic is untouched.
+    tether: crate::selection_tether::TetherFit,
+    /// The last `TetherBlend` pick awaiting its realized outcome.
+    tether_pending: TetherPending,
     /// The L4 generative fallback (Plan 336 T4.4). `None` by default — the
     /// pipeline is then byte-identical to the L0-L3 path. Consulted only on a
     /// modelless miss; see [`crate::l4_fallback`] for the contract.
@@ -294,6 +367,8 @@ impl HealPipeline {
             retrieve_out: Vec::new(),
             tilt_rewards: Vec::new(),
             tilt_advantages: Vec::new(),
+            tether: crate::selection_tether::TetherFit::new(),
+            tether_pending: TetherPending::default(),
             #[cfg(feature = "l4_lora")]
             l4: None,
             #[cfg(feature = "contrastive_scope")]
@@ -375,7 +450,15 @@ impl HealPipeline {
             );
         }
 
+        // ρ is read ONCE for the whole pool: the weight that scores a pool
+        // must not shift between its candidates, and the fit is published
+        // only at window boundaries anyway (the Issue 033 lag law).
+        let tether = matches!(self.selection_mode, SelectionMode::TetherBlend);
+        let rho = self.tether.rho();
+
         let mut best = None::<(usize, f32)>;
+        // The winner's endpoint pair, carried out for the TETHER observation.
+        let mut best_axes = (0.0f32, 0.0f32);
         for (i, cand) in candidates.iter().enumerate() {
             let evo_score = self.evolution.score_candidate(rule_id, &cand.direction);
             let reliability = if entropic_pool {
@@ -383,12 +466,58 @@ impl HealPipeline {
             } else {
                 reliability_score(self.selection_mode, cand.counts, cand.success_rate)
             };
-            let combined = W_EVO * evo_score + W_RATE * reliability;
+            let combined = if tether {
+                (1.0 - rho) * evo_score + rho * reliability
+            } else {
+                W_EVO * evo_score + W_RATE * reliability
+            };
             if best.is_none_or(|(_, best_score)| combined > best_score) {
                 best = Some((i, combined));
+                best_axes = (evo_score, reliability);
             }
         }
-        best.expect("candidates is non-empty, so best exists")
+        let (best_idx, best_score) = best.expect("candidates is non-empty, so best exists");
+        if tether {
+            self.stage_tether_pick(rule_id, &candidates[best_idx].code, best_axes);
+        }
+        (best_idx, best_score)
+    }
+
+    /// Stage the `TetherBlend` pick's `(rule_id, fixed_code, p1, p2)` so a later
+    /// [`report_outcome`](Self::report_outcome) can attribute the realized
+    /// return to it (Issue 033 T2).
+    ///
+    /// Attribution is exact-match on `(rule_id, fixed_code)`: the heal path can
+    /// still decline the pick or replace it with an L4 answer, and an outcome
+    /// for a fix this mode did not choose must not enter the fit.
+    fn stage_tether_pick(&mut self, rule_id: &str, fixed_code: &str, axes: (f32, f32)) {
+        let p = &mut self.tether_pending;
+        p.rule_id.clear();
+        p.rule_id.push_str(rule_id);
+        p.fixed_code.clear();
+        p.fixed_code.push_str(fixed_code);
+        p.p1 = axes.0;
+        p.p2 = axes.1;
+        p.staged = true;
+    }
+
+    /// The TETHER blend telemetry — applied ρ, last closed window's raw fit,
+    /// window counts (Issue 033 T3).
+    ///
+    /// The ρ *trajectory* is the mechanism-of-action signal: a ρ pinned at its
+    /// [`DEFAULT_RHO`](crate::selection_tether::DEFAULT_RHO) start means the
+    /// fit never saw a window with two disagreeing axes, i.e. the mode is
+    /// inert on this stream — a finding, not a pass.
+    #[must_use]
+    pub fn tether_stats(&self) -> crate::selection_tether::TetherStats {
+        self.tether.stats()
+    }
+
+    /// Close the TETHER window early — for a process ending mid-window
+    /// (`cargo heal` is short-lived) or a benchmark that wants the tail folded
+    /// in. A no-op-safe flush: a degenerate tail holds the previous ρ.
+    pub fn flush_tether_window(&mut self) {
+        self.tether.close_window();
     }
 
     /// Score the input under the installed scope model and fold the verdict
@@ -782,6 +911,23 @@ impl HealPipeline {
 
         // 4. EMA direction update (the actual "evolution").
         self.evolution.record_outcome(rule_id, &fix_dir, success);
+
+        // 5. TETHER blend-weight fit (Issue 033) — only for an outcome of a
+        //    fix THIS mode selected, and only where the outcome is
+        //    trustworthy. `verified` is the Issue-018 oracle split at this
+        //    seam: an unverified verdict (syn-parse pass, simulated outcome)
+        //    would fit ρ against a guess, exactly what the split forbids for
+        //    the EMA direction update.
+        if matches!(self.selection_mode, SelectionMode::TetherBlend)
+            && self.tether_pending.staged
+            && verified
+            && self.tether_pending.rule_id == rule_id
+            && self.tether_pending.fixed_code == fixed_code
+        {
+            let (p1, p2) = (self.tether_pending.p1, self.tether_pending.p2);
+            self.tether_pending.staged = false;
+            self.tether.observe(f32::from(u8::from(success)), p1, p2);
+        }
     }
 
     /// **Stage 2 tuning loop (Issue 010 fix direction).**
