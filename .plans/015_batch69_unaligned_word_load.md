@@ -51,7 +51,7 @@ offsets, both arches). G2 median-of-5, interleaved arms:
 
 ## Defers
 
-- [ ] Proposer (recognize the ≥3-term shift/or byte-assembly chain on indexed byte loads → emit the
+- [-] Proposer (recognize the ≥3-term shift/or byte-assembly chain on indexed byte loads → emit the
       try_into+from_le_bytes form) — deferrable per the B59/B68 suggestion-first precedent. Record either way.
-- [ ] u128 window (the B66 `u128-funnel` shape — 2 overlapping u64 loads + funnel) — out of scope,
+- [-] u128 window (the B66 `u128-funnel` shape — 2 overlapping u64 loads + funnel) — out of scope,
       unmeasured here; the queue snapshot's B66 secondary note remains the record.

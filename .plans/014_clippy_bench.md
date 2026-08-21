@@ -74,8 +74,8 @@ train/test-style split so corpus growth cannot inflate the score.
 - [x] P1.3 `src/score_bench/report.rs` — JSONL history + SVG renderer + tests
 - [x] P1.4 CLI: `cargo heal --score-bench` (run + append + render) and
       `--score-report` (render only)
-- [ ] P1.5 `#[ignore]`d e2e smoke (first N fixtures, real clippy) — deferred
-      `[-]`: the CLI run IS the e2e (ran for the baseline); a pinned test
+- [-] P1.5 `#[ignore]`d e2e smoke (first N fixtures, real clippy) — deferred
+      per plan text: the CLI run IS the e2e (ran for the baseline); a pinned test
       would re-run the same oracle path for no additional coverage
 
 ### Phase 1.5 — frozen v1 fixture set
@@ -150,7 +150,7 @@ Perf-axis fixtures from mined anti-pattern sites + the existing Pareto
 validator; format axis = heal-must-not-break-rustfmt sub-check.
 
 ### Phase 3 (deferred) — generalization tiers
-- [ ] External crates.io fixture source (truly unseen distribution)
-- [ ] Per-fixture stub manifests (crate-internal spans)
-- [ ] Cold vs warm memory lines (`RIIR_HEAL_MEMORY` override)
-- [ ] Holdout tier: fixtures frozen + never used for proposer tuning
+- [-] External crates.io fixture source (truly unseen distribution)
+- [-] Per-fixture stub manifests (crate-internal spans)
+- [-] Cold vs warm memory lines (`RIIR_HEAL_MEMORY` override)
+- [-] Holdout tier: fixtures frozen + never used for proposer tuning
