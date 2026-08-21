@@ -324,6 +324,49 @@ curve at root-cause fixes, not a training curve — the self-learning
 mechanisms measured negative and were killed; improvement is
 engineering-iterative and the curve makes it honest.
 
+## Watch mode (real use) — Plan 019 Phase 5
+
+`scripts/watch_heal.sh` wraps `cargo heal --fix-compile --write` in a watch
+loop for real session use: your editor saves, the oracle repairs what it
+can, the miss queue collects what it can't.
+
+```bash
+./scripts/watch_heal.sh                    # session-touched .rs files only
+./scripts/watch_heal.sh src/foo.rs ...     # an explicit scope
+HEAL_FEATURES="--features my-gate" ./scripts/watch_heal.sh   # the repo's real feature set
+HEAL_BIN="cargo run --features rustc_errors --bin cargo-heal --" ./scripts/watch_heal.sh  # dev build
+```
+
+Three recorded caveats are REQUIREMENTS of any wrapper — the script
+encodes them, and a hand-rolled variant must too:
+
+1. **Write semantics are clean by construction.** `--fix-compile` NEVER
+   writes without `--write` (pinned by test) and a reverted candidate is
+   byte-identical to its pre-run content. There is no unconditional-write
+   trap.
+2. **`--verify-args` MUST carry the repo's real feature set.** The oracle
+   is `cargo check`; a fix that compiles under default features can break
+   a gated config (the Issue 031 H3 class). Default: `--all-features` (the
+   safe superset) — narrow for speed only once you know your repo's shape.
+3. **NEVER whole-repo scoping on a shared checkout.** Default scope =
+   session-touched files (`git diff --name-only HEAD` + untracked `.rs`),
+   the recorded sibling-collision discipline. The watch TRIGGER may be the
+   tree; the HEAL SCOPE stays the list.
+
+Self-evolution state lives at `<repo>/.heal/`: `trajectories.kv/` (the
+durable neuron-db store, `latent_retrieval` builds — encrypted WAL + BM25
++ the 8-D latent axis), `memory.json` (the default-build fallback), and
+`misses/` (the template-authoring queue — each miss is a self-contained
+authoring request with the rendered diagnostic). Export either backend:
+
+```bash
+cargo heal --dump-trajectories > trajectories.jsonl
+```
+
+Concurrent sibling builds: export a private `CARGO_TARGET_DIR` before
+launching (see the script header for the isolation recipe — the global
+rule; the oracle shares your target dir by default).
+
 ## Usage
 
 ```rust

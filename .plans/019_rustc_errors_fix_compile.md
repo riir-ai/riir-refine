@@ -469,21 +469,43 @@ arbitrate; revert is one iteration).
 
 ### Phase 5 — real use: the watch loop
 
-- [ ] T5.1 `scripts/watch_heal.sh` — wrapper over `watchexec` (preferred) or
+- [x] T5.1 `scripts/watch_heal.sh` — wrapper over `watchexec` (preferred) or
   `cargo watch`; per invocation: scope to SESSION-TOUCHED files (git
   diff-name-only vs HEAD, or an explicit file list — NEVER whole-repo on
   shared checkouts, the recorded sibling-collision discipline), run
   `cargo heal --fix-compile --write --verify-args "<repo feature set>"`,
   pin `.heal/memory.json` + `fix_log.jsonl`.
-- [ ] T5.2 README section "Watch mode (real use)" documenting the three
+  **DONE 2026-08-22** — with the Phase 4 amendment applied: the wrapper
+  pins the STORE (`.heal/trajectories.kv` / `memory.json`), never a
+  JSONL append (the amendment's "no shadow log" rule — the plan text
+  above predates it). macOS-bash-3.2-portable scope collection (no
+  `mapfile`); `HEAL_BIN` overridable (the installed `cargo-heal`
+  binary by default, a `cargo run` prefix for dev builds); `HEAL_FEATURES`
+  defaults to `--all-features`. Live-smoked end-to-end: scope resolution →
+  oracle pass (CLEAN, zero writes on a compiling tree — the T2.3 gate) →
+  watch entry. **The smoke caught a real CLI bug**: `--verify-args` was
+  unconditionally rejected on `fix_verify`-less builds even under
+  `--fix-compile` (whose substrate is `compile_oracle`, not `fix_verify`)
+  — fixed: the gate now keys on `any(fix_verify, rustc_errors)` + a
+  fix_verify-less build rejects `--verify-args` only when the consumer
+  is NOT `--fix-compile` (the exact Issue 031 H3 feature-blindness trap
+  the flag exists to prevent, previously unavoidable on that build).
+- [x] T5.2 README section "Watch mode (real use)" documenting the three
   recorded caveats as REQUIREMENTS of any wrapper: (1) write semantics
   clean (`--fix-compile` has no unconditional-write trap — assert by test),
   (2) feature-gate blindness → `--verify-args` MUST carry the repo's real
   feature set (the Issue 031 H3 class), (3) sibling agents → session file
   scoping, never whole-repo.
-- [ ] T5.3 `CARGO_TARGET_DIR` isolation guidance for concurrent sibling
+  **DONE 2026-08-22** — README §"Watch mode (real use)": the three
+  requirements, the store-path map (`.heal/` layout), the dump command,
+  and the `CARGO_TARGET_DIR` isolation pointer.
+- [x] T5.3 `CARGO_TARGET_DIR` isolation guidance for concurrent sibling
   builds (the global rule) in the wrapper's header comment.
-- [ ] T5.4 Built-in `--watch` (notify crate): DEFER — the wrapper is the
+  **DONE 2026-08-22** — the script header documents the recipe + WHY the
+  script does not set it unconditionally (shared target dir = the fast
+  path when idle, the contention point when not — check first, isolate
+  when concurrent).
+- [-] T5.4 Built-in `--watch` (notify crate): DEFER — the wrapper is the
   real-use surface; a new dep must beat it measurably first.
 
 ### Phase 6 — GOAT + record

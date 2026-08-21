@@ -541,9 +541,23 @@ fn main() {
         eprintln!("--verify requires a build with --features fix_verify");
         std::process::exit(2);
     }
-    #[cfg(not(feature = "fix_verify"))]
+    // `--verify-args` serves TWO consumers: `--verify` (needs `fix_verify`)
+    // and `--fix-compile` (needs only `compile_oracle`, implied by
+    // `rustc_errors`). Reject only when NEITHER substrate is compiled in —
+    // the watch-wrapper smoke caught the unconditional rejection (a
+    // rustc_errors-without-fix_verify build could never pass a feature
+    // set, silently reverting to default-feature blindness — the exact
+    // Issue 031 H3 trap the flag exists to prevent).
+    #[cfg(not(any(feature = "fix_verify", feature = "rustc_errors")))]
     if args.verify_args.is_some() {
-        eprintln!("--verify-args requires --verify (built with --features fix_verify)");
+        eprintln!("--verify-args requires --verify or --fix-compile (build with --features fix_verify or rustc_errors)");
+        std::process::exit(2);
+    }
+    // A fix_verify-less build CANNOT serve --verify's own --verify-args
+    // (the batch gate is absent) — only --fix-compile's.
+    #[cfg(all(not(feature = "fix_verify"), feature = "rustc_errors"))]
+    if args.verify_args.is_some() && !args.fix_compile {
+        eprintln!("--verify-args for --verify requires a build with --features fix_verify");
         std::process::exit(2);
     }
 
