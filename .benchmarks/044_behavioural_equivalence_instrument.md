@@ -1,4 +1,10 @@
-# Bench 041 — Behavioural-equivalence instrument: the 2 silent semantic breaks are now caught automatically
+# Bench 044 — Behavioural-equivalence instrument: the 2 silent semantic breaks are now caught automatically
+
+<!-- Numbering note (2026-08-22): originally landed as 041 at 18:51 on
+     2026-08-21; a same-evening collision with 041_rustc_errors_cargo_fix_floor
+     (19:07) resolved per the fewer-live-references tie-breaker — the rustc
+     floor's number is baked into Plan 019 / Issue 035 / committed tests, so
+     THIS file moved to the free gap 044. -->
 
 **Verdict: INSTRUMENT VALIDATED — 9/9 harness cases PASS. Both silent semantic
 breaks that [Bench 039](039_l4_vs_decline_reachable_set.md) scored as WINs are
