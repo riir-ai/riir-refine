@@ -83,6 +83,7 @@ pub(crate) fn cand(
         byte_span,
         replacement,
         shape: String::new(),
+        semantic_note: None,
         extra_edits: Vec::new(),
     }
 }
@@ -128,6 +129,12 @@ pub struct FixCandidate {
     /// time — the T4.2 shape-conditional ordering retrieves neighbors by
     /// it). Playbooks leave it empty; the driver overwrites.
     pub shape: String,
+    /// The T6.10 semantic annotation: `Some` when this strategy's fix is in
+    /// the semantics-changing class (clone-instead-of-borrow, drop-order
+    /// change, ownership transfer, lifetime-contract loosening). The
+    /// driver surfaces it on every record so the diff NAMES the change —
+    /// "compiles + tests pass" is not "means the same thing".
+    pub semantic_note: Option<&'static str>,
     /// Further edits applied atomically with the primary one (same file,
     /// non-overlapping with it and each other). Empty for the common
     /// single-edit candidate.
@@ -145,6 +152,15 @@ impl FixCandidate {
                 .iter()
                 .map(|e| e.replacement.len())
                 .sum::<usize>()
+    }
+
+    /// Attach the T6.10 semantic annotation (builder form — playbook
+    /// templates whose fixes sit in the semantics-changing class name the
+    /// change instead of leaving it silent).
+    #[must_use]
+    pub fn with_note(mut self, note: &'static str) -> Self {
+        self.semantic_note = Some(note);
+        self
     }
 }
 
@@ -249,6 +265,7 @@ mod tests {
                 byte_span: (0, 0),
                 replacement: String::new(),
                 shape: String::new(),
+                semantic_note: None,
                 extra_edits: Vec::new(),
             }]
         }

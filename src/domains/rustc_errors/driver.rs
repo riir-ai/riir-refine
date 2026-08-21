@@ -59,6 +59,8 @@ pub struct AppliedRecord {
     /// The replacement text landed for the primary edit — the trajectory's
     /// `fixed` half.
     pub fix: String,
+    /// The T6.10 semantic-note annotation (see [`RevertedRecord']).
+    pub semantic_note: Option<&'static str>,
 }
 
 /// One tried-and-reverted candidate, for the report.
@@ -75,6 +77,11 @@ pub struct RevertedRecord {
     pub shape: String,
     /// The attempted replacement (trajectory `fixed`).
     pub fix: String,
+    /// The T6.10 semantic-note annotation, when the strategy's fix is in
+    /// the semantics-changing class (clone-instead-of-borrow, drop-order
+    /// change, ownership transfer) — surfaced in the report + CLI diff so
+    /// the change is NAMED, never silent.
+    pub semantic_note: Option<&'static str>,
 }
 
 /// Why a candidate was reverted.
@@ -119,6 +126,8 @@ pub struct PlannedRecord {
     pub strategy_id: String,
     /// First line of the replacement, for the printed plan.
     pub replacement_head: String,
+    /// The T6.10 semantic note, when the strategy carries one.
+    pub semantic_note: Option<&'static str>,
 }
 
 /// The outcome of a [`CompileDriver::run`].
@@ -142,6 +151,10 @@ pub struct FixCompileReport {
     pub remaining: usize,
     /// Zero coded errors at the final check.
     pub clean: bool,
+    /// Wall time of each write-mode loop iteration, milliseconds (the G2
+    /// latency axis — incremental `cargo check` dominates each entry;
+    /// measured release for the published p50/p99).
+    pub iter_ms: Vec<f64>,
     /// Why the run could not complete (cargo could not run, unreadable
     /// package...).
     pub error: Option<String>,
@@ -311,6 +324,7 @@ impl CompileDriver {
         // ── Write mode: the bounded loop ─────────────────────────────────
         let mut tried: HashSet<TriedKey> = HashSet::new();
         for _iter in 0..self.max_iters {
+            let iter_t0 = std::time::Instant::now();
             // Propose for every current diagnostic.
             let mut candidates: Vec<FixCandidate> = Vec::new();
             for d in &diags {
@@ -345,6 +359,7 @@ impl CompileDriver {
                     reason: RevertReason::Io,
                     shape: String::new(),
                     fix: String::new(),
+                    semantic_note: best.semantic_note,
                 });
                 tried.insert(tried_key(&best));
                 continue;
@@ -369,6 +384,7 @@ impl CompileDriver {
                     reason: RevertReason::NoProgress,
                     shape,
                     fix: best.replacement.clone(),
+                    semantic_note: best.semantic_note,
                 });
                 tried.insert(tried_key(&best));
                 continue;
@@ -382,6 +398,7 @@ impl CompileDriver {
                     reason: RevertReason::Io,
                     shape,
                     fix: best.replacement.clone(),
+                    semantic_note: best.semantic_note,
                 });
                 tried.insert(tried_key(&best));
                 continue;
@@ -407,6 +424,7 @@ impl CompileDriver {
                     errors: (before_errors, new_diags.len()),
                     shape,
                     fix: best.replacement.clone(),
+                    semantic_note: best.semantic_note,
                 });
                 diags = new_diags;
                 if diags.is_empty() {
@@ -424,9 +442,11 @@ impl CompileDriver {
                     reason: RevertReason::NoProgress,
                     shape,
                     fix: best.replacement.clone(),
+                    semantic_note: best.semantic_note,
                 });
                 tried.insert(tried_key(&best));
             }
+            report.iter_ms.push(iter_t0.elapsed().as_secs_f64() * 1000.0);
         }
 
         report.remaining = diags.len();
@@ -515,6 +535,7 @@ fn collect_candidates(
                 code: c.code.clone(),
                 strategy_id: c.strategy_id.clone(),
                 replacement_head: c.replacement.lines().next().unwrap_or("").to_string(),
+                semantic_note: c.semantic_note,
             });
         }
     }
@@ -630,6 +651,7 @@ mod tests {
             byte_span: (0, 0),
             replacement: repl.to_string(),
             shape: String::new(),
+            semantic_note: None,
             extra_edits: Vec::new(),
         };
         let mut cands = vec![
@@ -657,6 +679,7 @@ mod tests {
             byte_span: (0, 0),
             replacement: String::new(),
             shape: String::new(),
+            semantic_note: None,
             extra_edits: extras,
         };
         // A two-byte deletion pair must sort BEFORE a `.clone()` insertion
@@ -699,6 +722,7 @@ mod tests {
             byte_span: (3, 8),
             replacement: "x".to_string(),
             shape: String::new(),
+            semantic_note: None,
             extra_edits: Vec::new(),
         };
         let b = FixCandidate {

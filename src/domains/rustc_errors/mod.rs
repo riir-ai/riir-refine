@@ -4,6 +4,8 @@
 //! - [`diag`] — suggestion-aware rustc JSON parsing (error code +
 //!   `suggested_replacement` + applicability).
 //! - [`probe`] — the premise probe: does rustc already auto-fix this code?
+//! - [`corpus_gen`] — the generated known-inverse mutation corpus (T6.1,
+//!   N≥200, every seed carrying a ground-truth behavior test).
 //! - [`floor`] — the G-floor harness: any [`floor::CompileFixer`] scored
 //!   against `cargo fix --broken-code` on a known-inverse mutation corpus
 //!   (arms: the [`floor::CargoFixBaseline`] floor, the [`floor::DriverFixer`]
@@ -22,6 +24,7 @@
 //! imports only `std` + `serde`; its `latent_retrieval` implication is a
 //! CLI-surface artifact, not a code dependency.
 
+pub mod corpus_gen;
 pub mod diag;
 pub mod driver;
 pub mod evolve;

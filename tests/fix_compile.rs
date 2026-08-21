@@ -54,6 +54,7 @@ impl CompileProposer for ReplacePlaybook {
             byte_span: (at, at + self.from.len()),
             replacement: self.to.to_string(),
             shape: String::new(),
+            semantic_note: None,
             extra_edits: Vec::new(),
         }]
     }

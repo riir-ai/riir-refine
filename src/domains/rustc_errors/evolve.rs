@@ -231,6 +231,7 @@ mod tests {
                 errors: (1, 0),
                 shape: "&v[0]".to_string(),
                 fix: String::new(),
+                semantic_note: None,
             }],
             reverted: vec![super::super::driver::RevertedRecord {
                 file: PathBuf::from("/x/a.rs"),
@@ -240,6 +241,7 @@ mod tests {
                 reason: super::super::driver::RevertReason::NoProgress,
                 shape: "&v[0]".to_string(),
                 fix: "v[0].clone()".to_string(),
+                semantic_note: None,
             }],
             ..FixCompileReport::default()
         };

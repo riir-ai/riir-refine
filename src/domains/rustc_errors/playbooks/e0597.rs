@@ -202,6 +202,9 @@ impl CompileProposer for AnonLifetime {
                 (abs, abs + "'static".len()),
                 "'_".to_string(),
                 self.name(),
+            )
+            .with_note(
+                "loosens the lifetime annotation ('static -> '_) — an API-contract change, not a purely local one",
             ));
             from += at + "'static".len();
         }
@@ -242,7 +245,8 @@ impl CompileProposer for MoveCapture {
             (cap.byte_start, cap.byte_start),
             "move ".to_string(),
             self.name(),
-        )]
+        )
+        .with_note("moves the capture into the closure — ownership leaves the enclosing scope")]
     }
 }
 
@@ -287,7 +291,8 @@ impl CompileProposer for MoveCloneCapture {
             (range.start, range.end),
             repl,
             self.name(),
-        )]
+        )
+        .with_note("clones the captured binding — the closure owns a copy; mutations no longer alias the original")]
     }
 }
 
@@ -344,7 +349,8 @@ impl CompileProposer for DropTheBox {
                 (li.stmt.start, li.stmt.end),
                 repl,
                 self.name(),
-            )];
+            )
+            .with_note("unboxes the binding — the value is no longer heap-allocated; drop timing may change")];
         }
         Vec::new()
     }
@@ -418,7 +424,8 @@ impl CompileProposer for SharedOwnership {
             (range.start, range.end),
             repl,
             self.name(),
-        )]
+        )
+        .with_note("switches to shared ownership (Rc/Arc) — access is now shared, not exclusive")]
     }
 }
 
@@ -541,7 +548,8 @@ impl CompileProposer for ScopeHoist {
             (b.open, stmt_range.end),
             repl,
             self.name(),
-        )]
+        )
+        .with_note("hoists the declaration out of the block — drop order changes")]
     }
 }
 

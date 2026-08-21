@@ -423,6 +423,17 @@ fn snippet_head(text: &str) -> &str {
 }
 
 /// Clamp a message to `n` chars for one-line report output.
+/// The T6.10 semantic-note suffix for fix-compile report lines: names
+/// the semantics change in the diff output when the applied strategy
+/// sits in the exclusion class (clone-instead-of-borrow, drop-order
+/// change, ownership transfer, lifetime loosening).
+fn semantic_note_suffix(note: Option<&'static str>) -> String {
+    match note {
+        None => String::new(),
+        Some(n) => format!("\n  ⚠ semantic change: {n}"),
+    }
+}
+
 fn truncate(s: &str, n: usize) -> String {
     if s.chars().count() <= n {
         s.to_string()
@@ -700,13 +711,14 @@ fn main() {
         if args.write {
             for a in &report.applied {
                 println!(
-                    "applied {} [{}] at {}:{} (errors {} → {})",
+                    "applied {} [{}] at {}:{} (errors {} → {}){}",
                     a.code,
                     a.strategy_id,
                     a.file.display(),
                     a.line,
                     a.errors.0,
-                    a.errors.1
+                    a.errors.1,
+                    semantic_note_suffix(a.semantic_note)
                 );
             }
             for r in &report.reverted {
@@ -816,12 +828,13 @@ fn main() {
             }
             for p in &report.planned {
                 println!(
-                    "plan {}:{} {} [{}] → {}",
+                    "plan {}:{} {} [{}] → {}{}",
                     p.file.display(),
                     p.line,
                     p.code,
                     p.strategy_id,
-                    p.replacement_head
+                    p.replacement_head,
+                    semantic_note_suffix(p.semantic_note)
                 );
             }
             if !report.misses.is_empty() {

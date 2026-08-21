@@ -55,11 +55,11 @@ fn the_no_op_arm_repairs_nothing() {
         return;
     }
     let report = harness.measure(&NullFixer).expect("harness ran");
-    let free_wins: Vec<&str> = report
+    let free_wins: Vec<String> = report
         .outcomes
         .iter()
         .filter(|o| o.verdict != FixVerdict::Unfixed)
-        .map(|o| o.name)
+        .map(|o| o.name.clone())
         .collect();
     harness.cleanup();
 

@@ -241,6 +241,11 @@ impl CompileProposer for E0502DerefRemoval {
             byte_span: (rl.amp.start, rl.amp.end),
             replacement: String::new(),
             shape: String::new(),
+            // No note by design: reading a Copy element by value is
+            // byte-identical to reading it through the reference — the
+            // template only fires on Copy-typed elements (see the family
+            // gate), so there is no semantics change to name.
+            semantic_note: None,
             extra_edits: extras,
         }]
     }
@@ -285,7 +290,8 @@ impl CompileProposer for E0502CloneOut {
             (rl.init.start, rl.init.end),
             repl,
             self.name(),
-        )]
+        )
+        .with_note("clones the element — the binding owns a copy instead of borrowing (aliasing not preserved)")]
     }
 }
 
@@ -399,7 +405,8 @@ impl CompileProposer for E0505CloneAtMove {
             (end, end),
             ".clone()".to_string(),
             self.name(),
-        )]
+        )
+        .with_note("clones at the move — the destination owns a copy; the source borrow is preserved")]
     }
 }
 

@@ -1,71 +1,81 @@
-//! Issue 035 T2 — run the G-floor measurement and print the published tables.
+//! Issue 035 T2 + Plan 019 Phase 6 — the G-floor + GOAT measurement runner.
 //!
 //! ```bash
+//! # everything (the full Phase 6 measurement session, ~30-40 min):
 //! cargo run --release --example rustc_errors_floor --features rustc_errors
+//!
+//! # one section at a time (chunked runs; sections: probe floor driver null ab):
+//! cargo run --release --example rustc_errors_floor --features rustc_errors -- --only driver
+//! cargo run --release --example rustc_errors_floor --features "rustc_errors,latent_retrieval" -- --only ab
 //! ```
 //!
-//! Two measurements, both against the live toolchain:
+//! Sections (each prints its own table; all measured against the live
+//! toolchain):
 //!
-//! 1. **The premise probe** — per error code, does rustc ship a
-//!    machine-applicable suggestion, and does `cargo fix --broken-code`
-//!    apply it? This is the contested/uncontested split that bounds what the
-//!    `rustc_errors` domain can claim.
-//! 2. **The floor** — `cargo fix --broken-code` scored over the
-//!    known-inverse mutation corpus: fix rate AND, for every repair that
-//!    landed, whether it restored the original meaning or diverged from it.
-//!
-//! The second number is the one that matters. A fixer that repairs a mutant
-//! with a diff that means something different has not "fixed" it — it has
-//! moved the problem somewhere a compiler cannot see.
+//! 1. **probe** — per error code, does rustc ship a machine-applicable
+//!    suggestion, and does `cargo fix --broken-code` apply it? The
+//!    contested/uncontested split that bounds what `rustc_errors` can claim.
+//! 2. **floor** — `cargo fix --broken-code` over the FULL known-inverse
+//!    corpus (the 12 committed anchors + the N≥200 generated cases):
+//!    per-code fix rate AND, for every landed repair, whether it restored
+//!    the original meaning or diverged.
+//! 3. **driver** — the production `--fix-compile` arm over the same corpus
+//!    (verbose: per-iteration timings), plus the G1 semantics pass
+//!    (`cargo test` post-fix on every repaired case — the corpus's
+//!    ground-truth behavior tests) and the G2 latency table (p50/p99).
+//! 4. **null** — the no-op arm self-check: must score exactly 0% on the
+//!    full corpus (corpus integrity at scale).
+//! 5. **ab** — the G6/G7 ordering A/B (needs `latent_retrieval`): a
+//!    learning pass warms a temp trajectory store, then static min-delta
+//!    vs flat `(code,strategy)` BetaPosterior vs shape-conditional
+//!    ordering are compared on candidates-tried + reverts over the
+//!    template-covered stratum.
 
+use riir_clippy::domains::rustc_errors::corpus_gen::{generate_corpus, Territory};
 use riir_clippy::domains::rustc_errors::floor::{
-    CargoFixBaseline, DriverFixer, FixVerdict, FloorHarness, FloorReport, NullFixer, MUTANT_CASES,
+    CargoFixBaseline, DriverFixer, FixVerdict, FloorHarness, FloorOutcome, FloorReport, NullFixer,
+    MUTANT_CASES,
 };
 use riir_clippy::domains::rustc_errors::probe::PremiseProbe;
 
 fn main() {
-    println!("=== Issue 035 — rustc_errors premise probe + G-floor ===\n");
+    let only: Vec<String> = std::env::args()
+        .skip_while(|a| a != "--only")
+        .nth(1)
+        .map(|s| {
+            s.split(',')
+                .map(str::trim)
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let want = |s: &str| only.is_empty() || only.iter().any(|x| x == s);
+
+    println!("=== Plan 019 Phase 6 — premise probe + G-floor + GOAT ===\n");
     println!("rustc: {}", rustc_version());
 
-    probe_section();
-    let baseline = floor_section();
-    driver_arm_section();
-    null_arm_section();
-
-    println!("\n── Verdict ──");
-    match baseline {
-        None => println!("  INCONCLUSIVE — cargo unavailable, nothing measured."),
-        Some(report) => {
-            println!(
-                "  Floor arm `{}`: {:.1}% of the corpus repaired.",
-                report.arm,
-                report.total_fix_rate() * 100.0
-            );
-            let diverged: Vec<&str> = report
-                .outcomes
-                .iter()
-                .filter(|o| o.verdict == FixVerdict::Diverged)
-                .map(|o| o.name)
-                .collect();
-            match diverged.is_empty() {
-                true => println!(
-                    "  Every repair matched the known inverse — on this corpus the floor \
-                     is not just free, it is right."
-                ),
-                false => println!(
-                    "  {} repair(s) compiled but DIVERGED from the known inverse: {}\n  \
-                     These are where a compile-only oracle cannot tell you the meaning \
-                     changed — the review surface a ranked-alternatives fixer would own.",
-                    diverged.len(),
-                    diverged.join(", ")
-                ),
-            }
-            println!(
-                "  Any `--fix-compile` template must beat this per-code floor before it \
-                 ships (Plan 019 T6.9)."
-            );
-        }
+    if want("probe") {
+        probe_section();
     }
+    if want("floor") {
+        floor_section();
+    }
+    if want("driver") {
+        driver_section();
+    }
+    if want("null") {
+        null_section();
+    }
+    if want("ab") {
+        #[cfg(feature = "latent_retrieval")]
+        ordering_ab_section();
+        #[cfg(not(feature = "latent_retrieval"))]
+        println!("\n── 5. SKIP ab: needs --features latent_retrieval ──");
+    }
+}
+
+fn case_count() -> usize {
+    MUTANT_CASES.len() + generate_corpus().len()
 }
 
 fn rustc_version() -> String {
@@ -119,17 +129,23 @@ fn probe_section() {
     probe.cleanup();
 }
 
-fn floor_section() -> Option<FloorReport> {
+/// One measurement arm over the full corpus — shared scaffold/floor logic
+/// for the floor + driver sections (the null arm reuses it too).
+fn measure_full(
+    harness: &FloorHarness,
+    label: &str,
+    measure: impl Fn(&FloorHarness) -> Result<FloorReport, String>,
+) -> Option<FloorReport> {
     println!(
-        "\n── 2. G-floor: `cargo fix --broken-code` over {} known-inverse mutants ──\n",
-        MUTANT_CASES.len()
+        "\n── {label}: over {n} known-inverse mutants (12 anchors + {gen} generated) ──\n",
+        n = case_count(),
+        gen = case_count() - MUTANT_CASES.len()
     );
-    let harness = FloorHarness::new();
     if !harness.is_available() {
         println!("  SKIP — cargo not on PATH.");
         return None;
     }
-    let report = match harness.measure(&CargoFixBaseline::new()) {
+    let report = match measure(harness) {
         Ok(r) => r,
         Err(e) => {
             println!("  ERROR: {e}");
@@ -137,119 +153,313 @@ fn floor_section() -> Option<FloorReport> {
         }
     };
     print_report(&report);
-
-    if !report.invalid_mutants.is_empty() {
-        println!(
-            "\n  CORPUS INTEGRITY FAILURES ({}):",
-            report.invalid_mutants.len()
-        );
-        for bad in &report.invalid_mutants {
-            println!("    - {bad}");
-        }
-    }
-
-    println!("\n  Per-mutant detail:");
-    for o in &report.outcomes {
-        let verdict = match o.verdict {
-            FixVerdict::MatchedInverse => "matched-inverse",
-            FixVerdict::Diverged => "DIVERGED",
-            FixVerdict::Unfixed => "unfixed",
-        };
-        println!(
-            "    {:<34} {:>6} {:<18} {:<15} valid={}",
-            o.name,
-            o.expect_code,
-            o.mutator.label(),
-            verdict,
-            o.mutant_valid
-        );
-        if let Some(src) = &o.diverged_source {
-            for line in src.lines().filter(|l| !l.trim().is_empty()) {
-                println!("        | {line}");
-            }
-        }
-    }
-    harness.cleanup();
+    print_integrity(&report);
     Some(report)
 }
 
-/// The product arm: the production `--fix-compile` driver + playbook
-/// registry, scored by the same harness against the same corpus — the
-/// head-to-head with [`CargoFixBaseline`] that T6.9 requires before any
-/// template may claim its code.
-fn driver_arm_section() {
-    println!(
-        "\n── 3. The `--fix-compile` arm over the same corpus ──\n"
-    );
-    let harness = FloorHarness::new().with_work_root(
-        std::env::temp_dir().join(format!("riir_floor_driver_arm_{}", std::process::id())),
-    );
-    if !harness.is_available() {
-        println!("  SKIP — cargo not on PATH.");
-        return;
-    }
-    match harness.measure(&DriverFixer) {
-        Err(e) => println!("  ERROR: {e}"),
-        Ok(report) => {
-            print_report(&report);
-            println!("\n  Per-mutant detail:");
-            for o in &report.outcomes {
-                let verdict = match o.verdict {
-                    FixVerdict::MatchedInverse => "matched-inverse",
-                    FixVerdict::Diverged => "DIVERGED",
-                    FixVerdict::Unfixed => "unfixed",
-                };
-                println!(
-                    "    {:<34} {:>6} {:<18} {:<15}",
-                    o.name,
-                    o.expect_code,
-                    o.mutator.label(),
-                    verdict
-                );
-            }
-        }
-    }
-    harness.cleanup();
-}
-
-/// The falsification arm: an arm that repairs nothing must score 0%.
-/// If it scores above zero the harness is measuring the mutation, not the fixer.
-fn null_arm_section() {
-    println!("\n── 4. Harness self-check: the no-op arm must score 0% ──\n");
-    let harness = FloorHarness::new().with_work_root(
-        std::env::temp_dir().join(format!("riir_floor_null_arm_{}", std::process::id())),
-    );
-    if !harness.is_available() {
-        println!("  SKIP — cargo not on PATH.");
-        return;
-    }
-    match harness.measure(&NullFixer) {
-        Err(e) => println!("  ERROR: {e}"),
-        Ok(report) => {
-            let rate = report.total_fix_rate();
+fn floor_section() {
+    let harness = FloorHarness::new();
+    let report = measure_full(&harness, "2. G-floor: `cargo fix --broken-code`", |h| {
+        h.measure_cases(&CargoFixBaseline::new(), &floor_case_list())
+    });
+    if let Some(report) = report {
+        let diverged: Vec<&str> = report
+            .outcomes
+            .iter()
+            .filter(|o| o.verdict == FixVerdict::Diverged)
+            .map(|o| o.name.as_str())
+            .collect();
+        if !diverged.is_empty() {
             println!(
-                "  arm `{}`: {:.1}% fixed — {}",
-                report.arm,
-                rate * 100.0,
-                match rate == 0.0 {
-                    true => "PASS (every mutant genuinely broken)",
-                    false => "FAIL — the harness is scoring something other than the fixer",
-                }
+                "\n  {} repair(s) compiled but DIVERGED from the known inverse — the \
+                 review surface a ranked-alternatives fixer owns.",
+                diverged.len()
             );
         }
     }
     harness.cleanup();
 }
 
+fn driver_section() {
+    let harness = FloorHarness::new();
+    let fixer = DriverFixer::new();
+    let cases = floor_case_list();
+    println!(
+        "\n── 3. The `--fix-compile` arm (verbose): over {n} known-inverse mutants ──\n",
+        n = cases.len()
+    );
+    if !harness.is_available() {
+        println!("  SKIP — cargo not on PATH.");
+        return;
+    }
+    let (report, driver_reports) = match harness.measure_driver(&fixer, &cases) {
+        Ok(r) => r,
+        Err(e) => {
+            println!("  ERROR: {e}");
+            return;
+        }
+    };
+    print_report(&report);
+    print_integrity(&report);
+
+    // G1 semantics pass: every repaired case's scaffold holds the final
+    // source; run its ground-truth behavior test.
+    println!("\n  G1 semantics pass: `cargo test` post-fix on every repaired case");
+    let mut tested = 0usize;
+    let mut green = 0usize;
+    let mut red: Vec<String> = Vec::new();
+    for o in &report.outcomes {
+        if o.verdict == FixVerdict::Unfixed {
+            continue;
+        }
+        let dir = harness.work_root().join(&o.name);
+        match harness.cargo_test_passes(&dir) {
+            Err(e) => println!("    {} cargo-test error: {e}", o.name),
+            Ok(false) => red.push(o.name.clone()),
+            Ok(true) => green += 1,
+        }
+        tested += 1;
+    }
+    println!(
+        "    {green}/{tested} repaired cases keep the seed's behavior; {} broke it{}",
+        red.len(),
+        match red.is_empty() {
+            true => String::new(),
+            false => format!(": {}", red.join(", ")),
+        }
+    );
+
+    // G2 latency: per-case fixer wall time + per-iteration driver time.
+    let mut fix_ms: Vec<f64> = report.outcomes.iter().map(|o| o.fix_ms).collect();
+    fix_ms.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    if !fix_ms.is_empty() {
+        println!(
+            "\n  G2 latency, per CASE (ms): p50 {:.0}  p99 {:.0}  max {:.0}",
+            percentile(&fix_ms, 0.50),
+            percentile(&fix_ms, 0.99),
+            fix_ms[fix_ms.len() - 1]
+        );
+    }
+    let mut iter_ms: Vec<f64> = driver_reports
+        .iter()
+        .flat_map(|(_, r)| r.iter_ms.iter().copied())
+        .collect();
+    iter_ms.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    if !iter_ms.is_empty() {
+        println!(
+            "  G2 latency, per ITERATION (ms): n {}  p50 {:.0}  p99 {:.0}  max {:.0}",
+            iter_ms.len(),
+            percentile(&iter_ms, 0.50),
+            percentile(&iter_ms, 0.99),
+            iter_ms[iter_ms.len() - 1]
+        );
+    }
+    harness.cleanup();
+}
+
+fn null_section() {
+    let harness = FloorHarness::new();
+    let measured = measure_full(&harness, "4. Harness self-check: the no-op arm", |h| {
+        h.measure_cases(&NullFixer, &floor_case_list())
+    });
+    if let Some(report) = measured {
+        let rate = report.total_fix_rate();
+        println!(
+            "  no-op arm fix rate: {:.1}% — {}",
+            rate * 100.0,
+            match rate == 0.0 {
+                true => "PASS (every mutant genuinely broken)",
+                false => "FAIL — the harness is scoring something other than the fixer",
+            }
+        );
+    }
+    harness.cleanup();
+}
+
+// ── section 5: the G6/G7 ordering A/B (latent_retrieval builds) ───────
+
+/// The template-covered stratum: codes our playbooks propose for. The
+/// delegated contested codes (E0596/E0382/E0507/E0373) have exactly one
+/// "candidate" (none) — ordering cannot matter there.
+#[cfg(feature = "latent_retrieval")]
+fn template_covered<'a>(
+    committed: &'a [riir_clippy::domains::rustc_errors::floor::MutantCase],
+    generated: &'a [riir_clippy::domains::rustc_errors::corpus_gen::GeneratedCase],
+) -> (
+    Vec<riir_clippy::domains::rustc_errors::floor::HarnessCase<'a>>,
+    usize,
+) {
+    let mut cases = Vec::new();
+    let mut n = 0;
+    for c in committed {
+        if matches!(
+            c.expect_code,
+            "E0597" | "E0499" | "E0502" | "E0505"
+        ) {
+            if let Ok(h) =
+                riir_clippy::domains::rustc_errors::floor::HarnessCase::committed(c)
+            {
+                cases.push(h);
+                n += 1;
+            }
+        }
+    }
+    for g in generated {
+        if matches!(g.expect_code, "E0597" | "E0499" | "E0502" | "E0505") {
+            cases.push(riir_clippy::domains::rustc_errors::floor::HarnessCase::generated(
+                g,
+            ));
+            n += 1;
+        }
+    }
+    (cases, n)
+}
+
+#[cfg(feature = "latent_retrieval")]
+fn ordering_ab_section() {
+    use riir_clippy::domains::rustc_errors::evolve::traj_key;
+    use riir_clippy::traj_store::{shape_conditional_order, TrajStore};
+    use std::collections::HashMap;
+    use std::sync::Arc;
+
+    println!("\n── 5. G6/G7 ordering A/B (static vs flat vs shape-conditional) ──\n");
+    let harness = FloorHarness::new();
+    if !harness.is_available() {
+        println!("  SKIP — cargo not on PATH.");
+        return;
+    }
+    let generated = generate_corpus();
+    let (cases, n) = template_covered(MUTANT_CASES, &generated);
+    println!("  template-covered stratum: {n} cases");
+
+    // Fresh store for a self-contained measurement.
+    let root = std::env::temp_dir().join(format!("riir_floor_ab_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let (store, bad) = TrajStore::open(&root).expect("temp traj store");
+    assert_eq!(bad, 0);
+
+    // ── Learning pass (static ordering): populate the store ──
+    let learning = DriverFixer::new();
+    let mut learned = 0usize;
+    let (_, reports) = harness.measure_driver(&learning, &cases).expect("learning pass");
+    for (name, rep) in &reports {
+        for a in &rep.applied {
+            store
+                .record(&traj_key(&a.code, &a.strategy_id), &a.shape, &a.fix, true, true)
+                .expect("record applied");
+            learned += 1;
+        }
+        for r in &rep.reverted {
+            store
+                .record(&traj_key(&r.code, &r.strategy_id), &r.shape, &r.fix, false, false)
+                .expect("record reverted");
+            learned += 1;
+        }
+        let _ = name;
+    }
+    println!("  learning pass: {learned} trajectories recorded");
+
+    // ── Arm builders ──
+    // Flat: BetaPosterior over (code,strategy) counters, shape-blind —
+    // built from the store dump (the JSON-backend fallback's semantics).
+    let mut flat_counts: HashMap<String, (u32, u32)> = HashMap::new();
+    for row in store.dump() {
+        let e = flat_counts.entry(row.lint_key.clone()).or_default();
+        e.0 = e.0.saturating_add(row.success_count);
+        e.1 = e.1.saturating_add(row.fail_count);
+    }
+    let flat_ordering = Arc::new(
+        move |cands: &mut [riir_clippy::domains::rustc_errors::playbooks::FixCandidate]| {
+            let score = |c: &riir_clippy::domains::rustc_errors::playbooks::FixCandidate| {
+                match flat_counts.get(&traj_key(&c.code, &c.strategy_id)) {
+                    None => 0.32, // Beta(1,1) @ eps — the unseen prior
+                    Some(&(s, f)) => katgpt_core::best_belief_score(s, f, 0.32),
+                }
+            };
+            cands.sort_by(|a, b| {
+                score(b)
+                    .partial_cmp(&score(a))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+                    .then(a.total_len().cmp(&b.total_len()))
+                    .then(a.strategy_id.cmp(&b.strategy_id))
+            });
+        },
+    );
+
+    let arm_stats = |label: &str, fixer: &DriverFixer| {
+        let (_, reports) = harness.measure_driver(fixer, &cases).expect(label);
+        let mut total_iters = 0usize;
+        let mut total_reverts = 0usize;
+        let mut fixed_clean = 0usize;
+        for (name, rep) in &reports {
+            total_iters += rep.iterations;
+            total_reverts += rep.reverted.len();
+            if rep.clean {
+                fixed_clean += 1;
+            }
+            let _ = name;
+        }
+        println!(
+            "  {label:<20} clean {fixed_clean}/{n}  iterations {total_iters}  reverts {total_reverts}"
+        );
+        (fixed_clean, total_iters, total_reverts)
+    };
+
+    let store_arc = Arc::new(store);
+    let shape_fixer = {
+        let s = Arc::clone(&store_arc);
+        DriverFixer::new().with_ordering(Arc::new(move |cands| {
+            shape_conditional_order(cands, &s);
+        }))
+    };
+    let flat_fixer = DriverFixer::new().with_ordering(flat_ordering);
+
+    let static_arm = arm_stats("static (min-delta)", &DriverFixer::new());
+    let flat_arm = arm_stats("flat counters", &flat_fixer);
+    let shape_arm = arm_stats("shape-conditional", &shape_fixer);
+
+    println!(
+        "\n  verdict: shape-conditional reverts {} vs static {} — {}",
+        shape_arm.2,
+        static_arm.2,
+        match shape_arm.2.cmp(&static_arm.2) {
+            std::cmp::Ordering::Less => "IMPROVEMENT (T4.2 earns its keep)",
+            std::cmp::Ordering::Equal => "no difference on this corpus",
+            std::cmp::Ordering::Greater => "WORSE (record honest negative; keep static)",
+        }
+    );
+    let _ = flat_arm;
+
+    harness.cleanup();
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+// ── shared helpers ────────────────────────────────────────────────────
+
+fn floor_case_list() -> Vec<riir_clippy::domains::rustc_errors::floor::HarnessCase<'static>> {
+    // 'static: committed cases are 'static consts; generated cases leak
+    // their Strings once per process (the measurement is a one-shot binary
+    // — Box::leak keeps the borrow simple without rebuilding per section).
+    use riir_clippy::domains::rustc_errors::floor::HarnessCase;
+    let mut cases: Vec<HarnessCase<'static>> = MUTANT_CASES
+        .iter()
+        .map(|c| HarnessCase::committed(c).expect("committed case integrity"))
+        .collect();
+    for g in generate_corpus() {
+        cases.push(HarnessCase::generated(Box::leak(Box::new(g))));
+    }
+    cases
+}
+
 fn print_report(report: &FloorReport) {
     println!("  arm: {}\n", report.arm);
     println!(
-        "  {:<8} {:>8} {:>9} {:>9} {:>8} {:>10} {:>11}",
+        "  {:<8} {:>8} {:>9} {:>9} {:>8} {:>9} {:>11}",
         "code", "mutants", "matched", "diverged", "unfixed", "fix-rate", "divergence"
     );
     for row in &report.rows {
         println!(
-            "  {:<8} {:>8} {:>9} {:>9} {:>8} {:>9.0}% {:>10.0}%",
+            "  {:<8} {:>8} {:>9} {:>9} {:>8} {:>8.0}% {:>10.0}%",
             row.code,
             row.mutants,
             row.matched,
@@ -259,9 +469,49 @@ fn print_report(report: &FloorReport) {
             row.divergence_rate() * 100.0
         );
     }
+    let uncontested: Vec<&FloorOutcome> = report
+        .outcomes
+        .iter()
+        .filter(|o| {
+            riir_clippy::domains::rustc_errors::corpus_gen::territory_of(o.expect_code)
+                == Territory::Uncontested
+        })
+        .collect();
+    if !uncontested.is_empty() {
+        let fixed = uncontested
+            .iter()
+            .filter(|o| o.verdict != FixVerdict::Unfixed)
+            .count();
+        println!(
+            "\n  UNCONTESTED stratum (the product head): {fixed}/{} fixed",
+            uncontested.len()
+        );
+    }
     println!(
         "\n  TOTAL fix rate: {:.1}% ({} mutants)",
         report.total_fix_rate() * 100.0,
         report.outcomes.len()
     );
+}
+
+fn print_integrity(report: &FloorReport) {
+    if !report.invalid_mutants.is_empty() {
+        println!(
+            "\n  CORPUS INTEGRITY FAILURES ({}):",
+            report.invalid_mutants.len()
+        );
+        for bad in &report.invalid_mutants {
+            println!("    - {bad}");
+        }
+    } else {
+        println!("  corpus integrity: all mutants provoked their declared code");
+    }
+}
+
+fn percentile(sorted: &[f64], p: f64) -> f64 {
+    if sorted.is_empty() {
+        return 0.0;
+    }
+    let idx = ((sorted.len() as f64 - 1.0) * p).round() as usize;
+    sorted[idx.min(sorted.len() - 1)]
 }

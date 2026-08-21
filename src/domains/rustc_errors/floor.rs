@@ -41,8 +41,11 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::Instant;
 
+use super::corpus_gen::GeneratedCase;
 use super::diag::parse_error_diags;
+use super::driver::FixCompileReport;
 
 /// What kind of source rewrite broke the seed. Reporting label — the actual
 /// edit is the [`Mutator`]'s `from`/`to` pair.
@@ -351,7 +354,50 @@ impl CompileFixer for NullFixer {
 ///
 /// `Ok` means the driver RAN (its own report carries the detail); the
 /// harness re-checks and scores, same as every arm.
-pub struct DriverFixer;
+#[derive(Default)]
+pub struct DriverFixer {
+    ordering: Option<super::driver::OrderingFn>,
+}
+
+impl DriverFixer {
+    /// The production arm: static min-delta ordering, default max-iters.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Install a candidate-ordering override (the T4.2 seam — the G6/G7
+    /// A/B arms use this to compare static vs flat vs shape-conditional
+    /// ordering over the same corpus).
+    #[must_use]
+    pub fn with_ordering(mut self, f: super::driver::OrderingFn) -> Self {
+        self.ordering = Some(f);
+        self
+    }
+
+    /// Run the driver and RETURN its report (the verbose path the G2
+    /// latency + G6/G7 A/B measurements consume — per-iteration timings,
+    /// candidate try-order evidence, misses).
+    ///
+    /// # Errors
+    ///
+    /// No `src/lib.rs` in the scaffold dir.
+    pub fn fix_returning_report(&self, dir: &Path) -> Result<FixCompileReport, String> {
+        let lib = dir.join("src").join("lib.rs");
+        if !lib.is_file() {
+            return Err(format!("no src/lib.rs in {}", dir.display()));
+        }
+        let mut driver = super::driver::CompileDriver::isolated();
+        if let Some(f) = &self.ordering {
+            driver = driver.with_ordering(f.clone());
+        }
+        Ok(driver.run(
+            &[lib],
+            &super::playbooks::Playbooks::production(),
+            true,
+        ))
+    }
+}
 
 impl CompileFixer for DriverFixer {
     fn name(&self) -> &'static str {
@@ -359,17 +405,7 @@ impl CompileFixer for DriverFixer {
     }
 
     fn fix(&self, dir: &Path) -> Result<(), String> {
-        let lib = dir.join("src").join("lib.rs");
-        if !lib.is_file() {
-            return Err(format!("no src/lib.rs in {}", dir.display()));
-        }
-        let driver = super::driver::CompileDriver::isolated();
-        let _report = driver.run(
-            &[lib],
-            &super::playbooks::Playbooks::production(),
-            true,
-        );
-        Ok(())
+        self.fix_returning_report(dir).map(|_| ())
     }
 }
 
@@ -387,7 +423,7 @@ pub enum FixVerdict {
 /// One arm's result on one mutant.
 #[derive(Debug, Clone)]
 pub struct FloorOutcome {
-    pub name: &'static str,
+    pub name: String,
     pub expect_code: &'static str,
     pub mutator: MutatorKind,
     /// Codes the mutant provoked BEFORE any repair.
@@ -397,6 +433,50 @@ pub struct FloorOutcome {
     pub verdict: FixVerdict,
     /// The post-fix source when it compiles but diverged (the review artifact).
     pub diverged_source: Option<String>,
+    /// Wall time of the fixer call, milliseconds (the G2 latency axis;
+    /// per-iteration driver timings live in the verbose report).
+    pub fix_ms: f64,
+}
+
+/// A corpus case in the borrowed form the harness runs — the committed
+/// anchors ([`MUTANT_CASES`]) and the generated corpus
+/// ([`super::corpus_gen`]) unify here (Plan 019 T6.1).
+pub struct HarnessCase<'a> {
+    pub name: &'a str,
+    pub expect_code: &'static str,
+    pub kind: MutatorKind,
+    pub seed: &'a str,
+    pub broken: String,
+}
+
+impl<'a> HarnessCase<'a> {
+    /// Adapt a committed anchor. Errors when the declared mutation site is
+    /// absent from the seed (corpus integrity — never a silent no-op).
+    ///
+    /// # Errors
+    ///
+    /// `MutantCase::broken` failure (mutation site missing).
+    pub fn committed(c: &'a MutantCase) -> Result<Self, String> {
+        Ok(Self {
+            name: c.name,
+            expect_code: c.expect_code,
+            kind: c.mutator.kind,
+            seed: c.seed,
+            broken: c.broken()?,
+        })
+    }
+
+    /// Adapt a generated case (the broken half is precomputed).
+    #[must_use]
+    pub fn generated(g: &'a GeneratedCase) -> Self {
+        Self {
+            name: &g.name,
+            expect_code: g.expect_code,
+            kind: g.kind,
+            seed: &g.seed,
+            broken: g.broken.clone(),
+        }
+    }
 }
 
 /// Per-code aggregation — the published table shape.
@@ -503,7 +583,8 @@ impl FloorHarness {
             .is_ok()
     }
 
-    /// Measure one arm over the whole corpus.
+    /// Measure one arm over the committed anchor corpus (the original
+    /// Issue 035 surface — unchanged behavior).
     ///
     /// # Errors
     ///
@@ -512,10 +593,28 @@ impl FloorHarness {
     /// measurement is possible. A fixer that simply fails to fix things is a
     /// low score, not an error.
     pub fn measure(&self, fixer: &dyn CompileFixer) -> Result<FloorReport, String> {
-        let mut outcomes = Vec::with_capacity(MUTANT_CASES.len());
+        let cases: Vec<HarnessCase<'_>> = MUTANT_CASES
+            .iter()
+            .map(HarnessCase::committed)
+            .collect::<Result<_, _>>()?;
+        self.measure_cases(fixer, &cases)
+    }
+
+    /// Measure one arm over ANY case list (the generated corpus adapter —
+    /// Plan 019 T6.1). Same error semantics as [`FloorHarness::measure`].
+    ///
+    /// # Errors
+    ///
+    /// I/O or cargo-spawn failure mid-corpus.
+    pub fn measure_cases(
+        &self,
+        fixer: &dyn CompileFixer,
+        cases: &[HarnessCase<'_>],
+    ) -> Result<FloorReport, String> {
+        let mut outcomes = Vec::with_capacity(cases.len());
         let mut invalid_mutants = Vec::new();
-        for case in MUTANT_CASES {
-            let outcome = self.measure_one(fixer, case)?;
+        for case in cases {
+            let outcome = self.measure_one_by(case, |dir| fixer.fix(dir))?;
             if !outcome.mutant_valid {
                 invalid_mutants.push(format!(
                     "{} (expected {}, got {:?})",
@@ -533,12 +632,66 @@ impl FloorHarness {
         })
     }
 
-    fn measure_one(
+    /// The verbose driver arm (G2/G6/G7): runs the same
+    /// scaffold→before-check→fix→after-check flow but keeps each run's
+    /// [`FixCompileReport`] (per-iteration timings, candidate try evidence,
+    /// misses) alongside the scored outcome.
+    ///
+    /// # Errors
+    ///
+    /// I/O or cargo-spawn failure mid-corpus.
+    pub fn measure_driver(
         &self,
-        fixer: &dyn CompileFixer,
-        case: &MutantCase,
+        fixer: &DriverFixer,
+        cases: &[HarnessCase<'_>],
+    ) -> Result<(FloorReport, Vec<(String, FixCompileReport)>), String> {
+        let mut outcomes = Vec::with_capacity(cases.len());
+        let mut reports = Vec::with_capacity(cases.len());
+        let mut invalid_mutants = Vec::new();
+        for case in cases {
+            let slot: std::cell::RefCell<Option<FixCompileReport>> =
+                std::cell::RefCell::new(None);
+            let outcome = self.measure_one_by(case, |dir| {
+                let r = fixer.fix_returning_report(dir)?;
+                *slot.borrow_mut() = Some(r);
+                Ok(())
+            })?;
+            if !outcome.mutant_valid {
+                invalid_mutants.push(format!(
+                    "{} (expected {}, got {:?})",
+                    case.name, case.expect_code, outcome.codes_before
+                ));
+            }
+            let rep = slot
+                .borrow_mut()
+                .take()
+                .unwrap_or_default();
+            reports.push((case.name.to_string(), rep));
+            outcomes.push(outcome);
+        }
+        let rows = aggregate(&outcomes);
+        let report = FloorReport {
+            arm: fixer.name().to_string(),
+            outcomes,
+            rows,
+            invalid_mutants,
+        };
+        Ok((report, reports))
+    }
+
+    /// The work root (scaffold dirs live at `<root>/<case-name>/` — the
+    /// post-fix `cargo test` semantics pass walks them).
+    #[must_use]
+    pub fn work_root(&self) -> &Path {
+        &self.work_root
+    }
+
+    fn measure_one_by(
+        &self,
+        case: &HarnessCase<'_>,
+        fix: impl FnOnce(&Path) -> Result<(), String>,
     ) -> Result<FloorOutcome, String> {
-        let broken = case.broken()?;
+        let broken = case.broken.clone();
         let dir = self.scaffold(case.name, &broken)?;
 
         // Baseline check: the mutant MUST fail, with the declared code.
@@ -551,7 +704,9 @@ impl FloorHarness {
         codes_before.dedup();
         let mutant_valid = codes_before.iter().any(|c| c == case.expect_code);
 
-        fixer.fix(&dir)?;
+        let t0 = Instant::now();
+        fix(&dir)?;
+        let fix_ms = t0.elapsed().as_secs_f64() * 1000.0;
 
         let after = run_cargo(&self.cargo_bin, &dir, &["check", "--message-format=json"])?;
         let compiles = parse_error_diags(&after).is_empty();
@@ -566,14 +721,37 @@ impl FloorHarness {
         };
 
         Ok(FloorOutcome {
-            name: case.name,
+            name: case.name.to_string(),
             expect_code: case.expect_code,
-            mutator: case.mutator.kind,
+            mutator: case.kind,
             codes_before,
             mutant_valid,
             verdict,
             diverged_source,
+            fix_ms,
         })
+    }
+
+    /// Run `cargo test` in a scaffold dir (the G1 semantics pass — every
+    /// generated seed carries a ground-truth behavior test, so a fix that
+    /// compiles but changes behavior FAILS here, which textual
+    /// matched-inverse scoring cannot see).
+    ///
+    /// # Errors
+    ///
+    /// cargo unspawnable / dir unreadable. A FAILING test suite is
+    /// `Ok(false)`, not an error.
+    pub fn cargo_test_passes(&self, case_dir: &Path) -> Result<bool, String> {
+        let out = Command::new(&self.cargo_bin)
+            .args(["test", "--quiet"])
+            .current_dir(case_dir)
+            .env("CARGO_TARGET_DIR", case_dir.join("target"))
+            .env_remove("RUSTFLAGS")
+            .env_remove("RUSTC_WRAPPER")
+            .env_remove("CARGO_BUILD_RUSTFLAGS")
+            .output()
+            .map_err(|e| format!("cargo test spawn failed: {e}"))?;
+        Ok(out.status.success())
     }
 
     fn scaffold(&self, name: &str, source: &str) -> Result<PathBuf, String> {
@@ -581,8 +759,22 @@ impl FloorHarness {
         let src = dir.join("src");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&src).map_err(|e| format!("create {}: {e}", src.display()))?;
+        // Package names must be rustc identifiers — the corpus names carry
+        // literal suffixes ("world!") that make invalid crate names, and an
+        // invalid manifest produces ZERO diagnostics (cargo fails before
+        // rustc), which reads as a false corpus-integrity failure.
+        let pkg: String = name
+            .chars()
+            .map(|c| {
+                if c.is_ascii_alphanumeric() || c == '_' {
+                    c
+                } else {
+                    '_'
+                }
+            })
+            .collect();
         let manifest = format!(
-            "[package]\nname = \"{name}\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[lib]\npath = \"src/lib.rs\"\n\n[workspace]\n"
+            "[package]\nname = \"{pkg}\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\n[lib]\npath = \"src/lib.rs\"\n\n[workspace]\n"
         );
         std::fs::write(dir.join("Cargo.toml"), manifest)
             .map_err(|e| format!("write manifest: {e}"))?;
@@ -735,31 +927,34 @@ mod tests {
     fn aggregate_partitions_every_outcome() {
         let outcomes = vec![
             FloorOutcome {
-                name: "a",
+                name: "a".to_string(),
                 expect_code: "E0382",
                 mutator: MutatorKind::DropCloneCall,
                 codes_before: vec!["E0382".into()],
                 mutant_valid: true,
                 verdict: FixVerdict::MatchedInverse,
                 diverged_source: None,
+                fix_ms: 0.0,
             },
             FloorOutcome {
-                name: "b",
+                name: "b".to_string(),
                 expect_code: "E0382",
                 mutator: MutatorKind::DropCloneCall,
                 codes_before: vec!["E0382".into()],
                 mutant_valid: true,
                 verdict: FixVerdict::Unfixed,
                 diverged_source: None,
+                fix_ms: 0.0,
             },
             FloorOutcome {
-                name: "c",
+                name: "c".to_string(),
                 expect_code: "E0597",
                 mutator: MutatorKind::NarrowScope,
                 codes_before: vec!["E0597".into()],
                 mutant_valid: true,
                 verdict: FixVerdict::Diverged,
                 diverged_source: Some("x".into()),
+                fix_ms: 0.0,
             },
         ];
         let rows = aggregate(&outcomes);
