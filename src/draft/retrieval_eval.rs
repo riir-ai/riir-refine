@@ -1074,7 +1074,7 @@ mod tests {
         /// killed at the 85% bar).
         #[cfg(not(any(feature = "kernel_heal", feature = "sec")))]
         pub const ROUTER_ANNOTATION: f32 = 66.0 / 101.0;
-        #[cfg(feature = "kernel_heal")]
+        #[cfg(all(feature = "kernel_heal", not(feature = "sec")))]
         pub const ROUTER_ANNOTATION_3D: f32 = 84.0 / 130.0;
         /// 4-domain state (sec enabled): the TF-cosine lexical router has a
         /// mechanically harder task — the 6 sec corpus patterns are long
