@@ -77,6 +77,7 @@ pub struct LatentMatcher {
     clippy: Option<RuleIndex>,
     perf: Option<RuleIndex>,
     kernel: Option<RuleIndex>,
+    sec: Option<RuleIndex>,
     rule_book: std::collections::HashMap<String, RuleInfo>,
     /// G4 scratch — reused across every span + domain query.
     scratch: super::corpus_index::SuggestScratch,
@@ -189,6 +190,24 @@ impl LatentMatcher {
         #[cfg(not(feature = "kernel_heal"))]
         let kernel = None;
 
+        #[cfg(feature = "sec")]
+        let sec = index_domain!(
+            sec,
+            DomainId::Sec,
+            crate::domains::sec::SecDomain::build_corpus()
+                .into_iter()
+                .map(|e| {
+                    (
+                        e.rule_id().to_string(),
+                        e.buggy_code().to_string(),
+                        e.fixed_code().to_string(),
+                    )
+                })
+                .collect::<Vec<_>>()
+        );
+        #[cfg(not(feature = "sec"))]
+        let sec = None;
+
         if router_domains.is_empty() {
             return Err(
                 "LatentMatcher: no domains enabled (need at least one of clippy_lints/rust_perf/kernel_heal)"
@@ -212,6 +231,7 @@ impl LatentMatcher {
             clippy,
             perf,
             kernel,
+            sec,
             rule_book,
             scratch: super::corpus_index::SuggestScratch::default(),
         })
@@ -248,6 +268,7 @@ impl LatentMatcher {
             DomainId::Clippy => self.clippy.is_some(),
             DomainId::Perf => self.perf.is_some(),
             DomainId::Kernel => self.kernel.is_some(),
+            DomainId::Sec => self.sec.is_some(),
         }
     }
 
@@ -289,14 +310,20 @@ impl LatentMatcher {
     /// reusing the shared G4 scratch across domains. Field-direct index
     /// access keeps the borrow checker happy alongside the scratch borrow.
     fn suggest_all_domains(&mut self, code: &str, top_k: usize) -> Vec<(DomainId, Vec<ScoredRule>)> {
-        let mut out = Vec::with_capacity(3);
-        for domain in [DomainId::Clippy, DomainId::Perf, DomainId::Kernel] {
+        let mut out = Vec::with_capacity(4);
+        for domain in [
+            DomainId::Clippy,
+            DomainId::Perf,
+            DomainId::Kernel,
+            DomainId::Sec,
+        ] {
             // Direct field access (not `index_for`) so the immutable index
             // borrow + the mutable scratch borrow stay provably disjoint.
             let index = match domain {
                 DomainId::Clippy => self.clippy.as_ref(),
                 DomainId::Perf => self.perf.as_ref(),
                 DomainId::Kernel => self.kernel.as_ref(),
+                DomainId::Sec => self.sec.as_ref(),
             };
             if let Some(index) = index {
                 // Retrieve a POOL deeper than the caller's top_k: re-ranking

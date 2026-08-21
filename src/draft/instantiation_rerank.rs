@@ -166,6 +166,14 @@ fn instantiates(domain: DomainId, rule_id: &str, code: &str, file: &syn::File, m
             use crate::domains::rust_perf::proposers::collect_edits;
             !collect_edits(rule_id, code, file).is_empty()
         }
+        #[cfg(feature = "sec")]
+        DomainId::Sec => {
+            use crate::domains::sec::proposers::collect_edits;
+            if mode == RerankMode::Structural && !crate::domains::sec::proposers::FIXABLE_SEC.contains(&rule_id) {
+                return false;
+            }
+            !collect_edits(rule_id, code, file).is_empty()
+        }
         // Kernel has no proposers (Plan 005 Phase 5 deferred — the corpus is
         // concept-grade). Nothing to probe; retrieval order stands.
         _ => false,

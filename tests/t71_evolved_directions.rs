@@ -45,6 +45,7 @@ fn corpus_for(domain: DomainId) -> Vec<String> {
             .map(|e| e.buggy_code().to_string())
             .collect(),
         DomainId::Kernel => Vec::new(),
+        DomainId::Sec => Vec::new(),
     }
 }
 

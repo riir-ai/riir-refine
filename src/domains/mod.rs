@@ -21,3 +21,6 @@ pub mod kernel_opt;
 
 #[cfg(feature = "rustc_errors")]
 pub mod rustc_errors;
+
+#[cfg(feature = "sec")]
+pub mod sec;

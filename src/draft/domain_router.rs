@@ -57,11 +57,18 @@ pub enum DomainId {
     Perf,
     /// `kernel_opt` — GPU kernel optimization patterns.
     Kernel,
+    /// `sec` — security-pattern fixes (FFI/Drop/pointer hygiene, Plan 018).
+    Sec,
 }
 
 impl DomainId {
     /// All domains, in router order.
-    pub const ALL: [DomainId; 3] = [DomainId::Clippy, DomainId::Perf, DomainId::Kernel];
+    pub const ALL: [DomainId; 4] = [
+        DomainId::Clippy,
+        DomainId::Perf,
+        DomainId::Kernel,
+        DomainId::Sec,
+    ];
 
     /// Stable label (feature-independent).
     #[must_use]
@@ -70,6 +77,7 @@ impl DomainId {
             DomainId::Clippy => "clippy",
             DomainId::Perf => "perf",
             DomainId::Kernel => "kernel",
+            DomainId::Sec => "sec",
         }
     }
 }
@@ -427,13 +435,15 @@ impl SpectralVocab {
         use std::collections::BTreeMap;
 
         // Per-domain token counts (BTreeMap: deterministic iteration + no
-        // hash-order leakage into the vocab ranking).
-        let mut counts: BTreeMap<&str, [u32; 3]> = BTreeMap::new();
-        let mut totals = [0u64; 3];
+        // hash-order leakage into the vocab ranking). Vec-per-token so the
+        // domain count is not hardcoded (4 domains under `sec`; Plan 018).
+        let ndomains = domains.len();
+        let mut counts: BTreeMap<&str, Vec<u32>> = BTreeMap::new();
+        let mut totals = vec![0u64; ndomains];
         for (di, (_id, patterns)) in domains.iter().enumerate() {
             for pattern in patterns {
                 for_each_token(pattern, &mut |tok| {
-                    counts.entry(tok).or_insert([0; 3])[di] += 1;
+                    counts.entry(tok).or_insert(vec![0; ndomains])[di] += 1;
                     totals[di] += 1;
                 });
             }

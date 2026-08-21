@@ -223,6 +223,14 @@ pub use domains::kernel_opt::router::{
     AXIS_IS_ATTENTION, AXIS_IS_FUSION, AXIS_IS_IR_TRANSFORM,
 };
 
+// ── sec domain re-exports (behind `sec` feature, opt-in) ──────────────────
+#[cfg(feature = "sec")]
+pub use domains::sec::{SecDomain, SecFamily, SecRule, SecVerdict, UnsafeCounts, count_unsafe};
+
+/// Back-compat: `build_sec_seed_corpus` (behind `sec`).
+#[cfg(feature = "sec")]
+pub use domains::sec::corpus::build_sec_seed_corpus;
+
 /// `kernel_opt` thermal router (behind `kernel_heal`).
 #[cfg(feature = "kernel_heal")]
 pub use domains::kernel_opt::thermal::{KernelThermalRouter, ThermalTier};

@@ -12,6 +12,7 @@ space, drafts fixes via a modelless ternary SIMD matvec, and validates with a
 | **clippy_lints** (default) | `clippy_lints` | ✅ Production | 10 common lints (style/complexity/perf/nursery) |
 | **rust_perf** (default since 2026-08-13) | `rust_perf` | ✅ Phase 2 (GOAT G1+G5 PASS, Bench 013 promotion + Bench 015 finalization + Bench 016 Issue 012 + Bench 017 Issue 013 + Bench 020 Issue 014) | 50 rules from `rust-optimize` skill + nnethercote/perf-book + rustc-hash/bevy patterns + the hotpath-rs profiling guide (complexity/allocation/layout/concurrency/simd/arithmetic/iterators/dispatch/caching/io/bevy/wasm); 8 carry `context_notes` (2 ParetoDominated + 4 regime-fragile/Mixed + 2 NotBenchable metric-mismatch). Bench 020 added the deterministic alloc-count axis (exact integers, stable across repeat runs on 40/40 benchable rules) |
 | **kernel_opt** (opt-in) | `kernel_heal` | ✅ Phase 3 + Batch 1-8 corpus | 68 rules (50 popcorn-distilled Research 002-007 + 9 burn-cubecl Rust-native Research 008 + 9 burn-cubecl/cubecl-opt kernel-polymorphism/dtype-alignment/IR-strength-reduction Research 009); full distillation ~300-500 rules in ~15-25 batches |
+| **sec** (opt-in) | `sec` | ✅ Phase 0+1 (Bench 046) | 6 rules — FFI panic containment, Drop-glue panic safety, ptr-null hygiene, `from_raw_parts` len-zero, Rc backedges; 4 proposers + the real-clippy boundary gate (Plan 018 / Proposal 004) |
 
 Heavyweight LoRA is the last-resort fallback, not the co-equal path. Plan 005
 (2026-08-14) added the **latent suggest layer** — `cargo heal --suggest`
@@ -127,6 +128,7 @@ code; `--fix` CLI wiring is Phase 6.
 | `rust_perf_bench` | off | `rust_perf` | perf-bench Pareto validator (the GOAT gate; Bench 013) |
 | `kernel_heal` | off | `katgpt-core/variable_rank_domain_expert` | GPU kernel opt domain (Plan 001 Phase 3) |
 | `kernel_verify` | off | `kernel_heal` | CubeCL compile check (STUB — full validator deferred) |
+| `sec` | off | — | security-pattern healing domain (Plan 018; FFI/Drop/ptr hygiene, 6 rules + 4 proposers; the `--domain sec` CLI + boundary gate) |
 | `ruliology_search` | off | `clippy_lints` | L3 Pareto-front candidate search |
 | `latent_retrieval` | off | `dep:riir-rag`, `dep:riir-neuron-db` | Plan 005: span-level latent retrieval + `cargo heal --suggest`/`--fix` CLI (Bench 018 G1–G4 + Bench 019; T3.5 operator-aware BM25 tokenizer, Bench 027) |
 | `clippy_verify` + `latent_retrieval` | off | — | T3.5.5 real-`cargo clippy` labeling oracle (`ClippyOracle`) + the uncontaminated G1 harness (`tests/uncontaminated_g1.rs`) |

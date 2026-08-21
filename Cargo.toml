@@ -207,6 +207,20 @@ clippy_verify = ["clippy_lints"]
 # matched there); those codes report as misses and delegate to `cargo fix`.
 rustc_errors = ["compile_oracle"]
 
+# Plan 018 / Proposal 004: the `sec` domain — security-pattern healing
+# (FFI-boundary safety, Drop/panic safety, raw-pointer hygiene).
+# Opt-in (default-off), syn-only — ZERO new dependencies (the `rust_perf`
+# gating pattern). Suggest-only by default in `--fix` terms: the proposers
+# are conservative-gated + ride the `--fix --verify` compile gate on every
+# applied fix (Proposal 004 caveat 3).
+#
+# Phase 1 shipped 6 rules (5 of 11 candidates killed at mine-time
+# falsification — `improper_ctypes*` owns the extern-block declaration
+# side; two candidates had no bounded fix). NOT dependency auditing
+# (cargo-audit/cargo-deny), NOT a lint engine (dylint), NOT
+# judgment-bearing detection.
+sec = []
+
 # Ruliology candidate enumeration (L3 refinement layer).
 # Implies `clippy_lints` (searches over clippy corpus entries).
 ruliology_search = ["clippy_lints"]

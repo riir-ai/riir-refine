@@ -14,6 +14,7 @@
 | [`heal_domain_trait.md`](heal_domain_trait.md) | `HealDomain` + `HealEntry` traits — the one new abstraction |
 | [`rust_perf.md`](rust_perf.md) | Phase 2: `RustPerfDomain` + `PerfRule` + 39-rule seed corpus + `PerfVerifier` (`cargo test`); Phase 4: top-5 `syn` AST proposers (`--fix` upgrade) |
 | [`kernel_opt.md`](kernel_opt.md) | Phase 3: `KernelOptDomain` + `KernelRule` + `KernelExpertRouter` (`pick_domain`) + `KernelThermalRouter` (Plasma→Hot→Warm→Cold→Freeze) + `KernelVerifier` (stub) |
+| [`sec.md`](sec.md) | Plan 018: `SecDomain` + `SecRule` + the geiger-taxonomy unsafe counter + the banned-list boundary gate + 6-rule Phase-1 corpus (4 proposers) |
 | [`cross_domain_routing.md`](cross_domain_routing.md) | Why cross-domain auto-routing is NOT in scope (Proposal 001) |
 
 ## Source

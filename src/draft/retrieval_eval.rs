@@ -498,6 +498,7 @@ pub(crate) fn domain_index(d: DomainId) -> usize {
         DomainId::Clippy => 0,
         DomainId::Perf => 1,
         DomainId::Kernel => 2,
+        DomainId::Sec => 3,
     }
 }
 
@@ -1071,10 +1072,28 @@ mod tests {
         /// corpus-growth headroom. This is the standing per-batch measurement
         /// of annotation quality — NOT a gate-quality claim (gating stays
         /// killed at the 85% bar).
-        #[cfg(not(feature = "kernel_heal"))]
+        #[cfg(not(any(feature = "kernel_heal", feature = "sec")))]
         pub const ROUTER_ANNOTATION: f32 = 66.0 / 101.0;
         #[cfg(feature = "kernel_heal")]
         pub const ROUTER_ANNOTATION_3D: f32 = 84.0 / 130.0;
+        /// 4-domain state (sec enabled): the TF-cosine lexical router has a
+        /// mechanically harder task — the 6 sec corpus patterns are long
+        /// full-fn bodies whose common-token centroid absorbs generic Rust
+        /// spans, and the eval fixture set carries NO sec-labeled spans (so
+        /// every sec-routing counts as a miss by construction). Measured
+        /// 45/101 (44.6%, Plan 018 Phase 1). Floor = measured − 5 spans of
+        /// corpus-growth headroom. Same contract as above: re-measure +
+        /// re-pin with the delta recorded, never weaken silently. The
+        /// RETRIEVAL floors (the load-bearing ones) all held under sec.
+        #[cfg(all(feature = "sec", not(feature = "kernel_heal")))]
+        pub const ROUTER_ANNOTATION_4D: f32 = 40.0 / 101.0;
+        /// 4-domain + kernel state: the same mechanical drop, measured over
+        /// the 131-span set (101 + 30 kernel self-variants; the kernel spans
+        /// are strongly sec-adjacent vocabulary so they route correctly more
+        /// often). Measured 78/131 (59.5%, Plan 018 Phase 1). Floor =
+        /// measured − 5 spans.
+        #[cfg(all(feature = "sec", feature = "kernel_heal"))]
+        pub const ROUTER_ANNOTATION_4D_K: f32 = 73.0 / 131.0;
     }
 
     #[allow(clippy::cast_precision_loss)] // ratio arithmetic over tiny counts
@@ -1286,9 +1305,13 @@ mod tests {
         if report.router_checked > 0 {
             #[allow(clippy::cast_precision_loss)] // ratio over tiny counts
             let acc = report.router_correct as f32 / report.router_checked as f32;
-            #[cfg(feature = "kernel_heal")]
+            #[cfg(all(feature = "sec", feature = "kernel_heal"))]
+            let floor = floors::ROUTER_ANNOTATION_4D_K;
+            #[cfg(all(feature = "sec", not(feature = "kernel_heal")))]
+            let floor = floors::ROUTER_ANNOTATION_4D;
+            #[cfg(all(not(feature = "sec"), feature = "kernel_heal"))]
             let floor = floors::ROUTER_ANNOTATION_3D;
-            #[cfg(not(feature = "kernel_heal"))]
+            #[cfg(not(any(feature = "kernel_heal", feature = "sec")))]
             let floor = floors::ROUTER_ANNOTATION;
             assert!(
                 acc >= floor,
@@ -1478,5 +1501,43 @@ mod tests {
             again.iter().map(|r| (r.correct, r.misroutes_fixed)).collect::<Vec<_>>(),
             "router eval must be deterministic"
         );
+    }
+
+    /// Plan 018 T1.5 — the sec-domain self-variant floor (the kernel
+    /// precedent): every sec corpus rule's `buggy_code`, identifier-renamed
+    /// via the shared deterministic map, must retrieve ITS OWN rule at top-1
+    /// in the sec domain. Establishes the new domain's retrieval floor
+    /// WITHOUT touching the shared eval fixture set (the 4-domain router
+    /// annotation floor is re-pinned separately — see
+    /// [`floors::ROUTER_ANNOTATION_4D`]).
+    #[cfg(feature = "sec")]
+    #[test]
+    fn sec_self_variants_retrieve_top1() {
+        use crate::domains::sec::SecDomain;
+        use crate::domain::HealDomain;
+        let corpus = SecDomain::build_corpus();
+        assert!(corpus.len() >= 6, "Phase-1 survival count");
+        let mut matcher = LatentMatcher::from_enabled_domains()
+            .expect("build matcher");
+        let mut misses = Vec::new();
+        for rule in &corpus {
+            let probe = mutate_shape(&rule.buggy_code);
+            let (_routed, by_domain) = matcher.suggest_span(&probe, 3);
+            let sec_rules = by_domain
+                .iter()
+                .find(|(d, _)| *d == DomainId::Sec)
+                .map(|(_, rules)| rules)
+                .expect("sec domain present");
+            let top1 = sec_rules
+                .first()
+                .map_or("", |r| r.rule_id.as_str());
+            if top1 != rule.rule_id {
+                misses.push(format!(
+                    "{}: top1={top1} (want {})",
+                    rule.rule_id, rule.rule_id
+                ));
+            }
+        }
+        assert!(misses.is_empty(), "sec self-variant top-1 misses:\n{}", misses.join("\n"));
     }
 }

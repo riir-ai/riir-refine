@@ -164,7 +164,7 @@ fn usage() -> ! {
         "cargo-heal (Plan 005) — modelless code healing via latent corpus retrieval
 
 USAGE:
-    cargo heal --suggest [--domain <auto|clippy|perf|kernel>] [--top-k <N>] <path>...
+    cargo heal --suggest [--domain <auto|clippy|perf|kernel|sec>] [--top-k <N>] <path>...
     cargo heal --fix [--write] [--no-fmt] [--quiet] [--verify [--verify-args <s>]] [--top-k <N>] <path>...
     cargo heal --fix-compile [--write] [--max-iters <N>] [--verify-args <s>] <path>...
     cargo heal --dump-trajectories > trajectories.jsonl
@@ -305,8 +305,9 @@ fn parse_args() -> Args {
                     "clippy" => args.domain = Some(DomainId::Clippy),
                     "perf" => args.domain = Some(DomainId::Perf),
                     "kernel" => args.domain = Some(DomainId::Kernel),
+                    "sec" => args.domain = Some(DomainId::Sec),
                     other => {
-                        eprintln!("unknown --domain {other:?} (want auto|clippy|perf|kernel)");
+                        eprintln!("unknown --domain {other:?} (want auto|clippy|perf|kernel|sec)");
                         usage();
                     }
                 }
@@ -427,6 +428,7 @@ fn snippet_head(text: &str) -> &str {
 /// the semantics change in the diff output when the applied strategy
 /// sits in the exclusion class (clone-instead-of-borrow, drop-order
 /// change, ownership transfer, lifetime loosening).
+#[cfg(feature = "rustc_errors")]
 fn semantic_note_suffix(note: Option<&'static str>) -> String {
     match note {
         None => String::new(),
@@ -434,6 +436,7 @@ fn semantic_note_suffix(note: Option<&'static str>) -> String {
     }
 }
 
+#[cfg(feature = "rustc_errors")]
 fn truncate(s: &str, n: usize) -> String {
     if s.chars().count() <= n {
         s.to_string()
@@ -1013,7 +1016,9 @@ fn main() {
             // clippy` applied rust_perf rules (vec-with-capacity edits landed
             // in katgpt-pruners under --domain clippy). `auto` (None) keeps
             // both; `kernel` runs neither (kernel proposers are Phase 5).
-            let (run_perf, run_clippy) = fix_domain_scopes(args.domain);
+            let (run_perf, run_clippy, run_sec) = fix_domain_scopes(args.domain);
+            #[cfg(not(feature = "sec"))]
+            let _ = run_sec; // only consumed under the `sec` feature
             // fxhashmap dep gate (Issue 015): skip the rule for files in
             // crates without the rustc-hash dependency.
             #[cfg(feature = "fix_verify")]
@@ -1080,6 +1085,20 @@ fn main() {
                         edits.extend(
                             riir_clippy::domains::clippy_lints::proposers::collect_edits(
                                 lint, &current, &parsed,
+                            ),
+                        );
+                    }
+                }
+                #[cfg(feature = "sec")]
+                if run_sec {
+                    // Sec proposers are conservative-gated (Plan 018 T1.3):
+                    // guards-already-present skips, signature-changing
+                    // refusals — every applied fix still rides the
+                    // `--fix --verify` compile gate when enabled.
+                    for rule in riir_clippy::domains::sec::proposers::FIXABLE_SEC {
+                        edits.extend(
+                            riir_clippy::domains::sec::proposers::collect_edits(
+                                rule, &current, &parsed,
                             ),
                         );
                     }
@@ -1504,10 +1523,11 @@ fn main() {
 /// `(run_perf, run_clippy)`. `auto` (None) runs both compiled-in domains
 /// (the historical behavior); an explicit domain runs ONLY its own
 /// proposers; `kernel` runs neither (kernel proposers are Phase 5).
-fn fix_domain_scopes(domain: Option<DomainId>) -> (bool, bool) {
+fn fix_domain_scopes(domain: Option<DomainId>) -> (bool, bool, bool) {
     (
         domain.is_none_or(|d| d == DomainId::Perf),
         domain.is_none_or(|d| d == DomainId::Clippy),
+        domain.is_none_or(|d| d == DomainId::Sec),
     )
 }
 
@@ -1517,7 +1537,7 @@ mod fix_domain_tests {
 
     #[test]
     fn auto_runs_both() {
-        assert_eq!(fix_domain_scopes(None), (true, true));
+        assert_eq!(fix_domain_scopes(None), (true, true, true));
     }
 
     #[test]
@@ -1525,17 +1545,22 @@ mod fix_domain_tests {
         // The Issue 031 H2 regression: `--domain clippy` must not run
         // rust_perf proposers (vec-with-capacity applied under
         // `--domain clippy` in the katgpt-pruners batch).
-        assert_eq!(fix_domain_scopes(Some(DomainId::Clippy)), (false, true));
+        assert_eq!(fix_domain_scopes(Some(DomainId::Clippy)), (false, true, false));
     }
 
     #[test]
     fn perf_scopes_out_clippy() {
-        assert_eq!(fix_domain_scopes(Some(DomainId::Perf)), (true, false));
+        assert_eq!(fix_domain_scopes(Some(DomainId::Perf)), (true, false, false));
     }
 
     #[test]
     fn kernel_runs_neither_syn_domain() {
-        assert_eq!(fix_domain_scopes(Some(DomainId::Kernel)), (false, false));
+        assert_eq!(fix_domain_scopes(Some(DomainId::Kernel)), (false, false, false));
+    }
+
+    #[test]
+    fn sec_scopes_to_sec_only() {
+        assert_eq!(fix_domain_scopes(Some(DomainId::Sec)), (false, false, true));
     }
 }
 
