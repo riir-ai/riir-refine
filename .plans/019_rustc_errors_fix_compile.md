@@ -91,6 +91,7 @@ this table has a shelf life and must be re-measured, not cited.
 | cargo JSON diagnostic parsing (spans, codes, rendered messages) | `ClippyOracle` (T3.5.5) | parses real `cargo clippy` JSON today; `cargo check` JSON is the same format |
 | Candidate ranking / min-complexity preference | L3 `ast_delta_size` (Issue 005) | the "prefer the conservative fix" ordering among compiling candidates |
 | Learning log + trajectory memory | `EvolveRecorder` → `memory.json` (Issue 018, BLAKE3-committed since T7.4) | persists across runs, per-(lint,fix) outcome buckets |
+| **Durable indexed trajectory storage** | riir-neuron-db `LocalKvStore` + `Bm25Index` + `DenseEmbedIndex` | the Warm-tier substrate already in production (riir-dapps, riir-games); transitively present under `latent_retrieval` — ZERO new dep surface |
 | Selection policy that learns | `SelectionMode::BetaPosterior` (T9.3, Bench 028) | −8.4% selection regret in the thin-evidence regime — exactly the playbook regime |
 | Mutation-generated self-labeled eval | `mutate_shape` (kernel self-variant probes, Issue 017) | broken-code-with-known-inverse-fix, no hand labeling |
 | **Candidate generator keyed by rustc error code** | ❌ **the missing piece — this plan** | playbook templates, same class as the 40 clippy proposers |
@@ -119,6 +120,9 @@ src/domains/rustc_errors/diag.rs       # cargo check --message-format=json → R
 src/domains/rustc_errors/driver.rs     # the bounded fix loop
 src/domains/rustc_errors/playbooks/    # per-family syn proposers (move templates)
                                        #   e0597.rs (first), borrowck.rs (rest)
+src/traj_store.rs                      # NeuronBackend for trajectories (behind
+                                       #   latent_retrieval; JsonBackend stays the
+                                       #   zero-dep default — one active backend)
 scripts/watch_heal.sh                  # real-use watch wrapper (Phase 5)
 tests/fix_compile_gates.rs             # GOAT gates
 tests/mutations/                       # generated eval corpus (Phase 6)
@@ -331,16 +335,38 @@ arbitrate; revert is one iteration).
   outcome buckets keyed `(error_code, strategy_id)`. Evidential tiers apply
   (oracle-passed = the strongest tier we have — better than the clippy
   path's parse-only successes).
-- [ ] T4.2 Move-ordering policy: candidates ordered by BetaPosterior over
-  `(error_code, strategy_id)` from memory, AST-delta tiebreak, unseen
-  strategy prior 0.32 (the T9.3 shape). Measured benefit required at G6 —
-  if ordering shows no gain on the corpus, record negative + keep static
-  min-delta ordering (the honest T9.4 precedent).
-- [ ] T4.3 Per-repo memory + manual-mining log: watch wrapper pins
-  `RIIR_HEAL_MEMORY=<repo>/.heal/memory.json` AND appends every fix to
-  `<repo>/.heal/fix_log.jsonl` (one line per event: ts, file, error_code,
-  strategy, applied|reverted, iter). This is the "log to some folder and we
-  manual grab it later" surface — grep-able, no tooling needed.
+- [ ] T4.2 **Shape-conditional move-ordering policy (owner direction:
+  consume the trajectory store directly):** on propose, hybrid-retrieve
+  k-nearest past trajectories for the current error shape (BM25 lexical +
+  8-D KNN via `DenseEmbedIndex`/`ModellessEmbedder` — the
+  NeuronDbRetriever composition) → BetaPosterior prior per strategy
+  weighted by NEIGHBOR OUTCOMES (relevance-weighted, not flat family
+  counters — flat `(code,strategy)` buckets cannot distinguish
+  E0597-boxed-closure from E0597-returns-ref; retrieved neighbors can).
+  AST-delta tiebreak, unseen-strategy prior 0.32, Withdrawn excluded from
+  retrieval (the T7.4 rule). Measured benefit required at G6 — if ordering
+  shows no gain on the corpus, record negative + keep static min-delta
+  ordering (the honest T9.4 precedent). Falls back to flat
+  `(error_code, strategy_id)` BetaPosterior when the JsonBackend is active
+  (default build).
+- [ ] T4.3 **Trajectory store = neuron-db substrate (primary, behind
+  `latent_retrieval`):** `LocalKvStore` at `<repo>/.heal/trajectories.kv`
+  — encrypted WAL (stable per-repo key derived from a generated `.heal/key`
+  seed; the threat model is integrity+durability, not secrecy),
+  `CompactionPolicy`-bounded growth, `CommitBatch` flushes (94.5× measured
+  vs per-row fsync, Bench 472). Rows via `put_pod` keyed
+  `traj:{error_code}:{strategy_id}:{blake3_12(shape)}`; family scans via
+  `scan_prefix_bytes`; lexical axis `Bm25Index`; latent axis
+  `DenseEmbedIndex` with the SAME deterministic `ModellessEmbedder` the
+  corpus RuleIndex uses — one embedding substrate for rules + lived
+  experience. Zero-dep default build keeps the `memory.json` envelope
+  (Issue 018 G4: dep surface unchanged) — the tiering is the constraint,
+  one active backend per build, no dual-write drift.
+- [ ] T4.3b **Human grep surface = on-demand export, not a shadow log:**
+  `cargo heal --dump-trajectories [--jsonl]` reads either backend →
+  stdout (redirectable). One source of truth; `.heal/misses/*.md` stays
+  the human authoring queue (T4.4, unchanged). The watch wrapper pins the
+  store path (not a JSONL append).
 - [ ] T4.4 **Miss capture — the corpus-growth loop:** when NO template fixes
   an error, dump the full diagnostic + source excerpt to
   `<repo>/.heal/misses/E0597-<ts>.md`. Misses are the authoring queue for
@@ -351,6 +377,10 @@ arbitrate; revert is one iteration).
   shape-matching within a family proves insufficient (error code is exact;
   the refuted-over-learning precedents — T9.4, `gemma2_directions` — are
   binding).
+- [ ] T4.6 Store scope: per-repo `.heal/trajectories.kv` (repo idiom
+  locality) vs global `~/.cache/riir-clippy/trajectories.kv` (cross-project
+  volume is where selection learning compounds) — decide via the G6
+  measurement run both ways; default per-repo, `--global-traj` opt-in flag.
 
 ### Phase 5 — real use: the watch loop
 
@@ -427,9 +457,11 @@ arbitrate; revert is one iteration).
   the never-wrong number: non-compiling edits surviving a run = 0 (pinned
   by test, incl. a deliberately-bad template that MUST be reverted).
 - [ ] T6.7 **G6/G7 self-evolve:** (a) trajectories persist across runs
-  (memory round-trip); (b) move ordering measurably improves selection on
-  the corpus after a learning pass (fewer candidates-to-first-success) —
-  or honest negative recorded (T4.2's clause); (c) miss-capture produces a
+  (store round-trip, BOTH backends); (b) move ordering measurably improves
+  selection on the corpus after a learning pass (fewer
+  candidates-to-first-success; shape-conditional retrieval vs flat counters
+  measured separately — the T4.2 upgrade must earn its keep) — or honest
+  negative recorded (T4.2's clause); (c) miss-capture produces a
   readable authoring queue from seeded unfixed errors.
 - [ ] T6.8 Bench doc + AGENTS.md feature-matrix row (`rustc_errors`,
   default-off until G-gates pass; promotion per the modelless-gain rule —
