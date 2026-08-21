@@ -1,7 +1,7 @@
 # Bench 042: TETHER-adaptive selection blend — A/B vs the pinned `W_EVO/W_RATE`
 
 **Date:** 2026-08-21
-**Issue:** 033 (riir-clippy) — TETHER-adaptive selection blend
+**Issue:** 033 (riir-clippy) — TETHER-adaptive selection blend; T1-T6 all closed, issue resolved-and-removed in commit `5494dbe` (this note is the artifact)
 **Source:** [Research 426](../../riir-train/.research/426_Le_Critique_PVF_TETHER.md) §6 R2b — arXiv:2608.16739 "Le Critique" (TETHER baseline). Primitive home: katgpt-rs Issue 675 (`tether`).
 **Harnesses:** `tests/t33_tether_selection_ab.rs` (A/B, 8 tests), `tests/t33_tether_g4_alloc.rs` (G4 + determinism, 3 tests), `src/selection_tether.rs` (8 unit fixtures)
 
