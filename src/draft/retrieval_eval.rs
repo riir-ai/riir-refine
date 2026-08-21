@@ -458,13 +458,13 @@ const PROBE_TOP_K: usize = 8;
 
 /// The labeled eval span set as OWNED strings (shared by `run_eval` + the
 /// Issue 020 router eval — both must measure the SAME spans).
-struct OwnedEvalSpan {
-    label: String,
-    domain: DomainId,
-    code: String,
+pub(crate) struct OwnedEvalSpan {
+    pub(crate) label: String,
+    pub(crate) domain: DomainId,
+    pub(crate) code: String,
 }
 
-fn labeled_eval_spans() -> Vec<OwnedEvalSpan> {
+pub(crate) fn labeled_eval_spans() -> Vec<OwnedEvalSpan> {
     let mut spans = Vec::new();
     #[cfg(feature = "clippy_lints")]
     for (lint, code) in super::eval_fixtures_clippy::CLIPPY_SPANS {
@@ -493,7 +493,7 @@ fn labeled_eval_spans() -> Vec<OwnedEvalSpan> {
     spans
 }
 
-fn domain_index(d: DomainId) -> usize {
+pub(crate) fn domain_index(d: DomainId) -> usize {
     match d {
         DomainId::Clippy => 0,
         DomainId::Perf => 1,

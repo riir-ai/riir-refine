@@ -32,6 +32,7 @@ pub mod eval_fixtures_clippy;
 pub mod eval_fixtures_composite;
 pub mod eval_fixtures_cross_domain;
 pub mod eval_fixtures_perf;
+pub mod headroom_probe;
 pub mod latent_matcher;
 #[cfg(feature = "clippy_verify")]
 pub mod clippy_oracle;
@@ -48,6 +49,11 @@ pub use domain_router::{
 pub use latent_matcher::{LatentMatcher, RuleInfo, SpanSuggestion};
 #[cfg(feature = "clippy_verify")]
 pub use clippy_oracle::{ClippyOracle, OracleVerdict};
+pub use headroom_probe::{
+    print_headroom_report, run_headroom_probe, run_headroom_probe_with, HeadroomMetrics,
+    HeadroomMiss, HeadroomReport, HeadroomVerdict, MissKind, HEADROOM_DEPTHS,
+    HEADROOM_STOP_BAR_PP,
+};
 pub use instantiation_rerank::{RerankMode, RERANK_POOL};
 pub use op_tokenizer::{RustOpBigramTokenizer, RustOpTokenizer, BIGRAM_SEP, OP_PREFIX};
 pub use retrieval_eval::{run_eval, run_eval_with, run_retrieval_sweep, run_router_eval, EvalReport, DomainMetrics as EvalDomainMetrics};

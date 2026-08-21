@@ -406,3 +406,312 @@ fn t355_rerank_latency_g2() {
     let overhead = timings[1].1 - timings[0].1;
     println!("  overhead: {overhead:+.1} us/span ({:+.1}%)", overhead / timings[0].1 * 100.0);
 }
+
+// ── Issue 034 T1 — selection headroom on the uncontaminated surface ─────────
+//
+// The lib-side probe (`draft::headroom_probe`) measures headroom against OUR
+// labels on single-lint fixtures — exactly the surface
+// `rerank_circularity_diagnostic` showed is decided by retrieval, so a number
+// read only there could be a fixture artifact. These tests re-measure with
+// real `cargo clippy` as ground truth over spans where several corpus lints
+// genuinely apply, i.e. where "which candidate wins" is an ordering decision.
+//
+// Two acceptance criteria are measured, because the lenient one saturates:
+//
+// - **any-true** (`t1_dflash2_composite_headroom`): top-1 counts if real
+//   clippy reports it at all. This mirrors `t355_composite_multi_lint_g1`.
+// - **fixable-true** (`t1_dflash2_composite_headroom_fixable`): top-1 counts
+//   only if it is a true lint the `--fix` path can actually apply
+//   (`FIXABLE_LINTS`). A true-but-unfixable top-1 makes `--fix` decline even
+//   when a fixable true lint sits deeper in the pool — that is a real,
+//   recoverable selection miss, and it is invisible to the lenient criterion.
+//
+// Numbers are printed, not pinned: clippy's lint set moves between toolchains
+// (see the module note). Only structural invariants are asserted.
+
+/// One surface's headroom measurement.
+struct CompositeHeadroom {
+    scored: usize,
+    /// Spans where the production top-1 was accepted.
+    chosen: usize,
+    /// Per `HEADROOM_DEPTHS` entry: spans with an accepted rule in the pool.
+    pool: Vec<usize>,
+    /// `(wanted set, chosen rule, best accepted rank in the deepest pool)`.
+    misses: Vec<(String, String, Option<usize>)>,
+}
+
+impl CompositeHeadroom {
+    #[allow(clippy::cast_precision_loss)] // ≤28 spans; display arithmetic
+    fn pct(&self, k: usize) -> f32 {
+        if self.scored == 0 { 0.0 } else { k as f32 / self.scored as f32 * 100.0 }
+    }
+    fn ceiling(&self) -> usize {
+        *self.pool.last().expect("depths non-empty")
+    }
+    fn headroom_pp(&self) -> f32 {
+        self.pct(self.ceiling()) - self.pct(self.chosen)
+    }
+    fn selection_misses(&self) -> usize {
+        self.misses.iter().filter(|(_, _, r)| r.is_some()).count()
+    }
+}
+
+/// The clippy-domain ranked rule ids at pool depth `k`, in production order.
+///
+/// Owned ids: the matcher is borrowed mutably per query (shared G4 scratch),
+/// so a borrowed view cannot outlive the next depth's call.
+fn ranked_clippy_ids(matcher: &mut LatentMatcher, code: &str, k: usize) -> Vec<String> {
+    let (_, by_domain) = matcher.suggest_span(code, k);
+    by_domain
+        .iter()
+        .find(|(d, _)| *d == DomainId::Clippy)
+        .map_or_else(Vec::new, |(_, rules)| {
+            rules.iter().take(k).map(|r| r.rule_id.clone()).collect()
+        })
+}
+
+/// Measure headroom over `(span, accepted-rule set)` pairs.
+///
+/// Each depth gets its OWN query: the matcher re-ranks *the pool*
+/// (`max(top_k, RERANK_POOL)`), so depth is a configuration and a deeper pool
+/// can promote a top-1 the shallower one never saw — it cannot be read off by
+/// slicing a single deep list.
+fn measure_composite_headroom(pairs: &[(&Truth, BTreeSet<String>)]) -> CompositeHeadroom {
+    measure_composite_headroom_with(pairs, RerankMode::default())
+}
+
+/// [`measure_composite_headroom`] under an explicit re-rank mode — the
+/// instrument-power control. Headroom is a property of the SELECTOR under
+/// test, so the selector must be nameable.
+fn measure_composite_headroom_with(
+    pairs: &[(&Truth, BTreeSet<String>)],
+    rerank: RerankMode,
+) -> CompositeHeadroom {
+    let depths = riir_clippy::draft::HEADROOM_DEPTHS;
+    let mut matcher = LatentMatcher::from_enabled_domains()
+        .expect("build matcher")
+        .with_rerank_mode(rerank);
+
+    let mut out = CompositeHeadroom {
+        scored: pairs.len(),
+        chosen: 0,
+        pool: vec![0; depths.len()],
+        misses: Vec::new(),
+    };
+
+    for (t, accepted) in pairs {
+        let lists: Vec<Vec<String>> = depths
+            .iter()
+            .map(|&k| ranked_clippy_ids(&mut matcher, t.code, k))
+            .collect();
+        // Production selection is the RERANK_POOL-deep query, by definition.
+        let chosen = ranked_clippy_ids(&mut matcher, t.code, RERANK_POOL)
+            .first()
+            .cloned();
+
+        let correct = chosen.as_ref().is_some_and(|r| accepted.contains(r));
+        if correct {
+            out.chosen += 1;
+        }
+        for (i, list) in lists.iter().enumerate() {
+            if list.iter().any(|r| accepted.contains(r)) {
+                out.pool[i] += 1;
+            }
+        }
+        if !correct {
+            let deepest = lists.last().expect("depths non-empty");
+            let rank = deepest.iter().position(|r| accepted.contains(r));
+            let want: Vec<&str> = accepted.iter().map(String::as_str).collect();
+            out.misses.push((
+                format!("{want:?}"),
+                chosen.unwrap_or_else(|| "(none)".to_string()),
+                rank,
+            ));
+        }
+    }
+    out
+}
+
+fn print_composite_headroom(tag: &str, h: &CompositeHeadroom) {
+    let depths = riir_clippy::draft::HEADROOM_DEPTHS;
+    print!("\n  [{tag}] scored {} | recall@1 {:.1}%", h.scored, h.pct(h.chosen));
+    for (i, &k) in depths.iter().enumerate() {
+        print!("   pool@{k} {:.1}%", h.pct(h.pool[i]));
+    }
+    println!(
+        "\n  [{tag}] headroom (pool@{} − recall@1): {:+.1}pp   ({} selection / {} retrieval misses)",
+        depths[depths.len() - 1],
+        h.headroom_pp(),
+        h.selection_misses(),
+        h.misses.len() - h.selection_misses(),
+    );
+    for (want, chosen, rank) in &h.misses {
+        match rank {
+            Some(r) => println!("    SELECTION  want={want} chosen={chosen} best_accepted_rank={r}"),
+            None => println!("    RETRIEVAL  want={want} chosen={chosen} (nothing accepted in pool)"),
+        }
+    }
+    let bar = riir_clippy::draft::HEADROOM_STOP_BAR_PP;
+    println!(
+        "  [{tag}] T1.2 stop bar {bar:.1}pp -> {}",
+        if h.headroom_pp() < bar { "STOP on this criterion" } else { "PROCEED on this criterion" }
+    );
+    if h.chosen == h.scored {
+        println!(
+            "  [{tag}] NOTE: recall@1 is SATURATED at 100% — this criterion has zero \
+             measurement power here; a 0.0pp reading is 'cannot see', not 'is not there'."
+        );
+    }
+}
+
+/// The multi-lint spans real clippy confirms, with their true corpus lints.
+fn composite_scorable(truth: &[Truth]) -> Vec<&Truth> {
+    truth.iter().filter(|t| t.compiles && t.real.len() > 1).collect()
+}
+
+fn structural_invariants(h: &CompositeHeadroom) {
+    assert!(
+        h.ceiling() >= h.chosen,
+        "pool ceiling {} below recall@1 {} — the probe is comparing two different \
+         rankings and the headroom number is meaningless",
+        h.ceiling(),
+        h.chosen
+    );
+    assert_eq!(
+        h.misses.len(),
+        h.scored - h.chosen,
+        "miss taxonomy must cover exactly the non-chosen spans"
+    );
+}
+
+/// T1, lenient criterion: any lint real clippy reports counts.
+#[test]
+fn t1_dflash2_composite_headroom() {
+    let oracle = ClippyOracle::new();
+    if !oracle.is_available() {
+        eprintln!("SKIP: cargo not available");
+        return;
+    }
+    println!("\n=== Issue 034 T1 — headroom, real-clippy composite, ANY-TRUE ===");
+    let truth = gather_truth_over(riir_clippy::draft::eval_fixtures_composite::COMPOSITE_SPANS);
+    let scorable = composite_scorable(&truth);
+    println!("  authored {} | scorable multi-lint {}", truth.len(), scorable.len());
+    if scorable.len() < 5 {
+        println!("  INSUFFICIENT: fewer than 5 multi-lint spans — no verdict.");
+        return;
+    }
+
+    let pairs: Vec<(&Truth, BTreeSet<String>)> =
+        scorable.iter().map(|t| (*t, t.real.clone())).collect();
+    let h = measure_composite_headroom(&pairs);
+    print_composite_headroom("any-true", &h);
+    structural_invariants(&h);
+}
+
+/// T1, production criterion: the top-1 must be a true lint `--fix` can APPLY.
+///
+/// `FIXABLE_LINTS` is the `--fix` eligibility table. A top-1 that real clippy
+/// confirms but no proposer can rewrite yields a decline, so on that span the
+/// pipeline heals nothing even when a fixable true lint sat at rank 2. The
+/// lenient criterion scores those spans as wins; this one does not.
+#[test]
+fn t1_dflash2_composite_headroom_fixable() {
+    let oracle = ClippyOracle::new();
+    if !oracle.is_available() {
+        eprintln!("SKIP: cargo not available");
+        return;
+    }
+    println!("\n=== Issue 034 T1 — headroom, real-clippy composite, FIXABLE-TRUE ===");
+    let truth = gather_truth_over(riir_clippy::draft::eval_fixtures_composite::COMPOSITE_SPANS);
+    let scorable = composite_scorable(&truth);
+
+    let fixable: BTreeSet<&str> =
+        riir_clippy::domains::clippy_lints::proposers::FIXABLE_LINTS
+            .iter()
+            .copied()
+            .collect();
+
+    // Only spans with at least one FIXABLE true lint are scorable: a span
+    // whose every true lint is unfixable has no correct answer to select.
+    let pairs: Vec<(&Truth, BTreeSet<String>)> = scorable
+        .iter()
+        .filter_map(|t| {
+            let accepted: BTreeSet<String> = t
+                .real
+                .iter()
+                .filter(|l| fixable.contains(l.as_str()))
+                .cloned()
+                .collect();
+            match accepted.is_empty() {
+                true => None,
+                false => Some((*t, accepted)),
+            }
+        })
+        .collect();
+    println!(
+        "  multi-lint {} | with a FIXABLE true lint {} ({} fixable lints in the table)",
+        scorable.len(),
+        pairs.len(),
+        fixable.len()
+    );
+    if pairs.len() < 5 {
+        println!("  INSUFFICIENT: fewer than 5 scorable spans — no verdict.");
+        return;
+    }
+
+    let h = measure_composite_headroom(&pairs);
+    print_composite_headroom("fixable-true", &h);
+    structural_invariants(&h);
+}
+
+/// T1 instrument-power control: does this surface's headroom metric respond
+/// at all?
+///
+/// Both criteria above read 0.0pp with `recall@1` pinned at 100%, and a
+/// saturated metric cannot distinguish "no headroom" from "cannot see". The
+/// discriminating question is whether the SAME metric on the SAME spans shows
+/// headroom for a WEAKER selector. `RerankMode::Off` is that weaker selector:
+/// pure text similarity, no instantiation evidence.
+///
+/// - control shows headroom, shipped mode shows none → the metric works and
+///   the T3.5.5 instantiation re-ranker has already consumed the band. A
+///   DFlash2-style selector would be re-harvesting a harvested field.
+/// - control also reads 0.0pp → the metric is blind on this surface and it
+///   contributes no evidence to the T1.2 stop rule either way.
+#[test]
+fn t1_dflash2_composite_headroom_control() {
+    let oracle = ClippyOracle::new();
+    if !oracle.is_available() {
+        eprintln!("SKIP: cargo not available");
+        return;
+    }
+    println!("\n=== Issue 034 T1 — headroom instrument-power control (rerank OFF vs shipped) ===");
+    let truth = gather_truth_over(riir_clippy::draft::eval_fixtures_composite::COMPOSITE_SPANS);
+    let scorable = composite_scorable(&truth);
+    let pairs: Vec<(&Truth, BTreeSet<String>)> =
+        scorable.iter().map(|t| (*t, t.real.clone())).collect();
+    if pairs.len() < 5 {
+        println!("  INSUFFICIENT: fewer than 5 multi-lint spans — no verdict.");
+        return;
+    }
+
+    let off = measure_composite_headroom_with(&pairs, RerankMode::Off);
+    let shipped = measure_composite_headroom_with(&pairs, RerankMode::default());
+    print_composite_headroom("rerank=off", &off);
+    print_composite_headroom("rerank=shipped", &shipped);
+    structural_invariants(&off);
+    structural_invariants(&shipped);
+
+    println!(
+        "\n  instrument verdict: off {:+.1}pp vs shipped {:+.1}pp -> {}",
+        off.headroom_pp(),
+        shipped.headroom_pp(),
+        if off.headroom_pp() >= riir_clippy::draft::HEADROOM_STOP_BAR_PP {
+            "METRIC HAS POWER — a weaker selector leaves a band this metric sees, so the \
+             shipped 0.0pp is a real negative, not blindness"
+        } else {
+            "METRIC IS BLIND on this surface — it cannot see a band even for the weakest \
+             selector, so it contributes NO evidence to the T1.2 stop rule"
+        }
+    );
+}
