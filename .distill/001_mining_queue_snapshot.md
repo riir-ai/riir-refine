@@ -9,6 +9,24 @@
 
 ## Mining queue snapshot (update per batch — this is the resume state)
 
+- **2026-08-22 — Plan 019 Phase 6 COMPLETE (the GOAT session; Bench 045).** The
+  N≥200 corpus landed as `rustc_errors::corpus_gen` (200 generated, deterministic,
+  stratified, every seed carrying a ground-truth behavior test) + the 12 committed
+  anchors = 212; integrity + seed-validity + null-arm gates all green (two real
+  corpus bugs caught on the first run: an invalid manifest name from a literal `!`
+  in a case name, and 10 hand-counted string-length expectations — the seeds
+  COMPILED but their own tests failed, which only the seed-validity pass can see;
+  lesson: NEVER hand-count string literals, verify with `len()` mechanically).
+  Measured: floor 0% uncontested / 100%-matched delegated / 100%-diverged E0505
+  (bimodal held at 212); driver 105/105 uncontested + 21/21 E0505 matched,
+  126/126 behavior-green post-fix; G2 p50 151ms/case, 78ms/iteration; G4 ~1.5k
+  allocs/pass bounded; **ordering A/B HONEST NEGATIVE — static min-delta is
+  first-try-perfect on this corpus (0 reverts for every arm), so T4.2's
+  shape-conditional mechanism ships installed-but-unproven (flip-test pinned)
+  and T4.6 stays per-repo**. Promotion to default remains an OWNER CALL
+  (per the plan; the GOAT gates passed but the domain stays opt-in). Next
+  natural unit: real-use watch sessions to grow `.heal/misses/` into the next
+  template batch, or the sec domain (Plan 018, filed).
 - **2026-08-21 — Plan 019 filed (owner call, same-day): the `rustc_errors` domain —
   `cargo heal --fix-compile`, oracle-driven compile-error repair.** NOT a mining
   batch — a domain build. Motivating evidence: the E0597 incident (a narrative

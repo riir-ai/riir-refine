@@ -238,7 +238,8 @@ fn e0597_format(out: &mut Vec<GeneratedCase>) {
 
 /// `&owned[idx]` over `Vec<String>` narrowed.
 fn e0597_vec_string_index(out: &mut Vec<GeneratedCase>) {
-    // (elems expr, idx, idx_len)
+    // (elems expr, idx, idx_len) — lens MECHANICALLY verified (see the
+    // e0502_len table's lesson note).
     const TABLE: [(&str, usize, usize); 10] = [
         ("vec![String::from(\"aa\"), String::from(\"bbb\")]", 1, 3),
         ("vec![String::from(\"aa\"), String::from(\"bbb\")]", 0, 2),
@@ -247,9 +248,9 @@ fn e0597_vec_string_index(out: &mut Vec<GeneratedCase>) {
         ("vec![String::from(\"\")]", 0, 0),
         ("vec![String::from(\"four\"), String::from(\"five\")]", 1, 4),
         ("vec![String::from(\"six\"), String::from(\"seven\")]", 0, 3),
-        ("vec![String::from(\"eight8\"), String::from(\"nine9\")]", 1, 6),
-        ("vec![String::from(\"ten10\"), String::from(\"eleven11\")]", 1, 9),
-        ("vec![String::from(\"twelve12\"), String::from(\"th\")]", 0, 9),
+        ("vec![String::from(\"eight8\"), String::from(\"nine9\")]", 1, 5),
+        ("vec![String::from(\"ten10\"), String::from(\"eleven11\")]", 1, 8),
+        ("vec![String::from(\"twelve12\"), String::from(\"th\")]", 0, 8),
     ];
     for (i, (elems, idx, ilen)) in TABLE.iter().enumerate() {
         let gt = gt_module(&format!("assert_eq!(super::probe(), {ilen});"));
@@ -356,23 +357,27 @@ fn e0502_copy_index(out: &mut Vec<GeneratedCase>) {
 /// `items[0].len()` read through a reference across a `push` (non-Copy
 /// elements — the len must be computed through `&items[0]`).
 fn e0502_string_len(out: &mut Vec<GeneratedCase>) {
-    // (initial elements, idx-0 len, pushed literal)
+    // (initial elements, idx-0 len, pushed literal) — lens MECHANICALLY
+    // verified (`python3 -c 'print(len(..))'`); hand-counted literals are
+    // how the first draft shipped 7 wrong expectations that only the
+    // cargo-test G1 pass caught (the seeds compiled — the TESTS were
+    // wrong, which check-time integrity cannot see).
     const TABLE: [(&str, usize, &str); 15] = [
         ("vec![String::from(\"abc\")]", 3, "\"new\""),
         ("vec![String::from(\"hello\"), String::from(\"x\")]", 5, "\"new\""),
         ("vec![String::from(\"\")]", 0, "\"z\""),
         ("vec![String::from(\"abcd\"), String::from(\"ef\")]", 4, "\"w3\""),
-        ("vec![String::from(\"seven7\")]", 7, "\"new\""),
+        ("vec![String::from(\"seven7\")]", 6, "\"new\""),
         ("vec![String::from(\"one\"), String::from(\"two\")]", 3, "\"pushed\""),
         ("vec![String::from(\"12345\")]", 5, "\"9\""),
         ("vec![String::from(\"a\"), String::from(\"bb\"), String::from(\"ccc\")]", 1, "\"new\""),
-        ("vec![String::from(\"eleven=11\")]", 10, "\"x\""),
-        ("vec![String::from(\"twelve12\")]", 9, "\"yy\""),
-        ("vec![String::from(\"thirteen13\")]", 11, "\"n\""),
-        ("vec![String::from(\"fourteen14\")]", 12, "\"m\""),
-        ("vec![String::from(\"fifteen15\")]", 11, "\"k\""),
-        ("vec![String::from(\"sixteen16\")]", 11, "\"j\""),
-        ("vec![String::from(\"seventeen17\")]", 13, "\"i\""),
+        ("vec![String::from(\"eleven=11\")]", 9, "\"x\""),
+        ("vec![String::from(\"twelve12\")]", 8, "\"yy\""),
+        ("vec![String::from(\"thirteen13\")]", 10, "\"n\""),
+        ("vec![String::from(\"fourteen14\")]", 10, "\"m\""),
+        ("vec![String::from(\"fifteen15\")]", 9, "\"k\""),
+        ("vec![String::from(\"sixteen16\")]", 9, "\"j\""),
+        ("vec![String::from(\"seventeen17\")]", 11, "\"i\""),
     ];
     for (i, (init, len, push_lit)) in TABLE.iter().enumerate() {
         let gt = gt_module(&format!(
@@ -449,7 +454,8 @@ fn e0505_drop_clone(out: &mut Vec<GeneratedCase>) {
 // ── E0596: borrow as mutable (contested — delegated to cargo fix) ─────
 
 fn e0596_drop_mut(out: &mut Vec<GeneratedCase>) {
-    // Vec variants ×15
+    // Vec variants ×15 + String variants ×5 (both tables up front — items
+    // after statements is the confusing-form clippy class).
     const VEC_TABLE: [(&str, &str, &str, usize); 15] = [
         // (ty, initial, push, expected_len)
         ("u8", "vec![5u8]", "1u8", 2),
@@ -468,6 +474,15 @@ fn e0596_drop_mut(out: &mut Vec<GeneratedCase>) {
         ("u64", "vec![3u64, 4]", "5u64", 3),
         ("i16", "vec![9i16]", "8i16", 2),
     ];
+    // String variants ×5
+    const STR_TABLE: [(&str, &str, usize); 5] = [
+        // (initial, push_str, expected_len)
+        ("a", "bc", 3),
+        ("x", "yz!", 4),
+        ("", "hello", 5),
+        ("seed", "ed", 6),
+        ("q", "", 1),
+    ];
     for (i, (ty, init, push, len)) in VEC_TABLE.iter().enumerate() {
         let gt = gt_module(&format!("assert_eq!(super::probe({init}), {len});"));
         let seed = format!(
@@ -485,15 +500,6 @@ fn e0596_drop_mut(out: &mut Vec<GeneratedCase>) {
             broken,
         );
     }
-    // String variants ×5
-    const STR_TABLE: [(&str, &str, usize); 5] = [
-        // (initial, push_str, expected_len)
-        ("a", "bc", 3),
-        ("x", "yz!", 4),
-        ("", "hello", 5),
-        ("seed", "ed", 6),
-        ("q", "", 1),
-    ];
     for (i, (init, tail, len)) in STR_TABLE.iter().enumerate() {
         let gt = gt_module(&format!("assert_eq!(super::probe(), {len});"));
         let seed = format!(
@@ -606,7 +612,7 @@ fn e0507_drop_clone(out: &mut Vec<GeneratedCase>) {
 // ── E0373: closure may outlive captured value (contested — delegated) ─
 
 fn e0373_drop_move(out: &mut Vec<GeneratedCase>) {
-    // String captures ×10
+    // String captures ×10 + Vec sum captures ×15 (both tables up front).
     const STRS: [(&str, usize); 10] = [
         ("hello", 5),
         ("world", 5),
@@ -618,6 +624,24 @@ fn e0373_drop_move(out: &mut Vec<GeneratedCase>) {
         ("lifetime", 8),
         ("outlives", 8),
         ("probe", 5),
+    ];
+    const SUMS: [(&str, &str, &str, u64); 15] = [
+        // (ty, elems, sum_ty_annotation, expected)
+        ("u32", "1u32, 2, 3", "u32", 6),
+        ("u32", "10u32, 20", "u32", 30),
+        ("u32", "5u32", "u32", 5),
+        ("u32", "1u32, 1, 1, 1", "u32", 4),
+        ("u32", "0u32, 0", "u32", 0),
+        ("i64", "1i64, 2, 3", "i64", 6),
+        ("i64", "100i64, 200, 300", "i64", 600),
+        ("i64", "42i64", "i64", 42),
+        ("u16", "1u16, 2, 3, 4", "u16", 10),
+        ("u16", "7u16, 8", "u16", 15),
+        ("i32", "4i32, 5, 6", "i32", 15),
+        ("i32", "9i32", "i32", 9),
+        ("u8", "1u8, 2, 3, 4, 5", "u8", 15),
+        ("u8", "250u8", "u8", 250),
+        ("u64", "1u64, 2, 3, 4", "u64", 10),
     ];
     for (i, (lit, len)) in STRS.iter().enumerate() {
         let gt = gt_module(&format!("assert_eq!(super::probe()(), {len});"));
@@ -637,24 +661,6 @@ fn e0373_drop_move(out: &mut Vec<GeneratedCase>) {
         );
     }
     // Vec sum captures ×15
-    const SUMS: [(&str, &str, &str, u64); 15] = [
-        // (ty, elems, sum_ty_annotation, expected)
-        ("u32", "1u32, 2, 3", "u32", 6),
-        ("u32", "10u32, 20", "u32", 30),
-        ("u32", "5u32", "u32", 5),
-        ("u32", "1u32, 1, 1, 1", "u32", 4),
-        ("u32", "0u32, 0", "u32", 0),
-        ("i64", "1i64, 2, 3", "i64", 6),
-        ("i64", "100i64, 200, 300", "i64", 600),
-        ("i64", "42i64", "i64", 42),
-        ("u16", "1u16, 2, 3, 4", "u16", 10),
-        ("u16", "7u16, 8", "u16", 15),
-        ("i32", "4i32, 5, 6", "i32", 15),
-        ("i32", "9i32", "i32", 9),
-        ("u8", "1u8, 2, 3, 4, 5", "u8", 15),
-        ("u8", "250u8", "u8", 250),
-        ("u64", "1u64, 2, 3, 4", "u64", 10),
-    ];
     for (i, (ty, elems, ann, sum)) in SUMS.iter().enumerate() {
         let gt = gt_module(&format!("assert_eq!(super::probe()(), {sum});"));
         let seed = format!(
@@ -732,8 +738,7 @@ mod tests {
         ] {
             assert!(
                 counts.get(code).copied().unwrap_or(0) >= 10,
-                "{code} underrepresented: {:?}",
-                counts
+                "{code} underrepresented: {counts:?}"
             );
         }
         // The uncontested head (the product claim) must be the majority of

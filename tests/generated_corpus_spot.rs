@@ -108,4 +108,19 @@ fn full_corpus_declared_codes_hold() {
         0.0,
         "null arm repaired something — harness measuring the mutation"
     );
+    // Seed-validity half: every seed's ground-truth test must pass — a
+    // seed with a wrong expectation poisons the semantics pass (the
+    // first corpus shipped 10; only post-fix testing caught them because
+    // unrepaired cases never get tested).
+    let seed_harness = FloorHarness::new();
+    let bad_seeds = seed_harness
+        .verify_seed_tests(&cases)
+        .expect("seed verification ran");
+    seed_harness.cleanup();
+    assert!(
+        bad_seeds.is_empty(),
+        "seeds whose OWN ground-truth test fails (wrong expectations — the \
+         corpus ground truth is broken):\n  {}",
+        bad_seeds.join("\n  ")
+    );
 }

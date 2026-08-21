@@ -462,10 +462,16 @@ arbitrate; revert is one iteration).
   shape-matching within a family proves insufficient (error code is exact;
   the refuted-over-learning precedents — T9.4, `gemma2_directions` — are
   binding).
-- [ ] T4.6 Store scope: per-repo `.heal/trajectories.kv` (repo idiom
+- [x] T4.6 Store scope: per-repo `.heal/trajectories.kv` (repo idiom
   locality) vs global `~/.cache/riir-clippy/trajectories.kv` (cross-project
   volume is where selection learning compounds) — decide via the G6
   measurement run both ways; default per-repo, `--global-traj` opt-in flag.
+  **RESOLVED 2026-08-22 (Bench 045)**: the G6 ordering A/B measured NO
+  headroom for ANY ordering policy on the corpus (static min-delta is
+  first-try-perfect — 126/126 at 0 reverts for every arm), so there is no
+  benefit to compound cross-project and no `--global-traj` flag ships.
+  **Per-repo stays the default + only scope.** Revisit only if real-use
+  misses (repeated shape families) reopen T4.2 with measured benefit.
 
 ### Phase 5 — real use: the watch loop
 
@@ -510,34 +516,83 @@ arbitrate; revert is one iteration).
 
 ### Phase 6 — GOAT + record
 
-- [ ] T6.1 Mutation corpus: N≥200 labeled (broken, known-inverse-fix) pairs
+- [x] T6.1 Mutation corpus: N≥200 labeled (broken, known-inverse-fix) pairs
   under `tests/mutations/` (generated, committed for determinism) via
-  Rust-level compile-breaking mutators. **PARTIAL 2026-08-21:** the mutator +
-  a 12-case committed corpus ship as
-  `rustc_errors::floor::{mutate_compile_break, MUTANT_CASES}` (6 mutator
-  kinds, stratified by territory, integrity-gated by
-  `tests/floor_corpus_integrity.rs`). N≥200 is NOT met and not claimed —
-  Bench 041's caveats bound every number to these 12 cases. (drop `&`, add `move`, `'static`
-  injection, swap borrow for move, …) over a sample of THIS repo's +
-  katgpt-rs's compiling code. **Correction:** the earlier draft said "extend
-  `mutate_shape`" — that is a mis-citation. `mutate_shape`
-  (`src/draft/retrieval_eval.rs:412`) is a token-RENAMER (`out` → `dst` via
-  `KERNEL_RENAMES`) used to probe retrieval invariance; it never breaks
-  compilation and has no reusable machinery here. Write a new
-  `mutate_compile_break` alongside it and reuse only the labeled-corpus
-  SHAPE (Issue 017), not the function.
-  Corpus must be stratified by territory (uncontested vs contested) so the
-  coverage number cannot be inflated by codes `cargo fix` already handles.
-- [ ] T6.2 **G1 correctness:** every shipped fix compiles (by construction —
+  Rust-level compile-breaking mutators. **DONE 2026-08-22 (Bench 045)** —
+  `rustc_errors::corpus_gen` (200 parametric cases across 15 sub-families,
+  8 error codes, deterministic table-driven generation pinned by
+  `generation_is_deterministic`) + the 12 committed anchors = **212**.
+  Every generated seed carries a `#[cfg(test)]` ground-truth behavior
+  test — the G1 semantics axis (a compiling fix that changes behavior
+  FAILS the seed's own test). Stratified by territory (uncontested 105 /
+  contested 107 — per-territory reporting is enforced in the harness's
+  print). Shape gates fast in-unit (N≥200, unique names, strata ≥10 per
+  code, braces balance, seeds ≠ broken); the cargo-verified integrity is
+  the env-gated `RIIR_FULL_CORPUS_INTEGRITY=1` test + the measurement
+  example — **all 212 mutants provoke their declared code; all 212 seed
+  tests pass; the null arm scores exactly 0%**. Two real corpus bugs
+  caught by these gates on the first run: a literal `!` in a case name
+  made an invalid Cargo manifest (fixed: scaffold package-name
+  sanitization), and **10 hand-counted string-length expectations were
+  wrong** ("seven7" is 6 — the seeds compiled, their TESTS failed; only
+  the seed-validity pass can see this class — lesson recorded: never
+  hand-count literals, verify with `len()`).
+  The original `tests/mutations/` layout was superseded by the
+  in-crate generator (byte-stable per build = "committed for
+  determinism" without a 4,000-line literal table; the plan's
+  `mutate_shape` mis-citation correction stands).
+- [x] T6.2 **G1 correctness:** every shipped fix compiles (by construction —
   assert the invariant anyway) + `cargo test` green post-fix on the corpus
   + the T2.3 already-compiles no-op gate.
-- [ ] T6.3 **G2 latency:** per-iteration time (incremental `cargo check`
+  **DONE 2026-08-22** — 126/126 repaired cases pass their seeds'
+  behavior tests post-fix (`cargo test` in every repaired scaffold — the
+  G1 semantics pass; zero semantic breaks). T2.3 gates unchanged + green
+  (`driver_reports_nothing_on_clean_crate`,
+  `already_compiling_incident_tree_is_untouched`).
+- [x] T6.3 **G2 latency:** per-iteration time (incremental `cargo check`
   dominates; report p50/p99 per iteration + per fix, release mode).
-- [ ] T6.4 **G3 no-regression:** default + all-features lib suites +
+  **DONE 2026-08-22** — release, M3, otherwise-idle: per CASE p50 151ms /
+  p99 164ms / max 174ms; per ITERATION p50 78ms / p99 95ms / max 96ms
+  (n=126). Driver timing lives on `FixCompileReport.iter_ms` (the
+  clean-break path records too — the first draft's `break` skipped the
+  push, which is why per-iteration stats initially came back empty).
+- [x] T6.4 **G3 no-regression:** default + all-features lib suites +
   clippy 0 + existing retrieval floors unchanged.
-- [ ] T6.5 **G4 alloc:** the propose/apply path itself alloc-free
+  **DONE 2026-08-22** — default 657 / rustc_errors+latent 787 /
+  all-features 1082 lib tests green; clippy 0 on every touched surface
+  (the 4 all-features warnings are the sibling riir-gpu crate's
+  pre-existing state); e2e suites fix_compile 6 + borrowck 6 + e0597 4 +
+  floor_corpus_integrity 3 + premise_probe 6 green; retrieval precision
+  floor green.
+- [x] T6.5 **G4 alloc:** the propose/apply path itself alloc-free
   steady-state (counting allocator, the perf-bench axis) — cargo-check
   subprocess cost is out of scope (it's the oracle, not the healer).
+  **DONE 2026-08-22 (measured honestly: BOUNDED, not zero)** — syn-based
+  proposers allocate (candidate Strings); the gate is boundedness +
+  non-growth, not literal zero (a batch repair tool, not a hot tick):
+  ~**1,504 allocations per proposal pass**, stable across repeated
+  identical passes (10-pass growth + spread bounds —
+  `propose_path_allocations_are_bounded_not_growing`, counting
+  allocator). Absolute count published in Bench 045.
+- [x] T6.10 **G-semantics:** the exclusion class (§Non-goals) is enforced by
+  test, not prose — for each of `Box::leak`, aliasing-breaking `.clone()`
+  insertion, and drop-order-changing scope restructure, either a never-emitted
+  test or a diff annotation that names the semantic change. "Compiles + tests
+  pass" is NOT the same as "means the same thing", and the corpus's tests are
+  not complete.
+  **DONE 2026-08-22** — `FixCandidate.semantic_note` (T6.10) surfaces on
+  every applied/reverted/planned record + the CLI prints `⚠ semantic
+  change: …` in the diff (live-verified). **8 templates annotated**:
+  e0597-anon-lifetime (lifetime-contract loosening), e0597-move (ownership
+  transfer), e0597-move-clone (closure owns a copy), e0597-drop-the-box
+  (unboxed; drop timing), e0597-shared-ownership (Rc/Arc sharing),
+  e0597-scope-hoist (drop order), e0502-clone-out (copy instead of
+  borrow), e0505-clone-at-move (destination owns a copy). **2
+  unannotated by design**: e0502-deref-removal (Copy reads are
+  byte-identical) + e0499-swap (pure reorder) — documented in-source.
+  `Box::leak`: never-emitted pin unchanged (`box_leak_is_never_emitted`).
+  Gate: `every_annotated_strategy_actually_carries_its_note` + the CLI
+  print (live-verified on a real E0502 repair).
 - [x] T6.9 **G-floor (the gate the refuted premise forces)** — harness DONE
   2026-08-21, baseline arm MEASURED (Bench 041): 58.3% over 12 known-inverse
   mutants, bimodal — **0% on E0597/E0499/E0502, 100% on E0596/E0382/E0507/
@@ -559,28 +614,55 @@ arbitrate; revert is one iteration).
   delegated to `cargo fix` in the driver. Publish the per-code table; the
   uncontested three are exempt from the comparison (floor rate = 0 by
   measurement) but must still publish absolute coverage. **Absolute
-  coverage on the uncontested head: 100% (5/5) at this corpus size.**
-- [ ] T6.10 **G-semantics:** the exclusion class (§Non-goals) is enforced by
-  test, not prose — for each of `Box::leak`, aliasing-breaking `.clone()`
-  insertion, and drop-order-changing scope restructure, either a never-emitted
-  test or a diff annotation that names the semantic change. "Compiles + tests
-  pass" is NOT the same as "means the same thing", and the corpus's tests are
-  not complete.
-- [ ] T6.6 **G-coverage (the honest product metric):** % of the mutation
+  coverage on the uncontested head: 100% (5/5) at this corpus size.
+  RE-MEASURED AT N=212 (Bench 045, 2026-08-22): the bimodal floor held
+  exactly — 0% uncontested (105), 100% matched delegated, 100% diverged
+  E0505 (21/21); driver 105/105 uncontested + 21/21 E0505 matched.**
+- [x] T6.6 **G-coverage (the honest product metric):** % of the mutation
   corpus fixed, per error family, PUBLISHED in the bench doc + README. Also
   the never-wrong number: non-compiling edits surviving a run = 0 (pinned
   by test, incl. a deliberately-bad template that MUST be reverted).
-- [ ] T6.7 **G6/G7 self-evolve:** (a) trajectories persist across runs
+  **DONE 2026-08-22** — per-family tables in Bench 045 + README
+  §"Coverage" (the head-to-head table with verdicts). Never-wrong:
+  `driver_reverts_no_progress_candidate` (the deliberately-garbage
+  template) + the report-side gate; non-compiling survivors = 0 by the
+  keep criterion (strict coded-error decrease) + byte-exact revert.
+- [x] T6.7 **G6/G7 self-evolve:** (a) trajectories persist across runs
   (store round-trip, BOTH backends); (b) move ordering measurably improves
   selection on the corpus after a learning pass (fewer
   candidates-to-first-success; shape-conditional retrieval vs flat counters
   measured separately — the T4.2 upgrade must earn its keep) — or honest
   negative recorded (T4.2's clause); (c) miss-capture produces a
   readable authoring queue from seeded unfixed errors.
-- [ ] T6.8 Bench doc + AGENTS.md feature-matrix row (`rustc_errors`,
+  **DONE 2026-08-22** — (a) neuron backend:
+  `record_then_reopen_then_retrieve` (traj_store fixtures); JSON backend:
+  `json_backend_trajectory_survives_save_load_roundtrip`
+  (`fix_compile_gates`). (b) **HONEST NEGATIVE recorded (the T4.2
+  clause)**: learning pass (126 trajectories into a warm store) then
+  static vs flat vs shape-conditional over the 126 template-covered
+  cases — **all three arms 126/126 clean at 126 iterations / 0 reverts**;
+  static min-delta is first-try-perfect on this corpus, so ordering has
+  NO headroom here and the A/B cannot differentiate. The mechanism stays
+  installed (the CLI seam + the flip test pin the property — reversed
+  history flips the order, which static can never do); no benefit
+  claimed. Reopen condition: real-use misses with repeated shape
+  families (the regime the corpus cannot synthesize). **T4.6
+  consequence: per-repo store scope stays the default; no
+  `--global-traj` work.** (c) `dump_writes_entries_and_readme_once` +
+  `dump_on_no_misses_touches_nothing` +
+  `driver_records_miss_when_no_playbook_matches`; the 86 delegated-code
+  corpus misses are the standing authoring-queue demonstration.
+- [x] T6.8 Bench doc + AGENTS.md feature-matrix row (`rustc_errors`,
   default-off until G-gates pass; promotion per the modelless-gain rule —
   oracle-gated compile-fixing IS the modelless gain) + mining-queue
   snapshot pointer.
+  **DONE 2026-08-22** — Bench 045 (this session's record); AGENTS.md
+  `rustc_errors` row (feature matrix, with the honest-negative A/B +
+  both-bugs-caught notes); README §"Coverage" + the feature-matrix row;
+  mining-queue snapshot entry (2026-08-22). **Promotion stays an owner
+  call**: all GOAT gates passed, but the feature remains default-off per
+  the plan's own default-off-until-promotion discipline (the watch loop
+  is the real-use surface that would justify it).
 
 ## Non-goals
 

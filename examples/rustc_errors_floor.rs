@@ -66,6 +66,9 @@ fn main() {
     if want("null") {
         null_section();
     }
+    if want("seeds") {
+        seeds_section();
+    }
     if want("ab") {
         #[cfg(feature = "latent_retrieval")]
         ordering_ab_section();
@@ -272,6 +275,28 @@ fn null_section() {
                 false => "FAIL — the harness is scoring something other than the fixer",
             }
         );
+    }
+    harness.cleanup();
+}
+
+/// Seed-validity: every seed's own ground-truth test must pass (the corpus
+/// ground truth is only as good as this check — the first draft shipped 10
+/// hand-counted-string-length seeds whose tests failed, caught only by the
+/// post-fix pass because unrepaired cases never get tested).
+fn seeds_section() {
+    println!("\n── Seed validity: every seed's ground-truth test must pass ──\n");
+    let harness = FloorHarness::new();
+    if !harness.is_available() {
+        println!("  SKIP — cargo not on PATH.");
+        return;
+    }
+    let cases = floor_case_list();
+    match harness.verify_seed_tests(&cases) {
+        Err(e) => println!("  ERROR: {e}"),
+        Ok(bad) => match bad.is_empty() {
+            true => println!("  PASS — {}/{} seed tests green", cases.len(), cases.len()),
+            false => println!("  FAIL — {} seed(s) with failing ground truth:\n    {}", bad.len(), bad.join("\n    ")),
+        },
     }
     harness.cleanup();
 }

@@ -132,6 +132,7 @@ code; `--fix` CLI wiring is Phase 6.
 | `clippy_verify` + `latent_retrieval` | off | — | T3.5.5 real-`cargo clippy` labeling oracle (`ClippyOracle`) + the uncontaminated G1 harness (`tests/uncontaminated_g1.rs`) |
 | `bonsai_retrieval` | off | `latent_retrieval`, `riir-rag/bonsai_embedder` | Plan 005 T3.5 option 3: 768-D Bonsai dense rerank. **HEAVY** — 6.7 GB GGUF, ~48 s/embed on CPU. Measurement-only (Bench 027) |
 | `self_evolve` | on | — | additive self-evolution loop (memory + EMA + `EvolveRecorder`; DEFAULT-ON since Issue 018, opt-out `RIIR_HEAL_SELF_EVOLVE=0`; BLAKE3-committed memory since T7.4; Beta-posterior selection since T9.3) |
+| `rustc_errors` | off | — | **Plan 019**: `cargo heal --fix-compile` — oracle-driven compile-error repair (E0597/E0499/E0502 uncontested + the E0505 contested opening; delegated codes ship no template by the measured floor). GOAT at N=212: **105/105 uncontested fixed where `cargo fix` scores 0/105; 126/126 repaired cases behavior-green post-fix** (Bench 045) |
 | `ternary_inference` | off | `riir-engine`, `riir-gpu` | Bench 010: katgpt ternary generation on clippy prompts |
 
 ## Architecture
@@ -366,6 +367,31 @@ cargo heal --dump-trajectories > trajectories.jsonl
 Concurrent sibling builds: export a private `CARGO_TARGET_DIR` before
 launching (see the script header for the isolation recipe — the global
 rule; the oracle shares your target dir by default).
+
+## Coverage (measured, Bench 045 — the honest product numbers)
+
+Over the N=212 known-inverse mutation corpus (12 committed anchors + 200
+generated; every seed carries a ground-truth behavior test):
+
+| error family | `cargo fix --broken-code` | `cargo heal --fix-compile` | verdict |
+|---|---|---|---|
+| E0597 (borrow outlives owner) | **0%** | **100%** | net-new (uncontested) |
+| E0499 (two `&mut` alive) | **0%** | **100%** | net-new (uncontested) |
+| E0502 (borrow across mutation) | **0%** | **100%** | net-new (uncontested) |
+| E0505 (move out of borrowed) | 100% but **100% silently diverges** (`&v.clone()` changes aliasing) | **100% matched** | the contested win |
+| E0596 / E0382 / E0507 / E0373 | 100% matched | no template — delegated | `cargo fix` owns these |
+
+- **Uncontested stratum: 105/105 fixed** where the floor is 0/105.
+- **Never-wrong by construction:** every kept fix strictly reduces the
+  coded-error count (full `cargo check` verdict); everything else reverts
+  byte-exact. Non-compiling edits surviving a run: **0** (pinned by test).
+- **Semantics honest:** 126/126 repaired cases pass their seeds' behavior
+  tests post-fix; every semantics-changing template (clone-instead-of-
+  borrow, drop-order, ownership transfer, lifetime loosening) prints its
+  `⚠ semantic change` note in the diff — never silent.
+- Coverage is partial BY DESIGN and per-family numbers are the product
+  claim, not a blended total. Misses land in `.heal/misses/` — the
+  template-authoring queue.
 
 ## Usage
 

@@ -59,7 +59,7 @@ pub struct AppliedRecord {
     /// The replacement text landed for the primary edit — the trajectory's
     /// `fixed` half.
     pub fix: String,
-    /// The T6.10 semantic-note annotation (see [`RevertedRecord']).
+    /// The T6.10 semantic-note annotation (see [`RevertedRecord`]).
     pub semantic_note: Option<&'static str>,
 }
 
@@ -429,6 +429,9 @@ impl CompileDriver {
                 diags = new_diags;
                 if diags.is_empty() {
                     report.clean = true;
+                    report
+                        .iter_ms
+                        .push(iter_t0.elapsed().as_secs_f64() * 1000.0);
                     break;
                 }
             } else {

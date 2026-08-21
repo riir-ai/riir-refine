@@ -754,6 +754,32 @@ impl FloorHarness {
         Ok(out.status.success())
     }
 
+    /// Seed-validity gate (the corpus's OWN ground truth): scaffold every
+    /// case's SEED and run its `cargo test`. A seed whose ground-truth
+    /// test fails poisons every arm's semantics pass — the first corpus
+    /// shipped 10 such seeds (hand-counted string lengths) and only the
+    /// post-fix test pass caught them, because the UNREPAIRED cases never
+    /// get tested. Returns the failing case names.
+    ///
+    /// # Errors
+    ///
+    /// I/O or cargo-spawn failure.
+    pub fn verify_seed_tests(
+        &self,
+        cases: &[HarnessCase<'_>],
+    ) -> Result<Vec<String>, String> {
+        let mut bad = Vec::new();
+        for case in cases {
+            let dir = self.scaffold(case.name, case.seed)?;
+            match self.cargo_test_passes(&dir) {
+                Ok(true) => {}
+                Ok(false) => bad.push(case.name.to_string()),
+                Err(e) => return Err(format!("{}: {e}", case.name)),
+            }
+        }
+        Ok(bad)
+    }
+
     fn scaffold(&self, name: &str, source: &str) -> Result<PathBuf, String> {
         let dir = self.work_root.join(name);
         let src = dir.join("src");
