@@ -63,3 +63,5 @@ None of the three alone produces it: EvolveMem needs an LLM to diagnose; our eva
 | G2 | Tuner wall-clock (one round = 1 eval run) | < 60 s/round (eval is ~54 s kernel-inclusive) |
 | G3 | No-regression — all committed floors hold | floors green |
 | G5 | Headline — tuned vs default on held-out spans | ≥ +3pp top-1 on at least one domain, blend non-regressing; OR documented confirmation that defaults are near-optimal |
+
+> **PASS-Redirects (synthesis):** Gann & Gertz [arXiv:2608.06292 "NeSy-RAG: Neuro-Symbolic RAG for Explainable Question Answering"] — external data point for the config-sweep axis: their top-k retrieval-depth sweep peaks at k=10 with small drops at k=3 and k=20 (60.0/61.1/60.4), the same crowding-vs-recall tradeoff Issue 024 measured when `RERANK_POOL` went 8→12; supports "pool depth is a real tuned axis, mid-size optimum" — already at 12 with floors held, no action.
