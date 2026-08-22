@@ -6,3 +6,4 @@ Cargo.lock
 # Plan 019 runtime state — the heal self-evolution store + miss queue
 # (per-repo runtime data, never committed; see README "Watch mode")
 .heal/
+CLAUDE.md
