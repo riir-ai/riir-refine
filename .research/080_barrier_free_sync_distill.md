@@ -17,6 +17,17 @@ NOT file mining: no sibling lanes were spawned because the source is a
 code tree; every quoted claim below was re-verified against the fetched
 HTML this session.
 
+**PASS-Redirects (synthesis):** Stokes, Brown, Flynn, Jamieson, Weinzierl
+[arXiv:2608.19273 "DSLHyPE—a DSL kernel language for the Exascale
+Hyperbolic PDE Engine ExaHyPE"] — its §VI-D "kernel parallelization and
+orchestration" future-work item (model compute steps as a DAG the runtime
+deploys onto warps/cores — the horizontal/vertical parallelisation
+horizon) is the compiler-side framing of B70's closed-form
+per-dependency waits; the paper independently reports DAG parallelism
+applied throughout an ENTIRE kernel was NOT beneficial (their ref [17]),
+which agrees with B70's barrier-fallback scoping. No new decision
+content beyond the corpus → PASS.
+
 ## Rules (3)
 
 1. **`barrier-free-per-dependency-wait-from-loop-counters`** (D 71→72,
