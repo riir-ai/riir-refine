@@ -2249,6 +2249,32 @@ accumulates; Phases 2 (perf/format axes) + 3 (real-fraction growth:
 statement-wrap miner, stub manifests, crates.io source, cold/warm
 memory lines) defer-marked in the plan.
 
+**Issue 036 (2026-08-23, RESOLVED-NEGATIVE + removed per noise-reduction
+rule; harness `src/draft/jury_disagreement.rs` + `tests/jury_disagreement_poc.rs`
+kept as the reproducible artifact).** The Jagged Judges (arXiv:2608.12645 §6.2)
+transfer — retrieval-pool contention as a fix-instability predictor, gating
+expensive verification onto contested spans. T1+T2+T3 measured on the full
+fixture population (129 spans: 61 clippy + 28 composite + 40 perf):
+`resolved=72 nofix=49 fixture_broken=8 compile_fail=0 lint_unresolved=0` —
+**ZERO instability events among the 72 verdict-bearing spans**, so ρ is
+uncomputable (no variance in Y) and G1/G2 fail vacuously. Stronger than the
+ρ≈0 refutation the issue pre-authorized: the instability REGIME the paper's
+predictor targets does not exist on the proposers' home fixtures at all —
+the deterministic stack's verification failures live on real repo spans
+with type context (Bench 031: ~14% first-pass compile-gate reverts), not on
+minimal fixtures. Two measurement findings en route: (a) `pool_spread` is
+DEAD on this corpus — every span's 12-deep pool contains 12 distinct rules
+(the multi-scale line-chunk flooding the signal hypothesized never survives
+`rank_into`); (b) the join MUST baseline-check the ORIGINAL span first
+(`FixtureBroken` exclusion) — the first run's 8 "unstable" rows were all
+Issue-022-class broken-original fixtures fabricating CompileFail verdicts
+exactly the way a fix cannot be blamed for a span that never compiled.
+Reopen condition (recorded, not scheduled): instability events must first be
+shown to exist at a non-trivial rate on REAL-file spans via the `fix_verify`
+compile gate — a different harness, not this one. Validation at close:
+feature lib 745/0 · default lib 659/0 · retrieval floors 12/12 (G3) ·
+clippy 0 in the feature state.
+
 **Run #3 (fix `c8d0d34`, same day): heal 98.1% · created 1 (1.9%) — the
 run-#2 miss map triaged to root causes.** Every persist + created was
 probed against real clippy 1.97 BEFORE any code changed (per-fixture

@@ -345,6 +345,38 @@ impl LatentMatcher {
         out
     }
 
+    /// Issue 036 T1 surface: the pre-rerank retrieval pool AND the
+    /// post-rerank ranking for one domain, replicating `suggest_all_domains`'
+    /// per-domain steps on a copy. Read-only with respect to every existing
+    /// entry point — the ranked copy is a fresh `Vec`, never the truncated
+    /// `top_k` slice the suggest path returns.
+    ///
+    /// `None` when the domain is not enabled.
+    pub fn pool_and_ranked(
+        &mut self,
+        domain: DomainId,
+        code: &str,
+    ) -> Option<(Vec<ScoredRule>, Vec<ScoredRule>)> {
+        let index = match domain {
+            DomainId::Clippy => self.clippy.as_ref(),
+            DomainId::Perf => self.perf.as_ref(),
+            DomainId::Kernel => self.kernel.as_ref(),
+            DomainId::Sec => self.sec.as_ref(),
+        }?;
+        let pool = index
+            .suggest_deep_into(code, super::instantiation_rerank::RERANK_POOL, &mut self.scratch)
+            .to_vec();
+        let mut ranked = pool.clone();
+        super::instantiation_rerank::mark_instantiation(
+            domain,
+            code,
+            &mut ranked,
+            self.rerank_mode,
+        );
+        super::instantiation_rerank::rerank(&mut ranked);
+        Some((pool, ranked))
+    }
+
     /// Suggest rules for every chunk of a real `.rs` file.
     ///
     /// Uses [`AstChunker`] (fn/impl/struct spans with 1-based line ranges).

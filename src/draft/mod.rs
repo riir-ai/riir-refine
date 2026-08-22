@@ -37,6 +37,8 @@ pub mod latent_matcher;
 #[cfg(feature = "clippy_verify")]
 pub mod clippy_oracle;
 pub mod instantiation_rerank;
+#[cfg(feature = "clippy_verify")]
+pub mod jury_disagreement;
 pub mod op_tokenizer;
 pub mod retrieval_eval;
 pub mod switch_cost;
