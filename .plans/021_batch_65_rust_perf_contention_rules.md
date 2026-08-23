@@ -87,10 +87,14 @@ Two rules, both concurrency category:
       `.docs/11_domains/rust_perf.md` (counts + 2 table rows + the Batch
       65 history line), queue snapshot (pool → LANDED + progress corpus
       counts), this plan.
-- [ ] T8 — Commit `feat: batch 65 — rust_perf contention rules (hotpath
+- [x] T8 — Commit `feat: batch 65 — rust_perf contention rules (hotpath
       distill)` + push. Proposers deferred (suggestion-only, the
       B59/B67/B68/B69 precedent — align-64's repr change is
       layout-rippling, channel-batching is architectural).
+      LANDED in `c7e1aeb` (message matches this spec verbatim) + pushed —
+      ancestor of `origin/develop` @ `bec0108`. Box left stale because T8
+      is self-referential: the plan ships inside the commit it describes,
+      so the flip needs this follow-up (closed 2026-08-23).
 
 ## Non-goals
 
