@@ -100,10 +100,47 @@ ELO leaderboard (human-readable THERE, not in storage — per the 038 rule).
       rating denormalization, pre-039 decode-unrated→backfill-rated, the
       batch-only non-goal pin) — 744 latent / 669 default lib, clippy 0
       both states + bin.
-- [ ] **T3 — ruliology evidence axis**: extend `ScoredCandidate` + front
+- [x] **T3 — ruliology evidence axis**: extend `ScoredCandidate` + front
       ranking; fixtures pin (a) evidence breaks parse-equal ties, (b) payoff
       still dominates (a parse-failing high-ELO candidate NEVER outranks a
       parse-passing one — correctness before rating).
+      **DONE 2026-08-24.** Evidence is a LEXICOGRAPHIC TIE-BREAK ONLY (the
+      owner decision, recorded): the sort is
+      `(lint_satisfied desc, ast_delta_size asc, pareto_rank asc, evidence desc)`
+      — payoff primary, complexity still decides among parse-equal candidates
+      (the front stays `(payoff, complexity)`; evidence is the third,
+      tie-only axis — the issue's own axis-list order), and evidence reorders
+      exactly the candidates that tie on payoff + complexity + rank (where
+      the pre-039 sort fell to arbitrary input order). `evidence: f32` on
+      `ScoredCandidate` (f32 to match `src/elo.rs`; `default_elo()` 1200 for
+      unrated rules). ELO NEVER participates in `dominates` (the front SHAPE
+      is unchanged — pinned) and NEVER outranks payoff (pinned, both the
+      comparator + end-to-end).
+      - **API**: `search_with_evidence` / `best_fix_with_evidence` /
+        `pareto_optimal_with_evidence` take `&EloTable` (the always-compiled
+        `src/elo` type — zero new feature deps); the unrated `search` /
+        `best_fix` / `pareto_optimal` delegate with an empty table → base
+        evidence for all → bit-identical pre-039 ordering (test-pinned).
+        The sort's total order extracted to `cmp_rank` (tested directly).
+        No store wiring in T3 — the caller bridges store→table (ratings are
+        denormalized on every row, the T2 consumer contract); T4/T5 wire it.
+      - **Fixtures (9 new tests, 32 module total)**: comparator-level —
+        payoff-dominates-evidence (incl. the usize::MAX-complexity extreme),
+        evidence breaks the parse-equal tie BOTH directions (passing +
+        failing blocks), complexity-beats-evidence among parse-equal (the
+        lexicographic-position pin), equal-evidence Equal + determinism,
+        dominance-ignores-evidence; end-to-end — a parse-FAILING heavily-rated
+        rule NEVER outranks a parse-passing unrated one (search + best_fix),
+        identical-fixed_code ties reordered by rating in BOTH directions
+        (fresh table each way), equal-evidence preserves input order +
+        repeated searches identical + unrated path == rated-with-empty-table.
+      - **Validation**: 701 `ruliology_search` / 744 `latent_retrieval` / 669
+        default lib tests green (baselines held — the unrated path is
+        bit-identical); clippy 0 `--all-targets -D warnings` in all three
+        states; 7/7 bin tests (`fix_verify,clippy_verify` state); the
+        `ruliology_search_demo` example all GOAT gates PASS; global binary
+        rebuilt (`fix_verify,clippy_verify` — the changed module is outside
+        that feature graph, cargo-verified fresh).
 - [ ] **T4 — audit/report surface**: `self_evolve_audit.sh` section 1b —
       ELO leaderboard (top rules, draws on review-only, Withdrawn excluded)
       via `--dump-trajectories`; this is the human-readable rendering.

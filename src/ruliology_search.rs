@@ -5,6 +5,25 @@
 //! AST delta size) and picks the minimum-complexity fix among the
 //! Pareto-optimal set.
 //!
+//! # Evidence axis (Issue 039 T3)
+//!
+//! `ScoredCandidate` carries a third axis, `evidence: f32` — the rule's ELO
+//! rating from the trajectory store ([`crate::elo`], base 1200 when unrated).
+//! It is a **lexicographic tie-break ONLY**: payoff stays primary, and the
+//! sort is
+//!
+//! ```text
+//! (lint_satisfied desc, ast_delta_size asc, pareto_rank asc, evidence desc)
+//! ```
+//!
+//! so evidence reorders exactly the candidates that tie on payoff +
+//! complexity + rank — where the pre-039 sort fell to arbitrary input order.
+//! Measured track record decides what structure alone cannot. Evidence NEVER
+//! participates in Pareto dominance (a rated candidate does not dominate an
+//! unrated one — [`dominates`] is unchanged) and NEVER outranks payoff: a
+//! parse-failing high-ELO candidate stays below every parse-passing one
+//! (correctness before rating — pinned by test).
+//!
 //! # Substrate lineage
 //!
 //! The Pareto-front algorithm is reimplemented locally from
@@ -25,12 +44,17 @@
 //! no backprop. Runs once per lint invocation (not per-tick).
 
 use crate::domain::HealEntry;
+use crate::elo::EloTable;
 
 /// A candidate fix scored for Pareto-front ranking.
 ///
 /// `lint_satisfied` is the payoff (higher is better); `ast_delta_size` is the
 /// complexity (lower is better). A candidate dominates another if it has
 /// payoff ≥ AND strictly lower complexity (with at least one strict inequality).
+///
+/// `evidence` (Issue 039 T3) is the rule's ELO rating from the trajectory
+/// store — a lexicographic tie-break ONLY (see the module doc): it reorders
+/// candidates that tie on payoff + complexity + rank, nothing else.
 ///
 /// Generic over `E: HealEntry` (Plan 001 Phase 1) — works with any domain's
 /// corpus entry type.
@@ -49,6 +73,11 @@ pub struct ScoredCandidate<'a, E: HealEntry> {
     /// more candidates. Candidates with the same `pareto_rank` are
     /// incomparable (neither dominates the other).
     pub pareto_rank: usize,
+    /// Evidence (Issue 039 T3): the rule's ELO rating over the trajectory
+    /// store ([`crate::elo`]), f32 to match it; [`crate::elo::default_elo`]
+    /// (1200) when the rule has no rated history. Lexicographic tie-break
+    /// ONLY — excluded from Pareto dominance, never outranks payoff.
+    pub evidence: f32,
 }
 
 /// The L3 ruliology search engine.
@@ -93,9 +122,11 @@ impl RuliologySearch {
     ///   `validate_with_clippy` for truthful lint resolution.
     /// - `ast_delta_size`: count of changed syn nodes between buggy + fixed.
     /// - `pareto_rank`: 0 = Pareto-optimal.
+    /// - `evidence`: base 1200 for every candidate (unrated) — the tie-break
+    ///   is a no-op and the ordering is identical to the pre-039 search.
     ///
     /// Returns all candidates (not just the Pareto-front), sorted by
-    /// `(lint_satisfied desc, ast_delta_size asc, pareto_rank asc)`.
+    /// `(lint_satisfied desc, ast_delta_size asc, pareto_rank asc, evidence desc)`.
     /// Callers typically take `result[0]` or filter `pareto_rank == 0`.
     ///
     /// Generic over `E: HealEntry` (Plan 001 Phase 1) — works with any domain's
@@ -105,6 +136,32 @@ impl RuliologySearch {
         &self,
         buggy_code: &str,
         candidates: &'c [E],
+    ) -> Vec<ScoredCandidate<'c, E>> {
+        // Unrated search: an empty table leaves every candidate at base
+        // evidence (zero-alloc HashMap) — bit-identical to the pre-039 order.
+        self.search_with_evidence(buggy_code, candidates, &EloTable::new())
+    }
+
+    /// Score and rank candidates with real-world evidence (Issue 039 T3).
+    ///
+    /// Same scoring + ordering as [`search`](Self::search), but each
+    /// candidate's `evidence` is its rule's ELO rating looked up in `ratings`
+    /// (`ratings.rating(entry.rule_id())`; base 1200 for rules with no rated
+    /// history). Evidence is a lexicographic tie-break ONLY — see the module
+    /// doc — so this changes the order of exactly the candidates that tie on
+    /// payoff + complexity + rank.
+    ///
+    /// The natural caller bridge (the store keeps final ratings denormalized
+    /// on every row, the 039-T2 consumer contract): build the table from
+    /// `TrajStore` rows after `recompute_elo`, then pass it here. The search
+    /// itself never touches the store — batch-on-load only (the issue's
+    /// non-goal: no ELO work inside the hot fix loop).
+    #[must_use]
+    pub fn search_with_evidence<'c, E: HealEntry>(
+        &self,
+        buggy_code: &str,
+        candidates: &'c [E],
+        ratings: &EloTable,
     ) -> Vec<ScoredCandidate<'c, E>> {
         if candidates.is_empty() {
             return Vec::new();
@@ -121,13 +178,15 @@ impl RuliologySearch {
                     lint_satisfied: result.parses,
                     ast_delta_size: ast_delta,
                     pareto_rank: 0, // filled in Phase 2
+                    evidence: ratings.rating(entry.rule_id()),
                 }
             })
             .collect();
 
         // Phase 2: compute Pareto rank for each candidate.
         // Rank = number of other candidates that dominate this one.
-        // Pareto-optimal = rank 0.
+        // Pareto-optimal = rank 0. Evidence is deliberately EXCLUDED from
+        // dominance (tie-break only — the front shape is unchanged).
         let n = scored.len();
         for i in 0..n {
             let dominated_by = (0..n)
@@ -136,21 +195,12 @@ impl RuliologySearch {
             scored[i].pareto_rank = dominated_by;
         }
 
-        // Phase 3: sort by (lint_satisfied desc, ast_delta_size asc, pareto_rank asc).
-        // This puts the best candidate first: satisfying + simplest + Pareto-optimal.
-        scored.sort_by(|a, b| {
-            // lint_satisfied: true > false
-            match (a.lint_satisfied, b.lint_satisfied) {
-                (true, false) => std::cmp::Ordering::Less,
-                (false, true) => std::cmp::Ordering::Greater,
-                _ => {
-                    // ast_delta_size: lower is better
-                    a.ast_delta_size
-                        .cmp(&b.ast_delta_size)
-                        .then_with(|| a.pareto_rank.cmp(&b.pareto_rank))
-                }
-            }
-        });
+        // Phase 3: sort by
+        // (lint_satisfied desc, ast_delta_size asc, pareto_rank asc,
+        //  evidence desc).
+        // This puts the best candidate first: satisfying + simplest +
+        // Pareto-optimal + (Issue 039 T3) higher-rated among full ties.
+        scored.sort_by(cmp_rank);
 
         scored
     }
@@ -164,7 +214,21 @@ impl RuliologySearch {
         buggy_code: &str,
         candidates: &'c [E],
     ) -> Option<&'c E> {
-        let scored = self.search(buggy_code, candidates);
+        self.best_fix_with_evidence(buggy_code, candidates, &EloTable::new())
+    }
+
+    /// [`best_fix`](Self::best_fix) with real-world evidence (Issue 039 T3):
+    /// among equally-satisfying, equal-complexity, Pareto-optimal candidates
+    /// the higher-rated rule wins. Payoff still dominates — a parse-passing
+    /// candidate is never displaced by a higher-rated parse-failing one.
+    #[must_use]
+    pub fn best_fix_with_evidence<'c, E: HealEntry>(
+        &self,
+        buggy_code: &str,
+        candidates: &'c [E],
+        ratings: &EloTable,
+    ) -> Option<&'c E> {
+        let scored = self.search_with_evidence(buggy_code, candidates, ratings);
         scored
             .into_iter()
             .find(|s| s.lint_satisfied && s.pareto_rank == 0)
@@ -178,7 +242,21 @@ impl RuliologySearch {
         buggy_code: &str,
         candidates: &'c [E],
     ) -> Vec<ScoredCandidate<'c, E>> {
-        self.search(buggy_code, candidates)
+        self.pareto_optimal_with_evidence(buggy_code, candidates, &EloTable::new())
+    }
+
+    /// [`pareto_optimal`](Self::pareto_optimal) with real-world evidence
+    /// (Issue 039 T3): the front SET is unchanged (evidence is excluded from
+    /// dominance) but its presentation order breaks full ties by `evidence`
+    /// desc instead of input order.
+    #[must_use]
+    pub fn pareto_optimal_with_evidence<'c, E: HealEntry>(
+        &self,
+        buggy_code: &str,
+        candidates: &'c [E],
+        ratings: &EloTable,
+    ) -> Vec<ScoredCandidate<'c, E>> {
+        self.search_with_evidence(buggy_code, candidates, ratings)
             .into_iter()
             .filter(|s| s.pareto_rank == 0)
             .collect()
@@ -195,6 +273,10 @@ impl RuliologySearch {
 /// Direct adaptation of `WinMatrix::pareto_front`'s dominance check
 /// (`katgpt-ruliology/src/types.rs` lines 119-126), with bool payoff +
 /// usize complexity in place of f64/f32.
+///
+/// NOTE (Issue 039 T3): `evidence` is deliberately EXCLUDED — it is a
+/// lexicographic tie-break in [`cmp_rank`], not a front axis. A rated
+/// candidate does not dominate an unrated one; ratings reorder ties only.
 #[inline]
 fn dominates<E: HealEntry>(a: &ScoredCandidate<'_, E>, b: &ScoredCandidate<'_, E>) -> bool {
     let payoff_ge = a.lint_satisfied >= b.lint_satisfied; // bool: true >= false
@@ -202,6 +284,37 @@ fn dominates<E: HealEntry>(a: &ScoredCandidate<'_, E>, b: &ScoredCandidate<'_, E
     let strictly_better =
         a.lint_satisfied != b.lint_satisfied || a.ast_delta_size != b.ast_delta_size;
     payoff_ge && complexity_le && strictly_better
+}
+
+/// The search's total order (Issue 039 T3 makes it explicit + tested):
+///
+/// ```text
+/// (lint_satisfied desc, ast_delta_size asc, pareto_rank asc, evidence desc)
+/// ```
+///
+/// Payoff is primary — a parse-passing candidate sorts before every
+/// parse-failing one regardless of ELO. Complexity still beats evidence
+/// among parse-equal candidates (the front stays `(payoff, complexity)`;
+/// evidence is the third, tie-only axis). Evidence (`f32` ELO, finite)
+/// compares via `total_cmp` for a deterministic total order.
+#[inline]
+fn cmp_rank<E: HealEntry>(
+    a: &ScoredCandidate<'_, E>,
+    b: &ScoredCandidate<'_, E>,
+) -> std::cmp::Ordering {
+    // lint_satisfied: true > false
+    match (a.lint_satisfied, b.lint_satisfied) {
+        (true, false) => std::cmp::Ordering::Less,
+        (false, true) => std::cmp::Ordering::Greater,
+        _ => {
+            // ast_delta_size: lower is better
+            a.ast_delta_size
+                .cmp(&b.ast_delta_size)
+                .then_with(|| a.pareto_rank.cmp(&b.pareto_rank))
+                // evidence: higher is better (Issue 039 T3 tie-break)
+                .then_with(|| b.evidence.total_cmp(&a.evidence))
+        }
+    }
 }
 
 /// Count the AST delta size between buggy and fixed code.
@@ -405,6 +518,7 @@ mod tests {
     use super::*;
     use crate::domains::clippy_lints::ClippyFixEntry;
     use crate::domains::clippy_lints::corpus::build_seed_corpus;
+    use crate::elo::default_elo;
 
     fn mock_entry(lint: &str, buggy: &str, fixed: &str) -> ClippyFixEntry {
         ClippyFixEntry {
@@ -517,7 +631,204 @@ mod tests {
         assert!(!dominates(&b, &a));
     }
 
+    #[test]
+    fn dominance_ignores_evidence() {
+        // Issue 039 T3 pin: evidence is NOT a dominance axis — a rated
+        // candidate does not dominate an unrated one (the front shape is
+        // unchanged; ratings reorder ties in cmp_rank only).
+        let rated = mock_scored_with_evidence(true, 5, 1600.0);
+        let unrated = mock_scored(true, 5);
+        assert!(!dominates(&rated, &unrated));
+        assert!(!dominates(&unrated, &rated));
+    }
+
+    // ── Issue 039 T3: the evidence tie-break (cmp_rank) ────────────────
+
+    #[test]
+    fn cmp_payoff_dominates_evidence() {
+        // Fixture (a): higher payoff wins regardless of evidence. The
+        // load-bearing direction: a parse-FAILING high-ELO candidate never
+        // outranks a parse-passing one — correctness before rating.
+        let passing_low = mock_scored_with_evidence(true, 10, 1200.0);
+        let failing_high = mock_scored_with_evidence(false, 1, 2000.0);
+        assert_eq!(
+            cmp_rank(&passing_low, &failing_high),
+            std::cmp::Ordering::Less
+        );
+        assert_eq!(
+            cmp_rank(&failing_high, &passing_low),
+            std::cmp::Ordering::Greater
+        );
+        // The trivial direction too, plus the complexity-MAX extreme (an
+        // unparseable fix carries usize::MAX complexity) — payoff still first.
+        let passing_high = mock_scored_with_evidence(true, usize::MAX, 1800.0);
+        let failing_low = mock_scored_with_evidence(false, usize::MAX, 1200.0);
+        assert_eq!(
+            cmp_rank(&passing_high, &failing_low),
+            std::cmp::Ordering::Less
+        );
+        assert_eq!(
+            cmp_rank(&failing_low, &passing_high),
+            std::cmp::Ordering::Greater
+        );
+    }
+
+    #[test]
+    fn cmp_evidence_breaks_parse_equal_tie_both_directions() {
+        // Fixture (b): among parse-equal (and complexity/rank-equal)
+        // candidates, the higher evidence wins — in BOTH directions.
+        let hi = mock_scored_with_evidence(true, 5, 1300.0);
+        let lo = mock_scored_with_evidence(true, 5, 1200.0);
+        assert_eq!(cmp_rank(&hi, &lo), std::cmp::Ordering::Less);
+        assert_eq!(cmp_rank(&lo, &hi), std::cmp::Ordering::Greater);
+        // Same tie among parse-failing candidates — evidence still breaks it
+        // (ordering within the failing block is also evidence-aware).
+        let hi_f = mock_scored_with_evidence(false, 5, 1300.0);
+        let lo_f = mock_scored_with_evidence(false, 5, 1200.0);
+        assert_eq!(cmp_rank(&hi_f, &lo_f), std::cmp::Ordering::Less);
+        assert_eq!(cmp_rank(&lo_f, &hi_f), std::cmp::Ordering::Greater);
+    }
+
+    #[test]
+    fn cmp_complexity_beats_evidence_among_parse_equal() {
+        // The lexicographic-position pin: evidence is a tie-break ONLY —
+        // complexity (the structural heuristic) still decides among
+        // parse-equal candidates before evidence is ever consulted.
+        let simpler_unrated = mock_scored_with_evidence(true, 3, 1200.0);
+        let complex_rated = mock_scored_with_evidence(true, 5, 1600.0);
+        assert_eq!(
+            cmp_rank(&simpler_unrated, &complex_rated),
+            std::cmp::Ordering::Less
+        );
+        assert_eq!(
+            cmp_rank(&complex_rated, &simpler_unrated),
+            std::cmp::Ordering::Greater
+        );
+    }
+
+    #[test]
+    fn cmp_equal_evidence_is_equal_and_deterministic() {
+        // Fixture (c): equal keys compare Equal (stable sort then preserves
+        // input order) and the comparison is deterministic — same inputs,
+        // same ordering, every time.
+        let a = mock_scored_with_evidence(true, 5, 1250.0);
+        let b = mock_scored_with_evidence(true, 5, 1250.0);
+        assert_eq!(cmp_rank(&a, &b), std::cmp::Ordering::Equal);
+        assert_eq!(cmp_rank(&b, &a), std::cmp::Ordering::Equal);
+        for _ in 0..100 {
+            assert_eq!(cmp_rank(&a, &b), std::cmp::Ordering::Equal);
+        }
+    }
+
+    // ── Issue 039 T3: evidence-aware search (end-to-end) ──────────────
+
+    #[test]
+    fn search_payoff_beats_high_evidence() {
+        // Issue 039 T3 fixture (b), end-to-end: a parse-FAILING high-ELO
+        // candidate NEVER outranks a parse-passing one. The unrated rule
+        // parses; the heavily-rated rule emits garbage.
+        let search = RuliologySearch::new();
+        let buggy = "fn foo() -> i32 { return 42; }";
+        let candidates = vec![
+            mock_entry("rule_a", buggy, "fn foo() -> i32 { 42 }"),
+            mock_entry("rule_b", buggy, "this is not valid rust"),
+        ];
+        let mut ratings = EloTable::new();
+        for _ in 0..4 {
+            ratings.play("rule_b", "span", true); // rule_b ≈ 1258
+        }
+        let result = search.search_with_evidence(buggy, &candidates, &ratings);
+        assert!(
+            result[0].lint_satisfied,
+            "parse-passing candidate must rank first regardless of ELO"
+        );
+        assert_eq!(result[0].entry.rule_id(), "rule_a");
+        assert!(!result[1].lint_satisfied);
+        assert_eq!(result[1].entry.rule_id(), "rule_b");
+        // And best_fix_with_evidence picks the parse-passing one.
+        let best = search.best_fix_with_evidence(buggy, &candidates, &ratings);
+        assert_eq!(best.map(HealEntry::rule_id), Some("rule_a"));
+    }
+
+    #[test]
+    fn search_evidence_breaks_parse_equal_tie_both_directions() {
+        // End-to-end fixture (b): two candidates with IDENTICAL fixed_code
+        // (equal payoff + equal complexity + equal rank 0 — the exact tie
+        // that fell to input order pre-039) are reordered by rating, in
+        // BOTH directions.
+        let search = RuliologySearch::new();
+        let buggy = "fn foo() -> i32 { return 42; }";
+        let candidates = vec![
+            mock_entry("rule_a", buggy, "fn foo() -> i32 { 42 }"),
+            mock_entry("rule_b", buggy, "fn foo() -> i32 { 42 }"),
+        ];
+
+        // Direction 1: rule_b rated up → rule_b first.
+        let mut ratings = EloTable::new();
+        for _ in 0..2 {
+            ratings.play("rule_b", "span", true); // ≈ 1231
+        }
+        let result = search.search_with_evidence(buggy, &candidates, &ratings);
+        assert_eq!(result[0].entry.rule_id(), "rule_b");
+        assert_eq!(result[1].entry.rule_id(), "rule_a");
+        assert_eq!(result[0].pareto_rank, 0);
+        assert!(result[0].evidence > result[1].evidence);
+
+        // Direction 2: rule_a rated up instead → rule_a first.
+        let mut ratings = EloTable::new();
+        for _ in 0..2 {
+            ratings.play("rule_a", "span", true);
+        }
+        let result = search.search_with_evidence(buggy, &candidates, &ratings);
+        assert_eq!(result[0].entry.rule_id(), "rule_a");
+        assert_eq!(result[1].entry.rule_id(), "rule_b");
+        assert!(result[0].evidence > result[1].evidence);
+    }
+
+    #[test]
+    fn search_equal_evidence_preserves_input_order_and_is_deterministic() {
+        fn ids<'a>(r: &'a [ScoredCandidate<'a, ClippyFixEntry>]) -> Vec<&'a str> {
+            r.iter().map(|s| s.entry.rule_id()).collect()
+        }
+        // End-to-end fixture (c): equal evidence (both unrated — empty
+        // table) → the stable sort preserves input order, and repeated
+        // searches are identical.
+        let search = RuliologySearch::new();
+        let buggy = "fn foo() -> i32 { return 42; }";
+        let candidates = vec![
+            mock_entry("rule_a", buggy, "fn foo() -> i32 { 42 }"),
+            mock_entry("rule_b", buggy, "fn foo() -> i32 { 42 }"),
+            mock_entry("rule_c", buggy, "fn foo() -> i32 { 42 }"),
+        ];
+        let ratings = EloTable::new(); // unrated: all base 1200
+        let r1 = search.search_with_evidence(buggy, &candidates, &ratings);
+        assert_eq!(
+            ids(&r1),
+            vec!["rule_a", "rule_b", "rule_c"],
+            "equal evidence must preserve input order (stable sort)"
+        );
+        // Unrated lookups return the exact base constant (no arithmetic) —
+        // exact equality IS the unrated contract (the elo.rs test precedent).
+        #[allow(clippy::float_cmp)]
+        let all_base = r1.iter().all(|s| s.evidence == default_elo());
+        assert!(all_base);
+        let r2 = search.search_with_evidence(buggy, &candidates, &ratings);
+        assert_eq!(ids(&r1), ids(&r2), "search must be deterministic");
+        // The unrated search() path behaves identically (base evidence for
+        // all — the pre-039 ordering, bit-identical).
+        let r3 = search.search(buggy, &candidates);
+        assert_eq!(ids(&r1), ids(&r3));
+    }
+
     fn mock_scored(satisfied: bool, complexity: usize) -> ScoredCandidate<'static, ClippyFixEntry> {
+        mock_scored_with_evidence(satisfied, complexity, default_elo())
+    }
+
+    fn mock_scored_with_evidence(
+        satisfied: bool,
+        complexity: usize,
+        evidence: f32,
+    ) -> ScoredCandidate<'static, ClippyFixEntry> {
         // SAFETY: we never read `entry` in the dominates/dominance tests, so
         // we use a leaked static. This is test-only.
         static EMPTY_ENTRY: std::sync::OnceLock<ClippyFixEntry> = std::sync::OnceLock::new();
@@ -532,6 +843,7 @@ mod tests {
             lint_satisfied: satisfied,
             ast_delta_size: complexity,
             pareto_rank: 0,
+            evidence,
         }
     }
 
