@@ -49,6 +49,14 @@ same-bucket stats race.
 
 ## Tasks
 
+> **037-T2 pre-landed the schema half of T1/T2 (2026-08-24):**
+> `TrajRowDoc` now carries `last_run_id` + `last_seen_at` (serde-defaulted,
+> pre-T2 rows decode), `record()` takes the run id, and the `--fix
+> --verify` verdict events already land in `.heal/trajectories.kv`
+> (transitional dual-record with memory.json — T3 below retires the
+> envelope half). T1's `FixTrajectoryRow` design should build on these
+> fields rather than re-deriving them.
+
 - [ ] **T1 — Pod row schema** `FixTrajectoryRow` (`#[repr(C)]`, bytemuck Pod):
       the bucket fields (lint_name_hash, buggy/fixed BLAKE3 commitments,
       direction `[f32; 8]`, success/fail counts, consecutive_fails, tier,

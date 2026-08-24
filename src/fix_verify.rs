@@ -570,9 +570,16 @@ struct Diagnostic {
     #[serde(default)]
     level: String,
     #[serde(default)]
+    code: Option<DiagCode>,
+    #[serde(default)]
     spans: Vec<DiagSpan>,
     #[serde(default)]
     children: Vec<Diagnostic>,
+}
+
+#[derive(Deserialize)]
+struct DiagCode {
+    code: String,
 }
 
 #[derive(Deserialize)]
@@ -580,6 +587,8 @@ struct DiagSpan {
     file_name: String,
     line_start: usize,
     line_end: usize,
+    #[serde(default)]
+    primary: bool,
 }
 
 /// One error location: a file plus the inclusive line ranges its error
@@ -659,6 +668,80 @@ fn merge_error_locations(
 
 // `resolve_reported_path` moved to `compile_oracle` (re-exported above)
 // — Plan 019 T0.3. The doc on it there describes the resolution order.
+
+// ── 037-T2: the lint-resolution oracle helpers ────────────────────────────
+
+/// One clippy finding: the lint code (e.g. `clippy::uninlined_format_args`)
+/// plus the file + inclusive line range of its PRIMARY span.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClippyFinding {
+    pub code: String,
+    pub file: PathBuf,
+    pub line_start: usize,
+    pub line_end: usize,
+}
+
+/// Parse `cargo clippy --message-format=json` stdout into findings:
+/// warning-level `clippy::*` diagnostics, PRIMARY spans only (notes/children
+/// point at binding sites elsewhere — not resolution signal). This is the
+/// 037-T2 resolution oracle's read side: a kept edit's named lint resolved
+/// iff no finding of that lint covers the edit's final line.
+#[must_use]
+pub fn parse_clippy_findings(json_stdout: &str) -> Vec<ClippyFinding> {
+    let mut out = Vec::new();
+    for line in json_stdout.lines() {
+        let Ok(msg) = serde_json::from_str::<CargoMessage>(line.trim()) else {
+            continue;
+        };
+        if msg.reason.as_deref() != Some("compiler-message") {
+            continue;
+        }
+        let Some(diag) = msg.message else { continue };
+        if diag.level != "warning" {
+            continue;
+        }
+        let Some(code) = diag.code.as_ref().map(|c| c.code.clone()) else {
+            continue;
+        };
+        if !code.starts_with("clippy::") {
+            continue;
+        }
+        for s in &diag.spans {
+            if !s.primary {
+                continue;
+            }
+            out.push(ClippyFinding {
+                code: code.clone(),
+                file: PathBuf::from(&s.file_name),
+                line_start: s.line_start,
+                line_end: s.line_end.max(s.line_start),
+            });
+        }
+    }
+    out
+}
+
+/// The 037-T2 verdict matrix for a kept edit (the compile gate kept it —
+/// the code compiles):
+///
+/// - `Some(true)` — the clippy oracle confirms the named lint resolved at
+///   the edit site → `(success, verified) = (true, true)` → **Certified**
+///   (the only promotion path, Issue 021).
+/// - `Some(false)` — oracle ran + the lint PERSISTS at the edit site →
+///   `(false, true)` → a **verified failure** (the honest persist signal;
+///   three consecutive verified failures withdraw the trajectory).
+/// - `None` — no oracle verdict available (oracle not built, cargo
+///   unrunnable, or a non-clippy rule the oracle cannot judge) →
+///   `(true, false)` → **Heuristic outcome-success** (the rustc-only
+///   pass — exactly 037-T2's split).
+#[must_use]
+pub fn kept_edit_verdict(oracle_resolved: Option<bool>) -> (bool, bool) {
+    match oracle_resolved {
+        Some(true) => (true, true),
+        Some(false) => (false, true),
+        None => (true, false),
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -941,5 +1024,38 @@ mod tests {
         );
         assert!(on_disk.contains("|b| **b"), "bad closure edit reverted");
         let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    // ── 037-T2: lint-resolution oracle parsing + verdict matrix ─────────
+
+    #[test]
+    fn parse_clippy_findings_takes_primary_warning_spans_only() {
+        let json = concat!(
+            "{\"reason\":\"compiler-artifact\"}\n",
+            // A clippy warning: primary span kept, secondary span dropped.
+            "{\"reason\":\"compiler-message\",\"message\":{\"level\":\"warning\",\"code\":{\"code\":\"clippy::uninlined_format_args\"},\"spans\":[{\"file_name\":\"src/lib.rs\",\"line_start\":4,\"line_end\":4,\"primary\":true},{\"file_name\":\"src/lib.rs\",\"line_start\":9,\"line_end\":9,\"primary\":false}]}}\n",
+            // An error carries no resolution signal — dropped.
+            "{\"reason\":\"compiler-message\",\"message\":{\"level\":\"error\",\"code\":{\"code\":\"clippy::something\"},\"spans\":[{\"file_name\":\"src/lib.rs\",\"line_start\":2,\"line_end\":2,\"primary\":true}]}}\n",
+            // A rustc warning (no clippy:: prefix) — dropped.
+            "{\"reason\":\"compiler-message\",\"message\":{\"level\":\"warning\",\"code\":{\"code\":\"unused_variables\"},\"spans\":[{\"file_name\":\"src/lib.rs\",\"line_start\":6,\"line_end\":6,\"primary\":true}]}}\n",
+            // A warning with no code — dropped.
+            "{\"reason\":\"compiler-message\",\"message\":{\"level\":\"warning\",\"spans\":[{\"file_name\":\"src/lib.rs\",\"line_start\":8,\"line_end\":8,\"primary\":true}]}}\n",
+        );
+        let findings = parse_clippy_findings(json);
+        assert_eq!(findings.len(), 1, "{findings:?}");
+        assert_eq!(findings[0].code, "clippy::uninlined_format_args");
+        assert_eq!(findings[0].file, Path::new("src/lib.rs"));
+        assert_eq!((findings[0].line_start, findings[0].line_end), (4, 4));
+    }
+
+    #[test]
+    fn kept_edit_verdict_matrix() {
+        // Oracle-confirmed resolve → Certified.
+        assert_eq!(kept_edit_verdict(Some(true)), (true, true));
+        // Persist → verified failure (the honest persist signal).
+        assert_eq!(kept_edit_verdict(Some(false)), (false, true));
+        // No oracle verdict (not built / unrunnable / non-clippy rule) →
+        // rustc-only Heuristic outcome-success.
+        assert_eq!(kept_edit_verdict(None), (true, false));
     }
 }

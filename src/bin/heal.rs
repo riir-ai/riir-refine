@@ -61,6 +61,71 @@ fn default_memory_path() -> PathBuf {
     base.join("riir-clippy").join("memory.json")
 }
 
+/// 037-T2/038: open the repo-local neuron-db trajectory store (the durable
+/// verdict landing — the backend Issue 038 unifies on). Root resolution:
+/// `RIIR_HEAL_TRAJ_ROOT` → else the first path arg's workspace root → else
+/// cwd (repo-local wins for the 037-A2 per-repo adoption audit). `None` +
+/// one stderr line when the store cannot open — verdicts then land in
+/// memory.json only (never fatal to a heal).
+#[cfg(all(feature = "fix_verify", feature = "latent_retrieval"))]
+fn open_traj_store(paths: &[PathBuf]) -> Option<riir_clippy::traj_store::TrajStore> {
+    let root = std::env::var("RIIR_HEAL_TRAJ_ROOT")
+        .ok()
+        .map(PathBuf::from)
+        .or_else(|| {
+            paths.first().and_then(|p| {
+                riir_clippy::fix_verify::owning_package_root(p)
+                    .and_then(|pkg| riir_clippy::compile_oracle::workspace_root(&pkg))
+            })
+        })
+        .or_else(|| std::env::current_dir().ok())
+        .unwrap_or_default();
+    match riir_clippy::traj_store::TrajStore::open(&root) {
+        Ok((store, bad)) => {
+            if bad > 0 {
+                eprintln!("self-evolve: trajectory store: {bad} corrupt row(s) skipped");
+            }
+            Some(store)
+        }
+        Err(e) => {
+            eprintln!("self-evolve: neuron store unavailable ({e}) — verdicts land in memory.json only");
+            None
+        }
+    }
+}
+
+/// Record one verdict event into the durable store (best-effort — a store
+/// failure warns once per event, never fails the heal).
+#[cfg(all(feature = "fix_verify", feature = "latent_retrieval"))]
+fn record_traj(
+    store: &Option<riir_clippy::traj_store::TrajStore>,
+    rule_id: &str,
+    restore: &str,
+    replacement: &str,
+    success: bool,
+    verified: bool,
+    run_id: &str,
+) {
+    if let Some(store) = store {
+        if let Err(e) = store.record(rule_id, restore, replacement, success, verified, run_id) {
+            eprintln!("self-evolve: store record failed: {e}");
+        }
+    }
+}
+
+/// [`record_traj`] fixed at the failure verdict (reverts — Issue 018's
+/// definitive compile-gate fail).
+#[cfg(all(feature = "fix_verify", feature = "latent_retrieval"))]
+fn record_traj_fail(
+    store: &Option<riir_clippy::traj_store::TrajStore>,
+    rule_id: &str,
+    restore: &str,
+    replacement: &str,
+    run_id: &str,
+) {
+    record_traj(store, rule_id, restore, replacement, false, false, run_id);
+}
+
 /// Print the per-edit fix review + fmt annotation. `edits` are
 /// `(rule_id, final line, replacement, restore)` — only the first two
 /// fields print here; the last two exist for the verify path.
@@ -740,6 +805,20 @@ fn main() {
         }
     }
 
+    // ── 037-T2: one heal-run id per invocation — the verdict-attribution
+    // key stamped on the durable trajectory rows (Issue 038's schema:
+    // in-schema fields keyed by run id, single read path). Compact +
+    // unique per run (time-nanos + pid). Declared only in the feature
+    // states that consume it (the fix-verify verdict path; the
+    // fix-compile store arm) — otherwise unused.
+    #[cfg(any(feature = "fix_verify", all(feature = "rustc_errors", feature = "latent_retrieval")))]
+    let heal_run_id = {
+        let t = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0u128, |d| d.as_nanos());
+        format!("run-{t:x}-{}", std::process::id())
+    };
+
     // ── Plan 019 Phase 1: --fix-compile — the oracle driver ──────────
     // A separate early-exit arm: it operates on PACKAGES (cargo check per
     // owning package), needs no retrieval, and its loop carries its own
@@ -838,16 +917,26 @@ fn main() {
                 if let Some(store) = &traj_store {
                     use riir_clippy::domains::rustc_errors::evolve::traj_key;
                     for a in &report.applied {
-                        if let Err(e) =
-                            store.record(&traj_key(&a.code, &a.strategy_id), &a.shape, &a.fix, true, true)
-                        {
+                        if let Err(e) = store.record(
+                            &traj_key(&a.code, &a.strategy_id),
+                            &a.shape,
+                            &a.fix,
+                            true,
+                            true,
+                            &heal_run_id,
+                        ) {
                             eprintln!("self-evolve: store record failed: {e}");
                         }
                     }
                     for r in &report.reverted {
-                        if let Err(e) =
-                            store.record(&traj_key(&r.code, &r.strategy_id), &r.shape, &r.fix, false, false)
-                        {
+                        if let Err(e) = store.record(
+                            &traj_key(&r.code, &r.strategy_id),
+                            &r.shape,
+                            &r.fix,
+                            false,
+                            false,
+                            &heal_run_id,
+                        ) {
                             eprintln!("self-evolve: store record failed: {e}");
                         }
                     }
@@ -1406,12 +1495,12 @@ fn main() {
     // ── Issue 015: the verify loop — write, cargo check, auto-revert.
     #[cfg(feature = "fix_verify")]
     if args.verify {
-        let extra = args
+        let extra: Vec<String> = args
             .verify_args
             .as_deref()
             .map(|s| s.split_whitespace().map(str::to_string).collect())
             .unwrap_or_default();
-        let verifier = riir_clippy::fix_verify::FixVerifier::new().with_extra_args(extra);
+        let verifier = riir_clippy::fix_verify::FixVerifier::new().with_extra_args(extra.clone());
         // Issue 031 H3: the verify baseline is default-features cargo check
         // — code behind non-default features is NOT compile-gated (the
         // katgpt-pruners batch shipped 2 feature-gated breaks past verify:
@@ -1468,20 +1557,142 @@ fn main() {
                 );
             }
         }
+        // ── 037-T2: per-batch derived state (kept/reverted), computed ONCE
+        // — consumed by the oracle pre-pass below + the review loop.
+        let batch_state: Vec<(std::collections::HashSet<usize>, bool)> = verify_batches
+            .iter()
+            .map(|b| {
+                let reverted_lines: std::collections::HashSet<usize> = report
+                    .reverted
+                    .iter()
+                    .filter(|r| r.path == b.path && !r.whole_file)
+                    .map(|r| r.line)
+                    .collect();
+                let whole = report
+                    .reverted
+                    .iter()
+                    .any(|r| r.path == b.path && r.whole_file);
+                (reverted_lines, whole)
+            })
+            .collect();
+
+        // ── 037-T2: the lint-resolution oracle (clippy_verify builds). For
+        // kept edits whose rule is one of OUR clippy lints, one
+        // `cargo clippy -- -W clippy::<lint>…` per owning package (same
+        // feature set as the compile gate) confirms whether the named lint
+        // still fires AT the edit site:
+        //   resolved  → Certified verdict (the only promotion path)
+        //   persists  → verified FAILURE (the honest persist signal)
+        //   no verdict (oracle not built / unrunnable / non-clippy rule) →
+        //              rustc-only Heuristic outcome-success
+        // A finding elsewhere in the file (a refused sibling span) does NOT
+        // block confirmation — only a finding whose PRIMARY span covers the
+        // edit's final line is this edit's verdict.
+        // Populated only under clippy_verify — hence the cfg_attr'd mut.
+        #[cfg_attr(not(feature = "clippy_verify"), allow(unused_mut))]
+        let mut oracle_resolved: std::collections::HashMap<(PathBuf, usize), bool> =
+            std::collections::HashMap::new();
+        #[cfg(feature = "clippy_verify")]
+        {
+            // FIXABLE_LINTS (unconditional) + VERIFY_LINTS (fix_verify —
+            // this block nests inside it) are already imported at the top.
+            let oracle_lint =
+                |rule: &str| FIXABLE_LINTS.contains(&rule) || VERIFY_LINTS.contains(&rule);
+            // (pkg → (distinct lints, the kept edits carrying them)).
+            // Edit tuple: (batch path, final line, rule id).
+            type PkgOracle = (Vec<String>, Vec<(PathBuf, usize, String)>);
+            let mut by_pkg: std::collections::HashMap<PathBuf, PkgOracle> =
+                std::collections::HashMap::new();
+            for (b, (reverted_lines, whole)) in verify_batches.iter().zip(&batch_state) {
+                if *whole {
+                    continue;
+                }
+                let Some(pkg) = riir_clippy::fix_verify::owning_package_root(&b.path) else {
+                    continue;
+                };
+                for e in &b.edits {
+                    if reverted_lines.contains(&e.final_line) || !oracle_lint(&e.rule_id) {
+                        continue;
+                    }
+                    let entry = by_pkg.entry(pkg.clone()).or_default();
+                    if !entry.0.contains(&e.rule_id) {
+                        entry.0.push(e.rule_id.clone());
+                    }
+                    entry.1.push((b.path.clone(), e.final_line, e.rule_id.clone()));
+                }
+            }
+            if !by_pkg.is_empty() {
+                let runner =
+                    riir_clippy::fix_verify::CheckRunner::new().with_extra_args(extra.clone());
+                let mut canon_cache: std::collections::HashMap<PathBuf, PathBuf> =
+                    std::collections::HashMap::new();
+                let mut n_resolved = 0usize;
+                let mut n_persist = 0usize;
+                let mut n_unverifiable = 0usize;
+                for (pkg, (lints, edits)) in &by_pkg {
+                    let outcome = runner.run_clippy(pkg, lints);
+                    let findings = match outcome {
+                        Ok(o) if o.exit_ok => {
+                            riir_clippy::fix_verify::parse_clippy_findings(&o.json)
+                        }
+                        Ok(_) => {
+                            n_unverifiable += edits.len();
+                            continue; // clippy failed — no verdict (Heuristic)
+                        }
+                        Err(e) => {
+                            eprintln!("oracle: clippy unrunnable for {}: {e}", pkg.display());
+                            n_unverifiable += edits.len();
+                            continue;
+                        }
+                    };
+                    let ws = riir_clippy::compile_oracle::workspace_root(pkg);
+                    let ws_ref = ws.as_deref().unwrap_or(pkg.as_path());
+                    for (batch_path, line, lint) in edits {
+                        let canon = canon_cache
+                            .entry(batch_path.clone())
+                            .or_insert_with(|| {
+                                std::fs::canonicalize(batch_path)
+                                    .unwrap_or_else(|_| batch_path.clone())
+                            })
+                            .clone();
+                        let target = format!("clippy::{lint}");
+                        let persists = findings.iter().any(|f| {
+                            f.code == target
+                                && riir_clippy::fix_verify::resolve_reported_path(
+                                    &f.file,
+                                    ws_ref,
+                                    pkg,
+                                ) == *canon
+                                && *line >= f.line_start
+                                && *line <= f.line_end
+                        });
+                        oracle_resolved.insert((batch_path.clone(), *line), !persists);
+                        if persists {
+                            n_persist += 1;
+                        } else {
+                            n_resolved += 1;
+                        }
+                    }
+                }
+                eprintln!(
+                    "oracle: {n_resolved} confirmed resolved (Certified), {n_persist} persist (verified-fail), {n_unverifiable} without an oracle verdict (Heuristic)",
+                );
+            }
+        }
+
+        // ── 037-T2/038: the durable verdict landing — fix_verify implies
+        // latent_retrieval, so the verdict events ALSO land in the
+        // repo-local neuron-db store (`.heal/trajectories.kv`), the backend
+        // 038 unifies on. Transitional dual-record with memory.json below
+        // (the same events — no drift; 038-T3 retires the envelope half).
+        // The inner cfg guards a future decoupling of the feature graph.
+        #[cfg(feature = "latent_retrieval")]
+        let traj_store = open_traj_store(&args.paths);
+
         // Post-verify review: report what SURVIVED (the fix review for
         // reverted edits would be misleading).
-        for b in &verify_batches {
-            let reverted_lines: std::collections::HashSet<usize> = report
-                .reverted
-                .iter()
-                .filter(|r| r.path == b.path && !r.whole_file)
-                .map(|r| r.line)
-                .collect();
-            let whole = report
-                .reverted
-                .iter()
-                .any(|r| r.path == b.path && r.whole_file);
-            if whole {
+        for (b, (reverted_lines, whole)) in verify_batches.iter().zip(&batch_state) {
+            if *whole {
                 println!("fix {} — REVERTED (whole file):", b.path.display());
                 for e in &b.edits {
                     println!("  [{:<24}] line {} (reverted)", e.rule_id, e.final_line);
@@ -1491,6 +1702,8 @@ fn main() {
                 // compile failure itself is the verdict).
                 for e in &b.edits {
                     evolve_rec.record_outcome(&e.rule_id, &e.restore, &e.replacement, false);
+                    #[cfg(feature = "latent_retrieval")]
+                    record_traj_fail(&traj_store, &e.rule_id, &e.restore, &e.replacement, &heal_run_id);
                 }
                 continue;
             }
@@ -1504,15 +1717,40 @@ fn main() {
             }
             n_fixed_files += 1;
             n_fixed_edits += kept.len();
-            // Issue 018: kept edits join the memory (a rustc pass proves
-            // non-breakage, not lint resolution — memory-only, no verdict);
-            // span-level reverts are definitive fails (sound to learn from
-            // when an oracle build enabled learning).
+            // 037-T2 (the F2 fix): kept edits earn POSITIVE verdicts — the
+            // compile gate vouches at minimum (rustc-only pass = Heuristic
+            // outcome-success); the clippy oracle (when built + runnable)
+            // upgrades to Certified on confirmed resolution or records the
+            // honest verified-fail on a persist. Span-level reverts stay
+            // definitive fails.
             for e in &kept {
-                evolve_rec.record_applied(&e.rule_id, &e.restore, &e.replacement);
+                let (success, verified) = riir_clippy::fix_verify::kept_edit_verdict(
+                    oracle_resolved
+                        .get(&(b.path.clone(), e.final_line))
+                        .copied(),
+                );
+                evolve_rec.record_outcome_verified(
+                    &e.rule_id,
+                    &e.restore,
+                    &e.replacement,
+                    success,
+                    verified,
+                );
+                #[cfg(feature = "latent_retrieval")]
+                record_traj(
+                    &traj_store,
+                    &e.rule_id,
+                    &e.restore,
+                    &e.replacement,
+                    success,
+                    verified,
+                    &heal_run_id,
+                );
             }
             for e in b.edits.iter().filter(|e| reverted_lines.contains(&e.final_line)) {
                 evolve_rec.record_outcome(&e.rule_id, &e.restore, &e.replacement, false);
+                #[cfg(feature = "latent_retrieval")]
+                record_traj_fail(&traj_store, &e.rule_id, &e.restore, &e.replacement, &heal_run_id);
             }
             println!("fix {} ({} edit(s) verified):", b.path.display(), kept.len());
             for e in &kept {

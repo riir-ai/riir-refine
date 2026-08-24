@@ -44,6 +44,15 @@
 //! certifies; 3 consecutive failures withdraw (absorbing — only a
 //! verified success exits).
 //!
+//! ## 037-T2 verdict attribution (038's schema half)
+//!
+//! Every `record` stamps [`TrajRowDoc::last_run_id`] (the heal-run that
+//! produced the verdict — one id per CLI invocation) and
+//! [`TrajRowDoc::last_seen_at`] (unix seconds — 037-A1's memory-cadence
+//! half + 038-T1's timestamp field, landed here so 038 keeps a single
+//! read path: in-schema fields, no sidecar). Pre-T2 rows decode with
+//! `""`/`0` defaults (serde).
+//!
 //! ## One active backend per build (the constraint)
 //!
 //! The default (non-`latent_retrieval`) build keeps the `memory.json`
@@ -78,6 +87,15 @@ pub struct TrajRowDoc {
     pub consecutive_fails: u32,
     /// Evidential tier (Issue 021 semantics, durable).
     pub tier: u8,
+    /// The heal-run id that produced the latest verdict (037-T2 / 038-T1:
+    /// per-run attribution; `""` on rows written before the field
+    /// existed — serde default keeps old rows decoding).
+    #[serde(default)]
+    pub last_run_id: String,
+    /// Unix seconds of the latest verdict sighting (037-A1's cadence half;
+    /// `0` on pre-T2 rows).
+    #[serde(default)]
+    pub last_seen_at: u64,
 }
 
 impl EvidenceTier {
@@ -146,6 +164,13 @@ fn shape_hash(shape: &str) -> String {
     h.update(shape.as_bytes());
     let hex = h.finalize().to_hex().to_string();
     hex[..12].to_string()
+}
+
+/// Current unix time in seconds (the `last_seen_at` stamp).
+fn now_unix_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
 }
 
 /// Resolve or create the per-repo key seed at `<root>/.heal/key`. The
@@ -217,7 +242,9 @@ impl TrajStore {
     /// Upsert one outcome. Creates the row on first sight; increments the
     /// counters + transitions the tier on repeat (Issue 021 semantics,
     /// durable: `success && verified` certifies; 3 consecutive failures
-    /// withdraw — absorbing, only a verified success exits).
+    /// withdraw — absorbing, only a verified success exits). Stamps the
+    /// verdict's run attribution: `run_id` + the current unix time
+    /// (037-T2).
     ///
     /// # Errors
     ///
@@ -229,6 +256,7 @@ impl TrajStore {
         fix: &str,
         success: bool,
         verified: bool,
+        run_id: &str,
     ) -> Result<(), String> {
         let key = Self::row_key(lint_key, shape);
         let mut row = self
@@ -247,11 +275,15 @@ impl TrajStore {
                     fail_count: 0,
                     consecutive_fails: 0,
                     tier: EvidenceTier::Heuristic.as_u8(),
+                    last_run_id: String::new(),
+                    last_seen_at: 0,
                 }
             });
         // The text halves update with the latest sighting (the shape key
         // is stable, the fix may have been refined).
         row.fix = fix.to_string();
+        row.last_run_id = run_id.to_string();
+        row.last_seen_at = now_unix_secs();
         if success {
             row.success_count = row.success_count.saturating_add(1);
             row.consecutive_fails = 0;
@@ -478,7 +510,7 @@ mod tests {
             let (store, bad) = TrajStore::open(&root).unwrap();
             assert_eq!(bad, 0);
             store
-                .record("E0502:e0502-deref-removal", "&v[0]", "", true, true)
+                .record("E0502:e0502-deref-removal", "&v[0]", "", true, true, "run-a")
                 .unwrap();
             store
                 .record(
@@ -487,6 +519,7 @@ mod tests {
                     "items[0].clone()",
                     false,
                     false,
+                    "run-a",
                 )
                 .unwrap();
             assert_eq!(store.len(), 2);
@@ -518,7 +551,7 @@ mod tests {
         let (store, _) = TrajStore::open(&root).unwrap();
         for _ in 0..3 {
             store
-                .record("E0499:x", "&mut *v", "swap", false, false)
+                .record("E0499:x", "&mut *v", "swap", false, false, "run-f")
                 .unwrap();
         }
         assert!(store.retrieve("&mut *v", "E0499:", 5).is_empty());
@@ -527,7 +560,7 @@ mod tests {
         assert_eq!(row.tier, EvidenceTier::Withdrawn.as_u8());
         // A verified success exits Withdrawn (absorbing ONLY until one).
         store
-            .record("E0499:x", "&mut *v", "swap", true, true)
+            .record("E0499:x", "&mut *v", "swap", true, true, "run-g")
             .unwrap();
         let row = &store.dump()[0];
         assert_eq!(row.tier, EvidenceTier::Certified.as_u8());
@@ -540,7 +573,7 @@ mod tests {
         let root = tmp_root("dump");
         let (store, _) = TrajStore::open(&root).unwrap();
         store
-            .record("E0505:e0505-clone-at-move", "v", ".clone()", true, true)
+            .record("E0505:e0505-clone-at-move", "v", ".clone()", true, true, "run-d")
             .unwrap();
         let dumped = store.dump();
         assert_eq!(dumped.len(), 1);
@@ -550,6 +583,45 @@ mod tests {
         assert_eq!(dumped[0].tier, EvidenceTier::Certified.as_u8());
         assert_eq!(dumped[0].direction.len(), EMBED_DIM);
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn record_stamps_run_id_and_seen_at() {
+        let root = tmp_root("runid");
+        {
+            let (store, _) = TrajStore::open(&root).unwrap();
+            store
+                .record("E0502:s", "&v[0]", "v[0]", true, true, "run-abc")
+                .unwrap();
+            let row = &store.dump()[0];
+            assert_eq!(row.last_run_id, "run-abc");
+            assert!(row.last_seen_at > 0, "timestamp stamped");
+        }
+        // Durable across reopen + updated by the next sighting.
+        {
+            let (store, _) = TrajStore::open(&root).unwrap();
+            let before = store.dump()[0].last_seen_at;
+            store
+                .record("E0502:s", "&v[0]", "v[0]", true, true, "run-zzz")
+                .unwrap();
+            let row = &store.dump()[0];
+            assert_eq!(row.last_run_id, "run-zzz", "latest sighting wins");
+            assert!(row.last_seen_at >= before);
+        }
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn pre_t2_rows_without_verdict_fields_decode() {
+        // A row written before 037-T2 (no last_run_id / last_seen_at) must
+        // decode with the serde defaults — the schema is append-only.
+        let doc: TrajRowDoc = serde_json::from_str(
+            r#"{"lint_key":"E0502:x","shape":"&v","fix":"v","direction":[0.0,0.0],"success_count":1,"fail_count":0,"consecutive_fails":0,"tier":0}"#,
+        )
+        .expect("pre-T2 row decodes");
+        assert_eq!(doc.last_run_id, "");
+        assert_eq!(doc.last_seen_at, 0);
+        assert_eq!(doc.success_count, 1);
     }
 
     #[cfg(feature = "rustc_errors")]
@@ -564,10 +636,10 @@ mod tests {
         // ORDER follows lived outcomes, not the static preference).
         for _ in 0..5 {
             store
-                .record("E0502:e0502-deref-removal", "&v[0]", "", true, true)
+                .record("E0502:e0502-deref-removal", "&v[0]", "", true, true, "run-o")
                 .unwrap();
             store
-                .record("E0502:e0502-clone-out", "&v[0]", "v[0].clone()", false, false)
+                .record("E0502:e0502-clone-out", "&v[0]", "v[0].clone()", false, false, "run-o")
                 .unwrap();
         }
         let mk = |strat: &str, repl: &str, len_hint: usize| FixCandidate {
@@ -599,10 +671,10 @@ mod tests {
         let (flipped, _) = TrajStore::open(&flipped_root).unwrap();
         for _ in 0..5 {
             flipped
-                .record("E0502:e0502-deref-removal", "&v[0]", "", false, false)
+                .record("E0502:e0502-deref-removal", "&v[0]", "", false, false, "run-f")
                 .unwrap();
             flipped
-                .record("E0502:e0502-clone-out", "&v[0]", "v[0].clone()", true, true)
+                .record("E0502:e0502-clone-out", "&v[0]", "v[0].clone()", true, true, "run-f")
                 .unwrap();
         }
         let mut flipped_cands = vec![

@@ -140,6 +140,57 @@ impl CheckRunner {
             exit_ok: output.status.success(),
         })
     }
+
+    /// One `cargo clippy --all-targets --message-format=json -- -W clippy::<lint>…`
+    /// run in a package root — the lint-resolution oracle (037-T2). Same
+    /// env/extra-args handling as [`Self::run_check`]; the named lints are
+    /// forced on regardless of lint group (pedantic/nursery lints otherwise
+    /// never fire under a default-group run), so resolution can be judged
+    /// per lint. `Err` only when cargo could not run at all — lint findings
+    /// come back as `Ok(outcome)` in the JSON whatever the exit status.
+    ///
+    /// # Errors
+    ///
+    /// Returns a human-readable message when the cargo process cannot be
+    /// spawned or fails without emitting any JSON.
+    pub fn run_clippy(&self, pkg: &Path, lint_names: &[String]) -> Result<CheckOutcome, String> {
+        let mut cmd = Command::new(&self.cargo_bin);
+        cmd.current_dir(pkg)
+            .arg("clippy")
+            .arg("--all-targets")
+            .arg("--message-format=json");
+        for a in &self.extra_args {
+            cmd.arg(a);
+        }
+        cmd.arg("--");
+        for lint in lint_names {
+            cmd.arg("-W").arg(format!("clippy::{lint}"));
+        }
+        if self.isolate_env {
+            cmd.env("CARGO_TARGET_DIR", pkg.join("target"))
+                .env_remove("RUSTFLAGS")
+                .env_remove("RUSTC_WRAPPER")
+                .env_remove("CARGO_BUILD_RUSTFLAGS");
+        }
+        let output = cmd
+            .output()
+            .map_err(|e| format!("cargo spawn failed: {e}"))?;
+        let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+        if !stdout.lines().any(is_json_line) {
+            // cargo itself failed without emitting JSON (bad args, broken
+            // manifest) — surface stderr.
+            let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+            return Err(format!(
+                "cargo clippy failed to run in {}: {}",
+                pkg.display(),
+                first_meaningful_line(&stderr)
+            ));
+        }
+        Ok(CheckOutcome {
+            json: stdout,
+            exit_ok: output.status.success(),
+        })
+    }
 }
 
 pub(crate) fn is_json_line(line: &str) -> bool {

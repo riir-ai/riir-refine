@@ -78,6 +78,9 @@ the query surface for verifying T2 once it lands: after a real
 - [ ] **E2 — verdict:** ≥1 real (non-fixture) bucket with `success_count ≥ 1`
       and the first `Certified` tier entry, sourced from agent-initiated
       `--fix --write --verify` runs (NOT the demo/tests). **Blocked by T2.**
+      → **T2 LANDED** — the gate now needs a genuine dev-session run (T5);
+      the wiring proof used a scratch crate (real CLI, but not a workspace
+      repo's dev session).
 - [ ] **E3 — learn:** the EMA path consumes real verdicts — evidence: a lib
       test or `self_evolve_real_world_demo` run against the LIVE memory.json
       showing direction deltas ≠ 0 for buckets with outcomes, or an oracle
@@ -94,12 +97,57 @@ the query surface for verifying T2 once it lands: after a real
 
 - [x] **T1 — audit script** `scripts/self_evolve_audit.sh` (this issue's
       instrument; tested live — sections 0–4 print, E2/E5 honestly FAIL).
-- [ ] **T2 — wire positive outcomes in the CLI** (the F2 fix, unblocks E2):
+- [x] **T2 — wire positive outcomes in the CLI** (the F2 fix, unblocks E2):
       after a `--verify` pass where the compile gate kept an edit AND the
       clippy oracle (when built) confirms the named lint resolved, call
       `record_outcome_verified` / `record_outcome(..., true)` instead of bare
       `record_applied`. Keep the honest split: rustc-only pass = Heuristic
       outcome-success; oracle-confirmed = Certified (Issue 021 semantics).
+
+      **DONE 2026-08-24** — landed as the verdict matrix + the durable
+      landing (the decision's directive: verdicts as in-schema fields on
+      the `.heal/trajectories.kv` rows, keyed by heal-run id — no sidecar,
+      038 keeps a single read path):
+      - **The matrix** (`fix_verify::kept_edit_verdict`, unit-pinned):
+        oracle-confirmed resolve → `(success, verified)` = Certified;
+        persist → verified FAILURE (the honest persist signal); no oracle
+        verdict (not built / unrunnable / non-clippy rule — rust_perf ids
+        are kebab-case, not clippy lints) → rustc-only Heuristic
+        outcome-success. The CLI's kept-edit loop now calls
+        `record_outcome_verified` (was bare `record_applied` — F2's root
+        cause); reverts keep their Issue-018 failure verdicts.
+      - **The oracle** (clippy_verify builds): one `cargo clippy
+        --all-targets -- -W clippy::<lint>…` per owning package (the same
+        feature set as the compile gate; `CheckRunner::run_clippy`),
+        findings parsed PRIMARY-span-only
+        (`fix_verify::parse_clippy_findings`) — a kept edit is resolved iff
+        no finding of its named lint covers the edit's final line (a
+        finding elsewhere in the file — a refused sibling span — does not
+        block confirmation). Pedantic-group lints work (the `-W` forcing
+        was e2e-proven with `uninlined_format_args`).
+      - **The durable landing** (fix_verify = implies latent_retrieval):
+      verdict events ALSO land in the repo-local neuron-db store
+      (`.heal/trajectories.kv`) with run attribution —
+      `TrajRowDoc.last_run_id` + `last_seen_at` (unix secs; 038-T1's
+      timestamp field landed early — supersedes 037-T3's JSON-envelope
+      version; pre-T2 rows decode with `""`/`0` serde defaults).
+      Transitional dual-record with memory.json (same events; 038-T3
+      retires the envelope half). Root: `RIIR_HEAL_TRAJ_ROOT` → first
+      path's workspace root → cwd (per-repo, 037-A2's audit shape).
+      - **E2E proof** (real CLI, scratch crate, non-fixture code): 6 kept
+      edits → `oracle: 6 confirmed resolved (Certified)` → all 6 rows in
+      `.heal/trajectories.kv` carry `success_count ≥ 1`, `tier = 0`
+      (Certified), `last_run_id = run-…`, `last_seen_at > 0`; memory.json
+      mirrors with Certified tiers (F1's all-zero-success state is now
+      structurally impossible on new verify runs). The revert→fail-row
+      path rides the same `store.record` call (unit-pinned matrix + the
+      Issue-018-validated revert flow); no separate e2e demo recorded.
+      - En route: the sibling session's in-flight `--memory-stats`
+      observability scaffolding (flag + parse + help +
+      `LatentFixMemory::stats_report`) landed in the same commit with the
+      quote-escape fix that unblocked compilation — its E2 readout expects
+      exactly this wiring ("verdict needs a positive outcome (037-T2
+      wires it)"); the handler remains the sibling's to finish.
 - [ ] **T3 — timestamps in the memory envelope** (unblocks A1's memory half):
       optional `last_seen_at` per bucket + top-level `last_run_at`, serde
       defaults for backward compat (pre-T3 files decode as today).

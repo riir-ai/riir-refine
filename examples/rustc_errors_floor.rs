@@ -370,13 +370,13 @@ fn ordering_ab_section() {
     for (name, rep) in &reports {
         for a in &rep.applied {
             store
-                .record(&traj_key(&a.code, &a.strategy_id), &a.shape, &a.fix, true, true)
+                .record(&traj_key(&a.code, &a.strategy_id), &a.shape, &a.fix, true, true, "floor-learning")
                 .expect("record applied");
             learned += 1;
         }
         for r in &rep.reverted {
             store
-                .record(&traj_key(&r.code, &r.strategy_id), &r.shape, &r.fix, false, false)
+                .record(&traj_key(&r.code, &r.strategy_id), &r.shape, &r.fix, false, false, "floor-learning")
                 .expect("record reverted");
             learned += 1;
         }

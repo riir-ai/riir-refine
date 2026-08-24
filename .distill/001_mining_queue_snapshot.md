@@ -1200,12 +1200,23 @@ never closed). Ranked open classes (inventory 2026-08-24):
       Unknown-receiver terminal emission (`is_some_and`); 9 manual fixes
       to date; protects the score-bench `created` trust axis (1.9%).
       Evidence: created.
-- [ ] P5 **outcome-verdict wiring** — feed `--verify`-run outcomes +
+- [x] P5 **outcome-verdict wiring** — feed `--verify`-run outcomes +
       post-heal clippy results back into memory.json tiers (8,235
       Heuristic trajectories awaiting their first verdicts). Design gap.
       **Tracked in [Issue 037](../.issues/037_e2e_self_evolve_adoption_proof.md)
       T2 (root-caused — CLI records outcomes as `false` only); blocks
       Proposals 003 + 004 until E2E proven.**
+      **LANDED 2026-08-24 via 037-T2** (see the issue's T2 resolution note):
+      the kept-edit verdict matrix (oracle-confirmed → Certified / persist
+      → verified-fail / no oracle → Heuristic success) + the clippy
+      lint-resolution oracle (`CheckRunner::run_clippy` + PRIMARY-span
+      finding parse) + the durable landing in `.heal/trajectories.kv`
+      (run-attributed `last_run_id`/`last_seen_at` rows — Issue 038's
+      schema). The 8,235 legacy rows stay Heuristic (history is not
+      re-judged); every NEW `--fix --write --verify` run produces verdict-
+      bearing records (e2e-proven: 6/6 Certified on a real scratch-crate
+      run). Residual lives in 037's E2/E4 gates (real dev-session run +
+      score-bench delta), not here.
 - [ ] P6 **match_bool guard-on-first-arm** (nested-rewrite shape) +
       single_match_else bool/char/str literal first arms (unprobed).
       Evidence: miss.
