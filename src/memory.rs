@@ -567,9 +567,26 @@ impl LatentFixMemory {
         let e1 = if self.trajectories.is_empty() { "—" } else { "OK" };
         let e2 = if successes > 0 || certified > 0 { "OK" } else { "—" };
         let e3 = if certified > 0 { "OK" } else { "—" };
+        // Hints only for gates that are still open (post-037-T2: a "—"
+        // verdict means no verified heal has run yet, not missing wiring).
+        let mut hints: Vec<&str> = Vec::new();
+        if e1 == "—" {
+            hints.push("record needs a first trajectory");
+        }
+        if e2 == "—" {
+            hints.push("verdict needs a positive outcome (run a --fix --verify heal)");
+        }
+        if e3 == "—" {
+            hints.push("learn needs tier promotion");
+        }
+        let hint = if hints.is_empty() {
+            String::new()
+        } else {
+            format!(" — {}", hints.join("; "))
+        };
         let _ = writeln!(
             report,
-            "loop state (Issue 037): record {e1} | verdict {e2} | learn {e3} — verdict needs a positive outcome (037-T2 wires it), learn needs tier promotion"
+            "loop state (Issue 037): record {e1} | verdict {e2} | learn {e3}{hint}"
         );
         report
     }
@@ -797,12 +814,18 @@ mod tests {
         assert!(recorded.contains("buckets: 2 (distinct rules: 2)"), "recorded: {recorded}");
         assert!(recorded.contains("tiers: Certified 0 | Heuristic 2 | Withdrawn 0"));
         assert!(recorded.contains("record OK | verdict — | learn —"), "recorded: {recorded}");
+        // Open gates carry their hint (post-T2 wording: a "—" verdict means
+        // no verified heal has run, not missing wiring).
+        assert!(recorded.contains("verdict needs a positive outcome"), "recorded: {recorded}");
 
         m.record_certified("needless_return", "return 42;", "42");
         let evolved = m.stats_report(path, CommitmentStatus::Verified);
         assert!(evolved.contains("tiers: Certified 1 | Heuristic 1 | Withdrawn 0"));
         assert!(evolved.contains("outcomes: success 1 | fail 0"));
         assert!(evolved.contains("record OK | verdict OK | learn OK"), "evolved: {evolved}");
+        // Post-T2: a closed loop prints NO hint — the stale "verdict needs…"
+        // suffix must not survive once every gate is OK.
+        assert!(!evolved.contains("needs a"), "closed loop must carry no hints: {evolved}");
 
         // The commitment status surfaces — a MISMATCH must be loud.
         let tampered = m.stats_report(path, CommitmentStatus::Mismatch);

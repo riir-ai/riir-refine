@@ -81,6 +81,15 @@ the query surface for verifying T2 once it lands: after a real
       → **T2 LANDED** — the gate now needs a genuine dev-session run (T5);
       the wiring proof used a scratch crate (real CLI, but not a workspace
       repo's dev session).
+      → **Post-T2 rebuild verified live (2026-08-24, global binary rebuilt at
+      `fix_verify,clippy_verify`):** an agent-initiated scratch-crate
+      `--fix --write --verify` run recorded 9 oracle-confirmed Certified
+      outcomes into BOTH stores (memory.json: success 9, Certified 6;
+      `.heal/trajectories.kv`: 8 rows certified) and `--memory-stats` now
+      prints `record OK | verdict OK | learn OK` (the line-61 check PASSES).
+      Same provenance class as T2's own proof, so E2's checkbox stays open
+      until T5's workspace-repo run — but the wiring is proven live on the
+      installed binary, not just in the E2E proof.
 - [ ] **E3 — learn:** the EMA path consumes real verdicts — evidence: a lib
       test or `self_evolve_real_world_demo` run against the LIVE memory.json
       showing direction deltas ≠ 0 for buckets with outcomes, or an oracle
