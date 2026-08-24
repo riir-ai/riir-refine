@@ -312,6 +312,7 @@ USAGE:
     cargo heal --fix-compile [--write] [--max-iters <N>] [--verify-args <s>] <path>...
     cargo heal --dump-trajectories > trajectories.jsonl
     cargo heal --memory-stats                         (loop debug query, no paths)
+    cargo heal --recompute-elo                        (batch rating backfill, 039 T2)
     cargo heal --score-bench | --score-report        (needs --features score_bench)
 
     --suggest       Suggest mode: print matching rules per code span (no edits).
@@ -333,6 +334,10 @@ USAGE:
                     tier/outcome counts, top rules, commitment status, the
                     E1 record / E2 verdict / E3 learn state — the one-command
                     \"is the loop actually closed?\" query. Read-only.
+    --recompute-elo Batch ELO over the trajectory store (Issue 039 T2; needs
+                    --features latent_retrieval): replay every verdict count
+                    as rule-vs-shape matches from base 1200 + write the final
+                    ratings onto the rows. Idempotent standalone WRITE mode.
     --write         With --fix/--fix-compile: write the edits in place (with --fix:
                     then rustfmt AUTOMATICALLY when the original was already
                     rustfmt-clean — pre-existing drift + CRLF files are skipped — no
@@ -399,6 +404,11 @@ struct Args {
     /// Read-only standalone mode (no paths, no recording, ignores the
     /// opt-out env — a query, not a run).
     memory_stats: bool,
+    /// `--recompute-elo` (Issue 039 T2): batch PL→Elo (standard-update
+    /// canonical replay) over the trajectory store — backfills/writes the
+    /// final rule + span ratings onto every row. Standalone WRITE mode
+    /// (idempotent; `latent_retrieval` builds — the neuron-db store).
+    recompute_elo: bool,
 }
 
 fn parse_args() -> Args {
@@ -419,6 +429,7 @@ fn parse_args() -> Args {
         score_bench: false,
         score_report: false,
         memory_stats: false,
+        recompute_elo: false,
     };
     let mut it = std::env::args().skip(1);
     while let Some(arg) = it.next() {
@@ -434,6 +445,7 @@ fn parse_args() -> Args {
             "--score-bench" => args.score_bench = true,
             "--score-report" => args.score_report = true,
             "--memory-stats" => args.memory_stats = true,
+            "--recompute-elo" => args.recompute_elo = true,
             "--max-iters" => {
                 let Some(value) = it.next() else {
                     eprintln!("--max-iters requires a value");
@@ -490,6 +502,7 @@ fn parse_args() -> Args {
         && !args.score_report
         && !args.dump_trajectories
         && !args.memory_stats
+        && !args.recompute_elo
     {
         eprintln!("no paths given");
         usage();
@@ -766,6 +779,61 @@ fn main() {
                     kv.display()
                 );
             }
+        }
+        return;
+    }
+
+    // ── Issue 039 T2: --recompute-elo — the batch rating backfill ──────────
+    // Standalone WRITE mode (the one rating writer — the issue's non-goal
+    // pins NO online ELO updates in the hot fix loop). Replays every
+    // trajectory row's verdict counts from base 1200 + writes the final
+    // rule/span ratings onto the rows. Idempotent.
+    if args.recompute_elo {
+        #[cfg(feature = "latent_retrieval")]
+        {
+            let root = std::env::var("RIIR_HEAL_TRAJ_ROOT")
+                .map(PathBuf::from)
+                .or_else(|_| std::env::current_dir())
+                .unwrap_or_default();
+            let kv = root.join(".heal").join("trajectories.kv");
+            if !kv.exists() {
+                eprintln!(
+                    "recompute-elo: no store at {} — run any --fix in this repo first",
+                    kv.display()
+                );
+                std::process::exit(1);
+            }
+            match riir_clippy::traj_store::TrajStore::open(&root) {
+                Ok((store, bad)) => {
+                    if bad > 0 {
+                        eprintln!("recompute-elo: {bad} corrupt row(s) skipped");
+                    }
+                    match store.recompute_elo() {
+                        Ok(s) => println!(
+                            "elo: {} match(es) replayed | {} rule(s) + {} span(s) rated | {}/{} row(s) updated{}",
+                            s.matches,
+                            s.rules_rated,
+                            s.spans_rated,
+                            s.rows_written,
+                            s.rows_seen,
+                            if s.rows_written == 0 { " (already rated — idempotent)" } else { "" }
+                        ),
+                        Err(e) => {
+                            eprintln!("recompute-elo: {e}");
+                            std::process::exit(1);
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("recompute-elo: store at {} unreadable: {e}", root.display());
+                    std::process::exit(1);
+                }
+            }
+        }
+        #[cfg(not(feature = "latent_retrieval"))]
+        {
+            eprintln!("--recompute-elo requires a build with --features latent_retrieval (the neuron-db store)");
+            std::process::exit(2);
         }
         return;
     }

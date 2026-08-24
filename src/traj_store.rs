@@ -48,6 +48,11 @@
 //! ([`ema_step`](crate::evolve::ema_step) — same rule as the in-process
 //! layer), durable + observable via `--memory-stats`.
 //!
+//! The `elo`/`span_elo` row fields (Issue 039 T2) are written ONLY by the
+//! batch pass [`TrajStore::recompute_elo`] (`cargo heal --recompute-elo`)
+//! — ratings are a derived view over the verdict counts, never updated
+//! online (the issue's non-goal; G4).
+//!
 //! ## 037-T2 verdict attribution (038's schema half)
 //!
 //! Every `record` stamps [`TrajRowDoc::last_run_id`] (the heal-run that
@@ -70,6 +75,7 @@ use riir_neuron_db::bm25::Bm25Index;
 use riir_neuron_db::local_kv::LocalKvStore;
 
 use crate::embedder::{embed_into, EMBED_DIM};
+use crate::elo::EloTable;
 use crate::memory::EvidenceTier;
 
 /// One durable trajectory row (JSON doc — numeric + text halves together).
@@ -113,13 +119,11 @@ pub struct TrajRowDoc {
     pub span_elo: f32,
 }
 
-/// The ELO base rating (unrated) — the arena calculator's + PL conversion's
-/// shared convention (`katgpt-pruners` arena base 1200 / 400 per log10 unit;
+/// The ELO base rating (unrated) — re-exported from the math module
+/// (Issue 039 T2 moved it beside [`EloTable`]; the arena calculator + PL
+/// conversion's shared convention — base 1200 / 400 per log10 unit;
 /// promotion to `katgpt-core` filed as katgpt-rs Issue 686).
-#[must_use]
-pub fn default_elo() -> f32 {
-    1200.0
-}
+pub use crate::elo::default_elo;
 
 /// One persisted per-rule EMA learn row (Issue 037 E3) — the durable twin
 /// of [`LatentSkillEvolution`]'s in-memory directions. Key: `learn:{lint_key}`.
@@ -679,6 +683,80 @@ impl TrajStore {
         );
         report
     }
+
+    /// Issue 039 T2 — the batch rating pass: replay every trajectory row's
+    /// verdict counts as rule-vs-shape matches from base 1200 (canonical
+    /// order: rows in store key order, losses-then-wins within each row —
+    /// see [`crate::elo`]) and write the FINAL ratings back denormalized on
+    /// every row of each player. Deterministic + idempotent: a second pass
+    /// re-derives bit-identical ratings and writes 0 rows.
+    ///
+    /// The ONLY rating writer (the issue's non-goal: no online ELO updates
+    /// in the hot fix loop — [`record`](Self::record) never touches these
+    /// fields; G4's heal-path promise).
+    ///
+    /// # Errors
+    ///
+    /// KV put or JSON encode failure on a changed row.
+    #[allow(clippy::float_cmp)] // bit-identity IS the idempotency gate (deterministic replay)
+    pub fn recompute_elo(&self) -> Result<EloRecomputeSummary, String> {
+        let rows = self.dump();
+        let mut summary = EloRecomputeSummary {
+            rows_seen: rows.len(),
+            ..EloRecomputeSummary::default()
+        };
+        let mut table = EloTable::new();
+        let mut rules = std::collections::BTreeSet::new();
+        let mut spans = std::collections::BTreeSet::new();
+        for row in &rows {
+            if row.success_count.saturating_add(row.fail_count) == 0 {
+                continue; // apply-only sighting: not a match
+            }
+            let span_id = shape_hash(&row.shape);
+            rules.insert(row.lint_key.clone());
+            spans.insert(span_id.clone());
+            for _ in 0..row.fail_count {
+                table.play(&row.lint_key, &span_id, false);
+                summary.matches += 1;
+            }
+            for _ in 0..row.success_count {
+                table.play(&row.lint_key, &span_id, true);
+                summary.matches += 1;
+            }
+        }
+        summary.rules_rated = rules.len();
+        summary.spans_rated = spans.len();
+        for row in &rows {
+            let span_id = shape_hash(&row.shape);
+            let (elo, span_elo) = (table.rating(&row.lint_key), table.rating(&span_id));
+            if row.elo == elo && row.span_elo == span_elo {
+                continue; // unchanged (or apply-only, still at base)
+            }
+            let mut updated = row.clone();
+            updated.elo = elo;
+            updated.span_elo = span_elo;
+            let key = Self::row_key(&row.lint_key, &row.shape);
+            self.put_row(&key, &updated)?;
+            summary.rows_written += 1;
+        }
+        Ok(summary)
+    }
+}
+
+/// One [`TrajStore::recompute_elo`] pass summary (the `--recompute-elo`
+/// print + tests).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct EloRecomputeSummary {
+    /// Rows scanned.
+    pub rows_seen: usize,
+    /// Rows whose stored ratings changed (an idempotent second pass: 0).
+    pub rows_written: usize,
+    /// Distinct rules with ≥1 outcome.
+    pub rules_rated: usize,
+    /// Distinct spans with ≥1 outcome.
+    pub spans_rated: usize,
+    /// Total matches replayed (Σ success+fail counts).
+    pub matches: usize,
 }
 
 /// The `--memory-stats` EMA learn section (Issue 037 E3) — per-rule learn
@@ -1282,6 +1360,127 @@ mod tests {
             );
             assert!(report.contains("across 2 updated rule(s)"));
         }
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    // ── Issue 039 T2: batch ELO over the store ──────────────────────────────
+
+    #[test]
+    #[allow(clippy::float_cmp)] // base equality + shared-span bit-identity ARE the assertions
+    fn recompute_elo_backfills_and_is_idempotent() {
+        let root = tmp_root("elo-backfill");
+        {
+            let (store, _) = TrajStore::open(&root).unwrap();
+            store.record("rule_a", "shape 1", "fix", true, true, "run-1").unwrap();
+            for _ in 0..3 {
+                store.record("rule_a", "shape 1", "fix", false, true, "run-1").unwrap();
+            }
+            store.record("rule_b", "shape 1", "fix2", true, true, "run-1").unwrap();
+            // Apply-only sighting: no outcomes, stays unrated.
+            store.record_applied("rule_c", "shape 3", "fix3", "run-1").unwrap();
+
+            let s1 = store.recompute_elo().unwrap();
+            assert_eq!(s1.rows_seen, 3);
+            assert_eq!(s1.matches, 5);
+            assert_eq!(s1.rules_rated, 2);
+            assert_eq!(s1.spans_rated, 1);
+            assert_eq!(s1.rows_written, 2, "only the two outcome rows");
+
+            let dump = store.dump();
+            let a = dump.iter().find(|r| r.lint_key == "rule_a").unwrap();
+            let b = dump.iter().find(|r| r.lint_key == "rule_b").unwrap();
+            let c = dump.iter().find(|r| r.lint_key == "rule_c").unwrap();
+            // rule_b (1W 0L) above base; rule_a (1W 3L) below; both share
+            // the span's FINAL rating (denormalized snapshot semantics).
+            assert!(b.elo > default_elo(), "1W/0L rule rated up: {}", b.elo);
+            assert!(a.elo < default_elo(), "1W/3L rule rated down: {}", a.elo);
+            assert_eq!(a.span_elo, b.span_elo, "shared span carries one rating");
+            // The span's record: 3 wins (rule_a's failures) vs 2 losses
+            // (rule_a + rule_b successes) — a net-winning span rates UP.
+            assert!(a.span_elo > default_elo(), "3W/2L span rated up: {}", a.span_elo);
+            // Apply-only row stays at base (no matches).
+            assert_eq!(c.elo, default_elo());
+            assert_eq!(c.span_elo, default_elo());
+
+            // Idempotent: bit-identical re-derivation writes nothing.
+            let before = store.dump();
+            let s2 = store.recompute_elo().unwrap();
+            assert_eq!(s2.rows_written, 0);
+            assert_eq!(store.dump(), before);
+        }
+        // Durable: ratings survive close/reopen (the backfill's point).
+        {
+            let (store, _) = TrajStore::open(&root).unwrap();
+            let dump = store.dump();
+            let a = dump.iter().find(|r| r.lint_key == "rule_a").unwrap();
+            assert!(a.elo < default_elo(), "rating persisted: {}", a.elo);
+            let s = store.recompute_elo().unwrap();
+            assert_eq!(s.rows_written, 0, "still idempotent after reopen");
+        }
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)] // denormalized final-rating bit-identity IS the assertion
+    fn shared_rule_rows_carry_the_final_rating() {
+        // One rule over two shapes: EVERY row of the rule reports the
+        // rule's FINAL rating (the consumer contract — T3/T4 read any row).
+        let root = tmp_root("elo-final");
+        let (store, _) = TrajStore::open(&root).unwrap();
+        store.record("rule_r", "shape x", "f", true, true, "run-1").unwrap();
+        store.record("rule_r", "shape x", "f", true, true, "run-1").unwrap();
+        store.record("rule_r", "shape y", "f", false, true, "run-1").unwrap();
+        store.recompute_elo().unwrap();
+        let dump = store.dump();
+        let x = dump.iter().find(|r| r.shape == "shape x").unwrap();
+        let y = dump.iter().find(|r| r.shape == "shape y").unwrap();
+        assert_eq!(x.elo, y.elo, "denormalized FINAL rating on every row");
+        assert_ne!(x.span_elo, y.span_elo, "spans rate separately");
+        // x lost to the rule twice (0W/2L → down); y beat it once (1W/0L
+        // → up) — a span's wins come from the rule's failures.
+        assert!(x.span_elo < default_elo(), "twice-beaten span rated down");
+        assert!(y.span_elo > default_elo(), "span that beat the rule rated up");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)] // unrated == base IS the pre-backfill pin
+    fn pre_039_row_decodes_unrated_then_backfill_rates_it() {
+        // Extends the decode pin above: the SAME pre-039 JSON (no elo
+        // fields), once in the store, gets ratings WRITTEN by the T2
+        // backfill — decode-unrated is the input state, rated the
+        // post-backfill state.
+        let root = tmp_root("elo-pre039");
+        let (store, _) = TrajStore::open(&root).unwrap();
+        let pre039 = r#"{"lint_key":"match_bool","shape":"match c {\n    true => a,\n}","fix":"if c { a }","direction":[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"success_count":2,"fail_count":0,"consecutive_fails":0,"tier":0,"last_run_id":"run-1","last_seen_at":100}"#;
+        let shape = "match c {\n    true => a,\n}";
+        let key = TrajStore::row_key("match_bool", shape);
+        store.kv.put(&key, pre039.as_bytes()).unwrap();
+        // Decodes unrated (the pin above) ...
+        let row = &store.dump()[0];
+        assert_eq!(row.elo, default_elo());
+        // ... then the backfill rates it.
+        let s = store.recompute_elo().unwrap();
+        assert_eq!(s.rows_written, 1);
+        let row = &store.dump()[0];
+        assert_eq!(row.success_count, 2);
+        assert!(row.elo > default_elo(), "2W/0L rated up: {}", row.elo);
+        assert!(row.span_elo < default_elo());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)] // unrated == base IS the batch-only pin
+    fn record_never_touches_elo_batch_only() {
+        // The non-goal pin: no online ELO updates in the hot fix loop —
+        // record leaves the row unrated; ONLY the batch pass writes
+        // ratings (G4's heal-path promise).
+        let root = tmp_root("elo-batch-only");
+        let (store, _) = TrajStore::open(&root).unwrap();
+        store.record("match_bool", "match c { true => a, _ => b }", "if c { a } else { b }", true, true, "run-a").unwrap();
+        let row = &store.dump()[0];
+        assert_eq!(row.elo, default_elo(), "record must not write ratings");
+        assert_eq!(row.span_elo, default_elo());
         let _ = std::fs::remove_dir_all(&root);
     }
 }

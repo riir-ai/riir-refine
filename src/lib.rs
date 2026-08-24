@@ -54,6 +54,7 @@ pub mod corpus;
 pub mod domain;
 pub mod drafter;
 pub mod edit_emitter;
+pub mod elo;
 pub mod embedder;
 pub mod fmt;
 pub mod pruner;

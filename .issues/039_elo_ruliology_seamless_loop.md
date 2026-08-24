@@ -64,9 +64,42 @@ ELO leaderboard (human-readable THERE, not in storage — per the 038 rule).
       DECIDED IN: the match semantics rate both sides (span difficulty = the
       opponent rating); stored denormalized per-row until T2 decides whether
       spans get their own derivation.
-- [ ] **T2 — rating computation**: batch PL→Elo over trajectory rows on
+- [x] **T2 — rating computation**: batch PL→Elo over trajectory rows on
       store load (038 backend); unit-gate vs hand-computed fixtures + the
       arena calculator on small cases (cross-check the two math paths).
+      **DONE 2026-08-24** (adapt-locally per the T1 decision — standard
+      Elo, K=32, base 1200/400; PL stays the katgpt-rs 686 upgrade).
+      - **Math module `src/elo.rs`** (always compiled, pure f32):
+      `expected_score`/`update_pair` (the arena `EloCalculator` formula,
+      cited) + `EloTable` (string-id rating table). Unit gates: the exact
+      ±16 hand fixture (E=0.5 at equal ratings — exactly representable),
+      zero-sum, upset-sensitivity, determinism, the f64 arena-reference
+      cross-check over a mixed 12-match sequence (<0.01 drift — the
+      "two math paths" gate), + the PL-consistency fixed point (a pair at
+      75% win rate equilibrates at gap 400·log10(3), the PL conversion's
+      own curve — standard Elo and PL agree at equilibrium).
+      - **Store pass `TrajStore::recompute_elo`** + `EloRecomputeSummary`:
+      canonical-order batch replay (rows in key order — BTreeSet range;
+      losses-then-wins within each row, the documented modeling choice —
+      the store keeps aggregates, not event order), final ratings written
+      back denormalized on EVERY row of each player (any row reports the
+      rule's current rating — the T3/T4 consumer contract). Idempotent
+      (bit-identity re-derivation writes 0 rows); the ONLY rating writer
+      (record/record_applied never touch elo — the non-goal pin, G4).
+      Apply-only rows stay at base 1200 (no matches).
+      - **CLI `--recompute-elo`**: standalone write mode (latent_retrieval
+      builds) — backfill on demand; prints the pass summary.
+      - **Backfilled the three real stores**: riir-clippy (9 matches, 2
+      rules, 8 rows), riir-dapps (3 matches, 1 rule, 2 rows), riir-ai
+      (112 matches, 7 rules, 101 rows) — all idempotent on re-run. The
+      emergent signal is real: `uninlined_format_args` 1625 (62 rows),
+      `match_bool` 1361, `map_unwrap_or` 1337; the spans that BEAT rules
+      (0W/2L `score_fn`/`state.first()` shapes) rate UP at ~1231-1241 —
+      span difficulty emerging as the opponent rating, the ruliology
+      payoff. Tests: 7 elo + 4 store (backfill/idempotent/durable, final-
+      rating denormalization, pre-039 decode-unrated→backfill-rated, the
+      batch-only non-goal pin) — 744 latent / 669 default lib, clippy 0
+      both states + bin.
 - [ ] **T3 — ruliology evidence axis**: extend `ScoredCandidate` + front
       ranking; fixtures pin (a) evidence breaks parse-equal ties, (b) payoff
       still dominates (a parse-failing high-ELO candidate NEVER outranks a
