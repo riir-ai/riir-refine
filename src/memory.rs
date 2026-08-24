@@ -516,6 +516,64 @@ impl LatentFixMemory {
         self.trajectories.iter()
     }
 
+    /// One-command debug summary of the store (Issue 037 observability —
+    /// the `cargo heal --memory-stats` query surface).
+    ///
+    /// Answers "is the self-evolve loop actually closed?" from the data:
+    /// the E1/E2/E3 verdicts at the bottom mirror Issue 037's gates —
+    /// E1 `record` needs buckets, E2 `verdict` needs at least one positive
+    /// outcome (a success count or a Certified tier entry), E3 `learn` is
+    /// observable through tier promotion (the same verified outcomes the
+    /// EMA half consumes). Read-only; never mutates.
+    #[must_use]
+    pub fn stats_report(&self, path: &std::path::Path, status: CommitmentStatus) -> String {
+        use std::collections::HashMap;
+        use std::fmt::Write as _;
+
+        let mut report = String::with_capacity(512);
+        let (mut certified, mut heuristic, mut withdrawn, mut successes, mut fails, mut consec) =
+            (0u32, 0u32, 0u32, 0u32, 0u32, 0u32);
+        let mut rules: HashMap<&str, u32> = HashMap::new();
+        for t in &self.trajectories {
+            match t.tier {
+                EvidenceTier::Certified => certified += 1,
+                EvidenceTier::Withdrawn => withdrawn += 1,
+                EvidenceTier::Heuristic => heuristic += 1,
+            }
+            successes += t.success_count;
+            fails += t.fail_count;
+            if t.consecutive_fails > 0 {
+                consec += 1;
+            }
+            *rules.entry(t.lint_name.as_str()).or_insert(0) += 1;
+        }
+        let commitment = match status {
+            CommitmentStatus::Absent => "absent (pre-T7.4 file — unverifiable)",
+            CommitmentStatus::Verified => "verified (BLAKE3)",
+            CommitmentStatus::Mismatch => "MISMATCH — file corrupted or edited after write",
+        };
+        let _ = writeln!(
+            report,
+            "memory store: {}\nenvelope: v1 | commitment: {commitment}\nbuckets: {} (distinct rules: {})\ntiers: Certified {certified} | Heuristic {heuristic} | Withdrawn {withdrawn}\noutcomes: success {successes} | fail {fails} | buckets with consecutive fails {consec}",
+            path.display(),
+            self.trajectories.len(),
+            rules.len(),
+        );
+        let mut top: Vec<(&str, u32)> = rules.into_iter().collect();
+        top.sort_unstable_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(b.0)));
+        for (rule, count) in top.iter().take(8) {
+            let _ = writeln!(report, "  {count:6}  {rule}");
+        }
+        let e1 = if self.trajectories.is_empty() { "—" } else { "OK" };
+        let e2 = if successes > 0 || certified > 0 { "OK" } else { "—" };
+        let e3 = if certified > 0 { "OK" } else { "—" };
+        let _ = writeln!(
+            report,
+            "loop state (Issue 037): record {e1} | verdict {e2} | learn {e3} — verdict needs a positive outcome (037-T2 wires it), learn needs tier promotion"
+        );
+        report
+    }
+
     /// Serialize the memory state to a JSON string (v1 envelope, Issue 018).
     ///
     /// Round-trips losslessly: `direction` f32 components serialize via
@@ -720,6 +778,35 @@ mod tests {
         );
         // Advisory, not a gate: the data still loads (see CommitmentStatus).
         assert_eq!(loaded.len(), 1);
+    }
+
+    #[test]
+    fn stats_report_reflects_loop_state() {
+        // Issue 037 observability: the E1/E2/E3 lines must derive from the
+        // data — fresh memory is record-less; after one apply it records but
+        // has no verdict; after a certified outcome all three are OK.
+        let path = std::path::Path::new("/tmp/stats-report-probe/memory.json");
+        let mut m = LatentFixMemory::default();
+        let fresh = m.stats_report(path, CommitmentStatus::Verified);
+        assert!(fresh.contains("buckets: 0"), "fresh: {fresh}");
+        assert!(fresh.contains("record — | verdict — | learn —"), "fresh: {fresh}");
+
+        m.insert(make_traj("needless_return", "return 42;", "42"));
+        m.insert(make_traj("match_bool", "match b { true => x }", "if b { x }"));
+        let recorded = m.stats_report(path, CommitmentStatus::Verified);
+        assert!(recorded.contains("buckets: 2 (distinct rules: 2)"), "recorded: {recorded}");
+        assert!(recorded.contains("tiers: Certified 0 | Heuristic 2 | Withdrawn 0"));
+        assert!(recorded.contains("record OK | verdict — | learn —"), "recorded: {recorded}");
+
+        m.record_certified("needless_return", "return 42;", "42");
+        let evolved = m.stats_report(path, CommitmentStatus::Verified);
+        assert!(evolved.contains("tiers: Certified 1 | Heuristic 1 | Withdrawn 0"));
+        assert!(evolved.contains("outcomes: success 1 | fail 0"));
+        assert!(evolved.contains("record OK | verdict OK | learn OK"), "evolved: {evolved}");
+
+        // The commitment status surfaces — a MISMATCH must be loud.
+        let tampered = m.stats_report(path, CommitmentStatus::Mismatch);
+        assert!(tampered.contains("MISMATCH"), "tampered: {tampered}");
     }
 
     #[test]

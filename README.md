@@ -366,6 +366,15 @@ authoring request with the rendered diagnostic). Export either backend:
 cargo heal --dump-trajectories > trajectories.jsonl
 ```
 
+Debug-query the loop state (Issue 037 observability — one command, no jq,
+works from any repo with the installed binary; summarizes the JSON backend
+always + the repo-local kv store when present, incl. the E1 record / E2
+verdict / E3 learn loop-state verdict):
+
+```bash
+cargo heal --memory-stats
+```
+
 Concurrent sibling builds: export a private `CARGO_TARGET_DIR` before
 launching (see the script header for the isolation recipe — the global
 rule; the oracle shares your target dir by default).

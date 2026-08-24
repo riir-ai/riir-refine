@@ -168,6 +168,7 @@ USAGE:
     cargo heal --fix [--write] [--no-fmt] [--quiet] [--verify [--verify-args <s>]] [--top-k <N>] <path>...
     cargo heal --fix-compile [--write] [--max-iters <N>] [--verify-args <s>] <path>...
     cargo heal --dump-trajectories > trajectories.jsonl
+    cargo heal --memory-stats                         (loop debug query, no paths)
     cargo heal --score-bench | --score-report        (needs --features score_bench)
 
     --suggest       Suggest mode: print matching rules per code span (no edits).
@@ -185,6 +186,10 @@ USAGE:
     --dump-trajectories  Export the self-evolve trajectory store to stdout as
                     JSONL (Plan 019 T4.3b — the human grep surface; one source
                     of truth, no shadow log). Reads the store the build ships.
+    --memory-stats Print the self-evolve loop debug summary (Issue 037):
+                    tier/outcome counts, top rules, commitment status, the
+                    E1 record / E2 verdict / E3 learn state — the one-command
+                    \"is the loop actually closed?\" query. Read-only.
     --write         With --fix/--fix-compile: write the edits in place (with --fix:
                     then rustfmt AUTOMATICALLY when the original was already
                     rustfmt-clean — pre-existing drift + CRLF files are skipped — no
@@ -245,6 +250,12 @@ struct Args {
     score_bench: bool,
     /// `--score-report`: re-render the SVG from the existing history JSONL.
     score_report: bool,
+    /// `--memory-stats` (Issue 037 observability): print the one-command
+    /// debug summary of the self-evolve store — tier/outcome counts, top
+    /// rules, BLAKE3 commitment status, + the E1/E2/E3 loop-state verdict.
+    /// Read-only standalone mode (no paths, no recording, ignores the
+    /// opt-out env — a query, not a run).
+    memory_stats: bool,
 }
 
 fn parse_args() -> Args {
@@ -264,6 +275,7 @@ fn parse_args() -> Args {
         paths: Vec::new(),
         score_bench: false,
         score_report: false,
+        memory_stats: false,
     };
     let mut it = std::env::args().skip(1);
     while let Some(arg) = it.next() {
@@ -278,6 +290,7 @@ fn parse_args() -> Args {
             "--verify" => args.verify = true,
             "--score-bench" => args.score_bench = true,
             "--score-report" => args.score_report = true,
+            "--memory-stats" => args.memory_stats = true,
             "--max-iters" => {
                 let Some(value) = it.next() else {
                     eprintln!("--max-iters requires a value");
@@ -333,6 +346,7 @@ fn parse_args() -> Args {
         && !args.score_bench
         && !args.score_report
         && !args.dump_trajectories
+        && !args.memory_stats
     {
         eprintln!("no paths given");
         usage();
@@ -534,6 +548,85 @@ fn main() {
     if args.score_bench || args.score_report {
         eprintln!("--score-bench / --score-report require a build with --features score_bench");
         std::process::exit(2);
+    }
+
+    // ── Issue 037 observability: --memory-stats — the loop debug query ────
+    // Read-only standalone mode (like the score arms above: early return,
+    // validate_mode_flags never sees it). Summarizes whichever backend the
+    // build ships: the JSON envelope always; the repo-local neuron-db store
+    // (`.heal/trajectories.kv`, `latent_retrieval` builds) when present.
+    if args.memory_stats {
+        let path = default_memory_path();
+        match std::fs::read_to_string(&path) {
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                eprintln!(
+                    "memory-stats: no store at {} — the loop has never recorded here",
+                    path.display()
+                );
+                std::process::exit(1);
+            }
+            Err(e) => {
+                eprintln!("memory-stats: cannot read {}: {e}", path.display());
+                std::process::exit(1);
+            }
+            Ok(_) => {
+                let mut mem = riir_clippy::memory::LatentFixMemory::default();
+                match mem.load_verified(&path) {
+                    Ok(status) => {
+                        print!("{}", mem.stats_report(&path, status));
+                    }
+                    Err(e) => {
+                        eprintln!(
+                            "memory-stats: store at {} is unreadable: {e}",
+                            path.display()
+                        );
+                        std::process::exit(1);
+                    }
+                }
+            }
+        }
+        // The neuron-db backend (`latent_retrieval` builds): repo-local
+        // `.heal/trajectories.kv` — same root resolution as --dump-trajectories.
+        #[cfg(feature = "latent_retrieval")]
+        {
+            let root = std::env::var("RIIR_HEAL_TRAJ_ROOT")
+                .map(PathBuf::from)
+                .or_else(|_| std::env::current_dir())
+                .unwrap_or_default();
+            let kv = root.join(".heal").join("trajectories.kv");
+            if kv.exists() {
+                match riir_clippy::traj_store::TrajStore::open(&root) {
+                    Ok((store, bad)) => {
+                        let rows = store.dump();
+                        let (mut s, mut f, mut certified) = (0u32, 0u32, 0u32);
+                        for r in &rows {
+                            s += r.success_count;
+                            f += r.fail_count;
+                            if r.tier == riir_clippy::memory::EvidenceTier::Certified.as_u8() {
+                                certified += 1;
+                            }
+                        }
+                        let corrupt = if bad > 0 {
+                            format!(" ({bad} corrupt skipped)")
+                        } else {
+                            String::new()
+                        };
+                        println!(
+                            "kv store: {} | rows {} | success {s} | fail {f} | certified {certified}{corrupt}",
+                            kv.display(),
+                            rows.len()
+                        );
+                    }
+                    Err(e) => eprintln!("memory-stats: kv store at {} unreadable: {e}", kv.display()),
+                }
+            } else {
+                println!(
+                    "kv store: none at {} (the rustc_errors --fix-compile backend; not run in this repo)",
+                    kv.display()
+                );
+            }
+        }
+        return;
     }
 
     // Plan 019 T1.5: the mode-flag matrix (pinned by

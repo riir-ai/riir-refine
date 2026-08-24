@@ -54,6 +54,12 @@ In-session, adoption is additionally visible directly in the agent transcript
 (the `cargo heal` terminal calls). But the audit script is the durable,
 cross-session evidence — run it weekly or whenever doubting.
 
+**In-binary variant of section 1** (works from any repo with the installed
+binary, no checkout needed): `cargo heal --memory-stats` — same counts plus
+the BLAKE3 commitment status and the E1/E2/E3 loop-state verdict. This is
+the query surface for verifying T2 once it lands: after a real
+`--fix --write --verify` run, `verdict` must flip from `—` to `OK`.
+
 ## Acceptance gates (falsifiable; issue closes when ALL green)
 
 ### Adoption (the "agents use it" half)
