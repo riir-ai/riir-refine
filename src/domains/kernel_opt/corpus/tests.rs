@@ -63,7 +63,7 @@
         // Batch 63 (3): the CubeCL twin unlock — same-input-gemv-weight-concat-at-upload, deferred-residual-fused-into-next-layer-norm, reset-state-in-place-fill-never-realloc (ternary_deltanet_gpu_forward.rs, Plan 009 / Research 071).
         // Batch 70 (3): the arxiv barrier-free-sync paper distill (arXiv:2608.13757, Plan 020 / Research 080) — barrier-free-per-dependency-wait-from-loop-counters, shared-counter-decode-producer-progress, masked-branchless-wait-collapse.
         // Total: 209. // (historical batch-30 snapshot; current 370)
-        assert_eq!(corpus.entries.len(), 370, "kernel batches through Batch 70 should have 370 rules");
+        assert_eq!(corpus.entries.len(), 372, "kernel batches through Batch 71 should have 372 rules");
     }
 
     #[test]
@@ -3802,13 +3802,93 @@
     }
 
     #[test]
+    fn batch71_rules_present() {
+        // Batch 71 (oMLX external distill — the rotated-ring speculative
+        // undo + the GPU-API thread-affinity discipline; Research 083).
+        let corpus = build_kernel_seed_corpus();
+        let ids = [
+            "rotated-ring-undo-via-rebind-reference-snapshot",
+            "gpu-api-thread-affinity-snapshot-metrics",
+        ];
+        for id in ids {
+            assert!(
+                corpus.entries.iter().any(|e| e.rule_id == id),
+                "batch-71 rule '{id}' missing from corpus"
+            );
+        }
+    }
+
+    #[test]
+    fn batch71_concepts_covered() {
+        let corpus = build_kernel_seed_corpus();
+        let checks: [(&str, [&str; 5]); 2] = [
+            (
+                "rotated-ring-undo-via-rebind-reference-snapshot",
+                [
+                    "rotated ring cache",
+                    "phantom",
+                    "rebinds",
+                    "restore the references and replay",
+                    "detach-copy",
+                ],
+            ),
+            (
+                "gpu-api-thread-affinity-snapshot-metrics",
+                [
+                    "background monitor or enforcer thread",
+                    "corrupts command-buffer internal state",
+                    "Snapshot",
+                    "Flag-and-defer",
+                    "Cache-once",
+                ],
+            ),
+        ];
+        for (id, needles) in checks {
+            let entry = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-71 rule '{id}' missing"));
+            for needle in needles {
+                assert!(
+                    entry.gpu_concept.contains(needle),
+                    "batch-71 concept for '{id}' missing needle '{needle}'"
+                );
+            }
+        }
+    }
+
+    #[test]
+    #[cfg(not(feature = "kernel_verify"))]
+    fn batch71_pseudocode_parses() {
+        // G1 for Batch 71: syn-parse gate.
+        use crate::domain::HealDomain;
+        let corpus = build_kernel_seed_corpus();
+        let ids = [
+            "rotated-ring-undo-via-rebind-reference-snapshot",
+            "gpu-api-thread-affinity-snapshot-metrics",
+        ];
+        for id in ids {
+            let entry = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-71 rule '{id}' missing"));
+            let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+            assert!(ref_verdict.parses, "batch-71 ref_shape for '{id}' must parse");
+            let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+            assert!(opt_verdict.parses, "batch-71 opt_pattern for '{id}' must parse");
+        }
+    }
+
+    #[test]
     fn kernel_categories_table_has_15_entries() {
         assert_eq!(KERNEL_CATEGORIES.len(), 15, "Plan 003: 15 categories (A–O)");
     }
 
     #[test]
     fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-        // Every rule_id in the 370-rule corpus must appear in exactly one category.
+        // Every rule_id in the 372-rule corpus must appear in exactly one category.
         let corpus = build_kernel_seed_corpus();
         let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
         let mut categorized: Vec<&str> = Vec::new();
@@ -3839,12 +3919,12 @@
 
     #[test]
     fn kernel_categories_counts_match_plan_003_table() {
-        // Pin per-category rule counts to the Plan 003 table (updated for Batch 70).
+        // Pin per-category rule counts to the Plan 003 table (updated for Batch 71).
         let expected = [
-            (KernelCategory::MemoryAccess, 87),
+            (KernelCategory::MemoryAccess, 88),
             (KernelCategory::Compute, 53),
             (KernelCategory::Fusion, 34),
-            (KernelCategory::Dispatch, 73),
+            (KernelCategory::Dispatch, 74),
             (KernelCategory::Parallelism, 21),
             (KernelCategory::FlashAttnTiling, 10),
             (KernelCategory::LinearAttnRecurrence, 19),
@@ -3864,9 +3944,9 @@
                 "Plan 003: category {cat:?} has {} rules, expected {count}",
                 entry.2.len());
         }
-        // Sum must equal 370.
+        // Sum must equal 372.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 370, "Plan 003: category totals must sum to 370");
+        assert_eq!(total, 372, "Plan 003: category totals must sum to 372");
     }
 
     #[test]
@@ -3876,7 +3956,7 @@
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 370, "Plan 003: grouped corpus has {total} rules, expected 370");
+        assert_eq!(total, 372, "Plan 003: grouped corpus has {total} rules, expected 372");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");

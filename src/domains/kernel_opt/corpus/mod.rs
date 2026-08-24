@@ -1348,6 +1348,25 @@
 //!   surfaces); the 3.3x is Trainium-specific evidence, the rules encode
 //!   the mechanism; the fallback-to-barrier subset is stated in-rule.
 //!   Record: Research 080.
+//! - **Batch 71 (2026-08-24, Plan 022 — the oMLX external distill, Research
+//!   082 consumed / Research 083):** 2 rules, corpus 370 -> 372 (A 87 -> 88,
+//!   D 73 -> 74) from jundot/omlx (Apache-2.0 Python/MLX Apple-Silicon
+//!   serving engine; the SECOND external batch + first live-repo source):
+//!   rotated-ring-undo-via-rebind-reference-snapshot (A — a rotated ring
+//!   cache cannot trim, so a rejected speculative verify leaves PHANTOM
+//!   tokens; exact undo via the concat path's rebind contract: stash
+//!   pre-update attribute refs + staged inputs, restore + replay the
+//!   confirmed prefix; thread-local arming; detach-copy only where the
+//!   path may setitem in place) + gpu-api-thread-affinity-snapshot-metrics
+//!   (D — a background enforcer never calls GPU runtime APIs during active
+//!   requests: snapshot (executor-published cached sample + kernel ledger),
+//!   flag-and-defer (atomic flag; the clear runs on the inference thread at
+//!   the next step boundary through the synchronized path — the
+//!   callback-drain SIGABRT class merged in as the justification), cache-once
+//!   for immutable device caps). The Research 082 pool's #4 MMA kernel was
+//!   killed as B16 dedup (validation evidence only) + #5 Laguna fusions dropped
+//!   (`optimizations.py` read at mine time: a hardware-detection stub, the
+//!   fusions are not in it). Record: Research 083.
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
@@ -1400,7 +1419,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 370-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 372-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1408,7 +1427,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (87 rules)
+    // A: Memory access patterns (88 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -1499,6 +1518,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "async-htod-host-source-outlives-copy",
             "output-buffer-rotation-pool-multi-forward",
             "write-before-read-state-skips-checkpoint",
+            "rotated-ring-undo-via-rebind-reference-snapshot",
             "reset-state-in-place-fill-never-realloc",
         ],
     ),
@@ -1603,7 +1623,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fuse-indirect-gather-into-dot-consumer",
         ],
     ),
-    // D: Dispatch patterns (73 rules)
+    // D: Dispatch patterns (74 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -1673,6 +1693,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "phase-split-per-position-data-liveness-row-storage",
             "buffer-length-derived-from-allocation-not-binding",
             "concurrent-context-init-needs-process-wide-lock",
+            "gpu-api-thread-affinity-snapshot-metrics",
             "tile-loop-back-edge-needs-multi-tile-bitexact-gate",
             "captured-graph-bakes-buffer-addresses",
             "mid-pipeline-device-alloc-is-implicit-sync",
