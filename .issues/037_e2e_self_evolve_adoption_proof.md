@@ -104,7 +104,7 @@ the query surface for verifying T2 once it lands: after a real
       `record_applied`. Keep the honest split: rustc-only pass = Heuristic
       outcome-success; oracle-confirmed = Certified (Issue 021 semantics).
 
-      **DONE 2026-08-24** — landed as the verdict matrix + the durable
+      **DONE 2026-08-24 — commit `667562a`** — landed as the verdict matrix + the durable
       landing (the decision's directive: verdicts as in-schema fields on
       the `.heal/trajectories.kv` rows, keyed by heal-run id — no sidecar,
       038 keeps a single read path):

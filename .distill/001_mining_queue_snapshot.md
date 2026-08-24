@@ -1206,7 +1206,7 @@ never closed). Ranked open classes (inventory 2026-08-24):
       **Tracked in [Issue 037](../.issues/037_e2e_self_evolve_adoption_proof.md)
       T2 (root-caused — CLI records outcomes as `false` only); blocks
       Proposals 003 + 004 until E2E proven.**
-      **LANDED 2026-08-24 via 037-T2** (see the issue's T2 resolution note):
+      **LANDED 2026-08-24 via 037-T2, commit `667562a`** (see the issue's T2 resolution note):
       the kept-edit verdict matrix (oracle-confirmed → Certified / persist
       → verified-fail / no oracle → Heuristic success) + the clippy
       lint-resolution oracle (`CheckRunner::run_clippy` + PRIMARY-span
