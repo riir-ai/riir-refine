@@ -2711,6 +2711,32 @@ EvolveMem retrieval-config co-evolution, Gain verdict), item 13 doc-sync
 All 13 queue items have now been exercised ≥1× through the idle loop.
 T7 stays blocked on sibling WIP (`ternary_deltanet_gpu_forward.rs`).
 
+## Production adoption — `cargo heal` as the dev-time default (2026-08-24)
+
+**Verdict: GO** (live trial, M3). The healer is now the DEFAULT tool for
+mechanical clippy findings across the workspace, ahead of manual fixes and
+`cargo clippy --fix`:
+
+- **Global binary**: `~/.cargo/bin/cargo-heal` → symlink to
+  `target/release/cargo-heal` (built `--features fix_verify,clippy_verify` —
+  rebuild after healer source changes; the symlink keeps resolving).
+- **Trial evidence**: 12/12 planted fixes landed, 2/2 planted divergence
+  classes correctly refused (comment-guard + named-arg-rename), tests
+  bit-stable, compile gate 2 checks / 0 reverts, idempotent re-run; real dry
+  run on `riir-ai/crates/riir-games/src` → 222 edits / 54 files available.
+- **Dev-time skill**: `cargo-heal` (`.agents/skills/cargo-heal/`, symlinked
+  globally) — usage, divergence table, discipline, post-mining logging.
+- **Post-mining** (term adopted 2026-08-24): mining
+  improvement candidates from the healer's OWN usage artifacts (memory.json
+  trajectories, misses, created-warnings, verify reverts, score-bench delta)
+  — vs **pre-mining** (Protocol A, external sources). Intake lives in
+  `.distill/001_mining_queue_snapshot.md` §"Post-mining intake"; consumed by
+  idle-loop queue item 14 (Protocol C in the skill). Seed inventory 2026-08-24:
+  8 ranked classes (macro-nesting family, array-literal guards,
+  named-arg-with-rename, created-warning pair, outcome-verdict wiring, …) +
+  the measured gap that 8,235 memory trajectories carry ZERO outcome verdicts
+  (the sweep campaign validated manually; the verdict loop never closed — P5).
+
 ## Source secrecy & binary-only distribution (non-negotiable)
 
 **Per [Research 003](../riir-ai/.research/003_Commercial_Open_Source_Strategy_Verdict.md):

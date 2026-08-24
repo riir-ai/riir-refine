@@ -39,11 +39,12 @@ still applies whenever a measurement saturates the box, at any hour.
 | 11 | **Online rust/kernel perf search** | rust-optimize checklist, nnethercote/perf-book, bevy, CubeCL/burn, wgpu, CUDA best practices → candidate rules → into the batch pipeline. |
 | 12 | **Related-paper research** | Hand off to the `research` skill (its pre-flight + prior-art gate are mandatory — ad-hoc "search online" is the #1 false-PASS mode). |
 | 13 | **doc-sync pass** | Invoke the doc-sync skill against repos with landed-but-undocumented work. |
+| 14 | **Post-mining sweep** | Mine improvement candidates from the healer's OWN usage artifacts (Protocol C below) — misses, created-warnings, verify reverts, memory.json tier stats, score-bench delta. Contrast with items 5/11/12 which are PRE-mining (external sources). |
 
 Items 6 + 7 run BEFORE item 8 (benchmarks) by design — boundary/DRY
 findings are cheaper to fix before you benchmark around them.
 
-## Protocol A — batch mining (queue item 5)
+## Protocol A — batch mining (queue item 5) — PRE-mining (external sources)
 
 0. **Create the batch plan FIRST** — `riir-clippy/.plans/NNN_*.md` (next
    number per `.plans/.highwater`, re-scan the folder at write time) with
@@ -115,6 +116,26 @@ cargo run --features latent_retrieval --bin cargo-heal -- --fix --write <target-
   the healer must adapt each iteration, not accumulate suppressed lints.
 - Commit separately: `fix: heal <repo> ...` (target repo) and
   `fix: proposer ...` (riir-clippy).
+
+## Protocol C — post-mining sweep (queue item 14 — usage artifacts)
+
+Pre-mining (Protocol A) distills rules from external sources BEFORE usage.
+Post-mining distills proposer extensions + new rules from artifacts that only
+exist AFTER usage. Intake lives in `.distill/001_mining_queue_snapshot.md`
+§"Post-mining intake" — appended by dev-time heal sessions (the `cargo-heal`
+skill points agents there). Per sweep:
+
+1. Gather: `~/.cache/riir-clippy/memory.json` (trajectory counts by lint,
+  tier/outcome distribution), `.benchmarks/score_history.jsonl` delta,
+  `.heal/misses/`, verify-gate revert reports, grep target-repo session
+  records for `divergence|backlog|miss`.
+2. Triage each open class: **probe against real clippy FIRST** (temp crate,
+  JSON output — the established discipline; a rule without probe evidence
+  does not land, Batch 33's rejected seed is the precedent).
+3. Fix the proposer at root cause + fixture regression test + re-run
+   `--score-bench` (the history accumulates; never weaken floors silently).
+4. Highest-value recurring classes are pre-ranked in the intake file —
+   consume top-down, mark each DONE with its commit hash.
 
 ## Discipline (non-negotiable)
 

@@ -1173,3 +1173,41 @@
   4-arg shape kept) — only `lib.rs` (EvidenceTier re-export) was touched
   from the protected list.
 
+
+## Post-mining intake (usage-artifact improvement queue — opened 2026-08-24)
+
+PRE-mining (Protocol A) = external sources. POST-mining = the healer's own
+usage artifacts (memory.json trajectories, misses, created-warnings,
+verify reverts, score-bench delta). Dev-time heal sessions append lines
+here (via the `cargo-heal` skill); idle-loop queue item 14 consumes
+top-down. Probe each class against real clippy FIRST.
+
+**Baseline state (2026-08-24):** memory.json = 8,235 trajectories, ALL
+unjudged (no outcomes — the CLI records applied; outcome verdicts need
+`--verify` runs; the sweep campaign validated manually so the verdict loop
+never closed). Ranked open classes (inventory 2026-08-24):
+
+- [ ] P1 **macro-nesting family** — recursive `Expr::Macro` descent +
+      family-table breadth; 12+ live silent sites across 4 repos (ndb ×8,
+      riir-ai ×3, riir-train ×2, katgpt-rs ×2). Evidence: miss.
+- [ ] P2 **array-literal guard family** — `map_unwrap_or` context-forced
+      position detection (~8 sites) + `vec-with-capacity` temp-binding
+      emitter (4 sites). E0308 probe work already done. Evidence: miss.
+- [ ] P3 **named-arg-with-rename** — template-rewrite emission (`{:<w$}`),
+      ×5+ sites incl. the width variant; dominant residue of the
+      highest-volume lint (7,281 of 8,235 trajectories). Evidence: miss.
+- [ ] P4 **created-warning pair** — closure-bool plain-expression gap +
+      Unknown-receiver terminal emission (`is_some_and`); 9 manual fixes
+      to date; protects the score-bench `created` trust axis (1.9%).
+      Evidence: created.
+- [ ] P5 **outcome-verdict wiring** — feed `--verify`-run outcomes +
+      post-heal clippy results back into memory.json tiers (8,235
+      Heuristic trajectories awaiting their first verdicts). Design gap.
+- [ ] P6 **match_bool guard-on-first-arm** (nested-rewrite shape) +
+      single_match_else bool/char/str literal first arms (unprobed).
+      Evidence: miss.
+- [ ] P7 **no-proposer default lints** — `manual_is_multiple_of` (2 live
+      occurrences), `if_same_then_else` (owner call). Evidence: manual fix.
+- [ ] P8 **unnecessary_sort_by deref-binding shape** (`|&a, &b|` —
+      conservatively skipped; the AGENTS.md "no proposer" note is STALE,
+      proposer exists). Evidence: miss.
