@@ -1225,3 +1225,13 @@ never closed). Ranked open classes (inventory 2026-08-24):
 - [ ] P8 **unnecessary_sort_by deref-binding shape** (`|&a, &b|` —
       conservatively skipped; the AGENTS.md "no proposer" note is STALE,
       proposer exists). Evidence: miss.
+- [ ] P9 **compile-breaking proposal cluster in ruliology/player.rs** —
+      2× single_match_else (`match state.first()/opponent_history.last()`
+      Some/None → if-let) + 1× map_unwrap_or at :459, ALL THREE
+      auto-reverted by the verify gate when applied together (whole-file
+      revert; 037-T5, riir-ai). Root cause UNEXAMINED — grab the rustc
+      error (apply manually to a scratch copy), classify (borrow/move in
+      arm body? type-inference at the tail? edition let-chain?), then
+      either a proposer guard or a documented divergence class.
+      Evidence: verify revert (the gate's first multi-edit whole-file
+      refusal in production).

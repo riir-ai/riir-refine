@@ -75,7 +75,7 @@ the query surface for verifying T2 once it lands: after a real
 
 - [x] **E1 — record:** trajectories auto-record on every apply (proven
       2026-08-24: 8,236 buckets).
-- [ ] **E2 — verdict:** ≥1 real (non-fixture) bucket with `success_count ≥ 1`
+- [x] **E2 — verdict:** ≥1 real (non-fixture) bucket with `success_count ≥ 1`
       and the first `Certified` tier entry, sourced from agent-initiated
       `--fix --write --verify` runs (NOT the demo/tests). **Blocked by T2.**
       → **T2 LANDED** — the gate now needs a genuine dev-session run (T5);
@@ -87,17 +87,33 @@ the query surface for verifying T2 once it lands: after a real
       outcomes into BOTH stores (memory.json: success 9, Certified 6;
       `.heal/trajectories.kv`: 8 rows certified) and `--memory-stats` now
       prints `record OK | verdict OK | learn OK` (the line-61 check PASSES).
-      Same provenance class as T2's own proof, so E2's checkbox stays open
-      until T5's workspace-repo run — but the wiring is proven live on the
+      Same provenance class as T2's own proof, so E2's checkbox stayed open
+      until T5's workspace-repo run — but the wiring was proven live on the
       installed binary, not just in the E2E proof.
+      → **MET (T5, 2026-08-24, riir-ai `703856080`):** the first genuine
+      dev-session verify cycle — 19 files / 106 compile-gated edits on
+      `riir-games` (`--features swarm,target_coordination`), count-identical
+      tests in all 3 configs (default 557/0 · swarm 801/0 · union 860/0).
+      The repo store (first persisting run in riir-ai): **101 rows, 96
+      oracle-confirmed Certified, success 106 / fail 6** — every fail an
+      honest one (ruliology/player.rs's 3 proposed edits auto-reverted by
+      the compile gate: apply breaks cargo check → revert → fail verdict).
+      `--memory-stats`: `record OK | verdict OK | learn OK`.
 - [ ] **E3 — learn:** the EMA path consumes real verdicts — evidence: a lib
       test or `self_evolve_real_world_demo` run against the LIVE memory.json
       showing direction deltas ≠ 0 for buckets with outcomes, or an oracle
       run whose log shows learning active (no "learning disabled" line) AND
       persisted state reflecting the update.
-- [ ] **E4 — bench:** ≥1 new `score_history.jsonl` run post-T2 with
+- [x] **E4 — bench:** ≥1 new `score_history.jsonl` run post-T2 with
       `heal_rate ≥ 98.1%` AND `created_rate ≤ 1.9%` (no decay), or an
       improvement attributable to a post-mining fix.
+      → **MET (T4, 2026-08-24, sha `e4ce8ba`):** run #4 = heal **98.1%** ·
+      created **1.9%** · safety **100%** · decline **100%** — bit-identical
+      metrics to run #3 (`c8d0d34`): ZERO decay through the T2 verdict
+      wiring + the 038 store-backend swap (the bench's `heal_fixpoint`
+      exercises proposers only, by design — persistence is T5's axis).
+      Persist map unchanged: `useless_format ×1` (the documented String-typed
+      boundary, deliberately kept).
 - [ ] **E5 — mining report:** ≥1 post-mining intake class (P1–P8) closed
       end-to-end: intake `- [x]` + proposer-change commit + fixture +
       score-bench delta recorded in the research note.
@@ -163,11 +179,26 @@ the query surface for verifying T2 once it lands: after a real
       **SUPERSEDED by [Issue 038](038_self_evolve_memory_neuron_db_backend.md)**
       (neuron-db backend — timestamps land in the Pod rows there); do the
       JSON-envelope version ONLY if 038 slips past the A1 measurement window.
-- [ ] **T4 — post-T2 score-bench run** (feeds E4; record in score_history).
-- [ ] **T5 — first real-world verify cycle:** one genuine dev-session heal
+- [x] **T4 — post-T2 score-bench run** (feeds E4; record in score_history).
+      **DONE 2026-08-24** — run #4 appended (`e4ce8ba`): heal 98.1% / created
+      1.9% / safety 100% / decline 100% — bit-identical to run #3, zero
+      decay through the T2 + 038 landings. E4 MET.
+- [x] **T5 — first real-world verify cycle:** one genuine dev-session heal
       with `--write --verify` on a workspace repo (e.g. the 222-edit
       riir-games unit or the next idle-loop sweep) — its audit section-1
       output is the E2 evidence.
+      **DONE 2026-08-24 — riir-ai `703856080`.** Scoped to the 20
+      default+swarm+target_coordination-compiled files (108 dry-run edits;
+      dep-info gate map — the full 222-edit unit's other 34 files sit behind
+      game_sync/npc/combat/etc. features, the idle-loop sweep's territory).
+      19 files / 106 edits kept compile-gated; ruliology/player.rs's 3
+      proposed edits AUTO-REVERTED (apply breaks cargo check — the honest
+      refusal, recorded as the 3 fail verdicts). Tests count-identical in
+      all 3 configs: default 557/0 · swarm 801/0 · union 860/0. Store:
+      101 rows / 96 Certified / success 106 / fail 6 → **E2 MET**.
+      The player.rs break class is post-mining intake material (the exact
+      rustc error would sharpen a proposer guard — filed in the queue
+      snapshot, not examined this session).
 - [ ] **T6 — close gates A1–A3/E2–E5** via audit script output; write the
       resolution note here; remove this file per the noise-reduction rule.
 - [ ] **T7 — unblock Proposals 003 + 004** (they reference this issue; see
@@ -194,6 +225,32 @@ the query surface for verifying T2 once it lands: after a real
   adoption day (2026-08-24) — A2 is nearly satisfied by the adoption work
   itself; the gate wants post-adoption *usage* commits, so it stays unchecked
   until they accumulate.
+
+## Session record (2026-08-24, T4+T5)
+
+- **Observability fix (`c9d718b`)**: the kv branch of `--memory-stats`
+  shipped 038 as a 4-counter one-liner while the envelope branch printed
+  the full report — the histogram/tier/loop-state detail was envelope-only
+  (surfaced live when post-migration reads from riir-game-sdk showed no
+  per-rule detail). `TrajStore::stats_report` now carries envelope parity
+  PLUS the cadence line the envelope could never answer (F3): `activity:
+  last verdict YYYY-MM-DD | distinct active days N` from `last_seen_at`
+  (migrated rows carry 0 → excluded by construction). `loop_state_line`
+  extracted to memory.rs — one set of E1/E2/E3 semantics, both backends.
+- **The migration landed in riir-game-sdk** (another session's persisting
+  run, ~21:02): envelope 8241 buckets → 8117 rows (124 merged where the
+  envelope's (lint, buggy, fixed) triples collapsed onto the store's
+  (lint, shape) keying) + that run's own outcomes on top (success 9→11,
+  Certified 6→8). riir-ai's store started FRESH (the `.migrated` fence
+  prevents a second import) — per the one-import design.
+- **A2 status**: riir-ai `703856080` is heal-commit #1 post-adoption;
+  game-sdk's persisting run rode a sibling's uncommitted WIP (riir-e2e
+  files, Plan 004) — its heal commit lands when they commit. Gate stays
+  open until the 2nd repo's commit is on a branch.
+- **E3 remains open** — the EMA learn path consuming the store's verdicts
+  needs its own evidence run (the direction-delta / learning-active check
+  from the gate text); T5's run records verdicts but the EMA-half
+  observability is unproven on the store backend.
 - **2026-08-24 hygiene sweep (workspace-wide):** `.heal/` is machine-local
   runtime state — the `trajectories.kv` encrypted WAL, the `.heal/key` seed,
   and the `misses/` queue — and must never be committed: binary WAL churn,
