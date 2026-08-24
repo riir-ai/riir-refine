@@ -141,9 +141,50 @@ ELO leaderboard (human-readable THERE, not in storage — per the 038 rule).
         `ruliology_search_demo` example all GOAT gates PASS; global binary
         rebuilt (`fix_verify,clippy_verify` — the changed module is outside
         that feature graph, cargo-verified fresh).
-- [ ] **T4 — audit/report surface**: `self_evolve_audit.sh` section 1b —
+- [x] **T4 — audit/report surface**: `self_evolve_audit.sh` section 1b —
       ELO leaderboard (top rules, draws on review-only, Withdrawn excluded)
       via `--dump-trajectories`; this is the human-readable rendering.
+      **DONE 2026-08-24.** Both halves:
+      - **The store→table bridge T3 tee'd up** (the decision: LOAD
+        persisted ratings, never recompute from dumps — ratings are
+        already denormalized on every row, the T2 consumer contract):
+        `EloTable::from_ratings` (the load constructor — verbatim, no
+        replay, last-write-wins) + `TrajStore::elo_table()` (per player,
+        rule `lint_key`s AND span `shape_hash`es, the ruliology payoff
+        half; prefers the non-base rating among a player's rows so a
+        row CREATED after the last recompute — a sighting at base —
+        cannot mask the rated value; all-base players stay OUT of the
+        table, `rating()` answers base — the exact-1200 edge degrades
+        to unrated, conservative for a tie-break, documented). Tier is
+        NOT filtered in the bridge: ratings include every match
+        recompute replayed; Issue 021's suggestion-trust exclusion is
+        the consumer's tier axis and the leaderboard's Withdrawn
+        exclusion is a RENDER filter (the documented split).
+      - **§1b leaderboard** (`self_evolve_audit.sh`, python over the
+        per-repo `--dump-trajectories` JSONL): top-8 rules by rating
+        (W/L from the non-Withdrawn rows), draws line (review-only
+        rules — never a match), `pending-recompute` NOTE (verdicts but
+        no rating → the actionable `cargo heal --recompute-elo` hint),
+        Withdrawn rows excluded + counted, + a toughest-shapes line
+        (top span_elo — span difficulty visible). Header note: ratings
+        are as fresh as the last recompute.
+      - **Validation**: 670 default / 748 latent_retrieval / 702
+        ruliology_search lib tests (baselines held; +1 elo
+        `from_ratings`, +3 `elo_table` bridge tests incl. the
+        load-bearing post-recompute-sighting edge + unrated-absent +
+        verbatim-fidelity-to-rows); clippy 0 `--all-targets -D warnings`
+        all three states (one `float_cmp` allow, the exact-constant
+        comparison class); 7/7 bin tests; global binary rebuilt
+        (fix_verify,clippy_verify,latent_retrieval,rust_perf).
+      - **Live loop-closure proof**: the audit surfaced a NEW store
+        (riir-game-sdk, 8,117 rows — appeared since T2's backfill) with
+        5 pending rules; the hint's own command backfilled it (13
+        matches, 5 rules + 10 spans rated) → 0 pending on re-audit.
+        The standings carry the honest negative signal:
+        `redundant_closure` 1168.7 at W=0 L=2 — a losing rule rated
+        DOWN, visible. Headline standings (riir-ai):
+        `uninlined_format_args` 1625.3 (70W/0L), `match_bool` 1360.7,
+        `map_unwrap_or` 1336.6 (14W/2L); toughest shape 1241.
 - [ ] **T5 — selection challenge gate (measured)**: score-bench A/B,
       BetaPosterior vs ELO-weighted selection, at real pool-sparsity; promote
       ONLY on a win; record as a score_history delta + research note.

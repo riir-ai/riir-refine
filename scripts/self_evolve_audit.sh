@@ -2,6 +2,9 @@
 # self_evolve_audit.sh — one command to judge heal ADOPTION + E2E self-evolve state.
 # Answers: "did agents actually use cargo heal?" and "is the self-evolve loop closing?"
 # Issue 037 gates read directly from this output. Stateless: run anytime, compare runs.
+# Issue 039 T4: §1b renders the ELO leaderboard (rule-vs-shape ratings) from
+# --dump-trajectories — the human-readable rating surface (ratings stay in
+# storage; only the report is prose).
 set -u
 
 HEAL_REPO="/Users/katopz/git/riir-clippy"
@@ -95,6 +98,74 @@ elif [ -f "${MEMORY}.migrated" ]; then
   echo "  envelope: MIGRATED (${MEMORY}.migrated) — the active backend is the repo-local store(s) above"
 else
   echo "  memory ABSENT at $MEMORY — no heal run has ever recorded on this box"
+fi
+
+echo ""
+echo "── 1b. ELO leaderboard (Issue 039 T4 — rule-vs-shape ratings) ──"
+# The human-readable rendering of the 039 ELO surface: rules are rated by
+# REAL usage (win = kept+verified verdict, loss = reverted/created-warning,
+# review-only sighting = draw → stays unrated). Withdrawn rows (tier=2) are
+# EXCLUDED from the standings (Issue 021's trust model — ratings themselves
+# include every match; this is a render filter). Ratings are as fresh as
+# the last `cargo heal --recompute-elo` in that repo.
+if [ -n "$STORE_REPOS" ] && [ -x "$HEAL_BIN" ]; then
+  ELO_TMP="$(mktemp)"
+  for r in $STORE_REPOS; do
+    d="/Users/katopz/git/$r"
+    RIIR_HEAL_TRAJ_ROOT="$d" "$HEAL_BIN" --dump-trajectories > "$ELO_TMP" 2>/dev/null
+    python3 - "$r" "$ELO_TMP" <<'EOF'
+import json, sys
+repo, path = sys.argv[1], sys.argv[2]
+BASE = 1200.0
+rules = {}   # lint_key -> {wins, losses, elo(None|float)}
+spans = {}   # shape -> {elo(None|float)}
+withdrawn = 0
+for line in open(path):
+    line = line.strip()
+    if not line.startswith('{'):
+        continue
+    try:
+        v = json.loads(line)
+    except Exception:
+        continue
+    if int(v.get('tier', 1)) == 2:
+        withdrawn += 1
+        continue  # Withdrawn rows excluded from the standings (Issue 021)
+    e = rules.setdefault(v.get('lint_key', '?'), {'wins': 0, 'losses': 0, 'elo': None})
+    e['wins'] += int(v.get('success_count', 0))
+    e['losses'] += int(v.get('fail_count', 0))
+    elo = float(v.get('elo', BASE))
+    if elo != BASE:
+        e['elo'] = elo
+    s = spans.setdefault(v.get('shape', ''), {'elo': None})
+    span_elo = float(v.get('span_elo', BASE))
+    if span_elo != BASE:
+        s['elo'] = span_elo
+rated = sorted(((k, v) for k, v in rules.items() if v['elo'] is not None),
+               key=lambda kv: (-kv[1]['elo'], -kv[1]['wins'], kv[0]))
+pending = sorted(k for k, v in rules.items() if v['elo'] is None and v['wins'] + v['losses'] > 0)
+draws = sorted(k for k, v in rules.items() if v['elo'] is None and v['wins'] + v['losses'] == 0)
+tough = sorted(((k, v['elo']) for k, v in spans.items() if v['elo'] is not None),
+                key=lambda kv: -kv[1])[:3]
+print(f"  {repo}: {len(rated)} rated | {len(draws)} draw(s, review-only) | {len(pending)} pending-recompute | {withdrawn} Withdrawn row(s) excluded")
+for name, v in rated[:8]:
+    print(f"    {v['elo']:7.1f}  {name[:44]:<44}  W={v['wins']:<4} L={v['losses']}")
+if draws:
+    shown = ", ".join(draws[:6])
+    tail = " …" if len(draws) > 6 else ""
+    print(f"    draws (review-only, unrated): {shown}{tail}")
+if pending:
+    print(f"    NOTE: {len(pending)} rule(s) with verdicts but no rating — run: cargo heal --recompute-elo")
+if tough:
+    def clip(s):
+        s = s.replace("\n", " ")
+        return s if len(s) <= 38 else s[:37] + "…"
+    print("    toughest shapes (span_elo): " + ", ".join(f'"{clip(k)}" {v:.0f}' for k, v in tough))
+EOF
+  done
+  rm -f "$ELO_TMP"
+else
+  echo "  (needs ≥1 store repo + the readable binary — see §1)"
 fi
 
 echo ""

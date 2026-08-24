@@ -741,6 +741,44 @@ impl TrajStore {
         }
         Ok(summary)
     }
+
+    /// Issue 039 T4 — the store→table bridge T3 deferred to its caller:
+    /// load the PERSISTED ratings into an [`EloTable`] without replaying
+    /// any match (batch-on-load design — this returns the table the last
+    /// [`recompute_elo`](Self::recompute_elo) pass produced, as stored;
+    /// verdicts recorded since surface at the next recompute).
+    ///
+    /// Loading rule: recompute writes each player's FINAL rating on EVERY
+    /// row, so any row carries it — but a row CREATED after the last pass
+    /// still sits at [`default_elo`] (a sighting, not a rating event). The
+    /// bridge therefore takes a player's non-base rating (last one in key
+    /// order on a hand-edited tie) and leaves all-base players OUT of the
+    /// table — [`EloTable::rating`] answers base for them. A rule whose
+    /// true rating is exactly base degrades to unrated: conservative for a
+    /// tie-break axis, documented.
+    ///
+    /// Both namespaces load (rule `lint_key`s AND span `shape_hash`es —
+    /// span difficulty is the ruliology payoff). Tier is NOT filtered
+    /// here: the persisted ratings include every match recompute replayed
+    /// (Withdrawn rows' too); Issue 021's suggestion-trust exclusion is
+    /// the consumer's tier axis, and the audit leaderboard's Withdrawn
+    /// exclusion is a render filter in `self_evolve_audit.sh` §1b (the
+    /// documented split).
+    #[must_use]
+    #[allow(clippy::float_cmp)] // base-1200.0 is exactly representable + serde round-trips it
+    pub fn elo_table(&self) -> EloTable {
+        let base = default_elo();
+        let mut players: HashMap<String, f32> = HashMap::new();
+        for row in self.dump() {
+            if row.elo != base {
+                players.insert(row.lint_key.clone(), row.elo);
+            }
+            if row.span_elo != base {
+                players.insert(shape_hash(&row.shape), row.span_elo);
+            }
+        }
+        EloTable::from_ratings(players)
+    }
 }
 
 /// One [`TrajStore::recompute_elo`] pass summary (the `--recompute-elo`
@@ -1482,5 +1520,91 @@ mod tests {
         assert_eq!(row.elo, default_elo(), "record must not write ratings");
         assert_eq!(row.span_elo, default_elo());
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)] // bridge fidelity IS bit-identity to the persisted rating
+    fn elo_table_loads_persisted_ratings_verbatim() {
+        // Issue 039 T4 — the bridge contract: after a recompute pass (and a
+        // reopen), the store's table answers every row's PERSISTED rating
+        // for BOTH namespaces (rule lint_key + span shape_hash). No replay:
+        // the load is exactly what recompute wrote.
+        let root = tmp_root("elo-table-load");
+        {
+            let (store, _) = TrajStore::open(&root).unwrap();
+            for _ in 0..3 {
+                store.record("rule_a", "shape 1", "fix", true, true, "run-1").unwrap();
+            }
+            store.record("rule_a", "shape 2", "fix", false, true, "run-1").unwrap();
+            store.record("rule_b", "shape 1", "fix2", true, true, "run-1").unwrap();
+            store.recompute_elo().unwrap();
+        }
+        let (store, _) = TrajStore::open(&root).unwrap();
+        let table = store.elo_table();
+        for row in store.dump() {
+            assert_eq!(
+                table.rating(&row.lint_key),
+                row.elo,
+                "rule rating must match the persisted row value for {}",
+                row.lint_key
+            );
+            assert_eq!(
+                table.rating(&shape_hash(&row.shape)),
+                row.span_elo,
+                "span rating must match the persisted row value"
+            );
+        }
+        assert!(table.contains("rule_a"));
+        assert!(table.contains("rule_b"));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)] // the mixed-value edge IS a rating comparison
+    fn elo_table_prefers_rated_row_over_post_recompute_sighting() {
+        // The load-bearing edge: a row CREATED after the last recompute
+        // sits at base (a sighting, not a rating event) while the rule's
+        // older rows carry the rated value — the bridge must answer the
+        // RATED value, not the stale base.
+        let root = tmp_root("elo-table-edge");
+        {
+            let (store, _) = TrajStore::open(&root).unwrap();
+            for _ in 0..4 {
+                store.record("rule_r", "shape x", "f", true, true, "run-1").unwrap();
+            }
+            store.recompute_elo().unwrap();
+            // Post-recompute sighting on a NEW shape: fresh row at base.
+            store.record_applied("rule_r", "shape new", "f", "run-2").unwrap();
+        }
+        let (store, _) = TrajStore::open(&root).unwrap();
+        let dump = store.dump();
+        let rated = dump.iter().find(|r| r.shape == "shape x").unwrap().elo;
+        let fresh = dump.iter().find(|r| r.shape == "shape new").unwrap().elo;
+        assert!(rated > default_elo());
+        assert_eq!(fresh, default_elo(), "fresh sighting sits at base");
+        assert_eq!(store.elo_table().rating("rule_r"), rated);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)] // unrated == base IS the absent-player contract
+    fn elo_table_leaves_unrated_absent_and_empty_store_empty() {
+        // Review-only sightings are draws — never matches — so an
+        // apply-only rule stays OUT of the table (rating() answers base),
+        // and a store with no rows bridges to an empty table.
+        let root = tmp_root("elo-table-unrated");
+        {
+            let (store, _) = TrajStore::open(&root).unwrap();
+            store.record_applied("review_only", "shape 3", "fix3", "run-1").unwrap();
+            let table = store.elo_table();
+            assert!(table.is_empty());
+            assert!(!table.contains("review_only"));
+            assert_eq!(table.rating("review_only"), default_elo());
+        }
+        let root2 = tmp_root("elo-table-empty");
+        let (store, _) = TrajStore::open(&root2).unwrap();
+        assert!(store.elo_table().is_empty());
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_dir_all(&root2);
     }
 }

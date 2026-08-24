@@ -87,6 +87,22 @@ impl EloTable {
         Self::default()
     }
 
+    /// Load persisted ratings verbatim (the substrate half of Issue 039
+    /// T4's store→table bridge): no match replay — the entries become the
+    /// table exactly as given (later duplicates win, i.e. last-write-wins
+    /// in the caller's iteration order). Ids absent from `entries` keep
+    /// answering [`default_elo`] from [`Self::rating`].
+    #[must_use]
+    pub fn from_ratings<I, S>(entries: I) -> Self
+    where
+        I: IntoIterator<Item = (S, f32)>,
+        S: Into<String>,
+    {
+        Self {
+            ratings: entries.into_iter().map(|(id, r)| (id.into(), r)).collect(),
+        }
+    }
+
     /// Current rating ([`default_elo`] for unseen players).
     #[must_use]
     pub fn rating(&self, id: &str) -> f32 {
@@ -189,6 +205,27 @@ mod tests {
         assert!(t.rating("span") < default_elo());
         assert!(t.contains("rule"));
         assert!(!t.contains("nobody"));
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)] // verbatim load + base equality ARE the assertions
+    fn from_ratings_loads_verbatim_and_keeps_unseen_at_base() {
+        // The T4 bridge substrate: persisted ratings load as-is (no replay),
+        // unseen ids answer base, and an empty load equals `new()`.
+        let t = EloTable::from_ratings([("rule_x", 1625.0f32), ("rule_y", 1300.5)]);
+        assert_eq!(t.len(), 2);
+        assert_eq!(t.rating("rule_x"), 1625.0);
+        assert_eq!(t.rating("rule_y"), 1300.5);
+        // Owned-string entries load the same way (the bridge passes
+        // HashMap<String, f32>).
+        let owned: Vec<(String, f32)> = vec![("rule_z".to_string(), 1400.0)];
+        assert_eq!(EloTable::from_ratings(owned).rating("rule_z"), 1400.0);
+        assert_eq!(t.rating("nobody"), default_elo());
+        assert!(!t.contains("nobody"));
+        assert!(EloTable::from_ratings(Vec::<(String, f32)>::new()).is_empty());
+        // Last-write-wins on duplicate ids (the documented load rule).
+        let dup = EloTable::from_ratings([("a", 1216.0f32), ("a", 1240.0)]);
+        assert_eq!(dup.rating("a"), 1240.0);
     }
 
     #[test]
