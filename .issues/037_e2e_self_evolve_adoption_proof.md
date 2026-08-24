@@ -194,3 +194,15 @@ the query surface for verifying T2 once it lands: after a real
   adoption day (2026-08-24) — A2 is nearly satisfied by the adoption work
   itself; the gate wants post-adoption *usage* commits, so it stays unchecked
   until they accumulate.
+- **2026-08-24 hygiene sweep (workspace-wide):** `.heal/` is machine-local
+  runtime state — the `trajectories.kv` encrypted WAL, the `.heal/key` seed,
+  and the `misses/` queue — and must never be committed: binary WAL churn,
+  cross-machine divergence under the m3/4090 sync rule, and a committed
+  `.heal/key` in public katgpt-rs would be key material in a public repo.
+  `.heal/` is now gitignored in all 15 workspace repos (riir-clippy already
+  carried the Plan 019 entry; 14 more added it, riir-train via a worktree
+  cherry-pick — push race with a sibling — and katgpt-web committed to local
+  `main` only, it has no remote). Misses surface via `.distill/` intake
+  notes, not raw commits. Candidate post-mining follow-up: the healer
+  auto-appends the ignore entry on fresh-store creation (protects repos not
+  yet swept).
