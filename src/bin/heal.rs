@@ -151,6 +151,8 @@ fn migrate_envelope_once(store: &riir_clippy::traj_store::TrajStore) {
             },
             last_run_id: "migrated".to_string(),
             last_seen_at: 0,
+            elo: riir_clippy::traj_store::default_elo(),
+            span_elo: riir_clippy::traj_store::default_elo(),
         };
         if store.import_row(&row).is_ok() {
             imported += 1;

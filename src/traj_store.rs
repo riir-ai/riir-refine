@@ -100,6 +100,25 @@ pub struct TrajRowDoc {
     /// `0` on pre-T2 rows).
     #[serde(default)]
     pub last_seen_at: u64,
+    /// The rule's ELO rating (Issue 039 reservation; T2 computes — batch
+    /// PL→Elo over the verdict history, rule-vs-shape matches). Base 1200
+    /// = unrated (the honest pre-T2 state every row decodes with).
+    #[serde(default = "default_elo")]
+    pub elo: f32,
+    /// The opponent (shape) side of the last match — span difficulty
+    /// emerges as the opponent rating (039's match semantics rate BOTH
+    /// sides). Same base-1200 default; denormalized per-row until T2
+    /// decides whether spans get their own derivation.
+    #[serde(default = "default_elo")]
+    pub span_elo: f32,
+}
+
+/// The ELO base rating (unrated) — the arena calculator's + PL conversion's
+/// shared convention (`katgpt-pruners` arena base 1200 / 400 per log10 unit;
+/// promotion to `katgpt-core` filed as katgpt-rs Issue 686).
+#[must_use]
+pub fn default_elo() -> f32 {
+    1200.0
 }
 
 /// One persisted per-rule EMA learn row (Issue 037 E3) — the durable twin
@@ -394,6 +413,8 @@ impl TrajStore {
                     tier: EvidenceTier::Heuristic.as_u8(),
                     last_run_id: String::new(),
                     last_seen_at: 0,
+                    elo: default_elo(),
+                    span_elo: default_elo(),
                 }
             })
     }
@@ -962,6 +983,21 @@ mod tests {
         assert_eq!(doc.success_count, 1);
     }
 
+    #[test]
+    #[allow(clippy::float_cmp)] // exact base value — serde default, never computed
+    fn pre_039_rows_without_elo_fields_decode_at_base() {
+        // Issue 039 T1 reservation: rows written before the elo fields exist
+        // decode at base 1200 — the honest unrated state every pre-039 row
+        // carries (T2 recomputes from verdict history on load).
+        let doc: TrajRowDoc = serde_json::from_str(
+            r#"{"lint_key":"E0502:x","shape":"&v","fix":"v","direction":[0.0,0.0],"success_count":1,"fail_count":0,"consecutive_fails":0,"tier":0,"last_run_id":"run-1","last_seen_at":100}"#,
+        )
+        .expect("pre-039 row decodes");
+        assert_eq!(doc.elo, default_elo());
+        assert_eq!(doc.span_elo, default_elo());
+        assert_eq!(doc.last_seen_at, 100);
+    }
+
     #[cfg(feature = "rustc_errors")]
     #[test]
     fn shape_conditional_ordering_prefers_the_winning_neighbor() {
@@ -1086,6 +1122,8 @@ mod tests {
                 tier: EvidenceTier::Heuristic.as_u8(),
                 last_run_id: "migrated".to_string(),
                 last_seen_at: 0,
+                elo: default_elo(),
+                span_elo: default_elo(),
             })
             .unwrap();
         let report = store.stats_report(0);

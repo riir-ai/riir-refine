@@ -48,10 +48,22 @@ ELO leaderboard (human-readable THERE, not in storage — per the 038 rule).
 
 ## Tasks
 
-- [ ] **T1 — substrate decision + reservation**: file the katgpt-rs ELO→core
+- [x] **T1 — substrate decision + reservation**: file the katgpt-rs ELO→core
       promotion issue (or record the adapt-locally decision with citation);
       reserve `elo: f32` (+ `span_elo: f32`? decide) on the 038-T1 Pod row
       schema so 038 lands once.
+      **DONE 2026-08-24.** Both halves:
+      - **Substrate:** the promotion issue is filed — katgpt-rs `686`
+      (`b5cfd29d`; ELO/PL → `katgpt-core`, the 3-consumer argument — arena +
+      PL in-tree + this issue's T2). Until 686 lands, T2 proceeds
+      adapt-locally with citation (the `ruliology_search.rs` precedent) and
+      switches to the core primitive on close.
+      - **Reservation:** `elo: f32` + `span_elo: f32` on `TrajRowDoc`
+      (serde-defaulted at base 1200 via `default_elo()` — the arena/PL shared
+      convention; pre-039 rows decode unrated, test-pinned). `span_elo`
+      DECIDED IN: the match semantics rate both sides (span difficulty = the
+      opponent rating); stored denormalized per-row until T2 decides whether
+      spans get their own derivation.
 - [ ] **T2 — rating computation**: batch PL→Elo over trajectory rows on
       store load (038 backend); unit-gate vs hand-computed fixtures + the
       arena calculator on small cases (cross-check the two math paths).
