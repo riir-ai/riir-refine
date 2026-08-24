@@ -97,6 +97,9 @@ cross-session evidence — run it weekly or whenever doubting.
 - [ ] **T3 — timestamps in the memory envelope** (unblocks A1's memory half):
       optional `last_seen_at` per bucket + top-level `last_run_at`, serde
       defaults for backward compat (pre-T3 files decode as today).
+      **SUPERSEDED by [Issue 038](038_self_evolve_memory_neuron_db_backend.md)**
+      (neuron-db backend — timestamps land in the Pod rows there); do the
+      JSON-envelope version ONLY if 038 slips past the A1 measurement window.
 - [ ] **T4 — post-T2 score-bench run** (feeds E4; record in score_history).
 - [ ] **T5 — first real-world verify cycle:** one genuine dev-session heal
       with `--write --verify` on a workspace repo (e.g. the 222-edit
