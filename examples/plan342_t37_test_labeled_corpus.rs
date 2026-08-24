@@ -220,12 +220,43 @@ fn line_span(source: &str, start: usize, end: usize) -> (usize, usize) {
     (lo, hi)
 }
 
+/// The L4 drafter's prompt, byte-identical to `data/clippy_l4_sft_train.jsonl`.
+///
+/// **Load-bearing that this is one function.** T3.8 emits a corpus with it and
+/// later rejoins model drafts by prompt text, because `--dump-drafts` does not
+/// carry through extra columns — the prompt IS the join key. Two
+/// near-identical renderings would silently drop every row.
+fn l4_prompt(lint: &str, buggy: &str) -> String {
+    format!(
+        "Fix the clippy lint `{lint}` in this Rust code. Output ONLY the fixed \
+         code, no explanation:\n\n{buggy}"
+    )
+}
+
+/// What the sweep does with each site.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Task {
+    /// T3.7: apply the PROPOSER's edit, compile, test.
+    MeasureProposer,
+    /// T3.8 step 1 (CPU): emit an L4 eval corpus over these sites, so the
+    /// model is asked to fix *buildable, testable* code rather than the
+    /// existing corpus's in-crate excerpts.
+    EmitL4Corpus,
+    /// T3.8 step 3 (CPU): apply the MODEL's draft at the same sites and run
+    /// the same compile+test loop. Only the edit's author changes, so the
+    /// proposer cross-tab is a valid control.
+    MeasureDrafts,
+}
+
 fn main() {
     let mut targets_file = String::new();
     let mut out_path = String::from("t37_rows.jsonl");
     let mut workdir: Option<String> = None;
     let mut only_lints: Option<Vec<String>> = None;
     let mut mode = Mode::PerLint;
+    let mut task = Task::MeasureProposer;
+    let mut emit_corpus: Option<String> = None;
+    let mut drafts_path: Option<String> = None;
 
     let args: Vec<String> = std::env::args().collect();
     let mut i = 1;
@@ -262,6 +293,16 @@ fn main() {
                     "per-lint" => Mode::PerLint,
                     other => die(&format!("--mode must be single|per-lint, got {other}")),
                 };
+            }
+            "--emit-l4-corpus" => {
+                i += 1;
+                emit_corpus = Some(need(i));
+                task = Task::EmitL4Corpus;
+            }
+            "--drafts" => {
+                i += 1;
+                drafts_path = Some(need(i));
+                task = Task::MeasureDrafts;
             }
             other => die(&format!("unknown arg: {other}")),
         }
@@ -308,7 +349,43 @@ fn main() {
         .map(std::io::BufWriter::new)
         .unwrap_or_else(|e| die(&format!("create {out_path}: {e}")));
 
+    let mut corpus_out = emit_corpus.as_ref().map(|p| {
+        std::fs::File::create(p)
+            .map(std::io::BufWriter::new)
+            .unwrap_or_else(|e| die(&format!("create {p}: {e}")))
+    });
+
+    // T3.8 step 3: prompt -> model draft. The prompt is the join key because
+    // `--dump-drafts` emits only (lint, prompt, reference, draft, …) and drops
+    // any provenance columns the corpus carried.
+    let mut drafts: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    if let Some(dp) = &drafts_path {
+        let text = std::fs::read_to_string(dp).unwrap_or_else(|e| die(&format!("read {dp}: {e}")));
+        let mut dup_keys = 0usize;
+        for line in text.lines().filter(|l| !l.trim().is_empty()) {
+            let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else {
+                continue;
+            };
+            let (Some(p), Some(d)) = (v["prompt"].as_str(), v["draft"].as_str()) else {
+                continue;
+            };
+            if drafts.insert(p.to_string(), d.to_string()).is_some() {
+                dup_keys += 1;
+            }
+        }
+        // A duplicated prompt means the join is ambiguous and some site would
+        // silently get another site's draft. Refuse rather than mis-attribute.
+        if dup_keys > 0 {
+            die(&format!(
+                "{dup_keys} duplicate prompts in {dp}: the prompt join is ambiguous, so \
+                 drafts would be attributed to the wrong site. Aborting."
+            ));
+        }
+        println!("  drafts loaded: {} unique prompts\n", drafts.len());
+    }
+
     let (mut n_rows, mut n_skipped, mut n_edits) = (0usize, 0usize, 0usize);
+    let (mut n_no_draft, mut n_noop_draft) = (0usize, 0usize);
     // The cross-tab this harness exists to fill in.
     let (mut cc_pass_t_pass, mut cc_pass_t_fail, mut cc_fail, mut cc_timeout) =
         (0usize, 0usize, 0usize, 0usize);
@@ -364,9 +441,68 @@ fn main() {
                 n_edits += 1;
                 let e = dup(&group[0]);
                 let group_len = group.len();
-                let edited = apply_edits(&source, group.iter().map(dup).collect());
-                if edited == source {
+                let proposed = apply_edits(&source, group.iter().map(dup).collect());
+                if proposed == source {
                     continue; // the emitter dropped them (overlap / bad range)
+                }
+                // The prompt/apply window, shared by all three tasks so the
+                // proposer arm is a valid control for the model arm.
+                let (w_lo, w_hi) = group.iter().fold((usize::MAX, 0usize), |(a, b), g| {
+                    let (x, y) = line_span(&source, g.start, g.end);
+                    (a.min(x), b.max(y))
+                });
+                let prompt = l4_prompt(lint, &source[w_lo..w_hi]);
+
+                // ---- T3.8 step 1: emit the L4 eval corpus and move on ----
+                if task == Task::EmitL4Corpus {
+                    let p_delta: isize = group
+                        .iter()
+                        .map(|g| g.replacement.len() as isize - (g.end as isize - g.start as isize))
+                        .sum();
+                    let p_hi = (w_hi as isize + p_delta).clamp(0, proposed.len() as isize) as usize;
+                    let reference = &proposed[w_lo.min(proposed.len())..p_hi.max(w_lo)];
+                    let row = serde_json::json!({
+                        "prompt": prompt,
+                        // The proposer's own output is the reference, so
+                        // `exact_match` stays meaningful and the model is
+                        // scored against a fix that is known to compile here.
+                        "response": reference,
+                        "lint": lint,
+                        // Provenance for the rejoin. `--dump-drafts` drops
+                        // unknown columns, so these are for OUR index only and
+                        // the prompt remains the actual join key.
+                        "file": tgt,
+                        "start": w_lo,
+                        "end": w_hi,
+                        "n_edits": group_len,
+                    });
+                    if let Some(w) = corpus_out.as_mut() {
+                        let _ = writeln!(w, "{row}");
+                    }
+                    n_rows += 1;
+                    per_target += 1;
+                    continue;
+                }
+
+                // ---- choose whose edit is under test ----
+                let edited = match task {
+                    Task::MeasureDrafts => {
+                        let Some(draft) = drafts.get(&prompt) else {
+                            n_no_draft += 1;
+                            continue;
+                        };
+                        // Splice the model's span back where the buggy span was.
+                        let mut s = String::with_capacity(source.len() + draft.len());
+                        s.push_str(&source[..w_lo]);
+                        s.push_str(draft);
+                        s.push_str(&source[w_hi..]);
+                        s
+                    }
+                    _ => proposed.clone(),
+                };
+                if edited == source {
+                    n_noop_draft += 1;
+                    continue;
                 }
                 let cand_src = wd.join(format!("t{ti}_{lint}_{ei}.rs"));
                 let cand_exe = wd.join(format!("t{ti}_{lint}_{ei}.exe"));
@@ -386,12 +522,21 @@ fn main() {
                     _ => cc_fail += 1,
                 }
 
-                // Span, line-expanded on BOTH sides so the pair is comparable.
-                let (lo, hi) = line_span(&source, e.start, e.end);
+                // Reuse the same window the prompt was cut from, so `buggy` and
+                // `candidate_fix` describe the identical region in both arms.
+                let (lo, hi) = (w_lo, w_hi);
                 let buggy = &source[lo..hi];
-                let new_end = e.start + e.replacement.len();
-                let (nlo, nhi) = line_span(&edited, e.start, new_end);
-                let fixed = &edited[nlo.min(edited.len())..nhi.min(edited.len())];
+                // Every edit lies inside [lo, hi), so the edited region is that
+                // window shifted by the net length delta — exact, no re-scan.
+                let delta: isize = match task {
+                    Task::MeasureDrafts => edited.len() as isize - source.len() as isize,
+                    _ => group
+                        .iter()
+                        .map(|g| g.replacement.len() as isize - (g.end as isize - g.start as isize))
+                        .sum(),
+                };
+                let nhi = (hi as isize + delta).clamp(0, edited.len() as isize) as usize;
+                let fixed = &edited[lo.min(edited.len())..nhi.max(lo.min(edited.len()))];
 
                 let compile_ok = compile_out == Outcome::Pass;
                 let tests_ok = test_out == Outcome::Pass;
@@ -409,6 +554,13 @@ fn main() {
                     "apply_mode": match mode {
                         Mode::PerLint => "per-lint",
                         Mode::Single => "single",
+                    },
+                    // Which author's edit this row measures. The whole point of
+                    // T3.8 is that these two arms share target, window, and
+                    // label mechanism, so `arm` is the ONLY difference.
+                    "arm": match task {
+                        Task::MeasureDrafts => "model_draft",
+                        _ => "proposer",
                     },
                     "compile_ok": compile_ok,
                     "tests_ok": tests_ok,
@@ -442,6 +594,22 @@ fn main() {
     }
     let _ = out.flush();
 
+    if let Some(w) = corpus_out.as_mut() {
+        let _ = w.flush();
+    }
+    if task == Task::EmitL4Corpus {
+        println!(
+            "\n  emitted {n_rows} L4 prompts -> {}",
+            emit_corpus.as_deref().unwrap_or("?")
+        );
+        println!("  targets skipped : {n_skipped}");
+        println!(
+            "\n  Next: run bonsai_clippy_l4_eval --test <that file> --dump-drafts <drafts>,\n\
+             \x20 then re-run this harness with --drafts <drafts> to get the model arm."
+        );
+        return;
+    }
+
     println!("\n  edits attempted : {n_edits}");
     println!("  rows emitted    : {n_rows}");
     println!("  targets skipped : {n_skipped}");
@@ -454,6 +622,14 @@ fn main() {
         "    compile PASS / tests HANG : {cc_timeout:>4}   (recorded distinctly, not as a fail)"
     );
     println!("    compile FAIL              : {cc_fail:>4}   (the gate already handles these)");
+    if task == Task::MeasureDrafts {
+        println!(
+            "\n  model-arm bookkeeping (excluded, never counted as an outcome)\n\
+             \x20   sites with no draft   : {n_no_draft}\n\
+             \x20   drafts identical to input : {n_noop_draft}   (a no-op draft is not a fix \
+             attempt, so scoring it would flatter the model)"
+        );
+    }
 
     println!("\n  VERDICT");
     let gate_independent = cc_pass_t_fail;
