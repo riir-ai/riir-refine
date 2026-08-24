@@ -316,7 +316,7 @@ impl TrajStore {
     /// KV put or JSON encode failure.
     pub fn import_row(&self, row: &TrajRowDoc) -> Result<(), String> {
         let key = Self::row_key(&row.lint_key, &row.shape);
-        self.put_row(&key, &row)
+        self.put_row(&key, row)
     }
 
     /// Load the row at `key`, or create a fresh Heuristic one for
@@ -449,6 +449,86 @@ impl TrajStore {
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
+
+    /// The store-side twin of `LatentFixMemory::stats_report` — full
+    /// feature parity for the `--memory-stats` kv branch (rows, distinct
+    /// rules, tier breakdown, outcomes, top-8 histogram, loop state) plus
+    /// the cadence line the envelope could never answer (F3: it carried no
+    /// timestamps; store rows carry `last_seen_at` since 037-T2).
+    ///
+    /// Migrated rows (038-T3) carry `last_seen_at = 0` and are excluded
+    /// from the day buckets by construction — the cadence line counts
+    /// post-migration verdict activity only.
+    #[must_use]
+    pub fn stats_report(&self, bad_rows: usize) -> String {
+        use std::collections::{BTreeSet, HashMap};
+        use std::fmt::Write as _;
+
+        let rows = self.dump();
+        let (mut certified, mut heuristic, mut withdrawn, mut successes, mut fails, mut consec) =
+            (0u32, 0u32, 0u32, 0u32, 0u32, 0u32);
+        let mut rules: HashMap<&str, u32> = HashMap::new();
+        let mut last_seen = 0u64;
+        let mut days: BTreeSet<u64> = BTreeSet::new();
+        for r in &rows {
+            match EvidenceTier::from_u8(r.tier) {
+                EvidenceTier::Certified => certified += 1,
+                EvidenceTier::Withdrawn => withdrawn += 1,
+                EvidenceTier::Heuristic => heuristic += 1,
+            }
+            successes += r.success_count;
+            fails += r.fail_count;
+            if r.consecutive_fails > 0 {
+                consec += 1;
+            }
+            *rules.entry(r.lint_key.as_str()).or_insert(0) += 1;
+            if r.last_seen_at > 0 {
+                days.insert(r.last_seen_at / 86_400);
+                if r.last_seen_at > last_seen {
+                    last_seen = r.last_seen_at;
+                }
+            }
+        }
+        let mut report = String::with_capacity(512);
+        let corrupt = if bad_rows > 0 {
+            format!(" ({bad_rows} corrupt skipped)")
+        } else {
+            String::new()
+        };
+        let _ = writeln!(
+            report,
+            "kv store: {}{}\nrows: {} (distinct rules: {})\ntiers: Certified {certified} | Heuristic {heuristic} | Withdrawn {withdrawn}\noutcomes: success {successes} | fail {fails} | rows with consecutive fails {consec}",
+            self.root.display(),
+            corrupt,
+            rows.len(),
+            rules.len(),
+        );
+        let mut top: Vec<(&str, u32)> = rules.into_iter().collect();
+        top.sort_unstable_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(b.0)));
+        for (rule, count) in top.iter().take(8) {
+            let _ = writeln!(report, "  {count:6}  {rule}");
+        }
+        if last_seen > 0 {
+            let day = i64::try_from(last_seen / 86_400).unwrap_or(0);
+            let (y, m, d) = civil_from_days(day);
+            let _ = writeln!(
+                report,
+                "activity: last verdict {y:04}-{m:02}-{d:02} | distinct active days: {}",
+                days.len()
+            );
+        } else {
+            let _ = writeln!(
+                report,
+                "activity: no verdict timestamps yet (apply-only or migrated rows)"
+            );
+        }
+        let _ = writeln!(
+            report,
+            "{}",
+            crate::memory::loop_state_line(!rows.is_empty(), successes, certified)
+        );
+        report
+    }
 }
 
 /// sigmoid(dot(a, b)) — the house similarity (never softmax).
@@ -458,6 +538,28 @@ fn sigmoid_dot_8(a: &[f32; EMBED_DIM], b: &[f32; EMBED_DIM]) -> f32 {
         dot += a[i] * b[i];
     }
     katgpt_core::sigmoid(dot)
+}
+
+/// days-since-epoch → (year, month, day) — Howard Hinnant's
+/// `civil_from_days` (std-only date formatting for the stats report's
+/// activity line; no chrono dep for one formatted date). All-i64 core:
+/// every intermediate is non-negative by the era adjustment, so integer
+/// division is floor division and the two `u32` conversions are infallible
+/// by the algorithm's documented ranges.
+#[must_use]
+fn civil_from_days(z: i64) -> (i64, u32, u32) {
+    let z = z + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = z - era * 146_097; // [0, 146096]
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365; // [0, 399]
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100); // [0, 365]
+    let mp = (5 * doy + 2) / 153; // [0, 11]
+    let d = doy - (153 * mp + 2) / 5 + 1; // [1, 31]
+    let m = if mp < 10 { mp + 3 } else { mp - 9 }; // [1, 12]
+    let d = u32::try_from(d).unwrap_or(1);
+    let m = u32::try_from(m).unwrap_or(1);
+    (y + i64::from(m <= 2), m, d)
 }
 
 // ── T4.2: the shape-conditional candidate ordering ───────────────────
@@ -743,5 +845,87 @@ mod tests {
         );
         let _ = std::fs::remove_dir_all(&root);
         let _ = std::fs::remove_dir_all(&flipped_root);
+    }
+
+    /// The kv branch of `--memory-stats` must carry the SAME detail as the
+    /// envelope branch (rows, distinct rules, tiers, outcomes, histogram,
+    /// loop state) — the observability regression: the store path shipped
+    /// 038 as a 4-counter one-liner and the histogram/tier/loop-state
+    /// detail was envelope-only (surfaced live on adoption day).
+    #[test]
+    fn stats_report_carries_envelope_parity() {
+        let root = tmp_root("stats");
+        {
+            let (store, _) = TrajStore::open(&root).unwrap();
+            let empty = store.stats_report(0);
+            assert!(empty.contains("rows: 0 (distinct rules: 0)"));
+            assert!(empty.contains("record — | verdict — | learn —"));
+
+            store
+                .record("uninlined_format_args", "format!(\"{}\", x)", "format!(\"{x}\")", true, true, "run-1")
+                .unwrap();
+            store
+                .record_applied("match_bool", "match c { true => a, _ => b }", "if c { a } else { b }", "run-1")
+                .unwrap();
+        }
+        {
+            let (store, bad) = TrajStore::open(&root).unwrap();
+            assert_eq!(bad, 0);
+            let report = store.stats_report(0);
+            assert!(report.contains("rows: 2 (distinct rules: 2)"));
+            assert!(report.contains("tiers: Certified 1 | Heuristic 1 | Withdrawn 0"));
+            assert!(report.contains("outcomes: success 1 | fail 0 | rows with consecutive fails 0"));
+            assert!(report.contains("     1  match_bool"));
+            assert!(report.contains("     1  uninlined_format_args"));
+            assert!(report.contains("activity: last verdict "));
+            assert!(report.contains("distinct active days: 1"));
+            assert!(
+                report.contains("loop state (Issue 037): record OK | verdict OK | learn OK"),
+                "certified row closes all three gates: {report}"
+            );
+        }
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// Migrated rows carry `last_seen_at = 0` — the activity line must say
+    /// so instead of fabricating a 1970 date.
+    #[test]
+    fn stats_report_migration_rows_report_no_activity() {
+        let root = tmp_root("stats-migrated");
+        let (store, _) = TrajStore::open(&root).unwrap();
+        store
+            .import_row(&TrajRowDoc {
+                lint_key: "uninlined_format_args".to_string(),
+                shape: "format!(\"{}\", x)".to_string(),
+                fix: "format!(\"{x}\")".to_string(),
+                direction: vec![0.0; EMBED_DIM],
+                success_count: 3,
+                fail_count: 0,
+                consecutive_fails: 0,
+                tier: EvidenceTier::Heuristic.as_u8(),
+                last_run_id: "migrated".to_string(),
+                last_seen_at: 0,
+            })
+            .unwrap();
+        let report = store.stats_report(0);
+        assert!(report.contains("rows: 1 (distinct rules: 1)"));
+        assert!(report.contains("outcomes: success 3"));
+        assert!(
+            report.contains("activity: no verdict timestamps yet (apply-only or migrated rows)"),
+            "{report}"
+        );
+        // Successes from migrated history still close E2 (same semantics as
+        // the envelope report — a positive outcome is a positive outcome).
+        assert!(report.contains("record OK | verdict OK | learn —"));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn civil_from_days_known_dates() {
+        assert_eq!(civil_from_days(0), (1970, 1, 1));
+        assert_eq!(civil_from_days(10_957), (2000, 1, 1));
+        assert_eq!(civil_from_days(11_016), (2000, 2, 29), "leap day");
+        assert_eq!(civil_from_days(11_323), (2001, 1, 1), "year after a leap");
+        assert_eq!(civil_from_days(20_689), (2026, 8, 24), "adoption day");
     }
 }

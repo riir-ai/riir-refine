@@ -749,25 +749,12 @@ fn main() {
             if kv.exists() {
                 match riir_clippy::traj_store::TrajStore::open(&root) {
                     Ok((store, bad)) => {
-                        let rows = store.dump();
-                        let (mut s, mut f, mut certified) = (0u32, 0u32, 0u32);
-                        for r in &rows {
-                            s += r.success_count;
-                            f += r.fail_count;
-                            if r.tier == riir_clippy::memory::EvidenceTier::Certified.as_u8() {
-                                certified += 1;
-                            }
-                        }
-                        let corrupt = if bad > 0 {
-                            format!(" ({bad} corrupt skipped)")
-                        } else {
-                            String::new()
-                        };
-                        println!(
-                            "kv store: {} | rows {} | success {s} | fail {f} | certified {certified}{corrupt}",
-                            kv.display(),
-                            rows.len()
-                        );
+                        // Full report — feature parity with the envelope
+                        // branch (histogram/tiers/loop state; the kv branch
+                        // shipped 038 as a 4-counter one-liner, an
+                        // observability regression surfaced live on
+                        // adoption day).
+                        print!("{}", store.stats_report(bad));
                     }
                     Err(e) => eprintln!("memory-stats: kv store at {} unreadable: {e}", kv.display()),
                 }

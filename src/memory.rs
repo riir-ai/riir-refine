@@ -564,29 +564,10 @@ impl LatentFixMemory {
         for (rule, count) in top.iter().take(8) {
             let _ = writeln!(report, "  {count:6}  {rule}");
         }
-        let e1 = if self.trajectories.is_empty() { "—" } else { "OK" };
-        let e2 = if successes > 0 || certified > 0 { "OK" } else { "—" };
-        let e3 = if certified > 0 { "OK" } else { "—" };
-        // Hints only for gates that are still open (post-037-T2: a "—"
-        // verdict means no verified heal has run yet, not missing wiring).
-        let mut hints: Vec<&str> = Vec::new();
-        if e1 == "—" {
-            hints.push("record needs a first trajectory");
-        }
-        if e2 == "—" {
-            hints.push("verdict needs a positive outcome (run a --fix --verify heal)");
-        }
-        if e3 == "—" {
-            hints.push("learn needs tier promotion");
-        }
-        let hint = if hints.is_empty() {
-            String::new()
-        } else {
-            format!(" — {}", hints.join("; "))
-        };
         let _ = writeln!(
             report,
-            "loop state (Issue 037): record {e1} | verdict {e2} | learn {e3}{hint}"
+            "{}",
+            loop_state_line(!self.trajectories.is_empty(), successes, certified)
         );
         report
     }
@@ -701,6 +682,36 @@ impl LatentFixMemory {
             Err(e) => Err(e),
         }
     }
+}
+
+/// The E1/E2/E3 loop-state line shared by BOTH `--memory-stats` backends
+/// (the envelope's and the neuron-db store's `stats_report`s — one set of
+/// gate semantics + hints, two durable homes). Issue 037's gates: E1
+/// `record` needs rows, E2 `verdict` needs at least one positive outcome,
+/// E3 `learn` is observable through tier promotion.
+#[must_use]
+pub fn loop_state_line(has_rows: bool, successes: u32, certified: u32) -> String {
+    let e1 = if has_rows { "OK" } else { "—" };
+    let e2 = if successes > 0 || certified > 0 { "OK" } else { "—" };
+    let e3 = if certified > 0 { "OK" } else { "—" };
+    // Hints only for gates that are still open (post-037-T2: a "—"
+    // verdict means no verified heal has run yet, not missing wiring).
+    let mut hints: Vec<&str> = Vec::new();
+    if e1 == "—" {
+        hints.push("record needs a first trajectory");
+    }
+    if e2 == "—" {
+        hints.push("verdict needs a positive outcome (run a --fix --verify heal)");
+    }
+    if e3 == "—" {
+        hints.push("learn needs tier promotion");
+    }
+    let hint = if hints.is_empty() {
+        String::new()
+    } else {
+        format!(" — {}", hints.join("; "))
+    };
+    format!("loop state (Issue 037): record {e1} | verdict {e2} | learn {e3}{hint}")
 }
 
 /// The persisted memory file envelope (v1, Issue 018).
