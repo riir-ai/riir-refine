@@ -77,6 +77,32 @@ impl Default for LatentSkillEvolution {
     }
 }
 
+/// One EMA outcome step over a caller-owned direction — the pure
+/// arithmetic core of [`LatentSkillEvolution::record_outcome`], shared
+/// with the durable per-rule learn rows ([`crate::traj_store`], Issue 037
+/// E3) so the persisted state evolves under the SAME rule the in-process
+/// layer uses. Returns the L2 magnitude of the applied (pre-clamp) delta —
+/// the "direction deltas ≠ 0" evidence the E3 gate asks for.
+///
+/// Success moves `dir` toward `fix_dir` by `α`; fail moves it away by `β`.
+/// The clamp keeps components in `[-1, 1]` (the embedder's range — EMA
+/// accumulation could otherwise drift past it).
+pub fn ema_step(
+    dir: &mut Direction,
+    fix_dir: &Direction,
+    success: bool,
+    config: &EvolveConfig,
+) -> f32 {
+    let rate = if success { config.alpha } else { -config.beta };
+    let mut sq = 0.0f32;
+    for i in 0..EMBED_DIM {
+        let applied = rate * (fix_dir[i] - dir[i]);
+        dir[i] = (dir[i] + applied).clamp(-1.0, 1.0);
+        sq += applied * applied;
+    }
+    sq.sqrt()
+}
+
 impl LatentSkillEvolution {
     /// Construct with the given config.
     #[must_use]
@@ -132,15 +158,9 @@ impl LatentSkillEvolution {
     pub fn record_outcome(&mut self, lint_name: &str, fix_direction: &Direction, success: bool) {
         match self.directions.get_mut(lint_name) {
             Some(dir) => {
-                // EMA update: component-wise arithmetic.
-                let rate = if success { self.config.alpha } else { -self.config.beta };
-                for i in 0..EMBED_DIM {
-                    let delta = fix_direction[i] - dir[i];
-                    dir[i] += rate * delta;
-                    // Clamp to [-1, 1] to prevent drift (the embedder outputs
-                    // [-1, 1], but EMA accumulation could exceed this).
-                    dir[i] = dir[i].clamp(-1.0, 1.0);
-                }
+                // EMA update: component-wise arithmetic (the shared core —
+                // see [`ema_step`]).
+                ema_step(dir, fix_direction, success, &self.config);
             }
             None if success => {
                 // First outcome is a success: initialize to the fix direction.
@@ -308,5 +328,45 @@ mod tests {
             ev.record_outcome("needless_return", &fix_dir, true);
         }
         assert_eq!(ev.len(), len_after_warmup, "HashMap grew — not alloc-free");
+    }
+
+    // ── Issue 037 E3: the shared EMA step (the durable store consumes it) ──
+
+    #[test]
+    fn ema_step_magnitude_is_rate_times_distance() {
+        // dir = origin, fix = unit vector → a success applies α·||fix-dir||
+        // per component; the returned magnitude is the L2 norm of that.
+        let cfg = EvolveConfig::default();
+        let mut dir = [0.0f32; EMBED_DIM];
+        let mut fix = [0.0f32; EMBED_DIM];
+        fix[0] = 1.0;
+
+        let d = ema_step(&mut dir, &fix, true, &cfg);
+        assert!((d - cfg.alpha).abs() < 1e-6, "success delta = α·1, got {d}");
+        assert!((dir[0] - cfg.alpha).abs() < 1e-6);
+
+        // Fail from dir=[α,0,..] with fix=[1,0,..]: moves AWAY by β·(1-α).
+        let d = ema_step(&mut dir, &fix, false, &cfg);
+        let expect = cfg.beta * (1.0 - cfg.alpha);
+        assert!((d - expect).abs() < 1e-6, "fail delta = β·distance, got {d}");
+        assert!((dir[0] - (cfg.alpha - expect)).abs() < 1e-6);
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)] // bit-identity with the layer IS the assertion
+    fn ema_step_agrees_with_the_evolution_layer() {
+        // The extracted core must be bit-compatible with what
+        // `LatentSkillEvolution::record_outcome` does on an initialized
+        // entry — the store's persisted rows consume the same rule.
+        let fix = embed("needless_return", "42");
+        let mut layer = LatentSkillEvolution::default();
+        layer.record_outcome("needless_return", &fix, true); // initialize
+
+        let mut dir = *layer.get("needless_return").unwrap();
+        let other = embed("needless_return", "return 42;");
+        layer.record_outcome("needless_return", &other, false);
+        ema_step(&mut dir, &other, false, &EvolveConfig::default());
+
+        assert_eq!(dir, *layer.get("needless_return").unwrap());
     }
 }

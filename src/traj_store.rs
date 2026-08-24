@@ -36,13 +36,17 @@
 //!
 //! ```text
 //! traj:{code}:{strategy_id}:{blake3_12(shape)} → JSON TrajRowDoc
+//! learn:{lint_key}                          → JSON LearnRowDoc (037 E3)
 //! ```
 //!
 //! Family scans are `scan_prefix(b"traj:")`; a trajectory's counters
 //! update by read-modify-write under the full-row key (idempotent upsert).
 //! The tier transitions are Issue 021's, durable: `success && verified`
 //! certifies; 3 consecutive failures withdraw (absorbing — only a
-//! verified success exits).
+//! verified success exits). The `learn:` rows are the per-rule EMA twin
+//! (Issue 037 E3): every verdict also steps the rule's evolved direction
+//! ([`ema_step`](crate::evolve::ema_step) — same rule as the in-process
+//! layer), durable + observable via `--memory-stats`.
 //!
 //! ## 037-T2 verdict attribution (038's schema half)
 //!
@@ -94,6 +98,45 @@ pub struct TrajRowDoc {
     pub last_run_id: String,
     /// Unix seconds of the latest verdict sighting (037-A1's cadence half;
     /// `0` on pre-T2 rows).
+    #[serde(default)]
+    pub last_seen_at: u64,
+}
+
+/// One persisted per-rule EMA learn row (Issue 037 E3) — the durable twin
+/// of [`LatentSkillEvolution`]'s in-memory directions. Key: `learn:{lint_key}`.
+/// Every verdict event ([`TrajStore::record`]) feeds the rule's row through
+/// [`ema_step`](crate::evolve::ema_step) — the same rule, same α/β, durable —
+/// so "the EMA path consumes real verdicts" is answerable from the store
+/// itself (per-rule counters + a nonzero `last_delta`).
+///
+/// Mirrors the evolve.rs initialization rule: `direction` stays empty until
+/// the rule's first SUCCESS (a first fail never establishes a baseline), so
+/// `updates > 0` ⟺ the direction is initialized ⟺ `last_delta > 0`.
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq)]
+pub struct LearnRowDoc {
+    /// The rule key (the `traj:` row's `lint_key` — e.g. `uninlined_format_args`
+    /// or `E0502:e0502-clone-out`).
+    pub lint_key: String,
+    /// The EMA-evolved direction; EMPTY until the rule's first success.
+    #[serde(default)]
+    pub direction: Vec<f32>,
+    /// EMA steps that actually moved the vector (init + every post-init
+    /// verdict) — the per-rule learn counter.
+    #[serde(default)]
+    pub updates: u32,
+    /// Verdict outcomes consumed (raw counters — includes pre-init fails,
+    /// which are direction no-ops but still verdicts).
+    #[serde(default)]
+    pub successes: u32,
+    #[serde(default)]
+    pub fails: u32,
+    /// L2 magnitude of the last applied step — the "direction deltas ≠ 0"
+    /// evidence (E3's gate text). 0.0 only while the row is pre-init.
+    #[serde(default)]
+    pub last_delta: f32,
+    /// The heal-run id of the latest verdict (037-T2 attribution).
+    #[serde(default)]
+    pub last_run_id: String,
     #[serde(default)]
     pub last_seen_at: u64,
 }
@@ -278,7 +321,12 @@ impl TrajStore {
                 row.tier = EvidenceTier::Withdrawn.as_u8();
             }
         }
-        self.put_row(&key, &row)
+        self.put_row(&key, &row)?;
+        // The EMA half (Issue 037 E3): the same verdict also feeds the
+        // rule's durable learn row — one event, two durable effects
+        // (trajectory counters for retrieval, direction evolution for
+        // learn observability).
+        self.learn_step(lint_key, fix, success, run_id)
     }
 
     /// Upsert one APPLY event (038-T2: the `record_applied` equivalent —
@@ -359,6 +407,82 @@ impl TrajStore {
         self.bm25
             .index(key, &format!("{} {}", row.shape, row.fix));
         Ok(())
+    }
+
+    /// Load-or-create the rule's learn row, apply one EMA step (the shared
+    /// [`ema_step`](crate::evolve::ema_step) core — same α/β as the
+    /// in-process layer), persist. Called ONLY from [`record`](Self::record):
+    /// the EMA consumes verdicts, not sightings — `record_applied` never
+    /// touches learn rows.
+    ///
+    /// Initialization rule (evolve.rs): the direction is established by the
+    /// rule's first SUCCESS (a first fail is a direction no-op — it never
+    /// establishes what a good fix looks like), with `last_delta` = the full
+    /// initial vector's L2 norm (the honest "delta ≠ 0" at birth).
+    ///
+    /// # Errors
+    ///
+    /// KV put or JSON encode failure (the learn row is skipped on read
+    /// errors — an undecodable row restarts fresh rather than failing the
+    /// verdict that feeds it).
+    fn learn_step(&self, lint_key: &str, fix: &str, success: bool, run_id: &str) -> Result<(), String> {
+        let key = format!("learn:{lint_key}").into_bytes();
+        let mut row: LearnRowDoc = self
+            .kv
+            .get_bytes(&key)
+            .and_then(|v| serde_json::from_slice::<LearnRowDoc>(&v).ok())
+            .unwrap_or_else(|| LearnRowDoc {
+                lint_key: lint_key.to_string(),
+                direction: Vec::new(),
+                updates: 0,
+                successes: 0,
+                fails: 0,
+                last_delta: 0.0,
+                last_run_id: String::new(),
+                last_seen_at: 0,
+            });
+        let mut fix_dir = [0.0f32; EMBED_DIM];
+        embed_into(lint_key, fix, &mut fix_dir);
+        if row.direction.len() < EMBED_DIM {
+            // Pre-init: only a success establishes the baseline.
+            if success {
+                row.last_delta = l2_norm(&fix_dir);
+                row.direction = fix_dir.to_vec();
+                row.updates = row.updates.saturating_add(1);
+            }
+        } else {
+            let mut dir = [0.0f32; EMBED_DIM];
+            for (i, x) in row.direction.iter().take(EMBED_DIM).enumerate() {
+                dir[i] = *x;
+            }
+            row.last_delta =
+                crate::evolve::ema_step(&mut dir, &fix_dir, success, &crate::evolve::EvolveConfig::default());
+            row.direction = dir.to_vec();
+            row.updates = row.updates.saturating_add(1);
+        }
+        if success {
+            row.successes = row.successes.saturating_add(1);
+        } else {
+            row.fails = row.fails.saturating_add(1);
+        }
+        row.last_run_id = run_id.to_string();
+        row.last_seen_at = now_unix_secs();
+        let bytes =
+            serde_json::to_vec(&row).map_err(|e| format!("encode learn row: {e}"))?;
+        self.kv.put(&key, &bytes).map_err(|e| format!("put learn row: {e}"))
+    }
+
+    /// Every persisted EMA learn row (the `--memory-stats` learn section +
+    /// tests), in key order. Learn rows live under `learn:` — invisible to
+    /// [`len`](Self::len)/[`dump`](Self::dump)/[`retrieve`](Self::retrieve)
+    /// by construction (they scan `traj:`).
+    #[must_use]
+    pub fn learn_rows(&self) -> Vec<LearnRowDoc> {
+        self.kv
+            .scan_prefix(b"learn:")
+            .into_iter()
+            .filter_map(|(_, v)| serde_json::from_slice::<LearnRowDoc>(&v).ok())
+            .collect()
     }
 
     /// Hybrid retrieval (T4.2's input): BM25 over shape+fix + sigmoid-dot
@@ -454,7 +578,10 @@ impl TrajStore {
     /// feature parity for the `--memory-stats` kv branch (rows, distinct
     /// rules, tier breakdown, outcomes, top-8 histogram, loop state) plus
     /// the cadence line the envelope could never answer (F3: it carried no
-    /// timestamps; store rows carry `last_seen_at` since 037-T2).
+    /// timestamps; store rows carry `last_seen_at` since 037-T2) and the
+    /// EMA learn section (E3: per-rule learn counters + the decay line —
+    /// persisted state only this backend can show; the envelope's EMA half
+    /// is the in-process evolution layer, Bench 024 G7's evidence).
     ///
     /// Migrated rows (038-T3) carry `last_seen_at = 0` and are excluded
     /// from the day buckets by construction — the cadence line counts
@@ -522,6 +649,8 @@ impl TrajStore {
                 "activity: no verdict timestamps yet (apply-only or migrated rows)"
             );
         }
+        // ── Issue 037 E3: the EMA learn section (see write_learn_section).
+        write_learn_section(&mut report, &self.learn_rows());
         let _ = writeln!(
             report,
             "{}",
@@ -531,6 +660,49 @@ impl TrajStore {
     }
 }
 
+/// The `--memory-stats` EMA learn section (Issue 037 E3) — per-rule learn
+/// counters + the decay line. The durable evidence the gate asks for:
+/// rules with verdicts carry `updates > 0` and a nonzero last |Δ| (the
+/// direction MOVED — "direction deltas ≠ 0 for buckets with outcomes").
+fn write_learn_section(report: &mut String, learns: &[LearnRowDoc]) {
+    use std::fmt::Write as _;
+    if learns.is_empty() {
+        let _ = writeln!(
+            report,
+            "learn (EMA): no evolved rules yet — verdict runs (--fix --verify) land per-rule learn rows"
+        );
+        return;
+    }
+    let total_updates: u32 = learns.iter().map(|l| l.updates).sum();
+    let _ = writeln!(
+        report,
+        "learn (EMA): {} evolved rule(s) | {total_updates} update(s) consumed",
+        learns.len()
+    );
+    let mut top_l: Vec<&LearnRowDoc> = learns.iter().collect();
+    top_l.sort_unstable_by(|a, b| b.updates.cmp(&a.updates).then(a.lint_key.cmp(&b.lint_key)));
+    for l in top_l.into_iter().take(8) {
+        let _ = writeln!(
+            report,
+            "  {:6}  last |Δ| {:.4}  s{} f{}  {}",
+            l.updates, l.last_delta, l.successes, l.fails, l.lint_key
+        );
+    }
+    let cfg = crate::evolve::EvolveConfig::default();
+    let updated = learns.iter().filter(|l| l.updates > 0).count();
+    #[allow(clippy::cast_precision_loss)] // rule count — tens at most
+    let mean_delta = if updated > 0 {
+        learns.iter().map(|l| l.last_delta).sum::<f32>() / updated as f32
+    } else {
+        0.0
+    };
+    let _ = writeln!(
+        report,
+        "decay: α {:.3} toward / β {:.3} away | mean last |Δ| {:.4} across {updated} updated rule(s)",
+        cfg.alpha, cfg.beta, mean_delta
+    );
+}
+
 /// sigmoid(dot(a, b)) — the house similarity (never softmax).
 fn sigmoid_dot_8(a: &[f32; EMBED_DIM], b: &[f32; EMBED_DIM]) -> f32 {
     let mut dot = 0.0f32;
@@ -538,6 +710,15 @@ fn sigmoid_dot_8(a: &[f32; EMBED_DIM], b: &[f32; EMBED_DIM]) -> f32 {
         dot += a[i] * b[i];
     }
     katgpt_core::sigmoid(dot)
+}
+
+/// L2 norm of a fixed-dim vector (the learn row's `last_delta` at birth).
+fn l2_norm(v: &[f32; EMBED_DIM]) -> f32 {
+    let mut sq = 0.0f32;
+    for &x in v {
+        sq += x * x;
+    }
+    sq.sqrt()
 }
 
 /// days-since-epoch → (year, month, day) — Howard Hinnant's
@@ -927,5 +1108,142 @@ mod tests {
         assert_eq!(civil_from_days(11_016), (2000, 2, 29), "leap day");
         assert_eq!(civil_from_days(11_323), (2001, 1, 1), "year after a leap");
         assert_eq!(civil_from_days(20_689), (2026, 8, 24), "adoption day");
+    }
+
+    // ── Issue 037 E3: the durable EMA learn rows ─────────────────────────
+
+    /// The E3 mechanism: every verdict steps the rule's persisted direction
+    /// (nonzero `last_delta` — "direction deltas ≠ 0 for buckets with
+    /// outcomes"), init-on-first-success, fail-before-init is a direction
+    /// no-op (the evolve.rs rule), and applies never touch learn rows.
+    #[test]
+    fn record_feeds_the_per_rule_ema_learn_rows() {
+        let root = tmp_root("learn");
+        {
+            let (store, _) = TrajStore::open(&root).unwrap();
+            // First verdict is a SUCCESS → initializes the direction.
+            store
+                .record("uninlined_format_args", "format!(\"{}\", x)", "format!(\"{x}\")", true, true, "run-1")
+                .unwrap();
+            let learns = store.learn_rows();
+            assert_eq!(learns.len(), 1, "one learn row per rule");
+            let l = &learns[0];
+            assert_eq!(l.lint_key, "uninlined_format_args");
+            assert_eq!(l.updates, 1, "init counts as the first update");
+            assert!(l.last_delta > 0.0, "init delta = the born vector's norm");
+            assert_eq!(l.direction.len(), EMBED_DIM);
+            assert_eq!(l.successes, 1);
+            assert_eq!(l.fails, 0);
+            assert_eq!(l.last_run_id, "run-1");
+
+            // A second, different fix → the direction MOVES (Δ ≠ 0).
+            let init_dir = l.direction.clone();
+            store
+                .record("uninlined_format_args", "println!(\"{}\", y)", "println!(\"{y}\")", true, true, "run-2")
+                .unwrap();
+            let l = &store.learn_rows()[0];
+            assert_eq!(l.updates, 2);
+            assert_eq!(l.successes, 2);
+            assert_ne!(l.direction, init_dir, "EMA moved the persisted direction");
+            assert!(l.last_delta > 0.0);
+
+            // A post-init FAIL moves the direction away — still an update.
+            store
+                .record("uninlined_format_args", "write!(f, \"{}\", z)", "write!(f, \"{z}\")", false, false, "run-3")
+                .unwrap();
+            let l = &store.learn_rows()[0];
+            assert_eq!(l.updates, 3);
+            assert_eq!(l.fails, 1);
+        }
+        // Durable across reopen (the WAL carries learn rows too).
+        {
+            let (store, _) = TrajStore::open(&root).unwrap();
+            let l = &store.learn_rows()[0];
+            assert_eq!(l.updates, 3, "learn state survives close/reopen");
+            assert_eq!(l.last_run_id, "run-3");
+        }
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)] // exact 0.0 — set, never computed
+    fn first_fail_is_a_learn_direction_noop() {
+        let root = tmp_root("learn-fail-first");
+        let (store, _) = TrajStore::open(&root).unwrap();
+        store
+            .record("match_bool", "match c { true => a, _ => b }", "if c { a } else { b }", false, false, "run-f")
+            .unwrap();
+        let l = &store.learn_rows()[0];
+        assert_eq!(l.fails, 1, "the verdict is still counted");
+        assert_eq!(l.updates, 0, "but never establishes a direction");
+        assert_eq!(l.last_delta, 0.0);
+        assert!(l.direction.is_empty());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn record_applied_does_not_touch_learn_rows() {
+        // The EMA consumes verdicts, not sightings — an apply-only run
+        // leaves the learn section empty.
+        let root = tmp_root("learn-apply-only");
+        let (store, _) = TrajStore::open(&root).unwrap();
+        store
+            .record_applied("match_bool", "match c { true => a, _ => b }", "if c { a } else { b }", "run-a")
+            .unwrap();
+        assert!(store.learn_rows().is_empty());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn learn_rows_do_not_pollute_the_trajectory_surface() {
+        let root = tmp_root("learn-isolated");
+        let (store, _) = TrajStore::open(&root).unwrap();
+        store
+            .record("E0502:e0502-deref-removal", "&v[0]", "", true, true, "run-1")
+            .unwrap();
+        assert_eq!(store.len(), 1, "learn rows are not trajectory rows");
+        assert_eq!(store.dump().len(), 1);
+        assert_eq!(store.learn_rows().len(), 1);
+        assert_eq!(store.retrieve("&v[0]", "E0502:", 5).len(), 1);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// The `--memory-stats` learn section: per-rule counters + the decay
+    /// line, with a graceful empty state (Issue 037 E3's observability).
+    #[test]
+    fn stats_report_prints_the_learn_section_and_decay_line() {
+        let root = tmp_root("learn-stats");
+        {
+            let (store, _) = TrajStore::open(&root).unwrap();
+            let empty = store.stats_report(0);
+            assert!(
+                empty.contains("learn (EMA): no evolved rules yet"),
+                "empty learn section: {empty}"
+            );
+
+            store
+                .record("uninlined_format_args", "format!(\"{}\", x)", "format!(\"{x}\")", true, true, "run-1")
+                .unwrap();
+            store
+                .record("match_bool", "match c { true => a, _ => b }", "if c { a } else { b }", true, true, "run-1")
+                .unwrap();
+        }
+        {
+            let (store, _) = TrajStore::open(&root).unwrap();
+            let report = store.stats_report(0);
+            assert!(
+                report.contains("learn (EMA): 2 evolved rule(s) | 2 update(s) consumed"),
+                "{report}"
+            );
+            assert!(report.contains("last |Δ| "), "per-rule delta column: {report}");
+            assert!(report.contains("uninlined_format_args"));
+            assert!(report.contains("match_bool"));
+            assert!(
+                report.contains("decay: α 0.100 toward / β 0.050 away | mean last |Δ| "),
+                "decay line: {report}"
+            );
+            assert!(report.contains("across 2 updated rule(s)"));
+        }
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

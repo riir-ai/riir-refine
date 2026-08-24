@@ -66,8 +66,12 @@ the query surface for verifying T2 once it lands: after a real
 
 - [ ] **A1 — cadence:** heal activity (memory growth after T3, or heal
       commits) on ≥3 distinct days within any 14-day window post-T3.
-- [ ] **A2 — breadth:** ≥2 repos carry heal-commits dated after
+- [x] **A2 — breadth:** ≥2 repos carry heal-commits dated after
       2026-08-24T00:00:00 (`git log --since=... --grep=heal`).
+      → **MET (2026-08-24):** riir-ai `703856080` (the T5 unit) + riir-dapps
+      `4fbdbfb` (the E3 evidence run — 3 match_bool edits, oracle-confirmed,
+      tests count-identical, direction_gate OK). Both genuine dev-session
+      usage commits, not adoption-day infrastructure.
 - [ ] **A3 — no silent regression:** no repo's clippy residue grows between
       audits (dry-run spot check on the repos agents touched).
 
@@ -99,11 +103,28 @@ the query surface for verifying T2 once it lands: after a real
       honest one (ruliology/player.rs's 3 proposed edits auto-reverted by
       the compile gate: apply breaks cargo check → revert → fail verdict).
       `--memory-stats`: `record OK | verdict OK | learn OK`.
-- [ ] **E3 — learn:** the EMA path consumes real verdicts — evidence: a lib
+- [x] **E3 — learn:** the EMA path consumes real verdicts — evidence: a lib
       test or `self_evolve_real_world_demo` run against the LIVE memory.json
       showing direction deltas ≠ 0 for buckets with outcomes, or an oracle
       run whose log shows learning active (no "learning disabled" line) AND
       persisted state reflecting the update.
+      → **MET (2026-08-24, the E3 landing + the riir-dapps oracle run).** The
+      gate's store-backend half: `TrajStore::record` now also feeds a durable
+      per-rule EMA learn row (`learn:{lint_key}` → `LearnRowDoc`) through the
+      SAME `ema_step` core the in-process layer uses (extracted to
+      `evolve::ema_step` — one rule, two homes). `--memory-stats` prints the
+      learn section + decay line. Evidence run (riir-dapps `4fbdbfb`): 3
+      oracle-confirmed verdicts, learning active (no degradation line), and
+      `--memory-stats` in a SEPARATE process prints `learn (EMA): 1 evolved
+      rule(s) | 3 update(s) consumed … last |Δ| 0.2303` — direction deltas
+      ≠ 0 for the bucket with outcomes, persisted (cross-process durable).
+      Lib tests pin the mechanism: init-on-first-success, first-fail no-op,
+      apply-only never touches learn rows, learn rows invisible to the
+      trajectory surface, stats section + decay line.
+      (The envelope-era EMA half was already evidenced by Bench 024 G7 —
+      50%→100% healing via real clippy evolution; the envelope carries no
+      persisted EMA state to print, so the learn section is store-only by
+      design, 038's one-active-backend constraint.)
 - [x] **E4 — bench:** ≥1 new `score_history.jsonl` run post-T2 with
       `heal_rate ≥ 98.1%` AND `created_rate ≤ 1.9%` (no decay), or an
       improvement attributable to a post-mining fix.
@@ -228,6 +249,24 @@ the query surface for verifying T2 once it lands: after a real
 
 ## Session record (2026-08-24, T4+T5)
 
+- **E3 + A2 LANDED (same day, post-T5):** the EMA learn observability on the
+  store backend. `ema_step` extracted to `evolve.rs` (the pure EMA core —
+  `LatentSkillEvolution::record_outcome` now calls it, bit-identical by
+  test); `TrajStore::record` feeds durable per-rule learn rows
+  (`learn:{lint_key}`, `LearnRowDoc`: direction/updates/successes/fails/
+  last_delta/run attribution); `--memory-stats` prints the learn section
+  (per-rule counters, top-8 by updates) + the decay line (α/β + mean last
+  |Δ|). 7 lib tests (2 evolve + 5 traj_store), clippy 0 both states
+  (default + latent_retrieval). Evidence run: riir-dapps `4fbdbfb` — 3
+  oracle-confirmed match_bool edits, `--memory-stats` (separate process)
+  prints `learn (EMA): 1 evolved rule | 3 updates | last |Δ| 0.2303` →
+  **E3 MET**; the commit is heal-commit #2 post-adoption (riir-ai #1) →
+  **A2 MET**. The global binary was rebuilt with the change (21:5x).
+- **Remaining open gates:** A1 (cadence — time-gated, accumulates; today is
+  day 1), A3 (no-residue spot check — next audit), E5 (mining-report
+  closure — needs a P-class closed end-to-end). T6 closes them via the
+  audit script; T7 (unblock Proposals 003/004) follows.
+
 - **Observability fix (`c9d718b`)**: the kv branch of `--memory-stats`
   shipped 038 as a 4-counter one-liner while the envelope branch printed
   the full report — the histogram/tier/loop-state detail was envelope-only
@@ -251,6 +290,7 @@ the query surface for verifying T2 once it lands: after a real
   needs its own evidence run (the direction-delta / learning-active check
   from the gate text); T5's run records verdicts but the EMA-half
   observability is unproven on the store backend.
+  *(Superseded same day — see the E3 + A2 LANDED entry above.)*
 - **2026-08-24 hygiene sweep (workspace-wide):** `.heal/` is machine-local
   runtime state — the `trajectories.kv` encrypted WAL, the `.heal/key` seed,
   and the `misses/` queue — and must never be committed: binary WAL churn,
