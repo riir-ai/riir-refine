@@ -1,6 +1,7 @@
 # Proposal 003 — Binary-only distribution (source stays secret)
 
 **Status:** proposed (binding policy adopted 2026-08-14; execution awaits a release plan)
+**Blocked by:** [Issue 037](../.issues/037_e2e_self_evolve_adoption_proof.md) — E2E self-evolve proof (verdicts → learning → bench). The moat claim ("the adaptive/learning layers", caveat 2) is unproven while the loop has never recorded a single positive verdict (Issue 037 F2). First public release waits for gates E2–E4.
 **Branch:** `develop` (per global rule — no feature branches)
 **Owner:** unassigned
 **Fusion of:** [Research 003](../../riir-ai/.research/003_Commercial_Open_Source_Strategy_Verdict.md) (the boundary verdict) × the rustup installer pattern (curl|sh + install.ps1) × cargo-dist prior art (installer UX + tap automation)

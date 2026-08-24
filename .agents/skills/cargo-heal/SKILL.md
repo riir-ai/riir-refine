@@ -89,6 +89,10 @@ class, site, evidence type). The idle loop (riir-clippy skill queue item 14)
 consumes it: probe each class against real clippy FIRST, then extend the
 proposer + fixtures + score-bench.
 
+Audit adoption + loop state in one command (Issue 037's instrument):
+`/Users/katopz/git/riir-clippy/scripts/self_evolve_audit.sh` — memory
+tiers/outcomes, score-bench history, intake progress, heal-commit trail.
+
 ## Evidence (2026-08-24 adoption trial, M3)
 
 - Probe: 12/12 planted fixes landed, 2/2 planted divergences refused,

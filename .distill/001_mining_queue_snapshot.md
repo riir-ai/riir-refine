@@ -1203,6 +1203,9 @@ never closed). Ranked open classes (inventory 2026-08-24):
 - [ ] P5 **outcome-verdict wiring** — feed `--verify`-run outcomes +
       post-heal clippy results back into memory.json tiers (8,235
       Heuristic trajectories awaiting their first verdicts). Design gap.
+      **Tracked in [Issue 037](../.issues/037_e2e_self_evolve_adoption_proof.md)
+      T2 (root-caused — CLI records outcomes as `false` only); blocks
+      Proposals 003 + 004 until E2E proven.**
 - [ ] P6 **match_bool guard-on-first-arm** (nested-rewrite shape) +
       single_match_else bool/char/str literal first arms (unprobed).
       Evidence: miss.

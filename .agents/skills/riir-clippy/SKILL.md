@@ -125,7 +125,8 @@ exist AFTER usage. Intake lives in `.distill/001_mining_queue_snapshot.md`
 §"Post-mining intake" — appended by dev-time heal sessions (the `cargo-heal`
 skill points agents there). Per sweep:
 
-1. Gather: `~/.cache/riir-clippy/memory.json` (trajectory counts by lint,
+1. Gather (one command: `scripts/self_evolve_audit.sh` — Issue 037's
+   instrument): `~/.cache/riir-clippy/memory.json` (trajectory counts by lint,
   tier/outcome distribution), `.benchmarks/score_history.jsonl` delta,
   `.heal/misses/`, verify-gate revert reports, grep target-repo session
   records for `divergence|backlog|miss`.
