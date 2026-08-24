@@ -62,20 +62,39 @@ fn default_memory_path() -> PathBuf {
 }
 
 /// 037-T2/038: open the repo-local neuron-db trajectory store (the durable
-/// verdict landing — the backend Issue 038 unifies on). Root resolution:
-/// `RIIR_HEAL_TRAJ_ROOT` → else the first path arg's workspace root → else
-/// cwd (repo-local wins for the 037-A2 per-repo adoption audit). `None` +
-/// one stderr line when the store cannot open — verdicts then land in
-/// memory.json only (never fatal to a heal).
-#[cfg(all(feature = "fix_verify", feature = "latent_retrieval"))]
-fn open_traj_store(paths: &[PathBuf]) -> Option<riir_clippy::traj_store::TrajStore> {
+/// backend Issue 038 unifies on). Root resolution: `RIIR_HEAL_TRAJ_ROOT`
+/// → else the first path arg's repo root (nearest `.git` ancestor — the
+/// repo-local semantic 038-T2 picked for the 037-A2 per-repo adoption
+/// audit) → else cwd. `None` + one stderr line when the store cannot open
+/// — the run then falls back to the legacy memory.json envelope (never
+/// fatal to a heal).
+///
+/// `migrate` (038-T3): on the first PERSISTING run, import the legacy
+/// envelope once — envelope present + store empty → every bucket becomes a
+/// row verbatim, then the envelope is renamed `memory.json.migrated` so the
+/// import can never run twice (or drift into a second repo's store).
+#[cfg(feature = "latent_retrieval")]
+fn open_traj_store(paths: &[PathBuf], migrate: bool) -> Option<riir_clippy::traj_store::TrajStore> {
     let root = std::env::var("RIIR_HEAL_TRAJ_ROOT")
         .ok()
         .map(PathBuf::from)
         .or_else(|| {
             paths.first().and_then(|p| {
-                riir_clippy::fix_verify::owning_package_root(p)
-                    .and_then(|pkg| riir_clippy::compile_oracle::workspace_root(&pkg))
+                let abs = if p.is_absolute() {
+                    p.clone()
+                } else {
+                    std::env::current_dir().ok()?.join(p)
+                };
+                let abs = abs.canonicalize().ok()?;
+                let mut dir = if abs.is_dir() { abs } else { abs.parent()?.to_path_buf() };
+                loop {
+                    if dir.join(".git").exists() {
+                        return Some(dir);
+                    }
+                    if !dir.pop() {
+                        return None;
+                    }
+                }
             })
         })
         .or_else(|| std::env::current_dir().ok())
@@ -85,12 +104,69 @@ fn open_traj_store(paths: &[PathBuf]) -> Option<riir_clippy::traj_store::TrajSto
             if bad > 0 {
                 eprintln!("self-evolve: trajectory store: {bad} corrupt row(s) skipped");
             }
+            if migrate {
+                migrate_envelope_once(&store);
+            }
             Some(store)
         }
         Err(e) => {
-            eprintln!("self-evolve: neuron store unavailable ({e}) — verdicts land in memory.json only");
+            eprintln!("self-evolve: neuron store unavailable ({e}) — falling back to the legacy memory.json envelope (038-T3)");
             None
         }
+    }
+}
+
+/// 038-T3: the one-time envelope → store migration (see [`open_traj_store`]).
+/// Idempotent by construction: the `.migrated` rename is the fence — a
+/// second run sees no envelope and does nothing.
+#[cfg(feature = "latent_retrieval")]
+fn migrate_envelope_once(store: &riir_clippy::traj_store::TrajStore) {
+    use riir_clippy::memory::EvidenceTier;
+    use riir_clippy::traj_store::TrajRowDoc;
+
+    let envelope = default_memory_path();
+    if !envelope.exists() || !store.dump().is_empty() {
+        return; // nothing to migrate from, or the store already has history
+    }
+    let mut mem = riir_clippy::memory::LatentFixMemory::default();
+    if let Err(e) = mem.load(&envelope) {
+        eprintln!("self-evolve: migration skipped — unreadable envelope ({}): {e}", envelope.display());
+        return;
+    }
+    let n = mem.len();
+    let mut imported = 0usize;
+    for t in mem.iter() {
+        let row = TrajRowDoc {
+            lint_key: t.lint_name.clone(),
+            shape: t.buggy_code.clone(),
+            fix: t.fixed_code.clone(),
+            direction: t.direction.as_slice().to_vec(),
+            success_count: t.success_count,
+            fail_count: t.fail_count,
+            consecutive_fails: t.consecutive_fails,
+            tier: match t.tier {
+                EvidenceTier::Certified => EvidenceTier::Certified.as_u8(),
+                EvidenceTier::Withdrawn => EvidenceTier::Withdrawn.as_u8(),
+                EvidenceTier::Heuristic => EvidenceTier::Heuristic.as_u8(),
+            },
+            last_run_id: "migrated".to_string(),
+            last_seen_at: 0,
+        };
+        if store.import_row(&row).is_ok() {
+            imported += 1;
+        }
+    }
+    let migrated = envelope.with_extension("json.migrated");
+    match std::fs::rename(&envelope, &migrated) {
+        Ok(()) => eprintln!(
+            "self-evolve: migrated {imported}/{n} envelope bucket(s) → {} (envelope kept as {})",
+            store.root.display(),
+            migrated.display()
+        ),
+        Err(e) => eprintln!(
+            "self-evolve: imported {imported}/{n} row(s) but could not rename the envelope ({}): {e} — migration will re-check on the next persisting run",
+            envelope.display()
+        ),
     }
 }
 
@@ -624,11 +700,22 @@ fn main() {
         let path = default_memory_path();
         match std::fs::read_to_string(&path) {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                eprintln!(
-                    "memory-stats: no store at {} — the loop has never recorded here",
-                    path.display()
-                );
-                std::process::exit(1);
+                // 038: the envelope may have been migrated — the ACTIVE
+                // backend is then the repo-local .heal/trajectories.kv
+                // (summarized below). Not an error; fall through.
+                let migrated = path.with_extension("json.migrated");
+                if migrated.exists() {
+                    println!(
+                        "memory store: {} (MIGRATED — the active backend is the repo-local .heal/trajectories.kv)",
+                        migrated.display()
+                    );
+                } else {
+                    eprintln!(
+                        "memory-stats: no store at {} — the loop has never recorded here",
+                        path.display()
+                    );
+                    std::process::exit(1);
+                }
             }
             Err(e) => {
                 eprintln!("memory-stats: cannot read {}: {e}", path.display());
@@ -686,7 +773,7 @@ fn main() {
                 }
             } else {
                 println!(
-                    "kv store: none at {} (the rustc_errors --fix-compile backend; not run in this repo)",
+                    "kv store: none at {} — run any --fix in this repo to create it (the 038 unified backend)",
                     kv.display()
                 );
             }
@@ -808,10 +895,10 @@ fn main() {
     // ── 037-T2: one heal-run id per invocation — the verdict-attribution
     // key stamped on the durable trajectory rows (Issue 038's schema:
     // in-schema fields keyed by run id, single read path). Compact +
-    // unique per run (time-nanos + pid). Declared only in the feature
-    // states that consume it (the fix-verify verdict path; the
-    // fix-compile store arm) — otherwise unused.
-    #[cfg(any(feature = "fix_verify", all(feature = "rustc_errors", feature = "latent_retrieval")))]
+    // unique per run (time-nanos + pid). Consumed by every store-writing
+    // path (applies, verify verdicts, fix-compile) — all under
+    // `latent_retrieval` (which `fix_verify` implies).
+    #[cfg(feature = "latent_retrieval")]
     let heal_run_id = {
         let t = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -1091,13 +1178,26 @@ fn main() {
         );
     }
 
-    // Issue 018: self-evolve recording — the memory half runs in every
-    // build (records applied/reverted fix trajectories + persists across
-    // runs); the EMA learning half degrades gracefully without an oracle
+    // Issue 018/038: self-evolve recording — the memory half runs in every
+    // build; the EMA learning half degrades gracefully without an oracle
     // (one log line). `RIIR_HEAL_SELF_EVOLVE=0` makes this fully inert.
+    //
+    // 038-T2/T3: under `latent_retrieval` the repo-local neuron store is the
+    // ONE backend — opened up front (with the one-time envelope migration
+    // on persisting runs); when active, the legacy envelope is neither
+    // loaded nor saved. In-session recording + EMA learning still run
+    // through the recorder identically — only the persistence swaps.
+    // Light builds (no `latent_retrieval`) keep the envelope by design
+    // (one active backend per build).
     let mut evolve_rec = EvolveRecorder::from_env();
     let memory_path = default_memory_path();
-    if evolve_rec.is_enabled() {
+    #[cfg(feature = "latent_retrieval")]
+    let traj_store = open_traj_store(&args.paths, args.write || args.verify);
+    #[cfg(feature = "latent_retrieval")]
+    let envelope_backend = traj_store.is_none();
+    #[cfg(not(feature = "latent_retrieval"))]
+    let envelope_backend = true;
+    if evolve_rec.is_enabled() && envelope_backend {
         match evolve_rec.load_verified(&memory_path) {
             Err(e) => eprintln!(
                 "self-evolve: ignoring unreadable memory file ({}): {e}",
@@ -1396,9 +1496,24 @@ fn main() {
                 n_fixed_edits += all_edits.len();
             }
             // Issue 018: only WRITTEN edits are applied fixes — review-only
-            // runs record nothing.
+            // runs record nothing. 038: applies persist to the active
+            // backend — the envelope (light builds / fallback), or the
+            // repo-local store (an apply is a SIGHTING: texts + run stamp,
+            // no outcome counters — a later verify run promotes it).
             if args.write {
-                evolve_rec.record_reviewed(&all_edits);
+                if envelope_backend {
+                    evolve_rec.record_reviewed(&all_edits);
+                }
+                #[cfg(feature = "latent_retrieval")]
+                if let Some(store) = &traj_store {
+                    for (rule, _, replacement, restore) in &all_edits {
+                        if let Err(e) =
+                            store.record_applied(rule, restore, replacement, &heal_run_id)
+                        {
+                            eprintln!("self-evolve: store record failed: {e}");
+                        }
+                    }
+                }
             }
         }
 
@@ -1422,9 +1537,24 @@ fn main() {
                 n_fixed_edits += all_edits.len();
             }
             // Issue 018: only WRITTEN edits are applied fixes — review-only
-            // runs record nothing.
+            // runs record nothing. 038: applies persist to the active
+            // backend — the envelope (light builds / fallback), or the
+            // repo-local store (an apply is a SIGHTING: texts + run stamp,
+            // no outcome counters — a later verify run promotes it).
             if args.write {
-                evolve_rec.record_reviewed(&all_edits);
+                if envelope_backend {
+                    evolve_rec.record_reviewed(&all_edits);
+                }
+                #[cfg(feature = "latent_retrieval")]
+                if let Some(store) = &traj_store {
+                    for (rule, _, replacement, restore) in &all_edits {
+                        if let Err(e) =
+                            store.record_applied(rule, restore, replacement, &heal_run_id)
+                        {
+                            eprintln!("self-evolve: store record failed: {e}");
+                        }
+                    }
+                }
             }
         }
 
@@ -1685,9 +1815,9 @@ fn main() {
         // repo-local neuron-db store (`.heal/trajectories.kv`), the backend
         // 038 unifies on. Transitional dual-record with memory.json below
         // (the same events — no drift; 038-T3 retires the envelope half).
-        // The inner cfg guards a future decoupling of the feature graph.
-        #[cfg(feature = "latent_retrieval")]
-        let traj_store = open_traj_store(&args.paths);
+        // 038: the store was hoisted + opened at the --fix path entry (the
+        // same instance serves apply events + verify verdicts — one open,
+        // one migration check per run); this scope borrows it directly.
 
         // Post-verify review: report what SURVIVED (the fix review for
         // reverted edits would be misleading).
@@ -1788,8 +1918,11 @@ fn main() {
             }
         }
     }
-    // Issue 018: persist recorded trajectories (skip when nothing new).
-    if evolve_rec.recorded_count() > 0 {
+    // Issue 018/038: persist recorded trajectories (skip when nothing
+    // new). 038: store-backend runs skip the envelope ENTIRELY — events
+    // were persisted to the repo-local store as they happened; the
+    // envelope save is the light-build / fallback path only.
+    if envelope_backend && evolve_rec.recorded_count() > 0 {
         if let Some(parent) = memory_path.parent() {
             let _ = std::fs::create_dir_all(parent);
         }

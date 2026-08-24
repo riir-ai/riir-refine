@@ -74,6 +74,9 @@ riir-neuron-db = { path = "../riir-neuron-db", optional = true, default-features
 # arithmetic-overflow fix + the raw-handle accessors).
 
 [dev-dependencies]
+# serde_json: already a main dep (zero new tree cost) — the 038 e2e parses
+# --dump-trajectories JSONL rows.
+serde_json = "1"
 
 [features]
 default = ["clippy_lints", "rust_perf", "self_evolve"]

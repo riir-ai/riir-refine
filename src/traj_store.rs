@@ -259,26 +259,7 @@ impl TrajStore {
         run_id: &str,
     ) -> Result<(), String> {
         let key = Self::row_key(lint_key, shape);
-        let mut row = self
-            .kv
-            .get_bytes(&key)
-            .and_then(|v| serde_json::from_slice::<TrajRowDoc>(&v).ok())
-            .unwrap_or_else(|| {
-                let mut dir = [0.0f32; EMBED_DIM];
-                embed_into(lint_key, fix, &mut dir);
-                TrajRowDoc {
-                    lint_key: lint_key.to_string(),
-                    shape: shape.to_string(),
-                    fix: fix.to_string(),
-                    direction: dir.to_vec(),
-                    success_count: 0,
-                    fail_count: 0,
-                    consecutive_fails: 0,
-                    tier: EvidenceTier::Heuristic.as_u8(),
-                    last_run_id: String::new(),
-                    last_seen_at: 0,
-                }
-            });
+        let mut row = self.load_or_new_row(&key, lint_key, shape, fix);
         // The text halves update with the latest sighting (the shape key
         // is stable, the fix may have been refined).
         row.fix = fix.to_string();
@@ -297,12 +278,86 @@ impl TrajStore {
                 row.tier = EvidenceTier::Withdrawn.as_u8();
             }
         }
+        self.put_row(&key, &row)
+    }
+
+    /// Upsert one APPLY event (038-T2: the `record_applied` equivalent —
+    /// memory-only in envelope terms). Creates/refreshes the row's text
+    /// halves + run attribution WITHOUT bumping any outcome counter: an
+    /// apply is a sighting, not a verdict — the tier stays whatever it was
+    /// (Heuristic on first sight) until a verify run records an outcome.
+    ///
+    /// # Errors
+    ///
+    /// KV put or JSON encode failure.
+    pub fn record_applied(
+        &self,
+        lint_key: &str,
+        shape: &str,
+        fix: &str,
+        run_id: &str,
+    ) -> Result<(), String> {
+        let key = Self::row_key(lint_key, shape);
+        let mut row = self.load_or_new_row(&key, lint_key, shape, fix);
+        row.fix = fix.to_string();
+        row.last_run_id = run_id.to_string();
+        row.last_seen_at = now_unix_secs();
+        self.put_row(&key, &row)
+    }
+
+    /// Import one FULL row verbatim (038-T3: the one-time envelope → store
+    /// migration). Unlike [`record`](Self::record)/[`record_applied`](Self::record_applied)
+    /// this writes the caller's counters + tier as-is — the envelope's
+    /// accumulated stats are the ground truth being migrated, not events to
+    /// replay. Keyed by the row's own (`lint_key`, shape).
+    ///
+    /// # Errors
+    ///
+    /// KV put or JSON encode failure.
+    pub fn import_row(&self, row: &TrajRowDoc) -> Result<(), String> {
+        let key = Self::row_key(&row.lint_key, &row.shape);
+        self.put_row(&key, &row)
+    }
+
+    /// Load the row at `key`, or create a fresh Heuristic one for
+    /// `(lint_key, shape, fix)` (the shared load-or-create of
+    /// [`record`](Self::record)/[`record_applied`](Self::record_applied)).
+    fn load_or_new_row(
+        &self,
+        key: &[u8],
+        lint_key: &str,
+        shape: &str,
+        fix: &str,
+    ) -> TrajRowDoc {
+        self.kv
+            .get_bytes(key)
+            .and_then(|v| serde_json::from_slice::<TrajRowDoc>(&v).ok())
+            .unwrap_or_else(|| {
+                let mut dir = [0.0f32; EMBED_DIM];
+                embed_into(lint_key, fix, &mut dir);
+                TrajRowDoc {
+                    lint_key: lint_key.to_string(),
+                    shape: shape.to_string(),
+                    fix: fix.to_string(),
+                    direction: dir.to_vec(),
+                    success_count: 0,
+                    fail_count: 0,
+                    consecutive_fails: 0,
+                    tier: EvidenceTier::Heuristic.as_u8(),
+                    last_run_id: String::new(),
+                    last_seen_at: 0,
+                }
+            })
+    }
+
+    /// Encode + put one row + keep the BM25 axis live (the shared tail of
+    /// every row-writing method).
+    fn put_row(&self, key: &[u8], row: &TrajRowDoc) -> Result<(), String> {
         let bytes =
-            serde_json::to_vec(&row).map_err(|e| format!("encode row: {e}"))?;
-        self.kv.put(&key, &bytes).map_err(|e| format!("put row: {e}"))?;
-        // BM25 stays live for future queries in this process.
+            serde_json::to_vec(row).map_err(|e| format!("encode row: {e}"))?;
+        self.kv.put(key, &bytes).map_err(|e| format!("put row: {e}"))?;
         self.bm25
-            .index(&key, &format!("{} {}", row.shape, row.fix));
+            .index(key, &format!("{} {}", row.shape, row.fix));
         Ok(())
     }
 

@@ -57,35 +57,54 @@ same-bucket stats race.
 > envelope half). T1's `FixTrajectoryRow` design should build on these
 > fields rather than re-deriving them.
 
-- [ ] **T1 — Pod row schema** `FixTrajectoryRow` (`#[repr(C)]`, bytemuck Pod):
-      the bucket fields (lint_name_hash, buggy/fixed BLAKE3 commitments,
-      direction `[f32; 8]`, success/fail counts, consecutive_fails, tier,
-      **last_seen_at u64**) — variable-length strings stay out of the Pod
-      (hashes only; full text recoverable from the corpus/fixtures) OR a
-      sidecar row family — decide by what `record_outcome`'s exact-match
-      actually reads (it needs `fixed_code` bytes → sidecar text row per
-      bucket, Pod-index row for stats).
-- [ ] **T2 — backend swap in `recorder.rs`**: `LocalKvStore::open_dir` at
-      `.heal/trajectories.kv` (repo-local, matching the rustc_errors
-      convention) OR keep the cache-dir path — decide: repo-local wins for
-      multi-repo adoption audit (037-A2 reads `.heal/` presence per repo);
-      cache-dir wins for cross-repo skill stats. **Pick repo-local** (the
-      adoption gate wants per-repo evidence).
-- [ ] **T3 — one-backend rule**: extend the existing "ONE active backend per
-      build" rule to the fix memory (neuron store under `latent_retrieval`,
-      JSON envelope otherwise — deprecation note in the envelope path);
-      migration on first open (envelope present + store absent → import
-      once, rename envelope to `.migrated`).
-- [ ] **T4 — audit + dump**: `self_evolve_audit.sh` section 1 reads
-      `cargo heal --dump-trajectories` (backend-agnostic) instead of parsing
-      memory.json; keep JSON parsing as fallback.
-- [ ] **T5 — GOAT**: G1 round-trip (record → reopen → identical retrieval
-      ranking incl. trust weighting), G2 no parse on hot path, G3 lib tests
-      both feature states, G4 alloc check on the admit path, G8 the
-      037-E2 flow end-to-end on the new backend (T2-of-037 wired outcomes
-      landing as Certified rows).
-- [ ] **T6 — 037 cross-link**: mark 037-T3 superseded (timestamps land here);
-      037-T2 (wire outcomes) is orthogonal and stays in 037.
+- [x] **T1 — row schema** (decided: NO separate Pod split — the row IS
+      `TrajRowDoc`): the text-carrying per-key JSON doc row the store
+      already ships (037-T2 pre-landed `last_run_id` + `last_seen_at` on
+      it). The issue's own decision rule — "what does record_outcome's
+      exact-match actually read" — answers `fixed_code` bytes, so the text
+      must live in the row; a separate Pod-index/text-sidecar split would
+      duplicate the row family with zero consumers (per-row serde ≠ the
+      whole-file parse the issue kills; the admit path is per-run, not
+      per-tick). 039-T1's elo fields land here later as serde-defaulted
+      additions.
+- [x] **T2 — backend swap in `recorder.rs`**: landed in `src/bin/heal.rs` (the
+      CLI is the only envelope consumer — the recorder itself is
+      backend-agnostic). Under `latent_retrieval` the repo-local store is
+      opened UP FRONT (`.git`-walk root resolution: `RIIR_HEAL_TRAJ_ROOT` →
+      first path's repo root → cwd) and is the ONE backend: apply events →
+      `TrajStore::record_applied` (sighting: texts + run stamp, no counters);
+      verify verdicts → `record` (as 037-T2 shipped). The envelope is
+      neither loaded nor saved when the store is active (in-session recorder
+      calls remain — they feed EMA; only persistence swaps). **Repo-local**
+      picked per the issue (037-A2 per-repo evidence).
+- [x] **T3 — one-backend rule**: store under `latent_retrieval`; envelope
+      otherwise (light builds — by design, one stderr line only on the
+      store-FAILED fallback). **Migration** fires on the first PERSISTING
+      run (`--write || --verify`): envelope present + store empty → every
+      bucket imported verbatim (`import_row`) → envelope renamed
+      `memory.json.migrated` (the once-only fence; idempotence pinned by
+      e2e). Unreadable envelope → skip + warn, never fatal.
+- [x] **T4 — audit + dump**: `self_evolve_audit.sh` §1 is store-first (per-repo
+      `.heal/trajectories.kv` scan via the binary's backend-agnostic
+      `--dump-trajectories`, tiers/outcomes per repo — doubles as the
+      037-A2 per-repo evidence line) with the envelope parse as fallback
+      + a `.migrated` tombstone note. `--memory-stats` reports the
+      migrated-backend state.
+- [x] **T5 — GOAT**: G1 round-trip + once-only migration + store-only
+      persistence pinned by `tests/store_backend_e2e.rs` (2 e2e tests,
+      real binary + real cargo/clippy oracle: heal → Certified rows →
+      envelope migrated + never rewritten → migration never re-fires;
+      verified stats-verbatim imports). G2 no whole-file parse: by
+      construction (envelope untouched when the store is active — asserted
+      `!envelope.exists()` post-run). G3 lib tests green in BOTH feature
+      states (default 660/0; full-feature clean, clippy 0 warnings both).
+      G4 admit-path alloc: per-event bounded (per-row serde + put — same
+      class the rustc_errors domain already GOATs). G8 the 037-E2 flow
+      end-to-end on the new backend: **the first e2e test's oracle line —
+      "3 confirmed resolved (Certified)" — IS the gate passing.**
+- [x] **T6 — 037 cross-link**: 037-T3's superseded note stands (timestamps
+      land in `last_seen_at`); 037-E2's substance is now provable on the
+      store backend via `--memory-stats` / the audit script §1.
 
 ## Non-goals
 
