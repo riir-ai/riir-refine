@@ -2,7 +2,7 @@
 
 > **Source:** "Long-Horizon AI Research for Grothendieck Constant: A Case Study in Human–AI Mathematical Collaboration" — [arXiv:2608.11195](https://arxiv.org/abs/2608.11195) — Li, Saha, Xue, Chaudhuri, Klivans, Kothari, Meka (UT Austin / Princeton / UCLA), 2026-08-14
 **Date:** 2026-08-15
-**Status:** Implemented — Issue 021 shipped 2026-08-16 (Bench 026); the §2.3 game-side provenance note remains a research lead only
+> **Status:** Implemented — Issue 021 shipped 2026-08-16 (Bench 026); the §2.3 game-side provenance lead upgraded 2026-08-25 by riir-ai [R346](../../riir-ai/.research/346_rag_collapse_self_authored_retrieval.md) (arXiv:2608.22118 — the retrieval-side measured evidence) → riir-ai Issue 758 (crowd PoC) + riir-clippy Issue 042 (healer monitor)
 > **Related Research:** katgpt-rs R461 (PRO-LONG — the lossless-log thesis), riir-ai R169 (AgentMemBench F6/F7/F9), riir-ai R333 (Prime Agent continual-harness verdict), katgpt-rs R473 (GAMER dual-stream Q+/Q−), katgpt-rs R104/R088 (AlphaProof Nexus), katgpt-rs R368 (AutoMem)
 > **Related Plans:** riir-clippy Plan 005 (latent retrieval + `cargo heal --suggest`)
 > **Cross-ref:** companion math paper [arXiv:2608.11158] "New Lower and Upper Bounds for the Grothendieck Constant" — **PASS** (no SDP/rounding surface in the stack; certification methodology already covered by Lean + spec-match; interval arithmetic explicitly rejected in katgpt-rs R220). Redirects landed in katgpt-rs R087 (ConvexTok) + riir-chain R004 (LatCal Lean bridge).
