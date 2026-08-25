@@ -1251,6 +1251,6 @@ never closed). Ranked open classes (inventory 2026-08-24):
       — the honest cost), created 1 unchanged, parse_safety 100% held —
       the fixture pins the guard on the compile axis (a regression drops
       parse_safety < 1.0). The two innocent single_match_else edits
-      landed on the real file afterward (riir-ai `f611310b7`, 70/70
+      landed on the real file afterward (riir-ai `6ca4f00e3`, 70/70
       ruliology tests green). Evidence: verify revert → E0308 probe →
       guard + fixtures + bench pin.

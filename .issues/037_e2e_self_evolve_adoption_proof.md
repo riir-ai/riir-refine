@@ -164,7 +164,7 @@ the query surface for verifying T2 once it lands: after a real
       fixture's map_unwrap_or persists as the documented we-stay-silent
       divergence — the honest cost of pinning it), created 1.9%
       unchanged, parse_safety 100% held, edits 66→67 (the two innocent
-      single_match_else edits now land; riir-ai `f611310b7`, 70/70
+      single_match_else edits now land; riir-ai `6ca4f00e3`, 70/70
       ruliology tests). Full chain in the intake entry — §3 prints
       `E5: PASS — P9`.
 
@@ -346,7 +346,7 @@ the query surface for verifying T2 once it lands: after a real
   unchanged, **parse_safety 100% held** — the pin: pre-guard the healed
   fixture E0308s and would drop the axis below 1.0. The two innocent
   single_match_else edits landed on the real file after the guard
-  (riir-ai `f611310b7`; the healer now proposes 2/3 edits, `cargo check`
+  (riir-ai `6ca4f00e3`; the healer now proposes 2/3 edits, `cargo check`
   clean, 70/70 ruliology tests). Live audit after the closure: §3 prints
   `E5: PASS — P9` (P5 still correctly rejected with reasons).
 - **Remaining open:** A1 only (2/3 days; earliest close 2026-08-26 — §5

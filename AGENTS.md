@@ -2814,7 +2814,7 @@ fixtures + score-bench v2 fixture `riir-ai-ruliology-player-001` pinning
 the guard on the parse_safety axis (run #5: heal 96.2% = the new
 persistent-divergence denominator, created 1.9%, safety 100% held); the
 two innocent single_match_else edits landed on the real file (riir-ai
-`f611310b7`). E1-E5 + A2/A3 MET (A3 spot check 2026-08-25: riir-ai healed
+`6ca4f00e3`). E1-E5 + A2/A3 MET (A3 spot check 2026-08-25: riir-ai healed
 files + riir-dapps src/ → 0 dry-run edits). Blocks Proposals 003 + 004 until
 A1 green. File: `.issues/037_e2e_self_evolve_adoption_proof.md`.
 
