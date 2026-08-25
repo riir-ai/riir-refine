@@ -1,9 +1,14 @@
 //! ELO rating math for Issue 039 — rule-vs-shape ratings over the
 //! trajectory store's verdict history.
 //!
-//! Adapted locally (with citation) from the two in-tree katgpt-rs paths;
-//! promotion to `katgpt-core` is filed as katgpt-rs Issue 686 — this module
-//! switches to the core primitive when 686 lands:
+//! **katgpt-rs Issue 686 CLOSED — the math delegates to
+//! `katgpt_core::rating`** (DEFAULT-ON there since Bench 675): the f32
+//! twins `expected_f32`/`update_f32` + the `STANDARD_*` constants are the
+//! verbatim expression trees this module used to carry inline
+//! (bit-identical — the persisted store ratings do not drift). What stays
+//! local: [`EloTable`] (the string-id rating table + the T4 store→table
+//! bridge surface) and this module's citations of the two original
+//! katgpt-rs paths the core primitive was promoted from:
 //!
 //! - `katgpt-pruners/src/arena/types.rs` `EloCalculator` — the standard
 //!   expected-score + K-factor update (the per-match math here is the same
@@ -39,36 +44,40 @@
 
 use std::collections::HashMap;
 
-/// K-factor (per-match maximum movement) — `EloCalculator`'s default.
-pub const ELO_K: f32 = 32.0;
+/// K-factor (per-match maximum movement) — `EloCalculator`'s default
+/// (the standard-chess value from `katgpt_core::rating`).
+#[allow(clippy::cast_possible_truncation)] // 32.0 is exactly representable in f32
+pub const ELO_K: f32 = katgpt_core::rating::STANDARD_K as f32;
 
 /// Elo per log10 unit — the standard-chess scale both katgpt-rs paths use
-/// (`PlackettLuceConfig::elo_scale`).
-pub const ELO_SCALE: f32 = 400.0;
+/// (`PlackettLuceConfig::elo_scale`, from `katgpt_core::rating`).
+#[allow(clippy::cast_possible_truncation)] // 400.0 is exactly representable in f32
+pub const ELO_SCALE: f32 = katgpt_core::rating::STANDARD_SCALE as f32;
 
 /// The base (unrated) rating — standard chess 1200, the PL conversion's
-/// `elo_offset`. Lives here (with the math) since Issue 039 T2;
+/// `elo_offset` (from `katgpt_core::rating`; 1200 is exactly representable
+/// in f32). Lives here (with the math) since Issue 039 T2;
 /// `traj_store` re-exports it for back-compat.
 #[must_use]
+#[allow(clippy::cast_possible_truncation)] // 1200.0 is exactly representable in f32
 pub fn default_elo() -> f32 {
-    1200.0
+    katgpt_core::rating::STANDARD_BASE as f32
 }
 
 /// Expected score of `a` vs `b` — `1 / (1 + 10^((b-a)/400))` (the arena
-/// formula at f32).
+/// formula; the `katgpt_core::rating::expected_f32` twin, verbatim).
 #[must_use]
 pub fn expected_score(a: f32, b: f32) -> f32 {
-    1.0 / (1.0 + 10.0_f32.powf((b - a) / ELO_SCALE))
+    katgpt_core::rating::expected_f32(a, b, ELO_SCALE)
 }
 
 /// One zero-sum match update — returns `(new_a, new_b)`; the arena
-/// `update` formula at f32 (the winner gains what the loser loses, up to
-/// float rounding).
+/// `update` formula at f32 (the `katgpt_core::rating::update_f32` twin,
+/// verbatim — the winner gains what the loser loses, up to float
+/// rounding).
 #[must_use]
 pub fn update_pair(a: f32, b: f32, a_won: bool) -> (f32, f32) {
-    let e_a = expected_score(a, b);
-    let (s_a, s_b) = if a_won { (1.0, 0.0) } else { (0.0, 1.0) };
-    (a + ELO_K * (s_a - e_a), b + ELO_K * (s_b - (1.0 - e_a)))
+    katgpt_core::rating::update_f32(a, b, a_won, ELO_K, ELO_SCALE)
 }
 
 /// A rating table over string player ids. The two namespaces are disjoint

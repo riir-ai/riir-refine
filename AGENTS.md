@@ -2316,6 +2316,13 @@ their own harness). Verdict pinned by `t39_recorded_verdict_is_report_only`
 T9.3 promotion survives the real-sparsity re-test (margin over LinearBlend
 holds: 0.9185 vs 0.9013 / 0.9399 vs 0.9190). Reopen triggers: store
 densification (median candidate ≥2 observations) or evo-axis degradation.
+**katgpt-rs Issue 686 CLOSED 2026-08-25** (Bench 675): the rating math now
+lives in `katgpt_core::rating` (DEFAULT-ON there) — this repo's `src/elo.rs`
+delegates to the f32 twins (`expected_f32`/`update_f32` + the `STANDARD_*`
+consts), bit-identical, persisted store ratings do not drift (675/753/707
+lib counts unchanged). Substrate-first found a FOURTH copy the issue never
+listed (riir-games ruliology `ParadigmRanking` — the win/loss/draw form,
+which set `update_scored`'s API shape) — all four consumers delegate now.
 
 **Run #3 (fix `c8d0d34`, same day): heal 98.1% · created 1 (1.9%) — the
 run-#2 miss map triaged to root causes.** Every persist + created was
