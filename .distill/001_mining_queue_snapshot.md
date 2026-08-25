@@ -1227,13 +1227,30 @@ never closed). Ranked open classes (inventory 2026-08-24):
 - [ ] P8 **unnecessary_sort_by deref-binding shape** (`|&a, &b|` —
       conservatively skipped; the AGENTS.md "no proposer" note is STALE,
       proposer exists). Evidence: miss.
-- [ ] P9 **compile-breaking proposal cluster in ruliology/player.rs** —
+- [x] P9 **compile-breaking proposal cluster in ruliology/player.rs** —
       2× single_match_else (`match state.first()/opponent_history.last()`
       Some/None → if-let) + 1× map_unwrap_or at :459, ALL THREE
       auto-reverted by the verify gate when applied together (whole-file
-      revert; 037-T5, riir-ai). Root cause UNEXAMINED — grab the rustc
-      error (apply manually to a scratch copy), classify (borrow/move in
-      arm body? type-inference at the tail? edition let-chain?), then
-      either a proposer guard or a documented divergence class.
-      Evidence: verify revert (the gate's first multi-edit whole-file
-      refusal in production).
+      revert; the 2026-08-24 first real-world verify cycle, riir-ai).
+      **CLOSED 2026-08-25 — root cause + proposer guard, commit `64820c1`.**
+      Root cause (reproduced on a scratch copy, rustc E0308 at player.rs:463:
+      "expected `&fn(usize, &[f32], &[usize]) -> f64`, found
+      `&dyn Fn(usize, &[f32], &[usize]) -> f64`"): the map_unwrap_or →
+      map_or rewrite requires an UNSIZE coercion (`&fn(..) → &dyn Fn(..)`)
+      that `unwrap_or` performs (map(..) fixed the Option parameter first)
+      but `map_or`'s free inference variable U structurally cannot — the
+      second member of the array-literal guard class (2bf2a44), and it
+      falsifies the "casts are safe" note on `is_array_lit_ref`. Fix: the
+      proposer now skips mappers whose TAIL casts to a trait-object type
+      (`|f| f as &dyn Fn(..)`), both map_or and map_or_else forms. 5 new
+      proposer fixture tests pin the guard (production shape, block-tail,
+      or_else variant refused; concrete-cast + non-tail-dyn still fire).
+      Score-bench delta (history run #5, v2 fixture set 34→35): heal
+      98.1%→96.2% (the new `riir-ai-ruliology-player-001` fixture's
+      map_unwrap_or persists as the documented we-stay-silent divergence
+      — the honest cost), created 1 unchanged, parse_safety 100% held —
+      the fixture pins the guard on the compile axis (a regression drops
+      parse_safety < 1.0). The two innocent single_match_else edits
+      landed on the real file afterward (riir-ai `f611310b7`, 70/70
+      ruliology tests green). Evidence: verify revert → E0308 probe →
+      guard + fixtures + bench pin.

@@ -140,13 +140,33 @@ the query surface for verifying T2 once it lands: after a real
       exercises proposers only, by design — persistence is T5's axis).
       Persist map unchanged: `useless_format ×1` (the documented String-typed
       boundary, deliberately kept).
-- [ ] **E5 — mining report:** ≥1 post-mining intake class (P1–P9) closed
+      (Run #5, 2026-08-25 — post-E5: heal 96.2% is NOT decay: the score-bench
+      v2 set grew 34→35 with the P9 fixture whose map_unwrap_or persists by
+      DESIGN as the documented we-stay-silent divergence; the old 34
+      fixtures' per-fixture outcomes are unchanged, created stays 1.9%,
+      parse_safety 100%. The gate's "attributable to a post-mining fix"
+      arm — the denominator grew because the P9 class is now PINNED.)
+- [x] **E5 — mining report:** ≥1 post-mining intake class (P1–P9) closed
       end-to-end: intake `- [x]` + proposer-change commit + fixture +
       score-bench delta recorded in the research note. (A tick closed via
       this issue's own tasks — e.g. P5 = T2 wiring, "one unit, tracked
       once" — is NOT evidence: a gate's own task completions cannot be its
       own evidence. The audit §3 judge enforces the chain and prints
       per-tick reasons.)
+      → **MET (2026-08-25, P9 closed — proposer guard `64820c1`).** The
+      ruliology/player.rs verify-revert cluster root-caused (E0308 at :463
+      — the map_or rewrite needs the `&fn(..) → &dyn Fn(..)` unsize
+      coercion that only `unwrap_or` can perform; second member of the
+      2bf2a44 class) and fixed at the PROPOSER, not the call site: the
+      mapper-tail trait-object-cast guard + 5 fixtures + a score-bench
+      v2 fixture (`riir-ai-ruliology-player-001`) pinning it on the
+      parse_safety axis. Bench run #5: heal 98.1% → 96.2% (the new
+      fixture's map_unwrap_or persists as the documented we-stay-silent
+      divergence — the honest cost of pinning it), created 1.9%
+      unchanged, parse_safety 100% held, edits 66→67 (the two innocent
+      single_match_else edits now land; riir-ai `f611310b7`, 70/70
+      ruliology tests). Full chain in the intake entry — §3 prints
+      `E5: PASS — P9`.
 
 ## Tasks
 
@@ -304,6 +324,34 @@ the query surface for verifying T2 once it lands: after a real
   + score-bench delta, provenance mention of the 037-T5 cluster) counts;
   P5 does not. Gate text range synced P1–P8 → P1–P9 (P9
   postdates the original gate wording).
+- **E5 MET — P9 closed end-to-end (later this session):** the armed
+  candidate landed. Root cause reproduced on a scratch copy (healer's
+  exact 3 edits applied to riir-ai ruliology/player.rs, `cargo check -p
+  riir-games --lib`): ONE error, E0308 at :463 — `expected
+  \`&fn(usize, &[f32], &[usize]) -> f64\`, found \`&dyn Fn(usize, &[f32],
+  &[usize]) -> f64\``. The map_unwrap_or → map_or rewrite needs the unsize
+  coercion `&fn(..) → &dyn Fn(..)` that `unwrap_or` performs (map fixed the
+  Option parameter first) but `map_or`'s free inference variable U
+  structurally cannot — the SECOND member of the array-literal guard class
+  (2bf2a44), and it falsifies `is_array_lit_ref`'s "casts are safe" doc
+  note (the ascribed `&fn` default is exactly what wins U). Fix-forward at
+  the proposer (riir-clippy `64820c1`): mapper-tail trait-object-cast
+  guard (both map_or + map_or_else forms), 5 fixtures, + the score-bench
+  v2 fixture `riir-ai-ruliology-player-001` (real span; freeze-probed:
+  real clippy fires ONLY map_unwrap_or on it — single_match_else does NOT
+  fire on the both-arm-blocks + None-second shape, a small honest
+  discovery recorded in the fixture comment). Bench run #5: heal
+  98.1%→96.2% (denominator 52→53; the new lint persists as the documented
+  we-stay-silent divergence — joins useless_format), created 1.9%
+  unchanged, **parse_safety 100% held** — the pin: pre-guard the healed
+  fixture E0308s and would drop the axis below 1.0. The two innocent
+  single_match_else edits landed on the real file after the guard
+  (riir-ai `f611310b7`; the healer now proposes 2/3 edits, `cargo check`
+  clean, 70/70 ruliology tests). Live audit after the closure: §3 prints
+  `E5: PASS — P9` (P5 still correctly rejected with reasons).
+- **Remaining open:** A1 only (2/3 days; earliest close 2026-08-26 — §5
+  prints `A1: PASS` on any genuine heal run that day). Then T6
+  (resolution note + rm) + T7 (unblock Proposals 003+004).
 
 ## Session record (2026-08-24, T4+T5)
 
