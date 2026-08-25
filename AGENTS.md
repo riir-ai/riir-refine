@@ -2277,6 +2277,46 @@ compile gate — a different harness, not this one. Validation at close:
 feature lib 745/0 · default lib 659/0 · retrieval floors 12/12 (G3) ·
 clippy 0 in the feature state.
 
+**Issue 039 (2026-08-24→25, RESOLVED — T5 verdict ReportOnly; removed per
+noise-reduction rule; harness `tests/t39_elo_selection_ab.rs` kept as the
+reproducible artifact).** The ELO-rated rules + evidence-grounded ruliology
+issue over the unified trajectory store — T1 substrate decision (katgpt-rs
+Issue 686 filed; adapt-locally standard Elo K=32/base-1200 with citation) +
+Pod-row reservation; T2 the `src/elo.rs` math module +
+`TrajStore::recompute_elo` batch pass + `--recompute-elo` CLI + the 3-store
+backfill (headline: `uninlined_format_args` 1625.3 70W/0L; spans that beat
+rules rate UP — span difficulty emerges); T3 the ruliology evidence axis
+(LEXICOGRAPHIC TIE-BREAK ONLY — payoff primary, evidence reorders exactly
+the parse-equal ties; `search_with_evidence` et al., unrated path
+bit-identical); T4 the `EloTable::from_ratings` load constructor +
+`TrajStore::elo_table()` bridge (prefers the non-base rating per player;
+never recompute) + `self_evolve_audit.sh` §1b leaderboard (top rules,
+draws, pending-recompute hint, Withdrawn excluded, toughest shapes) with a
+live loop-closure proof (a NEW riir-game-sdk store surfaced + backfilled by
+the hint's own command). **T5 — the selection challenge gate: ELO does NOT
+replace BetaPosterior** ([Bench 047](.benchmarks/047_elo_selection_challenge_gate.md)
++ [Research 083](.research/083_elo_selection_gate.md)): at REAL pool sparsity
+(measured from the stores — 98.5% of candidates unseen, 1.3% one-observation;
+t26's assumed 0..=3 was ~40× denser) with paired common-random-numbers
+McNemar + the promotion rule ENCODED (`promotion_gate`: strict win = discovery
+strictly greater + z > +1.96 + no regret regression, both evo-noise cells):
+EloStatic (the exact batch-loaded store form) significantly WORSE (z = −8.94
+— frozen ratings give up within-trial learning, which is nearly all the
+signal at this sparsity); EloOnline a microscopic real win (+0.0004,
+z = +3.63 @ 0.6) but NS @ 0.2; the dense rule-aggregated production form
+regime-dependent (+4.09 harsh-evo, NS negative mild-evo). Three findings
+recorded: starved pools make selection differences ≤0.04pp (the Issue 026
+doctrine CONFIRMED on store-measured numbers — the bottleneck is evidence
+volume, not selection math); a frozen rating table is strictly worse than
+count-updating at thin evidence (any future rating-based selection must be
+online); and the clippy score-bench CANNOT measure selection at all
+(`heal_fixpoint` bypasses `select_best_candidate` — selection gates get
+their own harness). Verdict pinned by `t39_recorded_verdict_is_report_only`
++ a LIVE gate assertion re-deriving it every run. Bonus: BetaPosterior's
+T9.3 promotion survives the real-sparsity re-test (margin over LinearBlend
+holds: 0.9185 vs 0.9013 / 0.9399 vs 0.9190). Reopen triggers: store
+densification (median candidate ≥2 observations) or evo-axis degradation.
+
 **Run #3 (fix `c8d0d34`, same day): heal 98.1% · created 1 (1.9%) — the
 run-#2 miss map triaged to root causes.** Every persist + created was
 probed against real clippy 1.97 BEFORE any code changed (per-fixture
