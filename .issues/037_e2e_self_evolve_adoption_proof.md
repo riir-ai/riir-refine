@@ -140,9 +140,13 @@ the query surface for verifying T2 once it lands: after a real
       exercises proposers only, by design — persistence is T5's axis).
       Persist map unchanged: `useless_format ×1` (the documented String-typed
       boundary, deliberately kept).
-- [ ] **E5 — mining report:** ≥1 post-mining intake class (P1–P8) closed
+- [ ] **E5 — mining report:** ≥1 post-mining intake class (P1–P9) closed
       end-to-end: intake `- [x]` + proposer-change commit + fixture +
-      score-bench delta recorded in the research note.
+      score-bench delta recorded in the research note. (A tick closed via
+      this issue's own tasks — e.g. P5 = T2 wiring, "one unit, tracked
+      once" — is NOT evidence: a gate's own task completions cannot be its
+      own evidence. The audit §3 judge enforces the chain and prints
+      per-tick reasons.)
 
 ## Tasks
 
@@ -283,6 +287,23 @@ the query surface for verifying T2 once it lands: after a real
   auto-revert cluster — is the armed candidate: root-cause the exact rustc
   error, fix the proposer guard + fixture, record the score-bench delta).
   Then T6 (resolution note + rm) + T7 (unblock Proposals 003+004).
+- **§3 E5 false positive found + fixed (this session):** the audit script's
+  §3 judge printed `E5: PASS` by counting ANY ticked intake line — and the
+  only tick was P5, which is THIS issue's own T2 (outcome-verdict wiring):
+  circular evidence, not a proposer-class closure. §3 now scopes E5 evidence
+  to genuine proposer-class closures only — a tick counts only when its
+  entry carries the full chain (proposer-change commit + fixture +
+  score-bench delta) AND is not closed via an Issue-037 task attribution;
+  non-qualifying ticks print with reasons. Live run: `P5 outcome-verdict
+  wiring: tick does NOT count — closed via an Issue-037 task (self-evidence
+  — not eligible); no fixture` → **E5: PENDING**, honestly open with P9
+  armed. Verified no genuine closure evidence exists: the only `src/domains`
+  commit since adoption is Batch 71 (`eeda363`) — a PRE-mining external
+  distill (oMLX), not a post-mining usage-artifact class. The judge was
+  discriminant-tested: a hypothetical genuine P9 closure (commit + fixtures
+  + score-bench delta, provenance mention of the 037-T5 cluster) counts;
+  P5 does not. Gate text range synced P1–P8 → P1–P9 (P9
+  postdates the original gate wording).
 
 ## Session record (2026-08-24, T4+T5)
 

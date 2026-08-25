@@ -192,10 +192,58 @@ fi
 echo ""
 echo "── 3. Post-mining intake (mining report progress) ──"
 if [ -f "$INTAKE" ]; then
-  done_n=$(grep -c '^- \[x\]' "$INTAKE" 2>/dev/null); done_n=${done_n:-0}
-  open_n=$(grep -c '^- \[ \]' "$INTAKE" 2>/dev/null); open_n=${open_n:-0}
-  echo "  intake items: done=${done_n:-0} open=${open_n:-0}"
-  echo "  E5 (>=1 class closed e2e): $([ "${done_n:-0}" -ge 1 ] && echo PASS || echo 'FAIL — no post-mining class closed yet')"
+  python3 - "$INTAKE" <<'EOF'
+import re, sys
+# E5's gate text: ">=1 post-mining intake class closed end-to-end: intake
+# [x] + proposer-change commit + fixture + score-bench delta". A bare tick
+# count is NOT that judge: P5's tick is Issue 037's own T2 (outcome-verdict
+# WIRING — "one unit, tracked once" under T2), not a proposer-class closure,
+# and a gate's own task completions cannot be evidence for the gate itself.
+# A ticked item counts only when its entry carries the full closure chain
+# AND is not closed-via-an-Issue-037-task attribution.
+text = open(sys.argv[1]).read()
+parts = text.split('## Post-mining intake', 1)
+if len(parts) != 2:
+    print("  intake section header missing — cannot parse P-items")
+    raise SystemExit(0)
+body = parts[1]
+items = re.split(r'\n(?=- \[.\] P\d)', body)
+ticked, open_n, qualifying = [], 0, []
+for it in items:
+    m = re.match(r'- \[(x| )\] (P\d+)', it)
+    if not m:
+        continue
+    state, pid = m.groups()
+    t = re.match(r'- \[.\] P\d+ \*\*(.+?)\*\*', it)
+    label = (t.group(1) if t else pid)[:44]
+    if state == 'x':
+        ticked.append((pid, label, it))
+    else:
+        open_n += 1
+print(f"  intake items: done={len(ticked)} open={open_n}")
+HASH = re.compile(r'\b[0-9a-f]{7,40}\b')
+for pid, label, entry in ticked:
+    low = entry.lower()
+    reasons = []
+    if re.search(r'(via|under) 037-t\d|tracked in \[?issue 037', low):
+        reasons.append('closed via an Issue-037 task (self-evidence — not eligible)')
+    if not HASH.search(entry):
+        reasons.append('no proposer-change commit ref')
+    if 'fixture' not in low:
+        reasons.append('no fixture')
+    if 'score-bench' not in low and 'score_bench' not in low:
+        reasons.append('no score-bench delta')
+    if reasons:
+        print(f"    {pid} {label}: tick does NOT count — {'; '.join(reasons)}")
+    else:
+        qualifying.append(pid)
+if qualifying:
+    print(f"  E5 (>=1 proposer class closed e2e): PASS — {', '.join(qualifying)}")
+elif ticked:
+    print("  E5 (>=1 proposer class closed e2e): PENDING — tick(s) above lack the proposer closure chain (commit + fixture + score-bench delta)")
+else:
+    print("  E5 (>=1 proposer class closed e2e): PENDING — no post-mining class closed yet")
+EOF
 else
   echo "  intake ABSENT at $INTAKE"
 fi
