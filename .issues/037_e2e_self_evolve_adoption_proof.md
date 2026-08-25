@@ -262,6 +262,17 @@ the query surface for verifying T2 once it lands: after a real
 - **A1 status:** distinct heal-activity days so far = 1 (2026-08-24 — the
   stores' `last_seen_at` population). Window runs through 2026-09-07;
   earliest possible close 2026-08-26 if heal runs land today + tomorrow.
+- **A1 addendum (later 2026-08-25, this session):** the audit script gained
+  **§5 — the mechanical A1 judge** (union of store `last_seen_at` days +
+  consumer-repo heal-commit days, sliding ≥3-in-any-14-day-window count;
+  riir-clippy's own dev commits excluded from the commit half — the tool's
+  development is not adoption evidence). First live run **corrects the day
+  count above: 2 distinct days, not 1** — riir-game-sdk's store carries a
+  genuine 01:24 heal run today (`run-18ced0f5438da5b8-68248`:
+  vec-with-capacity `Vec::new()` → `Vec::with_capacity(MAX_DRAIN_ROUNDS)`,
+  success, recorded) + same-day heal commits in game-sdk/train. A1 stays
+  open — one more distinct day closes it (earliest 2026-08-26; any genuine
+  heal run that day → §5 prints `A1: PASS` → T6 ticks it).
 - **Issue 038 closed** (all T1-T6 already `[x]`; GOAT landed `e4ce8ba`):
   resolution note in AGENTS.md §Production adoption +
   `.docs/10_self_evolve/latent_fix_memory.md` §Persistence; issue file

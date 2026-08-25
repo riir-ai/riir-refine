@@ -212,7 +212,78 @@ for r in $REPOS; do
 done
 echo "  total heal-related commits since $ADOPTION_DATE: $total"
 echo "  A2 gate (>=2 repos with heal commits): see above"
+
 echo ""
-echo "NOTE: envelope rows carry no timestamps, but 038 store rows do"
-echo "(last_seen_at) — per-day adoption cadence (A1) becomes measurable from"
-echo "--dump-trajectories once stores accumulate. Envelope: git-commit proxy only."
+echo "── 5. Cadence (A1 — distinct heal-activity days, >=3 in any 14-day window) ──"
+# Union of the gate's own two evidence halves:
+#   store days  — .heal/trajectories.kv rows' last_seen_at (a stamped row
+#                 only exists where the tool RAN and recorded — the
+#                 memory-growth half)
+#   commit days — git heal-mentioning commits since adoption (CONSUMER
+#                 repos only: riir-clippy is the tool itself, its dev
+#                 commits are development, not adoption evidence)
+DAYS_TMP="$(mktemp)"
+A1_DUMP="$(mktemp)"
+for r in $REPOS; do
+  d="/Users/katopz/git/$r"
+  if [ -d "$d/.heal/trajectories.kv" ] && [ -x "$HEAL_BIN" ]; then
+    RIIR_HEAL_TRAJ_ROOT="$d" "$HEAL_BIN" --dump-trajectories > "$A1_DUMP" 2>/dev/null
+    python3 - "$r" "$A1_DUMP" >> "$DAYS_TMP" <<'EOF'
+import json, sys, datetime
+repo, path = sys.argv[1], sys.argv[2]
+for line in open(path):
+    line = line.strip()
+    if not line.startswith('{'):
+        continue
+    try:
+        v = json.loads(line)
+    except Exception:
+        continue
+    ts = int(v.get('last_seen_at', 0))
+    if ts > 0:
+        day = datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d')
+        print(f"{day}\tstore\t{repo}")
+EOF
+  fi
+  if [ -d "$d/.git" ] && [ "$r" != "riir-clippy" ]; then
+    git -C "$d" log --format="%as" --since="$ADOPTION_DATE" --grep='heal' 2>/dev/null \
+      | while read -r day; do printf '%s\tcommit\t%s\n' "$day" "$r"; done >> "$DAYS_TMP"
+  fi
+done
+python3 - "$DAYS_TMP" <<'EOF'
+import sys, datetime
+ADOPT = datetime.date(2026, 8, 24)  # adoption day; post-T3 activity only
+days = {}
+for line in open(sys.argv[1]):
+    line = line.strip()
+    if not line:
+        continue
+    parts = line.split('\t')
+    if len(parts) != 3:
+        continue
+    try:
+        dd = datetime.date.fromisoformat(parts[0])
+    except ValueError:
+        continue
+    if dd < ADOPT:
+        continue
+    days.setdefault(dd, set()).add((parts[1], parts[2]))
+for dd in sorted(days):
+    repos = sorted({r for _, r in days[dd]})
+    halves = sorted({h for h, _ in days[dd]})
+    print(f"  {dd}: {' + '.join(halves)} — {', '.join(repos[:6])}{' …' if len(repos) > 6 else ''}")
+distinct = sorted(days)
+best = 0
+for i, d0 in enumerate(distinct):
+    n = sum(1 for d in distinct[i:] if (d - d0).days <= 13)
+    best = max(best, n)
+print(f"  distinct days: {len(distinct)} | max within any 14-day window: {best}")
+if best >= 3:
+    print("  A1 (>=3 distinct days in a 14-day window): PASS")
+elif distinct:
+    nxt = distinct[-1] + datetime.timedelta(days=1)
+    print(f"  A1: PENDING — needs {3 - best} more distinct day(s); earliest close {nxt}")
+else:
+    print("  A1: PENDING — no heal-activity days recorded since adoption")
+EOF
+rm -f "$DAYS_TMP" "$A1_DUMP"
