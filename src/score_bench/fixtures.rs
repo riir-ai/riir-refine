@@ -8,6 +8,13 @@
 //!
 //! Regenerate/extend ONLY via `examples/score_bench_mine.rs` (Plan 014
 //! discipline: new fixtures = a new bench version, not silent edits).
+//!
+//! v2 extension (P9, 2026-08-25): `riir-ai-ruliology-player-001` — the
+//! production verify-revert span that motivated the `map_unwrap_or`
+//! trait-object-cast guard (riir-clippy post-mining P9). Added as a
+//! deliberate bench-version step: it pins the guard on the `parse_safety`
+//! axis (pre-guard, the healed output E0308s; post-guard it compiles and
+//! the lint persists as the documented we-stay-silent divergence).
 
 /// The frozen v1 fixture set.
 #[must_use]
@@ -792,6 +799,90 @@ pub fn effective_receptive_field(
 }",
         expect_lints: &[],
         clean: true,
+    },
+    // v2 (P9, 2026-08-25): the riir-ai ruliology/player.rs span whose heal
+    // E0308'd in production (the verify gate's first multi-edit whole-file
+    // revert). Real clippy fires ONLY map_unwrap_or here (probe-verified at
+    // freeze: single_match_else does NOT fire on the default_score match —
+    // both-arm-blocks + None-second is not its firing shape on 1.97). The
+    // healer rewrites the two matches anyway (its own detection is wider);
+    // the load-bearing measurement is parse_safety: post-guard the healed
+    // span compiles (2 sound if-let rewrites, map_or declined); a guard
+    // regression re-breaks it and drops parse_safety below 1.0.
+    RawFixture {
+        id: "riir-ai-ruliology-player-001",
+        provenance: "riir-ai@849ce8330:crates/riir-games/src/ruliology/player.rs (P9; trait scaffolding added, lint spans verbatim)",
+        code: r"pub trait StrategyPlayer {
+    fn name(&self) -> &str;
+    fn paradigm(&self) -> Paradigm;
+    fn select_action(&mut self, state: &[f32], opponent_history: &[usize]) -> usize;
+}
+pub enum Paradigm {
+    HeuristicLearning,
+}
+
+pub type ScoreFn = dyn Fn(usize, &[f32], &[usize]) -> f64 + Send + Sync;
+
+pub struct HlPlayer {
+    action_count: usize,
+    score_fn: Option<Box<ScoreFn>>,
+    name: String,
+}
+
+impl HlPlayer {
+    fn default_score(action: usize, state: &[f32], opponent_history: &[usize]) -> f64 {
+        let base = match opponent_history.last() {
+            Some(&last) => {
+                // Cooperative: high score for matching opponent's last action
+                if action == last { 1.0 } else { 0.3 }
+            }
+            None => {
+                // No history: prefer action 0 (cooperative default)
+                if action == 0 { 1.0 } else { 0.5 }
+            }
+        };
+
+        // State modulation: use state observation to adjust scores
+        let state_bonus = match state.first() {
+            Some(&s) if s > 0.5 => 0.1,
+            _ => 0.0,
+        };
+
+        base + state_bonus
+    }
+}
+
+impl StrategyPlayer for HlPlayer {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn paradigm(&self) -> Paradigm {
+        Paradigm::HeuristicLearning
+    }
+
+    fn select_action(&mut self, state: &[f32], opponent_history: &[usize]) -> usize {
+        let scorer = self
+            .score_fn
+            .as_ref()
+            .map(|f| f as &dyn Fn(usize, &[f32], &[usize]) -> f64)
+            .unwrap_or(&(Self::default_score as fn(usize, &[f32], &[usize]) -> f64));
+
+        let mut best_action = 0;
+        let mut best_score = f64::NEG_INFINITY;
+        for a in 0..self.action_count {
+            let s = scorer(a, state, opponent_history);
+            if s > best_score {
+                best_score = s;
+                best_action = a;
+            }
+        }
+        best_action
+    }
+}
+",
+        expect_lints: &["map_unwrap_or"],
+        clean: false,
     },
 ];
 

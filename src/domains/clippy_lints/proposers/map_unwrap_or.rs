@@ -28,12 +28,23 @@
 //! `is_none_or` stable since 1.82). Closures whose bool-ness cannot be
 //! proven syntactically (e.g. a bare path) keep the `map_or` form — a
 //! parse-only limitation, not a wrong fix.
+//!
+//! Documented divergence (P9, 2026-08-25): a mapper whose TAIL casts to a
+//! trait-object reference (`|f| f as &dyn Fn(..)`) is SKIPPED — real clippy
+//! fires and suggests `map_or`, but the suggestion only compiles when the
+//! default already has the trait-object type. `unwrap_or` accepts any
+//! unsize-coercible default (`&fn(..)`, `&[T; N]`, fn items) because
+//! `map(..)` fixed the Option parameter first; `map_or`'s U is inferred
+//! from both args simultaneously and coercions cannot fire through it
+//! (E0308, probe-verified on riir-ai ruliology/player.rs:463). The healer
+//! stays silent there — SAFER than clippy's own autofix (the array-literal
+//! guard class, second member).
 
 use super::helpers::is_postfix_safe;
 use super::uninlined_format_args::post_template_expr_args;
 use super::{edit, src, SourceEdit};
 use syn::visit::Visit;
-use syn::{Expr, ExprMethodCall, ExprMacro, File, Macro, StmtMacro};
+use syn::{Expr, ExprMethodCall, ExprMacro, File, Macro, Stmt, StmtMacro, Type};
 use proc_macro2::TokenStream;
 
 /// Collect the lint's edits against the original source. Empty = no match.
@@ -218,6 +229,27 @@ fn try_map_or(
         if is_array_lit_default(&m.args[0], else_form) {
             return None;
         }
+        // Trait-object-cast mappers (the P9 class, probe-verified 2026-08-25
+        // on riir-ai ruliology/player.rs:463 — E0308 "expected `&fn(..) ->
+        // f64`, found `&dyn Fn(..) -> f64`"): a mapper whose TAIL casts to a
+        // trait-object reference (`|f| f as &dyn Fn(..)`) makes U a trait
+        // object, and the default reaches it only through an UNSIZE coercion
+        // (`&fn(..) -> &dyn Fn(..)`). `unwrap_or` performs that coercion —
+        // `map(..)` has already fixed the Option's parameter, so the default's
+        // expected type is known before it is checked. `map_or`'s U is a free
+        // inference variable fed by BOTH args; a coercion cannot fire through
+        // it, so the ascribed `&fn(..)` default wins U and the closure's
+        // `&dyn Fn(..)` return is a hard E0308. The parse-only tail check is
+        // precise (a dyn cast NOT in tail position doesn't type the closure's
+        // return); the one safe default — an identical `as &dyn ..` cast — is
+        // unprovable short of text equality, so skip the shape entirely
+        // (joins the we-stay-silent class beside the array-literal guard
+        // above; sibling of the 2bf2a44 E0308 probe).
+        if let Expr::Closure(c) = &map.args[0] {
+            if tail_casts_to_trait_object(&c.body) {
+                return None;
+            }
+        }
         let recv = if is_postfix_safe(&map.receiver) {
             recv
         } else {
@@ -346,6 +378,33 @@ fn is_array_lit_default(arg: &Expr, else_form: bool) -> bool {
         }
     } else {
         is_array_lit_ref(arg)
+    }
+}
+
+/// True when the expression's TAIL (its value — the closure's return type
+/// when called on a closure body) is a cast to a trait-object type or a
+/// (smart-)pointer/reference TO one: `f as &dyn Fn(..)`, `{ ..; f as *const dyn T }`.
+/// Parenthesized tails and block tails (last stmt, no semi) recurse.
+fn tail_casts_to_trait_object(body: &Expr) -> bool {
+    match body {
+        Expr::Paren(p) => tail_casts_to_trait_object(&p.expr),
+        Expr::Block(b) => b.block.stmts.last().is_some_and(|s| match s {
+            Stmt::Expr(e, _) => tail_casts_to_trait_object(e),
+            _ => false,
+        }),
+        Expr::Cast(c) => ty_refs_trait_object(&c.ty),
+        _ => false,
+    }
+}
+
+/// Cast target is a bare trait object, or a reference/pointer to one.
+fn ty_refs_trait_object(ty: &Type) -> bool {
+    match ty {
+        Type::TraitObject(_) => true,
+        Type::Reference(r) => matches!(&*r.elem, Type::TraitObject(_)),
+        Type::Ptr(p) => matches!(&*p.elem, Type::TraitObject(_)),
+        Type::Paren(p) => ty_refs_trait_object(&p.elem),
+        _ => false,
     }
 }
 
@@ -481,6 +540,63 @@ mod tests {
             "fn f(m: Vec<Vec<f32>>) -> usize { m.get(1).map(|s| s.as_slice()).unwrap_or_else(|| &[]).len() }";
         let out = propose_fix("map_unwrap_or", input);
         assert!(out.is_none(), "`|| &[]` default-closure body must not fire: {out:?}");
+    }
+
+    // Trait-object-cast mapper guard (the P9 class, 2026-08-25): the mapper's
+    // tail casting to `&dyn ..` makes map_or's U a trait object, and the
+    // default reaches it only via an unsize coercion that CANNOT fire through
+    // map_or's free inference variable — the exact E0308 measured on
+    // riir-ai ruliology/player.rs:463 (`expected &fn(..) -> f64, found
+    // &dyn Fn(..) -> f64`). `unwrap_or` compiles the same shape because
+    // `map(..)` fixes the Option parameter first. See the guard comment in
+    // `try_map_or`.
+    #[test]
+    fn trait_object_cast_mapper_skipped() {
+        // The player.rs production shape: default = `&(fn as fn-ptr)`,
+        // mapper = `|f| f as &dyn Fn(..)`.
+        let input = "fn f(p: Option<Box<dyn Fn(u8) -> u8>>, g: fn(u8) -> u8) -> u8 { p.as_ref().map(|f| f as &dyn Fn(u8) -> u8).unwrap_or(&(g as fn(u8) -> u8))(0) }";
+        let out = propose_fix("map_unwrap_or", input);
+        assert!(out.is_none(), "trait-object-cast mapper must not fire: {out:?}");
+    }
+
+    #[test]
+    fn trait_object_cast_block_tail_skipped() {
+        let input = "fn f(p: Option<Box<dyn Fn(u8) -> u8>>, g: fn(u8) -> u8) -> u8 { p.as_ref().map(|f| { let _ = 1; f as &dyn Fn(u8) -> u8 }).unwrap_or(&(g as fn(u8) -> u8))(0) }";
+        let out = propose_fix("map_unwrap_or", input);
+        assert!(out.is_none(), "block-tail dyn cast must not fire: {out:?}");
+    }
+
+    #[test]
+    fn or_else_trait_object_cast_mapper_skipped() {
+        let input = "fn f(p: Option<Box<dyn Fn(u8) -> u8>>, g: fn(u8) -> u8) -> u8 { p.as_ref().map(|f| f as &dyn Fn(u8) -> u8).unwrap_or_else(|| &(g as fn(u8) -> u8))(0) }";
+        let out = propose_fix("map_unwrap_or", input);
+        assert!(out.is_none(), "`map_or_else` shares U's inference — must not fire: {out:?}");
+    }
+
+    #[test]
+    fn concrete_cast_mapper_still_fires() {
+        // Precision pin: casts to CONCRETE types are unaffected — both args
+        // land on the same type, no coercion involved.
+        let input = "fn f(x: Option<u8>) -> u64 { x.map(|v| v as u64).unwrap_or(0) }";
+        let out = propose_fix("map_unwrap_or", input).expect("matched");
+        assert!(
+            out.contains("x.map_or(0, |v| v as u64)"),
+            "concrete-cast mapper must still fuse: {out}"
+        );
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn non_tail_dyn_cast_still_fires() {
+        // Precision pin: a dyn cast NOT in tail position doesn't type the
+        // closure's return — the rewrite is safe there.
+        let input = "fn f(x: Option<u8>) -> i32 { x.map(|f| { let _ = f as &dyn Fn(); 1 }).unwrap_or(0) }";
+        let out = propose_fix("map_unwrap_or", input).expect("matched");
+        assert!(
+            out.contains("map_or(0,") ,
+            "non-tail dyn cast must still fuse: {out}"
+        );
+        syn::parse_file(&out).expect("re-parses");
     }
 
     #[test]
