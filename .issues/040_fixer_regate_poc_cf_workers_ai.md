@@ -34,14 +34,47 @@ Eval set: the clippy-L4 v2edit test chunks + the L4 three-miss classes (no-candi
 
 ## Tasks
 
-- [ ] T1 Partial-credit eval harness (extends `bonsai_clippy_l4_eval` scoring: compile-pass / oracle-verified / strict-keep columns; CF client behind an env token)
-- [ ] T2 Pre-pass prompt shaping (span + modelless candidate + corpus few-shots via the existing retrieval ranker)
-- [ ] T3 Run arms A–C (D optional); record per-arm table in a `.benchmarks/` note
-- [ ] T4 Verdict vs the bar (verify-filtered acceptance > decline on reachable-miss set); update Proposal 005 caveat #2 + Phase 3 accordingly
-- [ ] T5 CF data-usage policy verification for the leak-posture half (no-training default confirmed in writing)
+- [x] T1 Partial-credit eval harness (`src/cf_workers_ai.rs` + `src/bin/fixer_regate.rs`, feature `cf_workers_ai`; scoring: EM / fragment-parse / merge-strategy / oracle-verified / strict-keep with BOTH Bench 039 vetoes; CF client behind env token, token never logged)
+- [x] T2 Pre-pass prompt shaping (`prompt_prepass`: span + modelless candidate via `HealPipeline::heal` + corpus few-shots via `LatentMatcher::suggest_span` clippy arm)
+- [-] T3 Run arms A–C — **DRY arm only** (offline validation: planted controls ALL PASS, decline baseline 9/9, EM 408/408 self-consistent). A/B blocked on `CF_API_TOKEN`/`CF_ACCOUNT_ID` (absent — env + `~/.wrangler` + `~/.cloudflare` checked, presence only). C blocked on BOTH GPUs busy (M3 sibling Plan-349 training 822% CPU; 4090 `bonsai_clippy_l4_sft_train.exe` resident → GPU-exclusivity rule) AND no `.bcl4` checkpoint on disk (t51's is gone; the riir-train driver hard-requires `--lora`). Record: [Bench 049](../.benchmarks/049_fixer_regate_poc.md).
+- [-] T4 Verdict vs the bar — **PENDING ARMS** (nothing fabricated; Proposal 005 caveat #2 + Phase 3 updated to point at the harness + pending state). Bonus measured findings recorded in Bench 049: v2edit reference responses 96.6% unmergeable by deterministic means (14/408) + `manual_map_result` is an invented lint label (E0602 on clippy 1.93) on 64 rows — two further confounds for the historical G1 record.
+- [x] T5 CF data-usage policy verified in writing — Trust Hub quote captured (the old per-model docs page is 404; Cloudflare: "we do not use our customers' content to train any LLMs" + the third-party-model nuance) — [Bench 049](../.benchmarks/049_fixer_regate_poc.md) §T5.
 
 ## Notes
 
 - Not gated on Issue 037 A1 — this is evidence-gathering, not a release.
 - CF budget: dollars, not hundreds (116-sample eval × ~$0.002).
 - Redaction: eval corpora are in-house fixtures — no consumer data in this POC.
+
+## Status (2026-08-25)
+
+**Shipped + validated offline; issue stays OPEN until arms run + verdict.**
+
+Done:
+- Harness + pre-pass + CF client + arm-C transport, all behind `cf_workers_ai` (default build untouched; `cargo clippy --all-targets --features cf_workers_ai -- -D warnings` clean).
+- Instrument validated in BOTH directions (`--arm DRY` + `tests/t40_fixer_regate_harness.rs`, 4 fast + 1 ignored full-corpus test): positive planted fixes keep_strict; noop never kept; the destructive drop passes the raw oracle filter and is killed by the contract veto (Bench 039 route 2, live); the silent-logic-change generation is refuted by the behavioural veto (route 3, live); EM 408/408 vs the v2edit references; decline baseline 9/9 re-measured.
+- Two corpus defects measured (Bench 049): 394/408 v2edit references are position-ambiguous (unmergeable deterministically — `rlvr_reward::substitute` cannot apply them either); `manual_map_result` (64 rows' first label) is not a real clippy lint.
+
+Blocked (exact unblock):
+
+```sh
+# Arms A/B (one command each, once the owner provides the token):
+export CF_API_TOKEN=... CF_ACCOUNT_ID=...
+cargo run --release --features cf_workers_ai --bin fixer_regate -- --arm A --out /tmp/armA.jsonl
+cargo run --release --features cf_workers_ai --bin fixer_regate -- --arm B --out /tmp/armB.jsonl
+# full set: append --source both --limit 0 --chunks 0,1,2,3,4,5,6  (~$0.30-0.80 total)
+
+# Arm C needs BOTH:
+#  1. a .bcl4 checkpoint (none on disk; regenerate via riir-train Plan 336 T2.9, or
+#     convert the 4090's E:\tmp\p336_t29\v2edit_rank4_lorc.bin.best.bin)
+#  2. an idle GPU (M3: sibling Plan-349 training; 4090: bonsai_clippy_l4_sft_train.exe resident)
+cargo run --release --features cf_workers_ai --bin fixer_regate -- --arm C \
+  --l4-bin /Users/katopz/git/riir-train/target/release/examples/bonsai_clippy_l4_eval \
+  --l4-gguf /Users/katopz/git/riir-train/data/Ternary-Bonsai-27B-Q2_0.gguf \
+  --l4-lora /path/to/ckpt.bcl4 --limit 8
+```
+
+NOTE (arm C shape): the riir-train driver hard-requires `--lora`, so "arm C base model" as
+written in the Arms table is not reachable without either a checkpoint or a riir-train driver
+change (sibling WIP — deliberately not touched). Running arm C with the T2.9 LoRA checkpoint
+is arm-D-shaped; record which one ran.
