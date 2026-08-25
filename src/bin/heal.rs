@@ -313,6 +313,7 @@ USAGE:
     cargo heal --dump-trajectories > trajectories.jsonl
     cargo heal --memory-stats                         (loop debug query, no paths)
     cargo heal --recompute-elo                        (batch rating backfill, 039 T2)
+    cargo heal --collapse-report                      (self-collapse monitor, 042)
     cargo heal --score-bench | --score-report        (needs --features score_bench)
 
     --suggest       Suggest mode: print matching rules per code span (no edits).
@@ -338,6 +339,12 @@ USAGE:
                     --features latent_retrieval): replay every verdict count
                     as rule-vs-shape matches from base 1200 + write the final
                     ratings onto the rows. Idempotent standalone WRITE mode.
+    --collapse-report Self-collapse monitor (Issue 042; needs --features
+                    latent_retrieval): run the REAL heal retrieval loop over
+                    the fixed clippy fixture set against the store at
+                    RIIR_HEAL_TRAJ_ROOT (or the envelope fallback) and print
+                    pool memory-fraction + memory win-rate + top-k rule
+                    entropy, with a fresh-store baseline column. Read-only.
     --write         With --fix/--fix-compile: write the edits in place (with --fix:
                     then rustfmt AUTOMATICALLY when the original was already
                     rustfmt-clean — pre-existing drift + CRLF files are skipped — no
@@ -409,6 +416,12 @@ struct Args {
     /// final rule + span ratings onto every row. Standalone WRITE mode
     /// (idempotent; `latent_retrieval` builds — the neuron-db store).
     recompute_elo: bool,
+    /// `--collapse-report` (Issue 042): the self-collapse monitor — runs the
+    /// real retrieval loop (`HealPipeline::heal` Step 1/3 + selection) over
+    /// the fixed clippy fixture set against the store at
+    /// `RIIR_HEAL_TRAJ_ROOT` (or the envelope fallback) + a fresh baseline.
+    /// Read-only standalone mode (R346's monitor; feeds the audit script).
+    collapse_report: bool,
 }
 
 fn parse_args() -> Args {
@@ -430,6 +443,7 @@ fn parse_args() -> Args {
         score_report: false,
         memory_stats: false,
         recompute_elo: false,
+        collapse_report: false,
     };
     let mut it = std::env::args().skip(1);
     while let Some(arg) = it.next() {
@@ -446,6 +460,7 @@ fn parse_args() -> Args {
             "--score-report" => args.score_report = true,
             "--memory-stats" => args.memory_stats = true,
             "--recompute-elo" => args.recompute_elo = true,
+            "--collapse-report" => args.collapse_report = true,
             "--max-iters" => {
                 let Some(value) = it.next() else {
                     eprintln!("--max-iters requires a value");
@@ -503,6 +518,7 @@ fn parse_args() -> Args {
         && !args.dump_trajectories
         && !args.memory_stats
         && !args.recompute_elo
+        && !args.collapse_report
     {
         eprintln!("no paths given");
         usage();
@@ -836,6 +852,80 @@ fn main() {
             std::process::exit(2);
         }
         return;
+    }
+
+    // ── Issue 042: --collapse-report — the self-collapse monitor ──────────
+    // Read-only standalone mode (early return, like --memory-stats /
+    // --recompute-elo above; validate_mode_flags never sees it). Runs the
+    // REAL retrieval loop (HealPipeline::heal Step 1 retrieval + Step 3 pool
+    // + selection) over the fixed clippy fixture set (Issue 017's
+    // real-clippy-verified spans) under two conditions: the store at
+    // RIIR_HEAL_TRAJ_ROOT (no migration — this mode never writes), falling
+    // back to the memory.json envelope, plus a fresh-empty baseline for the
+    // elevation delta. Feeds self_evolve_audit.sh §1c.
+    if args.collapse_report {
+        #[cfg(feature = "latent_retrieval")]
+        {
+            use riir_clippy::collapse_monitor::collapse_report_common;
+            let spans = riir_clippy::draft::eval_fixtures_clippy::CLIPPY_SPANS;
+            let corpus = riir_clippy::build_seed_corpus().entries;
+
+            // Fresh baseline (condition b).
+            let fresh = riir_clippy::collapse_monitor::measure(
+                &riir_clippy::memory::LatentFixMemory::default(),
+                spans,
+                &corpus,
+            );
+            println!("collapse-report: fixture spans={} corpus_rules={}", spans.len(), corpus.len());
+            println!("{}", fresh.report("  fresh(empty)"));
+
+            // Production condition (a): the store, or the envelope fallback.
+            let root = std::env::var("RIIR_HEAL_TRAJ_ROOT")
+                .map(PathBuf::from)
+                .or_else(|_| std::env::current_dir())
+                .unwrap_or_default();
+            if root.join(".heal").join("trajectories.kv").exists() {
+                match riir_clippy::traj_store::TrajStore::open(&root) {
+                    Ok((store, bad)) => {
+                        if bad > 0 {
+                            eprintln!("collapse-report: {bad} corrupt row(s) skipped");
+                        }
+                        collapse_report_common(
+                            &format!("  store({})", root.display()),
+                            &riir_clippy::collapse_monitor::memory_from_store_rows(&store.dump()),
+                            spans,
+                            &corpus,
+                        );
+                        return;
+                    }
+                    Err(e) => {
+                        eprintln!("collapse-report: store at {} unreadable: {e}", root.display());
+                        std::process::exit(1);
+                    }
+                }
+            }
+            let envelope = default_memory_path();
+            if envelope.exists() {
+                let mut mem = riir_clippy::memory::LatentFixMemory::default();
+                match mem.load(&envelope) {
+                    Ok(()) => {
+                        collapse_report_common("  envelope", &mem, spans, &corpus);
+                        return;
+                    }
+                    Err(e) => {
+                        eprintln!("collapse-report: envelope {} unreadable: {e}", envelope.display());
+                        std::process::exit(1);
+                    }
+                }
+            }
+            eprintln!("collapse-report: no store at {} — showing the fresh baseline only", root.display());
+            return;
+        }
+        #[cfg(not(feature = "latent_retrieval"))]
+        {
+            eprintln!("--collapse-report requires a build with --features latent_retrieval (the fixture set + store bridge)");
+            std::process::exit(2);
+        }
     }
 
     // Plan 019 T1.5: the mode-flag matrix (pinned by

@@ -305,6 +305,20 @@ impl LatentFixMemory {
         Self { trajectories: Vec::with_capacity(n), weights: RetrievalWeights::default() }
     }
 
+    /// Construct from an already-deduplicated batch — O(n), no per-insert
+    /// dedup scan (Issue 042's collapse monitor builds prefix conditions of
+    /// the 8k-trajectory production store; `insert`'s O(n²) total scan is
+    /// the wrong cost for a measurement harness).
+    ///
+    /// Caller guarantee: the batch carries no duplicate
+    /// `(lint_name, buggy_code, fixed_code)` triples. Store rows satisfy it
+    /// by key; envelope loads satisfy it via `load_json`'s merge dedup; a
+    /// prefix of a deduplicated batch inherits it.
+    #[must_use]
+    pub fn from_trajectories(trajectories: Vec<FixTrajectory>) -> Self {
+        Self { trajectories, weights: RetrievalWeights::default() }
+    }
+
     /// Number of stored trajectories.
     #[must_use]
     pub fn len(&self) -> usize {

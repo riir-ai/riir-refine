@@ -169,6 +169,35 @@ else
 fi
 
 echo ""
+echo "── 1c. Self-collapse monitor (Issue 042 — retrieval-loop source diversity) ──"
+# R346 (arXiv:2608.22118) watch axis: as the trajectory stores age, does the
+# REAL heal retrieval loop (HealPipeline::heal Step 1/3 + selection) become
+# memory-dominated at the expense of pool rule-diversity? Trend signal for
+# Issue 037's A-axes: pool memory-fraction rising + top-k rule entropy
+# falling as stores age = the collapse signature; entropy RISING is the
+# healthy direction (more rules covered). Read-only (same open-replay class
+# as --dump-trajectories above; this mode never migrates and never puts).
+# Needs a latent_retrieval build of the binary (the fixture set + store
+# bridge); a stale binary is detected once and noted.
+if [ -n "$STORE_REPOS" ] && [ -x "$HEAL_BIN" ]; then
+  CR_PROBE="$(mktemp -d)"
+  if RIIR_HEAL_TRAJ_ROOT="$CR_PROBE" "$HEAL_BIN" --collapse-report 2>/dev/null | grep -q 'collapse-report:'; then
+    for r in $STORE_REPOS; do
+      d="/Users/katopz/git/$r"
+      RIIR_HEAL_TRAJ_ROOT="$d" "$HEAL_BIN" --collapse-report 2>/dev/null | grep -E 'fresh\(empty\)|store\('
+    done
+    echo "  reading: pool mem% = Memory share of the heal candidate pool;"
+    echo "           top-k H = normalized rule-entropy of the retrieved top-k;"
+    echo "           mem win% = Memory share of served fixes (citation-rate analog)."
+  else
+    echo "  (binary lacks --collapse-report — rebuild with: cargo build --release --features latent_retrieval -p riir-clippy --bin cargo-heal)"
+  fi
+  rm -rf "$CR_PROBE"
+else
+  echo "  (needs ≥1 store repo + the readable binary — see §1)"
+fi
+
+echo ""
 echo "── 2. Score bench history (learning quality over time) ──"
 if [ -f "$HISTORY" ]; then
   python3 - "$HISTORY" <<'EOF'
