@@ -123,6 +123,14 @@ pub mod l4_fallback;
 #[cfg(feature = "l4_lora")]
 pub mod l4_daemon;
 
+// Issue 040 — the fixer re-gate POC harness: partial-credit metrics (EM /
+// fragment-parse / oracle-verified / verify-filtered acceptance) + the
+// modelless pre-pass prompt + the CF Workers AI REST client. Opt-in; pulls
+// `ureq` (third-party HTTP, not boundary-gated) + the retrieval + oracle
+// substrates it composes. See `.issues/040_*` + Bench 049.
+#[cfg(feature = "cf_workers_ai")]
+pub mod cf_workers_ai;
+
 // Bench 669 consumer adoption (Plan 016): the input-scope gate at the heal()
 // seam. `ScopeModel` wraps katgpt-core's `contrastive_scope` primitive — the
 // 2D extension of the Issue 030 relevance gate (rule coverage × input scope).

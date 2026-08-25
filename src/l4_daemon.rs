@@ -42,7 +42,10 @@ use crate::l4_fallback::L4Fallback;
 
 /// The instruction line every training row shares. Reproduced verbatim; a
 /// reworded prompt is a different distribution than the one trained on.
-const TRAINED_INSTRUCTION: &str =
+///
+/// `pub` since Issue 040: the CF-Workers-AI re-gate harness builds its arm-A
+/// prompt from the same line so both arms share one instruction contract.
+pub const TRAINED_INSTRUCTION: &str =
     "Fix all clippy lints in this Rust code. Output ONLY the corrected lines \
      that differ from the input, no explanation:";
 
@@ -124,6 +127,15 @@ impl DaemonL4 {
             name: format!("daemon-l4({})", short(lora)),
             dead: false,
         })
+    }
+
+    /// One request/response round trip with a CALLER-BUILT prompt (Issue 040
+    /// arm C pre-pass: the harness composes instruction + module + modelless
+    /// candidate + few-shots and needs the daemon transport without the
+    /// trait's fixed prompt shape). Same protocol + failure contract as
+    /// [`L4Fallback::generate_fix`].
+    pub fn request_prompt(&mut self, prompt: &str) -> Option<String> {
+        self.request(prompt)
     }
 
     /// One request/response round trip. `None` on any protocol or process

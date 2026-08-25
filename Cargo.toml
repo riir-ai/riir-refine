@@ -43,6 +43,12 @@ syn = { version = "2", default-features = false, features = ["full", "parsing", 
 proc-macro2 = { version = "1", features = ["span-locations"] }
 quote = "1"
 
+# Issue 040 (fixer re-gate POC): blocking HTTP client for the CF Workers AI
+# REST arms. Optional + feature-gated (`cf_workers_ai`) — third-party crates
+# are NOT boundary-gated (the kat_service precedent), and the default build
+# stays untouched. Default features = rustls TLS (api.cloudflare.com).
+ureq = { version = "2.9", optional = true, features = ["json"] }
+
 # ── Ternary inference arm (Bench 010) ────────────────────────────────────
 # Real katgpt ternary generation on the clippy task, so llama.cpp can be
 # compared against OUR inference stack rather than against the retriever.
@@ -163,6 +169,13 @@ score_bench = ["clippy_verify", "latent_retrieval", "clippy_lints", "rust_perf"]
 # Opt-in per the promotion rule: default-on requires Plan 336's G1-G4 to pass,
 # and G1 is unproven (riir-train Bench 462/465).
 l4_lora = []
+
+# Issue 040 — the fixer re-gate POC: partial-credit eval harness + modelless
+# pre-pass prompts + the CF Workers AI REST client + the arm-C daemon client.
+# Composes shipped substrate (HealPipeline miss classification, LatentMatcher
+# few-shots, ClippyVerifier oracle, behavioural_equivalence vetoes, DaemonL4
+# transport); adds only the ureq HTTP dep + the v2edit corpus loader.
+cf_workers_ai = ["dep:ureq", "latent_retrieval", "clippy_verify", "l4_lora"]
 
 # Bench 669 consumer adoption (Plan 016): the input-scope gate at the heal()
 # seam — katgpt-core's `contrastive_scope` primitive (ContrastiveScoreTable +
@@ -370,6 +383,14 @@ required-features = ["ternary_inference"]
 name = "cargo-heal"
 path = "src/bin/heal.rs"
 required-features = ["latent_retrieval", "rust_perf", "clippy_lints"]
+
+# Issue 040 — the fixer re-gate POC runner (arms A/B = CF Workers AI, arm C =
+# the local Bonsai daemon; --dry-run = offline harness validation on planted
+# fixes + golden prompt snapshots, no model needed).
+[[bin]]
+name = "fixer_regate"
+path = "src/bin/fixer_regate.rs"
+required-features = ["cf_workers_ai"]
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Local patches — mirror riir-ai/Cargo.toml's [patch.crates-io] so the
