@@ -43,9 +43,6 @@ from game crates but has zero game-domain coupling.
 
 ## Drift ledger (target vs actual)
 
-| Drift | Issue | State |
-|---|---|---|
-| [Proposal 005](.proposals/005_kat_heal_service_network.md) would place a CF Worker service plane (ingest/ledger-DO/payments) + a `riir-chain-sdk` dep inside this repo — colliding with §"Does not own" (Chain) and absent from §"May depend on". **No code landed**; filed pre-implementation. | [041](.issues/041_boundary_kat_service_plane_placement.md) | OPEN — recommended fix is relocation to `../riir-dapps`, leaving this allowlist unchanged |
-
-Otherwise clean (surfaces clean at the 2026-08-19 guard run; this row is a
-*proposed*-dep drift, not a measured one).
+**None.** Otherwise clean (surfaces clean at the 2026-08-19 guard run; the
+2026-08-25 Proposal-005 service-plane row closed with Issue 041 — home
+resolved to `../riir-dapps`, client half only, allowlist unchanged).
