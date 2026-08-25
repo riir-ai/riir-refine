@@ -409,6 +409,7 @@ fn main() {
 
     let (mut n_rows, mut n_skipped, mut n_edits) = (0usize, 0usize, 0usize);
     let (mut n_no_draft, mut n_noop_draft) = (0usize, 0usize);
+    let mut n_empty_draft = 0usize;
     // The cross-tab this harness exists to fill in.
     let (mut cc_pass_t_pass, mut cc_pass_t_fail, mut cc_fail, mut cc_timeout) =
         (0usize, 0usize, 0usize, 0usize);
@@ -514,6 +515,25 @@ fn main() {
                             n_no_draft += 1;
                             continue;
                         };
+                        // An EMPTY draft is a non-attempt, not a failed fix.
+                        // `--dump-drafts` writes `draft` as
+                        // `extract_code_block(generated)`, which returns "" when
+                        // the model emits no usable fenced block (verified: the
+                        // extractor has an explicit `return ""` for a fence with
+                        // no newline). Splicing "" over the buggy span DELETES
+                        // that span, which then fails to compile and would be
+                        // scored as "the model produced a fix that does not
+                        // build" — inflating the compile-FAIL cell with rows
+                        // where nothing was proposed. That matters here: an
+                        // undertrained drafter (Plan 336 measured 0/116
+                        // exact-match) is exactly the regime that emits
+                        // malformed output, so this could be a large fraction
+                        // and would shrink the effective n behind the gold cell
+                        // while the report still claimed the full count.
+                        if draft.trim().is_empty() {
+                            n_empty_draft += 1;
+                            continue;
+                        }
                         // Splice the model's span back where the buggy span was.
                         let mut s = String::with_capacity(source.len() + draft.len());
                         s.push_str(&source[..w_lo]);
@@ -658,9 +678,11 @@ fn main() {
     if task == Task::MeasureDrafts {
         println!(
             "\n  model-arm bookkeeping (excluded, never counted as an outcome)\n\
-             \x20   sites with no draft   : {n_no_draft}\n\
+             \x20   sites with no draft       : {n_no_draft}\n\
              \x20   drafts identical to input : {n_noop_draft}   (a no-op draft is not a fix \
-             attempt, so scoring it would flatter the model)"
+             attempt, so scoring it would flatter the model)\n\
+             \x20   drafts EMPTY after extract: {n_empty_draft}   (no usable fenced block — a \
+             non-attempt, NOT a fix that fails to build)"
         );
     }
 
