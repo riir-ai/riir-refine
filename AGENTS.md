@@ -2778,6 +2778,39 @@ mechanical clippy findings across the workspace, ahead of manual fixes and
   named-arg-with-rename, created-warning pair, outcome-verdict wiring, …) +
   the measured gap that 8,235 memory trajectories carry ZERO outcome verdicts
   (the sweep campaign validated manually; the verdict loop never closed — P5).
+  **P5 CLOSED 2026-08-24** (Issue 037 T2, `667562a` — verdict matrix +
+  clippy oracle + durable landing; see below).
+
+**Issue 038 (2026-08-24, RESOLVED + removed per noise-reduction rule) —
+self-evolve memory onto the neuron-db Warm-tier store (kill the JSON
+envelope).** Owner's call ("log should store in neuron-db local kv? no need
+to parse back and forth? … latent first with dag and ast"). Under
+`latent_retrieval` the repo-local `.heal/trajectories.kv` store
+(`src/traj_store.rs`: `TrajStore`/`TrajRowDoc`/`LearnRowDoc`) is the ONE
+backend — the CLI opens it up front for all `--fix` paths, per-key Pod rows
+with incremental puts, WAL encryption at rest; the envelope is neither
+loaded nor saved when the store is active (light builds keep it by design).
+One-time migration on the first persisting run: envelope present + store
+empty → verbatim import → rename `memory.json.migrated` (once-only fence,
+idempotence e2e-pinned by `tests/store_backend_e2e.rs`). Row decision: NO
+separate Pod split — the row IS `TrajRowDoc` (text-carrying JSON doc row;
+`record_outcome`'s exact-match reads `fixed_code` bytes, so the text lives in
+the row). DAG/AST storage DEFERRED with a named consumer (Proposal 002's
+deep-fusion E — file when E3-learn demands chains). Commits: `dd71f78`
+(initial 038+039 scaffold) → `e4ce8ba` (the full landing: T1-T6, G1-G8;
+default lib 660/0, full-feature 762/0/8i, clippy 0 both states) →
+`efa254c` (durable EMA learn rows — 037-E3's store half) → `c9d718b`
+(`--memory-stats` store-branch envelope parity + the F3 cadence line from
+`last_seen_at`). Record: [`.docs/10_self_evolve/latent_fix_memory.md`](.docs/10_self_evolve/latent_fix_memory.md)
+§Persistence + `scripts/self_evolve_audit.sh` §1 (store-first).
+
+**Issue 037 (E2E self-evolve proof + adoption observability) — OPEN**, gated
+on: **A1** cadence (≥3 distinct heal-activity days in a 14-day window;
+day 1 = 2026-08-24, earliest possible close 2026-08-26), **E5** post-mining
+class closed end-to-end (P9 ruliology/player.rs cluster is the armed
+candidate). E1-E4 + A2/A3 MET (A3 spot check 2026-08-25: riir-ai healed files
++ riir-dapps src/ → 0 dry-run edits). Blocks Proposals 003 + 004 until
+E2-E5 green (E2-E4 already green). File: `.issues/037_e2e_self_evolve_adoption_proof.md`.
 
 ## Source secrecy & binary-only distribution (non-negotiable)
 

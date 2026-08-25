@@ -14,14 +14,15 @@
 |---|---|
 | [`heal_pipeline.md`](heal_pipeline.md) | `HealPipeline` + `HealResult` + `HealSource` — the composition |
 | [`scope_model.md`](scope_model.md) | `ScopeModel` — the input-scope gate at the heal seam (Bench 040 / Plan 016; the Bench 669 consumer adoption) |
-| [`latent_fix_memory.md`](latent_fix_memory.md) | `LatentFixMemory` + `FixTrajectory` + `EvidenceTier` (Issue 021) + 4-axis retrieval + JSON persistence (Issue 018) |
+| [`latent_fix_memory.md`](latent_fix_memory.md) | `LatentFixMemory` + `FixTrajectory` + `EvidenceTier` (Issue 021) + 4-axis retrieval + dual-backend persistence (store-first Issue 038; JSON envelope Issue 018 fallback) |
 | [`latent_skill_evolution.md`](latent_skill_evolution.md) | `LatentSkillEvolution` + `EvolveConfig` + EMA rule |
 | [`evolve_recorder.md`](evolve_recorder.md) | `EvolveRecorder` — the oracle-split recorder + the `cargo heal --fix` wiring (Issue 018) |
 
 ## Source
 
 - [`src/self_evolve.rs`](../../src/self_evolve.rs) — `HealPipeline`
-- [`src/memory.rs`](../../src/memory.rs) — `LatentFixMemory`, `FixTrajectory`, persistence
+- [`src/memory.rs`](../../src/memory.rs) — `LatentFixMemory`, `FixTrajectory`, envelope persistence
+- [`src/traj_store.rs`](../../src/traj_store.rs) — `TrajStore` / `TrajRowDoc` / `LearnRowDoc` (the neuron-db store backend, Issue 038)
 - [`src/evolve.rs`](../../src/evolve.rs) — `LatentSkillEvolution`, `EvolveConfig`
 - [`src/recorder.rs`](../../src/recorder.rs) — `EvolveRecorder` (Issue 018)
 - [`src/embedder.rs`](../../src/embedder.rs) — BLAKE3 embedding (shared with L1)

@@ -72,8 +72,13 @@ the query surface for verifying T2 once it lands: after a real
       `4fbdbfb` (the E3 evidence run — 3 match_bool edits, oracle-confirmed,
       tests count-identical, direction_gate OK). Both genuine dev-session
       usage commits, not adoption-day infrastructure.
-- [ ] **A3 — no silent regression:** no repo's clippy residue grows between
+- [x] **A3 — no silent regression:** no repo's clippy residue grows between
       audits (dry-run spot check on the repos agents touched).
+      → **MET (2026-08-25 spot check):** dry-run `cargo heal --fix` on both
+      heal-touched repos — riir-ai's 10 T5-healed `riir-games` files →
+      **0 edits available**; riir-dapps `src/` (the 3 match_bool sites'
+      home) → **0 edits available**. No residue growth since the adoption-day
+      heals. (Standing check — re-run at each audit until the window closes.)
 
 ### E2E self-evolve (the "loop closed" half)
 
@@ -197,9 +202,12 @@ the query surface for verifying T2 once it lands: after a real
 - [ ] **T3 — timestamps in the memory envelope** (unblocks A1's memory half):
       optional `last_seen_at` per bucket + top-level `last_run_at`, serde
       defaults for backward compat (pre-T3 files decode as today).
-      **SUPERSEDED by [Issue 038](038_self_evolve_memory_neuron_db_backend.md)**
-      (neuron-db backend — timestamps land in the Pod rows there); do the
-      JSON-envelope version ONLY if 038 slips past the A1 measurement window.
+      **SUPERSEDED by Issue 038** (removed 2026-08-25 per noise-reduction
+      rule; record: AGENTS.md §Production adoption +
+      `.docs/10_self_evolve/latent_fix_memory.md` §Persistence) — the
+      neuron-db backend landed; timestamps live in the Pod rows
+      (`last_seen_at`); do the JSON-envelope version ONLY if 038's backend
+      were ever reverted.
 - [x] **T4 — post-T2 score-bench run** (feeds E4; record in score_history).
       **DONE 2026-08-24** — run #4 appended (`e4ce8ba`): heal 98.1% / created
       1.9% / safety 100% / decline 100% — bit-identical to run #3, zero
@@ -246,6 +254,24 @@ the query surface for verifying T2 once it lands: after a real
   adoption day (2026-08-24) — A2 is nearly satisfied by the adoption work
   itself; the gate wants post-adoption *usage* commits, so it stays unchecked
   until they accumulate.
+
+## Session record (2026-08-25)
+
+- **A3 spot check run + MET** (evidence at the A3 checkbox). Both
+  heal-touched repos clean on dry-run — no residue growth since adoption day.
+- **A1 status:** distinct heal-activity days so far = 1 (2026-08-24 — the
+  stores' `last_seen_at` population). Window runs through 2026-09-07;
+  earliest possible close 2026-08-26 if heal runs land today + tomorrow.
+- **Issue 038 closed** (all T1-T6 already `[x]`; GOAT landed `e4ce8ba`):
+  resolution note in AGENTS.md §Production adoption +
+  `.docs/10_self_evolve/latent_fix_memory.md` §Persistence; issue file
+  removed per the noise-reduction rule. It fed this issue's E2/E3/E4 —
+  all three MET on the store backend.
+- **Remaining open:** A1 (time-gated — accumulates), E5 (post-mining class
+  closed end-to-end; P9 in the queue snapshot — the ruliology/player.rs
+  auto-revert cluster — is the armed candidate: root-cause the exact rustc
+  error, fix the proposer guard + fixture, record the score-bench delta).
+  Then T6 (resolution note + rm) + T7 (unblock Proposals 003+004).
 
 ## Session record (2026-08-24, T4+T5)
 

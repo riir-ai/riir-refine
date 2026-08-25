@@ -175,7 +175,43 @@ drafter candidate's rate drops to 0.0 and the correct candidate wins.
 Linear scan over all trajectories — acceptable for POC scale, worth
 profiling at production volume.
 
-## Persistence (Issue 018)
+## Persistence — two backends, one active (Issue 018 → Issue 038)
+
+`LatentFixMemory` itself is backend-agnostic; persistence is chosen by
+feature build (**one active backend per run — never both**, Issue 038):
+
+| Build | Backend | Location | Why |
+|---|---|---|---|
+| `latent_retrieval` | **neuron-db store (`TrajStore`)** — the ONE backend | repo-local `.heal/trajectories.kv` (encrypted WAL; root = `RIIR_HEAL_TRAJ_ROOT` → first path's repo root → cwd) | per-key Pod rows, incremental puts via `CommitBatch`, WAL encryption at rest, run-attributed timestamps |
+| default (light) | JSON envelope (Issue 018) | `~/.cache/riir-clippy/memory.json` (`RIIR_HEAL_MEMORY` override) | zero heavy deps for light builds |
+
+### The store backend (Issue 038 — commit `e4ce8ba`)
+
+[`src/traj_store.rs`](../../src/traj_store.rs): `TrajStore::open` → per-key
+rows keyed `(lint, shape)`; `TrajRowDoc` carries the text triple + counters +
+tier + `last_run_id` + `last_seen_at` (unix secs — 037-A1's cadence line
+reads it). `record_applied` = sighting (texts + run stamp, no counters);
+`record` = outcome verdict (the 037-T2 matrix); `import_row` = verbatim
+migration. **One-time migration** on the first persisting run
+(`--write || --verify`): envelope present + store empty → every bucket
+imported verbatim → envelope renamed `memory.json.migrated` (the once-only
+fence; idempotence pinned by `tests/store_backend_e2e.rs`). Per-key puts
+shrink the concurrent-session loss surface from whole-file last-writer-wins
+to the same-bucket stats race.
+
+**Durable EMA learn rows (Issue 037 E3, commit `efa254c`):** `TrajStore::record`
+also feeds `learn:{lint_key}` rows (`LearnRowDoc`) through the same
+`evolve::ema_step` core the in-process layer uses — cross-process durable
+learning, reported by `--memory-stats` (per-rule counters + the decay line).
+Learn rows are invisible to the trajectory surface.
+
+Observability: `--memory-stats` prints envelope-parity detail PLUS the
+cadence line the envelope could never answer (`activity: last verdict
+… | distinct active days N`); `scripts/self_evolve_audit.sh` §1 is
+store-first (per-repo row summaries via `--dump-trajectories`) with the
+envelope parse as fallback.
+
+### The JSON envelope (Issue 018 — light-build fallback)
 
 ```rust
 pub fn to_json(&self) -> serde_json::Result<String>
@@ -184,9 +220,8 @@ pub fn save(&self, path: &Path) -> std::io::Result<()>
 pub fn load(&mut self, path: &Path) -> std::io::Result<()>
 ```
 
-A CLI process is short-lived — an in-RAM memory would be permanently
-starved (the exact problem Issue 018's promotion fixes). The v1 JSON
-envelope (`{"version":1,"trajectories":[…]}`) round-trips losslessly:
+The v1 JSON envelope (`{"version":1,"trajectories":[…]}`) round-trips
+losslessly:
 
 - `direction` f32 components serialize via ryu's shortest round-trip form
   → bit-identical recovery.
