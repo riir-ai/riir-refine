@@ -142,8 +142,10 @@ enum Mode {
 /// whose receiver no longer advances). Treated as a distinct outcome, not as a
 /// test failure — conflating them would credit the harness with a "No" it did
 /// not actually observe.
+/// Only the RUN needs a deadline. `compile_traced` uses `Command::output()`,
+/// which waits for rustc to finish — correct here because a compile terminates
+/// on its own where a mutated test binary may not.
 const RUN_TIMEOUT: Duration = Duration::from_secs(30);
-const COMPILE_TIMEOUT: Duration = Duration::from_secs(120);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Outcome {
@@ -181,19 +183,40 @@ fn wait_bounded(mut child: std::process::Child, limit: Duration) -> Outcome {
     }
 }
 
-fn compile(src: &Path, exe: &Path) -> Outcome {
-    let child = Command::new("rustc")
+/// Compile, returning the outcome **and rustc's diagnostics**.
+///
+/// The trace is the whole point of Plan 342 T4.1: it is the *rationale* a
+/// GenRM-CoT verifier is graded against ("compiler-guided grading", the
+/// stronger analogue of the paper's reference-guided grading). Discarding it —
+/// which this harness did until now — makes a CoT corpus unbuildable, because
+/// the one thing that actually explains WHY an edit is bad is gone.
+///
+/// Uses `output()` rather than the deadline-bounded spawn: rustc terminates on
+/// its own (a *test binary* can loop forever, a compile cannot), and capturing
+/// stderr through a pipe needs the reader to drain it anyway.
+fn compile_traced(src: &Path, exe: &Path) -> (Outcome, String) {
+    let out = Command::new("rustc")
         .args(["--test", "--edition", "2024", "-A", "warnings"])
         .arg(src)
         .arg("-o")
         .arg(exe)
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn();
-    match child {
-        Ok(c) => wait_bounded(c, COMPILE_TIMEOUT),
-        Err(_) => Outcome::Fail,
+        .output();
+    match out {
+        Ok(o) => {
+            let trace = String::from_utf8_lossy(&o.stderr).trim().to_string();
+            let outcome = match o.status.success() {
+                true => Outcome::Pass,
+                false => Outcome::Fail,
+            };
+            (outcome, trace)
+        }
+        Err(e) => (Outcome::Fail, format!("rustc spawn failed: {e}")),
     }
+}
+
+fn compile(src: &Path, exe: &Path) -> Outcome {
+    compile_traced(src, exe).0
 }
 
 fn run_tests(exe: &Path) -> Outcome {
@@ -509,11 +532,18 @@ fn main() {
                 if std::fs::write(&cand_src, &edited).is_err() {
                     continue;
                 }
-                let compile_out = compile(&cand_src, &cand_exe);
+                let (compile_out, mut trace) = compile_traced(&cand_src, &cand_exe);
                 let test_out = match compile_out {
                     Outcome::Pass => run_tests(&cand_exe),
                     _ => Outcome::Fail,
                 };
+                // Cap the rationale: rustc can emit hundreds of lines and a
+                // GenRM-CoT target is a short chain, not a transcript. Keep the
+                // head, which carries the error code and primary span.
+                if trace.len() > 1200 {
+                    trace.truncate(1200);
+                    trace.push_str("\n… [truncated]");
+                }
 
                 match (compile_out, test_out) {
                     (Outcome::Pass, Outcome::Pass) => cc_pass_t_pass += 1,
@@ -576,6 +606,9 @@ fn main() {
                     // gate's output rather than taking it on trust.
                     "gate_would_say": if compile_ok { "Yes" } else { "No" },
                     "gate_is_wrong": compile_ok != tests_ok,
+                    // T4.1: the RATIONALE for compiler-guided grading. Empty on
+                    // a clean compile, which is itself the signal.
+                    "compiler_trace": trace,
                 });
                 let _ = writeln!(out, "{row}");
                 n_rows += 1;
