@@ -366,6 +366,14 @@ required-features = ["self_evolve", "clippy_verify"]
 name = "stage2_tuning_demo"
 required-features = ["self_evolve", "clippy_verify"]
 
+# Plan 342 T4.1: labeled-corpus probe. Imports the clippy_lints proposers
+# (E0432 under --all-targets --no-default-features without this gate — the
+# gate-coverage lesson: an example reaching a feature-gated module needs its
+# required-features row in the SAME commit).
+[[example]]
+name = "plan342_t37_test_labeled_corpus"
+required-features = ["clippy_lints"]
+
 # E2E tokens/sec harness (Bonsai/llama.cpp head-to-head denominator).
 # Emits JSONL of (lint, emitted fix, latency); tokens are counted externally by
 # scripts/bench_bonsai_vs_clippy_tokps.py using the SAME Bonsai tokenizer, so
