@@ -1,7 +1,7 @@
 //! Issue 040 — the fixer re-gate POC runner.
 //!
 //! Arms:
-//! - `--arm A` — CF llama-3.3-70b raw prompt (needs `CF_API_TOKEN` +
+//! - `--arm A` — CF qwen3.8-27b raw prompt (needs `CF_API_TOKEN` +
 //!   `CF_ACCOUNT_ID`)
 //! - `--arm B` — same model, modelless pre-pass prompt (candidate + corpus
 //!   few-shots)
@@ -34,17 +34,24 @@ use std::io::Write as _;
 use std::path::PathBuf;
 
 use riir_clippy::cf_workers_ai::{
-    self, ArmSummary, CaseScore, CfClient, FewShot, MissClass, RegateHarness, Sample,
-    SampleSource, reachable_samples,
+    self, ArmSummary, CaseScore, CfClient, CfUsageToday, FewShot, MissClass, RegateHarness,
+    Sample, SampleSource, reachable_samples,
 };
 use riir_clippy::l4_daemon::DaemonL4;
 use riir_clippy::ClippyVerifier;
 
 /// Default per-M USD pricing for the cost column — the Proposal 005 cost
-/// basis (llama-3.3-70b list). Overridable via `--price-in/--price-out`;
+/// basis (qwen3.8-27b list). Overridable via `--price-in/--price-out`;
 /// these are ASSUMPTIONS, not a quote.
-const DEFAULT_PRICE_IN_PER_M: f64 = 0.29;
-const DEFAULT_PRICE_OUT_PER_M: f64 = 2.25;
+const DEFAULT_PRICE_IN_PER_M: f64 = 0.45;
+const DEFAULT_PRICE_OUT_PER_M: f64 = 3.2;
+/// Published neuron rates for the default model (pricing page 2026-08-18):
+/// 40,909 neurons / M input · 290,909 / M output · $0.011 / 1k neurons ·
+/// 10,000 neurons/day free (resets 00:00 UTC; EXCEEDING IT ON WORKERS FREE
+/// FAILS OPERATIONS — the fixer service must respect this ceiling).
+const DEFAULT_NEURONS_IN_PER_M: f64 = 40_909.0;
+const DEFAULT_NEURONS_OUT_PER_M: f64 = 290_909.0;
+const NEURONS_FREE_DAILY: f64 = 10_000.0;
 
 struct Args {
     arm: String,
@@ -508,6 +515,96 @@ fn run_cf(args: &Args, verifier: &ClippyVerifier, prepared: &[Prepared]) {
     );
     println!("  latency: total {lat_total}ms, max {lat_max}ms");
     println!("  {}", summary.verdict_vs_decline());
+
+    // ── Cost track (Proposal 005 §cost-tracking; Issue 040 T3) ────────────
+    // Two meters: the client token-meter above (response.usage × list price)
+    // and the server billing truth (GraphQL aiInferenceAdaptiveGroups →
+    // Neurons). Both land in the committed ledger; KAT denomination happens
+    // at Phase 1 (kat: null until the rail exists).
+    let server = client.fetch_usage_today().ok();
+    if let Some(u) = &server {
+        let usd_neurons = u.neurons / 1000.0 * 0.011;
+        println!(
+            "  server meter (today, this model): {} req · {}+{} tok · {:.2} neurons ≈ ${:.5} (list $0.011/1k)",
+            u.requests, u.input_tokens, u.output_tokens, u.neurons, usd_neurons
+        );
+        println!(
+            "  free-allocation: {:.1}% of the 10k neurons/day (per-model view; account total ≥ this; resets 00:00 UTC)",
+            u.neurons / NEURONS_FREE_DAILY * 100.0
+        );
+        // Third meter: client tokens × published neuron rates — should land
+        // within a few % of the server neurons (validated 2026-08-26: 165.04
+        // expected vs 165.037 server on the smoke run).
+        let neurons_from_client = summary.prompt_tokens as f64 / 1e6 * DEFAULT_NEURONS_IN_PER_M
+            + summary.completion_tokens as f64 / 1e6 * DEFAULT_NEURONS_OUT_PER_M;
+        if neurons_from_client > 0.0 {
+            println!(
+                "  neuron cross-check: client tokens → {:.2} neurons vs server {:.2} ({:+.0}% — server counts template tokens)",
+                neurons_from_client,
+                u.neurons,
+                (u.neurons / neurons_from_client - 1.0) * 100.0
+            );
+        }
+        if summary.cost_usd > 0.0 && u.neurons > 0.0 {
+            println!(
+                "  reconciliation: client ${:.5} vs server ${:.5} ({:+.0}%)",
+                summary.cost_usd,
+                usd_neurons,
+                (usd_neurons / summary.cost_usd - 1.0) * 100.0
+            );
+        }
+    } else {
+        println!("  server meter: unavailable (GraphQL fetch failed — client meter only)");
+    }
+    append_cost_ledger(&args.arm, client.model_id(), &summary, server.as_ref());
+}
+
+/// Append one run row to `.benchmarks/llm_cost_ledger.jsonl` (the
+/// score_history.jsonl precedent — committed, append-only).
+///
+/// KAT denomination is Phase 1 territory: rows carry `kat: null` until the
+/// rail exists, then get back-filled at the mint rate of their run date.
+fn append_cost_ledger(arm: &str, model: &str, summary: &ArmSummary, server: Option<&CfUsageToday>) {
+    use std::io::Write;
+    let path = std::env::var("RIIR_LLM_COST_LEDGER")
+        .unwrap_or_else(|_| ".benchmarks/llm_cost_ledger.jsonl".to_string());
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let row = serde_json::json!({
+        "ts_unix": ts,
+        "arm": arm,
+        "model": model,
+        "n": summary.n,
+        "client": {
+            "prompt_tokens": summary.prompt_tokens,
+            "completion_tokens": summary.completion_tokens,
+            "usd_est": summary.cost_usd,
+        },
+        "server": server.map(|u| serde_json::json!({
+            "requests": u.requests,
+            "input_tokens": u.input_tokens,
+            "output_tokens": u.output_tokens,
+            "neurons": u.neurons,
+            "usd_list": u.neurons / 1000.0 * 0.011,
+            "free_alloc_pct_of_daily_10k": u.neurons / 10_000.0 * 100.0,
+        })),
+        "kat": serde_json::Value::Null,
+        "note": "kat null until Phase 1 rail; server = GraphQL aiInferenceAdaptiveGroups (billing truth)",
+    });
+    let mut f = match std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("[regate] cost ledger write skipped ({path}: {e})");
+            return;
+        }
+    };
+    if let Err(e) = writeln!(f, "{row}") {
+        eprintln!("[regate] cost ledger write failed: {e}");
+    } else {
+        println!("  cost ledger: {path} ← 1 row");
+    }
 }
 
 fn run_daemon(args: &Args, verifier: &ClippyVerifier, prepared: &[Prepared]) {

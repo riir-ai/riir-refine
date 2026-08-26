@@ -46,9 +46,47 @@ Eval set: the clippy-L4 v2edit test chunks + the L4 three-miss classes (no-candi
 - CF budget: dollars, not hundreds (116-sample eval × ~$0.002).
 - Redaction: eval corpora are in-house fixtures — no consumer data in this POC.
 
-## Status (2026-08-25)
+## Status (2026-08-26, cost-tracked)
 
-**Shipped + validated offline; issue stays OPEN until arms run + verdict.**
+**Arms A/B auth UNBLOCKED — no owner token needed** (the wrangler OAuth bridge:
+`npx wrangler whoami` refresh → lift `oauth_token` from
+`~/Library/Preferences/.wrangler/config/default.toml` → export as
+`CF_API_TOKEN` + `CF_ACCOUNT_ID`; the session carries `ai:write` +
+`account:read`, both needed. The T3 audit had checked `~/.wrangler` — the
+wrong macOS path — and missed it).
+
+**Costs now tracked three ways** (Proposal 005 §LLM cost tracking — verified
+live): client token-meter · per-response `usage.neurons` (chat-schema
+models) · server GraphQL daily aggregate (`aiInferenceAdaptiveGroups` →
+`totalNeurons`, billing truth). Committed ledger:
+`.benchmarks/llm_cost_ledger.jsonl` (KAT denomination at Phase 1).
+
+**Model switched to `@cf/qwen/qwen3.8-27b` (owner, 2026-08-26).**
+
+**Incident (the 169-request waste):** the first qwen arm-A run extracted zero
+generation text from every request — Workers AI's chat-schema models
+(qwen3.8) return `result.choices[0].message.content` (+ `message.reasoning`)
+while the harness read only the legacy `result.response`. ~7.8k neurons
+billed for nothing (thinking tokens ARE billed). Fixed (dual-schema parser +
+per-response neurons + reasoning diagnostics); standing rule: one-call smoke
+after ANY model change, before any billed run.
+
+**Neuron budget state (2026-08-26 ~01:40Z): 8,309 / 10,000 burned (83%)** —
+165 llama smoke (valid, 5/9 vs decline 0/9) + 7,766 qwen wasted + ~366 n of
+llama usage at 01:10-01:15Z NOT from this session (20 req — flagged, another
+session/process used the account) + 12 n diagnostic. **~1,700 neurons
+remain today** (~37 qwen samples / ~110 llama samples). The full arm A
+(~280 samples) + arm B needs ~13-27k neurons at qwen rates / ~6-10k at llama
+rates — **cannot complete today**; the free cap resets 00:00 UTC.
+
+**Resume options (owner's call):**
+1. qwen3.8-27b, spread over 2 days (quality arm first)
+2. llama-3.3-70b-fp8-fast for A/B (3× cheaper; both arms fit one free day)
+3. proceed past the cap on Workers Paid overage (~$0.011/1k neurons — the
+   whole POC < $0.30 even at qwen rates; only if the account is on Paid)
+
+The harness is otherwise READY: dual-schema parser in, cost meters + ledger
+in, free-allocation guardrails print per run.
 
 Done:
 - Harness + pre-pass + CF client + arm-C transport, all behind `cf_workers_ai` (default build untouched; `cargo clippy --all-targets --features cf_workers_ai -- -D warnings` clean).

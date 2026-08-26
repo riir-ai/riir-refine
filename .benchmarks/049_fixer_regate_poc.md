@@ -96,3 +96,35 @@ cargo run --release --features cf_workers_ai --bin fixer_regate -- --arm C \
 
 - **Settles:** the instrument is trustworthy in both directions (positive controls kept, both false-WIN routes vetoed on real data, EM exact, decline baseline re-measured). Two v2edit corpus defects are now measured facts (unmergeable-by-contract responses at 96.6%; an invented lint label on 64 rows).
 - **Does not settle:** the falsifiable question itself — whether verify-filtered acceptance beats decline on any REAL arm. No model ran. The verdict is **PENDING ARMS** and Proposal 005's blocker stands until an arm runs.
+
+## Addendum (2026-08-26) — cost tracking wired + the qwen incident
+
+**Cost tracking is live and verified** (user requirement: track + ledger every
+$ burned, KAT-denominated later; Proposal 005 §LLM cost tracking):
+
+- Three meters: client token-meter (per-response `usage`) · per-response
+  `usage.neurons` (chat-schema models) · server GraphQL daily aggregate
+  (`aiInferenceAdaptiveGroups.sum.totalNeurons` — billing truth; works with
+  the wrangler OAuth `account:read` scope).
+- Committed ledger: `.benchmarks/llm_cost_ledger.jsonl` (kat: null until
+  Phase 1). Rates pinned from the pricing page (2026-08-18): $0.011/1k
+  neurons · 10k/day free · resets 00:00 UTC · hard-fail past cap on Free.
+- Reconciliation measured: client reads ~7-8% under server (template tokens);
+  neuron cross-check exact to 0.01% (165.04 vs 165.037).
+
+**The qwen incident (honest record):** model switched to `@cf/qwen/qwen3.8-27b`
+(owner) → first full arm-A run extracted ZERO text from 169 billed requests
+(chat.completion schema vs the legacy parser; thinking tokens billed).
+~7.8k neurons = 78% of a free day, wasted. Fix: dual-schema parser +
+per-response neurons + reasoning diagnostics; standing rule = one-call smoke
+after any model change.
+
+**Ledger state at pause (2026-08-26 ~01:40Z):** 8,309.5 neurons total
+(83.1% of one free day) · $0.0914 list value — 165 llama smoke (VALID:
+reachable-miss strict-keep 5/9 vs decline 0/9) + 7,766 wasted qwen + 366
+unattributed llama (20 req at 01:10-01:15Z, not this session — flagged) + 12
+diagnostic. ~1,700 neurons remain today; the free cap resets 00:00 UTC.
+
+**Per-model economics (measured):** llama-70b-fp8-fast ≈ 15 n/req;
+qwen3.8-27b ≈ 46 n/req (thinking billed). Arm A+B at qwen rates needs
+~13-27k neurons (>1 free day); at llama rates ~6-10k (fits one day).

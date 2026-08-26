@@ -17,7 +17,7 @@
 //!
 //! | arm | model | pre-pass |
 //! |---|---|---|
-//! | A | CF `@cf/meta/llama-3.3-70b-instruct-fp8-fast` (REST) | none ([`prompt_raw`]) |
+//! | A | CF `@cf/qwen/qwen3.8-27b` (REST) | none ([`prompt_raw`]) |
 //! | B | same | [`prompt_prepass`]: span + modelless candidate + corpus few-shots |
 //! | C | local Bonsai via [`crate::l4_daemon::DaemonL4`] | same pre-pass |
 //!
@@ -718,6 +718,13 @@ pub struct CfGen {
     pub text: String,
     pub prompt_tokens: u64,
     pub completion_tokens: u64,
+    /// Per-response neuron cost when the API reports it (the qwen3.8
+    /// chat.completion schema includes `usage.neurons`; legacy-schema models
+    /// report 0 — use the GraphQL daily aggregate for those).
+    pub neurons: f64,
+    /// Thinking-token size diagnostic (qwen3.x `message.reasoning` length —
+    /// billed as completion tokens; 0 when the model doesn't reason).
+    pub reasoning_chars: usize,
     pub latency_ms: u128,
 }
 
@@ -728,6 +735,8 @@ pub struct CfClient {
     agent: ureq::Agent,
     url: String,
     token: String,
+    account: String,
+    model: String,
 }
 
 impl std::fmt::Debug for CfClient {
@@ -738,8 +747,13 @@ impl std::fmt::Debug for CfClient {
 }
 
 impl CfClient {
+    /// The model id this client targets (for ledger/report rows).
+    #[must_use]
+    pub fn model_id(&self) -> &str {
+        &self.model
+    }
     /// Default model (the issue's arm A/B choice).
-    pub const DEFAULT_MODEL: &'static str = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
+    pub const DEFAULT_MODEL: &'static str = "@cf/qwen/qwen3.8-27b";
 
     /// Build from `CF_API_TOKEN` + `CF_ACCOUNT_ID` (+ optional model override).
     ///
@@ -758,13 +772,106 @@ impl CfClient {
             agent: ureq::AgentBuilder::new()
                 .timeout(Duration::from_mins(3))
                 .build(),
-            url: format!(
-                "https://api.cloudflare.com/client/v4/accounts/{account}/ai/run/{model}"
-            ),
+            url: format!("https://api.cloudflare.com/client/v4/accounts/{account}/ai/run/{model}"),
             token,
+            account,
+            model: model.to_string(),
         })
     }
 
+    /// Server-side usage for THIS model, TODAY (UTC), via the GraphQL
+    /// Analytics API — the billing-truth half of the two-meter cost track
+    /// (Proposal 005 §cost-tracking; client meter is the other half).
+    ///
+    /// Returns requests + tokens + **Neurons** (Workers AI's billing unit;
+    /// list price $0.011 per 1,000 Neurons). Verified live 2026-08-26: the
+    /// wrangler OAuth token's `account:read` scope suffices — no dedicated
+    /// analytics token needed. Best-effort by contract: callers treat an
+    /// `Err` as "server meter unavailable", never fatal.
+    ///
+    /// # Errors
+    ///
+    /// Transport/HTTP/shape errors — never the token.
+    #[allow(clippy::many_single_char_names)] // civil-from-days reference notation
+    pub fn fetch_usage_today(&self) -> Result<CfUsageToday, String> {
+        let today = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() + 86_400) // generous: never split a run at local midnight
+            .map(|s| s / 86_400 * 86_400)
+            .map_err(|e| format!("clock: {e}"))?;
+        // epoch-days -> YYYY-MM-DD (civil-from-days, Howard Hinnant's
+        // algorithm — kept verbatim vs the reference; the single-char names
+        // ARE the reference notation)
+        let days = i64::try_from(today / 86_400).unwrap_or(0);
+        let z = days + 719_468;
+        let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+        let doe = z - era * 146_097;
+        let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365;
+        let y = yoe + era * 400;
+        let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+        let mp = (5 * doy + 2) / 153;
+        let d = doy - (153 * mp + 2) / 5 + 1;
+        let m = if mp < 10 { mp + 3 } else { mp - 9 };
+        let y = if m <= 2 { y + 1 } else { y };
+        let date = format!("{y:04}-{m:02}-{d:02}");
+        let query = format!(
+            "{{ viewer {{ accounts(filter: {{accountTag: \"{}\"}}) {{ \
+             aiInferenceAdaptiveGroups(limit: 1000, filter: {{date_geq: \"{date}\", date_leq: \"{date}\"}}) {{ \
+             dimensions {{ modelId }} \
+             sum {{ totalInputTokens totalOutputTokens totalNeurons }} count }} }} }} }}",
+            self.account
+        );
+        let resp = self
+            .agent
+            .post("https://api.cloudflare.com/client/v4/graphql")
+            .set("Authorization", &format!("Bearer {}", self.token))
+            .send_json(serde_json::json!({ "query": query }))
+            .map_err(|e| format!("usage GraphQL request failed: {e}"))?;
+        let v: serde_json::Value = resp
+            .into_json()
+            .map_err(|e| format!("usage GraphQL response was not JSON: {e}"))?;
+        let rows = v
+            .pointer("/data/viewer/accounts/0/aiInferenceAdaptiveGroups")
+            .and_then(|r| r.as_array())
+            .ok_or_else(|| format!("usage GraphQL shape unexpected: {v}"))?;
+        let mut u = CfUsageToday::default();
+        for row in rows {
+            if row
+                .pointer("/dimensions/modelId")
+                .and_then(serde_json::Value::as_str)
+                != Some(self.model.as_str())
+            {
+                continue;
+            }
+            u.requests += row.pointer("/count").and_then(serde_json::Value::as_u64).unwrap_or(0);
+            u.input_tokens += row
+                .pointer("/sum/totalInputTokens")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(0);
+            u.output_tokens += row
+                .pointer("/sum/totalOutputTokens")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(0);
+            u.neurons += row
+                .pointer("/sum/totalNeurons")
+                .and_then(serde_json::Value::as_f64)
+                .unwrap_or(0.0);
+        }
+        Ok(u)
+    }
+}
+
+/// Server-side per-model usage for one UTC day (the GraphQL analytics row).
+#[derive(Debug, Clone, Default)]
+pub struct CfUsageToday {
+    pub requests: u64,
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    /// Workers AI's billing unit (list $0.011 / 1k Neurons).
+    pub neurons: f64,
+}
+
+impl CfClient {
     /// One generation. Temperature 0 for reproducibility.
     ///
     /// # Errors
@@ -790,14 +897,34 @@ impl CfClient {
         let result = v
             .get("result")
             .ok_or_else(|| format!("CF response had no result: {v}"))?;
-        let text = match result.get("response") {
-            Some(serde_json::Value::String(s)) => s.clone(),
-            Some(serde_json::Value::Array(items)) => items
-                .iter()
-                .filter_map(|i| i.as_str())
-                .collect::<Vec<_>>()
-                .join(""),
-            _ => return Err(format!("CF result had no response field: {result}")),
+        // Two response schemas ship on Workers AI (measured 2026-08-26):
+        //   legacy      — `result.response` (String | Array<String>)
+        //                 e.g. llama-3.3-70b-instruct-fp8-fast
+        //   chat-style  — `result.choices[0].message.content` + a separate
+        //                 `message.reasoning` for thinking models
+        //                 e.g. @cf/qwen/qwen3.8-27b
+        // The 169-request arm-A burn on 2026-08-26 was wasted to learning
+        // this: the qwen switch left `response` absent and every extraction
+        // returned nothing while completion tokens (thinking) billed.
+        let (text, reasoning_chars) = if let Some(r) = result.pointer("/choices/0/message/content").and_then(serde_json::Value::as_str) {
+            let rc = result
+                .pointer("/choices/0/message/reasoning")
+                .and_then(serde_json::Value::as_str)
+                .map_or(0, str::len);
+            (r.to_string(), rc)
+        } else {
+            match result.get("response") {
+                Some(serde_json::Value::String(s)) => (s.clone(), 0),
+                Some(serde_json::Value::Array(items)) => (
+                    items
+                        .iter()
+                        .filter_map(|i| i.as_str())
+                        .collect::<Vec<_>>()
+                        .join(""),
+                    0,
+                ),
+                _ => return Err(format!("CF result had neither chat nor legacy response shape: {result}")),
+            }
         };
         let usage = result.get("usage");
         let get = |k: &str| {
@@ -810,6 +937,11 @@ impl CfClient {
             text,
             prompt_tokens: get("prompt_tokens"),
             completion_tokens: get("completion_tokens"),
+            neurons: usage
+                .and_then(|u| u.get("neurons"))
+                .and_then(serde_json::Value::as_f64)
+                .unwrap_or(0.0),
+            reasoning_chars,
             latency_ms: t0.elapsed().as_millis(),
         })
     }
