@@ -132,6 +132,13 @@ pub mod l4_daemon;
 #[cfg(feature = "cf_workers_ai")]
 pub mod cf_workers_ai;
 
+// Issue 046 — the USD LLM daily-cap ledger (reserve-then-reconcile): the
+// circuit breaker every LLM call through `CfClient::generate` gates through
+// BEFORE any unattended loop runs (the Issue 040 169-request burn class).
+// Same feature gate as the client it guards; no new deps.
+#[cfg(feature = "cf_workers_ai")]
+pub mod llm_spend;
+
 // Bench 669 consumer adoption (Plan 016): the input-scope gate at the heal()
 // seam. `ScopeModel` wraps katgpt-core's `contrastive_scope` primitive — the
 // 2D extension of the Issue 030 relevance gate (rule coverage × input scope).

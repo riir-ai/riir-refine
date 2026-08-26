@@ -71,7 +71,9 @@ echo "=== Layer 5c: KAT integration gates (all-features) ==="
 # T0.4 (Plan 028) adds the pending-estimator G4 binary — the caveat-#15
 # framing gate (no $ beside an accrual; blocked never earns) + the
 # watermark recovery gate.
-cargo test --all-features --test kat_redact_g4 --test kat_sync_payload_g4 --test kat_pending_estimator_g4 --test kat_meter_g9 --test kat_meter_g2_alloc --test kat_account_g9
+# Issue 046 adds the USD LLM daily-cap binaries (G1 planted-state + G2
+# alloc-free gate path) — same class, same layer.
+cargo test --all-features --test kat_redact_g4 --test kat_sync_payload_g4 --test kat_pending_estimator_g4 --test kat_meter_g9 --test kat_meter_g2_alloc --test kat_account_g9 --test llm_spend_gates --test llm_spend_g2_alloc
 echo "✓ KAT integration gates pass"
 
 echo

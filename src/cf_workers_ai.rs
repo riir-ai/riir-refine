@@ -48,7 +48,7 @@
 //!   `CF_API_TOKEN` and is NEVER logged or included in any error string.
 
 use std::collections::BTreeSet;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use crate::ClippyVerifier;
@@ -727,6 +727,10 @@ pub struct CfGen {
     /// (DeepSeek-style) for GLM; billed as completion tokens; 0 when the
     /// model doesn't reason or thinking is disabled).
     pub reasoning_chars: usize,
+    /// Whether the response carried a `usage` object (the reconcile half of
+    /// the USD cap gate — Issue 046: a billed response with no usage spends
+    /// the FULL reserve, never releases it).
+    pub usage_reported: bool,
     pub latency_ms: u128,
 }
 
@@ -739,6 +743,10 @@ pub struct CfClient {
     token: String,
     account: String,
     model: String,
+    /// The USD daily-cap ledger (Issue 046) — reserve-then-reconcile on
+    /// every `generate`. `&mut self` on generate is load-bearing: the gate
+    /// mutates persisted state.
+    spend: crate::llm_spend::SpendLedger,
 }
 
 impl std::fmt::Debug for CfClient {
@@ -759,10 +767,14 @@ impl CfClient {
 
     /// Build from `CF_API_TOKEN` + `CF_ACCOUNT_ID` (+ optional model override).
     ///
+    /// Issue 046: the model must be in the pricing table (an unpriced model
+    /// is refused here, fail-fast, rather than per-call) and the USD daily
+    /// cap ledger opens at `KAT_LLM_SPEND_FILE` or `./.heal/kat_llm_spend.json`.
+    ///
     /// # Errors
     ///
     /// A human-readable message naming exactly which env var is missing —
-    /// never the token value.
+    /// never the token value — or the unpriced-model refusal.
     pub fn from_env(model: Option<&str>) -> Result<Self, String> {
         let token = std::env::var("CF_API_TOKEN")
             .map_err(|_| "CF_API_TOKEN is not set — arms A/B need it (export CF_API_TOKEN=...)".to_string())?;
@@ -770,6 +782,18 @@ impl CfClient {
             "CF_ACCOUNT_ID is not set — arms A/B need it (export CF_ACCOUNT_ID=...)".to_string()
         })?;
         let model = model.unwrap_or(Self::DEFAULT_MODEL);
+        crate::llm_spend::price_for(model).ok_or_else(|| {
+            format!(
+                "model {model:?} is not in the LLM pricing table — refusing to price a guess \
+                 at $0; add it to PRICING_TABLE + bump PRICING_VERSION"
+            )
+        })?;
+        let spend = match std::env::var(crate::llm_spend::ENV_SPEND_FILE) {
+            Ok(p) => crate::llm_spend::SpendLedger::open_at(PathBuf::from(p)),
+            Err(_) => crate::llm_spend::SpendLedger::open(
+                std::env::current_dir().unwrap_or_default().as_path(),
+            ),
+        };
         Ok(Self {
             agent: ureq::AgentBuilder::new()
                 .timeout(Duration::from_mins(3))
@@ -778,7 +802,21 @@ impl CfClient {
             token,
             account,
             model: model.to_string(),
+            spend,
         })
+    }
+
+    /// The USD daily-cap ledger state (Issue 046) — for run summaries and
+    /// ledger rows.
+    #[must_use]
+    pub fn spend_state(&self) -> &crate::llm_spend::SpendState {
+        self.spend.state()
+    }
+
+    /// One-line cap status for run summaries (cold path).
+    #[must_use]
+    pub fn spend_summary(&self) -> String {
+        self.spend.summary_line()
     }
 
     /// Server-side usage for THIS model, TODAY (UTC), via the GraphQL
@@ -975,30 +1013,85 @@ fn parse_chat_result(result: &serde_json::Value) -> Result<(String, usize), Stri
 impl CfClient {
     /// One generation. Temperature 0 for reproducibility.
     ///
+    /// **Issue 046 — the USD hard cap (reserve-then-reconcile):** the call
+    /// is priced at the model's published in/out per-M rates against the
+    /// per-UTC-day accumulator and CHECKED BEFORE THE REQUEST; at/over cap
+    /// the call hard-declines for the rest of the UTC day
+    /// (`Err` starting with "LLM daily cap reached") — a terminal-for-today
+    /// verdict the CALLER must honor, never retry. A transport failure
+    /// releases the reserve (nothing billed); a response that arrived but
+    /// failed to parse spends the FULL reserve (the qwen-incident rule:
+    /// tokens were billed even though extraction produced nothing).
+    ///
     /// # Errors
     ///
     /// Transport/HTTP/shape errors — body text on HTTP failure (CF error
-    /// JSON), never the token.
-    pub fn generate(&self, prompt: &str, max_tokens: usize) -> Result<CfGen, String> {
+    /// JSON), never the token — plus the two cap-gate refusals (cap reached,
+    /// unknown model).
+    pub fn generate(&mut self, prompt: &str, max_tokens: usize) -> Result<CfGen, String> {
         let t0 = std::time::Instant::now();
-        // Qwen3-family models are THINKING models: unmitigated, the reasoning
-        // phase consumes the entire max_tokens budget and `content` arrives
-        // null (finish_reason=length) — the 2026-08-26 wasted-run incident
-        // class, re-caught by the standing one-call smoke on 2026-08-27Z's
-        // session. The official Qwen3 soft switch is the literal suffix
-        // `/no_think` in the user turn (probed live: reasoning compresses to
-        // a short preamble and content lands within budget;
-        // `enable_thinking:false` is IGNORED by this serving stack — probed,
-        // reasoning still present). Non-qwen3 models pass through unchanged.
-        // GLM-4.7-flash mitigation is measured separately (Issue 043 T1
-        // probes, 2026-08-26): `chat_template_kwargs.enable_thinking:false`
-        // is the ONE switch this serving stack honors — 0.155 n vs 4.52 n on
-        // the trivial probe (~29×). Note the inversion vs qwen: there the
-        // kwarg is IGNORED and the suffix works. `reasoning_effort` and
-        // `thinking:{type:disabled}` are ignored here too (probed).
-        // `RIIR_CF_GLM_THINKING=1` opts back into budgeted reasoning (for
-        // gates comparing the reasoning mode) — read once per call, never
-        // logged.
+        let max = u64::try_from(max_tokens).unwrap_or(u64::MAX);
+        let reserved = match self.spend.reserve(&self.model, prompt, max) {
+            Ok(r) => r,
+            Err(e) => {
+                // Persist the decline count, then surface the verdict.
+                let _ = self.spend.save();
+                return Err(e.to_string());
+            }
+        };
+        // Crash-safety: persist the outstanding reserve BEFORE the call — a
+        // crash mid-call keeps the reserve counted against today's cap.
+        let _ = self.spend.save();
+        let mut gen = match self.generate_billed(prompt, max_tokens) {
+            Ok(g) => g,
+            Err((msg, billed)) => {
+                if billed {
+                    // A `result` was received — tokens were almost certainly
+                    // consumed. Spend the reserve (over-count, never under).
+                    self.spend.reconcile(reserved, &self.model, 0, 0, false);
+                } else {
+                    // The request never completed — nothing billed.
+                    self.spend.release(reserved);
+                }
+                let _ = self.spend.save();
+                return Err(msg);
+            }
+        };
+        self.spend.reconcile(
+            reserved,
+            &self.model,
+            gen.prompt_tokens,
+            gen.completion_tokens,
+            gen.usage_reported,
+        );
+        let _ = self.spend.save();
+        gen.latency_ms = t0.elapsed().as_millis();
+        Ok(gen)
+    }
+
+    /// The pre-046 generation body (the network half, no cap logic). `Err`
+    /// carries `(message, billed?)` where `billed` = a `result` object was
+    /// received — used by [`Self::generate`] to decide spend-vs-release.
+    ///
+    /// Qwen3-family models are THINKING models: unmitigated, the reasoning
+    /// phase consumes the entire `max_tokens` budget and `content` arrives
+    /// null (`finish_reason` `=` `"length"`) — the 2026-08-26 wasted-run
+    /// incident class, re-caught by the standing one-call smoke on
+    /// 2026-08-27Z's session. The official Qwen3 soft switch is the literal
+    /// suffix `/no_think` in the user turn (probed live: reasoning compresses
+    /// to a short preamble and content lands within budget;
+    /// `enable_thinking:false` is IGNORED by this serving stack — probed,
+    /// reasoning still present). Non-qwen3 models pass through unchanged.
+    /// GLM-4.7-flash mitigation is measured separately (Issue 043 T1
+    /// probes, 2026-08-26): `chat_template_kwargs.enable_thinking:false`
+    /// is the ONE switch this serving stack honors — 0.155 n vs 4.52 n on
+    /// the trivial probe (~29×). Note the inversion vs qwen: there the
+    /// kwarg is IGNORED and the suffix works. `reasoning_effort` and
+    /// `thinking:{type:disabled}` are ignored here too (probed).
+    /// `RIIR_CF_GLM_THINKING=1` opts back into budgeted reasoning (for
+    /// gates comparing the reasoning mode) — read once per call, never
+    /// logged.
+    fn generate_billed(&self, prompt: &str, max_tokens: usize) -> Result<CfGen, (String, bool)> {
         let glm_thinking =
             std::env::var("RIIR_CF_GLM_THINKING").as_deref() == Ok("1");
         let body = build_request_body(&self.model, prompt, max_tokens, glm_thinking);
@@ -1007,15 +1100,17 @@ impl CfClient {
             .post(&self.url)
             .set("Authorization", &format!("Bearer {}", self.token))
             .send_json(body)
-            .map_err(|e| format!("CF request failed: {e}"))?;
+            .map_err(|e| (format!("CF request failed: {e}"), false))?;
         let v: serde_json::Value = resp
             .into_json()
-            .map_err(|e| format!("CF response was not JSON: {e}"))?;
+            .map_err(|e| (format!("CF response was not JSON: {e}"), false))?;
         let result = v
             .get("result")
-            .ok_or_else(|| format!("CF response had no result: {v}"))?;
-        let (text, reasoning_chars) = parse_chat_result(result)?;
+            .ok_or_else(|| (format!("CF response had no result: {v}"), false))?;
+        let (text, reasoning_chars) =
+            parse_chat_result(result).map_err(|e| (e, true))?;
         let usage = result.get("usage");
+        let usage_reported = usage.is_some();
         let get = |k: &str| {
             usage
                 .and_then(|u| u.get(k))
@@ -1031,7 +1126,8 @@ impl CfClient {
                 .and_then(serde_json::Value::as_f64)
                 .unwrap_or(0.0),
             reasoning_chars,
-            latency_ms: t0.elapsed().as_millis(),
+            usage_reported,
+            latency_ms: 0, // set by the caller (the gate wraps the clock)
         })
     }
 }

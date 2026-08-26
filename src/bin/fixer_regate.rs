@@ -513,7 +513,7 @@ fn run_dry(args: &Args, verifier: &ClippyVerifier, prepared: &[Prepared]) {
 }
 
 fn run_cf(args: &Args, verifier: &ClippyVerifier, prepared: &[Prepared]) {
-    let client = match CfClient::from_env(args.model.as_deref()) {
+    let mut client = match CfClient::from_env(args.model.as_deref()) {
         Ok(c) => c,
         Err(e) => {
             eprintln!("SKIP arm {}: {e}", args.arm);
@@ -630,7 +630,16 @@ fn run_cf(args: &Args, verifier: &ClippyVerifier, prepared: &[Prepared]) {
     } else {
         println!("  server meter: unavailable (GraphQL fetch failed — client meter only)");
     }
-    append_cost_ledger(&args.arm, client.model_id(), &summary, server.as_ref());
+    // Issue 046 T6: the USD daily-cap status (the gate lives INSIDE
+    // `generate` — reserve-then-reconcile; this is the reporting half).
+    println!("  {}", client.spend_summary());
+    append_cost_ledger(
+        &args.arm,
+        client.model_id(),
+        &summary,
+        server.as_ref(),
+        Some(client.spend_state()),
+    );
 }
 
 /// Append one run row to `.benchmarks/llm_cost_ledger.jsonl` (the
@@ -638,7 +647,13 @@ fn run_cf(args: &Args, verifier: &ClippyVerifier, prepared: &[Prepared]) {
 ///
 /// KAT denomination is Phase 1 territory: rows carry `kat: null` until the
 /// rail exists, then get back-filled at the mint rate of their run date.
-fn append_cost_ledger(arm: &str, model: &str, summary: &ArmSummary, server: Option<&CfUsageToday>) {
+fn append_cost_ledger(
+    arm: &str,
+    model: &str,
+    summary: &ArmSummary,
+    server: Option<&CfUsageToday>,
+    spend: Option<&riir_clippy::llm_spend::SpendState>,
+) {
     use std::io::Write;
     let path = std::env::var("RIIR_LLM_COST_LEDGER")
         .unwrap_or_else(|_| ".benchmarks/llm_cost_ledger.jsonl".to_string());
@@ -656,6 +671,12 @@ fn append_cost_ledger(arm: &str, model: &str, summary: &ArmSummary, server: Opti
             "completion_tokens": summary.completion_tokens,
             "usd_est": summary.cost_usd,
         },
+        "cap": spend.map(|s| serde_json::json!({
+            "spent_usd": s.spent_usd,
+            "cap_usd": s.cap_usd,
+            "calls": s.calls,
+            "declines": s.declines,
+        })),
         "server": server.map(|u| serde_json::json!({
             "requests": u.requests,
             "input_tokens": u.input_tokens,
