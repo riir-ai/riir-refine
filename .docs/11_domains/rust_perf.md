@@ -19,7 +19,7 @@
 
 ## Corpus
 
-76 rules across 12 categories (rust-optimize skill checklist +
+78 rules across 12 categories (rust-optimize skill checklist +
 nnethercote/perf-book + rustc-hash/bevy real-world patterns + the hotpath-rs
 profiling guide, Research 032; Batch 48 added the 8 online-search candidates
 from the perf-book std-types + iterators chapters; Batch 53 added the 4
@@ -33,23 +33,25 @@ oxc-article rules: `keyword-map-to-match` + `usize-index-to-u32`; Batch 62
 (2026-08-19, Research 073 — the polars kernel-idiom distill) added
 `sparse-set-bit-iteration-tz-blsr` + `sortedness-check-branchless-accumulate`; Batch 67 (2026-08-19, Research 074 — the regex-automata distill) added
 `byte-find-position-to-memchr`; Batch 68 (2026-08-19, Research 075 — the
-tantivy utility-layer distill) added the annotated `varint-compose-word-single-store`; Batch 69 added `unaligned-word-load-from-bytes` — the T6 defer refuted, a cross-arch WINNER; Batch 65 (2026-08-22, Research 081 — the hotpath.rs profiler distill) added the 2 contention rules: `align-64-false-sharing` + `channel-send-batching-unpark`, both measured ParetoDominant).
+tantivy utility-layer distill) added the annotated `varint-compose-word-single-store`; Batch 69 added `unaligned-word-load-from-bytes` — the T6 defer refuted, a cross-arch WINNER; Batch 65 (2026-08-22, Research 081 — the hotpath.rs profiler distill) added the 2 contention rules: `align-64-false-sharing` + `channel-send-batching-unpark`, both measured ParetoDominant; Batch 73 (2026-08-26, Research 085/086 — the mnt.io Matrix-RSDK room-list DoD distill, Plan 029) added `sort-key-cache-precompute-out-of-lock` + `lock-guard-narrow-field-accessor`, both measured ParetoDominant with regime annotations).
 Allocation is the deepest
 category (18 rules). Complexity has 15 (Batch 64 added `debug-assert-length-hoist`). Iterators has 9 (Batch 66 added `sortedness-check-branchless-accumulate`; Batch 67 added `byte-find-position-to-memchr`). Simd 7 (Batch 62 added `transposed-weight-register-gemv`; Batch 64 added `loop-order-innermost-contiguous`), layout 6
 (Batch 61 added `usize-index-to-u32`);
-concurrency has 6 (Issue 014 added the two metric-mismatch rules; Batch 65
-added the two measured contention rules);
-caching has 2 (Issue 014 added `regex-hoist-lazylock`); arithmetic has 6
+concurrency has 7 (Issue 014 added the two metric-mismatch rules; Batch 65
+added the two measured contention rules; Batch 73 added
+`lock-guard-narrow-field-accessor`);
+caching has 3 (Issue 014 added `regex-hoist-lazylock`; Batch 73 added
+`sort-key-cache-precompute-out-of-lock`); arithmetic has 6
 (Batch 53 added `powi-vs-powf` + `distance-sq-no-sqrt`; Batch 59 added
 `division-by-invariant-multiplication`; Batch 62 added the annotated
 `newton-refinement-vs-hardware-transcendental`; Batch 66 added
 `sparse-set-bit-iteration-tz-blsr`); dispatch has 2 (Batch 61 added
 `keyword-map-to-match`); io is 3 (Batch 68 added
 `varint-compose-word-single-store`; Batch 69 added `unaligned-word-load-from-bytes`); the rest have 1
-each. 66 are benchable (carry a `BenchSpec`); 10 are honestly
+each. 68 are benchable (carry a `BenchSpec`); 10 are honestly
 `NotBenchable` — 8 need external runtimes or are structural (size_of,
 memory, fairness), 2 are **metric-mismatch** (Issue 014 T2.3/T2.4: the cost
-is contention latency / queue depth, not wall-clock). 18 of 76 carry
+is contention latency / queue depth, not wall-clock). 20 of 78 carry
 `context_notes` — 11 verdict-class (4 `ParetoDominated` + 7
 regime-fragile/Mixed — Batch 48 added the `filter-count-to-any` folk-wisdom
 refutation: the VECTORIZED count loop beats `any()`'s scalar early-exit at
@@ -150,6 +152,8 @@ annotated rules as context-dependent, not unconditional suggestions.
 | `async-yield-point` | iterators | ❌ NotBenchable | — | Long async fn (no `.await`) → cooperative `yield_now()` every 100 iters (fairness/p99-latency win under contention, not single-task throughput) |
 | `async-future-size` | layout | ❌ NotBenchable | — | Large locals across `.await` → scoped blocks (drops before next await; shrinks future state machine via `size_of_val`) |
 | `bufwriter-batched` | io | ✅ 2.48-21.57x ParetoDominant | — | `File::write` per record → `BufWriter` batched (syscall amortization; Issue 012 / Bench 016) |
+| `sort-key-cache-precompute-out-of-lock` | caching | ✅ 24.3-37.2x ParetoDominant | ⚠️ `context_notes` | comparator lock+clone per invocation → maintained sort-key cache refreshed once per data update (Batch 73, mnt.io room-list distill — the amortization curve visible in the sorts-per-update axis 1/4/16; allocs 164497→17 @16 sorts; REGIME: sorts-per-update ≈ 0 = pure refresh overhead; the source's 78× is end-to-end, our isolated mechanism reads 24-37×; composes with the narrow-accessor rule — production `RoomListItem.refresh_cached_data` reads through narrow accessors) |
+| `lock-guard-narrow-field-accessor` | concurrency | ✅ 11.5-12.7x ParetoDominant | ⚠️ `context_notes` | whole-payload clone under read-guard → narrow accessor returning only the consumed sub-field (Batch 73, mnt.io room-list distill — allocs 100000→0 @100K; the source's +18% is end-to-end, the isolated mechanism reads 11-13×; type-blind for a parse-only proposer — suggestion-only) |
 
 ## Validator (cargo test — behind `rust_perf_verify`)
 
@@ -361,7 +365,7 @@ joined in the 2026-08-17 batch. G5 real-repo validation precedent: Bench 019
 ## Source
 
 - [`src/domains/rust_perf/mod.rs`](../../src/domains/rust_perf/mod.rs) — `PerfRule` + `RustPerfDomain`
-- [`src/domains/rust_perf/corpus.rs`](../../src/domains/rust_perf/corpus.rs) — `build_perf_seed_corpus()` + 63 `BenchSpec`s (10 rules are honestly NotBenchable)
+- [`src/domains/rust_perf/corpus.rs`](../../src/domains/rust_perf/corpus.rs) — `build_perf_seed_corpus()` + 68 `BenchSpec`s (10 rules are honestly NotBenchable)
 - [`src/domains/rust_perf/proposers/`](../../src/domains/rust_perf/proposers/) — the 10 `syn` AST proposers (Phase 4 top-5 + the 2026-08-17 Batch 48 + Batch 53 follow-ups) + `propose_fix` dispatch
 - [`src/domains/rust_perf/verify.rs`](../../src/domains/rust_perf/verify.rs) — `PerfVerifier` (cargo test)
 - [`src/domains/rust_perf/bench.rs`](../../src/domains/rust_perf/bench.rs) — `PerfBenchValidator` (Pareto verdict)

@@ -1712,6 +1712,70 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: Some(unaligned_word_load_from_bytes_bench_spec()),
         },
+        // ── caching: comparator lock+clone per invocation → maintained sort-key
+        // cache refreshed once per data update ──────────────────────────────
+        // Source: mnt.io "Memory pressure, lock contention, and Data-oriented
+        // Design" (Batch 73, Research 085/086 — the Element X frozen-room-list
+        // hunt: 322,042 allocations / 743 MiB inside `eyeball_im_util`
+        // `SortBy` for ~500-600 rooms; 53.027 ms → 676.29 µs = 78× / −98.7%,
+        // +7718.5% throughput on the `room_list` bench). Each sorter
+        // comparison called `Room::latest_event()` —
+        // `self.info.read().latest_event.clone()`, a read-lock acquire + a
+        // 144-byte clone per call, twice per comparison, across 2 of 3
+        // sorters; the eyeball-im-util `SortBy` machinery re-invokes the
+        // comparator from `binary_search_by` on EVERY reactive diff and does
+        // a fresh full sort on every filter change (`stream!` loop in
+        // `entries_with_dynamic_adapters_impl`) — the sorts-per-update > 1
+        // regime is structural. Fix: the production `RoomListItem` facade
+        // caches the 6 sort/filter-relevant fields (verified in-source:
+        // `matrix_sdk_ui::room_list::RoomListItem` + `refresh_cached_data()`
+        // on every `RoomInfoNotableUpdate`; the sorter doc comments carry
+        // the warning verbatim: "Using `Room::new_latest_event` would be
+        // dramatic as it returns a clone of the `LatestEventValue").
+        // REGIME: sorts-per-update ≥ 1 (reactive re-sort on diff/filter) —
+        // the refresh cost (1 narrow read per changed item) amortizes over
+        // N·log N comparator calls per sort. At sorts-per-update ≈ 0 (updates
+        // never sorted) the maintained cache is pure refresh overhead.
+        // Composes with `lock-guard-narrow-field-accessor` (the refresh reads
+        // through narrow accessors, not whole-payload clones). Distinct from
+        // `sort-by-key` (that still invokes the key fn N times per sort —
+        // with the lock+clone inside it) and from `regex-hoist-lazylock`
+        // (once-per-program vs once-per-data-update).
+        PerfRule {
+            rule_id: "sort-key-cache-precompute-out-of-lock".to_string(),
+            name: "comparator lock+clone per invocation → maintained sort-key cache refreshed once per update".to_string(),
+            category: "caching".to_string(),
+            buggy_code: "use std::sync::RwLock;\nstruct LatestEvent { timestamp: u64, body: String /* …144 B total */ }\nstruct RoomInfo { latest_event: Option<LatestEvent> /* …many other fields */ }\nstruct Room { info: RwLock<RoomInfo> }\nimpl Room {\n    fn latest_event_timestamp(&self) -> Option<u64> {\n        // read-lock acquire + clone of the WHOLE LatestEventValue (144 B)\n        // to read one u64 — paid O(N log N) times per sort, twice per\n        // comparison, by every sorter AND every binary_search_by in the\n        // reactive diff machinery\n        self.info.read().unwrap().latest_event.clone().map(|ev| ev.timestamp)\n    }\n}\nfn sort_rooms(rooms: &mut [Room]) {\n    rooms.sort_by(|a, b| b.latest_event_timestamp().cmp(&a.latest_event_timestamp()));\n}".to_string(),
+            fixed_code: "use std::sync::RwLock;\nstruct LatestEvent { timestamp: u64, body: String /* …144 B total */ }\nstruct RoomInfo { latest_event: Option<LatestEvent> /* …many other fields */ }\nstruct Room { info: RwLock<RoomInfo> }\nimpl Room {\n    fn latest_event_timestamp(&self) -> Option<u64> {\n        // narrow read through the guard — no clone (composes with\n        // lock-guard-narrow-field-accessor)\n        self.info.read().unwrap().latest_event.as_ref().map(|ev| ev.timestamp)\n    }\n}\n/// The production `RoomListItem` pattern: cache the sort/filter-relevant\n/// fields, refresh once per data update (only the CHANGED item).\nstruct RoomListItem {\n    inner: Room,\n    cached_latest_event_timestamp: Option<u64>,\n}\nimpl RoomListItem {\n    fn refresh_cached_data(&mut self) { // called on each RoomInfoNotableUpdate\n        self.cached_latest_event_timestamp = self.inner.latest_event_timestamp();\n    }\n}\nfn sort_rooms(rooms: &mut [RoomListItem]) {\n    // comparator reads the maintained cache — no lock, no clone\n    rooms.sort_by(|a, b| b.cached_latest_event_timestamp.cmp(&a.cached_latest_event_timestamp));\n}".to_string(),
+            context_notes: Some("Measured ParetoDominant 24.3-37.2x across the sorts-per-update axis (1/4/16 sorts per refresh cycle, N=512; M3 Max release, load ~7.1, 2026-08-26; allocs 164497->17 + bytes 8.1MB->532KB @16 sorts, alloc-det stable; second invocation 28.1-35.1x — verdict stable). REGIME: the win GROWS with sorts-per-update (reactive re-sort on diff/filter — eyeball-im-util's SortBy re-invokes the comparator from binary_search_by on every diff, and every filter change does a fresh full sort); at sorts-per-update ~= 0 (data updated but never re-sorted) the maintained cache is pure refresh overhead — N narrow reads per Reset with no consumer. MAGNITUDE HONESTY: the source's 78x/-98.7% (53.027ms -> 676.29us, +7718.5% throughput, the matrix-rust-sdk room_list bench, ~500-600 rooms) is END-TO-END including allocation-pressure relief on a mobile allocator; our isolated-mechanism bench reads 24-37x — never cite 78x as our bench claim. Bench protocol note: the harness permutes via a fixed Fisher-Yates swap list before every sort — a plain reverse() is ONE detectable run for the adaptive driftsort (measured ~512 comparisons/sort vs the shuffle's ~5100 at N=512); the comparison count is the load-bearing axis. Composes with lock-guard-narrow-field-accessor (the refresh reads through narrow accessors).".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(sort_key_cache_bench_spec()),
+        },
+        // ── concurrency: whole-payload clone under read-guard → narrow field
+        // accessor returning only the consumed stack-sized value ───────────
+        // Source: same article (Batch 73, Research 085/086 — the +18%
+        // throughput patch on the same `room_list` bench from splitting the
+        // wide accessors alone). `fn field(&self) -> BigValue { self.info
+        // .read().field.clone() }` where consumers read ONE sub-field (a
+        // bool, a timestamp) pays a full 144 B clone per call for a 1-8 B
+        // result. The production fix added narrow siblings —
+        // `Room::new_latest_event_is_local() -> bool`, `new_latest_event_
+        // timestamp() -> Option<Ms>` — verified in-source: the sorter doc
+        // comments carry the rule verbatim ("It's better to use the more
+        // specific method … where the value is cached"). Keeps the lock,
+        // shrinks the guarded payload crossing — composable with (and
+        // distinct from) `papaya-lockfree`/`mutex-to-atomic` (replace the
+        // lock) and `avoid-clone` (borrow at fn boundary, no guard).
+        PerfRule {
+            rule_id: "lock-guard-narrow-field-accessor".to_string(),
+            name: "fn field(&self) -> BigValue { guard.clone() } → narrow accessor returning only the consumed sub-field".to_string(),
+            category: "concurrency".to_string(),
+            buggy_code: "use std::sync::RwLock;\nstruct LatestEvent { timestamp: u64, sender_is_local: bool, body: String /* …144 B total */ }\nstruct RoomInfo { latest_event: Option<LatestEvent> /* …many other fields */ }\nstruct Room { info: RwLock<RoomInfo> }\nimpl Room {\n    fn latest_event(&self) -> Option<LatestEvent> {\n        self.info.read().unwrap().latest_event.clone() // 144 B clone under the guard\n    }\n    fn latest_event_is_local(&self) -> bool {\n        // clones the WHOLE guarded payload to compute one bool\n        self.latest_event().is_some_and(|ev| ev.sender_is_local)\n    }\n}".to_string(),
+            fixed_code: "use std::sync::RwLock;\nstruct LatestEvent { timestamp: u64, sender_is_local: bool, body: String /* …144 B total */ }\nstruct RoomInfo { latest_event: Option<LatestEvent> /* …many other fields */ }\nstruct Room { info: RwLock<RoomInfo> }\nimpl Room {\n    fn latest_event_is_local(&self) -> bool {\n        // compute the ONE consumed sub-field under the guard — no clone\n        self.info.read().unwrap().latest_event.as_ref().is_some_and(|ev| ev.sender_is_local)\n    }\n}".to_string(),
+            context_notes: Some("Measured ParetoDominant 11.5-12.7x at 1K-100K calls (M3 Max release, load ~7.1, 2026-08-26; allocs 100000->0, bytes 4.7MB->0 @100K, alloc-det stable across invocations). HONEST MARGIN NOTE: the source's +18% throughput (the same matrix-rust-sdk room_list bench) is END-TO-END — the narrow-accessor patch was one of several stacked optimizations; the isolated mechanism (uncontended read-lock + ~47-64B guarded-payload clone with a heap alloc, vs read-lock + bool read) reads 11-13x on this box because the clone dominates the lock; under real read contention the gap widens further (the clone holds the guard longer). The alloc axis (exact N->0) is the deterministic half of the verdict. Type-blind for a parse-only proposer (cannot see payload width or which sub-field a consumer reads) — suggestion-only, the soa-hot-field precedent.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(lock_guard_narrow_field_accessor_bench_spec()),
+        },
     ])
 }
 
@@ -5423,6 +5487,374 @@ pub fn run_fixed(input: &Input) {
     }
 }
 
+/// Bench spec for `sort-key-cache-precompute-out-of-lock` (Batch 73,
+/// Research 085/086 — the mnt.io room-list distill): comparator that
+/// acquires a read-lock + clones a 144 B `LatestEventValue` per invocation
+/// vs a maintained sort-key cache refreshed once per data-update cycle
+/// (the production `RoomListItem` pattern — refresh via NARROW reads, the
+/// narrow-accessor rule composed in).
+///
+/// sizes = SORTS PER REFRESH CYCLE (the amortization axis — the reactive
+/// stream regime: every filter change / pagination reset does a fresh full
+/// sort over the same data, and eyeball-im-util's `SortBy` re-invokes the
+/// comparator from `binary_search_by` on every diff). N_ROOMS = 512 is the
+/// article's 500-600 room scale. Every sort is preceded by a fixed
+/// deterministic Fisher-Yates permutation (in-place, no allocs, the SAME
+/// swap list in both arms) — a pseudo-random permutation has ~N/2 runs so
+/// the adaptive driftsort pays the full ~N·log N comparisons every sort
+/// (a plain reverse would be ONE detectable run, O(N) — measured: the
+/// reverse-protocol run showed only ~512 comparisons/sort vs the ~4600
+/// the shuffle protocol pays). G1: the final order is always desc —
+/// position-weighted checksum asserted against a make_input-computed
+/// expectation, in both arms.
+/// Alloc axis: buggy ≈ 2 allocs/comparison (the String body clone ×2
+/// accessor calls) vs fixed ≈ 1/sort (the sort's internal scratch).
+#[cfg(feature = "rust_perf_bench")]
+#[allow(clippy::too_many_lines)] // data table: the harness is a single embedded raw string
+fn sort_key_cache_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![1, 4, 16],
+        harness: r#"
+use std::cell::RefCell;
+use std::sync::RwLock;
+
+mod buggy {
+    use std::sync::RwLock;
+
+    #[derive(Clone)]
+    pub struct LatestEvent {
+        pub timestamp: u64,
+        pub body: String, // ~64 B heap — the guarded payload footprint
+    }
+    pub struct RoomInfo {
+        pub latest_event: Option<LatestEvent>,
+    }
+    pub struct Room {
+        pub info: RwLock<RoomInfo>,
+    }
+
+    impl Room {
+        // The article's `Room::latest_event` shape: read-lock acquire +
+        // clone of the WHOLE value per call. The comparator invokes it
+        // twice per comparison, ~N·log N comparisons per sort.
+        pub fn latest_event_timestamp(&self) -> Option<u64> {
+            self.info.read().unwrap().latest_event.clone().map(|ev| ev.timestamp)
+        }
+
+        // Verification-only narrow reader (NOT the measured sort path).
+        pub fn verify_ts(&self) -> Option<u64> {
+            self.info.read().unwrap().latest_event.as_ref().map(|ev| ev.timestamp)
+        }
+    }
+
+    pub fn sort_desc(rooms: &mut [Room]) {
+        rooms.sort_by(|a, b| b.latest_event_timestamp().cmp(&a.latest_event_timestamp()));
+    }
+}
+
+mod fixed {
+    use std::sync::RwLock;
+
+    #[derive(Clone)]
+    pub struct LatestEvent {
+        pub timestamp: u64,
+        // The payload width IS the mechanism — only the buggy arm's clone
+        // ever reads it; the narrow refresh reads just the timestamp.
+        #[allow(dead_code)]
+        pub body: String,
+    }
+    pub struct RoomInfo {
+        pub latest_event: Option<LatestEvent>,
+    }
+    pub struct Room {
+        pub info: RwLock<RoomInfo>,
+    }
+
+    impl Room {
+        // Narrow read through the guard — no clone (the narrow-accessor
+        // rule composed into the refresh path).
+        pub fn latest_event_timestamp(&self) -> Option<u64> {
+            self.info.read().unwrap().latest_event.as_ref().map(|ev| ev.timestamp)
+        }
+    }
+
+    /// The production `RoomListItem` facade: cached sort key refreshed
+    /// once per data update (a Reset cycle refreshes all N — the
+    /// amortization cost side).
+    pub struct RoomListItem {
+        pub inner: Room,
+        pub cached_ts: Option<u64>,
+    }
+
+    impl RoomListItem {
+        pub fn refresh_cached_data(&mut self) {
+            self.cached_ts = self.inner.latest_event_timestamp();
+        }
+    }
+
+    pub fn refresh_all(items: &mut [RoomListItem]) {
+        for it in items.iter_mut() {
+            it.refresh_cached_data();
+        }
+    }
+
+    pub fn sort_desc(items: &mut [RoomListItem]) {
+        items.sort_by(|a, b| b.cached_ts.cmp(&a.cached_ts));
+    }
+}
+
+const N_ROOMS: usize = 512; // the article's 500-600 room scale
+
+pub struct Input {
+    // Interior mutability: the working vec persists across validator calls
+    // (no per-call clone — both arms sort in place).
+    buggy_rooms: RefCell<Vec<buggy::Room>>,
+    fixed_items: RefCell<Vec<fixed::RoomListItem>>,
+    // Deterministic Fisher-Yates swap list (fixed LCG seed), applied
+    // in-place before every sort in BOTH arms — the same permutation
+    // sequence, so comparison counts are identical across arms.
+    shuffle: Vec<(usize, usize)>,
+    sorts_per_cycle: usize,
+    expected_desc: u64,
+}
+
+fn make_body(i: u64) -> String {
+    format!("event body {i:04} padding padding padding padding")
+}
+
+pub fn make_input(n: usize) -> Input {
+    let mut buggy_rooms = Vec::with_capacity(N_ROOMS);
+    let mut rooms = Vec::with_capacity(N_ROOMS);
+    let mut keys: Vec<u64> = Vec::with_capacity(N_ROOMS);
+    for i in 0..N_ROOMS as u64 {
+        let ts = i * 7 + 3; // distinct → total order, G1-deterministic
+        rooms.push(fixed::Room {
+            info: RwLock::new(fixed::RoomInfo {
+                latest_event: Some(fixed::LatestEvent { timestamp: ts, body: make_body(i) }),
+            }),
+        });
+        buggy_rooms.push(buggy::Room {
+            info: RwLock::new(buggy::RoomInfo {
+                latest_event: Some(buggy::LatestEvent { timestamp: ts, body: make_body(i) }),
+            }),
+        });
+        keys.push(ts);
+    }
+    // Reverse both so call #1's entry state is anti-sorted for its first sort.
+    // Reverse both so call #1's entry state is unsorted.
+    buggy_rooms.reverse();
+    rooms.reverse();
+    let fixed_items: Vec<fixed::RoomListItem> = rooms
+        .into_iter()
+        .map(|inner| fixed::RoomListItem { inner, cached_ts: None })
+        .collect();
+
+    // Deterministic Fisher-Yates swap list (fixed LCG seed). A PLAIN
+    // reverse() before each sort would be WRONG here: a perfectly
+    // reversed input is ONE run for the adaptive driftsort — it detects
+    // + reverses it in O(N) with ~N comparisons. A fixed pseudo-random
+    // permutation has ~N/2 runs → the full ~N·log N merge comparisons,
+    // the honest reactive-stream re-sort cost.
+    let mut swap: Vec<(usize, usize)> = Vec::with_capacity(N_ROOMS);
+    let mut rng: u64 = 0x243F_6A88_85A3_08D3;
+    for i in (1..N_ROOMS).rev() {
+        rng = rng.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        let j = ((rng >> 33) as usize) % (i + 1);
+        swap.push((i, j));
+    }
+
+    // G1 expectation: position-weighted checksum of the desc order,
+    // computed from the key set alone (independent of either arm).
+    let mut sorted = keys.clone();
+    sorted.sort_unstable();
+    let expected_desc: u64 =
+        sorted.iter().rev().enumerate().map(|(i, &k)| k * (i as u64 + 1)).sum();
+
+    Input {
+        buggy_rooms: RefCell::new(buggy_rooms),
+        fixed_items: RefCell::new(fixed_items),
+        shuffle: swap,
+        sorts_per_cycle: n,
+        expected_desc,
+    }
+}
+
+// Sort protocol (deterministic full-work sorts, no RNG at run time): every
+// sort is preceded by applying the fixed Fisher-Yates swap list (in-place,
+// O(N) moves, no allocs) + sorts DESCENDING. The permuted input has ~N/2
+// runs → the adaptive driftsort pays the full ~N·log N comparisons for
+// EVERY sort, in BOTH arms, every call (a plain reverse would be a single
+// detectable run — O(N)). End state: always desc → one G1 expectation.
+fn apply_shuffle<T>(v: &mut [T], swap: &[(usize, usize)]) {
+    for &(i, j) in swap {
+        v.swap(i, j);
+    }
+}
+
+fn checksum_weighted(ts: &[Option<u64>]) -> u64 {
+    ts.iter().enumerate().map(|(i, k)| k.unwrap_or(0) * (i as u64 + 1)).sum()
+}
+
+pub fn run_buggy(input: &Input) {
+    let input = std::hint::black_box(input);
+    let mut rooms = input.buggy_rooms.borrow_mut();
+    for _ in 0..input.sorts_per_cycle {
+        apply_shuffle(&mut rooms, &input.shuffle);
+        buggy::sort_desc(&mut rooms);
+    }
+    let ts: Vec<Option<u64>> = rooms.iter().map(|r| r.verify_ts()).collect();
+    let cs = checksum_weighted(&ts);
+    std::hint::black_box(cs);
+    debug_assert_eq!(cs, input.expected_desc);
+}
+
+pub fn run_fixed(input: &Input) {
+    let input = std::hint::black_box(input);
+    let mut items = input.fixed_items.borrow_mut();
+    // The refresh cycle: N narrow reads (the maintained cache's cost side).
+    fixed::refresh_all(&mut items);
+    for _ in 0..input.sorts_per_cycle {
+        apply_shuffle(&mut items, &input.shuffle);
+        fixed::sort_desc(&mut items);
+    }
+    let ts: Vec<Option<u64>> = items.iter().map(|it| it.cached_ts).collect();
+    let cs = checksum_weighted(&ts);
+    std::hint::black_box(cs);
+    debug_assert_eq!(cs, input.expected_desc);
+}
+"#
+        .to_string(),
+    }
+}
+
+#[cfg(feature = "rust_perf_bench")]
+#[allow(clippy::too_many_lines)] // data table: the harness is a single embedded raw string
+fn lock_guard_narrow_field_accessor_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![1_000, 10_000, 100_000],
+        harness: r#"
+use std::sync::RwLock;
+
+mod buggy {
+    use std::sync::RwLock;
+
+    #[derive(Clone)]
+    pub struct LatestEvent {
+        pub timestamp: u64,
+        pub sender_is_local: bool,
+        pub body: String, // ~64 B heap — the guarded payload
+    }
+    pub struct RoomInfo {
+        pub latest_event: Option<LatestEvent>,
+    }
+    pub struct Room {
+        pub info: RwLock<RoomInfo>,
+    }
+
+    impl Room {
+        // The wide accessor: clones the WHOLE guarded payload under the
+        // read-guard — 144 B + a heap alloc — so the caller can read one bool.
+        pub fn latest_event(&self) -> Option<LatestEvent> {
+            self.info.read().unwrap().latest_event.clone()
+        }
+
+        pub fn latest_event_is_local(&self) -> bool {
+            self.latest_event().is_some_and(|ev| ev.sender_is_local)
+        }
+    }
+}
+
+mod fixed {
+    use std::sync::RwLock;
+
+    #[derive(Clone)]
+    pub struct LatestEvent {
+        // The guarded payload width IS the mechanism — the buggy arm pays
+        // to clone it; the narrow accessor reads only the consumed bool.
+        #[allow(dead_code)]
+        pub timestamp: u64,
+        pub sender_is_local: bool,
+        #[allow(dead_code)]
+        pub body: String,
+    }
+    pub struct RoomInfo {
+        pub latest_event: Option<LatestEvent>,
+    }
+    pub struct Room {
+        pub info: RwLock<RoomInfo>,
+    }
+
+    impl Room {
+        // The narrow sibling (the production `new_latest_event_is_local`):
+        // compute the ONE consumed sub-field under the guard — no clone.
+        pub fn latest_event_is_local(&self) -> bool {
+            self.info.read().unwrap().latest_event.as_ref().is_some_and(|ev| ev.sender_is_local)
+        }
+    }
+}
+
+pub struct Input {
+    buggy_rooms: Vec<buggy::Room>,
+    fixed_rooms: Vec<fixed::Room>,
+    probes: Vec<usize>,
+    expected_local_count: u64,
+}
+
+pub fn make_input(n: usize) -> Input {
+    const ROOMS: usize = 64; // probe target pool (mix of local/not)
+    let make_body = |i: u64| format!("event body {i:04} padding padding padding padding");
+    let mut buggy_rooms = Vec::with_capacity(ROOMS);
+    let mut fixed_rooms = Vec::with_capacity(ROOMS);
+    let mut expected = 0u64;
+    for i in 0..ROOMS as u64 {
+        let is_local = i % 3 == 0; // deterministic mix
+        buggy_rooms.push(buggy::Room {
+            info: RwLock::new(buggy::RoomInfo {
+                latest_event: Some(buggy::LatestEvent { timestamp: i * 11 + 1, sender_is_local: is_local, body: make_body(i) }),
+            }),
+        });
+        fixed_rooms.push(fixed::Room {
+            info: RwLock::new(fixed::RoomInfo {
+                latest_event: Some(fixed::LatestEvent { timestamp: i * 11 + 1, sender_is_local: is_local, body: make_body(i) }),
+            }),
+        });
+    }
+    // Deterministic probe sequence (LCG) + expected count in ONE pass.
+    let mut probes = Vec::with_capacity(n);
+    let mut x = 1u64;
+    for _ in 0..n {
+        x = x.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        let idx = ((x >> 33) as usize) % ROOMS;
+        if idx as u64 % 3 == 0 { expected += 1; }
+        probes.push(idx);
+    }
+    Input { buggy_rooms, fixed_rooms, probes, expected_local_count: expected }
+}
+
+pub fn run_buggy(input: &Input) {
+    let input = std::hint::black_box(input);
+    let mut count = 0u64;
+    for &p in &input.probes {
+        count += input.buggy_rooms[p].latest_event_is_local() as u64;
+    }
+    std::hint::black_box(count);
+    debug_assert_eq!(count, input.expected_local_count);
+}
+
+pub fn run_fixed(input: &Input) {
+    let input = std::hint::black_box(input);
+    let mut count = 0u64;
+    for &p in &input.probes {
+        count += input.fixed_rooms[p].latest_event_is_local() as u64;
+    }
+    std::hint::black_box(count);
+    debug_assert_eq!(count, input.expected_local_count);
+}
+"#
+        .to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -5438,9 +5870,9 @@ mod tests {
     }
 
     #[test]
-    fn seed_corpus_has_seventy_six_entries_across_twelve_categories() {
+    fn seed_corpus_has_seventy_eight_entries_across_twelve_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 76);
+        assert_eq!(corpus.entries.len(), 78);
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
@@ -5456,13 +5888,15 @@ mod tests {
         // transposed-weight-register-gemv; Batch 64 added
         // loop-order-innermost-contiguous); layout has 6 (Batch 53 added
         // soa-hot-field; Batch 61 added usize-index-to-u32) + concurrency
-        // has 6 (Issue 014 added the two metric-mismatch rules; Batch 65
-        // added align-64-false-sharing + channel-send-batching-unpark); arithmetic
+        // has 7 (Issue 014 added the two metric-mismatch rules; Batch 65
+        // added align-64-false-sharing + channel-send-batching-unpark;
+        // Batch 73 added lock-guard-narrow-field-accessor); arithmetic
         // has 6 (Batch 53 added powi-vs-powf + distance-sq-no-sqrt; Batch 59
-        // added division-by-invariant-multiplication; Batch 62 added
-        // newton-refinement-vs-hardware-transcendental); dispatch has 2
-        // (Batch 61 added keyword-map-to-match); caching has 2 (Issue 014
-        // added regex-hoist-lazylock); io has 3 (Batch 68 added
+        // added division-by-invariant-multiplication; Batch 62
+        // added newton-refinement-vs-hardware-transcendental); dispatch has 2
+        // (Batch 61 added keyword-map-to-match); caching has 3 (Issue 014
+        // added regex-hoist-lazylock; Batch 73 added
+        // sort-key-cache-precompute-out-of-lock); io has 3 (Batch 68 added
         // varint-compose-word-single-store; Batch 69 added
         // unaligned-word-load-from-bytes); bevy, wasm have 1 each.
         assert_eq!(categories.len(), 12);
@@ -5851,10 +6285,10 @@ mod tests {
 
     #[cfg(feature = "rust_perf_bench")]
     #[test]
-    fn sixty_six_rules_have_bench_specs() {
+    fn sixty_eight_rules_have_bench_specs() {
         let corpus = build_perf_seed_corpus();
         let with_spec = corpus.entries.iter().filter(|e| e.bench_spec.is_some()).count();
-        assert_eq!(with_spec, 66, "expected 66 benchable rules, got {with_spec}");
+        assert_eq!(with_spec, 68, "expected 68 benchable rules, got {with_spec}");
     }
 
     #[cfg(feature = "rust_perf_bench")]
@@ -5897,10 +6331,14 @@ mod tests {
     /// class — the mirrored regime of filter-count-to-any). Batch 65 added 2
     /// (align-64-false-sharing — the arch-granularity caveat on a clean
     /// winner; channel-send-batching-unpark — the pipeline-overlap regime).
+    /// Batch 73 added 2 (sort-key-cache-precompute-out-of-lock — the
+    /// sorts-per-update amortization regime + the source-vs-isolated
+    /// magnitude caveat; lock-guard-narrow-field-accessor — the honest
+    /// margin note on a clean winner).
     /// The other 58 have `context_notes: None` (unconditional wins or
     /// honestly NotBenchable).
     #[test]
-    fn eighteen_annotated_rules_carry_context_notes() {
+    fn twenty_annotated_rules_carry_context_notes() {
         let corpus = build_perf_seed_corpus();
         let annotated: Vec<&str> = corpus
             .entries
@@ -5908,7 +6346,7 @@ mod tests {
             .filter(|e| e.context_notes.is_some())
             .map(|e| e.rule_id.as_str())
             .collect();
-        assert_eq!(annotated.len(), 18, "expected 18 context-annotated rules");
+        assert_eq!(annotated.len(), 20, "expected 20 context-annotated rules");
         assert!(annotated.contains(&"precompute-table"));
         assert!(annotated.contains(&"papaya-lockfree"));
         assert!(annotated.contains(&"dedupe-hashset-vs-vec"));
@@ -5926,6 +6364,8 @@ mod tests {
         assert!(annotated.contains(&"debug-assert-length-hoist"));
         assert!(annotated.contains(&"align-64-false-sharing"));
         assert!(annotated.contains(&"channel-send-batching-unpark"));
+        assert!(annotated.contains(&"sort-key-cache-precompute-out-of-lock"));
+        assert!(annotated.contains(&"lock-guard-narrow-field-accessor"));
     }
 
     /// The non-annotated rules (ParetoDominant + honestly NotBenchable) must
@@ -5939,7 +6379,7 @@ mod tests {
             .iter()
             .filter(|e| e.context_notes.is_none())
             .count();
-        assert_eq!(unannotated, 58, "expected 58 unannotated rules (76 - 18 annotated)");
+        assert_eq!(unannotated, 58, "expected 58 unannotated rules (78 - 20 annotated)");
     }
 
     /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -5951,7 +6391,7 @@ mod tests {
         let json = serde_json::to_string(&corpus.entries).unwrap();
         let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
         let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-        assert_eq!(annotated, 18);
+        assert_eq!(annotated, 20);
 
         // Simulate a pre-field snapshot: strip `context_notes` from JSON.
         // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -5963,26 +6403,29 @@ mod tests {
 
     /// Integration: the drafter propagates `context_notes` from `PerfRule`
     /// through `DraftedFix` for the annotated rules, and `None` for the
-    /// unconditional wins. Eighteen annotations: Bench 013 (2 ParetoDominated
+    /// unconditional wins. Twenty annotations: Bench 013 (2 ParetoDominated
     /// and 2 Mixed), Bench 016 (sort-by-key and copy-from-slice), Issue 014
     /// (2 NotBenchable metric-mismatch), Batch 48 (2 verdict-class),
     /// Batch 53 (Bench 038, 2 verdict-class), Batch 62 (1 regime-class),
     /// Batch 64 (1 release-erasure class), Batch 66 (1 regime-split
     /// class), Batch 68 (1 ParetoDominated honest-loser — the tantivy
     /// varint ladder regresses on aarch64 across 3 tested writer regimes),
-    /// and Batch 65 (2 measured-winner regime caveats — align-64's
+    /// Batch 65 (2 measured-winner regime caveats — align-64's
     /// arch-granularity + channel-send's pipeline-overlap margin; a NEW
     /// annotation class: ParetoDominant verdict + applicability condition,
-    /// accepted by the token check below).
+    /// accepted by the token check below), and Batch 73 (2 measured-winner
+    /// caveats — the mnt.io room-list distill: sort-key-cache's
+    /// sorts-per-update regime + source-vs-isolated magnitude note;
+    /// lock-guard-narrow's end-to-end-vs-isolated margin note).
     #[test]
     fn drafter_propagates_context_notes_from_perf_corpus() {
         use crate::domain::HealEntry;
 
         let corpus = build_perf_seed_corpus();
 
-        // Filter to the 18 annotated rules.
+        // Filter to the 20 annotated rules.
         let annotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_some()).collect();
-        assert_eq!(annotated.len(), 18, "expected 18 annotated rules");
+        assert_eq!(annotated.len(), 20, "expected 20 annotated rules");
 
         // The HealEntry trait override must agree with the struct field.
         for rule in &annotated {
@@ -6145,5 +6588,154 @@ mod tests {
             .expect("channel-send-batching-unpark in corpus");
         let note = rule.context_notes.as_ref().unwrap();
         assert!(note.contains("mem::replace"), "annotation must warn take-vs-replace");
+    }
+
+    /// G1 for `sort-key-cache-precompute-out-of-lock` (Batch 73, Research
+    /// 085/086 — the mnt.io room-list distill): the maintained-cache sort
+    /// must produce the IDENTICAL order as the lock+clone comparator sort —
+    /// same keys, same comparator, no observable side effects. Mirrors the
+    /// bench harness's shape at test scale (distinct keys → total order →
+    /// deterministic), including the reverse-then-sort-desc protocol.
+    #[test]
+    fn sort_key_cache_order_matches_lock_clone_comparator() {
+        use std::sync::RwLock;
+
+        #[derive(Clone)]
+        struct LatestEvent {
+            timestamp: u64,
+            // width-only: the clone reads it, nothing else does
+            #[allow(dead_code)]
+            body: String,
+        }
+        struct RoomInfo {
+            latest_event: Option<LatestEvent>,
+        }
+        struct Room {
+            info: RwLock<RoomInfo>,
+        }
+
+        impl Room {
+            fn wide_ts(&self) -> Option<u64> {
+                // the buggy shape: whole-value clone under the guard
+                self.info
+                    .read()
+                    .unwrap()
+                    .latest_event
+                    .clone()
+                    .map(|ev| ev.timestamp)
+            }
+            fn narrow_ts(&self) -> Option<u64> {
+                self.info
+                    .read()
+                    .unwrap()
+                    .latest_event
+                    .as_ref()
+                    .map(|ev| ev.timestamp)
+            }
+        }
+
+        const N: usize = 128;
+        let mut rooms: Vec<Room> = (0..N as u64)
+            .map(|i| Room {
+                info: RwLock::new(RoomInfo {
+                    latest_event: Some(LatestEvent {
+                        timestamp: i * 7 + 3, // distinct
+                        body: format!("body {i} padded padded padded"),
+                    }),
+                }),
+            })
+            .collect();
+        rooms.reverse(); // maximally unsorted start
+
+        // Arm A: the buggy comparator (clone under guard, twice per cmp).
+        let mut buggy_order: Vec<Option<u64>> = rooms.iter().map(Room::wide_ts).collect();
+        buggy_order.sort_by(|a, b| b.cmp(a));
+
+        // Arm B: refresh the cache once (narrow reads), sort on cached keys.
+        let cached: Vec<Option<u64>> = rooms.iter().map(Room::narrow_ts).collect();
+        let mut fixed_order = cached.clone();
+        fixed_order.sort_by(|a, b| b.cmp(a));
+
+        assert_eq!(
+            buggy_order, fixed_order,
+            "maintained-cache sort order drifted from the lock+clone order"
+        );
+        // Descending-by-distinct-keys is fully determined: first = max key.
+        let max_key = (0..N as u64).map(|i| i * 7 + 3).max().unwrap();
+        assert_eq!(fixed_order.first().copied().flatten(), Some(max_key));
+    }
+
+    /// G1 for `lock-guard-narrow-field-accessor` (Batch 73, Research 085/086):
+    /// the narrow accessor must return the SAME value as the wide-clone
+    /// accessor for every room — the clone is unobservable, only the
+    /// consumed sub-field crosses.
+    #[test]
+    fn lock_guard_narrow_accessor_values_match_wide_clone() {
+        use std::sync::RwLock;
+
+        #[derive(Clone)]
+        struct LatestEvent {
+            // width-only fields: only the clone ever touches them
+            #[allow(dead_code)]
+            timestamp: u64,
+            sender_is_local: bool,
+            #[allow(dead_code)]
+            body: String,
+        }
+        struct RoomInfo {
+            latest_event: Option<LatestEvent>,
+        }
+        struct Room {
+            info: RwLock<RoomInfo>,
+        }
+
+        impl Room {
+            fn wide_is_local(&self) -> bool {
+                self.info
+                    .read()
+                    .unwrap()
+                    .latest_event
+                    .clone() // the whole 144 B payload
+                    .is_some_and(|ev| ev.sender_is_local)
+            }
+            fn narrow_is_local(&self) -> bool {
+                self.info
+                    .read()
+                    .unwrap()
+                    .latest_event
+                    .as_ref()
+                    .is_some_and(|ev| ev.sender_is_local)
+            }
+        }
+
+        // Mixed local/not + one room with NO latest event (the None edge).
+        let rooms: Vec<Room> = (0..33)
+            .map(|i| {
+                let latest = if i == 32 {
+                    None
+                } else {
+                    Some(LatestEvent {
+                        timestamp: i * 11 + 1,
+                        sender_is_local: i % 3 == 0,
+                        body: format!("body {i} padded padded"),
+                    })
+                };
+                Room {
+                    info: RwLock::new(RoomInfo {
+                        latest_event: latest,
+                    }),
+                }
+            })
+            .collect();
+
+        for (i, r) in rooms.iter().enumerate() {
+            assert_eq!(
+                r.wide_is_local(),
+                r.narrow_is_local(),
+                "narrow accessor drifted from wide-clone at room {i}"
+            );
+        }
+        // The None edge: both arms false.
+        assert!(!rooms[32].narrow_is_local());
     }
 }
