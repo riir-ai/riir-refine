@@ -1,7 +1,6 @@
 # Proposal 004 — The `sec` Domain: Security-Pattern Healing as the Fourth HealDomain
 
-Status: **draft**
-Blocked by: [Issue 037](../.issues/037_e2e_self_evolve_adoption_proof.md) — the existing loop's E2E proof (verdict wiring T2 is the same real-clippy-oracle substrate the sec boundary gate depends on). No fourth domain until the first three's loop is closed (gates E2–E5).
+Status: **draft — UNBLOCKED 2026-08-26**: [Issue 037](../.issues/037_e2e_self_evolve_adoption_proof.md) CLOSED (all gates green incl. A1 cadence — record: [AGENTS.md](../AGENTS.md) §Issue 037 + git history). The loop's verdict wiring (T2, real-clippy oracle) is proven; the fourth domain may open under its own plan (Plan 018 Phase 0+1 already shipped).
 Branch: `develop` (per global rule — no feature branches)
 Owner: unassigned
 Fusion of: Plan 001 (HealDomain meta-architecture) × Research 078 (seed inventory) × the `clippy_verify`/`fix_verify` validator shapes

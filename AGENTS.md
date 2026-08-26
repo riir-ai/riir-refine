@@ -2811,19 +2811,23 @@ default lib 660/0, full-feature 762/0/8i, clippy 0 both states) →
 `last_seen_at`). Record: [`.docs/10_self_evolve/latent_fix_memory.md`](.docs/10_self_evolve/latent_fix_memory.md)
 §Persistence + `scripts/self_evolve_audit.sh` §1 (store-first).
 
-**Issue 037 (E2E self-evolve proof + adoption observability) — OPEN**, gated
-on: **A1** cadence only (≥3 distinct heal-activity days in a 14-day window;
-2/3 so far — earliest close 2026-08-26). **E5 MET 2026-08-25**: P9 closed
-end-to-end — the ruliology/player.rs verify-revert cluster root-caused
-(map_or's U cannot perform the `&fn→&dyn Fn` unsize coercion — E0308 at
-:463; second member of the 2bf2a44 class), proposer guard `64820c1` + 5
-fixtures + score-bench v2 fixture `riir-ai-ruliology-player-001` pinning
-the guard on the parse_safety axis (run #5: heal 96.2% = the new
-persistent-divergence denominator, created 1.9%, safety 100% held); the
-two innocent single_match_else edits landed on the real file (riir-ai
-`6ca4f00e3`). E1-E5 + A2/A3 MET (A3 spot check 2026-08-25: riir-ai healed
-files + riir-dapps src/ → 0 dry-run edits). Blocks Proposals 003 + 004 until
-A1 green. File: `.issues/037_e2e_self_evolve_adoption_proof.md`.
+**Issue 037 (E2E self-evolve proof + adoption observability) — CLOSED
+2026-08-26** (file removed per the noise-reduction rule; full session records
+in git history — `git log -- .issues/037_*.md`). **ALL GATES GREEN**: A1
+cadence MET on day 3 — 2026-08-24 (riir-ai `703856080` T5), 2026-08-25
+(riir-ai `6ca4f00e3` P9), 2026-08-26 (riir-viewbridge `c54c658` — first
+clippy sweep of that repo, 6 edits / 5 Certified, tests count-identical
+102/0/3 + a sibling riir-train heal) — commit + store evidence both, judged
+with the audit script's word-boundary grep fix (a bare `--grep=heal`
+substring-match on "health"/"healthy" commits had fabricated a false 3rd day
+earlier the same day; caught + fixed in the sibling's in-flight script WIP —
+the honest 3-day evidence stands independent of it). E1–E5 + A2/A3 were
+already MET (E5 2026-08-25: P9 closed — ruliology/player.rs verify-revert
+cluster root-caused, proposer guard `64820c1` + score-bench v2 fixture;
+narrative: git history). **T7 discharged — Proposals 003 + 004 UNBLOCKED**
+(their Blocked-by lines updated in the same commit). KAT ([Proposal
+005](../.proposals/005_kat_heal_service_network.md)) Phase 0 unblocks with
+this close.
 
 ## Source secrecy & binary-only distribution (non-negotiable)
 

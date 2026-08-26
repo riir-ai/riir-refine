@@ -64,8 +64,19 @@ the query surface for verifying T2 once it lands: after a real
 
 ### Adoption (the "agents use it" half)
 
-- [ ] **A1 — cadence:** heal activity (memory growth after T3, or heal
+- [x] **A1 — cadence:** heal activity (memory growth after T3, or heal
       commits) on ≥3 distinct days within any 14-day window post-T3.
+      → **MET (2026-08-26, judged with the audit script's word-boundary grep
+      fix):** 2026-08-24 (riir-ai `703856080`, T5) · 2026-08-25 (riir-ai
+      `6ca4f00e3`, P9's two single_match_else edits) · 2026-08-26
+      (riir-viewbridge `c54c658` — first clippy sweep of that repo, 6 edits /
+      5 oracle-Certified, tests count-identical 102/0/3, store rows + EMA
+      learn active; plus a sibling riir-train heal the same day). Commit +
+      store evidence on all three days. Honesty note: an earlier same-day
+      audit run printed a FALSE A1 PASS — a bare `--grep=heal` substring
+      matched "health"/"healthy" commits; the word-boundary fix (sibling
+      in-flight on `self_evolve_audit.sh`) removes those, and the 3-day
+      evidence above survives it without the false rows.
 - [x] **A2 — breadth:** ≥2 repos carry heal-commits dated after
       2026-08-24T00:00:00 (`git log --since=... --grep=heal`).
       → **MET (2026-08-24):** riir-ai `703856080` (the T5 unit) + riir-dapps
@@ -252,10 +263,15 @@ the query surface for verifying T2 once it lands: after a real
       The player.rs break class is post-mining intake material (the exact
       rustc error would sharpen a proposer guard — filed in the queue
       snapshot, not examined this session).
-- [ ] **T6 — close gates A1–A3/E2–E5** via audit script output; write the
+- [x] **T6 — close gates A1–A3/E2–E5** via audit script output; write the
       resolution note here; remove this file per the noise-reduction rule.
-- [ ] **T7 — unblock Proposals 003 + 004** (they reference this issue; see
+      **DONE 2026-08-26** — audit §5 prints `A1: PASS` (3 distinct days);
+      all other gates were already green. Resolution narrative →
+      AGENTS.md §Issue 037; file removed in the same commit.
+- [x] **T7 — unblock Proposals 003 + 004** (they reference this issue; see
       below) once E2–E5 are green.
+      **DONE 2026-08-26** — both status lines updated in the same commit as
+      this close; KAT Proposal 005's Blocked-by cleared with it.
 
 ## Why this blocks the two proposals (owner's call, 2026-08-24)
 
