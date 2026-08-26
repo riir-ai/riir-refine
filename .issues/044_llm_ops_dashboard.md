@@ -1,7 +1,7 @@
 # Issue 044 — ops dashboard: one URL tracking LLM spend + healer adoption + coverage
 
 **Filed:** 2026-08-26
-**Status:** OPEN — T1 (v1) SHIPPED same day; backlog below
+**Status:** OPEN — T1 (v1) + T11 SHIPPED; T3/T5/T9 partial (Issue 045); T8 SHIPPED 2026-08-27 (`50da11a`); the remaining backlog is owner-gated (T2 auth choice, T4 webhook target, T6 riir-train convention, T7 scheduling infra) — see per-task notes
 **Repo:** riir-clippy
 **URL:** https://riir-ops-dashboard.foxfox.workers.dev/
 
@@ -90,8 +90,12 @@ Leftovers found + removed (owner ask: "any active on cloudflare leftover?"):
       This is the biggest visible gap vs the owner's "training" ask.
 - [ ] **T7 coverage auto-measure** — schedule `--sweep` nightly so the
       unhealed table stays honest (manual today).
-- [ ] **T8 fixer quality history** — keeps/vetoes per arm per session
-      (Bench 049/053 shape) as a time series, not prose in `.md`.
+- [x] **T8 fixer quality history** — SHIPPED 2026-08-27 (commit `50da11a`):
+      `.benchmarks/fixer_quality_history.jsonl` — one append-only row per arm
+      run (arms A/B via `run_cf` + arm C via `run_daemon`): keep_oracle/
+      keep_strict/vetoed/divergent/regressions + the reachable-miss pair +
+      EM/parse/merge axes + tokens + latency. The dashboard's fixer-quality
+      axis reads this file.
 - [-] **T9 heartbeat/staleness** — PARTIAL 2026-08-26 (Issue 045): the
       housekeeping Worker's hourly heartbeat rows (KV `latest`) prove a
       schedule is alive; the dashboard-side staleness banner + alert

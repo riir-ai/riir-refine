@@ -174,5 +174,6 @@ lives (T1 above).
   (`scheduled() → getContainer().start()` + poll heartbeat — still
   Worker-class work; this issue's Worker-not-container verdict is exactly
   why); (c) the LLM half of every future window is bounded by
-  [Issue 046](../.issues/046_usd_llm_daily_cap_enforcement.md)
-  (`DEFAULT_LLM_DAILY_CAP_USD = 1.0`). T4/T5/T6 unchanged.
+  Issue 046 (`DEFAULT_LLM_DAILY_CAP_USD = 1.0`; resolved + removed
+  2026-08-27, commit `8fce5b2` — the gate ships in `CfClient::generate`).
+  T4/T5/T6 unchanged.

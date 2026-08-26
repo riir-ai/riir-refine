@@ -4,11 +4,11 @@ Expands [Proposal 005](../.proposals/005_kat_heal_service_network.md) rollout ta
 
 **Honest sequencing rationale (bootstrap-first, the proposal's own discipline):** the local M3 idle-loop already sweeps whenever an agent session is open. Phase A (local cron) validates the loop at $0 and measures the real window lengths; the container (Phase B) is only worth its $5/mo plan gate + image pipeline once the loop is proven valuable AND 24/7 coverage matters; R2 (Phase C) only pays once cold-disk wakes exist to serve. Each phase's go condition is the previous phase's measurement.
 
-**Dependency:** [Issue 046](../.issues/046_usd_llm_daily_cap_enforcement.md) (USD hard cap) lands FIRST — no unattended LLM loop before it.
+**Dependency:** Issue 046 (USD hard cap) — **LANDED 2026-08-27, commit `8fce5b2`** (resolved + removed per the noise rule; see A1). No unattended LLM loop ran before it.
 
 ## Phase A — local bootstrap (no CF container, $0)
 
-- [ ] A1 Dependency: Issue 046 green (the cap enforced in `CfClient::generate`).
+- [x] A1 Dependency: Issue 046 green (the cap enforced in `CfClient::generate`) — **RESOLVED 2026-08-27, commit `8fce5b2`** (`src/llm_spend.rs` + the gate in `generate`; G1/G2/G3 green; issue file removed per the noise rule).
 - [ ] A2 **Local cron/launchd sweeper** (T2.6's local half): scheduled `cargo heal --fix --verify` runs over a TARGETED own-repo list (`-p <crate>` scope, span-class-filtered — never blind full sweeps); findings land on **review branches** (scoped per-repo deploy key, never the owner key, never direct `develop`); the never-wrong gates ride `--verify` as today. Deliverable: the launchd plist (or cron entry) + the targeting config + one week of measured runs (window length, findings/keeps/reverts per repo).
 - [ ] A3 **Trainer-window local drain** (T2.0's local half): productize the Bench 049 harness into the drain loop — pull the local miss backlog (TrajStore) → dedup/priority → modelless pre-pass → LLM (capped, both neuron + USD bounds) → `fix_verify` + oracle strict-keep → commit trajectories + the transparency ledger row (neurons, model id, attempts/keeps/declines, est-USD vs cap). Runs daily via the same cron surface. Deliverable: the loop binary + the first week's ledger rows.
 - [ ] A4 **Window measurement** (feeds Phase B sizing): per-run `cpuTimeSec` vs wall + peak RSS recorded; the T2.0 sizing rule (CPU work-constant, mem/disk per-wall-second) applied to pick the instance tier from DATA.
