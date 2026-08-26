@@ -722,8 +722,10 @@ pub struct CfGen {
     /// chat.completion schema includes `usage.neurons`; legacy-schema models
     /// report 0 — use the GraphQL daily aggregate for those).
     pub neurons: f64,
-    /// Thinking-token size diagnostic (qwen3.x `message.reasoning` length —
-    /// billed as completion tokens; 0 when the model doesn't reason).
+    /// Thinking-token size diagnostic (reasoning-model field length —
+    /// `message.reasoning` for qwen3.x, `message.reasoning_content`
+    /// (DeepSeek-style) for GLM; billed as completion tokens; 0 when the
+    /// model doesn't reason or thinking is disabled).
     pub reasoning_chars: usize,
     pub latency_ms: u128,
 }
@@ -871,6 +873,105 @@ pub struct CfUsageToday {
     pub neurons: f64,
 }
 
+/// Build the OpenAI-compat request body, applying per-family thinking
+/// mitigations (both measured live — see the `generate` doc for provenance).
+/// Pure so the mitigations are unit-testable without a network.
+fn build_request_body(
+    model: &str,
+    prompt: &str,
+    max_tokens: usize,
+    glm_thinking: bool,
+) -> serde_json::Value {
+    let content = if model.contains("qwen3") {
+        format!("{prompt} /no_think")
+    } else {
+        prompt.to_string()
+    };
+    let mut body = serde_json::json!({
+        "messages": [{ "role": "user", "content": content }],
+        "max_tokens": max_tokens,
+        "temperature": 0.0,
+    });
+    if model.contains("glm") && !glm_thinking {
+        body["chat_template_kwargs"] =
+            serde_json::json!({ "enable_thinking": false });
+    }
+    body
+}
+
+/// Error-prefix classifier for the thinking-model starvation class (see
+/// [`parse_chat_result`]). Distinct so harness runs can tell "budget too
+/// small" (recoverable, size it) from "unknown schema" (a real bug).
+pub const REASONING_OVERFLOW: &str = "reasoning-overflow";
+
+/// Parse the CF `result` object into `(text, reasoning_chars)`.
+///
+/// Two response schemas ship on Workers AI (measured 2026-08-26):
+///   legacy      — `result.response` (String | Array<String>)
+///                 e.g. llama-3.3-70b-instruct-fp8-fast
+///   chat-style  — `result.choices[0].message.content` + a separate reasoning
+///                 field for thinking models (`message.reasoning` for
+///                 qwen3.x, `message.reasoning_content` DeepSeek-style for
+///                 GLM — which emits BOTH at equal length)
+///
+/// The 169-request arm-A burn on 2026-08-26 was wasted to learning
+/// this: the qwen switch left `response` absent and every extraction
+/// returned nothing while completion tokens (thinking) billed.
+///
+/// Null/absent `content` with `finish_reason == "length"` is classified as
+/// [`REASONING_OVERFLOW`] — the thinking-model starvation class where
+/// reasoning consumed the whole `max_tokens` budget — so callers size the
+/// budget or disable thinking instead of misreading "model unusable"
+/// (the exact misread the 2026-08-26 GLM smoke + qwen incident shared).
+///
+/// # Errors
+///
+/// Overflow/shape errors; the overflow message starts with
+/// [`REASONING_OVERFLOW`] so `starts_with` classifies it without parsing.
+fn parse_chat_result(result: &serde_json::Value) -> Result<(String, usize), String> {
+    if let Some(r) = result
+        .pointer("/choices/0/message/content")
+        .and_then(serde_json::Value::as_str)
+    {
+        let rc = [
+            result
+                .pointer("/choices/0/message/reasoning")
+                .and_then(serde_json::Value::as_str),
+            result
+                .pointer("/choices/0/message/reasoning_content")
+                .and_then(serde_json::Value::as_str),
+        ]
+        .iter()
+        .filter_map(|o| *o)
+        .map(str::len)
+        .max()
+        .unwrap_or(0);
+        return Ok((r.to_string(), rc));
+    }
+    let finish = result
+        .pointer("/choices/0/finish_reason")
+        .and_then(serde_json::Value::as_str);
+    if finish == Some("length") {
+        return Err(format!(
+            "{REASONING_OVERFLOW}: content null with finish_reason=length — raise max_tokens or disable thinking"
+        ));
+    }
+    match result.get("response") {
+        Some(serde_json::Value::String(s)) => Ok((s.clone(), 0)),
+        Some(serde_json::Value::Array(items)) => Ok((
+            items
+                .iter()
+                .filter_map(|i| i.as_str())
+                .collect::<Vec<_>>()
+                .join(""),
+            0,
+        )),
+        _ => Err(format!(
+            "CF result had neither chat nor legacy response shape: {result}"
+        )),
+    }
+}
+
 impl CfClient {
     /// One generation. Temperature 0 for reproducibility.
     ///
@@ -889,16 +990,18 @@ impl CfClient {
         // a short preamble and content lands within budget;
         // `enable_thinking:false` is IGNORED by this serving stack — probed,
         // reasoning still present). Non-qwen3 models pass through unchanged.
-        let content = if self.model.contains("qwen3") {
-            format!("{prompt} /no_think")
-        } else {
-            prompt.to_string()
-        };
-        let body = serde_json::json!({
-            "messages": [{ "role": "user", "content": content }],
-            "max_tokens": max_tokens,
-            "temperature": 0.0,
-        });
+        // GLM-4.7-flash mitigation is measured separately (Issue 043 T1
+        // probes, 2026-08-26): `chat_template_kwargs.enable_thinking:false`
+        // is the ONE switch this serving stack honors — 0.155 n vs 4.52 n on
+        // the trivial probe (~29×). Note the inversion vs qwen: there the
+        // kwarg is IGNORED and the suffix works. `reasoning_effort` and
+        // `thinking:{type:disabled}` are ignored here too (probed).
+        // `RIIR_CF_GLM_THINKING=1` opts back into budgeted reasoning (for
+        // gates comparing the reasoning mode) — read once per call, never
+        // logged.
+        let glm_thinking =
+            std::env::var("RIIR_CF_GLM_THINKING").as_deref() == Ok("1");
+        let body = build_request_body(&self.model, prompt, max_tokens, glm_thinking);
         let resp = self
             .agent
             .post(&self.url)
@@ -911,35 +1014,7 @@ impl CfClient {
         let result = v
             .get("result")
             .ok_or_else(|| format!("CF response had no result: {v}"))?;
-        // Two response schemas ship on Workers AI (measured 2026-08-26):
-        //   legacy      — `result.response` (String | Array<String>)
-        //                 e.g. llama-3.3-70b-instruct-fp8-fast
-        //   chat-style  — `result.choices[0].message.content` + a separate
-        //                 `message.reasoning` for thinking models
-        //                 e.g. @cf/qwen/qwen3.8-27b
-        // The 169-request arm-A burn on 2026-08-26 was wasted to learning
-        // this: the qwen switch left `response` absent and every extraction
-        // returned nothing while completion tokens (thinking) billed.
-        let (text, reasoning_chars) = if let Some(r) = result.pointer("/choices/0/message/content").and_then(serde_json::Value::as_str) {
-            let rc = result
-                .pointer("/choices/0/message/reasoning")
-                .and_then(serde_json::Value::as_str)
-                .map_or(0, str::len);
-            (r.to_string(), rc)
-        } else {
-            match result.get("response") {
-                Some(serde_json::Value::String(s)) => (s.clone(), 0),
-                Some(serde_json::Value::Array(items)) => (
-                    items
-                        .iter()
-                        .filter_map(|i| i.as_str())
-                        .collect::<Vec<_>>()
-                        .join(""),
-                    0,
-                ),
-                _ => return Err(format!("CF result had neither chat nor legacy response shape: {result}")),
-            }
-        };
+        let (text, reasoning_chars) = parse_chat_result(result)?;
         let usage = result.get("usage");
         let get = |k: &str| {
             usage
@@ -1340,6 +1415,120 @@ impl ArmSummary {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ── build_request_body / parse_chat_result (Issue 043 T3) ────────────
+
+    #[test]
+    fn request_body_appends_no_think_for_qwen3_only() {
+        let q = build_request_body("@cf/qwen/qwen3.8-27b", "fix this", 128, false);
+        assert_eq!(
+            q.pointer("/messages/0/content").and_then(|v| v.as_str()),
+            Some("fix this /no_think")
+        );
+        assert!(q.get("chat_template_kwargs").is_none());
+    }
+
+    #[test]
+    fn request_body_disables_glm_thinking_by_default() {
+        let g = build_request_body("@cf/zai-org/glm-4.7-flash", "fix this", 512, false);
+        assert_eq!(
+            g.pointer("/messages/0/content").and_then(|v| v.as_str()),
+            Some("fix this")
+        );
+        assert_eq!(
+            g.pointer("/chat_template_kwargs/enable_thinking"),
+            Some(&serde_json::json!(false))
+        );
+    }
+
+    #[test]
+    fn request_body_glm_thinking_env_override_keeps_reasoning() {
+        let g = build_request_body("@cf/zai-org/glm-4.7-flash", "fix this", 512, true);
+        assert!(g.get("chat_template_kwargs").is_none());
+    }
+
+    #[test]
+    fn request_body_leaves_non_thinking_models_alone() {
+        let l = build_request_body(
+            "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+            "fix this",
+            512,
+            false,
+        );
+        assert_eq!(
+            l.pointer("/messages/0/content").and_then(|v| v.as_str()),
+            Some("fix this")
+        );
+        assert!(l.get("chat_template_kwargs").is_none());
+    }
+
+    #[test]
+    fn parse_reads_reasoning_content_the_glm_shape() {
+        let v = serde_json::json!({
+            "choices": [{
+                "finish_reason": "stop",
+                "message": {
+                    "content": "fn fixed() {}",
+                    "reasoning": "",
+                    "reasoning_content": "think think"
+                }
+            }]
+        });
+        let (t, rc) = parse_chat_result(&v).unwrap();
+        assert_eq!(t, "fn fixed() {}");
+        assert_eq!(rc, "think think".len());
+    }
+
+    #[test]
+    fn parse_prefers_the_longer_reasoning_field() {
+        let v = serde_json::json!({
+            "choices": [{
+                "finish_reason": "stop",
+                "message": {
+                    "content": "ok",
+                    "reasoning": "longer reasoning here",
+                    "reasoning_content": "short"
+                }
+            }]
+        });
+        let (_, rc) = parse_chat_result(&v).unwrap();
+        assert_eq!(rc, "longer reasoning here".len());
+    }
+
+    #[test]
+    fn parse_classifies_reasoning_overflow_distinctly() {
+        let v = serde_json::json!({
+            "choices": [{
+                "finish_reason": "length",
+                "message": { "content": null, "reasoning": "x" }
+            }]
+        });
+        let e = parse_chat_result(&v).unwrap_err();
+        assert!(
+            e.starts_with(REASONING_OVERFLOW),
+            "overflow must carry the classifier prefix, got: {e}"
+        );
+    }
+
+    #[test]
+    fn parse_null_content_with_stop_is_the_generic_shape_error() {
+        let v = serde_json::json!({
+            "choices": [{
+                "finish_reason": "stop",
+                "message": { "content": null }
+            }]
+        });
+        let e = parse_chat_result(&v).unwrap_err();
+        assert!(!e.starts_with(REASONING_OVERFLOW));
+    }
+
+    #[test]
+    fn parse_legacy_string_and_array_shapes_still_work() {
+        let s = serde_json::json!({ "response": "legacy text" });
+        assert_eq!(parse_chat_result(&s).unwrap().0, "legacy text");
+        let a = serde_json::json!({ "response": ["a", "b"] });
+        assert_eq!(parse_chat_result(&a).unwrap().0, "ab");
+    }
 
     // ── prompt_module / extract / normalize ──────────────────────────────
 
