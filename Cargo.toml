@@ -49,6 +49,14 @@ quote = "1"
 # stays untouched. Default features = rustls TLS (api.cloudflare.com).
 ureq = { version = "2.9", optional = true, features = ["json"] }
 
+# Proposal 005 Phase 0 T0.1 (Plan 025): KAT account identity — Ed25519 keypair
+# in OpenSSH format (the pattern `riir-chain/src/ssh_key.rs`, `GmKeySetup`, and
+# the mmorpg `avatar_crypto` registry all ship; the SHAPE is reused, not the
+# code — riir-chain is not a dep here). `ed25519` implies dep:ed25519-dalek +
+# rand_core (generation via `PrivateKey::random`), `getrandom` enables
+# `ssh_key::rand_core::OsRng`. Optional + feature-gated (`kat_service`).
+ssh-key = { version = "0.6", optional = true, features = ["ed25519", "std", "getrandom"] }
+
 # ── Ternary inference arm (Bench 010) ────────────────────────────────────
 # Real katgpt ternary generation on the clippy task, so llama.cpp can be
 # compared against OUR inference stack rather than against the retriever.
@@ -184,14 +192,13 @@ cf_workers_ai = ["dep:ureq", "latent_retrieval", "clippy_verify", "l4_lora"]
 # the katgpt-core feature (pure math + BLAKE3, no new deps).
 contrastive_scope = ["katgpt-core/contrastive_scope"]
 
-# Proposal 005 Phase 0 T0.5 (Plan 023): the KAT code-token meter — the
-# alloc-free, version-stamped, raw-span-byte word-token counter + its local
-# burn ledger (`<root>/.heal/kat_meter.json`). EMPTY feature: the meter needs
-# no deps (serde/serde_json are already main deps); `qrcode`/HTTP arrive with
-# the later account/sync tasks (T0.1+). Accounting-only per G9d — client
-# counts never mint or spend. Default-off keeps the default build
-# bit-identical with zero meter code compiled (G3).
-kat_service = []
+# Proposal 005 Phase 0 (Plans 023/024/025): the KAT service client substrate —
+# the code-token meter + charge ledger (T0.5/T0.6, no deps) + the account key
+# (T0.1: `dep:ssh-key` for Ed25519/OpenSSH identity — the first KAT dep; sync
+# signing adds direct `ed25519-dalek` at T0.3, qrcode/HTTP later still).
+# Accounting-only per G9d — client counts never mint or spend. Default-off
+# keeps the default build bit-identical with zero KAT code compiled (G3).
+kat_service = ["dep:ssh-key"]
 
 # Plan 005 T3.5 option 3: 768-D Bonsai dense rerank on top of the 8-D
 # ShardIndex pre-filter. HEAVY — loads the ~6.7 GB Ternary-Bonsai-27B GGUF

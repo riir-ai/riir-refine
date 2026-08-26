@@ -43,6 +43,18 @@ use riir_clippy::edit_emitter::RuleEdit;
 use riir_clippy::draft::{DomainId, LatentMatcher, SpanSuggestion};
 use riir_clippy::EvolveRecorder;
 
+/// Proposal 005 Phase 0 T0.1 (Plan 025): the identity subcommands — parsed
+/// unconditionally so a `kat_service`-off build errors cleanly instead of
+/// treating `login` as a scan path (the `--fix-compile`-off precedent).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum KatCommand {
+    /// Generate/import the account key + claim the grant (local projection).
+    Login,
+    /// Print the local account view (+ repo-local charge projection when a
+    /// path/cwd has one).
+    Account,
+}
+
 #[cfg(feature = "fix_verify")]
 use riir_clippy::domains::clippy_lints::proposers::VERIFY_LINTS;
 
@@ -165,6 +177,92 @@ fn open_kat_charge(
     }
     let root = resolve_heal_root(paths);
     Some(riir_clippy::kat_meter::KatCharge::open(&root, meter.state()))
+}
+
+/// Proposal 005 Phase 0 T0.1 (Plan 025): `cargo heal login` — generate/import
+/// the account key + record the grant projection. Prints one outcome line,
+/// the account id, the key path, and the Phase-0 honesty note. No `$`
+/// figures (caveats #12/#15).
+#[cfg(feature = "kat_service")]
+fn run_kat_login(import_key: Option<&Path>) {
+    use riir_clippy::kat_account::{KatAccount, LoginOutcome};
+
+    let dir = KatAccount::default_dir();
+    let result = match import_key {
+        Some(source) => KatAccount::login_import(&dir, source),
+        None => KatAccount::login(&dir),
+    };
+    let (account, outcome) = match result {
+        Ok(pair) => pair,
+        Err(e) => {
+            eprintln!("kat login failed: {e}");
+            std::process::exit(1);
+        }
+    };
+    match outcome {
+        LoginOutcome::Generated { .. } => println!("kat: account key generated"),
+        LoginOutcome::Imported { .. } => println!("kat: account key imported"),
+        LoginOutcome::Existing { .. } => println!("kat: already logged in (key loaded)"),
+    }
+    for line in account.summary_lines() {
+        println!("{line}");
+    }
+}
+
+/// Proposal 005 Phase 0 T0.1 (Plan 025): `cargo heal account` — the local
+/// view. Verifies key↔record agreement first (tamper evidence — identity is
+/// load-bearing for future sync, so a mismatch exits 1), then prints the
+/// identity block + (when a repo-local charge ledger exists) this repo's
+/// burn + balance projection with the per-repo caveat.
+#[cfg(feature = "kat_service")]
+fn run_kat_account(paths: &[PathBuf]) {
+    use riir_clippy::kat_account::KatAccount;
+    use riir_clippy::kat_meter::{ChargeState, KAT_WARN_REMAINING};
+
+    let dir = KatAccount::default_dir();
+    let account = match KatAccount::load(&dir) {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!("kat account: {e}");
+            std::process::exit(1);
+        }
+    };
+    if let Err(e) = account.verify() {
+        eprintln!("kat account: VERIFICATION FAILED — {e}");
+        std::process::exit(1);
+    }
+    for line in account.summary_lines() {
+        println!("{line}");
+    }
+
+    // The repo-local burn half: read the charge ledger at the heal root (path
+    // arg or cwd) when one exists. Per-repo by design (Plans 023/024) until
+    // the server aggregates at Phase 1.
+    let root = resolve_heal_root(paths);
+    let charge_path = root.join(".heal").join("kat_charge.json");
+    if let Ok(text) = std::fs::read_to_string(&charge_path) {
+        match serde_json::from_str::<ChargeState>(&text) {
+            Ok(charge) => {
+                let grant = account.state().grant_kat;
+                let remaining = grant.saturating_sub(charge.charged_kat);
+                println!("local burn:          {} KAT charged this repo ({} tokens, watermark {})",
+                    charge.charged_kat, charge.meter_watermark_tokens, charge.meter_watermark_tokens);
+                println!("balance projection:  {remaining} of {grant} KAT (per-repo until server aggregation)");
+                if remaining <= KAT_WARN_REMAINING {
+                    println!("kat: WARN balance ≤ {KAT_WARN_REMAINING} — top up before the next long run (never blocks healing)");
+                }
+            }
+            Err(e) => eprintln!(
+                "kat account: charge ledger unreadable ({}): {e}",
+                charge_path.display()
+            ),
+        }
+    } else {
+        println!(
+            "local burn:          (no charge ledger at {} — heal a repo to start one)",
+            charge_path.display()
+        );
+    }
 }
 
 /// 038-T3: the one-time envelope → store migration (see [`open_traj_store`]).
@@ -366,6 +464,8 @@ USAGE:
     cargo heal --recompute-elo                        (batch rating backfill, 039 T2)
     cargo heal --collapse-report                      (self-collapse monitor, 042)
     cargo heal --score-bench | --score-report        (needs --features score_bench)
+    cargo heal login [--key <path>]                   (KAT account, needs --features kat_service)
+    cargo heal account [<path>]                       (KAT local view + repo burn, kat_service)
 
     --suggest       Suggest mode: print matching rules per code span (no edits).
     --fix           Fix mode: apply the compiled-in proposers' span-preserving edits
@@ -405,6 +505,19 @@ USAGE:
     --quiet         With --fix: skip the --suggest pass (only show fixes).
     --no-fmt        Disable the automatic post-write rustfmt pass (it is
                     default-on; see src/fmt.rs for the discipline it encodes).
+    login           KAT account identity (Proposal 005 T0.1): generate an
+                    Ed25519 keypair in OpenSSH format under the account dir
+                    (RIIR_HEAL_KAT_ACCOUNT_DIR / ~/.config/riir-heal), or
+                    import one with --key <path>. Idempotent — an existing
+                    key is loaded, never regenerated. Records the free-tier
+                    grant as a LOCAL projection (accounting-only, G9d).
+    account         KAT local view: account id (BLAKE3(pubkey)), key path,
+                    grant projection, and — when a path (or cwd) holds a
+                    repo-local charge ledger — this repo's burn + balance
+                    projection. Verifies key↔record agreement (tamper
+                    evidence). No $ figures (caveats #12/#15).
+    --key <path>    With login: import this OpenSSH Ed25519 private key
+                    (unencrypted only) instead of generating one.
 {}{}    --domain        Filter suggest output to one domain (default: auto — all enabled).
     --top-k <N>     Rules per span per domain (default 3).
     <path>...       Files or directories to scan. `.rs` always; with the
@@ -473,6 +586,13 @@ struct Args {
     /// `RIIR_HEAL_TRAJ_ROOT` (or the envelope fallback) + a fresh baseline.
     /// Read-only standalone mode (R346's monitor; feeds the audit script).
     collapse_report: bool,
+    /// Proposal 005 T0.1: the identity subcommand (`login` / `account`),
+    /// recognized only as the FIRST positional (a dir named `login` later in
+    /// the arg list still scans).
+    command: Option<KatCommand>,
+    /// `--key <path>` — import an existing OpenSSH Ed25519 private key at
+    /// `login` instead of generating one.
+    import_key: Option<PathBuf>,
 }
 
 fn parse_args() -> Args {
@@ -495,6 +615,8 @@ fn parse_args() -> Args {
         memory_stats: false,
         recompute_elo: false,
         collapse_report: false,
+        command: None,
+        import_key: None,
     };
     let mut it = std::env::args().skip(1);
     while let Some(arg) = it.next() {
@@ -556,14 +678,29 @@ fn parse_args() -> Args {
                     usage();
                 });
             }
+            "--key" => {
+                let Some(value) = it.next() else {
+                    eprintln!("--key requires a value (an OpenSSH Ed25519 private key path)");
+                    usage();
+                };
+                args.import_key = Some(PathBuf::from(value));
+            }
             flag if flag.starts_with("--") => {
                 eprintln!("unknown flag {flag:?}");
                 usage();
+            }
+            "login" | "account" if args.paths.is_empty() && args.command.is_none() => {
+                args.command = Some(if arg == "login" {
+                    KatCommand::Login
+                } else {
+                    KatCommand::Account
+                });
             }
             path => args.paths.push(PathBuf::from(path)),
         }
     }
     if args.paths.is_empty()
+        && args.command.is_none()
         && !args.score_bench
         && !args.score_report
         && !args.dump_trajectories
@@ -741,6 +878,21 @@ fn run_score_bench() {
 
 fn main() {
     let args = parse_args();
+
+    // ── Proposal 005 T0.1: identity subcommands (standalone — no paths) ──
+    #[cfg(feature = "kat_service")]
+    if let Some(cmd) = args.command {
+        match cmd {
+            KatCommand::Login => run_kat_login(args.import_key.as_deref()),
+            KatCommand::Account => run_kat_account(&args.paths),
+        }
+        return;
+    }
+    #[cfg(not(feature = "kat_service"))]
+    if args.command.is_some() {
+        eprintln!("login/account require a build with --features kat_service");
+        std::process::exit(2);
+    }
 
     // ── Plan 014: clippy-bench modes (standalone — no paths) ─────────────
     #[cfg(feature = "score_bench")]

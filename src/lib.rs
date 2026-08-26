@@ -146,6 +146,13 @@ pub mod scope_model;
 #[cfg(feature = "kat_service")]
 pub mod kat_meter;
 
+// Proposal 005 Phase 0 T0.1 (Plan 025): the KAT account key — Ed25519
+// keypair in OpenSSH format, account id = BLAKE3(pubkey), machine-global.
+// `login`/`account` are the local view (no cloud until Phase 1); the grant
+// line is a projection (accounting-only, G9d).
+#[cfg(feature = "kat_service")]
+pub mod kat_account;
+
 // Plan 019 T4.3: the neuron-db trajectory store — the DURABLE backend for
 // `--fix-compile` self-evolution (LocalKvStore encrypted WAL + BM25 + the
 // 8-D sigmoid-dot latent axis). Behind `latent_retrieval` (the dep-light
@@ -279,6 +286,13 @@ pub use kat_meter::{
     count_word_tokens, kat_for_tokens, ChargeState, KatCharge, KatMeter, MeterState,
     CHARGE_CHANGELOG, CHARGE_KAT_PER_MILLION_TOKENS, CHARGE_VERSION, FREE_TIER_GRANT_KAT,
     KAT_WARN_REMAINING, METER_CHANGELOG, METER_VERSION,
+};
+
+// Proposal 005 Phase 0 T0.1 (Plan 025): the KAT account surface.
+#[cfg(feature = "kat_service")]
+pub use kat_account::{
+    account_id_for, short_id, AccountState, KatAccount, LoginOutcome, ACCOUNT_CHANGELOG,
+    ACCOUNT_VERSION,
 };
 
 // Plan 005: latent retrieval surface (`--suggest` MVP).
