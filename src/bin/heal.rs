@@ -1683,7 +1683,7 @@ fn main() {
                 match pkg {
                     None => false,
                     Some(pkg) => *pkg_dep_cache.entry(pkg.clone()).or_insert_with(|| {
-                        std::fs::read_to_string(pkg.join("Cargo.toml")).map_or(false, |t| {
+                        std::fs::read_to_string(pkg.join("Cargo.toml")).is_ok_and(|t| {
                             riir_clippy::fix_verify::manifest_has_dep(&t, "rustc-hash")
                         })
                     }),
