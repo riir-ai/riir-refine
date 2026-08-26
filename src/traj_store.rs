@@ -224,8 +224,12 @@ pub struct TrajStore {
     pub root: PathBuf,
 }
 
-/// blake3 of `shape`, first 12 bytes hex (the row-key identity).
-fn shape_hash(shape: &str) -> String {
+/// blake3 of `shape`, first 12 bytes hex (the row-key identity). Public since
+/// Plan 027 (T0.3): the KAT sync payload's `shape_id` derives from THIS fn —
+/// one derivation, so a payload row is addressable by the store's own row
+/// identity (no second hash to drift).
+#[must_use]
+pub fn shape_hash(shape: &str) -> String {
     let mut h = blake3::Hasher::new();
     h.update(shape.as_bytes());
     let hex = h.finalize().to_hex().to_string();
