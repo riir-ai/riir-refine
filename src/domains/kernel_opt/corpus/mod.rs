@@ -1367,6 +1367,17 @@
 //!   killed as B16 dedup (validation evidence only) + #5 Laguna fusions dropped
 //!   (`optimizations.py` read at mine time: a hardware-detection stub, the
 //!   fusions are not in it). Record: Research 083.
+//! - **Batch 72 (2026-08-26, Plan 026 — the frguthmann/NVIDIA external
+//!   distill, Research 084):** 1 rule, corpus 372 -> 373 (A 88 -> 89) + 1
+//!   spec rider. skip-unchanged-writes-via-dirty-encoding (A — per-element
+//!   write elision on ping-pong state buffers; dirty = plain + 2 piggybacked
+//!   on the encoding; lazy alternate-rotation cleanup; REGIME-GATED:
+//!   sparse ~20% win / dense measured LOSS). Rider: l2-grouped-tile-schedule
+//!   gained the NVIDIA applicability conditions (VRAM-limiter, L2 hit below
+//!   80%, footprint overlap; N=16; Morton loses; 47%/63->86% evidence) — the
+//!   thread-group-tiling candidate itself KILLED at dedup as that rule's
+//!   positive instance (the B66 rider precedent).
+//!   Record: Research 084.
 //! - **Plan 003 (2026-08-14):** router ↔ corpus wiring. `KERNEL_CATEGORIES`
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
@@ -1419,7 +1430,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 372-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 373-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1427,7 +1438,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (88 rules)
+    // A: Memory access patterns (89 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -1520,6 +1531,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "write-before-read-state-skips-checkpoint",
             "rotated-ring-undo-via-rebind-reference-snapshot",
             "reset-state-in-place-fill-never-realloc",
+            "skip-unchanged-writes-via-dirty-encoding",
         ],
     ),
     // B: Compute patterns (53 rules)

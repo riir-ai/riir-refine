@@ -55,7 +55,7 @@ Three domains ship (Plan 001):
    because the cost metric is contention latency / queue depth, not
    wall-clock — consumers should treat annotated rules as
    context-dependent).
-3. **`kernel_opt`** (opt-in, Phase 3) — heals GPU kernel optimization. 372 rules
+3. **`kernel_opt`** (opt-in, Phase 3) — heals GPU kernel optimization. 373 rules
    (Batch 1-6: 50 popcorn-distilled from Research 002-007; Batch 7: 9 burn-cubecl
    Rust-native autotune dispatch + conv-as-GEMM + layout rules from Research 008;
    Batch 8: 9 burn-cubecl kernel polymorphism + dtype/alignment specialization +

@@ -445,6 +445,23 @@ pub(super) fn entries() -> Vec<KernelRule> {
         // ── l2-grouped-tile-schedule — row-major → swizzled L2-aware mapping ──
         // Source: momoe_tl.py lin1/lin2/weights_update — grouped swizzle so
         // adjacent blocks share L2 cache lines of the weight matrix.
+        // ── l2-grouped-tile-schedule — row-major → swizzled L2-aware mapping ──
+        // Source: momoe_tl.py lin1/lin2/weights_update — grouped swizzle so
+        // adjacent blocks share L2 cache lines of the weight matrix.
+        //
+        // Rider (Batch 72, NVIDIA/Bavoil thread-group-ID-swizzling writeup,
+        // 2020): the applicability CONDITIONS are the decision content —
+        // apply only when (1) VRAM is the top-throughput limiter, (2) the L2
+        // load hit rate is well below 80%, and (3) adjacent thread groups'
+        // memory footprints significantly overlap (wide kernels: denoisers,
+        // ray queries; NOT narrow stencils — default row-major already reuses
+        // neighbor data there, and the swizzle measured irrelevant). Tile N
+        // groups along the primary direction before advancing; N=16 was the
+        // measured sweet spot on the Battlefield V DXR denoiser (1440p, RTX
+        // 2080): 47% faster, L2 read hit 63% -> 86%, the workload moved from
+        // VRAM-latency-limited to SM-limited. A simple rectangular tiling
+        // beat Morton order in practice. Re-profile after applying — once
+        // SM-bound, further locality work is misdirected.
         KernelRule {
             rule_id: "l2-grouped-tile-schedule".to_string(),
             gpu_concept: "swizzled L2-cache-aware tile mapping".to_string(),

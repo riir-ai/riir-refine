@@ -63,7 +63,7 @@
         // Batch 63 (3): the CubeCL twin unlock — same-input-gemv-weight-concat-at-upload, deferred-residual-fused-into-next-layer-norm, reset-state-in-place-fill-never-realloc (ternary_deltanet_gpu_forward.rs, Plan 009 / Research 071).
         // Batch 70 (3): the arxiv barrier-free-sync paper distill (arXiv:2608.13757, Plan 020 / Research 080) — barrier-free-per-dependency-wait-from-loop-counters, shared-counter-decode-producer-progress, masked-branchless-wait-collapse.
         // Total: 209. // (historical batch-30 snapshot; current 370)
-        assert_eq!(corpus.entries.len(), 372, "kernel batches through Batch 71 should have 372 rules");
+        assert_eq!(corpus.entries.len(), 373, "kernel batches through Batch 72 should have 373 rules");
     }
 
     #[test]
@@ -3888,7 +3888,7 @@
 
     #[test]
     fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-        // Every rule_id in the 372-rule corpus must appear in exactly one category.
+        // Every rule_id in the 373-rule corpus must appear in exactly one category.
         let corpus = build_kernel_seed_corpus();
         let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
         let mut categorized: Vec<&str> = Vec::new();
@@ -3919,9 +3919,9 @@
 
     #[test]
     fn kernel_categories_counts_match_plan_003_table() {
-        // Pin per-category rule counts to the Plan 003 table (updated for Batch 71).
+        // Pin per-category rule counts to the Plan 003 table (updated for Batch 72).
         let expected = [
-            (KernelCategory::MemoryAccess, 88),
+            (KernelCategory::MemoryAccess, 89),
             (KernelCategory::Compute, 53),
             (KernelCategory::Fusion, 34),
             (KernelCategory::Dispatch, 74),
@@ -3944,9 +3944,9 @@
                 "Plan 003: category {cat:?} has {} rules, expected {count}",
                 entry.2.len());
         }
-        // Sum must equal 372.
+        // Sum must equal 373.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 372, "Plan 003: category totals must sum to 372");
+        assert_eq!(total, 373, "Plan 003: category totals must sum to 373");
     }
 
     #[test]
@@ -3956,9 +3956,71 @@
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 372, "Plan 003: grouped corpus has {total} rules, expected 372");
+        assert_eq!(total, 373, "Plan 003: grouped corpus has {total} rules, expected 373");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");
+        }
+    }
+
+    #[test]
+    fn batch72_rules_present() {
+        // Batch 72 (frguthmann/NVIDIA external distill — the dirty-encoding
+        // write elision; Research 084).
+        let corpus = build_kernel_seed_corpus();
+        let ids = ["skip-unchanged-writes-via-dirty-encoding"];
+        for id in ids {
+            assert!(
+                corpus.entries.iter().any(|e| e.rule_id == id),
+                "batch-72 rule '{id}' missing from corpus"
+            );
+        }
+    }
+
+    #[test]
+    fn batch72_concepts_covered() {
+        let corpus = build_kernel_seed_corpus();
+        let checks: [(&str, [&str; 5]); 1] = [(
+            "skip-unchanged-writes-via-dirty-encoding",
+            [
+                "dirty = plain + 2",
+                "ALTERNATE rotations",
+                "ZERO writes",
+                "REGIME-GATED",
+                "lazy cleanup",
+            ],
+        )];
+        for (id, needles) in checks {
+            let e = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-72 rule '{id}' missing"));
+            for needle in needles {
+                assert!(
+                    e.gpu_concept.contains(needle),
+                    "batch-72 concept for '{id}' missing phrase '{needle}'"
+                );
+            }
+        }
+    }
+
+    #[test]
+    #[cfg(not(feature = "kernel_verify"))]
+    fn batch72_pseudocode_parses() {
+        // G1 for Batch 72: syn-parse gate.
+        use crate::domain::HealDomain;
+        let corpus = build_kernel_seed_corpus();
+        let ids = ["skip-unchanged-writes-via-dirty-encoding"];
+        for id in ids {
+            let entry = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-72 rule '{id}' missing"));
+            let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+            assert!(ref_verdict.parses, "batch-72 ref_shape for '{id}' must parse");
+            let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+            assert!(opt_verdict.parses, "batch-72 opt_pattern for '{id}' must parse");
         }
     }
