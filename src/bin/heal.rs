@@ -144,6 +144,29 @@ fn open_kat_meter(paths: &[PathBuf]) -> Option<riir_clippy::kat_meter::KatMeter>
     Some(riir_clippy::kat_meter::KatMeter::open(&root))
 }
 
+/// Proposal 005 Phase 0 T0.6 (Plan 024): open the KAT charge ledger right
+/// after the meter — the per-unit-burn consumer of the meter's events.
+/// Shares the meter's kill-switch (`RIIR_HEAL_KAT_METER=0` disables BOTH —
+/// one billing switch, per the Plan 024 decision); `RIIR_HEAL_KAT_CHARGE_FILE`
+/// overrides the exact file. `meter` is the just-opened meter's PRE-session
+/// state — the recovery path (missing/corrupt charge ledger → watermark = the
+/// meter cumulative at open) is only correct against a pre-session reading.
+#[cfg(feature = "kat_service")]
+fn open_kat_charge(
+    paths: &[PathBuf],
+    meter: Option<&riir_clippy::kat_meter::KatMeter>,
+) -> Option<riir_clippy::kat_meter::KatCharge> {
+    let meter = meter?;
+    if let Ok(file) = std::env::var("RIIR_HEAL_KAT_CHARGE_FILE") {
+        return Some(riir_clippy::kat_meter::KatCharge::open_at(
+            PathBuf::from(file),
+            meter.state(),
+        ));
+    }
+    let root = resolve_heal_root(paths);
+    Some(riir_clippy::kat_meter::KatCharge::open(&root, meter.state()))
+}
+
 /// 038-T3: the one-time envelope → store migration (see [`open_traj_store`]).
 /// Idempotent by construction: the `.migrated` rename is the fence — a
 /// second run sees no envelope and does nothing.
@@ -246,7 +269,7 @@ fn print_fix_review(
     }
     println!("fix {} ({} edit(s)):", display, edits.len());
     for (rule_id, line, _, _) in edits {
-        println!("  [{:<24}] line {line}", rule_id);
+        println!("  [{rule_id:<24}] line {line}");
     }
     if let Some(note) = fmt_note {
         println!("  fmt: {note}");
@@ -1244,9 +1267,7 @@ fn main() {
                 let root = args
                     .paths
                     .first()
-                    .and_then(|p| {
-                        riir_clippy::compile_oracle::owning_package_root(p)
-                    })
+                    .and_then(riir_clippy::compile_oracle::owning_package_root)
                     .and_then(|pkg| riir_clippy::compile_oracle::workspace_root(&pkg))
                     .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
                 let (written, warnings) = evolve::dump_misses(&root, &report.misses);
@@ -1399,6 +1420,14 @@ fn main() {
     #[cfg(feature = "kat_service")]
     let mut kat_meter = open_kat_meter(&args.paths);
 
+    // T0.6 (Plan 024): the charge ledger opens right after the meter, against
+    // its PRE-session state (see open_kat_charge). Shares the meter's
+    // kill-switch — `RIIR_HEAL_KAT_METER=0` disables the whole billing path.
+    // No immediate save needed: recovery is idempotent from the meter at open
+    // time, and the exit block persists the settled state.
+    #[cfg(feature = "kat_service")]
+    let mut kat_charge = open_kat_charge(&args.paths, kat_meter.as_ref());
+
     let mut n_chunks = 0usize;
     let mut n_suggestions = 0usize;
     let mut n_fixed_files = 0usize;
@@ -1502,11 +1531,9 @@ fn main() {
                 match pkg {
                     None => false,
                     Some(pkg) => *pkg_dep_cache.entry(pkg.clone()).or_insert_with(|| {
-                        std::fs::read_to_string(pkg.join("Cargo.toml"))
-                            .map(|t| {
-                                riir_clippy::fix_verify::manifest_has_dep(&t, "rustc-hash")
-                            })
-                            .unwrap_or(false)
+                        std::fs::read_to_string(pkg.join("Cargo.toml")).map_or(false, |t| {
+                            riir_clippy::fix_verify::manifest_has_dep(&t, "rustc-hash")
+                        })
                     }),
                 }
             };
@@ -2153,8 +2180,7 @@ fn main() {
             " (review only — add --write)"
         };
         format!(
-            ", fixed {} file(s) / {} edit(s){}",
-            n_fixed_files, n_fixed_edits, applied_note
+            ", fixed {n_fixed_files} file(s) / {n_fixed_edits} edit(s){applied_note}"
         )
     } else {
         String::new()
@@ -2190,6 +2216,29 @@ fn main() {
             eprintln!("kat-meter: could not persist burn ledger ({}): {e}", m.path().display());
         }
         println!("{}", m.summary_line());
+    }
+
+    // KAT charge (T0.6, Plan 024): settle the session's uncharged tokens at
+    // the per-unit rate, persist, one summary line. Same accounting-only
+    // posture (G9d — the balance is a local projection; the server ledger
+    // reconciles at sync), same no-`$` rule (caveats #12/#15).
+    #[cfg(feature = "kat_service")]
+    if let (Some(m), Some(c)) = (&kat_meter, kat_charge.as_mut()) {
+        c.settle(m.state());
+        if let Err(e) = c.save() {
+            eprintln!("kat-charge: could not persist charge ledger ({}): {e}", c.path().display());
+        }
+        println!("{}", c.summary_line());
+        if c.low_balance() {
+            // §KAT out-of-KAT warn: the QR/top-up half is T1.6. Healing never
+            // blocks on this (G3 — warn-and-pay, never brick).
+            eprintln!(
+                "kat-charge: warning — {} KAT remain of the {} grant projection; \
+                 healing continues offline (the server ledger is the authority)",
+                c.balance_projection(),
+                riir_clippy::kat_meter::FREE_TIER_GRANT_KAT
+            );
+        }
     }
 }
 

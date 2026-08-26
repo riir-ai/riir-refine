@@ -273,9 +273,13 @@ pub use self_evolve::{HealPipeline, HealResult, HealSource, SelectionMode, TuneR
 #[cfg(feature = "contrastive_scope")]
 pub use scope_model::{ScopeModel, OUT_OF_SCOPE_DOCS, KAPPA, THETA};
 
-// Proposal 005 Phase 0 T0.5 (Plan 023): the KAT meter surface.
+// Proposal 005 Phase 0 T0.5/T0.6 (Plans 023 + 024): the KAT meter + charge surface.
 #[cfg(feature = "kat_service")]
-pub use kat_meter::{count_word_tokens, KatMeter, MeterState, METER_CHANGELOG, METER_VERSION};
+pub use kat_meter::{
+    count_word_tokens, kat_for_tokens, ChargeState, KatCharge, KatMeter, MeterState,
+    CHARGE_CHANGELOG, CHARGE_KAT_PER_MILLION_TOKENS, CHARGE_VERSION, FREE_TIER_GRANT_KAT,
+    KAT_WARN_REMAINING, METER_CHANGELOG, METER_VERSION,
+};
 
 // Plan 005: latent retrieval surface (`--suggest` MVP).
 #[cfg(feature = "latent_retrieval")]

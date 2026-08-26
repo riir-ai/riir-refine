@@ -27,7 +27,11 @@
 
 #![cfg(feature = "kat_service")]
 
-use riir_clippy::kat_meter::{count_word_tokens, KatMeter, MeterState, METER_CHANGELOG, METER_VERSION};
+use riir_clippy::kat_meter::{
+    count_word_tokens, kat_for_tokens, ChargeState, KatCharge, KatMeter, MeterState,
+    CHARGE_CHANGELOG, CHARGE_KAT_PER_MILLION_TOKENS, CHARGE_VERSION, METER_CHANGELOG,
+    METER_VERSION,
+};
 
 // ── G9a: purity + determinism ──────────────────────────────────────────────
 
@@ -157,3 +161,120 @@ fn meter_summary_carries_no_currency_figure() {
 // CountingAllocator counts EVERY thread's allocations, so parallel sibling
 // tests would pollute the before/after bracket. A single-test binary has no
 // siblings.
+
+// ── T0.6: the charge consumer (Plan 024) ────────────────────────────────
+// The composition fixtures: meter + charge through the bin's exact open/record/
+// settle/save/reopen cycle, at the v1 per-unit rate.
+
+fn meter_state(cumulative: u64) -> MeterState {
+    MeterState {
+        version: METER_VERSION,
+        cumulative_tokens: cumulative,
+        sessions: 1,
+    }
+}
+
+#[test]
+fn g9_charge_version_is_changelog_covered_and_rides_the_file() {
+    assert!(
+        CHARGE_CHANGELOG.iter().any(|(v, _)| *v == CHARGE_VERSION),
+        "CHARGE_VERSION {CHARGE_VERSION} has no changelog entry"
+    );
+    let dir = std::env::temp_dir().join(format!("kat_chg_stamp_{}_{}", std::process::id(), line!()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let mut c = KatCharge::open(&dir, &meter_state(10));
+    c.settle(&meter_state(15));
+    c.save().unwrap();
+    let text =
+        std::fs::read_to_string(dir.join(".heal").join(KatCharge::FILE_NAME)).unwrap();
+    let state: ChargeState = serde_json::from_str(&text).unwrap();
+    assert_eq!(state.charge_version, CHARGE_VERSION);
+    assert_eq!(state.charged_kat, 15, "v1 rate: KAT charged == tokens charged");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn g9_charge_composition_through_the_bin_cycle() {
+    // The bin's exact order: meter open → charge open (pre-session) → record
+    // → settle at exit → save both → reopen. Two full cycles; the KAT charged
+    // must equal the tokens billed, cumulatively, with no double-charging.
+    let dir = std::env::temp_dir().join(format!("kat_chg_cycle_{}_{}", std::process::id(), line!()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let src_a = b"fn main() { println!(\"hello\"); }";
+    let src_b = b"let x: u32 = 42;";
+
+    // Cycle 1.
+    let mut m1 = KatMeter::open(&dir);
+    let mut c1 = KatCharge::open(&dir, m1.state());
+    let a = m1.record_span(src_a);
+    let kat1 = c1.settle(m1.state());
+    m1.save().unwrap();
+    c1.save().unwrap();
+    assert_eq!(kat1, a, "v1 rate: KAT == tokens, per cycle");
+
+    // Cycle 2: reopen both against pre-session state, bill more, settle.
+    let mut m2 = KatMeter::open(&dir);
+    let mut c2 = KatCharge::open(&dir, m2.state());
+    let b = m2.record_span(src_b);
+    let kat2 = c2.settle(m2.state());
+    m2.save().unwrap();
+    c2.save().unwrap();
+    assert_eq!(kat2, b);
+    assert_eq!(
+        c2.state().charged_kat,
+        a + b,
+        "cumulative KAT == cumulative tokens at the v1 rate"
+    );
+    assert_eq!(c2.state().meter_watermark_tokens, a + b);
+
+    // Cycle 3: a third open with NO new burn charges nothing.
+    let m3 = KatMeter::open(&dir);
+    let mut c3 = KatCharge::open(&dir, m3.state());
+    assert_eq!(c3.settle(m3.state()), 0);
+    assert_eq!(c3.state().charged_kat, a + b, "no re-charge on empty session");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn g9_charge_is_deterministic_across_repeated_settles() {
+    // G9a for the charge half: same starting watermark + same meter delta →
+    // same KAT, every time. The charge is a pure function of
+    // (watermark, delta, rate) — N independent ledgers must agree exactly.
+    let dir = std::env::temp_dir().join(format!("kat_chg_det_{}_{}", std::process::id(), line!()));
+    std::fs::create_dir_all(&dir).unwrap();
+    for i in 0..25 {
+        // Each iteration: a FRESH ledger file (recovered from the meter's
+        // 500-token history at open), then a 500-token delta — every one must
+        // produce the identical result.
+        let mut c =
+            KatCharge::open_at(dir.join(format!("det_{i}.json")), &meter_state(500));
+        assert_eq!(c.settle(&meter_state(1_000)), 500);
+        assert_eq!(c.state().charged_kat, 1_000, "recovery(500) + settle(500)");
+        assert_eq!(c.state().meter_watermark_tokens, 1_000);
+    }
+    // And the persisted-and-reopened form agrees with the fresh form.
+    let file = dir.join("persisted.json");
+    let mut a = KatCharge::open_at(file.clone(), &meter_state(500));
+    assert_eq!(a.settle(&meter_state(1_000)), 500);
+    a.save().unwrap();
+    let mut b = KatCharge::open_at(file, &meter_state(1_000));
+    assert_eq!(b.settle(&meter_state(1_200)), 200);
+    assert_eq!(b.state().charged_kat, 1_200, "recovered(500) + settled(500+200)");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn g9_charge_rate_arithmetic_matches_the_independent_mirror() {
+    // Test-side mirror computed independently — pins the u128 mul-div
+    // arithmetic and the v1 identity.
+    let mirror = |t: u64| {
+        u64::try_from((u128::from(t) * u128::from(CHARGE_KAT_PER_MILLION_TOKENS)) / 1_000_000)
+            .unwrap_or(u64::MAX)
+    };
+    for t in [0u64, 1, 2, 999, 1_000, 1_000_000, 1_000_001, u64::MAX / 2, u64::MAX] {
+        assert_eq!(kat_for_tokens(t), mirror(t), "rate arithmetic diverged at {t}");
+    }
+    // v1 pin: the rate IS 1 KAT per token — identity for every input.
+    assert_eq!(CHARGE_KAT_PER_MILLION_TOKENS, 1_000_000);
+    assert_eq!(kat_for_tokens(123_456_789), 123_456_789);
+}
