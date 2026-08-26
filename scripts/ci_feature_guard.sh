@@ -68,7 +68,10 @@ echo "=== Layer 5c: KAT integration gates (all-features) ==="
 # those tests ran only when invoked by hand (the gate-coverage lesson).
 # T0.3 (Plan 027) adds the sync-payload G4 binary — same class, same layer
 # (the payload builder is the serialization seam the gate guards).
-cargo test --all-features --test kat_redact_g4 --test kat_sync_payload_g4 --test kat_meter_g9 --test kat_meter_g2_alloc --test kat_account_g9
+# T0.4 (Plan 028) adds the pending-estimator G4 binary — the caveat-#15
+# framing gate (no $ beside an accrual; blocked never earns) + the
+# watermark recovery gate.
+cargo test --all-features --test kat_redact_g4 --test kat_sync_payload_g4 --test kat_pending_estimator_g4 --test kat_meter_g9 --test kat_meter_g2_alloc --test kat_account_g9
 echo "✓ KAT integration gates pass"
 
 echo

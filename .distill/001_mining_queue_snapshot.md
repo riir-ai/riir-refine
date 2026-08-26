@@ -1257,3 +1257,19 @@ never closed). Ranked open classes (inventory 2026-08-24):
       landed on the real file afterward (riir-ai `6ca4f00e3`, 70/70
       ruliology tests green). Evidence: verify revert → E0308 probe →
       guard + fixtures + bench pin.
+- [ ] P10 **two default-group corpus gaps: `needless_borrows_for_generic_args`
+      + `needless_pass_by_value`** (observed 2026-08-26, Plan 028 session).
+      Neither is in the 30-lint corpus — the healer was silent on both while
+      `clippy -D warnings` (default groups) FIRED them: `read_to_string(&path)`
+      where `path: &Path` (borrows, MachineApplicable, trivially mechanical)
+      and `load_at(path: PathBuf)` read-only (pass-by-value → `&Path`; the
+      clippy suggestion is `&PathBuf`/ref-pattern but the idiomatic fix is
+      `&Path` — semi-mechanical, needs the deref-coercion note). Live sites
+      at observation: 3 (`kat_pending_estimator.rs` ×2 fixed manually + the
+      `&Path` receiver pattern recurred across the healer's own corpus).
+      Session counter-evidence for priority: LOW volume vs P1-P3 (P3's class
+      is 7,281 trajectories; this is single digits), and one of the two
+      (pass-by-value) has no clean MachineApplicable fix — probe against
+      real clippy FIRST (the queue's standing rule) and likely take only the
+      borrows one. Evidence: miss ×2 (manual fixes `d0d301a`-class; the
+      session record is this entry).

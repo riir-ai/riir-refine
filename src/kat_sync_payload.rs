@@ -309,7 +309,14 @@ impl<'g> SyncPayloadBuilder<'g> {
 
     /// Gate every text field of one row (single pass — text + metadata
     /// harvested together); first block excludes the row.
-    fn gate_row(&self, row: &TrajRowDoc) -> Result<PayloadRow, (BlockReason, Vec<Finding>)> {
+    ///
+    /// `pub(crate)`: the pending-record estimator (T0.4) projects rows through
+    /// THIS path so estimator/payload agreement is by construction — no second
+    /// projection to drift (the one-derivation rule).
+    pub(crate) fn gate_row(
+        &self,
+        row: &TrajRowDoc,
+    ) -> Result<PayloadRow, (BlockReason, Vec<Finding>)> {
         let inputs = [
             (GATED_FIELDS[0], row.shape.as_str()),
             (GATED_FIELDS[1], row.fix.as_str()),

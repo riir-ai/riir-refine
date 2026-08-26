@@ -172,6 +172,17 @@ pub mod kat_redact;
 #[cfg(all(feature = "kat_service", feature = "latent_retrieval"))]
 pub mod kat_sync_payload;
 
+// Proposal 005 Phase 0 T0.4 (Plan 028): the pending-record estimator — the
+// local, deterministic partition of TrajStore rows by proof reachability
+// (blocked / pending-unsynced / synced-awaiting) against the last-synced
+// watermark, + the caveat-#15 service-credit renders (never a $ beside an
+// accrual). Same dual gate as the payload module: it consumes the gate
+// (kat_service) + TrajRowDoc/PayloadRow (latent_retrieval). Phase 1 T1.6's
+// `sync` command composes `SyncWatermark::from_payload` + `estimate_pending`;
+// nothing here touches the network or the clock (pure by construction).
+#[cfg(all(feature = "kat_service", feature = "latent_retrieval"))]
+pub mod kat_pending_estimator;
+
 // Plan 019 T4.3: the neuron-db trajectory store — the DURABLE backend for
 // `--fix-compile` self-evolution (LocalKvStore encrypted WAL + BM25 + the
 // 8-D sigmoid-dot latent axis). Behind `latent_retrieval` (the dep-light
