@@ -9,9 +9,9 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //! unconditional wins + honestly NotBenchable rules.
 //!
-//! 80 entries across 12 categories (complexity 15, allocation 18, simd 7,
+//! 83 entries across 12 categories (complexity 16, allocation 20, simd 7,
 //! layout 6, iterators 9, concurrency 7, io 3, arithmetic 7, dispatch 3,
-//! caching 3, bevy 1, wasm 1). 70 are benchable; 10 are honestly
+//! caching 3, bevy 1, wasm 1). 73 are benchable; 10 are honestly
 //! NotBenchable (8 external-runtime/size-class + 2 metric-mismatch, Issue 014).
 //! Batch 48 (idle-queue item 11, 2026-08-16) added the 8 online-search
 //! candidates (perf-book std-types + iterators chapters): collect-append-to-
@@ -956,7 +956,7 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
             category: "complexity".to_string(),
             buggy_code: "use std::collections::HashMap;\nfn sorted_keys(map: &HashMap<u32, u32>) -> Vec<u32> {\n    let mut keys: Vec<u32> = map.keys().copied().collect();\n    keys.sort_unstable();\n    keys\n}".to_string(),
             fixed_code: "use std::collections::BTreeMap;\nfn sorted_keys(map: &BTreeMap<u32, u32>) -> Vec<u32> {\n    map.keys().copied().collect()\n}".to_string(),
-            context_notes: None,
+            context_notes: Some("MEASURED ParetoDominant 3.73-6.91x (Bench 013, the rule own gate). REGIME (sorted-read frequency — the two-row decision table completed by Batch 75's `group-keys-borrow-allocate-on-first-sight`, the mirror rule): 0 sorted reads of the grouped output → plain Vec/HashMap, no ordering machinery; ONE final sort after a single grouping pass → build unordered + sort once (the mirror rule — R·L owned-key clones become S·L, and R ordered O(log S) inserts become one S·log(S) sort); MANY repeated sorted reads over a long-lived map → THIS rule (maintain the BTreeMap, iterate for free). The common failure is paying BTreeMap ordered-insert cost during a build whose output is read sorted once or never.".to_string()),
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: Some(btreemap_sorted_iteration_bench_spec()),
         },
@@ -1837,6 +1837,106 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
             context_notes: Some("MEASURED Mixed — 0/0/3 TIES on this box: 1.01x/1.04x/0.99x at 16/256/4096 B-per-chunk (M3 Max release, rustc 1.97, 2026-08-26; 0/0 allocs, alloc-det stable, verdict stable x2 invocations). HONEST FINDING: on current rustc the feature-name match on a string literal const-folds/optimize away to near-zero even through an #[inline(never)] boundary — the per-chunk detection machinery (std::detect string resolution + cached detector read) measured ~sub-0.1ns marginal on aarch64. The cost class the rule encodes SURVIVES in: (a) outlined #[target_feature] dispatch (the source's measured x86 finding — 'a per-call is_x86_feature_detected! check costs more than the SWAR fallback (cached-atomic load + two outlined target_feature calls per 8-digit group)', simd-json parse_eight_digits_unrolled), (b) non-literal/runtime-composed feature strings, (c) heavier probe libraries. The rule exists to encode the granularity DECISION (resolve once: cached static, hoist to caller, or static cfg gate) with an honest measured-Tie on the modern-toolchain baseline — the B68 honest-annotation precedent; do NOT cite it as a default-config hot-path win.".to_string()),
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: Some(runtime_feature_detect_per_chunk_bench_spec()),
+        },
+        // ── allocation: dictionary-encoded column consumed through a generic ──
+        // to_string materializer → borrowing layout-enum view ────────────────
+        // Source: GreptimeDB "Just One Function, 10x Faster?" (PR #8587,
+        // `recordbatches_to_timeseries` in src/servers/src/prom_store.rs;
+        // Batch 75, Research 089). THE DICTIONARY TRAP, quoted: "the
+        // dictionary-encoded group is 35% slower than the plain string
+        // group... Dictionary encoding exists to save memory and copies, so
+        // why is it slower?" Root cause: "`iter_column_as_string` does not
+        // recognize dictionary columns. It falls back to the generic path and
+        // calls `to_string()` row by row. The 3 strings become 1000, every
+        // allocation upstream avoided is made again here, plus one extra
+        // dictionary lookup per row." (A Dictionary<UInt32, Utf8> column
+        // stores few distinct strings + a u32 index per row; a label layout
+        // like `host` has few distinct values across many rows.) Fix: an enum
+        // `LabelValues<'a>` with one variant per layout whose
+        // `value(row) -> Option<&str>` "borrows straight from the array — no
+        // copy and no allocation"; the dictionary branch does key(row) then
+        // value(key). Measured in-source END-TO-END over the whole rewrite:
+        // dictionary columns improved the most (55.6ms → 3.38ms at
+        // adjacent/1000×100 = 16.5×) — never cite as this rule's isolated
+        // number. Composes with `group-keys-borrow-allocate-on-first-sight`
+        // (the source fix was both); distinct from `avoid-clone` (one clone
+        // at a fn boundary; this is R clones per pass through a generic
+        // accessor that erases the encoding) and `collect-avoidance`
+        // (intermediate Vec staging; the expansion happens INSIDE the
+        // accessor). Suggestion-only (type-blind: a parse-only proposer
+        // cannot prove a column is dictionary/interned-encoded — the
+        // soa-hot-field precedent).
+        PerfRule {
+            rule_id: "encoded-layout-borrowed-view".to_string(),
+            name: "generic to_string() column materializer over dictionary-encoded data → borrowing layout-enum view (Option<&str>)".to_string(),
+            category: "allocation".to_string(),
+            buggy_code: "struct DictColumn {\n    values: Vec<String>, // few distinct strings — what dictionary encoding is FOR\n    keys: Vec<u32>,     // one u32 per row indexing into values\n}\nimpl DictColumn {\n    fn lookup(&self, row: usize) -> Option<&str> {\n        let k = *self.keys.get(row)?;\n        self.values.get(k as usize).map(String::as_str)\n    }\n}\n// The generic accessor does not recognize the dictionary layout: it\n// materializes owned Strings row by row — \"the 3 strings become 1000\",\n// every allocation the encoding saved is made again here, plus one extra\n// dictionary lookup per row.\nfn column_as_strings(col: &DictColumn) -> Vec<Option<String>> {\n    (0..col.keys.len()).map(|r| col.lookup(r).map(|s| s.to_string())).collect()\n}\nfn label_len_total(col: &DictColumn) -> usize {\n    let cells = column_as_strings(col); // R heap allocs\n    cells.iter().map(|c| c.as_ref().map_or(0, |s| s.len())).sum()\n}".to_string(),
+            fixed_code: "struct DictColumn {\n    values: Vec<String>,\n    keys: Vec<u32>,\n}\n/// One variant per column layout. `value` borrows straight from the array:\n/// \"no copy and no allocation\" — the dictionary branch does key(row) then\n/// value(key), reusing the same S distinct strings for all R rows instead\n/// of expanding into R owned Strings. Holding nothing but &refs makes the\n/// borrow contract compiler-enforced.\nenum ColumnView<'a> {\n    Utf8(&'a [String]),\n    Dictionary { values: &'a [String], keys: &'a [u32] },\n}\nimpl ColumnView<'_> {\n    fn value(&self, row: usize) -> Option<&str> {\n        match self {\n            ColumnView::Utf8(v) => v.get(row).map(String::as_str),\n            ColumnView::Dictionary { values, keys } => keys\n                .get(row)\n                .and_then(|&k| values.get(k as usize).map(String::as_str)),\n        }\n    }\n}\nfn label_len_total(col: &DictColumn) -> usize {\n    let view = ColumnView::Dictionary { values: &col.values, keys: &col.keys };\n    (0..col.keys.len()).map(|r| view.value(r).map_or(0, str::len)).sum()\n}".to_string(),
+            context_notes: Some("MEASURED ParetoDominant 3/0/0 — 41.98x/39.38x/29.95x at R=10K/100K/1M, allocs 4,000,004 -> 0 + bytes 156.0 MB -> 0 at R=1M (S=100, L=4 (M3 Max release, rustc 1.97, 2026-08-26, load ~5.9 of 16; alloc-det stable). REGIME (distinct-values ratio S << R): the win is R·L owned-String materializations becoming S reused borrows — it grows with rows-per-distinct-value. At S ≈ R (mostly-distinct values) the encoding itself is pointless and the borrowed view saves ~nothing. Distinct from `avoid-clone` (one clone at a fn boundary; this is R clones per pass through a generic accessor that erases the encoding) and from `collect-avoidance` (the expansion happens INSIDE the accessor, not at a collect). The bench CONSUMES the view (black_box'd length sum) — an unread `&str` costs zero and the ratio inflates. The source's \"dictionary 35% slower than plain strings\" anomaly is its generic-fallback path (extra dictionary lookup per row on top of the expansion) — our bench measures the expansion cost only; never cite 35% as the expected win. Suggestion-only (type-blind: a parse-only proposer cannot prove a column is dictionary-encoded). Source: GreptimeDB PR #8587 walkthrough (2026-07-31), Steps 3-4 — the dictionary encoding upstream deliberately kept (#8541) was silently expanded downstream by one `iter_column_as_string`.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(encoded_layout_borrowed_view_bench_spec()),
+        },
+        // ── allocation: per-row owned group key → hash borrowed labels, ──────
+        // allocate on first sight, one final sort ─────────────────────────────
+        // Source: same article, THE COST MODEL + THE GROUPING REWRITE. Old:
+        // "R·L calls to to_string()... one Vec<Label> per row, so R heap
+        // allocations; one clone each for every label name and value, another
+        // R·L string copies; and one BTreeMap lookup per row, each on the
+        // order of log(S) comparisons." Fix: "A row only reaches
+        // `new_timeseries` once it is judged to be a new series... R·L copies
+        // become S·L copies. The whole optimization moves allocation from
+        // 'every iteration' to 'the iteration that finds something new.'"
+        // The decision content: std `HashMap::entry`/`BTreeMap::entry`
+        // require an OWNED key, so the natural map APIs FORCE per-row key
+        // materialization — the manual hash index (hash borrowed labels →
+        // `HashMap<u64, Vec<usize>>` candidate list → FULL compare →
+        // materialize only on first sight) keeps one hash per row and S
+        // total allocations. CORRECTNESS CONTRACT: (1) the map value is a
+        // candidate LIST — `HashMap<u64, usize>` merges distinct groups on
+        // hash collision ("Merging two different series for the sake of
+        // speed is a mistake this function cannot make"); (2) output order
+        // flips from key-sorted to first-appearance unless the final
+        // `sort_unstable_by` ships; (3) with optional fields skipped, one
+        // key can be a PREFIX of another — the compare must verify
+        // exhaustiveness. Suggestion-only (architectural — the
+        // soa-hot-field class; a parse-only proposer cannot see that keys
+        // repeat across rows).
+        PerfRule {
+            rule_id: "group-keys-borrow-allocate-on-first-sight".to_string(),
+            name: "per-row owned group key (clone into map key every row) → hash borrowed labels, clone key only on first sight + one final sort".to_string(),
+            category: "allocation".to_string(),
+            buggy_code: "use std::collections::BTreeMap;\nstruct Row {\n    labels: Vec<(String, String)>, // the series' (name, value) label set\n    value: u64,\n}\nfn group_rows(rows: &[Row]) -> Vec<(Vec<(String, String)>, (u64, u64))> {\n    let mut map: BTreeMap<Vec<(String, String)>, (u64, u64)> = BTreeMap::new();\n    for row in rows {\n        // per row: 1 Vec + 2·L String clones — R heap allocations where S\n        // would do — plus a BTreeMap insert at O(log S) ordered-string\n        // comparisons\n        let key: Vec<(String, String)> = row.labels.clone();\n        let e = map.entry(key).or_insert((0, 0));\n        e.0 += 1;\n        e.1 += row.value;\n    }\n    map.into_iter().collect() // BTreeMap gives sorted output for free\n}".to_string(),
+            fixed_code: "use std::collections::HashMap;\nuse std::collections::hash_map::DefaultHasher;\nuse std::hash::{Hash, Hasher};\nstruct Row {\n    labels: Vec<(String, String)>,\n    value: u64,\n}\nstruct Group {\n    key: Vec<(String, String)>,\n    count: u64,\n    sum: u64,\n}\n// exhaustive compare — with optional fields skipped one key can be a\n// PREFIX of another; the length check prevents {host=a} matching\n// {host=a, env=prod}\nfn key_matches(key: &[(String, String)], row: &Row) -> bool {\n    key.len() == row.labels.len()\n        && key.iter().zip(&row.labels).all(|(a, b)| a == b)\n}\nfn group_rows(rows: &[Row]) -> Vec<Group> {\n    // hash → candidate index list, FULL label comparison on each candidate\n    // — \"merging two different series for the sake of speed is a mistake\n    // this function cannot make\"\n    let mut index: HashMap<u64, Vec<usize>> = HashMap::new();\n    let mut groups: Vec<Group> = Vec::new();\n    for row in rows {\n        let mut h = DefaultHasher::new();\n        for (n, v) in &row.labels {\n            n.hash(&mut h); // borrowed — no alloc\n            v.hash(&mut h);\n        }\n        let hash = h.finish();\n        let idx = match index.get(&hash).and_then(|c| c.iter().find(|&&i| key_matches(&groups[i].key, row))) {\n            Some(&i) => i,\n            None => {\n                let i = groups.len();\n                // allocated ON FIRST SIGHT only — \"the whole optimization\n                // moves allocation from 'every iteration' to 'the iteration\n                // that finds something new': R·L copies become S·L\n                groups.push(Group { key: row.labels.clone(), count: 0, sum: 0 });\n                index.entry(hash).or_default().push(i);\n                i\n            }\n        };\n        groups[idx].count += 1;\n        groups[idx].sum += row.value;\n    }\n    // one S·log(S) sort is negligible against what was saved — restores\n    // the BTreeMap's ordered output contract\n    groups.sort_unstable_by(|a, b| a.key.cmp(&b.key));\n    groups\n}".to_string(),
+            context_notes: Some("MEASURED ParetoDominant 3/0/0 — 1.92x/2.27x/2.37x at R=10K/100K/300K (S=1000, L=3; M3 Max release, rustc 1.97, 2026-08-26, load ~5.9 of 16), allocs 70,133/700,133/2,100,133 -> 8,019 FLAT (the 7R+2S -> 8S+30 model, exact), bytes 55.9 MB -> 435 KB at 300K (alloc-det stable). REGIME (dedup ratio R/S): the win is R·L owned-key clones becoming S·L — it grows linearly with rows-per-group. At S ≈ R (mostly-distinct keys — every row a new group) first-sight allocation IS per-row allocation and the fixed form adds the hash pass + the final S·log(S) sort as pure overhead; gate on repeated-key grouping. The decision content: std `HashMap::entry`/`BTreeMap::entry` require an OWNED key, forcing per-row key materialization — the manual hash index (hash borrowed → `HashMap<u64, Vec<usize>>` candidates → FULL compare → materialize on first sight) keeps one hash per row and S total allocations. CORRECTNESS CONTRACT: (1) the map value is a candidate LIST — `HashMap<u64, usize>` merges distinct groups on hash collision; (2) output order flips from key-sorted to first-appearance unless the final `sort_unstable_by` ships — include it unless nothing downstream reads the order; (3) with optional fields skipped one key can be a PREFIX of another — the compare must verify exhaustiveness. Mirror regime of `btreemap-sorted-iteration` (repeated sorted reads → maintain a BTreeMap; single grouping pass → build + sort once) and distinct from `sort-key-cache-precompute-out-of-lock` (maintained comparator cache vs first-sight allocation in a scan). Bench isolates the grouping mechanism (borrowed inputs in both arms) — the source's 10.7-16.5x adjacent / 4.1-5.5x interleaved headline includes the borrowing + fast-path mechanisms stacked; never cite it for this rule alone. The map-mechanics swap alone is S-dependent (small S: short-circuiting BTreeMap compares can beat SipHash) — the load-bearing half is the R·L → S·L copy elimination. DefaultHasher (SipHash) is the faithful baseline; hasher swaps are an experiment, not the rule. Suggestion-only (architectural, the soa-hot-field class).".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(group_keys_borrow_allocate_on_first_sight_bench_spec()),
+        },
+        // ── complexity: hash-every-row grouping → previous-row group check ───
+        // first, hash fallback on miss ────────────────────────────────────────
+        // Source: same article, THE FAST PATH: "Comparing the current row
+        // against the series the previous row landed on is enough to reuse
+        // it on a hit, with no hash to compute. This only optimizes a common
+        // local ordering. It can break across partitions and across ranges,
+        // and correctness does not depend on it." Measured axis (END-TO-END,
+        // all p=0.00): adjacent 10.7-16.5x vs interleaved 4.1-5.5x — the
+        // fast-path hit rate decides (adjacent = samples of one series
+        // contiguous, the real query shape: rows sorted by primary key).
+        // DERIVED (not stated in the source): the fixed arm's own
+        // adjacent-vs-interleaved ratio is ~2.1-2.8x — the honest isolated
+        // bound for this mechanism. Sibling of `bsearch-sorted-slice` +
+        // `sortedness-check-branchless-accumulate` (all exploit input order).
+        // Composes AFTER `group-keys-borrow-allocate-on-first-sight` (the
+        // source shipped both). Suggestion-only (a parse-only proposer
+        // cannot prove consecutive rows share keys).
+        PerfRule {
+            rule_id: "sorted-input-previous-row-fast-path".to_string(),
+            name: "hash-every-row grouping → previous-row group check first (no hash on sorted-run hit, hash fallback on miss)".to_string(),
+            category: "complexity".to_string(),
+            buggy_code: "use std::collections::HashMap;\nstruct Row {\n    series: [u64; 2], // the label-set key\n    value: u64,\n}\nstruct Group {\n    series: [u64; 2],\n    count: u64,\n    sum: u64,\n}\nfn group_rows(rows: &[Row]) -> Vec<Group> {\n    let mut index: HashMap<[u64; 2], usize> = HashMap::new();\n    let mut groups: Vec<Group> = Vec::new();\n    for row in rows {\n        // hash EVERY row — even when it lands on the same series as the\n        // previous row, the common case for primary-key-sorted input\n        let idx = match index.get(&row.series) {\n            Some(&i) => i,\n            None => {\n                let i = groups.len();\n                groups.push(Group { series: row.series, count: 0, sum: 0 });\n                index.insert(row.series, i);\n                i\n            }\n        };\n        groups[idx].count += 1;\n        groups[idx].sum += row.value;\n    }\n    groups\n}".to_string(),
+            fixed_code: "use std::collections::HashMap;\nstruct Row {\n    series: [u64; 2],\n    value: u64,\n}\nstruct Group {\n    series: [u64; 2],\n    count: u64,\n    sum: u64,\n}\nfn group_rows(rows: &[Row]) -> Vec<Group> {\n    let mut index: HashMap<[u64; 2], usize> = HashMap::new();\n    let mut groups: Vec<Group> = Vec::new();\n    let mut prev: Option<usize> = None;\n    for row in rows {\n        // compare against the series the PREVIOUS row landed on first —\n        // no hash to compute on hit. \"This only optimizes a common local\n        // ordering. It can break across partitions and across ranges, and\n        // correctness does not depend on it\" — the hash fallback with\n        // full-key equality is the semantic contract.\n        let idx = match prev {\n            Some(i) if groups[i].series == row.series => i,\n            _ => match index.get(&row.series) {\n                Some(&i) => i,\n                None => {\n                    let i = groups.len();\n                    groups.push(Group { series: row.series, count: 0, sum: 0 });\n                    index.insert(row.series, i);\n                    i\n                }\n            },\n        };\n        prev = Some(idx);\n        groups[idx].count += 1;\n        groups[idx].sum += row.value;\n    }\n    groups\n}".to_string(),
+            context_notes: Some("MEASURED Mixed 1/0/1 — adjacent (run=100) 12.92x FASTER, interleaved (run=1) 0.99x tie (R=100K, S=1000; M3 Max release, rustc 1.97, 2026-08-26, load ~5.9 of 16; allocs 19/19 equal by design, alloc-det stable). REGIME (fast-path hit rate = input locality): adjacent (sorted-run) input pays ~S hashes instead of R — the previous-row comparison reuses the group with no hash to compute; interleaved input pays one failed comparison per row before the hash — expected Tie-to-slightly-Slower, the honest bound of the regime. DERIVED bound (not stated in the source; derived from the source's fixed-arm adjacent-vs-interleaved ratios): ~2.1-2.8x isolated — never cite the source's 10-16x END-TO-END totals for this mechanism alone (they stack the borrowing + grouping + fast-path optimizations). The win scales with the hash-vs-compare cost ratio: long composite string keys maximize it (SipHash over all L labels vs a compare short-circuiting at the first diff); short/scalar keys shrink it toward a tie. CORRECTNESS CONTRACT: the fast path uses the SAME full-equality predicate as the fallback (one predicate, no divergent comparisons), the predicate is exhaustive on variable-length keys (a skipped-field key can be a PREFIX of another), `previous` updates every row, and a miss always falls through to hash+full-compare — the fast path is deletable without changing output (\"correctness does not depend on it\"). Family note: this ADDS a cheap pre-check before expensive per-row work (hash+probe) — it does not contradict `sortedness-check-branchless-accumulate`/`filter-count-to-any` (those remove per-element early exits inside vectorizable scans; the branch there guards ns of work, here it guards the dominant per-row cost). Suggestion-only (a parse-only proposer cannot prove consecutive rows share keys).".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(sorted_input_previous_row_fast_path_bench_spec()),
         },
     ])
 }
@@ -6165,6 +6265,561 @@ pub fn run_fixed(input: &Input) {
     }
 }
 
+/// Bench spec for `encoded-layout-borrowed-view` (Batch 75, Research 089 —
+/// the GreptimeDB `recordbatches_to_timeseries` distill): dictionary-encoded
+/// column (S distinct strings + one u32 key per row) consumed through a
+/// generic materializing accessor vs a borrowing enum view with one variant
+/// per layout.
+///
+/// sizes = ROWS R per column; S_DISTINCT = 100 distinct dictionary values
+/// and L_COLS = 4 label columns fixed (the source's Dictionary<UInt32, Utf8>
+/// regime — a label layout like `host` has few distinct values across many
+/// rows). The buggy accessor is the source's `iter_column_as_string` shape:
+/// a GENERIC path that does not recognize the dictionary layout and calls
+/// to_string() row by row. G1: both arms sum the same label lengths — the
+/// expectation is computed in make_input straight from the keys (no view
+/// involved) and debug_assert_eq'd in both arms.
+/// Alloc axis: buggy = L + R·L per call (one collect Vec per column + one
+/// String per cell — "the 3 strings become 1000"); fixed = 0 steady-state
+/// (the view borrows; no copy, no allocation).
+#[cfg(feature = "rust_perf_bench")]
+#[allow(clippy::too_many_lines)] // the harness is a single embedded raw string
+fn encoded_layout_borrowed_view_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![10_000, 100_000, 1_000_000],
+        harness: r#"
+const S_DISTINCT: usize = 100; // distinct dictionary values per column
+const L_COLS: usize = 4;       // label columns (host, region, ...)
+
+mod buggy {
+    pub struct DictColumn {
+        pub values: Vec<String>,
+        pub keys: Vec<u32>,
+    }
+
+    impl DictColumn {
+        fn lookup(&self, row: usize) -> Option<&str> {
+            let k = *self.keys.get(row)?;
+            self.values.get(k as usize).map(String::as_str)
+        }
+    }
+
+    // The source's `iter_column_as_string`: a GENERIC accessor that does
+    // not recognize the dictionary layout — falls back to owned Strings
+    // row by row, so the S distinct strings expand into R per column.
+    pub fn column_as_strings(col: &DictColumn) -> Vec<Option<String>> {
+        (0..col.keys.len()).map(|r| col.lookup(r).map(|s| s.to_string())).collect()
+    }
+
+    pub fn label_len_total(cols: &[DictColumn]) -> usize {
+        let mut total = 0;
+        for col in cols {
+            let cells = column_as_strings(col); // R heap allocs per column
+            for cell in &cells {
+                total += cell.as_ref().map_or(0, |s| s.len());
+            }
+        }
+        total
+    }
+}
+
+mod fixed {
+    pub struct DictColumn {
+        pub values: Vec<String>,
+        pub keys: Vec<u32>,
+    }
+
+    // One variant per column layout; `value` borrows straight from the
+    // array — no copy and no allocation (the source's `LabelValues` enum).
+    pub enum ColumnView<'a> {
+        Utf8(&'a [String]),
+        Dictionary { values: &'a [String], keys: &'a [u32] },
+    }
+
+    impl ColumnView<'_> {
+        pub fn value(&self, row: usize) -> Option<&str> {
+            match self {
+                ColumnView::Utf8(v) => v.get(row).map(String::as_str),
+                ColumnView::Dictionary { values, keys } => keys
+                    .get(row)
+                    .and_then(|&k| values.get(k as usize).map(String::as_str)),
+            }
+        }
+    }
+
+    pub fn label_len_total(cols: &[DictColumn]) -> usize {
+        let rows = cols.first().map_or(0, |c| c.keys.len());
+        let mut total = 0;
+        for col in cols {
+            let view = ColumnView::Dictionary { values: &col.values, keys: &col.keys };
+            for row in 0..rows {
+                total += view.value(row).map_or(0, str::len);
+            }
+        }
+        total
+    }
+}
+
+pub struct Input {
+    buggy_cols: Vec<buggy::DictColumn>,
+    fixed_cols: Vec<fixed::DictColumn>,
+    expected: usize,
+}
+
+pub fn make_input(n: usize) -> Input {
+    let mut rng: u64 = 0x9E37_79B9_7F4A_7C15;
+    let mut buggy_cols = Vec::with_capacity(L_COLS);
+    let mut fixed_cols = Vec::with_capacity(L_COLS);
+    let mut expected = 0usize;
+    for _ in 0..L_COLS {
+        let values: Vec<String> = (0..S_DISTINCT).map(|i| format!("label-value-{i:03}")).collect();
+        let mut keys = Vec::with_capacity(n);
+        for _ in 0..n {
+            rng = rng.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695_040_888_963_407);
+            keys.push(((rng >> 33) % (S_DISTINCT as u64)) as u32);
+        }
+        // expectation straight from the keys — no view involved
+        expected += keys.iter().map(|&k| values[k as usize].len()).sum::<usize>();
+        buggy_cols.push(buggy::DictColumn { values: values.clone(), keys: keys.clone() });
+        fixed_cols.push(fixed::DictColumn { values, keys });
+    }
+    Input { buggy_cols, fixed_cols, expected }
+}
+
+pub fn run_buggy(input: &Input) {
+    let input = std::hint::black_box(input);
+    let total = buggy::label_len_total(&input.buggy_cols);
+    std::hint::black_box(total);
+    debug_assert_eq!(total, input.expected);
+}
+
+pub fn run_fixed(input: &Input) {
+    let input = std::hint::black_box(input);
+    let total = fixed::label_len_total(&input.fixed_cols);
+    std::hint::black_box(total);
+    debug_assert_eq!(total, input.expected);
+}
+"#
+        .to_string(),
+    }
+}
+
+/// Bench spec for `group-keys-borrow-allocate-on-first-sight` (Batch 75,
+/// Research 089 — the GreptimeDB `recordbatches_to_timeseries` distill):
+/// per-row owned-key grouping (clone the label set into a BTreeMap key
+/// every row) vs hash-the-borrowed-labels + candidate index list, cloning
+/// the owned key only when a NEW series is first seen + one final
+/// sort_unstable_by restoring the BTreeMap's ordered output.
+///
+/// sizes = ROWS R; S_GROUPS = 1000 distinct label sets fixed (the axis is
+/// the R/S dedup ratio: R·L clones become S·L). Rows reference an interned
+/// label arena by index so INPUT memory stays O(S) strings while the buggy
+/// arm still clones 2·L Strings + 1 Vec per row per call; group ids are
+/// assigned by a fixed LCG (pseudo-random order — no fast-path locality
+/// smuggled in; this rule's win is pure clone-avoidance). G1: both arms
+/// emit groups in SORTED key order (the BTreeMap's free order; the fixed
+/// arm's final sort restores it) — a position-weighted checksum over the
+/// independently-sorted group table is debug_assert_eq'd in both arms.
+/// Top cell 300K not 1M: the buggy arm at 1M is ~7M allocs + 1M ordered
+/// BTreeMap string inserts per call — the R/S-ratio story is unchanged and
+/// the bench stays minutes-scale (the B73 sorts-per-update sizing lesson).
+/// Alloc axis: buggy ≈ 7·R + 2·S per call; fixed ≈ 8·S + ~30 (first-sight
+/// key clones + candidate index lists + table/vec growth) — independent
+/// of R.
+#[cfg(feature = "rust_perf_bench")]
+#[allow(clippy::too_many_lines)] // the harness is a single embedded raw string
+fn group_keys_borrow_allocate_on_first_sight_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![10_000, 100_000, 300_000],
+        harness: r#"
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+
+const S_GROUPS: usize = 1_000; // distinct label sets (series)
+const L_LABELS: usize = 3;     // (name, value) pairs per series
+
+// Shared input vocabulary: rows reference the interned arena by index so
+// input memory stays O(S) — per-call cloning is the ARMS' business.
+pub struct Row {
+    pub labels: [(u32, u32); L_LABELS], // (name_idx, value_idx) into the arena
+    pub value: u64,
+}
+pub struct Labels {
+    pub names: Vec<String>,
+    pub vals: Vec<String>,
+}
+
+fn hash_row(row: &Row, arena: &Labels) -> u64 {
+    let mut h = DefaultHasher::new();
+    for &(n, v) in &row.labels {
+        arena.names[n as usize].hash(&mut h);
+        arena.vals[v as usize].hash(&mut h);
+    }
+    h.finish()
+}
+
+fn key_matches(key: &[(String, String)], row: &Row, arena: &Labels) -> bool {
+    key.len() == row.labels.len()
+        && key.iter().zip(&row.labels).all(|((kn, kv), &(n, v))| {
+            *kn == arena.names[n as usize] && *kv == arena.vals[v as usize]
+        })
+}
+
+mod buggy {
+    use super::{Labels, Row};
+    use std::collections::BTreeMap;
+
+    pub fn group_rows(rows: &[Row], arena: &Labels) -> Vec<(Vec<(String, String)>, (u64, u64))> {
+        let mut map: BTreeMap<Vec<(String, String)>, (u64, u64)> = BTreeMap::new();
+        for row in rows {
+            // 7 heap allocs EVERY row: 1 Vec + 2·L String clones — R·L
+            // copies where S·L would do
+            let key: Vec<(String, String)> = row
+                .labels
+                .iter()
+                .map(|&(n, v)| (arena.names[n as usize].clone(), arena.vals[v as usize].clone()))
+                .collect();
+            let e = map.entry(key).or_insert((0, 0));
+            e.0 += 1;
+            e.1 += row.value;
+        }
+        map.into_iter().collect() // BTreeMap order = sorted keys, for free
+    }
+}
+
+mod fixed {
+    use super::{hash_row, key_matches, Labels, Row};
+    use std::collections::HashMap;
+
+    pub struct Group {
+        pub key: Vec<(String, String)>,
+        pub count: u64,
+        pub sum: u64,
+    }
+
+    pub fn group_rows(rows: &[Row], arena: &Labels) -> Vec<Group> {
+        // hash → candidate index list; FULL label comparison on every
+        // candidate — collisions can never merge two different series
+        let mut index: HashMap<u64, Vec<usize>> = HashMap::new();
+        let mut groups: Vec<Group> = Vec::new();
+        for row in rows {
+            let hash = hash_row(row, arena); // borrowed labels — no alloc
+            let idx = match index.get(&hash).and_then(|cands| {
+                cands.iter().find(|&&i| key_matches(&groups[i].key, row, arena))
+            }) {
+                Some(&i) => i,
+                None => {
+                    let i = groups.len();
+                    groups.push(Group {
+                        key: row
+                            .labels
+                            .iter()
+                            .map(|&(n, v)| {
+                                (arena.names[n as usize].clone(), arena.vals[v as usize].clone())
+                            })
+                            .collect(), // allocated ON FIRST SIGHT only — S·L, not R·L
+                        count: 0,
+                        sum: 0,
+                    });
+                    index.entry(hash).or_default().push(i);
+                    i
+                }
+            };
+            groups[idx].count += 1;
+            groups[idx].sum += row.value;
+        }
+        // one S·log(S) sort ≪ R ordered BTreeMap inserts — restores the
+        // BTreeMap's sorted output contract
+        groups.sort_unstable_by(|a, b| a.key.cmp(&b.key));
+        groups
+    }
+}
+
+// position-weighted checksum over the sorted group table — the SAME fold
+// in make_input (ground truth) and both arms
+fn fold_group(chk: u64, key_len: usize, count: u64, sum: u64) -> u64 {
+    chk.wrapping_mul(31)
+        .wrapping_add(key_len as u64)
+        .wrapping_mul(31)
+        .wrapping_add(count)
+        .wrapping_mul(31)
+        .wrapping_add(sum)
+}
+
+pub struct Input {
+    rows: Vec<Row>,
+    arena: Labels,
+    expected_groups: usize,
+    expected_chk: u64,
+}
+
+pub fn make_input(n: usize) -> Input {
+    // arena: S groups × L (name, value) pairs, all distinct
+    let mut names = Vec::with_capacity(S_GROUPS * L_LABELS);
+    let mut vals = Vec::with_capacity(S_GROUPS * L_LABELS);
+    for g in 0..S_GROUPS {
+        for l in 0..L_LABELS {
+            names.push(format!("n{g:04}-{l}"));
+            vals.push(format!("v{g:04}-{l}"));
+        }
+    }
+    let arena = Labels { names, vals };
+
+    let mut rng: u64 = 0x853C_49E6_748F_EA9B;
+    let mut rows = Vec::with_capacity(n);
+    let mut counts = vec![0u64; S_GROUPS];
+    let mut sums = vec![0u64; S_GROUPS];
+    for _ in 0..n {
+        rng = rng.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695_040_888_963_407);
+        let g = ((rng >> 33) % (S_GROUPS as u64)) as usize;
+        let base = g * L_LABELS;
+        let labels = [
+            (base as u32, base as u32),
+            (base as u32 + 1, base as u32 + 1),
+            (base as u32 + 2, base as u32 + 2),
+        ];
+        rows.push(Row { labels, value: rng >> 16 });
+        counts[g] += 1;
+        sums[g] = sums[g].wrapping_add(rng >> 16);
+    }
+
+    // ground truth: the sorted-key group table, folded position-weighted
+    let mut table: Vec<(Vec<(String, String)>, u64, u64)> = (0..S_GROUPS)
+        .filter(|&g| counts[g] > 0)
+        .map(|g| {
+            let base = g * L_LABELS;
+            ((0..L_LABELS)
+                .map(|l| (arena.names[base + l].clone(), arena.vals[base + l].clone()))
+                .collect::<Vec<_>>(),
+            counts[g],
+            sums[g])
+        })
+        .collect();
+    table.sort_by(|a, b| a.0.cmp(&b.0));
+    let expected_groups = table.len();
+    let mut expected_chk: u64 = 0;
+    for (key, count, sum) in &table {
+        let key_len = key.iter().map(|(n, v)| n.len() + v.len()).sum::<usize>();
+        expected_chk = fold_group(expected_chk, key_len, *count, *sum);
+    }
+    Input { rows, arena, expected_groups, expected_chk }
+}
+
+pub fn run_buggy(input: &Input) {
+    let input = std::hint::black_box(input);
+    let groups = buggy::group_rows(&input.rows, &input.arena);
+    let mut chk: u64 = 0;
+    for (key, (count, sum)) in &groups {
+        let key_len = key.iter().map(|(n, v)| n.len() + v.len()).sum::<usize>();
+        chk = fold_group(chk, key_len, *count, *sum);
+    }
+    std::hint::black_box(chk);
+    debug_assert_eq!(groups.len(), input.expected_groups);
+    debug_assert_eq!(chk, input.expected_chk);
+}
+
+pub fn run_fixed(input: &Input) {
+    let input = std::hint::black_box(input);
+    let groups = fixed::group_rows(&input.rows, &input.arena);
+    let mut chk: u64 = 0;
+    for g in &groups {
+        let key_len = g.key.iter().map(|(n, v)| n.len() + v.len()).sum::<usize>();
+        chk = fold_group(chk, key_len, g.count, g.sum);
+    }
+    std::hint::black_box(chk);
+    debug_assert_eq!(groups.len(), input.expected_groups);
+    debug_assert_eq!(chk, input.expected_chk);
+}
+"#
+        .to_string(),
+    }
+}
+
+/// Bench spec for `sorted-input-previous-row-fast-path` (Batch 75,
+/// Research 089 — the GreptimeDB `recordbatches_to_timeseries` distill):
+/// hash-every-row grouping vs compare-against-the-previous-row's-group
+/// first, hash fallback on miss.
+///
+/// sizes = RUN LENGTH (the hit-rate regime axis, the sort_key_cache
+/// semantic-sizes precedent): n = 100 → adjacent input (S=1000 contiguous
+/// runs of 100 — the real query shape: rows sorted by primary key so one
+/// series' samples arrive together); n = 1 → interleaved (round-robin over
+/// all 1000 series — the honest bound: every row pays one failed [u64; 2]
+/// comparison before the hash). R_ROWS = 100_000 fixed; S_SERIES = 1000.
+/// G1: both arms emit groups in FIRST-SIGHT order — identical in both arms
+/// and computable in make_input (series 0..S ascending for BOTH layouts) —
+/// and fold the same position-weighted (series, count, sum) checksum,
+/// debug_assert_eq'd against the make_input ground truth. Correctness
+/// never depends on the fast path: the hash fallback with full-key
+/// equality is the semantic contract.
+/// Alloc axis: ~equal by design (both build the same HashMap + groups
+/// Vec; neither allocates per row) — the TIMING axis is the mechanism
+/// here, and the alloc integers pin that no per-row allocation snuck in.
+#[cfg(feature = "rust_perf_bench")]
+#[allow(clippy::too_many_lines)] // the harness is a single embedded raw string
+fn sorted_input_previous_row_fast_path_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![1, 100],
+        harness: r#"
+use std::collections::HashMap;
+
+const R_ROWS: usize = 100_000;
+const S_SERIES: usize = 1_000;
+
+pub struct Row {
+    pub series: [u64; 2], // the label-set key (hashed by the map)
+    pub value: u64,
+}
+pub struct Group {
+    pub series: [u64; 2],
+    pub count: u64,
+    pub sum: u64,
+}
+
+mod buggy {
+    use super::{Group, Row};
+    use std::collections::HashMap;
+
+    pub fn group_rows(rows: &[Row]) -> Vec<Group> {
+        let mut index: HashMap<[u64; 2], usize> = HashMap::new();
+        let mut groups: Vec<Group> = Vec::new();
+        for row in rows {
+            // hash EVERY row — even when it lands on the same series as
+            // the previous row (the common case for sorted input)
+            let idx = match index.get(&row.series) {
+                Some(&i) => i,
+                None => {
+                    let i = groups.len();
+                    groups.push(Group { series: row.series, count: 0, sum: 0 });
+                    index.insert(row.series, i);
+                    i
+                }
+            };
+            groups[idx].count += 1;
+            groups[idx].sum += row.value;
+        }
+        groups
+    }
+}
+
+mod fixed {
+    use super::{Group, Row};
+    use std::collections::HashMap;
+
+    pub fn group_rows(rows: &[Row]) -> Vec<Group> {
+        let mut index: HashMap<[u64; 2], usize> = HashMap::new();
+        let mut groups: Vec<Group> = Vec::new();
+        let mut prev: Option<usize> = None;
+        for row in rows {
+            // compare against the series the PREVIOUS row landed on —
+            // no hash on hit. The fast path only exploits local ordering;
+            // correctness never depends on it.
+            let idx = match prev {
+                Some(i) if groups[i].series == row.series => i,
+                _ => match index.get(&row.series) {
+                    Some(&i) => i,
+                    None => {
+                        let i = groups.len();
+                        groups.push(Group { series: row.series, count: 0, sum: 0 });
+                        index.insert(row.series, i);
+                        i
+                    }
+                },
+            };
+            prev = Some(idx);
+            groups[idx].count += 1;
+            groups[idx].sum += row.value;
+        }
+        groups
+    }
+}
+
+pub struct Input {
+    rows: Vec<Row>,
+    expected_groups: usize,
+    expected_chk: u64,
+}
+
+fn fold_group(chk: u64, series: [u64; 2], count: u64, sum: u64) -> u64 {
+    chk.wrapping_mul(31)
+        .wrapping_add(series[0] ^ series[1].rotate_left(17))
+        .wrapping_mul(31)
+        .wrapping_add(count)
+        .wrapping_mul(31)
+        .wrapping_add(sum)
+}
+
+fn series_of(g: usize) -> [u64; 2] {
+    [g as u64, (g as u64).wrapping_mul(2_654_435_761).wrapping_add(0x9E37_79B9)]
+}
+
+pub fn make_input(n: usize) -> Input {
+    let run_len = n.max(1); // n = run length: 1 = interleaved (round-robin), 100 = adjacent
+    let mut rng: u64 = 0x853C_49E6_748F_EA9B;
+    let mut rows = Vec::with_capacity(R_ROWS);
+    // emit run_len consecutive rows of one series, then the next — for
+    // run_len = 1 this degenerates to round-robin over all series
+    let mut g = 0usize;
+    while rows.len() < R_ROWS {
+        let series = series_of(g % S_SERIES);
+        for _ in 0..run_len {
+            if rows.len() == R_ROWS {
+                break;
+            }
+            rng = rng.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695_040_888_963_407);
+            rows.push(Row { series, value: rng >> 16 });
+        }
+        g += 1;
+    }
+    // ground truth: first-sight order is 0..S for BOTH layouts (series 0
+    // is the first run / first round-robin slot either way)
+    let mut counts = vec![0u64; S_SERIES];
+    let mut sums = vec![0u64; S_SERIES];
+    let mut present = vec![false; S_SERIES];
+    for row in &rows {
+        let g = row.series[0] as usize;
+        counts[g] += 1;
+        sums[g] = sums[g].wrapping_add(row.value);
+        present[g] = true;
+    }
+    let expected_groups = present.iter().filter(|&&p| p).count();
+    let mut expected_chk: u64 = 0;
+    for g in 0..S_SERIES {
+        if present[g] {
+            expected_chk = fold_group(expected_chk, series_of(g), counts[g], sums[g]);
+        }
+    }
+    Input { rows, expected_groups, expected_chk }
+}
+
+pub fn run_buggy(input: &Input) {
+    let input = std::hint::black_box(input);
+    let groups = buggy::group_rows(&input.rows);
+    let mut chk: u64 = 0;
+    for g in &groups {
+        chk = fold_group(chk, g.series, g.count, g.sum);
+    }
+    std::hint::black_box(chk);
+    debug_assert_eq!(groups.len(), input.expected_groups);
+    debug_assert_eq!(chk, input.expected_chk);
+}
+
+pub fn run_fixed(input: &Input) {
+    let input = std::hint::black_box(input);
+    let groups = fixed::group_rows(&input.rows);
+    let mut chk: u64 = 0;
+    for g in &groups {
+        chk = fold_group(chk, g.series, g.count, g.sum);
+    }
+    std::hint::black_box(chk);
+    debug_assert_eq!(groups.len(), input.expected_groups);
+    debug_assert_eq!(chk, input.expected_chk);
+}
+"#
+        .to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -6180,16 +6835,19 @@ mod tests {
     }
 
     #[test]
-    fn seed_corpus_has_eighty_entries_across_twelve_categories() {
+    fn seed_corpus_has_eighty_three_entries_across_twelve_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 80);
+        assert_eq!(corpus.entries.len(), 83);
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
         categories.dedup();
-        // 12 distinct categories. Allocation is the deepest (18 rules,
+        // 12 distinct categories. Allocation is the deepest (20 rules,
+        // — Batch 75 added encoded-layout-borrowed-view +
+        // group-keys-borrow-allocate-on-first-sight;
         // including Issue 014's arc-str-payload + Batch 48's three + Batch
-        // 53's hashmap-with-capacity); complexity has 15 (Batch 48 added
+        // 53's hashmap-with-capacity); complexity has 16 (Batch 75 added
+        // sorted-input-previous-row-fast-path; Batch 48 added
         // hashset-insert-bool-return + vec-insert-front-deque; Batch 64
         // added debug-assert-length-hoist); iterators
         // has 9 (Batch 48 added three; Batch 66 added
@@ -6776,10 +7434,10 @@ mod tests {
 
     #[cfg(feature = "rust_perf_bench")]
     #[test]
-    fn seventy_rules_have_bench_specs() {
+    fn seventy_three_rules_have_bench_specs() {
         let corpus = build_perf_seed_corpus();
         let with_spec = corpus.entries.iter().filter(|e| e.bench_spec.is_some()).count();
-        assert_eq!(with_spec, 70, "expected 70 benchable rules, got {with_spec}");
+        assert_eq!(with_spec, 73, "expected 73 benchable rules, got {with_spec}");
     }
 
     #[cfg(feature = "rust_perf_bench")]
@@ -6829,7 +7487,7 @@ mod tests {
     /// The other 58 have `context_notes: None` (unconditional wins or
     /// honestly NotBenchable).
     #[test]
-    fn twenty_two_annotated_rules_carry_context_notes() {
+    fn twenty_six_annotated_rules_carry_context_notes() {
         let corpus = build_perf_seed_corpus();
         let annotated: Vec<&str> = corpus
             .entries
@@ -6837,7 +7495,7 @@ mod tests {
             .filter(|e| e.context_notes.is_some())
             .map(|e| e.rule_id.as_str())
             .collect();
-        assert_eq!(annotated.len(), 22, "expected 22 context-annotated rules");
+        assert_eq!(annotated.len(), 26, "expected 26 context-annotated rules");
         assert!(annotated.contains(&"precompute-table"));
         assert!(annotated.contains(&"papaya-lockfree"));
         assert!(annotated.contains(&"dedupe-hashset-vs-vec"));
@@ -6859,6 +7517,10 @@ mod tests {
         assert!(annotated.contains(&"lock-guard-narrow-field-accessor"));
         assert!(annotated.contains(&"swar-digit-chunk-parse")); // Batch 74 — the regime note (<8 digits tie)
         assert!(annotated.contains(&"runtime-feature-detect-per-chunk")); // Batch 74 — measured-Tie honest annotation
+        assert!(annotated.contains(&"encoded-layout-borrowed-view")); // Batch 75 — S<<R regime
+        assert!(annotated.contains(&"group-keys-borrow-allocate-on-first-sight")); // Batch 75 — R/S regime + correctness contract
+        assert!(annotated.contains(&"sorted-input-previous-row-fast-path")); // Batch 75 — hit-rate regime
+        assert!(annotated.contains(&"btreemap-sorted-iteration")); // Batch 75 rider — the two-row sorted-read decision table
     }
 
     /// The non-annotated rules (ParetoDominant + honestly NotBenchable) must
@@ -6872,7 +7534,7 @@ mod tests {
             .iter()
             .filter(|e| e.context_notes.is_none())
             .count();
-        assert_eq!(unannotated, 58, "expected 58 unannotated rules (78 - 20 annotated)");
+        assert_eq!(unannotated, 57, "expected 57 unannotated rules (83 - 26 annotated)");
     }
 
     /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -6884,7 +7546,7 @@ mod tests {
         let json = serde_json::to_string(&corpus.entries).unwrap();
         let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
         let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-        assert_eq!(annotated, 22);
+        assert_eq!(annotated, 26);
 
         // Simulate a pre-field snapshot: strip `context_notes` from JSON.
         // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -6916,9 +7578,9 @@ mod tests {
 
         let corpus = build_perf_seed_corpus();
 
-        // Filter to the 20 annotated rules.
+        // Filter to the 26 annotated rules.
         let annotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_some()).collect();
-        assert_eq!(annotated.len(), 22, "expected 22 annotated rules");
+        assert_eq!(annotated.len(), 26, "expected 26 annotated rules");
 
         // The HealEntry trait override must agree with the struct field.
         for rule in &annotated {
@@ -6942,7 +7604,7 @@ mod tests {
 
         // The unannotated rules must return None from the trait too.
         let unannotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_none()).collect();
-        assert_eq!(unannotated.len(), 58, "expected 58 unannotated rules");
+        assert_eq!(unannotated.len(), 57, "expected 57 unannotated rules");
         for rule in &unannotated {
             assert!(HealEntry::context_notes(*rule).is_none(), "{} should have no context_notes", rule.rule_id);
         }
@@ -7230,5 +7892,91 @@ mod tests {
         }
         // The None edge: both arms false.
         assert!(!rooms[32].narrow_is_local());
+    }
+
+    /// Batch 75 — the three new rules parse (syn) and are retrievable.
+    #[test]
+    fn batch75_pseudocode_parses() {
+        let corpus = build_perf_seed_corpus();
+        for id in [
+            "encoded-layout-borrowed-view",
+            "group-keys-borrow-allocate-on-first-sight",
+            "sorted-input-previous-row-fast-path",
+        ] {
+            let e = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("{id} missing from corpus"));
+            assert!(
+                syn::parse_file(&e.buggy_code).and_then(|_| syn::parse_file(&e.fixed_code)).is_ok(),
+                "{id} buggy/fixed must both parse"
+            );
+        }
+    }
+
+    #[test]
+    fn batch75_rules_present() {
+        let corpus = build_perf_seed_corpus();
+        let ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        assert!(ids.contains(&"encoded-layout-borrowed-view"));
+        assert!(ids.contains(&"group-keys-borrow-allocate-on-first-sight"));
+        assert!(ids.contains(&"sorted-input-previous-row-fast-path"));
+    }
+
+    /// Batch 75 — the candidate-list correctness contract: an injected
+    /// worst-case hash (len % 4) MUST NOT merge distinct groups. Pins the
+    /// `HashMap<u64, Vec<usize>>` decision content a real SipHash collision
+    /// never exercises (the Lane B falsifiable-gate recommendation).
+    #[test]
+    fn batch75_collision_candidate_list_never_merges() {
+        use std::collections::HashMap;
+        // 8 distinct keys, all colliding under the injected hash
+        let keys: Vec<Vec<(String, String)>> = (0..8)
+            .map(|i| vec![(format!("k{i}"), format!("v{i}"))])
+            .collect();
+        let mut index: HashMap<u64, Vec<usize>> = HashMap::new();
+        let mut groups: Vec<Vec<(String, String)>> = Vec::new();
+        for key in &keys {
+            let hash = (key.len() % 4) as u64; // adversarial: identical for all
+            let idx = if let Some(i) = index.get(&hash).and_then(|c| {
+                c.iter().find(|&&i| groups[i] == *key).copied()
+            }) {
+                i
+            } else {
+                let i = groups.len();
+                groups.push(key.clone());
+                index.entry(hash).or_default().push(i);
+                i
+            };
+            std::hint::black_box(idx);
+        }
+        // 8 colliding distinct keys → 8 distinct groups, zero merges
+        assert_eq!(groups.len(), 8, "candidate list must keep colliding keys distinct");
+        let mut sorted = groups.clone();
+        sorted.sort();
+        sorted.dedup();
+        assert_eq!(sorted.len(), 8);
+    }
+
+    /// Batch 75 — the prefix-trap correctness contract: with optional fields
+    /// skipped, one key can be a PREFIX of another; the exhaustive compare
+    /// (length check) must not match them (the source's
+    /// `labels.next().is_none()` discipline, `{host=a}` vs `{host=a, env=prod}`).
+    #[test]
+    fn batch75_prefix_keys_do_not_match() {
+        fn key_matches(key: &[(String, String)], row_labels: &[(String, String)]) -> bool {
+            key.len() == row_labels.len()
+                && key.iter().zip(row_labels).all(|(a, b)| a == b)
+        }
+        let short: Vec<(String, String)> = vec![("host".into(), "a".into())];
+        let long: Vec<(String, String)> =
+            vec![("host".into(), "a".into()), ("env".into(), "prod".into())];
+        // identical prefix — must NOT match without the length check
+        assert!(!key_matches(&short, &long));
+        assert!(!key_matches(&long, &short));
+        // exact equality still matches
+        assert!(key_matches(&short, &short));
+        assert!(key_matches(&long, &long));
     }
 }
