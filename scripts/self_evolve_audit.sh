@@ -283,7 +283,11 @@ total=0
 for r in $REPOS; do
   d="/Users/katopz/git/$r"
   [ -d "$d/.git" ] || continue
-  n=$(git -C "$d" log --oneline --since="$ADOPTION_DATE" --grep='heal' 2>/dev/null | wc -l | tr -d ' ')
+  # Word-boundary match: "heal" as a standalone word. A bare --grep='heal'
+  # substring-matches "health"/"healthy" — measured 2026-08-26 when five
+  # unrelated commits ("healthy neutral/tax", "/health endpoint", "GPU-health")
+  # fabricated a 3rd activity day and printed a false A1: PASS.
+  n=$(git -C "$d" log --oneline -E --since="$ADOPTION_DATE" --grep='(^|[^[:alpha:]])heal($|[^[:alpha:]])' 2>/dev/null | wc -l | tr -d ' ')
   [ "$n" = "0" ] || echo "  $r: $n heal-commit(s) since $ADOPTION_DATE"
   total=$((total + n))
 done
@@ -323,7 +327,7 @@ for line in open(path):
 EOF
   fi
   if [ -d "$d/.git" ] && [ "$r" != "riir-clippy" ]; then
-    git -C "$d" log --format="%as" --since="$ADOPTION_DATE" --grep='heal' 2>/dev/null \
+    git -C "$d" log -E --format="%as" --since="$ADOPTION_DATE" --grep='(^|[^[:alpha:]])heal($|[^[:alpha:]])' 2>/dev/null \
       | while read -r day; do printf '%s\tcommit\t%s\n' "$day" "$r"; done >> "$DAYS_TMP"
   fi
 done
