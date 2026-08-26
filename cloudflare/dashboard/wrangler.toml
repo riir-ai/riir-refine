@@ -1,0 +1,17 @@
+# riir-ops-dashboard — the Issue 044 ops dashboard (static, single HTML).
+#
+# Deployed with `npx wrangler deploy` from this directory after
+# regenerating ../dashboard/index.html via
+#   python3 ../../scripts/gen_dashboard.py
+#
+# NOTE (v1, honest): this URL is UNAUTHENTICATED (workers.dev). The HTML
+# contains only aggregated numbers (no source, no tokens, no account ids
+# beyond none). Token gating / CF Access is the top item on the Issue 044
+# prod-grade backlog. Regenerate + redeploy to refresh data — there is no
+# auto-refresh yet.
+name = "riir-ops-dashboard"
+compatibility_date = "2026-08-26"
+
+[assets]
+directory = "./public"
+not_found_handling = "single-page-application"

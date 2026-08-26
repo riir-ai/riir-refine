@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>riir ops dashboard</title>
+<style>
+:root{
+  --bg:#0b0e14; --panel:#121722; --panel2:#0e1320; --line:#1f2736;
+  --fg:#d7dee9; --dim:#7b8794; --accent:#4cc38a; --accent2:#69a6f9;
+  --warn:#e5b567; --crit:#e0705f; --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);
+  font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;}
+a{color:var(--accent2);text-decoration:none}
+.wrap{max-width:1180px;margin:0 auto;padding:24px 20px 80px}
+header{display:flex;flex-wrap:wrap;gap:10px;align-items:baseline;margin-bottom:6px}
+h1{font:600 22px/1.2 var(--mono);margin:0;letter-spacing:.5px}
+h1 .cur{color:var(--accent)}
+.sub{color:var(--dim);font-size:12px;font-family:var(--mono)}
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font:11px var(--mono);
+  border:1px solid var(--line);color:var(--dim);margin-right:6px}
+.badge.ok{color:var(--accent);border-color:var(--accent)}
+.badge.warn{color:var(--warn);border-color:var(--warn)}
+.badge.crit{color:var(--crit);border-color:var(--crit)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:18px 0}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.kpi .v{font:600 24px/1.1 var(--mono);margin-top:4px}
+.kpi .l{color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:.8px}
+.kpi .s{color:var(--dim);font-size:11px;margin-top:4px;font-family:var(--mono)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px;margin:14px 0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px}
+.card h2{font:600 13px var(--mono);color:var(--dim);margin:0 0 12px;
+  text-transform:uppercase;letter-spacing:.8px}
+.card.wide{grid-column:1/-1}
+svg{display:block;width:100%;height:auto}
+svg text{font:10px var(--mono);fill:var(--dim)}
+.axis line{stroke:var(--line)}
+.bar{fill:var(--accent2)}
+.bar.alt{fill:var(--accent)}
+.bar.warn{fill:var(--warn)}
+.bar.crit{fill:var(--crit)}
+.capline{stroke:var(--crit);stroke-dasharray:5 4;stroke-width:1.2}
+.line{fill:none;stroke:var(--accent);stroke-width:2}
+.line.l2{stroke:var(--accent2)}
+.line.l3{stroke:var(--warn)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;color:var(--dim);font-size:11px;font-family:var(--mono)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+table{width:100%;border-collapse:collapse;font:12px var(--mono)}
+th{color:var(--dim);text-align:left;font-weight:500;border-bottom:1px solid var(--line);
+  padding:6px 8px;white-space:nowrap}
+td{border-bottom:1px solid var(--line);padding:6px 8px;vertical-align:top}
+tr:hover td{background:var(--panel2)}
+.num{text-align:right;white-space:nowrap}
+.note{color:var(--dim);max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.missing{color:var(--dim)}
+.missing li{margin:6px 0}
+footer{color:var(--dim);font:11px var(--mono);margin-top:34px;border-top:1px solid var(--line);padding-top:14px}
+.alertbar{background:rgba(224,112,95,.12);border:1px solid var(--crit);color:var(--crit);
+  border-radius:10px;padding:10px 14px;font:12px var(--mono);margin:12px 0;display:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>riir<span class="cur">·</span>ops dashboard</h1>
+  <span class="sub" id="generated"></span>
+</header>
+<div class="sub" id="sources"></div>
+<div class="alertbar" id="capalert"></div>
+
+<div class="kpis" id="kpis"></div>
+
+<div class="grid">
+  <div class="card"><h2>daily neurons — server truth (14d, CF GraphQL)</h2>
+    <div id="cfDaily"></div>
+    <div class="legend"><span><i style="background:var(--accent2)"></i>neurons/day</span>
+      <span><i style="background:var(--crit)"></i>10k free cap</span></div>
+  </div>
+  <div class="card"><h2>ledger spend by model (USD est, client)</h2>
+    <div id="modelSpend"></div>
+  </div>
+  <div class="card"><h2>neurons by model — ledger (server)</h2>
+    <div id="modelNeurons"></div>
+  </div>
+  <div class="card"><h2>healer score-bench curve</h2>
+    <div id="scoreCurve"></div>
+    <div class="legend"><span><i style="background:var(--accent)"></i>heal_rate</span>
+      <span><i style="background:var(--warn)"></i>created_rate</span>
+      <span><i style="background:var(--accent2)"></i>parse_safety</span></div>
+  </div>
+</div>
+
+<div class="grid">
+  <div class="card"><h2>self-evolve adoption — trajectories per repo</h2>
+    <div id="trajTable"></div>
+  </div>
+  <div class="card"><h2>heal commits — last 30d (word-boundary grep)</h2>
+    <div id="gitCadence"></div>
+  </div>
+  <div class="card wide"><h2>unhealed remainder (healer dry-run snapshot)</h2>
+    <div id="coverage"></div>
+    <div class="sub">re-measure: <code>python3 scripts/gen_dashboard.py --sweep</code></div>
+  </div>
+</div>
+
+<div class="grid">
+  <div class="card wide"><h2>LLM cost ledger — session log</h2>
+    <div id="ledgerTable"></div>
+  </div>
+  <div class="card wide"><h2>what is MISSING for prod grade (issue 044 backlog)</h2>
+    <ul class="missing" id="missingList"></ul>
+  </div>
+</div>
+
+<footer id="footer"></footer>
+</div>
+
+<script id="ds" type="application/json">{"generated_utc":"2026-08-26 05:53","neuron_usd":1.1e-05,"cap":10000.0,"ledger":{"rows":[{"ts_unix":1759184100,"arm":"A-smoke","model":"@cf/meta/llama-3.3-70b-instruct-fp8-fast","n":11,"client":{"prompt_tokens":1248,"completion_tokens":576,"usd_est":0.0017},"server":{"requests":11,"input_tokens":1358,"output_tokens":629,"neurons":165.03724670410156,"usd_list":0.0018154},"kat":null,"note":"retroactive backfill of the first smoke run (--limit 2 window); server numbers = GraphQL aiInferenceAdaptiveGroups row for 00:55Z"},{"ts_unix":1759186500,"arm":"external","model":"@cf/meta/llama-3.3-70b-instruct-fp8-fast","n":20,"client":null,"server":{"requests":20,"input_tokens":2686,"output_tokens":1438,"neurons":366.1,"usd_list":0.004,"free_alloc_pct_of_daily_10k":3.7},"kat":null,"note":"01:10-01:15Z llama usage NOT from the regate session (no local record) \u2014 flagged for owner attribution"},{"ts_unix":1787708412,"arm":"A-wasted","model":"@cf/qwen/qwen3.8-27b","n":170,"client":{"prompt_tokens":0,"completion_tokens":0,"usd_est":0.0,"note":"zero extraction \u2014 legacy-schema parser vs chat-schema model; generations billed but unusable"},"server":{"requests":170,"input_tokens":36018,"output_tokens":21632,"neurons":7778.4,"usd_list":0.0856,"free_alloc_pct_of_daily_10k":77.8},"kat":null,"note":"incident row \u2014 the model-switch-without-re-smoke lesson; see Issue 040 + Proposal 005 hazard note"},{"arm":"A","client":{"completion_tokens":0,"prompt_tokens":0,"usd_est":0.0},"kat":null,"model":"@cf/qwen/qwen3.8-27b","n":1,"note":"kat null until Phase 1 rail; server = GraphQL aiInferenceAdaptiveGroups (billing truth)","server":{"free_alloc_pct_of_daily_10k":0.0,"input_tokens":0,"neurons":0.0,"output_tokens":0,"requests":0,"usd_list":0.0},"ts_unix":1787712627},{"arm":"A","client":{"completion_tokens":0,"prompt_tokens":0,"usd_est":0.0},"kat":null,"model":"@cf/qwen/qwen3.8-27b","n":1,"note":"kat null until Phase 1 rail; server = GraphQL aiInferenceAdaptiveGroups (billing truth)","server":{"free_alloc_pct_of_daily_10k":0.0,"input_tokens":0,"neurons":0.0,"output_tokens":0,"requests":0,"usd_list":0.0},"ts_unix":1787713020},{"arm":"A","client":{"completion_tokens":325,"prompt_tokens":820,"usd_est":0.001409},"kat":null,"model":"@cf/meta/llama-3.3-70b-instruct-fp8-fast","n":9,"note":"kat null until Phase 1 rail; server = GraphQL aiInferenceAdaptiveGroups (billing truth)","server":{"free_alloc_pct_of_daily_10k":0.0,"input_tokens":0,"neurons":0.0,"output_tokens":0,"requests":0,"usd_list":0.0},"ts_unix":1787713081},{"arm":"B","client":{"completion_tokens":304,"prompt_tokens":3128,"usd_est":0.0023804},"kat":null,"model":"@cf/meta/llama-3.3-70b-instruct-fp8-fast","n":9,"note":"kat null until Phase 1 rail; server = GraphQL aiInferenceAdaptiveGroups (billing truth)","server":{"free_alloc_pct_of_daily_10k":0.0,"input_tokens":0,"neurons":0.0,"output_tokens":0,"requests":0,"usd_list":0.0},"ts_unix":1787713204},{"arm":"A","client":{"completion_tokens":1987,"prompt_tokens":3604,"usd_est":0.007980200000000002},"kat":null,"model":"@cf/meta/llama-3.3-70b-instruct-fp8-fast","n":20,"note":"kat null until Phase 1 rail; server = GraphQL aiInferenceAdaptiveGroups (billing truth)","server":{"free_alloc_pct_of_daily_10k":0.0,"input_tokens":0,"neurons":0.0,"output_tokens":0,"requests":0,"usd_list":0.0},"ts_unix":1787713358},{"arm":"B","client":{"completion_tokens":1543,"prompt_tokens":9221,"usd_est":0.00908705},"kat":null,"model":"@cf/meta/llama-3.3-70b-instruct-fp8-fast","n":20,"note":"kat null until Phase 1 rail; server = GraphQL aiInferenceAdaptiveGroups (billing truth)","server":{"free_alloc_pct_of_daily_10k":0.0,"input_tokens":0,"neurons":0.0,"output_tokens":0,"requests":0,"usd_list":0.0},"ts_unix":1787713516},{"ts_unix":1787714043,"arm":"reconciliation","model":"session-2026-08-26T02:45-03:20Z","n":58,"client":{"prompt_tokens":16873,"completion_tokens":4159,"usd_est":0.02086},"server":{"requests":62,"input_tokens":24645,"output_tokens":6518,"neurons":1433.2,"usd_list":0.01577,"free_alloc_pct_of_daily_10k":14.3},"kat":null,"note":"settled aggregate for the 4 arm rows above (their server fields read 0.0 from analytics lag at fetch time); qwen 118.1 (2 thinking-model smokes + 2 probes) + llama 1315.1 (58 generations: A/B reachable 9+9, A/B v2edit slice 20+20); account day closed at 9742.4/10000 \u2014 cap respected"},{"arm":"A","client":{"completion_tokens":0,"prompt_tokens":0,"usd_est":0.0},"kat":null,"model":"@cf/zai-org/glm-4.7-flash","n":9,"note":"kat null until Phase 1 rail; server = GraphQL aiInferenceAdaptiveGroups (billing truth)","server":{"free_alloc_pct_of_daily_10k":0.0,"input_tokens":0,"neurons":0.0,"output_tokens":0,"requests":0,"usd_list":0.0},"ts_unix":1787719123},{"arm":"A","client":{"completion_tokens":277,"prompt_tokens":551,"usd_est":0.00014386000000000002},"kat":null,"model":"@cf/zai-org/glm-4.7-flash","n":9,"note":"kat null until Phase 1 rail; server = GraphQL aiInferenceAdaptiveGroups (billing truth)","server":{"free_alloc_pct_of_daily_10k":0.0,"input_tokens":0,"neurons":0.0,"output_tokens":0,"requests":0,"usd_list":0.0},"ts_unix":1787720347},{"arm":"B","client":{"completion_tokens":275,"prompt_tokens":2859,"usd_est":0.00028154},"kat":null,"model":"@cf/zai-org/glm-4.7-flash","n":9,"note":"kat null until Phase 1 rail; server = GraphQL aiInferenceAdaptiveGroups (billing truth)","server":{"free_alloc_pct_of_daily_10k":0.0,"input_tokens":0,"neurons":0.0,"output_tokens":0,"requests":0,"usd_list":0.0},"ts_unix":1787720539},{"arm":"A","client":{"completion_tokens":4066,"prompt_tokens":319,"usd_est":0.00164554},"kat":null,"model":"@cf/zai-org/glm-4.7-flash","n":9,"note":"kat null until Phase 1 rail; server = GraphQL aiInferenceAdaptiveGroups (billing truth)","server":{"free_alloc_pct_of_daily_10k":0.0,"input_tokens":0,"neurons":0.0,"output_tokens":0,"requests":0,"usd_list":0.0},"ts_unix":1787720933}],"per_model":{"@cf/meta/llama-3.3-70b-instruct-fp8-fast":{"usd":0.02255665,"neurons":531.1372467041016,"requests":31,"n":89,"prompt_tokens":18021,"completion_tokens":4735},"@cf/qwen/qwen3.8-27b":{"usd":0.0,"neurons":7778.4,"requests":170,"n":172,"prompt_tokens":0,"completion_tokens":0},"session-2026-08-26T02:45-03:20Z":{"usd":0.02086,"neurons":1433.2,"requests":62,"n":58,"prompt_tokens":16873,"completion_tokens":4159},"@cf/zai-org/glm-4.7-flash":{"usd":0.0020709400000000003,"neurons":0.0,"requests":0,"n":36,"prompt_tokens":3729,"completion_tokens":4618}},"per_day":{"2025-09-29":{"usd":0.0017,"neurons":531.1372467041016,"n":31},"2026-08-26":{"usd":0.04378759,"neurons":9211.6,"n":324}},"incidents":[{"ts":1787708412,"model":"@cf/qwen/qwen3.8-27b","note":"incident row \u2014 the model-switch-without-re-smoke lesson; see Issue 040 + Proposal 005 hazard note","neurons":7778.4}],"totals":{"usd_client":0.045488,"server_neurons":9742.74,"requests":263}},"score":[{"ts":"2026-08-19T04:49:29","sha":"72bac03","n_ran":34,"n_healable":28,"n_clean":6,"heal_rate":0.84615386,"created_rate":0.057692308,"parse_safety":0.9285714,"decline_correctness":1.0,"edits_total":60,"vocab_size":33},{"ts":"2026-08-19T05:25:07","sha":"86ba7f1","n_ran":34,"n_healable":28,"n_clean":6,"heal_rate":0.90384614,"created_rate":0.057692308,"parse_safety":1.0,"decline_correctness":1.0,"edits_total":58,"vocab_size":33},{"ts":"2026-08-19T06:06:31","sha":"c8d0d34","n_ran":34,"n_healable":28,"n_clean":6,"heal_rate":0.9807692,"created_rate":0.01923077,"parse_safety":1.0,"decline_correctness":1.0,"edits_total":66,"vocab_size":33},{"ts":"2026-08-24T14:01:52","sha":"e4ce8ba","n_ran":34,"n_healable":28,"n_clean":6,"heal_rate":0.9807692,"created_rate":0.01923077,"parse_safety":1.0,"decline_correctness":1.0,"edits_total":66,"vocab_size":33},{"ts":"2026-08-25T04:05:18","sha":"7399ffc","n_ran":35,"n_healable":29,"n_clean":6,"heal_rate":0.9622642,"created_rate":0.018867925,"parse_safety":1.0,"decline_correctness":1.0,"edits_total":67,"vocab_size":33}],"traj":[{"repo":"katgpt-rs","rows":8,"tiers":{"certified":8,"heuristic":0,"withdrawn":0},"success":9,"fail":0,"top_rules":[["uninlined_format_args",7],["single_match_else",1]],"last_seen":1787717661},{"repo":"riir-ai","rows":104,"tiers":{"certified":99,"heuristic":5,"withdrawn":0},"success":109,"fail":7,"top_rules":[["uninlined_format_args",64],["map_unwrap_or",15],["match_bool",13],["single_match_else",8],["semicolon_if_nothing_returned",2],["hashmap-with-capacity",1]],"last_seen":1787720762},{"repo":"riir-train","rows":6,"tiers":{"certified":4,"heuristic":2,"withdrawn":0},"success":6,"fail":0,"top_rules":[["uninlined_format_args",3],["map_unwrap_or",1],["semicolon_if_nothing_returned",1],["vec-with-capacity",1]],"last_seen":1787704549},{"repo":"riir-chain","rows":2,"tiers":{"certified":1,"heuristic":0,"withdrawn":1},"success":1,"fail":3,"top_rules":[["redundant_closure",2]],"last_seen":1787667780},{"repo":"riir-clippy","rows":27,"tiers":{"certified":27,"heuristic":0,"withdrawn":0},"success":36,"fail":0,"top_rules":[["uninlined_format_args",15],["map_unwrap_or",4],["single_match_else",4],["collapsible_else_if",1],["match_bool",1],["redundant_closure",1]],"last_seen":1787721233},{"repo":"riir-game-sdk","rows":8117,"tiers":{"certified":8,"heuristic":8109,"withdrawn":0},"success":12,"fail":2,"top_rules":[["uninlined_format_args",7204],["match_bool",360],["map_unwrap_or",254],["single_match_else",215],["semicolon_if_nothing_returned",23],["range_plus_one",12]],"last_seen":1787595859},{"repo":"riir-mmorpg-examples","rows":24,"tiers":{"certified":24,"heuristic":0,"withdrawn":0},"success":24,"fail":0,"top_rules":[["map_unwrap_or",22],["match_bool",1],["semicolon_if_nothing_returned",1]],"last_seen":1787650079},{"repo":"riir-viewbridge","rows":6,"tiers":{"certified":5,"heuristic":1,"withdrawn":0},"success":6,"fail":0,"top_rules":[["single_match_else",3],["uninlined_format_args",2],["vec-with-capacity",1]],"last_seen":1787704511},{"repo":"riir-dapps","rows":2,"tiers":{"certified":2,"heuristic":0,"withdrawn":0},"success":3,"fail":0,"top_rules":[["match_bool",2]],"last_seen":1787583348}],"cadence":[{"repo":"riir-clippy","heal_commits_30d":46,"total_commits_30d":475},{"repo":"katgpt-rs","heal_commits_30d":44,"total_commits_30d":770},{"repo":"riir-train","heal_commits_30d":17,"total_commits_30d":1688},{"repo":"riir-ai","heal_commits_30d":16,"total_commits_30d":1804},{"repo":"riir-chain","heal_commits_30d":6,"total_commits_30d":785},{"repo":"riir-neuron-db","heal_commits_30d":5,"total_commits_30d":201},{"repo":"riir-mmorpg-examples","heal_commits_30d":5,"total_commits_30d":556},{"repo":"riir-game-sdk","heal_commits_30d":4,"total_commits_30d":162},{"repo":"riir-viewbridge","heal_commits_30d":3,"total_commits_30d":41},{"repo":"riir-dapps","heal_commits_30d":3,"total_commits_30d":53},{"repo":"riir-unity","heal_commits_30d":2,"total_commits_30d":54}],"cf_daily":[{"date":"2026-08-26","neurons":10329.778417239379}],"coverage":[{"repo":"katgpt-rs","files":15,"edits":33,"measured_at":"2026-08-26T05:51:18.727094+00:00"},{"repo":"riir-ai","files":336,"edits":2619,"measured_at":"2026-08-26T05:52:15.420737+00:00"},{"repo":"riir-train","files":272,"edits":2340,"measured_at":"2026-08-26T05:52:50.199385+00:00"},{"repo":"riir-neuron-db","files":2,"edits":4,"measured_at":"2026-08-26T05:52:50.440203+00:00"},{"repo":"riir-chain","files":11,"edits":29,"measured_at":"2026-08-26T05:52:53.062075+00:00"},{"repo":"riir-clippy","files":5,"edits":5,"measured_at":"2026-08-26T05:52:57.840953+00:00"},{"repo":"riir-game-sdk","files":45,"edits":341,"measured_at":"2026-08-26T05:53:02.126001+00:00"},{"repo":"riir-mmorpg-examples","files":1,"edits":2,"measured_at":"2026-08-26T05:53:02.239498+00:00"},{"repo":"riir-viewbridge","files":0,"edits":0,"measured_at":"2026-08-26T05:53:02.439961+00:00"},{"repo":"riir-dapps","files":0,"edits":0,"measured_at":"2026-08-26T05:53:02.669566+00:00"}],"missing":[["auth gating","unauthenticated workers.dev URL \u2014 add a token query gate (tiny Worker script in front of assets) or Cloudflare Access"],["auto-refresh","data is a snapshot at generation time \u2014 schedule regeneration (cron on this box, GitHub Action, or a Worker cron that re-runs collection into KV/R2)"],["budget alerting","notify (Discord/email/webhook) at 50/90/100% of the 10k/day cap + monthly USD budget; the bar turns red but nobody is paged"],["KAT rail","ledger rows carry kat:null \u2014 per-fix cost in KAT tokens per Proposal 005 Phase 1; wire when the rail lands"],["training/GPU axis","riir-train runs (plan, steps, tok/s, GPU-hours, M3 vs 4090) are not ingested \u2014 needs a run-log convention + collector"],["coverage auto-measure","--sweep is manual + slow; schedule it (nightly) so the unhealed-remainder table stays honest"],["fixer quality history","keeps/vetoes per arm per session (Bench 049/053 shape) as a time series, not prose in .md files"],["retention","CF GraphQL served ~14d here; the committed ledger is the archive \u2014 keep appending, never rewrite"],["incident timeline","ledger notes carry incidents (qwen 7.8k) \u2014 render as an annotated timeline strip once there are >3"],["heartbeat","the dashboard cannot tell you the GENERATOR died \u2014 add a generated-at staleness check + alert when >48h"]],"source_flags":[["ledger",true],["score-history",true],["trajectories",true],["git-cadence",true],["cf-analytics",true],["coverage",true]]}</script>
+<script>
+const D = JSON.parse(document.getElementById('ds').textContent);
+const $ = id => document.getElementById(id);
+const fmt = {
+  n: x => (x==null?'—':x.toLocaleString(undefined,{maximumFractionDigits:0})),
+  n1: x => (x==null?'—':x.toLocaleString(undefined,{maximumFractionDigits:0,minimumFractionDigits:0})),
+  f2: x => (x==null?'—':x.toFixed(2)),
+  usd: x => (x==null?'—':'$'+x.toFixed(x<0.1?4:2)),
+  pct: x => (x==null?'—':(x*100).toFixed(1)+'%'),
+  d: ts => new Date(ts*1000).toISOString().slice(0,16).replace('T',' '),
+};
+$('generated').textContent = 'generated ' + D.generated_utc + ' UTC';
+
+// ── alert bar ──
+if (D.cf_daily && D.cf_daily.length) {
+  const today = D.cf_daily[D.cf_daily.length-1];
+  const pctCap = today.neurons / D.cap;
+  if (pctCap >= 1) {
+    $('capalert').style.display='block';
+    $('capalert').textContent = '⚠ CAP EXCEEDED — ' + today.date + ': '
+      + fmt.n1(today.neurons) + ' / ' + fmt.n(D.cap) + ' neurons ('
+      + fmt.pct(pctCap) + '). Free plan hard-fails new generations until 00:00 UTC.';
+  } else if (pctCap >= 0.9) {
+    $('capalert').style.display='block';
+    $('capalert').textContent = '⚠ ' + fmt.pct(pctCap) + ' of daily free cap used ('
+      + today.date + ').';
+  }
+}
+
+// ── KPIs ──
+{
+  const srvTotal = (D.cf_daily||[]).reduce((a,b)=>a+b.neurons,0)
+    || D.ledger.totals.server_neurons;
+  const k = [
+    ['server neurons (14d)', fmt.n1(srvTotal),
+      fmt.usd(srvTotal * D.neuron_usd) + ' list'],
+    ['ledger USD (client est)', fmt.usd(D.ledger.totals.usd_client),
+      fmt.n(D.ledger.totals.requests) + ' server reqs'],
+    ['incidents', String(D.ledger.incidents.length),
+      D.ledger.incidents.length ? 'see ledger notes' : 'clean'],
+    ['score-bench runs', String(D.score.length),
+      D.score.length ? 'heal ' + fmt.pct(D.score[D.score.length-1].heal_rate) : '—'],
+    ['traj rows (all repos)', fmt.n(D.traj.reduce((a,b)=>a+b.rows,0)),
+      D.traj.reduce((a,b)=>a+b.tiers.certified,0) + ' certified'],
+    ['heal commits 30d', fmt.n(D.cadence.reduce((a,b)=>a+b.heal_commits_30d,0)),
+      'across ' + D.cadence.filter(r=>r.heal_commits_30d>0).length + ' repos'],
+  ];
+  $('kpis').innerHTML = k.map(x =>
+    '<div class="kpi"><div class="l">'+x[0]+'</div><div class="v">'+x[1]+
+    '</div><div class="s">'+x[2]+'</div></div>').join('');
+  $('sources').textContent = 'sources: '
+    + D.source_flags.map(s=>s[0]+(s[1]?'✓':'✗')).join(' · ');
+}
+
+// ── chart helpers (inline SVG, no deps) ──
+function svgBarChart(el, labels, values, opts={}) {
+  const W=560, rowH=26, topPad=8, cap=opts.cap;
+  const H = Math.max(120, topPad + values.length*rowH + 30);
+  const maxV = Math.max(...values, cap||0, 1);
+  const lw = 64; // label width
+  const bw = W - lw - 56;
+  let s = '<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMid meet">';
+  if (cap) {
+    const cy = topPad + (1 - cap/maxV) * (values.length*rowH);
+    s += '<line class="capline" x1="'+lw+'" y1="'+cy+'" x2="'+W+'" y2="'+cy+'"/>'
+       + '<text x="'+(W-4)+'" y="'+(cy-3)+'" text-anchor="end">cap '+fmt.n(cap)+'</text>';
+  }
+  values.forEach((v,i)=>{
+    const y = topPad + i*rowH;
+    const w = Math.max(2, (v/maxV)*bw);
+    const cls = cap && v>cap ? 'bar crit' : (cap && v>0.9*cap ? 'bar warn' : 'bar alt');
+    s += '<text x="'+(lw-6)+'" y="'+(y+13)+'" text-anchor="end">'+labels[i]+'</text>'
+       + '<rect class="'+cls+'" x="'+lw+'" y="'+y+3+'" width="'+w+'" height="'+(rowH-9)+'" rx="2">'
+       + '<title>'+labels[i]+': '+fmt.n1(v)+'</title></rect>'
+       + '<text x="'+(lw+w+5)+'" y="'+(y+13)+'">'+fmt.n1(v)+'</text>';
+  });
+  s += '</svg>';
+  el.innerHTML = s;
+}
+function svgLineChart(el, series, labels, opts={}) {
+  const W=560, H=220, padL=44, padB=26, padT=12;
+  const n = Math.max(...series.map(s=>s.values.length));
+  const yMax = opts.yMax!=null?opts.yMax:1;
+  const x = i => padL + (n<=1?0:(i/(n-1))*(W-padL-10));
+  const y = v => padT + (1 - v/yMax) * (H-padT-padB);
+  let s = '<svg viewBox="0 0 '+W+' '+H+'">';
+  for(let g=0; g<=4; g++){
+    const gy = padT + g*(H-padT-padB)/4;
+    s += '<line class="axis" x1="'+padL+'" y1="'+gy+'" x2="'+W+'" y2="'+gy+'"/>'
+       + '<text x="'+(padL-5)+'" y="'+(gy+3)+'" text-anchor="end">'
+       + (yMax*(1-g/4)).toFixed(yMax===1?1:0)+'</text>';
+  }
+  series.forEach(sr=>{
+    let p = sr.values.map((v,i)=>x(i).toFixed(1)+','+y(v).toFixed(1)).join(' ');
+    s += '<polyline class="line'+(sr.cls?' '+sr.cls:'')+'" points="'+p+'">'
+       + '</polyline>';
+    sr.values.forEach((v,i)=>{
+      s += '<circle cx="'+x(i)+'" cy="'+y(v)+'" r="2.6" fill="'+
+        (sr.color||'var(--accent)')+'"><title>'+sr.name+' '+labels[i]+': '
+        + v.toFixed(sr.pct?3:1)+'</title></circle>';
+    });
+  });
+  labels.forEach((l,i)=>{
+    if(n>8 && i%Math.ceil(n/7)!==0 && i!==n-1) return;
+    s += '<text x="'+x(i)+'" y="'+(H-8)+'" text-anchor="middle">'+l+'</text>';
+  });
+  s += '</svg>';
+  el.innerHTML = s;
+}
+
+// ── charts ──
+if (D.cf_daily && D.cf_daily.length) {
+  svgBarChart($('cfDaily'),
+    D.cf_daily.map(r=>r.date.slice(5)),
+    D.cf_daily.map(r=>r.neurons),
+    {cap: D.cap});
+} else {
+  $('cfDaily').innerHTML = '<div class="sub">no live analytics (token/lag) — ledger per-day below</div>';
+  svgBarChart($('cfDaily'),
+    Object.keys(D.ledger.per_day).map(k=>k.slice(5)),
+    Object.values(D.ledger.per_day).map(v=>v.neurons),
+    {cap: D.cap});
+}
+{
+  const models = Object.entries(D.ledger.per_model).sort((a,b)=>b[1].usd-a[1].usd);
+  svgBarChart($('modelSpend'), models.map(m=>m[0].split('/').pop().slice(0,22)),
+    models.map(m=>m[1].usd));
+  const m2 = Object.entries(D.ledger.per_model).sort((a,b)=>b[1].neurons-a[1].neurons);
+  svgBarChart($('modelNeurons'), m2.map(m=>m[0].split('/').pop().slice(0,22)),
+    m2.map(m=>m[1].neurons));
+}
+if (D.score.length) {
+  const labels = D.score.map(r=>(r.ts||'').slice(5,10));
+  svgLineChart($('scoreCurve'), [
+    {name:'heal_rate', values:D.score.map(r=>r.heal_rate||0), pct:true, color:'var(--accent)'},
+    {name:'created_rate', values:D.score.map(r=>r.created_rate||0), pct:true, color:'var(--warn)', cls:'l3'},
+    {name:'parse_safety', values:D.score.map(r=>r.parse_safety||0), pct:true, color:'var(--accent2)', cls:'l2'},
+  ], labels, {yMax:1});
+}
+
+// ── tables ──
+function tableHTML(headers, rows, rowFmt) {
+  let s = '<table><thead><tr>' + headers.map(h=>'<th>'+h+'</th>').join('') +
+          '</tr></thead><tbody>';
+  rows.forEach(r=>{ s += '<tr>' + rowFmt(r) + '</tr>'; });
+  return s + '</tbody></table>';
+}
+if (D.traj.length) {
+  $('trajTable').innerHTML = tableHTML(
+    ['repo','rows','cert','heur','wd','succ','fail','last','top rule'],
+    D.traj,
+    r => '<td>'+r.repo+'</td><td class="num">'+r.rows+'</td><td class="num">'+
+      r.tiers.certified+'</td><td class="num">'+r.tiers.heuristic+
+      '</td><td class="num">'+r.tiers.withdrawn+'</td><td class="num">'+
+      r.success+'</td><td class="num">'+r.fail+'</td><td>'+
+      (r.last_seen?new Date(r.last_seen*1000).toISOString().slice(0,10):'—')+
+      '</td><td class="note">'+(r.top_rules[0]?r.top_rules[0][0]+' ×'+r.top_rules[0][1]:'—')+'</td>');
+} else {
+  $('trajTable').innerHTML = '<div class="sub">no trajectory stores found</div>';
+}
+if (D.cadence.length) {
+  $('gitCadence').innerHTML = tableHTML(['repo','heal ⓗ','total 30d'],
+    D.cadence.filter(r=>r.heal_commits_30d>0),
+    r => '<td>'+r.repo+'</td><td class="num">'+r.heal_commits_30d+
+      '</td><td class="num">'+r.total_commits_30d+'</td>');
+} else {
+  $('gitCadence').innerHTML = '<div class="sub">no git data</div>';
+}
+if (D.coverage.length) {
+  $('coverage').innerHTML = tableHTML(['repo','files w/ edits','edits','measured'],
+    [...D.coverage].sort((a,b)=>b.edits-a.edits),
+    r => '<td>'+r.repo+'</td><td class="num">'+r.files+'</td><td class="num">'+
+      r.edits+'</td><td>'+(r.measured_at||'').slice(0,10)+'</td>');
+} else {
+  $('coverage').innerHTML = '<div class="sub">no coverage snapshot — run with --sweep</div>';
+}
+{
+  const rows = [...D.ledger.rows].reverse().slice(0, 40);
+  $('ledgerTable').innerHTML = tableHTML(
+    ['utc','arm','model','n','reqs','neurons','usd srv','usd cl','note'],
+    rows,
+    r => {
+      const sv=r.server||{}, cl=r.client||{};
+      const inc=(r.note||'').match(/incident|wasted/i);
+      return '<td>'+fmt.d(r.ts_unix)+'</td><td>'+(r.arm||'—')+'</td><td class="note">'+
+        (r.model||'?').split('/').pop()+'</td><td class="num">'+(r.n||0)+
+        '</td><td class="num">'+(sv.requests||0)+'</td><td class="num">'+
+        fmt.n1(sv.neurons||0)+'</td><td class="num">'+fmt.usd((sv.neurons||0)*D.neuron_usd)+
+        '</td><td class="num">'+fmt.usd(cl.usd_est||0)+'</td><td class="note"'+
+        (inc?' style="color:var(--crit)"':'')+'>'+esc(r.note||'')+'</td>';
+    });
+}
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+$('missingList').innerHTML = D.missing.map(m=>'<li><b>'+m[0]+'</b> — '+m[1]+'</li>').join('');
+$('footer').textContent = 'riir ops dashboard · generated by scripts/gen_dashboard.py (riir-clippy issue 044) · '
+  + 'single self-contained file, no external deps · regenerate + deploy: gen → wrangler deploy';
+</script>
+</body>
+</html>
