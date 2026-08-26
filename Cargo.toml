@@ -183,7 +183,9 @@ l4_lora = []
 # Composes shipped substrate (HealPipeline miss classification, LatentMatcher
 # few-shots, ClippyVerifier oracle, behavioural_equivalence vetoes, DaemonL4
 # transport); adds only the ureq HTTP dep + the v2edit corpus loader.
-cf_workers_ai = ["dep:ureq", "latent_retrieval", "clippy_verify", "l4_lora"]
+# Implies `kat_service` (T0.2): arms A/B SEND PROMPTS OFF-MACHINE — the
+# harness must never compile without the redaction gate it gates through.
+cf_workers_ai = ["dep:ureq", "latent_retrieval", "clippy_verify", "l4_lora", "kat_service"]
 
 # Bench 669 consumer adoption (Plan 016): the input-scope gate at the heal()
 # seam — katgpt-core's `contrastive_scope` primitive (ContrastiveScoreTable +

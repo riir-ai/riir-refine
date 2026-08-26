@@ -37,6 +37,7 @@ use riir_clippy::cf_workers_ai::{
     self, ArmSummary, CaseScore, CfClient, CfUsageToday, FewShot, MissClass, RegateHarness,
     Sample, SampleSource, reachable_samples,
 };
+use riir_clippy::kat_redact::{GateDecision, RedactionGate, RedactionLog, SpanOrigin};
 use riir_clippy::l4_daemon::DaemonL4;
 use riir_clippy::ClippyVerifier;
 
@@ -62,6 +63,7 @@ struct Args {
     max_new: usize,
     data_dir: Option<PathBuf>,
     out: Option<PathBuf>,
+    policy: Option<PathBuf>,
     model: Option<String>,
     l4_bin: Option<String>,
     l4_gguf: Option<String>,
@@ -82,6 +84,7 @@ impl Args {
             max_new: 128,
             data_dir: None,
             out: None,
+            policy: None,
             model: None,
             l4_bin: None,
             l4_gguf: None,
@@ -107,6 +110,7 @@ impl Args {
                 "--max-new" => a.max_new = val().parse().expect("--max-new must be an integer"),
                 "--data-dir" => a.data_dir = Some(PathBuf::from(val())),
                 "--out" => a.out = Some(PathBuf::from(val())),
+                "--policy" => a.policy = Some(PathBuf::from(val())),
                 "--model" => a.model = Some(val()),
                 "--l4-bin" => a.l4_bin = Some(val()),
                 "--l4-gguf" => a.l4_gguf = Some(val()),
@@ -159,6 +163,73 @@ fn build_samples(args: &Args) -> Result<Vec<Sample>, String> {
         return Err(format!("--source {} produced zero samples", args.source));
     }
     Ok(samples)
+}
+
+/// T0.2 (Plan 026): run every sample through the redaction gate BEFORE any
+/// arm sees it. Arms A/B send prompts to CF Workers AI (real egress) and
+/// every arm writes corpus rows via `record_case` — a blocked span must
+/// reach neither. Deny-by-default: no discoverable `.heal-sync-policy`
+/// blocks all (fail-loud, exit 4 — running on zero samples is pointless).
+///
+/// Sample origins: the `reachable:` set is authored in-repo (fixtures);
+/// the v2edit chunks are the pre-vetted mined research corpus. User code
+/// has no path into this harness today; if one appears it maps to
+/// `SpanOrigin::External`, which the shipped policy does not allow.
+fn gate_samples(samples: Vec<Sample>, args: &Args) -> Vec<Sample> {
+    let loaded = RedactionGate::discover(args.policy.as_deref());
+    match (&loaded.path, &loaded.warning) {
+        (Some(p), None) => eprintln!(
+            "[regate] redaction policy: {} (v{}, origins {:?})",
+            p.display(),
+            riir_clippy::kat_redact::REDACT_VERSION,
+            loaded.gate.policy().allow_origins
+        ),
+        (Some(_), Some(w)) => eprintln!("[regate] redaction policy: {w} — DENY-ALL in force"),
+        (None, None) => eprintln!(
+            "[regate] redaction policy: NONE FOUND — deny-by-default blocks every span; \
+             create .heal-sync-policy at the repo root (Proposal 005 T0.2)"
+        ),
+        (None, Some(w)) => eprintln!("[regate] redaction policy: {w} — DENY-ALL in force"),
+    }
+    let log = RedactionLog::open(&loaded.root());
+    let mut kept = Vec::with_capacity(samples.len());
+    let mut blocked = 0usize;
+    for mut s in samples {
+        let origin = match s.source {
+            SampleSource::Reachable => SpanOrigin::AuthoredFixture,
+            SampleSource::V2edit => SpanOrigin::MinedCorpus,
+        };
+        let decision = loaded.gate.check(origin, None, &s.module);
+        let fp = blake3::hash(s.module.as_bytes()).to_hex();
+        let fp12 = &fp.to_string()[..12];
+        if let Err(e) = log.record(&decision, origin, &s.id, fp12) {
+            eprintln!("[regate] redaction log write failed: {e}");
+        }
+        match decision {
+            GateDecision::Allow => kept.push(s),
+            GateDecision::Redacted { payload, .. } => {
+                eprintln!("[regate] REDACTED {} (findings replaced; policy allows redacted)", s.id);
+                s.module = payload;
+                kept.push(s);
+            }
+            GateDecision::Blocked { reason, findings } => {
+                blocked += 1;
+                let kinds: Vec<&str> = findings.iter().map(|f| f.kind.tag()).collect();
+                let detail = if kinds.is_empty() {
+                    String::new()
+                } else {
+                    format!(" [{kinds:?}]")
+                };
+                eprintln!("[regate] BLOCKED {} — {reason}{detail}", s.id);
+            }
+        }
+    }
+    eprintln!("[regate] redaction gate: {} allowed, {blocked} blocked", kept.len());
+    if kept.is_empty() {
+        eprintln!("FATAL: redaction gate blocked every sample — nothing to run");
+        std::process::exit(4);
+    }
+    kept
 }
 
 /// One prepared case: sample + miss class + both prompt shapes.
@@ -300,6 +371,9 @@ fn main() {
             std::process::exit(1);
         }
     };
+    // T0.2: gate BEFORE any arm dispatch — no egress, no corpus row, for a
+    // span that has not passed (Plan 026).
+    let samples = gate_samples(samples, &args);
     eprintln!(
         "[regate] {} samples (source={}, chunks={:?}, limit={}), arm={}",
         samples.len(),

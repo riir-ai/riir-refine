@@ -153,6 +153,15 @@ pub mod kat_meter;
 #[cfg(feature = "kat_service")]
 pub mod kat_account;
 
+// Proposal 005 Phase 0 T0.2 (Plan 026): the redaction gate — no payload
+// leaves the machine before passing it. Deny-by-default `.heal-sync-policy`
+// allowlist (origin + path glob + span cap) + a 12-rule secret scanner +
+// byte-exact redaction + a fingerprint-only JSONL block log. The fixer
+// harness gates every sample through this (`cf_workers_ai` implies the
+// feature); T0.3's sync payload consumes it the same way.
+#[cfg(feature = "kat_service")]
+pub mod kat_redact;
+
 // Plan 019 T4.3: the neuron-db trajectory store — the DURABLE backend for
 // `--fix-compile` self-evolution (LocalKvStore encrypted WAL + BM25 + the
 // 8-D sigmoid-dot latent axis). Behind `latent_retrieval` (the dep-light
@@ -293,6 +302,14 @@ pub use kat_meter::{
 pub use kat_account::{
     account_id_for, short_id, AccountState, KatAccount, LoginOutcome, ACCOUNT_CHANGELOG,
     ACCOUNT_VERSION,
+};
+
+// Proposal 005 Phase 0 T0.2 (Plan 026): the redaction-gate surface.
+#[cfg(feature = "kat_service")]
+pub use kat_redact::{
+    glob_match, redact, scan_secrets, BlockReason, Finding, FindingKind, GateDecision,
+    LoadedPolicy, RedactionGate, RedactionLog, SpanOrigin, SyncPolicy, DEFAULT_MAX_SPAN_BYTES,
+    POLICY_FILE_NAME, REDACT_CHANGELOG, REDACT_VERSION,
 };
 
 // Plan 005: latent retrieval surface (`--suggest` MVP).

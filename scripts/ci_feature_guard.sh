@@ -61,4 +61,13 @@ cargo test --lib --all-features
 echo "✓ lib tests pass (both feature sets)"
 
 echo
+echo "=== Layer 5c: KAT integration gates (all-features) ==="
+# Proposal 005 T0.2 — the redaction G4 fixtures are a STANDING CI gate
+# ("zero secrets in any synced payload, by test"), plus the meter/account
+# G9 binaries that Layer 5b's --lib scope never reaches. Without this layer
+# those tests ran only when invoked by hand (the gate-coverage lesson).
+cargo test --all-features --test kat_redact_g4 --test kat_meter_g9 --test kat_meter_g2_alloc --test kat_account_g9
+echo "✓ KAT integration gates pass"
+
+echo
 echo "=== All layers PASS ==="

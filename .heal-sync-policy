@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "sync_enabled": true,
+  "allow_origins": ["own-repo", "authored-fixture", "mined-corpus"],
+  "allow_paths": [
+    "src/**/*.rs",
+    "tests/**/*.rs",
+    "benches/**/*.rs",
+    "examples/**/*.rs",
+    "**/*.wgsl"
+  ],
+  "max_span_bytes": 65536,
+  "allow_redacted": false
+}
