@@ -246,7 +246,7 @@ AFTER:   consumer → wrong code → fixer (modelless pre-pass) → less wrong c
 
 ## Phased rollout (sketch — a plan would expand this)
 
-### Phase 0 — client substrate (riir-clippy, unblocks with Issue 037 A1)
+### Phase 0 — client substrate (riir-clippy; Issue 037 CLEARED 2026-08-26 — open the Phase 0 plan when executing)
 - [x] T0.0 **Resolve Issue 041** (service-plane home) — DONE 2026-08-25: Option A adopted under the owner's execute order — service plane → `../riir-dapps` (its §Owns widened: metered-service settlement), riir-clippy keeps the client half only, allowlist unchanged; `ci_boundary_contract.sh` re-run at close (riir-clippy ledger hard errors cleared, allowlist green)
 - [ ] T0.1 `kat_service` feature + account key (SSH Ed25519, existing loaders) + `login`/`account` (local view, no cloud)
 - [ ] T0.2 Redaction gate + `.heal-sync-policy` + adversarial fixtures (G4 local half)
