@@ -880,8 +880,22 @@ impl CfClient {
     /// JSON), never the token.
     pub fn generate(&self, prompt: &str, max_tokens: usize) -> Result<CfGen, String> {
         let t0 = std::time::Instant::now();
+        // Qwen3-family models are THINKING models: unmitigated, the reasoning
+        // phase consumes the entire max_tokens budget and `content` arrives
+        // null (finish_reason=length) — the 2026-08-26 wasted-run incident
+        // class, re-caught by the standing one-call smoke on 2026-08-27Z's
+        // session. The official Qwen3 soft switch is the literal suffix
+        // `/no_think` in the user turn (probed live: reasoning compresses to
+        // a short preamble and content lands within budget;
+        // `enable_thinking:false` is IGNORED by this serving stack — probed,
+        // reasoning still present). Non-qwen3 models pass through unchanged.
+        let content = if self.model.contains("qwen3") {
+            format!("{prompt} /no_think")
+        } else {
+            prompt.to_string()
+        };
         let body = serde_json::json!({
-            "messages": [{ "role": "user", "content": prompt }],
+            "messages": [{ "role": "user", "content": content }],
             "max_tokens": max_tokens,
             "temperature": 0.0,
         });

@@ -2729,6 +2729,36 @@ full-crate katgpt-pruners scan now proposes **293 edits / 104 files**
 decision, not a tool default; this GOAT was deliberately file-scoped.
 See [`.benchmarks/031`](.benchmarks/031_fix_verify_mode_goat.md).
 
+**Issue 040 (2026-08-25→26, RESOLVED — arms A/B run, verdict landed; removed per
+noise-reduction rule).** The fixer re-gate POC — the falsifiable question
+"does verify-filtered acceptance beat `decline` on the reachable-miss set,
+under partial-credit metrics, on any arm?" — answers **YES** ([Bench
+049](.benchmarks/049_fixer_regate_poc.md) §Arms A/B results): CF
+llama-3.3-70b-fp8-fast via the wrangler OAuth bridge (`ai:write` scope),
+**strict-keep 5/9 (arm A raw) / 6/9 (arm B pre-pass) vs decline 0/9**; the
+pre-pass dominates every partial-credit axis (v2edit slice 18 vs 12 keeps,
+parse 20/20 vs 15/20, merge 19/20 vs 13/20); never-wrong held (0 divergent,
+0 regressions; the contract veto killed the one destructive generation per
+arm — the Bench 039 route-2 veto live on real CF output). EM 0/40 reproduces
+Plan 336's 0/60 — structurally capped by the 96.6%-unmergeable v2edit
+references, corroborating the metric critique. **Proposal 005's fixer
+QUALITY blocker LIFTS for the CF llama arm** (its own "CF llama arm OR
+base-Bonsai arm" language; caveat #2 + Phase 3 updated in the same commit);
+leak-posture sign-off remains the owner's separate gate. **qwen3.8-27b (the
+owner's mid-flight switch) measured UNUSABLE on the free tier**: a thinking
+model whose reasoning phase consumes `max_tokens` and returns
+`content: null` at `finish_reason: length` — the same waste class as the
+169-request incident, root-caused by the standing one-call smoke at a cost
+of 118.1 n; `/no_think` unreliable (the model deliberates about honoring
+it); `enable_thinking:false` ignored by the serving stack. `CfClient::generate`
+now appends `/no_think` for qwen3-family ids regardless (documented
+mitigation, inert for llama). Bonsai arms C/D stay blocked-optional
+(GPU-exclusivity + no `.bcl4` checkpoint + the riir-train driver
+hard-requires `--lora`) — they remain the serving-path follow-up, not a
+verdict dependency. Cost: 1,433.2 n session (server truth; account day
+closed 9,742.4/10,000 — cap respected); llama ≈ **$0.00025/fix measured**
+(6.8× under the issue's estimate).
+
 ## The `riir-clippy` skill (auto-continue idle loop)
 
 `.agents/skills/riir-clippy/SKILL.md` (symlinked into `~/.agents/skills/`

@@ -1,9 +1,9 @@
-# Bench 049 — fixer re-gate POC: harness + offline validation (arms pending)
+# Bench 049 — fixer re-gate POC: harness + arms A/B RUN (verdict: BEATS decline)
 
 **Issue:** [040](../.issues/040_fixer_regate_poc_cf_workers_ai.md) · **Proposal:** [005](../.proposals/005_kat_heal_service_network.md) caveat #2 / Phase 3
-**Date:** 2026-08-25
+**Date:** 2026-08-25 (harness + offline) → **2026-08-26 02:45–03:20Z (arms A/B RUN, verdict landed)**
 **Machine:** M3 Max (macOS, arm64) — **UNDER SIBLING COMPUTE LOAD** (`bonsai_clippy_l4_sft_train` ~822% CPU + `maglev_drafter_train` ~85% CPU for the whole session). No latency number in this note is gate-grade; every number here is a COUNT or a VERDICT (load-insensitive).
-**Status:** T1 (harness) + T2 (pre-pass) SHIPPED + instrument-validated offline. **Arms A/B pending `CF_API_TOKEN`; arm C pending checkpoint + idle GPU — the verdict is PENDING ARMS, by design of this run.**
+**Status:** **RESOLVED — the falsifiable question answers YES.** Arms A/B (CF llama-3.3-70b-fp8-fast) both beat `decline` on the reachable-miss bar: strict-keep **5/9 (A, raw)** and **6/9 (B, pre-pass)** vs **decline 0/9**; the pre-pass arm dominates on every partial-credit axis. qwen3.8-27b measured UNUSABLE on the free tier for this task shape (thinking-model token economics — §qwen below). Arm C/D (Bonsai) stay blocked (GPU + checkpoint) and are now OPTIONAL for the unblock question — the Proposal 005 bar reads "CF llama arm OR base-Bonsai arm" and the CF arm met it.
 
 ---
 
@@ -16,11 +16,12 @@
 
 ## Arms status
 
-| arm | model | status | blocker |
+| arm | model | status | note |
 |---|---|---|---|
-| A (CF raw) | `@cf/meta/llama-3.3-70b-instruct-fp8-fast` REST | **PENDING** | no `CF_API_TOKEN`/`CF_ACCOUNT_ID` in env, no `~/.wrangler/config`, no `~/.cloudflare` (presence-checked, never echoed) |
-| B (CF + pre-pass) | same | **PENDING** | same |
-| C (Bonsai daemon) | local 27B base via `bonsai_clippy_l4_eval --serve` | **PENDING** | (a) M3 GPU busy with sibling Plan-349 training; 4090 has `bonsai_clippy_l4_sft_train.exe` resident — GPU-exclusivity rule bars gate runs; (b) **no `.bcl4` checkpoint exists on disk** (t51's `/tmp/t51_reach/` is gone) AND the riir-train driver hard-requires `--lora` (no base-model mode), so "arm C base" needs either a checkpoint or a driver change in riir-train (sibling WIP — not touched) |
+| A (CF raw) | `@cf/meta/llama-3.3-70b-instruct-fp8-fast` REST | **RUN 2026-08-26** | reachable 9/9 + v2edit chunk-0 slice 20/20 |
+| B (CF + pre-pass) | same | **RUN 2026-08-26** | same sets; dominates A everywhere |
+| qwen3.8-27b | `@cf/qwen/qwen3.8-27b` | **MEASURED UNUSABLE (free tier)** | thinking model — §The qwen3.8-27b finding |
+| C (Bonsai daemon) | local 27B base via `bonsai_clippy_l4_eval --serve` | **BLOCKED → optional** | GPU-exclusivity + no `.bcl4` checkpoint + driver hard-requires `--lora`; the unblock bar no longer needs it (CF arm met it) — remains the serving-path follow-up for Proposal 005's trainer node |
 | DRY (offline) | planted fixes | **RUN** | — |
 
 ## Arm DRY results (instrument validation — NOT model quality)
@@ -128,3 +129,96 @@ diagnostic. ~1,700 neurons remain today; the free cap resets 00:00 UTC.
 **Per-model economics (measured):** llama-70b-fp8-fast ≈ 15 n/req;
 qwen3.8-27b ≈ 46 n/req (thinking billed). Arm A+B at qwen rates needs
 ~13-27k neurons (>1 free day); at llama rates ~6-10k (fits one day).
+
+---
+
+## Arms A/B results (2026-08-26 02:45–03:20Z — llama-3.3-70b-fp8-fast, temp 0)
+
+Auth: the wrangler OAuth bridge (session refreshed via `npx wrangler whoami`;
+scopes `ai:write` + `account:read`). Neurons are server truth (GraphQL
+`aiInferenceAdaptiveGroups`, settled after analytics lag).
+
+### The bar — reachable-miss set (n=9; decline = 0/9)
+
+| arm | prompt | keep_oracle | **keep_strict** | vetoed | notes |
+|---|---|---|---|---|---|
+| A | raw | 6/9 | **5/9** | 1 | `or_fun_call` contract-vetoed (fix referenced `expensive` out of scope — the Bench 039 route-2 veto live on a real CF generation) |
+| B | pre-pass | 7/9 | **6/9** | 1 | edge vs A = `large_enum_variant` (fixed only with pre-pass context); `redundant_clone` was a noop (correctly not kept) |
+
+**Both arms beat decline. The falsifiable question answers YES.**
+Reproducibility: arm A's 5/9 matches the pre-pause llama smoke's 5/9 exactly
+(temperature 0; two independent sessions, same verdict).
+
+Per-sample keeps (both arms): `vec_init_then_push`, `manual_strip`,
+`box_collection`, `option_if_let_else`, `ptr_arg` (+ `large_enum_variant` in
+B). Unfixed in both: `too_many_arguments` (needs a signature reshape —
+arg-count fixes exceed the "corrected lines" merge shape),
+`redundant_clone` (A regressed, B noop). `or_fun_call` resolved the lint in
+both arms but the fix was contract-breaking (vetoed, correctly).
+
+### Partial credit — v2edit chunk-0 slice (n=20)
+
+| arm | EM | parses | merge | keep_o/scoreable | **keep_s** | vetoed | divergent | regressions |
+|---|---|---|---|---|---|---|---|---|
+| A | 0/20 | 15 | 13 | 12/12 | **12** | 0 | 0 | 0 |
+| B | 0/20 | **20** | **19** | 18/18 | **18** | 0 | 0 | 0 |
+
+- **The pre-pass roughly doubles usable yield**: 18 vs 12 strict-keeps on the
+  same 20 samples; parse 20/20 vs 15/20; merge 19/20 vs 13/20. Few-shot
+  shaping constrains the output to the machine-mergeable "corrected lines"
+  contract far better than the bare instruction.
+- **EM 0/40 across arms** — the historical Plan 336 G1 0/60 reproduces on
+  the CF stack too, corroborating the metric critique: with 96.6% of v2edit
+  references position-ambiguous (measured above), EM was structurally capped
+  regardless of model quality. Partial credit is the product metric, and on
+  it the pipeline works.
+- **Never-wrong held everywhere**: 0 divergent, 0 regressions across 58
+  generations; the one destructive generation (`or_fun_call`) was killed by
+  the contract veto in BOTH arms.
+
+### Verdict (T4)
+
+1. **The Proposal 005 fixer QUALITY blocker lifts for the CF llama arm** —
+   its own unblock language ("CF llama-3.3-70b arm OR base-Bonsai+pre-pass
+   arm") is satisfied by A (5/9) and B (6/9) vs decline 0/9.
+2. **The pre-pass arm (B) dominates A** on every axis — the Proposal 005
+   pipeline shape (modelless pre-pass → LLM → verify strict-keep) is
+   validated as the right one, not just the raw LLM.
+3. **Leak posture unchanged** — CF no-training verified in writing (§T5); the
+   single-vetted-vendor sign-off remains the owner's gate for Phase 3.
+4. Plan 336 G1 EM remains the bar only for the LoRA path (unchanged).
+
+### The qwen3.8-27b finding (owner's 2026-08-26 model switch — measured unusable on free tier)
+
+- **qwen3.8-27b is a THINKING model**: the reasoning phase consumes the whole
+  `max_tokens` budget and `content` arrives `null` (`finish_reason=length`)
+  — the same waste class as the 169-request incident, different root cause.
+  The standing one-call smoke caught it after TWO billed validation smokes
+  (93.7 n) instead of after a full arm run.
+- **`/no_think` (the Qwen3 soft switch) is unreliable here**: probing showed
+  the model *deliberating about whether to honor it* ("User included
+  /no_think maybe wants no thinking? But we can analyze.") — it shortens
+  reasoning on trivial prompts but does not suppress it on real tasks.
+- **`enable_thinking:false` as a request param is ignored** (probed;
+  reasoning still present).
+- **Budget arithmetic rules it out today**: thinking headroom needs
+  `max_tokens` ≥ 384–512 → ~110–190 n/call → both arms ≈ 2k+ neurons > the
+  ~1.6k that remained. Revisit on Workers Paid (the whole POC < $0.30 even
+  at qwen rates) or if CF ships a serving-level thinking toggle. The harness
+  carries the mitigation anyway: `CfClient::generate` appends `/no_think`
+  for qwen3-family model ids (documented; harmless if unused).
+
+### Cost record (server truth, settled)
+
+| run | neurons (server) | note |
+|---|---|---|
+| qwen diagnosis (2 smokes + 2 probes) | 118.1 | the thinking-model finding — cheap for what it bought |
+| arm A reachable (9) + arm B reachable (9) | ~360 | the bar |
+| arm A v2edit slice (20) + arm B slice (20) | ~955 | partial-credit stats |
+| **session total** | **1,433.2** | account day: 9,742.4 / 10,000 (cap respected, 257.6 left) |
+
+Per-fix economics (llama, server): **≈ 22.7 n/fix ≈ $0.00025/fix** at list —
+6.8× under the issue's ~$0.0017/fix estimate (short prompts + modest
+completions). The ledger's 4 run rows carry `server: 0.0` (analytics lag at
+fetch time); the settled aggregate above is the reconciliation (GraphQL
+re-probed post-settle).
