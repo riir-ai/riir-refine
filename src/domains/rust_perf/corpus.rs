@@ -166,15 +166,18 @@ use crate::domains::rust_perf::{PerfRule, RustPerfDomain};
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 76 entries
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 85 entries
 /// covering the main perf pattern categories (complexity, allocation, simd,
 /// layout, iterators, concurrency, io, arithmetic, dispatch, caching, bevy,
-/// wasm). Allocation is the deepest (18 rules); complexity has 15; iterators
+/// wasm). Allocation is the deepest (20 rules); complexity has 17 (Batch 76
+/// added 1); iterators
 /// has 9 (Batch 66/67 added 2); simd has 7 (Batch 62 added 1 + Batch 64
-/// added 1); layout has 6 (Batch 61 added 1); concurrency has 6
+/// added 1); layout has 6 (Batch 61 added 1); concurrency has 7
 /// (Issue 014 added the two metric-mismatch rules; Batch 65 added the two
-/// contention rules);
-/// dispatch has 2 (Batch 61 added 1); caching has 2; the rest have 1.
+/// contention rules; Batch 73 added 1);
+/// arithmetic has 7 (Batch 74 added 1); dispatch has 3 (Batch 61 + 74 added
+/// 1 each); caching has 4 (Batch 73 + 76 added 1 each); io has 3 (Batch
+/// 68/69 added 1 each); bevy + wasm have 1 each.
 #[must_use]
 #[allow(clippy::too_many_lines)] // seed corpus is a data table; length scales with rule count
 pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
@@ -1938,6 +1941,70 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: Some(sorted_input_previous_row_fast_path_bench_spec()),
         },
+        // ── complexity: eagerly-computed diagnostic statistic scans the whole ──
+// collection per operation → remove from the hot path / maintain ─────
+// incrementally ──────────────────────────────────────────────────────
+// Source: Meilisearch "Patching LMDB" (2026-03-18), STOP COMPUTING
+// USELESS STATS: the mean-degree sanity statistic — "added to Hannoy
+// very early on as a sanity check" — was computed during item-ID
+// retrieval, full-scanning the vector store on every insert batch:
+// "Removing this reduces the time from 559s to about 2–3s and brings
+// the complexity down to O(n), where n is the number of newly
+// inserted or removed embeddings." The decision content: a diagnostic
+// eagerly computed in a hot path is a hidden O(collection) tax that
+// GROWS with total size — the hot path pays for the whole past, not
+// the new work. Fix shapes: remove it (tests/CI now guard the
+// invariant), gate behind debug/opt-in, or maintain the aggregate
+// incrementally. Distinct from `sort-key-cache-precompute-out-of-lock`
+// (comparator recompute under a lock, per-comparison; this is
+// per-operation whole-collection statistics) and from
+// `filter-count-to-any` (predicate full scan vs short-circuit; this is
+// an aggregate whose RESULT isn't even consumed in production).
+// Suggestion-only (type-blind: a parse-only proposer cannot prove the
+// statistic is unconsumed or that the loop is diagnostic — the
+// soa-hot-field class).
+PerfRule {
+    rule_id: "debug-stat-full-scan-out-of-hot-path".to_string(),
+    name: "per-insert aggregate statistic recomputed over the ENTIRE collection (mean/count full scan) → out of the hot path (maintained incrementally / debug-gated)".to_string(),
+    category: "complexity".to_string(),
+    buggy_code: "use std::collections::HashMap;\nstruct Item {\n    links: Vec<u32>,\n}\nstruct Store {\n    items: Vec<Item>,\n}\nimpl Store {\n    // a sanity statistic \"added very early on\" — full-scans EVERY item\n    // on EVERY insert batch. O(total) per op: the hot path pays for the\n    // whole past, not the new work; grows without bound as the store does.\n    fn mean_degree(&self) -> f64 {\n        let total: usize = self.items.iter().map(|i| i.links.len()).sum();\n        self.items.len() as f64 / total.max(1) as f64\n    }\n    fn insert_batch(&mut self, new_items: Vec<Item>) {\n        for it in new_items {\n            self.items.push(it);\n        }\n        // diagnostic eagerly computed in the hot path — the only consumer\n        // was the developer's peace of mind (CI now guards the invariant)\n        let _mean = self.mean_degree();\n    }\n}".to_string(),
+    fixed_code: "struct Item {\n    links: Vec<u32>,\n}\nstruct Store {\n    items: Vec<Item>,\n    // maintained aggregate: link_count updates by the DELTA each insert\n    // — the statistic stays available at O(1) for whoever needs it, and\n    // the hot path never pays for the whole past\n    link_count: usize,\n}\nimpl Store {\n    fn mean_degree(&self) -> f64 {\n        self.items.len() as f64 / self.link_count.max(1) as f64\n    }\n    fn insert_batch(&mut self, new_items: Vec<Item>) {\n        for it in new_items {\n            self.link_count += it.links.len();\n            self.items.push(it);\n        }\n        // no full scan — the invariant moved to CI/tests (the source's\n        // fix: remove it; the maintained form when the stat IS wanted)\n    }\n}".to_string(),
+    context_notes: Some("MEASURED ParetoDominant 3/0/0 — 168.91x/1929.27x/5851.00x at N=10K/100K/300K store size (B=100 inserted per op; M3 Max release, rustc 1.97, 2026-08-27, load ~2.4 of 16; verdict-stable ×2: 179.55x/1883.75x/6293.55x on the re-run; allocs 0/0 equal by design, alloc-det stable). REGIME (store-size to batch-size ratio N/B): the buggy arm pays O(N) per insert batch — the win GROWS linearly with total store size (the source: 559s → 2–3s on a 19M-item store, ~200x on the step). At N ≈ B (tiny store, huge batches) the scan is one pass over what the insert touches anyway — expected Tie; the rule lives where the collection ACCUMULATES (insert-heavy stores where per-op diagnostics re-walk the past). The decision content: diagnostics eagerly computed in hot paths are a hidden O(collection) tax — the source's fix was REMOVAL (tests/CI now guard the invariant); the maintained-aggregate form is the fix when the statistic is actually consumed downstream. Distinct from `sort-key-cache-precompute-out-of-lock` (per-comparison recompute under lock) — this is per-operation whole-collection statistics. Suggestion-only (a parse-only proposer cannot prove the statistic unconsumed). Source: Meilisearch blog 2026-03-18 §Stop computing useless stats.".to_string()),
+    #[cfg(feature = "rust_perf_bench")]
+    bench_spec: Some(debug_stat_full_scan_out_of_hot_path_bench_spec()),
+},
+// ── caching: materialize a lookup index over ALL entries (full scan) ───
+// to serve a SUBSET of random accesses → lazy/direct access of only ───
+// the needed entries ───────────────────────────────────────────────────
+// Source: same article, FULL SCANS ARE HARMFUL + WHAT'S THE NEW TRICK:
+// the ImmutableItems/ImmutableLinks structures did "a full scan of all
+// the entries we will need to access", collecting pointers into a
+// HashMap — then "we were polluting the cache with useless,
+// unnecessary disk pages just by iterating over all of them to fetch
+// pointers." Replaced by FrozenReader: "read uncommitted graph nodes
+// and connections lazily, on demand" so "only the necessary pages are
+// loaded into the cache — not all available pages in LMDB. We avoid
+// evicting important pages." The decision content: building an
+// everything-index to serve a subset of accesses pays the scan TWICE —
+// once in time (O(all) build) and once in cache (the scan's own
+// traffic evicts the hot pages the subset will need). When the
+// underlying store offers a direct access path, index only on demand.
+// Distinct from `collect-avoidance` (intermediate-Vec staging, alloc
+// axis; this is working-set residency) and from
+// `encoded-layout-borrowed-view` (representation re-expansion inside
+// an accessor; this is eager INDEX MATERIALIZATION before a subset
+// read). Suggestion-only (architectural — a parse-only proposer
+// cannot see the direct-access path exists).
+PerfRule {
+    rule_id: "eager-pointer-collect-lazy-fetch".to_string(),
+    name: "full-scan materialize a HashMap of ALL entry pointers to serve a SUBSET of random reads → direct/lazy access of only the needed entries".to_string(),
+    category: "caching".to_string(),
+    buggy_code: "use std::collections::HashMap;\nstruct Node {\n    payload: [u64; 4],\n}\nstruct Store {\n    nodes: Vec<Node>, // direct-indexable: ids are dense 0..len\n}\nimpl Store {\n    // full scan of EVERY entry, collecting pointers into a HashMap —\n    // \"polluting the cache with useless, unnecessary disk pages just by\n    // iterating over all of them to fetch pointers\"\n    fn freeze_all(&self) -> HashMap<usize, &Node> {\n        let mut m = HashMap::with_capacity(self.nodes.len());\n        for (i, n) in self.nodes.iter().enumerate() {\n            m.insert(i, n);\n        }\n        m\n    }\n    fn touch(&self, ids: &[usize]) -> u64 {\n        let index = self.freeze_all(); // O(all) build to serve a subset\n        let mut acc = 0u64;\n        for &id in ids {\n            if let Some(n) = index.get(&id) {\n                acc = acc.wrapping_add(n.payload[0]);\n            }\n        }\n        acc\n    }\n}".to_string(),
+    fixed_code: "struct Node {\n    payload: [u64; 4],\n}\nstruct Store {\n    nodes: Vec<Node>,\n}\nimpl Store {\n    // lazy/on-demand: no index build, no scan — \"only the necessary pages\n    // are loaded into the cache\"; the store IS the direct-access path\n    fn touch(&self, ids: &[usize]) -> u64 {\n        let mut acc = 0u64;\n        for &id in ids {\n            if let Some(n) = self.nodes.get(id) {\n                acc = acc.wrapping_add(n.payload[0]);\n            }\n        }\n        acc\n    }\n}".to_string(),
+    context_notes: Some("MEASURED ParetoDominant 3/0/0 — 1903.70x/5414.62x/21353.90x at N=100K/300K/1M store size (K=1,000 touched ids; M3 Max release, rustc 1.97, 2026-08-27, load ~2.4 of 16; verdict-stable ×2: 2217.57x/5962.48x/25736.41x on the re-run; allocs 1->0, bytes 35.7 MB -> 0 at N=1M — the HashMap build eliminated; alloc-det stable). REGIME (subset ratio K/N + working-set fit): the win is two-part — the O(N) scan+hash build eliminated AND the scan's own cache traffic no longer evicts the K pages the subset reads (the source's disk-page story, reproduced here at cache scale: N=1M × 32 B nodes ≈ 32 MB > L2, so the scan evicts what the subset needs). At K ≈ N (read-most-everything) the index build amortizes to nothing — expected Tie-to-slower for the lazy form only when the SAME subset is read REPEATEDLY (then a persistent index is the sort-key-cache rule instead); the rule lives at K/N ≪ 1 with one-shot or sparse access. The eager arm's HashMap<usize, &Node> is the faithful source shape (pointer maps over mmap'd entries). Distinct from `collect-avoidance` (alloc staging) — the load-bearing half here is working-set residency; distinct from `encoded-layout-borrowed-view` (accessor re-expansion) — this is index materialization BEFORE a subset read. Suggestion-only (architectural: a parse-only proposer cannot see the direct-access path). Source: Meilisearch blog 2026-03-18 §Full scans are harmful + §But what's the new trick?.".to_string()),
+    #[cfg(feature = "rust_perf_bench")]
+    bench_spec: Some(eager_pointer_collect_lazy_fetch_bench_spec()),
+},
     ])
 }
 
@@ -6820,6 +6887,208 @@ pub fn run_fixed(input: &Input) {
     }
 }
 
+/// Bench spec for `debug-stat-full-scan-out-of-hot-path` (Batch 76,
+/// Research 090 — the Meilisearch LMDB/vector-store distill): per-insert-batch
+/// mean-degree statistic recomputed over the ENTIRE store vs maintained
+/// incremental aggregate.
+///
+/// sizes = STORE SIZE N (the accumulation axis): the buggy arm pays O(N) per
+/// op (B=100 inserted per call) — the win GROWS with store size (the source:
+/// 559s → 2–3s at 19M items). G1: both arms return the same final
+/// (items.len, link_count, mean_bits) triple, debug_assert_eq'd against a
+/// make_input-computed ground truth. Alloc axis: equal by design (2 Vecs for
+/// the store + batch in both arms) — the TIMING axis is the mechanism.
+#[cfg(feature = "rust_perf_bench")]
+#[allow(clippy::too_many_lines)] // the harness is a single embedded raw string
+fn debug_stat_full_scan_out_of_hot_path_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![10_000, 100_000, 300_000],
+        harness: r#"
+pub struct Item {
+    pub links: Vec<u32>,
+}
+pub struct Input {
+    pub store: Vec<Item>,
+    pub batch: Vec<Item>,
+    pub link_count: usize, // the maintained aggregate (fixed arm's starting state)
+    pub expected_len: usize,
+    pub expected_links: usize,
+}
+fn make_items(rng: &mut u64, count: usize, max_links: usize) -> Vec<Item> {
+    let mut out = Vec::with_capacity(count);
+    for _ in 0..count {
+        *rng = rng
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        let n = (*rng as usize) % max_links;
+        let mut links = Vec::with_capacity(n);
+        for _ in 0..n {
+            *rng = rng
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            links.push((*rng >> 16) as u32);
+        }
+        out.push(Item { links });
+    }
+    out
+}
+pub fn make_input(n: usize) -> Input {
+    let mut rng: u64 = 0x853C_49E6_748F_EA9B;
+    // the store starts at n - B items so post-insert size is exactly n
+    let b = 100usize;
+    let store = make_items(&mut rng, n.saturating_sub(b), 8);
+    let batch = make_items(&mut rng, b, 8);
+    let link_count = store.iter().map(|i| i.links.len()).sum();
+    let expected_len = store.len() + batch.len();
+    let expected_links = link_count + batch.iter().map(|i| i.links.len()).sum::<usize>();
+    Input { store, batch, link_count, expected_len, expected_links }
+}
+mod buggy {
+    use super::Item;
+    // the statistic's scan IS the cost: one pass over EVERY item's links
+    // per insert batch — the source's mean-degree sanity statistic,
+    // "added very early on", eagerly computed in the hot path. Non-mutating
+    // (statistic over store+batch) so timed calls are idempotent.
+    pub fn stat_with_batch(items: &[Item], batch: &[Item]) -> (usize, usize, u64) {
+        // O(total) per op — re-derives the WHOLE store's link count
+        let total: usize = items.iter().chain(batch).map(|i| i.links.len()).sum();
+        let len = items.len() + batch.len();
+        let mean = len as f64 / total.max(1) as f64;
+        (len, total, mean.to_bits())
+    }
+}
+mod fixed {
+    use super::Item;
+    // maintained aggregate: link_count was updated by DELTA at each insert —
+    // the hot path pays only the NEW batch's links, never the whole past
+    pub fn stat_with_batch(items: &[Item], link_count: usize, batch: &[Item]) -> (usize, usize, u64) {
+        let batch_links: usize = batch.iter().map(|i| i.links.len()).sum(); // O(B)
+        let total = link_count + batch_links;
+        let len = items.len() + batch.len();
+        let mean = len as f64 / total.max(1) as f64;
+        (len, total, mean.to_bits())
+    }
+}
+pub fn run_buggy(input: &Input) {
+    let input = std::hint::black_box(input);
+    let r = buggy::stat_with_batch(&input.store, &input.batch);
+    let chk = r.0.wrapping_mul(31).wrapping_add(r.1).wrapping_mul(31).wrapping_add(r.2 as usize);
+    std::hint::black_box(chk);
+    debug_assert_eq!(r.0, input.expected_len);
+    debug_assert_eq!(r.1, input.expected_links);
+}
+pub fn run_fixed(input: &Input) {
+    let input = std::hint::black_box(input);
+    let r = fixed::stat_with_batch(&input.store, input.link_count, &input.batch);
+    let chk = r.0.wrapping_mul(31).wrapping_add(r.1).wrapping_mul(31).wrapping_add(r.2 as usize);
+    std::hint::black_box(chk);
+    debug_assert_eq!(r.0, input.expected_len);
+    debug_assert_eq!(r.1, input.expected_links);
+}
+"#
+        .to_string(),
+    }
+}
+
+/// Bench spec for `eager-pointer-collect-lazy-fetch` (Batch 76, Research 090 —
+/// the Meilisearch LMDB/vector-store distill): full-scan HashMap-of-pointers
+/// build to serve a K-id subset vs direct lazy access.
+///
+/// sizes = STORE SIZE N at fixed K=1,000 touched ids (the subset-ratio axis:
+/// N=1M × 32 B nodes ≈ 32 MB > L2 — the scan's cache traffic evicts what the
+/// subset reads; the source's disk-page story at cache scale). G1: both arms
+/// fold the same wrapping checksum over the touched payloads, debug_assert_eq'd
+/// against the make_input ground truth. Alloc axis: buggy builds a
+/// HashMap<usize, &Node> (3 allocs, ~2.4 MB at N=1M); fixed allocates nothing.
+#[cfg(feature = "rust_perf_bench")]
+#[allow(clippy::too_many_lines)] // the harness is a single embedded raw string
+fn eager_pointer_collect_lazy_fetch_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![100_000, 300_000, 1_000_000],
+        harness: r#"
+pub const K_TOUCHED: usize = 1_000;
+pub struct Node {
+    pub payload: [u64; 4],
+}
+pub struct Input {
+    pub nodes: Vec<Node>,
+    pub ids: Vec<usize>,
+    pub expected_chk: u64,
+}
+pub fn make_input(n: usize) -> Input {
+    let mut rng: u64 = 0x0DDB_1A5E_5BAD_5EED;
+    let mut nodes = Vec::with_capacity(n);
+    for _ in 0..n {
+        rng = rng
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        nodes.push(Node { payload: [rng, rng >> 13, rng >> 29, rng >> 47] });
+    }
+    // K ids scattered over the whole range — the subset pattern
+    let mut ids = Vec::with_capacity(K_TOUCHED);
+    let mut expected_chk: u64 = 0;
+    for _ in 0..K_TOUCHED {
+        rng = rng
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        let id = (rng as usize) % n;
+        ids.push(id);
+        expected_chk = expected_chk
+            .wrapping_mul(31)
+            .wrapping_add(nodes[id].payload[0]);
+    }
+    Input { nodes, ids, expected_chk }
+}
+mod buggy {
+    use super::Node;
+    // "a full scan of all the entries we will need to access", pointer map
+    // over everything — "polluting the cache with useless, unnecessary disk
+    // pages just by iterating over all of them to fetch pointers"
+    pub fn touch(nodes: &[Node], ids: &[usize]) -> u64 {
+        let mut index = std::collections::HashMap::with_capacity(nodes.len());
+        for (i, n) in nodes.iter().enumerate() {
+            index.insert(i, n); // O(all) build to serve a subset
+        }
+        let mut acc = 0u64;
+        for &id in ids {
+            if let Some(n) = index.get(&id) {
+                acc = acc.wrapping_add(n.payload[0]);
+            }
+        }
+        acc
+    }
+}
+mod fixed {
+    use super::Node;
+    // lazy/on-demand — "only the necessary pages are loaded into the cache";
+    // the store IS the direct-access path
+    pub fn touch(nodes: &[Node], ids: &[usize]) -> u64 {
+        let mut acc = 0u64;
+        for &id in ids {
+            if let Some(n) = nodes.get(id) {
+                acc = acc.wrapping_add(n.payload[0]);
+            }
+        }
+        acc
+    }
+}
+pub fn run_buggy(input: &Input) {
+    let input = std::hint::black_box(input);
+    let acc = buggy::touch(&input.nodes, &input.ids);
+    std::hint::black_box(acc);
+    debug_assert_eq!(acc, input.expected_chk);
+}
+pub fn run_fixed(input: &Input) {
+    let input = std::hint::black_box(input);
+    let acc = fixed::touch(&input.nodes, &input.ids);
+    std::hint::black_box(acc);
+    debug_assert_eq!(acc, input.expected_chk);
+}
+"#
+        .to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -6835,9 +7104,9 @@ mod tests {
     }
 
     #[test]
-    fn seed_corpus_has_eighty_three_entries_across_twelve_categories() {
+    fn seed_corpus_has_eighty_five_entries_across_twelve_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 83);
+        assert_eq!(corpus.entries.len(), 85);
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
@@ -6846,7 +7115,8 @@ mod tests {
         // — Batch 75 added encoded-layout-borrowed-view +
         // group-keys-borrow-allocate-on-first-sight;
         // including Issue 014's arc-str-payload + Batch 48's three + Batch
-        // 53's hashmap-with-capacity); complexity has 16 (Batch 75 added
+        // 53's hashmap-with-capacity); complexity has 17 (Batch 76 added
+        // debug-stat-full-scan-out-of-hot-path; Batch 75 added
         // sorted-input-previous-row-fast-path; Batch 48 added
         // hashset-insert-bool-return + vec-insert-front-deque; Batch 64
         // added debug-assert-length-hoist); iterators
@@ -6864,9 +7134,10 @@ mod tests {
         // added newton-refinement-vs-hardware-transcendental; Batch 74
         // added swar-digit-chunk-parse); dispatch has 3
         // (Batch 61 added keyword-map-to-match; Batch 74 added
-        // runtime-feature-detect-per-chunk); caching has 3 (Issue 014
+        // runtime-feature-detect-per-chunk); caching has 4 (Issue 014
         // added regex-hoist-lazylock; Batch 73 added
-        // sort-key-cache-precompute-out-of-lock); io has 3 (Batch 68 added
+        // sort-key-cache-precompute-out-of-lock; Batch 76 added
+        // eager-pointer-collect-lazy-fetch); io has 3 (Batch 68 added
         // varint-compose-word-single-store; Batch 69 added
         // unaligned-word-load-from-bytes); bevy, wasm have 1 each.
         assert_eq!(categories.len(), 12);
@@ -7434,10 +7705,10 @@ mod tests {
 
     #[cfg(feature = "rust_perf_bench")]
     #[test]
-    fn seventy_three_rules_have_bench_specs() {
+    fn seventy_five_rules_have_bench_specs() {
         let corpus = build_perf_seed_corpus();
         let with_spec = corpus.entries.iter().filter(|e| e.bench_spec.is_some()).count();
-        assert_eq!(with_spec, 73, "expected 73 benchable rules, got {with_spec}");
+        assert_eq!(with_spec, 75, "expected 75 benchable rules, got {with_spec}");
     }
 
     #[cfg(feature = "rust_perf_bench")]
@@ -7487,7 +7758,7 @@ mod tests {
     /// The other 58 have `context_notes: None` (unconditional wins or
     /// honestly NotBenchable).
     #[test]
-    fn twenty_six_annotated_rules_carry_context_notes() {
+    fn twenty_eight_annotated_rules_carry_context_notes() {
         let corpus = build_perf_seed_corpus();
         let annotated: Vec<&str> = corpus
             .entries
@@ -7495,7 +7766,7 @@ mod tests {
             .filter(|e| e.context_notes.is_some())
             .map(|e| e.rule_id.as_str())
             .collect();
-        assert_eq!(annotated.len(), 26, "expected 26 context-annotated rules");
+        assert_eq!(annotated.len(), 28, "expected 28 context-annotated rules");
         assert!(annotated.contains(&"precompute-table"));
         assert!(annotated.contains(&"papaya-lockfree"));
         assert!(annotated.contains(&"dedupe-hashset-vs-vec"));
@@ -7534,7 +7805,7 @@ mod tests {
             .iter()
             .filter(|e| e.context_notes.is_none())
             .count();
-        assert_eq!(unannotated, 57, "expected 57 unannotated rules (83 - 26 annotated)");
+        assert_eq!(unannotated, 57, "expected 57 unannotated rules (85 - 28 annotated)");
     }
 
     /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -7546,7 +7817,7 @@ mod tests {
         let json = serde_json::to_string(&corpus.entries).unwrap();
         let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
         let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-        assert_eq!(annotated, 26);
+        assert_eq!(annotated, 28);
 
         // Simulate a pre-field snapshot: strip `context_notes` from JSON.
         // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -7578,9 +7849,9 @@ mod tests {
 
         let corpus = build_perf_seed_corpus();
 
-        // Filter to the 26 annotated rules.
+        // Filter to the 28 annotated rules.
         let annotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_some()).collect();
-        assert_eq!(annotated.len(), 26, "expected 26 annotated rules");
+        assert_eq!(annotated.len(), 28, "expected 28 annotated rules");
 
         // The HealEntry trait override must agree with the struct field.
         for rule in &annotated {
@@ -7922,6 +8193,53 @@ mod tests {
         assert!(ids.contains(&"encoded-layout-borrowed-view"));
         assert!(ids.contains(&"group-keys-borrow-allocate-on-first-sight"));
         assert!(ids.contains(&"sorted-input-previous-row-fast-path"));
+    }
+
+    /// Batch 76 — the two Meilisearch rules are present + retrievable.
+    #[test]
+    fn batch76_rules_present() {
+        let corpus = build_perf_seed_corpus();
+        let ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        assert!(ids.contains(&"debug-stat-full-scan-out-of-hot-path"));
+        assert!(ids.contains(&"eager-pointer-collect-lazy-fetch"));
+    }
+
+    /// Batch 76 — G1 for `debug-stat-full-scan-out-of-hot-path`: the buggy
+    /// arm's single-scan statistic and the fixed arm's maintained aggregate
+    /// must agree EXACTLY (len, total, mean bits) on structured + LCG
+    /// inputs — the mean's f64 bits are the strictest cheap equality we
+    /// have (any divergence in total or len shifts the quotient's bits).
+    #[test]
+    #[allow(clippy::cast_precision_loss)] // the usize→f64 mean IS the statistic under test
+    fn debug_stat_maintained_aggregate_matches_scan_exactly() {
+        fn scan_stat(items: &[usize], batch: &[usize]) -> (usize, usize, u64) {
+            let total: usize = items.iter().chain(batch).sum();
+            let len = items.len() + batch.len();
+            let mean = len as f64 / total.max(1) as f64;
+            (len, total, mean.to_bits())
+        }
+        fn maintained_stat(items: &[usize], link_count: usize, batch: &[usize]) -> (usize, usize, u64) {
+            let total = link_count + batch.iter().sum::<usize>();
+            let len = items.len() + batch.len();
+            let mean = len as f64 / total.max(1) as f64;
+            (len, total, mean.to_bits())
+        }
+        let mut rng: u64 = 0x5EED_5EED_5EED_5EED;
+        let mut next = || {
+            rng = rng
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            (rng >> 16) as usize % 8
+        };
+        // empty store + empty batch (the max(1) guard), structured, + LCG
+        for (items, batch) in [
+            (vec![], vec![]),
+            (vec![0usize; 5], vec![3usize; 2]),
+            ((0..200).map(|_| next()).collect::<Vec<_>>(), (0..50).map(|_| next()).collect::<Vec<_>>()),
+        ] {
+            let link_count = items.iter().sum::<usize>();
+            assert_eq!(scan_stat(&items, &batch), maintained_stat(&items, link_count, &batch));
+        }
     }
 
     /// Batch 75 — the candidate-list correctness contract: an injected
