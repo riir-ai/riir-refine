@@ -9,9 +9,9 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //! unconditional wins + honestly NotBenchable rules.
 //!
-//! 76 entries across 12 categories (complexity 15, allocation 18, simd 7,
-//! layout 6, iterators 9, concurrency 6, io 3, arithmetic 6, dispatch 2,
-//! caching 2, bevy 1, wasm 1). 66 are benchable; 10 are honestly
+//! 80 entries across 12 categories (complexity 15, allocation 18, simd 7,
+//! layout 6, iterators 9, concurrency 7, io 3, arithmetic 7, dispatch 3,
+//! caching 3, bevy 1, wasm 1). 70 are benchable; 10 are honestly
 //! NotBenchable (8 external-runtime/size-class + 2 metric-mismatch, Issue 014).
 //! Batch 48 (idle-queue item 11, 2026-08-16) added the 8 online-search
 //! candidates (perf-book std-types + iterators chapters): collect-append-to-
@@ -49,7 +49,7 @@
 //! `run_buggy` / `run_fixed` entry points. The bench validator generates a
 //! temp bin crate from the spec + runs a timing loop at multiple sizes.
 //!
-//! Currently benchable (66/76):
+//! Currently benchable (70/80):
 //! - `o1-lookup` (Vec scan vs HashMap lookup — clear O(n) vs O(1))
 //! - `bsearch-sorted-slice` (linear scan vs binary search — O(n) vs O(log n) on sorted data)
 //! - `dedupe-hashset-vs-vec` (Vec::contains loop vs HashSet collect — O(n²) vs O(n))
@@ -118,8 +118,10 @@
 //! - `unaligned-word-load-from-bytes` (shift/or byte-assembly word read → one unaligned from_le_bytes load — ParetoDominant cross-arch: u64 1.4-2.2x, u32 1.2-1.4x, both arches; the T6 defer refuted; Batch 69)
 //! - `align-64-false-sharing` (adjacent 24 B per-thread atomic counter slots → `#[repr(align)]` to ARCH line granularity — ParetoDominant 4.7-9.4x at 2-12t, **1t = tie (honest)**; align(64) insufficient on 128B-line Apple Silicon (measured 1.16-2.44x of the win) — pad to the arch granularity or CachePadded; Batch 65)
 //! - `channel-send-batching-unpark` (per-item MPSC sends to a parked `select!` receiver → per-64 batch flush via `mem::replace` — ParetoDominant 1.16-1.29x (pipeline-overlap honest margin; the source's 6.25x needs the park pair ON the critical path) + allocs 3232→1624; Batch 65)
+//! - `swar-digit-chunk-parse` (per-digit decimal parse loop → SWAR 8-digit chunk fold, 3 multiplies per 8 digits + SWAR digit validation — the serial `val = val*10 + d` chain broken; regime: ≥8 digits win, <8 pay the guard (the source's own README); Batch 74, simd-json distill)
+//! - `runtime-feature-detect-per-chunk` (CPU feature detection inside a per-chunk hot fn → resolve once via cached static / static cfg gate — the std::detect string resolution + detector read per call rivals small work units; Batch 74, simd-json distill)
 //!
-//! Not benchable (10/76) — honest:
+//! Not benchable (10/80) — honest:
 //! - `layout-reorder` (struct size — deterministic `size_of`, not a runtime
 //!   microbench; the cache-utilization claim needs a specific access pattern)
 //! - `repr-u8-enum` (enum size — deterministic `size_of`, same class as
@@ -1775,6 +1777,66 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
             context_notes: Some("Measured ParetoDominant 11.5-12.7x at 1K-100K calls (M3 Max release, load ~7.1, 2026-08-26; allocs 100000->0, bytes 4.7MB->0 @100K, alloc-det stable across invocations). HONEST MARGIN NOTE: the source's +18% throughput (the same matrix-rust-sdk room_list bench) is END-TO-END — the narrow-accessor patch was one of several stacked optimizations; the isolated mechanism (uncontended read-lock + ~47-64B guarded-payload clone with a heap alloc, vs read-lock + bool read) reads 11-13x on this box because the clone dominates the lock; under real read contention the gap widens further (the clone holds the guard longer). The alloc axis (exact N->0) is the deterministic half of the verdict. Type-blind for a parse-only proposer (cannot see payload width or which sub-field a consumer reads) — suggestion-only, the soa-hot-field precedent.".to_string()),
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: Some(lock_guard_narrow_field_accessor_bench_spec()),
+        },
+        // ── arithmetic: per-digit decimal parse loop → SWAR 8-digit chunk ─────
+        // Source: simd-lite/simd-json `numberparse.rs` (Batch 74, Research
+        // 088 — the Research 085 pool-drop re-probe; the MCP fetch failure
+        // was an indexing gap, the repo is alive at v0.18.1, 1.4k stars).
+        // `parse_eight_digits_swar` folds 8 ASCII digits into a u32 with
+        // three and/mul/shift steps (magic multipliers 2561 = 10*256+1,
+        // 6553601 = 100*2^16+1, 42949672960001 = 10^4*2^32+1 — each step
+        // merges adjacent digit pairs/quads/halves, byte 0 = most
+        // significant, verified by construction + the exhaustive gate);
+        // `is_made_of_eight_digits_fast` validates 8 bytes as digits with
+        // one SWAR test (every byte in 0x30..=0x39 iff `(val & 0xF0F0..) |
+        // ((val+0x0606..) & 0xF0F0..) >> 4 == 0x3333..` — high nibble must
+        // be 3 AND low nibble +6 must not carry, Muła's 0x80.pl
+        // swar-digits-validate, cited in-source). The per-digit loop pays a
+        // serial dependency chain (`val = val*10 + d` — LLVM cannot
+        // reassociate) of ~6 ops/digit; the chunk path is ~10 ops per 8
+        // digits. Provenance: Muła 0x80.pl ← simdjson C++ ← simd-json port.
+        // REGIME (the source's own README, `swar-number-parsing` feature):
+        // "comes at a slight performance hit if most of the floats have
+        // less than 8 digits" — gate the chunk path on >=8 digits
+        // remaining; the tail stays per-digit. Composes with
+        // `unaligned-word-load-from-bytes` (the chunk load IS that
+        // pattern); sibling of `division-by-invariant-multiplication`
+        // (magic-multiply family — radix folding vs divisor inversion).
+        // The SSSE3 escalation (`_mm_maddubs_epi16`, computes 16 values,
+        // "we are being wasteful") exists when target_feature("ssse3") is
+        // STATIC — non-portable, citation only.
+        PerfRule {
+            rule_id: "swar-digit-chunk-parse".to_string(),
+            name: "per-digit decimal parse loop → SWAR 8-digit chunk fold (3 multiplies per 8 digits)".to_string(),
+            category: "arithmetic".to_string(),
+            buggy_code: "fn parse_u64(digits: &[u8]) -> u64 {\n    let mut val: u64 = 0;\n    let mut i = 0;\n    while i < digits.len() && digits[i].is_ascii_digit() {\n        // serial dependency chain: 1 iteration per digit, ~6 ops each —\n        // LLVM cannot reassociate val = val*10 + d\n        val = val * 10 + u64::from(digits[i] - b'0');\n        i += 1;\n    }\n    val\n}".to_string(),
+            fixed_code: "fn parse_u64(digits: &[u8]) -> u64 {\n    let mut val: u64 = 0;\n    let mut i = 0;\n    while i + 8 <= digits.len() {\n        let chunk: [u8; 8] = digits[i..i + 8].try_into().unwrap();\n        if !is_made_of_eight_digits_fast(&chunk) {\n            break; // a non-digit byte sits in this window — take the tail path\n        }\n        // 8 digits in 3 multiplies (magic radix fold, Mula/simdjson lineage)\n        val = val.wrapping_mul(100_000_000).wrapping_add(u64::from(parse_eight_digits_swar(&chunk)));\n        i += 8;\n    }\n    while i < digits.len() && digits[i].is_ascii_digit() {\n        val = val * 10 + u64::from(digits[i] - b'0'); // tail: < 8 digits remain\n        i += 1;\n    }\n    val\n}\n\n/// True iff every byte is in 0x30..=0x39 (high nibble 3, low nibble +6 no carry).\nfn is_made_of_eight_digits_fast(chars: &[u8; 8]) -> bool {\n    let val = u64::from_ne_bytes(*chars);\n    ((val & 0xF0F0_F0F0_F0F0_F0F0)\n        | (((val.wrapping_add(0x0606_0606_0606_0606)) & 0xF0F0_F0F0_F0F0_F0F0) >> 4))\n        == 0x3333_3333_3333_3333\n}\n\n/// Folds 8 ASCII digits (byte 0 = most significant) into a u32 via three\n/// and/mul/shift steps — the pairs/quads/halves merge of the SWAR radix fold.\nfn parse_eight_digits_swar(chars: &[u8; 8]) -> u32 {\n    let val = u64::from_le_bytes(*chars); // byte 0 at the LOW position on every target\n    let val = (val & 0x0F0F_0F0F_0F0F_0F0F).wrapping_mul(2561) >> 8;\n    let val = (val & 0x00FF_00FF_00FF_00FF).wrapping_mul(6_553_601) >> 16;\n    ((val & 0x0000_FFFF_0000_FFFF).wrapping_mul(42_949_672_960_001) >> 32) as u32\n}".to_string(),
+            context_notes: Some("Measured ParetoDominant 2.35x/1.75x/2.52x at 8/12/19 digits-per-run (N_RUNS=2000; M3 Max release, load ~7.1, 2026-08-26; 0/0 allocs both arms, alloc-det stable; second invocation 2.35x/1.75x/2.52x-equivalent band — verdict stable). REGIME: 1.01x TIE at 4 digits — the chunk loop never fires below 8 digits; this is the source's own README tradeoff verbatim ('comes at a slight performance hit if most of the floats have less than 8 digits' — gate on >=8 digits remaining). The mechanism: the per-digit loop is a serial dependency chain (val = val*10 + d — LLVM cannot reassociate in strict FP... integer here, but the chain is still latency-bound at ~1 imul+add per digit); the SWAR fold breaks it with 3 and/mul/shift steps per 8 digits. G1: exhaustive equivalence gate (all lengths 0..=19 x boundaries x 10K LCG strings x terminator positions + the is_made_of_eight_digits_fast validation matrix + 100K fold checks) — bit-identical values + stop positions vs the u128 reference. Domain: digit runs whose value fits u64 (intermediate chunk multiples never exceed the final value — proven + gated). Type-blind for a parse-only proposer (cannot prove a loop parses digits semantically) — suggestion-only.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(swar_digit_chunk_parse_bench_spec()),
+        },
+        // ── dispatch: CPU feature detection inside a per-chunk hot fn ────────
+        // Source: simd-lite/simd-json `parse_eight_digits_unrolled` (Batch 74,
+        // Research 088) — the in-source measured decision comment: "Only use
+        // the SSSE3 version when the feature is statically available: a
+        // per-call `is_x86_feature_detected!` check costs more than the SWAR
+        // fallback (cached-atomic load + two outlined `target_feature` calls
+        // per 8-digit group)". The detection macro resolves the feature-name
+        // STRING at runtime (std::detect) + reads the cached detector — for
+        // small work units (their 8-digit groups; any per-chunk dispatch in
+        // the wild) the detection rivals the work itself. Fix: resolve once
+        // (cached static / OnceLock consulted per chunk, or hoisted to the
+        // caller) or gate statically via `#[cfg(target_feature)]` when the
+        // target set is compile-time known.
+        PerfRule {
+            rule_id: "runtime-feature-detect-per-chunk".to_string(),
+            name: "is_x86_feature_detected! inside a per-chunk hot fn → resolve once (cached static / static cfg gate)".to_string(),
+            category: "dispatch".to_string(),
+            buggy_code: "fn sum_chunk(data: &[u8]) -> u64 {\n    // CPU feature detection paid PER CHUNK: the feature-name string is\n    // resolved + the cached detector read on every call — for a work unit\n    // of a few ns the detection rivals the work itself\n    if is_x86_feature_detected!(\"avx2\") {\n        data.iter().map(|&b| u64::from(b)).sum()\n    } else {\n        data.iter().fold(0u64, |acc, &b| acc + u64::from(b))\n    }\n}\nfn process(chunks: &[Vec<u8>]) -> u64 {\n    chunks.iter().map(|c| sum_chunk(c)).sum()\n}".to_string(),
+            fixed_code: "use std::sync::atomic::{AtomicU8, Ordering};\n\n// detection hoisted: the string is resolved ONCE, then consulted per chunk\n// via one cached byte (0 = unknown, 1 = yes, 2 = no)\nstatic HAS_AVX2: AtomicU8 = AtomicU8::new(0);\nfn has_avx2() -> bool {\n    match HAS_AVX2.load(Ordering::Relaxed) {\n        0 => {\n            let v = is_x86_feature_detected!(\"avx2\");\n            HAS_AVX2.store(if v { 1 } else { 2 }, Ordering::Relaxed);\n            v\n        }\n        1 => true,\n        _ => false,\n    }\n}\nfn sum_chunk(data: &[u8]) -> u64 {\n    if has_avx2() {\n        data.iter().map(|&b| u64::from(b)).sum()\n    } else {\n        data.iter().fold(0u64, |acc, &b| acc + u64::from(b))\n    }\n}\nfn process(chunks: &[Vec<u8>]) -> u64 {\n    chunks.iter().map(|c| sum_chunk(c)).sum()\n}".to_string(),
+            context_notes: Some("MEASURED Mixed — 0/0/3 TIES on this box: 1.01x/1.04x/0.99x at 16/256/4096 B-per-chunk (M3 Max release, rustc 1.97, 2026-08-26; 0/0 allocs, alloc-det stable, verdict stable x2 invocations). HONEST FINDING: on current rustc the feature-name match on a string literal const-folds/optimize away to near-zero even through an #[inline(never)] boundary — the per-chunk detection machinery (std::detect string resolution + cached detector read) measured ~sub-0.1ns marginal on aarch64. The cost class the rule encodes SURVIVES in: (a) outlined #[target_feature] dispatch (the source's measured x86 finding — 'a per-call is_x86_feature_detected! check costs more than the SWAR fallback (cached-atomic load + two outlined target_feature calls per 8-digit group)', simd-json parse_eight_digits_unrolled), (b) non-literal/runtime-composed feature strings, (c) heavier probe libraries. The rule exists to encode the granularity DECISION (resolve once: cached static, hoist to caller, or static cfg gate) with an honest measured-Tie on the modern-toolchain baseline — the B68 honest-annotation precedent; do NOT cite it as a default-config hot-path win.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(runtime_feature_detect_per_chunk_bench_spec()),
         },
     ])
 }
@@ -4748,7 +4810,7 @@ pub fn make_input(n: usize) -> Input {
     // diverse residues; the divisors are runtime fields (NOT constants —
     // see the spec doc comment on strength reduction)
     let data32 = (0..n).map(|i| (i as u32).wrapping_mul(2654435761)).collect();
-    let data64 = (0..n).map(|i| (i as u64).wrapping_mul(6364136223846793005)).collect();
+    let data64 = (0..n).map(|i| (i as u64).wrapping_mul(6_364_136_223_846_793_005)).collect();
     Input { data32, data64, d32: 97, d64: 1000003 }
 }
 
@@ -5658,7 +5720,7 @@ pub fn make_input(n: usize) -> Input {
     let mut swap: Vec<(usize, usize)> = Vec::with_capacity(N_ROOMS);
     let mut rng: u64 = 0x243F_6A88_85A3_08D3;
     for i in (1..N_ROOMS).rev() {
-        rng = rng.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        rng = rng.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695_040_888_963_407);
         let j = ((rng >> 33) as usize) % (i + 1);
         swap.push((i, j));
     }
@@ -5823,7 +5885,7 @@ pub fn make_input(n: usize) -> Input {
     let mut probes = Vec::with_capacity(n);
     let mut x = 1u64;
     for _ in 0..n {
-        x = x.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        x = x.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695_040_888_963_407);
         let idx = ((x >> 33) as usize) % ROOMS;
         if idx as u64 % 3 == 0 { expected += 1; }
         probes.push(idx);
@@ -5855,6 +5917,254 @@ pub fn run_fixed(input: &Input) {
     }
 }
 
+/// Bench spec for `swar-digit-chunk-parse` (Batch 74, Research 088 —
+/// the simd-json distill): per-digit decimal parse loop vs the SWAR 8-digit
+/// chunk fold (`parse_eight_digits_swar` + `is_made_of_eight_digits_fast`,
+/// ORIGINAL minimal reproductions of the source construction).
+///
+/// sizes = DIGITS PER RUN (the regime axis — the source's own README:
+/// "a slight performance hit if most of the floats have less than 8
+/// digits"). N_RUNS = 2000 fixed; runs are LCG-generated digit strings of
+/// exactly n digits (values fit u64 at 19 digits = the axis max), offsets
+/// precomputed in make_input so the measured delta isolates the parse.
+/// G1: both arms wrapping-sum the SAME u64 values — the expectation is
+/// accumulated in u128 during generation (== the wrapping u64 sum) and
+/// debug_assert_eq'd in both arms. At size 4 (< 8) the chunk loop never
+/// fires — the honest Tie bound of the regime; 8/12/19 exercise the fold.
+/// Alloc axis: 0/0 (both arms parse from the pre-built buffer).
+#[cfg(feature = "rust_perf_bench")]
+#[allow(clippy::too_many_lines)] // data table: the harness is a single embedded raw string
+fn swar_digit_chunk_parse_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![4, 8, 12, 19],
+        harness: r#"
+pub mod buggy {
+    pub fn parse_u64(digits: &[u8]) -> u64 {
+        let mut val: u64 = 0;
+        let mut i = 0;
+        while i < digits.len() && digits[i].is_ascii_digit() {
+            val = val.wrapping_mul(10).wrapping_add(u64::from(digits[i] - b'0'));
+            i += 1;
+        }
+        val
+    }
+}
+
+pub mod fixed {
+    pub fn parse_u64(digits: &[u8]) -> u64 {
+        let mut val: u64 = 0;
+        let mut i = 0;
+        while i + 8 <= digits.len() {
+            let chunk: [u8; 8] = digits[i..i + 8].try_into().unwrap();
+            if !is_made_of_eight_digits_fast(&chunk) {
+                break;
+            }
+            val = val.wrapping_mul(100_000_000).wrapping_add(u64::from(parse_eight_digits_swar(&chunk)));
+            i += 8;
+        }
+        while i < digits.len() && digits[i].is_ascii_digit() {
+            val = val.wrapping_mul(10).wrapping_add(u64::from(digits[i] - b'0'));
+            i += 1;
+        }
+        val
+    }
+
+    fn is_made_of_eight_digits_fast(chars: &[u8; 8]) -> bool {
+        let val = u64::from_ne_bytes(*chars);
+        ((val & 0xF0F0_F0F0_F0F0_F0F0)
+            | (((val.wrapping_add(0x0606_0606_0606_0606)) & 0xF0F0_F0F0_F0F0_F0F0) >> 4))
+            == 0x3333_3333_3333_3333
+    }
+
+    fn parse_eight_digits_swar(chars: &[u8; 8]) -> u32 {
+        let val = u64::from_le_bytes(*chars);
+        let val = (val & 0x0F0F_0F0F_0F0F_0F0F).wrapping_mul(2561) >> 8;
+        let val = (val & 0x00FF_00FF_00FF_00FF).wrapping_mul(6_553_601) >> 16;
+        ((val & 0x0000_FFFF_0000_FFFF).wrapping_mul(42_949_672_960_001) >> 32) as u32
+    }
+}
+
+const N_RUNS: usize = 2_000;
+
+pub struct Input {
+    buf: std::cell::RefCell<Vec<u8>>,
+    runs: Vec<(usize, usize)>, // (offset, len) — precomputed so the delta isolates the parse
+    expected: u64,
+}
+
+pub fn make_input(n: usize) -> Input {
+    let mut buf = Vec::with_capacity(N_RUNS * (n + 1));
+    let mut runs = Vec::with_capacity(N_RUNS);
+    let mut expected: u128 = 0;
+    let mut rng: u64 = 0x853C_49E6_748F_EA9B;
+    for _ in 0..N_RUNS {
+        let start = buf.len();
+        let mut val: u128 = 0; // u128 accumulation == the wrapping u64 sum at cast time
+        for _ in 0..n {
+            rng = rng.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695_040_888_963_407);
+            let d = ((rng >> 33) % 10) as u8;
+            buf.push(b'0' + d);
+            val = val * 10 + u128::from(d);
+        }
+        buf.push(b','); // run terminator — both arms stop here
+        runs.push((start, n));
+        expected += val;
+    }
+    Input { buf: std::cell::RefCell::new(buf), runs, expected: expected as u64 }
+}
+
+pub fn run_buggy(input: &Input) {
+    let input = std::hint::black_box(input);
+    let buf = input.buf.borrow();
+    let mut sum: u64 = 0;
+    for &(s, l) in &input.runs {
+        sum = sum.wrapping_add(buggy::parse_u64(&buf[s..s + l]));
+    }
+    std::hint::black_box(sum);
+    debug_assert_eq!(sum, input.expected);
+}
+
+pub fn run_fixed(input: &Input) {
+    let input = std::hint::black_box(input);
+    let buf = input.buf.borrow();
+    let mut sum: u64 = 0;
+    for &(s, l) in &input.runs {
+        sum = sum.wrapping_add(fixed::parse_u64(&buf[s..s + l]));
+    }
+    std::hint::black_box(sum);
+    debug_assert_eq!(sum, input.expected);
+}
+"#
+        .to_string(),
+    }
+}
+
+/// Bench spec for `runtime-feature-detect-per-chunk` (Batch 74, Research
+/// 088): CPU feature detection paid PER CHUNK (the std::detect string
+/// resolution + cached detector read, modeled via the arch-portable
+/// `detected()` helper) vs resolved ONCE into a cached atomic byte.
+///
+/// sizes = BYTES PER CHUNK (the work-per-detection axis): at small chunks
+/// the detection rivals the work itself (the source's finding — their
+/// per-8-digit-group check "costs more than the SWAR fallback"); as chunk
+/// work grows the fixed ratio decays toward 1. N_CHUNKS = 1000 fixed.
+/// Both arms' chunk fns are `#[inline(never)]` — models the real-world
+/// outlined dispatch (the source's "two outlined target_feature calls")
+/// AND prevents the compiler from hoisting the detection out of the loop.
+/// G1: both arms sum the same bytes — checksum debug_assert_eq'd.
+/// Alloc axis: 0/0. HONEST SCOPE: on rustc 1.97 the feature-name match on
+/// a string literal may const-fold after inlining — the measured delta is
+/// whatever remains (detector read + branch + call shape); the annotation
+/// records the verdict honestly either way (the B68 varint precedent).
+#[cfg(feature = "rust_perf_bench")]
+#[allow(clippy::too_many_lines)] // data table: the harness is a single embedded raw string
+fn runtime_feature_detect_per_chunk_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![16, 256, 4096],
+        harness: r#"
+use std::sync::atomic::{AtomicU8, Ordering};
+
+#[cfg(target_arch = "aarch64")]
+pub fn detected() -> bool {
+    std::arch::is_aarch64_feature_detected!("neon")
+}
+#[cfg(target_arch = "x86_64")]
+pub fn detected() -> bool {
+    std::arch::is_x86_feature_detected!("avx2")
+}
+#[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
+pub fn detected() -> bool {
+    true
+}
+
+pub mod buggy {
+    use super::detected;
+
+    #[inline(never)] // models the outlined target_feature dispatch + blocks loop hoisting
+    pub fn sum_chunk(data: &[u8]) -> u64 {
+        // detection paid PER CHUNK — string resolution + detector read every call
+        if detected() {
+            data.iter().map(|&b| u64::from(b)).sum()
+        } else {
+            data.iter().fold(0u64, |acc, &b| acc.wrapping_add(u64::from(b)))
+        }
+    }
+}
+
+pub mod fixed {
+    use std::sync::atomic::{AtomicU8, Ordering};
+
+    static CACHED: AtomicU8 = AtomicU8::new(0); // 0 = unknown, 1 = yes, 2 = no
+
+    fn detected_once() -> bool {
+        match CACHED.load(Ordering::Relaxed) {
+            0 => {
+                let v = super::detected();
+                CACHED.store(if v { 1 } else { 2 }, Ordering::Relaxed);
+                v
+            }
+            1 => true,
+            _ => false,
+        }
+    }
+
+    #[inline(never)] // symmetric with the buggy arm — the delta is detection vs cached byte
+    pub fn sum_chunk(data: &[u8]) -> u64 {
+        if detected_once() {
+            data.iter().map(|&b| u64::from(b)).sum()
+        } else {
+            data.iter().fold(0u64, |acc, &b| acc.wrapping_add(u64::from(b)))
+        }
+    }
+}
+
+const N_CHUNKS: usize = 1_000;
+
+pub struct Input {
+    chunks: Vec<Vec<u8>>,
+    expected: u64,
+}
+
+pub fn make_input(n: usize) -> Input {
+    let mut chunks = Vec::with_capacity(N_CHUNKS);
+    let mut expected: u64 = 0;
+    let mut rng: u64 = 0xC0FF_EE00_BA5E_BA11;
+    for _ in 0..N_CHUNKS {
+        let mut c = Vec::with_capacity(n);
+        for _ in 0..n {
+            rng = rng.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695_040_888_963_407);
+            c.push((rng >> 56) as u8);
+        }
+        expected = expected.wrapping_add(c.iter().map(|&b| u64::from(b)).sum::<u64>());
+        chunks.push(c);
+    }
+    Input { chunks, expected }
+}
+
+pub fn run_buggy(input: &Input) {
+    let input = std::hint::black_box(input);
+    let mut sum: u64 = 0;
+    for c in &input.chunks {
+        sum = sum.wrapping_add(buggy::sum_chunk(c));
+    }
+    std::hint::black_box(sum);
+    debug_assert_eq!(sum, input.expected);
+}
+
+pub fn run_fixed(input: &Input) {
+    let input = std::hint::black_box(input);
+    let mut sum: u64 = 0;
+    for c in &input.chunks {
+        sum = sum.wrapping_add(fixed::sum_chunk(c));
+    }
+    std::hint::black_box(sum);
+    debug_assert_eq!(sum, input.expected);
+}
+"#
+        .to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -5870,9 +6180,9 @@ mod tests {
     }
 
     #[test]
-    fn seed_corpus_has_seventy_eight_entries_across_twelve_categories() {
+    fn seed_corpus_has_eighty_entries_across_twelve_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 78);
+        assert_eq!(corpus.entries.len(), 80);
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
@@ -5891,15 +6201,196 @@ mod tests {
         // has 7 (Issue 014 added the two metric-mismatch rules; Batch 65
         // added align-64-false-sharing + channel-send-batching-unpark;
         // Batch 73 added lock-guard-narrow-field-accessor); arithmetic
-        // has 6 (Batch 53 added powi-vs-powf + distance-sq-no-sqrt; Batch 59
+        // has 7 (Batch 53 added powi-vs-powf + distance-sq-no-sqrt; Batch 59
         // added division-by-invariant-multiplication; Batch 62
-        // added newton-refinement-vs-hardware-transcendental); dispatch has 2
-        // (Batch 61 added keyword-map-to-match); caching has 3 (Issue 014
+        // added newton-refinement-vs-hardware-transcendental; Batch 74
+        // added swar-digit-chunk-parse); dispatch has 3
+        // (Batch 61 added keyword-map-to-match; Batch 74 added
+        // runtime-feature-detect-per-chunk); caching has 3 (Issue 014
         // added regex-hoist-lazylock; Batch 73 added
         // sort-key-cache-precompute-out-of-lock); io has 3 (Batch 68 added
         // varint-compose-word-single-store; Batch 69 added
         // unaligned-word-load-from-bytes); bevy, wasm have 1 each.
         assert_eq!(categories.len(), 12);
+    }
+
+    /// G1 for `swar-digit-chunk-parse` (Batch 74, Research 088 — the
+    /// simd-json distill): the ported SWAR construction
+    /// (`parse_eight_digits_swar` + `is_made_of_eight_digits_fast` + the
+    /// chunk/tail loop) must be exactly equivalent to the naive per-digit
+    /// reference — the Batch 59 ported-numeric exhaustive-gate MANDATE
+    /// (casual tests miss subtle wrongness; the construction's wrapping
+    /// multiplies especially). Sweeps: (a) every digit-string length
+    /// 0..=19 × structured boundaries (all-0s, all-9s, 10^k) + the exact
+    /// 20-digit u64::MAX string; (b) 10_000 LCG digit strings of LCG
+    /// lengths; (c) non-digit terminators at EVERY offset (b'x', b',',
+    /// b' ', 0x00, 0xFF) — value AND consumed-length identical; (d) the
+    /// validation matrix: `is_made_of_eight_digits_fast` ≡ "every byte in
+    /// 0x30..=0x39" over 8 positions × boundary bytes + 10_000 LCG octets;
+    /// (e) the fold itself vs a u32 reference over structured + 100_000
+    /// LCG octets. Domain: digit runs whose value fits u64 (beyond that
+    /// BOTH arms overflow — documented out-of-domain).
+    #[test]
+    #[allow(clippy::too_many_lines)] // one five-section exhaustive sweep sharing the LCG stream
+    fn swar_digit_parse_equivalence_gate() {
+        fn is_made_of_eight_digits_fast(chars: [u8; 8]) -> bool {
+            let val = u64::from_ne_bytes(chars);
+            ((val & 0xF0F0_F0F0_F0F0_F0F0)
+                | (((val.wrapping_add(0x0606_0606_0606_0606)) & 0xF0F0_F0F0_F0F0_F0F0) >> 4))
+                == 0x3333_3333_3333_3333
+        }
+        fn parse_eight_digits_swar(chars: [u8; 8]) -> u32 {
+            let val = u64::from_le_bytes(chars);
+            let val = (val & 0x0F0F_0F0F_0F0F_0F0F).wrapping_mul(2561) >> 8;
+            let val = (val & 0x00FF_00FF_00FF_00FF).wrapping_mul(6_553_601) >> 16;
+            ((val & 0x0000_FFFF_0000_FFFF).wrapping_mul(42_949_672_960_001) >> 32) as u32
+        }
+        // The fixed construction (returns value + consumed length — pins the
+        // stop-position equivalence argument, not just the value).
+        fn parse_swars(digits: &[u8]) -> (u64, usize) {
+            let mut val: u64 = 0;
+            let mut i = 0;
+            while i + 8 <= digits.len() {
+                let chunk: [u8; 8] = digits[i..i + 8].try_into().unwrap();
+                if !is_made_of_eight_digits_fast(chunk) {
+                    break;
+                }
+                val = val
+                    .wrapping_mul(100_000_000)
+                    .wrapping_add(u64::from(parse_eight_digits_swar(chunk)));
+                i += 8;
+            }
+            while i < digits.len() && digits[i].is_ascii_digit() {
+                val = val
+                    .wrapping_mul(10)
+                    .wrapping_add(u64::from(digits[i] - b'0'));
+                i += 1;
+            }
+            (val, i)
+        }
+        // The reference — true u128 math, no wrapping ambiguity.
+        fn parse_naive(digits: &[u8]) -> (u128, usize) {
+            let mut val: u128 = 0;
+            let mut i = 0;
+            while i < digits.len() && digits[i].is_ascii_digit() {
+                val = val * 10 + u128::from(digits[i] - b'0');
+                i += 1;
+            }
+            (val, i)
+        }
+        fn check(bytes: &[u8]) {
+            let (ref_val, ref_len) = parse_naive(bytes);
+            assert!(
+                ref_val <= u128::from(u64::MAX),
+                "gate domain: test string must fit u64"
+            );
+            let (sw_val, sw_len) = parse_swars(bytes);
+            assert_eq!(u128::from(sw_val), ref_val, "value mismatch on {bytes:?}");
+            assert_eq!(sw_len, ref_len, "stop-position mismatch on {bytes:?}");
+        }
+
+        // (a) structured boundaries: every length × all-0s / all-9s / 10^k.
+        for len in 0..=19usize {
+            check(&vec![b'0'; len]);
+            check(&vec![b'9'; len]);
+            let mut p10 = Vec::with_capacity(len + 1);
+            p10.push(b'1');
+            p10.extend(std::iter::repeat_n(b'0', len));
+            check(&p10);
+        }
+        let max_str = u64::MAX.to_string(); // "18446744073709551615" — 20 digits, fits
+        check(max_str.as_bytes());
+        assert_eq!(parse_swars(max_str.as_bytes()).0, u64::MAX);
+
+        // (b) 10_000 LCG digit strings of LCG lengths 1..=19.
+        let mut rng: u64 = 0x0123_4567_89AB_CDEF;
+        for _ in 0..10_000 {
+            rng = rng
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            let len = 1 + ((rng >> 33) as usize) % 19;
+            let mut s = Vec::with_capacity(len);
+            for _ in 0..len {
+                rng = rng
+                    .wrapping_mul(6_364_136_223_846_793_005)
+                    .wrapping_add(1_442_695_040_888_963_407);
+                s.push(b'0' + (((rng >> 33) % 10) as u8));
+            }
+            check(&s);
+        }
+
+        // (c) non-digit terminators at EVERY offset — stop-position identity.
+        for len in 0..=19usize {
+            for term in [b'x', b',', b' ', 0x00, 0xFF] {
+                let mut s: Vec<u8> = vec![b'7'; len];
+                s.push(term);
+                s.extend_from_slice(b"901"); // post-terminator digits must NOT be consumed
+                check(&s);
+            }
+        }
+
+        // (d) validation matrix: is_made_of_eight_digits_fast ≡ all-digits.
+        let expect_all = |bytes: [u8; 8]| {
+            assert_eq!(
+                is_made_of_eight_digits_fast(bytes),
+                bytes.iter().all(|&b| b.is_ascii_digit()),
+                "validation mismatch on {bytes:?}"
+            );
+        };
+        for pos in 0..8usize {
+            for b in [0x00u8, 0x2F, 0x30, 0x39, 0x3A, 0x41, 0x46, 0x61, 0x7F, 0xFF] {
+                let mut bytes = [b'5'; 8];
+                bytes[pos] = b;
+                expect_all(bytes);
+            }
+        }
+        for _ in 0..10_000 {
+            rng = rng
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            let mut bytes = [0u8; 8];
+            for b in &mut bytes {
+                rng = rng
+                    .wrapping_mul(6_364_136_223_846_793_005)
+                    .wrapping_add(1_442_695_040_888_963_407);
+                *b = ((rng >> 40) % 96).wrapping_add(0x30) as u8; // 0x30..=0x8F mix of digit/non-digit
+            }
+            expect_all(bytes);
+        }
+
+        // (e) the fold itself vs a u32 reference (structured + LCG octets).
+        let fold_check = |bytes: [u8; 8]| {
+            let reference: u32 = bytes
+                .iter()
+                .fold(0u32, |acc, &b| acc * 10 + u32::from(b - b'0'));
+            assert_eq!(
+                parse_eight_digits_swar(bytes),
+                reference,
+                "fold mismatch on {bytes:?}"
+            );
+        };
+        fold_check([b'0'; 8]);
+        fold_check([b'9'; 8]);
+        fold_check(*b"12345678");
+        fold_check(*b"00000001");
+        for k in 0..8 {
+            let mut bytes = [b'0'; 8];
+            bytes[k] = b'1';
+            fold_check(bytes);
+        }
+        for _ in 0..100_000 {
+            rng = rng
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            let mut bytes = [b'0'; 8];
+            for b in &mut bytes {
+                rng = rng
+                    .wrapping_mul(6_364_136_223_846_793_005)
+                    .wrapping_add(1_442_695_040_888_963_407);
+                *b = b'0' + (((rng >> 33) % 10) as u8);
+            }
+            fold_check(bytes);
+        }
     }
 
     /// G1 for `varint-compose-word-single-store` (Batch 68, Research 075 —
@@ -6285,10 +6776,10 @@ mod tests {
 
     #[cfg(feature = "rust_perf_bench")]
     #[test]
-    fn sixty_eight_rules_have_bench_specs() {
+    fn seventy_rules_have_bench_specs() {
         let corpus = build_perf_seed_corpus();
         let with_spec = corpus.entries.iter().filter(|e| e.bench_spec.is_some()).count();
-        assert_eq!(with_spec, 68, "expected 68 benchable rules, got {with_spec}");
+        assert_eq!(with_spec, 70, "expected 70 benchable rules, got {with_spec}");
     }
 
     #[cfg(feature = "rust_perf_bench")]
@@ -6338,7 +6829,7 @@ mod tests {
     /// The other 58 have `context_notes: None` (unconditional wins or
     /// honestly NotBenchable).
     #[test]
-    fn twenty_annotated_rules_carry_context_notes() {
+    fn twenty_two_annotated_rules_carry_context_notes() {
         let corpus = build_perf_seed_corpus();
         let annotated: Vec<&str> = corpus
             .entries
@@ -6346,7 +6837,7 @@ mod tests {
             .filter(|e| e.context_notes.is_some())
             .map(|e| e.rule_id.as_str())
             .collect();
-        assert_eq!(annotated.len(), 20, "expected 20 context-annotated rules");
+        assert_eq!(annotated.len(), 22, "expected 22 context-annotated rules");
         assert!(annotated.contains(&"precompute-table"));
         assert!(annotated.contains(&"papaya-lockfree"));
         assert!(annotated.contains(&"dedupe-hashset-vs-vec"));
@@ -6366,6 +6857,8 @@ mod tests {
         assert!(annotated.contains(&"channel-send-batching-unpark"));
         assert!(annotated.contains(&"sort-key-cache-precompute-out-of-lock"));
         assert!(annotated.contains(&"lock-guard-narrow-field-accessor"));
+        assert!(annotated.contains(&"swar-digit-chunk-parse")); // Batch 74 — the regime note (<8 digits tie)
+        assert!(annotated.contains(&"runtime-feature-detect-per-chunk")); // Batch 74 — measured-Tie honest annotation
     }
 
     /// The non-annotated rules (ParetoDominant + honestly NotBenchable) must
@@ -6391,7 +6884,7 @@ mod tests {
         let json = serde_json::to_string(&corpus.entries).unwrap();
         let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
         let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-        assert_eq!(annotated, 20);
+        assert_eq!(annotated, 22);
 
         // Simulate a pre-field snapshot: strip `context_notes` from JSON.
         // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -6425,7 +6918,7 @@ mod tests {
 
         // Filter to the 20 annotated rules.
         let annotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_some()).collect();
-        assert_eq!(annotated.len(), 20, "expected 20 annotated rules");
+        assert_eq!(annotated.len(), 22, "expected 22 annotated rules");
 
         // The HealEntry trait override must agree with the struct field.
         for rule in &annotated {

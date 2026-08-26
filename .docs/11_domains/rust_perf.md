@@ -19,7 +19,7 @@
 
 ## Corpus
 
-78 rules across 12 categories (rust-optimize skill checklist +
+80 rules across 12 categories (rust-optimize skill checklist +
 nnethercote/perf-book + rustc-hash/bevy real-world patterns + the hotpath-rs
 profiling guide, Research 032; Batch 48 added the 8 online-search candidates
 from the perf-book std-types + iterators chapters; Batch 53 added the 4
@@ -33,7 +33,7 @@ oxc-article rules: `keyword-map-to-match` + `usize-index-to-u32`; Batch 62
 (2026-08-19, Research 073 — the polars kernel-idiom distill) added
 `sparse-set-bit-iteration-tz-blsr` + `sortedness-check-branchless-accumulate`; Batch 67 (2026-08-19, Research 074 — the regex-automata distill) added
 `byte-find-position-to-memchr`; Batch 68 (2026-08-19, Research 075 — the
-tantivy utility-layer distill) added the annotated `varint-compose-word-single-store`; Batch 69 added `unaligned-word-load-from-bytes` — the T6 defer refuted, a cross-arch WINNER; Batch 65 (2026-08-22, Research 081 — the hotpath.rs profiler distill) added the 2 contention rules: `align-64-false-sharing` + `channel-send-batching-unpark`, both measured ParetoDominant; Batch 73 (2026-08-26, Research 085/086 — the mnt.io Matrix-RSDK room-list DoD distill, Plan 029) added `sort-key-cache-precompute-out-of-lock` + `lock-guard-narrow-field-accessor`, both measured ParetoDominant with regime annotations).
+tantivy utility-layer distill) added the annotated `varint-compose-word-single-store`; Batch 69 added `unaligned-word-load-from-bytes` — the T6 defer refuted, a cross-arch WINNER; Batch 65 (2026-08-22, Research 081 — the hotpath.rs profiler distill) added the 2 contention rules: `align-64-false-sharing` + `channel-send-batching-unpark`, both measured ParetoDominant; Batch 73 (2026-08-26, Research 085/086 — the mnt.io Matrix-RSDK room-list DoD distill, Plan 029) added `sort-key-cache-precompute-out-of-lock` + `lock-guard-narrow-field-accessor`, both measured ParetoDominant with regime annotations; Batch 74 (2026-08-26, Research 088 — the simd-lite/simd-json SWAR distill, Plan 032, the Research 085 pool-drop re-probe) added `swar-digit-chunk-parse` (ParetoDominant, regime-annotated) + `runtime-feature-detect-per-chunk` (measured Mixed-ties, honest-annotated)).
 Allocation is the deepest
 category (18 rules). Complexity has 15 (Batch 64 added `debug-assert-length-hoist`). Iterators has 9 (Batch 66 added `sortedness-check-branchless-accumulate`; Batch 67 added `byte-find-position-to-memchr`). Simd 7 (Batch 62 added `transposed-weight-register-gemv`; Batch 64 added `loop-order-innermost-contiguous`), layout 6
 (Batch 61 added `usize-index-to-u32`);
@@ -41,12 +41,13 @@ concurrency has 7 (Issue 014 added the two metric-mismatch rules; Batch 65
 added the two measured contention rules; Batch 73 added
 `lock-guard-narrow-field-accessor`);
 caching has 3 (Issue 014 added `regex-hoist-lazylock`; Batch 73 added
-`sort-key-cache-precompute-out-of-lock`); arithmetic has 6
+`sort-key-cache-precompute-out-of-lock`); arithmetic has 7
 (Batch 53 added `powi-vs-powf` + `distance-sq-no-sqrt`; Batch 59 added
 `division-by-invariant-multiplication`; Batch 62 added the annotated
 `newton-refinement-vs-hardware-transcendental`; Batch 66 added
-`sparse-set-bit-iteration-tz-blsr`); dispatch has 2 (Batch 61 added
-`keyword-map-to-match`); io is 3 (Batch 68 added
+`sparse-set-bit-iteration-tz-blsr`; Batch 74 added `swar-digit-chunk-parse`);
+dispatch has 3 (Batch 61 added
+`keyword-map-to-match`; Batch 74 added `runtime-feature-detect-per-chunk`); io is 3 (Batch 68 added
 `varint-compose-word-single-store`; Batch 69 added `unaligned-word-load-from-bytes`); the rest have 1
 each. 68 are benchable (carry a `BenchSpec`); 10 are honestly
 `NotBenchable` — 8 need external runtimes or are structural (size_of,
@@ -154,6 +155,8 @@ annotated rules as context-dependent, not unconditional suggestions.
 | `bufwriter-batched` | io | ✅ 2.48-21.57x ParetoDominant | — | `File::write` per record → `BufWriter` batched (syscall amortization; Issue 012 / Bench 016) |
 | `sort-key-cache-precompute-out-of-lock` | caching | ✅ 24.3-37.2x ParetoDominant | ⚠️ `context_notes` | comparator lock+clone per invocation → maintained sort-key cache refreshed once per data update (Batch 73, mnt.io room-list distill — the amortization curve visible in the sorts-per-update axis 1/4/16; allocs 164497→17 @16 sorts; REGIME: sorts-per-update ≈ 0 = pure refresh overhead; the source's 78× is end-to-end, our isolated mechanism reads 24-37×; composes with the narrow-accessor rule — production `RoomListItem.refresh_cached_data` reads through narrow accessors) |
 | `lock-guard-narrow-field-accessor` | concurrency | ✅ 11.5-12.7x ParetoDominant | ⚠️ `context_notes` | whole-payload clone under read-guard → narrow accessor returning only the consumed sub-field (Batch 73, mnt.io room-list distill — allocs 100000→0 @100K; the source's +18% is end-to-end, the isolated mechanism reads 11-13×; type-blind for a parse-only proposer — suggestion-only) |
+| `swar-digit-chunk-parse` | arithmetic | ✅ 2.35/1.75/2.52× ParetoDominant | ⚠️ `context_notes` | per-digit decimal parse loop (`val = val*10 + (b-b'0')`, serial chain) → SWAR 8-digit chunk fold — 3 and/mul/shift steps per 8 digits (magic 2561/6553601/42949672960001) guarded by the `0x3333` SWAR digit validation (Batch 74, simd-json distill — Muła ← simdjson ← simd-json provenance; **honest 1.01× tie @ 4 digits** — the source's own README regime note: gate on ≥8 digits remaining; composes with `unaligned-word-load-from-bytes`, sibling of `division-by-invariant-multiplication`; exhaustive gate incl. value AND stop-position identity) |
+| `runtime-feature-detect-per-chunk` | dispatch | ~ Mixed (0/0/3 ties) | ⚠️ `context_notes` | CPU feature detection inside a per-chunk hot fn → resolve once (cached static / hoist / static cfg gate) — **measured Tie on rustc 1.97 aarch64** (the std::detect machinery const-folds through an `#[inline(never)]` boundary); the source's cost class (outlined `target_feature` calls per 8-digit group — their reason for static-gating SSSE3) survives for outlined dispatch / non-literal feature strings / heavier probes (Batch 74, simd-json distill — the honest-annotation record, the B68 varint precedent) |
 
 ## Validator (cargo test — behind `rust_perf_verify`)
 
