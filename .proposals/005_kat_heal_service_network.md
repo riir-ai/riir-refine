@@ -252,7 +252,7 @@ AFTER:   consumer → wrong code → fixer (modelless pre-pass) → less wrong c
 - [ ] T0.2 Redaction gate + `.heal-sync-policy` + adversarial fixtures (G4 local half)
 - [ ] T0.3 Sync payload schema over TrajStore rows (BLAKE3 batch commitment; versioned)
 - [ ] T0.4 Pending-record estimator (local, deterministic) — service-credit framing per caveat #15, no `$` beside an accrual
-- [ ] T0.5 **The meter** (NEW code, ~50 LOC — there is no substrate): raw-span-byte word-token counter on the heal path, alloc-free (`CountingAllocator`), version-stamped; **G9 fixtures** (cross-host bit-identity + unparseable-span fixture) land with it
+- [x] T0.5 **The meter** (NEW code, ~50 LOC — there is no substrate): raw-span-byte word-token counter on the heal path, alloc-free (`CountingAllocator`), version-stamped; **G9 fixtures** (cross-host bit-identity + unparseable-span fixture) land with it — **DONE 2026-08-26, [Plan 023](../.plans/023_kat_phase0_meter.md)**: `kat_service` feature + `src/kat_meter.rs` (`count_word_tokens` over raw bytes, ASCII-whitespace-delimited — line-ending-insensitive by construction) + the local burn ledger (`<root>/.heal/kat_meter.json`, version-stamped) + cargo-heal wiring (`.rs` + `.wgsl` reads; `RIIR_HEAL_KAT_METER=0` kill-switch, `RIIR_HEAL_KAT_METER_FILE` override) + G9/G2 fixtures (7+1 tests; the alloc gate in its own binary to dodge parallel-counter pollution). E2E on M3: 122 tokens billed/persisted/accumulated; kill-switch verified silent.
 - [ ] T0.6 Decide the charge model — per-unit burn vs volume-tiered lease (caveat #16) — **before** T1.3's Stripe SKU shape
 
 ### Phase 1 — KAT rail (chain program in riir-chain; service plane in riir-dapps)

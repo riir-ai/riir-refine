@@ -61,21 +61,13 @@ fn default_memory_path() -> PathBuf {
     base.join("riir-clippy").join("memory.json")
 }
 
-/// 037-T2/038: open the repo-local neuron-db trajectory store (the durable
-/// backend Issue 038 unifies on). Root resolution: `RIIR_HEAL_TRAJ_ROOT`
-/// → else the first path arg's repo root (nearest `.git` ancestor — the
-/// repo-local semantic 038-T2 picked for the 037-A2 per-repo adoption
-/// audit) → else cwd. `None` + one stderr line when the store cannot open
-/// — the run then falls back to the legacy memory.json envelope (never
-/// fatal to a heal).
-///
-/// `migrate` (038-T3): on the first PERSISTING run, import the legacy
-/// envelope once — envelope present + store empty → every bucket becomes a
-/// row verbatim, then the envelope is renamed `memory.json.migrated` so the
-/// import can never run twice (or drift into a second repo's store).
-#[cfg(feature = "latent_retrieval")]
-fn open_traj_store(paths: &[PathBuf], migrate: bool) -> Option<riir_clippy::traj_store::TrajStore> {
-    let root = std::env::var("RIIR_HEAL_TRAJ_ROOT")
+/// Resolve the repo-local `.heal` root shared by the trajectory store and the
+/// KAT meter: `RIIR_HEAL_TRAJ_ROOT` → else the first path arg's nearest
+/// `.git` ancestor (the repo-local semantic 038-T2 picked for the 037-A2
+/// per-repo adoption audit) → else cwd.
+#[cfg(any(feature = "latent_retrieval", feature = "kat_service"))]
+fn resolve_heal_root(paths: &[PathBuf]) -> PathBuf {
+    std::env::var("RIIR_HEAL_TRAJ_ROOT")
         .ok()
         .map(PathBuf::from)
         .or_else(|| {
@@ -98,7 +90,22 @@ fn open_traj_store(paths: &[PathBuf], migrate: bool) -> Option<riir_clippy::traj
             })
         })
         .or_else(|| std::env::current_dir().ok())
-        .unwrap_or_default();
+        .unwrap_or_default()
+}
+
+/// 037-T2/038: open the repo-local neuron-db trajectory store (the durable
+/// backend Issue 038 unifies on). Root resolution:
+/// [`resolve_heal_root`]. `None` + one stderr line when the store cannot open
+/// — the run then falls back to the legacy memory.json envelope (never
+/// fatal to a heal).
+///
+/// `migrate` (038-T3): on the first PERSISTING run, import the legacy
+/// envelope once — envelope present + store empty → every bucket becomes a
+/// row verbatim, then the envelope is renamed `memory.json.migrated` so the
+/// import can never run twice (or drift into a second repo's store).
+#[cfg(feature = "latent_retrieval")]
+fn open_traj_store(paths: &[PathBuf], migrate: bool) -> Option<riir_clippy::traj_store::TrajStore> {
+    let root = resolve_heal_root(paths);
     match riir_clippy::traj_store::TrajStore::open(&root) {
         Ok((store, bad)) => {
             if bad > 0 {
@@ -114,6 +121,27 @@ fn open_traj_store(paths: &[PathBuf], migrate: bool) -> Option<riir_clippy::traj
             None
         }
     }
+}
+
+/// Proposal 005 Phase 0 T0.5 (Plan 023): open the KAT code-token meter for
+/// this run. `None` when disabled — `RIIR_HEAL_KAT_METER=0|off|false|no`
+/// (the `RIIR_HEAL_SELF_EVOLVE=0` kill-switch pattern) or an unreachable
+/// meter location (never fatal to a heal). `RIIR_HEAL_KAT_METER_FILE`
+/// overrides the exact file; otherwise `<resolve_heal_root>/.heal/kat_meter.json`
+/// (beside the trajectory store).
+#[cfg(feature = "kat_service")]
+fn open_kat_meter(paths: &[PathBuf]) -> Option<riir_clippy::kat_meter::KatMeter> {
+    let disabled = std::env::var("RIIR_HEAL_KAT_METER")
+        .ok()
+        .is_some_and(|v| matches!(v.as_str(), "0" | "off" | "false" | "no"));
+    if disabled {
+        return None;
+    }
+    if let Ok(file) = std::env::var("RIIR_HEAL_KAT_METER_FILE") {
+        return Some(riir_clippy::kat_meter::KatMeter::open_at(PathBuf::from(file)));
+    }
+    let root = resolve_heal_root(paths);
+    Some(riir_clippy::kat_meter::KatMeter::open(&root))
 }
 
 /// 038-T3: the one-time envelope → store migration (see [`open_traj_store`]).
@@ -1362,6 +1390,15 @@ fn main() {
         }
     }
 
+    // Proposal 005 Phase 0 T0.5 (Plan 023): the KAT code-token meter —
+    // opt-in (`kat_service`), accounting-only (G9d: client counts never mint
+    // or spend; the burn reconciles at sync, T0.3+). Bills the raw bytes of
+    // every source the healer processes — deliberately NOT parse-dependent,
+    // so unparseable files still bill (G9c: parse-gating would bill zero on
+    // exactly the L4 miss class routed to the expensive path).
+    #[cfg(feature = "kat_service")]
+    let mut kat_meter = open_kat_meter(&args.paths);
+
     let mut n_chunks = 0usize;
     let mut n_suggestions = 0usize;
     let mut n_fixed_files = 0usize;
@@ -1412,6 +1449,14 @@ fn main() {
             continue;
         };
         let display = file.display().to_string();
+
+        // KAT meter (T0.5): one bill per source READ — the fix + suggest
+        // passes share this read; fixpoint passes re-parse already-billed
+        // bytes internally. Raw bytes, parse-independent (G9c).
+        #[cfg(feature = "kat_service")]
+        if let Some(m) = kat_meter.as_mut() {
+            m.record_span(src.as_bytes());
+        }
 
         // ── --fix: run the compiled-in proposers (the visitor IS the gate).
         // Both domains: rust_perf rules + the structural clippy lints (T6.4).
@@ -1733,6 +1778,12 @@ fn main() {
             let Ok(src) = std::fs::read_to_string(path) else {
                 continue;
             };
+            // KAT meter (T0.5): the non-syn surface bills like any other
+            // processed source — raw bytes, parse-independent.
+            #[cfg(feature = "kat_service")]
+            if let Some(m) = kat_meter.as_mut() {
+                m.record_span(src.as_bytes());
+            }
             for f in scanner.scan(&src) {
                 println!(
                     "{}:{} [kernel ] {:<44} — {}",
@@ -2128,6 +2179,18 @@ fn main() {
         non_syn_note,
         fmt_note
     );
+
+    // KAT meter (T0.5): persist the session's burn + one summary line.
+    // Save failure is a lost bookkeeping event, never a failed heal — warn
+    // + continue (the recorder precedent). No `$` figures here (caveats
+    // #12/#15): tokens only; pricing is server-side with an as-of date.
+    #[cfg(feature = "kat_service")]
+    if let Some(m) = &kat_meter {
+        if let Err(e) = m.save() {
+            eprintln!("kat-meter: could not persist burn ledger ({}): {e}", m.path().display());
+        }
+        println!("{}", m.summary_line());
+    }
 }
 
 /// Issue 031 H2: `--domain` scopes the `--fix` proposer loops. Returns

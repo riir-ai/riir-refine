@@ -184,6 +184,15 @@ cf_workers_ai = ["dep:ureq", "latent_retrieval", "clippy_verify", "l4_lora"]
 # the katgpt-core feature (pure math + BLAKE3, no new deps).
 contrastive_scope = ["katgpt-core/contrastive_scope"]
 
+# Proposal 005 Phase 0 T0.5 (Plan 023): the KAT code-token meter — the
+# alloc-free, version-stamped, raw-span-byte word-token counter + its local
+# burn ledger (`<root>/.heal/kat_meter.json`). EMPTY feature: the meter needs
+# no deps (serde/serde_json are already main deps); `qrcode`/HTTP arrive with
+# the later account/sync tasks (T0.1+). Accounting-only per G9d — client
+# counts never mint or spend. Default-off keeps the default build
+# bit-identical with zero meter code compiled (G3).
+kat_service = []
+
 # Plan 005 T3.5 option 3: 768-D Bonsai dense rerank on top of the 8-D
 # ShardIndex pre-filter. HEAVY — loads the ~6.7 GB Ternary-Bonsai-27B GGUF
 # and runs a CPU ternary forward pass per embedded text. NEVER default; the

@@ -138,6 +138,14 @@ pub mod cf_workers_ai;
 #[cfg(feature = "contrastive_scope")]
 pub mod scope_model;
 
+// Proposal 005 Phase 0 T0.5 (Plan 023): the KAT code-token meter — the
+// alloc-free, version-stamped, raw-span-byte word-token counter + its local
+// burn ledger. Accounting-only (G9d): client counts never mint or spend;
+// the burn reconciles at sync (T0.3+). Opt-in — the default build stays
+// bit-identical with zero meter code compiled (G3).
+#[cfg(feature = "kat_service")]
+pub mod kat_meter;
+
 // Plan 019 T4.3: the neuron-db trajectory store — the DURABLE backend for
 // `--fix-compile` self-evolution (LocalKvStore encrypted WAL + BM25 + the
 // 8-D sigmoid-dot latent axis). Behind `latent_retrieval` (the dep-light
@@ -264,6 +272,10 @@ pub use self_evolve::{HealPipeline, HealResult, HealSource, SelectionMode, TuneR
 // Bench 669 consumer adoption (Plan 016).
 #[cfg(feature = "contrastive_scope")]
 pub use scope_model::{ScopeModel, OUT_OF_SCOPE_DOCS, KAPPA, THETA};
+
+// Proposal 005 Phase 0 T0.5 (Plan 023): the KAT meter surface.
+#[cfg(feature = "kat_service")]
+pub use kat_meter::{count_word_tokens, KatMeter, MeterState, METER_CHANGELOG, METER_VERSION};
 
 // Plan 005: latent retrieval surface (`--suggest` MVP).
 #[cfg(feature = "latent_retrieval")]
