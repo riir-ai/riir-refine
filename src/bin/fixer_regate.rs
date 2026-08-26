@@ -630,6 +630,8 @@ fn run_cf(args: &Args, verifier: &ClippyVerifier, prepared: &[Prepared]) {
     } else {
         println!("  server meter: unavailable (GraphQL fetch failed — client meter only)");
     }
+    summary.latency_ms_total = lat_total;
+    summary.latency_ms_max = lat_max;
     // Issue 046 T6: the USD daily-cap status (the gate lives INSIDE
     // `generate` — reserve-then-reconcile; this is the reporting half).
     println!("  {}", client.spend_summary());
@@ -640,6 +642,55 @@ fn run_cf(args: &Args, verifier: &ClippyVerifier, prepared: &[Prepared]) {
         server.as_ref(),
         Some(client.spend_state()),
     );
+    append_quality_history(&args.arm, client.model_id(), &summary);
+}
+
+/// Append one row to `.benchmarks/fixer_quality_history.jsonl` (Issue 044
+/// T8 — keeps/vetoes per arm per session as a TIME SERIES, not prose in a
+/// `.md`). The `score_history.jsonl` / `llm_cost_ledger.jsonl` precedent:
+/// committed, append-only; the ops dashboard's fixer axis reads this file.
+fn append_quality_history(arm: &str, model: &str, summary: &ArmSummary) {
+    use std::io::Write;
+    let path = std::env::var("RIIR_FIXER_QUALITY_HISTORY")
+        .unwrap_or_else(|_| ".benchmarks/fixer_quality_history.jsonl".to_string());
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let row = serde_json::json!({
+        "ts_unix": ts,
+        "arm": arm,
+        "model": model,
+        "n": summary.n,
+        "em": {"hits": summary.em_hits, "total": summary.em_total},
+        "fragment_parses": summary.fragment_parses,
+        "merge_ok": summary.merge_ok,
+        "control_fires": summary.control_fires,
+        "oracle_scoreable": summary.oracle_scoreable,
+        "strictly_fewer": summary.strictly_fewer,
+        "keep_oracle": summary.keep_oracle,
+        "keep_strict": summary.keep_strict,
+        "vetoed": summary.vetoed,
+        "divergent": summary.divergent,
+        "regressions": summary.regressions,
+        "reachable": {"n": summary.reachable_n, "keep_strict": summary.reachable_keep_strict},
+        "tokens": {"prompt": summary.prompt_tokens, "completion": summary.completion_tokens},
+        // u128 ms → u64 (clippy-safe; latencies are far below 2^52 anyway).
+        "latency_ms": {
+            "total": u64::try_from(summary.latency_ms_total).unwrap_or(u64::MAX),
+            "max": u64::try_from(summary.latency_ms_max).unwrap_or(u64::MAX),
+        },
+    });
+    let mut f = match std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("[regate] quality-history write skipped ({path}: {e})");
+            return;
+        }
+    };
+    if let Err(e) = writeln!(f, "{row}") {
+        eprintln!("[regate] quality-history write failed: {e}");
+    }
 }
 
 /// Append one run row to `.benchmarks/llm_cost_ledger.jsonl` (the
@@ -755,4 +806,9 @@ fn run_daemon(args: &Args, verifier: &ClippyVerifier, prepared: &[Prepared]) {
     println!("{}", summary.markdown_row("C"));
     println!("  latency: total {lat_total}ms, max {lat_max}ms");
     println!("  {}", summary.verdict_vs_decline());
+    // Issue 044 T8: arm C lands in the same quality time series (tokens n/a
+    // for the local daemon — the keep/veto axes are the point).
+    summary.latency_ms_total = lat_total;
+    summary.latency_ms_max = lat_max;
+    append_quality_history("C", "local-bonsai-daemon", &summary);
 }
