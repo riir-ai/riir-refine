@@ -1,7 +1,7 @@
 # Issue 045 — container cost observability + hourly housekeeping worker + smallest-sizing verdict
 
 **Filed:** 2026-08-26
-**Status:** OPEN — T1 verdict recorded, T2+T3 SHIPPED same day; live-mint half gated on Proposal 005 Phase 1
+**Status:** OPEN — T1 verdict recorded, T2+T3 SHIPPED same day; live-mint half gated on Proposal 005 Phase 1. Sizing verdict feeds Proposal 005 T2.0/T2.1 **+ T2.6 / [Plan 031](../.plans/031_kat_sweeper_temp_container_r2_tier.md)** (2026-08-26 later-session sync).
 **Repo:** riir-clippy (dashboard + worker deploy live here; sizing verdict feeds Proposal 005 T2.0/T2.1)
 **Owner ask (2026-08-26):**
 1. can the container be smaller? smallest?
@@ -108,7 +108,9 @@ needs dashboard-side correlation — left as a follow-up, not a blocker.
 
 `cloudflare/housekeeping/` — **`riir-kat-housekeeping`** (deployed):
 
-- **Cron:** `0 * * * *` (hourly). Free-tier compatible (1 trigger).
+- **Cron:** `0 * * * *` (hourly). Free-tier compatible (1 of 3 triggers/worker on the
+  Free plan; cron invocations DO count as requests — 24/day is noise against
+  the 100k/day budget). KV writes ~27/day ≪ 1k/day free.
 - **Each run:** query the two container datasets for the trailing hour +
   `aiInferenceAdaptiveGroups` for the day's neurons → compute cost →
   appendimmutable KV rows (`hour:<YYYYMMDDHH>`, `day:<YYYYMMDD>` aggregate,
@@ -165,3 +167,12 @@ lives (T1 above).
   byte-seconds consistent with known instance footprints (lite/basic/
   standard-1 within ~2%). Cost figures are labeled *est* on the dashboard.
 - Numbering: 045 (highwater 44 → 45).
+- **2026-08-26 later-session sync:** (a) the T1 sizing verdict now also covers
+  the **own-repo sweeper container** (Proposal 005 §The own-repo hourly
+  sweeper lane / T2.6 — same `basic` floor / size-UP rule); (b) [Plan 031](../.plans/031_kat_sweeper_temp_container_r2_tier.md)
+  Phase B **extends this Worker** with the Cron Container crank duty
+  (`scheduled() → getContainer().start()` + poll heartbeat — still
+  Worker-class work; this issue's Worker-not-container verdict is exactly
+  why); (c) the LLM half of every future window is bounded by
+  [Issue 046](../.issues/046_usd_llm_daily_cap_enforcement.md)
+  (`DEFAULT_LLM_DAILY_CAP_USD = 1.0`). T4/T5/T6 unchanged.
