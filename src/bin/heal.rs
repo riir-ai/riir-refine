@@ -302,6 +302,7 @@ fn migrate_envelope_once(store: &riir_clippy::traj_store::TrajStore) {
             last_seen_at: 0,
             elo: riir_clippy::traj_store::default_elo(),
             span_elo: riir_clippy::traj_store::default_elo(),
+            component: t.component,
         };
         if store.import_row(&row).is_ok() {
             imported += 1;
@@ -322,8 +323,11 @@ fn migrate_envelope_once(store: &riir_clippy::traj_store::TrajStore) {
 }
 
 /// Record one verdict event into the durable store (best-effort — a store
-/// failure warns once per event, never fails the heal).
+/// failure warns once per event, never fails the heal). `component` is the
+/// Issue 047 decision-time failure attribution (`None` on successes and
+/// unattributed events).
 #[cfg(all(feature = "fix_verify", feature = "latent_retrieval"))]
+#[allow(clippy::too_many_arguments)] // the existing record shape + the one attribution param
 fn record_traj(
     store: &Option<riir_clippy::traj_store::TrajStore>,
     rule_id: &str,
@@ -332,16 +336,27 @@ fn record_traj(
     success: bool,
     verified: bool,
     run_id: &str,
+    component: Option<riir_clippy::component::ComponentClass>,
 ) {
     if let Some(store) = store {
-        if let Err(e) = store.record(rule_id, restore, replacement, success, verified, run_id) {
+        if let Err(e) = store.record_classified(
+            rule_id,
+            restore,
+            replacement,
+            success,
+            verified,
+            run_id,
+            component,
+        ) {
             eprintln!("self-evolve: store record failed: {e}");
         }
     }
 }
 
 /// [`record_traj`] fixed at the failure verdict (reverts — Issue 018's
-/// definitive compile-gate fail).
+/// definitive compile-gate fail). The component is derived HERE, at the
+/// point the failure is observed (Issue 047): a compile-gate revert means
+/// the drafter produced a defective fix — W-class.
 #[cfg(all(feature = "fix_verify", feature = "latent_retrieval"))]
 fn record_traj_fail(
     store: &Option<riir_clippy::traj_store::TrajStore>,
@@ -350,7 +365,12 @@ fn record_traj_fail(
     replacement: &str,
     run_id: &str,
 ) {
-    record_traj(store, rule_id, restore, replacement, false, false, run_id);
+    let class = riir_clippy::component::classify(
+        &riir_clippy::component::FailureSignal::reverted(
+            riir_clippy::component::RevertKind::CompileGate,
+        ),
+    );
+    record_traj(store, rule_id, restore, replacement, false, false, run_id, Some(class));
 }
 
 /// Print the per-edit fix review + fmt annotation. `edits` are
@@ -1366,13 +1386,26 @@ fn main() {
                         }
                     }
                     for r in &report.reverted {
-                        if let Err(e) = store.record(
+                        // Issue 047: no-progress = the drafted fix was defective
+                        // (W); I/O = the gate rejected without evaluating the
+                        // fix (C — unnecessary, gate-side).
+                        let component =
+                            riir_clippy::component::classify(
+                                &riir_clippy::component::FailureSignal::reverted(
+                                    match r.reason {
+                                        riir_clippy::domains::rustc_errors::driver::RevertReason::NoProgress => riir_clippy::component::RevertKind::CompileGate,
+                                        riir_clippy::domains::rustc_errors::driver::RevertReason::Io => riir_clippy::component::RevertKind::Infrastructure,
+                                    },
+                                ),
+                            );
+                        if let Err(e) = store.record_classified(
                             &traj_key(&r.code, &r.strategy_id),
                             &r.shape,
                             &r.fix,
                             false,
                             false,
                             &heal_run_id,
+                            Some(component),
                         ) {
                             eprintln!("self-evolve: store record failed: {e}");
                         }
@@ -2206,9 +2239,18 @@ fn main() {
                 }
                 // Issue 018: a whole-file revert is a definitive fail verdict
                 // for every edit in the file (attribution impossible — the
-                // compile failure itself is the verdict).
+                // compile failure itself is the verdict). Issue 047: the
+                // decision-time attribution is W (drafter produced a
+                // compile-broken fix; the gate caught it).
                 for e in &b.edits {
-                    evolve_rec.record_outcome(&e.rule_id, &e.restore, &e.replacement, false);
+                    evolve_rec.record_failure_signal(
+                        &e.rule_id,
+                        &e.restore,
+                        &e.replacement,
+                        &riir_clippy::component::FailureSignal::reverted(
+                            riir_clippy::component::RevertKind::CompileGate,
+                        ),
+                    );
                     #[cfg(feature = "latent_retrieval")]
                     record_traj_fail(&traj_store, &e.rule_id, &e.restore, &e.replacement, &heal_run_id);
                 }
@@ -2236,13 +2278,23 @@ fn main() {
                         .get(&(b.path.clone(), e.final_line))
                         .copied(),
                 );
-                evolve_rec.record_outcome_verified(
-                    &e.rule_id,
-                    &e.restore,
-                    &e.replacement,
-                    success,
-                    verified,
+                // Issue 047: a kept-but-unresolved edit (compile gate passed,
+                // full oracle says the lint persists) is C-class — the gate
+                // was too loose. Successes stay unattributed.
+                let fail_signal = (!success).then(
+                    riir_clippy::component::FailureSignal::gate_passed_ineffective,
                 );
+                if let Some(sig) = &fail_signal {
+                    evolve_rec.record_failure_signal(&e.rule_id, &e.restore, &e.replacement, sig);
+                } else {
+                    evolve_rec.record_outcome_verified(
+                        &e.rule_id,
+                        &e.restore,
+                        &e.replacement,
+                        success,
+                        verified,
+                    );
+                }
                 #[cfg(feature = "latent_retrieval")]
                 record_traj(
                     &traj_store,
@@ -2252,10 +2304,18 @@ fn main() {
                     success,
                     verified,
                     &heal_run_id,
+                    fail_signal.as_ref().map(riir_clippy::component::classify),
                 );
             }
             for e in b.edits.iter().filter(|e| reverted_lines.contains(&e.final_line)) {
-                evolve_rec.record_outcome(&e.rule_id, &e.restore, &e.replacement, false);
+                evolve_rec.record_failure_signal(
+                    &e.rule_id,
+                    &e.restore,
+                    &e.replacement,
+                    &riir_clippy::component::FailureSignal::reverted(
+                        riir_clippy::component::RevertKind::CompileGate,
+                    ),
+                );
                 #[cfg(feature = "latent_retrieval")]
                 record_traj_fail(&traj_store, &e.rule_id, &e.restore, &e.replacement, &heal_run_id);
             }

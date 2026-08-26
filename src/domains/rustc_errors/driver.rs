@@ -115,6 +115,11 @@ pub struct MissRecord {
     /// The full pre-rendered diagnostic, when cargo included it — the
     /// miss dump writes this verbatim (the plan's T4.4).
     pub rendered: Option<String>,
+    /// Component-attributed failure class (Issue 047). A `rustc_errors` miss
+    /// is a no-candidate miss by construction (no template proposed, or the
+    /// diagnostic was unlocalizable/unreadable before candidates could be
+    /// collected) — always E (corpus gap: the playbook lacks the code).
+    pub component: crate::component::ComponentClass,
 }
 
 /// A review-mode plan line (no writes happened).
@@ -504,6 +509,7 @@ fn collect_candidates(
             line: 0,
             message: d.message.clone(),
             rendered: d.rendered.clone(),
+            component: crate::component::classify(&crate::component::FailureSignal::miss_no_candidates()),
         });
         return Vec::new();
     };
@@ -516,6 +522,7 @@ fn collect_candidates(
             line,
             message: format!("(unreadable) {}", d.message),
             rendered: d.rendered.clone(),
+            component: crate::component::classify(&crate::component::FailureSignal::miss_no_candidates()),
         });
         return Vec::new();
     };
@@ -527,6 +534,7 @@ fn collect_candidates(
             line,
             message: d.message.clone(),
             rendered: d.rendered.clone(),
+            component: crate::component::classify(&crate::component::FailureSignal::miss_no_candidates()),
         });
         return Vec::new();
     }

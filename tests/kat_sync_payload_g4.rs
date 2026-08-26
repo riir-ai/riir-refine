@@ -67,6 +67,7 @@ fn row(lint_key: &str, shape: &str, fix: &str) -> TrajRowDoc {
         last_seen_at: 1_700_000_000,
         elo: 1200.0,
         span_elo: 1200.0,
+        component: None,
     }
 }
 

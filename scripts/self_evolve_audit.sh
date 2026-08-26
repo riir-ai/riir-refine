@@ -87,8 +87,11 @@ succ = sum(b.get('success_count', 0) for b in t)
 fail = sum(b.get('fail_count', 0) for b in t)
 cert = tiers.get('Certified', 0)
 wd = tiers.get('Withdrawn', 0)
+comps = collections.Counter(b.get('component') for b in t if b.get('component'))
 print(f"  envelope buckets: {len(t)}  tiers: {dict(tiers)}")
 print(f"  outcome totals: success={succ}  fail={fail}  (Certified={cert}, Withdrawn={wd})")
+if comps:
+    print(f"  component-attributed (047): {dict(comps)}")
 top = collections.Counter(b.get('lint_name','?') for b in t).most_common(5)
 print("  top lints: " + ", ".join(f"{k}={v}" for k, v in top))
 # E2 gate verdicts
@@ -193,6 +196,57 @@ if [ -n "$STORE_REPOS" ] && [ -x "$HEAL_BIN" ]; then
     echo "  (binary lacks --collapse-report — rebuild with: cargo build --release --features latent_retrieval -p riir-clippy --bin cargo-heal)"
   fi
   rm -rf "$CR_PROBE"
+else
+  echo "  (needs ≥1 store repo + the readable binary — see §1)"
+fi
+
+echo ""
+echo "── 1d. Component-attributed failures (Issue 047 — E/rho/W/C miss map) ──"
+# The Recuris localization-by-construction transplant: every recorded
+# failure carries the component class derived AT RECORD TIME (never
+# post-hoc). E = corpus/proposer gap, rho = retrieval (crowding/pool
+# depth), W = drafter (defective fix the gate caught), C = verifier/gate
+# (passed a bad fix / rejected without judging). The dominant class is
+# the next improvement target instead of a guess.
+if [ -n "$STORE_REPOS" ] && [ -x "$HEAL_BIN" ]; then
+  COMP_TMP="$(mktemp)"
+  for r in $STORE_REPOS; do
+    d="/Users/katopz/git/$r"
+    RIIR_HEAL_TRAJ_ROOT="$d" "$HEAL_BIN" --dump-trajectories > "$COMP_TMP" 2>/dev/null
+    python3 - "$r" "$COMP_TMP" <<'EOF'
+import json, sys, collections
+repo, path = sys.argv[1], sys.argv[2]
+rows = []
+for line in open(path):
+    line = line.strip()
+    if not line.startswith('{'):
+        continue
+    try:
+        v = json.loads(line)
+    except Exception:
+        continue
+    rows.append(v)
+tagged = [v for v in rows if v.get('component')]
+if not tagged:
+    print(f"  {repo}: 0 attributed row(s) ({len(rows)} row(s) — pre-047 rows decode unattributed)")
+    raise SystemExit(0)
+counts = collections.Counter(v['component'] for v in tagged)
+order = ['E', 'rho', 'W', 'C']
+long = {'E': 'corpus/proposer', 'rho': 'retrieval', 'W': 'drafter', 'C': 'verifier/gate'}
+parts = "  ".join(f"{k}({long[k]})={counts.get(k, 0)}" for k in order if counts.get(k, 0))
+print(f"  {repo}: {len(tagged)} attributed row(s)  {parts}")
+for k in order:
+    reps = [v for v in tagged if v['component'] == k][:3]
+    if not reps:
+        continue
+    def clip(s):
+        s = (s or '').replace("\n", " ")
+        return s if len(s) <= 42 else s[:41] + "…"
+    shown = ", ".join(f"{v.get('lint_key','?')} [\"{clip(v.get('shape',''))}\"] L={v.get('fail_count',0)}" for v in reps)
+    print(f"    {k}: {shown}")
+EOF
+  done
+  rm -f "$COMP_TMP"
 else
   echo "  (needs ≥1 store repo + the readable binary — see §1)"
 fi

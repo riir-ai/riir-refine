@@ -83,6 +83,12 @@ pub struct MissRecord {
     pub rank: Option<usize>,
     /// What topped the domain's list instead.
     pub top1: Option<String>,
+    /// Component-attributed class (Issue 047), derived at record time from
+    /// this record's own facts: outranked / crowded-past-the-probe = ρ
+    /// (retrieval), nothing-answered = E (corpus). The eval is the living
+    /// ρ/E coverage — its misses carry ground truth the production paths
+    /// lack.
+    pub component: crate::component::ComponentClass,
 }
 
 /// The full eval output.
@@ -616,11 +622,18 @@ pub fn run_eval_inner(
             b.hits_at_5 += 1;
         }
         if rank.is_none_or(|r| r >= 3) {
+            let component = crate::component::classify(&crate::component::FailureSignal {
+                expected_rule: Some(label.to_string()),
+                expected_rank: rank,
+                any_candidates: top1.is_some(),
+                ..crate::component::FailureSignal::default()
+            });
             report.misses.push(MissRecord {
                 expected: label.to_string(),
                 domain,
                 rank,
                 top1,
+                component,
             });
         }
     }
@@ -688,18 +701,36 @@ pub fn print_report(report: &EvalReport) {
     for miss in &report.misses {
         match miss.rank {
             Some(r) => println!(
-                "  outranked  [{:?}] expected={} rank={} top1={}",
-                miss.domain, miss.expected, r,
+                "  {} outranked  [{:?}] expected={} rank={} top1={}",
+                miss.component.as_str(),
+                miss.domain,
+                miss.expected,
+                r,
                 miss.top1.as_deref().unwrap_or("?"),
             ),
             None => println!(
-                "  not-in-top{} [{:?}] expected={} top1={}",
+                "  {} not-in-top{} [{:?}] expected={} top1={}",
+                miss.component.as_str(),
                 PROBE_TOP_K,
                 miss.domain,
                 miss.expected,
                 miss.top1.as_deref().unwrap_or("?"),
             ),
         }
+    }
+    // Issue 047: per-class counts — the dominant retrieval-stage component
+    // is the next tuning target (pool depth, fan-out) instead of a guess.
+    if !report.misses.is_empty() {
+        let mut e = 0usize;
+        let mut rho = 0usize;
+        for miss in &report.misses {
+            match miss.component {
+                crate::component::ComponentClass::Retrieval => rho += 1,
+                crate::component::ComponentClass::Corpus => e += 1,
+                _ => {}
+            }
+        }
+        println!("  component counts: E(corpus)={e}  rho(retrieval)={rho}");
     }
     println!("\n-- clean-span false-positive profile (what tops real clean code) --");
     for (tag, tops) in &report.clean_profile {

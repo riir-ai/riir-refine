@@ -218,6 +218,40 @@ impl EvolveRecorder {
         success: bool,
         verified: bool,
     ) {
+        self.record_outcome_signal(rule_id, buggy, fixed, success, verified, None);
+    }
+
+    /// Record a FAILURE with its decision-time signal (Issue 047): the
+    /// component class is derived where the failure is observed — never
+    /// reconstructed post-hoc — and tags the trajectory bucket for the
+    /// audit's per-class counts. Returns the derived class so callers can
+    /// mirror it into their other durable surfaces (the traj store rows).
+    ///
+    /// Equivalent to `record_outcome_verified(.., false, false)` + the
+    /// `tag_component` call (`verified` is outcome-irrelevant on failure —
+    /// only a verified SUCCESS certifies).
+    pub fn record_failure_signal(
+        &mut self,
+        rule_id: &str,
+        buggy: &str,
+        fixed: &str,
+        signal: &crate::component::FailureSignal,
+    ) -> crate::component::ComponentClass {
+        let class = crate::component::classify(signal);
+        self.record_outcome_signal(rule_id, buggy, fixed, false, false, Some(class));
+        class
+    }
+
+    /// The shared recording core: outcome + optional component attribution.
+    fn record_outcome_signal(
+        &mut self,
+        rule_id: &str,
+        buggy: &str,
+        fixed: &str,
+        success: bool,
+        verified: bool,
+        component: Option<crate::component::ComponentClass>,
+    ) {
         if self.opted_out {
             return;
         }
@@ -225,6 +259,9 @@ impl EvolveRecorder {
         self.memory
             .insert(FixTrajectory::new(rule_id.to_string(), buggy.to_string(), fixed.to_string()));
         self.memory.record_outcome(rule_id, fixed, success, verified);
+        if let Some(class) = component {
+            self.memory.tag_component(rule_id, fixed, class);
+        }
         self.recorded += 1;
 
         // 2. Learning — oracle-gated.
@@ -318,6 +355,44 @@ mod tests {
         r.record_applied("collapsible_if", "if a { if b { x(); } }", "if a && b { x(); }");
         assert_eq!(r.memory().len(), 2);
         assert_eq!(r.recorded_count(), 3);
+    }
+
+    #[test]
+    fn record_failure_signal_tags_the_bucket() {
+        // Issue 047: the class is derived at record time + tags the bucket
+        // for the audit; the returned class is what callers mirror into the
+        // traj store rows.
+        let mut r = EvolveRecorder::new();
+        let class = r.record_failure_signal(
+            "needless_return",
+            "return x;",
+            "x",
+            &crate::component::FailureSignal::reverted(crate::component::RevertKind::CompileGate),
+        );
+        assert_eq!(class, crate::component::ComponentClass::Drafter);
+        let t = r
+            .memory()
+            .iter()
+            .find(|t| t.lint_name == "needless_return")
+            .expect("bucket");
+        assert_eq!(t.component, Some(crate::component::ComponentClass::Drafter));
+        assert_eq!(t.fail_count, 1);
+        assert_eq!(r.recorded_count(), 1);
+    }
+
+    #[test]
+    fn record_failure_signal_classifies_even_when_opted_out() {
+        // The class is caller-visible regardless of the opt-out — callers
+        // mirror it into their own durable surfaces.
+        let mut r = EvolveRecorder::with_opt_out(true);
+        let class = r.record_failure_signal(
+            "collapsible_else_if",
+            "else { if c { } }",
+            "else if c { }",
+            &crate::component::FailureSignal::false_positive(true),
+        );
+        assert_eq!(class, crate::component::ComponentClass::Gate);
+        assert_eq!(r.memory().len(), 0, "opted-out recorder records nothing");
     }
 
     #[test]

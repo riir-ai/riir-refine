@@ -80,6 +80,7 @@ pub mod ruliology_search;
 // as a default-on back-compat alias (benches/examples required-features).
 // Validated: G1-G5 PASS (Issue 004) + G6/G7 real cargo clippy PASS (Issue 008).
 pub mod collapse_monitor;
+pub mod component;
 pub mod evolve;
 pub mod memory;
 pub mod recorder;

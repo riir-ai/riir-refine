@@ -117,6 +117,12 @@ pub struct TrajRowDoc {
     /// decides whether spans get their own derivation.
     #[serde(default = "default_elo")]
     pub span_elo: f32,
+    /// Component-attributed failure class (Issue 047, Recuris E/ρ/W/C
+    /// ontology) — the LAST decision-time attribution recorded for this
+    /// row's failures. `None` on success-only rows AND on pre-Issue-047
+    /// rows (serde default keeps old rows decoding as unattributed).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub component: Option<crate::component::ComponentClass>,
 }
 
 /// The ELO base rating (unrated) — re-exported from the math module
@@ -314,7 +320,9 @@ impl TrajStore {
     /// durable: `success && verified` certifies; 3 consecutive failures
     /// withdraw — absorbing, only a verified success exits). Stamps the
     /// verdict's run attribution: `run_id` + the current unix time
-    /// (037-T2).
+    /// (037-T2). Unattributed (Issue 047 component = `None`) — use
+    /// [`record_classified`](Self::record_classified) for failures whose
+    /// decision-time signal is known.
     ///
     /// # Errors
     ///
@@ -328,6 +336,28 @@ impl TrajStore {
         verified: bool,
         run_id: &str,
     ) -> Result<(), String> {
+        self.record_classified(lint_key, shape, fix, success, verified, run_id, None)
+    }
+
+    /// [`record`](Self::record) with the Issue 047 component attribution:
+    /// `Some(class)` stamps the row's failure class (the LAST decision-time
+    /// attribution — successes leave a previous tag in place; the tag is
+    /// failure metadata for the audit, not a state machine).
+    ///
+    /// # Errors
+    ///
+    /// KV put or JSON encode failure.
+    #[allow(clippy::too_many_arguments)] // mirrors `record`'s call shape + the one attribution param
+    pub fn record_classified(
+        &self,
+        lint_key: &str,
+        shape: &str,
+        fix: &str,
+        success: bool,
+        verified: bool,
+        run_id: &str,
+        component: Option<crate::component::ComponentClass>,
+    ) -> Result<(), String> {
         let key = Self::row_key(lint_key, shape);
         let mut row = self.load_or_new_row(&key, lint_key, shape, fix);
         // The text halves update with the latest sighting (the shape key
@@ -335,6 +365,9 @@ impl TrajStore {
         row.fix = fix.to_string();
         row.last_run_id = run_id.to_string();
         row.last_seen_at = now_unix_secs();
+        if let Some(class) = component {
+            row.component = Some(class);
+        }
         if success {
             row.success_count = row.success_count.saturating_add(1);
             row.consecutive_fails = 0;
@@ -423,6 +456,7 @@ impl TrajStore {
                     last_seen_at: 0,
                     elo: default_elo(),
                     span_elo: default_elo(),
+                    component: None,
                 }
             })
     }
@@ -1064,6 +1098,54 @@ mod tests {
         let _ = std::fs::remove_dir_all(&root);
     }
 
+    // ── Issue 047: component-attributed failure rows ──────────────────
+
+    #[test]
+    fn record_classified_stamps_and_persists_the_component() {
+        let root = tmp_root("component");
+        {
+            let (store, _) = TrajStore::open(&root).unwrap();
+            store
+                .record_classified(
+                    "E0502:e0502-clone-out",
+                    "&items[0]",
+                    "items[0].clone()",
+                    false,
+                    false,
+                    "run-c",
+                    Some(crate::component::ComponentClass::Drafter),
+                )
+                .unwrap();
+            let row = &store.dump()[0];
+            assert_eq!(row.component, Some(crate::component::ComponentClass::Drafter));
+            assert_eq!(row.fail_count, 1);
+
+            // A later unattributed SUCCESS leaves the last failure
+            // attribution in place (failure metadata, not a state machine).
+            store
+                .record("E0502:e0502-clone-out", "&items[0]", "items[0].clone()", true, true, "run-s")
+                .unwrap();
+            let row = &store.dump()[0];
+            assert_eq!(row.component, Some(crate::component::ComponentClass::Drafter));
+        }
+        // Durable across reopen (the audit reads it via --dump-trajectories).
+        {
+            let (store, _) = TrajStore::open(&root).unwrap();
+            let row = &store.dump()[0];
+            assert_eq!(row.component, Some(crate::component::ComponentClass::Drafter));
+        }
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn pre_047_row_json_decodes_component_as_none() {
+        // Back-compat: rows serialized before Issue 047 carry no `component`
+        // field — they must decode as unattributed, not fail.
+        let legacy = r#"{"lint_key":"E0502:x","shape":"&v[0]","fix":"v[0]","direction":[0.0],"success_count":1,"fail_count":0,"consecutive_fails":0,"tier":1,"last_run_id":"r","last_seen_at":1,"elo":1200.0,"span_elo":1200.0}"#;
+        let row: TrajRowDoc = serde_json::from_str(legacy).expect("legacy row decodes");
+        assert_eq!(row.component, None, "pre-047 row must decode unattributed");
+    }
+
     #[test]
     fn record_stamps_run_id_and_seen_at() {
         let root = tmp_root("runid");
@@ -1244,6 +1326,7 @@ mod tests {
                 last_seen_at: 0,
                 elo: default_elo(),
                 span_elo: default_elo(),
+                component: None,
             })
             .unwrap();
         let report = store.stats_report(0);

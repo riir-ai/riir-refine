@@ -151,6 +151,14 @@ pub struct FixTrajectory {
     /// decodes missing fields as the honest tier for unverified history).
     #[serde(default)]
     pub tier: EvidenceTier,
+    /// Component-attributed failure class (Issue 047, Recuris E/ρ/W/C
+    /// ontology) — the LAST decision-time attribution recorded for this
+    /// bucket's failures. `None` on success-only buckets AND on pre-Issue-047
+    /// serialized memories (`#[serde(default)]` decodes missing fields as
+    /// unattributed history). Successes leave the last attribution in place —
+    /// the tag is failure metadata for the audit, not a state machine.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub component: Option<crate::component::ComponentClass>,
 }
 
 impl FixTrajectory {
@@ -177,6 +185,7 @@ impl FixTrajectory {
             fail_count: 0,
             consecutive_fails: 0,
             tier: EvidenceTier::Heuristic,
+            component: None,
         }
     }
 
@@ -395,6 +404,26 @@ impl LatentFixMemory {
             fixed_code.to_string(),
         ));
         self.record_outcome(lint_name, fixed_code, true, true);
+    }
+
+    /// Tag a bucket's failure attribution (Issue 047). Sets the
+    /// [`ComponentClass`](crate::component::ComponentClass) on the
+    /// `(lint_name, fixed_code)` trajectory — a no-op when the bucket is
+    /// absent (the caller's `insert` must precede). Derived at record time
+    /// via [`crate::component::classify`], never reconstructed post-hoc.
+    pub fn tag_component(
+        &mut self,
+        lint_name: &str,
+        fixed_code: &str,
+        class: crate::component::ComponentClass,
+    ) {
+        for t in &mut self.trajectories {
+            if t.lint_name == lint_name && t.fixed_code == fixed_code {
+                t.component = Some(class);
+                return;
+            }
+        }
+        // No matching trajectory — caller should have inserted it first.
     }
 
     /// Retrieve the top-K trajectories for a query, writing their indices +
@@ -866,6 +895,57 @@ mod tests {
             loaded.load_json_verified(legacy).expect("load"),
             CommitmentStatus::Absent
         );
+    }
+
+    // ── Issue 047: component-attributed failures ───────────────────────
+
+    #[test]
+    fn pre_047_trajectory_json_decodes_component_as_none() {
+        // Back-compat: a trajectory serialized before Issue 047 carries no
+        // `component` field — it must decode as unattributed (None), not fail.
+        let legacy = r#"{"version":1,"trajectories":[{"lint_name":"needless_return","lint_name_hash":1,"buggy_code":"return x;","fixed_code":"x","direction":[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0],"success_count":1,"fail_count":0,"consecutive_fails":0,"tier":"Heuristic"}]}"#;
+        let mut loaded = LatentFixMemory::new(RetrievalWeights::default());
+        loaded.load_json(legacy).expect("legacy load");
+        assert_eq!(loaded.len(), 1);
+        let t = loaded.iter().next().expect("one bucket");
+        assert_eq!(t.component, None, "pre-047 trajectory must decode unattributed");
+    }
+
+    #[test]
+    fn tag_component_sets_only_the_matching_bucket() {
+        let mut m = LatentFixMemory::new(RetrievalWeights::default());
+        m.insert(make_traj("needless_return", "return x;", "x"));
+        m.insert(make_traj("match_bool", "match b { true => x }", "if b { x }"));
+
+        m.record_outcome("needless_return", "x", false, false);
+        m.tag_component("needless_return", "x", crate::component::ComponentClass::Drafter);
+
+        let traj = m.iter().find(|t| t.lint_name == "needless_return").expect("bucket");
+        assert_eq!(traj.component, Some(crate::component::ComponentClass::Drafter));
+        assert_eq!(traj.fail_count, 1);
+        let other = m.iter().find(|t| t.lint_name == "match_bool").expect("other");
+        assert_eq!(other.component, None, "unrelated bucket must stay unattributed");
+
+        // A later success leaves the last failure attribution in place —
+        // the tag is failure metadata for the audit, not a state machine.
+        m.record_outcome("needless_return", "x", true, true);
+        let traj = m.iter().find(|t| t.lint_name == "needless_return").expect("bucket");
+        assert_eq!(traj.component, Some(crate::component::ComponentClass::Drafter));
+    }
+
+    #[test]
+    fn tagged_trajectory_round_trips_through_the_envelope() {
+        let mut m = LatentFixMemory::new(RetrievalWeights::default());
+        m.insert(make_traj("collapsible_else_if", "else { if c { } }", "else if c { }"));
+        m.record_outcome("collapsible_else_if", "else if c { }", false, false);
+        m.tag_component("collapsible_else_if", "else if c { }", crate::component::ComponentClass::Gate);
+        let json = m.to_json().expect("serialize");
+        assert!(json.contains("\"component\":\"C\""), "tag serialized: {json}");
+
+        let mut loaded = LatentFixMemory::new(RetrievalWeights::default());
+        assert_eq!(loaded.load_json_verified(&json).expect("load"), CommitmentStatus::Verified);
+        let t = loaded.iter().next().expect("one bucket");
+        assert_eq!(t.component, Some(crate::component::ComponentClass::Gate));
     }
 
     #[test]

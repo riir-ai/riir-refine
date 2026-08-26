@@ -45,7 +45,10 @@ pub fn traj_key(code: &str, strategy_id: &str) -> String {
 ///
 /// Review-mode reports record NOTHING (the Issue 018 rule — only edits
 /// that were actually written are trajectories), so this is only called
-/// from the write path.
+/// from the write path. Reverts are component-attributed at record time
+/// (Issue 047): a no-progress revert means the drafted fix was defective
+/// (W); an I/O revert means the gate rejected without evaluating the fix
+/// (C — an unnecessary, gate-side revert).
 pub fn record_run(rec: &mut EvolveRecorder, report: &FixCompileReport) {
     for a in &report.applied {
         rec.record_outcome_verified(
@@ -57,12 +60,15 @@ pub fn record_run(rec: &mut EvolveRecorder, report: &FixCompileReport) {
         );
     }
     for r in &report.reverted {
-        rec.record_outcome(
-            &traj_key(&r.code, &r.strategy_id),
-            &r.shape,
-            &r.fix,
-            false,
-        );
+        let signal = match r.reason {
+            super::driver::RevertReason::NoProgress => {
+                crate::component::FailureSignal::reverted(crate::component::RevertKind::CompileGate)
+            }
+            super::driver::RevertReason::Io => {
+                crate::component::FailureSignal::reverted(crate::component::RevertKind::Infrastructure)
+            }
+        };
+        rec.record_failure_signal(&traj_key(&r.code, &r.strategy_id), &r.shape, &r.fix, &signal);
     }
 }
 
@@ -86,16 +92,19 @@ pub fn write_miss(dir: &Path, miss: &MissRecord) -> std::io::Result<PathBuf> {
         .map_or(0, |d| d.as_nanos());
     let path = dir.join(format!("{}-{ts}.md", miss.code));
     let rendered = miss.rendered.as_deref().unwrap_or(&miss.message);
-    let body = format!(
-        "# {code} — unresolved by the rustc_errors playbooks\n\n\
+    let body = format!
+        (
+        "# {code} — unresolved by the rustc_errors playbooks\n\n \
          - **file:** {file}:{line}\n\
          - **message:** {msg}\n\
-         - **captured:** by `cargo heal --fix-compile --write` (no candidate kept)\n\n\
+         - **component:** {component} — no candidate answered this error (corpus gap; author the next template here)\n\
+         - **captured:** by `cargo heal --fix-compile --write` (no candidate kept)\n\n \
          ## Rendered diagnostic\n\n```text\n{rendered}\n```\n",
         code = miss.code,
         file = miss.file.display(),
         line = miss.line,
         msg = miss.message,
+        component = miss.component,
     );
     std::fs::write(&path, body)?;
     Ok(path)
@@ -171,6 +180,9 @@ mod tests {
             line: 7,
             message: "cannot borrow".to_string(),
             rendered: Some("error[E0502]...rendered".to_string()),
+            component: crate::component::classify(
+                &crate::component::FailureSignal::miss_no_candidates(),
+            ),
         }
     }
 
@@ -190,6 +202,10 @@ mod tests {
         let body = std::fs::read_to_string(&written[0]).unwrap();
         assert!(body.contains("error[E0502]...rendered"), "rendered verbatim");
         assert!(body.contains("/x/src/lib.rs:7"));
+        assert!(
+            body.contains("**component:** E (corpus/proposer)"),
+            "Issue 047 attribution line present: {body}"
+        );
         assert!(root.join(".heal").join("misses").join("README.md").exists());
 
         // Second dump: README NOT rewritten (idempotent), new entry lands.
