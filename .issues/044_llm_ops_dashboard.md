@@ -70,16 +70,20 @@ Leftovers found + removed (owner ask: "any active on cloudflare leftover?"):
       token query gate (tiny Worker script in front of assets) or
       Cloudflare Access. The HTML carries only aggregated numbers today,
       which is why v1 shipped without it.
-- [ ] **T3 auto-refresh** — data is a snapshot at generation time. Options:
-      launchd/cron on this box re-running gen+deploy; a GitHub Action;
-      or a Worker cron writing collected JSON to KV with the HTML fetching
-      it (bigger change: makes the page live).
+- [-] **T3 auto-refresh** — PARTIAL 2026-08-26 ([Issue 045](045_container_cost_housekeeping.md)):
+      the `riir-kat-housekeeping` Worker (hourly cron) now archives
+      container cost + mint-anchor rows to KV continuously with read
+      endpoints (`/hours`, `/days`) — the live-data half of auto-refresh
+      exists; wiring the HTML to fetch it (and scheduling the generator)
+      remains open.
 - [ ] **T4 budget alerting** — notify (Discord/email/webhook) at 50/90/100%
       of the 10k/day cap + a monthly USD budget. The bar turns red today;
       nobody is paged. Today's 103.3% event would have paged twice
       (qwen 77.8% + GLM arms).
-- [ ] **T5 KAT rail** — ledger rows carry `kat: null`; per-fix cost in KAT
-      tokens per Proposal 005 Phase 1. Wire when the rail lands.
+- [-] **T5 KAT rail** — PARTIAL 2026-08-26 (Issue 045): the housekeeping
+      Worker records the daily mint anchor (`neurons_today`, the mint
+      function's input per Proposal 005 §Economics); ledger rows still
+      carry `kat: null` until the Phase 1 rail denominates them.
 - [ ] **T6 training/GPU axis** — riir-train runs (plan, steps, tok/s,
       GPU-hours, M3 vs 4090) are not ingested. Needs a run-log convention
       in riir-train (e.g. `.benchmarks/runs.jsonl`) + a collector here.
@@ -88,10 +92,16 @@ Leftovers found + removed (owner ask: "any active on cloudflare leftover?"):
       unhealed table stays honest (manual today).
 - [ ] **T8 fixer quality history** — keeps/vetoes per arm per session
       (Bench 049/053 shape) as a time series, not prose in `.md`.
-- [ ] **T9 heartbeat/staleness** — the dashboard cannot tell you the
-      GENERATOR died. Add generated-at staleness banner + alert when >48h.
+- [-] **T9 heartbeat/staleness** — PARTIAL 2026-08-26 (Issue 045): the
+      housekeeping Worker's hourly heartbeat rows (KV `latest`) prove a
+      schedule is alive; the dashboard-side staleness banner + alert
+      remain open.
 - [ ] **T10 incident timeline strip** — render ledger incident rows as an
       annotated timeline once there are >3 (today: 1, the qwen 7.8k row).
+- [x] **T11 container axis** — SHIPPED 2026-08-26 (Issue 045): container
+      sleep/awake/usage graphs (hourly 48h / daily 14d / weekly 4w +
+      per-app 30d table + est-cost KPIs) from the CF GraphQL container
+      datasets, deployed live.
 
 ## Notes
 

@@ -1,0 +1,42 @@
+# riir-kat-housekeeping — hourly ops housekeeping Worker (Issue 045).
+#
+# What it does (cron `0 * * * *`):
+#   1. Pulls container usage (billing dataset) + hourly metrics from CF
+#      GraphQL for the trailing hour → computes est cost.
+#   2. Pulls the day's Workers-AI neurons (the KAT mint anchor input per
+#      Proposal 005 §The economics loop / §The daily trainer window).
+#   3. Writes append-only rows to KV: hour:<YYYYMMDDHH>, day:<YYYYMMDD>
+#      (aggregate), latest, mint_anchor:<date>.
+#   4. GET /latest, /hours?n=, /days?n=, /status expose the rows for the
+#      ops dashboard / future live mode.
+#
+# Auth: set the CF_API_TOKEN secret once (dedicated API token, scope
+#   Account → Analytics : Read):
+#     npx wrangler secret put CF_API_TOKEN
+# The wrangler OAuth token rotates hourly and CANNOT be used here.
+# Until the secret is set, the cron still writes heartbeat rows (proof the
+# schedule is alive; doubles as the dashboard T9 staleness signal).
+#
+# Cost: $0 — Worker cron triggers are free-tier; 24 KV writes/day is far
+# under the 1k/day free cap. Deliberately NOT a container (Issue 045 T1:
+# milliseconds of work per run; a container pays the $5 plan + uptime for
+# nothing).
+#
+# Deploy: npx wrangler deploy   (from this directory)
+name = "riir-kat-housekeeping"
+main = "src/worker.js"
+compatibility_date = "2026-08-26"
+
+[triggers]
+crons = ["0 * * * *"]
+
+[[kv_namespaces]]
+binding = "HOUSEKEEPING_KV"
+id = "a3a0add9325f4078a16e32eb26f54932"
+
+[vars]
+CF_ACCOUNT_ID = "7e11517c4dd4f6e9cede7da9b60d66eb"
+# Pricing pinned 2026-08-26 (Issue 045) — Workers Paid, beyond included.
+MEM_USD_PER_GIB_S = "0.0000025"
+DISK_USD_PER_GB_S = "0.00000007"
+CPU_USD_PER_S = "0.000020"

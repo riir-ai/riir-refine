@@ -19,6 +19,9 @@ Data sources (ALL optional — each degrades gracefully):
   6. coverage snapshot JSON              — unhealed-edit counts per repo
                                             (--sweep re-measures via healer
                                             dry-run; otherwise cached)
+  7. CF GraphQL containersUsage/Metrics  — container sleep/awake/usage +
+                                            est cost, hourly/daily/weekly
+                                            (Issue 045)
 
 Usage:
   python3 scripts/gen_dashboard.py                  # regenerate HTML
@@ -40,7 +43,7 @@ import subprocess
 import sys
 import time
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -282,6 +285,146 @@ def collect_cf_daily(days: int = 14) -> list[dict]:
              "neurons": g["sum"]["totalNeurons"] or 0.0} for g in groups]
 
 
+# ── 5b. containers (usage + metrics) ───────────────────────────────────────
+# Issue 045: container sleep/awake/usage + est cost, hourly/daily/weekly.
+# Units (empirically pinned 2026-08-26 against known instance footprints):
+#   allocatedMemory / allocatedDisk = byte-seconds; cpuTimeSec = vCPU-seconds;
+#   containerUptime (metrics) = milliseconds per hourly bucket.
+
+CONT_MEM_USD_PER_GIB_S = 0.0000025   # $/GiB-s beyond 25 GiB-h/mo included
+CONT_DISK_USD_PER_GB_S = 0.00000007  # $/GB-s beyond 200 GB-h/mo included
+CONT_CPU_USD_PER_S = 0.000020       # $/vCPU-s beyond 375 vCPU-min/mo included
+
+
+def _wrangler_oauth_token():
+    if WRANGLER_TOKEN_FILE.exists():
+        m = re.search(r'^oauth_token = "(.+)"$',
+                      WRANGLER_TOKEN_FILE.read_text(), re.MULTILINE)
+        if m:
+            return m.group(1)
+    return None
+
+
+def _gql(token: str, query: str):
+    req = urllib.request.Request(
+        CF_GRAPHQL, data=json.dumps({"query": query}).encode(),
+        headers={"Authorization": f"Bearer {token}",
+                 "Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        return json.load(resp)
+
+
+def container_cost_usd(mem_byte_s: float, disk_byte_s: float, cpu_s: float) -> float:
+    """Est cost from billing-dataset sums (Issue 045 pinned constants)."""
+    mem_gib_s = (mem_byte_s or 0.0) / (1024.0 ** 3)
+    disk_gb_s = (disk_byte_s or 0.0) / 1e9
+    return (mem_gib_s * CONT_MEM_USD_PER_GIB_S
+            + disk_gb_s * CONT_DISK_USD_PER_GB_S
+            + (cpu_s or 0.0) * CONT_CPU_USD_PER_S)
+
+
+def collect_containers(daily_days: int = 30, hourly_hours: int = 48) -> dict:
+    """Container usage from CF GraphQL (Issue 045). Degrades to {\"daily\": [], \"hourly\": []}."""
+    empty = {"daily": [], "hourly": [], "apps": []}
+    token = _wrangler_oauth_token()
+    if not token:
+        log("no wrangler OAuth token — skipping container analytics")
+        return empty
+    today = datetime.now(timezone.utc)
+    d_start = datetime.fromtimestamp(time.time() - daily_days * 86400,
+                                     tz=timezone.utc).strftime("%Y-%m-%d")
+    h_start = datetime.fromtimestamp(time.time() - hourly_hours * 3600,
+                                     tz=timezone.utc).strftime("%Y-%m-%dT%H:00:00Z")
+    acc = today.strftime("%Y-%m-%d")
+    q_usage = ("{ viewer { accounts(filter: {accountTag: \"%s\"}) { "
+               "containersUsageAdaptiveGroups(limit: 1000, filter: {date_geq: \"%s\"}, "
+               "orderBy: [date_ASC]) { dimensions { applicationId date } "
+               "sum { allocatedMemory allocatedDisk cpuTimeSec txBytes } } } } }"
+               % (CF_ACCOUNT_ID, d_start))
+    q_metrics = ("{ viewer { accounts(filter: {accountTag: \"%s\"}) { "
+                 "containersMetricsAdaptiveGroups(limit: 2000, "
+                 "filter: {datetimeHour_geq: \"%s\"}, orderBy: [datetimeHour_ASC]) { "
+                 "dimensions { applicationId datetimeHour active } "
+                 "sum { containerUptime cpuTimeSec } } } } }"
+                 % (CF_ACCOUNT_ID, h_start))
+    try:
+        du = _gql(token, q_usage)
+        dm = _gql(token, q_metrics)
+    except Exception as e:  # noqa: BLE001 — best-effort source
+        log(f"container GraphQL failed: {e}")
+        return empty
+    for label, d in (("usage", du), ("metrics", dm)):
+        if d.get("errors"):
+            log(f"container GraphQL ({label}) errors: {str(d['errors'])[:160]}")
+    daily: dict[str, dict[str, dict]] = {}
+    apps: set[str] = set()
+    try:
+        rows = du["data"]["viewer"]["accounts"][0]["containersUsageAdaptiveGroups"] or []
+    except (KeyError, IndexError, TypeError):
+        rows = []
+    for g in rows:
+        app = (g["dimensions"].get("applicationId") or "?")[:8]
+        date = g["dimensions"]["date"]
+        s = g["sum"]
+        apps.add(app)
+        slot = daily.setdefault(date, {}).setdefault(app,
+                                                      {"mem": 0.0, "disk": 0.0,
+                                                       "cpu": 0.0, "tx": 0.0})
+        slot["mem"] += s.get("allocatedMemory") or 0.0
+        slot["disk"] += s.get("allocatedDisk") or 0.0
+        slot["cpu"] += s.get("cpuTimeSec") or 0.0
+        slot["tx"] += s.get("txBytes") or 0.0
+    hourly: dict[str, dict[str, float]] = {}
+    try:
+        rows = dm["data"]["viewer"]["accounts"][0]["containersMetricsAdaptiveGroups"] or []
+    except (KeyError, IndexError, TypeError):
+        rows = []
+    for g in rows:
+        app = (g["dimensions"].get("applicationId") or "?")[:8]
+        hour = (g["dimensions"].get("datetimeHour") or "")[:13]
+        up_ms = (g["sum"].get("containerUptime") or 0.0)
+        slot = hourly.setdefault(hour, {}).setdefault(app, 0.0)
+        hourly[hour][app] = slot + up_ms
+    daily_list = [{"date": d, "apps": daily[d]} for d in sorted(daily)]
+    hourly_list = [{"hour": h, "apps": hourly[h]} for h in sorted(hourly)]
+    # Zero-fill continuous grids so the charts show true gaps (sleep) instead
+    # of compressing sparse buckets together (Issue 045).
+    if hourly_list:
+        first_h = hourly_list[0]["hour"]
+        try:
+            t = datetime.strptime(first_h, "%Y-%m-%dT%H")
+        except ValueError:
+            t = None
+        if t is not None:
+            grid = []
+            seen = {h["hour"]: h["apps"] for h in hourly_list}
+            for i in range(hourly_hours):
+                key = t.strftime("%Y-%m-%dT%H")
+                grid.append({"hour": key, "apps": seen.get(key, {})})
+                t = t + timedelta(hours=1)
+            hourly_list = grid
+    if daily_list:
+        first_d = daily_list[0]["date"]
+        try:
+            t = datetime.strptime(first_d, "%Y-%m-%d")
+        except ValueError:
+            t = None
+        if t is not None:
+            seen = {h["date"]: h["apps"] for h in daily_list}
+            grid = []
+            for i in range(daily_days):
+                key = t.strftime("%Y-%m-%d")
+                grid.append({"date": key, "apps": seen.get(key, {})})
+                t = t + timedelta(days=1)
+            daily_list = grid
+    return {"daily": daily_list, "hourly": hourly_list,
+            "apps": sorted(apps),
+            "rates": {"mem": CONT_MEM_USD_PER_GIB_S,
+                      "disk": CONT_DISK_USD_PER_GB_S,
+                      "cpu": CONT_CPU_USD_PER_S}}
+
+
 # ── 6. coverage sweep (healer dry-run per repo; cached) ────────────────────
 
 def coverage_snapshot(sweep: bool) -> list[dict]:
@@ -425,6 +568,28 @@ footer{color:var(--dim);font:11px var(--mono);margin-top:34px;border-top:1px sol
 </div>
 
 <div class="grid">
+  <div class="card wide"><h2>containers — awake hours per hour (48h, per app)</h2>
+    <div id="contHourly"></div>
+    <div class="legend"><span><i style="background:var(--accent2)"></i>awake (uptime s in hour)</span>
+      <span>gap = asleep / no data</span></div>
+  </div>
+  <div class="card"><h2>containers — daily est cost (14d)</h2>
+    <div id="contDaily"></div>
+    <div class="legend"><span><i style="background:var(--accent2)"></i>est $/day ×1000</span>
+      <span>Workers-Paid allowances not subtracted</span></div>
+  </div>
+  <div class="card"><h2>containers — weekly est cost (4w)</h2>
+    <div id="contWeekly"></div>
+    <div class="legend"><span><i style="background:var(--accent)"></i>est $/week ×1000</span></div>
+  </div>
+  <div class="card wide"><h2>containers — per app (30d, billing dataset)</h2>
+    <div id="contTable"></div>
+    <div class="sub">cost = mem GiB-s×$2.5e-6 + disk GB-s×$7e-8 + vCPU-s×$2e-5 — beyond the
+      Workers-Paid included allowances (25 GiB-h mem / 375 vCPU-min / 200 GB-h disk per month)</div>
+  </div>
+</div>
+
+<div class="grid">
   <div class="card"><h2>self-evolve adoption — trajectories per repo</h2>
     <div id="trajTable"></div>
   </div>
@@ -463,6 +628,14 @@ const fmt = {
 };
 $('generated').textContent = 'generated ' + D.generated_utc + ' UTC';
 
+// ── container cost helpers (issue 045; used by KPIs + containers section) ──
+const contCost = (mem,disk,cpu) =>
+  (mem||0)/1073741824*(D.containers&&D.containers.rates?D.containers.rates.mem:2.5e-6)
+  + (disk||0)/1e9*(D.containers&&D.containers.rates?D.containers.rates.disk:7e-8)
+  + (cpu||0)*(D.containers&&D.containers.rates?D.containers.rates.cpu:2e-5);
+function contDayCost(dayRow){ let c=0; for(const a in dayRow.apps)
+  c+=contCost(dayRow.apps[a].mem,dayRow.apps[a].disk,dayRow.apps[a].cpu); return c; }
+
 // ── alert bar ──
 if (D.cf_daily && D.cf_daily.length) {
   const today = D.cf_daily[D.cf_daily.length-1];
@@ -497,6 +670,17 @@ if (D.cf_daily && D.cf_daily.length) {
     ['heal commits 30d', fmt.n(D.cadence.reduce((a,b)=>a+b.heal_commits_30d,0)),
       'across ' + D.cadence.filter(r=>r.heal_commits_30d>0).length + ' repos'],
   ];
+  if (D.containers && D.containers.daily && D.containers.daily.length) {
+    const days = D.containers.daily;
+    const last24 = days.slice(-1).map(contDayCost).reduce((a,b)=>a+b,0);
+    const week = days.slice(-7).map(contDayCost).reduce((a,b)=>a+b,0);
+    let awakeH = 0;
+    (D.containers.hourly||[]).slice(-24).forEach(h=>{ for(const a in h.apps) awakeH += h.apps[a]/3.6e6; });
+    k.push(['containers est $ (24h)', fmt.usd(last24),
+      fmt.usd(week) + ' / 7d · est'],
+      ['container awake h (24h)', awakeH.toFixed(1),
+      (D.containers.apps||[]).length + ' apps seen']);
+  }
   $('kpis').innerHTML = k.map(x =>
     '<div class="kpi"><div class="l">'+x[0]+'</div><div class="v">'+x[1]+
     '</div><div class="s">'+x[2]+'</div></div>').join('');
@@ -588,6 +772,63 @@ if (D.score.length) {
     {name:'created_rate', values:D.score.map(r=>r.created_rate||0), pct:true, color:'var(--warn)', cls:'l3'},
     {name:'parse_safety', values:D.score.map(r=>r.parse_safety||0), pct:true, color:'var(--accent2)', cls:'l2'},
   ], labels, {yMax:1});
+}
+
+// ── containers (issue 045) ──
+if (D.containers && (D.containers.daily.length || D.containers.hourly.length)) {
+  // hourly awake chart: one line per app (uptime seconds in each hour bucket)
+  if (D.containers.hourly.length) {
+    const hours = D.containers.hourly;
+    const labels = hours.map(h=>h.hour.slice(5));
+    const series = D.containers.apps.map(app => ({
+      name: app,
+      values: hours.map(h => (h.apps[app]||0)/1000.0), // ms → s
+    }));
+    const yMax = Math.max(3600, ...series.map(s=>Math.max(...s.values,0)));
+    svgLineChart($('contHourly'), series, labels, {yMax:yMax});
+  } else {
+    $('contHourly').innerHTML = '<div class="sub">no hourly metrics rows (asleep whole window / retention)</div>';
+  }
+  // daily: uptime h (derived from mem byte-s ÷ plausible GiB — instead use metrics when present;
+  // billing dataset gives cost directly) → bar chart cost + line uptime
+  if (D.containers.daily.length) {
+    const days = D.containers.daily.slice(-14);
+    const labels = days.map(d=>d.date.slice(5));
+    const costs = days.map(d=>contDayCost(d));
+    svgBarChart($('contDaily'), labels, costs.map(c=>c*1000)); // $ milli-units for visibility
+    // weekly cost (4w)
+    const wk = {};
+    D.containers.daily.forEach(d=>{
+      const dt = new Date(d.date+'T00:00:00Z');
+      const mon = new Date(dt); mon.setUTCDate(dt.getUTCDate()-dt.getUTCDay()+1);
+      const k = mon.toISOString().slice(0,10);
+      wk[k]=(wk[k]||0)+contDayCost(d);
+    });
+    const wkeys = Object.keys(wk).sort().slice(-4);
+    svgBarChart($('contWeekly'), wkeys.map(k=>k.slice(5)), wkeys.map(k=>wk[k]*1000));
+    // per-app table (30d)
+    const agg = {};
+    D.containers.daily.forEach(d=>{ for(const a in d.apps){
+      const s = agg[a] = agg[a] || {mem:0,disk:0,cpu:0,tx:0,last:d.date};
+      s.mem+=d.apps[a].mem; s.disk+=d.apps[a].disk; s.cpu+=d.apps[a].cpu;
+      s.tx+=d.apps[a].tx||0; s.last=d.date; }});
+    const rows = Object.entries(agg).sort((a,b)=>contCost(b[1].mem,b[1].disk,b[1].cpu)-contCost(a[1].mem,a[1].disk,a[1].cpu));
+    $('contTable').innerHTML = tableHTML(
+      ['app','mem GiB-s','disk GB-s','cpu vCPU-s','tx MB','est $ (30d)','last seen'],
+      rows,
+      r => '<td>'+r[0]+'</td><td class="num">'+(r[1].mem/1073741824).toFixed(0)+
+        '</td><td class="num">'+(r[1].disk/1e9).toFixed(0)+'</td><td class="num">'+
+        r[1].cpu.toFixed(1)+'</td><td class="num">'+(r[1].tx/1e6).toFixed(1)+
+        '</td><td class="num">'+fmt.usd(contCost(r[1].mem,r[1].disk,r[1].cpu))+'</td><td>'+
+        r[1].last+'</td>');
+  } else {
+    $('contDaily').innerHTML = '<div class="sub">no daily usage rows</div>';
+    $('contWeekly').innerHTML = '<div class="sub">no daily usage rows</div>';
+    $('contTable').innerHTML = '<div class="sub">no daily usage rows</div>';
+  }
+} else {
+  ['contHourly','contDaily','contWeekly','contTable'].forEach(id=>
+    $(id).innerHTML = '<div class="sub">no container analytics (token/lag) — nothing running, or retention window empty</div>');
 }
 
 // ── tables ──
@@ -683,6 +924,7 @@ def build_data(sweep: bool) -> dict:
     traj = collect_trajectories()
     cadence = collect_git_cadence()
     cf_daily = collect_cf_daily()
+    containers = collect_containers()
     coverage = coverage_snapshot(sweep)
     data = {
         "generated_utc": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M"),
@@ -703,6 +945,7 @@ def build_data(sweep: bool) -> dict:
         "traj": traj,
         "cadence": cadence,
         "cf_daily": cf_daily,
+        "containers": containers,
         "coverage": coverage,
         "missing": MISSING_FOR_PROD,
         "source_flags": [
@@ -711,6 +954,7 @@ def build_data(sweep: bool) -> dict:
             ["trajectories", bool(traj)],
             ["git-cadence", bool(cadence)],
             ["cf-analytics", bool(cf_daily)],
+            ["containers", bool(containers["daily"]) or bool(containers["hourly"])],
             ["coverage", bool(coverage)],
         ],
     }

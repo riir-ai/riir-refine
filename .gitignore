@@ -11,3 +11,5 @@ CLAUDE.md
 # Plan 342 T3.7 default output path (examples/plan342_t37_test_labeled_corpus.rs
 # writes ./t37_rows.jsonl when --out is omitted) — a run artifact, not source.
 t37_rows.jsonl
+.wrangler/
+scripts/__pycache__/
