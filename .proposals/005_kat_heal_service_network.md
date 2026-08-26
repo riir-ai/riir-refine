@@ -1,6 +1,6 @@
 # Proposal 005 — KAT: `cargo heal` as a token-metered, self-improving service network
 
-Status: **draft — revised 2026-08-25 after an adversarial substrate re-audit** (verdict: GO on the thesis and the de-gating decision; NO-GO on the "this is composition, not construction" framing). Four load-bearing claims were falsified by grep and are corrected in place, each marked *"correction"* at its point of use: (1) **§Payments** — `solana_watcher` has no verification machinery (`poll_inner` → `Ok(vec![])`); the rail is new construction. (2) **§KAT** — `AstChunker` is not the meter's substrate (wrong repo, default-off, emits chunks not word tokens); the meter is new code over raw span bytes, with new gate **G9**. (3) **§Mining** — the 53.38/85.17 ns figures belong to `ChainDivergenceDetector`, not `verify_no_split_head`; the quorum path is unmeasured and compile-bound. (4) **§caveat 2** — riir-ai Issue 742's vLLM win is the qwen3-8B stack, not Bonsai; that counterweight is withdrawn. Also added: **§Economics** two-currency separation + G7's `USD_inflow ≥ GPU + vendor` invariant, caveats **#14–#17** (boundary, mining-value copy, the free-build pricing inversion, citation hygiene), and Issue 041 (closed 2026-08-25 — resolution in git history).
+Status: **draft — revised 2026-08-25 after an adversarial substrate re-audit** (verdict: GO on the thesis and the de-gating decision; NO-GO on the "this is composition, not construction" framing). Four load-bearing claims were falsified by grep and are corrected in place, each marked *"correction"* at its point of use: (1) **§Payments** — `solana_watcher` has no verification machinery (`poll_inner` → `Ok(vec![])`); the rail is new construction. (2) **§KAT** — `AstChunker` is not the meter's substrate (wrong repo, default-off, emits chunks not word tokens); the meter is new code over raw span bytes, with new gate **G9**. (3) **§Mining** — the 53.38/85.17 ns figures belong to `ChainDivergenceDetector`, not `verify_no_split_head`; the quorum path is unmeasured and compile-bound. (4) **§caveat 2** — riir-ai Issue 742's vLLM win is the qwen3-8B stack, not Bonsai; that counterweight is withdrawn. Also added: **§Economics** two-currency separation + G7's `USD_inflow ≥ GPU + vendor` invariant, caveats **#14–#17** (boundary, mining-value copy, the free-build pricing inversion, citation hygiene), and Issue 041 (closed 2026-08-25 — resolution in git history). **Refined 2026-08-26 (corpus sync-back lifecycle):** the corpus return path is now specified — update-first with timeout, ETag-committed lease (the epoch BLAKE3 as the conditional tag), per-segment content-addressed delta fetch, atomic swap-or-nothing, delta-scoped boundary reheat (default ON) — see §Corpus sync-back lifecycle; normative for T1.5/T1.6, gate **G10** added.
 Blocked by: ~~[Issue 037](../.issues/037_e2e_self_evolve_adoption_proof.md) gate **A1 only**~~ — **CLEARED 2026-08-26**: Issue 037 CLOSED, all gates green (A1 cadence met on the 3rd distinct heal day: 08-24/25/26, commit + store evidence; record: [AGENTS.md](../AGENTS.md) §Issue 037 + git history). **Phase 0 is unblocked — open the Phase 0 plan when executing** (T0.5 the meter + T0.6 the charge model are the first construction). [Proposal 003](003_binary_only_distribution.md) (binary distribution — the delivery substrate) unblocked in the same close. The consumer-facing **fixer node's QUALITY blocker LIFTED 2026-08-26** — Issue 040 resolved: verify-filtered acceptance beats `decline` on the reachable-miss set on both CF arms (A raw 5/9, B pre-pass 6/9, decline 0/9; pre-pass dominates; [Bench 049](../.benchmarks/049_fixer_regate_poc.md)) — the remaining gate is the leak-posture sign-off (§Honest caveats #2b); **trainer nodes only at launch stands** (owner's call, 2026-08-25, until that sign-off). The re-gate POC ran + landed ([Issue 040](../.issues/040_fixer_regate_poc_cf_workers_ai.md), resolved + removed). Issue 041 (service-plane home) **RESOLVED 2026-08-25** — Option A adopted under the owner's execute order: the service plane lives in `../riir-dapps` (its §Owns widened to metered-service settlement in the same change); riir-clippy ships the **client half only**, allowlist unchanged. **Model pivot of record (owner directive, 2026-08-26):** `@cf/qwen/qwen3.8-27b` is the **sole designated** fixer/trainer model — the prior CF model is retired from this design (its measurements stand in [Bench 049](../.benchmarks/049_fixer_regate_poc.md); `src/cf_workers_ai.rs` `DEFAULT_MODEL` already targets qwen) — and the pivot carries the §The daily trainer window re-validation gates, because Issue 040 measured this model unusable *as-shipped* (thinking-token economics) and those gates are what make it usable. Added the same day: **§The daily trainer window** (scheduled Container setup/teardown, free-tier-first burn) + the **§Economics mint anchor** (outcomes, with burn as the attestation floor).
 Branch: `develop` (per global rule — no feature branches)
 Owner: unassigned
@@ -74,7 +74,7 @@ The user's instinct is correct and matches the substrate: **a CF Worker is enoug
 - **Free tier:** 100,000,000 KAT granted once per account key at `cargo heal login` — ≈ 100M code word tokens ≈ **~$300 of sticker value at Claude-Sonnet-class $3/M input** (the honest comparison: what *reading + fixing* that code via an API would cost). Our marginal cost is ~zero (local compute) — the grant is cheap for us *and* the conversion funnel: normal usage consumes it, mining extends it.
 - **Burns KAT (the sink that gives KAT value — owner's call, 2026-08-25):**
   1. **Modelless healing — 1 KAT per code word token processed.** The volume sink: every repo healed consumes KAT, so KAT demand = healing demand. Without this KAT has no value (nothing to spend it on at launch).
-  2. **Evolved-corpus lease** — a flat per-epoch lease (e.g. 1,000 KAT) for hot-push updates; deliberately small next to the token meter.
+  2. **Evolved-corpus lease** — a flat per-epoch lease (e.g. 1,000 KAT) for hot-push updates; deliberately small next to the token meter. Charged once per accepted epoch (a 304 never charges; the boundary reheat of the same transition never re-charges — §Corpus sync-back lifecycle).
   3. *(Blocked/later)* **Fixer-node LLM fixing** — LLM-token rates; see the fixer blocker (caveat #2).
 - **Enforcement posture (the honest half):** the meter is client-side accounting reconciled at sync; what the **server** enforces is *network membership* — accounts in good standing (synced burns plausible against synced data, balance ≥ 0) get corpus hot-push + mining settlement + cloud features. A patched binary freeloads the frozen corpus only, outside the economy (no earnings, no updates). See caveat #1.
 - **Earns KAT (mining):** syncing unproven heal data that later **proves new value** (see §Mining).
@@ -97,8 +97,54 @@ $ cargo heal account
                             KAT is prepaid service credit — not currency, not redeemable
   [QR] top up — card / Solana USDC:  https://kat.heal.gist.rs/pay?acct=9f3a…
 $ cargo heal sync            # push redacted batches, pull corpus lease (auto after N records)
+$ cargo heal update          # pull-only corpus refresh: lease check (If-None-Match) +
+                             # segment-delta fetch + atomic swap; prints the lease charge line
 $ cargo heal claim --tx <sig>  # Solana Pay claim (or auto-detected via reference on sync)
 ```
+
+### Corpus sync-back lifecycle (update-first, ETag-committed, boundary reheat — refined 2026-08-26)
+
+The return leg of the flywheel: how evolved corpus reaches clients. Designed in review (2026-08-26); normative for T1.5/T1.6, gated by **G10**.
+
+**Rules (load-bearing):**
+
+1. **Update-first; heal never waits.** The freshest corpus is fetched at run START inside a bounded window (default ~3–5 s, tuned at plan time; `--update-timeout <s>`, `0` = skip; `--no-update`). Timeout, offline, or skip → heal proceeds on the local corpus. The network may delay freshness; it may never block healing — G3's "offline is a mode" discipline extended to the *online* path. The whole phase is `kat_service`-gated + kill-switched (the `RIIR_HEAL_KAT` family): **CI never touches the network by default-or-hang.**
+2. **The epoch commitment IS the ETag.** Epochs are immutable and BLAKE3-committed (`Corpus::freeze()`/`thaw()`), so the conditional request is exact: `If-None-Match: <epoch BLAKE3>` → `304` (one RTT — the ~always case at weekly cadence) or `200` only when the epoch moved. A 200 body that does not hash to its own tag = detected tamper → reject, fall back to local. Two endpoints: `/lease` (tiny, `no-cache`) and `/epoch/<n>` (immutable body — CDN-cacheable; the mmorpg Issue 076 store-but-revalidate lesson applied to corpus).
+3. **Segments keep the 200 case small.** The check returns a manifest; the client diffs against local segments and fetches only new/changed ones (content-addressed — a weekly epoch carrying a handful of accepted rules is KB-scale, not a corpus re-download). A first-ever fetch (no local segments) gets a longer budget, or background-completes + stages for the next run — never applies mid-run.
+
+**The flow:**
+
+```
+cargo heal --fix <paths>
+  ├─ update phase (kat on, online; bounded by --update-timeout)
+  │    GET /lease   If-None-Match: <local epoch BLAKE3>
+  │    ├─ 304  → proceed instantly                                   (common)
+  │    ├─ 200  → manifest diff → fetch changed segments → per-segment
+  │    │        verify + epoch commitment → compat matrix → ATOMIC
+  │    │        pointer swap → retrieval index rebuild → proceed on E+1
+  │    ├─ timeout / offline → proceed on local corpus
+  │    └─ ESC  → skip update, proceed on local corpus
+  ├─ heal under the FROZEN snapshot — epoch pinned into trajectories
+  │    + meter records (the §The remote flow proof-object pin, extended
+  │    to run level); no mid-pass mutation, ever
+  └─ run-end: sync pushes redacted batches; if a NEW epoch landed
+       mid-run → delta-scoped boundary reheat (below — the rare path)
+```
+
+**Atomicity invariant — swap-or-nothing.** Download to temp → verify → compat check → pointer swap. Any interrupt before the swap is a no-op on the local corpus; there is no partially-applied corpus state. This is what makes ESC/timeout safe.
+
+**Boundary reheat (mid-run straddle; default ON).** If an epoch lands while a run is in flight, finishing on the old epoch and self-reporting "done" is a **false clean** — the worst output a healer can produce, because it is *invisible*; strictly worse than a visible second bill. So the run-end sync re-heats by default:
+
+- **Sequential frozen passes** — the E+1 pass runs over the post-E-fix tree. Each pass is internally deterministic; fixpoint composition and verify-revert coherence never mix rule sets mid-pass.
+- **Delta-scoped** — re-RETRIEVE each span under E+1 (cheap); only spans whose top-k candidate set *changed* re-enter propose/verify, and **only those spans' tokens re-bill**. The meter bills tokens *processed*; a re-glanced span with no new candidates was not re-processed. A straddle that changes nothing costs ~retrieval-only (≈0 KAT); one that lands real fixes bills exactly the spans that got real new work — cost the user would have paid on the next run anyhow.
+- **Itemized** — `pass 1 (epoch E): 12.5M tokens · pass 2 (epoch E+1): 0.4M tokens, +14 fixes`; the lease charge prints on its own line.
+- Knobs: `--no-reheat` (CI / cost-sensitive); `--corpus-epoch <E>` pins the epoch outright — same epoch every run, the CI-reproducibility form (implies skip-check).
+
+**`cargo heal update`** — the pull-only consumer's command (§Account mock): lease check + segment fetch + atomic swap + visible charge line (`corpus lease epoch N: −1,000 KAT`). `sync` stays bidirectional (push batches + pull lease); both share the T1.5/T1.6 machinery.
+
+**Interrupt semantics.** Timeout is the primary guard (robust, portable). ESC-during-update is sugar — terminal keypress capture in a cargo subcommand is portability mud (raw mode, Windows consoles) and mostly unreachable under a ~3–5 s budget; Ctrl-C keeps meaning "abort the command". A client-side TTL on the epoch check (re-check at most once per N minutes) is the known cheap follow-up if the per-invocation RTT ever annoys — 304s are ceremony for 99.9% of invocations.
+
+**Trainer-era note:** when corpus packs ship as `NeuronVessel`s (T3.3), the vessel's BLAKE3 commitment plays the ETag role unchanged — validation and swap stay run-boundary operations. The container changes; the lifecycle does not.
 
 ### Payments (card + Solana USDC; txhash as proof — #12 answered)
 
@@ -257,6 +303,7 @@ The trainer plane's bootstrap is a **daily window that burns the 10,000-neurons/
 - **G7 (economics simulation):** decay + first-come + burn-split simulation over ≥10⁴ synthetic contributors: no pool overdraw, monotonic early-miner advantage, budget bounded under free-tier farming at cap parameters; sensitivity table recorded in `.benchmarks/`. **Two-currency invariant is the pass/fail line, not a footnote:** the simulation must report `USD_treasury_inflow ≥ trainer_GPU_cost + vendor_cost` per epoch across the price/duty-cycle grid (§Economics), with the KAT reward pool accounted as a **liability re-mint, never as cash**. A run that balances the pool in KAT while USD inflow underfunds the fleet is a **FAIL**, not a pass with a note.
 - **G8 (e2e adoption realism):** one full external-user simulation from clean machine: install (both 1-liners) → login (grant) → heal (modelless, free) → sync (mine) → simulated pay (Surfpool USDC + Stripe test mode) → corpus lease refresh — scripted, in CI, green.
 - **G9 (meter reproducibility — NEW, 2026-08-25):** the billing counter is money, so it must be a **function of pinned inputs only**. (a) Same repo + same binary version + same corpus epoch → **bit-identical** token count across runs, hosts, and OSes (M3 + 4090/Windows, since line endings and path separators must not move the count). (b) A version bump that changes the count is **recorded as an explicit, versioned delta** in the meter's changelog — never a silent reprice. (c) Spans that fail to parse still bill (the raw-bytes rule, §KAT) — a fixture of deliberately unparseable spans must bill non-zero and identically on both hosts. (d) Client-side counts **never mint or spend** (caveat #9); G9 governs the *number*, not its authority. Without G9 the same repo can bill differently across releases with no audit trail — an unarguable dispute.
+- **G10 (sync-back lifecycle — NEW, 2026-08-26):** the update/reheat contract is money- and correctness-adjacent, so it is pinned: (a) **304 fast path** — no body transfer, no lease charge, and a stalled-server fixture must start healing within the timeout budget on the local corpus; (b) **atomicity** — kill the process at any point during fetch/verify (fault injection) → the next run sees either the old epoch or a fully-verified new one, never partial; (c) **tamper** — a 200 body that does not hash to its own ETag/commitment is rejected with fallback-to-local; (d) **reheat delta-billing** — a straddle fixture with no changed candidate sets bills ≈0 KAT; one with N changed spans re-bills exactly those spans' tokens, deterministically (the G9 discipline); (e) **itemization** — output separates pass-1/pass-2 token counts and the lease charge line; no silent aggregates.
 
 ## What ships now (riir-clippy primary) vs deferred
 
@@ -295,8 +342,8 @@ The trainer plane's bootstrap is a **daily window that burns the 10,000-neurons/
 - [ ] T1.2 [riir-dapps] Ledger DO (`R2Wal`) + ingest worker + 10-min anchor wiring; chaos sweep + soak (G1)
 - [ ] T1.3 [riir-dapps] Stripe Checkout + webhook mint (idempotent by event id) + payment page
 - [ ] T1.4 [riir-dapps] Solana Pay — **from-scratch verification** (the shipped watcher parses nothing; see §Payments): reference/memo flow, then each check as its own testable unit — (a) tx **finalized**, (b) SPL-USDC transfer **to our payee**, (c) amount ≥ price, (d) **reference present** and bound to one claim, (e) signature **unseen** (replay table). Plus: decide the signature width (`[u8; 64]` vs `blake3(sig)` + rename to `tx_sig_hash` — **never** a 32-byte truncation), keep the mint path integer-only (no `f64` cents), Surfpool e2e + the 4 negative fixtures (wrong payee / short amount / missing reference / replayed sig) all rejecting
-- [ ] T1.5 [riir-dapps channel + riir-clippy consumer] Corpus lease + hot-push channel (versioned, BLAKE3-committed, compat matrix)
-- [ ] T1.6 [riir-clippy] QR + out-of-KAT warn UX; `sync`/`claim` live; G2/G3/G8 gates
+- [ ] T1.5 [riir-dapps channel + riir-clippy consumer] Corpus lease + hot-push channel (versioned, BLAKE3-committed, compat matrix) — per the §Corpus sync-back lifecycle: `/lease` conditional endpoint (`If-None-Match: <epoch BLAKE3>` → 304/200), immutable CDN-cacheable `/epoch/<n>` bodies, per-segment content-addressed manifest diff, client-side atomic swap-or-nothing, G10 fixtures
+- [ ] T1.6 [riir-clippy] QR + out-of-KAT warn UX; `sync`/`update`/`claim` live (`update` = pull-only lease refresh with visible charge line); update-first phase (`--update-timeout`, default ~3–5 s, `0` = skip; `--no-update`); delta-scoped boundary reheat default ON (`--no-reheat`, `--corpus-epoch <E>` pin); G2/G3/G8/G10 gates
 
 ### Phase 2 — mining + proof
 - [ ] T2.0 Daily trainer window — the §The daily trainer window loop as the single-node bootstrap (local cron first → scheduled Container setup/teardown once the service plane exists; own repos until T3.2 leak-posture; can land independently of T0.2–T0.4 — it rides the AI-call surface, not the sync surface)
@@ -327,14 +374,14 @@ Blocked on: (a) ~~quality~~ **MET 2026-08-26** — Issue 040's unblock bar (*ver
 3c. **Unit conflation in the economics** (KAT liability vs USD cash) would let a G7 pass hide an underfunded trainer fleet. Mitigation: the §Economics two-currency table + G7's explicit `USD_inflow ≥ GPU + vendor` pass/fail line.
 4. **Privacy incident** (secret in synced payload) would be existential for trust. Mitigation: G4 adversarial gate, opt-in policy, span minimization; breach runbook.
 5. **Poisoning/griefing** degrades corpus quality → Mitigation: quorum + Withdrawn absorbing tier + regression gate; measure residual (caveat #6).
-6. **Perf risk:** hot-push corpus validation on client must stay off the heal hot path (lease check once per run, not per span).
+6. **Perf risk:** hot-push corpus validation on client must stay off the heal hot path — formalized as the §Corpus sync-back lifecycle's update-first phase (one bounded conditional request per run at start; the boundary reheat is delta-scoped retrieval, never a per-span lease check).
 7. **Architectural risk — workspace coupling:** putting the worker in riir-clippy pulls `riir-neuron-db`/`riir-chain-sdk` into the dev-tool repo's graph. Mitigation: worker is a separate workspace member (its dep closure never touches the healer's), boundary-guard at every landing; esc to a new repo if the closure leaks.
 8. **Cloudflare/Stripe/Solana outages** → client degrades to local mode (by design); payment outage blocks new spend, not usage of leased corpus.
 
 ## Release & maintenance (MA) lifecycle
 
 - **Versioning:** binary semver (Proposal 003 channels) **and** an independent **corpus semver**; a compat matrix (min binary per corpus epoch) is enforced at lease time — a stale binary gets the last compatible corpus, never a broken one.
-- **Channels:** `curl|sh` / `iwr|iex` + brew/scoop for binaries (003); **corpus hot-push needs no release** — rules land via the lease (the flywheel's release cadence is data, not code). Emergency corpus rollback = serve the previous epoch (segments are immutable + addressed).
+- **Channels:** `curl|sh` / `iwr|iex` + brew/scoop for binaries (003); **corpus hot-push needs no release** — rules land via the lease (the flywheel's release cadence is data, not code). Emergency corpus rollback = serve the previous epoch (segments are immutable + addressed). The wire form is the §Corpus sync-back lifecycle: conditional request keyed on the epoch BLAKE3 (304 fast path) + per-segment content-addressed delta fetch.
 - **Cadence:** corpus weekly (or per accepted-mining-batch); binary minor monthly; security patches ASAP out-of-band; chain program changes follow the pinned-discriminant + tombstone discipline (never reuse tags/ids).
 - **Support:** N-2 binary versions receive corpus leases; older = frozen (still fully usable offline — the honesty dividend).
 - **Ops:** SLOs — ingest p99 < 100 ms, mint p95 < 30/60 s, corpus-push success ≥ 99.5%, trainer queue depth alert; quarterly mint-key rotation; `self_evolve_audit.sh` extended with network sections (per-epoch proven/unproven/rejected, pool accounting); status page + `cargo heal status` subcommand.
