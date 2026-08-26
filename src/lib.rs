@@ -208,6 +208,13 @@ pub mod traj_store;
 #[cfg(feature = "score_bench")]
 pub mod score_bench;
 
+/// Plan 356 A1 — PAV (process-advantage) dataset curation for the L4
+/// fixer: (prefix, MC-Q) pairs over the frozen score-bench spans, the
+/// `.heal/` store, and extra miss dumps. The GPU half (daemon rollouts)
+/// runs via `examples/pav_data_curate.rs`; the module + tests are CPU.
+#[cfg(feature = "pav_data")]
+pub mod pav_data;
+
 /// Behavioural equivalence for candidate fixes (Plan 336 T5.1/T5.3's named
 /// blocker). Always compiled: it is CPU-only, needs no model, and a promotion
 /// gate must not be able to skip it via a feature flag.

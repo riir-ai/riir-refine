@@ -178,6 +178,15 @@ score_bench = ["clippy_verify", "latent_retrieval", "clippy_lints", "rust_perf"]
 # and G1 is unproven (riir-train Bench 462/465).
 l4_lora = []
 
+# Plan 356 A1 — PAV (process-advantage) dataset curation for the L4 fixer
+# (arXiv:2410.08146 / katgpt-rs Research 509): (prefix, MC-Q) pairs over the
+# frozen score-bench spans + the `.heal/` store + extra miss dumps, with
+# first-pit curation and the free vocabulary judge. The rollout engine is
+# seam-shaped: `examples/pav_data_curate.rs` drives the real daemon (the GPU
+# campaign) or a seeded mock (dry-run/tests). Opt-in — the daemon campaign
+# is a deliberate 30-40h exclusive-4090 budget, never a default build.
+pav_data = ["l4_lora", "score_bench"]
+
 # Issue 040 — the fixer re-gate POC: partial-credit eval harness + modelless
 # pre-pass prompts + the CF Workers AI REST client + the arm-C daemon client.
 # Composes shipped substrate (HealPipeline miss classification, LatentMatcher
@@ -313,6 +322,10 @@ required-features = ["rust_perf_bench"]
 [[example]]
 name = "clippy_verify_demo"
 required-features = ["clippy_verify"]
+
+[[example]]
+name = "pav_data_curate"
+required-features = ["pav_data"]
 
 # Phase 3: kernel_opt domain demo. Demonstrates the routed heal pipeline:
 # router → narrowed candidates → drafter → validator + thermal tier.
