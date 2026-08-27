@@ -4,6 +4,8 @@
 **Verdict:** **Gain** — survey reveals riir-clippy's gap (zero self-evolution); the fix is a latent-first loop borrowing patterns from riir-agents + riir-rag, implemented locally (boundary-compliant).
 **Date:** 2026-08-11
 
+> **PASS-Redirects (synthesis):** Ning, Tieu, Fu, Wei et al. [arXiv:2605.18747 "Code as Agent Harness: Toward Executable, Verifiable, and Stateful Agent Systems"] (UIUC+Meta+Stanford, 102-page survey, 2026-05) — the field-level taxonomy arriving AFTER this note's loop shipped: `cargo heal` IS an instance of its thesis (§3.4 PEV loop = `fix_verify` compile gate; §3.5 AHE deep telemetry/Evolution Agent/governed mutation = TrajStore + LatentSkillEvolution + EvidenceTier + score-bench; §5.2.1 oracle adequacy = the clippy oracle + Bench 041 premise probe; §5.2.3 self-evolution-without-regression = Issue-037 E1–E5 + A1 cadence + absorbing-Withdrawn tiers). PASS — the 2608.03392 gap it would have revealed is closed; its un-distilled citations (AutoHarness/Meta-Harness/AHE) are the AIDE² LLM-dependent class per [katgpt-rs/.research/440](../../katgpt-rs/.research/440_AIDE2_Recursive_Self_Improvement_PASS.md).
+
 ## TL;DR
 
 The survey organizes self-evolving LLM coding agents into a 5-category taxonomy
