@@ -57,6 +57,15 @@ ureq = { version = "2.9", optional = true, features = ["json"] }
 # `ssh_key::rand_core::OsRng`. Optional + feature-gated (`kat_service`).
 ssh-key = { version = "0.6", optional = true, features = ["ed25519", "std", "getrandom"] }
 
+# Proposal 005 Phase 1 T1.6 (Plan 040): the out-of-KAT top-up QR — terminal
+# ASCII render of the payment-page URL. Third-party crate, NOT
+# boundary-gated (the kat_service/ssh-key precedent). default-features =
+# false: the dense unicode renderer is UNGATED core (no `image`/`svg`/`pic`
+# features — qrcode's defaults would drag the heavy `image` crate into the
+# tree for nothing we use). Optional + feature-gated (`kat_transport`) —
+# kat_service itself stays dep-light.
+qrcode = { version = "0.14", optional = true, default-features = false }
+
 # ── Ternary inference arm (Bench 010) ────────────────────────────────────
 # Real katgpt ternary generation on the clippy task, so llama.cpp can be
 # compared against OUR inference stack rather than against the retriever.
@@ -210,6 +219,16 @@ contrastive_scope = ["katgpt-core/contrastive_scope"]
 # Accounting-only per G9d — client counts never mint or spend. Default-off
 # keeps the default build bit-identical with zero KAT code compiled (G3).
 kat_service = ["dep:ssh-key"]
+
+# Proposal 005 Phase 1 T1.6 (Plan 040): the corpus-lease TRANSPORT — the
+# HTTP client (reuses the existing optional ureq dep from cf_workers_ai) +
+# the top-up QR render (qrcode). A sub-feature so `kat_service` stays
+# deliberately dep-light (meter/charge/account/store work std-only); the
+# update phase + reheat network leg + QR only exist in kat_transport builds.
+# NO new riir dep — the lease wire format is a MIRRORED versioned
+# serialization contract pinned by cross-repo golden vectors (see
+# src/kat_lease_client.rs §golden).
+kat_transport = ["dep:ureq", "dep:qrcode", "kat_service"]
 
 # Plan 005 T3.5 option 3: 768-D Bonsai dense rerank on top of the 8-D
 # ShardIndex pre-filter. HEAVY — loads the ~6.7 GB Ternary-Bonsai-27B GGUF

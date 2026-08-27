@@ -19,6 +19,12 @@ use crate::domain::{HealDomain, HealEntry};
 use super::corpus_index::{RuleIndex, ScoredRule};
 use super::domain_router::{DomainId, DomainRouter, RoutingEmbedding, SpectralOrder};
 
+/// A leased epoch's per-domain corpus overlay (T1.6): domain → retrieval
+/// triples. Mirrors [`crate::kat_lease_client::DomainTriples`] one layer up
+/// (that module is `kat_service`-only; this alias keeps the matcher's
+/// surface self-contained under `latent_retrieval` alone).
+pub type DomainOverlay = [(DomainId, Vec<(String, String, String)>)];
+
 /// One suggestion bundle for one code span.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SpanSuggestion {
@@ -98,6 +104,29 @@ impl LatentMatcher {
         Self::from_enabled_domains_with(super::corpus_index::RetrievalConfig::default())
     }
 
+    /// Build with a per-domain corpus OVERLAY (Proposal 005 T1.6, Plan 040 —
+    /// the corpus-lease consumer's install point).
+    ///
+    /// An epoch is a FULL-corpus state per covered domain: a domain with a
+    /// non-empty overlay entry REPLACES its compiled-in seed corpus with the
+    /// leased entries (deterministic — the same epoch + same entries build a
+    /// bit-identical index); a domain with NO overlay entry keeps the
+    /// compiled-in seed. Overlay entries for a feature-OFF domain are ignored
+    /// (that domain compiles no index at all). This is what makes the leased
+    /// epoch swappable at a run boundary + pinnable (`--corpus-epoch`) for CI
+    /// reproducibility.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error `String` if no domain is feature-enabled, or if any
+    /// enabled domain's [`RuleIndex::build_with`] fails.
+    #[allow(clippy::too_many_lines)]
+    pub fn from_enabled_domains_with_overlay(
+        overlay: &DomainOverlay,
+    ) -> Result<Self, String> {
+        Self::build_with_config(super::corpus_index::RetrievalConfig::default(), Some(overlay))
+    }
+
     /// [`from_enabled_domains`](Self::from_enabled_domains) with an explicit
     /// retrieval config — the Plan 005 T3.5 A/B constructor.
     ///
@@ -109,6 +138,32 @@ impl LatentMatcher {
     pub fn from_enabled_domains_with(
         config: super::corpus_index::RetrievalConfig,
     ) -> Result<Self, String> {
+        Self::build_with_config(config, None)
+    }
+
+    /// The shared constructor core. `overlay` (when `Some`) replaces the
+    /// compiled-in corpus per covered domain — see
+    /// [`from_enabled_domains_with_overlay`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an error `String` if no domain is feature-enabled, or if any
+    /// enabled domain's [`RuleIndex::build_with`] fails.
+    ///
+    /// [`from_enabled_domains_with_overlay`]: Self::from_enabled_domains_with_overlay
+    #[allow(clippy::too_many_lines)]
+    fn build_with_config(
+        config: super::corpus_index::RetrievalConfig,
+        overlay: Option<&DomainOverlay>,
+    ) -> Result<Self, String> {
+        // Overlay entries for a domain, when present + non-empty (else None
+        // → the compiled-in seed stands).
+        let overlay_for = |d: DomainId| -> Option<Vec<(String, String, String)>> {
+            overlay
+                .and_then(|o| o.iter().find(|(od, _)| *od == d))
+                .map(|(_, v)| v.clone())
+                .filter(|v| !v.is_empty())
+        };
         let mut router_domains = Vec::new();
         let mut rule_book = std::collections::HashMap::new();
 
@@ -140,16 +195,18 @@ impl LatentMatcher {
         let clippy = index_domain!(
             clippy,
             DomainId::Clippy,
-            crate::domains::clippy_lints::ClippyLintDomain::build_corpus()
-                .into_iter()
-                .map(|e| {
-                    (
-                        e.rule_id().to_string(),
-                        e.buggy_code().to_string(),
-                        e.fixed_code().to_string(),
-                    )
-                })
-                .collect::<Vec<_>>()
+            overlay_for(DomainId::Clippy).unwrap_or_else(|| {
+                crate::domains::clippy_lints::ClippyLintDomain::build_corpus()
+                    .into_iter()
+                    .map(|e| {
+                        (
+                            e.rule_id().to_string(),
+                            e.buggy_code().to_string(),
+                            e.fixed_code().to_string(),
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            })
         );
         #[cfg(not(feature = "clippy_lints"))]
         let clippy = None;
@@ -158,16 +215,18 @@ impl LatentMatcher {
         let perf = index_domain!(
             perf,
             DomainId::Perf,
-            crate::domains::rust_perf::RustPerfDomain::build_corpus()
-                .into_iter()
-                .map(|e| {
-                    (
-                        e.rule_id().to_string(),
-                        e.buggy_code().to_string(),
-                        e.fixed_code().to_string(),
-                    )
-                })
-                .collect::<Vec<_>>()
+            overlay_for(DomainId::Perf).unwrap_or_else(|| {
+                crate::domains::rust_perf::RustPerfDomain::build_corpus()
+                    .into_iter()
+                    .map(|e| {
+                        (
+                            e.rule_id().to_string(),
+                            e.buggy_code().to_string(),
+                            e.fixed_code().to_string(),
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            })
         );
         #[cfg(not(feature = "rust_perf"))]
         let perf = None;
@@ -176,16 +235,18 @@ impl LatentMatcher {
         let kernel = index_domain!(
             kernel,
             DomainId::Kernel,
-            crate::domains::kernel_opt::KernelOptDomain::build_corpus()
-                .into_iter()
-                .map(|e| {
-                    (
-                        e.rule_id().to_string(),
-                        e.buggy_code().to_string(),
-                        e.fixed_code().to_string(),
-                    )
-                })
-                .collect::<Vec<_>>()
+            overlay_for(DomainId::Kernel).unwrap_or_else(|| {
+                crate::domains::kernel_opt::KernelOptDomain::build_corpus()
+                    .into_iter()
+                    .map(|e| {
+                        (
+                            e.rule_id().to_string(),
+                            e.buggy_code().to_string(),
+                            e.fixed_code().to_string(),
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            })
         );
         #[cfg(not(feature = "kernel_heal"))]
         let kernel = None;
@@ -194,21 +255,27 @@ impl LatentMatcher {
         let sec = index_domain!(
             sec,
             DomainId::Sec,
-            crate::domains::sec::SecDomain::build_corpus()
-                .into_iter()
-                .map(|e| {
-                    (
-                        e.rule_id().to_string(),
-                        e.buggy_code().to_string(),
-                        e.fixed_code().to_string(),
-                    )
-                })
-                .collect::<Vec<_>>()
+            overlay_for(DomainId::Sec).unwrap_or_else(|| {
+                crate::domains::sec::SecDomain::build_corpus()
+                    .into_iter()
+                    .map(|e| {
+                        (
+                            e.rule_id().to_string(),
+                            e.buggy_code().to_string(),
+                            e.fixed_code().to_string(),
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            })
         );
         #[cfg(not(feature = "sec"))]
         let sec = None;
 
         if router_domains.is_empty() {
+            // Single-domain-less feature combos (latent_retrieval alone):
+            // the config + overlay are only consumed inside `index_domain!`
+            // — reference them so the no-domain build stays warning-clean.
+            let _ = (&config, &overlay_for);
             return Err(
                 "LatentMatcher: no domains enabled (need at least one of clippy_lints/rust_perf/kernel_heal)"
                     .to_string(),
@@ -428,6 +495,68 @@ pub fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {
             m.domains().len() >= 2,
             "expected ≥2 enabled domains, got {:?}",
             m.domains()
+        );
+    }
+
+    #[test]
+    fn overlay_replaces_the_covered_domain_and_keeps_the_rest() {
+        // T1.6 (Plan 040): a leased epoch is a full-corpus state per
+        // COVERED domain — the overlay replaces clippy's seed entirely
+        // (the leased rule is retrievable, a seed rule is NOT), while the
+        // uncovered perf domain keeps its compiled-in seed.
+        let overlay = vec![
+            (
+                DomainId::Clippy,
+                vec![
+                    (
+                        "lease-fixture-rule".to_string(),
+                        "fn f() -> u8 { return 7; }".to_string(),
+                        "fn f() -> u8 { 7 }".to_string(),
+                    ),
+                ],
+            ),
+        ];
+        let mut m =
+            LatentMatcher::from_enabled_domains_with_overlay(&overlay).expect("build");
+        let (_, by_domain) = m.suggest_span("fn f() -> u8 { return 7; }", 3);
+        let clippy = by_domain
+            .iter()
+            .find(|(d, _)| *d == DomainId::Clippy)
+            .expect("clippy index enabled");
+        let ids: Vec<&str> = clippy.1.iter().map(|r| r.rule_id.as_str()).collect();
+        assert_eq!(
+            ids,
+            vec!["lease-fixture-rule"],
+            "the overlay REPLACES the seed — exactly the leased rule is retrievable"
+        );
+        assert_eq!(
+            m.rule_book("lease-fixture-rule").expect("in book").fixed_code,
+            "fn f() -> u8 { 7 }"
+        );
+        // The uncovered domain keeps its seed.
+        let perf = by_domain.iter().find(|(d, _)| *d == DomainId::Perf);
+        assert!(perf.is_some_and(|(_, rules)| !rules.is_empty()), "perf seed stands");
+    }
+
+    #[test]
+    fn empty_overlay_entries_make_no_statement() {
+        // An EMPTY entries list is "no statement" — the seed stands (the
+        // pack contract: empty ≠ remove-everything).
+        let overlay = vec![(DomainId::Clippy, vec![])];
+        let mut m =
+            LatentMatcher::from_enabled_domains_with_overlay(&overlay).expect("build");
+        let (_, by_domain) = m.suggest_span("fn f() -> u8 { return 7; }", 3);
+        let clippy = by_domain
+            .iter()
+            .find(|(d, _)| *d == DomainId::Clippy)
+            .expect("clippy index enabled");
+        assert!(
+            clippy
+                .1
+                .iter()
+                .take(3)
+                .any(|r| r.rule_id == "needless_return"),
+            "the seed corpus still serves the span"
         );
     }
 

@@ -75,7 +75,12 @@ echo "=== Layer 5c: KAT integration gates (all-features) ==="
 # alloc-free gate path) — same class, same layer.
 # Plan 031 A3 adds the trainer-drain bin's unit tests (the offline backlog/
 # priority/retry-cap gates; the dry-run itself is offline + CI-able).
-cargo test --all-features --test kat_redact_g4 --test kat_sync_payload_g4 --test kat_pending_estimator_g4 --test kat_meter_g9 --test kat_meter_g2_alloc --test kat_account_g9 --test llm_spend_gates --test llm_spend_g2_alloc --bin kat_drain
+# Plan 040 (T1.6) adds the lease-client G10 binary — the std-TCP mock
+# server fixtures (304 fast path / atomicity / tamper / reheat delta-billing
+# / itemization + the sync/claim wire shapes + G3 offline silence). The
+# mock binds 127.0.0.1 ephemeral (no external network; the run-start phase
+# itself never runs in CI — no test drives main's network path).
+cargo test --all-features --test kat_redact_g4 --test kat_sync_payload_g4 --test kat_pending_estimator_g4 --test kat_meter_g9 --test kat_meter_g2_alloc --test kat_account_g9 --test kat_lease_client_g10 --test llm_spend_gates --test llm_spend_g2_alloc --bin kat_drain
 echo "✓ KAT integration gates pass"
 
 echo

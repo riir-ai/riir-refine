@@ -192,6 +192,17 @@ pub mod kat_sync_payload;
 #[cfg(all(feature = "kat_service", feature = "latent_retrieval"))]
 pub mod kat_pending_estimator;
 
+// Proposal 005 Phase 1 T1.6 (Plan 040): the corpus-lease CLIENT half — the
+// wire mirror of riir-dapps' lease.rs serialization (pinned by cross-repo
+// golden vectors; riir-dapps is NOT a dep — the boundary allowlist), the
+// local lease store with the swap-or-nothing pointer install, the corpus
+// pack contract, the delta-scoped reheat planner, the lease-charge
+// projection, + (behind `kat_transport`) the HTTP transport + the bounded
+// update phase + the QR render. `kat_service` alone gets everything except
+// the network/QR (std + blake3 + serde only — the feature stays dep-light).
+#[cfg(feature = "kat_service")]
+pub mod kat_lease_client;
+
 // Plan 019 T4.3: the neuron-db trajectory store — the DURABLE backend for
 // `--fix-compile` self-evolution (LocalKvStore encrypted WAL + BM25 + the
 // 8-D sigmoid-dot latent axis). Behind `latent_retrieval` (the dep-light

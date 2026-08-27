@@ -43,9 +43,10 @@ use riir_clippy::edit_emitter::RuleEdit;
 use riir_clippy::draft::{DomainId, LatentMatcher, SpanSuggestion};
 use riir_clippy::EvolveRecorder;
 
-/// Proposal 005 Phase 0 T0.1 (Plan 025): the identity subcommands — parsed
-/// unconditionally so a `kat_service`-off build errors cleanly instead of
-/// treating `login` as a scan path (the `--fix-compile`-off precedent).
+/// Proposal 005 Phase 0 T0.1 (Plan 025) + Phase 1 T1.6 (Plan 040): the KAT
+/// subcommands — parsed unconditionally so a `kat_service`-off build errors
+/// cleanly instead of treating `login` as a scan path (the `--fix-compile`-off
+/// precedent).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum KatCommand {
     /// Generate/import the account key + claim the grant (local projection).
@@ -53,6 +54,13 @@ enum KatCommand {
     /// Print the local account view (+ repo-local charge projection when a
     /// path/cwd has one).
     Account,
+    /// Pull-only corpus lease refresh (T1.6): lease check + segment fetch +
+    /// atomic swap + the visible charge line.
+    Update,
+    /// Bidirectional (T1.6): push redacted batches + pull the lease.
+    Sync,
+    /// Compose + submit (or queue) a payment claim.
+    Claim,
 }
 
 #[cfg(feature = "fix_verify")]
@@ -262,6 +270,216 @@ fn run_kat_account(paths: &[PathBuf]) {
             "local burn:          (no charge ledger at {} — heal a repo to start one)",
             charge_path.display()
         );
+    }
+}
+
+/// Proposal 005 T1.6 (Plan 040): `cargo heal update` — the pull-only lease
+/// refresh. The explicit-command budget is generous (30s) vs the run-start
+/// phase's ~4s: a user asking for an update is waiting for it.
+#[cfg(feature = "kat_transport")]
+fn run_kat_update() {
+    use riir_clippy::kat_lease_client::{
+        run_update_phase, HttpLeaseTransport, LeaseCharge, LeaseStore,
+    };
+
+    let root = resolve_heal_root(&[]);
+    let store = LeaseStore::open(&root);
+    let mut charge = LeaseCharge::open(&store);
+    let url = riir_clippy::kat_lease_client::service_url_for_command();
+    let transport = HttpLeaseTransport::new(&url, 30);
+    let current = store.current_epoch().unwrap_or(0);
+    let outcome = run_update_phase(&transport, &store, &mut charge, false, None);
+    match outcome.status {
+        riir_clippy::kat_lease_client::UpdateStatus::NotModified => {
+            println!("corpus lease: up to date (epoch {current}, 304 — no charge)");
+        }
+        riir_clippy::kat_lease_client::UpdateStatus::Applied { epoch, charge_kat } => {
+            println!(
+                "{}",
+                riir_clippy::kat_lease_client::LeaseCharge::line(epoch, charge_kat)
+            );
+            println!(
+                "corpus lease: epoch {epoch} installed atomically — the retrieval index rebuilds on the next run"
+            );
+        }
+        riir_clippy::kat_lease_client::UpdateStatus::Skipped(reason) => {
+            println!("corpus lease: skipped — {reason}");
+        }
+        riir_clippy::kat_lease_client::UpdateStatus::Failed(e) => {
+            eprintln!("corpus lease: {e}");
+            eprintln!("corpus lease: proceeding on the local corpus (offline is a mode, not a failure)");
+        }
+    }
+    if let Err(e) = charge.save() {
+        eprintln!("corpus lease: could not persist the charge ledger: {e}");
+    }
+}
+
+/// Proposal 005 T1.6 (Plan 040): `cargo heal sync` — bidirectional. Push:
+/// build the redacted payload from the repo trajectory store (the
+/// sanctioned egress path — every row gated) + POST /sync; with the service
+/// plane deferred the payload is validated + queued locally
+/// (`.heal/outbox/`) and the honest state prints. Pull: the lease refresh
+/// (shared with `update`). The sync watermark advances ONLY on a real push
+/// acceptance (queued batches stay "pending" — the honest accounting).
+#[cfg(all(feature = "kat_transport", feature = "latent_retrieval"))]
+fn run_kat_sync() {
+    use riir_clippy::kat_lease_client::{
+        queue_outbox, run_update_phase, HttpLeaseTransport, LeaseCharge, LeaseStore,
+        LeaseTransport,
+    };
+    use riir_clippy::kat_redact::SpanOrigin;
+    use riir_clippy::kat_sync_payload::SyncPayloadBuilder;
+
+    let root = resolve_heal_root(&[]);
+    let store = LeaseStore::open(&root);
+    let mut charge = LeaseCharge::open(&store);
+    let url = riir_clippy::kat_lease_client::service_url_for_command();
+    let transport = HttpLeaseTransport::new(&url, 30);
+
+    // ── push half ──────────────────────────────────────────────────────
+    let kv = root.join(".heal").join("trajectories.kv");
+    if !kv.exists() {
+        println!("sync: no trajectory store at {} — run any --fix in this repo first", kv.display());
+    } else {
+        match riir_clippy::traj_store::TrajStore::open(&root) {
+            Ok((traj, bad)) => {
+                if bad > 0 {
+                    eprintln!("sync: {bad} corrupt row(s) skipped");
+                }
+                let rows = traj.dump();
+                let loaded = riir_clippy::kat_redact::RedactionGate::discover(None);
+                if loaded.warning.is_some() {
+                    eprintln!("sync: redaction policy — {}", loaded.warning.clone().unwrap_or_default());
+                }
+                let payload = SyncPayloadBuilder::new(&loaded.gate, SpanOrigin::OwnRepo)
+                    .build(&rows);
+                println!(
+                    "sync payload: {} row(s) included, {} blocked (batch {})",
+                    payload.rows_included,
+                    payload.rows_blocked,
+                    &payload.commitment[..12.min(payload.commitment.len())]
+                );
+                if payload.rows_included > 0 {
+                    match transport.post_sync(&payload.ndjson) {
+                        riir_clippy::kat_lease_client::HttpResponse::Ok(_) => {
+                            println!("sync: push accepted by {url}");
+                            // Real acceptance → advance the watermark (the
+                            // pushed rows are no longer "pending-unsynced").
+                            let wm = riir_clippy::kat_pending_estimator::SyncWatermark::from_payload(
+                                &payload,
+                            );
+                            if let Err(e) = wm.save(&root.join(".heal").join("kat_sync_watermark.json")) {
+                                eprintln!("sync: watermark save failed: {e}");
+                            }
+                        }
+                        resp => {
+                            let queued = queue_outbox(&root, &payload.ndjson, &payload.commitment)
+                                .ok().map_or_else(|| "(queue write failed)".to_string(), |p| p.display().to_string());
+                            println!(
+                                "sync: push NOT accepted ({resp:?}) — the service plane is not yet live;"
+                            );
+                            println!("sync: payload queued locally at {queued} (submits when the Worker lands; the watermark does not advance)");
+                        }
+                    }
+                }
+            }
+            Err(e) => eprintln!("sync: trajectory store unreadable: {e}"),
+        }
+    }
+
+    // ── pull half (shared with `update`) ───────────────────────────────
+    let current = store.current_epoch().unwrap_or(0);
+    let outcome = run_update_phase(&transport, &store, &mut charge, false, None);
+    match outcome.status {
+        riir_clippy::kat_lease_client::UpdateStatus::NotModified => {
+            println!("corpus lease: up to date (epoch {current}, 304 — no charge)");
+        }
+        riir_clippy::kat_lease_client::UpdateStatus::Applied { epoch, charge_kat } => {
+            println!(
+                "{}",
+                riir_clippy::kat_lease_client::LeaseCharge::line(epoch, charge_kat)
+            );
+        }
+        riir_clippy::kat_lease_client::UpdateStatus::Skipped(reason) => {
+            println!("corpus lease: skipped — {reason}");
+        }
+        riir_clippy::kat_lease_client::UpdateStatus::Failed(e) => {
+            eprintln!("corpus lease: {e}");
+        }
+    }
+    if let Err(e) = charge.save() {
+        eprintln!("corpus lease: could not persist the charge ledger: {e}");
+    }
+}
+
+/// Proposal 005 T1.6 (Plan 040): `cargo heal claim --tx <sig>` — compose +
+/// submit the payment-claim request. The five-check verification is
+/// service-side (deferred with the Worker shell); the client validates the
+/// format, queues locally when the service is not live, and NEVER fakes a
+/// mint (G9d — client counts never mint or spend).
+#[cfg(feature = "kat_service")]
+fn run_kat_claim(sig: Option<&str>) {
+    use riir_clippy::kat_lease_client::{
+        queue_claim, ClaimRequest, CLAIM_VERSION, DEFAULT_SERVICE_URL,
+    };
+
+    let Some(sig) = sig else {
+        eprintln!("claim: --tx <signature> is required (the Solana transaction signature)");
+        std::process::exit(2);
+    };
+    if !riir_clippy::kat_lease_client::validate_solana_signature(sig) {
+        eprintln!("claim: --tx does not look like a Solana signature (base58, 64-88 chars)");
+        std::process::exit(2);
+    }
+    let dir = riir_clippy::kat_account::KatAccount::default_dir();
+    let account = match riir_clippy::kat_account::KatAccount::load(&dir) {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!("claim: no account ({e}) — run `cargo heal login` first");
+            std::process::exit(1);
+        }
+    };
+    let req = ClaimRequest {
+        claim_version: CLAIM_VERSION,
+        account_id: account.state().account_id.clone(),
+        rail: "solana".to_string(),
+        reference: sig.to_string(),
+        queued_unix: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs()),
+    };
+    let json = serde_json::to_string(&req).unwrap_or_default();
+    #[cfg(not(feature = "kat_transport"))]
+    let _ = &json; // the submit path is transport-gated; the queue path re-serializes
+
+    // Submit when the service plane answers; otherwise queue + print the
+    // honest state. Either way the CLIENT mints nothing.
+    #[cfg(feature = "kat_transport")]
+    {
+        use riir_clippy::kat_lease_client::LeaseTransport;
+        let url = riir_clippy::kat_lease_client::service_url_for_command();
+        let transport =
+            riir_clippy::kat_lease_client::HttpLeaseTransport::new(&url, 10);
+        if let riir_clippy::kat_lease_client::HttpResponse::Ok(_) = transport.post_claim(&json) {
+            println!("claim: submitted to {url} — the service verifies the five checks + mints at settlement");
+            return;
+        }
+    }
+    let root = resolve_heal_root(&[]);
+    match queue_claim(&root, &req) {
+        Ok(path) => {
+            println!("claim: service plane not yet live — queued locally at {}", path.display());
+            println!(
+                "claim: the queued claim submits when the Worker lands; payment page: {}",
+                riir_clippy::kat_lease_client::payment_url(DEFAULT_SERVICE_URL, &req.account_id)
+            );
+            println!("claim: nothing is minted client-side (the server ledger is the authority)");
+        }
+        Err(e) => {
+            eprintln!("claim: could not queue locally: {e}");
+            std::process::exit(1);
+        }
     }
 }
 
@@ -486,6 +704,9 @@ USAGE:
     cargo heal --score-bench | --score-report        (needs --features score_bench)
     cargo heal login [--key <path>]                   (KAT account, needs --features kat_service)
     cargo heal account [<path>]                       (KAT local view + repo burn, kat_service)
+    cargo heal update                                 (corpus lease refresh, kat_transport)
+    cargo heal sync                                   (push redacted batches + pull lease, kat_transport)
+    cargo heal claim --tx <sig>                       (queue/submit a payment claim, kat_service)
 
     --suggest       Suggest mode: print matching rules per code span (no edits).
     --fix           Fix mode: apply the compiled-in proposers' span-preserving edits
@@ -536,6 +757,31 @@ USAGE:
                     repo-local charge ledger — this repo's burn + balance
                     projection. Verifies key↔record agreement (tamper
                     evidence). No $ figures (caveats #12/#15).
+    update          T1.6 corpus lease refresh (needs --features kat_transport):
+                    GET /lease with If-None-Match → 304 (up to date, no
+                    charge) or 200 → manifest verify (tamper → reject, fall
+                    back local) → segment diff → fetch → staged verify →
+                    ATOMIC pointer swap → retrieval index rebuild next run.
+                    Prints the lease charge line (idempotent per epoch).
+    sync            T1.6 bidirectional (kat_transport): push redacted
+                    trajectory batches (the sanctioned egress path) + pull
+                    the lease. With the service plane deferred, the push is
+                    validated + queued locally (.heal/outbox/) — nothing is
+                    faked.
+    claim           T1.6 payment claim (--tx <sig>, kat_service): validate +
+                    compose + submit (or queue locally when the service
+                    plane is not yet live). NEVER mints client-side (G9d).
+    --tx <sig>      With claim: the Solana transaction signature (base58,
+                    64-88 chars).
+    --update-timeout <s>  The run-start lease-phase budget (default 4s;
+                    0 = skip). Timeout/offline → heal proceeds on the local
+                    corpus (G3 — the network may delay freshness, never
+                    block healing).
+    --no-update     Skip the run-start lease phase entirely.
+    --no-reheat     Skip the run-end boundary reheat (the mid-run-epoch
+                    straddle pass; CI/cost-sensitive runs).
+    --corpus-epoch <E>    Pin the corpus epoch (an INSTALLED epoch — implies
+                    the lease check is skipped; the CI-reproducibility form).
     --key <path>    With login: import this OpenSSH Ed25519 private key
                     (unencrypted only) instead of generating one.
 {}{}    --domain        Filter suggest output to one domain (default: auto — all enabled).
@@ -606,13 +852,27 @@ struct Args {
     /// `RIIR_HEAL_TRAJ_ROOT` (or the envelope fallback) + a fresh baseline.
     /// Read-only standalone mode (R346's monitor; feeds the audit script).
     collapse_report: bool,
-    /// Proposal 005 T0.1: the identity subcommand (`login` / `account`),
-    /// recognized only as the FIRST positional (a dir named `login` later in
-    /// the arg list still scans).
+    /// Proposal 005 T0.1: the identity subcommand (`login` / `account` /
+    /// `update` / `sync` / `claim`), recognized only as the FIRST positional
+    /// (a dir named `login` later in the arg list still scans).
     command: Option<KatCommand>,
     /// `--key <path>` — import an existing OpenSSH Ed25519 private key at
     /// `login` instead of generating one.
     import_key: Option<PathBuf>,
+    /// T1.6: `--tx <sig>` — the Solana transaction signature `claim`
+    /// submits/queues.
+    claim_tx: Option<String>,
+    /// T1.6: the run-start update-phase budget in seconds (`0` = skip;
+    /// default 4 — the proposal's ~3–5s window).
+    update_timeout: u64,
+    /// T1.6: `--no-update` — skip the run-start lease phase entirely.
+    no_update: bool,
+    /// T1.6: `--no-reheat` — skip the run-end boundary reheat (CI /
+    /// cost-sensitive runs).
+    no_reheat: bool,
+    /// T1.6: `--corpus-epoch <E>` — pin the corpus epoch outright (the
+    /// CI-reproducibility form; implies the lease check is skipped).
+    corpus_epoch: Option<u64>,
 }
 
 fn parse_args() -> Args {
@@ -637,6 +897,11 @@ fn parse_args() -> Args {
         collapse_report: false,
         command: None,
         import_key: None,
+        claim_tx: None,
+        update_timeout: 4,
+        no_update: false,
+        no_reheat: false,
+        corpus_epoch: None,
     };
     let mut it = std::env::args().skip(1);
     while let Some(arg) = it.next() {
@@ -705,15 +970,48 @@ fn parse_args() -> Args {
                 };
                 args.import_key = Some(PathBuf::from(value));
             }
+            "--tx" => {
+                let Some(value) = it.next() else {
+                    eprintln!("--tx requires a value (the Solana transaction signature)");
+                    usage();
+                };
+                args.claim_tx = Some(value);
+            }
+            "--update-timeout" => {
+                let Some(value) = it.next() else {
+                    eprintln!("--update-timeout requires a value (seconds; 0 = skip)");
+                    usage();
+                };
+                args.update_timeout = value.parse().unwrap_or_else(|_| {
+                    eprintln!("--update-timeout expects a number, got {value:?}");
+                    usage();
+                });
+            }
+            "--no-update" => args.no_update = true,
+            "--no-reheat" => args.no_reheat = true,
+            "--corpus-epoch" => {
+                let Some(value) = it.next() else {
+                    eprintln!("--corpus-epoch requires a value (an installed epoch number)");
+                    usage();
+                };
+                args.corpus_epoch = Some(value.parse().unwrap_or_else(|_| {
+                    eprintln!("--corpus-epoch expects a number, got {value:?}");
+                    usage();
+                }));
+            }
             flag if flag.starts_with("--") => {
                 eprintln!("unknown flag {flag:?}");
                 usage();
             }
-            "login" | "account" if args.paths.is_empty() && args.command.is_none() => {
-                args.command = Some(if arg == "login" {
-                    KatCommand::Login
-                } else {
-                    KatCommand::Account
+            "login" | "account" | "update" | "sync" | "claim"
+                if args.paths.is_empty() && args.command.is_none() =>
+            {
+                args.command = Some(match arg.as_str() {
+                    "login" => KatCommand::Login,
+                    "account" => KatCommand::Account,
+                    "update" => KatCommand::Update,
+                    "sync" => KatCommand::Sync,
+                    _ => KatCommand::Claim,
                 });
             }
             path => args.paths.push(PathBuf::from(path)),
@@ -899,18 +1197,29 @@ fn run_score_bench() {
 fn main() {
     let args = parse_args();
 
-    // ── Proposal 005 T0.1: identity subcommands (standalone — no paths) ──
+    // ── Proposal 005 T0.1 + T1.6: KAT subcommands (standalone — no paths) ─
     #[cfg(feature = "kat_service")]
     if let Some(cmd) = args.command {
         match cmd {
             KatCommand::Login => run_kat_login(args.import_key.as_deref()),
             KatCommand::Account => run_kat_account(&args.paths),
+            KatCommand::Claim => run_kat_claim(args.claim_tx.as_deref()),
+            #[cfg(feature = "kat_transport")]
+            KatCommand::Update => run_kat_update(),
+            #[cfg(feature = "kat_transport")]
+            KatCommand::Sync => run_kat_sync(),
+            // The transport commands degrade honestly without kat_transport.
+            #[cfg(not(feature = "kat_transport"))]
+            KatCommand::Update | KatCommand::Sync => {
+                eprintln!("update/sync require a build with --features kat_transport");
+                std::process::exit(2);
+            }
         }
         return;
     }
     #[cfg(not(feature = "kat_service"))]
     if args.command.is_some() {
-        eprintln!("login/account require a build with --features kat_service");
+        eprintln!("login/account/update/sync/claim require a build with --features kat_service");
         std::process::exit(2);
     }
 
@@ -1452,7 +1761,7 @@ fn main() {
                 let root = args
                     .paths
                     .first()
-                    .and_then(riir_clippy::compile_oracle::owning_package_root)
+                    .and_then(|p| riir_clippy::compile_oracle::owning_package_root(p))
                     .and_then(|pkg| riir_clippy::compile_oracle::workspace_root(&pkg))
                     .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
                 let (written, warnings) = evolve::dump_misses(&root, &report.misses);
@@ -1514,7 +1823,37 @@ fn main() {
         std::process::exit(2);
     }
 
-    let mut matcher = LatentMatcher::from_enabled_domains().unwrap_or_else(|e| {
+    // ── T1.6 (Plan 040): the corpus-lease run context ────────────────────
+    // An INSTALLED epoch (or a --corpus-epoch pin) replaces the covered
+    // domains' compiled-in corpora for this run — a run-boundary install,
+    // never mid-pass mutation. Fresh install + offline → no epoch → the
+    // compiled-in seed stands (G3: byte-identical to features-off).
+    #[cfg(feature = "kat_service")]
+    let lease_store =
+        riir_clippy::kat_lease_client::LeaseStore::open(&resolve_heal_root(&args.paths));
+    #[cfg(feature = "kat_service")]
+    let run_overlay = lease_overlay_for_run(&lease_store, args.corpus_epoch);
+    #[cfg(feature = "kat_service")]
+    if let Some((epoch, overlay)) = &run_overlay {
+        let pinned = args.corpus_epoch.is_some();
+        let domains: Vec<&str> = overlay.iter().map(|(d, _)| d.label()).collect();
+        println!(
+            "corpus lease: running on epoch {epoch} ({}domains: {})",
+            if pinned { "pinned, " } else { "" },
+            domains.join(", ")
+        );
+    }
+
+    let mut matcher = (|| {
+        #[cfg(feature = "kat_service")]
+        if let Some((_, ref overlay)) = run_overlay {
+            return LatentMatcher::from_enabled_domains_with_overlay(overlay);
+        }
+        #[cfg(not(feature = "kat_service"))]
+        let _ = &args; // no lease context without kat_service
+        LatentMatcher::from_enabled_domains()
+    })()
+    .unwrap_or_else(|e| {
         eprintln!("index build failed: {e}");
         std::process::exit(1);
     });
@@ -1612,6 +1951,81 @@ fn main() {
     // time, and the exit block persists the settled state.
     #[cfg(feature = "kat_service")]
     let mut kat_charge = open_kat_charge(&args.paths, kat_meter.as_ref());
+
+    // ── T1.6 (Plan 040): the update-first phase + the reheat arming ──────
+    // The freshest corpus is fetched at run START inside the bounded
+    // --update-timeout window; timeout/offline/skip → heal proceeds on the
+    // local corpus (G3 — the network may delay freshness, never block
+    // healing). Silent unless an epoch actually applied. The phase runs
+    // ONLY when a service URL is explicitly configured (the Worker-deferred
+    // posture; `update`/`sync` fall back to the default URL) + neither the
+    // kill-switch nor a --corpus-epoch pin (which implies skip-check) nor
+    // --no-update/--update-timeout 0 disabled it. CI never touches the
+    // network by construction (no test drives main's network path).
+    #[cfg(feature = "kat_transport")]
+    let mut lease_charge = riir_clippy::kat_lease_client::LeaseCharge::open(&lease_store);
+    #[cfg(feature = "kat_transport")]
+    let mut lease_ctx: Option<ReheatCtx> = None;
+    #[cfg(feature = "kat_transport")]
+    {
+        let phase_live = !args.no_update
+            && args.update_timeout > 0
+            && args.corpus_epoch.is_none()
+            && !riir_clippy::kat_lease_client::lease_kill_switched();
+        let service_url = riir_clippy::kat_lease_client::service_url_from_env();
+        if phase_live && service_url.is_some() {
+            let url = service_url.clone().unwrap_or_default();
+            let transport = riir_clippy::kat_lease_client::HttpLeaseTransport::new(
+                &url,
+                args.update_timeout,
+            );
+            let deadline =
+                std::time::Instant::now() + std::time::Duration::from_secs(args.update_timeout);
+            let out_of_kat = kat_charge
+                .as_ref()
+                .is_some_and(|c| c.balance_projection() == 0);
+            let outcome = riir_clippy::kat_lease_client::run_update_phase(
+                &transport,
+                &lease_store,
+                &mut lease_charge,
+                out_of_kat,
+                Some(deadline),
+            );
+            if let riir_clippy::kat_lease_client::UpdateStatus::Applied { epoch, charge_kat } =
+                outcome.status
+            {
+                // The visible charge line + the matcher rebuild onto E+1 for
+                // THIS run (rule 1: proceed on the freshest applied epoch).
+                println!(
+                    "{}",
+                    riir_clippy::kat_lease_client::LeaseCharge::line(epoch, charge_kat)
+                );
+                if let Some((_, overlay)) = lease_overlay_for_run(&lease_store, None) {
+                    match LatentMatcher::from_enabled_domains_with_overlay(&overlay) {
+                        Ok(m) => matcher = m,
+                        Err(e) => eprintln!(
+                            "corpus lease: epoch {epoch} index rebuild failed ({e}) — continuing on the prior corpus"
+                        ),
+                    }
+                }
+            }
+            let _ = lease_charge.save();
+        }
+        // Reheat arming: a new epoch may land mid-run only when the lease
+        // channel is live. A pin (--corpus-epoch) disables it by design.
+        let reheat_armed = !args.no_reheat
+            && args.corpus_epoch.is_none()
+            && !riir_clippy::kat_lease_client::lease_kill_switched()
+            && service_url.is_some();
+        if reheat_armed {
+            lease_ctx = Some(ReheatCtx {
+                start_epoch: lease_store.current_epoch().unwrap_or(0),
+                pass1: std::collections::HashMap::new(),
+                pass1_tokens: 0,
+                spans_seen: 0,
+            });
+        }
+    }
 
     let mut n_chunks = 0usize;
     let mut n_suggestions = 0usize;
@@ -1973,6 +2387,31 @@ fn main() {
                 }
                 n_suggestions += 1;
                 print_suggestion(&s, &matcher, args.domain);
+            }
+        }
+
+        // ── T1.6 (Plan 040): reheat pass-1 collection. Retrieval-only,
+        // no output, no counter movement (G3: an unarmed run — offline,
+        // fresh, pinned, or --no-reheat — does ZERO extra work). The
+        // per-span candidate sets + token totals are the delta baseline
+        // the run-end E+1 pass compares against.
+        #[cfg(feature = "kat_transport")]
+        if let Some(ctx) = lease_ctx.as_mut() {
+            for s in matcher.suggest_file(&src, &display, args.top_k) {
+                let text = extract_span_text(&src, s.start_line, s.end_line);
+                let mut rules: Vec<String> = s
+                    .by_domain
+                    .iter()
+                    .flat_map(|(_, rs)| rs.iter().map(|r| r.rule_id.clone()))
+                    .collect();
+                rules.sort();
+                rules.dedup();
+                ctx.pass1_tokens +=
+                    riir_clippy::kat_meter::count_word_tokens(text.as_bytes());
+                ctx.spans_seen += 1;
+                ctx.pass1
+                    .entry(riir_clippy::kat_lease_client::span_key(&text))
+                    .or_insert(rules);
             }
         }
     }
@@ -2376,6 +2815,29 @@ fn main() {
         }
     }
 
+    // ── T1.6 (Plan 040): the run-end boundary reheat (default ON when the
+    // lease channel is armed). If a NEW epoch landed mid-run, finishing on
+    // the old epoch + reporting done would be a FALSE CLEAN — strictly worse
+    // than a visible second bill. Sequential frozen passes: the E+1 pass
+    // runs over the POST-FIX tree (re-read from disk), re-retrieves every
+    // span, and only spans whose top-k candidate set CHANGED re-enter
+    // propose (+ only their tokens re-bill — delta-scoped, metered inside
+    // the pass at span granularity; a straddle that changes nothing costs
+    // ~retrieval-only).
+    #[cfg(feature = "kat_transport")]
+    if let Some(ctx) = lease_ctx.as_mut() {
+        let meter = kat_meter.as_mut();
+        if let Some((report, charge_line)) =
+            run_reheat_pass(ctx, &args, &files, &mut matcher, meter)
+        {
+            println!("\nreheat: epoch {} landed mid-run", report.pass2_epoch);
+            println!("  {}", report.itemized_line());
+            if let Some(line) = charge_line {
+                println!("  {line}");
+            }
+        }
+    }
+
     let mode = if args.fix {
         #[cfg(feature = "fix_verify")]
         let applied_note = if args.verify {
@@ -2441,13 +2903,42 @@ fn main() {
             eprintln!("kat-charge: could not persist charge ledger ({}): {e}", c.path().display());
         }
         println!("{}", c.summary_line());
-        if c.low_balance() {
-            // §KAT out-of-KAT warn: the QR/top-up half is T1.6. Healing never
-            // blocks on this (G3 — warn-and-pay, never brick).
+        let remaining = c.balance_projection();
+        if remaining == 0 {
+            // §KAT warn-and-pay (T1.6): at 0 the evolved-corpus hot-push
+            // pauses at epoch end + the persistent warning fires — mining
+            // accrual/settlement CONTINUE, healing NEVER blocks (G3).
             eprintln!(
-                "kat-charge: warning — {} KAT remain of the {} grant projection; \
+                "kat-charge: 0 KAT remain of the {} grant projection — out-of-KAT",
+                riir_clippy::kat_meter::FREE_TIER_GRANT_KAT
+            );
+            eprintln!(
+                "kat-charge: healing continues on the local corpus; the evolved-corpus \\
+                 hot-push pauses at epoch end; mining accrual + settlement continue"
+            );
+            #[cfg(feature = "kat_transport")]
+            {
+                let dir = riir_clippy::kat_account::KatAccount::default_dir();
+                let acct = riir_clippy::kat_account::KatAccount::load(&dir)
+                    .ok()
+                    .map(|a| a.state().account_id.clone())
+                    .unwrap_or_default();
+                let url = riir_clippy::kat_lease_client::payment_url(
+                    riir_clippy::kat_lease_client::DEFAULT_SERVICE_URL,
+                    &acct,
+                );
+                eprintln!("kat-charge: top up — {url}");
+                let qr = riir_clippy::kat_lease_client::render_qr_ascii(&url);
+                if !qr.is_empty() {
+                    eprintln!("{qr}");
+                }
+            }
+        } else if c.low_balance() {
+            // §KAT warn at ≤10M remaining: the top-up nudge (no QR until 0 —
+            // the terminal render is the last-chance surface).
+            eprintln!(
+                "kat-charge: warning — {remaining} KAT remain of the {} grant projection; \\
                  healing continues offline (the server ledger is the authority)",
-                c.balance_projection(),
                 riir_clippy::kat_meter::FREE_TIER_GRANT_KAT
             );
         }
@@ -2464,6 +2955,298 @@ fn fix_domain_scopes(domain: Option<DomainId>) -> (bool, bool, bool) {
         domain.is_none_or(|d| d == DomainId::Clippy),
         domain.is_none_or(|d| d == DomainId::Sec),
     )
+}
+
+/// T1.6 (Plan 040): map an installed leased epoch's packs onto the enabled
+/// domains' corpora. `pin` selects a stored epoch (`--corpus-epoch`) instead
+/// of the current pointer. Unknown pack domains warn + skip (never abort —
+/// a future domain string must not brick an old client).
+#[cfg(all(feature = "kat_service", feature = "latent_retrieval"))]
+#[allow(clippy::type_complexity)] // mirrors the lease module's DomainTriples shape one layer up
+fn lease_overlay_for_run(
+    store: &riir_clippy::kat_lease_client::LeaseStore,
+    pin: Option<u64>,
+) -> Option<(u64, Vec<(DomainId, Vec<(String, String, String)>)>)> {
+    use riir_clippy::kat_lease_client::{
+        overlay_from_epoch, PACK_DOMAIN_CLIPPY, PACK_DOMAIN_KERNEL, PACK_DOMAIN_PERF,
+        PACK_DOMAIN_SEC,
+    };
+    let (epoch, raw) = overlay_from_epoch(store, pin)?;
+    let mut overlay = Vec::new();
+    for (domain, triples) in raw {
+        let id = match domain.as_str() {
+            PACK_DOMAIN_CLIPPY => Some(DomainId::Clippy),
+            PACK_DOMAIN_PERF => Some(DomainId::Perf),
+            PACK_DOMAIN_KERNEL => Some(DomainId::Kernel),
+            PACK_DOMAIN_SEC => Some(DomainId::Sec),
+            other => {
+                eprintln!("corpus lease: ignoring unknown pack domain {other:?} (client too old?)");
+                None
+            }
+        };
+        if let Some(id) = id {
+            overlay.push((id, triples));
+        }
+    }
+    Some((epoch, overlay))
+}
+
+/// Extract a 1-based inclusive line range as its own text (the span
+/// identity + token source for reheat pass bookkeeping).
+#[cfg(feature = "kat_transport")]
+fn extract_span_text(src: &str, start_line: usize, end_line: usize) -> String {
+    let n = end_line.saturating_sub(start_line) + 1;
+    src.lines()
+        .skip(start_line.saturating_sub(1))
+        .take(n)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// The T1.6 reheat context — pass-1's per-span candidate sets + token
+/// totals, collected during the main scan when the reheat is armed.
+#[cfg(feature = "kat_transport")]
+struct ReheatCtx {
+    start_epoch: u64,
+    pass1: std::collections::HashMap<[u8; 32], Vec<String>>,
+    pass1_tokens: u64,
+    spans_seen: usize,
+}
+
+/// The compact pass-2 fix loop over one file — the same proposer machinery
+/// and span-preserving splice as pass 1, without the verify-batching /
+/// evolve recording / line-remapping surfaces (pass-1 concerns). Review
+/// mode prints `reheat:` lines; `--write` applies + counts; under
+/// `--verify` the pass is REVIEW-ONLY (never-wrong: no unverified write —
+/// the edits land deterministically on the next run, the epoch being
+/// pinned).
+#[cfg(feature = "kat_transport")]
+fn reheat_fix_pass(
+    path: &Path,
+    domain: Option<DomainId>,
+    write: bool,
+    verify_mode: bool,
+    fmt_active: bool,
+) -> usize {
+    let Ok(src) = std::fs::read_to_string(path) else {
+        return 0;
+    };
+    let display = path.display().to_string();
+    let (run_perf, run_clippy, run_sec) = fix_domain_scopes(domain);
+    #[cfg(not(feature = "sec"))]
+    let _ = run_sec;
+    const MAX_PASSES: usize = 4;
+    let mut current = src.clone();
+    let mut total_applied = 0usize;
+    let mut changed = false;
+    for _pass in 0..MAX_PASSES {
+        let Ok(parsed) = syn::parse_file(&current) else {
+            return total_applied;
+        };
+        let mut edits: Vec<RuleEdit> = Vec::new();
+        if run_perf {
+            for rule in FIXABLE_RULES {
+                edits.extend(riir_clippy::domains::rust_perf::proposers::collect_edits(
+                    rule, &current, &parsed,
+                ));
+            }
+        }
+        if run_clippy {
+            for lint in FIXABLE_LINTS {
+                edits.extend(riir_clippy::domains::clippy_lints::proposers::collect_edits(
+                    lint, &current, &parsed,
+                ));
+            }
+        }
+        #[cfg(feature = "sec")]
+        if run_sec {
+            for rule in riir_clippy::domains::sec::proposers::FIXABLE_SEC {
+                edits.extend(riir_clippy::domains::sec::proposers::collect_edits(
+                    rule, &current, &parsed,
+                ));
+            }
+        }
+        if edits.is_empty() {
+            break;
+        }
+        let (next, splices) = riir_clippy::edit_emitter::apply_edits_traced(
+            &current,
+            edits.iter().map(|re| re.edit.clone()).collect(),
+        );
+        let applied: std::collections::HashSet<(usize, usize)> =
+            splices.iter().map(|s| (s.start, s.end)).collect();
+        for re in &edits {
+            if applied.contains(&(re.edit.start, re.edit.end)) {
+                let line = current[..re.edit.start].matches('\n').count() + 1;
+                if verify_mode {
+                    println!("reheat (review-only under --verify): {display}:{line} [{}]", re.rule_id);
+                } else {
+                    println!("reheat: {display}:{line} [{}]", re.rule_id);
+                }
+                total_applied += 1;
+            }
+        }
+        changed = next != current;
+        current = next;
+        if !changed {
+            break;
+        }
+    }
+    if (changed && write && !verify_mode && current != src) && (std::fs::write(path, &current).is_ok() && fmt_active) {
+            let edition = riir_clippy::fmt::edition_for(path);
+            if matches!(
+                riir_clippy::fmt::decide(&current, path, &edition),
+                riir_clippy::fmt::FmtDecision::Format
+            ) {
+                let _ = riir_clippy::fmt::apply(path, &edition);
+            }
+        }
+    total_applied
+}
+
+/// The run-end boundary reheat (T1.6, Plan 040). Returns `None` when no new
+/// epoch landed (the ~always case — one lease check). Otherwise: apply the
+/// new epoch (same staged/verified/atomic path as the update phase), rebuild
+/// the matcher under E+1, re-retrieve every pass-1 span over the POST-FIX
+/// tree, delta-scope (only changed candidate sets re-enter propose/verify +
+/// re-bill — metered at span granularity), and return the itemized report +
+/// the lease charge line. Failure at ANY step is silent-fallback (the run's
+/// pass-1 results stand; G3 — the network never blocks or corrupts a run).
+#[cfg(feature = "kat_transport")]
+fn run_reheat_pass(
+    ctx: &mut ReheatCtx,
+    args: &Args,
+    files: &[PathBuf],
+    matcher: &mut LatentMatcher,
+    mut meter: Option<&mut riir_clippy::kat_meter::KatMeter>,
+) -> Option<(riir_clippy::kat_lease_client::ReheatReport, Option<String>)> {
+    use riir_clippy::kat_lease_client::{
+        run_update_phase, HttpLeaseTransport, LeaseManifest, LeaseTransport, PassSpans,
+    };
+
+    // One bounded lease check: did a new epoch land?
+    let url = riir_clippy::kat_lease_client::service_url_from_env()?;
+    let transport = HttpLeaseTransport::new(&url, args.update_timeout.max(1));
+    let store = riir_clippy::kat_lease_client::LeaseStore::open(&resolve_heal_root(&args.paths));
+    let mut charge = riir_clippy::kat_lease_client::LeaseCharge::open(&store);
+    let current = store.current();
+    let etag = current.as_ref().map(|m| riir_clippy::kat_lease_client::hex32(&m.commitment));
+    let body = match transport.get_lease(etag.as_deref()) {
+        riir_clippy::kat_lease_client::HttpResponse::NotModified => return None,
+        riir_clippy::kat_lease_client::HttpResponse::Ok(b) => b,
+        _ => return None, // offline/error → no reheat, silently
+    };
+    let manifest = match LeaseManifest::decode(&body) {
+        Ok(m) => m,
+        Err(_) => return None, // tamper/malformed → stay on the run's epoch
+    };
+    if let Some(cur) = &current {
+        if manifest.epoch <= cur.epoch {
+            return None; // same-or-older (the check raced) — nothing to reheat
+        }
+    }
+
+    // Apply the new epoch through the SAME staged/verified/atomic path.
+    let out_of_kat = false; // the reheat bill is the delta bill, not a new grant gate
+    let outcome = run_update_phase(&transport, &store, &mut charge, out_of_kat, None);
+    match outcome.status {
+        riir_clippy::kat_lease_client::UpdateStatus::Applied { epoch, charge_kat } => {
+            // Rebuild the matcher under E+1 (a failed rebuild aborts the
+            // reheat — pass 1's results stand).
+            if let Some((_, overlay)) = lease_overlay_for_run(&store, None) {
+                match LatentMatcher::from_enabled_domains_with_overlay(&overlay) {
+                    Ok(m) => *matcher = m,
+                    Err(_) => return None,
+                }
+            } else {
+                return None;
+            }
+            // Pass 2 over the POST-FIX tree: re-retrieve every span.
+            let mut pass2: Vec<PassSpans> = Vec::new();
+            let mut span_texts: std::collections::HashMap<[u8; 32], String> =
+                std::collections::HashMap::new();
+            let mut file_changed: std::collections::HashSet<
+                std::path::PathBuf,
+            > = std::collections::HashSet::new();
+            for file in files {
+                let Ok(src) = std::fs::read_to_string(file) else {
+                    continue;
+                };
+                let display = file.display().to_string();
+                for s in matcher.suggest_file(&src, &display, args.top_k) {
+                    let text = extract_span_text(&src, s.start_line, s.end_line);
+                    let key = riir_clippy::kat_lease_client::span_key(&text);
+                    let mut rules: Vec<String> = s
+                        .by_domain
+                        .iter()
+                        .flat_map(|(_, rs)| rs.iter().map(|r| r.rule_id.clone()))
+                        .collect();
+                    rules.sort();
+                    rules.dedup();
+                    pass2.push(PassSpans {
+                        key,
+                        tokens: riir_clippy::kat_meter::count_word_tokens(text.as_bytes()),
+                        rules,
+                    });
+                    span_texts.insert(key, text);
+                }
+            }
+            let plan = riir_clippy::kat_lease_client::plan_reheat(&ctx.pass1, &pass2);
+            // Which FILES carry changed spans (the proposer granularity).
+            for file in files {
+                let Ok(src) = std::fs::read_to_string(file) else {
+                    continue;
+                };
+                let display = file.display().to_string();
+                let any_changed = matcher
+                    .suggest_file(&src, &display, args.top_k)
+                    .iter()
+                    .any(|s| {
+                        let text = extract_span_text(&src, s.start_line, s.end_line);
+                        plan.changed
+                            .iter()
+                            .any(|(k, _)| *k == riir_clippy::kat_lease_client::span_key(&text))
+                    });
+                if any_changed {
+                    file_changed.insert(file.clone());
+                }
+            }
+            // Delta-scoped billing FIRST (the spans WERE re-processed — the
+            // meter must reflect it even when propose finds nothing new).
+            if let Some(m) = meter.as_mut() {
+                for (key, _tokens) in &plan.changed {
+                    if let Some(text) = span_texts.get(key) {
+                        m.record_span(text.as_bytes());
+                    }
+                }
+            }
+            // Only changed files re-enter propose.
+            let mut new_fixes = 0usize;
+            if args.fix {
+                for file in &file_changed {
+                    new_fixes += reheat_fix_pass(
+                        file,
+                        args.domain,
+                        args.write,
+                        args.verify,
+                        !args.no_fmt,
+                    );
+                }
+            }
+            let report = riir_clippy::kat_lease_client::ReheatReport {
+                pass1_epoch: ctx.start_epoch,
+                pass2_epoch: epoch,
+                pass1_tokens: ctx.pass1_tokens,
+                pass2_tokens: plan.reheat_tokens,
+                changed_spans: plan.changed.len(),
+                new_fixes,
+            };
+            let _ = charge.save();
+            let line = riir_clippy::kat_lease_client::LeaseCharge::line(epoch, charge_kat);
+            Some((report, Some(line)))
+        }
+        _ => None,
+    }
 }
 
 #[cfg(test)]
