@@ -1331,7 +1331,17 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
             fixed_code: "fn theta_scale(base: f64, pos: &[i32], exp: i32) -> Vec<f64> {\n    pos.iter()\n        .map(|&p| base.powi(p * exp)) // log2 multiplies, no libm call\n        .collect() // Rust powi handles negative exponents (1/x^|n|)\n}".to_string(),
             context_notes: Some(
                 "Bench 77: ParetoDominant 2.57x/2.81x/2.66x (1K/100K/1M, release, \
-                 M3 aarch64; verdict-stable x2; 0 allocs both arms). The GPU \
+                 M3 aarch64; verdict-stable x2; 0 allocs both arms). CROSS-ARCH \
+                 RE-GATE (2026-08-27 same day, 4090 box, x86_64-pc-windows-msvc, \
+                 THIS harness unchanged, verdict-stable x2): all-Tie \
+                 0.99x/1.00x/1.00x, 0/0 allocs, alloc-det stable — on x86-msvc \
+                 BOTH lowerings are comparable calls (MSVC pow is fast; powi \
+                 rides a similar-cost routine), so the 2.6x is M3/aarch64 (and \
+                 GPU-slow-libm) regime, NOT universal: suggest by host — expect \
+                 the win where the platform's libm pow is slow (aarch64/M3, GPU \
+                 device libm, embedded); on fast-libm x86 hosts this is an idiom \
+                 swap, not a speedup (the newton-refinement regime-inversion \
+                 class, Batch 62). The GPU \
                  motivating evidence is the source's RDNA4 RoPE kernel (692 -> 76 \
                  µs/launch, 9.1x) — the CPU verdict is this bench's own. NOT \
                  bit-identical: powi(n) is binary exponentiation, not \
