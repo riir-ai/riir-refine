@@ -1432,6 +1432,36 @@
 //!   Plan 038.
 //! - **Deferred:** remaining popcorn kernels are mostly already-covered patterns
 //!   or domain-specific math; future batches need new source impl files.
+//! - **Batch 81 (2026-08-27, lucebox concurrency-stack distill -- PRs
+//!   642/651/659/668, Research 095 / Plan 039):** 6 rules, corpus
+//!   387 -> 393 (A 91 -> 93, D 79 -> 82, G 21 -> 22). Source is C++/HIP
+//!   on vendored ggml (R9700/gfx1201); patterns port, code does not --
+//!   all measured p50/goodput tables are PR-body numbers (absent from
+//!   the diffs), cited as source evidence only.
+//!   `virtual-tail-packed-tree-verify-over-paged-kv` (A -- tree
+//!   candidates as a VIRTUAL TAIL of the committed length; block-table
+//!   prefix rows + scratch-slab candidate rows behind ONE logical
+//!   index; ancestor-visibility walk gates siblings; `phys = -1` for
+//!   invisible rows). `gdn-transition-replay-log-commit-many` (G -- the
+//!   forward journals `[gate | key | delta]` per token/head; ONE kernel
+//!   replays accepted prefixes via `fmaf(key, delta, gate * current)`:
+//!   no second target forward). `cross-lane-column-packed-projections`
+//!   (D -- the AXIS-TRANSPOSED fourth member of the same-input family:
+//!   N lanes' inputs packed over ONE shared weight; lane-local
+//!   consumers carve back out). `identity-keyed-graph-retention-stable-
+//!   arena` (D -- composite owner/backend/topology key with the kv axis
+//!   BUCKET-quantized; retained metadata arena keeps `nodes[0]` stable;
+//!   the SALT prevents cross-bucket aliasing).
+//!   `staged-append-rollback-lifo-retry-blocks` (A -- rollback routes
+//!   freed blocks to a per-sequence LIFO so retry reproduces the SAME
+//!   physical rows; captured graphs + block-table deltas survive
+//!   reject+retry). `fail-closed-multi-resource-commit-transaction`
+//!   (D -- VALIDATE every destination across ALL resources first, then
+//!   `COMMIT_PREVALIDATED`; after the first mutation no recoverable error
+//!   may escape). Plus the Batch-81 rider on
+//!   `shared-activation-quantize-memo-per-eval` (lucebox 668: the
+//!   REQUEST-boundary release half -- memos popped LIFO before pool
+//!   trim). Record: Research 095 / Plan 039.
 
 use std::collections::HashMap;
 
@@ -1447,6 +1477,7 @@ mod entries_gpu_04;
 mod entries_gpu_05;
 mod entries_gpu_06;
 mod entries_gpu_07;
+mod entries_gpu_08;
 
 #[cfg(test)]
 mod tests;
@@ -1466,6 +1497,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
         entries.extend(entries_gpu_05::entries());
         entries.extend(entries_gpu_06::entries());
         entries.extend(entries_gpu_07::entries());
+        entries.extend(entries_gpu_08::entries());
         Corpus::new(entries)
 }
 
@@ -1478,7 +1510,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 387-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 393-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1486,7 +1518,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (91 rules)
+    // A: Memory access patterns (93 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -1582,6 +1614,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "skip-unchanged-writes-via-dirty-encoding",
             "weight-stream-non-temporal-loads",
             "vectorized-smem-write-no-bank-padding",
+            "virtual-tail-packed-tree-verify-over-paged-kv",
+            "staged-append-rollback-lifo-retry-blocks",
         ],
     ),
     // B: Compute patterns (53 rules)
@@ -1687,7 +1721,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fusion-payback-gated-on-per-dispatch-overhead",
         ],
     ),
-    // D: Dispatch patterns (79 rules)
+    // D: Dispatch patterns (82 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -1771,6 +1805,9 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "ordered-lhs-skip-smem-fragments-as-second-buffer",
             "interleave-loads-between-tile-matmuls",
             "dispatch-cost-sequential-measurement-not-single-op",
+            "cross-lane-column-packed-projections",
+            "identity-keyed-graph-retention-stable-arena",
+            "fail-closed-multi-resource-commit-transaction",
         ],
     ),
     // E: Parallelism patterns (23 rules)
@@ -1820,7 +1857,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "two-stage-mask-softmax-then-conv",
         ],
     ),
-    // G: Linear-attention recurrence (21 rules)
+    // G: Linear-attention recurrence (22 rules)
     (
         KernelCategory::LinearAttnRecurrence,
         "G: linear-attn recurrence",
@@ -1846,6 +1883,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "reverse-running-decay-weight",
             "tree-verify-recurrent-state-parent-reload",
             "first-order-affine-recurrence-associative-scan",
+            "gdn-transition-replay-log-commit-many",
         ],
     ),
     // H: MoE dispatch + backward pass (14 rules)

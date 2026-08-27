@@ -62,8 +62,8 @@
         // Batch 60 (1): measured-GOAT distillation (riir-train Issue 460 / katgpt-rs e2853fbf — pre-gate-recovery-by-division-cancels-algebraically; the MLA backward's saturated output-gate 0/0 NaN, fixed by algebraic cancellation; Bench 475: 6/10 -> 10/10 usable backward passes).
         // Batch 63 (3): the CubeCL twin unlock — same-input-gemv-weight-concat-at-upload, deferred-residual-fused-into-next-layer-norm, reset-state-in-place-fill-never-realloc (ternary_deltanet_gpu_forward.rs, Plan 009 / Research 071).
         // Batch 70 (3): the arxiv barrier-free-sync paper distill (arXiv:2608.13757, Plan 020 / Research 080) — barrier-free-per-dependency-wait-from-loop-counters, shared-counter-decode-producer-progress, masked-branchless-wait-collapse.
-        // Total: 209. // (historical batch-30 snapshot; current 387)
-        assert_eq!(corpus.entries.len(), 387, "kernel batches through Batch 80 should have 387 rules");
+        // Total: 209. // (historical batch-30 snapshot; current 393)
+        assert_eq!(corpus.entries.len(), 393, "kernel batches through Batch 81 should have 393 rules");
     }
 
     #[test]
@@ -3888,7 +3888,7 @@
 
     #[test]
     fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-        // Every rule_id in the 387-rule corpus must appear in exactly one category.
+        // Every rule_id in the 393-rule corpus must appear in exactly one category.
         let corpus = build_kernel_seed_corpus();
         let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
         let mut categorized: Vec<&str> = Vec::new();
@@ -3919,15 +3919,15 @@
 
     #[test]
     fn kernel_categories_counts_match_plan_003_table() {
-        // Pin per-category rule counts to the Plan 003 table (updated for Batch 80).
+        // Pin per-category rule counts to the Plan 003 table (updated for Batch 81).
         let expected = [
-            (KernelCategory::MemoryAccess, 91),
+            (KernelCategory::MemoryAccess, 93),
             (KernelCategory::Compute, 53),
             (KernelCategory::Fusion, 36),
-            (KernelCategory::Dispatch, 79),
+            (KernelCategory::Dispatch, 82),
             (KernelCategory::Parallelism, 23),
             (KernelCategory::FlashAttnTiling, 10),
-            (KernelCategory::LinearAttnRecurrence, 21),
+            (KernelCategory::LinearAttnRecurrence, 22),
             (KernelCategory::MoeDispatchBackward, 14),
             (KernelCategory::NsaBlockSparse, 4),
             (KernelCategory::VarlenChunkedReduction, 5),
@@ -3944,9 +3944,9 @@
                 "Plan 003: category {cat:?} has {} rules, expected {count}",
                 entry.2.len());
         }
-        // Sum must equal 387.
+        // Sum must equal 393.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 387, "Plan 003: category totals must sum to 387");
+        assert_eq!(total, 393, "Plan 003: category totals must sum to 393");
     }
 
     #[test]
@@ -3956,7 +3956,7 @@
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 387, "Plan 003: grouped corpus has {total} rules, expected 387");
+        assert_eq!(total, 393, "Plan 003: grouped corpus has {total} rules, expected 393");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");
@@ -4369,6 +4369,136 @@
         }
     }
 
+
+    #[test]
+    fn batch81_rules_present() {
+        // Batch 81 (lucebox concurrency-stack distill -- PRs 651/659/668;
+        // Research 095 / Plan 039).
+        let corpus = build_kernel_seed_corpus();
+        let ids = [
+            "virtual-tail-packed-tree-verify-over-paged-kv",
+            "gdn-transition-replay-log-commit-many",
+            "cross-lane-column-packed-projections",
+            "identity-keyed-graph-retention-stable-arena",
+            "staged-append-rollback-lifo-retry-blocks",
+            "fail-closed-multi-resource-commit-transaction",
+        ];
+        for id in ids {
+            assert!(
+                corpus.entries.iter().any(|e| e.rule_id == id),
+                "batch-81 rule '{id}' missing from corpus"
+            );
+        }
+    }
+
+    #[test]
+    fn batch81_concepts_covered() {
+        // Distinctness + mandated phrases must survive in the concept
+        // text (case-sensitive contains -- the B51 lesson).
+        let corpus = build_kernel_seed_corpus();
+        let checks: &[(&str, &[&str])] = &[
+            (
+                "virtual-tail-packed-tree-verify-over-paged-kv",
+                &[
+                    "VIRTUAL TAIL",
+                    "ancestor-visibility walk",
+                    "phys = -1",
+                    "tree-verify-recurrent-state-parent-reload",
+                    "kv-window-device-resident-ring-append",
+                ],
+            ),
+            (
+                "gdn-transition-replay-log-commit-many",
+                &[
+                    "[gate | key | delta]",
+                    "fmaf(key, delta, gate * current)",
+                    "OWNS its storage",
+                    "first-order-affine-recurrence-associative-scan",
+                    "write-before-read-state-skips-checkpoint",
+                ],
+            ),
+            (
+                "cross-lane-column-packed-projections",
+                &[
+                    "SHARED WEIGHT",
+                    "AXIS-TRANSPOSED",
+                    "single-lane",
+                    "same-input-gemv-weight-concat-at-upload",
+                    "op-major-backward-loop-inversion-batch-sequence-axis",
+                ],
+            ),
+            (
+                "identity-keyed-graph-retention-stable-arena",
+                &[
+                    "BUCKET",
+                    "nodes[0]",
+                    "SALT",
+                    "hot-swap-weights-preserve-autotune-caches",
+                    "captured-graph-bakes-buffer-addresses",
+                ],
+            ),
+            (
+                "staged-append-rollback-lifo-retry-blocks",
+                &[
+                    "LIFO",
+                    "GLOBAL free list",
+                    "physical rows",
+                    "captured-graph-bakes-buffer-addresses",
+                    "rotated-ring-undo-via-rebind-reference-snapshot",
+                ],
+            ),
+            (
+                "fail-closed-multi-resource-commit-transaction",
+                &[
+                    "VALIDATE",
+                    "COMMIT_PREVALIDATED",
+                    "NO recoverable error may escape",
+                    "verify-once-at-trust-boundary",
+                    "mixed pre/post-commit state",
+                ],
+            ),
+        ];
+        for &(id, needles) in checks {
+            let e = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-81 rule '{id}' missing"));
+            for needle in needles {
+                assert!(
+                    e.gpu_concept.contains(needle),
+                    "batch-81 concept for '{id}' missing phrase '{needle}'"
+                );
+            }
+        }
+    }
+
+    #[test]
+    #[cfg(not(feature = "kernel_verify"))]
+    fn batch81_pseudocode_parses() {
+        // G1 for Batch 81: syn-parse gate.
+        use crate::domain::HealDomain;
+        let corpus = build_kernel_seed_corpus();
+        let ids = [
+            "virtual-tail-packed-tree-verify-over-paged-kv",
+            "gdn-transition-replay-log-commit-many",
+            "cross-lane-column-packed-projections",
+            "identity-keyed-graph-retention-stable-arena",
+            "staged-append-rollback-lifo-retry-blocks",
+            "fail-closed-multi-resource-commit-transaction",
+        ];
+        for id in ids {
+            let entry = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-81 rule '{id}' missing"));
+            let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+            assert!(ref_verdict.parses, "batch-81 ref_shape for '{id}' must parse");
+            let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+            assert!(opt_verdict.parses, "batch-81 opt_pattern for '{id}' must parse");
+        }
+    }
     #[test]
     // the f32 rounding IS the subject under test (tree-order association
     // drift) -- the int->f32 casts feed float probes, precision loss is

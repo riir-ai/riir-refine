@@ -1,6 +1,6 @@
 # Research 095: lucebox PRs #642/#651/#659/#668 — concurrency stack distill verdict (YES A−; Plan 548 P1-2 T1)
 
-**Status:** DISTILLED — pending owner decision (the T2 port list below; corpus batch queued)
+**Status:** RECORD — Batch 81 LANDED 2026-08-27 (Plan 039; 6 rules + the B77 rider, corpus 387→393). The T2 port list below remains the Plan 548 concurrency-lane decision (ports are GPU-gated, NOT landed).
 
 **Source:** [Luce-Org/lucebox](https://github.com/Luce-Org/lucebox) PRs —
 [#642](https://github.com/Luce-Org/lucebox/pull/642) (concurrent fixed-chain GDN transition journal; **superseded by #651**, do not port separately) ·
@@ -64,5 +64,52 @@ evidence, the Batch 77 precedent).
   8.65%); no Strix claim for GDN/mech-5/6.
 - All numbers are R9700/gfx1201 (their box); our 4090 re-gate is mandatory
   (G2 + verdict-stable ×2 per Plan 548's gates).
-- Unread: the 28-commit #659 per-commit evolution (page-level verification
+## Unread: the 28-commit #659 per-commit evolution (page-level verification
   only); the LuceForge PR #73 observation record (linked, not fetched).
+
+---
+
+## Batch 81 record (landed 2026-08-27, Plan 039)
+
+6 rules — the full A/B/D/F/G/H set, ZERO dedup kills (Lane C adjudication:
+the ~50% falsification load Research 095 estimated was pre-absorbed by the
+C/E/I rider rulings at research time; every near-neighbor was read in full
+before the verdict). Corpus 387 → 393 (A 91→93, D 79→82, G 21→22):
+`virtual-tail-packed-tree-verify-over-paged-kv` (A),
+`gdn-transition-replay-log-commit-many` (G),
+`cross-lane-column-packed-projections` (D),
+`identity-keyed-graph-retention-stable-arena` (D),
+`staged-append-rollback-lifo-retry-blocks` (A),
+`fail-closed-multi-resource-commit-transaction` (D).
+Plus the P3-2 rider on B77 `shared-activation-quantize-memo-per-eval` (the
+#668 REQUEST-boundary release half: memos popped LIFO before pool trim;
+legacy non-VMM pools only).
+
+**Provenance corrections folded at batch time (Lane B, diff-verified):**
+(1) NO measured tables exist in the local diffs — every p50/goodput/GiB
+figure is a PR-body number via Plan 548's record (the diffs contain no
+commit messages; the "-22 dispatches" figure is not reproducible from the
+op inventory). Rules cite mechanisms, never the unverifiable numbers.
+(2) The F rule gained TWO halves the verdict summary missed: the kv axis of
+the key is BUCKET-quantized to 256 (`((requested + 255) / 256) * 256` — the
+mechanism that makes retention hit despite per-round kv growth) and the
+arena SALT loop (bucket-proportional dummy tensors so two shapes sharing
+the retained arena never alias in the address-keyed backend cache —
+"retention and salting are two halves of one contract").
+(3) The generation-counter invalidation belongs to the SELECTOR graph
+cache, not the target graph (the target invalidates via identity-key
+mismatch + park/unpark teardown).
+
+**GOAT:** kernel_heal lib 929/0/1i (926 + 3 gates) · default lib 703/0 ·
+all-features 1348/4/13i (the 4 = the KNOWN environmental l4_daemon
+Windows-spawn failures, identical B79/B80 signature; count-consistent —
+the parses gate is cfg-compiled-out under all-features) · clippy
+`--all-targets` 0 lint warnings both default + kernel_heal states (the
+exFAT hardlink cargo noise excepted; 1 doc_markdown backtick fix
+pre-commit) · retrieval floors 14/14 HELD zero decay (kernel
+self-variants 100/100/100, blended 93.9/96.9/97.7 — 10th consecutive
+batch) · CI guard layers 1-4 + 5a + 5b-default + 5c PASS.
+
+**Generator:** `target/gen_b81.py` (rustlit()-escaped, python-side needle
++ anchor assertions — the B51/B75 classes; one anchor bug caught pre-apply:
+the slice-insert searched for the OLD marker after replacing it).
