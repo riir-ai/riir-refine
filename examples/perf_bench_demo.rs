@@ -33,6 +33,8 @@ use riir_clippy::{
     domain::HealDomain,
     PerfBenchValidator, SizeOutcome,
 };
+#[cfg(feature = "rust_perf_bench")]
+use riir_clippy::domains::rust_perf::bench::ALLOC_AXIS_EXEMPT;
 
 /// How many times each benchable rule's binary runs for the alloc-determinism
 /// proof (Issue 014 T1.4: "identical across 3 repeat runs").
@@ -113,6 +115,8 @@ fn main() {
         if !deterministic {
             nondeterministic.push(entry.rule_id.clone());
             println!("  \u{274c} ALLOC AXIS NONDETERMINISTIC across {DETERMINISM_REPEATS} runs");
+        } else if ALLOC_AXIS_EXEMPT.contains(&entry.rule_id.as_str()) {
+            println!("  \u{26a0} ALLOC AXIS EXEMPT (platform: contended-mutex slow path allocates — see ALLOC_AXIS_EXEMPT)");
         }
 
         let faster_count = results.iter().filter(|r| r.outcome == SizeOutcome::Faster).count();

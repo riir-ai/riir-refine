@@ -1,6 +1,6 @@
 # Research 092 — Datadog RTDB/Monocle distill verdict (Batch 78 source)
 
-**Status:** DISTILLED — pending owner decision (batch tasks held in Plan 036; corpus edits gate on a free box — the sibling's Issue-762 FU2 bench iterations hold the M3 at time of verdict)
+**Status:** RECORD — Batch 78 LANDED 2026-08-27 (Plan 036 complete; commit in the same session). The bench OVERTURNED the verdict-time GOAT-lead ranking: `narrow-counter-overflow-promotion` measured **ParetoDominated 0.64-0.66x** (the memory-for-speed trade — honest-annotated, the `filter-count-to-any` class) while `cache-line-block-partitioned-lock` measured **ParetoDominant 1.12/3.91/2.98/3.03x at 2-12t** (verdict-stable x2). Both landed. See the §Landing addendum below.
 
 **Source:** "Evolving our real-time timeseries storage again: Built in Rust for performance at scale" — https://www.datadoghq.com/blog/engineering/rust-timeseries-engine/ (published 2025-08-04; authors Khayyam Guliyev, Duarte Nunes, Ming Chen, Justin Jaffray; read in full via webReader 2026-08-27). Blog-only (no public repo for Monocle) — fixtures are original minimal reproductions per the standing license constraint.
 
@@ -47,3 +47,12 @@ The validated hunting ground (B75/B76): production-Rust engineering blogs with m
 ## Queue slot
 
 Batch 78 (Plan 036), rust_perf, expected landing 1-2 rules. Cited by the queue snapshot line in the same commit.
+
+## Landing addendum (2026-08-27, Batch 78)
+
+- **The yield estimate held** (2 rules landed, both keep-candidates survived falsification — the rare 100% batch).
+- **The GOAT-lead ranking inverted at measurement**: the u32+sidecar form is a MEMORY trade, not a speed win on update-heavy shapes (flat 0.64-0.66x across 100K/1M/4M — branch-bound, not bandwidth-bound; Datadog's +70% was the compound, exactly as the caveat predicted). The honest-annotation class caught it: never promote a perf gain on a wrong result — the rule now documents the trade with the measured cost.
+- **`cache-line-block-partitioned-lock` is a clean winner** (2.5-4x at 4-12t) and forced the validator's first `ALLOC_AXIS_EXEMPT` (bench.rs): contended `std::sync::Mutex` on macOS allocates nondeterministically in the pthread slow path — probed 41/44/42/41/41 allocs across 5 runs (global-mutex 12t) vs EXACTLY 513 for uncontended construction of 512 locks. The exemption is probe-evidenced + per-rule, never a silent skip.
+- **The single-flight C+ lead died as predicted** (parse-only detection shape — recorded in Plan 036 T6).
+- **Harness lessons** (the B75 class, twice): `std::thread::Scope` takes TWO lifetime params; it is INVARIANT over `'scope` — helper fns taking `&Scope` fight the borrow checker; the spawn-body-inline shape (the align-64 convention) is the only smooth form.
+- **B77's stale benchable header caught en route** (74 vs true 76→78) — the count-pin-lesson class, fixed in the same walk.

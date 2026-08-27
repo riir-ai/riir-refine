@@ -9,9 +9,9 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //! unconditional wins + honestly NotBenchable rules.
 //!
-//! 86 entries across 12 categories (complexity 17, allocation 20, simd 7,
-//! layout 6, iterators 9, concurrency 7, io 3, arithmetic 8, dispatch 3,
-//! caching 4, bevy 1, wasm 1). 74 are benchable; 10 are honestly
+//! 88 entries across 12 categories (complexity 17, allocation 20, simd 7,
+//! layout 7, iterators 9, concurrency 8, io 3, arithmetic 8, dispatch 3,
+//! caching 4, bevy 1, wasm 1). 78 are benchable; 10 are honestly
 //! NotBenchable (8 external-runtime/size-class + 2 metric-mismatch, Issue 014).
 //! Batch 48 (idle-queue item 11, 2026-08-16) added the 8 online-search
 //! candidates (perf-book std-types + iterators chapters): collect-append-to-
@@ -49,7 +49,7 @@
 //! `run_buggy` / `run_fixed` entry points. The bench validator generates a
 //! temp bin crate from the spec + runs a timing loop at multiple sizes.
 //!
-//! Currently benchable (74/86):
+//! Currently benchable (78/88):
 //! - `o1-lookup` (Vec scan vs HashMap lookup — clear O(n) vs O(1))
 //! - `bsearch-sorted-slice` (linear scan vs binary search — O(n) vs O(log n) on sorted data)
 //! - `dedupe-hashset-vs-vec` (Vec::contains loop vs HashSet collect — O(n²) vs O(n))
@@ -122,7 +122,7 @@
 //! - `runtime-feature-detect-per-chunk` (CPU feature detection inside a per-chunk hot fn → resolve once via cached static / static cfg gate — the std::detect string resolution + detector read per call rivals small work units; Batch 74, simd-json distill)
 //! - `runtime-int-exponent-powi` (runtime-integer-exponent `powf` libm call → `powi` binary exponentiation — log2(n) multiplies vs an opaque pow call; NOT bit-identical, rel-error-gated; Batch 77, lucebox rope distill)
 //!
-//! Not benchable (10/86) — honest:
+//! Not benchable (10/88) — honest:
 //! - `layout-reorder` (struct size — deterministic `size_of`, not a runtime
 //!   microbench; the cache-utilization claim needs a specific access pattern)
 //! - `repr-u8-enum` (enum size — deterministic `size_of`, same class as
@@ -167,7 +167,7 @@ use crate::domains::rust_perf::{PerfRule, RustPerfDomain};
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 86 entries
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 88 entries
 /// covering the main perf pattern categories (complexity, allocation, simd,
 /// layout, iterators, concurrency, io, arithmetic, dispatch, caching, bevy,
 /// wasm). Allocation is the deepest (20 rules); complexity has 17 (Batch 76
@@ -1484,6 +1484,41 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: Some(usize_index_to_u32_bench_spec()),
         },
+        // ── layout: hot counter arrays u64 "just in case" → u32 +
+        // checked-promotion sidecar ──────────────────────────────────
+        // Source: Datadog RTDB/Monocle (Batch 78, Research 092 — the
+        // DDSketch aggregation buffer: "DDSketch bin counts are 64-bit
+        // integers, but in practice most counts never approach the
+        // 32-bit limit. We conserve memory by storing counts as u32
+        // values in the aggregation buffer and promoting them to 64-bit
+        // only if they overflow. Rust's built-in overflow checks make it
+        // straightforward to detect when an upgrade to a larger counter
+        // is needed."). The mechanism is the usize-index-to-u32 twin on
+        // VALUES: half-width counters = 2x per cache line on the sweep.
+        // DISTINCT from usize-index-to-u32 (Batch 61: narrows INDEX
+        // fields whose domain bounds below 2^32 — a layout claim with a
+        // domain guard); this narrows VALUE counters whose common case
+        // stays low but whose domain does NOT bound them — the escape
+        // hatch is runtime promotion (checked_add → sparse sidecar),
+        // not a domain proof. The promoted slot's narrow cell zeroes
+        // (dead) so the dense sweep stays branch-free; the sidecar is
+        // sparse (only overflowing slots, an empty-HashMap fast path
+        // guards the common regime). Datadog's compound (this + the
+        // radix buffer + inline bins + shared buffer) measured +70%
+        // aggregation throughput — the isolated mechanism is our bench.
+        PerfRule {
+            rule_id: "narrow-counter-overflow-promotion".to_string(),
+            name: "hot counter arrays stored u64 \"just in case\" → u32 + checked-promotion sidecar (2x cache density)".to_string(),
+            category: "layout".to_string(),
+            buggy_code: "// Hot aggregation buffer: every counter is u64 \"just in case\" —\n// 8 bytes each, half the per-line density on the aggregation sweep.\nstruct Bins {\n    counts: Vec<u64>, // production data: most bins never approach 2^32\n}\nimpl Bins {\n    fn bump(&mut self, i: usize, v: u64) {\n        self.counts[i] += v; // full-width add for a counter that fits u32\n    }\n    fn total(&self) -> u64 {\n        self.counts.iter().sum() // sweep pays 2x the bytes per element\n    }\n}".to_string(),
+            fixed_code: "// Same buffer, common case narrowed to u32 + a sparse promoted sidecar:\n// 2x counters per cache line on the sweep; Rust's checked_add IS the\n// overflow detector (the promote path moves the slot to the sidecar and\n// zeroes the narrow slot — totals stay exact).\nstruct Bins {\n    counts: Vec<u32>,                      // narrow fast path (dense sweep)\n    wide: std::collections::HashMap<usize, u64>, // promoted slots only (sparse)\n}\nimpl Bins {\n    fn bump(&mut self, i: usize, v: u32) {\n        if self.wide.is_empty() {\n            // common regime: nothing ever promoted — narrow add only\n            match self.counts[i].checked_add(v) {\n                Some(x) => self.counts[i] = x,\n                None => {\n                    let w = u64::from(self.counts[i]) + u64::from(v);\n                    self.counts[i] = 0; // narrow slot is dead now\n                    self.wide.insert(i, w);\n                }\n            }\n            return;\n        }\n        if let Some(w) = self.wide.get_mut(&i) {\n            *w += u64::from(v); // already promoted — stay wide\n            return;\n        }\n        match self.counts[i].checked_add(v) {\n            Some(x) => self.counts[i] = x,\n            None => {\n                let w = u64::from(self.counts[i]) + u64::from(v);\n                self.counts[i] = 0;\n                self.wide.insert(i, w);\n            }\n        }\n    }\n    fn total(&self) -> u64 {\n        // dense narrow sweep (2x density) + the tiny promoted patch\n        self.counts.iter().map(|&n| u64::from(n)).sum::<u64>()\n            + self.wide.values().sum::<u64>()\n    }\n}".to_string(),
+            context_notes: Some(
+                "MEASURED ParetoDominated 0.64-0.66x at 100K/1M/4M counters (M3 Max release, 2026-08-27; verdict-stable x2; alloc axis deterministic: buggy 1 alloc of 8N bytes vs fixed 1 alloc of 4N — the halving is exact). THE TRADE, honestly: the win is MEMORY (2x per cache line / half the footprint — Datadog's motivation was the 2,100 GiB infeasibility of per-worker DDSketch buffers, not speed), NOT wall-clock on update-heavy shapes: the per-update wide.is_empty() guard + checked_add overflow branch cost ~35-55% on a 4-updates-per-slot round-robin stream, and the flat ratio across sizes shows the workload is branch-bound, not bandwidth-bound (a bandwidth win would grow with the working set). REGIME where the trade PAYS: memory-footprint-bound systems (huge counter arrays, RAM/GB-priced deployment) and sweep-dominated access (read-mostly, few updates — the sweep alone touches half the bytes); the cost regime is update-heavy streams. Datadog's +70% aggregation throughput was the COMPOUND of the shared buffer + radix tree + inline bins + this narrowing — never cite it as the isolated mechanism. The promotion semantics are exact: totals match u64 bit-identically on every stream incl. u32-boundary crossings (the exhaustive-style G1 gate below). Distinct from usize-index-to-u32 (index fields, domain-bounded) — this narrows VALUE counters with a runtime escape hatch. Suggestion-only (type-blind: a parse-only proposer cannot see counter magnitude distributions). Source: Datadog RTDB/Monocle (datadoghq.com blog, 2025-08-04, Batch 78 / Research 092)."
+                    .to_string(),
+            ),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(narrow_counter_overflow_promotion_bench_spec()),
+        },
         // ── simd: transposed-weight register GEMV ─────────────────────────────────────
         // Source: microGPT-C (MIT, Research 070, Batch 62). The row-major
         // matvec dots every row into ONE scalar accumulator and pays a
@@ -1822,6 +1857,37 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
             context_notes: Some("Measured ParetoDominant 11.5-12.7x at 1K-100K calls (M3 Max release, load ~7.1, 2026-08-26; allocs 100000->0, bytes 4.7MB->0 @100K, alloc-det stable across invocations). HONEST MARGIN NOTE: the source's +18% throughput (the same matrix-rust-sdk room_list bench) is END-TO-END — the narrow-accessor patch was one of several stacked optimizations; the isolated mechanism (uncontended read-lock + ~47-64B guarded-payload clone with a heap alloc, vs read-lock + bool read) reads 11-13x on this box because the clone dominates the lock; under real read contention the gap widens further (the clone holds the guard longer). The alloc axis (exact N->0) is the deterministic half of the verdict. Type-blind for a parse-only proposer (cannot see payload width or which sub-field a consumer reads) — suggestion-only, the soa-hot-field precedent.".to_string()),
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: Some(lock_guard_narrow_field_accessor_bench_spec()),
+        },
+        // ── concurrency: one lock guarding a large item array →
+        // K-items-per-cache-line-block locks ──────────────────────────
+        // Source: Datadog RTDB/Monocle (Batch 78, Research 092 — the
+        // group-by aggregation buffer: "we leverage this pattern by
+        // grouping eight consecutive points into a cache line-aligned
+        // block protected by a single mutex. This fine-grained locking
+        // confines contention to within each small block and allows
+        // parallel updates with little synchronization overhead" —
+        // their per-worker-buffer replacement after the 2,100 GiB
+        // DDSketch duplication). ADJACENT-BUT-DISTINCT from
+        // align-64-false-sharing (Batch 65): that PADS independent
+        // slots so unrelated writes stop sharing a line (eliminates
+        // FALSE sharing between independent slots); THIS partitions
+        // one logical array's TRUE sharing at line granularity — the
+        // items ARE related (same buffer), the lock granularity is the
+        // tuning axis (global → per-block). Both live on the coherence-
+        // granularity axis; the detection shapes differ (per-thread
+        // ordinal slots vs one guarded array under a single lock).
+        PerfRule {
+            rule_id: "cache-line-block-partitioned-lock".to_string(),
+            name: "one Mutex guarding a large item array → K-items-per-cache-line-block locks (partition TRUE sharing at line granularity)".to_string(),
+            category: "concurrency".to_string(),
+            buggy_code: "// One lock guards the whole point array: every bump serializes.\nstruct Series {\n    points: std::sync::Mutex<Vec<u64>>, // all points under ONE lock\n}\nimpl Series {\n    fn bump(&self, i: usize) {\n        self.points.lock().unwrap()[i] += 1; // full serialization per bump\n    }\n}".to_string(),
+            fixed_code: "// K points per cache-line-aligned block, one lock per block: bumps to\n// different blocks proceed in parallel; contention drops by the block\n// count (here 8 points/block — the Datadog group-by buffer).\n#[repr(align(128))] // the ARCH coherence line (64 x86 / 128 Apple Silicon)\nstruct Block {\n    lock: std::sync::Mutex<[u64; 8]>, // 8 consecutive points per block\n}\nstruct Series {\n    blocks: Vec<Block>,\n}\nimpl Series {\n    fn bump(&self, i: usize) {\n        let b = &self.blocks[i / 8];\n        b.lock.lock().unwrap()[i % 8] += 1; // contention ~ /8\n    }\n}".to_string(),
+            context_notes: Some(
+                "MEASURED ParetoDominant 1.12x/3.91x/2.98x/3.03x at 2/4/8/12 threads, 4096 points, 20K bumps/thread (M3 Max release, 2026-08-27; verdict-stable x2; second invocation 1.14/4.02/2.95/3.03 — same verdict band). The mechanism: one Mutex<Vec<u64>> serializes EVERY bump across all threads; 512 aligned Mutex<[u64; 8]> blocks confine contention to within-block pairs (~8x fewer collision opportunities — measured 2.5-4x end-to-end at 4-12t; the 2t 1.12x is the honest low-contention edge). REGIME: multi-threaded bump workloads over a shared array; a single-threaded bump loop pays the block-index division for nothing (do not apply). DIFFERENTIATION vs align-64-false-sharing (Batch 65): that PADS independent per-thread slots to eliminate FALSE sharing between unrelated writes; THIS partitions the TRUE sharing of ONE logical array at lock granularity — the items are related (same buffer), the lock scope is the tuning axis. The two compose: block-partition first (this rule), pad the per-thread stats after (that one). ALLOC AXIS EXEMPT (the first such rule): contended std::sync::Mutex on macOS allocates nondeterministically in the pthread slow path (probed: global-mutex 12t measured 41-44 allocs across runs; uncontended construction exactly 513/512 locks) — the exemption is probe-evidenced in bench.rs ALLOC_AXIS_EXEMPT, not a silent skip. Suggestion-only (type-blind). Source: Datadog RTDB/Monocle group-by aggregation buffer (datadoghq.com blog, 2025-08-04, Batch 78 / Research 092)."
+                    .to_string(),
+            ),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(cache_line_block_partitioned_lock_bench_spec()),
         },
         // ── arithmetic: per-digit decimal parse loop → SWAR 8-digit chunk ─────
         // Source: simd-lite/simd-json `numberparse.rs` (Batch 74, Research
@@ -7192,6 +7258,37 @@ pub fn run_fixed(input: &Input) {
     }
 }
 
+/// Bench spec for `narrow-counter-overflow-promotion` (Batch 78,
+/// Research 092 — Datadog RTDB/Monocle): the full-width u64 counter
+/// buffer vs the u32+sidecar form. Sizes = counter count; working set
+/// 0.8/8/32 MB (u64 arm) vs 0.4/4/16 MB (u32 arm) — the smallest size
+/// is L2-resident (density pays nothing — the honest Tie regime), the
+/// largest is DRAM-bound. Alloc axis: buggy 1 alloc of 8N bytes, fixed
+/// 1 alloc of 4N (empty HashMap never allocates) — the halving is exact.
+/// G1: totals are closed-form identical (no promotion fires in the
+/// common regime; debug_assert per run).
+#[cfg(feature = "rust_perf_bench")]
+fn narrow_counter_overflow_promotion_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![100_000, 1_000_000, 4_000_000],
+        harness: "\nmod buggy {\n    // The full-width buffer: every counter u64 \"just in case\".\n    pub struct Bins { pub counts: Vec<u64> }\n    pub fn bump_all(c: &mut Bins, updates: &[(u32, u32)]) {\n        for &(i, v) in updates {\n            c.counts[i as usize] += u64::from(v);\n        }\n    }\n    pub fn total(c: &Bins) -> u64 {\n        c.counts.iter().sum()\n    }\n}\n\nmod fixed {\n    use std::collections::HashMap;\n    // Common case narrowed to u32; overflow promotes to a sparse sidecar.\n    pub struct Bins {\n        pub counts: Vec<u32>,\n        pub wide: HashMap<usize, u64>,\n    }\n    pub fn bump_all(c: &mut Bins, updates: &[(u32, u32)]) {\n        for &(i, v) in updates {\n            let i = i as usize;\n            if c.wide.is_empty() {\n                // common regime: nothing ever promoted\n                match c.counts[i].checked_add(v) {\n                    Some(x) => c.counts[i] = x,\n                    None => {\n                        let w = u64::from(c.counts[i]) + u64::from(v);\n                        c.counts[i] = 0; // narrow slot is dead now\n                        c.wide.insert(i, w);\n                    }\n                }\n                continue;\n            }\n            if let Some(w) = c.wide.get_mut(&i) {\n                *w += u64::from(v);\n                continue;\n            }\n            match c.counts[i].checked_add(v) {\n                Some(x) => c.counts[i] = x,\n                None => {\n                    let w = u64::from(c.counts[i]) + u64::from(v);\n                    c.counts[i] = 0;\n                    c.wide.insert(i, w);\n                }\n            }\n        }\n    }\n    pub fn total(c: &Bins) -> u64 {\n        c.counts.iter().map(|&n| u64::from(n)).sum::<u64>()\n            + c.wide.values().sum::<u64>()\n    }\n}\n\n/// Deterministic update stream: every slot bumped exactly UPDATES_PER_SLOT\n/// times with LCG deltas 1..=64 (the common regime — no slot approaches\n/// u32::MAX, so the fixed arm never promotes; totals are closed-form).\nconst UPDATES_PER_SLOT: u64 = 4;\nconst DELTA_MAX: u32 = 64;\n\npub struct Input {\n    n: usize,\n    updates: Vec<(u32, u32)>,\n    expected_total: u64,\n}\n\npub fn make_input(n: usize) -> Input {\n    let mut rng: u64 = 0x0B78_0D06_C0DE_5EED; // seeded LCG\n    let rng = &mut rng;\n    let mut updates: Vec<(u32, u32)> = Vec::with_capacity(n * UPDATES_PER_SLOT as usize);\n    let mut expected: u64 = 0;\n    // round-robin slots so both arms walk the array identically\n    for round in 0..UPDATES_PER_SLOT {\n        for i in 0..n {\n            *rng = rng.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695_040_888_963_407);\n            let v = ((*rng >> 33) as u32 % DELTA_MAX) + 1; // 1..=64\n            updates.push((i as u32, v));\n            expected += u64::from(v);\n            std::hint::black_box(&round);\n        }\n    }\n    Input { n, updates, expected_total: expected }\n}\n\npub fn run_buggy(input: &Input) {\n    let input = std::hint::black_box(input);\n    let mut bins = buggy::Bins { counts: vec![0u64; input.n] };\n    buggy::bump_all(&mut bins, &input.updates);\n    let t = buggy::total(&bins);\n    std::hint::black_box(t);\n    debug_assert_eq!(t, input.expected_total);\n}\n\npub fn run_fixed(input: &Input) {\n    let input = std::hint::black_box(input);\n    let mut bins = fixed::Bins { counts: vec![0u32; input.n], wide: std::collections::HashMap::new() };\n    fixed::bump_all(&mut bins, &input.updates);\n    let t = fixed::total(&bins);\n    std::hint::black_box(t);\n    debug_assert_eq!(t, input.expected_total);\n}\n".to_string(),
+    }
+}
+
+/// Bench spec for `cache-line-block-partitioned-lock` (Batch 78,
+/// Research 092 — Datadog RTDB/Monocle): one `Mutex<Vec<u64>>` guarding
+/// all 4096 points vs 512 aligned `Mutex<[u64; 8]>` blocks. Thread
+/// counts are the size axis (the align-64 convention). G1: bump totals
+/// are the closed form `threads * iters` — lock granularity cannot
+/// change totals (Mutex guarantees).
+#[cfg(feature = "rust_perf_bench")]
+fn cache_line_block_partitioned_lock_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![2, 4, 8, 12],
+        harness: "\nmod buggy {\n    use std::sync::Mutex;\n    // One lock guards the whole point array: every bump serializes.\n    pub struct Series { pub points: Mutex<Vec<u64>> }\n    pub fn make(n_points: usize) -> Series {\n        Series { points: Mutex::new(vec![0u64; n_points]) }\n    }\n    pub fn run(s: &Series, n_threads: usize, iters: u64, n_points: usize) -> u64 {\n        std::thread::scope(|sc| {\n            for t in 0..n_threads {\n                sc.spawn(move || {\n                    let mut rng: u64 = (t as u64 + 1).wrapping_mul(0x9E37_79B9_7F4A_7C15);\n                    for _ in 0..iters {\n                        rng = rng.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695_040_888_963_407);\n                        let i = (rng >> 33) as usize % n_points;\n                        s.points.lock().unwrap()[i] += 1; // full serialization\n                    }\n                });\n            }\n        });\n        let g = s.points.lock().unwrap();\n        g.iter().sum()\n    }\n}\n\nmod fixed {\n    use std::sync::Mutex;\n    // 8 points per cache-line-aligned block, one lock per block.\n    #[repr(align(128))] // the ARCH coherence line (64 x86 / 128 Apple Silicon)\n    pub struct Block { pub lock: Mutex<[u64; 8]> }\n    pub struct Series { pub blocks: Vec<Block> }\n    pub fn make(n_points: usize) -> Series {\n        let n_blocks = n_points.div_ceil(8);\n        Series { blocks: (0..n_blocks).map(|_| Block { lock: Mutex::new([0u64; 8]) }).collect() }\n    }\n    pub fn run(s: &Series, n_threads: usize, iters: u64, n_points: usize) -> u64 {\n        std::thread::scope(|sc| {\n            for t in 0..n_threads {\n                sc.spawn(move || {\n                    let mut rng: u64 = (t as u64 + 1).wrapping_mul(0x9E37_79B9_7F4A_7C15);\n                    for _ in 0..iters {\n                        rng = rng.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695_040_888_963_407);\n                        let i = (rng >> 33) as usize % n_points;\n                        let b = &s.blocks[i / 8];\n                        b.lock.lock().unwrap()[i % 8] += 1; // contention ~ /8\n                    }\n                });\n            }\n        });\n        s.blocks.iter().map(|b| b.lock.lock().unwrap().iter().sum::<u64>()).sum()\n    }\n}\n\nconst POINTS: usize = 4096; // 512 blocks x 8 (fixed arm)\nconst ITERS: u64 = 20_000;  // bumps per thread\n\npub struct Input { n_threads: usize }\n\npub fn make_input(n: usize) -> Input {\n    // n = THREAD COUNT (the contention axis is the size axis, the align-64\n    // bench convention).\n    Input { n_threads: n }\n}\n\nfn expected(n_threads: usize) -> u64 {\n    // Every bump adds exactly 1 — the closed-form total (lock granularity\n    // cannot change it; Mutex guarantees mutual exclusion, G1).\n    n_threads as u64 * ITERS\n}\n\npub fn run_buggy(input: &Input) {\n    let input = std::hint::black_box(input);\n    let s = buggy::make(POINTS);\n    let cs = buggy::run(&s, input.n_threads, ITERS, POINTS);\n    std::hint::black_box(cs);\n    debug_assert_eq!(cs, expected(input.n_threads));\n}\n\npub fn run_fixed(input: &Input) {\n    let input = std::hint::black_box(input);\n    let s = fixed::make(POINTS);\n    let cs = fixed::run(&s, input.n_threads, ITERS, POINTS);\n    std::hint::black_box(cs);\n    debug_assert_eq!(cs, expected(input.n_threads));\n}\n".to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -7207,9 +7304,9 @@ mod tests {
     }
 
     #[test]
-    fn seed_corpus_has_eighty_six_entries_across_twelve_categories() {
+    fn seed_corpus_has_eighty_eight_entries_across_twelve_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 86);
+        assert_eq!(corpus.entries.len(), 88);
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
@@ -7228,8 +7325,12 @@ mod tests {
         // byte-find-position-to-memchr); simd has 7 (Batch 62 added
         // transposed-weight-register-gemv; Batch 64 added
         // loop-order-innermost-contiguous); layout has 6 (Batch 53 added
-        // soa-hot-field; Batch 61 added usize-index-to-u32) + concurrency
-        // has 7 (Issue 014 added the two metric-mismatch rules; Batch 65
+        // soa-hot-field; Batch 61 added usize-index-to-u32; Batch 78 added
+        // narrow-counter-overflow-promotion) + concurrency
+        // has 8 (Issue 014 added the two metric-mismatch rules; Batch 65
+        // added align-64-false-sharing + channel-send-batching-unpark;
+        // Batch 73 added lock-guard-narrow-field-accessor; Batch 78 added
+        // cache-line-block-partitioned-lock
         // added align-64-false-sharing + channel-send-batching-unpark;
         // Batch 73 added lock-guard-narrow-field-accessor); arithmetic
         // has 7 (Batch 53 added powi-vs-powf + distance-sq-no-sqrt; Batch 59
@@ -7836,10 +7937,10 @@ mod tests {
 
     #[cfg(feature = "rust_perf_bench")]
     #[test]
-    fn seventy_six_rules_have_bench_specs() {
+    fn seventy_eight_rules_have_bench_specs() {
         let corpus = build_perf_seed_corpus();
         let with_spec = corpus.entries.iter().filter(|e| e.bench_spec.is_some()).count();
-        assert_eq!(with_spec, 76, "expected 76 benchable rules, got {with_spec}");
+        assert_eq!(with_spec, 78, "expected 78 benchable rules, got {with_spec}");
     }
 
     #[cfg(feature = "rust_perf_bench")]
@@ -7885,7 +7986,11 @@ mod tests {
     /// Batch 73 added 2 (sort-key-cache-precompute-out-of-lock — the
     /// sorts-per-update amortization regime + the source-vs-isolated
     /// magnitude caveat; lock-guard-narrow-field-accessor — the honest
-    /// margin note on a clean winner).
+    /// margin note on a clean winner). Batch 78 added 2 (narrow-counter-
+    /// overflow-promotion — the ParetoDominated memory-for-speed trade
+    /// (the Datadog 2,100 GiB regime vs the measured update-path cost);
+    /// cache-line-block-partitioned-lock — measured-winner regime note +
+    /// the first ALLOC_AXIS_EXEMPT rule).
     /// The other 58 have `context_notes: None` (unconditional wins or
     /// honestly NotBenchable).
     #[test]
@@ -7897,7 +8002,7 @@ mod tests {
             .filter(|e| e.context_notes.is_some())
             .map(|e| e.rule_id.as_str())
             .collect();
-        assert_eq!(annotated.len(), 29, "expected 29 context-annotated rules");
+        assert_eq!(annotated.len(), 31, "expected 31 context-annotated rules");
         assert!(annotated.contains(&"precompute-table"));
         assert!(annotated.contains(&"papaya-lockfree"));
         assert!(annotated.contains(&"dedupe-hashset-vs-vec"));
@@ -7923,6 +8028,8 @@ mod tests {
         assert!(annotated.contains(&"group-keys-borrow-allocate-on-first-sight")); // Batch 75 — R/S regime + correctness contract
         assert!(annotated.contains(&"sorted-input-previous-row-fast-path")); // Batch 75 — hit-rate regime
         assert!(annotated.contains(&"btreemap-sorted-iteration")); // Batch 75 rider — the two-row sorted-read decision table
+        assert!(annotated.contains(&"narrow-counter-overflow-promotion")); // Batch 78 — ParetoDominated honest-loser (the memory-for-speed trade)
+        assert!(annotated.contains(&"cache-line-block-partitioned-lock")); // Batch 78 — measured-winner + regime + alloc-exempt note
     }
 
     /// The non-annotated rules (ParetoDominant + honestly NotBenchable) must
@@ -7936,7 +8043,7 @@ mod tests {
             .iter()
             .filter(|e| e.context_notes.is_none())
             .count();
-        assert_eq!(unannotated, 57, "expected 57 unannotated rules (86 - 29 annotated)");
+        assert_eq!(unannotated, 57, "expected 57 unannotated rules (88 - 31 annotated)");
     }
 
     /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -7948,7 +8055,7 @@ mod tests {
         let json = serde_json::to_string(&corpus.entries).unwrap();
         let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
         let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-        assert_eq!(annotated, 29);
+        assert_eq!(annotated, 31);
 
         // Simulate a pre-field snapshot: strip `context_notes` from JSON.
         // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -7980,9 +8087,9 @@ mod tests {
 
         let corpus = build_perf_seed_corpus();
 
-        // Filter to the 28 annotated rules.
+        // Filter to the 31 annotated rules.
         let annotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_some()).collect();
-        assert_eq!(annotated.len(), 29, "expected 29 annotated rules");
+        assert_eq!(annotated.len(), 31, "expected 31 annotated rules");
 
         // The HealEntry trait override must agree with the struct field.
         for rule in &annotated {
@@ -8427,5 +8534,167 @@ mod tests {
         // exact equality still matches
         assert!(key_matches(&short, &short));
         assert!(key_matches(&long, &long));
+    }
+
+    /// Batch 78 — the two Datadog rules are present + retrievable.
+    #[test]
+    fn batch78_rules_present() {
+        let corpus = build_perf_seed_corpus();
+        let ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        assert!(ids.contains(&"narrow-counter-overflow-promotion"));
+        assert!(ids.contains(&"cache-line-block-partitioned-lock"));
+    }
+
+    /// Batch 78 — both new rules parse (syn) on buggy AND fixed code.
+    #[test]
+    fn batch78_pseudocode_parses() {
+        let corpus = build_perf_seed_corpus();
+        for id in ["narrow-counter-overflow-promotion", "cache-line-block-partitioned-lock"] {
+            let e = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("{id} missing from corpus"));
+            assert!(
+                syn::parse_file(&e.buggy_code).and_then(|_| syn::parse_file(&e.fixed_code)).is_ok(),
+                "{id} buggy/fixed must both parse"
+            );
+        }
+    }
+
+    /// Batch 78 — G1 for `narrow-counter-overflow-promotion` (the ported-
+    /// numeric MANDATE shape): the u32+sidecar form must be EXACTLY
+    /// equivalent to the u64 buffer for ANY monotone update stream,
+    /// including streams that CROSS the u32 boundary (the promotion path
+    /// the bench never fires). Adversarial sequences: repeated
+    /// u32::MAX-adjacent adds, mixed small/large, LCG, and every-slot
+    /// overflow sweeps. Totals AND per-slot values must match bit-exactly.
+    #[test]
+    #[allow(clippy::cast_possible_truncation)] // the LCG truncation IS the generator under test
+    fn narrow_counter_promotion_matches_u64_exactly() {
+        use std::collections::HashMap;
+
+        fn buggy_run(n: usize, updates: &[(usize, u32)]) -> (u64, Vec<u64>) {
+            let mut counts = vec![0u64; n];
+            for &(i, v) in updates {
+                counts[i] += u64::from(v);
+            }
+            let total = counts.iter().sum();
+            (total, counts)
+        }
+
+        fn fixed_run(n: usize, updates: &[(usize, u32)]) -> (u64, Vec<u64>) {
+            let mut counts = vec![0u32; n];
+            let mut wide: HashMap<usize, u64> = HashMap::new();
+            for &(i, v) in updates {
+                if let Some(w) = wide.get_mut(&i) {
+                    *w += u64::from(v);
+                    continue;
+                }
+                if let Some(x) = counts[i].checked_add(v) {
+                    counts[i] = x;
+                } else {
+                    let w = u64::from(counts[i]) + u64::from(v);
+                    counts[i] = 0;
+                    wide.insert(i, w);
+                }
+            }
+            let total = counts.iter().map(|&x| u64::from(x)).sum::<u64>()
+                + wide.values().sum::<u64>();
+            let per_slot: Vec<u64> = (0..n)
+                .map(|i| match wide.get(&i) {
+                    Some(&w) => w,
+                    None => u64::from(counts[i]),
+                })
+                .collect();
+            (total, per_slot)
+        }
+
+        // (a) Exact-boundary crossing: one slot walked to just below
+        // u32::MAX then pushed over, then bumped again (the promoted
+        // path's continue-on-follow-up).
+        let mut ups: Vec<(usize, u32)> = vec![(0, u32::MAX - 5), (0, 10), (0, 7)];
+        ups.extend((1..8).map(|i| (i, 1_000)));
+        let (bt, bp) = buggy_run(8, &ups);
+        let (ft, fp) = fixed_run(8, &ups);
+        assert_eq!((bt, bp), (ft, fp));
+
+        // (b) EVERY slot overflows (all-promoted regime).
+        let ups: Vec<(usize, u32)> = (0..16)
+            .flat_map(|i| [(i, u32::MAX), (i, u32::MAX), (i, 3)])
+            .collect();
+        let (bt, bp) = buggy_run(16, &ups);
+        let (ft, fp) = fixed_run(16, &ups);
+        assert_eq!((bt, bp), (ft, fp));
+
+        // (c) LCG stream over 128 slots, 4096 updates, deltas biased to
+        // the overflow regime.
+        let mut rng: u64 = 0x5EED_5EED_5EED_5EED;
+        let ups: Vec<(usize, u32)> = (0..4096)
+            .map(|_| {
+                rng = rng
+                    .wrapping_mul(6_364_136_223_846_793_005)
+                    .wrapping_add(1_442_695_040_888_963_407);
+                let i = (rng >> 33) as usize % 128;
+                let v = ((rng >> 13) as u32 % 3000) + 1;
+                (i, v)
+            })
+            .collect();
+        let (bt, bp) = buggy_run(128, &ups);
+        let (ft, fp) = fixed_run(128, &ups);
+        assert_eq!((bt, bp), (ft, fp), "LCG overflow-regime stream must match exactly");
+
+        // (d) u32::MAX boundary: 0 + u32::MAX does NOT overflow (stays
+        // narrow); the SECOND u32::MAX promotes.
+        let ups: Vec<(usize, u32)> = vec![(0, u32::MAX), (0, u32::MAX)];
+        let (bt, bp) = buggy_run(1, &ups);
+        let (ft, fp) = fixed_run(1, &ups);
+        assert_eq!(bt, ft);
+        assert_eq!(bp, fp);
+        assert_eq!(bp[0], 2 * u64::from(u32::MAX));
+    }
+
+    /// Batch 78 — G1 for `cache-line-block-partitioned-lock`: lock
+    /// granularity cannot change totals (same seeded stream through both
+    /// structures, closed-form check).
+    #[test]
+    fn block_partitioned_lock_totals_match() {
+        use std::sync::Mutex;
+
+        #[repr(align(128))]
+        struct Block { lock: Mutex<[u64; 8]> }
+        const N: usize = 64; // 8 blocks x 8 points
+        const UPS: usize = 500;
+        let stream: Vec<usize> = {
+            let mut rng: u64 = 0xABCD_EF01_2345_6789;
+            (0..UPS)
+                .map(|_| {
+                    rng = rng
+                        .wrapping_mul(6_364_136_223_846_793_005)
+                        .wrapping_add(1_442_695_040_888_963_407);
+                    (rng >> 33) as usize % N
+                })
+                .collect()
+        };
+
+        let g = Mutex::new(vec![0u64; N]);
+        for &i in &stream {
+            g.lock().unwrap()[i] += 1;
+        }
+        let global_total: u64 = g.lock().unwrap().iter().sum();
+
+        let blocks: Vec<Block> = (0..N / 8)
+            .map(|_| Block { lock: Mutex::new([0u64; 8]) })
+            .collect();
+        for &i in &stream {
+            blocks[i / 8].lock.lock().unwrap()[i % 8] += 1;
+        }
+        let block_total: u64 = blocks
+            .iter()
+            .map(|b| b.lock.lock().unwrap().iter().sum::<u64>())
+            .sum();
+
+        assert_eq!(global_total, block_total);
+        assert_eq!(global_total, UPS as u64);
     }
 }
