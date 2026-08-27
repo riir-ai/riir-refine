@@ -27,7 +27,7 @@ still applies whenever a measurement saturates the box, at any hour.
 | # | Item | How |
 |---|------|-----|
 | 1 | **Fix open issues** | Scan `.issues/` across repos, oldest first, skip deferred. Fix → validate → doc → remove file (noise-reduction rule). |
-| 2 | **Finish in-flight plans** | `.plans/` with unchecked `- [ ]` — complete the next task group, honor `- [-]` defers. |
+| 2 | **Finish in-flight plans** | `.plans/` with unchecked `- [ ]` — complete the next task group, honor `- [-]` defers. Rank plans from ORIGIN, never the working tree (Discipline: plan_read_origin). |
 | 3 | **Clippy sweep, all repos** | Heal-driven where possible (see heal protocol below), manual `cargo clippy --all-targets` otherwise. |
 | 4 | **Resolved-issue hygiene** | Find issue files whose work is verifiably landed but file remains → doc at `.docs`/AGENTS.md → `rm` the file. |
 | 5 | **Batch mining + heal dry-run** | The centerpiece — see the two protocols below. |
@@ -154,6 +154,16 @@ skill points agents there). Per sweep:
   untracked files, verify the tree is 100% theirs, pick a different unit.
   Never commit through a duplicate (two `feature = []` keys = broken
   manifest for both sessions).
+- **Plan selection reads ORIGIN, not the working tree** (2026-08-27, the
+  Plan-346 stale-copy trap): before ranking/dispatching any `.plans/` work,
+  use `riir-clippy/scripts/plan_read_origin.sh <repo> (--list | <file>)` —
+  fetches origin, resolves the default branch from the remote (`main` for
+  riir-train, `develop` elsewhere), reads `git show origin/<default>:...`,
+  logs the commit hash (cite it when acting on a plan). The shared checkout
+  can ride a SIBLING branch for days (riir-train on `sync/p348-*`) whose
+  plans are stale vs origin — a working-tree read once dispatched a plan
+  already closed there. Guard: `--self-test` (dirty non-default-branch
+  checkout must still yield origin contents).
 - **Sibling safety**: never `git stash` sibling WIP; commit only your own
   hunks; isolate builds under `/tmp`; before blaming CI on riir-clippy,
   check whether `src/domains/*/bench.rs` WIP is the sibling's.
