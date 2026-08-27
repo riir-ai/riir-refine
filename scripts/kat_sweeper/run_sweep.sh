@@ -29,7 +29,7 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SWEEPER_HOME="$(cd "$SCRIPT_DIR/.." && pwd)"
+SWEEPER_HOME="$(cd "$SCRIPT_DIR/../.." && pwd)"
 CONFIG="${KAT_SWEEPER_CONFIG:-$SCRIPT_DIR/kat_sweeper.toml}"
 RUNS_FILE="$SWEEPER_HOME/.heal/kat_sweeper_runs.jsonl"
 RUNS_VERSION=1
@@ -105,12 +105,13 @@ record_row() {
 }
 
 # Parse a `/usr/bin/time -l` report file into TIME_WALL / TIME_CPU / TIME_RSS
-# (globals). macOS layout:
-#     1.23 real   0.45 user   0.30 sys
+# (globals). macOS layout (fields on ONE line: value real, user-value user,
+# sys-value sys — so user is $3 + sys is $5 on the `real` line):
+#     22.36 real   19.12 user   3.11 sys
 #     12345678  maximum resident set size   (BYTES)
 parse_time_report() {
   TIME_WALL="$(awk '$2 == "real" {print $1; exit}' "$1")"
-  TIME_CPU="$(awk '$2 == "user" {u = $1} $2 == "sys" {s = $1} END {printf "%.2f", u + s}' "$1")"
+  TIME_CPU="$(awk '$2 == "real" {printf "%.2f", $3 + $5; exit}' "$1")"
   TIME_RSS="$(awk '/maximum resident set size/ {print $1; exit}' "$1")"
   TIME_WALL="${TIME_WALL:-0}"; TIME_CPU="${TIME_CPU:-0}"; TIME_RSS="${TIME_RSS:-0}"
 }
