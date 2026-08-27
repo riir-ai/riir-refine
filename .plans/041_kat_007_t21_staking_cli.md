@@ -1,7 +1,7 @@
 # Plan 041 — Proposal 007 T2.1: the staking CLI surface (stake / stake --info / unstake)
 
-Status: **complete** (landed 2026-08-28 — commit below) · validation: default lib 712/0 ·
-all-features lib 1409/0/13i · unit 19/0 · integration 9/0 · clippy 0 in touched files
+Status: **complete** (landed 2026-08-28, commit `6ee000e`) · validation: default lib
+712/0 · all-features lib 1409/0/13i · unit 19/0 · integration 9/0 · clippy 0 in touched files
 
 Repo: riir-clippy · Proposal: [007 §CLI surface](../.proposals/007_kat_usdc_staking.md) L71-92 ·
 Service contract: `riir-dapps/src/kat/staking.rs` (landed 7a18690) + `solana.rs` (the five-check
