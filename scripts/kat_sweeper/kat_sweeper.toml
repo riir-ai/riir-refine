@@ -1,0 +1,41 @@
+# kat_sweeper.toml — the own-repo sweeper's targeting config (Plan 031 A2).
+#
+# OWN REPOS ONLY (Proposal 005 §The own-repo hourly sweeper lane): the
+# own-repos-to-CF / own-repos-to-branch posture is the already-vetted class;
+# consumer code stays gated behind T3.2's leak-posture sign-off.
+#
+# TARGETED, NEVER BLIND: each entry scopes the healer to a small path set
+# (`scope`) inside ONE repo. Full cold workspace checks are the cost sink —
+# the plan's "-p <crate> scope" translates to a path scope because the
+# healer's CLI takes paths, not package flags.
+#
+# PARSING NOTE: this file is a deliberately minimal TOML subset parsed by
+# run_sweep.sh's awk — `key = "value"` single-line strings only, `scope` as
+# ONE comma-separated string, no nesting beyond [[target]]. Adding a real
+# TOML parser would be a new dep for a shell deliverable; the flat shape IS
+# the contract. Keep it flat.
+
+version = 1
+
+[[target]]
+repo     = "riir-clippy"
+path     = "/Users/katopz/git/riir-clippy"
+# The healer's own bin surface — small, fast to verify (cargo check of this
+# crate only), never the full workspace.
+scope    = "src/bin"
+# --verify-args: the features the scoped code compiles under (the heal bin
+# needs latent_retrieval; fix_verify + clippy_verify arm the compile gate +
+# the lint oracle). Empty string = default features.
+features = "--features latent_retrieval,clippy_verify,fix_verify"
+branch   = "heal/riir-clippy"
+cadence  = "hourly"
+
+[[target]]
+repo     = "riir-dapps"
+path     = "/Users/katopz/git/riir-dapps"
+# The composer layer — a leaf repo (no sibling compile fan-out), small -p
+# scope, exercises the cross-repo half of the loop.
+scope    = "src/dapps"
+features = ""
+branch   = "heal/riir-dapps"
+cadence  = "daily"

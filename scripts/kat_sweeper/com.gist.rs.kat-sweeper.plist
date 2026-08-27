@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- com.gist.rs.kat-sweeper.plist — the KAT own-repo sweeper's launchd
+     template (Plan 031 Phase A / A2). DISABLED BY DEFAULT: installing a file
+     in ~/Library/LaunchAgents does nothing until loaded — the opt-in is the
+     load, never the file's presence.
+
+     OPT-IN (the documented path):
+       mkdir -p ~/Library/LaunchAgents
+       cp scripts/kat_sweeper/com.gist.rs.kat-sweeper.plist ~/Library/LaunchAgents/
+       launchctl load -w ~/Library/LaunchAgents/com.gist.rs.kat-sweeper.plist
+       # opt back out:
+       launchctl unload -w ~/Library/LaunchAgents/com.gist.rs.kat-sweeper.plist
+
+     CADENCE: StartInterval 3600 = hourly (the lane's default; `daily`
+     targets in kat_sweeper.toml self-gate to once per UTC day inside
+     run_sweep.sh — the config's cadence, not launchd's, owns per-repo rate).
+
+     THE DAILY TRAINER WINDOW (A3) runs off the same cron surface: copy this
+     file as com.gist.rs.kat-drain.plist, replace ProgramArguments with the
+     --drain mode, and swap StartInterval for a StartCalendarInterval firing
+     just after the 00:00 UTC neuron reset (e.g. 07:05 local at UTC+7):
+
+       <key>StartCalendarInterval</key>
+       <dict>
+         <key>Hour</key>   <integer>7</integer>
+         <key>Minute</key> <integer>5</integer>
+       </dict>
+
+     NEVER-WRONG AT THE REPO LEVEL: the sweeper commits findings only to
+     heal/<repo>-<yyyymmdd> review branches and never pushes develop; the
+     drain (kat_drain) never writes repo files at all — keeps land as
+     Certified trajectories, rejects burn neurons and nothing else.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.gist.rs.kat-sweeper</string>
+
+    <key>Disabled</key>
+    <true/>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/katopz/git/riir-clippy/scripts/kat_sweeper/run_sweep.sh</string>
+    </array>
+
+    <key>StartInterval</key>
+    <integer>3600</integer>
+
+    <!-- launchd jobs get no user PATH; pin what the runner needs. -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/Users/katopz/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>HOME</key>
+        <string>/Users/katopz</string>
+    </dict>
+
+    <!-- The trainer drain (A3) needs the CF creds; the modelless sweeper
+         does not. EnvironmentFile-style secrets stay OUT of this template —
+         export them from a wrapper if the drain plist is added. -->
+    <key>StandardOutPath</key>
+    <string>/tmp/kat-sweeper.launchd.out</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/kat-sweeper.launchd.err</string>
+
+    <key>RunAtLoad</key>
+    <false/>
+</dict>
+</plist>

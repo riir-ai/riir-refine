@@ -431,6 +431,17 @@ name = "fixer_regate"
 path = "src/bin/fixer_regate.rs"
 required-features = ["cf_workers_ai"]
 
+# Plan 031 Phase A (A3) — the trainer-window LOCAL drain (T2.0's local half):
+# TrajStore miss backlog → priority → modelless pre-pass → redaction gate →
+# smoke → capped LLM → strict-keep verify → Certified trajectories + the
+# transparency ledger row. `--dry-run` is the offline queue review (CI-able).
+# Same feature gate as fixer_regate: the drain SENDS PROMPTS OFF-MACHINE and
+# must never compile without the redaction gate it gates through.
+[[bin]]
+name = "kat_drain"
+path = "src/bin/kat_drain.rs"
+required-features = ["cf_workers_ai"]
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Local patches — mirror riir-ai/Cargo.toml's [patch.crates-io] so the
 # metal_tensor_gemm + cubecl_runtime features compile from THIS workspace.
