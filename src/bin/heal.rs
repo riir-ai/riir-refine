@@ -61,6 +61,12 @@ enum KatCommand {
     Sync,
     /// Compose + submit (or queue) a payment claim.
     Claim,
+    /// Proposal 007 T2.1: `stake --usd <N>` (compose + QR) or `stake --info`
+    /// (the position render).
+    Stake,
+    /// Proposal 007 T2.1: drain-all-unlocked refund request + the escrow/
+    /// venting disclosure.
+    Unstake,
 }
 
 #[cfg(feature = "fix_verify")]
@@ -483,6 +489,180 @@ fn run_kat_claim(sig: Option<&str>) {
     }
 }
 
+/// Proposal 007 T2.1 (Plan 041): `cargo heal stake --usd <N>` / `stake
+/// --info` — the render-only + QR staking surface. Service-first (the
+/// service composes the transfer request it must track the reference for);
+/// when the plane is not live, the local fallback composes from the
+/// env-configured stake-custody payee + a fresh on-curve reference, queues
+/// the intent, and prints the honest state. Nothing client-side mints,
+/// credits, or moves principal (the G9d posture held for staking too).
+#[cfg(feature = "kat_service")]
+fn run_kat_stake(usd: Option<&str>, info: bool) {
+    use riir_clippy::kat_stake_client as stake;
+
+    let dir = riir_clippy::kat_account::KatAccount::default_dir();
+    let account = match riir_clippy::kat_account::KatAccount::load(&dir) {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!("stake: no account ({e}) — run `cargo heal login` first");
+            std::process::exit(1);
+        }
+    };
+    let account_id = account.state().account_id.clone();
+    let root = resolve_heal_root(&[]);
+    let now_unix = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
+
+    if info {
+        run_stake_info(&account_id, &root, now_unix);
+        return;
+    }
+
+    let Some(usd) = usd else {
+        eprintln!("stake: --usd <N> is required (the stake amount in dollars), or --info for the position");
+        std::process::exit(2);
+    };
+    let Some(amount_base) = stake::parse_usd_to_base(usd) else {
+        eprintln!("stake: --usd expects a dollar amount with at most 6 fractional digits (e.g. 100 or 100.5)");
+        std::process::exit(2);
+    };
+
+    // The honest copy prints above the QR (the proposal mock's two lines —
+    // the copy itself leads with "stake", no double prefix).
+    println!("{}", stake::stake_line(amount_base));
+
+    #[cfg(feature = "kat_transport")]
+    {
+        use riir_clippy::kat_stake_client::StakeOutcome;
+        let url = riir_clippy::kat_lease_client::service_url_for_command();
+        let transport = riir_clippy::kat_stake_client::HttpStakeTransport::new(&url, 10);
+        match riir_clippy::kat_stake_client::stake_request_flow(
+            &transport,
+            &account_id,
+            amount_base,
+            &root,
+            now_unix,
+        ) {
+            Ok(StakeOutcome::ServiceUrl(url)) => {
+                println!("stake: transfer request from the service:");
+                println!("  {url}");
+                print_qr(&url);
+                println!("stake: the service verifies the five checks and credits the tranche at sync");
+            }
+            Ok(StakeOutcome::LocalQueued { url, queued_at }) => {
+                println!("stake: service plane not yet live — composed locally:");
+                println!("  {url}");
+                print_qr(&url);
+                println!(
+                    "stake: intent queued locally at {} — the claim lands via sync/reference auto-detect when the plane is live",
+                    queued_at.display()
+                );
+            }
+            Err(e) => {
+                eprintln!("stake: {e}");
+                std::process::exit(1);
+            }
+        }
+    }
+    #[cfg(not(feature = "kat_transport"))]
+    {
+        let _ = (account_id, amount_base, root, now_unix);
+        eprintln!("stake: composing a transfer request requires a build with --features kat_transport");
+        std::process::exit(2);
+    }
+}
+
+/// `stake --info` — the position render. Service-first; the not-live
+/// fallback renders the local-queue view (honest: no fake tranches).
+#[cfg(feature = "kat_service")]
+fn run_stake_info(account_id: &str, root: &std::path::Path, now_unix: u64) {
+    use riir_clippy::kat_stake_client as stake;
+
+    #[cfg(feature = "kat_transport")]
+    {
+        use riir_clippy::kat_stake_client::StakeTransport as _;
+        let url = riir_clippy::kat_lease_client::service_url_for_command();
+        let transport = riir_clippy::kat_stake_client::HttpStakeTransport::new(&url, 10);
+        if let riir_clippy::kat_lease_client::HttpResponse::Ok(body) =
+            transport.get_stake_info(account_id)
+        {
+            match serde_json::from_slice::<riir_clippy::kat_stake_client::StakeInfo>(&body) {
+                Ok(info) => {
+                    // now_tick: the service's clock is authoritative; we
+                    // render against unix seconds (the deployment's tick).
+                    println!("{}", stake::render_info(&info, now_unix));
+                    return;
+                }
+                Err(e) => eprintln!("stake --info: service response unreadable: {e}"),
+            }
+        }
+    }
+    // The not-live fallback: the local-queue view.
+    let queued = stake::queued_stake_count(root).unwrap_or(0);
+    if queued > 0 {
+        println!(
+            "Staked:          — (service plane not yet live; {queued} stake intent(s) queued locally)"
+        );
+        println!("stake --info: tranches, incentives, and the pool split render once the service plane is live");
+    } else {
+        println!("Staked:          — (no position; the service plane is not yet live)");
+        println!("stake --info: tranches, incentives, and the pool split render once the service plane is live");
+    }
+}
+
+/// Proposal 007 T2.1: `cargo heal unstake` — the drain-all-unlocked refund
+/// request. Service-first; the not-live path queues the intent and still
+/// prints the full escrow/venting disclosure (the mechanics copy is true
+/// regardless of transport — disclosed at BOTH stake and unstake time per
+/// the proposal).
+#[cfg(feature = "kat_service")]
+fn run_kat_unstake() {
+    let dir = riir_clippy::kat_account::KatAccount::default_dir();
+    let account = match riir_clippy::kat_account::KatAccount::load(&dir) {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!("unstake: no account ({e}) — run `cargo heal login` first");
+            std::process::exit(1);
+        }
+    };
+    let account_id = account.state().account_id.clone();
+    let root = resolve_heal_root(&[]);
+    let now_unix = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
+
+    #[cfg(feature = "kat_transport")]
+    {
+        let url = riir_clippy::kat_lease_client::service_url_for_command();
+        let transport = riir_clippy::kat_stake_client::HttpStakeTransport::new(&url, 10);
+        match riir_clippy::kat_stake_client::unstake_flow(&transport, &account_id, &root, now_unix)
+        {
+            Ok(line) => println!("{line}"),
+            Err(e) => {
+                eprintln!("unstake: {e}");
+                std::process::exit(1);
+            }
+        }
+    }
+    #[cfg(not(feature = "kat_transport"))]
+    {
+        let _ = (account_id, root, now_unix);
+        eprintln!("unstake: composing a refund request requires a build with --features kat_transport");
+        std::process::exit(2);
+    }
+}
+
+/// Print the ASCII QR under a URL line (the T1.6 QR render, reused —
+/// errors surface as silence, the QR is a convenience never a gate).
+#[cfg(all(feature = "kat_service", feature = "kat_transport"))]
+fn print_qr(url: &str) {
+    let qr = riir_clippy::kat_lease_client::render_qr_ascii(url);
+    if !qr.is_empty() {
+        println!("{qr}");
+    }
+}
+
 /// 038-T3: the one-time envelope → store migration (see [`open_traj_store`]).
 /// Idempotent by construction: the `.migrated` rename is the fence — a
 /// second run sees no envelope and does nothing.
@@ -707,6 +887,8 @@ USAGE:
     cargo heal update                                 (corpus lease refresh, kat_transport)
     cargo heal sync                                   (push redacted batches + pull lease, kat_transport)
     cargo heal claim --tx <sig>                       (queue/submit a payment claim, kat_service)
+    cargo heal stake --usd <N> | --info              (Proposal 007 staking: transfer QR / position, kat_transport)
+    cargo heal unstake                                (drain unlocked tranches + escrow disclosure, kat_transport)
 
     --suggest       Suggest mode: print matching rules per code span (no edits).
     --fix           Fix mode: apply the compiled-in proposers' span-preserving edits
@@ -862,6 +1044,12 @@ struct Args {
     /// T1.6: `--tx <sig>` — the Solana transaction signature `claim`
     /// submits/queues.
     claim_tx: Option<String>,
+    /// Proposal 007 T2.1: `--usd <N>` — the stake amount (dollars, ≤6
+    /// fractional digits, integer-exact into base units).
+    stake_usd: Option<String>,
+    /// Proposal 007 T2.1: `--info` — render the stake position instead of
+    /// composing a stake request.
+    stake_info: bool,
     /// T1.6: the run-start update-phase budget in seconds (`0` = skip;
     /// default 4 — the proposal's ~3–5s window).
     update_timeout: u64,
@@ -898,6 +1086,8 @@ fn parse_args() -> Args {
         command: None,
         import_key: None,
         claim_tx: None,
+        stake_usd: None,
+        stake_info: false,
         update_timeout: 4,
         no_update: false,
         no_reheat: false,
@@ -977,6 +1167,14 @@ fn parse_args() -> Args {
                 };
                 args.claim_tx = Some(value);
             }
+            "--usd" => {
+                let Some(value) = it.next() else {
+                    eprintln!("--usd requires a value (the stake amount in dollars, e.g. 100)");
+                    usage();
+                };
+                args.stake_usd = Some(value);
+            }
+            "--info" => args.stake_info = true,
             "--update-timeout" => {
                 let Some(value) = it.next() else {
                     eprintln!("--update-timeout requires a value (seconds; 0 = skip)");
@@ -1003,7 +1201,7 @@ fn parse_args() -> Args {
                 eprintln!("unknown flag {flag:?}");
                 usage();
             }
-            "login" | "account" | "update" | "sync" | "claim"
+            "login" | "account" | "update" | "sync" | "claim" | "stake" | "unstake"
                 if args.paths.is_empty() && args.command.is_none() =>
             {
                 args.command = Some(match arg.as_str() {
@@ -1011,6 +1209,8 @@ fn parse_args() -> Args {
                     "account" => KatCommand::Account,
                     "update" => KatCommand::Update,
                     "sync" => KatCommand::Sync,
+                    "stake" => KatCommand::Stake,
+                    "unstake" => KatCommand::Unstake,
                     _ => KatCommand::Claim,
                 });
             }
@@ -1208,6 +1408,8 @@ fn main() {
             KatCommand::Update => run_kat_update(),
             #[cfg(feature = "kat_transport")]
             KatCommand::Sync => run_kat_sync(),
+            KatCommand::Stake => run_kat_stake(args.stake_usd.as_deref(), args.stake_info),
+            KatCommand::Unstake => run_kat_unstake(),
             // The transport commands degrade honestly without kat_transport.
             #[cfg(not(feature = "kat_transport"))]
             KatCommand::Update | KatCommand::Sync => {
@@ -1219,7 +1421,7 @@ fn main() {
     }
     #[cfg(not(feature = "kat_service"))]
     if args.command.is_some() {
-        eprintln!("login/account/update/sync/claim require a build with --features kat_service");
+        eprintln!("login/account/update/sync/claim/stake/unstake require a build with --features kat_service");
         std::process::exit(2);
     }
 

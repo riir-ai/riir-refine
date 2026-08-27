@@ -80,7 +80,11 @@ echo "=== Layer 5c: KAT integration gates (all-features) ==="
 # / itemization + the sync/claim wire shapes + G3 offline silence). The
 # mock binds 127.0.0.1 ephemeral (no external network; the run-start phase
 # itself never runs in CI — no test drives main's network path).
-cargo test --all-features --test kat_redact_g4 --test kat_sync_payload_g4 --test kat_pending_estimator_g4 --test kat_meter_g9 --test kat_meter_g2_alloc --test kat_account_g9 --test kat_lease_client_g10 --test llm_spend_gates --test llm_spend_g2_alloc --bin kat_drain
+# Proposal 007 T2.1 (Plan 041) adds the staking-client G2S binary — the
+# same std-TCP mock pattern for the three staking wire shapes (stake
+# request / info fetch / unstake), the honest not-live fallbacks, the
+# caveat-#15 copy gate, and the render-budget smoke.
+cargo test --all-features --test kat_redact_g4 --test kat_sync_payload_g4 --test kat_pending_estimator_g4 --test kat_meter_g9 --test kat_meter_g2_alloc --test kat_account_g9 --test kat_lease_client_g10 --test kat_stake_client_g2s --test llm_spend_gates --test llm_spend_g2_alloc --bin kat_drain
 echo "✓ KAT integration gates pass"
 
 echo

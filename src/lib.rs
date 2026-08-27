@@ -203,6 +203,16 @@ pub mod kat_pending_estimator;
 #[cfg(feature = "kat_service")]
 pub mod kat_lease_client;
 
+// Proposal 007 T2.1 (Plan 041): the staking CLI client — the render-only +
+// QR surface for `stake --usd` / `stake --info` / `unstake`. Mirrors the
+// riir-dapps service contract (base58 + the three-param transfer-request URL
+// + the tranche/pool views) WITHOUT a dep (the lease-client wire-mirror
+// precedent); service-first over `kat_transport`, with the honest
+// not-live local-queue fallbacks. The caveat-#15 copy rule is enforced by
+// test here (no $ beside a KAT accrual; service credit; no APY promise).
+#[cfg(feature = "kat_service")]
+pub mod kat_stake_client;
+
 // Plan 019 T4.3: the neuron-db trajectory store — the DURABLE backend for
 // `--fix-compile` self-evolution (LocalKvStore encrypted WAL + BM25 + the
 // 8-D sigmoid-dot latent axis). Behind `latent_retrieval` (the dep-light
