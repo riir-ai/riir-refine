@@ -1385,6 +1385,29 @@
 //!   maps each of the 15 corpus categories to its `rule_ids`; the
 //!   `KernelExpertRouter` now uses 15 category-keyed experts (one per category)
 //!   instead of 4 placeholder identity-vector experts.
+//! - **Batch 79 (2026-08-27, BAIR K-Search + cubek-matmul external
+//!   distill, Plan 037 / Research 093):** 5 rules, corpus 379 -> 384
+//!   (A 90 -> 91, D 76 -> 78, E 21 -> 22, G 20 -> 21).
+//!   `first-order-affine-recurrence-associative-scan` (G -- the affine
+//!   recurrence as the pair-space monoid, `O(log N)` prefix scan vs `O(N)`
+//!   sequential; spec-seeded, search-realized; REGIME: the combine cost
+//!   picks the strategy, scalar pairs scan / dxd state chunks;
+//!   REL-ERROR gate required, tree-order association is never
+//!   bit-identical); `plane-specialization-load-compute-role-split`
+//!   (E -- comptime `PlaneFlowPartitionRule` + runtime plane-id branch;
+//!   load-only planes raise occupancy without accumulator registers;
+//!   never specialize WITHIN a plane; underperforms on Metal);
+//!   `vectorized-smem-write-no-bank-padding` (A -- REFUTATION:
+//!   line-sized vector stores distribute across banks, the +1 pad
+//!   lineage is unnecessary; `SwizzleMode` is the modern complement,
+//!   not padding); `ordered-lhs-skip-smem-fragments-as-second-buffer`
+//!   (D -- the register fragments ARE the second Lhs buffer; ordering
+//!   discipline replaces inter-plane sync; the sequential-halves
+//!   allocation correction rides); `interleave-loads-between-tile-matmuls`
+//!   (D -- asynchrony is INDUCED by instruction-stream placement between
+//!   tile matmuls via `StageEventListener` on `TileMatmulCompleted`;
+//!   clean load/compute stage separation REMOVES the overlap). Record:
+//!   Research 093 / Plan 037.
 //! - **Deferred:** remaining popcorn kernels are mostly already-covered patterns
 //!   or domain-specific math; future batches need new source impl files.
 
@@ -1433,7 +1456,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 379-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 384-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1441,7 +1464,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (90 rules)
+    // A: Memory access patterns (91 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -1536,6 +1559,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "reset-state-in-place-fill-never-realloc",
             "skip-unchanged-writes-via-dirty-encoding",
             "weight-stream-non-temporal-loads",
+            "vectorized-smem-write-no-bank-padding",
         ],
     ),
     // B: Compute patterns (53 rules)
@@ -1640,7 +1664,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "gate-prep-fold-into-consumer-via-packed-side-tensor",
         ],
     ),
-    // D: Dispatch patterns (76 rules)
+    // D: Dispatch patterns (78 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -1721,9 +1745,11 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "shared-counter-decode-producer-progress",
             "shared-activation-quantize-memo-per-eval",
             "vendor-batched-gemm-contiguity-staging",
+            "ordered-lhs-skip-smem-fragments-as-second-buffer",
+            "interleave-loads-between-tile-matmuls",
         ],
     ),
-    // E: Parallelism patterns (21 rules)
+    // E: Parallelism patterns (22 rules)
     (
         KernelCategory::Parallelism,
         "E: parallelism",
@@ -1749,6 +1775,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "row-dot-split-inner-axis-block-reduce",
             "multi-head-out-proj-consumes-head-concat",
             "occupancy-grid-cap-refuted-uncapped-default",
+            "plane-specialization-load-compute-role-split",
         ],
     ),
     // F: Flash-attention tiling (10 rules)
@@ -1768,7 +1795,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "two-stage-mask-softmax-then-conv",
         ],
     ),
-    // G: Linear-attention recurrence (20 rules)
+    // G: Linear-attention recurrence (21 rules)
     (
         KernelCategory::LinearAttnRecurrence,
         "G: linear-attn recurrence",
@@ -1793,6 +1820,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "row-owned-register-blocked-recurrence",
             "reverse-running-decay-weight",
             "tree-verify-recurrent-state-parent-reload",
+            "first-order-affine-recurrence-associative-scan",
         ],
     ),
     // H: MoE dispatch + backward pass (14 rules)

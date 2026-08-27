@@ -453,12 +453,12 @@ mod tests {
 
     #[test]
     fn rules_for_expert_total_matches_corpus() {
-        // Sum of all experts' rule counts must equal the corpus total (379).
+        // Sum of all experts' rule counts must equal the corpus total (384).
         let total: usize = (0..NUM_KERNEL_EXPERTS)
             .map(KernelExpertRouter::rules_for_expert)
             .map(<[&str]>::len)
             .sum();
-        assert_eq!(total, 379, "Plan 003: experts cover all 379 corpus rules");
+        assert_eq!(total, 384, "Plan 003: experts cover all 384 corpus rules");
     }
 
     #[test]

@@ -63,7 +63,7 @@
         // Batch 63 (3): the CubeCL twin unlock — same-input-gemv-weight-concat-at-upload, deferred-residual-fused-into-next-layer-norm, reset-state-in-place-fill-never-realloc (ternary_deltanet_gpu_forward.rs, Plan 009 / Research 071).
         // Batch 70 (3): the arxiv barrier-free-sync paper distill (arXiv:2608.13757, Plan 020 / Research 080) — barrier-free-per-dependency-wait-from-loop-counters, shared-counter-decode-producer-progress, masked-branchless-wait-collapse.
         // Total: 209. // (historical batch-30 snapshot; current 370)
-        assert_eq!(corpus.entries.len(), 379, "kernel batches through Batch 77 should have 379 rules");
+        assert_eq!(corpus.entries.len(), 384, "kernel batches through Batch 79 should have 384 rules");
     }
 
     #[test]
@@ -3919,15 +3919,15 @@
 
     #[test]
     fn kernel_categories_counts_match_plan_003_table() {
-        // Pin per-category rule counts to the Plan 003 table (updated for Batch 77).
+        // Pin per-category rule counts to the Plan 003 table (updated for Batch 79).
         let expected = [
-            (KernelCategory::MemoryAccess, 90),
+            (KernelCategory::MemoryAccess, 91),
             (KernelCategory::Compute, 53),
             (KernelCategory::Fusion, 35),
-            (KernelCategory::Dispatch, 76),
-            (KernelCategory::Parallelism, 21),
+            (KernelCategory::Dispatch, 78),
+            (KernelCategory::Parallelism, 22),
             (KernelCategory::FlashAttnTiling, 10),
-            (KernelCategory::LinearAttnRecurrence, 20),
+            (KernelCategory::LinearAttnRecurrence, 21),
             (KernelCategory::MoeDispatchBackward, 14),
             (KernelCategory::NsaBlockSparse, 4),
             (KernelCategory::VarlenChunkedReduction, 5),
@@ -3944,9 +3944,9 @@
                 "Plan 003: category {cat:?} has {} rules, expected {count}",
                 entry.2.len());
         }
-        // Sum must equal 379.
+        // Sum must equal 384.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 379, "Plan 003: category totals must sum to 379");
+        assert_eq!(total, 384, "Plan 003: category totals must sum to 384");
     }
 
     #[test]
@@ -3956,7 +3956,7 @@
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 379, "Plan 003: grouped corpus has {total} rules, expected 379");
+        assert_eq!(total, 384, "Plan 003: grouped corpus has {total} rules, expected 384");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");
@@ -4151,4 +4151,225 @@
             let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
             assert!(opt_verdict.parses, "batch-77 opt_pattern for '{id}' must parse");
         }
+    }
+
+    #[test]
+    fn batch79_rules_present() {
+        // Batch 79 (BAIR K-Search + cubek-matmul external distill --
+        // Research 093 / Plan 037).
+        let corpus = build_kernel_seed_corpus();
+        let ids = [
+            "first-order-affine-recurrence-associative-scan",
+            "plane-specialization-load-compute-role-split",
+            "vectorized-smem-write-no-bank-padding",
+            "ordered-lhs-skip-smem-fragments-as-second-buffer",
+            "interleave-loads-between-tile-matmuls",
+        ];
+        for id in ids {
+            assert!(
+                corpus.entries.iter().any(|e| e.rule_id == id),
+                "batch-79 rule '{id}' missing from corpus"
+            );
+        }
+    }
+
+    #[test]
+    fn batch79_concepts_covered() {
+        // Distinctness + mandated phrases must survive in the concept text
+        // (case-sensitive contains -- the B51 lesson, 6 strikes).
+        let corpus = build_kernel_seed_corpus();
+        let checks: &[(&str, &[&str])] = &[
+            (
+                "first-order-affine-recurrence-associative-scan",
+                &[
+                    "associative operator over pair-space",
+                    "O(log N) dependent steps",
+                    "spec-seeded, search-realized",
+                    "THE COMBINE COST PICKS THE STRATEGY",
+                    "relative error",
+                    "chunkwise-parallel-recurrence",
+                ],
+            ),
+            (
+                "plane-specialization-load-compute-role-split",
+                &[
+                    "load-only planes run the whole global->shared load job",
+                    "PlaneFlowPartitionRule",
+                    "never specialize WITHIN a plane",
+                    "underperforms on Metal",
+                    "fold-query-tokens-for-occupancy",
+                ],
+            ),
+            (
+                "vectorized-smem-write-no-bank-padding",
+                &[
+                    "UNNECESSARY when the smem stores are VECTORIZED",
+                    "SwizzleMode",
+                    "Refutation-type",
+                    "zero pad/bank/skew fields",
+                    "pad-uniform-pod-to-min-binding-size",
+                ],
+            ),
+            (
+                "ordered-lhs-skip-smem-fragments-as-second-buffer",
+                &[
+                    "fragments themselves",
+                    "ORDERING-REPLACES-SYNCHRONIZATION",
+                    "1x k-step",
+                    "sequential halves",
+                    "smem-staging-gated-by-cross-thread-reuse",
+                ],
+            ),
+            (
+                "interleave-loads-between-tile-matmuls",
+                &[
+                    "asynchrony is INDUCED by instruction-stream placement",
+                    "TileMatmulCompleted",
+                    "EventLoadingMode",
+                    "REMOVES the overlap",
+                    "ordered-lhs-skip-smem-fragments-as-second-buffer",
+                ],
+            ),
+        ];
+        for &(id, needles) in checks {
+            let e = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-79 rule '{id}' missing"));
+            for needle in needles {
+                assert!(
+                    e.gpu_concept.contains(needle),
+                    "batch-79 concept for '{id}' missing phrase '{needle}'"
+                );
+            }
+        }
+    }
+
+    #[test]
+    #[cfg(not(feature = "kernel_verify"))]
+    fn batch79_pseudocode_parses() {
+        // G1 for Batch 79: syn-parse gate.
+        use crate::domain::HealDomain;
+        let corpus = build_kernel_seed_corpus();
+        let ids = [
+            "first-order-affine-recurrence-associative-scan",
+            "plane-specialization-load-compute-role-split",
+            "vectorized-smem-write-no-bank-padding",
+            "ordered-lhs-skip-smem-fragments-as-second-buffer",
+            "interleave-loads-between-tile-matmuls",
+        ];
+        for id in ids {
+            let entry = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-79 rule '{id}' missing"));
+            let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+            assert!(ref_verdict.parses, "batch-79 ref_shape for '{id}' must parse");
+            let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+            assert!(opt_verdict.parses, "batch-79 opt_pattern for '{id}' must parse");
+        }
+    }
+
+    #[test]
+    // the f32 rounding IS the subject under test (tree-order association
+    // drift) -- the int->f32 casts feed float probes, precision loss is
+    // the point
+    #[allow(clippy::cast_precision_loss)]
+    fn batch79_associative_scan_rel_error_gate() {
+        // G4 for Batch 79 (the ported-numeric MANDATE): the associative
+        // scan re-associates FP accumulation, so it can NEVER be
+        // bit-identical to the sequential form -- the gate is relative
+        // error over ADVERSARIAL sequences, never bitwise equality.
+        fn combine(later: (f32, f32), earlier: (f32, f32)) -> (f32, f32) {
+            (later.0 * earlier.0, later.0 * earlier.1 + later.1)
+        }
+        fn scan_pairs(a: &[f32], b: &[f32]) -> Vec<f32> {
+            let n = a.len();
+            let mut pairs: Vec<(f32, f32)> =
+                a.iter().zip(b.iter()).map(|(&x, &y)| (x, y)).collect();
+            let mut stride = 1usize;
+            while stride < n {
+                // reverse order: pairs[i - stride] still holds the
+                // previous round's value when pairs[i] updates
+                for i in (stride..n).rev() {
+                    pairs[i] = combine(pairs[i], pairs[i - stride]);
+                }
+                stride *= 2;
+            }
+            pairs.into_iter().map(|p| p.1).collect()
+        }
+        fn sequential(a: &[f32], b: &[f32]) -> Vec<f32> {
+            let mut h = 0.0f32;
+            let mut out = Vec::with_capacity(a.len());
+            for i in 0..a.len() {
+                h = a[i] * h + b[i];
+                out.push(h);
+            }
+            out
+        }
+        let mut max_rel = 0.0f32;
+        for seed in 0..4u64 {
+            let mut a = Vec::new();
+            let mut b = Vec::new();
+            for i in 0..256usize {
+                let (ai, bi) = match seed {
+                    // family 0: exponent crossings -- h swings across 2^n
+                    // boundaries via alternating decay + signed inputs
+                    0 => (
+                        if i % 2 == 0 { 0.9f32 } else { 0.99f32 },
+                        if i % 3 == 0 { -1.0f32 } else { 1.0f32 },
+                    ),
+                    // family 1: magnitude swings -- b alternating 1e6/1e-6
+                    1 => (0.99f32, if i % 2 == 0 { 1e6f32 } else { 1e-6f32 }),
+                    // family 2: long decay chain -- near-1 gates, tiny b
+                    2 => (0.999_95f32, 1e-4f32 + (i % 7) as f32 * 1e-5f32),
+                    // family 3: xorshift64 pseudo-random, bounded
+                    _ => {
+                        let mut x = seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1
+                            ^ (i as u64).wrapping_mul(0x2545_F491_4F6C_DD1D);
+                        x ^= x << 13;
+                        x ^= x >> 7;
+                        x ^= x << 17;
+                        let f = (x >> 11) as f32 / (1u64 << 53) as f32;
+                        (0.5f32 + 0.499 * f, 0.001f32 + f)
+                    }
+                };
+                a.push(ai);
+                b.push(bi);
+            }
+            let seq = sequential(&a, &b);
+            let scan = scan_pairs(&a, &b);
+            // allclose-shaped gate: rtol on the value PLUS an absolute
+            // term of 100 * EPSILON * scale (scale = largest |h| the
+            // sequential form reaches). Pure rel-to-reference is
+            // unbounded exactly where the adversarial families bite --
+            // at cancellation points |ref| is tiny while the drift is
+            // set by the ulp of the MAGNITUDES that produced it.
+            let scale = seq.iter().map(|s| s.abs()).fold(0.0f32, f32::max);
+            let atol = 100.0 * f32::EPSILON * scale;
+            for (s, t) in seq.iter().zip(&scan) {
+                let diff = (s - t).abs();
+                let bound = atol + 1e-3 * s.abs();
+                max_rel = max_rel.max(diff / bound);
+                assert!(
+                    diff <= bound,
+                    "seed {seed}: diff {diff} exceeds bound {bound} (scale {scale})"
+                );
+            }
+        }
+        // NON-VACUOUS halves: (a) the two forms must actually differ
+        // bitwise somewhere (association order matters -- else this gate
+        // proves nothing about FP honesty), and (b) the measured max_rel
+        // must be nonzero.
+        let a: Vec<f32> = (0..256).map(|i| 0.999_95f32 + i as f32 * 1e-7).collect();
+        let b: Vec<f32> = (0..256).map(|i| 1e-4f32 + (i % 7) as f32 * 1e-5).collect();
+        let seq = sequential(&a, &b);
+        let scan = scan_pairs(&a, &b);
+        assert!(
+            seq.iter().zip(&scan).any(|(s, t)| s.to_bits() != t.to_bits()),
+            "non-vacuous: scan and sequential must differ bitwise somewhere"
+        );
+        assert!(max_rel > 0.0, "max_rel measured nothing");
     }

@@ -1,6 +1,7 @@
 # Research 093 — Batch 79 pool verdict: BAIR K-Search CUDA→MLX + Burn/cubek SOTA matmul (kernel_opt)
 
-**Status:** DISTILLED — pool verified at upstream heads, awaiting batch dispatch (owner-directed stop: pool only, no corpus edits). Plan 037 holds the tasks.
+**Status:** RECORD — Batch 79 landed 2026-08-27 per Plan 037 (corpus 379->384, all gates
+green with the pre-existing l4_daemon caveat; this note stays the distillation record).
 
 Found via the idle-loop online-search pool (the dispatched unit after Plan 035/Batch 77).
 Two sources cleared the bar after dedup + subagent source-verification; the rest of the
