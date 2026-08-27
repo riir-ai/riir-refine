@@ -342,6 +342,15 @@ pub struct HealPipeline {
     /// borrow between `self.scope` and the scratch buffer).
     #[cfg(feature = "contrastive_scope")]
     scope_scratch: Vec<u32>,
+    /// Issue 048 T3 — the GP acquisition tie-break (lexicographic, AFTER the
+    /// `BetaPosterior` combined score; never overrides payoff). `None` by
+    /// default → selection is bit-identical to the pre-048 path. When
+    /// installed via [`Self::with_gp_tiebreak`], an EXACT combined-score tie
+    /// between two candidates is broken by posterior variance of their
+    /// 8-D direction embeddings (higher σ² first — prefer the input the
+    /// observed set explains least), and [`Self::report_outcome`] observes
+    /// each reported fix direction so σ² collapses where evidence exists.
+    gp: Option<crate::gp_acquisition::GpAcquisition>,
 }
 
 impl HealPipeline {
@@ -375,7 +384,35 @@ impl HealPipeline {
             scope: None,
             #[cfg(feature = "contrastive_scope")]
             scope_scratch: Vec::new(),
+            gp: None,
         }
+    }
+
+    /// Issue 048 T3 — install the GP acquisition tie-break, seeded with
+    /// prior observation directions (e.g. trajectory directions from
+    /// memory or the durable store).
+    ///
+    /// Lexicographic ONLY: the tie-break fires on exact `f32` equality of
+    /// the combined score (unseen candidates sharing belief 0.32 and a tied
+    /// evolution score are the common real-pool shape). Default pipeline
+    /// (not installed) is bit-identical — pinned by test.
+    #[must_use]
+    pub fn with_gp_tiebreak(
+        mut self,
+        observed: impl IntoIterator<Item = Direction>,
+    ) -> Self {
+        let mut gp = crate::gp_acquisition::GpAcquisition::new();
+        for dir in observed {
+            gp.observe(&dir);
+        }
+        self.gp = Some(gp);
+        self
+    }
+
+    /// Whether the GP acquisition tie-break is installed (Issue 048 T3).
+    #[must_use]
+    pub fn has_gp_tiebreak(&self) -> bool {
+        self.gp.is_some()
     }
 
     /// Install the input-scope gate (Bench 669 consumer adoption, Plan 016).
@@ -471,7 +508,35 @@ impl HealPipeline {
             } else {
                 W_EVO * evo_score + W_RATE * reliability
             };
-            if best.is_none_or(|(_, best_score)| combined > best_score) {
+            // Issue 048 T3 — GP acquisition tie-break: lexicographic AFTER
+            // the combined score. Fires ONLY on exact f32 equality (the
+            // unseen-candidate shape: belief(0,0) both sides + a tied
+            // evolution score); prefers the higher posterior-variance
+            // direction. Never overrides payoff — a strictly greater
+            // combined score always wins regardless of σ². The strict `==`
+            // is the DESIGN: an epsilon compare would let near-ties trigger
+            // the σ² override, which is exactly what "never overriding
+            // payoff" forbids.
+            #[allow(clippy::float_cmp)]
+            let takes = match best {
+                None => true,
+                Some((best_idx, best_score)) => {
+                    if combined > best_score {
+                        true
+                    } else if combined == best_score {
+                        match &self.gp {
+                            Some(gp) => {
+                                gp.sigma_sq(&cand.direction)
+                                    > gp.sigma_sq(&candidates[best_idx].direction)
+                            }
+                            None => false,
+                        }
+                    } else {
+                        false
+                    }
+                }
+            };
+            if takes {
                 best = Some((i, combined));
                 best_axes = (evo_score, reliability);
             }
@@ -912,6 +977,15 @@ impl HealPipeline {
         // 4. EMA direction update (the actual "evolution").
         self.evolution.record_outcome(rule_id, &fix_dir, success);
 
+        // 4b. Issue 048 T3 — observe the fix direction into the GP
+        //     acquisition model (when installed): σ² collapses where the
+        //     observed set already explains the input, so future tie-breaks
+        //     steer toward genuinely-unseen directions. Outcome-blind by
+        //     design — the VARIANCE model is over inputs, not labels.
+        if let Some(gp) = &mut self.gp {
+            gp.observe(&fix_dir);
+        }
+
         // 5. TETHER blend-weight fit (Issue 033) — only for an outcome of a
         //    fix THIS mode selected, and only where the outcome is
         //    trustworthy. `verified` is the Issue-018 oracle split at this
@@ -1297,5 +1371,148 @@ mod tests {
         // The annotation must surface regardless of source (Drafter or Memory).
         assert!(r.context_notes.is_some(), "memory path must surface context_notes from corpus");
         assert_eq!(r.context_notes.as_deref(), Some("Mixed 2/4 Faster (Bench 013)"));
+    }
+
+    // ── Issue 048 T3 — GP acquisition tie-break ─────────────────────────
+
+    fn embed_helper(rule: &str, code: &str) -> Direction {
+        let mut d = [0.0f32; EMBED_DIM];
+        embed_into(rule, code, &mut d);
+        d
+    }
+
+    #[test]
+    fn gp_tiebreak_default_pipeline_has_none_installed() {
+        let p = make_pipeline();
+        assert!(!p.has_gp_tiebreak(), "default: no GP installed → bit-identical pre-048");
+    }
+
+    #[test]
+    fn gp_tiebreak_breaks_exact_ties_toward_higher_sigma() {
+        // Two memory candidates with IDENTICAL counts (both unseen → same
+        // belief) and directions that tie on evolution score only if the
+        // evolution layer scores them equally — the honest way to force an
+        // exact combined tie is two identical-stat trajectories whose
+        // directions differ. The drafter candidate is absent (rule in
+        // corpus, drafter may still fire — instead force the memory-only
+        // shape via a rule NOT in the corpus: relevance gate would decline
+        // Memory candidates then... so instead use the corpus rule and
+        // check the SELECTED candidate differs per GP seeding.
+        //
+        // Simplest deterministic shape: same rule, two seeded trajectories
+        // with identical stats; GP observed set contains trajectory A's
+        // direction (σ²_A small) but NOT B's (σ²_B ≈ ‖b‖²) → tie must pick B.
+        let mut p = make_pipeline();
+        p.seed_trajectory(FixTrajectory::new(
+            "needless_return".to_string(),
+            "fn a() { return 1; }".to_string(),
+            "fn a() { 1 }".to_string(),
+        ));
+        p.seed_trajectory(FixTrajectory::new(
+            "needless_return".to_string(),
+            "fn b() { return 2; }".to_string(),
+            "fn b() { 2 }".to_string(),
+        ));
+        // Identical stats (0,0) → identical belief; evolution scores by
+        // direction — to force the tie we ALSO need identical evo. The
+        // evolution layer starts empty (score 0.5 neutral for unseen
+        // rules); with no recorded outcomes both candidates tie exactly:
+        // W_EVO·0.5' + W_RATE·belief(0,0) each — wait, evolution scores by
+        // direction even unseen. Force BOTH equal via identical counts and
+        // check evo equality empirically below instead of assuming.
+        let dir_a = embed_helper("needless_return", "fn a() { 1 }");
+        let dir_b = embed_helper("needless_return", "fn b() { 2 }");
+        let evo_a = p.evolution.score_candidate("needless_return", &dir_a);
+        let evo_b = p.evolution.score_candidate("needless_return", &dir_b);
+        // On a fresh pipeline the evolution layer's neutral score makes
+        // these equal; if not, this test's premise (exact tie) fails loudly.
+        assert_eq!(
+            evo_a, evo_b,
+            "test premise: fresh evolution layer must score both directions equally"
+        );
+
+        // GP seeded with A's AND the drafter's direction → both collapse,
+        // B stays high → the 3-way tie must pick B. (The drafter candidate
+        // — the corpus's own fix — joins the tie pool: same belief(0,0),
+        // same neutral evolution score, pushed first.)
+        let corpus = mock_corpus();
+        let dir_draft = embed_helper("needless_return", corpus[0].fixed_code.as_str());
+        let mut p_gp = make_pipeline();
+        p_gp.seed_trajectory(FixTrajectory::new(
+            "needless_return".to_string(),
+            "fn a() { return 1; }".to_string(),
+            "fn a() { 1 }".to_string(),
+        ));
+        p_gp.seed_trajectory(FixTrajectory::new(
+            "needless_return".to_string(),
+            "fn b() { return 2; }".to_string(),
+            "fn b() { 2 }".to_string(),
+        ));
+        let mut p_gp = p_gp.with_gp_tiebreak([dir_a, dir_draft]);
+        let buggy = "fn a() { return 1; }";
+        let r0 = p.heal("needless_return", buggy, &corpus).unwrap();
+        let r1 = p_gp.heal("needless_return", buggy, &corpus).unwrap();
+        // Without GP the tie resolves to first-index (the drafter candidate,
+        // pushed first); with GP it must flip to B (the only unobserved
+        // direction — highest σ²).
+        assert_eq!(r0.fixed_code, corpus[0].fixed_code, "no GP → first-index tie order");
+        assert_eq!(r1.fixed_code, "fn b() { 2 }", "GP tie-break must pick the unobserved direction");
+    }
+
+    #[test]
+    fn gp_tiebreak_never_overrides_payoff() {
+        // A strictly-better-scoring candidate must win regardless of σ².
+        // Shape: trajectory A with strong success stats (belief high),
+        // trajectory B unseen (belief 0.32) + GP seeded with A (σ²_A small,
+        // σ²_B large). Combined(A) > Combined(B) → A wins with AND without GP.
+        let mut p = make_pipeline();
+        let traj_a = FixTrajectory::new(
+            "needless_return".to_string(),
+            "fn a() { return 1; }".to_string(),
+            "fn a() { 1 }".to_string(),
+        );
+        p.seed_trajectory(traj_a);
+        p.seed_trajectory(FixTrajectory::new(
+            "needless_return".to_string(),
+            "fn b() { return 2; }".to_string(),
+            "fn b() { 2 }".to_string(),
+        ));
+        // 10 successes on A.
+        for _ in 0..10 {
+            p.report_outcome("needless_return", "fn a() { return 1; }", "fn a() { 1 }", true, false);
+        }
+        let dir_a = embed_helper("needless_return", "fn a() { 1 }");
+        // Rebuild with GP seeded on A (the winner) — payoff must still pick A.
+        let mut p2 = make_pipeline();
+        p2.seed_trajectory(FixTrajectory::new(
+            "needless_return".to_string(),
+            "fn a() { return 1; }".to_string(),
+            "fn a() { 1 }".to_string(),
+        ));
+        p2.seed_trajectory(FixTrajectory::new(
+            "needless_return".to_string(),
+            "fn b() { return 2; }".to_string(),
+            "fn b() { 2 }".to_string(),
+        ));
+        for _ in 0..10 {
+            p2.report_outcome("needless_return", "fn a() { return 1; }", "fn a() { 1 }", true, false);
+        }
+        let mut p2 = p2.with_gp_tiebreak([dir_a]);
+        let corpus = mock_corpus();
+        let r = p2.heal("needless_return", "fn a() { return 1; }", &corpus).unwrap();
+        assert_eq!(r.fixed_code, "fn a() { 1 }", "strictly better score wins regardless of σ²");
+    }
+
+    #[test]
+    fn gp_tiebreak_observations_grow_on_outcome() {
+        let mut p = make_pipeline().with_gp_tiebreak([]);
+        p.report_outcome("needless_return", "fn a() { return 1; }", "fn a() { 1 }", true, false);
+        // Internal growth is observable via behavior: σ² for the reported
+        // direction collapses. We can't read the private field from here —
+        // pin via the standalone module instead (gp_acquisition's own tests
+        // cover collapse); here just pin that outcomes don't panic + the
+        // pipeline still heals.
+        let corpus = mock_corpus();
+        assert!(p.heal("needless_return", "fn a() { return 1; }", &corpus).is_some());
     }
 }

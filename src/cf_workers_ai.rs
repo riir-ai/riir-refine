@@ -359,6 +359,103 @@ pub fn prompt_prepass(module: &str, modelless: Option<&str>, fewshots: &[FewShot
     s
 }
 
+// ── Issue 049: the growing-input channels (Meta^n conditioning POC) ──────
+
+/// Channel 1 — one prior trajectory outcome for the queried shape
+/// (retrieved from the durable store; Certified first, Withdrawn excluded
+/// by `TrajStore::retrieve` itself).
+#[derive(Debug, Clone)]
+pub struct TrajectoryExemplar {
+    pub lint_key: String,
+    pub shape: String,
+    pub fix: String,
+    pub success: u32,
+    pub fail: u32,
+    /// `"Certified"` / `"Heuristic"` (Withdrawn never reaches the prompt).
+    pub tier: &'static str,
+}
+
+/// Channel 3 — one per-rule failure-pattern row (the depth≥3
+/// structured-summary analog: the store's aggregate verdict distribution,
+/// not one span's history).
+#[derive(Debug, Clone)]
+pub struct FailurePattern {
+    pub rule: String,
+    pub attempts: u32,
+    /// Kept attempts (`ok`) — carried as the integer so the prompt renders
+    /// `kept/attempts` without a float round-trip (the rate stays display).
+    pub kept: u32,
+    pub success_rate: f32,
+    /// Up to 2 representative (`shape`, attempted-fix) pairs with failures.
+    pub representative_failures: Vec<(String, String)>,
+}
+
+/// Arm G prompt (Issue 049 T1): the arm-B pre-pass prompt + the two
+/// growing-input channels — (1) prior trajectory outcomes for shape-similar
+/// inputs, (3) the cross-rule failure-pattern summary. Channel 2 (the
+/// modelless candidate) is arm B's own addition and carries through.
+///
+/// The `Meta`^n mechanism (R512): "the gain comes from giving the improver
+/// more to read" — inter-layer conditioning carried ~72% of recursion gain
+/// in the paper's ablation. This is the single-call instantiation: the
+/// improver's input grows with the store; arm A/B remain byte-identical
+/// baselines (their builders are untouched).
+#[must_use]
+pub fn prompt_growing(
+    module: &str,
+    modelless: Option<&str>,
+    fewshots: &[FewShot],
+    trajectories: &[TrajectoryExemplar],
+    failure_summary: &[FailurePattern],
+) -> String {
+    use std::fmt::Write as _;
+    let s = prompt_prepass(module, modelless, fewshots);
+    // Splice the channels BEFORE the closing respond-line.
+    let closing = "\nRespond with ONLY the corrected lines that differ from the input code, no explanation.";
+    let base = s.strip_suffix(closing).unwrap_or(&s).to_string();
+    let mut s = base;
+    if !trajectories.is_empty() {
+        s.push_str("\nPrior fix attempts on shape-similar code (from the trajectory store — outcomes are ground truth, not suggestions):\n");
+        for t in trajectories {
+            let _ = write!(
+                s,
+                "--- {} [{}: {} ok / {} failed] ---\n before:\n{}\n after:\n{}",
+                t.lint_key, t.tier, t.success, t.fail, indent4(&t.shape), indent4(&t.fix)
+            );
+            s.push('\n');
+        }
+    }
+    if !failure_summary.is_empty() {
+        s.push_str("\nHistorical fix-reliability by rule (what usually works vs usually fails — calibrate against this):\n");
+        for f in failure_summary {
+            let _ = write!(
+                s,
+                "  {}: {}/{} attempts kept ({:.0}%)",
+                f.rule,
+                f.kept,
+                f.attempts,
+                f.success_rate * 100.0
+            );
+            s.push('\n');
+            for (shape, fix) in &f.representative_failures {
+                let _ = write!(
+                    s,
+                    "    failed attempt — before:\n{}\n    after (REJECTED):\n{}",
+                    indent4(shape),
+                    indent4(fix)
+                );
+                s.push('\n');
+            }
+        }
+    }
+    s.push_str(closing);
+    s
+}
+
+fn indent4(text: &str) -> String {
+    text.lines().map(|l| format!("    {l}")).collect::<Vec<_>>().join("\n")
+}
+
 // ── Edit application (the v2edit "only the corrected lines" contract) ──────
 
 /// Compute the brace depth before each line of `src`.
@@ -1282,6 +1379,11 @@ pub struct RegateHarness {
     pub corpus: ClippyCorpus,
     pub matcher: LatentMatcher,
     pub verifier: ClippyVerifier,
+    /// The durable trajectory store (Issue 049's growing-input source),
+    /// best-effort opened at `<repo root>/.heal/trajectories.kv`. `None`
+    /// when absent/unopenable — the growing channels then degrade to empty
+    /// (arm G ≡ arm B for that sample, honestly recorded by the runner).
+    pub store: Option<crate::traj_store::TrajStore>,
 }
 
 impl RegateHarness {
@@ -1304,11 +1406,13 @@ impl RegateHarness {
             HealPipeline::new(crate::TernaryDrafter::fallback(), RustAnalyzerPruner::new());
         pipeline.seed_from_corpus(&corpus.entries);
         let matcher = LatentMatcher::from_enabled_domains()?;
+        let store = crate::traj_store::TrajStore::open(std::path::Path::new(".")).ok().map(|(s, _)| s);
         Ok(Self {
             pipeline,
             corpus,
             matcher,
             verifier: ClippyVerifier::new(),
+            store,
         })
     }
 
@@ -1378,6 +1482,87 @@ impl RegateHarness {
             }
         }
         out
+    }
+
+    /// Issue 049 — the growing-input channels for one module: (channel 1)
+    /// top-k shape-similar trajectory outcomes from the durable store
+    /// (Certified first, Withdrawn excluded by `retrieve`), and (channel 3)
+    /// the per-rule failure-pattern summary over the whole store (top rules
+    /// by attempts, success rate, up to 2 representative REJECTED pairs).
+    ///
+    /// Both channels degrade to empty without a store — the runner records
+    /// the degradation per sample (arm G ≡ arm B there).
+    pub fn trajectory_context(&self, module: &str, k: usize) -> (Vec<TrajectoryExemplar>, Vec<FailurePattern>) {
+        use std::collections::BTreeMap;
+        /// (`ok`, `fail`, [(`shape`, `fix`, `fail_count`)] rows) — the per-rule fold.
+        type RuleFold = (u32, u32, Vec<(String, String, u32)>);
+        let Some(store) = &self.store else {
+            return (Vec::new(), Vec::new());
+        };
+        // Channel 1: shape-similar neighbors across ALL rules (empty lint
+        // prefix). Certified first, then Heuristic; deterministic order.
+        let mut neighbors = store.retrieve(module, "", k);
+        neighbors.sort_by(|a, b| {
+            let tier_rank = |t: crate::memory::EvidenceTier| {
+                u8::from(!matches!(t, crate::memory::EvidenceTier::Certified))
+            };
+            tier_rank(a.tier)
+                .cmp(&tier_rank(b.tier))
+                .then(b.bm25.partial_cmp(&a.bm25).unwrap_or(std::cmp::Ordering::Equal))
+        });
+        let exemplars: Vec<TrajectoryExemplar> = neighbors
+            .iter()
+            .map(|n| TrajectoryExemplar {
+                lint_key: n.lint_key.clone(),
+                shape: n.shape.clone(),
+                fix: n.fix.clone(),
+                success: n.success_count,
+                fail: n.fail_count,
+                tier: if matches!(n.tier, crate::memory::EvidenceTier::Certified) { "Certified" } else { "Heuristic" },
+            })
+            .collect();
+        // Channel 3: aggregate every row per rule; report the top rules by
+        // attempts (the distribution the improver should calibrate against).
+        let mut by_rule: BTreeMap<String, RuleFold> = BTreeMap::new();
+        for row in store.dump() {
+            if matches!(crate::memory::EvidenceTier::from_u8(row.tier), crate::memory::EvidenceTier::Withdrawn) {
+                continue;
+            }
+            let e = by_rule.entry(row.lint_key.clone()).or_insert((0, 0, Vec::new()));
+            e.0 += row.success_count;
+            e.1 += row.fail_count;
+            if row.fail_count > 0 {
+                e.2.push((row.shape.clone(), row.fix.clone(), row.fail_count));
+            }
+        }
+        let mut patterns: Vec<FailurePattern> = by_rule
+            .into_iter()
+            .filter_map(|(rule, (ok, fail, rejected))| {
+                let attempts = ok + fail;
+                if attempts == 0 {
+                    return None;
+                }
+                let mut rejected = rejected;
+                rejected.sort_by_key(|r| std::cmp::Reverse(r.2));
+                Some(FailurePattern {
+                    rule,
+                    attempts,
+                    kept: ok,
+                    // Display-only rate on tiny counts (≤ store rows); the
+                    // exact integers ride alongside in `kept`/`attempts`.
+                    #[allow(clippy::cast_precision_loss)]
+                    success_rate: ok as f32 / attempts as f32,
+                    representative_failures: rejected
+                        .into_iter()
+                        .take(2)
+                        .map(|(s, f, _)| (s, f))
+                        .collect(),
+                })
+            })
+            .collect();
+        patterns.sort_by(|a, b| b.attempts.cmp(&a.attempts).then(a.rule.cmp(&b.rule)));
+        patterns.truncate(5);
+        (exemplars, patterns)
     }
 }
 
@@ -1753,6 +1938,46 @@ mod tests {
         let declined = prompt_prepass("MOD", None, &[]);
         assert!(declined.contains("(no candidate"));
         assert!(!declined.contains("example ("));
+    }
+
+    // ── Issue 049 — the growing-input prompt ───────────────────────────
+
+    #[test]
+    fn prompt_growing_carries_both_channels_and_keeps_baselines_intact() {
+        let fs = vec![FewShot { rule_id: "manual_map".into(), buggy: "b".into(), fixed: "f".into() }];
+        let traj = vec![TrajectoryExemplar {
+            lint_key: "uninlined_format_args".into(),
+            shape: "format!(\"{}\", x)".into(),
+            fix: "format!(\"{x}\")".into(),
+            success: 4,
+            fail: 1,
+            tier: "Certified",
+        }];
+        let patterns = vec![FailurePattern {
+            rule: "match_bool".into(),
+            attempts: 6,
+            kept: 3,
+            success_rate: 0.5,
+            representative_failures: vec![("match b { true => x, false => y }".into(), "if b { x } else { y }".into())],
+        }];
+        let g = prompt_growing("MOD", Some("CAND"), &fs, &traj, &patterns);
+        // Channel 1: prior outcomes block.
+        assert!(g.contains("Prior fix attempts on shape-similar code"));
+        assert!(g.contains("uninlined_format_args [Certified: 4 ok / 1 failed]"));
+        // Channel 3: failure-pattern block.
+        assert!(g.contains("Historical fix-reliability by rule"));
+        assert!(g.contains("match_bool: 3/6 attempts kept (50%)"));
+        assert!(g.contains("REJECTED"));
+        // Arm B's content carries through (channel 2 + few-shots).
+        assert!(g.contains("CAND"));
+        assert!(g.contains("example (manual_map) before"));
+        // The closing line is last (spliced, not duplicated).
+        assert!(g.ends_with("no explanation."));
+        assert_eq!(g.matches("Respond with ONLY").count(), 1);
+        // Deterministic.
+        assert_eq!(g, prompt_growing("MOD", Some("CAND"), &fs, &traj, &patterns));
+        // Empty channels → byte-identical to arm B (the degradation case).
+        assert_eq!(prompt_growing("MOD", Some("CAND"), &fs, &[], &[]), prompt_prepass("MOD", Some("CAND"), &fs));
     }
 
     // ── contract + first_fn ────────────────────────────────────────────────

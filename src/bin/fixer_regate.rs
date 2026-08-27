@@ -5,6 +5,10 @@
 //!   `CF_ACCOUNT_ID`)
 //! - `--arm B` — same model, modelless pre-pass prompt (candidate + corpus
 //!   few-shots)
+//! - `--arm G` — Issue 049 growing-input prompt: arm B + the two Meta^n
+//!   conditioning channels from the durable trajectory store (prior
+//!   outcomes for shape-similar inputs + the per-rule failure-pattern
+//!   summary). Arm A/B prompts are untouched — reproducible baselines.
 //! - `--arm C` — local Bonsai via the `bonsai_clippy_l4_eval --serve` daemon
 //!   (`--l4-bin/--l4-gguf/--l4-lora`; note the riir-train driver REQUIRES
 //!   `--lora`, so arm C needs a checkpoint — see the issue Status section)
@@ -232,7 +236,7 @@ fn gate_samples(samples: Vec<Sample>, args: &Args) -> Vec<Sample> {
     kept
 }
 
-/// One prepared case: sample + miss class + both prompt shapes.
+/// One prepared case: sample + miss class + every prompt shape.
 struct Prepared {
     sample: Sample,
     miss: MissClass,
@@ -241,6 +245,12 @@ struct Prepared {
     few_shots: Vec<FewShot>,
     prompt_raw: String,
     prompt_prepass: String,
+    /// Issue 049 arm G: the growing-input prompt (arm B + channels 1/3).
+    prompt_growing: String,
+    /// Whether both growing channels were empty for this sample (store
+    /// absent or no shape-similar rows) — arm G degenerates to arm B there;
+    /// recorded per-row so the bench can report the degradation rate.
+    growing_channels_empty: bool,
     reachable_miss: bool,
 }
 
@@ -252,6 +262,15 @@ fn prepare(harness: &mut RegateHarness, samples: Vec<Sample>, few_shots: usize) 
             let fs = harness.few_shots(&sample.module, few_shots);
             let raw = cf_workers_ai::prompt_raw(&sample.module);
             let prepass = cf_workers_ai::prompt_prepass(&sample.module, modelless.as_deref(), &fs);
+            let (traj, patterns) = harness.trajectory_context(&sample.module, 3);
+            let growing_empty = traj.is_empty() && patterns.is_empty();
+            let growing = cf_workers_ai::prompt_growing(
+                &sample.module,
+                modelless.as_deref(),
+                &fs,
+                &traj,
+                &patterns,
+            );
             let reachable_miss = miss.is_reachable_miss();
             Prepared {
                 sample,
@@ -260,6 +279,8 @@ fn prepare(harness: &mut RegateHarness, samples: Vec<Sample>, few_shots: usize) 
                 few_shots: fs,
                 prompt_raw: raw,
                 prompt_prepass: prepass,
+                prompt_growing: growing,
+                growing_channels_empty: growing_empty,
                 reachable_miss,
             }
         })
@@ -297,6 +318,7 @@ fn record_case(
             "miss_class": format!("{:?}", p.miss),
             "modelless_served": p.modelless.is_some(),
             "reachable_miss": p.reachable_miss,
+            "growing_channels_empty": p.growing_channels_empty,
             "prompt_blake3_12": &blake3::hash(prompt.as_bytes()).to_hex().as_str()[..12],
             "prompt_chars": prompt.len(),
             "gen_chars": gen.len(),
@@ -391,10 +413,10 @@ fn main() {
 
     match args.arm.as_str() {
         "DRY" => run_dry(&args, &verifier, &prepared),
-        "A" | "B" => run_cf(&args, &verifier, &prepared),
+        "A" | "B" | "G" => run_cf(&args, &verifier, &prepared),
         "C" => run_daemon(&args, &verifier, &prepared),
         other => {
-            eprintln!("unknown --arm {other} (A|B|C|DRY)");
+            eprintln!("unknown --arm {other} (A|B|G|C|DRY)");
             std::process::exit(2);
         }
     }
@@ -411,12 +433,15 @@ fn run_dry(args: &Args, verifier: &ClippyVerifier, prepared: &[Prepared]) {
     for p in prepared.iter().take(5) {
         let raw = blake3::hash(p.prompt_raw.as_bytes()).to_hex();
         let pre = blake3::hash(p.prompt_prepass.as_bytes()).to_hex();
+        let grow = blake3::hash(p.prompt_growing.as_bytes()).to_hex();
         println!(
-            "  {:<28} miss={:<14} raw={:<12} prepass={:<12} modelless={}",
+            "  {:<28} miss={:<14} raw={:<12} prepass={:<12} growing={:<12} channels={} modelless={}",
             p.sample.id,
             format!("{:?}", p.miss),
             &raw.to_string()[..12],
             &pre.to_string()[..12],
+            &grow.to_string()[..12],
+            if p.growing_channels_empty { "empty" } else { "live" },
             if p.modelless.is_some() { "served" } else { "declined" },
         );
     }
@@ -520,13 +545,16 @@ fn run_cf(args: &Args, verifier: &ClippyVerifier, prepared: &[Prepared]) {
             std::process::exit(3);
         }
     };
-    let prepass = args.arm == "B";
     let mut out = args.out.as_ref().and_then(|p| std::fs::File::create(p).ok());
     let mut summary = ArmSummary::default();
     let (mut lat_total, mut lat_max) = (0u128, 0u128);
 
     for p in prepared {
-        let prompt = if prepass { &p.prompt_prepass } else { &p.prompt_raw };
+        let prompt = match args.arm.as_str() {
+            "G" => &p.prompt_growing,
+            "B" => &p.prompt_prepass,
+            _ => &p.prompt_raw,
+        };
         eprintln!("[{}] {} …", args.arm, p.sample.id);
         let gen = match client.generate(prompt, args.max_new) {
             Ok(g) => g,

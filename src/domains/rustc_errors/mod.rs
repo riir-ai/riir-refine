@@ -29,5 +29,6 @@ pub mod diag;
 pub mod driver;
 pub mod evolve;
 pub mod floor;
+pub mod gp_ordering;
 pub mod playbooks;
 pub mod probe;

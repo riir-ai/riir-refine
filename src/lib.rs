@@ -82,6 +82,7 @@ pub mod ruliology_search;
 pub mod collapse_monitor;
 pub mod component;
 pub mod evolve;
+pub mod gp_acquisition;
 pub mod memory;
 pub mod recorder;
 pub mod selection_entropic;
