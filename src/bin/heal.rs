@@ -1452,7 +1452,7 @@ fn main() {
                 let root = args
                     .paths
                     .first()
-                    .and_then(|p| riir_clippy::compile_oracle::owning_package_root(p))
+                    .and_then(riir_clippy::compile_oracle::owning_package_root)
                     .and_then(|pkg| riir_clippy::compile_oracle::workspace_root(&pkg))
                     .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
                 let (written, warnings) = evolve::dump_misses(&root, &report.misses);
