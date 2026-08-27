@@ -1,7 +1,7 @@
 # Plan 040 — KAT T1.6: the corpus-lease CLIENT half
 
-**Status:** DONE (T1.6 landed 2026-08-28 — see the commit; validation
-numbers in §Gates)
+**Status:** DONE — landed `0a7cfd8` on develop (2026-08-28); validation
+numbers in §Gates
 
 Proposal 005 Phase 1 T1.6 — the client-side corpus lease consumer, per
 §"Corpus sync-back lifecycle" (normative, proposal lines 105–147) + the
