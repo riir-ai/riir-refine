@@ -567,7 +567,9 @@ mod tests {
         assert_eq!(ds.stats.rollouts_total, 0);
         assert_eq!(ds.pairs.len(), 1);
         let p = &ds.pairs[0];
-        assert_eq!((p.q_hat - 1.0).abs(), 0.0);
+        // bit-identity intent (clippy::float_cmp): the rollout quality is
+        // exactly 1.0 by construction — compare bits, not tolerances.
+        assert_eq!(p.q_hat.to_bits(), 1.0f32.to_bits());
         assert!(p.kept);
         assert!(p.proxy_clean);
     }
@@ -616,7 +618,12 @@ mod tests {
         assert_eq!(ds1.pairs.len(), ds2.pairs.len());
         for (a, b) in ds1.pairs.iter().zip(ds2.pairs.iter()) {
             assert_eq!(a.state, b.state);
-            assert_eq!(a.q_hat, b.q_hat, "sampling schedule must be seed-stable");
+            // bit-identity intent (clippy::float_cmp): seed-stability means
+            // bit-identical sampling — compare bits, not tolerances.
+            assert_eq!(
+                a.q_hat.to_bits(), b.q_hat.to_bits(),
+                "sampling schedule must be seed-stable"
+            );
             assert_eq!(a.kept, b.kept);
         }
     }
