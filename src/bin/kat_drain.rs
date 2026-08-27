@@ -555,18 +555,15 @@ fn main() {
         // the span withdraws itself out of the queue — the self-limiting
         // property). Nothing is written to any repo file, ever.
         let outcome_ok = if score.keep_strict {
-            match cf_workers_ai::apply_edit(&p.sample.module, &gen.text, true) {
-                Some((merged, _)) => {
+            if let Some((merged, _)) = cf_workers_ai::apply_edit(&p.sample.module, &gen.text, true) {
                     let _ = store.record(&p.item.lint, &p.item.shape, &merged, true, true, &run_id);
                     true
-                }
-                None => {
+                } else {
                     // Unreachable in practice (keep_strict implies a merge) —
                     // record the failure rather than fabricating a keep.
                     let _ = store.record(&p.item.lint, &p.item.shape, &gen.text, false, false, &run_id);
                     false
                 }
-            }
         } else {
             let _ = store.record(&p.item.lint, &p.item.shape, &gen.text, false, false, &run_id);
             false
@@ -654,9 +651,7 @@ fn append_ledger(
             PathBuf::from,
         );
     let ts = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
+        .duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
     let row = serde_json::json!({
         "ts_unix": ts,
         "arm": "DRAIN",
@@ -892,7 +887,7 @@ mod tests {
         const {
             assert!(SMOKE_MAX_TOKENS <= 64);
             assert!(SMOKE_PROMPT.len() < 64);
-        }
+        };
     }
 
     #[test]
@@ -901,6 +896,6 @@ mod tests {
         // thinking models — the drain default must be ≥ 512.
         const {
             assert!(DEFAULT_MAX_NEW >= 512);
-        }
+        };
     }
 }

@@ -654,9 +654,7 @@ fn append_quality_history(arm: &str, model: &str, summary: &ArmSummary) {
     let path = std::env::var("RIIR_FIXER_QUALITY_HISTORY")
         .unwrap_or_else(|_| ".benchmarks/fixer_quality_history.jsonl".to_string());
     let ts = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
+        .duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
     let row = serde_json::json!({
         "ts_unix": ts,
         "arm": arm,
@@ -709,9 +707,7 @@ fn append_cost_ledger(
     let path = std::env::var("RIIR_LLM_COST_LEDGER")
         .unwrap_or_else(|_| ".benchmarks/llm_cost_ledger.jsonl".to_string());
     let ts = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
+        .duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
     let row = serde_json::json!({
         "ts_unix": ts,
         "arm": arm,
