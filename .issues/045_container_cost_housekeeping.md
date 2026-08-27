@@ -1,7 +1,7 @@
 # Issue 045 — container cost observability + hourly housekeeping worker + smallest-sizing verdict
 
 **Filed:** 2026-08-26
-**Status:** OPEN — T1 verdict recorded, T2+T3 SHIPPED same day; live-mint half gated on Proposal 005 Phase 1. Sizing verdict feeds Proposal 005 T2.0/T2.1 **+ T2.6 / [Plan 031](../.plans/031_kat_sweeper_temp_container_r2_tier.md)** (2026-08-26 later-session sync).
+**Status:** OPEN — T1 verdict recorded, T2+T3 SHIPPED same day; live-mint half gated on Proposal 005 Phase 1. Sizing verdict feeds Proposal 005 T2.0/T2.1 **+ T2.6 / [Plan 031](../.plans/031_kat_sweeper_temp_container_r2_tier.md)** (2026-08-26 later-session sync). **2026-08-27: the T3 Worker was EXTENDED + redeployed (`ab79bd20`) — CORS on all read endpoints (dashboard live-fetch), Issue-044-T4 budget alerting (cap thresholds 50/90/100% + optional monthly budget, KV-dedupe, webhook via `ALERT_WEBHOOK_URL`), extended `/status` (`cap`/`thresholds`/`has_webhook`/`has_monthly_budget`/`alerts_today`).**
 **Repo:** riir-clippy (dashboard + worker deploy live here; sizing verdict feeds Proposal 005 T2.0/T2.1)
 **Owner ask (2026-08-26):**
 1. can the container be smaller? smallest?
@@ -148,7 +148,10 @@ lives (T1 above).
 - [x] T3 housekeeping Worker deployed (cron hourly, KV rows, mint anchor,
       heartbeat fallback, read endpoints)
 - [ ] T4 owner: `wrangler secret put CF_API_TOKEN` (Analytics:Read) —
-      housekeeping data collection goes live
+      housekeeping data collection goes live *(2026-08-27: `ALERT_WEBHOOK_URL`
+      + optional `MONTHLY_BUDGET_USD` join the same one-time step — the
+      alerting mechanism is deployed + inert until then; without the
+      webhook, crossings still land in KV + `/status alerts_today`)*
 - [ ] T5 name the 3 live container-family apps (correlate app ids via
       dashboard-side mapping or CF dashboard) — cosmetic, blocked on a
       name-bearing API surface

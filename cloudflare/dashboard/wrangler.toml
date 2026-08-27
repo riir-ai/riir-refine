@@ -1,17 +1,25 @@
-# riir-ops-dashboard — the Issue 044 ops dashboard (static, single HTML).
+# riir-ops-dashboard — the Issue 044 ops dashboard (v2: worker + assets).
 #
 # Deployed with `npx wrangler deploy` from this directory after
 # regenerating ../dashboard/index.html via
 #   python3 ../../scripts/gen_dashboard.py
 #
-# NOTE (v1, honest): this URL is UNAUTHENTICATED (workers.dev). The HTML
-# contains only aggregated numbers (no source, no tokens, no account ids
-# beyond none). Token gating / CF Access is the top item on the Issue 044
-# prod-grade backlog. Regenerate + redeploy to refresh data — there is no
-# auto-refresh yet.
+# v2 (Issue 044 T2): token-gated when the DASHBOARD_TOKEN secret is set —
+# one-time:   npx wrangler secret put DASHBOARD_TOKEN
+# src/worker.js runs FIRST on every request (run_worker_first) and serves
+# the assets through the declared ASSETS binding (env.ASSETS). Until the
+# secret is set
+# the worker FAILS OPEN (v1 behavior: aggregates-only HTML; response header
+# x-dashboard-auth: open marks the mode). Authenticate once via
+# ?token=… (exchanged for an HttpOnly cookie) or the cookie itself.
 name = "riir-ops-dashboard"
 compatibility_date = "2026-08-26"
+main = "src/worker.js"
 
 [assets]
 directory = "./public"
 not_found_handling = "single-page-application"
+run_worker_first = true
+# Explicit binding: with run_worker_first=true wrangler does NOT auto-add
+# env.ASSETS — without this the worker's env.ASSETS.fetch() would be undefined.
+binding = "ASSETS"

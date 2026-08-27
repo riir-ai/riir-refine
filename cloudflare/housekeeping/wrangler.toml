@@ -40,3 +40,6 @@ CF_ACCOUNT_ID = "7e11517c4dd4f6e9cede7da9b60d66eb"
 MEM_USD_PER_GIB_S = "0.0000025"
 DISK_USD_PER_GB_S = "0.00000007"
 CPU_USD_PER_S = "0.000020"
+# Daily Workers-AI neuron cap (Issue 044 T4 budget alerting). Alert
+# thresholds are 50% / 90% / 100% of this, once per threshold per day.
+NEURON_CAP = "10000"

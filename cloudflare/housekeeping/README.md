@@ -27,6 +27,26 @@ The wrangler OAuth token rotates ~hourly and cannot be a Worker secret.
 Until `CF_API_TOKEN` is set the cron still writes heartbeat rows (proves
 the schedule is alive).
 
+## Optional secrets (budget alerting, Issue 044 T4)
+
+```sh
+npx wrangler secret put ALERT_WEBHOOK_URL     # Discord-compatible webhook URL
+npx wrangler secret put MONTHLY_BUDGET_USD    # optional monthly container budget (USD)
+```
+
+- **Alert thresholds:** `50% / 90% / 100%` of `NEURON_CAP` (`[vars]`, default
+  `10000` neurons/day). One webhook per threshold per day — deduped via KV
+  key `alert:<date>:<threshold>`, written **after** the POST attempt
+  regardless of success (a failed POST is **not** retried next hour — no
+  retry storms; check the KV row's `notified` flag).
+- **At 100%:** the message adds `CAP EXCEEDED — new generations hard-fail
+  until 00:00 UTC`.
+- **Monthly budget:** if `MONTHLY_BUDGET_USD` is set, the run sums the
+  month's `day:*` rows and alerts once per month (`alert:<YYYYMM>:budget`)
+  when month-to-date est cost reaches the budget.
+- Alerting only runs when `CF_API_TOKEN` is set (neurons are only known
+  there). Without a webhook, alerts still land in KV (`notified: false`).
+
 ## Deploy / read
 
 ```sh
@@ -35,6 +55,12 @@ curl https://riir-kat-housekeeping.<account>.workers.dev/status
 curl '.../hours?n=24'   # hourly rows (containers est_usd + awake_s per app)
 curl '.../days?n=14'    # day aggregates
 ```
+
+`/status`, `/latest`, `/hours?n=`, `/days?n=` are **CORS-enabled**
+(`Access-Control-Allow-Origin: *`) so the ops dashboard can fetch them
+cross-origin. `/status` additionally reports `cap`, `thresholds`,
+`has_webhook`, `has_monthly_budget`, and `alerts_today` (alerts fired
+today) alongside the unchanged `latest` row.
 
 ## Re-deploying the dashboard after changes here
 

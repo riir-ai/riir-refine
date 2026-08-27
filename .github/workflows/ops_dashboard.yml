@@ -1,0 +1,309 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# ops-dashboard-nightly — Issue 044 T7
+#
+# Nightly unattended run of `python3 scripts/gen_dashboard.py --sweep`
+# (healer-coverage re-measure across the 11 sibling repos) + commit of the
+# refreshed artifacts + conditional redeploy of the CF dashboard Worker.
+#
+# INERT BY DEFAULT. The job is guarded on the repository variable
+# OPS_DASHBOARD_ENABLED == 'true'. Until the owner sets it, scheduled runs
+# skip the job entirely — no nightly failure spam from missing secrets.
+#
+# Owner enablement (one-time):
+#   1. Settings → Secrets and variables → Actions → Variables:
+#        OPS_DASHBOARD_ENABLED = true
+#   2. Settings → Secrets and variables → Actions → Secrets:
+#        GH_PAT               — PAT with read access to the private gist-rs/*
+#                               repos (sibling checkouts)
+#        CF_API_TOKEN         — Cloudflare token with Analytics:Read (GraphQL;
+#                               the same token the housekeeping worker uses).
+#                               Feeds the CF daily-neurons + containers sections.
+#        CLOUDFLARE_API_TOKEN — Cloudflare token permitted to deploy the
+#                               `riir-ops-dashboard` Worker. The deploy step
+#                               soft-skips when unset.
+#
+# Scheduling note: scheduled workflows only run from the repo's DEFAULT
+# branch. Verified at authoring time: origin/HEAD → refs/heads/develop, so
+# this file is effective as soon as it lands on develop. If the default
+# branch ever changes, this file must move with it.
+#
+# ⚠ ASSUMED generator dependencies (owned by scripts/gen_dashboard.py — do
+# not "fix" here, another agent owns that file):
+#   a) GIT_ROOT is hardcoded to the macOS path /Users/katopz/git with NO env
+#      override today. This workflow needs the one-line generator change:
+#        GIT_ROOT = Path(os.environ.get("RIIR_GIT_ROOT", "/Users/katopz/git"))
+#      and exports RIIR_GIT_ROOT accordingly. UNTIL that lands, the scaffold
+#      step ALSO symlinks the hardcoded path (sudo ln -sfn $GITROOT
+#      /Users/katopz/git) so the CURRENT code resolves — either mechanism
+#      alone suffices; both point at the same directory.
+#   b) The CF token lookup only reads the macOS wrangler OAuth file
+#      (~/Library/Preferences/.wrangler/config/default.toml, regex
+#      `^oauth_token = "(.+)"$`). The workflow writes that file (mode 0600,
+#      ephemeral runner) from secrets.CF_API_TOKEN so the current parser
+#      finds it, AND exports CF_API_TOKEN for the generator's future env
+#      fallback.
+#
+# Layout: siblings are checked out to ${{ runner.temp }}/git/<name> (the same
+# /git/<name> shape as the dev boxes — the generator's REPOS list resolves
+# naturally inside it, including sibling-internal `../..` path deps), then
+# symlinked beside the workspace so riir-clippy's OWN cargo path deps
+# (`../katgpt-rs/...`, `../riir-ai/...`, `../riir-neuron-db`, and the
+# [patch.crates-io] ../riir-ai/vendor/* entries) resolve from
+# $GITHUB_WORKSPACE.
+#
+# fetch-depth is 2000 (NOT 1) because the dashboard's git-cadence source
+# runs `git log --since=30.days` per repo — a depth-1 clone would undercount
+# it. Known limitation: >2000 commits in 30d undercounts a repo's cadence.
+#
+# Known CI limitation: `.heal/trajectories.kv` stores are gitignored local
+# state, so the trajectory-adoption section will be empty on fresh checkouts
+# (it degrades gracefully; coverage + git cadence + ledger sections carry the
+# run).
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: ops-dashboard-nightly
+
+on:
+  schedule:
+    - cron: "23 18 * * *" # nightly, off the top of the hour (UTC)
+  workflow_dispatch:
+
+jobs:
+  nightly:
+    # INERT until the owner sets OPS_DASHBOARD_ENABLED=true (+ the secrets
+    # documented in the header). vars context is available on schedule events.
+    if: ${{ vars.OPS_DASHBOARD_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    permissions:
+      contents: write # push the refreshed dashboard artifacts
+    concurrency:
+      group: ops-dashboard-nightly
+      cancel-in-progress: false
+
+    steps:
+      - name: Preflight (config sanity — warnings only, never fatal)
+        env:
+          GH_PAT_SET: ${{ secrets.GH_PAT != '' }}
+          CF_API_SET: ${{ secrets.CF_API_TOKEN != '' }}
+          CF_DEPLOY_SET: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
+        run: |
+          [ "${GH_PAT_SET}" = "true" ] || echo "::warning::GH_PAT not set — private sibling checkouts will fail (coverage for those repos will be skipped)"
+          [ "${CF_API_SET}" = "true" ] || echo "::warning::CF_API_TOKEN not set — CF analytics sections will be empty"
+          [ "${CF_DEPLOY_SET}" = "true" ] || echo "::warning::CLOUDFLARE_API_TOKEN not set — Worker deploy will be skipped"
+
+      - name: Checkout riir-clippy
+        uses: actions/checkout@v4
+        with:
+          # 30d of history: the generator greps `git log --since=30.days`
+          fetch-depth: 2000
+
+      # ── Sibling checkouts (the generator's REPOS list minus riir-clippy) ──
+      # continue-on-error: a missing/paused repo must not kill the run — the
+      # generator degrades per-source and the sweep skips absent dirs.
+      # EXCEPTION: the cargo build hard-requires katgpt-rs + riir-ai
+      # (non-optional ../katgpt-rs/crates/katgpt-core path dep + the
+      # [patch.crates-io] ../riir-ai/vendor/* entries), so those two failing
+      # still fails the build step below.
+      - name: Checkout katgpt-rs (public)
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          repository: katopz/katgpt-rs
+          ref: develop
+          path: ${{ runner.temp }}/git/katgpt-rs
+          fetch-depth: 2000
+
+      - name: Checkout riir-ai
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          repository: gist-rs/riir-ai
+          ref: develop
+          token: ${{ secrets.GH_PAT }}
+          path: ${{ runner.temp }}/git/riir-ai
+          fetch-depth: 2000
+
+      - name: Checkout riir-train (main)
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          repository: gist-rs/riir-train
+          ref: main
+          token: ${{ secrets.GH_PAT }}
+          path: ${{ runner.temp }}/git/riir-train
+          fetch-depth: 2000
+
+      - name: Checkout riir-neuron-db
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          repository: gist-rs/riir-neuron-db
+          ref: develop
+          token: ${{ secrets.GH_PAT }}
+          path: ${{ runner.temp }}/git/riir-neuron-db
+          fetch-depth: 2000
+
+      - name: Checkout riir-chain
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          repository: gist-rs/riir-chain
+          ref: develop
+          token: ${{ secrets.GH_PAT }}
+          path: ${{ runner.temp }}/git/riir-chain
+          fetch-depth: 2000
+
+      - name: Checkout riir-game-sdk
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          repository: gist-rs/riir-game-sdk
+          ref: develop
+          token: ${{ secrets.GH_PAT }}
+          path: ${{ runner.temp }}/git/riir-game-sdk
+          fetch-depth: 2000
+
+      - name: Checkout riir-mmorpg-examples
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          repository: gist-rs/riir-mmorpg-examples
+          ref: develop
+          token: ${{ secrets.GH_PAT }}
+          path: ${{ runner.temp }}/git/riir-mmorpg-examples
+          fetch-depth: 2000
+
+      - name: Checkout riir-unity
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          repository: gist-rs/riir-unity
+          ref: develop
+          token: ${{ secrets.GH_PAT }}
+          path: ${{ runner.temp }}/git/riir-unity
+          fetch-depth: 2000
+
+      - name: Checkout riir-viewbridge
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          repository: gist-rs/riir-viewbridge
+          ref: develop
+          token: ${{ secrets.GH_PAT }}
+          path: ${{ runner.temp }}/git/riir-viewbridge
+          fetch-depth: 2000
+
+      - name: Checkout riir-dapps
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          repository: gist-rs/riir-dapps
+          ref: develop
+          token: ${{ secrets.GH_PAT }}
+          path: ${{ runner.temp }}/git/riir-dapps
+          fetch-depth: 2000
+
+      # Runs AFTER the checkouts so the symlink targets exist (no dangling
+      # links) and the post-step `ls` reflects the real sibling inventory.
+      - name: Scaffold /git layout (GIT_ROOT mapping + cargo path deps)
+        run: |
+          set -euo pipefail
+          GITROOT="${RUNNER_TEMP}/git"
+          WS_PARENT="$(dirname "${GITHUB_WORKSPACE}")"
+
+          # riir-clippy itself is part of the generator's REPOS list.
+          ln -sfn "${GITHUB_WORKSPACE}" "${GITROOT}/riir-clippy"
+
+          # Make the sibling-beside-workspace layout that riir-clippy's own
+          # `../<name>` cargo path deps expect.
+          for name in katgpt-rs riir-ai riir-train riir-neuron-db riir-chain \
+                      riir-game-sdk riir-mmorpg-examples riir-unity \
+                      riir-viewbridge riir-dapps; do
+            if [ -d "${GITROOT}/${name}" ]; then
+              ln -sfn "${GITROOT}/${name}" "${WS_PARENT}/${name}"
+            else
+              echo "::warning::sibling ${name} not checked out — its cargo path deps (if referenced) and dashboard sources degrade"
+            fi
+          done
+
+          # Fallback for the generator's hardcoded macOS GIT_ROOT (see header
+          # note (a)) — makes the CURRENT gen_dashboard.py resolve on Linux
+          # until the RIIR_GIT_ROOT env override lands there.
+          sudo mkdir -p /Users/katopz
+          sudo ln -sfn "${GITROOT}" /Users/katopz/git
+
+          echo "GITROOT=${GITROOT}"
+          ls -la "${GITROOT}"
+
+      - name: Install Rust (1.97.0, per rust-toolchain.toml)
+        uses: dtolnay/rust-toolchain@1.97.0
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache cargo build
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: cargo-heal-nightly
+
+      - name: Build cargo-heal
+        run: |
+          set -euo pipefail
+          cargo build --release --features latent_retrieval,rust_perf --bin cargo-heal
+          mkdir -p "${HOME}/.cargo/bin"
+          cp target/release/cargo-heal "${HOME}/.cargo/bin/cargo-heal"
+          ls -l "${HOME}/.cargo/bin/cargo-heal"
+
+      - name: Regenerate dashboard (--sweep)
+        env:
+          RIIR_GIT_ROOT: ${{ runner.temp }}/git
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Feed the CURRENT wrangler-file token lookup (macOS path under the
+          # Linux home; the parser greps `^oauth_token = "(.+)"$`) until the
+          # CF_API_TOKEN env fallback lands in gen_dashboard.py — see header
+          # note (b). 0600, ephemeral runner, never echoed.
+          if [ -n "${CF_API_TOKEN}" ]; then
+            mkdir -p "${HOME}/Library/Preferences/.wrangler/config"
+            (
+              umask 077
+              printf 'oauth_token = "%s"\n' "${CF_API_TOKEN}" \
+                > "${HOME}/Library/Preferences/.wrangler/config/default.toml"
+            )
+          else
+            echo "::warning::CF_API_TOKEN unset — CF analytics sections will be empty"
+          fi
+          python3 scripts/gen_dashboard.py --sweep
+
+      - name: Commit refreshed artifacts
+        id: commit
+        run: |
+          set -euo pipefail
+          git config user.name "ops-dashboard-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add .benchmarks/dashboard_coverage.json cloudflare/dashboard/public/index.html
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "${GITHUB_OUTPUT}"
+            echo "no artifact changes — nothing to commit"
+          else
+            git commit -m "chore(ops): nightly dashboard refresh [skip ci]"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+            echo "changed=true" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Deploy dashboard Worker (soft-skip when unconfigured)
+        # Nightly deploys only when artifacts changed; a manual
+        # workflow_dispatch always attempts the deploy (repair path).
+        if: ${{ steps.commit.outputs.changed == 'true' || github.event_name == 'workflow_dispatch' }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: "7e11517c4dd4f6e9cede7da9b60d66eb"
+        run: |
+          set -euo pipefail
+          if [ -z "${CLOUDFLARE_API_TOKEN}" ]; then
+            echo "CLOUDFLARE_API_TOKEN unset — skipping Worker deploy (artifacts are committed)"
+            exit 0
+          fi
+          cd cloudflare/dashboard
+          npx --yes wrangler deploy

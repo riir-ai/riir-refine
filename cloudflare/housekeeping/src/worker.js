@@ -4,6 +4,21 @@
 
 const GRAPHQL = "https://api.cloudflare.com/client/v4/graphql";
 
+const DASHBOARD_URL = "https://riir-ops-dashboard.foxfox.workers.dev/";
+
+// CORS for the read routes (the ops dashboard fetches these cross-origin).
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+  "Access-Control-Max-Age": "86400",
+};
+
+function cors(response) {
+  const r = new Response(response.body, response);
+  for (const [k, v] of Object.entries(CORS_HEADERS)) r.headers.set(k, v);
+  return r;
+}
+
 // ---- helpers -------------------------------------------------------------
 
 function utc(d) {
@@ -18,6 +33,22 @@ function costUsd(env, memByteS, diskByteS, cpuS) {
   const disk = (diskByteS || 0) / 1e9 * parseFloat(env.DISK_USD_PER_GB_S);
   const cpu = (cpuS || 0) * parseFloat(env.CPU_USD_PER_S);
   return mem + disk + cpu;
+}
+
+// Fire-and-forget Discord-compatible webhook. Never throws — a webhook
+// failure must not break the housekeeping run.
+async function notify(env, message) {
+  if (!env.ALERT_WEBHOOK_URL) return false;
+  try {
+    await fetch(env.ALERT_WEBHOOK_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: message }),
+    });
+    return true;
+  } catch (_) {
+    return false;
+  }
 }
 
 async function gql(env, query) {
@@ -144,6 +175,69 @@ async function runHousekeeping(env) {
       status: "pending-phase-1",
     };
     row.mint = "pending-phase-1";
+
+    // ---- budget alerting (Issue 044 T4) ----------------------------------
+    // Runs only in the token-present path: neurons are only known there.
+    // Dedupe key `alert:<date>:<threshold>` is written AFTER the webhook
+    // attempt regardless of POST success — a failed POST is NOT retried on
+    // the next hourly run (deliberate: no hourly retry storms). One alert
+    // per threshold per day.
+    const cap = parseFloat(env.NEURON_CAP);
+    if (cap > 0 && neurons >= 0) {
+      const pct = neurons / cap;
+      row.ai.pct = +pct.toFixed(4);
+      for (const t of [0.5, 0.9, 1.0]) {
+        if (pct < t) continue;
+        const dedupeKey = `alert:${dateISO}:${t}`;
+        if (await env.HOUSEKEEPING_KV.get(dedupeKey)) continue;
+        const pctStr = (pct * 100).toFixed(1);
+        let msg;
+        if (t === 1.0) {
+          msg = `⚠ ops budget alert ${dateISO}: CAP EXCEEDED — ${neurons} neurons (${pctStr}%) of the ${cap}/day cap, new generations hard-fail until 00:00 UTC — ${DASHBOARD_URL}`;
+        } else {
+          msg = `⚠ ops budget alert ${dateISO}: ${neurons} neurons (${pctStr}%) of the ${cap}/day cap, ${Math.max(0, Math.floor(cap - neurons))} remaining — ${DASHBOARD_URL}`;
+        }
+        const sent = await notify(env, msg);
+        await env.HOUSEKEEPING_KV.put(dedupeKey, JSON.stringify({
+          ts: now.toISOString(),
+          level: t,
+          neurons,
+          pct: +pct.toFixed(4),
+          notified: sent,
+        }));
+      }
+    }
+
+    // ---- monthly container budget (optional secret) ----------------------
+    if (env.MONTHLY_BUDGET_USD) {
+      try {
+        const ym = dateISO.slice(0, 7).replace("-", ""); // YYYYMM
+        let mtd = 0;
+        const listed = await env.HOUSEKEEPING_KV.list({ prefix: `day:${ym}` });
+        for (const k of listed.keys) {
+          try {
+            const day = JSON.parse(await env.HOUSEKEEPING_KV.get(k.name) || "{}");
+            mtd += day.est_usd || 0;
+          } catch (_) { /* tolerate malformed rows */ }
+        }
+        const budget = parseFloat(env.MONTHLY_BUDGET_USD);
+        if (budget > 0 && mtd >= budget) {
+          const dedupeKey = `alert:${ym}:budget`;
+          if (!(await env.HOUSEKEEPING_KV.get(dedupeKey))) {
+            const msg = `⚠ ops budget alert ${ym}: month-to-date container est cost $${mtd.toFixed(2)} ≥ monthly budget $${budget.toFixed(2)} — ${DASHBOARD_URL}`;
+            const sent = await notify(env, msg);
+            await env.HOUSEKEEPING_KV.put(dedupeKey, JSON.stringify({
+              ts: now.toISOString(),
+              kind: "monthly_budget",
+              mtd_usd: +mtd.toFixed(6),
+              budget_usd: budget,
+              notified: sent,
+            }));
+          }
+        }
+      } catch (_) { /* monthly budget check is best-effort */ }
+    }
+    // ---- end budget alerting ---------------------------------------------
   } catch (e) {
     row.ok = false;
     row.notes.push(`collect failed: ${e.message}`);
@@ -176,18 +270,33 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const kv = env.HOUSEKEEPING_KV;
+    // Preflight for any path — the read routes are the only CORS consumers,
+    // but a global 204 keeps the surface simple and harmless.
+    if (request.method === "OPTIONS") {
+      return new Response(null, { status: 204, headers: CORS_HEADERS });
+    }
     if (url.pathname === "/status") {
       const latest = await kv.get("latest");
-      return Response.json({
+      let alerts_today = 0;
+      try {
+        const listed = await kv.list({ prefix: `alert:${new Date().toISOString().slice(0, 10)}:`, limit: 100 });
+        alerts_today = listed.keys.length;
+      } catch (_) { /* best-effort count */ }
+      return cors(Response.json({
         worker: "riir-kat-housekeeping",
         cron: "0 * * * *",
         token_set: !!env.CF_API_TOKEN,
+        cap: parseFloat(env.NEURON_CAP) || 0,
+        thresholds: [0.5, 0.9, 1.0],
+        has_webhook: !!env.ALERT_WEBHOOK_URL,
+        has_monthly_budget: !!env.MONTHLY_BUDGET_USD,
+        alerts_today,
         latest: latest ? JSON.parse(latest) : null,
-      });
+      }));
     }
     if (url.pathname === "/latest") {
       const v = await kv.get("latest");
-      return new Response(v || "null", { headers: { "Content-Type": "application/json" } });
+      return cors(new Response(v || "null", { headers: { "Content-Type": "application/json" } }));
     }
     if (url.pathname === "/hours" || url.pathname === "/days") {
       const n = Math.min(parseInt(url.searchParams.get("n") || "24", 10) || 24, 720);
@@ -199,8 +308,8 @@ export default {
           (url.pathname === "/hours" ? hourKey(d) : dayKey(d)));
       }
       const rows = await Promise.all(keys.map(async (k) => ({ key: k, row: await kv.get(k) })));
-      return Response.json(rows.filter((r) => r.row !== null)
-        .map((r) => JSON.parse(r.row)));
+      return cors(Response.json(rows.filter((r) => r.row !== null)
+        .map((r) => JSON.parse(r.row))));
     }
     return new Response("riir-kat-housekeeping (issue 045) — /status /latest /hours?n= /days?n=",
       { status: 404 });

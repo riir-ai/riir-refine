@@ -22,6 +22,16 @@ Data sources (ALL optional — each degrades gracefully):
   7. CF GraphQL containersUsage/Metrics  — container sleep/awake/usage +
                                             est cost, hourly/daily/weekly
                                             (Issue 045)
+  8. riir-train/.benchmarks/runs.jsonl   — training/GPU run log (T6)
+  9. .benchmarks/fixer_quality_history   — fixer-arm quality history (T8)
+                                            .jsonl (src/bin/fixer_regate.rs)
+ 10. housekeeping worker GET /latest     — LIVE staleness badge + live cap
+                                            (T3/T9; fetched client-side,
+                                            the only network call)
+
+Env overrides (Issue 044, the CI workflow depends on both):
+  RIIR_GIT_ROOT  — sibling-repo root (default /Users/katopz/git)
+  CF_API_TOKEN   — CF API token; wins over the wrangler OAuth file
 
 Usage:
   python3 scripts/gen_dashboard.py                  # regenerate HTML
@@ -58,10 +68,14 @@ REPOS = [
     "riir-clippy", "riir-game-sdk", "riir-mmorpg-examples", "riir-unity",
     "riir-viewbridge", "riir-dapps",
 ]
-GIT_ROOT = Path("/Users/katopz/git")
+GIT_ROOT = Path(os.environ.get("RIIR_GIT_ROOT", "/Users/katopz/git"))
 
 CF_ACCOUNT_ID = "7e11517c4dd4f6e9cede7da9b60d66eb"
 CF_GRAPHQL = "https://api.cloudflare.com/client/v4/graphql"
+# Issue 044 T3/T9 — housekeeping worker (CORS-enabled). Fetched client-side
+# by the generated HTML (the ONLY network call) for the staleness badge +
+# live cap reading; never contacted by this generator.
+HOUSEKEEPING_BASE = "https://riir-kat-housekeeping.foxfox.workers.dev"
 NEURON_USD = 0.011 / 1000.0  # $0.011 per 1k neurons (pinned 2026-08-18)
 DAILY_FREE_CAP = 10_000.0
 
@@ -245,14 +259,10 @@ def collect_git_cadence(days: int = 30) -> list[dict]:
 # ── 5. CF GraphQL daily neurons ────────────────────────────────────────────
 
 def collect_cf_daily(days: int = 14) -> list[dict]:
-    token = None
-    if WRANGLER_TOKEN_FILE.exists():
-        m = re.search(r'^oauth_token = "(.+)"$',
-                      WRANGLER_TOKEN_FILE.read_text(), re.MULTILINE)
-        if m:
-            token = m.group(1)
+    token = _cf_token()
     if not token:
-        log("no wrangler OAuth token — skipping live CF analytics")
+        log("no CF token (CF_API_TOKEN unset + no wrangler OAuth) — "
+            "skipping live CF analytics")
         return []
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     start = datetime.fromtimestamp(time.time() - days * 86400,
@@ -305,6 +315,15 @@ def _wrangler_oauth_token():
     return None
 
 
+def _cf_token():
+    """Single CF token source (Issue 044): CF_API_TOKEN env wins, else the
+    wrangler OAuth file. The token only ever goes in request headers."""
+    tok = os.environ.get("CF_API_TOKEN")
+    if tok:
+        return tok
+    return _wrangler_oauth_token()
+
+
 def _gql(token: str, query: str):
     req = urllib.request.Request(
         CF_GRAPHQL, data=json.dumps({"query": query}).encode(),
@@ -327,9 +346,10 @@ def container_cost_usd(mem_byte_s: float, disk_byte_s: float, cpu_s: float) -> f
 def collect_containers(daily_days: int = 30, hourly_hours: int = 48) -> dict:
     """Container usage from CF GraphQL (Issue 045). Degrades to {\"daily\": [], \"hourly\": []}."""
     empty = {"daily": [], "hourly": [], "apps": []}
-    token = _wrangler_oauth_token()
+    token = _cf_token()
     if not token:
-        log("no wrangler OAuth token — skipping container analytics")
+        log("no CF token (CF_API_TOKEN unset + no wrangler OAuth) — "
+            "skipping container analytics")
         return empty
     today = datetime.now(timezone.utc)
     d_start = datetime.fromtimestamp(time.time() - daily_days * 86400,
@@ -470,6 +490,58 @@ def coverage_snapshot(sweep: bool) -> list[dict]:
     return cached
 
 
+# ── 7. training / GPU runs (riir-train; Issue 044 T6) ──────────────────────
+
+def collect_training() -> list[dict]:
+    """riir-train run log — one JSON row per training/bench run.
+
+    Schema (a README in riir-train mirrors this — keep identical):
+      row = {"ts": "2026-08-27T01:02:03Z", "run": "<plan/bench id>",
+             "gpu": "m3"|"4090"|str, "steps": int?, "tokens": int?,
+             "tok_per_s": float?, "gpu_hours": float?, "note": str?}
+    """
+    path = GIT_ROOT / "riir-train" / ".benchmarks" / "runs.jsonl"
+    rows: list[dict] = []
+    if not path.exists():
+        return rows
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            rows.append(json.loads(line))
+        except json.JSONDecodeError:
+            log(f"training skip bad line: {line[:60]}")
+    return rows
+
+
+# ── 8. fixer-arm quality history (Issue 044 T8 surfacing) ──────────────────
+
+def load_fixer_quality() -> list[dict]:
+    """Fixer-arm quality rows from src/bin/fixer_regate.rs::append_quality_history
+    (.benchmarks/fixer_quality_history.jsonl; tolerant — [] when missing).
+
+    Row: {ts_unix, arm, model, n, em:{hits,total}, fragment_parses, merge_ok,
+          control_fires, oracle_scoreable, strictly_fewer, keep_oracle,
+          keep_strict, vetoed, divergent, regressions, reachable:{n,keep_strict},
+          tokens:{prompt,completion}, latency_ms:{total,max}}
+    """
+    path = REPO_ROOT / ".benchmarks" / "fixer_quality_history.jsonl"
+    rows: list[dict] = []
+    if not path.exists():
+        return rows
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            rows.append(json.loads(line))
+        except json.JSONDecodeError:
+            log(f"fixer-quality skip bad line: {line[:60]}")
+    rows.sort(key=lambda r: r.get("ts_unix") or 0)
+    return rows
+
+
 # ── HTML ───────────────────────────────────────────────────────────────────
 
 HTML_TEMPLATE = r"""<!DOCTYPE html>
@@ -541,6 +613,7 @@ footer{color:var(--dim);font:11px var(--mono);margin-top:34px;border-top:1px sol
 <header>
   <h1>riir<span class="cur">·</span>ops dashboard</h1>
   <span class="sub" id="generated"></span>
+  <span class="badge" id="livebadge">…</span>
 </header>
 <div class="sub" id="sources"></div>
 <div class="alertbar" id="capalert"></div>
@@ -603,6 +676,18 @@ footer{color:var(--dim);font:11px var(--mono);margin-top:34px;border-top:1px sol
 </div>
 
 <div class="grid">
+  <div class="card wide"><h2>training / GPU — riir-train runs (runs.jsonl)</h2>
+    <div id="training"></div>
+  </div>
+  <div class="card wide"><h2>fixer quality — LLM arms (fixer_quality_history.jsonl)</h2>
+    <div id="fixerQ"></div>
+  </div>
+</div>
+
+<div class="grid">
+  <div class="card wide"><h2>incident timeline (ledger)</h2>
+    <div id="incidents"></div>
+  </div>
   <div class="card wide"><h2>LLM cost ledger — session log</h2>
     <div id="ledgerTable"></div>
   </div>
@@ -867,6 +952,73 @@ if (D.coverage.length) {
 } else {
   $('coverage').innerHTML = '<div class="sub">no coverage snapshot — run with --sweep</div>';
 }
+
+// ── training / GPU (issue 044 T6) ──
+{
+  const rows = [...(D.training||[])].sort((a,b)=>(b.ts||'').localeCompare(a.ts||'')).slice(0,12);
+  if (rows.length) {
+    let html = tableHTML(['ts','run','gpu','steps','tok/s','gpu_h','note'], rows,
+      r => '<td>'+esc((r.ts||'').slice(0,16).replace('T',' '))+'</td><td class="note">'+
+        esc(r.run||'—')+'</td><td>'+(r.gpu||'—')+'</td><td class="num">'+
+        (r.steps!=null?fmt.n(r.steps):'—')+'</td><td class="num">'+
+        (r.tok_per_s!=null?r.tok_per_s.toFixed(1):'—')+'</td><td class="num">'+
+        (r.gpu_hours!=null?r.gpu_hours.toFixed(1):'—')+'</td><td class="note">'+
+        esc(r.note||'')+'</td>');
+    const tps = rows.filter(r=>r.tok_per_s!=null);
+    if (tps.length >= 2) {
+      html += '<div id="trainingChart"></div>';
+      $('training').innerHTML = html;
+      const c = [...tps].reverse(); // oldest→newest, left→right
+      svgLineChart($('trainingChart'),
+        [{name:'tok/s', values:c.map(r=>r.tok_per_s), color:'var(--accent)'}],
+        c.map(r=>r.run||'?'),
+        {yMax:Math.max(1,...c.map(r=>r.tok_per_s))*1.15});
+    } else {
+      $('training').innerHTML = html;
+    }
+  } else {
+    $('training').innerHTML = '<div class="sub">no runs logged — append rows to '
+      + 'riir-train/.benchmarks/runs.jsonl (ts, run, gpu, steps, tokens, '
+      + 'tok_per_s, gpu_hours, note — schema in that repo\'s runs.README.md)</div>';
+  }
+}
+
+// ── fixer quality (issue 044 T8 surfacing) ──
+{
+  const rows = [...(D.fixer||[])].sort((a,b)=>((b.ts_unix||0)-(a.ts_unix||0))).slice(0,12);
+  if (rows.length) {
+    $('fixerQ').innerHTML = tableHTML(
+      ['utc','arm','model','n','keep o/s','veto','div','regr','em','tokens','avg s'],
+      rows,
+      r => '<td>'+fmt.d(r.ts_unix)+'</td><td>'+(r.arm||'—')+'</td><td class="note">'+
+        (r.model||'?').split('/').pop()+'</td><td class="num">'+(r.n!=null?r.n:'—')+
+        '</td><td class="num">'+(r.keep_oracle!=null?r.keep_oracle:'—')+'/'+
+        (r.keep_strict!=null?r.keep_strict:'—')+'</td><td class="num">'+
+        (r.vetoed!=null?r.vetoed:'—')+'</td><td class="num">'+
+        (r.divergent!=null?r.divergent:'—')+'</td><td class="num">'+
+        (r.regressions!=null?r.regressions:'—')+'</td><td class="num">'+
+        (r.em?(r.em.hits!=null?r.em.hits:'—')+'/'+(r.em.total!=null?r.em.total:'—'):'—')+
+        '</td><td class="num">'+(r.tokens?fmt.n((r.tokens.prompt||0)+(r.tokens.completion||0)):'—')+
+        '</td><td class="num">'+(r.n&&r.latency_ms&&r.latency_ms.total!=null?
+          (r.latency_ms.total/1000/r.n).toFixed(1):'—')+'</td>');
+  } else {
+    $('fixerQ').innerHTML = '<div class="sub">no arm runs recorded yet — '
+      + 'src/bin/fixer_regate.rs appends one row per arm run</div>';
+  }
+}
+
+// ── incident timeline (issue 044 T10) — every ledger incident, no filter ──
+if (D.ledger.incidents.length) {
+  $('incidents').innerHTML = tableHTML(['utc','model','neurons','usd','note'],
+    D.ledger.incidents,
+    r => '<td>'+(r.ts?fmt.d(r.ts):'—')+'</td><td class="note">'+
+      (r.model||'?').split('/').pop()+'</td><td class="num">'+
+      (r.neurons!=null?fmt.n1(r.neurons):'—')+'</td><td class="num">'+
+      (r.usd!=null?fmt.usd(r.usd):'—')+
+      '</td><td class="note" style="color:var(--crit)">'+esc(r.note||'')+'</td>');
+} else {
+  $('incidents').innerHTML = '<div class="sub">no incidents recorded</div>';
+}
 {
   const rows = [...D.ledger.rows].reverse().slice(0, 40);
   $('ledgerTable').innerHTML = tableHTML(
@@ -887,33 +1039,62 @@ function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g
 $('missingList').innerHTML = D.missing.map(m=>'<li><b>'+m[0]+'</b> — '+m[1]+'</li>').join('');
 $('footer').textContent = 'riir ops dashboard · generated by scripts/gen_dashboard.py (riir-clippy issue 044) · '
   + 'single self-contained file, no external deps · regenerate + deploy: gen → wrangler deploy';
+
+// ── live mode (issue 044 T3/T9) — housekeeping /latest, the only network call ──
+(async () => {
+  const stat = txt => { try { $('livebadge').className='badge';
+    $('livebadge').textContent=txt; } catch(e){} };
+  try {
+    const opt = (typeof AbortSignal!=='undefined' && AbortSignal.timeout)
+      ? {signal: AbortSignal.timeout(8000)} : {};
+    const j = await (await fetch(D.hk_base + '/latest', opt)).json();
+    if (j && j.ts) {
+      const t = Date.parse(j.ts);
+      if (!isNaN(t)) {
+        const age = Date.now() - t;
+        const hm = new Date(t).toISOString().slice(11,16);
+        if (age <= 2*3600e3) {
+          $('livebadge').className='badge ok';
+          $('livebadge').textContent='live · cron ' + hm + ' UTC';
+        } else {
+          $('livebadge').className='badge crit';
+          $('livebadge').textContent='housekeeping stale · last run ' + hm + ' UTC';
+        }
+      } else { stat('static snapshot'); }
+      // live cap alert when analytics were empty at generation time (T9)
+      try {
+        const nt = j.ai && j.ai.neurons_today;
+        if (nt!=null && !(D.cf_daily && D.cf_daily.length) && nt/D.cap >= 0.9) {
+          $('capalert').style.display='block';
+          $('capalert').textContent = '⚠ ' + fmt.pct(nt/D.cap)
+            + ' of daily free cap used (' + String(j.ts).slice(0,10) + ', live).';
+        }
+      } catch(e){}
+    } else { stat('static snapshot'); }
+  } catch (e) { stat('static snapshot'); }
+})().catch(()=>{});
 </script>
 </body>
 </html>
 """
 
 MISSING_FOR_PROD = [
-    ["auth gating", "unauthenticated workers.dev URL — add a token query gate "
-     "(tiny Worker script in front of assets) or Cloudflare Access"],
-    ["auto-refresh", "data is a snapshot at generation time — schedule "
-     "regeneration (cron on this box, GitHub Action, or a Worker cron that "
-     "re-runs collection into KV/R2)"],
-    ["budget alerting", "notify (Discord/email/webhook) at 50/90/100% of the "
-     "10k/day cap + monthly USD budget; the bar turns red but nobody is paged"],
-    ["KAT rail", "ledger rows carry kat:null — per-fix cost in KAT tokens per "
-     "Proposal 005 Phase 1; wire when the rail lands"],
-    ["training/GPU axis", "riir-train runs (plan, steps, tok/s, GPU-hours, "
-     "M3 vs 4090) are not ingested — needs a run-log convention + collector"],
-    ["coverage auto-measure", "--sweep is manual + slow; schedule it (nightly) "
-     "so the unhealed-remainder table stays honest"],
-    ["fixer quality history", "keeps/vetoes per arm per session (Bench 049/053 "
-     "shape) as a time series, not prose in .md files"],
-    ["retention", "CF GraphQL served ~14d here; the committed ledger is the "
-     "archive — keep appending, never rewrite"],
-    ["incident timeline", "ledger notes carry incidents (qwen 7.8k) — render "
-     "as an annotated timeline strip once there are >3"],
-    ["heartbeat", "the dashboard cannot tell you the GENERATOR died — add a "
-     "generated-at staleness check + alert when >48h"],
+    ["owner secrets (one-time)", "CF_API_TOKEN → housekeeping collector + "
+     "nightly regen analytics; DASHBOARD_TOKEN → dashboard auth gate "
+     "(fails OPEN — aggregates-only HTML — until set); ALERT_WEBHOOK_URL "
+     "(+ optional MONTHLY_BUDGET_USD) → budget paging. Each degrades "
+     "silently until set."],
+    ["auto-regeneration", "live badge reads the housekeeping worker; full "
+     "regen is nightly once repo var OPS_DASHBOARD_ENABLED=true + secrets "
+     "GH_PAT / CF_API_TOKEN / CLOUDFLARE_API_TOKEN are set "
+     "(.github/workflows/ops_dashboard.yml) — else manual: "
+     "python3 scripts/gen_dashboard.py --sweep && wrangler deploy"],
+    ["KAT rail", "ledger rows carry kat:null — per-fix cost in KAT tokens "
+     "per Proposal 005 Phase 1; wire when the rail lands"],
+    ["training axis adoption", "collector + card live; rows appear once "
+     "riir-train appends .benchmarks/runs.jsonl (schema in that repo)"],
+    ["retention", "CF GraphQL served ~14d here; the committed ledger is "
+     "the archive — keep appending, never rewrite"],
 ]
 
 
@@ -926,6 +1107,8 @@ def build_data(sweep: bool) -> dict:
     cf_daily = collect_cf_daily()
     containers = collect_containers()
     coverage = coverage_snapshot(sweep)
+    training = collect_training()
+    fixer = load_fixer_quality()
     data = {
         "generated_utc": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M"),
         "neuron_usd": NEURON_USD,
@@ -947,6 +1130,9 @@ def build_data(sweep: bool) -> dict:
         "cf_daily": cf_daily,
         "containers": containers,
         "coverage": coverage,
+        "training": training,
+        "fixer": fixer,
+        "hk_base": HOUSEKEEPING_BASE,
         "missing": MISSING_FOR_PROD,
         "source_flags": [
             ["ledger", bool(ledger_rows)],
@@ -956,6 +1142,8 @@ def build_data(sweep: bool) -> dict:
             ["cf-analytics", bool(cf_daily)],
             ["containers", bool(containers["daily"]) or bool(containers["hourly"])],
             ["coverage", bool(coverage)],
+            ["training", bool(training)],
+            ["fixer-quality", bool(fixer)],
         ],
     }
     return data
@@ -976,7 +1164,8 @@ def main() -> int:
     log(f"wrote {out} ({len(html)//1024} KiB, "
         f"ledger={len(data['ledger']['rows'])} rows, "
         f"cf_days={len(data['cf_daily'])}, traj_repos={len(data['traj'])}, "
-        f"coverage={len(data['coverage'])})")
+        f"coverage={len(data['coverage'])}, training={len(data['training'])}, "
+        f"fixer={len(data['fixer'])})")
     return 0
 
 
