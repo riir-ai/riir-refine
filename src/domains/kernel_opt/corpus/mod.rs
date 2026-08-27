@@ -1369,6 +1369,9 @@
 //!   fusions are not in it). Record: Research 083.
 //! - **Batch 72 (2026-08-26, Plan 026 — the frguthmann/NVIDIA external
 //!   distill, Research 084):** 1 rule, corpus 372 -> 373 (A 88 -> 89) + 1
+//! - **Batch 77 (2026-08-27, lucebox PR #625 external distill, Plan 035 /
+//!   Research 091):** 6 rules, corpus 373 -> 379 (A 89 -> 90, C 34 -> 35,
+//!   D 74 -> 76, G 19 -> 20, M 9 -> 10) + 1 B63 rider.
 //!   spec rider. skip-unchanged-writes-via-dirty-encoding (A — per-element
 //!   write elision on ping-pong state buffers; dirty = plain + 2 piggybacked
 //!   on the encoding; lazy alternate-rotation cleanup; REGIME-GATED:
@@ -1430,7 +1433,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 373-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 379-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1438,7 +1441,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (89 rules)
+    // A: Memory access patterns (90 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -1532,6 +1535,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "rotated-ring-undo-via-rebind-reference-snapshot",
             "reset-state-in-place-fill-never-realloc",
             "skip-unchanged-writes-via-dirty-encoding",
+            "weight-stream-non-temporal-loads",
         ],
     ),
     // B: Compute patterns (53 rules)
@@ -1594,7 +1598,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "masked-branchless-wait-collapse",
         ],
     ),
-    // C: Fusion patterns (34 rules)
+    // C: Fusion patterns (35 rules)
     (
         KernelCategory::Fusion,
         "C: fusion",
@@ -1633,9 +1637,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "sparse-gather-scale-at-read-not-table-prepass",
             "elementwise-offload-needs-device-side-anchor",
             "fuse-indirect-gather-into-dot-consumer",
+            "gate-prep-fold-into-consumer-via-packed-side-tensor",
         ],
     ),
-    // D: Dispatch patterns (74 rules)
+    // D: Dispatch patterns (76 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -1714,6 +1719,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "same-input-gemv-weight-concat-at-upload",
             "barrier-free-per-dependency-wait-from-loop-counters",
             "shared-counter-decode-producer-progress",
+            "shared-activation-quantize-memo-per-eval",
+            "vendor-batched-gemm-contiguity-staging",
         ],
     ),
     // E: Parallelism patterns (21 rules)
@@ -1761,7 +1768,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "two-stage-mask-softmax-then-conv",
         ],
     ),
-    // G: Linear-attention recurrence (19 rules)
+    // G: Linear-attention recurrence (20 rules)
     (
         KernelCategory::LinearAttnRecurrence,
         "G: linear-attn recurrence",
@@ -1785,6 +1792,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "wkv-logsumexp-three-channel-state",
             "row-owned-register-blocked-recurrence",
             "reverse-running-decay-weight",
+            "tree-verify-recurrent-state-parent-reload",
         ],
     ),
     // H: MoE dispatch + backward pass (14 rules)
@@ -1861,7 +1869,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fold-tile-transpose-into-dequant-scatter",
         ],
     ),
-    // M: Kernel parametric polymorphism (9 rules)
+    // M: Kernel parametric polymorphism (10 rules)
     (
         KernelCategory::KernelPolymorphism,
         "M: kernel polymorphism",
@@ -1875,6 +1883,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "zero-init-side-branch-frozen-base-path",
             "min-rank-inert-adapter-zero-alpha",
             "debug-only-gpu-label-macro",
+            "batch-width-routed-dual-tile-twins",
         ],
     ),
     // N: dtype + alignment specialization (21 rules)

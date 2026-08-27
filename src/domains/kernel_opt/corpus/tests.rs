@@ -63,7 +63,7 @@
         // Batch 63 (3): the CubeCL twin unlock — same-input-gemv-weight-concat-at-upload, deferred-residual-fused-into-next-layer-norm, reset-state-in-place-fill-never-realloc (ternary_deltanet_gpu_forward.rs, Plan 009 / Research 071).
         // Batch 70 (3): the arxiv barrier-free-sync paper distill (arXiv:2608.13757, Plan 020 / Research 080) — barrier-free-per-dependency-wait-from-loop-counters, shared-counter-decode-producer-progress, masked-branchless-wait-collapse.
         // Total: 209. // (historical batch-30 snapshot; current 370)
-        assert_eq!(corpus.entries.len(), 373, "kernel batches through Batch 72 should have 373 rules");
+        assert_eq!(corpus.entries.len(), 379, "kernel batches through Batch 77 should have 379 rules");
     }
 
     #[test]
@@ -3888,7 +3888,7 @@
 
     #[test]
     fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-        // Every rule_id in the 373-rule corpus must appear in exactly one category.
+        // Every rule_id in the 379-rule corpus must appear in exactly one category.
         let corpus = build_kernel_seed_corpus();
         let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
         let mut categorized: Vec<&str> = Vec::new();
@@ -3919,21 +3919,21 @@
 
     #[test]
     fn kernel_categories_counts_match_plan_003_table() {
-        // Pin per-category rule counts to the Plan 003 table (updated for Batch 72).
+        // Pin per-category rule counts to the Plan 003 table (updated for Batch 77).
         let expected = [
-            (KernelCategory::MemoryAccess, 89),
+            (KernelCategory::MemoryAccess, 90),
             (KernelCategory::Compute, 53),
-            (KernelCategory::Fusion, 34),
-            (KernelCategory::Dispatch, 74),
+            (KernelCategory::Fusion, 35),
+            (KernelCategory::Dispatch, 76),
             (KernelCategory::Parallelism, 21),
             (KernelCategory::FlashAttnTiling, 10),
-            (KernelCategory::LinearAttnRecurrence, 19),
+            (KernelCategory::LinearAttnRecurrence, 20),
             (KernelCategory::MoeDispatchBackward, 14),
             (KernelCategory::NsaBlockSparse, 4),
             (KernelCategory::VarlenChunkedReduction, 5),
             (KernelCategory::AutotuneDispatch, 5),
             (KernelCategory::ConvGemmLayout, 11),
-            (KernelCategory::KernelPolymorphism, 9),
+            (KernelCategory::KernelPolymorphism, 10),
             (KernelCategory::DtypeAlignment, 21),
             (KernelCategory::IrStrengthReduction, 4),
         ];
@@ -3944,9 +3944,9 @@
                 "Plan 003: category {cat:?} has {} rules, expected {count}",
                 entry.2.len());
         }
-        // Sum must equal 373.
+        // Sum must equal 379.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 373, "Plan 003: category totals must sum to 373");
+        assert_eq!(total, 379, "Plan 003: category totals must sum to 379");
     }
 
     #[test]
@@ -3956,7 +3956,7 @@
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 373, "Plan 003: grouped corpus has {total} rules, expected 373");
+        assert_eq!(total, 379, "Plan 003: grouped corpus has {total} rules, expected 379");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");
@@ -4022,5 +4022,133 @@
             assert!(ref_verdict.parses, "batch-72 ref_shape for '{id}' must parse");
             let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
             assert!(opt_verdict.parses, "batch-72 opt_pattern for '{id}' must parse");
+        }
+    }
+
+    #[test]
+    fn batch77_rules_present() {
+        // Batch 77 (lucebox PR #625 external distill — the DSpark qwen3.5
+        // drafters; Research 091 / Plan 035).
+        let corpus = build_kernel_seed_corpus();
+        let ids = [
+            "weight-stream-non-temporal-loads",
+            "batch-width-routed-dual-tile-twins",
+            "tree-verify-recurrent-state-parent-reload",
+            "shared-activation-quantize-memo-per-eval",
+            "vendor-batched-gemm-contiguity-staging",
+            "gate-prep-fold-into-consumer-via-packed-side-tensor",
+        ];
+        for id in ids {
+            assert!(
+                corpus.entries.iter().any(|e| e.rule_id == id),
+                "batch-77 rule '{id}' missing from corpus"
+            );
+        }
+    }
+
+    #[test]
+    fn batch77_concepts_covered() {
+        let corpus = build_kernel_seed_corpus();
+        let checks: [(&str, [&str; 5]); 6] = [
+            (
+                "weight-stream-non-temporal-loads",
+                [
+                    "STREAMING operands",
+                    "REUSED operands",
+                    "__ldcs",
+                    "bit-identical",
+                    "evict-first",
+                ],
+            ),
+            (
+                "batch-width-routed-dual-tile-twins",
+                [
+                    "namespace-reinclude",
+                    "occupancy",
+                    "crossover",
+                    "SWEEP",
+                    "mmq_x=32",
+                ],
+            ),
+            (
+                "tree-verify-recurrent-state-parent-reload",
+                [
+                    "parent_t != t-1",
+                    "read-after-write",
+                    "O(1)",
+                    "TREE_ROOT_PARENT",
+                    "rotated-ring-undo",
+                ],
+            ),
+            (
+                "shared-activation-quantize-memo-per-eval",
+                [
+                    "LIFO",
+                    "MAX_BUFFERS",
+                    "concurrent",
+                    "256",
+                    "THIRD mechanism",
+                ],
+            ),
+            (
+                "vendor-batched-gemm-contiguity-staging",
+                [
+                    "pinned-host",
+                    "contiguize",
+                    "k-limit",
+                    "CS=32",
+                    "vendor",
+                ],
+            ),
+            (
+                "gate-prep-fold-into-consumer-via-packed-side-tensor",
+                [
+                    "src[9]",
+                    "op_params[10]",
+                    "HARD-REJECT",
+                    "softplus",
+                    "UNUSED src slot",
+                ],
+            ),
+        ];
+        for (id, needles) in checks {
+            let e = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-77 rule '{id}' missing"));
+            for needle in needles {
+                assert!(
+                    e.gpu_concept.contains(needle),
+                    "batch-77 concept for '{id}' missing phrase '{needle}'"
+                );
+            }
+        }
+    }
+
+    #[test]
+    #[cfg(not(feature = "kernel_verify"))]
+    fn batch77_pseudocode_parses() {
+        // G1 for Batch 77: syn-parse gate.
+        use crate::domain::HealDomain;
+        let corpus = build_kernel_seed_corpus();
+        let ids = [
+            "weight-stream-non-temporal-loads",
+            "batch-width-routed-dual-tile-twins",
+            "tree-verify-recurrent-state-parent-reload",
+            "shared-activation-quantize-memo-per-eval",
+            "vendor-batched-gemm-contiguity-staging",
+            "gate-prep-fold-into-consumer-via-packed-side-tensor",
+        ];
+        for id in ids {
+            let entry = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-77 rule '{id}' missing"));
+            let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+            assert!(ref_verdict.parses, "batch-77 ref_shape for '{id}' must parse");
+            let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+            assert!(opt_verdict.parses, "batch-77 opt_pattern for '{id}' must parse");
         }
     }

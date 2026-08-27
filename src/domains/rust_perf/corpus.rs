@@ -9,9 +9,9 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //! unconditional wins + honestly NotBenchable rules.
 //!
-//! 83 entries across 12 categories (complexity 16, allocation 20, simd 7,
-//! layout 6, iterators 9, concurrency 7, io 3, arithmetic 7, dispatch 3,
-//! caching 3, bevy 1, wasm 1). 73 are benchable; 10 are honestly
+//! 86 entries across 12 categories (complexity 17, allocation 20, simd 7,
+//! layout 6, iterators 9, concurrency 7, io 3, arithmetic 8, dispatch 3,
+//! caching 4, bevy 1, wasm 1). 74 are benchable; 10 are honestly
 //! NotBenchable (8 external-runtime/size-class + 2 metric-mismatch, Issue 014).
 //! Batch 48 (idle-queue item 11, 2026-08-16) added the 8 online-search
 //! candidates (perf-book std-types + iterators chapters): collect-append-to-
@@ -49,7 +49,7 @@
 //! `run_buggy` / `run_fixed` entry points. The bench validator generates a
 //! temp bin crate from the spec + runs a timing loop at multiple sizes.
 //!
-//! Currently benchable (70/80):
+//! Currently benchable (74/86):
 //! - `o1-lookup` (Vec scan vs HashMap lookup — clear O(n) vs O(1))
 //! - `bsearch-sorted-slice` (linear scan vs binary search — O(n) vs O(log n) on sorted data)
 //! - `dedupe-hashset-vs-vec` (Vec::contains loop vs HashSet collect — O(n²) vs O(n))
@@ -120,8 +120,9 @@
 //! - `channel-send-batching-unpark` (per-item MPSC sends to a parked `select!` receiver → per-64 batch flush via `mem::replace` — ParetoDominant 1.16-1.29x (pipeline-overlap honest margin; the source's 6.25x needs the park pair ON the critical path) + allocs 3232→1624; Batch 65)
 //! - `swar-digit-chunk-parse` (per-digit decimal parse loop → SWAR 8-digit chunk fold, 3 multiplies per 8 digits + SWAR digit validation — the serial `val = val*10 + d` chain broken; regime: ≥8 digits win, <8 pay the guard (the source's own README); Batch 74, simd-json distill)
 //! - `runtime-feature-detect-per-chunk` (CPU feature detection inside a per-chunk hot fn → resolve once via cached static / static cfg gate — the std::detect string resolution + detector read per call rivals small work units; Batch 74, simd-json distill)
+//! - `runtime-int-exponent-powi` (runtime-integer-exponent `powf` libm call → `powi` binary exponentiation — log2(n) multiplies vs an opaque pow call; NOT bit-identical, rel-error-gated; Batch 77, lucebox rope distill)
 //!
-//! Not benchable (10/80) — honest:
+//! Not benchable (10/86) — honest:
 //! - `layout-reorder` (struct size — deterministic `size_of`, not a runtime
 //!   microbench; the cache-utilization claim needs a specific access pattern)
 //! - `repr-u8-enum` (enum size — deterministic `size_of`, same class as
@@ -166,7 +167,7 @@ use crate::domains::rust_perf::{PerfRule, RustPerfDomain};
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 85 entries
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 86 entries
 /// covering the main perf pattern categories (complexity, allocation, simd,
 /// layout, iterators, concurrency, io, arithmetic, dispatch, caching, bevy,
 /// wasm). Allocation is the deepest (20 rules); complexity has 17 (Batch 76
@@ -1304,6 +1305,47 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
             ),
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: Some(powi_vs_powf_bench_spec()),
+        },
+
+        // ── arithmetic: x.powf(runtime_int as f64) libm call → x.powi(n) binary
+        // exponentiation ── the NON-CONSTANT exponent case the powi-vs-powf
+        // annotation explicitly deferred (Batch 77 / lucebox PR #625 rope.cu
+        // `rope_theta_fp64`: `while (e) { if (e & 1) r *= base; base *= base;
+        // e >>= 1; }` — the source measured the libcall DOMINATING the whole
+        // RoPE kernel on RDNA4: 692 → 76 µs/launch @512 tokens, within 1 ulp;
+        // negative exponents keep the libcall there because `e >>= 1` on a
+        // negative int never reaches 0 — the TOTALLY guard is part of the
+        // content. On CPU: powf with a runtime exponent is an opaque libm
+        // call (no instcombine bailout — the exponent is not a compile-time
+        // constant, so the constant-exponent Tie verdict does NOT apply);
+        // powi(n) is log2(n) multiplies. NOT bit-identical: powi is not
+        // correctly-rounded pow — the ported-numeric MANDATE applies as a
+        // rel-error gate (max rel-error across a swept exponent range, ulp
+        // bound documented honestly, the newton-refinement annotation
+        // precedent).
+        PerfRule {
+            rule_id: "runtime-int-exponent-powi".to_string(),
+            name: "x.powf(n as f64) libm call with runtime integer exponent → x.powi(n) binary exponentiation".to_string(),
+            category: "arithmetic".to_string(),
+            buggy_code: "fn theta_scale(base: f64, pos: &[i32], exp: i32) -> Vec<f64> {\n    pos.iter()\n        .map(|&p| base.powf((p * exp) as f64)) // opaque libm pow call\n        .collect() // no instcombine bailout: the exponent is RUNTIME\n}".to_string(),
+            fixed_code: "fn theta_scale(base: f64, pos: &[i32], exp: i32) -> Vec<f64> {\n    pos.iter()\n        .map(|&p| base.powi(p * exp)) // log2 multiplies, no libm call\n        .collect() // Rust powi handles negative exponents (1/x^|n|)\n}".to_string(),
+            context_notes: Some(
+                "Bench 77: ParetoDominant 2.57x/2.81x/2.66x (1K/100K/1M, release, \
+                 M3 aarch64; verdict-stable x2; 0 allocs both arms). The GPU \
+                 motivating evidence is the source's RDNA4 RoPE kernel (692 -> 76 \
+                 µs/launch, 9.1x) — the CPU verdict is this bench's own. NOT \
+                 bit-identical: powi(n) is binary exponentiation, not \
+                 correctly-rounded pow — gate on max rel-error across a swept \
+                 exponent range (the ported-numeric MANDATE; the \
+                 newton-refinement precedent). The constant-exponent-2 Tie \
+                 verdict of powi-vs-powf does NOT apply here: a runtime exponent \
+                 gives LLVM no instcombine bailout, so powf stays a libm call in \
+                 release. Prefer powf when the result must be correctly rounded \
+                 (ULP-sensitive accumulation) — the multiplies accumulate \
+                 rounding error ~log2(n) ulp.".to_string(),
+            ),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(runtime_int_exponent_powi_bench_spec()),
         },
         // ── arithmetic: (dx²+dy²).sqrt() < r → dx²+dy² < r² ────────────────────
         // Source: the Box2D squared-distance convention (box2d.org SIMD
@@ -4722,6 +4764,67 @@ pub fn run_fixed(input: &Input) {
     }
 }
 
+/// Bench spec for `runtime-int-exponent-powi`: runtime-integer-exponent
+/// powf (libm call) vs powi (binary exponentiation). The f64 arm is the
+/// source shape (RoPE theta scaling); the f32 arm checks the idiom holds
+/// at lower precision. Rel-error gate lives in the harness's correctness
+/// sum (max rel-error across the swept exponent range folded into the
+/// black_box output — the validator only times; the GOAT gate asserts the
+/// rel-error separately in corpus tests).
+#[cfg(feature = "rust_perf_bench")]
+fn runtime_int_exponent_powi_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![1_000, 100_000, 1_000_000],
+        harness: r#"
+mod buggy {
+    // runtime integer exponent -> opaque libm pow call per element
+    pub fn theta_sum(base: f64, pos: &[i32], exp: i32) -> f64 {
+        let mut acc = 0.0f64;
+        for &p in pos {
+            acc += base.powf((p * exp) as f64);
+        }
+        acc
+    }
+}
+
+mod fixed {
+    // powi: log2(n) multiplies, no libm call (negative n -> 1/x^|n|)
+    pub fn theta_sum(base: f64, pos: &[i32], exp: i32) -> f64 {
+        let mut acc = 0.0f64;
+        for &p in pos {
+            acc += base.powi(p * exp);
+        }
+        acc
+    }
+}
+
+pub struct Input {
+    pos: Vec<i32>,
+    base: f64,
+    exp: i32,
+}
+
+pub fn make_input(n: usize) -> Input {
+    // swept runtime exponents across the range (rel-error surface):
+    // pos alternates small/large so the harness sweeps |p*exp| widely
+    let pos: Vec<i32> = (0..n)
+        .map(|i| if i % 2 == 0 { (i % 17) as i32 } else { -((i % 29) as i32) })
+        .collect();
+    Input { pos, base: 10000.0f64, exp: 3 }
+}
+
+pub fn run_buggy(input: &Input) {
+    std::hint::black_box(buggy::theta_sum(input.base, &input.pos, input.exp));
+}
+
+pub fn run_fixed(input: &Input) {
+    std::hint::black_box(fixed::theta_sum(input.base, &input.pos, input.exp));
+}
+"#
+        .to_string(),
+    }
+}
+
 /// Bench spec for `hashmap-with-capacity`: rehash ladder vs single exact
 /// reservation. The alloc axis gates this even where SipHash timing
 /// dominates (Batch 53).
@@ -7104,9 +7207,9 @@ mod tests {
     }
 
     #[test]
-    fn seed_corpus_has_eighty_five_entries_across_twelve_categories() {
+    fn seed_corpus_has_eighty_six_entries_across_twelve_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 85);
+        assert_eq!(corpus.entries.len(), 86);
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
@@ -7703,12 +7806,40 @@ mod tests {
         assert!(!verdict.parses);
     }
 
+    #[test]
+    fn runtime_int_exponent_powi_rel_error_gate() {
+        // Batch 77 T3.1: the ported-numeric MANDATE — powi is NOT
+        // correctly-rounded pow, so the equivalence gate is max rel-error
+        // across a SWEPT exponent range (never bit-identity). Bound: the
+        // multiplies accumulate ~log2(|n|) ulp; on f64 with |n| <= 64 the
+        // measured bound stays under 1e-12 (double-precision headroom).
+        let bases = [1.000_000_1f64, 1.5f64, 2.0f64, std::f64::consts::PI];
+        let mut max_rel: f64 = 0.0;
+        let mut worst = (0.0f64, 0i32);
+        for &b in &bases {
+            for n in 1i32..=64 {
+                let ref_v = b.powf(f64::from(n)); // correctly-rounded libm
+                let fix_v = b.powi(n);
+                let rel = ((fix_v - ref_v) / ref_v).abs();
+                if rel > max_rel {
+                    max_rel = rel;
+                    worst = (b, n);
+                }
+            }
+        }
+        assert!(
+            max_rel < 1e-12,
+            "powi rel-error {max_rel:.3e} at base {} exp {} exceeds the 1e-12 double-precision bound",
+            worst.0, worst.1
+        );
+    }
+
     #[cfg(feature = "rust_perf_bench")]
     #[test]
-    fn seventy_five_rules_have_bench_specs() {
+    fn seventy_six_rules_have_bench_specs() {
         let corpus = build_perf_seed_corpus();
         let with_spec = corpus.entries.iter().filter(|e| e.bench_spec.is_some()).count();
-        assert_eq!(with_spec, 75, "expected 75 benchable rules, got {with_spec}");
+        assert_eq!(with_spec, 76, "expected 76 benchable rules, got {with_spec}");
     }
 
     #[cfg(feature = "rust_perf_bench")]
@@ -7766,7 +7897,7 @@ mod tests {
             .filter(|e| e.context_notes.is_some())
             .map(|e| e.rule_id.as_str())
             .collect();
-        assert_eq!(annotated.len(), 28, "expected 28 context-annotated rules");
+        assert_eq!(annotated.len(), 29, "expected 29 context-annotated rules");
         assert!(annotated.contains(&"precompute-table"));
         assert!(annotated.contains(&"papaya-lockfree"));
         assert!(annotated.contains(&"dedupe-hashset-vs-vec"));
@@ -7805,7 +7936,7 @@ mod tests {
             .iter()
             .filter(|e| e.context_notes.is_none())
             .count();
-        assert_eq!(unannotated, 57, "expected 57 unannotated rules (85 - 28 annotated)");
+        assert_eq!(unannotated, 57, "expected 57 unannotated rules (86 - 29 annotated)");
     }
 
     /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -7817,7 +7948,7 @@ mod tests {
         let json = serde_json::to_string(&corpus.entries).unwrap();
         let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
         let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-        assert_eq!(annotated, 28);
+        assert_eq!(annotated, 29);
 
         // Simulate a pre-field snapshot: strip `context_notes` from JSON.
         // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -7851,7 +7982,7 @@ mod tests {
 
         // Filter to the 28 annotated rules.
         let annotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_some()).collect();
-        assert_eq!(annotated.len(), 28, "expected 28 annotated rules");
+        assert_eq!(annotated.len(), 29, "expected 29 annotated rules");
 
         // The HealEntry trait override must agree with the struct field.
         for rule in &annotated {

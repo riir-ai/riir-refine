@@ -1,6 +1,6 @@
 # Research 091: lucebox PR #625 — kernel distill verdict (YES, B+; external kernel batch queued as Plan 035)
 
-> **Status:** DISTILLED — pending owner decision. Verdict recorded 2026-08-27; the mining batch is plan-FIRST queued at [Plan 035](../.plans/035_lucebox_pr625_kernel_batch.md) and executes on the next batch slot.
+> **Status:** RECORD — Batch 77 landed 2026-08-27 (Plan 035 complete: 6 kernel_opt rules + 1 B63 rider + 1 rust_perf crossover `runtime-int-exponent-powi` ParetoDominant 2.57x/2.81x/2.66x; kernel corpus 373→379, rust_perf 85→86; full GOAT + CI guard ALL LAYERS). Yield exceeded the 2-3 estimate — the verdict's dedup was rigorous enough that coordinator falsification dropped 0 of 6 (each verified against source at head f28d85c; 3 provenance corrections folded in).
 
 **Source:** [Luce-Org/lucebox PR #625](https://github.com/Luce-Org/lucebox/pull/625) "qwen35: DSpark speculative decoding (Qwen3.8-27B drafters)" — merged 2026-08-24, 37 commits, 69 files, +3059/−345, Apache-2.0, C++/HIP on vendored ggml (R9700/gfx1201, ROCm 7.2). Head `f28d85c`. **All 69 file patches read** via the GitHub files API at verdict time (no unread files). Companion blog cross-checked; where they differ the PR wins.
 
