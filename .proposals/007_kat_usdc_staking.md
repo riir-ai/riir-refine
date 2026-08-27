@@ -1,6 +1,6 @@
 # Proposal 007 — KAT staking: USDC in, lockup, burn-pool incentives, authority share
 
-Status: **draft** (filed 2026-08-27). Extends [Proposal 005](005_kat_heal_service_network.md) — the third demand-side rail beside payments (T1.3/T1.4) and mining (Phase 2). **Amends Proposal 005 caveat #7** (the "no yield" closed-loop posture): refundable USDC custody + KAT incentives changes the legal surface — counsel sign-off is a hard launch gate (§Honest caveats #1), with a custody-free KAT-stake fallback arm that ships under the existing posture. Blocked by nothing at the proposal layer; execution order: after 005 T2.3 (the reward schedule this plugs into).
+Status: **draft** (filed 2026-08-27). Extends [Proposal 005](005_kat_heal_service_network.md) — the third demand-side rail beside payments (T1.3/T1.4) and mining (Phase 2). **Amends Proposal 005 caveat #7** (the "no yield" closed-loop posture): refundable USDC custody + KAT incentives changes the legal surface — counsel sign-off is a hard launch gate (§Honest caveats #1), with a custody-free KAT-stake fallback arm that ships under the existing posture. Blocked by nothing at the proposal layer; execution order: after 005 T2.3 (the reward schedule this plugs into). **Amended 2026-08-27 (owner design review, same day):** (a) mining rewards gain **opt-in auto-restaking** (default OFF — 005's never-brick rule; compounding as commitment escalation, not a forced lock), (b) positions unify on **per-tranche lockup rows** (each deposit owns its own 7-day clock — supersedes the single-position clock-reset design and resolves caveat #4), (c) unstake refunds are **refund-to-source-bound** (the funding address recorded at first stake; the service key can trigger a refund but never redirect one — zero principal blast radius on KAT-key compromise).
 Branch: `develop` (per global rule — no feature branches)
 Owner: unassigned
 Fusion of: Proposal 005 §Payments/§Economics (the rail + the pool this extends) × riir-chain `StakeProgram` **semantics** (`lockup_ticks` / `LockupNotExpired` / withdraw-after-lockup — cite, NOT the vehicle: KAT is ledger-side) × `KatLedger` row/queue discipline (exact-once intents, `CommitBatch` per op) × the Beanstalk snapshot defense (weight fixed BEFORE payout — prior art, §References)
@@ -33,25 +33,37 @@ What goes wrong without this: the economy stays spot-market-only, and the "keep 
 
 | Key | Value |
 |---|---|
-| `kat:stake:<16B account>` | 40B: `principal_usdc_base u64` · `staked_at_tick u64` · `unlock_at_tick u64` · `accrued_kat i64` · `last_claim_epoch u64` |
+| `kat:stakeacct:<16B account>` | 45B account head: `funding_solana_pubkey [u8;32]` · `restake u8` · `next_tranche_seq u32` · `accrued_kat i64` |
+| `kat:staketranche:<16B>:<seq>` | 25B: `kind u8` (usdc/kat) · `amount u64` (base units) · `staked_at_tick u64` · `unlock_at_tick u64` |
 | `kat:stakesig:<sig-key>` | 8B tick (replay dedupe) |
 | `Meta` extension | `staked_total_usdc u64` · `unstake_pending u64` (float + queue counters) |
 
-- **One stake position per account** (v1). A top-up **resets the whole position's lockup clock** to `now + LOCKUP` — punitive for late top-ups, but it is the only single-position rule that is never *less* locked than before (anti-churn is a feature here; the CLI warns). Per-tranche lockups (FIFO) are the named plan-time alternative if this reads too harsh in UX testing.
+- **Tranche-based positions (amended 2026-08-27).** An account's stake is a FIFO list of tranches, each owning its **own** 7-day clock — a top-up never re-locks earlier tranches (the original single-position clock-reset design is superseded; see caveat #4). USDC tranches share **one funding address per account** (§Unstake); KAT tranches come from reward restaking (next subsection). `unstake` drains all currently-unlocked tranches in one request — one button, no amount picker, simplicity preserved.
 
 ### Incentives (the earn) — burn-pool share, snapshot-gated
 
 - The epoch reward pool (the existing 70% burn re-mint) splits by **`staking_share_bp`** (genesis config, e.g. 1000 = 10% of the pool to stakers, 90% to miners). Staking incentives are **strictly pool-funded**: when burn is zero, incentives are zero. **No new supply channel** — the Proposal 005 invariant ("free compute opens no new emission channel") extends to staking: *capital opens no new emission channel either.*
-- Distribution: pro-rata by principal **among stakes that were already locked-and-old at the previous epoch boundary** — a stake counts for epoch E iff
+- Distribution: pro-rata **per tranche** among tranches that were already locked-and-old at the previous epoch boundary — a tranche counts for epoch E iff
   `staked_at_tick ≤ boundary(E−1) − LOCKUP_TICKS`.
   This is the Beanstalk lesson applied with margin: the weight snapshot precedes the payout, AND the capital must have been at risk for a full lockup before the snapshot even sees it. A flash-borrowed stake cannot farm one epoch — it must survive ≥1 week + 1 boundary. **Flash loans are time-attacks; the lockup is the clock they don't have.**
 - **Authority share:** of each epoch's staking slice, `authority_share_bp` (genesis, e.g. **2000 = 20%**) routes to the authority operator account, decaying by `authority_decay_bp`/epoch to a floor (e.g. **500 = 5%**). This implements "the authority node will have xx% initially": the operator is compensated for bootstrapping demand, treasury carry, and ops — with a schedule that hands the network to stakers as it matures. All three numbers are `KatConfig` fields, CLI-visible.
 - Rewards accrue as KAT service credit — **no $ figure ever renders beside a KAT accrual** (Proposal 005 caveat #15 rule, inherited verbatim), and the rate is honestly floating: it is a share of whatever the burn pool did, which can be zero. **No APY is promised anywhere.**
 - Concentration cap: a single account's principal is capped at `max_stake_share_bp` of total float (e.g. 20%) — no whale owns the incentive stream.
 
+### Reward restaking (opt-in compounding — amended 2026-08-27)
+
+The owner's ask: should mining rewards auto-stake into the same lockup? **Opt-in, default OFF.** The default must preserve 005's never-brick rule (*"mining accrual and settlement CONTINUE at balance 0 — earning it back by syncing data is the loop that keeps a broke user running"*): default-locked rewards would brick exactly that miner for up to 7 days, and delayed burns cut against the sink that gives KAT value. The retention design agrees — 008's variable-ratio schedule needs **liquid** base rewards for instant reinforcement; compounding is the *commitment escalation* layer a believer opts into.
+
+- `cargo heal stake --restake on|off` (account flag, enforced server-side at credit time): **on** redirects epoch-settled mining credits into **KAT tranches** (same FIFO rows, `kind = kat`, same 7-day clock each). KAT-tranche redemption after unlock is a pure ledger op — no custody, no outbound batch — so it is instant; only USDC principal rides the daily refund batch.
+- The staking slice now serves two classes — USDC-principal tranches and KAT-reward tranches — split by a **fixed sub-share** (`usdc_stake_share`/`kat_stake_share`, genesis config; a 008 lever). **Never pro-rata across units**: USDC base units and KAT micro-units are different denominations, and a cross-unit pro-rata is a category error that would price an arbitrage between the two stake kinds.
+- **Compounding is structurally bounded**: payouts are a partition of a fixed burn-funded slice (percentages of the pool), never a promised rate — no spiral even at 100% opt-in. The G7-S simulator models the loop explicitly.
+- This is the KAT-stake fallback arm's machinery shipped **anyway** — if counsel picks the fallback, the USDC arm is what drops, not this.
+- Securities note: yield on KAT you hold is the same class as the fallback arm — inside 007's single counsel review (caveat #1), no new gate.
+
 ### Unstake (out) — the one new construction, honestly named
 
-- `cargo heal unstake` refuses while `now < unlock_at_tick`, printing remaining time. After lockup, it queues an **exact-once settlement intent** (the `queue.rs` discipline — the measured ring) for the full principal; incentives stop accruing at request time.
+- `cargo heal unstake` refuses while any targeted tranche is younger than its `unlock_at_tick`, printing remaining time. After lockup, it queues an **exact-once settlement intent** (the `queue.rs` discipline — the measured ring) covering all unlocked tranches; incentives stop accruing on them at request time.
+- **Refund-to-source binding (amended 2026-08-27):** the **funding Solana address** — captured from the verified incoming transfer's token-balance delta — is recorded at the account's first USDC tranche, every later USDC tranche must originate from the same address or the claim is **rejected**, and refunds go **only** to that address. The KAT account key can *trigger* a refund but can never *redirect* one: **principal's only path is `funding wallet → custody → funding wallet`** — a compromised service key has zero principal blast radius, and address-switching through staking (stake dirty, unstake to a clean address) is structurally impossible. A new wallet means a new KAT account; re-binding an existing position is deliberately NOT self-service in v1 (caveat #7).
 - **Outbound USDC signing does not exist anywhere in the stack** (payments are watch-only). v1: an ops-run **signer binary** (local, capped key) drains the unstake queue as a **daily batch** — Glacial cadence, per-day outflow cap (float protection), receipts written back with the 64-byte signature (the same no-truncation rule). Custody posture: the stake-custody wallet holds user principal and **does nothing with it** — no lending, no yield-farming of principal (§Honest caveats #2).
 - **Counsel-fallback arm (design hedge):** if counsel flags USDC custody, the SAME lockup/snapshot/incentive machinery runs as **KAT-stake** — lock an existing KAT balance (no custody, no outbound transfers, no new legal surface at all). Both arms share every ledger mechanism; only the rail differs. The proposal is written so this swap is a plan-time toggle, not a redesign.
 
@@ -66,11 +78,15 @@ $ cargo heal stake --info
   Staked:          100.00 USDC (refundable)
   Unlock:          in 4d 03h   (top-ups restart the 7-day clock)
   Incentives:      +2,431 KAT accrued — service credit, rate floats with burn
-  Epoch pool:      mining 90% · staking 10% · authority share 20%→5% over 52 epochs
+  Epoch pool:      mining 90% · staking 10% (usdc 70% / kat-reward 30% of the slice)
+                   · authority share 20%→5% over 52 epochs
+  Reward restake:  ON — mining credits auto-lock as KAT tranches (7-day clock each;
+                   redeem instantly after unlock; opt back out anytime)
 
 $ cargo heal unstake
-  Queued: full refund in the next daily batch (exact-once).
-  Incentive accrual stopped at request. Next unlock check: passed.
+  Queued: refund of unlocked tranches in the next daily batch (exact-once).
+  Refund returns to the funding wallet (bound at first stake — never changeable
+  by the service key). Incentive accrual stopped at request.
 ```
 
 ### Ledger + chain placement (unchanged doctrine)
@@ -82,9 +98,11 @@ No new chain program. Staking ops are user-cadence request-driven writes to the 
 1. **Legal posture — this amends Proposal 005 caveat #7, and counsel is a hard launch gate.** 005's closed-loop posture explicitly said "non-transferable, non-redeemable, **no yield**" to stay outside money-transmission/securities territory. Staking introduces (a) **custody of user USDC** (holding others' funds — money-transmission surface) and (b) **rewards for committing capital** (staking-as-a-service-adjacent; the SEC/Kraken-2023 class). Mitigations built into the design: principal fully refundable (not a purchase), rewards in non-transferable service credit (not money), no promised rate (pool share, can be zero), no principal deployment. **Ship NOTHING user-facing before counsel signs the structure** — and the KAT-stake fallback arm exists precisely so the feature can ship under the old posture if counsel says no.
 2. **Custody risk is real and ours.** The stake-custody wallet is a hot-ish operational wallet. v1 mitigations: dedicated wallet (no commingling), per-day outflow cap, min principal, cold-backup of keys, refund-runbook. Future: multisig/FROST on the custody key (the 005 T4.3 mint-key substrate is the same upgrade). Say "operator-custodied" in user-facing copy, not "decentralized".
 3. **The float is a liability, not revenue.** Staked USDC appears on no income line and funds nothing. The USD invariant of 005's G7 is unchanged; staking adds a **liquidity invariant**: `custody_balance ≥ Σ principal − daily_drain_cap`, checked per epoch (a run on unstakes drains at the cap rate and the queue holds — by design, honestly disclosed as a queue delay).
-4. **Top-up clock reset is a product decision, not a law of nature.** It favors safety over UX fairness. If UX testing hates it, the fix is per-tranche lockups (FIFO unstake) — a bounded change, decided at plan time, not silently.
+4. **Lockup granularity is per-tranche (amended 2026-08-27).** The original draft reset the whole position's clock on top-up — safe but punitive; the reward-restaking amendment forced the tranche model (each deposit owns its 7-day clock, FIFO unstake), which resolves the harshness as a side effect. Residual: tranche rows need a compaction discipline (drained tranches pruned, seq high-water bounded) — plan-time detail.
 5. **Pool dependence means thin early incentives.** At launch burn is small; staking rewards will be symbolic. That is honest (the incentive is a share, not a rate) but it must be messaged — do not let the CLI imply earnings the pool doesn't have.
 6. **The authority share is a governance-lightning rod.** 20% initial to the operator will be called extraction by someone. The defense is the schedule: published at genesis, decaying, floor-bounded, CLI-visible, and earning nothing when burn is zero. Parameter freeze happens once at genesis (G7-S sensitivity) — re-pinning mid-flight is a breach of trust, not a config change.
+7. **The funding-wallet binding strands principal on wallet loss.** Refund-to-source (§Unstake) means a lost/locked Solana wallet strands the principal until an ops-assisted identity recovery — a manual process, not a feature. Deliberately NO self-service refund-address change in v1: a changeable destination reopens the redirect attack the binding kills. The named future upgrade is a delay-and-notice change flow (exchange-style withdrawal-address discipline) if real users hit this. Exchange-deposit-address quirks get a CLI warning ("stake from a wallet you control").
+8. **Reward restaking is yield-on-KAT — same counsel envelope.** Opt-in compounding on KAT you already hold is the same securities class as the KAT-stake fallback arm (caveat #1); one review covers both. Default-OFF is also legal hygiene: the default experience promises nothing.
 
 ## Fusion lineage
 
@@ -99,8 +117,8 @@ No new chain program. Staking ops are user-cadence request-driven writes to the 
 - **G2-S (perf/placement):** zero per-op chain writes (epoch-batched intents only — grep-pinned); CLI render < 50 ms; signer drain batch wall-bounded.
 - **G3-S (no-regression):** with `kat_staking` off, the riir-dapps default build and riir-clippy default binary are bit-identical to today.
 - **G4-S (alloc/typing):** ledger ops ride the existing `CommitBatch` per-op discipline; USDC base units u64 + KAT `MicroUnits` i64 end-to-end — `f32/f64` in any money path is a review-blocking finding (the `BridgeEvent.fractional_cents` anti-precedent, named in 005).
-- **G7-S (economics, extends G7):** the 005 simulator gains the staking axis — pool never overdrawn by mining+staking combined; incentive strictly zero when burn zero (self-funding invariant); authority share decays within bounds; a sybil-arm of many minimum stakes earns no more than one honest stake of equal principal.
-- **G8-S (adversarial, the flash-loan gate):** unstake-before-unlock refused with exact remaining ticks; a stake younger than `LOCKUP + 1 boundary` is excluded from distribution (flash-stake fixture); top-up cannot backdate the snapshot age; concentration cap rejects at `max_share + 1`; unstake-then-restake within one epoch cannot collect twice.
+- **G7-S (economics, extends G7):** the 005 simulator gains the staking axis — pool never overdrawn by mining+staking combined; incentive strictly zero when burn zero (self-funding invariant); authority share decays within bounds; a sybil-arm of many minimum stakes earns no more than one honest stake of equal principal; the reward-restake compounding loop is modeled explicitly (partition-bounded — no emission spiral at 100% opt-in).
+- **G8-S (adversarial, the flash-loan gate):** unstake-before-unlock refused with exact remaining ticks; a tranche younger than `LOCKUP + 1 boundary` is excluded from distribution (flash-stake fixture); a USDC top-up from a different funding address is rejected at claim; top-up cannot backdate the snapshot age; concentration cap rejects at `max_share + 1`; unstake-then-restake within one epoch cannot collect twice; reward tranches obey the same age rule while non-restaked credits stay liquid at balance 0 (the never-brick fixture); a compromised account key cannot redirect a refund (destination-pinned fixture).
 
 ## What ships now vs deferred
 
@@ -109,8 +127,8 @@ No new chain program. Staking ops are user-cadence request-driven writes to the 
 - riir-clippy: `stake`/`stake --info`/`unstake` CLI under `kat_service` (render-only + QR; the caveat-#15 copy rule enforced by test).
 
 ### Deferred — gated
-- KAT-stake fallback arm implementation (both arms share the machinery; build only if counsel picks it).
-- Per-tranche lockups (only if UX testing rejects the clock reset).
+- KAT-stake-**only** fallback deployment (the tranche + incentive machinery ships regardless via reward restaking; only the USDC rail drops if counsel picks the fallback).
+- Self-service refund-address change with delay-and-notice (only if real users hit caveat #7's lost-wallet case).
 - Multisig/FROST custody key (T4.3 substrate).
 - Staking-weight as governance signal for [Proposal 008](008_adaptive_tokenomics_riir_dao.md) (telemetry only in 008 v1).
 
