@@ -1,0 +1,54 @@
+# Research 091: lucebox PR #625 — kernel distill verdict (YES, B+; external kernel batch queued as Plan 035)
+
+> **Status:** DISTILLED — pending owner decision. Verdict recorded 2026-08-27; the mining batch is plan-FIRST queued at [Plan 035](../.plans/035_lucebox_pr625_kernel_batch.md) and executes on the next batch slot.
+
+**Source:** [Luce-Org/lucebox PR #625](https://github.com/Luce-Org/lucebox/pull/625) "qwen35: DSpark speculative decoding (Qwen3.8-27B drafters)" — merged 2026-08-24, 37 commits, 69 files, +3059/−345, Apache-2.0, C++/HIP on vendored ggml (R9700/gfx1201, ROCm 7.2). Head `f28d85c`. **All 69 file patches read** via the GitHub files API at verdict time (no unread files). Companion blog cross-checked; where they differ the PR wins.
+
+**Strategic half lives in riir-ai:** the policy/mechanism evidence (block-16 lever, adaptive burst policy, context-routed verify cap, flip-rate tolerance precedent, chunked-GDN cross-validation) is recorded in `../riir-ai/.research/350_lucebox_pr625_qwen38_dflash2_r9700.md` + Issues 754/755 — same commit window. As with the oMLX batch (B71/Research 082), the strategic value there EXCEEDS the corpus value here.
+
+---
+
+## Verdict
+
+**YES — grade B+, route `kernel_opt` (with one `rust_perf` crossover).** The tempting wrong routing is treating it as an engine-policy source only — the policy content is NOT corpus-shaped and routes to riir-ai, but the PR carries 8 kernel mechanisms with per-mechanism measured evidence (GB/s, µs/launch, ms/forward, launches/token), which is exactly the external-kernel-batch diet (the B71/B72 lane).
+
+## Ranked candidate table
+
+| # | Candidate | Source site | Grade | Notes |
+|---|---|---|---|---|
+| 1 | `weight-stream-non-temporal-loads` — decode reads every weight byte exactly once per token; cache-fill evicts the activations/KV other kernels reuse; load weights with bypass hints (HIP `__builtin_nontemporal_load` → sc0/sc1; CUDA `__ldcs`) | `vecdotq.cuh` `get_int_b4_nt` (IQ4_XS vecdot path) | **A** | Dedup: ZERO corpus hits under `ldcs|non.?temporal|bypass.*L2|evict.*activ` (the single grep hit was `rotated-ring-undo` matching "evicted token" — not coverage). In-stack measured twin: riir-ai Issue 742 T9.16 (`__ldcs` on the strict GEMV weight stream, Bench 734) — cite BOTH. |
+| 2 | `batch-width-routed-dual-tile-twins` — the optimal GEMM tile shape differs by batch width (64×64/4-warp for verify N≤16: +12–23%, a 5120-row projection leaves only 40 blocks on 64 CU with 128-row tiles; 128×128/8-warp for prefill N≥256: +16–18% at N=512; small wins to N=64, tie at 128); compile BOTH shapes as namespace-reinclude twins (tile is a baked macro — one TU holds one shape) and dispatch on N. Includes the pathological-mid-tile fact: mmq_x=32 measured 443 GB/s at N=16 but 180 at N=24–32 and 315 at N=48 — sweep, don't interpolate | `mmq.cu` `lucebox_mmq_big_tile_take` + `mmq.cuh` + `mmq_big.h` + `generate_cu_files.py` | **A−** | Dedup: no small/big-tile rule; `enum-dispatch-separate-kernel-per-variant` is fusion-variant dispatch, `size-gate-covers-every-cost-factor` is the gate-inputs rule — this is the tile-shape × batch-width two-regime + the twin-instantiation build mechanism. |
+| 3 | `tree-verify-recurrent-state-parent-reload` — tree-structured verify over a STATEFUL recurrence: store per-token intermediate states during the sequential walk; at a DFS branch transition (parent ≠ t−1) reload the register state shard from the parent's stored intermediate (same-thread read-after-write on global, no barrier); root-level siblings reset to the pre-block state. 61–196 → ~37 µs/layer, verified 8.4e-7 | `gated_delta_net.cu` `TREE_MODE` parent_ids block | **B+** | Dedup: `rotated-ring-undo` (B71) is KV-cache undo; no corpus rule covers in-kernel recurrent-state reload for branch transitions. Composes with the B71 family (the recurrent twin of the KV twin). |
+| 4 | `runtime-int-exponent-powi` (**rust_perf** crossover) — `powf(base, exp as f64)` with a runtime INTEGER exponent lowers to a libm `pow` call (opaque, 50–100 ns); `powi(n)` is binary exponentiation (log₂(n) multiplies). Source measured the libcall DOMINATING the whole rope kernel on RDNA4: 692 → 76 µs/launch @512 tokens, within 1 ulp; negative exponents keep the libcall (an arithmetic-shift loop never reaches 0 — the totality guard is part of the content) | `rope.cu` `rope_theta_fp64` | **B+** | Dedup: `powi-vs-powf` covers the CONSTANT-exponent-2 case (all-Tie in release — LLVM lowers pow(x,2.0)); its annotation explicitly defers the non-constant case. This is that case, with a measured 9.1× kernel-level source. Benchable on the Pareto validator; NOT bit-identical (powi ≠ correctly-rounded pow) → rel-error gate + annotation. |
+| 5 | `shared-activation-quantize-memo-per-eval` — when N matmuls of one graph evaluation consume the same src1 activation (Q/K/V/gate/router), memoize the quantized form for the whole eval, LIFO-freed at next eval start; pool depth must hold ~1 live entry per quantized matmul (MAX_BUFFERS 256→1024); guarded OFF under concurrent streams (events only at fork/join → a sibling stream may read while the quantize kernel is in flight) | `mmvq.cu` `LUCE_Q8_MEMO` + `common.cuh` pool bump | **B** | Dedup: the same-input family (B58 `same-input-gemv-segments-single-launch`, B63 `same-input-gemv-weight-concat-at-upload`, B25 `fan-out-shared-input-single-sync`) merges LAUNCHES/WEIGHTS; this caches the QUANTIZED ACTIVATION — the third mechanism in the family, with the pool-sizing + cross-stream-guard decision content. |
+| 6 | `vendor-batched-gemm-contiguity-staging` — strided-view slices of a batched matmul silently route into the vendor API's slow path (ROCm `cublasGemmBatchedEx` stages device pointer arrays through per-call pinned-host allocs, ~1 ms/node, 13 s per 512-token prefill; `cublasStrsmBatched` host-loops per batch at k>32, ~365 ms/solve node); contiguize the slices (`ggml_cont`) to restore the strided-batched fast path; keep the triangular-solve chunk ≤ the warp kernel's k-limit (CS=32) | `delta_net_chunked.cpp` | **B−** | Dedup: B26/B33 dispatch-avoidance family is adjacent but no rule covers the contiguity→API-path hazard. Vendor-specific (HIP) — same class as the B21 vendor-integration rules. |
+| 7 | `gate-prep-fold-into-consumer-via-packed-side-tensor` — 6–8 tiny graph-side elementwise ops per layer (sigmoid(beta), softplus(alpha+bias)·A) fold into the consumer kernel, which derives the gates from a packed `[dt_bias \| A]` f32 side tensor bound in an unused src slot + an op_param flag; every non-CUDA backend hard-REJECTS the mode (capability gate, not silent fallback) | `gated_delta_net.cu` raw_gates + `ggml.c` `ggml_gated_delta_net_set_raw_gates` | **B−** | Dedup: `fused-activation-quantize-for-gemv-consumer` / `delay-rms-scale-past-gemv-epilogue` are the fold-into-consumer family; the new content is the packed side-tensor mechanism + the hard capability gate. May land as a rider if the coordinator finds the fold-family coverage sufficient. |
+| 8 | `loader-placed-stacked-projection-aliases` (rider on B63) — place sibling projection tensors back-to-back in the weight buffer at load time so one zero-copy alias tensor spanning both rows serves a single GEMV ((z\|qkv), (beta\|alpha)); requires type/ne0 match + the backend's alloc-size == nbytes (no padding scribble) | `gguf_target_loader.cpp` `make_stack` | rider | Dedup: B63 `same-input-gemv-weight-concat-at-upload` is the upload-time twin; this is the placement-time twin. Rider note on B63's doc, not a new rule (the B72 l2-grouped rider precedent). |
+
+**Drops (with reasons):**
+
+- `ssm_conv_step` fused conv (history in registers, SiLU fused, in-place state, rollback-window sidecar) — **positive instance of B28 `fused-conv-state-shift-dot-silu`**; cite as external validation in B28's source note, not a new rule.
+- ADD+RMS_NORM+MUL subgraph fusion with two live outputs — adjacent to the norm-fusion family (`delay-rms-scale-past-gemv-epilogue`'s distinct-sibling note names `fuse-add-rms-norm`); the two-live-output legality point is a possible one-line rider, not a rule.
+- Adaptive spec policy + context-routed verify cap + block-width guard — **engine policy, not a code transformation**; routed to riir-ai (Research 350, Issues 754/755).
+- Chunked GDN prefill OFF-by-default — **external cross-validation of OUR Issue 734 negative result** (0.97×/0.98×); recorded in riir-ai, not a rule here.
+- MMVQ 6-warp end-to-end sweep, q8 KV-rotation skip for f16/q8_0, fa-window warning, disk-cache salt/version — tuning facts + config policy; ambient.
+- `DFLASH_QWEN35_NO_FUSED_KERNELS`-style kill switches + env resolution — covered by `env-flag-resolved-once-not-per-dispatch` (B38) family.
+
+## GOAT candidate (the lead)
+
+`weight-stream-non-temporal-loads` (candidate 1): kernel_opt corpus rules validate via the standing gates (no Pareto bench needed), and this one carries **two independent measured proofs** — the source's IQ4_XS vecdot conversion and our own T9.16 `__ldcs` strict-GEMV result (Bench 734). Deterministic (a load-hint, no numerics change — bit-identical by construction). Regime content: streaming operands read once (weights in decode) vs reused operands (activations/KV) — the inverse regime of the cache-the-weights rules.
+
+## Yield estimate
+
+4 keep-grade candidates + 1 rider after the table's own drops; with the standing ~50% coordinator falsification at batch time → **2–3 rules expected to land** (the B71/B72 external-batch norm), plus the rust_perf crossover if the bench confirms (the `powi` extension is the highest-confidence benchable — the existing rule's annotation already reserves the case).
+
+## Honest caveats
+
+- C++/HIP on vendored ggml — all fixtures will be ORIGINAL minimal reproductions (license rule; nothing verbatim).
+- Every number is R9700/gfx1201/ROCm 7.2 (their `mmq_probe` + server benches); regime claims must carry the arch caveat — several (non-temporal hints, contiguity staging) have direct NVIDIA/in-stack analogs, the tile shapes may not transfer.
+- The verify-MMQ "80% of practical bandwidth" ceiling and their three refuted levers (double-buffering, 8-warp small tiles, decode-once wide MMVQ) go in as context_notes — free negative results that bound the mechanism.
+- Provenance: lucebox is a llama.cpp-derived server (vendored fork); the mechanisms above are their dflash-extension code (`ggml_ssm_conv_step`, `dflash_dyn_conv`, raw-gates, MMQ twins) or their modifications of upstream kernels (rope, vecdotq, mmvq, fattn-vec) — cite file + function per entry at mine time.
+
+## Queue slot
+
+Queued as the next EXTERNAL kernel batch behind the open owner calls (sec Phase 2 / rustc_errors promotion) — same slot class as B71/B72. Plan 035 holds the task set; corpus work is CPU-only (no GPU window needed for the gates; the rust_perf crossover bench needs the standard quiet-box discipline).
