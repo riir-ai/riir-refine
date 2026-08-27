@@ -203,7 +203,7 @@ Metrics: burn/mint convergence, pool-overdraw events, miner retention (returning
 
 ### In-house (substrates this composes — grep-verified 2026-08-27)
 1. [`riir-dapps/src/kat/ledger.rs`](../../riir-dapps/src/kat/ledger.rs) + `compose.rs` — epoch settle, the `POOL_NUM`/`TREASURY_NUM` split constants (the first levers), anchors, exact-once queue.
-2. `katgpt_core::rating` (`expected_f32`/`update_f32`/`update_scored`, Bench 675) + `beta_lcb_order_into` (Plan 576) — the strategy-selection primitives, public.
+2. `katgpt_core::rating` (Elo `expected`/`update` + `update_scored`, Bench 675) + `beta_lcb_order_into` (Plan 576) — the strategy-selection primitives, public.
 3. [riir-clippy `self_evolve` / `SelectionMode::BetaPosterior`](../src/self_evolve.rs) — the selection *pattern* this transplants (code-level dep: none, by design).
 4. [riir-dapps `service::fair_roll`](../../riir-dapps/src/service/fair_roll.rs) — commit-reveal variance (the jackpot lever).
 5. [riir-clippy `src/llm_spend.rs`](../src/llm_spend.rs) (Issue 046) — reserve-then-reconcile USD cap discipline.

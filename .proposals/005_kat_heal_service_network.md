@@ -5,7 +5,7 @@ Blocked by: ~~[Issue 037](../.issues/037_e2e_self_evolve_adoption_proof.md) gate
 Branch: `develop` (per global rule — no feature branches)
 Owner: unassigned
 Fusion of: Proposal 003 (binary-only distribution) × Issue 037/038 (the closed self-evolve loop + `TrajStore`) × the riir-chain USDC bridge **shape** (`solana_watcher.rs`'s RPC-poll/cursor skeleton + the `BridgeEvent` row — *not* its verification, which does not exist; see §Payments) + `InflationSchedule` (Plan 279 T26) + chain Proposals 002/003 (subscription billing / cross-chain mint) × riir-neuron-db `R2Wal`/vessel × the RSM `split_head` game-proof substrate × [riir-ai Proposal 040](../../riir-ai/.proposals/040_riir_deployer_game_and_chain_devops.md) caveat 3 (the prior "service blocked on quality" verdict this proposal answers)
-Related: [Proposal 001](001_multi_domain_modelless_code_healer.md), [Proposal 004](004_sec_domain_fourth_heal_domain.md), [node_tiers.md](../../riir-ai/.docs/01_orientation/node_tiers.md), [riir-dapps Proposal 001](../../riir-dapps/.proposals/001_agreement_boundary_and_tiered_durability.md)
+Related: [Proposal 001](001_multi_domain_modelless_code_healer.md), [Proposal 004](004_sec_domain_fourth_heal_domain.md), [Proposal 007](007_kat_usdc_staking.md) (USDC staking — the commitment rail; amends caveat #7, counsel-gated), [Proposal 008](008_adaptive_tokenomics_riir_dao.md) (adaptive tokenomics / riir-dao — amends T2.3 "parameters frozen" to versioned-bounded-movable), [node_tiers.md](../../riir-ai/.docs/01_orientation/node_tiers.md), [riir-dapps Proposal 001](../../riir-dapps/.proposals/001_agreement_boundary_and_tiered_durability.md)
 
 ## TL;DR
 
