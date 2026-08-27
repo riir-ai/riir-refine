@@ -6,7 +6,7 @@
 //!
 //! ## Plan 003 — corpus wiring (2026-08-14)
 //!
-//! The router is now wired to the 379-rule corpus via the 15 categories
+//! The router is now wired to the 387-rule corpus via the 15 categories
 //! ([`KernelCategory`]). One expert per category (15 experts), each owning
 //! its category's `rule_ids` via [`KERNEL_CATEGORIES`] in [`super::corpus`].
 //! A future heal pipeline can route a kernel signature → expert index →
@@ -453,12 +453,12 @@ mod tests {
 
     #[test]
     fn rules_for_expert_total_matches_corpus() {
-        // Sum of all experts' rule counts must equal the corpus total (384).
+        // Sum of all experts' rule counts must equal the corpus total (387).
         let total: usize = (0..NUM_KERNEL_EXPERTS)
             .map(KernelExpertRouter::rules_for_expert)
             .map(<[&str]>::len)
             .sum();
-        assert_eq!(total, 384, "Plan 003: experts cover all 384 corpus rules");
+        assert_eq!(total, 387, "Plan 003: experts cover all 387 corpus rules");
     }
 
     #[test]

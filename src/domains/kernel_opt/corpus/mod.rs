@@ -1408,6 +1408,28 @@
 //!   tile matmuls via `StageEventListener` on `TileMatmulCompleted`;
 //!   clean load/compute stage separation REMOVES the overlap). Record:
 //!   Research 093 / Plan 037.
+//! - **Batch 80 (2026-08-27, WebGPU dispatch-overhead characterization
+//!   distill, Plan 038 / Research 094):** 3 rules, corpus 384 -> 387
+//!   (C 35 -> 36, D 78 -> 79, E 22 -> 23). Source: arXiv:2604.02344v1
+//!   (Maczan -- 4 GPU vendors, Dawn + wgpu-native, 3 browsers; open
+//!   data; cross-validated in-tree by riir-ai Bench 761).
+//!   `dispatch-cost-sequential-measurement-not-single-op` (D -- single-op
+//!   dispatch benchmarks conflate the submit->completion-drain round trip
+//!   with enqueue cost, 10-60x overestimate: Dawn 496.8 vs 23.8 us,
+//!   Chrome 2071-3123 vs 32.8-66.5 us; N back-to-back dispatches + ONE
+//!   tail sync isolates the true cost; submit alone is 40% of it);
+//!   `fusion-payback-gated-on-per-dispatch-overhead` (C -- the SAME
+//!   `RMSNorm` 6->1 fusion: 1.41x wgpu/Vulkan (24-36 us/dispatch), 0.95x
+//!   wgpu/Metal + 0.91x Safari (kernel-penalty-dominated), 0.92x CUDA
+//!   (7.4 us); B* batch crossover marks the overhead-bound regime;
+//!   payback = `dispatches_saved` x per-dispatch overhead vs fused-kernel
+//!   penalty); `grid-collapsing-mega-kernel-occupancy-trap` (E -- WebGPU
+//!   has no cross-workgroup sync, so the mega-kernel is ONE workgroup;
+//!   17k sequential MADs/thread at production scale vs 65k+ threads; the
+//!   tiled middle ground 7->3 dispatches preserves the grid: 2.01x Metal,
+//!   1.17x Vulkan; mega-vs-multi honestly inconclusive at toy scale
+//!   p>0.38 -- the regime split IS the rule). Record: Research 094 /
+//!   Plan 038.
 //! - **Deferred:** remaining popcorn kernels are mostly already-covered patterns
 //!   or domain-specific math; future batches need new source impl files.
 
@@ -1456,7 +1478,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 384-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 387-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1662,9 +1684,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "elementwise-offload-needs-device-side-anchor",
             "fuse-indirect-gather-into-dot-consumer",
             "gate-prep-fold-into-consumer-via-packed-side-tensor",
+            "fusion-payback-gated-on-per-dispatch-overhead",
         ],
     ),
-    // D: Dispatch patterns (78 rules)
+    // D: Dispatch patterns (79 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -1747,9 +1770,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "vendor-batched-gemm-contiguity-staging",
             "ordered-lhs-skip-smem-fragments-as-second-buffer",
             "interleave-loads-between-tile-matmuls",
+            "dispatch-cost-sequential-measurement-not-single-op",
         ],
     ),
-    // E: Parallelism patterns (22 rules)
+    // E: Parallelism patterns (23 rules)
     (
         KernelCategory::Parallelism,
         "E: parallelism",
@@ -1776,6 +1800,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "multi-head-out-proj-consumes-head-concat",
             "occupancy-grid-cap-refuted-uncapped-default",
             "plane-specialization-load-compute-role-split",
+            "grid-collapsing-mega-kernel-occupancy-trap",
         ],
     ),
     // F: Flash-attention tiling (10 rules)

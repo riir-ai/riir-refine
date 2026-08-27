@@ -62,8 +62,8 @@
         // Batch 60 (1): measured-GOAT distillation (riir-train Issue 460 / katgpt-rs e2853fbf — pre-gate-recovery-by-division-cancels-algebraically; the MLA backward's saturated output-gate 0/0 NaN, fixed by algebraic cancellation; Bench 475: 6/10 -> 10/10 usable backward passes).
         // Batch 63 (3): the CubeCL twin unlock — same-input-gemv-weight-concat-at-upload, deferred-residual-fused-into-next-layer-norm, reset-state-in-place-fill-never-realloc (ternary_deltanet_gpu_forward.rs, Plan 009 / Research 071).
         // Batch 70 (3): the arxiv barrier-free-sync paper distill (arXiv:2608.13757, Plan 020 / Research 080) — barrier-free-per-dependency-wait-from-loop-counters, shared-counter-decode-producer-progress, masked-branchless-wait-collapse.
-        // Total: 209. // (historical batch-30 snapshot; current 370)
-        assert_eq!(corpus.entries.len(), 384, "kernel batches through Batch 79 should have 384 rules");
+        // Total: 209. // (historical batch-30 snapshot; current 387)
+        assert_eq!(corpus.entries.len(), 387, "kernel batches through Batch 80 should have 387 rules");
     }
 
     #[test]
@@ -3888,7 +3888,7 @@
 
     #[test]
     fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-        // Every rule_id in the 379-rule corpus must appear in exactly one category.
+        // Every rule_id in the 387-rule corpus must appear in exactly one category.
         let corpus = build_kernel_seed_corpus();
         let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
         let mut categorized: Vec<&str> = Vec::new();
@@ -3919,13 +3919,13 @@
 
     #[test]
     fn kernel_categories_counts_match_plan_003_table() {
-        // Pin per-category rule counts to the Plan 003 table (updated for Batch 79).
+        // Pin per-category rule counts to the Plan 003 table (updated for Batch 80).
         let expected = [
             (KernelCategory::MemoryAccess, 91),
             (KernelCategory::Compute, 53),
-            (KernelCategory::Fusion, 35),
-            (KernelCategory::Dispatch, 78),
-            (KernelCategory::Parallelism, 22),
+            (KernelCategory::Fusion, 36),
+            (KernelCategory::Dispatch, 79),
+            (KernelCategory::Parallelism, 23),
             (KernelCategory::FlashAttnTiling, 10),
             (KernelCategory::LinearAttnRecurrence, 21),
             (KernelCategory::MoeDispatchBackward, 14),
@@ -3944,9 +3944,9 @@
                 "Plan 003: category {cat:?} has {} rules, expected {count}",
                 entry.2.len());
         }
-        // Sum must equal 384.
+        // Sum must equal 387.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 384, "Plan 003: category totals must sum to 384");
+        assert_eq!(total, 387, "Plan 003: category totals must sum to 387");
     }
 
     #[test]
@@ -3956,7 +3956,7 @@
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 384, "Plan 003: grouped corpus has {total} rules, expected 384");
+        assert_eq!(total, 387, "Plan 003: grouped corpus has {total} rules, expected 387");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");
@@ -4269,6 +4269,103 @@
             assert!(ref_verdict.parses, "batch-79 ref_shape for '{id}' must parse");
             let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
             assert!(opt_verdict.parses, "batch-79 opt_pattern for '{id}' must parse");
+        }
+    }
+
+    #[test]
+    fn batch80_rules_present() {
+        // Batch 80 (WebGPU dispatch-overhead characterization distill --
+        // arXiv:2604.02344v1 / Research 094 / Plan 038).
+        let corpus = build_kernel_seed_corpus();
+        let ids = [
+            "dispatch-cost-sequential-measurement-not-single-op",
+            "fusion-payback-gated-on-per-dispatch-overhead",
+            "grid-collapsing-mega-kernel-occupancy-trap",
+        ];
+        for id in ids {
+            assert!(
+                corpus.entries.iter().any(|e| e.rule_id == id),
+                "batch-80 rule '{id}' missing from corpus"
+            );
+        }
+    }
+
+    #[test]
+    fn batch80_concepts_covered() {
+        // Distinctness + mandated phrases must survive in the concept text
+        // (case-sensitive contains -- the B51 lesson, 6 strikes).
+        let corpus = build_kernel_seed_corpus();
+        let checks: &[(&str, &[&str])] = &[
+            (
+                "dispatch-cost-sequential-measurement-not-single-op",
+                &[
+                    "10-60x overestimate",
+                    "sync ONCE at the tail",
+                    "submit DOMINATES",
+                    "577 submits/token",
+                    "chain-dispatches-single-sync-point",
+                    "first-readback-pays-queue-drain",
+                ],
+            ),
+            (
+                "fusion-payback-gated-on-per-dispatch-overhead",
+                &[
+                    "payback = dispatches_saved x per_dispatch_overhead",
+                    "0.92x on CUDA (7.4 us/dispatch -- too little to save)",
+                    "B* >= 7 even for the",
+                    "single-op benchmark overestimates 10-60x",
+                    "kernelize-host-chain-after-sync-batching-floor",
+                    "merge-dispatches-into-single-compute-pass",
+                ],
+            ),
+            (
+                "grid-collapsing-mega-kernel-occupancy-trap",
+                &[
+                    "workgroupBarrier is intra-workgroup only",
+                    "~17,000 sequential MADs per thread",
+                    "7 dispatches -> 3 measured 2.01x on Metal",
+                    "honestly INCONCLUSIVE (p>0.38 both backends)",
+                    "epilogue-must-be-workgroup-local",
+                    "fold-query-tokens-for-occupancy",
+                ],
+            ),
+        ];
+        for &(id, needles) in checks {
+            let e = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-80 rule '{id}' missing"));
+            for needle in needles {
+                assert!(
+                    e.gpu_concept.contains(needle),
+                    "batch-80 concept for '{id}' missing phrase '{needle}'"
+                );
+            }
+        }
+    }
+
+    #[test]
+    #[cfg(not(feature = "kernel_verify"))]
+    fn batch80_pseudocode_parses() {
+        // G1 for Batch 80: syn-parse gate.
+        use crate::domain::HealDomain;
+        let corpus = build_kernel_seed_corpus();
+        let ids = [
+            "dispatch-cost-sequential-measurement-not-single-op",
+            "fusion-payback-gated-on-per-dispatch-overhead",
+            "grid-collapsing-mega-kernel-occupancy-trap",
+        ];
+        for id in ids {
+            let entry = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-80 rule '{id}' missing"));
+            let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+            assert!(ref_verdict.parses, "batch-80 ref_shape for '{id}' must parse");
+            let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+            assert!(opt_verdict.parses, "batch-80 opt_pattern for '{id}' must parse");
         }
     }
 
