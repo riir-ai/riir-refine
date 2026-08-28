@@ -5,10 +5,17 @@
 #      GraphQL for the trailing hour → computes est cost.
 #   2. Pulls the day's Workers-AI neurons (the KAT mint anchor input per
 #      Proposal 005 §The economics loop / §The daily trainer window).
-#   3. Writes append-only rows to KV: hour:<YYYYMMDDHH>, day:<YYYYMMDD>
-#      (aggregate), latest, mint_anchor:<date>.
+#   3. Writes rows to KV: hour:<YYYYMMDDHH>, day:<YYYYMMDD> (aggregate),
+#      latest, alert:<date>:<threshold>. NOT append-only — hour rows are
+#      idempotently rewritten, and the day aggregate is recomputed from them
+#      rather than accumulated (Issue 045 T7 CORRECT-1).
+#      (This block used to claim a `mint_anchor:<date>` key. No such key is
+#      ever written — the anchor lives INSIDE the hour row as `mint_anchor`.
+#      Corrected 2026-08-29; the T6 mint swap-in would have gone looking for
+#      a key that does not exist.)
 #   4. GET /latest, /hours?n=, /days?n=, /status expose the rows for the
-#      ops dashboard / future live mode.
+#      ops dashboard / future live mode. POST /backfill?days=&end= repairs
+#      missing hour rows from GraphQL (Issue 045 T9, token-gated write).
 #
 # Auth: set the CF_API_TOKEN secret once (dedicated API token, scope
 #   Account → Analytics : Read):
@@ -41,6 +48,17 @@
 name = "riir-kat-housekeeping"
 main = "src/worker.js"
 compatibility_date = "2026-08-26"
+
+# Every documented failure mode of this worker is SILENCE — the T8 key
+# collision ran two days behind green checks, and the collectors degrade to an
+# `ok:false` row nobody reads. Without this block the cron's own throws are
+# invisible: the docs are explicit that you must add the observability setting
+# for a Worker to write to Workers Logs. Cost is nil at this volume (24 cron
+# runs/day against 20M logs/month included on Paid); `head_sampling_rate = 1`
+# because sampling a 24-events-per-day signal defeats the point.
+[observability]
+enabled = true
+head_sampling_rate = 1
 
 [triggers]
 crons = ["0 * * * *"]

@@ -171,6 +171,42 @@ function dayKey(d) { return utc(d).slice(0, 8); }          // YYYYMMDD
 // correct rows — a double count layered on top of the undercount.
 const HOUR_KEY_RE = /^hour:\d{10}$/;
 
+// Does this hour row carry a REAL collection, or is it a placeholder?
+//
+// `ok` is load-bearing, not decorative. Two kinds of row have a `containers`
+// object and no data behind it: the heartbeat row written while CF_API_TOKEN
+// is unset (no `containers` at all), and the all-collectors-failed row, which
+// DOES get `containers: {est_usd: 0, apps: {}}` because the collectors return
+// empty maps rather than throwing. Treating that false zero as data would
+// wedge the hour shut forever. A row that says ok:false is telling us it did
+// not collect; take it at its word.
+function hasCollectedData(row) {
+  return !!(row && row.ok === true && row.containers);
+}
+
+// Marker written alongside every hour row so the backfill can decide
+// protect-vs-replace straight from `list()`, which returns per-key metadata —
+// the KV docs recommend exactly this over a list()+get() pair. Legacy rows
+// (written before this deploy) carry no metadata; the backfill falls back to
+// a `get` for those and only those.
+// Two bits, because the backfill asks two different questions:
+//   d — does this row carry a real collection? (protect it)
+//   m — does it carry anything worth MERGING FORWARD if it is replaced?
+//       A failed-collect row can hold a real neuron count, because the AI
+//       collector may have succeeded while the container ones failed.
+// Without `m` the metadata shortcut would be self-defeating: skipping the
+// `get` also discards the body we would need to merge. With it, the common
+// case — a pure heartbeat, which is 100% of the current archive — still
+// costs zero gets, and only the rare partial row is fetched.
+function hourMeta(row) {
+  return {
+    metadata: {
+      d: hasCollectedData(row) ? 1 : 0,
+      m: row && (row.ai || row.mint_anchor) ? 1 : 0,
+    },
+  };
+}
+
 function costUsd(env, memByteS, diskByteS, cpuS) {
   const mem = (memByteS || 0) / 1073741824 * parseFloat(env.MEM_USD_PER_GIB_S);
   const disk = (diskByteS || 0) / 1e9 * parseFloat(env.DISK_USD_PER_GB_S);
@@ -326,7 +362,7 @@ async function runHousekeeping(env) {
     row.notes.push("CF_API_TOKEN secret not set — heartbeat only");
     row.mint = "pending-worker-shell";
     row.mint_note = "phase-1 sync surface landed 2026-08-27; live mint awaits the deferred Worker/DO ledger shell (proposal-005 phase-2 defer / phase-3 owner gate)";
-    await env.HOUSEKEEPING_KV.put(`hour:${hk}`, JSON.stringify(row));
+    await env.HOUSEKEEPING_KV.put(`hour:${hk}`, JSON.stringify(row), hourMeta(row));
     await env.HOUSEKEEPING_KV.put("latest", JSON.stringify(row));
     return row;
   }
@@ -452,7 +488,7 @@ async function runHousekeeping(env) {
     row.notes.push(`collect failed: ${e.message}`);
   }
 
-  await env.HOUSEKEEPING_KV.put(`hour:${hk}`, JSON.stringify(row));
+  await env.HOUSEKEEPING_KV.put(`hour:${hk}`, JSON.stringify(row), hourMeta(row));
   await env.HOUSEKEEPING_KV.put("latest", JSON.stringify(row));
 
   // Day aggregate — one definition, shared with the backfill (see
@@ -524,10 +560,17 @@ async function recomputeDay(env, dk, seed) {
 //
 // Invariants, in order of how much they would cost to get wrong:
 //
-//  * NEVER overwrite an existing well-formed `hour:YYYYMMDDHH` row. A row the
-//    live cron wrote carries `ai` + `mint_anchor`, neither of which is
-//    per-hour reconstructible from billing; clobbering one with a
-//    billing-only row would DESTROY information in the name of repairing it.
+//  * Never overwrite an hour row that CARRIES A REAL COLLECTION. Such a row
+//    has `ai` + `mint_anchor`, neither of which is per-hour reconstructible
+//    from billing, so clobbering it would destroy information in the name of
+//    repairing it. But "exists" is NOT the same test as "carries data", and
+//    getting that wrong was a live bug (found 2026-08-29 by reading prod:
+//    `/status` says `token_set:false`, so EVERY archived row is a heartbeat).
+//    An exists-based rule would have declared the whole archive protected and
+//    silently repaired nothing — the placeholder rows written between this
+//    deploy and T4 would each wedge their hour shut permanently. The rule is
+//    `hasCollectedData()`; a heartbeat or failed-collect row is replaceable,
+//    and anything worth keeping on it is merged forward.
 //  * Idempotent. Existence is decided by ONE KV `list` per day rather than 24
 //    `get`s — 24x cheaper against both the subrequest cap and the 1,000/day
 //    list tier that T8's SEC/PERF pass was already defending. A second run
@@ -577,7 +620,31 @@ async function backfillRange(env, endDay, days) {
 
     const listed = await env.HOUSEKEEPING_KV.list({ prefix: `hour:${dk}` });
     spent += 1;
-    const present = new Set(listed.keys.map((k) => k.name).filter((n) => HOUR_KEY_RE.test(n)));
+    // Partition the existing rows into protected (real collection) and
+    // replaceable (heartbeat / failed collect). The marker rides in `list()`
+    // metadata, so this costs nothing for any row written by this build;
+    // only pre-marker legacy rows need a `get` to classify.
+    const existing = listed.keys.filter((k) => HOUR_KEY_RE.test(k.name));
+    // Fetch a body only when the marker cannot answer on its own: an unmarked
+    // legacy row (classify it), or a marked placeholder that has something to
+    // merge forward. A pure heartbeat needs neither.
+    const toFetch = existing.filter((k) =>
+      !k.metadata || (!k.metadata.d && k.metadata.m));
+    const probed = await mapLimit(toFetch, KV_CONCURRENCY,
+      (k) => env.HOUSEKEEPING_KV.get(k.name));
+    spent += toFetch.length;
+    const bodies = new Map(toFetch.map((k, i) => [k.name, probed[i]]));
+    const protectedRows = new Set();
+    const replaceable = new Map();
+    for (const k of existing) {
+      let row = null;
+      if (bodies.has(k.name)) {
+        try { row = JSON.parse(bodies.get(k.name) || "null"); } catch (_) { /* malformed */ }
+      }
+      const isData = k.metadata ? !!k.metadata.d : hasCollectedData(row);
+      if (isData) protectedRows.add(k.name);
+      else replaceable.set(k.name, row);
+    }
 
     // allSettled, matching the cron: a metrics outage must not cost us the
     // billing rows, which are the ones the cost number is built from.
@@ -601,7 +668,7 @@ async function backfillRange(env, endDay, days) {
       // clobber a live-cron row in an adjacent day.
       if (!hk.startsWith(dk)) continue;
       const name = `hour:${hk}`;
-      if (present.has(name)) { skipped += 1; continue; }
+      if (protectedRows.has(name)) { skipped += 1; continue; }
       const u = usage.get(hk) || {};
       const a = awake.get(hk) || {};
       let cost = 0;
@@ -612,6 +679,11 @@ async function backfillRange(env, endDay, days) {
         cost += c;
         apps[app] = { awake_s: Math.round(a[app] || 0), est_usd: +c.toFixed(6) };
       }
+      // Replacing a placeholder must not lose whatever it did carry. A
+      // heartbeat has no `ai`, but a failed-collect row can hold a real
+      // neuron count (that collector may have succeeded while the container
+      // ones failed) — so merge forward rather than overwrite wholesale.
+      const prior = replaceable.get(name) || null;
       const row = {
         kind: "housekeeping",
         source: "backfill",
@@ -620,10 +692,18 @@ async function backfillRange(env, endDay, days) {
         ok: true,
         notes: ["backfilled from GraphQL billing rows; ai + mint_anchor are not per-hour reconstructible"],
         containers: { est_usd: +cost.toFixed(6), apps },
-        ai: null,
-        mint: "n/a-backfill",
+        ai: (prior && prior.ai) || null,
+        mint: (prior && prior.mint) || "n/a-backfill",
       };
-      await env.HOUSEKEEPING_KV.put(name, JSON.stringify(row));
+      if (prior && prior.mint_anchor) row.mint_anchor = prior.mint_anchor;
+      // Provenance is recorded from the KEY's presence, not the body — a pure
+      // heartbeat is deliberately never fetched, so `prior` is null for it.
+      if (replaceable.has(name)) {
+        row.replaced = prior
+          ? { ts: prior.ts, ok: prior.ok, notes: prior.notes }
+          : { placeholder: true };
+      }
+      await env.HOUSEKEEPING_KV.put(name, JSON.stringify(row), hourMeta(row));
       spent += 1;
       seed[name] = row.containers.est_usd;
       wrote += 1;
@@ -636,7 +716,7 @@ async function backfillRange(env, endDay, days) {
       } catch (e) {
         entry.aggregate_error = String((e && e.message) || e);
       }
-      spent += 2 + present.size;
+      spent += 2 + existing.length;
     }
     report.per_day.push(entry);
     report.written += wrote;
@@ -652,7 +732,15 @@ async function backfillRange(env, endDay, days) {
 
 export default {
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(runHousekeeping(env));
+    // runHousekeeping's internal try covers COLLECTION; the KV writes after it
+    // are outside that guard, so a KV outage rejected straight into
+    // waitUntil() and the run vanished — no row, no log, and (with
+    // observability unset in wrangler.toml) nothing in the dashboard either.
+    // For a worker whose every documented failure mode is silence, an
+    // unobserved throw is the worst possible shape.
+    ctx.waitUntil(runHousekeeping(env).catch((e) => {
+      console.error("housekeeping run failed", (e && e.stack) || String(e));
+    }));
   },
   async fetch(request, env, ctx) {
     const url = new URL(request.url);

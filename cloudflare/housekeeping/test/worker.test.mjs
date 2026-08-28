@@ -18,18 +18,33 @@ import worker from "../src/worker.js";
 
 // ---- stubs ---------------------------------------------------------------
 
+// The real KV returns per-key metadata from list(), and the backfill relies on
+// it to classify rows without a get(). A stub that dropped metadata would make
+// the fallback path the only path under test, so it is modelled here.
+// `seed` entries may be a bare string (a legacy, metadata-less row) or
+// `{ value, metadata }`.
 function kvStub(seed = {}) {
-  const store = new Map(Object.entries(seed));
+  const store = new Map();
+  const meta = new Map();
+  for (const [k, v] of Object.entries(seed)) {
+    if (v && typeof v === "object") { store.set(k, v.value); meta.set(k, v.metadata); }
+    else store.set(k, v);
+  }
   const ops = { get: 0, put: 0, list: 0 };
   return {
     store,
+    meta,
     ops,
     async get(k) { ops.get++; return store.has(k) ? store.get(k) : null; },
-    async put(k, v) { ops.put++; store.set(k, v); },
+    async put(k, v, opts) {
+      ops.put++;
+      store.set(k, v);
+      if (opts && opts.metadata) meta.set(k, opts.metadata); else meta.delete(k);
+    },
     async list({ prefix = "", limit } = {}) {
       ops.list++;
       const keys = [...store.keys()].filter((k) => k.startsWith(prefix)).sort()
-        .map((name) => ({ name }));
+        .map((name) => (meta.has(name) ? { name, metadata: meta.get(name) } : { name }));
       return { keys: limit ? keys.slice(0, limit) : keys };
     },
   };
@@ -511,4 +526,122 @@ test("a long backfill stops on a wall-clock budget with a resumable cursor", asy
   for (const [d, n] of Object.entries(byDay)) {
     assert.equal(n, 24, `day ${d} was left half-written: ${n} rows`);
   }
+});
+
+// ---- T9c: protect DATA, not mere existence -------------------------------
+//
+// Found by reading prod, not the code: `/status` reports `token_set:false`,
+// so every archived row is a heartbeat. An exists-based protect rule would
+// have declared the entire archive untouchable and repaired nothing.
+
+test("backfill replaces heartbeat rows — existence is not data", async () => {
+  const kv = kvStub();
+  // Reproduce the live shape: cron running, CF_API_TOKEN unset.
+  const noToken = { ...env(kv), CF_API_TOKEN: undefined };
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = fetchStub();
+  try {
+    for (let h = 1; h <= 4; h++) {
+      await atUtc(`2026-08-27T0${h}:00:06.549Z`, async () => {
+        const c = ctxStub();
+        await worker.scheduled({}, noToken, c);
+        await c.drain();
+      });
+    }
+  } finally { globalThis.fetch = realFetch; }
+  const beats = [...kv.store.keys()].filter((k) => /^hour:\d{10}$/.test(k));
+  assert.equal(beats.length, 4, "precondition: heartbeat rows exist");
+  assert.equal(JSON.parse(kv.store.get(beats[0])).ok, false);
+  for (const k of beats) assert.equal(kv.meta.get(k).d, 0, "heartbeat must be marked d:0");
+
+  const e = env(kv, { READ_TOKEN: "s3cret" });
+  const body = await (await postBackfill(e, "?days=1&end=2026-08-27", { token: "s3cret" })).json();
+  assert.equal(body.skipped, 0, "a heartbeat must never be treated as protected");
+  assert.equal(body.written, 24);
+  const repaired = JSON.parse(kv.store.get("hour:2026082701"));
+  assert.equal(repaired.ok, true);
+  assert.ok(repaired.containers.est_usd > 0, "the heartbeat hour now carries real cost");
+  assert.ok(repaired.replaced, "the placeholder it displaced is recorded");
+  assert.equal(JSON.parse(kv.store.get("day:20260827")).hours, 24);
+});
+
+test("backfill still protects a row that really collected", async () => {
+  const kv = kvStub();
+  await runHour(kv, "2026-08-27T13:00:06.549Z");          // token present => real collect
+  const key = "hour:2026082712";
+  assert.equal(JSON.parse(kv.store.get(key)).ok, true);
+  assert.equal(kv.meta.get(key).d, 1, "a real collection must be marked d:1");
+  const before = kv.store.get(key);
+
+  const e = env(kv, { READ_TOKEN: "s3cret" });
+  const body = await (await postBackfill(e, "?days=1&end=2026-08-27", { token: "s3cret" })).json();
+  assert.equal(body.skipped, 1);
+  assert.equal(kv.store.get(key), before, "a real collection was clobbered");
+});
+
+test("an all-collectors-failed row is replaceable despite having containers", async () => {
+  // It gets `containers: {est_usd: 0, apps: {}}` because the collectors return
+  // empty maps rather than throwing. Treating that false zero as data would
+  // wedge the hour shut forever, so `ok` is the discriminator, not `containers`.
+  const kv = kvStub({
+    "hour:2026082705": JSON.stringify({
+      kind: "housekeeping", ok: false, ts: "2026-08-27T06:00:00Z",
+      notes: ["usage failed: graphql 500"],
+      containers: { est_usd: 0, apps: {} },
+      ai: { neurons_today: 4242 },        // this collector DID succeed
+    }),
+  });
+  const e = env(kv, { READ_TOKEN: "s3cret" });
+  const body = await (await postBackfill(e, "?days=1&end=2026-08-27", { token: "s3cret" })).json();
+  assert.equal(body.skipped, 0);
+  const row = JSON.parse(kv.store.get("hour:2026082705"));
+  assert.ok(row.containers.est_usd > 0, "the false zero must be replaced");
+  // Merge-forward: the neuron count that DID collect must survive the repair.
+  assert.equal(row.ai.neurons_today, 4242, "a successful collector's data was lost");
+});
+
+test("classifying marked rows costs no extra gets", async () => {
+  const kv = kvStub();
+  const e = env(kv, { READ_TOKEN: "s3cret" });
+  await postBackfill(e, "?days=1&end=2026-08-27", { token: "s3cret" });   // all marked d:1
+  const before = { ...kv.ops };
+  const body = await (await postBackfill(e, "?days=1&end=2026-08-27", { token: "s3cret" })).json();
+  assert.equal(body.skipped, 24);
+  assert.equal(kv.ops.get, before.get, "metadata in list() must avoid the get fan-out");
+  assert.equal(kv.ops.put, before.put);
+});
+
+test("a legacy row with no metadata is classified by a get, not assumed", async () => {
+  // Rows written before this deploy carry no marker. Assuming either way is
+  // wrong: assume-data and the repair silently no-ops; assume-placeholder and
+  // a real collection gets clobbered.
+  const kv = kvStub({
+    "hour:2026082703": JSON.stringify({ ok: true, containers: { est_usd: 7, apps: {} } }),
+    "hour:2026082704": JSON.stringify({ ok: false, notes: ["heartbeat only"] }),
+  });
+  const e = env(kv, { READ_TOKEN: "s3cret" });
+  const body = await (await postBackfill(e, "?days=1&end=2026-08-27", { token: "s3cret" })).json();
+  assert.equal(body.skipped, 1, "the legacy real collection must be protected");
+  assert.equal(JSON.parse(kv.store.get("hour:2026082703")).containers.est_usd, 7);
+  assert.equal(JSON.parse(kv.store.get("hour:2026082704")).ok, true, "legacy heartbeat repaired");
+});
+
+test("a throwing housekeeping run is logged, not swallowed", async () => {
+  const kv = kvStub();
+  kv.put = async () => { throw new Error("kv unavailable"); };
+  const errs = [];
+  const realErr = console.error;
+  console.error = (...a) => errs.push(a.join(" "));
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = fetchStub();
+  try {
+    await atUtc("2026-08-28T12:00:06.549Z", async () => {
+      const c = ctxStub();
+      await worker.scheduled({}, env(kv), c);
+      await c.drain();                    // must not reject
+    });
+  } finally { console.error = realErr; globalThis.fetch = realFetch; }
+  assert.equal(errs.length, 1, "the failure must reach the log");
+  assert.match(errs[0], /housekeeping run failed/);
+  assert.match(errs[0], /kv unavailable/);
 });

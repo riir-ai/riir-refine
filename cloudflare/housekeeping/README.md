@@ -288,11 +288,33 @@ Response: `{written, skipped, truncated, truncated_by, next_end, subrequests_spe
 
 Four invariants, in the order they would cost to get wrong:
 
-- **It never overwrites an existing well-formed `hour:YYYYMMDDHH` row.** A row
-  the live cron wrote carries `ai` + `mint_anchor`, neither of which billing
-  can reconstruct per-hour. Clobbering one would destroy information in the
-  name of repairing it. Backfilled rows are tagged `source:"backfill"`,
-  `ai:null`, `mint:"n/a-backfill"` so they are never mistaken for cron rows.
+- **It protects rows that carry a real collection — not rows that merely
+  exist.** A genuine cron row has `ai` + `mint_anchor`, neither of which
+  billing can reconstruct per-hour, so clobbering one would destroy
+  information in the name of repairing it. But *existence* is the wrong test,
+  and getting that wrong was a live bug (§T9c): production reports
+  `token_set:false`, so **every archived row today is a heartbeat**. An
+  exists-based rule would have declared the whole archive protected and
+  repaired nothing — and each placeholder written between the deploy and T4
+  would have wedged its hour shut permanently. The discriminator is
+  `row.ok === true && row.containers`; `ok` is load-bearing, because an
+  all-collectors-failed row *does* get `containers:{est_usd:0,apps:{}}` (the
+  collectors return empty maps rather than throwing) and that false zero must
+  not read as data. Anything worth keeping on a replaced placeholder — a
+  neuron count whose collector succeeded while the container ones failed — is
+  merged forward, and the displaced row is recorded under `replaced`.
+  Backfilled rows are tagged `source:"backfill"` so they are never mistaken
+  for cron rows.
+
+  The protect/replace decision is made from **`list()` metadata**, which the
+  KV docs recommend over a `list()`+`get()` pair. Each hour row is written
+  with a two-bit marker — `d` (carries a real collection) and `m` (carries
+  something worth merging forward if replaced). Both bits are needed: without
+  `m` the shortcut is self-defeating, since skipping the `get` also discards
+  the body the merge needs. The common case — a pure heartbeat — costs zero
+  gets. Rows written before this deploy carry no marker and are classified by
+  a `get`; assuming either way is wrong (assume-data and the repair silently
+  no-ops, assume-placeholder and a real collection is clobbered).
 - **Idempotent.** Existence is decided by **one KV `list` per day**, not 24
   `get`s. A repeat run writes nothing and costs 3 subrequests per day —
   pinned by a test that asserts zero puts *and* zero gets on the second pass.
@@ -324,7 +346,7 @@ Two things it deliberately does **not** do:
 ## Tests
 
 ```sh
-node --test cloudflare/housekeeping/test/*.test.mjs   # 22 tests, no deps
+node --test cloudflare/housekeeping/test/*.test.mjs   # 28 tests, no deps
 ```
 
 A bare directory arg fails `MODULE_NOT_FOUND` — `node --test` wants file
@@ -336,11 +358,16 @@ every "live-verified" check passed: the endpoints returned `200` with
 plausible JSON throughout. Asserting on the **shape of the KV keys** is what
 catches that class; asserting on HTTP status is not. Verified as a real pin —
 8 of the original 12 fail against the pre-fix worker
-(`git show HEAD~1:.../worker.js`); §T9 added 7 more and §T9b 3 more, all
-three of which were confirmed to fail against the pre-§T9b worker — a test
+(`git show HEAD~1:.../worker.js`); §T9 added 7 more, §T9b 3, and §T9c 6 — the
+behavioural ones in each batch confirmed to fail against the worker they fix — a test
 that has never been seen red is not a pin.
 
-One of the three needed a purpose-built clock. `atUtcAdvancing()` advances
+The KV stub also models per-key `list()` metadata, because the backfill's
+protect/replace decision reads it. A stub that dropped metadata would have
+left the legacy `get` fallback as the only path under test — the same
+unfaithful-instrument problem as the missing `datetimeHour`.
+
+One of them needed a purpose-built clock. `atUtcAdvancing()` advances
 `Date.now()` on every read, because the fixed-instant `atUtc()` makes any
 elapsed-time guard measure zero and pass vacuously.
 
@@ -359,6 +386,19 @@ Worker, so it has nothing to gate).
 The static dashboard reads CF GraphQL directly at generation time
 (`scripts/gen_dashboard.py`); the Worker's KV is the running archive +
 future live-mode source (`/hours`, `/days`).
+
+## Observability (added 2026-08-29, §T9c)
+
+`wrangler.toml` now carries `[observability] enabled = true,
+head_sampling_rate = 1`. Every documented failure mode of this worker is
+**silence** — the §T8 key collision ran two days behind green checks, and the
+collectors degrade to an `ok:false` row nobody reads — so an unlogged throw is
+the worst possible shape. The cron's own error path was also unguarded:
+`runHousekeeping`'s internal `try` covers *collection*, but the KV writes
+after it are outside it, so a KV outage rejected straight into `waitUntil()`
+and the run vanished leaving no row and no log. `scheduled()` now catches and
+`console.error`s. Cost is nil at 24 cron runs/day against the 20M
+logs/month included on Paid.
 
 ## Pricing constants (pinned 2026-08-26)
 
