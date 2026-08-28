@@ -34,7 +34,14 @@
 //! # Honest scope (what v1 does NOT catch)
 //!
 //! - No base64/gzip layer-stripping: a secret encoded then embedded is only
-//!   caught if the encoded blob itself trips the entropy rule.
+//!   caught if the encoded blob itself trips the entropy rule. **That
+//!   conditional is weaker than it reads — measured 2026-08-28 ([Bench
+//!   052](../.benchmarks/052_t32_external_leak_posture.md)): over a
+//!   deterministic 4 000-key sweep of AWS-shaped credentials, hex-wrapping
+//!   is caught only **37.0%** of the time (entropy range 2.349..3.412
+//!   against the 3.000 hexish threshold), so the same technique succeeds or
+//!   fails on the VALUE and an attacker picks the value. Treat the encoded
+//!   classes as uncaught, not as probabilistically caught.
 //! - Entropy thresholds are tuned for code corpora: hex ≥ 32 chars @ ≥ 3.0
 //!   bits/char, base64 ≥ 32 chars @ ≥ 4.5. **Committed hash literals in
 //!   test fixtures (BLAKE3/GGUF digests) WILL trip the hex rule** — that is
@@ -58,6 +65,24 @@
 //! G4 (the standing CI gate): adversarial fixtures with planted AWS keys /
 //! private keys / connection strings assert zero secret bytes in any
 //! synced payload — `tests/kat_redact_g4.rs`.
+//!
+//! # The `external` origin is walled off by POLICY, not by this scanner
+//!
+//! [`RedactionGate::check`] denies on origin BEFORE scanning content, and
+//! `external` is absent from the shipped allowlist — so for user-submitted
+//! code the load-bearing control is that one policy line, and this
+//! scanner carries no evidence about the class. Proposal 005 T3.2 asked
+//! whether the scanner could take over that job if `external` were
+//! admitted; it was measured and the answer is **no, structurally**
+//! ([Issue 052](../.issues/052_t32_leak_posture_content_scan_insufficient.md),
+//! suite `tests/kat_redact_t32_external.rs`): for consumer code the
+//! confidential asset is the SPAN ITSELF, so a span can carry zero
+//! secrets, pass every rule, and still be exactly what must not egress
+//! (measured: PII / trade-secret spans are `Allow` with zero findings).
+//! No pattern set closes that, because there is no pattern for "this
+//! source belongs to someone else". **Do not admit `external` on the
+//! strength of a stronger pattern set** — that is the specific dangerous
+//! move Issue 052 names.
 
 use std::fmt;
 use std::io;
