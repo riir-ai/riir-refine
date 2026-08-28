@@ -220,12 +220,37 @@ if [ "${OPS_NIGHTLY_NO_COMMIT:-0}" != "1" ]; then
 fi
 
 # ── 4. deploy ──
+# This step is the POINT of the run: steps 1-3 refresh + commit the dashboard,
+# but until it is deployed production still serves the PREVIOUS build. It used
+# to be WARN-only and fall through to `=== done ===` with exit 0, so a failed
+# deploy left prod stale FOREVER with a success signal on every surface
+# launchd can see (observed 2026-08-29 00:02: deploy failed, run reported
+# done, exit 0). The failure is now recorded and reported in the exit status.
+#
+# The old WARN also GUESSED its own cause ("wrangler OAuth may need refresh"),
+# which was wrong on the observed failure -- wrangler had authenticated fine
+# via CLOUDFLARE_API_TOKEN and was refused for MISSING SCOPE. A hint that
+# names the wrong fix costs more than no hint, so quote wrangler verbatim.
+DEPLOY_FAILED=0
 if [ "${OPS_NIGHTLY_NO_DEPLOY:-0}" != "1" ]; then
-  if (cd "${REPO}/cloudflare/dashboard" && timeout 600 npx --yes "wrangler@${WRANGLER_VERSION}" deploy >> "${LOG}" 2>&1); then
+  _dout="$(mktemp)"
+  if (cd "${REPO}/cloudflare/dashboard" && timeout 600 npx --yes "wrangler@${WRANGLER_VERSION}" deploy >"${_dout}" 2>&1); then
+    cat "${_dout}" >> "${LOG}"
     log "deployed"
   else
-    log "WARN deploy failed (wrangler OAuth may need refresh: npx wrangler login)"
+    cat "${_dout}" >> "${LOG}"
+    DEPLOY_FAILED=1
+    # Verbatim, from wrangler -- never a guess. `head -3` keeps the log line
+    # bounded; the full output is already appended above.
+    # `|| true` is LOAD-BEARING: `set -o pipefail` + a no-match grep returns 1,
+    # which under `set -e` aborted the run with NO log line at all -- silently
+    # worse than the WARN-only original, and on the LIKELIEST unattended
+    # failure (a bare `timeout 600` kill prints nothing this pattern matches).
+    _why="$(grep -iE 'error|denied|not authorized|permission|unauthorized|expired|missing' "${_dout}" \
+            | head -3 | tr '\n' ' ' | cut -c1-400 || true)"
+    log "WARN deploy FAILED — production still serves the PREVIOUS dashboard. wrangler said: ${_why:-<no error line matched; see full output above>}"
   fi
+  rm -f "${_dout}"
 fi
 
 # ── 4b. housekeeping-Worker regression gate (Issue 045 T8) ──
@@ -250,6 +275,17 @@ fi
 if [ "$(wc -l < "${LOG}")" -gt 5000 ]; then
   tail -n 2000 "${LOG}" > "${LOG}.tmp" && mv "${LOG}.tmp" "${LOG}"
   log "log truncated to last 2000 lines"
+fi
+
+# A failed deploy is a DEGRADED run, not a successful one: the artifacts are
+# refreshed and committed but production is stale. Exit non-zero so launchd's
+# log records a failure instead of the silent exit 0 that hid this for a day.
+# Distinct code (2) so a supervisor can tell it apart from the exit-1 aborts
+# above, which fail BEFORE anything is committed or deployed.
+# (No KeepAlive in com.riir.ops-nightly.plist, so this cannot respawn-loop.)
+if [ "${DEPLOY_FAILED:-0}" = "1" ]; then
+  log "=== done (DEGRADED: deploy failed — prod dashboard is STALE) ==="
+  exit 2
 fi
 
 log "=== done ==="
