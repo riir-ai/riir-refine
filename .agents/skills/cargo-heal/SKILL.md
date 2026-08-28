@@ -40,6 +40,14 @@ cargo heal --suggest <paths>                              # rule suggestions, no
 - After applying: validate in the TARGET repo — `cargo clippy --all-targets`
   + `cargo test` (assert COUNTS for gated suites, never bare exit codes).
 - Commit the heal separately: `fix: heal <repo> <scope>`.
+- **Invocation note (agents, the misattribution trap)**: run the healer with
+  your terminal tool's `cd` PARAMETER + absolute target paths. A
+  `cd <abs> && cargo-heal …` form INSIDE the command string dies with
+  `'.' is ambiguous in multi-root workspaces` — that error is the Zed
+  terminal wrapper's (it fires before the healer runs), NOT the healer's.
+  Cross-workspace targets are fine: `owning_package_root` walks up from
+  each target FILE, never the cwd (verified live 2026-08-28, Plan 550
+  session — same command, `cd &&` form fails / `cd`-param form heals).
 
 ## What it fixes vs refuses
 
