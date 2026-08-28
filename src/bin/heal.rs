@@ -3381,6 +3381,7 @@ fn run_overlay_with_promotion(
     Some((epoch, overlay))
 }
 
+#[cfg(feature = "kat_service")]
 #[allow(clippy::type_complexity)] // mirrors the lease module's DomainTriples shape one layer up
 fn lease_overlay_for_run(
     store: &riir_clippy::kat_lease_client::LeaseStore,

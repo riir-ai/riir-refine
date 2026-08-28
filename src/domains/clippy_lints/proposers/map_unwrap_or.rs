@@ -329,7 +329,11 @@ fn classify_receiver(recv: &str, params: Option<&std::collections::HashMap<Strin
     const OPTION_SHAPES: [&str; 7] = [
         ".get(", ".find(", ".first(", ".last(", ".pop()", ".next()", ".ok()",
     ];
-    const RESULT_SHAPES: [&str; 3] = ["env::var(", ".parse(", ".parse::<"];
+    // `.lock(`: std Mutex/RwLock `lock()` → `LockResult` (a Result alias) —
+    // evidence: 6 production sites in one heal sweep (riir-mmorpg-examples
+    // karma/party mirrors, 2026-08-28: `.lock().map(bool-f).unwrap_or(false)`
+    // left `map_or` residue that clippy's type info flagged as `is_ok_and`).
+    const RESULT_SHAPES: [&str; 4] = ["env::var(", ".parse(", ".parse::<", ".lock("];
     // A plain-path receiver typed by an enclosing fn parameter: the parse
     // tree's own type annotation is authoritative (`fn f(x: Option<u8>)`).
     if !recv.contains('.') && !recv.contains('(') {
@@ -340,20 +344,40 @@ fn classify_receiver(recv: &str, params: Option<&std::collections::HashMap<Strin
     }
     let mut best: Option<(usize, ReceiverKind)> = None;
     for shape in OPTION_SHAPES {
-        if let Some(pos) = recv.rfind(shape) {
+        if let Some(pos) = rfind_shape(recv, shape) {
             if best.is_none_or(|(p, _)| pos > p) {
                 best = Some((pos, ReceiverKind::OptionLike));
             }
         }
     }
     for shape in RESULT_SHAPES {
-        if let Some(pos) = recv.rfind(shape) {
+        if let Some(pos) = rfind_shape(recv, shape) {
             if best.is_none_or(|(p, _)| pos > p) {
                 best = Some((pos, ReceiverKind::ResultLike));
             }
         }
     }
     best.map_or(ReceiverKind::Unknown, |(_, kind)| kind)
+}
+
+/// `rfind` for a shape allowlist entry, ALSO matching the turbofish call
+/// form: `.get(` additionally matches `.get::<T>(` — the paren-suffixed
+/// shape with an explicit generic argument (`store.get::<ThinkTimer>(id)`,
+/// live residue in riir-mmorpg-examples projector.rs:287, 2026-08-28: the
+/// plain `.get(` text never matches `.get::<`, so the receiver fell to
+/// Unknown and the terminal `is_some_and` was withheld). The generic text
+/// itself is unmatchable from a fixed allowlist; the prefix + `::<` is the
+/// sound anchor. Positions stay comparable (the prefix starts where the
+/// plain shape starts), so last-match-wins ordering is unaffected.
+fn rfind_shape(recv: &str, shape: &str) -> Option<usize> {
+    if let Some(pos) = recv.rfind(shape) {
+        return Some(pos);
+    }
+    if let Some(prefix) = shape.strip_suffix('(') {
+        let turbofish = format!("{prefix}::<");
+        return recv.rfind(&turbofish);
+    }
+    None
 }
 
 /// True for `&[...]` / `&mut [...]` defaults (recursing through parens).
@@ -656,6 +680,49 @@ mod tests {
         assert!(
             out.contains("x.is_some_and(|v| v > 3)"),
             "is_some_and not produced: {out}"
+        );
+    }
+
+    // Turbofish receiver forms (2026-08-28, live residue in
+    // riir-mmorpg-examples projector.rs:287 + game/tests.rs:1582):
+    // `store.get::<ThinkTimer>(id)` — the plain `.get(` allowlist text never
+    // matches `.get::<`, so the receiver classified Unknown and the terminal
+    // was withheld, leaving `map_or` residue clippy flags as unnecessary.
+    #[test]
+    fn turbofish_get_receiver_becomes_is_some_and() {
+        let input = "struct T(u8); fn f(store: &mut dyn Store, id: u32) -> bool { store.get::<T>(id).map(|t| t.0 > 0).unwrap_or(false) }";
+        let out = propose_fix("map_unwrap_or", input).expect("matched");
+        assert!(
+            out.contains("store.get::<T>(id).is_some_and(|t| t.0 > 0)"),
+            "turbofish .get terminal not produced: {out}"
+        );
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    // `.lock(` receivers (std Mutex/RwLock → LockResult = Result): 6
+    // production sites in the same sweep (karma/party mirrors —
+    // `.lock().map(bool-f).unwrap_or(false)` → clippy's own `is_ok_and`).
+    #[test]
+    fn lock_receiver_becomes_is_ok_and() {
+        let input = "fn f(m: std::sync::Mutex<M>, local: u64) -> bool { m.lock().map(|g| g.is_partied(local)).unwrap_or(false) }";
+        let out = propose_fix("map_unwrap_or", input).expect("matched");
+        assert!(
+            out.contains("m.lock().is_ok_and(|g| g.is_partied(local))"),
+            "lock receiver terminal not produced: {out}"
+        );
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    // Precision pin: the turbofish variant must NOT flip a LATER known
+    // shape's last-match-wins — `.get::<T>(k).ok()` still classifies by the
+    // outermost `.ok()` (both OptionLike here; the pin guards ordering).
+    #[test]
+    fn turbofish_does_not_break_last_match_wins() {
+        let input = "fn f(x: R) -> bool { x.get::<u8>(1).ok().map(|v| v > 3).unwrap_or(false) }";
+        let out = propose_fix("map_unwrap_or", input).expect("matched");
+        assert!(
+            out.contains("x.get::<u8>(1).ok().is_some_and(|v| v > 3)"),
+            "ordering broken: {out}"
         );
     }
 
