@@ -132,6 +132,25 @@ without `kernel_heal`).
   [Bench 018](../../.benchmarks/018_plan005_latent_suggest_goat.md) and
   [`../03_drafter/latent_suggest.md`](../03_drafter/latent_suggest.md).
 
+## KAT subcommands (Proposal 005 / 007 / 008 — `kat_service`, submit legs `kat_transport`)
+
+Beyond healing, the same binary carries the KAT metered-service client
+(`cargo heal login|account|update|sync|claim|stake|unstake` — see `--help`;
+the accounting-only meter never mints, the server ledger is the authority).
+The newest member is the governance vote (Proposal 008 T2.4, G9-GOV):
+
+```sh
+cargo heal --features kat_transport vote --proposal <id> --yes   # or --no
+```
+
+Renders the proposal (weight + evidence) from a snapshot view, signs the
+vote with the LOGIN key, and submits service-first; when the service plane
+is not live the SIGNED intent queues locally and submits at the next sync.
+Weight = USDC tranches under the age rule (flash-voting excluded by
+construction); a vote decides membership only — it never moves funds.
+Record: [Bench 005](../../.benchmarks/) lives in riir-dapps (the G9-GOV
+e2e); this repo's half is the CLI + the signed-intent queue.
+
 ## Caveat
 
 No minimum-score threshold — and none is possible (measured, Bench 018
