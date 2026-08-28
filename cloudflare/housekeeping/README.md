@@ -25,7 +25,40 @@ cd cloudflare/housekeeping
 npx wrangler secret put CF_API_TOKEN   # dedicated token, Account → Analytics : Read
 ```
 
-The wrangler OAuth token rotates ~hourly and cannot be a Worker secret.
+### "Why not just use wrangler? It already authenticates."
+
+It does — **on the M3**. `scripts/gen_dashboard.py:_cf_token()` prefers
+`CF_API_TOKEN` but falls back to the wrangler OAuth file, so the generator and
+`scripts/ops_nightly.sh` need **zero secrets**. That fallback is the whole
+reason the nightly lives on the M3 rather than in CI.
+
+This **Worker** is different: it runs on Cloudflare's edge, on a cron, with no
+human present. It cannot read `~/Library/Preferences/.wrangler/config/default.toml`
+— the only credentials it can see are `env` vars and secrets.
+
+Pasting the OAuth token in fails for two independent reasons (both measured
+2026-08-28, not assumed):
+
+1. **It expires.** The config file carries an `expiration_time` ~1 h out plus a
+   `refresh_token`; the CLI refreshes silently, a Worker cannot. It would break
+   within the hour. A stale OAuth token is exactly what produced the
+   `graphql 400` heartbeat row found in KV during the T8 audit.
+2. **Blast radius — the stronger reason.** The OAuth token carries **29
+   scopes**, including `workers:write`, `workers_kv:write`,
+   `workers_scripts:write`, `secrets_store:write`, `containers:write`,
+   `cloudchamber:write`, `connectivity:admin`, `d1:write`, `ai:write`,
+   `email_sending:write`, `ssl_certs:write`. That is near-total account write
+   authority. This job needs exactly one permission: **Account → Analytics :
+   Read**. Storing the OAuth token here would let an unattended edge process
+   rewrite your Workers, KV, secrets store and containers in order to read
+   three analytics tables.
+
+**The zero-secret alternative, and why it is not taken:** `ops_nightly.sh`
+could collect on the M3 (wrangler already works there) and push rows in with
+`wrangler kv key put`. That trades 24/7 unattended hourly collection — the
+entire reason this Worker exists — for a laptop that must be awake, to save a
+one-time 30-second step. Not worth it.
+
 Until `CF_API_TOKEN` is set the cron still writes heartbeat rows (proves
 the schedule is alive).
 
