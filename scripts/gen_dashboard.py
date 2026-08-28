@@ -187,6 +187,25 @@ CORPUS_DOMAINS = [
     ("sec", "src/domains/sec/corpus.rs", "rule_id:"),
 ]
 
+# The RECORDED series (the bridge to the neuron-db Warm tier — Issue 050).
+# Appended idempotently at every regen with WORKING-TREE counts (today's
+# truth), committed beside the dashboard. Recorded rows win over git-mined
+# points for overlapping days; git-mining backfills everything before the
+# file existed and stays as the drift cross-check.
+CORPUS_HISTORY_JSONL = REPO_ROOT / ".benchmarks" / "corpus_history.jsonl"
+
+
+def _count_working_tree(path: str, needle: str) -> int:
+    p = REPO_ROOT / path
+    if p.suffix == ".rs":
+        return p.read_text().count(needle) if p.exists() else 0
+    n = 0
+    if p.is_dir():
+        for f in sorted(p.glob("*.rs")):
+            if f.name != "mod.rs":
+                n += f.read_text().count(needle)
+    return n
+
 
 def _count_in_rev(rev: str, path: str, needle: str) -> int:
     """Count `needle` occurrences in the corpus source(s) at `rev`."""
@@ -209,18 +228,23 @@ def _count_in_rev(rev: str, path: str, needle: str) -> int:
 
 
 def load_corpus_history(days: int = 35) -> list[dict]:
-    """One {ts, <domain>: n} point per commit that touched any corpus path,
-    oldest-first. Domains are counted fresh at every point, so a point carries
-    the complete state even when only one domain changed in that commit."""
+    """One {ts, <domain>: n} point per day, oldest-first.
+
+    Three layers, later wins for a given day:
+      1. git-mined (each rev that touched a corpus path — the backfill +
+         drift cross-check; covers the whole window with zero bookkeeping),
+      2. recorded rows from CORPUS_HISTORY_JSONL (durable beyond the window),
+      3. today's working-tree counts (upserted into the recorded file now).
+    """
     import subprocess
     from datetime import date, timedelta
     since = (date.today() - timedelta(days=days)).isoformat()
     paths = [p for _, p, _ in CORPUS_DOMAINS]
-    log = subprocess.run(
+    git_log = subprocess.run(
         ["git", "log", f"--since={since}", "--format=%H %cs", "--", *paths],
         capture_output=True, text=True, cwd=REPO_ROOT,
     )
-    revs = [tuple(l.split()) for l in log.stdout.splitlines() if l.strip()]
+    revs = [tuple(l.split()) for l in git_log.stdout.splitlines() if l.strip()]
     revs.reverse()  # oldest first
     # Collapse to one point per day (last commit of the day wins).
     by_day: dict[str, dict] = {}
@@ -229,6 +253,38 @@ def load_corpus_history(days: int = 35) -> list[dict]:
             name: _count_in_rev(sha, path, needle)
             for name, path, needle in CORPUS_DOMAINS
         }}
+
+    # Layer 2 — recorded rows (durable history; the KV-migration target).
+    recorded: dict[str, dict] = {}
+    if CORPUS_HISTORY_JSONL.exists():
+        for line in CORPUS_HISTORY_JSONL.read_text().splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                row = json.loads(line)
+                if isinstance(row.get("ts"), str):
+                    recorded[row["ts"]] = row
+            except json.JSONDecodeError:
+                pass
+
+    # Layer 3 — today's working-tree truth, upserted into the recorded file
+    # (idempotent: same counts → byte-identical file, no churn).
+    today = date.today().isoformat()
+    today_row = {"ts": today, **{
+        name: _count_working_tree(path, needle)
+        for name, path, needle in CORPUS_DOMAINS
+    }}
+    if recorded.get(today) != today_row:
+        recorded[today] = today_row
+        rows = [recorded[d] for d in sorted(recorded)]
+        CORPUS_HISTORY_JSONL.parent.mkdir(parents=True, exist_ok=True)
+        CORPUS_HISTORY_JSONL.write_text(
+            "".join(json.dumps(r, separators=(",", ":")) + "\n" for r in rows))
+        log(f"corpus stamp: recorded {today} "
+            + " ".join(f"{n}={today_row[n]}" for n, _, _ in CORPUS_DOMAINS))
+
+    by_day.update(recorded)  # recorded wins over mined for overlapping days
     return [by_day[d] for d in sorted(by_day)]
 
 
