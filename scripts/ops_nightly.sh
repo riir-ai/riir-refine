@@ -249,7 +249,16 @@ if [ "${OPS_NIGHTLY_NO_DEPLOY:-0}" != "1" ]; then
   # MANUAL run behave exactly like the launchd run, whose spartan environment
   # never had these set -- so a hand-run can no longer fail in a way the
   # scheduled run would not.
-  if (cd "${REPO}/cloudflare/dashboard" && env -u CLOUDFLARE_API_TOKEN -u CLOUDFLARE_API_KEY -u CLOUDFLARE_EMAIL timeout 600 npx --yes "wrangler@${WRANGLER_VERSION}" deploy >"${_dout}" 2>&1); then
+  #
+  # CF_API_TOKEN belongs in the same strip list (2026-08-29, Bench 057
+  # follow-up): wrangler honours it as a DEPRECATED ALIAS of
+  # CLOUDFLARE_API_TOKEN ("Using \"CF_API_TOKEN\" environment variable. This
+  # is deprecated."), and step 0b exports exactly that name from .env -- so
+  # under launchd the deploy was STILL shadowed by the analytics token after
+  # the CLOUDFLARE_API_TOKEN fix. Measured, not assumed: sourcing .env and
+  # running `env -u CLOUDFLARE_API_TOKEN wrangler whoami` reported the API
+  # token, not OAuth.
+  if (cd "${REPO}/cloudflare/dashboard" && env -u CLOUDFLARE_API_TOKEN -u CF_API_TOKEN -u CLOUDFLARE_API_KEY -u CLOUDFLARE_EMAIL timeout 600 npx --yes "wrangler@${WRANGLER_VERSION}" deploy >"${_dout}" 2>&1); then
     cat "${_dout}" >> "${LOG}"
     log "deployed"
   else
@@ -282,7 +291,7 @@ fi
 # posture-independent, so this gate survives closing the gate.
 if [ "${DEPLOY_FAILED}" = "0" ] && [ "${OPS_NIGHTLY_NO_DEPLOY:-0}" != "1" ]; then
   _newest="$(cd "${REPO}/cloudflare/dashboard" \
-    && env -u CLOUDFLARE_API_TOKEN -u CLOUDFLARE_API_KEY -u CLOUDFLARE_EMAIL \
+    && env -u CLOUDFLARE_API_TOKEN -u CF_API_TOKEN -u CLOUDFLARE_API_KEY -u CLOUDFLARE_EMAIL \
        timeout 120 npx --yes "wrangler@${WRANGLER_VERSION}" deployments list --json 2>/dev/null \
     | python3 -c 'import sys,json
 try:
