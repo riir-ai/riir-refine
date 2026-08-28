@@ -485,6 +485,18 @@ The bug was live from T3's deploy (2026-08-26) and survived three rounds of
 "live-verified" checks, because **every endpoint returned `200` with plausible
 JSON the entire time**. Nothing in an HTTP-status check can see this.
 
+**Blast radius, scoped honestly.** The *dashboard's* container charts are NOT
+affected: `scripts/gen_dashboard.py` queries CF GraphQL directly at generation
+time and never reads the Worker's KV (verified — the only network call the
+dashboard makes is `GET /latest`, `gen_dashboard.py:1535`, and `/latest` reads
+the single `latest` key, which no collision can corrupt). What the bug
+destroyed is the **Worker's own KV archive**: the `hour:` rows, the `day:`
+aggregates, `/hours`, `/days`, and — the part that would have mattered most —
+the future live mode and the mint-anchor history that Proposal 005's economics
+loop is meant to read. CF GraphQL retains ~14 days; this archive is supposed to
+be the durable record past that horizon, and for its first two days it kept
+3 rows a day instead of 24.
+
 Two related off-by-ones fixed in the same pass:
 
 - **Rows were filed under the run time, not the hour they describe.** The
