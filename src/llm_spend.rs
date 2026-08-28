@@ -70,7 +70,7 @@ pub const SPEND_CHANGELOG: &[(u32, &str)] = &[(1, "initial: per-UTC-day USD accu
 /// record the delta in [`PRICING_CHANGELOG`] in the same change. Independent
 /// of [`SPEND_VERSION`] on purpose: a rate change does not move the file
 /// shape, and a shape change does not reprice anything.
-pub const PRICING_VERSION: u32 = 1;
+pub const PRICING_VERSION: u32 = 2;
 
 /// Versioned deltas of the pricing table (the reprice audit trail).
 pub const PRICING_CHANGELOG: &[(u32, &str)] = &[
@@ -78,6 +78,13 @@ pub const PRICING_CHANGELOG: &[(u32, &str)] = &[
         1,
         "initial: @cf/qwen/qwen3.8-27b 0.45/3.20 (Proposal 005 pinned); \
          @cf/meta/llama-3.3-70b-instruct-fp8-fast 0.29/2.25 (Bench 049's recorded per-M basis)",
+    ),
+    (
+        2,
+        "owner pivot 2026-08-28: @cf/zai-org/glm-4.7-flash 0.06/0.40 added \
+         (CF list rates; exact fit of the committed glm arm rows' recorded \
+         per-M basis in llm_cost_ledger.jsonl — the Issue 043 glm session); \
+         DEFAULT_MODEL pivoted to it; qwen + llama rates unchanged",
     ),
 ];
 
@@ -94,6 +101,15 @@ pub struct ModelPrice {
 /// The pinned pricing table (PRICING_VERSION-stamped). **Unknown model ids
 /// are refused, never priced as $0** — an unpriced model is a hard error.
 pub const PRICING_TABLE: &[ModelPrice] = &[
+    // The DEFAULT_MODEL (owner pivot 2026-08-28). Rates = CF's list pricing
+    // for glm-4.7-flash; independently exact-fit by the committed glm arm
+    // rows' usd_est in llm_cost_ledger.jsonl (551/277, 2859/275, 319/4066
+    // token pairs all land on 0.06 in / 0.40 out per M to the digit).
+    ModelPrice {
+        id: "@cf/zai-org/glm-4.7-flash",
+        input_per_m: 0.06,
+        output_per_m: 0.4,
+    },
     // Proposal 005 TL;DR (2026-08-26 pivot): $0.450/$3.20 per M.
     ModelPrice {
         id: "@cf/qwen/qwen3.8-27b",
@@ -470,6 +486,9 @@ mod tests {
         let l = price_for("@cf/meta/llama-3.3-70b-instruct-fp8-fast").expect("llama priced");
         assert!((l.input_per_m - 0.29).abs() < 1e-9);
         assert!((l.output_per_m - 2.25).abs() < 1e-9);
+        let g = price_for("@cf/zai-org/glm-4.7-flash").expect("glm priced (the DEFAULT_MODEL)");
+        assert!((g.input_per_m - 0.06).abs() < 1e-9);
+        assert!((g.output_per_m - 0.4).abs() < 1e-9);
         assert!(price_for("@cf/nope/mystery").is_none(), "unknown model must be unpriced");
         // Version stamps are changelog-covered (the kat_meter discipline).
         assert!(SPEND_CHANGELOG.iter().any(|(v, _)| *v == SPEND_VERSION));

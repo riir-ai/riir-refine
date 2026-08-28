@@ -859,8 +859,18 @@ impl CfClient {
     pub fn model_id(&self) -> &str {
         &self.model
     }
-    /// Default model (the issue's arm A/B choice).
-    pub const DEFAULT_MODEL: &'static str = "@cf/qwen/qwen3.8-27b";
+    /// Default model — owner pivot 2026-08-28: llama-3.3-70b (Bench 049's
+    /// measured-winner arm) reads as too old; GLM-4.7-flash is the
+    /// designated replacement (its thinking-off mitigation is already
+    /// measured — Issue 043 T1 probes: 0.155 n vs 4.52 n with thinking on).
+    /// HONEST CAVEAT: Bench 049's fixer QUALITY verdict (strict-keep A 5/9 /
+    /// B 6/9 vs decline 0/9) was measured on llama — the GLM-arm re-gate is
+    /// the standing follow-up, and the 005 model-pivot discipline applies
+    /// (one-call smoke before any gated use; no CF creds in CI → the smoke
+    /// is an ops step). qwen3.8-27b stays priced + as the groq-side
+    /// free-tier id; it was measured UNUSABLE as the CF fixer (thinking
+    /// economics, Bench 049 §qwen).
+    pub const DEFAULT_MODEL: &'static str = "@cf/zai-org/glm-4.7-flash";
 
     /// Build from `CF_API_TOKEN` + `CF_ACCOUNT_ID` (+ optional model override).
     ///
