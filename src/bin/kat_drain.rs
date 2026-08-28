@@ -59,6 +59,10 @@
 //! # offline queue review — no network, CI-able
 //! cargo run --release --features "cf_workers_ai,groq_first" --bin kat_drain -- --dry-run
 //!
+//! # ladder + credential check — works on an EMPTY backlog, zero metered
+//! # cost (probes the FREE leg only; refuses to spend neurons)
+//! cargo run --release --features "cf_workers_ai,groq_first" --bin kat_drain -- --preflight
+//!
 //! # the daily window — needs AT LEAST ONE provider armed:
 //! #   GROQ_API_KEY                  → the free leg (~25-40 fix-pairs of
 //! #                                    free allocation at realistic sizes)
@@ -119,6 +123,7 @@ const CAP_REACHED_PREFIX: &str = "LLM daily cap reached";
 
 struct Args {
     dry_run: bool,
+    preflight: bool,
     limit: usize,
     max_new: usize,
     retry_cap: usize,
@@ -134,6 +139,7 @@ impl Args {
     fn parse() -> Args {
         let mut a = Args {
             dry_run: false,
+            preflight: false,
             limit: DEFAULT_LIMIT,
             max_new: DEFAULT_MAX_NEW,
             retry_cap: DEFAULT_RETRY_CAP,
@@ -152,6 +158,7 @@ impl Args {
             };
             match arg.as_str() {
                 "--dry-run" => a.dry_run = true,
+                "--preflight" => a.preflight = true,
                 "--limit" => a.limit = val().parse().expect("--limit must be an integer"),
                 "--max-new" => a.max_new = val().parse().expect("--max-new must be an integer"),
                 "--retry-cap" => {
@@ -283,8 +290,89 @@ struct Prepared {
     prompt_prepass: String,
 }
 
+/// `--preflight`: arm the ladder, prove the free leg SERVES, exit. Runs
+/// before the backlog is even opened, because the whole point is that it
+/// works on an EMPTY backlog — the daily window returns at "queue empty"
+/// before the router is constructed, so without this an operator has no way
+/// to validate credentials or the ladder on a quiet day. That gap is why
+/// Issue 051's T7 pre-flight existed only as an `#[ignore]`d unit test.
+///
+/// **Zero metered cost by construction.** The probe runs ONLY when the free
+/// leg is armed. A pure-CF preflight is deliberately refused: it would burn
+/// ~50-120 unledgered neurons (this fn writes no ledger row) while telling
+/// the operator nothing the daily window's own ledgered smoke does not
+/// already report. `.benchmarks/llm_cost_ledger.jsonl` is the usage record
+/// of last resort — no path may spend behind its back.
+///
+/// Exits: 0 armed-and-serving (or CF-only, reported without a call) · 3 no
+/// provider armed · 5 the free leg failed its probe.
+fn run_preflight(args: &Args) -> ! {
+    println!("═ kat_drain --preflight (ladder + credential check, zero metered cost) ═");
+    let mut llm = match LlmRouter::from_env(args.model.as_deref()) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("FATAL: {e}");
+            std::process::exit(3);
+        }
+    };
+    println!(
+        "  groq (free)      : {}",
+        match llm.groq_model() {
+            Some(m) => format!("ARMED   model {m}"),
+            None => "unarmed (GROQ_API_KEY unset)".to_string(),
+        }
+    );
+    println!(
+        "  cloudflare (paid): {}",
+        if llm.cf_armed() {
+            format!("ARMED   model {}", llm.model_id())
+        } else {
+            "unarmed (CF_API_TOKEN / CF_ACCOUNT_ID unset)".to_string()
+        }
+    );
+    println!("  billing basis    : {} (prices usd_avoided)", llm.model_id());
+    if let Some(cf) = llm.cf() {
+        println!("  cf spend         : {}", cf.spend_summary());
+    }
+    if !llm.groq_enabled() {
+        println!(
+            "\n  free leg unarmed → NO probe sent (a CF probe would burn unledgered \
+             neurons).\n  Export GROQ_API_KEY to exercise the ladder for free."
+        );
+        std::process::exit(0);
+    }
+    match llm.generate(SMOKE_PROMPT, SMOKE_MAX_TOKENS) {
+        Ok(g) => {
+            println!(
+                "\n  probe OK via {} · {}+{} tok · {:.1} neurons · {}ms",
+                g.provider.as_str(),
+                g.prompt_tokens,
+                g.completion_tokens,
+                g.neurons,
+                g.latency_ms,
+            );
+            if llm.cf_armed() {
+                println!("  verdict: ladder READY (free tier absorbs, CF catches overflow)");
+            } else {
+                println!(
+                    "  verdict: ladder READY (groq-ONLY — an exhausted free tier will end the \
+                     window cleanly; zero neurons can burn)"
+                );
+            }
+            std::process::exit(0);
+        }
+        Err(e) => {
+            eprintln!("\nFATAL: free-leg probe failed ({e})");
+            std::process::exit(EXIT_SMOKE_FAILED);
+        }
+    }
+}
+
 fn main() {
     let args = Args::parse();
+    if args.preflight {
+        run_preflight(&args);
+    }
     let t0 = std::time::Instant::now();
     let run_id = {
         let t = std::time::SystemTime::now()

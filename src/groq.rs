@@ -68,6 +68,18 @@ pub const DEFAULT_GROQ_MODEL: &str = "qwen/qwen3.8-27b";
 
 const GROQ_URL: &str = "https://api.groq.com/openai/v1/chat/completions";
 
+/// Overall per-call ceiling — a reasoning model at a 2k budget can legitimately
+/// take minutes.
+const CALL_TIMEOUT: Duration = Duration::from_mins(3);
+/// Connect-phase ceiling. Load-bearing SEPARATELY from [`CALL_TIMEOUT`]: a
+/// blackholed TCP connect (dropped packets, DNS-to-nowhere) is indistinguishable
+/// from a slow model under a single overall timeout, so it would stall for the
+/// full 3 min — × every span in the window. A `--limit 25` run could hang 75
+/// minutes on a dead network. Connecting is fast or broken; nothing in between.
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+/// Redaction placeholder for the token, should it ever surface in a payload.
+const TOKEN_REDACTED: &str = "<GROQ_API_KEY redacted>";
+
 /// One Groq generation.
 #[derive(Debug, Clone)]
 pub struct GroqGen {
@@ -118,6 +130,16 @@ impl GroqError {
 pub struct GroqClient {
     agent: ureq::Agent,
     url: String,
+    /// The pre-formatted `Bearer <token>` header value, built ONCE.
+    ///
+    /// Two reasons, both deliberate. Perf: `generate` no longer allocates a
+    /// fresh header String per call. Security: the secret exists in exactly
+    /// one heap location for the client's lifetime instead of being copied
+    /// into a new allocation per request and dropped un-zeroed, so it cannot
+    /// be smeared across freed heap pages.
+    auth: String,
+    /// The bare token, kept ONLY to scrub it out of outbound error strings
+    /// (defense in depth — see [`GroqClient::scrub`]).
     token: String,
     model: String,
 }
@@ -159,12 +181,32 @@ impl GroqClient {
             .unwrap_or_else(|| DEFAULT_GROQ_MODEL.to_string());
         Ok(Self {
             agent: ureq::AgentBuilder::new()
-                .timeout(Duration::from_mins(3))
+                .timeout(CALL_TIMEOUT)
+                .timeout_connect(CONNECT_TIMEOUT)
                 .build(),
             url: GROQ_URL.to_string(),
+            auth: format!("Bearer {token}"),
             token,
             model,
         })
+    }
+
+    /// Remove the token from a string bound for a log, error, or ledger row.
+    ///
+    /// Defense in depth: the Groq API does not echo the `Authorization`
+    /// header in error bodies today, and every error path in this module is
+    /// hand-audited. This guard is for the paths that DON'T exist yet — a
+    /// future provider that echoes the request, a proxy that inlines the
+    /// header into a 502 page, a debug endpoint. A leaked key in
+    /// `.benchmarks/llm_cost_ledger.jsonl` would be a COMMITTED secret; the
+    /// cost of this check is one `contains` on an error path that is already
+    /// doing network I/O.
+    fn scrub(&self, s: String) -> String {
+        // Early return keeps the common (clean) path allocation-free.
+        if s.contains(self.token.as_str()) {
+            return s.replace(self.token.as_str(), TOKEN_REDACTED);
+        }
+        s
     }
 
     /// One generation. Temperature 0 for reproducibility (the `CfClient` rule).
@@ -178,12 +220,13 @@ impl GroqClient {
         let resp = self
             .agent
             .post(&self.url)
-            .set("Authorization", &format!("Bearer {}", self.token))
+            .set("Authorization", &self.auth)
             .send_json(body)
             .map_err(|e| match e {
                 ureq::Error::Status(code, r) => {
-                    // Best-effort body extract for the message; the token is
-                    // never echoed by the API in error bodies.
+                    // Best-effort body extract for the message, scrubbed —
+                    // the body is SERVER-controlled, so it is the one error
+                    // string in this module we do not fully author.
                     let detail = r
                         .into_json::<serde_json::Value>()
                         .ok()
@@ -192,15 +235,18 @@ impl GroqClient {
                                 .and_then(serde_json::Value::as_str)
                                 .map(str::to_string)
                         })
-                        .unwrap_or_else(|| format!("HTTP {code}"));
+                        .map_or_else(|| format!("HTTP {code}"), |d| self.scrub(d));
                     if code == 429 {
                         GroqError::RateLimited(format!("HTTP 429: {detail}"))
                     } else {
                         GroqError::Transport(format!("HTTP {code}: {detail}"))
                     }
                 }
+                // ureq embeds the URL in transport errors; the token lives in
+                // a header, not the URL, but scrub anyway — this is the path
+                // a future query-param-auth provider would leak through.
                 ureq::Error::Transport(other) => {
-                    GroqError::Transport(format!("transport: {other}"))
+                    GroqError::Transport(self.scrub(format!("transport: {other}")))
                 }
             })?;
         let remaining_requests =
@@ -208,7 +254,7 @@ impl GroqClient {
         let remaining_tokens = parse_quota_header(resp.header("x-ratelimit-remaining-tokens"));
         let v: serde_json::Value = resp
             .into_json()
-            .map_err(|e| GroqError::Transport(format!("response was not JSON: {e}")))?;
+            .map_err(|e| GroqError::Transport(self.scrub(format!("response was not JSON: {e}"))))?;
         let (text, reasoning_chars, prompt_tokens, completion_tokens, total_tokens, usage_reported) =
             parse_groq_result(&v).map_err(|e| match e {
                 ParseFail::Overflow(m) => GroqError::Overflow(m),
@@ -828,6 +874,26 @@ mod tests {
             avoided_usd, providers_json, GroqStats, LlmRouter, FREE_TIER_EXHAUSTED,
         };
 
+        // ── prod-grade hardening (T10) ────────────────────────────────
+
+        #[test]
+        fn connect_timeout_is_bounded_well_under_the_call_timeout() {
+            // The whole point: a dead network must not consume the per-call
+            // ceiling. If these ever converge, a blackholed connect stalls
+            // the window again.
+            assert!(
+                super::super::CONNECT_TIMEOUT < super::super::CALL_TIMEOUT,
+                "connect must fail faster than a slow model completes"
+            );
+            assert!(
+                super::super::CONNECT_TIMEOUT.as_secs() <= 15,
+                "connecting is fast or broken; nothing in between"
+            );
+            // A full window must not be able to hang for hours on connects
+            // alone: 25 spans × the connect ceiling stays inside ~5 min.
+            assert!(super::super::CONNECT_TIMEOUT.as_secs() * 25 <= 300);
+        }
+
         // ── Issue 051 fix: either leg may be absent, not just groq ────
 
         #[test]
@@ -951,6 +1017,52 @@ mod tests {
             "smoke reply should contain OK, got: {:?}",
             gen.text
         );
+    }
+
+    #[test]
+    fn the_token_is_scrubbed_from_server_controlled_strings() {
+        // Built directly (not from_env) so the test never touches the real
+        // key and stays parallel-safe.
+        let c = GroqClient {
+            agent: ureq::AgentBuilder::new().build(),
+            url: GROQ_URL.to_string(),
+            auth: "Bearer gsk_secret".to_string(),
+            token: "gsk_secret".to_string(),
+            model: DEFAULT_GROQ_MODEL.to_string(),
+        };
+        let leaked = c.scrub("upstream rejected Bearer gsk_secret at /v1/chat".to_string());
+        assert!(!leaked.contains("gsk_secret"), "token must not survive: {leaked}");
+        assert!(leaked.contains(TOKEN_REDACTED));
+        // The common case is untouched (and allocation-free in spirit — the
+        // no-match arm returns the same String).
+        let clean = c.scrub("HTTP 500: internal error".to_string());
+        assert_eq!(clean, "HTTP 500: internal error");
+    }
+
+    #[test]
+    fn the_auth_header_is_built_once_and_matches_the_token() {
+        let c = GroqClient {
+            agent: ureq::AgentBuilder::new().build(),
+            url: GROQ_URL.to_string(),
+            auth: "Bearer gsk_x".to_string(),
+            token: "gsk_x".to_string(),
+            model: DEFAULT_GROQ_MODEL.to_string(),
+        };
+        assert_eq!(c.auth, format!("Bearer {}", c.token));
+    }
+
+    #[test]
+    fn debug_output_never_carries_the_token() {
+        let c = GroqClient {
+            agent: ureq::AgentBuilder::new().build(),
+            url: GROQ_URL.to_string(),
+            auth: "Bearer gsk_topsecret".to_string(),
+            token: "gsk_topsecret".to_string(),
+            model: DEFAULT_GROQ_MODEL.to_string(),
+        };
+        let d = format!("{c:?}");
+        assert!(!d.contains("gsk_topsecret"), "Debug leaked the token: {d}");
+        assert!(!d.contains("Bearer"), "Debug leaked the header: {d}");
     }
 
     /// The Issue 051 fix, on the real API: a GROQ-ONLY environment (no CF

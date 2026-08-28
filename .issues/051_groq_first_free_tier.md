@@ -1,7 +1,7 @@
 # Issue 051 — groq-first LLM routing: the free tier absorbs the reasoning window before any CF neuron burns
 
 **Filed:** 2026-08-28
-**Status:** OPEN — T1-T6 LANDED; **T9 LANDED 2026-08-28: the free leg is no longer gated behind the paid leg's credentials** (the fix below — `LlmRouter::from_env` built `CfClient` FIRST, so the owner's groq-only `.env` made `kat_drain` exit 3 without spending one free token: the exact opposite of this issue's purpose). Live-proven on the real API in a groq-only env (`live_router_groq_only`: served by groq, 21+2 tok, **0 neurons**, pricing basis `@cf/zai-org/glm-4.7-flash` intact). Tests 16/16 groq + 14/14 kat_drain + 1051/1051 lib, clippy clean. T7 (first live window on real backlog) STILL blocked — but on BACKLOG only (measured 0 eligible of 41 store rows), no longer on credentials; fixer_regate stays CF-pinned BY DESIGN
+**Status:** OPEN — T1-T6 LANDED; **T9 LANDED 2026-08-28: the free leg is no longer gated behind the paid leg's credentials** (the fix below — `LlmRouter::from_env` built `CfClient` FIRST, so the owner's groq-only `.env` made `kat_drain` exit 3 without spending one free token: the exact opposite of this issue's purpose). Live-proven on the real API in a groq-only env (`live_router_groq_only`: served by groq, 21+2 tok, **0 neurons**, pricing basis `@cf/zai-org/glm-4.7-flash` intact). Tests 16/16 groq + 14/14 kat_drain + 1051/1051 lib, clippy clean. **T10 (prod-grade hardening: split connect timeout, single-allocation auth header, token scrub on server-controlled strings) + T11 (`--preflight`: ladder check on an empty backlog, zero metered cost by construction) LANDED same day.** T7 (first live window on real backlog) STILL blocked — but on BACKLOG only (measured 0 eligible of 41 store rows), no longer on credentials; fixer_regate stays CF-pinned BY DESIGN
 **Repo:** riir-clippy
 **URL:** https://riir-ops-dashboard.foxfox.workers.dev/
 
@@ -128,13 +128,55 @@ price) and is labeled as one everywhere it renders.
       - `cf()` → `Option<&CfClient>`; the drain's spend-state / server-meter
         / spend-summary reads are Option-aware and print an explicit
         `$0.0000 metered spend (groq-only window)` line.
+- [x] T10 — **prod-grade hardening of the free leg** (2026-08-28):
+      - **`CONNECT_TIMEOUT` (10s) separate from `CALL_TIMEOUT` (3 min).**
+        Availability defect: one overall timeout cannot tell a blackholed TCP
+        connect from a slow reasoning model, so a dead network stalled the
+        FULL 3 min — per span. A `--limit 25` window could hang ~75 minutes.
+        Connecting is fast or broken; nothing in between. Pinned by
+        `connect_timeout_is_bounded_well_under_the_call_timeout` (also
+        asserts 25 × connect ≤ 5 min, so a future edit can't reopen it).
+      - **`auth: String` pre-formatted once.** Perf: drops one `format!`
+        allocation per call. Security: the secret occupies ONE heap location
+        for the client's lifetime instead of being copied into a fresh
+        allocation per request and dropped un-zeroed — it can't be smeared
+        across freed heap pages.
+      - **`GroqClient::scrub`** on every server-controlled error string (the
+        HTTP error body, ureq transport errors, the not-JSON path). Defense
+        in depth: the API doesn't echo `Authorization` today and all error
+        paths are hand-audited, but a leaked key in
+        `.benchmarks/llm_cost_ledger.jsonl` would be a COMMITTED secret. Cost
+        is one `contains` on a path already doing network I/O; the clean path
+        early-returns without allocating.
+      - Tests: token absent from `scrub` output / `Debug` / the header
+        contract (3 new, built without `from_env` so they never touch the
+        real key and stay parallel-safe).
+- [x] T11 — **`kat_drain --preflight`** (2026-08-28): arms the ladder, proves
+      the free leg SERVES, exits — BEFORE the TrajStore opens, so it works on
+      an empty backlog. Closes a real ops gap: the daily window returns at
+      "queue empty" before the router is ever constructed, so on a quiet day
+      an operator had NO way to validate credentials or the ladder — which is
+      why T7's pre-flight existed only as an `#[ignore]`d unit test.
+      **Zero metered cost by construction**: the probe runs ONLY when the
+      free leg is armed. A pure-CF preflight is deliberately REFUSED (it
+      would burn ~50-120 neurons that this path does not ledger, while
+      reporting nothing the window's own ledgered smoke doesn't). No path may
+      spend behind the ledger's back. Exits 0 / 3 (no provider) / 5 (probe
+      failed). Verified live both ways: groq-only → `probe OK via groq ·
+      21+2 tok · 0.0 neurons · 632ms · ladder READY`; neither armed → exit 3
+      with the both-vars refusal.
 - [-] T7 — first LIVE window on Groq (quota absorption measured on real
       backlog) — **no longer credential-blocked (T9)**; now waiting on a
       non-empty backlog. Measured 2026-08-28 via `--dry-run`: 0 eligible of
       41 store rows (eligibility = `fail_count > 0 AND tier != Withdrawn`),
       so the router is never even constructed. Standing pre-flights, both
       passing on the real API: `live_smoke` (T5) and `live_router_groq_only`
-      (T9, proves the groq-only ladder end-to-end).
+      (T9, proves the groq-only ladder end-to-end) — plus `--preflight`
+      (T11) as the operator-facing equivalent, runnable any day.
+      **Not forceable, deliberately:** backlog rows come from REAL heal
+      failures (`TrajStore` `fail_count > 0`), so seeding synthetic failures
+      to open the window would manufacture the very measurement T7 exists to
+      take. It waits for organic accumulation.
 - [-] T8 — `fixer_regate` arms stay CF-pinned BY DESIGN (arm rows are
       MODEL comparisons — mixing a free router would confound the comparison
       the arms exist to make). Re-open only with an explicit free-tier arm.
