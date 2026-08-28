@@ -1468,6 +1468,31 @@ never closed). Ranked open classes (inventory 2026-08-24):
       free-fn silent); default lib 776/0; clippy --all-targets 0; e2e
       dry→write reproduces the oracle byte-for-byte. Evidence: miss →
       probe → proposer + fixtures.
+- [x] P8b **unnecessary_sort_by field-key family** — **CLOSED 2026-08-29**
+      (probe-first, 3 rounds / 25+ shapes vs clippy 1.97). The key family is
+      GENERAL: any cmp receiver `EXPR(a)` + reference-arg inner `EXPR(b)`
+      identical modulo an a↔b swap fires MA `sort_by_key(|PARAM| EXPR(a))`
+      — multi-level fields, method-call keys, postfix chains, tuple keys
+      (parens KEPT), shared consts, param-referencing args, external
+      idents (`w.len() as i32`) — and the byte-for-byte e2e reproduced the
+      oracle on all 4 fired probe shapes. THE FALSE-ORACLE-FACT CORRECTION:
+      the old `custom_comparator_unchanged` test asserted
+      `a.abs().cmp(&b.abs())` is silent — the probe showed MA
+      `sort_by_key(|a| a.abs())`; the test encoded a lie (Issue 022 class)
+      and now fires. Typed-key form DROPS the annotation (`|a: &K|` →
+      `|a|`, oracle fact). Silent oracle facts pinned: mixed bindings for
+      key forms too, asymmetric args (max(1)/max(2)), different methods
+      (max/min), reversed field-key (MaybeIncorrect Reverse — skip kept).
+      Emitter design: textual word-boundary swap check (`swap(recv, a→b)
+      == inner` + recv-mentions-a-never-b guard) — rejects asymmetric and
+      reversed automatically; Paren-grouped keys deliberately SKIPPED
+      (oracle de-parens the HIR rendering — parity guard,
+      false-negative-safe); plain `a.cmp(&b)` bare/bare excluded (that
+      shape is `&&T` E0599 — cannot compile). Word-boundary helpers local
+      (contains_word/replace_word, `as`-in-`w.len() as i32` pinned by
+      fixture). 30 module tests (17 new/corrected), default lib 805/0,
+      clippy --all-targets 0. Evidence: P8 probe fact → 3-round probe →
+      emitter + fixtures + e2e parity.
 - [x] P9 **compile-breaking proposal cluster in ruliology/player.rs** —
       2× single_match_else (`match state.first()/opponent_history.last()`
       Some/None → if-let) + 1× map_unwrap_or at :459, ALL THREE
