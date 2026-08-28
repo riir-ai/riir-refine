@@ -1542,19 +1542,25 @@ never closed). Ranked open classes (inventory 2026-08-24):
       landed on the real file afterward (riir-ai `6ca4f00e3`, 70/70
       ruliology tests green). Evidence: verify revert → E0308 probe →
       guard + fixtures + bench pin.
-- [ ] P10 **two default-group corpus gaps: `needless_borrows_for_generic_args`
-      + `needless_pass_by_value`** (observed 2026-08-26, Plan 028 session).
-      Neither is in the 30-lint corpus — the healer was silent on both while
-      `clippy -D warnings` (default groups) FIRED them: `read_to_string(&path)`
-      where `path: &Path` (borrows, MachineApplicable, trivially mechanical)
-      and `load_at(path: PathBuf)` read-only (pass-by-value → `&Path`; the
-      clippy suggestion is `&PathBuf`/ref-pattern but the idiomatic fix is
-      `&Path` — semi-mechanical, needs the deref-coercion note). Live sites
-      at observation: 3 (`kat_pending_estimator.rs` ×2 fixed manually + the
-      `&Path` receiver pattern recurred across the healer's own corpus).
-      Session counter-evidence for priority: LOW volume vs P1-P3 (P3's class
-      is 7,281 trajectories; this is single digits), and one of the two
-      (pass-by-value) has no clean MachineApplicable fix — probe against
-      real clippy FIRST (the queue's standing rule) and likely take only the
-      borrows one. Evidence: miss ×2 (manual fixes `d0d301a`-class; the
-      session record is this entry).
+- [x] P10 **two default-group corpus gaps: `needless_borrows_for_generic_args`
+      + `needless_pass_by_value`** — **CLOSED 2026-08-29 — architecturally
+      out-of-scope, verdict analysis-backed.** The borrows lint is
+      TYPE-AWARE: it fires only when the callee's generic bound is uniquely
+      satisfied without the borrow (real clippy resolves the signature).
+      A parse-only proposer cannot distinguish type-forced borrows
+      (`read_to_string(&path)` — the observed case) from
+      semantic-changing ones: **`buffer.extend(&items)` →
+      `buffer.extend(items)` BOTH COMPILE with DIFFERENT semantics
+      (`&Vec<T>` iterates `&T`, `Vec<T>` iterates `T`) — the compile gate
+      cannot see it, so even the VERIFY_LINTS tier (the
+      single_char_pattern precedent) is UNSOUND for this lint** — the
+      breaks are semantic-and-silent, the exact class the tool's
+      parse-only architecture must never touch. pass_by_value is the same
+      story plus no clean MA fix (the entry's own note: the idiomatic
+      `&Path` rewrite is a signature change rippling to callers). Firing
+      either would be a harmful rule — the entry's "likely take only the
+      borrows one" hypothesis is REFUTED by the extend analysis. The
+      correct consumer for these two is `cargo clippy --fix` (type-aware)
+      or the rustc_errors domain (oracle-driven, compile-gated at a
+      whole-error level). Evidence: observation (2026-08-26, Plan 028
+      session) → this session's soundness analysis.
