@@ -71,7 +71,19 @@ without evidence, which is what keeps known-good files clean:
 The CLI derives what it can from the repo around the file (nearest
 `Cargo.toml`'s `Cargo.lock` / `.dockerignore`) and leaves the rest `None`.
 
-### 3. Degradation is a fact, not a pass
+### 3. `--write` has no build gate — know this before using it
+
+The Rust domains gate every written edit behind a `cargo check` (`--verify`).
+This lane has no equivalent, because the analogous oracle is a real
+`docker build`: minutes to tens of minutes, a daemon, and a build context. It
+is deliberately not run per fix.
+
+What does protect a write: every bounded rule reproduces its corpus fixture
+**byte-exactly**, the proposers refuse more than they fire, and `fix_all` is
+idempotent. Review the diff and run your image build. The G5-real gate proves
+the shape once per release, not once per edit.
+
+### 4. Degradation is a fact, not a pass
 
 `docker_verify` returns `None` when hadolint is absent and logs ONE line.
 `None` is never coerced to `false` or `true`: *"we could not check"* and

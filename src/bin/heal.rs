@@ -3787,6 +3787,18 @@ fn main() {
 /// - `--suggest`: print every finding as a rule citation.
 /// - `--fix`: print the bounded rewrites; `--write` applies them.
 ///
+/// ## `--verify` does NOT cover this lane (stated, not implied)
+///
+/// The Rust domains gate every written edit behind a `cargo check`. There is
+/// no equivalent here: the analogous oracle is a real `docker build`, which
+/// is minutes-to-tens-of-minutes and needs a daemon plus a build context, so
+/// it is deliberately NOT run per fix. What DOES protect a write: every
+/// bounded rule reproduces its corpus fixture byte-exactly, the proposers
+/// refuse more than they fire (non-bash `pipefail`, metacharacter exec-form,
+/// heredoc appends, `--locked` without a lockfile), and `fix_all` is
+/// idempotent. Review the diff, and run your image build — the Plan 030
+/// G5-real gate is what proves the shape, once, per release, not per edit.
+///
 /// Returns the number of findings printed.
 ///
 /// The caller-gated rules stay silent unless the evidence is derivable from
