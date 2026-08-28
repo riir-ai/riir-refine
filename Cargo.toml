@@ -117,7 +117,7 @@ serde_json = "1"
 ed25519-dalek = "2"
 
 [features]
-default = ["clippy_lints", "rust_perf", "self_evolve"]
+default = ["clippy_lints", "rust_perf", "self_evolve", "docker"]
 
 # Domain features (Plan 001 multi-domain framework refactor).
 # clippy_lints is the first domain; default-on. Phase 2 adds `rust_perf`
@@ -308,7 +308,15 @@ rustc_errors = ["compile_oracle"]
 sec = []
 
 # Plan 030 / Proposal 006: the `docker` domain — Dockerfile bounded-fix
-# healing + retrieval. Opt-in (default-off), ZERO new dependencies: the
+# healing + retrieval. **DEFAULT-ON since 2026-08-28** — the promotion rule's
+# two halves are both met: GOAT PASS (Bench 056, G1-G5 incl. a real
+# `docker build`) AND measured consumer pull (Plan 030 T1.6 — riir-chain
+# adopted the fixes on both deployment images and gates them in CI via
+# `scripts/dockerfile_heal_gate.sh`). The adoption run itself paid for the
+# promotion: it demoted `cargo-locked-flag` to suggest-only after a MEASURED
+# build break (a staged build context whose trimmed workspace makes the
+# committed lock unsatisfiable), so 14 bounded rules ship, not 15.
+# ZERO new dependencies: the
 # stanza scanner is a hand-written line scanner (no `syn`, and no `regex`
 # either — the WGSL scanner's regex dep stays behind `kernel_heal`).
 #

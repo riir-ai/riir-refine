@@ -1,6 +1,6 @@
 # The `docker` Domain — Dockerfile Bounded-Fix Healing + Retrieval
 
-**Feature:** `docker` (opt-in, default-off, zero new dependencies)
+**Feature:** `docker` (**DEFAULT-ON since 2026-08-28**, zero new dependencies)
 **Oracle tier:** `docker_verify` (implies `docker`; needs `hadolint` on PATH)
 **Plan:** [030](../../.plans/030_docker_domain_phase0_batch1.md) ·
 **Proposal:** [006](../../.proposals/006_docker_heal_domain_fifth_healdomain.md) ·
@@ -21,7 +21,7 @@ Fixing is unoccupied. So the domain splits:
 | **A — fix overlay** | 14 | the incumbent detects, we fix. Our detector must AGREE with hadolint on the fixture (`docker_verify`) |
 | **B — novel detection** | 13 | both incumbents silent; we detect AND fix or annotate |
 
-**27 rules total, 15 with bounded fixes.** (Plan 030's close condition was
+**27 rules total, 14 with bounded fixes.** (Plan 030's close condition was
 ≥10 bounded; Proposal 006's Phase-2 gate was ≥20 total. Both met.)
 
 ## Usage
@@ -62,7 +62,7 @@ without evidence, which is what keeps known-good files clean:
 
 | Rule | Evidence required | Why it cannot be guessed |
 |---|---|---|
-| `cargo-locked-flag` | a committed `Cargo.lock` | `--locked` fails the build outright when none exists |
+| `cargo-locked-flag` | a committed `Cargo.lock` — **necessary, not sufficient** (suggest-only since the T1.6 adoption run; see below) | `--locked` fails the build outright when the lock does not match the context |
 | `workspace-single-member-build` | a multi-member workspace | which member to build is not in the file |
 | `dockerignore-missing` | the context dir listing | the fix is a NEW FILE, not an edit |
 | `build-stage-missing-buildplatform` | a multi-platform build | the build matrix is an *invocation* fact (`buildx --platform a,b`) |
@@ -93,7 +93,7 @@ the shape once per release, not once per edit.
 
 | Gate | Result |
 |---|---|
-| **G1** fixtures + `clean_spans` + negative controls | PASS — 15 bounded rules each fire on their fixture AND reproduce the corpus `fixed_code` byte-exactly |
+| **G1** fixtures + `clean_spans` + negative controls | PASS — 14 bounded rules each fire on their fixture AND reproduce the corpus `fixed_code` byte-exactly |
 | **G1** negative control | PASS — **zero fixable findings** on `riir-chain/deploy/Dockerfile` and mmorpg `authority-container` |
 | **G2** latency | 17.05 µs/scan release (1.24 ms debug), 302-byte file, M3 Max |
 | **G3** no-regression | 5-domain router floors re-measured + re-pinned (below) |

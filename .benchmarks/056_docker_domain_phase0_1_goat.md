@@ -1,19 +1,19 @@
 # Bench 056 — `docker` Domain Phase 0 + 1 GOAT
 
-Status: **RECORD — GOAT PASS (2026-08-28)**
+Status: **RECORD — GOAT PASS (2026-08-28); T1.6 adoption + DEFAULT-ON promotion appended the same day**
 Executes: [Plan 030](../.plans/030_docker_domain_phase0_batch1.md) · [Proposal 006](../.proposals/006_docker_heal_domain_fifth_healdomain.md)
 Oracle: hadolint **2.15.1** (installed for this run) · Docker **29.7.2** (aarch64, desktop-linux)
 Box: M3 Max
 
 ## Result
 
-**27 rules — 14 Class A, 13 Class B, 15 with bounded fixes.** Plan 030's close
+**27 rules — 14 Class A, 13 Class B, 14 with bounded fixes** (15 at land time; `cargo-locked-flag` was demoted to suggest-only by the T1.6 adoption run — see the T1.6 section). Plan 030's close
 condition was ≥10 bounded; Proposal 006's Phase-2 gate was ≥20 total. Both met,
 so Phase 2 is UNBLOCKED (deferred per the plan).
 
 | Gate | Verdict | Evidence |
 |---|---|---|
-| G1 fixtures | PASS | 15 bounded rules each fire on their buggy fixture AND reproduce the corpus `fixed_code` **byte-exactly** (`every_fixable_rule_reproduces_its_fixed_fixture`) |
+| G1 fixtures | PASS | 14 bounded rules each fire on their buggy fixture AND reproduce the corpus `fixed_code` **byte-exactly** (`every_fixable_rule_reproduces_its_fixed_fixture`) |
 | G1 clean-spans | PASS | every rule is silent on its own fixed fixture (2 documented exemptions: rules whose subject is outside the file) |
 | G1 negative control | PASS | **zero fixable findings** on `riir-chain/deploy/Dockerfile` + mmorpg `authority-container` |
 | G1 refusal gate | PASS | 13 tests; DL3059 / apt-clean / LABEL-merge / QEMU-rewrite all refused |
@@ -129,9 +129,121 @@ this domain, there is none.
   `JSONArgsRecommended`) belong to `docker build --check`, which the library
   does not call — those 4 Class-A claims rest on the documented check list, not
   on a live oracle run.
-- **G5-real was measured on ONE file.** The adoption wiring (T1.6 — a CI-runnable
-  `cargo heal --domain docker` in a consumer repo) is NOT done, so the
-  promotion rule's standing-consumer-pull requirement is unmet and the feature
-  correctly stays **default-off**.
+- **G5-real was measured on ONE file, and on a COPY of it.** That mattered —
+  see the T1.6 section below: the copy sat where no `Cargo.lock` was adjacent,
+  so a caller-gated rule stayed silent that fires on the tracked file. A GOAT
+  measured on a copy cannot see evidence the caller gate derives from the
+  file's surroundings.
 - **hadolint had to be installed** for this run; it is not a repo dependency.
   Without it the agreement gate SKIPS with a printed line rather than passing.
+
+
+# ─────────────────────────────────────────────────────────────────────────
+
+# T1.6 — adoption, and what adoption falsified (2026-08-28)
+
+The plan's last open task was the promotion rule's other half: a consumer repo
+running the healer against real files, in CI. `riir-chain` is that consumer —
+it owns both Dockerfiles the domain was mined against. Running the healer on
+the **tracked** files (not a copy) immediately produced a result the GOAT
+could not have produced.
+
+## The finding: a bounded fix that breaks the build
+
+`cargo-locked-flag` fired on `cloudflare/edge-wallet-container/Dockerfile` and
+`--write` applied it. The image build then **died at resolve**:
+
+```
+error: cannot update the lock file /app/Cargo.lock because --locked was passed
+exit code: 101
+```
+
+The rule's caller gate asked *"is a `Cargo.lock` committed?"* — it is — and
+that is **necessary but not sufficient**. `build.sh` stages a hermetic build
+context whose workspace members are trimmed to the wallet closure, so cargo
+must prune the lock's absent-member entries; `--locked` refuses. The
+distinguishing fact — *does THIS context's manifest set resolve against the
+committed lock?* — is an invocation fact with no in-file signal.
+
+Why the GOAT missed it: G5-real healed a **copy** in a scratch directory. The
+CLI derives lockfile evidence from the repo around the file, and around the
+copy there was none, so the gate stayed silent. Two lessons, both cheap:
+
+1. **Measure on the tracked file.** Caller-gated rules are functions of the
+   file's *surroundings*; a copy changes the answer silently.
+2. **A `--write` lane with no build gate must not carry a rule whose failure
+   mode is "the build no longer resolves."** This domain's `--write` has no
+   `cargo check` equivalent (the honest oracle is a real `docker build`).
+
+**Decision: `cargo-locked-flag` demoted to suggest-only** — the same contract
+as `build-stage-missing-buildplatform` and `arg-secret-to-secret-mount`. It
+still fires (with lockfile evidence), it still explains itself, it no longer
+writes. **14 bounded / 13 suggest**, down from 15/12.
+
+`deploy/Dockerfile` DOES now carry `--locked`, applied by hand with evidence:
+its context is the whole workspace and `cargo fetch --locked --target
+x86_64-unknown-linux-musl` resolves clean. That is the shape the rule wants —
+a human holding the fact the file cannot state.
+
+## What adoption changed in riir-chain
+
+| File | Change | Evidence |
+|---|---|---|
+| `cloudflare/edge-wallet-container/Dockerfile` | `SHELL [... -o pipefail ...]` before the piped stub-manifest RUN | hadolint DL4006 **gone**: the file is now hadolint-CLEAN (was 1 finding) |
+| " | 2 `--mount=type=cache` mounts on the `cargo build` | `docker build` green; the healed RUN compiled 167.7 s cold, **21.4 s** warm |
+| " | `USER 65534:65534` in the runtime stage (the suggest-only `runtime-stage-missing-user` citation, taken) | container serves `/health` and `docker exec id` reports `uid=65534(nobody)` — measured, not argued |
+| `deploy/Dockerfile` | `cargo build --locked` | `cargo fetch --locked --target x86_64-unknown-linux-musl` exit 0 |
+
+The pipefail fix is the one that matters most and reads smallest: that RUN
+pipes `echo | tee` to write stub manifests. Without `pipefail` a failed stage
+yields a **silently broken build closure** rather than a failed build.
+
+## The standing gate (the actual T1.6 deliverable)
+
+`riir-chain/scripts/dockerfile_heal_gate.sh`, wired into `.github/workflows/rust.yml`'s
+`standalone` job (and therefore auto-picked-up by `ci_local.sh`, which derives
+its step list from the workflows). Two tiers, neither silently lenient:
+
+- **Tier 1 — hadolint** against a pinned ledger. Installed in CI, so this tier
+  is live there. Fails on an unpinned finding, on a count change, **and on a
+  pin that no longer fires** (a stale pin is how a ledger rots into decoration).
+  Ledger today: `deploy/Dockerfile` DL3018 ×1 (version pinning is a registry
+  fact) and DL3022 ×2 (hadolint cannot see BuildKit named contexts — the
+  false-positive that killed the rule at mine time, now written down where the
+  next reader will look).
+- **Tier 2 — `cargo heal --fix --domain docker`**: any bounded fix being
+  *available* means the tree drifted off the healed state. Suggest-only
+  citations are pinned the same way.
+
+Verified by falsification, not by a green run — each defect class was
+introduced and the gate was confirmed to fail:
+
+| Injected | Gate response |
+|---|---|
+| delete the `SHELL` pipefail line | FAIL ×2 (unpinned hadolint DL4006 **and** Tier-2 bounded fix available) |
+| add a `MAINTAINER` line | FAIL ×2 (unpinned DL4000 + `maintainer-to-label` available) |
+| pin the apk versions (removes DL3018's cause) | FAIL — "pinned DL3018 no longer fires; delete its ledger row" |
+| `HEAL_BIN=/nonexistent` | SKIP, PASS-with-skips; `--strict` → exit 1 |
+
+**En-route fix in the consumer:** `ci_local.sh` aborted on every Mac —
+`mapfile` is bash 4+ and macOS ships bash 3.2 as `/bin/bash`. Since riir-chain's
+CI is main-only, "run `ci_local.sh` before pushing" is the *documented*
+mitigation for work landing on `develop` — and it had never been available
+where most of the work happens. Replaced with a portable read loop; it now
+derives and runs 15 steps.
+
+## Promotion
+
+Both halves of the promotion rule are met — GOAT PASS **and** measured consumer
+pull — so `docker` is **DEFAULT-ON** as of 2026-08-28. `docker_verify` stays
+opt-in (it shells out to an external binary; the sec precedent).
+
+The promotion also removes a fragility the gate had to work around: a stock
+`cargo-heal` rejected `--domain docker`, so Tier 2 could only SKIP for anyone
+who had not rebuilt with the feature. It is now in every default build.
+
+Residual risk, stated plainly: default-on means `--fix --write` can edit
+Dockerfiles. Bounded to what it was already bounded to — files matched by NAME
+(`Dockerfile`, `<n>.Dockerfile`, `Dockerfile.<n>`), every bounded rule
+fixture-verified byte-exact and idempotent, and the one rule whose failure mode
+was a broken build is no longer a bounded rule.
