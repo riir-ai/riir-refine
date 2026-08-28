@@ -831,12 +831,55 @@ pub struct CfGen {
     pub latency_ms: u128,
 }
 
+/// Overall per-call ceiling — a reasoning model at a 2k budget can legitimately
+/// take minutes.
+const CALL_TIMEOUT: Duration = Duration::from_mins(3);
+/// Connect-phase ceiling, load-bearing SEPARATELY from [`CALL_TIMEOUT`]: under a
+/// single overall timeout a blackholed TCP connect is indistinguishable from a
+/// slow model, so it stalls for the full 3 min — × every span in the window.
+/// Connecting is fast or broken; nothing in between. (Issue 051 T10 fixed the
+/// same defect in the free leg; the fallback leg had it too.)
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+/// Redaction placeholder, should the token ever surface in a payload.
+const TOKEN_REDACTED: &str = "<CF_API_TOKEN redacted>";
+/// Byte ceiling on a server-controlled payload entering an error string.
+const MAX_PAYLOAD_IN_ERROR: usize = 512;
+
+/// Clip a server-controlled payload before it enters an error string or log.
+///
+/// An unbounded `{response_json}` dump floods cron logs (a large failed
+/// response is unbounded in principle) and echoes content back out of the
+/// process. Keeping a bounded prefix preserves every diagnostic these
+/// messages are actually read for.
+#[must_use]
+pub fn clip_payload(s: &str) -> String {
+    if s.len() <= MAX_PAYLOAD_IN_ERROR {
+        return s.to_string();
+    }
+    // Respect char boundaries — a byte-slice of UTF-8 would panic.
+    let cut = (0..=MAX_PAYLOAD_IN_ERROR)
+        .rev()
+        .find(|&i| s.is_char_boundary(i))
+        .unwrap_or(0);
+    format!("{}… (clipped, {} bytes total)", &s[..cut], s.len())
+}
+
 /// Minimal blocking CF Workers AI REST client.
 ///
 /// The token is held privately and NEVER appears in errors or Debug output.
 pub struct CfClient {
     agent: ureq::Agent,
     url: String,
+    /// The pre-formatted `Bearer <token>` header value, built ONCE.
+    ///
+    /// Perf: the two request paths no longer allocate a header String per
+    /// call. Security: the secret occupies ONE heap location for the
+    /// client's lifetime instead of being copied into a fresh allocation per
+    /// request and dropped un-zeroed. Mirrors `groq::GroqClient` (Issue 051
+    /// T10) — same defect class, same fix, both legs of the ladder.
+    auth: String,
+    /// The bare token, kept ONLY to scrub it out of server-controlled
+    /// strings (see [`CfClient::scrub`]).
     token: String,
     account: String,
     model: String,
@@ -854,6 +897,18 @@ impl std::fmt::Debug for CfClient {
 }
 
 impl CfClient {
+    /// Remove the token from a string bound for a log or error. Defense in
+    /// depth for the paths that don't exist yet (a proxy inlining the header
+    /// into a 502 page, a future query-param-auth endpoint). A leaked key in
+    /// an archived cron log is a leaked key.
+    fn scrub(&self, s: String) -> String {
+        // Early return keeps the common (clean) path allocation-free.
+        if s.contains(self.token.as_str()) {
+            return s.replace(self.token.as_str(), TOKEN_REDACTED);
+        }
+        s
+    }
+
     /// The model id this client targets (for ledger/report rows).
     #[must_use]
     pub fn model_id(&self) -> &str {
@@ -903,9 +958,11 @@ impl CfClient {
         };
         Ok(Self {
             agent: ureq::AgentBuilder::new()
-                .timeout(Duration::from_mins(3))
+                .timeout(CALL_TIMEOUT)
+                .timeout_connect(CONNECT_TIMEOUT)
                 .build(),
             url: format!("https://api.cloudflare.com/client/v4/accounts/{account}/ai/run/{model}"),
+            auth: format!("Bearer {token}"),
             token,
             account,
             model: model.to_string(),
@@ -971,16 +1028,16 @@ impl CfClient {
         let resp = self
             .agent
             .post("https://api.cloudflare.com/client/v4/graphql")
-            .set("Authorization", &format!("Bearer {}", self.token))
+            .set("Authorization", &self.auth)
             .send_json(serde_json::json!({ "query": query }))
-            .map_err(|e| format!("usage GraphQL request failed: {e}"))?;
+            .map_err(|e| self.scrub(format!("usage GraphQL request failed: {e}")))?;
         let v: serde_json::Value = resp
             .into_json()
-            .map_err(|e| format!("usage GraphQL response was not JSON: {e}"))?;
+            .map_err(|e| self.scrub(format!("usage GraphQL response was not JSON: {e}")))?;
         let rows = v
             .pointer("/data/viewer/accounts/0/aiInferenceAdaptiveGroups")
             .and_then(|r| r.as_array())
-            .ok_or_else(|| format!("usage GraphQL shape unexpected: {v}"))?;
+            .ok_or_else(|| self.scrub(format!("usage GraphQL shape unexpected: {}", clip_payload(&v.to_string()))))?;
         let mut u = CfUsageToday::default();
         for row in rows {
             if row
@@ -1205,15 +1262,15 @@ impl CfClient {
         let resp = self
             .agent
             .post(&self.url)
-            .set("Authorization", &format!("Bearer {}", self.token))
+            .set("Authorization", &self.auth)
             .send_json(body)
-            .map_err(|e| (format!("CF request failed: {e}"), false))?;
+            .map_err(|e| (self.scrub(format!("CF request failed: {e}")), false))?;
         let v: serde_json::Value = resp
             .into_json()
-            .map_err(|e| (format!("CF response was not JSON: {e}"), false))?;
+            .map_err(|e| (self.scrub(format!("CF response was not JSON: {e}")), false))?;
         let result = v
             .get("result")
-            .ok_or_else(|| (format!("CF response had no result: {v}"), false))?;
+            .ok_or_else(|| (self.scrub(format!("CF response had no result: {}", clip_payload(&v.to_string()))), false))?;
         let (text, reasoning_chars) =
             parse_chat_result(result).map_err(|e| (e, true))?;
         let usage = result.get("usage");
@@ -2018,5 +2075,35 @@ mod tests {
     fn reachable_premise_holds_against_the_seed_corpus() {
         let corpus = crate::build_seed_corpus();
         assert_reachable_premise(&corpus);
+    }
+
+    // ── Issue 051 T12: the fallback leg gets the free leg's hardening ──
+
+    #[test]
+    fn connect_timeout_is_bounded_well_under_the_call_timeout() {
+        assert!(super::CONNECT_TIMEOUT < super::CALL_TIMEOUT);
+        assert!(super::CONNECT_TIMEOUT.as_secs() <= 15);
+        // A full window must not hang for hours on connects alone.
+        assert!(super::CONNECT_TIMEOUT.as_secs() * 25 <= 300);
+    }
+
+    #[test]
+    fn clip_payload_bounds_a_server_controlled_dump() {
+        let small = "{\"error\":\"nope\"}";
+        assert_eq!(super::clip_payload(small), small, "short payloads pass through");
+        let big = "x".repeat(super::MAX_PAYLOAD_IN_ERROR * 4);
+        let out = super::clip_payload(&big);
+        assert!(out.len() < big.len(), "must shrink");
+        assert!(out.contains("clipped"), "must say so: {out}");
+        assert!(out.contains(&big.len().to_string()), "must report the true size");
+    }
+
+    #[test]
+    fn clip_payload_never_splits_a_utf8_char() {
+        // A multi-byte char straddling the cut would panic a naive slice.
+        let s = "é".repeat(super::MAX_PAYLOAD_IN_ERROR);
+        let out = super::clip_payload(&s);
+        assert!(out.contains("clipped"));
+        assert!(out.is_char_boundary(0));
     }
 }

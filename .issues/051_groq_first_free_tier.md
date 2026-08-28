@@ -1,7 +1,7 @@
 # Issue 051 — groq-first LLM routing: the free tier absorbs the reasoning window before any CF neuron burns
 
 **Filed:** 2026-08-28
-**Status:** OPEN — T1-T6 LANDED; **T9 LANDED 2026-08-28: the free leg is no longer gated behind the paid leg's credentials** (the fix below — `LlmRouter::from_env` built `CfClient` FIRST, so the owner's groq-only `.env` made `kat_drain` exit 3 without spending one free token: the exact opposite of this issue's purpose). Live-proven on the real API in a groq-only env (`live_router_groq_only`: served by groq, 21+2 tok, **0 neurons**, pricing basis `@cf/zai-org/glm-4.7-flash` intact). Tests 16/16 groq + 14/14 kat_drain + 1051/1051 lib, clippy clean. **T10 (prod-grade hardening: split connect timeout, single-allocation auth header, token scrub on server-controlled strings) + T11 (`--preflight`: ladder check on an empty backlog, zero metered cost by construction) LANDED same day.** T7 (first live window on real backlog) STILL blocked — but on BACKLOG only (measured 0 eligible of 41 store rows), no longer on credentials; fixer_regate stays CF-pinned BY DESIGN
+**Status:** OPEN — T1-T6 LANDED; **T9 LANDED 2026-08-28: the free leg is no longer gated behind the paid leg's credentials** (the fix below — `LlmRouter::from_env` built `CfClient` FIRST, so the owner's groq-only `.env` made `kat_drain` exit 3 without spending one free token: the exact opposite of this issue's purpose). Live-proven on the real API in a groq-only env (`live_router_groq_only`: served by groq, 21+2 tok, **0 neurons**, pricing basis `@cf/zai-org/glm-4.7-flash` intact). Tests 16/16 groq + 14/14 kat_drain + 1051/1051 lib, clippy clean. **T12 (the same hardening applied to the CF fallback leg + bounded response-body dumps) + T10 (prod-grade hardening: split connect timeout, single-allocation auth header, token scrub on server-controlled strings) + T11 (`--preflight`: ladder check on an empty backlog, zero metered cost by construction) LANDED same day.** T7 (first live window on real backlog) STILL blocked — but on BACKLOG only (measured 0 eligible of 41 store rows), no longer on credentials; fixer_regate stays CF-pinned BY DESIGN
 **Repo:** riir-clippy
 **URL:** https://riir-ops-dashboard.foxfox.workers.dev/
 
@@ -165,6 +165,25 @@ price) and is labeled as one everywhere it renders.
       failed). Verified live both ways: groq-only → `probe OK via groq ·
       21+2 tok · 0.0 neurons · 632ms · ladder READY`; neither armed → exit 3
       with the both-vars refusal.
+- [x] T12 — **the same hardening on the FALLBACK leg** (`CfClient`,
+      2026-08-28). T10 audited the free leg and found a defect class the
+      PAID leg shared — Issue 051's ladder depends on both, so fixing only
+      the half this issue introduced would leave the window hanging on the
+      other half:
+      - `CONNECT_TIMEOUT` (10s) split out of `CALL_TIMEOUT` (3 min) — the
+        identical blackholed-connect stall, same test pinning it.
+      - `auth: String` pre-formatted once, replacing a per-call `format!` at
+        BOTH request sites (generate + the usage GraphQL probe).
+      - `CfClient::scrub` on all six server-controlled error strings.
+      - **`clip_payload` (512-byte ceiling)** on the two paths that dumped a
+        FULL response body into an error string (`"usage GraphQL shape
+        unexpected: {v}"`, `"CF response had no result: {v}"`). An unbounded
+        dump floods archived cron logs and echoes server content back out of
+        the process; a bounded prefix keeps every diagnostic these messages
+        are actually read for. Char-boundary safe (a naive byte slice would
+        panic on multi-byte UTF-8) — pinned by a test.
+      Error PREFIXES are unchanged, so `kat_drain::classify_error` and the
+      pinned `"CF request failed"` test needed zero edits.
 - [-] T7 — first LIVE window on Groq (quota absorption measured on real
       backlog) — **no longer credential-blocked (T9)**; now waiting on a
       non-empty backlog. Measured 2026-08-28 via `--dry-run`: 0 eligible of
