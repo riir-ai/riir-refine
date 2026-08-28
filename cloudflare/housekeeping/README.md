@@ -212,6 +212,7 @@ There are **two** gate levels, and the distinction is the whole design:
 | `/status` | liveness (`worker`, `cron`, `ts`, `ok`) + `latest` **as the projection**; config posture while the gate fails open | + `alerts_today`, `latest` as the full row | 60 s |
 | `/hours?n=` | **projection** rows, `n ≤ 168` *(401 once `READ_TOKEN` is set)* | full rows | 300 s + isolate memo |
 | `/days?n=` | rows, `n ≤ 90` *(401 once `READ_TOKEN` is set)* | same | 300 s + isolate memo |
+| `POST /backfill` | **403** — a write route never fails open | repairs missing hour rows (§T9) | none |
 
 - **The projection is applied on every route, not just `/latest` (§T8).** It
   is `ts`, `hour`, `ok`, `mint`, aggregate `containers.est_usd`,
@@ -249,10 +250,60 @@ There are **two** gate levels, and the distinction is the whole design:
   `workers.dev`. The memo needs no such premise.
 - Non-`GET`/`HEAD` → `405`.
 
+## Repairing lost hours — `POST /backfill` (Issue 045 §T9)
+
+§T8 recorded the hours its `hourKey()` bug collapsed as **unrecoverable**.
+That is true of the KV *rows* and false of the *data*: KV here is a cache of
+a source that is still live. Cloudflare's GraphQL analytics datasets retain
+**~31 days**, and `datetimeHour` — the dimension the collectors were already
+requesting and then summing away — is exactly the per-hour truth the archive
+lost. So the same deploy that stops the bleeding also repairs the past.
+
+```sh
+H=https://riir-kat-housekeeping.foxfox.workers.dev
+# rebuild the last 7 days (default), walking back from today
+curl -sX POST -H "Authorization: Bearer $READ_TOKEN" "$H/backfill" | jq
+# a specific window; `end` is inclusive and the walk goes backwards
+curl -sX POST -H "Authorization: Bearer $READ_TOKEN" "$H/backfill?days=14&end=2026-08-27" | jq
+# if it reports truncated:true, resume from the cursor it hands back
+curl -sX POST -H "Authorization: Bearer $READ_TOKEN" "$H/backfill?days=14&end=<next_end>" | jq
+```
+
+Response: `{written, skipped, truncated, next_end, subrequests_spent, per_day:[…]}`.
+
+Four invariants, in the order they would cost to get wrong:
+
+- **It never overwrites an existing well-formed `hour:YYYYMMDDHH` row.** A row
+  the live cron wrote carries `ai` + `mint_anchor`, neither of which billing
+  can reconstruct per-hour. Clobbering one would destroy information in the
+  name of repairing it. Backfilled rows are tagged `source:"backfill"`,
+  `ai:null`, `mint:"n/a-backfill"` so they are never mistaken for cron rows.
+- **Idempotent.** Existence is decided by **one KV `list` per day**, not 24
+  `get`s. A repeat run writes nothing and costs 3 subrequests per day —
+  pinned by a test that asserts zero puts *and* zero gets on the second pass.
+- **Bounded.** Workers count *every* KV binding call as a subrequest (50 free
+  / 1,000+ paid), so an unbounded "repair the month" call would die mid-write
+  leaving a half-written day that looks complete to the aggregate. Hence
+  `days ≤ 14`, a 700-subrequest budget, and a stop that only ever lands on a
+  day boundary and returns a `next_end` cursor.
+- **`POST`, and it never fails open.** The read routes fail open while
+  `READ_TOKEN` is unset so the owner keeps a diagnostic path; this one spends
+  upstream GraphQL quota and writes KV, so an unset token is a `403`. `GET` is
+  a `405` — a link prefetch or crawler must not be able to trigger it.
+
+Two things it deliberately does **not** do:
+
+- **No TTL / pruning on `hour:` rows.** Tempting (they grow ~9k keys/yr, ~10 MB
+  against a 1 GB tier) and wrong: past ~31 days GraphQL can no longer rebuild
+  them, so expiring a row would make the archive strictly worse than the
+  source it caches. The `/hours?n=` cap is a *read* bound, not a retention one.
+- **No per-hour `ai` reconstruction.** `aiInferenceAdaptiveGroups` is a daily
+  rollup; the honest answer is `null`, not a divided-by-24 fiction.
+
 ## Tests
 
 ```sh
-node --test cloudflare/housekeeping/test/*.test.mjs   # 12 tests, no deps
+node --test cloudflare/housekeeping/test/*.test.mjs   # 19 tests, no deps
 ```
 
 A bare directory arg fails `MODULE_NOT_FOUND` — `node --test` wants file
@@ -263,7 +314,16 @@ These exist because the §T8 key-collision bug was live for two days while
 every "live-verified" check passed: the endpoints returned `200` with
 plausible JSON throughout. Asserting on the **shape of the KV keys** is what
 catches that class; asserting on HTTP status is not. Verified as a real pin —
-8 of the 12 fail against the pre-fix worker (`git show HEAD~1:.../worker.js`).
+8 of the original 12 fail against the pre-fix worker
+(`git show HEAD~1:.../worker.js`); §T9 added 7 more.
+
+One of those 12 was itself unfaithful and was fixed in the §T9 pass: the
+GraphQL stub **omitted `datetimeHour`**, the dimension the query asks for. A
+whole-day window therefore looked identical to a one-hour window, so no test
+in the suite could have caught an hour-grouping defect — the exact class of
+bug the suite exists for. The stub now echoes one group per hour, and
+`omitHour:true` reproduces the old shape on purpose to pin the cron's
+fallback behaviour.
 `scripts/ops_nightly.sh` runs them WARN-only (it does not deploy this
 Worker, so it has nothing to gate).
 

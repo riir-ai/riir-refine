@@ -1,7 +1,7 @@
 # Issue 045 — container cost observability + hourly housekeeping worker + smallest-sizing verdict
 
 **Filed:** 2026-08-26
-**Status:** OPEN — T4 (owner secrets) + T6 (external ledger shell) remain, and **T8 is code-complete, dry-run-VALIDATED 2026-08-28, but still NOT DEPLOYED (owner-gated)** (2026-08-28: `hourKey()` was collapsing 24 hourly rows into 3, understating the daily cost ~8×; fixed + pinned by 12 regression tests, deploy blocked by the session permission classifier — run `cd cloudflare/housekeeping && npx wrangler deploy`); T5 RESOLVED (cross-repo correlation) + T7 read-path hardening SHIPPED 2026-08-28. Issue 053 (unattributed app `a03a70ff`) filed **and RESOLVED same day** by cross-repo correlation — it is the `riir-mmorpg-examples` CCU proof bench (Bench 034); resolved-and-removed per the noise rule, record in §T5 + git history. T1 verdict recorded, T2+T3 SHIPPED same day; live-mint half gated on Proposal 005 Phase 1. Sizing verdict feeds Proposal 005 T2.0/T2.1 **+ T2.6 / [Plan 031](../.plans/031_kat_sweeper_temp_container_r2_tier.md)** (2026-08-26 later-session sync). **2026-08-27: the T3 Worker was EXTENDED + redeployed (`ab79bd20`) — CORS on all read endpoints (dashboard live-fetch), Issue-044-T4 budget alerting (cap thresholds 50/90/100% + optional monthly budget, KV-dedupe, webhook via `ALERT_WEBHOOK_URL`), extended `/status` (`cap`/`thresholds`/`has_webhook`/`has_monthly_budget`/`alerts_today`).** **2026-08-28 truth-refresh: Proposal 005 Phase 1 LANDED 2026-08-27 (T1.5 dapps `84dd049` / T1.6 clippy `0a7cfd8`) — T6's blocker is NO LONGER Phase 1; the live-mint swap-in awaits the deferred Worker/DO HTTP ledger shell (Proposal 005 phase-2 defer / Plan 031 Phase B gate / phase-3 owner gate). Worker mint status strings refreshed `pending-phase-1` → `pending-worker-shell` + redeployed (version `f93ae507`, live-verified on the 04:00 UTC tick). T4 unchanged (owner-gated secrets). T5 still blocked — CLI exposes no id→name mapping (see checkbox).** *(That last clause is SUPERSEDED later the same day — T5 was resolved by cross-repo correlation, not by the CLI; see §T5.)*
+**Status:** OPEN — T4 (owner secrets) + T6 (external ledger shell) remain, and **T8 + T9 are code-complete, dry-run-VALIDATED, but still NOT DEPLOYED (owner-gated; one command: `cd cloudflare/housekeeping && npx wrangler deploy`)**. **2026-08-29 T9 SHIPPED (code+tests, undeployed): `POST /backfill` re-derives the hours T8 lost — the "unrecoverable" verdict was wrong, CF GraphQL retains ~31 d and exposes `datetimeHour`, so KV is a cache of a still-live source. 19/19 tests (7 new). En route it fixed a defect in T8's own test suite (the GraphQL stub omitted `datetimeHour`, so no test could have caught an hour-grouping bug) and a hot-path KV read-your-writes hole in the day aggregate.** Prior status: (2026-08-28: `hourKey()` was collapsing 24 hourly rows into 3, understating the daily cost ~8×; fixed + pinned by 12 regression tests, deploy blocked by the session permission classifier — run `cd cloudflare/housekeeping && npx wrangler deploy`); T5 RESOLVED (cross-repo correlation) + T7 read-path hardening SHIPPED 2026-08-28. Issue 053 (unattributed app `a03a70ff`) filed **and RESOLVED same day** by cross-repo correlation — it is the `riir-mmorpg-examples` CCU proof bench (Bench 034); resolved-and-removed per the noise rule, record in §T5 + git history. T1 verdict recorded, T2+T3 SHIPPED same day; live-mint half gated on Proposal 005 Phase 1. Sizing verdict feeds Proposal 005 T2.0/T2.1 **+ T2.6 / [Plan 031](../.plans/031_kat_sweeper_temp_container_r2_tier.md)** (2026-08-26 later-session sync). **2026-08-27: the T3 Worker was EXTENDED + redeployed (`ab79bd20`) — CORS on all read endpoints (dashboard live-fetch), Issue-044-T4 budget alerting (cap thresholds 50/90/100% + optional monthly budget, KV-dedupe, webhook via `ALERT_WEBHOOK_URL`), extended `/status` (`cap`/`thresholds`/`has_webhook`/`has_monthly_budget`/`alerts_today`).** **2026-08-28 truth-refresh: Proposal 005 Phase 1 LANDED 2026-08-27 (T1.5 dapps `84dd049` / T1.6 clippy `0a7cfd8`) — T6's blocker is NO LONGER Phase 1; the live-mint swap-in awaits the deferred Worker/DO HTTP ledger shell (Proposal 005 phase-2 defer / Plan 031 Phase B gate / phase-3 owner gate). Worker mint status strings refreshed `pending-phase-1` → `pending-worker-shell` + redeployed (version `f93ae507`, live-verified on the 04:00 UTC tick). T4 unchanged (owner-gated secrets). T5 still blocked — CLI exposes no id→name mapping (see checkbox).** *(That last clause is SUPERSEDED later the same day — T5 was resolved by cross-repo correlation, not by the CLI; see §T5.)*
 **Repo:** riir-clippy (dashboard + worker deploy live here; sizing verdict feeds Proposal 005 T2.0/T2.1)
 **Owner ask (2026-08-26):**
 1. can the container be smaller? smallest?
@@ -284,6 +284,33 @@ lives (T1 above).
       **CODE + TESTS LANDED; DEPLOY PENDING — OWNER-GATED.** One command
       closes it: `cd cloudflare/housekeeping && npx wrangler deploy`.
 
+- [ ] T9 backfill the hours T8 lost — **CODE + TESTS LANDED 2026-08-29;
+      rides the same owner-gated deploy as T8.** `POST /backfill?days=&end=`
+      re-derives missing `hour:YYYYMMDDHH` rows from the GraphQL billing
+      dataset (~31 d retention) and recomputes the affected day aggregates.
+      Never overwrites an existing row (a cron row carries `ai` +
+      `mint_anchor`, which billing cannot rebuild); idempotent (one KV `list`
+      per day decides existence, so a repeat run issues zero puts AND zero
+      gets); bounded (`days <= 14`, 700-subrequest budget, stops on a day
+      boundary and returns a `next_end` cursor — Workers count every KV
+      binding call as a subrequest); `POST`-only and hard-gated (an unset
+      `READ_TOKEN` is a 403, not a fail-open). 7 new tests, 19/19 green,
+      bundle dry-run-verified (21.72 KiB / 6.53 KiB gzip, 7 bindings resolve).
+      **Owner runbook, after the T8 deploy and after T4 sets `CF_API_TOKEN`:**
+      `curl -sX POST -H "Authorization: Bearer $READ_TOKEN" "$H/backfill?days=14" | jq`
+      then repeat with `?end=<next_end>` while `truncated:true`.
+      En route, T9 found and fixed a **defect in the T8 test suite itself**:
+      the GraphQL stub omitted `datetimeHour`, the dimension the query asks
+      for, so a whole-day window was indistinguishable from a one-hour window
+      and **no test in the suite could have caught an hour-grouping bug** —
+      precisely the class the suite exists to pin. Also fixed on the hot path:
+      the cron listed `hour:<dk>*` immediately after `put`-ing that hour's
+      row, and KV `list` is not read-your-writes, so the day total could
+      silently omit the very hour it had just collected. `recomputeDay(env,
+      dk, seed)` — now the single shared definition of a day aggregate, used
+      by both the cron and the backfill — unions the in-memory seed with the
+      listed names and closes that window.
+
       **2026-08-28 validation pass (owner chose dry-run over a live deploy).**
       The bundle was validated WITHOUT changing live behaviour, and the defect
       was re-measured on the running Worker:
@@ -304,10 +331,18 @@ lives (T1 above).
         `2026-08-28T08/15`. The day aggregate is summing **4 of 24 hours**.
       - **The understatement factor is NOT a constant** — 3 distinct keys
         when first measured, 4 now (~8x then, ~6x today). It tracks how many
-        collision buckets happen to be populated, so the archived rows CANNOT
-        be repaired after the fact by scaling a fixed multiplier; only rows
-        written post-deploy are trustworthy. The longer the deploy waits, the
-        more unrecoverable hours accrue.
+        collision buckets happen to be populated, so the archived rows cannot
+        be repaired by scaling a fixed multiplier.
+      - ~~The longer the deploy waits, the more unrecoverable hours accrue.~~
+        **CORRECTED 2026-08-29 by T9.** "Unrecoverable" was true of the KV
+        *rows* and false of the *data*. KV here is a cache of a source that is
+        still live: CF's GraphQL analytics datasets retain **~31 days**, and
+        `datetimeHour` — the dimension the collectors were already requesting
+        and then summing away — is the per-hour truth the archive lost. The
+        hours ARE re-derivable, and `POST /backfill` (§T9) re-derives them.
+        The deploy urgency is unchanged (rows past ~31 d really are gone, and
+        the live undercount continues meanwhile) but the loss window is now
+        bounded by GraphQL retention, not by how long the deploy waits.
 
 ## T7 — read-path hardening (SHIPPED 2026-08-28)
 

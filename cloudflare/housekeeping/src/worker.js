@@ -196,21 +196,46 @@ async function gql(env, query) {
 
 // ---- collectors ----------------------------------------------------------
 
-// Trailing-hour container usage (billing dataset) grouped per app.
-// Bounds are [hourStart, hourEnd) — the trailing complete hour.
-async function containerUsageHour(env, hourStartISO, hourEndISO) {
+// `datetimeHour` comes back as an ISO-ish "YYYY-MM-DDTHH:00:00Z". Derive the
+// key by SLICING THE STRING, never via `new Date(...)`: V8 parses the
+// space-separated / unsuffixed variant as LOCAL time, which would shift every
+// backfilled row by the host offset — the same one-hour class of defect T8
+// already cost us once. Returns null for a shape we do not recognise; the
+// caller skips those groups rather than filing them under a guessed hour.
+function hourKeyFromDim(v, fallback) {
+  const m = String(v || "").match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2})/);
+  if (m) return m[1] + m[2] + m[3] + m[4];
+  // Unparseable or absent. The hourly cron KNOWS the answer — its window is
+  // one hour wide — so it passes that hour as the fallback and keeps the row.
+  // The backfill cannot know, so it passes nothing and the group is dropped:
+  // filing a whole day's usage under a guessed hour is worse than losing it.
+  return fallback || null;
+}
+
+// Container usage (billing dataset), grouped per HOUR and then per app.
+//
+// One shape serves both callers: the hourly cron passes a 1-hour window and
+// reads the single bucket, the backfill passes a whole day and reads 24. The
+// `datetimeHour` dimension was ALREADY being requested here and then summed
+// away — so a wide window silently collapsed into one bucket and the dataset's
+// per-hour truth was discarded at the door. Keying by it is what makes the
+// T9 backfill possible at all.
+async function containerUsageByHour(env, startISO, endISO, limit, fallbackHk) {
   const acc = await gql(env, `{ viewer { accounts(filter: {accountTag: "${env.CF_ACCOUNT_ID}"}) {
-    containersUsageAdaptiveGroups(limit: 100,
-      filter: {datetimeHour_geq: "${hourStartISO}", datetimeHour_lt: "${hourEndISO}"}) {
+    containersUsageAdaptiveGroups(limit: ${limit},
+      filter: {datetimeHour_geq: "${startISO}", datetimeHour_lt: "${endISO}"}) {
       dimensions { applicationId datetimeHour }
       sum { allocatedMemory allocatedDisk cpuTimeSec txBytes }
     } } } }`);
-  const groups = acc.containersUsageAdaptiveGroups || [];
-  const apps = {};
-  for (const g of groups) {
+  const byHour = new Map();
+  for (const g of acc.containersUsageAdaptiveGroups || []) {
+    const hk = hourKeyFromDim(g.dimensions.datetimeHour, fallbackHk);
+    if (!hk) continue;
     // Full 36-char id, not a truncated stub: the `[:8]` form is not
     // addressable against the API and caused the Issue 045 T5 misdiagnosis.
     const app = g.dimensions.applicationId || "?";
+    let apps = byHour.get(hk);
+    if (!apps) byHour.set(hk, apps = {});
     const s = g.sum;
     const slot = apps[app] = apps[app] || { mem: 0, disk: 0, cpu: 0, tx: 0 };
     slot.mem += s.allocatedMemory || 0;
@@ -218,24 +243,27 @@ async function containerUsageHour(env, hourStartISO, hourEndISO) {
     slot.cpu += s.cpuTimeSec || 0;
     slot.tx += s.txBytes || 0;
   }
-  return apps;
+  return byHour;
 }
 
-// Awake seconds per app for the trailing hour (metrics dataset).
-async function containerAwakeHour(env, hourStartISO, hourEndISO) {
+// Awake seconds per app, grouped per hour (metrics dataset). Same contract.
+async function containerAwakeByHour(env, startISO, endISO, limit, fallbackHk) {
   const acc = await gql(env, `{ viewer { accounts(filter: {accountTag: "${env.CF_ACCOUNT_ID}"}) {
-    containersMetricsAdaptiveGroups(limit: 200,
-      filter: {datetimeHour_geq: "${hourStartISO}", datetimeHour_lt: "${hourEndISO}"}) {
+    containersMetricsAdaptiveGroups(limit: ${limit},
+      filter: {datetimeHour_geq: "${startISO}", datetimeHour_lt: "${endISO}"}) {
       dimensions { applicationId datetimeHour }
       sum { containerUptime }
     } } } }`);
-  const groups = acc.containersMetricsAdaptiveGroups || [];
-  const awake = {};
-  for (const g of groups) {
+  const byHour = new Map();
+  for (const g of acc.containersMetricsAdaptiveGroups || []) {
+    const hk = hourKeyFromDim(g.dimensions.datetimeHour, fallbackHk);
+    if (!hk) continue;
     const app = g.dimensions.applicationId || "?";
-    awake[app] = (awake[app] || 0) + (g.sum.containerUptime || 0) / 1000.0;
+    let apps = byHour.get(hk);
+    if (!apps) byHour.set(hk, apps = {});
+    apps[app] = (apps[app] || 0) + (g.sum.containerUptime || 0) / 1000.0;
   }
-  return awake;
+  return byHour;
 }
 
 // Today's Workers-AI neurons (billing truth; the mint-anchor input).
@@ -289,8 +317,8 @@ async function runHousekeeping(env) {
     // allSettled, not all: one failing dataset used to discard the other two
     // and record a bare ok=false row, losing an hour of collectable data.
     const [rUsage, rAwake, rNeurons] = await Promise.allSettled([
-      containerUsageHour(env, hourStartISO, hourEndISO),
-      containerAwakeHour(env, hourStartISO, hourEndISO),
+      containerUsageByHour(env, hourStartISO, hourEndISO, 100, hk),
+      containerAwakeByHour(env, hourStartISO, hourEndISO, 200, hk),
       aiNeuronsToday(env, dateISO),
     ]);
     for (const [label, r] of [["usage", rUsage], ["awake", rAwake], ["neurons", rNeurons]]) {
@@ -299,8 +327,9 @@ async function runHousekeeping(env) {
         row.notes.push(`${label} failed: ${(r.reason && r.reason.message) || r.reason}`);
       }
     }
-    const usage = rUsage.status === "fulfilled" ? rUsage.value : {};
-    const awake = rAwake.status === "fulfilled" ? rAwake.value : {};
+    // One-hour window => at most one bucket; `|| {}` covers an idle hour.
+    const usage = (rUsage.status === "fulfilled" ? rUsage.value.get(hk) : null) || {};
+    const awake = (rAwake.status === "fulfilled" ? rAwake.value.get(hk) : null) || {};
     const neurons = rNeurons.status === "fulfilled" ? rNeurons.value : null;
     let cost = 0;
     const apps = {};
@@ -401,35 +430,186 @@ async function runHousekeeping(env) {
   await env.HOUSEKEEPING_KV.put(`hour:${hk}`, JSON.stringify(row));
   await env.HOUSEKEEPING_KV.put("latest", JSON.stringify(row));
 
-  // Day aggregate — RECOMPUTED from the hour rows, not accumulated.
-  // The previous read-modify-write (`prev.est_usd + this hour`) was both
-  // non-idempotent (a cron double-fire or a manual invoke double-counted the
-  // hour) and a lost-update race on an eventually-consistent store. Summing
-  // the authoritative hour:<dk>* rows is idempotent and converges.
+  // Day aggregate — one definition, shared with the backfill (see
+  // recomputeDay). Seeded with the row we just wrote so we neither re-read it
+  // nor depend on KV `list` having caught up with the `put` above.
   try {
-    const listed = await env.HOUSEKEEPING_KV.list({ prefix: `hour:${dk}` });
-    // Legacy collided keys (`hour:YYYYMMDDT<digit>`) share this prefix; sum
-    // only well-formed YYYYMMDDHH rows or the fix double-counts its own past.
-    const names = listed.keys.map((k) => k.name).filter((n) => HOUR_KEY_RE.test(n));
-    const raw = await mapLimit(names, KV_CONCURRENCY, (n) => env.HOUSEKEEPING_KV.get(n));
-    let est = 0, hours = 0;
-    for (const r of raw) {
-      if (!r) continue;
-      try {
-        const h = JSON.parse(r);
-        hours += 1;
-        est += (h.containers && h.containers.est_usd) || 0;
-      } catch (_) { /* tolerate a malformed hour row */ }
-    }
-    await env.HOUSEKEEPING_KV.put(`day:${dk}`, JSON.stringify({
-      date: hourStart.toISOString().slice(0, 10),
-      est_usd: +est.toFixed(6),
-      hours,
-      updated: now.toISOString(),
-    }));
+    await recomputeDay(env, dk, {
+      [`hour:${hk}`]: (row.containers && row.containers.est_usd) || 0,
+    });
   } catch (_) { /* aggregate is best-effort */ }
 
   return row;
+}
+
+// Day aggregate — RECOMPUTED from the hour rows, not accumulated.
+// The previous read-modify-write (`prev.est_usd + this hour`) was both
+// non-idempotent (a cron double-fire or a manual invoke double-counted the
+// hour) and a lost-update race on an eventually-consistent store. Summing the
+// authoritative hour:<dk>* rows is idempotent and converges.
+//
+// `seed` maps an already-in-memory `hour:` key to its est_usd. It buys two
+// things, not one:
+//   * a skipped KV get per seeded row (the cron seeds 1, the backfill seeds
+//     every hour it just wrote — up to 24 gets saved against a subrequest cap
+//     that counts every KV binding call), and
+//   * correctness under KV's eventual consistency. `list` is NOT read-your-
+//     writes: the cron previously listed immediately after putting `hour:<hk>`
+//     and could legitimately not see it, silently dropping the very hour it
+//     had just collected from that hour's own day total. Union-ing the seed
+//     keys with the listed names closes that window.
+async function recomputeDay(env, dk, seed) {
+  const listed = await env.HOUSEKEEPING_KV.list({ prefix: `hour:${dk}` });
+  // Legacy collided keys (`hour:YYYYMMDDT<digit>`) share this prefix; sum
+  // only well-formed YYYYMMDDHH rows or the fix double-counts its own past.
+  const names = new Set(listed.keys.map((k) => k.name).filter((n) => HOUR_KEY_RE.test(n)));
+  for (const n of Object.keys(seed)) if (HOUR_KEY_RE.test(n)) names.add(n);
+  const need = [...names].filter((n) => !(n in seed));
+  const raw = await mapLimit(need, KV_CONCURRENCY, (n) => env.HOUSEKEEPING_KV.get(n));
+  const fetched = new Map(need.map((n, i) => [n, raw[i]]));
+  let est = 0, hours = 0;
+  for (const n of names) {
+    if (n in seed) { est += seed[n] || 0; hours += 1; continue; }
+    const r = fetched.get(n);
+    if (!r) continue;
+    try {
+      const h = JSON.parse(r);
+      hours += 1;
+      est += (h.containers && h.containers.est_usd) || 0;
+    } catch (_) { /* tolerate a malformed hour row */ }
+  }
+  const out = {
+    date: `${dk.slice(0, 4)}-${dk.slice(4, 6)}-${dk.slice(6, 8)}`,
+    est_usd: +est.toFixed(6),
+    hours,
+    updated: new Date().toISOString(),
+  };
+  await env.HOUSEKEEPING_KV.put(`day:${dk}`, JSON.stringify(out));
+  return out;
+}
+
+// ---- backfill (Issue 045 T9) ---------------------------------------------
+//
+// T8 recorded the collapsed hours as UNRECOVERABLE. That is true of the KV
+// ROWS and false of the DATA: KV here is a cache of a source that is still
+// live. Cloudflare's GraphQL analytics datasets retain ~31 days, and
+// `datetimeHour` — the dimension the collectors were already requesting and
+// then summing away — is exactly the per-hour truth the archive lost. So the
+// same deploy that stops the bleeding can also repair the past.
+//
+// Invariants, in order of how much they would cost to get wrong:
+//
+//  * NEVER overwrite an existing well-formed `hour:YYYYMMDDHH` row. A row the
+//    live cron wrote carries `ai` + `mint_anchor`, neither of which is
+//    per-hour reconstructible from billing; clobbering one with a
+//    billing-only row would DESTROY information in the name of repairing it.
+//  * Idempotent. Existence is decided by ONE KV `list` per day rather than 24
+//    `get`s — 24x cheaper against both the subrequest cap and the 1,000/day
+//    list tier that T8's SEC/PERF pass was already defending. A second run
+//    over the same window writes nothing and costs 3 subrequests per day.
+//  * Bounded. Workers count EVERY KV binding call as a subrequest (50 free,
+//    1,000+ paid), so an unbounded "repair the month" call dies mid-write
+//    with a partially-written day. Hence MAX_BACKFILL_DAYS plus a running
+//    budget that stops on a day boundary and hands back a `next_end` cursor.
+//  * The day aggregate is recomputed only for days that actually changed, and
+//    only via recomputeDay() — the same function the cron uses. Two
+//    implementations of "what a day costs" is how the numbers drift apart.
+const MAX_BACKFILL_DAYS = 14;
+const GRAPHQL_RETENTION_DAYS = 31;
+// Worst case for one changed day: 1 list + 2 gql + 24 puts + 24 gets + 1 put.
+const DAY_SUBREQUEST_WORST_CASE = 52;
+const BACKFILL_SUBREQUEST_BUDGET = 700;
+
+async function backfillRange(env, endDay, days) {
+  const report = { written: 0, skipped: 0, truncated: false, next_end: null, per_day: [] };
+  const endMs = Date.UTC(+endDay.slice(0, 4), +endDay.slice(5, 7) - 1, +endDay.slice(8, 10));
+  let spent = 0;
+
+  for (let i = 0; i < days; i++) {
+    const d = new Date(endMs - i * 86400e3);
+    const dateISO = d.toISOString().slice(0, 10);
+    const dk = dayKey(d);
+    if (spent + DAY_SUBREQUEST_WORST_CASE > BACKFILL_SUBREQUEST_BUDGET) {
+      // Stop on a day boundary, never mid-day: a half-written day would look
+      // complete to the aggregate. The cursor lets the owner resume exactly.
+      report.truncated = true;
+      report.next_end = dateISO;
+      break;
+    }
+
+    const startISO = `${dateISO}T00:00:00Z`;
+    const endISO = `${new Date(d.getTime() + 86400e3).toISOString().slice(0, 10)}T00:00:00Z`;
+
+    const listed = await env.HOUSEKEEPING_KV.list({ prefix: `hour:${dk}` });
+    spent += 1;
+    const present = new Set(listed.keys.map((k) => k.name).filter((n) => HOUR_KEY_RE.test(n)));
+
+    // allSettled, matching the cron: a metrics outage must not cost us the
+    // billing rows, which are the ones the cost number is built from.
+    const [rU, rA] = await Promise.allSettled([
+      containerUsageByHour(env, startISO, endISO, 2000),
+      containerAwakeByHour(env, startISO, endISO, 2000),
+    ]);
+    spent += 2;
+    if (rU.status === "rejected" && rA.status === "rejected") {
+      report.per_day.push({ day: dk, error: String((rU.reason && rU.reason.message) || rU.reason) });
+      continue;
+    }
+    const usage = rU.status === "fulfilled" ? rU.value : new Map();
+    const awake = rA.status === "fulfilled" ? rA.value : new Map();
+
+    const seed = {};
+    let wrote = 0, skipped = 0;
+    for (const hk of new Set([...usage.keys(), ...awake.keys()])) {
+      // Defensive: only ever write inside the day whose keys we just listed.
+      // A row outside it was not existence-checked, so writing it could
+      // clobber a live-cron row in an adjacent day.
+      if (!hk.startsWith(dk)) continue;
+      const name = `hour:${hk}`;
+      if (present.has(name)) { skipped += 1; continue; }
+      const u = usage.get(hk) || {};
+      const a = awake.get(hk) || {};
+      let cost = 0;
+      const apps = {};
+      for (const app of new Set([...Object.keys(u), ...Object.keys(a)])) {
+        const g = u[app] || { mem: 0, disk: 0, cpu: 0, tx: 0 };
+        const c = costUsd(env, g.mem, g.disk, g.cpu);
+        cost += c;
+        apps[app] = { awake_s: Math.round(a[app] || 0), est_usd: +c.toFixed(6) };
+      }
+      const row = {
+        kind: "housekeeping",
+        source: "backfill",
+        ts: new Date().toISOString(),
+        hour: `${hk.slice(0, 4)}-${hk.slice(4, 6)}-${hk.slice(6, 8)}T${hk.slice(8, 10)}:00:00Z`,
+        ok: true,
+        notes: ["backfilled from GraphQL billing rows; ai + mint_anchor are not per-hour reconstructible"],
+        containers: { est_usd: +cost.toFixed(6), apps },
+        ai: null,
+        mint: "n/a-backfill",
+      };
+      await env.HOUSEKEEPING_KV.put(name, JSON.stringify(row));
+      spent += 1;
+      seed[name] = row.containers.est_usd;
+      wrote += 1;
+    }
+
+    const entry = { day: dk, written: wrote, skipped };
+    if (wrote > 0) {
+      try {
+        entry.day_row = await recomputeDay(env, dk, seed);
+      } catch (e) {
+        entry.aggregate_error = String((e && e.message) || e);
+      }
+      spent += 2 + present.size;
+    }
+    report.per_day.push(entry);
+    report.written += wrote;
+    report.skipped += skipped;
+  }
+
+  report.subrequests_spent = spent;
+  return report;
 }
 
 // ---- worker entry points -------------------------------------------------
@@ -452,6 +632,46 @@ export default {
     if (request.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: corsHeaders(request, env) });
     }
+    if (url.pathname === "/backfill") {
+      // The only WRITE route on this worker, and the only one that spends
+      // upstream GraphQL quota. Three deliberate differences from the read
+      // routes:
+      //   * POST, not GET — a GET write is reachable by a link prefetch, a
+      //     crawler, or a browser address bar, and this one costs money.
+      //   * It NEVER fails open. The read routes fail open while READ_TOKEN
+      //     is unset so the owner keeps a diagnostic path; an unset token on
+      //     a write route is a 403, not an open door.
+      //   * No CORS-driven browser access is intended; the allowlist echo
+      //     stays only so a cross-origin call fails loudly, not silently.
+      if (request.method !== "POST") {
+        return cors(new Response("use POST", { status: 405 }), request, env);
+      }
+      if (!env.READ_TOKEN) {
+        return cors(Response.json(
+          { error: "READ_TOKEN is not set; the write route does not fail open" },
+          { status: 403 }), request, env);
+      }
+      if (!ok) return cors(new Response("unauthorized", { status: 401 }), request, env);
+      if (!env.CF_API_TOKEN) {
+        return cors(Response.json(
+          { error: "CF_API_TOKEN is not set; there is no source to backfill from" },
+          { status: 503 }), request, env);
+      }
+      const reqDays = parseInt(url.searchParams.get("days") || "7", 10);
+      const days = Math.min(Number.isFinite(reqDays) && reqDays > 0 ? reqDays : 7, MAX_BACKFILL_DAYS);
+      const endParam = url.searchParams.get("end") || "";
+      const end = /^\d{4}-\d{2}-\d{2}$/.test(endParam)
+        ? endParam : new Date().toISOString().slice(0, 10);
+      const report = await backfillRange(env, end, days);
+      return cors(Response.json({
+        end,
+        days,
+        retention_days: GRAPHQL_RETENTION_DAYS,
+        note: `walks back from \`end\`; hours older than ~${GRAPHQL_RETENTION_DAYS} d are past GraphQL retention and are genuinely gone. Existing rows are never overwritten.`,
+        ...report,
+      }), request, env);
+    }
+
     if (request.method !== "GET" && request.method !== "HEAD") {
       return cors(new Response("method not allowed", { status: 405 }), request, env);
     }
@@ -559,7 +779,7 @@ export default {
     }
 
     return cors(new Response(
-      "riir-kat-housekeeping (issue 045) — /status /latest /hours?n= /days?n=",
+      "riir-kat-housekeeping (issue 045) — /status /latest /hours?n= /days?n= | POST /backfill?days=&end= (token)",
       { status: 404 }), request, env);
   },
 };
