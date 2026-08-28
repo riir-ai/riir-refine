@@ -1,7 +1,7 @@
 # Issue 045 — container cost observability + hourly housekeeping worker + smallest-sizing verdict
 
 **Filed:** 2026-08-26
-**Status:** OPEN — T4 (owner secrets) + T6 (external ledger shell) remain; T5 DEFERRED-unachievable and T7 read-path hardening SHIPPED 2026-08-28. Spun out [Issue 053](053_unattributed_container_app_a03a70ff.md) (unattributed app `a03a70ff`, 94% of container spend / 17.7 GB egress, attribution owner-gated). T1 verdict recorded, T2+T3 SHIPPED same day; live-mint half gated on Proposal 005 Phase 1. Sizing verdict feeds Proposal 005 T2.0/T2.1 **+ T2.6 / [Plan 031](../.plans/031_kat_sweeper_temp_container_r2_tier.md)** (2026-08-26 later-session sync). **2026-08-27: the T3 Worker was EXTENDED + redeployed (`ab79bd20`) — CORS on all read endpoints (dashboard live-fetch), Issue-044-T4 budget alerting (cap thresholds 50/90/100% + optional monthly budget, KV-dedupe, webhook via `ALERT_WEBHOOK_URL`), extended `/status` (`cap`/`thresholds`/`has_webhook`/`has_monthly_budget`/`alerts_today`).** **2026-08-28 truth-refresh: Proposal 005 Phase 1 LANDED 2026-08-27 (T1.5 dapps `84dd049` / T1.6 clippy `0a7cfd8`) — T6's blocker is NO LONGER Phase 1; the live-mint swap-in awaits the deferred Worker/DO HTTP ledger shell (Proposal 005 phase-2 defer / Plan 031 Phase B gate / phase-3 owner gate). Worker mint status strings refreshed `pending-phase-1` → `pending-worker-shell` + redeployed (version `f93ae507`, live-verified on the 04:00 UTC tick). T4 unchanged (owner-gated secrets). T5 still blocked — CLI exposes no id→name mapping (see checkbox).**
+**Status:** OPEN — T4 (owner secrets) + T6 (external ledger shell) remain; T5 DEFERRED-unachievable and T7 read-path hardening SHIPPED 2026-08-28. Issue 053 (unattributed app `a03a70ff`) filed **and RESOLVED same day** by cross-repo correlation — it is the `riir-mmorpg-examples` CCU proof bench (Bench 034); resolved-and-removed per the noise rule, record in §T5 + git history. T1 verdict recorded, T2+T3 SHIPPED same day; live-mint half gated on Proposal 005 Phase 1. Sizing verdict feeds Proposal 005 T2.0/T2.1 **+ T2.6 / [Plan 031](../.plans/031_kat_sweeper_temp_container_r2_tier.md)** (2026-08-26 later-session sync). **2026-08-27: the T3 Worker was EXTENDED + redeployed (`ab79bd20`) — CORS on all read endpoints (dashboard live-fetch), Issue-044-T4 budget alerting (cap thresholds 50/90/100% + optional monthly budget, KV-dedupe, webhook via `ALERT_WEBHOOK_URL`), extended `/status` (`cap`/`thresholds`/`has_webhook`/`has_monthly_budget`/`alerts_today`).** **2026-08-28 truth-refresh: Proposal 005 Phase 1 LANDED 2026-08-27 (T1.5 dapps `84dd049` / T1.6 clippy `0a7cfd8`) — T6's blocker is NO LONGER Phase 1; the live-mint swap-in awaits the deferred Worker/DO HTTP ledger shell (Proposal 005 phase-2 defer / Plan 031 Phase B gate / phase-3 owner gate). Worker mint status strings refreshed `pending-phase-1` → `pending-worker-shell` + redeployed (version `f93ae507`, live-verified on the 04:00 UTC tick). T4 unchanged (owner-gated secrets). T5 still blocked — CLI exposes no id→name mapping (see checkbox).**
 **Repo:** riir-clippy (dashboard + worker deploy live here; sizing verdict feeds Proposal 005 T2.0/T2.1)
 **Owner ask (2026-08-26):**
 1. can the container be smaller? smallest?
@@ -224,6 +224,41 @@ lives (T1 above).
       `deploymentId` + `location` per app — and the per-app table renders
       full id / backing DO / colo. Live-verified on the dashboard. Reopen
       only if CF adds a name-bearing dimension or a retained-app lookup.
+      **2026-08-28 RESOLVED-BY-CORRELATION — the apps are named after all,
+      just not by any CF API.** The answer was in a sibling repo's git
+      history, not in the control plane. `a03a70ff` is the
+      **`riir-mmorpg-examples` CCU proof-bench container** (its Issue 084 /
+      [Bench 034](../../riir-mmorpg-examples/.benchmarks/034_ccu_proof_bench.md),
+      Proposal 040 T4.3; commits `a10c81c` + `3dcb3d7`, 2026-08-26T23:34 UTC).
+      Four independent signals agree:
+      | signal | billing (GraphQL) | Bench 034 |
+      |---|---|---|
+      | colo | `yyz04` | "`yyz04` instance observed" |
+      | egress | 17.66 GB | 16.2 GB over the ladder |
+      | instance class | standard-2 | `standard-2` |
+      | date | 2026-08-26 | 2026-08-26 |
+      Billing implies ~19,525 standard-2 instance-seconds against 915 s of
+      measured wall uptime → **~21 concurrent instances**, which is just what
+      a CCU ladder autoscaling looks like.
+      **And this explains the deletion.** Bench 034 §Teardown: "CF worker +
+      container app deleted (`wrangler delete` + `wrangler containers
+      delete`) immediately after measurement". The `code 1609` 404s, the
+      empty `containers list`, and the absent DO namespaces are all one
+      cause — **deliberate, documented teardown**, not a missing API. T5 was
+      never a CF limitation; it was a cross-repo attribution question, and
+      the attribution key is repo git history + bench records.
+      *Honest scope:* `a03a70ff` is confirmed on all four signals. The other
+      three 08-26 apps (`a03038cf` cmh01, `a035c2cc` + `a034b17e` atl15 —
+      the latter two sharing DO `8d3b8a1d…`) are **plausible same-campaign
+      deploys** — Bench 034 F2 records a stale-image rebuild/redeploy cycle,
+      and CF places attempts across colos — but they are not independently
+      confirmed, since only the final deploy's colo is recorded. Ranked
+      `lite` (283 s), standard-1/2 (741 s), standard-2 (595 s); together
+      **$0.0161**, i.e. noise.
+      **Method note for the next agent:** the CF control plane cannot name a
+      torn-down app, but our own repos can. Correlate colo + instance shape
+      + egress + date against sibling `.benchmarks/` and `git log --since`
+      BEFORE concluding an app is unattributable.
 - [ ] T6 live-mint swap-in — Proposal 005 Phase 1 (the sync surface)
       landed 2026-08-27 (T1.5 dapps `84dd049` / T1.6 clippy `0a7cfd8`),
       so the blocker is NO LONGER Phase 1: the swap awaits the deferred
