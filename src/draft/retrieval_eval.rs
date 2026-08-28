@@ -94,9 +94,16 @@ pub struct MissRecord {
 /// The full eval output.
 #[derive(Debug, Default)]
 pub struct EvalReport {
-    /// Fixed domain order: clippy, perf, kernel. Entries with `labeled == 0`
-    /// are disabled (feature off) or had no fixtures.
-    pub per_domain: [DomainMetrics; 3],
+    /// Fixed domain order: [`DomainId::ALL`] (clippy, perf, kernel, sec,
+    /// docker). Entries with `labeled == 0` are disabled (feature off) or
+    /// had no fixtures.
+    ///
+    /// Sized by `DomainId::ALL.len()`, NOT by the number of domains that
+    /// happen to carry fixtures. Before the docker landing this array was
+    /// `[_; 3]` while `domain_index(Sec)` already returned 3 — a latent
+    /// out-of-bounds that never fired only because no sec-labeled fixture
+    /// existed. Adding a 5th domain would have made that two indices out.
+    pub per_domain: [DomainMetrics; DomainId::ALL.len()],
     /// All labeled spans across enabled domains.
     pub blended: DomainMetrics,
     /// Misses (expected rule outside its domain's top-3).
@@ -505,6 +512,7 @@ pub(crate) fn domain_index(d: DomainId) -> usize {
         DomainId::Perf => 1,
         DomainId::Kernel => 2,
         DomainId::Sec => 3,
+        DomainId::Docker => 4,
     }
 }
 
@@ -660,7 +668,7 @@ pub fn run_eval_inner(
 #[allow(clippy::cast_precision_loss)] // display percentages over tiny counts
 pub fn print_report(report: &EvalReport) {
     println!("== Issue 017 retrieval-precision eval ==");
-    let names = ["clippy", "perf  ", "kernel"];
+    let names = ["clippy", "perf  ", "kernel", "sec   ", "docker"];
     println!("{:<8} {:>8} {:>9} {:>9} {:>9}", "domain", "labeled", "top-1", "top-3", "top-5");
     for (i, name) in names.iter().enumerate() {
         let m = &report.per_domain[i];
@@ -909,7 +917,7 @@ pub struct RetrievalSweepRow {
     /// The config that produced the row.
     pub config: crate::draft::RetrievalConfig,
     /// Per-domain metrics, indexed as [`EvalReport::per_domain`].
-    pub per_domain: [DomainMetrics; 3],
+    pub per_domain: [DomainMetrics; DomainId::ALL.len()],
     /// Blended metrics across every labeled span.
     pub blended: DomainMetrics,
 }
@@ -979,7 +987,7 @@ pub struct RerankSweepRow {
     /// The mode that produced the row.
     pub mode: crate::draft::RerankMode,
     /// Per-domain metrics, indexed as [`EvalReport::per_domain`].
-    pub per_domain: [DomainMetrics; 3],
+    pub per_domain: [DomainMetrics; DomainId::ALL.len()],
     /// Blended metrics across every labeled span.
     pub blended: DomainMetrics,
 }
@@ -1103,28 +1111,63 @@ mod tests {
         /// corpus-growth headroom. This is the standing per-batch measurement
         /// of annotation quality — NOT a gate-quality claim (gating stays
         /// killed at the 85% bar).
-        #[cfg(not(any(feature = "kernel_heal", feature = "sec")))]
-        pub const ROUTER_ANNOTATION: f32 = 66.0 / 101.0;
-        #[cfg(all(feature = "kernel_heal", not(feature = "sec")))]
-        pub const ROUTER_ANNOTATION_3D: f32 = 84.0 / 130.0;
-        /// 4-domain state (sec enabled): the TF-cosine lexical router has a
-        /// mechanically harder task — the 6 sec corpus patterns are long
-        /// full-fn bodies whose common-token centroid absorbs generic Rust
-        /// spans, and the eval fixture set carries NO sec-labeled spans (so
-        /// every sec-routing counts as a miss by construction). Measured
-        /// 45/101 (44.6%, Plan 018 Phase 1). Floor = measured − 5 spans of
-        /// corpus-growth headroom. Same contract as above: re-measure +
-        /// re-pin with the delta recorded, never weaken silently. The
-        /// RETRIEVAL floors (the load-bearing ones) all held under sec.
-        #[cfg(all(feature = "sec", not(feature = "kernel_heal")))]
-        pub const ROUTER_ANNOTATION_4D: f32 = 40.0 / 101.0;
-        /// 4-domain + kernel state: the same mechanical drop, measured over
-        /// the 131-span set (101 + 30 kernel self-variants; the kernel spans
-        /// are strongly sec-adjacent vocabulary so they route correctly more
-        /// often). Measured 78/131 (59.5%, Plan 018 Phase 1). Floor =
-        /// measured − 5 spans.
-        #[cfg(all(feature = "sec", feature = "kernel_heal"))]
-        pub const ROUTER_ANNOTATION_4D_K: f32 = 73.0 / 131.0;
+        /// Router-annotation accuracy floors, one per enabled-domain state
+        /// (Issue 020 wiring, Bench 025). This is the standing per-batch
+        /// measurement of annotation quality — NOT a gate-quality claim
+        /// (gating stays killed at the 85% bar).
+        ///
+        /// **Restructured with the docker landing (Plan 030 T0.4).** These
+        /// were four `#[cfg]`-gated consts keyed on `(kernel_heal, sec)`. A
+        /// 5th domain would have made it EIGHT consts whose declaration cfg
+        /// and use cfg must match exactly — the precise shape that turned CI
+        /// Layer 5a red on the sec landing (`ROUTER_ANNOTATION_3D` declared
+        /// under `kernel_heal` but used under `not(sec)` → dead_code under
+        /// `-D warnings`). Selecting at RUNTIME with `cfg!` compiles every
+        /// arm in every state, so that whole failure class is gone; the
+        /// values stay per-state and measured.
+        ///
+        /// Floor = measured − 5 spans of corpus-growth headroom, per state.
+        /// Re-measure + re-pin with the delta recorded; never weaken
+        /// silently.
+        #[must_use]
+        pub fn router_annotation_floor() -> f32 {
+            match (
+                cfg!(feature = "kernel_heal"),
+                cfg!(feature = "sec"),
+                cfg!(feature = "docker"),
+            ) {
+                // 2-domain (clippy+perf): measured 71/101 (70.3%, Batch 59).
+                (false, false, false) => 66.0 / 101.0,
+                // 3-domain (+kernel): measured 84+5/130.
+                (true, false, false) => 84.0 / 130.0,
+                // 4-domain (+sec): measured 45/101 (44.6%, Plan 018) — the
+                // TF-cosine lexical router has a mechanically harder task
+                // (sec's 6 patterns are long full-fn bodies whose
+                // common-token centroid absorbs generic Rust spans, and the
+                // fixture set carries NO sec-labeled spans, so every
+                // sec-routing is a miss by construction).
+                (false, true, false) => 40.0 / 101.0,
+                // 4-domain + kernel: measured 78/131 (59.5%, Plan 018).
+                (true, true, false) => 73.0 / 131.0,
+                // ── docker-enabled states (Plan 030 T0.4, MEASURED
+                // 2026-08-28; floor = measured − 5 spans, per state) ──
+                //
+                // Docker's 27 patterns are DOCKERFILE text, not Rust, so
+                // their vocabulary (FROM/RUN/apt-get/COPY) barely
+                // intersects the Rust fixture spans. The measured result
+                // is the opposite of sec's: adding docker never lowers the
+                // annotation and twice RAISES it (2-domain 71/101 → 73/101;
+                // 4D+K 78/131 → 82/131), because a distinctive
+                // off-vocabulary centroid absorbs fewer generic Rust spans
+                // than a Rust-shaped one does. That is the measured answer
+                // to Proposal 006's open question about a 5th domain's cost
+                // to the router: for THIS domain it is not a cost.
+                (false, false, true) => 68.0 / 101.0, // measured 73/101 (72.3%)
+                (true, false, true) => 89.0 / 131.0,  // measured 94/131 (71.8%)
+                (false, true, true) => 36.0 / 101.0,  // measured 41/101 (40.6%)
+                (true, true, true) => 77.0 / 131.0,   // measured 82/131 (62.6%)
+            }
+        }
     }
 
     #[allow(clippy::cast_precision_loss)] // ratio arithmetic over tiny counts
@@ -1336,14 +1379,7 @@ mod tests {
         if report.router_checked > 0 {
             #[allow(clippy::cast_precision_loss)] // ratio over tiny counts
             let acc = report.router_correct as f32 / report.router_checked as f32;
-            #[cfg(all(feature = "sec", feature = "kernel_heal"))]
-            let floor = floors::ROUTER_ANNOTATION_4D_K;
-            #[cfg(all(feature = "sec", not(feature = "kernel_heal")))]
-            let floor = floors::ROUTER_ANNOTATION_4D;
-            #[cfg(all(not(feature = "sec"), feature = "kernel_heal"))]
-            let floor = floors::ROUTER_ANNOTATION_3D;
-            #[cfg(not(any(feature = "kernel_heal", feature = "sec")))]
-            let floor = floors::ROUTER_ANNOTATION;
+            let floor = floors::router_annotation_floor();
             assert!(
                 acc >= floor,
                 "router annotation accuracy {:.1}% below floor {:.1}% — annotation decayed (re-measure + re-pin per the Issue 020 contract)",
@@ -1540,7 +1576,7 @@ mod tests {
     /// in the sec domain. Establishes the new domain's retrieval floor
     /// WITHOUT touching the shared eval fixture set (the 4-domain router
     /// annotation floor is re-pinned separately — see
-    /// [`floors::ROUTER_ANNOTATION_4D`]).
+    /// [`floors::router_annotation_floor`]).
     #[cfg(feature = "sec")]
     #[test]
     fn sec_self_variants_retrieve_top1() {

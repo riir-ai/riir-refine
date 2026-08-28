@@ -174,6 +174,18 @@ fn instantiates(domain: DomainId, rule_id: &str, code: &str, file: &syn::File, m
             }
             !collect_edits(rule_id, code, file).is_empty()
         }
+        #[cfg(feature = "docker")]
+        DomainId::Docker => {
+            // The docker proposers read TEXT, not the parsed `syn::File` —
+            // the only domain whose probe ignores `file` entirely.
+            use crate::domains::docker::proposers::collect_edits;
+            if mode == RerankMode::Structural
+                && !crate::domains::docker::rules::FIXABLE_DOCKER.contains(&rule_id)
+            {
+                return false;
+            }
+            !collect_edits(rule_id, code).is_empty()
+        }
         // Kernel has no proposers (Plan 005 Phase 5 deferred — the corpus is
         // concept-grade). Nothing to probe; retrieval order stands.
         _ => false,

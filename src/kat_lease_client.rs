@@ -497,6 +497,7 @@ pub const PACK_DOMAIN_CLIPPY: &str = "clippy";
 pub const PACK_DOMAIN_PERF: &str = "perf";
 pub const PACK_DOMAIN_KERNEL: &str = "kernel";
 pub const PACK_DOMAIN_SEC: &str = "sec";
+pub const PACK_DOMAIN_DOCKER: &str = "docker";
 
 /// One evolved corpus entry (the retrieval triple).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

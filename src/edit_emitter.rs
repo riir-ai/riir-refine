@@ -33,7 +33,11 @@ use syn::{Expr, File, Item, Signature, Stmt};
 /// One span-preserving source edit: replace `source[start..end]` with
 /// `replacement`. Byte offsets index the exact original source the file was
 /// parsed from.
-#[derive(Debug, Clone)]
+///
+/// `PartialEq`/`Eq` (added with the `docker` domain, Plan 030) so proposer
+/// tests can assert on emitted edits directly instead of on their applied
+/// output — purely additive, no behavior change.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SourceEdit {
     pub start: usize,
     pub end: usize,

@@ -15,6 +15,7 @@
 | [`rust_perf.md`](rust_perf.md) | Phase 2: `RustPerfDomain` + `PerfRule` + 39-rule seed corpus + `PerfVerifier` (`cargo test`); Phase 4: top-5 `syn` AST proposers (`--fix` upgrade) |
 | [`kernel_opt.md`](kernel_opt.md) | Phase 3: `KernelOptDomain` + `KernelRule` + `KernelExpertRouter` (`pick_domain`) + `KernelThermalRouter` (Plasma→Hot→Warm→Cold→Freeze) + `KernelVerifier` (stub) |
 | [`sec.md`](sec.md) | Plan 018: `SecDomain` + `SecRule` + the geiger-taxonomy unsafe counter + the banned-list boundary gate + 6-rule Phase-1 corpus (4 proposers) |
+| [`docker.md`](docker.md) | Plan 030: `DockerDomain` + `DockerRule` + the stanza scanner (no `syn`) + the hadolint oracle tier + the DL3059-refusal gate + 27-rule Phase-1 corpus (15 bounded fixes) |
 | [`cross_domain_routing.md`](cross_domain_routing.md) | Why cross-domain auto-routing is NOT in scope (Proposal 001) |
 
 ## Source
@@ -30,10 +31,13 @@
 | Feature | Default | Implies | Domain |
 |---|---|---|---|
 | `clippy_lints` | ✅ on | — | clippy lint healing |
-| `rust_perf` | off | — | rust perf healing (Phase 2) |
+| `rust_perf` | ✅ on (since 2026-08-13) | — | rust perf healing (Phase 2) |
 | `rust_perf_verify` | off | `rust_perf` | `cargo test` verifier |
 | `kernel_heal` | off | `katgpt-core/variable_rank_domain_expert` | GPU kernel opt (Phase 3) |
 | `kernel_verify` | off | `kernel_heal` | CubeCL compile verifier (STUB) |
+| `sec` | off | — | security-pattern healing (Plan 018) |
+| `docker` | off | — | Dockerfile bounded-fix healing (Plan 030) |
+| `docker_verify` | off | `docker` | hadolint agreement oracle |
 
 ## Status
 

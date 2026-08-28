@@ -355,6 +355,17 @@ pub use domains::sec::{SecDomain, SecFamily, SecRule, SecVerdict, UnsafeCounts, 
 #[cfg(feature = "sec")]
 pub use domains::sec::corpus::build_sec_seed_corpus;
 
+// ── docker domain re-exports (behind `docker` feature, opt-in) ────────────
+#[cfg(feature = "docker")]
+pub use domains::docker::{
+    refuses as docker_refusals, DockerDomain, DockerFamily, DockerRule, DockerVerdict,
+    SyntaxVersion,
+};
+
+/// The docker seed corpus (behind `docker`).
+#[cfg(feature = "docker")]
+pub use domains::docker::corpus::build_docker_seed_corpus;
+
 /// `kernel_opt` thermal router (behind `kernel_heal`).
 #[cfg(feature = "kernel_heal")]
 pub use domains::kernel_opt::thermal::{KernelThermalRouter, ThermalTier};

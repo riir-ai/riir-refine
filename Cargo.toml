@@ -307,6 +307,26 @@ rustc_errors = ["compile_oracle"]
 # judgment-bearing detection.
 sec = []
 
+# Plan 030 / Proposal 006: the `docker` domain — Dockerfile bounded-fix
+# healing + retrieval. Opt-in (default-off), ZERO new dependencies: the
+# stanza scanner is a hand-written line scanner (no `syn`, and no `regex`
+# either — the WGSL scanner's regex dep stays behind `kernel_heal`).
+#
+# The measured delta: hadolint (71 DL rules) and `docker build --check`
+# (21 checks) are both DETECTION-ONLY, verified live — fixing is
+# unoccupied, and the cache/build-speed axis is unoccupied on the
+# detection side too (Research 086). NOT compose/k8s, NOT GitHub Actions
+# (zizmor), NOT image scanning (trivy/grype), NOT base-image version
+# auditing (renovate) — and never a registry network call.
+docker = []
+
+# The docker oracle tier: re-runs hadolint (external binary, if on PATH)
+# to confirm a Class-A rule's finding is GONE after the fix — the
+# `clippy_verify` symmetry. Degrades to the Tier-0 stanza check with ONE
+# log line when the binary is absent (the Issue 018 oracle-split): "we
+# could not check" and "the check failed" are different facts.
+docker_verify = ["docker"]
+
 # Ruliology candidate enumeration (L3 refinement layer).
 # Implies `clippy_lints` (searches over clippy corpus entries).
 ruliology_search = ["clippy_lints"]

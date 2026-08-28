@@ -968,7 +968,7 @@ fn usage() -> ! {
         "cargo-heal (Plan 005) — modelless code healing via latent corpus retrieval
 
 USAGE:
-    cargo heal --suggest [--domain <auto|clippy|perf|kernel|sec>] [--top-k <N>] <path>...
+    cargo heal --suggest [--domain <auto|clippy|perf|kernel|sec|docker>] [--top-k <N>] <path>...
     cargo heal --fix [--write] [--no-fmt] [--quiet] [--verify [--verify-args <s>]] [--top-k <N>] <path>...
     cargo heal --fix-compile [--write] [--max-iters <N>] [--verify-args <s>] <path>...
     cargo heal --dump-trajectories > trajectories.jsonl
@@ -1280,6 +1280,7 @@ fn parse_args() -> Args {
                     "perf" => args.domain = Some(DomainId::Perf),
                     "kernel" => args.domain = Some(DomainId::Kernel),
                     "sec" => args.domain = Some(DomainId::Sec),
+                    "docker" => args.domain = Some(DomainId::Docker),
                     other => {
                         eprintln!("unknown --domain {other:?} (want auto|clippy|perf|kernel|sec)");
                         usage();
@@ -1442,6 +1443,44 @@ fn validate_mode_flags(
 
 /// Recursively collect source files with the given extension (std-only
 /// walker — no new dep). Skips hidden dirs + `target`/`vendor` build noise.
+/// Whether a file name is a Dockerfile by convention.
+fn is_dockerfile_name(name: &str) -> bool {
+    name == "Dockerfile" || name.ends_with(".Dockerfile") || name.starts_with("Dockerfile.")
+}
+
+/// Collect Dockerfiles under `root` (Plan 030 T0.4) — the name-matched
+/// twin of [`collect_source_files`], which matches by extension only.
+fn collect_dockerfiles(root: &Path, out: &mut Vec<PathBuf>) {
+    if root.is_file() {
+        let name = root.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        if is_dockerfile_name(name) {
+            out.push(root.to_path_buf());
+        }
+        return;
+    }
+    let mut queue: VecDeque<PathBuf> = VecDeque::new();
+    queue.push_back(root.to_path_buf());
+    while let Some(dir) = queue.pop_front() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+                continue;
+            };
+            if name.starts_with('.') || name == "target" || name == "vendor" {
+                continue;
+            }
+            if path.is_dir() {
+                queue.push_back(path);
+            } else if is_dockerfile_name(name) {
+                out.push(path);
+            }
+        }
+    }
+}
+
 fn collect_source_files(root: &Path, ext: &str, out: &mut Vec<PathBuf>) {
     if root.is_file() {
         let name = root.file_name().and_then(|n| n.to_str()).unwrap_or("");
@@ -1576,6 +1615,7 @@ const CORPUS_DOMAIN_TABLE: &[(&str, &str, &str)] = &[
     ("rust_perf", "src/domains/rust_perf/corpus.rs", "rule_id:"),
     ("clippy_lints", "src/domains/clippy_lints/corpus.rs", "lint_name:"),
     ("sec", "src/domains/sec/corpus.rs", "rule_id:"),
+    ("docker", "src/domains/docker/corpus.rs", "rule_id:"),
 ];
 
 /// Whether the domain's feature is compiled into THIS binary (the honest
@@ -1588,6 +1628,7 @@ fn domain_compiled(domain: &str) -> bool {
         "rust_perf" => cfg!(feature = "rust_perf"),
         "clippy_lints" => cfg!(feature = "clippy_lints"),
         "sec" => cfg!(feature = "sec"),
+        "docker" => cfg!(feature = "docker"),
         _ => false,
     }
 }
@@ -2649,9 +2690,24 @@ fn main() {
     for path in &args.paths {
         collect_source_files(path, ".wgsl", &mut wgsl_files);
     }
-    if files.is_empty() && wgsl_files.is_empty() {
-        eprintln!("no .rs/.wgsl files under the given paths");
+    // Plan 030 T0.4: the second non-syn surface. Dockerfiles are matched by
+    // NAME, not extension — the three conventional spellings are
+    // `Dockerfile`, `<name>.Dockerfile` and `Dockerfile.<name>`, and a
+    // plain suffix match would miss the third.
+    let mut dockerfiles = Vec::new();
+    for path in &args.paths {
+        collect_dockerfiles(path, &mut dockerfiles);
+    }
+    if files.is_empty() && wgsl_files.is_empty() && dockerfiles.is_empty() {
+        eprintln!("no .rs/.wgsl/Dockerfile files under the given paths");
         std::process::exit(1);
+    }
+    #[cfg(not(feature = "docker"))]
+    if !dockerfiles.is_empty() {
+        eprintln!(
+            "note: {} Dockerfile(s) found but the docker domain needs --features docker (Plan 030)",
+            dockerfiles.len()
+        );
     }
     #[cfg(not(feature = "kernel_heal"))]
     if !wgsl_files.is_empty() {
@@ -3178,6 +3234,20 @@ fn main() {
             }
         }
     }
+
+    // ── Plan 030 T0.4: the docker lane (the second non-syn surface, and
+    // the only one with bounded proposers — so it serves --fix too).
+    #[cfg(feature = "docker")]
+    let n_docker = match (args.suggest || args.fix)
+        && args.domain.is_none_or(|d| d == DomainId::Docker)
+        && !dockerfiles.is_empty()
+    {
+        true => run_docker_lane(&dockerfiles, args.suggest, args.fix, args.write),
+        false => 0,
+    };
+    #[cfg(not(feature = "docker"))]
+    let n_docker = 0usize;
+    let _ = n_docker;
 
     // ── Issue 025 T4: the non-syn surface suggest pass — `.wgsl` kernel
     // files + `#[cube]` bodies inside `.rs` files, keyed to the kernel
@@ -3708,10 +3778,110 @@ fn main() {
     }
 }
 
+/// Plan 030 T0.4 — the `docker` lane.
+///
+/// Dockerfiles cannot ride the syn fix loop (no `syn::File`), so the domain
+/// gets its own pass. It handles BOTH modes, because unlike the WGSL
+/// scanner this domain ships bounded proposers:
+///
+/// - `--suggest`: print every finding as a rule citation.
+/// - `--fix`: print the bounded rewrites; `--write` applies them.
+///
+/// Returns the number of findings printed.
+///
+/// The caller-gated rules stay silent unless the evidence is derivable from
+/// the repo around the file — here, the presence of a `.dockerignore` and a
+/// committed `Cargo.lock` beside the build context. Evidence we cannot
+/// derive stays `None`, so those rules do not fire.
+#[cfg(feature = "docker")]
+fn run_docker_lane(paths: &[PathBuf], suggest: bool, fix: bool, write: bool) -> usize {
+    use riir_clippy::domains::docker::proposers::fix_all;
+    use riir_clippy::domains::docker::rules::{scan_source_with, FIXABLE_DOCKER};
+
+    let mut printed = 0usize;
+    for path in paths {
+        let Ok(src) = std::fs::read_to_string(path) else {
+            continue;
+        };
+        let ctx = docker_scan_context(path);
+        let findings = scan_source_with(&src, &ctx);
+        for f in &findings {
+            let kind = match FIXABLE_DOCKER.contains(&f.rule_id) && f.fix.is_some() {
+                true => "fix    ",
+                false => "suggest",
+            };
+            println!(
+                "{}:{} [docker {kind}] {:<40} — {}",
+                path.display(),
+                f.line,
+                f.rule_id,
+                f.excerpt.trim()
+            );
+            printed += 1;
+        }
+        if !fix {
+            continue;
+        }
+        let fixed = fix_all(&src, &ctx);
+        if fixed == src {
+            continue;
+        }
+        match write {
+            true => match std::fs::write(path, &fixed) {
+                Ok(()) => println!("  wrote {}", path.display()),
+                Err(e) => eprintln!("  FAILED to write {}: {e}", path.display()),
+            },
+            false => println!(
+                "  {} bounded fix(es) available for {} (re-run with --write to apply)",
+                findings
+                    .iter()
+                    .filter(|f| f.fix.is_some() && FIXABLE_DOCKER.contains(&f.rule_id))
+                    .count(),
+                path.display()
+            ),
+        }
+    }
+    let _ = suggest;
+    printed
+}
+
+/// Derive what the repo around a Dockerfile can prove, for the caller-gated
+/// rules. Anything not derivable stays `None` — never guessed.
+#[cfg(feature = "docker")]
+fn docker_scan_context(path: &Path) -> riir_clippy::domains::docker::rules::ScanContext {
+    use riir_clippy::domains::docker::rules::ScanContext;
+
+    // The build context is conventionally the Dockerfile's directory or a
+    // parent; walk up to the nearest dir carrying a Cargo.toml and read the
+    // evidence there. A file outside any Cargo project yields no evidence.
+    let mut dir = path.parent();
+    while let Some(d) = dir {
+        if d.join("Cargo.toml").is_file() {
+            return ScanContext {
+                lockfile_committed: Some(d.join("Cargo.lock").is_file()),
+                dockerignore_present: Some(d.join(".dockerignore").is_file()),
+                // Not derivable from the filesystem: whether the build is a
+                // multi-member workspace build, and whether the caller
+                // passes `--platform a,b`. Both stay silent.
+                workspace_multi_member: None,
+                multi_platform_build: None,
+            };
+        }
+        dir = d.parent();
+    }
+    ScanContext::default()
+}
+
 /// Issue 031 H2: `--domain` scopes the `--fix` proposer loops. Returns
-/// `(run_perf, run_clippy)`. `auto` (None) runs both compiled-in domains
-/// (the historical behavior); an explicit domain runs ONLY its own
-/// proposers; `kernel` runs neither (kernel proposers are Phase 5).
+/// `(run_perf, run_clippy, run_sec)`. `auto` (None) runs every compiled-in
+/// syn domain (the historical behavior); an explicit domain runs ONLY its
+/// own proposers; `kernel` runs neither (kernel proposers are Phase 5).
+///
+/// `docker` is deliberately NOT in this tuple: its proposers read
+/// Dockerfile TEXT, not a parsed `syn::File`, so it cannot ride the syn
+/// fix loop at all. It runs in its own lane ([`run_docker_lane`]), which
+/// is why an explicit `--domain docker` returns all-false here — the syn
+/// loop must do nothing.
 fn fix_domain_scopes(domain: Option<DomainId>) -> (bool, bool, bool) {
     (
         domain.is_none_or(|d| d == DomainId::Perf),
@@ -3772,6 +3942,7 @@ fn run_overlay_with_promotion(
                 "perf" => Some(DomainId::Perf),
                 "kernel" => Some(DomainId::Kernel),
                 "sec" => Some(DomainId::Sec),
+                "docker" => Some(DomainId::Docker),
                 _ => None,
             }?;
             Some((id, triples))
@@ -3793,7 +3964,7 @@ fn lease_overlay_for_run(
 ) -> Option<(u64, Vec<(DomainId, Vec<(String, String, String)>)>)> {
     use riir_clippy::kat_lease_client::{
         overlay_from_epoch, PACK_DOMAIN_CLIPPY, PACK_DOMAIN_KERNEL, PACK_DOMAIN_PERF,
-        PACK_DOMAIN_SEC,
+        PACK_DOMAIN_DOCKER, PACK_DOMAIN_SEC,
     };
     let (epoch, raw) = overlay_from_epoch(store, pin)?;
     let mut overlay = Vec::new();
@@ -3803,6 +3974,7 @@ fn lease_overlay_for_run(
             PACK_DOMAIN_PERF => Some(DomainId::Perf),
             PACK_DOMAIN_KERNEL => Some(DomainId::Kernel),
             PACK_DOMAIN_SEC => Some(DomainId::Sec),
+            PACK_DOMAIN_DOCKER => Some(DomainId::Docker),
             other => {
                 eprintln!("corpus lease: ignoring unknown pack domain {other:?} (client too old?)");
                 None

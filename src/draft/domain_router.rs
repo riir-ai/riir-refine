@@ -59,15 +59,18 @@ pub enum DomainId {
     Kernel,
     /// `sec` — security-pattern fixes (FFI/Drop/pointer hygiene, Plan 018).
     Sec,
+    /// `docker` — Dockerfile bounded-fix patterns (Plan 030).
+    Docker,
 }
 
 impl DomainId {
     /// All domains, in router order.
-    pub const ALL: [DomainId; 4] = [
+    pub const ALL: [DomainId; 5] = [
         DomainId::Clippy,
         DomainId::Perf,
         DomainId::Kernel,
         DomainId::Sec,
+        DomainId::Docker,
     ];
 
     /// Stable label (feature-independent).
@@ -78,6 +81,7 @@ impl DomainId {
             DomainId::Perf => "perf",
             DomainId::Kernel => "kernel",
             DomainId::Sec => "sec",
+            DomainId::Docker => "docker",
         }
     }
 }

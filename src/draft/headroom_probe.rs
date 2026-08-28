@@ -418,6 +418,8 @@ fn is_fixable(domain: DomainId, rule_id: &str) -> bool {
         }
         #[cfg(feature = "sec")]
         DomainId::Sec => crate::domains::sec::proposers::FIXABLE_SEC.contains(&rule_id),
+        #[cfg(feature = "docker")]
+        DomainId::Docker => crate::domains::docker::rules::FIXABLE_DOCKER.contains(&rule_id),
         // Kernel ships no proposers (Plan 005 Phase 5 deferred).
         _ => false,
     }
