@@ -85,7 +85,7 @@
 //! scanner carries no evidence about the class. Proposal 005 T3.2 asked
 //! whether the scanner could take over that job if `external` were
 //! admitted; it was measured and the answer is **no, structurally**
-//! ([Issue 052](../.issues/052_t32_leak_posture_content_scan_insufficient.md),
+//! ([Bench 052](../.benchmarks/052_t32_external_leak_posture.md),
 //! suite `tests/kat_redact_t32_external.rs`): for consumer code the
 //! confidential asset is the SPAN ITSELF, so a span can carry zero
 //! secrets, pass every rule, and still be exactly what must not egress
@@ -93,7 +93,7 @@
 //! No pattern set closes that, because there is no pattern for "this
 //! source belongs to someone else". **Do not admit `external` on the
 //! strength of a stronger pattern set** — that is the specific dangerous
-//! move Issue 052 names.
+//! move Bench 052 names.
 
 use std::fmt;
 use std::io;

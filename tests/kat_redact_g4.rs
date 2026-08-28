@@ -279,7 +279,7 @@ fn g4_shipped_policy_file_loads_at_the_current_gate_version() {
         "a clean own-repo span on an allowed path must sync under the          shipped policy — if it does not, the file loaded as deny-all"
     );
     // The shipped posture itself, pinned against accidental widening: user
-    // code stays denied on ORIGIN (Issue 052 — this policy line is the
+    // code stays denied on ORIGIN (Bench 052 — this policy line is the
     // control that protects consumer code, not the pattern set).
     assert!(
         !loaded.gate.check(SpanOrigin::External, None, "fn f() {}").is_syncable(),

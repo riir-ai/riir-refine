@@ -6,8 +6,11 @@ for consumer-grade code; `external` origin stays denied. The measurement
 also surfaced a miscalibrated parameter that was worth fixing on its own
 merits, shipped as **`REDACT_VERSION` 1 → 2** (§The v2 bump) — justified on
 own-repo determinism, explicitly NOT as progress toward `external`.
-Decision + reasoning in
-[Issue 052](../.issues/052_t32_leak_posture_content_scan_insufficient.md).
+Decision + reasoning: **§Verdict** below. Issue 052 carried the same
+decision and was CLOSED + REMOVED 2026-08-28 per the noise-reduction rule —
+this bench and [Proposal 005](../.proposals/005_kat_heal_service_network.md)
+T3.2 are the surviving record. Originating commits: `2581fa6` (the suite),
+`a0d03b3` (the v2 bump). Re-verified green at HEAD on removal: 6/6.
 
 Parent: [Proposal 005](../.proposals/005_kat_heal_service_network.md) T3.2 ·
 [Bench 049](049_fixer_regate_poc.md) §T5 (the CF no-training half) ·
@@ -134,6 +137,17 @@ architecture, a new plan, not a test suite.
 
 Trainer-nodes-only stands, now on a measured basis rather than a
 precautionary one.
+
+Two operative consequences, stated so they survive the issue's removal:
+
+1. **`external` remains absent from `allow_origins`, and that policy line —
+   not the pattern set — is what to defend in review.** Pinned by
+   `t32_shipped_policy_denies_every_confidential_span`.
+2. **No pattern work is proposed *for the purpose of admitting `external`*.**
+   Closing the remaining evasions has real value for own-repo hygiene, but
+   it cannot move this verdict: Result 4 is untouched by any pattern
+   improvement. The v2 bump below is justified on own-repo determinism
+   grounds ONLY — conflating the two is the exact trap this bench names.
 
 ## Honest residual
 
