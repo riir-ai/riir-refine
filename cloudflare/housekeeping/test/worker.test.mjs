@@ -64,6 +64,21 @@ async function atUtc(iso, fn) {
   try { return await fn(); } finally { globalThis.Date = Real; }
 }
 
+// Same as atUtc, but `Date.now()` ADVANCES by `stepMs` on every read. The
+// fixed-instant clock makes any elapsed-time guard inert — it would pass a
+// wall-clock test by measuring zero, which is the "verify the instrument"
+// trap. This one lets a guard actually trip.
+async function atUtcAdvancing(iso, stepMs, fn) {
+  const Real = Date;
+  let t = new Real(iso).getTime();
+  class Fake extends Real {
+    constructor(...a) { if (a.length === 0) super(iso); else super(...a); }
+    static now() { const v = t; t += stepMs; return v; }
+  }
+  globalThis.Date = Fake;
+  try { return await fn(); } finally { globalThis.Date = Real; }
+}
+
 const APP = "a03a70ff-88e9-45c5-af80-339ab7707fbe";
 
 // CF GraphQL stub: one app burning a fixed footprint every hour.
@@ -407,4 +422,93 @@ test("backfill is a write route: POST only, and it never fails open", async () =
   const noCollector = { ...env(kv, { READ_TOKEN: "s3cret" }), CF_API_TOKEN: undefined };
   assert.equal((await postBackfill(noCollector, "?days=1", { token: "s3cret" })).status, 503);
   assert.equal(kv.ops.put, 0);
+});
+
+// ---- T9b: cache posture, budget-scan cost, wall-clock guard --------------
+
+test("an authenticated body is never marked publicly cacheable", async () => {
+  // RFC 9111 §3.5: `public` is the exact directive that GRANTS a shared cache
+  // the storage of an Authorization-bearing response that it would otherwise
+  // refuse. Stamping it on the full rows handed account telemetry to every
+  // cache on the path. `Vary: Authorization` is a mitigation, not a licence.
+  const kv = kvStub();
+  await runHour(kv, "2026-08-28T12:00:06.549Z");
+  const e = env(kv, { READ_TOKEN: "s3cret" });
+
+  for (const path of ["/latest", "/status", "/hours?n=4", "/days?n=4"]) {
+    const priv = await fetchAt(e, path, { token: "s3cret" });
+    assert.equal(priv.headers.get("Cache-Control"), "private, no-store",
+      `${path} leaked an authenticated body into shared caches`);
+    assert.match(priv.headers.get("Vary") || "", /Authorization/);
+  }
+  // The redacted anonymous projection stays publicly cacheable — that is the
+  // whole point of having a projection.
+  for (const [path, secs] of [["/latest", 60], ["/status", 60]]) {
+    const pub = await fetchAt(e, path);
+    assert.equal(pub.headers.get("Cache-Control"), `public, max-age=${secs}`);
+  }
+});
+
+test("the monthly-budget scan stops running once the alert has fired", async () => {
+  const extra = { MONTHLY_BUDGET_USD: "0.000001" };   // trivially exceeded
+  // A prior day row must exist: the month-to-date scan reads the `day:`
+  // aggregates, and this run writes its own only after the budget check.
+  const seed = { "day:20260827": JSON.stringify({ date: "2026-08-27", est_usd: 1, hours: 24 }) };
+  const kv = kvStub(seed);
+  await runHour(kv, "2026-08-28T10:00:06.549Z", extra);
+  assert.ok(kv.store.has("alert:202608:budget"), "precondition: alert fired");
+
+  // The scan is 1 list + up to 31 gets, and it was re-running EVERY hour for
+  // the rest of the month to recompute a number that could only re-fire an
+  // alert already sent.
+  const before = { ...kv.ops };
+  await runHour(kv, "2026-08-28T11:00:06.549Z", extra);
+  const withAlert = { list: kv.ops.list - before.list, get: kv.ops.get - before.get };
+
+  const kv2 = kvStub(seed);
+  await runHour(kv2, "2026-08-28T10:00:06.549Z");          // no budget configured
+  const before2 = { ...kv2.ops };
+  await runHour(kv2, "2026-08-28T11:00:06.549Z");
+  const noBudget = { list: kv2.ops.list - before2.list, get: kv2.ops.get - before2.get };
+
+  assert.equal(withAlert.list, noBudget.list,
+    "a post-alert run must not spend the month-to-date list op");
+  assert.ok(withAlert.get <= noBudget.get + 1,
+    `post-alert run scanned the month anyway: ${withAlert.get} vs ${noBudget.get}`);
+});
+
+test("a long backfill stops on a wall-clock budget with a resumable cursor", async () => {
+  // A 524 mid-run is safe (writes are committed, the route is idempotent) but
+  // it is indistinguishable from a broken worker and it loses the cursor.
+  const kv = kvStub();
+  const e = env(kv, { READ_TOKEN: "s3cret" });
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = fetchStub();
+  let body;
+  try {
+    const req = new Request(
+      "https://riir-kat-housekeeping.foxfox.workers.dev/backfill?days=14&end=2026-08-27",
+      { method: "POST", headers: { Authorization: "Bearer s3cret" } },
+    );
+    // ~5 s of simulated wall clock per Date.now() read: the 45 s guard trips
+    // after a couple of days, long before the 700-subrequest budget would.
+    body = await (await atUtcAdvancing(NOW, 5000,
+      () => worker.fetch(req, e, ctxStub()))).json();
+  } finally { globalThis.fetch = realFetch; }
+
+  assert.equal(body.truncated, true);
+  assert.equal(body.truncated_by, "wall_clock");
+  assert.ok(body.subrequests_spent < 700, "must stop on time, not on budget");
+  assert.match(body.next_end, /^\d{4}-\d{2}-\d{2}$/);
+  // The cursor must name a day that was NOT completed, so resuming loses none.
+  assert.ok(!kv.store.has(`hour:${body.next_end.replace(/-/g, "")}00`),
+    "cursor points at an already-written day — resuming would skip real work");
+  // And it stopped on a day boundary: every day it did touch has all 24 rows.
+  const byDay = {};
+  for (const k of kv.store.keys()) {
+    if (k.startsWith("hour:")) byDay[k.slice(5, 13)] = (byDay[k.slice(5, 13)] || 0) + 1;
+  }
+  for (const [d, n] of Object.entries(byDay)) {
+    assert.equal(n, 24, `day ${d} was left half-written: ${n} rows`);
+  }
 });

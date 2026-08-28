@@ -36,10 +36,28 @@ function corsHeaders(request, env) {
   return h;
 }
 
-function cors(response, request, env, cacheSeconds) {
+// `authenticated` selects the cache posture, and it is not cosmetic.
+//
+// RFC 9111 §3.5: a shared cache MUST NOT reuse a response to a request
+// carrying an Authorization header UNLESS the response says `public` /
+// `s-maxage` / `must-revalidate`. So `public` is not a neutral hint here — it
+// is the exact directive that GRANTS shared caches the storage the default
+// would deny, and this worker was stamping it on the token-bearing full rows
+// (per-app ids, per-app cost, the mint anchor) on /latest, /status, /hours
+// and /days. `Vary: Authorization` keeps a *conformant* cache from serving
+// one caller's body to another, but it is a mitigation layered on an
+// unnecessary grant, and it depends on every intermediary honouring Vary.
+//
+// The isolate memo already got this right — "an authenticated body must never
+// be served from a cache an unauthenticated caller can also hit" — and then
+// the HTTP header handed the same body to every cache on the path. Same bug
+// class, one layer down. Authenticated responses are now `private, no-store`;
+// only the redacted anonymous projection stays publicly cacheable.
+function cors(response, request, env, cacheSeconds, authenticated) {
   const r = new Response(response.body, response);
   for (const [k, v] of Object.entries(corsHeaders(request, env))) r.headers.set(k, v);
-  if (cacheSeconds) r.headers.set("Cache-Control", `public, max-age=${cacheSeconds}`);
+  if (authenticated) r.headers.set("Cache-Control", "private, no-store");
+  else if (cacheSeconds) r.headers.set("Cache-Control", `public, max-age=${cacheSeconds}`);
   return r;
 }
 
@@ -395,8 +413,18 @@ async function runHousekeeping(env) {
     if (env.MONTHLY_BUDGET_USD) {
       try {
         const ym = dateISO.slice(0, 7).replace("-", ""); // YYYYMM
+        const dedupeKey = `alert:${ym}:budget`;
+        // Check the dedupe key BEFORE the scan, not after. The alert fires at
+        // most once a month, but the scan under it — 1 KV list + up to 31 gets
+        // — was running EVERY HOUR for the rest of the month to recompute a
+        // number that could only re-fire an alert already sent. Workers count
+        // every KV binding call as a subrequest, so this was ~32 of them per
+        // run, hourly, to reach a guaranteed no-op.
+        const alreadyAlerted = await env.HOUSEKEEPING_KV.get(dedupeKey);
         let mtd = 0;
-        const listed = await env.HOUSEKEEPING_KV.list({ prefix: `day:${ym}` });
+        const listed = alreadyAlerted
+          ? { keys: [] }
+          : await env.HOUSEKEEPING_KV.list({ prefix: `day:${ym}` });
         const vals = await mapLimit(listed.keys.map((k) => k.name), KV_CONCURRENCY,
           (n) => env.HOUSEKEEPING_KV.get(n));
         for (const v of vals) {
@@ -405,19 +433,16 @@ async function runHousekeeping(env) {
           } catch (_) { /* tolerate malformed rows */ }
         }
         const budget = parseFloat(env.MONTHLY_BUDGET_USD);
-        if (budget > 0 && mtd >= budget) {
-          const dedupeKey = `alert:${ym}:budget`;
-          if (!(await env.HOUSEKEEPING_KV.get(dedupeKey))) {
-            const msg = `⚠ ops budget alert ${ym}: month-to-date container est cost $${mtd.toFixed(2)} ≥ monthly budget $${budget.toFixed(2)} — ${DASHBOARD_URL}`;
-            const sent = await notify(env, msg);
-            await env.HOUSEKEEPING_KV.put(dedupeKey, JSON.stringify({
-              ts: now.toISOString(),
-              kind: "monthly_budget",
-              mtd_usd: +mtd.toFixed(6),
-              budget_usd: budget,
-              notified: sent,
-            }));
-          }
+        if (!alreadyAlerted && budget > 0 && mtd >= budget) {
+          const msg = `⚠ ops budget alert ${ym}: month-to-date container est cost $${mtd.toFixed(2)} ≥ monthly budget $${budget.toFixed(2)} — ${DASHBOARD_URL}`;
+          const sent = await notify(env, msg);
+          await env.HOUSEKEEPING_KV.put(dedupeKey, JSON.stringify({
+            ts: now.toISOString(),
+            kind: "monthly_budget",
+            mtd_usd: +mtd.toFixed(6),
+            budget_usd: budget,
+            notified: sent,
+          }));
         }
       } catch (_) { /* monthly budget check is best-effort */ }
     }
@@ -519,20 +544,30 @@ const GRAPHQL_RETENTION_DAYS = 31;
 // Worst case for one changed day: 1 list + 2 gql + 24 puts + 24 gets + 1 put.
 const DAY_SUBREQUEST_WORST_CASE = 52;
 const BACKFILL_SUBREQUEST_BUDGET = 700;
+// Cloudflare's edge closes a client connection that waits too long (524), and
+// a 14-day window is 28 sequential GraphQL round-trips. A timeout here is
+// SAFE — every KV write already committed and the route is idempotent, so the
+// owner can just re-run — but it is indistinguishable from a broken worker
+// and it loses the cursor. Stopping ourselves at 45 s turns that into a clean
+// `truncated:true` + `next_end` the runbook already knows how to resume from.
+const BACKFILL_WALL_CLOCK_MS = 45000;
 
 async function backfillRange(env, endDay, days) {
   const report = { written: 0, skipped: 0, truncated: false, next_end: null, per_day: [] };
   const endMs = Date.UTC(+endDay.slice(0, 4), +endDay.slice(5, 7) - 1, +endDay.slice(8, 10));
+  const started = Date.now();
   let spent = 0;
 
   for (let i = 0; i < days; i++) {
     const d = new Date(endMs - i * 86400e3);
     const dateISO = d.toISOString().slice(0, 10);
     const dk = dayKey(d);
-    if (spent + DAY_SUBREQUEST_WORST_CASE > BACKFILL_SUBREQUEST_BUDGET) {
+    const outOfTime = Date.now() - started > BACKFILL_WALL_CLOCK_MS;
+    if (outOfTime || spent + DAY_SUBREQUEST_WORST_CASE > BACKFILL_SUBREQUEST_BUDGET) {
       // Stop on a day boundary, never mid-day: a half-written day would look
       // complete to the aggregate. The cursor lets the owner resume exactly.
       report.truncated = true;
+      report.truncated_by = outOfTime ? "wall_clock" : "subrequest_budget";
       report.next_end = dateISO;
       break;
     }
@@ -609,6 +644,7 @@ async function backfillRange(env, endDay, days) {
   }
 
   report.subrequests_spent = spent;
+  report.elapsed_ms = Date.now() - started;
   return report;
 }
 
@@ -719,7 +755,7 @@ export default {
         } catch (_) { /* best-effort count */ }
         Object.assign(body, { alerts_today, latest: parsed });
       }
-      return cors(Response.json(body), request, env, 60);
+      return cors(Response.json(body), request, env, 60, hasToken);
     }
 
     if (url.pathname === "/latest") {
@@ -739,7 +775,7 @@ export default {
       if (!v) return cors(new Response("null", { status: 200,
         headers: { "Content-Type": "application/json" } }), request, env, 60);
       const full = JSON.parse(v);
-      if (hasToken) return cors(Response.json(full), request, env, 60);
+      if (hasToken) return cors(Response.json(full), request, env, 60, true);
       return cors(Response.json(publicRow(full)), request, env, 60);
     }
 
@@ -775,7 +811,7 @@ export default {
       // same scalar /latest publishes. Hour rows carry the per-app breakdown.
       const out = (isHours && !hasToken) ? rows.map(publicRow) : rows;
       if (!hasToken) memoPut(memoKey, out);
-      return cors(Response.json(out), request, env, 300);
+      return cors(Response.json(out), request, env, 300, hasToken);
     }
 
     return cors(new Response(

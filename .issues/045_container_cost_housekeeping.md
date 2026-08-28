@@ -1,7 +1,7 @@
 # Issue 045 — container cost observability + hourly housekeeping worker + smallest-sizing verdict
 
 **Filed:** 2026-08-26
-**Status:** OPEN — T4 (owner secrets) + T6 (external ledger shell) remain, and **T8 + T9 are code-complete, dry-run-VALIDATED, but still NOT DEPLOYED (owner-gated; one command: `cd cloudflare/housekeeping && npx wrangler deploy`)**. **2026-08-29 T9 SHIPPED (code+tests, undeployed): `POST /backfill` re-derives the hours T8 lost — the "unrecoverable" verdict was wrong, CF GraphQL retains ~31 d and exposes `datetimeHour`, so KV is a cache of a still-live source. 19/19 tests (7 new). En route it fixed a defect in T8's own test suite (the GraphQL stub omitted `datetimeHour`, so no test could have caught an hour-grouping bug) and a hot-path KV read-your-writes hole in the day aggregate.** Prior status: (2026-08-28: `hourKey()` was collapsing 24 hourly rows into 3, understating the daily cost ~8×; fixed + pinned by 12 regression tests, deploy blocked by the session permission classifier — run `cd cloudflare/housekeeping && npx wrangler deploy`); T5 RESOLVED (cross-repo correlation) + T7 read-path hardening SHIPPED 2026-08-28. Issue 053 (unattributed app `a03a70ff`) filed **and RESOLVED same day** by cross-repo correlation — it is the `riir-mmorpg-examples` CCU proof bench (Bench 034); resolved-and-removed per the noise rule, record in §T5 + git history. T1 verdict recorded, T2+T3 SHIPPED same day; live-mint half gated on Proposal 005 Phase 1. Sizing verdict feeds Proposal 005 T2.0/T2.1 **+ T2.6 / [Plan 031](../.plans/031_kat_sweeper_temp_container_r2_tier.md)** (2026-08-26 later-session sync). **2026-08-27: the T3 Worker was EXTENDED + redeployed (`ab79bd20`) — CORS on all read endpoints (dashboard live-fetch), Issue-044-T4 budget alerting (cap thresholds 50/90/100% + optional monthly budget, KV-dedupe, webhook via `ALERT_WEBHOOK_URL`), extended `/status` (`cap`/`thresholds`/`has_webhook`/`has_monthly_budget`/`alerts_today`).** **2026-08-28 truth-refresh: Proposal 005 Phase 1 LANDED 2026-08-27 (T1.5 dapps `84dd049` / T1.6 clippy `0a7cfd8`) — T6's blocker is NO LONGER Phase 1; the live-mint swap-in awaits the deferred Worker/DO HTTP ledger shell (Proposal 005 phase-2 defer / Plan 031 Phase B gate / phase-3 owner gate). Worker mint status strings refreshed `pending-phase-1` → `pending-worker-shell` + redeployed (version `f93ae507`, live-verified on the 04:00 UTC tick). T4 unchanged (owner-gated secrets). T5 still blocked — CLI exposes no id→name mapping (see checkbox).** *(That last clause is SUPERSEDED later the same day — T5 was resolved by cross-repo correlation, not by the CLI; see §T5.)*
+**Status:** OPEN — T4 (owner secrets) + T6 (external ledger shell) remain, and **T8 + T9 are code-complete, dry-run-VALIDATED, but still NOT DEPLOYED (owner-gated; one command: `cd cloudflare/housekeeping && npx wrangler deploy`)**. **2026-08-29 T9 + T9b SHIPPED (code+tests, undeployed). T9b: authenticated read responses were `Cache-Control: public` — RFC 9111 §3.5 makes that the exact directive granting shared caches storage of an `Authorization`-bearing response that they would otherwise refuse; now `private, no-store`. Plus the monthly-budget scan re-ran hourly after its alert had already fired (~32 subrequests/run to a guaranteed no-op), and the backfill could 524 instead of returning its resume cursor (45 s wall-clock guard). 22/22 tests. T9: `POST /backfill` re-derives the hours T8 lost — the "unrecoverable" verdict was wrong, CF GraphQL retains ~31 d and exposes `datetimeHour`, so KV is a cache of a still-live source. 19/19 tests (7 new). En route it fixed a defect in T8's own test suite (the GraphQL stub omitted `datetimeHour`, so no test could have caught an hour-grouping bug) and a hot-path KV read-your-writes hole in the day aggregate.** Prior status: (2026-08-28: `hourKey()` was collapsing 24 hourly rows into 3, understating the daily cost ~8×; fixed + pinned by 12 regression tests, deploy blocked by the session permission classifier — run `cd cloudflare/housekeeping && npx wrangler deploy`); T5 RESOLVED (cross-repo correlation) + T7 read-path hardening SHIPPED 2026-08-28. Issue 053 (unattributed app `a03a70ff`) filed **and RESOLVED same day** by cross-repo correlation — it is the `riir-mmorpg-examples` CCU proof bench (Bench 034); resolved-and-removed per the noise rule, record in §T5 + git history. T1 verdict recorded, T2+T3 SHIPPED same day; live-mint half gated on Proposal 005 Phase 1. Sizing verdict feeds Proposal 005 T2.0/T2.1 **+ T2.6 / [Plan 031](../.plans/031_kat_sweeper_temp_container_r2_tier.md)** (2026-08-26 later-session sync). **2026-08-27: the T3 Worker was EXTENDED + redeployed (`ab79bd20`) — CORS on all read endpoints (dashboard live-fetch), Issue-044-T4 budget alerting (cap thresholds 50/90/100% + optional monthly budget, KV-dedupe, webhook via `ALERT_WEBHOOK_URL`), extended `/status` (`cap`/`thresholds`/`has_webhook`/`has_monthly_budget`/`alerts_today`).** **2026-08-28 truth-refresh: Proposal 005 Phase 1 LANDED 2026-08-27 (T1.5 dapps `84dd049` / T1.6 clippy `0a7cfd8`) — T6's blocker is NO LONGER Phase 1; the live-mint swap-in awaits the deferred Worker/DO HTTP ledger shell (Proposal 005 phase-2 defer / Plan 031 Phase B gate / phase-3 owner gate). Worker mint status strings refreshed `pending-phase-1` → `pending-worker-shell` + redeployed (version `f93ae507`, live-verified on the 04:00 UTC tick). T4 unchanged (owner-gated secrets). T5 still blocked — CLI exposes no id→name mapping (see checkbox).** *(That last clause is SUPERSEDED later the same day — T5 was resolved by cross-repo correlation, not by the CLI; see §T5.)*
 **Repo:** riir-clippy (dashboard + worker deploy live here; sizing verdict feeds Proposal 005 T2.0/T2.1)
 **Owner ask (2026-08-26):**
 1. can the container be smaller? smallest?
@@ -284,6 +284,39 @@ lives (T1 above).
       **CODE + TESTS LANDED; DEPLOY PENDING — OWNER-GATED.** One command
       closes it: `cd cloudflare/housekeeping && npx wrangler deploy`.
 
+- [ ] T9b prod-grade pass on the same pending deploy (2026-08-29) — three
+      findings, each pinned by a test confirmed RED against the pre-T9b
+      worker:
+      **SEC-1 — authenticated bodies were marked publicly cacheable.**
+      `cors()` stamped `Cache-Control: public, max-age=60/300` on every read
+      route including the token-bearing full rows (per-app ids, per-app cost,
+      mint anchor). Per RFC 9111 §3.5 a shared cache MUST NOT reuse a response
+      to an `Authorization`-bearing request *unless* it carries
+      `public`/`s-maxage`/`must-revalidate` — so `public` was the exact
+      directive GRANTING storage the default would have refused.
+      `Vary: Authorization` was present and does keep a conformant cache from
+      cross-serving, but it is a mitigation on an unnecessary grant. Notably
+      the isolate memo already encoded the correct rule ("an authenticated
+      body must never be served from a cache an unauthenticated caller can
+      also hit") and the HTTP header contradicted it one layer down — the
+      same class T7/T8 kept finding. Authenticated responses are now
+      `private, no-store`; the redacted anonymous projection stays cacheable.
+      **PERF-1 — the monthly-budget scan ran forever after firing.** The
+      month-to-date scan (1 KV `list` + up to 31 `get`s) sat ABOVE its dedupe
+      check, so once the alert had fired it re-ran every hour for the rest of
+      the month to recompute a number that could only re-fire an alert already
+      sent — ~32 subrequests/run to reach a guaranteed no-op. Dedupe now gates
+      the scan. (Workers count every KV binding call as a subrequest.)
+      **RESIL-1 — the backfill could 524 instead of yielding its cursor.** 14
+      days is 28 sequential GraphQL round-trips, which can outlive the edge's
+      client-connection timeout. The timeout is SAFE (writes committed, route
+      idempotent) but indistinguishable from a broken worker, and it loses the
+      resume cursor. A 45 s wall-clock guard now stops on a day boundary and
+      returns `truncated_by:"wall_clock"` + `next_end`.
+      Test-instrument note: the wall-clock pin needed a new
+      `atUtcAdvancing()` helper — the existing fixed-instant clock makes any
+      elapsed-time guard measure zero and pass vacuously.
+      22/22 green; bundle re-verified (22.13 KiB / 6.68 KiB gzip, 7 bindings).
 - [ ] T9 backfill the hours T8 lost — **CODE + TESTS LANDED 2026-08-29;
       rides the same owner-gated deploy as T8.** `POST /backfill?days=&end=`
       re-derives missing `hour:YYYYMMDDHH` rows from the GraphQL billing

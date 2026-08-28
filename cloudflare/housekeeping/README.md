@@ -206,13 +206,27 @@ There are **two** gate levels, and the distinction is the whole design:
 | fail-**open** | `READ_TOKEN` unset ⇒ pass | liveness + config posture, so the T4 verification commands work before any token exists |
 | **hard** | `READ_TOKEN` set **and** presented | anything that is account telemetry, or that costs a KV `list` op |
 
-| route | anonymous | with `READ_TOKEN` | cache |
+| route | anonymous | with `READ_TOKEN` | cache (anon / authed) |
 |---|---|---|---|
-| `/latest` | projection + `redacted:true` | full row | 60 s |
-| `/status` | liveness (`worker`, `cron`, `ts`, `ok`) + `latest` **as the projection**; config posture while the gate fails open | + `alerts_today`, `latest` as the full row | 60 s |
-| `/hours?n=` | **projection** rows, `n ≤ 168` *(401 once `READ_TOKEN` is set)* | full rows | 300 s + isolate memo |
-| `/days?n=` | rows, `n ≤ 90` *(401 once `READ_TOKEN` is set)* | same | 300 s + isolate memo |
+| `/latest` | projection + `redacted:true` | full row | `public, max-age=60` / **`private, no-store`** |
+| `/status` | liveness (`worker`, `cron`, `ts`, `ok`) + `latest` **as the projection**; config posture while the gate fails open | + `alerts_today`, `latest` as the full row | `public, max-age=60` / **`private, no-store`** |
+| `/hours?n=` | **projection** rows, `n ≤ 168` *(401 once `READ_TOKEN` is set)* | full rows | `public, max-age=300` + isolate memo / **`private, no-store`**, no memo |
+| `/days?n=` | rows, `n ≤ 90` *(401 once `READ_TOKEN` is set)* | same | as above |
 | `POST /backfill` | **403** — a write route never fails open | repairs missing hour rows (§T9) | none |
+
+**Why authenticated responses are `private, no-store` (§T9b).** RFC 9111 §3.5
+says a shared cache MUST NOT reuse a response to a request carrying an
+`Authorization` header *unless* the response says `public` / `s-maxage` /
+`must-revalidate`. So `public` is not a neutral hint on this worker — it is
+the exact directive that **grants** shared caches storage the default would
+refuse, and it was being stamped on the token-bearing full rows (per-app ids,
+per-app cost, mint anchor) on all four read routes. `Vary: Authorization`
+keeps a *conformant* cache from serving one caller's body to another, but
+that is a mitigation layered on an unnecessary grant and it assumes every
+intermediary honours `Vary`. The isolate memo already had the right rule —
+"an authenticated body must never be served from a cache an unauthenticated
+caller can also hit" — and then the HTTP header handed the same body to every
+cache on the path. Same bug class, one layer down.
 
 - **The projection is applied on every route, not just `/latest` (§T8).** It
   is `ts`, `hour`, `ok`, `mint`, aggregate `containers.est_usd`,
@@ -269,7 +283,8 @@ curl -sX POST -H "Authorization: Bearer $READ_TOKEN" "$H/backfill?days=14&end=20
 curl -sX POST -H "Authorization: Bearer $READ_TOKEN" "$H/backfill?days=14&end=<next_end>" | jq
 ```
 
-Response: `{written, skipped, truncated, next_end, subrequests_spent, per_day:[…]}`.
+Response: `{written, skipped, truncated, truncated_by, next_end, subrequests_spent,
+`elapsed_ms`, per_day:[…]}`.
 
 Four invariants, in the order they would cost to get wrong:
 
@@ -290,6 +305,12 @@ Four invariants, in the order they would cost to get wrong:
   `READ_TOKEN` is unset so the owner keeps a diagnostic path; this one spends
   upstream GraphQL quota and writes KV, so an unset token is a `403`. `GET` is
   a `405` — a link prefetch or crawler must not be able to trigger it.
+- **A 45 s wall-clock guard**, on top of the subrequest budget. 14 days is 28
+  sequential GraphQL round-trips, which can outlive the edge's client-connection
+  timeout (`524`). A `524` here is *safe* — every KV write has committed and the
+  route is idempotent — but it is indistinguishable from a broken worker and it
+  loses the cursor. Stopping ourselves returns a clean
+  `truncated:true, truncated_by:"wall_clock", next_end:…` instead.
 
 Two things it deliberately does **not** do:
 
@@ -303,7 +324,7 @@ Two things it deliberately does **not** do:
 ## Tests
 
 ```sh
-node --test cloudflare/housekeeping/test/*.test.mjs   # 19 tests, no deps
+node --test cloudflare/housekeeping/test/*.test.mjs   # 22 tests, no deps
 ```
 
 A bare directory arg fails `MODULE_NOT_FOUND` — `node --test` wants file
@@ -315,7 +336,13 @@ every "live-verified" check passed: the endpoints returned `200` with
 plausible JSON throughout. Asserting on the **shape of the KV keys** is what
 catches that class; asserting on HTTP status is not. Verified as a real pin —
 8 of the original 12 fail against the pre-fix worker
-(`git show HEAD~1:.../worker.js`); §T9 added 7 more.
+(`git show HEAD~1:.../worker.js`); §T9 added 7 more and §T9b 3 more, all
+three of which were confirmed to fail against the pre-§T9b worker — a test
+that has never been seen red is not a pin.
+
+One of the three needed a purpose-built clock. `atUtcAdvancing()` advances
+`Date.now()` on every read, because the fixed-instant `atUtc()` makes any
+elapsed-time guard measure zero and pass vacuously.
 
 One of those 12 was itself unfaithful and was fixed in the §T9 pass: the
 GraphQL stub **omitted `datetimeHour`**, the dimension the query asks for. A
