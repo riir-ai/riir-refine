@@ -1,6 +1,6 @@
 # Research 097 — Direct-Operable SIMD Bit-Slicing (arXiv:2608.26368) distill verdict
 
-**Status:** DISTILLED — pending owner/batch execution (queued as Plan 044 / Batch 83)
+**Status:** RECORD — Batch 83 landed (T4's float-transform candidate DEMOTED to context as pre-authorized: its win is the radix-sort consumer, not the transform; measured verdict in the corpus annotation — ParetoDominant ~2x, the honest layout half of the source's 10.7x NEON headline)
 
 ## Source
 
