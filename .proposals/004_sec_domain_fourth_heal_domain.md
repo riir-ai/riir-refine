@@ -1,6 +1,6 @@
 # Proposal 004 — The `sec` Domain: Security-Pattern Healing as the Fourth HealDomain
 
-Status: **draft — UNBLOCKED 2026-08-26**: [Issue 037](../.issues/037_e2e_self_evolve_adoption_proof.md) CLOSED (all gates green incl. A1 cadence — record: [AGENTS.md](../AGENTS.md) §Issue 037 + git history). The loop's verdict wiring (T2, real-clippy oracle) is proven; the fourth domain may open under its own plan (Plan 018 Phase 0+1 already shipped).
+Status: **Phase 0+1 LANDED 2026-08-22** ([Bench 046](../.benchmarks/046_sec_domain_phase0_1_goat.md) / [Research 079](../.research/079_sec_domain_phase0_1.md): 6 rules shipped of 11 candidates; trait fit held, caveat 5 discharged; Phase 2 unblocked-but-deferred). Loop unblock record: [Issue 037](../.issues/037_e2e_self_evolve_adoption_proof.md) CLOSED (all gates green incl. A1 cadence).
 Branch: `develop` (per global rule — no feature branches)
 Owner: unassigned
 Fusion of: Plan 001 (HealDomain meta-architecture) × Research 078 (seed inventory) × the `clippy_verify`/`fix_verify` validator shapes
@@ -93,13 +93,13 @@ Dependency auditing (cargo-audit/cargo-deny), secret detection (gitleaks-class �
 ## Phased rollout (sketch — Plan 018 expands this)
 
 ### Phase 0 — scaffold
-- [ ] `SecDomain` impl + corpus schema + feature flag + router/CLI wiring + boundary gate
+- [x] `SecDomain` impl + corpus schema + feature flag + router/CLI wiring + boundary gate — **DONE (Plan 018 T0.1–T0.6): `src/domains/sec/`, feature `sec`, `DomainId::Sec` 4-domain fan-out, `tests/sec_boundary_gate.rs`, unsafe-count syn visitor, clippy 0 all states, default `cargo tree` diff empty.**
 
 ### Phase 1 — first batch (FFI/Drop family)
-- [ ] dedup re-verification → author rules + original fixtures → proposers → GOAT gates → real-repo validation → docs
+- [x] dedup re-verification → author rules + original fixtures → proposers → GOAT gates → real-repo validation → docs — **DONE (Plan 018 T1.1–T1.7, [Bench 046](../.benchmarks/046_sec_domain_phase0_1_goat.md) / [Research 079](../.research/079_sec_domain_phase0_1.md)): 11 candidates → real-clippy probe killed 5, 6 shipped; G1–G5-real ALL PASS (viewbridge 0 edits/24 files + riir-chain 0 edits/26 files as negative controls; positive control 3 edits end-to-end); sec self-variant retrieval 100% top-1; ≥6-rule survival bar MET.**
 
 ### Phase 2 — unsafe + crypto hygiene (gated)
-- [ ] opens only if Phase 1 lands ≥6 rules post-falsification
+- [-] opens only if Phase 1 lands ≥6 rules post-falsification — **GATE MET (6/6) but DEFERRED** as its own future batch (owner call on scheduling; Plan 018 T2.1) + the T2.3 second seed source (RustCrypto conventions) to clear the 20-rule domain bar. Miri/dudect/Kani oracle wiring stays deferred too (T2.2; fixes are by-construction safe).
 
 ## Risks
 
@@ -124,4 +124,4 @@ WASM domain (the other named future domain — unrelated), L4 fallback changes, 
 
 ## TL;DR
 
-Ship it: open `sec` as the fourth `HealDomain` (Proposal 001's own anticipated revisit — signature holds), seeded from Research 078, first batch = the FFI/Drop family with `ffi-extern-fn-catch-unwind` as the GOAT candidate and riir-viewbridge as the live negative control. Next action: execute [Plan 018](../.plans/018_sec_domain_phase0_batch1.md); Phase 2 opens only if Phase 1 lands ≥6 rules post-falsification.
+Ship it: open `sec` as the fourth `HealDomain` (Proposal 001's own anticipated revisit — signature holds), seeded from Research 078, first batch = the FFI/Drop family with `ffi-extern-fn-catch-unwind` as the GOAT candidate and riir-viewbridge as the live negative control. **Phase 0+1 EXECUTED — landed 2026-08-22 as [Bench 046](../.benchmarks/046_sec_domain_phase0_1_goat.md) via [Plan 018](../.plans/018_sec_domain_phase0_batch1.md) (6 rules, all GOAT gates PASS). Next action: Phase 2 batch (owner call — gate already met).**
