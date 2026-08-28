@@ -1,7 +1,7 @@
 # Issue 045 — container cost observability + hourly housekeeping worker + smallest-sizing verdict
 
 **Filed:** 2026-08-26
-**Status:** OPEN — T4 (owner secrets) + T6 (external ledger shell) remain, and **T8 is code-complete but NOT DEPLOYED** (2026-08-28: `hourKey()` was collapsing 24 hourly rows into 3, understating the daily cost ~8×; fixed + pinned by 12 regression tests, deploy blocked by the session permission classifier — run `cd cloudflare/housekeeping && npx wrangler deploy`); T5 RESOLVED (cross-repo correlation) + T7 read-path hardening SHIPPED 2026-08-28. Issue 053 (unattributed app `a03a70ff`) filed **and RESOLVED same day** by cross-repo correlation — it is the `riir-mmorpg-examples` CCU proof bench (Bench 034); resolved-and-removed per the noise rule, record in §T5 + git history. T1 verdict recorded, T2+T3 SHIPPED same day; live-mint half gated on Proposal 005 Phase 1. Sizing verdict feeds Proposal 005 T2.0/T2.1 **+ T2.6 / [Plan 031](../.plans/031_kat_sweeper_temp_container_r2_tier.md)** (2026-08-26 later-session sync). **2026-08-27: the T3 Worker was EXTENDED + redeployed (`ab79bd20`) — CORS on all read endpoints (dashboard live-fetch), Issue-044-T4 budget alerting (cap thresholds 50/90/100% + optional monthly budget, KV-dedupe, webhook via `ALERT_WEBHOOK_URL`), extended `/status` (`cap`/`thresholds`/`has_webhook`/`has_monthly_budget`/`alerts_today`).** **2026-08-28 truth-refresh: Proposal 005 Phase 1 LANDED 2026-08-27 (T1.5 dapps `84dd049` / T1.6 clippy `0a7cfd8`) — T6's blocker is NO LONGER Phase 1; the live-mint swap-in awaits the deferred Worker/DO HTTP ledger shell (Proposal 005 phase-2 defer / Plan 031 Phase B gate / phase-3 owner gate). Worker mint status strings refreshed `pending-phase-1` → `pending-worker-shell` + redeployed (version `f93ae507`, live-verified on the 04:00 UTC tick). T4 unchanged (owner-gated secrets). T5 still blocked — CLI exposes no id→name mapping (see checkbox).** *(That last clause is SUPERSEDED later the same day — T5 was resolved by cross-repo correlation, not by the CLI; see §T5.)*
+**Status:** OPEN — T4 (owner secrets) + T6 (external ledger shell) remain, and **T8 is code-complete, dry-run-VALIDATED 2026-08-28, but still NOT DEPLOYED (owner-gated)** (2026-08-28: `hourKey()` was collapsing 24 hourly rows into 3, understating the daily cost ~8×; fixed + pinned by 12 regression tests, deploy blocked by the session permission classifier — run `cd cloudflare/housekeeping && npx wrangler deploy`); T5 RESOLVED (cross-repo correlation) + T7 read-path hardening SHIPPED 2026-08-28. Issue 053 (unattributed app `a03a70ff`) filed **and RESOLVED same day** by cross-repo correlation — it is the `riir-mmorpg-examples` CCU proof bench (Bench 034); resolved-and-removed per the noise rule, record in §T5 + git history. T1 verdict recorded, T2+T3 SHIPPED same day; live-mint half gated on Proposal 005 Phase 1. Sizing verdict feeds Proposal 005 T2.0/T2.1 **+ T2.6 / [Plan 031](../.plans/031_kat_sweeper_temp_container_r2_tier.md)** (2026-08-26 later-session sync). **2026-08-27: the T3 Worker was EXTENDED + redeployed (`ab79bd20`) — CORS on all read endpoints (dashboard live-fetch), Issue-044-T4 budget alerting (cap thresholds 50/90/100% + optional monthly budget, KV-dedupe, webhook via `ALERT_WEBHOOK_URL`), extended `/status` (`cap`/`thresholds`/`has_webhook`/`has_monthly_budget`/`alerts_today`).** **2026-08-28 truth-refresh: Proposal 005 Phase 1 LANDED 2026-08-27 (T1.5 dapps `84dd049` / T1.6 clippy `0a7cfd8`) — T6's blocker is NO LONGER Phase 1; the live-mint swap-in awaits the deferred Worker/DO HTTP ledger shell (Proposal 005 phase-2 defer / Plan 031 Phase B gate / phase-3 owner gate). Worker mint status strings refreshed `pending-phase-1` → `pending-worker-shell` + redeployed (version `f93ae507`, live-verified on the 04:00 UTC tick). T4 unchanged (owner-gated secrets). T5 still blocked — CLI exposes no id→name mapping (see checkbox).** *(That last clause is SUPERSEDED later the same day — T5 was resolved by cross-repo correlation, not by the CLI; see §T5.)*
 **Repo:** riir-clippy (dashboard + worker deploy live here; sizing verdict feeds Proposal 005 T2.0/T2.1)
 **Owner ask (2026-08-26):**
 1. can the container be smaller? smallest?
@@ -281,10 +281,33 @@ lives (T1 above).
       redaction had two bypasses (`/status`, `/hours`), and anonymous
       `/status` spent a KV `list` per request against a 1,000/day cap. Fixed
       + pinned by 12 `node:test` regression tests (8 fail pre-fix).
-      **CODE + TESTS LANDED; DEPLOY PENDING** — `npx wrangler deploy` was
-      declined by this session's permission classifier, so the fix is on
-      `develop` but NOT yet live. One command closes it:
-      `cd cloudflare/housekeeping && npx wrangler deploy`.
+      **CODE + TESTS LANDED; DEPLOY PENDING — OWNER-GATED.** One command
+      closes it: `cd cloudflare/housekeeping && npx wrangler deploy`.
+
+      **2026-08-28 validation pass (owner chose dry-run over a live deploy).**
+      The bundle was validated WITHOUT changing live behaviour, and the defect
+      was re-measured on the running Worker:
+      - `wrangler deploy --dry-run --outdir` builds clean (15.83 KiB / 5.01
+        KiB gzip); all 7 bindings resolve (`HOUSEKEEPING_KV`, `CF_ACCOUNT_ID`,
+        the 3 price vars, `NEURON_CAP`, `ALLOWED_ORIGINS`).
+      - The emitted bundle CARRIES the fix — `hourKey` = `u.slice(0,8) +
+        u.slice(9,11)` (10-digit `YYYYMMDDHH`) plus the `HOUR_KEY_RE
+        /^hour:\d{10}$/` legacy-collision filter. Verifying the artifact that
+        WOULD deploy, not just the source it came from.
+      - Regression suite re-run: **12/12 pass** (`node --test
+        test/worker.test.mjs`). *(`node --test test/` — the directory form —
+        reports a bogus 1-test failure; invoke the FILE.)*
+      - Live deployment list: production is still `ca93c8de`, the **T7**
+        deploy. The T8 commit `216257a` is NOT live.
+      - **Live defect re-measured:** `/hours?n=24` returns 24 rows carrying
+        only **4 distinct** `(ts, hour)` pairs — `2026-08-27T18/22`,
+        `2026-08-28T08/15`. The day aggregate is summing **4 of 24 hours**.
+      - **The understatement factor is NOT a constant** — 3 distinct keys
+        when first measured, 4 now (~8x then, ~6x today). It tracks how many
+        collision buckets happen to be populated, so the archived rows CANNOT
+        be repaired after the fact by scaling a fixed multiplier; only rows
+        written post-deploy are trustworthy. The longer the deploy waits, the
+        more unrecoverable hours accrue.
 
 ## T7 — read-path hardening (SHIPPED 2026-08-28)
 
