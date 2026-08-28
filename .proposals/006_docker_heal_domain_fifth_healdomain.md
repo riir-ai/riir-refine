@@ -1,6 +1,6 @@
 # Proposal 006 — The `docker` Domain: Dockerfile Bounded-Fix Healing + Retrieval as the Fifth HealDomain
 
-Status: **draft**
+Status: **draft — IN FLIGHT on the shared checkout (2026-08-28 tree audit; do not read the worktree as landed).** The domain scaffold exists as **uncommitted sibling WIP**: `src/domains/docker/` is untracked (mod/corpus/rules/scanner/proposers/verify + `tests/docker_{t5_control,refusal_gate,class_a_agreement}.rs`), and the `docker`/`docker_verify` features, the 5-domain `DomainId` wiring, and the `--domain docker` CLI arms are uncommitted modifications — **HEAD is still the 4-domain state**. [Plan 030](../.plans/030_docker_domain_phase0_batch1.md)'s checkboxes are correctly un-ticked, no GOAT bench is recorded, and the CI guard carries no docker rows. Status flips to executed only when Plan 030 lands: checkboxes synced + the G1–G5 record (incl. the edge-wallet G5-real) + the T1.6 standing-consumer evidence.
 Branch: `develop` (per global rule — no feature branches)
 Owner: unassigned
 Fusion of: Proposal 001 (HealDomain meta-architecture) × Proposal 004 / Plan 018 (the `sec` domain pattern: boundary gate + negative control + close condition) × Research 086 + 087 (detection ledger + fused seed inventory) × the in-tree Dockerfiles (riir-chain `deploy/Dockerfile` as the measured-GOAT artifact — the Batch 49 mine-our-own-artifacts path)
