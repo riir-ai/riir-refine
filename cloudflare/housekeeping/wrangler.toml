@@ -52,7 +52,14 @@
 # milliseconds of work per run; a container pays the $5 plan + uptime for
 # nothing).
 #
-# Deploy: npx wrangler deploy   (from this directory)
+# Deploy (from this directory). Strip the API-token env vars: wrangler honours
+# CF_API_TOKEN as a deprecated alias of CLOUDFLARE_API_TOKEN, so a shell that
+# sourced .env authenticates as the analytics-scoped token — no workers_scripts
+# write scope — and deploy fails auth error 10000. Measured 2026-08-28 on
+# wrangler 4.127.1. The same applies to `secret put`, including the secret that
+# shares the name. See README "The trap".
+#   env -u CLOUDFLARE_API_TOKEN -u CF_API_TOKEN -u CLOUDFLARE_API_KEY \
+#       -u CLOUDFLARE_EMAIL npx wrangler deploy
 name = "riir-kat-housekeeping"
 main = "src/worker.js"
 compatibility_date = "2026-08-26"

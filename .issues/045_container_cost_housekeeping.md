@@ -861,3 +861,37 @@ as non-discriminating rather than as evidence: the wrong-token-vs-memo test
 token-length test (the old compare returned the same *verdicts*; only its
 timing leaked). Bundle 25.46 KiB / 7.78 KiB gzip, up from 23.73 / 7.15.
 Undeployed — `npx wrangler deploy` is still classifier-blocked.
+
+### T9e addendum — the deploy/secret commands in this issue were themselves broken
+
+Found by reading a sibling agent's `0d6ee64` (`scripts/ops_nightly.sh`) and
+then **re-measuring it against the manual runbook**, which had not been
+patched. wrangler 4.127.1, from `cloudflare/housekeeping`:
+
+```
+$ CF_API_TOKEN=bogus npx wrangler whoami
+Using "CF_API_TOKEN" environment variable. This is deprecated. ...
+✘ [ERROR] A request to the Cloudflare API (/user/tokens/verify) failed.
+  Invalid request headers [code: 6003]
+
+$ CF_API_TOKEN=bogus env -u CLOUDFLARE_API_TOKEN -u CF_API_TOKEN \
+    -u CLOUDFLARE_API_KEY -u CLOUDFLARE_EMAIL npx wrangler whoami
+👋 You are logged in with an OAuth Token ...
+```
+
+wrangler honours `CF_API_TOKEN` as a deprecated alias of
+`CLOUDFLARE_API_TOKEN`, so it shadows the OAuth session in any shell that
+sourced `.env`. With the real value that is the analytics-scoped token — no
+`workers_scripts` write scope — so the deploy fails **auth error 10000**.
+
+The sharp edge is a naming collision this issue created for itself: the secret
+T4 asks the owner to set is *itself* named `CF_API_TOKEN`, so
+`wrangler secret put CF_API_TOKEN` — a write, hence OAuth-only — fails when a
+variable of that name is already exported. **Every `deploy` / `secret put`
+command in the README and in `wrangler.toml` now carries the env strip**;
+analytics *reads* (`gen_dashboard.py`) deliberately keep the token.
+
+Worth noting how this was nearly missed: the sibling fix landed in the
+*automation* path only, and a `git pull` that merges cleanly gives no signal
+that a prose runbook two directories away asserts the now-falsified command.
+The check that caught it was re-running the measurement, not reading the diff.
