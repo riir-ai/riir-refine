@@ -7,6 +7,10 @@
 > validator GOAT gate passed (Bench 013 G1+G5). The domain module now
 > compiles by default; the validators (`rust_perf_verify`,
 > `rust_perf_bench`) remain opt-in (slow subprocess-based checks).
+> **Batch 86 (2026-08-29, Research 100)**: corpus 91 → 94 — the
+> Cloudflare 1.1.1.1 DNS-cache memory distill (Plan 047): two measured
+> ParetoDominant allocation rules + one NotBenchable-speed layout rule +
+> two doc riders.
 
 ## Validator hierarchy (strongest last)
 
@@ -21,7 +25,27 @@
 
 91 rules across 12 categories (rust-optimize skill checklist +
 nnethercote/perf-book + rustc-hash/bevy real-world patterns + the hotpath-rs
-profiling guide, Research 032; Batch 48 added the 8 online-search candidates
+profiling guide, Research 032; **now 94 rules — Batch 86 (2026-08-29,
+Research 100 — the Cloudflare Big Pineapple DNS-cache memory distill, Plan
+047, found via online perf search) added `serialize-once-byte-buffer-store`
+(allocation; **ParetoDominant 4.26/3.52/2.90× at 1K/10K/100K, verdict-stable
+×2, alloc axis EXACT 200,001 → 2** — per-record heap fields → ONE
+length-prefixed byte buffer + u32 offset table; the insert-path malloc
+storm is the mechanism; bytes 7.90 MB → 4.70 MB; regime: sequential-rebuild
+consumers win, in-place random-mutators lose; the full-wire-message form is
+the source's own REJECTED alternative — recorded as the anti-shape),
+`context-equal-field-elide` (allocation; **ParetoDominant 3.12/3.01/2.00×
+at the ~80% context-equal mix, verdict-stable ×2, allocs 100,001 → 20,056**
+— a stored field that equals the enclosing context (the lookup key)
+becomes `Option<Box<T>>` None, resolved at read; the two-regime note: low
+%-equal is pure overhead; composes with serialize-once), and
+`bitflag-pack-when-footprint-dominates` (layout; **NotBenchable-speed — the
+size axis 12 → 8 pinned by gate** — stored-at-scale bool cluster → one
+bitflag byte; cross-cites the kernel_opt hot-read INVERSE regime;
+measure-size_of-before/after caveat; rider: `box-str-immutable`
+generalizes to Box<[T]> for any frozen T, and `box-large-enum-variant`
+gains the honest costs — size-class rounding, locality scatter, the rare
+variant pays more)); Batch 48 added the 8 online-search candidates
 from the perf-book std-types + iterators chapters; Batch 53 added the 4
 online-search candidates of [Bench 038](../../.benchmarks/038_batch53_rust_perf_online_search_goat.md);
 Batch 59 (2026-08-18) added the first EXTERNAL-source distill via the
@@ -35,10 +59,11 @@ oxc-article rules: `keyword-map-to-match` + `usize-index-to-u32`; Batch 62
 `byte-find-position-to-memchr`; Batch 68 (2026-08-19, Research 075 — the
 tantivy utility-layer distill) added the annotated `varint-compose-word-single-store`; Batch 69 added `unaligned-word-load-from-bytes` — the T6 defer refuted, a cross-arch WINNER; Batch 65 (2026-08-22, Research 081 — the hotpath.rs profiler distill) added the 2 contention rules: `align-64-false-sharing` + `channel-send-batching-unpark`, both measured ParetoDominant; Batch 73 (2026-08-26, Research 085/086 — the mnt.io Matrix-RSDK room-list DoD distill, Plan 029) added `sort-key-cache-precompute-out-of-lock` + `lock-guard-narrow-field-accessor`, both measured ParetoDominant with regime annotations; Batch 74 (2026-08-26, Research 088 — the simd-lite/simd-json SWAR distill, Plan 032, the Research 085 pool-drop re-probe) added `swar-digit-chunk-parse` (ParetoDominant, regime-annotated) + `runtime-feature-detect-per-chunk` (measured Mixed-ties, honest-annotated); Batch 75 (2026-08-26, Research 089 — the GreptimeDB prom-read conversion distill, Plan 033, found via online perf search) added the 3 grouping/borrowing rules: `encoded-layout-borrowed-view` (ParetoDominant 29.95-41.98x, allocs 4M→0 — the dictionary-expansion trap), `group-keys-borrow-allocate-on-first-sight` (ParetoDominant 1.92-2.37x, allocs 7R+2S→8S+30 exact — the entry()-forces-owned-key escape), + `sorted-input-previous-row-fast-path` (Mixed: adjacent 12.92x / interleaved 0.99x tie — the hit-rate regime), all suggestion-only, + the `btreemap-sorted-iteration` regime-table rider); Batch 76 (2026-08-27, Research 090 — the Meilisearch LMDB/vector-store distill, Plan 034, found via online perf search) added `debug-stat-full-scan-out-of-hot-path` (ParetoDominant 168.91-5851.00x — the eager diagnostic statistic full-scan) + `eager-pointer-collect-lazy-fetch` (ParetoDominant 1903.70-21353.90x, allocs 1→0 — the full-scan pointer-map vs lazy on-demand fetch), both suggestion-only; pool drop: the Qdrant Gridstore article (architecture piece, dedup-adjacent candidate); Batch 77 (2026-08-27, Research 091 — the lucebox PR #625 rope.cu distill, Plan 035's crossover) added `runtime-int-exponent-powi` (arithmetic; **ParetoDominant 2.57x/2.81x/2.66x @ 1K/100K/1M on M3 aarch64 — CROSS-ARCH RE-GATED same day on x86_64-pc-windows-msvc: all-Tie 0.99/1.00/1.00 (verdict-stable ×2, same harness) — the win is the slow-libm-host regime (aarch64/GPU/embedded), an idiom swap on fast-libm x86 (the newton-refinement inversion class); verdict-stable x2, 0 allocs, rel-error gate <1e-12** — the runtime-integer-exponent case `powi-vs-powf` deferred: a runtime exponent gives LLVM no instcombine bailout so `powf` STAYS a libm call; GPU evidence: RDNA4 RoPE 692 → 76 µs/launch). Batch 78 (2026-08-27, Research 092 — the Datadog RTDB/Monocle distill, Plan 036, found via online perf search) added `narrow-counter-overflow-promotion` (layout; **ParetoDominated 0.64-0.66x honest-annotated** — the memory-for-speed trade: the alloc axis halves exactly (8N→4N bytes) but update-heavy streams pay 35-55% for the checked_add branch; the trade pays in memory-footprint-bound systems, Datadog's 2,100 GiB regime) + `cache-line-block-partitioned-lock` (concurrency; **ParetoDominant 1.12/3.91/2.98/3.03x at 2-12t** — one Mutex<Vec> → 512 aligned Mutex<[u64;8]> blocks; the first ALLOC_AXIS_EXEMPT rule: contended macOS pthread_mutex allocates nondeterministically in the slow path, probe-evidenced in bench.rs). Batch 83 (2026-08-28, Research 097 — the arXiv:2608.26368 SIMD bit-slicing predicate distill, Plan 044, found via the queue-11 arXiv listing walk) added `bitplane-transpose-repeated-predicate-scan` (simd; **ParetoDominant 1.96/2.16/1.93x at 10K/100K/1M, verdict-stable x2: 2.08/2.20/1.96x** — encode-once bit-plane transposition + zero-decompression bitwise predicate evaluation for REPEATEDLY filtered integer columns: the two-mask MSB→LSB recurrence is pure AND/OR word ops, b/32 the bytes, 64 values per word op; **honest gap vs the source's 10.7x NEON headline: in Rust the scalar arm auto-vectorizes (~0.126 ns/elem), compressing the win to the layout half** — never cite the source number isolated; regime gates: amortization (source break-even 7-25 scans; single-scan out-of-regime), b≤16, wide-type equality loses (source 0.5-0.7x), IN-lists k·b passes, point-lookups out; the DOMAIN CONTRACT (constant must fit the column width — out-of-range returns 0 via one branch per query) was CAUGHT by the G1 gate on an out-of-range threshold; plus the `branchless-conditional` rider: the source's scalar loop swung ~4.5x with selectivity on branch prediction while the plane form stayed constant). Batch 85 (2026-08-28, Research 098 — the arXiv:2608.23841 cflow "Pipeline-Native Transformers" distill, Plan 046) added `weight-tile-consumption-order` (layout; **ParetoDominant 1.32/1.35/1.35/1.56× at n_in=4K/16K/32K/64K, verdict-stable ×2, allocs equal** — row-major single-token matvec re-walks x per output row; repacking W once into consumption-ordered 64×512 tiles keeps the x slice L1-resident per tile, TILE_ROWS× less x traffic; the win GROWS with working set, M3's 128 KB L1-d shifting the source's Sandy-Bridge crossover 4× right; even the L1-resident arm measured 1.32×) + `software-prefetch-storage-bound` (io; **the honest annotation — SW prefetch on a bandwidth/storage-bound stream is useless-to-harmful: PF ±0.1% at 64 MB, PF=1 4% WORSE at 4.7 GB, the paper's prefetch thread burned 48% of decode time, disabling alone = 1.92×; x86 source-cited only (no stable aarch64 prefetch intrinsic); proposer-less by design**).
 Allocation is the deepest
-category (20 rules; Batch 75 added `encoded-layout-borrowed-view` + `group-keys-borrow-allocate-on-first-sight`). Complexity has 17 (Batch 64 added `debug-assert-length-hoist`; Batch 75 added `sorted-input-previous-row-fast-path`; Batch 76 added `debug-stat-full-scan-out-of-hot-path`). Iterators has 9 (Batch 66 added `sortedness-check-branchless-accumulate`; Batch 67 added `byte-find-position-to-memchr`). Simd 7 (Batch 62 added `transposed-weight-register-gemv`; Batch 64 added `loop-order-innermost-contiguous`), layout 7
+category (22 rules; Batch 75 added `encoded-layout-borrowed-view` + `group-keys-borrow-allocate-on-first-sight`; Batch 86 added `serialize-once-byte-buffer-store` + `context-equal-field-elide`). Complexity has 17 (Batch 64 added `debug-assert-length-hoist`; Batch 75 added `sorted-input-previous-row-fast-path`; Batch 76 added `debug-stat-full-scan-out-of-hot-path`). Iterators has 9 (Batch 66 added `sortedness-check-branchless-accumulate`; Batch 67 added `byte-find-position-to-memchr`). Simd 7 (Batch 62 added `transposed-weight-register-gemv`; Batch 64 added `loop-order-innermost-contiguous`), layout 9
 (Batch 61 added `usize-index-to-u32`; Batch 78 added
 `narrow-counter-overflow-promotion`; Batch 85 added
-`weight-tile-consumption-order`);
+`weight-tile-consumption-order`; Batch 86 added
+`bitflag-pack-when-footprint-dominates`);
 concurrency has 8 (Issue 014 added the two metric-mismatch rules; Batch 65
 added the two measured contention rules; Batch 73 added
 `lock-guard-narrow-field-accessor`; Batch 78 added
@@ -51,12 +76,15 @@ caching has 4 (Issue 014 added `regex-hoist-lazylock`; Batch 73 added
 `newton-refinement-vs-hardware-transcendental`; Batch 66 added
 `sparse-set-bit-iteration-tz-blsr`; Batch 74 added `swar-digit-chunk-parse`);
 dispatch has 3 (Batch 61 added
-`keyword-map-to-match`; Batch 74 added `runtime-feature-detect-per-chunk`); io is 3 (Batch 68 added
-`varint-compose-word-single-store`; Batch 69 added `unaligned-word-load-from-bytes`); the rest have 1
-each. 68 are benchable (carry a `BenchSpec`); 10 are honestly
+`keyword-map-to-match`; Batch 74 added `runtime-feature-detect-per-chunk`); io is 4 (Batch 68 added
+`varint-compose-word-single-store`; Batch 69 added `unaligned-word-load-from-bytes`; Batch 85 added
+`software-prefetch-storage-bound`); the rest have 1
+each. 82 are benchable (carry a `BenchSpec`); 12 are honestly
 `NotBenchable` — 8 need external runtimes or are structural (size_of,
 memory, fairness), 2 are **metric-mismatch** (Issue 014 T2.3/T2.4: the cost
-is contention latency / queue depth, not wall-clock). 20 of 78 carry
+is contention latency / queue depth, not wall-clock), the Batch 85 prefetch
+annotation is x86-source-cited only, and the Batch 86 bitflag rule is a
+deterministic size axis. 37 of 94 carry
 `context_notes` — 11 verdict-class (4 `ParetoDominated` + 7
 regime-fragile/Mixed — Batch 48 added the `filter-count-to-any` folk-wisdom
 refutation: the VECTORIZED count loop beats `any()`'s scalar early-exit at
@@ -173,6 +201,9 @@ annotated rules as context-dependent, not unconditional suggestions.
 
 | `narrow-counter-overflow-promotion` | layout | ⚠️ ParetoDominated 0.64/0.64/0.65× (honest-annotated — the memory-for-speed trade) | ⚠️ `context_notes` | hot counter arrays u64 "just in case" → u32 + checked-promotion sparse sidecar — the win is MEMORY (2x counters/line, allocs 8N→4N bytes exact; Datadog's motivation: the 2,100 GiB DDSketch infeasibility), NOT update-path wall-clock (the per-update `is_empty` guard + `checked_add` branch cost 35-55%; flat ratio across sizes = branch-bound, not bandwidth-bound). REGIME: memory-bound systems + sweep-dominated access. Distinct from `usize-index-to-u32` (domain-bounded index fields vs runtime-escape-hatch value counters). G1: totals bit-identical incl. u32-boundary crossings (Batch 78, Research 092) |
 | `cache-line-block-partitioned-lock` | concurrency | ✅ 1.12/3.91/2.98/3.03× ParetoDominant (2-12t) | ⚠️ `context_notes` | one `Mutex<Vec<u64>>` guarding a shared point array → K-items-per-cache-line-block locks (`Mutex<[u64; 8]>` blocks, `#[repr(align(128))]`) — contention confined to within-block pairs (~8x fewer collisions). DIFFERENTIATION vs `align-64-false-sharing`: that pads independent slots against FALSE sharing; this partitions the TRUE sharing of ONE array at lock granularity (they compose). The first `ALLOC_AXIS_EXEMPT` rule (contended macOS pthread_mutex allocates nondeterministically — probed 41-44/512-lock runs). REGIME: multithreaded bump workloads; single-threaded pays the division for nothing (Batch 78, Research 092) |
+| `serialize-once-byte-buffer-store` | allocation | ✅ 4.26/3.52/2.90× ParetoDominant (verdict-stable ×2) | ⚠️ `context_notes`, suggestion-only | frozen records as per-field heap allocations (name `Box<str>` + payload `Vec<u8>` PER record) → serialize each record ONCE into ONE length-prefixed byte buffer + u32 offset table — 2 allocations TOTAL regardless of record count (alloc axis EXACT 200,001 → 2 @ n=100K; bytes 7.90 MB → 4.70 MB — allocator round-up + headers gone). The insert path is the measured surface (the source's near-isolated +13% insert; END-TO-END +43%/−19% — never cite isolated). The win SHRINKS with n (copy dominates per-alloc overhead at scale) — still dominant everywhere. REGIME: sequential-rebuild consumers (cache → response rebuild); in-place random-mutators lose (every patch = buffer rewrite). ANTI-SHAPE: full-wire-message storage (the source's own rejected alternative — variant flags force two copies or post-build filtering). Distinct from `encoded-layout-borrowed-view` (read-side accessor; this is the store representation) (Batch 86, Cloudflare Big Pineapple distill, Research 100) |
+| `context-equal-field-elide` | allocation | ✅ 3.12/3.01/2.00× ParetoDominant at ~80% context-equal (verdict-stable ×2) | ⚠️ `context_notes`, suggestion-only | per-record field that equals the enclosing context (their DNS owner == the queried domain = the cache key, in hand at every lookup) → `Option<Box<T>>` with None = "same as context", resolved at read via `as_deref().unwrap_or(context)` — ~80% of records store NO name (allocs 100,001 → 20,056 @ n=100K — the ~20% non-equal keep theirs, the regime made visible; bytes 4.04 MB → 2.76 MB). The fixed arm pays the insert-time equality compare + the read branch and STILL dominates. REGIME (two-sided): high %-equal wins; LOW %-equal is pure overhead (unmeasured below ~50%). Composes with `serialize-once-byte-buffer-store` (the elided marker is one bit in the record header). Distinct from interning/dedup: nothing is shared or canonicalized — the value is ABSENT because the context re-derives it (Batch 86, Research 100) |
+| `bitflag-pack-when-footprint-dominates` | layout | 📐 NotBenchable-speed — size axis 12 → 8 pinned by gate | ⚠️ `context_notes` | stored-at-scale struct with a cluster of bools → ONE bitflag byte — a record held millions of times multiplies every byte (the source's per-entry 953 → 420 B fleet table; their own observation: the PADDING COLLAPSE shrank the struct by MORE than the raw bool bytes). CROSS-CITE the kernel_opt `bool-fields-over-bitset-hot-reads` INVERSE regime: per-tick READ flags stay bools (decode ALU dominates) — pack only when FOOTPRINT dominates. DEFAULT-REPR CAVEAT: field reordering makes the collapse layout-dependent — MEASURE size_of before/after (the gate pins 12 → 8 for THAT layout; evidence, not a promise). Composes with `serialize-once-byte-buffer-store` (a flag byte packs into the record header) (Batch 86, Research 100) |
 
 ## Validator (cargo test — behind `rust_perf_verify`)
 

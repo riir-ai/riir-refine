@@ -9,10 +9,12 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //! unconditional wins + honestly NotBenchable rules.
 //!
-//! 89 entries across 12 categories (complexity 17, allocation 20, simd 8,
-//! layout 7, iterators 9, concurrency 8, io 3, arithmetic 8, dispatch 3,
-//! caching 4, bevy 1, wasm 1). 79 are benchable; 10 are honestly
-//! NotBenchable (8 external-runtime/size-class + 2 metric-mismatch, Issue 014).
+//! 94 entries across 12 categories (complexity 17, allocation 22, simd 8,
+//! layout 9, iterators 9, concurrency 8, io 4, arithmetic 8, dispatch 3,
+//! caching 4, bevy 1, wasm 1). 82 are benchable; 12 are honestly
+//! NotBenchable (8 external-runtime/size-class + 2 metric-mismatch (Issue
+//! 014) + the x86-only prefetch annotation (Batch 85) + the bitflag size
+//! axis (Batch 86)).
 //! Batch 48 (idle-queue item 11, 2026-08-16) added the 8 online-search
 //! candidates (perf-book std-types + iterators chapters): collect-append-to-
 //! extend, hashset-insert-bool-return, unwrap-or-else-lazy, filter-count-to-
@@ -58,6 +60,20 @@
 //! aarch64 PRFM analog unmeasured — x86 source-cited only, proposer-less
 //! by design).
 //!
+//! Batch 86 (2026-08-29, Research 100 — the Cloudflare 1.1.1.1 DNS-cache
+//! memory distill) added serialize-once-byte-buffer-store (frozen records
+//! as ONE length-prefixed byte buffer + offset table — 2 allocations
+//! total regardless of record count; the insert-path malloc storm is the
+//! cost), context-equal-field-elide (a stored field that equals the
+//! enclosing context — the lookup key — becomes Option<Box<T>> None,
+//! resolved at read; ~80% of the source's records elided), and
+//! bitflag-pack-when-footprint-dominates (the stored-at-scale footprint
+//! regime; cross-cites the kernel_opt hot-read inverse; measure size_of
+//! before/after). Two doc riders: box-str-immutable generalizes to
+//! Box<[T]> for any frozen T; box-large-enum-variant gains the honest
+//! costs (size-class rounding, locality scatter, the rare variant pays
+//! more).
+//!
 //! ## Bench specs (behind `rust_perf_bench`)
 //!
 //! Benchable rules carry an optional [`BenchSpec`] — a self-contained harness
@@ -65,7 +81,7 @@
 //! `run_buggy` / `run_fixed` entry points. The bench validator generates a
 //! temp bin crate from the spec + runs a timing loop at multiple sizes.
 //!
-//! Currently benchable (80/91):
+//! Currently benchable (82/94):
 //! - `o1-lookup` (Vec scan vs HashMap lookup — clear O(n) vs O(1))
 //! - `bsearch-sorted-slice` (linear scan vs binary search — O(n) vs O(log n) on sorted data)
 //! - `dedupe-hashset-vs-vec` (Vec::contains loop vs HashSet collect — O(n²) vs O(n))
@@ -78,6 +94,8 @@
 //! - `vec-remove-front-to-vecdeque` (Vec::remove(0) O(n²) drain vs VecDeque::pop_front O(n) — grows with N²)
 //! - `btreemap-sorted-iteration` (HashMap + sort per query vs BTreeMap natural order — O(n log n) vs O(n) per query)
 //! - `static-str` (String alloc vs &'static str — allocation cost)
+//! - `serialize-once-byte-buffer-store` (per-record store malloc storm → ONE length-prefixed buffer + offsets — insert path, Batch 86)
+//! - `context-equal-field-elide` (unconditional owner field → Option elided at ~80% context-equal — alloc axis, Batch 86)
 //! - `simd-chunk` (scalar vs chunked loop — vectorization at large N)
 //! - `branchless-conditional` (if vs bool-as-usize multiply — vectorization + branch prediction)
 //! - `bool-to-bitpack` (Vec<bool> count vs packed Vec<u64> POPCNT — data density)
@@ -98,7 +116,7 @@
 //! - `retain-inplace` (filter().collect() new Vec vs retain() in-place — ~1.5-2×)
 //! - `mem-take` (clone+clear vs mem::take move — ~3×, avoids deep clone)
 //! - `avoid-clone` (fn(data: Vec<T>) clone → fn(data: &[T]) borrow — ~1.3-3×)
-//! - `box-str-immutable` (Vec<String> 3-word → Vec<Box<str>> 2-word — ~1.1-1.3×)
+//! - `box-str-immutable` (Vec<String> 3-word → Vec<Box<str>> 2-word — ~1.1-1.3×; B86 rider: generalizes to Box<[T]> for ANY frozen T)
 //! - `reuse-allocation-clear` (alloc-per-call → clear-reuse scratch buffer — **Mixed**, see `context_notes`)
 //! - `box-avoid` (Vec<Box<i64>> heap per elem → Vec<i64> stack values — ~10-35×)
 //! - `smallvec-stack` (Vec<T> always heap → stack array for ≤8 typical — ~7-12×)
@@ -139,8 +157,11 @@
 //! - `runtime-int-exponent-powi` (runtime-integer-exponent `powf` libm call → `powi` binary exponentiation — log2(n) multiplies vs an opaque pow call; NOT bit-identical, rel-error-gated; Batch 77, lucebox rope distill)
 //! - `bitplane-transpose-repeated-predicate-scan` (repeatedly filtered integer column → bit-plane transposition + bitwise predicate evaluation over the compressed planes, zero decompression — b/32 the bytes scanned + 64 values per word op; Batch 83, arXiv:2608.26368 distill)
 //! - `weight-tile-consumption-order` (row-major single-token matvec x re-walked per row → consumption-ordered tiles, x slice L1-resident per tile — 1.32-1.56x growing with working set; Batch 85, cflow distill)
+//! - `serialize-once-byte-buffer-store` (per-record heap fields → ONE length-prefixed byte buffer + offset table — 2 allocations total, copy-out rebuild; Batch 86, Cloudflare DNS-cache distill)
+//! - `context-equal-field-elide` (per-record field equal to the enclosing context → Option<Box<T>> None, resolved at read — Batch 86, Cloudflare DNS-cache distill)
+//! - `bitflag-pack-when-footprint-dominates` (bool cluster → one bitflag byte, stored-at-scale footprint regime — Batch 86, annotated)
 //!
-//! Not benchable (11/91) — honest:
+//! Not benchable (12/94) — honest:
 //! - `layout-reorder` (struct size — deterministic `size_of`, not a runtime
 //!   microbench; the cache-utilization claim needs a specific access pattern)
 //! - `repr-u8-enum` (enum size — deterministic `size_of`, same class as
@@ -161,10 +182,14 @@
 //! - `software-prefetch-storage-bound` (x86-only source evidence — no stable
 //!   aarch64 prefetch intrinsic to re-gate with; the rule IS the annotation
 //!   stopping a plausible-looking prefetch port; Batch 85, cflow distill)
+//! - `bitflag-pack-when-footprint-dominates` (deterministic `size_of` delta,
+//!   the `layout-reorder`/`box-large-enum-variant` class — the gate pins
+//!   12 → 8 for the fixture layout; Batch 86, annotated)
 //!
 //! ## Context-dependent rules (`context_notes`)
 //!
-//! Eighteen rules carry a `context_notes: Some(...)` annotation. Ten record that
+//! Thirty-seven rules carry a `context_notes` annotation (as of Batch 86;
+//! this prose last walked then). Ten record that
 //! the Pareto validator found them **ParetoDominated** or **Mixed** in the
 //! default configuration: the original 4 from Bench 013 (`precompute-table`,
 //! `papaya-lockfree`, `dedupe-hashset-vs-vec`, `reuse-allocation-clear`) + 2
@@ -188,18 +213,18 @@ use crate::domains::rust_perf::{PerfRule, RustPerfDomain};
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 89 entries
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 94 entries
 /// covering the main perf pattern categories (complexity, allocation, simd,
 /// layout, iterators, concurrency, io, arithmetic, dispatch, caching, bevy,
-/// wasm). Allocation is the deepest (20 rules); complexity has 17 (Batch 76
-/// added 1); iterators
+/// wasm). Allocation is the deepest (22 rules; Batch 86 added 2); complexity
+/// has 17 (Batch 76 added 1); iterators
 /// has 9 (Batch 66/67 added 2); simd has 8 (Batch 62 + 64 + 83 added 1
-/// each); layout has 6 (Batch 61 added 1); concurrency has 7
+/// each); layout has 9 (Batch 61 + 85 + 86 added); concurrency has 8
 /// (Issue 014 added the two metric-mismatch rules; Batch 65 added the two
 /// contention rules; Batch 73 added 1);
-/// arithmetic has 7 (Batch 74 added 1); dispatch has 3 (Batch 61 + 74 added
-/// 1 each); caching has 4 (Batch 73 + 76 added 1 each); io has 3 (Batch
-/// 68/69 added 1 each); bevy + wasm have 1 each.
+/// arithmetic has 8 (Batch 74 added 1); dispatch has 3 (Batch 61 + 74 added
+/// 1 each); caching has 4 (Batch 73 + 76 added 1 each); io has 4 (Batch
+/// 68/69 added 1 each + Batch 85 added 1); bevy + wasm have 1 each.
 #[must_use]
 #[allow(clippy::too_many_lines)] // seed corpus is a data table; length scales with rule count
 pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
@@ -725,6 +750,13 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
         // For immutable string collections, Box<str> saves 8 bytes/element on
         // 64-bit → better cache density. ~1.1-1.3× at scale. The compiler can't
         // change the representation type.
+        // B86 RIDER (Cloudflare Big Pineapple, Research 100): the rule
+        // GENERALIZES to Box<[T]> for ANY frozen (write-once) T — every
+        // Vec<T> field on a stored-at-scale record drops the capacity word
+        // AND the growth slack. Their cache replaced 8 frozen fields per
+        // entry (String/Vec → Box<str>/Box<[T]>) = 64 B/entry, >15 TB freed
+        // fleet-wide. The str half is this rule; the slice generalization
+        // is the rider — same mechanism (drop the capacity word), any T.
         PerfRule {
             rule_id: "box-str-immutable".to_string(),
             name: "Vec<String> (3-word handle) → Vec<Box<str>> (2-word, no capacity)".to_string(),
@@ -845,6 +877,18 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
         // (e.g., `[u8; 1024]`) and many small ones, every instance carries
         // the large variant's size. Boxing the large variant shrinks the
         // common case (enum becomes 8 bytes + discriminant vs 1032 bytes).
+        // B86 RIDER (Cloudflare Big Pineapple, Research 100 — their change
+        // 4): the HONEST COSTS of boxing the large variant, recorded so the
+        // rewrite is not sold as free: (1) allocator size-class rounding —
+        // the boxed payload rounds UP to the allocator's bin (their TXT 32 B
+        // fit its bin; MX 40 B rounded to 48 — some boxed variants pay more
+        // than their inline size); (2) locality scatter — one contiguous
+        // allocation becomes many, and the common-case records now chase a
+        // pointer on access; (3) the RARE variant pays MORE (their NAPTR,
+        // the 136 B variant, now costs the Box header on top). The win is
+        // the SKEWED-FREQUENCY regime: ~80% small variants (their A/AAAA
+        // traffic) vs a large tail — boxing shrinks the common case exactly
+        // because the large case is rare.
         PerfRule {
             rule_id: "box-large-enum-variant".to_string(),
             name: "Enum with one large variant → Box<LargeVariant> (shrink common case)".to_string(),
@@ -2250,6 +2294,87 @@ PerfRule {
             buggy_code: "#[cfg(target_arch = \"x86_64\")]\nfn checksum_stream(data: &[u32]) -> u64 {\n    let mut acc = 0u64;\n    for i in 0..data.len() {\n        // SW prefetch of a future block: when the stream is storage/RAM\n        // bound the miss pipeline is already saturated — this only adds\n        // issue slots + L1 pressure (the source: PF=1 was 4% WORSE at\n        // 4.7 GB direct-I/O; the prefetch THREAD burned 48% of decode\n        // time; disabling it alone = 1.92×).\n        unsafe {\n            let ahead = (i + 64).min(data.len() - 1);\n            core::arch::x86_64::_mm_prefetch(\n                data.as_ptr().add(ahead) as *const i8,\n                core::arch::x86_64::_MM_HINT_T0,\n            );\n        }\n        acc = acc.wrapping_add(u64::from(data[i]));\n    }\n    acc\n}".to_string(),
             fixed_code: "fn checksum_stream(data: &[u32]) -> u64 {\n    // The bare stream: the hardware prefetcher already lines up purely\n    // sequential access; on a bandwidth/storage-bound loop the explicit\n    // prefetch bought nothing and cost issue slots + L1 pressure.\n    let mut acc = 0u64;\n    for &v in data {\n        acc = acc.wrapping_add(u64::from(v));\n    }\n    acc\n}".to_string(),
             context_notes: Some("NotBenchable on this box — x86-only source evidence (no stable aarch64 prefetch intrinsic to re-gate with; the powi-vs-powf cross-arch precedent) — and the annotation exists to STOP a plausible-looking port: in the source's own A/B the prefetch arm reads ParetoDominated-adjacent on bandwidth/storage-bound streams (PF ±0.1% at 64 MB working set; PF=1 4% WORSE at 4.7 GB direct-I/O; at decode scale the dedicated prefetch thread burned ~48% of decode time walking expert regions at stride 256 — disabling it alone was their single largest decode win at 1.92×). REGIME: the two-sided boundary — compute-bound loops CAN hide latency with prefetch (the x86 folk wisdom's home regime); storage/RAM-bound streams add only issue slots + cache pressure. Proposer-less BY DESIGN (the filter-count-to-any rationale: a losing rewrite never gets a --fix path). Source: arXiv:2608.23841 (Research 098).".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: None,
+        },
+        // ── allocation: structured per-record store → serialize-once byte buffer ─
+        // Source: Cloudflare 1.1.1.1 DNS-cache memory optimization (Batch 86,
+        // Research 100 — the Big Pineapple distill, 2026-08-27). A frozen-record
+        // store that pays one heap allocation PER FIELD PER RECORD (name
+        // handle + payload Vec) carries allocator round-up + malloc-header
+        // overhead on every record, and the insert path pays that malloc
+        // storm per entry. Serializing each record ONCE into one
+        // length-prefixed byte buffer + a u32 offset table costs TWO
+        // allocations total regardless of record count; the rebuild consumer
+        // copies record bytes straight out of the buffer (no re-serialize) —
+        // the source's near-isolated attributions were +13% insert / −5%
+        // lookup (their END-TO-END numbers are +43%/−19% — never cite those
+        // isolated). REGIME: sequential-rebuild consumers win (cache →
+        // response rebuild); consumers that randomly index + mutate records
+        // in place lose (every patch becomes a buffer rewrite — the source's
+        // own round-robin-rotation caveat). ANTI-SHAPE (the source's own
+        // rejected alternative): do NOT store the FULL wire message — variant
+        // flags (their DNSSEC DO bit) then force caching two copies or
+        // post-build filtering; store record bytes + keep the structured
+        // metadata you patch on.
+        PerfRule {
+            rule_id: "serialize-once-byte-buffer-store".to_string(),
+            name: "frozen records as per-field heap allocations → serialize once into ONE length-prefixed byte buffer + offset table (2 allocations total, copy-out rebuild)".to_string(),
+            category: "allocation".to_string(),
+            buggy_code: "// Frozen record cache: every record owns its heap fields - one\n// Box<str> for the name + one Vec<u8> for the payload PER RECORD.\n// At store scale the malloc storm dominates the insert path\n// (2n+ allocations, each paying allocator round-up + header).\nstruct Entry {\n    name: Box<str>,\n    data: Vec<u8>,\n}\n\nfn build(names: &[Box<str>], payloads: &[Vec<u8>]) -> Vec<Entry> {\n    names\n        .iter()\n        .zip(payloads)\n        .map(|(n, p)| Entry { name: n.clone(), data: p.clone() })\n        .collect()\n}".to_string(),
+            fixed_code: "// Serialize each record ONCE into one length-prefixed buffer + a\n// u32 offset table: TWO allocations total regardless of record\n// count. Rebuild consumers copy record bytes straight out (no\n// re-serialize); only name-carrying records ever need parsing.\nfn build(names: &[Box<str>], payloads: &[Vec<u8>]) -> (Box<[u8]>, Vec<u32>) {\n    let mut total = 4; // record-count prefix\n    for (n, p) in names.iter().zip(payloads) {\n        total += 4 + n.len() + p.len();\n    }\n    let mut buf = Vec::with_capacity(total);\n    let mut offsets = Vec::with_capacity(names.len());\n    buf.extend_from_slice(&(names.len() as u32).to_le_bytes());\n    for (n, p) in names.iter().zip(payloads) {\n        offsets.push(buf.len() as u32);\n        buf.extend_from_slice(&(n.len() as u16).to_le_bytes());\n        buf.extend_from_slice(n.as_bytes());\n        buf.extend_from_slice(&(p.len() as u16).to_le_bytes());\n        buf.extend_from_slice(p);\n    }\n    (buf.into_boxed_slice(), offsets)\n}".to_string(),
+            context_notes: Some("MEASURED ParetoDominant 3/0/0 — 4.26x/3.52x/2.90x at n=1K/10K/100K (M3 Max release, rustc 1.97, 2026-08-29, load ~5 of 16; verdict-stable x2 — run 2: 4.26/3.47/2.87), alloc axis EXACT 200,001 → 2 allocations at n=100K (2n+1 → 2: the malloc storm IS the mechanism), bytes 7.90 MB → 4.70 MB (allocator round-up + headers gone), alloc-det stable. The win SHRINKS with n (4.26x → 2.90x) as the copy dominates the per-alloc overhead — still dominant at every tested size. REGIME: sequential-rebuild consumers (cache → response rebuild) — the source's near-isolated +13% insert is the same surface; consumers that randomly index + mutate records in place lose (every patch becomes a buffer rewrite). ANTI-SHAPE: full-wire-message storage (the source's own rejected alternative — variant flags force two copies or post-build filtering; store record bytes + patchable metadata). Distinct from `encoded-layout-borrowed-view` (a READ-side encoding erased by a generic accessor; this is the STORE representation) and from `reuse-allocation-clear` (a scratch buffer ACROSS calls; this is the persisted store shape). Suggestion-only (architectural — a parse-only proposer cannot prove records are frozen or the consumer rebuilds). Source: Cloudflare 1.1.1.1 DNS-cache memory optimization (2026-08-27), Batch 86 / Research 100.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(serialize_once_byte_buffer_store_bench_spec()),
+        },
+        // ── allocation: unconditional per-record field → context-equal elision ─
+        // Source: Cloudflare Big Pineapple (Batch 86, Research 100 — the
+        // owner-elision change). When a stored field equals a value the
+        // ENCLOSING CONTEXT already holds (their owner == the queried domain
+        // = the cache key, in hand at every lookup), storing it per record is
+        // a heap allocation for information the context carries for free:
+        // Option<Box<T>> with None = "same as context", resolved at read via
+        // as_deref().unwrap_or(context). ~80% of their records elided. REGIME
+        // (two-sided): high %-equal wins (allocation saved per record, the
+        // insert-time equality compare is a cheap early-exit); low %-equal is
+        // pure overhead — the Option tag widens the struct + every read pays
+        // the branch for nothing. COMPOSABLE with serialize-once (the elided
+        // marker is one bit in the record header). Distinct from interning/
+        // dedup: nothing is shared or canonicalized — the value is simply
+        // ABSENT because the context re-derives it.
+        PerfRule {
+            rule_id: "context-equal-field-elide".to_string(),
+            name: "per-record field that equals the enclosing context (the lookup key) → Option<Box<T>> elided to None, resolved against the context at read".to_string(),
+            category: "allocation".to_string(),
+            buggy_code: "// Every record stores its owner name unconditionally - even though\n// ~80% of owners EQUAL the queried name (the cache key) that the\n// lookup site already holds. One heap allocation per record for\n// information the context carries for free.\nstruct Answer {\n    ttl: u32,\n    owner: Box<str>,\n}\n\nfn build(owners: &[Box<str>], ttls: &[u32]) -> Vec<Answer> {\n    owners\n        .iter()\n        .zip(ttls)\n        .map(|(o, &t)| Answer { ttl: t, owner: o.clone() })\n        .collect()\n}".to_string(),
+            fixed_code: "// None == \"same as the context name\" (elided - the caller resolves\n// against the key it already holds); Some = a chain target that\n// genuinely needs its own allocation. ~80% of records now store NO\n// name at all (the elide comparison runs once per INSERT).\nstruct Answer {\n    ttl: u32,\n    owner: Option<Box<str>>,\n}\n\nfn build(context: &str, owners: &[Box<str>], ttls: &[u32]) -> Vec<Answer> {\n    owners\n        .iter()\n        .zip(ttls)\n        .map(|(o, &t)| Answer {\n            ttl: t,\n            owner: if o.as_ref() == context { None } else { Some(o.clone()) },\n        })\n        .collect()\n}".to_string(),
+            context_notes: Some("MEASURED ParetoDominant 3/0/0 — 3.12x/3.01x/2.00x at n=1K/10K/100K at the ~80% context-equal mix (M3 Max release, rustc 1.97, 2026-08-29, load ~5 of 16; verdict-stable x2 — run 2: 3.13/2.98/2.00), alloc axis EXACT 100,001 → 20,056 at n=100K (the ~20% non-equal owners keep their allocation — the elision regime made visible), bytes 4.04 MB → 2.76 MB, alloc-det stable. The fixed arm pays the insert-time equality compare + the read branch and STILL dominates at every size — the malloc removal outweighs both. REGIME (two-sided): high %-equal wins (the source's DNS distribution, ~80% owners = qname); LOW %-equal is pure overhead — the Option tag + the always-on compare buy nothing (unmeasured below ~50%; the boundary is where allocations-saved < compare-cost, which for small T sits far below 50%). Composes with `serialize-once-byte-buffer-store` (the elided marker is one bit in the record header). Distinct from interning/dedup: nothing is shared or canonicalized — the value is ABSENT because the context re-derives it. Suggestion-only (architectural — a parse-only proposer cannot prove the field equals the context). Source: Cloudflare Big Pineapple (2026-08-27), Batch 86 / Research 100.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(context_equal_field_elide_bench_spec()),
+        },
+        // ── layout (NotBenchable-speed): bool cluster → one bitflag byte ──────
+        // Source: Cloudflare Big Pineapple (Batch 86, Research 100): several
+        // per-record bools packed into ONE bitflag byte — their own
+        // observation is that the PADDING COLLAPSE shrank the struct by more
+        // than the raw bool bytes. Stored-at-scale regime only: a record
+        // held millions of times multiplies every byte (their per-entry
+        // 953 → 420 B fleet table). CROSS-CITE the kernel_opt INVERSE regime
+        // (Batch 32a `bool-fields-over-bitset-hot-reads`): per-tick READ
+        // flags stay bools — pack only when FOOTPRINT dominates (bytes
+        // stored/streamed), never when decode ALU dominates. DEFAULT-REPR
+        // CAVEAT: field reordering makes the collapse layout-dependent —
+        // MEASURE size_of before/after (the corpus gate pins 12 → 8 for the
+        // fixture layout below; that is evidence for THAT layout, not a
+        // promise for yours). NotBenchable-speed: the win is a deterministic
+        // size_of delta (the `layout-reorder`/`box-large-enum-variant`
+        // class), not a runtime microbench.
+        PerfRule {
+            rule_id: "bitflag-pack-when-footprint-dominates".to_string(),
+            name: "stored-at-scale struct with a cluster of bools → one bitflag byte (footprint regime — the padding collapse can do part of the work; measure size_of before/after)".to_string(),
+            category: "layout".to_string(),
+            buggy_code: "// Stored-at-scale record: eight independent bools. repr(Rust)\n// clusters them, but the flag bytes + alignment padding still\n// bloat every record in a table held millions of times.\nstruct NodeRecord {\n    weight: u32,\n    reachable: bool,\n    verified: bool,\n    stale: bool,\n    pinned: bool,\n    external: bool,\n    compressed: bool,\n    anchored: bool,\n    sealed: bool,\n}".to_string(),
+            fixed_code: "// The eight flags as ONE bitfield byte: 5 bytes of fields round to\n// 8 vs 12 - the padding collapse does part of the work. MEASURE\n// size_of before/after: default-repr reordering makes the collapse\n// layout-dependent (pinned 12 -> 8 in the corpus gate).\nstruct NodeRecord {\n    weight: u32,\n    flags: u8, // bit0 reachable .. bit7 sealed\n}\n\nconst REACHABLE: u8 = 1 << 0;\nconst VERIFIED: u8 = 1 << 1;\nconst STALE: u8 = 1 << 2;\nconst PINNED: u8 = 1 << 3;\nconst EXTERNAL: u8 = 1 << 4;\nconst COMPRESSED: u8 = 1 << 5;\nconst ANCHORED: u8 = 1 << 6;\nconst SEALED: u8 = 1 << 7;".to_string(),
+            context_notes: Some("NotBenchable-speed — the win is a deterministic size_of delta (12 → 8 for the pinned fixture layout), the `layout-reorder`/`box-large-enum-variant` class, not a runtime microbench. REGIME: stored-at-scale records (footprint dominates — the source's per-entry 953 → 420 B table) ONLY; the kernel_opt `bool-fields-over-bitset-hot-reads` rule is the documented inverse regime (per-tick READ flags stay bools — decode ALU dominates there). DEFAULT-REPR CAVEAT: field reordering makes the padding collapse layout-dependent — measure size_of before/after on YOUR layout; never promise the collapse (the source's struct gained more from padding than from the raw bool bytes, which need not reproduce). Composes with `serialize-once-byte-buffer-store` (a flag byte packs into the record header). Source: Cloudflare Big Pineapple DNS-cache memory optimization (2026-08-27), Batch 86 / Research 100.".to_string()),
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: None,
         },
@@ -7471,9 +7596,9 @@ mod tests {
     }
 
     #[test]
-    fn seed_corpus_has_ninety_one_entries_across_twelve_categories() {
+    fn seed_corpus_has_ninety_four_entries_across_twelve_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 91);
+        assert_eq!(corpus.entries.len(), 94);
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
@@ -8187,17 +8312,136 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "rust_perf_bench")]
+    /// Batch 86 — the three new rules are present + retrievable.
     #[test]
-    fn eighty_rules_have_bench_specs() {
+    fn batch86_rules_present() {
         let corpus = build_perf_seed_corpus();
-        let with_spec = corpus.entries.iter().filter(|e| e.bench_spec.is_some()).count();
-        assert_eq!(with_spec, 80, "expected 80 benchable rules, got {with_spec}");
+        let ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        assert!(ids.contains(&"serialize-once-byte-buffer-store"));
+        assert!(ids.contains(&"context-equal-field-elide"));
+        assert!(ids.contains(&"bitflag-pack-when-footprint-dominates"));
+    }
+
+    /// Batch 86 — the three new rules parse (syn) on buggy AND fixed code.
+    #[test]
+    fn batch86_pseudocode_parses() {
+        let corpus = build_perf_seed_corpus();
+        for id in [
+            "serialize-once-byte-buffer-store",
+            "context-equal-field-elide",
+            "bitflag-pack-when-footprint-dominates",
+        ] {
+            let e = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("{id} missing from corpus"));
+            assert!(
+                syn::parse_file(&e.buggy_code).and_then(|_| syn::parse_file(&e.fixed_code)).is_ok(),
+                "{id} buggy/fixed must both parse"
+            );
+        }
+    }
+
+    /// Batch 86 G1 (exactness gate, integer ops — the ported-numeric
+    /// MANDATE shape): the serialize-once buffer must reconstruct every
+    /// (name, payload) record BYTE-EXACTLY, including the edge records
+    /// (empty name, empty payload, multi-byte u16 lengths). No tolerance
+    /// — a drifted offset must fail loudly, not approximately.
+    #[test]
+    #[allow(clippy::cast_possible_truncation)] // the u16/u32 narrowings ARE the wire format under test
+    fn batch86_byte_buffer_store_reconstructs_exactly() {
+        let names: Vec<Box<str>> = vec![
+            "a".into(),
+            "example-node-7".into(),
+            "".into(),                          // empty-NAME edge (offsets must advance)
+            "x".repeat(300).into_boxed_str(),   // multi-byte u16 length
+        ];
+        let payloads: Vec<Vec<u8>> = vec![
+            vec![],
+            vec![1, 2, 3],
+            vec![0xAB; 41],
+            (0..300u32).map(|i| (i % 251) as u8).collect(),
+        ];
+        // fixed form (mirrors the corpus fixed_code shape exactly; the
+        // u16/u32 narrowings are the FORMAT — production lengths are bounded
+        // by the record domain, asserted by the exact reconstruction below)
+        let mut total = 4usize;
+        for (n, p) in names.iter().zip(&payloads) {
+            total += 4 + n.len() + p.len();
+        }
+        let mut buf = Vec::with_capacity(total);
+        let mut offsets = Vec::with_capacity(names.len());
+        buf.extend_from_slice(&(names.len() as u32).to_le_bytes());
+        for (n, p) in names.iter().zip(&payloads) {
+            offsets.push(buf.len() as u32);
+            buf.extend_from_slice(&(n.len() as u16).to_le_bytes());
+            buf.extend_from_slice(n.as_bytes());
+            buf.extend_from_slice(&(p.len() as u16).to_le_bytes());
+            buf.extend_from_slice(p);
+        }
+        // reconstruct + compare EXACTLY
+        let count = u32::from_le_bytes([buf[0], buf[1], buf[2], buf[3]]) as usize;
+        assert_eq!(count, names.len());
+        for (i, &off) in offsets.iter().enumerate() {
+            let o = off as usize;
+            let nl = u16::from_le_bytes([buf[o], buf[o + 1]]) as usize;
+            let name = &buf[o + 2..o + 2 + nl];
+            let pl = u16::from_le_bytes([buf[o + 2 + nl], buf[o + 3 + nl]]) as usize;
+            let payload = &buf[o + 4 + nl..o + 4 + nl + pl];
+            assert_eq!(name, names[i].as_bytes(), "name {i} drifted");
+            assert_eq!(payload, payloads[i].as_slice(), "payload {i} drifted");
+        }
+    }
+
+    /// Batch 86 G1 (the deterministic size axis for the bitflag rule):
+    /// the flag-cluster layout is 12 bytes, the bitflag layout is 8 —
+    /// pinned EXACTLY (align rules are platform-stable for these primitive
+    /// members), and every bit position round-trips through the packed
+    /// form. The "measure size_of before/after" caveat is the RULE's
+    /// (default-repr layouts vary); this fixture's layout is fixed.
+    #[test]
+    fn batch86_bitflag_size_axis_and_roundtrip() {
+        #[allow(dead_code)] // size_of is the measurement
+        #[allow(clippy::struct_excessive_bools)] // the 8-bool cluster IS the measured layout
+        struct Wide {
+            weight: u32,
+            reachable: bool,
+            verified: bool,
+            stale: bool,
+            pinned: bool,
+            external: bool,
+            compressed: bool,
+            anchored: bool,
+            sealed: bool,
+        }
+        #[allow(dead_code)]
+        struct Packed {
+            weight: u32,
+            flags: u8,
+        }
+        assert_eq!(std::mem::size_of::<Wide>(), 12);
+        assert_eq!(std::mem::size_of::<Packed>(), 8);
+        for bit in 0..8u8 {
+            let mut flags = 0u8;
+            flags |= 1 << bit;
+            assert_eq!((flags >> bit) & 1, 1);
+            flags &= !(1 << bit);
+            assert_eq!(flags, 0);
+        }
     }
 
     #[cfg(feature = "rust_perf_bench")]
     #[test]
-    fn eleven_rules_are_not_benchable() {
+    fn eighty_two_rules_have_bench_specs() {
+        let corpus = build_perf_seed_corpus();
+        let with_spec = corpus.entries.iter().filter(|e| e.bench_spec.is_some()).count();
+        assert_eq!(with_spec, 82, "expected 82 benchable rules, got {with_spec}");
+    }
+
+    #[cfg(feature = "rust_perf_bench")]
+    #[test]
+    fn twelve_rules_are_not_benchable() {
         let corpus = build_perf_seed_corpus();
         let without_spec: Vec<&str> = corpus
             .entries
@@ -8205,8 +8449,9 @@ mod tests {
             .filter(|e| e.bench_spec.is_none())
             .map(|e| e.rule_id.as_str())
             .collect();
-        assert_eq!(without_spec.len(), 11);
+        assert_eq!(without_spec.len(), 12);
         assert!(without_spec.contains(&"software-prefetch-storage-bound")); // Batch 85 — x86-only source evidence, the annotation IS the rule
+        assert!(without_spec.contains(&"bitflag-pack-when-footprint-dominates")); // Batch 86 — the deterministic size axis (12 → 8), not a speed bench
         assert!(without_spec.contains(&"layout-reorder"));
         assert!(without_spec.contains(&"repr-u8-enum"));
         assert!(without_spec.contains(&"bevy-reactive-loop"));
@@ -8243,11 +8488,15 @@ mod tests {
     /// overflow-promotion — the ParetoDominated memory-for-speed trade
     /// (the Datadog 2,100 GiB regime vs the measured update-path cost);
     /// cache-line-block-partitioned-lock — measured-winner regime note +
-    /// the first ALLOC_AXIS_EXEMPT rule).
-    /// The other 58 have `context_notes: None` (unconditional wins or
+    /// the first ALLOC_AXIS_EXEMPT rule). Batch 86 added 3 (serialize-once-
+    /// byte-buffer-store — the shrinking-ratio + regime note;
+    /// context-equal-field-elide — the %-equal two-regime note;
+    /// bitflag-pack-when-footprint-dominates — the NotBenchable-speed size
+    /// axis + the repr-reorder caveat).
+    /// The other 57 have `context_notes: None` (unconditional wins or
     /// honestly NotBenchable).
     #[test]
-    fn thirty_four_annotated_rules_carry_context_notes() {
+    fn thirty_seven_annotated_rules_carry_context_notes() {
         let corpus = build_perf_seed_corpus();
         let annotated: Vec<&str> = corpus
             .entries
@@ -8255,7 +8504,7 @@ mod tests {
             .filter(|e| e.context_notes.is_some())
             .map(|e| e.rule_id.as_str())
             .collect();
-        assert_eq!(annotated.len(), 34, "expected 34 context-annotated rules");
+        assert_eq!(annotated.len(), 37, "expected 37 context-annotated rules");
         assert!(annotated.contains(&"weight-tile-consumption-order")); // Batch 85 — measured ParetoDominant + the M3-L1-shift regime note
         assert!(annotated.contains(&"software-prefetch-storage-bound")); // Batch 85 — the x86-source-cited honest-loser annotation
         assert!(annotated.contains(&"precompute-table"));
@@ -8286,6 +8535,9 @@ mod tests {
         assert!(annotated.contains(&"bitplane-transpose-repeated-predicate-scan")); // Batch 83 — measured ParetoDominant + the amortization/b/equality regime gates
         assert!(annotated.contains(&"narrow-counter-overflow-promotion")); // Batch 78 — ParetoDominated honest-loser (the memory-for-speed trade)
         assert!(annotated.contains(&"cache-line-block-partitioned-lock")); // Batch 78 — measured-winner + regime + alloc-exempt note
+        assert!(annotated.contains(&"serialize-once-byte-buffer-store")); // Batch 86 — measured ParetoDominant + the shrinking-ratio/regime note
+        assert!(annotated.contains(&"context-equal-field-elide")); // Batch 86 — measured ParetoDominant + the %-equal two-regime note
+        assert!(annotated.contains(&"bitflag-pack-when-footprint-dominates")); // Batch 86 — NotBenchable-speed size axis + the repr-reorder caveat
     }
 
     /// The non-annotated rules (ParetoDominant + honestly NotBenchable) must
@@ -8299,7 +8551,7 @@ mod tests {
             .iter()
             .filter(|e| e.context_notes.is_none())
             .count();
-        assert_eq!(unannotated, 57, "expected 57 unannotated rules (91 - 34 annotated)");
+        assert_eq!(unannotated, 57, "expected 57 unannotated rules (94 - 37 annotated)");
     }
 
     /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -8311,7 +8563,7 @@ mod tests {
         let json = serde_json::to_string(&corpus.entries).unwrap();
         let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
         let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-        assert_eq!(annotated, 34);
+        assert_eq!(annotated, 37);
 
         // Simulate a pre-field snapshot: strip `context_notes` from JSON.
         // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -8345,7 +8597,7 @@ mod tests {
 
         // Filter to the 34 annotated rules.
         let annotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_some()).collect();
-        assert_eq!(annotated.len(), 34, "expected 34 annotated rules");
+        assert_eq!(annotated.len(), 37, "expected 37 annotated rules");
 
         // The HealEntry trait override must agree with the struct field.
         for rule in &annotated {
@@ -9170,6 +9422,218 @@ pub fn run_fixed(input: &Input) {
     }
     std::hint::black_box(total);
     debug_assert_eq!(total, input.expected_per_scan * SCANS as u64);
+}
+"#
+        .to_string(),
+    }
+}
+
+
+/// Bench spec for `serialize-once-byte-buffer-store` (Batch 86, Research
+/// 100 — the Cloudflare Big Pineapple distill): structured per-record
+/// store (2 heap allocations per record) vs ONE length-prefixed byte
+/// buffer + u32 offset table (2 allocations TOTAL). The insert path is
+/// the measured surface (the source's near-isolated +13% insert); the
+/// read guards touch every record so neither arm can be dead-coded.
+#[cfg(feature = "rust_perf_bench")]
+#[allow(clippy::items_after_test_module)] // bench-spec tables live after the corpus tests by design
+fn serialize_once_byte_buffer_store_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![1_000, 10_000, 100_000],
+        harness: r#"
+mod buggy {
+    pub struct Entry {
+        pub name: Box<str>,
+        pub data: Vec<u8>,
+    }
+    pub fn build(names: &[Box<str>], payloads: &[Vec<u8>]) -> Vec<Entry> {
+        names
+            .iter()
+            .zip(payloads)
+            .map(|(n, p)| Entry { name: n.clone(), data: p.clone() })
+            .collect()
+    }
+}
+
+mod fixed {
+    pub fn build(names: &[Box<str>], payloads: &[Vec<u8>]) -> (Box<[u8]>, Vec<u32>) {
+        let mut total = 4usize;
+        for (n, p) in names.iter().zip(payloads) {
+            total += 4 + n.len() + p.len();
+        }
+        let mut buf = Vec::with_capacity(total);
+        let mut offsets = Vec::with_capacity(names.len());
+        buf.extend_from_slice(&(names.len() as u32).to_le_bytes());
+        for (n, p) in names.iter().zip(payloads) {
+            offsets.push(buf.len() as u32);
+            buf.extend_from_slice(&(n.len() as u16).to_le_bytes());
+            buf.extend_from_slice(n.as_bytes());
+            buf.extend_from_slice(&(p.len() as u16).to_le_bytes());
+            buf.extend_from_slice(p);
+        }
+        (buf.into_boxed_slice(), offsets)
+    }
+}
+
+pub struct Input {
+    names: Vec<Box<str>>,
+    payloads: Vec<Vec<u8>>,
+}
+
+fn lcg(state: &mut u64) -> u64 {
+    *state = state
+        .wrapping_mul(6364136223846793005)
+        .wrapping_add(1442695040888963407);
+    *state >> 33
+}
+
+pub fn make_input(n: usize) -> Input {
+    let mut rng: u64 = 0x9E37_79B9_7F4A_7C15;
+    let mut names = Vec::with_capacity(n);
+    let mut payloads = Vec::with_capacity(n);
+    for _ in 0..n {
+        let name_len = 4 + lcg(&mut rng) as usize % 28; // 4..32 B names
+        let mut name = String::with_capacity(name_len);
+        for _ in 0..name_len {
+            name.push((b'a' + lcg(&mut rng) as u8 % 26) as char);
+        }
+        let payload_len = 4 + lcg(&mut rng) as usize % 36; // 4..40 B payloads
+        let payload: Vec<u8> = (0..payload_len).map(|_| lcg(&mut rng) as u8).collect();
+        names.push(name.into_boxed_str());
+        payloads.push(payload);
+    }
+    Input { names, payloads }
+}
+
+pub fn run_buggy(input: &Input) {
+    let store = buggy::build(&input.names, &input.payloads);
+    let mut total = 0usize;
+    for e in &store {
+        total += e.name.len() + e.data.len();
+    }
+    std::hint::black_box(total);
+}
+
+pub fn run_fixed(input: &Input) {
+    let (buf, offsets) = fixed::build(&input.names, &input.payloads);
+    let mut total = 0usize;
+    for &off in &offsets {
+        let o = off as usize;
+        let nl = u16::from_le_bytes([buf[o], buf[o + 1]]) as usize;
+        total += nl;
+    }
+    std::hint::black_box(total + buf.len());
+}
+"#
+        .to_string(),
+    }
+}
+
+/// Bench spec for `context-equal-field-elide` (Batch 86, Research 100):
+/// owner stored on EVERY record vs Option<Box<str>> elided to None when the
+/// owner equals the record's lookup context (the cache key) — resolved at
+/// read via as_deref().unwrap_or(context). ~80% context-equal mix (the
+/// source's DNS-owner distribution); the alloc axis is the headline
+/// (n → ~0.2n owner allocations); the fixed arm pays the insert-time
+/// equality compare (the mechanism's honest cost).
+#[cfg(feature = "rust_perf_bench")]
+#[allow(clippy::items_after_test_module)] // bench-spec tables live after the corpus tests by design
+fn context_equal_field_elide_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![1_000, 10_000, 100_000],
+        harness: r#"
+mod buggy {
+    pub struct Answer {
+        pub ttl: u32,
+        pub owner: Box<str>,
+    }
+    pub fn build(owners: &[Box<str>], ttls: &[u32]) -> Vec<Answer> {
+        owners
+            .iter()
+            .zip(ttls)
+            .map(|(o, &t)| Answer { ttl: t, owner: o.clone() })
+            .collect()
+    }
+}
+
+mod fixed {
+    pub struct Answer {
+        pub ttl: u32,
+        pub owner: Option<Box<str>>,
+    }
+    pub fn build_elided(
+        contexts: &[Box<str>],
+        owners: &[Box<str>],
+        ttls: &[u32],
+    ) -> Vec<Answer> {
+        contexts
+            .iter()
+            .zip(owners)
+            .zip(ttls)
+            .map(|((c, o), &t)| Answer {
+                ttl: t,
+                owner: if o.as_ref() == c.as_ref() { None } else { Some(o.clone()) },
+            })
+            .collect()
+    }
+}
+
+pub struct Input {
+    contexts: Vec<Box<str>>, // the lookup key each record belongs to
+    owners: Vec<Box<str>>,   // ~80% identical to the context
+    ttls: Vec<u32>,
+}
+
+fn lcg(state: &mut u64) -> u64 {
+    *state = state
+        .wrapping_mul(6364136223846793005)
+        .wrapping_add(1442695040888963407);
+    *state >> 33
+}
+
+pub fn make_input(n: usize) -> Input {
+    let mut rng: u64 = 0x9E37_79B9_7F4A_7C15;
+    let mut contexts = Vec::with_capacity(n);
+    let mut owners = Vec::with_capacity(n);
+    let mut ttls = Vec::with_capacity(n);
+    for _ in 0..n {
+        let ctx_len = 8 + lcg(&mut rng) as usize % 17; // 8..25 B names
+        let mut ctx = String::with_capacity(ctx_len);
+        for _ in 0..ctx_len {
+            ctx.push((b'a' + lcg(&mut rng) as u8 % 26) as char);
+        }
+        let ctx: Box<str> = ctx.into_boxed_str();
+        let owner: Box<str> = if lcg(&mut rng) % 5 != 0 {
+            ctx.clone() // ~80% context-equal (the elision regime)
+        } else {
+            let mut o = String::with_capacity(ctx_len + 4);
+            o.push_str(&ctx);
+            o.push_str(".x"); // a genuinely different chain target
+            o.into_boxed_str()
+        };
+        contexts.push(ctx);
+        owners.push(owner);
+        ttls.push(lcg(&mut rng) as u32 | 1);
+    }
+    Input { contexts, owners, ttls }
+}
+
+pub fn run_buggy(input: &Input) {
+    let store = buggy::build(&input.owners, &input.ttls);
+    let mut total = 0usize;
+    for a in &store {
+        total += a.owner.len();
+    }
+    std::hint::black_box(total);
+}
+
+pub fn run_fixed(input: &Input) {
+    let store = fixed::build_elided(&input.contexts, &input.owners, &input.ttls);
+    let mut total = 0usize;
+    for (a, c) in store.iter().zip(&input.contexts) {
+        total += a.owner.as_deref().unwrap_or(c).len();
+    }
+    std::hint::black_box(total);
 }
 "#
         .to_string(),

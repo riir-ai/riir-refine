@@ -1,6 +1,6 @@
 # Research 100 — Distill verdict: Cloudflare 1.1.1.1 DNS cache memory optimization (Big Pineapple)
 
-**Status:** DISTILLED — pending owner decision (queued as Batch 86 / Plan 047; 85 = the sibling's queued cflow, Plan 046)
+**Status:** RECORD — LANDED as Batch 86 / Plan 047 (2026-08-29, idle loop; corpus 91 → 94, allocation 20→22 + layout 8→9). GOAT: serialize-once-byte-buffer-store ParetoDominant 4.26/3.52/2.90× with alloc axis EXACT 200,001→2 (2n+1→2, the malloc storm IS the mechanism); context-equal-field-elide ParetoDominant 3.12/3.01/2.00× at the ~80% mix with allocs 100,001→20,056 (the elision regime made visible); bitflag-pack NotBenchable-speed with the 12→8 size axis pinned by gate. Verdict-stable ×2 both benchable; G-det stable; retrieval floors 13/13 HELD zero re-pins; 809/0 default + 827/0 bench-state lib; clippy 0 both states. Both riders landed (box-str-immutable → Box<[T]> generalization; box-large-enum-variant honest costs). All 3 candidates survived authoring falsification — context-equal did NOT collapse into the dedup/intern family (the distinct decision: the value is ABSENT because the context re-derives it — no sharing, no canonicalization). Count-pin walk found the corpus header line STALE at 89/79/10 (B85 never bumped it) — now true at 94/82/12.
 
 ## Source
 
