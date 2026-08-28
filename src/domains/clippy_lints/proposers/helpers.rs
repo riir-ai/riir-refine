@@ -13,7 +13,11 @@ use syn::{Expr, ExprLit, Lit, Pat};
 
 /// Can `<expr>.method(...)` be appended without changing grouping? Postfix
 /// chains (paths, calls, field/index access, `?`, awaits, literals, macros)
-/// bind tighter than `.`; binary/unary/if/struct forms need parens.
+/// bind tighter than `.`; binary/unary/if/struct forms need parens. Casts
+/// are EXCLUDED despite parsing fine in operator position: method calls bind
+/// TIGHTER than `as`, so `x as u64.method()` groups the method into the
+/// TYPE position and fails — a cast receiver must parenthesize
+/// (`(x as u64).method()`; P11, found authoring `manual_is_multiple_of`).
 pub(crate) fn is_postfix_safe(e: &Expr) -> bool {
     matches!(
         e,
@@ -27,14 +31,15 @@ pub(crate) fn is_postfix_safe(e: &Expr) -> bool {
             | Expr::Await(_)
             | Expr::Lit(_)
             | Expr::Macro(_)
-            | Expr::Cast(_)
     )
 }
 
 /// Does `<expr>` need parens when negated (`!e`), `&&`-joined, or used as a
-/// replacement in operator position? Complementary to [`is_postfix_safe`]
-/// modulo the forms that parse fine in logic position but not before `.`
-/// (none today — the sets coincide; kept separate for intent).
+/// replacement in operator position? The sets DIVERGE deliberately at casts:
+/// `x as u64 == y` parses fine (`as` binds tighter than binary operators)
+/// but `x as u64.method()` does not — casts pass here and fail
+/// [`is_postfix_safe`]. Over-parenthesizing a cast condition is byte-drift
+/// vs the oracle, harmless; under-parenthesizing before `.` is a break.
 pub(crate) fn needs_logic_parens(e: &Expr) -> bool {
     !is_postfix_safe(e)
 }

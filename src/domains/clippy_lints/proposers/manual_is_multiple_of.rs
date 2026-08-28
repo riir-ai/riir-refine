@@ -17,10 +17,10 @@
 //! a consumer pinned older fails the verify gate, which is the sanctioned
 //! revert path.
 //!
-//! Postfix guard: [`is_postfix_safe`] includes `Expr::Cast`, but `x as u64`
-//! is NOT method-append-safe (`x as u64.method()` parses the method into the
-//! TYPE position and fails) — the guard here excludes casts so cast
-//! dividends parenthesize (`(x as u64).is_multiple_of(4)`).
+//! Postfix guard: the shared [`is_postfix_safe`] EXCLUDES casts (P11 —
+//! `x as u64.method()` parses the method into the TYPE position and fails),
+//! so cast dividends parenthesize (`(x as u64).is_multiple_of(4)`; fixture
+//! `unparenthesized_cast_dividend_parenthesizes`).
 //!
 //! Self-recursion guard (Issue 031 H1 class): `self % d == 0` inside
 //! `fn is_multiple_of` would rewrite to a call of itself — infinite
@@ -114,9 +114,9 @@ impl<'ast> Visit<'ast> for Collector<'_> {
 }
 
 /// `<dividend>.is_multiple_of(<divisor>)` — parens on the dividend unless it
-/// is method-append-safe (see the module doc for the cast exclusion), the
-/// divisor verbatim (argument position needs no guard), `!` prefix when the
-/// comparison was `!=`.
+/// is postfix-safe (the shared helper's cast exclusion covers the
+/// method-append hazard), the divisor verbatim (argument position needs no
+/// guard), `!` prefix when the comparison was `!=`.
 fn multiple_of_text(
     source: &str,
     rem: &ExprBinary,
@@ -130,7 +130,7 @@ fn multiple_of_text(
     if dividend == "self" && fn_top == Some("is_multiple_of") {
         return None;
     }
-    let recv = if is_method_append_safe(&rem.left) {
+    let recv = if is_postfix_safe(&rem.left) {
         dividend
     } else {
         format!("({dividend})")
@@ -160,13 +160,6 @@ fn is_zero(e: &Expr) -> bool {
 
 fn is_float_lit(e: &Expr) -> bool {
     matches!(e, Expr::Lit(ExprLit { lit: Lit::Float(_), .. }))
-}
-
-/// [`is_postfix_safe`] minus casts: `x as u64.method()` groups the method
-/// into the TYPE position (method calls bind tighter than `as`), so a cast
-/// dividend must parenthesize.
-fn is_method_append_safe(e: &Expr) -> bool {
-    is_postfix_safe(e) && !matches!(e, Expr::Cast(_))
 }
 
 #[cfg(test)]

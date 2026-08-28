@@ -9,6 +9,8 @@
 
 ## Mining queue snapshot (update per batch — this is the resume state)
 
+- **2026-08-29 (later +07, idle loop) — P7 COMMITTED + PUSHED (`bf991f7`) after the prior session's fd-exhaustion wedge; P11 LANDED same cycle (`is_postfix_safe` Cast exclusion — the intake item P7 opened).** P7 was code-complete but uncommitted in the shared tree; verified coherent against the sibling's 2 landed commits (`4b5c087` score-bench #11 + `fcb28c8` cycle record — 0 source overlap), compile-gated, committed with the staged-path guard (exactly the 8 files), pushed, and the installed binary rebuilt (`fix_verify,clippy_verify`). P11 (small, in-repo, the queue's declared next-executable): `Expr::Cast(_)` removed from the shared `is_postfix_safe` — method calls bind TIGHTER than `as`, so `x as u64.method()` groups into the TYPE position; cast receivers now parenthesize (`(foo() as &str).is_empty()`, the live comparison_to_empty exposure, pinned by fixture `cast_receiver_parenthesizes_p11`); `needs_logic_parens` doc updated (the sets now DIVERGE deliberately — logic-safe, method-append-unsafe); P7's local `is_method_append_safe` deleted (subsumed); the two now-identical LOCAL copies in `manual_map` + `unnecessary_unwrap` DEDUPED to the shared helper (the copy-drift that CAUSED P11; cast-scrutinee outputs gain harmless parens, no fixtures cover that shape). Defense-in-depth: match_bool's `!{scrutinee}` prefix on a cast would have emitted `!x as u8` (= `(!x) as u8`, silent wrong-condition) — now `!(x as u8)`. 828/0 lib (+1), clippy 0 both states, score-bench #14 steady (96.2/1.9/100/100, 66 edits — flat, no frozen cast shape). Lane state: sibling ACTIVE (riir-ai GPU lanes + riir-dapps kat/ worker shell); 4090/M3 lanes sibling-held; pool refill quota-gated until 09-15. Next executable: adoption-sweep re-dry (the parenthesization change is proposer-behavior — a dry-run over previously-CLEAN repos is cheap re-verification) or idle report.
+
 - **2026-08-29 (06:0x +07, idle loop) — P7 LANDED (`manual_is_multiple_of` proposer + corpus entry, the post-mining wave's last open item) + the game-sdk adoption heal (393 edits): corpus 40 → 41 (clippy_lints).** P7: VERIFY-tier lane decided + landed — proposer (18 fixtures, float/method-form/self-recursion guards, the Cast-exclusion method-append guard) + e2e VERIFY-contract proven on a scratch crate (unsigned site healed Certified, signed i64 site auto-reverted byte-exact); score-bench steady state held; **retrieval floor re-pinned per the floor contract (blended top-3 97→95/101, the `== 0`-token competition class, Issue 022 precedent, worktree-isolated baseline)**; `if_same_then_else` stays owner-gated. NEW intake item **P11**: `is_postfix_safe` includes `Expr::Cast` — a latent method-append break (`x as u64.method()` groups into the type position); P7 carries a local exclusion, the shared helper fix is its own unit. **Also this cycle: riir-game-sdk adoption heal LANDED (`2576b0b`): 393 mechanical edits / 56 files, net −124** (uninlined 326 / map_unwrap_or 38 / useless_format 12 / single_match_else 7) across 4 verify cycles (root gm+avatar_sync+pubdir / viz full_gm+chain_viz+vibe_view+quest_bytes+quest_manifold_demo+neuro_viz_3d / e2e prod_e2e+game_e2e+settlement_e2e / default) — all compile-gated under their exact unions; 3 heal-created map_or sites terminal-fixed to is_some_and; clippy 0 on touched packages; the repo's test_gate.sh ALL 7 ROWS GREEN at pinned counts (21/30/35/44/153/33/80). riir-dao stragglers healed (`af914d3`, 2 edits); riir-viewbridge verified CLEAN (0 fixable — the adoption-sweep lane is fully consumed). **Coordination: the sibling landed `4b5c087` (score-bench #11 record) mid-cycle on the shared checkout — disjoint files, no sweep; their score-bench cadence continues (my run #13 recorded flat on the frozen set, uncommitted row rides my P7 commit).** Lane state: sibling ACTIVE in riir-ai (59 dirty, GPU perf lanes) + riir-dapps (kat/ worker-shell WIP); the sibling's M3 bench_767 finished mid-cycle. Next executable: P11 (the is_postfix_safe Cast fix, small) or the 4090/M3 lanes (sibling-held) or idle report; pool refill quota-gated until 09-15.
 - **2026-08-29 (morning +07, idle loop, 4090 box quiet) — Plan 555 T1 LANDED (riir-ai `6167c78d0`, pushed): the crowd temperament-ladder A/B → G8 honestly REFUTED (structural); genome axis validated; Bench 806 (renumbered — see collision note).** The queue's declared next-executable was taken (box quiet, riir-ai tree clean at cycle start; B86's gate freed mid-cycle by the sibling's own B85/B86 landings — see their entries below). New module `riir-games/src/swarm/temperament_ladder.rs` (opt-in `spectral_temperament`) + `riir-poc/tests/temperament_ladder_poc.rs` (3 arms × 8 seeds, Bench-010 world). Gates: G1 determinism PASS (bit-identical per arm), G4 PASS (0 allocs/bytes, 20 ticks @ 1000 NPC), Weyl merge certificate 100/100 PASS, genome engagement PASS (L/H vs incumbent mean |Δflee_frac| 0.0042; flee duty cycle scales with the calibrated scalar 0.0125@t=0.33 → 0.075@t=1.0). **G8 rung-ladder REFUTED structurally: 98× hierarchy (rung effect 0.000042 vs genome effect 0.004155), sd ratio 0.999–1.005 across kick_spread ∈ {1,2,4,8} — family-S's `Aᵢ = αᵢI + diag(εᵢ)` gives every rung the same isotropic feature response (λk(A₀)=0 at every k by eigengap-at-init), so k only modulates the O(ε) residual (~7% of the genome axis). Harness pins the hierarchy as the standing verdict test; substrate feedback recorded for katgpt-rs spectral_pencil.** Two measured world-design lessons en route (in the bench doc): stock kick 0.5 saturates fear at 1.0 genome-invisibly (Issue-070 arithmetic) → the derived temperament-visible regime kick `1.25·gap·(1−e^(−λ·dt))`; a forage attractor outside every fear disc measures all-zero flees → per-NPC grazing spots spanning the flight-initiation annulus. **Bench 804 dual-allocated AGAIN (7th collision): sibling's k4-smem-race doc landed first (`b7b787f80`) + they took 805 (771 tiled-flash PROMOTED default-on, `18df22e14`) → mine renumbered 806 at rebase (.highwater → 806; conflict was .highwater-only).** Score-bench #11 also run this cycle (flat 96.2%/1.9% — validates P3+P8 proposer changes regression-free on the frozen set, PRE-B86; the post-B86 #12 is the sibling's cadence per their entry). Lane state after: 555 T3 quota-gated (09-15), T4 deferred (Glacial consumer must materialize); the post-mining wave + B86 landed by the sibling concurrently — no file collisions this cycle beyond .highwater + this snapshot (both resolved push-wins).
 
@@ -1485,20 +1487,28 @@ never closed). Ranked open classes (inventory 2026-08-24):
       HEAD worktree (pre-change 97/101 → post-change 96/101, sole cause
       confirmed); all other floors re-measured unchanged. `if_same_then_else`
       stays owner-gated (semantic-duplication judgment).
-- [ ] P11 **`is_postfix_safe` includes `Expr::Cast` — latent method-append
-      break**. Found while writing the P7 proposer: `x as u64.method()` does
-      NOT group as `(x as u64).method()` (method calls bind TIGHTER than
-      `as`, so the method parses into the TYPE position and fails) — the
-      helper's doc claims "can be appended without changing grouping" for a
-      form where appending is structurally broken. The P7 proposer carries a
-      local exclusion (`is_method_append_safe`) so it is safe; the shared
-      helper remains wrong for any FUTURE proposer that appends a method to a
-      cast expr (comparison_to_empty's `finish_is_empty` is the live exposure:
-      `foo() as &str == ""` would emit `foo() as &str.is_empty()`). Fix =
-      remove Cast from `is_postfix_safe` + audit the negation/`&&`-join users
-      (`needs_logic_parens` delegates to it — over-parenthesizing there is
-      byte-drift vs the oracle, harmless but parity-tested). Evidence: grammar
-      analysis + the P7 fixture (`unparenthesized_cast_dividend_parenthesizes`).
+- [x] P11 **`is_postfix_safe` includes `Expr::Cast` — latent method-append
+      break** — **CLOSED 2026-08-29** (same-day fix). Found while writing the
+      P7 proposer: `x as u64.method()` does NOT group as `(x as u64).method()`
+      (method calls bind TIGHTER than `as`, so the method parses into the TYPE
+      position and fails) — the helper's doc claims "can be appended without
+      changing grouping" for a form where appending is structurally broken.
+      Fix: `Expr::Cast(_)` removed from the shared `is_postfix_safe` (cast
+      receivers now parenthesize — `(foo() as &str).is_empty()`, the live
+      comparison_to_empty exposure, pinned by the new
+      `cast_receiver_parenthesizes_p11` fixture); `needs_logic_parens` doc
+      updated (the sets now DIVERGE deliberately at casts — logic-safe,
+      method-append-unsafe; over-parens byte-drift harmless); the P7 local
+      exclusion `is_method_append_safe` deleted (subsumed); the two
+      now-identical LOCAL copies in `manual_map` + `unnecessary_unwrap`
+      deduped to the shared helper (DRY — the copy drift that CAUSED P11;
+      their cast-scrutinee outputs gain harmless parens, no fixtures cover
+      cast scrutinees). Latent wrong-math hazard closed as defense-in-depth:
+      match_bool's `!{scrutinee}` prefix on a cast would have emitted
+      `!x as u8` (= `(!x) as u8`, silent wrong-condition); now `!(x as u8)`.
+      828/0 lib (+1 fixture), clippy 0 both states, score-bench #14 steady
+      state held (96.2/1.9/100/100, 66 edits — flat; no frozen fixture has a
+      cast shape).
 - [x] P8 **unnecessary_sort_by deref-binding shape** — **CLOSED 2026-08-29**
       (this commit). Probe-first (12-shape scratch crate vs clippy 1.97,
       JSON): the deref form `sort_by(|&a, &b| a.cmp(&b))` fires

@@ -305,4 +305,19 @@ mod tests {
         );
         syn::parse_file(&out).expect("re-parses");
     }
+
+    #[test]
+    fn cast_receiver_parenthesizes_p11() {
+        // P11: method calls bind TIGHTER than `as` — `foo() as &str.is_empty()`
+        // groups the method into the TYPE position and fails to compile. The
+        // shared `is_postfix_safe` excludes casts, so a cast receiver must
+        // parenthesize.
+        let input = "fn f() -> bool { foo() as &str == \"\" }";
+        let out = propose_fix("comparison_to_empty", input).expect("matched");
+        assert!(
+            out.contains("(foo() as &str).is_empty()"),
+            "cast receiver must parenthesize: {out}"
+        );
+        syn::parse_file(&out).expect("re-parses");
+    }
 }

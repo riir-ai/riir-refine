@@ -17,6 +17,7 @@
 //! these bodies — probe-verified 1.97: the `?`-in-arm shape stays silent,
 //! the clean shape fires.
 
+use super::helpers::is_postfix_safe;
 use super::{edit, src, SourceEdit};
 use syn::visit::Visit;
 use syn::{Expr, ExprMatch, File, Pat};
@@ -105,17 +106,6 @@ impl Collector<'_> {
         };
         Some(format!("{scrutinee}.map(|{binding}| {inner})"))
     }
-}
-
-/// Can `<expr>.map(...)` be appended without changing grouping? Postfix
-/// chains (paths, calls, field/index access, `?`, awaits, literals) bind
-/// tighter than `.`; binary/unary/if/struct forms need parens.
-fn is_postfix_safe(e: &Expr) -> bool {
-    matches!(
-        e,
-        Expr::Path(_) | Expr::Call(_) | Expr::MethodCall(_) | Expr::Field(_) | Expr::Index(_)
-            | Expr::Paren(_) | Expr::Try(_) | Expr::Await(_) | Expr::Lit(_) | Expr::Macro(_)
-    )
 }
 
 fn is_some_pat(p: &Pat) -> bool {

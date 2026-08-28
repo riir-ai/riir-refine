@@ -10,6 +10,7 @@
 //! receiver must textually match the `is_some` receiver — the old version
 //! rewrote `if a.is_some() { b.unwrap() }` into `a.unwrap_or(..)`.
 
+use super::helpers::is_postfix_safe;
 use super::{edit, src, SourceEdit};
 use syn::visit::Visit;
 use syn::{Expr, ExprIf, File, Stmt};
@@ -84,15 +85,6 @@ impl Collector<'_> {
         };
         Some(format!("{recv_out}.unwrap_or({default})"))
     }
-}
-
-/// Can `<expr>.unwrap_or(...)` be appended without changing grouping?
-fn is_postfix_safe(e: &Expr) -> bool {
-    matches!(
-        e,
-        Expr::Path(_) | Expr::Call(_) | Expr::MethodCall(_) | Expr::Field(_) | Expr::Index(_)
-            | Expr::Paren(_) | Expr::Try(_) | Expr::Await(_) | Expr::Lit(_) | Expr::Macro(_)
-    )
 }
 
 #[cfg(test)]
