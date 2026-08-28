@@ -1288,9 +1288,31 @@ never closed). Ranked open classes (inventory 2026-08-24):
       sibling's pre-existing broken `examples/can_freeze_v2_goat.rs`
       (needs `required-features svd_cca_freeze_gate` — owner/sibling
       flag), so ndb files were validated per-target instead.
-- [ ] P2 **array-literal guard family** — `map_unwrap_or` context-forced
-      position detection (~8 sites) + `vec-with-capacity` temp-binding
-      emitter (4 sites). E0308 probe work already done. Evidence: miss.
+- [x] P2 **array-literal guard family** — **CLOSED 2026-08-29 — documented
+      permanent divergence, verdict evidence-backed** (population measured
+      this session, not assumed). The `2bf2a44` guard (skip ALL
+      array-literal defaults) is the CORRECT terminal state: the recorded
+      E0308 proof stands (`map_or(&[], f)` unifies U from the default FIRST
+      — E0308 at inference-transparent lets, the original
+      map+unwrap_or form always compiles). Workspace population measured:
+      36 raw `unwrap_or(&[` hits but only **6 are map-form**
+      (`.map(..).unwrap_or(&[..])` — the lint's actual trigger; the rest
+      are `.copied().unwrap_or(&[])` and friends, NOT map_unwrap_or
+      candidates). Split: **3 inference-transparent lets** (step.rs:196,
+      cgsp_production_wiring.rs:26+30 — MUST NOT fire, the guard class)
+      vs **3 forced fn-tails** (mux/freeze_thaw.rs:61 `-> &[MuxTarget]`,
+      breakeven/fidelity.rs:252, vocab_clusters.rs:48 `-> &[u32]` —
+      convertible only with fn-tail + return-type parent tracking, ~60-80
+      lines of emitter machinery). Payoff of that machinery: 3 stylistic
+      sites (map_or vs map+unwrap_or both compile at forced positions —
+      pedantic-group cosmetic); risk: any forced-position
+      mis-classification = compile break on a consumer repo (the exact
+      hazard the guard prevents). Fails the P7 value/rate bar; the 4-site
+      vec-with-capacity temp-binding half has the same verdict (statement
+      restructure, binding-name collision surface, same cosmetic payoff).
+      Joins the documented we-stay-silent table (real clippy still flags
+      those; our rewrite would not compile at the transparent sites).
+      Evidence: 2bf2a44 E0308 probe + this session's population grep.
 - [x] P3 **named-arg-with-rename** — template-rewrite emission (`{:<w$}`),
       ×5+ sites incl. the width variant; dominant residue of the
       highest-volume lint (7,281 of 8,235 trajectories). Evidence: miss.
