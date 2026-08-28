@@ -2848,6 +2848,23 @@ default lib 660/0, full-feature 762/0/8i, clippy 0 both states) →
 `last_seen_at`). Record: [`.docs/10_self_evolve/latent_fix_memory.md`](.docs/10_self_evolve/latent_fix_memory.md)
 §Persistence + `scripts/self_evolve_audit.sh` §1 (store-first).
 
+**Issue 050 (2026-08-28, RESOLVED + removed per noise-reduction rule) —
+corpus + score series onto the Warm tier.** The corpus-count and score-run
+series are now STORE rows (`CorpusCountRow` / `ScoreRunRow` in
+`src/traj_store.rs`), not hand-appended jsonl: `cargo heal --corpus-stats`
+counts the four corpus domains by source-walk (compiled flag via `cfg!`,
+absent domain never emits 0), stamps today's rows, and `--json` emits the
+`{today, corpus, scores}` contract the dashboard consumes;
+`--import-series` is the idempotent one-time jsonl→store import (jsonl rows
+yield to a first-hand `source-walk` stamp — same-day precedence pinned by
+test). `--score-bench` dual-writes every run into the store (best-effort,
+never fails the bench). The dashboard readers (`gen_dashboard.py`) are
+STORE-FIRST via that JSON contract; the committed `.benchmarks/*.jsonl`
+files REMAIN as generated projections — `.heal/` is gitignored, so the
+committed jsonl is the only cross-clone durable record and the git-mined
+corpus layer stays as the drift cross-check. Landed with T1 (the recorded
+jsonl bridge, `586402c`). Record: git history — `git log -- .issues/050_*.md`.
+
 **Issue 037 (E2E self-evolve proof + adoption observability) — CLOSED
 2026-08-26** (file removed per the noise-reduction rule; full session records
 in git history — `git log -- .issues/037_*.md`). **ALL GATES GREEN**: A1
