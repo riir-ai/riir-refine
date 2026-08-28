@@ -20,10 +20,92 @@ anchor**. Deployed at `riir-kat-housekeeping.<account>.workers.dev`.
 
 ## One-time owner step
 
+### 1. Create the token
+
+Go to the **Account API tokens** page — <https://dash.cloudflare.com/?to=/:account/api-tokens>
+— and **Create Token → Custom token**.
+
+Use the **account-owned** surface, not `My Profile → API Tokens`. Account-owned
+tokens are documented as
+"[durable integrations that can act as service principals with their own
+specific set of permissions](https://developers.cloudflare.com/fundamentals/api/get-started/account-owned-tokens/)",
+whereas a user token "acts on behalf of a particular user and inherits a subset
+of that user's permissions" — i.e. it dies with the user. An unattended cron is
+exactly the durable-service-principal case. *(Creating one requires Super
+Administrator on the account.)*
+
+| field | value |
+|---|---|
+| Token name | `riir-kat-housekeeping-analytics` |
+| Permissions | `Account` → **`Account Analytics`** → **`Read`** |
+| Account Resources | Include → this account (`CF_ACCOUNT_ID` in `wrangler.toml`) |
+| TTL | optional start/end **date pair**; there is no default expiry |
+| Client IP filtering | optional; a Worker has no stable egress IP, so leave it off |
+
+**One permission. Nothing else.** Do **not** add `Containers : Read` or
+`Workers AI : Read` — those govern the Containers / Workers-AI *management*
+REST APIs, not the analytics pipeline, and they widen the blast radius of a
+token whose whole justification (see below) is that it is narrow.
+
+Two dashboard gotchas, both doc-sourced:
+
+- The
+  [Analytics walkthrough](https://developers.cloudflare.com/analytics/graphql-api/getting-started/authentication/api-token-auth/)
+  tells you to configure **Zone Resources**. `Account Analytics` is an
+  **account**-scoped permission and binds via **Account Resources**; the zone
+  step reads as stale copy carried over from zone-analytics tokens. The docs
+  do not explain the discrepancy.
+- The token is **shown once**. "Anyone who has the token can use it to access
+  your data."
+
+### 2. Verify it BEFORE setting it — not optional here
+
+```sh
+node cloudflare/housekeeping/verify_token.mjs <token>     # or CF_API_TOKEN=... node ...
+```
+
+This is a hard requirement rather than a nicety, because **Cloudflare does not
+document the permission these queries need**:
+
+- `aiInferenceAdaptiveGroups` is **undocumented on developers.cloudflare.com** —
+  not the dataset, not its fields, not its permission. It exists in the live
+  GraphQL schema and nowhere in the product docs.
+- Neither Containers dataset appears on the
+  [Datasets (tables)](https://developers.cloudflare.com/analytics/graphql-api/features/data-sets/)
+  reference; they exist only in a
+  [tutorial](https://developers.cloudflare.com/analytics/graphql-api/tutorials/querying-container-metrics/),
+  which delegates permissions to the generic Account-Analytics page rather than
+  stating a per-dataset requirement.
+
+So `Account Analytics : Read` is the best-supported reading of the docs, not a
+documented guarantee. The script closes that gap empirically by issuing the
+exact three queries `worker.js` issues.
+
+Reading its output:
+
+- `token/verify` is **informational**. Account-owned and user tokens verify at
+  *different* endpoints (`/accounts/{id}/tokens/verify` vs
+  `/user/tokens/verify`) and each 401s on the other's token — measured: the
+  wrangler OAuth token 401s at **both** while running all three GraphQL
+  queries successfully. Gating on it would reject a working token.
+- **`0 row(s)` is a PASS.** "Authorised, nothing billed in this window" is the
+  normal state; nothing has run containers on this account since
+  2026-08-26T22Z. Only an error means the token cannot do the job.
+- A wrong-permission token surfaces as `code 9106 "Authentication failed"` on
+  the GraphQL call — *not* at `token/verify`.
+
+### 3. Set it
+
 ```sh
 cd cloudflare/housekeeping
-npx wrangler secret put CF_API_TOKEN   # dedicated token, Account → Analytics : Read
+npx wrangler secret put CF_API_TOKEN   # paste at the prompt
+curl -s https://riir-kat-housekeeping.foxfox.workers.dev/status | jq '{token_set, ts, ok}'
 ```
+
+> **Sequencing:** deploy the T8 fix *before* setting this secret. Until it is
+> deployed the worker still collides its hour keys, and its rows — which start
+> carrying the per-app cost breakdown the moment this token exists — are still
+> served unredacted on `/hours` and `/status`.
 
 ### "Why not just use wrangler? It already authenticates."
 

@@ -58,17 +58,30 @@ const QUERIES = [
 const auth = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
 let failed = 0;
 
-// Informational only: an OAuth token 400s here while still querying GraphQL fine,
-// so a failure is not by itself disqualifying.
-try {
-  const r = await fetch("https://api.cloudflare.com/client/v4/user/tokens/verify", { headers: auth });
-  const j = await r.json();
-  const status = j?.result?.status;
-  console.log(status === "active"
-    ? "  token/verify   ACTIVE"
-    : `  token/verify   ${r.status} ${JSON.stringify(j?.errors ?? status)} (informational)`);
-} catch (e) {
-  console.log(`  token/verify   unreachable: ${e.message} (informational)`);
+// Informational only: an OAuth token 401s here while still querying GraphQL
+// fine, so a failure is not by itself disqualifying — the GraphQL probes below
+// are the real gate.
+//
+// Two endpoints, because account-owned and user tokens verify at different
+// paths and each 4xxs on the other's token. Account-owned is the recommended
+// shape for this job (a durable service principal that does not die with a
+// user), so try that first.
+const VERIFY = [
+  [`accounts/${acct}/tokens/verify`, "account-owned"],
+  ["user/tokens/verify", "user"],
+];
+for (const [path, kind] of VERIFY) {
+  try {
+    const r = await fetch(`https://api.cloudflare.com/client/v4/${path}`, { headers: auth });
+    const j = await r.json();
+    if (j?.result?.status === "active") {
+      console.log(`  token/verify   ACTIVE (${kind} token)`);
+      break;
+    }
+    console.log(`  token/verify   ${kind}: ${r.status} ${JSON.stringify(j?.errors ?? j?.result?.status)} (informational)`);
+  } catch (e) {
+    console.log(`  token/verify   ${kind}: unreachable: ${e.message} (informational)`);
+  }
 }
 
 for (const [label, query] of QUERIES) {
