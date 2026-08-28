@@ -1,7 +1,11 @@
 # The `docker` Domain — Dockerfile Bounded-Fix Healing + Retrieval
 
 **Feature:** `docker` (**DEFAULT-ON since 2026-08-28**, zero new dependencies)
-**Oracle tier:** `docker_verify` (implies `docker`; needs `hadolint` on PATH)
+**Oracle tier:** `docker_verify` (implies `docker`; needs `hadolint` on PATH).
+The 4 Class-A rules whose incumbent is a BuildKit check rather than a DL code
+are verified against a live `docker build --check` (4/4 fire on `buggy_code`,
+silent on `fixed_code` — Bench 056 postscript), but that oracle is not wired
+into the library; doing so is Phase 2.
 **Plan:** [030](../../.plans/030_docker_domain_phase0_batch1.md) ·
 **Proposal:** [006](../../.proposals/006_docker_heal_domain_fifth_healdomain.md) ·
 **Research:** [086](../../.research/086_dockerfile_detection_inventory_hadolint_buildkit.md) (dedup ledger) + [087](../../.research/087_docker_heal_seed_inventory.md) (seed inventory)

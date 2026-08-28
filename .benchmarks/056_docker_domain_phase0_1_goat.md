@@ -124,11 +124,12 @@ this domain, there is none.
 
 - **`docker build --check` (Tier 2) is wired conceptually but not into the
   library** — Tier 3 (a real build) ran only in this bench, by hand.
-- **The agreement gate covers DL codes only.** BuildKit check names
-  (`ConsistentInstructionCasing`, `LegacyKeyValueFormat`, `NoEmptyContinuation`,
-  `JSONArgsRecommended`) belong to `docker build --check`, which the library
-  does not call — those 4 Class-A claims rest on the documented check list, not
-  on a live oracle run.
+- **The agreement gate covers DL codes only** — but the 4 BuildKit-check
+  claims are no longer documentation-only. **Measured 2026-08-28** (see the
+  T1.6 section's postscript): each of the 4 fires its named check on the corpus
+  `buggy_code` and is silent on the `fixed_code`, against a live
+  `docker build --check`. The library still does not call that oracle — wiring
+  it in is Phase 2 — so this is a verified claim, not a standing gate.
 - **G5-real was measured on ONE file, and on a COPY of it.** That mattered —
   see the T1.6 section below: the copy sat where no `Cargo.lock` was adjacent,
   so a caller-gated rule stayed silent that fires on the tracked file. A GOAT
@@ -247,3 +248,22 @@ Dockerfiles. Bounded to what it was already bounded to — files matched by NAME
 (`Dockerfile`, `<n>.Dockerfile`, `Dockerfile.<n>`), every bounded rule
 fixture-verified byte-exact and idempotent, and the one rule whose failure mode
 was a broken build is no longer a bounded rule.
+
+
+## Postscript — the 4 BuildKit-check claims, measured (2026-08-28)
+
+Oracle: `docker build --check`, Docker **29.7.2** / buildx **v0.36.1-desktop.1**,
+run over the corpus fixtures verbatim in a throwaway context.
+
+| Rule | Claimed check | `buggy_code` | `fixed_code` |
+|---|---|---|---|
+| `instruction-casing` | `ConsistentInstructionCasing` | fires ✅ | clean ✅ |
+| `legacy-key-value-format` | `LegacyKeyValueFormat` | fires ✅ | clean ✅ |
+| `no-empty-continuation` | `NoEmptyContinuation` | fires ✅ | clean ✅ |
+| `cmd-entrypoint-exec-form` | `JSONArgsRecommended` | fires ✅ | clean ✅ |
+
+4/4 — the incumbent names in the ledger are the incumbent's actual names, and
+each fix genuinely silences the check it claims. What this does NOT do is make
+the oracle a standing gate: the library calls hadolint, not `docker build
+--check`, so this is a one-shot verification of a documented claim. The
+standing tier-2 oracle stays Phase 2, where the plan put it.
