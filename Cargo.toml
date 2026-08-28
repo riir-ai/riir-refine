@@ -57,6 +57,16 @@ ureq = { version = "2.9", optional = true, features = ["json"] }
 # `ssh_key::rand_core::OsRng`. Optional + feature-gated (`kat_service`).
 ssh-key = { version = "0.6", optional = true, features = ["ed25519", "std", "getrandom"] }
 
+# Proposal 008 T2.4 (Plan 041's successor): DIRECT ed25519 for the vote
+# signature — the account key's ssh-key wrapper exposes the raw keypair, but
+# SIGNING needs the dalek type nameable. ZERO NEW PACKAGES: this exact crate
+# (2.2.0) is ALREADY in the resolved tree for every `kat_service` build via
+# ssh-key's own `ed25519` feature (default-features = false, the same profile
+# ssh-key uses — feature-unification-neutral). The lib.rs comment
+# pre-sanctioned this edge ("sync signing adds direct ed25519-dalek at
+# T0.3"); T2.4 is where signing actually landed first.
+ed25519-dalek = { version = "2", optional = true, default-features = false }
+
 # Proposal 005 Phase 1 T1.6 (Plan 040): the out-of-KAT top-up QR — terminal
 # ASCII render of the payment-page URL. Third-party crate, NOT
 # boundary-gated (the kat_service/ssh-key precedent). default-features =
@@ -100,6 +110,11 @@ riir-neuron-db = { path = "../riir-neuron-db", optional = true, default-features
 # serde_json: already a main dep (zero new tree cost) — the 038 e2e parses
 # --dump-trajectories JSONL rows.
 serde_json = "1"
+# T2.4 vote-client fixtures sign/verify directly. Already in the tree for
+# every kat_service build via ssh-key's ed25519 feature + the direct
+# optional dep above — zero new packages (dev-deps unify to the same
+# instance).
+ed25519-dalek = "2"
 
 [features]
 default = ["clippy_lints", "rust_perf", "self_evolve"]
@@ -218,7 +233,8 @@ contrastive_scope = ["katgpt-core/contrastive_scope"]
 # signing adds direct `ed25519-dalek` at T0.3, qrcode/HTTP later still).
 # Accounting-only per G9d — client counts never mint or spend. Default-off
 # keeps the default build bit-identical with zero KAT code compiled (G3).
-kat_service = ["dep:ssh-key"]
+# T2.4 adds the direct dalek edge for vote signing (see the dep comment).
+kat_service = ["dep:ssh-key", "dep:ed25519-dalek"]
 
 # Proposal 005 Phase 1 T1.6 (Plan 040): the corpus-lease TRANSPORT — the
 # HTTP client (reuses the existing optional ureq dep from cf_workers_ai) +

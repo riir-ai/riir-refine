@@ -90,7 +90,7 @@ echo "=== Layer 5c: KAT integration gates (all-features) ==="
 # history-isolation pin (trial runs never append to score_history.jsonl).
 # The oracle shells out to real cargo clippy on a one-fixture subset —
 # content-cached by the oracle's work root, so the run stays CI-cheap.
-cargo test --all-features --test kat_redact_g4 --test kat_sync_payload_g4 --test kat_pending_estimator_g4 --test kat_meter_g9 --test kat_meter_g2_alloc --test kat_account_g9 --test kat_lease_client_g10 --test kat_stake_client_g2s --test kat_promotion_g2p --test llm_spend_gates --test llm_spend_g2_alloc --bin kat_drain
+cargo test --all-features --test kat_redact_g4 --test kat_sync_payload_g4 --test kat_pending_estimator_g4 --test kat_meter_g9 --test kat_meter_g2_alloc --test kat_account_g9 --test kat_lease_client_g10 --test kat_stake_client_g2s --test kat_vote_client_g9gov --test kat_promotion_g2p --test llm_spend_gates --test llm_spend_g2_alloc --bin kat_drain
 echo "✓ KAT integration gates pass"
 
 echo

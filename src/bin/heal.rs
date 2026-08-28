@@ -67,6 +67,9 @@ enum KatCommand {
     /// Proposal 007 T2.1: drain-all-unlocked refund request + the escrow/
     /// venting disclosure.
     Unstake,
+    /// Proposal 008 T2.4: `vote --proposal <id> --yes|--no` — the
+    /// governance voting surface (weight + evidence render, signed vote).
+    Vote,
 }
 
 #[cfg(feature = "fix_verify")]
@@ -653,6 +656,97 @@ fn run_kat_unstake() {
     }
 }
 
+/// Proposal 008 T2.4 (Plan 012): `cargo heal vote --proposal <id>
+/// --yes|--no` — the governance voting surface. Renders the proposal
+/// (weight + evidence lead — the service serves the view when live), signs
+/// the vote with the LOGIN key, and submits (service-first; the honest
+/// not-live fallback queues the SIGNED intent). Nothing client-side decides
+/// eligibility or tallies — the ledger computes the weight that counts.
+#[cfg(feature = "kat_service")]
+fn run_kat_vote(proposal: Option<u64>, yes: bool, no: bool) {
+    use riir_clippy::kat_vote_client as vote;
+
+    let dir = riir_clippy::kat_account::KatAccount::default_dir();
+    let account = match riir_clippy::kat_account::KatAccount::load(&dir) {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!("vote: no account ({e}) — run `cargo heal login` first");
+            std::process::exit(1);
+        }
+    };
+    let account_id = account.state().account_id.clone();
+    let signing_key = match account.signing_key() {
+        Ok(k) => k,
+        Err(e) => {
+            eprintln!("vote: could not load the account signing key: {e}");
+            std::process::exit(1);
+        }
+    };
+
+    let Some(proposal_id) = proposal else {
+        eprintln!("vote: --proposal <id> is required (the governance proposal id)");
+        std::process::exit(2);
+    };
+    let choice = match (yes, no) {
+        (true, false) => vote::VoteChoice::Yes,
+        (false, true) => vote::VoteChoice::No,
+        _ => {
+            eprintln!("vote: exactly one of --yes or --no is required");
+            std::process::exit(2);
+        }
+    };
+
+    let root = resolve_heal_root(&[]);
+    let now_unix = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
+
+    #[cfg(feature = "kat_transport")]
+    {
+        use riir_clippy::kat_vote_client::VoteOutcome;
+        let url = riir_clippy::kat_lease_client::service_url_for_command();
+        let transport = riir_clippy::kat_vote_client::HttpVoteTransport::new(&url, 10);
+        match riir_clippy::kat_vote_client::vote_flow(
+            &transport,
+            &account_id,
+            proposal_id,
+            choice,
+            &signing_key,
+            &root,
+            now_unix,
+        ) {
+            Ok((view, outcome)) => {
+                if let Some(v) = view {
+                    println!("{}", vote::render_proposal(&v, now_unix));
+                }
+                match outcome {
+                    VoteOutcome::Submitted(ack) => {
+                        println!("{}", vote::vote_confirm_line(&ack));
+                        println!("vote: a vote decides membership only — it never moves funds");
+                    }
+                    VoteOutcome::LocalQueued { queued_at } => {
+                        println!(
+                            "vote: service plane not yet live — the SIGNED intent queued at {}",
+                            queued_at.display()
+                        );
+                        println!("vote: it submits at the next sync; the weight renders when the service answers");
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("vote: {e}");
+                std::process::exit(1);
+            }
+        }
+    }
+    #[cfg(not(feature = "kat_transport"))]
+    {
+        let _ = (root, now_unix);
+        eprintln!("vote: signing + submitting requires a build with --features kat_transport");
+        std::process::exit(2);
+    }
+}
+
 /// Print the ASCII QR under a URL line (the T1.6 QR render, reused —
 /// errors surface as silence, the QR is a convenience never a gate).
 #[cfg(all(feature = "kat_service", feature = "kat_transport"))]
@@ -890,6 +984,7 @@ USAGE:
     cargo heal sync                                   (push redacted batches + pull lease, kat_transport)
     cargo heal claim --tx <sig>                       (queue/submit a payment claim, kat_service)
     cargo heal stake --usd <N> | --info              (Proposal 007 staking: transfer QR / position, kat_transport)
+    cargo heal vote --proposal <id> --yes|--no     (Proposal 008 T2.4 governance voting: weight + evidence render, kat_transport)
     cargo heal unstake                                (drain unlocked tranches + escrow disclosure, kat_transport)
 
     --suggest       Suggest mode: print matching rules per code span (no edits).
@@ -1064,6 +1159,12 @@ struct Args {
     /// Proposal 007 T2.1: `--info` — render the stake position instead of
     /// composing a stake request.
     stake_info: bool,
+    /// Proposal 008 T2.4: `--proposal <id>` — the governance proposal id.
+    vote_proposal: Option<u64>,
+    /// Proposal 008 T2.4: `--yes` — vote for.
+    vote_yes: bool,
+    /// Proposal 008 T2.4: `--no` — vote against.
+    vote_no: bool,
     /// T1.6: the run-start update-phase budget in seconds (`0` = skip;
     /// default 4 — the proposal's ~3–5s window).
     update_timeout: u64,
@@ -1120,6 +1221,9 @@ fn parse_args() -> Args {
         claim_tx: None,
         stake_usd: None,
         stake_info: false,
+        vote_proposal: None,
+        vote_yes: false,
+        vote_no: false,
         update_timeout: 4,
         no_update: false,
         no_reheat: false,
@@ -1214,6 +1318,18 @@ fn parse_args() -> Args {
                 args.stake_usd = Some(value);
             }
             "--info" => args.stake_info = true,
+            "--proposal" => {
+                let Some(value) = it.next() else {
+                    eprintln!("--proposal requires a value (the governance proposal id)");
+                    usage();
+                };
+                args.vote_proposal = Some(value.parse().unwrap_or_else(|_| {
+                    eprintln!("--proposal expects a number, got {value:?}");
+                    usage();
+                }));
+            }
+            "--yes" => args.vote_yes = true,
+            "--no" => args.vote_no = true,
             "--update-timeout" => {
                 let Some(value) = it.next() else {
                     eprintln!("--update-timeout requires a value (seconds; 0 = skip)");
@@ -1247,7 +1363,7 @@ fn parse_args() -> Args {
                 eprintln!("unknown flag {flag:?}");
                 usage();
             }
-            "login" | "account" | "update" | "sync" | "claim" | "stake" | "unstake"
+            "login" | "account" | "update" | "sync" | "claim" | "stake" | "unstake" | "vote"
                 if args.paths.is_empty() && args.command.is_none() =>
             {
                 args.command = Some(match arg.as_str() {
@@ -1257,6 +1373,7 @@ fn parse_args() -> Args {
                     "sync" => KatCommand::Sync,
                     "stake" => KatCommand::Stake,
                     "unstake" => KatCommand::Unstake,
+                    "vote" => KatCommand::Vote,
                     _ => KatCommand::Claim,
                 });
             }
@@ -1482,9 +1599,7 @@ fn domain_compiled(domain: &str) -> bool {
 fn count_corpus_domain(repo: &Path, rel: &str, needle: &str) -> u32 {
     let path = repo.join(rel);
     if path.is_file() {
-        return std::fs::read_to_string(&path)
-            .map(|t| u32::try_from(t.matches(needle).count()).unwrap_or(u32::MAX))
-            .unwrap_or(0);
+        return std::fs::read_to_string(&path).map_or(0, |t| u32::try_from(t.matches(needle).count()).unwrap_or(u32::MAX));
     }
     if !path.is_dir() {
         return 0;
@@ -1813,6 +1928,11 @@ fn main() {
             KatCommand::Sync => run_kat_sync(),
             KatCommand::Stake => run_kat_stake(args.stake_usd.as_deref(), args.stake_info),
             KatCommand::Unstake => run_kat_unstake(),
+            KatCommand::Vote => run_kat_vote(
+                args.vote_proposal,
+                args.vote_yes,
+                args.vote_no,
+            ),
             // The transport commands degrade honestly without kat_transport.
             #[cfg(not(feature = "kat_transport"))]
             KatCommand::Update | KatCommand::Sync => {
@@ -2387,7 +2507,7 @@ fn main() {
                 let root = args
                     .paths
                     .first()
-                    .and_then(|p| riir_clippy::compile_oracle::owning_package_root(p))
+                    .and_then(riir_clippy::compile_oracle::owning_package_root)
                     .and_then(|pkg| riir_clippy::compile_oracle::workspace_root(&pkg))
                     .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
                 let (written, warnings) = evolve::dump_misses(&root, &report.misses);

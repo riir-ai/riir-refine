@@ -213,6 +213,18 @@ pub mod kat_lease_client;
 #[cfg(feature = "kat_service")]
 pub mod kat_stake_client;
 
+// Proposal 008 T2.4: the governance voting CLI client — `cargo heal vote
+// --proposal <id> --yes|--no`. Mirrors riir-dapps' `kat::governance` voting
+// surface (the vote-signing domain + message bytes, the proposal view, the
+// /gov/proposal + /gov/vote wire shapes) WITHOUT a dep (the copy-gate
+// discipline); the mirror is pinned by the SAME vote-message golden hex
+// both repos assert. Signs with the login key (ssh-key → dalek; the direct
+// ed25519-dalek edge adds ZERO new packages — it is already in the tree via
+// ssh-key's own ed25519 feature). Service-first over `kat_transport`, with
+// the signed-intent local-queue fallback (`.heal/vote/pending.jsonl`).
+#[cfg(feature = "kat_service")]
+pub mod kat_vote_client;
+
 // Proposal 005 Phase 2 T2.4 (Plan 042): the score-bench promotion gate
 // for network-learned corpus candidates — the frozen bench runs BEFORE any
 // candidate enters the local overlay (Certified on pass; Withdrawn is

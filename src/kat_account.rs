@@ -136,6 +136,19 @@ fn pubkey_of(key: &PrivateKey) -> [u8; 32] {
         .as_ref()
 }
 
+/// The account's Ed25519 SIGNING key (Proposal 008 T2.4 — vote signing).
+/// Reads the on-disk OpenSSH key + converts to the dalek type (the key file
+/// is the authority — the record is a projection; re-reading keeps that
+/// invariant for signing too).
+fn signing_key_of(key: &PrivateKey) -> Result<ed25519_dalek::SigningKey, String> {
+    let kp = key
+        .key_data()
+        .ed25519()
+        .ok_or_else(|| "key is not Ed25519".to_string())?;
+    ed25519_dalek::SigningKey::try_from(kp)
+        .map_err(|e| format!("converting the account key to a signing key: {e}"))
+}
+
 /// Write a file with `0600` on unix (best-effort elsewhere).
 fn write_private(path: &Path, text: &str) -> Result<(), String> {
     std::fs::write(path, text).map_err(|e| format!("writing {}: {e}", path.display()))?;
@@ -320,6 +333,21 @@ impl KatAccount {
             dir: dir.to_path_buf(),
             state,
         })
+    }
+
+    /// The account's Ed25519 SIGNING key, re-read from the key file
+    /// (Proposal 008 T2.4 — `cargo heal vote` signs with the login key;
+    /// the file is the authority, the record is a projection).
+    ///
+    /// # Errors
+    ///
+    /// String errors for a missing key file, an unparseable/encrypted key,
+    /// or a non-Ed25519 key.
+    pub fn signing_key(&self) -> Result<ed25519_dalek::SigningKey, String> {
+        let key_path = self.dir.join(Self::KEY_FILE);
+        let text = std::fs::read_to_string(&key_path)
+            .map_err(|e| format!("reading {}: {e}", key_path.display()))?;
+        signing_key_of(&parse_private_key(&text)?)
     }
 
     /// Persist the record file (the generators' fresh write + load's
