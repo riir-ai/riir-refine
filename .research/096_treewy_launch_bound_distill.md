@@ -1,6 +1,6 @@
 # Research 096 — TreeWY + Launch-Bound distill (the 2026-08-28 arXiv pool)
 
-**Status:** DISTILLED — verdict recorded; Batch 82 (Plan 043) executing (§6 filled at landing)
+**Status:** RECORD (verdict + Batch 82 / Plan 043 landed same day)
 **Sources:** arXiv:2608.20961 (TreeWY, Ghantasala, submitted 08-21, 10pp) · arXiv:2608.26612 (Launch-Bound and Substitutable, Sakthivel et al., UMD, submitted 08-27)
 **Lane:** idle-loop queue item 11 (online perf search) — the MCP search tools were quota-exhausted (reset 2026-09-15), so the pool came from walking `arxiv.org/list/cs.PF+cs.DC/recent` via the native fetch tool.
 
@@ -156,7 +156,33 @@ three candidates are new decision content.**
 
 ## 6. Batch 82 record (Plan 043)
 
-PENDING — filled with measured GOAT numbers at batch landing.
+All three candidates LANDED as rules 394–396 (corpus 393 → 396; D 82→83,
+E 23→24, G 22→23) in `entries_gpu_08.rs` + `KERNEL_CATEGORIES` + the three
+standing gates (`batch82_rules_present` / `batch82_concepts_covered` /
+`batch82_pseudocode_parses`). Generator: `target/gen_b82.py` (the B77
+rustlit()-escape path; needle + anchor assertions). One anchor bug caught
+pre-apply: the first run's `isascii()` assertion fired on the `──` comment
+rulers (house style since B81) — the check is now scoped to literal content
+only. One category-wiring miss caught by the count-pin test (the E-slice
+anchor landed `capture-break-count-not-perf-target` in F; the fix's first
+pass over-deleted two F entries — both restored, verified by the clean
+git diff).
+
+**GOAT (measured, isolated same-parent worktree at `3d567f9` + exactly the
+4 batch files):** kernel_heal lib **944/0/1i** (941+3 gates) + default lib
+**715/0/0** + clippy `--all-targets --features kernel_heal` **0 warnings in
+the batch files** (5 doc_markdown backtick fixes pre-commit — the B37
+line-family lesson struck again: `TreeWY`, `O(N*d_v)`, `N+1`,
+`record_function`) + retrieval floors **14/14 HELD** (kernel self-variants
+100/100/100 — 11th consecutive) + CI guard Layer 1 **26/28** — the 2
+failures (`--all-features`, `--features ternary_inference`) are the
+**riir-ai sibling's live riir-gpu WIP** (`write_many` mid-refactor in
+`../riir-ai/crates/riir-gpu`), proven not-mine: the errors are in
+riir-gpu's lib, my diff is corpus-data-only, and the main tree's
+all-features lib run **PASSED 1426/0/13i ~25 min earlier** before their
+breaking edit landed (both timestamps recorded). The known l4_daemon
+env failures from B79–B81 records did NOT reproduce this session
+(all-features 0 failed).
 
 ## 7. Dropped / pooled (with reasons)
 

@@ -1462,6 +1462,26 @@
 //!   `shared-activation-quantize-memo-per-eval` (lucebox 668: the
 //!   REQUEST-boundary release half -- memos popped LIFO before pool
 //!   trim). Record: Research 095 / Plan 039.
+//! - **Batch 82 (2026-08-28, `TreeWY` + Launch-Bound arXiv distill --
+//!   2608.20961 + 2608.26612, Research 096 / Plan 043):** 3 rules, corpus
+//!   393 -> 396 (D 82 -> 83, E 23 -> 24, G 22 -> 23). Sources are arXiv
+//!   papers (B200/vLLM + A100/torch) with measured tables in the papers;
+//!   fixtures are original minimal reproductions.
+//!   `wy-transform-tree-verify-state-free` (G -- DFS pre-order makes the
+//!   GDN transition system strictly lower-triangular; ONE forward
+//!   substitution verifies the whole draft state-free; reconstruct only
+//!   the accepted state; `O(N*d_v)` pseudo-values vs `N+1` state blocks,
+//!   128x smaller per head; win CONDITIONAL on memory pressure; trees
+//!   affordable but NOT a throughput win -- externally confirming our
+//!   Issue 721 structural negative). `work-scaling-probe-launch-bound`
+//!   (D -- 32x the work at 1.55x the time = launch-bound; 5.6-9.0x
+//!   isolated kernels returned 0.999x end-to-end vs a measured 1.072x
+//!   Amdahl ceiling; f from wrapped `record_function` modules, never
+//!   kernel-name matching). `capture-break-count-not-perf-target` (E --
+//!   forcing zero graph breaks via dynamic-shape capture made the model
+//!   3x SLOWER; unbacked symbolic-shape guards cost more than the eager
+//!   dispatch they replace; corroborated by `TreeWY`'s piecewise-capture
+//!   eviction cost). Record: Research 096 / Plan 043.
 
 use std::collections::HashMap;
 
@@ -1510,7 +1530,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 393-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 396-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1721,7 +1741,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fusion-payback-gated-on-per-dispatch-overhead",
         ],
     ),
-    // D: Dispatch patterns (82 rules)
+    // D: Dispatch patterns (83 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -1808,9 +1828,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "cross-lane-column-packed-projections",
             "identity-keyed-graph-retention-stable-arena",
             "fail-closed-multi-resource-commit-transaction",
+            "work-scaling-probe-launch-bound",
         ],
     ),
-    // E: Parallelism patterns (23 rules)
+    // E: Parallelism patterns (24 rules)
     (
         KernelCategory::Parallelism,
         "E: parallelism",
@@ -1838,6 +1859,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "occupancy-grid-cap-refuted-uncapped-default",
             "plane-specialization-load-compute-role-split",
             "grid-collapsing-mega-kernel-occupancy-trap",
+            "capture-break-count-not-perf-target",
         ],
     ),
     // F: Flash-attention tiling (10 rules)
@@ -1857,7 +1879,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "two-stage-mask-softmax-then-conv",
         ],
     ),
-    // G: Linear-attention recurrence (22 rules)
+    // G: Linear-attention recurrence (23 rules)
     (
         KernelCategory::LinearAttnRecurrence,
         "G: linear-attn recurrence",
@@ -1884,6 +1906,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "tree-verify-recurrent-state-parent-reload",
             "first-order-affine-recurrence-associative-scan",
             "gdn-transition-replay-log-commit-many",
+            "wy-transform-tree-verify-state-free",
         ],
     ),
     // H: MoE dispatch + backward pass (14 rules)
