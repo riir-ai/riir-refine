@@ -62,8 +62,8 @@
         // Batch 60 (1): measured-GOAT distillation (riir-train Issue 460 / katgpt-rs e2853fbf — pre-gate-recovery-by-division-cancels-algebraically; the MLA backward's saturated output-gate 0/0 NaN, fixed by algebraic cancellation; Bench 475: 6/10 -> 10/10 usable backward passes).
         // Batch 63 (3): the CubeCL twin unlock — same-input-gemv-weight-concat-at-upload, deferred-residual-fused-into-next-layer-norm, reset-state-in-place-fill-never-realloc (ternary_deltanet_gpu_forward.rs, Plan 009 / Research 071).
         // Batch 70 (3): the arxiv barrier-free-sync paper distill (arXiv:2608.13757, Plan 020 / Research 080) — barrier-free-per-dependency-wait-from-loop-counters, shared-counter-decode-producer-progress, masked-branchless-wait-collapse.
-        // Total: 209. // (historical batch-30 snapshot; current 396)
-        assert_eq!(corpus.entries.len(), 396, "kernel batches through Batch 82 should have 396 rules");
+        // Total: 209. // (historical batch-30 snapshot; current 398)
+        assert_eq!(corpus.entries.len(), 398, "kernel batches through Batch 84 should have 398 rules");
     }
 
     #[test]
@@ -3888,7 +3888,7 @@
 
     #[test]
     fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-        // Every rule_id in the 396-rule corpus must appear in exactly one category.
+        // Every rule_id in the 398-rule corpus must appear in exactly one category.
         let corpus = build_kernel_seed_corpus();
         let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
         let mut categorized: Vec<&str> = Vec::new();
@@ -3924,7 +3924,7 @@
             (KernelCategory::MemoryAccess, 93),
             (KernelCategory::Compute, 53),
             (KernelCategory::Fusion, 36),
-            (KernelCategory::Dispatch, 83),
+            (KernelCategory::Dispatch, 84),
             (KernelCategory::Parallelism, 24),
             (KernelCategory::FlashAttnTiling, 10),
             (KernelCategory::LinearAttnRecurrence, 23),
@@ -3934,7 +3934,7 @@
             (KernelCategory::AutotuneDispatch, 5),
             (KernelCategory::ConvGemmLayout, 11),
             (KernelCategory::KernelPolymorphism, 10),
-            (KernelCategory::DtypeAlignment, 21),
+            (KernelCategory::DtypeAlignment, 22),
             (KernelCategory::IrStrengthReduction, 4),
         ];
         for (cat, count) in expected {
@@ -3944,9 +3944,9 @@
                 "Plan 003: category {cat:?} has {} rules, expected {count}",
                 entry.2.len());
         }
-        // Sum must equal 396.
+        // Sum must equal 398.
         let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-        assert_eq!(total, 396, "Plan 003: category totals must sum to 396");
+        assert_eq!(total, 398, "Plan 003: category totals must sum to 398");
     }
 
     #[test]
@@ -3956,7 +3956,7 @@
         let grouped = build_corpus_categorized();
         assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
         let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
-        assert_eq!(total, 396, "Plan 003: grouped corpus has {total} rules, expected 396");
+        assert_eq!(total, 398, "Plan 003: grouped corpus has {total} rules, expected 398");
         // No empty buckets.
         for (cat, rules) in &grouped {
             assert!(!rules.is_empty(), "Plan 003: category {cat:?} has zero rules");
@@ -4593,6 +4593,29 @@
             assert!(ref_verdict.parses, "batch-82 ref_shape for '{id}' must parse");
             let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
             assert!(opt_verdict.parses, "batch-82 opt_pattern for '{id}' must parse");
+        }
+    }
+
+    #[test]
+    #[cfg(not(feature = "kernel_verify"))]
+    fn batch84_pseudocode_parses() {
+        // G1 for Batch 84: syn-parse gate.
+        use crate::domain::HealDomain;
+        let corpus = build_kernel_seed_corpus();
+        let ids = [
+            "pad-tail-to-fixed-tile",
+            "token-local-only-approximate-accelerator",
+        ];
+        for id in ids {
+            let entry = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-84 rule '{id}' missing"));
+            let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+            assert!(ref_verdict.parses, "batch-84 ref_shape for '{id}' must parse");
+            let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+            assert!(opt_verdict.parses, "batch-84 opt_pattern for '{id}' must parse");
         }
     }
     #[test]

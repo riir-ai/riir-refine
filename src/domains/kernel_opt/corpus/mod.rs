@@ -1462,6 +1462,27 @@
 //!   `shared-activation-quantize-memo-per-eval` (lucebox 668: the
 //!   REQUEST-boundary release half -- memos popped LIFO before pool
 //!   trim). Record: Research 095 / Plan 039.
+//! - **Batch 84 (2026-08-28, oMLX v0.5.4rc1 -> v0.6.3 release delta --
+//!   jundot/omlx PRs #2966/#3133/#3110, Research 098 / Plan 045):** 2 rules
+//!   + 1 rider, corpus 396 -> 398 (D 83 -> 84, N 21 -> 22).
+//!
+//!   Sources are the PR pages + diffs + release notes
+//!   (subagent-verified at mine time); the +26.3%/+22.7% figures are
+//!   PREFILL-THROUGHPUT, never quality (the research record's "PP"
+//!   gloss corrected at mine time). `pad-tail-to-fixed-tile` (D --
+//!   residual tails large enough to pay run the resident fixed-shape
+//!   tile; intermediate-only padding, strip-before-stateful, never
+//!   extend state; floor(S*G/H)+1 = 1357; +29.0% at a 2,047-token
+//!   tail) + `token-local-only-approximate-accelerator` (N -- the
+//!   delegation boundary for approximate compute is the consumer's
+//!   STATE HORIZON: token-local rows tolerate bounded approximation,
+//!   recurrent-feeding rows stay checkpoint-precision; the fraction is
+//!   a logged ceiling) + the B56 rider
+//!   `assigned-columns-only-staging-dequant` (slice to the device
+//!   boundary BEFORE dequant; spike 35.8 -> 4.7 GB, bit-identical).
+//!   The 4th queued candidate (latch-failed-accelerator-shed-to-
+//!   fallback) deferred per the queue verdict -- fold into a
+//!   measured-GOAT from our own status=0x9 work instead.
 //! - **Batch 82 (2026-08-28, `TreeWY` + Launch-Bound arXiv distill --
 //!   2608.20961 + 2608.26612, Research 096 / Plan 043):** 3 rules, corpus
 //!   393 -> 396 (D 82 -> 83, E 23 -> 24, G 22 -> 23). Sources are arXiv
@@ -1530,7 +1551,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 396-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 398-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1741,7 +1762,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fusion-payback-gated-on-per-dispatch-overhead",
         ],
     ),
-    // D: Dispatch patterns (83 rules)
+    // D: Dispatch patterns (84 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -1829,6 +1850,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "identity-keyed-graph-retention-stable-arena",
             "fail-closed-multi-resource-commit-transaction",
             "work-scaling-probe-launch-bound",
+            "pad-tail-to-fixed-tile",
         ],
     ),
     // E: Parallelism patterns (24 rules)
@@ -2000,7 +2022,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "batch-width-routed-dual-tile-twins",
         ],
     ),
-    // N: dtype + alignment specialization (21 rules)
+    // N: dtype + alignment specialization (22 rules)
     (
         KernelCategory::DtypeAlignment,
         "N: dtype + alignment",
@@ -2026,6 +2048,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "dequant-placement-by-component-traffic-share",
             "outlier-span-escapes-quantization-via-lossless-sidecar",
             "pre-gate-recovery-by-division-cancels-algebraically",
+            "token-local-only-approximate-accelerator",
         ],
     ),
     // O: IR strength reduction (4 rules)

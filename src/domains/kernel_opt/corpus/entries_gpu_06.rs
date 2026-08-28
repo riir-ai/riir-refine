@@ -833,6 +833,26 @@ pub(super) fn entries() -> Vec<KernelRule> {
         // MiB) + −2.2 GiB host; first-ever e2e test coverage for the path.
         // Fourth measured-GOAT distillation after the corpus-complete
         // declaration (the B49/B52/B54/B55 reopen path (c)).
+        //
+        // RIDER `assigned-columns-only-staging-dequant` (Batch 84 /
+        // Research 098 / Plan 045; source: jundot/omlx PR #3110, merged
+        // 2026-08-24, verified against the PR body): when staging a
+        // split-device / tensor-parallel weight for dequantization,
+        // dequantize ONLY the columns the consuming device is actually
+        // assigned -- slice to the device boundary BEFORE the dequant
+        // call (in packed-axis terms, on quantization-group boundaries),
+        // never dequantize-then-discard the sibling device's columns
+        // (it reads them directly from the still-packed source).
+        // Measured: compile-memory staging spike 35.8 GB -> 4.7 GB and
+        // retained cache 32.1 GB -> 0.2 GB (the GB figures are the
+        // research record's; the PR body quantifies ~0.5 GB/layer of
+        // pure-waste transient), staged weights BIT-IDENTICAL to
+        // dequantize-then-slice (the boundary is a multiple of the
+        // quantization group size, pinned by a shape-spy test). This is
+        // the live-fields-only class at COLUMN granularity: the dead
+        // weight is not a whole superseded format but the per-column
+        // slice belonging to a consumer that never reads the dequantized
+        // copy.
         KernelRule {
             rule_id: "superseded-format-constructor-live-fields-only".to_string(),
             gpu_concept: "A constructor that accepts an OPTIONAL second weight format (a quantized Q4_K set, an alternative runtime's pool) while unconditionally uploading the primary f32 set uploads DEAD WEIGHT: every dispatch site branches on the live format, so the primary set's projections are never bound in the superseded arms — but the memory is paid in full. The scale makes it a correctness-adjacent allocation bug, not a tuning miss: full f32 ~9.7 GB device (2.2 GB wte + 7.5 GB projections, Gemma 2 2B) stacking on a ~1.4 GB Q4_K set; or ~6 GB device + 2.4 GB host stacking on an alternative runtime's pool → 23.8 GB peak on a 24 GB 4090 (OOM territory). The dead-set proof comes from a DISPATCH-SITE AUDIT (grep every bind of the primary buffers — all sit inside the superseded format's match arms or guarded entry points), never from the constructor alone. Fix shape: live-fields-only constructor variants in TIERS — skipped() (everything dead: zero-size buffers + empty Vecs) and norms_only() (the small live subset still uploads: per-layer norm gammas, final_norm, the host embedding copy the decode loop reads per token) — with zero-size placeholder buffers for dead fields so the struct still typechecks. The placeholder is a TRIPWIRE, not a silent zero: an accidental bind of a zero-size buffer fails GPU validation LOUDLY instead of silently computing garbage (raw wgpu accepts size 0; substrates that validate non-empty need B31's minimum-legal-footprint instead). Wire the variant selection INTO the shared constructor (new_internal picks it when the alternative set is Some) so callers cannot forget. The class shipped TWICE back-to-back (Issue 714: the cubecl half-skip; Issue 720: the Issue-714 class missed on the WGSL Q4_K constructors) and as a hazard elsewhere (the 2x GPU weight residency in the Q4_K trainer) — a constructor-format pair is the trigger, not any one runtime. Measured (Bench 692): bit-identical logits (LOGITS_HASH equal both sides), −10.3 GiB device per construction (14,089 → ~3,500 MiB) + −2.2 GiB host, strictly fewer allocs; the path had ZERO e2e test coverage before — the fix added the first determinism gate. Distinct from verbatim-upload-on-format-match (B37: HOW to upload the LIVE format — raw blocks, never dequant-requantize; this is NOT uploading the dead one at all), from min-rank-inert-adapter-zero-alpha (B31: a structurally-REQUIRED-but-inert branch gets minimum legal footprint + scale annihilation; this is an OPTIONAL superseded branch skipped entirely), from superseded-primitive-machinery-zombie (B41: dead MACHINERY still EXECUTING per step; this is dead MEMORY allocated once at construction), and from host-cache-immutable-device-weights (B26: immutable weights cached at init to avoid per-call download; this is which format's buffers exist at all).".to_string(),
