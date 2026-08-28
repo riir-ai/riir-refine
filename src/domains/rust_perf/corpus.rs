@@ -48,6 +48,16 @@
 //! bitwise predicate evaluation for REPEATEDLY filtered integer columns
 //! (the O'Neil-Quass bit-sliced index as a primary representation).
 //!
+//! Batch 85 (2026-08-28, Research 098 — the arXiv:2608.23841 cflow
+//! "Pipeline-Native Transformers" distill) added weight-tile-consumption-
+//! order (MEASURED ParetoDominant 1.32-1.56x growing with working set —
+//! consumption-ordered tiles keep the x slice L1-resident per tile) +
+//! software-prefetch-storage-bound (the honest annotation: SW prefetch on
+//! a bandwidth-bound stream is useless-to-harmful — the source's prefetch
+//! thread burned 48% of decode time; disabling it alone = 1.92x; the
+//! aarch64 PRFM analog unmeasured — x86 source-cited only, proposer-less
+//! by design).
+//!
 //! ## Bench specs (behind `rust_perf_bench`)
 //!
 //! Benchable rules carry an optional [`BenchSpec`] — a self-contained harness
@@ -55,7 +65,7 @@
 //! `run_buggy` / `run_fixed` entry points. The bench validator generates a
 //! temp bin crate from the spec + runs a timing loop at multiple sizes.
 //!
-//! Currently benchable (79/89):
+//! Currently benchable (80/91):
 //! - `o1-lookup` (Vec scan vs HashMap lookup — clear O(n) vs O(1))
 //! - `bsearch-sorted-slice` (linear scan vs binary search — O(n) vs O(log n) on sorted data)
 //! - `dedupe-hashset-vs-vec` (Vec::contains loop vs HashSet collect — O(n²) vs O(n))
@@ -128,8 +138,9 @@
 //! - `runtime-feature-detect-per-chunk` (CPU feature detection inside a per-chunk hot fn → resolve once via cached static / static cfg gate — the std::detect string resolution + detector read per call rivals small work units; Batch 74, simd-json distill)
 //! - `runtime-int-exponent-powi` (runtime-integer-exponent `powf` libm call → `powi` binary exponentiation — log2(n) multiplies vs an opaque pow call; NOT bit-identical, rel-error-gated; Batch 77, lucebox rope distill)
 //! - `bitplane-transpose-repeated-predicate-scan` (repeatedly filtered integer column → bit-plane transposition + bitwise predicate evaluation over the compressed planes, zero decompression — b/32 the bytes scanned + 64 values per word op; Batch 83, arXiv:2608.26368 distill)
+//! - `weight-tile-consumption-order` (row-major single-token matvec x re-walked per row → consumption-ordered tiles, x slice L1-resident per tile — 1.32-1.56x growing with working set; Batch 85, cflow distill)
 //!
-//! Not benchable (10/89) — honest:
+//! Not benchable (11/91) — honest:
 //! - `layout-reorder` (struct size — deterministic `size_of`, not a runtime
 //!   microbench; the cache-utilization claim needs a specific access pattern)
 //! - `repr-u8-enum` (enum size — deterministic `size_of`, same class as
@@ -147,6 +158,9 @@
 //! - `bounded-channel-backpressure` (**metric mismatch + semantics-changing**,
 //!   Issue 014 T2.4 — win is bounded queue depth; the buggy path is often
 //!   FASTER on wall-clock precisely because it buffers unboundedly)
+//! - `software-prefetch-storage-bound` (x86-only source evidence — no stable
+//!   aarch64 prefetch intrinsic to re-gate with; the rule IS the annotation
+//!   stopping a plausible-looking prefetch port; Batch 85, cflow distill)
 //!
 //! ## Context-dependent rules (`context_notes`)
 //!
@@ -2168,6 +2182,77 @@ PerfRule {
     #[cfg(feature = "rust_perf_bench")]
     bench_spec: Some(bitplane_transpose_repeated_predicate_scan_bench_spec()),
 },
+        // ── layout: row-major single-token matvec (x re-walked per output
+        // row) → weights repacked ONCE into consumption-ordered tiles, the
+        // activation slice L1-resident across each tile's rows ──────────
+        // Source: cflow "Pipeline-Native Transformers" (arXiv:2608.23841,
+        // Batch 85, Research 098 — the CC-BY-4.0 paper distill; x86-64
+        // source numbers, M3-re-gated here). Single-token decode is
+        // bandwidth-bound (arithmetic intensity ~4 FLOP/byte vs machine
+        // balance ~20); in the naive row-major GEMV every output row
+        // re-walks the full activation x — once W-row + x exceed L1-d the
+        // activation is evicted before reuse and re-fetched once per row
+        // (n_out × n_in × 4 B of x traffic). The tile fix repacks W at
+        // load/conversion time into TILE_ROWS × TILE_COLS tiles stored in
+        // compute-consumption order; the matvec walks tiles sequentially
+        // and the x column-slice (TILE_COLS × 4 B) stays L1-resident
+        // across all TILE_ROWS rows — x traffic drops by TILE_ROWS×.
+        // REGIME (the honest M3 note): the crossover sits where W-row + x
+        // exceeds L1-d — M3 Max P-core L1-d is 128 KB (4× the source's
+        // Sandy Bridge 32 KB), so the win appears only at working sets
+        // the source would call comfortably-resident (Tie there — both
+        // arms stream W sequentially with x resident). The paper's Q4
+        // sibling-projection stripe interleave (QKV/gate-up packed by
+        // output stripe so one x pass serves sibling matvecs) is the same
+        // repack applied to sibling projections — noted as the variant.
+        // Distinct from `transposed-weight-register-gemv` (B62 —
+        // register/accumulator granularity for the dot itself;
+        // COMPOSABLE: tile first for cache, transpose within a tile for
+        // registers), from `loop-order-innermost-contiguous` (B64 —
+        // reorders loops over an UNCHANGED layout; this repacks the
+        // data), from `soa-hot-field` (struct fields, not matvec
+        // weights), and from kernel_opt B14/B15 (GPU global-memory
+        // access-count rules — cousins, different substrate). Tile
+        // accumulation order changes per-output float summation →
+        // rel-error gate, NOT bit-identity (the B64/powi gate shape).
+        PerfRule {
+            rule_id: "weight-tile-consumption-order".to_string(),
+            name: "row-major single-token matvec (x re-walked per output row) → weights repacked once into consumption-ordered tiles, the x slice L1-resident across each tile's rows".to_string(),
+            category: "layout".to_string(),
+            buggy_code: "fn matvec_rowmajor(w: &[f32], x: &[f32], y: &mut [f32], n_in: usize) {\n    // W is [n_out x n_in] row-major. Every output row re-walks ALL of x;\n    // once a W row + x exceed L1, x is evicted before its next use and\n    // re-fetched from L2/DRAM once PER ROW (n_out × n_in × 4 B of x\n    // traffic — pure waste: x is the SAME vector every row).\n    for (r, yo) in y.iter_mut().enumerate() {\n        let row = &w[r * n_in..(r + 1) * n_in];\n        let mut acc = 0.0f32;\n        for (wv, &xv) in row.iter().zip(x) {\n            acc += wv * xv;\n        }\n        *yo = acc;\n    }\n}".to_string(),
+            fixed_code: "const TILE_ROWS: usize = 64;\nconst TILE_COLS: usize = 512;\n\n/// Repack W ONCE at load/conversion time into consumption-ordered tiles:\n/// tile-major, row-within-tile, column-within-row — the matvec walks this\n/// linearly (setup cost amortized over every decode step).\nfn repack_tiles(w: &[f32], n_out: usize, n_in: usize) -> Vec<f32> {\n    let mut tiles = Vec::with_capacity(w.len());\n    for tr in (0..n_out).step_by(TILE_ROWS) {\n        for tc in (0..n_in).step_by(TILE_COLS) {\n            for r in tr..(tr + TILE_ROWS).min(n_out) {\n                let row = &w[r * n_in..(r + 1) * n_in];\n                tiles.extend_from_slice(&row[tc..(tc + TILE_COLS).min(n_in)]);\n            }\n        }\n    }\n    tiles\n}\n\nfn matvec_tiled(tiles: &[f32], x: &[f32], y: &mut [f32], n_out: usize, n_in: usize) {\n    // y is pre-zeroed; each column tile's partial dot ACCUMULATES into\n    // y[tr + r]. The x slice (TILE_COLS × 4 B = 2 KB) stays L1-resident\n    // across the tile's TILE_ROWS rows — x is read once per row-group\n    // instead of once per row (TILE_ROWS× less x traffic).\n    let mut off = 0usize;\n    for tr in (0..n_out).step_by(TILE_ROWS) {\n        for tc in (0..n_in).step_by(TILE_COLS) {\n            let rows = TILE_ROWS.min(n_out - tr);\n            let cols = TILE_COLS.min(n_in - tc);\n            let xs = &x[tc..tc + cols];\n            for r in 0..rows {\n                let tile_row = &tiles[off + r * cols..off + (r + 1) * cols];\n                let mut partial = 0.0f32;\n                for (wv, &xv) in tile_row.iter().zip(xs) {\n                    partial += wv * xv;\n                }\n                y[tr + r] += partial;\n            }\n            off += rows * cols;\n        }\n    }\n}".to_string(),
+            context_notes: Some("MEASURED ParetoDominant 4/0/0 — 1.32x/1.35x/1.35x/1.56x at n_in=4K/16K/32K/64K (n_out=64, TILE 64x512; M3 Max release, rustc 1.97, 2026-08-28, load ~8.9 of 16; verdict-stable x2 — run 2: 1.32/1.35/1.35/1.56; allocs 1/1 + bytes 256/256 equal at every size, alloc-det stable). The win GROWS monotonically with working set — the ratio story the source predicted, SHIFTED for M3's 128 KB P-core L1-d (4x the source's Sandy Bridge 32 KB): W-row + x per row runs 32 KB / 128 KB / 256 KB / 512 KB across the sweep. HONEST SMALL-ARM NOTE: even the L1-resident arm (n=4096, row+x = 32 KB ~ 1/4 L1) measured 1.32x FASTER — the paper's own 1x-L1 cells also read ~1.12x; below the eviction boundary the tile walk still wins on x-slice register/L1 reuse vs the full-x re-walk per row (the mechanism is weaker, not absent). MAGNITUDE HONESTY: the source's 1.12-1.36x AVX2 wall-clock (plus 7.29x fewer L1-d misses, PMU) is the same band we measure — cite that, never the Q4-tile end-to-end numbers. REGIME: single-token GEMV / memory-bound matvec where W is streamed once + x is re-read per output row; the repack is setup-amortized (load/conversion time — never in the hot path). At x + row fully L1-resident with tiny N the indirection can cost (unmeasured below 4K); batched-multi-token matmuls amortize x across the batch differently (the B62 transposed-register rule composes there). Suggestion-only (a parse-only proposer cannot prove the repack site is load-time — a mid-loop repack would regress; the soa-hot-field precedent). Source: arXiv:2608.23841 cflow (Research 098).".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(weight_tile_consumption_order_bench_spec()),
+        },
+        // ── io: software prefetch sprinkled on a bandwidth/storage-bound
+        // stream → remove it (the miss pipeline is already full) ─────────
+        // Source: cflow §decode optimizations (arXiv:2608.23841, Batch 85,
+        // Research 098). THE ANNOTATION CLASS (the varint/precompute-table
+        // family — the rule exists to STOP a plausible-looking port): SW
+        // prefetch buys ≈nothing when the workload is bandwidth-bound and
+        // is ACTIVELY HARMFUL at decode scale — the paper's prefetch
+        // thread walked expert regions at stride 256 and burned ~48% of
+        // decode time; disabling it alone was their single largest decode
+        // win at 1.92×. Direct-I/O A/B: PF ±0.1% at 64 MB working set;
+        // PF=1 4% WORSE at 4.7 GB. Two-regime: compute-bound loops CAN
+        // hide latency with prefetch (the x86 folk wisdom's home turf);
+        // storage/RAM-bound streams add only issue slots + cache
+        // pressure. x86-benched source numbers; the aarch64 analog (PRFM)
+        // unmeasured here — no stable Rust prefetch intrinsic on aarch64
+        // (the powi-vs-powf cross-arch annotation precedent). Proposer-less
+        // by design (a losing rewrite never gets a --fix path — the
+        // filter-count-to-any rationale applied to prefetch).
+        PerfRule {
+            rule_id: "software-prefetch-storage-bound".to_string(),
+            name: "software prefetch on a bandwidth/storage-bound stream → remove it (the miss pipeline is already saturated; prefetch only adds issue slots + cache pressure)".to_string(),
+            category: "io".to_string(),
+            buggy_code: "#[cfg(target_arch = \"x86_64\")]\nfn checksum_stream(data: &[u32]) -> u64 {\n    let mut acc = 0u64;\n    for i in 0..data.len() {\n        // SW prefetch of a future block: when the stream is storage/RAM\n        // bound the miss pipeline is already saturated — this only adds\n        // issue slots + L1 pressure (the source: PF=1 was 4% WORSE at\n        // 4.7 GB direct-I/O; the prefetch THREAD burned 48% of decode\n        // time; disabling it alone = 1.92×).\n        unsafe {\n            let ahead = (i + 64).min(data.len() - 1);\n            core::arch::x86_64::_mm_prefetch(\n                data.as_ptr().add(ahead) as *const i8,\n                core::arch::x86_64::_MM_HINT_T0,\n            );\n        }\n        acc = acc.wrapping_add(u64::from(data[i]));\n    }\n    acc\n}".to_string(),
+            fixed_code: "fn checksum_stream(data: &[u32]) -> u64 {\n    // The bare stream: the hardware prefetcher already lines up purely\n    // sequential access; on a bandwidth/storage-bound loop the explicit\n    // prefetch bought nothing and cost issue slots + L1 pressure.\n    let mut acc = 0u64;\n    for &v in data {\n        acc = acc.wrapping_add(u64::from(v));\n    }\n    acc\n}".to_string(),
+            context_notes: Some("NotBenchable on this box — x86-only source evidence (no stable aarch64 prefetch intrinsic to re-gate with; the powi-vs-powf cross-arch precedent) — and the annotation exists to STOP a plausible-looking port: in the source's own A/B the prefetch arm reads ParetoDominated-adjacent on bandwidth/storage-bound streams (PF ±0.1% at 64 MB working set; PF=1 4% WORSE at 4.7 GB direct-I/O; at decode scale the dedicated prefetch thread burned ~48% of decode time walking expert regions at stride 256 — disabling it alone was their single largest decode win at 1.92×). REGIME: the two-sided boundary — compute-bound loops CAN hide latency with prefetch (the x86 folk wisdom's home regime); storage/RAM-bound streams add only issue slots + cache pressure. Proposer-less BY DESIGN (the filter-count-to-any rationale: a losing rewrite never gets a --fix path). Source: arXiv:2608.23841 (Research 098).".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: None,
+        },
     ])
 }
 
@@ -7344,6 +7429,33 @@ fn cache_line_block_partitioned_lock_bench_spec() -> BenchSpec {
     }
 }
 
+/// Bench spec for `weight-tile-consumption-order` (Batch 85, Research 098
+/// — the cflow "Pipeline-Native Transformers" distill): row-major matvec
+/// (x re-walked per output row) vs weights repacked ONCE into
+/// consumption-ordered 64×512 tiles (the x slice L1-resident across each
+/// tile's 64 rows).
+///
+/// n = n_in; n_out fixed at 64 — the memory-bounded shape that crosses M3
+/// Max's 128 KB P-core L1-d (4× the source's Sandy Bridge 32 KB target —
+/// the size axis is SHIFTED, the ratio story preserved). W-row + x per row:
+///   n=4096  →  32 KB (L1-resident — the honest Tie arm; both arms stream
+///                     W sequentially with x resident)
+///   n=16384 → 128 KB (the L1 boundary — transition)
+///   n=32768 → 256 KB (2× L1 — eviction regime; row-major re-fetches x
+///                     from L2 once per row, tiled once per row-GROUP)
+///   n=65536 → 512 KB (4× L1 — the paper's headline regime)
+/// TILE_ROWS=64 = n_out (one row-group); TILE_COLS=512 (x slice = 2 KB).
+/// The repack lives in make_input (setup — NEVER measured). Float
+/// sum-order differs between the arms (per-tile partials) — the corpus
+/// rel-error gate covers it (NOT bit-identity; the B64 gate shape).
+#[cfg(feature = "rust_perf_bench")]
+fn weight_tile_consumption_order_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![4_096, 16_384, 32_768, 65_536],
+        harness: "\nmod buggy {\n    pub fn matvec_rowmajor(w: &[f32], x: &[f32], y: &mut [f32], n_in: usize) {\n        for (r, yo) in y.iter_mut().enumerate() {\n            let row = &w[r * n_in..(r + 1) * n_in];\n            let mut acc = 0.0f32;\n            for (wv, &xv) in row.iter().zip(x) {\n                acc += wv * xv;\n            }\n            *yo = acc;\n        }\n    }\n}\n\nmod fixed {\n    pub const TILE_ROWS: usize = 64;\n    pub const TILE_COLS: usize = 512;\n    pub fn repack_tiles(w: &[f32], n_out: usize, n_in: usize) -> Vec<f32> {\n        let mut tiles = Vec::with_capacity(w.len());\n        for tr in (0..n_out).step_by(TILE_ROWS) {\n            for tc in (0..n_in).step_by(TILE_COLS) {\n                for r in tr..(tr + TILE_ROWS).min(n_out) {\n                    let row = &w[r * n_in..(r + 1) * n_in];\n                    tiles.extend_from_slice(&row[tc..(tc + TILE_COLS).min(n_in)]);\n                }\n            }\n        }\n        tiles\n    }\n    pub fn matvec_tiled(tiles: &[f32], x: &[f32], y: &mut [f32], n_out: usize, n_in: usize) {\n        let mut off = 0usize;\n        for tr in (0..n_out).step_by(TILE_ROWS) {\n            for tc in (0..n_in).step_by(TILE_COLS) {\n                let rows = TILE_ROWS.min(n_out - tr);\n                let cols = TILE_COLS.min(n_in - tc);\n                let xs = &x[tc..tc + cols];\n                for r in 0..rows {\n                    let tile_row = &tiles[off + r * cols..off + (r + 1) * cols];\n                    let mut partial = 0.0f32;\n                    for (wv, &xv) in tile_row.iter().zip(xs) {\n                        partial += wv * xv;\n                    }\n                    y[tr + r] += partial;\n                }\n                off += rows * cols;\n            }\n        }\n    }\n}\n\nconst N_OUT: usize = 64;\n\npub struct Input { w: Vec<f32>, tiles: Vec<f32>, x: Vec<f32>, zero: Vec<f32> }\n\npub fn make_input(n: usize) -> Input {\n    let hash = |i: usize, s: u32| {\n        let h = (i as u32).wrapping_mul(0x9E37_79B9).wrapping_add(s);\n        ((h >> 8) as f32) / 16_777_216.0 - 0.5\n    };\n    let w: Vec<f32> = (0..N_OUT * n).map(|i| hash(i, 1)).collect();\n    let x: Vec<f32> = (0..n).map(|i| hash(i, 2)).collect();\n    let tiles = fixed::repack_tiles(&w, N_OUT, n); // setup — never measured\n    Input { w, tiles, x, zero: vec![0.0; N_OUT] }\n}\n\npub fn run_buggy(input: &Input) {\n    let input = std::hint::black_box(input);\n    let mut y = input.zero.clone();\n    buggy::matvec_rowmajor(&input.w, &input.x, &mut y, input.x.len());\n    std::hint::black_box(&y);\n}\n\npub fn run_fixed(input: &Input) {\n    let input = std::hint::black_box(input);\n    let mut y = input.zero.clone();\n    fixed::matvec_tiled(&input.tiles, &input.x, &mut y, N_OUT, input.x.len());\n    std::hint::black_box(&y);\n}\n".to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -7359,9 +7471,9 @@ mod tests {
     }
 
     #[test]
-    fn seed_corpus_has_eighty_eight_entries_across_twelve_categories() {
+    fn seed_corpus_has_ninety_one_entries_across_twelve_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 89);
+        assert_eq!(corpus.entries.len(), 91);
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
@@ -7380,9 +7492,10 @@ mod tests {
         // byte-find-position-to-memchr); simd has 8 (Batch 62 added
         // transposed-weight-register-gemv; Batch 64 added
         // loop-order-innermost-contiguous; Batch 83 added
-        // bitplane-transpose-repeated-predicate-scan); layout has 6 (Batch 53 added
+        // bitplane-transpose-repeated-predicate-scan); layout has 7 (Batch 53 added
         // soa-hot-field; Batch 61 added usize-index-to-u32; Batch 78 added
-        // narrow-counter-overflow-promotion) + concurrency
+        // narrow-counter-overflow-promotion; Batch 85 added
+        // weight-tile-consumption-order) + concurrency
         // has 8 (Issue 014 added the two metric-mismatch rules; Batch 65
         // added align-64-false-sharing + channel-send-batching-unpark;
         // Batch 73 added lock-guard-narrow-field-accessor; Batch 78 added
@@ -7397,9 +7510,10 @@ mod tests {
         // runtime-feature-detect-per-chunk); caching has 4 (Issue 014
         // added regex-hoist-lazylock; Batch 73 added
         // sort-key-cache-precompute-out-of-lock; Batch 76 added
-        // eager-pointer-collect-lazy-fetch); io has 3 (Batch 68 added
+        // eager-pointer-collect-lazy-fetch); io has 4 (Batch 68 added
         // varint-compose-word-single-store; Batch 69 added
-        // unaligned-word-load-from-bytes); bevy, wasm have 1 each.
+        // unaligned-word-load-from-bytes; Batch 85 added
+        // software-prefetch-storage-bound); bevy, wasm have 1 each.
         assert_eq!(categories.len(), 12);
     }
 
@@ -7991,17 +8105,99 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "rust_perf_bench")]
+    /// G1 for `weight-tile-consumption-order` (Batch 85, Research 098 —
+    /// the cflow distill): tile accumulation order (per-column-tile partial
+    /// dots, accumulated into y) != row-major accumulation order (one
+    /// sequential dot per row) — the gate is max rel-error over swept
+    /// shapes (never bit-identity; the B64/powi gate shape). Non-tile-
+    /// multiple shapes exercise the min() edge paths. Positive-only inputs
+    /// (no cancellation): sums of positives keep the relative bound tight.
     #[test]
-    fn seventy_nine_rules_have_bench_specs() {
-        let corpus = build_perf_seed_corpus();
-        let with_spec = corpus.entries.iter().filter(|e| e.bench_spec.is_some()).count();
-        assert_eq!(with_spec, 79, "expected 79 benchable rules, got {with_spec}");
+    #[allow(clippy::cast_possible_truncation)] // the 24-bit hash — intentional, the loop_order convention
+    #[allow(clippy::cast_precision_loss)] // u32→f32 mantissa loss IS the hash's purpose
+    fn weight_tile_consumption_order_rel_error_gate() {
+        const TILE_ROWS: usize = 64;
+        const TILE_COLS: usize = 512;
+        fn repack(w: &[f32], n_out: usize, n_in: usize) -> Vec<f32> {
+            let mut tiles = Vec::with_capacity(w.len());
+            for tr in (0..n_out).step_by(TILE_ROWS) {
+                for tc in (0..n_in).step_by(TILE_COLS) {
+                    for r in tr..(tr + TILE_ROWS).min(n_out) {
+                        let row = &w[r * n_in..(r + 1) * n_in];
+                        tiles.extend_from_slice(&row[tc..(tc + TILE_COLS).min(n_in)]);
+                    }
+                }
+            }
+            tiles
+        }
+        fn matvec_rowmajor(w: &[f32], x: &[f32], y: &mut [f32], n_in: usize) {
+            for (r, yo) in y.iter_mut().enumerate() {
+                let row = &w[r * n_in..(r + 1) * n_in];
+                let mut acc = 0.0f32;
+                for (wv, &xv) in row.iter().zip(x) {
+                    acc += wv * xv;
+                }
+                *yo = acc;
+            }
+        }
+        fn matvec_tiled(tiles: &[f32], x: &[f32], y: &mut [f32], n_out: usize, n_in: usize) {
+            let mut off = 0usize;
+            for tr in (0..n_out).step_by(TILE_ROWS) {
+                for tc in (0..n_in).step_by(TILE_COLS) {
+                    let rows = TILE_ROWS.min(n_out - tr);
+                    let cols = TILE_COLS.min(n_in - tc);
+                    let xs = &x[tc..tc + cols];
+                    for r in 0..rows {
+                        let tile_row = &tiles[off + r * cols..off + (r + 1) * cols];
+                        let mut partial = 0.0f32;
+                        for (wv, &xv) in tile_row.iter().zip(xs) {
+                            partial += wv * xv;
+                        }
+                        y[tr + r] += partial;
+                    }
+                    off += rows * cols;
+                }
+            }
+        }
+        // (n_out, n_in) — includes non-tile-multiple shapes (70x777, 96x1300)
+        // exercising the ragged min() edges + a full-shape arm.
+        for (n_out, n_in) in [(64usize, 4096usize), (96, 1300), (70, 777)] {
+            let hash = |i: usize, s: u32| {
+                let h = (i as u32).wrapping_mul(0x9E37_79B9).wrapping_add(s);
+                ((h >> 8) as f32) / 16_777_216.0 // 0..1, positive-only
+            };
+            let w: Vec<f32> = (0..n_out * n_in).map(|i| hash(i, 1)).collect();
+            let x: Vec<f32> = (0..n_in).map(|i| hash(i, 2)).collect();
+            let mut y_row = vec![0.0f32; n_out];
+            matvec_rowmajor(&w, &x, &mut y_row, n_in);
+            let tiles = repack(&w, n_out, n_in);
+            assert_eq!(tiles.len(), w.len(), "repack preserves every weight");
+            let mut y_tiled = vec![0.0f32; n_out];
+            matvec_tiled(&tiles, &x, &mut y_tiled, n_out, n_in);
+            let mut max_rel = 0.0f64;
+            for r in 0..n_out {
+                let ref_v = f64::from(y_row[r]);
+                let rel = (f64::from(y_tiled[r]) - ref_v).abs() / ref_v.abs().max(1e-30);
+                max_rel = max_rel.max(rel);
+            }
+            assert!(
+                max_rel < 1e-5,
+                "tile-order rel-error {max_rel:.3e} at {n_out}x{n_in} exceeds the 1e-5 bound"
+            );
+        }
     }
 
     #[cfg(feature = "rust_perf_bench")]
     #[test]
-    fn ten_rules_are_not_benchable() {
+    fn eighty_rules_have_bench_specs() {
+        let corpus = build_perf_seed_corpus();
+        let with_spec = corpus.entries.iter().filter(|e| e.bench_spec.is_some()).count();
+        assert_eq!(with_spec, 80, "expected 80 benchable rules, got {with_spec}");
+    }
+
+    #[cfg(feature = "rust_perf_bench")]
+    #[test]
+    fn eleven_rules_are_not_benchable() {
         let corpus = build_perf_seed_corpus();
         let without_spec: Vec<&str> = corpus
             .entries
@@ -8009,7 +8205,8 @@ mod tests {
             .filter(|e| e.bench_spec.is_none())
             .map(|e| e.rule_id.as_str())
             .collect();
-        assert_eq!(without_spec.len(), 10);
+        assert_eq!(without_spec.len(), 11);
+        assert!(without_spec.contains(&"software-prefetch-storage-bound")); // Batch 85 — x86-only source evidence, the annotation IS the rule
         assert!(without_spec.contains(&"layout-reorder"));
         assert!(without_spec.contains(&"repr-u8-enum"));
         assert!(without_spec.contains(&"bevy-reactive-loop"));
@@ -8050,7 +8247,7 @@ mod tests {
     /// The other 58 have `context_notes: None` (unconditional wins or
     /// honestly NotBenchable).
     #[test]
-    fn twenty_eight_annotated_rules_carry_context_notes() {
+    fn thirty_four_annotated_rules_carry_context_notes() {
         let corpus = build_perf_seed_corpus();
         let annotated: Vec<&str> = corpus
             .entries
@@ -8058,7 +8255,9 @@ mod tests {
             .filter(|e| e.context_notes.is_some())
             .map(|e| e.rule_id.as_str())
             .collect();
-        assert_eq!(annotated.len(), 32, "expected 32 context-annotated rules");
+        assert_eq!(annotated.len(), 34, "expected 34 context-annotated rules");
+        assert!(annotated.contains(&"weight-tile-consumption-order")); // Batch 85 — measured ParetoDominant + the M3-L1-shift regime note
+        assert!(annotated.contains(&"software-prefetch-storage-bound")); // Batch 85 — the x86-source-cited honest-loser annotation
         assert!(annotated.contains(&"precompute-table"));
         assert!(annotated.contains(&"papaya-lockfree"));
         assert!(annotated.contains(&"dedupe-hashset-vs-vec"));
@@ -8100,7 +8299,7 @@ mod tests {
             .iter()
             .filter(|e| e.context_notes.is_none())
             .count();
-        assert_eq!(unannotated, 57, "expected 57 unannotated rules (89 - 32 annotated)");
+        assert_eq!(unannotated, 57, "expected 57 unannotated rules (91 - 34 annotated)");
     }
 
     /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -8112,7 +8311,7 @@ mod tests {
         let json = serde_json::to_string(&corpus.entries).unwrap();
         let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
         let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-        assert_eq!(annotated, 32);
+        assert_eq!(annotated, 34);
 
         // Simulate a pre-field snapshot: strip `context_notes` from JSON.
         // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -8144,9 +8343,9 @@ mod tests {
 
         let corpus = build_perf_seed_corpus();
 
-        // Filter to the 32 annotated rules.
+        // Filter to the 34 annotated rules.
         let annotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_some()).collect();
-        assert_eq!(annotated.len(), 32, "expected 32 annotated rules");
+        assert_eq!(annotated.len(), 34, "expected 34 annotated rules");
 
         // The HealEntry trait override must agree with the struct field.
         for rule in &annotated {

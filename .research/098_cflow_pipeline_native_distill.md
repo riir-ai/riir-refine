@@ -1,6 +1,6 @@
 # Research 098 — arXiv:2608.23841 Pipeline-Native Transformers (cflow) — distill verdict
 
-**Status:** DISTILLED — pending owner decision (queued as Batch 85 / Plan 046; build-gated — box saturated at verdict time per Plan 337).
+**Status:** RECORD (Batch 85 LANDED 2026-08-28 — corpus 89→91, both candidates shipped; GOAT all gates PASS; the M3 re-gate refuted the "L1-resident arm ties" expectation: 1.32× even at n=4096).
 
 ## Source
 
