@@ -13,3 +13,4 @@ CLAUDE.md
 t37_rows.jsonl
 .wrangler/
 scripts/__pycache__/
+.env
