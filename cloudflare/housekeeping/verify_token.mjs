@@ -116,7 +116,52 @@ for (const [label, query] of QUERIES) {
   }
 }
 
-console.log(failed === 0
-  ? "\nPASS — this token can run every query the cron issues.\n  next: cd cloudflare/housekeeping && npx wrangler secret put CF_API_TOKEN"
-  : `\nFAIL — ${failed}/3 queries rejected. Do not set this as the secret;\n  the worker would deploy fine and then collect nothing.`);
-process.exit(failed === 0 ? 0 : 1);
+// ---- blast-radius probe -------------------------------------------------
+// Proving the token CAN read the three datasets says nothing about what else
+// it can do. Measured failure (2026-08-28): a token created for this job also
+// carried "Account API Tokens Write" — a permission that can mint further
+// tokens with arbitrary permissions, i.e. account takeover — and this script
+// printed PASS, because every analytics query worked fine.
+//
+// So: probe surfaces an analytics-only token MUST NOT reach. All are plain
+// GETs; nothing is created or modified. A 200 means the token is wider than
+// the job needs.
+const FORBIDDEN = [
+  [`accounts/${acct}/tokens`, "enumerate API tokens (Account API Tokens Read/Write)"],
+  [`accounts/${acct}/workers/scripts`, "read Workers scripts"],
+  [`accounts/${acct}/storage/kv/namespaces`, "read KV namespaces"],
+  [`accounts/${acct}/containers/applications`, "read Containers control plane"],
+];
+let wide = 0;
+console.log("\nblast radius — these must all be denied:");
+for (const [path, what] of FORBIDDEN) {
+  const pad = what.padEnd(52);
+  try {
+    const r = await fetch(`https://api.cloudflare.com/client/v4/${path}`, {
+      headers: auth, signal: AbortSignal.timeout(20000),
+    });
+    if (r.ok) { console.log(`  ✗ ${pad} ALLOWED (HTTP 200) — token is over-privileged`); wide++; }
+    else console.log(`  ✓ ${pad} denied (HTTP ${r.status})`);
+  } catch (e) {
+    console.log(`  ? ${pad} probe failed: ${e.message}`);
+  }
+}
+if (wide) {
+  console.log(`\nOVER-PRIVILEGED — ${wide} surface(s) this token should not reach are open.`);
+  console.log("  This token grants more than Account Analytics : Read. Edit it in the");
+  console.log("  dashboard (Account API tokens -> Edit) to carry that permission ALONE;");
+  console.log("  editing permissions does not change the token value.");
+}
+
+if (failed) {
+  console.log(`\nFAIL — ${failed}/3 queries rejected. Do not set this as the secret;`);
+  console.log("  the worker would deploy fine and then collect nothing.");
+} else if (wide) {
+  console.log("\nFAIL — the queries all work, but the token is wider than the job.");
+} else {
+  console.log("\nPASS — this token runs every query the cron issues, and nothing more.");
+  console.log("  next: cd cloudflare/housekeeping && npx wrangler secret put CF_API_TOKEN");
+}
+// Over-privilege is a FAIL: a working-but-too-powerful token is the exact
+// case this script exists to catch, and it is invisible to the queries above.
+process.exit(failed === 0 && wide === 0 ? 0 : 1);

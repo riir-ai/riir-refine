@@ -93,6 +93,20 @@ Reading its output:
   2026-08-26T22Z. Only an error means the token cannot do the job.
 - A wrong-permission token surfaces as `code 9106 "Authentication failed"` on
   the GraphQL call — *not* at `token/verify`.
+- **The blast-radius probe is part of the gate, not advice.** Proving a token
+  can read the three datasets says nothing about what else it can do. Measured
+  2026-08-28: a token created for this job also carried **Account API Tokens
+  Write** (permission group `5bc3f8b21c554832afc660159ab75fa4`) — which can
+  mint further tokens with arbitrary permissions, i.e. account takeover — and
+  the script printed PASS, because every analytics query worked. It now GETs
+  four surfaces an analytics-only token must not reach (account tokens, Workers
+  scripts, KV namespaces, Containers control plane) and FAILs on any 200.
+  Self-test: run it against the wrangler OAuth token and it trips 3 of 4.
+
+If it reports over-privilege, fix the token rather than the script: dashboard →
+Account API tokens → **Edit** → leave only `Account Analytics : Read`. Editing
+permissions does **not** change the token value, so nothing downstream needs
+re-pasting.
 
 ### 3. Set it
 
