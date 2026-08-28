@@ -251,16 +251,44 @@ fn census(rows: &[TrajRowDoc]) -> BacklogCensus {
     c
 }
 
-/// The operator-facing reason an empty queue is empty.
+/// The operator-facing reason nothing reached the LLM.
 ///
-/// Pure so the wording is pinned by tests: the three cases are genuinely
-/// different operational states and must never collapse into one string.
-fn empty_queue_reason(c: BacklogCensus, limit: usize) -> String {
+/// The caller's branch is `prepared_count == 0`, which is reached FIVE
+/// different ways — and they are not the same news. Pure so the wording is
+/// pinned by tests; these states must never collapse into one string.
+///
+/// `queued` is the post-`--limit` queue length and `modelless_served` the
+/// count the L4 pre-pass absorbed, because `prepared_count == queued -
+/// modelless_served`: without both, a window where the modelless seam served
+/// EVERY span (the best possible outcome — zero LLM cost) is indistinguishable
+/// from an empty backlog, and a `--limit 0` run is indistinguishable from a
+/// census bug.
+fn empty_queue_reason(
+    c: BacklogCensus,
+    limit: usize,
+    queued: usize,
+    modelless_served: usize,
+) -> String {
     match () {
         () if c.total == 0 => "the trajectory store is empty — no heal run has recorded a \
              trajectory yet"
             .to_string(),
-        () if c.eligible > 0 => format!(
+        // The BEST outcome, and the one most easily misread as a failure: the
+        // backlog was real, and the modelless seam served all of it. The L4
+        // contract keeps the LLM off non-misses, so zero spend here is the
+        // mechanism WORKING.
+        () if queued > 0 && modelless_served == queued => format!(
+            "not idle — the modelless seam served all {queued} queued span(s) (L4 contract \
+             keeps the LLM off non-misses): the backlog was real and was healed at zero LLM \
+             cost. Nothing to escalate."
+        ),
+        // A deliberate operator choice, not a defect.
+        () if limit == 0 && c.eligible > 0 => format!(
+            "{} eligible row(s) withheld by `--limit 0` — raise the limit to drain them",
+            c.eligible
+        ),
+        // Only NOW is a disagreement genuinely unexplained.
+        () if c.eligible > 0 && queued == 0 => format!(
             "BUG: {} row(s) are eligible but none queued (limit {limit}) — the census and \
              build_backlog disagree",
             c.eligible
@@ -512,6 +540,9 @@ fn main() {
     // queue has three distinct causes and the operator needs to know which.
     let census = census(&rows);
     let queue = build_backlog(rows, |lint| corpus_rules.contains(lint), args.limit);
+    // Captured before the pre-pass consumes `queue`: an empty `prepared` set
+    // means something very different when the queue was non-empty.
+    let queued = queue.len();
     eprintln!(
         "[drain] backlog: {} queued (limit {}, store {} row(s)) — priority = fail_count × \
          gap(2.0 off-corpus / 1.0 in-corpus), never-healed first",
@@ -610,7 +641,7 @@ fn main() {
             // row records a clean no-op.
             eprintln!(
                 "[drain] queue empty — nothing to drain · {}",
-                empty_queue_reason(census, args.limit)
+                empty_queue_reason(census, args.limit, queued, modelless_served)
             );
             return;
         }
@@ -1130,7 +1161,7 @@ mod tests {
         ];
         let c = census(&rows);
         assert_eq!(c.eligible, 0, "nothing queues");
-        let msg = empty_queue_reason(c, 25);
+        let msg = empty_queue_reason(c, 25, 0, 0);
         assert!(msg.contains("STALL"), "{msg}");
         assert!(msg.contains("withheld"), "{msg}");
         assert!(!msg.contains("healthy"), "a withheld backlog must never read healthy: {msg}");
@@ -1142,18 +1173,60 @@ mod tests {
             row("clean_a", "fn a() {}", 0, 3, CERTIFIED),
             row("clean_b", "fn b() {}", 0, 1, HEURISTIC),
         ];
-        let msg = empty_queue_reason(census(&rows), 25);
+        let msg = empty_queue_reason(census(&rows), 25, 0, 0);
         assert!(msg.contains("healthy"), "{msg}");
         assert!(!msg.contains("STALL"), "{msg}");
     }
 
     #[test]
     fn an_empty_store_is_distinct_from_a_clean_one() {
-        let msg = empty_queue_reason(census(&[]), 25);
+        let msg = empty_queue_reason(census(&[]), 25, 0, 0);
         assert!(msg.contains("store is empty"), "{msg}");
         // "no heal run has recorded a trajectory" is a DIFFERENT operator
         // action (run the healer) than "every row is clean" (nothing to do).
         assert!(!msg.contains("healthy"), "{msg}");
+    }
+
+    /// The regression this fix exists for. `prepared_count == 0` is ALSO
+    /// reached when the modelless seam served every queued span — the BEST
+    /// outcome (real backlog, healed at zero LLM cost). The first cut of
+    /// `empty_queue_reason` reported that as "BUG: the census and
+    /// build_backlog disagree", i.e. it screamed defect at the mechanism
+    /// working exactly as the L4 contract designs it.
+    #[test]
+    fn a_fully_modelless_window_is_not_a_bug_and_not_an_empty_backlog() {
+        let rows = vec![
+            row("clean", "fn a() {}", 0, 3, CERTIFIED),
+            row("eligible_a", "fn d() {}", 2, 0, HEURISTIC),
+            row("eligible_b", "fn g() {}", 1, 2, CERTIFIED),
+        ];
+        let c = census(&rows);
+        assert_eq!(c.eligible, 2);
+        // 2 queued, all 2 absorbed by the modelless pre-pass.
+        let msg = empty_queue_reason(c, 25, 2, 2);
+        assert!(!msg.contains("BUG"), "the best outcome must not read as a defect: {msg}");
+        assert!(msg.contains("modelless seam"), "{msg}");
+        assert!(msg.contains("zero LLM cost"), "{msg}");
+        assert!(!msg.contains("healthy: all"), "the backlog was REAL, not clean: {msg}");
+    }
+
+    /// `--limit 0` withholds a real backlog by operator choice — also not a
+    /// census disagreement.
+    #[test]
+    fn limit_zero_is_an_operator_choice_not_a_census_bug() {
+        let rows = vec![row("eligible_a", "fn d() {}", 2, 0, HEURISTIC)];
+        let msg = empty_queue_reason(census(&rows), 0, 0, 0);
+        assert!(!msg.contains("BUG"), "{msg}");
+        assert!(msg.contains("--limit 0"), "{msg}");
+    }
+
+    /// The BUG branch must still fire on a genuine, unexplained disagreement:
+    /// eligible rows, a positive limit, and nothing queued.
+    #[test]
+    fn a_genuine_census_disagreement_still_reports_bug() {
+        let rows = vec![row("eligible_a", "fn d() {}", 2, 0, HEURISTIC)];
+        let msg = empty_queue_reason(census(&rows), 25, 0, 0);
+        assert!(msg.contains("BUG"), "a real disagreement must not be explained away: {msg}");
     }
 
     #[test]

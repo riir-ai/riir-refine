@@ -240,7 +240,7 @@ price) and is labeled as one everywhere it renders.
         the healer), **healthy** (all clean → nothing to do), **STALL** (all
         failures withheld → needs a fresh pattern). Three different operator
         actions that used to share one string.
-      - 5 new tests (bin unit tests 16 → **21/21**): bucket disjointness +
+      - 5 new tests (bin unit tests 16 → **24/24**): bucket disjointness +
         exhaustiveness, census-vs-queue agreement, and one per reason —
         including the negative assertions that a stall never reads `healthy`
         and an empty store never reads `healthy`.
@@ -252,6 +252,31 @@ price) and is labeled as one everywhere it renders.
         rather than overturning it; the difference is that the claim is now
         *instrument-verified on every window* instead of assumed, and the day
         it becomes a stall the operator is told so.
+      - **Follow-through fix, same day — the defect T14 itself created.**
+        Auditing my own change (the T13 discipline): the caller's branch is
+        `prepared_count == 0`, and `prepared_count == queued -
+        modelless_served`, so it is reached FIVE ways — not the three the
+        first cut modelled. Two were misreported:
+        - **A fully-modelless window** (real backlog, every queued span
+          absorbed by the L4 pre-pass — zero LLM cost, the BEST possible
+          outcome) printed `BUG: the census and build_backlog disagree`. The
+          message screamed *defect* at the mechanism working exactly as the
+          L4 contract designs it, and would have sent an operator hunting a
+          non-existent bug on the healthiest window the drain can have.
+        - **`--limit 0`** (a deliberate operator choice) hit the same
+          false `BUG`.
+        `empty_queue_reason` now takes `queued` + `modelless_served` — without
+        both, "the seam healed everything for free" is genuinely
+        indistinguishable from "the backlog is empty". The `BUG` branch was
+        narrowed to the only genuinely unexplained shape (eligible > 0,
+        limit > 0, queued == 0) and is still pinned firing by its own test, so
+        the fix did not simply delete the alarm. 3 new tests (21 -> **24/24**),
+        including the negative assertion that a fully-modelless window never
+        reads `healthy` either — the backlog was REAL, just served for free.
+        *Lesson, same shape as T9 -> T13: a diagnostic added to remove
+        ambiguity introduced its own, because it modelled the states it was
+        designed for rather than every state its branch can actually be
+        reached in.*
       - Deliberately NOT surfaced to the ledger/dashboard: `withdrawn == 0`
         today, so a chart would plot a constant zero while risking the 19-row
         ledger and the T13 attribution logic. Escalate when the census
