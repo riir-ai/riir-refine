@@ -645,3 +645,78 @@ test("a throwing housekeeping run is logged, not swallowed", async () => {
   assert.match(errs[0], /housekeeping run failed/);
   assert.match(errs[0], /kv unavailable/);
 });
+
+// ---- T9d: what a live KV inventory exposed -------------------------------
+//
+// 2026-08-29: the namespace held EIGHT keys after three days of hourly runs —
+// 7 legacy collided `hour:` rows and `latest`. Not one `day:` row. The
+// heartbeat path was returning before the aggregate, so that code had never
+// executed in production and every fix to it was stub-only.
+
+test("heartbeat runs still write a day aggregate", async () => {
+  const kv = kvStub();
+  const noToken = { ...env(kv), CF_API_TOKEN: undefined };
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = fetchStub();
+  try {
+    for (let h = 1; h <= 5; h++) {
+      await atUtc(`2026-08-28T0${h}:00:06.549Z`, async () => {
+        const c = ctxStub();
+        await worker.scheduled({}, noToken, c);
+        await c.drain();
+      });
+    }
+  } finally { globalThis.fetch = realFetch; }
+
+  const day = kv.store.get("day:20260828");
+  assert.ok(day, "a heartbeat day must still produce a day: row — `/days` served [] for three days");
+  const d = JSON.parse(day);
+  // The honest shape: rows exist, none of them are data. Reporting hours:5
+  // with est_usd:0 would be a false zero that looks like a measurement.
+  assert.equal(d.hours, 0, "a heartbeat must not count as a collected hour");
+  assert.equal(d.hours_present, 5, "but its presence must still be visible");
+  assert.equal(d.est_usd, 0);
+});
+
+test("a collected day reports hours and hours_present distinctly", async () => {
+  const kv = kvStub();
+  const noToken = { ...env(kv), CF_API_TOKEN: undefined };
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = fetchStub();
+  try {
+    // Two heartbeat hours, then the token arrives and three hours collect.
+    for (const h of [1, 2]) {
+      await atUtc(`2026-08-28T0${h}:00:06.549Z`, async () => {
+        const c = ctxStub();
+        await worker.scheduled({}, noToken, c);
+        await c.drain();
+      });
+    }
+  } finally { globalThis.fetch = realFetch; }
+  for (const h of [3, 4, 5]) await runHour(kv, `2026-08-28T0${h}:00:06.549Z`);
+
+  const d = JSON.parse(kv.store.get("day:20260828"));
+  assert.equal(d.hours_present, 5);
+  assert.equal(d.hours, 3, "only the collected hours count toward the cost");
+  assert.ok(d.est_usd > 0);
+});
+
+test("the 7 live legacy keys stay inert across every path", async () => {
+  // Exactly the shapes measured in prod. They match the `hour:<dk>` prefix the
+  // aggregate scans, so an unfiltered path would sum or clobber them.
+  const seed = {};
+  for (const n of ["hour:20260828T0", "hour:20260828T1", "hour:20260828T2"]) {
+    seed[n] = JSON.stringify({ ts: "2026-08-28T17:00:07.321Z", hour: "2026-08-28T16:00:00Z", ok: false });
+  }
+  const kv = kvStub(seed);
+  const e = env(kv, { READ_TOKEN: "s3cret" });
+  const body = await (await postBackfill(e, "?days=1&end=2026-08-28", { token: "s3cret" })).json();
+  assert.equal(body.written, 24, "legacy keys must not block any hour");
+  assert.equal(body.skipped, 0);
+  for (const n of Object.keys(seed)) {
+    assert.equal(kv.store.get(n), seed[n], `legacy key ${n} was mutated`);
+  }
+  const d = JSON.parse(kv.store.get("day:20260828"));
+  assert.equal(d.hours, 24, "legacy rows must not inflate the collected count");
+  assert.equal(d.hours_present, 24, "nor the present count");
+});

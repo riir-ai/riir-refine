@@ -358,16 +358,20 @@ async function runHousekeeping(env) {
   if (!env.CF_API_TOKEN) {
     // Heartbeat mode: prove the cron is alive; data collection waits on the
     // one-time owner step (wrangler secret put CF_API_TOKEN).
+    //
+    // This block used to `return` here, skipping the day aggregate below —
+    // which is why a live KV inventory on 2026-08-29 found EIGHT keys after
+    // three days of hourly runs and NOT ONE `day:` row. The aggregate had
+    // never executed in production, so `/days` served `[]`, indistinguishable
+    // from "nothing ran", and every fix to that code path (T7 CORRECT-1, the
+    // T9 recomputeDay extraction) was only ever exercised against a stub.
+    // Fall through instead: a heartbeat day is now reported honestly as
+    // hours:0 / hours_present:24 rather than being absent.
     row.ok = false;
     row.notes.push("CF_API_TOKEN secret not set — heartbeat only");
     row.mint = "pending-worker-shell";
     row.mint_note = "phase-1 sync surface landed 2026-08-27; live mint awaits the deferred Worker/DO ledger shell (proposal-005 phase-2 defer / phase-3 owner gate)";
-    await env.HOUSEKEEPING_KV.put(`hour:${hk}`, JSON.stringify(row), hourMeta(row));
-    await env.HOUSEKEEPING_KV.put("latest", JSON.stringify(row));
-    return row;
-  }
-
-  try {
+  } else try {
     // allSettled, not all: one failing dataset used to discard the other two
     // and record a bare ok=false row, losing an hour of collectable data.
     const [rUsage, rAwake, rNeurons] = await Promise.allSettled([
@@ -496,7 +500,10 @@ async function runHousekeeping(env) {
   // nor depend on KV `list` having caught up with the `put` above.
   try {
     await recomputeDay(env, dk, {
-      [`hour:${hk}`]: (row.containers && row.containers.est_usd) || 0,
+      [`hour:${hk}`]: {
+        usd: (row.containers && row.containers.est_usd) || 0,
+        data: hasCollectedData(row),
+      },
     });
   } catch (_) { /* aggregate is best-effort */ }
 
@@ -509,7 +516,7 @@ async function runHousekeeping(env) {
 // hour) and a lost-update race on an eventually-consistent store. Summing the
 // authoritative hour:<dk>* rows is idempotent and converges.
 //
-// `seed` maps an already-in-memory `hour:` key to its est_usd. It buys two
+// `seed` maps an already-in-memory `hour:` key to `{usd, data}`. It buys two
 // things, not one:
 //   * a skipped KV get per seeded row (the cron seeds 1, the backfill seeds
 //     every hour it just wrote — up to 24 gets saved against a subrequest cap
@@ -528,13 +535,24 @@ async function recomputeDay(env, dk, seed) {
   const need = [...names].filter((n) => !(n in seed));
   const raw = await mapLimit(need, KV_CONCURRENCY, (n) => env.HOUSEKEEPING_KV.get(n));
   const fetched = new Map(need.map((n, i) => [n, raw[i]]));
-  let est = 0, hours = 0;
+  // `hours` counts rows that actually COLLECTED; `hours_present` counts rows
+  // that exist. Conflating them made a heartbeat day read as "24 hours cost
+  // $0" — a false zero that is worse than an absent row, because it looks
+  // like a measurement. Split, a heartbeat day reads hours:0 /
+  // hours_present:24, which is the truth: 24 rows, none of them data.
+  let est = 0, hours = 0, present = 0;
   for (const n of names) {
-    if (n in seed) { est += seed[n] || 0; hours += 1; continue; }
+    if (n in seed) {
+      present += 1;
+      if (seed[n].data) { hours += 1; est += seed[n].usd || 0; }
+      continue;
+    }
     const r = fetched.get(n);
     if (!r) continue;
+    present += 1;
     try {
       const h = JSON.parse(r);
+      if (!hasCollectedData(h)) continue;
       hours += 1;
       est += (h.containers && h.containers.est_usd) || 0;
     } catch (_) { /* tolerate a malformed hour row */ }
@@ -543,6 +561,7 @@ async function recomputeDay(env, dk, seed) {
     date: `${dk.slice(0, 4)}-${dk.slice(4, 6)}-${dk.slice(6, 8)}`,
     est_usd: +est.toFixed(6),
     hours,
+    hours_present: present,
     updated: new Date().toISOString(),
   };
   await env.HOUSEKEEPING_KV.put(`day:${dk}`, JSON.stringify(out));
@@ -705,7 +724,7 @@ async function backfillRange(env, endDay, days) {
       }
       await env.HOUSEKEEPING_KV.put(name, JSON.stringify(row), hourMeta(row));
       spent += 1;
-      seed[name] = row.containers.est_usd;
+      seed[name] = { usd: row.containers.est_usd, data: true };
       wrote += 1;
     }
 

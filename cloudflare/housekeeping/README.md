@@ -264,6 +264,37 @@ cache on the path. Same bug class, one layer down.
   `workers.dev`. The memo needs no such premise.
 - Non-`GET`/`HEAD` → `405`.
 
+## ⚠ Read this before deploying: `/hours` and `/days` go blank first
+
+Measured live 2026-08-29 — the whole KV namespace is **8 keys**:
+
+```
+7  hour:20260826T1, hour:20260826T2, hour:20260827T0 … hour:20260828T1   (legacy collided)
+1  latest
+0  day:*          ← none, after three days of hourly runs
+0  hour:YYYYMMDDHH ← none in the post-fix shape
+```
+
+Two consequences of deploying the fix, both of which look like breakage:
+
+1. **The hour chart empties.** The deployed worker uses the buggy `hourKey()`
+   on *both* the write and the read path, so its reads currently land on the
+   same 7 collided keys — that is why `/hours?n=24` returns 24 rows with only
+   4 distinct `(ts,hour)` pairs. The fixed worker constructs
+   `hour:YYYYMMDDHH`, and **none of those exist yet**. So `/hours` returns
+   `[]` immediately after deploy, filling one row per hour thereafter. Run the
+   backfill to populate it at once. The 7 legacy keys become permanent
+   orphans: unreachable by every read path and filtered out of the aggregate
+   by `HOUR_KEY_RE`. They are inert — leave them. Do not "repair" them.
+2. **`day:` starts existing for the first time.** There were zero, because the
+   heartbeat path `return`ed before the aggregate — so `/days` had been
+   serving `[]` since deploy, indistinguishable from "nothing ran", and the
+   aggregate code was never once exercised in production. Fixed in §T9d: a
+   heartbeat day now writes `hours: 0, hours_present: 24`. Those two counters
+   are deliberately separate — reporting `hours: 24, est_usd: 0` for a day
+   that collected nothing is a false zero, and a false zero looks like a
+   measurement.
+
 ## Repairing lost hours — `POST /backfill` (Issue 045 §T9)
 
 §T8 recorded the hours its `hourKey()` bug collapsed as **unrecoverable**.
@@ -346,7 +377,7 @@ Two things it deliberately does **not** do:
 ## Tests
 
 ```sh
-node --test cloudflare/housekeeping/test/*.test.mjs   # 28 tests, no deps
+node --test cloudflare/housekeeping/test/*.test.mjs   # 31 tests, no deps
 ```
 
 A bare directory arg fails `MODULE_NOT_FOUND` — `node --test` wants file
@@ -358,7 +389,7 @@ every "live-verified" check passed: the endpoints returned `200` with
 plausible JSON throughout. Asserting on the **shape of the KV keys** is what
 catches that class; asserting on HTTP status is not. Verified as a real pin —
 8 of the original 12 fail against the pre-fix worker
-(`git show HEAD~1:.../worker.js`); §T9 added 7 more, §T9b 3, and §T9c 6 — the
+(`git show HEAD~1:.../worker.js`); §T9 added 7 more, §T9b 3, §T9c 6 and §T9d 3 — the
 behavioural ones in each batch confirmed to fail against the worker they fix — a test
 that has never been seen red is not a pin.
 
