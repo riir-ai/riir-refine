@@ -583,11 +583,11 @@ mod tests {
     }
 
     /// The CROSS-REPO GOLDEN PAYLOAD — the exact NDJSON bytes the
-    /// `clean_rows_round_trip` fixture (2 rows, stamp 1_234_567, own-repo
+    /// `clean_rows_round_trip` fixture (2 rows, stamp `1_234_567`, own-repo
     /// allow policy) produces. Pinned IDENTICALLY on the consumer side:
     /// riir-dapps `tests/kat_mining.rs` (`GOLDEN_PAYLOAD`, feature
     /// `kat_mining`) parses these exact bytes as the ingest contract — the
-    /// wire_golden.bytes precedent (a mirror nobody checks is not a mirror;
+    /// `wire_golden.bytes` precedent (a mirror nobody checks is not a mirror;
     /// serialization drift on EITHER side fails a gate here).
     #[test]
     fn golden_payload_bytes_are_pinned() {
@@ -600,7 +600,11 @@ mod tests {
         let p = b.build_at(&rows, 1_234_567);
         assert_eq!(p.commitment, "d6395af4a5df9460d859f3de6ebc7f1372d55e4e11625a8bf1aa41622bf0401d");
         let expected = concat!(
-            "{\"payload_version\":1,\"redact_version\":1,\"origin\":\"own-repo\",",
+            // redact_version tracks REDACT_VERSION (2 since the Bench 052
+            // hexish-rule bump). The batch_commitment below is over the ROW
+            // lines only, so it is unchanged by a header-field bump — which
+            // is why only this line moved.
+            "{\"payload_version\":1,\"redact_version\":2,\"origin\":\"own-repo\",",
             "\"created_unix\":1234567,\"rows_included\":2,\"rows_blocked\":0,",
             "\"batch_commitment\":\"d6395af4a5df9460d859f3de6ebc7f1372d55e4e11625a8bf1aa41622bf0401d\"}\n",
             "{\"shape_id\":\"241e0429984b\",\"lint_key\":\"needless_return\",",

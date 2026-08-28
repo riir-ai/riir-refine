@@ -1,8 +1,12 @@
 # Bench 052 — T3.2 leak posture: the content scanner under an admitted `external` origin
 
-**Status:** RECORD (2026-08-28) — **REFUTATION.** The content-scan branch of
-Proposal 005 T3.2 cannot discharge the leak posture for consumer-grade code.
-`external` origin stays denied; decision + reasoning in
+**Status:** RECORD (2026-08-28) — **REFUTATION, plus one shipped fix.** The
+content-scan branch of Proposal 005 T3.2 cannot discharge the leak posture
+for consumer-grade code; `external` origin stays denied. The measurement
+also surfaced a miscalibrated parameter that was worth fixing on its own
+merits, shipped as **`REDACT_VERSION` 1 → 2** (§The v2 bump) — justified on
+own-repo determinism, explicitly NOT as progress toward `external`.
+Decision + reasoning in
 [Issue 052](../.issues/052_t32_leak_posture_content_scan_insufficient.md).
 
 Parent: [Proposal 005](../.proposals/005_kat_heal_service_network.md) T3.2 ·
@@ -89,6 +93,11 @@ max`), deliberately: the claim is *"neither reliably caught nor reliably
 evaded"*, and a point pin would invite tuning the fixture instead of the
 gate.
 
+**FIXED in v2 — measured 4,000/4,000 caught** (see §The v2 bump). The test
+now asserts BOTH halves: v2 unanimity, AND that the v1 rule still measures
+as a coin flip on the same corpus — so the justification for the bump stays
+reproducible and the fixture cannot silently stop being adversarial.
+
 ## Result 3 — chunking defeats per-span scanning, structurally
 
 The gate is per-span with no cross-span state. A credential straddling an
@@ -133,3 +142,42 @@ we control our own source, and G4 shows the planted-secret classes ARE
 caught bare — but not zero, and the hex coin flip means the gate's own
 documented reassurance is weaker than it reads. That is **hygiene work, not
 a leak-posture blocker**, and this bench does not claim it as closed.
+
+## The v2 bump — the one thing this bench changed in the gate
+
+Result 2 describes a **miscalibrated parameter in a security boundary**, not
+just a gap: the verdict was chosen by whoever picked the credential. The
+rest of the gate is explicitly fail-closed (the module doc already accepts
+that committed digests block "by design"), so the consistent rule is that an
+all-hex run of 32+ chars blocks unconditionally — it is a digest or an
+encoded blob, and both are what this gate exists to stop.
+
+`REDACT_VERSION` 1 → 2: the **hexish** arm of `scan_entropy` drops the
+entropy test. The **non-hex** arm keeps its 4.5 cut deliberately — `_` is
+not an ASCII hex digit, so every long `snake_case` run lands there, and 4.5
+is what stops identifiers from false-positiving.
+
+| | v1 | v2 |
+|---|---|---|
+| hex-wrapped AWS-shaped keys caught (4 000-key sweep) | 1 481 (**37.0%**) | **4 000 (100%)** |
+| behavior | value-dependent | deterministic |
+| newly blocked spans in this repo's `src/` + `tests/` | — | **2** (both the same synthetic `4242…` fixture; 15 of 17 hexish runs already blocked) |
+
+### Blast radius (a version bump is fail-closed: mismatch ⇒ deny-all)
+
+| surface | finding |
+|---|---|
+| `riir-clippy/.heal-sync-policy` | migrated to `version: 2` in the same commit — REQUIRED, else all sync deny-alls |
+| `riir-clippy-glm/.heal-sync-policy` | **unaffected** — independent clone vendoring its own `kat_redact.rs` at `REDACT_VERSION = 1`, self-consistent. Not touched. |
+| `kat_sync_payload::golden_payload_bytes_are_pinned` | `redact_version` is a wire HEADER field, so the golden moved 1 → 2. `batch_commitment` is over the ROW lines only and did **not** move — which is the evidence that the commitment domain is scoped correctly. |
+| `riir-dapps` mirror | **no coordination needed.** dapps parses `redact_version` as DATA (`vu32`) and validates only `payload_version`; no cargo dep (the Issue 041 one-way rule). Its hardcoded `redact_version: 1` fixtures keep passing and keep exercising the parser against an older header — coverage worth keeping. Left untouched. |
+
+### `redact_version` is an unverifiable claim (recorded, not acted on)
+
+Scanning happens on the SENDER, so a receiver cannot confirm that any gate
+ran, let alone which version — a sender may assert v1 or v2 freely. The
+field is therefore **provenance metadata for audit, not a control**, and the
+receiver declining to validate it is correct: rejecting rows because a
+sender upgraded its scanner would be strictly harmful, and rejecting on a
+claimed-old version would be security theatre. Recorded so nobody later
+"hardens" it into a check.

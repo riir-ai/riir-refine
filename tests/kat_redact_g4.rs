@@ -242,6 +242,51 @@ fn g4_no_policy_file_denies_all() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// **The shipped policy FILE must load at the current gate version.**
+///
+/// `REDACT_VERSION` mismatch is fail-closed by design: a policy written for
+/// another gate version yields `deny_all()` + a warning. That is the correct
+/// safety behavior and also a silent-breakage trap — bumping
+/// `REDACT_VERSION` without migrating `.heal-sync-policy` in the same commit
+/// turns every sync into a deny-all, and nothing else in the suite notices,
+/// because every other test constructs its policy from `REDACT_VERSION`
+/// (so they follow the bump automatically) or writes a temp fixture.
+///
+/// This test reads the REPO'S ACTUAL FILE — the one instance the "test pins
+/// the SHAPE, the repo pins the instance" split otherwise leaves unpinned.
+/// Added 2026-08-28 after the `REDACT_VERSION` 1 → 2 bump (Bench 052) had to
+/// migrate the file by hand with no gate to catch a miss.
+#[test]
+fn g4_shipped_policy_file_loads_at_the_current_gate_version() {
+    // CARGO_MANIFEST_DIR so the test is cwd-independent.
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(POLICY_FILE_NAME);
+    assert!(path.is_file(), "the shipped policy must exist at {}", path.display());
+
+    let loaded = RedactionGate::load(&path);
+    assert!(
+        loaded.warning.is_none(),
+        "the shipped .heal-sync-policy failed to load cleanly — a          REDACT_VERSION bump almost certainly landed without migrating the          file, which silently deny-alls every sync: {:?}",
+        loaded.warning
+    );
+
+    // And it is genuinely usable: an in-policy span syncs, proving the load
+    // produced the real gate rather than `deny_all()`.
+    assert!(
+        loaded
+            .gate
+            .check(SpanOrigin::OwnRepo, Some("src/kat_redact.rs"), "fn f() {}")
+            .is_syncable(),
+        "a clean own-repo span on an allowed path must sync under the          shipped policy — if it does not, the file loaded as deny-all"
+    );
+    // The shipped posture itself, pinned against accidental widening: user
+    // code stays denied on ORIGIN (Issue 052 — this policy line is the
+    // control that protects consumer code, not the pattern set).
+    assert!(
+        !loaded.gate.check(SpanOrigin::External, None, "fn f() {}").is_syncable(),
+        "`external` must remain absent from the shipped allow_origins"
+    );
+}
+
 #[test]
 fn g4_path_not_on_allowlist_blocks() {
     let d = gate().check(SpanOrigin::OwnRepo, Some("private/keys/prod.rs"), "fn f() {}");

@@ -40,13 +40,24 @@
 //!   deterministic 4 000-key sweep of AWS-shaped credentials, hex-wrapping
 //!   is caught only **37.0%** of the time (entropy range 2.349..3.412
 //!   against the 3.000 hexish threshold), so the same technique succeeds or
-//!   fails on the VALUE and an attacker picks the value. Treat the encoded
-//!   classes as uncaught, not as probabilistically caught.
-//! - Entropy thresholds are tuned for code corpora: hex ≥ 32 chars @ ≥ 3.0
-//!   bits/char, base64 ≥ 32 chars @ ≥ 4.5. **Committed hash literals in
-//!   test fixtures (BLAKE3/GGUF digests) WILL trip the hex rule** — that is
-//!   fail-closed by design; such spans are blocked + logged until a future
-//!   version adds allow-by-fingerprint.
+//!   fails on the VALUE and an attacker picks the value. **Closed in v2**
+//!   for the hex layer (now unconditional; 4 000/4 000 in the sweep).
+//!   base64 and the arbitrary-transform classes (byte arrays, xor,
+//!   reversal, split literals) remain uncaught — treat them as uncaught,
+//!   not as probabilistically caught.
+//! - Entropy thresholds: **hex ≥ 32 chars blocks UNCONDITIONALLY (v2 — no
+//!   entropy test)**, base64-ish ≥ 32 chars @ ≥ 4.5 bits/char. v1 gated hex
+//!   at ≥ 3.0 and that measured as a coin flip rather than a threshold
+//!   (37.0% of hex-wrapped AWS-shaped keys caught, range 2.349..3.412 —
+//!   Bench 052); a boundary whose verdict depends on a value the attacker
+//!   chooses is not a threshold, so v2 is fail-closed and deterministic
+//!   there. **Committed hash literals in test fixtures (BLAKE3/GGUF
+//!   digests) WILL block** — fail-closed by design, and now for every
+//!   digest rather than the high-entropy ones only; blocked + logged until
+//!   a future version adds allow-by-fingerprint. The 4.5 cut on the
+//!   non-hex arm is deliberately kept: it is what stops long `snake_case`
+//!   identifiers from false-positiving (`_` is not a hex digit, so those
+//!   runs land on that arm).
 //! - Re-scanning a redacted payload can re-flag the placeholder site (the
 //!   secret-shaped *name* survives value redaction) — also fail-closed;
 //!   treat a redacted payload as terminal, do not re-gate it.
@@ -92,7 +103,7 @@ use std::path::{Path, PathBuf};
 /// semantics are part of the version). Bump ONLY when detection or policy
 /// semantics change what passes/blocks for some input, and record the delta
 /// in [`REDACT_CHANGELOG`] in the same change.
-pub const REDACT_VERSION: u32 = 1;
+pub const REDACT_VERSION: u32 = 2;
 
 /// Versioned deltas of the gate definition.
 pub const REDACT_CHANGELOG: &[(u32, &str)] = &[
@@ -104,6 +115,17 @@ pub const REDACT_CHANGELOG: &[(u32, &str)] = &[
          credentialed connection strings, bearer tokens, env secret \
          assignments, rust secret literals, high-entropy hex + base64), \
          byte-exact redaction, fingerprint-only JSONL log.",
+    ),
+    (
+        2,
+        "hexish high-entropy rule made UNCONDITIONAL: an all-hex run of 32+ \
+         chars now blocks with no entropy test. v1's >= 3.0 bits/char cut \
+         measured as a coin flip, not a threshold — 37.0% of AWS-shaped \
+         credentials caught when hex-wrapped, entropy range 2.349..3.412 \
+         straddling the cut (Bench 052). Fail-closed + deterministic \
+         instead. Non-hex runs keep the 4.5 threshold (it is what protects \
+         long snake_case identifiers). Measured cost on riir-clippy: 2 \
+         additional blocked spans repo-wide, both synthetic fixtures.",
     ),
 ];
 
@@ -463,15 +485,31 @@ fn scan_entropy(span: &str, out: &mut Vec<Finding>) {
         let token = &span[s..e];
         let len = e - s;
         if len >= 32 {
-            let h = shannon_entropy(&bytes[s..e]);
             let hexish = token.bytes().all(|b| b.is_ascii_hexdigit());
-            if (hexish && h >= 3.0) || (!hexish && h >= 4.5) {
-                let kind = if hexish {
-                    FindingKind::HighEntropyHex
-                } else {
-                    FindingKind::HighEntropyB64
-                };
-                out.push(Finding::new(kind, s, e, span));
+            // v2: hexish runs are flagged UNCONDITIONALLY — no entropy test.
+            //
+            // v1 gated them at >= 3.0 bits/char, which measured as a coin
+            // flip rather than a threshold: over a deterministic 4 000-key
+            // sweep of AWS-shaped credentials, hex-wrapping was caught only
+            // 37.0% of the time, entropy range 2.349..3.412 straddling the
+            // 3.000 cut (Bench 052). A security boundary whose verdict
+            // depends on the specific value — which an attacker chooses —
+            // is not a threshold, and the fail-closed philosophy the rest of
+            // this gate follows says an all-hex run of 32+ chars should
+            // block regardless: it is a digest or an encoded blob, and both
+            // are things this gate exists to stop leaving the machine.
+            //
+            // Cost, measured over this repo's own src/ + tests/ before the
+            // change: 17 hexish runs >= 32 chars, 15 already blocking, so
+            // exactly 2 newly block — both the same synthetic `4242…`
+            // fixture. Identifiers cannot be caught by this branch: `_` is
+            // not an ASCII hex digit, so any snake_case run falls to the
+            // non-hex arm and keeps the 4.5 threshold that protects long
+            // identifiers from false positives.
+            if hexish {
+                out.push(Finding::new(FindingKind::HighEntropyHex, s, e, span));
+            } else if shannon_entropy(&bytes[s..e]) >= 4.5 {
+                out.push(Finding::new(FindingKind::HighEntropyB64, s, e, span));
             }
         }
     };

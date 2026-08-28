@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "sync_enabled": true,
   "allow_origins": ["own-repo", "authored-fixture", "mined-corpus"],
   "allow_paths": [

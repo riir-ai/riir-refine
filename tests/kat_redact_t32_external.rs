@@ -178,12 +178,12 @@ fn attack_corpus() -> Vec<Attack> {
         },
         Attack {
             id: "hex-wrapped-marginal",
-            exploits: "layer-stripping gap; this key's hex entropy is 2.976 vs the 3.0 hexish threshold — evades by 0.024 bits",
+            exploits: "v1 EVADED here (hex entropy 2.976 vs the 3.0 cut — by 0.024 bits); v2 catches it unconditionally",
             span: format!("const K: &str = \"{}\";\n", hex_encode(k)),
         },
         Attack {
             id: "hex-wrapped-highentropy",
-            exploits: "SAME class, different key (hex entropy 3.404) — caught, which is what makes the class a coin flip rather than a gap",
+            exploits: "SAME class, different key (hex entropy 3.404) — caught in BOTH versions; the pair is why v1's rule was a coin flip",
             span: format!("const K: &str = \"{}\";\n", hex_encode(HEX_CAUGHT_KEY)),
         },
         Attack {
@@ -357,15 +357,14 @@ fn t32_measured_evasion_set_is_pinned() {
     // THE PIN. Measured at REDACT_VERSION 1. A change here is a gate
     // definition change: bump REDACT_VERSION + add a REDACT_CHANGELOG row.
     assert_eq!(
-        REDACT_VERSION, 1,
-        "the evasion set below was measured at REDACT_VERSION 1 — re-measure \
-         and update this pin as part of the version bump"
+        REDACT_VERSION, 2,
+        "the evasion set below was measured at REDACT_VERSION 2 — re-measure \
+         and update this pin as part of the next version bump"
     );
     assert_eq!(
         evaded,
         vec![
             "base64-wrapped",
-            "hex-wrapped-marginal",
             "byte-array",
             "concat-split",
             "line-split",
@@ -378,30 +377,31 @@ fn t32_measured_evasion_set_is_pinned() {
     );
 }
 
-/// **The hex-layer class is a coin flip, quantified.** The module doc says
-/// layer-stripping is absent and "a secret encoded then embedded is only
-/// caught if the encoded blob itself trips the entropy rule" — true, and
-/// that conditional is doing much more work than it looks. Whether a
-/// hex-wrapped credential trips the rule depends on the ENTROPY OF THAT
-/// PARTICULAR VALUE'S hex expansion, which sits right on the 3.0 threshold
-/// for real AWS-key shapes.
+/// **The hex layer was a coin flip in v1; v2 makes it deterministic — this
+/// test is the before/after evidence and the regression guard.**
 ///
-/// Measured over a deterministic sweep of AWS-shaped keys (`AKIA` + 16 chars
-/// from the base32 alphabet real keys use), keyed by BLAKE3 so the sweep is
-/// reproducible without a rand dep. The result is pinned as a RANGE, not a
-/// point: the claim being pinned is *"neither reliably caught nor reliably
-/// evaded"*, and a point pin would invite tuning the fixture instead of the
-/// gate.
+/// v1's module doc said layer-stripping was absent and "a secret encoded
+/// then embedded is only caught if the encoded blob itself trips the entropy
+/// rule". True, and that conditional did far more work than it looked:
+/// whether a hex-wrapped credential tripped the rule depended on THAT
+/// PARTICULAR VALUE's hex entropy, which for real AWS-key shapes sits right
+/// on the 3.0 cut. Measured over a deterministic sweep (`AKIA` + 16 chars
+/// from the base32 alphabet real keys use, BLAKE3-keyed so it reproduces
+/// without a rand dep): **1 481/4 000 = 37.0% caught, entropy range
+/// 2.349..3.412 against a 3.000 threshold.** A security boundary whose
+/// verdict depends on a value the ATTACKER chooses is not a threshold.
 ///
-/// Consequence for T3.2: the hex class cannot be reasoned about at all. It
-/// is not a gap you can accept with a known residual risk, and it is not a
-/// defense you can rely on — the same technique succeeds or fails on the
-/// value, and an attacker picks the value.
+/// [`REDACT_VERSION`] 2 drops the entropy test on the hexish arm, so the
+/// sweep must now be unanimous. Both halves are asserted: the entropy
+/// spread still straddles 3.0 (so the v1 finding stays reproducible and the
+/// fixture cannot silently stop being adversarial), AND every key is caught
+/// regardless.
 #[test]
-fn t32_hex_layer_catch_rate_is_a_coin_flip() {
+fn t32_hex_layer_is_deterministic_in_v2() {
     const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
     const N: usize = 4_000;
     let mut caught = 0usize;
+    let mut would_catch_v1 = 0usize;
     let mut min_e = f64::MAX;
     let mut max_e = f64::MIN;
 
@@ -413,37 +413,47 @@ fn t32_hex_layer_catch_rate_is_a_coin_flip() {
             .map(|b| ALPHABET[(*b as usize) % ALPHABET.len()] as char)
             .collect();
         let key = format!("AKIA{body}");
-        // Sanity: the BARE key must be detectable, else the sweep is
-        // measuring malformed fixtures rather than the hex layer.
-        debug_assert!(
+        // Sanity: the BARE key must be detectable, else the sweep measures
+        // malformed fixtures rather than the hex layer.
+        assert!(
             scan_secrets(&format!("k=\"{key}\"")).iter().any(|f| f.kind == FindingKind::AwsAccessKey),
             "generated key {key} is not AWS-shaped"
         );
+
         let hex = hex_encode(&key);
         let e = shannon_bits(&hex);
         min_e = min_e.min(e);
         max_e = max_e.max(e);
-        // hexish (all hex digits) ⇒ the 3.0 threshold applies.
         if e >= 3.0 {
+            would_catch_v1 += 1;
+        }
+        if scan_secrets(&hex).iter().any(|f| f.kind == FindingKind::HighEntropyHex) {
             caught += 1;
         }
     }
 
-    let pct = 100.0 * caught as f64 / N as f64;
+    let v1_pct = 100.0 * would_catch_v1 as f64 / N as f64;
     println!(
-        "\n=== T3.2 hex-layer sweep: {caught}/{N} caught ({pct:.1}%), \
-         entropy range {min_e:.3}..{max_e:.3} vs threshold 3.000 ===\n"
+        "\n=== T3.2 hex-layer sweep @ REDACT_VERSION {REDACT_VERSION}: \
+         v2 caught {caught}/{N}; v1 rule would have caught {would_catch_v1}/{N} \
+         ({v1_pct:.1}%); entropy range {min_e:.3}..{max_e:.3} vs the v1 cut 3.000 ===\n"
     );
 
-    assert!(
-        (0.15..0.85).contains(&(caught as f64 / N as f64)),
-        "the hex class must measure as NEITHER reliably caught nor reliably \
-         evaded — that unreliability is the finding. Got {pct:.1}%"
+    assert_eq!(
+        caught, N,
+        "v2 must catch EVERY hex-wrapped credential — the whole point of \
+         dropping the entropy test on the hexish arm"
     );
     assert!(
         min_e < 3.0 && max_e >= 3.0,
-        "the sweep must straddle the threshold to support the claim \
+        "the fixture must still straddle the v1 threshold, else it has \
+         stopped being the adversarial corpus that justified v2 \
          (range {min_e:.3}..{max_e:.3})"
+    );
+    assert!(
+        (0.15..0.85).contains(&(would_catch_v1 as f64 / N as f64)),
+        "and the v1 rule must still measure as a coin flip on this corpus \
+         — that is the recorded justification for the v2 bump. Got {v1_pct:.1}%"
     );
 }
 

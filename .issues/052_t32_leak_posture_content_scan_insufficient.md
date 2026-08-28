@@ -101,11 +101,17 @@ because closing it is not a detection problem.
    control protecting consumer code is that policy line, not the pattern
    set — so that is the line to defend in review. Pinned by
    `t32_shipped_policy_denies_every_confidential_span`.
-2. **No `REDACT_VERSION` bump is proposed here.** Closing the 7 evasions
-   would be real work with real value for *own-repo* hygiene, but it would
-   not change this verdict — Result 4 is untouched by any pattern
+2. **No pattern work is proposed *for the purpose of admitting `external`*.**
+   Closing the 7 evasions has real value for *own-repo* hygiene, but it
+   cannot change this verdict — Result 4 is untouched by any pattern
    improvement. Doing the work and then admitting `external` would be the
    dangerous outcome: a much stronger scanner still allows the PII span.
+
+   **One exception was taken, and only one — `REDACT_VERSION` 1 → 2, see
+   §The v2 bump below.** It is justified on own-repo determinism grounds,
+   NOT as progress toward `external`, and it does not move the verdict
+   above. The distinction matters enough to state twice because conflating
+   them is exactly the trap this issue names.
 3. **Trainer-nodes-only stands** (the owner's 2026-08-25 call), now on a
    measured basis rather than a precautionary one.
 4. **T3.2's remaining close paths**, both outside this branch:
@@ -131,3 +137,49 @@ own source, and G4's planted-secret classes ARE caught bare), but they are
 not zero-risk, and the hex coin flip in particular means the gate's own
 documented reassurance is weaker than it reads. That is hygiene work, not a
 leak-posture blocker, and is not claimed as closed by this issue.
+
+## The v2 bump (`REDACT_VERSION` 1 → 2) — the one change taken
+
+Result 2 is not merely a gap; it is a **miscalibrated single parameter in a
+security boundary**, and that is worth fixing on its own merits regardless
+of `external`.
+
+**The argument.** Whether a hex-wrapped credential blocked depended on the
+entropy of that specific value, measured at 37.0% over 4,000 AWS-shaped
+keys with the range (2.349..3.412) straddling the 3.000 cut. A boundary
+whose verdict is chosen by the attacker is not a threshold. The rest of the
+gate is explicitly fail-closed — the module doc already accepts that
+committed digests block "by design" — so an all-hex run of 32+ chars should
+block unconditionally: it is a digest or an encoded blob, and both are
+things this gate exists to stop.
+
+**v2:** the hexish arm of `scan_entropy` drops the entropy test entirely.
+The non-hex arm KEEPS its 4.5 cut — deliberately, because `_` is not an
+ASCII hex digit, so every long `snake_case` run lands on that arm and the
+4.5 threshold is what stops identifiers from false-positiving. Measured
+after: **4,000/4,000** hex-wrapped keys caught (from 1,481).
+
+**Cost, measured before committing to it** — over this repo's own `src/` +
+`tests/`: 17 hexish runs ≥ 32 chars, **15 already blocked**, so exactly
+**2 newly block**, and both are the same synthetic `4242…` fixture. The
+change is close to free.
+
+**Blast radius checked, because a version bump is fail-closed by design**
+(`policy.version != REDACT_VERSION` ⇒ deny-all):
+
+| surface | finding |
+|---|---|
+| `riir-clippy/.heal-sync-policy` | migrated to `version: 2` in the same commit — REQUIRED, or all sync deny-alls |
+| `riir-clippy-glm/.heal-sync-policy` | **unaffected** — independent clone, vendors its own `kat_redact.rs` with its own `REDACT_VERSION = 1`, so it stays self-consistent. Not touched. |
+| `kat_sync_payload` golden | `redact_version` is a WIRE HEADER field, so the golden moved 1 → 2. `batch_commitment` is over the ROW lines only and is unchanged — one line moved, which is the evidence the commitment domain is correct. |
+| `riir-dapps` mirror | **no coordination needed.** dapps parses `redact_version` as DATA (`vu32`) and validates only `payload_version`; it has no cargo dep on riir-clippy (the Issue 041 one-way rule). Its hardcoded `redact_version: 1` fixtures keep passing and keep exercising the parser against an older header, which is coverage worth keeping. Left untouched. |
+
+**An observation worth recording rather than acting on:** `redact_version`
+is an **unverifiable claim**. Scanning happens on the sender, so a receiver
+cannot confirm any gate ran, let alone which version — a sender could
+assert v1 (weaker) or v2 (stronger) freely. That makes the field
+provenance metadata for audit, not a control, and it is why the receiver
+declining to validate it is the *right* call: rejecting rows because the
+sender upgraded its scanner would be strictly harmful, and rejecting on a
+claimed-old version would be security theatre. Noted so nobody later
+"hardens" it into a check.
