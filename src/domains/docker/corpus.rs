@@ -355,6 +355,43 @@ fn entries() -> Vec<DockerRule> {
             F::RustIdiom, S::Builtin, None,
             Some("Suggest-only: which base is the right one is the author's call (the skew may be deliberate for a musl target — in which case chef's recipe should be per-target too)."),
         ),
+        // ────── Phase 2 (Plan 030 T2.1(b)) — suggest-only ──────
+        rule(
+            "base-tag-not-digest-pinned",
+            "a runtime base carried by TAG moves under you — the same tag is a different image after any upstream push, so what you tested and what you deployed are related only by trust",
+            "a runtime-stage FROM naming a registry image with no `@sha256:` digest (silent on scratch, on a local stage reference, and when distroless-distro-suffix-pin already cited the same base)",
+            "FROM rust:1.97.0-slim AS builder\nRUN cargo build --release\n\nFROM debian:bookworm-slim\nCOPY --from=builder /app/x /usr/local/bin/x\n",
+            "FROM rust:1.97.0-slim AS builder\nRUN cargo build --release\n\nFROM debian:bookworm-slim@sha256:0000000000000000000000000000000000000000000000000000000000000000\nCOPY --from=builder /app/x /usr/local/bin/x\n",
+            F::BaseChoice, S::Builtin, None,
+            Some("Suggest-only for TWO independent reasons, either of which alone would be enough. (1) The digest is a REGISTRY fact and this domain makes no network calls — the `fixed_code` above carries a zero digest precisely so it cannot be mistaken for a resolvable one. (2) Pinning FREEZES security patches, so it is correct only alongside a bump policy (renovate/dependabot), which is a decision the Dockerfile cannot express. Multi-arch trap worth knowing before you take it: pin the INDEX digest, not a platform manifest's, or the image stops building on the other architecture."),
+        ),
+        rule(
+            "copy-link-artifact-rebase",
+            "`COPY --link` writes an INDEPENDENT layer instead of rebasing onto the parent filesystem, so the artefact copy — the one whose content changes every single build — stops invalidating everything above it",
+            "the first COPY --from=<stage> in the runtime stage that carries no --link (one citation per stage: four copies are one decision)",
+            "# syntax=docker/dockerfile:1.4\nFROM rust:1.97.0-slim AS builder\nRUN cargo build --release\n\nFROM debian:bookworm-slim\nCOPY --from=builder /app/x /usr/local/bin/x\n",
+            "# syntax=docker/dockerfile:1.4\nFROM rust:1.97.0-slim AS builder\nRUN cargo build --release\n\nFROM debian:bookworm-slim\nCOPY --link --from=builder /app/x /usr/local/bin/x\n",
+            F::CachePerf, S::V1_4, None,
+            Some("Suggest-only because `--link` genuinely CHANGES semantics rather than merely optimising: the copy cannot see the parent layers. Anything depending on a path already existing behaves differently — a `--chown=appuser` resolved against the image's /etc/passwd, or an overwrite of a file the base shipped. Whether a given copy is order-dependent is not derivable from the Dockerfile, which is exactly why this is not a bounded fix."),
+        ),
+        rule(
+            "musl-allocator-perf-annotation",
+            "musl's allocator is written for smallness and predictability, not multi-threaded throughput — an allocation-hot service profiled against glibc does not carry that profile across the target switch",
+            "the build targets musl AND the runtime stage EXPOSEs a port (a long-running service, not a one-shot tool) AND the file names no alternative global allocator",
+            "FROM rust:1.97.0-alpine AS builder\nRUN cargo build --release --target x86_64-unknown-linux-musl\n\nFROM scratch\nCOPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt\nCOPY --from=builder /app/x /usr/local/bin/x\nEXPOSE 8080\n",
+            "FROM rust:1.97.0-alpine AS builder\n# Cargo.toml: mimalloc = \"0.1\" + #[global_allocator] in main.rs\nRUN cargo build --release --target x86_64-unknown-linux-musl\n\nFROM scratch\nCOPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt\nCOPY --from=builder /app/x /usr/local/bin/x\nEXPOSE 8080\n",
+            F::RustIdiom, S::Builtin, None,
+            Some("An ANNOTATION, not a defect claim, and the distinction is the whole rule: plenty of musl services allocate rarely enough that the difference is unmeasurable. It says 'you changed allocators without saying so', not 'this is slow'. NO number is asserted because none was measured here — see muslrust#142 for the upstream reports. It is also not fixable from the Dockerfile at all: the `global_allocator` lives in Rust source and Cargo.toml, which this domain does not edit (the fixed_code above shows the shape as a comment, deliberately, so nobody mistakes it for a writable diff)."),
+        ),
+        rule(
+            "healthcheck-tool-absent-in-runtime",
+            "a HEALTHCHECK that cannot run does not report 'unknown' — it reports UNHEALTHY forever, and an orchestrator acting on that will restart or drain a container that is serving perfectly well",
+            "a HEALTHCHECK invoking curl/wget in a scratch or distroless runtime stage — neither base ships either binary. The shell FORM is deliberately not cited: DL3025 already owns it",
+            "FROM rust:1.97.0-slim AS builder\nRUN cargo build --release\n\nFROM scratch\nCOPY --from=builder /app/x /usr/local/bin/x\nHEALTHCHECK CMD [\"/usr/bin/curl\", \"-f\", \"http://localhost:8080/health\"]\n",
+            "FROM rust:1.97.0-slim AS builder\nRUN cargo build --release\n\nFROM scratch\nCOPY --from=builder /app/x /usr/local/bin/x\nCOPY --from=builder /app/healthcheck /usr/local/bin/healthcheck\nHEALTHCHECK CMD [\"/usr/local/bin/healthcheck\"]\n",
+            F::SignalPid1, S::Builtin, None,
+            Some("Suggest-only because the fix needs an application fact: WHICH endpoint the checker polls, and whether one was built at all. The static-checker pattern is a second small binary copied in, exec form, exit 0 healthy / 1 unhealthy — and mind the exit-code contract, because a Rust panic exits 101 and Docker reserves everything but 0 and 1. `HEALTHCHECK NONE` is explicitly NOT cited: declining a healthcheck is a decision, and this rule only fires on one that was declared and cannot work."),
+        ),
     ]
 }
 

@@ -146,7 +146,27 @@ impl SyntaxVersion {
             .collect();
         let mut parts = digits.split('.');
         let major: u32 = parts.next().unwrap_or("").parse().unwrap_or(0);
-        let minor: u32 = parts.next().unwrap_or("").parse().unwrap_or(0);
+        let minor_tag = parts.next();
+        // A tag with NO minor (`docker/dockerfile:1`) is a MOVING label —
+        // Docker's own recommended form, always resolving to the latest
+        // release of that major. It therefore satisfies every floor in that
+        // major, and reading it as `1.0` gets this exactly backwards: the
+        // healer would demand `1.4` on a file already carrying something
+        // strictly newer, and refuse V1_4-floor fixes the frontend supports.
+        //
+        // MEASURED 2026-08-29, not inferred from the docs: under
+        // `# syntax=docker/dockerfile:1`, `COPY --exclude=` — a 1.19-only
+        // feature — passes `docker build --check` and builds green.
+        // Found by adopting `copy-link-artifact-rebase` into riir-chain's
+        // edge-wallet image, where writing the canonical directive made
+        // `missing-syntax-directive` fire on a correct file.
+        let Some(minor_tag) = minor_tag else {
+            return match major {
+                0 => SyntaxVersion::Builtin,
+                _ => SyntaxVersion::V1_19,
+            };
+        };
+        let minor: u32 = minor_tag.parse().unwrap_or(0);
         match (major, minor) {
             (1, m) if m >= 19 => SyntaxVersion::V1_19,
             (1, m) if m >= 4 => SyntaxVersion::V1_4,
@@ -361,9 +381,20 @@ mod tests {
             SyntaxVersion::V1_19
         );
         // An unpinned or unparseable frontend must NOT be read as capable.
+        // A bare major is a MOVING label: latest 1.x, so every 1.x floor is
+        // satisfied. Measured against the real frontend (see from_directive).
         assert_eq!(
             SyntaxVersion::from_directive("docker/dockerfile:1"),
+            SyntaxVersion::V1_19
+        );
+        // ...but an explicitly pinned minor is exactly that minor.
+        assert_eq!(
+            SyntaxVersion::from_directive("docker/dockerfile:1.0"),
             SyntaxVersion::Builtin
+        );
+        assert_eq!(
+            SyntaxVersion::from_directive("docker/dockerfile:1.4"),
+            SyntaxVersion::V1_4
         );
         assert_eq!(
             SyntaxVersion::from_directive("mycorp/frontend"),

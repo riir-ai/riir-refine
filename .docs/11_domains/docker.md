@@ -28,10 +28,62 @@ Fixing is unoccupied. So the domain splits:
 | Class | Count | Contract |
 |---|---|---|
 | **A — fix overlay** | 14 | the incumbent detects, we fix. Our detector must AGREE with hadolint on the fixture (`docker_verify`) |
-| **B — novel detection** | 13 | both incumbents silent; we detect AND fix or annotate |
+| **B — novel detection** | 17 | both incumbents silent; we detect AND fix or annotate |
 
-**27 rules total, 14 with bounded fixes.** (Plan 030's close condition was
+**31 rules total, 14 with bounded fixes.** (Plan 030's close condition was
 ≥10 bounded; Proposal 006's Phase-2 gate was ≥20 total. Both met.)
+
+### Phase 2 T2.1(b) — the suggest-only family (2026-08-29)
+
+Four rules that all CITE and none of which fix, because each one's correct
+action depends on a fact the Dockerfile does not carry. That is not a
+shortfall — a `--write` lane guessing at any of them would repeat the
+`cargo-locked-flag` break, where a rule with a plausible in-file signal broke
+a real build on a fact that lived outside the file.
+
+| rule | family | what it says | why it cannot fix |
+|---|---|---|---|
+| `base-tag-not-digest-pinned` | base-choice | a runtime base carried by tag moves under you | the digest is a registry fact (no network calls), *and* pinning freezes patches, so it is only correct next to a bump policy |
+| `copy-link-artifact-rebase` | cache-perf | the artefact copy invalidates everything above it without `--link` | `--link` changes semantics — the copy cannot see parent layers, and whether a copy is order-dependent is not in the file |
+| `musl-allocator-perf-annotation` | rust-idiom | musl's allocator is not glibc's, and a service profiled on one does not carry that profile to the other | the `global_allocator` lives in Rust source and Cargo.toml, which this domain does not edit |
+| `healthcheck-tool-absent-in-runtime` | signal-pid1 | an exec-form `curl`/`wget` probe on scratch/distroless can never run — the container reports UNHEALTHY forever | which endpoint a static checker should poll is an application fact |
+
+Two boundaries in that set were drawn by MEASUREMENT rather than by taste,
+and both narrowed a rule that had already been written:
+
+- **`healthcheck-tool-absent-in-runtime` cites the TOOL, not the FORM.** A
+  shell-form `HEALTHCHECK` is hadolint's DL3025 — verified live, it fires.
+  What no incumbent sees is an *exec-form* probe invoking `curl` on a base
+  that ships no `curl`: well-formed, passes every linter, never runs. Citing
+  the form too would have been an echo, and the Class-B "unoccupied
+  territory" gate caught it.
+- **`copy-link-artifact-rebase` stands down on `scratch`.** There is no parent
+  filesystem there to rebase onto, so `--link` buys nothing. Without that
+  guard the rule fired on `riir-chain/deploy` and on the G4 clean-file
+  fixture — a rule that fires on every well-written multi-stage file carries
+  no information.
+
+The controls now discriminate cleanly: `deploy` (musl on scratch) draws only
+the allocator annotation; `edge-wallet` (glibc on debian) draws the digest
+citation; `authority-container` (distroless) draws the digest and `--link`
+citations and not the allocator one.
+
+### The bug this batch found in the domain itself
+
+Adopting `copy-link-artifact-rebase` into riir-chain meant adding the
+`# syntax=` line `--link` requires — and writing Docker's own canonically
+recommended form, `# syntax=docker/dockerfile:1`, made
+`missing-syntax-directive` fire on a now-correct file.
+
+`SyntaxVersion::from_directive` was parsing a bare major as `1.0`. But a tag
+with no minor is a **moving label**: it always resolves to the latest release
+of that major, so it satisfies every floor in it. **Measured, not inferred
+from the docs:** under `# syntax=docker/dockerfile:1`, `COPY --exclude=` — a
+1.19-only feature — passes `docker build --check` and builds green. Reading
+it as `1.0` got the ordering exactly backwards: the healer would demand `1.4`
+on a file already carrying something strictly newer, and would refuse
+V1_4-floor fixes the frontend supports. An explicitly pinned `1.0` still reads
+as `Builtin`; only the minor-less form is treated as latest-of-major.
 
 ## Usage
 

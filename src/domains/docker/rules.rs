@@ -100,6 +100,11 @@ pub const DOCKER_RULES: &[&str] = &[
     "musl-scratch-ca-certs",
     "runtime-stage-missing-user",
     "chef-stage-toolchain-skew",
+    // ── Phase 2 (Plan 030 T2.1(b)): suggest-only, no bounded fix ──
+    "base-tag-not-digest-pinned",
+    "copy-link-artifact-rebase",
+    "musl-allocator-perf-annotation",
+    "healthcheck-tool-absent-in-runtime",
 ];
 
 /// The subset carrying a bounded fix (`--fix`-eligible).
@@ -647,7 +652,14 @@ fn file_level(
         }
     }
 
+    let before = out.len();
     runtime_stage_rules(scan, source, out);
+    // `distroless-distro-suffix-pin` and `base-tag-not-digest-pinned` both
+    // say "pin this base harder"; the second stands down when the first fired.
+    let base_already_cited = out[before..]
+        .iter()
+        .any(|f| f.rule_id == "distroless-distro-suffix-pin");
+    runtime_suggest_rules(scan, source, base_already_cited, out);
 
     // ── build-stage-missing-buildplatform (annotation, never a rewrite) ──
     // Emitted only for a MULTI-stage file whose builder compiles and whose
@@ -741,6 +753,216 @@ fn runtime_stage_rules(scan: &DockerfileScan, source: &str, out: &mut Vec<Docker
                 });
             }
         }
+}
+
+/// Plan 030 T2.1(b) — the suggest-only family, all four scoped to the
+/// RUNTIME stage.
+///
+/// Every rule here CITES and none of them fix. That is not a shortfall: each
+/// one's correct action depends on a fact the file does not carry (the
+/// registry's current digest, whether an artefact copy is order-dependent,
+/// whether the service is allocation-hot, what the health endpoint is). A
+/// `--write` lane that guessed at any of them would be the `cargo-locked-flag`
+/// failure again, where a rule with a plausible in-file signal broke a build
+/// on a fact that lived outside the file.
+fn runtime_suggest_rules(
+    scan: &DockerfileScan,
+    source: &str,
+    already_cited_base: bool,
+    out: &mut Vec<DockerFinding>,
+) {
+    let Some(rt) = scan.runtime_stage(source) else {
+        return;
+    };
+    let stage = &scan.stages[rt];
+    let base = stage.base.to_ascii_lowercase();
+    let line = scan.stanzas[stage.stanza_idx].line;
+
+    digest_pin(scan, stage, &base, line, already_cited_base, out);
+    copy_link(scan, source, rt, &base, out);
+    musl_allocator(scan, source, rt, &base, line, out);
+    healthcheck_shellless(scan, source, rt, &base, out);
+}
+
+/// A runtime base carried by TAG moves under you: the same tag is a different
+/// image after any upstream push, so the thing you tested and the thing you
+/// deployed are only related by trust. A digest is the content address.
+///
+/// Suggest-only for two independent reasons, and both are load-bearing: the
+/// digest is a REGISTRY fact this domain will not look up (the no-network
+/// boundary), and pinning freezes security patches, so it is only correct
+/// alongside a bump policy — a judgment the file cannot express.
+///
+/// Silent on `scratch` (no image to pin), on a local stage reference, and on
+/// a base that `distroless-distro-suffix-pin` already cited: two findings
+/// that both say "pin this base harder" is one finding with an echo.
+fn digest_pin(
+    scan: &DockerfileScan,
+    stage: &crate::domains::docker::scanner::Stage,
+    base: &str,
+    line: usize,
+    already_cited_base: bool,
+    out: &mut Vec<DockerFinding>,
+) {
+    if already_cited_base || base.is_empty() || base == "scratch" || base.contains('@') {
+        return;
+    }
+    // `FROM builder` / `COPY --from=<name>`: a local stage, not a registry ref.
+    let is_local_stage = scan
+        .stages
+        .iter()
+        .filter_map(|s| s.alias.as_deref())
+        .any(|n| n.eq_ignore_ascii_case(base));
+    if is_local_stage {
+        return;
+    }
+    out.push(DockerFinding {
+        rule_id: "base-tag-not-digest-pinned",
+        line,
+        excerpt: stage.base.clone(),
+        fix: None,
+    });
+}
+
+/// `COPY --link` writes an INDEPENDENT layer: it is not rebased onto the
+/// parent filesystem, so it survives a change to everything above it. For the
+/// artefact copy at the top of a runtime stage — the copy whose content
+/// changes on every single build — that is the difference between the base
+/// layers being reused and the whole runtime stage being rebuilt.
+///
+/// Suggest-only because `--link` genuinely CHANGES semantics: the copy cannot
+/// see the parent layers, so anything that depends on a path already existing
+/// (a `--chown` resolved against the image's `/etc/passwd`, an overwrite of a
+/// file the base shipped) behaves differently. Whether a given copy is
+/// order-dependent is not derivable from the Dockerfile.
+///
+/// One citation per runtime stage, at the first eligible copy — four copies
+/// is one decision, not four.
+fn copy_link(
+    scan: &DockerfileScan,
+    source: &str,
+    rt: usize,
+    base: &str,
+    out: &mut Vec<DockerFinding>,
+) {
+    // On `scratch` there is no parent filesystem to rebase onto, so `--link`
+    // buys nothing and the citation would be pure noise. MEASURED, not
+    // reasoned: without this guard the rule fired on `riir-chain/deploy`
+    // (a scratch runtime) and on the G4 clean-file fixture — a rule that
+    // fires on every well-written multi-stage file carries no information.
+    if base == "scratch" {
+        return;
+    }
+    let first = scan.stage_stanzas(rt).find(|st| {
+        if st.instruction_of(source) != "COPY" {
+            return false;
+        }
+        let args = st.raw_args(source);
+        args.contains("--from=") && !args.contains("--link")
+    });
+    let Some(st) = first else { return };
+    out.push(DockerFinding {
+        rule_id: "copy-link-artifact-rebase",
+        line: st.line,
+        excerpt: st.raw_args(source).trim().to_string(),
+        fix: None,
+    });
+}
+
+/// musl's allocator is not glibc's. It is written for smallness and
+/// predictability rather than for multi-threaded throughput, and an
+/// allocation-hot service that was profiled against glibc does not carry that
+/// profile across the target switch. A `#[global_allocator]` of jemalloc or
+/// mimalloc is the standard answer and costs one dependency.
+///
+/// This is an ANNOTATION, not a defect claim, and the distinction is the
+/// point: plenty of musl services allocate rarely enough that the difference
+/// is unmeasurable. The rule says "you changed allocators without saying so",
+/// not "this is slow". No number is asserted here because none was measured
+/// here — see muslrust#142 for the upstream reports.
+///
+/// Fires only when all three hold: the build targets musl, the runtime stage
+/// EXPOSEs a port (a long-running service rather than a one-shot tool), and
+/// the file names no alternative allocator.
+fn musl_allocator(
+    scan: &DockerfileScan,
+    source: &str,
+    rt: usize,
+    base: &str,
+    line: usize,
+    out: &mut Vec<DockerFinding>,
+) {
+    let targets_musl = scan.stanzas.iter().any(|st| st.text(source).contains("-musl"))
+        || scan.stages.iter().any(|s| s.base.to_ascii_lowercase().contains("alpine"));
+    if !targets_musl {
+        return;
+    }
+    let serves = scan
+        .stage_stanzas(rt)
+        .any(|st| st.instruction_of(source) == "EXPOSE");
+    if !serves {
+        return;
+    }
+    let names_an_allocator = source.contains("jemalloc") || source.contains("mimalloc");
+    if names_an_allocator {
+        return;
+    }
+    let _ = base;
+    out.push(DockerFinding {
+        rule_id: "musl-allocator-perf-annotation",
+        line,
+        excerpt: "musl target + EXPOSE, no alternative global allocator named".to_string(),
+        fix: None,
+    });
+}
+
+/// A `HEALTHCHECK` that cannot run does not report "unknown" — it reports
+/// UNHEALTHY, forever, and an orchestrator configured to act on that will
+/// restart or drain a container that is serving perfectly well. The failure
+/// is silent at build time and looks like an application fault at runtime.
+///
+/// Scoped to the TOOL, because the FORM is already occupied: hadolint's
+/// DL3025 fires on a shell-form `HEALTHCHECK` (verified live), so citing that
+/// too would be an echo. What no incumbent sees is an *exec-form* probe
+/// invoking `curl`/`wget` on `scratch` or distroless — neither base ships
+/// either binary, so the probe is well-formed, passes every linter, and
+/// never runs. The fix is the static-checker pattern — a second small binary copied
+/// in, exec form, exit 0 healthy / 1 unhealthy — but which endpoint it should
+/// poll is an application fact, so this cites rather than writes.
+fn healthcheck_shellless(
+    scan: &DockerfileScan,
+    source: &str,
+    rt: usize,
+    base: &str,
+    out: &mut Vec<DockerFinding>,
+) {
+    let shell_less = base == "scratch" || base.starts_with("gcr.io/distroless/");
+    if !shell_less {
+        return;
+    }
+    for st in scan.stage_stanzas(rt) {
+        if st.instruction_of(source) != "HEALTHCHECK" {
+            continue;
+        }
+        let args = st.raw_args(source);
+        if args.trim().eq_ignore_ascii_case("NONE") {
+            continue;
+        }
+        // The FORM is hadolint's (DL3025 fires on a shell-form HEALTHCHECK,
+        // verified live 2026-08-29). Ours is the TOOL: an exec-form probe
+        // invoking curl/wget on a base that ships neither is invisible to
+        // hadolint and can never pass. Detecting only the unoccupied half is
+        // the Research 086 dedup discipline, not a narrower rule for its own
+        // sake — the shell-form case is already covered by the DL3025 overlay.
+        if args.contains("curl") || args.contains("wget") {
+            out.push(DockerFinding {
+                rule_id: "healthcheck-tool-absent-in-runtime",
+                line: st.line,
+                excerpt: args.trim().to_string(),
+                fix: None,
+            });
+        }
+    }
 }
 
 // ────────────────────────── helpers ──────────────────────────

@@ -177,8 +177,25 @@ fn negative_control_no_fixable_findings_on_known_good_files() {
 #[test]
 fn negative_control_suggest_only_findings_are_pinned() {
     let expected: &[(&str, &[&str])] = &[
-        ("deploy", &[]),
-        ("authority", &["runtime-stage-missing-user"]),
+        // Plan 030 T2.1(b) added a suggest-only family, and the two controls
+        // discriminate as designed: `deploy` is musl-on-scratch, so it draws
+        // the allocator annotation and NOT the digest or --link citations
+        // (scratch has no image to pin and no parent filesystem to rebase
+        // onto). `authority` draws both of those and not the allocator one —
+        // it is `gcr.io/distroless/cc-debian13`, a real registry image with a
+        // real parent filesystem, and it is not a musl build. That corrected
+        // a prediction: `distroless-distro-suffix-pin` was expected to absorb
+        // the digest citation, but it only fires on a base MISSING the
+        // `-debianNN` suffix, and this one carries it. Measured, then pinned.
+        ("deploy", &["musl-allocator-perf-annotation"]),
+        (
+            "authority",
+            &[
+                "base-tag-not-digest-pinned",
+                "copy-link-artifact-rebase",
+                "runtime-stage-missing-user",
+            ],
+        ),
     ];
     for (name, want) in expected {
         let Some(src) = read(name) else { continue };
@@ -259,7 +276,19 @@ fn edge_wallet_stays_healed_after_adoption() {
     let mut suggest: Vec<&str> = scan_source(&src).into_iter().map(|f| f.rule_id).collect();
     suggest.sort_unstable();
     suggest.dedup();
-    assert_eq!(&suggest, &[] as &[&str], "edge-wallet: suggest-only finding set drifted");
+    // Plan 030 T2.1(b), 2026-08-29: of the two new citations this file drew,
+    // `copy-link-artifact-rebase` was TAKEN (the file now carries
+    // `COPY --link` + the `# syntax=` line it requires; rebuilt and verified
+    // serving /health as uid 65534), so it is gone. `base-tag-not-digest-pinned`
+    // stands — see the reason in riir-chain's dockerfile_heal_gate.sh: a digest
+    // is reproducible but frozen, and with no renovate/dependabot here, an
+    // un-bumped base accumulating CVEs is the worse risk for an image holding
+    // a signing key.
+    assert_eq!(
+        &suggest,
+        &["base-tag-not-digest-pinned"],
+        "edge-wallet: suggest-only finding set drifted"
+    );
 }
 
 #[test]

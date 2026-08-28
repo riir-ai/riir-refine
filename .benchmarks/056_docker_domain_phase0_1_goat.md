@@ -343,3 +343,91 @@ would put a daemon requirement into a default `cargo test`, which is not a
 GOAT question at all — it is a dependency-class question, and the answer is no.
 The availability probe is itself the oracle on `FROM scratch`, an end-to-end
 capability test that costs 0.2 s once per process and touches no registry.
+
+
+## T2.1(b) — the suggest-only family, and what measuring it changed (2026-08-29)
+
+Four rules, chosen by whether they **discriminate on the real in-tree images**
+rather than by working down the Research 087 seed table. **27 → 31 rules;
+bounded stays 14** — nothing new touches the `--write` lane, because each
+rule's correct action depends on a fact the Dockerfile does not carry, and a
+`--write` lane guessing at one would be `cargo-locked-flag` again.
+
+| rule | family | fires on | silent on |
+|---|---|---|---|
+| `base-tag-not-digest-pinned` | base-choice | edge-wallet (debian), authority (distroless) | deploy (scratch — no image to pin) |
+| `copy-link-artifact-rebase` | cache-perf | authority | deploy (scratch), edge-wallet (taken) |
+| `musl-allocator-perf-annotation` | rust-idiom | deploy | edge-wallet, authority (glibc) |
+| `healthcheck-tool-absent-in-runtime` | signal-pid1 | — | all three (none declares a HEALTHCHECK) |
+
+### Two rules were NARROWED by measurement, after being written
+
+Both narrowings were forced by an existing gate, not noticed by reading.
+
+**`healthcheck-tool-absent-in-runtime` cites the TOOL, not the FORM.** The
+Class-B "unoccupied territory" gate failed it against DL3025. Probed live:
+
+```
+$ hadolint  # HEALTHCHECK CMD curl -f http://localhost:8080/health || exit 1
+DL3025 warning: Use arguments JSON notation for CMD and ENTRYPOINT arguments
+$ hadolint  # HEALTHCHECK CMD ["/usr/bin/curl", "-f", "http://localhost:8080/health"]
+(silent)
+```
+
+So the shell FORM is occupied and the exec-form probe on a `curl`-less base is
+not: well-formed, passes every linter, and can never run. Detecting only the
+unoccupied half is the Research 086 dedup discipline doing its job.
+
+**`copy-link-artifact-rebase` stands down on `scratch`.** It first fired on
+`riir-chain/deploy` *and* on the G4 clean-file fixture. There is no parent
+filesystem on scratch to rebase onto, so `--link` buys nothing there — and a
+rule that fires on every well-written multi-stage Dockerfile carries no
+information. The G4 clean-file gate is what caught it.
+
+### A prediction the controls corrected
+
+`authority-container` was predicted to draw neither new base citation, on the
+theory that `distroless-distro-suffix-pin` would absorb the digest one. Wrong:
+that rule only fires on a base MISSING the `-debianNN` suffix, and
+`gcr.io/distroless/cc-debian13` carries it. The citation is legitimate and is
+now pinned at the measured 3.
+
+### The bug this batch found in the domain itself
+
+Adopting `copy-link` into riir-chain meant adding the `# syntax=` line `--link`
+requires — and writing Docker's own canonically recommended form,
+`# syntax=docker/dockerfile:1`, made `missing-syntax-directive` fire on a
+now-correct file.
+
+`SyntaxVersion::from_directive` parsed a bare major as `1.0`. A minor-less tag
+is a **moving label** — always the latest release of that major, so it
+satisfies every floor in it. Measured rather than inferred from the docs:
+
+```
+# syntax=docker/dockerfile:1
+FROM scratch
+COPY --exclude=*.log ctx/ /data/     # --exclude is 1.19-only
+→ docker build --check: Check complete, no warnings found.
+→ docker build:         exit 0
+```
+
+Reading `:1` as `1.0` got the ordering backwards: the healer would demand
+`1.4` on a file already carrying something strictly newer, and refuse
+V1_4-floor fixes the frontend supports. An explicitly pinned `1.0` still reads
+as `Builtin`; only the minor-less form is latest-of-major. **This is what
+adoption buys that a fixture cannot** — the same lesson as T1.6's
+`cargo-locked-flag`, arriving from the opposite direction: there, adoption
+falsified a rule; here, adoption falsified the *domain's model of the
+frontend*.
+
+### Adoption: one taken, two pinned — the decisions, not the deferrals
+
+| citation | decision | why |
+|---|---|---|
+| edge-wallet `copy-link-artifact-rebase` | **TAKEN** | rebuilt GREEN in 44.7 s; container verified serving `/health` as `uid=65534(nobody)`; binary root:root 755; image 141 MB, unchanged. Safe here because nothing about the copy is order-dependent |
+| edge-wallet `base-tag-not-digest-pinned` | **DECLINED on a security trade** | a digest is reproducible but FROZEN, and this repo runs no renovate/dependabot. For an image holding a signing key, a base quietly accumulating CVEs is the worse risk. The ledger row FLIPS the day a bump policy exists |
+| deploy `musl-allocator-perf-annotation` | **NOT INVESTIGATED**, said plainly | the annotation is unmeasured here. Worth measuring because `.docs` claims a ≤200 µs tx-path budget. What would settle it is named in the row: the tx-path bench against the musl artefact ± a mimalloc `#[global_allocator]`. Swapping a consensus daemon's allocator on reasoning alone is not something that repo does |
+
+`riir-chain/scripts/dockerfile_heal_gate.sh` went RED on both new citations
+before any row existed — the closed loop working exactly as designed — and is
+green again with the rows in place.
