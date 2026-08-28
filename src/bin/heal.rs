@@ -881,6 +881,7 @@ USAGE:
     cargo heal --memory-stats                         (loop debug query, no paths)
     cargo heal --recompute-elo                        (batch rating backfill, 039 T2)
     cargo heal --collapse-report                      (self-collapse monitor, 042)
+    cargo heal --corpus-stats [--json] [--import-series]  (corpus/score series, 050 T2)
     cargo heal --score-bench | --score-report        (needs --features score_bench)
     cargo heal --candidates <path>                   (T2.4 promotion gate, kat_service+score_bench)
     cargo heal login [--key <path>]                   (KAT account, needs --features kat_service)
@@ -920,6 +921,18 @@ USAGE:
                     RIIR_HEAL_TRAJ_ROOT (or the envelope fallback) and print
                     pool memory-fraction + memory win-rate + top-k rule
                     entropy, with a fresh-store baseline column. Read-only.
+    --corpus-stats  Count the four corpus domains by source-walking (the
+                    dashboard generator's counting, Issue 050 T2), print the
+                    table, and stamp today's rows into the trajectory store
+                    (needs --features latent_retrieval; without it the table
+                    prints + a warning says stamping is unavailable).
+    --import-series Import .benchmarks/{{corpus,score}}_history.jsonl into the
+                    trajectory store (idempotent upserts; needs
+                    --features latent_retrieval). With or without
+                    --corpus-stats.
+    --json          With --corpus-stats: stdout carries ONLY the dashboard
+                    JSON payload ({{today, corpus, scores}}) — the human table
+                    moves to stderr.
     --write         With --fix/--fix-compile: write the edits in place (with --fix:
                     then rustfmt AUTOMATICALLY when the original was already
                     rustfmt-clean — pre-existing drift + CRLF files are skipped — no
@@ -1067,6 +1080,19 @@ struct Args {
     /// sweep of the live overlay first, then gate + persist + report).
     /// Standalone mode — no paths. Needs `kat_service` + `score_bench`.
     candidates_path: Option<PathBuf>,
+    /// Issue 050 T2: `--corpus-stats` — count the four corpus domains by
+    /// source-walking (the dashboard generator's counting, now in Rust),
+    /// print the table, and stamp today's rows into the trajectory store
+    /// (`latent_retrieval` builds). Standalone mode — no paths.
+    corpus_stats: bool,
+    /// `--json` (a `--corpus-stats` modifier): print ONLY the dashboard
+    /// JSON payload (today + corpus series + score runs) to stdout — the
+    /// human table moves to stderr so stdout stays machine-parseable.
+    json: bool,
+    /// `--import-series` — import `.benchmarks/{corpus,score}_history.jsonl`
+    /// into the trajectory store (idempotent upserts). Works with or
+    /// without `--corpus-stats`. Needs `latent_retrieval`.
+    import_series: bool,
 }
 
 fn parse_args() -> Args {
@@ -1099,6 +1125,9 @@ fn parse_args() -> Args {
         no_reheat: false,
         corpus_epoch: None,
         candidates_path: None,
+        corpus_stats: false,
+        json: false,
+        import_series: false,
     };
     let mut it = std::env::args().skip(1);
     while let Some(arg) = it.next() {
@@ -1116,6 +1145,9 @@ fn parse_args() -> Args {
             "--memory-stats" => args.memory_stats = true,
             "--recompute-elo" => args.recompute_elo = true,
             "--collapse-report" => args.collapse_report = true,
+            "--corpus-stats" => args.corpus_stats = true,
+            "--import-series" => args.import_series = true,
+            "--json" => args.json = true,
             "--max-iters" => {
                 let Some(value) = it.next() else {
                     eprintln!("--max-iters requires a value");
@@ -1239,6 +1271,8 @@ fn parse_args() -> Args {
         && !args.memory_stats
         && !args.recompute_elo
         && !args.collapse_report
+        && !args.corpus_stats
+        && !args.import_series
         && args.candidates_path.is_none()
     {
         eprintln!("no paths given");
@@ -1397,6 +1431,11 @@ fn run_score_bench() {
     if let Err(e) = sb::report::append_history(jsonl, &rec) {
         eprintln!("score history append failed: {e}");
     }
+    // Issue 050 T2: the Warm-tier dual-write — the jsonl stays the committed
+    // projection; the store becomes the queryable source of truth.
+    // Best-effort (never fails the bench run).
+    #[cfg(feature = "latent_retrieval")]
+    sb::report::record_store_best_effort(&rec);
     let history = sb::report::load_history(jsonl);
     let svg = sb::report::render_svg(&history);
     std::fs::write(sb::report::HISTORY_SVG, &svg)
@@ -1407,6 +1446,236 @@ fn run_score_bench() {
         sb::report::HISTORY_JSONL,
         sb::report::HISTORY_SVG
     );
+}
+
+// ── Issue 050 T2: --corpus-stats / --import-series / --json ────────────
+
+/// The corpus domain table — the Rust mirror of gen_dashboard.py's
+/// `CORPUS_DOMAINS` (Issue 050 T2). Paths are repo-relative; a directory
+/// counts its DIRECT `*.rs` children except `mod.rs`, a single file counts
+/// itself.
+const CORPUS_DOMAIN_TABLE: &[(&str, &str, &str)] = &[
+    ("kernel_opt", "src/domains/kernel_opt/corpus", "rule_id:"),
+    ("rust_perf", "src/domains/rust_perf/corpus.rs", "rule_id:"),
+    ("clippy_lints", "src/domains/clippy_lints/corpus.rs", "lint_name:"),
+    ("sec", "src/domains/sec/corpus.rs", "rule_id:"),
+];
+
+/// Whether the domain's feature is compiled into THIS binary (the honest
+/// `compiled` half of the corpus row — a source-walk counts text, this
+/// answers "is the domain live here").
+fn domain_compiled(domain: &str) -> bool {
+    match domain {
+        "kernel_opt" => cfg!(feature = "kernel_heal"),
+        "rust_perf" => cfg!(feature = "rust_perf"),
+        "clippy_lints" => cfg!(feature = "clippy_lints"),
+        "sec" => cfg!(feature = "sec"),
+        _ => false,
+    }
+}
+
+/// Count `needle` over the domain's corpus source(s) — the exact
+/// `_count_working_tree` semantics from gen_dashboard.py: a `.rs` file
+/// counts itself; a directory counts its DIRECT `*.rs` children except
+/// `mod.rs` (non-recursive, matching the Python glob). A missing path
+/// counts 0 (the domain table is static; the walk is best-effort).
+fn count_corpus_domain(repo: &Path, rel: &str, needle: &str) -> u32 {
+    let path = repo.join(rel);
+    if path.is_file() {
+        return std::fs::read_to_string(&path)
+            .map(|t| u32::try_from(t.matches(needle).count()).unwrap_or(u32::MAX))
+            .unwrap_or(0);
+    }
+    if !path.is_dir() {
+        return 0;
+    }
+    let mut n = 0u64;
+    if let Ok(entries) = std::fs::read_dir(&path) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            let Some(name) = p.file_name().and_then(|s| s.to_str()) else {
+                continue;
+            };
+            if name == "mod.rs" || !name.ends_with(".rs") {
+                continue;
+            }
+            if let Ok(t) = std::fs::read_to_string(&p) {
+                n += t.matches(needle).count() as u64;
+            }
+        }
+    }
+    u32::try_from(n).unwrap_or(u32::MAX)
+}
+
+/// Locate the riir-clippy repo root for the corpus source-walk: the nearest
+/// ancestor of the CWD owning the corpus paths, else the binary's own
+/// build-machine manifest dir (makes the flag work from any CWD on the
+/// build machine), else None (the caller errors clearly).
+fn resolve_corpus_repo_root() -> Option<PathBuf> {
+    const MARKER: &str = "src/domains/kernel_opt/corpus";
+    let mut dir = std::env::current_dir().ok()?;
+    loop {
+        if dir.join(MARKER).exists() {
+            return Some(dir);
+        }
+        if !dir.pop() {
+            break;
+        }
+    }
+    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    if manifest.join(MARKER).exists() {
+        return Some(manifest);
+    }
+    None
+}
+
+/// Issue 050 T2: the `--corpus-stats` / `--import-series` standalone mode.
+/// Counts the four corpus domains by source-walking, prints the table, and
+/// (under `latent_retrieval`) stamps today's rows into the trajectory
+/// store, runs the jsonl imports, and serves the `--json` dashboard
+/// payload. With `--json` the human table + import lines go to STDERR so
+/// stdout carries ONLY the JSON object (the dashboard's parse contract).
+fn run_corpus_stats(with_stats: bool, as_json: bool, do_import: bool) {
+    let Some(repo) = resolve_corpus_repo_root() else {
+        eprintln!(
+            "corpus-stats: cannot locate the riir-clippy corpus paths \
+             (src/domains/...) from {:?} — run inside the repo",
+            std::env::current_dir().unwrap_or_default()
+        );
+        std::process::exit(1);
+    };
+    let table: Vec<(&str, u32, bool)> = CORPUS_DOMAIN_TABLE
+        .iter()
+        .map(|(domain, rel, needle)| {
+            (*domain, count_corpus_domain(&repo, rel, needle), domain_compiled(domain))
+        })
+        .collect();
+
+    // With --json the stdout contract is the JSON payload ONLY.
+    let say = |line: &str| {
+        if as_json {
+            eprintln!("{line}");
+        } else {
+            println!("{line}");
+        }
+    };
+    say(&format!("corpus stats (repo {}):", repo.display()));
+    for (domain, count, compiled) in &table {
+        say(&format!(
+            "  {domain:<14} {count:>5}  compiled={compiled}  (source-walk)"
+        ));
+    }
+
+    #[cfg(feature = "latent_retrieval")]
+    {
+        let root = std::env::var("RIIR_HEAL_TRAJ_ROOT")
+            .map(PathBuf::from)
+            .or_else(|_| std::env::current_dir())
+            .unwrap_or_default();
+        if !(with_stats || as_json || do_import) {
+            return;
+        }
+        let store = match riir_clippy::traj_store::TrajStore::open(&root) {
+            Ok((store, bad)) => {
+                if bad > 0 {
+                    eprintln!("corpus-stats: {bad} corrupt row(s) skipped");
+                }
+                store
+            }
+            Err(e) => {
+                if as_json {
+                    // The JSON contract needs the series — a store failure
+                    // must not masquerade as an empty store (the consumer
+                    // would project that emptiness over real history).
+                    eprintln!(
+                        "corpus-stats: store at {} unreadable: {e}",
+                        root.display()
+                    );
+                    std::process::exit(1);
+                }
+                eprintln!(
+                    "corpus-stats: store at {} unavailable ({e}) — stats NOT stamped",
+                    root.display()
+                );
+                return;
+            }
+        };
+        if with_stats {
+            let day = riir_clippy::traj_store::today_local_date();
+            let mut stamped = 0usize;
+            for (domain, count, compiled) in &table {
+                match store.upsert_corpus_count(&day, domain, *count, *compiled, "source-walk") {
+                    Ok(()) => stamped += 1,
+                    Err(e) => eprintln!("corpus-stats: stamp {domain} failed: {e}"),
+                }
+            }
+            say(&format!(
+                "stamped {day}: {stamped} row(s) → {}",
+                root.join(".heal").join("trajectories.kv").display()
+            ));
+        }
+        if do_import {
+            for (file, label) in [
+                ("corpus_history.jsonl", "corpus"),
+                ("score_history.jsonl", "score"),
+            ] {
+                let path = repo.join(".benchmarks").join(file);
+                let res = if label == "corpus" {
+                    store.import_corpus_jsonl(&path)
+                } else {
+                    store.import_score_jsonl(&path)
+                };
+                match res {
+                    Ok((seen, written)) => say(&format!(
+                        "import {label}: {seen} row(s) seen, {written} written/updated ← {}",
+                        path.display()
+                    )),
+                    Err(e) => eprintln!("corpus-stats: import {label} failed: {e}"),
+                }
+            }
+        }
+        if as_json {
+            let today = riir_clippy::traj_store::today_local_date();
+            let mut today_obj = serde_json::Map::new();
+            today_obj.insert("ts".into(), serde_json::Value::String(today.clone()));
+            for (domain, count, compiled) in &table {
+                today_obj.insert(
+                    (*domain).into(),
+                    serde_json::json!({ "count": count, "compiled": compiled }),
+                );
+            }
+            let corpus = store.corpus_series_by_day().unwrap_or_default();
+            let scores = store.score_runs().unwrap_or_default();
+            let payload = serde_json::json!({
+                "today": serde_json::Value::Object(today_obj),
+                "corpus": corpus,
+                "scores": scores,
+            });
+            match serde_json::to_string(&payload) {
+                Ok(line) => println!("{line}"),
+                Err(e) => {
+                    eprintln!("corpus-stats: encode json: {e}");
+                    std::process::exit(1);
+                }
+            }
+        }
+    }
+    #[cfg(not(feature = "latent_retrieval"))]
+    {
+        let _ = (with_stats, do_import);
+        if as_json {
+            eprintln!(
+                "corpus-stats: --json needs the store — rebuild with --features latent_retrieval"
+            );
+            return;
+        }
+        if with_stats || do_import {
+            eprintln!(
+                "corpus-stats: stamping/import unavailable — rebuild with \
+                 --features latent_retrieval (the neuron-db store)"
+            );
+        }
+    }
 }
 
 /// T2.4 (Plan 042): `--candidates <path>` — the promotion gate over a
@@ -1600,6 +1869,15 @@ fn main() {
     if args.candidates_path.is_some() {
         eprintln!("--candidates requires a build with --features kat_service,score_bench");
         std::process::exit(2);
+    }
+
+    // ── Issue 050 T2: --corpus-stats / --import-series (standalone) ─────
+    // Early return before validate_mode_flags (the memory-stats pattern):
+    // the table prints either way; the stamp/import/json halves need
+    // latent_retrieval (handled inside run_corpus_stats).
+    if args.corpus_stats || args.import_series {
+        run_corpus_stats(args.corpus_stats, args.json, args.import_series);
+        return;
     }
 
     // ── Issue 037 observability: --memory-stats — the loop debug query ────

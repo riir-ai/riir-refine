@@ -159,18 +159,86 @@ def ledger_summary(rows: list[dict]) -> dict:
 # ── 2. score history ───────────────────────────────────────────────────────
 
 def load_score_history() -> list[dict]:
-    if not SCORE_HISTORY.exists():
-        return []
-    out = []
-    for line in SCORE_HISTORY.read_text().splitlines():
-        line = line.strip()
-        if not line:
-            continue
+    jsonl_rows: list[dict] = []
+    if SCORE_HISTORY.exists():
+        for line in SCORE_HISTORY.read_text().splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                jsonl_rows.append(json.loads(line))
+            except json.JSONDecodeError:
+                pass
+    series = store_series()
+    if series is None:
+        return jsonl_rows
+    # Store-first merge (Issue 050 T2): dedupe by (ts, sha), store wins;
+    # jsonl-only rows survive. The scores jsonl is NOT rewritten here —
+    # append-time dual-write keeps it in lockstep with the store.
+    scores = series.get("scores") or []
+    merged: dict[tuple, dict] = {}
+    for r in scores:
+        merged[(r.get("ts"), r.get("sha"))] = r
+    for r in jsonl_rows:
+        merged.setdefault((r.get("ts"), r.get("sha")), r)
+    return [merged[k] for k in sorted(merged, key=lambda kv: (str(kv[0]), str(kv[1])))]
+
+
+# ── 2b. the store-first reader (Issue 050 T2) ─────────────────────────────
+
+# One-shot memo: the corpus + score loaders both need the same payload, and
+# each store_series() call opens the healer's KV store. The sentinel
+# distinguishes not-yet-computed from computed-unavailable (None).
+_STORE_SERIES_UNSET = object()
+_STORE_SERIES_CACHE: object = _STORE_SERIES_UNSET
+
+
+def store_series() -> dict | None:
+    """The Warm-tier series via `cargo-heal --corpus-stats --json`.
+
+    Runs the healer binary with RIIR_HEAL_TRAJ_ROOT=REPO_ROOT and parses
+    ONLY the last JSON object on stdout (with --json the Rust side prints
+    the human table to stderr, so stdout is one JSON line). Returns
+    {"today":…, "corpus":[…], "scores":[…]} or None on any failure
+    (missing binary, non-zero exit, bad/absent JSON, timeout) — every
+    caller degrades to the jsonl readers.
+    """
+    global _STORE_SERIES_CACHE
+    if _STORE_SERIES_CACHE is not _STORE_SERIES_UNSET:
+        return _STORE_SERIES_CACHE  # type: ignore[return-value]
+    result: dict | None = None
+    if not HEAL_BIN.exists():
+        log(f"healer binary missing: {HEAL_BIN} — jsonl fallback for corpus/score series")
+    else:
+        env = dict(os.environ)
+        env["RIIR_HEAL_TRAJ_ROOT"] = str(REPO_ROOT)
         try:
-            out.append(json.loads(line))
-        except json.JSONDecodeError:
-            pass
-    return out
+            proc = subprocess.run(
+                [str(HEAL_BIN), "--corpus-stats", "--json"],
+                capture_output=True, text=True, timeout=60, env=env,
+            )
+        except subprocess.TimeoutExpired:
+            log("corpus-stats timeout — jsonl fallback for corpus/score series")
+        else:
+            if proc.returncode != 0:
+                log(f"corpus-stats exit {proc.returncode} — jsonl fallback for corpus/score series")
+            else:
+                obj = None
+                for line in proc.stdout.splitlines():
+                    line = line.strip()
+                    if line.startswith("{"):
+                        try:
+                            obj = json.loads(line)
+                        except json.JSONDecodeError:
+                            obj = None
+                if (isinstance(obj, dict) and isinstance(obj.get("today"), dict)
+                        and isinstance(obj.get("corpus"), list)
+                        and isinstance(obj.get("scores"), list)):
+                    result = obj
+                else:
+                    log("corpus-stats: no parseable JSON payload — jsonl fallback")
+    _STORE_SERIES_CACHE = result
+    return result
 
 
 # ── corpus size per domain (mined from git history of the sources) ─────────
@@ -188,10 +256,14 @@ CORPUS_DOMAINS = [
 ]
 
 # The RECORDED series (the bridge to the neuron-db Warm tier — Issue 050).
-# Appended idempotently at every regen with WORKING-TREE counts (today's
-# truth), committed beside the dashboard. Recorded rows win over git-mined
-# points for overlapping days; git-mining backfills everything before the
-# file existed and stays as the drift cross-check.
+# Issue 050 T2 flipped the direction: the Warm-tier store is the source of
+# truth and this file is a generated PROJECTION (rewritten store-first each
+# regen; jsonl-only days survive the merge). It cannot be deleted — it is
+# the only cross-clone durable record (`.heal/` is gitignored). The legacy
+# append-today's-working-tree behavior remains only as the no-store
+# fallback. Recorded rows win over git-mined points for overlapping days;
+# git-mining backfills everything before the file existed and stays as the
+# drift cross-check.
 CORPUS_HISTORY_JSONL = REPO_ROOT / ".benchmarks" / "corpus_history.jsonl"
 
 
@@ -233,8 +305,13 @@ def load_corpus_history(days: int = 35) -> list[dict]:
     Three layers, later wins for a given day:
       1. git-mined (each rev that touched a corpus path — the backfill +
          drift cross-check; covers the whole window with zero bookkeeping),
-      2. recorded rows from CORPUS_HISTORY_JSONL (durable beyond the window),
-      3. today's working-tree counts (upserted into the recorded file now).
+      2. recorded rows (Issue 050 T2: the Warm-tier store is the source of
+         truth and the jsonl is REWRITTEN as an exact projection of it;
+         jsonl-only days survive the merge — history imported by other
+         clones stays),
+      3. today's working-tree counts — via the store too: --corpus-stats
+         already stamped them, so the store series carries today. Only the
+         no-store fallback keeps the legacy upsert-into-jsonl behavior.
     """
     import subprocess
     from datetime import date, timedelta
@@ -254,35 +331,65 @@ def load_corpus_history(days: int = 35) -> list[dict]:
             for name, path, needle in CORPUS_DOMAINS
         }}
 
-    # Layer 2 — recorded rows (durable history; the KV-migration target).
+    # Layers 2+3 — the recorded series. Store-first (Issue 050 T2); the
+    # jsonl-only path below is the no-store fallback, verbatim legacy.
     recorded: dict[str, dict] = {}
-    if CORPUS_HISTORY_JSONL.exists():
-        for line in CORPUS_HISTORY_JSONL.read_text().splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                row = json.loads(line)
-                if isinstance(row.get("ts"), str):
-                    recorded[row["ts"]] = row
-            except json.JSONDecodeError:
-                pass
-
-    # Layer 3 — today's working-tree truth, upserted into the recorded file
-    # (idempotent: same counts → byte-identical file, no churn).
-    today = date.today().isoformat()
-    today_row = {"ts": today, **{
-        name: _count_working_tree(path, needle)
-        for name, path, needle in CORPUS_DOMAINS
-    }}
-    if recorded.get(today) != today_row:
-        recorded[today] = today_row
+    series = store_series()
+    if series is not None:
+        for row in series["corpus"]:
+            ts = row.get("ts")
+            if isinstance(ts, str):
+                recorded[ts] = row
+        # Union the jsonl under the store rows (store wins on overlap;
+        # jsonl-only days kept). Rewrite the file as the exact projection —
+        # sorted, compact separators, byte-stable when nothing changed.
+        if CORPUS_HISTORY_JSONL.exists():
+            for line in CORPUS_HISTORY_JSONL.read_text().splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    row = json.loads(line)
+                    ts = row.get("ts")
+                    if isinstance(ts, str) and ts not in recorded:
+                        recorded[ts] = row
+                except json.JSONDecodeError:
+                    pass
         rows = [recorded[d] for d in sorted(recorded)]
+        payload = "".join(json.dumps(r, separators=(",", ":")) + "\n" for r in rows)
         CORPUS_HISTORY_JSONL.parent.mkdir(parents=True, exist_ok=True)
-        CORPUS_HISTORY_JSONL.write_text(
-            "".join(json.dumps(r, separators=(",", ":")) + "\n" for r in rows))
-        log(f"corpus stamp: recorded {today} "
-            + " ".join(f"{n}={today_row[n]}" for n, _, _ in CORPUS_DOMAINS))
+        if (not CORPUS_HISTORY_JSONL.exists()
+                or CORPUS_HISTORY_JSONL.read_text() != payload):
+            CORPUS_HISTORY_JSONL.write_text(payload)
+            log(f"corpus stamp: store projection written ({len(rows)} day(s))")
+    else:
+        # Legacy path (no healer binary / store unavailable): jsonl +
+        # today's working-tree upsert, exactly as before the store flip.
+        if CORPUS_HISTORY_JSONL.exists():
+            for line in CORPUS_HISTORY_JSONL.read_text().splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    row = json.loads(line)
+                    if isinstance(row.get("ts"), str):
+                        recorded[row["ts"]] = row
+                except json.JSONDecodeError:
+                    pass
+
+        today = date.today().isoformat()
+        today_row = {"ts": today, **{
+            name: _count_working_tree(path, needle)
+            for name, path, needle in CORPUS_DOMAINS
+        }}
+        if recorded.get(today) != today_row:
+            recorded[today] = today_row
+            rows = [recorded[d] for d in sorted(recorded)]
+            CORPUS_HISTORY_JSONL.parent.mkdir(parents=True, exist_ok=True)
+            CORPUS_HISTORY_JSONL.write_text(
+                "".join(json.dumps(r, separators=(",", ":")) + "\n" for r in rows))
+            log(f"corpus stamp: recorded {today} "
+                + " ".join(f"{n}={today_row[n]}" for n, _, _ in CORPUS_DOMAINS))
 
     by_day.update(recorded)  # recorded wins over mined for overlapping days
     return [by_day[d] for d in sorted(by_day)]

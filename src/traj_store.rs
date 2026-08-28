@@ -37,6 +37,8 @@
 //! ```text
 //! traj:{code}:{strategy_id}:{blake3_12(shape)} → JSON TrajRowDoc
 //! learn:{lint_key}                          → JSON LearnRowDoc (037 E3)
+//! corpus:{YYYYMMDD}:{domain}                → JSON CorpusCountRow (Issue 050 T2)
+//! scorerun:{unix}:{sha|nosh}                → JSON ScoreRunRow    (Issue 050 T2)
 //! ```
 //!
 //! Family scans are `scan_prefix(b"traj:")`; a trajectory's counters
@@ -170,6 +172,80 @@ pub struct LearnRowDoc {
     pub last_seen_at: u64,
 }
 
+/// One durable corpus-size row (Issue 050 T2) — the Warm-tier twin of the
+/// dashboard's `.benchmarks/corpus_history.jsonl` projection. Key:
+/// `corpus:{YYYYMMDD}:{domain}`. One row per (day, domain); the per-day
+/// FLAT shape the dashboard consumes is derived by
+/// [`TrajStore::corpus_series_by_day`]. A typed doc row (not a Pod) — same
+/// pattern as every row here (the `source_note` half is variable-length
+/// text; the dep-light JSON-row rule from the module header applies).
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq)]
+pub struct CorpusCountRow {
+    /// Calendar day, `YYYY-MM-DD` (UTC — the same convention as
+    /// [`today_local_date`]).
+    pub day: String,
+    /// The corpus domain (`kernel_opt` / `rust_perf` / `clippy_lints` / `sec`).
+    pub domain: String,
+    /// Marker occurrences counted by the source walk (`rule_id:` /
+    /// `lint_name:`).
+    pub count: u32,
+    /// Whether the domain's feature was compiled into the binary that
+    /// stamped the row (`cfg!(feature = ...)` — text counts and compiled
+    /// liveness are different facts).
+    pub compiled: bool,
+    /// Where the row came from: `"source-walk"` (the `--corpus-stats`
+    /// stamp) or `"import-jsonl"` (the one-time jsonl import).
+    pub source_note: String,
+}
+
+/// One durable score-run row (Issue 050 T2) — the Warm-tier twin of a
+/// `.benchmarks/score_history.jsonl` line. The first eleven fields are the
+/// `score_bench::report::HistoryRecord` shape VERBATIM (schema-identity
+/// jsonl ↔ store is pinned by a test); `recorded_unix` is the ordering key
+/// derived from `ts` (0 when the timestamp does not parse). Key:
+/// `scorerun:{recorded_unix}:{sha-or-"nosh"}` — upsert semantics, so a
+/// re-import or a dual-write of the same run is idempotent by construction.
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq)]
+pub struct ScoreRunRow {
+    /// ISO-8601 timestamp of the run (the `HistoryRecord` `ts` verbatim;
+    /// schema-identical with the jsonl line by test).
+    pub ts: String,
+    /// Short git sha of the healer build (empty → key part `nosh`).
+    pub sha: String,
+    pub n_ran: usize,
+    pub n_healable: usize,
+    pub n_clean: usize,
+    pub heal_rate: f32,
+    pub created_rate: f32,
+    pub parse_safety: f32,
+    pub decline_correctness: f32,
+    pub edits_total: usize,
+    pub vocab_size: usize,
+    /// Unix seconds of `ts` (the store-key ordering half; 0 = unparseable).
+    #[serde(default)]
+    pub recorded_unix: u64,
+}
+
+#[cfg(feature = "score_bench")]
+impl From<&crate::score_bench::report::HistoryRecord> for ScoreRunRow {
+    fn from(r: &crate::score_bench::report::HistoryRecord) -> Self {
+        Self {
+            ts: r.ts.clone(),
+            sha: r.sha.clone(),
+            n_ran: r.n_ran,
+            n_healable: r.n_healable,
+            n_clean: r.n_clean,
+            heal_rate: r.heal_rate,
+            created_rate: r.created_rate,
+            parse_safety: r.parse_safety,
+            decline_correctness: r.decline_correctness,
+            edits_total: r.edits_total,
+            vocab_size: r.vocab_size,
+            recorded_unix: parse_ts_unix(&r.ts),
+        }
+    }
+}
+
 impl EvidenceTier {
     /// Stable `u8` for the row doc.
     #[must_use]
@@ -247,6 +323,63 @@ fn now_unix_secs() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs())
+}
+
+/// Today's date as `YYYY-MM-DD` (the corpus-stamp day key, Issue 050 T2).
+/// UTC-based — the crate's one date convention (deterministic across
+/// machines); may trail a wall-clock-local `date.today()` by the
+/// UTC-to-local offset within the first hours of a day.
+#[must_use]
+pub fn today_local_date() -> String {
+    let day = i64::try_from(now_unix_secs() / 86_400).unwrap_or(0);
+    let (y, m, d) = civil_from_days(day);
+    format!("{y:04}-{m:02}-{d:02}")
+}
+
+/// Parse `YYYY-MM-DD[THH:MM:SS]` (the score-history `ts` shape) to unix
+/// seconds — the `ScoreRunRow::recorded_unix` derivation. `0` on any
+/// malformed input (the honest fallback; the row still stores, it just
+/// sorts first).
+// The single-char names are y/m/d/h/min/s — deliberate, mirroring the
+// crate's `local_iso_timestamp` convention.
+#[must_use]
+#[allow(clippy::many_single_char_names)]
+pub fn parse_ts_unix(ts: &str) -> u64 {
+    let b = ts.as_bytes();
+    if b.len() < 10 || b[4] != b'-' || b[7] != b'-' {
+        return 0;
+    }
+    let y: i64 = ts.get(..4).and_then(|s| s.parse().ok()).unwrap_or(0);
+    let m: u32 = ts.get(5..7).and_then(|s| s.parse().ok()).unwrap_or(0);
+    let d: u32 = ts.get(8..10).and_then(|s| s.parse().ok()).unwrap_or(0);
+    if !(1..=12).contains(&m) || !(1..=31).contains(&d) {
+        return 0;
+    }
+    let (h, mi, s): (i64, i64, i64) = if b.len() >= 19 && b[10] == b'T' {
+        (
+            ts.get(11..13).and_then(|v| v.parse().ok()).unwrap_or(0),
+            ts.get(14..16).and_then(|v| v.parse().ok()).unwrap_or(0),
+            ts.get(17..19).and_then(|v| v.parse().ok()).unwrap_or(0),
+        )
+    } else {
+        (0, 0, 0)
+    };
+    let total = days_from_civil(y, m, d) * 86_400 + h * 3600 + mi * 60 + s;
+    u64::try_from(total).unwrap_or(0)
+}
+
+/// Inverse of [`civil_from_days`] — Howard Hinnant's `days_from_civil`
+/// (the score-run timestamp parser's date half; same bounded-range
+/// argument as the forward direction).
+#[must_use]
+fn days_from_civil(y: i64, m: u32, d: u32) -> i64 {
+    let y = y - i64::from(m <= 2);
+    let era = if y >= 0 { y } else { y - 399 } / 400;
+    let yoe = y - era * 400; // [0, 399]
+    let mp = (i64::from(m) + 9) % 12; // [0, 11]
+    let doy = (153 * mp + 2) / 5 + i64::from(d) - 1; // [0, 365]
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy; // [0, 146096]
+    era * 146_097 + doe - 719_468
 }
 
 /// Resolve or create the per-repo key seed at `<root>/.heal/key`. The
@@ -816,6 +949,263 @@ impl TrajStore {
             }
         }
         EloTable::from_ratings(players)
+    }
+
+    // ── Issue 050 T2: the corpus/score series families ────────────────
+
+    /// Full row key: `corpus:{YYYYMMDD}:{domain}` (the dashed day compacted;
+    /// domain last so a prefix scan by day is a single `scan_prefix`).
+    fn corpus_key(day: &str, domain: &str) -> Vec<u8> {
+        format!("corpus:{}:{}", day.replace('-', ""), domain).into_bytes()
+    }
+
+    /// Full row key: `scorerun:{recorded_unix}:{sha-or-nosh}`.
+    fn score_key(rec: &ScoreRunRow) -> Vec<u8> {
+        let sha = if rec.sha.is_empty() { "nosh" } else { rec.sha.as_str() };
+        format!("scorerun:{}:{}", rec.recorded_unix, sha).into_bytes()
+    }
+
+    /// Encode + put one row IFF the stored bytes differ (the import path's
+    /// idempotence counter: `false` = unchanged, nothing written).
+    fn put_row_if_changed(&self, key: &[u8], row: &impl serde::Serialize) -> Result<bool, String> {
+        let bytes = serde_json::to_vec(row).map_err(|e| format!("encode row: {e}"))?;
+        if self.kv.get_bytes(key).is_some_and(|old| old.as_ref() == bytes.as_slice()) {
+            return Ok(false);
+        }
+        self.kv.put(key, &bytes).map_err(|e| format!("put row: {e}"))?;
+        Ok(true)
+    }
+
+    /// Upsert today's (or any day's) corpus count for one domain — the
+    /// `--corpus-stats` stamp. Idempotent overwrite by construction: the
+    /// same inputs produce the same bytes at the same key.
+    ///
+    /// # Errors
+    ///
+    /// KV put or JSON encode failure.
+    pub fn upsert_corpus_count(
+        &self,
+        day: &str,
+        domain: &str,
+        count: u32,
+        compiled: bool,
+        source_note: &str,
+    ) -> Result<(), String> {
+        let row = CorpusCountRow {
+            day: day.to_string(),
+            domain: domain.to_string(),
+            count,
+            compiled,
+            source_note: source_note.to_string(),
+        };
+        let bytes = serde_json::to_vec(&row).map_err(|e| format!("encode corpus row: {e}"))?;
+        self.kv
+            .put(&Self::corpus_key(day, domain), &bytes)
+            .map_err(|e| format!("put corpus row: {e}"))
+    }
+
+    /// Every corpus row, sorted by (day, domain) — the raw series.
+    ///
+    /// # Errors
+    ///
+    /// Row decode failure (a corrupt row is a real error here — unlike the
+    /// trajectory families, this series is small and should never rot;
+    /// silence would hide a broken stamp).
+    pub fn corpus_series(&self) -> Result<Vec<CorpusCountRow>, String> {
+        let mut rows: Vec<CorpusCountRow> = Vec::new();
+        for (_, v) in self.kv.scan_prefix(b"corpus:") {
+            let row: CorpusCountRow =
+                serde_json::from_slice(&v).map_err(|e| format!("decode corpus row: {e}"))?;
+            rows.push(row);
+        }
+        rows.sort_by(|a, b| a.day.cmp(&b.day).then(a.domain.cmp(&b.domain)));
+        Ok(rows)
+    }
+
+    /// The dashboard-facing shape: one FLAT `{"ts": day, "<domain>": n}`
+    /// object per day, oldest-first. Domains with no row that day are
+    /// OMITTED — never a synthesized 0 (an absent stamp is "not measured",
+    /// not "measured zero"). Identical to the
+    /// `.benchmarks/corpus_history.jsonl` row shape by contract.
+    ///
+    /// # Errors
+    ///
+    /// Row decode failure (see [`corpus_series`](Self::corpus_series)).
+    pub fn corpus_series_by_day(&self) -> Result<Vec<serde_json::Value>, String> {
+        // BTreeMaps on both levels — the emission order is deterministic
+        // regardless of scan order.
+        let rows = self.corpus_series()?;
+        let mut by_day: std::collections::BTreeMap<&str, std::collections::BTreeMap<&str, u32>> =
+            std::collections::BTreeMap::new();
+        for row in &rows {
+            by_day
+                .entry(row.day.as_str())
+                .or_default()
+                .insert(row.domain.as_str(), row.count);
+        }
+        Ok(by_day
+            .into_iter()
+            .map(|(day, domains)| {
+                let mut obj = serde_json::Map::new();
+                obj.insert("ts".into(), serde_json::Value::String(day.to_string()));
+                for (domain, count) in domains {
+                    obj.insert(domain.to_string(), serde_json::json!(count));
+                }
+                serde_json::Value::Object(obj)
+            })
+            .collect())
+    }
+
+    /// Record one finished score-bench run (the dual-write tail of the
+    /// jsonl append — Issue 050 T2). Upsert at
+    /// `scorerun:{recorded_unix}:{sha|nosh}`: the same run re-recorded is
+    /// idempotent, a genuinely new run gets a new key.
+    ///
+    /// # Errors
+    ///
+    /// KV put or JSON encode failure.
+    pub fn record_score_run(&self, rec: &ScoreRunRow) -> Result<(), String> {
+        let bytes = serde_json::to_vec(rec).map_err(|e| format!("encode score row: {e}"))?;
+        self.kv
+            .put(&Self::score_key(rec), &bytes)
+            .map_err(|e| format!("put score row: {e}"))
+    }
+
+    /// Every score-run row, sorted by (`recorded_unix`, key) — the
+    /// store-side score history (the jsonl's queryable twin).
+    ///
+    /// # Errors
+    ///
+    /// Row decode failure (see [`corpus_series`](Self::corpus_series)).
+    pub fn score_runs(&self) -> Result<Vec<ScoreRunRow>, String> {
+        let mut rows: Vec<(Vec<u8>, ScoreRunRow)> = Vec::new();
+        for (k, v) in self.kv.scan_prefix(b"scorerun:") {
+            let row: ScoreRunRow =
+                serde_json::from_slice(&v).map_err(|e| format!("decode score row: {e}"))?;
+            rows.push((k, row));
+        }
+        rows.sort_by(|a, b| {
+            a.1.recorded_unix
+                .cmp(&b.1.recorded_unix)
+                .then(a.0.cmp(&b.0))
+        });
+        Ok(rows.into_iter().map(|(_, r)| r).collect())
+    }
+
+    /// One-time (idempotent) import of the committed
+    /// `.benchmarks/corpus_history.jsonl` projection: each flat
+    /// `{"ts": day, "<domain>": n}` line becomes one [`CorpusCountRow`]
+    /// per domain with `source_note = "import-jsonl"` and
+    /// `compiled = false` (the flat shape carries no compiled fact — an
+    /// imported row honestly records "not verified"). Unchanged rows are
+    /// not rewritten, and an existing `source-walk` row is NEVER clobbered
+    /// (the first-hand stamp outranks the second-hand projection — the
+    /// store is the source of truth, so re-importing a stale jsonl cannot
+    /// overwrite today's live stamp).
+    ///
+    /// Returns `(rows_seen, rows_written)`.
+    ///
+    /// # Errors
+    ///
+    /// File read / KV put / JSON encode failure. A malformed LINE is
+    /// skipped (one stderr line), never fatal.
+    pub fn import_corpus_jsonl(&self, path: &Path) -> Result<(usize, usize), String> {
+        let text =
+            std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
+        let (mut seen, mut written) = (0usize, 0usize);
+        for line in text.lines() {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+            let Ok(row) = serde_json::from_str::<serde_json::Value>(line) else {
+                eprintln!(
+                    "traj-store: skipping malformed corpus-history line in {}",
+                    path.display()
+                );
+                continue;
+            };
+            let Some(obj) = row.as_object() else {
+                continue;
+            };
+            let Some(day) = obj.get("ts").and_then(|v| v.as_str()) else {
+                continue;
+            };
+            for (domain, val) in obj {
+                if domain == "ts" {
+                    continue;
+                }
+                let Some(count) = val.as_u64().and_then(|c| u32::try_from(c).ok()) else {
+                    eprintln!(
+                        "traj-store: skipping non-numeric corpus count ({domain}) in {}",
+                        path.display()
+                    );
+                    continue;
+                };
+                seen += 1;
+                let row = CorpusCountRow {
+                    day: day.to_string(),
+                    domain: domain.clone(),
+                    count,
+                    compiled: false,
+                    source_note: "import-jsonl".to_string(),
+                };
+                let key = Self::corpus_key(day, domain);
+                // Provenance precedence: a first-hand source-walk stamp
+                // outranks the second-hand projection — yield, count as
+                // seen only. Same-provenance re-imports compare-and-put.
+                let yields = self
+                    .kv
+                    .get_bytes(&key)
+                    .and_then(|old| serde_json::from_slice::<CorpusCountRow>(&old).ok())
+                    .is_some_and(|old| old.source_note == "source-walk");
+                if yields {
+                    continue;
+                }
+                if self.put_row_if_changed(&key, &row)? {
+                    written += 1;
+                }
+            }
+        }
+        Ok((seen, written))
+    }
+
+    /// One-time (idempotent) import of the committed
+    /// `.benchmarks/score_history.jsonl`: each `HistoryRecord` line becomes
+    /// a [`ScoreRunRow`] with `recorded_unix` derived from `ts` (0 on a
+    /// malformed timestamp). Unchanged rows are not rewritten.
+    ///
+    /// Returns `(rows_seen, rows_written)`.
+    ///
+    /// # Errors
+    ///
+    /// File read / KV put / JSON encode failure. A malformed LINE is
+    /// skipped (one stderr line), never fatal.
+    pub fn import_score_jsonl(&self, path: &Path) -> Result<(usize, usize), String> {
+        let text =
+            std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
+        let (mut seen, mut written) = (0usize, 0usize);
+        for line in text.lines() {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+            let Ok(mut row) = serde_json::from_str::<ScoreRunRow>(line) else {
+                eprintln!(
+                    "traj-store: skipping malformed score-history line in {}",
+                    path.display()
+                );
+                continue;
+            };
+            seen += 1;
+            // Derive the ordering key from the row's own ts — never trust a
+            // stale stored value (and the jsonl shape carries none).
+            row.recorded_unix = parse_ts_unix(&row.ts);
+            if self.put_row_if_changed(&Self::score_key(&row), &row)? {
+                written += 1;
+            }
+        }
+        Ok((seen, written))
     }
 }
 
@@ -1693,5 +2083,265 @@ mod tests {
         assert!(store.elo_table().is_empty());
         let _ = std::fs::remove_dir_all(&root);
         let _ = std::fs::remove_dir_all(&root2);
+    }
+
+    // ── Issue 050 T2: the corpus + score series families ─────────────
+
+    #[test]
+    fn corpus_roundtrip_and_idempotent_upsert() {
+        let root = tmp_root("corpus-roundtrip");
+        {
+            let (store, _) = TrajStore::open(&root).unwrap();
+            store
+                .upsert_corpus_count("2026-08-28", "kernel_opt", 393, true, "source-walk")
+                .unwrap();
+            store
+                .upsert_corpus_count("2026-08-28", "rust_perf", 88, true, "source-walk")
+                .unwrap();
+            store
+                .upsert_corpus_count("2026-08-27", "sec", 6, false, "import-jsonl")
+                .unwrap();
+            let series = store.corpus_series().unwrap();
+            assert_eq!(series.len(), 3);
+            let json_before = serde_json::to_string(&series).unwrap();
+            // Same inputs again → same bytes at the same keys (the
+            // idempotent-overwrite contract).
+            store
+                .upsert_corpus_count("2026-08-28", "kernel_opt", 393, true, "source-walk")
+                .unwrap();
+            let json_after = serde_json::to_string(&store.corpus_series().unwrap()).unwrap();
+            assert_eq!(json_before, json_after, "second upsert changed nothing");
+        }
+        // Reopen: the series is durable + (day, domain)-ordered.
+        let (store, _) = TrajStore::open(&root).unwrap();
+        let series = store.corpus_series().unwrap();
+        assert_eq!(series.len(), 3);
+        assert_eq!((series[0].day.as_str(), series[0].domain.as_str()), ("2026-08-27", "sec"));
+        assert_eq!(
+            (series[1].day.as_str(), series[1].domain.as_str()),
+            ("2026-08-28", "kernel_opt")
+        );
+        assert_eq!(
+            (series[2].day.as_str(), series[2].domain.as_str()),
+            ("2026-08-28", "rust_perf")
+        );
+        assert_eq!(series[1].count, 393);
+        assert!(series[1].compiled);
+        assert_eq!(series[0].source_note, "import-jsonl");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn corpus_by_day_merges_and_omits_absent_domains() {
+        let root = tmp_root("corpus-by-day");
+        let (store, _) = TrajStore::open(&root).unwrap();
+        // Day 1: only kernel_opt measured.
+        store
+            .upsert_corpus_count("2026-08-27", "kernel_opt", 380, true, "source-walk")
+            .unwrap();
+        // Day 2: kernel_opt + rust_perf (sec absent — must NOT appear, and
+        // must NOT be synthesized as 0).
+        store
+            .upsert_corpus_count("2026-08-28", "kernel_opt", 393, true, "source-walk")
+            .unwrap();
+        store
+            .upsert_corpus_count("2026-08-28", "rust_perf", 88, true, "source-walk")
+            .unwrap();
+        let by_day = store.corpus_series_by_day().unwrap();
+        assert_eq!(by_day.len(), 2, "one flat row per day");
+        assert_eq!(
+            by_day[0],
+            serde_json::json!({"ts": "2026-08-27", "kernel_opt": 380}),
+            "absent domains omitted — never a 0"
+        );
+        assert_eq!(
+            by_day[1],
+            serde_json::json!({"ts": "2026-08-28", "kernel_opt": 393, "rust_perf": 88})
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn score_run_roundtrip_and_ordering() {
+        let root = tmp_root("score-run");
+        let mk = |ts: &str, sha: &str, unix: u64, rate: f32| ScoreRunRow {
+            ts: ts.to_string(),
+            sha: sha.to_string(),
+            n_ran: 34,
+            n_healable: 28,
+            n_clean: 6,
+            heal_rate: rate,
+            created_rate: 0.01,
+            parse_safety: 1.0,
+            decline_correctness: 1.0,
+            edits_total: 60,
+            vocab_size: 33,
+            recorded_unix: unix,
+        };
+        let (store, _) = TrajStore::open(&root).unwrap();
+        // Insert out of order; score_runs must return (recorded_unix, key)
+        // order. The empty-sha row pins the `nosh` key part.
+        store.record_score_run(&mk("2026-08-25T04:05:18", "7399ffc", 1_756_087_518, 0.96)).unwrap();
+        store.record_score_run(&mk("2026-08-19T04:49:29", "", 1_755_571_769, 0.84)).unwrap();
+        store.record_score_run(&mk("2026-08-28T02:09:06", "9f08442", 1_756_337_346, 0.98)).unwrap();
+        let runs = store.score_runs().unwrap();
+        assert_eq!(runs.len(), 3);
+        assert_eq!(runs[0].sha, "", "empty sha stored verbatim (key part is nosh)");
+        assert!(runs[0].recorded_unix < runs[1].recorded_unix);
+        assert!(runs[1].recorded_unix < runs[2].recorded_unix);
+        assert!((runs[2].heal_rate - 0.98).abs() < 1e-6);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn jsonl_imports_are_idempotent_and_skip_malformed_lines() {
+        let root = tmp_root("jsonl-import");
+        let dir = root.join("benchmarks");
+        std::fs::create_dir_all(&dir).unwrap();
+        let corpus_jsonl = dir.join("corpus_history.jsonl");
+        std::fs::write(
+            &corpus_jsonl,
+            concat!(
+                "{\"ts\":\"2026-08-27\",\"kernel_opt\":380,\"sec\":6}\n",
+                "{\"ts\":\"2026-08-28\",\"kernel_opt\":393,\"rust_perf\":88,\"clippy_lints\":40,\"sec\":6}\n",
+                "NOT JSON AT ALL\n",
+            ),
+        )
+        .unwrap();
+        let score_jsonl = dir.join("score_history.jsonl");
+        std::fs::write(
+            &score_jsonl,
+            concat!(
+                "{\"ts\":\"2026-08-19T04:49:29\",\"sha\":\"72bac03\",\"n_ran\":34,\"n_healable\":28,\"n_clean\":6,\"heal_rate\":0.84615386,\"created_rate\":0.057692308,\"parse_safety\":0.9285714,\"decline_correctness\":1.0,\"edits_total\":60,\"vocab_size\":33}\n",
+                "GARBAGE\n",
+            ),
+        )
+        .unwrap();
+        let (store, _) = TrajStore::open(&root).unwrap();
+        // 2 + 4 domain rows seen (the malformed line skipped, not fatal).
+        let (seen, written) = store.import_corpus_jsonl(&corpus_jsonl).unwrap();
+        assert_eq!((seen, written), (6, 6));
+        let (seen_s, written_s) = store.import_score_jsonl(&score_jsonl).unwrap();
+        assert_eq!((seen_s, written_s), (1, 1));
+        // Series reflects the import with the import-jsonl provenance.
+        let series = store.corpus_series().unwrap();
+        assert_eq!(series.len(), 6);
+        assert!(series.iter().all(|r| r.source_note == "import-jsonl"));
+        assert_eq!(
+            store.score_runs().unwrap()[0].recorded_unix,
+            parse_ts_unix("2026-08-19T04:49:29")
+        );
+        // Second import: upserts change nothing → 0 written (idempotence).
+        let (seen2, written2) = store.import_corpus_jsonl(&corpus_jsonl).unwrap();
+        assert_eq!((seen2, written2), (6, 0));
+        let (seen3, written3) = store.import_score_jsonl(&score_jsonl).unwrap();
+        assert_eq!((seen3, written3), (1, 0));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn corpus_import_yields_to_a_first_hand_source_walk_row() {
+        // Issue 050 T2 provenance precedence: the store is the source of
+        // truth, so a (day, domain) key already holding a `source-walk`
+        // stamp is never clobbered by the second-hand jsonl projection —
+        // even when the projection carries a DIFFERENT (stale) count.
+        let root = tmp_root("corpus-import-precedence");
+        let dir = root.join("benchmarks");
+        std::fs::create_dir_all(&dir).unwrap();
+        let corpus_jsonl = dir.join("corpus_history.jsonl");
+        std::fs::write(
+            &corpus_jsonl,
+            "{\"ts\":\"2026-08-28\",\"kernel_opt\":393}\n",
+        )
+        .unwrap();
+        let (store, _) = TrajStore::open(&root).unwrap();
+        store
+            .upsert_corpus_count("2026-08-28", "kernel_opt", 396, true, "source-walk")
+            .unwrap();
+        // Import sees the row but writes nothing — the stamp survives.
+        let (seen, written) = store.import_corpus_jsonl(&corpus_jsonl).unwrap();
+        assert_eq!((seen, written), (1, 0));
+        let series = store.corpus_series().unwrap();
+        assert_eq!(series.len(), 1);
+        assert_eq!(series[0].count, 396, "source-walk stamp survived the import");
+        assert_eq!(series[0].source_note, "source-walk");
+        // An import-jsonl row (no stamp) is still idempotently refreshed.
+        store
+            .upsert_corpus_count("2026-08-27", "sec", 6, false, "import-jsonl")
+            .unwrap();
+        std::fs::write(
+            &corpus_jsonl,
+            concat!(
+                "{\"ts\":\"2026-08-28\",\"kernel_opt\":393}\n",
+                "{\"ts\":\"2026-08-27\",\"sec\":6}\n",
+            ),
+        )
+        .unwrap();
+        let (seen2, written2) = store.import_corpus_jsonl(&corpus_jsonl).unwrap();
+        assert_eq!((seen2, written2), (2, 0), "same-bytes re-import writes nothing");
+        assert_eq!(store.corpus_series().unwrap().len(), 2);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn parse_ts_unix_and_today_roundtrip() {
+        // Date-only and full-timestamp shapes both parse.
+        assert_eq!(parse_ts_unix("2026-08-19"), parse_ts_unix("2026-08-19T00:00:00"));
+        assert_eq!(parse_ts_unix("2026-08-19T04:49:29"), 1_787_114_969);
+        assert_eq!(parse_ts_unix("garbage"), 0);
+        assert_eq!(parse_ts_unix("2026-13-99"), 0, "out-of-range fields refuse");
+        // days_from_civil ∘ civil_from_days is the identity on sample dates.
+        for day in [0i64, 1, 100, 19_000, 20_663] {
+            let (y, m, d) = civil_from_days(day);
+            assert_eq!(days_from_civil(y, m, d), day);
+        }
+        // today_local_date is the date part of a fresh civil computation
+        // (shape check — the value moves with the clock).
+        let today = today_local_date();
+        assert_eq!(today.len(), 10);
+        assert_eq!(today.as_bytes()[4], b'-');
+        assert_eq!(today.as_bytes()[7], b'-');
+        assert_eq!(parse_ts_unix(&today), parse_ts_unix(&format!("{today}T00:00:00")));
+    }
+
+    #[cfg(feature = "score_bench")]
+    #[test]
+    fn score_run_row_is_schema_identical_to_history_record() {
+        // The jsonl ↔ store schema-identity contract (Issue 050 T2): a
+        // HistoryRecord round-trips through ScoreRunRow with every field
+        // preserved — only `recorded_unix` is added.
+        let rec = crate::score_bench::report::HistoryRecord {
+            ts: "2026-08-19T04:49:29".to_string(),
+            sha: "72bac03".to_string(),
+            n_ran: 34,
+            n_healable: 28,
+            n_clean: 6,
+            heal_rate: 0.846_153_86,
+            created_rate: 0.057_692_308,
+            parse_safety: 0.928_571_4,
+            decline_correctness: 1.0,
+            edits_total: 60,
+            vocab_size: 33,
+        };
+        let row = ScoreRunRow::from(&rec);
+        assert_eq!(row.ts, rec.ts);
+        assert_eq!(row.sha, rec.sha);
+        assert_eq!(row.n_ran, rec.n_ran);
+        assert_eq!(row.n_healable, rec.n_healable);
+        assert_eq!(row.n_clean, rec.n_clean);
+        assert_eq!(row.heal_rate, rec.heal_rate);
+        assert_eq!(row.created_rate, rec.created_rate);
+        assert_eq!(row.parse_safety, rec.parse_safety);
+        assert_eq!(row.decline_correctness, rec.decline_correctness);
+        assert_eq!(row.edits_total, rec.edits_total);
+        assert_eq!(row.vocab_size, rec.vocab_size);
+        assert_eq!(row.recorded_unix, parse_ts_unix(&rec.ts));
+        // And the serialized jsonl line of the record is a PREFIX-shape of
+        // the row: deserializing the record's JSON into a ScoreRunRow keeps
+        // recorded_unix at its serde default (0) — the import path.
+        let line = serde_json::to_string(&rec).unwrap();
+        let from_jsonl: ScoreRunRow = serde_json::from_str(&line).unwrap();
+        assert_eq!(from_jsonl.recorded_unix, 0, "jsonl shape carries no unix stamp");
+        assert_eq!(from_jsonl.ts, rec.ts);
     }
 }
