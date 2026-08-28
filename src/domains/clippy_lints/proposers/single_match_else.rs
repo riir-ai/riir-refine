@@ -39,14 +39,17 @@
 //! non-block bodies are braced.
 
 use super::helpers::{byte_range, drops_interior_comment, is_postfix_safe, is_unit_expr};
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 use syn::spanned::Spanned;
 use syn::visit::Visit;
-use syn::{Expr, ExprMatch, File, Lit, Pat};
+use syn::{Expr, ExprMatch, File, Lit, Pat, Stmt};
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
-    let mut v = Collector { source, edits: Vec::new() };
+    let mut v = Collector {
+        source,
+        edits: Vec::new(),
+    };
     v.visit_file(file);
     v.edits
 }
@@ -70,16 +73,34 @@ impl Collector<'_> {
         if m.arms.len() != 2 || !m.attrs.is_empty() {
             return None;
         }
-        if m.arms.iter().any(|a| !a.attrs.is_empty() || a.guard.is_some()) {
+        if m.arms
+            .iter()
+            .any(|a| !a.attrs.is_empty() || a.guard.is_some())
+        {
             return None; // guards/arm-attrs would be lost by the splice
         }
-        if !is_wildcard_second_arm(&m.arms[0].pat, &m.arms[1].pat) || is_unit_expr(&m.arms[1].body) {
+        if !is_wildcard_second_arm(&m.arms[0].pat, &m.arms[1].pat) || is_unit_expr(&m.arms[1].body)
+        {
             return None; // unit wildcard is `single_match`, not this lint
         }
         // Issue 027: real clippy only fires when the wildcard arm is a
         // statement BLOCK (expression wildcards are silent even under
         // pedantic) — probe P2/P4 vs P3.
-        if !matches!(&*m.arms[1].body, Expr::Block(_)) {
+        let Expr::Block(else_block) = &*m.arms[1].body else {
+            return None;
+        };
+        // P6 oracle gate (clippy 1.97 master source, probed): an else block
+        // that is a SINGLE statement with no tail expr, or a bare tail expr
+        // with no statements, is SILENT ("single statement/expr else block,
+        // don't lint"). Only 2+ HIR statements, or 1+ statement plus a tail
+        // expr, fire. Firing on the skipped shapes would put the healer
+        // AHEAD of the oracle (the format_in_format_args boundary rule).
+        // syn folds the tail expr into stmts as `Stmt::Expr(_, None)` —
+        // split it back out to recover the HIR shape.
+        let stmts = &else_block.block.stmts;
+        let has_tail = matches!(stmts.last(), Some(Stmt::Expr(_, None)));
+        let n_stmts = stmts.len() - usize::from(has_tail);
+        if !(n_stmts >= 2 || (n_stmts >= 1 && has_tail)) {
             return None;
         }
         if matches!(m.arms[0].pat, Pat::Wild(_)) {
@@ -105,8 +126,16 @@ impl Collector<'_> {
             // Issue 029: literal INTEGER first arms fire under the equality
             // form (`if x == 0`). This syn's `PatLit` holds a `Lit` whose
             // token text preserves any leading `-` — non-negative only
-            // (negatives unprobed); bool/char/str literals stay skipped.
-            Pat::Lit(l) if is_nonnegative_int_lit(&l.lit) => {
+            // (negatives unprobed). P6: literal STRING and CHAR first arms
+            // fire the same equality form (probed MA vs clippy 1.97: `if s
+            // == "go"` / `if c == 'x'`); the literal text is spliced
+            // verbatim from source, so escapes need no interpretation. BOOL
+            // literals stay skipped — match_bool owns that shape (oracle:
+            // single_match_else is silent, match_bool fires MA).
+            Pat::Lit(l)
+                if is_nonnegative_int_lit(&l.lit)
+                    || matches!(&l.lit, Lit::Str(_) | Lit::Char(_)) =>
+            {
                 let lit = src(self.source, &l.lit)?;
                 let cond = if is_postfix_safe(&m.expr) {
                     format!("{scrutinee} == {lit}")
@@ -115,7 +144,7 @@ impl Collector<'_> {
                 };
                 Some(format!("if {cond} {then} else {else_}"))
             }
-            Pat::Lit(_) => None, // bool/char/str literal — unprobed, skip
+            Pat::Lit(_) => None, // bool literal — match_bool territory (oracle-silent here)
             _ => {
                 let pat = src(self.source, &m.arms[0].pat)?;
                 Some(format!("if let {pat} = {scrutinee} {then} else {else_}"))
@@ -184,7 +213,10 @@ fn is_std_no_binding_ctor(p: &Pat) -> bool {
         Pat::TupleStruct(ts) => {
             !ts.elems.is_empty()
                 && is_ctor_path(&ts.path)
-                && ts.elems.iter().all(|e| matches!(e, Pat::Wild(_) | Pat::Rest(_)))
+                && ts
+                    .elems
+                    .iter()
+                    .all(|e| matches!(e, Pat::Wild(_) | Pat::Rest(_)))
         }
         _ => false,
     }
@@ -229,13 +261,30 @@ mod tests {
 
     #[test]
     fn block_bodies_keep_original_braces() {
-        let input = "fn g(x: Option<u8>) { match x { Some(v) => { drop(v); }, _ => { fallback(); } } }";
+        // P6 gate: the else block must be a FIRING shape (1+ stmt + tail
+        // expr, or 2+ stmts) — `{ fallback(); }` alone is oracle-silent.
+        let input = "fn g(x: Option<u8>) { match x { Some(v) => { drop(v); }, _ => { fallback(); other(); } } }";
         let out = propose_fix("single_match_else", input).expect("matched");
         assert!(
-            out.contains("if let Some(v) = x { drop(v); } else { fallback(); }"),
+            out.contains("if let Some(v) = x { drop(v); } else { fallback(); other(); }"),
             "{out}"
         );
         syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn single_statement_else_block_is_oracle_silent() {
+        // P6 oracle gate (clippy 1.97): a single-statement else block
+        // (`([_], None)` in HIR) and a bare tail-expr block (`([], Some(_))`)
+        // are SILENT — the healer must not fire ahead of the oracle.
+        let single_stmt =
+            "fn g(x: Option<u8>) { match x { Some(v) => drop(v), _ => { fallback(); } } }";
+        assert!(propose_fix("single_match_else", single_stmt).is_none());
+        let bare_tail = "fn g(x: Option<u8>) -> u8 { match x { Some(v) => v, _ => { 0 } } }";
+        assert!(propose_fix("single_match_else", bare_tail).is_none());
+        let single_semi_tail =
+            "fn g(x: Option<u8>) -> u8 { match x { Some(v) => v, _ => { 0; } } }";
+        assert!(propose_fix("single_match_else", single_semi_tail).is_none());
     }
 
     #[test]
@@ -254,7 +303,61 @@ mod tests {
         // from the equality form (unprobed vs real clippy).
         let input = "fn g(x: i64) -> u8 { match x { -1 => 1, _ => { let v = 2; v } } }";
         let out = propose_fix("single_match_else", input);
-        assert!(out.is_none(), "negative literal arm must stay skipped: {out:?}");
+        assert!(
+            out.is_none(),
+            "negative literal arm must stay skipped: {out:?}"
+        );
+    }
+
+    #[test]
+    fn str_literal_first_arm_becomes_equality() {
+        // P6 oracle (clippy 1.97, MA): str literal + FIRING else block →
+        // `if s == "go" { .. } else { .. }`.
+        let input =
+            "fn g(s: &str) { match s { \"go\" => walk(), _ => { stop(); panic!(\"bad\"); } } }";
+        let out = propose_fix("single_match_else", input).expect("matched");
+        assert!(
+            out.contains("if s == \"go\" { walk() } else {"),
+            "str equality not produced: {out}"
+        );
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn char_literal_first_arm_becomes_equality() {
+        // P6 oracle (clippy 1.97, MA): char literal → `if c == 'x' { .. }`.
+        let input =
+            "fn g(c: char) { match c { 'x' => walk(), _ => { stop(); panic!(\"bad\"); } } }";
+        let out = propose_fix("single_match_else", input).expect("matched");
+        assert!(
+            out.contains("if c == 'x' { walk() } else {"),
+            "char equality not produced: {out}"
+        );
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn str_literal_with_escapes_splices_verbatim() {
+        // The literal text is taken from the source by span — escapes ride
+        // through uninterpreted (`if s == "a\"b"`).
+        let input =
+            "fn g(s: &str) { match s { \"a\\\"b\" => walk(), _ => { stop(); panic!(\"bad\"); } } }";
+        let out = propose_fix("single_match_else", input).expect("matched");
+        assert!(
+            out.contains("if s == \"a\\\"b\" { walk() } else {"),
+            "escaped literal not spliced verbatim: {out}"
+        );
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn bool_literal_first_arm_stays_skipped() {
+        // P6 oracle: single_match_else is SILENT on bool literals (match_bool
+        // owns the shape and fires MA there — the match_bool proposer covers it).
+        let input =
+            "fn g(b: bool) { match b { true => walk(), _ => { stop(); panic!(\"bad\"); } } }";
+        let out = propose_fix("single_match_else", input);
+        assert!(out.is_none(), "bool literal must stay skipped: {out:?}");
     }
 
     #[test]
@@ -262,8 +365,7 @@ mod tests {
         // Issue 027 probe P1 fixture — it FIRES under the equality form
         // (Issue 029); the Binary scrutinee is parenthesized (Rust's `&`
         // binds tighter than `==`, but explicit parens are unambiguous).
-        let input =
-            "fn g(x: u64) -> f32 { match x & 1 { 0 => -1.0, _ => { let f = 1.0; f } } }";
+        let input = "fn g(x: u64) -> f32 { match x & 1 { 0 => -1.0, _ => { let f = 1.0; f } } }";
         let out = propose_fix("single_match_else", input).expect("matched");
         assert!(
             out.contains("if (x & 1) == 0 { -1.0 } else { let f = 1.0; f }"),
@@ -288,18 +390,19 @@ mod tests {
     #[test]
     fn complex_scrutinee_gets_parens_in_equality() {
         // A scrutinee that binds looser than `==` must be parenthesized.
-        let input =
-            "fn g(x: u8, y: u8) -> u8 { match x | y { 0 => 1, _ => { let v = 2; v } } }";
+        let input = "fn g(x: u8, y: u8) -> u8 { match x | y { 0 => 1, _ => { let v = 2; v } } }";
         let out = propose_fix("single_match_else", input).expect("matched");
-        assert!(out.contains("if (x | y) == 0"), "scrutinee not parenthesized: {out}");
+        assert!(
+            out.contains("if (x | y) == 0"),
+            "scrutinee not parenthesized: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 
     #[test]
     fn bool_literal_first_arm_still_skipped() {
         // Unprobed vs real clippy — bool literal arms stay out of scope.
-        let input =
-            "fn g(x: bool) -> u8 { match x { true => 1, _ => { let v = 2; v } } }";
+        let input = "fn g(x: bool) -> u8 { match x { true => 1, _ => { let v = 2; v } } }";
         let out = propose_fix("single_match_else", input);
         assert!(out.is_none(), "bool literal arm must stay skipped: {out:?}");
     }
@@ -310,8 +413,7 @@ mod tests {
         // a comment between arms sits in a DROPPED gap — the whole-match
         // splice would delete it. The decomp_reviewer.rs:62 site carries
         // exactly this comment and must stay silent.
-        let equality =
-            "fn g(total: u32) -> bool { match total { 0 => true, // no data yet\n            _ => { let n = 1.0; n >= 0.5 } } }";
+        let equality = "fn g(total: u32) -> bool { match total { 0 => true, // no data yet\n            _ => { let n = 1.0; n >= 0.5 } } }";
         assert!(propose_fix("single_match_else", equality).is_none());
         let if_let = "fn g(x: Option<u8>) { match x { // leading comment\n            Some(v) => drop(v), _ => { fallback(); } } }";
         assert!(propose_fix("single_match_else", if_let).is_none());
@@ -320,11 +422,14 @@ mod tests {
     #[test]
     fn comment_inside_arm_body_survives() {
         // A comment INSIDE a kept fragment (arm body) survives the splice —
-        // must keep firing.
-        let input =
-            "fn g(x: Option<u8>) { match x { Some(v) => { drop(v); // why\n }, _ => { fallback(); } } }";
+        // must keep firing. (Else body is a 2-stmt firing shape per the P6
+        // gate.)
+        let input = "fn g(x: Option<u8>) { match x { Some(v) => { drop(v); // why\n }, _ => { fallback(); fallback(); } } }";
         let out = propose_fix("single_match_else", input).expect("matched");
-        assert!(out.contains("// why"), "interior arm-body comment lost: {out}");
+        assert!(
+            out.contains("// why"),
+            "interior arm-body comment lost: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 
@@ -332,7 +437,10 @@ mod tests {
     fn unit_wildcard_is_single_match() {
         let input = "fn g(x: Option<u8>) { match x { Some(v) => drop(v), _ => () } }";
         let out = propose_fix("single_match_else", input);
-        assert!(out.is_none(), "unit wildcard arm is single_match, not this lint: {out:?}");
+        assert!(
+            out.is_none(),
+            "unit wildcard arm is single_match, not this lint: {out:?}"
+        );
     }
 
     #[test]
@@ -344,7 +452,8 @@ mod tests {
 
     #[test]
     fn guarded_arm_untouched() {
-        let input = "fn g(x: Option<u8>) { match x { Some(v) if v > 0 => drop(v), _ => { fallback() } } }";
+        let input =
+            "fn g(x: Option<u8>) { match x { Some(v) if v > 0 => drop(v), _ => { fallback() } } }";
         let out = propose_fix("single_match_else", input);
         assert!(out.is_none(), "guarded arm must not fire: {out:?}");
     }
@@ -393,16 +502,14 @@ mod tests {
         // Issue 029 T3 probe P13/P14: the DEFAULT first + success-wildcard
         // second also fires (clippy suggests `if x == None` — we emit the
         // trait-free `if let None = x` form, sound for every payload type).
-        let option =
-            "fn g(x: Option<u8>) -> u8 { match x { None => { let b = 2; b }, Some(_) => { let a = 1; a } } }";
+        let option = "fn g(x: Option<u8>) -> u8 { match x { None => { let b = 2; b }, Some(_) => { let a = 1; a } } }";
         let out = propose_fix("single_match_else", option).expect("matched");
         assert!(
             out.contains("if let None = x { let b = 2; b } else { let a = 1; a }"),
             "reversed Some(_) not converted: {out}"
         );
         syn::parse_file(&out).expect("re-parses");
-        let result =
-            "fn g(r: Result<u8, u8>) -> u8 { match r { Err(_) => { let b = 2; b }, Ok(_) => { let a = 1; a } } }";
+        let result = "fn g(r: Result<u8, u8>) -> u8 { match r { Err(_) => { let b = 2; b }, Ok(_) => { let a = 1; a } } }";
         let out = propose_fix("single_match_else", result).expect("matched");
         assert!(
             out.contains("if let Err(_) = r { let b = 2; b } else { let a = 1; a }"),
@@ -413,8 +520,7 @@ mod tests {
     #[test]
     fn qualified_option_none_second_fires() {
         // Issue 029 T3 probe P9: qualified `Option::None` fires.
-        let input =
-            "fn g(x: Option<u8>) -> u8 { match x { Some(v) => v, Option::None => { let b = 2; b } } }";
+        let input = "fn g(x: Option<u8>) -> u8 { match x { Some(v) => v, Option::None => { let b = 2; b } } }";
         let out = propose_fix("single_match_else", input).expect("matched");
         assert!(
             out.contains("if let Some(v) = x { v } else { let b = 2; b }"),
@@ -426,11 +532,9 @@ mod tests {
     fn binding_second_arm_stays_silent() {
         // Issue 029 T3 probes P5/P6/P18/P19: a BINDING in the second arm
         // loses the binding under `else` — real clippy stays silent.
-        let err_e =
-            "fn g(r: Result<u8, u8>) -> u8 { match r { Ok(v) => v, Err(e) => { let b = e as u8; b } } }";
+        let err_e = "fn g(r: Result<u8, u8>) -> u8 { match r { Ok(v) => v, Err(e) => { let b = e as u8; b } } }";
         assert!(propose_fix("single_match_else", err_e).is_none());
-        let some_v =
-            "fn g(x: Option<u8>) -> u8 { match x { None => { let b = 2; b }, Some(v) => { let a = v + 1; a } } }";
+        let some_v = "fn g(x: Option<u8>) -> u8 { match x { None => { let b = 2; b }, Some(v) => { let a = v + 1; a } } }";
         assert!(propose_fix("single_match_else", some_v).is_none());
     }
 
@@ -438,8 +542,7 @@ mod tests {
     fn expression_none_second_body_stays_silent() {
         // Issue 029 T3 probes P3/P12: expression arm2 bodies are silent
         // (consistent with the 027 expression-wildcard finding).
-        let input =
-            "fn g(x: Option<u8>) -> u8 { match x { Some(v) => v + 1, None => 2 } }";
+        let input = "fn g(x: Option<u8>) -> u8 { match x { Some(v) => v + 1, None => 2 } }";
         let out = propose_fix("single_match_else", input);
         assert!(out.is_none(), "expression None arm must not fire: {out:?}");
     }
@@ -459,8 +562,7 @@ mod tests {
     fn none_first_with_wildcard_second_still_fires() {
         // Pre-existing `_`-second behavior extends to a None FIRST arm —
         // the if-let form keeps the unit-path pattern verbatim.
-        let input =
-            "fn g(x: Option<u8>) -> u8 { match x { None => 2, _ => { let a = 1; a } } }";
+        let input = "fn g(x: Option<u8>) -> u8 { match x { None => 2, _ => { let a = 1; a } } }";
         let out = propose_fix("single_match_else", input).expect("matched");
         assert!(
             out.contains("if let None = x { 2 } else { let a = 1; a }"),

@@ -10,23 +10,37 @@
 //! guarded middle arm plus an EMPTY same-polarity fallback — rewrites to
 //! `if s { A } else if g { B }` (the empty fallback is the implicit else;
 //! real clippy fires `match_bool` on this shape with no autofix of its
-//! own). Only this exact polarity layout is converted: a guard on the
-//! FIRST arm would need a nested `if`, which is a different rewrite.
+//! own). Only this exact polarity layout is converted.
+//!
+//! P6 extensions (oracle-probed vs clippy 1.97, ALL MachineApplicable):
+//! - wildcard-second two-arm: `[P => A, _ => B]` (either arm order, either
+//!   polarity) → `if s { A } else { B }` / `if !s { A } else { B }`
+//! - guard-on-the-literal-arm: `[P if g => A, _ => B]` → the FLAT
+//!   conjunction `if s && g { A } else { B }` / `if !s && g { .. }` —
+//!   clippy emits the flat form, NOT a nested if (the old "would need a
+//!   nested if" note was wrong; short-circuit `&&` preserves the guard's
+//!   evaluate-only-when-P semantics). A bool-LITERAL second arm with a
+//!   guarded first arm is E0004 (guards don't count toward
+//!   exhaustiveness) — impossible in compiling code, not handled.
 //!
 //! Span-preserving (Issue 016): the whole match's byte range is replaced by
 //! `if <scrutinee> <true-body> else <false-body>` — scrutinee and bodies
 //! keep their ORIGINAL source text; non-block bodies are braced. The if
 //! condition takes any expression, so the scrutinee needs no parens.
 
+use super::helpers::is_postfix_safe;
 use super::uninlined_format_args::all_expr_args;
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 use proc_macro2::TokenStream;
 use syn::visit::Visit;
 use syn::{Expr, ExprMacro, ExprMatch, File, Lit, Macro, Pat, StmtMacro};
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
-    let mut v = Collector { source, edits: Vec::new() };
+    let mut v = Collector {
+        source,
+        edits: Vec::new(),
+    };
     v.visit_file(file);
     v.edits
 }
@@ -100,18 +114,68 @@ impl Collector<'_> {
     }
 
     /// The classic two-arm form: `[true => A, false => B]` (either order,
-    /// no guards).
+    /// no guards), extended (P6, oracle MA) to the wildcard-second form
+    /// `[P => A, _ => B]` and the guarded-literal form `[P if g => A,
+    /// _ => B]` (flat `&&` conjunction).
     fn try_two_arm(&self, m: &ExprMatch) -> Option<String> {
-        if m.arms.iter().any(|a| !a.attrs.is_empty() || a.guard.is_some()) {
-            return None; // guards/arm-attrs would be lost by the splice
+        if m.arms.iter().any(|a| !a.attrs.is_empty()) {
+            return None; // arm-attrs would be lost by the splice
         }
         let scrutinee = src(self.source, &*m.expr)?;
+        let scrut_postfix = is_postfix_safe(&m.expr);
+        // `!s && g` / `if !s` — unary `!` binds tighter than `&&`, so a
+        // postfix scrutinee takes no parens; binary/macro forms need them
+        // (`!a == b` parses as `(!a) == b` — a silent wrong-condition).
+        let neg_cond = if scrut_postfix {
+            format!("!{scrutinee}")
+        } else {
+            format!("!({scrutinee})")
+        };
+        // Guarded-literal form: the literal arm carries the guard, the
+        // other arm is the wildcard (clippy MA: flat `s && g`).
+        let (lit, other) = (&m.arms[0], &m.arms[1]);
+        let (lit, other) = if other.guard.is_some() {
+            (other, lit)
+        } else {
+            (lit, other)
+        };
+        if let Some(guard) = &lit.guard {
+            let negated = match (&lit.pat, &other.pat) {
+                (p, Pat::Wild(_)) if pat_is_bool(p, true) => false,
+                (p, Pat::Wild(_)) if pat_is_bool(p, false) => true,
+                _ => return None,
+            };
+            let guard_text = src(self.source, &*guard.1)?;
+            let lit_body = braced_body(self.source, &lit.body)?;
+            let other_body = braced_body(self.source, &other.body)?;
+            let cond = if negated {
+                format!("if {neg_cond} && {guard_text}")
+            } else {
+                format!("if {scrutinee} && {guard_text}")
+            };
+            return Some(format!("{cond} {lit_body} else {other_body}"));
+        }
         for (t, f) in [(&m.arms[0], &m.arms[1]), (&m.arms[1], &m.arms[0])] {
-            if pat_is_bool(&t.pat, true) && pat_is_bool(&f.pat, false) {
-                let t_body = braced_body(self.source, &t.body)?;
-                let f_body = braced_body(self.source, &f.body)?;
-                return Some(format!("if {scrutinee} {t_body} else {f_body}"));
+            let (t_lit, t_neg) = if pat_is_bool(&t.pat, true) {
+                (true, false)
+            } else if pat_is_bool(&t.pat, false) {
+                (false, true)
+            } else {
+                continue;
+            };
+            // classic: both arms bool literals; P6: wildcard second arm
+            let other_matches = pat_is_bool(&f.pat, !t_lit) || matches!(f.pat, Pat::Wild(_));
+            if !other_matches {
+                continue;
             }
+            let t_body = braced_body(self.source, &t.body)?;
+            let f_body = braced_body(self.source, &f.body)?;
+            let cond = if t_neg {
+                format!("if {neg_cond}")
+            } else {
+                format!("if {scrutinee}")
+            };
+            return Some(format!("{cond} {t_body} else {f_body}"));
         }
         None
     }
@@ -192,7 +256,10 @@ mod tests {
     fn true_first_becomes_if_else() {
         let input = "fn f(b: bool) -> u8 { match b { true => 1, false => 0 } }";
         let out = propose_fix("match_bool", input).expect("matched");
-        assert!(out.contains("if b { 1 } else { 0 }"), "not converted: {out}");
+        assert!(
+            out.contains("if b { 1 } else { 0 }"),
+            "not converted: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 
@@ -200,7 +267,13 @@ mod tests {
     fn false_first_also_rewrites() {
         let input = "fn f(b: bool) -> u8 { match b { false => 0, true => 1 } }";
         let out = propose_fix("match_bool", input).expect("matched");
-        assert!(out.contains("if b { 1 } else { 0 }"), "arm order not normalized: {out}");
+        // P6 oracle re-probe: clippy is ARM-ORDER-PRESERVING — false-first
+        // emits `if !b { 0 } else { 1 }`, not the normalized true-first form
+        // (probe vs clippy 1.97: sugg = `if !flag { 0 } else { 1 }`, MA).
+        assert!(
+            out.contains("if !b { 0 } else { 1 }"),
+            "not converted: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 
@@ -223,7 +296,8 @@ mod tests {
     fn guarded_fallback_true_first_rewrites() {
         // The bench_478 production shape: guarded middle arm + empty
         // same-polarity fallback becomes an if / else-if chain.
-        let input = "fn f(b: bool, g: bool) { match b { true => x(), false if g => y(), false => {} } }";
+        let input =
+            "fn f(b: bool, g: bool) { match b { true => x(), false if g => y(), false => {} } }";
         let out = propose_fix("match_bool", input).expect("matched");
         assert!(
             out.contains("if b { x() } else if g { y() }"),
@@ -234,7 +308,8 @@ mod tests {
 
     #[test]
     fn guarded_fallback_false_first_rewrites() {
-        let input = "fn f(b: bool, g: bool) { match b { false => x(), true if g => y(), true => {} } }";
+        let input =
+            "fn f(b: bool, g: bool) { match b { false => x(), true if g => y(), true => {} } }";
         let out = propose_fix("match_bool", input).expect("matched");
         assert!(
             out.contains("if !b { x() } else if g { y() }"),
@@ -264,7 +339,10 @@ mod tests {
         let input =
             "fn f(b: bool, g: bool) { match b { true if g => x(), false => y(), false => {} } }";
         let out = propose_fix("match_bool", input);
-        assert!(out.is_none(), "guard on the first arm needs a nested rewrite: {out:?}");
+        // 3-arm guarded-first is unprobed territory (the P6 oracle covered
+        // the 2-arm form only); the guarded-FALLBACK shape requires the
+        // guard on the MIDDLE arm.
+        assert!(out.is_none(), "3-arm first-guard must not fire: {out:?}");
     }
 
     #[test]
@@ -278,15 +356,99 @@ mod tests {
     fn guarded_arm_untouched() {
         let input = "fn f(b: bool) -> u8 { match b { true if b => 1, false => 0 } }";
         let out = propose_fix("match_bool", input);
+        // oracle fact (P6): literal + guard + BOOL-LITERAL second arm is
+        // E0004 (guards don't count toward exhaustiveness) — impossible
+        // code, stays silent either way.
         assert!(out.is_none(), "guarded arm must not fire: {out:?}");
+    }
+
+    #[test]
+    fn wildcard_second_true_first_rewrites() {
+        // P6 oracle (clippy 1.97, MA): `match flag { true => A, _ => B }`
+        // fires match_bool with `if flag { A } else { B }`.
+        let input = "fn f(b: bool) -> u8 { match b { true => 1, _ => 0 } }";
+        let out = propose_fix("match_bool", input).expect("matched");
+        assert!(out.contains("if b { 1 } else { 0 }"), "{out}");
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn wildcard_second_false_first_rewrites_negated() {
+        // P6 oracle: `false => A, _ => B` → `if !flag { A } else { B }` —
+        // postfix scrutinee takes NO parens (byte-parity with clippy).
+        let input = "fn f(b: bool) -> u8 { match b { false => 0, _ => 1 } }";
+        let out = propose_fix("match_bool", input).expect("matched");
+        assert!(out.contains("if !b { 0 } else { 1 }"), "{out}");
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn wildcard_first_rewrites() {
+        // P6 oracle: wild-first order also fires; the if normalizes to the
+        // literal arm as the then-branch.
+        let input = "fn f(b: bool) { match b { _ => stop(), true => walk() } }";
+        let out = propose_fix("match_bool", input).expect("matched");
+        assert!(out.contains("if b { walk() } else { stop() }"), "{out}");
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn guarded_literal_flat_conjunction() {
+        // P6 oracle: `true if g => A, _ => B` → `if b && g { A } else { B }`
+        // — the FLAT conjunction, not a nested if; short-circuit `&&`
+        // preserves the guard's evaluate-only-when-P semantics.
+        let input = "fn f(b: bool, g: bool) { match b { true if g => stop(), _ => walk() } }";
+        let out = propose_fix("match_bool", input).expect("matched");
+        assert!(
+            out.contains("if b && g { stop() } else { walk() }"),
+            "{out}"
+        );
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn guarded_literal_false_polarity_negated() {
+        // P6 oracle: `false if g => A, _ => B` → `if !flag && g { .. }`.
+        let input = "fn f(b: bool, g: bool) { match b { false if g => stop(), _ => walk() } }";
+        let out = propose_fix("match_bool", input).expect("matched");
+        assert!(
+            out.contains("if !b && g { stop() } else { walk() }"),
+            "{out}"
+        );
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn guarded_literal_non_postfix_scrutinee_gets_parens() {
+        // `!a == b && g` parses as `(!a) == b` — a binary scrutinee must be
+        // parenthesized in the negated form.
+        let input = "fn f(a: bool, b: bool, g: bool) { match a == b { false if g => stop(), _ => walk() } }";
+        let out = propose_fix("match_bool", input).expect("matched");
+        assert!(
+            out.contains("if !(a == b) && g { stop() } else { walk() }"),
+            "{out}"
+        );
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn guarded_literal_wild_first_order_also_fires() {
+        // P6 oracle: m2 probe — wild-first with guarded literal second also
+        // fires; normalized to `if b && g { .. }`.
+        let input = "fn f(b: bool, g: bool) { match b { _ => stop(), true if g => walk() } }";
+        let out = propose_fix("match_bool", input).expect("matched");
+        assert!(
+            out.contains("if b && g { walk() } else { stop() }"),
+            "{out}"
+        );
+        syn::parse_file(&out).expect("re-parses");
     }
 
     #[test]
     fn macro_arg_post_template_rewrites() {
         // The ndb `ed_freeze_gate_poc` production shape — real clippy 1.97
         // fires match_bool on the match inside the println! arg (probed).
-        let input =
-            "fn f(b: bool, p: f64) { println!(\"sign={} p={p:.3}\", match b { true => \"OK\", false => \"NO\" }); }";
+        let input = "fn f(b: bool, p: f64) { println!(\"sign={} p={p:.3}\", match b { true => \"OK\", false => \"NO\" }); }";
         let out = propose_fix("match_bool", input).expect("matched");
         assert!(
             out.contains("println!(\"sign={} p={p:.3}\", if b { \"OK\" } else { \"NO\" })"),
@@ -299,10 +461,12 @@ mod tests {
     fn macro_arg_stmt_macro_rewrites() {
         // writeln! in statement position parses as Stmt::Macro — covered
         // by the second visitor.
-        let input =
-            "fn f(w: &mut String, c: bool) { writeln!(w, \"{}\", match c { true => 1, false => 0 }).unwrap(); }";
+        let input = "fn f(w: &mut String, c: bool) { writeln!(w, \"{}\", match c { true => 1, false => 0 }).unwrap(); }";
         let out = propose_fix("match_bool", input).expect("matched");
-        assert!(out.contains("if c { 1 } else { 0 }"), "stmt-macro arg not converted: {out}");
+        assert!(
+            out.contains("if c { 1 } else { 0 }"),
+            "stmt-macro arg not converted: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 
@@ -313,7 +477,10 @@ mod tests {
         let input =
             "fn f(b: bool, a: bool, c: bool) { assert!(match b { true => a, false => c }); }";
         let out = propose_fix("match_bool", input).expect("matched");
-        assert!(out.contains("assert!(if b { a } else { c })"), "operand not converted: {out}");
+        assert!(
+            out.contains("assert!(if b { a } else { c })"),
+            "operand not converted: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 
@@ -321,10 +488,12 @@ mod tests {
     fn macro_arg_nested_in_call_rewrites() {
         // A match inside a CALL inside a macro arg — the recursive
         // visit_expr descent reaches it at depth 2.
-        let input =
-            "fn f(b: bool) { println!(\"{}\", str_len(match b { true => \"A\", false => \"BB\" })); }";
+        let input = "fn f(b: bool) { println!(\"{}\", str_len(match b { true => \"A\", false => \"BB\" })); }";
         let out = propose_fix("match_bool", input).expect("matched");
-        assert!(out.contains("str_len(if b { \"A\" } else { \"BB\" })"), "nested not converted: {out}");
+        assert!(
+            out.contains("str_len(if b { \"A\" } else { \"BB\" })"),
+            "nested not converted: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 

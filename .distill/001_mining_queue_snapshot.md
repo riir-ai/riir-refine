@@ -1395,9 +1395,38 @@ never closed). Ranked open classes (inventory 2026-08-24):
       bearing records (e2e-proven: 6/6 Certified on a real scratch-crate
       run). Residual lives in 037's E2/E4 gates (real dev-session run +
       score-bench delta), not here.
-- [ ] P6 **match_bool guard-on-first-arm** (nested-rewrite shape) +
-      single_match_else bool/char/str literal first arms (unprobed).
-      Evidence: miss.
+- [x] P6 **match_bool guard-on-first-arm** (nested-rewrite shape) +
+      single_match_else bool/char/str literal first arms — **CLOSED
+      2026-08-29 (this commit), 20+ shapes probed vs clippy 1.97 across 5
+      probe crates.** **(a) The "nested rewrite" note was WRONG:**
+      `match flag { true if g => A, _ => B }` fires match_bool MA with the
+      FLAT conjunction `if flag && g { A } else { B }` (short-circuit `&&`
+      preserves the guard's evaluate-only-when-P semantics); `false if g`
+      mirror probed (`if !flag && g`); bool-literal SECOND arm with a
+      guarded first arm is E0004 (guards don't count toward
+      exhaustiveness) — impossible code. Wildcard-second two-arm form
+      probed both polarities + both arm orders (`false => A, _ => B` →
+      `if !flag { A } else { B }`) — and clippy is ARM-ORDER-PRESERVING
+      for bool+bool too (`false => 0, true => 1` → `if !flag { 0 } else {
+      1 }`), correcting our old normalizing emission. Binary-scrutinee
+      negation needs parens (`!a == b` parses as `(!a) == b`). (b)
+      **single_match_else str/char equality forms CONFIRMED MA** (`if s ==
+      "go"`, `if c == 'x'` — the equality path covers is_str/is_char);
+      escapes splice verbatim by span. (c) **BOOL literals confirmed
+      single_match_else-SILENT** — match_bool owns the shape; our skip was
+      correct. (d) **THE OVERSHOOT FIND: real clippy SILENT on
+      single-statement else blocks** (`_ => { stmt; }` = HIR `([_], None)`;
+      bare tail `_ => { 0 }` = `([], Some(_))`) — only 2+ stmts or 1+ stmt
+      + tail expr fire; our proposer FIRED on the silent shapes (the
+      healer must never outrun the oracle, the format_in_format_args
+      boundary rule); gate added with the syn-tail-folding subtlety
+      documented (syn folds the tail into `Stmt::Expr(_, None)`). (e)
+      g9-style int-literal VALUE-position 2-arm matches also silently
+      fail single_match_else when the else is single-stmt — the old
+      Issue-027 "block wildcard fires" record was shape-incomplete.
+      match_bool 24 tests (7 new + 1 re-pinned), single_match_else 28
+      tests (5 new + 2 re-pinned); lib 788/0; clippy 0 all-targets; e2e
+      dry→write byte-for-byte vs oracle on all 3 new shapes.
 - [ ] P7 **no-proposer default lints** — `manual_is_multiple_of` (2 live
       occurrences), `if_same_then_else` (owner call). Evidence: manual fix.
       **RECON PROBED 2026-08-29 (4 scratch crates vs clippy 1.97, default-group
