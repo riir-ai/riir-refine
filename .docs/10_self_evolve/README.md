@@ -17,6 +17,7 @@
 | [`latent_fix_memory.md`](latent_fix_memory.md) | `LatentFixMemory` + `FixTrajectory` + `EvidenceTier` (Issue 021) + 4-axis retrieval + dual-backend persistence (store-first Issue 038; JSON envelope Issue 018 fallback) |
 | [`latent_skill_evolution.md`](latent_skill_evolution.md) | `LatentSkillEvolution` + `EvolveConfig` + EMA rule |
 | [`evolve_recorder.md`](evolve_recorder.md) | `EvolveRecorder` — the oracle-split recorder + the `cargo heal --fix` wiring (Issue 018) |
+| [`l4_fallback.md`](l4_fallback.md) | The L4 generative fallback seam (`l4_lora`): trait + `DaemonL4` transport + the local Bonsai-27B story + measured verdicts + the serving-lane decision (UNARMED) |
 
 ## Source
 
@@ -26,6 +27,8 @@
 - [`src/evolve.rs`](../../src/evolve.rs) — `LatentSkillEvolution`, `EvolveConfig`
 - [`src/recorder.rs`](../../src/recorder.rs) — `EvolveRecorder` (Issue 018)
 - [`src/embedder.rs`](../../src/embedder.rs) — BLAKE3 embedding (shared with L1)
+- [`src/l4_fallback.rs`](../../src/l4_fallback.rs) — `L4Fallback` trait + `NullL4`
+- [`src/l4_daemon.rs`](../../src/l4_daemon.rs) — `DaemonL4` transport client
 - [`tests/goat_gate_004.rs`](../../tests/goat_gate_004.rs) — GOAT gate G1–G5
 
 ## Feature gate
@@ -67,4 +70,5 @@ pre-existing by corpus drift (Issue 022).
 
 - [`../03_drafter/embedder.md`](../03_drafter/embedder.md) — the BLAKE3 embedder (shared)
 - [`../09_lessons/modelless_first.md`](../09_lessons/modelless_first.md) — why this is modelless
+- [`l4_fallback.md`](l4_fallback.md) — the L4 seam + the UNARMED decision
 - [Bench 026](../../.benchmarks/026_evidential_status_axis_goat.md) — the Issue 021 evidential-tier GOAT (retelling-bias defense; the honest A/B finding)
