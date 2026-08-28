@@ -1400,6 +1400,23 @@ never closed). Ranked open classes (inventory 2026-08-24):
       Evidence: miss.
 - [ ] P7 **no-proposer default lints** — `manual_is_multiple_of` (2 live
       occurrences), `if_same_then_else` (owner call). Evidence: manual fix.
+      **RECON PROBED 2026-08-29 (4 scratch crates vs clippy 1.97, default-group
+      lint):** oracle table — `u % lit == 0` fires → `u.is_multiple_of(lit)`,
+      `(expr) % lit == 0` fires (receiver parenthesized), `u % d == 0`
+      non-literal divisor fires (verbatim), `0 == u % 4` reversed fires
+      (same fix), `u % 4 != 0` fires → `!u.is_multiple_of(4)`,
+      `(1 + u) % (2 * 2) == 0` complex divisor fires (verbatim); SILENT:
+      signed dividends (`x: i32 % 4 == 0` — **`is_multiple_of` is
+      UNSIGNED-ONLY, E0599 on i32 probe-verified**) and the method form
+      `(u % 4).eq(&0)`. **The design fork that gates the proposer:**
+      parse-only cannot see dividend signedness → a naive fix breaks every
+      signed site without --verify. Two sound lanes: (a) VERIFY_LINTS tier
+      (the single_char_pattern precedent — type-blind shapes the compile
+      gate auto-reverts), or (b) a receiver-classification allowlist of
+      KNOWN-unsigned method signatures (`.len()`/`.count()`/`.capacity()`…
+      — the map_unwrap_or ReceiverKind pattern) firing only there; plain
+      unknown paths stay silent. RECON-ONLY this cycle — value/rate poor
+      (2 live sites in 8k files) vs P8/P2; next session picks the lane.
 - [ ] P8 **unnecessary_sort_by deref-binding shape** (`|&a, &b|` —
       conservatively skipped; the AGENTS.md "no proposer" note is STALE,
       proposer exists). Evidence: miss.
