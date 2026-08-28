@@ -39,7 +39,12 @@ into a measured-GOAT from our own `status=0x9` work instead of an external-only 
       098→099: the sibling's cflow verdict consumed 098 mid-batch; highwater → 100)
       + AGENTS.md corpus count 396→398 + Batch 84 entry + `.docs/11_domains/
       kernel_opt.md` row + queue snapshot update (same-commit discipline).
-- [ ] T8 — commit `feat: batch 84: ...` + push.
+- [x] T8 — commit `feat: batch 84: ...` + push. LANDED: repair commit `e40cb6e`
+      (5 pre-existing breaks, my-hunks-only via a hand-built patch — the shared
+      checkout carried the sibling's heal.rs WIP) + batch commit `20d551a`
+      (7 files incl. this plan + Research 099 + highwater 100). Pushed
+      f67c628..20d551a. The .distill snapshot carried the sibling's queued cflow
+      entry (their staging raced the commit — noted in the message).
 
 ## Deferred
 
