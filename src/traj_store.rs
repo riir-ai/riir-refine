@@ -2329,10 +2329,15 @@ mod tests {
         assert_eq!(row.n_ran, rec.n_ran);
         assert_eq!(row.n_healable, rec.n_healable);
         assert_eq!(row.n_clean, rec.n_clean);
-        assert_eq!(row.heal_rate, rec.heal_rate);
-        assert_eq!(row.created_rate, rec.created_rate);
-        assert_eq!(row.parse_safety, rec.parse_safety);
-        assert_eq!(row.decline_correctness, rec.decline_correctness);
+        // f32 fields: the contract is BIT-IDENTITY through the row round-trip
+        // (not approximate equality) — float_cmp is the gate here.
+        #[allow(clippy::float_cmp)]
+        {
+            assert_eq!(row.heal_rate, rec.heal_rate);
+            assert_eq!(row.created_rate, rec.created_rate);
+            assert_eq!(row.parse_safety, rec.parse_safety);
+            assert_eq!(row.decline_correctness, rec.decline_correctness);
+        }
         assert_eq!(row.edits_total, rec.edits_total);
         assert_eq!(row.vocab_size, rec.vocab_size);
         assert_eq!(row.recorded_unix, parse_ts_unix(&rec.ts));

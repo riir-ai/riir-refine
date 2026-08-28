@@ -44,26 +44,37 @@ const FLAT_SPREAD: f32 = 0.05;
 /// the 8-D hash embedding carries no locality for a linear-kernel GP to
 /// exploit; the escalation path (BM25 TF-IDF dims) stands.
 const GP_ACQUISITION_VERDICT: &str = "NEGATIVE-noise-equivalent";
+#[allow(dead_code)] // doc-truth anchor: cited textually by the ordering_ab assertion
+const _VERDICT_DOC: &str = GP_ACQUISITION_VERDICT;
 
-// ── Deterministic LCG (t26/t33/t39's) ────────────────────────────────────
+// ── Deterministic LCG (t26/t33/t39's) ─────────────────────────────────
+// (test-support RNG: short names + the bit-shift cast are the fixture
+// notation, lifted verbatim from t26/t33/t39 — block-allowed, not per-site.
+// Gated `latent_retrieval` because the ONLY consumer is the ordering_ab mod;
+// without the gate the struct is dead under --all-features' -D warnings.)
+#[cfg(feature = "latent_retrieval")]
+#[allow(clippy::cast_precision_loss, clippy::many_single_char_names)]
+mod lcg {
+    pub(super) struct Lcg(pub(super) u64);
 
-struct Lcg(u64);
-
-impl Lcg {
-    fn new(seed: u64) -> Self {
-        Self(seed)
-    }
-    fn f32(&mut self) -> f32 {
-        self.0 = self
-            .0
-            .wrapping_mul(6_364_136_223_846_793_005)
-            .wrapping_add(1_442_695_040_888_963_407);
-        ((self.0 >> 40) as f32) / 16_777_216.0
-    }
-    fn below(&mut self, n: usize) -> usize {
-        (self.f32() * n as f32) as usize % n.max(1)
+    impl Lcg {
+        pub(super) fn new(seed: u64) -> Self {
+            Self(seed)
+        }
+        pub(super) fn f32(&mut self) -> f32 {
+            self.0 = self
+                .0
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            ((self.0 >> 40) as f32) / 16_777_216.0
+        }
+        pub(super) fn below(&mut self, n: usize) -> usize {
+            (self.f32() * n as f32) as usize % n.max(1)
+        }
     }
 }
+#[cfg(feature = "latent_retrieval")]
+use lcg::Lcg;
 
 /// The labeled (rule, span) pairs — default-build subset (clippy fixtures
 /// are compiled under `clippy_lints`, a default feature; this test file

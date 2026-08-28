@@ -1581,6 +1581,7 @@ const CORPUS_DOMAIN_TABLE: &[(&str, &str, &str)] = &[
 /// Whether the domain's feature is compiled into THIS binary (the honest
 /// `compiled` half of the corpus row — a source-walk counts text, this
 /// answers "is the domain live here").
+#[allow(clippy::match_like_matches_macro)] // cfg! arms are compile-time, not a pattern set
 fn domain_compiled(domain: &str) -> bool {
     match domain {
         "kernel_opt" => cfg!(feature = "kernel_heal"),
@@ -2507,7 +2508,7 @@ fn main() {
                 let root = args
                     .paths
                     .first()
-                    .and_then(riir_clippy::compile_oracle::owning_package_root)
+                    .and_then(|p| riir_clippy::compile_oracle::owning_package_root(p.as_path()))
                     .and_then(|pkg| riir_clippy::compile_oracle::workspace_root(&pkg))
                     .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
                 let (written, warnings) = evolve::dump_misses(&root, &report.misses);
@@ -2601,6 +2602,11 @@ fn main() {
         // (the "corpus promotion" line above names what joined).
     }
 
+    // IIFE because the kat_service arm returns early from inside a
+    // cfg-gated block — a plain let-chain would need the same cfg pair
+    // on a variable initializer (the immediately-invoked-closure idiom,
+    // lint-flagged under this feature union; allow is the honest shape).
+    #[allow(clippy::redundant_closure_call)]
     let mut matcher = (|| {
         #[cfg(feature = "kat_service")]
         if let Some((_, ref overlay)) = run_overlay {

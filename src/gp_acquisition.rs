@@ -208,9 +208,19 @@ mod tests {
     use super::*;
 
     /// Deterministic LCG for fixture inputs (no external dep).
-    struct Lcg(u64);
-    impl Lcg {
-        fn next_f32(&mut self) -> f32 {
+    /// (test-support math: the casts + short names ARE the numeric
+    /// reference notation — allowed as a block, not suppressed per-site.)
+    #[allow(
+        clippy::cast_precision_loss,
+        clippy::many_single_char_names,
+        clippy::needless_range_loop,
+        clippy::cast_possible_truncation
+    )]
+    mod numerics {
+        use super::*;
+        struct Lcg(u64);
+        impl Lcg {
+            fn next_f32(&mut self) -> f32 {
             self.0 = self
                 .0
                 .wrapping_mul(6_364_136_223_846_793_005)
@@ -371,5 +381,6 @@ mod tests {
         let q = rng.dir();
         assert_eq!(a.sigma_sq(&q).to_bits(), b.sigma_sq(&q).to_bits());
         assert_eq!(a.chol, b.chol);
+    }
     }
 }

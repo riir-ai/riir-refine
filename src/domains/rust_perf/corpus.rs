@@ -8870,6 +8870,7 @@ mod tests {
 /// 50 ≈ 50% selectivity (the scalar branch predictor's worst case). G1 is
 /// integer-exact: the bit-plane popcount MUST equal the scalar count.
 #[cfg(feature = "rust_perf_bench")]
+#[allow(clippy::items_after_test_module)] // bench-spec tables live after the corpus tests by design
 fn bitplane_transpose_repeated_predicate_scan_bench_spec() -> BenchSpec {
     BenchSpec {
         sizes: vec![10_000, 100_000, 1_000_000],

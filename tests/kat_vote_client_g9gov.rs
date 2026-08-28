@@ -389,10 +389,16 @@ fn renders_and_copy_gates() {
     assert!(ack.contains("recorded — snapshot weight 5000"));
     assert!(!ack.contains('$'));
     // sign_vote + the message round-trip (self-consistency; the golden is
-    // the cross-repo half).
+    // the cross-repo half). The verify re-derives the SAME message the
+    // client signs (vote_message) and checks the signature against the
+    // returned pubkey — a real signature check, not just length pins.
     use ed25519_dalek::Verifier as _;
     let key = ed25519_dalek::SigningKey::from_bytes(&[7u8; 32]);
     let (sig, pubkey) = sign_vote(&key, 9, VoteChoice::No);
     assert_eq!(sig.len(), 64);
     assert_eq!(pubkey.len(), 32);
+    let msg = vote_message(9, &pubkey, VoteChoice::No);
+    let vkey = ed25519_dalek::VerifyingKey::from_bytes(&pubkey).expect("valid pubkey");
+    let sig = ed25519_dalek::Signature::from_bytes(&sig);
+    assert!(vkey.verify(&msg, &sig).is_ok());
 }
