@@ -1083,8 +1083,10 @@ USAGE:
                     suggest-only citations, never touched by --fix).
 
 Domains are feature-gated: clippy + perf are default-on; kernel needs
---features kernel_heal. Requesting a domain whose feature is off is an
-error (T2.4 gating). --verify needs --features fix_verify.
+--features kernel_heal, sec needs --features sec, docker needs --features
+docker (Dockerfiles are matched by NAME — `Dockerfile`, `<n>.Dockerfile`,
+`Dockerfile.<n>`; `docker_verify` adds the hadolint agreement oracle).
+Requesting a domain whose feature is off is an error (T2.4 gating). --verify needs --features fix_verify.
 --fix-compile needs --features rustc_errors.",
         FIXABLE_RULES.len(),
         FIXABLE_RULES.join(", "),
@@ -1282,7 +1284,7 @@ fn parse_args() -> Args {
                     "sec" => args.domain = Some(DomainId::Sec),
                     "docker" => args.domain = Some(DomainId::Docker),
                     other => {
-                        eprintln!("unknown --domain {other:?} (want auto|clippy|perf|kernel|sec)");
+                        eprintln!("unknown --domain {other:?} (want auto|clippy|perf|kernel|sec|docker)");
                         usage();
                     }
                 }

@@ -1121,7 +1121,7 @@ mod tests {
         /// 5th domain would have made it EIGHT consts whose declaration cfg
         /// and use cfg must match exactly — the precise shape that turned CI
         /// Layer 5a red on the sec landing (`ROUTER_ANNOTATION_3D` declared
-        /// under `kernel_heal` but used under `not(sec)` → dead_code under
+        /// under `kernel_heal` but used under `not(sec)` → `dead_code` under
         /// `-D warnings`). Selecting at RUNTIME with `cfg!` compiles every
         /// arm in every state, so that whole failure class is gone; the
         /// values stay per-state and measured.

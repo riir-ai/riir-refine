@@ -65,7 +65,10 @@ fn t5_control_scanner_structure_on_in_tree_files() {
         // `grep -cE '^[A-Za-z]+ ' <file>` at pin time (2026-08-28) — the
         // scanner is not allowed to define its own ground truth here.
         ("deploy", 2, 18, "rust:1.97.0-alpine"),
-        ("edge-wallet", 2, 9, "rust:1.97.0-slim"),
+        // 9 -> 11 on 2026-08-28: riir-chain ADOPTED the healer's fixes
+        // (Plan 030 T1.6), adding the `SHELL` pipefail stanza and a
+        // runtime-stage `USER`. Re-verified with `grep -cE '^[A-Za-z]+ '`.
+        ("edge-wallet", 2, 11, "rust:1.97.0-slim"),
         ("authority", 2, 11, "rust:1-slim"),
         ("tick-test", 2, 9, "rust:1-slim"),
     ];
@@ -188,10 +191,37 @@ fn negative_control_suggest_only_findings_are_pinned() {
 
 // ───────────────────── 3. the G5-real target ──────────────────────
 
+/// The pre-adoption shape of `edge-wallet-container/Dockerfile`, reduced to
+/// the three spans the Plan 030 T1.5 prediction named: a piped `RUN`, an
+/// uncached `cargo build`, and a runtime stage with no `USER`. It is a
+/// REDUCTION, not a copy — the real file's stub-manifest `printf` payload is
+/// ~2 KB of irrelevant TOML — and it exists because the live file no longer
+/// carries these defects: riir-chain adopted the fixes (Plan 030 T1.6,
+/// 2026-08-28). Without it, adoption would silently erase the evidence that
+/// the rules ever fired on the file they were built to heal.
+const EDGE_WALLET_PRE_ADOPTION: &str = "\
+FROM rust:1.97.0-slim AS builder
+WORKDIR /app
+COPY .container-src/ ./
+
+RUN mkdir -p /riir-neuron-db/src \\
+ && echo '// stub' \\
+    | tee /riir-neuron-db/src/lib.rs > /dev/null
+
+RUN cargo build --release -p riir-wallet --example edge_wallet_agent --features native
+
+FROM debian:bookworm-slim
+COPY --from=builder /app/target/release/examples/edge_wallet_agent /usr/local/bin/edge_wallet_agent
+EXPOSE 8080
+CMD [\"/usr/local/bin/edge_wallet_agent\"]
+";
+
 #[test]
-fn g5_target_edge_wallet_yields_the_predicted_findings() {
-    let Some(src) = read("edge-wallet") else { return };
-    let mut got: Vec<&str> = scan_source(&src).into_iter().map(|f| f.rule_id).collect();
+fn g5_prediction_holds_on_the_pre_adoption_content() {
+    let mut got: Vec<&str> = scan_source(EDGE_WALLET_PRE_ADOPTION)
+        .into_iter()
+        .map(|f| f.rule_id)
+        .collect();
     got.sort_unstable();
     got.dedup();
     // Predicted by Plan 030 T1.5 before the run: the pipe in the stub-
@@ -202,8 +232,34 @@ fn g5_target_edge_wallet_yields_the_predicted_findings() {
         "cache-mount-missing-on-cargo-build",
         "runtime-stage-missing-user",
     ] {
-        assert!(got.contains(&want), "edge-wallet lost the {want} finding (got {got:?})");
+        assert!(got.contains(&want), "the pre-adoption content lost the {want} finding (got {got:?})");
     }
+}
+
+/// The T1.6 adoption gate, from riir-clippy's side: the consumer file the
+/// healer was built for must STAY healed. A regression here means somebody
+/// re-introduced a defect the healer already fixed in `riir-chain`
+/// (`cloudflare/edge-wallet-container/Dockerfile`), and the consumer repo's
+/// own `scripts/dockerfile_heal_gate.sh` is the other half of this pin.
+#[test]
+fn edge_wallet_stays_healed_after_adoption() {
+    let Some(src) = read("edge-wallet") else { return };
+    let fixable: Vec<&str> = scan_source(&src)
+        .into_iter()
+        .filter(|f| FIXABLE_DOCKER.contains(&f.rule_id))
+        .map(|f| f.rule_id)
+        .collect();
+    assert!(
+        fixable.is_empty(),
+        "edge-wallet regressed — bounded findings are back: {fixable:?}"
+    );
+    // The suggest-only set is pinned too, so a NEW citation is visible
+    // rather than absorbed. `runtime-stage-missing-user` is gone because the
+    // adoption took that citation (USER 65534:65534, measured serving).
+    let mut suggest: Vec<&str> = scan_source(&src).into_iter().map(|f| f.rule_id).collect();
+    suggest.sort_unstable();
+    suggest.dedup();
+    assert_eq!(&suggest, &[] as &[&str], "edge-wallet: suggest-only finding set drifted");
 }
 
 #[test]

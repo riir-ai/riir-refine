@@ -36,7 +36,8 @@ use crate::edit_emitter::SourceEdit;
 #[derive(Debug, Clone, Default)]
 pub struct ScanContext {
     /// `Some(true)` when a `Cargo.lock` is committed next to the manifest
-    /// the build compiles (enables `cargo-locked-flag`).
+    /// the build compiles (enables the suggest-only `cargo-locked-flag`
+    /// citation — necessary evidence, not sufficient; see the rule).
     pub lockfile_committed: Option<bool>,
     /// `Some(true)` when the built manifest is a workspace ROOT with more
     /// than one member (enables `workspace-single-member-build`).
@@ -117,9 +118,6 @@ pub const FIXABLE_DOCKER: &[&str] = &[
     "apt-update-install-same-run",
     "cache-mount-missing-on-cargo-build",
     "missing-syntax-directive",
-    // Bounded, but only reachable WITH caller evidence (a committed
-    // lockfile). A text-only scan never gets here.
-    "cargo-locked-flag",
 ];
 
 /// Scan a Dockerfile for every rule, text-only (no external evidence).
@@ -481,11 +479,26 @@ fn cargo_rules(
             }),
         });
     }
-    // Caller-gated: `--locked` fails the build outright when no lockfile is
-    // committed, so text alone must not propose it.
+    // Caller-gated AND suggest-only. A committed lockfile is NECESSARY but not
+    // SUFFICIENT evidence: the build CONTEXT can be a derived subset of the
+    // workspace whose resolve differs from the committed lock, and then
+    // `--locked` fails the build outright.
+    //
+    // Measured 2026-08-28 on `riir-chain/cloudflare/edge-wallet-container`
+    // (the T1.6 adoption run): `build.sh` stages a closure with the workspace
+    // members trimmed to the wallet crates, so cargo must prune the lock's
+    // absent-member entries — `--locked` refuses and the image build dies at
+    // resolve with exit 101. The repo has a committed `Cargo.lock`, so the
+    // presence gate passed and the fix was written; only a real `docker build`
+    // caught it, and this domain's `--write` has no build gate.
+    //
+    // The distinguishing fact (does THIS context's manifest set resolve
+    // against the committed lock?) is an invocation fact with no in-file
+    // signal, which is the caller-gate class — so we cite and let a human
+    // decide, the same contract as `build-stage-missing-buildplatform` and
+    // `arg-secret-to-secret-mount`.
     if ctx.lockfile_committed == Some(true) && !args.contains("--locked") {
-        let fix = insert_flag_after(st, source, "cargo build", " --locked");
-        out.push(finding("cargo-locked-flag", st, source, fix));
+        out.push(finding("cargo-locked-flag", st, source, None));
     }
     if ctx.workspace_multi_member == Some(true)
         && !args.contains(" -p ")

@@ -23,7 +23,7 @@
 //! | `apt-update-install-same-run` | `CachePerf` | **B** | bounded | none |
 //! | `cache-mount-missing-on-cargo-build` | `CachePerf` | **B** | bounded | none |
 //! | `missing-syntax-directive` | `CachePerf` | **B** | bounded | none |
-//! | `cargo-locked-flag` | `RustIdiom` | **B** | bounded (gated) | none |
+//! | `cargo-locked-flag` | `RustIdiom` | **B** | suggest (gated) | none |
 //! | `workspace-single-member-build` | `RustIdiom` | **B** | suggest (gated) | none |
 //! | `dockerignore-missing` | `CachePerf` | **B** | suggest (gated) | none |
 //! | `arg-secret-to-secret-mount` | `SecretsHygiene` | A | suggest | DL3064 |
