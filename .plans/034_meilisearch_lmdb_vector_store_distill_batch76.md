@@ -37,19 +37,24 @@ change — out of scope. The two mechanism wins that generalize to OUR corpus:
 
 ## Tasks
 
-- [ ] T1 Plan file (this)
-- [ ] T2 Corpus entries ×2 (`debug-stat-full-scan-out-of-hot-path` complexity,
+- [x] T1 Plan file (this)
+- [x] T2 Corpus entries ×2 (`debug-stat-full-scan-out-of-hot-path` complexity,
       `eager-pointer-collect-lazy-fetch` caching) + bench_spec fns, suggestion-only
-      (type-blind, no proposer — the B73/B75 precedent)
-- [ ] T3 Bench arms in bench.rs (working-set-sized data for rule 2; per-insert
-      loop for rule 1) + honest annotation if regime-gated
-- [ ] T4 Count pins updated everywhere they break (failing-run discovery,
+      (type-blind, no proposer — the B73/B75 precedent) — verified 2026-08-28: 9 rule-id refs in `src/domains/rust_perf/corpus.rs`
+- [x] T3 Bench arms in bench.rs (working-set-sized data for rule 2; per-insert
+      loop for rule 1) + honest annotation if regime-gated — verdict-stable ×2 recorded in the research note (179×/1884×/6294× re-run)
+- [x] T4 Count pins updated everywhere they break (failing-run discovery,
       B75's list: AGENTS header, corpus count comments, serde/drafter hidden
-      pins, annotation counts)
-- [ ] T5 GOAT: G1 parse + G2 lib tests (default + rust_perf_bench) + G3 clippy 0
+      pins, annotation counts) — AGENTS.md Batch 76 row + "28 of 85" annotation count landed
+- [x] T5 GOAT: G1 parse + G2 lib tests (default + rust_perf_bench) + G3 clippy 0
       both states `--all-targets` + retrieval floors HELD + verdict-stable ×2
-      + the new benches report measured verdicts
-- [ ] T6 Research note `.research/090_*` (born-complete RECORD per convention)
-- [ ] T7 Docs: AGENTS.md Batch 76 row + corpus counts + `.docs/11_domains/rust_perf.md`
-      + `.distill/001_mining_queue_snapshot.md` queue state
+      + the new benches report measured verdicts — 696/0 default + 714/0 bench-state + full CI guard ALL LAYERS (AGENTS.md record)
+- [x] T6 Research note `.research/090_*` (born-complete RECORD per convention) — `090_meilisearch_lmdb_vector_store_distill_batch76.md`
+- [x] T7 Docs: AGENTS.md Batch 76 row + corpus counts + `.docs/11_domains/rust_perf.md`
+      + `.distill/001_mining_queue_snapshot.md` queue state — both doc rows verified 2026-08-28
 - [x] T8 Commit + push (`feat: batch 76: ...`)
+
+> **Bookkeeping note (2026-08-28, idle-loop item-4 pass):** T1–T7 landed with the
+> batch on 2026-08-27 but only T8 was ticked at the time; the boxes above were
+> ticked retroactively against verified evidence (corpus grep, research note,
+> AGENTS.md + rust_perf.md rows). No work remained.

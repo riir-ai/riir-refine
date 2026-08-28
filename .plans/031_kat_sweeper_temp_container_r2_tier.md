@@ -1,6 +1,6 @@
 # Plan 031 — KAT infra: own-repo sweeper + temp container + R2 persistence tier
 
-**Status:** Phase A COMPLETE (A1–A4, 2026-08-27 — mechanism + first measured runs; the week-of-runs deliverable accumulates async). Phase B (temp container) + Phase C (R2) remain gated per the sequencing rationale — each opens on the previous phase's measurement.
+**Status:** Phase A COMPLETE (A1–A4, 2026-08-27 — mechanism + first measured runs; the week-of-runs deliverable accumulates async). Phase B (temp container) + Phase C (R2) remain gated per the sequencing rationale — each opens on the previous phase's measurement. **B1–B5 + C1–C4 defer-marked `[-]` 2026-08-28 (idle-loop item-10 pass) — not stalled, SEQUENCED: B opens on A2's week-of-runs window distribution (day 2 of 7), C opens only on B4's cold-window measurement.**
 
 Expands [Proposal 005](../.proposals/005_kat_heal_service_network.md) rollout tasks **T2.0 (container half) + T2.1 (correction gates + R2 mitigation) + T2.6 (sweeper lane)** — and the new §R2 as the persistence tier — into executable work. No KAT-rail dependency (rides the AI-call surface + the healer, not the sync surface), so this can proceed independently of Phase 1.
 
@@ -25,20 +25,29 @@ Expands [Proposal 005](../.proposals/005_kat_heal_service_network.md) rollout ta
 
 ## Phase B — the temp container (deploy-once, cron-start, sleep-billed)
 
-- [ ] B1 **The image**: Dockerfile carrying the prebuilt `cargo-heal` + the pinned toolchain layer (the A3 loop + `--fix --verify` needs rustc). **Dogfood gate: the image's Dockerfile is a `docker`-domain heal target** (Plan 030 T1.6 adoption candidate — the container eats its own cooking from day one).
-- [ ] B2 **The Container class**: `onActivityExpired()` override holding through a drain (or the documented decision to die-and-resume); **commit-before-sleep** enforced structurally (git push + ledger/trajectory commit to R2/store BEFORE the sleep transition — local disk dies with the instance); SIGTERM graceful drain within the stop grace.
-- [ ] B3 **Cranker extension**: the live `cloudflare/housekeeping` Worker gains the Cron Container pattern (`scheduled()` → `getContainer().start()`) + the **poll heartbeat** (each poll resets `sleepAfter`; doubles as liveness monitoring feeding the Issue 044 dashboard).
-- [ ] B4 **Deploy + measured window**: real runs on the A4-chosen tier; cost observability via Issue 045's graphs; **cost gate**: the sweeper window's monthly overage stays ≤ the ~$4–14/mo band at the included-allowance low end; if a window blows the band, re-size UP (the work-constant rule) before considering cadence cuts.
-- [ ] B5 **Secrets posture**: scoped per-repo deploy keys (write-access to target branches only) + the CF AI/OAuth creds; a woken container stays Worker-binding-reachable only (no public route).
+> **Deferred `[-]` as a phase (2026-08-28):** every box below opens on A2's
+> week-of-runs distribution — the go/no-go is the cold-compile window share,
+> not calendar time. Re-open by un-deferring B1 when the A4 table has ~7 days
+> of rows.
+
+- [-] B1 **The image**: Dockerfile carrying the prebuilt `cargo-heal` + the pinned toolchain layer (the A3 loop + `--fix --verify` needs rustc). **Dogfood gate: the image's Dockerfile is a `docker`-domain heal target** (Plan 030 T1.6 adoption candidate — the container eats its own cooking from day one) — second-order gate: also waits on Plan 030 Phase 1 landing.
+- [-] B2 **The Container class**: `onActivityExpired()` override holding through a drain (or the documented decision to die-and-resume); **commit-before-sleep** enforced structurally (git push + ledger/trajectory commit to R2/store BEFORE the sleep transition — local disk dies with the instance); SIGTERM graceful drain within the stop grace.
+- [-] B3 **Cranker extension**: the live `cloudflare/housekeeping` Worker gains the Cron Container pattern (`scheduled()` → `getContainer().start()`) + the **poll heartbeat** (each poll resets `sleepAfter`; doubles as liveness monitoring feeding the Issue 044 dashboard).
+- [-] B4 **Deploy + measured window**: real runs on the A4-chosen tier; cost observability via Issue 045's graphs; **cost gate**: the sweeper window's monthly overage stays ≤ the ~$4–14/mo band at the included-allowance low end; if a window blows the band, re-size UP (the work-constant rule) before considering cadence cuts.
+- [-] B5 **Secrets posture**: scoped per-repo deploy keys (write-access to target branches only) + the CF AI/OAuth creds; a woken container stays Worker-binding-reachable only (no public route).
 
 ## Phase C — R2 persistence tier (GATED on B4's cold-window measurement)
 
+> **Deferred `[-]` as a phase (2026-08-28):** opens only if B4 shows
+> cold-compile wall-time dominating the window cost. Until B4 runs, C has no
+> go condition to evaluate.
+
 Opens only if B4 shows cold-compile wall-time dominating the window cost (the expected case for any `-p` scope with deps).
 
-- [ ] C1 **Bucket layout + creds**: per-purpose buckets (`kat-cache-sccache`, `kat-artifacts`), least-privilege R2 tokens; lifecycle policy reaping stale cache classes (Standard storage — Infrequent Access is wrong for a hot cache: retrieval fees + 30-day minimums).
-- [ ] C2 **sccache over R2** (preferred form): `SCCACHE_ENDPOINT` → the R2 S3 API in the image env; **measurement gate**: cold vs warm window wall-time on the same repo scope — the warm win must exceed the wake-time cache-pull overhead (expected: minutes saved vs seconds-to-a-minute pulled; R2↔Container bandwidth is free both directions on-CF).
-- [ ] C3 **Registry-bundle bootstrap tier** (only if sccache fights back): tarball pull of cargo registry + git db on wake, delta-push before sleep; safe for the content-addressed registry, NOT for `target/` (absolute paths).
-- [ ] C4 **Worker + R2 artifact serving**: built binaries + cache bundles served via the Worker → R2 `get()` path (egress-free by construction); extends to **NeuronVessel packs** only when Phase 3 opens. Cache objects are regenerable — git stays the source of truth.
+- [-] C1 **Bucket layout + creds**: per-purpose buckets (`kat-cache-sccache`, `kat-artifacts`), least-privilege R2 tokens; lifecycle policy reaping stale cache classes (Standard storage — Infrequent Access is wrong for a hot cache: retrieval fees + 30-day minimums).
+- [-] C2 **sccache over R2** (preferred form): `SCCACHE_ENDPOINT` → the R2 S3 API in the image env; **measurement gate**: cold vs warm window wall-time on the same repo scope — the warm win must exceed the wake-time cache-pull overhead (expected: minutes saved vs seconds-to-a-minute pulled; R2↔Container bandwidth is free both directions on-CF).
+- [-] C3 **Registry-bundle bootstrap tier** (only if sccache fights back): tarball pull of cargo registry + git db on wake, delta-push before sleep; safe for the content-addressed registry, NOT for `target/` (absolute paths).
+- [-] C4 **Worker + R2 artifact serving**: built binaries + cache bundles served via the Worker → R2 `get()` path (egress-free by construction); extends to **NeuronVessel packs** only when Phase 3 opens. Cache objects are regenerable — git stays the source of truth.
 
 ## Close condition (honest)
 
