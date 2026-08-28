@@ -21,10 +21,21 @@
 //!    findings). Other qualified families (`std::format!` etc.) match the
 //!    same way — real clippy is qualifier-agnostic (post-expansion).
 //! 2. The template slice must be a plain `"`-opening string literal.
-//!    Everything after it: format args, each parsed as a `syn::Expr`
-//!    that is a single-ident path. Anything else (field access, calls,
-//!    casts, literals, named args `w = 5`, `r#raw`/`self` idents) aborts
-//!    the WHOLE macro — no partial inlining. A trailing comma is allowed.
+//!    Everything after it: format args, each parsed as a `syn::Expr`.
+//!    Three shapes are accepted (the rest abort the WHOLE macro — no
+//!    partial inlining):
+//!    - a plain single-ident path — a positional arg, consumed by `{}` /
+//!      `{:spec}`;
+//!    - a redundant named arg `n = n` — deleted, template untouched;
+//!    - a named-arg-with-RENAME `n = v` (both plain idents, `n != v`) —
+//!      every template occurrence of `n` is rewritten to `v` (placeholder
+//!      names AND width/precision `$` refs inside specs) and the arg is
+//!      deleted (P3 post-mining unit, 2026-08-29; oracle = real clippy
+//!      1.97 probe: const/param/`self` values all fire `MachineApplicable`,
+//!      field-access values `val = s.0` are SILENT so they abort, and an
+//!      is referenced). `r#raw` on either side aborts. Field access,
+//!      calls, casts, literals (`w = 5`) abort the WHOLE macro. A
+//!      trailing comma is allowed.
 //! 3. The template is scanned char-by-char over its RAW literal text:
 //!    escape payloads copy verbatim, `{{`/`}}` copy verbatim, then the
 //!    placeholder classifier (T4 extension — spec'd placeholders are now
@@ -204,14 +215,16 @@ fn inline_args(tokens: &TokenStream, pos: TemplatePos) -> Option<Vec<SourceEdit>
     let raw = &text[1..text.len() - 1];
     let template_range = template_arg.toks[0].span().byte_range();
 
-    // Everything after the template is a format arg — ident paths only.
-    // A named arg `n = n` (BOTH sides the same plain ident) is REDUNDANT
-    // under implicit capture: real clippy's MachineApplicable fix deletes
-    // the arg and leaves the template untouched (probe-verified clippy
-    // 1.95 on the live riir-data sites). Any other assign shape (rename
-    // `a = b`, complex value) still aborts — the rename class is backlog.
+    // Everything after the template is a format arg. A named arg `n = n`
+    // (BOTH sides the same plain ident) is REDUNDANT under implicit
+    // capture: real clippy's MachineApplicable fix deletes the arg and
+    // leaves the template untouched (probe-verified clippy 1.95 on the
+    // live riir-data sites). A named-arg-with-RENAME `n = v` is INLINED
+    // into the template (P3, probe-verified clippy 1.97 — see the module
+    // header). A rename value that is not a plain ident aborts.
     let mut fmt_args = Vec::new();
     let mut redundant_named: Vec<(usize, usize)> = Vec::new();
+    let mut renames: Vec<RenameArg> = Vec::new();
     for arg in &args[pos.index() + 1..] {
         let stream: TokenStream = arg.toks.iter().cloned().collect();
         let expr = syn::parse2::<Expr>(stream).ok()?;
@@ -224,17 +237,28 @@ fn inline_args(tokens: &TokenStream, pos: TemplatePos) -> Option<Vec<SourceEdit>
                 let (Some(l), Some(r)) = (l.path.get_ident(), r.path.get_ident()) else {
                     return None;
                 };
-                if l != r {
-                    return None; // named-arg-with-rename — the backlog class
+                let (l, r) = (l.to_string(), r.to_string());
+                if l == r {
+                    redundant_named.push((arg.comma_start, arg.end));
+                } else {
+                    // `{r#x}` is not a valid placeholder name on either side.
+                    if l.contains('#') || r.contains('#') {
+                        return None;
+                    }
+                    renames.push(RenameArg {
+                        key: l,
+                        val: r,
+                        comma_start: arg.comma_start,
+                        end: arg.end,
+                    });
                 }
-                redundant_named.push((arg.comma_start, arg.end));
                 continue;
             }
             _ => return None, // field access / call / cast / literal … — no partial inlining
         };
         // `{r#raw}` is not a valid format-arg name — skip. (`{self}` IS
         // valid: rustc explicitly allows `self` as an implicit capture —
-        // probe-verified 2026-08-18, `format!("{self:?}")` compiles + real
+        // probe-verified 2026-08-18, `format!("{self:?")}` compiles + real
         // clippy fires on `format!("{:?}", self)` sites.)
         if ident.contains('#') {
             return None;
@@ -246,18 +270,21 @@ fn inline_args(tokens: &TokenStream, pos: TemplatePos) -> Option<Vec<SourceEdit>
         });
     }
 
-    let (new_raw, used) = build_inlined(raw, &fmt_args)?;
-    if used == 0 && redundant_named.is_empty() {
+    let mut referenced: Vec<usize> = Vec::new();
+    let (new_raw, used) = build_inlined(raw, &fmt_args, &renames, &mut referenced)?;
+    if used == 0 && redundant_named.is_empty() && referenced.is_empty() {
         return None; // nothing consumed — nothing to inline here
     }
 
     let mut edits = Vec::new();
-    if used > 0 {
+    if used > 0 || !referenced.is_empty() {
         edits.push(SourceEdit {
             start: template_range.start,
             end: template_range.end,
             replacement: format!("\"{new_raw}\""),
         });
+    }
+    if used > 0 {
         for a in &fmt_args {
             edits.push(SourceEdit {
                 start: a.comma_start,
@@ -266,10 +293,27 @@ fn inline_args(tokens: &TokenStream, pos: TemplatePos) -> Option<Vec<SourceEdit>
             });
         }
     }
+    for &i in &referenced {
+        let r = &renames[i];
+        edits.push(SourceEdit {
+            start: r.comma_start,
+            end: r.end,
+            replacement: String::new(),
+        });
+    }
     for (start, end) in redundant_named {
         edits.push(SourceEdit { start, end, replacement: String::new() });
     }
     Some(edits)
+}
+
+/// A named-arg-with-rename: the template names it `key`, the value ident
+/// is `val`. The rewrite inlines `val` at every `key` occurrence (P3).
+struct RenameArg {
+    key: String,
+    val: String,
+    comma_start: usize,
+    end: usize,
 }
 
 /// Split the macro's top-level token stream on commas. `None` on shapes
@@ -357,8 +401,16 @@ pub(super) fn all_expr_args(mac: &Macro) -> Option<Vec<ExprMacroArg>> {
 /// Build the inlined RAW literal text + the number of args consumed.
 /// `None` aborts: an uninlinable placeholder (explicit index, positional
 /// `$` ref, malformed content), malformed braces, or an arg-count
-/// mismatch.
-fn build_inlined(raw: &str, args: &[ArgSpan]) -> Option<(String, usize)> {
+/// mismatch. Renames: every placeholder named `key` becomes `val`, and
+/// every width/precision `$` ref to a `key` inside a spec becomes `val`;
+/// each applied rename's index is pushed to `referenced` (only referenced
+/// renames get their arg deleted).
+fn build_inlined(
+    raw: &str,
+    args: &[ArgSpan],
+    renames: &[RenameArg],
+    referenced: &mut Vec<usize>,
+) -> Option<(String, usize)> {
     let chars: Vec<char> = raw.chars().collect();
     let mut out = String::with_capacity(raw.len());
     let mut next_arg = 0usize;
@@ -432,24 +484,31 @@ fn build_inlined(raw: &str, args: &[ArgSpan]) -> Option<(String, usize)> {
                     }
                     Placeholder::Spec(spec) => {
                         // T4: the spec rides along verbatim — same arg,
-                        // same trait bounds, same formatting.
+                        // same trait bounds, same formatting — except that
+                        // width/precision `$` refs to a RENAME key are
+                        // re-pointed at the value ident (P3; clippy 1.97
+                        // rewrites `{:>w$}` + `w = width` → `{:>width$}`).
                         if has_dynamic_spec_ref(spec) {
                             return None; // `{:1$}` / `{:.*}` — the spec itself consumes/references another positional arg
                         }
+                        let spec = rewrite_spec_refs(spec, renames, referenced);
                         let arg = args.get(next_arg)?;
                         next_arg += 1;
                         out.push('{');
                         out.push_str(&arg.name);
                         out.push(':');
-                        out.push_str(spec);
+                        out.push_str(&spec);
                         out.push('}');
                     }
                     Placeholder::AlreadyNamed => {
-                        // `{name}` / `{name:spec}` — copies verbatim,
+                        // `{name}` / `{name:spec}` — copies verbatim and
                         // consumes nothing (its binding is not one of the
-                        // positional args).
+                        // positional args), UNLESS `name` is a rename key:
+                        // then the name (and any `$` refs in its spec) are
+                        // re-pointed at the rename's value ident (P3).
+                        let rewritten = rewrite_named_content(&content, renames, referenced);
                         out.push('{');
-                        out.push_str(&content);
+                        out.push_str(&rewritten);
                         out.push('}');
                     }
                     Placeholder::NotInlinable => return None,
@@ -531,6 +590,101 @@ fn has_dynamic_spec_ref(spec: &str) -> bool {
         }
     }
     false
+}
+
+/// Rebuild an `{name}` / `{name:spec}` placeholder's content: the name
+/// maps through a rename key when one matches, and the spec's `$` refs
+/// re-point likewise. Everything else copies verbatim.
+fn rewrite_named_content(
+    content: &str,
+    renames: &[RenameArg],
+    referenced: &mut Vec<usize>,
+) -> String {
+    let (name_part, spec_part) = match content.find(':') {
+        Some(i) => (&content[..i], Some(&content[i + 1..])),
+        None => (content, None),
+    };
+    let mut new_name: &str = name_part;
+    for (i, r) in renames.iter().enumerate() {
+        if r.key == name_part {
+            new_name = &r.val;
+            if !referenced.contains(&i) {
+                referenced.push(i);
+            }
+            break;
+        }
+    }
+    let mut out = String::new();
+    out.push_str(new_name);
+    if let Some(spec) = spec_part {
+        let spec = rewrite_spec_refs(spec, renames, referenced);
+        out.push(':');
+        out.push_str(&spec);
+    }
+    out
+}
+
+/// Re-point every width/precision `ident$` ref inside a spec whose
+/// `ident` is a rename key at that rename's value ident (P3). The ident
+/// run is matched EXACTLY (walk back from `$` over ident-constituent
+/// chars; `{:>w$}` matches `w`, not `aw`), so `{a2}` never maps a rename
+/// keyed `a`. Positional digit refs are unreachable here —
+/// `has_dynamic_spec_ref` aborted them first.
+fn rewrite_spec_refs(
+    spec: &str,
+    renames: &[RenameArg],
+    referenced: &mut Vec<usize>,
+) -> String {
+    if renames.is_empty() {
+        return spec.to_string();
+    }
+    let chars: Vec<char> = spec.chars().collect();
+    // Pass 1 — locate every `ident$` ref whose ident is a rename key.
+    // Ranges are non-overlapping (format specs separate width/precision
+    // refs with `.` or other non-ident chars).
+    let mut repls: Vec<(usize, usize, &str)> = Vec::new();
+    for (i, &c) in chars.iter().enumerate() {
+        if c != '$' {
+            continue;
+        }
+        let mut j = i;
+        while j > 0 && (chars[j - 1].is_ascii_alphanumeric() || chars[j - 1] == '_') {
+            j -= 1;
+        }
+        let ident: String = chars[j..i].iter().collect();
+        if ident.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_') {
+            for (ri, r) in renames.iter().enumerate() {
+                if r.key == ident {
+                    repls.push((j, i, &r.val));
+                    if !referenced.contains(&ri) {
+                        referenced.push(ri);
+                    }
+                    break;
+                }
+            }
+        }
+    }
+    if repls.is_empty() {
+        return spec.to_string();
+    }
+    // Pass 2 — splice the value idents in place of the matched runs (the
+    // `$` itself survives: `w$` → `width$`).
+    let mut out = String::with_capacity(spec.len());
+    let mut k = 0usize;
+    for (j, i, val) in repls {
+        while k < j {
+            out.push(chars[k]);
+            k += 1;
+        }
+        out.push_str(val);
+        out.push('$');
+        k = i + 1; // past the run and the original `$`
+    }
+    while k < chars.len() {
+        out.push(chars[k]);
+        k += 1;
+    }
+    out
 }
 
 #[cfg(test)]
@@ -703,14 +857,213 @@ mod tests {
     }
 
     #[test]
-    fn named_arg_with_rename_still_untouched() {
-        // `a = b` (different idents) is the documented backlog class — the
-        // fix needs template rewriting, not arg deletion.
+    fn named_arg_with_rename_inlined_into_template() {
+        // P3 (probe 2026-08-29, real clippy 1.97, all MachineApplicable):
+        // `a = b` renames are INLINED — the placeholder name is rewritten
+        // to the value ident and the arg is deleted. Const values fire
+        // exactly like locals (implicit capture resolves consts).
+        let out = propose_fix(
+            "uninlined_format_args",
+            "fn f() { println!(\"{iters}\", iters = ITERS); }",
+        )
+        .expect("pattern matched");
+        assert_eq!(out, "fn f() { println!(\"{ITERS}\"); }");
+        assert!(syn::parse_file(&out).is_ok(), "{out}");
+    }
+
+    #[test]
+    fn rename_with_format_spec_carries_spec() {
+        let out = propose_fix(
+            "uninlined_format_args",
+            "fn f(g: f32) { println!(\"{spread:.3}\", spread = g); }",
+        )
+        .expect("pattern matched");
+        assert_eq!(out, "fn f(g: f32) { println!(\"{g:.3}\"); }");
+        assert!(syn::parse_file(&out).is_ok(), "{out}");
+    }
+
+    #[test]
+    fn rename_rewrites_positional_spec_dollar_ref() {
+        // The width ref `width$` on a POSITIONAL placeholder re-points at
+        // the rename's value ident; the positional arg itself is untouched.
+        let out = propose_fix(
+            "uninlined_format_args",
+            "fn f(x: u8, w: usize) -> String { format!(\"{:>width$}\", x, width = w) }",
+        )
+        .expect("pattern matched");
+        assert_eq!(
+            out,
+            "fn f(x: u8, w: usize) -> String { format!(\"{x:>w$}\") }"
+        );
+        assert!(syn::parse_file(&out).is_ok(), "{out}");
+    }
+
+    #[test]
+    fn rename_rewrites_named_placeholder_and_its_own_spec_ref() {
+        // clippy probe L46: `{a:>w$}` + `a = x, w = width` — BOTH the
+        // placeholder name and the width ref are rewritten, both args
+        // deleted.
+        let out = propose_fix(
+            "uninlined_format_args",
+            "fn f(x: u8, width: usize) { println!(\"{a:>w$}\", a = x, w = width); }",
+        )
+        .expect("pattern matched");
+        assert_eq!(
+            out,
+            "fn f(x: u8, width: usize) { println!(\"{x:>width$}\"); }"
+        );
+        assert!(syn::parse_file(&out).is_ok(), "{out}");
+    }
+
+    #[test]
+    fn rename_rewrites_precision_dollar_ref() {
+        let out = propose_fix(
+            "uninlined_format_args",
+            "fn f(x: f64, p: usize) { println!(\"{:.p$}\", x, p = prec); }",
+        )
+        .expect("pattern matched");
+        assert_eq!(out, "fn f(x: f64, p: usize) { println!(\"{x:.prec$}\"); }");
+        assert!(syn::parse_file(&out).is_ok(), "{out}");
+    }
+
+    #[test]
+    fn multi_rename_all_rewritten() {
+        let out = propose_fix(
+            "uninlined_format_args",
+            "fn f(x: u32, y: u32) { println!(\"{a} {b}\", a = x, b = y); }",
+        )
+        .expect("pattern matched");
+        assert_eq!(out, "fn f(x: u32, y: u32) { println!(\"{x} {y}\"); }");
+        assert!(syn::parse_file(&out).is_ok(), "{out}");
+    }
+
+    #[test]
+    fn rename_chain_both_sides() {
+        // `a = x, b = c`: each placeholder maps via its OWN key — no
+        // cascade (`{a}`→`{x}`, `{b}`→`{c}`), both in scope by construction.
+        let out = propose_fix(
+            "uninlined_format_args",
+            "fn f(x: u32, c: u32) { println!(\"{a} {b}\", a = x, b = c); }",
+        )
+        .expect("pattern matched");
+        assert_eq!(out, "fn f(x: u32, c: u32) { println!(\"{x} {c}\"); }");
+        assert!(syn::parse_file(&out).is_ok(), "{out}");
+    }
+
+    #[test]
+    fn rename_escaped_braces_untouched() {
+        // clippy probe L26: only the REAL placeholder is rewritten; the
+        // `{{a}}` escape payload survives verbatim.
+        let out = propose_fix(
+            "uninlined_format_args",
+            "fn f(v: u32) { println!(\"{{{{a}}}} {a}\", a = v); }",
+        )
+        .expect("pattern matched");
+        assert_eq!(out, "fn f(v: u32) { println!(\"{{{{a}}}} {v}\"); }");
+        assert!(syn::parse_file(&out).is_ok(), "{out}");
+    }
+
+    #[test]
+    fn rename_repeated_placeholder_all_occurrences() {
+        let out = propose_fix(
+            "uninlined_format_args",
+            "fn f(v: u32) { println!(\"{a}{a}\", a = v); }",
+        )
+        .expect("pattern matched");
+        assert_eq!(out, "fn f(v: u32) { println!(\"{v}{v}\"); }");
+        assert!(syn::parse_file(&out).is_ok(), "{out}");
+    }
+
+    #[test]
+    fn rename_composes_with_positional_inline() {
+        // clippy probe L38 (c3 mixed): the positional `{}` inlines AND the
+        // `{n}` rename rewrites in one invocation.
+        let out = propose_fix(
+            "uninlined_format_args",
+            "fn f(v: u32, v2: u32) { println!(\"{} {n}\", v, n = v2); }",
+        )
+        .expect("pattern matched");
+        assert_eq!(out, "fn f(v: u32, v2: u32) { println!(\"{v} {v2}\"); }");
+        assert!(syn::parse_file(&out).is_ok(), "{out}");
+    }
+
+    #[test]
+    fn rename_exact_ident_boundary() {
+        // clippy probe L42: `{a2}` is an unrelated implicit capture — only
+        // the exact `a` placeholder maps.
+        let out = propose_fix(
+            "uninlined_format_args",
+            "fn f(v: u32, a2: u32) { println!(\"{a2} {a}\", a = v); }",
+        )
+        .expect("pattern matched");
+        assert_eq!(out, "fn f(v: u32, a2: u32) { println!(\"{a2} {v}\"); }");
+        assert!(syn::parse_file(&out).is_ok(), "{out}");
+    }
+
+    #[test]
+    fn rename_self_value_fires() {
+        // clippy probe L63: `me = self` inlines to `{self}`.
+        let out = propose_fix(
+            "uninlined_format_args",
+            "fn f() { let s = 1; let _ = &s; println!(\"{me}\", me = s); }",
+        )
+        .expect("pattern matched");
+        assert_eq!(out, "fn f() { let s = 1; let _ = &s; println!(\"{s}\"); }");
+        assert!(syn::parse_file(&out).is_ok(), "{out}");
+    }
+
+    #[test]
+    fn rename_composes_with_redundant_delete() {
+        let out = propose_fix(
+            "uninlined_format_args",
+            "fn f(v: u32, w: u32) { println!(\"{v} {n}\", v = v, n = w); }",
+        )
+        .expect("pattern matched");
+        assert_eq!(out, "fn f(v: u32, w: u32) { println!(\"{v} {w}\"); }");
+        assert!(syn::parse_file(&out).is_ok(), "{out}");
+    }
+
+    #[test]
+    fn rename_field_access_value_still_aborts() {
+        // clippy probe: `val = s.0` is SILENT in real clippy (implicit
+        // capture cannot express a field access) — the whole macro aborts.
+        let out = propose_fix(
+            "uninlined_format_args",
+            "fn f(s: &S) { println!(\"{val:?}\", val = s.0); }",
+        );
+        assert!(out.is_none(), "field-access value must stay silent: {out:?}");
+    }
+
+    #[test]
+    fn rename_raw_ident_value_aborts() {
+        // `{r#type}` is not a valid placeholder name.
+        let out = propose_fix(
+            "uninlined_format_args",
+            "fn f() { println!(\"{a}\", a = r#type); }",
+        );
+        assert!(out.is_none(), "raw-ident value must abort: {out:?}");
+    }
+
+    #[test]
+    fn rename_raw_ident_key_aborts() {
+        let out = propose_fix(
+            "uninlined_format_args",
+            "fn f(b: u32) { println!(\"{a}\", r#a = b); }",
+        );
+        assert!(out.is_none(), "raw-ident key must abort: {out:?}");
+    }
+
+    #[test]
+    fn rename_with_literal_positional_arg_still_untouched() {
+        // The rename itself is now inlinable, but the positional literal
+        // `1` aborts the whole macro before any edit (no partial inlining) —
+        // real clippy would fire a partial fix here; we stay conservative
+        // (same policy as every literal-positional shape).
         let out = propose_fix(
             "uninlined_format_args",
             "fn f(w: usize) { println!(\"{:<width$}\", 1, width = w); }",
         );
-        assert!(out.is_none(), "rename must not fire: {out:?}");
+        assert!(out.is_none(), "literal positional must abort: {out:?}");
     }
 
     #[test]

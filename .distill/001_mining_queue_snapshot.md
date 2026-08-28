@@ -1290,9 +1290,44 @@ never closed). Ranked open classes (inventory 2026-08-24):
 - [ ] P2 **array-literal guard family** — `map_unwrap_or` context-forced
       position detection (~8 sites) + `vec-with-capacity` temp-binding
       emitter (4 sites). E0308 probe work already done. Evidence: miss.
-- [ ] P3 **named-arg-with-rename** — template-rewrite emission (`{:<w$}`),
+- [x] P3 **named-arg-with-rename** — template-rewrite emission (`{:<w$}`),
       ×5+ sites incl. the width variant; dominant residue of the
       highest-volume lint (7,281 of 8,235 trajectories). Evidence: miss.
+      **CONSUMED 2026-08-29 (probe-first + proposer extension,
+      `uninlined_format_args` rename class):** real-clippy 1.97 probe
+      (scratch crate, JSON suggestions) established the oracle table —
+      renames `n = v` (both plain idents, n != v) fire MachineApplicable
+      with the fix = rewrite every placeholder `n` to `v` AND re-point
+      every width/precision `\$` ref (`{:>width\$}` + `width = w` →
+      `{:>w\$}`), then delete the args; const/param/`self` values all
+      fire (implicit capture resolves consts); escaped `{{a}}` payloads
+      untouched; repeated placeholders all rewritten; a/a2 exact-ident
+      boundary; mixed positional+rename composes in one invocation.
+      **Oracle silences:** field-access values (`val = s.0`) are SILENT
+      (implicit capture cannot express them — whole-macro abort kept);
+      and an UNREFERENCED named arg is now a hard rustc error
+      (`named argument never used`, deny-by-default) — every rename in
+      compiling code is referenced by construction. Landed:
+      `RenameArg` + `rewrite_named_content` (named placeholder + own
+      spec) + `rewrite_spec_refs` (two-pass: locate `ident\$` runs whose
+      ident matches a key, then splice — the streaming first draft
+      double-pushed the run, caught by fixtures); raw idents on either
+      side abort; 17 fixtures (rename + spec + width/precision refs +
+      escape + repeat + boundary + compose + raw/literal aborts); the
+      old `named_arg_with_rename_still_untouched` test re-documented
+      (still None, but because the literal positional `1` aborts the
+      macro — clippy would fire a partial fix there, we stay
+      conservative). Validation: module 61/61, default lib 768/0
+      (corpus-lockstep + clean-span negative control green, incl. the
+      sibling's B85 WIP corpus entries — their WIP compiles clean),
+      clippy 0 in the file, e2e dry→write on a 4-shape scratch file
+      reproduced the oracle fix byte-for-byte on all 4.
+      **Deferred this cycle [-]:** score-bench run #10 (the shared
+      checkout's dirty corpus.rs is the sibling's unlanded B85 — a run
+      now would contaminate the delta with their WIP rules; re-run after
+      B85 lands); cross-repo live-site heals (katgpt-rs bench_337 /
+      bench_105 / bench_256 + ndb merkle.rs — their repos' build state
+      belongs to the next sweep pass).
 - [~] P4 **created-warning pair** — closure-bool plain-expression gap +
       Unknown-receiver terminal emission (`is_some_and`); 9 manual fixes
       to date; protects the score-bench `created` trust axis (1.9%).
