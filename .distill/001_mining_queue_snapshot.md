@@ -9,6 +9,7 @@
 
 ## Mining queue snapshot (update per batch — this is the resume state)
 
+- **2026-08-29 (06:0x +07, idle loop) — P7 LANDED (`manual_is_multiple_of` proposer + corpus entry, the post-mining wave's last open item) + the game-sdk adoption heal (393 edits): corpus 40 → 41 (clippy_lints).** P7: VERIFY-tier lane decided + landed — proposer (18 fixtures, float/method-form/self-recursion guards, the Cast-exclusion method-append guard) + e2e VERIFY-contract proven on a scratch crate (unsigned site healed Certified, signed i64 site auto-reverted byte-exact); score-bench steady state held; **retrieval floor re-pinned per the floor contract (blended top-3 97→95/101, the `== 0`-token competition class, Issue 022 precedent, worktree-isolated baseline)**; `if_same_then_else` stays owner-gated. NEW intake item **P11**: `is_postfix_safe` includes `Expr::Cast` — a latent method-append break (`x as u64.method()` groups into the type position); P7 carries a local exclusion, the shared helper fix is its own unit. **Also this cycle: riir-game-sdk adoption heal LANDED (`2576b0b`): 393 mechanical edits / 56 files, net −124** (uninlined 326 / map_unwrap_or 38 / useless_format 12 / single_match_else 7) across 4 verify cycles (root gm+avatar_sync+pubdir / viz full_gm+chain_viz+vibe_view+quest_bytes+quest_manifold_demo+neuro_viz_3d / e2e prod_e2e+game_e2e+settlement_e2e / default) — all compile-gated under their exact unions; 3 heal-created map_or sites terminal-fixed to is_some_and; clippy 0 on touched packages; the repo's test_gate.sh ALL 7 ROWS GREEN at pinned counts (21/30/35/44/153/33/80). riir-dao stragglers healed (`af914d3`, 2 edits); riir-viewbridge verified CLEAN (0 fixable — the adoption-sweep lane is fully consumed). **Coordination: the sibling landed `4b5c087` (score-bench #11 record) mid-cycle on the shared checkout — disjoint files, no sweep; their score-bench cadence continues (my run #13 recorded flat on the frozen set, uncommitted row rides my P7 commit).** Lane state: sibling ACTIVE in riir-ai (59 dirty, GPU perf lanes) + riir-dapps (kat/ worker-shell WIP); the sibling's M3 bench_767 finished mid-cycle. Next executable: P11 (the is_postfix_safe Cast fix, small) or the 4090/M3 lanes (sibling-held) or idle report; pool refill quota-gated until 09-15.
 - **2026-08-29 (morning +07, idle loop, 4090 box quiet) — Plan 555 T1 LANDED (riir-ai `6167c78d0`, pushed): the crowd temperament-ladder A/B → G8 honestly REFUTED (structural); genome axis validated; Bench 806 (renumbered — see collision note).** The queue's declared next-executable was taken (box quiet, riir-ai tree clean at cycle start; B86's gate freed mid-cycle by the sibling's own B85/B86 landings — see their entries below). New module `riir-games/src/swarm/temperament_ladder.rs` (opt-in `spectral_temperament`) + `riir-poc/tests/temperament_ladder_poc.rs` (3 arms × 8 seeds, Bench-010 world). Gates: G1 determinism PASS (bit-identical per arm), G4 PASS (0 allocs/bytes, 20 ticks @ 1000 NPC), Weyl merge certificate 100/100 PASS, genome engagement PASS (L/H vs incumbent mean |Δflee_frac| 0.0042; flee duty cycle scales with the calibrated scalar 0.0125@t=0.33 → 0.075@t=1.0). **G8 rung-ladder REFUTED structurally: 98× hierarchy (rung effect 0.000042 vs genome effect 0.004155), sd ratio 0.999–1.005 across kick_spread ∈ {1,2,4,8} — family-S's `Aᵢ = αᵢI + diag(εᵢ)` gives every rung the same isotropic feature response (λk(A₀)=0 at every k by eigengap-at-init), so k only modulates the O(ε) residual (~7% of the genome axis). Harness pins the hierarchy as the standing verdict test; substrate feedback recorded for katgpt-rs spectral_pencil.** Two measured world-design lessons en route (in the bench doc): stock kick 0.5 saturates fear at 1.0 genome-invisibly (Issue-070 arithmetic) → the derived temperament-visible regime kick `1.25·gap·(1−e^(−λ·dt))`; a forage attractor outside every fear disc measures all-zero flees → per-NPC grazing spots spanning the flight-initiation annulus. **Bench 804 dual-allocated AGAIN (7th collision): sibling's k4-smem-race doc landed first (`b7b787f80`) + they took 805 (771 tiled-flash PROMOTED default-on, `18df22e14`) → mine renumbered 806 at rebase (.highwater → 806; conflict was .highwater-only).** Score-bench #11 also run this cycle (flat 96.2%/1.9% — validates P3+P8 proposer changes regression-free on the frozen set, PRE-B86; the post-B86 #12 is the sibling's cadence per their entry). Lane state after: 555 T3 quota-gated (09-15), T4 deferred (Glacial consumer must materialize); the post-mining wave + B86 landed by the sibling concurrently — no file collisions this cycle beyond .highwater + this snapshot (both resolved push-wins).
 
 - **2026-08-29 (04:2x +07, idle loop) — BATCH 86 LANDED (the Cloudflare 1.1.1.1 DNS-cache memory distill → rust_perf; Plan 047, Research 100 → RECORD): corpus 91 → 94 (allocation 20→22, layout 8→9).** 3 rules + 2 riders: `serialize-once-byte-buffer-store` (MEASURED ParetoDominant 4.26/3.52/2.90×, alloc axis EXACT 200,001→2 — 2n+1→2, the malloc storm IS the mechanism; verdict-stable ×2; the full-wire-message ANTI-SHAPE in-rule), `context-equal-field-elide` (MEASURED ParetoDominant 3.12/3.01/2.00× @ ~80% mix, allocs 100,001→20,056 — the elision regime made visible; NOT collapsed into intern/dedup at authoring — the value is ABSENT because the context re-derives it), `bitflag-pack-when-footprint-dominates` (NotBenchable-speed; size axis 12→8 pinned by gate; cross-cites the kernel_opt hot-read INVERSE regime). Riders: box-str-immutable → Box<[T]> any-frozen-T; box-large-enum-variant honest costs. GOAT: 809/0 default + 827/0 bench-state lib + clippy 0 both states --all-targets + retrieval floors 13/13 HELD zero re-pins + G-det stable. **Count-pin walk found the corpus `//!` header line STALE at 89/79/10 (B85 never bumped it) + the stale builder-doc prose + the stale "Eighteen rules" header line — all walked to true (94/82/12/37).** Coordination: the sibling's B85 landed `2462eff` (clearing B86's dual-gate) and their score-bench #10 ran to completion in parallel without touching rust_perf/corpus.rs — no dual-allocation. **Lane state after: B86 done; B87 done (sibling, 00:0x); the post-mining wave P3–P8b landed (sibling); next executable units: score-bench #11 post-B86 (the sibling's cadence — my B86 landing changes the corpus they measure), the 4090/M3 perf lanes stay sibling-held, 555-T1 build+quiet-box-gated (riir-ai tree), boundary-guard NOT due (quarterly, last 08-27).**
@@ -1455,25 +1456,49 @@ never closed). Ranked open classes (inventory 2026-08-24):
       match_bool 24 tests (7 new + 1 re-pinned), single_match_else 28
       tests (5 new + 2 re-pinned); lib 788/0; clippy 0 all-targets; e2e
       dry→write byte-for-byte vs oracle on all 3 new shapes.
-- [ ] P7 **no-proposer default lints** — `manual_is_multiple_of` (2 live
+- [x] P7 **no-proposer default lints** — `manual_is_multiple_of` (2 live
       occurrences), `if_same_then_else` (owner call). Evidence: manual fix.
-      **RECON PROBED 2026-08-29 (4 scratch crates vs clippy 1.97, default-group
-      lint):** oracle table — `u % lit == 0` fires → `u.is_multiple_of(lit)`,
-      `(expr) % lit == 0` fires (receiver parenthesized), `u % d == 0`
-      non-literal divisor fires (verbatim), `0 == u % 4` reversed fires
-      (same fix), `u % 4 != 0` fires → `!u.is_multiple_of(4)`,
-      `(1 + u) % (2 * 2) == 0` complex divisor fires (verbatim); SILENT:
-      signed dividends (`x: i32 % 4 == 0` — **`is_multiple_of` is
-      UNSIGNED-ONLY, E0599 on i32 probe-verified**) and the method form
-      `(u % 4).eq(&0)`. **The design fork that gates the proposer:**
-      parse-only cannot see dividend signedness → a naive fix breaks every
-      signed site without --verify. Two sound lanes: (a) VERIFY_LINTS tier
-      (the single_char_pattern precedent — type-blind shapes the compile
-      gate auto-reverts), or (b) a receiver-classification allowlist of
-      KNOWN-unsigned method signatures (`.len()`/`.count()`/`.capacity()`…
-      — the map_unwrap_or ReceiverKind pattern) firing only there; plain
-      unknown paths stay silent. RECON-ONLY this cycle — value/rate poor
-      (2 live sites in 8k files) vs P8/P2; next session picks the lane.
+      **CONSUMED 2026-08-29 (the recon's lane decision: VERIFY_LINTS tier, the
+      single_char_pattern precedent):** the receiver-allowlist lane was REJECTED
+      — it would cover ~none of the real sites (`rng.next()` is unclassifiable);
+      VERIFY-tier covers ALL firing shapes with the compile gate as the
+      signedness safety net. Landed: corpus 40 → 41 (style group, corpus entry
+      `n % 4 == 0` → `n.is_multiple_of(4)`), proposer with the recon's full
+      oracle table (either-order `==`/`!= 0`, paren-layer unwrap on the `%`,
+      divisor spliced verbatim incl. complex exprs, `!= 0` → `!` prefix, suffix
+      zeros); guards: float operands skip (no `is_multiple_of` on floats), the
+      method form `(x % 4).eq(&0)` naturally silent (not an Eq/Ne binary),
+      self-recursion guard (Issue 031 H1 class: `self % d == 0` inside
+      `fn is_multiple_of` would self-call — refused), and a LOCAL method-append
+      guard excluding `Expr::Cast` (`is_postfix_safe` includes Cast, but
+      `x as u64.method()` groups the method into the TYPE position — cast
+      dividends must parenthesize; see P11). 18 fixtures; 827/0 lib; clippy 0
+      both states; score-bench steady state held (96.2/1.9/100/100 — the new
+      proposer doesn't fire on the frozen set, expected); e2e scratch-crate
+      VERIFY-contract proven: unsigned site healed (2 Certified), signed site
+      auto-reverted byte-exact. **Retrieval floor re-pinned per the floor
+      contract (Issue 022 precedent): blended top-3 97/101 → 95/101** — the new
+      entry's `== 0` token legitimately out-scores the truthful comparison_to_empty
+      entry on the len-shaped fixture; VERIFY-tier entries get no structural
+      re-rank rescue (Issue 034's deliberate exclusion); fix-before-repin applied
+      (the token is the lint's identity, irreducible); baseline isolated via a
+      HEAD worktree (pre-change 97/101 → post-change 96/101, sole cause
+      confirmed); all other floors re-measured unchanged. `if_same_then_else`
+      stays owner-gated (semantic-duplication judgment).
+- [ ] P11 **`is_postfix_safe` includes `Expr::Cast` — latent method-append
+      break**. Found while writing the P7 proposer: `x as u64.method()` does
+      NOT group as `(x as u64).method()` (method calls bind TIGHTER than
+      `as`, so the method parses into the TYPE position and fails) — the
+      helper's doc claims "can be appended without changing grouping" for a
+      form where appending is structurally broken. The P7 proposer carries a
+      local exclusion (`is_method_append_safe`) so it is safe; the shared
+      helper remains wrong for any FUTURE proposer that appends a method to a
+      cast expr (comparison_to_empty's `finish_is_empty` is the live exposure:
+      `foo() as &str == ""` would emit `foo() as &str.is_empty()`). Fix =
+      remove Cast from `is_postfix_safe` + audit the negation/`&&`-join users
+      (`needs_logic_parens` delegates to it — over-parenthesizing there is
+      byte-drift vs the oracle, harmless but parity-tested). Evidence: grammar
+      analysis + the P7 fixture (`unparenthesized_cast_dividend_parenthesizes`).
 - [x] P8 **unnecessary_sort_by deref-binding shape** — **CLOSED 2026-08-29**
       (this commit). Probe-first (12-shape scratch crate vs clippy 1.97,
       JSON): the deref form `sort_by(|&a, &b| a.cmp(&b))` fires

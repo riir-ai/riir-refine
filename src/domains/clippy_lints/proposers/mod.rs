@@ -113,8 +113,8 @@
 //!
 //! Each proposer handles ONE lint. Adding a new lint = adding a new proposer
 //! module + a row in `collect_rule_edits`' match (and, when detection is
-//! structural, a row in [`FIXABLE_LINTS`]). 40 lints ship today (10 seed +
-//! 30 from the Issue 016 expansion); future lints drop in by extending the
+//! structural, a row in [`FIXABLE_LINTS`]). 41 lints ship today (10 seed +
+//! 31 from the Issue 016 expansion and the post-mining P7 verify-tier row); future lints drop in by extending the
 //! match.
 
 pub mod collapsible_else_if;
@@ -127,6 +127,7 @@ pub mod helpers;
 pub mod identity_op;
 pub mod iter_next_loop;
 pub mod iter_nth_zero;
+pub mod manual_is_multiple_of;
 pub mod manual_map;
 pub mod manual_unwrap_or;
 pub mod map_unwrap_or;
@@ -223,6 +224,10 @@ pub const VERIFY_LINTS: &[&str] = &[
     "comparison_to_empty",
     "while_let_on_iterator",
     "single_char_pattern",
+    // P7 (post-mining): `x % d == 0` → `x.is_multiple_of(d)`. Parse-only
+    // cannot see dividend signedness and `is_multiple_of` is unsigned-only —
+    // the verify gate reverts signed-dividend breaks (E0599).
+    "manual_is_multiple_of",
 ];
 
 /// Propose a fix for `(lint_name, buggy_code)` by applying the lint's
@@ -260,7 +265,7 @@ pub fn collect_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<Rul
         .collect()
 }
 
-/// Dispatch to one lint's proposer. All 40 lints are reachable here (the
+/// Dispatch to one lint's proposer. All 41 lints are reachable here (the
 /// `self_evolve` loop verifies output with cargo clippy); `--fix` callers
 /// filter through [`FIXABLE_LINTS`] instead.
 #[allow(clippy::too_many_lines)]
@@ -308,6 +313,7 @@ fn collect_rule_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<So
         "comparison_to_empty" => comparison_to_empty::collect_edits(source, file),
         "while_let_on_iterator" => while_let_on_iterator::collect_edits(source, file),
         "single_char_pattern" => single_char_pattern::collect_edits(source, file),
+        "manual_is_multiple_of" => manual_is_multiple_of::collect_edits(source, file),
         _ => Vec::new(),
     }
 }

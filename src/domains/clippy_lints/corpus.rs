@@ -18,9 +18,9 @@ use crate::domains::clippy_lints::{ClippyFixEntry, ClippyLintDomain};
 
 /// Build a seed corpus from common clippy lint examples.
 ///
-/// Returns a BLAKE3-committed [`Corpus<ClippyLintDomain>`] with 40 entries:
-/// the 10 seed lints (style, complexity, perf, nursery groups) + the 30
-/// Issue 016 structural-expansion lints (frequency-ranked from kornel's
+/// Returns a BLAKE3-committed [`Corpus<ClippyLintDomain>`] with 41 entries:
+/// the 10 seed lints (style, complexity, perf, nursery groups) + the 31
+/// Issue 016 structural-expansion and post-mining verify-tier lints (frequency-ranked from kornel's
 /// 100K-crate clippy run + Li et al.'s 8.09M-warning crates.io study ∩
 /// clippy's `MachineApplicable` axis ∩ parse-only provability — see
 /// `.benchmarks/021`).
@@ -296,6 +296,15 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
             buggy_code: "fn f(s: &str) -> bool { s.contains(\"x\") }".to_string(),
             fixed_code: "fn f(s: &str) -> bool { s.contains('x') }".to_string(),
         },
+        ClippyFixEntry {
+            lint_name: "manual_is_multiple_of".to_string(),
+            lint_group: "style".to_string(),
+            // Post-mining P7. VERIFY-tier: parse-only cannot see dividend
+            // signedness and `is_multiple_of` is unsigned-only — the
+            // `--verify` compile gate reverts any signed-dividend break.
+            buggy_code: "fn f(n: u64) -> bool { n % 4 == 0 }".to_string(),
+            fixed_code: "fn f(n: u64) -> bool { n.is_multiple_of(4) }".to_string(),
+        },
     ])
 }
 
@@ -366,11 +375,11 @@ mod tests {
         assert!(thawed.verify());
     }
 
-    /// Corpus size pin: 10 seed + 30 Issue 016 expansion.
+    /// Corpus size pin: 10 seed + 31 expansion/post-mining.
     #[test]
-    fn corpus_size_is_40() {
+    fn corpus_size_is_41() {
         let corpus = build_seed_corpus();
-        assert_eq!(corpus.entries.len(), 40);
+        assert_eq!(corpus.entries.len(), 41);
     }
 
     /// Every corpus entry's proposer round-trips: the buggy fixture fires

@@ -2517,10 +2517,15 @@ uninlined_format_args, identity_op, needless_bool, needless_bool_assign,
 match_bool, needless_match, redundant_static_lifetimes, double_parens,
 unnecessary_lazy_evaluations, map_unwrap_or, filter_next, iter_nth_zero,
 manual_unwrap_or, unused_unit, useless_format, deref_addrof,
-wildcard_in_or_patterns, unnecessary_sort_by, iter_next_loop) + 3 in
+wildcard_in_or_patterns, unnecessary_sort_by, iter_next_loop) + 4 in
 `VERIFY_LINTS` (comparison_to_empty — 12 live `.len() == 0` hits in our
 own workspace; while_let_on_iterator; single_char_pattern — type-blind
-shapes the Issue 015 compile gate auto-reverts). Notable spec guards:
+shapes the Issue 015 compile gate auto-reverts; manual_is_multiple_of —
+the post-mining P7 row: `x % d == 0` → `x.is_multiple_of(d)`, probed vs
+clippy 1.97 — parse-only cannot see dividend signedness and
+`is_multiple_of` is unsigned-only, so the verify gate reverts
+signed-dividend breaks; e2e proven on a scratch crate: unsigned site
+healed Certified, signed site auto-reverted byte-exact). Notable spec guards:
 identity_op's IEEE-754 split (`+0.0` is NOT identity for `-0.0`, so
 unsuffixed `+ 0` never fires; `- 0`, `* 1`, `/ 1` are float-safe),
 manual_unwrap_or/unnecessary_lazy_evaluations purity gates (eager-vs-lazy
