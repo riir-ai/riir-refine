@@ -581,4 +581,41 @@ mod tests {
             h.finalize().to_hex().to_string()[..12].to_string()
         });
     }
+
+    /// The CROSS-REPO GOLDEN PAYLOAD — the exact NDJSON bytes the
+    /// `clean_rows_round_trip` fixture (2 rows, stamp 1_234_567, own-repo
+    /// allow policy) produces. Pinned IDENTICALLY on the consumer side:
+    /// riir-dapps `tests/kat_mining.rs` (`GOLDEN_PAYLOAD`, feature
+    /// `kat_mining`) parses these exact bytes as the ingest contract — the
+    /// wire_golden.bytes precedent (a mirror nobody checks is not a mirror;
+    /// serialization drift on EITHER side fails a gate here).
+    #[test]
+    fn golden_payload_bytes_are_pinned() {
+        let gate = RedactionGate::from_policy(allow_policy());
+        let b = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo);
+        let rows = vec![
+            row("uninlined_format_args", "fn f() { println!(\"{}\", x); }", "fn f() { println!(\"{x}\"); }"),
+            row("needless_return", "fn g() { return 1; }", "fn g() { 1 }"),
+        ];
+        let p = b.build_at(&rows, 1_234_567);
+        assert_eq!(p.commitment, "d6395af4a5df9460d859f3de6ebc7f1372d55e4e11625a8bf1aa41622bf0401d");
+        let expected = concat!(
+            "{\"payload_version\":1,\"redact_version\":1,\"origin\":\"own-repo\",",
+            "\"created_unix\":1234567,\"rows_included\":2,\"rows_blocked\":0,",
+            "\"batch_commitment\":\"d6395af4a5df9460d859f3de6ebc7f1372d55e4e11625a8bf1aa41622bf0401d\"}\n",
+            "{\"shape_id\":\"241e0429984b\",\"lint_key\":\"needless_return\",",
+            "\"shape\":\"fn g() { return 1; }\",\"fix\":\"fn g() { 1 }\",",
+            "\"direction\":[0.1,-0.2,0.3,0.0,0.5,-0.5,0.7,0.9],\"success_count\":3,\"fail_count\":1,",
+            "\"consecutive_fails\":0,\"tier\":0,\"last_run_id\":\"run-abc123-42\",",
+            "\"last_seen_at\":1700000000,\"elo\":1215.5,\"span_elo\":1188.25,",
+            "\"gate\":{\"decision\":\"allow\",\"findings\":[]}}\n",
+            "{\"shape_id\":\"15ca779abbbc\",\"lint_key\":\"uninlined_format_args\",",
+            "\"shape\":\"fn f() { println!(\\\"{}\\\", x); }\",\"fix\":\"fn f() { println!(\\\"{x}\\\"); }\",",
+            "\"direction\":[0.1,-0.2,0.3,0.0,0.5,-0.5,0.7,0.9],\"success_count\":3,\"fail_count\":1,",
+            "\"consecutive_fails\":0,\"tier\":0,\"last_run_id\":\"run-abc123-42\",",
+            "\"last_seen_at\":1700000000,\"elo\":1215.5,\"span_elo\":1188.25,",
+            "\"gate\":{\"decision\":\"allow\",\"findings\":[]}}\n",
+        );
+        assert_eq!(p.ndjson, expected);
+    }
 }
