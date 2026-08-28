@@ -1,7 +1,7 @@
 # Issue 044 — ops dashboard: one URL tracking LLM spend + healer adoption + coverage
 
 **Filed:** 2026-08-26
-**Status:** OPEN — T1+T8+T11 SHIPPED; T2/T3/T6/T9/T10 SHIPPED 2026-08-27 (live-deployed, see §2026-08-27 session); T4 mechanism SHIPPED (paging inert until owner secrets); T7 workflow SHIPPED (inert until repo var + secrets); T5 blocker REWORDED 2026-08-28 — Proposal 005 Phase 1 landed 2026-08-27 (T1.5 dapps `84dd049` / T1.6 clippy `0a7cfd8`), so ledger-row KAT denomination awaits the deferred Worker/DO HTTP ledger shell (phase-2 defer / Plan 031 Phase B gate / phase-3 owner gate); ledger rows carry NO `kat` field at all today (grep-verified) — all remaining work is owner-gated activation
+**Status:** OPEN — T1+T8+T11 SHIPPED; T2/T3/T6/T9/T10 SHIPPED 2026-08-27 (live-deployed, see §2026-08-27 session); T4 mechanism SHIPPED (paging inert until owner secrets); T7 workflow SHIPPED (inert until repo var + secrets); T5 blocker REWORDED 2026-08-28 — Proposal 005 Phase 1 landed 2026-08-27 (T1.5 dapps `84dd049` / T1.6 clippy `0a7cfd8`), so ledger-row KAT denomination awaits the deferred Worker/DO HTTP ledger shell (phase-2 defer / Plan 031 Phase B gate / phase-3 owner gate); ledger rows DO carry a `kat` field today, present-and-null on all 19 rows (the earlier "NO `kat` field at all (grep-verified)" claim was WRONG — corrected 2026-08-28 by re-parsing the file rather than grepping it; what is missing is a non-null DENOMINATION, not the field). **T12 SHIPPED 2026-08-28** — the "all remaining work is owner-gated activation" claim was also FALSE: the per-day neuron series was silently WRONG (see T12). Remaining work is now genuinely owner-gated activation (T4 paging / T5 ledger shell / T7 nightly)
 **Repo:** riir-clippy
 **URL:** https://riir-ops-dashboard.foxfox.workers.dev/
 
@@ -91,8 +91,12 @@ Leftovers found + removed (owner ask: "any active on cloudflare leftover?"):
       2026-08-27 (T1.5/T1.6), so the blocker is now the deferred
       Worker/DO HTTP ledger shell (phase-2 defer / Plan 031 Phase B gate
       / phase-3 owner gate); ledger rows carry NO `kat` field at all
-      today (grep-verified) — the field appears when that shell
-      denominates them.
+      today — CORRECTED 2026-08-28: the field IS present on all 19 rows,
+      uniformly `null`. The producers (`kat_drain.rs`, `fixer_regate.rs`)
+      already emit it; only the VALUE awaits that shell. The prior
+      "grep-verified" claim came from grepping for a populated pattern and
+      reading zero hits as an absent field — a parse, not a grep, settles
+      field presence.
 - [x] **T6 training/GPU axis** — SHIPPED 2026-08-27: collector
       (`collect_training()`) + card live (recent-runs table + tok/s curve;
       placeholder until rows); the convention landed in riir-train
@@ -124,6 +128,81 @@ Leftovers found + removed (owner ask: "any active on cloudflare leftover?"):
       sleep/awake/usage graphs (hourly 48h / daily 14d / weekly 4w +
       per-app 30d table + est-cost KPIs) from the CF GraphQL container
       datasets, deployed live.
+- [x] **T12 per-day attribution + reconciliation guard** — SHIPPED 2026-08-28
+      (§T12): rows were bucketed by APPEND time, not the usage window they
+      cover, so the per-day neuron series was wrong on 4 days (phantom 2025
+      bucket; cap-exceeded day under-reported by 1,118 n; 2026-08-27 read
+      0.00). New optional `covers_unix` field + `eff_ts` in the generator;
+      the ledger now reconciles with server billing truth to 0.003% and
+      reproduces this issue's 10,329.78 headline from the committed archive.
+      Plus a ledger↔analytics reconciliation card so it cannot regress
+      silently.
+
+## T12 — per-day attribution bug + reconciliation guard (SHIPPED 2026-08-28)
+
+**The dashboard was reporting the wrong neurons-per-day, on the very day it
+exists to police.** Found by decoding `ts_unix` on every ledger row instead of
+trusting the rendered chart.
+
+Two defect instances, one root cause — **rows were bucketed by the time they
+were APPENDED, not the usage window they describe:**
+
+| rows | stamped | actually covers | evidence |
+|---|---|---|---|
+| 0 (`A-smoke`), 2 (`external`) | 2025-09-29 | 2026-08-26 00:55Z / 01:10Z | their own notes name the windows; CF GraphQL retains ~1 day so a GraphQL-sourced row cannot predate commit `dac4b71` (2026-08-26 01:42Z) by 331 days |
+| 17 (glm settlement), 18 (llama settlement) | 2026-08-28 12:02Z | 2026-08-26 04:00Z / 2026-08-27 17:00Z | their own notes name the settled buckets |
+
+Effect on the per-day series — a phantom 2025 bucket, the cap-exceeded day
+under-reported by 1,118 neurons, and a day of spend credited to a day that
+spent nothing:
+
+| account day | before | after | CF analytics (server truth) |
+|---|---|---|---|
+| 2025-09-29 | 531.14 | — (phantom, gone) | n/a |
+| 2026-08-26 | 9,211.60 | **10,330.10** | 10,329.78 |
+| 2026-08-27 | 0.00 | **542.54** | 542.54 |
+| 2026-08-28 | 1,129.90 | — (nothing spent) | n/a |
+
+The fix makes the client ledger reconcile with server billing truth to
+**0.003%** (residual +0.32 is 2dp rounding in the committed 587.36 figure) and
+independently reproduces the **10,329.78** cap-exceeded figure this issue
+headlines — which had been reachable only from live analytics, never from the
+committed archive.
+
+**The fix (append-only respected):**
+
+- New optional ledger field **`covers_unix`** — the usage window a row
+  describes. `ts_unix` keeps its honest meaning (append time). Applied
+  surgically by string insertion, not re-serialization: **15/19 lines are
+  byte-identical**, the 4 targeted rows changed additively only (asserted
+  key-by-key; notes appended, never replaced; no measured value touched).
+  A first attempt re-serialized via `json.dumps` and silently re-spaced 13
+  untouched archive lines — reverted and redone.
+- `gen_dashboard.py` derives `eff_ts = covers_unix or ts_unix` once in
+  `load_ledger()` and every time-axis consumer (sort, `per_day`, incidents,
+  rows table) uses it. Settlement rows show their covered time with a `*`
+  and the append time in a tooltip.
+- `per_day` chart keys are now date-**sorted** rather than insertion-ordered
+  (the `MM-DD` labels also drop the year, so a cross-year bucket was
+  unlabelable as stale).
+- Producers need no change: `kat_drain.rs` / `fixer_regate.rs` write live
+  rows where append time *is* the usage time. `covers_unix` is for
+  hand-appended settlement/backfill rows.
+
+**New: ledger ↔ analytics reconciliation card** (so this class cannot regress
+silently). Per account day it shows ledger n vs analytics n and a verdict:
+`RECONCILED` (within 0.5%, floor 1 neuron), `DRIFT · N% unreconciled`,
+`analytics only · unrecorded session` (neurons burned outside the ledger — the
+`external` row's original condition), or a dim `ledger only · outside
+analytics retention`. Verified across 5 rendered scenarios: reconciled, injected
+drift, analytics-only day, **no-analytics (raises no false alarm — today's
+token-unset state)**, and empty-both.
+
+Deployed + live-verified byte-identical (version `6b8c8a10`). The standing honest
+gap is unchanged and now *visible*: per-run `server` fields read 0.0 under
+analytics lag, and CF GraphQL exposes no `model` dimension to this token, so
+per-model server truth still needs a manual settlement row — the card now names
+the days that need one.
 
 ## 2026-08-27 session (T2/T3/T6/T9/T10 shipped live; T4 mechanism + T7 workflow)
 
@@ -163,4 +242,12 @@ Leftovers found + removed (owner ask: "any active on cloudflare leftover?"):
   Live health at check time: `token_set: false` (heartbeat mode — the
   `CF_API_TOKEN` owner secret is still unset), `cap: 10000`,
   `has_webhook: false`, `has_monthly_budget: false`, `alerts_today: 0`.
+- **Ledger schema (2026-08-28):** `ts_unix` = when the row was appended.
+  `covers_unix` (optional) = the usage window it describes; set it on any
+  hand-appended settlement/backfill row. Consumers must bucket by
+  `covers_unix or ts_unix` — never `ts_unix` alone.
+- **Lesson (T12):** the dashboard rendered a confident, wrong per-day series
+  for two days. A chart cannot audit its own inputs — decode the raw
+  timestamps. And "grep-verified" is not verification of field presence
+  (the T5 `kat` claim): parse the file.
 - Numbering: allocated 044 (highwater 43 → 44).

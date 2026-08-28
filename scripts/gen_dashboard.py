@@ -102,7 +102,15 @@ def load_ledger() -> list[dict]:
             rows.append(json.loads(line))
         except json.JSONDecodeError:
             log(f"ledger skip bad line: {line[:60]}")
-    rows.sort(key=lambda r: r.get("ts_unix") or 0)
+    # `ts_unix` is when the row was APPENDED; `covers_unix` (optional) is the
+    # usage window it describes. They differ for settlement/backfill rows, so
+    # every time-axis consumer below uses the effective timestamp instead —
+    # bucketing a reconciliation row by its append time credits its neurons to
+    # the wrong account day (Issue 044: 2026-08-27 read 0.00 while 2026-08-28
+    # carried 1,129.90 it never spent).
+    for r in rows:
+        r["eff_ts"] = r.get("covers_unix") or r.get("ts_unix")
+    rows.sort(key=lambda r: r.get("eff_ts") or 0)
     return rows
 
 
@@ -145,7 +153,7 @@ def ledger_summary(rows: list[dict]) -> dict:
         m["n"] += n
         m["prompt_tokens"] += cl.get("prompt_tokens") or 0
         m["completion_tokens"] += cl.get("completion_tokens") or 0
-        ts = r.get("ts_unix")
+        ts = r.get("eff_ts") or r.get("ts_unix")
         if ts:
             day = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d")
             d = per_day.setdefault(day, {"usd": 0.0, "neurons": 0.0, "n": 0})
@@ -158,7 +166,7 @@ def ledger_summary(rows: list[dict]) -> dict:
         note = r.get("note") or ""
         if "incident" in note.lower() or "wasted" in note.lower():
             incidents.append({
-                "ts": r.get("ts_unix"), "model": model,
+                "ts": r.get("eff_ts") or r.get("ts_unix"), "model": model,
                 "note": note[:160],
                 "neurons": sv.get("neurons") or 0.0,
             })
@@ -915,6 +923,16 @@ footer{color:var(--dim);font:11px var(--mono);margin-top:34px;border-top:1px sol
     <div class="legend"><span><i style="background:var(--accent2)"></i>neurons/day</span>
       <span><i style="background:var(--crit)"></i>10k free cap</span></div>
   </div>
+  <div class="card wide"><h2>ledger ↔ analytics reconciliation (per account day)</h2>
+    <div id="recon"></div>
+    <div class="sub" style="margin-top:8px">the ledger is a CLIENT record; CF GraphQL is
+      SERVER billing truth. A day that disagrees means unreconciled rows (per-run
+      server fields read 0.0 under analytics lag) or a mis-stamped row — the
+      defect class Issue 044 hit when settlement rows were bucketed by append
+      time instead of the window they cover. Days present in only one source are
+      shown too: analytics retention is ~1 day on this account, so older
+      ledger-only days are EXPECTED, not drift.</div>
+  </div>
   <div class="card"><h2>ledger spend by model (USD est, client)</h2>
     <div id="modelSpend"></div>
   </div>
@@ -1152,9 +1170,52 @@ if (D.cf_daily && D.cf_daily.length) {
 } else {
   $('cfDaily').innerHTML = '<div class="sub">no live analytics (token/lag) — ledger per-day below</div>';
   svgBarChart($('cfDaily'),
-    Object.keys(D.ledger.per_day).map(k=>k.slice(5)),
-    Object.values(D.ledger.per_day).map(v=>v.neurons),
+    Object.keys(D.ledger.per_day).sort().map(k=>k.slice(5)),
+    Object.keys(D.ledger.per_day).sort().map(k=>D.ledger.per_day[k].neurons),
     {cap: D.cap});
+}
+// ── ledger ↔ analytics reconciliation (issue 044) ──
+{
+  const led = D.ledger.per_day || {};
+  const ana = {};
+  (D.cf_daily||[]).forEach(r=>{ ana[r.date] = r.neurons; });
+  const days = [...new Set([...Object.keys(led), ...Object.keys(ana)])].sort().reverse();
+  // Tolerance: committed reconciliation rows are rounded to 2dp, so an exact
+  // match is not achievable — 0.5% (floor 1 neuron) is the drift threshold.
+  const tol = (a) => Math.max(1, Math.abs(a) * 0.005);
+  if (!days.length) {
+    $('recon').innerHTML = '<div class="sub">no ledger or analytics days yet</div>';
+  } else {
+    let drift = 0;
+    $('recon').innerHTML = tableHTML(
+      ['account day','ledger n (client)','analytics n (server)','diff','verdict'],
+      days,
+      d => {
+        const l = led[d] ? led[d].neurons : null, a = (d in ana) ? ana[d] : null;
+        let v, cls = '';
+        if (l == null || a == null) {
+          v = (a == null) ? 'ledger only · outside analytics retention'
+                          : 'analytics only · unrecorded session';
+          if (a == null) cls = 'color:var(--dim)';
+          else { cls = 'color:var(--warn)'; drift++; }
+        } else if (Math.abs(l - a) <= tol(a)) {
+          v = 'RECONCILED'; cls = 'color:var(--accent2)';
+        } else {
+          v = 'DRIFT · ' + fmt.pct(Math.abs(l - a) / (a || 1)) + ' unreconciled';
+          cls = 'color:var(--crit)'; drift++;
+        }
+        const dv = (l != null && a != null) ? (l - a) : null;
+        return '<td>'+d+'</td><td class="num">'+(l==null?'—':fmt.f2(l))+
+          '</td><td class="num">'+(a==null?'—':fmt.f2(a))+
+          '</td><td class="num">'+(dv==null?'—':(dv>=0?'+':'')+dv.toFixed(2))+
+          '</td><td style="'+cls+'">'+v+'</td>';
+      });
+    if (drift) {
+      $('recon').innerHTML += '<div class="sub" style="color:var(--crit);margin-top:8px">'
+        + drift + ' day(s) need reconciliation — append a settlement row with '
+        + 'covers_unix set to the window it settles.</div>';
+    }
+  }
 }
 {
   const models = Object.entries(D.ledger.per_model).sort((a,b)=>b[1].usd-a[1].usd);
@@ -1424,7 +1485,9 @@ if (D.ledger.incidents.length) {
     r => {
       const sv=r.server||{}, cl=r.client||{};
       const inc=(r.note||'').match(/incident|wasted/i);
-      return '<td>'+fmt.d(r.ts_unix)+'</td><td>'+(r.arm||'—')+'</td><td class="note">'+
+      const ets=r.eff_ts||r.ts_unix;
+      return '<td'+(r.covers_unix?' title="appended '+fmt.d(r.ts_unix)+'"':'')+'>'+
+        fmt.d(ets)+(r.covers_unix?'*':'')+'</td><td>'+(r.arm||'—')+'</td><td class="note">'+
         (r.model||'?').split('/').pop()+'</td><td class="num">'+(r.n||0)+
         '</td><td class="num">'+(sv.requests||0)+'</td><td class="num">'+
         fmt.n1(sv.neurons||0)+'</td><td class="num">'+fmt.usd((sv.neurons||0)*D.neuron_usd)+
