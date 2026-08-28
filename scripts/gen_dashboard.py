@@ -608,12 +608,25 @@ def collect_containers(daily_days: int = 30, hourly_hours: int = 48) -> dict:
                  "dimensions { applicationId datetimeHour active } "
                  "sum { containerUptime cpuTimeSec } } } } }"
                  % (CF_ACCOUNT_ID, h_start))
+    # Correlation dimensions (Issue 045 T5): applicationId alone is opaque and
+    # the control plane 404s for deleted apps, so carry the identifiers that CAN
+    # be joined dashboard-side — the backing DO, the deployment, the colo.
+    q_meta = ("{ viewer { accounts(filter: {accountTag: \"%s\"}) { "
+              "containersMetricsAdaptiveGroups(limit: 2000, "
+              "filter: {date_geq: \"%s\"}) { dimensions { applicationId "
+              "durableObjectId deploymentId location } } } } }"
+              % (CF_ACCOUNT_ID, d_start))
     try:
         du = _gql(token, q_usage)
         dm = _gql(token, q_metrics)
     except Exception as e:  # noqa: BLE001 — best-effort source
         log(f"container GraphQL failed: {e}")
         return empty
+    try:
+        dmeta = _gql(token, q_meta)
+    except Exception as e:  # noqa: BLE001 — enrichment only, never fatal
+        log(f"container meta GraphQL failed (non-fatal): {e}")
+        dmeta = {}
     for label, d in (("usage", du), ("metrics", dm)):
         if d.get("errors"):
             log(f"container GraphQL ({label}) errors: {str(d['errors'])[:160]}")
@@ -646,6 +659,34 @@ def collect_containers(daily_days: int = 30, hourly_hours: int = 48) -> dict:
         up_ms = (g["sum"].get("containerUptime") or 0.0)
         slot = hourly.setdefault(hour, {}).setdefault(app, 0.0)
         hourly[hour][app] = slot + up_ms
+    # app short-key -> full id + correlation dims. The charts key off the short
+    # form (stable, readable); the table shows the full id so it is addressable
+    # against the API instead of being a dead 8-char stub (Issue 045 T5).
+    meta: dict[str, dict] = {}
+    try:
+        mrows = dmeta["data"]["viewer"]["accounts"][0][
+            "containersMetricsAdaptiveGroups"] or []
+    except (KeyError, IndexError, TypeError):
+        mrows = []
+    for g in mrows:
+        dims = g.get("dimensions") or {}
+        full = dims.get("applicationId") or ""
+        if not full:
+            continue
+        m = meta.setdefault(full[:8], {"id": full, "do": set(),
+                                       "deployments": set(), "locations": set()})
+        for key, dim in (("do", "durableObjectId"),
+                         ("deployments", "deploymentId"),
+                         ("locations", "location")):
+            if dims.get(dim):
+                m[key].add(dims[dim])
+    for short in apps:
+        meta.setdefault(short, {"id": short, "do": set(),
+                                "deployments": set(), "locations": set()})
+    meta_out = {k: {"id": v["id"], "do": sorted(v["do"]),
+                    "deployments": sorted(v["deployments"]),
+                    "locations": sorted(v["locations"])}
+                for k, v in meta.items()}
     daily_list = [{"date": d, "apps": daily[d]} for d in sorted(daily)]
     hourly_list = [{"hour": h, "apps": hourly[h]} for h in sorted(hourly)]
     # Zero-fill continuous grids so the charts show true gaps (sleep) instead
@@ -659,8 +700,13 @@ def collect_containers(daily_days: int = 30, hourly_hours: int = 48) -> dict:
         if t is not None:
             grid = []
             seen = {h["hour"]: h["apps"] for h in hourly_list}
-            for i in range(hourly_hours):
+            # Clamp at the current hour — zero-filling a fixed width past `now`
+            # painted phantom "asleep" buckets into the future (Issue 045).
+            now_h = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H")
+            for _ in range(hourly_hours):
                 key = t.strftime("%Y-%m-%dT%H")
+                if key > now_h:
+                    break
                 grid.append({"hour": key, "apps": seen.get(key, {})})
                 t = t + timedelta(hours=1)
             hourly_list = grid
@@ -673,13 +719,16 @@ def collect_containers(daily_days: int = 30, hourly_hours: int = 48) -> dict:
         if t is not None:
             seen = {h["date"]: h["apps"] for h in daily_list}
             grid = []
-            for i in range(daily_days):
+            now_d = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            for _ in range(daily_days):
                 key = t.strftime("%Y-%m-%d")
+                if key > now_d:
+                    break
                 grid.append({"date": key, "apps": seen.get(key, {})})
                 t = t + timedelta(days=1)
             daily_list = grid
     return {"daily": daily_list, "hourly": hourly_list,
-            "apps": sorted(apps),
+            "apps": sorted(apps), "meta": meta_out,
             "rates": {"mem": CONT_MEM_USD_PER_GIB_S,
                       "disk": CONT_DISK_USD_PER_GB_S,
                       "cpu": CONT_CPU_USD_PER_S}}
@@ -1238,14 +1287,22 @@ if (D.containers && (D.containers.daily.length || D.containers.hourly.length)) {
       s.mem+=d.apps[a].mem; s.disk+=d.apps[a].disk; s.cpu+=d.apps[a].cpu;
       s.tx+=d.apps[a].tx||0; s.last=d.date; }});
     const rows = Object.entries(agg).sort((a,b)=>contCost(b[1].mem,b[1].disk,b[1].cpu)-contCost(a[1].mem,a[1].disk,a[1].cpu));
+    // Issue 045 T5: show the FULL applicationId (the 8-char stub is not
+    // addressable against the API) plus the join keys — backing DO + colo.
+    const cmeta = (D.containers.meta)||{};
     $('contTable').innerHTML = tableHTML(
-      ['app','mem GiB-s','disk GB-s','cpu vCPU-s','tx MB','est $ (30d)','last seen'],
+      ['app id','backing DO','colo','mem GiB-s','disk GB-s','cpu vCPU-s','tx MB','est $ (30d)','last seen'],
       rows,
-      r => '<td>'+r[0]+'</td><td class="num">'+(r[1].mem/1073741824).toFixed(0)+
+      r => { const m = cmeta[r[0]]||{};
+        const dobj = (m.do&&m.do.length) ? m.do.map(x=>x.slice(0,12)).join(', ') : '—';
+        const loc = (m.locations&&m.locations.length) ? m.locations.join(', ') : '—';
+        return '<td title="'+(m.id||r[0])+'"><code>'+(m.id||r[0])+'</code></td>'+
+        '<td title="backing durable object"><code>'+dobj+'</code></td><td>'+loc+
+        '</td><td class="num">'+(r[1].mem/1073741824).toFixed(0)+
         '</td><td class="num">'+(r[1].disk/1e9).toFixed(0)+'</td><td class="num">'+
         r[1].cpu.toFixed(1)+'</td><td class="num">'+(r[1].tx/1e6).toFixed(1)+
         '</td><td class="num">'+fmt.usd(contCost(r[1].mem,r[1].disk,r[1].cpu))+'</td><td>'+
-        r[1].last+'</td>');
+        r[1].last+'</td>'; });
   } else {
     $('contDaily').innerHTML = '<div class="sub">no daily usage rows</div>';
     $('contWeekly').innerHTML = '<div class="sub">no daily usage rows</div>';

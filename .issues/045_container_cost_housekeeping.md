@@ -1,7 +1,7 @@
 # Issue 045 — container cost observability + hourly housekeeping worker + smallest-sizing verdict
 
 **Filed:** 2026-08-26
-**Status:** OPEN — T1 verdict recorded, T2+T3 SHIPPED same day; live-mint half gated on Proposal 005 Phase 1. Sizing verdict feeds Proposal 005 T2.0/T2.1 **+ T2.6 / [Plan 031](../.plans/031_kat_sweeper_temp_container_r2_tier.md)** (2026-08-26 later-session sync). **2026-08-27: the T3 Worker was EXTENDED + redeployed (`ab79bd20`) — CORS on all read endpoints (dashboard live-fetch), Issue-044-T4 budget alerting (cap thresholds 50/90/100% + optional monthly budget, KV-dedupe, webhook via `ALERT_WEBHOOK_URL`), extended `/status` (`cap`/`thresholds`/`has_webhook`/`has_monthly_budget`/`alerts_today`).** **2026-08-28 truth-refresh: Proposal 005 Phase 1 LANDED 2026-08-27 (T1.5 dapps `84dd049` / T1.6 clippy `0a7cfd8`) — T6's blocker is NO LONGER Phase 1; the live-mint swap-in awaits the deferred Worker/DO HTTP ledger shell (Proposal 005 phase-2 defer / Plan 031 Phase B gate / phase-3 owner gate). Worker mint status strings refreshed `pending-phase-1` → `pending-worker-shell` + redeployed (version `f93ae507`, live-verified on the 04:00 UTC tick). T4 unchanged (owner-gated secrets). T5 still blocked — CLI exposes no id→name mapping (see checkbox).**
+**Status:** OPEN — T4 (owner secrets) + T6 (external ledger shell) remain; T5 DEFERRED-unachievable 2026-08-28 with root cause fixed. T1 verdict recorded, T2+T3 SHIPPED same day; live-mint half gated on Proposal 005 Phase 1. Sizing verdict feeds Proposal 005 T2.0/T2.1 **+ T2.6 / [Plan 031](../.plans/031_kat_sweeper_temp_container_r2_tier.md)** (2026-08-26 later-session sync). **2026-08-27: the T3 Worker was EXTENDED + redeployed (`ab79bd20`) — CORS on all read endpoints (dashboard live-fetch), Issue-044-T4 budget alerting (cap thresholds 50/90/100% + optional monthly budget, KV-dedupe, webhook via `ALERT_WEBHOOK_URL`), extended `/status` (`cap`/`thresholds`/`has_webhook`/`has_monthly_budget`/`alerts_today`).** **2026-08-28 truth-refresh: Proposal 005 Phase 1 LANDED 2026-08-27 (T1.5 dapps `84dd049` / T1.6 clippy `0a7cfd8`) — T6's blocker is NO LONGER Phase 1; the live-mint swap-in awaits the deferred Worker/DO HTTP ledger shell (Proposal 005 phase-2 defer / Plan 031 Phase B gate / phase-3 owner gate). Worker mint status strings refreshed `pending-phase-1` → `pending-worker-shell` + redeployed (version `f93ae507`, live-verified on the 04:00 UTC tick). T4 unchanged (owner-gated secrets). T5 still blocked — CLI exposes no id→name mapping (see checkbox).**
 **Repo:** riir-clippy (dashboard + worker deploy live here; sizing verdict feeds Proposal 005 T2.0/T2.1)
 **Owner ask (2026-08-26):**
 1. can the container be smaller? smallest?
@@ -76,6 +76,10 @@ wall-second of run; CPU bills on *active usage* only.
 
 ### Live finding the research surfaced (owner should see)
 
+> **SUPERSEDED 2026-08-28 — this paragraph was measured on 2026-08-26 with
+> the truncating collector; three of its numbers are wrong. Corrected
+> restatement follows below. Kept for provenance.**
+
 `containersUsageAdaptiveGroups` shows **3 container-family apps running
 TODAY** (a03038cf…, a034b17e…, a035c2cc… — app ids, not names; the GraphQL
 schema exposes no name mapping and `wrangler containers list` shows none).
@@ -84,6 +88,32 @@ burn ≈ **$0.01–0.03/day**. 2026-08-14 rows match the Bench 331 deploy pair
 (deleted). Likely Cloudflare-Agents/Sandboxes-family workloads from other
 tooling on this account. The dashboard (T2) makes them visible; naming them
 needs dashboard-side correlation — left as a follow-up, not a blocker.
+
+### Corrected live finding (2026-08-28, full-id collector)
+
+Three corrections, all measured against the same GraphQL datasets:
+
+1. **Count: 6 apps over 30 d, not 3.** The 08-26 window has **4**
+   (a03038cf, a034b17e, a035c2cc, **a03a70ff**); 08-14 has 2
+   (a03c634b, a033f790 — the Bench 331 pair). The original list of 3
+   **omitted `a03a70ff`, the single largest consumer.**
+2. **Cost: ~11–35× understated.** Not "$0.01–0.03/day" — the measured
+   **2026-08-26 burn is $0.3453**, and `a03a70ff` alone is **$0.3292
+   (94% of all container spend)**: 117,149 GiB-s memory, 998.5 vCPU-s,
+   **17.7 GB egress** in one day, colo `yyz04`, 3 deployments. The
+   30 d total across all 6 is **$0.3780**. Still small in absolute
+   terms — but the observability claim "we can see our container
+   spend" was false while the dominant line item was missing.
+3. **"Running TODAY" is stale.** Zero rows on 2026-08-27 **and**
+   2026-08-28; last container activity anywhere on the account is
+   **2026-08-26T22Z**. Nothing is running now.
+
+Correlation material now retained (was discarded by the `[:8]` truncation):
+`a035c2cc` and `a034b17e` **share durableObjectId `8d3b8a1d…`** and colo
+`atl15` — two billed apps behind one Worker/DO, not two independent
+workloads. `/containers/me` reports account container defaults of
+**0.0625 vCPU / 256 MiB / 2000 MB disk** — an independent confirmation of
+the T1 `lite` row.
 
 ---
 
@@ -152,14 +182,41 @@ lives (T1 above).
       + optional `MONTHLY_BUDGET_USD` join the same one-time step — the
       alerting mechanism is deployed + inert until then; without the
       webhook, crossings still land in KV + `/status alerts_today`)*
-- [ ] T5 name the 3 live container-family apps (a03038cf…, a034b17e…,
-      a035c2cc… — app ids, not names) — cosmetic, blocked on a
-      name-bearing API surface. **2026-08-28 re-probe (read-only, from
-      `cloudflare/housekeeping`, OAuth'd): `npx wrangler containers list`
-      → `No containers found.`; `npx wrangler containers info a03038cf`
-      → `[ERROR] Response body when an Application is not found` (exit 1)
-      — the CLI neither lists the 3 GraphQL app ids nor maps id→name;
-      needs dashboard-side correlation or a CF-dashboard lookup.**
+- [-] T5 name the container-family apps — **DEFERRED as unachievable by
+      API; root cause found and fixed, correlation surface shipped.**
+      **2026-08-28 second re-probe corrects the first one's premise.** The
+      earlier probe fed `wrangler containers info` an **8-char stub**
+      (`a03038cf`) — but that stub was never the id. It is a *display
+      artifact* of our own `gen_dashboard.py`, which did
+      `(dimensions["applicationId"])[:8]`. The real ids are 36-char UUIDs;
+      the "ids are unaddressable" conclusion was an artifact of our
+      truncation, not of the CF API. Re-probed correctly (OAuth token
+      carries `containers (write)` + `cloudchamber (write)`):
+      - `GET /containers/applications` → `[]` (empty, HTTP 200).
+      - `GET /containers/applications/<FULL-UUID>` → HTTP 404 **`code 1609
+        "Container application not found"`** for all 6 — a *well-formed*
+        lookup, not a malformed one. These are **deleted** applications:
+        GraphQL retains their billing rows, the control plane has no
+        record, so **no name exists server-side to fetch**. That is the
+        real, positive reason T5 cannot close — it replaces the wrong one.
+      - `label(name:)` **is** usable with an argument (the prior note said
+        "unusable bare" — correct, but it takes a key). Probed 20+ keys
+        (`name`, `app`, `worker-name`, `script-name`, `class`, `image`,
+        `managed-by`, …): **every one empty**. Keys >~22 chars or with dots
+        are rejected outright. Labels are not the path.
+      - `/cloudchamber/applications` → 401 "Account is not authorized";
+        `/containers/deployments` → 7003 no route. No deployments surface.
+      - Control plane cross-check: only **2** DO namespaces are
+        container-backed (`hello-cloudflare-container_MyContainer`,
+        `seal-poc-container_MyContainer`) against **6** billed apps —
+        consistent with same-day create/delete (Sandboxes/Agents-family),
+        i.e. ephemeral apps that never had a durable name here.
+      **What shipped instead** (the "dashboard-side correlation" this
+      checkbox always named as the path): `collect_containers()` now emits
+      a `meta` map — **full applicationId** + `durableObjectId` +
+      `deploymentId` + `location` per app — and the per-app table renders
+      full id / backing DO / colo. Live-verified on the dashboard. Reopen
+      only if CF adds a name-bearing dimension or a retained-app lookup.
 - [ ] T6 live-mint swap-in — Proposal 005 Phase 1 (the sync surface)
       landed 2026-08-27 (T1.5 dapps `84dd049` / T1.6 clippy `0a7cfd8`),
       so the blocker is NO LONGER Phase 1: the swap awaits the deferred
@@ -204,3 +261,21 @@ lives (T1 above).
   Issue 046 (`DEFAULT_LLM_DAILY_CAP_USD = 1.0`; resolved + removed
   2026-08-27, commit `8fce5b2` — the gate ships in `CfClient::generate`).
   T4/T5/T6 unchanged.
+
+- **2026-08-28 T5 close-out + collector correctness fix (this session):**
+  T5 re-probed properly and **deferred as unachievable by API** — the apps
+  are deleted (`code 1609`), so no server-side name exists; the prior
+  "ids unaddressable" reasoning was our own `[:8]` truncation, now fixed.
+  Two real defects found and fixed in `scripts/gen_dashboard.py`:
+  **(a) full-id retention + correlation `meta`** (applicationId /
+  durableObjectId / deploymentId / location; per-app table shows full id,
+  backing DO, colo) — this is the correlation surface T5 asked for;
+  **(b) the zero-fill grid painted phantom buckets into the FUTURE**
+  (daily ran to 2026-09-12 and hourly to 2026-08-28T16 while it was
+  12:26 UTC), rendering not-yet-existent hours as "asleep" — both grids
+  now clamp at the current day/hour. Regenerated + deployed
+  (`riir-ops-dashboard` version `e9964b8d`), live-verified serving full
+  UUIDs. The §"Corrected live finding" block above supersedes the
+  2026-08-26 numbers (6 apps not 3; $0.3453 on 08-26 not $0.01–0.03/day;
+  nothing running since 08-26T22Z). No worker/KV change — T3's Worker is
+  untouched this session. T4/T6 unchanged.
