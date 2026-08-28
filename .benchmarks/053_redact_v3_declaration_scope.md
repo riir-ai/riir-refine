@@ -120,6 +120,12 @@ line.
 checks `redact_version`** — the receiver accepts a payload produced by any
 gate version, including one weaker than the current floor. The client fails
 closed on a stale *policy*; the service does not fail closed on a stale
-*gate*. Filed as a riir-dapps issue rather than fixed here (boundary: the
-service plane is riir-dapps per Proposal 005 Issue 041), and that file is
-under concurrent edit.
+*gate*. Filed as [riir-dapps Issue 007](../../riir-dapps/.issues/007_ingest_accepts_any_redact_version.md)
+(commit `6d65f5d`) rather than fixed here — boundary (the service plane is
+riir-dapps per Proposal 005 Issue 041), and the receive-side floor is a design
+decision for the Worker/DO shell in flight there. The compatibility question is
+settled in the issue so it need not be re-derived: `MIN_REDACT_VERSION = 3` is
+free today (no deployed endpoint, no persisted payload on disk in either repo),
+and the honest limit is recorded too — the payload is UNSIGNED, so a version
+floor is a staleness guard against an honest-but-stale client, not an
+authenticity control.
