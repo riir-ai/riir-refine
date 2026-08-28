@@ -167,11 +167,44 @@ pub struct BenchScore {
 /// - No fmt pass: the bench measures the proposers, not rustfmt.
 #[must_use]
 pub fn heal_fixpoint(source: &str) -> (String, usize, usize) {
+    heal_fixpoint_with(source, &[])
+}
+
+/// [`heal_fixpoint`] with an optional CANDIDATE textual lane (Proposal 005
+/// T2.4 — the promotion gate's trial mechanism): each pass first applies
+/// every candidate's verbatim substitution (`buggy` → `fixed`, ALL
+/// occurrences — the L1 verbatim-tier semantics a corpus row carries), then
+/// the proposer edits over the result. Candidates + proposers compose in
+/// ONE bounded fixpoint; a candidate whose `fixed` re-introduces a buggy
+/// shape simply gets re-healed by the proposers on the next pass.
+///
+/// A candidate substitution that breaks parsing ends the loop with the
+/// broken text — exactly the applied-breakage the promotion gate's
+/// heal-rate bar exists to catch (a non-compiling after-span scores as
+/// NOTHING resolved, never as healed).
+///
+/// Empty `candidates` is byte-identical to [`heal_fixpoint`].
+#[must_use]
+pub fn heal_fixpoint_with(source: &str, candidates: &[(&str, &str)]) -> (String, usize, usize) {
     const MAX_FIX_PASSES: usize = 4;
     let mut current = source.to_string();
     let mut edits_applied = 0usize;
     let mut passes = 0usize;
     for _ in 0..MAX_FIX_PASSES {
+        // Candidate lane first: the incoming rule gets its chance on its
+        // exact shapes before the proposers compose over the result.
+        let mut candidate_edits = 0usize;
+        for (buggy, fixed) in candidates {
+            let hits = current.match_indices(buggy).count();
+            if hits > 0 {
+                current = current.replace(buggy, fixed);
+                candidate_edits += hits;
+            }
+        }
+        if candidate_edits > 0 {
+            edits_applied += candidate_edits;
+            passes += 1;
+        }
         let Ok(parsed) = syn::parse_file(&current) else {
             break;
         };
@@ -248,7 +281,23 @@ fn after_verdict(
 // Scoring rates are count→ratio casts over fixture counts (< 10⁴) — far
 // below f32's mantissa; allowed with cause.
 #[allow(clippy::cast_precision_loss)]
+#[must_use]
 pub fn run_bench(oracle: &ClippyOracle, fixture_list: &[BenchFixture]) -> BenchScore {
+    run_bench_with(oracle, fixture_list, &[])
+}
+
+/// [`run_bench`] with a candidate textual lane (Proposal 005 T2.4): the
+/// FROZEN fixtures stay frozen — only the heal loop gains the candidate
+/// substitutions (see [`heal_fixpoint_with`]). The `before` verdicts are
+/// derived from the ORIGINAL fixture code in both arms, so baseline and
+/// trial share identical denominators by construction — the promotion
+/// gate compares integer totals, never floats.
+#[allow(clippy::cast_precision_loss)]
+pub fn run_bench_with(
+    oracle: &ClippyOracle,
+    fixture_list: &[BenchFixture],
+    candidates: &[(&str, &str)],
+) -> BenchScore {
     let vocab = vocabulary();
     let mut score = BenchScore {
         n_total: fixture_list.len(),
@@ -296,7 +345,7 @@ pub fn run_bench(oracle: &ClippyOracle, fixture_list: &[BenchFixture]) -> BenchS
             );
         }
 
-        let (healed, edits, passes) = heal_fixpoint(fx.code);
+        let (healed, edits, passes) = heal_fixpoint_with(fx.code, candidates);
         let (after_lints, output_ok, vocab_persist, created) =
             after_verdict(oracle, &healed, &vocab, &vocab_before, &before.lints);
 

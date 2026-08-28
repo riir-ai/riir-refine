@@ -213,6 +213,17 @@ pub mod kat_lease_client;
 #[cfg(feature = "kat_service")]
 pub mod kat_stake_client;
 
+// Proposal 005 Phase 2 T2.4 (Plan 042): the score-bench promotion gate
+// for network-learned corpus candidates — the frozen bench runs BEFORE any
+// candidate enters the local overlay (Certified on pass; Withdrawn is
+// ABSORBING on post-hoc regression — the §Mining #4 poisoning defense),
+// with trial runs strictly isolated from the score history. Behind BOTH
+// kat_service (the candidate channel's surface) AND score_bench (the
+// frozen bench + oracle); both are opt-in — the default build is
+// untouched.
+#[cfg(all(feature = "kat_service", feature = "score_bench"))]
+pub mod kat_promotion;
+
 // Plan 019 T4.3: the neuron-db trajectory store — the DURABLE backend for
 // `--fix-compile` self-evolution (LocalKvStore encrypted WAL + BM25 + the
 // 8-D sigmoid-dot latent axis). Behind `latent_retrieval` (the dep-light

@@ -882,6 +882,7 @@ USAGE:
     cargo heal --recompute-elo                        (batch rating backfill, 039 T2)
     cargo heal --collapse-report                      (self-collapse monitor, 042)
     cargo heal --score-bench | --score-report        (needs --features score_bench)
+    cargo heal --candidates <path>                   (T2.4 promotion gate, kat_service+score_bench)
     cargo heal login [--key <path>]                   (KAT account, needs --features kat_service)
     cargo heal account [<path>]                       (KAT local view + repo burn, kat_service)
     cargo heal update                                 (corpus lease refresh, kat_transport)
@@ -1061,6 +1062,11 @@ struct Args {
     /// T1.6: `--corpus-epoch <E>` — pin the corpus epoch outright (the
     /// CI-reproducibility form; implies the lease check is skipped).
     corpus_epoch: Option<u64>,
+    /// T2.4 (Plan 042): `--candidates <path>` — run the score-bench
+    /// promotion gate over a network-delivered candidates file (post-hoc
+    /// sweep of the live overlay first, then gate + persist + report).
+    /// Standalone mode — no paths. Needs `kat_service` + `score_bench`.
+    candidates_path: Option<PathBuf>,
 }
 
 fn parse_args() -> Args {
@@ -1092,6 +1098,7 @@ fn parse_args() -> Args {
         no_update: false,
         no_reheat: false,
         corpus_epoch: None,
+        candidates_path: None,
     };
     let mut it = std::env::args().skip(1);
     while let Some(arg) = it.next() {
@@ -1187,6 +1194,13 @@ fn parse_args() -> Args {
             }
             "--no-update" => args.no_update = true,
             "--no-reheat" => args.no_reheat = true,
+            "--candidates" => {
+                let Some(value) = it.next() else {
+                    eprintln!("--candidates requires a value (the candidates NDJSON path)");
+                    usage();
+                };
+                args.candidates_path = Some(PathBuf::from(value));
+            }
             "--corpus-epoch" => {
                 let Some(value) = it.next() else {
                     eprintln!("--corpus-epoch requires a value (an installed epoch number)");
@@ -1225,6 +1239,7 @@ fn parse_args() -> Args {
         && !args.memory_stats
         && !args.recompute_elo
         && !args.collapse_report
+        && args.candidates_path.is_none()
     {
         eprintln!("no paths given");
         usage();
@@ -1394,6 +1409,125 @@ fn run_score_bench() {
     );
 }
 
+/// T2.4 (Plan 042): `--candidates <path>` — the promotion gate over a
+/// network-delivered candidates file. Post-hoc sweep of the live overlay
+/// first (withdraw regressors — absorbing), then the gate (trial → verdict
+/// → persist registry + audit). Trial runs are strictly isolated from the
+/// score history (only `--score-bench` appends there).
+///
+/// The NETWORK SEAM this composes with (documented, service-side — T1.5):
+/// the lease manifest can carry a candidates segment; a delivered segment
+/// is written to a local candidates file and THIS gate runs before the
+/// rules ever reach the overlay.
+#[cfg(all(feature = "kat_service", feature = "score_bench"))]
+fn run_candidates_gate(path: &std::path::Path, heal_root: &std::path::Path) {
+    use riir_clippy::kat_promotion as kp;
+
+    let bytes = std::fs::read(path).unwrap_or_else(|e| {
+        eprintln!("candidates file unreadable ({}): {e}", path.display());
+        std::process::exit(1);
+    });
+    let candidates = match kp::parse_candidates(&bytes) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("candidates file rejected: {e}");
+            std::process::exit(2);
+        }
+    };
+    println!(
+        "candidates: {} row(s) from {} (schema v{}, domains clippy|perf)",
+        candidates.len(),
+        path.display(),
+        kp::CANDIDATE_SCHEMA_VERSION
+    );
+
+    // The oracle is ground truth for the gate — refuse to run without it
+    // (fail closed: no evidence = no promotion).
+    let oracle = riir_clippy::score_bench::draft_oracle();
+    if !oracle.is_available() {
+        eprintln!("promotion gate: cargo not on PATH — cannot derive ground truth");
+        std::process::exit(1);
+    }
+
+    let registry_path = heal_root.join(kp::REGISTRY_FILE);
+    let audit_path = heal_root.join(kp::AUDIT_FILE);
+    let mut registry = kp::PromotionRegistry::load(&registry_path).unwrap_or_else(|e| {
+        // A corrupt blacklist cannot be promoted around — hard stop.
+        eprintln!("{e}");
+        std::process::exit(1);
+    });
+
+    let fixture_list = riir_clippy::score_bench::fixtures::fixtures();
+    println!("frozen fixtures: {} — running post-hoc sweep…", fixture_list.len());
+
+    // 1. Post-hoc sweep of the LIVE overlay (withdraw regressors first so
+    //    the new gate runs against a clean overlay).
+    let sweep = kp::run_posthoc_sweep(&oracle, &fixture_list, &mut registry);
+    print!("{}", sweep.render());
+
+    // 2. The gate.
+    println!("running promotion gate…");
+    let report = kp::run_promotion_gate(&oracle, &fixture_list, &candidates, &mut registry);
+    print!("{}", report.render());
+
+    // 3. Persist + audit (the only side effects — never the score history).
+    registry.save(&registry_path).unwrap_or_else(|e| {
+        eprintln!("registry save failed ({}) — decisions NOT persisted: {e}", registry_path.display());
+        std::process::exit(1);
+    });
+    let ts = riir_clippy::score_bench::report::local_iso_timestamp();
+    let mut audit: Vec<kp::AuditRecord> = Vec::new();
+    for id in &sweep.withdrawn {
+        // The sweep's registry mutation already happened; record the cause.
+        audit.push(kp::AuditRecord {
+            ts: ts.clone(),
+            kind: "withdraw".to_string(),
+            rule_id: id.clone(),
+            content_hash_hex: String::new(), // removed from the overlay — the blacklists carry it
+            reason: "posthoc_regression".to_string(),
+            fired: true,
+            base_resolved: sweep.base.resolved,
+            trial_resolved: sweep.overlay.resolved,
+            base_created: sweep.base.created,
+            trial_created: sweep.overlay.created,
+        });
+    }
+    for v in &report.verdicts {
+        let (kind, reason) = match &v.verdict {
+            riir_clippy::kat_promotion::Verdict::Promoted => ("promote", String::new()),
+            riir_clippy::kat_promotion::Verdict::Rejected(r) => ("reject", r.tag().to_string()),
+        };
+        let trial_totals = report.batch.unwrap_or_default();
+        audit.push(kp::AuditRecord {
+            ts: ts.clone(),
+            kind: kind.to_string(),
+            rule_id: v.rule_id.clone(),
+            content_hash_hex: candidates
+                .iter()
+                .find(|c| c.rule_id == v.rule_id)
+                .map(|c| c.content_hash_hex())
+                .unwrap_or_default(),
+            reason,
+            fired: v.fired,
+            base_resolved: report.base.resolved,
+            trial_resolved: trial_totals.resolved,
+            base_created: report.base.created,
+            trial_created: trial_totals.created,
+        });
+    }
+    if !audit.is_empty() {
+        kp::append_audit(&audit_path, &audit).unwrap_or_else(|e| {
+            eprintln!("audit append failed ({}) — continuing: {e}", audit_path.display());
+        });
+    }
+    println!(
+        "registry: {} promoted / {} withdrawn-blacklisted → {}",
+        registry.promoted.len(),
+        registry.withdrawn_hashes.len(),
+        registry_path.display()
+    );
+}
+
 fn main() {
     let args = parse_args();
 
@@ -1453,6 +1587,18 @@ fn main() {
     #[cfg(not(feature = "score_bench"))]
     if args.score_bench || args.score_report {
         eprintln!("--score-bench / --score-report require a build with --features score_bench");
+        std::process::exit(2);
+    }
+
+    // ── T2.4 (Plan 042): the promotion gate (standalone — no paths) ────
+    #[cfg(all(feature = "kat_service", feature = "score_bench"))]
+    if let Some(path) = &args.candidates_path {
+        run_candidates_gate(path, &resolve_heal_root(&args.paths));
+        return;
+    }
+    #[cfg(not(all(feature = "kat_service", feature = "score_bench")))]
+    if args.candidates_path.is_some() {
+        eprintln!("--candidates requires a build with --features kat_service,score_bench");
         std::process::exit(2);
     }
 
@@ -2033,17 +2179,28 @@ fn main() {
     #[cfg(feature = "kat_service")]
     let lease_store =
         riir_clippy::kat_lease_client::LeaseStore::open(&resolve_heal_root(&args.paths));
-    #[cfg(feature = "kat_service")]
+    // T2.4: with the promotion surface compiled in, Certified network rules
+    // merge into the run overlay (never under a --corpus-epoch pin).
+    #[cfg(all(feature = "kat_service", feature = "score_bench"))]
+    let run_overlay =
+        run_overlay_with_promotion(&lease_store, args.corpus_epoch, &resolve_heal_root(&args.paths));
+    #[cfg(all(feature = "kat_service", not(feature = "score_bench")))]
     let run_overlay = lease_overlay_for_run(&lease_store, args.corpus_epoch);
     #[cfg(feature = "kat_service")]
     if let Some((epoch, overlay)) = &run_overlay {
         let pinned = args.corpus_epoch.is_some();
+        let leased = lease_store.current().is_some();
         let domains: Vec<&str> = overlay.iter().map(|(d, _)| d.label()).collect();
-        println!(
-            "corpus lease: running on epoch {epoch} ({}domains: {})",
-            if pinned { "pinned, " } else { "" },
-            domains.join(", ")
-        );
+        if leased {
+            println!(
+                "corpus lease: running on epoch {epoch} ({}domains: {})",
+                if pinned { "pinned, " } else { "" },
+                domains.join(", ")
+            );
+        }
+        // No installed lease + a non-empty overlay ⇒ the T2.4 promotion
+        // merge built it from the compiled-in seed + Certified local rules
+        // (the "corpus promotion" line above names what joined).
     }
 
     let mut matcher = (|| {
@@ -3164,6 +3321,66 @@ fn fix_domain_scopes(domain: Option<DomainId>) -> (bool, bool, bool) {
 /// of the current pointer. Unknown pack domains warn + skip (never abort —
 /// a future domain string must not brick an old client).
 #[cfg(all(feature = "kat_service", feature = "latent_retrieval"))]
+/// T2.4 (Plan 042): merge the PROMOTION registry's Certified triples into
+/// the run overlay (leased-or-compiled-in per domain — the pure merge lives
+/// in `kat_promotion::promotion_run_overlay`). Skipped under a `--corpus-epoch`
+/// pin (exact reproduction) and when the registry is empty/unloadable (a
+/// corrupt registry WARNs and continues WITHOUT network rules — the safe
+/// direction for a heal run; the GATE refuses on the same condition).
+#[cfg(all(feature = "kat_service", feature = "score_bench"))]
+#[allow(clippy::type_complexity)] // mirrors lease_overlay_for_run's shape one layer up
+fn run_overlay_with_promotion(
+    store: &riir_clippy::kat_lease_client::LeaseStore,
+    pin: Option<u64>,
+    heal_root: &std::path::Path,
+) -> Option<(u64, Vec<(DomainId, Vec<(String, String, String)>)>)> {
+    use riir_clippy::kat_promotion::{promotion_run_overlay, PromotionRegistry, REGISTRY_FILE};
+
+    let leased = lease_overlay_for_run(store, pin);
+    let registry_path = heal_root.join(REGISTRY_FILE);
+    let registry = match PromotionRegistry::load(&registry_path) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!(
+                "corpus promotion: registry unreadable — continuing WITHOUT network rules: {e}"
+            );
+            return leased;
+        }
+    };
+    if registry.promoted.is_empty() || pin.is_some() {
+        return leased;
+    }
+    // DomainId ⇄ String-domain mapping (label() is the lease pack spelling).
+    let leased_str: Option<(u64, Vec<(String, Vec<_>)>)> = leased.as_ref().map(|(epoch, o)| {
+        (
+            *epoch,
+            o.iter()
+                .map(|(d, t)| (d.label().to_string(), t.clone()))
+                .collect(),
+        )
+    });
+    let merged = promotion_run_overlay(leased_str.as_ref().map(|(_, o)| o.as_slice()), &registry, pin.is_some())?;
+    let overlay: Vec<(DomainId, Vec<_>)> = merged
+        .into_iter()
+        .filter_map(|(domain, triples)| {
+            let id = match domain.as_str() {
+                "clippy" => Some(DomainId::Clippy),
+                "perf" => Some(DomainId::Perf),
+                "kernel" => Some(DomainId::Kernel),
+                "sec" => Some(DomainId::Sec),
+                _ => None,
+            }?;
+            Some((id, triples))
+        })
+        .collect();
+    let epoch = leased.map_or(0, |(e, _)| e);
+    println!(
+        "corpus promotion: +{} local Certified rule(s) merged into the run overlay",
+        registry.promoted.len()
+    );
+    Some((epoch, overlay))
+}
+
 #[allow(clippy::type_complexity)] // mirrors the lease module's DomainTriples shape one layer up
 fn lease_overlay_for_run(
     store: &riir_clippy::kat_lease_client::LeaseStore,
@@ -3354,8 +3571,17 @@ fn run_reheat_pass(
     match outcome.status {
         riir_clippy::kat_lease_client::UpdateStatus::Applied { epoch, charge_kat } => {
             // Rebuild the matcher under E+1 (a failed rebuild aborts the
-            // reheat — pass 1's results stand).
-            if let Some((_, overlay)) = lease_overlay_for_run(&store, None) {
+            // reheat — pass 1's results stand). T2.4: promotions merge into
+            // the rebuilt overlay too (same helper as the run-start build).
+            #[cfg(all(feature = "kat_service", feature = "score_bench"))]
+            let rebuilt = run_overlay_with_promotion(
+                &store,
+                None,
+                &resolve_heal_root(&[]),
+            );
+            #[cfg(all(feature = "kat_service", not(feature = "score_bench")))]
+            let rebuilt = lease_overlay_for_run(&store, None);
+            if let Some((_, overlay)) = rebuilt {
                 match LatentMatcher::from_enabled_domains_with_overlay(&overlay) {
                     Ok(m) => *matcher = m,
                     Err(_) => return None,
