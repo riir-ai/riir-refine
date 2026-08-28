@@ -600,11 +600,13 @@ mod tests {
         let p = b.build_at(&rows, 1_234_567);
         assert_eq!(p.commitment, "d6395af4a5df9460d859f3de6ebc7f1372d55e4e11625a8bf1aa41622bf0401d");
         let expected = concat!(
-            // redact_version tracks REDACT_VERSION (2 since the Bench 052
-            // hexish-rule bump). The batch_commitment below is over the ROW
-            // lines only, so it is unchanged by a header-field bump — which
-            // is why only this line moved.
-            "{\"payload_version\":1,\"redact_version\":2,\"origin\":\"own-repo\",",
+            // redact_version tracks REDACT_VERSION (3 since the Bench 053
+            // declaration-scope bump; 2 was the Bench 052 hexish rule). The
+            // batch_commitment below is over the ROW lines only, so it is
+            // unchanged by a header-field bump — which is why only this line
+            // moved, and that immobility is the point: a gate-version bump
+            // must not silently re-key committed batches.
+            "{\"payload_version\":1,\"redact_version\":3,\"origin\":\"own-repo\",",
             "\"created_unix\":1234567,\"rows_included\":2,\"rows_blocked\":0,",
             "\"batch_commitment\":\"d6395af4a5df9460d859f3de6ebc7f1372d55e4e11625a8bf1aa41622bf0401d\"}\n",
             "{\"shape_id\":\"241e0429984b\",\"lint_key\":\"needless_return\",",

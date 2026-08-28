@@ -44,7 +44,9 @@
 //! the vendor-side data-usage sign-off (owner act, one vetted vendor, the
 //! CF no-training half already verified in writing), or (b) an actual
 //! sandbox that never egresses consumer bytes at all. Recorded in
-//! `.issues/052`, with the decision in Proposal 005 T3.2.
+//! [Bench 052](../.benchmarks/052_t32_external_leak_posture.md), with the
+//! decision in Proposal 005 T3.2. (Issue 052 carried this record until it was
+//! removed in `1acc591`; Bench 052 is the retained home.)
 //!
 //! ```bash
 //! cargo test --features kat_service --test kat_redact_t32_external -- --nocapture
@@ -354,11 +356,26 @@ fn t32_measured_evasion_set_is_pinned() {
          not merely evadable"
     );
 
-    // THE PIN. Measured at REDACT_VERSION 1. A change here is a gate
-    // definition change: bump REDACT_VERSION + add a REDACT_CHANGELOG row.
+    // THE PIN. A change here is a gate definition change: bump
+    // REDACT_VERSION + add a REDACT_CHANGELOG row.
+    //
+    // Re-measured at v3 (the declaration-scope bump, Bench 053) and the set
+    // did NOT move — which is the expected result, and worth stating rather
+    // than passing over. v3 rescoped the identifier rule from the physical
+    // line to the DECLARATION, closing the shape `rustfmt` generates
+    // (`const NAME: &str =` ⏎ `    "literal";`). `line-split` below is a
+    // different shape: the secret is broken INSIDE the literal with a Rust
+    // `\` continuation, which no formatter emits at default settings — it is
+    // author-chosen obfuscation, not a formatting artifact. v3 deliberately
+    // does not chase it; see Bench 052 §Verdict for the reasoning on why
+    // hardening the pattern set for this class is the wrong move.
+    //
+    // The standing caught/evaded ratio across versions: v1 2/9, v2 3/9
+    // (hexish made unconditional), v3 3/9 (unchanged — v3's gain is on the
+    // ACCIDENTAL own-repo class this suite does not measure).
     assert_eq!(
-        REDACT_VERSION, 2,
-        "the evasion set below was measured at REDACT_VERSION 2 — re-measure \
+        REDACT_VERSION, 3,
+        "the evasion set below was measured at REDACT_VERSION 3 — re-measure \
          and update this pin as part of the next version bump"
     );
     assert_eq!(

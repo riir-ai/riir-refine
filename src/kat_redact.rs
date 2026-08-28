@@ -61,9 +61,17 @@
 //! - Re-scanning a redacted payload can re-flag the placeholder site (the
 //!   secret-shaped *name* survives value redaction) — also fail-closed;
 //!   treat a redacted payload as terminal, do not re-gate it.
-//! - The scanner is line- and token-based, not AST-based: a secret split
-//!   across two lines evades the env/literal rules (entropy + known formats
-//!   still catch most such values).
+//! - The scanner is line- and token-based, not AST-based. **v3 rescoped the
+//!   identifier-policy rule from the physical line to the declaration**, so
+//!   the `rustfmt`-wrapped spelling
+//!   (`const NAME: &str =` ⏎ `    "literal";`) is caught — before v3 the
+//!   same secret in the same declaration blocked at one line width and was
+//!   ALLOWED at another, which made the verdict a property of formatting
+//!   rather than of the span (Bench 053). Still uncaught, deliberately: a
+//!   secret split across two lines *inside* the literal (`"aa\` ⏎ `bb"`),
+//!   and shell `\`-continuation of an env assignment — no formatter emits
+//!   either and no shell path is in the shipped `allow_paths`. Entropy +
+//!   known formats remain the backstop for both.
 //!
 //! # Wiring (the standing surfaces)
 //!
@@ -103,7 +111,7 @@ use std::path::{Path, PathBuf};
 /// semantics are part of the version). Bump ONLY when detection or policy
 /// semantics change what passes/blocks for some input, and record the delta
 /// in [`REDACT_CHANGELOG`] in the same change.
-pub const REDACT_VERSION: u32 = 2;
+pub const REDACT_VERSION: u32 = 3;
 
 /// Versioned deltas of the gate definition.
 pub const REDACT_CHANGELOG: &[(u32, &str)] = &[
@@ -126,6 +134,23 @@ pub const REDACT_CHANGELOG: &[(u32, &str)] = &[
          instead. Non-hex runs keep the 4.5 threshold (it is what protects \
          long snake_case identifiers). Measured cost on riir-clippy: 2 \
          additional blocked spans repo-wide, both synthetic fixtures.",
+    ),
+    (
+        3,
+        "identifier-policy rule (rust secret literals) rescoped from the \
+         PHYSICAL LINE to the DECLARATION: a secret-shaped `let/const/static \
+         NAME =` whose literal `rustfmt` pushed to the next line is now \
+         caught. v1/v2 required name, `=` and literal on one line, so the \
+         SAME secret in the SAME declaration was blocked at one width and \
+         allowed at another — the verdict was decided by formatting, and \
+         `rustfmt` generates the allowed spelling automatically past \
+         `max_width` (Bench 053). One line of lookahead, the exact shape \
+         `rustfmt` emits. Detection is otherwise unchanged; no pattern was \
+         added. Measured cost on riir-clippy: 0 additional blocked spans \
+         across 230 .rs files (12 rust-secret-literal findings, none \
+         wrapped). Shell `\\`-continuation of env assignments stays \
+         UNCAUGHT and out of scope — no formatter emits it and the shipped \
+         allow_paths carry no shell path.",
     ),
 ];
 
@@ -436,12 +461,56 @@ fn scan_env_assignments(span: &str, out: &mut Vec<Finding>) {
     }
 }
 
+/// The value half of the identifier-policy rule: a `"LITERAL"` carrying ≥ 8
+/// bytes inside the quotes. Factored out so the same-line and the
+/// wrapped-continuation paths share ONE derivation — a rule that decides
+/// differently depending on where a formatter broke the line is the exact
+/// defect v3 closes, so the two paths must not be able to drift apart.
+///
+/// `value` must be a subslice of `span` (offsets are derived by pointer
+/// arithmetic against `span`, the `offset_of` convention used throughout).
+fn push_rust_secret_literal(value: &str, span: &str, out: &mut Vec<Finding>) -> bool {
+    let value = value.trim_start();
+    if !value.starts_with('"') {
+        return false;
+    }
+    let Some(close) = value[1..].find('"') else { return false };
+    if close < 8 {
+        return false;
+    }
+    let start = value.as_ptr() as usize - span.as_ptr() as usize;
+    out.push(Finding::new(
+        FindingKind::RustSecretLiteral,
+        start,
+        start + close + 2,
+        span,
+    ));
+    true
+}
+
 /// `let/const/static NAME…= "LITERAL";` where NAME is secret-shaped and the
 /// literal is ≥ 8 bytes — the identifier-policy rule.
+///
+/// The unit of analysis is the **declaration**, not the physical line (v3).
+/// `rustfmt` breaks after the `=` whenever the declaration exceeds
+/// `max_width`, putting the literal on the next line — measured 2026-08-28
+/// ([Bench 053](../.benchmarks/053_redact_v3_declaration_scope.md)): the same
+/// secret in the same declaration was `Blocked` on one line and `Allow`ed once
+/// wrapped, so the verdict was decided by line width. One line of lookahead
+/// (exactly the shape `rustfmt` emits — it never inserts a blank line there)
+/// makes the two spellings agree. Single pass, no extra allocation.
 fn scan_rust_secret_literals(span: &str, out: &mut Vec<Finding>) {
-    let offset_of = |s: &str| s.as_ptr() as usize - span.as_ptr() as usize;
+    // Set when the previous line was a secret-shaped declaration whose `=`
+    // ended the line; the value is expected on the line now being read.
+    let mut carried = false;
     for line in span.split('\n') {
         let trimmed = line.trim_start();
+        // A carried declaration consumes this line only if it really is the
+        // literal; otherwise fall through — the line may open its own
+        // declaration.
+        if std::mem::take(&mut carried) && push_rust_secret_literal(trimmed, span, out) {
+            continue;
+        }
         let rest = strip_rust_prefixes(trimmed);
         let ws = rest.find(|c: char| c.is_whitespace() || c == ':').unwrap_or(rest.len());
         let name = &rest[..ws];
@@ -458,20 +527,12 @@ fn scan_rust_secret_literals(span: &str, out: &mut Vec<Finding>) {
             continue;
         }
         let value = after_name[eq + 1..].trim_start();
-        if !value.starts_with('"') {
+        // Nothing after the `=` (bar a CRLF `\r`) — the wrapped shape.
+        if value.trim_end().is_empty() {
+            carried = true;
             continue;
         }
-        let Some(close) = value[1..].find('"') else { continue };
-        if close < 8 {
-            continue;
-        }
-        let start = offset_of(value);
-        out.push(Finding::new(
-            FindingKind::RustSecretLiteral,
-            start,
-            start + close + 2,
-            span,
-        ));
+        push_rust_secret_literal(value, span, out);
     }
 }
 
@@ -1271,6 +1332,81 @@ mod tests {
             d.findings().len(),
             1,
             "the 20-char key trips the format rule (below the 32-char entropy floor)"
+        );
+    }
+
+    /// v3 — the property the declaration rescope buys: the gate's verdict is
+    /// a function of the SPAN, not of where a formatter broke the line.
+    ///
+    /// This is written as an invariance over spellings rather than as a
+    /// fixture list on purpose. A fixture pins one shape; the invariant pins
+    /// the *class*, and it cannot be satisfied by bolting on a pattern — the
+    /// only way to hold it is for the rule to scope to the declaration.
+    #[test]
+    fn v3_verdict_is_invariant_to_rustfmt_wrapping() {
+        // Low entropy, no known credential format, 25 bytes — this value is
+        // reachable ONLY by the identifier-policy rule, so the entropy and
+        // format backstops cannot mask a regression here.
+        let secret = "correcthorsebatterystaple";
+        let spellings = [
+            ("same line", format!("const DATABASE_PASSWORD: &str = \"{secret}\";")),
+            ("wrapped after =", format!("const DATABASE_PASSWORD: &str =\n    \"{secret}\";")),
+            ("let, wrapped", format!("let api_secret =\n    \"{secret}\";")),
+            (
+                "static with lifetime, wrapped",
+                format!("static SERVICE_ACCOUNT_TOKEN: &'static str =\n    \"{secret}\";"),
+            ),
+        ];
+        let gate = RedactionGate::from_policy(SyncPolicy {
+            version: REDACT_VERSION,
+            sync_enabled: true,
+            allow_origins: vec!["own-repo".into()],
+            allow_paths: vec![],
+            max_span_bytes: 4096,
+            allow_redacted: false,
+        });
+        for (name, span) in &spellings {
+            let findings = scan_secrets(span);
+            assert_eq!(
+                findings.len(),
+                1,
+                "{name}: expected exactly one identifier-policy finding, got {findings:?}"
+            );
+            assert_eq!(findings[0].kind, FindingKind::RustSecretLiteral, "{name}");
+            // The finding must cover the literal INCLUDING both quotes — an
+            // off-by-one here would leak the first or last secret byte
+            // through redaction.
+            let f = &findings[0];
+            assert_eq!(&span[f.start..f.start + f.len], format!("\"{secret}\""), "{name}: range");
+            assert!(
+                !gate.check(SpanOrigin::OwnRepo, None, span).is_syncable(),
+                "{name}: must not sync"
+            );
+        }
+    }
+
+    /// The carried declaration must not swallow the line that follows when
+    /// that line is not its literal — otherwise one wrapped declaration would
+    /// blind the scanner to the next one.
+    #[test]
+    fn v3_carried_declaration_does_not_shadow_the_next_line() {
+        // Line 1 opens a wrapped declaration; line 2 is NOT a literal (so the
+        // carry must lapse) and is itself a complete secret declaration.
+        let span = "let api_secret =\nconst DB_PASSWORD: &str = \"correcthorsebatterystaple\";";
+        let findings = scan_secrets(span);
+        assert_eq!(
+            findings.len(),
+            1,
+            "the second declaration must still be found: {findings:?}"
+        );
+        assert_eq!(findings[0].kind, FindingKind::RustSecretLiteral);
+
+        // And a lapsed carry must not fabricate a finding out of a plain
+        // continuation that merely happens to be a short string.
+        let benign = "let secret_len =\n    \"ab\".len();";
+        assert!(
+            scan_secrets(benign).is_empty(),
+            "an 8-byte floor still applies on the carried path"
         );
     }
 
