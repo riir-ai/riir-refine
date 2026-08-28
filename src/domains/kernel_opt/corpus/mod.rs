@@ -1503,14 +1503,35 @@
 //!   3x SLOWER; unbacked symbolic-shape guards cost more than the eager
 //!   dispatch they replace; corroborated by `TreeWY`'s piecewise-capture
 //!   eviction cost). Record: Research 096 / Plan 043.
+//! - **Batch 87 (2026-08-29, the TTT-KVB App-I boundary distill --
+//!   arXiv:2602.21204 "TTT with KV Binding Is Secretly Linear Attention"
+//!   (NVIDIA, ICML 2026), Research note = katgpt-rs R516 (`513088cd`) /
+//!   Plan 048 / Issue 054):** 2 rules + 1 B79 rider, corpus 398 -> 400
+//!   (G 23 -> 25). The BOUNDARY COMPLEMENT of Batch 79's
+//!   `first-order-affine-recurrence-associative-scan` (B79 = affine =>
+//!   scan; this = what BREAKS the scan):
+//!   `state-normalization-between-updates-breaks-associative-scan` (G --
+//!   Norm(A+B) != Norm(A)+Norm(B): state normalization between updates
+//!   voids associativity outright; the `LaCT` weight-norm anti-shape;
+//!   fix-space = normalize q/k instead (phi-side, scan-SAFE) or accept
+//!   the sequential form) + `dynamic-kernel-params-break-prefix-scan`
+//!   (G -- Theta updated INSIDE the recurrence makes phi
+//!   history-dependent through nested-nonlinearity chains; fix-space =
+//!   freeze Theta; the paper's V1/V2 reduction rungs are the design
+//!   table). Rider on B79's `gpu_concept`: qk/head-side normalization is
+//!   part of phi and does NOT break the scan (negative control:
+//!   riir-gpu `expand_and_l2_normalize_heads_f32` -- in-tree SAFE).
+//!   THEORY-DISTILLED, grade B (throughput AND quality numbers are `LaCT`
+//!   end-to-end, never cite isolated); ZERO in-tree firing population
+//!   (paper-distilled precedent = B79 itself). Content gate:
+//!   `batch87_state_norm_breaks_associative_scan` (the breaker's
+//!   wrongness pinned materially, non-vacuous).
 
 use std::collections::HashMap;
 
 use crate::corpus::Corpus;
 use crate::domains::kernel_opt::{KernelCategory, KernelOptDomain, KernelRule};
 
-
-mod entries_popcorn;
 mod entries_gpu_01;
 mod entries_gpu_02;
 mod entries_gpu_03;
@@ -1519,6 +1540,7 @@ mod entries_gpu_05;
 mod entries_gpu_06;
 mod entries_gpu_07;
 mod entries_gpu_08;
+mod entries_popcorn;
 
 #[cfg(test)]
 mod tests;
@@ -1530,16 +1552,16 @@ mod tests;
 #[must_use]
 #[allow(clippy::too_many_lines)] // data table, not logic — grows with distillation batches
 pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
-        let mut entries = entries_popcorn::entries();
-        entries.extend(entries_gpu_01::entries());
-        entries.extend(entries_gpu_02::entries());
-        entries.extend(entries_gpu_03::entries());
-        entries.extend(entries_gpu_04::entries());
-        entries.extend(entries_gpu_05::entries());
-        entries.extend(entries_gpu_06::entries());
-        entries.extend(entries_gpu_07::entries());
-        entries.extend(entries_gpu_08::entries());
-        Corpus::new(entries)
+    let mut entries = entries_popcorn::entries();
+    entries.extend(entries_gpu_01::entries());
+    entries.extend(entries_gpu_02::entries());
+    entries.extend(entries_gpu_03::entries());
+    entries.extend(entries_gpu_04::entries());
+    entries.extend(entries_gpu_05::entries());
+    entries.extend(entries_gpu_06::entries());
+    entries.extend(entries_gpu_07::entries());
+    entries.extend(entries_gpu_08::entries());
+    Corpus::new(entries)
 }
 
 /// The category → `rule_ids` mapping — the corpus wiring for [`super::router::KernelExpertRouter`].
@@ -1551,7 +1573,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 398-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 400-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1901,7 +1923,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "two-stage-mask-softmax-then-conv",
         ],
     ),
-    // G: Linear-attention recurrence (23 rules)
+    // G: Linear-attention recurrence (25 rules)
     (
         KernelCategory::LinearAttnRecurrence,
         "G: linear-attn recurrence",
@@ -1929,6 +1951,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "first-order-affine-recurrence-associative-scan",
             "gdn-transition-replay-log-commit-many",
             "wy-transform-tree-verify-state-free",
+            "state-normalization-between-updates-breaks-associative-scan",
+            "dynamic-kernel-params-break-prefix-scan",
         ],
     ),
     // H: MoE dispatch + backward pass (14 rules)
