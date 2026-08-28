@@ -277,6 +277,54 @@ Linux runner as root, and a step writing the CF token to disk as a fake wrangler
 config (the generator reads it straight from env, so the token no longer touches
 the runner's filesystem).
 
+## T15 — the domain list was duplicated three times; docker was about to vanish (SHIPPED 2026-08-28)
+
+Found while verifying T14's newly hard-gated `verify_dom.mjs` — if a gate now
+blocks the unattended deploy, it had better be right about what "broken" means.
+
+**The list of corpus domains existed in THREE places**, two of them as a bare
+count:
+
+1. `gen_dashboard.py:CORPUS_DOMAINS` — the source of truth (mines the counts),
+2. a hand-typed JS literal in `HTML_TEMPLATE` (`const DOMAINS = [...4 names]`),
+3. `verify_dom.mjs` pins: `ys.length === 4`, `ys === [11,37,63,89]`, and three
+   more `=== 4` spark assertions.
+
+A sibling had already added **docker** to (1), so `CORPUS_DOMAINS` has five
+entries while the renderer's literal still had four. Consequences, both live:
+
+- **Silently dropped data.** The generator builds each daily point from ALL of
+  `CORPUS_DOMAINS` (`gen_dashboard.py:382`), so the next regen mines docker's
+  rule counts and the 4-name literal then never renders them. The
+  coverage-growth card would under-report by a whole domain with nothing
+  failing anywhere — the same "green surface, wrong number" class as 045 T8.
+- **A booby-trapped fix.** Correcting the literal to five would then trip
+  `verify_dom.mjs`'s `=== 4` pins → gate FAIL → and since T14 made this gate
+  hard-block the nightly, the deploy would stop with "the dashboard is broken"
+  when it was merely *bigger*.
+
+**Fixed on both sides.** The generator now emits `const DOMAINS = __DOMAINS__`
+from `CORPUS_DOMAINS` via the existing `__DATA__` replacement idiom — the list
+is never re-typed, so adding a domain is a one-line change in one place. The
+gate **derives** the expected count from the page's own `DOMAINS` list instead
+of pinning it, preserving the invariant that actually catches defects (one rect
+per series, on the 11+26k lattice, inside the viewBox — the "y=83 concat"
+class).
+
+**Verified positive AND negative — the negative is the point:**
+
+| case | expected | result |
+|---|---|---|
+| current 4-domain page | PASS | ✓ `corpus 4 domains ys [11,37,63,89]` |
+| simulated 5-domain page (docker in data + list) | PASS | ✓ `corpus 5 domains ys [11,37,63,89,115]` |
+| row lattice broken (`rowH` 26→25) | **FAIL** | ✓ `corpusBar rect ys = 11,36,61,86` + per-chart off-lattice |
+| DOMAINS claims 5, only 4 render | **FAIL** | ✓ `corpusBar rect count 4 != 5 domains` |
+
+The 5-domain simulation also caught an **incomplete first fix**: deriving only
+the corpus-bar count left the three spark `=== 4` pins in place, and the bar
+alone reported a clean pass. Running the gate against the grown page — rather
+than only the current one — is what surfaced them.
+
 ## T14 — pre-install audit of the unattended nightly runner (SHIPPED 2026-08-28)
 
 `scripts/ops_nightly.sh` is about to be installed as a **launchd job that

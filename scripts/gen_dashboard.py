@@ -1292,7 +1292,7 @@ if (D.score.length) {
 
 // ── corpus per domain (counts mined from git; the coverage-growth axis) ──
 if (D.corpus && D.corpus.length) {
-  const DOMAINS = ['kernel_opt','rust_perf','clippy_lints','sec'];
+  const DOMAINS = __DOMAINS__;
   const lastP = D.corpus[D.corpus.length-1];
   // 7d reference: the latest point at/before now-7d (earliest if history is short).
   const cutoff = new Date(lastP.ts+'T00:00:00Z').getTime() - 7*864e5;
@@ -1647,7 +1647,14 @@ def main() -> int:
     payload = json.dumps(data, separators=(",", ":"))
     # Never embed anything but aggregated data — assert no token leaked.
     assert "oauth_token" not in payload and "Bearer " not in payload
-    html = HTML_TEMPLATE.replace("__DATA__", payload)
+    # DOMAINS is emitted FROM CORPUS_DOMAINS, never re-typed. The list used
+    # to be duplicated as a JS literal here, so adding a domain (docker,
+    # 2026-08-28) mined its counts into the series while the renderer
+    # silently dropped them — the coverage card under-reported by a whole
+    # domain with nothing failing anywhere.
+    html = HTML_TEMPLATE.replace("__DATA__", payload).replace(
+        "__DOMAINS__", json.dumps([n for n, _, _ in CORPUS_DOMAINS])
+    )
     out.write_text(html)
     log(f"wrote {out} ({len(html)//1024} KiB, "
         f"ledger={len(data['ledger']['rows'])} rows, "

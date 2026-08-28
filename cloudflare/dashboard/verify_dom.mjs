@@ -33,11 +33,22 @@ if (!captured['corpusBar']) {
   process.exit(1);
 }
 
-// 1. corpus bar: exactly 4 rects at the correct rows
+// 1. corpus bar: one rect per DOMAIN, on the correct rows.
+// The count is DERIVED from the page's own DOMAINS list, not pinned. A
+// hardcoded `=== 4` turns legitimate growth (adding a domain) into a gate
+// FAILURE, and since this gate hard-blocks the unattended nightly deploy,
+// that would have read as "the dashboard is broken" when it was merely
+// bigger. The invariant that actually catches defects — rows on the 11+26k
+// lattice, one per series, inside the viewBox — is preserved exactly.
 const bar = captured['corpusBar'];
+const domMatch = body.match(/const DOMAINS = (\[[^\]]*\]);/);
+ok(domMatch !== null, 'could not read DOMAINS from the page script');
+const N_DOM = domMatch ? JSON.parse(domMatch[1].replace(/'/g, '"')).length : 0;
+ok(N_DOM > 0, 'DOMAINS list is empty');
 const ys = [...bar.matchAll(/<rect[^>]*? y="(-?[\d.]+)"/g)].map(m => +m[1]);
-ok(ys.length === 4, 'corpusBar rect count ' + ys.length);
-ok(JSON.stringify(ys) === JSON.stringify([11, 37, 63, 89]), 'corpusBar rect ys = ' + ys.join(','));
+const expectedYs = Array.from({ length: N_DOM }, (_, k) => 11 + 26 * k);
+ok(ys.length === N_DOM, 'corpusBar rect count ' + ys.length + ' != ' + N_DOM + ' domains');
+ok(JSON.stringify(ys) === JSON.stringify(expectedYs), 'corpusBar rect ys = ' + ys.join(','));
 ok(bar.includes('x="88"'), 'corpusBar label anchor x=88 (lw=94)');
 ok(bar.includes('clippy_lints'), 'clippy_lints label present untruncated source');
 // every bar inside its viewBox
@@ -48,11 +59,17 @@ for (const svg of bar.split('<svg').slice(1)) {
   }
 }
 
-// 2. sparks: fixed px size + nowrap labels
+// 2. sparks: fixed px size + nowrap labels — ONE PER DOMAIN.
+// Derived from N_DOM for the same reason as the corpus bar: these are
+// rendered by `DOMAINS.forEach`, so a hardcoded 4 fails the moment a domain
+// is added. (Caught by running the gate against a simulated 5-domain page —
+// fixing only the bar left these three pinned, and the bar alone would have
+// reported a clean pass.)
 const sp = captured['corpusSparks'];
-ok((sp.match(/width:150px;height:26px/g) || []).length === 4, 'spark svg fixed px size x4');
-ok((sp.match(/white-space:nowrap/g) || []).length === 4, 'spark range label nowrap x4');
-ok((sp.match(/→/g) || []).length === 4, 'range labels content (4 arrows)');
+const nDom = String(N_DOM);
+ok((sp.match(/width:150px;height:26px/g) || []).length === N_DOM, 'spark svg fixed px size x' + nDom);
+ok((sp.match(/white-space:nowrap/g) || []).length === N_DOM, 'spark range label nowrap x' + nDom);
+ok((sp.match(/→/g) || []).length === N_DOM, 'range labels content (' + nDom + ' arrows)');
 
 // 3. global: every rect y in EVERY chart is on the 11+26k lattice (catches the "y=83" concat class)
 const VALID = new Set(Array.from({ length: 40 }, (_, k) => 11 + 26 * k));
@@ -66,4 +83,4 @@ for (const [id, h] of Object.entries(captured)) {
 ok(n >= 8, 'total rects scanned ' + n + ' (expected >=8 across all charts)');
 
 if (fails.length) { console.error('FAIL:\n - ' + fails.join('\n - ')); process.exit(1); }
-console.log('PASS: ' + n + ' rects across ' + Object.keys(captured).length + ' charts; corpus ys [11,37,63,89]; sparks fixed-size + nowrap');
+console.log('PASS: ' + n + ' rects across ' + Object.keys(captured).length + ' charts; corpus ' + N_DOM + ' domains ys [' + ys.join(',') + ']; sparks fixed-size + nowrap');
