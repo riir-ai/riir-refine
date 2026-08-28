@@ -277,6 +277,63 @@ Linux runner as root, and a step writing the CF token to disk as a fake wrangler
 config (the generator reads it straight from env, so the token no longer touches
 the runner's filesystem).
 
+## T14 — pre-install audit of the unattended nightly runner (SHIPPED 2026-08-28)
+
+`scripts/ops_nightly.sh` is about to be installed as a **launchd job that
+git-commits and `wrangler deploy`s with nobody watching**. T7 asserted its
+prod-grade properties in prose; this task VERIFIED them instead, before the
+schedule exists. Three defects, all fixed:
+
+**1. The stale-lock reclaim could run two instances concurrently (correctness).**
+The lock was reclaimed on AGE alone (`>6 h → abandoned`). But the plist's own
+comment says *"The laptop sleeps"* — a suspended run exceeds any wall-clock
+threshold while remaining perfectly alive, so the next night's run would
+reclaim a LIVE holder's lock and proceed to `git commit` + `wrangler deploy`
+concurrently with it. Age cannot answer the question being asked; **liveness**
+can. The lock now carries the holder's pid and is reclaimed only when
+`kill -0` says the holder is gone; age survives strictly as the fallback for a
+lock with no readable pid (pre-upgrade lock, or a torn write), so a genuinely
+killed run still cannot wedge the schedule forever.
+
+**2. The EXIT trap released whatever lock existed, not its own (cascade).**
+`trap 'rmdir "${LOCK}"' EXIT` — a run that was correctly reclaimed as dead, or
+one that overran and got displaced, would delete its SUCCESSOR's lock on the
+way out, admitting a third concurrent run. `release_lock` now compares the pid
+file against `$$` and releases only a lock it still owns. Same defect as (1),
+one level up.
+
+**3. `npx --yes wrangler` was unpinned remote code holding deploy rights (SECURITY).**
+There is no `package.json` in `cloudflare/dashboard`, so `npx --yes wrangler`
+resolves the **latest** wrangler from the npm registry **at run time** and
+executes it unattended with this account's Cloudflare deploy OAuth. That is a
+scheduled, unsupervised, unpinned fetch-and-execute with publish rights — a
+supply-chain exposure whose blast radius is the live dashboard. Now pinned
+(`WRANGLER_VERSION="4.127.1"`, verified to resolve and to match the version
+already in use, so behaviour is unchanged today) with the bump-deliberately
+rule stated at the constant.
+
+**4. Repo hygiene (`.gitignore`).** The runner writes `.benchmarks/ops_nightly.log`
+and the lock dir INTO the repo, both untracked. That is not just `git status`
+noise: sibling agents run bulk `git add -A`, and an untracked file is exactly
+what gets swept into someone else's commit. Both are now ignored.
+
+**Verified empirically, not by reading** — the lock functions were extracted
+into an isolated harness (nothing triggers the real 20-minute sweep) and all
+six behaviours exercised:
+
+| case | expected | result |
+|---|---|---|
+| free lock | acquire | ✓ |
+| holder ALIVE, lock backdated to 2020 | **SKIP** (old age-only logic would have reclaimed) | ✓ |
+| holder DEAD | reclaim (schedule must not wedge) | ✓ |
+| no readable pid, fresh | SKIP | ✓ |
+| no readable pid, backdated | reclaim (age fallback intact) | ✓ |
+| release someone else's lock | **refused** | ✓ |
+| release our own lock | released | ✓ |
+
+`bash -n` + `shellcheck` clean. The schedule itself is still NOT installed —
+that remains the owner action documented in T7.
+
 ## T12 — per-day attribution bug + reconciliation guard (SHIPPED 2026-08-28)
 
 **The dashboard was reporting the wrong neurons-per-day, on the very day it

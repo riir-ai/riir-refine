@@ -14,3 +14,10 @@ t37_rows.jsonl
 .wrangler/
 scripts/__pycache__/
 .env
+
+# Issue 044 T7 — the unattended nightly runner writes both of these INTO the
+# repo. Untracked files here are not merely noise: sibling agents run bulk
+# `git add -A`, and an untracked log/lock is exactly what gets swept into
+# someone else's commit.
+.benchmarks/ops_nightly.log
+.benchmarks/.ops_nightly.lock/

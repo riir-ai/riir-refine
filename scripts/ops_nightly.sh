@@ -24,21 +24,73 @@ LOG="${REPO}/.benchmarks/ops_nightly.log"
 LOCK="${REPO}/.benchmarks/.ops_nightly.lock"
 ARTIFACTS=(".benchmarks/dashboard_coverage.json" "cloudflare/dashboard/public/index.html")
 
+# PINNED ON PURPOSE. There is no package.json in cloudflare/dashboard, so a
+# bare `npx --yes wrangler` resolves the LATEST wrangler from the npm registry
+# at run time and executes it UNATTENDED with this account's Cloudflare deploy
+# credentials — unpinned remote code holding publish rights, on a schedule,
+# with nobody watching. Bump this deliberately after checking the release;
+# never let it float.
+WRANGLER_VERSION="4.127.1"
+
 log() { printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >> "${LOG}"; }
 
-# mkdir is atomic on macOS (no flock in base BSD userland). A stale lock from a
-# killed run would wedge the schedule forever, so treat >6 h as abandoned.
-if ! mkdir "${LOCK}" 2>/dev/null; then
-  if [ -n "$(find "${LOCK}" -maxdepth 0 -mmin +360 2>/dev/null)" ]; then
-    log "WARN stale lock >6h — reclaiming"
-    rmdir "${LOCK}" 2>/dev/null || true
-    mkdir "${LOCK}" 2>/dev/null || { log "SKIP could not reclaim lock"; exit 0; }
-  else
-    log "SKIP another ops_nightly run holds the lock"
-    exit 0
+# mkdir is atomic on macOS (no flock in base BSD userland). Two contention
+# cases must be told apart, and a wall-clock threshold ALONE cannot do it:
+#
+#   holder DEAD  (killed run)  — reclaim, or the schedule wedges forever
+#   holder ALIVE (just slow)   — respect it
+#
+# This laptop sleeps — the plist says so in its own comment — so a suspended
+# run can exceed ANY age threshold while remaining perfectly alive. The old
+# age-only reclaim would then start a SECOND run that git-commits and
+# `wrangler deploy`s concurrently with the first. Liveness is the right
+# question; age survives only as the fallback for a lock carrying no readable
+# pid (a pre-upgrade lock, or a torn write).
+acquire_lock() {
+  if mkdir "${LOCK}" 2>/dev/null; then
+    echo $$ > "${LOCK}/pid"
+    return 0
   fi
-fi
-trap 'rmdir "${LOCK}" 2>/dev/null || true' EXIT
+  local holder=""
+  [ -r "${LOCK}/pid" ] && holder="$(cat "${LOCK}/pid" 2>/dev/null || true)"
+  case "${holder}" in
+    ''|*[!0-9]*)
+      if [ -z "$(find "${LOCK}" -maxdepth 0 -mmin +360 2>/dev/null)" ]; then
+        log "SKIP lock held (no readable pid, not yet stale)"
+        return 1
+      fi
+      log "WARN lock has no readable pid and is >6h old — reclaiming"
+      ;;
+    *)
+      if kill -0 "${holder}" 2>/dev/null; then
+        log "SKIP ops_nightly pid ${holder} is ALIVE and holds the lock"
+        return 1
+      fi
+      log "WARN lock holder pid ${holder} is gone — reclaiming"
+      ;;
+  esac
+  rm -f "${LOCK}/pid" 2>/dev/null || true
+  rmdir "${LOCK}" 2>/dev/null || true
+  mkdir "${LOCK}" 2>/dev/null || { log "SKIP could not reclaim lock"; return 1; }
+  echo $$ > "${LOCK}/pid"
+  return 0
+}
+
+# Release ONLY a lock we still own. Without the ownership check, a run that
+# was (correctly) reclaimed as dead — or one that overran and got displaced —
+# would delete its SUCCESSOR's lock on exit, cascading into a third concurrent
+# run. That is the same defect as the reclaim, one level up.
+release_lock() {
+  local holder=""
+  [ -r "${LOCK}/pid" ] && holder="$(cat "${LOCK}/pid" 2>/dev/null || true)"
+  if [ "${holder}" = "$$" ]; then
+    rm -f "${LOCK}/pid" 2>/dev/null || true
+    rmdir "${LOCK}" 2>/dev/null || true
+  fi
+}
+
+acquire_lock || exit 0
+trap release_lock EXIT
 
 log "=== start (pid $$) ==="
 
@@ -88,7 +140,7 @@ fi
 
 # ── 4. deploy ──
 if [ "${OPS_NIGHTLY_NO_DEPLOY:-0}" != "1" ]; then
-  if (cd "${REPO}/cloudflare/dashboard" && timeout 600 npx --yes wrangler deploy >> "${LOG}" 2>&1); then
+  if (cd "${REPO}/cloudflare/dashboard" && timeout 600 npx --yes "wrangler@${WRANGLER_VERSION}" deploy >> "${LOG}" 2>&1); then
     log "deployed"
   else
     log "WARN deploy failed (wrangler OAuth may need refresh: npx wrangler login)"
