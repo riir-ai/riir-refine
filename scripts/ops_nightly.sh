@@ -233,6 +233,10 @@ fi
 # names the wrong fix costs more than no hint, so quote wrangler verbatim.
 DEPLOY_FAILED=0
 if [ "${OPS_NIGHTLY_NO_DEPLOY:-0}" != "1" ]; then
+  # Stamped BEFORE the upload so step 4a can ask "did a deployment land
+  # AFTER we started?" -- the question `wrangler deploy`'s exit code does
+  # not answer.
+  _t0="$(date -u +%Y-%m-%dT%H:%M:%S)"
   _dout="$(mktemp)"
   # `env -u ...` is LOAD-BEARING (2026-08-29). Step 0b loads .env for the CF
   # ANALYTICS credential; wrangler, unrelatedly, auto-adopts any ambient
@@ -262,6 +266,45 @@ if [ "${OPS_NIGHTLY_NO_DEPLOY:-0}" != "1" ]; then
     log "WARN deploy FAILED — production still serves the PREVIOUS dashboard. wrangler said: ${_why:-<no error line matched; see full output above>}"
   fi
   rm -f "${_dout}"
+fi
+
+# ── 4a. post-deploy verification: did production actually RECEIVE it? ──
+# `wrangler deploy` exiting 0 means the API accepted the upload, NOT that the
+# deployment landed. This issue has now been bitten three times by a green
+# surface over a wrong fact (T12 wrong per-day series, T15 dropped domain,
+# T16 failed deploy reported as success), so the deploy gets an independent
+# check rather than a self-report.
+#
+# Deliberately NOT a fetch-and-byte-compare of the dashboard HTML: that only
+# works while the auth gate is OPEN (T13). The moment someone runs
+# `wrangler secret put DASHBOARD_TOKEN`, `/` stops serving the payload and a
+# body check would go RED on a correct deploy. The deployment list is
+# posture-independent, so this gate survives closing the gate.
+if [ "${DEPLOY_FAILED}" = "0" ] && [ "${OPS_NIGHTLY_NO_DEPLOY:-0}" != "1" ]; then
+  _newest="$(cd "${REPO}/cloudflare/dashboard" \
+    && env -u CLOUDFLARE_API_TOKEN -u CLOUDFLARE_API_KEY -u CLOUDFLARE_EMAIL \
+       timeout 120 npx --yes "wrangler@${WRANGLER_VERSION}" deployments list --json 2>/dev/null \
+    | python3 -c 'import sys,json
+try:
+    d = json.load(sys.stdin)
+    print(max(x["created_on"] for x in d) if d else "")
+except Exception:
+    print("")' 2>/dev/null || true)"
+  # THREE outcomes, not two. "Could not measure" must never be reported as
+  # "measured stale" -- a network blip on this read would otherwise turn a
+  # correct deploy into a nightly exit 2 (a false alarm is how a gate gets
+  # ignored, and then disabled).
+  case "${_newest}" in
+    "")
+      log "NOTE post-deploy verify INCONCLUSIVE — could not read the deployment list; deploy itself reported success" ;;
+    *)
+      if [ "${_newest}" \> "${_t0}" ]; then
+        log "verified: deployment landed at ${_newest} (after ${_t0})"
+      else
+        DEPLOY_FAILED=1
+        log "WARN post-deploy verify FAILED — wrangler exited 0 but the newest deployment is ${_newest}, not newer than ${_t0}: production may still serve the PREVIOUS build"
+      fi ;;
+  esac
 fi
 
 # ── 4b. housekeeping-Worker regression gate (Issue 045 T8) ──

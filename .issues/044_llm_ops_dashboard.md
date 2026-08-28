@@ -348,6 +348,45 @@ Verified with a CONTROL, so the test discriminates: with the guard removed and
 Full matrix re-run: `SUCCESS` 0 | `SCOPE-ERR` 2 | `TIMEOUT(124)` 2 |
 `SILENT-FAIL` 2 | `NO_DEPLOY` 0. shellcheck clean.
 
+### T16.2 — "deployed" now means production RECEIVED it (2026-08-29)
+
+`wrangler deploy` exiting 0 means the API accepted the upload, not that the
+deployment landed. This issue has been bitten three times by a green surface
+over a wrong fact (T12 wrong per-day series, T15 dropped domain, T16 failed
+deploy reported as success), so step 4a now checks independently: stamp `_t0`
+before the upload, then confirm the newest entry in `wrangler deployments
+list --json` is newer than it.
+
+Deliberately NOT a fetch-and-byte-compare of the dashboard HTML. That works
+only while the auth gate is OPEN (T13) — the moment someone runs `wrangler
+secret put DASHBOARD_TOKEN`, `/` stops serving the payload and a body check
+would go RED on a perfectly correct deploy. The deployment list is
+posture-independent, so this gate survives closing the gate.
+
+**Three outcomes, not two.** "Could not measure" is reported separately from
+"measured stale": a network blip on the list read logs `NOTE ... INCONCLUSIVE`
+and leaves the exit status alone. Conflating the two would turn a correct
+deploy into a nightly exit 2, and a gate that cries wolf gets ignored and then
+disabled.
+
+Verified on four arms: landed-after-`_t0` -> `verified`, exit 0 | newest older
+than `_t0` -> exit 2 + WARN | list unreadable -> NOTE, exit 0 | list returns
+non-JSON -> NOTE, exit 0. The parser was then run against the REAL API, not
+just the stub, and returned `2026-08-28T17:04:29.645465Z` — the actual
+deployment identified in T16.1. shellcheck clean.
+
+**Auth posture, verified live (not assumed):** `/` serves 200 unauthenticated
+and self-announces it — `x-dashboard-auth: OPEN-INSECURE` plus an
+`x-dashboard-warning` naming T13. Confirmed to be the origin's real behaviour,
+not an edge-cache artifact (a cache-buster request returns `cf-cache-status:
+MISS` with the same 200). The payload carries operational telemetry (model
+names, neuron counts, groq usage) and NO credentials: account id, `Bearer`,
+`api_key` and local paths all grep to zero. Other headers are strict (CSP,
+`no-store`, `noindex`, `frame-ancestors 'none'`, `vary: Cookie`). This is the
+documented owner decision, one `wrangler secret put DASHBOARD_TOKEN` from
+closed — recorded here because "the gate is open" had never been confirmed
+against the deployment itself.
+
 **Consequence for T4:** minting `CF_API_TOKEN` is still wanted for ANALYTICS,
 but it is **NOT** on the critical path for deploying — that path is open today
 via OAuth. T7's schedule install is likewise unblocked on this axis.
