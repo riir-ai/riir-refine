@@ -335,6 +335,17 @@ docker = []
 # could not check" and "the check failed" are different facts.
 docker_verify = ["docker"]
 
+# Plan 030 Phase 2 — the TIER-2 oracle: `docker build --check`, BuildKit's
+# own linter, for the rules whose incumbent is a check NAME rather than a
+# `DL` code. Implies `docker_verify` on purpose: one feature axis, so the
+# agreement dispatch is a two-arm `cfg` pair rather than a 4-state cross
+# product (the Bench 056 lesson that turned CI red on the sec landing).
+# Kept OFF by default and OUT of `docker_verify` because the dependency
+# class is strictly heavier than hadolint's: a running daemon, plus a
+# registry round-trip for any fixture not based on `scratch` (measured
+# ~1.3-2.2 s each, and it does not warm). Never runs in the heal path.
+docker_buildcheck = ["docker", "docker_verify"]
+
 # Ruliology candidate enumeration (L3 refinement layer).
 # Implies `clippy_lints` (searches over clippy corpus entries).
 ruliology_search = ["clippy_lints"]

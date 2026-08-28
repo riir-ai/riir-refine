@@ -137,23 +137,76 @@ pub fn class_a_agreement(rule_id: &str) -> Agreement {
     let Some(code) = rule.incumbent.as_deref() else {
         return Agreement::Unavailable;
     };
-    // Only hadolint's DL codes are checkable here; the BuildKit check names
-    // belong to `docker build --check` (Tier 2, out of scope for the lib).
+    // hadolint owns the DL codes. A BuildKit check NAME belongs to Tier 2
+    // (`docker build --check`), which is the `docker_buildcheck` feature —
+    // absent it, the honest answer is still `Unavailable`, never a pass.
     if !code.starts_with("DL") {
-        return Agreement::Unavailable;
+        return tier2_agreement(rule);
     }
     let (Some(before), Some(after)) = (hadolint(&rule.buggy_code), hadolint(&rule.fixed_code))
     else {
         return Agreement::Unavailable;
     };
-    match (
+    verdict(
         before.iter().any(|f| f.code == code),
         after.iter().any(|f| f.code == code),
-    ) {
+    )
+}
+
+/// The shared before/after reduction — one place, so Tier 1 and Tier 2
+/// cannot drift into disagreeing about what "agrees" means.
+fn verdict(fires_on_buggy: bool, fires_on_fixed: bool) -> Agreement {
+    match (fires_on_buggy, fires_on_fixed) {
         (false, _) => Agreement::OracleSilentOnBuggy,
         (true, true) => Agreement::StillFiresAfterFix,
         (true, false) => Agreement::Agrees,
     }
+}
+
+/// Tier-2 dispatch. Two `cfg` arms rather than a `cfg`-gated body: both
+/// compile in every feature state, which is the Bench 056 lesson about the
+/// dead-code failure class that turned CI red on the sec landing.
+#[cfg(feature = "docker_buildcheck")]
+fn tier2_agreement(rule: &super::DockerRule) -> Agreement {
+    use super::buildcheck;
+
+    let Some(check) = rule.tier2_check() else {
+        return Agreement::Unavailable;
+    };
+    let (Some(before), Some(after)) = (
+        buildcheck::findings(&rule.buggy_code),
+        buildcheck::findings(&rule.fixed_code),
+    ) else {
+        // Unavailable OR a truncated (`Errored`) run — both are "not
+        // checked". `buildcheck` already collapsed that distinction, and
+        // collapsing it toward `Unavailable` is the safe direction.
+        return Agreement::Unavailable;
+    };
+    verdict(
+        before.iter().any(|f| f.check == check),
+        after.iter().any(|f| f.check == check),
+    )
+}
+
+#[cfg(not(feature = "docker_buildcheck"))]
+fn tier2_agreement(_rule: &super::DockerRule) -> Agreement {
+    Agreement::Unavailable
+}
+
+/// Check every rule that names a Tier-2 (`BuildKit`) check.
+///
+/// Returns `(rule_id, check, verdict)` per rule. This is the standing gate
+/// that Bench 056's postscript could only assert by hand.
+#[must_use]
+pub fn all_tier2_agreements() -> Vec<(String, String, Agreement)> {
+    build_docker_seed_corpus()
+        .entries
+        .iter()
+        .filter_map(|r| {
+            let check = r.tier2_check()?.to_string();
+            Some((r.rule_id.clone(), check, tier2_agreement(r)))
+        })
+        .collect()
 }
 
 #[cfg(test)]

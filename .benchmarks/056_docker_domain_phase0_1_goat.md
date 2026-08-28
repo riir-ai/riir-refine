@@ -122,10 +122,14 @@ this domain, there is none.
 
 ## Honest limits
 
-- **`docker build --check` (Tier 2) is wired conceptually but not into the
-  library** — Tier 3 (a real build) ran only in this bench, by hand.
-- **The agreement gate covers DL codes only** — but the 4 BuildKit-check
-  claims are no longer documentation-only. **Measured 2026-08-28** (see the
+- ~~**`docker build --check` (Tier 2) is wired conceptually but not into the
+  library**~~ — **CLOSED 2026-08-29 (Plan 030 T2.1(a))**: Tier 2 is now
+  `src/domains/docker/buildcheck.rs` behind `docker_buildcheck`, with
+  `tests/docker_tier2_buildcheck.rs` as the standing gate. See §Tier-2 below.
+  Tier 3 (a real build) still ran only in this bench, by hand.
+- ~~**The agreement gate covers DL codes only**~~ — **CLOSED 2026-08-29**:
+  `class_a_agreement` now dispatches a non-`DL` incumbent to Tier 2. The 4
+  BuildKit-check claims were already no longer documentation-only. **Measured 2026-08-28** (see the
   T1.6 section's postscript): each of the 4 fires its named check on the corpus
   `buggy_code` and is silent on the `fixed_code`, against a live
   `docker build --check`. The library still does not call that oracle — wiring
@@ -267,3 +271,75 @@ each fix genuinely silences the check it claims. What this does NOT do is make
 the oracle a standing gate: the library calls hadolint, not `docker build
 --check`, so this is a one-shot verification of a documented claim. The
 standing tier-2 oracle stays Phase 2, where the plan put it.
+
+
+## Tier-2 — the standing `docker build --check` oracle (Plan 030 T2.1(a), 2026-08-29)
+
+The postscript above verified 4 claims once, by hand, and said so. That is
+exactly the shape that rots: a measured fact with no gate behind it survives
+until the corpus moves and then quietly stops being true. Phase 2's
+highest-value item was to close it, and it is closed —
+`src/domains/docker/buildcheck.rs` behind `docker_buildcheck`, dispatched from
+`class_a_agreement`, gated by `tests/docker_tier2_buildcheck.rs`.
+
+Live re-run, Docker **29.7.2** / buildx **v0.36.1-desktop.1**:
+
+```
+tier2 OK: cmd-entrypoint-exec-form -> JSONArgsRecommended
+tier2 OK: instruction-casing       -> ConsistentInstructionCasing
+tier2 OK: legacy-key-value-format  -> LegacyKeyValueFormat
+tier2 OK: no-empty-continuation    -> NoEmptyContinuation
+test result: ok. 4 passed; 0 failed — finished in 5.86s
+```
+
+### Verified by falsification, not by the green run
+
+A gate that has only ever passed has demonstrated nothing about what it
+catches. Three defect classes injected into the corpus, each reverted after:
+
+| Injection | Expected verdict | Result |
+|---|---|---|
+| `legacy-key-value-format.fixed_code` keeps `ENV RUST_LOG info` | `StillFiresAfterFix` | **FAILED correctly** |
+| `instruction-casing.buggy_code` uppercased to `RUN` | `OracleSilentOnBuggy` | **FAILED correctly** |
+| ledger cross-ref mistyped `NoEmptyContinuationTypo` | `OracleSilentOnBuggy` | **FAILED correctly** — and the set-pin test failed too (2 of 4), so the ledger has two independent guards |
+
+### Three measured facts the design rests on
+
+None are in the upstream documentation; each was probed directly before a line
+of the parser was written.
+
+1. **There is no structured output.** `--progress=rawjson` emits only
+   `vertexes` and `statuses`; the check report is printed as plain text
+   *outside* the JSON stream. Text parsing is the only interface, not a
+   shortcut taken for convenience.
+2. **Findings go to stdout, build errors go to stderr** — cleanly separable,
+   which is what makes fact 3 handleable at all.
+3. **A resolve failure silently truncates the finding set.** A two-defect file
+   (`from` lowercase + legacy `ENV`) on an unresolvable base reported **one**
+   warning, not two, and exited **1** — the same exit code as a healthy run
+   that found warnings. Shape and exit code both fail to distinguish partial
+   from complete. `CheckRun::Errored` therefore **discards** the findings it
+   received rather than reporting a subset that reads like a near-clean file.
+   `tests/docker_tier2_buildcheck.rs::a_resolve_failure_is_errored_not_a_short_finding_list`
+   pins it, and is written so that a future BuildKit which stops truncating
+   passes for the right reason instead of silently going green.
+
+### Cost, and why this one does NOT get promoted
+
+`docker` went default-on because the gain was modelless and the dependency was
+nothing. Tier 2 is the opposite trade: it needs a **running daemon**, and it
+resolves source metadata **over the network** for every fixture not based on
+`scratch`.
+
+| Fixture base | Cold | Repeat |
+|---|---|---|
+| `FROM scratch` | 0.195 s | 0.195 s |
+| `FROM alpine:3.20` | 1.29 s | **2.17 s** |
+
+The registry round-trip does **not** warm — the repeat run paid it again, and
+paid more. So the suite is ~9.6 s, dominated by four `alpine`-based fixtures,
+and the tier never runs in the heal path: only in gates and benches. Promotion
+would put a daemon requirement into a default `cargo test`, which is not a
+GOAT question at all — it is a dependency-class question, and the answer is no.
+The availability probe is itself the oracle on `FROM scratch`, an end-to-end
+capability test that costs 0.2 s once per process and touches no registry.

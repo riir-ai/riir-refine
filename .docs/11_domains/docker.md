@@ -1,11 +1,16 @@
 # The `docker` Domain — Dockerfile Bounded-Fix Healing + Retrieval
 
 **Feature:** `docker` (**DEFAULT-ON since 2026-08-28**, zero new dependencies)
-**Oracle tier:** `docker_verify` (implies `docker`; needs `hadolint` on PATH).
-The 4 Class-A rules whose incumbent is a BuildKit check rather than a DL code
-are verified against a live `docker build --check` (4/4 fire on `buggy_code`,
-silent on `fixed_code` — Bench 056 postscript), but that oracle is not wired
-into the library; doing so is Phase 2.
+**Oracle ladder:** `docker_verify` (Tier 1 — implies `docker`; needs `hadolint`
+on PATH) and `docker_buildcheck` (Tier 2 — implies `docker_verify`; needs a
+running Docker daemon). Tier 2 is `docker build --check`, BuildKit's own
+linter, and it owns the 4 Class-A rules whose incumbent is a check NAME rather
+than a `DL` code. **Landed 2026-08-29 (Phase 2)**: those 4 claims used to be a
+hand-measured Bench 056 postscript and are now a standing gate
+(`tests/docker_tier2_buildcheck.rs`), verified by falsification — three
+injected defect classes (fix does not silence the check; the oracle does not
+see the claimed defect; a mistyped ledger cross-ref) each turn it red with the
+right verdict.
 **Plan:** [030](../../.plans/030_docker_domain_phase0_batch1.md) ·
 **Proposal:** [006](../../.proposals/006_docker_heal_domain_fifth_healdomain.md) ·
 **Research:** [086](../../.research/086_dockerfile_detection_inventory_hadolint_buildkit.md) (dedup ledger) + [087](../../.research/087_docker_heal_seed_inventory.md) (seed inventory)
@@ -93,6 +98,24 @@ the shape once per release, not once per edit.
 `None` is never coerced to `false` or `true`: *"we could not check"* and
 *"the check failed"* are different facts.
 
+Tier 2 needs a third variant, because `docker build --check` has a failure
+mode hadolint does not. **Measured 2026-08-29:** feed it a two-defect
+Dockerfile whose base image cannot be resolved and it reports **one** warning,
+not two — and exits 1, exactly as it does when it found warnings and nothing
+went wrong. A partial result is indistinguishable from a complete one by shape
+or exit code alone. So `CheckRun` has three variants and `Errored` **discards**
+the findings it did receive: reporting a strict subset would let a truncated
+run masquerade as a clean-ish one. The only usable signal is `ERROR:` on
+stderr; findings arrive on stdout, and the two streams are cleanly separable.
+
+Two more measured facts the Tier-2 parser is built on, neither of them
+guessable from the docs: `--progress=rawjson` carries **only** `vertexes` and
+`statuses` — the check results are printed as plain text outside the JSON
+stream, so text parsing is the only interface, not a shortcut. And the
+availability probe is the oracle itself on `FROM scratch` (~0.2 s, no registry
+round-trip) rather than a version-string guess: it tests the capability
+end to end.
+
 ## Gates
 
 | Gate | Result |
@@ -104,6 +127,7 @@ the shape once per release, not once per edit.
 | **G4** alloc | scan buffers reach a steady state; a clean file allocates no findings at all |
 | **G5-real** | PASS — `edge-wallet-container` healed, `docker build` GREEN (the healed cache-mount `RUN` compiled for 167.7 s), image 141 MB, binary present |
 | **Class-A agreement** | PASS — all DL-coded rules agree with live hadolint 2.15.1 |
+| **Tier-2 agreement** | PASS — 4/4 BuildKit-check rules agree with live `docker build --check` (Docker 29.7.2 / buildx v0.36.1). Falsified with 3 injected defect classes; ~9.6 s for the suite, dominated by the registry round-trip on the `alpine`-based fixtures |
 
 ### The negative controls, stated precisely
 

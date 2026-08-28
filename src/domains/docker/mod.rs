@@ -56,6 +56,9 @@ pub mod scanner;
 #[cfg(feature = "docker_verify")]
 pub mod verify;
 
+#[cfg(feature = "docker_buildcheck")]
+pub mod buildcheck;
+
 /// The rule family (parallel to `SecFamily` / clippy's `lint_group`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DockerFamily {
@@ -179,6 +182,17 @@ pub struct DockerRule {
     /// Context annotation for rules whose fix is a judgment call rather
     /// than an unconditional win (the `rust_perf` `context_notes` channel).
     pub notes: Option<String>,
+    /// The `BuildKit` check name when it differs from [`Self::incumbent`].
+    ///
+    /// Most Class-A rules have ONE incumbent and it lives in `incumbent`.
+    /// A few are detected by BOTH tools under different ids — hadolint's
+    /// `DL3025` and `BuildKit`'s `JSONArgsRecommended` cover the same
+    /// shell-form `CMD`/`ENTRYPOINT` defect. `incumbent` names the primary
+    /// (Tier-1-checkable) id; this names the Tier-2 one so the
+    /// `docker_buildcheck` gate can reach a rule whose primary id is a
+    /// `DL` code. Set via [`Self::with_buildkit_check`] rather than a 9th
+    /// constructor argument: 26 of 27 rules do not need it.
+    pub buildkit_check: Option<String>,
 }
 
 impl DockerRule {
@@ -193,6 +207,25 @@ impl DockerRule {
     #[must_use]
     pub fn is_class_a(&self) -> bool {
         self.incumbent.is_some()
+    }
+
+    /// Declare the Tier-2 (`docker build --check`) id for a rule whose
+    /// primary incumbent is a hadolint `DL` code.
+    #[must_use]
+    pub fn with_buildkit_check(mut self, check: &str) -> Self {
+        self.buildkit_check = Some(check.to_string());
+        self
+    }
+
+    /// The id the Tier-2 oracle should look for, if any: the explicit
+    /// [`Self::buildkit_check`], else [`Self::incumbent`] when that is
+    /// already a `BuildKit` check name rather than a `DL` code.
+    #[must_use]
+    pub fn tier2_check(&self) -> Option<&str> {
+        match self.buildkit_check.as_deref() {
+            Some(c) => Some(c),
+            None => self.incumbent.as_deref().filter(|c| !c.starts_with("DL")),
+        }
     }
 }
 
@@ -350,6 +383,7 @@ mod tests {
             min_syntax: SyntaxVersion::V1_4,
             incumbent: None,
             notes: None,
+            buildkit_check: None,
         };
         assert!(!r.fix_allowed_under(SyntaxVersion::Builtin));
         assert!(r.fix_allowed_under(SyntaxVersion::V1_4));

@@ -110,6 +110,7 @@ fn rule(
         min_syntax,
         incumbent: incumbent.map(str::to_string),
         notes: notes.map(str::to_string),
+        buildkit_check: None,
     }
 }
 
@@ -158,7 +159,8 @@ fn entries() -> Vec<DockerRule> {
             "FROM scratch\nCMD [\"/usr/local/bin/app\"]\n",
             F::SignalPid1, S::Builtin, Some("DL3025"),
             Some("Behavior-adjacent: exec form changes WHO receives the signal. The fix refuses when the command carries a pipe, &&, redirect, glob or variable — there the shell is doing real work."),
-        ),
+        )
+        .with_buildkit_check("JSONArgsRecommended"),
         rule(
             "apt-not-apt-get",
             "`apt` is the interactive CLI and warns that it has no stable interface for scripts; `apt-get` is the scripting one",

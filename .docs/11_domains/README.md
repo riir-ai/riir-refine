@@ -38,6 +38,7 @@
 | `sec` | off | — | security-pattern healing (Plan 018) |
 | `docker` | off | — | Dockerfile bounded-fix healing (Plan 030) |
 | `docker_verify` | off | `docker` | hadolint agreement oracle |
+| `docker_buildcheck` | off | `docker_verify` | Tier-2 `docker build --check` agreement oracle |
 
 ## Status
 
