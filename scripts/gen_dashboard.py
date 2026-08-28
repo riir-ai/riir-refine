@@ -902,7 +902,11 @@ function svgBarChart(el, labels, values, opts={}) {
   const W=560, rowH=26, topPad=8, cap=opts.cap;
   const H = Math.max(120, topPad + values.length*rowH + 30);
   const maxV = Math.max(...values, cap||0, 1);
-  const lw = 64; // label width
+  // Label width sized to the longest label (svg text clips at x<0 — the
+  // fixed 64px ate "clippy_lints" down to "ippy_lints"); capped so the long
+  // model-name labels cannot starve the bar area.
+  const lw = Math.min(170, Math.max(64,
+    Math.ceil(Math.max(...labels.map(l=>String(l).length))*6.6)+14));
   const bw = W - lw - 56;
   let s = '<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="xMidYMid meet">';
   if (cap) {
@@ -915,7 +919,7 @@ function svgBarChart(el, labels, values, opts={}) {
     const w = Math.max(2, (v/maxV)*bw);
     const cls = cap && v>cap ? 'bar crit' : (cap && v>0.9*cap ? 'bar warn' : 'bar alt');
     s += '<text x="'+(lw-6)+'" y="'+(y+13)+'" text-anchor="end">'+labels[i]+'</text>'
-       + '<rect class="'+cls+'" x="'+lw+'" y="'+y+3+'" width="'+w+'" height="'+(rowH-9)+'" rx="2">'
+       + '<rect class="'+cls+'" x="'+lw+'" y="'+(y+3)+'" width="'+w+'" height="'+(rowH-9)+'" rx="2">'
        + '<title>'+labels[i]+': '+fmt.n1(v)+'</title></rect>'
        + '<text x="'+(lw+w+5)+'" y="'+(y+13)+'">'+fmt.n1(v)+'</text>';
   });
@@ -1034,11 +1038,14 @@ if (D.corpus && D.corpus.length) {
     const pts = vals.map((v,i)=>
       (pad + i*(w-2*pad)/Math.max(vals.length-1,1)).toFixed(1)+','
       + (pad + (1-(v-lo)/span)*(h-2*pad)).toFixed(1)).join(' ');
+    // Explicit px size on the svg: the global svg{width:100%} rule stretches
+    // these to the flex-row width, pushing the lo→hi label outside the card
+    // (the "number outside the chart" bug).
     rows += '<div style="display:flex;align-items:center;gap:8px;margin:2px 0">'
-      + '<span style="width:90px;text-align:right;color:var(--dim)">'+d+'</span>'
-      + '<svg width="'+w+'" height="'+h+'" style="flex:none"><polyline fill="none" stroke="'
+      + '<span style="width:90px;flex:none;text-align:right;color:var(--dim)">'+d+'</span>'
+      + '<svg width="'+w+'" height="'+h+'" style="flex:none;width:'+w+'px;height:'+h+'px"><polyline fill="none" stroke="'
       + colors[d]+'" stroke-width="1.5" points="'+pts+'"/></svg>'
-      + '<span class="sub">'+lo+' → '+hi+'</span></div>';
+      + '<span class="sub" style="white-space:nowrap">'+lo+' → '+hi+'</span></div>';
   });
   $('corpusSparks').innerHTML = rows;
 }
