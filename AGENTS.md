@@ -2781,6 +2781,36 @@ verdict dependency. Cost: 1,433.2 n session (server truth; account day
 closed 9,742.4/10,000 — cap respected); llama ≈ **$0.00025/fix measured**
 (6.8× under the issue's estimate).
 
+## CF ops surface + the `.env` contract (Issues 044/045 — read before touching ops)
+
+This repo hosts the **LLM ops plane**: the `riir-kat-housekeeping` worker
+(`cloudflare/housekeeping/` — hourly cost/budget cron), the
+`riir-ops-dashboard` worker (`cloudflare/dashboard/`), and the nightly
+generator (`scripts/ops_nightly.sh`). Credentials live in **`.env`
+(gitignored — never commit, never print values)**; [`.env.example`](.env.example)
+is the documented template (per-var purpose, consumer, minting steps).
+AI sessions: treat `.env` as read-only local state — pipe values into
+`wrangler secret put` via stdin (`grep '^NAME=' .env | cut -d= -f2- | …`),
+never echo them.
+
+**State as of 2026-08-29 (verified live, do not re-ask for these):** the
+T9 rollout EXECUTED — worker deployed, `READ_TOKEN` gate live (anon
+`/hours` → 401), `CF_API_TOKEN` set in the worker (`/status` →
+`token_set:true`; neurons + containers collecting hourly; 14-day backfill
+run), 4 core vars all SET in `.env` (`GROQ_API_KEY`, `CF_API_TOKEN`,
+`CF_DEPLOY_API_TOKEN`, `READ_TOKEN`). Remaining owner-gated (verified
+absent): `ALERT_WEBHOOK_URL` + `MONTHLY_BUDGET_USD` (paging — crossings
+still land in KV + `/status alerts_today` without them), `DASHBOARD_TOKEN`
+(auth gate ships OPEN by owner decision 2026-08-28), and the nightly
+launchd bootstrap (2 commands, plist at `scripts/com.riir.ops-nightly.plist`).
+
+**Deploy hazard (Issue 044 T16.1, load-bearing):** wrangler honours
+`CF_API_TOKEN` as a deprecated alias of `CLOUDFLARE_API_TOKEN` — an
+analytics-scoped value in the deploy env silently breaks auth. Every
+`wrangler deploy` in this repo runs under
+`env -u CLOUDFLARE_API_TOKEN -u CF_API_TOKEN -u CLOUDFLARE_API_KEY -u CLOUDFLARE_EMAIL …`.
+Keep that prefix; a bare `npx wrangler deploy` is the bug.
+
 ## The `riir-clippy` skill (auto-continue idle loop)
 
 `.agents/skills/riir-clippy/SKILL.md` (symlinked into `~/.agents/skills/`

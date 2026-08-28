@@ -394,6 +394,41 @@ Concurrent sibling builds: export a private `CARGO_TARGET_DIR` before
 launching (see the script header for the isolation recipe — the global
 rule; the oracle shares your target dir by default).
 
+## Ops surface (Cloudflare workers + nightly) — Issues 044/045
+
+This repo also hosts the **LLM ops plane**: the cost/budget housekeeping
+worker, the ops dashboard, and the nightly generator. State as of
+2026-08-29 (verified live):
+
+| Piece | URL / where | State |
+|---|---|---|
+| Housekeeping worker | `https://riir-kat-housekeeping.foxfox.workers.dev` | **LIVE** — hourly cron, T9 code deployed, `READ_TOKEN` gate on (`/hours` `/days` `/backfill` anon → 401), `CF_API_TOKEN` set (`/status` → `token_set:true`, neurons + containers collecting, 14-day backfill run) |
+| Ops dashboard | `https://riir-ops-dashboard.foxfox.workers.dev` | LIVE — serves the self-contained HTML; fetches `/latest` from the housekeeping worker. **Auth gate ships OPEN** (owner decision 2026-08-28; one `wrangler secret put DASHBOARD_TOKEN` closes it) |
+| Nightly generator | `scripts/ops_nightly.sh` + `scripts/com.riir.ops-nightly.plist` | **Shipped, NOT bootstrapped** — two commands: `cp scripts/com.riir.ops-nightly.plist ~/Library/LaunchAgents/ && launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.riir.ops-nightly.plist` |
+
+**Credentials live in `.env` (gitignored — never commit, never print).**
+[`.env.example`](.env.example) is the documented template: what each var is
+for, which consumer reads it, and where each is minted. The four core vars:
+`GROQ_API_KEY` (free-tier LLM routing, Issue 051) · `CF_API_TOKEN`
+(Account Analytics:Read — worker secret AND nightly generator; the only one
+that cannot be minted from this machine) · `CF_DEPLOY_API_TOKEN`
+(least-privilege deploy token, preferred by the nightly) · `READ_TOKEN`
+(the housekeeping read gate, 64-hex). Optional: `ALERT_WEBHOOK_URL` +
+`MONTHLY_BUDGET_USD` (cap-crossing paging — inert until set; crossings
+still land in KV + `/status alerts_today`) · `DASHBOARD_TOKEN`.
+
+Deploy rule (Issue 044 T16.1, load-bearing): wrangler honours
+`CF_API_TOKEN` as a deprecated alias of `CLOUDFLARE_API_TOKEN`, so an
+analytics-scoped value in the deploy environment silently breaks auth —
+deploys run under `env -u CLOUDFLARE_API_TOKEN -u CF_API_TOKEN …` (the
+nightly and `cloudflare/housekeeping` runbooks already do; keep it that
+way).
+
+Full narratives + runbooks: [`.issues/044_llm_ops_dashboard.md`](.issues/044_llm_ops_dashboard.md)
+(dashboard + alerting + nightly) and
+[`.issues/045_container_cost_housekeeping.md`](.issues/045_container_cost_housekeeping.md)
+(housekeeping worker, rollout, backfill).
+
 ## Coverage (measured, Bench 045 — the honest product numbers)
 
 Over the N=212 known-inverse mutation corpus (12 committed anchors + 200
