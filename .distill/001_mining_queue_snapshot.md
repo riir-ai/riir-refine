@@ -1417,9 +1417,28 @@ never closed). Ranked open classes (inventory 2026-08-24):
       — the map_unwrap_or ReceiverKind pattern) firing only there; plain
       unknown paths stay silent. RECON-ONLY this cycle — value/rate poor
       (2 live sites in 8k files) vs P8/P2; next session picks the lane.
-- [ ] P8 **unnecessary_sort_by deref-binding shape** (`|&a, &b|` —
-      conservatively skipped; the AGENTS.md "no proposer" note is STALE,
-      proposer exists). Evidence: miss.
+- [x] P8 **unnecessary_sort_by deref-binding shape** — **CLOSED 2026-08-29**
+      (this commit). Probe-first (12-shape scratch crate vs clippy 1.97,
+      JSON): the deref form `sort_by(|&a, &b| a.cmp(&b))` fires
+      MachineApplicable `sort_by_key(|&a| a)` — clippy keeps the KEY form
+      (NOT sort()) and preserves the pattern text verbatim; `sort_unstable_by`
+      mirrors both forms (plain → `sort_unstable()` MA — was ALSO
+      proposer-skipped before this fix; deref → `sort_unstable_by_key` MA);
+      typed params `|a: &u8, b: &u8|` → `sort()` MA. Non-fired oracle facts
+      pinned: mixed `|&a, b|` SILENT (so mixed bindings must not fire),
+      reversed-plain fully silent, reversed-deref MaybeIncorrect
+      (`Reverse(b)` — no-autofire discipline keeps the skip), free-fn
+      `Ord::cmp(&a, &b)` silent, field-key `a.k.cmp(&b.k)` → MA
+      `sort_by_key(|&a| a.k)` = a SEPARATE pattern family recorded as the
+      P8b follow-up. Proposer: `Binding::{Plain,Deref}` classification
+      (Pat::Ident / Pat::Type-wrapped / Pat::Reference non-mut),
+      `body_matches` accepts the owned-form `a.cmp(&b)` arg for deref,
+      same-form-only rule (mixed never fires). 13 module tests (8 new:
+      deref fire, unstable plain/deref, typed, reversed-deref silent,
+      mixed silent, deref+plain-arg silent, wildcard-inner silent,
+      free-fn silent); default lib 776/0; clippy --all-targets 0; e2e
+      dry→write reproduces the oracle byte-for-byte. Evidence: miss →
+      probe → proposer + fixtures.
 - [x] P9 **compile-breaking proposal cluster in ruliology/player.rs** —
       2× single_match_else (`match state.first()/opponent_history.last()`
       Some/None → if-let) + 1× map_unwrap_or at :459, ALL THREE
