@@ -1,0 +1,13 @@
+{
+  "ts_unix": 1787938200,
+  "model": "@cf/zai-org/glm-5.3-flash",
+  "suite": "t40_fixer_regate_harness + arms A/B reachable-9 (Bench 057)",
+  "verdict": "PASS",
+  "scope": "re-gate of the 5a5caed owner pivot: both arms BEAT the Bench 049 llama bar (A 7/9 vs 5/9; B 7/9 vs 6/9); never-wrong held (regressions 0, divergent 0, veto caught the unsafe); $/fix 0.00003-0.00007 (~8-10x under llama)",
+  "caveats": [
+    "n=9 one-day one-seed; margin 1-2 cases",
+    "max_tokens>=128 floor measured (32-64 burns the budget on reasoning_content even at reasoning_effort low)",
+    "server neuron meter lagged 0 at run time; client meter + pricing v3 is the basis",
+    "smoke probes (~6 calls, ~10n) unledgered by design - raw curls outside the harness"
+  ]
+}

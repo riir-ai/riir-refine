@@ -1171,6 +1171,13 @@ pub const REASONING_OVERFLOW: &str = "reasoning-overflow";
 /// budget or disable thinking instead of misreading "model unusable"
 /// (the exact misread the 2026-08-26 GLM smoke + qwen incident shared).
 ///
+/// Measured GLM-5.3-flash budget floor (2026-08-28 smoke, Bench 057): with
+/// `reasoning_effort:"low"` and `max_tokens` 32 the model still spends the
+/// WHOLE budget on `reasoning_content` → content null (length); 64 is
+/// marginal (1-in-N); ≥ 128 returned `finish_reason:stop` + a 3-token
+/// answer every time. Keep `max_tokens ≥ 128` on every GLM-5 call — the
+/// fixer harness's default `max_new = 128` sits exactly on this floor.
+///
 /// # Errors
 ///
 /// Overflow/shape errors; the overflow message starts with
