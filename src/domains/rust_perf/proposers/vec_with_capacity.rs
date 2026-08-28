@@ -57,8 +57,15 @@
 //! the capacity fragment is the ORIGINAL source text of the inferred node.
 
 use super::{edit, src, SourceEdit};
+use syn::spanned::Spanned;
 use syn::visit::Visit;
 use syn::{Expr, ExprLit, File, Lit, Local, Pat, RangeLimits, Signature, Stmt};
+
+/// Byte range of any node's span (Range<usize> form; convert to a pair when
+/// hashing).
+fn byte_range<T: Spanned>(t: &T) -> std::ops::Range<usize> {
+    t.span().byte_range()
+}
 
 use super::ProposerOpts;
 
@@ -92,6 +99,24 @@ fn collect_block_edits(
             .iter()
             .filter_map(stmt_local_ident)
             .collect();
+        // P2 extension (2026-08-28): the immediately-following statement is
+        // a for loop whose iterable is a BARE ARRAY LITERAL (the katgpt-rs
+        // bench_120/test_120_toast shape — multi-line `[..]` with non-Copy
+        // elements). The literal has no name for `.len()`, so the rewrite
+        // binds a temp first: `let tmp = [..];` + `Vec::with_capacity(
+        // tmp.len())` + `for .. in tmp`. Safe only when the loop is the
+        // IMMEDIATELY-following statement: the literal's evaluation then
+        // moves across exactly one statement (the fresh-vec init) — zero
+        // reordering across side-effectful code, identical name resolution.
+        if i + 1 < stmts.len() {
+            if let Some((fl, arr)) = array_iter_push_loop(&stmts[i + 1], ident) {
+                if let Some(pair) = temp_binding_edits(source, local, arr, fl, block) {
+                    edits.push(pair.0);
+                    edits.push(pair.1);
+                    continue;
+                }
+            }
+        }
         for later in stmts.iter().skip(i + 1) {
             // Stop at a shadowing re-bind of the same ident: pushes after it
             // may belong to the shadow, not the binding we'd rewrite.
@@ -110,6 +135,88 @@ fn collect_block_edits(
             }
         }
     }
+}
+
+/// If `stmt` is a `for` loop whose iterable is a BARE array literal and
+/// whose body pushes to `ident`, return the loop + the literal.
+fn array_iter_push_loop<'a>(stmt: &'a Stmt, ident: &syn::Ident) -> Option<(&'a syn::ExprForLoop, &'a Expr)> {
+    let Stmt::Expr(Expr::ForLoop(fl), _) = stmt else { return None };
+    let Expr::Array(_) = &*fl.expr else { return None };
+    let mut scan = PushScan { ident, found: false };
+    scan.visit_block(&fl.body);
+    if !scan.found {
+        return None;
+    }
+    Some((fl, &fl.expr))
+}
+
+/// Build the two-part temp-binding rewrite. Returns (binding edit, iterable
+/// edit) or None when a collision-free temp name cannot be found.
+fn temp_binding_edits(
+    source: &str,
+    local: &Local,
+    arr: &Expr,
+    fl: &syn::ExprForLoop,
+    block: &syn::Block,
+) -> Option<(SourceEdit, SourceEdit)> {
+    // Collision-free temp name: scan every ident in the whole fn block.
+    let mut seen = std::collections::HashSet::new();
+    collect_idents(block, &mut seen);
+    let mut tmp = String::from("cap_iter");
+    let mut n = 1;
+    while seen.contains(&tmp) {
+        n += 1;
+        if n > 9 {
+            return None;
+        }
+        tmp = format!("cap_iter{n}");
+    }
+    let local_span = src(source, local)?;
+    let init = local.init.as_ref()?;
+    let local_range = byte_range(local);
+    let init_range = byte_range(&*init.expr);
+    let rel_start = init_range.start.checked_sub(local_range.start)?;
+    let rel_end = init_range.end.checked_sub(local_range.start)?;
+    if rel_start > local_span.len() || rel_end > local_span.len() {
+        return None;
+    }
+    let arr_text = src(source, arr)?;
+    let indent: String = {
+        let line_start = source[..local_range.start]
+            .rfind('\n')
+            .map_or(0, |p| p + 1);
+        source[line_start..local_range.start]
+            .chars()
+            .take_while(|c| c.is_whitespace())
+            .collect()
+    };
+    let new_local = format!(
+        "{}Vec::with_capacity({tmp}.len()){}",
+        &local_span[..rel_start],
+        &local_span[rel_end..]
+    );
+    let binding_replacement =
+        format!("let {tmp} = {arr_text};\n{indent}{new_local}");
+    let iterable_replacement = tmp;
+    Some((edit(local, binding_replacement), edit(&*fl.expr, iterable_replacement)))
+}
+
+/// Every identifier used or bound anywhere in the block (paths, patterns,
+/// method names, macro tokens' idents are NOT walked — token streams are
+/// opaque, and a synthesized `cap_iter` colliding with an ident inside a
+/// macro's tokens would have to also be a real binding to matter, which
+/// macros can't bind into this scope).
+fn collect_idents(block: &syn::Block, out: &mut std::collections::HashSet<String>) {
+    struct IdScan<'a> {
+        out: &'a mut std::collections::HashSet<String>,
+    }
+    impl<'ast> Visit<'ast> for IdScan<'_> {
+        fn visit_ident(&mut self, i: &'ast syn::Ident) {
+            self.out.insert(i.to_string());
+        }
+    }
+    let mut scan = IdScan { out };
+    scan.visit_block(block);
 }
 
 /// The capacity, as a node whose ORIGINAL source text becomes the
@@ -614,6 +721,97 @@ mod tests {
                 "fn build(items: &[u32]) -> Vec<u32> {\n    let mut v = Vec::new();\n    \n                 for x in items { v.push(*x); }\n    v\n}"
             )
             .is_none()
+        );
+    }
+
+    // ── P2 extension (2026-08-28): bare array-literal iterables — the
+    // katgpt-rs bench_120 / test_120_toast_renyi shape (multi-line `[..]`,
+    // non-Copy elements, no name for `.len()`). The rewrite binds a temp
+    // first; fires only when the loop is the IMMEDIATELY-following
+    // statement (zero semantic reordering — the literal's evaluation moves
+    // across exactly the fresh-vec init). Probe 2026-08-28: compiles,
+    // behavior identical, capacity hint lands. ──────────────────────────
+    #[test]
+    fn array_literal_iterable_gets_temp_binding() {
+        let src = concat!(
+            "fn build() -> Vec<Vec<u8>> {\n",
+            "    let mut v = Vec::new();\n",
+            "    for tok in [\n",
+            "        b\"<pad>\".to_vec(),\n",
+            "        b\"<bos>\".to_vec(),\n",
+            "    ] {\n",
+            "        v.push(tok);\n",
+            "    }\n",
+            "    v\n",
+            "}"
+        );
+        let out = propose_fix("vec-with-capacity", src).expect("array-literal shape matched");
+        assert!(out.contains("let cap_iter = ["), "temp binding missing: {out}");
+        assert!(
+            out.contains("Vec::with_capacity(cap_iter.len())"),
+            "capacity hint missing: {out}"
+        );
+        assert!(out.contains("for tok in cap_iter {"), "iterable not rewritten: {out}");
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn array_literal_name_collision_gets_suffix() {
+        let src = concat!(
+            "fn build(cap_iter: u32) -> Vec<u32> {\n",
+            "    let mut v = Vec::new();\n",
+            "    for x in [1u32, 2, 3] {\n",
+            "        v.push(x + cap_iter);\n",
+            "    }\n",
+            "    v\n",
+            "}"
+        );
+        let out = propose_fix("vec-with-capacity", src).expect("matched");
+        assert!(
+            out.contains("let cap_iter2 = [1u32, 2, 3];"),
+            "collision-free temp name missing: {out}"
+        );
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn array_literal_non_adjacent_loop_skipped() {
+        // The loop is NOT the immediately-following statement — the temp
+        // binding would reorder the literal's evaluation across the
+        // intervening statement. Stays skipped.
+        let src = concat!(
+            "fn build(flag: bool) -> Vec<u32> {\n",
+            "    let mut v = Vec::new();\n",
+            "    if flag { println!(\"go\"); }\n",
+            "    for x in [1u32, 2, 3] {\n",
+            "        v.push(x);\n",
+            "    }\n",
+            "    v\n",
+            "}"
+        );
+        assert!(
+            propose_fix("vec-with-capacity", src).is_none(),
+            "non-adjacent loop must stay guarded"
+        );
+    }
+
+    #[test]
+    fn array_literal_reference_iterable_skipped() {
+        // `for x in &[..]` — the temp would bind the ARRAY and rewrite the
+        // iterable to a bare path, changing the iteration mode
+        // (by-value vs by-reference). Stays skipped.
+        let src = concat!(
+            "fn build() -> Vec<u32> {\n",
+            "    let mut v = Vec::new();\n",
+            "    for x in &[1u32, 2, 3] {\n",
+            "        v.push(*x);\n",
+            "    }\n",
+            "    v\n",
+            "}"
+        );
+        assert!(
+            propose_fix("vec-with-capacity", src).is_none(),
+            "reference-literal iterable must stay guarded"
         );
     }
 

@@ -40,11 +40,11 @@
 //! stays silent there — SAFER than clippy's own autofix (the array-literal
 //! guard class, second member).
 
-use super::helpers::is_postfix_safe;
+use super::helpers::{byte_range, is_postfix_safe};
 use super::uninlined_format_args::post_template_expr_args;
 use super::{edit, src, SourceEdit};
 use syn::visit::Visit;
-use syn::{Expr, ExprMethodCall, ExprMacro, File, Macro, Stmt, StmtMacro, Type};
+use syn::{Expr, ExprMethodCall, ExprMacro, File, Local, Macro, Pat, Signature, Stmt, StmtMacro, Type};
 use proc_macro2::TokenStream;
 
 /// Collect the lint's edits against the original source. Empty = no match.
@@ -53,6 +53,7 @@ pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
         source,
         edits: Vec::new(),
         param_kinds: Vec::new(),
+        pinned: std::collections::HashSet::new(),
     };
     v.visit_file(file);
     v.edits
@@ -65,24 +66,55 @@ struct Collector<'a> {
     /// plain-path receivers of the bool-literal terminal forms). Stack of
     /// scopes — the Issue 031 H1 enclosing-fn-stack pattern.
     param_kinds: Vec<std::collections::HashMap<String, ReceiverKind>>,
+    /// Byte ranges of `unwrap_or`/`unwrap_or_else` calls whose array-literal
+    /// default sits in a COERCION-FORCED position (fn return tail with a
+    /// declared `&[T]` return type, or a `let` initializer whose pattern
+    /// annotation is `&[T]`). The P2 extension of the 2bf2a44 guard: in
+    /// these positions the call site fixes `map_or`'s U from syntax we can
+    /// read, so the unsize coercion fires and the rewrite compiles
+    /// (probe-verified 2026-08-28 — see the guard in `try_map_or`).
+    pinned: std::collections::HashSet<(usize, usize)>,
 }
 
 impl<'ast> Visit<'ast> for Collector<'_> {
     fn visit_item_fn(&mut self, f: &'ast syn::ItemFn) {
         self.param_kinds.push(fn_param_kinds(&f.sig));
+        self.note_fn_tail_pin(&f.sig, &f.block);
         syn::visit::visit_item_fn(self, f);
         self.param_kinds.pop();
     }
 
     fn visit_impl_item_fn(&mut self, f: &'ast syn::ImplItemFn) {
         self.param_kinds.push(fn_param_kinds(&f.sig));
+        self.note_fn_tail_pin(&f.sig, &f.block);
         syn::visit::visit_impl_item_fn(self, f);
         self.param_kinds.pop();
     }
 
+    /// Annotated-let initializer pin: `let q: &[T] = chain.unwrap_or(&[..]);`
+    /// The annotation fixes U before the default is checked, so the
+    /// unsize coercion fires (probe A3/A4, 2026-08-28). Direct initializer
+    /// only — a chain nested inside a match/if inside the initializer keeps
+    /// its pin (the annotation forces the whole expression's type by
+    /// unification), but the emitter stays conservative here: direct shape
+    /// only, the nested forms (`collider_pruner` class) stay guarded.
+    fn visit_local(&mut self, l: &'ast Local) {
+        if let (Pat::Type(pt), Some(init)) = (&l.pat, l.init.as_ref()) {
+            if ty_is_slice_ref(&pt.ty) {
+                if let Expr::MethodCall(m) = &*init.expr {
+                    if is_unwrap_or_call(m) {
+                        self.pinned.insert(two(byte_range(&*init.expr)));
+                    }
+                }
+            }
+        }
+        syn::visit::visit_local(self, l);
+    }
+
     fn visit_expr_method_call(&mut self, m: &'ast ExprMethodCall) {
         syn::visit::visit_expr_method_call(self, m);
-        if let Some(replacement) = try_map_or(self.source, m, self.innermost_params()) {
+        let slice_pinned = self.pinned.contains(&two(byte_range(m)));
+        if let Some(replacement) = try_map_or(self.source, m, self.innermost_params(), slice_pinned) {
             self.edits.push(edit(m, replacement));
         }
     }
@@ -107,6 +139,21 @@ impl<'ast> Visit<'ast> for Collector<'_> {
 }
 
 impl Collector<'_> {
+    /// Return-tail pin: a fn whose signature declares `-> &[T]` and whose
+    /// block's DIRECT tail is an `unwrap_or`/`unwrap_or_else` call — the
+    /// return type forces U (the five live return-tail sites:
+    /// `dual_gram_pca_bridge` ×2, `vocab_clusters`, `freeze_thaw`, `fidelity`).
+    fn note_fn_tail_pin(&mut self, sig: &Signature, block: &syn::Block) {
+        if !sig_ret_is_slice_ref(sig) {
+            return;
+        }
+        if let Some(Stmt::Expr(Expr::MethodCall(m), None)) = block.stmts.last() {
+            if is_unwrap_or_call(m) {
+                self.pinned.insert(two(byte_range(m)));
+            }
+        }
+    }
+
     fn scan_macro_args(&mut self, mac: &Macro) {
         let Some(args) = post_template_expr_args(mac) else {
             return;
@@ -144,7 +191,7 @@ fn scan_expr_for_matches(
     impl<'ast> Visit<'ast> for Sub<'ast> {
         fn visit_expr_method_call(&mut self, m: &'ast ExprMethodCall) {
             syn::visit::visit_expr_method_call(self, m);
-            if let Some(replacement) = try_map_or(self.source, m, self.params) {
+            if let Some(replacement) = try_map_or(self.source, m, self.params, false) {
                 self.edits.push(edit(m, replacement));
             }
         }
@@ -184,12 +231,39 @@ fn param_type_kind(ty: &syn::Type) -> Option<ReceiverKind> {
     }
 }
 
+/// `-> &[T]` / `-> &mut [T]` (paren-wrapped accepted). The coercion-forcing
+/// return type for the P2 tail pin.
+fn sig_ret_is_slice_ref(sig: &Signature) -> bool {
+    let syn::ReturnType::Type(_, ty) = &sig.output else {
+        return false;
+    };
+    ty_is_slice_ref(ty)
+}
+
+fn ty_is_slice_ref(ty: &Type) -> bool {
+    match ty {
+        Type::Reference(r) => matches!(&*r.elem, Type::Slice(_)),
+        Type::Paren(p) => ty_is_slice_ref(&p.elem),
+        _ => false,
+    }
+}
+
+fn is_unwrap_or_call(m: &ExprMethodCall) -> bool {
+    matches!(m.method.to_string().as_str(), "unwrap_or" | "unwrap_or_else")
+}
+
+/// `byte_range` as a hashable pair (Range<usize> is not Hash).
+fn two(r: std::ops::Range<usize>) -> (usize, usize) {
+    (r.start, r.end)
+}
+
 /// `x.map(f).unwrap_or(d)` → `x.map_or(d, f)` / `is_some_and(f)`;
 /// `x.map(f).unwrap_or_else(g)` → `x.map_or_else(g, f)`.
 fn try_map_or(
     source: &str,
     m: &ExprMethodCall,
     params: Option<&std::collections::HashMap<String, ReceiverKind>>,
+    slice_pinned: bool,
 ) -> Option<String> {
         let else_form = if m.method == "unwrap_or" {
             false
@@ -224,9 +298,19 @@ fn try_map_or(
         // return E0308s — probe-verified 2026-08-18: `map_or(&[], |m|
         // m.as_slice())` AND `map_or(&[1.0], ...)` both fail in `let`
         // position while both compile context-forced; the original always
-        // compiles. The proposer cannot see call-site context, so skip the
-        // shape entirely (joins the documented we-stay-silent class).
-        if is_array_lit_default(&m.args[0], else_form) {
+        // compiles.
+        //
+        // P2 extension (2026-08-28): the call site CAN be read when the
+        // position itself carries the forcing type — a fn return tail whose
+        // signature declares `&[T]`, or a let initializer whose pattern
+        // annotation is `&[T]` (`slice_pinned`, collected by the pre-pass
+        // on the Collector). In those positions the rewrite compiles
+        // (probe A2/A4) and real clippy `-W clippy::map_unwrap_or` fires on
+        // the original shape (probe A1/A3), so the silence was pure guard
+        // over-conservatism. Everything else stays skipped — including the
+        // plain-let control, where clippy 1.97's own MachineApplicable
+        // suggestion emits the E0308 form (we stay SAFER than clippy).
+        if is_array_lit_default(&m.args[0], else_form) && !slice_pinned {
             return None;
         }
         // Trait-object-cast mappers (the P9 class, probe-verified 2026-08-25
@@ -564,6 +648,100 @@ mod tests {
             "fn f(m: Vec<Vec<f32>>) -> usize { m.get(1).map(|s| s.as_slice()).unwrap_or_else(|| &[]).len() }";
         let out = propose_fix("map_unwrap_or", input);
         assert!(out.is_none(), "`|| &[]` default-closure body must not fire: {out:?}");
+    }
+
+    // P2 extension (2026-08-28): array-literal defaults FIRE when the
+    // position carries the coercion-forcing type — a fn return tail whose
+    // signature declares `&[T]`, or an annotated-let initializer `let q:
+    // &[T] = ...`. Probe evidence 2026-08-28: real clippy 1.97 `-W
+    // clippy::map_unwrap_or` fires on both shapes, the rewritten `map_or`
+    // compiles (A2/A4), and no default-group warning is created. The five
+    // live sites: riir-engine dual_gram_pca_bridge ×2, riir-games-shared
+    // vocab_clusters, katgpt-core freeze_thaw + breakeven/fidelity.
+    #[test]
+    fn return_tail_slice_pinned_fires() {
+        let input = concat!(
+            "pub fn eigenvalues(result: &Option<Vec<f32>>) -> &[f32] {\n",
+            "    result\n",
+            "        .as_ref()\n",
+            "        .map(|r| r.as_slice())\n",
+            "        .unwrap_or(&[])\n",
+            "}\n"
+        );
+        let out = propose_fix("map_unwrap_or", input).expect("pinned tail must fire");
+        assert!(
+            out.contains(".as_ref().map_or(&[], |r| r.as_slice())"),
+            "pinned return-tail rewrite not produced: {out}"
+        );
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn annotated_let_slice_pinned_fires() {
+        let input =
+            "fn f(m: std::collections::HashMap<usize, Vec<f32>>, k: usize) -> usize { let q: &[f32] = m.get(&k).map(|v| v.as_slice()).unwrap_or(&[]); q.len() }";
+        let out = propose_fix("map_unwrap_or", input).expect("pinned let must fire");
+        assert!(
+            out.contains("let q: &[f32] = m.get(&k).map_or(&[], |v| v.as_slice());"),
+            "pinned annotated-let rewrite not produced: {out}"
+        );
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn pinned_tail_requires_direct_tail() {
+        // A `-> &[f32]` fn whose tail is `Some(chain.unwrap_or(&[]))` —
+        // the pin is the DIRECT tail only; the Some(...) wrapper keeps the
+        // position unforced (conservative).
+        let input = concat!(
+            "fn f<'a>(m: &'a Option<Vec<f32>>) -> Option<&'a [f32]> {\n",
+            "    Some(m.as_ref().map(|r| r.as_slice()).unwrap_or(&[]))\n",
+            "}"
+        );
+        let out = propose_fix("map_unwrap_or", input);
+        assert!(
+            out.is_none(),
+            "Some-wrapped tail must stay guarded: {out:?}"
+        );
+    }
+
+    #[test]
+    fn nested_in_annotated_let_still_skipped() {
+        // The katgpt-band collider_pruner shape: the unwrap_or map chain
+        // sits inside a match arm inside the annotated-let initializer —
+        // NOT the direct init. Conservative: stays guarded (the pin is
+        // direct-shape only).
+        let input = concat!(
+            "fn f<'a>(rows: &'a [Vec<f32>], idx: Option<usize>, z: &mut [&'a [f32]; 2]) {\n",
+            "    let cols: &[&[f32]] = if idx.is_some() {\n",
+            "        match idx { Some(i) => rows.get(i).map(|r| r.as_slice()).unwrap_or(&[]), None => &[] }\n",
+            "    } else { &[] };\n",
+            "    z[0] = cols;\n",
+            "}"
+        );
+        let out = propose_fix("map_unwrap_or", input);
+        assert!(
+            out.is_none(),
+            "match-arm-nested chain must stay guarded: {out:?}"
+        );
+    }
+
+    #[test]
+    fn pinned_tail_inside_fn_body_stmt_still_skipped() {
+        // A `-> &[f32]` fn whose unwrap_or chain sits in a NON-tail
+        // statement (semicolon-terminated) is not forced by the return type
+        // (the coercion target there is the let's inference variable).
+        let input = concat!(
+            "fn f(m: Vec<Vec<f32>>) -> &[f32] {\n",
+            "    let q = m.first().map(|s| s.as_slice()).unwrap_or(&[]);\n",
+            "    q\n",
+            "}"
+        );
+        let out = propose_fix("map_unwrap_or", input);
+        assert!(
+            out.is_none(),
+            "plain-let inside a slice-returning fn must stay guarded: {out:?}"
+        );
     }
 
     // Trait-object-cast mapper guard (the P9 class, 2026-08-25): the mapper's
