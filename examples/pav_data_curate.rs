@@ -180,6 +180,8 @@ fn finish(
     started: std::time::Instant,
 ) {
     let manifest = PavManifest {
+        schema_version: riir_clippy::pav_data::pav_schema_version(),
+        bok_k: riir_clippy::pav_data::BOK_K,
         generator: generator_name.to_string(),
         judge: "vocabulary".to_string(),
         n_cov: cfg.n_cov,

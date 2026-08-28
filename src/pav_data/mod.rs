@@ -74,15 +74,115 @@ pub fn first_pit(q_seq: &[f32], eps: f32) -> Option<usize> {
     q_seq.iter().position(|&q| q < eps)
 }
 
-/// `BoK` transform (plan 356 A2's closed form, `K=4`): the probability that
-/// at least one of K independent continuations from a prefix with
-/// per-rollout success Q succeeds. Emitted alongside Q̂ so the training
-/// side can pick its label column without re-deriving it.
+/// The plan's `BoK` draw count (`K=4` — “Bo4” in Plan 356's shorthand).
 ///
-/// Note: `BoK` with `K=4` — “Bo4” in the plan's shorthand.
+/// A4 beams over K=4 daemon samples, so the label must be the value of the
+/// SAME K the server will use.
+pub const BOK_K: u32 = 4;
+
+/// `BoK` closed form **in terms of the true per-rollout success probability
+/// Q**: the chance at least one of `k` independent continuations succeeds.
+///
+/// This is the *definition*, not an estimator. Feeding a measured Q̂ into it
+/// gives the plug-in estimator, which is biased — see [`bok_unbiased`],
+/// which is what the dataset labels actually use.
+#[must_use]
+pub fn bok(q: f32, k: u32) -> f32 {
+    1.0 - (1.0 - q).powi(k_as_i32(k))
+}
+
+/// The plug-in estimator at the plan's `K=4`: `1 - (1 - q)^4`.
+///
+/// Retained as a **diagnostic** column (`q_bo4_plugin`) so the bias against
+/// [`bok_unbiased`] stays visible in the data rather than being an
+/// invisible modelling choice. Do not train on it.
 #[must_use]
 pub fn bok4(q: f32) -> f32 {
-    1.0 - (1.0 - q).powi(4)
+    bok(q, BOK_K)
+}
+
+/// Unbiased `BoK` from the RAW Bernoulli counts — the pass@k U-statistic.
+///
+/// # Why the plan's closed form is not the label
+///
+/// Plan 356 A2 writes the relabel as `Q^{Bo4} = 1 - (1 - Q̂)^4`. That is the
+/// right *definition* but the wrong *estimator*: `f(q) = 1 - (1 - q)^k` is
+/// strictly concave for `k >= 2` (`f'' = -k(k-1)(1-q)^{k-2} < 0`), so by
+/// Jensen `E[f(Q̂)] < f(E[Q̂]) = f(Q)`. Plugging a noisy Q̂ into it
+/// **systematically under-estimates** the true Bo-K value, and the error is
+/// largest at small `n` — which is exactly this plan's low-budget regime
+/// (`n_mc` 3–8, `n_cov > n_mc`) and exactly the low-Q region where PAV's
+/// advantage signal lives. Measured in
+/// `.benchmarks/054_pav_bok_unbiased_labels.md`.
+///
+/// # The estimator
+///
+/// With `s` successes out of `n` iid samples, the probability that a
+/// uniformly random `k`-subset of those `n` contains no success is
+/// `C(n - s, k) / C(n, k)`. A uniform `k`-subset of `n` iid Bernoulli(Q)
+/// draws is itself `k` iid Bernoulli(Q) draws, so that expectation is
+/// exactly `(1 - Q)^k` — making
+///
+/// ```text
+/// 1 - C(n - s, k) / C(n, k)  =  1 - prod_{i=0}^{k-1} (n - s - i) / (n - i)
+/// ```
+///
+/// an **exactly unbiased** estimator of `1 - (1 - Q)^k`. (This is the
+/// standard `pass@k` estimator; the product form is used so no factorial is
+/// ever materialised.)
+///
+/// # Contract
+///
+/// - `n < k` — the U-statistic does not exist (you cannot draw `k` from
+///   fewer than `k`); falls back to the plug-in on `s/n` and is therefore
+///   biased. Callers wanting unbiased labels must sample `n >= k`.
+/// - `n == 0` — no evidence; returns `0.0`. The clean-root anchor is a
+///   *definitional* `q = 1` row, not an estimate, and is constructed with
+///   [`bok`] directly rather than routed through here.
+/// - `k == 0` — `Bo0` is vacuously `0.0`.
+/// - `k == 1` — returns exactly `s / n = Q̂` (drawing one sample cannot beat
+///   itself), which is pinned as an identity test.
+#[must_use]
+pub fn bok_unbiased(n_success: u32, n_samples: u32, k: u32) -> f32 {
+    if k == 0 || n_samples == 0 {
+        return 0.0;
+    }
+    let (succ, total) = (f64::from(n_success), f64::from(n_samples));
+    // `fail` = P(a uniform k-subset of the n samples is failure-only).
+    let fail = if n_samples < k {
+        // Cannot form the U-statistic — plug-in fallback, biased low.
+        (1.0 - succ / total).powi(k_as_i32(k))
+    } else if n_samples - n_success < k {
+        // Fewer than k failures exist, so every k-subset holds a success.
+        0.0
+    } else {
+        // prod_{i=0}^{k-1} (n - s - i) / (n - i); s == 0 gives exactly 1.
+        let mut acc = 1.0_f64;
+        for drawn in 0..k {
+            let drawn = f64::from(drawn);
+            acc *= (total - succ - drawn) / (total - drawn);
+        }
+        acc
+    };
+    narrow_prob(1.0 - fail)
+}
+
+/// `k` as the exponent `powi` wants. Saturating rather than panicking: a `k`
+/// past `i32::MAX` is nonsense input, and `(1-q)^huge` is 0 either way.
+fn k_as_i32(k: u32) -> i32 {
+    i32::try_from(k).unwrap_or(i32::MAX)
+}
+
+/// The module's ONE `f64` → `f32` narrowing, isolated so the lossy cast is a
+/// single reviewed site instead of being scattered across the estimators.
+/// Probabilities are computed in `f64` and stored in the `f32` dataset
+/// column; the clamp also absorbs any float drift past the unit interval.
+#[allow(
+    clippy::cast_possible_truncation,
+    reason = "deliberate f64->f32 narrowing at the dataset-column boundary"
+)]
+fn narrow_prob(p: f64) -> f32 {
+    p.clamp(0.0, 1.0) as f32
 }
 
 /// Campaign knobs. Defaults are the plan's low-budget regime.
@@ -148,8 +248,13 @@ pub struct PavPair {
     pub n_success: u32,
     /// Samples backing the estimate (>= `n_mc` for emitted pairs).
     pub n_mc: u32,
-    /// `1 - (1 - q_hat)^4` (A2's closed form).
+    /// **The training label.** Unbiased Bo-`BOK_K` from `(n_success, n_mc)`
+    /// via [`bok_unbiased`] — NOT the plug-in of `q_hat`.
     pub q_bo4: f32,
+    /// Diagnostic only: the plug-in `1 - (1 - q_hat)^4` the plan sketched.
+    /// Kept beside the label so the Jensen bias is auditable in the dataset
+    /// instead of being an invisible modelling choice. Do not train on it.
+    pub q_bo4_plugin: f32,
     /// First-pit curation verdict (false = dropped as a hopeless tail).
     pub kept: bool,
     /// Earliest pit depth among failed paths through this state.
@@ -254,7 +359,12 @@ pub fn curate(
                 q_hat: 1.0,
                 n_success: 0,
                 n_mc: 0,
-                q_bo4: bok4(1.0),
+                // Definitional anchor (already clean, zero rollouts spent),
+                // not an estimate — so the closed form is correct here and
+                // `bok_unbiased` (which would read n = 0 as "no evidence")
+                // is deliberately not used.
+                q_bo4: bok(1.0, BOK_K),
+                q_bo4_plugin: bok4(1.0),
                 kept: true,
                 pit_depth: None,
                 proxy_clean: true,
@@ -382,6 +492,9 @@ fn emit_span_pairs(
             stats.pairs_dropped_pit += 1;
         }
         stats.pairs += 1;
+        let n_success_u32 =
+            u32::try_from(node.samples.iter().filter(|b| **b).count()).unwrap_or(u32::MAX);
+        let n_mc_u32 = u32::try_from(node.samples.len()).unwrap_or(u32::MAX);
         pairs.push(PavPair {
             span_id: span.id.clone(),
             source: span.source.name().to_string(),
@@ -389,10 +502,10 @@ fn emit_span_pairs(
             depth: node.depth,
             state: node.state.clone(),
             q_hat: q,
-            n_success: u32::try_from(node.samples.iter().filter(|b| **b).count())
-                .unwrap_or(u32::MAX),
-            n_mc: u32::try_from(node.samples.len()).unwrap_or(u32::MAX),
-            q_bo4: bok4(q),
+            n_success: n_success_u32,
+            n_mc: n_mc_u32,
+            q_bo4: bok_unbiased(n_success_u32, n_mc_u32, BOK_K),
+            q_bo4_plugin: bok4(q),
             kept,
             pit_depth,
             proxy_clean: mark.proxy_clean,
@@ -436,6 +549,15 @@ pub fn ground_truth(pairs: &mut [PavPair]) -> Result<usize, String> {
 /// Manifest sidecar: config + stats snapshot (written next to the JSONL).
 #[derive(Debug, Serialize)]
 pub struct PavManifest {
+    /// Dataset schema version. **2** = `q_bo4` carries the unbiased
+    /// U-statistic and `q_bo4_plugin` is the diagnostic; **1** (never
+    /// released with real data) had `q_bo4` as the plug-in. A consumer that
+    /// reads v1 rows as v2 labels would train on systematically low targets.
+    #[serde(default = "pav_schema_version")]
+    pub schema_version: u32,
+    /// The K the label is for — must match the serve-time beam width (A4).
+    #[serde(default = "pav_bok_k")]
+    pub bok_k: u32,
     pub generator: String,
     pub judge: String,
     pub n_cov: usize,
@@ -444,6 +566,18 @@ pub struct PavManifest {
     pub eps_pit: f32,
     pub seed: u64,
     pub stats: PavStats,
+}
+
+/// Current dataset schema version (see [`PavManifest::schema_version`]).
+#[must_use]
+pub fn pav_schema_version() -> u32 {
+    2
+}
+
+/// Default K for [`PavManifest::bok_k`].
+#[must_use]
+pub fn pav_bok_k() -> u32 {
+    BOK_K
 }
 
 /// Write the dataset as JSONL + a `.manifest.json` sidecar.
@@ -504,6 +638,125 @@ mod tests {
         assert!((bok4(0.5) - 0.9375).abs() < 1e-9, "1 - 0.0625");
     }
 
+    /// Deterministic splitmix64 → uniform [0, 1). Local so the gate has no
+    /// RNG dependency and reproduces bit-identically on every box.
+    fn u01(state: &mut u64) -> f64 {
+        *state = state.wrapping_add(0x9E37_79B9_7F4A_7C15);
+        let mut z = *state;
+        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        z ^= z >> 31;
+        // Top 32 bits → [0, 1); `z >> 32` always fits u32, so no lossy cast.
+        f64::from(u32::try_from(z >> 32).unwrap_or(u32::MAX)) / 4_294_967_296.0
+    }
+
+    /// Draw `s ~ Binomial(n, q)` by counting explicit Bernoulli trials — the
+    /// same way a real rollout produces the column.
+    fn draw_successes(n: u32, q: f64, state: &mut u64) -> u32 {
+        u32::try_from((0..n).filter(|_| u01(state) < q).count()).unwrap_or(u32::MAX)
+    }
+
+    #[test]
+    fn bok_unbiased_edge_cases_and_k1_identity() {
+        // No evidence / vacuous K.
+        assert!((bok_unbiased(0, 0, 4)).abs() < 1e-9);
+        assert!((bok_unbiased(3, 8, 0)).abs() < 1e-9);
+        // Zero successes ⇒ every k-subset is failure-only ⇒ exactly 0.
+        assert!((bok_unbiased(0, 8, 4)).abs() < 1e-9);
+        // Fewer than k failures ⇒ every k-subset holds a success ⇒ exactly 1.
+        assert!((bok_unbiased(6, 8, 4) - 1.0).abs() < 1e-9, "2 failures < k=4");
+        assert!((bok_unbiased(8, 8, 4) - 1.0).abs() < 1e-9);
+        // k == 1 is exactly q_hat — one draw cannot beat itself.
+        for (sc, n) in [(1_u32, 4_u32), (3, 8), (5, 16), (0, 5)] {
+            let want = f64::from(sc) / f64::from(n);
+            assert!(
+                (f64::from(bok_unbiased(sc, n, 1)) - want).abs() < 1e-6,
+                "k=1 must equal q_hat for {sc}/{n}"
+            );
+        }
+        // n == k reduces to the indicator "at least one success".
+        assert!((bok_unbiased(1, 4, 4) - 1.0).abs() < 1e-9);
+        assert!((bok_unbiased(0, 4, 4)).abs() < 1e-9);
+        // Monotone non-decreasing in successes at fixed n.
+        let mut prev = -1.0_f32;
+        for sc in 0..=12_u32 {
+            let v = bok_unbiased(sc, 12, 4);
+            assert!(v >= prev - 1e-9, "must not decrease at s={sc}");
+            prev = v;
+        }
+        // n < k falls back to the (biased) plug-in, per the documented contract.
+        assert!((bok_unbiased(1, 2, 4) - bok(0.5, 4)).abs() < 1e-6);
+    }
+
+    /// **The A2 gate.** The label column must be an unbiased estimator of the
+    /// true Bo-K value, and the plug-in the plan sketched must be shown to be
+    /// biased LOW — otherwise there is no reason to carry two columns.
+    ///
+    /// Seeded, so a failure is a real regression rather than an unlucky draw.
+    /// Bias sign is asserted per-cell; magnitude is asserted only in
+    /// aggregate, since a single cell can be within MC noise of zero.
+    #[test]
+    fn bok_unbiased_is_unbiased_where_the_plugin_is_not() {
+        const TRIALS: u32 = 40_000;
+        // 3σ for a [0,1]-bounded estimator at 40k trials ≈ 3 * 0.5/√40000.
+        const TOL: f64 = 0.015;
+        let mut worst_unbiased = 0.0_f64;
+        let mut worst_plugin = 0.0_f64;
+        let mut rows = Vec::new();
+
+        for n in [4_u32, 5, 8, 16] {
+            for (qi, q) in [0.05_f64, 0.1, 0.2, 0.3, 0.5, 0.7].into_iter().enumerate() {
+                let truth = 1.0 - (1.0 - q).powi(k_as_i32(BOK_K));
+                let mut state =
+                    0xA2_5EED_u64 ^ (u64::from(n) << 32) ^ (qi as u64).wrapping_mul(0x9E37);
+                let (mut sum_u, mut sum_p) = (0.0_f64, 0.0_f64);
+                for _ in 0..TRIALS {
+                    let sc = draw_successes(n, q, &mut state);
+                    sum_u += f64::from(bok_unbiased(sc, n, BOK_K));
+                    let q_hat = f64::from(sc) / f64::from(n);
+                    sum_p += 1.0 - (1.0 - q_hat).powi(k_as_i32(BOK_K));
+                }
+                let (mean_u, mean_p) = (sum_u / f64::from(TRIALS), sum_p / f64::from(TRIALS));
+                let (bias_u, bias_p) = (mean_u - truth, mean_p - truth);
+
+                assert!(
+                    bias_u.abs() < TOL,
+                    "unbiased estimator drifted: n={n} q={q} truth={truth:.4} \
+                     mean={mean_u:.4} bias={bias_u:+.4}"
+                );
+                // Jensen: a strictly concave transform of a noisy estimate
+                // can only sit below the truth (equality only at q∈{0,1}).
+                assert!(
+                    bias_p < TOL,
+                    "plug-in must never read HIGH: n={n} q={q} bias={bias_p:+.4}"
+                );
+                worst_unbiased = worst_unbiased.max(bias_u.abs());
+                worst_plugin = worst_plugin.max(bias_p.abs());
+                rows.push((n, q, truth, mean_u, bias_u, mean_p, bias_p));
+            }
+        }
+
+        // The whole reason A2 diverges from the plan's sketch: at the plan's
+        // own low-budget n the plug-in is off by a lot more than MC noise.
+        assert!(
+            worst_plugin > 10.0 * worst_unbiased,
+            "plug-in bias {worst_plugin:.4} should dwarf unbiased {worst_unbiased:.4}"
+        );
+        assert!(worst_plugin > 0.10, "expected a >10pp worst-case plug-in bias");
+
+        // Bench 054's table (printed under --nocapture; the asserts above are
+        // the standing gate, this is the record).
+        println!("\n=== Bench 054 — BoK label bias, K={BOK_K}, {TRIALS} trials/cell ===");
+        println!(
+            "{:>3} {:>5} {:>8} {:>9} {:>9} {:>9} {:>9}",
+            "n", "q", "truth", "unbiased", "bias", "plug-in", "bias"
+        );
+        for (n, q, truth, mu, bu, mp, bp) in rows {
+            println!("{n:>3} {q:>5.2} {truth:>8.4} {mu:>9.4} {bu:>+9.4} {mp:>9.4} {bp:>+9.4}");
+        }
+        println!("worst |bias|: unbiased {worst_unbiased:.4} | plug-in {worst_plugin:.4}");
+    }
+
     fn span(code: &str, id: &str) -> PavSpan {
         PavSpan {
             id: id.to_string(),
@@ -541,10 +794,21 @@ mod tests {
         // samples and the Bo4 column.
         assert!(ds.pairs.iter().any(|p| p.depth == 0));
         assert!(ds.pairs.iter().any(|p| p.state.contains("CLEAN")));
+        // The DIAGNOSTIC column is still the plug-in of q_hat...
         assert!(ds
             .pairs
             .iter()
-            .all(|p| (p.q_bo4 - bok4(p.q_hat)).abs() < 1e-6));
+            .all(|p| (p.q_bo4_plugin - bok4(p.q_hat)).abs() < 1e-6));
+        // ...while the LABEL column is the unbiased U-statistic over the
+        // raw counts (the clean-root anchor is definitional, n_mc == 0).
+        assert!(ds.pairs.iter().all(|p| {
+            let want = if p.n_mc == 0 {
+                bok(p.q_hat, BOK_K)
+            } else {
+                bok_unbiased(p.n_success, p.n_mc, BOK_K)
+            };
+            (p.q_bo4 - want).abs() < 1e-6
+        }));
         // Root got a sample from every coverage rollout (all paths start
         // there) — no top-up needed for it.
         let root = ds.pairs.iter().find(|p| p.depth == 0).unwrap();
@@ -642,6 +906,8 @@ mod tests {
         };
         let ds = curate(&spans, &mut mixed_gen(), &MarkerJudge, &cfg);
         let manifest = PavManifest {
+            schema_version: pav_schema_version(),
+            bok_k: BOK_K,
             generator: "mixed".into(),
             judge: "marker".into(),
             n_cov: cfg.n_cov,
