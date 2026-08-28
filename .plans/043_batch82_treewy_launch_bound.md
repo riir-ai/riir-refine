@@ -32,8 +32,9 @@ Research 096 (`.research/096_treewy_launch_bound_distill.md`): arXiv:2608.20961
 - [x] T6 Docs: Research 096 §6 batch record (measured numbers), AGENTS.md
       Batch 82 record + corpus counts, `.docs/11_domains/kernel_opt.md`,
       `.distill/001_mining_queue_snapshot.md` queue entry
-- [ ] T7 Commit + push (re-scan snapshot folder at write time; sibling is
+- [x] T7 Commit + push (re-scan snapshot folder at write time; sibling is
       active on dashboard/Issue-050 territory — disjoint files)
+      LANDED: 65ec73f (9 files, +227/−31, fast-forward push)
 
 ## Non-goals
 
