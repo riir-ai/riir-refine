@@ -11,6 +11,16 @@ const DASHBOARD_URL = "https://riir-ops-dashboard.foxfox.workers.dev/";
 // (~14 s of trivial traffic) exhaust the 100k/day KV read tier, which then
 // breaks the dashboard AND makes the alert-dedupe `get` throw — degrading
 // budget alerting exactly when it matters. Cap the window and the fan-out.
+// n=168 means 168 KV gets, and Workers counts EVERY KV binding call as a
+// subrequest against a per-request limit of 50 (free) or 1,000 (paid) — so
+// whether this cap is even reachable depends on the plan, and getting it wrong
+// means /hours?n=168 dies mid-fan-out. Settled by evidence rather than by the
+// pricing comments in wrangler.toml (which mix free and paid tiers):
+// containers are a Workers PAID feature, `containersUsageAdaptiveGroups`
+// returns rows for this account, and Issue 045 T1 priced the $5 plan gate. So
+// the account is Paid, the limit is 1,000, and 168 fits with room. Revisit
+// this constant if the plan ever changes — it is the one number here that a
+// downgrade would silently break.
 const MAX_HOURS = 168;   // 7 d of hourly rows
 const MAX_DAYS = 90;     // a quarter of daily rows
 const KV_CONCURRENCY = 16;
@@ -1014,7 +1024,7 @@ async function handleFetch(request, env, ctx) {
       // presented the same secret.
       const memoKey = `${tag}:${url.pathname}:${n}`;
       const hit = memoGet(memoKey);
-      if (hit) return cors(Response.json(hit), request, env, 300, true);
+      if (hit) return cors(Response.json(hit), request, env, 0, true);
       const now = new Date();
       // Hours walk back from the last COMPLETE hour: rows are written for
       // hourStart, so including the current partial hour guaranteed one miss
@@ -1033,7 +1043,7 @@ async function handleFetch(request, env, ctx) {
       // Day rows are already a bare {date, est_usd, hours} aggregate — the
       // same scalar /latest publishes. Hour rows carry the per-app breakdown.
       memoPut(memoKey, rows);
-      return cors(Response.json(rows), request, env, 300, true);
+      return cors(Response.json(rows), request, env, 0, true);
     }
 
     return cors(new Response(
