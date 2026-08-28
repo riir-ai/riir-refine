@@ -1,7 +1,7 @@
 # Issue 044 — ops dashboard: one URL tracking LLM spend + healer adoption + coverage
 
 **Filed:** 2026-08-26
-**Status:** OPEN — T1+T8+T11 SHIPPED; T2/T3/T6/T9/T10 SHIPPED 2026-08-27 (live-deployed, see §2026-08-27 session); T4 mechanism SHIPPED (paging inert until owner secrets); T7 workflow SHIPPED (inert until repo var + secrets); T5 blocked on Proposal 005 Phase 1 — all remaining work is owner-gated activation
+**Status:** OPEN — T1+T8+T11 SHIPPED; T2/T3/T6/T9/T10 SHIPPED 2026-08-27 (live-deployed, see §2026-08-27 session); T4 mechanism SHIPPED (paging inert until owner secrets); T7 workflow SHIPPED (inert until repo var + secrets); T5 blocker REWORDED 2026-08-28 — Proposal 005 Phase 1 landed 2026-08-27 (T1.5 dapps `84dd049` / T1.6 clippy `0a7cfd8`), so ledger-row KAT denomination awaits the deferred Worker/DO HTTP ledger shell (phase-2 defer / Plan 031 Phase B gate / phase-3 owner gate); ledger rows carry NO `kat` field at all today (grep-verified) — all remaining work is owner-gated activation
 **Repo:** riir-clippy
 **URL:** https://riir-ops-dashboard.foxfox.workers.dev/
 
@@ -84,10 +84,15 @@ Leftovers found + removed (owner ask: "any active on cloudflare leftover?"):
       without the webhook, crossings still land in KV + `/status`
       `alerts_today`. Today's 103.3% event would have paged at all three
       levels once live.
-- [-] **T5 KAT rail** — PARTIAL 2026-08-26 (Issue 045): the housekeeping
-      Worker records the daily mint anchor (`neurons_today`, the mint
-      function's input per Proposal 005 §Economics); ledger rows still
-      carry `kat: null` until the Phase 1 rail denominates them.
+- [-] **T5 KAT rail** — PARTIAL 2026-08-26 (Issue 045); blocker REWORDED
+      2026-08-28: the housekeeping Worker records the daily mint anchor
+      (`neurons_today`, the mint function's input per Proposal 005
+      §Economics — a policy, not a formula). Proposal 005 Phase 1 landed
+      2026-08-27 (T1.5/T1.6), so the blocker is now the deferred
+      Worker/DO HTTP ledger shell (phase-2 defer / Plan 031 Phase B gate
+      / phase-3 owner gate); ledger rows carry NO `kat` field at all
+      today (grep-verified) — the field appears when that shell
+      denominates them.
 - [x] **T6 training/GPU axis** — SHIPPED 2026-08-27: collector
       (`collect_training()`) + card live (recent-runs table + tok/s curve;
       placeholder until rows); the convention landed in riir-train
@@ -151,4 +156,11 @@ Leftovers found + removed (owner ask: "any active on cloudflare leftover?"):
   from ledger client rows).
 - Regenerate + redeploy:
   `python3 scripts/gen_dashboard.py && (cd cloudflare/dashboard && npx wrangler deploy)`
+- **2026-08-28:** housekeeping worker mint status strings refreshed to
+  `pending-worker-shell` (+ `mint_note`/`note`) and redeployed (version
+  `f93ae507-4612-4037-8ad4-e6ce75d345e6`); live-verified on the
+  04:00:06 UTC tick (`/status` + `/latest` return the new strings).
+  Live health at check time: `token_set: false` (heartbeat mode — the
+  `CF_API_TOKEN` owner secret is still unset), `cap: 10000`,
+  `has_webhook: false`, `has_monthly_budget: false`, `alerts_today: 0`.
 - Numbering: allocated 044 (highwater 43 → 44).

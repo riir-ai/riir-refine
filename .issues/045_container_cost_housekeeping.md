@@ -1,7 +1,7 @@
 # Issue 045 — container cost observability + hourly housekeeping worker + smallest-sizing verdict
 
 **Filed:** 2026-08-26
-**Status:** OPEN — T1 verdict recorded, T2+T3 SHIPPED same day; live-mint half gated on Proposal 005 Phase 1. Sizing verdict feeds Proposal 005 T2.0/T2.1 **+ T2.6 / [Plan 031](../.plans/031_kat_sweeper_temp_container_r2_tier.md)** (2026-08-26 later-session sync). **2026-08-27: the T3 Worker was EXTENDED + redeployed (`ab79bd20`) — CORS on all read endpoints (dashboard live-fetch), Issue-044-T4 budget alerting (cap thresholds 50/90/100% + optional monthly budget, KV-dedupe, webhook via `ALERT_WEBHOOK_URL`), extended `/status` (`cap`/`thresholds`/`has_webhook`/`has_monthly_budget`/`alerts_today`).**
+**Status:** OPEN — T1 verdict recorded, T2+T3 SHIPPED same day; live-mint half gated on Proposal 005 Phase 1. Sizing verdict feeds Proposal 005 T2.0/T2.1 **+ T2.6 / [Plan 031](../.plans/031_kat_sweeper_temp_container_r2_tier.md)** (2026-08-26 later-session sync). **2026-08-27: the T3 Worker was EXTENDED + redeployed (`ab79bd20`) — CORS on all read endpoints (dashboard live-fetch), Issue-044-T4 budget alerting (cap thresholds 50/90/100% + optional monthly budget, KV-dedupe, webhook via `ALERT_WEBHOOK_URL`), extended `/status` (`cap`/`thresholds`/`has_webhook`/`has_monthly_budget`/`alerts_today`).** **2026-08-28 truth-refresh: Proposal 005 Phase 1 LANDED 2026-08-27 (T1.5 dapps `84dd049` / T1.6 clippy `0a7cfd8`) — T6's blocker is NO LONGER Phase 1; the live-mint swap-in awaits the deferred Worker/DO HTTP ledger shell (Proposal 005 phase-2 defer / Plan 031 Phase B gate / phase-3 owner gate). Worker mint status strings refreshed `pending-phase-1` → `pending-worker-shell` + redeployed (version `f93ae507`, live-verified on the 04:00 UTC tick). T4 unchanged (owner-gated secrets). T5 still blocked — CLI exposes no id→name mapping (see checkbox).**
 **Repo:** riir-clippy (dashboard + worker deploy live here; sizing verdict feeds Proposal 005 T2.0/T2.1)
 **Owner ask (2026-08-26):**
 1. can the container be smaller? smallest?
@@ -152,11 +152,23 @@ lives (T1 above).
       + optional `MONTHLY_BUDGET_USD` join the same one-time step — the
       alerting mechanism is deployed + inert until then; without the
       webhook, crossings still land in KV + `/status alerts_today`)*
-- [ ] T5 name the 3 live container-family apps (correlate app ids via
-      dashboard-side mapping or CF dashboard) — cosmetic, blocked on a
-      name-bearing API surface
-- [ ] T6 Phase 1 lands → swap `recordMintAnchor` for the real mint call
-      (ledger DO / `chain_prog_kat`) — tracked by Proposal 005 T1.1–T1.4
+- [ ] T5 name the 3 live container-family apps (a03038cf…, a034b17e…,
+      a035c2cc… — app ids, not names) — cosmetic, blocked on a
+      name-bearing API surface. **2026-08-28 re-probe (read-only, from
+      `cloudflare/housekeeping`, OAuth'd): `npx wrangler containers list`
+      → `No containers found.`; `npx wrangler containers info a03038cf`
+      → `[ERROR] Response body when an Application is not found` (exit 1)
+      — the CLI neither lists the 3 GraphQL app ids nor maps id→name;
+      needs dashboard-side correlation or a CF-dashboard lookup.**
+- [ ] T6 live-mint swap-in — Proposal 005 Phase 1 (the sync surface)
+      landed 2026-08-27 (T1.5 dapps `84dd049` / T1.6 clippy `0a7cfd8`),
+      so the blocker is NO LONGER Phase 1: the swap awaits the deferred
+      Worker/DO HTTP ledger shell (Proposal 005 phase-2 defer / Plan 031
+      Phase B gate / phase-3 owner gate). Then swap `recordMintAnchor`
+      (this object is already the designed mint payload) for the real
+      mint call (`ledger DO` / `chain_prog_kat`). Worker status strings
+      refreshed to `pending-worker-shell` 2026-08-28 + deployed
+      (`f93ae507`).
 
 ## Notes
 
@@ -170,6 +182,18 @@ lives (T1 above).
   byte-seconds consistent with known instance footprints (lite/basic/
   standard-1 within ~2%). Cost figures are labeled *est* on the dashboard.
 - Numbering: 045 (highwater 44 → 45).
+- **2026-08-28 housekeeping status-truth refresh (this session):** worker
+  mint status strings `pending-phase-1` → `pending-worker-shell` +
+  `mint_note`/`note` fields added (phase-1 sync surface landed
+  2026-08-27; live-mint blocker = the deferred Worker/DO ledger shell);
+  README mint bullet updated the same way. Deployed live (wrangler
+  OAuth, version `f93ae507-4612-4037-8ad4-e6ce75d345e6`) and verified on
+  the 04:00:06 UTC tick via `/status` + `/latest` (still heartbeat mode:
+  `token_set: false`, `has_webhook: false`, `alerts_today: 0` — owner
+  secrets still unset, unchanged). T5 re-probed same day (see checkbox:
+  CLI names nothing, ids unaddressable). No KV key or field-name changes;
+  `kat` stays `null` (§Economics is a policy, not a formula — no KAT
+  math in the worker).
 - **2026-08-26 later-session sync:** (a) the T1 sizing verdict now also covers
   the **own-repo sweeper container** (Proposal 005 §The own-repo hourly
   sweeper lane / T2.6 — same `basic` floor / size-UP rule); (b) [Plan 031](../.plans/031_kat_sweeper_temp_container_r2_tier.md)

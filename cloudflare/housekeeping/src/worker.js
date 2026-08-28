@@ -140,7 +140,8 @@ async function runHousekeeping(env) {
     // one-time owner step (wrangler secret put CF_API_TOKEN).
     row.ok = false;
     row.notes.push("CF_API_TOKEN secret not set — heartbeat only");
-    row.mint = "pending-phase-1";
+    row.mint = "pending-worker-shell";
+    row.mint_note = "phase-1 sync surface landed 2026-08-27; live mint awaits the deferred Worker/DO ledger shell (proposal-005 phase-2 defer / phase-3 owner gate)";
     await env.HOUSEKEEPING_KV.put(`hour:${hourKey(now)}`, JSON.stringify(row));
     await env.HOUSEKEEPING_KV.put("latest", JSON.stringify(row));
     return row;
@@ -164,17 +165,21 @@ async function runHousekeeping(env) {
     row.ai = { neurons_today: neurons };
 
     // KAT mint anchor (Issue 045 T3): the daily trainer window's committed
-    // ledger rows are the mint function's input (Proposal 005 §Economics).
-    // The LIVE mint is Phase 1 (chain_prog_kat + ledger DO) — until then we
-    // record the anchor only. Swap-in point: this object becomes the mint
-    // call's payload.
+    // ledger rows are the mint function's input. Proposal 005 §Economics is
+    // a POLICY ("emission tracks credited work"), not a formula — no KAT
+    // amount math lives in this worker. Phase 1 (the sync surface) landed
+    // 2026-08-27 (T1.5/T1.6); the LIVE mint awaits the deferred Worker/DO
+    // HTTP ledger shell (proposal-005 phase-2 defer / Plan 031 Phase B gate
+    // / phase-3 owner gate) — until then we record the anchor only.
+    // Swap-in point: this object becomes the mint call's payload.
     row.mint_anchor = {
       date: dateISO,
       neurons_today: neurons,
       kat: null,
-      status: "pending-phase-1",
+      status: "pending-worker-shell",
+      note: "phase-1 sync surface landed 2026-08-27; live mint awaits the deferred Worker/DO ledger shell (proposal-005 phase-2 defer / phase-3 owner gate)",
     };
-    row.mint = "pending-phase-1";
+    row.mint = "pending-worker-shell";
 
     // ---- budget alerting (Issue 044 T4) ----------------------------------
     // Runs only in the token-present path: neurons are only known there.
