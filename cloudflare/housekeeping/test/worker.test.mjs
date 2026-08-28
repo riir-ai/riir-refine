@@ -12,9 +12,14 @@
 // The worker is dependency-free ESM and every global it touches (Response,
 // URL, TextEncoder, fetch) exists in Node 18+, so it runs unmodified here.
 
-import test from "node:test";
+import test, { beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import worker from "../src/worker.js";
+import worker, { __resetMemoForTests } from "../src/worker.js";
+
+// The worker's response/KV memo is module state with namespace-agnostic keys,
+// so without this one test's `latest` row is servable to the next test's
+// differently-seeded stub — a suite that passes only in this order.
+beforeEach(() => __resetMemoForTests());
 
 // ---- stubs ---------------------------------------------------------------
 
@@ -218,19 +223,39 @@ test("legacy collided keys are not summed alongside the fixed rows", async () =>
 
 // ---- SEC-A: the redaction must hold on every read route ------------------
 
-test("unauthenticated /hours is redacted, not full rows", async () => {
+// SUPERSEDES "unauthenticated /hours is redacted, not full rows". Redaction
+// was the T8 answer to an unauthenticated caller reaching the bulk routes; the
+// stronger answer is that it does not reach them at all. A redacted row still
+// costs the full KV fan-out to produce, which was the actual exposure — see
+// the gate comment in the worker. The projection itself is still pinned, on
+// /status and /latest, by the two tests below.
+test("unauthenticated /hours and /days are refused, and spend nothing", async () => {
   const kv = kvStub();
   await runHour(kv, "2026-08-28T12:00:06.549Z");
-  const res = await fetchAt(env(kv), "/hours?n=3");
-  const rows = await res.json();
-  assert.ok(rows.length >= 1);
-  for (const r of rows) {
-    assert.equal(r.redacted, true);
-    assert.equal(r.containers.apps, undefined, "per-app breakdown must not be public");
-    assert.equal(r.mint_anchor, undefined, "mint anchor must not be public");
-    assert.equal(r.notes, undefined, "collector notes must not be public");
-    assert.ok(typeof r.containers.est_usd === "number", "the scalar stays public");
+  const e = env(kv);          // no READ_TOKEN — the old fail-open window
+  const before = { get: kv.ops.get, list: kv.ops.list };
+  for (const path of ["/hours?n=168", "/days?n=90"]) {
+    const res = await fetchAt(e, path);
+    assert.equal(res.status, 403, `${path} must not fail open`);
+    const body = await res.json();
+    assert.match(body.error, /not fail open/);
   }
+  // The point of the gate is COST, so assert the cost, not just the status.
+  assert.equal(kv.ops.get - before.get, 0, "a refused request must issue no KV get");
+  assert.equal(kv.ops.list - before.list, 0);
+});
+
+test("a wrong token cannot read a memo entry a valid one populated", async () => {
+  const kv = kvStub();
+  const opts = { READ_TOKEN: "s3cret", CF_API_TOKEN: "t" };
+  const e = env(kv, opts);
+  await runHour(kv, "2026-08-28T12:00:06.549Z", opts);
+  const warm = await (await fetchAt(e, "/hours?n=2", { token: "s3cret" })).json();
+  assert.ok(warm.length >= 1, "the valid caller populates the memo");
+  // The memo key is salted with a digest of the ACCEPTED token, so there is
+  // no key a rejected caller can name.
+  assert.equal((await fetchAt(e, "/hours?n=2", { token: "wrong" })).status, 401);
+  assert.equal((await fetchAt(e, "/hours?n=2")).status, 401);
 });
 
 test("unauthenticated /status echoes the projection, never the full row", async () => {
@@ -281,16 +306,22 @@ test("unauthenticated /status spends zero KV list ops", async () => {
   assert.equal(kv.ops.list - before, 0);
 });
 
+// Presents a token now that the route is hard-gated. Without one this test
+// passed for the WRONG REASON: a 403 issues zero gets, so both "bounded" and
+// "memoised" held trivially and the assertions measured nothing.
 test("/hours fan-out is bounded and memoised per isolate", async () => {
   const kv = kvStub();
-  await runHour(kv, "2026-08-28T12:00:06.549Z");
-  const e = env(kv);
+  const opts = { READ_TOKEN: "s3cret", CF_API_TOKEN: "t" };
+  const e = env(kv, opts);
+  await runHour(kv, "2026-08-28T12:00:06.549Z", opts);
+  const tok = { token: "s3cret" };
   const before = kv.ops.get;
-  await fetchAt(e, "/hours?n=720");
+  await fetchAt(e, "/hours?n=720", tok);
   const first = kv.ops.get - before;
+  assert.ok(first > 0, "the measured path must actually issue gets");
   assert.ok(first <= 168, `n=720 must clamp to MAX_HOURS, issued ${first} gets`);
   const mid = kv.ops.get;
-  await fetchAt(e, "/hours?n=720");
+  await fetchAt(e, "/hours?n=720", tok);
   assert.equal(kv.ops.get - mid, 0, "the repeat request must be served from the memo");
 });
 
@@ -719,4 +750,86 @@ test("the 7 live legacy keys stay inert across every path", async () => {
   const d = JSON.parse(kv.store.get("day:20260828"));
   assert.equal(d.hours, 24, "legacy rows must not inflate the collected count");
   assert.equal(d.hours_present, 24, "nor the present count");
+});
+
+// ---- ROBUST: a corrupt KV value must degrade, not 500 --------------------
+//
+// Every JSON.parse here is over a value KV handed back — i.e. over data a
+// previous deploy or a partial write could have left malformed. The aggregate
+// and backfill paths were already tolerant of that; the two PUBLIC read
+// routes were not, so one bad `latest` value turned the dashboard's liveness
+// badge into an opaque runtime 500 with no line of our own in the logs.
+
+test("a corrupt `latest` value degrades instead of 500ing the read routes", async () => {
+  const kv = kvStub({ latest: "{ not json" });
+  const e = env(kv);
+
+  const status = await fetchAt(e, "/status");
+  assert.equal(status.status, 200, "/status must still answer the liveness badge");
+  const body = await status.json();
+  assert.equal(body.latest, null, "an unparseable row reports as absent");
+  assert.equal(body.worker, "riir-kat-housekeeping");
+  assert.equal(body.token_set, true, "the config half still answers");
+
+  const latest = await fetchAt(e, "/latest");
+  assert.equal(latest.status, 200);
+  assert.equal(await latest.json(), null);
+});
+
+test("a throwing KV binding answers 500 JSON, not an unhandled rejection", async () => {
+  const kv = kvStub();
+  kv.get = async () => { throw new Error("kv unavailable"); };
+  const errs = [];
+  const realErr = console.error;
+  console.error = (...a) => errs.push(a.join(" "));
+  try {
+    const res = await fetchAt(env(kv), "/latest");
+    assert.equal(res.status, 500);
+    assert.deepEqual(await res.json(), { error: "internal error" });
+    // The whole point is that it stops being SILENT.
+    assert.ok(errs.some((l) => /fetch failed .*\/latest.*kv unavailable/s.test(l)),
+      `the failure must be logged, got ${JSON.stringify(errs)}`);
+    // A 500 is a private, uncacheable body — a shared cache holding it would
+    // serve one caller's failure to everyone. (Kept inside the stub so the
+    // worker's own log does not litter the suite's stderr.)
+    const res2 = await fetchAt(env(kv), "/latest");
+    assert.equal(res2.headers.get("Cache-Control"), "private, no-store");
+  } finally { console.error = realErr; }
+});
+
+// ---- PERF-B: `latest` is the one key an anonymous caller can drive -------
+
+test("repeated public reads of `latest` collapse to one KV get", async () => {
+  const kv = kvStub();
+  await runHour(kv, "2026-08-28T12:00:06.549Z");
+  const e = env(kv);
+  const before = kv.ops.get;
+  for (let i = 0; i < 5; i++) await fetchAt(e, "/latest");
+  for (let i = 0; i < 5; i++) await fetchAt(e, "/status");
+  // Pre-fix: 10 gets. /status and /latest read the SAME key, so they share
+  // one memo entry rather than one each.
+  assert.equal(kv.ops.get - before, 1, "10 public reads must cost one KV get");
+});
+
+// ---- SEC-B: the token compare must not time out the secret's length -----
+
+test("token acceptance is independent of token length", async () => {
+  const kv = kvStub();
+  // A 1-char and a 200-char secret must both work, and neither may be
+  // unlocked by a guess of the other's length. The digest compare makes the
+  // loop 64 hex chars wide in every case.
+  for (const secret of ["x", "s3cret", "z".repeat(200)]) {
+    const opts = { READ_TOKEN: secret, CF_API_TOKEN: "t" };
+    const e = env(kv, opts);
+    __resetMemoForTests();
+    await runHour(kv, "2026-08-28T12:00:06.549Z", opts);
+    assert.equal((await fetchAt(e, "/hours?n=1", { token: secret })).status, 200,
+      `a ${secret.length}-char secret must be accepted`);
+    for (const guess of ["", "x", "z".repeat(199), "z".repeat(201), secret + "!"]) {
+      if (guess === secret) continue;
+      const res = await fetchAt(e, "/hours?n=1", { token: guess });
+      assert.equal(res.status, 401,
+        `guess of length ${guess.length} must be rejected against a ${secret.length}-char secret`);
+    }
+  }
 });

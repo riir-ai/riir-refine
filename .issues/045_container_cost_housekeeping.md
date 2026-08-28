@@ -1,7 +1,7 @@
 # Issue 045 — container cost observability + hourly housekeeping worker + smallest-sizing verdict
 
 **Filed:** 2026-08-26
-**Status:** OPEN — T4 (owner secrets) + T6 (external ledger shell) remain, and **T8 + T9 are code-complete, dry-run-VALIDATED, but still NOT DEPLOYED (owner-gated; one command: `cd cloudflare/housekeeping && npx wrangler deploy`)**. **2026-08-29 T9 + T9b + T9c + T9d SHIPPED (code+tests, undeployed). T9d (KV inventory): the namespace is 8 keys — 7 legacy collided hour rows + `latest`, and ZERO `day:` rows, because the heartbeat path returned before the aggregate. `/days` has served `[]` since deploy and the aggregate code never ran in prod. Fixed, plus `hours` split from `hours_present` so a heartbeat day cannot report a false zero. DEPLOY WARNING: `/hours` returns `[]` right after the deploy (the fixed read path looks for keys that do not exist yet) — run the backfill immediately after. T9c (from reading PROD, not code): `/status` says `token_set:false` — the token has never been set, so no cost data has EVER been collected and the "~6-8x undercount is live" framing above describes an undercount of nothing; what T8 loses is heartbeats. That also broke T9's own design: its exists-based protect rule would have declared the all-heartbeat archive untouchable and repaired nothing, so the rule is now data-based (`ok===true && containers`, decided free from `list()` metadata). Plus `[observability]` (this worker's every failure mode is silence) and a `scheduled()` catch. T9b: T9b: authenticated read responses were `Cache-Control: public` — RFC 9111 §3.5 makes that the exact directive granting shared caches storage of an `Authorization`-bearing response that they would otherwise refuse; now `private, no-store`. Plus the monthly-budget scan re-ran hourly after its alert had already fired (~32 subrequests/run to a guaranteed no-op), and the backfill could 524 instead of returning its resume cursor (45 s wall-clock guard). 22/22 tests. T9: `POST /backfill` re-derives the hours T8 lost — the "unrecoverable" verdict was wrong, CF GraphQL retains ~31 d and exposes `datetimeHour`, so KV is a cache of a still-live source. 19/19 tests (7 new). En route it fixed a defect in T8's own test suite (the GraphQL stub omitted `datetimeHour`, so no test could have caught an hour-grouping bug) and a hot-path KV read-your-writes hole in the day aggregate.** Prior status: (2026-08-28: `hourKey()` was collapsing 24 hourly rows into 3, understating the daily cost ~8×; fixed + pinned by 12 regression tests, deploy blocked by the session permission classifier — run `cd cloudflare/housekeeping && npx wrangler deploy`); T5 RESOLVED (cross-repo correlation) + T7 read-path hardening SHIPPED 2026-08-28. Issue 053 (unattributed app `a03a70ff`) filed **and RESOLVED same day** by cross-repo correlation — it is the `riir-mmorpg-examples` CCU proof bench (Bench 034); resolved-and-removed per the noise rule, record in §T5 + git history. T1 verdict recorded, T2+T3 SHIPPED same day; live-mint half gated on Proposal 005 Phase 1. Sizing verdict feeds Proposal 005 T2.0/T2.1 **+ T2.6 / [Plan 031](../.plans/031_kat_sweeper_temp_container_r2_tier.md)** (2026-08-26 later-session sync). **2026-08-27: the T3 Worker was EXTENDED + redeployed (`ab79bd20`) — CORS on all read endpoints (dashboard live-fetch), Issue-044-T4 budget alerting (cap thresholds 50/90/100% + optional monthly budget, KV-dedupe, webhook via `ALERT_WEBHOOK_URL`), extended `/status` (`cap`/`thresholds`/`has_webhook`/`has_monthly_budget`/`alerts_today`).** **2026-08-28 truth-refresh: Proposal 005 Phase 1 LANDED 2026-08-27 (T1.5 dapps `84dd049` / T1.6 clippy `0a7cfd8`) — T6's blocker is NO LONGER Phase 1; the live-mint swap-in awaits the deferred Worker/DO HTTP ledger shell (Proposal 005 phase-2 defer / Plan 031 Phase B gate / phase-3 owner gate). Worker mint status strings refreshed `pending-phase-1` → `pending-worker-shell` + redeployed (version `f93ae507`, live-verified on the 04:00 UTC tick). T4 unchanged (owner-gated secrets). T5 still blocked — CLI exposes no id→name mapping (see checkbox).** *(That last clause is SUPERSEDED later the same day — T5 was resolved by cross-repo correlation, not by the CLI; see §T5.)*
+**Status:** OPEN — T4 (owner secrets) + T6 (external ledger shell) remain, and **T8 + T9 are code-complete, dry-run-VALIDATED, but still NOT DEPLOYED (owner-gated; one command: `cd cloudflare/housekeeping && npx wrangler deploy`)**. **2026-08-29 T9 + T9b + T9c + T9d + T9e SHIPPED (code+tests, undeployed). T9e (perf/sec pass): `/hours` + `/days` were the last fail-open FAN-OUT routes (168 KV gets per request, memo is per-ISOLATE so colo-spread traffic misses it; ~595 anonymous requests exhaust the 100k/day read tier and what breaks is the day aggregate + the alert-dedupe get, i.e. anonymous traffic could silently disable budget alerting). Hard-gated to 403, which costs ZERO functionality because the consumer was checked first: the ops dashboard makes exactly one cross-origin call, `/latest`, and charts from a statically baked blob. RUNBOOK ORDER CHANGED — `secret put READ_TOKEN` now precedes the verification curls. Plus: the "timing-safe" compare leaked the secret's LENGTH (looped max(len) times) → SHA-256 digests, fixed 64-char loop, digest doubles as the memo salt so the authenticated fan-out is memoised for the first time; `/status` + `/latest` no longer 500 on a corrupt KV value (safeJson) and `fetch` gained the top-level catch `scheduled` got in T9c; `latest` reads collapse 10→1. 36/36 tests, 5 of 6 new/changed RED against the prior worker (the 2 green-on-both recorded as non-discriminating, not as evidence). T9d (KV inventory): the namespace is 8 keys — 7 legacy collided hour rows + `latest`, and ZERO `day:` rows, because the heartbeat path returned before the aggregate. `/days` has served `[]` since deploy and the aggregate code never ran in prod. Fixed, plus `hours` split from `hours_present` so a heartbeat day cannot report a false zero. DEPLOY WARNING: `/hours` returns `[]` right after the deploy (the fixed read path looks for keys that do not exist yet) — run the backfill immediately after. T9c (from reading PROD, not code): `/status` says `token_set:false` — the token has never been set, so no cost data has EVER been collected and the "~6-8x undercount is live" framing above describes an undercount of nothing; what T8 loses is heartbeats. That also broke T9's own design: its exists-based protect rule would have declared the all-heartbeat archive untouchable and repaired nothing, so the rule is now data-based (`ok===true && containers`, decided free from `list()` metadata). Plus `[observability]` (this worker's every failure mode is silence) and a `scheduled()` catch. T9b: T9b: authenticated read responses were `Cache-Control: public` — RFC 9111 §3.5 makes that the exact directive granting shared caches storage of an `Authorization`-bearing response that they would otherwise refuse; now `private, no-store`. Plus the monthly-budget scan re-ran hourly after its alert had already fired (~32 subrequests/run to a guaranteed no-op), and the backfill could 524 instead of returning its resume cursor (45 s wall-clock guard). 22/22 tests. T9: `POST /backfill` re-derives the hours T8 lost — the "unrecoverable" verdict was wrong, CF GraphQL retains ~31 d and exposes `datetimeHour`, so KV is a cache of a still-live source. 19/19 tests (7 new). En route it fixed a defect in T8's own test suite (the GraphQL stub omitted `datetimeHour`, so no test could have caught an hour-grouping bug) and a hot-path KV read-your-writes hole in the day aggregate.** Prior status: (2026-08-28: `hourKey()` was collapsing 24 hourly rows into 3, understating the daily cost ~8×; fixed + pinned by 12 regression tests, deploy blocked by the session permission classifier — run `cd cloudflare/housekeeping && npx wrangler deploy`); T5 RESOLVED (cross-repo correlation) + T7 read-path hardening SHIPPED 2026-08-28. Issue 053 (unattributed app `a03a70ff`) filed **and RESOLVED same day** by cross-repo correlation — it is the `riir-mmorpg-examples` CCU proof bench (Bench 034); resolved-and-removed per the noise rule, record in §T5 + git history. T1 verdict recorded, T2+T3 SHIPPED same day; live-mint half gated on Proposal 005 Phase 1. Sizing verdict feeds Proposal 005 T2.0/T2.1 **+ T2.6 / [Plan 031](../.plans/031_kat_sweeper_temp_container_r2_tier.md)** (2026-08-26 later-session sync). **2026-08-27: the T3 Worker was EXTENDED + redeployed (`ab79bd20`) — CORS on all read endpoints (dashboard live-fetch), Issue-044-T4 budget alerting (cap thresholds 50/90/100% + optional monthly budget, KV-dedupe, webhook via `ALERT_WEBHOOK_URL`), extended `/status` (`cap`/`thresholds`/`has_webhook`/`has_monthly_budget`/`alerts_today`).** **2026-08-28 truth-refresh: Proposal 005 Phase 1 LANDED 2026-08-27 (T1.5 dapps `84dd049` / T1.6 clippy `0a7cfd8`) — T6's blocker is NO LONGER Phase 1; the live-mint swap-in awaits the deferred Worker/DO HTTP ledger shell (Proposal 005 phase-2 defer / Plan 031 Phase B gate / phase-3 owner gate). Worker mint status strings refreshed `pending-phase-1` → `pending-worker-shell` + redeployed (version `f93ae507`, live-verified on the 04:00 UTC tick). T4 unchanged (owner-gated secrets). T5 still blocked — CLI exposes no id→name mapping (see checkbox).** *(That last clause is SUPERSEDED later the same day — T5 was resolved by cross-repo correlation, not by the CLI; see §T5.)*
 **Repo:** riir-clippy (dashboard + worker deploy live here; sizing verdict feeds Proposal 005 T2.0/T2.1)
 **Owner ask (2026-08-26):**
 1. can the container be smaller? smallest?
@@ -752,3 +752,112 @@ The 4 that pass on both are the invariants the fix must **not** break
 `scripts/ops_nightly.sh` runs the suite WARN-only — it does not deploy this
 Worker, so it has nothing to gate; it exists so the next regression is caught
 by a machine rather than by an audit two days later.
+
+## T9e — the fail-open window on the fan-out routes, and a timing-leaky compare (2026-08-28)
+
+Two prod-grade findings from a perf/sec pass over the (still undeployed) T9d
+worker. Both were reachable only by first establishing a fact about the
+CONSUMER, not by reading the worker.
+
+### The fact that decided it
+
+`/hours` and `/days` have **no consumer**. The ops dashboard makes exactly one
+cross-origin call — `/latest` — and renders its hourly/daily container charts
+from the statically baked `<script id="ds">` blob that
+`scripts/gen_dashboard.py` writes into `public/index.html`. Every `/hours` /
+`/days` invocation in the housekeeping README already passes
+`Authorization: Bearer $READ_TOKEN`. The dashboard worker's own CSP comment
+says the same thing from the other side ("makes exactly ONE cross-origin call:
+the housekeeping worker's /latest live badge").
+
+That is what made the fix free. Without checking it, the obvious move was the
+weaker one (cap the anonymous `n`), because hard-gating *looks* like it costs
+the weekly chart.
+
+### SEC/PERF-1 — `/hours` + `/days` were the last fail-open fan-out
+
+They are the only fan-out routes on the worker: one request issues up to **168
+KV gets**. The isolate memo meant to blunt that is **per-isolate**, and
+Workers spreads traffic across colos, so realistic anonymous traffic misses it
+nearly every time. ~**595 anonymous requests exhaust the 100k/day KV read
+tier** — and what breaks when reads run out is not the chart, it is the
+day-aggregate recompute and the alert-dedupe `get`. So unauthenticated traffic
+could **silently disable budget alerting**: the same exhaustion class T7
+capped, one route over, and only partially mitigated.
+
+Redaction (the T8 answer for this route) does not help — producing a redacted
+row costs the identical fan-out. So the routes now **403 while `READ_TOKEN` is
+unset**, matching `/backfill`'s existing rule verbatim ("a costly route does
+not fail open"). Zero functionality lost per the consumer fact above; the
+diagnostic path the fail-open posture existed for (`token_set`, `read_gated`,
+liveness) is on `/status` + `/latest`, untouched.
+
+**Operational consequence for the runbook:** `wrangler secret put READ_TOKEN`
+now moves **ahead of** the post-deploy verification curls. Not an extra step —
+the backfill already required it — but the ordering changed, and an anonymous
+`curl .../hours` returning 403 is the gate working, not the deploy failing.
+
+### SEC-2 — the "timing-safe" compare leaked the secret's length
+
+`timingSafeEqual` XOR-ed the raw encodings and looped
+`max(len(guess), len(secret))` times. Folding the length difference into
+`diff` makes the **verdict** length-independent — but not the **timing**,
+which is the property it was named for: a 1-char guess still ran
+`len(READ_TOKEN)` iterations. Both sides are now SHA-256'd first, so every
+comparison is a fixed 64-hex-char loop.
+
+The accepted digest doubles as the memo salt. That is not incidental: the old
+memo deliberately skipped the authenticated path, so hard-gating the route
+would otherwise have left **nothing** memoised and made every owner poll pay
+the full 168-get fan-out. Salting with a digest of an already-ACCEPTED token
+restores the collapse without weakening the rule it was protecting — a
+rejected caller cannot name a live key.
+
+**Honest limit:** the tests pin the compare's **verdicts** across secret
+lengths 1 / 6 / 200, not its **timing**. A wall-clock timing assertion would
+be flaky. The timing property rests on the loop being fixed-width by
+construction — a code-shape argument, not a measured one.
+
+### ROBUST-3 — the two public routes 500'd on a corrupt KV value
+
+Every `JSON.parse` here is over a value KV returned, i.e. over data a previous
+deploy or partial write could have left malformed. The aggregate and backfill
+paths were already tolerant; `/status` and `/latest` parsed bare, so one bad
+`latest` value turned the dashboard's liveness badge into an opaque runtime
+500. Now `safeJson` → reports as absent. `fetch` also gained the top-level
+catch `scheduled` got in T9c, for the same reason (this worker's every failure
+mode is silence): a throw now logs one line of ours and answers
+`{"error":"internal error"}` as `private, no-store`.
+
+### PERF-4 — `latest` is the one key anonymous traffic can drive
+
+`/status` and `/latest` both read it, one get per request each. Now one
+memoised **parsed** read shared by both (60 s TTL, matching the `max-age=60`
+both already advertise): 10 public reads cost 1 KV get, down from 10. The row
+is projected/gated per-request, so the memo is a KV-read cache, not a response
+cache — no auth coupling.
+
+Memoising module state also exposed a **test defect I introduced**: the memo's
+keys carry no namespace identity, so one test's `latest` was servable to the
+next test's differently-seeded stub — a suite that passes *in this order*.
+Hence `__resetMemoForTests()` + a `beforeEach`. The Workers runtime only ever
+reads `default`, so the extra named export is inert in production.
+
+### The false green worth recording
+
+Hard-gating `/hours` made the existing test *"/hours fan-out is bounded and
+memoised per isolate"* **pass for the wrong reason**: a 403 issues zero KV
+gets, so both "bounded" and "memoised from the memo" held trivially and the
+assertions measured nothing. It now presents a token and asserts
+`first > 0` before asserting `first <= 168` — the shape of every gate that
+can be satisfied by the measured path not running.
+
+### Gate
+
+**36/36 tests** (4 new, 2 rewritten). Verified **5 of the 6 new/changed tests
+are RED against the prior worker**. The 2 that are green on both are recorded
+as non-discriminating rather than as evidence: the wrong-token-vs-memo test
+(the old worker also 401s, having no authenticated memo to leak) and the
+token-length test (the old compare returned the same *verdicts*; only its
+timing leaked). Bundle 25.46 KiB / 7.78 KiB gzip, up from 23.73 / 7.15.
+Undeployed — `npx wrangler deploy` is still classifier-blocked.

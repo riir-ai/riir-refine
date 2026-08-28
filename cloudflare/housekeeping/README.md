@@ -119,7 +119,10 @@ curl -s https://riir-kat-housekeeping.foxfox.workers.dev/status | jq '{token_set
 > **Sequencing:** deploy the T8 fix *before* setting this secret. Until it is
 > deployed the worker still collides its hour keys, and its rows — which start
 > carrying the per-app cost breakdown the moment this token exists — are still
-> served unredacted on `/hours` and `/status`.
+> served unredacted on `/hours` and `/status`. (As of §T9e `/hours` is
+> token-gated outright, so on the *current* build the exposure is `/status`
+> alone; the sequencing advice stands because the DEPLOYED worker is the old
+> one.)
 
 ### "Why not just use wrangler? It already authenticates."
 
@@ -185,7 +188,7 @@ npx wrangler secret put MONTHLY_BUDGET_USD    # optional monthly container budge
 ## Optional secret (read gating, Issue 045 T7)
 
 ```sh
-npx wrangler secret put READ_TOKEN            # gates /hours, /days, /status config half
+npx wrangler secret put READ_TOKEN            # gates /hours, /days, /backfill, /status config half
 ```
 
 ## Deploy / read
@@ -197,22 +200,58 @@ curl -H "Authorization: Bearer $READ_TOKEN" '.../hours?n=24'   # hourly rows
 curl -H "Authorization: Bearer $READ_TOKEN" '.../days?n=14'    # day aggregates
 ```
 
-### Access model (hardened 2026-08-28 — Issue 045 §T7, revised §T8)
+### Access model (hardened 2026-08-28 — Issue 045 §T7, revised §T8, §T9e)
 
 There are **two** gate levels, and the distinction is the whole design:
 
 | level | condition | what it guards |
 |---|---|---|
-| fail-**open** | `READ_TOKEN` unset ⇒ pass | liveness + config posture, so the T4 verification commands work before any token exists |
-| **hard** | `READ_TOKEN` set **and** presented | anything that is account telemetry, or that costs a KV `list` op |
+| fail-**open** | `READ_TOKEN` unset ⇒ pass | liveness + config posture only, so the T4 verification commands work before any token exists. Costs **one memoised KV get** for the whole anonymous surface. |
+| **hard** | `READ_TOKEN` set **and** presented | account telemetry, anything that spends a KV `list`, and every **fan-out** route |
 
 | route | anonymous | with `READ_TOKEN` | cache (anon / authed) |
 |---|---|---|---|
 | `/latest` | projection + `redacted:true` | full row | `public, max-age=60` / **`private, no-store`** |
 | `/status` | liveness (`worker`, `cron`, `ts`, `ok`) + `latest` **as the projection**; config posture while the gate fails open | + `alerts_today`, `latest` as the full row | `public, max-age=60` / **`private, no-store`** |
-| `/hours?n=` | **projection** rows, `n ≤ 168` *(401 once `READ_TOKEN` is set)* | full rows | `public, max-age=300` + isolate memo / **`private, no-store`**, no memo |
-| `/days?n=` | rows, `n ≤ 90` *(401 once `READ_TOKEN` is set)* | same | as above |
+| `/hours?n=` | **403** — a fan-out route never fails open (§T9e) | full rows, `n ≤ 168` | none / **`private, no-store`** + token-salted isolate memo |
+| `/days?n=` | **403** (§T9e) | rows, `n ≤ 90` | as above |
 | `POST /backfill` | **403** — a write route never fails open | repairs missing hour rows (§T9) | none |
+
+**Why `/hours` + `/days` stopped failing open (§T9e).** They are the only
+fan-out routes here: one request can issue up to **168 KV gets**. The isolate
+memo that was supposed to blunt that is *per-isolate*, so traffic spread
+across colos misses it every time — roughly **595 anonymous requests exhaust
+the 100k/day KV read tier**. What breaks when reads run out is not the chart:
+it is the day-aggregate recompute and the alert-dedupe `get`, so
+unauthenticated traffic could **silently disable budget alerting**. Redaction
+(the §T8 answer) did not help, because producing a redacted row costs the same
+fan-out as producing a full one.
+
+Checked before closing it rather than assumed: the ops dashboard makes
+**exactly one** cross-origin call — `/latest` — and renders its hourly/daily
+container charts from the statically baked `<script id="ds">` blob that
+`scripts/gen_dashboard.py` writes. Every `/hours` / `/days` invocation in this
+README already passes a token. So the gate costs **zero functionality today**,
+and the diagnostic path the fail-open posture existed for (`token_set`,
+`read_gated`, liveness) lives on `/status` + `/latest`, which are unchanged.
+They return **403, not 401**, while `READ_TOKEN` is unset — the same rule and
+the same wording `/backfill` already used.
+
+**Token compare is over digests (§T9e).** The previous constant-time compare
+XOR-ed the raw bytes and looped `max(len(guess), len(secret))` times. That
+makes the *verdict* length-independent but not the *timing* — the thing it was
+named for: a 1-char guess still ran `len(READ_TOKEN)` iterations, so the
+response time leaked the secret's length. Both sides are now SHA-256'd first,
+making every comparison a fixed 64-hex-char loop. The accepted digest doubles
+as the memo salt, so an authenticated fan-out can finally be memoised
+(previously the authenticated path had no memo at all, so hard-gating the
+route would have meant *nothing* was memoised) without a rejected caller ever
+being able to name a live key.
+
+> The tests pin the **verdicts** of that compare across secret lengths 1 / 6 /
+> 200, not its **timing** — a wall-clock timing assertion would be flaky in
+> CI. The timing property rests on the fixed-width loop being fixed-width by
+> construction, which is a code-shape argument, not a measured one.
 
 **Why authenticated responses are `private, no-store` (§T9b).** RFC 9111 §3.5
 says a shared cache MUST NOT reuse a response to a request carrying an
@@ -275,7 +314,15 @@ Measured live 2026-08-29 — the whole KV namespace is **8 keys**:
 0  hour:YYYYMMDDHH ← none in the post-fix shape
 ```
 
-Two consequences of deploying the fix, both of which look like breakage:
+Three consequences of deploying the fix, all of which look like breakage:
+
+0. **`/hours` and `/days` start answering 403 to an anonymous caller** (§T9e).
+   They are token-gated now, so *verifying* any of the below requires
+   `READ_TOKEN` to be set first. That is not an extra step in practice — the
+   backfill in point 1 already required it — but it does mean **`wrangler
+   secret put READ_TOKEN` moves ahead of the verification curls**, not after
+   them. An anonymous `curl .../hours` returning 403 is the gate working, not
+   the deploy failing.
 
 1. **The hour chart empties.** The deployed worker uses the buggy `hourKey()`
    on *both* the write and the read path, so its reads currently land on the
@@ -371,6 +418,12 @@ Two things it deliberately does **not** do:
   against a 1 GB tier) and wrong: past ~31 days GraphQL can no longer rebuild
   them, so expiring a row would make the archive strictly worse than the
   source it caches. The `/hours?n=` cap is a *read* bound, not a retention one.
+- **No lock on `POST /backfill`.** Two concurrent calls would both run,
+  doubling the GraphQL spend; the route is idempotent so the rows converge.
+  Deliberately not "fixed" with a KV flag: KV is eventually consistent, so a
+  read-then-write lock on it would fail exactly when two calls race — the one
+  case it exists for. It would buy false assurance, not mutual exclusion. The
+  route needs the owner token, so the realistic caller count is one.
 - **No per-hour `ai` reconstruction.** `aiInferenceAdaptiveGroups` is a daily
   rollup; the honest answer is `null`, not a divided-by-24 fiction.
 
@@ -416,7 +469,11 @@ Worker, so it has nothing to gate).
 
 The static dashboard reads CF GraphQL directly at generation time
 (`scripts/gen_dashboard.py`); the Worker's KV is the running archive +
-future live-mode source (`/hours`, `/days`).
+future live-mode source (`/hours`, `/days`). Live mode will have to **present
+`READ_TOKEN`** — those routes stopped failing open in §T9e — which means
+shipping a token to a browser, i.e. it wants a dashboard-side proxy rather
+than a direct `fetch` from the page. The dashboard already proxies (its CSP
+`connect-src` names only this origin, and only `/latest` is called today).
 
 ## Observability (added 2026-08-29, §T9c)
 

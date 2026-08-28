@@ -21,17 +21,25 @@
 #   Account → Analytics : Read):
 #     npx wrangler secret put CF_API_TOKEN
 #
-# Read-side hardening (Issue 045 T7 + T8, 2026-08-28):
-#   READ_TOKEN (optional secret) gates /hours and /days, and hard-gates the
-#   detail half of /status. Two gate levels, deliberately distinct:
-#     * fail-OPEN while READ_TOKEN is unset  — liveness + config posture, so
-#       the T4 verification commands work before any token exists.
-#     * hard (token SET and PRESENTED)       — anything that is account
-#       telemetry, or that costs a KV list op.
-#   EVERY read route now emits the same MINIMISED projection
-#   (ts/hour/ok/mint/neurons/est_usd) to an unauthenticated caller. T8 found
-#   /status and /hours were both returning the FULL row, silently bypassing
-#   the redaction /latest documents as unconditional. Set with:
+# Read-side hardening (Issue 045 T7 + T8 + T9e):
+#   READ_TOKEN (optional secret) is the one read gate. Two levels:
+#     * fail-OPEN while unset — liveness (/status, /latest) and the config
+#       posture, so the T4 verification commands work before a token exists.
+#       These cost ONE memoised KV get between them.
+#     * hard (token SET and PRESENTED) — account telemetry, anything that
+#       spends a KV list, and (T9e) the bulk read routes /hours + /days.
+#   T9e closed the fail-open window on /hours + /days: they are the only
+#   fan-out routes here (up to 168 KV gets for ONE request) and the memo that
+#   blunted that is per-ISOLATE, so colo-spread traffic missed it every time.
+#   ~595 anonymous requests would exhaust the 100k/day KV read tier, and what
+#   breaks when reads run out is the day aggregate and the alert-dedupe get —
+#   i.e. anonymous traffic could silently disable budget alerting. Verified
+#   first that nothing consumes them: the ops dashboard makes exactly ONE
+#   cross-origin call, /latest, and renders its charts from a statically baked
+#   blob. They now 403 (not 401) while READ_TOKEN is unset — matching
+#   /backfill's existing "a costly route does not fail open" rule.
+#   /latest + /status still emit the MINIMISED projection
+#   (ts/hour/ok/mint/neurons/est_usd) to an unauthenticated caller. Set with:
 #     npx wrangler secret put READ_TOKEN
 #   ALLOWED_ORIGINS (var) is the CORS allowlist; was `*`, which let any page
 #   in any browser read this account cost telemetry cross-origin.

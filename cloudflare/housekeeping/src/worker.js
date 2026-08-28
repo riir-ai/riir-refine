@@ -17,9 +17,17 @@ const KV_CONCURRENCY = 16;
 
 // CORS: echo only an allowlisted origin (was `*`, which let any page in any
 // browser read this account's cost telemetry cross-origin).
+// Parsed once per distinct value rather than per response: `cors()` runs on
+// every request, and the var is constant for an isolate's whole lifetime.
+const originCache = new Map();
 function allowedOrigins(env) {
-  return (env.ALLOWED_ORIGINS || DASHBOARD_URL)
-    .split(",").map((o) => o.trim().replace(/\/$/, "")).filter(Boolean);
+  const raw = env.ALLOWED_ORIGINS || DASHBOARD_URL;
+  let list = originCache.get(raw);
+  if (!list) {
+    list = raw.split(",").map((o) => o.trim().replace(/\/$/, "")).filter(Boolean);
+    originCache.set(raw, list);
+  }
+  return list;
 }
 
 function corsHeaders(request, env) {
@@ -61,36 +69,79 @@ function cors(response, request, env, cacheSeconds, authenticated) {
   return r;
 }
 
-// Length-independent compare so a wrong token cannot be recovered byte-wise
-// from response timing.
-function timingSafeEqual(a, b) {
-  const ea = new TextEncoder().encode(a), eb = new TextEncoder().encode(b);
-  let diff = ea.length ^ eb.length;
-  const n = Math.max(ea.length, eb.length);
-  for (let i = 0; i < n; i++) diff |= (ea[i] || 0) ^ (eb[i] || 0);
+// Constant-time token compare, over DIGESTS rather than the raw bytes.
+//
+// The previous version XOR-ed the raw encodings and looped
+// `max(len(a), len(b))` times. It folded the length difference into `diff`,
+// which makes the VERDICT length-independent — but not the TIMING, which is
+// the thing it was named for: present a 1-char guess and the loop still runs
+// `len(READ_TOKEN)` times, so the iteration count (and the response time) is
+// a function of the secret's length. Hashing both sides first makes every
+// comparison exactly 32 bytes wide regardless of either input, so the loop
+// count carries no information about READ_TOKEN at all.
+async function sha256Hex(s) {
+  const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
+  return Array.from(new Uint8Array(d), (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function constantTimeHexEqual(a, b) {
+  // Both operands are always 64 hex chars, so this is a fixed-width loop by
+  // construction. `charCodeAt` past the end yields NaN, and `NaN | 0` is 0.
+  let diff = a.length ^ b.length;
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    diff |= (a.charCodeAt(i) | 0) ^ (b.charCodeAt(i) | 0);
+  }
   return diff === 0;
 }
 
-// Detail routes are gated ONLY when READ_TOKEN is set — fails OPEN until the
-// owner sets it, matching the existing DASHBOARD_TOKEN posture. `/latest`
-// stays public but returns a minimised projection (below) either way, so the
-// public surface never carries per-app ids or cost breakdown.
-function authed(request, env) {
-  if (!env.READ_TOKEN) return true;
+// One auth decision per request, computed once.
+//
+//   ok       — fail-OPEN while READ_TOKEN is unset. This is the diagnostic
+//              posture for the config half of /status, which the owner needs
+//              in order to verify the T4 secret step landed at all.
+//   hasToken — a token is SET and was PRESENTED. Required for account
+//              telemetry, for anything that spends a KV list, and (since the
+//              hard-gate below) for the bulk read routes.
+//   tag      — a truncated digest of the accepted token, used ONLY as the
+//              memo salt. A comparison that returned true proves
+//              `presented === READ_TOKEN`, so this tag is identical for every
+//              legitimate caller and unreachable by an illegitimate one —
+//              which is exactly the property a shared memo entry needs.
+async function authContext(request, env) {
+  if (!env.READ_TOKEN) return { ok: true, hasToken: false, tag: "" };
   const h = request.headers.get("Authorization") || "";
   const m = h.match(/^Bearer\s+(.+)$/);
-  return !!m && timingSafeEqual(m[1], env.READ_TOKEN);
+  if (!m) return { ok: false, hasToken: false, tag: "" };
+  const [presented, expected] = await Promise.all([
+    sha256Hex(m[1]), sha256Hex(env.READ_TOKEN)]);
+  const ok = constantTimeHexEqual(presented, expected);
+  return { ok, hasToken: ok, tag: ok ? presented.slice(0, 16) : "" };
+}
+
+// Every JSON.parse in this worker is over a value KV handed back, i.e. over
+// data that a previous deploy (or a partial write) could have left malformed.
+// The aggregate and backfill paths were already tolerant; the read routes were
+// not — `/status` and `/latest` parsed bare, so one corrupt `latest` value
+// turned the dashboard's liveness badge into an opaque 500. Fail soft and let
+// the route report "no row" instead.
+function safeJson(v) {
+  if (v == null) return null;
+  try { return JSON.parse(v); } catch (_) { return null; }
 }
 
 // The public projection of an hour row: exactly the fields the dashboard
 // badge and cap alert consume. Per-app ids, per-app cost, the mint anchor and
 // the collector notes are account telemetry and need a presented token.
 //
-// This is applied by /latest AND by /hours AND by the /status `latest` echo.
-// It previously lived only in /latest, so `GET /hours?n=1` and `GET /status`
-// both returned the full row to an unauthenticated caller — two silent
-// bypasses of the redaction /latest documents as unconditional. Harmless
-// while the rows are heartbeats; it arms itself the moment T4 sets
+// Applied by /latest and by the /status `latest` echo — the two routes an
+// unauthenticated caller can still reach. It previously ALSO covered /hours,
+// which is where T8 found it missing (`GET /hours?n=1` and `GET /status` both
+// returned the full row to an anonymous caller). /hours no longer needs the
+// projection because it no longer serves anonymous callers at all; redacting
+// a row still cost the full KV fan-out to produce it, so the route is
+// hard-gated instead. See the gate comment there.
+//
+// Harmless while the rows are heartbeats; it arms itself the moment T4 sets
 // CF_API_TOKEN and the rows start carrying per-app breakdown.
 function publicRow(r) {
   if (!r) return r;
@@ -133,6 +184,31 @@ function memoGet(k) {
 function memoPut(k, v) {
   if (memo.size >= MEMO_MAX) memo.clear();
   memo.set(k, { v, exp: Date.now() + MEMO_TTL_MS });
+}
+
+// The memo is module state, so it outlives a single request by design (that is
+// the whole point) — but in a test process it also outlives a single TEST, and
+// its keys carry no namespace identity. Without a reset, one test's `latest`
+// row is servable to the next test's differently-seeded KV stub, and a suite
+// that passes becomes a suite that passes IN THIS ORDER. Not exported for
+// production use; the Workers runtime only ever reads `default`.
+export function __resetMemoForTests() { memo.clear(); }
+
+// `latest` is read by BOTH public routes (/status liveness badge, /latest),
+// so it is the one KV key an anonymous caller can drive a read against on
+// every request. Memoising the PARSED row — not a response — keeps the gate
+// decisions per-request while collapsing the repeat reads; the 60 s TTL
+// already matches the `max-age=60` both routes advertise, against a key the
+// cron rewrites hourly.
+async function readLatest(kv) {
+  // Wrapped, because `memoGet` signals a miss with null and an ABSENT latest
+  // row parses to null too. Unwrapped, the one case that most wants the memo
+  // — no row yet, so every request re-reads — would never hit it.
+  const hit = memoGet("kv:latest");
+  if (hit) return hit.row;
+  const row = safeJson(await kv.get("latest"));
+  memoPut("kv:latest", { row });
+  return row;
 }
 
 // Bounded-concurrency map — replaces Promise.all over an attacker-sized list.
@@ -761,16 +837,28 @@ export default {
       console.error("housekeeping run failed", (e && e.stack) || String(e));
     }));
   },
+  // `scheduled` grew a catch because an unobserved throw was this worker's
+  // worst failure shape. `fetch` had the same hole: any throw here becomes an
+  // opaque runtime 500 with no line of our own in the logs, and the read
+  // routes parse KV values (see safeJson) so a corrupt row was a live path to
+  // exactly that. Log it ourselves, answer JSON like every other route.
   async fetch(request, env, ctx) {
+    try {
+      return await handleFetch(request, env, ctx);
+    } catch (e) {
+      let path = "?";
+      try { path = new URL(request.url).pathname; } catch (_) { /* opaque url */ }
+      console.error("fetch failed", request.method, path, (e && e.stack) || String(e));
+      return cors(Response.json({ error: "internal error" }, { status: 500 }),
+        request, env, 0, true);
+    }
+  },
+};
+
+async function handleFetch(request, env, ctx) {
     const url = new URL(request.url);
     const kv = env.HOUSEKEEPING_KV;
-    // Two gate levels, deliberately distinct:
-    //   ok       — fail-OPEN while READ_TOKEN is unset (the diagnostic path
-    //              the owner needs to verify the T4 secret step landed).
-    //   hasToken — hard: a token must be SET and PRESENTED. Anything that is
-    //              account telemetry, or that costs a KV list, needs this.
-    const ok = authed(request, env);
-    const hasToken = !!env.READ_TOKEN && ok;
+    const { ok, hasToken, tag } = await authContext(request, env);
 
     if (request.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: corsHeaders(request, env) });
@@ -834,8 +922,7 @@ export default {
       //    two things that then break are list-based: the day-aggregate
       //    recompute and the monthly-budget check. That is a cheaper and
       //    more damaging exhaustion than the read amplification T7 fixed.
-      const latest = await kv.get("latest");
-      const parsed = latest ? JSON.parse(latest) : null;
+      const parsed = await readLatest(kv);
       const body = {
         worker: "riir-kat-housekeeping",
         cron: "0 * * * *",
@@ -878,27 +965,56 @@ export default {
       // open so the owner keeps a diagnostic path (notably `token_set`, the
       // check for whether the T4 CF_API_TOKEN step landed) before any token
       // exists to present.
-      const v = await kv.get("latest");
-      if (!v) return cors(new Response("null", { status: 200,
+      const full = await readLatest(kv);
+      if (!full) return cors(new Response("null", { status: 200,
         headers: { "Content-Type": "application/json" } }), request, env, 60);
-      const full = JSON.parse(v);
       if (hasToken) return cors(Response.json(full), request, env, 60, true);
       return cors(Response.json(publicRow(full)), request, env, 60);
     }
 
     if (url.pathname === "/hours" || url.pathname === "/days") {
+      // HARD-gated, no fail-open — the same rule /backfill already applies,
+      // and for the same reason: cost. These are the only fan-out routes on
+      // the worker (up to 168 KV gets for ONE request), and the memo that was
+      // supposed to blunt that is per-ISOLATE, so traffic spread across colos
+      // misses it every time. At 168 gets a request, ~595 anonymous requests
+      // exhaust the 100k/day KV read tier — and the two things that break
+      // when reads run out are the day-aggregate recompute and the alert
+      // dedupe `get`, i.e. unauthenticated traffic could silently disable
+      // budget alerting. The read amplification T7 capped is still an
+      // amplification.
+      //
+      // Verified before closing it (2026-08-28) rather than assumed: the ops
+      // dashboard makes exactly ONE cross-origin call, `/latest` — its hourly
+      // and daily container charts render from a statically baked
+      // `<script id="ds">` blob written by scripts/gen_dashboard.py, not from
+      // this API. Every `/hours` / `/days` invocation in the README already
+      // passes `Authorization: Bearer $READ_TOKEN`. So this gate costs zero
+      // functionality today, and the diagnostic path the fail-open posture
+      // existed for (`token_set`, `read_gated`, liveness) is on /status and
+      // /latest, which are untouched.
+      if (!env.READ_TOKEN) {
+        return cors(Response.json(
+          { error: "READ_TOKEN is not set; the bulk read routes do not fail open" },
+          { status: 403 }), request, env);
+      }
       if (!ok) return cors(new Response("unauthorized", { status: 401 }), request, env);
       const isHours = url.pathname === "/hours";
       const max = isHours ? MAX_HOURS : MAX_DAYS;
       const req = parseInt(url.searchParams.get("n") || "24", 10);
       const n = Math.min(Number.isFinite(req) && req > 0 ? req : 24, max);
-      // Only the public variant is memoised — an authenticated body must never
-      // be served from a cache an unauthenticated caller can also hit.
-      const memoKey = `${url.pathname}:${n}`;
-      if (!hasToken) {
-        const hit = memoGet(memoKey);
-        if (hit) return cors(Response.json(hit), request, env, 300);
-      }
+      // Memoised for the token holder, who is now the only caller that gets
+      // here. The old memo skipped the authenticated path entirely — correct
+      // as far as it went ("an authenticated body must never be served from a
+      // cache an unauthenticated caller can also hit"), but it meant that
+      // once the gate above closes, NOTHING is memoised and every poll pays
+      // the full fan-out again. Salting the key with `tag` restores the
+      // collapse without weakening that rule: `tag` is a digest of an already
+      // ACCEPTED token, so an entry is only ever readable by a caller who
+      // presented the same secret.
+      const memoKey = `${tag}:${url.pathname}:${n}`;
+      const hit = memoGet(memoKey);
+      if (hit) return cors(Response.json(hit), request, env, 300, true);
       const now = new Date();
       // Hours walk back from the last COMPLETE hour: rows are written for
       // hourStart, so including the current partial hour guaranteed one miss
@@ -911,18 +1027,16 @@ export default {
       const raw = await mapLimit(keys, KV_CONCURRENCY, (k) => kv.get(k));
       const rows = [];
       for (const r of raw) {
-        if (!r) continue;
-        try { rows.push(JSON.parse(r)); } catch (_) { /* skip malformed */ }
+        const parsed = safeJson(r);
+        if (parsed) rows.push(parsed);
       }
       // Day rows are already a bare {date, est_usd, hours} aggregate — the
       // same scalar /latest publishes. Hour rows carry the per-app breakdown.
-      const out = (isHours && !hasToken) ? rows.map(publicRow) : rows;
-      if (!hasToken) memoPut(memoKey, out);
-      return cors(Response.json(out), request, env, 300, hasToken);
+      memoPut(memoKey, rows);
+      return cors(Response.json(rows), request, env, 300, true);
     }
 
     return cors(new Response(
       "riir-kat-housekeeping (issue 045) — /status /latest /hours?n= /days?n= | POST /backfill?days=&end= (token)",
       { status: 404 }), request, env);
-  },
-};
+}
