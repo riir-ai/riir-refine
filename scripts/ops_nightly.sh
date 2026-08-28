@@ -139,6 +139,41 @@ for _tool in python3 node npx git; do
 done
 log "toolchain OK (node $(node --version 2>/dev/null), $(command -v npx))"
 
+# ── 0b. credentials: load .env, then say plainly when we are running BLIND ──
+# This script never sourced .env, and launchd hands it a spartan environment —
+# so `gen_dashboard.py` fell through to its wrangler-OAuth fallback. That
+# fallback is STALE BY CONSTRUCTION here: the OAuth access token carries a ~1 h
+# TTL and is refreshed only when the wrangler CLI runs, which in this script is
+# step 4 — AFTER the step-1 regeneration that needs it. On an unattended 03:00
+# run the token has long expired.
+#
+# The failure is quiet, which is the whole problem: both CF collectors log one
+# line and return empty, so the dashboard renders its container and neuron
+# sections BLANK — indistinguishable from "nothing ran on the account". That is
+# the same class as the Issue 045 T8 hour-key bug cited in step 0: output that
+# looks like data.
+if [ -f "${REPO}/.env" ]; then
+  set -a
+  # shellcheck disable=SC1091
+  . "${REPO}/.env"
+  set +a
+  log "loaded ${REPO}/.env"
+fi
+if [ -n "${CF_API_TOKEN:-}" ]; then
+  log "CF credential: CF_API_TOKEN from env"
+else
+  _WT="${HOME}/Library/Preferences/.wrangler/config/default.toml"
+  _EXP="$(sed -n 's/^expiration_time = "\(.*\)"$/\1/p' "${_WT}" 2>/dev/null || true)"
+  _NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  if [ -z "${_EXP}" ]; then
+    log "WARN no CF_API_TOKEN and no wrangler OAuth token — CF analytics + container sections will render BLANK"
+  elif [ "${_EXP}" \< "${_NOW}" ]; then
+    log "WARN no CF_API_TOKEN and the wrangler OAuth token EXPIRED at ${_EXP} (now ${_NOW}) — CF analytics + container sections will render BLANK; set CF_API_TOKEN in ${REPO}/.env"
+  else
+    log "CF credential: wrangler OAuth, valid until ${_EXP}"
+  fi
+fi
+
 # ── 1. regenerate (re-measures healer coverage across the sibling repos) ──
 # --sweep shells out to cargo-heal per repo; 20 min is ~4x the measured cost.
 if timeout 1200 python3 "${REPO}/scripts/gen_dashboard.py" --sweep >> "${LOG}" 2>&1; then
