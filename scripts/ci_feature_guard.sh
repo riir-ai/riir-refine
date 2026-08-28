@@ -95,8 +95,12 @@ echo "=== Layer 5c: every integration test + bin (all-features, no allowlist) ==
 #
 # `--tests` is not just `tests/*.rs`: cargo selects EVERY target with
 # `test = true`, so this one invocation also covers the lib unittests and the
-# three bin unit-test modules (`cargo-heal` 7, `fixer_regate` 0, `kat_drain`
-# 14) that Layer 5b's `--lib` scope never reached. No `--bins` needed.
+# bin unit-test modules (`cargo-heal`, `fixer_regate`, `kat_drain`) that Layer
+# 5b's `--lib` scope never reached. No `--bins` needed.
+#
+# Deliberately NOT stating per-bin test counts here: they drift with every
+# added test and a stale number in a comment reads as a spec. Nothing in this
+# script enforces them — Layer 5d's pin is derived from `tests/*.rs` on disk.
 RUNLOG="$(mktemp "${TMPDIR:-/tmp}/ci_feature_guard_5c.XXXXXX")"
 trap 'rm -f "$RUNLOG"' EXIT
 cargo test --all-features --tests 2>&1 | tee "$RUNLOG"

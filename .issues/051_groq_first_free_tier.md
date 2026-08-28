@@ -1,7 +1,7 @@
 # Issue 051 — groq-first LLM routing: the free tier absorbs the reasoning window before any CF neuron burns
 
 **Filed:** 2026-08-28
-**Status:** OPEN — T1-T6 LANDED; **T9 LANDED 2026-08-28: the free leg is no longer gated behind the paid leg's credentials** (the fix below — `LlmRouter::from_env` built `CfClient` FIRST, so the owner's groq-only `.env` made `kat_drain` exit 3 without spending one free token: the exact opposite of this issue's purpose). Live-proven on the real API in a groq-only env (`live_router_groq_only`: served by groq, 21+2 tok, **0 neurons**, pricing basis `@cf/zai-org/glm-4.7-flash` intact). Tests 16/16 groq + 14/14 kat_drain + 1051/1051 lib, clippy clean. **T13 (ledger attribution — a groq-only window no longer credits the CF model with samples it never served) + T12 (the same hardening applied to the CF fallback leg + bounded response-body dumps) + T10 (prod-grade hardening: split connect timeout, single-allocation auth header, token scrub on server-controlled strings) + T11 (`--preflight`: ladder check on an empty backlog, zero metered cost by construction) LANDED same day.** T7 (first live window on real backlog) STILL blocked — but on BACKLOG only (measured 0 eligible of 41 store rows), no longer on credentials; fixer_regate stays CF-pinned BY DESIGN
+**Status:** OPEN — T1-T6 LANDED; **T9 LANDED 2026-08-28: the free leg is no longer gated behind the paid leg's credentials** (the fix below — `LlmRouter::from_env` built `CfClient` FIRST, so the owner's groq-only `.env` made `kat_drain` exit 3 without spending one free token: the exact opposite of this issue's purpose). Live-proven on the real API in a groq-only env (`live_router_groq_only`: served by groq, 21+2 tok, **0 neurons**, pricing basis `@cf/zai-org/glm-4.7-flash` intact). Tests 16/16 groq + 14/14 kat_drain + 1051/1051 lib, clippy clean. **T13 (ledger attribution — a groq-only window no longer credits the CF model with samples it never served) + T12 (the same hardening applied to the CF fallback leg + bounded response-body dumps) + T10 (prod-grade hardening: split connect timeout, single-allocation auth header, token scrub on server-controlled strings) + T11 (`--preflight`: ladder check on an empty backlog, zero metered cost by construction) LANDED same day.** **T14 (backlog census -- "queue empty" no longer hides a withheld backlog) LANDED 2026-08-28**, and its first real-store reading (`51 clean * 0 eligible * 0 withdrawn`) instrument-VERIFIES that T7 (first live window on real backlog) is STILL blocked — but on BACKLOG only (measured 0 eligible of 41 store rows), no longer on credentials; fixer_regate stays CF-pinned BY DESIGN
 **Repo:** riir-clippy
 **URL:** https://riir-ops-dashboard.foxfox.workers.dev/
 
@@ -214,11 +214,54 @@ price) and is labeled as one everywhere it renders.
         harness asserting groq-only + legacy-groq reattribute while pure-CF,
         mixed, settlement, and no-providers rows stay put with neurons and
         client tokens intact.
+- [x] T14 — **backlog census: "queue empty" was diagnostically opaque**
+      (2026-08-28). `build_backlog` applies TWO independent exclusions
+      (`fail_count == 0`, and `tier == Withdrawn`) and the drain reported only
+      their SUM — `0 queued (store 51 row(s))`. That one line cannot
+      distinguish the two operational states it collapses:
+      - **healthy** — every row is clean, nothing to heal; and
+      - **STALLED** — real recorded failures exist, but every one sits in the
+        absorbing `Withdrawn` tier (3 strikes) and will NEVER be queued again.
+      Both print `queue empty — nothing to drain` and **exit 0**, so the daily
+      window looks green either way while a pile of permanent failures grows
+      invisibly. Same defect class as 044-T12 (the hourly archive collapsing
+      24 rows into 3) and this issue's own T13 (a groq-only row crediting the
+      CF model): **a green surface hiding real state.**
+      - Pure `census(&[TrajRowDoc]) -> BacklogCensus { total, clean,
+        withdrawn, eligible }` — a fold using the SAME two predicates in the
+        SAME order as `build_backlog` (a census that could disagree with the
+        queue it explains would be worse than none; pinned by
+        `census_eligible_matches_what_build_backlog_queues`).
+      - Reported on EVERY window, not only empty ones — a non-empty queue can
+        coexist with a growing withdrawn pile — plus an explicit `WARN` line
+        when `withdrawn > 0`.
+      - Pure `empty_queue_reason` separates the THREE causes an empty queue
+        actually has: **empty store** (no heal run has recorded anything → run
+        the healer), **healthy** (all clean → nothing to do), **STALL** (all
+        failures withheld → needs a fresh pattern). Three different operator
+        actions that used to share one string.
+      - 5 new tests (bin unit tests 16 → **21/21**): bucket disjointness +
+        exhaustiveness, census-vs-queue agreement, and one per reason —
+        including the negative assertions that a stall never reads `healthy`
+        and an empty store never reads `healthy`.
+      - **`fail_count == 0` wins over the tier**: a clean-but-`Withdrawn` row
+        is `clean`, not `withdrawn` — there is nothing to heal, so counting it
+        as a stall would manufacture a false alarm (pinned).
+      - **Measured on the real store the same day** — see T7: `51 clean · 0
+        eligible · 0 withdrawn`. The census CONFIRMED T7's parked status
+        rather than overturning it; the difference is that the claim is now
+        *instrument-verified on every window* instead of assumed, and the day
+        it becomes a stall the operator is told so.
+      - Deliberately NOT surfaced to the ledger/dashboard: `withdrawn == 0`
+        today, so a chart would plot a constant zero while risking the 19-row
+        ledger and the T13 attribution logic. Escalate when the census
+        measures a non-zero stall — not before (evidence-first, no
+        premature surface).
 - [-] T7 — first LIVE window on Groq (quota absorption measured on real
       backlog) — **no longer credential-blocked (T9)**; now waiting on a
       non-empty backlog. Measured 2026-08-28 via `--dry-run`: 0 eligible of
       41 store rows (eligibility = `fail_count > 0 AND tier != Withdrawn`),
-      so the router is never even constructed. Standing pre-flights, both
+      so the router is never even constructed. **Re-measured 2026-08-28 with the T14 census: the store has GROWN 41 -> 51 rows and is still `51 clean * 0 eligible * 0 withdrawn`** -- so the backlog is genuinely ABSENT, not withheld in the absorbing tier (the one alternative reading that would have made this a stall to fix rather than a wait). T7's blocker is now instrument-verified, not assumed. Standing pre-flights, both
       passing on the real API: `live_smoke` (T5) and `live_router_groq_only`
       (T9, proves the groq-only ladder end-to-end) — plus `--preflight`
       (T11) as the operator-facing equivalent, runnable any day.

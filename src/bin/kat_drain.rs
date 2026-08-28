@@ -207,6 +207,77 @@ fn priority(row: &TrajRowDoc, off_corpus: bool) -> f32 {
     row.fail_count as f32 * gap
 }
 
+/// Why the backlog has the size it has — the eligibility census.
+///
+/// [`build_backlog`] applies TWO independent exclusions and the drain used to
+/// report only their SUM ("0 queued"), which cannot tell a HEALTHY store
+/// (every row clean) from a STALLED one (real failures exist, but every one
+/// of them sits in the absorbing `Withdrawn` tier and will never be queued
+/// again). Both print `queue empty — nothing to drain` and exit 0, so the
+/// daily window looks green either way. That is the Issue 044 T12 / Issue 051
+/// T13 defect class: a green surface hiding real state.
+///
+/// The census is a pure fold over the rows, so the operator line and the
+/// tests read the same numbers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+struct BacklogCensus {
+    /// Every row in the store.
+    total: usize,
+    /// `fail_count == 0` — nothing to heal. The healthy majority.
+    clean: usize,
+    /// `fail_count > 0` AND tier == `Withdrawn`: real, recorded failures the
+    /// drain will NEVER queue again (3 strikes, absorbing). A growing count
+    /// here is a silent stall, not a clean backlog.
+    withdrawn: usize,
+    /// `fail_count > 0` AND tier != `Withdrawn` — the queue's source
+    /// population (before `--limit` truncation).
+    eligible: usize,
+}
+
+/// Pure fold: classify every store row into exactly one census bucket.
+///
+/// The predicates are the SAME two `build_backlog` filters on, deliberately
+/// written in the same order — a census that could disagree with the queue it
+/// explains would be worse than no census at all.
+fn census(rows: &[TrajRowDoc]) -> BacklogCensus {
+    let mut c = BacklogCensus { total: rows.len(), ..BacklogCensus::default() };
+    for r in rows {
+        match () {
+            () if r.fail_count == 0 => c.clean += 1,
+            () if EvidenceTier::from_u8(r.tier) == EvidenceTier::Withdrawn => c.withdrawn += 1,
+            () => c.eligible += 1,
+        }
+    }
+    c
+}
+
+/// The operator-facing reason an empty queue is empty.
+///
+/// Pure so the wording is pinned by tests: the three cases are genuinely
+/// different operational states and must never collapse into one string.
+fn empty_queue_reason(c: BacklogCensus, limit: usize) -> String {
+    match () {
+        () if c.total == 0 => "the trajectory store is empty — no heal run has recorded a \
+             trajectory yet"
+            .to_string(),
+        () if c.eligible > 0 => format!(
+            "BUG: {} row(s) are eligible but none queued (limit {limit}) — the census and \
+             build_backlog disagree",
+            c.eligible
+        ),
+        () if c.withdrawn > 0 => format!(
+            "STALL, not a clean store: {} of {} row(s) DO carry failures but every one is \
+             Withdrawn (3 strikes, absorbing) — re-entry needs a fresh pattern, so the drain \
+             will never queue them again. This backlog is withheld, not absent.",
+            c.withdrawn, c.total
+        ),
+        () => format!(
+            "healthy: all {} store row(s) are clean (fail_count == 0) — nothing to heal",
+            c.total
+        ),
+    }
+}
+
 /// Build the ordered, deduped queue from the store's rows.
 ///
 /// `is_known_rule` answers "does the clippy corpus carry an entry for this
@@ -437,6 +508,9 @@ fn main() {
         .iter()
         .map(|e| e.rule_id())
         .collect();
+    // The census is taken BEFORE build_backlog consumes the rows: an empty
+    // queue has three distinct causes and the operator needs to know which.
+    let census = census(&rows);
     let queue = build_backlog(rows, |lint| corpus_rules.contains(lint), args.limit);
     eprintln!(
         "[drain] backlog: {} queued (limit {}, store {} row(s)) — priority = fail_count × \
@@ -445,6 +519,20 @@ fn main() {
         args.limit,
         store.len()
     );
+    eprintln!(
+        "[drain] census: {} clean · {} eligible · {} withdrawn-with-failures (of {} row(s))",
+        census.clean, census.eligible, census.withdrawn, census.total
+    );
+    // A withheld backlog is the failure mode a bare "queue empty" hides. Say
+    // it on EVERY window, not only the empty ones — a non-empty queue can
+    // coexist with a growing withdrawn pile.
+    if census.withdrawn > 0 {
+        eprintln!(
+            "[drain] WARN: {} row(s) carry failures but are Withdrawn (absorbing tier) — the \
+             drain will never queue them; they need a fresh pattern to re-enter",
+            census.withdrawn
+        );
+    }
 
     // ── Modelless pre-pass (the L4 reachability contract): classify each
     // queued span; only the classes the modelless seam cannot serve reach
@@ -520,7 +608,10 @@ fn main() {
             // The healthy state: the backlog (or the modelless pre-pass)
             // produced nothing to drain. Not an error — exit 0, the cron
             // row records a clean no-op.
-            eprintln!("[drain] queue empty — nothing to drain");
+            eprintln!(
+                "[drain] queue empty — nothing to drain · {}",
+                empty_queue_reason(census, args.limit)
+            );
             return;
         }
         eprintln!(
@@ -991,6 +1082,79 @@ mod tests {
     const CERTIFIED: u8 = 0;
     const HEURISTIC: u8 = 1;
     const WITHDRAWN: u8 = 2;
+
+    // ── Backlog census: an empty queue has three distinct causes ─────────
+
+    #[test]
+    fn census_buckets_are_disjoint_and_total() {
+        let rows = vec![
+            row("clean_a", "fn a() {}", 0, 3, CERTIFIED),
+            row("clean_b", "fn b() {}", 0, 1, HEURISTIC),
+            // fail_count == 0 wins even at the Withdrawn tier: nothing to heal.
+            row("clean_withdrawn", "fn c() {}", 0, 0, WITHDRAWN),
+            row("eligible_a", "fn d() {}", 2, 0, HEURISTIC),
+            row("stalled_a", "fn e() {}", 5, 1, WITHDRAWN),
+            row("stalled_b", "fn f() {}", 3, 0, WITHDRAWN),
+        ];
+        let c = census(&rows);
+        assert_eq!(c.total, 6);
+        assert_eq!(c.clean, 3);
+        assert_eq!(c.eligible, 1);
+        assert_eq!(c.withdrawn, 2);
+        // Disjoint + exhaustive: the buckets must account for every row, or
+        // the operator line silently drops rows.
+        assert_eq!(c.clean + c.eligible + c.withdrawn, c.total);
+    }
+
+    /// The census must never disagree with the queue it explains.
+    #[test]
+    fn census_eligible_matches_what_build_backlog_queues() {
+        let rows = vec![
+            row("clean", "fn a() {}", 0, 3, CERTIFIED),
+            row("eligible_a", "fn d() {}", 2, 0, HEURISTIC),
+            row("eligible_b", "fn g() {}", 1, 2, CERTIFIED),
+            row("stalled", "fn e() {}", 5, 1, WITHDRAWN),
+        ];
+        let c = census(&rows);
+        let q = build_backlog(rows, |_| true, usize::MAX);
+        assert_eq!(c.eligible, q.len(), "census eligible must equal the unlimited queue length");
+    }
+
+    /// A store whose only failures are Withdrawn is a STALL — it must not
+    /// read like a clean store. This is the whole point of the census.
+    #[test]
+    fn an_all_withdrawn_backlog_reports_a_stall_not_a_clean_store() {
+        let rows = vec![
+            row("clean", "fn a() {}", 0, 3, CERTIFIED),
+            row("stalled", "fn e() {}", 5, 1, WITHDRAWN),
+        ];
+        let c = census(&rows);
+        assert_eq!(c.eligible, 0, "nothing queues");
+        let msg = empty_queue_reason(c, 25);
+        assert!(msg.contains("STALL"), "{msg}");
+        assert!(msg.contains("withheld"), "{msg}");
+        assert!(!msg.contains("healthy"), "a withheld backlog must never read healthy: {msg}");
+    }
+
+    #[test]
+    fn an_all_clean_backlog_reports_healthy() {
+        let rows = vec![
+            row("clean_a", "fn a() {}", 0, 3, CERTIFIED),
+            row("clean_b", "fn b() {}", 0, 1, HEURISTIC),
+        ];
+        let msg = empty_queue_reason(census(&rows), 25);
+        assert!(msg.contains("healthy"), "{msg}");
+        assert!(!msg.contains("STALL"), "{msg}");
+    }
+
+    #[test]
+    fn an_empty_store_is_distinct_from_a_clean_one() {
+        let msg = empty_queue_reason(census(&[]), 25);
+        assert!(msg.contains("store is empty"), "{msg}");
+        // "no heal run has recorded a trajectory" is a DIFFERENT operator
+        // action (run the healer) than "every row is clean" (nothing to do).
+        assert!(!msg.contains("healthy"), "{msg}");
+    }
 
     #[test]
     fn backlog_takes_only_rows_with_failures() {
