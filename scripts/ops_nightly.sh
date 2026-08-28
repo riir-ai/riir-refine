@@ -258,7 +258,25 @@ if [ "${OPS_NIGHTLY_NO_DEPLOY:-0}" != "1" ]; then
   # the CLOUDFLARE_API_TOKEN fix. Measured, not assumed: sourcing .env and
   # running `env -u CLOUDFLARE_API_TOKEN wrangler whoami` reported the API
   # token, not OAuth.
-  if (cd "${REPO}/cloudflare/dashboard" && env -u CLOUDFLARE_API_TOKEN -u CF_API_TOKEN -u CLOUDFLARE_API_KEY -u CLOUDFLARE_EMAIL timeout 600 npx --yes "wrangler@${WRANGLER_VERSION}" deploy >"${_dout}" 2>&1); then
+  #
+  # Deploy-credential resolution (2026-08-29): CF_DEPLOY_API_TOKEN (optional
+  # .env entry) is the least-privilege deploy token (Account -> Workers
+  # Scripts -> Edit, ideally script-scoped to riir-ops-dashboard). When set
+  # it is PREFERRED over the personal OAuth session -- the OAuth file carries
+  # 29 scopes of near-total account authority, and an unattended launchd job
+  # only ever needs this one worker. It is mapped onto CLOUDFLARE_API_TOKEN
+  # for the individual command (wrangler's own var) -- never exported -- and
+  # the analytics credentials stay stripped in both arms. GitHub Actions sets
+  # the same value as its CLOUDFLARE_API_TOKEN secret, so local + CI deploy
+  # paths use one credential.
+  if [ -n "${CF_DEPLOY_API_TOKEN:-}" ]; then
+    log "deploy credential: CF_DEPLOY_API_TOKEN (least-privilege; overrides OAuth)"
+    _w_env=(CLOUDFLARE_API_TOKEN="${CF_DEPLOY_API_TOKEN}" env -u CF_API_TOKEN -u CLOUDFLARE_API_KEY -u CLOUDFLARE_EMAIL)
+  else
+    log "deploy credential: wrangler OAuth (CF_DEPLOY_API_TOKEN unset)"
+    _w_env=(env -u CLOUDFLARE_API_TOKEN -u CF_API_TOKEN -u CLOUDFLARE_API_KEY -u CLOUDFLARE_EMAIL)
+  fi
+  if (cd "${REPO}/cloudflare/dashboard" && "${_w_env[@]}" timeout 600 npx --yes "wrangler@${WRANGLER_VERSION}" deploy >"${_dout}" 2>&1); then
     cat "${_dout}" >> "${LOG}"
     log "deployed"
   else
@@ -291,8 +309,7 @@ fi
 # posture-independent, so this gate survives closing the gate.
 if [ "${DEPLOY_FAILED}" = "0" ] && [ "${OPS_NIGHTLY_NO_DEPLOY:-0}" != "1" ]; then
   _newest="$(cd "${REPO}/cloudflare/dashboard" \
-    && env -u CLOUDFLARE_API_TOKEN -u CF_API_TOKEN -u CLOUDFLARE_API_KEY -u CLOUDFLARE_EMAIL \
-       timeout 120 npx --yes "wrangler@${WRANGLER_VERSION}" deployments list --json 2>/dev/null \
+    && "${_w_env[@]}" timeout 120 npx --yes "wrangler@${WRANGLER_VERSION}" deployments list --json 2>/dev/null \
     | python3 -c 'import sys,json
 try:
     d = json.load(sys.stdin)
