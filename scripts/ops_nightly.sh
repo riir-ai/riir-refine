@@ -94,6 +94,51 @@ trap release_lock EXIT
 
 log "=== start (pid $$) ==="
 
+# ── 0. resolve the toolchain, then REFUSE to run degraded ──────────────────
+# launchd hands this job a spartan environment. `node`/`npx` are nvm-managed
+# and nvm initialises in ~/.zshrc — which `/bin/bash -lc` NEVER sources (only
+# ~/.profile exists here, and it does not mention nvm). Measured under a
+# launchd-realistic login shell: python3 resolves (/usr/bin/python3) but node
+# and npx are NOT FOUND.
+#
+# Left unhandled, the consequence is not a loud failure but a QUIET one: the
+# run regenerates, skips the render gate ("deploying unverified"), commits
+# artifacts nothing verified, and fails the deploy with the misleading
+# "wrangler OAuth may need refresh" — every one of them a WARN. The schedule
+# would look healthy for as long as it ran and would never deploy anything.
+if ! command -v node >/dev/null 2>&1 && [ -s "${NVM_DIR:-$HOME/.nvm}/nvm.sh" ]; then
+  # shellcheck disable=SC1091
+  . "${NVM_DIR:-$HOME/.nvm}/nvm.sh" >/dev/null 2>&1 || true
+fi
+if ! command -v node >/dev/null 2>&1; then
+  # `set -euo pipefail` is live: a bare `find` over a MISSING nvm dir exits
+  # non-zero, pipefail propagates it through the substitution, and the script
+  # dies right here — exit 1 with NO log line, i.e. the silent death this
+  # whole section exists to prevent. Guard the directory, and neutralise the
+  # pipeline's status so only the preflight below decides the verdict.
+  NVM_VERSIONS="${NVM_DIR:-$HOME/.nvm}/versions/node"
+  if [ -d "${NVM_VERSIONS}" ]; then
+    NVM_BIN_DIR="$(find "${NVM_VERSIONS}" -maxdepth 2 -type d -name bin 2>/dev/null | sort -V | tail -1 || true)"
+    if [ -n "${NVM_BIN_DIR}" ]; then
+      PATH="${NVM_BIN_DIR}:${PATH}"
+      export PATH
+      log "resolved node from nvm: ${NVM_BIN_DIR}"
+    fi
+  fi
+fi
+
+# A missing tool must STOP this runner, never downgrade it. A gate that
+# silently stops gating is worse than no gate, because the log still reads
+# green — which is precisely how the Issue 045 T8 hour-key bug survived two
+# days of "live-verified" checks.
+for _tool in python3 node npx git; do
+  if ! command -v "${_tool}" >/dev/null 2>&1; then
+    log "FAIL required tool '${_tool}' not on PATH — refusing to run degraded"
+    exit 1
+  fi
+done
+log "toolchain OK (node $(node --version 2>/dev/null), $(command -v npx))"
+
 # ── 1. regenerate (re-measures healer coverage across the sibling repos) ──
 # --sweep shells out to cargo-heal per repo; 20 min is ~4x the measured cost.
 if timeout 1200 python3 "${REPO}/scripts/gen_dashboard.py" --sweep >> "${LOG}" 2>&1; then
@@ -104,7 +149,7 @@ else
 fi
 
 # ── 2. render gate: never deploy or commit an HTML that does not render ──
-if [ -f "${REPO}/cloudflare/dashboard/verify_dom.mjs" ] && command -v node >/dev/null; then
+if [ -f "${REPO}/cloudflare/dashboard/verify_dom.mjs" ]; then
   if timeout 120 node "${REPO}/cloudflare/dashboard/verify_dom.mjs" >> "${LOG}" 2>&1; then
     log "verify_dom PASS"
   else
@@ -112,7 +157,8 @@ if [ -f "${REPO}/cloudflare/dashboard/verify_dom.mjs" ] && command -v node >/dev
     exit 1
   fi
 else
-  log "WARN verify_dom.mjs or node absent — deploying unverified"
+  log "FAIL verify_dom.mjs missing — refusing to deploy an unverified dashboard"
+  exit 1
 fi
 
 # ── 3. commit ONLY the two artifacts, by explicit path ──
@@ -155,7 +201,7 @@ fi
 # on the KEYS is what catches that class, and this is the repo's only
 # unattended runner. WARN-only, by design: a housekeeping regression must
 # never stop the dashboard refresh.
-if [ -d "${REPO}/cloudflare/housekeeping/test" ] && command -v node >/dev/null; then
+if [ -d "${REPO}/cloudflare/housekeeping/test" ]; then
   # NB: a bare directory arg makes `node --test` fail MODULE_NOT_FOUND;
   # it wants file paths, so glob them.
   if timeout 120 node --test "${REPO}"/cloudflare/housekeeping/test/*.test.mjs >> "${LOG}" 2>&1; then

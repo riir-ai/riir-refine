@@ -317,6 +317,45 @@ and the lock dir INTO the repo, both untracked. That is not just `git status`
 noise: sibling agents run bulk `git add -A`, and an untracked file is exactly
 what gets swept into someone else's commit. Both are now ignored.
 
+**5. THE HEADLINE — under launchd the runner would have silently never deployed
+(availability + a gate that stops gating).** `node` and `npx` are **nvm**-managed
+and nvm initialises in `~/.zshrc`, which `/bin/bash -lc` (the plist's own
+invocation) NEVER sources — `~/.bash_profile` does not exist here and
+`~/.profile` says nothing about nvm. Measured under a launchd-realistic login
+shell: `python3` resolves (`/usr/bin/python3`) but **node and npx are NOT
+FOUND**. The consequence was not a loud failure but a quiet one — the run would
+have:
+
+1. regenerated fine (python3 present),
+2. **skipped the render gate** → `WARN verify_dom.mjs or node absent — deploying unverified`,
+3. committed artifacts nothing had verified,
+4. **failed every deploy** → `WARN deploy failed (wrangler OAuth may need refresh)` — a
+   MISLEADING diagnosis; the cause is a missing binary, not OAuth,
+5. skipped the housekeeping test gate silently,
+
+every one of them a WARN. The schedule would have looked healthy for as long as
+it ran and **never deployed anything**. This is exactly the failure mode the T8
+hour-key bug had: a surface that reads green while the mechanism is dead.
+
+Fixed two ways, because either alone is insufficient: the runner now **resolves**
+the toolchain (sources `nvm.sh`, else prepends the highest installed
+`versions/node/*/bin`), and then **refuses to run degraded** — a preflight over
+`python3 node npx git` that names the missing tool and exits 1. The render gate's
+`&& command -v node` conjunct is gone (dead weight that could mask a regression
+now that the preflight guarantees node), and a missing `verify_dom.mjs` is now a
+hard FAIL instead of `deploying unverified`. **A gate that silently stops gating
+is worse than no gate, because the log still reads green.**
+
+**6. A defect in fix (5) itself, caught by testing the negative path.** The first
+cut resolved nvm with a bare `find` over `${NVM_DIR}/versions/node`. Under the
+script's own `set -euo pipefail`, a MISSING nvm dir makes `find` exit non-zero,
+`pipefail` propagates it through the command substitution, and the script dies
+at that assignment — **exit 1 with no log line**, the very silent death the
+section exists to prevent. Now the directory is guarded and the pipeline's
+status neutralised, so only the preflight decides the verdict. *Verifying that
+the failure path FAILS LOUDLY is what caught this; a success-path-only test
+would have passed.*
+
 **Verified empirically, not by reading** — the lock functions were extracted
 into an isolated harness (nothing triggers the real 20-minute sweep) and all
 six behaviours exercised:
@@ -331,8 +370,18 @@ six behaviours exercised:
 | release someone else's lock | **refused** | ✓ |
 | release our own lock | released | ✓ |
 
+And the toolchain paths, run under a launchd-realistic environment
+(`env -i HOME=… PATH=/usr/bin:/bin:/usr/sbin:/sbin /bin/bash -lc`):
+
+| case | expected | result |
+|---|---|---|
+| nvm present | resolve node, proceed | ✓ `node v24.10.0`, exit 0 |
+| nvm absent | name the missing tool, exit 1 | ✓ `FAIL required tool 'node' not on PATH`, exit 1 |
+| *(pre-fix baseline)* | — | gate would be SKIPPED → "deploying unverified" |
+
 `bash -n` + `shellcheck` clean. The schedule itself is still NOT installed —
-that remains the owner action documented in T7.
+that remains the owner action documented in T7, and it is now worth installing:
+before this pass it would have run degraded and silently deployed nothing.
 
 ## T12 — per-day attribution bug + reconciliation guard (SHIPPED 2026-08-28)
 
