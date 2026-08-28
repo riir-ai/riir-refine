@@ -1,7 +1,7 @@
 # Issue 051 — groq-first LLM routing: the free tier absorbs the reasoning window before any CF neuron burns
 
 **Filed:** 2026-08-28
-**Status:** OPEN — T1-T6 LANDED; **T9 LANDED 2026-08-28: the free leg is no longer gated behind the paid leg's credentials** (the fix below — `LlmRouter::from_env` built `CfClient` FIRST, so the owner's groq-only `.env` made `kat_drain` exit 3 without spending one free token: the exact opposite of this issue's purpose). Live-proven on the real API in a groq-only env (`live_router_groq_only`: served by groq, 21+2 tok, **0 neurons**, pricing basis `@cf/zai-org/glm-4.7-flash` intact). Tests 16/16 groq + 14/14 kat_drain + 1051/1051 lib, clippy clean. **T12 (the same hardening applied to the CF fallback leg + bounded response-body dumps) + T10 (prod-grade hardening: split connect timeout, single-allocation auth header, token scrub on server-controlled strings) + T11 (`--preflight`: ladder check on an empty backlog, zero metered cost by construction) LANDED same day.** T7 (first live window on real backlog) STILL blocked — but on BACKLOG only (measured 0 eligible of 41 store rows), no longer on credentials; fixer_regate stays CF-pinned BY DESIGN
+**Status:** OPEN — T1-T6 LANDED; **T9 LANDED 2026-08-28: the free leg is no longer gated behind the paid leg's credentials** (the fix below — `LlmRouter::from_env` built `CfClient` FIRST, so the owner's groq-only `.env` made `kat_drain` exit 3 without spending one free token: the exact opposite of this issue's purpose). Live-proven on the real API in a groq-only env (`live_router_groq_only`: served by groq, 21+2 tok, **0 neurons**, pricing basis `@cf/zai-org/glm-4.7-flash` intact). Tests 16/16 groq + 14/14 kat_drain + 1051/1051 lib, clippy clean. **T13 (ledger attribution — a groq-only window no longer credits the CF model with samples it never served) + T12 (the same hardening applied to the CF fallback leg + bounded response-body dumps) + T10 (prod-grade hardening: split connect timeout, single-allocation auth header, token scrub on server-controlled strings) + T11 (`--preflight`: ladder check on an empty backlog, zero metered cost by construction) LANDED same day.** T7 (first live window on real backlog) STILL blocked — but on BACKLOG only (measured 0 eligible of 41 store rows), no longer on credentials; fixer_regate stays CF-pinned BY DESIGN
 **Repo:** riir-clippy
 **URL:** https://riir-ops-dashboard.foxfox.workers.dev/
 
@@ -184,6 +184,36 @@ price) and is labeled as one everywhere it renders.
         panic on multi-byte UTF-8) — pinned by a test.
       Error PREFIXES are unchanged, so `kat_drain::classify_error` and the
       pinned `"CF request failed"` test needed zero edits.
+- [x] T13 — **ledger attribution for a groq-only window** (2026-08-28). The
+      defect T9 CREATED, found by following through on my own change: the row's
+      `model` field is the CF **pricing basis** (it prices `usd_avoided` and is
+      resolved even when the CF leg was never armed), NOT a claim that CF
+      served anything. So a groq-only row reads `model: @cf/…glm-4.7-flash`
+      with `client` tokens 0, `usd_est` 0.0, `cap` null, `server` null —
+      **exactly the `glm-4.7-flash 0` mis-render the owner hand-reconciled in
+      `7bdb710`**, except T9 turned it from an anomaly into a ROUTINE row
+      shape. Worse than the cosmetic $0: `per_model[…]["n"] += n`
+      credited the CF model with every sample groq actually served.
+      - **Producer** (`kat_drain`): new top-level `"served_by"` field —
+        `groq` / `cloudflare` / `mixed` / `none` — from a pure, unit-tested
+        `served_by(groq_served, cf_tokens, smoke_neurons, server_neurons)`.
+        A CF-served SMOKE counts as CF usage even when groq served every
+        span: those neurons are real, and labelling them free would hide
+        metered spend behind the free-tier label — the one thing the ledger
+        must never do (pinned by `a_cf_smoke_is_not_attributed_to_the_free_tier`).
+      - **Consumer** (`scripts/gen_dashboard.py`): reattribute such a row to
+        a `groq:<model>` bucket. Deliberately NARROW — rows that must stay on
+        the CF model are all excluded by construction: pure-CF/mixed windows
+        (client tokens > 0), settlement/backfill rows (server neurons > 0,
+        client 0 — the `7bdb710` shape), and a CF-smoke + groq window
+        (`drain.smoke_neurons` > 0). `served_by` is authoritative; the token
+        heuristic is the fallback that keeps pre-T13 rows correct.
+      - **Verified zero-regression**: the dashboard's entire `ledger` section
+        is byte-identical on the real 19-row ledger (no legacy row carries
+        groq activity, so the branch never fires), plus a 6-shape synthetic
+        harness asserting groq-only + legacy-groq reattribute while pure-CF,
+        mixed, settlement, and no-providers rows stay put with neurons and
+        client tokens intact.
 - [-] T7 — first LIVE window on Groq (quota absorption measured on real
       backlog) — **no longer credential-blocked (T9)**; now waiting on a
       non-empty backlog. Measured 2026-08-28 via `--dry-run`: 0 eligible of

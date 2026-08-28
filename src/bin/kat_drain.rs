@@ -280,6 +280,34 @@ fn classify_error(msg: &str) -> AttemptPlan {
     }
 }
 
+/// Which provider actually served this window (pure — unit-tested).
+///
+/// Load-bearing for ledger attribution. The row's `model` field is the CF
+/// PRICING BASIS — it prices `usd_avoided` and is resolved even when the CF
+/// leg was never armed (Issue 051 T9) — so it is NOT a claim that CF served
+/// anything. Without this field a groq-only window is indistinguishable from
+/// a CF window that happened to cost $0, and the dashboard credits the CF
+/// model with samples it never touched: the `glm-4.7-flash 0` mis-render the
+/// owner hand-reconciled in `7bdb710`, which T9 turned from an anomaly into a
+/// ROUTINE row shape.
+///
+/// A CF-served SMOKE counts as CF usage even when groq served every span —
+/// those neurons are real and must not be attributed to the free tier.
+fn served_by(
+    groq_served: bool,
+    cf_tokens: u64,
+    smoke_neurons: f64,
+    server_neurons: f64,
+) -> &'static str {
+    let cf_used = cf_tokens > 0 || smoke_neurons > 0.0 || server_neurons > 0.0;
+    match (groq_served, cf_used) {
+        (true, true) => "mixed",
+        (true, false) => "groq",
+        (false, true) => "cloudflare",
+        (false, false) => "none",
+    }
+}
+
 // ── The drain ──────────────────────────────────────────────────────────────
 
 /// One prepared queue entry through the harness (post-classification).
@@ -840,10 +868,21 @@ fn append_ledger(
     } else {
         "pure CF window (groq not armed)".to_string()
     };
+    // Issue 051 T13 — WHO SERVED this window. Load-bearing for attribution:
+    // `model` is the CF PRICING BASIS (it prices `usd_avoided` and is
+    // resolved even when the CF leg was never armed), NOT a claim that CF
+    // served anything.
+    let served_by = served_by(
+        gstats.ok > 0,
+        summary.prompt_tokens + summary.completion_tokens,
+        drain.smoke_neurons,
+        server.map_or(0.0, |u| u.neurons),
+    );
     let row = serde_json::json!({
         "ts_unix": ts,
         "arm": "DRAIN",
         "model": model,
+        "served_by": served_by,
         "n": summary.n,
         "client": {
             "prompt_tokens": summary.prompt_tokens,
@@ -1052,6 +1091,28 @@ mod tests {
             ),
             AttemptPlan::StopDay
         );
+    }
+
+    #[test]
+    fn served_by_attributes_each_window_shape() {
+        // The T9 shape this field exists for: groq did all the work, the CF
+        // leg was never even armed.
+        assert_eq!(served_by(true, 0, 0.0, 0.0), "groq");
+        // Pure CF (groq unarmed or served nothing).
+        assert_eq!(served_by(false, 1000, 0.0, 0.0), "cloudflare");
+        assert_eq!(served_by(false, 0, 0.0, 587.36), "cloudflare");
+        // Mixed: the free tier absorbed part, CF caught the rest.
+        assert_eq!(served_by(true, 500, 0.0, 250.0), "mixed");
+        // A failed smoke that never reached either provider.
+        assert_eq!(served_by(false, 0, 0.0, 0.0), "none");
+    }
+
+    #[test]
+    fn a_cf_smoke_is_not_attributed_to_the_free_tier() {
+        // groq served every SPAN but the smoke landed on CF — those neurons
+        // are real. Calling this "groq" would hide metered spend behind the
+        // free-tier label, which is the one thing the ledger must never do.
+        assert_eq!(served_by(true, 0, 60.0, 0.0), "mixed");
     }
 
     #[test]

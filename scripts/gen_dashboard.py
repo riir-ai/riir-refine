@@ -143,6 +143,30 @@ def ledger_summary(rows: list[dict]) -> dict:
             groq["usd_avoided"] += gq.get("usd_avoided_est") or 0.0
             groq["rate_limited"] += gq.get("rate_limited") or 0
             groq["fallbacks"] += gq.get("fallbacks_to_cf") or gq.get("fallbacks") or 0
+        # Issue 051 T13 — attribute a GROQ-ONLY window to the free provider,
+        # not to the CF model whose id the row carries as its PRICING BASIS.
+        # Without this, such a row renders as `<cf-model> 0` ($0, 0 tokens)
+        # AND credits the CF model with `n` samples groq actually served —
+        # the mis-render hand-reconciled in `7bdb710`, which the T9 groq-only
+        # window turned from an anomaly into a routine row shape.
+        #
+        # Deliberately narrow. Rows that must stay on the CF model:
+        #   - pure-CF / mixed windows   → client tokens > 0
+        #   - settlement/backfill rows  → server neurons > 0, client 0
+        #   - a CF smoke + groq window  → drain.smoke_neurons > 0
+        # Only "groq did work AND CF demonstrably did none" reattributes.
+        # `served_by` (emitted from T13 on) is authoritative; the token
+        # heuristic is the fallback that keeps pre-T13 rows correct.
+        cf_used = bool(
+            (cl.get("prompt_tokens") or 0)
+            or (cl.get("completion_tokens") or 0)
+            or (sv.get("neurons") or 0)
+            or ((r.get("drain") or {}).get("smoke_neurons") or 0)
+        )
+        gq_active = bool(gq.get("enabled") or gq.get("calls") or gq.get("rate_limited"))
+        served_by = r.get("served_by")
+        if served_by == "groq" or (served_by is None and gq_active and not cf_used):
+            model = "groq:" + (gq.get("model") or "?")
         m = per_model.setdefault(model, {
             "usd": 0.0, "neurons": 0.0, "requests": 0, "n": 0,
             "prompt_tokens": 0, "completion_tokens": 0,
