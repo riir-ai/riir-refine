@@ -84,6 +84,23 @@ Leftovers found + removed (owner ask: "any active on cloudflare leftover?"):
       without the webhook, crossings still land in KV + `/status`
       `alerts_today`. Today's 103.3% event would have paged at all three
       levels once live.
+      **Blocker sharpened 2026-08-28 (T13): `ALERT_WEBHOOK_URL` alone cannot
+      activate this** — the collector needs `CF_API_TOKEN` too, and that token
+      **cannot be minted from this machine.** `wrangler whoami` shows OAuth
+      scopes `account (read)` / `user (read)` with NO `user_tokens:edit`, so no
+      agent or script here can create it; it must be made by hand: CF dashboard
+      → My Profile → API Tokens → Create Token → Custom → permission
+      `Account · Account Analytics · Read` (account
+      `7e11517c4dd4f6e9cede7da9b60d66eb`), then
+      `cd cloudflare/housekeeping && npx wrangler secret put CF_API_TOKEN`.
+      A long-lived token is unavoidable for the Worker because the wrangler
+      OAuth token rotates hourly.
+      The asymmetry that makes this survivable: the *generator* reads analytics
+      fine (it uses that rotating OAuth token from
+      `~/Library/Preferences/.wrangler/config/default.toml`), which is why the
+      dashboard's cap chart is live and DID surface the 103.3% event. What is
+      missing is only *push* paging — *pull* (look at the dashboard) works, and
+      the T12 reconciliation card now cross-checks it against billing truth.
 - [-] **T5 KAT rail** — PARTIAL 2026-08-26 (Issue 045); blocker REWORDED
       2026-08-28: the housekeeping Worker records the daily mint anchor
       (`neurons_today`, the mint function's input per Proposal 005
