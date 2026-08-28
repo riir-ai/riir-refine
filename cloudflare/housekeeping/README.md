@@ -46,23 +46,51 @@ npx wrangler secret put MONTHLY_BUDGET_USD    # optional monthly container budge
 - **Monthly budget:** if `MONTHLY_BUDGET_USD` is set, the run sums the
   month's `day:*` rows and alerts once per month (`alert:<YYYYMM>:budget`)
   when month-to-date est cost reaches the budget.
+- **`day:*` rows are recomputed, not accumulated** (fixed 2026-08-28): each
+  run sums the authoritative `hour:<day>*` rows. The previous
+  read-modify-write double-counted on a cron double-fire or manual invoke and
+  could lose an update between overlapping runs.
 - Alerting only runs when `CF_API_TOKEN` is set (neurons are only known
   there). Without a webhook, alerts still land in KV (`notified: false`).
+
+## Optional secret (read gating, Issue 045 T7)
+
+```sh
+npx wrangler secret put READ_TOKEN            # gates /hours, /days, /status config half
+```
 
 ## Deploy / read
 
 ```sh
 npx wrangler deploy
 curl https://riir-kat-housekeeping.<account>.workers.dev/status
-curl '.../hours?n=24'   # hourly rows (containers est_usd + awake_s per app)
-curl '.../days?n=14'    # day aggregates
+curl -H "Authorization: Bearer $READ_TOKEN" '.../hours?n=24'   # hourly rows
+curl -H "Authorization: Bearer $READ_TOKEN" '.../days?n=14'    # day aggregates
 ```
 
-`/status`, `/latest`, `/hours?n=`, `/days?n=` are **CORS-enabled**
-(`Access-Control-Allow-Origin: *`) so the ops dashboard can fetch them
-cross-origin. `/status` additionally reports `cap`, `thresholds`,
-`has_webhook`, `has_monthly_budget`, and `alerts_today` (alerts fired
-today) alongside the unchanged `latest` row.
+### Access model (hardened 2026-08-28 — Issue 045 §T7)
+
+| route | anonymous | with `READ_TOKEN` | cache |
+|---|---|---|---|
+| `/latest` | minimised projection + `redacted:true` | full row | 60 s |
+| `/status` | liveness only (`worker`, `cron`, `ts`, `ok`) | + `cap`, `thresholds`, `has_webhook`, `has_monthly_budget`, `read_gated`, `alerts_today`, `latest` | 60 s |
+| `/hours?n=` | **401** *(fails open until `READ_TOKEN` set)* | rows, `n ≤ 168` | 300 s |
+| `/days?n=` | **401** *(fails open until `READ_TOKEN` set)* | rows, `n ≤ 90` | 300 s |
+
+- `/latest` redacts **unconditionally** — it does not fail open. The
+  projection (`ts`, `hour`, `ok`, `mint`, aggregate `containers.est_usd`,
+  `ai.neurons_today`, `ai.pct`) is by construction everything the dashboard
+  consumes, so hard-gating the per-app ids and cost breakdown costs no
+  functionality. The other routes fail open so `token_set` stays readable as
+  the check that the `CF_API_TOKEN` step landed.
+- **CORS is an allowlist**, not `*` — set `ALLOWED_ORIGINS` (`[vars]`,
+  comma-separated, no trailing slash) to the origins allowed to read
+  cross-origin. A non-allowlisted `Origin` gets no `Access-Control-Allow-Origin`.
+- **Fan-out is bounded.** `n` clamps to 168/90 and reads run at concurrency
+  16. Before this, `n=720` meant 720 unbounded concurrent KV gets on an
+  unauthenticated route — 138 requests exhausted the 100k/day KV read tier,
+  which also broke the alert-dedupe read and silenced the cap alarm.
+- Non-`GET`/`HEAD` → `405`.
 
 ## Re-deploying the dashboard after changes here
 

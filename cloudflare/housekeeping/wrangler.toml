@@ -13,6 +13,15 @@
 # Auth: set the CF_API_TOKEN secret once (dedicated API token, scope
 #   Account → Analytics : Read):
 #     npx wrangler secret put CF_API_TOKEN
+#
+# Read-side hardening (Issue 045, 2026-08-28):
+#   READ_TOKEN (optional secret) gates /hours, /days and the config half of
+#   /status. FAILS OPEN until set, matching DASHBOARD_TOKEN. /latest is always
+#   public but returns a MINIMISED projection (ts/ok/mint/neurons/est_usd) —
+#   per-app ids and cost breakdown need the token. Set with:
+#     npx wrangler secret put READ_TOKEN
+#   ALLOWED_ORIGINS (var) is the CORS allowlist; was `*`, which let any page
+#   in any browser read this account cost telemetry cross-origin.
 # The wrangler OAuth token rotates hourly and CANNOT be used here.
 # Until the secret is set, the cron still writes heartbeat rows (proof the
 # schedule is alive; doubles as the dashboard T9 staleness signal).
@@ -43,3 +52,6 @@ CPU_USD_PER_S = "0.000020"
 # Daily Workers-AI neuron cap (Issue 044 T4 budget alerting). Alert
 # thresholds are 50% / 90% / 100% of this, once per threshold per day.
 NEURON_CAP = "10000"
+# CORS allowlist (comma-separated origins, no trailing slash). Defaults to the
+# ops dashboard origin when unset.
+ALLOWED_ORIGINS = "https://riir-ops-dashboard.foxfox.workers.dev"

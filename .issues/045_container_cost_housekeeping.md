@@ -1,7 +1,7 @@
 # Issue 045 — container cost observability + hourly housekeeping worker + smallest-sizing verdict
 
 **Filed:** 2026-08-26
-**Status:** OPEN — T4 (owner secrets) + T6 (external ledger shell) remain; T5 DEFERRED-unachievable 2026-08-28 with root cause fixed. T1 verdict recorded, T2+T3 SHIPPED same day; live-mint half gated on Proposal 005 Phase 1. Sizing verdict feeds Proposal 005 T2.0/T2.1 **+ T2.6 / [Plan 031](../.plans/031_kat_sweeper_temp_container_r2_tier.md)** (2026-08-26 later-session sync). **2026-08-27: the T3 Worker was EXTENDED + redeployed (`ab79bd20`) — CORS on all read endpoints (dashboard live-fetch), Issue-044-T4 budget alerting (cap thresholds 50/90/100% + optional monthly budget, KV-dedupe, webhook via `ALERT_WEBHOOK_URL`), extended `/status` (`cap`/`thresholds`/`has_webhook`/`has_monthly_budget`/`alerts_today`).** **2026-08-28 truth-refresh: Proposal 005 Phase 1 LANDED 2026-08-27 (T1.5 dapps `84dd049` / T1.6 clippy `0a7cfd8`) — T6's blocker is NO LONGER Phase 1; the live-mint swap-in awaits the deferred Worker/DO HTTP ledger shell (Proposal 005 phase-2 defer / Plan 031 Phase B gate / phase-3 owner gate). Worker mint status strings refreshed `pending-phase-1` → `pending-worker-shell` + redeployed (version `f93ae507`, live-verified on the 04:00 UTC tick). T4 unchanged (owner-gated secrets). T5 still blocked — CLI exposes no id→name mapping (see checkbox).**
+**Status:** OPEN — T4 (owner secrets) + T6 (external ledger shell) remain; T5 DEFERRED-unachievable and T7 read-path hardening SHIPPED 2026-08-28. Spun out [Issue 053](053_unattributed_container_app_a03a70ff.md) (unattributed app `a03a70ff`, 94% of container spend / 17.7 GB egress, attribution owner-gated). T1 verdict recorded, T2+T3 SHIPPED same day; live-mint half gated on Proposal 005 Phase 1. Sizing verdict feeds Proposal 005 T2.0/T2.1 **+ T2.6 / [Plan 031](../.plans/031_kat_sweeper_temp_container_r2_tier.md)** (2026-08-26 later-session sync). **2026-08-27: the T3 Worker was EXTENDED + redeployed (`ab79bd20`) — CORS on all read endpoints (dashboard live-fetch), Issue-044-T4 budget alerting (cap thresholds 50/90/100% + optional monthly budget, KV-dedupe, webhook via `ALERT_WEBHOOK_URL`), extended `/status` (`cap`/`thresholds`/`has_webhook`/`has_monthly_budget`/`alerts_today`).** **2026-08-28 truth-refresh: Proposal 005 Phase 1 LANDED 2026-08-27 (T1.5 dapps `84dd049` / T1.6 clippy `0a7cfd8`) — T6's blocker is NO LONGER Phase 1; the live-mint swap-in awaits the deferred Worker/DO HTTP ledger shell (Proposal 005 phase-2 defer / Plan 031 Phase B gate / phase-3 owner gate). Worker mint status strings refreshed `pending-phase-1` → `pending-worker-shell` + redeployed (version `f93ae507`, live-verified on the 04:00 UTC tick). T4 unchanged (owner-gated secrets). T5 still blocked — CLI exposes no id→name mapping (see checkbox).**
 **Repo:** riir-clippy (dashboard + worker deploy live here; sizing verdict feeds Proposal 005 T2.0/T2.1)
 **Owner ask (2026-08-26):**
 1. can the container be smaller? smallest?
@@ -182,6 +182,13 @@ lives (T1 above).
       + optional `MONTHLY_BUDGET_USD` join the same one-time step — the
       alerting mechanism is deployed + inert until then; without the
       webhook, crossings still land in KV + `/status alerts_today`)*
+      *(2026-08-28: `READ_TOKEN` joins the same step — optional, gates
+      `/hours` + `/days` + the `/status` config half. Those three FAIL OPEN
+      until it is set, deliberately, so `token_set` stays readable as the
+      check that this very step landed. `/latest` is already hard-gated and
+      needs no secret. Verify after setting:
+      `curl -s .../status` → `read_gated: true`, and
+      `curl -s .../hours` → 401.)*
 - [-] T5 name the container-family apps — **DEFERRED as unachievable by
       API; root cause found and fixed, correlation surface shipped.**
       **2026-08-28 second re-probe corrects the first one's premise.** The
@@ -226,6 +233,108 @@ lives (T1 above).
       mint call (`ledger DO` / `chain_prog_kat`). Worker status strings
       refreshed to `pending-worker-shell` 2026-08-28 + deployed
       (`f93ae507`).
+- [x] T7 read-path hardening — prod-grade perf/sec pass on the T3 Worker
+      (2026-08-28; §T7 below). Deployed `ca93c8de`, live-verified.
+
+## T7 — read-path hardening (SHIPPED 2026-08-28)
+
+A prod-grade perf/sec pass over the T3 Worker. Seven findings, all fixed and
+live-verified (`riir-kat-housekeeping` version `ca93c8de`).
+
+### SEC-1 (headline) — unauthenticated KV read amplification
+
+`/hours?n=` accepted **n=720** and fanned it out as **720 unbounded
+concurrent KV gets**, on a route with no auth. Measured blast radius:
+
+- **138 requests exhaust the 100k/day KV read tier** — ~14 s at a trivial
+  10 req/s.
+- Once exhausted the damage is not just "graphs empty": the alert-dedupe
+  `kv.get('alert:<date>:<t>')` throws, is swallowed by the outer catch, and
+  the run records `ok:false`. **Budget alerting degrades exactly when it
+  matters** — an attacker (or a crawler) can silence the cap alarm for the
+  rest of the UTC day for free.
+
+Fixed: window capped (`MAX_HOURS=168`, `MAX_DAYS=90`) and fan-out bounded by
+a `mapLimit(…, 16)` helper replacing `Promise.all`. Worst case is now 168
+keys at concurrency 16, bounded by construction (`Math.min`), verified over
+`n ∈ {720, -5, abc, 0, 1e9, null}`.
+
+### SEC-2 — CORS was `*`
+
+Any page in any browser could read this account's cost telemetry
+cross-origin. Now an allowlist (`ALLOWED_ORIGINS` var, defaults to the
+dashboard origin); a non-allowlisted `Origin` gets no ACAO header. Verified
+live: `evil.example` → absent, dashboard origin → echoed.
+
+### SEC-3 — public routes exposed account telemetry
+
+`/latest` returned the whole row (per-app **ids**, per-app cost, neuron
+counts); `/status` advertised config posture (`cap`, `has_webhook`,
+`has_monthly_budget`, `alerts_today`) — i.e. whether alerting was even wired.
+
+Split by what each consumer actually needs:
+
+| route | anonymous | with `READ_TOKEN` |
+|---|---|---|
+| `/latest` | minimised projection (`ts`, `hour`, `ok`, `mint`, aggregate `est_usd`, `neurons_today`, `pct`) + `redacted:true` | full row |
+| `/status` | liveness only (`worker`, `cron`, `ts`, `ok`) | + config posture |
+| `/hours`, `/days` | 401 *(fails open until `READ_TOKEN` set)* | full rows |
+
+`/latest` redacts **unconditionally** — it does not fail open — because the
+projection is by construction everything the dashboard consumes, so
+hard-gating costs no functionality. The other routes fail open so the owner
+retains a diagnostic path (notably `token_set`) before any token exists.
+Token compare is length-independent (`timingSafeEqual`) so a wrong token
+cannot be recovered byte-wise from response timing.
+
+### CORRECT-1 — the day aggregate was non-idempotent AND racy
+
+`day:<dk>` did a read-modify-write: `prev.est_usd + this hour`. A cron
+double-fire or any manual invoke **double-counted** the hour, and two
+overlapping runs lose an update on an eventually-consistent store. Now
+**recomputed** by summing the authoritative `hour:<dk>*` rows — idempotent
+and convergent. Costs ≤24 bounded KV reads/run (~576/day, noise against the
+100k tier).
+
+### RESIL-1 — one failing dataset discarded the other two
+
+`Promise.all` over the three collectors meant a single GraphQL failure threw
+away usage + awake + neurons and wrote a bare `ok:false` row, losing an hour
+of collectable data. Now `Promise.allSettled` with per-dataset notes; a
+partial hour is recorded rather than dropped. `neurons` may now be `null`,
+so the cap-alert branch is type-guarded.
+
+### RESIL-2 — no timeouts
+
+Neither the GraphQL fetch nor the alert webhook had one; a hanging endpoint
+stalled the cron run. Added `AbortSignal.timeout` — 10 s GraphQL, 5 s webhook.
+
+### PERF-1 — no caching, unbounded MTD scan
+
+Read routes now send `Cache-Control` (60 s `/latest` + `/status`, 300 s
+`/hours` + `/days`), cutting repeat KV reads from dashboard loads. The
+monthly-budget MTD scan's per-key `get` loop is bounded by the same
+`mapLimit`.
+
+### Consistency — full applicationId in the Worker too
+
+The Worker carried the same `applicationId.slice(0, 8)` truncation that
+caused the T5 misdiagnosis; its KV rows now record full 36-char ids.
+**Schema note:** `hour:*` rows written from this version key
+`containers.apps` by full UUID, older rows by 8-char stub. Nothing consumes
+that map yet (the dashboard reads GraphQL directly), so no migration is
+needed — but a future consumer must tolerate both.
+
+### Verification
+
+`node --check`; unit tests for `mapLimit` (peak concurrency 16, order
+preserved, empty-input safe) and `timingSafeEqual` (6 cases incl. unequal
+lengths + unicode); `wrangler dev --local` for route behaviour (CORS
+allow/deny, 405 on POST, 401 matrix with and without `READ_TOKEN`,
+redaction projection against a seeded row); then live curl against the
+deployed Worker. The dashboard live badge consumes only `ts` +
+`ai.neurons_today`, both retained in the public projection — confirmed
+still 200 after deploy.
 
 ## Notes
 
