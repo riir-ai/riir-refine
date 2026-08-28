@@ -292,6 +292,15 @@ jobs:
             echo "changed=true" >> "${GITHUB_OUTPUT}"
           fi
 
+      - name: Verify dashboard DOM (the y="83"-concat gate)
+        # Issue 044 T13 — `verify_dom.mjs` is the anti-vacuity gate for the
+        # generated page: it stubs the DOM, executes the emitted script, and
+        # asserts every chart rect lands on the row lattice (the string-concat
+        # class that put 39 rects off-lattice at HEAD once) + corpus ys + the
+        # sparkline range labels. Runs BEFORE deploy: a generator change that
+        # breaks the DOM cannot reach the Worker.
+        run: node cloudflare/dashboard/verify_dom.mjs cloudflare/dashboard/public/index.html
+
       - name: Deploy dashboard Worker (soft-skip when unconfigured)
         # Nightly deploys only when artifacts changed; a manual
         # workflow_dispatch always attempts the deploy (repair path).
