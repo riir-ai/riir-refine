@@ -9,9 +9,9 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //! unconditional wins + honestly NotBenchable rules.
 //!
-//! 88 entries across 12 categories (complexity 17, allocation 20, simd 7,
+//! 89 entries across 12 categories (complexity 17, allocation 20, simd 8,
 //! layout 7, iterators 9, concurrency 8, io 3, arithmetic 8, dispatch 3,
-//! caching 4, bevy 1, wasm 1). 78 are benchable; 10 are honestly
+//! caching 4, bevy 1, wasm 1). 79 are benchable; 10 are honestly
 //! NotBenchable (8 external-runtime/size-class + 2 metric-mismatch, Issue 014).
 //! Batch 48 (idle-queue item 11, 2026-08-16) added the 8 online-search
 //! candidates (perf-book std-types + iterators chapters): collect-append-to-
@@ -42,6 +42,12 @@
 //! ParetoDominant, both context-annotated — the 128B-line arch caveat +
 //! the park-storm regime condition).
 //!
+//! Batch 83 (2026-08-28, Research 097 — the arXiv:2608.26368 SIMD
+//! bit-slicing predicate distill) added bitplane-transpose-repeated-
+//! predicate-scan: encode-once bit-plane transposition + zero-decompression
+//! bitwise predicate evaluation for REPEATEDLY filtered integer columns
+//! (the O'Neil-Quass bit-sliced index as a primary representation).
+//!
 //! ## Bench specs (behind `rust_perf_bench`)
 //!
 //! Benchable rules carry an optional [`BenchSpec`] — a self-contained harness
@@ -49,7 +55,7 @@
 //! `run_buggy` / `run_fixed` entry points. The bench validator generates a
 //! temp bin crate from the spec + runs a timing loop at multiple sizes.
 //!
-//! Currently benchable (78/88):
+//! Currently benchable (79/89):
 //! - `o1-lookup` (Vec scan vs HashMap lookup — clear O(n) vs O(1))
 //! - `bsearch-sorted-slice` (linear scan vs binary search — O(n) vs O(log n) on sorted data)
 //! - `dedupe-hashset-vs-vec` (Vec::contains loop vs HashSet collect — O(n²) vs O(n))
@@ -121,8 +127,9 @@
 //! - `swar-digit-chunk-parse` (per-digit decimal parse loop → SWAR 8-digit chunk fold, 3 multiplies per 8 digits + SWAR digit validation — the serial `val = val*10 + d` chain broken; regime: ≥8 digits win, <8 pay the guard (the source's own README); Batch 74, simd-json distill)
 //! - `runtime-feature-detect-per-chunk` (CPU feature detection inside a per-chunk hot fn → resolve once via cached static / static cfg gate — the std::detect string resolution + detector read per call rivals small work units; Batch 74, simd-json distill)
 //! - `runtime-int-exponent-powi` (runtime-integer-exponent `powf` libm call → `powi` binary exponentiation — log2(n) multiplies vs an opaque pow call; NOT bit-identical, rel-error-gated; Batch 77, lucebox rope distill)
+//! - `bitplane-transpose-repeated-predicate-scan` (repeatedly filtered integer column → bit-plane transposition + bitwise predicate evaluation over the compressed planes, zero decompression — b/32 the bytes scanned + 64 values per word op; Batch 83, arXiv:2608.26368 distill)
 //!
-//! Not benchable (10/88) — honest:
+//! Not benchable (10/89) — honest:
 //! - `layout-reorder` (struct size — deterministic `size_of`, not a runtime
 //!   microbench; the cache-utilization claim needs a specific access pattern)
 //! - `repr-u8-enum` (enum size — deterministic `size_of`, same class as
@@ -167,13 +174,13 @@ use crate::domains::rust_perf::{PerfRule, RustPerfDomain};
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 88 entries
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 89 entries
 /// covering the main perf pattern categories (complexity, allocation, simd,
 /// layout, iterators, concurrency, io, arithmetic, dispatch, caching, bevy,
 /// wasm). Allocation is the deepest (20 rules); complexity has 17 (Batch 76
 /// added 1); iterators
-/// has 9 (Batch 66/67 added 2); simd has 7 (Batch 62 added 1 + Batch 64
-/// added 1); layout has 6 (Batch 61 added 1); concurrency has 7
+/// has 9 (Batch 66/67 added 2); simd has 8 (Batch 62 + 64 + 83 added 1
+/// each); layout has 6 (Batch 61 added 1); concurrency has 7
 /// (Issue 014 added the two metric-mismatch rules; Batch 65 added the two
 /// contention rules; Batch 73 added 1);
 /// arithmetic has 7 (Batch 74 added 1); dispatch has 3 (Batch 61 + 74 added
@@ -524,7 +531,11 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
         // primarily auto-vectorization, NOT branch prediction — even with
         // 100% predictable conditions, the branchless version is ~10× faster
         // because LLVM vectorizes the multiply loop but cannot vectorize the
-        // branchy loop.
+        // branchy loop. External measured evidence for the selectivity axis
+        // (Batch 83, Research 097 / arXiv:2608.26368): a scalar filter loop's
+        // throughput swung ~4.5× with predicate selectivity (5.4K → 1.2K
+        // M elem/s, 0.1% → 90%) on branch prediction alone, while the
+        // branchless bit-plane form stayed constant (<6% spread).
         PerfRule {
             rule_id: "branchless-conditional".to_string(),
             name: "Data-dependent if in hot loop → branchless arithmetic (bool as usize)".to_string(),
@@ -2122,6 +2133,40 @@ PerfRule {
     context_notes: Some("MEASURED ParetoDominant 3/0/0 — 1903.70x/5414.62x/21353.90x at N=100K/300K/1M store size (K=1,000 touched ids; M3 Max release, rustc 1.97, 2026-08-27, load ~2.4 of 16; verdict-stable ×2: 2217.57x/5962.48x/25736.41x on the re-run; allocs 1->0, bytes 35.7 MB -> 0 at N=1M — the HashMap build eliminated; alloc-det stable). REGIME (subset ratio K/N + working-set fit): the win is two-part — the O(N) scan+hash build eliminated AND the scan's own cache traffic no longer evicts the K pages the subset reads (the source's disk-page story, reproduced here at cache scale: N=1M × 32 B nodes ≈ 32 MB > L2, so the scan evicts what the subset needs). At K ≈ N (read-most-everything) the index build amortizes to nothing — expected Tie-to-slower for the lazy form only when the SAME subset is read REPEATEDLY (then a persistent index is the sort-key-cache rule instead); the rule lives at K/N ≪ 1 with one-shot or sparse access. The eager arm's HashMap<usize, &Node> is the faithful source shape (pointer maps over mmap'd entries). Distinct from `collect-avoidance` (alloc staging) — the load-bearing half here is working-set residency; distinct from `encoded-layout-borrowed-view` (accessor re-expansion) — this is index materialization BEFORE a subset read. Suggestion-only (architectural: a parse-only proposer cannot see the direct-access path). Source: Meilisearch blog 2026-03-18 §Full scans are harmful + §But what's the new trick?.".to_string()),
     #[cfg(feature = "rust_perf_bench")]
     bench_spec: Some(eager_pointer_collect_lazy_fetch_bench_spec()),
+},
+// ── simd: repeatedly filtered integer column stored row-wise → bit-plane ──
+// transposition + zero-decompression bitwise predicate evaluation ─────────
+// Source: arXiv:2608.26368 (Research 097, the O'Neil & Quass bit-sliced
+// index rebuilt as a PRIMARY representation). Values are transposed into b
+// bit-planes (b = bits of the column max — adaptive per block in the
+// source); a > c filter becomes the two-mask MSB→LSB recurrence
+// (gt |= eq & plane when c's bit is 0; eq &= plane when it is 1) — pure
+// AND/OR/NOT word ops, NO decompression, 64 values per word op, and b/32
+// the bytes to stream (b=6 → 5.3× less). The win needs the AMORTIZATION
+// regime: encoding is O(N·b) once (source break-even 7–25 scans; single-
+// scan workloads are OUT — the source's own 1M-row single-pass cells
+// measured sub-1×) and the win GROWS as b shrinks (b≈32 → 1× compression,
+// no win; source guideline b ≤ 16). Point lookups are out (the layout is
+// scan-shaped); wide-type EQUALITY loses (scalar == is one instruction vs
+// b plane ANDs — the source measured 0.5–0.7× for timestamp eq) — range /
+// comparison predicates are the win; large IN-lists scale k·b passes (hash
+// on materialized values past ~k=8). Distinct from `soa-hot-field`
+// (field-level columnar layout, no compression, no predicate algebra —
+// bit-plane is the per-BIT extreme with a different consumer shape); from
+// `simd-chunk` (chunked word loops are the VEHICLE here, not the
+// mechanism); from `bool-to-bitpack` (flag DENSITY for counting, not value
+// predicates); from `sparse-set-bit-iteration-tz-blsr` (iteration WITHIN a
+// word, not layout across values). Suggestion-only (a parse-only proposer
+// cannot prove the column is re-scanned).
+PerfRule {
+    rule_id: "bitplane-transpose-repeated-predicate-scan".to_string(),
+    name: "repeatedly filtered integer column stored row-wise → encode-once bit-plane transposition + zero-decompression bitwise predicate evaluation (b/32 the bytes, 64 values per word op)".to_string(),
+    category: "simd".to_string(),
+    buggy_code: "// Row-oriented event column; EVERY dashboard query re-scans it.\nstruct Events {\n    user_age: Vec<u32>, // 4 B/value; 10M events = 40 MB streamed per scan\n}\nimpl Events {\n    fn count_older_than(&self, age: u32) -> u64 {\n        let mut hits = 0u64;\n        for &a in &self.user_age {\n            if a > age {\n                hits += 1; // one value per iteration, full-width bytes\n            }\n        }\n        hits\n    }\n}".to_string(),
+    fixed_code: "// Encode ONCE at ingest; every filter is bitwise plane ops — the\n// values are NEVER materialized (zero decompression).\nstruct BitSlicedColumn {\n    planes: Vec<Vec<u64>>, // planes[bit][word]; index 0 = LSB\n    words: usize,\n}\nimpl BitSlicedColumn {\n    fn encode(values: &[u32]) -> Self {\n        let max_val = values.iter().copied().max().unwrap_or(0);\n        let b = (32 - max_val.leading_zeros()).max(1) as usize; // adaptive width\n        let words = values.len().div_ceil(64);\n        let mut planes = vec![vec![0u64; words]; b];\n        for (i, &v) in values.iter().enumerate() {\n            for bit in 0..b {\n                planes[bit][i / 64] |= (((v >> bit) & 1) as u64) << (i % 64);\n            }\n        }\n        Self { planes, words }\n    }\n    // x > c: two-mask MSB→LSB recurrence — pure AND/OR per plane word.\n    // DOMAIN CONTRACT (the paper's §3.5 bias transform): c must be\n    // representable in the column's bit-width — one branch per QUERY, not\n    // per value (an out-of-range c means nothing can exceed it).\n    fn count_gt(&self, c: u32) -> u64 {\n        let b = self.planes.len() as u32;\n        if b < 32 && c >= (1u32 << b) {\n            return 0;\n        }\n        let mut gt = vec![0u64; self.words];\n        let mut eq = vec![u64::MAX; self.words];\n        for (bit, plane) in self.planes.iter().enumerate().rev() {\n            if (c >> bit) & 1 == 0 {\n                // data 1 where c 0 → still-equal values are confirmed greater\n                for w in 0..self.words {\n                    gt[w] |= eq[w] & plane[w];\n                }\n            } else {\n                // data 0 where c 1 → drop from the still-equal set\n                for w in 0..self.words {\n                    eq[w] &= plane[w];\n                }\n            }\n        }\n        gt.iter().map(|w| u64::from(w.count_ones())).sum()\n    }\n}".to_string(),
+    context_notes: Some("MEASURED ParetoDominant 3/0/0 — 1.96x/2.16x/1.93x at N=10K/100K/1M (64 filter scans per timed call over the SAME column, b=7 planes, ~50% selectivity; M3 Max release, rustc 1.97, 2026-08-28, load ~4.7-5.6 of 16; verdict-stable x2: 2.08x/2.20x/1.96x on the re-run; allocs 0/128 — the fixed arm allocates its two scratch masks per scan, hoistable by the caller; alloc-det stable). HONEST REGIME NOTE — the measured ~2x is NOT the source's 10.7x headline: in Rust the SCALAR arm auto-vectorizes (LLVM lowers the threshold-count loop to SIMD, ~0.126 ns/elem vs the paper's non-vectorized Java scalar at ~0.65), which compresses the win to the LAYOUT half — b/32 fewer bytes streamed + 64 values per word op. Never cite the paper's 10.7x as this mechanism's isolated number. AMORTIZATION is the rule's regime gate: encoding is O(N*b) ONCE (outside the timed region here by design — the ingest-amortization shape); the source measured break-even at 7-25 scans and its own 1M-row single-pass cells ran sub-1x, so single-scan/write-once workloads are OUT of regime. b<=16 guideline (b~32 = 1x compression, no win); point lookups OUT (scan-shaped layout); wide-type EQUALITY loses (the source: 0.5-0.7x for timestamp eq — scalar == is one instruction vs b plane ANDs); IN-lists scale k*b passes (hash on materialized values past ~k=8). DOMAIN CONTRACT: the predicate constant must be representable in the column width — out-of-range c returns 0 through one branch per query (the paper's §3.5 bias transform; the G1 gate caught the unguarded form marking ALL rows greater on an out-of-range constant). Data-oblivious side property: plane-reduction throughput is selectivity-constant (the source: <6% spread across 0.1%-90% vs the scalar branchy loop's ~4.5x swing). Differentiation in-rule vs soa-hot-field / simd-chunk / bool-to-bitpack / sparse-set-bit-iteration-tz-blsr. Suggestion-only (a parse-only proposer cannot prove the column is re-scanned). Source: arXiv:2608.26368 (Research 097).".to_string()),
+    #[cfg(feature = "rust_perf_bench")]
+    bench_spec: Some(bitplane_transpose_repeated_predicate_scan_bench_spec()),
 },
     ])
 }
@@ -7316,7 +7361,7 @@ mod tests {
     #[test]
     fn seed_corpus_has_eighty_eight_entries_across_twelve_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 88);
+        assert_eq!(corpus.entries.len(), 89);
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
@@ -7332,9 +7377,10 @@ mod tests {
         // added debug-assert-length-hoist); iterators
         // has 9 (Batch 48 added three; Batch 66 added
         // sortedness-check-branchless-accumulate; Batch 67 added
-        // byte-find-position-to-memchr); simd has 7 (Batch 62 added
+        // byte-find-position-to-memchr); simd has 8 (Batch 62 added
         // transposed-weight-register-gemv; Batch 64 added
-        // loop-order-innermost-contiguous); layout has 6 (Batch 53 added
+        // loop-order-innermost-contiguous; Batch 83 added
+        // bitplane-transpose-repeated-predicate-scan); layout has 6 (Batch 53 added
         // soa-hot-field; Batch 61 added usize-index-to-u32; Batch 78 added
         // narrow-counter-overflow-promotion) + concurrency
         // has 8 (Issue 014 added the two metric-mismatch rules; Batch 65
@@ -7947,10 +7993,10 @@ mod tests {
 
     #[cfg(feature = "rust_perf_bench")]
     #[test]
-    fn seventy_eight_rules_have_bench_specs() {
+    fn seventy_nine_rules_have_bench_specs() {
         let corpus = build_perf_seed_corpus();
         let with_spec = corpus.entries.iter().filter(|e| e.bench_spec.is_some()).count();
-        assert_eq!(with_spec, 78, "expected 78 benchable rules, got {with_spec}");
+        assert_eq!(with_spec, 79, "expected 79 benchable rules, got {with_spec}");
     }
 
     #[cfg(feature = "rust_perf_bench")]
@@ -8012,7 +8058,7 @@ mod tests {
             .filter(|e| e.context_notes.is_some())
             .map(|e| e.rule_id.as_str())
             .collect();
-        assert_eq!(annotated.len(), 31, "expected 31 context-annotated rules");
+        assert_eq!(annotated.len(), 32, "expected 32 context-annotated rules");
         assert!(annotated.contains(&"precompute-table"));
         assert!(annotated.contains(&"papaya-lockfree"));
         assert!(annotated.contains(&"dedupe-hashset-vs-vec"));
@@ -8038,6 +8084,7 @@ mod tests {
         assert!(annotated.contains(&"group-keys-borrow-allocate-on-first-sight")); // Batch 75 — R/S regime + correctness contract
         assert!(annotated.contains(&"sorted-input-previous-row-fast-path")); // Batch 75 — hit-rate regime
         assert!(annotated.contains(&"btreemap-sorted-iteration")); // Batch 75 rider — the two-row sorted-read decision table
+        assert!(annotated.contains(&"bitplane-transpose-repeated-predicate-scan")); // Batch 83 — measured ParetoDominant + the amortization/b/equality regime gates
         assert!(annotated.contains(&"narrow-counter-overflow-promotion")); // Batch 78 — ParetoDominated honest-loser (the memory-for-speed trade)
         assert!(annotated.contains(&"cache-line-block-partitioned-lock")); // Batch 78 — measured-winner + regime + alloc-exempt note
     }
@@ -8053,7 +8100,7 @@ mod tests {
             .iter()
             .filter(|e| e.context_notes.is_none())
             .count();
-        assert_eq!(unannotated, 57, "expected 57 unannotated rules (88 - 31 annotated)");
+        assert_eq!(unannotated, 57, "expected 57 unannotated rules (89 - 32 annotated)");
     }
 
     /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -8065,7 +8112,7 @@ mod tests {
         let json = serde_json::to_string(&corpus.entries).unwrap();
         let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
         let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-        assert_eq!(annotated, 31);
+        assert_eq!(annotated, 32);
 
         // Simulate a pre-field snapshot: strip `context_notes` from JSON.
         // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -8097,9 +8144,9 @@ mod tests {
 
         let corpus = build_perf_seed_corpus();
 
-        // Filter to the 31 annotated rules.
+        // Filter to the 32 annotated rules.
         let annotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_some()).collect();
-        assert_eq!(annotated.len(), 31, "expected 31 annotated rules");
+        assert_eq!(annotated.len(), 32, "expected 32 annotated rules");
 
         // The HealEntry trait override must agree with the struct field.
         for rule in &annotated {
@@ -8572,6 +8619,112 @@ mod tests {
         }
     }
 
+    /// Batch 83 — the bit-slicing rule is present + retrievable.
+    #[test]
+    fn batch83_rules_present() {
+        let corpus = build_perf_seed_corpus();
+        let ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        assert!(ids.contains(&"bitplane-transpose-repeated-predicate-scan"));
+    }
+
+    /// Batch 83 — the rule parses (syn) on buggy AND fixed code.
+    #[test]
+    fn batch83_pseudocode_parses() {
+        let corpus = build_perf_seed_corpus();
+        let e = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == "bitplane-transpose-repeated-predicate-scan")
+            .unwrap_or_else(|| panic!("bitplane rule missing from corpus"));
+        assert!(
+            syn::parse_file(&e.buggy_code).and_then(|_| syn::parse_file(&e.fixed_code)).is_ok(),
+            "bitplane buggy/fixed must both parse"
+        );
+    }
+
+    /// Batch 83 — G1 (the ported-numeric MANDATE shape): the two-mask MSB→LSB
+    /// recurrence must equal the scalar count EXACTLY for every threshold,
+    /// adversarial value streams (LCG, all-equal, all-zero, max-saturated),
+    /// and BOTH adaptive widths (values < 256 → b = 8; values incl. huge →
+    /// b = 32). Integer ops — no tolerance.
+    #[test]
+    fn batch83_bitplane_mask_matches_scalar_exactly() {
+        fn encode(values: &[u32], b: usize) -> (Vec<Vec<u64>>, usize) {
+            let words = values.len().div_ceil(64);
+            let mut planes = vec![vec![0u64; words]; b];
+            for (i, &v) in values.iter().enumerate() {
+                for (bit, plane) in planes.iter_mut().enumerate() {
+                    plane[i / 64] |= u64::from((v >> bit) & 1) << (i % 64);
+                }
+            }
+            (planes, words)
+        }
+
+        fn gt_popcount(planes: &[Vec<u64>], words: usize, b: usize, c: u32) -> u64 {
+            if b < 32 && c >= (1u32 << b) {
+                return 0;
+            }
+            let mut gt = vec![0u64; words];
+            let mut eq = vec![u64::MAX; words];
+            for bit in (0..b).rev() {
+                let plane = &planes[bit];
+                if (c >> bit) & 1 == 0 {
+                    for w in 0..words {
+                        gt[w] |= eq[w] & plane[w];
+                    }
+                } else {
+                    for w in 0..words {
+                        eq[w] &= plane[w];
+                    }
+                }
+            }
+            gt.iter().map(|w| u64::from(w.count_ones())).sum()
+        }
+
+        // LCG stream + edge-shape columns at two widths.
+        let mut rng: u64 = 0x0B78_0D06_C0DE_5EED;
+        let mut cols: Vec<Vec<u32>> = Vec::new();
+        for _ in 0..8 {
+            let mut v = Vec::with_capacity(513); // non-multiple-of-64 tail
+            for _ in 0..513 {
+                rng = rng.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695_040_888_963_407);
+                v.push(((rng >> 33) % 256) as u32);
+            }
+            cols.push(v);
+        }
+        cols.push(vec![7u32; 513]); // all-equal
+        cols.push(vec![0u32; 129]); // all-zero (b = 1 adaptive)
+        cols.push(vec![u32::MAX; 65]); // max-saturated (b = 32)
+
+        for col in &cols {
+            let max_val = col.iter().copied().max().unwrap_or(0);
+            let b = (32 - max_val.leading_zeros()).max(1) as usize;
+            let (planes, words) = encode(col, b);
+            // sweep ONLY the representable range (the domain contract:
+            // constants beyond 2^b - 1 are bias-handled by the caller — see
+            // the guard checks below)
+            let c_max = u32::from(u8::MAX).min((1u32 << b.min(8)) - 1);
+            for c in 0..=c_max {
+                let scalar = col.iter().filter(|&&v| v > c).count() as u64;
+                assert_eq!(gt_popcount(&planes, words, b, c), scalar, "threshold {c}");
+            }
+            // out-of-range constants: nothing in a b-wide column can exceed
+            // them — the caller-side guard (one branch per query) returns 0
+            if b < 32 {
+                let out = 1u32 << b;
+                let scalar = col.iter().filter(|&&v| v > out).count() as u64;
+                assert_eq!(scalar, 0, "sanity: no value exceeds 2^b");
+            }
+            // wide-width column: sweep a few u32 thresholds too
+            if b == 32 {
+                for c in [0u32, 1, 0x7FFF_FFFF, u32::MAX - 1, u32::MAX] {
+                    let scalar = col.iter().filter(|&&v| v > c).count() as u64;
+                    assert_eq!(gt_popcount(&planes, words, b, c), scalar, "wide threshold {c}");
+                }
+            }
+        }
+    }
+
     /// Batch 78 — G1 for `narrow-counter-overflow-promotion` (the ported-
     /// numeric MANDATE shape): the u32+sidecar form must be EXACTLY
     /// equivalent to the u64 buffer for ANY monotone update stream,
@@ -8706,5 +8859,119 @@ mod tests {
 
         assert_eq!(global_total, block_total);
         assert_eq!(global_total, UPS as u64);
+    }
+}
+
+/// Bench spec for `bitplane-transpose-repeated-predicate-scan` (Batch 83,
+/// Research 097 — arXiv:2608.26368 distill): 64 filter scans per timed call
+/// over the SAME column (the ingest-amortization regime — encoding happens
+/// once in `make_input`, OUTSIDE the timed region by design; the source's
+/// break-even is 7–25 scans). Values in [0, 100) → b = 7 planes; threshold
+/// 50 ≈ 50% selectivity (the scalar branch predictor's worst case). G1 is
+/// integer-exact: the bit-plane popcount MUST equal the scalar count.
+#[cfg(feature = "rust_perf_bench")]
+fn bitplane_transpose_repeated_predicate_scan_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![10_000, 100_000, 1_000_000],
+        harness: r#"
+const SCANS: usize = 64;      // scans per timed call (amortization regime)
+const BIT_CAP: u64 = 100;     // values in [0, 100) -> b = 7 planes
+const THRESHOLD: u32 = 50;    // ~50% selectivity
+
+mod buggy {
+    pub fn scan_count(values: &[u32], threshold: u32) -> u64 {
+        let mut hits = 0u64;
+        for &v in values {
+            if v > threshold {
+                hits += 1;
+            }
+        }
+        hits
+    }
+}
+
+mod fixed {
+    pub struct BitSliced {
+        pub planes: Vec<Vec<u64>>, // [bit][word]
+        pub words: usize,
+    }
+
+    pub fn gt_popcount(col: &BitSliced, threshold: u32) -> u64 {
+        let b = col.planes.len() as u32;
+        if b < 32 && threshold >= (1u32 << b) {
+            return 0;
+        }
+        let mut gt = vec![0u64; col.words];
+        let mut eq = vec![u64::MAX; col.words];
+        for (bit, plane) in col.planes.iter().enumerate().rev() {
+            if (threshold >> bit) & 1 == 0 {
+                for w in 0..col.words {
+                    gt[w] |= eq[w] & plane[w];
+                }
+            } else {
+                for w in 0..col.words {
+                    eq[w] &= plane[w];
+                }
+            }
+        }
+        gt.iter().map(|w| u64::from(w.count_ones())).sum()
+    }
+}
+
+pub struct Input {
+    values: Vec<u32>,
+    fixed_col: fixed::BitSliced,
+    threshold: u32,
+    expected_per_scan: u64,
+}
+
+pub fn make_input(n: usize) -> Input {
+    let mut rng: u64 = 0x9E37_79B9_7F4A_7C15;
+    let mut values = Vec::with_capacity(n);
+    for _ in 0..n {
+        rng = rng
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        values.push(((rng >> 33) % BIT_CAP) as u32);
+    }
+    let max_val = values.iter().copied().max().unwrap_or(0);
+    let b = (32 - max_val.leading_zeros()).max(1) as usize;
+    let words = n.div_ceil(64);
+    let mut planes = vec![vec![0u64; words]; b];
+    for (i, &v) in values.iter().enumerate() {
+        for (bit, plane) in planes.iter_mut().enumerate() {
+            plane[i / 64] |= u64::from((v >> bit) & 1) << (i % 64);
+        }
+    }
+    let expected_per_scan = values.iter().filter(|&&v| v > THRESHOLD).count() as u64;
+    Input {
+        values,
+        fixed_col: fixed::BitSliced { planes, words },
+        threshold: THRESHOLD,
+        expected_per_scan,
+    }
+}
+
+pub fn run_buggy(input: &Input) {
+    let input = std::hint::black_box(input);
+    let mut total = 0u64;
+    for _ in 0..SCANS {
+        total += buggy::scan_count(&input.values, input.threshold);
+    }
+    std::hint::black_box(total);
+    debug_assert_eq!(total, input.expected_per_scan * SCANS as u64);
+}
+
+pub fn run_fixed(input: &Input) {
+    let input = std::hint::black_box(input);
+    let mut total = 0u64;
+    for _ in 0..SCANS {
+        total += fixed::gt_popcount(&input.fixed_col, input.threshold);
+    }
+    std::hint::black_box(total);
+    debug_assert_eq!(total, input.expected_per_scan * SCANS as u64);
+}
+"#
+        .to_string(),
     }
 }
