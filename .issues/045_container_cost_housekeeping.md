@@ -1,7 +1,7 @@
 # Issue 045 — container cost observability + hourly housekeeping worker + smallest-sizing verdict
 
 **Filed:** 2026-08-26
-**Status:** OPEN — T4 (owner secrets) + T6 (external ledger shell) remain; T5 RESOLVED (cross-repo correlation) + T7 read-path hardening SHIPPED 2026-08-28. Issue 053 (unattributed app `a03a70ff`) filed **and RESOLVED same day** by cross-repo correlation — it is the `riir-mmorpg-examples` CCU proof bench (Bench 034); resolved-and-removed per the noise rule, record in §T5 + git history. T1 verdict recorded, T2+T3 SHIPPED same day; live-mint half gated on Proposal 005 Phase 1. Sizing verdict feeds Proposal 005 T2.0/T2.1 **+ T2.6 / [Plan 031](../.plans/031_kat_sweeper_temp_container_r2_tier.md)** (2026-08-26 later-session sync). **2026-08-27: the T3 Worker was EXTENDED + redeployed (`ab79bd20`) — CORS on all read endpoints (dashboard live-fetch), Issue-044-T4 budget alerting (cap thresholds 50/90/100% + optional monthly budget, KV-dedupe, webhook via `ALERT_WEBHOOK_URL`), extended `/status` (`cap`/`thresholds`/`has_webhook`/`has_monthly_budget`/`alerts_today`).** **2026-08-28 truth-refresh: Proposal 005 Phase 1 LANDED 2026-08-27 (T1.5 dapps `84dd049` / T1.6 clippy `0a7cfd8`) — T6's blocker is NO LONGER Phase 1; the live-mint swap-in awaits the deferred Worker/DO HTTP ledger shell (Proposal 005 phase-2 defer / Plan 031 Phase B gate / phase-3 owner gate). Worker mint status strings refreshed `pending-phase-1` → `pending-worker-shell` + redeployed (version `f93ae507`, live-verified on the 04:00 UTC tick). T4 unchanged (owner-gated secrets). T5 still blocked — CLI exposes no id→name mapping (see checkbox).**
+**Status:** OPEN — T4 (owner secrets) + T6 (external ledger shell) remain, and **T8 is code-complete but NOT DEPLOYED** (2026-08-28: `hourKey()` was collapsing 24 hourly rows into 3, understating the daily cost ~8×; fixed + pinned by 12 regression tests, deploy blocked by the session permission classifier — run `cd cloudflare/housekeeping && npx wrangler deploy`); T5 RESOLVED (cross-repo correlation) + T7 read-path hardening SHIPPED 2026-08-28. Issue 053 (unattributed app `a03a70ff`) filed **and RESOLVED same day** by cross-repo correlation — it is the `riir-mmorpg-examples` CCU proof bench (Bench 034); resolved-and-removed per the noise rule, record in §T5 + git history. T1 verdict recorded, T2+T3 SHIPPED same day; live-mint half gated on Proposal 005 Phase 1. Sizing verdict feeds Proposal 005 T2.0/T2.1 **+ T2.6 / [Plan 031](../.plans/031_kat_sweeper_temp_container_r2_tier.md)** (2026-08-26 later-session sync). **2026-08-27: the T3 Worker was EXTENDED + redeployed (`ab79bd20`) — CORS on all read endpoints (dashboard live-fetch), Issue-044-T4 budget alerting (cap thresholds 50/90/100% + optional monthly budget, KV-dedupe, webhook via `ALERT_WEBHOOK_URL`), extended `/status` (`cap`/`thresholds`/`has_webhook`/`has_monthly_budget`/`alerts_today`).** **2026-08-28 truth-refresh: Proposal 005 Phase 1 LANDED 2026-08-27 (T1.5 dapps `84dd049` / T1.6 clippy `0a7cfd8`) — T6's blocker is NO LONGER Phase 1; the live-mint swap-in awaits the deferred Worker/DO HTTP ledger shell (Proposal 005 phase-2 defer / Plan 031 Phase B gate / phase-3 owner gate). Worker mint status strings refreshed `pending-phase-1` → `pending-worker-shell` + redeployed (version `f93ae507`, live-verified on the 04:00 UTC tick). T4 unchanged (owner-gated secrets). T5 still blocked — CLI exposes no id→name mapping (see checkbox).** *(That last clause is SUPERSEDED later the same day — T5 was resolved by cross-repo correlation, not by the CLI; see §T5.)*
 **Repo:** riir-clippy (dashboard + worker deploy live here; sizing verdict feeds Proposal 005 T2.0/T2.1)
 **Owner ask (2026-08-26):**
 1. can the container be smaller? smallest?
@@ -276,6 +276,15 @@ lives (T1 above).
       (`f93ae507`).
 - [x] T7 read-path hardening — prod-grade perf/sec pass on the T3 Worker
       (2026-08-28; §T7 below). Deployed `ca93c8de`, live-verified.
+- [ ] T8 hourly-archive correctness + posture pass (§T8 below) — `hourKey()`
+      collapsed 24 h into 3 keys (day cost understated ~8×), the `/latest`
+      redaction had two bypasses (`/status`, `/hours`), and anonymous
+      `/status` spent a KV `list` per request against a 1,000/day cap. Fixed
+      + pinned by 12 `node:test` regression tests (8 fail pre-fix).
+      **CODE + TESTS LANDED; DEPLOY PENDING** — `npx wrangler deploy` was
+      declined by this session's permission classifier, so the fix is on
+      `develop` but NOT yet live. One command closes it:
+      `cd cloudflare/housekeeping && npx wrangler deploy`.
 
 ## T7 — read-path hardening (SHIPPED 2026-08-28)
 
@@ -429,3 +438,145 @@ still 200 after deploy.
   2026-08-26 numbers (6 apps not 3; $0.3453 on 08-26 not $0.01–0.03/day;
   nothing running since 08-26T22Z). No worker/KV change — T3's Worker is
   untouched this session. T4/T6 unchanged.
+
+
+---
+
+## T8 — the hourly archive was collapsing 24 hours into 3 keys (2026-08-28)
+
+**Status: code + tests on `develop`; NOT DEPLOYED.** `npx wrangler deploy` was
+declined by this session's permission classifier. Production is still running
+the pre-fix worker (`ca93c8de`) and still collapsing its hour keys until an
+owner runs `cd cloudflare/housekeeping && npx wrangler deploy`.
+
+A prod-grade perf/sec pass over the T3 Worker's own state, prompted by the
+sibling Issue 044 T13 finding ("the fail-open rationale was false"): the same
+question, asked of this Worker's fail-open routes, found one correctness bug
+and two more posture defects. All are fixed, tested and pinned.
+
+### BUG-1 (headline) — `hourKey()` produced 3 distinct keys per day, not 24
+
+```js
+function utc(d)     { return d.toISOString().replace(/[-:]/g,"").replace(/\.\d{3}Z$/,""); }
+function hourKey(d) { return utc(d).slice(0, 10); }   // "YYYYMMDDHH" — it is not
+```
+
+`utc()` yields `YYYYMMDD"T"HHMMSS`. `slice(0, 10)` therefore keeps the literal
+`T` **plus one hour digit**:
+
+| wall hour | key written | |
+|---|---|---|
+| 00–09 | `hour:20260828T0` | 10 runs, one surviving row |
+| 10–19 | `hour:20260828T1` | 10 runs, one surviving row |
+| 20–23 | `hour:20260828T2` | 4 runs, one surviving row |
+
+**Measured in production before the fix**, not inferred:
+
+- `wrangler kv key list` returned **3 keys total** for the namespace:
+  `day:20260828`, `hour:20260828T1`, `latest`.
+- `day:20260828` = `{"date":"2026-08-28","est_usd":0,"hours":1,...}` — after
+  **13 cron runs that day**. The day aggregate sums `hour:<YYYYMMDD>*`, so it
+  was summing ≤3 of 24 hours: **the daily cost number this issue exists to
+  produce was understated ~8×.**
+- `GET /hours?n=24` returned **24 rows with 4 distinct timestamps** — the same
+  row repeated, rendering as a flat hourly chart that looked like real data.
+
+The bug was live from T3's deploy (2026-08-26) and survived three rounds of
+"live-verified" checks, because **every endpoint returned `200` with plausible
+JSON the entire time**. Nothing in an HTTP-status check can see this.
+
+Two related off-by-ones fixed in the same pass:
+
+- **Rows were filed under the run time, not the hour they describe.** The
+  12:00 run collects 11:00–12:00 and wrote it under `12`, so every point was
+  one slot off its own `row.hour` field. Now keyed on `hourStart`.
+- **The 00:00 run orphaned the previous day's last hour.** It collects the
+  23:00 hour of day *N* but aggregated `dayKey(now)` = day *N+1*, so day *N*
+  never got its 24th hour. Now aggregates `dayKey(hourStart)`.
+
+Migration: legacy `hour:YYYYMMDDT<digit>` keys still match the aggregate's
+`hour:YYYYMMDD` prefix scan, so they would have been summed *alongside* the
+correct rows — a double count layered on the undercount. The aggregate now
+filters to `/^hour:\d{10}$/`. The pre-fix hours of 2026-08-28 are
+unrecoverable (they were overwritten in place); collection is correct from
+the first post-deploy tick.
+
+### SEC-1 — the `/latest` redaction had two silent bypasses
+
+T7 documented the minimised projection as **unconditional** on `/latest` and
+applied it in exactly one place. Both other read routes returned the **full
+row** to an anonymous caller:
+
+- `GET /status` echoed `latest: parsed` — the complete row.
+- `GET /hours?n=1` returned full rows (the route fails open until `READ_TOKEN`
+  is set, which it is not — T4 is still open).
+
+Currently harmless only because the rows are heartbeats. It **arms itself the
+moment T4 lands**: from that tick the rows carry `containers.apps` (per-app
+id → awake seconds → est cost), the mint anchor and the collector notes — the
+exact account telemetry `/latest` refuses to serve. Fixed by hoisting the
+projection into one `publicRow()` used by all three routes.
+
+### PERF-1 — an anonymous KV `list` per `/status` request
+
+`alerts_today` issues a `kv.list()` on **every** request and sat behind the
+fail-open gate, so anonymous traffic drove one list op each. Free-tier KV
+allows **1,000 list ops/day against 100,000 reads**
+([pricing](https://developers.cloudflare.com/kv/platform/pricing/), confirmed
+against the live doc — the more commonly cited *limits* page omits list and
+delete entirely). So:
+
+- **~1,000 unauthenticated requests exhaust the day's list quota**, versus the
+  138 that exhausted the read tier in T7 — but list ops are **100× scarcer**,
+  and the two operations that then fail are both list-based: the day-aggregate
+  recompute and the monthly-budget check. A cheaper trip with a worse blast
+  radius than the bug T7 shipped to fix.
+
+Fixed: `alerts_today` (and the full-row `latest`) now require a **presented**
+token. Liveness and `token_set`/`read_gated` stay in the fail-open tier so the
+T4 verification commands still work before any token exists.
+
+### PERF-2 — repeat fan-outs are memoised per isolate
+
+`/hours?n=168` issues 168 KV gets, uncached, per request. Added a 60 s
+isolate-local memo (64 entries, **public variant only** — an authenticated
+body must never be served from a cache an anonymous caller can hit). Past hour
+rows are immutable once written, so the TTL is safe.
+
+Deliberately **not** the Cache API. Checked the docs rather than assuming:
+[runtime-apis/cache](https://developers.cloudflare.com/workers/runtime-apis/cache/)
+enumerates the three contexts where Cache API ops no-op (dashboard editor,
+Playground previews, Access-fronted Workers) and `*.workers.dev` is not among
+them — **but** the availability sentence names custom domains and Pages and
+stays silent on `workers.dev`. That is an omission, not a grant, and this
+Worker is on `workers.dev`. An isolate memo needs no such premise. *(This
+correction matters: the first draft of the fix asserted a `workers.dev` Cache
+API prohibition as fact in a source comment. It was not fact — same failure
+mode as the false fail-open rationale that started this pass.)*
+
+### The regression pin (`cloudflare/housekeeping/test/worker.test.mjs`)
+
+12 tests, zero dependencies, `node --test cloudflare/housekeeping/test/*.test.mjs`.
+The Worker is dependency-free ESM and every global it touches exists in
+Node 18+, so it runs unmodified under `node:test` against a KV stub and a
+pinned clock.
+
+**Verified as a real pin, not a decorative one** — run against the pre-fix
+worker (`git show HEAD:...`), **8 of 12 fail**, each with the measured number:
+
+| test | pre-fix | post-fix |
+|---|---|---|
+| every hourly run writes a distinct key | 3 rows | 24 rows |
+| the key names the hour the row describes | `hour:20260828T1` | `hour:2026082811` |
+| the day aggregate counts every hour | `hours: 2` | `hours: 12` |
+| the 00:00 run aggregates the previous day | orphaned | filed under the 28th |
+| anonymous `/hours` is redacted | full rows | `redacted: true` |
+| anonymous `/status` echoes the projection | full row | projection |
+| anonymous `/status` spends zero list ops | 10 ops / 10 reqs | 0 |
+| `/hours` repeat is memoised | 168 gets | 0 gets |
+
+The 4 that pass on both are the invariants the fix must **not** break
+(authenticated detail, wrong-token rejection, CORS allowlist).
+`scripts/ops_nightly.sh` runs the suite WARN-only — it does not deploy this
+Worker, so it has nothing to gate; it exists so the next regression is caught
+by a machine rather than by an audit two days later.

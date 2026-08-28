@@ -95,6 +95,24 @@ if [ "${OPS_NIGHTLY_NO_DEPLOY:-0}" != "1" ]; then
   fi
 fi
 
+# ── 4b. housekeeping-Worker regression gate (Issue 045 T8) ──
+# This nightly does NOT deploy the housekeeping worker, so this gate cannot
+# block anything — it exists because the T8 bug (colliding hour keys) lived in
+# production for two days while every "live-verified" check passed: the
+# endpoints returned 200 with plausible JSON the whole time. A shape assertion
+# on the KEYS is what catches that class, and this is the repo's only
+# unattended runner. WARN-only, by design: a housekeeping regression must
+# never stop the dashboard refresh.
+if [ -d "${REPO}/cloudflare/housekeeping/test" ] && command -v node >/dev/null; then
+  # NB: a bare directory arg makes `node --test` fail MODULE_NOT_FOUND;
+  # it wants file paths, so glob them.
+  if timeout 120 node --test "${REPO}"/cloudflare/housekeeping/test/*.test.mjs >> "${LOG}" 2>&1; then
+    log "housekeeping worker tests PASS"
+  else
+    log "WARN housekeeping worker tests FAILED — see above (Issue 045 T8)"
+  fi
+fi
+
 # ── 5. keep the log bounded (this runs unattended, forever) ──
 if [ "$(wc -l < "${LOG}")" -gt 5000 ]; then
   tail -n 2000 "${LOG}" > "${LOG}.tmp" && mv "${LOG}.tmp" "${LOG}"

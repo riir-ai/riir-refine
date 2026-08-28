@@ -64,6 +64,59 @@ function authed(request, env) {
   return !!m && timingSafeEqual(m[1], env.READ_TOKEN);
 }
 
+// The public projection of an hour row: exactly the fields the dashboard
+// badge and cap alert consume. Per-app ids, per-app cost, the mint anchor and
+// the collector notes are account telemetry and need a presented token.
+//
+// This is applied by /latest AND by /hours AND by the /status `latest` echo.
+// It previously lived only in /latest, so `GET /hours?n=1` and `GET /status`
+// both returned the full row to an unauthenticated caller — two silent
+// bypasses of the redaction /latest documents as unconditional. Harmless
+// while the rows are heartbeats; it arms itself the moment T4 sets
+// CF_API_TOKEN and the rows start carrying per-app breakdown.
+function publicRow(r) {
+  if (!r) return r;
+  return {
+    ts: r.ts,
+    hour: r.hour,
+    ok: r.ok,
+    mint: r.mint,
+    ai: r.ai ? { neurons_today: r.ai.neurons_today, pct: r.ai.pct } : undefined,
+    containers: r.containers ? { est_usd: r.containers.est_usd } : undefined,
+    redacted: true,
+  };
+}
+
+// Per-isolate response memo for the KV fan-out routes.
+//
+// NOT the Cache API, deliberately. Checked the docs rather than assuming
+// either way: developers.cloudflare.com/workers/runtime-apis/cache/ names the
+// three contexts where Cache API operations do nothing (dashboard editor,
+// Playground previews, Access-fronted Workers) and *.workers.dev is not among
+// them — but the availability sentence enumerates custom domains and Pages and
+// stays SILENT on workers.dev. That is an omission, not a grant. This worker
+// is on workers.dev, so a `caches.default` win here would rest on an
+// unconfirmed premise.
+//
+// An isolate-local memo needs no such premise. Past hour rows are immutable
+// once written, so a short TTL is safe, and it collapses repeated fan-outs
+// within an isolate instead of re-issuing up to 168 KV gets per request.
+const MEMO_TTL_MS = 60000;
+const MEMO_MAX = 64;
+const memo = new Map();
+
+function memoGet(k) {
+  const e = memo.get(k);
+  if (e && e.exp > Date.now()) return e.v;
+  if (e) memo.delete(k);
+  return null;
+}
+
+function memoPut(k, v) {
+  if (memo.size >= MEMO_MAX) memo.clear();
+  memo.set(k, { v, exp: Date.now() + MEMO_TTL_MS });
+}
+
 // Bounded-concurrency map — replaces Promise.all over an attacker-sized list.
 async function mapLimit(items, limit, fn) {
   const out = new Array(items.length);
@@ -83,8 +136,22 @@ function utc(d) {
   return d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "");
 }
 
-function hourKey(d) { return utc(d).slice(0, 10); }        // YYYYMMDDHH
+// YYYYMMDDHH. `utc()` yields YYYYMMDD"T"HHMMSS, so the old `slice(0, 10)`
+// took the literal "T" plus ONE hour digit: every hour 00-09 wrote
+// `hour:YYYYMMDDT0`, 10-19 wrote `T1`, 20-23 wrote `T2`. 24 hourly runs
+// collapsed into 3 keys, each overwriting the last. Measured in prod
+// 2026-08-28 before the fix: `day:20260828` = {"hours":1} after 13 cron
+// runs, and `/hours?n=24` returned 24 rows with 4 distinct timestamps.
+// The day aggregate — the cost number this whole issue exists to report —
+// was therefore summing ~3 of 24 hours, understating daily spend ~8x.
+function hourKey(d) { const u = utc(d); return u.slice(0, 8) + u.slice(9, 11); }
 function dayKey(d) { return utc(d).slice(0, 8); }          // YYYYMMDD
+
+// Strict shape of a post-fix hour key. The legacy colliding keys
+// (`hour:YYYYMMDDT<digit>`) still match the day aggregate's `hour:YYYYMMDD`
+// prefix scan, so without this filter they would be summed ALONGSIDE the
+// correct rows — a double count layered on top of the undercount.
+const HOUR_KEY_RE = /^hour:\d{10}$/;
 
 function costUsd(env, memByteS, diskByteS, cpuS) {
   const mem = (memByteS || 0) / 1073741824 * parseFloat(env.MEM_USD_PER_GIB_S);
@@ -189,6 +256,14 @@ async function runHousekeeping(env) {
   const hourStartISO = hourStart.toISOString().slice(0, 13) + ":00:00Z";
   const hourEndISO = now.toISOString().slice(0, 13) + ":00:00Z";
   const dateISO = now.toISOString().slice(0, 10);
+  // Key by the hour the row DESCRIBES (hourStart), not by the run time.
+  // The run at 12:00 collects 11:00-12:00, so keying on `now` filed that
+  // row under 12 — every point on the hourly chart was shifted one hour off
+  // its own `row.hour` field. Same reason the day aggregate below keys on
+  // hourStart: the 00:00 run collects the PREVIOUS day's 23:00 hour, and
+  // aggregating `dayKey(now)` left that last hour permanently unsummed.
+  const hk = hourKey(hourStart);
+  const dk = dayKey(hourStart);
 
   const row = {
     kind: "housekeeping",
@@ -205,7 +280,7 @@ async function runHousekeeping(env) {
     row.notes.push("CF_API_TOKEN secret not set — heartbeat only");
     row.mint = "pending-worker-shell";
     row.mint_note = "phase-1 sync surface landed 2026-08-27; live mint awaits the deferred Worker/DO ledger shell (proposal-005 phase-2 defer / phase-3 owner gate)";
-    await env.HOUSEKEEPING_KV.put(`hour:${hourKey(now)}`, JSON.stringify(row));
+    await env.HOUSEKEEPING_KV.put(`hour:${hk}`, JSON.stringify(row));
     await env.HOUSEKEEPING_KV.put("latest", JSON.stringify(row));
     return row;
   }
@@ -323,7 +398,7 @@ async function runHousekeeping(env) {
     row.notes.push(`collect failed: ${e.message}`);
   }
 
-  await env.HOUSEKEEPING_KV.put(`hour:${hourKey(now)}`, JSON.stringify(row));
+  await env.HOUSEKEEPING_KV.put(`hour:${hk}`, JSON.stringify(row));
   await env.HOUSEKEEPING_KV.put("latest", JSON.stringify(row));
 
   // Day aggregate — RECOMPUTED from the hour rows, not accumulated.
@@ -332,9 +407,10 @@ async function runHousekeeping(env) {
   // hour) and a lost-update race on an eventually-consistent store. Summing
   // the authoritative hour:<dk>* rows is idempotent and converges.
   try {
-    const dk = dayKey(now);
     const listed = await env.HOUSEKEEPING_KV.list({ prefix: `hour:${dk}` });
-    const names = listed.keys.map((k) => k.name);
+    // Legacy collided keys (`hour:YYYYMMDDT<digit>`) share this prefix; sum
+    // only well-formed YYYYMMDDHH rows or the fix double-counts its own past.
+    const names = listed.keys.map((k) => k.name).filter((n) => HOUR_KEY_RE.test(n));
     const raw = await mapLimit(names, KV_CONCURRENCY, (n) => env.HOUSEKEEPING_KV.get(n));
     let est = 0, hours = 0;
     for (const r of raw) {
@@ -346,7 +422,7 @@ async function runHousekeeping(env) {
       } catch (_) { /* tolerate a malformed hour row */ }
     }
     await env.HOUSEKEEPING_KV.put(`day:${dk}`, JSON.stringify({
-      date: dateISO,
+      date: hourStart.toISOString().slice(0, 10),
       est_usd: +est.toFixed(6),
       hours,
       updated: now.toISOString(),
@@ -365,7 +441,13 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const kv = env.HOUSEKEEPING_KV;
+    // Two gate levels, deliberately distinct:
+    //   ok       — fail-OPEN while READ_TOKEN is unset (the diagnostic path
+    //              the owner needs to verify the T4 secret step landed).
+    //   hasToken — hard: a token must be SET and PRESENTED. Anything that is
+    //              account telemetry, or that costs a KV list, needs this.
     const ok = authed(request, env);
+    const hasToken = !!env.READ_TOKEN && ok;
 
     if (request.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: corsHeaders(request, env) });
@@ -375,9 +457,20 @@ export default {
     }
 
     if (url.pathname === "/status") {
-      // Liveness is public (the dashboard badge needs it). Config posture —
-      // cap, thresholds, whether alerting/webhook/budget are wired, how many
-      // alerts fired — is operational detail and goes behind the token.
+      // Liveness is public (the dashboard badge needs it). Config posture goes
+      // behind the fail-open gate so the T4 verification commands still work
+      // before any token exists. Two things moved to the HARD gate:
+      //
+      //  * `latest` — this echoed the FULL row, so /status was a complete
+      //    bypass of the projection /latest documents as unconditional. It
+      //    now echoes the same projection; the full row needs a token.
+      //  * `alerts_today` — it issues a KV `list` on EVERY request, and the
+      //    gate above it was fail-open, so an unauthenticated caller drove
+      //    one list op per request. The free tier allows 1,000 list ops/day
+      //    (against 100,000 reads), so ~1,000 requests exhaust it — and the
+      //    two things that then break are list-based: the day-aggregate
+      //    recompute and the monthly-budget check. That is a cheaper and
+      //    more damaging exhaustion than the read amplification T7 fixed.
       const latest = await kv.get("latest");
       const parsed = latest ? JSON.parse(latest) : null;
       const body = {
@@ -385,14 +478,9 @@ export default {
         cron: "0 * * * *",
         ts: parsed ? parsed.ts : null,
         ok: parsed ? parsed.ok : null,
+        latest: publicRow(parsed),
       };
       if (ok) {
-        let alerts_today = 0;
-        try {
-          const listed = await kv.list({
-            prefix: `alert:${new Date().toISOString().slice(0, 10)}:`, limit: 100 });
-          alerts_today = listed.keys.length;
-        } catch (_) { /* best-effort count */ }
         Object.assign(body, {
           token_set: !!env.CF_API_TOKEN,
           cap: parseFloat(env.NEURON_CAP) || 0,
@@ -400,9 +488,16 @@ export default {
           has_webhook: !!env.ALERT_WEBHOOK_URL,
           has_monthly_budget: !!env.MONTHLY_BUDGET_USD,
           read_gated: !!env.READ_TOKEN,
-          alerts_today,
-          latest: parsed,
         });
+      }
+      if (hasToken) {
+        let alerts_today = 0;
+        try {
+          const listed = await kv.list({
+            prefix: `alert:${new Date().toISOString().slice(0, 10)}:`, limit: 100 });
+          alerts_today = listed.keys.length;
+        } catch (_) { /* best-effort count */ }
+        Object.assign(body, { alerts_today, latest: parsed });
       }
       return cors(Response.json(body), request, env, 60);
     }
@@ -424,17 +519,8 @@ export default {
       if (!v) return cors(new Response("null", { status: 200,
         headers: { "Content-Type": "application/json" } }), request, env, 60);
       const full = JSON.parse(v);
-      const hasToken = !!env.READ_TOKEN && ok;
       if (hasToken) return cors(Response.json(full), request, env, 60);
-      return cors(Response.json({
-        ts: full.ts,
-        hour: full.hour,
-        ok: full.ok,
-        mint: full.mint,
-        ai: full.ai ? { neurons_today: full.ai.neurons_today, pct: full.ai.pct } : undefined,
-        containers: full.containers ? { est_usd: full.containers.est_usd } : undefined,
-        redacted: true,
-      }), request, env, 60);
+      return cors(Response.json(publicRow(full)), request, env, 60);
     }
 
     if (url.pathname === "/hours" || url.pathname === "/days") {
@@ -443,10 +529,21 @@ export default {
       const max = isHours ? MAX_HOURS : MAX_DAYS;
       const req = parseInt(url.searchParams.get("n") || "24", 10);
       const n = Math.min(Number.isFinite(req) && req > 0 ? req : 24, max);
+      // Only the public variant is memoised — an authenticated body must never
+      // be served from a cache an unauthenticated caller can also hit.
+      const memoKey = `${url.pathname}:${n}`;
+      if (!hasToken) {
+        const hit = memoGet(memoKey);
+        if (hit) return cors(Response.json(hit), request, env, 300);
+      }
       const now = new Date();
+      // Hours walk back from the last COMPLETE hour: rows are written for
+      // hourStart, so including the current partial hour guaranteed one miss
+      // per request and shifted every row one slot in the chart.
+      const lastHour = new Date(Math.floor(now.getTime() / 3600e3) * 3600e3 - 3600e3);
       const keys = Array.from({ length: n }, (_, i) => {
-        const d = new Date(now.getTime() - i * (isHours ? 3600e3 : 86400e3));
-        return (isHours ? `hour:${hourKey(d)}` : `day:${dayKey(d)}`);
+        if (!isHours) return `day:${dayKey(new Date(now.getTime() - i * 86400e3))}`;
+        return `hour:${hourKey(new Date(lastHour.getTime() - i * 3600e3))}`;
       });
       const raw = await mapLimit(keys, KV_CONCURRENCY, (k) => kv.get(k));
       const rows = [];
@@ -454,7 +551,11 @@ export default {
         if (!r) continue;
         try { rows.push(JSON.parse(r)); } catch (_) { /* skip malformed */ }
       }
-      return cors(Response.json(rows), request, env, 300);
+      // Day rows are already a bare {date, est_usd, hours} aggregate — the
+      // same scalar /latest publishes. Hour rows carry the per-app breakdown.
+      const out = (isHours && !hasToken) ? rows.map(publicRow) : rows;
+      if (!hasToken) memoPut(memoKey, out);
+      return cors(Response.json(out), request, env, 300);
     }
 
     return cors(new Response(

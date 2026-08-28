@@ -68,21 +68,40 @@ curl -H "Authorization: Bearer $READ_TOKEN" '.../hours?n=24'   # hourly rows
 curl -H "Authorization: Bearer $READ_TOKEN" '.../days?n=14'    # day aggregates
 ```
 
-### Access model (hardened 2026-08-28 — Issue 045 §T7)
+### Access model (hardened 2026-08-28 — Issue 045 §T7, revised §T8)
+
+There are **two** gate levels, and the distinction is the whole design:
+
+| level | condition | what it guards |
+|---|---|---|
+| fail-**open** | `READ_TOKEN` unset ⇒ pass | liveness + config posture, so the T4 verification commands work before any token exists |
+| **hard** | `READ_TOKEN` set **and** presented | anything that is account telemetry, or that costs a KV `list` op |
 
 | route | anonymous | with `READ_TOKEN` | cache |
 |---|---|---|---|
-| `/latest` | minimised projection + `redacted:true` | full row | 60 s |
-| `/status` | liveness only (`worker`, `cron`, `ts`, `ok`) | + `cap`, `thresholds`, `has_webhook`, `has_monthly_budget`, `read_gated`, `alerts_today`, `latest` | 60 s |
-| `/hours?n=` | **401** *(fails open until `READ_TOKEN` set)* | rows, `n ≤ 168` | 300 s |
-| `/days?n=` | **401** *(fails open until `READ_TOKEN` set)* | rows, `n ≤ 90` | 300 s |
+| `/latest` | projection + `redacted:true` | full row | 60 s |
+| `/status` | liveness (`worker`, `cron`, `ts`, `ok`) + `latest` **as the projection**; config posture while the gate fails open | + `alerts_today`, `latest` as the full row | 60 s |
+| `/hours?n=` | **projection** rows, `n ≤ 168` *(401 once `READ_TOKEN` is set)* | full rows | 300 s + isolate memo |
+| `/days?n=` | rows, `n ≤ 90` *(401 once `READ_TOKEN` is set)* | same | 300 s + isolate memo |
 
-- `/latest` redacts **unconditionally** — it does not fail open. The
-  projection (`ts`, `hour`, `ok`, `mint`, aggregate `containers.est_usd`,
-  `ai.neurons_today`, `ai.pct`) is by construction everything the dashboard
-  consumes, so hard-gating the per-app ids and cost breakdown costs no
-  functionality. The other routes fail open so `token_set` stays readable as
-  the check that the `CF_API_TOKEN` step landed.
+- **The projection is applied on every route, not just `/latest` (§T8).** It
+  is `ts`, `hour`, `ok`, `mint`, aggregate `containers.est_usd`,
+  `ai.neurons_today`, `ai.pct` — by construction everything the dashboard
+  consumes, so hard-gating the per-app ids, per-app cost, mint anchor and
+  collector notes costs no functionality. T7 applied it only in `/latest`,
+  which meant `GET /status` and `GET /hours?n=1` each returned the full row
+  to an anonymous caller: two silent bypasses of a redaction documented as
+  unconditional. Harmless while the rows are heartbeats — it arms itself the
+  moment T4 sets `CF_API_TOKEN` and the rows start carrying the breakdown.
+- **`alerts_today` is hard-gated (§T8).** It issues a KV `list` per request
+  and sat behind the fail-open gate, so anonymous traffic drove one list op
+  each. The free tier allows **1,000 list ops/day against 100,000 reads**
+  ([KV pricing](https://developers.cloudflare.com/kv/platform/pricing/)) —
+  ~1,000 requests exhaust it, and the two things that then break are both
+  list-based: the day-aggregate recompute and the monthly-budget check.
+  Cheaper to trip and more damaging than the read amplification T7 fixed.
+- `token_set` / `read_gated` stay readable while the gate fails open — that
+  is the check that the `CF_API_TOKEN` step landed.
 - **CORS is an allowlist**, not `*` — set `ALLOWED_ORIGINS` (`[vars]`,
   comma-separated, no trailing slash) to the origins allowed to read
   cross-origin. A non-allowlisted `Origin` gets no `Access-Control-Allow-Origin`.
@@ -90,7 +109,34 @@ curl -H "Authorization: Bearer $READ_TOKEN" '.../days?n=14'    # day aggregates
   16. Before this, `n=720` meant 720 unbounded concurrent KV gets on an
   unauthenticated route — 138 requests exhausted the 100k/day KV read tier,
   which also broke the alert-dedupe read and silenced the cap alarm.
+- **Repeat fan-outs are memoised per isolate (§T8)**, 60 s TTL, 64 entries,
+  public variant only — an authenticated body is never served from a cache an
+  anonymous caller can hit. Deliberately *not* the Cache API: the
+  [docs](https://developers.cloudflare.com/workers/runtime-apis/cache/)
+  enumerate the contexts where it no-ops (dashboard editor, Playground,
+  Access-fronted Workers) and `*.workers.dev` is not among them — but the
+  availability sentence names custom domains and Pages and stays silent on
+  `workers.dev`. That is an omission, not a grant, and this Worker is on
+  `workers.dev`. The memo needs no such premise.
 - Non-`GET`/`HEAD` → `405`.
+
+## Tests
+
+```sh
+node --test cloudflare/housekeeping/test/*.test.mjs   # 12 tests, no deps
+```
+
+A bare directory arg fails `MODULE_NOT_FOUND` — `node --test` wants file
+paths. The Worker is dependency-free ESM and every global it touches exists
+in Node 18+, so it runs unmodified under `node:test` with a KV stub.
+
+These exist because the §T8 key-collision bug was live for two days while
+every "live-verified" check passed: the endpoints returned `200` with
+plausible JSON throughout. Asserting on the **shape of the KV keys** is what
+catches that class; asserting on HTTP status is not. Verified as a real pin —
+8 of the 12 fail against the pre-fix worker (`git show HEAD~1:.../worker.js`).
+`scripts/ops_nightly.sh` runs them WARN-only (it does not deploy this
+Worker, so it has nothing to gate).
 
 ## Re-deploying the dashboard after changes here
 
