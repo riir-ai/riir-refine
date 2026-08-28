@@ -234,7 +234,18 @@ fi
 DEPLOY_FAILED=0
 if [ "${OPS_NIGHTLY_NO_DEPLOY:-0}" != "1" ]; then
   _dout="$(mktemp)"
-  if (cd "${REPO}/cloudflare/dashboard" && timeout 600 npx --yes "wrangler@${WRANGLER_VERSION}" deploy >"${_dout}" 2>&1); then
+  # `env -u ...` is LOAD-BEARING (2026-08-29). Step 0b loads .env for the CF
+  # ANALYTICS credential; wrangler, unrelatedly, auto-adopts any ambient
+  # CLOUDFLARE_API_TOKEN and PREFERS it over the OAuth session. So an
+  # analytics-scoped token in the invoking shell silently SHADOWED an OAuth
+  # session that holds `workers_scripts (write)`, and the deploy was refused
+  # for missing scope -- which then read as "the owner must mint a deploy
+  # token" when no such gap existed. Two credentials, two jobs: analytics
+  # reads use the token, deploys use OAuth. Unsetting here also makes a
+  # MANUAL run behave exactly like the launchd run, whose spartan environment
+  # never had these set -- so a hand-run can no longer fail in a way the
+  # scheduled run would not.
+  if (cd "${REPO}/cloudflare/dashboard" && env -u CLOUDFLARE_API_TOKEN -u CLOUDFLARE_API_KEY -u CLOUDFLARE_EMAIL timeout 600 npx --yes "wrangler@${WRANGLER_VERSION}" deploy >"${_dout}" 2>&1); then
     cat "${_dout}" >> "${LOG}"
     log "deployed"
   else
