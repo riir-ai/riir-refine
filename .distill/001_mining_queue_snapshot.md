@@ -1220,9 +1220,41 @@ unjudged (no outcomes — the CLI records applied; outcome verdicts need
 `--verify` runs; the sweep campaign validated manually so the verdict loop
 never closed). Ranked open classes (inventory 2026-08-24):
 
-- [ ] P1 **macro-nesting family** — recursive `Expr::Macro` descent +
+- [x] P1 **macro-nesting family** — recursive `Expr::Macro` descent +
       family-table breadth; 12+ live silent sites across 4 repos (ndb ×8,
       riir-ai ×3, riir-train ×2, katgpt-rs ×2). Evidence: miss.
+      **CONSUMED 2026-08-28 (post-mining sweep, the descent unit):**
+      probe-first against real clippy 1.97 (probe crate) established the
+      ORACLE BOUNDARY — `match_bool` fires in EVERY macro-arg position
+      (post-template, assert operand, nested-in-call; single_match is
+      SILENT there — not wired); `uninlined_format_args` fires on (a)
+      `assert_eq!` COMPARAND position even as a direct macro child (the
+      eql_symbolic shape) and (b) family macros nested DEEPER inside
+      calls (the riir-engine cwm_runtime `truncate(&format!("{:?}", x),
+      120)` shape), but is SILENT on a family macro DIRECTLY in a
+      post-template arg (format_in_format_args owns it — a direct-child
+      skip enforces the format_args! boundary so the healer never
+      outruns the oracle). Landed: `match_bool` visit_expr_macro/
+      visit_stmt_macro + scan_macro_args over `all_expr_args` (new
+      pub(super) helper, no template skip); uninlined's
+      `descend_nested_macros` with the position-aware direct-child skip;
+      9 fixtures (5 match_bool + 4 uninlined incl. the print-family
+      negative control). Score-bench steady state held (96.2/1.9/100/100,
+      run #9); retrieval floors 13/13; lib 727/0 + bench-state 878/0/8i;
+      clippy clean in my files. Live sites healed e2e: ndb
+      `tests/ed_freeze_gate_poc.rs` ×7 match_bool (5/5 green under
+      `ed_freeze_poc`; the file is gated — the "0 passed = gate" lesson)
+      + `bench_478` :372 (the 8th site) + `bench_486` 13 mechanical;
+      riir-train `eql_symbolic.rs:1037` (compile-gate verified, 19/19
+      module tests); riir-ai `cwm_runtime/refinement.rs` ×2 sites +
+      `cognitive_branches_runtime/replay.rs` :986 (compile-gate
+      verified; riir-engine lib uninlined residue now ZERO, cwm 194/0).
+      The katgpt-rs bench_367-era "2nd-level println! arg" residue
+      SELF-RESOLVES under 1.97 (oracle silent; format_in_format_args
+      territory, not in our corpus). ndb `--verify` blocked by the
+      sibling's pre-existing broken `examples/can_freeze_v2_goat.rs`
+      (needs `required-features svd_cca_freeze_gate` — owner/sibling
+      flag), so ndb files were validated per-target instead.
 - [ ] P2 **array-literal guard family** — `map_unwrap_or` context-forced
       position detection (~8 sites) + `vec-with-capacity` temp-binding
       emitter (4 sites). E0308 probe work already done. Evidence: miss.

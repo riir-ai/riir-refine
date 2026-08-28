@@ -70,6 +70,7 @@ impl<'ast> Visit<'ast> for Collector {
     fn visit_expr_macro(&mut self, m: &'ast ExprMacro) {
         syn::visit::visit_expr_macro(self, m);
         self.try_inline(&m.mac);
+        self.descend_nested_macros(&m.mac);
     }
 
     /// Statement-position macros (`println!(…);`) parse as `Stmt::Macro`,
@@ -78,6 +79,7 @@ impl<'ast> Visit<'ast> for Collector {
     fn visit_stmt_macro(&mut self, m: &'ast syn::StmtMacro) {
         syn::visit::visit_stmt_macro(self, m);
         self.try_inline(&m.mac);
+        self.descend_nested_macros(&m.mac);
     }
 }
 
@@ -106,6 +108,40 @@ impl Collector {
         };
         if let Some(edits) = inline_args(&mac.tokens, pos) {
             self.edits.extend(edits);
+        }
+    }
+
+    /// Recurse into nested family macros one level DOWN from this
+    /// macro's args. The oracle boundary (probed against real clippy
+    /// 1.97, 2026-08-28) is the `format_args!` boundary — the args AFTER
+    /// the template feed `format_args!`, so a family macro DIRECTLY in
+    /// one of those positions is owned by `format_in_format_args` and
+    /// does NOT fire uninlined (direct `Expr::Macro` children there are
+    /// skipped). Family macros nested DEEPER (inside a call inside an
+    /// arg — the riir-engine `cwm_runtime/refinement.rs` live shape,
+    /// `truncate(&format!("{:?}", x), 120)`) are standalone `format!`
+    /// calls and DO fire. Pre-template positions don't feed
+    /// `format_args!` — the `assert_eq!(format!("{}", e), ..)` comparand
+    /// fires even as a direct child (the `eql_symbolic` live shape), so
+    /// no skip applies there. Visiting parsed args with `self` reaches
+    /// nested macros at any depth, applying the same rule at each level.
+    fn descend_nested_macros(&mut self, mac: &Macro) {
+        let Some(pos) = macro_family(&mac.path) else {
+            return;
+        };
+        let toks: Vec<TokenTree> = mac.tokens.clone().into_iter().collect();
+        let Some(args) = split_args(&toks) else {
+            return;
+        };
+        for (i, arg) in args.iter().enumerate() {
+            let stream: TokenStream = arg.toks.iter().cloned().collect();
+            let Ok(expr) = syn::parse2::<Expr>(stream) else {
+                continue;
+            };
+            if i > pos.index() && matches!(expr, Expr::Macro(_)) {
+                continue; // direct post-template child — format_args! boundary
+            }
+            self.visit_expr(&expr);
         }
     }
 }
@@ -295,6 +331,24 @@ pub(super) fn post_template_expr_args(mac: &Macro) -> Option<Vec<ExprMacroArg>> 
     Some(
         args.into_iter()
             .skip(pos.index() + 1)
+            .map(|a| ExprMacroArg { toks: a.toks })
+            .collect(),
+    )
+}
+
+/// EVERY argument of a known format-family macro as expression tokens —
+/// pre-template operands INCLUDED (`assert!`/`write!` conditions,
+/// `assert_eq!` comparands). Shared with sibling proposers whose lint
+/// fires real clippy in those positions (probe 2026-08-28: `match_bool`
+/// fires on `assert!(match b { .. })` — the assert operand — as well as
+/// post-template args). The template slice itself fails to parse as an
+/// `Expr` and is skipped by the caller's `ok()` filter.
+pub(super) fn all_expr_args(mac: &Macro) -> Option<Vec<ExprMacroArg>> {
+    macro_family(&mac.path)?;
+    let toks: Vec<TokenTree> = mac.tokens.clone().into_iter().collect();
+    let args = split_args(&toks)?;
+    Some(
+        args.into_iter()
             .map(|a| ExprMacroArg { toks: a.toks })
             .collect(),
     )
@@ -1055,5 +1109,64 @@ mod tests {
             "fn f() -> String { format!(\"done\") }",
         );
         assert!(out.is_none(), "no placeholders, no edits: {out:?}");
+    }
+
+    #[test]
+    fn assert_eq_operand_format_inlined() {
+        // The riir-train `eql_symbolic` production shape — real clippy 1.97
+        // fires uninlined_format_args on the format! in the assert_eq!
+        // COMPARAND position (probed 2026-08-28); the operand descent
+        // reaches it.
+        let out = propose_fix(
+            "uninlined_format_args",
+            "fn f(e: E) { assert_eq!(format!(\"{}\", e), \"E(0)\"); }",
+        )
+        .expect("pattern matched");
+        assert_eq!(out, "fn f(e: E) { assert_eq!(format!(\"{e}\"), \"E(0)\"); }");
+        assert!(syn::parse_file(&out).is_ok(), "{out}");
+    }
+
+    #[test]
+    fn call_nested_format_inlined() {
+        // The riir-engine `cwm_runtime/refinement.rs` production shape —
+        // a format! inside a CALL inside a macro arg. Probed: real clippy
+        // 1.97 FIRES on it (the inner format! is a standalone call past
+        // the format_args! boundary, unlike a direct macro-arg child).
+        let out = propose_fix(
+            "uninlined_format_args",
+            "fn f(x: u32, t: usize) -> String { format!(\"a={:?}\", truncate(format!(\"{:?}\", x), t)) }",
+        )
+        .expect("pattern matched");
+        assert!(
+            out.contains("truncate(format!(\"{x:?}\"), t)"),
+            "call-nested format! not inlined: {out}"
+        );
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn assert_eq_operand_both_comparands_reached() {
+        // Either comparand position can carry the nested macro.
+        let out = propose_fix(
+            "uninlined_format_args",
+            "fn f(a: &str, e: E) { assert_eq!(a, format!(\"{}\", e)); }",
+        )
+        .expect("pattern matched");
+        assert_eq!(out, "fn f(a: &str, e: E) { assert_eq!(a, format!(\"{e}\")); }");
+        assert!(syn::parse_file(&out).is_ok(), "{out}");
+    }
+
+    #[test]
+    fn print_family_post_template_macro_untouched() {
+        // Probe-verified divergence: a nested format! in the print
+        // family's POST-template args is owned by clippy's
+        // `format_in_format_args` — real clippy does NOT fire
+        // uninlined_format_args there, so the descent must NOT fix it
+        // (fixing oracle-silent sites would outrun the oracle).
+        let out = propose_fix(
+            "uninlined_format_args",
+            "fn f(k: &str, p: f64) { println!(\"entry {}\", format!(\"{}={:.4}\", k, p)); }",
+        );
+        assert!(out.is_none(), "print-family post-template descent must stay silent: {out:?}");
     }
 }

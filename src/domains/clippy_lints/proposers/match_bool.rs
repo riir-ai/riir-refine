@@ -18,9 +18,11 @@
 //! keep their ORIGINAL source text; non-block bodies are braced. The if
 //! condition takes any expression, so the scrutinee needs no parens.
 
+use super::uninlined_format_args::all_expr_args;
 use super::{edit, src, SourceEdit};
+use proc_macro2::TokenStream;
 use syn::visit::Visit;
-use syn::{Expr, ExprMatch, File, Lit, Pat};
+use syn::{Expr, ExprMacro, ExprMatch, File, Lit, Macro, Pat, StmtMacro};
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
@@ -41,9 +43,49 @@ impl<'ast> Visit<'ast> for Collector<'_> {
             self.edits.push(edit(m, replacement));
         }
     }
+
+    /// Match expressions inside format-family macro args are invisible to
+    /// syn's default visitor (macro token streams are opaque), but real
+    /// clippy 1.97 DOES fire `match_bool` there — probed on every position:
+    /// `println!("{}", match b { true => .., false => .. })` (post-template
+    /// arg), `assert!(match b { .. })` (assert operand), a match nested in
+    /// a CALL inside a macro arg. Parse the macro's expression args and
+    /// visit them with `self` — spans stay file-relative through the
+    /// token round-trip, and the recursive visit covers arbitrary nesting
+    /// depth. Only KNOWN-family macros are opened (an arbitrary macro's
+    /// args are not safely parseable as expressions).
+    fn visit_expr_macro(&mut self, m: &'ast ExprMacro) {
+        syn::visit::visit_expr_macro(self, m);
+        self.scan_macro_args(&m.mac);
+    }
+
+    /// Statement-position macros (`println!(…);`) parse as `Stmt::Macro`,
+    /// not `Expr::Macro` — the print family lives there, so both shapes
+    /// are visited.
+    fn visit_stmt_macro(&mut self, m: &'ast StmtMacro) {
+        syn::visit::visit_stmt_macro(self, m);
+        self.scan_macro_args(&m.mac);
+    }
 }
 
 impl Collector<'_> {
+    /// Visit every expression argument of a known format-family macro.
+    /// ALL args are walked (pre-template operands included — the
+    /// `assert!(match ..)` probe position fires real clippy), recursing
+    /// through `self.visit_expr` so nested family macros and matches
+    /// inside calls are reached at any depth.
+    fn scan_macro_args(&mut self, mac: &Macro) {
+        let Some(args) = all_expr_args(mac) else {
+            return;
+        };
+        for arg in args {
+            let stream: TokenStream = arg.toks.iter().cloned().collect();
+            if let Ok(expr) = syn::parse2::<Expr>(stream) {
+                self.visit_expr(&expr);
+            }
+        }
+    }
+
     fn try_match_bool(&self, m: &ExprMatch) -> Option<String> {
         if !m.attrs.is_empty() {
             return None;
@@ -237,5 +279,62 @@ mod tests {
         let input = "fn f(b: bool) -> u8 { match b { true if b => 1, false => 0 } }";
         let out = propose_fix("match_bool", input);
         assert!(out.is_none(), "guarded arm must not fire: {out:?}");
+    }
+
+    #[test]
+    fn macro_arg_post_template_rewrites() {
+        // The ndb `ed_freeze_gate_poc` production shape — real clippy 1.97
+        // fires match_bool on the match inside the println! arg (probed).
+        let input =
+            "fn f(b: bool, p: f64) { println!(\"sign={} p={p:.3}\", match b { true => \"OK\", false => \"NO\" }); }";
+        let out = propose_fix("match_bool", input).expect("matched");
+        assert!(
+            out.contains("println!(\"sign={} p={p:.3}\", if b { \"OK\" } else { \"NO\" })"),
+            "macro-arg match not converted: {out}"
+        );
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn macro_arg_stmt_macro_rewrites() {
+        // writeln! in statement position parses as Stmt::Macro — covered
+        // by the second visitor.
+        let input =
+            "fn f(w: &mut String, c: bool) { writeln!(w, \"{}\", match c { true => 1, false => 0 }).unwrap(); }";
+        let out = propose_fix("match_bool", input).expect("matched");
+        assert!(out.contains("if c { 1 } else { 0 }"), "stmt-macro arg not converted: {out}");
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn macro_arg_assert_operand_rewrites() {
+        // Probe-verified: real clippy fires match_bool on the assert!
+        // OPERAND position too (pre-template arg).
+        let input =
+            "fn f(b: bool, a: bool, c: bool) { assert!(match b { true => a, false => c }); }";
+        let out = propose_fix("match_bool", input).expect("matched");
+        assert!(out.contains("assert!(if b { a } else { c })"), "operand not converted: {out}");
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn macro_arg_nested_in_call_rewrites() {
+        // A match inside a CALL inside a macro arg — the recursive
+        // visit_expr descent reaches it at depth 2.
+        let input =
+            "fn f(b: bool) { println!(\"{}\", str_len(match b { true => \"A\", false => \"BB\" })); }";
+        let out = propose_fix("match_bool", input).expect("matched");
+        assert!(out.contains("str_len(if b { \"A\" } else { \"BB\" })"), "nested not converted: {out}");
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn macro_arg_non_family_macro_untouched() {
+        // An arbitrary macro's args are not opened (not safely parseable
+        // as expressions) — the match stays invisible, like the real
+        // oracle's conservative silence on unparseable positions.
+        let input = "fn f(b: bool) { my_macro!(match b { true => 1, false => 0 }); }";
+        let out = propose_fix("match_bool", input);
+        assert!(out.is_none(), "non-family macro arg must not fire: {out:?}");
     }
 }
