@@ -173,6 +173,65 @@ def load_score_history() -> list[dict]:
     return out
 
 
+# ── corpus size per domain (mined from git history of the sources) ─────────
+# Counting is deterministic greps over the corpus files at each rev:
+#   kernel_opt  rule_id:   over src/domains/kernel_opt/corpus/*.rs   → 393
+#   rust_perf   rule_id:   over src/domains/rust_perf/corpus.rs      → 88
+#   clippy      lint_name: over src/domains/clippy_lints/corpus.rs   → 40
+#   sec         rule_id:   over src/domains/sec/corpus.rs            → 6
+# (HEAD counts verified against the pinned batch totals 2026-08-28.)
+CORPUS_DOMAINS = [
+    ("kernel_opt", "src/domains/kernel_opt/corpus", "rule_id:"),
+    ("rust_perf", "src/domains/rust_perf/corpus.rs", "rule_id:"),
+    ("clippy_lints", "src/domains/clippy_lints/corpus.rs", "lint_name:"),
+    ("sec", "src/domains/sec/corpus.rs", "rule_id:"),
+]
+
+
+def _count_in_rev(rev: str, path: str, needle: str) -> int:
+    """Count `needle` occurrences in the corpus source(s) at `rev`."""
+    import subprocess
+    if path.endswith(".rs"):
+        r = subprocess.run(["git", "show", f"{rev}:{path}"],
+                           capture_output=True, text=True)
+        return r.stdout.count(needle) if r.returncode == 0 else 0
+    # A directory: enumerate its .rs files at that rev (renames/splits safe).
+    ls = subprocess.run(["git", "ls-tree", "-r", "--name-only", rev, path],
+                        capture_output=True, text=True)
+    n = 0
+    for f in ls.stdout.splitlines():
+        if f.endswith(".rs") and not f.endswith("mod.rs"):
+            r = subprocess.run(["git", "show", f"{rev}:{f}"],
+                               capture_output=True, text=True)
+            if r.returncode == 0:
+                n += r.stdout.count(needle)
+    return n
+
+
+def load_corpus_history(days: int = 35) -> list[dict]:
+    """One {ts, <domain>: n} point per commit that touched any corpus path,
+    oldest-first. Domains are counted fresh at every point, so a point carries
+    the complete state even when only one domain changed in that commit."""
+    import subprocess
+    from datetime import date, timedelta
+    since = (date.today() - timedelta(days=days)).isoformat()
+    paths = [p for _, p, _ in CORPUS_DOMAINS]
+    log = subprocess.run(
+        ["git", "log", f"--since={since}", "--format=%H %cs", "--", *paths],
+        capture_output=True, text=True, cwd=REPO_ROOT,
+    )
+    revs = [tuple(l.split()) for l in log.stdout.splitlines() if l.strip()]
+    revs.reverse()  # oldest first
+    # Collapse to one point per day (last commit of the day wins).
+    by_day: dict[str, dict] = {}
+    for sha, day in revs:
+        by_day[day] = {"ts": day, **{
+            name: _count_in_rev(sha, path, needle)
+            for name, path, needle in CORPUS_DOMAINS
+        }}
+    return [by_day[d] for d in sorted(by_day)]
+
+
 # ── 3. trajectory stores per repo ──────────────────────────────────────────
 
 def collect_trajectories() -> list[dict]:
@@ -641,6 +700,12 @@ footer{color:var(--dim);font:11px var(--mono);margin-top:34px;border-top:1px sol
     <div id="createdZoom" style="margin-top:10px"></div>
     <div class="legend"><span><i style="background:var(--warn)"></i>created_rate (own scale — the trust axis; 1.9% reads as ~0 on the 0–1 curve above)</span></div>
   </div>
+  <div class="card"><h2>healer corpus — rules per domain</h2>
+    <div id="corpusLatest" class="sub" style="margin-bottom:6px"></div>
+    <div id="corpusBar"></div>
+    <div id="corpusSparks"></div>
+    <div class="legend"><span>counts mined from the git history of the corpus sources (rule_id / lint_name greps, verified against the pinned batch totals) — one point per day any corpus changed</span></div>
+  </div>
 </div>
 
 <div class="grid">
@@ -879,6 +944,47 @@ if (D.score.length) {
   svgLineChart($('createdZoom'), [
     {name:'created_rate', values:D.score.map(r=>r.created_rate||0), pct:true, color:'var(--warn)'},
   ], labels, {yMax:cyMax});
+}
+
+// ── corpus per domain (counts mined from git; the coverage-growth axis) ──
+if (D.corpus && D.corpus.length) {
+  const DOMAINS = ['kernel_opt','rust_perf','clippy_lints','sec'];
+  const lastP = D.corpus[D.corpus.length-1];
+  // 7d reference: the latest point at/before now-7d (earliest if history is short).
+  const cutoff = new Date(lastP.ts+'T00:00:00Z').getTime() - 7*864e5;
+  let ref = D.corpus[0];
+  for (const p of D.corpus) {
+    if (new Date(p.ts+'T00:00:00Z').getTime() <= cutoff) ref = p; else break;
+  }
+  const d7 = d => lastP[d] - (ref[d]||0);
+  $('corpusLatest').innerHTML = DOMAINS.map(d =>
+    '<b>'+d+' '+(lastP[d]||0)+'</b>'
+    + ' <span style="color:'+(d7(d)>0?'var(--accent)':'var(--dim)')+'">'
+    + (d7(d)>0?'(+'+d7(d)+'/7d)':(d7(d)<0?'('+d7(d)+'/7d)':'(±0/7d)'))+'</span>'
+  ).join(' · ');
+  // Current totals as labeled bars (values print beside each bar — the
+  // 393-vs-6 spread would otherwise repeat the reads-as-zero failure).
+  svgBarChart($('corpusBar'), DOMAINS.slice(), DOMAINS.map(d=>lastP[d]||0));
+  // Per-domain sparklines — own scale each (kernel_opt 370→393 and sec 6→6
+  // cannot share an axis honestly).
+  const colors = {kernel_opt:'var(--accent)', rust_perf:'var(--accent2)',
+                  clippy_lints:'var(--warn)', sec:'var(--crit)'};
+  let rows = '';
+  DOMAINS.forEach(d => {
+    const vals = D.corpus.map(p=>p[d]||0);
+    const w=150, h=26, pad=3;
+    const lo = Math.min(...vals), hi = Math.max(...vals);
+    const span = (hi-lo)||1;
+    const pts = vals.map((v,i)=>
+      (pad + i*(w-2*pad)/Math.max(vals.length-1,1)).toFixed(1)+','
+      + (pad + (1-(v-lo)/span)*(h-2*pad)).toFixed(1)).join(' ');
+    rows += '<div style="display:flex;align-items:center;gap:8px;margin:2px 0">'
+      + '<span style="width:90px;text-align:right;color:var(--dim)">'+d+'</span>'
+      + '<svg width="'+w+'" height="'+h+'" style="flex:none"><polyline fill="none" stroke="'
+      + colors[d]+'" stroke-width="1.5" points="'+pts+'"/></svg>'
+      + '<span class="sub">'+lo+' → '+hi+'</span></div>';
+  });
+  $('corpusSparks').innerHTML = rows;
 }
 
 // ── containers (issue 045) ──
@@ -1131,6 +1237,7 @@ def build_data(sweep: bool) -> dict:
     coverage = coverage_snapshot(sweep)
     training = collect_training()
     fixer = load_fixer_quality()
+    corpus = load_corpus_history()
     data = {
         "generated_utc": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M"),
         "neuron_usd": NEURON_USD,
@@ -1147,6 +1254,7 @@ def build_data(sweep: bool) -> dict:
             },
         },
         "score": score,
+        "corpus": corpus,
         "traj": traj,
         "cadence": cadence,
         "cf_daily": cf_daily,
@@ -1187,7 +1295,7 @@ def main() -> int:
         f"ledger={len(data['ledger']['rows'])} rows, "
         f"cf_days={len(data['cf_daily'])}, traj_repos={len(data['traj'])}, "
         f"coverage={len(data['coverage'])}, training={len(data['training'])}, "
-        f"fixer={len(data['fixer'])})")
+        f"fixer={len(data['fixer'])}, corpus_days={len(data['corpus'])})")
     return 0
 
 
