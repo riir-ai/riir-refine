@@ -117,7 +117,7 @@ serde_json = "1"
 ed25519-dalek = "2"
 
 [features]
-default = ["clippy_lints", "rust_perf", "self_evolve", "docker"]
+default = ["clippy_lints", "rust_perf", "self_evolve", "docker", "rustc_errors"]
 
 # Domain features (Plan 001 multi-domain framework refactor).
 # clippy_lints is the first domain; default-on. Phase 2 adds `rust_perf`
@@ -274,9 +274,15 @@ kernel_verify = ["kernel_heal"]
 clippy_verify = ["clippy_lints"]
 
 # Plan 019 / Issue 035: the `rustc_errors` domain — compile-error repair keyed
-# by rustc error code. Opt-in (default-off) and NOT promotable until the
-# G-floor gate passes: `cargo fix --broken-code` already repairs 5 of the 8
-# measured codes, so a template that does not beat it must not ship.
+# by rustc error code. **PROMOTED DEFAULT-ON 2026-08-29 (owner call, this
+# commit): all GOAT gates passed at Bench 045 (Phase 6, N=212 — uncontested
+# stratum 105/105 where `cargo fix` is 0/105; E0505 21/21 matched; 126/126
+# semantics pass; never-wrong pinned), and the owner lifted the default-off
+# hold.** The domain is a DRIVER (`--fix-compile`), not a passive scan —
+# default-on costs compile time only, zero runtime overhead until invoked.
+# The floor gate stands: `cargo fix --broken-code` already repairs 5 of the 8
+# measured codes, so a template that does not beat it must not ship
+# (E0596/E0382/E0507/E0373 ship NO template and delegate).
 #
 # Deliberately does NOT imply `latent_retrieval` (Plan 019 T0.3): this domain
 # is exact-keyed by the error code in the diagnostic, so it needs no retrieval,
