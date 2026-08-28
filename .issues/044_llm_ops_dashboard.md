@@ -1,7 +1,7 @@
 # Issue 044 — ops dashboard: one URL tracking LLM spend + healer adoption + coverage
 
 **Filed:** 2026-08-26
-**Status:** OPEN — T1+T8+T11 SHIPPED; T2/T3/T6/T9/T10 SHIPPED 2026-08-27 (live-deployed, see §2026-08-27 session); T4 mechanism SHIPPED (paging inert until owner secrets); T7 workflow SHIPPED (inert until repo var + secrets); T5 blocker REWORDED 2026-08-28 — Proposal 005 Phase 1 landed 2026-08-27 (T1.5 dapps `84dd049` / T1.6 clippy `0a7cfd8`), so ledger-row KAT denomination awaits the deferred Worker/DO HTTP ledger shell (phase-2 defer / Plan 031 Phase B gate / phase-3 owner gate); ledger rows DO carry a `kat` field today, present-and-null on all 19 rows (the earlier "NO `kat` field at all (grep-verified)" claim was WRONG — corrected 2026-08-28 by re-parsing the file rather than grepping it; what is missing is a non-null DENOMINATION, not the field). **T12 SHIPPED 2026-08-28** — the "all remaining work is owner-gated activation" claim was also FALSE: the per-day neuron series was silently WRONG (see T12). **T13 SHIPPED 2026-08-28** (security hardening + T7 re-homed). Remaining: T4 paging (needs `CF_API_TOKEN`, unmintable from wrangler OAuth — no `user_tokens:edit` scope), T5 (deferred Worker/DO ledger shell), T7 activation (one `launchctl bootstrap`, files shipped), and **the auth gate is OPEN by owner decision 2026-08-28** — see T13
+**Status:** OPEN — T1+T8+T11 SHIPPED; T2/T3/T6/T9/T10 SHIPPED 2026-08-27 (live-deployed, see §2026-08-27 session); T4 mechanism SHIPPED (paging inert until owner secrets); T7 workflow SHIPPED (inert until repo var + secrets); T5 blocker REWORDED 2026-08-28 — Proposal 005 Phase 1 landed 2026-08-27 (T1.5 dapps `84dd049` / T1.6 clippy `0a7cfd8`), so ledger-row KAT denomination awaits the deferred Worker/DO HTTP ledger shell (phase-2 defer / Plan 031 Phase B gate / phase-3 owner gate); ledger rows DO carry a `kat` field today, present-and-null on all 19 rows (the earlier "NO `kat` field at all (grep-verified)" claim was WRONG — corrected 2026-08-28 by re-parsing the file rather than grepping it; what is missing is a non-null DENOMINATION, not the field). **T12 SHIPPED 2026-08-28** — the "all remaining work is owner-gated activation" claim was also FALSE: the per-day neuron series was silently WRONG (see T12). **T13 SHIPPED 2026-08-28** (security hardening + T7 re-homed). Remaining: T4 paging (needs `CF_API_TOKEN`, unmintable from wrangler OAuth — no `user_tokens:edit` scope), T5 (deferred Worker/DO ledger shell), T7 activation (one `launchctl bootstrap`, files shipped), and **the auth gate is OPEN by owner decision 2026-08-28** — see T13. **T16 SHIPPED 2026-08-29** (`0a8e1ec`): the nightly logged `WARN deploy failed` then `=== done ===` and exited 0 — a failed deploy left production stale while launchd saw success. Now exits 2, quotes wrangler verbatim instead of misdiagnosing it as stale OAuth, and names the stale-prod consequence. The deployed dashboard is currently BEHIND the committed one; the real blocker is an under-scoped credential (`Workers Scripts:Edit`), i.e. T4's owner step
 **Repo:** riir-clippy
 **URL:** https://riir-ops-dashboard.foxfox.workers.dev/
 
@@ -276,6 +276,46 @@ a `sudo mkdir -p /Users/katopz` + `sudo ln -sfn` fabricating a macOS path on a
 Linux runner as root, and a step writing the CF token to disk as a fake wrangler
 config (the generator reads it straight from env, so the token no longer touches
 the runner's filesystem).
+
+## T16 — the nightly reported success while production stayed stale (SHIPPED 2026-08-29)
+
+Commit `0a8e1ec`. Found by reading the 00:02 run's own log rather than its
+exit status: it printed `WARN deploy failed`, then `=== done ===`, then
+exited 0. Deploying is the POINT of this runner -- steps 1-3 only refresh and
+commit; until the deploy lands, production serves the PREVIOUS dashboard. So
+WARN-only meant a failed deploy left prod stale indefinitely while every
+surface launchd can observe reported success. Same class as T12 (a confident,
+wrong per-day series) and T15 (a silently dropped domain): the green surface
+was never the thing that was wrong.
+
+Three changes:
+- **Record the failure in the exit status** -- exit 2, distinct from the
+  exit-1 aborts earlier in the script, which fail BEFORE anything is
+  committed or deployed. `com.riir.ops-nightly.plist` has no `KeepAlive`, so
+  a non-zero exit cannot respawn-loop.
+- **Quote wrangler verbatim instead of guessing.** The old hint blamed
+  "wrangler OAuth may need refresh". On the observed failure wrangler had
+  authenticated FINE via `CLOUDFLARE_API_TOKEN` and was refused for MISSING
+  SCOPE -- so the hint named the wrong fix, which costs more than no hint.
+- **Say plainly that prod is serving the previous build.**
+
+Verified on five arms by stubbing `npx` against the extracted block:
+`SUCCESS` exit 0 | `SCOPE-ERR` exit 2 (verbatim cause) | `TIMEOUT(124)` exit 2
+| `SILENT-FAIL` (no output at all) exit 2 | `NO_DEPLOY` exit 0 with `npx`
+never invoked.
+
+**The failure arms caught a defect in the first version of the fix.** With
+`set -o pipefail`, a no-match `grep` returns 1, so under `set -e` the run
+aborted with NO log line at all -- silently WORSE than the WARN-only original,
+and precisely on the likeliest unattended failure (a bare `timeout 600` kill
+prints nothing the error pattern matches). Hence the load-bearing `|| true`.
+Testing only the success arm would have shipped a silent-death regression.
+
+**Live consequence still open:** the 00:02 deploy failure means the deployed
+dashboard is currently BEHIND the committed one, and the cause is an
+under-scoped credential (needs `Workers Scripts:Edit`), not a stale OAuth
+session -- see T4's owner step. Until that token is minted this runner will
+now exit 2 nightly, which is the correct signal.
 
 ## T15 — the domain list was duplicated three times; docker was about to vanish (SHIPPED 2026-08-28)
 
