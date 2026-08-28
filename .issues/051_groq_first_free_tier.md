@@ -1,7 +1,7 @@
 # Issue 051 — groq-first LLM routing: the free tier absorbs the reasoning window before any CF neuron burns
 
 **Filed:** 2026-08-28
-**Status:** OPEN — T1-T6 LANDED; **T9 LANDED 2026-08-28: the free leg is no longer gated behind the paid leg's credentials** (the fix below — `LlmRouter::from_env` built `CfClient` FIRST, so the owner's groq-only `.env` made `kat_drain` exit 3 without spending one free token: the exact opposite of this issue's purpose). Live-proven on the real API in a groq-only env (`live_router_groq_only`: served by groq, 21+2 tok, **0 neurons**, pricing basis `@cf/zai-org/glm-4.7-flash` intact). Tests 16/16 groq + 14/14 kat_drain + 1051/1051 lib, clippy clean. **T13 (ledger attribution — a groq-only window no longer credits the CF model with samples it never served) + T12 (the same hardening applied to the CF fallback leg + bounded response-body dumps) + T10 (prod-grade hardening: split connect timeout, single-allocation auth header, token scrub on server-controlled strings) + T11 (`--preflight`: ladder check on an empty backlog, zero metered cost by construction) LANDED same day.** **T14 (backlog census -- "queue empty" no longer hides a withheld backlog) LANDED 2026-08-28**, and its first real-store reading (`51 clean * 0 eligible * 0 withdrawn`) instrument-VERIFIES that T7 (first live window on real backlog) is STILL blocked — but on BACKLOG only (measured 0 eligible of 41 store rows), no longer on credentials; fixer_regate stays CF-pinned BY DESIGN. **T15 LANDED 2026-08-29** — T7's "empty backlog" is now verified on BOTH sides: T14 covered the census READER, T15 covers the failure WRITER (live `success 65 | fail 0` + `Certified 49`, `latent_retrieval` confirmed compiled into the installed `cargo-heal`, and the shared `record_traj` path). No defect found — the wait is real, not a dropped-signal bug
+**Status:** OPEN — T1-T6 LANDED; **T9 LANDED 2026-08-28: the free leg is no longer gated behind the paid leg's credentials** (the fix below — `LlmRouter::from_env` built `CfClient` FIRST, so the owner's groq-only `.env` made `kat_drain` exit 3 without spending one free token: the exact opposite of this issue's purpose). Live-proven on the real API in a groq-only env (`live_router_groq_only`: served by groq, 21+2 tok, **0 neurons**, pricing basis `@cf/zai-org/glm-4.7-flash` intact). Tests 16/16 groq + 14/14 kat_drain + 1051/1051 lib, clippy clean. **T13 (ledger attribution — a groq-only window no longer credits the CF model with samples it never served) + T12 (the same hardening applied to the CF fallback leg + bounded response-body dumps) + T10 (prod-grade hardening: split connect timeout, single-allocation auth header, token scrub on server-controlled strings) + T11 (`--preflight`: ladder check on an empty backlog, zero metered cost by construction) LANDED same day.** **T14 (backlog census -- "queue empty" no longer hides a withheld backlog) LANDED 2026-08-28**, and its first real-store reading (`51 clean * 0 eligible * 0 withdrawn`) instrument-VERIFIES that T7 (first live window on real backlog) is STILL blocked — but on BACKLOG only (measured 0 eligible of 41 store rows), no longer on credentials; fixer_regate stays CF-pinned BY DESIGN. **T7 RAN 2026-08-29 and PASSED** — the backlog reached 1 eligible of 71 organically, and the live groq-only window absorbed 2/2 calls for **$0.0000 metered / zero neurons** (T9 + T13 both confirmed live). The drained row was NOT healed (keep_s 0) — T7 measured absorption, not heal quality. **T15 LANDED 2026-08-29** — T7's "empty backlog" is now verified on BOTH sides: T14 covered the census READER, T15 covers the failure WRITER (live `success 65 | fail 0` + `Certified 49`, `latent_retrieval` confirmed compiled into the installed `cargo-heal`, and the shared `record_traj` path). No defect found — the wait is real, not a dropped-signal bug
 **Repo:** riir-clippy
 **URL:** https://riir-ops-dashboard.foxfox.workers.dev/
 
@@ -282,18 +282,38 @@ price) and is labeled as one everywhere it renders.
         ledger and the T13 attribution logic. Escalate when the census
         measures a non-zero stall — not before (evidence-first, no
         premature surface).
-- [-] T7 — first LIVE window on Groq (quota absorption measured on real
-      backlog) — **no longer credential-blocked (T9)**; now waiting on a
-      non-empty backlog. Measured 2026-08-28 via `--dry-run`: 0 eligible of
-      41 store rows (eligibility = `fail_count > 0 AND tier != Withdrawn`),
-      so the router is never even constructed. **Re-measured 2026-08-28 with the T14 census: the store has GROWN 41 -> 51 rows and is still `51 clean * 0 eligible * 0 withdrawn`** -- so the backlog is genuinely ABSENT, not withheld in the absorbing tier (the one alternative reading that would have made this a stall to fix rather than a wait). T7's blocker is now instrument-verified, not assumed. **T15 (2026-08-29) closes the WRITER side of the same question:** the T14 census verified only the READER (rows are counted correctly); a `fail 0` reading would look identical if the failure RECORDER were dead or compiled out, since `record_traj_fail` has never once fired in production. Verified instead by measurement + shared-path argument, no synthetic seeding: (a) `--memory-stats` reads `success 65 | fail 0`, `Certified 49 | Heuristic 2`, last verdict same-day across 5 active days -- so the verdict writer is demonstrably LIVE, and the clippy oracle is resolving (Certified requires `verified=true`), not silently degrading every edit to the generous `kept_edit_verdict(None) -> success` default; (b) both `record_traj`/`record_traj_fail` sit behind `#[cfg(feature = "latent_retrieval")]` -- confirmed COMPILED IN to the installed `cargo-heal` (`fix_verify => latent_retrieval`; `trajectories.kv` + `self-evolve: store record failed:` present in the binary's strings), so `fail 0` is not a default-off gate artifact; (c) `record_traj_fail` is a thin wrapper delegating to the same `record_traj` -> `record_classified` that fired 65 times, whose `success=false` branch (fail_count++ / consecutive_fails++ / 3-strike -> Withdrawn) is unit-pinned in `traj_store.rs`. Net: the backlog is empty because the compile-gated healer reverts nothing, NOT because failures are being dropped. T7 remains a genuine WAIT. Standing pre-flights, both
-      passing on the real API: `live_smoke` (T5) and `live_router_groq_only`
-      (T9, proves the groq-only ladder end-to-end) — plus `--preflight`
-      (T11) as the operator-facing equivalent, runnable any day.
-      **Not forceable, deliberately:** backlog rows come from REAL heal
-      failures (`TrajStore` `fail_count > 0`), so seeding synthetic failures
-      to open the window would manufacture the very measurement T7 exists to
-      take. It waits for organic accumulation.
+- [x] T7 — first LIVE window on Groq — **RUN 2026-08-29, the issue's core
+      claim is now proven on REAL backlog.** The wait ended on its own terms:
+      the backlog accumulated ORGANICALLY (0 eligible of 41 -> 0 of 51 -> **1
+      of 71**), so nothing was seeded and the measurement was not
+      manufactured. Eligible row `traj:manual_is_multiple_of:abbe52d636ad`
+      (OffCorpus, fail 1, prio 2.0); redaction gate 1 allowed / 0 blocked.
+
+      **Measured (run_id `drain-18d01cf6ab6e21c8-99237`):**
+      - `groq-ONLY window (model qwen/qwen3.8-27b, no CF fallback armed)` --
+        **T9's design confirmed LIVE**: `CF fallback NOT armed (CF_API_TOKEN /
+        CF_ACCOUNT_ID unset)`, i.e. the free leg ran on a partial paid-leg
+        credential set instead of exiting, which is exactly the failure T9
+        fixed.
+      - smoke OK via groq 424 ms; the one item 414 ms, 302+7 tok, attempts 1.
+      - **groq absorbed 2/2 calls, 323+9 tok, est $0.00005 of CF avoided,
+        rate-limited 0.**
+      - **`$0.0000` metered spend, ZERO neurons burned** -- the whole point of
+        this issue, on a real backlog row rather than a synthetic one.
+      - Ledger row verifies **T13 attribution**: `client.usd_est 0.0` with
+        `client.prompt_tokens/completion_tokens 0`, while
+        `providers.groq.calls 2`, `smoke_provider "groq"`, `smoke_neurons
+        0.0`. `model "@cf/zai-org/glm-5.3-flash"` appears only as the PRICING
+        BASIS -- the CF model is credited with nothing it did not serve.
+
+      **Reported honestly: the item was NOT healed.** `keep_s=false`,
+      `keeps 0`, EM 0/0 -- the drafter's fix was rejected, and the row took a
+      second failure (store `fail 1 -> 2`, still 1 eligible, `Withdrawn 0`).
+      T7 asked for a QUOTA-ABSORPTION measurement on real backlog, and that is
+      what passed; it never claimed the free tier would also heal the row. A
+      third consecutive failure moves the row to the absorbing `Withdrawn`
+      tier by design, which the census already reports.
+
 - [-] T8 — `fixer_regate` arms stay CF-pinned BY DESIGN (arm rows are
       MODEL comparisons — mixing a free router would confound the comparison
       the arms exist to make). Re-open only with an explicit free-tier arm.
