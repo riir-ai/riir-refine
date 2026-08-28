@@ -1,7 +1,7 @@
 # Issue 044 — ops dashboard: one URL tracking LLM spend + healer adoption + coverage
 
 **Filed:** 2026-08-26
-**Status:** OPEN — T1+T8+T11 SHIPPED; T2/T3/T6/T9/T10 SHIPPED 2026-08-27 (live-deployed, see §2026-08-27 session); T4 mechanism SHIPPED (paging inert until owner secrets); T7 workflow SHIPPED (inert until repo var + secrets); T5 blocker REWORDED 2026-08-28 — Proposal 005 Phase 1 landed 2026-08-27 (T1.5 dapps `84dd049` / T1.6 clippy `0a7cfd8`), so ledger-row KAT denomination awaits the deferred Worker/DO HTTP ledger shell (phase-2 defer / Plan 031 Phase B gate / phase-3 owner gate); ledger rows DO carry a `kat` field today, present-and-null on all 19 rows (the earlier "NO `kat` field at all (grep-verified)" claim was WRONG — corrected 2026-08-28 by re-parsing the file rather than grepping it; what is missing is a non-null DENOMINATION, not the field). **T12 SHIPPED 2026-08-28** — the "all remaining work is owner-gated activation" claim was also FALSE: the per-day neuron series was silently WRONG (see T12). Remaining work is now genuinely owner-gated activation (T4 paging / T5 ledger shell / T7 nightly)
+**Status:** OPEN — T1+T8+T11 SHIPPED; T2/T3/T6/T9/T10 SHIPPED 2026-08-27 (live-deployed, see §2026-08-27 session); T4 mechanism SHIPPED (paging inert until owner secrets); T7 workflow SHIPPED (inert until repo var + secrets); T5 blocker REWORDED 2026-08-28 — Proposal 005 Phase 1 landed 2026-08-27 (T1.5 dapps `84dd049` / T1.6 clippy `0a7cfd8`), so ledger-row KAT denomination awaits the deferred Worker/DO HTTP ledger shell (phase-2 defer / Plan 031 Phase B gate / phase-3 owner gate); ledger rows DO carry a `kat` field today, present-and-null on all 19 rows (the earlier "NO `kat` field at all (grep-verified)" claim was WRONG — corrected 2026-08-28 by re-parsing the file rather than grepping it; what is missing is a non-null DENOMINATION, not the field). **T12 SHIPPED 2026-08-28** — the "all remaining work is owner-gated activation" claim was also FALSE: the per-day neuron series was silently WRONG (see T12). **T13 SHIPPED 2026-08-28** (security hardening + T7 re-homed). Remaining: T4 paging (needs `CF_API_TOKEN`, unmintable from wrangler OAuth — no `user_tokens:edit` scope), T5 (deferred Worker/DO ledger shell), T7 activation (one `launchctl bootstrap`, files shipped), and **the auth gate is OPEN by owner decision 2026-08-28** — see T13
 **Repo:** riir-clippy
 **URL:** https://riir-ops-dashboard.foxfox.workers.dev/
 
@@ -66,7 +66,7 @@ Leftovers found + removed (owner ask: "any active on cloudflare leftover?"):
 
 ## Prod-grade backlog (the "what you miss" fill-in)
 
-- [x] **T2 auth gating** — SHIPPED 2026-08-27: `cloudflare/dashboard/src/worker.js`
+- [-] **T2 auth gating** — mechanism SHIPPED 2026-08-27, but the gate is **OPEN** (owner decision 2026-08-28, §T13) — reopened from [x] to [-] because a deployed-but-unset gate is not a closed gate: `cloudflare/dashboard/src/worker.js`
       token gate deployed in front of the assets (`run_worker_first = true`,
       declared `ASSETS` binding). Fails OPEN (`x-dashboard-auth: open`)
       until the one-time `npx wrangler secret put DASHBOARD_TOKEN` (from
@@ -137,6 +137,128 @@ Leftovers found + removed (owner ask: "any active on cloudflare leftover?"):
       reproduces this issue's 10,329.78 headline from the committed archive.
       Plus a ledger↔analytics reconciliation card so it cannot regress
       silently.
+- [-] **T13 security hardening + T7 re-homed** — SHIPPED 2026-08-28 (§T13):
+      payload audit falsified T2's fail-open rationale (19 raw ledger rows,
+      10 private repo names + lint debt, container costs). Deployed CSP,
+      `private, no-store`, `no-referrer`, nosniff, DENY, noindex, 405 on
+      non-GET, length-independent token compare, and a LOUD
+      `x-dashboard-auth: OPEN-INSECURE` marker. Investigated
+      `cf-cache-status: HIT` → NOT a bypass (`run_worker_first = true`
+      invokes the Worker on all requests). **Gate left OPEN by owner
+      decision** — deferred, not done. T7 re-homed to the M3
+      (`scripts/ops_nightly.sh` + plist, zero secrets, ~5 min vs ~30-50);
+      files shipped, schedule not installed.
+
+## T13 — security hardening + T7 re-homed to the M3 (SHIPPED 2026-08-28)
+
+### The fail-open rationale was falsified by a payload audit
+
+T2 shipped the gate FAIL-OPEN on the written rationale that "the HTML carries
+only aggregated numbers". Auditing the embedded `ds` JSON instead of trusting
+that sentence: it carries **19 FULL ledger rows** with internal issue/proposal
+references, **10 PRIVATE repo names with per-repo unhealed-lint counts**, per-repo
+rule-adoption stats + top rule names, container app ids and cost, and
+fixer-quality internals. That is a private engineering profile of the whole
+workspace, on an unauthenticated public URL.
+
+**OWNER DECISION 2026-08-28: leave the gate OPEN.** Recorded, not silently
+worked around. The exposure stands until `DASHBOARD_TOKEN` is set:
+
+    cd cloudflare/dashboard && npx wrangler secret put DASHBOARD_TOKEN
+
+### What DID ship (deployed, version `82c5032d`)
+
+Everything that hardens the surface without risking a lockout ahead of that
+secret:
+
+- **`Cache-Control: private, no-store` + `Vary: Cookie`.** The assets pipeline
+  served the private payload as `public, max-age=0, must-revalidate` and CF was
+  observed returning `cf-cache-status: HIT`. Investigated rather than assumed:
+  `run_worker_first = true` means **all** requests invoke the Worker (assets are
+  never served directly), and CF's own docs note `CF-Cache-Status` is
+  "probabilistically added for privacy reasons — don't rely on it for critical
+  routing logic". So it is the internal asset layer behind the auth check, **not**
+  an edge-cache bypass. The override still matters for browser/intermediary
+  caches holding a private body.
+- **CSP** `default-src 'none'` with `connect-src` pinned to the single origin the
+  HTML actually calls (the housekeeping `/latest` badge), plus `base-uri 'none'`,
+  `form-action 'none'`, `frame-ancestors 'none'`. The HTML is fully self-contained
+  (inline style/script, inline SVG, zero external assets), so everything else is
+  denied outright. Origin is a declared var `HK_ORIGIN`, not a buried literal.
+- **`Referrer-Policy: no-referrer`** — the one-time `?token=…` must never ride a
+  Referer header outbound.
+- **Length-INDEPENDENT token compare.** The prior `if (A.length !== B.length)
+  return false` short-circuited and leaked token length via response timing; the
+  length difference now folds into the same XOR accumulator.
+- `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
+  `X-Robots-Tag: noindex, nofollow, noarchive`, `Cross-Origin-Opener-Policy`,
+  `Permissions-Policy`, and **405** on non-GET/HEAD. Applied on EVERY branch
+  (401/503/405 included) so the posture never depends on which branch answered.
+- **The unconfigured branch is now LOUD:** `x-dashboard-auth: OPEN-INSECURE` plus
+  an `x-dashboard-warning` naming the exposure — the old value was a mild `open`
+  that read as normal to a curl or uptime check.
+- **`UNCONFIGURED_POLICY` var** (`serve` default | `deny`). Default `serve` ONLY so
+  deploying this hardening could not take the dashboard offline ahead of the
+  secret. Target state: set the secret, then flip to `deny` so an accidentally
+  deleted secret fails safe instead of silently republishing the payload.
+
+### The gated branches are unit-gated, because production cannot test them
+
+With no secret set, the 401 / token-exchange / cookie-auth paths are
+unreachable live — so setting `DASHBOARD_TOKEN` would be their FIRST-EVER
+execution. `cloudflare/dashboard/verify_auth.mjs` (`node
+cloudflare/dashboard/verify_auth.mjs`) exercises all of them against a stub
+env: 10 scenarios covering unconfigured serve/deny, 401 with no payload leak
+and no secret echo, 5 wrong-token shapes (empty / short / long / truncated /
+case-flipped), wrong cookie, the 301 exchange (token stripped from `Location`,
+unrelated query params preserved, `HttpOnly`+`Secure`+`SameSite=Lax`+`Path`+
+`Max-Age` all present, empty body), multi-cookie jar parsing, 405 on
+POST/PUT/DELETE across all three env shapes, and the hardening headers on
+every branch.
+
+It immediately earned its keep by catching a real latent bug: the
+`x-dashboard-warning` value contained an **em-dash**, and HTTP header values
+are ByteStrings. workerd tolerated it (the live header rendered fine), but
+Node/undici throws `Cannot convert argument to a ByteString`, so the header was
+unportable and the branch untestable off-workerd. Now ASCII-only.
+
+**NOT touched:** `cloudflare/housekeeping/` — a sibling agent has uncommitted
+read-side hardening in flight there (CORS allowlist replacing `*`, `READ_TOKEN`
+gating `/hours`/`/days`, KV fan-out caps, minimised `/latest`). Live still shows
+`Access-Control-Allow-Origin: *` and an unauthenticated `/hours`, so that work is
+theirs to land; duplicating it would have collided.
+
+### T7 re-homed: the M3 is primary, CI is the fallback
+
+The CI design was measured against the local one and loses on every axis:
+
+| | M3 (`scripts/ops_nightly.sh`) | GitHub Actions |
+|---|---|---|
+| secrets needed | **zero** (repos present, cargo-heal installed, wrangler OAuth works) | 3 (`GH_PAT`, `CF_API_TOKEN`, `CLOUDFLARE_API_TOKEN`) |
+| wall clock | ~5 min | ~30-50 min (11 × depth-2000 clones + release build of cargo-heal) |
+| adoption card | populated | **structurally always empty** — `.heal/trajectories.kv` is gitignored local state |
+| `develop` races | none (no auto-push on conflict) | nightly bot commit races concurrent agents |
+
+Shipped `scripts/ops_nightly.sh` + `scripts/com.riir.ops-nightly.plist`
+(`plutil -lint` clean). Prod-grade properties: atomic `mkdir` lock with a 6 h
+stale-reclaim (a killed run must not wedge the schedule forever); a **render gate**
+— refuses to deploy or commit an HTML that fails `verify_dom.mjs`; commits **only
+the 2 artifact paths by explicit name**, never `git add -A` (sibling WIP lives in
+this repo continuously); best-effort push that never force-pushes or rebases and
+just retries next run on a race; niced/low-IO/Background so it yields to
+interactive agent work; self-truncating log. **Files shipped, schedule NOT
+installed** (owner action):
+
+    cp scripts/com.riir.ops-nightly.plist ~/Library/LaunchAgents/
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.riir.ops-nightly.plist
+
+Also **de-staled the CI workflow**, whose header still warned that two generator
+dependencies were unlanded. Both landed (`RIIR_GIT_ROOT` at
+`gen_dashboard.py:71`, `CF_API_TOKEN` at `:569`), so two dead shims are gone:
+a `sudo mkdir -p /Users/katopz` + `sudo ln -sfn` fabricating a macOS path on a
+Linux runner as root, and a step writing the CF token to disk as a fake wrangler
+config (the generator reads it straight from env, so the token no longer touches
+the runner's filesystem).
 
 ## T12 — per-day attribution bug + reconciliation guard (SHIPPED 2026-08-28)
 

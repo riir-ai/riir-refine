@@ -4,14 +4,14 @@
 # regenerating ../dashboard/index.html via
 #   python3 ../../scripts/gen_dashboard.py
 #
-# v2 (Issue 044 T2): token-gated when the DASHBOARD_TOKEN secret is set —
-# one-time:   npx wrangler secret put DASHBOARD_TOKEN
-# src/worker.js runs FIRST on every request (run_worker_first) and serves
-# the assets through the declared ASSETS binding (env.ASSETS). Until the
-# secret is set
-# the worker FAILS OPEN (v1 behavior: aggregates-only HTML; response header
-# x-dashboard-auth: open marks the mode). Authenticate once via
-# ?token=… (exchanged for an HttpOnly cookie) or the cookie itself.
+# v3 (Issue 044 T13): token-gated and FAILS CLOSED. src/worker.js runs FIRST
+# on every request (run_worker_first) and serves the assets through the
+# declared ASSETS binding (env.ASSETS). With DASHBOARD_TOKEN unset the worker
+# returns 503 — it never serves the payload unauthenticated (T2's fail-open
+# rationale of "aggregates only" was falsified by a payload audit; see
+# src/worker.js). Authenticate once via ?token=… (301-exchanged for an
+# HttpOnly cookie) or the cookie itself.
+#   one-time:  npx wrangler secret put DASHBOARD_TOKEN
 name = "riir-ops-dashboard"
 compatibility_date = "2026-08-26"
 main = "src/worker.js"
@@ -23,3 +23,8 @@ run_worker_first = true
 # Explicit binding: with run_worker_first=true wrangler does NOT auto-add
 # env.ASSETS — without this the worker's env.ASSETS.fetch() would be undefined.
 binding = "ASSETS"
+
+# CSP connect-src allowlist: the ONLY cross-origin call the HTML makes is the
+# housekeeping worker's /latest live badge (T3). Keep in sync if that moves.
+[vars]
+HK_ORIGIN = "https://riir-kat-housekeeping.foxfox.workers.dev"
