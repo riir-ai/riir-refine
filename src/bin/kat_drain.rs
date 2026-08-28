@@ -59,9 +59,14 @@
 //! # offline queue review — no network, CI-able
 //! cargo run --release --features "cf_workers_ai,groq_first" --bin kat_drain -- --dry-run
 //!
-//! # the daily window (needs CF_API_TOKEN + CF_ACCOUNT_ID; GROQ_API_KEY arms
-//! # the free tier — the groq-first ladder absorbs the window before any CF
-//! # neuron burns; ~25-40 fix-pairs of free allocation at realistic sizes)
+//! # the daily window — needs AT LEAST ONE provider armed:
+//! #   GROQ_API_KEY                  → the free leg (~25-40 fix-pairs of
+//! #                                    free allocation at realistic sizes)
+//! #   CF_API_TOKEN + CF_ACCOUNT_ID  → the metered fallback (USD-capped)
+//! # Both armed is the intended daily shape (free tier absorbs the window,
+//! # CF catches the overflow). Groq-only runs too: an exhausted free tier
+//! # then ends the window cleanly (`free-tier exhausted`), and zero neurons
+//! # can burn. Neither armed → a loud refusal naming both vars.
 //! cargo run --release --features "cf_workers_ai,groq_first" --bin kat_drain -- --limit 25
 //! ```
 
@@ -73,7 +78,7 @@ use riir_clippy::cf_workers_ai::{
     REASONING_OVERFLOW,
 };
 use riir_clippy::domain::HealEntry as _;
-use riir_clippy::groq::router::{LlmRouter, Provider};
+use riir_clippy::groq::router::{LlmRouter, Provider, FREE_TIER_EXHAUSTED};
 use riir_clippy::kat_redact::{GateDecision, RedactionGate, RedactionLog, SpanOrigin};
 use riir_clippy::traj_store::{shape_hash, TrajRowDoc, TrajStore};
 use riir_clippy::EvidenceTier;
@@ -257,7 +262,9 @@ enum AttemptPlan {
 }
 
 fn classify_error(msg: &str) -> AttemptPlan {
-    if msg.starts_with(CAP_REACHED_PREFIX) {
+    // Both terminal verdicts stop the window: the USD cap (paid leg) and an
+    // exhausted free tier with no paid leg armed (Issue 051 groq-only).
+    if msg.starts_with(CAP_REACHED_PREFIX) || msg.starts_with(FREE_TIER_EXHAUSTED) {
         AttemptPlan::StopDay
     } else if msg.starts_with(REASONING_OVERFLOW) {
         AttemptPlan::RetryEscalate
@@ -443,14 +450,18 @@ fn main() {
             std::process::exit(3);
         }
     };
-    if llm.groq_enabled() {
-        eprintln!(
+    match (llm.groq_enabled(), llm.cf_armed()) {
+        (true, true) => eprintln!(
             "[drain] groq-first armed (model {}, free tier absorbs the window; CF fallback \
              stays cap-guarded)",
             llm.groq_model().unwrap_or("?")
-        );
-    } else {
-        eprintln!("[drain] groq not armed (GROQ_API_KEY unset) — pure CF window");
+        ),
+        (true, false) => eprintln!(
+            "[drain] groq-ONLY window (model {}, no CF fallback armed) — an exhausted free \
+             tier ends the window cleanly; zero neurons can burn",
+            llm.groq_model().unwrap_or("?")
+        ),
+        (false, _) => eprintln!("[drain] groq not armed (GROQ_API_KEY unset) — pure CF window"),
     }
     let (price_in, price_out) = riir_clippy::llm_spend::price_for(llm.model_id())
         .map_or((0.0, 0.0), |p| (p.input_per_m, p.output_per_m));
@@ -482,7 +493,7 @@ fn main() {
                 llm.model_id(),
                 &ArmSummary::default(),
                 None,
-                Some(llm.cf().spend_state()),
+                llm.cf().map(cf_workers_ai::CfClient::spend_state),
                 &DrainStats {
                     run_id: run_id.clone(),
                     queued: kept.len(),
@@ -619,7 +630,7 @@ fn main() {
     println!("| arm | n | EM | parses | merge | keep_o/scoreable | keep_s | vetoed | divergent | regressions | $ |");
     println!("{}", summary.markdown_row("DRAIN"));
     println!("  queued {} · llm-scored {llm_scored} · declined {declines} (overflow {overflow_declines})", kept.len());
-    let server = llm.cf().fetch_usage_today().ok();
+    let server = llm.cf().and_then(|c| c.fetch_usage_today().ok());
     if let Some(u) = &server {
         println!(
             "  server meter (today, this model): {} req · {:.2} neurons ≈ ${:.5}",
@@ -644,14 +655,19 @@ fn main() {
             gstats.rate_limited,
         );
     }
-    println!("  {}", llm.cf().spend_summary());
+    match llm.cf() {
+        Some(cf) => println!("  {}", cf.spend_summary()),
+        // Groq-only: no paid leg, so no USD spend line to print. The
+        // absorption line above IS the whole cost record for this window.
+        None => println!("  CF fallback not armed — $0.0000 metered spend (groq-only window)"),
+    }
     eprintln!("[drain] store events → {}", store.root.display());
     append_ledger(
         &args,
         llm.model_id(),
         &summary,
         server.as_ref(),
-        Some(llm.cf().spend_state()),
+        llm.cf().map(cf_workers_ai::CfClient::spend_state),
         &DrainStats {
             run_id,
             queued: kept.len(),
@@ -947,6 +963,29 @@ mod tests {
                  $1.00 cap — hard-declining for the rest of the UTC day"
             ),
             AttemptPlan::StopDay
+        );
+    }
+
+    #[test]
+    fn free_tier_exhausted_classifies_stop_day() {
+        // Issue 051 fix: a groq-only window whose free tier runs out has no
+        // paid leg to fall back to — terminal, exactly like the USD cap.
+        assert_eq!(
+            classify_error(
+                "free-tier exhausted: groq is the only armed provider (429 rate limit) — no \
+                 CF fallback (CF_API_TOKEN / CF_ACCOUNT_ID unset)"
+            ),
+            AttemptPlan::StopDay
+        );
+    }
+
+    #[test]
+    fn a_transient_groq_failure_without_cf_declines_only_the_span() {
+        // A transport blip is NOT terminal even with no fallback — the next
+        // span retries groq. Only the (windowed) rate limit ends the day.
+        assert_eq!(
+            classify_error("groq attempt failed and no CF fallback is armed (connect timeout)"),
+            AttemptPlan::DeclineSpan
         );
     }
 

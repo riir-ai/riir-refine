@@ -26,9 +26,22 @@
 //!          Cloudflare CfClient (unchanged: cap + smoke + ledger)
 //! ```
 //!
-//! `GROQ_API_KEY` absent → pure-CF behavior, byte-identical to pre-051.
-//! CF creds stay MANDATORY (`CfClient::from_env` fails hard) — the free
-//! tier alone is not the contract.
+//! **Either leg may be absent; at least ONE must be armed.**
+//!
+//! - `GROQ_API_KEY` absent → pure-CF behavior, byte-identical to pre-051.
+//! - CF creds absent → a GROQ-ONLY window. The ladder has no fallback, so
+//!   an exhausted free tier is terminal for the window (the
+//!   `FREE_TIER_EXHAUSTED` verdict — a clean stop that still writes the
+//!   ledger row, mirroring CF's cap-reached verdict) instead of a crash.
+//! - Both absent → refused at construction, naming both vars.
+//!
+//! CF creds were MANDATORY until 2026-08-28. That gated the FREE leg behind
+//! the PAID leg's credentials, so the owner's groq-only `.env` could not run
+//! a window at all — `kat_drain` exited 3 before spending a single free
+//! token, which is the exact opposite of this module's purpose. Note that a
+//! misconfigured CF leg (creds PRESENT, build refused — e.g. an unpriced
+//! model) still fails hard: that is a config bug, not an absent leg, and
+//! must never degrade silently to groq-only.
 //!
 //! # Accounting honesty (the load-bearing rule)
 //!
@@ -362,11 +375,29 @@ pub mod router {
         pub fallbacks: u64,
     }
 
-    /// The groq-first ladder. `GROQ_API_KEY` absent → pure CF (pre-051
-    /// behavior, byte-identical). CF creds stay mandatory — the fallback
-    /// must exist.
+    /// The verdict prefix for "the free tier is exhausted and no paid leg is
+    /// armed" — TERMINAL for the window: the caller stops cleanly and still
+    /// writes its ledger row. Deliberately NOT the USD-cap prefix; no paid
+    /// leg exists to cap, and conflating the two would misreport the cause.
+    pub const FREE_TIER_EXHAUSTED: &str = "free-tier exhausted";
+
+    /// The groq-first ladder. At least ONE leg must be armed; either may be
+    /// absent:
+    ///
+    /// - `GROQ_API_KEY` absent → pure CF (pre-051 behavior, byte-identical).
+    /// - CF creds absent → groq-only. The ladder has no fallback, so an
+    ///   exhausted free tier is terminal for the window (the
+    ///   [`FREE_TIER_EXHAUSTED`] verdict) instead of a hard failure.
+    ///
+    /// The both-absent case is refused at construction — a router with no
+    /// provider can only fail per span, which is worse than failing loudly
+    /// once.
     pub struct LlmRouter {
-        cf: CfClient,
+        cf: Option<CfClient>,
+        /// The billing/fallback model id — resolved EVEN WHEN the CF leg is
+        /// unarmed, so `usd_avoided` keeps an honest pricing basis and the
+        /// ledger row keeps a stable `model` field on a groq-only window.
+        cf_model: String,
         groq: Option<GroqClient>,
         /// Set on the FIRST rate-limit: free-tier limits are windowed, so
         /// hammering a 429 is waste. Transport errors do NOT disable.
@@ -379,22 +410,58 @@ pub mod router {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             f.debug_struct("LlmRouter")
                 .field("groq_armed", &self.groq_enabled())
+                .field("cf_armed", &self.cf_armed())
                 .field("stats", &self.stats)
                 .finish_non_exhaustive()
         }
     }
 
     impl LlmRouter {
-        /// Build from env: `CfClient::from_env` (mandatory — the fallback)
-        /// + `GroqClient::from_env` (optional — the free leg).
+        /// Which legs a window gets, or the refusal when neither is armed
+        /// (pure — env-free, so it is unit-testable without mutating the
+        /// process environment). `Ok(cf_wanted)`: build the CF leg.
         ///
         /// # Errors
         ///
-        /// The CF client's `from_env` message (missing `CF_API_TOKEN` /
-        /// `CF_ACCOUNT_ID`, unpriced model). A missing `GROQ_API_KEY` is NOT
-        /// an error — the router degrades to pure CF.
+        /// Both legs unarmed — the actionable refusal naming both vars.
+        pub fn arm_plan(groq_armed: bool, cf_creds_present: bool) -> Result<bool, String> {
+            match (groq_armed, cf_creds_present) {
+                (_, true) => Ok(true),
+                (true, false) => Ok(false),
+                (false, false) => Err(
+                    "no LLM provider is armed: GROQ_API_KEY is unset (the free leg) and \
+                     CF_API_TOKEN / CF_ACCOUNT_ID are unset (the metered fallback) — set \
+                     at least one"
+                        .to_string(),
+                ),
+            }
+        }
+
+        /// True when BOTH CF credential vars are present. Distinguishes an
+        /// UNARMED leg (creds absent — legitimate, groq may carry the
+        /// window) from a MISCONFIGURED one (creds present, build refused,
+        /// e.g. an unpriced model), which must never degrade silently.
+        fn cf_creds_present() -> bool {
+            std::env::var_os("CF_API_TOKEN").is_some_and(|v| !v.is_empty())
+                && std::env::var_os("CF_ACCOUNT_ID").is_some_and(|v| !v.is_empty())
+        }
+
+        /// Build from env: `GroqClient::from_env` (the free leg) +
+        /// `CfClient::from_env` (the metered fallback). Either leg may be
+        /// absent; at least one must be armed.
+        ///
+        /// # Errors
+        ///
+        /// - Both legs unarmed (`GROQ_API_KEY` unset AND CF creds unset) —
+        ///   the actionable refusal, naming both vars.
+        /// - CF creds PRESENT but the client refused (unpriced model, …) —
+        ///   the CF message, propagated. A misconfigured fallback is a
+        ///   config bug, not an absent leg, so it never degrades to
+        ///   groq-only silently.
+        ///
+        /// A missing `GROQ_API_KEY` is NOT an error (pure CF), and missing
+        /// CF creds are NOT an error when groq is armed (groq-only).
         pub fn from_env(cf_model: Option<&str>) -> Result<Self, String> {
-            let cf = CfClient::from_env(cf_model)?;
             let groq = if GroqClient::available() {
                 match GroqClient::from_env(None) {
                     Ok(g) => Some(g),
@@ -408,8 +475,27 @@ pub mod router {
             } else {
                 None
             };
+            // Creds present → build hard (propagate an unpriced-model
+            // refusal). Absent → the leg is simply unarmed.
+            let cf = if Self::arm_plan(groq.is_some(), Self::cf_creds_present())? {
+                Some(CfClient::from_env(cf_model)?)
+            } else {
+                eprintln!(
+                    "[router] CF fallback NOT armed (CF_API_TOKEN / CF_ACCOUNT_ID unset) \
+                     — groq-only window: an exhausted free tier ends it"
+                );
+                None
+            };
+            // Honest pricing basis on a groq-only window: the model that
+            // WOULD have served. `price_for` is a pure table lookup — it
+            // needs no credentials.
+            let cf_model = cf.as_ref().map_or_else(
+                || cf_model.unwrap_or(CfClient::DEFAULT_MODEL).to_string(),
+                |c| c.model_id().to_string(),
+            );
             Ok(Self {
                 cf,
+                cf_model,
                 groq,
                 groq_disabled: false,
                 disable_reason: None,
@@ -436,15 +522,24 @@ pub mod router {
         }
 
         /// The CF (billing/fallback) model id — the ledger row's `model`.
+        /// Resolved even on a groq-only window (the model that WOULD have
+        /// served), so pricing and the ledger keep a stable basis.
         #[must_use]
         pub fn model_id(&self) -> &str {
-            self.cf.model_id()
+            &self.cf_model
         }
 
-        /// The CF client (spend state + server-meter passthroughs).
+        /// True when the metered fallback leg exists.
         #[must_use]
-        pub fn cf(&self) -> &CfClient {
-            &self.cf
+        pub fn cf_armed(&self) -> bool {
+            self.cf.is_some()
+        }
+
+        /// The CF client (spend state + server-meter passthroughs) — `None`
+        /// on a groq-only window.
+        #[must_use]
+        pub fn cf(&self) -> Option<&CfClient> {
+            self.cf.as_ref()
         }
 
         /// One generation through the ladder. `Err` carries CF's exact
@@ -459,7 +554,10 @@ pub mod router {
         /// # Errors
         ///
         /// CF's error surface (the terminal leg). Groq overflow errors are
-        /// re-emitted with the same `reasoning-overflow` prefix.
+        /// re-emitted with the same `reasoning-overflow` prefix. On a
+        /// groq-only window with the free leg down, the
+        /// [`FREE_TIER_EXHAUSTED`] prefix (terminal) or a plain per-span
+        /// message (transient transport).
         pub fn generate(&mut self, prompt: &str, max_tokens: usize) -> Result<RouterGen, String> {
             if self.groq_enabled() {
                 let groq = self
@@ -489,25 +587,58 @@ pub mod router {
                     // failure). Surface with the CF-compatible prefix so the
                     // drain's budget-escalation retry re-enters HERE.
                     Err(GroqError::Overflow(msg)) => return Err(msg),
+                    // `fallbacks` counts attempts that ACTUALLY reached CF
+                    // — on a groq-only window there is nothing to fall back
+                    // to, so it must stay 0 rather than imply paid traffic.
                     Err(GroqError::RateLimited(msg)) => {
                         self.stats.rate_limited += 1;
-                        self.stats.fallbacks += 1;
                         self.groq_disabled = true;
                         self.disable_reason = Some(msg.clone());
-                        eprintln!(
-                            "[router] groq rate-limited — disabled for the rest of the \
-                             window, falling back to CF ({msg})"
-                        );
+                        if self.cf.is_some() {
+                            self.stats.fallbacks += 1;
+                            eprintln!(
+                                "[router] groq rate-limited — disabled for the rest of the \
+                                 window, falling back to CF ({msg})"
+                            );
+                        } else {
+                            eprintln!(
+                                "[router] groq rate-limited and no CF fallback armed — the \
+                                 window ends here ({msg})"
+                            );
+                        }
                     }
                     Err(GroqError::Transport(msg)) => {
                         self.stats.transport_errors += 1;
-                        self.stats.fallbacks += 1;
-                        eprintln!("[router] groq transport error — falling back to CF this attempt ({msg})");
+                        if self.cf.is_some() {
+                            self.stats.fallbacks += 1;
+                            eprintln!("[router] groq transport error — falling back to CF this attempt ({msg})");
+                        } else {
+                            eprintln!("[router] groq transport error, no CF fallback armed — declining this attempt ({msg})");
+                        }
                     }
                 }
             }
             let fell_back = self.stats.fallbacks > 0;
-            let g = self.cf.generate(prompt, max_tokens)?;
+            let Some(cf) = self.cf.as_mut() else {
+                // Groq-only window with the free leg down. A rate-limit is
+                // TERMINAL (the quota window won't reopen mid-run) and
+                // mirrors CF's cap-reached verdict — stop cleanly, keep the
+                // ledger row. A transport blip is transient: decline this
+                // span only, and let the next one retry groq.
+                let why = self
+                    .disable_reason
+                    .clone()
+                    .unwrap_or_else(|| "groq unavailable".to_string());
+                return Err(if self.groq_disabled {
+                    format!(
+                        "{FREE_TIER_EXHAUSTED}: groq is the only armed provider ({why}) — no \
+                         CF fallback (CF_API_TOKEN / CF_ACCOUNT_ID unset)"
+                    )
+                } else {
+                    format!("groq attempt failed and no CF fallback is armed ({why})")
+                });
+            };
+            let g = cf.generate(prompt, max_tokens)?;
             Ok(RouterGen {
                 text: g.text,
                 prompt_tokens: g.prompt_tokens,
@@ -607,6 +738,9 @@ mod tests {
 
     // ── response parse ────────────────────────────────────────────────────
 
+    // `json!` consumes the arg by value — a reference would just force a
+    // clone at every call site.
+    #[allow(clippy::needless_pass_by_value)]
     fn chat_response(content: serde_json::Value) -> serde_json::Value {
         serde_json::json!({
             "id": "chatcmpl-x",
@@ -690,9 +824,61 @@ mod tests {
 
     #[cfg(feature = "cf_workers_ai")]
     mod router_tests {
-        use super::super::router::{avoided_usd, providers_json, GroqStats};
+        use super::super::router::{
+            avoided_usd, providers_json, GroqStats, LlmRouter, FREE_TIER_EXHAUSTED,
+        };
+
+        // ── Issue 051 fix: either leg may be absent, not just groq ────
 
         #[test]
+        fn a_groq_only_window_is_armed_not_refused() {
+            // THE regression this fix exists for: the owner's .env has only
+            // GROQ_API_KEY, and the free leg used to be gated behind the
+            // PAID leg's credentials — so no window could run at all.
+            assert_eq!(LlmRouter::arm_plan(true, false), Ok(false));
+        }
+
+        #[test]
+        fn cf_creds_present_always_arms_the_fallback() {
+            assert_eq!(LlmRouter::arm_plan(true, true), Ok(true));
+            assert_eq!(LlmRouter::arm_plan(false, true), Ok(true));
+        }
+
+        #[test]
+        fn neither_leg_armed_is_refused_naming_both_vars() {
+            let e = LlmRouter::arm_plan(false, false).expect_err("must refuse");
+            assert!(e.contains("GROQ_API_KEY"), "names the free leg: {e}");
+            assert!(e.contains("CF_API_TOKEN"), "names the paid leg: {e}");
+            assert!(e.contains("CF_ACCOUNT_ID"), "names the paid leg: {e}");
+        }
+
+        #[test]
+        fn the_free_tier_verdict_is_distinct_from_the_usd_cap() {
+            // kat_drain treats BOTH as terminal, but they must not share a
+            // prefix — the cause has to stay readable in the ledger.
+            assert_eq!(FREE_TIER_EXHAUSTED, "free-tier exhausted");
+            assert!(!FREE_TIER_EXHAUSTED.starts_with("LLM daily cap reached"));
+            assert!(!"LLM daily cap reached: $1".starts_with(FREE_TIER_EXHAUSTED));
+        }
+
+        #[test]
+        fn a_groq_only_window_reports_zero_cf_fallbacks() {
+            // `fallbacks_to_cf` must stay 0 when no CF leg exists — a
+            // non-zero count would imply paid traffic that never happened.
+            let stats = GroqStats {
+                calls: 3,
+                ok: 2,
+                rate_limited: 1,
+                fallbacks: 0,
+                ..GroqStats::default()
+            };
+            let v = providers_json(&stats, 0.0, Some("qwen/qwen3.8-27b"));
+            assert_eq!(v["groq"]["fallbacks_to_cf"], serde_json::json!(0));
+            assert_eq!(v["groq"]["enabled"], serde_json::json!(true));
+        }
+
+        #[test]
+        #[allow(clippy::float_cmp)] // exact-zero contract: 0 tok MUST price to exactly 0.0
         fn avoided_usd_prices_both_sides() {
             let usd = avoided_usd(1_000_000, 500_000, 0.5, 0.75);
             assert!((usd - (0.5 + 0.375)).abs() < 1e-9);
@@ -763,6 +949,64 @@ mod tests {
         assert!(
             gen.text.to_uppercase().contains("OK"),
             "smoke reply should contain OK, got: {:?}",
+            gen.text
+        );
+    }
+
+    /// The Issue 051 fix, on the real API: a GROQ-ONLY environment (no CF
+    /// creds) must ARM and SERVE. Before the fix this path was unreachable —
+    /// `LlmRouter::from_env` built the paid leg first and returned its
+    /// `"CF_API_TOKEN is not set"` refusal, so `kat_drain` exited 3 without
+    /// ever touching the free tier.
+    ///
+    /// Standing pre-flight for T7. Run with `GROQ_API_KEY` exported and CF
+    /// creds UNSET:
+    ///
+    /// ```sh
+    /// cargo test --features cf_workers_ai,groq_first --lib \
+    ///   groq::tests::live_router_groq_only -- --ignored --nocapture
+    /// ```
+    #[test]
+    #[ignore = "live API call — burns free quota; run manually with GROQ_API_KEY set and CF creds unset"]
+    // Exact-zero contract: a free-tier generation MUST bill exactly 0.0 CF
+    // billing units — an epsilon compare would accept a real charge.
+    #[allow(clippy::float_cmp)]
+    fn live_router_groq_only() {
+        use super::router::{LlmRouter, Provider};
+        assert!(
+            std::env::var_os("CF_API_TOKEN").is_none(),
+            "unset CF_API_TOKEN — this test proves the groq-ONLY path"
+        );
+        let mut router = LlmRouter::from_env(None)
+            .expect("a groq-only env must arm the router (the Issue 051 fix)");
+        assert!(router.groq_enabled(), "the free leg must be armed");
+        assert!(!router.cf_armed(), "the paid leg must be absent");
+        // The pricing basis survives an absent CF leg — the ledger row and
+        // the usd_avoided estimate both depend on it.
+        assert!(
+            crate::llm_spend::price_for(router.model_id()).is_some(),
+            "the would-have-served model must stay priced: {}",
+            router.model_id()
+        );
+        let gen = router
+            .generate("Reply with exactly: OK", 32)
+            .expect("the groq-only ladder must serve");
+        assert_eq!(gen.provider, Provider::Groq);
+        assert_eq!(gen.neurons, 0.0, "groq is free — zero CF billing units");
+        assert!(gen.groq_fallback.is_none());
+        assert_eq!(router.stats.fallbacks, 0, "no CF leg → no fallbacks");
+        eprintln!(
+            "[groq-only] served by {} · billing-basis model {} · {}+{} tok · {} neurons · {}ms",
+            gen.provider.as_str(),
+            router.model_id(),
+            gen.prompt_tokens,
+            gen.completion_tokens,
+            gen.neurons,
+            gen.latency_ms,
+        );
+        assert!(
+            gen.text.to_uppercase().contains("OK"),
+            "reply should contain OK, got: {:?}",
             gen.text
         );
     }
