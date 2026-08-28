@@ -140,6 +140,15 @@ pub mod cf_workers_ai;
 #[cfg(feature = "cf_workers_ai")]
 pub mod llm_spend;
 
+// Issue 051 — groq-first free-tier LLM routing: the Groq chat client
+// (OpenAI-compatible REST, reuses the optional ureq dep) + the groq→CF
+// provider ladder (the `router` submodule, additionally gated on
+// `cf_workers_ai` — it composes CfClient as the paid fallback leg).
+// `GROQ_API_KEY` absent → pure-CF behavior, byte-identical to pre-051.
+// See `.issues/051_groq_first_free_tier.md`.
+#[cfg(feature = "groq_first")]
+pub mod groq;
+
 // Bench 669 consumer adoption (Plan 016): the input-scope gate at the heal()
 // seam. `ScopeModel` wraps katgpt-core's `contrastive_scope` primitive — the
 // 2D extension of the Issue 030 relevance gate (rule coverage × input scope).

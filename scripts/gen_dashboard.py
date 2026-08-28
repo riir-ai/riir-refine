@@ -113,11 +113,28 @@ def ledger_summary(rows: list[dict]) -> dict:
     total_neurons_server = 0.0
     total_req = 0
     incidents = []
+    # Issue 051 — the groq-first free tier's absorption (per-row
+    # `providers.groq` block; legacy rows without the key are unaffected).
+    groq = {
+        "calls": 0, "ok": 0, "prompt_tokens": 0, "completion_tokens": 0,
+        "usd_avoided": 0.0, "rate_limited": 0, "fallbacks": 0,
+        "windows": 0,
+    }
     for r in rows:
         model = r.get("model") or "?"
         cl = r.get("client") or {}
         sv = r.get("server") or {}
         n = r.get("n") or 0
+        gq = (r.get("providers") or {}).get("groq") or {}
+        if gq.get("enabled") or gq.get("calls") or gq.get("rate_limited"):
+            groq["windows"] += 1
+            groq["calls"] += gq.get("calls") or 0
+            groq["ok"] += gq.get("ok") or 0
+            groq["prompt_tokens"] += gq.get("prompt_tokens") or 0
+            groq["completion_tokens"] += gq.get("completion_tokens") or 0
+            groq["usd_avoided"] += gq.get("usd_avoided_est") or 0.0
+            groq["rate_limited"] += gq.get("rate_limited") or 0
+            groq["fallbacks"] += gq.get("fallbacks_to_cf") or gq.get("fallbacks") or 0
         m = per_model.setdefault(model, {
             "usd": 0.0, "neurons": 0.0, "requests": 0, "n": 0,
             "prompt_tokens": 0, "completion_tokens": 0,
@@ -152,6 +169,7 @@ def ledger_summary(rows: list[dict]) -> dict:
         "total_neurons_server": total_neurons_server,
         "total_requests": total_req,
         "incidents": incidents,
+        "groq": groq,
         "rows": rows,
     }
 
@@ -854,6 +872,11 @@ footer{color:var(--dim);font:11px var(--mono);margin-top:34px;border-top:1px sol
   <div class="card"><h2>neurons by model — ledger (server)</h2>
     <div id="modelNeurons"></div>
   </div>
+  <div class="card"><h2>free-tier absorption (groq-first)</h2>
+    <div id="groqAbsorb" class="sub" style="margin-bottom:6px"></div>
+    <div id="groqBars"></div>
+    <div class="legend"><span>issue 051: the daily drain reasons on groq's free tier FIRST and only falls back to metered CF workers AI when the free limit hits — usd avoided is an ESTIMATE (free groq tokens priced at the CF fallback model's per-M rates)</span></div>
+  </div>
   <div class="card"><h2>healer score-bench curve</h2>
     <div id="scoreLatest" class="sub" style="margin-bottom:6px"></div>
     <div id="scoreCurve"></div>
@@ -985,6 +1008,9 @@ if (D.cf_daily && D.cf_daily.length) {
       D.traj.reduce((a,b)=>a+b.tiers.certified,0) + ' certified'],
     ['heal commits 30d', fmt.n(D.cadence.reduce((a,b)=>a+b.heal_commits_30d,0)),
       'across ' + D.cadence.filter(r=>r.heal_commits_30d>0).length + ' repos'],
+    ['groq tok absorbed (free)', fmt.n((D.ledger.groq||{prompt_tokens:0}).prompt_tokens
+      + (D.ledger.groq||{completion_tokens:0}).completion_tokens),
+      fmt.usd((D.ledger.groq||{usd_avoided:0}).usd_avoided) + ' CF avoided (est)'],
   ];
   if (D.containers && D.containers.daily && D.containers.daily.length) {
     const days = D.containers.daily;
@@ -1088,6 +1114,22 @@ if (D.cf_daily && D.cf_daily.length) {
   const m2 = Object.entries(D.ledger.per_model).sort((a,b)=>b[1].neurons-a[1].neurons);
   svgBarChart($('modelNeurons'), m2.map(m=>m[0].split('/').pop().slice(0,22)),
     m2.map(m=>m[1].neurons));
+}
+// ── free-tier absorption (issue 051 groq-first) ──
+{
+  const g = (D.ledger.groq || {calls:0,ok:0,prompt_tokens:0,completion_tokens:0,
+    usd_avoided:0,rate_limited:0,fallbacks:0,windows:0});
+  if (g.calls || g.rate_limited || g.fallbacks) {
+    $('groqAbsorb').innerHTML = '<b>' + fmt.n(g.ok) + '</b> of ' + fmt.n(g.calls)
+      + ' groq calls served free across ' + fmt.n(g.windows) + ' window(s) — '
+      + fmt.n(g.prompt_tokens + g.completion_tokens) + ' tokens absorbed (est '
+      + fmt.usd(g.usd_avoided) + ' of CF avoided) · fell back '
+      + fmt.n(g.fallbacks) + '× (rate-limited ' + fmt.n(g.rate_limited) + '×).';
+    svgBarChart($('groqBars'), ['groq ok', 'fallback→cf', 'rate-limited'],
+      [g.ok, g.fallbacks, g.rate_limited]);
+  } else {
+    $('groqAbsorb').innerHTML = 'no groq-first windows yet (issue 051) — drain runs land here';
+  }
 }
 if (D.score.length) {
   const labels = D.score.map(r=>(r.ts||'').slice(5,10));
@@ -1417,6 +1459,7 @@ def build_data(sweep: bool) -> dict:
             "per_model": led["per_model"],
             "per_day": led["per_day"],
             "incidents": led["incidents"],
+            "groq": led["groq"],
             "totals": {
                 "usd_client": round(led["total_usd_client"], 6),
                 "server_neurons": round(led["total_neurons_server"], 2),

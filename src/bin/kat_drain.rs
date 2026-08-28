@@ -6,7 +6,9 @@
 //! ```text
 //! TrajStore miss backlog → dedup + priority → modelless pre-pass
 //!   → redaction gate (every span, own-repo origin; all-blocked = exit 4)
-//!   → one-call smoke (~50-120 n) → LLM (CfClient; USD cap inside generate)
+//!   → one-call smoke (~50-120 n) → LLM (groq-first free tier → CF fallback
+//!      via `LlmRouter`; the USD cap guards the CF leg inside generate —
+//!      Issue 051: the free tier absorbs the window before any neuron burns)
 //!   → strict-keep verify (score_case: clippy oracle + contract + behavioural
 //!      vetoes — the fixer_regate machinery, reused not rewritten)
 //!   → Certified trajectories + the transparency ledger row
@@ -55,21 +57,23 @@
 //!
 //! ```sh
 //! # offline queue review — no network, CI-able
-//! cargo run --release --features cf_workers_ai --bin kat_drain -- --dry-run
+//! cargo run --release --features "cf_workers_ai,groq_first" --bin kat_drain -- --dry-run
 //!
-//! # the daily window (needs CF_API_TOKEN + CF_ACCOUNT_ID; ~25-40 fix-pairs
-//! # of free allocation at realistic sizes)
-//! cargo run --release --features cf_workers_ai --bin kat_drain -- --limit 25
+//! # the daily window (needs CF_API_TOKEN + CF_ACCOUNT_ID; GROQ_API_KEY arms
+//! # the free tier — the groq-first ladder absorbs the window before any CF
+//! # neuron burns; ~25-40 fix-pairs of free allocation at realistic sizes)
+//! cargo run --release --features "cf_workers_ai,groq_first" --bin kat_drain -- --limit 25
 //! ```
 
 use std::io::Write as _;
 use std::path::PathBuf;
 
 use riir_clippy::cf_workers_ai::{
-    self, ArmSummary, CaseScore, CfClient, CfUsageToday, MissClass, RegateHarness, Sample,
-    SampleSource, REASONING_OVERFLOW,
+    self, ArmSummary, CaseScore, CfUsageToday, MissClass, RegateHarness, Sample, SampleSource,
+    REASONING_OVERFLOW,
 };
 use riir_clippy::domain::HealEntry as _;
+use riir_clippy::groq::router::{LlmRouter, Provider};
 use riir_clippy::kat_redact::{GateDecision, RedactionGate, RedactionLog, SpanOrigin};
 use riir_clippy::traj_store::{shape_hash, TrajRowDoc, TrajStore};
 use riir_clippy::EvidenceTier;
@@ -429,34 +433,56 @@ fn main() {
         return;
     }
 
-    // ── The LLM window.
-    let mut client = match CfClient::from_env(args.model.as_deref()) {
-        Ok(c) => c,
+    // ── The LLM window (Issue 051: groq-first ladder — the free tier
+    // absorbs the window; CF remains the metered fallback its USD cap
+    // guards). GROQ_API_KEY absent → pure CF, byte-identical to pre-051.
+    let mut llm = match LlmRouter::from_env(args.model.as_deref()) {
+        Ok(r) => r,
         Err(e) => {
             eprintln!("FATAL: {e}");
             std::process::exit(3);
         }
     };
-    let (price_in, price_out) = riir_clippy::llm_spend::price_for(client.model_id())
+    if llm.groq_enabled() {
+        eprintln!(
+            "[drain] groq-first armed (model {}, free tier absorbs the window; CF fallback \
+             stays cap-guarded)",
+            llm.groq_model().unwrap_or("?")
+        );
+    } else {
+        eprintln!("[drain] groq not armed (GROQ_API_KEY unset) — pure CF window");
+    }
+    let (price_in, price_out) = riir_clippy::llm_spend::price_for(llm.model_id())
         .map_or((0.0, 0.0), |p| (p.input_per_m, p.output_per_m));
 
     // Smoke (caveat #18(d)): one cheap call BEFORE the backlog. A failure
     // aborts the window — the 169-billed-request incident class this probe
-    // exists to kill.
-    let smoke = client.generate(SMOKE_PROMPT, SMOKE_MAX_TOKENS);
+    // exists to kill. The probe rides the ladder (groq-first), so a dead
+    // free tier is surfaced before the queue starts.
+    let smoke = llm.generate(SMOKE_PROMPT, SMOKE_MAX_TOKENS);
+    let smoke_provider = smoke
+        .as_ref()
+        .map_or("none", |g| g.provider.as_str())
+        .to_string();
     match &smoke {
         Ok(g) => eprintln!(
-            "[drain] smoke OK ({:.1} neurons, {}ms) — window opens",
-            g.neurons, g.latency_ms
+            "[drain] smoke OK (via {}, {}ms{}; window opens)",
+            g.provider.as_str(),
+            g.latency_ms,
+            if g.provider == Provider::Groq {
+                String::new()
+            } else {
+                format!(", {:.1} neurons", g.neurons)
+            }
         ),
         Err(e) => {
             eprintln!("FATAL: smoke failed ({e}) — aborting BEFORE any backlog burn");
             append_ledger(
                 &args,
-                client.model_id(),
+                llm.model_id(),
                 &ArmSummary::default(),
                 None,
-                Some(client.spend_state()),
+                Some(llm.cf().spend_state()),
                 &DrainStats {
                     run_id: run_id.clone(),
                     queued: kept.len(),
@@ -464,10 +490,12 @@ fn main() {
                     declines: 0,
                     overflow_declines: 0,
                     smoke_neurons: 0.0,
+                    smoke_provider: smoke_provider.clone(),
                     smoke_failed: true,
                     stopped_early: true,
                     wall_ms: t0.elapsed().as_millis(),
                 },
+                &llm,
             );
             std::process::exit(EXIT_SMOKE_FAILED);
         }
@@ -490,7 +518,7 @@ fn main() {
         let mut attempts = 0usize;
         let gen = loop {
             attempts += 1;
-            match client.generate(&p.prompt_prepass, budget) {
+            match llm.generate(&p.prompt_prepass, budget) {
                 Ok(g) => break Some(g),
                 Err(e) => match classify_error(&e) {
                     AttemptPlan::StopDay => {
@@ -542,14 +570,16 @@ fn main() {
         llm_scored += 1;
         let score =
             cf_workers_ai::score_case(&verifier, &p.sample, &gen.text, Some(&args.behav_dir));
-        summary.add(
-            &score,
-            true,
-            gen.prompt_tokens,
-            gen.completion_tokens,
-            price_in,
-            price_out,
-        );
+        // Accounting honesty (Issue 051): groq tokens are FREE — they count
+        // toward the quality summary but contribute ZERO to the CF cost
+        // estimate. The groq usage rides the ledger's `providers.groq`
+        // block (see append_ledger), never the `client` block.
+        let (tok_in, tok_out) = if gen.provider == Provider::Cloudflare {
+            (gen.prompt_tokens, gen.completion_tokens)
+        } else {
+            (0, 0)
+        };
+        summary.add(&score, true, tok_in, tok_out, price_in, price_out);
         // NEVER-WRONG: accepted → a Certified trajectory (the ONLY write the
         // drain performs); rejected → a failure verdict (three failures and
         // the span withdraws itself out of the queue — the self-limiting
@@ -589,7 +619,7 @@ fn main() {
     println!("| arm | n | EM | parses | merge | keep_o/scoreable | keep_s | vetoed | divergent | regressions | $ |");
     println!("{}", summary.markdown_row("DRAIN"));
     println!("  queued {} · llm-scored {llm_scored} · declined {declines} (overflow {overflow_declines})", kept.len());
-    let server = client.fetch_usage_today().ok();
+    let server = llm.cf().fetch_usage_today().ok();
     if let Some(u) = &server {
         println!(
             "  server meter (today, this model): {} req · {:.2} neurons ≈ ${:.5}",
@@ -598,14 +628,30 @@ fn main() {
             u.neurons / 1000.0 * 0.011
         );
     }
-    println!("  {}", client.spend_summary());
+    let gstats = llm.stats.clone();
+    if gstats.ok > 0 {
+        println!(
+            "  groq absorbed {} call(s), {}+{} tok (est ${:.5} of CF avoided; rate-limited {})",
+            gstats.ok,
+            gstats.prompt_tokens,
+            gstats.completion_tokens,
+            riir_clippy::groq::router::avoided_usd(
+                gstats.prompt_tokens,
+                gstats.completion_tokens,
+                price_in,
+                price_out
+            ),
+            gstats.rate_limited,
+        );
+    }
+    println!("  {}", llm.cf().spend_summary());
     eprintln!("[drain] store events → {}", store.root.display());
     append_ledger(
         &args,
-        client.model_id(),
+        llm.model_id(),
         &summary,
         server.as_ref(),
-        Some(client.spend_state()),
+        Some(llm.cf().spend_state()),
         &DrainStats {
             run_id,
             queued: kept.len(),
@@ -613,10 +659,12 @@ fn main() {
             declines,
             overflow_declines,
             smoke_neurons,
+            smoke_provider,
             smoke_failed: false,
             stopped_early,
             wall_ms: t0.elapsed().as_millis(),
         },
+        &llm,
     );
 }
 
@@ -632,6 +680,8 @@ struct DrainStats {
     declines: usize,
     overflow_declines: usize,
     smoke_neurons: f64,
+    /// Which provider served the smoke ("groq" / "cloudflare" / "none").
+    smoke_provider: String,
     smoke_failed: bool,
     stopped_early: bool,
     wall_ms: u128,
@@ -644,6 +694,7 @@ fn append_ledger(
     server: Option<&CfUsageToday>,
     spend: Option<&riir_clippy::llm_spend::SpendState>,
     drain: &DrainStats,
+    llm: &LlmRouter,
 ) {
     let path = std::env::var("RIIR_LLM_COST_LEDGER")
         .map_or_else(
@@ -652,6 +703,39 @@ fn append_ledger(
         );
     let ts = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+    let (price_in, price_out) = riir_clippy::llm_spend::price_for(model)
+        .map_or((0.0, 0.0), |p| (p.input_per_m, p.output_per_m));
+    let gstats = &llm.stats;
+    let avoided = riir_clippy::groq::router::avoided_usd(
+        gstats.prompt_tokens,
+        gstats.completion_tokens,
+        price_in,
+        price_out,
+    );
+    // Issue 051: the free tier's absorption rides `providers.groq` — the
+    // dashboard's card reads it; legacy rows without the key are unaffected.
+    let mut providers = riir_clippy::groq::router::providers_json(
+        gstats,
+        avoided,
+        llm.groq_model(),
+    );
+    if let Some(reason) = llm.disable_reason() {
+        providers["groq"]["disabled_reason"] = serde_json::json!(reason);
+    }
+    let groq_note = if gstats.ok > 0 {
+        format!(
+            "groq-first absorbed {}/{} call(s) +{}+{} tok (est ${:.5} CF avoided)",
+            gstats.ok,
+            gstats.calls,
+            gstats.prompt_tokens,
+            gstats.completion_tokens,
+            avoided
+        )
+    } else if gstats.calls > 0 {
+        "groq armed but served nothing this window".to_string()
+    } else {
+        "pure CF window (groq not armed)".to_string()
+    };
     let row = serde_json::json!({
         "ts_unix": ts,
         "arm": "DRAIN",
@@ -676,6 +760,7 @@ fn append_ledger(
             "usd_list": u.neurons / 1000.0 * 0.011,
             "free_alloc_pct_of_daily_10k": u.neurons / 10_000.0 * 100.0,
         })),
+        "providers": providers,
         "drain": {
             "row_version": DRAIN_ROW_VERSION,
             "run_id": drain.run_id,
@@ -685,12 +770,13 @@ fn append_ledger(
             "overflow_declines": drain.overflow_declines,
             "keeps": summary.keep_strict,
             "smoke_neurons": drain.smoke_neurons,
+            "smoke_provider": drain.smoke_provider,
             "smoke_failed": drain.smoke_failed,
             "stopped_early": drain.stopped_early,
             "wall_ms": u64::try_from(drain.wall_ms).unwrap_or(u64::MAX),
         },
         "kat": serde_json::Value::Null,
-        "note": "kat null until Phase 1 rail; Plan 031 A3 trainer-window drain (never-wrong: keeps are Certified trajectories, rejects never land)",
+        "note": format!("kat null until Phase 1 rail; Plan 031 A3 trainer-window drain (never-wrong: keeps are Certified trajectories, rejects never land); {groq_note}"),
     });
     let mut f = match std::fs::OpenOptions::new().create(true).append(true).open(&path) {
         Ok(f) => f,

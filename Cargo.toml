@@ -220,6 +220,14 @@ pav_data = ["l4_lora", "score_bench"]
 # harness must never compile without the redaction gate it gates through.
 cf_workers_ai = ["dep:ureq", "latent_retrieval", "clippy_verify", "l4_lora", "kat_service"]
 
+# Issue 051 — groq-first free-tier routing: the Groq chat client (OpenAI-
+# compatible REST) + the groq→CF provider ladder. ZERO new packages — reuses
+# the optional ureq dep (the cf_workers_ai edge). Opt-in per feature
+# discipline; without it (or without GROQ_API_KEY at runtime) the LLM
+# windows behave exactly as before (pure CF). The router half is additionally
+# gated on `cf_workers_ai` (it composes CfClient as the fallback leg).
+groq_first = ["dep:ureq"]
+
 # Bench 669 consumer adoption (Plan 016): the input-scope gate at the heal()
 # seam — katgpt-core's `contrastive_scope` primitive (ContrastiveScoreTable +
 # ScopeGate) wrapped as `ScopeModel`. Opt-in like the L4 seam it guards: the
@@ -475,7 +483,8 @@ required-features = ["cf_workers_ai"]
 [[bin]]
 name = "kat_drain"
 path = "src/bin/kat_drain.rs"
-required-features = ["cf_workers_ai"]
+# Issue 051: groq_first joins — the drain routes groq-first, CF fallback.
+required-features = ["cf_workers_ai", "groq_first"]
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Local patches — mirror riir-ai/Cargo.toml's [patch.crates-io] so the
