@@ -633,10 +633,13 @@ footer{color:var(--dim);font:11px var(--mono);margin-top:34px;border-top:1px sol
     <div id="modelNeurons"></div>
   </div>
   <div class="card"><h2>healer score-bench curve</h2>
+    <div id="scoreLatest" class="sub" style="margin-bottom:6px"></div>
     <div id="scoreCurve"></div>
     <div class="legend"><span><i style="background:var(--accent)"></i>heal_rate</span>
       <span><i style="background:var(--warn)"></i>created_rate</span>
       <span><i style="background:var(--accent2)"></i>parse_safety</span></div>
+    <div id="createdZoom" style="margin-top:10px"></div>
+    <div class="legend"><span><i style="background:var(--warn)"></i>created_rate (own scale — the trust axis; 1.9% reads as ~0 on the 0–1 curve above)</span></div>
   </div>
 </div>
 
@@ -802,6 +805,10 @@ function svgLineChart(el, series, labels, opts={}) {
   const W=560, H=220, padL=44, padB=26, padT=12;
   const n = Math.max(...series.map(s=>s.values.length));
   const yMax = opts.yMax!=null?opts.yMax:1;
+  // Scale-aware gridline labels: a 0–1 axis reads fine at 1 decimal, but a
+  // 0–0.05 axis needs 3 (toFixed(0) would print "0" on every line — the
+  // exact "reads as zero" failure the created_rate zoom panel exists to fix).
+  const yDec = yMax===1?1:(yMax<1?3:0);
   const x = i => padL + (n<=1?0:(i/(n-1))*(W-padL-10));
   const y = v => padT + (1 - v/yMax) * (H-padT-padB);
   let s = '<svg viewBox="0 0 '+W+' '+H+'">';
@@ -809,7 +816,7 @@ function svgLineChart(el, series, labels, opts={}) {
     const gy = padT + g*(H-padT-padB)/4;
     s += '<line class="axis" x1="'+padL+'" y1="'+gy+'" x2="'+W+'" y2="'+gy+'"/>'
        + '<text x="'+(padL-5)+'" y="'+(gy+3)+'" text-anchor="end">'
-       + (yMax*(1-g/4)).toFixed(yMax===1?1:0)+'</text>';
+       + (yMax*(1-g/4)).toFixed(yDec)+'</text>';
   }
   series.forEach(sr=>{
     let p = sr.values.map((v,i)=>x(i).toFixed(1)+','+y(v).toFixed(1)).join(' ');
@@ -852,11 +859,26 @@ if (D.cf_daily && D.cf_daily.length) {
 }
 if (D.score.length) {
   const labels = D.score.map(r=>(r.ts||'').slice(5,10));
+  // Latest values as TEXT — the numbers are the point; on a 0–1 curve a
+  // created_rate of 0.019 renders ~3px above the floor and reads as 0.
+  const last = D.score[D.score.length-1];
+  const pct = v => (v==null?'—':(v*100).toFixed(1)+'%');
+  $('scoreLatest').innerHTML = 'latest ('+(last.ts||'?')+'):'
+    + ' <b>heal ' + pct(last.heal_rate) + '</b>'
+    + ' <b style="color:var(--warn)">created ' + pct(last.created_rate) + '</b>'
+    + ' <b style="color:var(--accent2)">safety ' + pct(last.parse_safety) + '</b>'
+    + ' <b>decline ' + pct(last.decline_correctness) + '</b>';
   svgLineChart($('scoreCurve'), [
     {name:'heal_rate', values:D.score.map(r=>r.heal_rate||0), pct:true, color:'var(--accent)'},
     {name:'created_rate', values:D.score.map(r=>r.created_rate||0), pct:true, color:'var(--warn)', cls:'l3'},
     {name:'parse_safety', values:D.score.map(r=>r.parse_safety||0), pct:true, color:'var(--accent2)', cls:'l2'},
   ], labels, {yMax:1});
+  // created_rate on its OWN scale — the trust axis deserves a readable line.
+  const cmax = Math.max(...D.score.map(r=>r.created_rate||0), 0.01);
+  const cyMax = Math.min(1, Math.ceil(cmax*20)/20); // round up to 5% steps
+  svgLineChart($('createdZoom'), [
+    {name:'created_rate', values:D.score.map(r=>r.created_rate||0), pct:true, color:'var(--warn)'},
+  ], labels, {yMax:cyMax});
 }
 
 // ── containers (issue 045) ──
