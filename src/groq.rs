@@ -533,12 +533,14 @@ pub mod router {
                 None
             };
             // Honest pricing basis on a groq-only window: the model that
-            // WOULD have served. `price_for` is a pure table lookup — it
+            // WOULD have served — resolved through the same
+            // explicit > env > default precedence as an armed client
+            // (CfClient::resolve_model_id), so `RIIR_CF_MODEL` reprices a
+            // groq-only window too. `price_for` is a pure table lookup — it
             // needs no credentials.
-            let cf_model = cf.as_ref().map_or_else(
-                || cf_model.unwrap_or(CfClient::DEFAULT_MODEL).to_string(),
-                |c| c.model_id().to_string(),
-            );
+            let cf_model = cf
+                .as_ref()
+                .map_or_else(|| CfClient::resolve_model_id(cf_model), |c| c.model_id().to_string());
             Ok(Self {
                 cf,
                 cf_model,

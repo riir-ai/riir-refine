@@ -70,7 +70,7 @@ pub const SPEND_CHANGELOG: &[(u32, &str)] = &[(1, "initial: per-UTC-day USD accu
 /// record the delta in [`PRICING_CHANGELOG`] in the same change. Independent
 /// of [`SPEND_VERSION`] on purpose: a rate change does not move the file
 /// shape, and a shape change does not reprice anything.
-pub const PRICING_VERSION: u32 = 2;
+pub const PRICING_VERSION: u32 = 3;
 
 /// Versioned deltas of the pricing table (the reprice audit trail).
 pub const PRICING_CHANGELOG: &[(u32, &str)] = &[
@@ -85,6 +85,15 @@ pub const PRICING_CHANGELOG: &[(u32, &str)] = &[
          (CF list rates; exact fit of the committed glm arm rows' recorded \
          per-M basis in llm_cost_ledger.jsonl — the Issue 043 glm session); \
          DEFAULT_MODEL pivoted to it; qwen + llama rates unchanged",
+    ),
+    (
+        3,
+        "owner pivot 2026-08-28 (second call): DEFAULT_MODEL moved glm-4.7 → \
+         glm-5.3-flash (4.7 FAILED the Issue 043 fixer-quality gate 3/9 vs \
+         the 5/9 bar; owner: no llama); @cf/zai-org/glm-5.3-flash 0.15/0.50 \
+         added at CF's PUBLISHED rates (catalog-verified by the dao advisory \
+         lane's Plan 003 catalog work, 2026-08-28); 4.7 stays priced + \
+         selectable via RIIR_CF_MODEL",
     ),
 ];
 
@@ -101,10 +110,22 @@ pub struct ModelPrice {
 /// The pinned pricing table (PRICING_VERSION-stamped). **Unknown model ids
 /// are refused, never priced as $0** — an unpriced model is a hard error.
 pub const PRICING_TABLE: &[ModelPrice] = &[
-    // The DEFAULT_MODEL (owner pivot 2026-08-28). Rates = CF's list pricing
-    // for glm-4.7-flash; independently exact-fit by the committed glm arm
-    // rows' usd_est in llm_cost_ledger.jsonl (551/277, 2859/275, 319/4066
-    // token pairs all land on 0.06 in / 0.40 out per M to the digit).
+    // The DEFAULT_MODEL (owner pivot 2026-08-28, second call: 4.7 failed the
+    // Issue 043 fixer-quality gate, llama rejected as too old). Rates = CF's
+    // PUBLISHED rates for glm-5.3-flash, catalog-verified by the dao advisory
+    // lane (Plan 003, 2026-08-28). Assumption-grade until our own usage rows
+    // exact-fit them (the v2 precedent) — the one-call smoke / first gated
+    // run stamps the check.
+    ModelPrice {
+        id: "@cf/zai-org/glm-5.3-flash",
+        input_per_m: 0.15,
+        output_per_m: 0.5,
+    },
+    // The Issue 043 gate model: FAILED the fixer-quality bar (3/9 vs 5/9) but
+    // stays priced + selectable (RIIR_CF_MODEL). Rates independently
+    // exact-fit by the committed glm arm rows' usd_est in
+    // llm_cost_ledger.jsonl (551/277, 2859/275, 319/4066 token pairs all
+    // land on 0.06 in / 0.40 out per M to the digit).
     ModelPrice {
         id: "@cf/zai-org/glm-4.7-flash",
         input_per_m: 0.06,
@@ -486,9 +507,12 @@ mod tests {
         let l = price_for("@cf/meta/llama-3.3-70b-instruct-fp8-fast").expect("llama priced");
         assert!((l.input_per_m - 0.29).abs() < 1e-9);
         assert!((l.output_per_m - 2.25).abs() < 1e-9);
-        let g = price_for("@cf/zai-org/glm-4.7-flash").expect("glm priced (the DEFAULT_MODEL)");
+        let g = price_for("@cf/zai-org/glm-4.7-flash").expect("glm-4.7 priced (Issue 043 gate model)");
         assert!((g.input_per_m - 0.06).abs() < 1e-9);
         assert!((g.output_per_m - 0.4).abs() < 1e-9);
+        let g5 = price_for("@cf/zai-org/glm-5.3-flash").expect("glm-5.3 priced (the DEFAULT_MODEL)");
+        assert!((g5.input_per_m - 0.15).abs() < 1e-9);
+        assert!((g5.output_per_m - 0.5).abs() < 1e-9);
         assert!(price_for("@cf/nope/mystery").is_none(), "unknown model must be unpriced");
         // Version stamps are changelog-covered (the kat_meter discipline).
         assert!(SPEND_CHANGELOG.iter().any(|(v, _)| *v == SPEND_VERSION));

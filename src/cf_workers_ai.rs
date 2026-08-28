@@ -914,24 +914,59 @@ impl CfClient {
     pub fn model_id(&self) -> &str {
         &self.model
     }
-    /// Default model — owner pivot 2026-08-28: llama-3.3-70b (Bench 049's
-    /// measured-winner arm) reads as too old; GLM-4.7-flash is the
-    /// designated replacement (its thinking-off mitigation is already
-    /// measured — Issue 043 T1 probes: 0.155 n vs 4.52 n with thinking on).
-    /// HONEST CAVEAT: Bench 049's fixer QUALITY verdict (strict-keep A 5/9 /
-    /// B 6/9 vs decline 0/9) was measured on llama — the GLM-arm re-gate is
-    /// the standing follow-up, and the 005 model-pivot discipline applies
-    /// (one-call smoke before any gated use; no CF creds in CI → the smoke
-    /// is an ops step). qwen3.8-27b stays priced + as the groq-side
-    /// free-tier id; it was measured UNUSABLE as the CF fixer (thinking
-    /// economics, Bench 049 §qwen).
-    pub const DEFAULT_MODEL: &'static str = "@cf/zai-org/glm-4.7-flash";
+    /// Default model — owner pivot 2026-08-28 (second call, same day):
+    /// **NO llama** (reads as too old) and **NO glm-4.7-flash** — 4.7 FAILED
+    /// the Issue 043 re-designation gate (strict-keep 3/9 in BOTH modes vs
+    /// the llama bar 5/9 raw / 6/9 prepass; it beat decline 0/9 and
+    /// never-wrong held, but quality sat 40-50% below the bar). glm-5.3-flash
+    /// is the designated replacement: the SAME model the dao advisory lane
+    /// catalog-verified and live-smoked (its thinking mitigation is the
+    /// measured one for GLM-5 — `reasoning_effort:"low"`, probed 2026-08-28:
+    /// 3-token "OK" at ~0.37 n vs 48-token reasoning starvation without it;
+    /// the GLM-4 `enable_thinking` kwarg does NOT carry over — the dao's
+    /// catalog work found the legacy switch 8005-errors on GLM-5, so
+    /// [`build_request_body`] routes 5.x to `reasoning_effort` only).
+    /// HONEST CAVEAT: 5.3's fixer-QUALITY arms have NOT run (Issue 043
+    /// measured 4.7); the re-gate is the standing follow-up, and the 005
+    /// model-pivot discipline applies (one-call smoke before any gated use;
+    /// no CF creds in CI → the smoke is an ops step). Override without a
+    /// rebuild via [`Self::ENV_MODEL`]. qwen3.8-27b stays priced + as the
+    /// groq-side free-tier id; it was measured UNUSABLE as the CF fixer
+    /// (thinking economics, Bench 049 §qwen).
+    pub const DEFAULT_MODEL: &'static str = "@cf/zai-org/glm-5.3-flash";
+
+    /// Env var overriding [`Self::DEFAULT_MODEL`] — precedence: explicit
+    /// arg > `RIIR_CF_MODEL` > default (the `GROQ_MODEL` pattern, mirrored
+    /// for the CF leg). Empty string is treated as unset.
+    pub const ENV_MODEL: &str = "RIIR_CF_MODEL";
+
+    /// Resolve the model id: explicit arg > [`Self::ENV_MODEL`] env >
+    /// [`Self::DEFAULT_MODEL`]. Used by [`Self::from_env`] AND the router's
+    /// unarmed-CF pricing basis so both honor the same override.
+    #[must_use]
+    pub fn resolve_model_id(explicit: Option<&str>) -> String {
+        let env = std::env::var(Self::ENV_MODEL).ok();
+        Self::resolve_model_from(explicit, env.as_deref())
+    }
+
+    /// Pure half of [`Self::resolve_model_id`] (testable without touching
+    /// the process env — parallel tests never race it).
+    fn resolve_model_from(explicit: Option<&str>, env: Option<&str>) -> String {
+        explicit
+            .filter(|s| !s.is_empty())
+            .or_else(|| env.filter(|s| !s.is_empty()))
+            .map_or_else(|| Self::DEFAULT_MODEL.to_string(), str::to_string)
+    }
 
     /// Build from `CF_API_TOKEN` + `CF_ACCOUNT_ID` (+ optional model override).
     ///
     /// Issue 046: the model must be in the pricing table (an unpriced model
     /// is refused here, fail-fast, rather than per-call) and the USD daily
     /// cap ledger opens at `KAT_LLM_SPEND_FILE` or `./.heal/kat_llm_spend.json`.
+    ///
+    /// Override precedence: explicit arg > `RIIR_CF_MODEL` env >
+    /// [`Self::DEFAULT_MODEL`] (Issue: owner asks for a no-rebuild model
+    /// switch; mirrors `GROQ_MODEL`).
     ///
     /// # Errors
     ///
@@ -943,8 +978,8 @@ impl CfClient {
         let account = std::env::var("CF_ACCOUNT_ID").map_err(|_| {
             "CF_ACCOUNT_ID is not set — arms A/B need it (export CF_ACCOUNT_ID=...)".to_string()
         })?;
-        let model = model.unwrap_or(Self::DEFAULT_MODEL);
-        crate::llm_spend::price_for(model).ok_or_else(|| {
+        let model = Self::resolve_model_id(model);
+        crate::llm_spend::price_for(&model).ok_or_else(|| {
             format!(
                 "model {model:?} is not in the LLM pricing table — refusing to price a guess \
                  at $0; add it to PRICING_TABLE + bump PRICING_VERSION"
@@ -965,7 +1000,7 @@ impl CfClient {
             auth: format!("Bearer {token}"),
             token,
             account,
-            model: model.to_string(),
+            model,
             spend,
         })
     }
@@ -1094,9 +1129,19 @@ fn build_request_body(
         "max_tokens": max_tokens,
         "temperature": 0.0,
     });
-    if model.contains("glm") && !glm_thinking {
-        body["chat_template_kwargs"] =
-            serde_json::json!({ "enable_thinking": false });
+    if !glm_thinking {
+        if model.contains("glm-5") {
+            // GLM-5 generation: `reasoning_effort:"low"` is the honored
+            // switch (probed live 2026-08-28 — 3-token "OK" at ~0.37 n vs
+            // 48-token reasoning starvation without it). The GLM-4
+            // `enable_thinking` kwarg must NOT go here: the legacy switch
+            // 8005-errors on GLM-5 (the dao advisory lane's catalog
+            // finding, Plan 003).
+            body["reasoning_effort"] = serde_json::json!("low");
+        } else if model.contains("glm") {
+            body["chat_template_kwargs"] =
+                serde_json::json!({ "enable_thinking": false });
+        }
     }
     body
 }
@@ -1246,12 +1291,14 @@ impl CfClient {
     /// to a short preamble and content lands within budget;
     /// `enable_thinking:false` is IGNORED by this serving stack — probed,
     /// reasoning still present). Non-qwen3 models pass through unchanged.
-    /// GLM-4.7-flash mitigation is measured separately (Issue 043 T1
-    /// probes, 2026-08-26): `chat_template_kwargs.enable_thinking:false`
-    /// is the ONE switch this serving stack honors — 0.155 n vs 4.52 n on
-    /// the trivial probe (~29×). Note the inversion vs qwen: there the
-    /// kwarg is IGNORED and the suffix works. `reasoning_effort` and
-    /// `thinking:{type:disabled}` are ignored here too (probed).
+    /// GLM mitigation is generation-dependent (probed — Issue 043 T1 for
+    /// 4.7, the 2026-08-28 live probes for 5.3): `glm-5*` takes
+    /// `reasoning_effort:"low"` (the ONLY honored switch there — the GLM-4
+    /// kwarg 8005-errors), glm-4.x takes
+    /// `chat_template_kwargs.enable_thinking:false` (0.155 n vs 4.52 n on
+    /// the trivial probe, ~29×). Both are exact inversions of qwen, where
+    /// the kwarg is IGNORED and the suffix works; on GLM,
+    /// `thinking:{type:disabled}` is ignored too (probed).
     /// `RIIR_CF_GLM_THINKING=1` opts back into budgeted reasoning (for
     /// gates comparing the reasoning mode) — read once per call, never
     /// logged.
@@ -1786,6 +1833,56 @@ mod tests {
         assert_eq!(
             g.pointer("/chat_template_kwargs/enable_thinking"),
             Some(&serde_json::json!(false))
+        );
+    }
+
+    #[test]
+    fn request_body_glm5_uses_reasoning_effort_low() {
+        // GLM-5 takes the DIFFERENT switch: reasoning_effort (the GLM-4
+        // enable_thinking kwarg 8005-errors there — dao Plan 003 catalog
+        // finding). DEFAULT_MODEL is a glm-5, so this is the production
+        // body shape now.
+        let g = build_request_body(CfClient::DEFAULT_MODEL, "fix this", 512, false);
+        assert_eq!(
+            g.pointer("/messages/0/content").and_then(|v| v.as_str()),
+            Some("fix this")
+        );
+        assert_eq!(
+            g.pointer("/reasoning_effort").and_then(|v| v.as_str()),
+            Some("low")
+        );
+        assert!(
+            g.get("chat_template_kwargs").is_none(),
+            "the GLM-4 kwarg must NOT ride a glm-5 request (8005-errors)"
+        );
+    }
+
+    #[test]
+    fn request_body_glm5_thinking_env_override_keeps_reasoning() {
+        let g = build_request_body(CfClient::DEFAULT_MODEL, "fix this", 512, true);
+        assert!(g.get("reasoning_effort").is_none());
+        assert!(g.get("chat_template_kwargs").is_none());
+    }
+
+    #[test]
+    fn resolve_model_precedence_explicit_over_env_over_default() {
+        // Pure core — no process-env races (parallel tests never touch it).
+        let d = CfClient::DEFAULT_MODEL;
+        assert_eq!(
+            CfClient::resolve_model_from(Some("@cf/qwen/qwen3.8-27b"), Some("@cf/zai-org/glm-4.7-flash")),
+            "@cf/qwen/qwen3.8-27b",
+            "explicit arg wins over env"
+        );
+        assert_eq!(
+            CfClient::resolve_model_from(None, Some("@cf/zai-org/glm-4.7-flash")),
+            "@cf/zai-org/glm-4.7-flash",
+            "env wins over default"
+        );
+        assert_eq!(CfClient::resolve_model_from(None, None), d, "default falls through");
+        assert_eq!(
+            CfClient::resolve_model_from(Some(""), Some("")),
+            d,
+            "empty strings are unset, not overrides"
         );
     }
 
