@@ -143,9 +143,31 @@ annotated, the sweep finished for the first time: **57 targets, 1924 passed,
 mid-run. The other is real and had never been observable:
 `t33_tether_g4_alloc` — `t33_g4_fit_never_allocates` (**332 allocs, expects
 0**) and `t33_g4_tether_mode_adds_zero_steady_state_allocs` (**default 69958
-vs tether 83785, +13827**). Filed separately; note that this binary's own docs
-specify `--release` and this run was DEBUG, so the debug/release question is
-resolved in that issue rather than asserted here.
+vs tether 83785, +13827**).
+
+**That red was NOT a regression — checked before claiming one.** The binary's
+own docs specify `--release`; the sweep runs DEBUG. Re-run on the same commit
+in release:
+
+| gate | debug | release |
+|---|---|---|
+| `fit` allocs (expects 0) | **332** | **0** ✓ |
+| steady-state delta (expects ≤0) | **+13827** | **−1** ✓ |
+| (context) default-mode heal allocs | 69958 | 43280 |
+
+Allocation counts are a debug artifact *for a zero-allocation claim*: debug
+does not inline, so `String`/iterator machinery allocates where release elides
+it entirely — visible in that last row, where debug allocates 1.6× more on the
+*unchanged* default path. Both gates now carry
+`#[cfg_attr(debug_assertions, ignore = …)]` with the measured numbers in the
+reason, matching the idiom already used in `latent_suggest_goat.rs`
+("debug timings are meaningless"). Verified in **both** directions, since a
+one-way check would not distinguish "correctly gated" from "disabled":
+debug → `1 passed; 2 ignored`, release → `3 passed; 0 ignored`.
+
+The finding that survives is about the harness, not the code under test:
+**Layer 5c would have been permanently red on this binary**, and nobody could
+have known, because the layer had never run to completion.
 
 **Standing hazard, not a one-off.** `--all-features` is a *superset* switch:
 any future feature that gates a weights-loading or hours-long test enters
