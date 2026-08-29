@@ -1,6 +1,6 @@
 # Proposal 010 — KAT yield ceiling + treasury-funded free tier (two ledger budget rules)
 
-Status: **DRAFT — decisions locked, simulator-first, no ledger change until G16 passes** (filed 2026-08-29). Enters through the re-open path [Proposal 008](008_adaptive_tokenomics_riir_dao.md) T1.4 names verbatim: *"Re-open levers (v2 candidates incl. decay_factor/Inflate, **or a ledger budget-rule change**) require a NEW plan."* This is the ledger-budget-rule half. It does **not** re-roll the G5 campaign and does **not** ask for agent autonomy — the agent stays advisory-only.
+Status: **PHASE 0 COMPLETE — G16 PASS ([riir-dao Bench 003](../../riir-dao/.benchmarks/003_yield_ceiling_g16_sim.md), 2026-08-29); Phases 1–3 unblocked; no ledger change landed yet** (filed 2026-08-29). Enters through the re-open path [Proposal 008](008_adaptive_tokenomics_riir_dao.md) T1.4 names verbatim: *"Re-open levers (v2 candidates incl. decay_factor/Inflate, **or a ledger budget-rule change**) require a NEW plan."* This is the ledger-budget-rule half. It does **not** re-roll the G5 campaign and does **not** ask for agent autonomy — the agent stays advisory-only.
 
 ## TL;DR
 
@@ -178,10 +178,10 @@ One nuance recorded so the synergy is not overclaimed: M1's undrawn excess stays
 
 ## Phased rollout
 
-### Phase 0 — simulator arm (riir-dao, no ledger change)
-- [ ] T0.1 Model the thin-base exploit in the riir-dao sim; **reproduce it against today's rules** (a fix whose failure was never reproduced is unverified)
-- [ ] T0.2 Implement M1 as a sim-side rule; run G16 (10⁴ epochs × 5 seeds vs frozen baseline)
-- [ ] T0.3 Sim M2: cumulative `mint_demand` and treasury trajectory vs baseline (G14 shape)
+### Phase 0 — simulator arm (riir-dao, no ledger change) — **COMPLETE, G16 PASS** ([Bench 003](../../riir-dao/.benchmarks/003_yield_ceiling_g16_sim.md), 2026-08-29)
+- [x] T0.1 Model the thin-base exploit in the riir-dao sim; **reproduce it against today's rules** — reproduced at 38–42 M bp/epoch on the eligible base, early birds 717×–1 813× principal, 5/5 seeds
+- [x] T0.2 Implement M1 as a sim-side rule; run G16 (10⁴ epochs × 5 seeds vs frozen baseline) — PASS: blocked at exactly 22 bp (cap bound 156–180 epochs/seed, verified to fire); participation delta **0 bp** under the pinned 1 000 bp tolerance; replay bit-identical
+- [x] T0.3 Sim M2: cumulative `mint_demand` and treasury trajectory vs baseline (G14 shape) — main regime 100 % treasury-funded (zero fallback mint); stress regime (3× inflow drain) 34 % treasury-funded with the fallback firing every epoch and the floor never breached
 
 ### Phase 1 — row v2 migration (riir-dapps) — **only if G16 passes**
 - [ ] T1.1 `EpochParams` → 20 bytes, dual-length decode, `u32::MAX` sentinel, `valid()` unchanged (G13)
