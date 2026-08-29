@@ -73,9 +73,14 @@ fn run_clippy() -> Option<Vec<Diag>> {
     let dir: PathBuf = std::env::temp_dir().join(format!("sec_boundary_{}", std::process::id()));
     let src = dir.join("src");
     std::fs::create_dir_all(&src).expect("mkdir");
+    // Batch 88: the crypto fixtures import sha1/sha2/md-5/blake3/argon2/subtle —
+    // the probe crate must declare them or the fixtures fail to COMPILE
+    // (compile errors are not clippy diagnostics; the gate reads diagnostics).
     std::fs::write(
         dir.join("Cargo.toml"),
-        "[package]\nname=\"sec_boundary_probe\"\nversion=\"0.0.0\"\nedition=\"2021\"\n[workspace]\n",
+        "[package]\nname=\"sec_boundary_probe\"\nversion=\"0.0.0\"\nedition=\"2021\"\
+         \n[workspace]\n[dependencies]\nsha1 = \"0.10\"\nsha2 = \"0.10\"\
+         \nmd-5 = \"0.10\"\nblake3 = \"1\"\nargon2 = \"0.5\"\nsubtle = \"2\"\n",
     )
     .expect("write toml");
     let mut lib = String::new();
