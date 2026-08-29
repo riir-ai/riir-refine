@@ -393,6 +393,14 @@ mod tests {
 
     /// The pure constituents are also cross-clean solo (cheap double-check
     /// of the pair-selection rules at the fixture level).
+    ///
+    /// Issue 056: this used to iterate only the 12 `CROSS_PAIRS`
+    /// constituents — a SAMPLED invariant. Two PERF_SPANS fixtures carried
+    /// `v % 2 == 0` (`manual_is_multiple_of`) indefinitely with every test
+    /// green, because neither rule appeared in a pair. Purity is asserted
+    /// over EVERY entry of both consts now: a perf fixture may carry no
+    /// clippy proposer, a clippy fixture no perf proposer. The pair
+    /// constituents are a subset, so they stay covered.
     #[cfg(all(feature = "clippy_lints", feature = "rust_perf"))]
     #[test]
     fn cross_domain_constituents_carry_no_cross_domain_proposer() {
@@ -404,19 +412,19 @@ mod tests {
             .chain(VERIFY_LINTS)
             .copied()
             .collect();
-        for &(lint, rule) in CROSS_PAIRS {
-            let pc = perf_fixture(rule);
+        for &(rule, code) in PERF_SPANS {
             for &l in &structural {
                 assert!(
-                    propose_fix(l, pc).is_none(),
-                    "perf fixture for {rule} carries clippy lint {l}"
+                    propose_fix(l, code).is_none(),
+                    "perf fixture {rule} carries clippy lint {l}"
                 );
             }
-            let cc = clippy_fixture(lint);
+        }
+        for &(lint, code) in CLIPPY_SPANS {
             for &r in perf::FIXABLE_RULES {
                 assert!(
-                    perf::propose_fix(r, cc).is_none(),
-                    "clippy fixture for {lint} carries perf rule {r}"
+                    perf::propose_fix(r, code).is_none(),
+                    "clippy fixture {lint} carries perf rule {r}"
                 );
             }
         }

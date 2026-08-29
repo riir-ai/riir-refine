@@ -57,10 +57,10 @@ impl KillCounter {
     }
 }
 "#),
-    ("simd-chunk", r#"pub fn total_damage(samples: &[f32]) -> f32 {
+    ("simd-chunk", r#"pub fn total_damage(samples: &[f32], weights: &[f32]) -> f32 {
     let mut total = 0.0;
     for i in 0..samples.len() {
-        total += samples[i];
+        total += samples[i] * weights[i];
     }
     total
 }
@@ -351,7 +351,7 @@ fn default_spawns(n: u32) -> u32 {
     ("filter-count-to-any", r#"pub fn any_even_kill(kills: &[u32]) -> bool {
     kills
         .iter()
-        .filter(|&&v| v % 2 == 0)
+        .filter(|&&v| v % 2 == 1)
         .count()
         > 0
 }
@@ -372,7 +372,7 @@ fn default_spawns(n: u32) -> u32 {
     ("filter-map-fuse", r#"pub fn even_kill_squares(kills: &[u32]) -> Vec<u32> {
     kills
         .iter()
-        .filter(|&&v| v % 2 == 0)
+        .filter(|&&v| v % 2 == 1)
         .map(|&v| v * v)
         .collect()
 }
