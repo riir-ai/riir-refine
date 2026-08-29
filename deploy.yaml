@@ -1,0 +1,58 @@
+# deploy.yaml — the riir-clippy ops plane through the deployer (Issue 003
+# T2 in riir-deployer): the two LIVE Cloudflare Workers that were
+# wrangler-deployed by hand until the `cf-worker` provider adapter landed.
+#
+# Each worker's wrangler project dir IS the deploy unit — vars, KV
+# bindings, cron triggers and observability config live in the projects'
+# own wrangler.toml and are NEVER generated here. `env:` stays empty:
+# every secret (CF_API_TOKEN, READ_TOKEN, DASHBOARD_TOKEN) is a
+# `wrangler secret put` ops step, and the adapter refuses secret-shaped
+# manifest keys at plan time anyway.
+#
+# Auth note (encoded in the adapter, the riir-clippy Issue 044 T16.1
+# trap): wrangler honours CF_API_TOKEN as a deprecated alias of
+# CLOUDFLARE_API_TOKEN — a sourced-.env analytics token silently breaks
+# auth. The deployer strips the alias from the wrangler env and REQUIRES
+# the canonical deploy-scoped CLOUDFLARE_API_TOKEN.
+#
+# Stage-and-verify-first (the Issue-080 convention) — the workers are
+# ALREADY live (hand-deployed), so the first deployer run proves the
+# staging matches reality:
+#   ../riir-deployer/target/debug/riir-deploy -m deploy.yaml deploy --dest production --stage-only
+#   ../riir-deployer/target/debug/riir-deploy -m deploy.yaml verify --dest production
+# Roll story: versioned deploys — `deploy` only; `wrangler rollback`
+# reverts. There is no drain window to model (the adapter refuses roll).
+name: riir-clippy-ops
+domain: ops
+
+targets:
+  housekeeping:
+    kind: node
+    provider: cf-worker
+    dir: cloudflare/housekeeping
+  dashboard:
+    kind: node
+    provider: cf-worker
+    dir: cloudflare/dashboard
+
+destinations:
+  production: { targets: [housekeeping, dashboard] }
+
+# The LIVE topology claims (probes are claims, not pings):
+# - housekeeping /status → 200 with the MINIMISED projection to an
+#   unauthenticated caller (fail-open liveness by design, T8) — while
+#   /hours (the only fan-out route) MUST stay 401 to an anonymous
+#   caller: the T9e anti-fail-open gate, pinned as a probe. If that
+#   probe ever returns 200, anonymous traffic can silently disable
+#   budget alerting — treat it as an incident.
+# - dashboard / → 200 anon (the auth gate ships OPEN by owner decision
+#   2026-08-28; the wrangler.toml v3 comment describes the older
+#   fail-closed posture). Flip this probe with the decision, not before.
+verify:
+  - probe: health
+    url: https://riir-kat-housekeeping.foxfox.workers.dev/status
+  - probe: http
+    url: https://riir-kat-housekeeping.foxfox.workers.dev/hours
+    expect_status: 401
+  - probe: health
+    url: https://riir-ops-dashboard.foxfox.workers.dev/
