@@ -1,6 +1,6 @@
 # Proposal 010 — KAT yield ceiling + treasury-funded free tier (two ledger budget rules)
 
-Status: **PHASE 0 COMPLETE — G16 PASS ([riir-dao Bench 003](../../riir-dao/.benchmarks/003_yield_ceiling_g16_sim.md), 2026-08-29); Phases 1–3 unblocked; no ledger change landed yet** (filed 2026-08-29). Enters through the re-open path [Proposal 008](008_adaptive_tokenomics_riir_dao.md) T1.4 names verbatim: *"Re-open levers (v2 candidates incl. decay_factor/Inflate, **or a ledger budget-rule change**) require a NEW plan."* This is the ledger-budget-rule half. It does **not** re-roll the G5 campaign and does **not** ask for agent autonomy — the agent stays advisory-only.
+Status: **PHASES 1–3 COMPLETE — the ledger fix LANDED (riir-dapps `c27300b`, 2026-08-29: the 28-B v2 row with the ceiling armed in DEFAULT, the M1 cap, the M2 treasury-first grant; 352 tests green, clippy 0); Phase 4 = owner activation** (filed 2026-08-29). G16 PASS: [riir-dao Bench 003](../../riir-dao/.benchmarks/003_yield_ceiling_g16_sim.md). Enters through the re-open path [Proposal 008](008_adaptive_tokenomics_riir_dao.md) T1.4 names verbatim: *"Re-open levers (v2 candidates incl. decay_factor/Inflate, **or a ledger budget-rule change**) require a NEW plan."* This is the ledger-budget-rule half. It does **not** re-roll the G5 campaign and does **not** ask for agent autonomy — the agent stays advisory-only.
 
 ## TL;DR
 
@@ -183,20 +183,20 @@ One nuance recorded so the synergy is not overclaimed: M1's undrawn excess stays
 - [x] T0.2 Implement M1 as a sim-side rule; run G16 (10⁴ epochs × 5 seeds vs frozen baseline) — PASS: blocked at exactly 22 bp (cap bound 156–180 epochs/seed, verified to fire); participation delta **0 bp** under the pinned 1 000 bp tolerance; replay bit-identical
 - [x] T0.3 Sim M2: cumulative `mint_demand` and treasury trajectory vs baseline (G14 shape) — main regime 100 % treasury-funded (zero fallback mint); stress regime (3× inflow drain) 34 % treasury-funded with the fallback firing every epoch and the floor never breached
 
-### Phase 1 — row v2 migration (riir-dapps) — **only if G16 passes**
-- [ ] T1.1 `EpochParams` → 20 bytes, dual-length decode, `u32::MAX` sentinel, `valid()` unchanged (G13)
-- [ ] T1.2 Land the two PENDING levers in the same migration (`USDC_KAT_SUB_SPLIT`, `DECAY_FACTOR`) — one row change, not three
-- [ ] T1.3 `LeverBound::YIELD_CEILING` + the 5th `bounds_violation` check
-- [ ] T1.4 Saturation pin, verified to fire (G15); mirror the pin in riir-dao `dapps_contract_pins.rs`
+### Phase 1 — row v2 migration (riir-dapps) — **G16 passed → LANDED (riir-dapps `c27300b`)**
+- [x] T1.1 `EpochParams` → **28 bytes** (three appended fields — T1.2's two levers ride the same migration, not 20), dual-length decode, `u32::MAX` sentinels, `valid()` unchanged (G13); the `kat:params` integrity scan accepts 16-or-28 B rows
+- [x] T1.2 The two PENDING levers landed in the same migration — `usdc_kat_sub_split_bp` (genesis 7 000 = `StakingParams::DEFAULT`, pinned) + `decay_factor_bp` (**genesis = the DISABLED sentinel, deliberately: the no-row fallback must track `KatConfig::reward_decay_bp` — a baked 9 900 silently overrode decay-10 000 deployments, caught live by `tests/kat_mining.rs` and root-caused via a pristine-HEAD worktree A/B**)
+- [x] T1.3 `LeverBound::YIELD_CEILING { 9, 22, Δ2 }` + the three new `bounds_violation`/`delta_violation` checks (sentinel-refusing proposals; a sentinel reference gets the free first move — the staking 0→500 bootstrap)
+- [x] T1.4 Saturation pin verified to fire (`yield_ceiling_genesis_saturates_lever_safe_end` + the v2 back-compat pin, `tests/kat_governance.rs` 29/29); `GovernanceIntent` binding widened to 28 B (GOVAPPLIED row 113→125 B). **The dao-side mirror (dao `params.rs` + `PARAMS_HASH_DOMAIN` v1→v2 + the dao pin) is DEFERRED to the dao-side session** — the dapps-side landing kept the no-interference line on riir-dao
 
-### Phase 2 — M1 in the ledger
-- [ ] T2.1 The cap in `pay_due_staking` between `staking.rs:1304` and `:1319`
-- [ ] T2.2 G10 conservation/replay + G11 sybil-invariance tests
-- [ ] T2.3 G12 alloc/perf bench vs baseline
+### Phase 2 — M1 in the ledger — **LANDED**
+- [x] T2.1 The cap in `pay_due_staking` (after the `kat_total` fold, before the payout loop); excess undrawn + honestly counted in `StakingPayoutReport::ceiling_deferred_kat`; the sub-split now reads the epoch row's lever (v1 sentinel → the frozen `StakingParams` value)
+- [x] T2.2 G10/G11 — `tests/kat_staking_yield_ceiling.rs` 6/6 (incl. T0.1's LEDGER twin: the uncapped control pays the whole class slice to a lone tranche)
+- [x] T2.3 G12 — O(1) integer cap on the already-computed `kat_total`; zero added allocation (by construction; epoch-cadence path, not hot)
 
-### Phase 3 — M2 in the ledger
-- [ ] T3.1 `treasury_grant_floor` in `KatConfig` (+ its codec, matching the existing `to_le_bytes` layout discipline)
-- [ ] T3.2 Treasury-first `grant`; G14 tests; `granted`-flag and refusal behavior asserted byte-identical
+### Phase 3 — M2 in the ledger — **LANDED**
+- [x] T3.1 `treasury_grant_floor` in `KatConfig` (genesis `FREE_GRANT_KAT × 10_000` = 1 M KAT runway; never a lever) — the feature-independent core row widened **128 → 136 B** (the 4 reserved bytes cannot hold an i64; the staking/governance widening precedent)
+- [x] T3.2 Treasury-first `grant`; G14 `tests/kat_grant_treasury.rs` 7/7 (mint delta 10 M legacy vs **0** funded over the same 10-account window; floor never breached; `granted`/refusal/return byte-identical). Fixture discoveries recorded in the test doc: `mint_demand` is a per-epoch transient (`settle_epoch` flushes it → measure windowed deltas); the treasury's in-fixture depth source is the mining stipend path
 
 ### Phase 4 — activation (owner act, not an agent move)
 - [ ] T4.1 Owner sets `staking_share_bp` 0 → 500 with the ceiling already armed. **Ordering is load-bearing: the ceiling must land first, or the thin-base window opens for exactly one epoch**
