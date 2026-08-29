@@ -1658,3 +1658,47 @@ never closed). Ranked open classes (inventory 2026-08-24):
       or the rustc_errors domain (oracle-driven, compile-gated at a
       whole-error level). Evidence: observation (2026-08-26, Plan 028
       session) → this session's soundness analysis.
+
+## Post-mining intake (2026-08-29 — riir-ai/crates full sweep, 3089-edit session)
+
+Two proposer-guard classes found live by the sweep's gates + one check-vs-clippy
+divergence worth encoding:
+
+1. **`redundant_closure` fn-path coercion (E0631, 6 sites)** —
+   `Option<Vec<f32>>.as_ref().map(|w| upload(w))` → `.map(upload)` breaks
+   under `--all-features` (riir-gpu `mla_cubecl.rs` x2, `moe_cubecl.rs` x4):
+   the closure annotates `w: &[f32]` and provides the `&Vec<f32> -> &[f32]`
+   deref-coercion site; the bare fn path requires `fn(&Vec<f32>)`. This is the
+   EXACT T6.2 G5 class that demoted redundant_closure from FIXABLE — it fired
+   anyway because it sits in the rust_perf proposer set, not the clippy one.
+   Evidence type: compile-revert (all-features check). Fix shape: the
+   proposer must skip when the closure body is a single call whose argument
+   is a deref-coercion (ref -> slice) of the binding — i.e. the
+   `param_name_preserved`/E0631 guard exists for `static-str`/`bool-to-bitpack`
+   but not here.
+
+2. **`manual_is_multiple_of` ambiguous-integer receivers (E0689, 8 sites)** —
+   rewrote `x % d == 0` → `x.is_multiple_of(d)` where x is an AMBIGUOUS
+   `{integer}` (bare range-loop vars: riir-agents multi_agent_consensus_bench,
+   riir-games-civ flock_goat_test, riir-engine evpi_gate x2 +
+   reestimation_steerer + motor_gated_wiring_demo, riir-infer-core gguf_loader
+   tests x2). is_multiple_of is unsigned-only; rustc raises E0689 under
+   CLIPPY's typeck while plain `cargo check` RESOLVES it clean — the
+   check-only `--verify` gate is structurally blind to this class (the
+   check-vs-clippy divergence, twice-observed now). All 8 manually restored
+   to the modulo form. Evidence type: clippy hard error post-landing.
+   Fix shape: the proposer needs a receiver-pin guard — only fire when the
+   receiver is a demonstrably unsigned local/field (typed let, struct field,
+   cast); bare loop vars over ranges stay silent. Failing that, the class
+   belongs in VERIFY-only-with-clippy, not check-verify.
+
+3. **(observation) `approx_constant` deny-lint breaks the workspace clippy
+   gate on literals landed by older toolchains** — pre-existing
+   riir-games-mmorpg fov.rs `1.047_197_6` (clippy 1.95 deny) blocked the
+   sweep's clippy validation until swapped to `FRAC_PI_3` (bit-identical
+   f32 0x3f860a92, verified). Not a proposer defect; recorded because any
+   future workspace-clippy sweep on this box will trip more of the same class
+   (sibling commits validated under older clippy). Candidate: a cheap
+   `cargo clippy --workspace --all-targets --keep-going` screen as part of
+   the sweep protocol — `--keep-going` enumerates ALL failing crates in one
+   pass (single-pass discovery vs 4 sequential here).
