@@ -348,6 +348,43 @@ Verified with a CONTROL, so the test discriminates: with the guard removed and
 Full matrix re-run: `SUCCESS` 0 | `SCOPE-ERR` 2 | `TIMEOUT(124)` 2 |
 `SILENT-FAIL` 2 | `NO_DEPLOY` 0. shellcheck clean.
 
+### T16.3 — the least-privilege deploy path was 100% broken (2026-08-29)
+
+The `CF_DEPLOY_API_TOKEN` branch added on top of T16.1 could never deploy:
+
+```
+_w_env=(CLOUDFLARE_API_TOKEN="${CF_DEPLOY_API_TOKEN}" env -u CF_API_TOKEN ...)
+"${_w_env[@]}" timeout 600 npx ... deploy
+```
+
+A leading `VAR=value` is an assignment prefix only when the SHELL PARSES it.
+After `"${_w_env[@]}"` expansion it is just the first WORD, so the shell looked
+for a command literally named `CLOUDFLARE_API_TOKEN=<token>` and every deploy
+died with `command not found`. `.env` HAS `CF_DEPLOY_API_TOKEN` set (045
+rollout), so this was **100% of deploys on the preferred, least-privilege
+path** -- the OAuth fallback, which works, was unreachable whenever the safer
+credential was present.
+
+Fix: `env` first, assignment as an ARGUMENT to it (options before assignments):
+`_w_env=(env -u CF_API_TOKEN -u CLOUDFLARE_API_KEY -u CLOUDFLARE_EMAIL "CLOUDFLARE_API_TOKEN=${CF_DEPLOY_API_TOKEN}")`.
+
+Found by re-running T16's arm matrix against the REFACTORED script rather than
+trusting the earlier pass -- the refactor changed the exact invocation the
+safety properties hang off, so the prior verification was stale. Proven by
+having the stub print what it can actually see: token arm
+`TOKEN_SEEN=deploytok CF_API_TOKEN=<stripped>`, OAuth arm `TOKEN_SEEN=<none>`
+with an ambient shadowing token present (T16.1 still holds).
+
+Second, smaller fix: the error-extraction pattern did not match `not found` /
+`no such`, so this very failure logged `<no error line matched>` -- the loudest
+possible break reported with the least possible information. Pattern widened;
+the `command-not-found` arm now quotes `bash: wrangler: command not found`.
+
+Full matrix re-verified on the fixed script: `scope-err` (both credential arms)
+exit 2 verbatim | `timeout(124)` exit 2 | `command-not-found` exit 2 WITH cause
+| `uploaded-not-landed` exit 2 DEGRADED | `list-garbage` exit 0 INCONCLUSIVE
+(no false alarm) | `NO_DEPLOY` exit 0. shellcheck clean.
+
 ### T16.2 — "deployed" now means production RECEIVED it (2026-08-29)
 
 `wrangler deploy` exiting 0 means the API accepted the upload, not that the

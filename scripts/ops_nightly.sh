@@ -271,7 +271,13 @@ if [ "${OPS_NIGHTLY_NO_DEPLOY:-0}" != "1" ]; then
   # paths use one credential.
   if [ -n "${CF_DEPLOY_API_TOKEN:-}" ]; then
     log "deploy credential: CF_DEPLOY_API_TOKEN (least-privilege; overrides OAuth)"
-    _w_env=(CLOUDFLARE_API_TOKEN="${CF_DEPLOY_API_TOKEN}" env -u CF_API_TOKEN -u CLOUDFLARE_API_KEY -u CLOUDFLARE_EMAIL)
+    # `env` MUST come first and the assignment must be an ARGUMENT to it.
+    # A leading `VAR=value` is an assignment prefix only when the SHELL PARSES
+    # it -- after `"${_w_env[@]}"` expansion it is just the first word, so the
+    # shell looked for a command literally named `CLOUDFLARE_API_TOKEN=<tok>`
+    # and every deploy died with `command not found`. `.env` HAS this var set,
+    # so that was 100% of deploys on the least-privilege path (2026-08-29).
+    _w_env=(env -u CF_API_TOKEN -u CLOUDFLARE_API_KEY -u CLOUDFLARE_EMAIL "CLOUDFLARE_API_TOKEN=${CF_DEPLOY_API_TOKEN}")
   else
     log "deploy credential: wrangler OAuth (CF_DEPLOY_API_TOKEN unset)"
     _w_env=(env -u CLOUDFLARE_API_TOKEN -u CF_API_TOKEN -u CLOUDFLARE_API_KEY -u CLOUDFLARE_EMAIL)
@@ -288,7 +294,7 @@ if [ "${OPS_NIGHTLY_NO_DEPLOY:-0}" != "1" ]; then
     # which under `set -e` aborted the run with NO log line at all -- silently
     # worse than the WARN-only original, and on the LIKELIEST unattended
     # failure (a bare `timeout 600` kill prints nothing this pattern matches).
-    _why="$(grep -iE 'error|denied|not authorized|permission|unauthorized|expired|missing' "${_dout}" \
+    _why="$(grep -iE 'error|denied|not authorized|permission|unauthorized|expired|missing|not found|no such' "${_dout}" \
             | head -3 | tr '\n' ' ' | cut -c1-400 || true)"
     log "WARN deploy FAILED — production still serves the PREVIOUS dashboard. wrangler said: ${_why:-<no error line matched; see full output above>}"
   fi
