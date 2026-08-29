@@ -380,6 +380,14 @@ Second, smaller fix: the error-extraction pattern did not match `not found` /
 possible break reported with the least possible information. Pattern widened;
 the `command-not-found` arm now quotes `bash: wrangler: command not found`.
 
+**The credential itself was never the problem** — verified after the fix by
+running `deployments list --json` under the real `CF_DEPLOY_API_TOKEN` from
+`.env` (read-only, no upload): `AUTH OK`, newest deployment
+`2026-08-28T17:58:38Z`. The token authenticates and can see the worker, so the
+least-privilege path was broken ONLY by the shell invocation. That also means
+T16.2's post-deploy verification works on this credential, since step 4a now
+shares the same `_w_env` resolution as the deploy.
+
 Full matrix re-verified on the fixed script: `scope-err` (both credential arms)
 exit 2 verbatim | `timeout(124)` exit 2 | `command-not-found` exit 2 WITH cause
 | `uploaded-not-landed` exit 2 DEGRADED | `list-garbage` exit 0 INCONCLUSIVE
