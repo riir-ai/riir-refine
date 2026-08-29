@@ -267,7 +267,19 @@ to train a classifier+slot-filler)." Measured `.benchmarks/corpus_history.jsonl`
 clippy_lints 41 · rust_perf 94 · sec 11 · docker 2 · kernel_opt 400   (total 548)
 ```
 
-**400 of 548 (73%) are `kernel_opt`** — a default-OFF GPU-kernel domain that the decline/L4
+> **Correction 2026-08-29 (author's LGTM pass was right; my arithmetic was not).** Both that
+> jsonl row AND my cross-check grep undercount `docker`: its rules are built through a
+> `rule(...)` helper in `src/domains/docker/corpus.rs`, so a `DockerRule {` struct-literal
+> grep sees **1** and the projection records **2**, while `entries()` actually returns **31**
+> (`rule(` call count, measured). Corrected totals: **577 total, of which 400 (69%) are
+> `kernel_opt`.** Two consequences: (i) **fix the projection** — `corpus_history.jsonl`'s
+> docker series is wrong, and any domain using a builder helper is equally suspect, so the
+> count must be derived from `build_*_seed_corpus().len()` at runtime, never by grep
+> (this note included); (ii) **F2's conclusion is unchanged** — `kernel_opt` still dominates
+> and the corpus a clippy drafter would classify over is still **41 clippy lints**, which is
+> the number the sizing argument actually turns on.
+
+**400 of 577 (69%) are `kernel_opt`** — a default-OFF GPU-kernel domain that the decline/L4
 lane does not serve. The corpus the clippy drafter would actually classify over is
 **41 clippy lints** (+94 perf rules). "41 classes, pool recall already 100%@16" is a
 materially weaker training proposition than "~450 rules". Fix the number before re-arguing

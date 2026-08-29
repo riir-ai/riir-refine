@@ -53,9 +53,10 @@ proposers (the T3.5.4 contamination lesson) — `clippy_oracle` labels everythin
       decline 0/9 — plus a CodeCureAgent-style iterate loop (arXiv:2509.11787: 86.3%
       manually-correct on 1,000 SonarQube warnings, ~$0.029 each). The proposal's "L4 sits
       UNARMED with no candidate shaped to beat decline" premise has been false since 2026-08-26.
-      **Two guards:** (a) the standing leak-posture decision (`.docs/10_self_evolve/l4_fallback.md`
-      §5: "the CF llama arm waits on the owner's leak-posture sign-off — no code change") owns the
-      ENABLE flip — the wiring + loop harness may land opt-in-dark ahead of sign-off, the flip
+      **Two guards:** (a) the standing leak-posture decision owns the
+      ENABLE flip — `.docs/10_self_evolve/l4_fallback.md` §5 ("The serving-lane decision",
+      item 2) reads verbatim: "the arm sends code to a third party: the leak-posture sign-off
+      is the owner's separate gate ... This decision deliberately does NOT touch that lane." — the wiring + loop harness may land opt-in-dark ahead of sign-off, the flip
       itself is the owner's; (b) the loop's KEEP criterion is CodeCureAgent's FULL gate, not
       "warning cleared": warning gone + NO new warnings (the score-bench `created_rate` axis
       must not regress) + compile + tests — otherwise deleting the offending code "clears" the
