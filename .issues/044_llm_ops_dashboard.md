@@ -119,7 +119,11 @@ Leftovers found + removed (owner ask: "any active on cloudflare leftover?"):
       placeholder until rows); the convention landed in riir-train
       `c536b47a` (`.benchmarks/runs.README.md` + `runs.example.jsonl`).
       Rows appear as runs complete.
-- [-] **T7 coverage auto-measure** — WORKFLOW SHIPPED 2026-08-27
+- [-] **T7 coverage auto-measure** — VERIFIED END-TO-END 2026-08-29 (§T17:
+      real run, every gate observed to RUN, exit 0, 6m18s; found + fixed the
+      unlisted `corpus_history.jsonl` artifact, `3ae3c92`). **Verdict: INSTALL.**
+      Install itself is classifier-blocked — see §T17 / §T13 for the commands.
+      Prior: WORKFLOW SHIPPED 2026-08-27
       (`.github/workflows/ops_dashboard.yml`): nightly 18:23 UTC `--sweep`
       regen + commit `[skip ci]` + conditional wrangler deploy; guarded on
       repo var `OPS_DASHBOARD_ENABLED=true` + secrets `GH_PAT` /
@@ -165,6 +169,55 @@ Leftovers found + removed (owner ask: "any active on cloudflare leftover?"):
       decision** — deferred, not done. T7 re-homed to the M3
       (`scripts/ops_nightly.sh` + plist, zero secrets, ~5 min vs ~30-50);
       files shipped, schedule not installed.
+
+## T17 — T7 verified end-to-end; VERDICT: install it (2026-08-29)
+
+T7 has sat on "owner decision" through T13's re-home and T14's audit. Both of
+those verified the runner by *reasoning about it* — T14 even says so, and its
+own headline finding was that a property asserted in prose (the toolchain
+resolves) was false in practice. So this task did the missing thing: **ran the
+whole runner for real** and diffed what it left behind.
+
+    OPS_NIGHTLY_NO_COMMIT=1 OPS_NIGHTLY_NO_DEPLOY=1 scripts/ops_nightly.sh
+
+| step | observed | note |
+|---|---|---|
+| toolchain preflight | `toolchain OK (node v24.10.0, .../npx)` | T14's fix works under a real run |
+| `.env` load | `loaded .../.env` | |
+| CF credential | `CF credential: CF_API_TOKEN from env` | |
+| regen `--sweep` | `regen OK`, **6m18s** | vs the ~5 min design claim, vs ~30-50 min in CI |
+| render gate | **`verify_dom PASS`** | it RAN — not the `deploying unverified` skip T14 fixed |
+| worker tests | `housekeeping worker tests PASS` (39/39) | now also gates T9f |
+| exit | `=== done ===`, **0** | no WARN anywhere |
+
+**And it found a defect that only a real run could find.** The generator left
+THREE modified paths; `ARTIFACTS` listed two. `.benchmarks/corpus_history.jsonl`
+is written on both generator code paths, independent of `--sweep`, and a new
+calendar day always appends a row — so the schedule would have dirtied a
+tracked file every night and never committed it. For an **append-only history**
+file in a repo where sibling agents run bulk `git add -A` and `git checkout`,
+that row either lands in someone else's unrelated commit or is discarded, and
+the day then goes missing from the corpus series with nothing recording the
+hole. A gap in a history file is invisible — the chart just draws through it.
+Fixed by adding it to `ARTIFACTS` (commit `3ae3c92`).
+
+**Verdict: install.** Every objection previously raised against installing has
+now been closed by measurement rather than by argument — the runner does not
+run degraded (T14), it does not silently fail to deploy (T16/T16.1/T16.3), it
+cannot deploy under a credential that cannot work (T16.3), and it no longer
+leaves uncommitted state behind (this task). It is `Nice 10` / `LowPriorityIO`
+/ `Background` so it yields to interactive agent work, has no `KeepAlive` so a
+non-zero exit cannot respawn-loop, and is reversible in one command.
+
+**BLOCKED — needs the owner's hands.** The install pair (copy the plist into
+`~/Library/LaunchAgents/`, then bootstrap it) was refused by the session
+permission classifier — the same gate that blocked the T9f worker deploy and,
+before it, T8's. The decision is made; only execution is gated. The exact
+four commands (install / verify / run-now / uninstall) are in this file's T13
+section and in the header comment of `scripts/com.riir.ops-nightly.plist`.
+
+`plutil -lint` clean; schedule is 01:23 local, deliberately off the
+housekeeping Worker's :00 cron minute.
 
 ## T13 — security hardening + T7 re-homed to the M3 (SHIPPED 2026-08-28)
 
