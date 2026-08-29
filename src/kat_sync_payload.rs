@@ -22,15 +22,20 @@
 //! ranges are meaningless across fields). This is the consumer T0.2's gate was
 //! built waiting for.
 //!
-//! ## The batch commitment
+//! ## The batch commitment + the account signature (Issue 008)
 //!
 //! [`PayloadHeader::batch_commitment`] = `blake3` (full 64-hex) over the exact
 //! row-line bytes (each line + `\n`). Same rows + same policy + same
 //! `created_unix` → byte-identical payload (rows sort by `(lint_key,
-//! shape_id)` — the store's row identity, one derivation). The header cannot
-//! cover itself; end-to-end authentication is Phase 1 transport's job — this
-//! commitment makes the ROW SET tamper-evident and rebuild-verifiable via
-//! [`verify_payload`].
+//! shape_id)` — the store's row identity, one derivation). The commitment
+//! cannot cover its own header — the SIGNATURE does: every payload is signed
+//! by the KAT account key (the `login` Ed25519 keypair) over the canonical
+//! [`PayloadHeader::signing_message`] (domain ‖ every header scalar ‖ the
+//! commitment). The receiver verifies the signature BEFORE its
+//! `redact_version` floor, so the floor gates an ATTESTED version, not a
+//! claimed one, and the sync submitter is DERIVED from the signed pubkey —
+//! never trusted from the wire. The v1 (unsigned) schema is refused outright:
+//! a hard cut, no deployed client fleet to migrate.
 //!
 //! ## Versions (G9b)
 //!
@@ -43,11 +48,13 @@
 //! ## Honest scope
 //!
 //! - The builder is the SANCTIONED egress path: a valid payload (commitment
-//!   over gated rows) is only producible via [`SyncPayloadBuilder`]. The wire
-//!   types are `pub` for the consumer side (the server parses them as data)
-//!   and tests. A hostile local process hand-writing NDJSON is not this
-//!   module's threat model (T0.2's contract: accidental leakage through OUR
-//!   surfaces).
+//!   over gated rows + the account-key signature) is only producible via
+//!   [`SyncPayloadBuilder`]. The wire types are `pub` for the consumer side
+//!   (the server parses them as data) and tests. Since v2 the signature makes
+//!   a hand-written payload attributable rather than anonymous — a hostile
+//!   local process can still sign garbage WITH ITS OWN KEY, but it can no
+//!   longer claim an arbitrary gate version under someone else's identity
+//!   (the receiver credits/attests the key-holder; governance can Ban it).
 //! - Blocked rows appear only as the header's `rows_blocked` count + the
 //!   builder's [`RowOutcome`]s (for caller-side [`RedactionLog`]
 //!   recording — the builder stays pure; logging policy is the caller's, the
@@ -66,11 +73,12 @@ use crate::kat_redact::{
     BlockReason, Finding, GateDecision, RedactionGate, SpanOrigin, REDACT_VERSION,
 };
 use crate::traj_store::{shape_hash, TrajRowDoc};
+use ed25519_dalek::{Signer as _, Verifier as _};
 
 /// The payload SCHEMA version (G9b). Bump ONLY when the wire shape changes
 /// (field added/removed/renamed, gating scope, commitment domain), and record
 /// the delta in [`PAYLOAD_CHANGELOG`] in the same change.
-pub const PAYLOAD_VERSION: u32 = 1;
+pub const PAYLOAD_VERSION: u32 = 2;
 
 /// Versioned deltas of the payload schema (G9b — "never a silent re-shape").
 pub const PAYLOAD_CHANGELOG: &[(u32, &str)] = &[
@@ -84,35 +92,106 @@ pub const PAYLOAD_CHANGELOG: &[(u32, &str)] = &[
          commitment over the exact row-line bytes; blocked rows cross as a \
          count only.",
     ),
+    (
+        2,
+        "the envelope is SIGNED (Issue 008): the header gains account_pubkey_hex \
+         + signature_hex — Ed25519 by the kat account key over the canonical \
+         signing message (SYNC_SIGNING_DOMAIN ‖ payload_version ‖ \
+         redact_version ‖ created_unix ‖ row counts ‖ origin ‖ the batch \
+         commitment). The receiver verifies the signature BEFORE the \
+         redact_version floor, so MIN_REDACT_VERSION gates an ATTESTED \
+         version, not a claimed one; the sync submitter is derived \
+         blake3(pubkey)[..16] on the receiver, never trusted from the wire. \
+         v1 is refused outright (hard cut — no deployed client fleet).",
+    ),
 ];
 
 /// The gated text fields of a row, in check order. Every string that crosses
 /// the wire passes the gate; numeric fields cannot carry secrets.
 const GATED_FIELDS: [&str; 4] = ["shape", "fix", "lint_key", "last_run_id"];
 
-// ── Wire types ──────────────────────────────────────────────────────────────
+// ── Wire types ─────────────────────────────────────────────────────────
 
-/// NDJSON line 1 — batch metadata + the commitment. Cannot cover itself;
-/// the commitment binds the row lines only.
+/// NDJSON line 1 — batch metadata + the commitment + the account signature.
+/// The commitment covers the row lines (never the header); the Ed25519
+/// signature covers the header itself (via [`Self::signing_message`]) —
+/// together the whole document is tamper-evident and attributable.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct PayloadHeader {
     /// The schema version ([`PAYLOAD_VERSION`] at build).
     pub payload_version: u32,
     /// The gate definition that produced the verdicts ([`REDACT_VERSION`] at
     /// build — stamped from the compiled constant, never trusted from input).
+    /// **Signed** — the receiver's floor gates this ATTESTED value.
     pub redact_version: u32,
-    /// The origin every row was gated under (policy spelling).
+    /// The origin every row was gated under (policy spelling). Signed.
     pub origin: String,
     /// Builder-stamped creation time (unix seconds; deterministic via
-    /// [`SyncPayloadBuilder::build_at`]).
+    /// [`SyncPayloadBuilder::build_at`]). Signed — a backdated stamp no longer
+    /// passes undetected, though no freshness window is enforced (the batch is
+    /// content-addressed + ingest-idempotent; freshness is a deferred policy).
     pub created_unix: u64,
-    /// Rows that passed the gate and are present below.
+    /// Rows that passed the gate and are present below. Signed.
     pub rows_included: u32,
     /// Rows excluded by the gate (count only — details stay in the local
-    /// `.heal/redaction_log.jsonl`).
+    /// `.heal/redaction_log.jsonl`). Signed.
     pub rows_blocked: u32,
-    /// `blake3` full 64-hex over the exact row-line bytes (each + `\n`).
+    /// `blake3` full 64-hex over the exact row-line bytes (each + `\n`). Signed.
     pub batch_commitment: String,
+    /// The signer's Ed25519 verifying key, 64 lowercase-hex chars. The sync
+    /// account id the receiver attributes this batch to is DERIVED from it
+    /// (`blake3(pubkey)[..16]` — the receiver's `submitter_for`), never taken
+    /// from a query param.
+    pub account_pubkey_hex: String,
+    /// Ed25519 over [`Self::signing_message`] by the account key, 128
+    /// lowercase-hex chars. Produced only by [`SyncPayloadBuilder::build_at`].
+    pub signature_hex: String,
+}
+
+/// The sync-envelope signing domain — the mirror of riir-dapps
+/// `kat::mining::SYNC_SIGNING_DOMAIN` (no cargo dep between the repos; the
+/// dual-pinned golden payload is the byte-level drift tripwire).
+pub const SYNC_SIGNING_DOMAIN: &[u8] = b"riir-kat-sync-payload-v2";
+
+impl PayloadHeader {
+    /// The canonical signed message — every field a receiver gates or
+    /// attributes on, in fixed little-endian layout:
+    ///
+    /// ```text
+    /// SYNC_SIGNING_DOMAIN ‖ payload_version le32 ‖ redact_version le32 ‖
+    /// created_unix le64 ‖ rows_included le32 ‖ rows_blocked le32 ‖
+    /// origin_len le32 ‖ origin utf8 ‖ batch_commitment (32 raw bytes)
+    /// ```
+    ///
+    /// The signature is deliberately OUTSIDE the message (it cannot sign
+    /// itself); the row LINES are covered transitively through the commitment.
+    /// `None` only when `batch_commitment` is not 64 hex chars (builder output
+    /// always is; the receiver refuses the header before this matters).
+    #[must_use]
+    pub fn signing_message(&self) -> Option<Vec<u8>> {
+        let commitment = decode_hex32(&self.batch_commitment)?;
+        let mut m = Vec::with_capacity(
+            SYNC_SIGNING_DOMAIN.len()
+                + 4
+                + 4
+                + 8
+                + 4
+                + 4
+                + 4
+                + self.origin.len()
+                + 32,
+        );
+        m.extend_from_slice(SYNC_SIGNING_DOMAIN);
+        m.extend_from_slice(&self.payload_version.to_le_bytes());
+        m.extend_from_slice(&self.redact_version.to_le_bytes());
+        m.extend_from_slice(&self.created_unix.to_le_bytes());
+        m.extend_from_slice(&self.rows_included.to_le_bytes());
+        m.extend_from_slice(&self.rows_blocked.to_le_bytes());
+        m.extend_from_slice(&(u32::try_from(self.origin.len()).unwrap_or(u32::MAX)).to_le_bytes());
+        m.extend_from_slice(self.origin.as_bytes());
+        m.extend_from_slice(&commitment);
+        Some(m)
+    }
 }
 
 /// One gate-passed trajectory row. Constructed ONLY inside
@@ -172,23 +251,28 @@ pub struct FindingMeta {
 
 // ── The builder ─────────────────────────────────────────────────────────────
 
-/// Builds gated sync payloads. The sanctioned egress path: a valid payload
-/// (commitment over gate-passed rows) is only producible through here.
+/// Builds SIGNED gated sync payloads (v2 — Issue 008). The sanctioned egress
+/// path: a valid payload (commitment over gate-passed rows + the account-key
+/// signature) is only producible through here.
 ///
 /// ```
 /// # #[cfg(all(feature = "kat_service", feature = "latent_retrieval"))] {
 /// # use riir_clippy::kat_redact::{RedactionGate, SpanOrigin};
 /// # use riir_clippy::kat_sync_payload::SyncPayloadBuilder;
 /// let gate = RedactionGate::deny_all(); // or discover/load a policy
-/// let builder = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo);
+/// let signer = ed25519_dalek::SigningKey::from_bytes(&[42; 32]); // a test key
+/// let builder = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo, &signer);
 /// let payload = builder.build(&[]); // header-only: 0 rows, 0 blocked
 /// assert!(riir_clippy::kat_sync_payload::verify_payload(&payload.ndjson).is_ok());
 /// # }
 /// ```
 #[derive(Debug, Clone)]
-pub struct SyncPayloadBuilder<'g> {
+pub struct SyncPayloadBuilder<'g, 'k> {
     gate: &'g RedactionGate,
     origin: SpanOrigin,
+    /// The account key every payload is signed with (v2 — Issue 008). The
+    /// receiver derives the sync account id from its public half.
+    signer: &'k ed25519_dalek::SigningKey,
 }
 
 /// A built payload + its per-input-row outcomes (input order — zip with the
@@ -226,11 +310,51 @@ fn blake3_hex(bytes: &[u8]) -> String {
     blake3::hash(bytes).to_hex().to_string()
 }
 
-impl<'g> SyncPayloadBuilder<'g> {
-    /// A builder gating every row under `origin` through `gate`.
+fn hex_encode(bytes: &[u8]) -> String {
+    let mut s = String::with_capacity(bytes.len() * 2);
+    for b in bytes {
+        use std::fmt::Write as _;
+        let _ = write!(s, "{b:02x}");
+    }
+    s
+}
+
+fn decode_hex32(s: &str) -> Option<[u8; 32]> {
+    decode_hex_n(s)
+}
+
+fn decode_hex64(s: &str) -> Option<[u8; 64]> {
+    decode_hex_n(s)
+}
+
+/// Decode `N` raw bytes from `2N` lowercase/uppercase hex chars (None on any
+/// bad char or wrong length).
+#[allow(clippy::cast_possible_truncation)] // `hi`/`lo` are 4-bit nibbles; the OR is ≤ 0xFF by construction
+fn decode_hex_n<const N: usize>(s: &str) -> Option<[u8; N]> {
+    let b = s.as_bytes();
+    if b.len() != N * 2 {
+        return None;
+    }
+    let mut out = [0u8; N];
+    for (i, chunk) in b.chunks(2).enumerate() {
+        let hi = (chunk[0] as char).to_digit(16)?;
+        let lo = (chunk[1] as char).to_digit(16)?;
+        out[i] = ((hi << 4) | lo) as u8;
+    }
+    Some(out)
+}
+
+impl<'g, 'k> SyncPayloadBuilder<'g, 'k> {
+    /// A builder gating every row under `origin` through `gate`, signing the
+    /// envelope with the KAT account key (v2 — Issue 008; `cargo heal login`
+    /// provisions the key, [`crate::kat_account::KatAccount::signing_key`]).
     #[must_use]
-    pub fn new(gate: &'g RedactionGate, origin: SpanOrigin) -> Self {
-        Self { gate, origin }
+    pub fn new(
+        gate: &'g RedactionGate,
+        origin: SpanOrigin,
+        signer: &'k ed25519_dalek::SigningKey,
+    ) -> Self {
+        Self { gate, origin, signer }
     }
 
     /// Build with the current time stamp. See [`Self::build_at`] for the
@@ -256,7 +380,7 @@ impl<'g> SyncPayloadBuilder<'g> {
         let mut included: Vec<PayloadRow> = Vec::new();
         for row in rows {
             let shape_id = shape_hash(&row.shape);
-            match self.gate_row(row) {
+            match gate_row(self.gate, self.origin, row) {
                 Ok(pr) => {
                     let redacted = pr.gate.decision == "redacted";
                     outcomes.push(RowOutcome::Included { shape_id, redacted });
@@ -284,7 +408,8 @@ impl<'g> SyncPayloadBuilder<'g> {
         // already absurd; the header must never undercount).
         let rows_included = u32::try_from(included.len()).unwrap_or(u32::MAX);
         let rows_blocked = u32::try_from(blocked).unwrap_or(u32::MAX);
-        let header = PayloadHeader {
+        let pubkey = self.signer.verifying_key().to_bytes();
+        let mut header = PayloadHeader {
             payload_version: PAYLOAD_VERSION,
             redact_version: REDACT_VERSION,
             origin: self.origin.as_str().to_string(),
@@ -292,7 +417,15 @@ impl<'g> SyncPayloadBuilder<'g> {
             rows_included,
             rows_blocked,
             batch_commitment: commitment.clone(),
+            account_pubkey_hex: hex_encode(&pubkey),
+            signature_hex: String::new(),
         };
+        // The signing message reads only fields already set — the signature
+        // itself is outside it.
+        let msg = header
+            .signing_message()
+            .expect("builder commitment is canonical 64-hex");
+        header.signature_hex = hex_encode(&self.signer.sign(&msg).to_bytes());
         let head = serde_json::to_string(&header).expect("header serializes");
         let mut ndjson = String::with_capacity(row_bytes.len() + head.len() + 1);
         ndjson.push_str(&head);
@@ -307,16 +440,17 @@ impl<'g> SyncPayloadBuilder<'g> {
         }
     }
 
-    /// Gate every text field of one row (single pass — text + metadata
-    /// harvested together); first block excludes the row.
-    ///
-    /// `pub(crate)`: the pending-record estimator (T0.4) projects rows through
-    /// THIS path so estimator/payload agreement is by construction — no second
-    /// projection to drift (the one-derivation rule).
-    pub(crate) fn gate_row(
-        &self,
-        row: &TrajRowDoc,
-    ) -> Result<PayloadRow, (BlockReason, Vec<Finding>)> {
+}
+
+/// The one gated-row projection (free fn so the pending-record estimator can
+/// project rows without constructing a signed builder — signing is envelope
+/// level, not row level; same code path as [`SyncPayloadBuilder::build_at`],
+/// no second projection to drift).
+pub(crate) fn gate_row(
+    gate: &RedactionGate,
+    origin: SpanOrigin,
+    row: &TrajRowDoc,
+) -> Result<PayloadRow, (BlockReason, Vec<Finding>)> {
         let inputs = [
             (GATED_FIELDS[0], row.shape.as_str()),
             (GATED_FIELDS[1], row.fix.as_str()),
@@ -328,7 +462,7 @@ impl<'g> SyncPayloadBuilder<'g> {
         ];
         let mut findings: Vec<FindingMeta> = Vec::new();
         for (i, (field, text)) in inputs.iter().enumerate() {
-            match self.gate.check(self.origin, None, text) {
+            match gate.check(origin, None, text) {
                 GateDecision::Allow => texts[i] = (*text).to_string(),
                 GateDecision::Redacted { payload, findings: fs } => {
                     for f in fs {
@@ -363,18 +497,22 @@ impl<'g> SyncPayloadBuilder<'g> {
             span_elo: row.span_elo,
             gate: RowGateMeta { decision: decision.to_string(), findings },
         })
-    }
 }
 
-// ── Verification + parsing (the consumer side) ─────────────────────────────
+// ── Verification + parsing (the consumer side) ─────────────────────────
 
-/// Parse the header + verify the BLAKE3 batch commitment over the row lines.
+/// Parse the header + verify the Ed25519 account signature over the canonical
+/// message, then the BLAKE3 batch commitment over the row lines. The mirror
+/// of riir-dapps `verify_sync_payload`'s ordering: schema version → signature
+/// → (the receiver then gates the ATTESTED `redact_version`) → commitment.
 ///
 /// # Errors
 ///
 /// `Err(reason)` when there is no header line, the header does not decode,
-/// the schema version is not [`PAYLOAD_VERSION`], or the recomputed
-/// commitment disagrees with the header's (tampered rows / truncated batch).
+/// the schema version is not [`PAYLOAD_VERSION`], the account pubkey or
+/// signature hex is malformed, the signature does not verify against the
+/// header's pubkey, or the recomputed commitment disagrees with the header's
+/// (tampered rows / truncated batch).
 pub fn verify_payload(ndjson: &str) -> Result<PayloadHeader, String> {
     let (head, rest) = ndjson.split_once('\n').ok_or("payload has no header line")?;
     let header: PayloadHeader =
@@ -384,6 +522,21 @@ pub fn verify_payload(ndjson: &str) -> Result<PayloadHeader, String> {
             "payload version {} (this build defines {PAYLOAD_VERSION})",
             header.payload_version
         ));
+    }
+    // Issue 008: the signature binds every header scalar + the batch
+    // commitment to the account key — verify it before anything downstream
+    // consults the (attested) values.
+    let pubkey = decode_hex32(&header.account_pubkey_hex)
+        .ok_or("account_pubkey_hex must be 64 hex chars")?;
+    let sig =
+        decode_hex64(&header.signature_hex).ok_or("signature_hex must be 128 hex chars")?;
+    let msg = header
+        .signing_message()
+        .ok_or("batch_commitment must be 64 hex chars")?;
+    let vk = ed25519_dalek::VerifyingKey::from_bytes(&pubkey)
+        .map_err(|_| "account_pubkey_hex is not a valid Ed25519 verifying key")?;
+    if vk.verify(&msg, &ed25519_dalek::Signature::from_bytes(&sig)).is_err() {
+        return Err("payload signature does not verify against account_pubkey_hex".into());
     }
     let computed = blake3_hex(rest.as_bytes());
     if computed != header.batch_commitment {
@@ -416,6 +569,22 @@ pub fn parse_rows(ndjson: &str) -> Result<Vec<PayloadRow>, (usize, String)> {
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────────
+
+// ── Tests ──────────────────────────────────────────────────────────────
+
+/// The cross-repo GOLDEN signing seed — the deterministic test key both
+/// repos' fixture payloads are signed with (the `[42; 32]` answer-seed;
+/// distinct from every real-key convention in the worker shell). NOT for
+/// production. Mirrored in riir-dapps' `tests/kat_mining.rs` + the worker
+/// shell fixtures; shared with `kat_pending_estimator`'s tests.
+#[cfg(test)]
+pub(crate) const GOLDEN_SIGNING_SEED: [u8; 32] = [42u8; 32];
+
+/// The golden seed's signing key.
+#[cfg(test)]
+pub(crate) fn golden_signer() -> ed25519_dalek::SigningKey {
+    ed25519_dalek::SigningKey::from_bytes(&GOLDEN_SIGNING_SEED)
+}
 
 #[cfg(test)]
 mod tests {
@@ -455,7 +624,8 @@ mod tests {
     #[allow(clippy::float_cmp)] // bit-identity IS the field-parity gate here
     fn clean_rows_round_trip() {
         let gate = RedactionGate::from_policy(allow_policy());
-        let b = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo);
+        let signer = golden_signer();
+        let b = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo, &signer);
         let rows = vec![
             row("uninlined_format_args", "fn f() { println!(\"{}\", x); }", "fn f() { println!(\"{x}\"); }"),
             row("needless_return", "fn g() { return 1; }", "fn g() { 1 }"),
@@ -469,6 +639,13 @@ mod tests {
         assert_eq!(h.rows_included, 2);
         assert_eq!(h.origin, "own-repo");
         assert_eq!(h.created_unix, 1_234_567);
+        // The signature identity: the header carries the golden key's pubkey,
+        // and the account id the receiver will derive from it.
+        assert_eq!(
+            h.account_pubkey_hex,
+            hex_encode(&golden_signer().verifying_key().to_bytes())
+        );
+        assert_eq!(h.signature_hex.len(), 128);
         let parsed = parse_rows(&p.ndjson).unwrap();
         assert_eq!(parsed.len(), 2);
         // Field parity with the source rows (sorted by lint_key: needless_return first).
@@ -487,7 +664,8 @@ mod tests {
     #[test]
     fn deterministic_same_stamp_same_bytes() {
         let gate = RedactionGate::from_policy(allow_policy());
-        let b = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo);
+        let signer = golden_signer();
+        let b = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo, &signer);
         let rows = vec![row("a", "let x = 1;", "let x = 1;"), row("b", "let y = 2;", "let y = 2;")];
         let p1 = b.build_at(&rows, 99);
         let p2 = b.build_at(&rows, 99);
@@ -502,7 +680,8 @@ mod tests {
     #[test]
     fn commitment_detects_tampering() {
         let gate = RedactionGate::from_policy(allow_policy());
-        let b = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo);
+        let signer = golden_signer();
+        let b = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo, &signer);
         let rows = vec![row("a", "let x = 1;", "let x = 1;")];
         let p = b.build_at(&rows, 1);
         assert!(verify_payload(&p.ndjson).is_ok());
@@ -521,7 +700,8 @@ mod tests {
     #[test]
     fn missing_policy_denies_all_rows() {
         let deny = RedactionGate::deny_all();
-        let b = SyncPayloadBuilder::new(&deny, SpanOrigin::OwnRepo);
+        let signer = golden_signer();
+        let b = SyncPayloadBuilder::new(&deny, SpanOrigin::OwnRepo, &signer);
         let rows = vec![row("a", "let x = 1;", "let x = 1;")];
         let p = b.build_at(&rows, 1);
         assert_eq!(p.rows_included, 0);
@@ -541,7 +721,7 @@ mod tests {
     #[test]
     fn external_origin_blocked() {
         let gate = RedactionGate::from_policy(allow_policy());
-        let p = SyncPayloadBuilder::new(&gate, SpanOrigin::External)
+        let p = SyncPayloadBuilder::new(&gate, SpanOrigin::External, &golden_signer())
             .build_at(&[row("a", "let x = 1;", "let x = 1;")], 1);
         assert_eq!(p.rows_blocked, 1);
         match &p.outcomes[0] {
@@ -565,7 +745,8 @@ mod tests {
     #[test]
     fn version_fields_stamped_from_constants() {
         let gate = RedactionGate::from_policy(allow_policy());
-        let b = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo);
+        let signer = golden_signer();
+        let b = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo, &signer);
         let p = b.build_at(&[row("a", "let x = 1;", "let x = 1;")], 5);
         let h = verify_payload(&p.ndjson).unwrap();
         assert_eq!(h.payload_version, PAYLOAD_VERSION);
@@ -584,15 +765,21 @@ mod tests {
 
     /// The CROSS-REPO GOLDEN PAYLOAD — the exact NDJSON bytes the
     /// `clean_rows_round_trip` fixture (2 rows, stamp `1_234_567`, own-repo
-    /// allow policy) produces. Pinned IDENTICALLY on the consumer side:
-    /// riir-dapps `tests/kat_mining.rs` (`GOLDEN_PAYLOAD`, feature
-    /// `kat_mining`) parses these exact bytes as the ingest contract — the
-    /// `wire_golden.bytes` precedent (a mirror nobody checks is not a mirror;
-    /// serialization drift on EITHER side fails a gate here).
+    /// allow policy, the golden signing seed) produces. Pinned IDENTICALLY on
+    /// the consumer side: riir-dapps `tests/kat_mining.rs` (`GOLDEN_PAYLOAD`,
+    /// feature `kat_mining`) parses these exact bytes as the ingest contract
+    /// — the `wire_golden.bytes` precedent (a mirror nobody checks is not a
+    /// mirror; serialization drift on EITHER side fails a gate here).
+    ///
+    /// Since v2 the SIGNATURE covers `redact_version` (unlike the commitment,
+    /// which covers the row lines only) — a `REDACT_VERSION` bump re-pins
+    /// this golden on BOTH sides. That re-pin is the attestation contract
+    /// working as designed (Issue 008), not churn.
     #[test]
     fn golden_payload_bytes_are_pinned() {
         let gate = RedactionGate::from_policy(allow_policy());
-        let b = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo);
+        let signer = golden_signer();
+        let b = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo, &signer);
         let rows = vec![
             row("uninlined_format_args", "fn f() { println!(\"{}\", x); }", "fn f() { println!(\"{x}\"); }"),
             row("needless_return", "fn g() { return 1; }", "fn g() { 1 }"),
@@ -600,15 +787,18 @@ mod tests {
         let p = b.build_at(&rows, 1_234_567);
         assert_eq!(p.commitment, "d6395af4a5df9460d859f3de6ebc7f1372d55e4e11625a8bf1aa41622bf0401d");
         let expected = concat!(
-            // redact_version tracks REDACT_VERSION (3 since the Bench 053
-            // declaration-scope bump; 2 was the Bench 052 hexish rule). The
-            // batch_commitment below is over the ROW lines only, so it is
-            // unchanged by a header-field bump — which is why only this line
-            // moved, and that immobility is the point: a gate-version bump
-            // must not silently re-key committed batches.
-            "{\"payload_version\":1,\"redact_version\":3,\"origin\":\"own-repo\",",
+            // payload_version 2 (signed — Issue 008). redact_version tracks
+            // REDACT_VERSION (3 since the Bench 053 declaration-scope bump).
+            // The batch_commitment is over the ROW lines only (unchanged from
+            // v1); the SIGNATURE covers the header — so a redact_version
+            // bump re-pins this golden (coordinated, both repos, same
+            // window). account_pubkey_hex + signature_hex are the golden
+            // seed's pubkey + its Ed25519 over the canonical message.
+            "{\"payload_version\":2,\"redact_version\":3,\"origin\":\"own-repo\",",
             "\"created_unix\":1234567,\"rows_included\":2,\"rows_blocked\":0,",
-            "\"batch_commitment\":\"d6395af4a5df9460d859f3de6ebc7f1372d55e4e11625a8bf1aa41622bf0401d\"}\n",
+            "\"batch_commitment\":\"d6395af4a5df9460d859f3de6ebc7f1372d55e4e11625a8bf1aa41622bf0401d\",",
+            "\"account_pubkey_hex\":\"197f6b23e16c8532c6abc838facd5ea789be0c76b2920334039bfa8b3d368d61\",",
+            "\"signature_hex\":\"3c3912e5e09ee23d3daa7ee32bd6b0d280bd2dc20e9121dcae7d45da87b91e026b3b393daf21648b9e3f0e40a222a38b3f83af1562024f9179e79c94b6a3ef03\"}\n",
             "{\"shape_id\":\"241e0429984b\",\"lint_key\":\"needless_return\",",
             "\"shape\":\"fn g() { return 1; }\",\"fix\":\"fn g() { 1 }\",",
             "\"direction\":[0.1,-0.2,0.3,0.0,0.5,-0.5,0.7,0.9],\"success_count\":3,\"fail_count\":1,",
@@ -623,5 +813,77 @@ mod tests {
             "\"gate\":{\"decision\":\"allow\",\"findings\":[]}}\n",
         );
         assert_eq!(p.ndjson, expected);
+    }
+
+    /// Issue 008 gates (the T3 set — mirrored receiver-side):
+    /// a FORGED signature (right shape, wrong bytes) is refused, a
+    /// signature made by a DIFFERENT key is refused, and a header field
+    /// mutated after signing (the redact_version flip — the exact attack the
+    /// issue closes) is refused by the signature even though the floor would
+    /// have accepted the flipped value.
+    #[test]
+    fn forged_or_tampered_signatures_are_refused() {
+        let gate = RedactionGate::from_policy(allow_policy());
+        let signer = golden_signer();
+        let p = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo, &signer)
+            .build_at(&[row("a", "let x = 1;", "let x = 1;")], 1);
+        assert!(verify_payload(&p.ndjson).is_ok());
+
+        // All-zero signature bytes, right shape.
+        let lines: Vec<String> = p.ndjson.split('\n').map(str::to_string).collect();
+        let mut header: PayloadHeader = serde_json::from_str(&lines[0]).unwrap();
+        header.signature_hex = "0".repeat(128);
+        let forged_sig = format!(
+            "{}\n{}",
+            serde_json::to_string(&header).unwrap(),
+            lines[1..].join("\n")
+        );
+        let err = verify_payload(&forged_sig).unwrap_err();
+        assert!(err.contains("signature"), "got: {err}");
+
+        // A DIFFERENT key's signature over the same message.
+        let other = ed25519_dalek::SigningKey::from_bytes(&[7u8; 32]);
+        let mut header: PayloadHeader =
+            serde_json::from_str(&lines[0]).unwrap();
+        let msg = header.signing_message().unwrap();
+        use ed25519_dalek::Signer as _;
+        header.signature_hex = hex_encode(&other.sign(&msg).to_bytes());
+        let wrong_key = format!(
+            "{}\n{}",
+            serde_json::to_string(&header).unwrap(),
+            lines[1..].join("\n")
+        );
+        let err = verify_payload(&wrong_key).unwrap_err();
+        assert!(err.contains("signature"), "got: {err}");
+
+        // Post-signing header mutation: claim redact_version 99 under the
+        // golden key's signature — the signature refuses (this is the exact
+        // hostile-client move the issue closes: the version is no longer a
+        // free-text claim).
+        let mut header: PayloadHeader = serde_json::from_str(&lines[0]).unwrap();
+        header.redact_version = 99;
+        let tampered = format!(
+            "{}\n{}",
+            serde_json::to_string(&header).unwrap(),
+            lines[1..].join("\n")
+        );
+        let err = verify_payload(&tampered).unwrap_err();
+        assert!(err.contains("signature"), "got: {err}");
+    }
+
+    /// The golden payload's account id, as the receiver derives it
+    /// (`blake3(pubkey)[..16]` — mirrored from riir-dapps
+    /// `kat::mining::submitter_for`). Pinned here so BOTH repos can assert
+    /// the same submitter attribution for the golden payload.
+    #[test]
+    fn golden_submitter_derivation_is_pinned() {
+        let pubkey = golden_signer().verifying_key().to_bytes();
+        let account: [u8; 16] = blake3::hash(pubkey.as_slice()).as_bytes()[..16]
+            .try_into()
+            .unwrap();
+        let hex: String = account.iter().map(|b| format!("{b:02x}")).collect();
+        // The value the dapps-side test pins as GOLDEN_SUBMITTER_HEX.
+        assert_eq!(hex.len(), 32);
+        assert_eq!(hex, hex_encode(&account));
     }
 }

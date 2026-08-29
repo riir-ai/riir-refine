@@ -182,11 +182,14 @@ pub mod kat_redact;
 
 // Proposal 005 Phase 0 T0.3 (Plan 027): the sync payload schema — the
 // versioned NDJSON serialization contract over TrajStore rows (header +
-// gated rows + BLAKE3 batch commitment). Behind BOTH kat_service AND
-// latent_retrieval: it consumes the redaction gate (kat_service) and the
-// TrajRowDoc wire source (latent_retrieval — the store's riir-neuron-db dep).
-// kat_service alone stays dep-light; CI covers the combo standing (Layer 5b
-// --lib --all-features + Layer 5c's integration binary).
+// gated rows + BLAKE3 batch commitment + the account-key Ed25519 signature
+// over the header — v2, riir-dapps Issue 008; the receiver's redact-version
+// floor gates the ATTESTED version and the submitter is derived from the
+// signed key). Behind BOTH kat_service AND latent_retrieval: it consumes the
+// redaction gate (kat_service) and the TrajRowDoc wire source
+// (latent_retrieval — the store's riir-neuron-db dep). kat_service alone
+// stays dep-light; CI covers the combo standing (Layer 5b --lib
+// --all-features + Layer 5c's integration binary).
 #[cfg(all(feature = "kat_service", feature = "latent_retrieval"))]
 pub mod kat_sync_payload;
 

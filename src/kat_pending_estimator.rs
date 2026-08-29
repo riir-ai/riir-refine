@@ -83,7 +83,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use crate::kat_redact::{RedactionGate, SpanOrigin};
-use crate::kat_sync_payload::{PayloadRow, SyncPayloadBuilder};
+use crate::kat_sync_payload::PayloadRow;
 use crate::traj_store::{TrajRowDoc, shape_hash};
 
 // ── Version stamps (G9b — no silent shape/model change) ─────────────────────
@@ -359,9 +359,10 @@ impl PendingEstimate {
 }
 
 /// The estimator — a pure function of `(rows, gate, origin, watermark)`.
-/// Projects every row through the payload builder's own `gate_row` (same
-/// code path as the next real payload) and compares the gated projection's
-/// digest against the watermark.
+/// Projects every row through the payload builder's own gated-row projection
+/// ([`crate::kat_sync_payload::gate_row`] — same code path as the next real
+/// payload; no signed builder needed, row gating is envelope-independent)
+/// and compares the gated projection's digest against the watermark.
 #[must_use]
 pub fn estimate_pending(
     rows: &[TrajRowDoc],
@@ -369,11 +370,10 @@ pub fn estimate_pending(
     origin: SpanOrigin,
     watermark: &SyncWatermark,
 ) -> PendingEstimate {
-    let builder = SyncPayloadBuilder::new(gate, origin);
     let mut est = PendingEstimate::default();
     for row in rows {
         let shape_id = shape_hash(&row.shape);
-        match builder.gate_row(row) {
+        match crate::kat_sync_payload::gate_row(gate, origin, row) {
             Ok(pr) => {
                 let digest = row_digest(&pr);
                 if watermark.covers(&pr.lint_key, &shape_id, &digest) {
@@ -411,6 +411,7 @@ fn thousands(n: u64) -> String {
 mod tests {
     use super::*;
     use crate::kat_redact::{REDACT_VERSION, RedactionGate, SpanOrigin, SyncPolicy};
+    use crate::kat_sync_payload::{SyncPayloadBuilder, golden_signer};
     use crate::traj_store::TrajRowDoc;
 
     fn allow_policy() -> SyncPolicy {
@@ -464,7 +465,8 @@ mod tests {
     /// The watermark a sync of `rows` under `policy` would leave.
     fn watermark_after_sync(rows: &[TrajRowDoc], policy: &SyncPolicy) -> SyncWatermark {
         let gate = RedactionGate::from_policy(policy.clone());
-        let payload = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo).build_at(rows, 0);
+        let payload =
+            SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo, &golden_signer()).build_at(rows, 0);
         SyncWatermark::from_payload(&payload)
     }
 
@@ -684,7 +686,8 @@ mod tests {
         );
         let rows = vec![clean, dirty];
         let gate = RedactionGate::from_policy(allow_policy());
-        let payload = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo).build_at(&rows, 0);
+        let payload =
+            SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo, &golden_signer()).build_at(&rows, 0);
         assert_eq!(payload.rows_included, 1);
         assert_eq!(payload.rows_blocked, 1);
         let wm = SyncWatermark::from_payload(&payload);

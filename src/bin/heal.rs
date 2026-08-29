@@ -346,7 +346,7 @@ fn run_kat_sync() {
     let url = riir_clippy::kat_lease_client::service_url_for_command();
     let transport = HttpLeaseTransport::new(&url, 30);
 
-    // ── push half ──────────────────────────────────────────────────────
+    // ── push half ──────────────────────────────────────────────────
     let kv = root.join(".heal").join("trajectories.kv");
     if !kv.exists() {
         println!("sync: no trajectory store at {} — run any --fix in this repo first", kv.display());
@@ -361,8 +361,39 @@ fn run_kat_sync() {
                 if loaded.warning.is_some() {
                     eprintln!("sync: redaction policy — {}", loaded.warning.clone().unwrap_or_default());
                 }
-                let payload = SyncPayloadBuilder::new(&loaded.gate, SpanOrigin::OwnRepo)
-                    .build(&rows);
+                // Payload v2 is SIGNED with the account key (Issue 008) —
+                // the receiver derives the submitter from it, so an account
+                // is required to sync at all.
+                let account =
+                    match riir_clippy::kat_account::KatAccount::load(
+                        &riir_clippy::kat_account::KatAccount::default_dir(),
+                    ) {
+                        Ok(a) => a,
+                        Err(e) => {
+                            eprintln!(
+                                "sync: no account ({e}) — payload v2 is signed with the account \
+                                 key; run `cargo heal login` first"
+                            );
+                            std::process::exit(1);
+                        }
+                    };
+                let signing_key = match account.signing_key() {
+                    Ok(k) => k,
+                    Err(e) => {
+                        eprintln!("sync: account key unusable ({e})");
+                        std::process::exit(1);
+                    }
+                };
+                let payload =
+                    SyncPayloadBuilder::new(&loaded.gate, SpanOrigin::OwnRepo, &signing_key)
+                        .build(&rows);
+                println!(
+                    "sync payload: {} row(s) included, {} blocked, signed as {}… (batch {})",
+                    payload.rows_included,
+                    payload.rows_blocked,
+                    riir_clippy::kat_account::short_id(account.state().account_id.as_str()),
+                    &payload.commitment[..12.min(payload.commitment.len())]
+                );
                 println!(
                     "sync payload: {} row(s) included, {} blocked (batch {})",
                     payload.rows_included,
@@ -1056,9 +1087,10 @@ USAGE:
                     Prints the lease charge line (idempotent per epoch).
     sync            T1.6 bidirectional (kat_transport): push redacted
                     trajectory batches (the sanctioned egress path) + pull
-                    the lease. With the service plane deferred, the push is
-                    validated + queued locally (.heal/outbox/) — nothing is
-                    faked.
+                    the lease. The payload is SIGNED with the account key
+                    (v2 — Issue 008; `login` first). With the service plane
+                    deferred, the push is validated + queued locally
+                    (.heal/outbox/) — nothing is faked.
     claim           T1.6 payment claim (--tx <sig>, kat_service): validate +
                     compose + submit (or queue locally when the service
                     plane is not yet live). NEVER mints client-side (G9d).
