@@ -23,9 +23,10 @@
 #                               soft-skips when unset.
 #
 # Scheduling note: scheduled workflows only run from the repo's DEFAULT
-# branch. Verified at authoring time: origin/HEAD → refs/heads/develop, so
-# this file is effective as soon as it lands on develop. If the default
-# branch ever changes, this file must move with it.
+# branch. DEFAULT IS `main` (flipped 2026-08-29 to match every sibling repo
+# and the deploy policy: prod deploys ship from main only — see
+# scripts/ops_nightly.sh §3b; `develop` stays the working branch). This file
+# must stay on the default branch or the schedule dies silently.
 #
 # ── Generator dependencies: BOTH LANDED (verified 2026-08-28, T13) ──────────
 # The two assumptions this workflow was authored against are no longer

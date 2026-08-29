@@ -14,8 +14,15 @@
 #   launchctl bootout   gui/$(id -u)/com.riir.ops-nightly
 # Run once by hand (safe, idempotent):
 #   scripts/ops_nightly.sh
-# Regenerate without touching git or Cloudflare:
+# Regenerate without touching git and Cloudflare:
 #   OPS_NIGHTLY_NO_COMMIT=1 OPS_NIGHTLY_NO_DEPLOY=1 scripts/ops_nightly.sh
+#
+# DEPLOY POLICY (2026-08-29): production deploys ship from `main` ONLY —
+# `develop` is the working branch. §3b resolves a dedicated `main` worktree
+# (default ../.riir-clippy-main, override RIIR_OPS_MAIN_WT), fast-forwards it
+# to origin/develop, and the wrangler deploy runs from THERE — never from
+# whatever branch this checkout happens to sit on. A diverged main skips the
+# deploy loudly instead of shipping a tree main did not vet.
 
 set -euo pipefail
 
@@ -228,6 +235,55 @@ if [ "${OPS_NIGHTLY_NO_COMMIT:-0}" != "1" ]; then
   fi
 fi
 
+# ── 3b. resolve the DEPLOY source — prod ships from main ONLY (policy) ─────
+# See the header. DEPLOY_FAILED is initialized here (before any skip can set
+# it) so a skipped deploy degrades the run exactly like a failed one: prod
+# keeping the previous build must never read as success.
+DEPLOY_FAILED=0
+DEPLOY_DIR=""
+if [ "${OPS_NIGHTLY_NO_DEPLOY:-0}" != "1" ]; then
+  MAIN_WT="${RIIR_OPS_MAIN_WT:-${REPO}/../.riir-clippy-main}"
+  # Canonicalize BEFORE comparing against `worktree list` output: porcelain
+  # prints the resolved path, and the raw "${REPO}/.." spelling would never
+  # string-match it (the worktree would then be re-created every run and the
+  # add would fail on "already registered").
+  MAIN_WT="$(cd "${MAIN_WT}" 2>/dev/null && pwd || printf '%s' "${MAIN_WT}")"
+  if ! git -C "${REPO}" worktree list --porcelain | grep -Fxq "worktree ${MAIN_WT}"; then
+    # First run (or the worktree was pruned): create it. Seeded from
+    # origin/main when that exists, origin/develop as the bootstrap fallback
+    # — main is born FROM develop and is never allowed to diverge silently
+    # (the FF-only merge below is the standing enforcement).
+    _start="origin/main"
+    if ! git -C "${REPO}" rev-parse -q --verify origin/main >/dev/null 2>&1; then
+      _start="origin/develop"
+    fi
+    if ! git -C "${REPO}" worktree add -q -B main "${MAIN_WT}" "${_start}" >> "${LOG}" 2>&1; then
+      log "WARN could not create the main worktree at ${MAIN_WT} — deploy SKIPPED, prod keeps the previous build"
+      DEPLOY_FAILED=1
+      MAIN_WT=""
+    fi
+  fi
+  if [ -n "${MAIN_WT:-}" ]; then
+    # Worktrees share this repo's object store, so this fetch refreshes the
+    # remote-tracking refs for BOTH checkouts. FF-ONLY: main either already
+    # equals origin/develop or fast-forwards to it — a direct main commit or
+    # a held-back release makes this FAIL, and a failed FF skips the deploy
+    # rather than shipping a tree main did not vet.
+    if git -C "${MAIN_WT}" fetch -q origin \
+       && git -C "${MAIN_WT}" merge -q --ff-only origin/develop >> "${LOG}" 2>&1; then
+      if timeout 120 git -C "${MAIN_WT}" push -q origin main >> "${LOG}" 2>&1; then
+        log "deploy source: main @ $(git -C "${MAIN_WT}" rev-parse --short HEAD) (FF to origin/develop, pushed)"
+      else
+        log "WARN push of main failed (race?) — deploying the fast-forwarded local main"
+      fi
+      DEPLOY_DIR="${MAIN_WT}"
+    else
+      log "WARN main is DIVERGED from origin/develop (FF-only merge failed) — deploy SKIPPED; reconcile main by hand. prod keeps the previous build"
+      DEPLOY_FAILED=1
+    fi
+  fi
+fi
+
 # ── 4. deploy ──
 # This step is the POINT of the run: steps 1-3 refresh + commit the dashboard,
 # but until it is deployed production still serves the PREVIOUS build. It used
@@ -240,8 +296,7 @@ fi
 # which was wrong on the observed failure -- wrangler had authenticated fine
 # via CLOUDFLARE_API_TOKEN and was refused for MISSING SCOPE. A hint that
 # names the wrong fix costs more than no hint, so quote wrangler verbatim.
-DEPLOY_FAILED=0
-if [ "${OPS_NIGHTLY_NO_DEPLOY:-0}" != "1" ]; then
+if [ "${OPS_NIGHTLY_NO_DEPLOY:-0}" != "1" ] && [ -n "${DEPLOY_DIR}" ]; then
   # Stamped BEFORE the upload so step 4a can ask "did a deployment land
   # AFTER we started?" -- the question `wrangler deploy`'s exit code does
   # not answer.
@@ -291,7 +346,7 @@ if [ "${OPS_NIGHTLY_NO_DEPLOY:-0}" != "1" ]; then
     log "deploy credential: wrangler OAuth (CF_DEPLOY_API_TOKEN unset)"
     _w_env=(env -u CLOUDFLARE_API_TOKEN -u CF_API_TOKEN -u CLOUDFLARE_API_KEY -u CLOUDFLARE_EMAIL)
   fi
-  if (cd "${REPO}/cloudflare/dashboard" && "${_w_env[@]}" timeout 600 npx --yes "wrangler@${WRANGLER_VERSION}" deploy >"${_dout}" 2>&1); then
+  if (cd "${DEPLOY_DIR}/cloudflare/dashboard" && "${_w_env[@]}" timeout 600 npx --yes "wrangler@${WRANGLER_VERSION}" deploy >"${_dout}" 2>&1); then
     cat "${_dout}" >> "${LOG}"
     log "deployed"
   else
@@ -323,7 +378,7 @@ fi
 # body check would go RED on a correct deploy. The deployment list is
 # posture-independent, so this gate survives closing the gate.
 if [ "${DEPLOY_FAILED}" = "0" ] && [ "${OPS_NIGHTLY_NO_DEPLOY:-0}" != "1" ]; then
-  _newest="$(cd "${REPO}/cloudflare/dashboard" \
+  _newest="$(cd "${DEPLOY_DIR}/cloudflare/dashboard" \
     && "${_w_env[@]}" timeout 120 npx --yes "wrangler@${WRANGLER_VERSION}" deployments list --json 2>/dev/null \
     | python3 -c 'import sys,json
 try:
