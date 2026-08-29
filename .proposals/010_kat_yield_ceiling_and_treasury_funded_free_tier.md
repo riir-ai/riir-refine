@@ -1,6 +1,6 @@
 # Proposal 010 — KAT yield ceiling + treasury-funded free tier (two ledger budget rules)
 
-Status: **PHASES 1–3 COMPLETE — the ledger fix LANDED (riir-dapps `c27300b`, 2026-08-29: the 28-B v2 row with the ceiling armed in DEFAULT, the M1 cap, the M2 treasury-first grant; 352 tests green, clippy 0); Phase 4 = owner activation** (filed 2026-08-29). G16 PASS: [riir-dao Bench 003](../../riir-dao/.benchmarks/003_yield_ceiling_g16_sim.md). Enters through the re-open path [Proposal 008](008_adaptive_tokenomics_riir_dao.md) T1.4 names verbatim: *"Re-open levers (v2 candidates incl. decay_factor/Inflate, **or a ledger budget-rule change**) require a NEW plan."* This is the ledger-budget-rule half. It does **not** re-roll the G5 campaign and does **not** ask for agent autonomy — the agent stays advisory-only.
+Status: **COMPLETE — Phases 1–3 LANDED (riir-dapps `c27300b`, 2026-08-29); Phase 4 (the delegated perf/sec activation call) + the dao-side mirror LANDED 2026-08-30** (filed 2026-08-29). G16 PASS: [riir-dao Bench 003](../../riir-dao/.benchmarks/003_yield_ceiling_g16_sim.md). Enters through the re-open path [Proposal 008](008_adaptive_tokenomics_riir_dao.md) T1.4 names verbatim: *"Re-open levers (v2 candidates incl. decay_factor/Inflate, **or a ledger budget-rule change**) require a NEW plan."* This is the ledger-budget-rule half. It does **not** re-roll the G5 campaign and does **not** ask for agent autonomy — the agent stays advisory-only.
 
 ## TL;DR
 
@@ -198,8 +198,14 @@ One nuance recorded so the synergy is not overclaimed: M1's undrawn excess stays
 - [x] T3.1 `treasury_grant_floor` in `KatConfig` (genesis `FREE_GRANT_KAT × 10_000` = 1 M KAT runway; never a lever) — the feature-independent core row widened **128 → 136 B** (the 4 reserved bytes cannot hold an i64; the staking/governance widening precedent)
 - [x] T3.2 Treasury-first `grant`; G14 `tests/kat_grant_treasury.rs` 7/7 (mint delta 10 M legacy vs **0** funded over the same 10-account window; floor never breached; `granted`/refusal/return byte-identical). Fixture discoveries recorded in the test doc: `mint_demand` is a per-epoch transient (`settle_epoch` flushes it → measure windowed deltas); the treasury's in-fixture depth source is the mining stipend path
 
-### Phase 4 — activation (owner act, not an agent move)
-- [ ] T4.1 Owner sets `staking_share_bp` 0 → 500 with the ceiling already armed. **Ordering is load-bearing: the ceiling must land first, or the thin-base window opens for exactly one epoch**
+### Phase 4 — activation — **LANDED 2026-08-30** (the delegated perf/sec call)
+- [x] T4.1 `staking_share_bp` 0 → 500 in `EpochParams::DEFAULT` (carved from mining), the
+      ceiling already armed in the SAME default — and the ordering constraint upgraded from
+      conventional to ENFORCED: `KatLedger::set_epoch_params` refuses staking > 0 with the
+      disabled-ceiling sentinel, so the thin-base window is unwritable by any path. The
+      dao-side mirror landed in the same window (`PARAMS_HASH_DOMAIN` v1→v2, the ceiling
+      field, `LeverBounds::YIELD_CEILING`, armed `frozen_baseline`; G5/g16 re-ran green on
+      the flipped control arm). Record: riir-dapps Plan 014 T4.1/T4.2.
 
 ## Risks
 
