@@ -103,7 +103,52 @@ echo "=== Layer 5c: every integration test + bin (all-features, no allowlist) ==
 # script enforces them — Layer 5d's pin is derived from `tests/*.rs` on disk.
 RUNLOG="$(mktemp "${TMPDIR:-/tmp}/ci_feature_guard_5c.XXXXXX")"
 trap 'rm -f "$RUNLOG"' EXIT
-cargo test --all-features --tests 2>&1 | tee "$RUNLOG"
+
+# Layer 5c was the one UNBOUNDED step in this guard, and unbounded is exactly
+# how it failed. `--all-features` is a SUPERSET switch: it turns on every
+# feature gate, including ones guarding tests that load model weights or run
+# for hours. One such binary (`bonsai_retrieval_probe`: 6.7 GB GGUF, ~50 min in
+# RELEASE, run here in DEBUG with both tests loading the model concurrently at
+# 15.5 GB RSS) consumed the ENTIRE run, so Layer 5c had never once completed
+# since it landed. It was misdiagnosed three separate times as an environment
+# problem — a killed process, nohup vs a process-group SIGKILL — because a run
+# that simply never returns names no cause. Measured: 4 binaries finished in
+# the ~30 min before that probe; 26 finished in the 3 min after it was killed.
+#
+# `#[ignore]` is the fix for any individual offender (see Bench 055), but
+# nothing ENFORCES the annotation, and the next feature to gate a heavy test
+# enters this layer silently. So bound the layer and, on expiry, name the
+# target it died on — turning "hangs forever, cause unknown" into a diagnosis.
+# The budget is deliberately generous: it is a wedge detector, not a perf gate.
+LAYER_5C_TIMEOUT_SECS="${LAYER_5C_TIMEOUT_SECS:-3600}"
+_TIMEOUT_BIN="$(command -v timeout || command -v gtimeout || true)"
+if [ -n "$_TIMEOUT_BIN" ]; then
+    set +e
+    "$_TIMEOUT_BIN" "$LAYER_5C_TIMEOUT_SECS" cargo test --all-features --tests 2>&1 | tee "$RUNLOG"
+    _5C_RC=${PIPESTATUS[0]}
+    set -e
+    if [ "$_5C_RC" = 124 ]; then
+        echo
+        echo "✗ Layer 5c exceeded ${LAYER_5C_TIMEOUT_SECS}s and was killed."
+        echo "  last target it started:"
+        grep -E '^ +Running ' "$RUNLOG" | tail -1 | sed 's/^/      /'
+        echo
+        echo "  --all-features enables EVERY feature gate, so a test that loads"
+        echo "  model weights or runs for hours joins this layer silently. If the"
+        echo "  target above is a measurement probe rather than a gate, mark it"
+        echo "  #[ignore] with the cost in the reason (Bench 055) — do not raise"
+        echo "  this budget to accommodate it. Raise it only when the SWEEP has"
+        echo "  legitimately grown."
+        exit 1
+    fi
+    [ "$_5C_RC" = 0 ] || exit "$_5C_RC"
+else
+    # Never fail the guard over a missing coreutils; just refuse to imply a
+    # bound that is not being enforced.
+    echo "  WARN: no timeout(1)/gtimeout(1) — Layer 5c runs UNBOUNDED;"
+    echo "        a wedged test binary will hang this guard with no diagnosis."
+    cargo test --all-features --tests 2>&1 | tee "$RUNLOG"
+fi
 echo "✓ all integration tests + bin unit tests pass"
 
 echo

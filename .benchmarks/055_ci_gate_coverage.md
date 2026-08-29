@@ -112,6 +112,41 @@ empty binary. Worth stating explicitly, because "ignore everything" would
 otherwise be a way to launder a dead target past 5d — it is not, and 5d
 should keep it that way.
 
+**Layer 5c bounded, and the bound verified to fire.** `#[ignore]` fixes any
+individual offender, but nothing ENFORCES the annotation — so the layer now
+runs under `timeout` and, on expiry, prints the last `Running` target it
+started. That turns "hangs forever, cause unknown" (which cost four sessions)
+into a named diagnosis. Budget `LAYER_5C_TIMEOUT_SECS`, default 3600 s against
+a measured healthy run of ~30 min: it is a WEDGE detector, not a perf gate,
+and the failure text says so ("mark it `#[ignore]` ... do not raise this budget
+to accommodate it").
+
+Verified against a stubbed `cargo` on `PATH`, exercising the SHIPPED block
+(extracted by `sed` from the real script, not a retyped copy) — all four arms,
+because a guard that only works on the happy path is the bug this bench is about:
+
+| arm | expected | result |
+|---|---|---|
+| stub wedges past the budget | FAIL, naming the wedged target | ✓ named `tests/bonsai_retrieval_probe.rs` |
+| stub passes | pass through, exit 0 | ✓ |
+| stub fails (exit 101) | **propagate 101**, not masked by `tee` | ✓ 101 |
+| no `timeout(1)`/`gtimeout(1)` | WARN + run unbounded, exit 0 | ✓ |
+
+The third arm matters most: `| tee` would otherwise return tee's status. It
+does not here — the script sets `pipefail` and the new code reads
+`PIPESTATUS[0]` — but that was CHECKED rather than assumed, since a guard
+that swallows real test failures is strictly worse than no guard.
+
+**First complete Layer 5c run (2026-08-29), the payoff.** With the probe
+annotated, the sweep finished for the first time: **57 targets, 1924 passed,
+24 ignored, 2 failed.** One failure is the SIGTERM from killing the probe
+mid-run. The other is real and had never been observable:
+`t33_tether_g4_alloc` — `t33_g4_fit_never_allocates` (**332 allocs, expects
+0**) and `t33_g4_tether_mode_adds_zero_steady_state_allocs` (**default 69958
+vs tether 83785, +13827**). Filed separately; note that this binary's own docs
+specify `--release` and this run was DEBUG, so the debug/release question is
+resolved in that issue rather than asserted here.
+
 **Standing hazard, not a one-off.** `--all-features` is a *superset* switch:
 any future feature that gates a weights-loading or hours-long test enters
 Layer 5c automatically and silently. The annotation is the only defense, and
