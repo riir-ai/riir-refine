@@ -181,7 +181,7 @@ pub fn zone_owner(zones: &HashMap<u32, u32>, zone: u32) -> Option<u32> {
     npcs
         .iter()
         .copied()
-        .filter(|&id| id % 7 != 0)
+        .filter(|&id| id != 0)
         .collect()
 }
 "#),
