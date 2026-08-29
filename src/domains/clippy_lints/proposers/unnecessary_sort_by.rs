@@ -44,7 +44,20 @@
 //!   rendered key (`|a| a.k + 1`); our byte-for-byte parity standard cannot
 //!   reproduce HIR de-parening, so the shape is deliberately skipped
 //!   (false-negative-safe)
-//! - free-fn form `Ord::cmp(&a, &b)` (oracle-silent)
+//! - free-fn cmp form `Ord::cmp(&a, &b)` (oracle-silent)
+//! - borrow-in-key: a BARE reference into the binding as a direct tuple/
+//!   array element (`(a.0, &a.1)` — the live riir-chain persist.rs shape;
+//!   probe 1.97: oracle-SILENT for the non-Copy tuple, the Copy twin, the
+//!   array twin, AND the whole-binding element `(a.0, a)`) — the emitted
+//!   `sort_by_key` key would hold the borrow itself and cannot compile
+//!   (`FnMut(&T) -> K` returns K by value; a K tied to the input has no
+//!   name). Consumed positions stay MA and keep firing: call args
+//!   (`combine(&a.k)`), method args (`a.dist2(&ORIGIN)`), binary operands
+//!   (`a.1 + &a.2`) — the callee/impl consumes the reference and the key
+//!   value stays owned. Guard = `key_holds_borrow` (value-position walk).
+//! - reference-RETURNING method keys (`a.kref()` — clippy is type-aware
+//!   silent; parse-only cannot see return types — the `--verify` compile
+//!   gate is the backstop if that shape ever appears)
 //! - `&mut` reference args, `|a, b| a.cmp(&b)` with plain bindings (that
 //!   shape is `&&T` — E0599, cannot compile), subpatterns, wildcard inners
 //! - `r#raw` ident params (not modeled)
@@ -145,6 +158,46 @@ fn utf8_len(b: u8) -> usize {
 
 fn is_ident_char(c: u8) -> bool {
     c == b'_' || c.is_ascii_alphanumeric()
+}
+
+/// True when a BARE reference into `binding` sits as a direct tuple/array
+/// element of the key — the emitted key's VALUE would hold the borrow
+/// itself (`(a.0, &a.1)`, the live riir-chain persist.rs shape) and the
+/// `sort_by_key` suggestion cannot compile (`FnMut(&T) -> K` returns K by
+/// value; a K holding a reference tied to the input has no name).
+///
+/// Probe-pinned (clippy 1.97): the bare-element class is oracle-SILENT for
+/// the non-Copy tuple, the Copy twin, the array twin, AND the whole-binding
+/// element `(a.0, a)` (same borrow, no `&` token — the Path arm, PLAIN
+/// bindings only: under a deref pattern the binding is OWNED and the key
+/// `|&a| a` is the probe-verified MA form). Consumed positions are
+/// oracle-MA and keep firing: call args (`combine(&a.k)`), method args
+/// (`a.dist2(&ORIGIN)`), binary operands (`a.1 + &a.2`) — the callee/impl
+/// consumes the reference and the key value stays owned. The nested
+/// tuple/array/paren recursion is a conservative structural extension of
+/// the pinned flat class (false-negative-safe).
+fn key_holds_borrow(source: &str, e: &Expr, binding: &str, deref: bool) -> bool {
+    match e {
+        Expr::Tuple(t) => t
+            .elems
+            .iter()
+            .any(|x| key_holds_borrow(source, x, binding, deref)),
+        Expr::Array(a) => a
+            .elems
+            .iter()
+            .any(|x| key_holds_borrow(source, x, binding, deref)),
+        Expr::Paren(p) => key_holds_borrow(source, &p.expr, binding, deref),
+        Expr::Group(g) => key_holds_borrow(source, &g.expr, binding, deref),
+        Expr::Reference(r) => src(source, &*r.expr)
+            .is_some_and(|t| contains_word(&t, binding)),
+        // `(a.0, a)` — the whole binding as an element: the key copies the
+        // reference VALUE into K (probe: oracle-silent, same class). Deref
+        // bindings own their binding — the bare ident is the MA key form.
+        Expr::Path(p) => {
+            !deref && p.path.get_ident().is_some_and(|id| id == binding)
+        }
+        _ => false,
+    }
 }
 
 impl Collector<'_> {
@@ -260,6 +313,12 @@ impl Collector<'_> {
         let inner_text = src(self.source, &*argref.expr)?;
         let a_s = pa.to_string();
         let b_s = pb.to_string();
+        // Borrow-in-key: a bare reference into the binding as a tuple/array
+        // element makes the emitted key hold the borrow — the suggestion
+        // cannot compile and the oracle is silent on the whole class.
+        if key_holds_borrow(self.source, &cmp.receiver, &a_s, deref) {
+            return None;
+        }
         // Forward order: the receiver mentions `a` (never `b`); the swap
         // `a→b` must reproduce the argument's inner text exactly. This
         // rejects reversed sorts (recv mentions `b`), mixed fields,
@@ -418,6 +477,83 @@ mod tests {
         let input = "fn f(v: &mut Vec<K>) { v.sort_by(|a, b| (a.k, a.j).cmp(&(b.k, b.j))); }";
         let out = propose_fix("unnecessary_sort_by", input).expect("matched");
         assert!(out.contains("v.sort_by_key(|a| (a.k, a.j))"), "got: {out}");
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn borrow_tuple_key_not_fired() {
+        // Borrow-in-key probe (clippy 1.97): `(a.0, &a.1)` — the key VALUE
+        // holds the borrow, oracle-SILENT; our emitted `sort_by_key` could
+        // not compile (K tied to the closure input). The live riir-chain
+        // persist.rs shape — guarded by `key_holds_borrow`.
+        let input =
+            "fn f(v: &mut Vec<(u8, Vec<u8>)>) { v.sort_by(|a, b| (a.0, &a.1).cmp(&(b.0, &b.1))); }";
+        let out = propose_fix("unnecessary_sort_by", input);
+        assert!(out.is_none(), "borrow tuple key must not fire: {out:?}");
+    }
+
+    #[test]
+    fn borrow_tuple_key_copy_twin_not_fired() {
+        // Probe: the Copy twin is oracle-silent too — the ref element is the
+        // trigger, not the non-Copy payload.
+        let input = "fn f(v: &mut Vec<(u8, u8)>) { v.sort_by(|a, b| (a.0, &a.1).cmp(&(b.0, &b.1))); }";
+        let out = propose_fix("unnecessary_sort_by", input);
+        assert!(out.is_none(), "copy-twin borrow key must not fire: {out:?}");
+    }
+
+    #[test]
+    fn borrow_array_key_not_fired() {
+        // Probe: bare-reference ARRAY elements are oracle-silent — same
+        // value-position class as the tuple.
+        let input =
+            "fn f(v: &mut Vec<[u8; 2]>) { v.sort_by(|a, b| [&a[0], &a[1]].cmp(&[&b[0], &b[1]])); }";
+        let out = propose_fix("unnecessary_sort_by", input);
+        assert!(out.is_none(), "borrow array key must not fire: {out:?}");
+    }
+
+    #[test]
+    fn whole_binding_tuple_element_not_fired() {
+        // Probe: `(a.0, a)` — the whole binding as an element — is
+        // oracle-silent: the key copies the reference VALUE into K (no `&`
+        // token, same borrow). The Path arm of the guard.
+        let input =
+            "fn f(v: &mut Vec<(u8, Vec<u8>)>) { v.sort_by(|a, b| (a.0, a).cmp(&(b.0, b))); }";
+        let out = propose_fix("unnecessary_sort_by", input);
+        assert!(out.is_none(), "whole-binding element must not fire: {out:?}");
+    }
+
+    #[test]
+    fn consumed_ref_arg_key_still_fires() {
+        // Probe: a reference as a CALL argument is oracle-MA — the callee
+        // consumes it and the key value stays owned. Must keep firing.
+        let input = "fn g(s: &u8) -> u8 { s.wrapping_add(1) }\n\
+            fn f(v: &mut Vec<K>) { v.sort_by(|a, b| g(&a.k).cmp(&g(&b.k))); }";
+        let out = propose_fix("unnecessary_sort_by", input).expect("matched");
+        assert!(out.contains("v.sort_by_key(|a| g(&a.k))"), "got: {out}");
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn non_binding_ref_method_arg_key_still_fires() {
+        // Probe: a reference to a NON-binding is oracle-MA — no borrow into
+        // the closure param exists. Must keep firing (the guard is the AST
+        // value-position walk, not the `&` token).
+        let input = "fn f(v: &mut Vec<P>) { v.sort_by(|a, b| a.dist(&O).cmp(&b.dist(&O))); }";
+        let out = propose_fix("unnecessary_sort_by", input).expect("matched");
+        assert!(out.contains("v.sort_by_key(|a| a.dist(&O))"), "got: {out}");
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn ref_binary_operand_key_still_fires() {
+        // Probe: `(a.0, a.1 + &a.2)` — the ref is a binary OPERAND — is
+        // oracle-MA (the Add impl consumes it). Must keep firing.
+        let input = "fn f(v: &mut Vec<(u8, u8, u8)>) { v.sort_by(|a, b| (a.0, a.1 + &a.2).cmp(&(b.0, b.1 + &b.2))); }";
+        let out = propose_fix("unnecessary_sort_by", input).expect("matched");
+        assert!(
+            out.contains("v.sort_by_key(|a| (a.0, a.1 + &a.2))"),
+            "got: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 
