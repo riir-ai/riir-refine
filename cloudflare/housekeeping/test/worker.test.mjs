@@ -420,6 +420,61 @@ test("backfill is bounded: days clamps and the window walks back", async () => {
   for (const d of days) assert.ok(d <= "20260827", `wrote a day after \`end\`: ${d}`);
 });
 
+// ---- T9f: exhausting `days` is a truncation, and must say so --------------
+//
+// A walk that completes `days` days without tripping a budget used to report
+// `truncated:false, next_end:null` — indistinguishable from "the retrievable
+// window is now fully archived". It is not: MAX_BACKFILL_DAYS (14) is less
+// than half of GraphQL's ~31 d retention, so the runbook's `?days=14` from
+// today never reaches days 15-31. Measured against prod on 2026-08-29:
+// 2026-08-14 held 2 real container-usage hours (est $0.032696) that the
+// default call could not see and the cron will never write, because the cron
+// only ever writes the CURRENT hour. The archive was silently short by a day
+// that cost real money.
+
+test("a completed `days` walk still yields a cursor while retention remains", async () => {
+  const kv = kvStub();
+  const e = env(kv, { READ_TOKEN: "s3cret" });
+  // 14 days ending 2026-08-28 covers back to 2026-08-15; retention reaches
+  // ~2026-07-29, so there is plenty left and the caller must be told.
+  const body = await (await postBackfill(e, "?days=14&end=2026-08-28", { token: "s3cret" })).json();
+
+  assert.equal(body.truncated, true, "a 14-day slice of a 31-day window is not complete");
+  assert.equal(body.truncated_by, "max_days");
+  // The cursor must name the next OLDER unvisited day, so a resume loop loses
+  // nothing and repeats nothing.
+  assert.equal(body.next_end, "2026-08-14");
+  assert.ok(!body.per_day.some((r) => r.day === "20260814"),
+    "cursor points at a day this call already walked — resuming would skip work");
+  // And it must say what it actually covered, not just where retention ends.
+  assert.deepEqual(body.covered, { from: "20260815", to: "20260828" });
+});
+
+test("the cursor stops at the retention floor instead of looping on dead days", async () => {
+  // Symmetric failure: a cursor that never goes null turns the runbook's
+  // resume loop into an unbounded spend against days GraphQL cannot answer.
+  const kv = kvStub();
+  const e = env(kv, { READ_TOKEN: "s3cret" });
+  // NOW is 2026-08-28, so the floor is 2026-07-29. Ending at 2026-08-11 with
+  // 14 days covers back to 2026-07-29 — exactly the floor, nothing older.
+  const body = await (await postBackfill(e, "?days=14&end=2026-08-11", { token: "s3cret" })).json();
+
+  assert.equal(body.truncated, false, "nothing retrievable remains older than the floor");
+  assert.equal(body.next_end, null);
+});
+
+test("the backfill note does not claim more coverage than one call gives", async () => {
+  // The old note spoke only of the retention edge, which reads as "everything
+  // still retrievable was covered". Prose is the surface an owner acts on.
+  const kv = kvStub();
+  const e = env(kv, { READ_TOKEN: "s3cret" });
+  const body = await (await postBackfill(e, "?days=14&end=2026-08-28", { token: "s3cret" })).json();
+  assert.match(body.note, /ONE call covers/);
+  assert.match(body.note, /next_end/);
+  assert.ok(!/genuinely gone\. Existing rows/.test(body.note),
+    "the retention-only note is what made a partial walk read as complete");
+});
+
 test("backfill drops groups whose datetimeHour is missing, never guesses", async () => {
   // A whole day's usage filed under a guessed hour is worse than a gap.
   const kv = kvStub();

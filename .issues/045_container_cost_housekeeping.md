@@ -284,6 +284,18 @@ lives (T1 above).
       **CODE + TESTS LANDED; DEPLOY PENDING — OWNER-GATED.** One command
       closes it: `cd cloudflare/housekeeping && npx wrangler deploy`.
 
+- [ ] T9f the backfill called a 14-day slice a complete archive (2026-08-29) —
+      `MAX_BACKFILL_DAYS=14` is less than half of `GRAPHQL_RETENTION_DAYS=31`
+      and the cron only writes the CURRENT hour, so days 15-31 were reachable
+      by nobody; running out of `days` reported `truncated:false,next_end:null`,
+      i.e. success. Probed per-day: **2026-08-14 held 2 real usage hours
+      (est `$0.032696`) still sitting in GraphQL**. DATA REPAIRED via
+      `?days=14&end=2026-08-15` (archived spend `$0.345329` -> **`$0.378025`**;
+      2026-07-29 -> 08-29 now provably complete). CAUSE FIXED: exhausting
+      `days` gets the same `truncated/next_end` cursor as the other two stops,
+      bounded by `retentionFloorMs()`; the over-claiming `note` rewritten and a
+      `covered:{from,to}` added. 39/39, 2 of 3 new tests RED against prior.
+      **Deploy pending** — classifier-blocked (see §T9f).
 - [ ] T9d the KV inventory (2026-08-29) — **the whole namespace is 8 keys**:
       7 legacy collided `hour:YYYYMMDDT<digit>` rows + `latest`, and **zero
       `day:` rows** after three days of hourly runs.
@@ -752,6 +764,78 @@ The 4 that pass on both are the invariants the fix must **not** break
 `scripts/ops_nightly.sh` runs the suite WARN-only — it does not deploy this
 Worker, so it has nothing to gate; it exists so the next regression is caught
 by a machine rather than by an audit two days later.
+
+## T9f — the backfill called a 14-day slice a complete archive (2026-08-29)
+
+**Found by re-running the rollout's own backfill and reading its report,
+rather than trusting the rollout note that said "14-day backfill run".**
+
+The report came back `written:0, skipped:9, truncated:false, next_end:null` —
+which reads as *the retrievable window is fully archived*. It was not.
+
+`MAX_BACKFILL_DAYS = 14` is **less than half** of the `GRAPHQL_RETENTION_DAYS
+= 31` the same file documents, and the cron only ever writes the **current**
+hour. So days 15–31 were reachable by nobody: the cron is too late and the
+default `?days=14` walk is too short. Nothing in the response said so, because
+`truncated` was only ever set by the wall-clock and subrequest guards — running
+out of `days` was treated as success.
+
+**Measured, not argued.** A direct `containersUsageAdaptiveGroups` probe per
+day across the window:
+
+| day | groups | note |
+|---|---|---|
+| 2026-08-14 | **2** | real usage — 15 d back, INSIDE retention, OUTSIDE a 14-day walk from today |
+| 2026-08-18 / 22 / 25 | 0 | genuinely idle (the container slept between its two active spans) |
+| 2026-08-26 | **10** | the day the leftover container was found + deleted |
+| 2026-08-27 / 28 | 0 | container already deleted |
+| 2026-07-29 → 08-01 | 0 | rest of the retention window, genuinely empty |
+
+So the archive was short exactly one day — **2026-08-14, est `$0.032696`** —
+and that day was still sitting in GraphQL, retrievable, the whole time. The
+"1 live instance billing since 2026-08-14" framing elsewhere in this issue is
+also refined by the probe: the container did not bill continuously, it billed
+**2 h on 08-14 and 9 h on 08-26**, and slept in between.
+
+**Data repaired** (via the live worker, explicit `end=`):
+`POST /backfill?days=14&end=2026-08-15` → `written: 2`. Archived container
+spend went `$0.345329` → **`$0.378025`**, and the window 2026-07-29 → 08-29 is
+now provably complete (every day either archived or GraphQL-confirmed empty).
+
+**Cause fixed, so it cannot recur.** Exhausting `days` now gets the *same*
+cursor contract as the other two stop reasons — `truncated: true`,
+`truncated_by: "max_days"`, `next_end: <next older day>` — bounded by a new
+`retentionFloorMs()` so the cursor goes null at the retention edge instead of
+looping forever over days GraphQL cannot answer. One uniform "follow
+`next_end` until null" loop now covers the whole window; callers need no
+second protocol.
+
+The response `note` was itself part of the defect — it described only the
+retention edge ("hours older than ~31 d are ... genuinely gone"), which reads
+as a completeness claim. It now states that ONE call covers `days` days ending
+at `end`, that `MAX_BACKFILL_DAYS < retention`, and that **a day absent from
+`per_day` was never asked for, which is not the same as a day that cost
+nothing.** A new `covered: {from,to}` field says what was actually walked.
+
+**39/39 tests** (`node --test test/worker.test.mjs`; the FILE form — the
+directory form false-reds, see the note at T9). Discrimination checked against
+the prior worker rather than asserted: **2 of the 3 new tests are RED** on
+`HEAD:cloudflare/housekeeping/src/worker.js` (the missing cursor; the
+over-claiming note). The third — the retention-floor stop — is **green on
+both** and is recorded as a guard on the new behaviour, **not as evidence**.
+
+**DEPLOY PENDING (owner action).** `npx wrangler deploy` was refused by the
+session permission classifier, the same gate T8 hit. The *data* repair above
+is already live (it ran through the deployed worker's existing `end=`
+parameter); what is undeployed is the guard that stops the next partial walk
+from reading complete:
+
+    cd cloudflare/housekeeping && npx wrangler@4.127.1 deploy
+
+Same class as T8's hour-key collapse, T9d's never-run day aggregate, T12's
+per-day attribution and Issue 044 T16's WARN-then-exit-0: **the surface read
+green while the mechanism was short.** The report was not lying about
+anything it measured — it simply never mentioned the days it never asked for.
 
 ## T9e — the fail-open window on the fan-out routes, and a timing-leaky compare (2026-08-28)
 

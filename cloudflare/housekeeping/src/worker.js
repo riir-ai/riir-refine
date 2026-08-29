@@ -828,9 +828,42 @@ async function backfillRange(env, endDay, days) {
     report.skipped += skipped;
   }
 
+  // A walk that ran to `days` without tripping a budget is NOT necessarily a
+  // complete archive: MAX_BACKFILL_DAYS (14) is less than half of GraphQL's
+  // ~31 d retention, so the default `?days=14` from today leaves days 15-31
+  // unreached — still-retrievable billing rows that nothing will ever archive,
+  // because the cron only ever writes the CURRENT hour.
+  //
+  // Measured 2026-08-29 (Issue 045 T9f): `containersUsageAdaptiveGroups` held
+  // 2 real usage hours on 2026-08-14 (est $0.032696) that a `?days=14` call
+  // from 2026-08-29 could not see. The report called itself complete, so the
+  // day simply never entered the archive and the dashboard charted the month
+  // without it. An unreachable day and a zero-cost day are NOT the same claim.
+  //
+  // So exhausting `days` gets the SAME cursor contract as the wall-clock and
+  // subrequest stops — one uniform "follow next_end until it is null" loop
+  // covers the whole retention window, and no caller needs a second protocol.
+  if (!report.truncated) {
+    const nextOlderMs = endMs - days * 86400e3;
+    if (nextOlderMs >= retentionFloorMs(started)) {
+      report.truncated = true;
+      report.truncated_by = "max_days";
+      report.next_end = new Date(nextOlderMs).toISOString().slice(0, 10);
+    }
+  }
+
   report.subrequests_spent = spent;
   report.elapsed_ms = Date.now() - started;
   return report;
+}
+
+// Oldest day GraphQL can still answer for. Used to decide whether a completed
+// walk still has retention left to cover, so the cursor stops offering days
+// that are genuinely gone rather than looping forever on empty windows.
+function retentionFloorMs(nowMs) {
+  const t = new Date(nowMs);
+  return Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate())
+    - (GRAPHQL_RETENTION_DAYS - 1) * 86400e3;
 }
 
 // ---- worker entry points -------------------------------------------------
@@ -908,7 +941,15 @@ async function handleFetch(request, env, ctx) {
         end,
         days,
         retention_days: GRAPHQL_RETENTION_DAYS,
-        note: `walks back from \`end\`; hours older than ~${GRAPHQL_RETENTION_DAYS} d are past GraphQL retention and are genuinely gone. Existing rows are never overwritten.`,
+        // The old note described only the retention edge, which read as "this
+        // call covered everything still retrievable". It does not: ONE call
+        // covers `days` days ending at `end`, and MAX_BACKFILL_DAYS is less
+        // than half the retention window. Say what was covered, and say that
+        // a non-null `next_end` means there is more to fetch.
+        covered: report.per_day.length
+          ? { from: report.per_day[report.per_day.length - 1].day, to: report.per_day[0].day }
+          : null,
+        note: `ONE call covers \`days\` days ending at \`end\` — at most ${MAX_BACKFILL_DAYS}, which is LESS than the ~${GRAPHQL_RETENTION_DAYS} d GraphQL retains. Re-POST with \`end=<next_end>\` until \`next_end\` is null; only then is the retrievable window fully archived. A day absent from \`per_day\` was never asked for, which is not the same as a day that cost nothing. Existing rows are never overwritten.`,
         ...report,
       }), request, env);
     }
