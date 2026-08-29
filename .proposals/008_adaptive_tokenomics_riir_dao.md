@@ -4,7 +4,7 @@ Status: **LANDED (advisory-only) — Phases 0–2 shipped, Phase 3/4 foreclosed 
 Branch: `develop` (per global rule — no feature branches)
 Owner: unassigned
 Fusion of: Proposal 005 §Economics (the economy governed) × the riir-clippy self-heal selection math (`SelectionMode::BetaPosterior` + Elo — now public substrate in `katgpt_core::rating` + `beta_lcb_order_into`, Bench 675) × riir-dapps epoch-settle/anchor (`KatLedger`, the exact-once ring, Merkle anchors — the apply+audit seam) × riir-dapps `FairRoll` (commit-reveal variance — the dopamine lever) × `src/llm_spend.rs` USD-cap discipline (the cost breaker precedent) × RAI's reflexive PI controller (prior art — §References, our differentiators named in §Honest caveats #8)
-Related: [Proposal 005](005_kat_heal_service_network.md), [Proposal 007](007_kat_usdc_staking.md) (the staking actuator), [riir-dapps Proposal 001](../../riir-dapps/.proposals/001_agreement_boundary_and_tiered_durability.md) (which lists tokenomics as out-of-scope for dapps — the boundary argument for this repo)
+Related: [Proposal 005](005_kat_heal_service_network.md), [Proposal 007](007_kat_usdc_staking.md) (the staking actuator), [riir-dapps Proposal 001](../../riir-dapps/.proposals/001_agreement_boundary_and_tiered_durability.md) (which lists tokenomics as out-of-scope for dapps — the boundary argument for this repo) Successor: [Proposal 010](010_kat_yield_ceiling_and_treasury_funded_free_tier.md) — the ledger-budget-rule half of this proposal's T1.4 re-open path (KAT-class yield ceiling + treasury-funded free tier); it does NOT re-roll G5 and does NOT ask for autonomy.
 
 ## TL;DR
 
