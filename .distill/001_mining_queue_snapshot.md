@@ -1284,6 +1284,32 @@ verify reverts, score-bench delta). Dev-time heal sessions append lines
 here (via the `cargo-heal` skill); idle-loop queue item 14 consumes
 top-down. Probe each class against real clippy FIRST.
 
+**Intake 2026-08-29 (Plan 581 twist_smc heal session, katgpt-rs):**
+
+- [x] **`neg_cmp_op_on_partial_ord` (nursery) → REFUSED-FOREVER class, no
+      corpus rule.** `!(a > b)` → `a <= b` is NaN-UNSAFE on floats:
+      `!(NaN > x)` is true, `NaN <= x` is false — the rewrite changes
+      semantics on the partial order the lint is NAMED for. An autofix
+      would be a wrong-code generator. Recorded in the cargo-heal skill
+      divergence table ("NaN-unsound negated comparisons") as the
+      canonical never-heal example; manual is the only correct fix shape
+      (decide NaN policy first). Evidence: miss (healer silent) + manual
+      fix landed `twist_cache.rs` (`span <= eps`, `sum <= 0.0`).
+- [x] **`type_complexity` (default, NotMachineApplicable upstream) →
+      REFUSED class, no corpus rule.** The fix invents a type name + a
+      declaration site — no bounded parse-only rewrite exists; clippy
+      itself does not suggest one. Manual (`type BoxedScorer = …`)
+      landed. Evidence: miss.
+- [ ] **`unusual_byte_groupings` (style, MachineApplicable) → corpus
+      candidate (LOW priority).** "digits of hex/binary/octal literal not
+      in groups of equal size" — bounded rewrite (regroup the literal),
+      but low frequency; sits behind the top-N frequency bar for the
+      corpus. Evidence: miss (2 sites, bench_692 harness hex seeds).
+      Probe before mining.
+- [x] **`unused_assignments` + hex-digit rustc-side lints → OUT OF SCOPE
+      by construction** (rustc lints, not clippy — the clippy_verify
+      oracle never sees them). No action.
+
 **Baseline state (2026-08-24):** memory.json = 8,235 trajectories, ALL
 unjudged (no outcomes — the CLI records applied; outcome verdicts need
 `--verify` runs; the sweep campaign validated manually so the verdict loop

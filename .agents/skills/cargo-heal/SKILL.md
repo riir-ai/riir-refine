@@ -67,6 +67,7 @@ REFUSES BY DESIGN (fix manually — the healer is SAFER than clippy here):
 | named-arg-with-rename (`{:<width$}`, `width = w`) | needs template rewriting |
 | nested macro args (`format!` inside `println!`/`assert_eq!`) | descent is format-family, one level |
 | guard-on-first-arm `match_bool`, `{0}`/dynamic-spec format args | rewrite shape not parse-provable |
+| NaN-unsound negated comparisons (`!(a > b)` → `a <= b`, the `neg_cmp_op_on_partial_ord` shape) | NOT equivalent on floats — `!(NaN > x)` ≠ `NaN <= x`; the rewrite silently changes NaN semantics (the only correct fix is semantic) |
 
 Semantic lints (`if_same_then_else`, …) are not heal class — owner call.
 
