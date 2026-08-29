@@ -337,8 +337,11 @@ choice of kill-switch band.
    re-measure. Only the residual after that is an honest training denominator, and it must be
    compared against TFix's ~67% and Getafix's 12–91%.
 4. **Arm the L4 seam with the arm that already passed** (Bench 049 CF-70B, 5–6/9) plus
-   CodeCureAgent's iterate-until-the-warning-clears loop. This is the largest measured win
-   available and needs no new artifact.
+   CodeCureAgent's iterate loop. This is the largest measured win available and needs no new
+   artifact. *Guard (2026-08-29 LGTM pass): the ENABLE flip stays owner-gated on leak-posture
+   sign-off (`.docs/10_self_evolve/l4_fallback.md` §5) — wiring may land opt-in-dark; and the
+   loop's keep criterion is the FULL gate (warning gone + no new warnings + compile + tests),
+   never "warning cleared" alone.*
 5. **Add the unlisted plumbing as explicit Phase-0 tasks**: parameterize the headroom span
    source; add a `ClippyOracle` repo-walk batch labeler. Nothing downstream can run without them.
 6. **Fix the corpus number** (548 total / 137 default-on / 41 clippy) wherever "~450" appears.

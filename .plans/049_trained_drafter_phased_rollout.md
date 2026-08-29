@@ -48,12 +48,18 @@ proposers (the T3.5.4 contamination lesson) — `clippy_oracle` labels everythin
       deterministic proposers (`dyn-to-enum`, `shrink-to-fit-after-build`, and whatever T0.2
       surfaces) — the Getafix/Sorald shape, zero training. Re-measure. Only the residual after
       this is an honest trained-arm denominator.
-- [ ] T0.0d **Cheapest real unblock, independent of this plan:** arm the L4 seam with the arm
-      that ALREADY passed — Bench 049 CF-70B strict-keep 5/9 (A) and 6/9 (B) vs decline 0/9 —
-      plus a CodeCureAgent-style iterate-until-the-warning-clears loop (arXiv:2509.11787:
-      96.8% plausible / 86.3% manually-correct on 1,000 SonarQube warnings, ~$0.029 each).
-      The proposal's "L4 sits UNARMED with no candidate shaped to beat decline" premise has
-      been false since 2026-08-26.
+- [ ] T0.0d **Cheapest real unblock, independent of this plan — OWNER-GATED FLIP:** wire the L4
+      seam to the arm that ALREADY passed — Bench 049 CF-70B strict-keep 5/9 (A) and 6/9 (B) vs
+      decline 0/9 — plus a CodeCureAgent-style iterate loop (arXiv:2509.11787: 86.3%
+      manually-correct on 1,000 SonarQube warnings, ~$0.029 each). The proposal's "L4 sits
+      UNARMED with no candidate shaped to beat decline" premise has been false since 2026-08-26.
+      **Two guards:** (a) the standing leak-posture decision (`.docs/10_self_evolve/l4_fallback.md`
+      §5: "the CF llama arm waits on the owner's leak-posture sign-off — no code change") owns the
+      ENABLE flip — the wiring + loop harness may land opt-in-dark ahead of sign-off, the flip
+      itself is the owner's; (b) the loop's KEEP criterion is CodeCureAgent's FULL gate, not
+      "warning cleared": warning gone + NO new warnings (the score-bench `created_rate` axis
+      must not regress) + compile + tests — otherwise deleting the offending code "clears" the
+      warning (never-wrong preserved).
 
 - [ ] T0.1 Oracle-label a fresh real-repo span set across the workspace repos (extend the
       `src/draft/clippy_oracle.rs` batch path; target ≥ 300 labeled spans; commit the dataset
@@ -110,7 +116,8 @@ proposers (the T3.5.4 contamination lesson) — `clippy_oracle` labels everythin
       `decline` and vs the CF-70B numbers, on the REFRESHED reachable set (G2).
 - [ ] T2.3 Miss-only reachability contract enforced: the trained drafter is consulted on L4
       misses exactly like `DaemonL4` (`a_parsing_modelless_fix_is_never_replaced_by_l4` holds).
-- [ ] T2.4 Gates: G2 + G6 (headroom band 0 → nonzero). Record the bench.
+- [ ] T2.4 Gates: G2 + **G6'-residual** (the proposer-coverage band the T0.0c proposers leave
+      behind — the voided G6 selection-band wording no longer applies). Record the bench.
 
 ## Phase 3 — PUCT search on contested spans (the moka transfer proper; only if Phase 1–2 win)
 
@@ -136,8 +143,10 @@ proposers (the T3.5.4 contamination lesson) — `clippy_oracle` labels everythin
 - [-] AST-path representation refinement (code2vec-style paths) — only if the token bi-encoder
       plateaus below G2; cite-and-verify code2vec/TBCNN at that point (search quota was
       exhausted at proposal time).
-- [-] CF llama / Bonsai serving-lane changes — untouched; this artifact is a separate
-      domain-trained arm, and the existing leak-posture gate stays.
+- [-] CF llama / Bonsai serving-lane ENABLE flip — still owner-gated on leak-posture sign-off
+      (`.docs/10_self_evolve/l4_fallback.md` §5). The T0.0d wiring + iterate-loop harness may
+      land opt-in-dark ahead of it; only the flip waits. (v1's "untouched" wording superseded
+      by T0.0d's re-plan.)
 - [-] 4090 training — only if M3 Metal cannot converge the towers in reasonable time; check
       GPU exclusivity per the standing rule first.
 
