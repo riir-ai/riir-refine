@@ -1,6 +1,6 @@
 # Proposal 009 — Trained clippy drafter: the moka-PUCT transfer (bounded draft-and-verify for the healer)
 
-Status: **draft** (proposal only — execution waits on the owner go + [Plan 049](../.plans/049_trained_drafter_phased_rollout.md))
+Status: **REVIEWED 2026-08-29 — verdict REFRAME (not CONDITIONAL GO).** Phase 1 (bi-encoder pool prior) is NO-GO on committed evidence (Bench 043 raw table 3: selector-addressable band 0, pool@16 100%); Phase 2 (proposer coverage) is promoted; Phase 0 re-points at the proposer-coverage band and needs two unlisted plumbing tasks. Three premises measurably wrong (corpus ~450→41 relevant; L4 "unarmed" stale per Bench 049; prior-art gap TFix/Getafix/CodeCureAgent/PredicateFix). See §Review verdict at the end.
 Branch: `develop` (per global rule — no feature branches)
 Owner: unassigned
 Fusion of: moka PUCT (katgpt-rs Issues 204–207 / Bench 205) × [Research 001](../.research/001_self_evolving_latent_first_agent.md) "Model evolution" (the deferred category) × [Plan 017](../.plans/017_dflash2_selection_headroom_poc.md) headroom instrument × [Plan 014](../.plans/014_clippy_bench.md) score-bench × the `l4_lora` seam
@@ -226,3 +226,124 @@ Gated per-phase; the full promotion gate before any default flip:
 an opt-in feature with decline as default, gated on G1–G6 with the Plan 017 instrument as the
 Phase-0 kill switch. Next action: run [Plan 049](../.plans/049_trained_drafter_phased_rollout.md)
 Phase 0 (refresh + measure the trainable band) before any training code is written.
+
+---
+
+## Review verdict — 2026-08-29 (adversarial re-read, evidence re-grepped + online prior-art sweep)
+
+**Verdict: REFRAME — not CONDITIONAL GO as filed.** Phase 1 is **NO-GO on already-committed
+evidence**; Phase 2 is the only phase with a non-empty denominator and should be promoted to
+Phase 1; Phase 0's kill switch points at the wrong band AND is not executable as written.
+Three of the proposal's load-bearing premises are measurably wrong.
+
+### F1 — Phase 1's band is not "unmeasured", it is *already decomposed and empty*
+
+Proposal §design: "the trained bi-encoder's entire value proposition is adding type/semantic
+signal the parse-only features lack." [Bench 043](../.benchmarks/043_dflash2_selection_headroom_negative.md)
+raw table 3 already attributes every residual miss:
+
+| cause | spans | recoverable by |
+|---|---|---|
+| type-blind exclusion | 4 | `RerankMode::All` — **already shipped**, declined on precision (Bench 022/027) |
+| pool depth | 1 | `RERANK_POOL` 12→16 — a constant |
+| unfixable target (no proposer) | 2 | **writing the proposer** |
+| selector-addressable | **0** | — |
+
+Bench 043 also measures **zero retrieval misses at any depth** — `pool@16 = 100.0%` on every
+surface. A tower whose output is *a score over a pool that always contains the answer* has a
+structural ceiling of 4 fixture spans, and those 4 are not a missing-signal problem: `All`
+already promotes them and was rejected because it over-matches on production code
+(`created_rate`). So Phase 1's real ask is "be more precise than a blunt on/off rule on 4
+spans" — that is Plan 017's refuted selector wearing trained weights, which is exactly the
+failure mode caveat #1 warns about. It should be killed on the existing evidence, not
+re-litigated with a GPU.
+
+### F2 — the corpus-sizing argument is off by ~10× in the direction that matters
+
+Proposal: "the corpus is frozen at ~450 rules (too small to train a generator, exactly right
+to train a classifier+slot-filler)." Measured `.benchmarks/corpus_history.jsonl` 2026-08-29:
+
+```
+clippy_lints 41 · rust_perf 94 · sec 11 · docker 2 · kernel_opt 400   (total 548)
+```
+
+**400 of 548 (73%) are `kernel_opt`** — a default-OFF GPU-kernel domain that the decline/L4
+lane does not serve. The corpus the clippy drafter would actually classify over is
+**41 clippy lints** (+94 perf rules). "41 classes, pool recall already 100%@16" is a
+materially weaker training proposition than "~450 rules". Fix the number before re-arguing
+the design.
+
+### F3 — the motivating claim "the L4 seam sits UNARMED with no candidate shaped to beat decline" is stale
+
+[Bench 049](../.benchmarks/049_fixer_regate_poc.md) resolved 2026-08-26: CF llama-3.3-70B
+strict-keep **5/9 (arm A) and 6/9 (arm B)** vs **decline 0/9** — "**RESOLVED — the falsifiable
+question answers YES**". An arm shaped to beat decline exists and has already met the bar; it
+is simply not wired into `HealPipeline`. The cheapest path to closing real-repo misses is
+**arming the seam with the measured arm**, not training a new artifact to re-win a bar
+something else already won.
+
+### F4 — Phase 0 is not executable as written (concrete plumbing gap)
+
+- `decompose_headroom()` (`src/draft/headroom_probe.rs:466`) takes **no arguments** and reaches
+  `run_headroom_probe_with(RerankMode)` → `labeled_eval_spans()`
+  (`src/draft/retrieval_eval.rs:480`), which iterates two hardcoded consts
+  (`eval_fixtures_clippy::CLIPPY_SPANS`, `eval_fixtures_perf::PERF_SPANS`). There is **no span-set
+  injection point**. Plan 049 T0.2 says "re-run `decompose_headroom()`" on a refreshed real-repo
+  set — that cannot be done without first parameterizing the span source.
+- `ClippyOracle` (`src/draft/clippy_oracle.rs`) exposes `lints_for(&str)` only — a
+  single-snippet API. T0.1's "extend the batch path" is writing a batch path, not extending one.
+
+Both are ordinary work, but they are **unlisted tasks on the critical path of a kill switch**,
+and the plan reads as if the instruments already accept the new inputs.
+
+### F5 — prior-art gap: the four closest papers are missing, and the search excuse does not hold
+
+The proposal cites code2vec (2018) + TBCNN (2014) "from knowledge — MCP search quota exhausted
+(resets 2026-09-15)". Plain `WebSearch` answered on the first try today; the quota claim only
+covered the MCP path. The uncited competitors are each closer to this design than either
+representation paper:
+
+| Paper | Why it is load-bearing here |
+|---|---|
+| **TFix** (Berabi/He/Raychev/Vechev, ICML 2021) | *Literally Phase 2.* Fine-tuned T5 on linter warnings, 52 ESLint error types, **~67% correct fixes**. The "small specialist over bounded lint corpus" bet has a published number to beat — and TFix used **free text**, not bounded templates, contradicting the proposal's framing that free-text emission is the doomed shape. |
+| **Getafix** (Bader et al., OOPSLA 2019, deployed at Meta) | *Literally the modelless L1 + a learned ranker.* Anti-unification + hierarchical clustering of past fixes, context-based ranking; **top-1 exact human fix 12–91% by category**, 1,268 fixes. Shows the ranking win comes from edit-pattern generalization, not from a learned span embedding. |
+| **CodeCureAgent** (arXiv:2509.11787, 2025) | *Riir-clippy's verifier stack, already SOTA without a trained drafter.* Three-step approval — build → warning gone with no new warnings → tests pass — i.e. `clippy_verify` + `fix_verify`. **96.8% plausible / 86.3% manually-confirmed correct on 1,000 SonarQube warnings, 291 rules, $0.029 and ~4 min per warning.** This is the honest bar for "arm the L4 seam", and it is a general LLM in an agent loop. |
+| **PredicateFix** (arXiv:2503.12205, 2025) | The closest thing to the rule tower — and it wins by retrieving **the rule's predicates as a bridge**, a *symbolic* artifact, not a learned rule embedding: **+27.1–69.3% correct repairs over RAG baselines** (CodeQL, GoInsight). Suggests the cheap win on our side is richer rule-side symbolic evidence, which is what `RerankMode::Structural` already is. |
+| **Sorald** (arXiv:2103.12033) | 30 hand-written SonarQube template fixers — the `FIXABLE_LINTS` analogue, and evidence that proposer coverage is the ordinary, effective lever. |
+
+Phase 3's PUCT novelty claim also needs narrowing: tree search over partial patches with a
+policy prior is published (FLAMES; value-guided MCTS decoding). The transferable claim is the
+in-house *port*, which the proposal already correctly frames — but it should say so against
+these, not against AlphaZero alone.
+
+### What survives
+
+The **reframing** survives and is genuinely good: bounded output + verifier-gated correctness
+turns quality into an acceptance-rate problem, and that is the right response to the 0/60
+(Bench 467) generative failure. The **modelless-first tension resolution** and the **decline-is-
+default posture** survive. What does not survive is the phase order, the sizing, and the
+choice of kill-switch band.
+
+### Recommended re-plan (supersedes §Phased rollout)
+
+1. **Kill Phase 1 (bi-encoder pool prior).** Bench 043 is the negative; do not spend a GPU hour
+   re-deriving it. Re-open only if a *retrieval* miss (not selection) is ever measured.
+2. **Re-point the Phase-0 kill switch** from the selection band (known 0) to the
+   **proposer-coverage band**: of oracle-labeled real-repo spans, what fraction have the correct
+   rule at top-1 and **no proposer**? Bench 043 puts it at 2/101 on fixtures — nonzero, and the
+   only band Bench 043 says is real ("Writing the proposer is the fix, not selecting better").
+3. **Modelless-first before trained-first.** Write the missing deterministic proposers
+   (`dyn-to-enum`, `shrink-to-fit-after-build`, the Getafix/Sorald shape — zero training), then
+   re-measure. Only the residual after that is an honest training denominator, and it must be
+   compared against TFix's ~67% and Getafix's 12–91%.
+4. **Arm the L4 seam with the arm that already passed** (Bench 049 CF-70B, 5–6/9) plus
+   CodeCureAgent's iterate-until-the-warning-clears loop. This is the largest measured win
+   available and needs no new artifact.
+5. **Add the unlisted plumbing as explicit Phase-0 tasks**: parameterize the headroom span
+   source; add a `ClippyOracle` repo-walk batch labeler. Nothing downstream can run without them.
+6. **Fix the corpus number** (548 total / 137 default-on / 41 clippy) wherever "~450" appears.
+
+**Bottom line:** the mechanism is sound and the discipline is exemplary, but as phased this
+plan spends its first (and most expensive) phase attacking a band its own committed instrument
+already measured at zero, while the band that instrument says is real — proposer coverage — is
+deferred to Phase 2 and is addressable **modellessly**. Reframe, do not cancel.
