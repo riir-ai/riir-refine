@@ -794,6 +794,7 @@ the days that need one.
   (`covers_unix` = the settled day, aggregate remainder only — no model
   dimension), `ops_nightly.sh` runs it + commits the ledger, and the
   launchd schedule is installed. The standing 2026-08-28 drift (ledger
-  0.00 vs analytics 132.84) settled in the filing session. See
-  `.issues/057_ledger_settlement_automation.md`.
+  0.00 vs analytics 132.84) settled in the filing session. Issue 057
+  RESOLVED + removed (2026-08-29) per the noise-reduction rule — full
+  narrative in git history (`git log -- .issues/057_*`).
 - Numbering: allocated 044 (highwater 43 → 44).
