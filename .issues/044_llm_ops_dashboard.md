@@ -401,6 +401,36 @@ Verified with a CONTROL, so the test discriminates: with the guard removed and
 Full matrix re-run: `SUCCESS` 0 | `SCOPE-ERR` 2 | `TIMEOUT(124)` 2 |
 `SILENT-FAIL` 2 | `NO_DEPLOY` 0. shellcheck clean.
 
+### T15 validated in the wild + one remaining gap (2026-08-29)
+
+**T15 paid off, measurably.** `verify_dom.mjs` on the current committed
+dashboard now reports:
+
+```
+PASS: 40 rects across 25 charts; corpus 5 domains ys [11,37,63,89,115]
+```
+
+**Five** domains — docker landed. The pre-T15 gate hard-pinned
+`ys.length === 4` and `[11,37,63,89]`, so it would be RED right now, and since
+T14 made this gate hard-block the deploy, the nightly would be refusing to ship
+a perfectly correct dashboard. Deriving the expected count from the page's own
+`DOMAINS` list, instead of pinning a literal, is exactly what averted that.
+This is the first time the fix has been exercised against a real domain
+addition rather than a simulated one.
+
+**Remaining gap (not fixed here — different owner, low severity):** the
+GitHub-Actions path in `.github/workflows/ops_dashboard.yml` deliberately does
+NOT go through `scripts/ops_nightly.sh` (documented at its lines 45-48; it runs
+its own steps), so it inherits **T16.2's post-deploy verification not at all**.
+It does fail loudly on a bad exit — GH Actions `run:` is `bash -e`, so a failed
+`wrangler deploy` fails the job, unlike the nightly's original WARN-only — so
+what it lacks is only the "did production actually RECEIVE it" half. Two deploy
+paths, one verified. Worth reconciling when someone next touches that workflow.
+
+Confirmed harmless to CI: that workflow sets `CLOUDFLARE_API_TOKEN` itself and
+calls `wrangler` directly, so T16.1's `env -u CLOUDFLARE_API_TOKEN` (which is
+scoped to the nightly script) cannot strip its credential.
+
 ### T16.3 — the least-privilege deploy path was 100% broken (2026-08-29)
 
 The `CF_DEPLOY_API_TOKEN` branch added on top of T16.1 could never deploy:
