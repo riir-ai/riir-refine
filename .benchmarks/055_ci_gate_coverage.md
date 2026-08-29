@@ -2,6 +2,13 @@
 
 **Status: LANDED 2026-08-28.** `scripts/ci_feature_guard.sh` Layer 5c
 de-allowlisted + Layer 5d (zero-test detector) added.
+**Follow-up 2026-08-29:** Layer 5c had still never completed a run — a single
+un-annotated binary (`bonsai_retrieval_probe`: 6.7 GB GGUF, ~50 min in
+release, run in DEBUG with both tests loading the model concurrently at
+15.5 GB RSS) was consuming the entire sweep. 4 binaries finished in the 30 min
+before it; **26 finished in the 3 min after it was killed.** Both tests now
+`#[ignore]` with the cost in the reason — the policy this bench already wrote
+down, applied to the file that was missing it. See §Follow-up.
 
 ## The finding
 
@@ -56,6 +63,62 @@ The allowlist was also **buying nothing**. There is no `[[test]]` block in
 inner `#![cfg(feature = "...")]`. Layer 5a (`cargo clippy --all-targets
 --all-features`) already type-checks all 51. So naming a subset saved the
 *run* of 39 binaries, not their compile — and hid the other 39 to do it.
+
+## Follow-up 2026-08-29 — Layer 5c had still never completed a run
+
+De-allowlisting Layer 5c was correct, and the design statement below is
+correct: what stays out belongs in `#[ignore]`, in the test file, next to the
+reason ("network, model weights, hours-long"). **One binary was never given
+that annotation, and it was the one that needed it most** — so from the day
+Layer 5c landed, it had not once run to completion. Four prior attempts were
+each diagnosed as an environment problem (killed process, `nohup` vs
+SIGKILL, moved to `screen`). The environment was never the cause.
+
+`tests/bonsai_retrieval_probe.rs` is gated on `bonsai_retrieval`, which
+**`--all-features` turns on**. Its own module docs price it at **~50 min in
+RELEASE** for one test and mandate `--test-threads=1`. Layer 5c runs it in
+**debug**, with default threading, so **both** tests load the 6.7 GB
+Ternary-Bonsai GGUF **concurrently**:
+
+| | measured |
+|---|---|
+| RSS | **15.5 GB** (23.6% of machine memory) |
+| CPU | 199% |
+| elapsed when killed | 15 min, no output, still going |
+| binaries completed in the ~30 min before it | 4 |
+| binaries completed in the 3 min after it was killed | **26** |
+
+That last row is the whole finding. One test binary was consuming the entire
+run; everything downstream of it was simply never reached. The sweep is not
+slow — it was blocked.
+
+**Fix:** both tests marked `#[ignore]` with the cost in the reason string, and
+the module docs now carry the `--ignored` invocation plus *why* the annotation
+exists. This is not a new policy — it is the policy this bench already wrote
+down, applied to the file that was missing it.
+
+Pin verified to FIRE rather than assumed (a `--list` check proves nothing;
+it lists ignored tests too). The same binary, same features:
+
+    test dense_rerank_precision ... ignored, loads a 6.7 GB GGUF ...
+    test probe_cost            ... ignored, loads a 6.7 GB GGUF ...
+    test result: ok. 0 passed; 0 failed; 2 ignored; finished in 0.00s
+
+**15+ min and 15.5 GB -> 0.00 s.**
+
+Layer 5d is unaffected: it fails a `tests/*.rs` target that ran **zero**
+tests, and an all-ignored target reports `0 passed; 2 ignored`, not a silent
+empty binary. Worth stating explicitly, because "ignore everything" would
+otherwise be a way to launder a dead target past 5d — it is not, and 5d
+should keep it that way.
+
+**Standing hazard, not a one-off.** `--all-features` is a *superset* switch:
+any future feature that gates a weights-loading or hours-long test enters
+Layer 5c automatically and silently. The annotation is the only defense, and
+nothing enforces it. Siblings (`riir-ai`, `riir-train`) carry many
+GGUF-loading test files; whether each is annotated was NOT audited here and
+is left to those repos' owners rather than swept blind across concurrent
+agents' work.
 
 ## The fix
 

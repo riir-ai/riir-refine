@@ -5,8 +5,25 @@
 //! text. Run explicitly:
 //!
 //! ```bash
-//! cargo test --release --features bonsai_retrieval --test bonsai_retrieval_probe -- --nocapture --test-threads=1
+//! cargo test --release --features bonsai_retrieval --test bonsai_retrieval_probe \
+//!   -- --ignored --nocapture --test-threads=1
 //! ```
+//!
+//! ## Why both tests are `#[ignore]`
+//!
+//! `--all-features` enables `bonsai_retrieval`, so a plain
+//! `cargo test --all-features --tests` sweep used to pull this binary in and
+//! run BOTH tests -- in DEBUG, and in PARALLEL (two concurrent 6.7 GB model
+//! loads; measured 15.5 GB RSS, 199% CPU, still going at 15 min). The
+//! documented ~50 min is a RELEASE figure for ONE test, so a debug sweep is
+//! effectively unbounded. That is why the repo's all-binaries run had never
+//! once completed -- not a flake or a crash, just this probe.
+//!
+//! These are measurements, not gates: nothing regresses if a sweep skips
+//! them, and the `--test-threads=1` above is load-bearing (the parallel
+//! double-load is what made the memory pressure dangerous on a box shared
+//! with sibling agents). `#[ignore]` keeps the sweep bounded while the
+//! explicit invocation above still runs them in full.
 //!
 //! ## Why this is scope-limited, and how
 //!
@@ -51,6 +68,9 @@ fn gguf_present() -> bool {
 }
 
 #[test]
+#[ignore = "loads a 6.7 GB GGUF and runs a CPU ternary forward pass per embed; \
+           ~50 min in RELEASE (far worse in debug). A measurement probe, not a \
+           gate -- run it explicitly with the invocation in the module docs."]
 fn probe_cost() {
     use riir_rag::{BonsaiEmbedStrategy, BonsaiEmbedder, DenseEmbedder};
     if !gguf_present() {
@@ -106,6 +126,9 @@ fn cosine(a: &[f32], b: &[f32]) -> f32 {
 }
 
 #[test]
+#[ignore = "loads a 6.7 GB GGUF and runs a CPU ternary forward pass per embed; \
+           ~50 min in RELEASE (far worse in debug). A measurement probe, not a \
+           gate -- run it explicitly with the invocation in the module docs."]
 fn dense_rerank_precision() {
     use riir_rag::{BonsaiEmbedStrategy, BonsaiEmbedder, DenseEmbedder};
     if !gguf_present() {
