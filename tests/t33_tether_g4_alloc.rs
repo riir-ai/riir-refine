@@ -23,11 +23,36 @@ use riir_clippy::{
 
 struct CountingAllocator;
 
-static ALLOCS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+// Counted PER THREAD, not process-globally.
+//
+// A `static AtomicUsize` here was unusable: `cargo test` runs these tests on
+// parallel threads inside ONE process, so a sibling test's allocations landed
+// inside another test's `before..after` delta. Measured under the default
+// harness: `t33_g4_fit_never_allocates` saw **332** allocations against an
+// expected 0, from the ~70 000 its neighbour was making. Deterministic, not
+// flaky — this file could never pass Layer 5c (`--all-features --tests`),
+// which runs the harness at its default width.
+//
+// Serialising the tests with a mutex is NOT sufficient, and the difference is
+// only visible on repeat runs: the harness still spawns the other test threads
+// while one test is measuring, and those spawns allocate. That attempt left a
+// residual `fit allocs: 6` and still failed 1 run in 3.
+//
+// A thread-local is safe inside a `GlobalAlloc`: `const`-initialised and
+// `Cell<usize>` has no `Drop`, so access neither allocates nor registers a
+// destructor, and cannot re-enter the allocator. `try_with` additionally
+// tolerates access during thread teardown.
+//
+// Semantically equivalent for what is measured here — every path under test
+// (`TetherFit::observe`/`blend`, `HealPipeline::heal`) is single-threaded, so
+// there are no worker-thread allocations to miss.
+thread_local! {
+    static ALLOCS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
 
 unsafe impl std::alloc::GlobalAlloc for CountingAllocator {
     unsafe fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {
-        ALLOCS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let _ = ALLOCS.try_with(|c| c.set(c.get().wrapping_add(1)));
         unsafe { std::alloc::System.alloc(layout) }
     }
     unsafe fn dealloc(&self, ptr: *mut u8, layout: std::alloc::Layout) {
@@ -39,7 +64,7 @@ unsafe impl std::alloc::GlobalAlloc for CountingAllocator {
 static A: CountingAllocator = CountingAllocator;
 
 fn allocs() -> usize {
-    ALLOCS.load(std::sync::atomic::Ordering::Relaxed)
+    ALLOCS.with(std::cell::Cell::get)
 }
 
 /// The fit alone: 10 000 observations across ~600 windows must allocate
