@@ -22,7 +22,16 @@ set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOG="${REPO}/.benchmarks/ops_nightly.log"
 LOCK="${REPO}/.benchmarks/.ops_nightly.lock"
-ARTIFACTS=(".benchmarks/dashboard_coverage.json" "cloudflare/dashboard/public/index.html")
+# Every path the generator WRITES must be listed here, or the nightly dirties a
+# tracked file it never commits. `corpus_history.jsonl` was missing (found
+# 2026-08-29 by diffing the working tree after a real run, not by reading the
+# generator): it is written on BOTH generator paths, independent of --sweep,
+# and a new calendar day always appends a row -- so the schedule would leave it
+# permanently dirty. That is not cosmetic for an APPEND-ONLY HISTORY file in a
+# repo where sibling agents run bulk `git add -A` and `git checkout`: the row
+# either lands in someone else's unrelated commit, or is discarded and that
+# day is gone from the series with nothing recording the hole.
+ARTIFACTS=(".benchmarks/dashboard_coverage.json" ".benchmarks/corpus_history.jsonl" "cloudflare/dashboard/public/index.html")
 
 # PINNED ON PURPOSE. There is no package.json in cloudflare/dashboard, so a
 # bare `npx --yes wrangler` resolves the LATEST wrangler from the npm registry
