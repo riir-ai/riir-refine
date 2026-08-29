@@ -785,4 +785,15 @@ the days that need one.
   for two days. A chart cannot audit its own inputs — decode the raw
   timestamps. And "grep-verified" is not verification of field presence
   (the T5 `kat` claim): parse the file.
+- **2026-08-29 — settlement automation (issue 057, RESOLVED same day):** the
+  card's "append a settlement row" remedy was aimed at a human forever —
+  nothing wrote settlement rows (both prior rows were hand-appended), the
+  launchd nightly had no settlement step AND was never bootstrapped, and the
+  ledger was not in the nightly's ARTIFACTS commit list. `gen_dashboard.py
+  --settle` now appends one settlement row per completed drifting day
+  (`covers_unix` = the settled day, aggregate remainder only — no model
+  dimension), `ops_nightly.sh` runs it + commits the ledger, and the
+  launchd schedule is installed. The standing 2026-08-28 drift (ledger
+  0.00 vs analytics 132.84) settled in the filing session. See
+  `.issues/057_ledger_settlement_automation.md`.
 - Numbering: allocated 044 (highwater 43 → 44).

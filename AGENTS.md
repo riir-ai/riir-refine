@@ -2800,9 +2800,13 @@ T9 rollout EXECUTED — worker deployed, `READ_TOKEN` gate live (anon
 run), 4 core vars all SET in `.env` (`GROQ_API_KEY`, `CF_API_TOKEN`,
 `CF_DEPLOY_API_TOKEN`, `READ_TOKEN`). Remaining owner-gated (verified
 absent): `ALERT_WEBHOOK_URL` + `MONTHLY_BUDGET_USD` (paging — crossings
-still land in KV + `/status alerts_today` without them), `DASHBOARD_TOKEN`
-(auth gate ships OPEN by owner decision 2026-08-28), and the nightly
-launchd bootstrap (2 commands, plist at `scripts/com.riir.ops-nightly.plist`).
+still land in KV + `/status alerts_today` without them) and `DASHBOARD_TOKEN`
+(auth gate ships OPEN by owner decision 2026-08-28). The nightly launchd
+bootstrap is INSTALLED (2026-08-29, `launchctl print` verified; 01:23 local
+daily) and settlement is automated (issue 057): the nightly appends a
+settlement ledger row per completed account day that drifts from CF GraphQL,
+commits it (the ledger joined the nightly's ARTIFACTS list), and deploys —
+the reconciliation card can no longer accumulate silent drift.
 
 **Deploy hazard (Issue 044 T16.1, load-bearing):** wrangler honours
 `CF_API_TOKEN` as a deprecated alias of `CLOUDFLARE_API_TOKEN` — an

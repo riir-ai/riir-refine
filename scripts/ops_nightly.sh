@@ -38,7 +38,11 @@ LOCK="${REPO}/.benchmarks/.ops_nightly.lock"
 # repo where sibling agents run bulk `git add -A` and `git checkout`: the row
 # either lands in someone else's unrelated commit, or is discarded and that
 # day is gone from the series with nothing recording the hole.
-ARTIFACTS=(".benchmarks/dashboard_coverage.json" ".benchmarks/corpus_history.jsonl" "cloudflare/dashboard/public/index.html")
+# Same class, same day (issue 057): the ledger is written whenever --settle
+# appends a settlement row -- without it, a settled day would sit uncommitted
+# and a later checkout would turn it back into drift (re-settled as a
+# duplicate, or lost entirely once analytics retention expires).
+ARTIFACTS=(".benchmarks/dashboard_coverage.json" ".benchmarks/corpus_history.jsonl" ".benchmarks/llm_cost_ledger.jsonl" "cloudflare/dashboard/public/index.html")
 
 # PINNED ON PURPOSE. There is no package.json in cloudflare/dashboard, so a
 # bare `npx --yes wrangler` resolves the LATEST wrangler from the npm registry
@@ -191,8 +195,11 @@ else
 fi
 
 # ── 1. regenerate (re-measures healer coverage across the sibling repos) ──
-# --sweep shells out to cargo-heal per repo; 20 min is ~4x the measured cost.
-if timeout 1200 python3 "${REPO}/scripts/gen_dashboard.py" --sweep >> "${LOG}" 2>&1; then
+# --settle first appends settlement rows for completed account days whose
+# ledger attribution drifts from CF GraphQL (issue 057), so the regenerated
+# dashboard reflects the settled state in the same run. --sweep shells out to
+# cargo-heal per repo; 20 min is ~4x the measured cost.
+if timeout 1200 python3 "${REPO}/scripts/gen_dashboard.py" --sweep --settle >> "${LOG}" 2>&1; then
   log "regen OK"
 else
   log "FAIL regen (exit $?) — leaving artifacts untouched, no deploy"
@@ -222,7 +229,7 @@ if [ "${OPS_NIGHTLY_NO_COMMIT:-0}" != "1" ]; then
     git -C "${REPO}" add -- "${ARTIFACTS[@]}"
     git -C "${REPO}" -c user.name="ops-nightly" \
         -c user.email="ops-nightly@localhost" \
-        commit -q -m "chore(ops): nightly dashboard refresh (issue 044 T7)" \
+        commit -q -m "chore(ops): nightly dashboard refresh (issue 044 T7; settlement per issue 057)" \
         -- "${ARTIFACTS[@]}" && log "committed artifacts"
     # Push is best-effort: a race with a concurrent agent must never wedge the
     # schedule or rewrite anyone's history. No rebase, no force.

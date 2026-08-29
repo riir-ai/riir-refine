@@ -38,6 +38,12 @@ Usage:
   python3 scripts/gen_dashboard.py --sweep          # + re-measure coverage
                                                      # (slow: healer dry-run
                                                      # per repo)
+  python3 scripts/gen_dashboard.py --settle         # + settle completed
+                                                     # account days: append a
+                                                     # settlement ledger row
+                                                     # per drifting day
+                                                     # (issue 057; runs before
+                                                     # the data build)
   python3 scripts/gen_dashboard.py --out FILE.html  # override output path
 
 Output default: cloudflare/dashboard/index.html
@@ -566,6 +572,95 @@ def collect_cf_daily(days: int = 14) -> list[dict]:
         return []
     return [{"date": g["dimensions"]["date"],
              "neurons": g["sum"]["totalNeurons"] or 0.0} for g in groups]
+
+
+# ── 5a. automated settlement (issue 057) ───────────────────────────────────
+# The reconciliation card compares ledger-per-day against CF GraphQL billing
+# truth, but nothing ever WROTE the settlement rows — they were hand-appended
+# (7bdb710, 83d853c), so every completed account day drifted "100%
+# unreconciled" until a human noticed, and analytics retention (~1-3 days on
+# this account) silently expired the chance to fix it. This closes the loop:
+# for every COMPLETE day (strictly before today UTC — the current day is
+# still growing, so settling it would under-count) whose ledger attribution
+# disagrees with GraphQL beyond the card's own tolerance, append ONE
+# settlement row with covers_unix set to the day it settles (the Issue 044
+# T12 rule — never bucket by append time).
+#
+# Idempotency: settled-day detection reads the LEDGER FILE ITSELF, so an
+# appended-but-uncommitted row still blocks a duplicate on the next run; the
+# nightly's commit merely makes it durable.
+SETTLE_ARMS = {"settlement", "reconciliation"}  # "reconciliation" = the two hand-appended T12 rows
+
+
+def settle_reconciliation() -> int:
+    token = _cf_token()
+    if not token:
+        log("settlement skipped: no CF token (CF_API_TOKEN unset + no wrangler OAuth)")
+        return 0
+    cf_daily = collect_cf_daily()
+    if not cf_daily:
+        log("settlement skipped: no analytics days returned")
+        return 0
+    rows = load_ledger()
+    led = ledger_summary(rows)
+    settled_days = {
+        datetime.fromtimestamp(r["eff_ts"], tz=timezone.utc).strftime("%Y-%m-%d")
+        for r in rows if r.get("arm") in SETTLE_ARMS and r.get("eff_ts")
+    }
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    appended = 0
+    for g in cf_daily:
+        day = g["date"]
+        if day >= today:
+            continue  # incomplete day — analytics still growing
+        if day in settled_days:
+            continue
+        target = g["neurons"]
+        have = (led["per_day"].get(day) or {}).get("neurons") or 0.0
+        diff = target - have
+        # Same tolerance as the card: committed rows round to 2dp, so exact
+        # equality is not achievable — below 0.5% (floor 1 neuron) is noise.
+        if abs(diff) <= max(1.0, abs(target) * 0.005):
+            log(f"settlement: {day} already reconciled "
+                f"(ledger {have:.2f} vs analytics {target:.2f})")
+            continue
+        covers = int(datetime.strptime(day, "%Y-%m-%d")
+                     .replace(tzinfo=timezone.utc).timestamp())
+        row = {
+            "ts_unix": int(time.time()),
+            "covers_unix": covers,
+            "arm": "settlement",
+            # aiInferenceAdaptiveGroups has NO model dimension (probed
+            # 7bdb710) — the aggregate remainder cannot be attributed to a
+            # model, so name it honestly instead of guessing.
+            "model": "account/unattributed-aggregate",
+            "n": 0,
+            "client": None,
+            "server": {
+                "requests": 0,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                # The sign is carried honestly: a negative row is a
+                # legitimate correction (per-run rows can over-attribute
+                # from a laggy snapshot vs final billing).
+                "neurons": round(diff, 2),
+                "usd_list": round(diff * NEURON_USD, 7),
+                "free_alloc_pct_of_daily_10k": round(diff / 10_000.0 * 100.0, 1),
+            },
+            "kat": None,
+            "note": (f"automated settlement (issue 057): GraphQL account-day total "
+                     f"{target:.2f} n vs ledger-attributed {have:.2f} n at settle time; "
+                     "aggregate remainder — aiInferenceAdaptiveGroups has NO model "
+                     "dimension, per-model attribution is not derivable"),
+        }
+        with LEDGER.open("a") as f:
+            f.write(json.dumps(row) + "\n")
+        appended += 1
+        log(f"settlement: {day} appended {diff:+.2f} n "
+            f"(analytics {target:.2f} - ledger {have:.2f})")
+    if not appended:
+        log("settlement: nothing to settle")
+    return appended
 
 
 # ── 5b. containers (usage + metrics) ───────────────────────────────────────
@@ -1639,6 +1734,10 @@ def build_data(sweep: bool) -> dict:
 
 def main() -> int:
     sweep = "--sweep" in sys.argv
+    if "--settle" in sys.argv:
+        # BEFORE build_data: the freshly generated dashboard must show the
+        # post-settlement state, not one run behind.
+        settle_reconciliation()
     out = DEFAULT_OUT
     if "--out" in sys.argv:
         out = Path(sys.argv[sys.argv.index("--out") + 1])
