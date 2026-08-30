@@ -20,4 +20,5 @@ scripts/__pycache__/
 # `git add -A`, and an untracked log/lock is exactly what gets swept into
 # someone else's commit.
 .benchmarks/ops_nightly.log
+.benchmarks/ops_nightly.launchd.log
 .benchmarks/.ops_nightly.lock/
