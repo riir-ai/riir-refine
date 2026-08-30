@@ -1,6 +1,6 @@
 # Plan 049 — Trained clippy drafter: phased rollout (Proposal 009)
 
-Status: **BLOCKED ON RE-PLAN 2026-08-29 — review verdict REFRAME.** No code written. Phase 1 is CLOSED UNBUILT (Bench 043 already decomposed the band to 0 selector-addressable with pool@16 = 100.0% — G6's denominator is empty by construction, the Plan 017 failure mode repeating). Phase 2 is promoted to the new Phase 1 and re-scoped modelless-first. Phase 0 is re-pointed at the **proposer-coverage** band and gains two unlisted-but-required plumbing tasks (T0.0a/b). See [Proposal 009 §Review verdict](../.proposals/009_trained_clippy_drafter_moka_puct.md#review-verdict--2026-08-29-adversarial-re-read-evidence-re-grepped--online-prior-art-sweep).
+Status: **IN PROGRESS 2026-08-30 — T0.0a + T0.0b landed (`15ceebf`); still no trained code.** Phase 1 is CLOSED UNBUILT (Bench 043 already decomposed the band to 0 selector-addressable with pool@16 = 100.0% — G6's denominator is empty by construction, the Plan 017 failure mode repeating). Phase 2 is promoted to the new Phase 1 and re-scoped modelless-first. Phase 0 is re-pointed at the **proposer-coverage** band; its two plumbing tasks (T0.0a/b) landed 2026-08-30 — **T0.0c / T0.1 / T0.2 are the queued next units.** See [Proposal 009 §Review verdict](../.proposals/009_trained_clippy_drafter_moka_puct.md#review-verdict--2026-08-29-adversarial-re-read-evidence-re-grepped--online-prior-art-sweep).
 Branch: `develop` (per global rule — no feature branches)
 **Proposal:** [`.proposals/009_trained_clippy_drafter_moka_puct.md`](../.proposals/009_trained_clippy_drafter_moka_puct.md)
 Predecessor evidence: Bench 049 (CF-70B 5–6/9, decline 0/9), riir-train Plan 336 + Benches 463/467 (0/60 generative-LoRA failure), Plan 017 + Bench 043 (headroom instrument + negative), Plan 014 (score-bench axes), Research 001 (Model-evolution category), Research 077 (DFlash2).
@@ -36,14 +36,31 @@ proposers (the T3.5.4 contamination lesson) — `clippy_oracle` labels everythin
 > **proposer coverage**, and it is addressable **modellessly** (write the proposer). Re-point
 > the kill switch accordingly and do the modelless work first.
 
-- [ ] T0.0a **(plumbing, unlisted in v1 — blocks T0.2)** Parameterize the headroom span source.
+- [x] T0.0a **(plumbing, unlisted in v1 — blocks T0.2)** Parameterize the headroom span source.
       `decompose_headroom()` (`src/draft/headroom_probe.rs:466`) takes no arguments and reaches
       `labeled_eval_spans()` (`src/draft/retrieval_eval.rs:480`), which iterates two hardcoded
       consts (`eval_fixtures_clippy::CLIPPY_SPANS`, `eval_fixtures_perf::PERF_SPANS`). There is
       no injection point — "re-run the instrument on real-repo spans" is currently impossible.
-- [ ] T0.0b **(plumbing, unlisted in v1 — blocks T0.1)** Add a repo-walk batch labeler to
-      `ClippyOracle`. It exposes `lints_for(&str)` only (single snippet); T0.1 is writing a
-      batch path, not extending one.
+      **LANDED 2026-08-30 (`15ceebf`):** `run_headroom_probe_with_spans(mode, spans)` +
+      `decompose_headroom_with_spans(spans)`; the no-arg entry points are DEFINED as the
+      parameterized forms over `labeled_eval_spans()`, so injection can never silently change
+      what the default measures (delegation pinned by test, both directions); `OwnedEvalSpan`
+      widened to `pub`.
+- [x] T0.0b **(plumbing, unlisted in v1 — blocks T0.1)** Add a repo-walk batch labeler to
+      `ClippyOracle`. It exposes `lints_for(&str)` only (single snippet); T0.1 is writing a batch
+      path, not extending one.
+      **LANDED 2026-08-30 (`15ceebf`):** `ClippyOracle::lints_for_batch(&[&str])` — ONE clippy
+      over a BLAKE3-keyed, one-module-per-snippet probe crate; diagnostics attributed by
+      primary-span file, component-wise (a 14-snippet batch's s13 never bleeds into s1).
+      **Measured contract (the agreement gate caught it live):** a hard error anywhere in the
+      probe crate suppresses rustc's late lint passes CRATE-WIDE, so a mixed batch's clean
+      modules were never emitted and would have mislabeled as silently-clean — a batch is
+      therefore trusted ONLY when the whole probe crate compiled; otherwise it falls back to
+      per-snippet `lints_for` runs wholesale (pinned by the agreement + wholesale-fallback
+      gates). `draft::span_source` hoists the cargo-heal bin's `collect_source_files` (the bin
+      now delegates — one walker, no drifting copies) + `collect_source_files_sorted` for
+      BLAKE3-committed dataset walks. Validation: clippy `-D warnings --all-targets`
+      (latent_retrieval,clippy_verify) green; latent lib suite 1017/0/1 (14 new tests).
 - [ ] T0.0c **Modelless-first, before any training denominator exists:** write the missing
       deterministic proposers (`dyn-to-enum`, `shrink-to-fit-after-build`, and whatever T0.2
       surfaces) — the Getafix/Sorald shape, zero training. Re-measure. Only the residual after
