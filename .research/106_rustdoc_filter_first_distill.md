@@ -1,6 +1,10 @@
 # Research 106 — Distill verdict: noahlev.org "How I made Rustdoc 33% faster" → rust_perf
 
-**Status:** DISTILLED — pending owner decision
+**Status:** RECORD — Batch 91 landed 2026-08-31 (Plan 052; both rules
+`filter-before-expensive-transform` + `decision-projection-before-construction`
+measured ParetoDominant 3/0/0, verdict-stable ×2; mine-time verification
+included the PR 159623 diff read — the guard is un-normalized raw-ty-data,
+the post-filter + the entire Deref-chain machinery deleted)
 
 - **Source:** <https://noahlev.org/blog/2026/08/27/making-rustdoc-faster/> + the four linked rust-lang PRs: [#159623](https://github.com/rust-lang/rust/pull/159623) (filter-first, 20%), [#159721](https://github.com/rust-lang/rust/pull/159721) (local-primitives gate, 12%), [#159779](https://github.com/rust-lang/rust/pull/159779) (documented-types-only synthesis, 6%), [#159854](https://github.com/rust-lang/rust/pull/159854) (self-type head before `param_env`, 18%).
 - **Inspection date:** 2026-08-29 (article fully read; PR diffs NOT read — unverified, re-read at mine time).

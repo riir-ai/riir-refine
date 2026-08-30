@@ -25,7 +25,19 @@
 
 91 rules across 12 categories (rust-optimize skill checklist +
 nnethercote/perf-book + rustc-hash/bevy real-world patterns + the hotpath-rs
-profiling guide, Research 032; **now 94 rules — Batch 86 (2026-08-29,
+profiling guide, Research 032; **now 96 rules — Batch 91 (2026-08-31,
+Research 106 — the Rustdoc filter-first distill, Plan 052, from noahlev.org
+"Making Rustdoc 33% faster" + rust-lang PRs 159623/159779/159854) added
+`filter-before-expensive-transform` (iterators; **ParetoDominant
+11.85/11.30/6.61× at 1K/30K/300K, verdict-stable ×2, alloc axis EXACT
+300,014 → 18,764** — map(expensive).filter(relevant) → re-express the
+predicate on the RAW input and filter first; win ∝ discard-fraction ×
+transform cost; IMPOSSIBLE when the predicate is not re-expressible on the
+input; composes with filter-map-fuse) and
+`decision-projection-before-construction` (complexity; **ParetoDominant
+24.58/24.38/24.37×, alloc axis EXACT 300,000 → 0** — transform-then-project
+to decide → compute the invariant projection on the raw input; the
+invariance precondition is pinned as a test); Batch 86 (2026-08-29,
 Research 100 — the Cloudflare Big Pineapple DNS-cache memory distill, Plan
 047, found via online perf search) added `serialize-once-byte-buffer-store`
 (allocation; **ParetoDominant 4.26/3.52/2.90× at 1K/10K/100K, verdict-stable

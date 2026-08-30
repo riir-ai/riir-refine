@@ -9,9 +9,9 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //! unconditional wins + honestly NotBenchable rules.
 //!
-//! 94 entries across 12 categories (complexity 17, allocation 22, simd 8,
-//! layout 9, iterators 9, concurrency 8, io 4, arithmetic 8, dispatch 3,
-//! caching 4, bevy 1, wasm 1). 82 are benchable; 12 are honestly
+//! 96 entries across 12 categories (complexity 18, allocation 22, simd 8,
+//! layout 9, iterators 10, concurrency 8, io 4, arithmetic 8, dispatch 3,
+//! caching 4, bevy 1, wasm 1). 84 are benchable; 12 are honestly
 //! NotBenchable (8 external-runtime/size-class + 2 metric-mismatch (Issue
 //! 014) + the x86-only prefetch annotation (Batch 85) + the bitflag size
 //! axis (Batch 86)).
@@ -74,6 +74,18 @@
 //! costs (size-class rounding, locality scatter, the rare variant pays
 //! more).
 //!
+//! Batch 91 (2026-08-31, Research 106 — the Rustdoc filter-first distill,
+//! noahlev.org "Making Rustdoc 33% faster" + rust-lang PRs 159623/159779/
+//! 159854) added filter-before-expensive-transform (Rustdoc built the
+//! display representation for EVERY trait impl in the dependency graph,
+//! THEN filtered; the fix re-expresses the relevance predicate on the raw
+//! input and filters first — win ∝ discard-fraction × transform cost,
+//! IMPOSSIBLE when the predicate is not re-expressible on the input) and
+//! decision-projection-before-construction (the decision consumes only a
+//! cheap projection that is INVARIANT under an expensive canonicalization
+//! — the head of a type — so compute the projection on the raw input and
+//! pay the canonicalization only behind the decision).
+//!
 //! ## Bench specs (behind `rust_perf_bench`)
 //!
 //! Benchable rules carry an optional [`BenchSpec`] — a self-contained harness
@@ -81,7 +93,7 @@
 //! `run_buggy` / `run_fixed` entry points. The bench validator generates a
 //! temp bin crate from the spec + runs a timing loop at multiple sizes.
 //!
-//! Currently benchable (82/94):
+//! Currently benchable (84/96):
 //! - `o1-lookup` (Vec scan vs HashMap lookup — clear O(n) vs O(1))
 //! - `bsearch-sorted-slice` (linear scan vs binary search — O(n) vs O(log n) on sorted data)
 //! - `dedupe-hashset-vs-vec` (Vec::contains loop vs HashSet collect — O(n²) vs O(n))
@@ -160,8 +172,10 @@
 //! - `serialize-once-byte-buffer-store` (per-record heap fields → ONE length-prefixed byte buffer + offset table — 2 allocations total, copy-out rebuild; Batch 86, Cloudflare DNS-cache distill)
 //! - `context-equal-field-elide` (per-record field equal to the enclosing context → Option<Box<T>> None, resolved at read — Batch 86, Cloudflare DNS-cache distill)
 //! - `bitflag-pack-when-footprint-dominates` (bool cluster → one bitflag byte, stored-at-scale footprint regime — Batch 86, annotated)
+//! - `filter-before-expensive-transform` (map(expensive).filter(relevant) → filter-first on the RAW input — win ∝ discard × transform cost; Batch 91, Rustdoc filter-first distill)
+//! - `decision-projection-before-construction` (transform-to-decide → decide on the invariant raw projection, canonicalize only behind the decision — Batch 91, annotated)
 //!
-//! Not benchable (12/94) — honest:
+//! Not benchable (12/96) — honest:
 //! - `layout-reorder` (struct size — deterministic `size_of`, not a runtime
 //!   microbench; the cache-utilization claim needs a specific access pattern)
 //! - `repr-u8-enum` (enum size — deterministic `size_of`, same class as
@@ -188,7 +202,7 @@
 //!
 //! ## Context-dependent rules (`context_notes`)
 //!
-//! Thirty-seven rules carry a `context_notes` annotation (as of Batch 86;
+//! Thirty-nine rules carry a `context_notes` annotation (as of Batch 91;
 //! this prose last walked then). Ten record that
 //! the Pareto validator found them **ParetoDominated** or **Mixed** in the
 //! default configuration: the original 4 from Bench 013 (`precompute-table`,
@@ -203,7 +217,10 @@
 //! (`newton-refinement-vs-hardware-transcendental`, `debug-assert-length-hoist`)
 //! and Batch 65's two (the arch-granularity caveat on `align-64-false-sharing`,
 //! a clean winner whose FIX is arch-dependent; and the pipeline-overlap
-//! regime on `channel-send-batching-unpark`) complete the set. The patterns
+//! regime on `channel-send-batching-unpark`) complete the set; Batch 91's
+//! two (the two-regime note on `filter-before-expensive-transform`, the
+//! invariance-precondition note on `decision-projection-before-construction`)
+//! extend it. The patterns
 //! are genuine wins in their respective regimes and are kept in the corpus as
 //! documented patterns, but consumers should treat annotated rules as
 //! context-dependent — not unconditional suggestions.
@@ -213,12 +230,12 @@ use crate::domains::rust_perf::{PerfRule, RustPerfDomain};
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 94 entries
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 96 entries
 /// covering the main perf pattern categories (complexity, allocation, simd,
 /// layout, iterators, concurrency, io, arithmetic, dispatch, caching, bevy,
 /// wasm). Allocation is the deepest (22 rules; Batch 86 added 2); complexity
-/// has 17 (Batch 76 added 1); iterators
-/// has 9 (Batch 66/67 added 2); simd has 8 (Batch 62 + 64 + 83 added 1
+/// has 18 (Batch 76 + 91 added 1 each); iterators
+/// has 10 (Batch 66/67 added 2; Batch 91 added 1); simd has 8 (Batch 62 + 64 + 83 added 1
 /// each); layout has 9 (Batch 61 + 85 + 86 added); concurrency has 8
 /// (Issue 014 added the two metric-mismatch rules; Batch 65 added the two
 /// contention rules; Batch 73 added 1);
@@ -2377,6 +2394,71 @@ PerfRule {
             context_notes: Some("NotBenchable-speed — the win is a deterministic size_of delta (12 → 8 for the pinned fixture layout), the `layout-reorder`/`box-large-enum-variant` class, not a runtime microbench. REGIME: stored-at-scale records (footprint dominates — the source's per-entry 953 → 420 B table) ONLY; the kernel_opt `bool-fields-over-bitset-hot-reads` rule is the documented inverse regime (per-tick READ flags stay bools — decode ALU dominates there). DEFAULT-REPR CAVEAT: field reordering makes the padding collapse layout-dependent — measure size_of before/after on YOUR layout; never promise the collapse (the source's struct gained more from padding than from the raw bool bytes, which need not reproduce). Composes with `serialize-once-byte-buffer-store` (a flag byte packs into the record header). Source: Cloudflare Big Pineapple DNS-cache memory optimization (2026-08-27), Batch 86 / Research 100.".to_string()),
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: None,
+        },
+        // ── iterators: map(expensive).filter(relevant) → filter-first on the RAW input ─
+        // Source: noahlev.org "Making Rustdoc 33% faster" (2026-08-27,
+        // Batch 91 / Research 106 — rust-lang PR 159623, the same mechanism
+        // again in PR 159779). Rustdoc's build_extern_trait_impls built the
+        // expensive display representation (build_impl) for EVERY trait
+        // impl in the entire dependency graph, THEN filtered; the fix
+        // re-expressed the relevance filter on the RAW ty data and placed
+        // it as a guard before each build_impl call (-20% wall, -12% RSS,
+        // perf.rust-lang.org-measured; PR 159779 re-ran the mechanism on
+        // synthetic impls, -6%). REGIME (two-sided): win ∝ discard-fraction
+        // × transform cost; a wash when the transform is cheap (LLVM
+        // inlines + CSEs it into the filter) or the filter is
+        // non-selective. PRECONDITION (load-bearing): the predicate must be
+        // RE-EXPRESSIBLE on the input type — impossible when the mapped
+        // value carries information the raw item cannot derive (the
+        // source's own work: they adapted the filter to raw ty data
+        // first). The re-expressed filter may be OVER-permissive (the
+        // source's own choice — extra kept impls only cost time when
+        // consumers tolerate them: precision may drop, recall must not).
+        // COMPOSES with `filter-map-fuse` (reorder, THEN optionally fuse);
+        // ADJACENT to `eager-pointer-collect-lazy-fetch` (both pay O(all)
+        // to use O(subset), but that rule fixes the ACCESS path, this one
+        // the PIPELINE order — the corpus's same-family distinct-fix-space
+        // precedent). Suggestion-only (a parse-only proposer cannot prove
+        // the predicate re-expresses on the input — the rewrite is
+        // semantic).
+        PerfRule {
+            rule_id: "filter-before-expensive-transform".to_string(),
+            name: "map(expensive).filter(relevant) → re-express the predicate on the RAW input and filter first (win ∝ discard-fraction × transform cost)".to_string(),
+            category: "iterators".to_string(),
+            buggy_code: "// Renders EVERY doc into its display page first, then keeps only the\n// published ones. render_page is the expensive step (a fresh\n// allocation + a full pass over the body) and ~94% of its output is\n// discarded by the filter behind it.\nstruct Doc {\n    published: bool,\n    rank: u32,\n    body: [u64; 8],\n}\nstruct Page {\n    published: bool,\n    score: u64,\n}\n\nfn render_page(doc: &Doc) -> Page { /* expensive: allocate + fold */ }\n\nfn published_pages(docs: &[Doc]) -> Vec<Page> {\n    docs.iter().map(render_page).filter(|p| p.published).collect()\n}".to_string(),
+            fixed_code: "// The published check needs only the RAW doc - filter FIRST, render\n// only the survivors. Same Vec, same order (filter-then-map preserves\n// order for a pure render and a pure predicate).\nstruct Doc {\n    published: bool,\n    rank: u32,\n    body: [u64; 8],\n}\nstruct Page {\n    published: bool,\n    score: u64,\n}\n\nfn render_page(doc: &Doc) -> Page { /* expensive: allocate + fold */ }\n\nfn published_pages(docs: &[Doc]) -> Vec<Page> {\n    docs.iter().filter(|d| d.published).map(render_page).collect()\n}".to_string(),
+            context_notes: Some("MEASURED ParetoDominant 3/0/0 — 11.85x/11.30x/6.61x at n=1K/30K/300K (x86_64-pc-windows-msvc, rustc 1.97, 2026-08-31, box quiet; verdict-stable x2 — run 1: ~12x/10.67x/8.28x; the ratio jitters with box state, the verdict does not), alloc axis EXACT 300,014 → 18,764 at n=300K (n+14 → 6.25%·n+14: the ~94% discarded renders ARE the mechanism — one escaping digest allocation per render), bytes 2.77 MB → 1.65 MB, alloc-det stable. REGIME (two-sided): win ∝ discard-fraction × transform cost; a WASH when the transform is cheap (LLVM inlines + CSEs it into the filter) or the filter is non-selective — do not apply for cheap/inlinable transforms. PRECONDITION: the predicate must be re-expressible on the input type (the mapped value must carry no information the raw item cannot derive) — the source's own precondition (they adapted the filter to raw ty data first); when not re-expressible the rewrite is IMPOSSIBLE, not merely slower. The re-expressed filter may be OVER-permissive (the source's own choice: keeping extras is correctness-safe when consumers tolerate them — precision may drop, recall must not). COMPOSES with `filter-map-fuse` (reorder, THEN optionally fuse). ADJACENT to `eager-pointer-collect-lazy-fetch` (that rule fixes the ACCESS path for subset reads; this one fixes the PIPELINE order — distinct fix spaces, the corpus's same-family precedent). The 6.61x at 300K vs 11.85x at 1K is the kept-item render work becoming a constant fraction of the total plus collect locality, not a regime boundary. Suggestion-only (semantic rewrite — a parse-only proposer cannot prove re-expressibility). Source: noahlev.org 'Making Rustdoc 33% faster' (2026-08-27) + rust-lang PRs 159623/159779, Batch 91 / Research 106.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(filter_before_expensive_transform_bench_spec()),
+        },
+        // ── complexity: transform-to-decide → decide on the invariant raw projection ─
+        // Source: noahlev.org "Making Rustdoc 33% faster" (2026-08-27,
+        // Batch 91 / Research 106 — rust-lang PR 159854). The impl-inlining
+        // decision computed the FULL cleaned self type (clean_middle_ty +
+        // the param_env normalization of where clauses — 50% of the pass)
+        // when the decision consumes only the HEAD of the type (the `Vec`
+        // in `Vec<i32>`, the `String` in `&mut String`); deciding from the
+        // raw head skipped the normalization entirely (-18% wall). Generic
+        // form: the decision needs a cheap PROJECTION that is INVARIANT
+        // under an expensive canonicalization — compute the projection on
+        // the raw input and pay the canonicalization only behind the
+        // decision (or for the survivors — composes with
+        // `filter-before-expensive-transform`). PRECONDITION
+        // (load-bearing): the projection must be invariant under the
+        // transform — if the canonical form can change the projected
+        // field, the raw shortcut answers a DIFFERENT question.
+        // Suggestion-only (a parse-only proposer cannot prove projection
+        // invariance). Caveat: PR 159854's diff was NOT read — the mapping
+        // is article-level (Research 106).
+        PerfRule {
+            rule_id: "decision-projection-before-construction".to_string(),
+            name: "transform-then-project to decide → compute the invariant projection on the RAW input; pay the expensive canonicalization only behind the decision".to_string(),
+            category: "complexity".to_string(),
+            buggy_code: "// The predicate canonicalizes the WHOLE item (sorts + dedupes the\n// tag set into a fresh Vec) only to read one field the RAW item\n// already determines - the transform is pure overhead for every\n// non-matching item.\nstruct Item {\n    tags: [u32; 8],\n}\nstruct Canonical {\n    primary: u32,\n    tags: Vec<u32>,\n}\n\nfn canonicalize(item: &Item) -> Canonical { /* sort + dedupe; primary = tags[0] */ }\nfn raw_primary(item: &Item) -> u32 { /* min of the tags - no allocation */ }\n\nfn count_hot(items: &[Item], hot: u32) -> usize {\n    items.iter().filter(|i| canonicalize(i).primary == hot).count()\n}".to_string(),
+            fixed_code: "// primary is INVARIANT under canonicalization (both are the minimum\n// of the tag set) - test the raw projection; canonicalize only the\n// callers that need the full canonical form.\nstruct Item {\n    tags: [u32; 8],\n}\nstruct Canonical {\n    primary: u32,\n    tags: Vec<u32>,\n}\n\nfn canonicalize(item: &Item) -> Canonical { /* sort + dedupe; primary = tags[0] */ }\nfn raw_primary(item: &Item) -> u32 { /* min of the tags - no allocation */ }\n\nfn count_hot(items: &[Item], hot: u32) -> usize {\n    items.iter().filter(|i| raw_primary(i) == hot).count()\n}".to_string(),
+            context_notes: Some("MEASURED ParetoDominant 3/0/0 — 24.58x/24.38x/24.37x at n=1K/30K/300K (x86_64-pc-windows-msvc, rustc 1.97, 2026-08-31, box quiet; verdict-stable x2 — the alloc axis byte-identical across runs and the Pareto verdict identical), alloc axis EXACT 300,000 → 0 at n=300K (the fixed predicate NEVER needs the canonical form — the decision answers from the raw projection), bytes 9.60 MB → 0, alloc-det stable. PRECONDITION (load-bearing — this IS the rule's content): the projection must be INVARIANT under the canonicalization (`canonicalize(i).primary == raw_primary(i)` is pinned over the fixture as a test); if the canonical form can change the projected field, the raw shortcut answers a DIFFERENT question. REGIME: win ∝ pass-rate × canonicalization cost; near-100% pass-rate buys nothing (every item needs the form anyway). The consuming decision here DISCARDS the canonical form (count/decide); when survivors need the form, construct behind the decision — composes with `filter-before-expensive-transform`. Distinct from `ok-or-else`/`unwrap-or-else-lazy` (single-value laziness behind Option — this is decide-from-a-projection) and from `filter-map-fuse` (adapter fusion — no decision content). Suggestion-only (a parse-only proposer cannot prove projection invariance). Caveat: PR 159854's diff was NOT read — the mapping is article-level (Research 106). Source: noahlev.org 'Making Rustdoc 33% faster' (2026-08-27) + rust-lang PR 159854, Batch 91 / Research 106.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(decision_projection_before_construction_bench_spec()),
         },
     ])
 }
@@ -7596,25 +7678,27 @@ mod tests {
     }
 
     #[test]
-    fn seed_corpus_has_ninety_four_entries_across_twelve_categories() {
+    fn seed_corpus_has_ninety_six_entries_across_twelve_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 94);
+        assert_eq!(corpus.entries.len(), 96);
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
         categories.dedup();
-        // 12 distinct categories. Allocation is the deepest (20 rules,
+        // 12 distinct categories. Allocation is the deepest (22 rules,
         // — Batch 75 added encoded-layout-borrowed-view +
         // group-keys-borrow-allocate-on-first-sight;
         // including Issue 014's arc-str-payload + Batch 48's three + Batch
-        // 53's hashmap-with-capacity); complexity has 17 (Batch 76 added
-        // debug-stat-full-scan-out-of-hot-path; Batch 75 added
+        // 53's hashmap-with-capacity); complexity has 18 (Batch 76 added
+        // debug-stat-full-scan-out-of-hot-path; Batch 91 added
+        // decision-projection-before-construction; Batch 75 added
         // sorted-input-previous-row-fast-path; Batch 48 added
         // hashset-insert-bool-return + vec-insert-front-deque; Batch 64
         // added debug-assert-length-hoist); iterators
-        // has 9 (Batch 48 added three; Batch 66 added
+        // has 10 (Batch 48 added three; Batch 66 added
         // sortedness-check-branchless-accumulate; Batch 67 added
-        // byte-find-position-to-memchr); simd has 8 (Batch 62 added
+        // byte-find-position-to-memchr; Batch 91 added
+        // filter-before-expensive-transform); simd has 8 (Batch 62 added
         // transposed-weight-register-gemv; Batch 64 added
         // loop-order-innermost-contiguous; Batch 83 added
         // bitplane-transpose-repeated-predicate-scan); layout has 7 (Batch 53 added
@@ -8343,6 +8427,167 @@ mod tests {
         }
     }
 
+    /// Batch 91 — the two new rules are present.
+    #[test]
+    fn batch91_rules_present() {
+        let corpus = build_perf_seed_corpus();
+        let ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        assert!(ids.contains(&"filter-before-expensive-transform"));
+        assert!(ids.contains(&"decision-projection-before-construction"));
+    }
+
+    /// Batch 91 — the two new rules parse (syn) on buggy AND fixed code.
+    #[test]
+    fn batch91_pseudocode_parses() {
+        let corpus = build_perf_seed_corpus();
+        for id in [
+            "filter-before-expensive-transform",
+            "decision-projection-before-construction",
+        ] {
+            let e = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == id)
+                .unwrap_or_else(|| panic!("{id} missing from corpus"));
+            assert!(
+                syn::parse_file(&e.buggy_code).and_then(|_| syn::parse_file(&e.fixed_code)).is_ok(),
+                "{id} buggy/fixed must both parse"
+            );
+        }
+    }
+
+    /// Batch 91 G1 (rule 1 exactness + the discarded-work axis): both
+    /// adapter orders collect the IDENTICAL page Vec (order included) for
+    /// a pure render and a pure predicate, AND the call-count axis proves
+    /// the mechanism — the buggy order renders EVERY doc, the fixed order
+    /// renders only the keepers. Non-vacuous via the strict-inequality
+    /// assert.
+    #[test]
+    fn batch91_filter_order_preserves_output_and_render_count() {
+        use std::cell::Cell;
+        thread_local! {
+            static RENDER_CALLS: Cell<u64> = const { Cell::new(0) };
+        }
+        struct Doc {
+            published: bool,
+            body: [u64; 4],
+        }
+        #[derive(Clone, PartialEq, Eq, Debug)]
+        struct Page {
+            published: bool,
+            score: u64,
+        }
+        let render = |doc: &Doc| -> Page {
+            RENDER_CALLS.with(|c| c.set(c.get() + 1));
+            let mut acc = 0u64;
+            for &v in &doc.body {
+                acc = acc.wrapping_mul(31).wrapping_add(v);
+            }
+            Page {
+                published: doc.published,
+                score: acc,
+            }
+        };
+        let docs: Vec<Doc> = (0..256u64)
+            .map(|i| Doc {
+                published: i % 16 == 0,
+                body: [i; 4],
+            })
+            .collect();
+
+        RENDER_CALLS.with(|c| c.set(0));
+        let buggy: Vec<Page> = docs.iter().map(&render).filter(|p| p.published).collect();
+        let buggy_calls = RENDER_CALLS.with(Cell::get);
+
+        RENDER_CALLS.with(|c| c.set(0));
+        let fixed: Vec<Page> = docs.iter().filter(|d| d.published).map(&render).collect();
+        let fixed_calls = RENDER_CALLS.with(Cell::get);
+
+        assert_eq!(buggy, fixed, "both orders must collect the identical page Vec");
+        assert_eq!(buggy_calls, docs.len() as u64, "the buggy order renders EVERY doc");
+        assert_eq!(fixed_calls, buggy.len() as u64, "the fixed order renders only keepers");
+        assert!(
+            fixed_calls < buggy_calls,
+            "the discarded-work axis must be strictly visible"
+        );
+    }
+
+    /// Batch 91 G1 (rule 2 precondition AS A TEST + the call axis): the
+    /// projection is INVARIANT under canonicalization for every fixture
+    /// item (`canonicalize(i).primary == raw_primary(i)`), the two
+    /// predicates answer IDENTICALLY, and the canonicalize-call axis
+    /// proves the mechanism — the buggy predicate canonicalizes EVERY
+    /// item, the fixed predicate canonicalizes NONE (the decision never
+    /// needs the canonical form). Non-vacuous: the hot count must be
+    /// non-zero.
+    #[test]
+    #[allow(clippy::cast_possible_truncation)] // the enumerate-index u32 narrowing IS the fixture (k < 8)
+    fn batch91_projection_invariance_and_canonicalize_count() {
+        use std::cell::Cell;
+        thread_local! {
+            static CANON_CALLS: Cell<u64> = const { Cell::new(0) };
+        }
+        struct Item {
+            tags: [u32; 8],
+        }
+        #[derive(PartialEq, Eq, Debug)]
+        struct Canonical {
+            primary: u32,
+            tags: Vec<u32>,
+        }
+        let canonicalize = |item: &Item| -> Canonical {
+            CANON_CALLS.with(|c| c.set(c.get() + 1));
+            let mut tags: Vec<u32> = item.tags.to_vec();
+            tags.sort_unstable();
+            tags.dedup();
+            Canonical { primary: tags[0], tags }
+        };
+        let raw_primary = |item: &Item| -> u32 {
+            let mut m = u32::MAX;
+            for &t in &item.tags {
+                m = m.min(t);
+            }
+            m
+        };
+        let items: Vec<Item> = (0..256u32)
+            .map(|i| {
+                let base = i % 64;
+                let mut tags = [0u32; 8];
+                for (k, t) in tags.iter_mut().enumerate() {
+                    *t = base * 8 + (k as u32) * 31;
+                }
+                Item { tags }
+            })
+            .collect();
+
+        for item in &items {
+            assert_eq!(
+                canonicalize(item).primary,
+                raw_primary(item),
+                "the projection must be invariant under canonicalization"
+            );
+        }
+        let invariance_calls = CANON_CALLS.with(Cell::get);
+        assert_eq!(invariance_calls, items.len() as u64);
+
+        CANON_CALLS.with(|c| c.set(0));
+        let buggy_hot = items.iter().filter(|i| canonicalize(i).primary == 128).count();
+        let buggy_calls = CANON_CALLS.with(Cell::get);
+
+        CANON_CALLS.with(|c| c.set(0));
+        let fixed_hot = items.iter().filter(|i| raw_primary(i) == 128).count();
+        let fixed_calls = CANON_CALLS.with(Cell::get);
+
+        assert_eq!(buggy_hot, fixed_hot, "the decision must be identical");
+        assert!(buggy_hot > 0, "the hot count must be non-zero (non-vacuous)");
+        assert_eq!(
+            buggy_calls,
+            items.len() as u64,
+            "the buggy predicate canonicalizes EVERY item"
+        );
+        assert_eq!(fixed_calls, 0, "the fixed predicate never needs the canonical form");
+    }
+
     /// Batch 86 G1 (exactness gate, integer ops — the ported-numeric
     /// MANDATE shape): the serialize-once buffer must reconstruct every
     /// (name, payload) record BYTE-EXACTLY, including the edge records
@@ -8433,10 +8678,10 @@ mod tests {
 
     #[cfg(feature = "rust_perf_bench")]
     #[test]
-    fn eighty_two_rules_have_bench_specs() {
+    fn eighty_four_rules_have_bench_specs() {
         let corpus = build_perf_seed_corpus();
         let with_spec = corpus.entries.iter().filter(|e| e.bench_spec.is_some()).count();
-        assert_eq!(with_spec, 82, "expected 82 benchable rules, got {with_spec}");
+        assert_eq!(with_spec, 84, "expected 84 benchable rules, got {with_spec}");
     }
 
     #[cfg(feature = "rust_perf_bench")]
@@ -8492,11 +8737,14 @@ mod tests {
     /// byte-buffer-store — the shrinking-ratio + regime note;
     /// context-equal-field-elide — the %-equal two-regime note;
     /// bitflag-pack-when-footprint-dominates — the NotBenchable-speed size
-    /// axis + the repr-reorder caveat).
+    /// axis + the repr-reorder caveat). Batch 91 added 2
+    /// (filter-before-expensive-transform — the two-regime discard ×
+    /// transform-cost note; decision-projection-before-construction — the
+    /// invariance-precondition note).
     /// The other 57 have `context_notes: None` (unconditional wins or
     /// honestly NotBenchable).
     #[test]
-    fn thirty_seven_annotated_rules_carry_context_notes() {
+    fn thirty_nine_annotated_rules_carry_context_notes() {
         let corpus = build_perf_seed_corpus();
         let annotated: Vec<&str> = corpus
             .entries
@@ -8504,7 +8752,7 @@ mod tests {
             .filter(|e| e.context_notes.is_some())
             .map(|e| e.rule_id.as_str())
             .collect();
-        assert_eq!(annotated.len(), 37, "expected 37 context-annotated rules");
+        assert_eq!(annotated.len(), 39, "expected 39 context-annotated rules");
         assert!(annotated.contains(&"weight-tile-consumption-order")); // Batch 85 — measured ParetoDominant + the M3-L1-shift regime note
         assert!(annotated.contains(&"software-prefetch-storage-bound")); // Batch 85 — the x86-source-cited honest-loser annotation
         assert!(annotated.contains(&"precompute-table"));
@@ -8538,6 +8786,8 @@ mod tests {
         assert!(annotated.contains(&"serialize-once-byte-buffer-store")); // Batch 86 — measured ParetoDominant + the shrinking-ratio/regime note
         assert!(annotated.contains(&"context-equal-field-elide")); // Batch 86 — measured ParetoDominant + the %-equal two-regime note
         assert!(annotated.contains(&"bitflag-pack-when-footprint-dominates")); // Batch 86 — NotBenchable-speed size axis + the repr-reorder caveat
+        assert!(annotated.contains(&"filter-before-expensive-transform")); // Batch 91 — measured ParetoDominant + the two-regime (discard × cost) note
+        assert!(annotated.contains(&"decision-projection-before-construction")); // Batch 91 — the invariance-precondition note
     }
 
     /// The non-annotated rules (ParetoDominant + honestly NotBenchable) must
@@ -8551,7 +8801,7 @@ mod tests {
             .iter()
             .filter(|e| e.context_notes.is_none())
             .count();
-        assert_eq!(unannotated, 57, "expected 57 unannotated rules (94 - 37 annotated)");
+        assert_eq!(unannotated, 57, "expected 57 unannotated rules (96 - 39 annotated)");
     }
 
     /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -8563,7 +8813,7 @@ mod tests {
         let json = serde_json::to_string(&corpus.entries).unwrap();
         let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
         let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-        assert_eq!(annotated, 37);
+        assert_eq!(annotated, 39);
 
         // Simulate a pre-field snapshot: strip `context_notes` from JSON.
         // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -8597,7 +8847,7 @@ mod tests {
 
         // Filter to the 34 annotated rules.
         let annotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_some()).collect();
-        assert_eq!(annotated.len(), 37, "expected 37 annotated rules");
+        assert_eq!(annotated.len(), 39, "expected 39 annotated rules");
 
         // The HealEntry trait override must agree with the struct field.
         for rule in &annotated {
@@ -9634,6 +9884,183 @@ pub fn run_fixed(input: &Input) {
         total += a.owner.as_deref().unwrap_or(c).len();
     }
     std::hint::black_box(total);
+}
+"#
+        .to_string(),
+    }
+}
+
+/// Bench spec for `filter-before-expensive-transform` (Batch 91,
+/// Research 106 — the Rustdoc filter-first distill): ~6% keep-rate, an
+/// opaque `#[inline(never)]` render whose digest allocation ESCAPES into
+/// the collected Vec (LLVM cannot elide it) + a full body fold — the
+/// discarded work is real on both axes. G1: both orders collect the
+/// IDENTICAL page Vec (order included).
+#[cfg(feature = "rust_perf_bench")]
+#[allow(clippy::items_after_test_module)] // bench-spec tables live after the corpus tests by design
+fn filter_before_expensive_transform_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![1_000, 30_000, 300_000],
+        harness: r#"
+pub struct Doc {
+    pub published: bool,
+    pub body: [u64; 8],
+}
+
+pub struct Page {
+    pub published: bool,
+    pub digest: Box<[u8]>,
+}
+
+#[inline(never)]
+pub fn render_page(doc: &Doc) -> Page {
+    let mut acc: u64 = 0;
+    for &v in &doc.body {
+        acc = acc.wrapping_mul(0x1_0000_0001_b3).wrapping_add(v);
+    }
+    // the digest allocation ESCAPES into the collected Vec - LLVM
+    // cannot elide it, the discarded work is real
+    let digest = vec![
+        (acc & 0xFF) as u8,
+        ((acc >> 8) & 0xFF) as u8,
+        ((acc >> 16) & 0xFF) as u8,
+        ((acc >> 24) & 0xFF) as u8,
+    ]
+    .into_boxed_slice();
+    Page { published: doc.published, digest }
+}
+
+mod buggy {
+    use super::{render_page, Doc, Page};
+    pub fn published_pages(docs: &[Doc]) -> Vec<Page> {
+        docs.iter().map(render_page).filter(|p| p.published).collect()
+    }
+}
+
+mod fixed {
+    use super::{render_page, Doc, Page};
+    pub fn published_pages(docs: &[Doc]) -> Vec<Page> {
+        docs.iter().filter(|d| d.published).map(render_page).collect()
+    }
+}
+
+pub struct Input {
+    docs: Vec<Doc>,
+}
+
+pub fn make_input(n: usize) -> Input {
+    let docs = (0..n)
+        .map(|i| {
+            let seed = (i as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+            Doc {
+                published: i % 16 == 0, // ~6.25% keep-rate
+                body: [seed; 8],
+            }
+        })
+        .collect();
+    Input { docs }
+}
+
+pub fn run_buggy(input: &Input) {
+    let pages = buggy::published_pages(&input.docs);
+    let mut touch = pages.len() as u64;
+    if let Some(first) = pages.first() {
+        touch += u64::from(first.digest[0]);
+    }
+    std::hint::black_box(touch);
+}
+
+pub fn run_fixed(input: &Input) {
+    let pages = fixed::published_pages(&input.docs);
+    let mut touch = pages.len() as u64;
+    if let Some(first) = pages.first() {
+        touch += u64::from(first.digest[0]);
+    }
+    std::hint::black_box(touch);
+}
+"#
+        .to_string(),
+    }
+}
+
+/// Bench spec for `decision-projection-before-construction` (Batch 91,
+/// Research 106 — the Rustdoc head-before-param_env distill): the buggy
+/// predicate canonicalizes EVERY item (fresh Vec + sort + dedup behind an
+/// `#[inline(never)]` boundary) to read a field the raw item already
+/// determines; the fixed predicate computes the invariant min directly.
+/// ~1.6% pass-rate. The invariance precondition + the canonicalize-call
+/// axis are pinned in the corpus gate (every item vs zero calls).
+#[cfg(feature = "rust_perf_bench")]
+#[allow(clippy::items_after_test_module)] // bench-spec tables live after the corpus tests by design
+fn decision_projection_before_construction_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![1_000, 30_000, 300_000],
+        harness: r#"
+pub struct Item {
+    pub tags: [u32; 8],
+}
+
+pub struct Canonical {
+    pub primary: u32,
+    pub tags: Vec<u32>,
+}
+
+#[inline(never)]
+pub fn canonicalize(item: &Item) -> Canonical {
+    let mut tags: Vec<u32> = item.tags.to_vec(); // the construction alloc
+    tags.sort_unstable();
+    tags.dedup();
+    Canonical { primary: tags[0], tags }
+}
+
+pub fn raw_primary(item: &Item) -> u32 {
+    let mut m = u32::MAX;
+    for &t in &item.tags {
+        m = m.min(t);
+    }
+    m
+}
+
+mod buggy {
+    use super::{canonicalize, Item};
+    pub fn count_hot(items: &[Item], hot: u32) -> usize {
+        items.iter().filter(|i| canonicalize(i).primary == hot).count()
+    }
+}
+
+mod fixed {
+    use super::{raw_primary, Item};
+    pub fn count_hot(items: &[Item], hot: u32) -> usize {
+        items.iter().filter(|i| raw_primary(i) == hot).count()
+    }
+}
+
+pub struct Input {
+    items: Vec<Item>,
+    hot: u32,
+}
+
+pub fn make_input(n: usize) -> Input {
+    let items = (0..n)
+        .map(|i| {
+            let base = (i % 64) as u32;
+            let mut tags = [0u32; 8];
+            for (k, t) in tags.iter_mut().enumerate() {
+                *t = base * 8 + (k as u32) * 31; // min == base * 8, no wrap
+            }
+            Item { tags }
+        })
+        .collect();
+    let hot = 128; // base == 16 -> ~1.56% pass-rate
+    Input { items, hot }
+}
+
+pub fn run_buggy(input: &Input) {
+    std::hint::black_box(buggy::count_hot(&input.items, input.hot));
+}
+
+pub fn run_fixed(input: &Input) {
+    std::hint::black_box(fixed::count_hot(&input.items, input.hot));
 }
 "#
         .to_string(),
