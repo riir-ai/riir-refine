@@ -41,6 +41,7 @@ pub mod instantiation_rerank;
 pub mod jury_disagreement;
 pub mod op_tokenizer;
 pub mod retrieval_eval;
+pub mod span_source;
 pub mod switch_cost;
 
 pub use corpus_index::{IndexTokenizer, RetrievalConfig, RuleIndex, ScoredRule, SuggestScratch};
@@ -52,11 +53,16 @@ pub use latent_matcher::{LatentMatcher, RuleInfo, SpanSuggestion};
 #[cfg(feature = "clippy_verify")]
 pub use clippy_oracle::{ClippyOracle, OracleVerdict};
 pub use headroom_probe::{
-    decompose_headroom, print_headroom_decomposition, print_headroom_report, run_headroom_probe,
-    run_headroom_probe_with, HeadroomDecomposition, HeadroomMetrics, HeadroomMiss, HeadroomReport,
-    HeadroomVerdict, MissKind, ResidualCause, HEADROOM_DEPTHS, HEADROOM_STOP_BAR_PP,
+    decompose_headroom, decompose_headroom_with_spans, print_headroom_decomposition,
+    print_headroom_report, run_headroom_probe, run_headroom_probe_with,
+    run_headroom_probe_with_spans, HeadroomDecomposition, HeadroomMetrics, HeadroomMiss,
+    HeadroomReport, HeadroomVerdict, MissKind, ResidualCause, HEADROOM_DEPTHS, HEADROOM_STOP_BAR_PP,
 };
 pub use instantiation_rerank::{RerankMode, RERANK_POOL};
 pub use op_tokenizer::{RustOpBigramTokenizer, RustOpTokenizer, BIGRAM_SEP, OP_PREFIX};
-pub use retrieval_eval::{run_eval, run_eval_with, run_retrieval_sweep, run_router_eval, EvalReport, DomainMetrics as EvalDomainMetrics};
+pub use retrieval_eval::{
+    run_eval, run_eval_with, run_retrieval_sweep, run_router_eval, OwnedEvalSpan, EvalReport,
+    DomainMetrics as EvalDomainMetrics,
+};
+pub use span_source::{collect_source_files, collect_source_files_sorted};
 pub use switch_cost::{cross_domain_spans, run_switch_cost_eval, print_switch_cost_report, SwitchCostReport};

@@ -395,7 +395,7 @@ mod tests {
     /// of the pair-selection rules at the fixture level).
     ///
     /// Issue 056: this used to iterate only the 12 `CROSS_PAIRS`
-    /// constituents — a SAMPLED invariant. Two PERF_SPANS fixtures carried
+    /// constituents — a SAMPLED invariant. Two `PERF_SPANS` fixtures carried
     /// `v % 2 == 0` (`manual_is_multiple_of`) indefinitely with every test
     /// green, because neither rule appeared in a pair. Purity is asserted
     /// over EVERY entry of both consts now: a perf fixture may carry no

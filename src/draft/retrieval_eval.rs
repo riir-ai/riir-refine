@@ -471,10 +471,16 @@ const PROBE_TOP_K: usize = 8;
 
 /// The labeled eval span set as OWNED strings (shared by `run_eval` + the
 /// Issue 020 router eval — both must measure the SAME spans).
-pub(crate) struct OwnedEvalSpan {
-    pub(crate) label: String,
-    pub(crate) domain: DomainId,
-    pub(crate) code: String,
+///
+/// Plan 049 T0.0a widened this from `pub(crate)` to `pub`: the
+/// parameterized probe entry points ([`run_headroom_probe_with_spans`])
+/// take `&[OwnedEvalSpan]`, so a caller must be able to name the set it
+/// feeds in — T0.2's oracle-labeled real-repo span sets are constructed
+/// outside this module.
+pub struct OwnedEvalSpan {
+    pub label: String,
+    pub domain: DomainId,
+    pub code: String,
 }
 
 pub(crate) fn labeled_eval_spans() -> Vec<OwnedEvalSpan> {

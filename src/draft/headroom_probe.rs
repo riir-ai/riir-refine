@@ -46,7 +46,7 @@
 use super::domain_router::DomainId;
 use super::instantiation_rerank::RERANK_POOL;
 use super::latent_matcher::LatentMatcher;
-use super::retrieval_eval::{canonical_rank, domain_index, labeled_eval_spans};
+use super::retrieval_eval::{canonical_rank, domain_index, labeled_eval_spans, OwnedEvalSpan};
 
 /// Candidate-pool depths probed, ascending. `RERANK_POOL` (the production
 /// depth) must be one of them — it is the recall@1 reference point.
@@ -232,6 +232,25 @@ pub fn run_headroom_probe() -> HeadroomReport {
 pub fn run_headroom_probe_with(
     rerank: super::instantiation_rerank::RerankMode,
 ) -> HeadroomReport {
+    run_headroom_probe_with_spans(rerank, &labeled_eval_spans())
+}
+
+/// [`run_headroom_probe_with`] over an EXPLICIT span set — the Plan 049
+/// T0.0a injection point. The Issue 017 fixture set (`labeled_eval_spans`)
+/// is only one source; Plan 049 T0.2 re-runs this same instrument over
+/// oracle-labeled real-repo spans, which was impossible while the span
+/// source was hardcoded inside the probe. The no-arg entry point is
+/// DEFINED as this fn over the fixture set, so injecting a set can never
+/// silently change what the default probe measures.
+///
+/// # Panics
+///
+/// Panics if [`LatentMatcher::from_enabled_domains`] fails.
+#[must_use]
+pub fn run_headroom_probe_with_spans(
+    rerank: super::instantiation_rerank::RerankMode,
+    spans: &[OwnedEvalSpan],
+) -> HeadroomReport {
     const _: () = assert!(
         HEADROOM_DEPTHS[PROD_DEPTH_IDX] == RERANK_POOL,
         "the production depth must be one of the probed depths"
@@ -242,7 +261,7 @@ pub fn run_headroom_probe_with(
         .with_rerank_mode(rerank);
     let mut report = HeadroomReport::default();
 
-    for span in labeled_eval_spans() {
+    for span in spans {
         if !matcher.has_domain(span.domain) {
             report.skipped += 1;
             continue;
@@ -464,10 +483,23 @@ impl HeadroomDecomposition {
 /// Panics if [`LatentMatcher::from_enabled_domains`] fails.
 #[must_use]
 pub fn decompose_headroom() -> HeadroomDecomposition {
+    decompose_headroom_with_spans(&labeled_eval_spans())
+}
+
+/// [`decompose_headroom`] over an explicit span set — the T0.0a twin of
+/// [`run_headroom_probe_with_spans`]. The trainable-band denominator is a
+/// property of the SPAN SET, so the decomposition must accept the set as a
+/// parameter (Plan 049 T0.2 feeds oracle-labeled real-repo spans here).
+///
+/// # Panics
+///
+/// Panics if [`LatentMatcher::from_enabled_domains`] fails.
+#[must_use]
+pub fn decompose_headroom_with_spans(spans: &[OwnedEvalSpan]) -> HeadroomDecomposition {
     use super::instantiation_rerank::RerankMode;
 
-    let shipped = run_headroom_probe_with(RerankMode::default());
-    let strongest = run_headroom_probe_with(RerankMode::All);
+    let shipped = run_headroom_probe_with_spans(RerankMode::default(), spans);
+    let strongest = run_headroom_probe_with_spans(RerankMode::All, spans);
 
     // Key by (domain, expected rule) — the span identity for a labeled set
     // with one label per span.
@@ -693,6 +725,91 @@ mod tests {
             a.misses.iter().map(|m| (&m.expected, m.rank, m.kind)).collect::<Vec<_>>(),
             b.misses.iter().map(|m| (&m.expected, m.rank, m.kind)).collect::<Vec<_>>(),
             "miss taxonomy must be deterministic"
+        );
+    }
+
+    /// Plan 049 T0.0a: the no-arg entry points must be EXACTLY the
+    /// parameterized entry points over the default fixture set. If the
+    /// delegation drifts, an injected set (T0.2's real-repo spans) would be
+    /// measured by a different instrument than the committed baseline.
+    #[test]
+    fn span_source_defaults_delegate_to_the_fixture_set() {
+        use crate::draft::RerankMode;
+
+        let spans = labeled_eval_spans();
+
+        let probe_default = run_headroom_probe_with(RerankMode::default());
+        let probe_explicit = run_headroom_probe_with_spans(RerankMode::default(), &spans);
+        assert_eq!(
+            probe_default.blended, probe_explicit.blended,
+            "the default probe must measure the fixture set"
+        );
+        assert_eq!(
+            probe_default.misses.iter().map(|m| (&m.expected, m.rank, m.kind)).collect::<Vec<_>>(),
+            probe_explicit.misses.iter().map(|m| (&m.expected, m.rank, m.kind)).collect::<Vec<_>>(),
+            "the default probe's miss taxonomy must match the explicit-fixture-set run"
+        );
+
+        let decomp_default = decompose_headroom();
+        let decomp_explicit = decompose_headroom_with_spans(&spans);
+        assert_eq!(decomp_default.labeled, decomp_explicit.labeled);
+        assert_eq!(decomp_default.shipped, decomp_explicit.shipped);
+        assert_eq!(decomp_default.type_blind, decomp_explicit.type_blind);
+        assert_eq!(decomp_default.pool_depth, decomp_explicit.pool_depth);
+        assert_eq!(decomp_default.unfixable, decomp_explicit.unfixable);
+        assert_eq!(
+            decomp_default.selector_addressable,
+            decomp_explicit.selector_addressable,
+            "the default decomposition must match the explicit-fixture-set run"
+        );
+    }
+
+    /// Plan 049 T0.0a: the reason the injection point exists — the probe
+    /// must score the set it is HANDED, not the fixtures. T0.2 feeds
+    /// oracle-labeled real-repo spans through exactly this seam.
+    #[test]
+    fn span_source_injection_measures_exactly_the_injected_set() {
+        use crate::draft::RerankMode;
+
+        let spans = vec![
+            OwnedEvalSpan {
+                label: "needless_return".to_string(),
+                domain: DomainId::Clippy,
+                code: "fn f(x: i32) -> i32 { return x; }".to_string(),
+            },
+            OwnedEvalSpan {
+                label: "unused_unit".to_string(),
+                domain: DomainId::Clippy,
+                code: "pub fn g() -> () { () }".to_string(),
+            },
+        ];
+
+        let report = run_headroom_probe_with_spans(RerankMode::default(), &spans);
+        assert_eq!(
+            report.blended.labeled, 2,
+            "the probe must score exactly the injected set"
+        );
+        assert_eq!(
+            report.per_domain[domain_index(DomainId::Clippy)].labeled,
+            2,
+            "the injected spans are clippy-domain and must land in the clippy row"
+        );
+        // The taxonomy stays total over an injected set too.
+        assert_eq!(
+            report.misses.len(),
+            report.blended.labeled - report.blended.chosen,
+            "miss taxonomy must cover exactly the non-chosen spans"
+        );
+
+        let decomp = decompose_headroom_with_spans(&spans);
+        assert_eq!(decomp.labeled, 2);
+        assert_eq!(
+            decomp.shipped.len(),
+            decomp.type_blind.len()
+                + decomp.pool_depth.len()
+                + decomp.unfixable.len()
+                + decomp.selector_addressable.len(),
+            "every shipped selection miss must be attributed to exactly one cause"
         );
     }
 }

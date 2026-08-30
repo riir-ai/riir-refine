@@ -41,6 +41,7 @@ use riir_clippy::domains::clippy_lints::proposers::FIXABLE_LINTS;
 use riir_clippy::domains::rust_perf::proposers::FIXABLE_RULES;
 use riir_clippy::edit_emitter::RuleEdit;
 use riir_clippy::draft::{DomainId, LatentMatcher, SpanSuggestion};
+use riir_clippy::draft::span_source::collect_source_files;
 use riir_clippy::EvolveRecorder;
 
 /// Proposal 005 Phase 0 T0.1 (Plan 025) + Phase 1 T1.6 (Plan 040): the KAT
@@ -1509,37 +1510,6 @@ fn collect_dockerfiles(root: &Path, out: &mut Vec<PathBuf>) {
             if path.is_dir() {
                 queue.push_back(path);
             } else if is_dockerfile_name(name) {
-                out.push(path);
-            }
-        }
-    }
-}
-
-fn collect_source_files(root: &Path, ext: &str, out: &mut Vec<PathBuf>) {
-    if root.is_file() {
-        let name = root.file_name().and_then(|n| n.to_str()).unwrap_or("");
-        if name.ends_with(ext) {
-            out.push(root.to_path_buf());
-        }
-        return;
-    }
-    let mut queue: VecDeque<PathBuf> = VecDeque::new();
-    queue.push_back(root.to_path_buf());
-    while let Some(dir) = queue.pop_front() {
-        let Ok(entries) = std::fs::read_dir(&dir) else {
-            continue;
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
-                continue;
-            };
-            if name.starts_with('.') || name == "target" || name == "vendor" {
-                continue;
-            }
-            if path.is_dir() {
-                queue.push_back(path);
-            } else if name.ends_with(ext) {
                 out.push(path);
             }
         }
