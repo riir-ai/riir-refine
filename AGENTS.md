@@ -30,10 +30,13 @@ game concern, NOT a training repo, NOT a chain repo.
 Five retrieval domains ship (Plan 001 + Plans 018/030; `rustc_errors` is a
 6th, driver-based rather than retrieval):
 1. **`clippy_lints`** (default-on) — heals `cargo clippy` warnings. The
-   original domain; **43 corpus lints** (Batch 89: +`use_self` FIXABLE,
+   original domain; **45 corpus lints** (Batch 90: +`items_after_statements`
+   FIXABLE, +`manual_let_else` FIXABLE, `option_if_let_else` REFUTED — the
+   rewrite output re-enters `single_match_else`'s territory → fixpoint
+   ping-pong, `.plans/051`; Batch 89: +`use_self` FIXABLE,
    +`suboptimal_flops` VERIFY; `missing_const_for_fn` proposed then KILLED —
-   `.plans/050`) across style/complexity/perf/nursery; 34 `--fix` eligible +
-   6 `--verify` tier + 3 self_evolve-only.
+   `.plans/050`) across style/complexity/perf/pedantic/nursery; 36 `--fix`
+   eligible + 6 `--verify` tier + 3 self_evolve-only.
 2. **`rust_perf`** (default-on since 2026-08-13, Phase 2) — heals rust perf
    issues. **94 rules** (Batch 86 ->94) distilled from the `rust-optimize` skill checklist +
    nnethercote/perf-book + rustc-hash/bevy real-world patterns + the hotpath-rs

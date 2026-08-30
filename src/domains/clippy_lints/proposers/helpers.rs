@@ -150,7 +150,7 @@ pub(crate) fn drops_interior_comment(
 /// keywords/punctuation, so string-literal false positives cannot occur
 /// there; kept fragments are checked verbatim so a `//` inside a string in a
 /// kept fragment is covered by its own range.
-fn comment_marker_positions(text: &str) -> Vec<usize> {
+pub(crate) fn comment_marker_positions(text: &str) -> Vec<usize> {
     let mut out = Vec::new();
     let bytes = text.as_bytes();
     let mut i = 0;

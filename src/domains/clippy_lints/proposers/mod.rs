@@ -41,7 +41,8 @@
 //! `--fix` applies edits without a type checker — the L2 pruner only validates
 //! syntax. Rules whose **detection is purely structural** (the pattern match
 //! alone guarantees the rewrite preserves semantics) are `--fix` eligible.
-//! The 33 rows below (6 seed + 27 from the Issue 016 expansion, selected
+//! The 36 rows below (6 seed + 27 from the Issue 016 expansion + 1 Batch 89
+//! `use_self` + 2 Batch 90, selected
 //! frequency-ranked from kornel's 100K-crate clippy run + Li et al.'s
 //! 8.09M-warning crates.io study ∩ clippy's `MachineApplicable` axis ∩
 //! parse-only provability; see `.benchmarks/021`):
@@ -80,9 +81,11 @@
 //! | `deref_addrof` | `*&x` → `x` (structural) |
 //! | `wildcard_in_or_patterns` | `A | _ =>` → `_ =>` (structural) |
 //! | `unnecessary_sort_by` | `sort_by(|a, b| a.cmp(b))` → `sort()` (exact closure shape; compilability proves `Ord`) |
-//! | `iter_next_loop` | `for x in it.next()` → `for x in it` (correctness lint — the rewrite IS the intended semantics fix) |
+//! | `use_self` | inherent-impl `TypeName` → `Self` path rewrite (guards: nested items, bounds, attrs, macros, generic-arg identity, value-namespace ambiguity) |
+//! | `items_after_statements` | block items hoisted above the statements (order-independent resolution; guards: macro items, leading-gap / same-line-trailing comments) |
+//! | `manual_let_else` | let-bound 2-arm match with visibly diverging fallback → `let .. else` (guards: binding-use fallbacks, non-identity arm-1 bodies, 3-arm/guard shapes, visible-divergence whitelist) |
 //!
-//! The remaining four proposers fire on **type-blind** detection — they are
+//! The remaining proposers fire on **type-blind** detection — they are
 //! correct when the types line up, but a parse-only validator cannot know
 //! that. They stay available to the `self_evolve` tuning loop (whose output
 //! IS verified by a real `cargo clippy` run) and are excluded from `--fix`:
@@ -110,13 +113,23 @@
 //! workspace), `while_let_on_iterator` (receiver could be a non-`Iterator`
 //! custom type with a `next()` method), `single_char_pattern` (method
 //! resolution is receiver-type-dependent — a custom type can have
-//! `contains(&str)` without `contains(char)`).
+//! `contains(&str)` without `contains(char)`), `manual_is_multiple_of`
+//! (dividend signedness), and `suboptimal_flops` (receiver type invisible —
+//! a custom `powf`/`log` would make the rewrite semantic).
+//!
+//! REFUTED candidates (probed, no proposer, no corpus entry):
+//! `missing_const_for_fn` (Batch 89 — const-ability is typeck-driven and the
+//! lint is BROAD: an allowlist proposer fires on virtually every trivial fn,
+//! cross-firing every eval fixture and the clean-span set, and cargo-fix
+//! already applies it), `option_if_let_else` (Batch 90 — nursery-group pure
+//! style, and its rewrite output re-enters `single_match_else`'s territory →
+//! fixpoint ping-pong with our own FIXABLE proposer).
 //!
 //! ## Scope
 //!
 //! Each proposer handles ONE lint. Adding a new lint = adding a new proposer
 //! module + a row in `collect_rule_edits`' match (and, when detection is
-//! structural, a row in [`FIXABLE_LINTS`]). 41 lints ship today (10 seed +
+//! structural, a row in [`FIXABLE_LINTS`]). 45 lints ship today (10 seed +
 //! 31 from the Issue 016 expansion and the post-mining P7 verify-tier row); future lints drop in by extending the
 //! match.
 
@@ -130,7 +143,9 @@ pub mod helpers;
 pub mod identity_op;
 pub mod iter_next_loop;
 pub mod iter_nth_zero;
+pub mod items_after_statements;
 pub mod manual_is_multiple_of;
+pub mod manual_let_else;
 pub mod manual_map;
 pub mod manual_unwrap_or;
 pub mod map_unwrap_or;
@@ -219,6 +234,28 @@ pub const FIXABLE_LINTS: &[&str] = &[
     // items, bounds, attrs, macros, generic-arg identity, and the
     // value-namespace ambiguity — see the module docs).
     "use_self",
+    // ── Batch 90 (the fired-histogram pedantic tail, Plan 051) ──
+    // Block-item hoist: items cannot capture block locals and resolution is
+    // order-independent WITHIN a block, so the hoist is semantics-preserving
+    // for every compiling input (guards: macro items, leading-gap /
+    // same-line-trailing comments). Applicability `Unspecified` — cargo
+    // clippy --fix does NOT cover this lint.
+    "items_after_statements",
+    // Let-bound 2-arm match with a VISIBLY diverging fallback → let-else.
+    // The probe mapped real clippy's silent shapes 1:1 onto parse-only
+    // guards: binding-use fallbacks (let-else cannot see arm bindings),
+    // non-identity arm-1 bodies, 3-arm/guard shapes, non-diverging
+    // fallbacks. Divergence is judged visibly (return/break/continue/
+    // panic-family macro) — a `!`-returning CALL fallback stays silent
+    // (parse-only cannot prove the return type).
+    "manual_let_else",
+    // NOTE — `option_if_let_else` (38 in the fired histogram) was PROBED
+    // then REFUTED (Batch 90, see `.plans/051`): nursery-group pure style
+    // with zero perf/correctness content, applicability Unspecified, its
+    // let-match half is already covered by manual_unwrap_or(_default), and
+    // its rewrite output (match with a std no-binding second arm, statement
+    // position) re-enters `single_match_else`'s Issue-029-T3 territory →
+    // fixpoint ping-pong with our own FIXABLE proposer. No corpus entry.
 ];
 
 /// Lints attempted ONLY under `cargo heal --fix --verify` (Issue 015) —
@@ -342,6 +379,9 @@ fn collect_rule_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<So
         // ── Batch 89 (fired-histogram expansion) ──
         "use_self" => use_self::collect_edits(source, file),
         "suboptimal_flops" => suboptimal_flops::collect_edits(source, file),
+        // ── Batch 90 (fired-histogram pedantic tail) ──
+        "items_after_statements" => items_after_statements::collect_edits(source, file),
+        "manual_let_else" => manual_let_else::collect_edits(source, file),
         _ => Vec::new(),
     }
 }
@@ -387,13 +427,14 @@ mod tests {
                 "{excluded} must not be --fix eligible"
             );
         }
-        // 6 seed + 27 Issue 016 structural rows + 1 Batch 89 use_self.
-        assert_eq!(FIXABLE_LINTS.len(), 34);
+        // 6 seed + 27 Issue 016 structural rows + 1 Batch 89 use_self
+        // + 2 Batch 90 (items_after_statements + manual_let_else).
+        assert_eq!(FIXABLE_LINTS.len(), 36);
     }
 
     /// Every proposer lint round-trips through the shared dispatch (fires on
     /// its fixture + output re-parses — the L2 pruner check `--fix` runs).
-    /// 40-row fixture table — length is the point.
+    /// 44-row fixture table — length is the point.
     #[test]
     #[allow(clippy::too_many_lines)]
     fn all_lints_fire_and_parse() {
@@ -621,6 +662,17 @@ impl S {
                 "suboptimal_flops",
                 "fn f(x: f64) -> f64 { x.powf(0.5) }",
                 "x.sqrt()",
+            ),
+            // ── Batch 90 (fired-histogram pedantic tail) ──
+            (
+                "items_after_statements",
+                "fn f() -> i32 { let x = 1; fn h(v: i32) -> i32 { v * 2 } h(x) }",
+                "fn h(v: i32) -> i32 { v * 2 }\n\nlet x = 1;",
+            ),
+            (
+                "manual_let_else",
+                "fn f(x: Option<u32>) -> u32 { let v = match x { Some(v) => v, None => return 0 }; v + 1 }",
+                "let Some(v) = x else { return 0 };",
             ),
         ];
         let pruner = crate::pruner::RustAnalyzerPruner::new();

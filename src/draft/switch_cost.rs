@@ -412,8 +412,20 @@ mod tests {
             .chain(VERIFY_LINTS)
             .copied()
             .collect();
+        // TRUE-positive exception (found Batch 90, a Batch-89 leftover): the
+        // `powi-vs-powf` perf fixture legitimately carries
+        // `d.powf(2.0)` — the exact shape clippy's `suboptimal_flops`
+        // targets (real clippy fires there too; the fixture predates that
+        // clippy rule's corpus entry). The invariant below catches FALSE
+        // fires (a clippy proposer mangling a perf fixture through pattern
+        // ambiguity); a true-positive fire by the lint's own shape is not a
+        // leak, so the named (fixture, lint) pair is allowlisted.
+        const TRUE_POSITIVE_FIRES: &[(&str, &str)] = &[("powi-vs-powf", "suboptimal_flops")];
         for &(rule, code) in PERF_SPANS {
             for &l in &structural {
+                if TRUE_POSITIVE_FIRES.contains(&(rule, l)) {
+                    continue;
+                }
                 assert!(
                     propose_fix(l, code).is_none(),
                     "perf fixture {rule} carries clippy lint {l}"

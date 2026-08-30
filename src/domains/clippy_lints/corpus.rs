@@ -329,6 +329,31 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
             fixed_code: "fn unit_len(x: f64, y: f64) -> f64 { (x * x + y * y).sqrt() }"
                 .to_string(),
         },
+        ClippyFixEntry {
+            lint_name: "items_after_statements".to_string(),
+            lint_group: "pedantic".to_string(),
+            // Batch 90 (the fired-histogram pedantic tail: 39 real
+            // instances). FIXABLE: block items cannot capture block locals
+            // and name resolution is order-independent within a block, so
+            // the hoist is semantics-preserving; the proposer's comment
+            // guards (leading gap + same-line trailing) refuse where the
+            // hoist would displace a comment.
+            buggy_code: "fn f() -> i32 { let x = 1; fn h(v: i32) -> i32 { v * 2 } h(x) }".to_string(),
+            fixed_code: "fn f() -> i32 { fn h(v: i32) -> i32 { v * 2 } let x = 1; h(x) }".to_string(),
+        },
+        ClippyFixEntry {
+            lint_name: "manual_let_else".to_string(),
+            lint_group: "pedantic".to_string(),
+            // Batch 90 (~40 real instances). FIXABLE: the probe mapped real
+            // clippy's silent shapes 1:1 onto parse-only guards (binding-use
+            // fallbacks, non-identity arm-1 bodies, 3-arm/guard shapes,
+            // non-diverging fallbacks); divergence is judged visibly
+            // (return/break/continue/panic-family macro).
+            buggy_code: "fn f(x: Option<u32>) -> u32 { let v = match x { Some(v) => v, None => return 0 }; v + 1 }"
+                .to_string(),
+            fixed_code: "fn f(x: Option<u32>) -> u32 { let Some(v) = x else { return 0 }; v + 1 }"
+                .to_string(),
+        },
     ])
 }
 
@@ -404,9 +429,9 @@ mod tests {
     /// KILLED: a broad const-ability proposer cross-fires every fixture
     /// and the clean-span set; see `VERIFY_LINTS` + `.plans/050`.)
     #[test]
-    fn corpus_size_is_43() {
+    fn corpus_size_is_45() {
         let corpus = build_seed_corpus();
-        assert_eq!(corpus.entries.len(), 43);
+        assert_eq!(corpus.entries.len(), 45);
     }
 
     /// Every corpus entry's proposer round-trips: the buggy fixture fires

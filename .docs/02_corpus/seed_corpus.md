@@ -83,6 +83,25 @@ corpus-lockstep gate forbids a corpus entry without a proposer; and real
 `cargo clippy --fix` already applies the lint's own MachineApplicable
 suggestion. Record: `.plans/050` + the `VERIFY_LINTS` note.
 
+## The 2 Batch 90 entries (2026-08-31)
+
+The same fired-histogram lead, pedantic tail — both FIXABLE, both
+applicability `Unspecified` under clippy 1.97 (cargo-fix does NOT cover
+them, so the proposers are genuinely additive):
+
+| Lint | Group | Tier | Pattern |
+|---|---|---|---|
+| `items_after_statements` | pedantic | fix | block item (`fn`/`const`/`static`/`struct`/…) hoisted above the statements (order-independent resolution; guards: macro items, leading-gap + same-line-trailing comments) |
+| `manual_let_else` | pedantic | fix | `let v = match x { P => v, Q => diverge }` → `let P = x else { diverge }` (visible divergence only: return/break/continue/panic-family; skips binding-use fallbacks, non-identity arm-1 bodies, 3-arm/guard shapes — all probe-matched to real clippy's silent set) |
+
+**The refuted third lead:** `option_if_let_else` (38 instances) — nursery-
+group pure style with zero perf/correctness content; its let-match half is
+already covered by `manual_unwrap_or`/`manual_unwrap_or_default`; and its
+rewrite output (`match x { Some(v) => v, None => 0 }` in statement position)
+re-enters `single_match_else`'s Issue-029-T3 std-ctor territory → fixpoint
+ping-pong with our own FIXABLE proposer. No corpus entry. Record: `.plans/051`
++ the `FIXABLE_LINTS` note.
+
 The full per-lint fixture tables live in
 [`corpus.rs`](../../src/domains/clippy_lints/corpus.rs) + the per-lint
 proposer test modules under
