@@ -107,4 +107,4 @@ stays silent on. All three are parse-bounded candidates; probe evidence per rule
   useless_format ×1, the two documented boundaries).
 - [x] T7 Docs: AGENTS.md batch record + `.docs/02_corpus/seed_corpus.md` table +
   README counts + queue snapshot (lead consumed, refutation recorded).
-- [ ] T8 Commit + push; clean up `target/probe_b90/`.
+- [x] T8 Commit + push; clean up `target/probe_b90/`. — VERIFIED DONE 2026-08-31 (idle-loop queue-2 hygiene): commit `a657f4f` landed on origin/develop (batch record + GOAT counts in the message); `target/probe_b90/` already absent. Box was the only stale `- [ ]` in the plans tree.

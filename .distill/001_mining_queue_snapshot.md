@@ -1721,7 +1721,7 @@ divergence worth encoding:
    the sweep protocol — `--keep-going` enumerates ALL failing crates in one
    pass (single-pass discovery vs 4 sequential here).
 
-## Intake consumption + WGSL sweep (2026-08-30 — the follow-through session)
+## Batch 89 landing — plans/050 histogram leads (landed 2026-08-31; header deduped 2026-08-31 — was a duplicate of the WGSL-sweep header below)
 
 **Batch 89 LANDED 2026-08-31 (`.plans/050`, 2 of 3 leads consumed):** `use_self`
 (130) landed FIXABLE, `suboptimal_flops` (206) landed VERIFY-tier — both
