@@ -1,6 +1,6 @@
 # Plan 049 — Trained clippy drafter: phased rollout (Proposal 009)
 
-Status: **IN PROGRESS 2026-08-30 — T0.0a + T0.0b landed (`15ceebf`); still no trained code.** Phase 1 is CLOSED UNBUILT (Bench 043 already decomposed the band to 0 selector-addressable with pool@16 = 100.0% — G6's denominator is empty by construction, the Plan 017 failure mode repeating). Phase 2 is promoted to the new Phase 1 and re-scoped modelless-first. Phase 0 is re-pointed at the **proposer-coverage** band; its two plumbing tasks (T0.0a/b) landed 2026-08-30 — **T0.0c / T0.1 / T0.2 are the queued next units.** See [Proposal 009 §Review verdict](../.proposals/009_trained_clippy_drafter_moka_puct.md#review-verdict--2026-08-29-adversarial-re-read-evidence-re-grepped--online-prior-art-sweep).
+Status: **IN PROGRESS 2026-08-30 — T0.0a + T0.0b + T0.0c landed (`15ceebf`, this commit); still no trained code.** Phase 1 is CLOSED UNBUILT (Bench 043 already decomposed the band to 0 selector-addressable with pool@16 = 100.0% — G6's denominator is empty by construction, the Plan 017 failure mode repeating). Phase 2 is promoted to the new Phase 1 and re-scoped modelless-first. Phase 0 is re-pointed at the **proposer-coverage** band; T0.0c is LANDED — **T0.0d / T0.1 / T0.2 are the queued next units.** See [Proposal 009 §Review verdict](../.proposals/009_trained_clippy_drafter_moka_puct.md#review-verdict--2026-08-29-adversarial-re-read-evidence-re-grepped--online-prior-art-sweep).
 Branch: `develop` (per global rule — no feature branches)
 **Proposal:** [`.proposals/009_trained_clippy_drafter_moka_puct.md`](../.proposals/009_trained_clippy_drafter_moka_puct.md)
 Predecessor evidence: Bench 049 (CF-70B 5–6/9, decline 0/9), riir-train Plan 336 + Benches 463/467 (0/60 generative-LoRA failure), Plan 017 + Bench 043 (headroom instrument + negative), Plan 014 (score-bench axes), Research 001 (Model-evolution category), Research 077 (DFlash2).
@@ -61,10 +61,34 @@ proposers (the T3.5.4 contamination lesson) — `clippy_oracle` labels everythin
       now delegates — one walker, no drifting copies) + `collect_source_files_sorted` for
       BLAKE3-committed dataset walks. Validation: clippy `-D warnings --all-targets`
       (latent_retrieval,clippy_verify) green; latent lib suite 1017/0/1 (14 new tests).
-- [ ] T0.0c **Modelless-first, before any training denominator exists:** write the missing
-      deterministic proposers (`dyn-to-enum`, `shrink-to-fit-after-build`, and whatever T0.2
-      surfaces) — the Getafix/Sorald shape, zero training. Re-measure. Only the residual after
-      this is an honest trained-arm denominator.
+- [x] T0.0c **LANDED 2026-08-30:** `shrink-to-fit-after-build` proposer
+      (`proposers/shrink_to_fit_after_build.rs`, FIXABLE_RULES 10 → 11, 19
+      fixtures). Fires on a `let mut v = Vec::new()` / `with_capacity(hint)`
+      binding whose ident is the fn tail, with ≥1 push-in-loop — inserts
+      `v.shrink_to_fit();` before the tail (zero-width edit, body-local, no
+      signature/type ripple). **Exact-capacity complement:** it MUTUALLY
+      EXCLUDES with `vec-with-capacity` (runs the vwc probe, same
+      `ProposerOpts`) AND independently delegates on len-convention push
+      loops (bare-path/`&p`/`.iter()` iterables — `.len()` is unconditionally
+      usize, no type gate needed) — the with_capacity fix wins wherever it
+      applies; shrink is the fallback for `while`/`loop` bodies,
+      unknown-iterator for loops (`.enumerate()`), and over-provisioned or
+      guessed hints (`with_capacity(count * 2)`, `with_capacity(4096)`).
+      Range-bound loops keep ONLY the vwc-overlap gate: when vwc declines a
+      range (u8 bound vs its usize gate), shrink fires as the correct
+      fallback. **Re-measure (headroom decomposition, 101 spans): shipped
+      misses 8 → 7, unfixable 3 → 2 — the shrink eval span left the miss list
+      entirely (rank-6 in-pool → healed by the DEFAULT Structural rerank via
+      instantiation evidence).** The two REMAINING unfixable targets stay
+      proposer-less by architecture and are the honest trained-arm residual:
+      `dyn-to-enum` (full devirtualization, the `usize-index-to-u32`
+      type-ripple class) and `box-str-immutable` (Vec<String> → Vec<Box<str>>
+      ripples into every push site + changes mutability semantics). Gates:
+      fixture label-verify + cross-fire 3/3, clean-span gate ok, default lib
+      937/0, latent lib 1070/0/7i, score-bench #19 flat (96.2/1.9/100/100 —
+      the standing series; 0 created), clippy 0, fmt clean. NOTE: the T0.2
+      trainable-band lens below is unchanged — (a)+(b) remain 0 on the
+      fixture set.
 - [ ] T0.0d **Cheapest real unblock, independent of this plan — OWNER-GATED FLIP:** wire the L4
       seam to the arm that ALREADY passed — Bench 049 CF-70B strict-keep 5/9 (A) and 6/9 (B) vs
       decline 0/9 — plus a CodeCureAgent-style iterate loop (arXiv:2509.11787: 86.3%

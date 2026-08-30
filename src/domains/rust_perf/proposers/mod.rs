@@ -54,6 +54,23 @@
 //! rationale applied to a tie instead of a loss), and `soa-hot-field` is
 //! architectural (a struct layout change, suggestion-only).
 //!
+//! ## Plan 049 T0.0c (2026-08-30): +1 proposer-covered rule
+//!
+//! The Bench 043 headroom decomposition showed the shrink rule's eval span
+//! ranked IN-POOL with no edit to apply ("unfixable target"). The proposer
+//! inserts `v.shrink_to_fit();` before a build fn's tail. It MUTUALLY
+//! EXCLUDES with `vec-with-capacity` (which runs as a probe inside it):
+//! where the capacity is derivable, `Vec::with_capacity(n)` is the strictly
+//! better fix and shrink stays silent; shrink is the fallback for `while`/
+//! `loop` push bodies, unknown-iterator for loops, and over-provisioned or
+//! guessed `with_capacity` hints. The win is peak memory, not speed — the
+//! corpus note stands. Two of the three unfixable targets REMAIN
+//! proposer-less by architecture: `dyn-to-enum` (full devirtualization —
+//! the `usize-index-to-u32` type-ripple class) and `box-str-immutable`
+//! (Vec<String> → Vec<Box<str>> ripples into every push site and changes
+//! mutability semantics); they are the honest residual for the trained-arm
+//! denominator.
+//!
 //! ## Honest caveats (Proposal 002 caveats 3-4, restated for this domain)
 //!
 //! - **`--fix` only applies CONFIRMED visitor matches** (these proposers).
@@ -90,6 +107,7 @@ pub mod entry_vs_contains;
 pub mod fxhashmap;
 pub mod hashmap_with_capacity;
 pub mod hashset_insert_bool_return;
+pub mod shrink_to_fit_after_build;
 pub mod static_str;
 pub mod vec_macro_zero_fill;
 pub mod vec_with_capacity;
@@ -146,6 +164,7 @@ pub const FIXABLE_RULES: &[&str] = &[
     "vec-macro-zero-fill",
     "distance-sq-no-sqrt",
     "hashmap-with-capacity",
+    "shrink-to-fit-after-build",
 ];
 
 /// Proposer option flags (Issue 015 verify-mode).
@@ -214,6 +233,9 @@ pub fn collect_edits_opts(
         "vec-macro-zero-fill" => vec_macro_zero_fill::collect_edits(source, file),
         "distance-sq-no-sqrt" => distance_sq_no_sqrt::collect_edits(source, file),
         "hashmap-with-capacity" => hashmap_with_capacity::collect_edits(source, file),
+        "shrink-to-fit-after-build" => {
+            shrink_to_fit_after_build::collect_edits_opts(source, file, opts)
+        }
         _ => Vec::new(),
     };
     edits
