@@ -2796,6 +2796,19 @@ AI sessions: treat `.env` as read-only local state — pipe values into
 `wrangler secret put` via stdin (`grep '^NAME=' .env | cut -d= -f2- | …`),
 never echo them.
 
+**Issue 051 (groq-first LLM routing) RESOLVED + removed 2026-08-31 per the
+noise-reduction rule (full session records in git history —
+`git log -- .issues/051_*.md`). All T1–T15 landed and live-proven: the free
+leg serves first (`LlmRouter::from_env` no longer requires CF creds to
+build — the T9 fix), T7's live window absorbed 2/2 calls for $0.0000
+metered / 0 neurons, T14/T15 close both "empty backlog" falsification
+halves.** The one defer, preserved here because the file is gone: **T8 —
+`fixer_regate` arms stay CF-pinned BY DESIGN** (the arm rows are MODEL
+comparisons; mixing a free router would confound the comparison the arms
+exist to make) — re-open only with an explicit free-tier arm. The
+scaling-direction note (owner): this ladder is the TEMPLATE for more free
+tiers — a provider list + per-provider quota state, not a hardcoded pair.
+
 **State as of 2026-08-29 (verified live, do not re-ask for these):** the
 T9 rollout EXECUTED — worker deployed, `READ_TOKEN` gate live (anon
 `/hours` → 401), `CF_API_TOKEN` set in the worker (`/status` →
