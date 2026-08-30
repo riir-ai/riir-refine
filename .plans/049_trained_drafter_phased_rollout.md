@@ -1,6 +1,6 @@
 # Plan 049 — Trained clippy drafter: phased rollout (Proposal 009)
 
-Status: **IN PROGRESS 2026-08-31 — T0.0a/T0.0b/T0.0c + T0.1 LANDED; still no trained code.** T0.1 measured the real-repo dataset in-context: **the in-vocabulary band is 20/2,128 = 0.94%** — under T0.3's 2% stop bar before T0.2 even runs; the decomposition + stop-rule verdict is the remaining Phase-0 unit. Phase 1 is CLOSED UNBUILT (Bench 043 already decomposed the band to 0 selector-addressable with pool@16 = 100.0% — G6's denominator is empty by construction, the Plan 017 failure mode repeating). Phase 2 is promoted to the new Phase 1 and re-scoped modelless-first. **T0.0d (owner-gated flip) / T0.2+T0.3 (stop verdict) are the queued units.** The T0.1 fired-histogram (must_use_candidate 1011, missing_const_for_fn 723, doc_markdown 518, cast_precision_loss 463, suboptimal_flops 206, …) is the committed corpus-expansion roadmap — a NEW plan if the owner wants the pedantic long-tail healed. See [Proposal 009 §Review verdict](../.proposals/009_trained_clippy_drafter_moka_puct.md#review-verdict--2026-08-29-adversarial-re-read-evidence-re-grepped--online-prior-art-sweep).
+Status: **CLOSED-STOP 2026-08-31 — Phase 0 complete, the stop rule fired.** The trained-drafter band on real code is **0.94pp (20/2,128) < the 2.0pp bar** ([Bench 061](../.benchmarks/061_trained_drafter_phase0_stop.md)): the sweep already owns its surface, 99.06% of real findings are corpus-absent (a proposer-coverage problem, not a ranking one), and decline stays the L4 default. Phase 1 was CLOSED UNBUILT (Bench 043). **Reopen pinned by test:** a new T0.1 dataset whose in-vocab band clears 2pp. Successor: the committed fired-histogram (missing_const_for_fn 723, suboptimal_flops 206, …) is the corpus-expansion roadmap in the mining queue — modelless proposer work. T0.0d (CF-70B arm) stays OWNER-GATED, independent of this verdict. See [Proposal 009 §Review verdict](../.proposals/009_trained_clippy_drafter_moka_puct.md#review-verdict--2026-08-29-adversarial-re-read-evidence-re-grepped--online-prior-art-sweep).
 Branch: `develop` (per global rule — no feature branches)
 **Proposal:** [`.proposals/009_trained_clippy_drafter_moka_puct.md`](../.proposals/009_trained_clippy_drafter_moka_puct.md)
 Predecessor evidence: Bench 049 (CF-70B 5–6/9, decline 0/9), riir-train Plan 336 + Benches 463/467 (0/60 generative-LoRA failure), Plan 017 + Bench 043 (headroom instrument + negative), Plan 014 (score-bench axes), Research 001 (Model-evolution category), Research 077 (DFlash2).
@@ -132,13 +132,23 @@ proposers (the T3.5.4 contamination lesson) — `clippy_oracle` labels everythin
       `compiles_batch_splits_a_mixed_batch_without_the_fallback_storm`.
       `compiles_batch` (one-cargo-run batch compile probe) stays as oracle API even though
       the final harness outgrew it.
-- [ ] T0.2 Re-run `decompose_headroom()` (Plan 017 instrument) with the trained-arm lens:
-      classify each pipeline failure as (a) retrieval miss (rule absent from pool), (b) ordering
-      miss (present, not top-1), (c) proposer-absent (no bounded fix exists). The TRAINABLE band
-      = (a)+(b) where a span-conditioned type-aware signal could plausibly flip the outcome.
-- [ ] T0.3 **Stop rule:** trainable band < 2% of failures → record the negative bench,
-      close the plan, keep decline (the Plan 017 precedent — G0's denominator must be non-empty
-      before any GPU hour is spent). Record as `.benchmarks/NNN_trained_drafter_phase0.md`.
+- [x] T0.2 **DONE 2026-08-31** (verdict test `tests/t049_t023_stop_verdict.rs`, runs the
+      shipped `decompose_headroom_with_spans` over the T0.1 dataset's 20 in-vocab-labeled
+      spans + records the dataset-level band): layer 2 — 14/20 top-1 correct, 6 selection
+      misses → 1 pool-depth / 0 type-blind / 0 unfixable / **5 selector-addressable (25pp
+      of the 20-span subset)** — with the instrument's own read-the-count caveat binding
+      ("recover ≥50%" = "recover 3 spans" at n=20). Layer 1 (the honest denominator) —
+      **20/2,128 = 0.94pp** of the real finding-bearing surface has any in-corpus target;
+      the other 99.06% is proposer-absent at span level, which no ranking quality
+      addresses.
+- [x] T0.3 **STOP FIRED 2026-08-31** — record: [Bench 061](../.benchmarks/061_trained_drafter_phase0_stop.md).
+      0.94pp < the 2.0pp bar at the dataset level → the trained-drafter track CLOSES,
+      decline stays the L4 default (T0.0d's owner-gated CF arm is independent and stays
+      owner-gated). Reopen pinned by the test: a NEW T0.1 dataset whose in-vocab band
+      clears 2pp. Successor work recorded as a mining lead: the fired histogram
+      (missing_const_for_fn 723, suboptimal_flops 206, use_self 130, …) is the
+      corpus-expansion roadmap — modelless proposer work in the existing Protocol-A
+      pattern, no trained component.
 
 ## Phase 1 — ~~dataset + bi-encoder prior~~ **CLOSED UNBUILT 2026-08-29**
 
