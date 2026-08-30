@@ -7,7 +7,31 @@
 # storage; only the report is prose).
 set -u
 
-HEAL_REPO="/Users/katopz/git/riir-clippy"
+# Portable: repo root + sibling root derived from THIS script's location
+# (works unchanged on the M3 checkout and the 4090/Windows checkout).
+HEAL_REPO="$(cd "$(dirname "$0")/.." && pwd)"
+GIT_ROOT="$(dirname "$HEAL_REPO")"
+# Python is OPTIONAL: probe by EXECUTION, not command existence — Windows ships
+# a Microsoft-Store `python3` stub that resolves on PATH but only prints
+# "Python was not found" (measured 2026-08-31). Sections that need JSON math
+# degrade to a one-line note instead of spewing stub errors.
+PY_BIN=""
+for _c in python3 python py; do
+  if command -v "$_c" >/dev/null 2>&1 && "$_c" -c 'import sys' >/dev/null 2>&1; then
+    PY_BIN="$_c"
+    break
+  fi
+done
+run_py() {
+  if [ -n "$PY_BIN" ]; then
+    # Windows consoles default python's stdio to the LOCALE codec (cp874 on the
+    # 4090 box) — trajectories/scores are UTF-8 (…, box-drawing) → force UTF-8.
+    PYTHONIOENCODING=utf-8 "$PY_BIN" "$@"
+  else
+    cat >/dev/null
+    echo "  (python unavailable on this box — section skipped)"
+  fi
+}
 MEMORY="${RIIR_HEAL_MEMORY:-$HOME/.cache/riir-clippy/memory.json}"
 HISTORY="$HEAL_REPO/.benchmarks/score_history.jsonl"
 INTAKE="$HEAL_REPO/.distill/001_mining_queue_snapshot.md"
@@ -25,15 +49,32 @@ if [ -x "$HOME/.cargo/bin/cargo-heal" ] || [ -L "$HOME/.cargo/bin/cargo-heal" ];
 else
   echo "  binary:    MISSING (~/.cargo/bin/cargo-heal)"
 fi
+# Skill + global-rule checks are drift-aware and multi-platform:
+#  - Mac: the global skill is a SYMLINK (the discipline)
+#  - Windows: native symlinks need admin/Developer Mode (Operation not
+#    permitted, measured 2026-08-31) — a CONTENT-VERIFIED copy is accepted;
+#    a drifted copy is named loudly
 if [ -L "$HOME/.agents/skills/cargo-heal" ]; then
-  echo "  skill:     OK  (~/.agents/skills/cargo-heal)"
+  echo "  skill:     OK  (symlink)"
+elif [ -f "$HOME/.agents/skills/cargo-heal/SKILL.md" ]; then
+  if diff -q "$HEAL_REPO/.agents/skills/cargo-heal/SKILL.md" "$HOME/.agents/skills/cargo-heal/SKILL.md" >/dev/null 2>&1; then
+    echo "  skill:     OK  (content-verified copy — no native symlink on this box)"
+  else
+    echo "  skill:     STALE COPY — SKILL.md differs from canonical $HEAL_REPO/.agents/skills/cargo-heal; refresh it"
+  fi
 else
   echo "  skill:     MISSING (~/.agents/skills/cargo-heal)"
 fi
-if grep -q 'cargo heal --fix --write --verify' "$HOME/.config/zed/AGENTS.md" 2>/dev/null; then
-  echo "  global rule: OK  (~/.config/zed/AGENTS.md)"
+# Zed's global AGENTS.md lives at ~/.config/zed/ on macOS/Linux but at
+# %APPDATA%\\Zed on Windows (measured 2026-08-31) — check both.
+ZED_AGENTS=""
+for cand in "$HOME/.config/zed/AGENTS.md" "${APPDATA:-$HOME/AppData/Roaming}/Zed/AGENTS.md"; do
+  [ -f "$cand" ] && ZED_AGENTS="$cand" && break
+done
+if [ -n "$ZED_AGENTS" ] && grep -q 'cargo heal --fix --write --verify' "$ZED_AGENTS" 2>/dev/null; then
+  echo "  global rule: OK  ($ZED_AGENTS)"
 else
-  echo "  global rule: MISSING in ~/.config/zed/AGENTS.md"
+  echo "  global rule: MISSING (checked ~/.config/zed/AGENTS.md + %APPDATA%/Zed/AGENTS.md)"
 fi
 
 echo ""
@@ -47,16 +88,16 @@ HEAL_BIN="${HEAL_REPO}/target/release/cargo-heal"
 DUMP_TMP="$(mktemp)"
 STORE_REPOS=""
 for r in $REPOS; do
-  d="/Users/katopz/git/$r"
+  d="$GIT_ROOT/$r"
   [ -d "$d/.heal/trajectories.kv" ] || continue
   STORE_REPOS="$STORE_REPOS $r"
   if [ -x "$HEAL_BIN" ]; then
     RIIR_HEAL_TRAJ_ROOT="$d" "$HEAL_BIN" --dump-trajectories > "$DUMP_TMP" 2>/dev/null
-    python3 - "$r" "$DUMP_TMP" <<'EOF'
+    run_py - "$r" "$DUMP_TMP" <<'EOF'
 import json, sys
 repo, path = sys.argv[1], sys.argv[2]
 rows = succ = fail = cert = 0
-for line in open(path):
+for line in open(path, encoding='utf-8', errors='replace'):
     line = line.strip()
     if not line.startswith('{'):
         continue
@@ -78,9 +119,9 @@ done
 rm -f "$DUMP_TMP"
 [ -n "$STORE_REPOS" ] && echo "  repos with stores:$STORE_REPOS  (037-A2 per-repo evidence)"
 if [ -f "$MEMORY" ]; then
-  python3 - "$MEMORY" <<'EOF'
+  run_py - "$MEMORY" <<'EOF'
 import json, sys, collections
-m = json.load(open(sys.argv[1]))
+m = json.load(open(sys.argv[1], encoding='utf-8', errors='replace'))
 t = m.get('trajectories', [])
 tiers = collections.Counter(str(b.get('tier')) for b in t)
 succ = sum(b.get('success_count', 0) for b in t)
@@ -114,16 +155,16 @@ echo "── 1b. ELO leaderboard (Issue 039 T4 — rule-vs-shape ratings) ──
 if [ -n "$STORE_REPOS" ] && [ -x "$HEAL_BIN" ]; then
   ELO_TMP="$(mktemp)"
   for r in $STORE_REPOS; do
-    d="/Users/katopz/git/$r"
+    d="$GIT_ROOT/$r"
     RIIR_HEAL_TRAJ_ROOT="$d" "$HEAL_BIN" --dump-trajectories > "$ELO_TMP" 2>/dev/null
-    python3 - "$r" "$ELO_TMP" <<'EOF'
+    run_py - "$r" "$ELO_TMP" <<'EOF'
 import json, sys
 repo, path = sys.argv[1], sys.argv[2]
 BASE = 1200.0
 rules = {}   # lint_key -> {wins, losses, elo(None|float)}
 spans = {}   # shape -> {elo(None|float)}
 withdrawn = 0
-for line in open(path):
+for line in open(path, encoding='utf-8', errors='replace'):
     line = line.strip()
     if not line.startswith('{'):
         continue
@@ -186,7 +227,7 @@ if [ -n "$STORE_REPOS" ] && [ -x "$HEAL_BIN" ]; then
   CR_PROBE="$(mktemp -d)"
   if RIIR_HEAL_TRAJ_ROOT="$CR_PROBE" "$HEAL_BIN" --collapse-report 2>/dev/null | grep -q 'collapse-report:'; then
     for r in $STORE_REPOS; do
-      d="/Users/katopz/git/$r"
+      d="$GIT_ROOT/$r"
       RIIR_HEAL_TRAJ_ROOT="$d" "$HEAL_BIN" --collapse-report 2>/dev/null | grep -E 'fresh\(empty\)|store\('
     done
     echo "  reading: pool mem% = Memory share of the heal candidate pool;"
@@ -211,13 +252,13 @@ echo "── 1d. Component-attributed failures (Issue 047 — E/rho/W/C miss map
 if [ -n "$STORE_REPOS" ] && [ -x "$HEAL_BIN" ]; then
   COMP_TMP="$(mktemp)"
   for r in $STORE_REPOS; do
-    d="/Users/katopz/git/$r"
+    d="$GIT_ROOT/$r"
     RIIR_HEAL_TRAJ_ROOT="$d" "$HEAL_BIN" --dump-trajectories > "$COMP_TMP" 2>/dev/null
-    python3 - "$r" "$COMP_TMP" <<'EOF'
+    run_py - "$r" "$COMP_TMP" <<'EOF'
 import json, sys, collections
 repo, path = sys.argv[1], sys.argv[2]
 rows = []
-for line in open(path):
+for line in open(path, encoding='utf-8', errors='replace'):
     line = line.strip()
     if not line.startswith('{'):
         continue
@@ -254,9 +295,9 @@ fi
 echo ""
 echo "── 2. Score bench history (learning quality over time) ──"
 if [ -f "$HISTORY" ]; then
-  python3 - "$HISTORY" <<'EOF'
+  run_py - "$HISTORY" <<'EOF'
 import json, sys
-rows = [json.loads(l) for l in open(sys.argv[1]) if l.strip()]
+rows = [json.loads(l) for l in open(sys.argv[1], encoding='utf-8', errors='replace') if l.strip()]
 print(f"  runs: {len(rows)}")
 for r in rows:
     ts = (r.get('ts') or r.get('timestamp') or '?')[:19]
@@ -275,7 +316,7 @@ fi
 echo ""
 echo "── 3. Post-mining intake (mining report progress) ──"
 if [ -f "$INTAKE" ]; then
-  python3 - "$INTAKE" <<'EOF'
+  run_py - "$INTAKE" <<'EOF'
 import re, sys
 # E5's gate text: ">=1 post-mining intake class closed end-to-end: intake
 # [x] + proposer-change commit + fixture + score-bench delta". A bare tick
@@ -284,7 +325,7 @@ import re, sys
 # and a gate's own task completions cannot be evidence for the gate itself.
 # A ticked item counts only when its entry carries the full closure chain
 # AND is not closed-via-an-Issue-037-task attribution.
-text = open(sys.argv[1]).read()
+text = open(sys.argv[1], encoding='utf-8', errors='replace').read()
 parts = text.split('## Post-mining intake', 1)
 if len(parts) != 2:
     print("  intake section header missing — cannot parse P-items")
@@ -335,7 +376,7 @@ echo ""
 echo "── 4. Adoption (did agents actually run it? durable trail) ──"
 total=0
 for r in $REPOS; do
-  d="/Users/katopz/git/$r"
+  d="$GIT_ROOT/$r"
   [ -d "$d/.git" ] || continue
   # Word-boundary match: "heal" as a standalone word. A bare --grep='heal'
   # substring-matches "health"/"healthy" — measured 2026-08-26 when five
@@ -360,13 +401,13 @@ echo "── 5. Cadence (A1 — distinct heal-activity days, >=3 in any 14-day w
 DAYS_TMP="$(mktemp)"
 A1_DUMP="$(mktemp)"
 for r in $REPOS; do
-  d="/Users/katopz/git/$r"
+  d="$GIT_ROOT/$r"
   if [ -d "$d/.heal/trajectories.kv" ] && [ -x "$HEAL_BIN" ]; then
     RIIR_HEAL_TRAJ_ROOT="$d" "$HEAL_BIN" --dump-trajectories > "$A1_DUMP" 2>/dev/null
-    python3 - "$r" "$A1_DUMP" >> "$DAYS_TMP" <<'EOF'
+    run_py - "$r" "$A1_DUMP" >> "$DAYS_TMP" <<'EOF'
 import json, sys, datetime
 repo, path = sys.argv[1], sys.argv[2]
-for line in open(path):
+for line in open(path, encoding='utf-8', errors='replace'):
     line = line.strip()
     if not line.startswith('{'):
         continue
@@ -385,11 +426,11 @@ EOF
       | while read -r day; do printf '%s\tcommit\t%s\n' "$day" "$r"; done >> "$DAYS_TMP"
   fi
 done
-python3 - "$DAYS_TMP" <<'EOF'
+run_py - "$DAYS_TMP" <<'EOF'
 import sys, datetime
 ADOPT = datetime.date(2026, 8, 24)  # adoption day; post-T3 activity only
 days = {}
-for line in open(sys.argv[1]):
+for line in open(sys.argv[1], encoding='utf-8', errors='replace'):
     line = line.strip()
     if not line:
         continue
