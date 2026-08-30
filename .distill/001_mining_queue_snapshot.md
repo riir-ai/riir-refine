@@ -1702,3 +1702,53 @@ divergence worth encoding:
    `cargo clippy --workspace --all-targets --keep-going` screen as part of
    the sweep protocol — `--keep-going` enumerates ALL failing crates in one
    pass (single-pass discovery vs 4 sequential here).
+
+## Intake consumption + WGSL sweep (2026-08-30 — the follow-through session)
+
+Both 2026-08-29 intake items LANDED (riir-clippy `227637e`), plus the deferred
+kernel_heal sweep executed:
+
+1. **redundant_closure E0631 guard — LANDED.** The proposer now skips
+   bare-ident callees that same-file resolve to (a) a closure `let` binding
+   with any annotated param (the annotation IS the deref-coercion site — the
+   observed `let upload = |data: &[f32]|` + `.map(|w| upload(w))` class,
+   mla_cubecl x2 + moe_cubecl x4) or (b) a fn item with any reference-typed
+   param (reference params can always be coercion targets; by-value never).
+   Unannotated closure bindings still fire — their param type is inferred
+   FROM the call site, so the bare path re-derives the same type. The
+   intake's "skip when the arg is a deref-coercion" was refined: the
+   coercion is invisible to syn; the ANNOTATION/reference-param resolution
+   is the achievable sound surrogate. 4 new fixtures + 1 positive control.
+
+2. **manual_is_multiple_of E0689 guard — LANDED.** Fires only on a
+   PROVABLY-unsigned dividend: unsigned cast, unsigned-suffixed literal,
+   len()/capacity() method, arithmetic binary with one provable operand
+   (types unify), or bare ident bound by a typed unsigned fn param / typed
+   let (syn 2.x: the `let k: u64` annotation lives in `Pat::Type`, Local has
+   no ty field). The ambiguous-`{integer}` class (bare range-loop vars,
+   untyped lets, unsuffixed literals) is now SILENT — plain check resolves
+   it clean while CLIPPY raises E0689, so check-only --verify was
+   structurally blind and emission had to stop at the proposer. The self-
+   receiver positive control flipped to a documented skip (Self's type is
+   unknowable at syntax level) with a cast-based replacement. 8 new
+   fixtures. VERIFY_LINTS comment corrected (the old "verify gate reverts
+   E0599" claim was wrong for the ambiguous class).
+
+3. **kernel_heal WGSL sweep — EXECUTED, 0 new actionable finds.** Binary
+   rebuilt with kernel_heal; `--suggest --domain kernel` over riir-ai/crates
+   (120 .wgsl + 2371 .rs, 12,978 spans): **29 non-syn findings** =
+   15× declared-max-array-taxed-per-thread-under-runtime-bound (B46) +
+   13× row-dot-split-inner-axis-block-reduce (B44) +
+   1× share-cube-size-const-between-kernel-and-launcher (B44).
+   Triage (dispatch-site audit, not assumed): the declared-max citations on
+   m2p_attention ARE the Issue 701 H-B fix itself (validate_m2p_dispatch_
+   bounds release-checked caps named "Issue 701 H-B" in the error strings);
+   the attention_score/batched/flashprefill scores arrays are the same
+   audited-cap contract class. The row-dot citations are on the LEGACY
+   opt-in WGSL surface (shine_hypernet/spectral_quant_gpu/moa kernels)
+   whose production replacements shipped as the cubecl twins (Bench
+   773/774/790 + attention_cubecl). mux_kl_loss's 256u is Issue 709 H11's
+   documented unwired-kernel note (CPU path is production). Verdict: the
+   scanner's citations are accurate but point at dispositioned classes —
+   the default-pattern set needs no adjustment, and the next NEW-kernel
+   mine (Bonsai/qwen38 .wgsl additions) re-runs this command in one line.
