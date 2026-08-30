@@ -1,0 +1,212 @@
+{
+  "schema_version": 1,
+  "created_utc": "2026-08-30T18:17:28Z",
+  "generator": "riir-clippy examples/t01_real_repo_label",
+  "cargo_version": "cargo 1.97.0 (c980f4866 2026-06-30)",
+  "plan": "049_trained_drafter_phased_rollout.md T0.1",
+  "label_policy": "fired ∩ clippy-corpus vocabulary; prefer fixable (FIXABLE_LINTS ∪ VERIFY_LINTS), alphabetical within tier; None = in-context span whose fired lints are all outside the vocabulary",
+  "labeling": "in-context: `cargo clippy --workspace --all-targets --message-format=json -- -W clippy::all -W clippy::pedantic -W clippy::nursery` per repo; primary-span (file, line) attributed to the containing AstChunker span; files with hard errors excluded wholesale",
+  "vocabulary_size": 41,
+  "row_count": 2128,
+  "target_labeled": 330,
+  "dataset_blake3": "eb4aaed8d00394d6319dcf501f45b861e5ae72d243680f2d5f6859450682941f",
+  "source_repos": [
+    {
+      "name": "katgpt-rs",
+      "path": "../katgpt-rs",
+      "commit": "121802d683441dd963a55e4258bb8f0cbdc97ae6",
+      "clippy_exit_ok": false,
+      "lint_events": 35362,
+      "error_files": 1
+    },
+    {
+      "name": "riir-ai",
+      "path": "../riir-ai",
+      "commit": "84b1dc6d458cf1e13c9c065ef144510700c41c66",
+      "clippy_exit_ok": false,
+      "lint_events": 4398,
+      "error_files": 1
+    },
+    {
+      "name": "riir-train",
+      "path": "../riir-train",
+      "commit": "5f74f4deb746d338344ae561f43ab8d05e824a2a",
+      "clippy_exit_ok": true,
+      "lint_events": 9593,
+      "error_files": 0
+    },
+    {
+      "name": "riir-chain",
+      "path": "../riir-chain",
+      "commit": "c19ee3e02b8d62ec658d91e0731692073ee76894",
+      "clippy_exit_ok": true,
+      "lint_events": 3625,
+      "error_files": 0
+    },
+    {
+      "name": "riir-neuron-db",
+      "path": "../riir-neuron-db",
+      "commit": "06e7152791988b9a384d01aedf63c0a0a77bc770",
+      "clippy_exit_ok": false,
+      "lint_events": 2444,
+      "error_files": 1
+    },
+    {
+      "name": "riir-dapps",
+      "path": "../riir-dapps",
+      "commit": "7b4a9932d773b5bf94a67931e7c50ca2db519578",
+      "clippy_exit_ok": true,
+      "lint_events": 234,
+      "error_files": 0
+    }
+  ],
+  "label_histogram": {
+    "map_unwrap_or": 2,
+    "match_bool": 6,
+    "needless_range_loop": 1,
+    "semicolon_if_nothing_returned": 3,
+    "single_match_else": 3,
+    "uninlined_format_args": 4,
+    "unnecessary_sort_by": 1
+  },
+  "fired_histogram_top": [
+    [
+      "must_use_candidate",
+      1011
+    ],
+    [
+      "missing_const_for_fn",
+      723
+    ],
+    [
+      "doc_markdown",
+      518
+    ],
+    [
+      "cast_precision_loss",
+      463
+    ],
+    [
+      "suboptimal_flops",
+      206
+    ],
+    [
+      "cast_possible_truncation",
+      195
+    ],
+    [
+      "use_self",
+      130
+    ],
+    [
+      "missing_errors_doc",
+      90
+    ],
+    [
+      "missing_panics_doc",
+      78
+    ],
+    [
+      "cast_lossless",
+      77
+    ],
+    [
+      "too_many_lines",
+      72
+    ],
+    [
+      "cast_sign_loss",
+      55
+    ],
+    [
+      "inline_always",
+      51
+    ],
+    [
+      "similar_names",
+      45
+    ],
+    [
+      "return_self_not_must_use",
+      41
+    ],
+    [
+      "items_after_statements",
+      39
+    ],
+    [
+      "option_if_let_else",
+      38
+    ],
+    [
+      "explicit_iter_loop",
+      37
+    ],
+    [
+      "unreadable_literal",
+      37
+    ],
+    [
+      "redundant_closure_for_method_calls",
+      35
+    ],
+    [
+      "cast_possible_wrap",
+      28
+    ],
+    [
+      "too_long_first_doc_paragraph",
+      26
+    ],
+    [
+      "match_same_arms",
+      19
+    ],
+    [
+      "wildcard_imports",
+      19
+    ],
+    [
+      "many_single_char_names",
+      18
+    ],
+    [
+      "unnecessary_literal_bound",
+      18
+    ],
+    [
+      "ignored_unit_patterns",
+      15
+    ],
+    [
+      "manual_let_else",
+      15
+    ],
+    [
+      "elidable_lifetime_names",
+      14
+    ],
+    [
+      "float_cmp",
+      11
+    ]
+  ],
+  "counts": {
+    "files_walked": 6343,
+    "files_read_failed": 0,
+    "files_with_errors": 0,
+    "spans_chunked": 35893,
+    "span_size_filtered": 2333,
+    "pool_size": 33560,
+    "rows_with_findings": 2128,
+    "in_vocab_labeled": 20,
+    "in_vocab_multi": 1,
+    "events_total": 55656,
+    "events_matched_to_spans": 16464
+  },
+  "notes": [
+    "Labels come from the repos' REAL cargo environment (default features, their own target dirs): a span's label is the finding production healing would see.",
+    "cargo may REPLAY cached diagnostics for unchanged files — those carry the last build's lint config; for sweep-era surfaces that config equals this scan's, so replays are correct-or-undercounting labels, never fabricated ones.",
+    "Retrieval still sees the ISOLATED span text (production shape): the healer is handed a span, not the crate."
+  ]
+}

@@ -415,6 +415,14 @@ required-features = ["clippy_verify"]
 name = "pav_data_curate"
 required-features = ["pav_data"]
 
+# Plan 049 T0.1: oracle-label a fresh real-repo span set across the
+# workspace repos and freeze it as a BLAKE3-committed dataset
+# (.benchmarks/data/049_t01/). Needs cargo + clippy on PATH.
+#   cargo run --release --features latent_retrieval --example t01_real_repo_label
+[[example]]
+name = "t01_real_repo_label"
+required-features = ["latent_retrieval"]
+
 # Phase 3: kernel_opt domain demo. Demonstrates the routed heal pipeline:
 # router → narrowed candidates → drafter → validator + thermal tier.
 # Closes the Plan 003/004 gap (router was corpus-wired but never called in

@@ -206,6 +206,63 @@ impl ClippyOracle {
         }
     }
 
+    /// Compile-probe a batch: ONE `cargo check` over the shared batch
+    /// crate, hard errors attributed to their module by primary-span file.
+    ///
+    /// Plan 049 T0.1: real-repo spans carry a substantial non-compiling
+    /// fraction (crate-internal references, edition drift), and
+    /// [`Self::lints_for_batch`] answers any batch containing ONE broken
+    /// snippet with the per-snippet fallback — ~1 cargo spawn per span.
+    /// Probing first lets a caller clip the broken spans and label an
+    /// all-compiling batch, which takes the attributed fast path (one
+    /// spawn per whole batch).
+    ///
+    /// Returns one flag per snippet, input order. A module with no
+    /// attributed error reads as compiling — the same contract as a
+    /// single-snippet [`Self::lints_for`].`compiles`. An unattributable
+    /// error (primary span outside the module set — must not exist in a
+    /// crate this module fully controls) falls back to per-snippet
+    /// single-run probes, matching [`Self::lints_for_batch`]'s honesty
+    /// rule: unmeasurable is not compiling.
+    pub fn compiles_batch(&self, snippets: &[&str]) -> Vec<bool> {
+        if snippets.is_empty() {
+            return Vec::new();
+        }
+        let module_files: Vec<String> =
+            (0..snippets.len()).map(|i| format!("src/s{i}.rs")).collect();
+        let module_refs: Vec<&str> = module_files.iter().map(String::as_str).collect();
+
+        let crate_dir = match self.prepare_batch_crate_in("probe_", snippets) {
+            Ok(dir) => dir,
+            Err(_) => return vec![false; snippets.len()],
+        };
+        let output = match Command::new(&self.cargo_bin)
+            .arg("check")
+            .arg("--manifest-path")
+            .arg(crate_dir.join("Cargo.toml"))
+            .arg("--message-format=json")
+            // Same rule as run_clippy_status: the inherited
+            // CARGO_TARGET_DIR routes same-name temp packages into one
+            // target dir and crosses their diagnostic replay.
+            .env_remove("CARGO_TARGET_DIR")
+            .output()
+        {
+            Ok(o) => o,
+            Err(_) => return vec![false; snippets.len()],
+        };
+        let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+
+        match parse_batch_verdicts(&stdout, &module_refs) {
+            BatchParse::Attributed(v) => v.into_iter().map(|x| x.compiles).collect(),
+            // The crate shape is fully controlled, so this path should be
+            // dead; when it fires anyway, per-snippet single-run probes are
+            // the honest fallback (same rule as lints_for_batch).
+            BatchParse::Unattributable(_) => {
+                snippets.iter().map(|c| self.lints_for(c).compiles).collect()
+            }
+        }
+    }
+
     /// BLAKE3-keyed temp crate so repeat calls reuse cargo's build cache.
     fn prepare_crate(&self, code: &str) -> Result<PathBuf, String> {
         let hex = blake3::hash(code.as_bytes()).to_hex();
@@ -223,14 +280,24 @@ impl ClippyOracle {
     /// of the SAME snippet sequence reuse cargo's build cache. The key
     /// hashes each snippet LENGTH-PREFIXED (the incremental multi-part hash
     /// — no concatenation copy, and no `a‖b` vs `a‖b‖c` ambiguity).
+    /// `prefix` namespaces the crate dir: the compile PROBE and the clippy
+    /// LABEL run must never share a dir, because cargo's diagnostic-cache
+    /// replay on a target dir that a previous `cargo check` populated
+    /// SUPPRESSES the clippy warnings (measured, Plan 049 T0.1: a
+    /// check-then-clippy sequence emitted ~zero lints on 200 spans that
+    /// fire readily on a fresh dir).
     fn prepare_batch_crate(&self, snippets: &[&str]) -> Result<PathBuf, String> {
+        self.prepare_batch_crate_in("batch_", snippets)
+    }
+
+    fn prepare_batch_crate_in(&self, prefix: &str, snippets: &[&str]) -> Result<PathBuf, String> {
         let mut hasher = blake3::Hasher::new();
         for s in snippets {
             hasher.update(&(s.len() as u64).to_le_bytes());
             hasher.update(s.as_bytes());
         }
         let hex = hasher.finalize().to_hex();
-        let dir = self.work_root.join(format!("batch_{}", &hex[..16]));
+        let dir = self.work_root.join(format!("{prefix}{}", &hex[..16]));
         let src_dir = dir.join("src");
         std::fs::create_dir_all(&src_dir).map_err(|e| format!("create_dir_all failed: {e}"))?;
         std::fs::write(dir.join("Cargo.toml"), ORACLE_CARGO_TOML)
@@ -259,12 +326,20 @@ impl ClippyOracle {
     /// [`run_clippy`] plus the exit status — the batch path needs it to
     /// catch failures that produce no attributable diagnostic (link
     /// errors, a wedged rustc).
+    ///
+    /// The child env DROPS `CARGO_TARGET_DIR`: every keyed temp crate is a
+    /// package named `clippy_oracle`, and routing them all into one
+    /// inherited target dir cross-contaminates cargo's fingerprint/diagnostic
+    /// replay across DIFFERENT contents (measured: batch vs single label
+    /// divergence, T0.1 session). Each crate_dir therefore gets its own
+    /// `target/` beside it.
     fn run_clippy_status(&self, crate_dir: &Path) -> Result<(String, bool), String> {
         let output = Command::new(&self.cargo_bin)
             .arg("clippy")
             .arg("--manifest-path")
             .arg(crate_dir.join("Cargo.toml"))
             .arg("--message-format=json")
+            .env_remove("CARGO_TARGET_DIR")
             .arg("--")
             .arg("-W")
             .arg("clippy::all")
@@ -701,5 +776,41 @@ mod tests {
         }
         assert!(!batch[1].compiles, "the broken snippet must read uncompilable");
         assert!(batch[0].compiles, "the clean snippet must keep its real labels");
+    }
+
+    #[test]
+    fn compiles_batch_splits_a_mixed_batch_without_the_fallback_storm() {
+        // Plan 049 T0.1's instrument: ONE check run must separate the
+        // compiling spans from the broken ones — the property that lets the
+        // dataset harness clip broken spans and label the clean remainder
+        // in attributed batches instead of paying ~1 spawn per span.
+        let oracle = ClippyOracle::new().with_work_root(
+            std::env::temp_dir().join(format!("riir_clippy_oracle_batch_{}", std::process::id())),
+        );
+        if !oracle.is_available() {
+            return;
+        }
+        let good_a = "pub fn a(x: i32) -> i32 { x + 1 }";
+        let broken_b = "pub fn b() { let _: DoesNotExist = (); }";
+        let good_c = "pub fn c(v: &[u8]) -> Option<u8> { v.iter().nth(0).copied() }";
+        let broken_d = "pub fn d() -> String { format!(\"{}\", NonexistentType::field) }";
+
+        let flags = oracle.compiles_batch(&[good_a, broken_b, good_c, broken_d]);
+        assert_eq!(flags, vec![true, false, true, false]);
+
+        // The T0.1 sequence contract: probe FIRST, label SECOND — the label
+        // run must still see every lint the probe's check did not suppress.
+        // (The probe and the label use separate keyed crate dirs; sharing a
+        // dir made cargo's diagnostic replay swallow the clippy warnings.)
+        let surviving = [good_a, good_c];
+        let verdicts = oracle.lints_for_batch(&surviving);
+        assert!(verdicts.iter().all(|v| v.ran && v.compiles));
+        assert!(
+            !verdicts[0].lints.is_empty(),
+            "post-probe label run lost the warnings — probe/label crates share a dir?"
+        );
+
+        // Empty input stays a no-op (the offline contract).
+        assert!(oracle.compiles_batch(&[]).is_empty());
     }
 }

@@ -1,6 +1,6 @@
 # Plan 049 — Trained clippy drafter: phased rollout (Proposal 009)
 
-Status: **IN PROGRESS 2026-08-30 — T0.0a + T0.0b + T0.0c landed (`15ceebf`, this commit); still no trained code.** Phase 1 is CLOSED UNBUILT (Bench 043 already decomposed the band to 0 selector-addressable with pool@16 = 100.0% — G6's denominator is empty by construction, the Plan 017 failure mode repeating). Phase 2 is promoted to the new Phase 1 and re-scoped modelless-first. Phase 0 is re-pointed at the **proposer-coverage** band; T0.0c is LANDED — **T0.0d / T0.1 / T0.2 are the queued next units.** See [Proposal 009 §Review verdict](../.proposals/009_trained_clippy_drafter_moka_puct.md#review-verdict--2026-08-29-adversarial-re-read-evidence-re-grepped--online-prior-art-sweep).
+Status: **IN PROGRESS 2026-08-31 — T0.0a/T0.0b/T0.0c + T0.1 LANDED; still no trained code.** T0.1 measured the real-repo dataset in-context: **the in-vocabulary band is 20/2,128 = 0.94%** — under T0.3's 2% stop bar before T0.2 even runs; the decomposition + stop-rule verdict is the remaining Phase-0 unit. Phase 1 is CLOSED UNBUILT (Bench 043 already decomposed the band to 0 selector-addressable with pool@16 = 100.0% — G6's denominator is empty by construction, the Plan 017 failure mode repeating). Phase 2 is promoted to the new Phase 1 and re-scoped modelless-first. **T0.0d (owner-gated flip) / T0.2+T0.3 (stop verdict) are the queued units.** The T0.1 fired-histogram (must_use_candidate 1011, missing_const_for_fn 723, doc_markdown 518, cast_precision_loss 463, suboptimal_flops 206, …) is the committed corpus-expansion roadmap — a NEW plan if the owner wants the pedantic long-tail healed. See [Proposal 009 §Review verdict](../.proposals/009_trained_clippy_drafter_moka_puct.md#review-verdict--2026-08-29-adversarial-re-read-evidence-re-grepped--online-prior-art-sweep).
 Branch: `develop` (per global rule — no feature branches)
 **Proposal:** [`.proposals/009_trained_clippy_drafter_moka_puct.md`](../.proposals/009_trained_clippy_drafter_moka_puct.md)
 Predecessor evidence: Bench 049 (CF-70B 5–6/9, decline 0/9), riir-train Plan 336 + Benches 463/467 (0/60 generative-LoRA failure), Plan 017 + Bench 043 (headroom instrument + negative), Plan 014 (score-bench axes), Research 001 (Model-evolution category), Research 077 (DFlash2).
@@ -103,9 +103,35 @@ proposers (the T3.5.4 contamination lesson) — `clippy_oracle` labels everythin
       must not regress) + compile + tests — otherwise deleting the offending code "clears" the
       warning (never-wrong preserved).
 
-- [ ] T0.1 Oracle-label a fresh real-repo span set across the workspace repos (extend the
-      `src/draft/clippy_oracle.rs` batch path; target ≥ 300 labeled spans; commit the dataset
-      BLAKE3-committed under `.benchmarks/` or a data dir — freeze/thaw precedent).
+- [x] T0.1 **LANDED 2026-08-31** (`examples/t01_real_repo_label.rs` + the committed dataset
+      `.benchmarks/data/049_t01/{spans.jsonl,manifest.json}`, integrity test
+      `tests/t049_t01_dataset_integrity.rs`). **Method pivot recorded: the planned
+      isolated-span labeling (chunk → temp-crate → `ClippyOracle`) MEASURED ~0 labels per
+      200 compiled spans on four source sets (workspace repos, their unswept corners, and
+      the untouched sibling codebase seal-online-remaster) — most real-repo item spans do
+      not compile standalone (crate-internal references), and the self-contained fraction
+      is lint-clean by construction, so the oracle's `compiles=false → no labels` contract
+      excludes EXACTLY the code that needs healing. The shipped harness labels IN CONTEXT
+      instead: `cargo clippy --workspace --all-targets --message-format=json -- -W
+      clippy::all -W clippy::pedantic -W clippy::nursery` per repo, primary-span (file,
+      line) attributed to the containing AstChunker span; files with hard errors excluded
+      wholesale. Dataset: **2,128 finding-bearing real spans** (bar ≥300), 55,656 events
+      across 6 repos / 6,343 files, BLAKE3 `eb4aaed8…941f`, canonical (repo, path,
+      start_line) order. **THE HEADLINE FINDING — the in-vocabulary band is 20/2,128
+      = 0.94%**: of 99 distinct lints real clippy fires on our own code, the 33+4-rule
+      sweep vocabulary captures essentially nothing (top fired: must_use_candidate 1011,
+      missing_const_for_fn 723, doc_markdown 518, cast_precision_loss 463, suboptimal_flops
+      206 — none in corpus). The sweep already owns its surface completely; T0.3's stop
+      rule reads this ratio. En-route instrument fix (root cause, stays): the oracle's
+      probe and label paths now use SEPARATE keyed crate dirs (`probe_` vs `batch_`
+      prefix) — sharing one dir let cargo's diagnostic-cache replay SUPPRESS the clippy
+      warnings after a cargo check (measured: check-then-clippy emitted ~zero lints where
+      a fresh dir fires readily); also `CARGO_TARGET_DIR` is now stripped from oracle
+      children (same-name temp packages sharing an inherited target dir crossed their
+      diagnostic replay, flipping the batch-agreement test red). Both fixes pinned by
+      `compiles_batch_splits_a_mixed_batch_without_the_fallback_storm`.
+      `compiles_batch` (one-cargo-run batch compile probe) stays as oracle API even though
+      the final harness outgrew it.
 - [ ] T0.2 Re-run `decompose_headroom()` (Plan 017 instrument) with the trained-arm lens:
       classify each pipeline failure as (a) retrieval miss (rule absent from pool), (b) ordering
       miss (present, not top-1), (c) proposer-absent (no bounded fix exists). The TRAINABLE band
