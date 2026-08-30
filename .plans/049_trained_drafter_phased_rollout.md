@@ -89,7 +89,7 @@ proposers (the T3.5.4 contamination lesson) — `clippy_oracle` labels everythin
       the standing series; 0 created), clippy 0, fmt clean. NOTE: the T0.2
       trainable-band lens below is unchanged — (a)+(b) remain 0 on the
       fixture set.
-- [ ] T0.0d **Cheapest real unblock, independent of this plan — OWNER-GATED FLIP:** wire the L4
+- [-] **[DEFER — owner-gated: leak-posture sign-off (l4_fallback.md §5); independent of the stop verdict]** T0.0d **Cheapest real unblock, independent of this plan — OWNER-GATED FLIP:** wire the L4
       seam to the arm that ALREADY passed — Bench 049 CF-70B strict-keep 5/9 (A) and 6/9 (B) vs
       decline 0/9 — plus a CodeCureAgent-style iterate loop (arXiv:2509.11787: 86.3%
       manually-correct on 1,000 SonarQube warnings, ~$0.029 each). The proposal's "L4 sits
@@ -161,18 +161,18 @@ proposers (the T3.5.4 contamination lesson) — `clippy_oracle` labels everythin
 > are retained for the record; do not execute them.
 
 
-- [ ] T1.1 Freeze the dataset (T0.1 output + corpus pairs): (span, rule-id, fix-template) triples,
+- [-] **[STOP-CLOSED — Bench 061]** T1.1 Freeze the dataset (T0.1 output + corpus pairs): (span, rule-id, fix-template) triples,
       train/val/held-out split seeded and committed; BLAKE3 commitment over the canonical
       serialization (the corpus-commitment pattern).
-- [ ] T1.2 Train the two-tower bi-encoder in **riir-train** (GDN towers over span/rule tokens,
+- [-] **[STOP-CLOSED — Bench 061]** T1.2 Train the two-tower bi-encoder in **riir-train** (GDN towers over span/rule tokens,
       contrastive loss, `dot + sigmoid` scoring — sigmoid never softmax; M3 Metal first, no 4090
       unless scaling). Export a freeze snapshot.
-- [ ] T1.3 Ship the artifact as runtime DATA: BLAKE3-committed weight file (freeze/thaw
+- [-] **[STOP-CLOSED — Bench 061]** T1.3 Ship the artifact as runtime DATA: BLAKE3-committed weight file (freeze/thaw
       NeuronShard-style envelope, riir-neuron-db precedent); `trained_prior` loads + hash-verifies
       at startup; stale/mismatched hash → loud fallback to the modelless path (never silent).
-- [ ] T1.4 Integrate as a pool scorer behind the feature: scores the fan-out pool, feeds the
+- [-] **[STOP-CLOSED — Bench 061]** T1.4 Integrate as a pool scorer behind the feature: scores the fan-out pool, feeds the
       `RerankMode` slot; feature-OFF path byte-identical (assert by test).
-- [ ] T1.5 Gates: G1 (oracle-labeled composite eval), G3 (score-bench + CI guard, feature OFF
+- [-] **[STOP-CLOSED — Bench 061]** T1.5 Gates: G1 (oracle-labeled composite eval), G3 (score-bench + CI guard, feature OFF
       count-identical), G4 (latency/alloc), G5 (acceptance curve on held-out). Record
       `.benchmarks/NNN_trained_prior_g1.md`.
 
@@ -188,32 +188,32 @@ proposers (the T3.5.4 contamination lesson) — `clippy_oracle` labels everythin
 > failure, not a proof that unbounded output cannot work.
 
 
-- [ ] T2.1 Slot-filling heads: which identifier/range fills which template hole, bounded by the
+- [-] **[STOP-CLOSED — Bench 061]** T2.1 Slot-filling heads: which identifier/range fills which template hole, bounded by the
       corpus template surface; template-instantiation output only (no free text).
-- [ ] T2.2 Bench 049 harness arm: strict-keep / v2edit / parse / merge partial credit vs
+- [-] **[STOP-CLOSED — Bench 061]** T2.2 Bench 049 harness arm: strict-keep / v2edit / parse / merge partial credit vs
       `decline` and vs the CF-70B numbers, on the REFRESHED reachable set (G2).
-- [ ] T2.3 Miss-only reachability contract enforced: the trained drafter is consulted on L4
+- [-] **[STOP-CLOSED — Bench 061]** T2.3 Miss-only reachability contract enforced: the trained drafter is consulted on L4
       misses exactly like `DaemonL4` (`a_parsing_modelless_fix_is_never_replaced_by_l4` holds).
-- [ ] T2.4 Gates: G2 + **G6'-residual** (the proposer-coverage band the T0.0c proposers leave
+- [-] **[STOP-CLOSED — Bench 061]** T2.4 Gates: G2 + **G6'-residual** (the proposer-coverage band the T0.0c proposers leave
       behind — the voided G6 selection-band wording no longer applies). Record the bench.
 
 ## Phase 3 — PUCT search on contested spans (the moka transfer proper; only if Phase 1–2 win)
 
-- [ ] T3.1 Policy head = the bi-encoder prior; value head = V(passes-verify) trained on verify
+- [-] **[STOP-CLOSED — Bench 061]** T3.1 Policy head = the bi-encoder prior; value head = V(passes-verify) trained on verify
       outcomes (self-play over repo sweeps; oracle = reward; moka PUCT port pattern
       `katgpt-moka-wasm/src/puct.rs`, sigmoid-gated, bounded budget).
-- [ ] T3.2 Search only on contested/composite spans (multi-lint, ambiguous) — measure the
+- [-] **[STOP-CLOSED — Bench 061]** T3.2 Search only on contested/composite spans (multi-lint, ambiguous) — measure the
       contested-span rate first; if < 1% of spans, defer `[-]` with the number recorded.
-- [ ] T3.3 Self-play loop: dataset re-freeze per epoch, G5 curve per epoch, corruption-guard on
+- [-] **[STOP-CLOSED — Bench 061]** T3.3 Self-play loop: dataset re-freeze per epoch, G5 curve per epoch, corruption-guard on
       the oracle (label-drift check vs pinned fixtures).
-- [ ] T3.4 Gates: full G1–G6 re-run + score-bench series row.
+- [-] **[STOP-CLOSED — Bench 061]** T3.4 Gates: full G1–G6 re-run + score-bench series row.
 
 ## Phase 4 — promotion decision
 
-- [ ] T4.1 All gates green + real-repo G5-style validation (heal a real file end-to-end:
+- [-] **[STOP-CLOSED — Bench 061]** T4.1 All gates green + real-repo G5-style validation (heal a real file end-to-end:
       compile + tests) → promotion proposal to the owner; feature stays opt-in until the owner
       flips it.
-- [ ] T4.2 Doc-sync: AGENTS.md feature list + `.docs/11_domains/` entry (or the drafter doc),
+- [-] **[STOP-CLOSED — Bench 061]** T4.2 Doc-sync: AGENTS.md feature list + `.docs/11_domains/` entry (or the drafter doc),
       references back to Proposal 009 + this plan.
 
 ## Deliberate defers
