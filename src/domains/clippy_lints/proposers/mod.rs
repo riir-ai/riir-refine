@@ -152,12 +152,14 @@ pub mod semicolon_if_nothing_returned;
 pub mod single_char_pattern;
 pub mod single_match_else;
 pub mod single_match;
+pub mod suboptimal_flops;
 pub mod unnecessary_lazy_evaluations;
 pub mod unnecessary_mut_passed;
 pub mod unnecessary_sort_by;
 pub mod unnecessary_unwrap;
 pub mod uninlined_format_args;
 pub mod unused_unit;
+pub mod use_self;
 pub mod useless_conversion;
 pub mod useless_format;
 pub mod while_let_on_iterator;
@@ -212,6 +214,11 @@ pub const FIXABLE_LINTS: &[&str] = &[
     "wildcard_in_or_patterns",
     "unnecessary_sort_by",
     "iter_next_loop",
+    // ── Batch 89 (fired-histogram expansion, Plan 049 successor) ──
+    // Parse-provable path rewrite inside inherent impls (guards: nested
+    // items, bounds, attrs, macros, generic-arg identity, and the
+    // value-namespace ambiguity — see the module docs).
+    "use_self",
 ];
 
 /// Lints attempted ONLY under `cargo heal --fix --verify` (Issue 015) —
@@ -234,6 +241,18 @@ pub const VERIFY_LINTS: &[&str] = &[
     // typeck raises E0689, so the check-only --verify gate is structurally
     // blind to it and must never see the proposal at all.
     "manual_is_multiple_of",
+    // Batch 89 (fired-histogram expansion): `suboptimal_flops` — the
+    // receiver's type is invisible to syn (a custom `powf`/`log` would
+    // make the rewrite semantic; the `single_char_pattern` precedent).
+    // NOTE — `missing_const_for_fn` was PROPOSED then KILLED (Batch 89,
+    // see `.plans/050`): const-ability is typeck-driven and the lint is
+    // BROAD — an allowlist proposer fires on virtually every trivial fn,
+    // cross-firing every eval fixture and the clean-span set (the
+    // `needless_borrow` trio over-match precedent). Real `cargo clippy
+    // --fix` applies its MachineApplicable suggestion already, so the
+    // healer's marginal value was near zero. Corpus entry withheld too
+    // (the corpus-lockstep gate forbids entries without proposers).
+    "suboptimal_flops",
 ];
 
 /// Propose a fix for `(lint_name, buggy_code)` by applying the lint's
@@ -320,6 +339,9 @@ fn collect_rule_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<So
         "while_let_on_iterator" => while_let_on_iterator::collect_edits(source, file),
         "single_char_pattern" => single_char_pattern::collect_edits(source, file),
         "manual_is_multiple_of" => manual_is_multiple_of::collect_edits(source, file),
+        // ── Batch 89 (fired-histogram expansion) ──
+        "use_self" => use_self::collect_edits(source, file),
+        "suboptimal_flops" => suboptimal_flops::collect_edits(source, file),
         _ => Vec::new(),
     }
 }
@@ -354,14 +376,19 @@ mod tests {
             "comparison_to_empty",
             "while_let_on_iterator",
             "single_char_pattern",
+            "manual_is_multiple_of",
+            // Batch 89: invisible receiver types — VERIFY-tier only.
+            // (missing_const_for_fn was proposed then KILLED — see the
+            // VERIFY_LINTS note.)
+            "suboptimal_flops",
         ] {
             assert!(
                 !FIXABLE_LINTS.contains(&excluded),
                 "{excluded} must not be --fix eligible"
             );
         }
-        // 6 seed + 27 Issue 016 structural rows.
-        assert_eq!(FIXABLE_LINTS.len(), 33);
+        // 6 seed + 27 Issue 016 structural rows + 1 Batch 89 use_self.
+        assert_eq!(FIXABLE_LINTS.len(), 34);
     }
 
     /// Every proposer lint round-trips through the shared dispatch (fires on
@@ -583,6 +610,17 @@ impl S {
                 "single_char_pattern",
                 "fn f(s: &str) -> bool { s.contains(\"x\") }",
                 "s.contains('x')",
+            ),
+            // ── Batch 89 (fired-histogram expansion) ──
+            (
+                "use_self",
+                "struct V { n: u32 }\nimpl V { fn new() -> V { V { n: 1 } } }",
+                "Self { n: 1 }",
+            ),
+            (
+                "suboptimal_flops",
+                "fn f(x: f64) -> f64 { x.powf(0.5) }",
+                "x.sqrt()",
             ),
         ];
         let pruner = crate::pruner::RustAnalyzerPruner::new();

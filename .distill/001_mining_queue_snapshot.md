@@ -1709,6 +1709,30 @@ divergence worth encoding:
 
 ## Intake consumption + WGSL sweep (2026-08-30 — the follow-through session)
 
+**Batch 89 LANDED 2026-08-31 (`.plans/050`, 2 of 3 leads consumed):** `use_self`
+(130) landed FIXABLE, `suboptimal_flops` (206) landed VERIFY-tier — both
+probe-verified vs clippy 1.97 all-groups JSON, all gates green (963/0 lib,
+clippy 0 both states, retrieval floors 13/0 incl. cross-fire + clean-span,
+composite G1 8/0, score-bench #20 floors held). **`missing_const_for_fn` (723,
+the #1 lead) KILLED by the standing contracts**: a broad const-ability
+proposer fires on virtually every trivial fn — cross-fires every eval fixture
+(the single-anti-pattern invariant), pollutes the re-ranker's structural
+signal, and would need a clean-span exemption (the `needless_borrow` trio
+over-match precedent = not-fix-eligible); corpus-lockstep forbids an entry
+without a proposer; and `cargo clippy --fix` already applies the lint's own
+MachineApplicable suggestion (probe-verified), so marginal healer value ≈ 0.
+The remaining histogram leads are the SUGGEST-ONLY classes
+(must_use_candidate 1011, doc_markdown 518, cast_precision_loss 463,
+cast_possible_truncation 195 — no bounded parse-only fixes) + the narrow
+pedantic tail (items_after_statements 39, option_if_let_else 38,
+manual_let_else ~40 — viable future proposer candidates, probe-first).
+En-route: `tests/t049_t023_stop_verdict.rs` gained its missing
+`required-features = ["latent_retrieval"]` row (E0432 under default
+--all-targets — the gate-coverage class) + 3 clippy_oracle.rs warnings fixed
+(prior-session leftovers).
+
+## Intake consumption + WGSL sweep (2026-08-30 — the follow-through session)
+
 Both 2026-08-29 intake items LANDED (riir-clippy `227637e`), plus the deferred
 kernel_heal sweep executed:
 

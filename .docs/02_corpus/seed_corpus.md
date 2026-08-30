@@ -62,6 +62,27 @@ compile gate):
 | `while_let_on_iterator` | style | verify | `while let Some(x) = it.next()` → `for x in it` |
 | `single_char_pattern` | style | verify | `.contains("x")` → `.contains('x')` |
 
+## The 2 Batch 89 entries (2026-08-31)
+
+From the Plan 049 T0.1 real-code fired histogram (Bench 061) — what real
+clippy fires on our own repos that the corpus did not cover:
+
+| Lint | Group | Tier | Pattern |
+|---|---|---|---|
+| `use_self` | style | fix | inside inherent `impl V`: `-> V` / `V { .. }` / `V::K` → `Self` (inherent impls only; skips nested items, bounds, attrs, macros; generic args must match the impl head) |
+| `suboptimal_flops` | perf | verify | `x.powf(0.5)` → `x.sqrt()`, `x.powf(N.0)` → `x.powi(N)`, `x.log(2.0)` → `x.log2()`, `x.log(10.0)` → `x.log10()` (literal args only; `powf(1/3)` is nursery `imprecise_flops` territory) |
+
+**The killed third lead:** `missing_const_for_fn` (723 instances — the
+histogram's #1) was implemented as a VERIFY-tier allowlist proposer, then
+KILLED at the gates: a broad const-ability proposer fires on virtually every
+trivial fn, cross-firing every eval fixture (the single-anti-pattern
+invariant) and the clean-span set, and polluting the instantiation
+re-ranker's structural signal. The `needless_borrow` trio precedent
+classifies such over-matching proposers as not-fix-eligible; the
+corpus-lockstep gate forbids a corpus entry without a proposer; and real
+`cargo clippy --fix` already applies the lint's own MachineApplicable
+suggestion. Record: `.plans/050` + the `VERIFY_LINTS` note.
+
 The full per-lint fixture tables live in
 [`corpus.rs`](../../src/domains/clippy_lints/corpus.rs) + the per-lint
 proposer test modules under

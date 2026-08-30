@@ -583,3 +583,11 @@ debug = "line-tables-only"
 
 [profile.dev.package."*"]
 debug = false
+
+# The Plan 049 T0.2/T0.3 stop-verdict gate imports the feature-gated
+# `draft::` retrieval surface (latent_retrieval) — without this row the
+# target fails `cargo clippy/test --all-targets` under default features
+# (E0432 `could not find draft`; found 2026-08-31, Batch 89 G3).
+[[test]]
+name = "t049_t023_stop_verdict"
+required-features = ["latent_retrieval"]

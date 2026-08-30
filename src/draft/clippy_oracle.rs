@@ -232,23 +232,21 @@ impl ClippyOracle {
             (0..snippets.len()).map(|i| format!("src/s{i}.rs")).collect();
         let module_refs: Vec<&str> = module_files.iter().map(String::as_str).collect();
 
-        let crate_dir = match self.prepare_batch_crate_in("probe_", snippets) {
-            Ok(dir) => dir,
-            Err(_) => return vec![false; snippets.len()],
+        let Ok(crate_dir) = self.prepare_batch_crate_in("probe_", snippets) else {
+            return vec![false; snippets.len()];
         };
-        let output = match Command::new(&self.cargo_bin)
+        // Same rule as run_clippy_status: the inherited CARGO_TARGET_DIR
+        // routes same-name temp packages into one target dir and crosses
+        // their diagnostic replay.
+        let Ok(output) = Command::new(&self.cargo_bin)
             .arg("check")
             .arg("--manifest-path")
             .arg(crate_dir.join("Cargo.toml"))
             .arg("--message-format=json")
-            // Same rule as run_clippy_status: the inherited
-            // CARGO_TARGET_DIR routes same-name temp packages into one
-            // target dir and crosses their diagnostic replay.
             .env_remove("CARGO_TARGET_DIR")
             .output()
-        {
-            Ok(o) => o,
-            Err(_) => return vec![false; snippets.len()],
+        else {
+            return vec![false; snippets.len()];
         };
         let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
 
@@ -331,7 +329,7 @@ impl ClippyOracle {
     /// package named `clippy_oracle`, and routing them all into one
     /// inherited target dir cross-contaminates cargo's fingerprint/diagnostic
     /// replay across DIFFERENT contents (measured: batch vs single label
-    /// divergence, T0.1 session). Each crate_dir therefore gets its own
+    /// divergence, T0.1 session). Each `crate_dir` therefore gets its own
     /// `target/` beside it.
     fn run_clippy_status(&self, crate_dir: &Path) -> Result<(String, bool), String> {
         let output = Command::new(&self.cargo_bin)

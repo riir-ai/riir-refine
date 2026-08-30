@@ -18,12 +18,13 @@ use crate::domains::clippy_lints::{ClippyFixEntry, ClippyLintDomain};
 
 /// Build a seed corpus from common clippy lint examples.
 ///
-/// Returns a BLAKE3-committed [`Corpus<ClippyLintDomain>`] with 41 entries:
-/// the 10 seed lints (style, complexity, perf, nursery groups) + the 31
-/// Issue 016 structural-expansion and post-mining verify-tier lints (frequency-ranked from kornel's
-/// 100K-crate clippy run + Li et al.'s 8.09M-warning crates.io study ∩
-/// clippy's `MachineApplicable` axis ∩ parse-only provability — see
-/// `.benchmarks/021`).
+/// Returns a BLAKE3-committed [`Corpus<ClippyLintDomain>`] with 43 entries:
+/// the 10 seed lints (style, complexity, perf, nursery groups) + the 33
+/// Issue 016 structural-expansion, post-mining, and Batch 89 fired-histogram
+/// lints (frequency-ranked from kornel's 100K-crate clippy run + Li et al.'s
+/// 8.09M-warning crates.io study ∩ clippy's `MachineApplicable` axis ∩
+/// parse-only provability — see `.benchmarks/021`; the Batch 89 pair from
+/// the Plan 049 T0.1 real-code fired histogram, Bench 061).
 // 40-entry data table, not logic — length is the point.
 #[allow(clippy::too_many_lines)]
 #[must_use]
@@ -305,6 +306,29 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
             buggy_code: "fn f(n: u64) -> bool { n % 4 == 0 }".to_string(),
             fixed_code: "fn f(n: u64) -> bool { n.is_multiple_of(4) }".to_string(),
         },
+        ClippyFixEntry {
+            lint_name: "use_self".to_string(),
+            lint_group: "style".to_string(),
+            // Batch 89 (the Plan 049 fired histogram: 130 real instances).
+            // FIXABLE: inherent-impl path rewrite with the soundness guards
+            // from the module docs (nested items, bounds, attrs, macros,
+            // generic-arg identity, value-namespace ambiguity).
+            buggy_code: "struct V { n: u32 }\nimpl V { fn new() -> V { V { n: 1 } } }".to_string(),
+            fixed_code: "struct V { n: u32 }\nimpl V { fn new() -> Self { Self { n: 1 } } }"
+                .to_string(),
+        },
+        ClippyFixEntry {
+            lint_name: "suboptimal_flops".to_string(),
+            lint_group: "perf".to_string(),
+            // Batch 89 (206 real instances). VERIFY-tier: the receiver's
+            // type is invisible to syn. The powf(2.0)→powi(2) shape carries
+            // the Batch-53 powi-vs-powf measured-TIE annotation — this is a
+            // clippy-pedantic idiom fix, not a release-speed claim.
+            buggy_code: "fn unit_len(x: f64, y: f64) -> f64 { (x * x + y * y).powf(0.5) }"
+                .to_string(),
+            fixed_code: "fn unit_len(x: f64, y: f64) -> f64 { (x * x + y * y).sqrt() }"
+                .to_string(),
+        },
     ])
 }
 
@@ -375,11 +399,14 @@ mod tests {
         assert!(thawed.verify());
     }
 
-    /// Corpus size pin: 10 seed + 31 expansion/post-mining.
+    /// Corpus size pin: 10 seed + 31 expansion/post-mining + 2 Batch 89.
+    /// (`missing_const_for_fn` — the histogram's #1 — was proposed then
+    /// KILLED: a broad const-ability proposer cross-fires every fixture
+    /// and the clean-span set; see `VERIFY_LINTS` + `.plans/050`.)
     #[test]
-    fn corpus_size_is_41() {
+    fn corpus_size_is_43() {
         let corpus = build_seed_corpus();
-        assert_eq!(corpus.entries.len(), 41);
+        assert_eq!(corpus.entries.len(), 43);
     }
 
     /// Every corpus entry's proposer round-trips: the buggy fixture fires
