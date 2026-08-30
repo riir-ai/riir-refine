@@ -96,7 +96,10 @@
 //! `redundant_closure` sits between the two sets: demoted from
 //! `FIXABLE_LINTS` by the G5 run, but restored under `--verify` via
 //! [`VERIFY_LINTS`] — the E0631 failure class is exactly what the
-//! verify loop reverts.
+//! verify loop reverts. Guarded 2026-08-29: the proposer now skips
+//! bare-ident callees that same-file resolve to an annotated closure
+//! binding or a reference-param fn (the annotation/reference IS the
+//! deref-coercion site), so the verify loop sees fewer breaking edits.
 //!
 //! ## `--verify` tier ([`VERIFY_LINTS`], Issue 015)
 //!
@@ -224,9 +227,12 @@ pub const VERIFY_LINTS: &[&str] = &[
     "comparison_to_empty",
     "while_let_on_iterator",
     "single_char_pattern",
-    // P7 (post-mining): `x % d == 0` → `x.is_multiple_of(d)`. Parse-only
-    // cannot see dividend signedness and `is_multiple_of` is unsigned-only —
-    // the verify gate reverts signed-dividend breaks (E0599).
+    // P7 (post-mining): `x % d == 0` → `x.is_multiple_of(d)`. Guarded
+    // (2026-08-29): the proposer now fires only on a PROVABLY-unsigned
+    // dividend — the ambiguous-`{integer}` class (bare loop vars, untyped
+    // lets, unsuffixed literals) passes plain `cargo check` while CLIPPY's
+    // typeck raises E0689, so the check-only --verify gate is structurally
+    // blind to it and must never see the proposal at all.
     "manual_is_multiple_of",
 ];
 
