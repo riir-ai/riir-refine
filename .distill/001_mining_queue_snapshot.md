@@ -9,6 +9,8 @@
 
 ## Mining queue snapshot (update per batch — this is the resume state)
 
+- **2026-08-31 (2nd cycle, ~09:0x +07, 4090 box) — B89/B90/B91 PROPOSER ADOPTION HEAL LANDED on katgpt-rs (`2cb97410`, rebased over sibling's docs commit fb415463): 1540 compile-gated edits / 453 files — the new-fixable classes dominate (use_self 896, items_after_statements 194, manual_let_else 42, uninlined 95, match_bool 36, suboptimal_flops 6 verify-tier + minors), 20 edits auto-reverted by the verify gate, 330 files rustfmt'd.** Validation: workspace clippy (excl. katgpt-backend — its all-targets build carries the PRE-EXISTING macOS-trap E0433 metal example, PROVEN at HEAD via detached worktree, matches the t01 manifest's error_files:1) 0 new warnings — remaining 6 warnings all pre-existing (bench_680 kinematic files + rule_extractor:180 documented owner-call leftover; alloc_check's ch-loops are in heal-untouched regions); cargo test --workspace --lib green except the transformer cluster-map failure PROVEN pre-existing at HEAD 00cfe345 (same worktree); sample test binaries green (integration 92/92, bench_core_optimization, problem_mutator 2/2). **Post-mining findings (→ intake items P12/P13):** (1) verify-revert CHURN — pass 2 re-proposed the exact 20 edits pass 1's verify gate reverted (42 cargo checks/pass, converges never); (2) verify-gate ATTRIBUTION NOISE — the and_or/types.rs use_self reverts were innocent (manual probe: the single edit compiles clean, exit 0); (3) cosmetic — items_after_statements hoist can emit an unformatted bare-block shape in fmt-skipped files (compiles). No corpus lead armed; next executable: same adoption heal over riir-ai + riir-train surfaces (bigger trees, sibling lanes must be checked first), else idle report.
+
 - **2026-08-31 (idle loop, Windows/4090 box) — queue-hygiene unit: audit instrument fixed for this box + plan 049 defer-marks + post-mining intake closed to EMPTY.** (1) `scripts/self_evolve_audit.sh` was misreporting GARBAGE here (hardcoded `/Users/katopz/git` root → "intake ABSENT", "0 heal commits", every section empty); fixed: repo + sibling roots derived from the script's own location, python probed by EXECUTION not existence (the WindowsApps `python3` STUB resolves on PATH but only prints "Python was not found" — measured; a real `python` 3.10 exists), `PYTHONIOENCODING=utf-8` + explicit `encoding='utf-8'` on every file read (Windows consoles default python stdio to the LOCALE codec — cp874 here — which crashed on UTF-8 trajectories), skill check drift-aware (Mac symlink OK / Windows content-verified copy OK / stale copy named loudly — native symlinks need admin here, "Operation not permitted" measured; the global `cargo-heal` + `riir-clippy` skill copies on this box WERE stale and got refreshed), Zed global-rule check covers both `~/.config/zed/AGENTS.md` and `%APPDATA%/Zed/AGENTS.md` (Windows path — the rule IS present here). Full audit now renders on this box: store 6909 rows (success=3/fail=1), 21 score runs flat at 96.2/1.9/100/100, E5 PASS (P9+P10), adoption 122 commits / 7 repos, A1 PASS (8 distinct days). (2) Plan 049's 15 stop-closed-track checkboxes (T0.0d owner-gated + T1.x CLOSED-UNBUILT + T2.x/T3.x/T4.x downstream) defer-marked `- [-]` with tags — the plan was CLOSED-STOP since `7bd6481` but the boxes were never marked; 0 unchecked remain. (3) `unusual_byte_groupings` CLOSED-REFUSED below the frequency bar (2 sites vs the 39-site smallest admitted candidate; style-only; retrieval-floor protection) — re-open only on a future fired-histogram population; **post-mining intake now has ZERO open classes.** Next executable: arxiv pool re-walk (cadence 09-01+) or MCP-search pool walk (quota 09-15); no corpus lead armed.
 
 - **2026-08-31 (~0x:xx +07, Batch 91 landed) — the 2026-08-29 Rustdoc-33% lead CONSUMED (Plan 052, Research 106 → RECORD): corpus 94 → 96 (iterators 9→10, complexity 17→18), both rules measured ParetoDominant + suggestion-only.** Mine-time source verification went beyond the verdict note: the PR 159623 diff was READ (patch-diff host) — the guard before `build_impl` is un-normalized raw-ty-data (`type_of(...).instantiate_identity()`), the post-collection filter + the ENTIRE `BadImplStripper`/`add_deref_target` Deref-chain machinery (~100 lines) deleted, `is_doc_notable_trait` added (the latent-bug fix); PR 159854's diff NOT read (article-level mapping only, caveat carried in-rule). **Rule 1 `filter-before-expensive-transform` (iterators): ParetoDominant 3/0/0 — 11.85x/11.30x/6.61x at 1K/30K/300K (verdict-stable x2; run 1 ~12x/10.67x/8.28x — ratio jitters, verdict doesn't), alloc axis EXACT 300,014 → 18,764 (n+14 → 6.25%·n+14), bytes 2.77 → 1.65 MB — map(expensive).filter(relevant) → filter-first on the RAW input; PRECONDITION: predicate re-expressible on the input (IMPOSSIBLE otherwise, the source's own precondition); wash for cheap transforms/non-selective filters; composes with filter-map-fuse; adjacent to eager-pointer-collect-lazy-fetch (access path vs pipeline order).** **Rule 2 `decision-projection-before-construction` (complexity): ParetoDominant 3/0/0 — 24.58x/24.38x/24.37x, alloc axis EXACT 300,000 → 0, bytes 9.60 MB → 0 — transform-then-project to decide → decide on the INVARIANT raw projection, canonicalize only behind the decision; the invariance precondition pinned AS A TEST (the batch's survival falsification: the bench showed a DISTINCT regime from rule 1 — transform-inside-predicate vs pipeline-reorder — so rule 2 SURVIVED the ~40–50% odds; PR 159854's −18% is the source anchor).** PR 159721 KILL confirmed (kernel_opt B30/B37 external-validation citation stands). GOAT: 992/0 default + 1010/0 bench-state + 1091/0 latent (floors HELD no re-pins incl. cross-fire + clean-span + the Issue-056 fixture-purity gate) + 1136/0/8i triple + clippy 0 self-crate both states (10 findings in the new gate code fixed en route: const thread_local ×2, unsigned loops killing cast_sign_loss ×2, method-path closures ×5, one documented cast_possible_truncation allow) + score-bench #22 = #21 flat (96.2/1.9/100/100, the clippy --fix path untouched) + verdict-stable ×2 + G-det stable; 4 new gates (present/parses/filter-order-identity+render-count-axis/projection-invariance+canonicalize-count-axis); count pins walked (96/84/12/39/57 across header + 6 test sites + builder doc + list bullets + AGENTS + .docs); independent subagent verification ALL 5 PASS (annotation numbers proven exact-to-the-byte — the +14 shared Vec-growth events derivation; harness honesty: the escaping digest + inline(never) make the discarded work real). Generator: `target/gen_b91.py` + `gen_b91_notes.py` (assert-anchored python, first-pass clean — the edit_file escape-stripping hazard avoided). **Next corpus lead: none armed — the Plan 049 fired-histogram lead is consumed (B89+B90), the Rustdoc lead consumed (B91); next = Protocol-C post-mining intake (P-classes open) or a fresh online-search pool walk (quota resets 09-15; the fetch-fallback lane stays open) or the arxiv listing walk.**
@@ -1292,6 +1294,42 @@ usage artifacts (memory.json trajectories, misses, created-warnings,
 verify reverts, score-bench delta). Dev-time heal sessions append lines
 here (via the `cargo-heal` skill); idle-loop queue item 14 consumes
 top-down. Probe each class against real clippy FIRST.
+
+**Intake 2026-08-31 (katgpt-rs B89/B90 adoption heal session, commit `2cb97410`):**
+
+- [ ] **P12 — verify-revert CHURN: the verify gate does not suppress re-proposal.**
+      Pass 2 of the katgpt-rs heal re-proposed the EXACT 20 edits pass 1's verify
+      gate had reverted (latent_steering, slod, and_or/types.rs, conformal/seasonal,
+      percepta/legacy/tests, ...) and re-ran 42 cargo checks to re-revert them.
+      Every future run of `--fix --write --verify` over this tree re-does the same
+      20-edit/42-check dance — the operation never converges to a cheap fixpoint.
+      Fix shapes to probe: (a) record verified-fail edits in the self-evolve store
+      keyed by (file, rule, line-hash) and have `--fix` skip recorded failures (the
+      fail-trajectory loop the AGENTS.md already claims exists — "--verify records
+      ... reverted edits as success=false" — but the oracle line printed
+      `0 persist (verified-fail)` despite 20 reverts, so either the recording or the
+      consumption half is missing on this path); (b) cheaper: have `--verify` emit a
+      machine-readable suppression list the next invocation honors (session-scoped,
+      not cross-repo). Probe-first: reproduce the 20-edit churn on the current tree
+      (one more `--fix --verify` pass should re-propose them if unfixed).
+- [ ] **P13 — verify-gate ATTRIBUTION NOISE: innocent edits reverted by
+      line-mapping.** The and_or/types.rs `use_self` edits (return/param types
+      `&AndOrNode<G,S>` → `&Self` in `impl<G,S> AndOrNode<G,S>`) were reverted in
+      BOTH passes as compile-breaking — but the manual probe (single edit applied
+      by hand, `cargo check -p katgpt-core`) compiles clean, exit 0. The real
+      breaker was somewhere else in the package batch; the gate's error→line→edit
+      mapping reverted neighbors (4 line-reverts + a whole-file revert for the same
+      file in one pass). Fix shape: when a package check fails, diff-check each
+      candidate edit INDIVIDUALLY (bisect the batch) before whole-file/line reverts,
+      or re-verify surviving edits after the revert round and re-apply any that
+      compile alone. Evidence preserved: `target/b92_katgpt_write{,2}.txt` (the
+      dual revert lists), the probe command in the session record.
+- [ ] **P14 (cosmetic) — items_after_statements hoist emits an unformatted
+      bare-block shape in fmt-skipped files.** The hoist places the const/use
+      before the block, leaving `{` at column 0 (bench_680_kinematic_alloc_check.rs
+      hunk) — compiles, but is ugly in files the fmt-clean-at-HEAD gate skips
+      (pre-existing drift). Fix shape: when the fmt plan says skip, emit the hoist
+      with the block re-indented (the proposer knows the target file's fmt plan).
 
 **Intake 2026-08-29 (Plan 581 twist_smc heal session, katgpt-rs):**
 
