@@ -23,13 +23,28 @@
     spec-dec league lane returned ZERO new entries). **Next window 09-02+** (Monday's
     announcement lands Tue ~07:00 +07; daily differential cadence established).
   - **09-15 MCP search quota reset** → online perf-search pool walk (queue item 11).
+  - **Batch 94 (QUEUED 2026-08-31, Research 110): oMLX PR #3260 expert-streaming distill**
+    — verdict grade A-, ~3.3k LOC fully read via 4 subagent extractions, 6 anchors
+    coordinator-verified; yield ≈ 8 new rules (6 kernel_opt D + 2 rust_perf io/caching:
+    content-keying, fill-gate, decayed-eviction, lazy-promotion,
+    rollback-snapshot-coverage, scratch-bank-isolation, physical-slot-sorting,
+    row-addressable-reads+coalescing) + 2 riders (B63 bank-fusion 4th member, B71
+    thread-affinity producer complement) + rich bug yield (stat-triplet fingerprint,
+    warm-start scale confusion, placeholder poison, fd race). **Mine-time re-read
+    REQUIRED** — head `3343e44` is force-push-prone; re-clone `refs/pull/3260/head`
+    and re-verify anchors (Protocol A). Lineage: antirez/ds4 → DwarfStar fork → this PR.
   - League opponent-watch: watch→intake step CURRENT as of 08-31 (the Qwen3.8-Flash-Next
     league verdict landed — history note, 5th-cycle entry; re-arm = a ≤24-GB-feasible
     Flash-Next-class variant with native MTP). **Rapid-MLX reference row PINNED 08-31**
     (riir-ai `e6b13a0cd` = Bench 831: short 30.74 dec/138.25 pre, long 14.08/124.85
     medians, PROVISIONAL window — clean re-run owed behind the 782 autofire retry;
     prefill 0.958× llama.cpp = second engine confirms the 27B prefill bar; corpus
-    delta ZERO — doctrine citations only).
+    delta ZERO — doctrine citations only). **Streaming axis added 08-31 (Research 110 §8):**
+    oMLX PR #3260 streams Flash-Next-class checkpoints (99 GiB) on 18–36 GB Macs at
+    15–17 t/s, and DwarfStar/ds4 (antirez's DeepSeek-V4 engine) publishes M3 Max 128 GB
+    q2 at 26.68 t/s decode / 250.1 t/s long prefill — the ≤24-GB re-arm condition should
+    read "RAM-feasible or streaming-feasible"; owner call whether the league admits a
+    streaming opponent.
 - **Sibling lanes (do not touch):** riir-train — sibling actively building
   (`/tmp/riir-train-499b`); the 4090 perf lanes — sibling PV work mid-flight as of 08-29
   (re-verify lane state at session start before any 4090 unit).
