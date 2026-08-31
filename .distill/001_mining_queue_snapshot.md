@@ -1329,15 +1329,28 @@ top-down. Probe each class against real clippy FIRST.
       bench_680_kinematic_alloc_check.rs was the manual_let_else mangle +
       fmt-skip interaction, not an items_after_statements emission defect.
       Closed; no code change.**
-- [ ] **P15 — useless_format emitter can produce invalid cast-then-method text.**
-      Live instance in the riir-train heal (`loss_uopsd/extractor.rs:329`):
-      `Some(format!("{}", v as i64))` → `Some(v as i64.to_string())` — `as`
-      binds looser than `.`, so the emitted text parses the method call into
-      the cast's TARGET TYPE position (syntax garbage). The `is_postfix_safe`
-      guard removed Cast from the method-APPEND-RECEIVER set (B77) but never
-      covered the append-AFTER-CAST direction. Fix: parenthesize before the
-      trailing call (`(v as i64).to_string()`) or refuse. Evidence: the
-      reverted hunk in riir-train `d9cdf68e`.
+- [x] **P15 — useless_format emitter can produce invalid cast-then-method text.
+      **CONSUMED 2026-08-31 (probe-first, 4 probe rounds vs clippy 1.97): the
+      "parenthesize" option REFUTED by the oracle — the single-arg branch is
+      TYPE-GATED upstream (fires only when the arg's peeled type is str/String;
+      its own source: `peel_refs()` match on `ty::Str` / the String lang item),
+      so cast (`v as i64`), binary (`v * 2`), unary (`!v`), paren, and
+      int-typed method calls (`s.len()`) are ALL SILENT — firing with safe
+      parenthesized text would phantom-fix oracle-silent code (the P6
+      never-outrun-the-oracle rule) and poison the Certified verdict loop.
+      Landed instead: the single-positional path NARROWED to the one
+      syntax-provable firing shape — a `.to_string()` method-call arg
+      (ToString returns String for every receiver; the oracle's
+      `is_new_string` branch emits it VERBATIM, which also kills the old
+      `x.to_string().to_string()` double-call emission). Every other
+      non-ident arg refuses. The pre-P15 tests for `names[0]`/`s.n` fired on
+      oracle-silent shapes (the 2026-08-19 probe predated the type gate) and
+      were flipped to refusal tests + 4 new fixtures. Score-bench run #22
+      UNCHANGED (96.2/1.9/100/100, 66 edits — the composite
+      range_loop_plus_format_args never resolved its useless_format half
+      through the Index shape: the range_loop rewrite converts `names[i]` to
+      a bare ident first, which both old and new emitters skip). Retrieval
+      floors 13/13. lib 1000/0; clippy 0.**
 - [ ] **P12 — verify-revert CHURN: the verify gate does not suppress re-proposal**
       (STILL OPEN — the katgpt-rs `--fix --write --verify` path re-does a
       20-edit/42-check revert dance every run; suppression shapes in the
