@@ -35,11 +35,12 @@
     and re-verify anchors (Protocol A). Lineage: antirez/ds4 → DwarfStar fork → this PR.
   - League opponent-watch: watch→intake step CURRENT as of 08-31 (the Qwen3.8-Flash-Next
     league verdict landed — history note, 5th-cycle entry; re-arm = a ≤24-GB-feasible
-    Flash-Next-class variant with native MTP). **Rapid-MLX reference row PINNED 08-31**
-    (riir-ai `e6b13a0cd` = Bench 831: short 30.74 dec/138.25 pre, long 14.08/124.85
-    medians, PROVISIONAL window — clean re-run owed behind the 782 autofire retry;
-    prefill 0.958× llama.cpp = second engine confirms the 27B prefill bar; corpus
-    delta ZERO — doctrine citations only). **Streaming axis added 08-31 (Research 110 §8):**
+    Flash-Next-class variant with native MTP). **Rapid-MLX reference row PINNED**
+    (riir-ai Bench 831, clean window `11895e9e5`: prefill 179/189 pp512/pp2048 =
+    **1.45× llama.cpp / 1.94× ours — the 27B prefill frontier on the M3 is ~190**;
+    decode ≈ llama.cpp, ours tops; format-crossed non-scoring, scoreboard unmoved;
+    corpus delta ZERO. The contaminated first window is the case study: numbers wrong
+    by 20–94% and one conclusion inverted — armed-autofire sequencing rule recorded). **Streaming axis added 08-31 (Research 110 §8):**
     oMLX PR #3260 streams Flash-Next-class checkpoints (99 GiB) on 18–36 GB Macs at
     15–17 t/s, and DwarfStar/ds4 (antirez's DeepSeek-V4 engine) publishes M3 Max 128 GB
     q2 at 26.68 t/s decode / 250.1 t/s long prefill — the ≤24-GB re-arm condition should
