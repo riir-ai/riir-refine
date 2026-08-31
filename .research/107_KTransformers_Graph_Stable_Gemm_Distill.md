@@ -1,9 +1,10 @@
 # Research 107 — ktransformers distill: graph-stable GEMM + serving-graph discipline (Plan 548 feed)
 
-**Status:** RECORD — external-source distill landed 2026-08-31. Corpus candidates QUEUED to the
-mining queue (`.distill/001_mining_queue_snapshot.md`), Plan 548 lanes + the league ledger fed.
-Read-only mining; raw clone at `.raw/ktransformers` (gitignored, disposable — the clone is not
-the record, this note is).
+**Status:** RECORD -- external-source distill landed 2026-08-31. Corpus candidates 1-12
+LANDED as Batch 92 (11 rules, `entries_gpu_09.rs`, commit in git history; the repack rider
+folded into `cpasync-multistage-tile-pipeline`; candidates 13-14 remain queued for a future
+CPU-lane batch). Plan 548 lanes + the league ledger fed. Read-only mining; raw clone at
+`.raw/ktransformers` (gitignored, disposable -- the clone is not the record, this note is).
 
 ## Source
 

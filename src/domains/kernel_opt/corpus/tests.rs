@@ -66,8 +66,8 @@ fn seed_corpus_has_expected_entry_count() {
     // Total: 209. // (historical batch-30 snapshot; current 400)
     assert_eq!(
         corpus.entries.len(),
-        400,
-        "kernel batches through Batch 87 should have 400 rules"
+        411,
+        "kernel batches through Batch 92 should have 411 rules"
     );
 }
 
@@ -5331,20 +5331,20 @@ fn kernel_categories_cover_all_corpus_rules_exhaustively() {
 fn kernel_categories_counts_match_plan_003_table() {
     // Pin per-category rule counts to the Plan 003 table (updated for Batch 82).
     let expected = [
-        (KernelCategory::MemoryAccess, 93),
-        (KernelCategory::Compute, 53),
+        (KernelCategory::MemoryAccess, 98),
+        (KernelCategory::Compute, 54),
         (KernelCategory::Fusion, 36),
         (KernelCategory::Dispatch, 84),
-        (KernelCategory::Parallelism, 24),
+        (KernelCategory::Parallelism, 25),
         (KernelCategory::FlashAttnTiling, 10),
         (KernelCategory::LinearAttnRecurrence, 25),
         (KernelCategory::MoeDispatchBackward, 14),
         (KernelCategory::NsaBlockSparse, 4),
         (KernelCategory::VarlenChunkedReduction, 5),
         (KernelCategory::AutotuneDispatch, 5),
-        (KernelCategory::ConvGemmLayout, 11),
-        (KernelCategory::KernelPolymorphism, 10),
-        (KernelCategory::DtypeAlignment, 22),
+        (KernelCategory::ConvGemmLayout, 12),
+        (KernelCategory::KernelPolymorphism, 11),
+        (KernelCategory::DtypeAlignment, 24),
         (KernelCategory::IrStrengthReduction, 4),
     ];
     for (cat, count) in expected {
@@ -5359,9 +5359,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 400.
+    // Sum must equal 411.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 400, "Plan 003: category totals must sum to 400");
+    assert_eq!(total, 411, "Plan 003: category totals must sum to 411");
 }
 
 #[test]
@@ -5372,8 +5372,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 400,
-        "Plan 003: grouped corpus has {total} rules, expected 400"
+        total, 411,
+        "Plan 003: grouped corpus has {total} rules, expected 411"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -6074,6 +6074,44 @@ fn batch84_pseudocode_parses() {
         );
     }
 }
+#[test]
+#[cfg(not(feature = "kernel_verify"))]
+fn batch92_pseudocode_parses() {
+    // G1 for Batch 92: syn-parse gate (the ktransformers Marlin distill).
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "device-m-runtime-mblock-graph-stable-gemm",
+        "cpasync-multistage-tile-pipeline",
+        "register-double-buffer-operand-pipeline",
+        "ldmatrix-mma-layout-loads",
+        "xor-swizzle-smem-static-index-tables",
+        "multi-pointer-dependency-break",
+        "quant-group-scale-fetch-gating",
+        "lop3-int4-to-half2-dequant",
+        "prmt-int8-to-half2-dequant",
+        "stripe-sms-l2-semaphore-reduce",
+        "mma-fragment-layout-m16n8k16",
+    ];
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-92 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            ref_verdict.parses,
+            "batch-92 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            opt_verdict.parses,
+            "batch-92 opt_pattern for '{id}' must parse"
+        );
+    }
+}
+
 #[test]
 #[cfg(not(feature = "kernel_verify"))]
 fn batch87_pseudocode_parses() {

@@ -6,7 +6,7 @@
 //!
 //! ## Plan 003 — corpus wiring (2026-08-14)
 //!
-//! The router is now wired to the 400-rule corpus via the 15 categories
+//! The router is now wired to the 411-rule corpus via the 15 categories
 //! ([`KernelCategory`]). One expert per category (15 experts), each owning
 //! its category's `rule_ids` via [`KERNEL_CATEGORIES`] in [`super::corpus`].
 //! A future heal pipeline can route a kernel signature → expert index →
@@ -458,7 +458,7 @@ mod tests {
             .map(KernelExpertRouter::rules_for_expert)
             .map(<[&str]>::len)
             .sum();
-        assert_eq!(total, 400, "Plan 003: experts cover all 400 corpus rules");
+        assert_eq!(total, 411, "Plan 003: experts cover all 411 corpus rules");
     }
 
     #[test]

@@ -1540,6 +1540,7 @@ mod entries_gpu_05;
 mod entries_gpu_06;
 mod entries_gpu_07;
 mod entries_gpu_08;
+mod entries_gpu_09;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -1561,6 +1562,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_06::entries());
     entries.extend(entries_gpu_07::entries());
     entries.extend(entries_gpu_08::entries());
+    entries.extend(entries_gpu_09::entries());
     Corpus::new(entries)
 }
 
@@ -1573,7 +1575,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 400-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 411-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1581,7 +1583,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (93 rules)
+    // A: Memory access patterns (98 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -1678,10 +1680,15 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "weight-stream-non-temporal-loads",
             "vectorized-smem-write-no-bank-padding",
             "virtual-tail-packed-tree-verify-over-paged-kv",
-            "staged-append-rollback-lifo-retry-blocks",
+            "staged-append-rollback-lifo-retry-blocks",            "cpasync-multistage-tile-pipeline",
+            "register-double-buffer-operand-pipeline",
+            "xor-swizzle-smem-static-index-tables",
+            "multi-pointer-dependency-break",
+            "quant-group-scale-fetch-gating",
+
         ],
     ),
-    // B: Compute patterns (53 rules)
+    // B: Compute patterns (54 rules)
     (
         KernelCategory::Compute,
         "B: compute",
@@ -1738,10 +1745,11 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "softmax-denominator-hoist-out-of-weighted-v",
             "per-key-projection-hoist-out-of-query-sweep",
             "regularizer-above-noise-floor-coupled-to-damping-cap",
-            "masked-branchless-wait-collapse",
+            "masked-branchless-wait-collapse",            "mma-fragment-layout-m16n8k16",
+
         ],
     ),
-    // C: Fusion patterns (35 rules)
+    // C: Fusion patterns (36 rules)
     (
         KernelCategory::Fusion,
         "C: fusion",
@@ -1875,7 +1883,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "pad-tail-to-fixed-tile",
         ],
     ),
-    // E: Parallelism patterns (24 rules)
+    // E: Parallelism patterns (25 rules)
     (
         KernelCategory::Parallelism,
         "E: parallelism",
@@ -1903,7 +1911,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "occupancy-grid-cap-refuted-uncapped-default",
             "plane-specialization-load-compute-role-split",
             "grid-collapsing-mega-kernel-occupancy-trap",
-            "capture-break-count-not-perf-target",
+            "capture-break-count-not-perf-target",            "stripe-sms-l2-semaphore-reduce",
+
         ],
     ),
     // F: Flash-attention tiling (10 rules)
@@ -2011,7 +2020,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "autotune-cache-extract-outlives-owner",
         ],
     ),
-    // L: Conv-as-GEMM + memory layout (11 rules)
+    // L: Conv-as-GEMM + memory layout (12 rules)
     (
         KernelCategory::ConvGemmLayout,
         "L: conv-as-GEMM + layout",
@@ -2026,10 +2035,11 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "bool-fields-over-bitset-hot-reads",
             "pre-transposed-consumer-layout-handles-build-once",
             "stream-drain-free-source-during-build",
-            "fold-tile-transpose-into-dequant-scatter",
+            "fold-tile-transpose-into-dequant-scatter",            "ldmatrix-mma-layout-loads",
+
         ],
     ),
-    // M: Kernel parametric polymorphism (10 rules)
+    // M: Kernel parametric polymorphism (11 rules)
     (
         KernelCategory::KernelPolymorphism,
         "M: kernel polymorphism",
@@ -2043,10 +2053,11 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "zero-init-side-branch-frozen-base-path",
             "min-rank-inert-adapter-zero-alpha",
             "debug-only-gpu-label-macro",
-            "batch-width-routed-dual-tile-twins",
+            "batch-width-routed-dual-tile-twins",            "device-m-runtime-mblock-graph-stable-gemm",
+
         ],
     ),
-    // N: dtype + alignment specialization (22 rules)
+    // N: dtype + alignment specialization (24 rules)
     (
         KernelCategory::DtypeAlignment,
         "N: dtype + alignment",
@@ -2072,7 +2083,9 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "dequant-placement-by-component-traffic-share",
             "outlier-span-escapes-quantization-via-lossless-sidecar",
             "pre-gate-recovery-by-division-cancels-algebraically",
-            "token-local-only-approximate-accelerator",
+            "token-local-only-approximate-accelerator",            "lop3-int4-to-half2-dequant",
+            "prmt-int8-to-half2-dequant",
+
         ],
     ),
     // O: IR strength reduction (4 rules)

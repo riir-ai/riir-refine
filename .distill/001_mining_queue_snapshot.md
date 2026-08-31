@@ -1952,7 +1952,7 @@ kernel_heal sweep executed:
    the default-pattern set needs no adjustment, and the next NEW-kernel
    mine (Bonsai/qwen38 .wgsl additions) re-runs this command in one line.
 
-## Distill intake — ktransformers (Research 107, 2026-08-31; QUEUED not landed)
+## Distill intake — ktransformers (Research 107, 2026-08-31; candidates 1-12 LANDED as Batch 92)
 
 Source: kvcache-ai/ktransformers @ 21095b9 (clone at `.raw/ktransformers`, gitignored).
 Verdict: kernel_opt A− (the modified Marlin W4A16 GEMM in `archive/csrc/custom_marlin/` is
@@ -1960,29 +1960,20 @@ the value; NO attention kernels exist in-repo), rust_perf/host C+ (x86+NUMA-flav
 techniques-only), serving-arch intel B for Plan 548/556 lanes. Full record + file:line refs:
 `.research/107_KTransformers_Graph_Stable_Gemm_Distill.md`.
 
-kernel_opt candidates (14, in priority order — the first is the headline):
-1. `device-side-m-graph-stable-gemm` — M via device pointer + runtime m-block dispatch +
-   grid=f(sms) (Marlin_wrapper cu:1409-1457; M-cap 1024 chunking caveat) — feeds lanes/Plan 556.
-2. `cpasync-multistage-tile-pipeline` (4-stage, mid-tile issue, cu:1247-1253).
-3. `reg-double-buffer-inner-pipeline` (fetch k+1 before mma k, cu:1244-1254).
-4. `ldmatrix-mma-layout-loads` (cu:118-127).
-5. `lop3-int4-to-half2-dequant` (cu:163-208, fp16-mma-arm only for us).
-6. `prmt-int8-to-half2-dequant` (cu:221-240).
-7. `xor-swizzle-smem-static-index-tables` (cu:644-665).
-8. `multi-pointer-dependency-break` (cu:667-674).
-9. `quant-group-scale-fetch-gating` (cu:780-796).
-10. `stripe-schedule-l2-lockfree-reduction` (cu:315-345 + 1074-1137).
-11. `mma-fragment-assembler-m16n8k16` (working reference for our Bench-786 broken arm —
-    dtypes.cuh:22-26 + cu:86-114).
-12. `pipeline-machinery-for-pure-movement` (gptq_marlin_repack.cu reuses the GEMM pipeline).
-13. `k-block-half-of-l2` (AMX-origin; transfers to smem/staging sizing).
-14. `k-block-aligned-to-quant-group` (one scale application per block).
+**LANDED 2026-08-31 as Batch 92** (11 rules, `entries_gpu_09.rs`, corpus 400 → 411,
+M+1 N+2 E+1 B+1 A+5 L+1; the repack rider #12 folded into `cpasync-multistage-tile-pipeline`;
+quotes coordinator-verified byte-accurate; GOAT + count pins in the batch record —
+AGENTS.md Batch 92 entry). REMAINING QUEUED (candidates 13-14, CPU-lane batch):
 
-rust_perf/host candidates (lower priority; DEDUP-CHECK at batch time — `alignas(64)` status
-structs are already B65 align-64-false-sharing): `grow-only-arena-pointer-rebind`,
-`intensity-gated-mat-vec-twins`, `fuse-independent-gemms-one-task-space`,
-`allow-n-pending-sync`, `host-callback-on-gpu-stream`, `dual-seed-page-hash` +
-`recompute-ratio-guard` + `batched-evict-count` (kvc2 prefix-cache hardening riders),
+13. `k-block-half-of-l2` (host/CPU-origin; transfers) — K_BLOCK sized so the weight slab ≈ ½ L2.
+14. `k-block-aligned-to-quant-group` — K blocking = quant group ⇒ one scale application per block.
+
+The rust_perf/host candidate list below is UNCONSUMED (lower priority; dedup-check at
+batch time — `alignas(64)` status structs are already B65 align-64-false-sharing):
+`grow-only-arena-pointer-rebind`, `intensity-gated-mat-vec-twins`,
+`fuse-independent-gemms-one-task-space`, `allow-n-pending-sync`,
+`host-callback-on-gpu-stream`, `dual-seed-page-hash` + `recompute-ratio-guard` +
+`batched-evict-count` (kvc2 prefix-cache hardening riders),
 `decode-prefill-kernel-split` (corpus-adjacent).
 
 Also fed (cross-repo, same day): riir-ai Plan 548 P0-2/P1-2 feed lines + the league ledger's
