@@ -17,8 +17,11 @@
 - **Last landed:** Batch 93 (`501fdb2` — ktransformers residue disposition, ZERO corpus
   delta, the last mined-source lane CLOSED) + the t48 substrate tie-break fix (`944741f`).
 - **Next executable (cadence-gated):**
-  - **The arxiv pool re-walk** (due 09-01 per cadence — Protocol A intake; prior walks:
-    `.research/102` + `.research/105`; the fetch-fallback lane / r.jina.ai per the Search rules).
+  - **The arxiv pool re-walk: DONE 2026-08-31 ~23:20 +07** (`.research/109` — walk #3,
+    covered the Sunday-08-30 announcement window that walk #2 never saw; zero corpus delta,
+    two doctrine citations: LAH/S4-FIFO → riir-dao, TerraceMoE gates → doctrine; the
+    spec-dec league lane returned ZERO new entries). **Next window 09-02+** (Monday's
+    announcement lands Tue ~07:00 +07; daily differential cadence established).
   - **09-15 MCP search quota reset** → online perf-search pool walk (queue item 11).
   - League opponent-watch: watch→intake step CURRENT as of 08-31 (the Qwen3.8-Flash-Next
     league verdict landed — history note, 5th-cycle entry; re-arm = a ≤24-GB-feasible
