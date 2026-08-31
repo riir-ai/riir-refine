@@ -51,3 +51,5 @@ axis (audit §1b leaderboard + ruliology tie-break), no selection wiring.
 
 Store densification (median candidate ≥2 observations) or evo-axis
 degradation — recorded in Bench 047 §Reopen condition.
+
+> **PASS-Redirects (synthesis):** Tu, Feng, Wang, Xie, Yan [arXiv:2608.18027 "Chain-of-Experience for Continual LLM Improvement"] — independent external confirmation of lesson 1 at frontier scale: across 8 reasoning LLMs × 6 benchmarks, improvement-from-feedback correlates positively with base ability (task-avg Pearson r=0.50) and most gains land in the first ~20 iterations — the same "evidence volume, not selection math" shape this note measured at store sparsity (98.5% unseen). Also validates the L4 decline posture from the other side: their model-judge feedback only becomes competitive with a correctness oracle when the judge's base ability is strong (a weak judge yields inferior-or-negative lift) — GPT-5-mini could not help GPT-5 on hard tasks, exactly the weak-verifier regime that disarmed the local fallback lane.
