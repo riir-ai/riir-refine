@@ -46,6 +46,14 @@ fn redact_policy() -> SyncPolicy {
     }
 }
 
+/// The golden signing seed (`[42; 32]`) — the mirror of the lib's
+/// `GOLDEN_SIGNING_SEED`; integration tests cannot see the lib's
+/// `#[cfg(test)]` helper, so the literal is mirrored here (the documented
+/// cross-repo mirror convention).
+fn golden_signer() -> ed25519_dalek::SigningKey {
+    ed25519_dalek::SigningKey::from_bytes(&[42u8; 32])
+}
+
 fn row(lint_key: &str, shape: &str, fix: &str) -> TrajRowDoc {
     TrajRowDoc {
         lint_key: lint_key.into(),
@@ -78,7 +86,8 @@ fn two_rows() -> Vec<TrajRowDoc> {
 /// The watermark a successful sync of `rows` under `policy` leaves.
 fn watermark_after_sync(rows: &[TrajRowDoc], policy: &SyncPolicy) -> SyncWatermark {
     let gate = RedactionGate::from_policy(policy.clone());
-    let payload = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo).build_at(rows, 0);
+    let signer = golden_signer();
+    let payload = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo, &signer).build_at(rows, 0);
     SyncWatermark::from_payload(&payload)
 }
 

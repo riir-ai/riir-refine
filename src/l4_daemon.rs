@@ -232,11 +232,25 @@ fn short(path: &str) -> &str {
 
 #[cfg(test)]
 mod tests {
+    // The fake-daemon suite is `#[cfg(unix)]`-gated below (Windows cannot
+    // exec `#!` scripts — error 193), so the helper + `ECHO_DAEMON` are
+    // dead code on non-unix hosts.
+    #![cfg_attr(not(unix), allow(dead_code))]
+
+    #[cfg(unix)]
     use super::{DaemonL4, L4Fallback};
+    #[cfg(unix)]
     use std::io::Write;
 
     /// A fake daemon: speaks the protocol, needs no model. Lets the client's
     /// framing, escaping and failure handling be tested in milliseconds.
+    ///
+    /// The suite is `#[cfg(unix)]`-gated: the scripts are `#!/bin/sh` programs,
+    /// and `Command::spawn` on Windows has no shebang mechanism (error 193,
+    /// "%1 is not a valid Win32 application"). The protocol contracts these
+    /// tests pin (banner skip, escaping, EOF-decline) are Windows-independent;
+    /// they rejoin the suite on POSIX hosts.
+    #[cfg(unix)]
     fn fake_daemon(script: &str) -> std::path::PathBuf {
         let dir = std::env::temp_dir().join(format!("l4d_{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
@@ -269,6 +283,7 @@ while IFS= read -r line; do
 done
 "#;
 
+    #[cfg(unix)]
     #[test]
     fn handshake_skips_the_banner_and_reaches_ready() {
         let bin = fake_daemon(ECHO_DAEMON);
@@ -277,6 +292,7 @@ done
         assert_eq!(d.unwrap().name(), "daemon-l4(ckpt.bin)");
     }
 
+    #[cfg(unix)]
     #[test]
     fn prompt_uses_the_trained_instruction_and_omits_the_lint_name() {
         let bin = fake_daemon(ECHO_DAEMON);
@@ -295,6 +311,7 @@ done
         assert!(echoed.contains("\\n"), "newlines must be escaped for the line protocol");
     }
 
+    #[cfg(unix)]
     #[test]
     fn dead_daemon_declines_instead_of_blocking() {
         let bin = fake_daemon("#!/bin/sh\necho \"<<<READY>>>\"\nexit 0\n");
@@ -303,6 +320,7 @@ done
         assert!(d.generate_fix("x", "code").is_none(), "second call must decline immediately");
     }
 
+    #[cfg(unix)]
     #[test]
     fn daemon_that_dies_during_load_is_an_error_not_a_silent_decline() {
         let bin = fake_daemon("#!/bin/sh\necho loading\nexit 1\n");
@@ -310,6 +328,7 @@ done
         assert!(e.is_err(), "a load failure must surface at spawn");
     }
 
+    #[cfg(unix)]
     #[test]
     fn empty_frame_is_a_decline() {
         let bin = fake_daemon(

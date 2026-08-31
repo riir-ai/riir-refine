@@ -166,11 +166,12 @@ fn no_banned_lint_fires_with_an_equivalent_fix() {
         }
         let idx: usize = d
             .file
+            .replace('\\', "/")
             .trim_start_matches("src/r")
             .trim_end_matches(".rs")
             .parse()
             .unwrap_or(usize::MAX);
-        let rule = rules.get(idx).map(|r| r.rule_id.as_str()).unwrap_or("?");
+        let rule = rules.get(idx).map_or("?", |r| r.rule_id.as_str());
         let applicability = d.applicability.as_deref().unwrap_or("none");
         let d_code = &d.code;
         assert_ne!(
@@ -198,9 +199,11 @@ fn unwrap_used_fires_without_fix_on_drop_fixture() {
         .position(|r| r.rule_id == "drop-impl-no-panic")
         .expect("drop rule present");
     let file = format!("src/r{drop_idx}.rs");
+    // Windows renders the path with backslashes (`src\r2.rs`) — normalize
+    // before the byte comparison (the pinned file identity is `src/rN.rs`).
     let hits: Vec<&Diag> = diags
         .iter()
-        .filter(|d| d.file == file && d.code == "clippy::unwrap_used")
+        .filter(|d| d.file.replace('\\', "/") == file && d.code == "clippy::unwrap_used")
         .collect();
     assert!(
         !hits.is_empty(),

@@ -818,11 +818,12 @@ mod tests {
     /// Issue 008 gates (the T3 set — mirrored receiver-side):
     /// a FORGED signature (right shape, wrong bytes) is refused, a
     /// signature made by a DIFFERENT key is refused, and a header field
-    /// mutated after signing (the redact_version flip — the exact attack the
+    /// mutated after signing (the `redact_version` flip — the exact attack the
     /// issue closes) is refused by the signature even though the floor would
     /// have accepted the flipped value.
     #[test]
     fn forged_or_tampered_signatures_are_refused() {
+        use ed25519_dalek::Signer as _;
         let gate = RedactionGate::from_policy(allow_policy());
         let signer = golden_signer();
         let p = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo, &signer)
@@ -846,7 +847,6 @@ mod tests {
         let mut header: PayloadHeader =
             serde_json::from_str(&lines[0]).unwrap();
         let msg = header.signing_message().unwrap();
-        use ed25519_dalek::Signer as _;
         header.signature_hex = hex_encode(&other.sign(&msg).to_bytes());
         let wrong_key = format!(
             "{}\n{}",
@@ -877,11 +877,15 @@ mod tests {
     /// the same submitter attribution for the golden payload.
     #[test]
     fn golden_submitter_derivation_is_pinned() {
+        use std::fmt::Write as _;
         let pubkey = golden_signer().verifying_key().to_bytes();
         let account: [u8; 16] = blake3::hash(pubkey.as_slice()).as_bytes()[..16]
             .try_into()
             .unwrap();
-        let hex: String = account.iter().map(|b| format!("{b:02x}")).collect();
+        let mut hex = String::with_capacity(account.len() * 2);
+        for b in account {
+            write!(hex, "{b:02x}").expect("String writes are infallible");
+        }
         // The value the dapps-side test pins as GOLDEN_SUBMITTER_HEX.
         assert_eq!(hex.len(), 32);
         assert_eq!(hex, hex_encode(&account));

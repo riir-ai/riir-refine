@@ -91,6 +91,7 @@ pub fn cross_domain_spans() -> Vec<CrossSpan> {
             code: format!("{pc}\n{cc}"),
         });
     }
+    out.shrink_to_fit();
     out
 }
 
@@ -407,11 +408,6 @@ mod tests {
         use crate::domains::clippy_lints::proposers::{propose_fix, FIXABLE_LINTS, VERIFY_LINTS};
         use crate::domains::rust_perf::proposers as perf;
 
-        let structural: Vec<&str> = FIXABLE_LINTS
-            .iter()
-            .chain(VERIFY_LINTS)
-            .copied()
-            .collect();
         // TRUE-positive exception (found Batch 90, a Batch-89 leftover): the
         // `powi-vs-powf` perf fixture legitimately carries
         // `d.powf(2.0)` — the exact shape clippy's `suboptimal_flops`
@@ -421,6 +417,11 @@ mod tests {
         // ambiguity); a true-positive fire by the lint's own shape is not a
         // leak, so the named (fixture, lint) pair is allowlisted.
         const TRUE_POSITIVE_FIRES: &[(&str, &str)] = &[("powi-vs-powf", "suboptimal_flops")];
+        let structural: Vec<&str> = FIXABLE_LINTS
+            .iter()
+            .chain(VERIFY_LINTS)
+            .copied()
+            .collect();
         for &(rule, code) in PERF_SPANS {
             for &l in &structural {
                 if TRUE_POSITIVE_FIRES.contains(&(rule, l)) {

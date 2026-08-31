@@ -53,6 +53,15 @@ fn redacting_policy() -> SyncPolicy {
     SyncPolicy { allow_redacted: true, ..shipped_policy() }
 }
 
+/// The golden signing seed (`[42; 32]`) — the mirror of the lib's
+/// `GOLDEN_SIGNING_SEED` (`src/kat_sync_payload.rs`). Integration tests
+/// cannot see the lib's `#[cfg(test)]` helper, so the literal is mirrored
+/// here — the documented cross-repo mirror convention (riir-dapps'
+/// `tests/kat_mining.rs` mirrors the same seed).
+fn golden_signer() -> ed25519_dalek::SigningKey {
+    ed25519_dalek::SigningKey::from_bytes(&[42u8; 32])
+}
+
 fn row(lint_key: &str, shape: &str, fix: &str) -> TrajRowDoc {
     TrajRowDoc {
         lint_key: lint_key.into(),
@@ -82,7 +91,8 @@ fn g4_planted_aws_key_in_shape_blocks_the_row() {
         &format!("// setup\nlet k = \"{secret}\";\nfn rest() {{}}"),
         "fn rest() {}",
     )];
-    let p = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo).build_at(&rows, 1);
+    let signer = golden_signer();
+    let p = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo, &signer).build_at(&rows, 1);
     assert_eq!(p.rows_included, 0, "secret-bearing row must not serialize");
     assert_eq!(p.rows_blocked, 1);
     match &p.outcomes[0] {
@@ -104,7 +114,8 @@ fn g4_planted_github_token_in_fix_blocks_the_row() {
         "fn token() -> String { \"x\".to_string() }",
         &format!("fn token() -> String {{ \"{secret}\".to_string() }}"),
     )];
-    let p = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo).build_at(&rows, 2);
+    let signer = golden_signer();
+    let p = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo, &signer).build_at(&rows, 2);
     assert_eq!(p.rows_included, 0);
     assert!(!p.ndjson.contains(secret), "payload leaked the token:\n{}", p.ndjson);
 }
@@ -115,7 +126,8 @@ fn g4_secret_in_lint_key_blocks_the_row() {
     let gate = RedactionGate::from_policy(shipped_policy());
     let secret = "xoxb-514685712-quiet";
     let rows = vec![row(secret, "let a = 1;", "let a = 1;")];
-    let p = SyncPayloadBuilder::new(&gate, SpanOrigin::MinedCorpus).build_at(&rows, 3);
+    let signer = golden_signer();
+    let p = SyncPayloadBuilder::new(&gate, SpanOrigin::MinedCorpus, &signer).build_at(&rows, 3);
     assert_eq!(p.rows_included, 0, "lint_key is a gated field");
     assert!(!p.ndjson.contains(secret));
 }
@@ -126,7 +138,8 @@ fn g4_secret_in_last_run_id_blocks_the_row() {
     let secret = "glpat-AbCdEf0123456789AbCdEf0123456789";
     let mut r = row("map_unwrap_or", "let v = x.map(f).unwrap_or(0);", "let v = x.map_or(0, f);");
     r.last_run_id = format!("run-{secret}-1");
-    let p = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo).build_at(&[r], 4);
+    let signer = golden_signer();
+    let p = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo, &signer).build_at(&[r], 4);
     assert_eq!(p.rows_included, 0);
     assert!(!p.ndjson.contains(secret));
 }
@@ -147,7 +160,8 @@ fn g4_mixed_batch_clean_survive_blocked_absent() {
         ),
         row("needless_return", "fn g() { return 1; }", "fn g() { 1 }"),
     ];
-    let p = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo).build_at(&rows, 10);
+    let signer = golden_signer();
+    let p = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo, &signer).build_at(&rows, 10);
     assert_eq!(p.rows_included, 2);
     assert_eq!(p.rows_blocked, 1);
 
@@ -184,7 +198,8 @@ fn g4_allow_redacted_placeholders_and_fingerprints() {
     let secret = "AKIAIOSFODNN7EXAMPLE";
     let dirty_shape = format!("// cfg\nlet key = \"{secret}\";\nfn tail() {{}}");
     let rows = vec![row("identity_op", &dirty_shape, "fn tail() {}")];
-    let p = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo).build_at(&rows, 20);
+    let signer = golden_signer();
+    let p = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo, &signer).build_at(&rows, 20);
     assert_eq!(p.rows_included, 1);
     assert_eq!(p.rows_blocked, 0);
 
@@ -216,7 +231,8 @@ fn g4_allow_redacted_placeholders_and_fingerprints() {
 #[test]
 fn g4_no_policy_denies_every_row() {
     let rows = vec![row("a", "let x = 1;", "let x = 1;"), row("b", "let y = 2;", "let y = 2;")];
-    let p = SyncPayloadBuilder::new(&RedactionGate::deny_all(), SpanOrigin::OwnRepo)
+    let signer = golden_signer();
+    let p = SyncPayloadBuilder::new(&RedactionGate::deny_all(), SpanOrigin::OwnRepo, &signer)
         .build_at(&rows, 30);
     assert_eq!(p.rows_included, 0);
     assert_eq!(p.rows_blocked, 2);
@@ -229,7 +245,8 @@ fn g4_no_policy_denies_every_row() {
 #[test]
 fn g4_external_origin_denies() {
     let gate = RedactionGate::from_policy(shipped_policy());
-    let p = SyncPayloadBuilder::new(&gate, SpanOrigin::External)
+    let signer = golden_signer();
+    let p = SyncPayloadBuilder::new(&gate, SpanOrigin::External, &signer)
         .build_at(&[row("a", "let x = 1;", "let x = 1;")], 31);
     assert_eq!(p.rows_blocked, 1);
     match &p.outcomes[0] {
@@ -249,7 +266,8 @@ fn g4_commitment_binds_the_row_set() {
         row("a_rule", "let a = 1;", "let a = 1;"),
         row("b_rule", "let b = 2;", "let b = 2;"),
     ];
-    let p = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo).build_at(&rows, 40);
+    let signer = golden_signer();
+    let p = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo, &signer).build_at(&rows, 40);
     assert!(verify_payload(&p.ndjson).is_ok());
 
     // Tamper one row byte (a counter), header untouched → mismatch.
@@ -272,7 +290,8 @@ fn g4_commitment_binds_the_row_set() {
 #[test]
 fn g4_builds_are_deterministic() {
     let gate = RedactionGate::from_policy(shipped_policy());
-    let b = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo);
+    let signer = golden_signer();
+    let b = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo, &signer);
     let rows = vec![
         row("zz_rule", "let z = 9;", "let z = 9;"),
         row("aa_rule", "let a = 1;", "let a = 1;"),
@@ -299,7 +318,8 @@ fn g4_zero_secrets_in_row_lines_of_synced_payloads() {
         row("needless_return", "fn g() { return 1; }", "fn g() { 1 }"),
         row("static_str", "fn s() -> &'static str { \"ok\" }", "fn s() -> &'static str { \"ok\" }"),
     ];
-    let p = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo).build_at(&rows, 60);
+    let signer = golden_signer();
+    let p = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo, &signer).build_at(&rows, 60);
     assert_eq!(p.rows_included, 3);
     // G4 over USER CONTENT: scan the row lines only — the header's own
     // 64-hex commitment is our metadata (the documented fail-closed class).

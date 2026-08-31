@@ -16,7 +16,7 @@
 //! strings the first run just produced (asserted before seeding).
 #![cfg(all(feature = "latent_retrieval", feature = "fix_verify"))]
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 const RULE: &str = "match_bool";
@@ -40,7 +40,7 @@ fn scratch_root(tag: &str) -> PathBuf {
     d
 }
 
-fn write_lib(dir: &PathBuf, text: &str) {
+fn write_lib(dir: &Path, text: &str) {
     std::fs::write(dir.join("src").join("lib.rs"), text).unwrap();
 }
 

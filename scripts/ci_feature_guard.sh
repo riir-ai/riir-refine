@@ -175,7 +175,11 @@ echo "=== Layer 5d: no test binary silently ran ZERO tests ==="
 # (`tests/fixtures/*.rs`) are NOT targets — cargo auto-discovers `tests/*.rs`
 # and `tests/*/main.rs` only — so the top-level glob is the right expectation.
 EXPECTED_TARGETS="$(find tests -maxdepth 1 -name '*.rs' 2>/dev/null | wc -l | tr -d ' ')"
-OBSERVED_TARGETS="$(grep -cE '^ +Running tests/' "$RUNLOG" || true)"
+# cargo's human output renders paths with the OS separator (`tests\x.rs` on
+# Windows, `tests/x.rs` elsewhere) — the class must accept both or the
+# instrument silently counts 0 on Windows and fails its own consistency
+# check (measured 2026-08-31, the first Layer 5c completion on this box).
+OBSERVED_TARGETS="$(grep -cE '^ +Running tests[\\/]' "$RUNLOG" || true)"
 if [ "$OBSERVED_TARGETS" != "$EXPECTED_TARGETS" ]; then
     echo "✗ Layer 5d cannot trust its own instrument — counts disagree:"
     echo "      tests/*.rs files on disk : $EXPECTED_TARGETS"
@@ -190,7 +194,7 @@ fi
 echo "  instrument check: $OBSERVED_TARGETS/$EXPECTED_TARGETS targets observed"
 
 ZERO_TEST_TARGETS="$(awk '
-    /^ +Running tests\// { t = $2 }
+    /^ +Running tests[\\/]/ { t = $2 }
     /^running 0 tests$/  { if (t != "") { print t; t = "" } }
 ' "$RUNLOG")"
 if [ -n "$ZERO_TEST_TARGETS" ]; then
