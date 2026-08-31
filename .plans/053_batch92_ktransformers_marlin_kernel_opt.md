@@ -1,6 +1,6 @@
 # Plan 053 — Batch 92: ktransformers Marlin kernel_opt distill (Research 107 consumption)
 
-**Status:** IN PROGRESS — opened 2026-08-31 (idle loop, queue item 5 Protocol A).
+**Status:** DONE — landed 2026-08-31, commit `66f1c8d` (pushed origin/develop).
 
 ## Source
 
@@ -68,8 +68,9 @@
 - [x] T8 Research 107 status → LANDED (batch 92 refs); snapshot updated
       (candidates 1-12 consumed, 13-14 remain); AGENTS.md B92 entry;
       .docs/11_domains/kernel_opt.md total + table row.
-- [ ] T9 Commit `feat: batch 92: ktransformers Marlin distill — 11 rules (401-411)`
-      + push. CARGO_TARGET_DIR isolated (/tmp/b92) — clean up after.
+- [x] T9 Commit `66f1c8d` pushed origin/develop (fast-forward, no
+      sibling divergence); CARGO_TARGET_DIR /tmp/b92 cleanup pending at
+      session end.
 
 ## Risks / lessons carried in
 
