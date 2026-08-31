@@ -411,10 +411,20 @@ impl RuleIndex {
         for (rule_id, score) in best.drain() {
             ranked.push(ScoredRule { rule_id, score, instantiates: false });
         }
+        // The rule_id tie-break is LOAD-BEARING, not cosmetic: `best` is a
+        // HashMap, so `.drain()` order varies per process (RandomState), and
+        // without a total order two equal-scored rules land in drain-luck
+        // order — which rule survives the `top_k` truncation below then
+        // differs run to run (the t48_gp_acquisition_ab ordering A/B flaked
+        // exactly this way: the set flipped at the pool boundary while every
+        // aggregate jittered). `total_cmp` + rule_id is the same canonical
+        // key order `instantiation_rerank::rerank` and the eval's
+        // `canonical_rank` already apply — this aligns the substrate with
+        // them so the whole retrieval stack is order-deterministic.
         ranked.sort_unstable_by(|a, b| {
             b.score
-                .partial_cmp(&a.score)
-                .unwrap_or(std::cmp::Ordering::Equal)
+                .total_cmp(&a.score)
+                .then_with(|| a.rule_id.cmp(&b.rule_id))
         });
         let len = ranked.len().min(top_k);
         &ranked[..len]
@@ -487,10 +497,16 @@ mod tests {
     #[test]
     fn deterministic_output() {
         // G1 helper: identical query → identical ranking (BLAKE3+DFT is
-        // deterministic; the substrate adds no randomness).
+        // deterministic; the substrate adds no randomness). Each call builds
+        // a FRESH `SuggestScratch` → a fresh `HashMap` with its own
+        // RandomState, so every iteration samples a different `drain()`
+        // order — the rule_id tie-break in `rank_into` must make the output
+        // identical across all of them.
         let index = RuleIndex::build(mini_corpus()).expect("build");
-        let a = index.suggest("fn calc(a: i32) -> i32 { return a + 1; }", 3);
-        let b = index.suggest("fn calc(a: i32) -> i32 { return a + 1; }", 3);
-        assert_eq!(a, b);
+        let first = index.suggest("fn calc(a: i32) -> i32 { return a + 1; }", 3);
+        for _ in 0..8 {
+            let again = index.suggest("fn calc(a: i32) -> i32 { return a + 1; }", 3);
+            assert_eq!(first, again, "ranking drifted across fresh-scratch runs");
+        }
     }
 }

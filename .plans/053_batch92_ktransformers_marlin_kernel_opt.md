@@ -65,6 +65,22 @@
       on a flaky measurement would be dishonest) — owner follow-up: pin
       the A/B seeds / pool construction so the sub-classification is
       deterministic, then re-record once.
+      **RESOLVED 2026-08-31 (same-day follow-up, M3 box):** root-caused
+      NOT to the test but to the SUBSTRATE — `corpus_index.rs::rank_into`
+      sorted a HashMap-drain order by score with no tie-break, so two
+      equal-scored rules landed in per-process (RandomState) drain-luck
+      order and the `top_k` truncation boundary flipped the pool SET;
+      the GP arm's σ² ordering (a different key) then moved the label
+      across the rank-3 boundary while retrieval/random stayed stable —
+      exactly the observed signature. Fix: canonical rule_id tie-break
+      (score `total_cmp` desc → rule_id asc — the same key order
+      `rerank`/`canonical_rank` already apply) in `rank_into` +
+      `SpanSuggestion::all_rules`; gates: `ordering_ab_is_process_
+deterministic` (5 fresh-matcher runs, the falsifiable pin) +
+      8× fresh-process runs 8/8 green (was 2/5 fail); verdict constant
+      UNCHANGED (canonical re-derivation = NEGATIVE-noise-equivalent, gp
+      @3 0.240 / b=74 c=1 z=8.429 — doc numbers refreshed); floors HELD,
+      libs green both states, clippy 0 both states.
 - [x] T8 Research 107 status → LANDED (batch 92 refs); snapshot updated
       (candidates 1-12 consumed, 13-14 remain); AGENTS.md B92 entry;
       .docs/11_domains/kernel_opt.md total + table row.

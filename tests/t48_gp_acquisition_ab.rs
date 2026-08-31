@@ -36,10 +36,12 @@ const FLAT_SPREAD: f32 = 0.05;
 /// The recorded verdict — asserted against the LIVE ordering A/B by
 /// `ordering_ab::gp_pool_ordering_vs_retrieval_vs_random` (the t39
 /// pattern: the recorded verdict must be re-derivable, never stale).
-/// MEASURED (2026-08-27, 100 real pools): GP @3 0.230 ≈ random 0.240 ≪
-/// retrieval 0.970; McNemar b=74 c=0 z=+8.6 AGAINST GP. The σ² surface is
-/// NOT numerically flat (rel_range 1.82) but its variation is NORM-
-/// CONCENTRATION NOISE under the BLAKE3 hash embedder — the ordering it
+/// MEASURED (2026-08-27, 100 real pools; re-derived CANONICALLY 2026-08-31
+/// after the substrate rule_id tie-break fix — `rank_into`'s HashMap-drain
+/// tie-luck used to flip the GP arm's @3 23↔24 run-to-run): GP @3 0.240 ≈
+/// random 0.250 ≪ retrieval 0.970; McNemar b=74 c=1 z=+8.43 AGAINST GP. The
+/// σ² surface is NOT numerically flat (rel_range 1.82) but its variation is
+/// NORM-CONCENTRATION NOISE under the BLAKE3 hash embedder — the ordering it
 /// induces is noise-equivalent (within 1 point of random). Honest verdict:
 /// the 8-D hash embedding carries no locality for a linear-kernel GP to
 /// exploit; the escalation path (BM25 TF-IDF dims) stands.
@@ -175,10 +177,19 @@ mod ordering_ab {
         rules.iter().position(|r| r == label)
     }
 
-    /// The A/B: per labeled span, retrieve the domain pool ONCE (common
-    /// random numbers), then order it three ways.
-    #[test]
-    fn gp_pool_ordering_vs_retrieval_vs_random() {
+    struct AbOut {
+        scored: u32,
+        retrieval: ArmOut,
+        gp: ArmOut,
+        random: ArmOut,
+        b: u64,
+        c: u64,
+        z: f64,
+    }
+
+    /// One full pass of the A/B (fresh `LatentMatcher` per call — fresh
+    /// index HashMaps, hence a fresh RandomState draw for every `drain()`).
+    fn run_ordering_ab() -> AbOut {
         let mut matcher = LatentMatcher::from_enabled_domains().expect("index builds");
         // Labeled pairs across the two default domains.
         let mut pairs: Vec<(&'static str, &'static str)> = CLIPPY_SPANS.to_vec();
@@ -190,14 +201,19 @@ mod ordering_ab {
             .map(|(rule, span)| embed(rule, span))
             .collect();
 
-        let mut retrieval = ArmOut { hits1: 0, hits3: 0, mrr: 0.0 };
-        let mut gp_arm = ArmOut { hits1: 0, hits3: 0, mrr: 0.0 };
-        let mut random = ArmOut { hits1: 0, hits3: 0, mrr: 0.0 };
+        let mut out = AbOut {
+            scored: 0,
+            retrieval: ArmOut { hits1: 0, hits3: 0, mrr: 0.0 },
+            gp: ArmOut { hits1: 0, hits3: 0, mrr: 0.0 },
+            random: ArmOut { hits1: 0, hits3: 0, mrr: 0.0 },
+            b: 0,
+            c: 0,
+            z: 0.0,
+        };
         let mut rng = super::Lcg::new(48);
         // Paired McNemar cells (GP vs retrieval, discovery@3): b = ret hit &
         // gp miss; c = gp hit & ret miss.
         let (mut b, mut c) = (0u64, 0u64);
-        let mut scored = 0u32;
 
         for (i, (label, span)) in pairs.iter().enumerate() {
             let (_, by_domain) = matcher.suggest_span(span, POOL_K);
@@ -213,7 +229,7 @@ mod ordering_ab {
             if pool.is_empty() {
                 continue; // correct rule not retrieved at all — off-axis for ordering
             }
-            scored += 1;
+            out.scored += 1;
 
             // Arm 1: incumbent retrieval order.
             let ret_rank = rank_of(&pool, label).unwrap();
@@ -252,7 +268,11 @@ mod ordering_ab {
             }
             let rnd_rank = rnd_order.iter().position(|&idx| pool[idx] == *label).unwrap();
 
-            for (arm, rank) in [(&mut retrieval, ret_rank), (&mut gp_arm, gp_rank), (&mut random, rnd_rank)] {
+            for (arm, rank) in [
+                (&mut out.retrieval, ret_rank),
+                (&mut out.gp, gp_rank),
+                (&mut out.random, rnd_rank),
+            ] {
                 if rank == 0 {
                     arm.hits1 += 1;
                 }
@@ -271,53 +291,100 @@ mod ordering_ab {
             }
         }
 
-        assert!(scored >= 40, "expected a real pool population, got {scored}");
-        let n = f64::from(scored);
-        println!("t48 ordering A/B over {scored} pools:");
-        println!(
-            "  retrieval: @1 {:.3} @3 {:.3} mrr {:.3}",
-            retrieval.hits1 as f64 / n,
-            retrieval.hits3 as f64 / n,
-            retrieval.mrr / n
-        );
-        println!(
-            "  gp:        @1 {:.3} @3 {:.3} mrr {:.3}",
-            gp_arm.hits1 as f64 / n,
-            gp_arm.hits3 as f64 / n,
-            gp_arm.mrr / n
-        );
-        println!(
-            "  random:    @1 {:.3} @3 {:.3} mrr {:.3}",
-            random.hits1 as f64 / n,
-            random.hits3 as f64 / n,
-            random.mrr / n
-        );
-        let z = if b + c > 0 {
+        out.b = b;
+        out.c = c;
+        out.z = if b + c > 0 {
             (b as f64 - c as f64) / (b as f64 + c as f64).sqrt()
         } else {
             0.0
         };
-        println!("t48 McNemar gp-vs-retrieval: b={b} c={c} z={z:.3}");
+        out
+    }
 
-        // ── The verdict derivation (recorded + asserted) ──────────────
+    fn derive_verdict(ab: &AbOut) -> &'static str {
         // Promotion bar: GP discovery@3 STRICTLY greater than retrieval's
         // AND z > +1.96 AND GP @3 ≥ random's (not noise-equivalent-worse).
         // Noise-equivalence (GP within 1 point of random) is itself the
         // recorded NEGATIVE — the σ² ordering carries no information.
-        let noise_equivalent = (gp_arm.hits3 as i64 - random.hits3 as i64).abs() <= 1
-            && gp_arm.hits3 < retrieval.hits3;
-        let gp_beats = gp_arm.hits3 > retrieval.hits3 && z > 1.96 && gp_arm.hits3 > random.hits3;
-        let derived = if gp_beats {
+        let noise_equivalent = (ab.gp.hits3 as i64 - ab.random.hits3 as i64).abs() <= 1
+            && ab.gp.hits3 < ab.retrieval.hits3;
+        let gp_beats =
+            ab.gp.hits3 > ab.retrieval.hits3 && ab.z > 1.96 && ab.gp.hits3 > ab.random.hits3;
+        if gp_beats {
             "POSITIVE"
         } else if noise_equivalent {
             "NEGATIVE-noise-equivalent"
         } else {
             "NEGATIVE"
-        };
+        }
+    }
+
+    /// The A/B: per labeled span, retrieve the domain pool ONCE (common
+    /// random numbers), then order it three ways.
+    #[test]
+    fn gp_pool_ordering_vs_retrieval_vs_random() {
+        let ab = run_ordering_ab();
+        assert!(ab.scored >= 40, "expected a real pool population, got {}", ab.scored);
+        let n = f64::from(ab.scored);
+        println!("t48 ordering A/B over {} pools:", ab.scored);
+        println!(
+            "  retrieval: @1 {:.3} @3 {:.3} mrr {:.3}",
+            ab.retrieval.hits1 as f64 / n,
+            ab.retrieval.hits3 as f64 / n,
+            ab.retrieval.mrr / n
+        );
+        println!(
+            "  gp:        @1 {:.3} @3 {:.3} mrr {:.3}",
+            ab.gp.hits1 as f64 / n,
+            ab.gp.hits3 as f64 / n,
+            ab.gp.mrr / n
+        );
+        println!(
+            "  random:    @1 {:.3} @3 {:.3} mrr {:.3}",
+            ab.random.hits1 as f64 / n,
+            ab.random.hits3 as f64 / n,
+            ab.random.mrr / n
+        );
+        println!("t48 McNemar gp-vs-retrieval: b={} c={} z={:.3}", ab.b, ab.c, ab.z);
+
+        // ── The verdict derivation (recorded + asserted) ──────────────
+        let derived = derive_verdict(&ab);
         assert_eq!(
-            super::GP_ACQUISITION_VERDICT, derived,
+            super::GP_ACQUISITION_VERDICT,
+            derived,
             "recorded verdict stale: derived {derived} from the live measurement"
         );
+    }
+
+    /// The substrate determinism pin (the t48 flake's root cause was
+    /// tie-luck in `rank_into`'s HashMap-drain + boundary truncation): each
+    /// `run_ordering_ab` builds a FRESH matcher → fresh index HashMaps → a
+    /// fresh per-process drain draw, so repeated runs sample the exact
+    /// variation that used to flip the GP arm's @3 (23↔24). Without the
+    /// canonical rule_id tie-break this assertion fails on the real corpus
+    /// (the tie demonstrably exists); with it, the A/B is a pure function
+    /// of the corpus.
+    #[test]
+    fn ordering_ab_is_process_deterministic() {
+        let first = run_ordering_ab();
+        for run in 1..5 {
+            let again = run_ordering_ab();
+            assert_eq!(first.scored, again.scored, "run {run}: scored drifted");
+            assert_eq!(first.retrieval.hits1, again.retrieval.hits1, "run {run}: ret @1");
+            assert_eq!(first.retrieval.hits3, again.retrieval.hits3, "run {run}: ret @3");
+            assert_eq!(first.gp.hits1, again.gp.hits1, "run {run}: gp @1");
+            assert_eq!(first.gp.hits3, again.gp.hits3, "run {run}: gp @3");
+            assert_eq!(first.random.hits1, again.random.hits1, "run {run}: rnd @1");
+            assert_eq!(first.random.hits3, again.random.hits3, "run {run}: rnd @3");
+            assert_eq!(first.b, again.b, "run {run}: mcnemar b");
+            assert_eq!(first.c, again.c, "run {run}: mcnemar c");
+            assert!(first.z.to_bits() == again.z.to_bits(), "run {run}: z bits");
+            assert_eq!(
+                derive_verdict(&first),
+                derive_verdict(&again),
+                "run {run}: verdict sub-classification drifted"
+            );
+        }
     }
 }
 

@@ -50,10 +50,14 @@ impl SpanSuggestion {
             .iter()
             .flat_map(|(_, rules)| rules.iter())
             .collect();
+        // rule_id tie-break: cross-domain concatenation is deterministic
+        // (DomainId::ALL order), but equal scores from DIFFERENT domains
+        // must still resolve identically every run — same canonical order
+        // as `rank_into`/`rerank`/`canonical_rank`.
         all.sort_unstable_by(|a, b| {
             b.score
-                .partial_cmp(&a.score)
-                .unwrap_or(std::cmp::Ordering::Equal)
+                .total_cmp(&a.score)
+                .then_with(|| a.rule_id.cmp(&b.rule_id))
         });
         all
     }
