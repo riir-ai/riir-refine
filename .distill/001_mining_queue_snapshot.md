@@ -77,7 +77,13 @@ All classes closed; the standing divergence (P4 residual) has no action planned.
       17 fixtures, module 61/61, e2e byte-for-byte vs oracle; adopted cross-repo
       (katgpt-rs `2e445664` 42 edits, ndb `ffb3234`); + the stale-binary mtime
       discipline (check `~/.cargo/bin/cargo-heal` mtime vs the last proposer commit
-      before adoption runs) + the ndb `can_freeze_v2_goat` missing-required-features fix.
+      before adoption runs); incident record 2026-08-31: the installed binary sat STALE at the
+            08-30 08:48 build across five 08-31 src/ commits (P15 narrowing, P12 suppression,
+            Batch 92 corpus +11, guard repair, t48 tie-break) despite the P12 commit message
+            claiming "installed binary rebuilt" — cause suspected: the session built under a
+            /tmp CARGO_TARGET_DIR and the claim referred to that build. Rebuilt from HEAD
+            23:28 +07 (`kernel_opt 411` probe PASS + suggest smoke) — the mtime-vs-commit
+            check is load-bearing, trust the mtime not the message.
 - [~] P4 **created-warning pair** — PARTIALLY CONSUMED 2026-08-28 (`1941712`): the
       plain-expression closure gap was already closed in expr_is_bool; the live residue
       was RECEIVER classification (turbofish `get::<` prefix match, `.lock(` joined
