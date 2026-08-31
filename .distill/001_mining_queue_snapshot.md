@@ -1811,6 +1811,53 @@ divergence worth encoding:
    the sweep protocol — `--keep-going` enumerates ALL failing crates in one
    pass (single-pass discovery vs 4 sequential here).
 
+## Post-mining intake (2026-08-31 — riir-ai Issue 830, the `--all-features --all-targets` audit)
+
+**Both 2026-08-29 intake guards are CONFIRMED CORRECT and need no change. What
+this audit adds is a PROTOCOL gap, not a proposer gap.**
+
+riir-ai ran `cargo clippy --workspace --all-features --all-targets --keep-going`
+for the first time (riir-ai `.issues/830`) and found **99 errors across 50
+targets in 9 crates**, of which **32 are exactly the two classes landed in
+`227637e`**: 16 × `manual_is_multiple_of` on ambiguous `{integer}` receivers and
+16 × `redundant_closure` over a deref coercion (`.map(softmax)` where softmax is
+`fn(&[f32]) -> Vec<f32>` and the iterator yields `&Vec<f32>`;
+`.filter(has_dangerous_char)` `&String`/`&str`; `.filter(in_border_band)`
+`&&T`/`&T`).
+
+Checked before filing: every one of those 16 closure shapes is a **fn item with
+a reference-typed param**, i.e. guard (b) of the landed E0631 fix. The landed
+guards would have suppressed all 32. They are residue from the PRE-guard heal
+runs (`7b949b659` 2026-08-29, `606ce69de` earlier) — code that had already
+landed in riir-ai when the guard shipped on 2026-08-30.
+
+- [ ] **P-a: landing a proposer guard does not retro-fix already-landed code —
+      add a consumer residue sweep to the guard-landing protocol.** Today the
+      cycle ends when the fixture + positive control go green in riir-clippy.
+      That leaves every consumer repo carrying whatever the un-guarded proposer
+      already emitted, with no record of how much. One day separated the guard
+      landing from an audit that found 32 live sites. Shape: on landing a guard
+      for class C, grep the repos the healer has swept for C's signature and
+      report the count in the landing note (fix or file, but never silently
+      leave it unmeasured).
+
+- [x] **P-b: intake item 3's proposed sweep screen was RIGHT but
+      UNDER-SPECIFIED — it needs `--all-features`, not just `--all-targets`.**
+      That item (2026-08-29, the `approx_constant` observation) proposed
+      "a cheap `cargo clippy --workspace --all-targets --keep-going` screen as
+      part of the sweep protocol". Measured verdict: necessary, not sufficient.
+      **All 32 sites sat behind non-default features**, so a default-feature
+      `--all-targets` screen compiles them to nothing and passes. The immediate
+      predecessor fix of the E0689 class (riir-ai `483ca9693`) recorded exactly
+      that command as "exit 0" while 16 more sites of the same class were live
+      at the same commit. The screen must be
+      `cargo clippy --workspace --all-features --all-targets --keep-going`.
+      Also note both classes are invisible to `cargo check` — so the healer's
+      own `--verify` compile gate cannot substitute for it at any feature set.
+      LANDED consumer-side: riir-ai `scripts/ci_feature_guard.sh` Layer 2 was
+      upgraded from `cargo check --workspace --all-features` to that exact
+      command (riir-ai Issue 830 T4).
+
 ## Batch 89 landing — plans/050 histogram leads (landed 2026-08-31; header deduped 2026-08-31 — was a duplicate of the WGSL-sweep header below)
 
 **Batch 89 LANDED 2026-08-31 (`.plans/050`, 2 of 3 leads consumed):** `use_self`
