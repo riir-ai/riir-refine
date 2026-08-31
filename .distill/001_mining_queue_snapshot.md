@@ -36,11 +36,33 @@
   - League opponent-watch: watch→intake step CURRENT as of 08-31 (the Qwen3.8-Flash-Next
     league verdict landed — history note, 5th-cycle entry; re-arm = a ≤24-GB-feasible
     Flash-Next-class variant with native MTP). **Rapid-MLX reference row PINNED**
-    (riir-ai Bench 831, clean window `11895e9e5`: prefill 179/189 pp512/pp2048 =
-    **1.45× llama.cpp / 1.94× ours — the 27B prefill frontier on the M3 is ~190**;
-    decode ≈ llama.cpp, ours tops; format-crossed non-scoring, scoreboard unmoved;
+    (riir-ai Bench 831, clean window `11895e9e5`: prefill 179/189 pp512/pp2048 —
+    decode ≈ llama.cpp; format-crossed non-scoring, scoreboard unmoved;
     corpus delta ZERO. The contaminated first window is the case study: numbers wrong
-    by 20–94% and one conclusion inverted — armed-autofire sequencing rule recorded). **Streaming axis added 08-31 (Research 110 §8):**
+    by 20–94% and one conclusion inverted — armed-autofire sequencing rule recorded).
+    **09-01 same-window CORRECTION (riir-ai `f098133a7` league update): llama.cpp reads
+    pp2048 192.95 / pp512 221.49 in the same window ≈ Rapid-MLX's 189.59 — the
+    "1.45× llama.cpp" was CROSS-WINDOW; the ~190 prefill frontier is ENGINE-GENERIC.**
+    The same session found + FIXED our long-context decode deficit (0.74× → 0.93× @2K,
+    +25% e2e, greedy-token-identity EXACT): split-K Metal flash decode
+    (`QwenAttentionDecodeGatedSplit{,Combine}CubeCL`, default-ON >512 pos).
+    **Batch 95 LEAD (QUEUED 2026-09-01, from the Bench 831 follow-up source read):
+    mlx-lm `gated_delta.py` GDN prefill kernel family** — the 190-tok/s shape's GDN
+    half: ONE fused Metal kernel per whole-T scan (sequential in T inside the kernel,
+    state REGISTER-resident per lane), reductions via simd_sum / explicit shuffle_xor
+    butterflies — ZERO smem, ZERO barriers; the 0.32.x gain is the PACKED
+    specialization (Dk=128 packs 8 value rows per SIMD-group, 4 lanes/row, 32 state
+    elems/lane; reduction split 2-level in-lane + 2-level cross-lane). Yield
+    estimate ≈ 2-3 kernel_opt rules: (1) simd-group row-packing geometry for
+    narrow-row register scans (NOT covered — B22 is the plain warp-shuffle
+    reduction, B58 the register-resident state; the PACKING GEOMETRY is new),
+    (2) whole-T zero-barrier single-kernel scan shape (the barrier-elimination
+    complement of B35's barrier-count rules), (3) RIDER: the bitwise-contract-by-
+    comparator-kernel test discipline (pin an optimized kernel bit-identical to an
+    explicitly-written comparator independent of library lowering — our Issue-715
+    class, external confirmation). Source: raw.githubusercontent ml-explore/mlx-lm
+    main `mlx_lm/models/gated_delta.py` (read in full 09-01); mine-time re-read per
+    Protocol A (moving main). Lineage: ml-explore/mlx-lm, Apache-2.0. **Streaming axis added 08-31 (Research 110 §8):**
     oMLX PR #3260 streams Flash-Next-class checkpoints (99 GiB) on 18–36 GB Macs at
     15–17 t/s, and DwarfStar/ds4 (antirez's DeepSeek-V4 engine) publishes M3 Max 128 GB
     q2 at 26.68 t/s decode / 250.1 t/s long prefill — the ≤24-GB re-arm condition should
