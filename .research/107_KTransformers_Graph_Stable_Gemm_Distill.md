@@ -2,8 +2,12 @@
 
 **Status:** RECORD -- external-source distill landed 2026-08-31. Corpus candidates 1-12
 LANDED as Batch 92 (11 rules, `entries_gpu_09.rs`, commit in git history; the repack rider
-folded into `cpasync-multistage-tile-pipeline`; candidates 13-14 remain queued for a future
-CPU-lane batch). Plan 548 lanes + the league ledger fed. Read-only mining; raw clone at
+folded into `cpasync-multistage-tile-pipeline`). The residue (13-14 + the 8 host
+candidates) DISPOSITIONED same day as Batch 93 (`.plans/054`, zero corpus delta):
+14 was already inside Batch 92's `quant-group-scale-fetch-gating` (the cu:464-472
+alignment precondition); 13 killed (no source anchor); host candidates killed on
+dedup/bar grounds or routed to the Plan 548 intel lane. The ktransformers lane is
+CLOSED. Plan 548 lanes + the league ledger fed. Read-only mining; raw clone at
 `.raw/ktransformers` (gitignored, disposable -- the clone is not the record, this note is).
 
 ## Source

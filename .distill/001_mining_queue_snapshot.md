@@ -1954,7 +1954,7 @@ kernel_heal sweep executed:
    the default-pattern set needs no adjustment, and the next NEW-kernel
    mine (Bonsai/qwen38 .wgsl additions) re-runs this command in one line.
 
-## Distill intake — ktransformers (Research 107, 2026-08-31; candidates 1-12 LANDED as Batch 92)
+## Distill intake — ktransformers (Research 107, 2026-08-31; DISPOSITIONED as Batch 93 — lane CLOSED)
 
 Source: kvcache-ai/ktransformers @ 21095b9 (clone at `.raw/ktransformers`, gitignored).
 Verdict: kernel_opt A− (the modified Marlin W4A16 GEMM in `archive/csrc/custom_marlin/` is
@@ -1965,19 +1965,42 @@ techniques-only), serving-arch intel B for Plan 548/556 lanes. Full record + fil
 **LANDED 2026-08-31 as Batch 92** (11 rules, `entries_gpu_09.rs`, corpus 400 → 411,
 M+1 N+2 E+1 B+1 A+5 L+1; the repack rider #12 folded into `cpasync-multistage-tile-pipeline`;
 quotes coordinator-verified byte-accurate; GOAT + count pins in the batch record —
-AGENTS.md Batch 92 entry). REMAINING QUEUED (candidates 13-14, CPU-lane batch):
+AGENTS.md Batch 92 entry). **REMAINING CANDIDATES 13-14 + THE 8 HOST CANDIDATES
+DISPOSITIONED SAME DAY AS BATCH 93 (`.plans/054` — zero corpus delta, lane CLOSED):**
+candidate 14 was ALREADY INSIDE Batch 92 (`quant-group-scale-fetch-gating` carries the
+cu:464-472 stripe-alignment precondition verbatim — the "REMAINING QUEUED" line below was
+stale); candidate 13 (`k-block-half-of-l2`) KILLED — the ½-L2 formula does not exist in the
+repo (grep-verified; the only L2 content already landed as `stripe-sms-l2-semaphore-reduce`);
+the 8 rust_perf/host candidates all KILLed/ROUTEd with grounded reasons (dedup vs B77
+twins + the B58/B63 same-input family + B32a split-scratch; `allow-n-pending-sync` killed
+on the measured-verdict BAR with its real `task_queue.h:29` anchor recorded; `dual-seed-
+page-hash` = dead scaffolding in source; kvc2 riders = commented-out/dead; `decode-prefill-
+kernel-split` superseded by B92 device-M + B77 twins; `host-callback-on-gpu-stream` routed
+to Plan 548 intel). Full table: `.plans/054` §"The disposition table".
+
+~~REMAINING QUEUED (candidates 13-14, CPU-lane batch):~~ (superseded by Batch 93 above)
 
 13. `k-block-half-of-l2` (host/CPU-origin; transfers) — K_BLOCK sized so the weight slab ≈ ½ L2.
 14. `k-block-aligned-to-quant-group` — K blocking = quant group ⇒ one scale application per block.
 
-The rust_perf/host candidate list below is UNCONSUMED (lower priority; dedup-check at
-batch time — `alignas(64)` status structs are already B65 align-64-false-sharing):
+~~The rust_perf/host candidate list below is UNCONSUMED (lower priority; dedup-check at
+batch time — `alignas(64)` status structs are already B65 align-64-false-sharing):~~
 `grow-only-arena-pointer-rebind`, `intensity-gated-mat-vec-twins`,
 `fuse-independent-gemms-one-task-space`, `allow-n-pending-sync`,
 `host-callback-on-gpu-stream`, `dual-seed-page-hash` + `recompute-ratio-guard` +
 `batched-evict-count` (kvc2 prefix-cache hardening riders),
-`decode-prefill-kernel-split` (corpus-adjacent).
+`decode-prefill-kernel-split` (corpus-adjacent). — all dispositioned, see `.plans/054`.
 
 Also fed (cross-repo, same day): riir-ai Plan 548 P0-2/P1-2 feed lines + the league ledger's
 verify-C reopen-(b) row and Bonsai-prefill U7 row now pin Research 107 as the concrete
 Marlin reference.
+
+## Hygiene pending — the snapshot fold (the file's own ~400-line budget)
+
+This file is ~1980 lines vs its own header budget ("when it exceeds ~400 lines, fold
+closed-batch history into a `.research/` note and keep only the live queue here"). The
+closed-batch history below the live queue should fold into
+`.research/NNN_mining_queue_history.md` (next free number at fold time) in a dedicated
+hygiene unit — read-heavy, so it wants a fresh-context cycle, and it touches the resume
+state other sessions read, so it lands as its own commit with the live-queue half left
+byte-intact.
