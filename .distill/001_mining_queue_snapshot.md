@@ -25,7 +25,11 @@
   - **09-15 MCP search quota reset** → online perf-search pool walk (queue item 11).
   - League opponent-watch: watch→intake step CURRENT as of 08-31 (the Qwen3.8-Flash-Next
     league verdict landed — history note, 5th-cycle entry; re-arm = a ≤24-GB-feasible
-    Flash-Next-class variant with native MTP).
+    Flash-Next-class variant with native MTP). **Rapid-MLX reference row PINNED 08-31**
+    (riir-ai `e6b13a0cd` = Bench 831: short 30.74 dec/138.25 pre, long 14.08/124.85
+    medians, PROVISIONAL window — clean re-run owed behind the 782 autofire retry;
+    prefill 0.958× llama.cpp = second engine confirms the 27B prefill bar; corpus
+    delta ZERO — doctrine citations only).
 - **Sibling lanes (do not touch):** riir-train — sibling actively building
   (`/tmp/riir-train-499b`); the 4090 perf lanes — sibling PV work mid-flight as of 08-29
   (re-verify lane state at session start before any 4090 unit).
