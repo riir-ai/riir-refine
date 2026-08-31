@@ -897,6 +897,50 @@ fn record_traj_fail(
     record_traj(store, rule_id, restore, replacement, false, false, run_id, Some(class));
 }
 
+/// P12: the recorded consecutive-fail streak for one exact edit pair —
+/// the store row when the store backend is active, the envelope buckets
+/// otherwise (never both: one active backend per build, 038). Consumed by
+/// the fixpoint suppression filter: a pair with 2+ consecutive compile-gate
+/// fails is suppressed from re-proposal (see the filter comment there for
+/// the full rationale).
+#[cfg(feature = "latent_retrieval")]
+fn pair_fail_streak(
+    store: &Option<riir_clippy::traj_store::TrajStore>,
+    memory: &riir_clippy::memory::LatentFixMemory,
+    rule_id: &str,
+    restore: &str,
+    replacement: &str,
+) -> u32 {
+    if let Some(store) = store {
+        return store.pair_consecutive_fails(rule_id, restore, replacement);
+    }
+    memory.pair_consecutive_fails(rule_id, replacement)
+}
+
+/// Light-build twin: the envelope is the only backend (the store type does
+/// not exist without `latent_retrieval`). The streak query is still sound —
+/// envelopes written by heavier builds carry the same verdicts.
+#[cfg(not(feature = "latent_retrieval"))]
+fn pair_fail_streak(
+    memory: &riir_clippy::memory::LatentFixMemory,
+    rule_id: &str,
+    _restore: &str,
+    replacement: &str,
+) -> u32 {
+    memory.pair_consecutive_fails(rule_id, replacement)
+}
+
+/// P12 kill-switch parse: suppression is default-on; `RIIR_HEAL_SUPPRESS_
+/// REVERTED=0|off|false|no` re-enables unconditional re-proposal (force
+/// retry of previously-reverted edits). Mirrors the recorder's opt-out
+/// value set.
+fn suppression_disabled() -> bool {
+    match std::env::var("RIIR_HEAL_SUPPRESS_REVERTED") {
+        Ok(v) => matches!(v.to_ascii_lowercase().as_str(), "0" | "off" | "false" | "no"),
+        Err(_) => false,
+    }
+}
+
 /// Print the per-edit fix review + fmt annotation. `edits` are
 /// `(rule_id, final line, replacement, restore)` — only the first two
 /// fields print here; the last two exist for the verify path.
@@ -2854,6 +2898,17 @@ fn main() {
     let mut n_suggestions = 0usize;
     let mut n_fixed_files = 0usize;
     let mut n_fixed_edits = 0usize;
+    // P12: re-proposal suppression. Default-on; the kill-switch re-enables
+    // unconditional re-proposal (force retry of previously-reverted edits).
+    let suppress_reverted = !suppression_disabled();
+    // Unique suppressed pairs for the end-of-run report: (rule, restore,
+    // fix) → the (file, line) of the first drop. Deduped by the pair, not
+    // the line — a suppressed pattern stays in the text and is re-collected
+    // (and re-dropped) on every fixpoint pass.
+    let mut suppressed_pairs: std::collections::HashMap<
+        (String, String, String),
+        (String, usize),
+    > = std::collections::HashMap::new();
 
     // Issue 015: under --verify the fix collection loosens the
     // vec-with-capacity usize gate (rustc backs the revert) and adds the
@@ -3025,6 +3080,61 @@ fn main() {
                             ),
                         );
                     }
+                }
+                // ── P12: re-proposal suppression. A pair whose exact
+                // (rule, restore, replacement) texts already failed the
+                // compile gate TWICE consecutively is a deterministic
+                // replay — same span bytes + same proposer output + same
+                // gate = the same revert; re-proposing it every run was
+                // the katgpt-rs sweep's 20-edit/42-check churn that never
+                // converged. The filter runs HERE, before apply, because
+                // the pass output text `current` already contains every
+                // applied edit — dropping the edit from the report list
+                // alone would still write it.
+                //
+                // TWO fails, not one: a whole-file revert records a fail
+                // for every edit in the file (attribution impossible —
+                // Issue 018), so an innocent edit can carry one
+                // association fail; the second run is its retry window,
+                // and a second consecutive fail means the pair itself is
+                // the problem. Any text change auto-unlocks: the span
+                // edited → different restore; the proposer fixed →
+                // different replacement (the 6038e59 manual_let_else
+                // recovery path). `RIIR_HEAL_SUPPRESS_REVERTED=0` forces
+                // retry.
+                if suppress_reverted && !edits.is_empty() {
+                    edits.retain(|re| {
+                        let Some(restore) = current.get(re.edit.start..re.edit.end) else {
+                            return true; // un-sliceable span — let the gate judge
+                        };
+                        #[cfg(feature = "latent_retrieval")]
+                        let streak = pair_fail_streak(
+                            &traj_store,
+                            evolve_rec.memory(),
+                            &re.rule_id,
+                            restore,
+                            &re.edit.replacement,
+                        );
+                        #[cfg(not(feature = "latent_retrieval"))]
+                        let streak = pair_fail_streak(
+                            evolve_rec.memory(),
+                            &re.rule_id,
+                            restore,
+                            &re.edit.replacement,
+                        );
+                        if streak < 2 {
+                            return true;
+                        }
+                        let line = current[..re.edit.start].matches('\n').count() + 1;
+                        suppressed_pairs
+                            .entry((
+                                re.rule_id.clone(),
+                                restore.to_string(),
+                                re.edit.replacement.clone(),
+                            ))
+                            .or_insert_with(|| (display.clone(), line));
+                        false
+                    });
                 }
                 if edits.is_empty() {
                     break;
@@ -3706,6 +3816,27 @@ fn main() {
     } else {
         String::new()
     };
+    // P12: report the suppressed re-proposals — the operator must see what
+    // was skipped and why (a suppressed edit keeps its lint firing; the
+    // escape hatch is RIIR_HEAL_SUPPRESS_REVERTED=0 for one run).
+    if !suppressed_pairs.is_empty() {
+        println!(
+            "suppressed {} previously-reverted edit(s) (2+ consecutive compile-gate fails; RIIR_HEAL_SUPPRESS_REVERTED=0 forces retry):",
+            suppressed_pairs.len()
+        );
+        const MAX_SUPPRESSED_SHOWN: usize = 20;
+        for ((rule, restore, _fix), (file, line)) in suppressed_pairs.iter().take(MAX_SUPPRESSED_SHOWN) {
+            println!(
+                "  [{rule:<24}] {}:{} — {}",
+                file,
+                line,
+                snippet_head(restore)
+            );
+        }
+        if suppressed_pairs.len() > MAX_SUPPRESSED_SHOWN {
+            println!("  ... and {} more", suppressed_pairs.len() - MAX_SUPPRESSED_SHOWN);
+        }
+    }
     println!(
         "\nscanned {} file(s), {} span(s), {} with suggestions (top-{} per domain){}{}{}",
         files.len(),

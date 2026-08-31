@@ -1351,12 +1351,35 @@ top-down. Probe each class against real clippy FIRST.
       through the Index shape: the range_loop rewrite converts `names[i]` to
       a bare ident first, which both old and new emitters skip). Retrieval
       floors 13/13. lib 1000/0; clippy 0.**
-- [ ] **P12 — verify-revert CHURN: the verify gate does not suppress re-proposal**
-      (STILL OPEN — the katgpt-rs `--fix --write --verify` path re-does a
-      20-edit/42-check revert dance every run; suppression shapes in the
-      2nd-cycle entry below). The P13 "attribution noise" suspicion resolved:
-      the reverts were the REAL mangling bug above (fixed); the gate's net
-      effect was correct.
+- [x] **P12 — verify-revert CHURN: the verify gate does not suppress
+      re-proposal. CONSUMED 2026-08-31 (the re-proposal suppression filter).
+      The fixpoint pass now DROPS any edit whose exact (rule, restore,
+      replacement) pair has 2+ consecutive compile-gate fails recorded in
+      the active verdict backend (the store row via the new
+      `TrajStore::pair_consecutive_fails`, envelope buckets via the new
+      `LatentFixMemory::pair_consecutive_fails` twin — the same bucket
+      `record_outcome` addresses). TWO fails, not one: a whole-file revert
+      records a fail for EVERY edit in the file (Issue 018's
+      attribution-impossible verdict), so an innocent edit can carry one
+      association fail — the second run is its retry window; a second
+      consecutive fail means the pair itself is the problem. Any text
+      change auto-unlocks (span edited → different restore; proposer fixed
+      → different replacement — the 6038e59 manual_let_else emitter-fix
+      recovery path). The filter runs BEFORE apply (the pass output text
+      already contains applied edits — dropping the report line alone
+      would still write it); suppressed edits keep their lint firing and
+      are reported at run end (`suppressed N previously-reverted edit(s)`
+      + per-pair file:line, capped at 20). Kill-switch
+      `RIIR_HEAL_SUPPRESS_REVERTED=0` forces retry for one run.
+      Churn math: "converges never" → converges by run 3 (run 2 records
+      the second fails, run 3 suppresses), and one retry window stays open
+      for false-attribution recovery. E2E proven
+      (tests/p12_suppress_reverted_e2e.rs: run 1 heals, seeded 2× fails
+      suppress run 2 byte-identically + the report prints, kill-switch
+      forces the retry); unit tests in both stores; installed binary
+      rebuilt; score-bench #23 flat (96.2/1.9/100/100, 66 edits — the
+      proposer path is untouched); lib 1001/0 default + 1111/0/2i
+      feature state; clippy 0 --all-targets fresh rebuild.**
 
 **Intake 2026-08-29 (Plan 581 twist_smc heal session, katgpt-rs):**
 

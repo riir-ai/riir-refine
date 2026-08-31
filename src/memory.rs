@@ -389,6 +389,22 @@ impl LatentFixMemory {
         // No matching trajectory — caller should have inserted it first.
     }
 
+    /// The stored consecutive-fail streak for the first (`lint_name`,
+    /// `fixed_code`) bucket — the envelope backend's P12 re-proposal-
+    /// suppression signal. Mirrors the traj-store row semantics: `0` = no
+    /// bucket or no recorded failure. The lookup shape is the same one
+    /// [`Self::record_outcome`] uses to address buckets (`(lint, fixed)` —
+    /// the insert dedups by the full triple but outcome addressing ignores
+    /// the buggy half), so the query reads the same bucket a new verdict
+    /// would land in.
+    #[must_use]
+    pub fn pair_consecutive_fails(&self, lint_name: &str, fixed_code: &str) -> u32 {
+        self.trajectories
+            .iter()
+            .find(|t| t.lint_name == lint_name && t.fixed_code == fixed_code)
+            .map_or(0, |t| t.consecutive_fails)
+    }
+
     /// Record a **certification event** — a full-validator admission (Issue 021).
     ///
     /// Inserts the trajectory if absent, then records `(success = true,
@@ -1156,6 +1172,37 @@ mod tests {
         // Success resets the consecutive-fail streak — modelled by the caller
         // passing the reset streak (0) — and only verified success re-certifies.
         assert_eq!(Withdrawn.advance(true, true, 0), Certified, "re-certification is the only exit");
+    }
+
+    #[test]
+    fn pair_consecutive_fails_reads_the_same_bucket_record_outcome_writes() {
+        // P12 envelope twin: the suppression query must read the same bucket
+        // record_outcome addresses — (lint, fixed); the buggy half is
+        // insert-dedup metadata, not outcome identity.
+        let mut mem = LatentFixMemory::new(RetrievalWeights::default());
+        assert_eq!(mem.pair_consecutive_fails("use_self", "&Self"), 0, "no bucket");
+
+        mem.insert(FixTrajectory::new(
+            "use_self".to_string(),
+            "&EventLog<A>".to_string(),
+            "&Self".to_string(),
+        ));
+        mem.record_outcome("use_self", "&Self", false, false);
+        assert_eq!(mem.pair_consecutive_fails("use_self", "&Self"), 1);
+        mem.record_outcome("use_self", "&Self", false, false);
+        assert_eq!(mem.pair_consecutive_fails("use_self", "&Self"), 2, "suppress threshold");
+
+        // A success resets the streak.
+        mem.record_outcome("use_self", "&Self", true, false);
+        assert_eq!(mem.pair_consecutive_fails("use_self", "&Self"), 0);
+
+        // A different fixed text: not the same bucket (the pair is new).
+        mem.insert(FixTrajectory::new(
+            "use_self".to_string(),
+            "&EventLog<A>".to_string(),
+            "&Self<A>".to_string(),
+        ));
+        assert_eq!(mem.pair_consecutive_fails("use_self", "&Self<A>"), 0);
     }
 
     #[test]

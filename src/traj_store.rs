@@ -546,6 +546,28 @@ impl TrajStore {
         self.put_row(&key, &row)
     }
 
+    /// The stored consecutive-fail streak for the exact (`lint_key`, `shape`,
+    /// `fix`) pair — the P12 re-proposal-suppression signal. `0` means no
+    /// row, no recorded failure, or the row's latest `fix` text differs (the
+    /// proposer's output changed since the failures — the pair is new, so a
+    /// retry is not a deterministic replay of a known revert). Read-only:
+    /// querying never creates a row.
+    #[must_use]
+    pub fn pair_consecutive_fails(&self, lint_key: &str, shape: &str, fix: &str) -> u32 {
+        let key = Self::row_key(lint_key, shape);
+        let Some(bytes) = self.kv.get_bytes(&key) else {
+            return 0;
+        };
+        let Ok(row) = serde_json::from_slice::<TrajRowDoc>(&bytes) else {
+            return 0;
+        };
+        if row.fix == fix {
+            row.consecutive_fails
+        } else {
+            0
+        }
+    }
+
     /// Import one FULL row verbatim (038-T3: the one-time envelope → store
     /// migration). Unlike [`record`](Self::record)/[`record_applied`](Self::record_applied)
     /// this writes the caller's counters + tier as-is — the envelope's
@@ -1468,6 +1490,49 @@ mod tests {
         let row = &store.dump()[0];
         assert_eq!(row.tier, EvidenceTier::Certified.as_u8());
         assert_eq!(row.consecutive_fails, 0);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn pair_consecutive_fails_tracks_the_exact_fix_pair() {
+        // P12: the suppression signal. Two consecutive fails on the exact
+        // (rule, restore, fix) pair read back; ANY of {a recorded success,
+        // a different fix text (the proposer's output changed), no row at
+        // all} reads 0 — those are exactly the auto-unlock conditions.
+        let root = tmp_root("pair-streak");
+        let (store, _) = TrajStore::open(&root).unwrap();
+        assert_eq!(store.pair_consecutive_fails("use_self", "&EventLog<A>", "&Self"), 0,
+            "no row = no suppression");
+
+        // One fail: under the threshold — the whole-file-association retry
+        // window (Issue 018's attribution-impossible revert records every
+        // edit in the file).
+        store
+            .record("use_self", "&EventLog<A>", "&Self", false, false, "run-1")
+            .unwrap();
+        assert_eq!(store.pair_consecutive_fails("use_self", "&EventLog<A>", "&Self"), 1);
+
+        // Second consecutive fail: the pair is a deterministic replay —
+        // suppress.
+        store
+            .record("use_self", "&EventLog<A>", "&Self", false, false, "run-2")
+            .unwrap();
+        assert_eq!(store.pair_consecutive_fails("use_self", "&EventLog<A>", "&Self"), 2);
+
+        // A different fix text on the same span: the proposer's output
+        // changed since the failures — retry is NOT a replay of the known
+        // revert (the 6038e59 manual_let_else emitter-fix recovery path).
+        assert_eq!(store.pair_consecutive_fails("use_self", "&EventLog<A>", "&Self<A>"), 0);
+
+        // A success (verified) resets the streak — the pair heals honestly
+        // once the surrounding code changes.
+        store
+            .record("use_self", "&EventLog<A>", "&Self", true, true, "run-3")
+            .unwrap();
+        assert_eq!(store.pair_consecutive_fails("use_self", "&EventLog<A>", "&Self"), 0);
+
+        // Different rule or shape: different row, no suppression.
+        assert_eq!(store.pair_consecutive_fails("use_self", "&OtherLog<A>", "&Self"), 0);
         let _ = std::fs::remove_dir_all(&root);
     }
 
