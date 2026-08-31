@@ -2951,6 +2951,64 @@ narrative: git history). **T7 discharged — Proposals 003 + 004 UNBLOCKED**
 005](../.proposals/005_kat_heal_service_network.md)) Phase 0 unblocks with
 this close.
 
+## Guard-landing protocol — a guard is not landed until the residue is counted
+
+Landing a proposer guard stops the healer **emitting** a broken class. It does
+nothing about what the un-guarded healer already emitted and that already
+landed in consumer repos. The cycle used to end when the fixture + positive
+control went green here; that left every swept consumer carrying whatever came
+before, with no record of how much.
+
+**Measured, not hypothetical.** The `227637e` guards (`manual_is_multiple_of`
+on ambiguous `{integer}` receivers, `redundant_closure` over a deref coercion)
+landed 2026-08-30 and were **correct** — every one of the 32 sites riir-ai
+found the next day would have been suppressed by them. They were *pre-guard
+residue*. One day separated the landing from an audit that found 99 errors
+across 50 targets, 32 of them these classes.
+
+**The rule (mining-queue item P-a, closed 2026-08-31).** On landing a guard for
+class C, run the sweep and paste its table into the landing note. Fix or file —
+never silently leave it unmeasured.
+
+```bash
+scripts/consumer_residue_sweep.sh <lint> [<lint> ...]        # the screen
+scripts/consumer_residue_sweep.sh --grep '<regex>' <lint>    # narrow first
+```
+
+Target set: `scripts/swept_repos.txt` (derived from the BOUNDARY.md workspace,
+git worktrees excluded — the file documents how to re-derive it). Exits
+non-zero when residue exists.
+
+**The screen is the claim** (item P-b): `cargo clippy --workspace
+**--all-features** --all-targets --keep-going`. Not `cargo check` — both
+guarded classes are accepted by check's typeck and rejected by clippy's, so the
+healer's own `--verify` compile gate is blind to them *by construction*. Not
+default features — all 32 sites sat behind non-default ones, and the
+immediately preceding fix of the same E0689 class recorded `--workspace
+--all-targets: exit 0` while 16 more live sites existed at that very commit.
+
+**Two traps the script was caught by, and now handles** — both of which
+reported "clean", which is why it prints a per-repo diagnostic total as a
+liveness witness:
+
+1. **`cargo clippy` on an up-to-date build emits nothing.** The first version
+   reported 0 sites for `riir-neuron-db` while a live `manual_is_multiple_of`
+   sat in `src/`: the units were fresh from an earlier run, so no lint pass ran.
+   A quiet zero from a cached build is indistinguishable from a clean repo.
+   Handled by `cargo clean -p <each workspace member>` inside a sweep-local
+   `CARGO_TARGET_DIR` — local crates re-check, dependency builds stay warm, and
+   the repo's own target dir is never touched (a concurrent session there is
+   neither slowed nor invalidated).
+2. **The JSON shape is `"code":{"code":"clippy::<lint>"}`** — not
+   `"code":"<lint>"` — and `byte_start` *precedes* `file_name` in the span
+   object. Guessing either backwards also returns a confident zero.
+
+Verified against ground truth before use: 1 `manual_is_multiple_of`, 0
+`redundant_closure`, 1 `unused_assignments` on `riir-neuron-db`, stable on a
+warm second run. The `unused_assignments` case is the de-dup working — the same
+site is reported once per compilation unit under `--all-targets`, and identity
+is `(file_name, byte_start)`.
+
 ## Source secrecy & binary-only distribution (non-negotiable)
 
 **Per [Research 003](../riir-ai/.research/003_Commercial_Open_Source_Strategy_Verdict.md):

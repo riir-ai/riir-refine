@@ -1831,8 +1831,26 @@ guards would have suppressed all 32. They are residue from the PRE-guard heal
 runs (`7b949b659` 2026-08-29, `606ce69de` earlier) — code that had already
 landed in riir-ai when the guard shipped on 2026-08-30.
 
-- [ ] **P-a: landing a proposer guard does not retro-fix already-landed code —
-      add a consumer residue sweep to the guard-landing protocol.** Today the
+- [x] **P-a: landing a proposer guard does not retro-fix already-landed code —
+      add a consumer residue sweep to the guard-landing protocol.**
+      **CLOSED 2026-08-31 — `scripts/consumer_residue_sweep.sh` +
+      `scripts/swept_repos.txt`, protocol section in AGENTS.md ("Guard-landing
+      protocol — a guard is not landed until the residue is counted").** Runs
+      the P-b screen per repo, prints a landing-note-ready markdown table,
+      exits non-zero on residue. Optional `--grep` tier-1 narrowing, documented
+      as narrowing-only (a zero-hit grep does not clear a repo — the classes
+      worth guarding are the ones whose signature is a type relationship, not a
+      token). **The script had to be caught lying twice before it was
+      trustworthy, and both lies said "clean":** (1) `cargo clippy` on an
+      up-to-date build emits nothing, so v1 reported 0 sites for
+      `riir-neuron-db` while a live `manual_is_multiple_of` sat in `src/` —
+      fixed with `cargo clean -p <member>` in a sweep-local `CARGO_TARGET_DIR`
+      (the repo's own target dir is never touched, so a concurrent session
+      there is unaffected); (2) the JSON code is
+      `"code":{"code":"clippy::<lint>"}`, not `"code":"<lint>"`, and
+      `byte_start` precedes `file_name`. It now prints a per-repo diagnostic
+      total as a liveness witness and was verified against ground truth (1 / 0
+      / 1 on riir-neuron-db, stable warm). Original text below. Today the
       cycle ends when the fixture + positive control go green in riir-clippy.
       That leaves every consumer repo carrying whatever the un-guarded proposer
       already emitted, with no record of how much. One day separated the guard
