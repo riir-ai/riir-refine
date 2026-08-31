@@ -112,13 +112,16 @@ impl Collector<'_> {
             return None;
         }
         // Arm 1: pattern binds EXACTLY one ident, body is exactly that ident.
+        // The arm body must be the arm's own binding — that is what makes the
+        // rewrite value-preserving (`let OUTER = match s { P(inner) => inner }`
+        // ≡ `let P(OUTER) = s`).
         let bound = pattern_bindings(&a1.pat);
         if bound.len() != 1 {
             return None;
         }
-        let name = &bound[0];
+        let inner = &bound[0];
         let body1 = src(self.source, &a1.body)?;
-        if body1.trim() != *name {
+        if body1.trim() != *inner {
             return None;
         }
         // Arm 2: binds nothing, diverges visibly.
@@ -138,9 +141,95 @@ impl Collector<'_> {
             return None;
         }
         let scrutinee = src(self.source, &m.expr)?;
-        let pat1 = src(self.source, &a1.pat)?;
+        // The let-else pattern binds the OUTER let name, not the match arm's
+        // inner binding. `let preferred_i = match g { Some(p) => p, None =>
+        // continue }` must become `let Some(preferred_i) = g else { continue }`
+        // — emitting `Some(p)` left `preferred_i` undefined downstream (the
+        // 2cb97410 katgpt-rs escape: 14 feature-gated compile breaks, all this
+        // one shape; the original fixtures passed because they named the outer
+        // and inner bindings identically).
+        let outer = pi.ident.to_string();
+        let pat_start = byte_range(&a1.pat).start;
+        let pat1 = renamed_single_binding(self.source, &a1.pat, pat_start, inner, &outer)?;
         Some(format!("let {pat1} = {scrutinee} else {body2};"))
     }
+}
+
+/// Rewrite the pattern text with its single binding ident `from` renamed to
+/// `to`: byte-precise splice of the ident's own span into the pattern's
+/// source text (format-preserving — token-stream printing would inject
+/// spaces into `Some (v)` / `& last`). Refuses unless the walk finds
+/// exactly one hit.
+fn renamed_single_binding(
+    source: &str,
+    pat: &Pat,
+    pat_start: usize,
+    from: &str,
+    to: &str,
+) -> Option<String> {
+    struct Seek<'a, 'b> {
+        from: &'a str,
+        hit: Option<std::ops::Range<usize>>,
+        count: usize,
+        shorthand_hit: bool,
+        _marker: std::marker::PhantomData<&'b ()>,
+    }
+    impl<'ast> Visit<'ast> for Seek<'_, '_> {
+        fn visit_pat(&mut self, p: &'ast Pat) {
+            if let Pat::Struct(ps) = p {
+                for f in &ps.fields {
+                    // Shorthand = no `colon_token` and the member is the
+                    // binding itself (`Inject { signature }`).
+                    if f.colon_token.is_none() {
+                        if let Pat::Ident(id) = &*f.pat {
+                            if id.ident == self.from {
+                                self.shorthand_hit = true;
+                            }
+                        }
+                    }
+                }
+            }
+            if let Pat::Ident(id) = p {
+                if id.ident == self.from {
+                    self.count += 1;
+                    if self.hit.is_none() {
+                        self.hit = Some(id.ident.span().byte_range());
+                    }
+                }
+            }
+            syn::visit::visit_pat(self, p);
+        }
+    }
+    let mut seek = Seek {
+        from,
+        hit: None,
+        count: 0,
+        shorthand_hit: false,
+        _marker: std::marker::PhantomData,
+    };
+    seek.visit_pat(pat);
+    // A SHORTHAND struct field (`Inject { signature }`) binds THROUGH its
+    // member name — renaming the binding would rewrite the FIELD NAME and
+    // change what the pattern matches (the integrity_layer_goat.rs escape:
+    // `Inject { raw_sig }` matched a nonexistent field). Only an explicit
+    // field rename (`Inject { signature: raw_sig }`) would be correct, and
+    // synthesizing that text is beyond the byte-splice — refuse instead.
+    if seek.shorthand_hit {
+        return None;
+    }
+    if seek.count != 1 {
+        return None;
+    }
+    let r = seek.hit?;
+    let rel_start = r.start.checked_sub(pat_start)?;
+    let rel_end = r.end.checked_sub(pat_start)?;
+    let pat_text = src(source, pat)?;
+    if rel_end > pat_text.len() || rel_start >= rel_end {
+        return None;
+    }
+    let mut out = pat_text.clone();
+    out.replace_range(rel_start..rel_end, to);
+    Some(out)
 }
 
 /// Idents bound by a pattern (conservative walk; or-patterns, tuples, and
@@ -248,6 +337,73 @@ mod tests {
         )
         .expect("pattern matched");
         assert!(out.contains("let Ok(v) = r else { return 0 };"), "{out}");
+    }
+
+    #[test]
+    fn struct_pattern_shorthand_field_refused() {
+        // The integrity_layer_goat.rs escape: `Inject { signature }` binds
+        // THROUGH the member name — a byte-splice rename would rewrite the
+        // FIELD itself (`Inject { raw_sig }` matches a nonexistent field).
+        // Refuse; synthesizing `Inject { signature: raw_sig }` is beyond the
+        // byte-splice contract.
+        let out = propose_fix(
+            "manual_let_else",
+            "fn f(d: D) -> u32 { let raw_sig = match d { D::Inject { signature } => signature, D::Skip => panic!(\"x\") }; signature_len(raw_sig) }",
+        );
+        // Either it no longer fires (None), or the emission keeps the field
+        // name intact. Both are acceptable; the E0425 form is not.
+        if let Some(o) = out {
+            assert!(
+                !o.contains("D::Inject { raw_sig }"),
+                "field name must not be rewritten: {o}"
+            );
+        }
+    }
+
+    #[test]
+    fn outer_name_differs_from_inner_binding_renames_pattern() {
+        // The 2cb97410 katgpt-rs escape: the outer let name and the arm's
+        // inner binding differ — the let-else pattern must bind the OUTER
+        // name, or every downstream use E0425s.
+        let out = propose_fix(
+            "manual_let_else",
+            "fn f(g: Option<&u32>) -> u32 { let preferred_i = match g { Some(p) => p, None => continue }; *preferred_i }",
+        )
+        .expect("pattern matched");
+        assert!(
+            out.contains("let Some(preferred_i) = g else { continue };"),
+            "{out}"
+        );
+        assert!(out.contains("*preferred_i"), "{out}");
+        assert!(syn::parse_file(&out).is_ok(), "{out}");
+    }
+
+    #[test]
+    fn deref_pattern_binding_renames_to_outer_name() {
+        // `Some(&t) => t` — the deref stays, the binding renames.
+        let out = propose_fix(
+            "manual_let_else",
+            "fn f(ts: &[usize]) -> usize { let last = match ts.last() { Some(&t) => t, None => return 0 }; last + 1 }",
+        )
+        .expect("pattern matched");
+        assert!(
+            out.contains("let Some(&last) = ts.last() else { return 0 };"),
+            "{out}"
+        );
+        assert!(syn::parse_file(&out).is_ok(), "{out}");
+    }
+
+    #[test]
+    fn nested_tuple_struct_pattern_renames_inner_binding() {
+        // `Some(SquareKind::Property(g)) => g` — nested path pattern, inner
+        // binding g renames to the outer `group`.
+        let out = propose_fix(
+            "manual_let_else",
+            "fn f(k: Option<K>) -> u32 { let group = match k { Some(K::Property(g)) => g, _ => return 0 }; group }",
+        )
+        .expect("pattern matched");
+        assert!(out.contains("Some(K::Property(group))"), "{out}");
+        assert!(syn::parse_file(&out).is_ok(), "{out}");
     }
 
     #[test]

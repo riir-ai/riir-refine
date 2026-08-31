@@ -257,7 +257,17 @@ impl Collector<'_> {
             }
             Ctx::Type | Ctx::Struct | Ctx::Qualified => {}
         }
-        self.edits.push(edit(&first.ident, "Self".to_string()));
+        // `Self` cannot carry explicit generic arguments (`&Self<A>` is
+        // E0109 — `Self` already means the FULL impl type). When the matched
+        // path has angle-bracketed args, the edit must replace the WHOLE
+        // segment (ident + args) with bare `Self` — replacing the ident only
+        // left `Self<A>` in the emitted type and broke the katgpt-rs
+        // event_log.rs `&EventLog<A>` site (2cb97410 escape class).
+        if matches!(first.arguments, PathArguments::AngleBracketed(_)) {
+            self.edits.push(edit(first, "Self".to_string()));
+        } else {
+            self.edits.push(edit(&first.ident, "Self".to_string()));
+        }
     }
 }
 
@@ -300,6 +310,22 @@ mod tests {
         // `generic_impl_skips_different_args` hazard).
         assert!(out.contains("fn new() -> Self"), "{out}");
         assert!(out.contains("G { t: None }"), "{out}");
+    }
+
+    #[test]
+    fn generic_arg_path_emits_bare_self_not_self_with_args() {
+        // The 2cb97410 katgpt-rs event_log.rs escape: `Self<A>` is E0109 —
+        // `Self` already means the full impl type. The edit must replace the
+        // whole segment (ident + args), emitting bare `Self`.
+        let out = propose_fix(
+            "use_self",
+            "struct G<T> { t: Option<T> }\nimpl<T> G<T> { fn diff(&self, o: &G<T>) -> u8 { 0 } }",
+        )
+        .expect("pattern matched");
+        assert!(out.contains("o: &Self"), "{out}");
+        assert!(!out.contains("Self<"), "Self must not carry args: {out}");
+        assert!(!out.contains("&G<T>"), "{out}");
+        syn::parse_file(&out).expect("re-parses");
     }
 
     #[test]

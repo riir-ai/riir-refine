@@ -9,6 +9,12 @@
 
 ## Mining queue snapshot (update per batch — this is the resume state)
 
+- **2026-08-31 (3rd cycle, ~11:3x +07, 4090 box) — THE FULL-WORKSPACE ADOPTION SWEEP LANDED: katgpt-rs `2cb97410` + `8807f3b5` (14 gated-break repairs), riir-ai `606ce69de` (1800 edits / 469 files, rebased over the sibling's 828-cmma wave TWICE), riir-train `d9cdf68e` (3588 edits / 444 files) — 6900+ mechanical edits total with the B89/B90 proposer set, and the sweep CAUGHT + ROOT-CAUSED 3 PROPOSER BUGS (fixed in the same cycle, 997/0 lib + fixtures):**
+  1. **manual_let_else binding-name mangling (CRITICAL, 15 real breaks)** — the emitted let-else pattern kept the ARM's inner binding (`Some(p)`) instead of binding the OUTER let name (`preferred_i`), E0425-ing every downstream use; the original fixtures passed only because they named outer and inner identically. Fix = byte-precise rename of the single binding inside the pattern to the outer name (span-splice, format-preserving; ToTokens would inject `Some (v)` spaces). **Sub-class: shorthand struct fields** (`Inject { signature }`) — renaming the binding rewrites the FIELD NAME and changes what the pattern matches → REFUSED (synthesizing `signature: raw_sig` is beyond the byte-splice contract; found live as integrity_layer_goat.rs in riir-ai). 4 new fixtures.
+  2. **unnecessary_sort_by field keys (E0507)** — `sort_by_key(|a| a.k)` MOVES the field out of `&K`: compiles only for Copy fields, parse-only cannot prove Copy (probe: real clippy type-aware — MA on Copy, SILENT on non-Copy, the katgpt-rs datrie.rs `a.0: Vec<u8>` break) → the whole field subfamily refused (`a.k`, `a.n.c`, `a.n.m()`, tuples `(a.k, a.j)`, method-on-field); whole-BINDING method keys (`a.abs()`) keep firing. 12 fixtures flipped to refusal tests + 5 new.
+  3. **use_self `Self<A>` (E0109)** — `Self` cannot carry explicit generic args; when the matched path has angle-bracketed args matching the impl head, the edit now replaces the WHOLE segment with bare `Self` (the katgpt-rs event_log.rs `&EventLog<A>` break). 1 new fixture.
+  **Verification-gate blind spot confirmed as the escape vector (now with a LIVE instance):** all 15 katgpt-rs breaks sat in feature-gated code the default-features verify check compiled EMPTY — the documented limitation, previously hypothetical. The workspace --all-features sweep is the reliable catch-net and is now MANDATORY for adoption heals. Also proven pre-existing (not-mine, documented): katgpt-rs workspace E0433 metal example + transformer cluster-map test failure + the tf_loop fold_kv_mean E0425 (`8ce82c59` fix: added the missing `#[cfg(feature = "tf_loop")]` the sibling's 892657c1 left off — it references KVCache through the gated `use super::*`), riir-ai npc/dialog.rs FxHashMap double-import + from-array E0308 (fixed in the heal commit), riir-train 4 gated breaks (gpu_future/DllmTrainingConfig imports, oft_inputs private fields, join_training — sibling lane, stash-proven at clean HEAD). Also 1 heal-created emission reverted in riir-train: useless_format rewrote `format!("{}", v as i64)` → `v as i64.to_string()` (E0271-cast-then-method, parses as `v as (i64.to_string)`... actually `as` binds looser than method call → syntax error E0769-class; intake P15). **riir-train lib tests 1804/0 exit 0; riir-ai lib tests green (2 parallel-run interference failures pass isolated: civ heap-corruption + infer-core 64MB OOM; goat_proof 5ms timing gate = cold-cache flake 3/3 green); katgpt-rs workspace tests green modulo 2 proven-pre-existing. All 4 repos synced; queues 3+5 serviced. Next executable: intake P12-P15 (verify-churn suppression + the useless_format cast-emission guard), else idle report.**
+
 - **2026-08-31 (2nd cycle, ~09:0x +07, 4090 box) — B89/B90/B91 PROPOSER ADOPTION HEAL LANDED on katgpt-rs (`2cb97410`, rebased over sibling's docs commit fb415463): 1540 compile-gated edits / 453 files — the new-fixable classes dominate (use_self 896, items_after_statements 194, manual_let_else 42, uninlined 95, match_bool 36, suboptimal_flops 6 verify-tier + minors), 20 edits auto-reverted by the verify gate, 330 files rustfmt'd.** Validation: workspace clippy (excl. katgpt-backend — its all-targets build carries the PRE-EXISTING macOS-trap E0433 metal example, PROVEN at HEAD via detached worktree, matches the t01 manifest's error_files:1) 0 new warnings — remaining 6 warnings all pre-existing (bench_680 kinematic files + rule_extractor:180 documented owner-call leftover; alloc_check's ch-loops are in heal-untouched regions); cargo test --workspace --lib green except the transformer cluster-map failure PROVEN pre-existing at HEAD 00cfe345 (same worktree); sample test binaries green (integration 92/92, bench_core_optimization, problem_mutator 2/2). **Post-mining findings (→ intake items P12/P13):** (1) verify-revert CHURN — pass 2 re-proposed the exact 20 edits pass 1's verify gate reverted (42 cargo checks/pass, converges never); (2) verify-gate ATTRIBUTION NOISE — the and_or/types.rs use_self reverts were innocent (manual probe: the single edit compiles clean, exit 0); (3) cosmetic — items_after_statements hoist can emit an unformatted bare-block shape in fmt-skipped files (compiles). No corpus lead armed; next executable: same adoption heal over riir-ai + riir-train surfaces (bigger trees, sibling lanes must be checked first), else idle report.
 
 - **2026-08-31 (idle loop, Windows/4090 box) — queue-hygiene unit: audit instrument fixed for this box + plan 049 defer-marks + post-mining intake closed to EMPTY.** (1) `scripts/self_evolve_audit.sh` was misreporting GARBAGE here (hardcoded `/Users/katopz/git` root → "intake ABSENT", "0 heal commits", every section empty); fixed: repo + sibling roots derived from the script's own location, python probed by EXECUTION not existence (the WindowsApps `python3` STUB resolves on PATH but only prints "Python was not found" — measured; a real `python` 3.10 exists), `PYTHONIOENCODING=utf-8` + explicit `encoding='utf-8'` on every file read (Windows consoles default python stdio to the LOCALE codec — cp874 here — which crashed on UTF-8 trajectories), skill check drift-aware (Mac symlink OK / Windows content-verified copy OK / stale copy named loudly — native symlinks need admin here, "Operation not permitted" measured; the global `cargo-heal` + `riir-clippy` skill copies on this box WERE stale and got refreshed), Zed global-rule check covers both `~/.config/zed/AGENTS.md` and `%APPDATA%/Zed/AGENTS.md` (Windows path — the rule IS present here). Full audit now renders on this box: store 6909 rows (success=3/fail=1), 21 score runs flat at 96.2/1.9/100/100, E5 PASS (P9+P10), adoption 122 commits / 7 repos, A1 PASS (8 distinct days). (2) Plan 049's 15 stop-closed-track checkboxes (T0.0d owner-gated + T1.x CLOSED-UNBUILT + T2.x/T3.x/T4.x downstream) defer-marked `- [-]` with tags — the plan was CLOSED-STOP since `7bd6481` but the boxes were never marked; 0 unchecked remain. (3) `unusual_byte_groupings` CLOSED-REFUSED below the frequency bar (2 sites vs the 39-site smallest admitted candidate; style-only; retrieval-floor protection) — re-open only on a future fired-histogram population; **post-mining intake now has ZERO open classes.** Next executable: arxiv pool re-walk (cadence 09-01+) or MCP-search pool walk (quota 09-15); no corpus lead armed.
@@ -1295,41 +1301,49 @@ verify reverts, score-bench delta). Dev-time heal sessions append lines
 here (via the `cargo-heal` skill); idle-loop queue item 14 consumes
 top-down. Probe each class against real clippy FIRST.
 
-**Intake 2026-08-31 (katgpt-rs B89/B90 adoption heal session, commit `2cb97410`):**
+**Intake 2026-08-31 (the full-workspace B89/B90 adoption sweep session):**
 
-- [ ] **P12 — verify-revert CHURN: the verify gate does not suppress re-proposal.**
-      Pass 2 of the katgpt-rs heal re-proposed the EXACT 20 edits pass 1's verify
-      gate had reverted (latent_steering, slod, and_or/types.rs, conformal/seasonal,
-      percepta/legacy/tests, ...) and re-ran 42 cargo checks to re-revert them.
-      Every future run of `--fix --write --verify` over this tree re-does the same
-      20-edit/42-check dance — the operation never converges to a cheap fixpoint.
-      Fix shapes to probe: (a) record verified-fail edits in the self-evolve store
-      keyed by (file, rule, line-hash) and have `--fix` skip recorded failures (the
-      fail-trajectory loop the AGENTS.md already claims exists — "--verify records
-      ... reverted edits as success=false" — but the oracle line printed
-      `0 persist (verified-fail)` despite 20 reverts, so either the recording or the
-      consumption half is missing on this path); (b) cheaper: have `--verify` emit a
-      machine-readable suppression list the next invocation honors (session-scoped,
-      not cross-repo). Probe-first: reproduce the 20-edit churn on the current tree
-      (one more `--fix --verify` pass should re-propose them if unfixed).
-- [ ] **P13 — verify-gate ATTRIBUTION NOISE: innocent edits reverted by
-      line-mapping.** The and_or/types.rs `use_self` edits (return/param types
-      `&AndOrNode<G,S>` → `&Self` in `impl<G,S> AndOrNode<G,S>`) were reverted in
-      BOTH passes as compile-breaking — but the manual probe (single edit applied
-      by hand, `cargo check -p katgpt-core`) compiles clean, exit 0. The real
-      breaker was somewhere else in the package batch; the gate's error→line→edit
-      mapping reverted neighbors (4 line-reverts + a whole-file revert for the same
-      file in one pass). Fix shape: when a package check fails, diff-check each
-      candidate edit INDIVIDUALLY (bisect the batch) before whole-file/line reverts,
-      or re-verify surviving edits after the revert round and re-apply any that
-      compile alone. Evidence preserved: `target/b92_katgpt_write{,2}.txt` (the
-      dual revert lists), the probe command in the session record.
-- [ ] **P14 (cosmetic) — items_after_statements hoist emits an unformatted
-      bare-block shape in fmt-skipped files.** The hoist places the const/use
-      before the block, leaving `{` at column 0 (bench_680_kinematic_alloc_check.rs
-      hunk) — compiles, but is ugly in files the fmt-clean-at-HEAD gate skips
-      (pre-existing drift). Fix shape: when the fmt plan says skip, emit the hoist
-      with the block re-indented (the proposer knows the target file's fmt plan).
+- [x] **manual_let_else binding-name mangling — ROOT-CAUSED + FIXED same day
+      (CRITICAL, 15 real gated breaks).** The emitted let-else pattern kept
+      the ARM's inner binding (`Some(p)`) instead of binding the OUTER let
+      name (`preferred_i`); the original fixtures passed only because they
+      named outer and inner identically. Fix: `renamed_single_binding`
+      (byte-precise span-splice of the single binding to the outer name) +
+      the SHORTHAND-FIELD refusal (`Inject { signature }` renames the FIELD,
+      not the binding — refuse; the integrity_layer_goat.rs live instance).
+      4 fixtures; see the 3rd-cycle snapshot entry for the full record.
+- [x] **unnecessary_sort_by field keys (E0507) — REFUSED (parse-only
+      type-blind).** `sort_by_key(|a| a.k)` moves the field out of `&K`:
+      compiles only for Copy fields, probe-verified real clippy is
+      type-aware (MA on Copy, SILENT on non-Copy — the katgpt-rs datrie.rs
+      `a.0: Vec<u8>` break). The whole field subfamily now refuses
+      (`a.k`, `a.n.c`, `a.n.m()`, tuples, method-on-field); whole-binding
+      method keys (`a.abs()`) keep firing. 12 fixtures flipped to refusal
+      tests + 5 new.
+- [x] **use_self `Self<A>` (E0109) — FIXED: whole-segment replacement.**
+      `Self` cannot carry explicit generic args; when the matched path has
+      args matching the impl head, the edit now replaces the whole segment
+      (ident + args) with bare `Self` (the katgpt-rs event_log.rs
+      `&EventLog<A>` break). 1 new fixture.
+- [x] **P14 (mis-diagnosed) — MOOTED: the "unformatted bare-block shape" in
+      bench_680_kinematic_alloc_check.rs was the manual_let_else mangle +
+      fmt-skip interaction, not an items_after_statements emission defect.
+      Closed; no code change.**
+- [ ] **P15 — useless_format emitter can produce invalid cast-then-method text.**
+      Live instance in the riir-train heal (`loss_uopsd/extractor.rs:329`):
+      `Some(format!("{}", v as i64))` → `Some(v as i64.to_string())` — `as`
+      binds looser than `.`, so the emitted text parses the method call into
+      the cast's TARGET TYPE position (syntax garbage). The `is_postfix_safe`
+      guard removed Cast from the method-APPEND-RECEIVER set (B77) but never
+      covered the append-AFTER-CAST direction. Fix: parenthesize before the
+      trailing call (`(v as i64).to_string()`) or refuse. Evidence: the
+      reverted hunk in riir-train `d9cdf68e`.
+- [ ] **P12 — verify-revert CHURN: the verify gate does not suppress re-proposal**
+      (STILL OPEN — the katgpt-rs `--fix --write --verify` path re-does a
+      20-edit/42-check revert dance every run; suppression shapes in the
+      2nd-cycle entry below). The P13 "attribution noise" suspicion resolved:
+      the reverts were the REAL mangling bug above (fixed); the gate's net
+      effect was correct.
 
 **Intake 2026-08-29 (Plan 581 twist_smc heal session, katgpt-rs):**
 

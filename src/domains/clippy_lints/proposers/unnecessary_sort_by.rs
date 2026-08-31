@@ -55,6 +55,14 @@
 //!   (`combine(&a.k)`), method args (`a.dist2(&ORIGIN)`), binary operands
 //!   (`a.1 + &a.2`) — the callee/impl consumes the reference and the key
 //!   value stays owned. Guard = `key_holds_borrow` (value-position walk).
+//! - FIELD keys (2cb97410 escape class, 2026-08-31): any key that reads a
+//!   field (`a.k`, `a.n.c`, `a.n.m()`, `(a.k, a.j)`, `a.k.max(MAX)`) is
+//!   refused — `sort_by_key` returns K by VALUE, so the emitted key moves
+//!   the field out of `&T`, which E0507s for every non-Copy field type
+//!   (the katgpt-rs datrie.rs break). Real clippy is type-aware here (MA
+//!   on Copy fields, SILENT on non-Copy); parse-only cannot prove Copy, so
+//!   the whole subfamily is refused (healer-safer-than-clippy). Keys over
+//!   the WHOLE binding (`a.abs()`, `a.max(MAX)` on `a` itself) keep firing.
 //! - reference-RETURNING method keys (`a.kref()` — clippy is type-aware
 //!   silent; parse-only cannot see return types — the `--verify` compile
 //!   gate is the backstop if that shape ever appears)
@@ -176,6 +184,21 @@ fn is_ident_char(c: u8) -> bool {
 /// consumes the reference and the key value stays owned. The nested
 /// tuple/array/paren recursion is a conservative structural extension of
 /// the pinned flat class (false-negative-safe).
+/// True when the expression tree contains ANY field access (`a.k`, `a.n.c`,
+/// `a.0`) — the `sort_by_key` move-out risk class (see the guard site).
+fn key_mentions_field(e: &Expr) -> bool {
+    match e {
+        Expr::Field(_) => true,
+        Expr::Tuple(t) => t.elems.iter().any(key_mentions_field),
+        Expr::Array(a) => a.elems.iter().any(key_mentions_field),
+        Expr::Paren(p) => key_mentions_field(&p.expr),
+        Expr::Group(g) => key_mentions_field(&g.expr),
+        Expr::Binary(b) => key_mentions_field(&b.left) || key_mentions_field(&b.right),
+        Expr::MethodCall(mc) => key_mentions_field(&mc.receiver),
+        _ => false,
+    }
+}
+
 fn key_holds_borrow(source: &str, e: &Expr, binding: &str, deref: bool) -> bool {
     match e {
         Expr::Tuple(t) => t
@@ -319,6 +342,18 @@ impl Collector<'_> {
         if key_holds_borrow(self.source, &cmp.receiver, &a_s, deref) {
             return None;
         }
+        // Field-access keys (`a.k`, `a.n.c`, tuple elements `(a.k, a.j)`):
+        // `sort_by_key` returns K BY VALUE, so the emitted key MOVES the field
+        // out of `&T` — E0507 for every non-Copy field type (the katgpt-rs
+        // datrie.rs escape: `sort_by(|a, b| a.0.cmp(&b.0))` over `Vec<u8>`
+        // keys broke the build). The oracle is type-aware: MA on Copy fields,
+        // SILENT on non-Copy — parse-only cannot separate them, so the whole
+        // field subfamily is refused (the healer-safer-than-clippy class;
+        // keys over the WHOLE binding — method calls like `a.abs()`, shared
+        // constants — keep firing: no field is moved).
+        if key_mentions_field(&cmp.receiver) {
+            return None;
+        }
         // Forward order: the receiver mentions `a` (never `b`); the swap
         // `a→b` must reproduce the argument's inner text exactly. This
         // rejects reversed sorts (recv mentions `b`), mixed fields,
@@ -400,84 +435,68 @@ mod tests {
     }
 
     #[test]
-    fn field_key_plain_fires() {
-        // P8b oracle: `|a, b| a.k.cmp(&b.k)` → `sort_by_key(|a| a.k)` (MA)
+    fn field_key_plain_refused_non_copy_move_risk() {
+        // E0507 probe + the katgpt-rs datrie.rs break: `sort_by_key(|a| a.k)`
+        // MOVES `a.k` out of `&K` — compiles only for Copy fields, and
+        // parse-only cannot prove Copy (real clippy is type-aware: MA on
+        // Copy, SILENT on non-Copy). The whole field subfamily is refused.
         let input = "fn f(v: &mut Vec<K>) { v.sort_by(|a, b| a.k.cmp(&b.k)); }";
-        let out = propose_fix("unnecessary_sort_by", input).expect("matched");
-        assert!(
-            out.contains("v.sort_by_key(|a| a.k)"),
-            "field key must produce sort_by_key: {out}"
-        );
-        syn::parse_file(&out).expect("re-parses");
+        let out = propose_fix("unnecessary_sort_by", input);
+        assert!(out.is_none(), "field key must be refused: {out:?}");
     }
 
     #[test]
-    fn field_key_deref_fires_verbatim_pattern() {
-        // P8b oracle: `|&a, &b| a.k.cmp(&b.k)` → `sort_by_key(|&a| a.k)` (MA)
+    fn field_key_deref_refused_same_move_risk() {
+        // The deref twin moves the field identically (`|&a| a.k` still owns
+        // `a` after the pattern deref) — refused for the same reason.
         let input = "fn f(v: &mut Vec<K>) { v.sort_by(|&a, &b| a.k.cmp(&b.k)); }";
-        let out = propose_fix("unnecessary_sort_by", input).expect("matched");
-        assert!(out.contains("v.sort_by_key(|&a| a.k)"), "got: {out}");
-        syn::parse_file(&out).expect("re-parses");
+        let out = propose_fix("unnecessary_sort_by", input);
+        assert!(out.is_none(), "deref field key must be refused: {out:?}");
     }
 
     #[test]
-    fn field_key_unstable_fires() {
-        // P8b oracle: `sort_unstable_by(|a, b| a.k.cmp(&b.k))` →
-        // `sort_unstable_by_key(|a| a.k)` (MA)
+    fn field_key_unstable_refused() {
         let input = "fn f(v: &mut Vec<K>) { v.sort_unstable_by(|a, b| a.k.cmp(&b.k)); }";
-        let out = propose_fix("unnecessary_sort_by", input).expect("matched");
-        assert!(out.contains("v.sort_unstable_by_key(|a| a.k)"), "got: {out}");
-        syn::parse_file(&out).expect("re-parses");
+        let out = propose_fix("unnecessary_sort_by", input);
+        assert!(out.is_none(), "unstable field key must be refused: {out:?}");
     }
 
     #[test]
-    fn field_key_typed_drops_annotation() {
-        // P8b oracle: `|a: &K, b: &K| a.k.cmp(&b.k)` → `sort_by_key(|a| a.k)`
-        // — the annotation is DROPPED from the suggested closure (MA).
+    fn field_key_typed_refused() {
         let input = "fn f(v: &mut Vec<K>) { v.sort_by(|a: &K, b: &K| a.k.cmp(&b.k)); }";
-        let out = propose_fix("unnecessary_sort_by", input).expect("matched");
-        assert!(out.contains("v.sort_by_key(|a| a.k)"), "got: {out}");
-        assert!(!out.contains("&K|"), "annotation must be dropped: {out}");
-        syn::parse_file(&out).expect("re-parses");
+        let out = propose_fix("unnecessary_sort_by", input);
+        assert!(out.is_none(), "typed field key must be refused: {out:?}");
     }
 
     #[test]
-    fn multilevel_field_key_fires() {
-        // P8b oracle: `a.n.c.cmp(&b.n.c)` → `sort_by_key(|a| a.n.c)` (MA)
+    fn multilevel_field_key_refused() {
         let input = "fn f(v: &mut Vec<K>) { v.sort_by(|a, b| a.n.c.cmp(&b.n.c)); }";
-        let out = propose_fix("unnecessary_sort_by", input).expect("matched");
-        assert!(out.contains("v.sort_by_key(|a| a.n.c)"), "got: {out}");
-        syn::parse_file(&out).expect("re-parses");
+        let out = propose_fix("unnecessary_sort_by", input);
+        assert!(out.is_none(), "multilevel field key must be refused: {out:?}");
     }
 
     #[test]
-    fn method_call_key_fires() {
-        // P8b oracle: `a.n.m().cmp(&b.n.m())` → `sort_by_key(|a| a.n.m())` (MA)
+    fn method_call_on_field_key_refused() {
+        // `a.n.m()` reads the field `a.n` before calling — same move-out
+        // risk at the field read, refused with the family.
         let input = "fn f(v: &mut Vec<K>) { v.sort_by(|a, b| a.n.m().cmp(&b.n.m())); }";
-        let out = propose_fix("unnecessary_sort_by", input).expect("matched");
-        assert!(out.contains("v.sort_by_key(|a| a.n.m())"), "got: {out}");
-        syn::parse_file(&out).expect("re-parses");
+        let out = propose_fix("unnecessary_sort_by", input);
+        assert!(out.is_none(), "field method-call key must be refused: {out:?}");
     }
 
     #[test]
-    fn postfix_method_key_fires() {
-        // P8b oracle CORRECTION: the old `custom_comparator_unchanged` test
-        // asserted `a.abs().cmp(&b.abs())` is silent — the probe showed MA
-        // `sort_by_key(|a| a.abs())`. The skip encoded a false oracle fact.
+    fn postfix_method_on_field_key_refused() {
         let input = "fn f(v: &mut Vec<K>) { v.sort_by(|a, b| a.k.abs().cmp(&b.k.abs())); }";
-        let out = propose_fix("unnecessary_sort_by", input).expect("matched");
-        assert!(out.contains("v.sort_by_key(|a| a.k.abs())"), "got: {out}");
-        syn::parse_file(&out).expect("re-parses");
+        let out = propose_fix("unnecessary_sort_by", input);
+        assert!(out.is_none(), "postfix field key must be refused: {out:?}");
     }
 
     #[test]
-    fn tuple_key_fires_parens_kept() {
-        // P8b oracle: `(a.k, a.j).cmp(&(b.k, b.j))` →
-        // `sort_by_key(|a| (a.k, a.j))` — tuple parens KEPT (MA).
+    fn tuple_field_key_refused() {
+        // `(a.k, a.j)` moves both fields — refused with the family.
         let input = "fn f(v: &mut Vec<K>) { v.sort_by(|a, b| (a.k, a.j).cmp(&(b.k, b.j))); }";
-        let out = propose_fix("unnecessary_sort_by", input).expect("matched");
-        assert!(out.contains("v.sort_by_key(|a| (a.k, a.j))"), "got: {out}");
-        syn::parse_file(&out).expect("re-parses");
+        let out = propose_fix("unnecessary_sort_by", input);
+        assert!(out.is_none(), "tuple field key must be refused: {out:?}");
     }
 
     #[test]
@@ -545,54 +564,38 @@ mod tests {
     }
 
     #[test]
-    fn ref_binary_operand_key_still_fires() {
-        // Probe: `(a.0, a.1 + &a.2)` — the ref is a binary OPERAND — is
-        // oracle-MA (the Add impl consumes it). Must keep firing.
+    fn field_binary_operand_key_refused() {
+        // `(a.0, a.1 + &a.2)` — field reads at value position, refused with
+        // the family (the E0507 move risk exists at every field read).
         let input = "fn f(v: &mut Vec<(u8, u8, u8)>) { v.sort_by(|a, b| (a.0, a.1 + &a.2).cmp(&(b.0, b.1 + &b.2))); }";
-        let out = propose_fix("unnecessary_sort_by", input).expect("matched");
-        assert!(
-            out.contains("v.sort_by_key(|a| (a.0, a.1 + &a.2))"),
-            "got: {out}"
-        );
-        syn::parse_file(&out).expect("re-parses");
+        let out = propose_fix("unnecessary_sort_by", input);
+        assert!(out.is_none(), "field binary-operand key must be refused: {out:?}");
     }
 
     #[test]
-    fn shared_const_key_fires() {
-        // P8b oracle: `a.k.max(MAX).cmp(&b.k.max(MAX))` →
-        // `sort_by_key(|a| a.k.max(MAX))` (MA) — shared constants swap-clean.
+    fn field_method_call_with_const_arg_refused() {
+        // `a.k.max(MAX)` reads the field `a.k` — refused with the family.
         let input = "fn f(v: &mut Vec<K>) { v.sort_by(|a, b| a.k.max(MAX).cmp(&b.k.max(MAX))); }";
-        let out = propose_fix("unnecessary_sort_by", input).expect("matched");
-        assert!(out.contains("v.sort_by_key(|a| a.k.max(MAX))"), "got: {out}");
-        syn::parse_file(&out).expect("re-parses");
+        let out = propose_fix("unnecessary_sort_by", input);
+        assert!(out.is_none(), "field-reading method key must be refused: {out:?}");
     }
 
     #[test]
-    fn param_arg_key_fires() {
-        // P8b oracle: `a.k.wrapping_add(a.j).cmp(&b.k.wrapping_add(b.j))` →
-        // `sort_by_key(|a| a.k.wrapping_add(a.j))` (MA) — param-referencing
-        // method args inside the key swap cleanly.
+    fn field_method_param_arg_refused() {
+        // `a.k.wrapping_add(a.j)` — field reads, refused.
         let input = "fn f(v: &mut Vec<K>) { v.sort_by(|a, b| a.k.wrapping_add(a.j).cmp(&b.k.wrapping_add(b.j))); }";
-        let out = propose_fix("unnecessary_sort_by", input).expect("matched");
-        assert!(
-            out.contains("v.sort_by_key(|a| a.k.wrapping_add(a.j))"),
-            "got: {out}"
-        );
-        syn::parse_file(&out).expect("re-parses");
+        let out = propose_fix("unnecessary_sort_by", input);
+        assert!(out.is_none(), "field method-arg key must be refused: {out:?}");
     }
 
     #[test]
-    fn external_ident_key_fires() {
-        // P8b oracle: `a.k.max(w.len() as i32)` swaps clean → MA. Also pins
-        // the word-boundary scan: `a` inside `as` is NOT a word occurrence.
+    fn field_method_external_ident_refused() {
+        // `a.k.max(w.len() as i32)` — field read, refused (the external-ident
+        // swap check itself still stands; the field guard fires first).
         let input =
             "fn f(v: &mut Vec<K>, w: &Vec<K>) { v.sort_by(|a, b| a.k.max(w.len() as i32).cmp(&b.k.max(w.len() as i32))); }";
-        let out = propose_fix("unnecessary_sort_by", input).expect("matched");
-        assert!(
-            out.contains("v.sort_by_key(|a| a.k.max(w.len() as i32))"),
-            "got: {out}"
-        );
-        syn::parse_file(&out).expect("re-parses");
+        let out = propose_fix("unnecessary_sort_by", input);
+        assert!(out.is_none(), "external-ident field key must be refused: {out:?}");
     }
 
     #[test]
