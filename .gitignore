@@ -15,6 +15,11 @@ t37_rows.jsonl
 scripts/__pycache__/
 .env
 
+# Research 107 — external-source raw clones (distill inputs, never committed:
+# a vendored upstream tree would be swept into sibling bulk adds and bloats
+# the repo; the distill VERDICT is the record, the clone is disposable).
+.raw/
+
 # Issue 044 T7 — the unattended nightly runner writes both of these INTO the
 # repo. Untracked files here are not merely noise: sibling agents run bulk
 # `git add -A`, and an untracked log/lock is exactly what gets swept into
