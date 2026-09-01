@@ -1,7 +1,7 @@
 # Issue 045 — container cost observability + hourly housekeeping worker + smallest-sizing verdict
 
 **Filed:** 2026-08-26
-**Status:** OPEN — **2026-08-30 T9f DEPLOYED (version `2e07d125`) + the backfill cursor loop executed live to `next_end:null`** — the retrievable archive (31-day GraphQL floor) is complete; backfill verified idempotent (written 0 everywhere; existing rows never overwritten); gate posture re-verified (anon `/hours` → 401, authed `/status` → `read_gated:true, token_set:true`). Remaining OPEN items are T4 paging (`ALERT_WEBHOOK_URL` + optional `MONTHLY_BUDGET_USD` — owner secrets) and T6 (awaits the deferred Worker/DO ledger shell). Prior status: **2026-08-29 ROLLOUT EXECUTED (the T8+T9 deploy blocker is GONE — this headline previously said "NOT DEPLOYED"; that is STALE as of the rollout):** `target/hk_rollout.sh` ran the five documented commands end-to-end — T9 worker DEPLOYED (live at `https://riir-kat-housekeeping.foxfox.workers.dev`), `READ_TOKEN` generated → `.env` + pushed (gate LIVE: anon `/hours` → 401), `CF_API_TOKEN` pushed from `.env` (verified `/status` → `token_set:true`; neurons + containers collecting hourly), 14-day backfill run, hourly rows accumulating. T4 (owner secrets) is HALF-resolved: `CF_API_TOKEN` is IN — the collector + cap-crossing detection are LIVE (`alerts_today` in `/status`); what remains secret-gated is only the paging PUSH (`ALERT_WEBHOOK_URL`, optional `MONTHLY_BUDGET_USD` — crossings land in KV + `/status` without them). T6 (external ledger shell) remains design-gated. The `.env` contract is documented in [`.env.example`](../.env.example) + repo README §"Ops surface" — the four core vars are all SET (`GROQ_API_KEY`, `CF_API_TOKEN`, `CF_DEPLOY_API_TOKEN`, `READ_TOKEN`); do not re-ask for them. **2026-08-29 T9 + T9b + T9c + T9d + T9e SHIPPED — and DEPLOYED (this said "undeployed"; that was STALE, corrected 2026-08-29 by `wrangler deployments list` rather than by re-reading the prose: the live code deployment is `64bea65c` at **2026-08-28T17:56:39Z**, which POST-DATES the last T9e commit `682a8c3` at 17:41:35Z — so the rollout carried the whole T9..T9e series to prod. Independently corroborated live: anon `/hours` + `/days` -> 401, authed `/status` -> `read_gated:true, token_set:true`. The remaining undeployed change is T9f only). T9e (perf/sec pass): `/hours` + `/days` were the last fail-open FAN-OUT routes (168 KV gets per request, memo is per-ISOLATE so colo-spread traffic misses it; ~595 anonymous requests exhaust the 100k/day read tier and what breaks is the day aggregate + the alert-dedupe get, i.e. anonymous traffic could silently disable budget alerting). Hard-gated to 403, which costs ZERO functionality because the consumer was checked first: the ops dashboard makes exactly one cross-origin call, `/latest`, and charts from a statically baked blob. RUNBOOK ORDER CHANGED — `secret put READ_TOKEN` now precedes the verification curls. Plus: the "timing-safe" compare leaked the secret's LENGTH (looped max(len) times) → SHA-256 digests, fixed 64-char loop, digest doubles as the memo salt so the authenticated fan-out is memoised for the first time; `/status` + `/latest` no longer 500 on a corrupt KV value (safeJson) and `fetch` gained the top-level catch `scheduled` got in T9c; `latest` reads collapse 10→1. 36/36 tests, 5 of 6 new/changed RED against the prior worker (the 2 green-on-both recorded as non-discriminating, not as evidence). T9d (KV inventory): the namespace is 8 keys — 7 legacy collided hour rows + `latest`, and ZERO `day:` rows, because the heartbeat path returned before the aggregate. `/days` has served `[]` since deploy and the aggregate code never ran in prod. Fixed, plus `hours` split from `hours_present` so a heartbeat day cannot report a false zero. DEPLOY WARNING: `/hours` returns `[]` right after the deploy (the fixed read path looks for keys that do not exist yet) — run the backfill immediately after. T9c (from reading PROD, not code): `/status` says `token_set:false` — the token has never been set, so no cost data has EVER been collected and the "~6-8x undercount is live" framing above describes an undercount of nothing; what T8 loses is heartbeats. That also broke T9's own design: its exists-based protect rule would have declared the all-heartbeat archive untouchable and repaired nothing, so the rule is now data-based (`ok===true && containers`, decided free from `list()` metadata). Plus `[observability]` (this worker's every failure mode is silence) and a `scheduled()` catch. T9b: T9b: authenticated read responses were `Cache-Control: public` — RFC 9111 §3.5 makes that the exact directive granting shared caches storage of an `Authorization`-bearing response that they would otherwise refuse; now `private, no-store`. Plus the monthly-budget scan re-ran hourly after its alert had already fired (~32 subrequests/run to a guaranteed no-op), and the backfill could 524 instead of returning its resume cursor (45 s wall-clock guard). 22/22 tests. T9: `POST /backfill` re-derives the hours T8 lost — the "unrecoverable" verdict was wrong, CF GraphQL retains ~31 d and exposes `datetimeHour`, so KV is a cache of a still-live source. 19/19 tests (7 new). En route it fixed a defect in T8's own test suite (the GraphQL stub omitted `datetimeHour`, so no test could have caught an hour-grouping bug) and a hot-path KV read-your-writes hole in the day aggregate.** Prior status: (2026-08-28: `hourKey()` was collapsing 24 hourly rows into 3, understating the daily cost ~8×; fixed + pinned by 12 regression tests, deploy blocked by the session permission classifier — run `cd cloudflare/housekeeping && npx wrangler deploy`); T5 RESOLVED (cross-repo correlation) + T7 read-path hardening SHIPPED 2026-08-28. Issue 053 (unattributed app `a03a70ff`) filed **and RESOLVED same day** by cross-repo correlation — it is the `riir-mmorpg-examples` CCU proof bench (Bench 034); resolved-and-removed per the noise rule, record in §T5 + git history. T1 verdict recorded, T2+T3 SHIPPED same day; live-mint half gated on Proposal 005 Phase 1. Sizing verdict feeds Proposal 005 T2.0/T2.1 **+ T2.6 / [Plan 031](../.plans/031_kat_sweeper_temp_container_r2_tier.md)** (2026-08-26 later-session sync). **2026-08-27: the T3 Worker was EXTENDED + redeployed (`ab79bd20`) — CORS on all read endpoints (dashboard live-fetch), Issue-044-T4 budget alerting (cap thresholds 50/90/100% + optional monthly budget, KV-dedupe, webhook via `ALERT_WEBHOOK_URL`), extended `/status` (`cap`/`thresholds`/`has_webhook`/`has_monthly_budget`/`alerts_today`).** **2026-08-28 truth-refresh: Proposal 005 Phase 1 LANDED 2026-08-27 (T1.5 dapps `84dd049` / T1.6 clippy `0a7cfd8`) — T6's blocker is NO LONGER Phase 1; the live-mint swap-in awaits the deferred Worker/DO HTTP ledger shell (Proposal 005 phase-2 defer / Plan 031 Phase B gate / phase-3 owner gate). Worker mint status strings refreshed `pending-phase-1` → `pending-worker-shell` + redeployed (version `f93ae507`, live-verified on the 04:00 UTC tick). T4 unchanged (owner-gated secrets). T5 still blocked — CLI exposes no id→name mapping (see checkbox).** *(That last clause is SUPERSEDED later the same day — T5 was resolved by cross-repo correlation, not by the CLI; see §T5.)*
+**Status:** OPEN — **2026-09-01 T4 RESOLVED (re-verified live: `token_set:true, read_gated:true`; owner-optional paging residual only) + T6 WORKER HALF LANDED (`a07b9e6`, deployed `693972ec` — armed-but-inert until the owner sets `KAT_SERVICE_URL` + `KAT_MINT_TOKEN`; go-live also needs the sibling's server route + kat-service prod deploy). Remaining OPEN: T6 go-live (above) + T4's owner-optional paging secrets.** Prior status: **2026-08-30 T9f DEPLOYED (version `2e07d125`) + the backfill cursor loop executed live to `next_end:null`** — the retrievable archive (31-day GraphQL floor) is complete; backfill verified idempotent (written 0 everywhere; existing rows never overwritten); gate posture re-verified (anon `/hours` → 401, authed `/status` → `read_gated:true, token_set:true`). Remaining OPEN items are T4 paging (`ALERT_WEBHOOK_URL` + optional `MONTHLY_BUDGET_USD` — owner secrets) and T6 (awaits the deferred Worker/DO ledger shell). Prior status: **2026-08-29 ROLLOUT EXECUTED (the T8+T9 deploy blocker is GONE — this headline previously said "NOT DEPLOYED"; that is STALE as of the rollout):** `target/hk_rollout.sh` ran the five documented commands end-to-end — T9 worker DEPLOYED (live at `https://riir-kat-housekeeping.foxfox.workers.dev`), `READ_TOKEN` generated → `.env` + pushed (gate LIVE: anon `/hours` → 401), `CF_API_TOKEN` pushed from `.env` (verified `/status` → `token_set:true`; neurons + containers collecting hourly), 14-day backfill run, hourly rows accumulating. T4 (owner secrets) is HALF-resolved: `CF_API_TOKEN` is IN — the collector + cap-crossing detection are LIVE (`alerts_today` in `/status`); what remains secret-gated is only the paging PUSH (`ALERT_WEBHOOK_URL`, optional `MONTHLY_BUDGET_USD` — crossings land in KV + `/status` without them). T6 (external ledger shell) remains design-gated. The `.env` contract is documented in [`.env.example`](../.env.example) + repo README §"Ops surface" — the four core vars are all SET (`GROQ_API_KEY`, `CF_API_TOKEN`, `CF_DEPLOY_API_TOKEN`, `READ_TOKEN`); do not re-ask for them. **2026-08-29 T9 + T9b + T9c + T9d + T9e SHIPPED — and DEPLOYED (this said "undeployed"; that was STALE, corrected 2026-08-29 by `wrangler deployments list` rather than by re-reading the prose: the live code deployment is `64bea65c` at **2026-08-28T17:56:39Z**, which POST-DATES the last T9e commit `682a8c3` at 17:41:35Z — so the rollout carried the whole T9..T9e series to prod. Independently corroborated live: anon `/hours` + `/days` -> 401, authed `/status` -> `read_gated:true, token_set:true`. The remaining undeployed change is T9f only). T9e (perf/sec pass): `/hours` + `/days` were the last fail-open FAN-OUT routes (168 KV gets per request, memo is per-ISOLATE so colo-spread traffic misses it; ~595 anonymous requests exhaust the 100k/day read tier and what breaks is the day aggregate + the alert-dedupe get, i.e. anonymous traffic could silently disable budget alerting). Hard-gated to 403, which costs ZERO functionality because the consumer was checked first: the ops dashboard makes exactly one cross-origin call, `/latest`, and charts from a statically baked blob. RUNBOOK ORDER CHANGED — `secret put READ_TOKEN` now precedes the verification curls. Plus: the "timing-safe" compare leaked the secret's LENGTH (looped max(len) times) → SHA-256 digests, fixed 64-char loop, digest doubles as the memo salt so the authenticated fan-out is memoised for the first time; `/status` + `/latest` no longer 500 on a corrupt KV value (safeJson) and `fetch` gained the top-level catch `scheduled` got in T9c; `latest` reads collapse 10→1. 36/36 tests, 5 of 6 new/changed RED against the prior worker (the 2 green-on-both recorded as non-discriminating, not as evidence). T9d (KV inventory): the namespace is 8 keys — 7 legacy collided hour rows + `latest`, and ZERO `day:` rows, because the heartbeat path returned before the aggregate. `/days` has served `[]` since deploy and the aggregate code never ran in prod. Fixed, plus `hours` split from `hours_present` so a heartbeat day cannot report a false zero. DEPLOY WARNING: `/hours` returns `[]` right after the deploy (the fixed read path looks for keys that do not exist yet) — run the backfill immediately after. T9c (from reading PROD, not code): `/status` says `token_set:false` — the token has never been set, so no cost data has EVER been collected and the "~6-8x undercount is live" framing above describes an undercount of nothing; what T8 loses is heartbeats. That also broke T9's own design: its exists-based protect rule would have declared the all-heartbeat archive untouchable and repaired nothing, so the rule is now data-based (`ok===true && containers`, decided free from `list()` metadata). Plus `[observability]` (this worker's every failure mode is silence) and a `scheduled()` catch. T9b: T9b: authenticated read responses were `Cache-Control: public` — RFC 9111 §3.5 makes that the exact directive granting shared caches storage of an `Authorization`-bearing response that they would otherwise refuse; now `private, no-store`. Plus the monthly-budget scan re-ran hourly after its alert had already fired (~32 subrequests/run to a guaranteed no-op), and the backfill could 524 instead of returning its resume cursor (45 s wall-clock guard). 22/22 tests. T9: `POST /backfill` re-derives the hours T8 lost — the "unrecoverable" verdict was wrong, CF GraphQL retains ~31 d and exposes `datetimeHour`, so KV is a cache of a still-live source. 19/19 tests (7 new). En route it fixed a defect in T8's own test suite (the GraphQL stub omitted `datetimeHour`, so no test could have caught an hour-grouping bug) and a hot-path KV read-your-writes hole in the day aggregate.** Prior status: (2026-08-28: `hourKey()` was collapsing 24 hourly rows into 3, understating the daily cost ~8×; fixed + pinned by 12 regression tests, deploy blocked by the session permission classifier — run `cd cloudflare/housekeeping && npx wrangler deploy`); T5 RESOLVED (cross-repo correlation) + T7 read-path hardening SHIPPED 2026-08-28. Issue 053 (unattributed app `a03a70ff`) filed **and RESOLVED same day** by cross-repo correlation — it is the `riir-mmorpg-examples` CCU proof bench (Bench 034); resolved-and-removed per the noise rule, record in §T5 + git history. T1 verdict recorded, T2+T3 SHIPPED same day; live-mint half gated on Proposal 005 Phase 1. Sizing verdict feeds Proposal 005 T2.0/T2.1 **+ T2.6 / [Plan 031](../.plans/031_kat_sweeper_temp_container_r2_tier.md)** (2026-08-26 later-session sync). **2026-08-27: the T3 Worker was EXTENDED + redeployed (`ab79bd20`) — CORS on all read endpoints (dashboard live-fetch), Issue-044-T4 budget alerting (cap thresholds 50/90/100% + optional monthly budget, KV-dedupe, webhook via `ALERT_WEBHOOK_URL`), extended `/status` (`cap`/`thresholds`/`has_webhook`/`has_monthly_budget`/`alerts_today`).** **2026-08-28 truth-refresh: Proposal 005 Phase 1 LANDED 2026-08-27 (T1.5 dapps `84dd049` / T1.6 clippy `0a7cfd8`) — T6's blocker is NO LONGER Phase 1; the live-mint swap-in awaits the deferred Worker/DO HTTP ledger shell (Proposal 005 phase-2 defer / Plan 031 Phase B gate / phase-3 owner gate). Worker mint status strings refreshed `pending-phase-1` → `pending-worker-shell` + redeployed (version `f93ae507`, live-verified on the 04:00 UTC tick). T4 unchanged (owner-gated secrets). T5 still blocked — CLI exposes no id→name mapping (see checkbox).** *(That last clause is SUPERSEDED later the same day — T5 was resolved by cross-repo correlation, not by the CLI; see §T5.)*
 **Repo:** riir-clippy (dashboard + worker deploy live here; sizing verdict feeds Proposal 005 T2.0/T2.1)
 **Owner ask (2026-08-26):**
 1. can the container be smaller? smallest?
@@ -177,8 +177,18 @@ lives (T1 above).
       sleep/awake + est cost) + regenerate + deploy
 - [x] T3 housekeeping Worker deployed (cron hourly, KV rows, mint anchor,
       heartbeat fallback, read endpoints)
-- [ ] T4 owner: `wrangler secret put CF_API_TOKEN` (Analytics:Read) —
-      housekeeping data collection goes live *(2026-08-27: `ALERT_WEBHOOK_URL`
+- [x] T4 owner: `wrangler secret put CF_API_TOKEN` (Analytics:Read) —
+      housekeeping data collection goes live — **RESOLVED: the token landed
+      via the 2026-08-29 rollout** (pushed from `.env`), and re-verified
+      LIVE 2026-09-01: authed `/status` → `token_set:true, read_gated:true,
+      cap:10000`; anon `/hours` → 401; hourly rows carry `ok:true` + real
+      collector fields (the 2026-08-30 T9f-deploy headline already recorded
+      the same posture). **Owner-optional residual (does not gate this
+      checkbox):** `ALERT_WEBHOOK_URL` + optional `MONTHLY_BUDGET_USD` (push
+      paging) remain owner-gated and verified ABSENT —
+      `has_webhook:false, has_monthly_budget:false` live 2026-09-01; without
+      them crossings still land in KV + `/status alerts_today`.
+      *(2026-08-27: `ALERT_WEBHOOK_URL`
       + optional `MONTHLY_BUDGET_USD` join the same one-time step — the
       alerting mechanism is deployed + inert until then; without the
       webhook, crossings still land in KV + `/status alerts_today`)*
@@ -188,7 +198,7 @@ lives (T1 above).
       check that this very step landed. `/latest` is already hard-gated and
       needs no secret. Verify after setting:
       `curl -s .../status` → `read_gated: true`, and
-      `curl -s .../hours` → 401.)*
+      `curl -s .../hours` → 401. — both verified LIVE 2026-09-01.)*
 - [x] T5 name the container-family apps — **RESOLVED 2026-08-28 by
       cross-repo correlation** (see the RESOLVED-BY-CORRELATION block at the
       end of this item). Unachievable by *API* — the apps are deleted by a
@@ -265,15 +275,44 @@ lives (T1 above).
       torn-down app, but our own repos can. Correlate colo + instance shape
       + egress + date against sibling `.benchmarks/` and `git log --since`
       BEFORE concluding an app is unattributable.
-- [ ] T6 live-mint swap-in — Proposal 005 Phase 1 (the sync surface)
-      landed 2026-08-27 (T1.5 dapps `84dd049` / T1.6 clippy `0a7cfd8`),
-      so the blocker is NO LONGER Phase 1: the swap awaits the deferred
-      Worker/DO HTTP ledger shell (Proposal 005 phase-2 defer / Plan 031
-      Phase B gate / phase-3 owner gate). Then swap `recordMintAnchor`
-      (this object is already the designed mint payload) for the real
-      mint call (`ledger DO` / `chain_prog_kat`). Worker status strings
-      refreshed to `pending-worker-shell` 2026-08-28 + deployed
-      (`f93ae507`).
+- [x] T6 live-mint swap-in — **WORKER HALF LANDED + DEPLOYED 2026-09-01
+      (`a07b9e6`, worker version `693972ec`); the swap is armed-but-INERT
+      until the owner sets the two secrets — by design, not a gap.** The
+      blocker resolved 2026-08-29 (riir-dapps Plan 013 kat-service: the
+      Worker/DO HTTP ledger shell, e2e-proven incl. cold-reboot replay); the
+      sibling is landing the `POST {url}/mint-anchor` route in parallel.
+      What landed here, to the pinned wire contract: on EVERY hourly cron
+      run with BOTH `KAT_SERVICE_URL` + `KAT_MINT_TOKEN` set, POST the most
+      recent COMPLETED UTC day's neuron burn (today is a moving target —
+      resets 00:00 UTC — so posting it hourly would record a partial day the
+      server's exactly-once rule then wedges shut; the completed day is
+      stateless, later runs get `already-recorded`). Bearer auth; body
+      `{date, neurons_today, source:"riir-kat-housekeeping", generated_at}`;
+      both 200 shapes are success; 409 = one log line + row status, never
+      thrown; network failure = fail-soft (the cron row is written either
+      way — a mint failure must not fail collection). New row field
+      `row.mint_post {date, neurons_yesterday, status}` — the local
+      `row.mint_anchor` is NOT overloaded. Status strings made truthful now
+      the shell exists: `row.mint` `pending-worker-shell` → `anchor-only`
+      (heartbeat arm → `idle`), `row.mint_anchor.status` → `accruing`.
+      Consumer impact MEASURED before the change: the ops dashboard
+      (`gen_dashboard.py` + `index.html`) reads only `ts` /
+      `ai.neurons_today` / `cap` from `/latest` and never reads `mint`; the
+      test suite pinned no mint string. 39→45 tests (6 new; the GraphQL stub
+      serves DISTINCT counts per date window — the T9 lesson — and models
+      the server's replay semantics). Dry-run: 28.43 KiB / 8.61 KiB gzip,
+      7 bindings resolve, bundle carries the new code. **Go-live residual
+      (owner + sibling):** kat-service production deploy; the server half of
+      the route; then `npx wrangler secret put KAT_SERVICE_URL` +
+      `KAT_MINT_TOKEN`. **Contract note for the sibling (IMPORTANT):** the
+      body carries `generated_at`, which differs on every run — a server
+      keying strict BYTE-identity would 409 every hourly re-post and break
+      the stateless design; the replay key must be `(date, neurons)`
+      semantically (byte-identity applies only to a transport retry of the
+      same request). Prior state: Proposal 005 Phase 1 landed 2026-08-27
+      (T1.5 dapps `84dd049` / T1.6 clippy `0a7cfd8`); the deferred Worker/DO
+      shell was the blocker 2026-08-28 → 2026-08-29; status strings were
+      `pending-worker-shell` (deployed `f93ae507`).
 - [x] T7 read-path hardening — prod-grade perf/sec pass on the T3 Worker
       (2026-08-28; §T7 below). Deployed `ca93c8de`, live-verified.
 - [x] T8 hourly-archive correctness + posture pass (§T8 below) — `hourKey()`
@@ -582,6 +621,27 @@ still 200 after deploy.
   byte-seconds consistent with known instance footprints (lite/basic/
   standard-1 within ~2%). Cost figures are labeled *est* on the dashboard.
 - Numbering: 045 (highwater 44 → 45).
+- **2026-09-01 — T4/T6 reconciliation + the mint-anchor swap-in (this
+  session):** every claim re-measured against PROD before editing. Authed
+  `/status` → `token_set:true, read_gated:true, cap:10000,
+  has_webhook:false, has_monthly_budget:false, alerts_today:0`; anon
+  `/hours` → 401; the latest row (00:00Z cron) carries `ok:true` + real
+  collector fields; the row's mint strings were still
+  `pending-worker-shell` (pre-swap, expected). `.env` has the four core
+  vars; `KAT_SERVICE_URL`/`KAT_MINT_TOKEN`/`ALERT_WEBHOOK_URL`/
+  `MONTHLY_BUDGET_USD` verified absent. The swap-in (`a07b9e6`, version
+  `693972ec`): completed-day POST per the pinned contract, inert until
+  armed — see the T6 checkbox for the full shape + the `(date, neurons)`
+  replay-key note for the sibling's server half. Mint status strings
+  `pending-worker-shell` → `anchor-only`/`accruing` (heartbeat `idle`):
+  grep-audited consumers first — the dashboard (generator + served HTML)
+  never reads `mint`; `publicRow()` passes it through; the suite pinned no
+  string; the issue notes' historical mentions stay historical. README +
+  wrangler.toml + `.env.example` updated the same commit. Deployed live
+  (env-strip prefix per the T9e addendum); anon routes still serving the
+  pre-deploy 00:00Z row at check time — new strings appear on the next
+  hourly tick, not asserted as the deploy gate (the 45-test suite + the
+  dry-run bundle are).
 - **2026-08-28 housekeeping status-truth refresh (this session):** worker
   mint status strings `pending-phase-1` → `pending-worker-shell` +
   `mint_note`/`note` fields added (phase-1 sync surface landed

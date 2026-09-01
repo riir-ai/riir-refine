@@ -66,7 +66,7 @@ Leftovers found + removed (owner ask: "any active on cloudflare leftover?"):
 
 ## Prod-grade backlog (the "what you miss" fill-in)
 
-- [-] **T2 auth gating** — mechanism SHIPPED 2026-08-27, but the gate is **OPEN** (owner decision 2026-08-28, §T13) — reopened from [x] to [-] because a deployed-but-unset gate is not a closed gate: `cloudflare/dashboard/src/worker.js`
+- [-] **T2 auth gating** — mechanism SHIPPED 2026-08-27, but the gate is **OPEN** (owner decision 2026-08-28, §T13; still open, re-verified live 2026-09-01: `x-dashboard-auth: OPEN-INSECURE`) — reopened from [x] to [-] because a deployed-but-unset gate is not a closed gate: `cloudflare/dashboard/src/worker.js`
       token gate deployed in front of the assets (`run_worker_first = true`,
       declared `ASSETS` binding). Fails OPEN (`x-dashboard-auth: open`)
       until the one-time `npx wrangler secret put DASHBOARD_TOKEN` (from
@@ -76,53 +76,79 @@ Leftovers found + removed (owner ask: "any active on cloudflare leftover?"):
       fetches the housekeeping worker `/latest` (CORS-enabled) on load →
       `live · cron HH:MM` badge, live cap-alert when generation-time
       analytics were empty. Full regen stays nightly/manual (T7).
-- [-] **T4 budget alerting** — MECHANISM SHIPPED 2026-08-27 (housekeeping
+- [-] **T4 budget alerting** — COLLECTION half LIVE since 2026-08-29 (the
+      08-29 rollout pushed `CF_API_TOKEN` from `.env`; re-verified live
+      2026-09-01: authed `/status` → `token_set:true, read_gated:true`,
+      `alerts_today:0`, anon `/hours` → 401, hourly rows accumulating — the
+      00:00Z row carries `ok:true` + real collector fields, not a heartbeat).
+      Only PUSH paging remains owner-gated: `ALERT_WEBHOOK_URL` (+ optional
+      `MONTHLY_BUDGET_USD`) — verified ABSENT live (`has_webhook:false,
+      has_monthly_budget:false`; neither name exists in `.env`), so crossings
+      land in KV + `/status alerts_today` and page nobody. Refreshes the
+      2026-08-28 story below — the “cannot be minted from this machine”
+      blocker was resolved when the owner-supplied token landed (it lives in
+      `.env` + the worker secret); the minting instructions remain valid only
+      as the re-mint runbook.
+      MECHANISM SHIPPED 2026-08-27 (housekeeping
       worker, deployed): hourly neurons vs cap thresholds 50/90/100% +
       optional monthly container budget, KV-dedupe `alert:<date>:<level>`,
-      Discord-shape webhook POST. Paging INERT until the owner secrets
-      `CF_API_TOKEN` + `ALERT_WEBHOOK_URL` (optional `MONTHLY_BUDGET_USD`);
-      without the webhook, crossings still land in KV + `/status`
-      `alerts_today`. Today's 103.3% event would have paged at all three
-      levels once live.
-      **Blocker sharpened 2026-08-28 (T13): `ALERT_WEBHOOK_URL` alone cannot
-      activate this** — the collector needs `CF_API_TOKEN` too, and that token
-      **cannot be minted from this machine.** `wrangler whoami` shows OAuth
-      scopes `account (read)` / `user (read)` with NO `user_tokens:edit`, so no
-      agent or script here can create it; it must be made by hand: CF dashboard
-      → My Profile → API Tokens → Create Token → Custom → permission
-      `Account · Account Analytics · Read` (account
-      `7e11517c4dd4f6e9cede7da9b60d66eb`), then
-      `cd cloudflare/housekeeping && npx wrangler secret put CF_API_TOKEN`.
-      A long-lived token is unavoidable for the Worker because the wrangler
-      OAuth token rotates hourly.
+      Discord-shape webhook POST. Today's 103.3% event would have paged at
+      all three levels once the webhook lands.
       The asymmetry that makes this survivable: the *generator* reads analytics
       fine (it uses that rotating OAuth token from
       `~/Library/Preferences/.wrangler/config/default.toml`), which is why the
       dashboard's cap chart is live and DID surface the 103.3% event. What is
       missing is only *push* paging — *pull* (look at the dashboard) works, and
       the T12 reconciliation card now cross-checks it against billing truth.
-- [-] **T5 KAT rail** — PARTIAL 2026-08-26 (Issue 045); blocker REWORDED
-      2026-08-28: the housekeeping Worker records the daily mint anchor
-      (`neurons_today`, the mint function's input per Proposal 005
-      §Economics — a policy, not a formula). Proposal 005 Phase 1 landed
-      2026-08-27 (T1.5/T1.6), so the blocker is now the deferred
-      Worker/DO HTTP ledger shell (phase-2 defer / Plan 031 Phase B gate
-      / phase-3 owner gate); ledger rows carry NO `kat` field at all
-      today — CORRECTED 2026-08-28: the field IS present on all 19 rows,
-      uniformly `null`. The producers (`kat_drain.rs`, `fixer_regate.rs`)
-      already emit it; only the VALUE awaits that shell. The prior
-      "grep-verified" claim came from grepping for a populated pattern and
-      reading zero hits as an absent field — a parse, not a grep, settles
-      field presence.
+- [-] **T5 KAT rail** — SHELL RESOLVED 2026-08-29 (riir-dapps Plan 013
+      kat-service: the Worker/DO HTTP ledger shell landed, e2e-proven incl.
+      cold-reboot replay), and the WORKER-SIDE SWAP-IN LANDED 2026-09-01
+      (this repo `a07b9e6`, deployed version `693972ec`): every hourly cron
+      run with BOTH `KAT_SERVICE_URL` + `KAT_MINT_TOKEN` set now POSTs the
+      most recent COMPLETED UTC day's neuron burn to
+      `${KAT_SERVICE_URL}/mint-anchor` (bearer; both 200 shapes are success,
+      409/network failure fail-soft, new `row.mint_post` field — the local
+      `row.mint_anchor` untouched; status strings `anchor-only`/`accruing`,
+      heartbeat `idle`). Deployed-but-INERT: neither var is set on the
+      worker (verified absent from `.env` too) — the swap arms only when the
+      owner pushes the two secrets, by design. Remaining (why this stays
+      `[-]`): the kat-service production deploy + the two owner secrets, and
+      the server half of the route (sibling riir-dapps, in flight — see the
+      045 T6 contract note: the server must key replays on `(date, neurons)`,
+      not raw bytes, because `generated_at` differs per run).
+      Prior blocker history: PARTIAL 2026-08-26 (Issue 045); reworded
+      2026-08-28 (Proposal 005 Phase 1 landed 2026-08-27, so the blocker was
+      the deferred Worker/DO shell). Ledger rows carry the `kat` field,
+      uniformly `null` — the producers emit it; the VALUE awaits go-live.
 - [x] **T6 training/GPU axis** — SHIPPED 2026-08-27: collector
       (`collect_training()`) + card live (recent-runs table + tok/s curve;
       placeholder until rows); the convention landed in riir-train
       `c536b47a` (`.benchmarks/runs.README.md` + `runs.example.jsonl`).
       Rows appear as runs complete.
-- [-] **T7 coverage auto-measure** — VERIFIED END-TO-END 2026-08-29 (§T17:
+- [x] **T7 coverage auto-measure** — INSTALLED + FIRING, verified live
+      2026-09-01: `launchctl print gui/$(id -u)/com.riir.ops-nightly` shows
+      the loaded agent (`state = not running` is the idle posture between
+      runs) with the calendar interval `Hour 1 / Minute 23` (= the documented
+      01:23 local), and `~/Library/LaunchAgents/com.riir.ops-nightly.plist`
+      exists (Aug 29 22:44). The "install is classifier-blocked" note was
+      STALE — a later session installed it (also recorded in §Notes
+      2026-08-29). **Honest finding from the same live check:** every
+      SCHEDULED run since install failed at the regen step —
+      `timeout: command not found` (exit 127) on 08-29/30/31, and
+      `git log --grep='skip ci'` finds ZERO regen commits in history; launchd
+      hands the job a spartan PATH (/usr/bin:/bin:/usr/sbin:/sbin) with no
+      homebrew, so GNU-coreutils `timeout` resolved in every manual run and
+      in no scheduled one. FIXED 2026-09-01 (`0c795fe`): the toolchain block
+      resolves `/opt/homebrew/bin` the same way it already resolved nvm, and
+      `timeout` joined the required-tools preflight; verified end-to-end
+      under a launchd-realistic restricted PATH (regen OK → verify_dom PASS →
+      worker tests 45/45 → exit 0). First green SCHEDULED run expected with
+      the 2026-09-02 01:23 local tick — that log line is the last
+      confirmation, and it needs no agent.
+      VERIFIED END-TO-END 2026-08-29 (§T17:
       real run, every gate observed to RUN, exit 0, 6m18s; found + fixed the
-      unlisted `corpus_history.jsonl` artifact, `3ae3c92`). **Verdict: INSTALL.**
-      Install itself is classifier-blocked — see §T17 / §T13 for the commands.
+      unlisted `corpus_history.jsonl` artifact, `3ae3c92`). **Verdict:
+      INSTALL.**
       Prior: WORKFLOW SHIPPED 2026-08-27
       (`.github/workflows/ops_dashboard.yml`): nightly 18:23 UTC `--sweep`
       regen + commit `[skip ci]` + conditional wrangler deploy; guarded on
@@ -166,9 +192,13 @@ Leftovers found + removed (owner ask: "any active on cloudflare leftover?"):
       `x-dashboard-auth: OPEN-INSECURE` marker. Investigated
       `cf-cache-status: HIT` → NOT a bypass (`run_worker_first = true`
       invokes the Worker on all requests). **Gate left OPEN by owner
-      decision** — deferred, not done. T7 re-homed to the M3
+      decision** — deferred, not done; re-verified still open live
+      2026-09-01 (`curl -I` → `x-dashboard-auth: OPEN-INSECURE`).
+      T7 re-homed to the M3
       (`scripts/ops_nightly.sh` + plist, zero secrets, ~5 min vs ~30-50);
-      files shipped, schedule not installed.
+      files shipped, schedule not installed *(SUPERSEDED: installed
+      2026-08-29 — see T7 for the install evidence + the 2026-09-01
+      timeout fix)*.
 
 ## T17 — T7 verified end-to-end; VERDICT: install it (2026-08-29)
 
@@ -797,4 +827,19 @@ the days that need one.
   0.00 vs analytics 132.84) settled in the filing session. Issue 057
   RESOLVED + removed (2026-08-29) per the noise-reduction rule — full
   narrative in git history (`git log -- .issues/057_*`).
+- **2026-09-01 — live-state reconciliation (this session):** every
+  marker below was re-measured against PROD, not prose. `.env` holds the
+  four core vars (`CF_API_TOKEN`, `CF_DEPLOY_API_TOKEN`, `GROQ_API_KEY`,
+  `READ_TOKEN`); `ALERT_WEBHOOK_URL` + `MONTHLY_BUDGET_USD` verified ABSENT
+  (owner-gated, unchanged). Housekeeping authed `/status` → `token_set:true,
+  read_gated:true, cap:10000, has_webhook:false, has_monthly_budget:false,
+  alerts_today:0`; anon `/hours` → 401; anon `/status`/`/latest` → the
+  redacted projection only (no config half — correct, since READ_TOKEN is
+  set and anon presents none). Dashboard auth header still
+  `x-dashboard-auth: OPEN-INSECURE` (T2/T13 owner decision, unchanged).
+  T4 text refreshed (collection live since 08-29; only push paging gated);
+  T5 updated for the landed shell + the worker swap-in (`a07b9e6`, worker
+  version `693972ec`, inert until the owner sets the two KAT_* secrets);
+  T7 marked installed with the nightly-defect finding + fix (`0c795fe`); T2
+  one-line status refreshed.
 - Numbering: allocated 044 (highwater 43 → 44).
