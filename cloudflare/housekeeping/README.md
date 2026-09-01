@@ -7,12 +7,15 @@ anchor**. Deployed at `riir-kat-housekeeping.<account>.workers.dev`.
   billing dataset + `containersMetricsAdaptiveGroups` awake seconds +
   `aiInferenceAdaptiveGroups` day neurons), computes est cost, writes KV
   rows (`hour:*`, `day:*`, `latest`), and records the **KAT mint anchor**.
-- **Mint:** records the anchor (`neurons_today`, `kat: null`,
-  `status: "pending-worker-shell"`). Proposal 005 Phase 1 (the sync
-  surface) landed 2026-08-27 (T1.5/T1.6); the live mint awaits the
-  deferred Worker/DO HTTP ledger shell (proposal-005 phase-2 defer /
-  Plan 031 Phase B gate / phase-3 owner gate) — swap-in point is
-  `row.mint_anchor` in `runHousekeeping()`; no cron/topology change.
+- **Mint:** records the local anchor for the in-progress UTC day
+  (`row.mint_anchor`, `status: "accruing"`; `row.mint: "anchor-only"`).
+  The ledger shell landed 2026-08-29 (riir-dapps Plan 013 kat-service):
+  when BOTH `KAT_SERVICE_URL` + `KAT_MINT_TOKEN` are set, every cron run
+  also POSTs the most recent COMPLETED UTC day's burn to
+  `${KAT_SERVICE_URL}/mint-anchor` (bearer auth; the server answers
+  `already-recorded` on replay, so hourly re-posts are idempotent) —
+  Issue 045 T6 / Issue 044 T5, landed 2026-09-01. Unset → inert (the
+  deployed-but-inert pattern); no KAT math in the worker.
 - **Why a Worker, not a container:** the run is milliseconds of work.
   Worker cron is free-tier (3 triggers/worker), 24 KV writes/day ≪ the
   1k/day free cap. Any container pays the $5/mo Workers Paid gate +

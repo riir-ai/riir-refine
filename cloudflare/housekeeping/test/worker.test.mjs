@@ -888,3 +888,180 @@ test("token acceptance is independent of token length", async () => {
     }
   }
 });
+
+// ---- T6: the completed-day mint-anchor POST (Issue 045 T6 / 044 T5) -------
+//
+// The kat-service ledger shell (riir-dapps Plan 013) accepts
+// POST {url}/mint-anchor: first valid body for a day → 200 {recorded:true},
+// byte-identical replay → 200 {recorded:false,reason:"already-recorded"},
+// byte-different same-day body → 409. The cron must post the most recent
+// COMPLETED UTC day (today is a moving target the exactly-once rule would
+// wedge shut) and treat every failure as fail-soft.
+//
+// The stub models the server contract rather than a fixed script. One
+// nuance found by this very test: the body carries `generated_at`, which
+// necessarily DIFFERS on every hourly run — so a server keying strict
+// byte-identity would 409 every re-post and the stateless design would
+// fail. The replay key is therefore (date, neurons) — byte-identity applies
+// to a transport retry of the same request; the semantic key is what makes
+// "every later run just gets already-recorded" (the pinned design) true.
+// Recorded in Issue 045 for the sibling implementing the server half.
+function mintFetchStub(opts = {}) {
+  const { posts = [], postMode = "ok", neuronsToday = 100, neuronsYesterday = 77,
+    extraCounts = {} } = opts;
+  const seen = new Map();   // date → neurons, the server's semantic key
+  return async (url, init) => {
+    if (String(url).endsWith("/mint-anchor")) {
+      const body = JSON.parse(init.body);
+      posts.push({ url: String(url), init, body });
+      if (postMode === "reject") throw new Error("mint post network failure");
+      if (postMode === "conflict") {
+        return { ok: false, status: 409, async json() { return { recorded: false, reason: "superseded" }; } };
+      }
+      if (seen.has(body.date)) {
+        if (seen.get(body.date) === body.neurons_today) {
+          return { ok: true, status: 200, async json() { return { recorded: false, reason: "already-recorded" }; } };
+        }
+        return { ok: false, status: 409, async json() { return { recorded: false, reason: "neurons-mismatch" }; } };
+      }
+      seen.set(body.date, body.neurons_today);
+      return { ok: true, status: 200, async json() { return { recorded: true }; } };
+    }
+    const q = JSON.parse(init.body).query;
+    const geq = (q.match(/date_geq: "([^"]+)"/) || [])[1];
+    const acc = {};
+    if (q.includes("containersUsageAdaptiveGroups")) acc.containersUsageAdaptiveGroups = [];
+    else if (q.includes("containersMetricsAdaptiveGroups")) acc.containersMetricsAdaptiveGroups = [];
+    else acc.aiInferenceAdaptiveGroups = [{ sum: {
+      totalNeurons: geq === "2026-08-27" ? neuronsYesterday
+        : (extraCounts[geq] ?? neuronsToday) } }];
+    return { ok: true, async json() { return { data: { viewer: { accounts: [acc] } } }; } };
+  };
+}
+
+async function runHourMint(kv, iso, fetchImpl, extra = {}) {
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = fetchImpl;
+  try {
+    return await atUtc(iso, async () => {
+      const c = ctxStub();
+      await worker.scheduled({}, env(kv, extra), c);
+      await c.drain();
+      return JSON.parse(kv.store.get("latest"));
+    });
+  } finally { globalThis.fetch = realFetch; }
+}
+
+const MINT = { KAT_SERVICE_URL: "https://kat.example", KAT_MINT_TOKEN: "mint-t0k" };
+
+test("mint env unset: no POST, and the truthful status strings are pinned", async () => {
+  const kv = kvStub();
+  const posts = [];
+  const row = await runHourMint(kv, "2026-08-28T12:00:06.549Z", mintFetchStub({ posts }));
+  assert.equal(posts.length, 0, "no KAT_* env → no POST at all");
+  assert.equal(row.mint_post, undefined, "no mint_post field when unarmed");
+  // The old strings described a shell that now EXISTS. Pin the truthful ones
+  // so a regression back to `pending-worker-shell` fails here.
+  assert.equal(row.mint, "anchor-only");
+  assert.equal(row.mint_anchor.status, "accruing");
+  assert.equal(row.mint_anchor.date, "2026-08-28");
+  assert.equal(row.mint_anchor.neurons_today, 100);
+  assert.equal(row.mint_anchor.kat, null);
+  // Same field shape as before the swap-in — no new keys on the local anchor.
+  assert.deepEqual(Object.keys(row.mint_anchor).sort(),
+    ["date", "kat", "neurons_today", "note", "status"]);
+
+  // The heartbeat arm has its own truthful string: nothing collected, so
+  // nothing is accruing.
+  const kv2 = kvStub();
+  const hb = await runHourMint(kv2, "2026-08-28T12:00:06.549Z", mintFetchStub({ posts }),
+    { CF_API_TOKEN: undefined });
+  assert.equal(hb.mint, "idle");
+  assert.equal(hb.mint_anchor, undefined);
+  assert.equal(posts.length, 0, "heartbeat mode never POSTs either");
+});
+
+test("mint env set: exactly one POST per run, carrying YESTERDAY's UTC day and its distinct count", async () => {
+  const kv = kvStub();
+  const posts = [];
+  const row = await runHourMint(kv, "2026-08-28T12:00:06.549Z",
+    mintFetchStub({ posts }), MINT);
+  assert.equal(posts.length, 1, "one cron run = exactly one mint POST");
+  const p = posts[0];
+  assert.equal(p.url, "https://kat.example/mint-anchor");
+  assert.equal(p.init.method, "POST");
+  assert.equal(p.init.headers.Authorization, "Bearer mint-t0k");
+  assert.equal(p.init.headers["Content-Type"], "application/json");
+  // The completed-day contract: the run at 12:00 on the 28th posts the 27th,
+  // with the 27th's OWN count (77) — not today's in-progress 100. A stub
+  // that could not tell the windows apart would have let a window bug pass.
+  assert.equal(p.body.date, "2026-08-27");
+  assert.equal(p.body.neurons_today, 77);
+  assert.equal(typeof p.body.neurons_today, "number");
+  assert.ok(Number.isInteger(p.body.neurons_today));
+  assert.equal(p.body.source, "riir-kat-housekeeping");
+  assert.ok(!Number.isNaN(Date.parse(p.body.generated_at)), "generated_at must be RFC3339");
+  assert.equal(row.mint_post.status, "recorded");
+  assert.equal(row.mint_post.date, "2026-08-27");
+  assert.equal(row.mint_post.neurons_yesterday, 77);
+  // The local anchor is untouched by the POST — still today, still accruing.
+  assert.equal(row.mint_anchor.date, "2026-08-28");
+  assert.equal(row.mint_anchor.status, "accruing");
+});
+
+test("mint replay: the second hourly run gets already-recorded, statelessly", async () => {
+  const kv = kvStub();
+  const posts = [];
+  const stub = mintFetchStub({ posts });
+  const r1 = await runHourMint(kv, "2026-08-28T12:00:06.549Z", stub, MINT);
+  const r2 = await runHourMint(kv, "2026-08-28T13:00:06.549Z", stub, MINT);
+  assert.equal(r1.mint_post.status, "recorded");
+  // The 13:00 run re-derives the same completed day (2026-08-27) with the
+  // same count → byte-identical body → the server (modelled here) answers
+  // already-recorded. No client-side dedupe, no extra KV checkpoint.
+  assert.equal(r2.mint_post.status, "already-recorded");
+  assert.equal(posts.length, 2);
+  assert.equal(posts[0].body.date, "2026-08-27");
+  assert.equal(posts[1].body.date, "2026-08-27");
+});
+
+test("mint 409: recorded as an error status, never thrown, cron row still ok", async () => {
+  const kv = kvStub();
+  const errs = [];
+  const realWarn = console.warn;
+  console.warn = (...a) => errs.push(a.join(" "));
+  try {
+    const row = await runHourMint(kv, "2026-08-28T12:00:06.549Z",
+      mintFetchStub({ postMode: "conflict" }), MINT);
+    assert.equal(row.mint_post.status, "error: http 409 (superseded)");
+    assert.equal(row.ok, true, "a mint failure must not fail collection");
+    assert.ok(kv.store.has("hour:2026082811"), "the cron row is written regardless");
+    // "Log one line + record status": the warn lands in Workers Logs.
+    assert.ok(errs.some((l) => l.includes("mint-anchor 2026-08-27")),
+      `the 409 must be logged, got ${JSON.stringify(errs)}`);
+  } finally { console.warn = realWarn; }
+});
+
+test("mint fetch rejects: fail-soft, row still written", async () => {
+  const kv = kvStub();
+  const row = await runHourMint(kv, "2026-08-28T12:00:06.549Z",
+    mintFetchStub({ postMode: "reject" }), MINT);
+  assert.equal(row.mint_post.status, "error: mint post network failure");
+  assert.equal(row.ok, true, "network failure must not fail collection");
+  assert.ok(kv.store.has("hour:2026082811"));
+  assert.ok(kv.store.has("latest"));
+});
+
+test("mint window rolls over at UTC midnight: the 00:00 run posts the day that just completed", async () => {
+  const kv = kvStub();
+  const posts = [];
+  // 00:00:06 on the 29th UTC — the 28th completed four seconds ago. The stub
+  // gives the 28th its OWN count (88), so the assertion proves the boundary
+  // maps to the right GraphQL window, not a local-time drift.
+  const row = await runHourMint(kv, "2026-08-29T00:00:06.549Z",
+    mintFetchStub({ posts, extraCounts: { "2026-08-28": 88 } }), MINT);
+  assert.equal(posts[0].body.date, "2026-08-28");
+  assert.equal(posts[0].body.neurons_today, 88);
+  assert.equal(row.mint_post.status, "recorded");
+  assert.equal(row.mint_post.neurons_yesterday, 88);
+});

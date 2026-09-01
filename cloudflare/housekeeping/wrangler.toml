@@ -41,6 +41,15 @@
 #   /latest + /status still emit the MINIMISED projection
 #   (ts/hour/ok/mint/neurons/est_usd) to an unauthenticated caller. Set with:
 #     npx wrangler secret put READ_TOKEN
+# Mint-anchor swap-in (Issue 045 T6 / Issue 044 T5, landed 2026-09-01):
+#   when BOTH KAT_SERVICE_URL and KAT_MINT_TOKEN are set, every cron run
+#   also POSTs the most recent COMPLETED UTC day's neuron burn to
+#   `${KAT_SERVICE_URL}/mint-anchor` (bearer KAT_MINT_TOKEN). Unset →
+#   inert: only the local `row.mint_anchor` is written. Optional env
+#   follows the READ_TOKEN pattern (read from env, declared nowhere;
+#   secrets are never in wrangler.toml):
+#     npx wrangler secret put KAT_SERVICE_URL   # or a plain var, if preferred
+#     npx wrangler secret put KAT_MINT_TOKEN
 #   ALLOWED_ORIGINS (var) is the CORS allowlist; was `*`, which let any page
 #   in any browser read this account cost telemetry cross-origin.
 # The wrangler OAuth token rotates hourly and CANNOT be used here.

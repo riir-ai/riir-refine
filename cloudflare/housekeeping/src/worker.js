@@ -455,8 +455,8 @@ async function runHousekeeping(env) {
     // hours:0 / hours_present:24 rather than being absent.
     row.ok = false;
     row.notes.push("CF_API_TOKEN secret not set — heartbeat only");
-    row.mint = "pending-worker-shell";
-    row.mint_note = "phase-1 sync surface landed 2026-08-27; live mint awaits the deferred Worker/DO ledger shell (proposal-005 phase-2 defer / phase-3 owner gate)";
+    row.mint = "idle";
+    row.mint_note = "no CF_API_TOKEN: nothing collected, no anchor recorded (the completed-day POST needs the same token)";
   } else try {
     // allSettled, not all: one failing dataset used to discard the other two
     // and record a bare ok=false row, losing an hour of collectable data.
@@ -486,22 +486,83 @@ async function runHousekeeping(env) {
     row.containers = { est_usd: +cost.toFixed(6), apps };
     row.ai = { neurons_today: neurons };
 
-    // KAT mint anchor (Issue 045 T3): the daily trainer window's committed
-    // ledger rows are the mint function's input. Proposal 005 §Economics is
-    // a POLICY ("emission tracks credited work"), not a formula — no KAT
-    // amount math lives in this worker. Phase 1 (the sync surface) landed
-    // 2026-08-27 (T1.5/T1.6); the LIVE mint awaits the deferred Worker/DO
-    // HTTP ledger shell (proposal-005 phase-2 defer / Plan 031 Phase B gate
-    // / phase-3 owner gate) — until then we record the anchor only.
-    // Swap-in point: this object becomes the mint call's payload.
+    // KAT mint anchor (Issue 045 T3): the day's Workers-AI neuron burn is
+    // the attestation input per Proposal 005 §Economics — a POLICY, not a
+    // formula — so no KAT amount math lives in this worker. The local anchor
+    // below stays the source of record for the CURRENT (still accruing) UTC
+    // day; COMPLETED days now also POST to the kat-service ledger when the
+    // two KAT_* env vars are set (the mint_post block below — Issue 045 T6 /
+    // Issue 044 T5; the ledger shell landed 2026-08-29, riir-dapps Plan 013).
     row.mint_anchor = {
       date: dateISO,
       neurons_today: neurons,
       kat: null,
-      status: "pending-worker-shell",
-      note: "phase-1 sync surface landed 2026-08-27; live mint awaits the deferred Worker/DO ledger shell (proposal-005 phase-2 defer / phase-3 owner gate)",
+      status: "accruing",
+      note: "local anchor for the in-progress UTC day; completed days POST to KAT_SERVICE_URL /mint-anchor when KAT_MINT_TOKEN is set",
     };
-    row.mint = "pending-worker-shell";
+    row.mint = "anchor-only";
+
+    // ---- completed-day mint-anchor POST (Issue 045 T6 / Issue 044 T5) ----
+    // TODAY's neuron count is a moving target (resets 00:00 UTC), so posting
+    // it hourly would record a partial day the server's exactly-once rule
+    // then wedges shut. Post the most recent COMPLETED UTC day instead: the
+    // first valid POST records it; every later run gets 200
+    // `already-recorded` back — idempotent at ~zero cost, no client-side
+    // checkpoint needed.
+    // Gated on BOTH env vars (the deployed-but-inert pattern): unset leaves
+    // this block entirely silent and the local anchor above as the only
+    // record. Fail-soft throughout — a mint-record failure must never fail
+    // collection, and the cron row is written either way. 409 is recorded as
+    // an error status, never thrown (a byte-different same-day replay is a
+    // real condition if the count re-derives differently; `superseded` means
+    // an older non-replay date — not actionable from here).
+    if (env.KAT_SERVICE_URL && env.KAT_MINT_TOKEN) {
+      const yISO = new Date(now.getTime() - 86400000).toISOString().slice(0, 10);
+      row.mint_post = { date: yISO };
+      try {
+        const yNeurons = await aiNeuronsToday(env, yISO);
+        row.mint_post.neurons_yesterday = yNeurons;
+        try {
+          const res = await fetch(
+            `${String(env.KAT_SERVICE_URL).replace(/\/+$/, "")}/mint-anchor`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${env.KAT_MINT_TOKEN}`,
+              },
+              body: JSON.stringify({
+                date: yISO,
+                neurons_today: yNeurons,
+                source: "riir-kat-housekeeping",
+                generated_at: now.toISOString(),
+              }),
+              signal: AbortSignal.timeout(10000),
+            });
+          if (res.ok) {
+            const b = await res.json().catch(() => ({}));
+            row.mint_post.status = (b && b.recorded === false && b.reason)
+              ? (b.reason === "already-recorded" ? "already-recorded"
+                : `error: ${String(b.reason).slice(0, 80)}`)
+              : "recorded";
+          } else {
+            let detail = "";
+            try {
+              const b = await res.json();
+              if (b && b.reason) detail = ` (${String(b.reason).slice(0, 80)})`;
+            } catch (_) { /* non-JSON body — status code alone */ }
+            row.mint_post.status = `error: http ${res.status}${detail}`;
+          }
+        } catch (err) {
+          row.mint_post.status = `error: ${String((err && err.message) || err).slice(0, 80)}`;
+        }
+      } catch (err) {
+        row.mint_post.status = `error: ${String((err && err.message) || err).slice(0, 80)}`;
+      }
+      if (String(row.mint_post.status || "").startsWith("error:")) {
+        console.warn(`mint-anchor ${yISO}: ${row.mint_post.status}`);
+      }
+    }
 
     // ---- budget alerting (Issue 044 T4) ----------------------------------
     // Runs only in the token-present path: neurons are only known there.
