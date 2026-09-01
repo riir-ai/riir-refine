@@ -70,8 +70,9 @@
 - **Sibling lanes (do not touch):** riir-train — sibling actively building
   (`/tmp/riir-train-499b`); the 4090 perf lanes — sibling PV work mid-flight as of 08-29
   (re-verify lane state at session start before any 4090 unit).
-- **Post-mining intake: EMPTY — no open classes** (compact records below; full text in the
-  history note).
+- **Post-mining intake: 1 open class** — P8 nan-unsafe float sort comparator (filed
+  2026-09-01, riir-ai Issue 832 T5; detect-only tier recommended); all prior classes
+  closed (records below; full text in the history note).
 - **Owner-gated tails:** `.issues/044` (paging secrets `ALERT_WEBHOOK_URL` +
   `MONTHLY_BUDGET_USD`), `.issues/045` (T7 launchctl activation) — verified 08-31.
 - **Queue items 6/7** (boundary-guard + substrate-first drift audit): last run 08-29,
@@ -225,6 +226,25 @@ All classes closed; the standing divergence (P4 residual) has no action planned.
       residue sites sat behind non-default features; check is structurally blind to
       both guarded classes); landed consumer-side as riir-ai `ci_feature_guard.sh`
       Layer 2.
+
+- [ ] P8 **nan-unsafe float sort comparator** (`partial_cmp(..).unwrap_or(Equal)`
+      inside a sort closure) — FILED 2026-09-01 (riir-ai Issue 832 T5; riir-ai fixed
+      its 102 library sites this session against `katgpt_core::float_order`).
+      Feasibility verdict: DETECTABLE parse-only — match `<recv>.partial_cmp(<arg>)`
+      followed (same line or next 3) by `.unwrap_or(<path>::Ordering::Equal)` or
+      `.unwrap()`, where the enclosing item contains a `sort_by`/`sort_unstable_by`/
+      `select_nth_unstable_by` call; siblings ≈300 library sites workspace-wide
+      (katgpt-rs 164 / riir-train 77 / riir-clippy 21 / ndb 27 lib src). Fix-space is
+      NOT a parse-only rewrite: the replacement comparator needs the operand DIRECTION
+      (desc vs asc) and the float TYPE (f32 `f32::total_cmp` vs f64 twin) — both
+      type-blind in syn (quest_matcher's `total` field is f64 while its sibling file's
+      is f32 — the riir-ai feature-union compile gate caught exactly this). Right tier:
+      DETECT-ONLY lint (or suggest-with-verify), landing via `fix_verify` so the typed
+      emission auto-reverts on f64/f32 mismatches; never a blind `--fix` proposer.
+      Consumer note: katgpt-core `float_order::{desc,asc,desc_f64,asc_f64}` is the
+      sanctioned replacement (ungated since the 832 T1 cfg fix); crates without a
+      katgpt-core dep carry a documented local twin (riir-data/riir-router/riir-wasm/
+      riir-games-shared pattern).
 
 **Standing never-heal divergence table:** the cargo-heal skill owns it (comment-guarded
 matches, array-literal defaults, named-arg renames, nested macro args, NaN-unsound
