@@ -139,7 +139,7 @@ Leftovers found + removed (owner ask: "any active on cloudflare leftover?"):
       STALE — a later session installed it (also recorded in §Notes
       2026-08-29). **Honest finding from the same live check:** every
       SCHEDULED run since install failed at the regen step —
-      `timeout: command not found` (exit 127) on 08-29/30/31, and
+      timeout: command not found` (exit 127) on 08-29/30/31, and
       `git log --grep='skip ci'` finds ZERO regen commits in history; launchd
       hands the job a spartan PATH (/usr/bin:/bin:/usr/sbin:/sbin) with no
       homebrew, so GNU-coreutils `timeout` resolved in every manual run and
@@ -150,6 +150,24 @@ Leftovers found + removed (owner ask: "any active on cloudflare leftover?"):
       worker tests 45/45 → exit 0). First green SCHEDULED run expected with
       the 2026-09-02 01:23 local tick — that log line is the last
       confirmation, and it needs no agent.
+      **CONFIRMED UNDER LAUNCHD 2026-09-01, same day (kickstart — the
+      launchd-environment question is answered, not deferred to tomorrow):**
+      `launchctl kickstart -k gui/$(id -u)/com.riir.ops-nightly` ran the
+      fixed script under the REAL launchd environment (03:29:14 → 03:47:19Z,
+      exit 0): `resolved timeout from /opt/homebrew/bin` (the fix firing),
+      regen OK (15.5 min niced/LowPriorityIO under interactive load — well
+      inside the 1200 s bound), verify_dom PASS, artifacts committed
+      (`1143a62` — exactly the 3 artifact paths, no sibling WIP swept), main
+      FF → deployed via the least-privilege `CF_DEPLOY_API_TOKEN` arm (T16.3
+      fix live), **T16.2 post-deploy verify `verified: deployment landed at
+      03:47:09`**, housekeeping tests 45/45, `=== done ===`. One WARN, by
+      design and honestly consequential: the artifact push lost a 120 s
+      network-stall race, so the commit stayed local and the deploy FF'd to
+      the PRE-pushed origin/develop — production re-served the PREVIOUS HTML
+      ("No updated asset files to upload"). The refresh reached prod the
+      same session via the session push + manual main-FF deploy (see Notes
+      2026-09-01 session 2). The 09-02 01:23 tick remains the first
+      SCHEDULED-tick confirmation only.
       VERIFIED END-TO-END 2026-08-29 (§T17:
       real run, every gate observed to RUN, exit 0, 6m18s; found + fixed the
       unlisted `corpus_history.jsonl` artifact, `3ae3c92`). **Verdict:
@@ -453,18 +471,53 @@ a perfectly correct dashboard. Deriving the expected count from the page's own
 This is the first time the fix has been exercised against a real domain
 addition rather than a simulated one.
 
-**Remaining gap (not fixed here — different owner, low severity):** the
-GitHub-Actions path in `.github/workflows/ops_dashboard.yml` deliberately does
-NOT go through `scripts/ops_nightly.sh` (documented at its lines 45-48; it runs
-its own steps), so it inherits **T16.2's post-deploy verification not at all**.
-It does fail loudly on a bad exit — GH Actions `run:` is `bash -e`, so a failed
-`wrangler deploy` fails the job, unlike the nightly's original WARN-only — so
-what it lacks is only the "did production actually RECEIVE it" half. Two deploy
-paths, one verified. Worth reconciling when someone next touches that workflow.
+**Remaining gap — CLOSED 2026-09-01 (session 2).** The GitHub-Actions path
+in `.github/workflows/ops_dashboard.yml` deliberately does NOT go through
+`scripts/ops_nightly.sh` (documented at its lines 45-48; it runs its own
+steps), so it had inherited **none** of T16's deploy-safety properties. It
+failed loudly on a bad deploy exit — GH Actions `run:` is `bash -e` — but
+that was its only gate, and it drifted four ways from the nightly. All four
+reconciled in this commit:
 
-Confirmed harmless to CI: that workflow sets `CLOUDFLARE_API_TOKEN` itself and
-calls `wrangler` directly, so T16.1's `env -u CLOUDFLARE_API_TOKEN` (which is
-scoped to the nightly script) cannot strip its credential.
+1. **wrangler PINNED to `4.127.1`** — CI deployed via bare `npx --yes
+   wrangler`, i.e. latest-from-registry executed UNATTENDED with deploy
+   credentials: the exact hazard the nightly's pin rationale names
+   (scripts/ops_nightly.sh L47-53).
+2. **The commit step carries the full ARTIFACTS set** — it added only
+   `dashboard_coverage.json` + `index.html`, so `corpus_history.jsonl`
+   (written on BOTH generator code paths, a new day always appends) was
+   silently dropped by EVERY CI run: the exact T17 defect, fixed in the
+   nightly script 2026-08-29 and never ported. The ledger row is listed
+   too (parity; CI runs no `--settle` today).
+3. **verify_dom now runs BEFORE the commit** — CI verified after committing,
+   so a generator change that breaks the DOM could be COMMITTED (and only
+   the deploy was saved). The nightly's rule is "never deploy or commit an
+   HTML that does not render"; CI now matches.
+4. **T16.2 post-deploy verification added** — stamp `_t0` before the
+   upload, then `deployments list --json` must show a deployment newer than
+   it. Three outcomes preserved: stale ⇒ `::error::` + exit 1 (the CI
+   signal), list-unreadable ⇒ `::notice::` INCONCLUSIVE exit 0 (a network
+   blip must not cry wolf), landed ⇒ `verified`.
+
+The verify logic was **arm-matrix-tested, not trusted** (the T16.3 lesson:
+re-run the matrix against the refactored path) — the run script was
+extracted from the YAML and executed against a stubbed `npx` + `timeout`:
+landed-after-`_t0` → rc 0 `verified` · newest-older → rc 1 `::error::` ·
+list-garbage → rc 0 INCONCLUSIVE · list-empty → rc 0 INCONCLUSIVE. The
+arm test earned its keep immediately: the first draft ported the nightly's
+MULTI-LINE `python3 -c` argument verbatim, and its zero-indented lines
+TERMINATED the YAML literal block scalar — the workflow did not even parse.
+A literal-block indentation is a constraint the nightly (plain bash) does
+not have; the parser ships as a one-liner and the three-outcome contract
+survives the flattening (an unreadable list still yields "" → INCONCLUSIVE).
+Push-race posture also upgraded to nightly parity: a lost push race now
+WARNs and STILL deploys the locally refreshed artifacts, instead of
+`changed=true` never being set and the deploy being skipped.
+
+Still structurally degraded vs the M3 — adoption card empty (gitignored
+local state), ~30-50 min, races develop — which is why this remains the
+disaster-recovery fallback (INERT until the owner sets
+`OPS_DASHBOARD_ENABLED=true`).
 
 ### T16.3 — the least-privilege deploy path was 100% broken (2026-08-29)
 
@@ -847,4 +900,28 @@ the days that need one.
   version `693972ec`, inert until the owner sets the two KAT_* secrets);
   T7 marked installed with the nightly-defect finding + fix (`0c795fe`); T2
   one-line status refreshed.
+- **2026-09-01 (session 2) — T7 launchd confirmation + T15 CI-gap closure
+  + one measured push-race WARN:** (a) the kickstarted launchd run went
+  GREEN end-to-end (see T7 — the launchd-environment question answered
+  same day as the `0c795fe` fix, not deferred to the 09-02 tick). (b) The
+  GH Actions deploy path was reconciled to the nightly's four deploy-safety
+  properties (pin, artifact parity, DOM-before-commit, T16.2 verify) —
+  see the T15 closure above; arm-matrix-verified against a stubbed npx.
+  (c) The launchd run's ONE WARN was measured rather than hand-waved: the
+  artifact push step timed out at EXACTLY its 120 s bound (committed
+  03:44:46 → WARN 03:46:46) while the main-worktree fetch+FF+push 8 s
+  later succeeded over the same transport — a transient network stall,
+  NOT a credential or wiring fault (the same pull took 4.9 s from an
+  interactive shell minutes later). The designed degradation held exactly
+  as specified: commit stayed local (`1143a62`, scoped to the 3 artifact
+  paths — verified no sibling WIP swept), nothing wedged, next run
+  retries. Honest consequence: the deploy FF'd to the PRE-push
+  origin/develop, so production re-served the PREVIOUS HTML ("No updated
+  asset files to upload") — a fresh dashboard existed only in the local
+  commit. Resolved in-session by the session push (which carried
+  `1143a62`) + a manual main-FF deploy of the fresh HTML. Lesson of
+  record: "pushed" is a third post-deploy surface that can read green
+  (deploy verified) while the CONTENT shipped is stale — the T16.2 gate
+  verifies a deployment LANDED, not which bytes it carries; the FF-only
+  deploy-source policy is what bounds that window to one run.
 - Numbering: allocated 044 (highwater 43 → 44).

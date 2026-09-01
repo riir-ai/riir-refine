@@ -60,6 +60,17 @@
 #     work in this repo continuously.
 # Keep this workflow as the disaster-recovery / owner-activated path.
 #
+# ── Nightly-parity gates (2026-09-01, closes the 044 T15 remaining gap) ─────
+# The CI path historically did NOT go through scripts/ops_nightly.sh and
+# drifted: unpinned wrangler (the nightly pins for the unpinned-remote-code-
+# with-deploy-creds reason), the T17 artifact gap (corpus_history.jsonl was
+# never committed by CI — every run dropped that day's corpus-series row),
+# verify_dom sitting AFTER the commit (the nightly refuses to commit an
+# unverified HTML), and no T16.2 post-deploy verification. All four are now
+# mirrored here. Remaining CI-only degradations are structural (documented
+# above): the adoption card stays empty (gitignored local state) and the
+# run is slow.
+#
 # Layout: siblings are checked out to ${{ runner.temp }}/git/<name> (the same
 # /git/<name> shape as the dev boxes — the generator's REPOS list resolves
 # naturally inside it, including sibling-internal `../..` path deps), then
@@ -285,13 +296,32 @@ jobs:
           set -euo pipefail
           git config user.name "ops-dashboard-bot"
           git config user.email "actions@users.noreply.github.com"
-          git add .benchmarks/dashboard_coverage.json cloudflare/dashboard/public/index.html
+          # Same artifact set as scripts/ops_nightly.sh ARTIFACTS (2026-09-01
+          # parity): `.benchmarks/corpus_history.jsonl` is written on BOTH
+          # generator code paths, independent of --sweep, and a new calendar
+          # day always appends a row — the CI path was missing it, so every
+          # CI run silently dropped that day's corpus-series row (the exact
+          # T17 defect fixed in the nightly script on 2026-08-29 and never
+          # ported here). The ledger rides --settle locally; listed for
+          # parity so a future CI --settle cannot regress this class.
+          git add .benchmarks/dashboard_coverage.json \
+                  .benchmarks/corpus_history.jsonl \
+                  .benchmarks/llm_cost_ledger.jsonl \
+                  cloudflare/dashboard/public/index.html
           if git diff --cached --quiet; then
             echo "changed=false" >> "${GITHUB_OUTPUT}"
             echo "no artifact changes — nothing to commit"
           else
             git commit -m "chore(ops): nightly dashboard refresh [skip ci]"
-            git push origin "HEAD:${GITHUB_REF_NAME}"
+            # Push is best-effort (nightly parity): a race with a concurrent
+            # agent on develop must not skip the deploy of the locally
+            # refreshed artifacts — the deploy repairs the divergence next
+            # run, a red job for a push race does not.
+            if git push origin "HEAD:${GITHUB_REF_NAME}"; then
+              :
+            else
+              echo "::warning::push failed (develop raced a concurrent writer) — deploying the locally refreshed artifacts anyway"
+            fi
             echo "changed=true" >> "${GITHUB_OUTPUT}"
           fi
 
@@ -300,8 +330,11 @@ jobs:
         # generated page: it stubs the DOM, executes the emitted script, and
         # asserts every chart rect lands on the row lattice (the string-concat
         # class that put 39 rects off-lattice at HEAD once) + corpus ys + the
-        # sparkline range labels. Runs BEFORE deploy: a generator change that
-        # breaks the DOM cannot reach the Worker.
+        # sparkline range labels. Runs BEFORE commit AND deploy (2026-09-01,
+        # parity with scripts/ops_nightly.sh step 2): a generator change that
+        # breaks the DOM must not reach the Worker — and must not be COMMITTED
+        # either; the nightly's rule is "never deploy or commit an HTML that
+        # does not render", and this step used to sit after the commit.
         run: node cloudflare/dashboard/verify_dom.mjs cloudflare/dashboard/public/index.html
 
       - name: Deploy dashboard Worker (soft-skip when unconfigured)
@@ -318,4 +351,40 @@ jobs:
             exit 0
           fi
           cd cloudflare/dashboard
-          npx --yes wrangler deploy
+          # Pinned on purpose (2026-09-01, parity with scripts/ops_nightly.sh):
+          # a bare `npx --yes wrangler` resolves the LATEST wrangler from the
+          # npm registry at run time and executes it UNATTENDED with this
+          # account's deploy credentials. Bump deliberately after checking
+          # the release; never let it float.
+          WRANGLER_VERSION="4.127.1"
+          # Stamped BEFORE the upload so the check below can ask "did a
+          # deployment land AFTER we started?" — the question wrangler's exit
+          # code does not answer. T16.2 parity with the nightly's step 4a
+          # (2026-09-01): this CI path previously shipped without ANY
+          # post-deploy verification — `wrangler deploy` exiting 0 means the
+          # API accepted the upload, NOT that the deployment landed. This
+          # issue has been bitten three times by a green surface over a wrong
+          # fact (044 T12/T15/T16). The deployment list is posture-independent,
+          # so this gate survives closing the auth gate (T13).
+          _t0="$(date -u +%Y-%m-%dT%H:%M:%S)"
+          npx --yes "wrangler@${WRANGLER_VERSION}" deploy
+          # The parser is a ONE-LINER on purpose: a multi-line `python3 -c`
+          # argument has zero-indented lines, which TERMINATE a YAML literal
+          # block scalar — the workflow would not even parse. An unreadable
+          # list still yields "" → the INCONCLUSIVE branch, so the
+          # three-outcome contract survives the flattening.
+          _newest="$(timeout 120 npx --yes "wrangler@${WRANGLER_VERSION}" deployments list --json 2>/dev/null | python3 -c 'import sys,json; d=json.load(sys.stdin); print(max(x["created_on"] for x in d) if d else "")' 2>/dev/null || true)"
+          # THREE outcomes, not two (same rationale as the nightly): "could
+          # not measure" must never be reported as "measured stale" — a
+          # network blip on this read must not turn a correct deploy red.
+          case "${_newest}" in
+            "")
+              echo "::notice::post-deploy verify INCONCLUSIVE — could not read the deployment list; deploy itself reported success" ;;
+            *)
+              if [ "${_newest}" \> "${_t0}" ]; then
+                echo "verified: deployment landed at ${_newest} (after ${_t0})"
+              else
+                echo "::error::post-deploy verify FAILED — wrangler exited 0 but the newest deployment is ${_newest}, not newer than ${_t0}: production may still serve the PREVIOUS build"
+                exit 1
+              fi ;;
+          esac
