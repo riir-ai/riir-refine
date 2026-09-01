@@ -147,11 +147,32 @@ if ! command -v node >/dev/null 2>&1; then
   fi
 fi
 
+# Same spartan-PATH class as nvm above, found live 2026-09-01: `timeout` is
+# GNU coreutils, installed here by homebrew (/opt/homebrew/bin on Apple
+# silicon), and launchd's PATH (/usr/bin:/bin:/usr/sbin:/sbin) has no
+# homebrew — so every SCHEDULED run since install died at step 1 with
+# `timeout: command not found` (exit 127) while every manual run from an
+# interactive shell passed, because the interactive PATH carries homebrew.
+# Three consecutive nightly failures (08-29/30/31, .benchmarks/ops_nightly.log)
+# and zero [skip ci] regen commits in history were the measurement. Resolve
+# the brew prefix the same way nvm is resolved; the preflight below then
+# makes a genuinely-missing timeout LOUD at step 0 instead of a mid-run 127.
+if ! command -v timeout >/dev/null 2>&1; then
+  for _brew_bin in /opt/homebrew/bin /usr/local/bin; do
+    if [ -x "${_brew_bin}/timeout" ]; then
+      PATH="${_brew_bin}:${PATH}"
+      export PATH
+      log "resolved timeout from ${_brew_bin}"
+      break
+    fi
+  done
+fi
+
 # A missing tool must STOP this runner, never downgrade it. A gate that
 # silently stops gating is worse than no gate, because the log still reads
 # green — which is precisely how the Issue 045 T8 hour-key bug survived two
 # days of "live-verified" checks.
-for _tool in python3 node npx git; do
+for _tool in python3 node npx git timeout; do
   if ! command -v "${_tool}" >/dev/null 2>&1; then
     log "FAIL required tool '${_tool}' not on PATH — refusing to run degraded"
     exit 1
