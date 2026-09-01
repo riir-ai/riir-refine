@@ -12,7 +12,7 @@
 
 ## Live queue state (2026-08-31, post-Batch-93, M3 box)
 
-- **Corpus counts:** kernel_opt 411 · rust_perf 96 · clippy_lints 45 · sec 11 · docker 31
+- **Corpus counts:** kernel_opt 422 · rust_perf 97 · clippy_lints 45 · sec 12 · docker 31
   (AGENTS.md is the authoritative ledger — bump there per batch, snapshot counts are a convenience copy).
 - **Last landed:** Batch 93 (`501fdb2` — ktransformers residue disposition, ZERO corpus
   delta, the last mined-source lane CLOSED) + the t48 substrate tie-break fix (`944741f`).
@@ -23,16 +23,14 @@
     spec-dec league lane returned ZERO new entries). **Next window 09-02+** (Monday's
     announcement lands Tue ~07:00 +07; daily differential cadence established).
   - **09-15 MCP search quota reset** → online perf-search pool walk (queue item 11).
-  - **Batch 94 (QUEUED 2026-08-31, Research 110): oMLX PR #3260 expert-streaming distill**
-    — verdict grade A-, ~3.3k LOC fully read via 4 subagent extractions, 6 anchors
-    coordinator-verified; yield ≈ 8 new rules (6 kernel_opt D + 2 rust_perf io/caching:
-    content-keying, fill-gate, decayed-eviction, lazy-promotion,
-    rollback-snapshot-coverage, scratch-bank-isolation, physical-slot-sorting,
-    row-addressable-reads+coalescing) + 2 riders (B63 bank-fusion 4th member, B71
-    thread-affinity producer complement) + rich bug yield (stat-triplet fingerprint,
-    warm-start scale confusion, placeholder poison, fd race). **Mine-time re-read
-    REQUIRED** — head `3343e44` is force-push-prone; re-clone `refs/pull/3260/head`
-    and re-verify anchors (Protocol A). Lineage: antirez/ds4 → DwarfStar fork → this PR.
+  - **Batch 94 (LANDED 2026-09-01, Plan 058 / Research 112): oMLX PR #3260
+    expert-streaming distill CONSUMED** — 8 kernel_opt D + 1 rust_perf io +
+    3 riders (B63 4th member, B71 producer complement, B84 routing member);
+    corpus 414 → 422 / 96 → 97; head never force-pushed, all anchors
+    re-verified at mine time (4 line-range corrections + 2 paraphrases
+    folded). GOAT all green: 1238/0 kernel_heal + 1001/0 default + 1728/0
+    all-features + clippy 0 both states + floors 14/14 + score-bench #25
+    flat. The oMLX external-distill pool is now CLOSED.
   - League opponent-watch: watch→intake step CURRENT as of 08-31 (the Qwen3.8-Flash-Next
     league verdict landed — history note, 5th-cycle entry; re-arm = a ≤24-GB-feasible
     Flash-Next-class variant with native MTP). **Rapid-MLX reference row PINNED**

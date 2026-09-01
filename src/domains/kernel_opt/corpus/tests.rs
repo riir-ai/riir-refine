@@ -63,11 +63,11 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 60 (1): measured-GOAT distillation (riir-train Issue 460 / katgpt-rs e2853fbf — pre-gate-recovery-by-division-cancels-algebraically; the MLA backward's saturated output-gate 0/0 NaN, fixed by algebraic cancellation; Bench 475: 6/10 -> 10/10 usable backward passes).
     // Batch 63 (3): the CubeCL twin unlock — same-input-gemv-weight-concat-at-upload, deferred-residual-fused-into-next-layer-norm, reset-state-in-place-fill-never-realloc (ternary_deltanet_gpu_forward.rs, Plan 009 / Research 071).
     // Batch 70 (3): the arxiv barrier-free-sync paper distill (arXiv:2608.13757, Plan 020 / Research 080) — barrier-free-per-dependency-wait-from-loop-counters, shared-counter-decode-producer-progress, masked-branchless-wait-collapse.
-    // Total: 209. // (historical batch-30 snapshot; current 414)
+    // Total: 209. // (historical batch-30 snapshot; current 422)
     assert_eq!(
         corpus.entries.len(),
-        414,
-        "kernel batches through Batch 95 should have 414 rules"
+        422,
+        "kernel batches through Batch 94 should have 423 rules"
     );
 }
 
@@ -5334,7 +5334,7 @@ fn kernel_categories_counts_match_plan_003_table() {
         (KernelCategory::MemoryAccess, 98),
         (KernelCategory::Compute, 54),
         (KernelCategory::Fusion, 36),
-        (KernelCategory::Dispatch, 85),
+        (KernelCategory::Dispatch, 93),
         (KernelCategory::Parallelism, 26),
         (KernelCategory::FlashAttnTiling, 10),
         (KernelCategory::LinearAttnRecurrence, 26),
@@ -5359,9 +5359,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 414.
+    // Sum must equal 422.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 414, "Plan 003: category totals must sum to 414");
+    assert_eq!(total, 422, "Plan 003: category totals must sum to 422");
 }
 
 #[test]
@@ -5372,8 +5372,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 414,
-        "Plan 003: grouped corpus has {total} rules, expected 414"
+        total, 422,
+        "Plan 003: grouped corpus has {total} rules, expected 422"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -6334,4 +6334,74 @@ fn batch79_associative_scan_rel_error_gate() {
         "non-vacuous: scan and sequential must differ bitwise somewhere"
     );
     assert!(max_rel > 0.0, "max_rel measured nothing");
+}
+
+#[test]
+fn batch94_rules_present() {
+    // Batch 94 (oMLX PR #3260 SSD expert streaming + Soft-REAP distill --
+    // Research 110 / Plan 058): 8 kernel_opt D rules.
+    let corpus = build_kernel_seed_corpus();
+    let ids = ["cross-run-profiles-key-on-content-not-stat-triplets", "fill-gate-speculation-until-working-set-resident", "decayed-frequency-eviction-recency-tiebreak-route-protection", "defer-promoted-write-to-first-consumer-dispatch", "rollback-snapshot-covers-all-mutable-state", "scratch-bank-isolates-one-shot-operands-from-hot-cache", "sort-consumer-routes-by-physical-slot", "row-addressable-operand-index-not-full-tensor-map"];
+    for id in ids {
+        assert!(
+            corpus.entries.iter().any(|e| e.rule_id == id),
+            "batch-94 rule '{id}' missing from corpus"
+        );
+    }
+}
+
+#[test]
+fn batch94_concepts_covered() {
+    // Distinctness + mandated phrases must survive in the concept
+    // text (case-sensitive contains -- the B51 lesson).
+    let corpus = build_kernel_seed_corpus();
+    let checks: &[(&str, &[&str])] = &[
+        ("cross-run-profiles-key-on-content-not-stat-triplets", &["mtime-preserving copy", "unverified claim", "write the guard at the derivation, not at one caller"]),
+        ("fill-gate-speculation-until-working-set-resident", &["166.965 s speculative vs 14.709 s checked", "0.579 s vs 0.556 s", "LATCH the readiness bit"]),
+        ("decayed-frequency-eviction-recency-tiebreak-route-protection", &["recency as TIE-BREAK only", "score BOTH hits and misses", "FAIL LOUD when no candidate remains"]),
+        ("defer-promoted-write-to-first-consumer-dispatch", &["materializes the same writes twice", "bind seconds vs materialize seconds", "IDENTIFYING the existing implicit fence"]),
+        ("rollback-snapshot-covers-all-mutable-state", &["append-only write contract", "silently skipped", "NEVER returned"]),
+        ("scratch-bank-isolates-one-shot-operands-from-hot-cache", &["42 -> 0", "2.12-2.19x", "STRUCTURALLY untouchable"]),
+        ("sort-consumer-routes-by-physical-slot", &["+26.6%", "64 routed rows", "an API CONTRACT with the gather kernel"]),
+        ("row-addressable-operand-index-not-full-tensor-map", &["silent weight corruption", "UNGUARDED data_bytes // num_experts", "the merkle_root lesson"]),
+    ];
+    for (id, needles) in checks {
+        let e = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == *id)
+            .unwrap_or_else(|| panic!("batch-94 rule '{id}' missing"));
+        for needle in *needles {
+            assert!(
+                e.gpu_concept.contains(needle),
+                "batch-94 concept for '{id}' missing phrase '{needle}'"
+            );
+        }
+    }
+}
+
+#[test]
+#[cfg(not(feature = "kernel_verify"))]
+fn batch94_pseudocode_parses() {
+    // G1 for Batch 94: syn-parse gate.
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = ["cross-run-profiles-key-on-content-not-stat-triplets", "fill-gate-speculation-until-working-set-resident", "decayed-frequency-eviction-recency-tiebreak-route-protection", "defer-promoted-write-to-first-consumer-dispatch", "rollback-snapshot-covers-all-mutable-state", "scratch-bank-isolates-one-shot-operands-from-hot-cache", "sort-consumer-routes-by-physical-slot", "row-addressable-operand-index-not-full-tensor-map"];
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-94 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            ref_verdict.parses,
+            "batch-94 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            opt_verdict.parses,
+            "batch-94 opt_pattern for '{id}' must parse"
+        );
+    }
 }

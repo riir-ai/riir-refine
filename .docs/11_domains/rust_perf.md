@@ -23,9 +23,18 @@
 
 ## Corpus
 
-91 rules across 12 categories (rust-optimize skill checklist +
+97 rules across 12 categories (rust-optimize skill checklist +
 nnethercote/perf-book + rustc-hash/bevy real-world patterns + the hotpath-rs
-profiling guide, Research 032; **now 96 rules — Batch 91 (2026-08-31,
+profiling guide, Research 032; **now 97 rules — Batch 94 (2026-09-01,
+Research 110/112 — the oMLX PR #3260 SSD expert-streaming distill, Plan 058)
+added `coalesce-nearby-reads-bounded-gap-cacheability-gated` (io;
+source-reported regime-annotation, honestly NotBenchable — merge addressed
+rows within a bounded byte gap (64 KiB) into one pread; the DECISION CONTENT
+is the cacheability coupling: gap budget collapses to 0 on direct/F_NOCACHE
+descriptors because over-read bytes are only free when the page cache absorbs
+them; re-selection preserves the caller's order incl. duplicates; riders:
+Darwin fcntl hints once per persistent descriptor, advisory-swallowed) —
+Batch 91 (2026-08-31,
 Research 106 — the Rustdoc filter-first distill, Plan 052, from noahlev.org
 "Making Rustdoc 33% faster" + rust-lang PRs 159623/159779/159854) added
 `filter-before-expensive-transform` (iterators; **ParetoDominant

@@ -1541,6 +1541,7 @@ mod entries_gpu_06;
 mod entries_gpu_07;
 mod entries_gpu_08;
 mod entries_gpu_09;
+mod entries_gpu_10;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -1563,6 +1564,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_07::entries());
     entries.extend(entries_gpu_08::entries());
     entries.extend(entries_gpu_09::entries());
+    entries.extend(entries_gpu_10::entries());
     Corpus::new(entries)
 }
 
@@ -1575,7 +1577,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 411-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 422-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1792,7 +1794,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fusion-payback-gated-on-per-dispatch-overhead",
         ],
     ),
-    // D: Dispatch patterns (85 rules)
+    // D: Dispatch patterns (93 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -1882,6 +1884,14 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "work-scaling-probe-launch-bound",
             "pad-tail-to-fixed-tile",
             "reduction-restructure-needs-source-owned-comparator",
+            "cross-run-profiles-key-on-content-not-stat-triplets",
+            "fill-gate-speculation-until-working-set-resident",
+            "decayed-frequency-eviction-recency-tiebreak-route-protection",
+            "defer-promoted-write-to-first-consumer-dispatch",
+            "rollback-snapshot-covers-all-mutable-state",
+            "scratch-bank-isolates-one-shot-operands-from-hot-cache",
+            "sort-consumer-routes-by-physical-slot",
+            "row-addressable-operand-index-not-full-tensor-map",
         ],
     ),
     // E: Parallelism patterns (26 rules)

@@ -9,12 +9,13 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //! unconditional wins + honestly NotBenchable rules.
 //!
-//! 96 entries across 12 categories (complexity 18, allocation 22, simd 8,
-//! layout 9, iterators 10, concurrency 8, io 4, arithmetic 8, dispatch 3,
-//! caching 4, bevy 1, wasm 1). 84 are benchable; 12 are honestly
+//! 97 entries across 12 categories (complexity 18, allocation 22, simd 8,
+//! layout 9, iterators 10, concurrency 8, io 5, arithmetic 8, dispatch 3,
+//! caching 4, bevy 1, wasm 1). 84 are benchable; 13 are honestly
 //! NotBenchable (8 external-runtime/size-class + 2 metric-mismatch (Issue
 //! 014) + the x86-only prefetch annotation (Batch 85) + the bitflag size
-//! axis (Batch 86)).
+//! axis (Batch 86) + the workload-level read-coalescing annotation (Batch
+//! 94)).
 //! Batch 48 (idle-queue item 11, 2026-08-16) added the 8 online-search
 //! candidates (perf-book std-types + iterators chapters): collect-append-to-
 //! extend, hashset-insert-bool-return, unwrap-or-else-lazy, filter-count-to-
@@ -86,6 +87,15 @@
 //! — the head of a type — so compute the projection on the raw input and
 //! pay the canonicalization only behind the decision).
 //!
+//! Batch 94 (2026-09-01, Research 110 — the oMLX PR #3260 SSD expert
+//! streaming distill) added coalesce-nearby-reads-bounded-gap-cacheability-
+//! gated to io: merge random-ish reads within a bounded byte gap into ONE
+//! pread; the CACHEABILITY COUPLING is the decision content — the over-read
+//! bytes are only free when the OS page cache absorbs them, so a direct/
+//! no-cache descriptor coalesces with gap 0 (exactly-adjacent rows only).
+//! The source's serving numbers are workload-level, no isolated corpus
+//! bench — regime-annotated, suggestion-only.
+//!
 //! ## Bench specs (behind `rust_perf_bench`)
 //!
 //! Benchable rules carry an optional [`BenchSpec`] — a self-contained harness
@@ -93,7 +103,7 @@
 //! `run_buggy` / `run_fixed` entry points. The bench validator generates a
 //! temp bin crate from the spec + runs a timing loop at multiple sizes.
 //!
-//! Currently benchable (84/96):
+//! Currently benchable (84/97):
 //! - `o1-lookup` (Vec scan vs HashMap lookup — clear O(n) vs O(1))
 //! - `bsearch-sorted-slice` (linear scan vs binary search — O(n) vs O(log n) on sorted data)
 //! - `dedupe-hashset-vs-vec` (Vec::contains loop vs HashSet collect — O(n²) vs O(n))
@@ -2459,6 +2469,30 @@ PerfRule {
             context_notes: Some("MEASURED ParetoDominant 3/0/0 — 24.58x/24.38x/24.37x at n=1K/30K/300K (x86_64-pc-windows-msvc, rustc 1.97, 2026-08-31, box quiet; verdict-stable x2 — the alloc axis byte-identical across runs and the Pareto verdict identical), alloc axis EXACT 300,000 → 0 at n=300K (the fixed predicate NEVER needs the canonical form — the decision answers from the raw projection), bytes 9.60 MB → 0, alloc-det stable. PRECONDITION (load-bearing — this IS the rule's content): the projection must be INVARIANT under the canonicalization (`canonicalize(i).primary == raw_primary(i)` is pinned over the fixture as a test); if the canonical form can change the projected field, the raw shortcut answers a DIFFERENT question. REGIME: win ∝ pass-rate × canonicalization cost; near-100% pass-rate buys nothing (every item needs the form anyway). The consuming decision here DISCARDS the canonical form (count/decide); when survivors need the form, construct behind the decision — composes with `filter-before-expensive-transform`. Distinct from `ok-or-else`/`unwrap-or-else-lazy` (single-value laziness behind Option — this is decide-from-a-projection) and from `filter-map-fuse` (adapter fusion — no decision content). Suggestion-only (a parse-only proposer cannot prove projection invariance). Caveat: PR 159854's diff was NOT read — the mapping is article-level (Research 106). Source: noahlev.org 'Making Rustdoc 33% faster' (2026-08-27) + rust-lang PR 159854, Batch 91 / Research 106.".to_string()),
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: Some(decision_projection_before_construction_bench_spec()),
+        },
+        // -- io: coalesce-nearby-reads-bounded-gap-cacheability-gated ----
+        // Batch 94 (2026-09-01, Research 110 -- the oMLX PR #3260 SSD
+        // expert streaming distill). Random-ish addressed reads
+        // (per-expert rows) issued as one pread PER ROW merge into one
+        // pread per CLUSTER when the byte gap between consecutive rows
+        // fits a bounded budget (source: 64 KiB) -- the over-read gap
+        // bytes are free ONLY when the OS page cache absorbs them, so
+        // the budget is COUPLED TO CACHEABILITY: a direct / F_NOCACHE
+        // descriptor coalesces with gap 0 (exactly-adjacent rows only).
+        // Merged spans re-select the requested rows afterwards,
+        // preserving the caller's order incl. duplicates.
+        // Suggestion-only (I/O orchestration -- not a parse-only
+        // rewrite); serving-level source numbers only, no isolated
+        // corpus bench.
+        PerfRule {
+            rule_id: "coalesce-nearby-reads-bounded-gap-cacheability-gated".to_string(),
+            name: "one pread per requested row -> merge rows within a bounded byte gap into one pread; gap budget collapses to 0 on non-cacheable descriptors".to_string(),
+            category: "io".to_string(),
+            buggy_code: "// One pread PER requested row: 9 hot experts scattered across two\n// shards cost 9 syscalls, each paying its own overhead; rows 40 KiB\n// apart pay the gap three times over.\nfn read_rows(fd: i32, rows: &[(u64, u32)]) -> Vec<Vec<u8>> {\n    rows.iter().map(|(off, len)| pread(fd, *off, *len)).collect()\n}\n\n".to_string(),
+            fixed_code: "// Merge rows whose byte gap fits the budget into ONE pread per\n// cluster, then re-select the requested rows from the merged spans\n// (caller's order and duplicates preserved). Cacheability-gated:\n// gap 0 when the fd is opened no-cache -- over-read is only free\n// when the page cache absorbs it.\nconst MAX_GAP: u64 = 64 * 1024;\nfn read_rows(fd: i32, rows: &[(u64, u32)], cacheable: bool) -> Vec<Vec<u8>> {\n    let budget = if cacheable { MAX_GAP } else { 0 };\n    let mut sorted: Vec<(u64, u64)> =\n        rows.iter().map(|(o, l)| (*o, *o + *l as u64)).collect();\n    sorted.sort_by_key(|r| r.0);\n    let mut spans: Vec<(u64, u64)> = Vec::new();\n    for (off, end) in sorted {\n        match spans.last_mut() {\n            Some((_, last_end)) if off - *last_end <= budget => {\n                *last_end = end;\n            }\n            _ => spans.push((off, end)),\n        }\n    }\n    spans.iter().map(|(s, e)| pread(fd, *s, (e - s) as u32)).collect()\n}\n\n".to_string(),
+            context_notes: Some("REGIME-ANNOTATED, source-reported (the source ships serving-level numbers only -- no isolated A/B for the coalescing itself; honestly NotBenchable here). The DECISION CONTENT is the cacheability coupling, not the merge: gap budget = cacheable ? 64 KiB : 0 -- in direct/F_NOCACHE mode over-read bytes are NOT free (they bypass the page cache and cannot repay the extra transfer), so only exactly-adjacent rows merge; on a cacheable descriptor the page cache repays the gap and 64 KiB of slack is cheap. Merge is gap-BOUNDED, not whole-range (an unbounded merge re-reads the shard -- the eager-pointer-collect-lazy-fetch failure shape on the transport axis). Re-selection after the merge preserves the caller's row order incl. duplicates; sort + merge at O(n log n) over the REQUESTED set only. RIDERS from the same source: (1) Darwin hints (fcntl F_RDAHEAD on cacheable fds, F_NOCACHE on direct fds) are applied ONCE per persistent descriptor and advisory-swallowed on unsupported platforms -- a descriptor-lifetime hint, not a per-read posix_fadvise; (2) fd cache keyed (path, cache-mode) so direct and cached descriptors coexist for the same file (note: that dict's get/set is unsynchronized in the source -- double os.open with the loser's fd leaked -- a concurrency hazard recorded in Research 110 section 7, not folded into this rule). Distinct from buffered-io (sequential stream buffering with a fixed window; this is random-addressed access merged by measured gap), from eager-pointer-collect-lazy-fetch (avoids materializing an O(all) index to read a subset; this transports a known subset in fewer syscalls), and from software-prefetch-storage-bound (both are storage-side; SW prefetch hides latency on compute-bound streams, coalescing removes syscall count on random-addressed streams -- different mechanisms, compose freely). Suggestion-only (I/O orchestration; a parse-only proposer cannot see descriptor cacheability). Source: jundot/omlx PR #3260 safetensors.py:448+452 (cold_max_gap_bytes = 64 KiB, clamped), :560-562 (gap-bounded range split), :597-598 (gap 0 when not use_file_cache), :675-678 (re-selection from merged spans), :536-549 (advisory fcntl hints), :526-531 (fd cache keyed (path, use_file_cache)). Batch 94 / Research 110 / Plan 058.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: None,
         },
     ])
 }
@@ -7678,9 +7712,9 @@ mod tests {
     }
 
     #[test]
-    fn seed_corpus_has_ninety_six_entries_across_twelve_categories() {
+    fn seed_corpus_has_ninety_seven_entries_across_twelve_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 96);
+        assert_eq!(corpus.entries.len(), 97);
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
@@ -7719,10 +7753,12 @@ mod tests {
         // runtime-feature-detect-per-chunk); caching has 4 (Issue 014
         // added regex-hoist-lazylock; Batch 73 added
         // sort-key-cache-precompute-out-of-lock; Batch 76 added
-        // eager-pointer-collect-lazy-fetch); io has 4 (Batch 68 added
+        // eager-pointer-collect-lazy-fetch); io has 5 (Batch 68 added
         // varint-compose-word-single-store; Batch 69 added
         // unaligned-word-load-from-bytes; Batch 85 added
-        // software-prefetch-storage-bound); bevy, wasm have 1 each.
+        // software-prefetch-storage-bound; Batch 94 added
+        // coalesce-nearby-reads-bounded-gap-cacheability-gated); bevy, wasm
+        // have 1 each.
         assert_eq!(categories.len(), 12);
     }
 
@@ -8686,7 +8722,7 @@ mod tests {
 
     #[cfg(feature = "rust_perf_bench")]
     #[test]
-    fn twelve_rules_are_not_benchable() {
+    fn thirteen_rules_are_not_benchable() {
         let corpus = build_perf_seed_corpus();
         let without_spec: Vec<&str> = corpus
             .entries
@@ -8694,7 +8730,8 @@ mod tests {
             .filter(|e| e.bench_spec.is_none())
             .map(|e| e.rule_id.as_str())
             .collect();
-        assert_eq!(without_spec.len(), 12);
+        assert_eq!(without_spec.len(), 13);
+        assert!(without_spec.contains(&"coalesce-nearby-reads-bounded-gap-cacheability-gated")); // Batch 94 — cacheability-coupled regime, source-reported only
         assert!(without_spec.contains(&"software-prefetch-storage-bound")); // Batch 85 — x86-only source evidence, the annotation IS the rule
         assert!(without_spec.contains(&"bitflag-pack-when-footprint-dominates")); // Batch 86 — the deterministic size axis (12 → 8), not a speed bench
         assert!(without_spec.contains(&"layout-reorder"));
@@ -8752,7 +8789,7 @@ mod tests {
             .filter(|e| e.context_notes.is_some())
             .map(|e| e.rule_id.as_str())
             .collect();
-        assert_eq!(annotated.len(), 39, "expected 39 context-annotated rules");
+        assert_eq!(annotated.len(), 40, "expected 40 context-annotated rules");
         assert!(annotated.contains(&"weight-tile-consumption-order")); // Batch 85 — measured ParetoDominant + the M3-L1-shift regime note
         assert!(annotated.contains(&"software-prefetch-storage-bound")); // Batch 85 — the x86-source-cited honest-loser annotation
         assert!(annotated.contains(&"precompute-table"));
@@ -8788,6 +8825,7 @@ mod tests {
         assert!(annotated.contains(&"bitflag-pack-when-footprint-dominates")); // Batch 86 — NotBenchable-speed size axis + the repr-reorder caveat
         assert!(annotated.contains(&"filter-before-expensive-transform")); // Batch 91 — measured ParetoDominant + the two-regime (discard × cost) note
         assert!(annotated.contains(&"decision-projection-before-construction")); // Batch 91 — the invariance-precondition note
+        assert!(annotated.contains(&"coalesce-nearby-reads-bounded-gap-cacheability-gated")); // Batch 94 — the cacheability-coupling regime note (source-reported)
     }
 
     /// The non-annotated rules (ParetoDominant + honestly NotBenchable) must
@@ -8801,7 +8839,7 @@ mod tests {
             .iter()
             .filter(|e| e.context_notes.is_none())
             .count();
-        assert_eq!(unannotated, 57, "expected 57 unannotated rules (96 - 39 annotated)");
+        assert_eq!(unannotated, 57, "expected 57 unannotated rules (97 - 40 annotated)");
     }
 
     /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -8813,7 +8851,7 @@ mod tests {
         let json = serde_json::to_string(&corpus.entries).unwrap();
         let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
         let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-        assert_eq!(annotated, 39);
+        assert_eq!(annotated, 40);
 
         // Simulate a pre-field snapshot: strip `context_notes` from JSON.
         // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -8847,7 +8885,7 @@ mod tests {
 
         // Filter to the 34 annotated rules.
         let annotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_some()).collect();
-        assert_eq!(annotated.len(), 39, "expected 39 annotated rules");
+        assert_eq!(annotated.len(), 40, "expected 40 annotated rules");
 
         // The HealEntry trait override must agree with the struct field.
         for rule in &annotated {

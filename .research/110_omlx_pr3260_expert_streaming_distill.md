@@ -1,10 +1,10 @@
 # Research 110 — Distill verdict: oMLX PR #3260 "SSD Expert Streaming and Soft-REAP for MoE models" → kernel_opt (host orchestration) + rust_perf (io/caching)
 
-**Status:** DISTILLED — Batch 94 queued (verdict-only landing 2026-08-31; yield
-estimate ≈ 8 new rules + 2 riders + rich bug yield; mine-time source re-read
-REQUIRED before any corpus entry per Protocol A — the clone at `/tmp/omlx3260`
-is disposable and the head is force-push-prone, so re-clone `refs/pull/3260/head`
-at mine time and re-verify every anchor)
+**Status:** RECORD — consumed by Batch 94, LANDED 2026-09-01 (see
+`112_batch94_omlx_pr3260_landing.md`: 8 kernel_opt D + 1 rust_perf io + 3
+riders, corpus 414 → 422 / 96 → 97; head did not force-push — mine-time
+lanes re-verified all anchors and corrected four line ranges + two paraphrases,
+all folded into the landing note)
 
 - **Source:** [jundot/omlx PR #3260](https://github.com/jundot/omlx/pull/3260) —
   "feat(moe): SSD Expert Streaming and Soft-REAP for MoE models" by onthehub97,
