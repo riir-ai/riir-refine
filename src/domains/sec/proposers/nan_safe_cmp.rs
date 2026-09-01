@@ -181,6 +181,49 @@ impl NanCmpWalker<'_> {
                 self.visit_expr(&ix.index);
             }
             Expr::Closure(c) => self.visit_expr(&c.body),
+            // Loop bodies are a primary sort habitat (sort inside `for` over
+            // cases/batches); without these arms the walker detects the sort
+            // via the whole-block scan but never reaches the site.
+            Expr::ForLoop(f) => {
+                self.visit_expr(&f.expr);
+                self.visit_block(&f.body);
+            }
+            Expr::While(w) => {
+                self.visit_expr(&w.cond);
+                self.visit_block(&w.body);
+            }
+            Expr::Loop(l) => self.visit_block(&l.body),
+            Expr::Let(l) => self.visit_expr(&l.expr),
+            Expr::Assign(a) => {
+                self.visit_expr(&a.left);
+                self.visit_expr(&a.right);
+            }
+            Expr::Return(r) => {
+                if let Some(e) = &r.expr {
+                    self.visit_expr(e);
+                }
+            }
+            Expr::Try(t) => self.visit_expr(&t.expr),
+            Expr::Yield(y) => {
+                if let Some(e) = &y.expr {
+                    self.visit_expr(e);
+                }
+            }
+            Expr::Await(a) => self.visit_expr(&a.base),
+            Expr::Range(r) => {
+                if let Some(e) = &r.start {
+                    self.visit_expr(e);
+                }
+                if let Some(e) = &r.end {
+                    self.visit_expr(e);
+                }
+            }
+            Expr::Reference(r) => self.visit_expr(&r.expr),
+            Expr::Group(g) => self.visit_expr(&g.expr),
+            Expr::Repeat(r) => {
+                self.visit_expr(&r.expr);
+                self.visit_expr(&r.len);
+            }
             _ => {}
         }
     }
@@ -359,6 +402,34 @@ mod tests {
         let src_text = "pub fn cmp(a: &f32, b: &f32) -> std::cmp::Ordering {\n    a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)\n}\npub fn g(v: &mut [f32]) {\n    v.sort_by(cmp);\n}\n";
         let (_, n) = applied(src_text);
         assert_eq!(n, 0);
+    }
+
+    #[test]
+    fn sort_inside_for_loop_fires() {
+        // Loop bodies are a primary sort habitat — the walker must descend
+        // (production shape: per-case probe sorting inside `for case in ..`).
+        let src_text = "pub fn g(cases: &[Vec<f32>]) {\n    for c in cases {\n        let mut v = c.clone();\n        v.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));\n    }\n}\n";
+        let (out, n) = applied(src_text);
+        assert_eq!(n, 1);
+        assert!(out.contains("b.total_cmp(a)"), "{out}");
+    }
+
+    #[test]
+    fn sort_inside_while_and_loop_fires() {
+        let src_text = "pub fn g(v: &mut [f32], w: &mut [f64]) {\n    while !v.is_empty() {\n        v.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));\n        break;\n    }\n    loop {\n        w.sort_unstable_by(|a, b| a.partial_cmp(b).unwrap());\n        break;\n    }\n}\n";
+        let (_, n) = applied(src_text);
+        assert_eq!(n, 2);
+    }
+
+    #[test]
+    fn chain_inside_assign_and_try_fires_alongside_a_sort() {
+        // The sort-context gate still applies — assign/try/arm shapes only
+        // need REACHING once a sort shares the fn (the nested-fn shadow test
+        // pins the boundary in the other direction).
+        let src_text = "pub fn g(v: &mut [f32]) -> std::io::<()> {\n    v.sort_by(|a, b| b.total_cmp(a));\n    let mut ord = std::cmp::Ordering::Equal;\n    ord = v[0].partial_cmp(&v[1]).unwrap_or(std::cmp::Ordering::Equal);\n    let _ = ord;\n    let checked = Some(v[0].partial_cmp(&v[1]).unwrap_or(std::cmp::Ordering::Equal))?;\n    let _ = checked;\n    Ok(())\n}\n";
+        let (out, n) = applied(src_text);
+        assert_eq!(n, 2);
+        assert!(out.contains("v[0].total_cmp(&v[1])"), "{out}");
     }
 
     #[test]
