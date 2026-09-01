@@ -63,11 +63,11 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 60 (1): measured-GOAT distillation (riir-train Issue 460 / katgpt-rs e2853fbf — pre-gate-recovery-by-division-cancels-algebraically; the MLA backward's saturated output-gate 0/0 NaN, fixed by algebraic cancellation; Bench 475: 6/10 -> 10/10 usable backward passes).
     // Batch 63 (3): the CubeCL twin unlock — same-input-gemv-weight-concat-at-upload, deferred-residual-fused-into-next-layer-norm, reset-state-in-place-fill-never-realloc (ternary_deltanet_gpu_forward.rs, Plan 009 / Research 071).
     // Batch 70 (3): the arxiv barrier-free-sync paper distill (arXiv:2608.13757, Plan 020 / Research 080) — barrier-free-per-dependency-wait-from-loop-counters, shared-counter-decode-producer-progress, masked-branchless-wait-collapse.
-    // Total: 209. // (historical batch-30 snapshot; current 400)
+    // Total: 209. // (historical batch-30 snapshot; current 414)
     assert_eq!(
         corpus.entries.len(),
-        411,
-        "kernel batches through Batch 92 should have 411 rules"
+        414,
+        "kernel batches through Batch 95 should have 414 rules"
     );
 }
 
@@ -5334,10 +5334,10 @@ fn kernel_categories_counts_match_plan_003_table() {
         (KernelCategory::MemoryAccess, 98),
         (KernelCategory::Compute, 54),
         (KernelCategory::Fusion, 36),
-        (KernelCategory::Dispatch, 84),
-        (KernelCategory::Parallelism, 25),
+        (KernelCategory::Dispatch, 85),
+        (KernelCategory::Parallelism, 26),
         (KernelCategory::FlashAttnTiling, 10),
-        (KernelCategory::LinearAttnRecurrence, 25),
+        (KernelCategory::LinearAttnRecurrence, 26),
         (KernelCategory::MoeDispatchBackward, 14),
         (KernelCategory::NsaBlockSparse, 4),
         (KernelCategory::VarlenChunkedReduction, 5),
@@ -5359,9 +5359,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 411.
+    // Sum must equal 414.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 411, "Plan 003: category totals must sum to 411");
+    assert_eq!(total, 414, "Plan 003: category totals must sum to 414");
 }
 
 #[test]
@@ -5372,8 +5372,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 411,
-        "Plan 003: grouped corpus has {total} rules, expected 411"
+        total, 414,
+        "Plan 003: grouped corpus has {total} rules, expected 414"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -6108,6 +6108,38 @@ fn batch92_pseudocode_parses() {
         assert!(
             opt_verdict.parses,
             "batch-92 opt_pattern for '{id}' must parse"
+        );
+    }
+}
+
+#[test]
+#[cfg(not(feature = "kernel_verify"))]
+fn batch95_pseudocode_parses() {
+    // G1 for Batch 95: syn-parse gate (the mlx-lm gated_delta.py GDN
+    // prefill distill -- simd-group row packing, whole-T zero-barrier
+    // single-dispatch scan, source-owned reduction comparator).
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "simdgroup-row-packing-reduction-amortization",
+        "whole-sequence-zero-barrier-single-dispatch-scan",
+        "reduction-restructure-needs-source-owned-comparator",
+    ];
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-95 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            ref_verdict.parses,
+            "batch-95 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            opt_verdict.parses,
+            "batch-95 opt_pattern for '{id}' must parse"
         );
     }
 }

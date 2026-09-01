@@ -46,23 +46,22 @@
     The same session found + FIXED our long-context decode deficit (0.74× → 0.93× @2K,
     +25% e2e, greedy-token-identity EXACT): split-K Metal flash decode
     (`QwenAttentionDecodeGatedSplit{,Combine}CubeCL`, default-ON >512 pos).
-    **Batch 95 LEAD (QUEUED 2026-09-01, from the Bench 831 follow-up source read):
-    mlx-lm `gated_delta.py` GDN prefill kernel family** — the 190-tok/s shape's GDN
-    half: ONE fused Metal kernel per whole-T scan (sequential in T inside the kernel,
-    state REGISTER-resident per lane), reductions via simd_sum / explicit shuffle_xor
-    butterflies — ZERO smem, ZERO barriers; the 0.32.x gain is the PACKED
-    specialization (Dk=128 packs 8 value rows per SIMD-group, 4 lanes/row, 32 state
-    elems/lane; reduction split 2-level in-lane + 2-level cross-lane). Yield
-    estimate ≈ 2-3 kernel_opt rules: (1) simd-group row-packing geometry for
-    narrow-row register scans (NOT covered — B22 is the plain warp-shuffle
-    reduction, B58 the register-resident state; the PACKING GEOMETRY is new),
-    (2) whole-T zero-barrier single-kernel scan shape (the barrier-elimination
-    complement of B35's barrier-count rules), (3) RIDER: the bitwise-contract-by-
-    comparator-kernel test discipline (pin an optimized kernel bit-identical to an
-    explicitly-written comparator independent of library lowering — our Issue-715
-    class, external confirmation). Source: raw.githubusercontent ml-explore/mlx-lm
-    main `mlx_lm/models/gated_delta.py` (read in full 09-01); mine-time re-read per
-    Protocol A (moving main). Lineage: ml-explore/mlx-lm, Apache-2.0. **Streaming axis added 08-31 (Research 110 §8):**
+    **Batch 95 (LANDED 2026-09-01, Plan 055 / Research 111): mlx-lm
+    `gated_delta.py` GDN prefill — 3 rules, corpus 411 → 414 (D 85, E 26,
+    G 26).** `simdgroup-row-packing-reduction-amortization` (E),
+    `whole-sequence-zero-barrier-single-dispatch-scan` (G — the FOURTH
+    recurrence dispatch strategy beside scan/chunk),
+    `reduction-restructure-needs-source-owned-comparator` (D — the
+    comparator-ORACLE discipline; the snapshot's rider estimate was
+    PROMOTED to a full rule: both subagent lanes independently converged
+    on it as decision content). Riders: B38 env-flag, B23
+    hardcoded-fast-path eligibility, B23 gqa; B79 sequential-loop note
+    confirmed for GDN. Snapshot corrections folded at mine time: the
+    reduction split is 3-level in-lane + 2-level cross-lane (not 2+2);
+    the "(3) RIDER" comparator discipline carried full-rule content.
+    GOAT: batch95 gate + kernel_heal 1235/0 + default 1001/0 + clippy 0
+    both states + retrieval floors 14/14 HELD; full CI guard not run (the
+    3 affected states validated; recorded in Research 111). **Streaming axis added 08-31 (Research 110 §8):**
     oMLX PR #3260 streams Flash-Next-class checkpoints (99 GiB) on 18–36 GB Macs at
     15–17 t/s, and DwarfStar/ds4 (antirez's DeepSeek-V4 engine) publishes M3 Max 128 GB
     q2 at 26.68 t/s decode / 250.1 t/s long prefill — the ≤24-GB re-arm condition should

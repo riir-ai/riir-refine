@@ -1792,7 +1792,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fusion-payback-gated-on-per-dispatch-overhead",
         ],
     ),
-    // D: Dispatch patterns (84 rules)
+    // D: Dispatch patterns (85 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -1881,9 +1881,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fail-closed-multi-resource-commit-transaction",
             "work-scaling-probe-launch-bound",
             "pad-tail-to-fixed-tile",
+            "reduction-restructure-needs-source-owned-comparator",
         ],
     ),
-    // E: Parallelism patterns (25 rules)
+    // E: Parallelism patterns (26 rules)
     (
         KernelCategory::Parallelism,
         "E: parallelism",
@@ -1911,8 +1912,9 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "occupancy-grid-cap-refuted-uncapped-default",
             "plane-specialization-load-compute-role-split",
             "grid-collapsing-mega-kernel-occupancy-trap",
-            "capture-break-count-not-perf-target",            "stripe-sms-l2-semaphore-reduce",
-
+            "capture-break-count-not-perf-target",
+            "stripe-sms-l2-semaphore-reduce",
+            "simdgroup-row-packing-reduction-amortization",
         ],
     ),
     // F: Flash-attention tiling (10 rules)
@@ -1932,7 +1934,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "two-stage-mask-softmax-then-conv",
         ],
     ),
-    // G: Linear-attention recurrence (25 rules)
+    // G: Linear-attention recurrence (26 rules)
     (
         KernelCategory::LinearAttnRecurrence,
         "G: linear-attn recurrence",
@@ -1962,6 +1964,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "wy-transform-tree-verify-state-free",
             "state-normalization-between-updates-breaks-associative-scan",
             "dynamic-kernel-params-break-prefix-scan",
+            "whole-sequence-zero-barrier-single-dispatch-scan",
         ],
     ),
     // H: MoE dispatch + backward pass (14 rules)
