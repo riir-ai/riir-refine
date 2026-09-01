@@ -53,6 +53,8 @@ cannot promote past devnet; nobody can prove the network works.
 | 10 | Free-tier daily crank: CF schedule credits every synced account daily | **Ship — a GRANT crank, not a mint faucet** | 010 M2 treasury-first grant + floor, the kat-service DO alarm (10-min sweep/settle/anchor), housekeeping cron/cursor precedent, the exactly-once `(date, x)` key pattern, 008's never-lever free-grant family | daily pass in the alarm + `FREE_TIER_DAILY_KAT` (genesis yaml) + activity gate + budget cap |
 | 11 | Faucet request by QR (owner scans; Discord bot long-run) | **Ship v1 = a `faucet` preset on the ask-1 web wallet; Discord bot DEFERRED** | the ask-1 web wallet (GitHub-SSH + hold-SEND + G-WEB), payreq labels/caps, the wet-run faucet leg | `faucet --request` preset + daily cap; bot later |
 | 12 | USDC pay → register → mint KAT ("pay and register in one take"), memo links back to the KAT account, tests | **Ship later-phase — with one binding correction: the REFERENCE key is the mandatory machine link; the memo is mandatory-in-URL audit copy** | Solana Pay transfer-request + five checks, on-curve reference keys (dapps Plan 005), 007's token-balance-delta address capture, the account-key-signed sync envelope, chain 008 MemoShard (the later on-chain leg) | registration-intent rows + funding-address binding + settle/mint path + the G-REG test matrix |
+| 13 | Walk-to-scan QR is hacky — share the LINK instead; render the QR in the browser as optional; with a timeout | **AGREED — link-first: the URL was always the primitive, the QR is a rendering** | the PayRequest URL + signed resolve + the existing expiry field, the web wallet (no camera needed on any device), the page's Solana-Pay QR rendering for wallet-scan rails | CLI prints the link first (`--qr` fallback); `link_ttl` expiry; expired = honest expired state + settle-refused |
+| 14 | Record EVERY request in DB — track, limit, and quick mapping on chain from that shard | **AGREED — promoted to the request-ledger rule (§13)** | Warm-tier rows (826 ns/write), the queue.rs write-ahead intent discipline, MemoShard commitment mapping (chain 008) | lifecycle rows (`created→resolved→settled\|expired\|refused`) with a `chain_anchor` slot; the limiter READS these rows; refusals are rows too |
 
 ## The proposed design
 
@@ -78,9 +80,10 @@ Three rails, one object — **the KAT rail is the default and ships first**
 minted the operator's wallet); Stripe and Solana-Pay are exercised as MOCK
 tests until the KAT loop lands.
 
-- **KAT rail (in-network, DEFAULT — the web-wallet flow):** the QR encodes
-  `{service}/payreq/{id}` — the same host as the existing `/pay?acct=` top-up
-  page. Bar scans it with a phone; the page:
+- **KAT rail (in-network, DEFAULT — the web-wallet flow):** the request IS a
+  **shareable link** — `{service}/payreq/{id}` — the same host as the
+  existing `/pay?acct=` top-up page. The QR is just one rendering of that
+  URL (§13): foo shares the LINK, bar opens it on any device; the page:
   1. resolves the signed PayRequest (payee, amount — or "any amount", expiry);
   2. **Sign in with GitHub** → OAuth → the worker fetches the signer's
      published SSH keys (`https://github.com/{user}.keys`) and derives each
@@ -320,18 +323,43 @@ not survive a week of daily use. The crank makes the free tier renewable:
   sustains from day 1.
 - **UX:** `account` shows the daily credit line and 8.3's welcome reads it.
 
-### 11. Faucet by QR (ask 11)
+### 11. Faucet by QR → faucet by LINK (ask 11, revised by ask 13)
 
 No new mechanism — the faucet request IS a PayRequest with a preset:
 `cargo heal faucet --request` creates a payreq whose label is `faucet`, amount
-fixed to `faucet_daily_cap_kat`, payer hint = the root/faucet account. Bar
-scans the QR → web wallet (GitHub-SSH sign-in, hold-SEND — all of ask 1's
-machinery and G-WEB gates) → settle. Human-rate by construction (the owner
-walks to the machine); the wet-run's programmatic faucet leg already proves
-the ledger half. **Discord bot: DEFERRED** — a Discord↔KAT identity binding is
-a new sybil surface (Discord accounts are cheap); reopen when manual scanning
-is the bottleneck, gated on a per-account daily cap + a proof-of-identity no
-weaker than the GitHub-SSH key-match.
+fixed to `faucet_daily_cap_kat`, payer hint = the root/faucet account — and
+**prints the shareable link** (the ASCII QR renders only as a TTY fallback or
+with `--qr`; the page renders the QR optionally for wallet-scan rails). Foo
+sends the link to bar over any channel; bar opens it → web wallet (GitHub-SSH
+sign-in, hold-SEND — all of ask 1's machinery and G-WEB gates) → settle.
+**Shared links carry a TTL** (`link_ttl`, default 24 h for faucet — expiry is
+already a PayRequest field): an expired link resolves to an honest "expired"
+state and settle-refuses. No camera, no walking to the machine. The wet-run's
+programmatic faucet leg already proves the ledger half. **Discord bot:
+DEFERRED** — with link-first sharing the manual path is just "send a URL", so
+the bot's only remaining value is automation; reopen when volume demands it,
+gated on a per-account daily cap + a proof-of-identity no weaker than the
+GitHub-SSH key-match.
+
+### 13. The request-ledger rule (ask 14 — track · limit · chain mapping)
+
+Every request — payreq create, faucet request, registration intent, resolve,
+settle — is a **row first** (write-ahead, the queue.rs intent discipline):
+`{request_id, kind, account, status: created→resolved→settled|expired|refused,
+amounts, unix, chain_anchor}`. The row is not bookkeeping after the fact; it
+is the gate:
+
+- **Track** — the lifecycle of every request is auditable end-to-end by id.
+- **Limit** — the rate limiter READS these rows (no second store): per-account
+  request counts and per-kind caps (the faucet daily cap, `daily_grant_budget`,
+  requests-per-window) are enforced from them, and a refusal writes a
+  `refused` row — the limits are auditable too. Cost is trivial at request
+  cadence (Warm-tier writes measured at 826 ns).
+- **Chain mapping ("from that shard")** — every row's `chain_anchor` slot is
+  filled when epoch settlement composes the chain intent (the MemoShard-shaped
+  commitment id, chain Proposal 008): one lookup maps any chain artifact back
+  to its request row and any request forward to its chain artifact — which is
+  what makes reconcile, expired-intent recovery, and audits tractable.
 
 ### 12. USDC pay-and-register in one take (ask 12 — later phase, tests now)
 
@@ -444,6 +472,13 @@ account paying from two Solana addresses ⇒ first-wins binding, later recorded
     the memo field; the reference key is the binding. The CLI/page copy still
     shows the memo to the payer — the user-visible contract is intact; only
     the settlement gate ignores it.
+12. **Shared links are capability URLs.** Anyone holding the link can VIEW
+    the request (payee, amount) — the same exposure as the QR it replaces,
+    but a link forwards further than a camera scan. Bounds: settlement still
+    requires the GitHub-SSH session (G-WEB), `link_ttl` bounds the exposure
+    window, and resolve stays signed + rate-limited. View-only must never
+    leak more than the request itself (no balance, no history on the
+    pre-auth page).
 
 ## Fusion lineage
 
@@ -499,6 +534,10 @@ account paying from two Solana addresses ⇒ first-wins binding, later recorded
   fixtures — including the forged-intent refusal, the memo-dropped settle,
   and the single-credit dedupe; the live-rail arm stays `#[ignore]` until
   Phase 5.
+- **G-REQ (the request-ledger gate):** no request path processes without its
+  write-ahead row; the limiter refuses at cap and the refusal is itself a
+  row; an expired link resolves to the expired state and settle-refuses;
+  `chain_anchor` round-trips (row → chain intent → row) in one lookup.
 
 ## What ships now vs deferred
 
@@ -548,7 +587,8 @@ account paying from two Solana addresses ⇒ first-wins binding, later recorded
 ## Phased rollout (sketch — plans would expand this)
 
 ### Phase 0 — ledger + SDK substrate
-- [ ] T0.1 `payreq` invoice rows + faucet credit row type (riir-dapps, `kat_payreq`)
+- [ ] T0.1 `payreq` request-ledger lifecycle rows + invoice rows + faucet
+      credit row type (riir-dapps, `kat_payreq`)
 - [ ] T0.2 clippy CLI: `login` default-SSH, `account` welcome/history
 - [ ] T0.3 riir-chain-sdk `pay_request` module (KAT compose + resolve/transfer;
       USDC arm stubbed behind the mock)
@@ -556,12 +596,13 @@ account paying from two Solana addresses ⇒ first-wins binding, later recorded
 - [ ] T0.5 registration-intent + funding-binding row types (the ask-12 substrate)
 
 ### Phase 1 — the KAT rail + web wallet (DEFAULT, ships first — owner call 2026-09-01)
-- [ ] T1.1 `/payreq` routes (create/resolve/settle/invoice) + rate limit + signed resolve
+- [ ] T1.1 `/payreq` routes (create/resolve/settle/invoice) + request-ledger
+      write-ahead rows + limiter-backed-by-rows + signed resolve
 - [ ] T1.2 the web wallet on the kat-service host: GitHub OAuth → `.keys` fetch →
       key-match → session → **press-and-hold SEND** (server-enforced min-hold)
       → settle → invoice row
 - [ ] T1.3 clippy `pay --request [--amount]` (KAT default; blank = any amount)
-      + QR + poll-on-credit
+      + shareable link first (ASCII QR as TTY fallback / `--qr`) + poll-on-credit
 - [ ] T1.4 invoice display + bit-exact recheck (golden-pinned QR)
 - [ ] T1.5 G1-S/G8-S/G-WEB money + auth + adversarial suite (replay, session
       theft, amount manipulation, self-pay, hold-bypass, root-float refusal)
@@ -569,7 +610,8 @@ account paying from two Solana addresses ⇒ first-wins binding, later recorded
       against fixtures; no live rail this phase)
 - [ ] T1.7 the daily grant crank (alarm pass, `(account, utc_date)` exactly-once,
       activity gate, budget cap) + G-CRANK
-- [ ] T1.8 `faucet --request` preset + `faucet_daily_cap_kat` enforcement
+- [ ] T1.8 `faucet --request` preset + `faucet_daily_cap_kat` enforcement +
+      `link_ttl` expiry (expired = settle-refused)
 
 ### Phase 2 — genesis ceremony (bar)
 - [ ] T2.1 params yaml + validation against pinned tokenomics
@@ -668,4 +710,7 @@ web wallet** (Discord bot deferred), and pay-and-register binds via the
 would strand real payments. Next action: open the Phase 0 plan
 (riir-dapps rows + SDK module + self-pay fixtures), then the Phase 1 web
 wallet — and Phase 2's ceremony first, because bar's dry-run genesis is what
-puts the mint in the wallet that every foo gets paid from.
+puts the mint in the wallet that every foo gets paid from. Requests go out
+as **shareable links first** (the QR is an optional rendering — browser page
+or `--qr` fallback) with a TTL, and **every request is a row first** —
+tracked, limited, and chain-mapped from the same ledger.
