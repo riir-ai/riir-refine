@@ -423,7 +423,7 @@ fn finalize_report(rows: Vec<JuryRow>) -> JuryPocReport {
         .filter(|r| r.signals.rerank_margin.is_finite())
         .map(|r| f64::from(r.signals.rerank_margin))
         .collect();
-    margins.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    margins.sort_by(|a, b| a.total_cmp(b));
     margins.dedup();
     let margin_sweep: Vec<Contingency> = margins
         .iter()

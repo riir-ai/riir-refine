@@ -234,7 +234,7 @@ fn driver_section() {
 
     // G2 latency: per-case fixer wall time + per-iteration driver time.
     let mut fix_ms: Vec<f64> = report.outcomes.iter().map(|o| o.fix_ms).collect();
-    fix_ms.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    fix_ms.sort_by(|a, b| a.total_cmp(b));
     if !fix_ms.is_empty() {
         println!(
             "\n  G2 latency, per CASE (ms): p50 {:.0}  p99 {:.0}  max {:.0}",
@@ -247,7 +247,7 @@ fn driver_section() {
         .iter()
         .flat_map(|(_, r)| r.iter_ms.iter().copied())
         .collect();
-    iter_ms.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    iter_ms.sort_by(|a, b| a.total_cmp(b));
     if !iter_ms.is_empty() {
         println!(
             "  G2 latency, per ITERATION (ms): n {}  p50 {:.0}  p99 {:.0}  max {:.0}",
@@ -402,9 +402,7 @@ fn ordering_ab_section() {
                 }
             };
             cands.sort_by(|a, b| {
-                score(b)
-                    .partial_cmp(&score(a))
-                    .unwrap_or(std::cmp::Ordering::Equal)
+                score(b).total_cmp(&score(a))
                     .then(a.total_len().cmp(&b.total_len()))
                     .then(a.strategy_id.cmp(&b.strategy_id))
             });

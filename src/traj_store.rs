@@ -764,7 +764,7 @@ impl TrajStore {
         out.sort_by(|a, b| {
             let fa = a.bm25 / norm + a.latent;
             let fb = b.bm25 / norm + b.latent;
-            fb.partial_cmp(&fa).unwrap_or(std::cmp::Ordering::Equal)
+            fb.total_cmp(&fa)
         });
         out.truncate(k);
         out
@@ -1391,9 +1391,7 @@ pub fn shape_conditional_order(
         shape_conditional_score(store, &cand.code, &cand.strategy_id, &cand.shape)
     };
     cands.sort_by(|a, b| {
-        belief(b)
-            .partial_cmp(&belief(a))
-            .unwrap_or(std::cmp::Ordering::Equal)
+        belief(b).total_cmp(&belief(a))
             .then(a.file.cmp(&b.file))
             .then(a.line.cmp(&b.line))
             .then(a.total_len().cmp(&b.total_len()))

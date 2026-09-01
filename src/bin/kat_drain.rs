@@ -340,7 +340,7 @@ fn build_backlog(
         let never_b = b.success_count == 0;
         never_b
             .cmp(&never_a)
-            .then(b.priority.partial_cmp(&a.priority).unwrap_or(std::cmp::Ordering::Equal))
+            .then(b.priority.total_cmp(&a.priority))
             .then_with(|| a.lint.cmp(&b.lint))
             .then_with(|| shape_hash(&a.shape).cmp(&shape_hash(&b.shape)))
     });

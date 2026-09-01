@@ -1629,7 +1629,7 @@ impl RegateHarness {
             };
             tier_rank(a.tier)
                 .cmp(&tier_rank(b.tier))
-                .then(b.bm25.partial_cmp(&a.bm25).unwrap_or(std::cmp::Ordering::Equal))
+                .then(b.bm25.total_cmp(&a.bm25))
         });
         let exemplars: Vec<TrajectoryExemplar> = neighbors
             .iter()

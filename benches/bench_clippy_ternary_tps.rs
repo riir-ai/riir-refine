@@ -307,7 +307,7 @@ fn main() {
                 .enumerate()
                 .map(|(i, &v)| (i, v))
                 .collect();
-            top.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+            top.sort_by(|a, b| b.1.total_cmp(&a.1));
             let (t1i, t1v) = top[0];
             let (t2i, t2v) = top[1];
             eprintln!(

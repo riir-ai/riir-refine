@@ -52,8 +52,7 @@ pub fn gp_ordering(observed: &[(String, String)]) -> OrderingFn {
         cands.sort_by(|a, b| {
             let sa = sigma_of(&gp, a);
             let sb = sigma_of(&gp, b);
-            sb.partial_cmp(&sa)
-                .unwrap_or(std::cmp::Ordering::Equal)
+            sb.total_cmp(&sa)
                 .then_with(|| incumbent_key(a).cmp(&incumbent_key(b)))
         });
     })
@@ -88,8 +87,7 @@ pub fn gp_ordering_growing(observed: &[(String, String)]) -> OrderingFn {
         cands.sort_by(|a, b| {
             let sa = sigma_of(&gp, a);
             let sb = sigma_of(&gp, b);
-            sb.partial_cmp(&sa)
-                .unwrap_or(std::cmp::Ordering::Equal)
+            sb.total_cmp(&sa)
                 .then_with(|| incumbent_key(a).cmp(&incumbent_key(b)))
         });
     })
