@@ -16,6 +16,11 @@
   (AGENTS.md is the authoritative ledger — bump there per batch, snapshot counts are a convenience copy).
 - **Last landed:** Batch 93 (`501fdb2` — ktransformers residue disposition, ZERO corpus
   delta, the last mined-source lane CLOSED) + the t48 substrate tie-break fix (`944741f`).
+  **2026-09-01 late: P8 adoption wave 2** — the nan-unsafe sweep's benches/examples/
+  tests residue + unclaimed repos discharged across riir-clippy (self + loop-habitat
+  proposer fix `5122bbe`), riir-neuron-db (`4524854`), riir-train (`20b53943`),
+  riir-ai (`1e6e4b06a`, 188 sites / 13 crates); katgpt-rs residue YIELDED to live
+  sibling WIP (re-scan next session). Full record: P8 ADOPTION WAVE 2 below.
 - **Next executable (cadence-gated):**
   - **The arxiv pool re-walk: DONE 2026-08-31 ~23:20 +07** (`.research/109` — walk #3,
     covered the Sunday-08-30 announcement window that walk #2 never saw; zero corpus delta,
@@ -254,8 +259,31 @@ All classes closed; the standing divergence (P4 residual) has no action planned.
       **ADOPTED 2026-09-01 (same day):** katgpt-rs `e854958e` (64 files / 113 sites,
       src only) + unused-import cleanup `26d055c6` (7 files); riir-train `d37553e5`
       (41 files / 59 sites); riir-neuron-db `4af0c63` (7 files / 19); riir-mmorpg-
-      examples `77d1319` (1). Residue: tests/benches/examples slices (katgpt-rs
-      ~47, riir-train ~53), riir-wallet-worker 1 FFI site + moka-wasm 10 FFI sites
+      examples `77d1319` (1).
+      **ADOPTION WAVE 2 — 2026-09-01 late session (4090 box): the benches/examples/
+      tests residue + the unclaimed repos DISCHARGED.** riir-clippy self `02a5580`
+      (11 sites incl. the loop-habitat catch) + **proposer root-cause fix `5122bbe`**:
+      the nan_safe_cmp walker's visit_expr had NO ForLoop/While/Loop/Let/Assign/
+      Return/Try/Yield/Await/Range/Reference/Group/Repeat arms — the whole-block
+      sort SCAN (syn Visit) detected loop-habitat sorts but the edit COLLECTOR
+      never descended into loop bodies (found live: sort inside the per-case `for`
+      at bench_clippy_ternary_tps.rs:310; 3 fixtures). riir-neuron-db `4524854`
+      (16 files / 19 sites post-collision-dedup vs sibling 4af0c63); riir-train
+      `20b53943` (6 sites post-dedup vs sibling 24bc7780's 53 in the same surface —
+      both sessions swept tests/benches/examples within the hour, rebase
+      auto-dropped identical hunks cleanly BOTH times, zero manual conflict
+      resolution); riir-ai `1e6e4b06a` (**188 sites / 138 files across 13 crates** —
+      the lib was NEVER swept: engine 47, gpu 71, poc 20, examples 15, civ 12,
+      games 8, agents 4, rag 4, + 9 singles; per-crate lib suites all green,
+      ci all-features screen's 4 error classes proven PRE-EXISTING not-mine).
+      Post-wave live residue: ~9 sites in riir-train (2 tuple-receiver suggest-only
+      + min_by + helper-fn comparator shapes = the strict-gate recall limits),
+      ~2 max_by sites ndb, riir-clippy raw-string fixtures (correctly untouched),
+      katgpt-rs tests/benches/examples ~100 YIELDED — sibling WIP mid-flight on
+      src/transformer/tests.rs at sweep time (next session: re-scan first).
+      Fixture-literal sites (score-bench raw strings) correctly never touched.
+      Residue: tests/benches/examples slices (katgpt-rs ~47, riir-train ~53),
+      riir-wallet-worker 1 FFI site + moka-wasm 10 FFI sites
       (ffi-extern-fn-catch-unwind unit, needs wasm32 validation), seal-game-editor
       17 raw unexamined. **New boundary found by the sweep (P-intake class):**
       TUPLE receivers — `(f32, f32)` sort keys suggest the rewrite but verify
