@@ -128,8 +128,10 @@ does not move: weights are bytes, not a cargo dep (default build stays katgpt-co
    harness (heal/created/safety/decline axes) and the uncontaminated labeling instrument —
    repurposed as training val set + RL reward.
 
-The combination produces what none alone can: the corpus is frozen at ~450 rules (too small to
-train a generator, exactly right to train a classifier+slot-filler); the verify stack makes
+The combination produces what none alone can: the corpus is bounded (577 rules total,
+of which **41 clippy lints** are the classes a clippy drafter classifies over — the
+corrected F2 figure), too small to train a generator, exactly right to train a
+classifier+slot-filler; the verify stack makes
 correctness free; and the oracle supplies dense labeled data across 15 repos of real code.
 
 ## GOAT gate
