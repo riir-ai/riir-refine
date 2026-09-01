@@ -151,6 +151,27 @@ construction); a vote decides membership only — it never moves funds.
 Record: [Bench 005](../../.benchmarks/) lives in riir-dapps (the G9-GOV
 e2e); this repo's half is the CLI + the signed-intent queue.
 
+**Onboarding (kat-011 T0.2, [Plan 059](../../.plans/059_kat011_t02_and_corpus_runtime_counts.md)):**
+`login` on a fresh machine adopts the default `~/.ssh/id_ed25519` as the
+account identity when it parses as an unencrypted Ed25519 OpenSSH key —
+the BLAKE3(pubkey) id then matches what the GitHub `.keys` key-match
+derives, so zero configuration; `RIIR_HEAL_KAT_KEY` overrides the key
+path (failing LOUDLY when set but unusable — explicit config never
+silently falls back), and anything else generates with the fallback
+reason disclosed + the exact source path printed. `account --history`
+renders the LOCAL view (earned = login-grant projection, spent = the
+repo-local `kat_charge.json` burn, balance = the projection) + a welcome
+line when fresh; the live `/balance` + nodes-healthy gate is 011 T0.2b
+(riir-dapps routes, not renderable honestly from here).
+
+**`--corpus-stats` counts at runtime** (Proposal 009 §F2 fix): the
+per-domain count comes from the COMPILED corpus builder when the domain
+is in the binary, falling back to the source-walk needle only for
+non-compiled domains — each row stamped with its provenance
+(`runtime-corpus` vs `source-walk`) so a needle-derived number can never
+masquerade as a runtime count; the jsonl import yields to BOTH first-hand
+provenances (a `runtime-corpus` row survives a stale re-import).
+
 ## Caveat
 
 No minimum-score threshold — and none is possible (measured, Bench 018
