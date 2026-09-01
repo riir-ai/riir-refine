@@ -208,7 +208,12 @@ fn run_kat_login(import_key: Option<&Path>) {
     let dir = KatAccount::default_dir();
     let result = match import_key {
         Some(source) => KatAccount::login_import(&dir, source),
-        None => KatAccount::login(&dir),
+        // Proposal 011 T0.2 (ask 8.2): the default chain — existing →
+        // RIIR_HEAL_KAT_KEY override → the machine's default SSH key →
+        // generate fresh with a disclosed fallback note. Zero configuration:
+        // an adopted SSH key makes the account id match the GitHub .keys
+        // key-match the web wallet derives for the same key.
+        None => KatAccount::login_default(&dir),
     };
     let (account, outcome) = match result {
         Ok(pair) => pair,
@@ -218,8 +223,16 @@ fn run_kat_login(import_key: Option<&Path>) {
         }
     };
     match outcome {
+        LoginOutcome::Generated {
+            fallback_note: Some(note),
+            ..
+        } => println!("kat: account key generated ({note})"),
         LoginOutcome::Generated { .. } => println!("kat: account key generated"),
         LoginOutcome::Imported { .. } => println!("kat: account key imported"),
+        LoginOutcome::Adopted { source, .. } => println!(
+            "kat: account key adopted from {} (copied into the account dir — the original is untouched)",
+            source.display()
+        ),
         LoginOutcome::Existing { .. } => println!("kat: already logged in (key loaded)"),
     }
     for line in account.summary_lines() {
@@ -231,10 +244,13 @@ fn run_kat_login(import_key: Option<&Path>) {
 /// view. Verifies key↔record agreement first (tamper evidence — identity is
 /// load-bearing for future sync, so a mismatch exits 1), then prints the
 /// identity block + (when a repo-local charge ledger exists) this repo's
-/// burn + balance projection with the per-repo caveat.
+/// burn + balance projection with the per-repo caveat. `--history` (Proposal
+/// 011 T0.2, ask 8.5) adds the local earned/spent view; the welcome line
+/// prints while the account is fresh (the service-side all-synced + nodes-
+/// healthy gate lands with Issue 061 T0.2b and replaces the heuristic).
 #[cfg(feature = "kat_service")]
-fn run_kat_account(paths: &[PathBuf]) {
-    use riir_clippy::kat_account::KatAccount;
+fn run_kat_account(paths: &[PathBuf], show_history: bool) {
+    use riir_clippy::kat_account::{history_lines, welcome_line, KatAccount};
     use riir_clippy::kat_meter::{ChargeState, KAT_WARN_REMAINING};
 
     let dir = KatAccount::default_dir();
@@ -258,28 +274,51 @@ fn run_kat_account(paths: &[PathBuf]) {
     // the server aggregates at Phase 1.
     let root = resolve_heal_root(paths);
     let charge_path = root.join(".heal").join("kat_charge.json");
-    if let Ok(text) = std::fs::read_to_string(&charge_path) {
-        match serde_json::from_str::<ChargeState>(&text) {
-            Ok(charge) => {
-                let grant = account.state().grant_kat;
-                let remaining = grant.saturating_sub(charge.charged_kat);
-                println!("local burn:          {} KAT charged this repo ({} tokens, watermark {})",
-                    charge.charged_kat, charge.meter_watermark_tokens, charge.meter_watermark_tokens);
-                println!("balance projection:  {remaining} of {grant} KAT (per-repo until server aggregation)");
-                if remaining <= KAT_WARN_REMAINING {
-                    println!("kat: WARN balance ≤ {KAT_WARN_REMAINING} — top up before the next long run (never blocks healing)");
-                }
+    let charge = std::fs::read_to_string(&charge_path)
+        .ok()
+        .and_then(|text| match serde_json::from_str::<ChargeState>(&text) {
+            Ok(charge) => Some(charge),
+            Err(e) => {
+                eprintln!(
+                    "kat account: charge ledger unreadable ({}): {e}",
+                    charge_path.display()
+                );
+                None
             }
-            Err(e) => eprintln!(
-                "kat account: charge ledger unreadable ({}): {e}",
-                charge_path.display()
-            ),
+        });
+
+    let grant = account.state().grant_kat;
+    match &charge {
+        Some(charge) => {
+            let remaining = grant.saturating_sub(charge.charged_kat);
+            println!("local burn:          {} KAT charged this repo ({} tokens, watermark {})",
+                charge.charged_kat, charge.meter_watermark_tokens, charge.meter_watermark_tokens);
+            println!("balance projection:  {remaining} of {grant} KAT (per-repo until server aggregation)");
+            if remaining <= KAT_WARN_REMAINING {
+                println!("kat: WARN balance ≤ {KAT_WARN_REMAINING} — top up before the next long run (never blocks healing)");
+            }
         }
-    } else {
-        println!(
-            "local burn:          (no charge ledger at {} — heal a repo to start one)",
-            charge_path.display()
-        );
+        None => {
+            println!(
+                "local burn:          (no charge ledger at {} — heal a repo to start one)",
+                charge_path.display()
+            );
+        }
+    }
+
+    // Proposal 011 T0.2: the welcome (while fresh) + the earned/spent view.
+    // Both render from LOCAL state only — the service-side events and the
+    // sync/node-health gate arrive with the dapps half (061 T0.2b) and are
+    // never fabricated here (the G9d posture).
+    let spent = charge.as_ref().map_or(0, |c| c.charged_kat);
+    let tokens = charge.as_ref().map_or(0, |c| c.meter_watermark_tokens);
+    if spent == 0 {
+        println!("{}", welcome_line());
+    }
+    if show_history {
+        for line in history_lines(grant, spent, tokens) {
+            println!("{line}");
+        }
     }
 }
 
@@ -1055,7 +1094,7 @@ USAGE:
     cargo heal --score-bench | --score-report        (needs --features score_bench)
     cargo heal --candidates <path>                   (T2.4 promotion gate, kat_service+score_bench)
     cargo heal login [--key <path>]                   (KAT account, needs --features kat_service)
-    cargo heal account [<path>]                       (KAT local view + repo burn, kat_service)
+    cargo heal account [<path>] [--history]            (KAT local view + repo burn + earned/spent, kat_service)
     cargo heal update                                 (corpus lease refresh, kat_transport)
     cargo heal sync                                   (push redacted batches + pull lease, kat_transport)
     cargo heal claim --tx <sig>                       (queue/submit a payment claim, kat_service)
@@ -1092,9 +1131,10 @@ USAGE:
                     RIIR_HEAL_TRAJ_ROOT (or the envelope fallback) and print
                     pool memory-fraction + memory win-rate + top-k rule
                     entropy, with a fresh-store baseline column. Read-only.
-    --corpus-stats  Count the four corpus domains by source-walking (the
-                    dashboard generator's counting, Issue 050 T2), print the
-                    table, and stamp today's rows into the trajectory store
+    --corpus-stats  Count the corpus domains (compiled builders where the
+                    feature is on, source-walk needle otherwise — 009-F2),
+                    print the table, and stamp today's rows into the
+                    trajectory store
                     (needs --features latent_retrieval; without it the table
                     prints + a warning says stamping is unavailable).
     --import-series Import .benchmarks/{{corpus,score}}_history.jsonl into the
@@ -1226,6 +1266,9 @@ struct Args {
     /// `update` / `sync` / `claim`), recognized only as the FIRST positional
     /// (a dir named `login` later in the arg list still scans).
     command: Option<KatCommand>,
+    /// `--history` — with `account`: render the local earned/spent history
+    /// (Proposal 011 T0.2, ask 8.5).
+    account_history: bool,
     /// `--key <path>` — import an existing OpenSSH Ed25519 private key at
     /// `login` instead of generating one.
     import_key: Option<PathBuf>,
@@ -1260,8 +1303,8 @@ struct Args {
     /// sweep of the live overlay first, then gate + persist + report).
     /// Standalone mode — no paths. Needs `kat_service` + `score_bench`.
     candidates_path: Option<PathBuf>,
-    /// Issue 050 T2: `--corpus-stats` — count the four corpus domains by
-    /// source-walking (the dashboard generator's counting, now in Rust),
+    /// Issue 050 T2: `--corpus-stats` — count the corpus domains (runtime
+    /// builders where compiled, the source-walk needle otherwise — 009-F2),
     /// print the table, and stamp today's rows into the trajectory store
     /// (`latent_retrieval` builds). Standalone mode — no paths.
     corpus_stats: bool,
@@ -1277,6 +1320,7 @@ struct Args {
 
 fn parse_args() -> Args {
     let mut args = Args {
+        account_history: false,
         suggest: false,
         fix: false,
         fix_compile: false,
@@ -1421,6 +1465,7 @@ fn parse_args() -> Args {
                 });
             }
             "--no-update" => args.no_update = true,
+            "--history" => args.account_history = true,
             "--no-reheat" => args.no_reheat = true,
             "--candidates" => {
                 let Some(value) = it.next() else {
@@ -1459,6 +1504,10 @@ fn parse_args() -> Args {
             }
             path => args.paths.push(PathBuf::from(path)),
         }
+    }
+    if args.account_history && !matches!(args.command, Some(KatCommand::Account)) {
+        eprintln!("--history requires the `account` command");
+        usage();
     }
     if args.paths.is_empty()
         && args.command.is_none()
@@ -1658,6 +1707,12 @@ fn run_score_bench() {
 /// `CORPUS_DOMAINS` (Issue 050 T2). Paths are repo-relative; a directory
 /// counts its DIRECT `*.rs` children except `mod.rs`, a single file counts
 /// itself.
+// Proposal 009 §F2 item (ii): the authoritative count for a COMPILED domain is
+// `build_*_seed_corpus().len()` at runtime — a text needle cannot see rules
+// built through a helper (docker's `rule(...)` builder measured 2 by needle
+// vs 31 actual, which is how the committed corpus_history.jsonl series drifted).
+// The needle source-walk remains the fallback for domains not compiled into
+// this binary (feature off), labeled honestly in the table + the store stamp.
 const CORPUS_DOMAIN_TABLE: &[(&str, &str, &str)] = &[
     ("kernel_opt", "src/domains/kernel_opt/corpus", "rule_id:"),
     ("rust_perf", "src/domains/rust_perf/corpus.rs", "rule_id:"),
@@ -1678,6 +1733,40 @@ fn domain_compiled(domain: &str) -> bool {
         "sec" => cfg!(feature = "sec"),
         "docker" => cfg!(feature = "docker"),
         _ => false,
+    }
+}
+
+/// The COMPILED corpus size for one domain — [`None`] when the domain's
+/// feature is off in this binary (the caller falls back to the source-walk
+/// needle). Each arm rides the same feature as the re-exported builder, so
+/// every combination compiles and the runtime path can never count a corpus
+/// the binary does not contain.
+fn runtime_corpus_count(domain: &str) -> Option<u32> {
+    match domain {
+        #[cfg(feature = "clippy_lints")]
+        "clippy_lints" => {
+            Some(u32::try_from(riir_clippy::build_seed_corpus().entries.len()).unwrap_or(u32::MAX))
+        }
+        #[cfg(feature = "rust_perf")]
+        "rust_perf" => Some(
+            u32::try_from(riir_clippy::build_perf_seed_corpus().entries.len())
+                .unwrap_or(u32::MAX),
+        ),
+        #[cfg(feature = "kernel_heal")]
+        "kernel_opt" => Some(
+            u32::try_from(riir_clippy::build_kernel_seed_corpus().entries.len())
+                .unwrap_or(u32::MAX),
+        ),
+        #[cfg(feature = "sec")]
+        "sec" => {
+            Some(u32::try_from(riir_clippy::build_sec_seed_corpus().entries.len()).unwrap_or(u32::MAX))
+        }
+        #[cfg(feature = "docker")]
+        "docker" => Some(
+            u32::try_from(riir_clippy::build_docker_seed_corpus().entries.len())
+                .unwrap_or(u32::MAX),
+        ),
+        _ => None,
     }
 }
 
@@ -1735,11 +1824,13 @@ fn resolve_corpus_repo_root() -> Option<PathBuf> {
 }
 
 /// Issue 050 T2: the `--corpus-stats` / `--import-series` standalone mode.
-/// Counts the four corpus domains by source-walking, prints the table, and
-/// (under `latent_retrieval`) stamps today's rows into the trajectory
-/// store, runs the jsonl imports, and serves the `--json` dashboard
-/// payload. With `--json` the human table + import lines go to STDERR so
-/// stdout carries ONLY the JSON object (the dashboard's parse contract).
+/// Counts the corpus domains (runtime builders where the feature is on,
+/// source-walk needle otherwise — Proposal 009 §F2 item (ii)), prints the
+/// table, and (under `latent_retrieval`) stamps today's rows into the
+/// trajectory store, runs the jsonl imports, and serves the `--json`
+/// dashboard payload. With `--json` the human table + import lines go to
+/// STDERR so stdout carries ONLY the JSON object (the dashboard's parse
+/// contract).
 fn run_corpus_stats(with_stats: bool, as_json: bool, do_import: bool) {
     let Some(repo) = resolve_corpus_repo_root() else {
         eprintln!(
@@ -1749,10 +1840,16 @@ fn run_corpus_stats(with_stats: bool, as_json: bool, do_import: bool) {
         );
         std::process::exit(1);
     };
-    let table: Vec<(&str, u32, bool)> = CORPUS_DOMAIN_TABLE
+    let table: Vec<(&str, u32, bool, &'static str)> = CORPUS_DOMAIN_TABLE
         .iter()
-        .map(|(domain, rel, needle)| {
-            (*domain, count_corpus_domain(&repo, rel, needle), domain_compiled(domain))
+        .map(|(domain, rel, needle)| match runtime_corpus_count(domain) {
+            Some(n) => (*domain, n, true, "runtime-corpus"),
+            None => (
+                *domain,
+                count_corpus_domain(&repo, rel, needle),
+                domain_compiled(domain),
+                "source-walk",
+            ),
         })
         .collect();
 
@@ -1765,9 +1862,9 @@ fn run_corpus_stats(with_stats: bool, as_json: bool, do_import: bool) {
         }
     };
     say(&format!("corpus stats (repo {}):", repo.display()));
-    for (domain, count, compiled) in &table {
+    for (domain, count, compiled, source) in &table {
         say(&format!(
-            "  {domain:<14} {count:>5}  compiled={compiled}  (source-walk)"
+            "  {domain:<14} {count:>5}  compiled={compiled}  ({source})"
         ));
     }
 
@@ -1808,8 +1905,8 @@ fn run_corpus_stats(with_stats: bool, as_json: bool, do_import: bool) {
         if with_stats {
             let day = riir_clippy::traj_store::today_local_date();
             let mut stamped = 0usize;
-            for (domain, count, compiled) in &table {
-                match store.upsert_corpus_count(&day, domain, *count, *compiled, "source-walk") {
+            for (domain, count, compiled, source) in &table {
+                match store.upsert_corpus_count(&day, domain, *count, *compiled, source) {
                     Ok(()) => stamped += 1,
                     Err(e) => eprintln!("corpus-stats: stamp {domain} failed: {e}"),
                 }
@@ -1843,7 +1940,7 @@ fn run_corpus_stats(with_stats: bool, as_json: bool, do_import: bool) {
             let today = riir_clippy::traj_store::today_local_date();
             let mut today_obj = serde_json::Map::new();
             today_obj.insert("ts".into(), serde_json::Value::String(today.clone()));
-            for (domain, count, compiled) in &table {
+            for (domain, count, compiled, _source) in &table {
                 today_obj.insert(
                     (*domain).into(),
                     serde_json::json!({ "count": count, "compiled": compiled }),
@@ -2010,7 +2107,7 @@ fn main() {
     if let Some(cmd) = args.command {
         match cmd {
             KatCommand::Login => run_kat_login(args.import_key.as_deref()),
-            KatCommand::Account => run_kat_account(&args.paths),
+            KatCommand::Account => run_kat_account(&args.paths, args.account_history),
             KatCommand::Claim => run_kat_claim(args.claim_tx.as_deref()),
             #[cfg(feature = "kat_transport")]
             KatCommand::Update => run_kat_update(),

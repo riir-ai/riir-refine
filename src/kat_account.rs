@@ -81,9 +81,22 @@ pub struct AccountState {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LoginOutcome {
     /// No key existed; a fresh Ed25519 keypair was generated + written.
-    Generated { account_id: String },
+    /// `fallback_note` records why an existing key was not adopted
+    /// ([`KatAccount::login_default`] only — plain [`KatAccount::login`]
+    /// emits `None`).
+    Generated {
+        account_id: String,
+        fallback_note: Option<String>,
+    },
     /// `--key <path>` imported an existing OpenSSH private key.
     Imported { account_id: String },
+    /// A fresh account ADOPTED an existing key (the machine's default SSH
+    /// key or a `RIIR_HEAL_KAT_KEY` override — Proposal 011 T0.2): the
+    /// identity inherits the adopted key, so the BLAKE3(pubkey) account id
+    /// matches what the GitHub `.keys` key-match derives for that key.
+    /// The source path is carried for the disclosure print (caveat #8 —
+    /// say exactly which key landed where).
+    Adopted { account_id: String, source: PathBuf },
     /// A key already existed in the account dir; it was loaded as-is.
     Existing { account_id: String },
 }
@@ -93,8 +106,9 @@ impl LoginOutcome {
     #[must_use]
     pub fn account_id(&self) -> &str {
         match self {
-            Self::Generated { account_id }
+            Self::Generated { account_id, .. }
             | Self::Imported { account_id }
+            | Self::Adopted { account_id, .. }
             | Self::Existing { account_id } => account_id,
         }
     }
@@ -201,8 +215,101 @@ impl KatAccount {
             let account_id = account.state.account_id.clone();
             Ok((account, LoginOutcome::Existing { account_id }))
         } else {
-            Self::generate_into(dir)
+            Self::generate_into(dir, None)
         }
+    }
+
+    /// `cargo heal login` with the Proposal 011 T0.2 default chain — zero
+    /// configuration for the onboarding loop (ask 8.2). In order:
+    ///
+    /// 1. an existing account key wins → [`LoginOutcome::Existing`] (the
+    ///    idempotence contract is unchanged; adoption never re-binds an
+    ///    account);
+    /// 2. `RIIR_HEAL_KAT_KEY` (a private-key path) overrides the default
+    ///    location and fails LOUDLY when set but unusable — explicit
+    ///    configuration must not silently fall back to a different identity;
+    /// 3. otherwise adopt the machine's default SSH key (`~/.ssh/id_ed25519`,
+    ///    `HOME`/`USERPROFILE`) when it exists, parses, and is an unencrypted
+    ///    Ed25519 key — copied into the account dir (the [`Self::login_import`]
+    ///    semantics: 0600, pub sidecar, fresh record) so the key-file-is-the-
+    ///    authority invariant holds everywhere; the original stays untouched;
+    /// 4. anything else → generate fresh, with the reason recorded in
+    ///    [`LoginOutcome::Generated`]'s `fallback_note` (one honest line,
+    ///    never a silent identity change).
+    ///
+    /// SSH-key rotation afterwards leaves the account on the OLD identity —
+    /// the same ops-assisted re-binding posture Proposal 011 caveat #7
+    /// documents; no self-service re-bind.
+    ///
+    /// # Errors
+    ///
+    /// String errors: the `RIIR_HEAL_KAT_KEY` override unreadable/unparseable,
+    /// or the account-dir/record write failures shared with [`Self::login`].
+    pub fn login_default(dir: &Path) -> Result<(Self, LoginOutcome), String> {
+        let key_path = dir.join(Self::KEY_FILE);
+        if key_path.exists() {
+            let account = Self::load(dir)?;
+            let account_id = account.state.account_id.clone();
+            return Ok((account, LoginOutcome::Existing { account_id }));
+        }
+        if let Ok(source) = std::env::var(Self::KEY_OVERRIDE_ENV) {
+            return Self::adopt(dir, Path::new(&source));
+        }
+        match Self::machine_default_ssh_key() {
+            Some(source) => Self::adopt(dir, &source),
+            None => Self::generate_into(
+                dir,
+                Some(
+                    "no default SSH key at ~/.ssh/id_ed25519 — generated a dedicated account key"
+                        .to_string(),
+                ),
+            ),
+        }
+    }
+
+    /// The `RIIR_HEAL_KAT_KEY` override: a private-key path adopted by
+    /// [`Self::login_default`] when no account key exists yet.
+    pub const KEY_OVERRIDE_ENV: &'static str = "RIIR_HEAL_KAT_KEY";
+
+    /// The machine's default Ed25519 SSH private key, if one exists
+    /// (`$HOME`/`$USERPROFILE` → `.ssh/id_ed25519`). The `.pub` alone cannot
+    /// sign, so adoption reads the private half — and adoption requires
+    /// Ed25519 (the only key type the account supports).
+    fn machine_default_ssh_key() -> Option<PathBuf> {
+        let home = std::env::var_os("HOME")
+            .or_else(|| std::env::var_os("USERPROFILE"))?;
+        let path = PathBuf::from(home)
+            .join(".ssh")
+            .join("id_ed25519");
+        path.is_file().then_some(path)
+    }
+
+    /// Adopt an existing OpenSSH Ed25519 private key as a FRESH account's
+    /// key — the shared body of [`Self::login_import`] and
+    /// [`Self::login_default`]'s adoption arms. Never called with an account
+    /// key already present (both callers check first).
+    fn adopt(dir: &Path, source: &Path) -> Result<(Self, LoginOutcome), String> {
+        let text = std::fs::read_to_string(source)
+            .map_err(|e| format!("reading key {}: {e}", source.display()))?;
+        let key = parse_private_key(&text)?;
+
+        std::fs::create_dir_all(dir)
+            .map_err(|e| format!("creating account dir {}: {e}", dir.display()))?;
+        let openssh = key
+            .to_openssh(LineEnding::LF)
+            .map_err(|e| format!("serializing key: {e}"))?;
+        write_private(&dir.join(Self::KEY_FILE), &openssh)?;
+        Self::write_pub_sidecar(dir, &key)?;
+
+        let account = Self::with_fresh_record(dir, &key)?;
+        let account_id = account.state.account_id.clone();
+        Ok((
+            account,
+            LoginOutcome::Adopted {
+                account_id,
+                source: source.to_path_buf(),
+            },
+        ))
     }
 
     /// `cargo heal login --key <path>` — import an existing OpenSSH Ed25519
@@ -239,8 +346,10 @@ impl KatAccount {
         Ok((account, LoginOutcome::Imported { account_id }))
     }
 
-    /// Generate a fresh Ed25519 keypair into the account dir.
-    fn generate_into(dir: &Path) -> Result<(Self, LoginOutcome), String> {
+    /// Generate a fresh Ed25519 keypair into the account dir. `fallback_note`
+    /// is the [`LoginOutcome::Generated`] disclosure for why an existing key
+    /// was not adopted (the [`Self::login_default`] chain only).
+    fn generate_into(dir: &Path, fallback_note: Option<String>) -> Result<(Self, LoginOutcome), String> {
         let mut key = PrivateKey::random(&mut ssh_key::rand_core::OsRng, Algorithm::Ed25519)
             .map_err(|e| format!("generating Ed25519 keypair: {e}"))?;
         key.set_comment("riir-heal kat account");
@@ -255,7 +364,13 @@ impl KatAccount {
 
         let account = Self::with_fresh_record(dir, &key)?;
         let account_id = account.state.account_id.clone();
-        Ok((account, LoginOutcome::Generated { account_id }))
+        Ok((
+            account,
+            LoginOutcome::Generated {
+                account_id,
+                fallback_note,
+            },
+        ))
     }
 
     /// Build the account over a just-written key with a FRESH record — the
@@ -445,6 +560,36 @@ impl KatAccount {
     }
 }
 
+/// Proposal 011 T0.2 (ask 8.5): the LOCAL earned/spent history lines for
+/// `cargo heal account --history`. Earned is the login-grant projection —
+/// server-side events (mining credits, settlement, wet-run refunds labeled)
+/// land with the service half (Issue 061 T0.2b) and are deliberately NOT
+/// fabricated here. Spent is this repo's metered burn. Every line obeys the
+/// caveat-#15 copy rule (no `$` beside a KAT figure — none at all), pinned
+/// by [`tests::history_lines_obey_the_copy_rule`].
+#[must_use]
+pub fn history_lines(grant_kat: u64, spent_kat: u64, metered_tokens: u64) -> Vec<String> {
+    vec![
+        "history (local view — server events land with the service half):".to_string(),
+        format!("  earned:  {grant_kat} KAT (login grant projection)"),
+        format!("  spent:   {spent_kat} KAT ({metered_tokens} tokens metered, this repo)"),
+        format!(
+            "  balance: {} KAT (per-repo projection)",
+            grant_kat.saturating_sub(spent_kat)
+        ),
+    ]
+}
+
+/// Proposal 011 T0.2 (ask 8.3): the welcome line. The proposal's full gate
+/// ("when all-synced + nodes healthy") needs the service plane; the local
+/// render prints it while the account is fresh (no local burn) and the
+/// service-side gate REPLACES that heuristic when it lands (Issue 061
+/// T0.2b) — never a claim of sync health the CLI cannot see.
+#[must_use]
+pub fn welcome_line() -> &'static str {
+    "welcome to the KAT network — this account is live; heal a repo to start metering"
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -529,6 +674,125 @@ mod tests {
 
         // A second import into the same dir refuses (never overwrites).
         assert!(KatAccount::login_import(&dir, &source_key).is_err());
+    }
+
+    #[test]
+    fn login_default_adopts_the_machine_ssh_key() {
+        // Env-mutating tests are serialized (process-global env + parallel
+        // test threads is the Plan-545 pollution class).
+        let _env = ENV_LOCK.lock().unwrap();
+        // 011 T0.2: seed a plausible "machine default" by pointing HOME at a
+        // temp root carrying ~/.ssh/id_ed25519, then login_default must adopt
+        // it (identity = the adopted key's derivation) rather than generate.
+        let home = temp_dir("home");
+        let ssh_dir = home.join(".ssh");
+        std::fs::create_dir_all(&ssh_dir).unwrap();
+        let key_dir = temp_dir("seedkey");
+        let (seed, _) = KatAccount::login(&key_dir).unwrap();
+        std::fs::copy(key_dir.join(KatAccount::KEY_FILE), ssh_dir.join("id_ed25519")).unwrap();
+
+        // Shield the test from the developer's real HOME and any override,
+        // then restore both (lock-guarded, so no sibling test races the env).
+        let saved_home = std::env::var_os("HOME");
+        let saved_override = std::env::var(KatAccount::KEY_OVERRIDE_ENV).ok();
+        std::env::set_var("HOME", &home);
+        std::env::remove_var(KatAccount::KEY_OVERRIDE_ENV);
+        let dir = temp_dir("adopt");
+        let result = KatAccount::login_default(&dir);
+        restore_env("HOME", saved_home, KatAccount::KEY_OVERRIDE_ENV, saved_override);
+        let (account, outcome) = result.unwrap();
+
+        assert!(
+            matches!(outcome, LoginOutcome::Adopted { ref source, .. } if source.ends_with("id_ed25519")),
+            "outcome must record the adopted source"
+        );
+        assert_eq!(
+            account.state().account_id,
+            seed.state().account_id,
+            "the account id must be the adopted key's derivation"
+        );
+        assert!(!matches!(outcome, LoginOutcome::Generated { .. }));
+    }
+
+    #[test]
+    fn login_default_falls_back_to_generate_with_a_note_when_no_ssh_key() {
+        let _env = ENV_LOCK.lock().unwrap();
+        let home = temp_dir("empty-home");
+        let saved_home = std::env::var_os("HOME");
+        let saved_override = std::env::var(KatAccount::KEY_OVERRIDE_ENV).ok();
+        std::env::set_var("HOME", &home);
+        std::env::remove_var(KatAccount::KEY_OVERRIDE_ENV);
+        let dir = temp_dir("fallback");
+        let result = KatAccount::login_default(&dir);
+        restore_env("HOME", saved_home, KatAccount::KEY_OVERRIDE_ENV, saved_override);
+
+        let (account, outcome) = result.unwrap();
+        let LoginOutcome::Generated { fallback_note, .. } = &outcome else {
+            panic!("expected the generate fallback, got {outcome:?}");
+        };
+        assert!(
+            fallback_note.as_deref().is_some_and(|n| n.contains("id_ed25519")),
+            "the fallback must disclose why (no default SSH key)"
+        );
+        assert!(!account.state().account_id.is_empty());
+    }
+
+    #[test]
+    fn login_default_existing_key_wins_and_env_override_is_loud() {
+        let _env = ENV_LOCK.lock().unwrap();
+        // (1) An existing account key wins over everything — adoption never
+        // re-binds. (2) A set-but-unusable RIIR_HEAL_KAT_KEY fails LOUDLY
+        // (explicit config must not silently fall back to another identity).
+        let dir = temp_dir("existing");
+        let (first, _) = KatAccount::login(&dir).unwrap();
+        let (again, outcome) = KatAccount::login_default(&dir).unwrap();
+        assert!(matches!(outcome, LoginOutcome::Existing { .. }));
+        assert_eq!(first.state(), again.state());
+
+        std::env::set_var(KatAccount::KEY_OVERRIDE_ENV, "Z:/definitely/missing/key");
+        let fresh_dir = temp_dir("override");
+        let result = KatAccount::login_default(&fresh_dir);
+        std::env::remove_var(KatAccount::KEY_OVERRIDE_ENV);
+        assert!(result.is_err(), "a set override pointing nowhere must error, not fall back");
+    }
+
+    /// Serialize the env-mutating tests (process-global env + parallel test
+    /// threads is the Plan-545 pollution class).
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    /// Restore two env vars by saved values (`None` = remove). Lock-held by
+    /// the callers; split out so each test's restore path is one line.
+    fn restore_env(
+        name_a: &str,
+        saved_a: Option<std::ffi::OsString>,
+        name_b: &str,
+        saved_b: Option<String>,
+    ) {
+        match saved_a {
+            Some(v) => std::env::set_var(name_a, v),
+            None => std::env::remove_var(name_a),
+        }
+        match saved_b {
+            Some(v) => std::env::set_var(name_b, v),
+            None => std::env::remove_var(name_b),
+        }
+    }
+
+    #[test]
+    fn history_lines_obey_the_copy_rule() {
+        // The caveat-#15 gate (no $ beside a KAT figure) for the T0.2 renders.
+        let lines = history_lines(FREE_TIER_GRANT_KAT, 1_234, 56_789);
+        assert_eq!(lines.len(), 4);
+        for line in &lines {
+            assert!(!line.contains('$'), "copy rule: no $ in a KAT render — got {line:?}");
+            if line.contains("KAT") {
+                assert!(line.len() < 120, "render discipline: keep lines short");
+            }
+        }
+        assert!(lines[3].contains(&(FREE_TIER_GRANT_KAT - 1_234).to_string()),
+            "balance is the saturation subtraction, not a wrapped one");
+        assert!(!welcome_line().contains('$'));
+        assert!(welcome_line().contains("KAT network"));
     }
 
     #[test]

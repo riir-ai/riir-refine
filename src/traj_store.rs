@@ -187,15 +187,25 @@ pub struct CorpusCountRow {
     /// The corpus domain (`kernel_opt` / `rust_perf` / `clippy_lints` / `sec`).
     pub domain: String,
     /// Marker occurrences counted by the source walk (`rule_id:` /
-    /// `lint_name:`).
+    /// `lint_name:`), or the compiled corpus size when [`Self::source_note`]
+    /// is `"runtime-corpus"`.
     pub count: u32,
     /// Whether the domain's feature was compiled into the binary that
     /// stamped the row (`cfg!(feature = ...)` — text counts and compiled
     /// liveness are different facts).
     pub compiled: bool,
     /// Where the row came from: `"source-walk"` (the `--corpus-stats`
-    /// stamp) or `"import-jsonl"` (the one-time jsonl import).
+    /// needle fallback), `"runtime-corpus"` (the compiled builder count —
+    /// Plan 059 B1, the 009-F2 fix), or `"import-jsonl"` (the one-time
+    /// jsonl import).
     pub source_note: String,
+}
+
+/// The first-hand corpus provenances — a live `--corpus-stats` stamp
+/// (either counting mode). The jsonl import yields to these; only a
+/// second-hand `import-jsonl` row may be superseded by a re-import.
+fn is_first_hand_corpus_source(note: &str) -> bool {
+    matches!(note, "source-walk" | "runtime-corpus")
 }
 
 /// One durable score-run row (Issue 050 T2) — the Warm-tier twin of a
@@ -1120,10 +1130,10 @@ impl TrajStore {
     /// per domain with `source_note = "import-jsonl"` and
     /// `compiled = false` (the flat shape carries no compiled fact — an
     /// imported row honestly records "not verified"). Unchanged rows are
-    /// not rewritten, and an existing `source-walk` row is NEVER clobbered
-    /// (the first-hand stamp outranks the second-hand projection — the
-    /// store is the source of truth, so re-importing a stale jsonl cannot
-    /// overwrite today's live stamp).
+    /// not rewritten, and an existing FIRST-HAND stamp (`source-walk` or
+    /// `runtime-corpus`) is NEVER clobbered — the live stamp outranks the
+    /// second-hand projection (the store is the source of truth, so
+    /// re-importing a stale jsonl cannot overwrite today's live count).
     ///
     /// Returns `(rows_seen, rows_written)`.
     ///
@@ -1173,14 +1183,15 @@ impl TrajStore {
                     source_note: "import-jsonl".to_string(),
                 };
                 let key = Self::corpus_key(day, domain);
-                // Provenance precedence: a first-hand source-walk stamp
-                // outranks the second-hand projection — yield, count as
-                // seen only. Same-provenance re-imports compare-and-put.
+                // Provenance precedence: a first-hand live stamp (source-walk
+                // needle OR the runtime corpus builder — Plan 059 B2) outranks
+                // the second-hand projection — yield, count as seen only.
+                // Same-provenance re-imports compare-and-put.
                 let yields = self
                     .kv
                     .get_bytes(&key)
                     .and_then(|old| serde_json::from_slice::<CorpusCountRow>(&old).ok())
-                    .is_some_and(|old| old.source_note == "source-walk");
+                    .is_some_and(|old| is_first_hand_corpus_source(&old.source_note));
                 if yields {
                     continue;
                 }
@@ -2343,6 +2354,32 @@ mod tests {
         let (seen2, written2) = store.import_corpus_jsonl(&corpus_jsonl).unwrap();
         assert_eq!((seen2, written2), (2, 0), "same-bytes re-import writes nothing");
         assert_eq!(store.corpus_series().unwrap().len(), 2);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn corpus_import_yields_to_a_runtime_corpus_row_too() {
+        // Plan 059 B2 (the 009-F2 fix): `runtime-corpus` is a FIRST-HAND
+        // provenance (the compiled builder count), so a stale committed
+        // projection must not clobber it either — the precedence check
+        // previously covered only `source-walk`, which would have let the
+        // very drift the fix corrects (docker 2 vs 31) re-enter the store
+        // on the next --import-series.
+        let root = tmp_root("corpus-import-runtime-precedence");
+        let dir = root.join("benchmarks");
+        std::fs::create_dir_all(&dir).unwrap();
+        let corpus_jsonl = dir.join("corpus_history.jsonl");
+        std::fs::write(&corpus_jsonl, "{\"ts\":\"2026-09-01\",\"docker\":2}\n").unwrap();
+        let (store, _) = TrajStore::open(&root).unwrap();
+        store
+            .upsert_corpus_count("2026-09-01", "docker", 31, true, "runtime-corpus")
+            .unwrap();
+        let (seen, written) = store.import_corpus_jsonl(&corpus_jsonl).unwrap();
+        assert_eq!((seen, written), (1, 0), "the stale projection yields");
+        let series = store.corpus_series().unwrap();
+        assert_eq!(series.len(), 1);
+        assert_eq!(series[0].count, 31, "runtime-corpus stamp survived the import");
+        assert_eq!(series[0].source_note, "runtime-corpus");
         let _ = std::fs::remove_dir_all(&root);
     }
 
