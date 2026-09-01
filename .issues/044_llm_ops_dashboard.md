@@ -110,12 +110,17 @@ Leftovers found + removed (owner ask: "any active on cloudflare leftover?"):
       409/network failure fail-soft, new `row.mint_post` field — the local
       `row.mint_anchor` untouched; status strings `anchor-only`/`accruing`,
       heartbeat `idle`). Deployed-but-INERT: neither var is set on the
-      worker (verified absent from `.env` too) — the swap arms only when the
+      Deployed-but-INERT: neither var is set on the worker (verified absent from
+      `.env` too) — the swap arms only when the
       owner pushes the two secrets, by design. Remaining (why this stays
-      `[-]`): the kat-service production deploy + the two owner secrets, and
-      the server half of the route (sibling riir-dapps, in flight — see the
-      045 T6 contract note: the server must key replays on `(date, neurons)`,
-      not raw bytes, because `generated_at` differs per run).
+      `[-]`): the kat-service production deploy + the two owner secrets. The
+      SERVER half of the route LANDED 2026-09-01 (riir-dapps `10ffb18`):
+      `POST/GET /mint-anchor` on the kat-service ledger DO, bearer
+      `KAT_MINT_TOKEN` (503 fail-closed unset), exactly-once per date keyed
+      SEMANTICALLY on `(date, neurons)` — the 045 T6 contract concern is
+      resolved (replays never rewrite; first-post `source`/`generated_at`
+      win), attestation-only (`Meta`/`mint_demand`/balances untouched);
+      workerd e2e green incl. two SIGKILL cold reboots.
       Prior blocker history: PARTIAL 2026-08-26 (Issue 045); reworded
       2026-08-28 (Proposal 005 Phase 1 landed 2026-08-27, so the blocker was
       the deferred Worker/DO shell). Ledger rows carry the `kat` field,

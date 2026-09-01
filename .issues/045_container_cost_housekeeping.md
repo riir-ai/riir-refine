@@ -302,14 +302,27 @@ lives (T1 above).
       serves DISTINCT counts per date window — the T9 lesson — and models
       the server's replay semantics). Dry-run: 28.43 KiB / 8.61 KiB gzip,
       7 bindings resolve, bundle carries the new code. **Go-live residual
-      (owner + sibling):** kat-service production deploy; the server half of
-      the route; then `npx wrangler secret put KAT_SERVICE_URL` +
-      `KAT_MINT_TOKEN`. **Contract note for the sibling (IMPORTANT):** the
-      body carries `generated_at`, which differs on every run — a server
-      keying strict BYTE-identity would 409 every hourly re-post and break
-      the stateless design; the replay key must be `(date, neurons)`
-      semantically (byte-identity applies only to a transport retry of the
-      same request). Prior state: Proposal 005 Phase 1 landed 2026-08-27
+      (owner):** kat-service production deploy; then `npx wrangler secret
+      put KAT_SERVICE_URL` + `KAT_MINT_TOKEN`. **Server half LANDED
+      2026-09-01 (riir-dapps `10ffb18`) — the contract note below is
+      CONFIRMED IMPLEMENTED:** `POST/GET /mint-anchor` keys replays
+      semantically on `(date, neurons)` (never byte-identity — `generated_at`
+      is stored from the FIRST post and never rewritten), 503 fail-closed
+      when `KAT_MINT_TOKEN` is unset, exactly-once + forward-only + 409
+      conflict/superseded, attestation-only (no `Meta`/`mint_demand`/
+      balance mutation). Client-relevant pin-decisions of record: body
+      `source`/`generated_at` OPTIONAL (this worker sends both — accepted,
+      512-byte cap); dates are strict zero-padded `YYYY-MM-DD` (civil-validated);
+      "today" accepted, only strictly-future is 400 (this worker posts
+      yesterday — always safe); 401 body `{"error":"mint-anchor
+      unauthorized"}` (fail-soft on our side either way); the server's
+      constant-time compare is BLAKE3-digest internally (no wire impact).
+      **Contract note preserved (now satisfied):** the body carries
+      `generated_at`, which differs on every run — a server keying strict
+      BYTE-identity would 409 every hourly re-post and break the stateless
+      design; the replay key must be `(date, neurons)` semantically
+      (byte-identity applies only to a transport retry of the same
+      request). Prior state: Proposal 005 Phase 1 landed 2026-08-27
       (T1.5 dapps `84dd049` / T1.6 clippy `0a7cfd8`); the deferred Worker/DO
       shell was the blocker 2026-08-28 → 2026-08-29; status strings were
       `pending-worker-shell` (deployed `f93ae507`).
