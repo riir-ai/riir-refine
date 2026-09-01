@@ -99,6 +99,33 @@ impl BlockScan<'_> {
                     if (i + 1..j).any(|k| stmt_binds_ident(&stmts[k], &root)) {
                         break;
                     }
+                    // A bare-path root bound by a same-block `let` with an
+                    // OPAQUE init may not expose `.len()` at all: rusqlite's
+                    // `let rows = stmt.query_map(..)?` yields `MappedRows`, an
+                    // iterator with no `len()` — the emitted
+                    // `with_capacity(rows.len())` is E0599 (found live in
+                    // seal-game-editor editor-data, 9 reverts in one sweep).
+                    // Parse-only can't type the init, so any non-whitelisted
+                    // init shape refuses; params/outer-scope bindings stay
+                    // permissive (the `--verify` compile gate backstops them).
+                    if len_expr_is_bare_ident(&fl.expr) {
+                        let same_block_binding = (0..i).rev().find_map(|k| match &stmts[k] {
+                            Stmt::Local(l) => {
+                                let mut pat = &l.pat;
+                                while let Pat::Type(pt) = pat {
+                                    pat = &pt.pat;
+                                }
+                                (matches!(pat, Pat::Ident(pi) if pi.ident == root))
+                                    .then_some(l)
+                            }
+                            _ => None,
+                        });
+                        if let Some(local) = same_block_binding {
+                            if !init_is_known_len(local) {
+                                break;
+                            }
+                        }
+                    }
                 }
                 self.edits.push(edit(
                     &init.expr,
@@ -215,6 +242,49 @@ fn iterable_root_ident(e: &Expr) -> Option<String> {
             Some(p.path.segments[0].ident.to_string())
         }
         _ => None,
+    }
+}
+
+/// True when the iterable is a bare single-segment path (no `&`, no
+/// `.iter()`, no field chain) — the only shape the opaque-init guard
+/// refines; field chains and refs keep the pre-existing permissiveness.
+fn len_expr_is_bare_ident(e: &Expr) -> bool {
+    matches!(e, Expr::Path(p) if p.path.segments.len() == 1)
+}
+
+/// Does the local's init expression expose a `len()` we can trust?
+/// Whitelist of shapes whose len-ability is certain; everything opaque
+/// (method calls, `?`, awaits, calls, non-`vec!` macros) refuses.
+fn init_is_known_len(local: &Local) -> bool {
+    let Some(init) = &local.init else { return false };
+    known_len_expr(&init.expr)
+}
+
+fn known_len_expr(e: &Expr) -> bool {
+    match e {
+        // Array literals are certainly len-able; bare paths are the
+        // historical permissive class (params, outer bindings, `let rows =
+        // other_rows;` aliases — unknowable at parse time, the `--verify`
+        // compile gate backstops them).
+        Expr::Array(_) | Expr::Path(_) => true,
+        Expr::Macro(m) => m.mac.path.segments.last().is_some_and(|s| s.ident == "vec"),
+        Expr::Reference(r) => known_len_expr(&r.expr),
+        Expr::Group(g) => known_len_expr(&g.expr),
+        Expr::Paren(p) => known_len_expr(&p.expr),
+        // `Vec::new()` / `HashMap::with_capacity(..)` / `String::from(..)` —
+        // constructor calls on a len-able container (the SECOND-to-last path
+        // segment must be a known len-able type, so `Rc::new(..)` refuses —
+        // an `Rc<Vec<_>>` has no `.len()`).
+        Expr::Call(call) => {
+            matches!(&*call.func, Expr::Path(p)
+                if matches!(p.path.segments.last().map(|s| s.ident.to_string()).as_deref(),
+                            Some("new" | "with_capacity" | "from"))
+                    && p.path.segments.len() >= 2
+                    && matches!(p.path.segments[p.path.segments.len() - 2].ident.to_string().as_str(),
+                                "Vec" | "String" | "VecDeque" | "HashMap" | "HashSet"
+                                | "BTreeMap" | "BTreeSet"))
+        }
+        _ => false,
     }
 }
 
@@ -495,6 +565,94 @@ mod tests {
             "use std::collections::HashMap;\nfn f(names: Vec<String>) -> HashMap<String, u32> {\n    \
              let mut m = HashMap::new();\n    let names: Vec<String> = names.into_iter().take(2).collect();\n    \
              for n in &names {\n        m.insert(n.clone(), 1);\n    }\n    m\n}",
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn opaque_method_call_init_skips() {
+        // A bare-path iterable bound to an OPAQUE method-call result may not
+        // expose `.len()` at all: rusqlite's `stmt.query_map(..)?` yields
+        // `MappedRows`, an iterator with no `len()` — the emitted
+        // `with_capacity(rows.len())` is E0599 (found live in seal-game-editor
+        // editor-data: 9 reverts in one sweep). Parse-only can't type the
+        // init, so the shape refuses.
+        assert!(propose_fix(
+            "hashmap-with-capacity",
+            "use std::collections::HashMap;\nfn f(rows: MappedRows<'_, F>) -> HashMap<i32, String> {\n    \
+             let mut out = HashMap::new();\n    let iter = rows.filter(|r| r.is_ok());\n    \
+             for r in iter {\n        out.insert(0, String::new());\n    }\n    out\n}",
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn try_wrapped_call_init_skips() {
+        // The production shape: `let rows = stmt.query_map(..)?;` — Try
+        // wrapping a method call is opaque, refuse.
+        assert!(propose_fix(
+            "hashmap-with-capacity",
+            "use std::collections::HashMap;\nfn f(stmt: &Statement) -> rusqlite::Result<HashMap<i32, String>> {\n    \
+             let mut out = HashMap::new();\n    let rows = stmt.query_map([\"x\"], |r| r.get::<_, i32>(0))?;\n    \
+             for r in rows {\n        out.insert(r?, String::new());\n    }\n    Ok(out)\n}",
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn non_lenable_constructor_init_skips() {
+        // `Rc::new(..)` ends in `new` but an `Rc<Vec<_>>` has no `.len()` —
+        // the constructor whitelist requires a len-able container as the
+        // second-to-last path segment.
+        assert!(propose_fix(
+            "hashmap-with-capacity",
+            "use std::collections::HashMap;\nuse std::rc::Rc;\nfn f() -> HashMap<u32, u32> {\n    \
+             let mut m = HashMap::new();\n    let items = Rc::new(vec![1u32, 2]);\n    \
+             for it in &items {\n        m.insert(*it, 1);\n    }\n    m\n}",
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn vec_macro_init_still_fires() {
+        // Positive control: a `vec![..]` init is certainly len-able. The
+        // binding sits BEFORE the map (a binding between map and loop is the
+        // use-before-decl refusal, pinned separately).
+        let out = propose_fix(
+            "hashmap-with-capacity",
+            "use std::collections::HashMap;\nfn f() -> HashMap<u32, u32> {\n    \
+             let items = vec![1u32, 2, 3];\n    let mut m = HashMap::new();\n    \
+             for it in &items {\n        m.insert(*it, 1);\n    }\n    m\n}",
+        )
+        .expect("pattern matched");
+        assert!(out.contains("HashMap::with_capacity(items.len())"), "{out}");
+        parses(&out);
+    }
+
+    #[test]
+    fn vec_constructor_init_still_fires() {
+        // Positive control: `Vec::with_capacity(..)` init is certainly
+        // len-able (second-to-last segment is the container).
+        let out = propose_fix(
+            "hashmap-with-capacity",
+            "use std::collections::HashMap;\nfn f() -> HashMap<u32, u32> {\n    \
+             let items = Vec::with_capacity(8);\n    let mut m = HashMap::new();\n    \
+             items.push(1u32);\n    for it in &items {\n        m.insert(*it, 1);\n    }\n    m\n}",
+        )
+        .expect("pattern matched");
+        assert!(out.contains("HashMap::with_capacity(items.len())"), "{out}");
+        parses(&out);
+    }
+
+    #[test]
+    fn len_base_bound_between_map_and_loop_stays() {
+        // The opaque-init guard composes with the E0425 guard: even a
+        // KNOWN-len init refuses when bound between the map and the loop.
+        assert!(propose_fix(
+            "hashmap-with-capacity",
+            "use std::collections::HashMap;\nfn f() -> HashMap<u32, u32> {\n    \
+             let mut m = HashMap::new();\n    let items = vec![1u32, 2];\n    \
+             for it in &items {\n        m.insert(*it, 1);\n    }\n    m\n}",
         )
         .is_none());
     }

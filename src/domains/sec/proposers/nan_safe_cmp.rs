@@ -261,6 +261,18 @@ impl NanCmpWalker<'_> {
         {
             return;
         }
+        // Tuple literals refuse: `total_cmp` is an f32/f64-inherent, NOT a
+        // tuple method — `(f32, f32).partial_cmp(..)` (egui-Rect-style
+        // multi-field compares) has no tuple `total_cmp` to rewrite to, and
+        // the splice is E0599 under `--tests` (found live in seal-game-editor
+        // editor-widgets, sorted-by-rect-position test). Parse-only can't see
+        // every no-total_cmp type, but a literal tuple IS the common
+        // multi-field shape and is detectable — refuse it here.
+        if matches!(partial.receiver.as_ref(), Expr::Tuple(_))
+            || matches!(arg, Expr::Tuple(_))
+        {
+            return;
+        }
         let chain_start = byte_start(partial.receiver.as_ref());
         let chain_end = call.span().byte_range().end;
         // Comment guard: the rewrite replaces the whole chain span; a
@@ -438,6 +450,28 @@ mod tests {
         let src_text = "macro_rules! f { () => { 1.0f32 } }\npub fn g(v: &mut [f32]) {\n    v.sort_by(|a, b| a.partial_cmp(f!()).unwrap_or(Ordering::Equal));\n}\n";
         let (_, n) = applied(src_text);
         assert_eq!(n, 0, "macro operands have unreliable spans — refuse");
+    }
+
+    #[test]
+    fn tuple_receiver_refuses() {
+        // `total_cmp` is an f32/f64-inherent, NOT a tuple method: a
+        // multi-field compare like `(a.top(), a.left()).partial_cmp(..)` has
+        // no tuple `total_cmp` to rewrite to — the splice is E0599 under
+        // `--tests` (found live in seal-game-editor editor-widgets sorting
+        // egui::Rect positions). The literal-tuple shape is parse-detectable.
+        let src_text = "pub fn g(v: &mut [(f32, f32)]) {\n    v.sort_by(|a, b| {\n        (a.0, a.1)\n            .partial_cmp(&(b.0, b.1))\n            .unwrap()\n    });\n}\n";
+        let (_, n) = applied(src_text);
+        assert_eq!(n, 0, "tuples have no total_cmp — refuse");
+    }
+
+    #[test]
+    fn scalar_receiver_still_fires_beside_tuple_refusal() {
+        // Positive control for the tuple guard: the scalar form in the same
+        // fn still rewrites.
+        let src_text = "pub fn g(v: &mut [(f32, f32)]) {\n    v.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(Ordering::Equal));\n}\n";
+        let (out, n) = applied(src_text);
+        assert_eq!(n, 1);
+        assert!(out.contains("a.0.total_cmp(&b.0)"), "{out}");
     }
 
     #[test]
