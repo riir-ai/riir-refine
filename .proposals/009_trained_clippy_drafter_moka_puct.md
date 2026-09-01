@@ -9,7 +9,8 @@ Related: [Research 077](../.research/077_dflash2_draft_only_distillation.md) (DF
 ## TL;DR
 
 Train a **small domain-specific drafter** for the clippy healer — not a generative fixer. The
-model learns `P(rule | span)` + fix-template slot bindings over the ~450-rule bounded corpus,
+model learns `P(rule | span)` + fix-template slot bindings over the ~450-rule bounded corpus
+(sizing corrected 2026-08-29 — §F2: **577 rules total, only 41 clippy + 94 perf default-on**),
 speculatively; the existing verifier stack (syn parse → `clippy_verify` → `fix_verify` compile
 gate) makes correctness free, so draft quality is purely an **acceptance-rate** problem — the
 same property that makes moka's PUCT player work (policy prior + value head over a bounded move
@@ -34,9 +35,11 @@ proved the *selection* axis is precision-bounded, not ordering-bounded — `deco
 found **0 of 101 spans** selector-addressable because parse-only latent features carry no type
 information ("a pairwise selector over the same parse-only latent features carries no type
 information with which to break that bound" — Plan 017 §Outcome). The gap: **no trained,
-span-conditioned, type-aware prior exists anywhere in the healer**, and the L4 seam
+span-conditioned, type-aware prior exists anywhere in the healer, and the L4 seam
 (`src/l4_fallback.rs`, armed, miss-only reachability contract) sits UNARMED with no candidate
-shaped to beat decline. Without this, the healer's misses stay permanently declined and the
+shaped to beat decline. **(STALE 2026-08-29 — §F3: Bench 049 resolved — the CF-70B arm already
+measures 5–6/9 strict-keep vs decline 0/9; the re-plan below arms the seam with that measured
+arm instead of training a new one.)** Without this, the healer's misses stay permanently declined and the
 armed L4 seam stays dead weight.
 
 ## The proposed design
@@ -165,6 +168,10 @@ Gated per-phase; the full promotion gate before any default flip:
   path dep; riir-train trains, riir-clippy consumes bytes.
 
 ## Phased rollout (sketch — [Plan 049](../.plans/049_trained_drafter_phased_rollout.md) expands)
+
+> **SUPERSEDED 2026-08-29** by §Review verdict §Recommended re-plan (Phase 1 killed on Bench 043;
+> Phase 2 promoted; Phase 0 re-pointed at the proposer-coverage band + two unlisted plumbing
+> tasks). Kept as the filed record.
 
 ### Phase 0 — kill-or-proceed (the Plan 017 instrument, trained arm)
 - [ ] T0.1 Refresh the real-repo span set via the oracle; re-run `decompose_headroom()`; measure the trainable band. Empty → record negative, close, keep decline.
@@ -353,10 +360,13 @@ choice of kill-switch band.
    artifact. *Guard (2026-08-29 LGTM pass): the ENABLE flip stays owner-gated on leak-posture
    sign-off (`.docs/10_self_evolve/l4_fallback.md` §5) — wiring may land opt-in-dark; and the
    loop's keep criterion is the FULL gate (warning gone + no new warnings + compile + tests),
-   never "warning cleared" alone.*
+   never "warning cleared" alone.* (This arm is also the prerequisite
+   [Proposal 011](011_kat_pay_request_qr_genesis_and_onboarding.md) §Baz names — "the CF-llama
+   arm awaiting the owner's leak-posture sign-off" — so arming it is the shared next step for
+   both proposals.)
 5. **Add the unlisted plumbing as explicit Phase-0 tasks**: parameterize the headroom span
    source; add a `ClippyOracle` repo-walk batch labeler. Nothing downstream can run without them.
-6. **Fix the corpus number** (548 total / 137 default-on / 41 clippy) wherever "~450" appears.
+6. **Fix the corpus number** (577 total / **41 clippy** relevant — the corrected figure in the F2 blockquote) wherever "~450" appears.
 
 **Bottom line:** the mechanism is sound and the discipline is exemplary, but as phased this
 plan spends its first (and most expensive) phase attacking a band its own committed instrument

@@ -13,8 +13,9 @@ This proposal turns the KAT network from "a healing tool with a ledger" into a
 SSH identity, sees a balance and a welcome, and earns/spends KAT — because an
 operator (`bar`) ran a genesis ceremony and deployed a 3-node network first,
 and the whole loop is proven by a **wet-run** (a real paid transaction round-trip
-that refunds itself from a faucet). The nine owner asks map onto substrates that
-are ~80% already shipped: the top-up QR (`payment_url` + `render_qr_ascii`),
+that refunds itself from a faucet). The owner asks (nine original + five session
+follow-ups — the verdict table below carries all fourteen) map onto substrates
+that are ~80% already shipped: the top-up QR (`payment_url` + `render_qr_ascii`),
 the claim rails (`solana`/`stripe`), the five-check verification, the deployer
 ops ladder + verify probes, and the chainspec genesis format. What is genuinely
 new: a `PayRequest` object (any-amount capable, invoice-indexed, QR-asset with
@@ -36,7 +37,7 @@ selection or post-deploy sync proof, and there is no end-to-end loop test that
 proves pay → record → reward with real (testnet) money. Foo cannot onboard; bar
 cannot promote past devnet; nobody can prove the network works.
 
-## The nine asks → verdicts
+## The owner asks → verdicts
 
 | # | Ask | Verdict | Composes (grep-verified) | New surface |
 |---|---|---|---|---|
@@ -171,11 +172,15 @@ tokenomics:                       # DEFAULTS = the ratified constants; drift ⇒
   max_emission_kat: 100000000000  # REWARD_MAX_EMISSION_DEFAULT (010/008)
   reward_decay_bp: 9900           # 010 T2.5 ratification (saturation = zero upward headroom)
   yield_ceiling_bp: 22            # YIELD_CEILING.max_bp — genesis-saturated
-  epoch_split_bp: [6500, 500, 2000, 1000]
-  treasury_grant_floor: 1000000
+  epoch_split_bp: [6500, 500, 2000, 1000]  # [mining, staking, treasury, true_burn] — sums to 10 000
+  treasury_grant_floor: 1000000   # KAT — the 1 M KAT M2 runway (10^12 micro = FREE_GRANT_KAT × 10 000)
   free_tier_daily_kat: <n>        # ask 10 — daily crank amount (never-lever family)
   faucet_daily_cap_kat: <n>       # ask 11 — per-request faucet cap
-  staking_share_bp: 0             # shipped default; first lever move pinned to 500 (007)
+  usdc_kat_sub_split_bp: 7000     # 010 T1.2 — StakingParams::DEFAULT USDC/KAT class sub-split
+  staking_share_bp: 500           # 010 Phase 4 ACTIVATED 2026-08-30 (the 0-bp bootstrap posture is
+                                  #   historical): ceiling armed in the same default, ordering constraint
+                                  #   enforced — equals epoch_split_bp[1]; payout routes to the reward
+                                  #   pool until 007's own staking destination lands
   authority_share: { initial_bp: 2000, floor_bp: 500, decay_epochs: 60 }
 mint:
   root_float_kat: <n>             # pre-mine; MUST be ≤ max_emission − (treasury + faucet rows)
@@ -604,7 +609,7 @@ account paying from two Solana addresses ⇒ first-wins binding, later recorded
 - [ ] T1.3 clippy `pay --request [--amount]` (KAT default; blank = any amount)
       + shareable link first (ASCII QR as TTY fallback / `--qr`) + poll-on-credit
 - [ ] T1.4 invoice display + bit-exact recheck (golden-pinned QR)
-- [ ] T1.5 G1-S/G8-S/G-WEB money + auth + adversarial suite (replay, session
+- [ ] T1.5 G1-S/G-WEB money + auth + the adversarial suite (replay, session
       theft, amount manipulation, self-pay, hold-bypass, root-float refusal)
 - [ ] T1.6 Stripe/USDC rails as MOCK tests only (five-check machinery exercised
       against fixtures; no live rail this phase)
