@@ -74,6 +74,20 @@
     q2 at 26.68 t/s decode / 250.1 t/s long prefill — the ≤24-GB re-arm condition should
     read "RAM-feasible or streaming-feasible"; owner call whether the league admits a
     streaming opponent.
+  - **NEW 2026-09-02 (riir-ai Issue 843 T5 / league opponent-watch intake): the 1.4×
+    prefill jump is REAL, root-caused from source — PrismML fork `9ca265a → e311ed38f`
+    landed native Metal PQ2_0 kernels (`73f0fed04`, 08-25, `ggml-metal/kernels/mul_mv.metal`
+    `kernel_mul_mv_pq2_0_f32` + quantize.h codec — verified ZERO PQ2_0 mentions in
+    `ggml/src/ggml-metal/` at 9ca265a, so the old pin ran type-142 through the generic
+    dequant fallback). Secondary in-range fork commits: GDN ring decode (`bed6e9a6b` +
+    `08d8c9035`, the known +3.2% decode move, already distilled as the mlx-lm GDN
+    batch-95 lane's external confirmation), `e8b6452b1` im2col fix + wide-row set_rows,
+    `e0c828b90` Hadamard weight-fold runtime. **ARMED DISTILL SOURCE:
+    `../vendor/prismml-llama.cpp @ e311ed38f` — `ggml/src/ggml-metal/kernels/mul_mv.metal`
+    (PQ2_0/Q2_0 group-128 native Metal mul_mv: 8 sub-blocks × 16 weights, SIMDWIDTH/8
+    lane packing — same ternary-class codec as our Q2_0 GEMV family; verdict B, same
+    model/quant as the league opponent) + `set_rows.metal` wide-row KV write. Not yet
+    mined; next idle-loop batch candidate after the arxiv re-walk.**
 - **Sibling lanes (do not touch):** riir-train — sibling actively building
   (`/tmp/riir-train-499b`); the 4090 perf lanes — sibling PV work mid-flight as of 08-29
   (re-verify lane state at session start before any 4090 unit).
