@@ -314,13 +314,14 @@ All classes closed; the standing divergence (P4 residual) has no action planned.
       harness (fake receiver type) and rustc THAT — type-checks the real
       content without the dependency graph, ~2 min, and it is the only
       Windows-reachable gate for macOS-gated repairs.
-- [-] **P18 (open — self-applied 2026-09-02, riir-clippy `2044722`; remaining:
-      riir-ai, riir-chain, riir-dao, riir-deployer, riir-game-sdk, riir-dapps,
-      riir-train, riir-unity, riir-viewbridge, riir-mmorpg-examples — one per
-      cycle) — full-gate workflows missing in the sibling repos (katgpt-rs
-      Issue 701 R2 table, 2026-09-01).** Self-apply landed: riir-clippy's own
-      guard (which was already a SUPERSET of the katgpt-rs full gate — layer
-      5a is clippy `-D warnings` both feature extremes) is now CI-enforced via
+- [-] **P18 (open — self-applied 2026-09-02, riir-clippy `2044722`; riir-deployer
+      landed 2026-09-01, deployer `2b7d58d`; remaining: riir-ai, riir-chain,
+      riir-dao, riir-game-sdk, riir-dapps, riir-train, riir-unity,
+      riir-viewbridge, riir-mmorpg-examples — one per cycle) — full-gate
+      workflows missing in the sibling repos (katgpt-rs Issue 701 R2 table,
+      2026-09-01).** Self-apply landed: riir-clippy's own guard (which was
+      already a SUPERSET of the katgpt-rs full gate — layer 5a is clippy
+      `-D warnings` both feature extremes) is now CI-enforced via
       `.github/workflows/rust.yml` (weekly Fri 03:23 UTC on develop + main
       pushes + dispatch, mirroring the ndb/riir-chain spending-limit
       convention) + `scripts/standalone_dep_gate.sh` (9 escaping path deps
@@ -345,6 +346,24 @@ All classes closed; the standing divergence (P4 residual) has no action planned.
       coverage), layer-5c wedge budget 7200 s for the 4-core runner,
       ~300-min job budget (30-feature --each-feature layer + the GPU
       all-features tree), first scheduled runs are the cost measurement.
+      **riir-deployer landed 2026-09-01 (`2b7d58d`)** — the cheapest unit in
+      the set and the only INVERTED shape in the workspace: its dep-gate pin
+      is EMPTY (zero escaping path deps IS the repo's hard rule — "a deployer
+      must build when everything it deploys is broken"), so its
+      `standalone_dep_gate.sh` asserts none rather than pinning some; the
+      lexical `escapes()` kept verbatim so the four gates stay
+      audit-equivalent. Verified by injection at landing (an injected
+      `../../../riir-chain` dev-dep fires exit-1; `cloudflare/control-do`'s
+      contained `../../crates/riir-control` edge does not). Full guard = 4
+      layers (dep gate + clippy `-D warnings` at both feature extremes +
+      `cargo test --workspace` incl. the loopback e2e), ALL LAYERS PASS ~40 s
+      warm locally; workflow = standalone (no toolchain) + feature-guard
+      jobs, weekly Fri 04:07 UTC (distinct slot — the default branch there IS
+      develop, so the rot check audits it), main pushes + dispatch.
+      Note for the remaining repos: the katgpt-rs 701 R2 table predates some
+      workflow landings — re-scan `ls .github/workflows/` per repo at unit
+      time instead of trusting the list (riir-dao already carries rust.yml;
+      whether it runs the FULL guard is the check that matters).
 
 **Standing never-heal divergence table:** the cargo-heal skill owns it (comment-guarded
 matches, array-literal defaults, named-arg renames, nested macro args, NaN-unsound
