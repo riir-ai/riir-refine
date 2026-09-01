@@ -3,7 +3,7 @@
 **Date:** 2026-08-21
 **Issue:** `.issues/035_cargo_fix_floor_premise_probe.md` (T1, T2)
 **Plan:** `.plans/019_rustc_errors_fix_compile.md` (T0.4, T6.9)
-**Feature:** `rustc_errors` (opt-in, default-off)
+**Feature:** `rustc_errors` (default-ON since 2026-08-29 by owner call, after all GOAT gates — incl. this bench's floor — had passed; driver-shaped, inert until `--fix-compile` is invoked, so default-on costs compile time only. *Stale label `opt-in, default-off` corrected 2026-09-01 per katgpt-rs `.issues/702`.*)
 **Toolchains:** rustc **1.97.0** (repo pin, `rust-toolchain.toml`) — and rustc
 **1.93.0** (box default) for the original ad-hoc probe. Both agree; the split
 below is not a single-toolchain artifact.

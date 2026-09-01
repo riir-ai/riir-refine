@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-22
 **Plan:** `.plans/019_rustc_errors_fix_compile.md` (Phase 6: T6.1–T6.8, T6.10)
-**Feature:** `rustc_errors` (opt-in, default-off; the ab section also needs `latent_retrieval`)
+**Feature:** `rustc_errors` (default-ON since 2026-08-29 by owner call, after this GOAT passed — the promotion hold this bench was measured under is lifted; driver-shaped, inert until `--fix-compile` is invoked, so default-on costs compile time only. *Stale label `opt-in, default-off` corrected 2026-09-01 per katgpt-rs `.issues/702`.* The ab section also needs `latent_retrieval`)
 **Toolchain:** rustc 1.97.0 (repo pin), macOS M3, otherwise-idle box
 **Repro:**
 ```bash
