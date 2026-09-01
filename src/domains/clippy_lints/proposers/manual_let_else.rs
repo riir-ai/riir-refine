@@ -141,6 +141,18 @@ impl Collector<'_> {
             return None;
         }
         let scrutinee = src(self.source, &m.expr)?;
+        // A scrutinee whose text ends in `}` (an unsafe block, plain block,
+        // or macro block) must be parenthesized: `let Ok(p) = unsafe { r } else
+        // { return 0 }` is a parse error ("right curly brace `}` before `else`")
+        // — real clippy's own suggestion wraps the scrutinee (probe-verified on
+        // the live riir-wallet-worker site, 2026-09-01); the un-parenthesized
+        // template shipped 2 broken edits past the fixture corpus because the
+        // fixtures used plain expression scrutinees.
+        let scrutinee = if scrutinee.trim_end().ends_with('}') {
+            format!("({scrutinee})")
+        } else {
+            scrutinee
+        };
         // The let-else pattern binds the OUTER let name, not the match arm's
         // inner binding. `let preferred_i = match g { Some(p) => p, None =>
         // continue }` must become `let Some(preferred_i) = g else { continue }`
@@ -337,6 +349,23 @@ mod tests {
         )
         .expect("pattern matched");
         assert!(out.contains("let Ok(v) = r else { return 0 };"), "{out}");
+    }
+
+    #[test]
+    fn unsafe_block_scrutinee_is_parenthesized() {
+        // The riir-wallet-worker escape: a scrutinee ending in a `}` (unsafe
+        // block here) makes the un-parenthesized let-else a PARSE ERROR —
+        // real clippy's suggestion parenthesizes; so does the rewrite now.
+        let out = propose_fix(
+            "manual_let_else",
+            "fn f(p: *const u8, l: u32) -> i32 { let pinned = match unsafe { read_array::<32>(p, l) } { Ok(p2) => p2, Err(_) => return 0 }; let _ = pinned; 1 }",
+        )
+        .expect("pattern matched");
+        assert!(
+            out.contains("let Ok(pinned) = (unsafe { read_array::<32>(p, l) }) else { return 0 };"),
+            "{out}"
+        );
+        assert!(syn::parse_file(&out).is_ok(), "{out}");
     }
 
     #[test]
