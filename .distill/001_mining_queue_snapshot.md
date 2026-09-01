@@ -253,6 +253,21 @@ All classes closed; the standing divergence (P4 residual) has no action planned.
       top-1), score-bench run #24 flat (96.2/1.9/100/100), clippy 0 touched files.
       ≈300 sibling library sites are now addressable via heal sweeps with
       `--features sec` (a later per-repo unit).
+      **ADOPTED 2026-09-01 (same day):** katgpt-rs `e854958e` (64 files / 113 sites,
+      src only) + unused-import cleanup `26d055c6` (7 files); riir-train `d37553e5`
+      (41 files / 59 sites); riir-neuron-db `4af0c63` (7 files / 19); riir-mmorpg-
+      examples `77d1319` (1). Residue: tests/benches/examples slices (katgpt-rs
+      ~47, riir-train ~53), riir-wallet-worker 1 FFI site + moka-wasm 10 FFI sites
+      (ffi-extern-fn-catch-unwind unit, needs wasm32 validation), seal-game-editor
+      17 raw unexamined. **New boundary found by the sweep (P-intake class):**
+      TUPLE receivers — `(f32, f32)` sort keys suggest the rewrite but verify
+      auto-reverts (E0599: tuples have no `total_cmp`; observed
+      riir-mmorpg-examples `src/pet_visual.rs:550`, a cfg(test) site — the compile
+      gate caught it correctly, manual fix = sort-key decomposition, a semantic
+      choice). Tuple-receiver decomposition = candidate proposer extension
+      (rewrite `|a, b| a.partial_cmp(b).unwrap()` over tuple keys to
+      lexicographic `.0`-then-`.1` total_cmp — needs a decision on which key
+      dominates; leave suggest-only until a real NaN risk shows up).
 
 **Standing never-heal divergence table:** the cargo-heal skill owns it (comment-guarded
 matches, array-literal defaults, named-arg renames, nested macro args, NaN-unsound
