@@ -1,0 +1,206 @@
+# CI enforcement for scripts/ci_feature_guard.sh — the riir-clippy half of
+# katgpt-rs Issue 701 R2 (the full-gate-workflow fan-out; this repo was in the
+# missing set surveyed 2026-09-01: 1 workflow, no full gate).
+#
+# Until this workflow, the 5-layer guard ran only on laptops — the exact
+# "a gate nobody runs is documentation, not a gate" class riir-chain found in
+# its own repo (Issue 046 F5) and ndb closed with its rust.yml. The failure
+# mode it catches is slow rot at a HEAD where every documented narrow gate is
+# green; the magnitude precedent is riir-ai Issue 830 (99 errors / 50 targets
+# at such a HEAD).
+#
+# Two jobs:
+#   standalone     — no siblings, no secret, no cargo: pins the escaping-dep
+#                    set (scripts/standalone_dep_gate.sh, 9 entries across 3
+#                    siblings). The ONLY check that runs in a bare clone.
+#   feature-guard  — the full scripts/ci_feature_guard.sh, siblings provided.
+#                    Runs exactly what a developer runs locally — no CI-only
+#                    configuration, so a red run is reproducible on a laptop.
+#
+# ── Trigger surface (deliberately small) ────────────────────────────────────
+# Same owner's call as riir-neuron-db + riir-chain (2026-08-14/15: the account
+# is at/near its Actions spending limit): no push trigger on `develop` and no
+# PR trigger, even though work lands directly on `develop` here (AGENTS.md
+# §Branch) — run ./scripts/ci_feature_guard.sh locally in the meantime.
+# The WEEKLY schedule is the load-bearing trigger: it is the rot check, and
+# because the default branch here is `develop`, that is exactly the branch it
+# audits. `main` pushes (promotions) and workflow_dispatch cover the rest.
+#
+# Sibling provisioning follows riir-chain's pattern (its rust.yml, Issue 028):
+# katgpt-rs is public (default GITHUB_TOKEN), riir-ai + riir-neuron-db are
+# private and need `SIBLING_REPOS_TOKEN` — a fine-grained PAT that expires
+# (~90 days), so an expired token must fail LOUDLY, not silently skip. On any
+# trusted event (push/schedule/dispatch — there is no PR trigger today) a
+# missing token is a hard error; the pull_request warning branch exists only
+# so a future PR trigger cannot inherit the hard-error.
+#
+# `ref: develop` for katgpt-rs is measured, not cosmetic (the ndb precedent):
+# katgpt-rs develop runs far ahead of main, and this repo's source compiles
+# against develop's katgpt-core. The private clones float at their default
+# branch HEADs — the same floating-sibling behavior local development has
+# (path deps, no lockfile pin; Cargo.lock is gitignored here precisely
+# because floating siblings churn it), which also means a red run can be a
+# sibling's fresh break rather than this repo's — inherent to the workspace
+# shape, and the right bias for a rot gate.
+#
+# ── Runner notes ────────────────────────────────────────────────────────────
+# Toolchain: installed FROM rust-toolchain.toml (`rustup toolchain install`),
+# not @stable — the repo pin (1.97.0) is deliberate ("single toolchain across
+# all 8 repos"; divergent pins broke resolution once already) and raising it
+# is a reviewed act that must not be re-decided by a CI default.
+#
+# Docker: ubuntu-latest runners ship Docker with the daemon RUNNING, so
+# `available()` in the Tier-2 buildcheck gate would return true in CI and run
+# `docker build --check` for real — a daemon + registry round-trip per
+# non-scratch fixture from shared, rate-limited runner IPs. That is a flake
+# factory for a weekly gate (the same reasoning that keeps riir-chain's
+# release-mode timing tier out of CI). The workflow points DOCKER_HOST at a
+# dead socket, which drives `available()` through its normal false path: the
+# Tier-2 (and Tier-1, hadolint absent) agreement gates print their loud
+# one-line degradation and SKIP — "not checked", never silently "passed".
+# Local runs own the live-oracle coverage.
+#
+# Cost: the guard compiles the workspace ~35x over its layers (30 features in
+# the --each-feature layer, not the 5 the script comment once claimed), plus
+# the GPU-stack all-features tree, on a 4-core runner, with floating sibling
+# HEADs defeating cross-run cache for the sibling crates (fresh clone = fresh
+# fingerprints). Budget 300 min and treat the first runs as the measurement.
+name: Rust
+
+on:
+  schedule:
+    # Fridays 03:23 UTC — off-the-hour (top-of-hour is the runner-queue crunch),
+    # and a different slot from katgpt-rs's Monday full gate so workspace gates
+    # do not stack.
+    - cron: '23 3 * * 5'
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+  workflow_dispatch:
+
+concurrency:
+  # A push that supersedes an in-flight run should cancel it — the guard
+  # compiles the workspace many times (30-feature each-feature + all-features)
+  # and there is no value in racing. A scheduled run superseded by a dispatch
+  # is fine to drop for the same reason.
+  group: rust-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── The standalone tier: no siblings, no secret, no cargo ──────────────
+  standalone:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - name: Standalone-dep gate (9 escaping path deps, pinned)
+        run: ./scripts/standalone_dep_gate.sh
+
+  # ── The gate tier: the full local guard, strictly enforced ─────────────
+  feature-guard:
+    runs-on: ubuntu-latest
+    # Generous, and the preamble says why: 30-feature isolation + the
+    # all-features GPU tree on a 4-core runner, siblings floating. The first
+    # runs are the measurement — raise or (more likely, once the cache
+    # stabilises) lower from evidence, not hope.
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v6
+
+      # The all-features build of three siblings (riir-gpu pulls cubecl/wgpu;
+      # riir-engine pulls its kernel stack) is a multi-GB target/ on top of
+      # the runner's preinstalled toolchains. Clear the ones cargo never
+      # touches before the build, not after a failed run taught us the hard
+      # way (the ndb free-disk composite exists for the same reason).
+      - name: Free runner disk
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /opt/hostedtoolcache/CodeQL /usr/local/.ghcup
+
+      # From the pin file, not @stable — see the runner notes above.
+      - name: Install the pinned toolchain (rust-toolchain.toml)
+        run: rustup toolchain install
+
+      - name: Check out katgpt-rs (public, develop)
+        uses: actions/checkout@v6
+        with:
+          repository: katopz/katgpt-rs
+          ref: develop
+          path: sibling/katgpt-rs
+
+      # Factored inline rather than shared — a composite action for six lines
+      # is a file nobody reads (the riir-chain note).
+      - name: Check out private siblings
+        id: siblings
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          if [ -z "${SIBLING_TOKEN:-}" ]; then
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          for repo in riir-ai riir-neuron-db; do
+            git clone --depth 1 \
+              "https://x-access-token:${SIBLING_TOKEN}@github.com/gist-rs/${repo}.git" \
+              "sibling/${repo}"
+          done
+          echo "available=true" >> "$GITHUB_OUTPUT"
+        env:
+          SIBLING_TOKEN: ${{ secrets.SIBLING_REPOS_TOKEN }}
+
+      # $GITHUB_WORKSPACE is .../riir-clippy; the manifest's `../katgpt-rs`,
+      # `../riir-ai` and `../riir-neuron-db` path deps resolve into the parent
+      # — this puts the siblings exactly where cargo expects them.
+      - name: Arrange the sibling layout
+        if: steps.siblings.outputs.available == 'true'
+        run: mv sibling/* ..
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          # No Cargo.lock term: it is gitignored here (floating siblings churn
+          # it), so hashFiles would silently contribute an empty string.
+          # Manifest + toolchain pin are the meaningful grain.
+          key: featureguard-${{ runner.os }}-${{ hashFiles('Cargo.toml', 'rust-toolchain.toml') }}
+          restore-keys: featureguard-${{ runner.os }}-
+
+      # The guard auto-skips its --each-feature layer when cargo-hack is
+      # absent — locally that is a convenience, in CI it would be the exact
+      # "green gate that verified nothing" failure this workflow exists to
+      # prevent. Install it so the layer runs.
+      - name: Install cargo-hack
+        run: cargo install cargo-hack --locked
+
+      # Issue 028 expiry-alarm pattern: an expired PAT must fail the run, not
+      # silently skip the gate. Everything that can trigger this workflow is
+      # a trusted event today; the PR branch is future-proofing only.
+      - name: Report the gap when siblings are unavailable
+        if: steps.siblings.outputs.available != 'true'
+        run: |
+          MSG="riir-clippy cannot load its workspace without katopz/katgpt-rs \
+          (public, checked out above) and gist-rs/riir-ai + \
+          gist-rs/riir-neuron-db (private). Set/renew SIBLING_REPOS_TOKEN \
+          (a fine-grained PAT expires ~90 days)."
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "::warning title=Feature guard SKIPPED::$MSG"
+          else
+            echo "::error title=Feature guard SKIPPED on a trusted branch::$MSG"
+            exit 1
+          fi
+
+      # See the runner notes: deterministic SKIP (with its loud degradation
+      # line) for the daemon+registry-dependent agreement gates, keeping the
+      # weekly gate flake-free. Local runs own the live-oracle coverage.
+      - name: Point docker at a dead socket
+        run: echo "DOCKER_HOST=unix:///nonexistent-riir-clippy-ci.sock" >> "$GITHUB_ENV"
+
+      # The wedge-detector budget inside the guard is a 16-core-laptop number;
+      # a 4-core runner needs more before "wedged" is the right diagnosis.
+      - name: Feature guard (ci_feature_guard.sh)
+        env:
+          LAYER_5C_TIMEOUT_SECS: 7200
+        run: ./scripts/ci_feature_guard.sh

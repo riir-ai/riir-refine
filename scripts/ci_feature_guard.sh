@@ -4,7 +4,8 @@
 # Runs five cargo layers to catch feature-combo regressions:
 #   1. --no-default-features  → zero-dep baseline (only katgpt-core cross-repo)
 #   2. default features       → the production path
-#   3. --each-feature         → all 5 single-feature combos (--keep-going, so
+#   3. --each-feature         → every single-feature combo, ~30 of them as of
+#                               2026-09-02 (--keep-going, so
 #                               one run enumerates every failure — the
 #                               riir-chain Issue 034 lesson)
 #   4. --all-features         → every feature at once (catches combo-only bugs
@@ -48,8 +49,9 @@ echo
 echo "=== Layer 4: all-features combination check ==="
 # Catches combo-only bugs — the class where no single feature turns on both
 # sides of a regression simultaneously (the merkle_root/can_freeze lesson,
-# riir-neuron-db AGENTS.md). riir-clippy's 5 features are mostly independent,
-# but `self_evolve` + `ruliology_search` both touch the drafter/pruner surface.
+# riir-neuron-db AGENTS.md). The feature set is ~30 (2026-09-02) and mostly
+# independent, but `self_evolve` + `ruliology_search` both touch the
+# drafter/pruner surface.
 cargo check --all-features
 echo "✓ --all-features compiles"
 

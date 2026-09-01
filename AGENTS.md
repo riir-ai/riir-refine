@@ -3193,11 +3193,34 @@ cargo check --all-features
 # Full CI guard (5 layers: no-dep / default / per-feature / all-features / clippy+tests)
 ./scripts/ci_feature_guard.sh
 
+# The standalone-dep gap pin (no cargo, no siblings needed — the bare-clone CI tier)
+./scripts/standalone_dep_gate.sh
+
 # Re-run GOAT benches (see .benchmarks/001_goat_consolidated.md for measured results)
 cargo bench --bench bench_001_l1_matvec
 cargo bench --bench bench_002_l2_pruner_syn
 cargo run --example ruliology_search_demo --features ruliology_search --release
 ```
+
+### CI enforcement (2026-09-02, katgpt-rs Issue 701 R2 self-apply)
+
+`.github/workflows/rust.yml` now runs `scripts/ci_feature_guard.sh` — the
+same guard a developer runs, not a CI-only subset. Triggers are deliberately
+narrow (the workspace spending-limit convention): **weekly on `develop`**
+(the rot check — the default branch IS the working branch here), pushes to
+`main`, and `workflow_dispatch`. The `standalone` job pins the
+escaping-path-dep set (`scripts/standalone_dep_gate.sh`: 9 entries across 3
+siblings — katgpt-rs public; riir-ai + riir-neuron-db private via
+`SIBLING_REPOS_TOKEN`, hard-erroring when the token is absent, the riir-chain
+Issue 028 expiry-alarm pattern). Runner notes: the toolchain installs from
+rust-toolchain.toml (never @stable — the single-toolchain-across-8-repos pin
+is deliberate); the Tier-2 `docker build --check` agreement degrades
+deterministically in CI via a dead `DOCKER_HOST` (daemon + registry from
+shared runner IPs is a flake factory — local runs own the live-oracle
+coverage); the guard's layer-5c wedge budget is raised to 7200 s for the
+4-core runner. First scheduled runs are the cost measurement: budget ~300 min
+(30-feature `--each-feature` layer + the all-features GPU tree, floating
+sibling HEADs).
 
 ## Feature Flag Discipline
 
