@@ -19,8 +19,12 @@
   **2026-09-01 late: P8 adoption wave 2** — the nan-unsafe sweep's benches/examples/
   tests residue + unclaimed repos discharged across riir-clippy (self + loop-habitat
   proposer fix `5122bbe`), riir-neuron-db (`4524854`), riir-train (`20b53943`),
-  riir-ai (`1e6e4b06a`, 188 sites / 13 crates); katgpt-rs residue YIELDED to live
-  sibling WIP (re-scan next session). Full record: P8 ADOPTION WAVE 2 below.
+  riir-ai (`1e6e4b06a`, 188 sites / 13 crates); katgpt-rs residue RE-SCANNED
+  AND DISCHARGED 2026-09-02 (`a9a72a3e`, wave 3: the ~100 estimate was 17
+  live sites / 13 files after the sibling sweeps consumed the rest; 3 gate
+  configs count-identical; shared-checkout discipline held — exactly 13
+  files committed while the sibling's 16 uncommitted files stayed out via
+  explicit-path `git add`). Full record: P8 ADOPTION WAVE 2 below.
 - **Next executable (cadence-gated):**
   - **The arxiv pool re-walk: DONE 2026-08-31 ~23:20 +07** (`.research/109` — walk #3,
     covered the Sunday-08-30 announcement window that walk #2 never saw; zero corpus delta,
@@ -278,9 +282,24 @@ All classes closed; the standing divergence (P4 residual) has no action planned.
       ci all-features screen's 4 error classes proven PRE-EXISTING not-mine).
       Post-wave live residue: ~9 sites in riir-train (2 tuple-receiver suggest-only
       + min_by + helper-fn comparator shapes = the strict-gate recall limits),
-      ~2 max_by sites ndb, riir-clippy raw-string fixtures (correctly untouched),
-      katgpt-rs tests/benches/examples ~100 YIELDED — sibling WIP mid-flight on
-      src/transformer/tests.rs at sweep time (next session: re-scan first).
+      ~2 max_by sites ndb, riir-clippy raw-string fixtures (correctly untouched).
+      **WAVE 3 — katgpt-rs DISCHARGED 2026-09-02 (`a9a72a3e`):** the yielded
+      tests/benches/examples surface re-scanned to **17 sites / 13 files**
+      (the ~100 estimate was pre-sibling-sweep; their waves consumed the
+      rest — re-scan-before-heal vindicated). All
+      `partial_cmp(..).unwrap()/unwrap_or(Equal)` sort comparators →
+      `total_cmp` (the latent NaN-panic class). Validation: 3 gate configs
+      count-identical pre/post — default (spec_reconciliation 1 +
+      latent_steering 2 + smooth_min_poc 0; latent_field_steering and
+      micro_belief are default-on, the gate map said so), one 10-feature
+      union (8 targets / 30 tests), and the 2 harness=false binaries
+      (bench + example run as exes, structure-identical normalized outputs).
+      12/13 rustfmt'd; 1 CRLF healed unfmt'd. Shared-checkout discipline:
+      the sibling had 16 uncommitted files mid-flight; explicit-path
+      `git add` + staged-set check (13, 0 outside tests/benches/examples)
+      kept the commit clean — and the `git diff HEAD~1` 29-file scare was
+      the working-tree artifact (single-ref diff reads the WORKING TREE,
+      not HEAD; `git show HEAD` is the commit-truth command).
       Fixture-literal sites (score-bench raw strings) correctly never touched.
       Residue: tests/benches/examples slices (katgpt-rs ~47, riir-train ~53),
       riir-wallet-worker 1 FFI site + moka-wasm 10 FFI sites
