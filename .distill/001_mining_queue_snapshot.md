@@ -294,6 +294,37 @@ All classes closed; the standing divergence (P4 residual) has no action planned.
       (rewrite `|a, b| a.partial_cmp(b).unwrap()` over tuple keys to
       lexicographic `.0`-then-`.1` total_cmp — needs a decision on which key
       dominates; leave suggest-only until a real NaN risk shows up).
+- [x] **P16 — manual_let_else binding-mangle residue: class CLOSED at 17 gated
+      breaks in katgpt-rs (2026-09-02).** The 6038e59 root-cause fix repaired 15
+      same-day; a 4090-side audit of every macOS-gated file the heal touched
+      found the last 2 (`katgpt-backend/src/gpu.rs` test sites — invisible to a
+      Windows compile gate), repaired by the sibling `c284dbb2` (M3-validated:
+      both repaired tests EXECUTE on Metal) while a 4090 session independently
+      derived the same fix and YIELDED per the dual-allocation discipline
+      (duplicate commit reset, never pushed). Audit method: enumerate the 5
+      macOS-gated source files, hand-diff each against the heal commit — the
+      rest of the gated surface got only shrink_to_fit/const-hoist additions.
+- [x] **P17 — standalone `rustc` is a VACUOUS checker for E0425-class mangles
+      in dependency-heavy gated files (2026-09-02; the anti-vacuity control
+      caught it).** Compiling a single gated file (`rustc --emit=metadata
+      gpu.rs`) aborts at IMPORT resolution (E0432/E0433 unlinked crates) BEFORE
+      late resolution can fire the E0425 — mangled and fixed versions both
+      report 0 "cannot find value", so the check cannot discriminate. The
+      discriminating check: extract the rewritten lines VERBATIM into a stub
+      harness (fake receiver type) and rustc THAT — type-checks the real
+      content without the dependency graph, ~2 min, and it is the only
+      Windows-reachable gate for macOS-gated repairs.
+- [ ] **P18 (open) — full-gate workflows missing in 11/12 sibling repos
+      (katgpt-rs Issue 701 R2 table, 2026-09-01).** riir-neuron-db is the only
+      repo whose CI runs the `--all-targets --all-features` screen; the magnitude
+      precedent is riir-ai Issue 830 (99 errors / 50 targets at a HEAD where
+      every existing gate was green). Each repo owns its own CI per
+      BOUNDARY.md — one repo per idle cycle: port
+      `katgpt-rs/scripts/full_gate.sh` (written portable; the macOS platform
+      layer + AGENTS.md parity check are the katgpt-rs-specific parts) or wire
+      the repo's existing guard script into a weekly workflow. riir-clippy is
+      itself in the missing set (1 workflow, no full gate) — self-apply first,
+      then fan out.
 
 **Standing never-heal divergence table:** the cargo-heal skill owns it (comment-guarded
 matches, array-literal defaults, named-arg renames, nested macro args, NaN-unsound
