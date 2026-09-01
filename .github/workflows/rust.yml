@@ -204,3 +204,44 @@ jobs:
         env:
           LAYER_5C_TIMEOUT_SECS: 7200
         run: ./scripts/ci_feature_guard.sh
+
+  # ── The docs-drift tier: the two auditors, on the weekly cadence ───────
+  # katgpt-rs Issue 702 closing condition: "each sibling either runs the two
+  # auditors on some cadence or records why not." This job is the "runs":
+  # scripts/bench_doc_audit.py + scripts/cargo_comment_audit.py, invoked BY
+  # PATH from a katgpt-rs checkout (no script copies — 702's zero-copies
+  # property is deliberate), each pointed at THIS repo's root explicitly.
+  #
+  # Why not katgpt-rs's docs_gate.yml / docs_gate.sh wholesale: two of its
+  # four checks are katgpt-rs-rooted BY CONSTRUCTION and would be a vacuous
+  # green here — count_features.py takes no repo argument (always audits
+  # katgpt-rs), and skill_repo_set_gate.py gates katgpt-rs's own SKILL.md
+  # set. Only the two auditors accept a target path; running exactly those
+  # two, at '.', is the honest subset.
+  #
+  # Why weekly + dispatch, not per-push: same owner's Actions-budget call as
+  # the trigger surface above (no push trigger on develop here). Doc drift
+  # caught weekly rather than per-commit is the accepted trade for this
+  # private repo — recorded here as 702's "or records why not".
+  docs-drift:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+
+      # Public sibling, default token — the feature-guard pattern. develop,
+      # not main: this repo's docs are authored against develop's auditor
+      # fixes (the auditors are fixed in katgpt-rs develop, 702 a90dd631).
+      - name: Check out katgpt-rs (public, develop — the auditors' home)
+        uses: actions/checkout@v6
+        with:
+          repository: katopz/katgpt-rs
+          ref: develop
+          path: sibling/katgpt-rs
+
+      # '.' = this checkout, NOT the scripts' default (katgpt-rs) — passing
+      # no argument would audit the WRONG repo and report a green.
+      - name: Bench-doc + Cargo-comment audit vs the manifests
+        run: |
+          python3 sibling/katgpt-rs/scripts/bench_doc_audit.py .
+          python3 sibling/katgpt-rs/scripts/cargo_comment_audit.py .
