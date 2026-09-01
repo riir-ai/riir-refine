@@ -50,6 +50,9 @@ cannot promote past devnet; nobody can prove the network works.
 | 8 | Onboarding: install via sh; run with default SSH; welcome + balance; bar pre-does genesis; earned/spent history | **Ship — with one owner correction** | 003 binary-only distribution; `login`/`account`; `/balance`; kat_charge.json | install.sh copy tweak; login default-SSH; `account --history` |
 | 8.1 correction | "releases at gist-rs/riir-clippy" | **CORRECTED** | 003 hard rule: private-repo release assets are not publicly downloadable; the sanctioned surface is **gist-rs/cargo-heal** releases + install.sh (zero .rs files) | none — align to 003, do not open riir-clippy releases |
 | 9 | Fixer tier "baz" (local LLM earns KAT) — my call | **DEFER to its own plan** | l4_lora seam + l4_daemon (`bonsai_clippy_l4_eval --serve`) + fixer_regate harness all ship | nothing now — see §Baz |
+| 10 | Free-tier daily crank: CF schedule credits every synced account daily | **Ship — a GRANT crank, not a mint faucet** | 010 M2 treasury-first grant + floor, the kat-service DO alarm (10-min sweep/settle/anchor), housekeeping cron/cursor precedent, the exactly-once `(date, x)` key pattern, 008's never-lever free-grant family | daily pass in the alarm + `FREE_TIER_DAILY_KAT` (genesis yaml) + activity gate + budget cap |
+| 11 | Faucet request by QR (owner scans; Discord bot long-run) | **Ship v1 = a `faucet` preset on the ask-1 web wallet; Discord bot DEFERRED** | the ask-1 web wallet (GitHub-SSH + hold-SEND + G-WEB), payreq labels/caps, the wet-run faucet leg | `faucet --request` preset + daily cap; bot later |
+| 12 | USDC pay → register → mint KAT ("pay and register in one take"), memo links back to the KAT account, tests | **Ship later-phase — with one binding correction: the REFERENCE key is the mandatory machine link; the memo is mandatory-in-URL audit copy** | Solana Pay transfer-request + five checks, on-curve reference keys (dapps Plan 005), 007's token-balance-delta address capture, the account-key-signed sync envelope, chain 008 MemoShard (the later on-chain leg) | registration-intent rows + funding-address binding + settle/mint path + the G-REG test matrix |
 
 ## The proposed design
 
@@ -167,6 +170,8 @@ tokenomics:                       # DEFAULTS = the ratified constants; drift ⇒
   yield_ceiling_bp: 22            # YIELD_CEILING.max_bp — genesis-saturated
   epoch_split_bp: [6500, 500, 2000, 1000]
   treasury_grant_floor: 1000000
+  free_tier_daily_kat: <n>        # ask 10 — daily crank amount (never-lever family)
+  faucet_daily_cap_kat: <n>       # ask 11 — per-request faucet cap
   staking_share_bp: 0             # shipped default; first lever move pinned to 500 (007)
   authority_share: { initial_bp: 2000, floor_bp: 500, decay_epochs: 60 }
 mint:
@@ -288,6 +293,86 @@ case set, (b) leak-posture sign-off, (c) reward economics with G5-class
 evidence. Opening that plan before clippy-tier onboarding lands would put the
 least-proven earning lane in front of the newest users.
 
+### 10. Free-tier daily crank (ask 10)
+
+The one-time login grant (`FREE_TIER_GRANT_KAT`) covers install-day; it does
+not survive a week of daily use. The crank makes the free tier renewable:
+
+- **Where:** a daily pass in the kat-service DO's existing alarm (the 10-min
+  sweep/settle/anchor tick gains a date-bucketed grant sweep — the DO alarm is
+  guaranteed to wake the DO; the housekeeping worker's scheduled-cron +
+  cursor discipline is the ops precedent).
+- **What:** for every ledger account with activity (a successful `/sync` push
+  or `/lease` pull) within `FREE_TIER_ACTIVITY_DAYS` (default 7), call the
+  **existing M2 grant** (`KatLedger::grant`) for `FREE_TIER_DAILY_KAT`. M2
+  makes this treasury-first — zero mint pressure above the
+  `treasury_grant_floor`; the mint fallback at/below the floor is the floor's
+  own ratified design — so the ask's "mint KAT to each account" is implemented
+  as a **grant**: one entry point, supply accounting already proven.
+- **Exactly-once:** idempotent per `(account, utc_date)` — the same shape as
+  the KAT mint swap-in's exactly-once `(date, neurons)` key. The clock is DO
+  host time, never caller-supplied (the Issue-004 rule).
+- **Bounds:** the amount joins the 008 never-lever free-grant family
+  (genesis-frozen, never agent-movable); a global `daily_grant_budget` caps
+  total outflow per day (overflow skips + alerts via the existing housekeeping
+  path); the activity gate is the sybil tax — a farm of keypairs must actually
+  run syncs to harvest. Day-0 coverage stays with the login grant; the crank
+  sustains from day 1.
+- **UX:** `account` shows the daily credit line and 8.3's welcome reads it.
+
+### 11. Faucet by QR (ask 11)
+
+No new mechanism — the faucet request IS a PayRequest with a preset:
+`cargo heal faucet --request` creates a payreq whose label is `faucet`, amount
+fixed to `faucet_daily_cap_kat`, payer hint = the root/faucet account. Bar
+scans the QR → web wallet (GitHub-SSH sign-in, hold-SEND — all of ask 1's
+machinery and G-WEB gates) → settle. Human-rate by construction (the owner
+walks to the machine); the wet-run's programmatic faucet leg already proves
+the ledger half. **Discord bot: DEFERRED** — a Discord↔KAT identity binding is
+a new sybil surface (Discord accounts are cheap); reopen when manual scanning
+is the bottleneck, gated on a per-account daily cap + a proof-of-identity no
+weaker than the GitHub-SSH key-match.
+
+### 12. USDC pay-and-register in one take (ask 12 — later phase, tests now)
+
+For real users later: paying USDC should both fund and REGISTER — the payer's
+Solana address becomes the funding address bound to their KAT account.
+
+1. `cargo heal pay --token usdc [--amount N]` → POSTs a **registration
+   intent** `{reference, kat_account, min_amount, expiry}` (account-key-signed
+   — the v2 sync envelope; nobody can bind an intent to an account whose key
+   they do not hold) → composes the Solana Pay transfer-request URL: revenue
+   payee, the fresh on-curve reference, min amount, **memo = KAT account id +
+   label, always composed by us** → QR. The same page on the kat-service host
+   renders it + polls — the site "takes care of that like usual payment".
+2. Foo pays from any Solana wallet. The watcher (five checks, existing) finds
+   the tx by reference → finalized / payee / amount / reference-present /
+   sig-unseen → captures the **payer's source address** from the token-balance
+   delta (007's refund-to-source capture, reversed) → writes the funding
+   binding → credits KAT per the pack economics → invoice row.
+
+**The binding verdict (the memo-mandatory ask, corrected):** the **reference
+key is the mandatory machine link**; the memo is mandatory in the URL and an
+on-chain audit copy. Solana Pay's `memo` is composed by the PAYER'S wallet,
+and wallet support is inconsistent — a payment whose wallet dropped the memo
+must still settle via the reference (the intent row already carries the
+linkage), flagged `memo_missing`; refusing it would orphan real funds.
+Memo-present/reference-absent is impossible by construction (the reference
+rides the tx account keys, not the wallet's goodwill). When the KAT side later
+settles on riir-chain, chain 008's MemoShard is the memo vehicle —
+complementary, not this phase.
+
+**Test matrix (G-REG, the owner's demand):** happy path (credit to the right
+account + funding binding + invoice); memo-dropped ⇒ settles + `memo_missing`
+flag; replayed signature ⇒ rejected; wrong payee ⇒ rejected; amount < min ⇒
+rejected; expired intent ⇒ stuck-funds reconcile path (honest gap — outbound
+refund signing is 007 T2.2-deferred; long expiry + ops reconcile + the funding
+binding enable a late manual credit); forged intent for a victim account ⇒
+refused (intent POST is account-key-signed); self-pay USDC ⇒ allowed, binds
+funding, credits once; double-processing ⇒ single credit (sig dedupe); one
+account paying from two Solana addresses ⇒ first-wins binding, later recorded
++ flagged.
+
 ## Honest caveats — READ BEFORE IMPLEMENTING (MANDATORY)
 
 1. **The KAT rail ships FIRST (owner call 2026-09-01) but its public launch
@@ -348,6 +433,17 @@ least-proven earning lane in front of the newest users.
    over the transfer intent for large sends; the **root/genesis float stays
    CLI-only** regardless — the web wallet spends a working float, never the
    treasury keys.
+10. **The crank is a grant engine, not a mint engine — and a sybil surface.**
+    Treasury-first per M2 (the word "mint" in the ask maps to `grant`);
+    the never-lever freeze means the amount is a genesis decision, not a
+    tuning knob; the activity gate + daily budget cap are load-bearing. Size
+    `FREE_TIER_DAILY_KAT` so farming keypairs-just-to-sync loses to one real
+    healing session — the crank must never out-pay the work it subsidizes.
+11. **Memo vs reference (ask 12), restated as a warning.** A
+    `memo`-mandatory settlement would strand payments from wallets that drop
+    the memo field; the reference key is the binding. The CLI/page copy still
+    shows the memo to the payer — the user-visible contract is intact; only
+    the settlement gate ignores it.
 
 ## Fusion lineage
 
@@ -395,18 +491,29 @@ least-proven earning lane in front of the newest users.
   from B; replayed/nonces-fresh sessions refused; the server-side min-hold
   fires when `held_ms < 3000`; a send above the threshold is refused with
   CLI pointing; the root float account is refused outright.
+- **G-CRANK:** two alarm passes on the same UTC date credit exactly once per
+  account; a dormant account (outside the activity window) earns zero; the
+  budget cap skips + alerts; below-floor treasury follows the M2 fallback
+  exactly; the amount constants are asserted immutable (never-lever pin).
+- **G-REG (the register matrix):** the ten §12 cases green against recorded
+  fixtures — including the forged-intent refusal, the memo-dropped settle,
+  and the single-credit dedupe; the live-rail arm stays `#[ignore]` until
+  Phase 5.
 
 ## What ships now vs deferred
 
 ### Ships now — this proposal's phased scope
-- riir-clippy: `pay`/`payreq` CLI (create/request/show), invoice view + recheck,
+- riir-clippy: `pay`/`payreq` CLI (create/request/show), `faucet --request`
+  preset, `pay --token usdc` intent composer, invoice view + recheck,
   `wetrun` + `--dry-run`, `login` default-SSH, `account` welcome + `--history`
   (feature `kat_payreq`, forwards `kat_transport`).
 - riir-dapps: `/payreq` routes (create/resolve/settle/invoice) on the
   kat-service worker + **the web wallet page on the same host** (static
   assets + GitHub OAuth callback + key-match + session + hold-send route),
-  `payreq` invoice rows + faucet refund credit (feature `kat_payreq`);
-  Stripe/USDC rails stay behind their existing features, fixture-tested only.
+  `payreq` invoice rows + faucet refund credit, the **daily grant crank** in
+  the DO alarm, registration-intent + funding-binding rows (feature
+  `kat_payreq`); Stripe/USDC rails stay behind their existing features,
+  fixture-tested only.
 - riir-deployer: `genesis` command + params yaml + SSH provision; deploy
   selector + acks; `node-sync` probe; chainspec authorship for testnet/mainnet
   (closes 040 D4 / chain Issue 103's authoring half).
@@ -421,10 +528,15 @@ least-proven earning lane in front of the newest users.
   machinery is already proven — only the launch decision waits).
 - KAT-rail launch beyond operator-owned accounts (counsel gate).
 - `riir-wallet-wasm` invoice display (browser wallet; CLI view ships first).
+- **Discord faucet bot** (sybil surface; reopen trigger + gates in §11).
+- **Live USDC pay-and-register** (Phase 5 — counsel + demand gated; the
+  intent/binding substrate and the G-REG fixture matrix land earlier).
 - **Baz fixer tier** — own plan, gated per §9.
 
 ### Explicitly NOT shipped by this proposal
 - A per-payment chain program or per-payment chain writes (rate test rejects).
+- An always-mint daily faucet (the crank grants treasury-first via M2 — it is
+  not an emission channel, and its amount is never-lever).
 - Recurring/subscription requests (chain Proposal 002's territory — complement,
   later).
 - Any mainnet wet-run path, with or without overrides.
@@ -441,6 +553,7 @@ least-proven earning lane in front of the newest users.
 - [ ] T0.3 riir-chain-sdk `pay_request` module (KAT compose + resolve/transfer;
       USDC arm stubbed behind the mock)
 - [ ] T0.4 self-pay fixtures (chain + ledger + payreq)
+- [ ] T0.5 registration-intent + funding-binding row types (the ask-12 substrate)
 
 ### Phase 1 — the KAT rail + web wallet (DEFAULT, ships first — owner call 2026-09-01)
 - [ ] T1.1 `/payreq` routes (create/resolve/settle/invoice) + rate limit + signed resolve
@@ -454,6 +567,9 @@ least-proven earning lane in front of the newest users.
       theft, amount manipulation, self-pay, hold-bypass, root-float refusal)
 - [ ] T1.6 Stripe/USDC rails as MOCK tests only (five-check machinery exercised
       against fixtures; no live rail this phase)
+- [ ] T1.7 the daily grant crank (alarm pass, `(account, utc_date)` exactly-once,
+      activity gate, budget cap) + G-CRANK
+- [ ] T1.8 `faucet --request` preset + `faucet_daily_cap_kat` enforcement
 
 ### Phase 2 — genesis ceremony (bar)
 - [ ] T2.1 params yaml + validation against pinned tokenomics
@@ -470,6 +586,14 @@ least-proven earning lane in front of the newest users.
 - [ ] T4.2 mainnet refusal (unit + live) + `--dry-run` read-only proof
 - [ ] T4.3 install.sh copy alignment (cargo-heal releases) + foo end-to-end doc
 - [ ] T4.4 testnet wet-run executed; mesh-ready verdict recorded
+
+### Phase 5 — live USDC pay-and-register (real users; counsel + demand gated)
+- [ ] T5.1 live Solana-Pay settle path + G-REG matrix run live (fixtures first;
+      the `#[ignore]`d live arm un-ignored)
+- [ ] T5.2 ops reconcile runbook for expired-intent stuck funds (until
+      outbound refunds exist — 007 T2.2 territory)
+- [ ] T5.3 testnet-then-mainnet launch decision (the counsel envelope shared
+      with the KAT rail)
 
 ## Risks
 
@@ -512,12 +636,16 @@ least-proven earning lane in front of the newest users.
    complement), `NftProgram` (invoice-NFT vehicle).
 7. 008/010 ratified tokenomics constants (`KatConfig`) — the params-yaml
    defaults; 007's authority-share schedule.
+8. The KAT mint swap-in (riir-clippy `a07b9e6` worker half / riir-dapps
+   `10ffb18` server half) — the exactly-once `(date, neurons)` grant key the
+   crank reuses; the `cloudflare/housekeeping/` worker — the scheduled-cron
+   + cursor + alert discipline the crank's ops shape follows.
 
 ### External (cited-only)
-8. **Solana Pay Transfer Request v1** (docs.solanapay.com) — URL schema,
+9. **Solana Pay Transfer Request v1** (docs.solanapay.com) — URL schema,
    omitted-`amount` payer-composes semantics, reference confirmation.
-9. **BIP-21** — the earlier amount-optional payment-URI precedent.
-10. **GitHub SSH keys endpoint** (`https://github.com/{user}.keys`) — the
+10. **BIP-21** — the earlier amount-optional payment-URI precedent.
+11. **GitHub SSH keys endpoint** (`https://github.com/{user}.keys`) — the
     published-keys lookup the web wallet's key-match uses; GitHub's
     one-key-one-account uniqueness is what makes the binding an identity.
 
@@ -532,7 +660,12 @@ The install surface stays gist-rs/cargo-heal per 003 — the owner's
 riir-clippy-releases URL is corrected, not adopted. Baz waits for its own
 measured plan. The one hard rule to carry out of this document: the web
 wallet's hold-to-send is UX, the session is an OAuth-bound identity, and the
-root/genesis float stays CLI-only. Next action: open the Phase 0 plan
+root/genesis float stays CLI-only. The follow-up trio lands inside the same
+envelope: the daily free tier is a **treasury-first grant crank** (never a
+mint faucet, never-lever), the faucet is a **payreq preset behind the same
+web wallet** (Discord bot deferred), and pay-and-register binds via the
+**reference key** with the memo as the audit copy — a memo-mandatory gate
+would strand real payments. Next action: open the Phase 0 plan
 (riir-dapps rows + SDK module + self-pay fixtures), then the Phase 1 web
 wallet — and Phase 2's ceremony first, because bar's dry-run genesis is what
 puts the mint in the wallet that every foo gets paid from.
