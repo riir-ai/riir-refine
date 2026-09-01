@@ -424,10 +424,12 @@ deploys run under `env -u CLOUDFLARE_API_TOKEN -u CF_API_TOKEN …` (the
 nightly and `cloudflare/housekeeping` runbooks already do; keep it that
 way).
 
-Full narratives + runbooks: [`.issues/044_llm_ops_dashboard.md`](.issues/044_llm_ops_dashboard.md)
-(dashboard + alerting + nightly) and
-[`.issues/045_container_cost_housekeeping.md`](.issues/045_container_cost_housekeeping.md)
-(housekeeping worker, rollout, backfill).
+Full narratives: Issues 044 (dashboard + alerting + nightly) and 045
+(housekeeping worker, rollout, backfill) RESOLVED + removed 2026-09-01
+per the noise-reduction rule — the live state + owner-gated residuals
+are documented in [AGENTS.md](AGENTS.md) §"CF ops surface"; the full
+narratives live in git history (`git log -- .issues/044_*` /
+`git log -- .issues/045_*`).
 
 ## Coverage (measured, Bench 045 — the honest product numbers)
 

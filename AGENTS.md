@@ -2815,20 +2815,53 @@ exist to make) — re-open only with an explicit free-tier arm. The
 scaling-direction note (owner): this ladder is the TEMPLATE for more free
 tiers — a provider list + per-provider quota state, not a hardcoded pair.
 
-**State as of 2026-08-29 (verified live, do not re-ask for these):** the
-T9 rollout EXECUTED — worker deployed, `READ_TOKEN` gate live (anon
-`/hours` → 401), `CF_API_TOKEN` set in the worker (`/status` →
-`token_set:true`; neurons + containers collecting hourly; 14-day backfill
-run), 4 core vars all SET in `.env` (`GROQ_API_KEY`, `CF_API_TOKEN`,
-`CF_DEPLOY_API_TOKEN`, `READ_TOKEN`). Remaining owner-gated (verified
-absent): `ALERT_WEBHOOK_URL` + `MONTHLY_BUDGET_USD` (paging — crossings
-still land in KV + `/status alerts_today` without them) and `DASHBOARD_TOKEN`
-(auth gate ships OPEN by owner decision 2026-08-28). The nightly launchd
-bootstrap is INSTALLED (2026-08-29, `launchctl print` verified; 01:23 local
-daily) and settlement is automated (issue 057): the nightly appends a
-settlement ledger row per completed account day that drifts from CF GraphQL,
-commits it (the ledger joined the nightly's ARTIFACTS list), and deploys —
-the reconciliation card can no longer accumulate silent drift.
+**Issues 044 + 045 RESOLVED + removed 2026-09-01 per the noise-reduction
+rule (full narratives in git history — `git log -- .issues/044_*` /
+`git log -- .issues/045_*`).** All engineering in both is landed,
+deployed + live-verified (every claim re-measured against PROD on
+09-01, not prose): the dashboard (six-source one-URL HTML; token gate
+deployed fail-open + the T13 CSP/no-store/redaction hardening
+`82c5032d`; the T12 per-day attribution fix + reconciliation card
+`6b8c8a10`), the nightly runner (T14 toolchain preflight + T16
+exit-2-on-failed-deploy + T16.1 `env -u` credential-shadowing fix +
+T16.2 post-deploy verify + T16.3 least-privilege-arm fix; the CI twin
+reconciled in `55fd477`; launchd INSTALLED and kickstart-GREEN under
+the REAL launchd environment 09-01 — regen 15.5 min, verify_dom PASS,
+artifacts `1143a62`, deploy `verified`, housekeeping tests 45/45), the
+housekeeping Worker (T7 `ca93c8de` → T8+T9e `64bea65c` → the T9 series
++ T9f `2e07d125`; full 31-day cursor backfill executed to
+`next_end:null`), and the KAT mint swap-in (worker half `a07b9e6`
+deployed `693972ec`; server half riir-dapps `10ffb18`, exactly-once per
+`(date, neurons)`). The residuals, preserved here because the files
+are gone:
+
+1. **Dashboard auth gate OPEN by owner decision** (2026-08-28;
+   re-verified live 09-01: `x-dashboard-auth: OPEN-INSECURE`). The
+   payload carries 19 full ledger rows, 10 private repo names, per-repo
+   lint debt + container costs. One command from closed:
+   `cd cloudflare/dashboard && npx wrangler secret put DASHBOARD_TOKEN`
+   — then flip `UNCONFIGURED_POLICY` to `deny` so a deleted secret
+   fails safe instead of silently republishing the payload.
+2. **Push paging owner-gated**: `ALERT_WEBHOOK_URL` + optional
+   `MONTHLY_BUDGET_USD` verified ABSENT live 09-01. Collection +
+   cap-crossing detection are LIVE (since 08-29); crossings land in
+   KV + `/status alerts_today` and page nobody.
+3. **KAT mint go-live (044 T5 / 045 T6)**: armed-but-INERT until the
+   kat-service production deploy (riir-dapps surface) lands AND the
+   owner pushes `KAT_SERVICE_URL` + `KAT_MINT_TOKEN` (verified absent
+   09-01). The POST is exactly-once per `(date, neurons)`; 409/network
+   failures fail-soft — a mint failure never fails collection.
+4. **T7 first SCHEDULED-tick confirmation** (2026-09-02 01:23 local):
+   the launchd-environment question was answered 09-01 by kickstart, so
+   the scheduled tick is confirmation only and needs no agent. If it
+   fails, the log + missing artifacts make it visible; re-open then.
+
+Still true and stable: the 4 core vars are all SET in `.env`
+(`GROQ_API_KEY`, `CF_API_TOKEN`, `CF_DEPLOY_API_TOKEN`, `READ_TOKEN`);
+the worker collects neurons + containers hourly (`token_set:true,
+read_gated:true`; anon `/hours` → 401); settlement is automated
+(Issue 057): the nightly appends a settlement ledger row per completed
+account day that drifts from CF GraphQL, commits it, and deploys.
 
 **Deploy hazard (Issue 044 T16.1, load-bearing):** wrangler honours
 `CF_API_TOKEN` as a deprecated alias of `CLOUDFLARE_API_TOKEN` — an
