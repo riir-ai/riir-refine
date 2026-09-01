@@ -156,6 +156,56 @@ pub fn span_range(node: &impl Spanned) -> (usize, usize) {
     (r.start, r.end)
 }
 
+/// Does a whole-node splice replacement DROP a comment? Scans the replaced
+/// span's source for comment markers and reports any that is NOT inside a
+/// kept fragment (Issue 027/028/029 class — real clippy stays silent on
+/// comment-displacing rewrites, and our emitter deletes the comment
+/// outright). Kept fragments are byte ranges that survive verbatim in the
+/// replacement (e.g. scrutinee, patterns, arm bodies). Hoisted here (from
+/// `clippy_lints::proposers::helpers`, Plan 057 salvage) so the `sec`
+/// domain can share it WITHOUT pulling `clippy_lints` into
+/// `--no-default-features --features sec` — this module is the
+/// feature-neutral substrate.
+#[must_use]
+pub fn drops_interior_comment(
+    source: &str,
+    span: std::ops::Range<usize>,
+    kept: &[std::ops::Range<usize>],
+) -> bool {
+    let Some(text) = source.get(span.clone()) else {
+        return true; // broken span bookkeeping — refuse rather than displace
+    };
+    let offset = span.start;
+    for pos in comment_marker_positions(text) {
+        let abs = offset + pos;
+        if !kept.iter().any(|k| k.contains(&abs)) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Byte offsets of `//` and `/*` comment OPENERS in `text` (syn has no
+/// comment nodes). Dropped-gap regions of a rewritten node contain only
+/// keywords/punctuation, so string-literal false positives cannot occur
+/// there; kept fragments are checked verbatim so a `//` inside a string in a
+/// kept fragment is covered by its own range.
+#[must_use]
+pub fn comment_marker_positions(text: &str) -> Vec<usize> {
+    let mut out = Vec::new();
+    let bytes = text.as_bytes();
+    let mut i = 0;
+    while i + 1 < bytes.len() {
+        if bytes[i] == b'/' && (bytes[i + 1] == b'/' || bytes[i + 1] == b'*') {
+            out.push(i);
+            i += 2;
+        } else {
+            i += 1;
+        }
+    }
+    out
+}
+
 /// Extend an edit's end past ONE following ASCII space, when present —
 /// deleting `'a` from `&'a u8` should yield `&u8`, not `& u8`.
 #[must_use]

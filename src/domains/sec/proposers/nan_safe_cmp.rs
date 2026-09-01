@@ -50,7 +50,7 @@ use syn::spanned::Spanned;
 use syn::visit::Visit;
 use syn::{Expr, ExprMethodCall, File, Item};
 
-use crate::domains::clippy_lints::proposers::helpers::comment_marker_positions;
+use crate::edit_emitter::comment_marker_positions;
 use super::{src, SourceEdit};
 
 /// The sort-family method names that license the rewrite (the precision
@@ -209,9 +209,8 @@ impl NanCmpWalker<'_> {
         if partial.args.len() != 1 {
             return;
         }
-        let arg = match partial.args.first() {
-            Some(a) => a,
-            None => return,
+        let Some(arg) = partial.args.first() else {
+            return;
         };
         // Macro args: token-stream spans are unreliable — refuse.
         if matches!(arg, Expr::Macro(_))
@@ -219,9 +218,7 @@ impl NanCmpWalker<'_> {
         {
             return;
         }
-        let Some(chain_start) = byte_start(partial.receiver.as_ref()) else {
-            return;
-        };
+        let chain_start = byte_start(partial.receiver.as_ref());
         let chain_end = call.span().byte_range().end;
         // Comment guard: the rewrite replaces the whole chain span; a
         // comment inside it would be displaced. Kept fragments are the
@@ -267,8 +264,8 @@ impl NanCmpWalker<'_> {
 
 /// Span start that survives method-call receivers (syn spans on exprs are
 /// call-site dependent; the byte range is what we splice against).
-fn byte_start(expr: &Expr) -> Option<usize> {
-    Some(expr.span().byte_range().start)
+fn byte_start(expr: &Expr) -> usize {
+    expr.span().byte_range().start
 }
 
 #[cfg(test)]
@@ -293,7 +290,7 @@ mod tests {
     }
 
     #[test]
-    fn rewrives_imported_ordering_form() {
+    fn rewrites_imported_ordering_form() {
         let src_text = "use std::cmp::Ordering;\npub fn f(v: &mut [f32]) {\n    v.sort_by(|a, b| a.partial_cmp(b).unwrap_or(Ordering::Equal));\n}\n";
         let (out, n) = applied(src_text);
         assert_eq!(n, 1);
@@ -360,6 +357,32 @@ mod tests {
     fn helper_fn_comparator_outside_sort_refuses() {
         // The honest recall limit: sort and chain must share the fn.
         let src_text = "pub fn cmp(a: &f32, b: &f32) -> std::cmp::Ordering {\n    a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)\n}\npub fn g(v: &mut [f32]) {\n    v.sort_by(cmp);\n}\n";
+        let (_, n) = applied(src_text);
+        assert_eq!(n, 0);
+    }
+
+    #[test]
+    fn macro_operand_refuses() {
+        // The gate exists for span reliability — pin it with a fixture.
+        let src_text = "macro_rules! f { () => { 1.0f32 } }\npub fn g(v: &mut [f32]) {\n    v.sort_by(|a, b| a.partial_cmp(f!()).unwrap_or(Ordering::Equal));\n}\n";
+        let (_, n) = applied(src_text);
+        assert_eq!(n, 0, "macro operands have unreliable spans — refuse");
+    }
+
+    #[test]
+    fn nested_fn_without_sort_shadows_the_outer_sort() {
+        // A chain inside a NESTED fn must consult the nested fn's own body:
+        // the outer fn's sort does not license it (the innermost-habitat
+        // semantics — collect_in_item re-checks per fn).
+        let src_text = "pub fn outer(v: &mut [f32]) {\n    v.sort_by(|a, b| a.total_cmp(b));\n    fn inner(a: &f32, b: &f32) -> std::cmp::Ordering {\n        a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)\n    }\n    let _ = inner;\n}\n";
+        let (_, n) = applied(src_text);
+        assert_eq!(n, 0, "the nested fn has no sort of its own — refuse");
+    }
+
+    #[test]
+    fn sort_by_key_is_not_a_comparator_habitat() {
+        // Keys return K, not Ordering — a chain there is not a comparator.
+        let src_text = "pub fn g(v: &mut [f32]) {\n    v.sort_by_key(|x| x.to_bits());\n    let o = 1.0f32.partial_cmp(&2.0).unwrap_or(std::cmp::Ordering::Equal);\n    let _ = o;\n}\n";
         let (_, n) = applied(src_text);
         assert_eq!(n, 0);
     }
