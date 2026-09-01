@@ -44,6 +44,10 @@ pub enum SecFamily {
     UnsafeHygiene,
     /// Crypto-API hygiene (Phase 2 — none shipped yet).
     CryptoHygiene,
+    /// Sort/ordering panic safety (P8 — a comparator violating the
+    /// total-order contract makes the std sorts PANIC since 1.81 and
+    /// silently mis-orders NaN otherwise).
+    PanicSafety,
 }
 
 impl SecFamily {
@@ -55,6 +59,7 @@ impl SecFamily {
             SecFamily::DropLeak => "drop-leak",
             SecFamily::UnsafeHygiene => "unsafe-hygiene",
             SecFamily::CryptoHygiene => "crypto-hygiene",
+            SecFamily::PanicSafety => "panic-safety",
         }
     }
 }

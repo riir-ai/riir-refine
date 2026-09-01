@@ -70,9 +70,9 @@
 - **Sibling lanes (do not touch):** riir-train — sibling actively building
   (`/tmp/riir-train-499b`); the 4090 perf lanes — sibling PV work mid-flight as of 08-29
   (re-verify lane state at session start before any 4090 unit).
-- **Post-mining intake: 1 open class** — P8 nan-unsafe float sort comparator (filed
-  2026-09-01, riir-ai Issue 832 T5; detect-only tier recommended); all prior classes
-  closed (records below; full text in the history note).
+- **Post-mining intake: 0 open classes** — P8 nan-unsafe float sort comparator CLOSED
+  2026-09-01 (landed as sec `nan-unsafe-sort-comparator`, Plan 057; record below); all
+  prior classes closed (records below; full text in the history note).
 - **Owner-gated tails:** `.issues/044` (paging secrets `ALERT_WEBHOOK_URL` +
   `MONTHLY_BUDGET_USD`), `.issues/045` (T7 launchctl activation) — verified 08-31.
 - **Queue items 6/7** (boundary-guard + substrate-first drift audit): last run 08-29,
@@ -227,24 +227,32 @@ All classes closed; the standing divergence (P4 residual) has no action planned.
       both guarded classes); landed consumer-side as riir-ai `ci_feature_guard.sh`
       Layer 2.
 
-- [ ] P8 **nan-unsafe float sort comparator** (`partial_cmp(..).unwrap_or(Equal)`
-      inside a sort closure) — FILED 2026-09-01 (riir-ai Issue 832 T5; riir-ai fixed
-      its 102 library sites this session against `katgpt_core::float_order`).
-      Feasibility verdict: DETECTABLE parse-only — match `<recv>.partial_cmp(<arg>)`
-      followed (same line or next 3) by `.unwrap_or(<path>::Ordering::Equal)` or
-      `.unwrap()`, where the enclosing item contains a `sort_by`/`sort_unstable_by`/
-      `select_nth_unstable_by` call; siblings ≈300 library sites workspace-wide
-      (katgpt-rs 164 / riir-train 77 / riir-clippy 21 / ndb 27 lib src). Fix-space is
-      NOT a parse-only rewrite: the replacement comparator needs the operand DIRECTION
-      (desc vs asc) and the float TYPE (f32 `f32::total_cmp` vs f64 twin) — both
-      type-blind in syn (quest_matcher's `total` field is f64 while its sibling file's
-      is f32 — the riir-ai feature-union compile gate caught exactly this). Right tier:
-      DETECT-ONLY lint (or suggest-with-verify), landing via `fix_verify` so the typed
-      emission auto-reverts on f64/f32 mismatches; never a blind `--fix` proposer.
-      Consumer note: katgpt-core `float_order::{desc,asc,desc_f64,asc_f64}` is the
-      sanctioned replacement (ungated since the 832 T1 cfg fix); crates without a
-      katgpt-core dep carry a documented local twin (riir-data/riir-router/riir-wasm/
-      riir-games-shared pattern).
+- [x] P8 **nan-unsafe float sort comparator** (`partial_cmp(..).unwrap_or(Equal)`
+      inside a sort closure) — **DONE 2026-09-01 (Plan 057, sec domain): landed as
+      `nan-unsafe-sort-comparator`** — 12th sec rule, new `PanicSafety` family, the 6th
+      FIXABLE proposer. **The intake's type-blindness concern DISSOLVED by std
+      `total_cmp`:** the intake assumed the replacement needed operand DIRECTION +
+      float TYPE (the `float_order::{desc,asc,desc_f64,asc_f64}` twin problem), but
+      `a.partial_cmp(b)` → `a.total_cmp(b)` preserves the recv/arg order mechanically
+      (direction rides the same positions), `total_cmp` is name-identical on f32/f64,
+      AND the arg carries over VERBATIM — `PartialOrd::partial_cmp` pins the trait
+      signature `(&self, other: &Self)`, exactly the shape `total_cmp` takes, so a
+      pre-compiling call site rewrites signature-compatibly and only non-`total_cmp`
+      receivers (`Option<f32>`, other Ord primitives) E0599 → verify-reverted. Gates:
+      sort context (sort_by/sort_unstable_by/select_nth_unstable_by in the enclosing
+      fn — the intake's precision guard) + exact chain shape + `Equal`-only default +
+      comment guard + macro args refuse; helper-fn comparators passed to
+      `sort_by(helper)` by name are the honest recall limit. Probe-first (Protocol C):
+      zero clippy lints fire on the shape (1.97 pedantic+nursery+perf+suspicious+
+      correctness+style) — the suggest-only tier the intake recommended was for a
+      type-ambiguous rewrite that no longer exists; the strict-gated FIXABLE proposer
+      (the `constant-time-secret-compare` precedent) is the more valuable form.
+      Validation: sec lib 1051/0 (11 proposer tests incl. the exact corpus round-trip),
+      default lib 1001/0 unchanged, boundary gate 2/2 with the new fixture
+      auto-covered, retrieval floors HELD (13/13 + 14/14 combined, sec self-variant
+      top-1), score-bench run #24 flat (96.2/1.9/100/100), clippy 0 touched files.
+      ≈300 sibling library sites are now addressable via heal sweeps with
+      `--features sec` (a later per-repo unit).
 
 **Standing never-heal divergence table:** the cargo-heal skill owns it (comment-guarded
 matches, array-literal defaults, named-arg renames, nested macro args, NaN-unsound

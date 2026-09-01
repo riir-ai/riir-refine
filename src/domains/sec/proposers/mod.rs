@@ -22,6 +22,7 @@
 //! | `weak-hash-to-blake3` | ✗ | output TYPE changes (`[u8; N]` → `blake3::Hash`) — signature-changing |
 //! | `password-hash-argon2` | ✗ | argon2 is a salted KDF with its own API — a redesign, not a swap |
 //! | `constant-time-secret-compare` | ✓ | `==` → `.ct_eq(..).into()` is signature-preserving (bool → bool), strict-gated (subtle import + plain-ident operands + secret vocabulary) |
+//! | `nan-unsafe-sort-comparator` (P8) | ✓ | `partial_cmp(..).unwrap_or(Equal)` → `total_cmp(..)` is order-identical on non-NaN and NaN-deterministic after; strict-gated (sort context + exact chain + `Equal`-only default + comment guard); non-float receivers fail E0599 → the `--verify` gate reverts |
 //!
 //! ## Conservative gates (Proposal 004 caveat 3)
 //!
@@ -35,6 +36,7 @@ use syn::File;
 
 pub mod drop_no_panic;
 pub mod ffi_catch_unwind;
+pub mod nan_safe_cmp;
 pub mod ptr_deref_null_check;
 pub mod secret_ct_eq;
 pub mod slice_len_guard;
@@ -51,6 +53,7 @@ pub const FIXABLE_SEC: &[&str] = &[
     "drop-impl-no-panic",
     "slice-from-raw-parts-len-guard",
     "constant-time-secret-compare",
+    "nan-unsafe-sort-comparator",
 ];
 
 /// Collect the rule's edits for the file (empty for unknown rules).
@@ -62,6 +65,7 @@ pub fn collect_edits(rule_id: &str, source: &str, file: &File) -> Vec<RuleEdit> 
         "drop-impl-no-panic" => drop_no_panic::collect_edits(source, file),
         "slice-from-raw-parts-len-guard" => slice_len_guard::collect_edits(source, file),
         "constant-time-secret-compare" => secret_ct_eq::collect_edits(source, file),
+        "nan-unsafe-sort-comparator" => nan_safe_cmp::collect_edits(source, file),
         _ => Vec::new(),
     };
     edits

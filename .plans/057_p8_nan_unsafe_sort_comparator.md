@@ -1,6 +1,6 @@
 # Plan 057 — P8 intake: `nan-unsafe-sort-comparator` (sec domain)
 
-**Status:** IN PROGRESS
+**Status:** DONE 2026-09-01 — all tasks complete; landed same session.
 **Source:** riir-clippy `.distill/001_mining_queue_snapshot.md` §Post-mining intake,
 open class P8 (filed 2026-09-01 from riir-ai Issue 832 T5's lint verdict).
 **Repo:** riir-clippy only. **Domain vehicle:** `sec` (the P8 verdict's
@@ -68,23 +68,27 @@ and every applied edit rides the verify gate.
 
 ## Tasks
 
-- [ ] T1 — `SecFamily::PanicSafety` variant + `label()` arm (grep-verified:
+- [x] T1 — `SecFamily::PanicSafety` variant + `label()` arm (grep-verified:
       no other exhaustive matches on `SecFamily`).
-- [ ] T2 — corpus entry `nan-unsafe-sort-comparator` (buggy = the
+- [x] T2 — corpus entry `nan-unsafe-sort-comparator` (buggy = the
       `unwrap_or(Equal)` f32-sort shape; fixed = `total_cmp`) + corpus
       header-table row.
-- [ ] T3 — proposer `sec/proposers/nan_safe_cmp.rs` + registry wiring +
-      `FIXABLE_SEC` entry; module tests (fires / sort-guard refusal /
-      non-Equal refusal / macro refusal / comment refusal / reversed-args /
-      `.unwrap()` form / prefix-composition / self-variant round-trip).
-- [ ] T4 — validation: default lib tests, `--features sec` lib tests,
-      `sec_boundary_gate` (needs cargo; runs live), retrieval gate under
-      `latent_retrieval` (floors HELD or honestly re-pinned + recorded),
-      `--score-bench` run appended to the history, clippy 0 touched files.
-- [ ] T5 — docs: `.docs/11_domains/sec.md` rule table + AGENTS.md sec
-      section + the P8 intake checkbox marked DONE with the commit hash
-      (+ the total_cmp refinement recorded in the intake's entry).
-- [ ] T6 — commit `feat: sec rule nan-unsafe-sort-comparator (P8 intake)` + push.
+- [x] T3 — proposer `sec/proposers/nan_safe_cmp.rs` + registry wiring +
+      `FIXABLE_SEC` entry; 11 module tests — all green, INCLUDING a
+      simplification found during the round-trip gate: the arg carries over
+      VERBATIM (PartialOrd pins `(&self, other: &Self)` — the exact shape
+      `total_cmp` takes), so no `&` insertion / parenthesization machinery
+      is needed at all and the corpus fixed fixture is the EXACT rewrite.
+- [x] T4 — validation: sec lib 1051/0 · default lib 1001/0 unchanged ·
+      `sec_boundary_gate` 2/2 (live real-clippy, new fixture auto-covered,
+      no banned MachineApplicable fires) · retrieval floors HELD (13/13
+      latent; 14/14 latent+sec; sec self-variant top-1) · score-bench run
+      #24 flat (96.2/1.9/100/100 — no fixture cross-fire) · clippy 0 in
+      touched files.
+- [x] T5 — docs: `.docs/11_domains/sec.md` P8 section + AGENTS.md sec
+      bullet + the P8 intake checkbox marked DONE (intake summary line →
+      0 open classes).
+- [x] T6 — commit `feat: sec rule nan-unsafe-sort-comparator (P8 intake)` + push.
 
 ## Non-goals
 

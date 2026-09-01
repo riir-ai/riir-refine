@@ -21,6 +21,7 @@
 //! | `weak-hash-to-blake3` | `CryptoHygiene` | no (suggest-only, dep-gated) | — (no lint fires on 1.97; cargo-audit owns vulnerable CRATES, not misuse) |
 //! | `password-hash-argon2` | `CryptoHygiene` | no (suggest-only, dep-gated) | — (silent on 1.97) |
 //! | `constant-time-secret-compare` | `CryptoHygiene` | yes (strict-gated) | — (silent on 1.97) |
+//! | `nan-unsafe-sort-comparator` | `PanicSafety` | yes (strict-gated, P8) | — (silent on 1.97; probe: zero lints fire on the shape) |
 //!
 //! Phase-1 killed candidates (recorded in the batch research note):
 //! `ffi-fnptr-type-unsafe-extern` + `ffi-by-value-no-drop-type`
@@ -168,6 +169,20 @@ both operands are plain identifiers)"
             buggy_code: "use subtle::ConstantTimeEq;\n\npub fn check_token(provided: &[u8], expected: &[u8]) -> bool {\n    provided == expected\n}\n".to_string(),
             fixed_code: "use subtle::ConstantTimeEq;\n\npub fn check_token(provided: &[u8], expected: &[u8]) -> bool {\n    provided.ct_eq(expected).into()\n}\n".to_string(),
             family: SecFamily::CryptoHygiene,
+        },
+        // ── nan-unsafe-sort-comparator (PanicSafety; P8 intake, strict-gated proposer) ──
+        SecRule {
+            rule_id: "nan-unsafe-sort-comparator".to_string(),
+            sec_concept: "a sort comparator built from `partial_cmp(..).unwrap_or(Equal)` treats \
+NaN as equal to EVERYTHING — an inconsistent (non-total) order the std sorts \
+MAY PANIC on since 1.81, and silently mis-order NaN otherwise — use \
+`total_cmp` (name-identical on f32/f64, direction-preserving, NaN-deterministic); \
+probe 2026-09-01: zero clippy lints fire on the shape (real clippy 1.97, \
+pedantic+nursery+perf+suspicious+correctness+style)"
+                .to_string(),
+            buggy_code: "pub fn sort_scores(v: &mut [f32]) {\n    v.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));\n}\n".to_string(),
+            fixed_code: "pub fn sort_scores(v: &mut [f32]) {\n    v.sort_by(|a, b| a.total_cmp(b));\n}\n".to_string(),
+            family: SecFamily::PanicSafety,
         },
     ]
 }

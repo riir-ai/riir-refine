@@ -47,6 +47,12 @@ secret (subtle has no `ConstantTimeEq` for `String`) FIRES and then the
 `--fix --verify` compile gate reverts it — the type backstop, recorded as
 a fixture. The `!=` form stays out of Phase-2 scope.
 
+## P8 intake (2026-09-01) — the 12th rule, new `PanicSafety` family
+
+| Rule | Family | `--fix` | The bounded fix / gate |
+|---|---|---|---|
+| `nan-unsafe-sort-comparator` | `PanicSafety` | yes (strict-gated) | `partial_cmp(..).unwrap_or(Equal)` (or `.unwrap()`) inside a sort comparator → `total_cmp(..)` — NaN becomes deterministically ordered instead of equal-to-everything (an inconsistent order the std sorts MAY PANIC on since 1.81). Gates: enclosing fn contains a `sort_by`/`sort_unstable_by`/`select_nth_unstable_by` call + exact chain shape + `Equal`-only default + comment guard + macro args refuse. The arg carries over VERBATIM (`PartialOrd::partial_cmp` pins `(&self, other: &Self)` — the same shape `total_cmp` takes), so the output is the idiomatic human form; non-float receivers (`Option<f32>`, other Ord primitives) fail E0599 → the `--verify` gate auto-reverts. Probe 2026-09-01: zero clippy lints fire on the shape (real clippy 1.97, pedantic+nursery+perf+suspicious+correctness+style) — the boundary holds with margin. Source: riir-ai Issue 832 T5's P8 intake (≈300 sibling library sites); the intake's type-blindness concern dissolved by `total_cmp` (direction-preserving recv/arg order + name-identical on f32/f64) — recorded in the intake close-out. Honest recall limit: a comparator defined in a helper fn and passed to `sort_by(helper)` by name is not detected — the sort call and the chain must share the enclosing fn.
+
 ## The boundary discipline (non-negotiable)
 
 `tests/sec_boundary_gate.rs` runs REAL clippy over the corpus fixtures with
