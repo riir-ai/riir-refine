@@ -27,6 +27,7 @@ from game crates but has zero game-domain coupling.
 | Crate | Location | Condition |
 |---|---|---|
 | katgpt-core | `../katgpt-rs/crates/katgpt-core` | **the only dep in the default build** |
+| katgpt-device-verify | `../katgpt-rs/crates/katgpt-device-verify` | **`[patch]` entry only — no code-level dep** (`grep katgpt_device_verify` over `*.rs`: 0 files). A patch section must cover EVERY crate resolved from the patched source, and `riir-neuron-db` resolves this one under `latent_retrieval`; without the row its git copy survives and seven katgpt crates compile twice (Issue 058). Same ride-along shape as `riir-mmorpg-examples`'s row. |
 | riir-engine, riir-gpu | `../riir-ai/crates/*` | opt-in `ternary_inference` only |
 | riir-rag | `../riir-ai/crates/riir-rag` | opt-in `latent_retrieval` only |
 | riir-neuron-db | `../riir-neuron-db` | `optional = true`, `default-features = false` (measured 2026-08-21) |

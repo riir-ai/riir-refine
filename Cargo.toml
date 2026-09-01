@@ -591,3 +591,19 @@ debug = false
 [[test]]
 name = "t049_t023_stop_verdict"
 required-features = ["latent_retrieval"]
+
+# ⛔ `[patch]` is honoured ONLY in the root manifest of the workspace being
+# built. `riir-neuron-db` deps katgpt by git URL and redirects it back to the
+# local checkout with its own `[patch]` — a redirect that does NOT reach us
+# when riir-clippy is the build root. Without the table below, a
+# `latent_retrieval` build resolves SEVEN katgpt crates twice (local path +
+# git `14116501`, four commits before `roll_die v2` and the device-verify
+# fixture rewrite): same name, same version, non-unifying types, compiled
+# twice — in a build CI does in release (`ops_dashboard.yml`). Issue 058;
+# gated by C7 in `../riir-ai/scripts/ci_boundary_contract.sh`.
+#
+# `katgpt-attn-match` is deliberately absent — optional and not enabled on this
+# path, so patching it emits `warning: patch ... was not used in the crate graph`.
+[patch."https://github.com/katopz/katgpt-rs"]
+katgpt-core          = { path = "../katgpt-rs/crates/katgpt-core" }
+katgpt-device-verify = { path = "../katgpt-rs/crates/katgpt-device-verify" }
