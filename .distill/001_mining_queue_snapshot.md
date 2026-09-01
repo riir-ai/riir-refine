@@ -314,17 +314,37 @@ All classes closed; the standing divergence (P4 residual) has no action planned.
       harness (fake receiver type) and rustc THAT — type-checks the real
       content without the dependency graph, ~2 min, and it is the only
       Windows-reachable gate for macOS-gated repairs.
-- [ ] **P18 (open) — full-gate workflows missing in 11/12 sibling repos
-      (katgpt-rs Issue 701 R2 table, 2026-09-01).** riir-neuron-db is the only
-      repo whose CI runs the `--all-targets --all-features` screen; the magnitude
-      precedent is riir-ai Issue 830 (99 errors / 50 targets at a HEAD where
-      every existing gate was green). Each repo owns its own CI per
-      BOUNDARY.md — one repo per idle cycle: port
-      `katgpt-rs/scripts/full_gate.sh` (written portable; the macOS platform
-      layer + AGENTS.md parity check are the katgpt-rs-specific parts) or wire
-      the repo's existing guard script into a weekly workflow. riir-clippy is
-      itself in the missing set (1 workflow, no full gate) — self-apply first,
-      then fan out.
+- [-] **P18 (open — self-applied 2026-09-02, riir-clippy `2044722`; remaining:
+      riir-ai, riir-chain, riir-dao, riir-deployer, riir-game-sdk, riir-dapps,
+      riir-train, riir-unity, riir-viewbridge, riir-mmorpg-examples — one per
+      cycle) — full-gate workflows missing in the sibling repos (katgpt-rs
+      Issue 701 R2 table, 2026-09-01).** Self-apply landed: riir-clippy's own
+      guard (which was already a SUPERSET of the katgpt-rs full gate — layer
+      5a is clippy `-D warnings` both feature extremes) is now CI-enforced via
+      `.github/workflows/rust.yml` (weekly Fri 03:23 UTC on develop + main
+      pushes + dispatch, mirroring the ndb/riir-chain spending-limit
+      convention) + `scripts/standalone_dep_gate.sh` (9 escaping path deps
+      pinned across 3 siblings — katgpt-rs public; riir-ai + riir-neuron-db
+      private via `SIBLING_REPOS_TOKEN` with the Issue 028 expiry-alarm
+      hard-error). Measured error count at landing: the full 5-layer guard
+      ALL LAYERS PASS after (a) syncing all 3 floating siblings (riir-ai was
+      2 behind — the stale checkout showed a dead `note_tiled_flash_cmma_pv_launch`
+      that upstream had already wired) and (b) one own-crate fix: the denied
+      `redundant_closure_for_method_calls` at `src/draft/jury_disagreement.rs:426`
+      (→ `sort_by(f64::total_cmp)`). Two load-bearing facts learned: path-dep
+      warnings are UNCAPPED but NOT denied — they surface in the log yet can
+      never fail the gate (riir-gpu's tiled-flash warning leak, from the
+      sibling's 09-01/02 work, is visible here but is their lint debt to
+      close; do NOT fix mid-flight files in a hot sibling repo) — so the
+      `-D warnings` gate fails ONLY on own-crate warnings, no sibling-hostage
+      problem; and Cargo.lock is GITIGNORED here (floating siblings churn it),
+      so the CI cache key hashes Cargo.toml + rust-toolchain.toml instead.
+      CI runner notes live in the workflow preamble: docker Tier-2
+      deterministically degraded via dead `DOCKER_HOST` (daemon+registry from
+      shared runner IPs = flake factory; local runs own live-oracle
+      coverage), layer-5c wedge budget 7200 s for the 4-core runner,
+      ~300-min job budget (30-feature --each-feature layer + the GPU
+      all-features tree), first scheduled runs are the cost measurement.
 
 **Standing never-heal divergence table:** the cargo-heal skill owns it (comment-guarded
 matches, array-literal defaults, named-arg renames, nested macro args, NaN-unsound
