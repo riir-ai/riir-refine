@@ -1,8 +1,10 @@
 # Repos the healer has swept — the consumer-residue sweep target set.
 #
 # Derived (not guessed) as: sibling directories under /git that carry BOTH a
-# root `BOUNDARY.md` (the enumerated 15-repo workspace — see katgpt-rs
-# AGENTS.md "Repo count", measured by riir-ai/scripts/ci_boundary_contract.sh)
+# root `BOUNDARY.md` (the enumerated workspace — see katgpt-rs AGENTS.md
+# "Repo count", measured by riir-ai/scripts/ci_boundary_contract.sh, which
+# reported 18 contract-bearing repos on 2026-09-01; 17 of those also carry a
+# root Cargo.toml and so appear below)
 # AND a root `Cargo.toml`, excluding git worktrees (`.git` as a file rather
 # than a directory — `riir-ai-wt771`, `riir-train-p354*` and friends are
 # checkouts of a repo already in this list, so screening them double-counts).
@@ -33,3 +35,4 @@
 /Users/katopz/git/riir-neuron-db
 /Users/katopz/git/riir-train
 /Users/katopz/git/riir-viewbridge
+/Users/katopz/git/seal-game-editor
