@@ -1,6 +1,14 @@
 # Issue 64: Modelability oracle — scaffold marginal value as a latent-space quality measurement (GenFirst fusion)
 
-**Status:** Open — fusion idea, novelty TBD; validation protocol pre-registered; heuristic-tier candidate for the healer
+**Status:** Open — **Phase 1 (the oracle primitive) DONE 2026-09-02**: `src/modelability.rs` (always-compiled, std-only, zero deps) — `scaffold_value(population, config) -> ModelabilityReport` with the measured design: baseline = single-mode held-out MSE; scaffold = deterministic k-means++/Lloyd (fixed-seed LCG, fixed-stride hold-out, empty-cluster farthest-point rescue); raw gain = `ln(baseline_mse / scaffold_mse)`; **null-calibrated value = `v_raw − v_null` against a diagonal-matched null population** (same n/d/mean/per-dim σ, no cluster or cross-dimensional structure — the `mi_est` permutation-test pattern). The null calibration was FORCED by measurement: a single 2-D gaussian scores `v_raw` ≈ 1.9 at k=8 — pure k-means quantization gain, not structure — and the first failing gate (diffuse < 1.0) caught it exactly as designed. Gates 6/6: clustered-vs-diffuse separation (blobs > 1.5 excess nats, single gaussian |v| < 0.75, ordering + 1.0 margin), held-out overfit resistance (k = n_train must not collapse the value), determinism ×3 bit-identical, degenerate population → 0 not NaN, panic validation, split accounting. Diagnostic tier only (doc-pinned); never gates a heal decision. lib 1018/0, clippy 0. **Phase 2 (the pre-registered Spearman sweep) remains — wiring map below.**
+
+## Phase 2 wiring map (recon done 2026-09-02 — execute as the next unit)
+
+- **Variants (≥ 4, must differ in top-1)**: the `IndexTokenizer` ladder in `src/draft/corpus_index.rs:100` — `CodeDefault` / `OpAware` / `OpAwareBigram` (measured T3.5 spread: clippy top-1 54.2 → 70.8, Bench 027) × the three domain surfaces (clippy 48 / perf 40 / kernel 30 spans in `retrieval_eval.rs`) gives 9+ (variant, population, top-1) points; `run_eval_with(RetrievalConfig { tokenizer, .. })` produces each variant's report (`EvalReport.domain_metrics[..].recall(1)`).
+- **Populations for the oracle**: the per-domain CORPUS rule-pattern embeddings (the index chunks `RuleIndex` builds — one embedding per rule pattern + significant lines) and/or the eval-span embeddings; extract via the same `AstChunker → ModellessEmbedder` path the index uses so the oracle measures the space the retriever actually searches.
+- **Metric**: Spearman rank correlation of `report.value` vs per-variant top-1 across the sweep points. Gate ≥ 0.8 ⇒ the oracle predicts where embedder investment pays; < 0.5 ⇒ kill (record negative, keep the harness).
+- **Harness home**: `tests/modelability_sweep.rs` (integration, requires `latent_retrieval` — pulls riir-rag), reusing the `run_tokenizer_sweep` scaffolding in `retrieval_eval.rs`.
+- **Pre-registered in this file's protocol below — do not restate it, execute it.**
 
 ## Source
 

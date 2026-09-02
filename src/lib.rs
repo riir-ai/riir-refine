@@ -57,6 +57,7 @@ pub mod edit_emitter;
 pub mod elo;
 pub mod embedder;
 pub mod fmt;
+pub mod modelability;
 pub mod pruner;
 
 // ── Domain modules (feature-gated) ─────────────────────────────────────────
