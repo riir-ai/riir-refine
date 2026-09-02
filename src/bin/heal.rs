@@ -74,6 +74,16 @@ enum KatCommand {
     /// Proposal 011 T1.3 (Plan 062): `pay --request [--amount N]` — the
     /// pay-request surface (signed create + link-first + poll-on-credit).
     Pay,
+    /// Proposal 011 T1.8 (Plan 066): `faucet --request` — the faucet
+    /// preset. A separate command rather than a `pay` mode because it is a
+    /// different *signing domain* (`kat:payreq:faucet:v1:`) with a
+    /// different economics posture: the amount is the deployment's, not
+    /// the requester's.
+    Faucet,
+    /// Proposal 011 T4.1/T4.2 (Plan 066): `wetrun [--dry-run]` — the §7
+    /// full-loop proof. Refuses mainnet with NO override (caveat #2);
+    /// `--dry-run` is steps 1+6 only and runs on every network.
+    Wetrun,
 }
 
 #[cfg(feature = "fix_verify")]
@@ -995,6 +1005,291 @@ fn run_kat_pay(amount: Option<&str>, label: Option<&str>, qr: bool, wait: u64) {
     }
 }
 
+/// Proposal 011 T1.8 (Plan 066): `faucet --request [--qr]` — the faucet
+/// preset. One signed POST to `/payreq/faucet`, then the link + what the
+/// LEDGER pinned.
+///
+/// **No `--amount`.** The wire carries the pubkey and the signature and
+/// nothing else; the amount is the deployment's `faucet_daily_cap_kat`.
+/// Accepting an amount flag would advertise a choice that does not exist,
+/// and the parser rejects it on this command for exactly that reason.
+///
+/// **No `--wait`.** A faucet row is settled by the DAILY crank, so a poll
+/// would be either a lie (seconds against a once-a-day pass) or a day-long
+/// hang. The render says where the credit shows up instead.
+#[cfg(feature = "kat_service")]
+fn run_kat_faucet(qr: bool) {
+    let dir = riir_clippy::kat_account::KatAccount::default_dir();
+    let account = match riir_clippy::kat_account::KatAccount::load(&dir) {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!("faucet: no account ({e}) — run `cargo heal login` first");
+            std::process::exit(1);
+        }
+    };
+    let signing_key = match account.signing_key() {
+        Ok(k) => k,
+        Err(e) => {
+            eprintln!("faucet: could not load the account signing key: {e}");
+            std::process::exit(1);
+        }
+    };
+
+    #[cfg(feature = "kat_transport")]
+    {
+        let url = riir_clippy::kat_lease_client::service_url_for_command();
+        let transport = riir_clippy::kat_payreq_client::HttpPayreqTransport::new(&url, 10);
+        match riir_clippy::kat_payreq_client::faucet_request_flow(&transport, &url, &signing_key) {
+            Ok(outcome) => {
+                for line in riir_clippy::kat_payreq_client::faucet_display_lines(&outcome) {
+                    println!("{line}");
+                }
+                if qr {
+                    print_qr(&outcome.url);
+                }
+            }
+            Err(e) => {
+                eprintln!("{e}");
+                std::process::exit(1);
+            }
+        }
+    }
+    #[cfg(not(feature = "kat_transport"))]
+    {
+        let _ = (signing_key, qr);
+        eprintln!("faucet: opening a faucet request requires a build with --features kat_transport");
+        std::process::exit(2);
+    }
+}
+
+/// The wet-run's local legs — step 3 (a REAL scored scan→fix cycle with
+/// the REAL charge meter) and step 4 (the signed v2 payload).
+///
+/// Step 3 runs the actual `clippy_lints` proposers over a seeded dirty
+/// fixture in a temp dir: `syn`-parse → `collect_edits` per FIXABLE lint →
+/// `apply_edits` → `KatMeter::record_span` → `KatCharge::settle`. A
+/// fabricated spend figure would make the harness measure itself (the
+/// self-referential-corpus lesson), so the number comes from the same
+/// meter a paying run uses.
+#[cfg(all(feature = "kat_service", feature = "kat_transport"))]
+struct CliLocalLegs {
+    root: PathBuf,
+}
+
+/// The seeded dirty fixture. Deliberately tiny and deliberately hitting
+/// lints whose proposers are parse-only (`needless_return`,
+/// `redundant_field_names`, `uninlined_format_args`) so the cycle is a
+/// real fix pass rather than a retrieval run — the wet-run proves the
+/// PLUMBING (pay → ledger → record → credit → mesh), not fix quality.
+#[cfg(all(feature = "kat_service", feature = "kat_transport"))]
+const WETRUN_FIXTURE: &str = r#"pub struct P { pub x: i32, pub y: i32 }
+
+pub fn mk(x: i32, y: i32) -> P {
+    return P { x: x, y: y };
+}
+
+pub fn show(p: &P) -> String {
+    return format!("{} {}", p.x, p.y);
+}
+"#;
+
+#[cfg(all(feature = "kat_service", feature = "kat_transport"))]
+impl riir_clippy::kat_wetrun::LocalLegs for CliLocalLegs {
+    fn scored_cycle(&mut self) -> Result<(u32, i64), String> {
+        use riir_clippy::domains::clippy_lints::proposers::{collect_edits, FIXABLE_LINTS};
+        use riir_clippy::edit_emitter::apply_edits;
+        use riir_clippy::kat_meter::{KatCharge, KatMeter};
+
+        let parsed = syn::parse_file(WETRUN_FIXTURE)
+            .map_err(|e| format!("the seeded fixture did not parse: {e}"))?;
+        let mut edits = Vec::new();
+        for lint in FIXABLE_LINTS {
+            for re in collect_edits(lint, WETRUN_FIXTURE, &parsed) {
+                edits.push(re.edit);
+            }
+        }
+        let fixes = u32::try_from(edits.len()).unwrap_or(u32::MAX);
+        if fixes == 0 {
+            return Err(
+                "the seeded dirty fixture produced ZERO fixes — the cycle measured nothing, \
+                 which is a harness failure and not a clean fixture (a zero-fix cycle also \
+                 records a zero spend, so step 3 would pass vacuously)"
+                    .to_string(),
+            );
+        }
+        let fixed = apply_edits(WETRUN_FIXTURE, edits);
+
+        // The REAL meter + charge ledger, on the repo-local `.heal` root.
+        let mut meter = KatMeter::open(&self.root);
+        meter.record_span(fixed.as_bytes());
+        let mut charge = KatCharge::open(&self.root, meter.state());
+        let spent_kat = charge.settle(meter.state());
+        meter.save().map_err(|e| format!("meter save: {e}"))?;
+        charge.save().map_err(|e| format!("charge save: {e}"))?;
+        // KAT whole units → micro (integer money end-to-end, G4-S).
+        let micro = i64::try_from(spent_kat)
+            .map_err(|_| "the metered charge does not fit an i64".to_string())?;
+        Ok((fixes, micro))
+    }
+
+    #[cfg(feature = "latent_retrieval")]
+    fn sync_payload(&mut self) -> Result<(String, usize, u32), String> {
+        use riir_clippy::kat_redact::SpanOrigin;
+        use riir_clippy::kat_sync_payload::SyncPayloadBuilder;
+
+        let account = riir_clippy::kat_account::KatAccount::load(
+            &riir_clippy::kat_account::KatAccount::default_dir(),
+        )
+        .map_err(|e| format!("no account ({e})"))?;
+        let key = account.signing_key().map_err(|e| format!("account key unusable ({e})"))?;
+        let (traj, _bad) = riir_clippy::traj_store::TrajStore::open(&self.root)
+            .map_err(|e| format!("trajectory store unreadable: {e}"))?;
+        let rows = traj.dump();
+        if rows.is_empty() {
+            return Err(
+                "the trajectory store has no rows to push — run a `--fix` in this repo first; \
+                 pushing an EMPTY payload would let step 4 pass without recording anything"
+                    .to_string(),
+            );
+        }
+        let loaded = riir_clippy::kat_redact::RedactionGate::discover(None);
+        let payload = SyncPayloadBuilder::new(&loaded.gate, SpanOrigin::OwnRepo, &key).build(&rows);
+        Ok((
+            payload.ndjson,
+            payload.rows_included,
+            riir_clippy::kat_sync_payload::PAYLOAD_VERSION,
+        ))
+    }
+
+    /// Without `latent_retrieval` the v2 payload builder is not in the
+    /// build, so step 4 REPORTS that and FAILS. It deliberately does not
+    /// "skip": a step that quietly does nothing is the vacuous green this
+    /// whole harness exists to avoid.
+    #[cfg(not(feature = "latent_retrieval"))]
+    fn sync_payload(&mut self) -> Result<(String, usize, u32), String> {
+        Err(
+            "step 4 needs a build with --features latent_retrieval — the v2 signed payload \
+             builder (`kat_sync_payload`) and the trajectory store live there. This is a \
+             FAILURE, not a skip: a wet-run that pushes nothing has not proven the record leg."
+                .to_string(),
+        )
+    }
+}
+
+/// Proposal 011 §7 / T4.1+T4.2 (Plan 066): `cargo heal wetrun [--dry-run]`.
+///
+/// The network is classified from the RESOLVED service URL and the
+/// admission decision is [`riir_clippy::kat_wetrun::admit`] — mainnet is
+/// refused with **no override**, and an unclassifiable host is refused the
+/// same way (fail-closed). `--dry-run` runs steps 1+6 only and is admitted
+/// everywhere.
+#[cfg(feature = "kat_service")]
+fn run_kat_wetrun(dry_run: bool) {
+    use riir_clippy::kat_wetrun::{RunMode, Verdict};
+
+    let url = riir_clippy::kat_lease_client::service_url_for_command();
+    let network = riir_clippy::kat_wetrun::classify_service_url(&url);
+    let mode = match dry_run {
+        true => RunMode::DryRun,
+        false => RunMode::Full,
+    };
+
+    // Admission BEFORE anything else — including before the account load,
+    // so a refused mainnet run cannot be confused with a missing key.
+    if let Err(why) = riir_clippy::kat_wetrun::admit(network, mode) {
+        eprintln!("{why}");
+        std::process::exit(2);
+    }
+
+    let dir = riir_clippy::kat_account::KatAccount::default_dir();
+    let account = match riir_clippy::kat_account::KatAccount::load(&dir) {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!("wetrun: no account ({e}) — run `cargo heal login` first");
+            std::process::exit(1);
+        }
+    };
+    let signing_key = match account.signing_key() {
+        Ok(k) => k,
+        Err(e) => {
+            eprintln!("wetrun: could not load the account signing key: {e}");
+            std::process::exit(1);
+        }
+    };
+    let Some(acct_hex) =
+        riir_clippy::kat_account_client::service_account_hex(&account.state().account_id)
+    else {
+        eprintln!(
+            "wetrun: the local account id is not the ledger's 32-hex shape — refusing to \
+             query an account no route can settle from"
+        );
+        std::process::exit(1);
+    };
+    let acct_hex = acct_hex.to_string();
+
+    #[cfg(feature = "kat_transport")]
+    {
+        // The crank bearer is read HERE, never inside `kat_wetrun` — that
+        // module is pinned environment-free so no env read there can grow
+        // into a mainnet-admission override (caveat #2).
+        let crank_bearer = std::env::var("RIIR_HEAL_KAT_CRANK_TOKEN")
+            .ok()
+            .filter(|t| !t.is_empty());
+        if matches!(mode, RunMode::Full) && crank_bearer.is_none() {
+            eprintln!(
+                "wetrun: RIIR_HEAL_KAT_CRANK_TOKEN is unset. `POST /admin/crank/daily` is \
+                 bearer-gated fail-closed service-side, and it is what SETTLES a faucet row — \
+                 without it steps 2 and 5 cannot complete. Set it, or use --dry-run."
+            );
+            std::process::exit(2);
+        }
+        let transport = riir_clippy::kat_wetrun::HttpWetrunTransport::new(
+            &url,
+            30,
+            signing_key,
+            crank_bearer,
+        );
+        let mut legs = CliLocalLegs {
+            root: resolve_heal_root(&[]),
+        };
+        let report = riir_clippy::kat_wetrun::run(&transport, &mut legs, network, mode, &acct_hex);
+        for step in &report.steps {
+            println!("── step {} ──", step.step.label());
+            for line in &step.lines {
+                println!("{line}");
+            }
+            println!("   {}", if step.ok { "PASS" } else { "FAIL" });
+        }
+        if let (Some(b), Some(a)) = (report.supply_before, report.supply_after) {
+            println!(
+                "G-WET supply: epoch {} mint {} burn {} pool_paid {} pool_avail {} → \
+                 mint {} burn {} pool_paid {} pool_avail {}",
+                b.epoch,
+                b.mint_kat,
+                b.burn_kat,
+                b.pool_paid_kat,
+                b.pool_available_kat,
+                a.mint_kat,
+                a.burn_kat,
+                a.pool_paid_kat,
+                a.pool_available_kat
+            );
+        }
+        println!("{}", report.verdict_line());
+        match report.verdict {
+            Verdict::Ready => {}
+            Verdict::NotReady(_) => std::process::exit(1),
+            Verdict::Refused(_) => std::process::exit(2),
+        }
+    }
+    #[cfg(not(feature = "kat_transport"))]
+    {
+        let _ = (signing_key, acct_hex, network);
+        eprintln!("wetrun: requires a build with --features kat_transport");
+        std::process::exit(2);
+    }
+}
+
 /// Print the ASCII QR under a URL line (the T1.6 QR render, reused —
 /// errors surface as silence, the QR is a convenience never a gate).
 #[cfg(all(feature = "kat_service", feature = "kat_transport"))]
@@ -1279,6 +1574,8 @@ USAGE:
     cargo heal vote --proposal <id> --yes|--no     (Proposal 008 T2.4 governance voting: weight + evidence render, kat_transport)
     cargo heal unstake                                (drain unlocked tranches + escrow disclosure, kat_transport)
     cargo heal pay --request [--amount N] [--label L] [--qr] [--wait S]  (Proposal 011 T1.3 pay request: signed create + link-first + poll-on-credit, kat_transport)
+    cargo heal faucet --request [--qr]               (Proposal 011 T1.8 faucet preset: the amount is the deployment's cap, not yours, kat_transport)
+    cargo heal wetrun [--dry-run]                    (Proposal 011 T4.1 wet-run + G-WET; REFUSES mainnet with no override, --dry-run is read-only everywhere, kat_transport)
 
     --suggest       Suggest mode: print matching rules per code span (no edits).
     --fix           Fix mode: apply the compiled-in proposers' span-preserving edits
@@ -1486,6 +1783,10 @@ struct Args {
     /// Proposal 011 T1.3: `--wait <secs>` — the poll-on-credit budget
     /// (default 600; `0` = don't poll — the credit surfaces via `account`).
     pay_wait: u64,
+    /// Proposal 011 T4.2: `--dry-run` — with `wetrun`, run steps 1+6 only
+    /// (read-only, zero state). Admitted on EVERY network including
+    /// mainnet; it is what mainnet gets.
+    dry_run: bool,
     /// T1.6: the run-start update-phase budget in seconds (`0` = skip;
     /// default 4 — the proposal's ~3–5s window).
     update_timeout: u64,
@@ -1551,6 +1852,7 @@ fn parse_args() -> Args {
         pay_qr: false,
         pay_label: None,
         pay_wait: 600,
+        dry_run: false,
         update_timeout: 4,
         no_update: false,
         no_reheat: false,
@@ -1666,6 +1968,7 @@ fn parse_args() -> Args {
                 args.pay_amount = Some(value);
             }
             "--request" => args.pay_request = true,
+            "--dry-run" => args.dry_run = true,
             "--qr" => args.pay_qr = true,
             "--label" => {
                 let Some(value) = it.next() else {
@@ -1719,7 +2022,7 @@ fn parse_args() -> Args {
                 usage();
             }
             "login" | "account" | "update" | "sync" | "claim" | "stake" | "unstake" | "vote"
-                | "pay"
+                | "pay" | "faucet" | "wetrun"
                 if args.paths.is_empty() && args.command.is_none() =>
             {
                 args.command = Some(match arg.as_str() {
@@ -1731,6 +2034,8 @@ fn parse_args() -> Args {
                     "unstake" => KatCommand::Unstake,
                     "vote" => KatCommand::Vote,
                     "pay" => KatCommand::Pay,
+                    "faucet" => KatCommand::Faucet,
+                    "wetrun" => KatCommand::Wetrun,
                     _ => KatCommand::Claim,
                 });
             }
@@ -1741,14 +2046,30 @@ fn parse_args() -> Args {
         eprintln!("--history requires the `account` command");
         usage();
     }
-    if (args.pay_request
-        || args.pay_amount.is_some()
-        || args.pay_qr
-        || args.pay_label.is_some()
-        || args.pay_wait != 600)
+    // `--request` and `--qr` are SHARED by `pay` and `faucet` (both open a
+    // payreq row and both print a link); `--amount`/`--label`/`--wait` are
+    // `pay`-only. The faucet's amount is the deployment's
+    // `faucet_daily_cap_kat` and its settle is the daily crank's, so
+    // accepting either flag there would advertise a choice that does not
+    // exist on the wire (T1.8).
+    if (args.pay_request || args.pay_qr)
+        && !matches!(args.command, Some(KatCommand::Pay | KatCommand::Faucet))
+    {
+        eprintln!("--request/--qr require the `pay` or `faucet` command");
+        usage();
+    }
+    if (args.pay_amount.is_some() || args.pay_label.is_some() || args.pay_wait != 600)
         && !matches!(args.command, Some(KatCommand::Pay))
     {
-        eprintln!("--request/--amount/--qr/--label/--wait require the `pay` command");
+        eprintln!(
+            "--amount/--label/--wait require the `pay` command — a faucet request carries no \
+             amount and no ttl on the wire (the deployment pins both), and its credit lands \
+             at the daily crank, so there is nothing to wait on"
+        );
+        usage();
+    }
+    if args.dry_run && !matches!(args.command, Some(KatCommand::Wetrun)) {
+        eprintln!("--dry-run requires the `wetrun` command");
         usage();
     }
     if args.paths.is_empty()
@@ -2368,6 +2689,8 @@ fn main() {
                 args.pay_qr,
                 args.pay_wait,
             ),
+            KatCommand::Faucet => run_kat_faucet(args.pay_qr),
+            KatCommand::Wetrun => run_kat_wetrun(args.dry_run),
             // The transport commands degrade honestly without kat_transport.
             #[cfg(not(feature = "kat_transport"))]
             KatCommand::Update | KatCommand::Sync => {

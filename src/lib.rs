@@ -261,6 +261,23 @@ pub mod kat_payreq_client;
 #[cfg(feature = "kat_service")]
 pub mod kat_account_client;
 
+// Proposal 011 §7 / T4.1+T4.2 (Issue 061, Plan 066): the wet-run harness —
+// the six-step full-loop proof and the G-WET gate. Three things it exists
+// to make impossible: a faucet loop that moves a supply counter (the
+// caveat-#2 money printer — asserted BYTE-wise over a total-function
+// encoding of the whole counter struct, not a field subset), a crank SKIP
+// read as a pass (riir-dapps Issue 010 makes the treasury grant path
+// structurally unreachable at genesis defaults, so the skip is named and
+// FAILED, never retried), and a wet-run on mainnet (refused with NO
+// override — an env hatch would be an attack on our own bookkeeping).
+// `--dry-run` is steps 1+6, read-only, admitted on every network, and its
+// "touches nothing" claim is proven by a recorded call log.
+// `kat_service` gets the classification/parses/verdicts; the transport +
+// the run itself ride `kat_transport` (the payreq/account-client
+// convention).
+#[cfg(feature = "kat_service")]
+pub mod kat_wetrun;
+
 // Proposal 005 Phase 2 T2.4 (Plan 042): the score-bench promotion gate
 // for network-learned corpus candidates — the frozen bench runs BEFORE any
 // candidate enters the local overlay (Certified on pass; Withdrawn is

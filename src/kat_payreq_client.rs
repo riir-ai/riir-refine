@@ -260,6 +260,21 @@ pub struct HttpPayreqTransport {
     base: String,
 }
 
+/// The pure half of [`HttpPayreqTransport::refusal_or_status`] — split out
+/// so the decision is unit-testable without a live `ureq::Response`
+/// (constructing one needs a socket, and an untestable branch on a money
+/// path is an assumption, not a rule).
+#[cfg(feature = "kat_transport")]
+fn refusal_body_or_status(status: u16, body: Vec<u8>) -> HttpResponse {
+    match serde_json::from_slice::<serde_json::Value>(&body)
+        .ok()
+        .and_then(|v| v.get("error").and_then(serde_json::Value::as_str).map(str::to_string))
+    {
+        Some(_) => HttpResponse::Ok(body),
+        None => HttpResponse::Status(status),
+    }
+}
+
 #[cfg(feature = "kat_transport")]
 impl HttpPayreqTransport {
     /// Build with a per-request timeout in seconds (connect, headers, AND
@@ -293,6 +308,39 @@ impl HttpPayreqTransport {
         }
     }
 
+    /// A non-200 whose body carries the service's own `{"error": ...}`
+    /// becomes [`HttpResponse::Ok`] of that body, so the parse layer — which
+    /// already reads `error` FIRST — is the single arbiter.
+    ///
+    /// **Why this exists (a real hole, not a style preference).** Every
+    /// payreq refusal is `RouteResp::error(status, reason)` on the service
+    /// side, i.e. a non-200 WITH `{"error":"<the operator's words>"}`.
+    /// `ureq` reports that as `Err(Error::Status(c, resp))`, and dropping
+    /// `resp` reduced all four documented faucet refusals (faucet disabled,
+    /// service account, daily cap used, one already open) to a bare
+    /// `HTTP 400`. The doc contract on [`parse_faucet_request`] promises
+    /// those words survive **verbatim**; without this the promise was
+    /// unreachable on the deployed path while every mock-driven test passed
+    /// — the "unit-gate paths production cannot reach" class.
+    ///
+    /// A non-200 with no readable JSON `error` stays
+    /// [`HttpResponse::Status`]: an opaque failure must not be dressed up
+    /// as an answer.
+    ///
+    /// Deliberately applied to the POST arms only. The GET arms answer 404
+    /// for the ordinary *not settled yet* case, and their callers already
+    /// carry per-state copy for it — turning that into a parse error would
+    /// reword the common case, which is the same defect in the other
+    /// direction.
+    fn refusal_or_status(status: u16, resp: ureq::Response) -> HttpResponse {
+        use std::io::Read as _;
+        let mut buf = Vec::new();
+        match resp.into_reader().read_to_end(&mut buf) {
+            Err(_) => HttpResponse::Status(status),
+            Ok(_) => refusal_body_or_status(status, buf),
+        }
+    }
+
     fn post_json(&self, path: &str, body: &str) -> HttpResponse {
         let url = format!("{}{path}", self.base);
         match self
@@ -302,7 +350,7 @@ impl HttpPayreqTransport {
             .send_string(body)
         {
             Ok(r) => Self::body(r),
-            Err(ureq::Error::Status(c, _)) => HttpResponse::Status(c),
+            Err(ureq::Error::Status(c, r)) => Self::refusal_or_status(c, r),
             Err(e) => HttpResponse::Error(e.to_string()),
         }
     }
@@ -715,6 +763,97 @@ pub fn fetch_invoice(transport: &dyn PayreqTransport, id_hex: &str) -> SettleOut
     }
 }
 
+// ── T1.8: the faucet preset flow (`cargo heal faucet --request`) ────────
+
+/// What one `faucet --request` produced (the caller's receipt).
+#[cfg(feature = "kat_transport")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FaucetOutcome {
+    /// The opened row, exactly as the ledger reported it.
+    pub request: FaucetRequest,
+    /// The capability URL for that row — link-first, ask 13.
+    pub url: String,
+}
+
+/// Open one faucet request: sign [`faucet_message`], `POST
+/// /payreq/faucet`, and report the row the ledger pinned.
+///
+/// **One POST, no poll.** The pay-request flow polls because a payer is
+/// expected to settle within a CLI wait budget; a faucet row is settled by
+/// the DAILY crank, so a poll here would either be a lie (a few seconds
+/// against a once-a-day pass) or a day-long hang. The honest surface is:
+/// open the row, print what the ledger pinned, and say where the credit
+/// shows up.
+///
+/// Nothing about the amount is proposed — [`FaucetRequest::amount_micro`]
+/// is read back from the deployment's `faucet_daily_cap_kat`. A zero
+/// amount is therefore NOT the pay-request "any amount" convention; it
+/// means the row read back without one, which is an error rather than a
+/// free pass.
+///
+/// # Errors
+///
+/// A human-readable string on an unreachable service, a non-200, an
+/// unparseable body, a refusal (surfaced verbatim), or a zero pinned
+/// amount.
+#[cfg(feature = "kat_transport")]
+pub fn faucet_request_flow(
+    transport: &dyn PayreqTransport,
+    service_base: &str,
+    key: &ed25519_dalek::SigningKey,
+) -> Result<FaucetOutcome, String> {
+    let body = match transport.post_faucet(&faucet_request_body(key)) {
+        HttpResponse::Ok(b) => b,
+        // A refusal rides a non-200 WITH a body, and the body is the
+        // ledger's own words (faucet disabled / service account / cap
+        // used / one already open) — reading only the status code would
+        // turn every one of those into an opaque "HTTP 400".
+        HttpResponse::Status(c) => {
+            return Err(format!("faucet: the service refused the request (HTTP {c})"))
+        }
+        HttpResponse::Error(e) => return Err(format!("faucet: service unreachable: {e}")),
+        HttpResponse::NotModified => {
+            return Err("faucet: the service answered 304 for a faucet request".to_string())
+        }
+    };
+    let request = parse_faucet_request(&body).map_err(|e| format!("faucet: {e}"))?;
+    match request.amount_micro {
+        0 => Err(
+            "faucet: the ledger pinned an amount of 0 — this deployment's \
+             `faucet_daily_cap_kat` is unset or the row did not read back; there is nothing \
+             to credit"
+                .to_string(),
+        ),
+        _ => Ok(FaucetOutcome {
+            url: request_url_from_id_hex(service_base, &request.id_hex),
+            request,
+        }),
+    }
+}
+
+/// The `faucet --request` render — caveat-#15 copy (no `$`, KAT labelled
+/// service credit) and the pinned amount presented as the LEDGER's, never
+/// as the requester's choice.
+#[cfg(feature = "kat_transport")]
+#[must_use]
+pub fn faucet_display_lines(outcome: &FaucetOutcome) -> Vec<String> {
+    vec![
+        format!("faucet request {}:", &outcome.request.id_hex),
+        format!("  share this link: {}", outcome.url),
+        format!(
+            "  amount:    {} service credit — PINNED by the deployment's daily faucet cap \
+             (not a value this request chose)",
+            render_kat(outcome.request.amount_micro)
+        ),
+        format!(
+            "  expires:   ledger tick {} (the deployment's link_ttl)",
+            outcome.request.expiry
+        ),
+        "  the credit lands at the next daily crank pass; `cargo heal account` shows it"
+            .to_string(),
+    ]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -795,6 +934,8 @@ mod tests {
     /// would not have noticed a *new* field at all.
     #[test]
     fn the_faucet_body_carries_no_amount_and_no_ttl() {
+        use ed25519_dalek::Verifier as _;
+
         let key = ed25519_dalek::SigningKey::from_bytes(&[0x11u8; 32]);
         let body = faucet_request_body(&key);
         let v: serde_json::Value = serde_json::from_str(&body).expect("valid JSON");
@@ -813,7 +954,6 @@ mod tests {
         assert_eq!(v["signature_hex"].as_str().map(str::len), Some(128));
         assert_eq!(v["pubkey_hex"].as_str().map(str::len), Some(64));
         // And the signature verifies over the mirrored message.
-        use ed25519_dalek::Verifier as _;
         let sig_bytes = {
             let hex = v["signature_hex"].as_str().unwrap();
             let mut out = [0u8; 64];
@@ -1217,6 +1357,182 @@ mod tests {
         assert_eq!(inv.amount_paid_micro, 1_500_000);
         assert!(inv.qr_commitment_is_unset(), "the mock serves the unset sentinel");
         assert!(outcome.url.ends_with("/payreq/71b5cbf13626d2554aba7d9b06e63474"));
+    }
+
+    /// A faucet-only mock: every pay-request method is `unimplemented!()`,
+    /// so a flow that reached one would panic rather than pass quietly.
+    /// The count is a `RefCell` because "exactly one POST, no poll" is the
+    /// property under test — a faucet row is settled by the DAILY crank,
+    /// so a poll here would be either a lie or a day-long hang.
+    #[cfg(feature = "kat_transport")]
+    struct FaucetMock {
+        posts: std::cell::RefCell<u32>,
+        reply: HttpResponse,
+    }
+
+    #[cfg(feature = "kat_transport")]
+    impl PayreqTransport for FaucetMock {
+        fn post_create(&self, _json: &str) -> HttpResponse {
+            unimplemented!("the faucet flow must never open a PAY request")
+        }
+        fn get_request(&self, _id: &str) -> HttpResponse {
+            unimplemented!("the faucet flow must never poll — the crank settles it")
+        }
+        fn get_invoice(&self, _id: &str) -> HttpResponse {
+            unimplemented!("the faucet flow must never read an invoice row")
+        }
+        fn post_faucet(&self, json: &str) -> HttpResponse {
+            *self.posts.borrow_mut() += 1;
+            // The body the service actually verifies over: pubkey +
+            // signature, and NOTHING the requester could inflate.
+            let v: serde_json::Value = serde_json::from_str(json).expect("valid JSON");
+            assert_eq!(v.as_object().map(serde_json::Map::len), Some(2));
+            assert_eq!(v["pubkey_hex"].as_str().map(str::len), Some(64));
+            assert_eq!(v["signature_hex"].as_str().map(str::len), Some(128));
+            self.reply.clone()
+        }
+    }
+
+    #[cfg(feature = "kat_transport")]
+    fn faucet_mock(reply: HttpResponse) -> FaucetMock {
+        FaucetMock {
+            posts: std::cell::RefCell::new(0),
+            reply,
+        }
+    }
+
+    /// The happy path: ONE signed POST, the ledger's pinned amount read
+    /// back (never proposed), the link composed from the returned id, and
+    /// no poll at all.
+    #[cfg(feature = "kat_transport")]
+    #[test]
+    fn faucet_request_flow_posts_once_and_never_polls() {
+        let mock = faucet_mock(HttpResponse::Ok(
+            serde_json::json!({
+                "request_id": "71b5cbf13626d2554aba7d9b06e63474",
+                "created": true,
+                "kind": "faucet",
+                "amount_micro": 10_000_000,
+                "expiry": 86_400,
+            })
+            .to_string()
+            .into_bytes(),
+        ));
+        let key = ed25519_dalek::SigningKey::from_bytes(&[0xF0; 32]);
+        let out = faucet_request_flow(&mock, "https://kat.example.com/", &key)
+            .expect("the flow completes");
+        assert_eq!(*mock.posts.borrow(), 1, "exactly one POST — no retry loop");
+        assert_eq!(out.request.amount_micro, 10_000_000);
+        assert_eq!(out.request.expiry, 86_400);
+        assert_eq!(
+            out.url,
+            "https://kat.example.com/payreq/71b5cbf13626d2554aba7d9b06e63474"
+        );
+
+        // The render: caveat-#15 copy, and the amount is presented as the
+        // DEPLOYMENT's, not as a value this request chose.
+        let joined = faucet_display_lines(&out).join("\n");
+        assert!(!joined.contains('$'), "{joined}");
+        assert!(joined.contains("10.000000 KAT"), "{joined}");
+        assert!(joined.contains("service credit"), "{joined}");
+        assert!(joined.contains("PINNED"), "{joined}");
+        assert!(joined.contains(&out.url), "link-first: {joined}");
+    }
+
+    /// A pinned amount of zero is an ERROR, not an "any amount" faucet.
+    ///
+    /// The pay-request convention reads `amount_micro == 0` as *"the payer
+    /// chooses"*; carrying that convention into the faucet would turn a
+    /// deployment with the faucet switched off (`faucet_daily_cap_kat = 0`)
+    /// into an unbounded open request.
+    #[cfg(feature = "kat_transport")]
+    #[test]
+    fn a_zero_pinned_faucet_amount_is_refused_not_read_as_any_amount() {
+        let mock = faucet_mock(HttpResponse::Ok(
+            serde_json::json!({
+                "request_id": "ab".repeat(16),
+                "amount_micro": 0,
+                "expiry": 1,
+            })
+            .to_string()
+            .into_bytes(),
+        ));
+        let key = ed25519_dalek::SigningKey::from_bytes(&[0xF1; 32]);
+        let err = faucet_request_flow(&mock, "https://kat.example.com", &key)
+            .expect_err("a zero cap has nothing to credit");
+        assert!(err.contains("faucet_daily_cap_kat"), "{err}");
+        assert!(err.contains("nothing"), "{err}");
+    }
+
+    /// The hole this closes: a payreq refusal is a **non-200 WITH a body**
+    /// (`RouteResp::error` ⇒ `{"error": "<the operator's words>"}`), and
+    /// dropping that body reduced all four documented faucet refusals to a
+    /// bare `HTTP 400`. Pinned on the pure half so the branch is reachable
+    /// without a socket.
+    #[cfg(feature = "kat_transport")]
+    #[test]
+    fn a_non_200_carrying_the_services_error_body_is_not_reduced_to_a_status() {
+        let refusal = serde_json::json!({
+            "error": "payreq: an open faucet request already exists for this account"
+        })
+        .to_string()
+        .into_bytes();
+        assert_eq!(
+            refusal_body_or_status(400, refusal.clone()),
+            HttpResponse::Ok(refusal),
+            "the service ANSWERED — its answer is the payload"
+        );
+        // An opaque failure must NOT be dressed up as an answer.
+        for opaque in [b"<html>502</html>".to_vec(), b"{}".to_vec(), Vec::new()] {
+            assert_eq!(refusal_body_or_status(502, opaque), HttpResponse::Status(502));
+        }
+    }
+
+    /// End-to-end over the flow: the four documented refusals reach the
+    /// caller VERBATIM once the transport stops discarding the body.
+    #[cfg(feature = "kat_transport")]
+    #[test]
+    fn the_four_faucet_refusals_reach_the_caller_verbatim() {
+        let key = ed25519_dalek::SigningKey::from_bytes(&[0xF3; 32]);
+        for reason in [
+            "payreq: the faucet is disabled at this deployment (faucet_daily_cap_kat = 0)",
+            "payreq: service accounts cannot request from the faucet",
+            "payreq: faucet daily cap already used for this account today",
+            "payreq: an open faucet request already exists for this account",
+        ] {
+            // What `refusal_or_status` now hands the flow for a 400.
+            let mock = faucet_mock(refusal_body_or_status(
+                400,
+                serde_json::json!({"error": reason}).to_string().into_bytes(),
+            ));
+            let err = faucet_request_flow(&mock, "https://kat.example.com", &key)
+                .expect_err("a refusal is an error");
+            assert!(
+                err.contains(reason),
+                "the ledger's own words must survive; got {err:?}"
+            );
+        }
+    }
+
+    /// The transport-level failure modes each surface as their own
+    /// sentence, and none of them is retried.
+    #[cfg(feature = "kat_transport")]
+    #[test]
+    fn faucet_transport_failures_surface_once_and_honestly() {
+        let key = ed25519_dalek::SigningKey::from_bytes(&[0xF2; 32]);
+        for (reply, needle) in [
+            (HttpResponse::Status(400), "refused"),
+            (HttpResponse::Error("dns".to_string()), "unreachable"),
+            (HttpResponse::NotModified, "304"),
+            (HttpResponse::Ok(b"not json".to_vec()), "not JSON"),
+        ] {
+            let mock = faucet_mock(reply);
+            let err = faucet_request_flow(&mock, "https://kat.example.com", &key)
+                .expect_err("every one of these is an error");
+            assert!(err.starts_with("faucet: "), "{err}");
+            assert!(err.contains(needle), "{needle:?} not in {err:?}");
+            assert_eq!(*mock.posts.borrow(), 1, "one attempt, never a retry storm");
+        }
     }
 
     /// A service refusal surfaces as a human-readable error, not a panic.
