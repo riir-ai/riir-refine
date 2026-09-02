@@ -10,8 +10,10 @@ LANDED 2026-09-02** (riir-chain-sdk `fe865ba1` + the dapps-side dual golden pin
 [Plan 062](../.plans/062_kat011_t111_payreq_routes.md) — the signed `/payreq`
 routes + the row-backed limiter). **T1.3 LANDED 2026-09-02** (riir-clippy
 `9a5086a` + the dapps-side create-message golden `0a4d37a` — `cargo heal pay
---request`). Remaining Phase 0: T0.2b's service half (the `/balance` history
-route now exists to consume).
+--request`). **T0.2b + T1.4 LANDED 2026-09-02** (riir-clippy `dc9e179`,
+[Plan 064](../.plans/064_kat011_t02b_account_service_and_t14_invoice_qr.md) —
+the service-plane welcome gate + `/balance` history, and the invoice display
+with the caveat-#3 QR pin canaried on both axes). **Phase 0 is now COMPLETE.**
 **T2.1 + T3.1 + T3.2 + T3.3 LANDED 2026-09-02** (riir-deployer `96009cc`,
 [Plan 003](../../riir-deployer/.plans/003_genesis_params_deploy_ux_node_sync.md) —
 the genesis params pin with drift-FAILS validation, the TTY selector + the
@@ -43,11 +45,25 @@ Proposal 008 (MemoShard).
       **LANDED** ([Plan 059](../.plans/059_kat011_t02_and_corpus_runtime_counts.md)).
       The service half (live `/balance`, the all-synced + nodes-healthy welcome gate,
       server-side history) is the `[-]` below.
-- [-] T0.2b — the service half of account: welcome gate evaluated from real sync/node
-      health + `/balance` history consumption (the payreq routes landed the
-      service-plane pattern; `/balance` already serves — the remaining work is the
-      all-synced + nodes-healthy welcome gate + the history consumption shape).
-      Unblocked.
+- [x] T0.2b — the service half of account — **LANDED 2026-09-02** (riir-clippy
+      `dc9e179`, [Plan 064](../.plans/064_kat011_t02b_account_service_and_t14_invoice_qr.md)):
+      `src/kat_account_client.rs` — the §8.3 welcome gate evaluated from THREE REAL
+      service reads (`GET /health` ledger plane + `GET /mining/health` +
+      `GET /balance?acct=`), replacing T0.2's local `no burn yet` heuristic, and the
+      §8.5 history read from the authoritative `/balance` instead of the per-repo
+      projection. **`WelcomeGate` is three-state** (`Open` / `Withheld` — read the
+      network, it is not settled / `Unknown` — could not read it): folding `Unknown`
+      into `Open` would print a health claim the CLI cannot see, folding it into
+      `Withheld` would tell an offline user their account is out of sync. The
+      `pending_durable == 0` check is the all-synced half; the mining `unproven`
+      backlog is deliberately NOT a gate (it is the steady state). `service_account_hex`
+      pins the 64-hex local account id down to the ledger's 32-hex `AccountId`,
+      cross-checked against `account_for_pubkey` — a drift there would query an
+      account no route can settle from. Probe fail-fasts on an unreachable host (an
+      offline `account` costs ONE timeout, not three). Same transport convention as
+      T1.3's payreq client. **Residue, not a blocker:** `/balance` serves a POSITION,
+      not an event log — the render says so rather than fabricating a transaction
+      list; a per-event history needs a dapps route that does not exist.
 - [x] T0.3 riir-chain-sdk `pay_request` module (KAT compose + resolve/transfer; USDC
       arm stubbed behind the mock) — **LANDED 2026-09-02** (riir-chain-sdk
       `fe865ba1`; dapps-side dual golden pin `46e6660`): `request_id` byte-exact
@@ -111,8 +127,32 @@ Proposal 008 (MemoShard).
       `--amount/--qr/--label/--wait` (link-first print per ask 13, `--qr` renders
       ASCII, poll default 600 s). 9 tests incl. the scripted-mock full flow + the
       caveat-#15 no-dollar copy rule; lib 1127/1127; default build untouched (G3).
-- [-] T1.4 invoice display + bit-exact recheck (golden-pinned QR; caveat #3 — the
-      re-encode pin rides the `qrcode` crate version + render params).
+- [x] T1.4 invoice display + bit-exact recheck — **LANDED 2026-09-02** (riir-clippy
+      `dc9e179`, [Plan 064](../.plans/064_kat011_t02b_account_service_and_t14_invoice_qr.md)):
+      `InvoiceView`/`parse_invoice`/`QrRecheck`/`invoice_display_lines` +
+      `recheck_invoice_qr` in `kat_payreq_client`, and the QR pin in
+      `kat_lease_client` (`QrRenderParams`, `QR_RENDER_PARAMS`, `qr_commitment`).
+      **A mismatch REFUSES to render the body** (tamper indicator; no amount, no
+      payer, no token row — pinned), the unset service sentinel reads as
+      `Unavailable` and LABELS itself instead of passing silently (caveat #3's
+      hash-match-only fallback), and the caveat-#15 copy rule is pinned over all
+      three states. **Caveat #3 made non-vacuous on BOTH axes, two mechanisms each,
+      each canaried by reintroducing the defect:** the `qrcode` version rides IN the
+      commitment preimage AND is read back from **`Cargo.lock`** (the RESOLVED
+      version — the `"0.14"` requirement is satisfied by any `0.14.x`, so a
+      manifest-only pin would sit green through a patch bump that re-rendered every
+      stored asset); the render params ride in the preimage AND get per-axis
+      divergence probes (`EcLevel::{L,Q,H}`, `quiet_zone: false`). Canaries:
+      declaring `0.14.2` against the locked `0.14.1` fails 3 tests; flipping the ECC
+      level fails 5. The commitment is over the QR **module matrix**, not a PNG —
+      this repo carries `qrcode` with `default-features = false`, so there is no
+      `image` and no PNG to hash, and every rendering is a function of the matrix.
+      **CONTRACT NOTE for the dapps half:** `qr_png_blake3` is `[0u8; 32]` on every
+      invoice the service has ever written (`invoice_set_qr_hash` is the unfilled
+      render step). Whoever fills it MUST fill it with
+      `kat_lease_client::qr_commitment` of the canonical request URL — filling it
+      with a PNG hash or different params would make every invoice display as a
+      tamper.
 - [-] T1.5 G1-S/G-WEB money + auth + adversarial suite (replay, session theft, amount
       manipulation, self-pay, hold-bypass, root-float refusal).
 - [-] T1.6 Stripe/USDC rails as MOCK tests only (five-check machinery against

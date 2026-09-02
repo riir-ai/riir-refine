@@ -221,6 +221,16 @@ hash, and every rendering is a function of the matrix anyway.
 - **The node-level `node-sync` probe is still T3.2.** This gate reads the
   SERVICE plane's health, which is what serves today; it does not claim
   per-node reachability/height/sync%, and the module docs say so.
+- **Near-miss worth recording: a python rewrite LF-ified a CRLF file.**
+  `src/kat_payreq_client.rs` is a pure-CRLF file (638/638 lines at HEAD~1; this
+  repo has no `.gitattributes` and several other `src/**.rs` files are CRLF
+  too, from the Windows box pin). Editing it with `open(p,'w').write(s)`
+  silently rewrote every line ending, turning a 513-line change into a
+  2,086-line diff that buried the real edit. Caught by reading `git show
+  --stat` rather than trusting the commit, and fixed by converting the file
+  back to CRLF before amending. Same class as the
+  "never re-serialize a JSONL archive" rule: read/write bytes, or check the
+  stat.
 - **`cargo heal` observation** (usage-artifact intake): the healer's
   `items_after_statements` edit hoisted two `impl` blocks out of a test fn
   but left one `struct` behind and dropped the indentation of the following
