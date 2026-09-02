@@ -9,9 +9,9 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //! unconditional wins + honestly NotBenchable rules.
 //!
-//! 97 entries across 12 categories (complexity 18, allocation 22, simd 8,
-//! layout 9, iterators 10, concurrency 8, io 5, arithmetic 8, dispatch 3,
-//! caching 4, bevy 1, wasm 1). 84 are benchable; 13 are honestly
+//! 99 entries across 12 categories (complexity 18, allocation 22, simd 8,
+//! layout 9, iterators 10, concurrency 8, io 5, arithmetic 8, dispatch 5,
+//! caching 4, bevy 1, wasm 1). 86 are benchable; 13 are honestly
 //! NotBenchable (8 external-runtime/size-class + 2 metric-mismatch (Issue
 //! 014) + the x86-only prefetch annotation (Batch 85) + the bitflag size
 //! axis (Batch 86) + the workload-level read-coalescing annotation (Batch
@@ -242,7 +242,7 @@ use crate::domains::rust_perf::{PerfRule, RustPerfDomain};
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 98 entries
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 99 entries
 /// covering the main perf pattern categories (complexity, allocation, simd,
 /// layout, iterators, concurrency, io, arithmetic, dispatch, caching, bevy,
 /// wasm). Allocation is the deepest (22 rules; Batch 86 added 2); complexity
@@ -251,8 +251,9 @@ use crate::domains::rust_perf::{PerfRule, RustPerfDomain};
 /// each); layout has 9 (Batch 61 + 85 + 86 added); concurrency has 8
 /// (Issue 014 added the two metric-mismatch rules; Batch 65 added the two
 /// contention rules; Batch 73 added 1);
-/// arithmetic has 8 (Batch 74 added 1); dispatch has 4 (Batch 61 + 74 added
-/// 1 each; Batch 99 added the DestProp branch-site rule); caching has 4 (Batch 73 + 76 added 1 each); io has 5 (Batch
+/// arithmetic has 8 (Batch 74 added 1); dispatch has 5 (Batch 61 + 74 added
+/// 1 each; Batch 99 added the DestProp branch-site rule; Batch 101 added
+/// the runtime-table handler-pair hoist); caching has 4 (Batch 73 + 76 added 1 each); io has 5 (Batch
 /// 68/69 added 1 each + Batch 85 added 1 + Batch 94 added the cacheability-
 /// coupled coalescing rule); bevy + wasm have 1 each.
 #[must_use]
@@ -2519,6 +2520,29 @@ PerfRule {
             context_notes: Some("MEASURED ParetoDominant 2/0/1 -- 1.04x/1.24x/1.25x at n=1K/100K/1M dispatches, 50/50 mixed stream, the corpus Pareto validator the recorded instrument (x86_64-pc-windows-msvc, rustc 1.97, 2026-09-02, box quiet; alloc axis EXACT 0/0/0/0 at every size, alloc-det stable across 3 runs). Verdict-stable vs the mine-time probe (median-of-15 methodology): 1.11x/1.21x/1.19x + a second run 1.05x/1.22x/1.18x -- the two large sizes are rock-stable at 1.18-1.25x, the 1K cell straddles the Faster threshold (1.04-1.11) and lands Tie under the validator. MECHANISM (asm-inspected on this toolchain, not inferred): the merged form emits `lea rax,[rip+h_a]; lea r9,[rip+h_b]; test cl,cl; cmovne r9,rax; jmp r9` -- a conditional move of the two code addresses + ONE indirect tail-jump; the split form emits TWO DIRECT `jmp h_a` / `jmp h_b` tail-jumps. Both mechanisms are load-bearing and BOTH are the rule's honest content: (1) devirtualization enablement -- the phi of two KNOWN fn items can never fold to a direct call, so the merged form forces an indirect branch forever; (2) per-site predictor history -- the single site is 2-target polymorphic, mixing BTB history across arms. REGIME (measured, three skew arms): 98/02 skew 1.18/1.30/1.28 (most stable -- rare transitions pay full mispredicts at the shared site); 50/50 1.11/1.21/1.19; 75/25 1.31/1.05/1.03 (borderline at the two large sizes). NEGATIVE CONTROL (the boundary, measured): when the two fn pointers are RUNTIME-OPAQUE (fn args, table entries behind opaque loads -- genuinely dynamic dispatch), BOTH forms keep indirect calls and the split buys NOTHING (0.95-1.00x across all nine cells, two runs) -- the rule applies ONLY when the arms load compile-time-known code pointers (fn items / consts / statics), where splitting re-enables direct calls; for genuinely dynamic dispatch see dyn-to-enum (change the representation) instead. TOOLCHAIN REGIME: the deopt class is rustc >=1.92 MIR DestinationPropagation (default-on; the source measured the 1.91->1.92 boundary, ~2800 -> >4200 CoreMark ~+50% from the single fix on the wasmi tail-call dispatch, independently reproduced on Stitch); re-gate on toolchain bumps (the debug-assert-length-hoist cross-arch precedent). The source's own scope note: only the tail-call-based dispatch configurations see improvements (our fixture is the tail-call shape -- the step fn's last op is the handler call). Suggestion-only (a parse-only proposer cannot see codegen shapes). Source: wasmi v2.0 blog 'Accidental Rust Deoptimization' (wasmi-labs.github.io, 2026-09-01, Robin Freyler), Batch 99 / Research 119 / Plan 067.".to_string()),
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: Some(mir_destprop_branch_site_merge_bench_spec()),
+        },
+        // -- dispatch: a hot loop reads its handler fn pointer OUT of a
+        // runtime table on EVERY dispatch (the classic `HANDLERS[op](..)`
+        // idiom) ----------------------------------------------------------
+        // Batch 101 (2026-09-02, Research 119 §Parallel-session addendum --
+        // the aarch64 complement of Batch 99, probe-only candidate
+        // promoted). On aarch64 the merged/indirect dispatch keeps an
+        // IN-LOOP indexed load of the handler (`csel x8, xzr, x22, ne;
+        // ldr x8, [x19, x8]; blr x8`) -- and DestProp's SPLIT fix does not
+        // help here (the split re-merges structurally on this target). The
+        // hoist does: loading both table entries ONCE before the loop and
+        // selecting between registers eliminates the per-dispatch load.
+        // The win is regime-bound: unpredictable streams only.
+        // Suggest-only (a parse-only proposer cannot see codegen).
+        PerfRule {
+            rule_id: "dispatch-handler-pair-hoist".to_string(),
+            name: "hot loop re-reads its handler fn pointer from a runtime table every dispatch -> hoist the table entries once before the loop (register-resident select)".to_string(),
+            category: "dispatch".to_string(),
+            buggy_code: "// A hot dispatch loop reads the handler OUT of a runtime table on\n// EVERY dispatch. On aarch64 the indirect call keeps that indexed\n// load in the loop (csel offset + ldr + blr) -- a memory access on\n// the dispatch critical path that the predictor cannot hide on\n// unpredictable streams. Note: splitting into two call sites does\n// NOT fix this shape (DestProp re-merges the split on aarch64 --\n// see mir-destprop-branch-site-merge's cross-arch note).\ntype Handler = fn(u64) -> u64;\n\nstatic HANDLERS: [Handler; 2] = [op_add, op_mul];\n\n#[inline(never)]\nfn op_add(x: u64) -> u64 { x.wrapping_add(0x9E37) }\n#[inline(never)]\nfn op_mul(x: u64) -> u64 { x.wrapping_mul(31) }\n\nfn run(ops: &[u32], xs: &[u64]) -> u64 {\n    let mut acc = 0u64;\n    for (i, &op) in ops.iter().enumerate() {\n        let f = HANDLERS[(op & 1) as usize]; // in-loop indexed load\n        acc = f(acc ^ xs[i]);\n    }\n    acc\n}".to_string(),
+            fixed_code: "// Hoist BOTH table entries once before the loop: the handlers sit\n// in registers for the whole loop and the per-dispatch body is a\n// register select + direct-ish call -- the indexed load is GONE from\n// the critical path. Wins on unpredictable streams (LCG-random\n// 1.19-1.23x at 10K/1M dispatches); structured/periodic streams are a\n// Tie (a learnable stream lets the single indirect site's predictor\n// hide the load).\ntype Handler = fn(u64) -> u64;\n\nstatic HANDLERS: [Handler; 2] = [op_add, op_mul];\n\n#[inline(never)]\nfn op_add(x: u64) -> u64 { x.wrapping_add(0x9E37) }\n#[inline(never)]\nfn op_mul(x: u64) -> u64 { x.wrapping_mul(31) }\n\nfn run(ops: &[u32], xs: &[u64]) -> u64 {\n    let f0 = HANDLERS[0]; // hoisted once\n    let f1 = HANDLERS[1];\n    let mut acc = 0u64;\n    for (i, &op) in ops.iter().enumerate() {\n        let x = acc ^ xs[i];\n        acc = if op & 1 == 0 { f0(x) } else { f1(x) };\n    }\n    acc\n}".to_string(),
+            context_notes: Some("MEASURED ParetoDominant 2/0/0 on the corpus validator -- 1.23x/1.22x at 10K/1M dispatches on the LCG-random (unpredictable) stream, band 1.19-1.23x across 3 runs, alloc axis EXACT 0/0, alloc-det stable x3 (aarch64, M3 Max, rustc 1.97.0, macOS 26.6.2; raw probe LC 0.837-0.840 = fixed wins ~16-19%, verdict-stable x3). REGIME (measured, three stream shapes): the win exists ONLY on unpredictable streams -- period-16 0.988-1.004 and alternation 0.990-1.003 read Tie (a learnable stream lets the single indirect site's predictor hide the load), so consumers on patterned dispatch streams gain nothing. MECHANISM (asm-pinned, not inferred): the aarch64 merged form keeps an IN-LOOP indexed load (`csel x8, xzr, x22, ne; ldr x8, [x19, x8]; blr x8` -- DestProp's merged-load shape; the classic HANDLERS[op](..) idiom is the buggy form) and the hoist eliminates it. CROSS-ARCH CAVEAT (verdict PENDING, armed): x86_64's DestProp-merged form uses `lea rip+h_*` address materialization -- NO in-loop load -- so the hoist win may be aarch64-shaped; expected Tie there pending the 4090 re-gate measurement. Do NOT delete this caveat on annotation -- the annotation UPDATES it. DEDUP vs mir-destprop-branch-site-merge (Batch 99): distinct mechanism AND fixture shape -- that rule = compile-time-KNOWN fn items + tail-call shape + the SPLIT transform (two direct jmp sites, per-site predictor history; x86-verified no-re-merge); this rule = runtime TABLE + value-returning handlers + the HOIST transform (register-resident select; on aarch64 the split re-merges structurally, so Batch 99's fix does not transfer to this shape -- and Batch 99's runtime-opaque NEGATIVE CONTROL covers splitting on unpredictable streams, not hoisting). The two compose in the dispatch family: known items -> split (B99); runtime table -> hoist (this). Suggestion-only (a parse-only proposer cannot see codegen shapes). Source: the wasmi v2.0 distill's parallel-session lane, Research 119 §Parallel-session addendum (probe-only evidence, queued unnumbered, promoted Batch 101 / Plan 069).".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(dispatch_handler_pair_hoist_bench_spec()),
         },
     ])
 }
@@ -7740,7 +7764,7 @@ mod tests {
     #[test]
     fn seed_corpus_has_ninety_eight_entries_across_twelve_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 98);
+        assert_eq!(corpus.entries.len(), 99);
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
@@ -8703,6 +8727,114 @@ mod tests {
         );
     }
 
+    /// Batch 101 — the new rule is present.
+    #[test]
+    fn batch101_rules_present() {
+        let corpus = build_perf_seed_corpus();
+        let ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        assert!(ids.contains(&"dispatch-handler-pair-hoist"));
+    }
+
+    /// Batch 101 — the new rule parses (syn) on buggy AND fixed code.
+    #[test]
+    fn batch101_pseudocode_parses() {
+        let corpus = build_perf_seed_corpus();
+        let e = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == "dispatch-handler-pair-hoist")
+            .unwrap_or_else(|| panic!("dispatch-handler-pair-hoist missing from corpus"));
+        assert!(
+            syn::parse_file(&e.buggy_code)
+                .and_then(|_| syn::parse_file(&e.fixed_code))
+                .is_ok(),
+            "dispatch-handler-pair-hoist buggy/fixed must both parse"
+        );
+    }
+
+    /// Batch 101 — the load-bearing concepts survive into the corpus text
+    /// (retrieval discriminators), and the recorded verdict + the
+    /// x86-pending cross-arch caveat are in context_notes.
+    #[test]
+    fn batch101_concepts_covered() {
+        let corpus = build_perf_seed_corpus();
+        let e = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == "dispatch-handler-pair-hoist")
+            .expect("rule present");
+        let text = format!("{}\n{}\n{}", e.name, e.buggy_code, e.fixed_code);
+        for needle in [
+            "hoist",
+            "table",
+            "unpredictable",
+            "register",
+            "dispatch",
+        ] {
+            assert!(text.contains(needle), "concept {needle:?} missing from the rule text");
+        }
+        let notes = e.context_notes.as_deref().unwrap_or("");
+        assert!(
+            notes.contains("ParetoDominant"),
+            "the measured verdict must be recorded in context_notes"
+        );
+        assert!(
+            notes.contains("x86") && notes.contains("PENDING"),
+            "the x86-pending cross-arch caveat must be recorded (never silently deleted)"
+        );
+        assert!(
+            notes.contains("mir-destprop-branch-site-merge"),
+            "the dedup cross-ref vs the landed B99 rule must be recorded"
+        );
+    }
+
+    /// Batch 101 — G1: the hoisted form is output-identical to the table
+    /// form over a fixed op stream, and BOTH handlers actually run
+    /// (non-vacuity: a one-op stream would pass trivially).
+    #[test]
+    fn batch101_hoist_preserves_output_and_both_handlers_run() {
+        fn op_add(x: u64) -> u64 {
+            x.wrapping_add(0x9E37)
+        }
+        fn op_mul(x: u64) -> u64 {
+            x.wrapping_mul(31)
+        }
+        let handlers: [fn(u64) -> u64; 2] = [op_add, op_mul];
+
+        // Fixed 2-op stream: both ops exercised, deterministic.
+        let ops: Vec<u32> = (0..256).map(|i| (i % 2) as u32).collect();
+        let xs: Vec<u64> = (0..256).map(|i| (i as u64) ^ 0xABCD).collect();
+
+        let run_table = |ops: &[u32], xs: &[u64]| -> u64 {
+            let mut acc = 0u64;
+            for (i, &op) in ops.iter().enumerate() {
+                let f = handlers[(op & 1) as usize];
+                acc = f(acc ^ xs[i]);
+            }
+            acc
+        };
+        let run_hoisted = |ops: &[u32], xs: &[u64]| -> u64 {
+            let f0 = handlers[0];
+            let f1 = handlers[1];
+            let mut acc = 0u64;
+            for (i, &op) in ops.iter().enumerate() {
+                let x = acc ^ xs[i];
+                acc = if op & 1 == 0 { f0(x) } else { f1(x) };
+            }
+            acc
+        };
+
+        let a = run_table(&ops, &xs);
+        let b = run_hoisted(&ops, &xs);
+        assert_eq!(a, b, "hoist must be output-identical");
+
+        // Non-vacuity: the all-add and all-mul streams must DIFFER —
+        // proves both handlers are load-bearing in the fixture.
+        let only_add: Vec<u32> = vec![0; 256];
+        let only_mul: Vec<u32> = vec![1; 256];
+        assert_ne!(run_table(&only_add, &xs), run_table(&only_mul, &xs));
+    }
+
     /// Batch 99 G1 (output + dispatch-sequence identity): both shapes
     /// dispatch the IDENTICAL handler sequence over the same stream (pinned
     /// by per-handler call counters, not just final state) and land the
@@ -8865,14 +8997,14 @@ mod tests {
 
     #[cfg(feature = "rust_perf_bench")]
     #[test]
-    fn eighty_five_rules_have_bench_specs() {
+    fn eighty_six_rules_have_bench_specs() {
         let corpus = build_perf_seed_corpus();
         let with_spec = corpus
             .entries
             .iter()
             .filter(|e| e.bench_spec.is_some())
             .count();
-        assert_eq!(with_spec, 85, "expected 85 benchable rules, got {with_spec}");
+        assert_eq!(with_spec, 86, "expected 86 benchable rules, got {with_spec}");
     }
 
     #[cfg(feature = "rust_perf_bench")]
@@ -8941,7 +9073,7 @@ mod tests {
     /// The other 57 have `context_notes: None` (unconditional wins or
     /// honestly NotBenchable).
     #[test]
-    fn forty_one_annotated_rules_carry_context_notes() {
+    fn forty_two_annotated_rules_carry_context_notes() {
         let corpus = build_perf_seed_corpus();
         let annotated: Vec<&str> = corpus
             .entries
@@ -8949,7 +9081,7 @@ mod tests {
             .filter(|e| e.context_notes.is_some())
             .map(|e| e.rule_id.as_str())
             .collect();
-        assert_eq!(annotated.len(), 41, "expected 41 context-annotated rules");
+        assert_eq!(annotated.len(), 42, "expected 42 context-annotated rules");
         assert!(annotated.contains(&"weight-tile-consumption-order")); // Batch 85 — measured ParetoDominant + the M3-L1-shift regime note
         assert!(annotated.contains(&"software-prefetch-storage-bound")); // Batch 85 — the x86-source-cited honest-loser annotation
         assert!(annotated.contains(&"precompute-table"));
@@ -8987,6 +9119,7 @@ mod tests {
         assert!(annotated.contains(&"decision-projection-before-construction")); // Batch 91 — the invariance-precondition note
         assert!(annotated.contains(&"coalesce-nearby-reads-bounded-gap-cacheability-gated")); // Batch 94 — the cacheability-coupling regime note (source-reported)
         assert!(annotated.contains(&"mir-destprop-branch-site-merge")); // Batch 99 — measured ParetoDominant + the runtime-opaque-targets boundary + toolchain regime
+        assert!(annotated.contains(&"dispatch-handler-pair-hoist")); // Batch 101 — measured ParetoDominant (aarch64) + the unpredictable-stream regime + the x86-pending cross-arch caveat
     }
 
     /// The non-annotated rules (ParetoDominant + honestly NotBenchable) must
@@ -9000,7 +9133,7 @@ mod tests {
             .iter()
             .filter(|e| e.context_notes.is_none())
             .count();
-        assert_eq!(unannotated, 57, "expected 57 unannotated rules (98 - 41 annotated)");
+        assert_eq!(unannotated, 57, "expected 57 unannotated rules (99 - 42 annotated)");
     }
 
     /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -9012,7 +9145,7 @@ mod tests {
         let json = serde_json::to_string(&corpus.entries).unwrap();
         let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
         let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-        assert_eq!(annotated, 41);
+        assert_eq!(annotated, 42);
 
         // Simulate a pre-field snapshot: strip `context_notes` from JSON.
         // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -9046,7 +9179,7 @@ mod tests {
 
         // Filter to the 41 annotated rules.
         let annotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_some()).collect();
-        assert_eq!(annotated.len(), 41, "expected 41 annotated rules");
+        assert_eq!(annotated.len(), 42, "expected 42 annotated rules");
 
         // The HealEntry trait override must agree with the struct field.
         for rule in &annotated {
@@ -10348,6 +10481,89 @@ pub fn run_fixed(input: &Input) {
         step_split(input.conds[i] != 0, &mut s, input.xs[i]);
     }
     std::hint::black_box(s);
+}
+"#
+        .to_string(),
+    }
+}
+
+/// Bench spec for `dispatch-handler-pair-hoist` (Batch 101, Research 119
+/// §Parallel-session addendum): the runtime-table dispatch shape — the
+/// buggy loop reads `HANDLERS[op & 1]` (indexed fn-pointer load) every
+/// dispatch; the fixed loop hoists both entries once and selects between
+/// registers. LCG-random 2-op stream (the UNPREDICTABLE regime — the
+/// measured win band 1.19–1.23×; structured streams are the Tie band, a
+/// different harness, not gated here). G1 output identity is pinned in
+/// `batch101_hoist_preserves_output_and_both_handlers_run`.
+#[cfg(feature = "rust_perf_bench")]
+#[allow(clippy::items_after_test_module)] // bench-spec tables live after the corpus tests by design
+fn dispatch_handler_pair_hoist_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![1_000, 100_000, 1_000_000],
+        harness: r#"
+pub type Handler = fn(u64) -> u64;
+
+#[inline(never)]
+pub fn op_add(x: u64) -> u64 {
+    x.wrapping_add(0x9E37)
+}
+
+#[inline(never)]
+pub fn op_mul(x: u64) -> u64 {
+    x.wrapping_mul(31)
+}
+
+pub static HANDLERS: [Handler; 2] = [op_add, op_mul];
+
+// BUGGY: indexed fn-pointer load on EVERY dispatch (aarch64: the
+// indirect call keeps an in-loop ldr on its critical path).
+#[inline(never)]
+pub fn run_table(ops: &[u32], xs: &[u64]) -> u64 {
+    let mut acc = 0u64;
+    for (i, &op) in ops.iter().enumerate() {
+        let f = HANDLERS[(op & 1) as usize];
+        acc = f(acc ^ xs[i]);
+    }
+    acc
+}
+
+// FIXED: both entries hoisted once — register-resident select in-loop.
+#[inline(never)]
+pub fn run_hoisted(ops: &[u32], xs: &[u64]) -> u64 {
+    let f0 = HANDLERS[0];
+    let f1 = HANDLERS[1];
+    let mut acc = 0u64;
+    for (i, &op) in ops.iter().enumerate() {
+        let x = acc ^ xs[i];
+        acc = if op & 1 == 0 { f0(x) } else { f1(x) };
+    }
+    acc
+}
+
+pub struct Input {
+    ops: Vec<u32>,
+    xs: Vec<u64>,
+}
+
+pub fn make_input(n: usize) -> Input {
+    let mut seed = 0x243F_6A88_85A3_08D3u64;
+    let mut next = move || {
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        seed >> 33
+    };
+    let ops: Vec<u32> = (0..n).map(|_| (next() % 2) as u32).collect();
+    let xs: Vec<u64> = (0..n).map(|i| next() ^ (i as u64)).collect();
+    Input { ops, xs }
+}
+
+pub fn run_buggy(input: &Input) {
+    std::hint::black_box(run_table(&input.ops, &input.xs));
+}
+
+pub fn run_fixed(input: &Input) {
+    std::hint::black_box(run_hoisted(&input.ops, &input.xs));
 }
 "#
         .to_string(),

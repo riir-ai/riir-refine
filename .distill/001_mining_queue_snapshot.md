@@ -82,8 +82,10 @@
     qwen-3.8-mtp-challenge-adjacent batch or a paged-KV admission consumer) and indivisible-attention-
     span chunk snapping + one-shot starvation guard (SchedulerV2; reopen on a multimodal or span-atomic
     chunked-prefill consumer).
-  - **Unnumbered candidate (probe-only, 2026-09-02 — Research 119 §Parallel-session addendum):
-    `dispatch-handler-pair-hoist` (rust_perf/dispatch).** The aarch64 complement of Batch 99's landed
+  - **~~Unnumbered candidate (probe-only, 2026-09-02 — Research 119 §Parallel-session addendum):
+    `dispatch-handler-pair-hoist` (rust_perf/dispatch)~~ LANDED 2026-09-02 as Batch 101
+    (Plan 069, corpus 98 → 99, dispatch 4 → 5; validator ParetoDominant 3/0/0 — 2.89×/1.21×/1.23×;
+    x86 re-gate ARMED in Plan 069 — 4090 contention at batch time).** Original candidate row: The aarch64 complement of Batch 99's landed
     rule: the merged conditional-dispatch form keeps an IN-LOOP indexed handler load on aarch64 (asm-pinned,
     `csel` offset + `ldr` + one `blr`; the classic `HANDLERS[op](..)` per-dispatch idiom), and hoisting the
     handler pair once (register-resident select) measured ParetoDominant 2/0/0 — 1.19-1.23x at 10K/1M

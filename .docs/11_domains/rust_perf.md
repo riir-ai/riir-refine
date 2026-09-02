@@ -23,7 +23,7 @@
 
 ## Corpus
 
-98 rules across 12 categories (rust-optimize skill checklist +
+99 rules across 12 categories (rust-optimize skill checklist +
 nnethercote/perf-book + rustc-hash/bevy real-world patterns + the hotpath-rs
 profiling guide, Research 032; **now 98 rules — Batch 99 (2026-09-02,
 Research 119 — the wasmi v2.0 blog distill, Plan 067) added
@@ -111,7 +111,7 @@ caching has 4 (Issue 014 added `regex-hoist-lazylock`; Batch 73 added
 `division-by-invariant-multiplication`; Batch 62 added the annotated
 `newton-refinement-vs-hardware-transcendental`; Batch 66 added
 `sparse-set-bit-iteration-tz-blsr`; Batch 74 added `swar-digit-chunk-parse`);
-dispatch has 3 (Batch 61 added
+dispatch has 5 (Batch 61 added
 `keyword-map-to-match`; Batch 74 added `runtime-feature-detect-per-chunk`); io is 4 (Batch 68 added
 `varint-compose-word-single-store`; Batch 69 added `unaligned-word-load-from-bytes`; Batch 85 added
 `software-prefetch-storage-bound`); the rest have 1
@@ -182,6 +182,7 @@ annotated rules as context-dependent, not unconditional suggestions.
 | `retain-inplace` | iterators | ✅ 1.5-2.1x ParetoDominant | — | `iter().filter().collect()` new Vec → `Vec::retain()` in-place filter (no allocation, single pass; ~1.5-2× across all sizes) |
 | `sort-by-key` | complexity | ~ Mixed (regime-fragile) | ⚠️ `context_notes` | `sort_by` repeated closure → `sort_by_key` single extraction (Issue 012 / Bench 016) |
 | `dyn-to-enum` | dispatch | ✅ 2.5-2.9x ParetoDominant | — | `Box<dyn Trait>` dispatch → enum dispatch (devirtualize: vtable indirection → direct match, compiler can inline) |
+| `dispatch-handler-pair-hoist` | dispatch | ✅ 2.89/1.21/1.23× ParetoDominant (aarch64; x86 pending) | — | hot loop reads its handler from a runtime table every dispatch → hoist both entries once before the loop (register-resident select); wins on UNPREDICTABLE streams only (structured/periodic = Tie); Batch 101 |
 | `precompute-table` | caching | ❌ 0.20-0.40x ParetoDominated | ⚠️ `context_notes` | Recompute-per-call → `const` lookup table (compiler optimizes popcount to POPCNT in release) |
 | `regex-hoist-lazylock` | caching | ✅ 5443-5675x ParetoDominant | — | `Regex::new` per call → `static LazyLock<Regex>` (compile once; Issue 014 / Bench 020: allocs 1.3M→0, bytes 563.6M→0 per 1000 calls — the largest deterministic win in the corpus) |
 | `bevy-reactive-loop` | bevy | ❌ NotBenchable | — | `WinitSettings::default()` (Continuous, 100% CPU) → `reactive_low_power` (needs Bevy runtime) |
