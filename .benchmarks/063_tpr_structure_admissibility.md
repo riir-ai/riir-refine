@@ -619,8 +619,8 @@ tree under test).
 | **P12** | `kernel_opt` inadmissible at every `d` in the 8-D consumer space, coalesced and not | **CONFIRMED.** Both arms `admissible_d = []`. `K = m·d ≥ D` at `d = 1` with `m = 15` vs `D = 8`, and coalescing at `T = 8` merged only 4 categories (sizes 4, 5, 5, 4) to `m' = 12`, still far above 8. |
 | **P13** | the 256-D control admissible at every `d` | **CONFIRMED coalesced** (all four `d`, `K = 96 < 256` at the worst, 3,773–28,392 params against 113,920 observations); **HALF on the uncoalesced arm** — `d ∈ {1, 2}` only, killed at `d ∈ {4, 8}` by the per-role bound exactly as the prediction's own caveat said it would be. |
 | **P14** | BIC picks `d = 1` | **CONFIRMED**, a third time, monotone in `d`. |
-| **P15** | control arm structured, ratio above clippy's 1.1417 | **REFUTED, and in the direction that matters.** `bow_router` **0.9307** (`structured = false`) and cross-state **1.0147** (`degraded = false`). Not merely below clippy — below 1.0, the same `r_bow < r_full` signature §11.2 found in the flat 8-D consumer space. |
-| **P16** | `moved > 0`, `vacuous = false` on every arm that ran | **CONFIRMED.** `moved = 383/445` on `kernel_opt`. The Issue 710 machinery worked exactly as intended — which is what makes this section necessary. |
+| **P15** | control arm structured, ratio above clippy's 1.1417 (`clippy_lints / tokenbag256 [coalesced T=8]`) | **REFUTED, and in the direction that matters.** On `kernel_opt / tokenbag256 [coalesced T=8]`, 445 states: `bow_router` **0.9307** (`structured = false`) and cross-state **1.0147** (`degraded = false`). Not merely below clippy — below 1.0, the same `r_bow < r_full` signature §11.2 found in the flat 8-D consumer space. *(Arms named inline per §12.9's rule; this row is the counterexample that rule was written from — it originally carried neither, and §12.6 then guessed the arm wrong. A table row travels; the heading above it does not.)* |
+| **P16** | `moved > 0`, `vacuous = false` on every arm that ran | **CONFIRMED.** `moved = 383/445` on `kernel_opt / tokenbag256 [coalesced T=8]`. The Issue 710 machinery worked exactly as intended — which is what makes this section necessary. |
 
 **§12.3's first bullet is hereby retracted, not triggered.** It said a flat
 unconfounded arm would mean §11's control-space structure is substantially the
@@ -629,11 +629,17 @@ discounted. That inference requires `kernel_opt` to be a *valid test of role
 structure*, and it is not:
 
 ```
+arm = <corpus> / tokenbag256 [coalesced T=8]   (all three rows; kernel_opt at 445 states)
              states/filler   bow_router   cross-state
 kernel_opt          1.00        0.9307        1.0147
 clippy_lints        2.51        1.1417        1.0693
 rustc_errors       26.50        2.2096        2.6661
 ```
+
+*(Arm line added per §12.9. `clippy_lints` and `rustc_errors` re-measured
+identically on a later run — 1.1417 / 1.0693 and 2.2096 / 2.6661, corpora
+unmoved at 113 and 212 states. `kernel_opt` is the one row that has since
+moved, to 0.9525 / 1.0512 at 453; §12.8b prices that drift.)*
 
 `kernel_opt` has `n_fillers == n_states == 445`: every rule id occurs in
 exactly one state, and every rule belongs to exactly one declared category, so
