@@ -979,7 +979,29 @@ fn finish(
         .filter(|s| !s.ok)
         .map(|s| s.step.label())
         .collect();
+    // Make [`Step::in_dry_run`] load-bearing rather than decorative.
+    //
+    // Measured: a canary that widened `in_dry_run` to include the faucet
+    // top-up changed NOTHING, because `run`'s dry-run branch is a straight
+    // line that never consulted it — the declaration and the mechanism
+    // could drift silently in both directions. (The `--dry-run` proof
+    // itself does not rest on this: the gate's real evidence is the
+    // recorded CALL LOG, and a canary that ran a money leg inside the
+    // dry-run branch did red it.) This check closes the other direction.
+    let illegal: Vec<&str> = match mode {
+        RunMode::Full => Vec::new(),
+        RunMode::DryRun => steps
+            .iter()
+            .filter(|s| !s.step.in_dry_run())
+            .map(|s| s.step.label())
+            .collect(),
+    };
     let verdict = match () {
+        () if !illegal.is_empty() => Verdict::NotReady(format!(
+            "the harness executed money leg(s) inside a --dry-run: {} — a dry-run is steps \
+             1+6, read-only, zero state (Proposal 011 §7)",
+            illegal.join(", ")
+        )),
         () if !failed.is_empty() => Verdict::NotReady(format!("step(s) failed: {}", failed.join(", "))),
         () if mode == RunMode::DryRun => Verdict::Ready,
         // A full run that reached the end MUST have both snapshots; a
