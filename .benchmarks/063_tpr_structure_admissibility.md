@@ -784,10 +784,11 @@ Here it confirms rather than corrects.
 
 ### 12.8 What corpus growth did to the guarded arm
 
-> **Read §12.8a first** — two of this section's claims are corrected there: the
+> **Read §12.8a then §12.8b.** One claim in this section is corrected: the
 > verdict is `None` (not `Some(false)`), so the covariate guard is load-bearing
-> rather than redundant; and the `1.0147 → 1.0512` crossing compares two
-> different arms.
+> rather than redundant. §12.8a also alleged an arm mismatch in the
+> `1.0147 → 1.0512` crossing; **that allegation is WITHDRAWN** — the crossing is
+> same-arm and real (§12.8b; §12.8a(2) is struck at source).
 
 Between the §12.4 run (445 `kernel_opt` states) and this one (453, sibling
 batch `93b7448`), the cross-state control on `kernel_opt / tokenbag256
@@ -822,25 +823,58 @@ on the coalesced arm — a confident negative, which is exactly the
 to prevent. So 12.8 undersells itself: the finding is stronger than stated,
 because nothing except the covariate guard produces the `None`.
 
-**(2) The `1.0147 -> 1.0512` crossing spans two different ARMS.** §12.6 already
-established that §12.4's `0.9307` was the **uncoalesced** `kernel_opt /
-tokenbag256` row ("reads 0.9351 (was 0.9307) and the coalesced arm 0.9525"),
-and `1.0147` is that same row's cross-state partner in the P15 table. Compared
-within one arm at 453 states:
+**(2) ~~The `1.0147 -> 1.0512` crossing spans two different ARMS.~~ WITHDRAWN
+2026-09-02.**
 
-| arm | cross-state ratio | `degraded` | `structured()` |
-|---|---|---|---|
-| `kernel_opt / tokenbag256` (uncoalesced, the 1.0147 row's arm) | **1.0310** | **false** | `None` |
-| `kernel_opt / tokenbag256 [coalesced T=8]` | **1.0512** | true | `None` |
+Wrong, and kept struck rather than deleted because *how* it was wrong is the
+finding. The crossing is same-arm and real. The 445 block carrying **both**
+`0.9307` and `1.0147` is self-labelled `[coalesced T=8]` in its header, with
+`m(roles)=12`, `m'=12`, admissible `[1, 2, 4, 8]` and label
+`orthogonal:m12:d1` — and two of those lines are emitted by
+`print_space_report` **only** when `r.coalesce.is_some()` (`tpr_fit.rs:868` for
+the header suffix, `:874` for the `coalesced: merged … m'=` line). So the arm
+identity is the printer's own gating, not an inference from the numbers, which
+is why this is not close. What is genuinely uncaptured is the **uncoalesced**
+arm's 445 values — it ran, a `tail -45` just did not reach it.
 
-So the arm that read 1.0147 at 445 reads 1.0310 at 453 and **did not cross**.
-The coalesced arm's 445-state value was never recorded — §12.6 said as much,
-calling it "0.9307's sibling row" — so whether *it* crossed is **unknown**, and
-"a signal manufactured by eight extra rules" is not supported by these numbers.
-What the growth did do is move the same-arm ratio 1.0147 -> 1.0310 while the
-covariate stayed at `max 1 / mean 1.000`, which carries 12.8's lesson intact
-without the crossing: a probe on a corpus where the structure question is not
-posed drifts with corpus size and the covariate does not.
+The defect was inherited, not invented: §12.8a(2) cited §12.6's parenthetical,
+which had itself paired a 453-uncoalesced reading with a 445-**coalesced** one
+and then called the coalesced 445 value unrecorded when it is the one on hand
+(§12.6 now carries that amendment). **A correction that inherits its premise
+from the text it corrects is the same failure wearing the reviewer's badge** —
+the fourth and sharpest instance of the session's recurring shape, and the one
+rule that catches all four is: re-read the run, not the section that summarised
+it. This document has now mislabelled itself twice, so a number cited from §11
+or §12 prose without going back to the run output should be treated as
+unverified.
+
+**What survives is stronger than the struck claim.** Same arm, 445 → 453:
+`bow_router` 0.9307 → 0.9525 **and** cross-state 1.0147 → 1.0512, the latter
+crossing `STRUCTURE_EPS`. **Both** probes drift with corpus size on an arm whose
+covariate is pinned at `max 1 / mean 1.000`, and neither drift means anything —
+§12.8's point without needing any arm-mismatch claim. Reversal and drift
+pairing: `86f34a4`.
+
+Struck text follows, unedited.
+
+> §12.6 already established that §12.4's `0.9307` was the **uncoalesced**
+> `kernel_opt / tokenbag256` row, and `1.0147` is that same row's cross-state
+> partner in the P15 table. Compared within one arm at 453 states:
+
+> | arm | cross-state ratio | `degraded` | `structured()` |
+> |---|---|---|---|
+> | `kernel_opt / tokenbag256` (uncoalesced, the 1.0147 row's arm) | 1.0310 | false | `None` |
+> | `kernel_opt / tokenbag256 [coalesced T=8]` | 1.0512 | true | `None` |
+>
+> So the arm that read 1.0147 at 445 reads 1.0310 at 453 and did not cross.
+> The coalesced arm's 445-state value was never recorded, so whether it crossed
+> is unknown, and "a signal manufactured by eight extra rules" is not
+> supported by these numbers.
+>
+> *(Both sentences are false. 1.0310 is the UNCOALESCED arm at 453 — a
+> different arm from the 1.0147 row — and the coalesced 445 value is exactly
+> the one that was captured. The `degraded`/`structured()` column values are
+> correct as measured; only the arm attribution and the conclusion are wrong.)*
 
 Third instance today of quoting a number from a different arm than the claim it
 supports (after §11.6's `rustc_errors` covariate, `1ddf4796`), and the first one
