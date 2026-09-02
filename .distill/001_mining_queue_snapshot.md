@@ -30,6 +30,14 @@
   files committed while the sibling's 16 uncommitted files stayed out via
   explicit-path `git add`). Full record: P8 ADOPTION WAVE 2 below.
 - **Next executable (cadence-gated):**
+  - **Batch 99 candidate (queued 2026-09-02, Plan 067 / Research 119): wasmi v2.0 blog**
+    (wasmi-labs, Robin Freyler, first-party + measured) — route `rust_perf`/dispatch, yield 1–2
+    rules, lead = `mir-destprop-branch-site-merge` (rustc ≥1.92 DestinationPropagation merges a
+    conditional dispatch's two call sites into one branch site → predictor history mixing;
+    wasmi measured ~2800 → >4200 CoreMark from the single fix; Stitch reproduced), secondary
+    = `hot-dispatch-gpr-arg-budget` (sysv64 6-GPR budget; float-domain pack; preserve_none
+    future). Dual verdict: the same source TRIGGERED the workspace wasmi 1.0 → 2.0 upgrade
+    (riir-ai Plan 563 — 13 pins / 7 repos lockstep + fuel recalibration).
   - **The arxiv pool re-walk #4: DONE 2026-09-02 ~07:15 +07** (`.research/113` — covered
     the Tuesday-09-01 announcement window; zero corpus delta; the spec-dec lane woke up:
     DBloom's ceiling-bin acceptance histogram (zero-cost telemetry adoption candidate for
