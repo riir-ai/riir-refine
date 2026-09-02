@@ -129,6 +129,18 @@
     external measured confirmation on HIP v_perm_b32, MI300X 1.9–2.9× decode rows;
     CDNA-vs-RDNA MMVQ geometry regime). Source verdict upgraded to A- at mine time
     (measured HIP rows + upstream PR 26980 lineage).**
+  - **NEW 2026-09-02 (distill verdict, Research 117 / Plan 063): antirez/ds4
+    (DwarfStar) — YES B+, route kernel_opt (Metal lanes).** The engine behind the
+    250.1 t/s @11709 M3 Max league row; discipline evidence = bit-identity-abort
+    A/B harnesses + a 4096-pair GPU raw-bit oracle kernel. GOAT lead = half-domain
+    exact-band MXFP4 dequant table (E8M0∈[103,142] once-rounded exact, exhaustive
+    256×16 equivalence gate mandatory) + Metal4 MPP double-buffered dequant staging
+    (mechanism-doc class, 1 barrier/k-step) + tail-SIMDgroup cull under preserved
+    barriers + pair gate+up ONE-B-tile staging (bit-identical contract) + expert-major
+    atomic-scatter work map w/ stale-overwrite trailer (lead vs B94 expert_major
+    RESOLVED distinct) + static-shape proven specialization w/ identical-results
+    fallback. **Batch 97 next idle cycle (Plan 063, lane split: moe.metal verified /
+    dsv4_hc+kv+flash+host unverified).**
 - **Sibling lanes (do not touch):** riir-train — sibling actively building
   (`/tmp/riir-train-499b`); the 4090 perf lanes — sibling PV work mid-flight as of 08-29
   (re-verify lane state at session start before any 4090 unit).
