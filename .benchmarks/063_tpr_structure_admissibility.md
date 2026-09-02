@@ -780,6 +780,11 @@ Here it confirms rather than corrects.
 
 ### 12.8 What corpus growth did to the guarded arm
 
+> **Read §12.8a first** — two of this section's claims are corrected there: the
+> verdict is `None` (not `Some(false)`), so the covariate guard is load-bearing
+> rather than redundant; and the `1.0147 → 1.0512` crossing compares two
+> different arms.
+
 Between the §12.4 run (445 `kernel_opt` states) and this one (453, sibling
 batch `93b7448`), the cross-state control on `kernel_opt / tokenbag256
 [coalesced]` moved **1.0147 → 1.0512** and crossed `STRUCTURE_EPS = 0.05`, so
@@ -787,9 +792,8 @@ that probe now reports `degraded = true` on the arm whose role is a
 deterministic function of its filler.
 
 Stated precisely, because the tempting overstatement is wrong: this is **not** a
-false positive that the Issue 711 guard caught. `structured()` is the
-conjunction of both probes and `bow_router` still reads `false` (0.9525), so
-the arm lands on `Some(false)` with or without the guard. What it does show is
+false positive that the Issue 711 guard caught — the verdict was already being
+withheld before this probe moved at all. What it does show is
 what "unreadable, not false" means operationally — a probe on a corpus where
 the structure question is not posed produced a **threshold crossing from corpus
 growth alone**, with the covariate completely unmoved (`max = 1`,
@@ -798,5 +802,42 @@ growth alone**, with the covariate completely unmoved (`max = 1`,
 
 The guard's value is therefore that `STRUCTURED` reads `None`, not that any
 single number changed. A consumer reading `cross_state.degraded` directly —
-which is what this harness did before Issue 711 — would now be reading a signal
-manufactured by eight extra rules.
+which is what this harness did before Issue 711 — would now be reading that
+crossing as signal.
+
+#### 12.8a Two corrections to 12.8, both measured
+
+**(1) The guard IS the load-bearing mechanism here, not the conjunction.** 12.8
+first said the arm "lands on `Some(false)` with or without the guard", which
+contradicts its own closing sentence. Measured, both `kernel_opt / tokenbag256`
+arms report `STRUCTURED (router AND cross-state): None`. Without the covariate
+guard the conjunction would be
+`Some(bow.structured && cross.degraded)` = `Some(false && true)` = **`Some(false)`**
+on the coalesced arm — a confident negative, which is exactly the
+"largest corpus we have carries no binding structure" misread Issue 711 exists
+to prevent. So 12.8 undersells itself: the finding is stronger than stated,
+because nothing except the covariate guard produces the `None`.
+
+**(2) The `1.0147 -> 1.0512` crossing spans two different ARMS.** §12.6 already
+established that §12.4's `0.9307` was the **uncoalesced** `kernel_opt /
+tokenbag256` row ("reads 0.9351 (was 0.9307) and the coalesced arm 0.9525"),
+and `1.0147` is that same row's cross-state partner in the P15 table. Compared
+within one arm at 453 states:
+
+| arm | cross-state ratio | `degraded` | `structured()` |
+|---|---|---|---|
+| `kernel_opt / tokenbag256` (uncoalesced, the 1.0147 row's arm) | **1.0310** | **false** | `None` |
+| `kernel_opt / tokenbag256 [coalesced T=8]` | **1.0512** | true | `None` |
+
+So the arm that read 1.0147 at 445 reads 1.0310 at 453 and **did not cross**.
+The coalesced arm's 445-state value was never recorded — §12.6 said as much,
+calling it "0.9307's sibling row" — so whether *it* crossed is **unknown**, and
+"a signal manufactured by eight extra rules" is not supported by these numbers.
+What the growth did do is move the same-arm ratio 1.0147 -> 1.0310 while the
+covariate stayed at `max 1 / mean 1.000`, which carries 12.8's lesson intact
+without the crossing: a probe on a corpus where the structure question is not
+posed drifts with corpus size and the covariate does not.
+
+Third instance today of quoting a number from a different arm than the claim it
+supports (after §11.6's `rustc_errors` covariate, `1ddf4796`), and the first one
+inside a finding *about* that failure. The arm label is part of the number.
