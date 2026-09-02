@@ -542,13 +542,23 @@ All classes closed; the standing divergence (P4 residual) has no action planned.
       riir-chain+riir-chaind; riir-train-engine; riir-dapps) + rust.yml with
       weekly Sat 03:58 UTC cron (default branch = develop, so the rot check
       audits it), Layer-4 Lean deliberately NOT duplicated (elan absent →
-      loud skip; lean_proofs.yml strictly owns proofs); remaining:
+      loud skip; lean_proofs.yml strictly owns proofs); riir-train landed
+      2026-09-02 same session, riir-train `66ffcd10` — 22 escaping deps
+      across THREE siblings (12 katgpt-*; 9 riir-ai crates + the vendored
+      cubecl-runtime; riir-neuron-db) + rust.yml with weekly Sun 04:17 UTC
+      cron (default branch = main, this repo's working branch); its guard
+      is COMPILE-LEVEL by design (five cargo check layers) so the ubuntu
+      run is runner-friendly — the guard header's macOS exclusions
+      (Issue 498) behave as on the Windows 4090 box on Linux; remaining:
       riir-train + riir-mmorpg-examples (ZERO workflows), riir-game-sdk
       (nightly+wasm32 only — verify test_gate.sh coverage), riir-unity
       (no_rust_boundary.yml only — no Rust, boundary-only shape may be
       correct), riir-dao + riir-chain + riir-dapps + riir-viewbridge (have
       rust.yml — verify it runs the FULL guard, per the 2026-09-02 re-scan:
-      the original remaining-list predates several workflow landings) — one
+      the original remaining-list predates several workflow landings); also
+      verify the SIBLING_REPOS_TOKEN secret is configured per-repo (the
+      hard-error makes an absent/expired one LOUD on the first scheduled
+      run) — one
       per cycle) — full-gate
       workflows missing in the sibling repos (katgpt-rs Issue 701 R2 table,
       2026-09-01).** Self-apply landed: riir-clippy's own guard (which was
