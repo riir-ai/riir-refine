@@ -32,6 +32,15 @@
     the verify-loop benches) + compressed draft-side KV (riir-train route) + a rigor-matched
     audit paper (measurement doctrine); two doctrine citations (G4/alloc budgets,
     modelless-first). **Next window 09-03+** (daily differential cadence; MCP quota 09-15).
+  - **The arxiv pool re-walk #5: DONE 2026-09-02 (later session, subagent read-only lane)**
+    (`.research/115` — Sept-ID (2609.x) differential wave + two NEW query surfaces
+    [KV+eviction, quant+inference]; zero corpus delta). **Queued from the walk:**
+    2609.00363 (A− — PoT-scale INT8 determinism lever; source-verify: PoT procedure
+    mirrorable? f16-KV blindness transfer? upgrades Bench 802's flat-tolerance verdict
+    into a fault-class classification?) QUEUED FIRST; 2609.00066 (B+ — NVFP4 outlier
+    grouping; source-verify: pure channel permutation vs calibration-coupled; svcca
+    Permuted-detection constraint) QUEUED SECOND; DASC 2608.30386 = GDN lane record only.
+    Standing fix for walk #6: drop `cat:cs.LG` from the spec-dec query (walk-#4 recall hole).
   - **09-15 MCP search quota reset** → online perf-search pool walk (queue item 11).
   - **Batch 94 (LANDED 2026-09-01, Plan 058 / Research 112): oMLX PR #3260
     expert-streaming distill CONSUMED** — 8 kernel_opt D + 1 rust_perf io +
