@@ -967,6 +967,12 @@ fn readiness_step(transport: &dyn WetrunTransport, acct_hex: &str, epoch: u64) -
 
 /// Assemble the verdict: every executed step ok AND (for a full run) the
 /// supply frozen.
+///
+/// Gated with [`run`], its only caller. Without the gate a
+/// `kat_service`-without-`kat_transport` build warns `finish is never used`
+/// — found by a feature-isolation sweep, which is the only axis that sees
+/// it (`--all-features` and the default build are both silent).
+#[cfg(feature = "kat_transport")]
 fn finish(
     mode: RunMode,
     network: Network,
