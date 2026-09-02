@@ -36,15 +36,27 @@ did NOT fire. Three caveats that bound what Phase 2 may claim:
 
 ## Phase 2 — structured retrieval axis (gated on katgpt-core `tpr`, issue 707 T1–T5)
 
-- [ ] **T3** **ALS fit of the healer corpus** into role-filler form: filler = code-shape embedding (existing AstChunker/ModellessEmbedder path), role = rule identity (and separately domain); ridge-ALS closed form, monotone certificate, frozen BLAKE3 artifact. Substrate tie: `self_evolve`'s EMA domain direction vectors are already runtime-updated rank-1 role embeddings — the TPR role table should thaw from the same freeze/thaw cycle, not fork it.
-- [ ] **T4** **TPR-structured retrieval axis** *(OOD baseline to beat, from Bench 062: T1 retrieval 4.0% / Structural 52.0% top-1; T2 retrieval 48.8% top-1, 51.2% top-3)* behind a `tpr_retrieval` feature (off by default): query-side structural denoise (score against the TPR projection, not the raw 8-D embedding — paper finding 7: decoders read better from the idealization) + role-conditioned match in the reranker. **Honest claim discipline: in-distribution gains are NOT the claim** (top-1 already 89.6–100 on the floors); the claim axes are (a) the OOD delta over T1's baseline by a preregistered margin, and (b) kernel_opt long-tail crowding (426 rules, the biggest corpus). Floors MUST hold (the 14/14 retrieval gate + score-bench flat unless OOD wins land).
-- [ ] **T5** **BoW-null router per domain:** *(prior measured by Bench 062: `rustc_errors` roles are 6/8 single-filler, so m=1 shared-role ALS should show little residual gain there; `clippy_lints` has 13 multi-filler roles)* fit the m=1 shared-role ALS per corpus; residual ratio `r_bow/r_full < 1+ε` ⇒ that domain carries no binding structure ⇒ structured machinery skipped there. Records a per-domain structure verdict (prediction to test: clippy_lints strongly structured; kernel_opt categories possibly weaker than rule-level).
-- [ ] **T6** **Counterfactual surgery on LatentFixMemory trajectories:** for score-bench persist-miss spans, surgery-swap the rule/domain filler and ask closed-form "would domain X / rule Y have healed this span?" — complements Bench 032's re-run-based switch-cost measurement with a zero-recompute counterfactual; feeds the post-mining intake (`.distill/001_mining_queue_snapshot.md`) with attributed misses.
+> **All rows below are `[-]` (deferred), not `[ ]` (actionable): every one needs the
+> `tpr` primitive that does not exist yet. **Unblock: katgpt-rs `.issues/707` T1–T5
+> ship the algebra** (bind/unbind/surgery/project + the ridge-ALS fit). As of
+> 2026-09-02 that work is in flight in a sibling session — `katgpt-core/src/tpr/`
+> holds an UNTRACKED `types.rs` — so treat 707 as unlanded until it is committed.
+> Phase 1 already discharged the half that needed nothing (T1/T2/T2a), and its
+> measurement is what justifies Phase 2 at all.
+
+- [-] **T3** **ALS fit of the healer corpus** into role-filler form: filler = code-shape embedding (existing AstChunker/ModellessEmbedder path), role = rule identity (and separately domain); ridge-ALS closed form, monotone certificate, frozen BLAKE3 artifact. Substrate tie: `self_evolve`'s EMA domain direction vectors are already runtime-updated rank-1 role embeddings — the TPR role table should thaw from the same freeze/thaw cycle, not fork it.
+- [-] **T4** **TPR-structured retrieval axis** *(OOD baseline to beat, from Bench 062: T1 retrieval 4.0% / Structural 52.0% top-1; T2 retrieval 48.8% top-1, 51.2% top-3)* behind a `tpr_retrieval` feature (off by default): query-side structural denoise (score against the TPR projection, not the raw 8-D embedding — paper finding 7: decoders read better from the idealization) + role-conditioned match in the reranker. **Honest claim discipline: in-distribution gains are NOT the claim** (top-1 already 89.6–100 on the floors); the claim axes are (a) the OOD delta over T1's baseline by a preregistered margin, and (b) kernel_opt long-tail crowding (426 rules, the biggest corpus). Floors MUST hold (the 14/14 retrieval gate + score-bench flat unless OOD wins land).
+- [-] **T5** **BoW-null router per domain:** *(prior measured by Bench 062: `rustc_errors` roles are 6/8 single-filler, so m=1 shared-role ALS should show little residual gain there; `clippy_lints` has 13 multi-filler roles)* fit the m=1 shared-role ALS per corpus; residual ratio `r_bow/r_full < 1+ε` ⇒ that domain carries no binding structure ⇒ structured machinery skipped there. Records a per-domain structure verdict (prediction to test: clippy_lints strongly structured; kernel_opt categories possibly weaker than rule-level).
+- [-] **T6** **Counterfactual surgery on LatentFixMemory trajectories:** for score-bench persist-miss spans, surgery-swap the rule/domain filler and ask closed-form "would domain X / rule Y have healed this span?" — complements Bench 032's re-run-based switch-cost measurement with a zero-recompute counterfactual; feeds the post-mining intake (`.distill/001_mining_queue_snapshot.md`) with attributed misses.
 
 ## GOAT gate
 
-- [ ] **G1** ALS determinism: monotone-certificate assert + double-run bit-identical artifact.
-- [ ] **G3** Floors hold with the feature off AND on (14/14 retrieval gate; score-bench run recorded before/after).
+> Also all `[-]`: these gates measure the Phase 2 machinery, so they inherit its
+> unblock (707 T1–T5). G8's OOD baseline is the ONLY part already in hand — Phase 1
+> produced it (Bench 062), and the caveats recorded above bound what G8 may claim.
+
+- [-] **G1** ALS determinism: monotone-certificate assert + double-run bit-identical artifact.
+- [-] **G3** Floors hold with the feature off AND on (14/14 retrieval gate; score-bench run recorded before/after).
       **Selector resolved by measurement 2026-09-02 - do not re-derive:** the "14/14
       retrieval gate" is the LIB test module `src/draft/retrieval_eval.rs` (floors in its
       private `mod floors`, assertion `retrieval_precision_regression_gate`), NOT a
@@ -59,9 +71,9 @@ did NOT fire. Three caveats that bound what Phase 2 may claim:
       (45/48 measured vs 45/48 asserted - one casualty reds the gate), and the `mod
       floors` P7 re-pin comment understates measured blended top-3/top-5 by 1-2 spans
       (floors were not weakened; the corpus moved).
-- [ ] **G4** Zero-alloc hot path for the projection/unbind inside retrieval (tracking allocator, exact counts).
-- [ ] **G8** OOD delta vs the T1 baseline at the preregistered margin, OR an honest no-gain record + demote-loser (flat cosine + Structural rerank keeps the slot at OOD parity). Per-domain BoW verdict recorded.
-- [ ] **Promote** Only after gates pass AND T1 shows the OOD gap the axis claims to close; opt-in until then.
+- [-] **G4** Zero-alloc hot path for the projection/unbind inside retrieval (tracking allocator, exact counts).
+- [-] **G8** OOD delta vs the T1 baseline at the preregistered margin, OR an honest no-gain record + demote-loser (flat cosine + Structural rerank keeps the slot at OOD parity). Per-domain BoW verdict recorded.
+- [-] **Promote** Only after gates pass AND T1 shows the OOD gap the axis claims to close; opt-in until then.
 
 ## Cross-refs
 
