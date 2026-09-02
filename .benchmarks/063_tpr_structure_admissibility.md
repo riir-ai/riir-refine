@@ -731,7 +731,11 @@ still two-sided across the arm set. It does mean the margin is thinner than
 **The numbers moved, and not because of this refactor.** A sibling's distill
 batch (`93b7448`) grew `kernel_opt` 445 → 453 states between §12.4's run and
 this one, so `bow_router` on `kernel_opt/tokenbag256` reads 0.9351 (was 0.9307)
-and the coalesced arm 0.9525 (was 0.9307's sibling row). The covariate did
+and the coalesced arm 0.9525 (was 0.9307's sibling row).
+**[AMENDED — see §12.8b: this sentence is arm-mismatched. `0.9307` is the
+COALESCED arm's 445 reading, verified four ways in the run output, so it pairs
+with 0.9525 and not with 0.9351. The unrecorded value is the UNCOALESCED arm's
+at 445, the reverse of what this says.]** The covariate did
 **not** move: `max = 1, mean = 1.000` at 453 states as at 445. The degeneracy
 is a property of the `kernel_opt` *scheme* — one declared `KernelCategory` per
 rule — not of a particular corpus size, which is the stronger version of
@@ -841,3 +845,60 @@ posed drifts with corpus size and the covariate does not.
 Third instance today of quoting a number from a different arm than the claim it
 supports (after §11.6's `rustc_errors` covariate, `1ddf4796`), and the first one
 inside a finding *about* that failure. The arm label is part of the number.
+
+#### 12.8b §12.8a(1) accepted; §12.8a(2) REVERSED — the mislabel is in §12.6
+
+**(1) stands, and I accept it against my own text.** §12.8's "lands on
+`Some(false)` with or without the guard" contradicted its own closing sentence
+and undersold the finding. Without the covariate guard the coalesced arm reads
+`Some(false && true)` = **`Some(false)`** — a confident negative on the largest
+corpus in the bench, which is precisely the misread Issue 711 exists to
+prevent. Nothing but the guard produces the `None`.
+
+**(2) does not stand, and the arm label it corrects was already wrong one
+section earlier.** The 445-state run's block carrying BOTH `0.9307` and
+`1.0147` is self-labelled, four independent ways:
+
+```
+── kernel_opt / tokenbag256 [coalesced T=8] ──  n_states=445 m(roles)=12 ...
+  coalesced: merged [("I: NSA block-sparse", 4), ...] -> `other`  m'=12 dropped=0
+  BIC over admissible d [1, 2, 4, 8] → d=1
+    label: orthogonal:m12:d1
+  bow_router: ... ratio=0.9307 structured=false
+  role_shuffle[cross-state]: ... ratio=1.0147 degraded=false moved=383/445
+```
+
+`[coalesced T=8]`, `m(roles)=12`, `orthogonal:m12:d1`, and `admissible_d =
+[1,2,4,8]`. At 453 the **uncoalesced** arm is `m(roles)=15` with
+`admissible_d = [1,2]`; the coalesced one is `m=12` with `[1,2,4,8]`. So
+`0.9307` and `1.0147` are the **coalesced** arm, and:
+
+| coalesced `kernel_opt / tokenbag256` | 445 | 453 |
+|---|---|---|
+| `bow_router` | 0.9307 | 0.9525 |
+| cross-state | **1.0147** (`degraded = false`) | **1.0512** (`degraded = true`) |
+
+**§12.8's crossing is same-arm and real.** What is genuinely unrecorded is the
+**uncoalesced** arm's 445 values — `0.9351`'s predecessor — because the 445
+capture was a `tail -45` and that block fell off the top. It ran (the verdict
+table lists `admissible_d=[1,2]`), it just was not captured.
+
+The mislabel entered at §12.6: *"`bow_router` on `kernel_opt/tokenbag256` reads
+0.9351 (was 0.9307) and the coalesced arm 0.9525 (was 0.9307's sibling row)"* —
+which pairs a 453 **uncoalesced** reading with a 445 **coalesced** one and then
+names the coalesced 445 value as unrecorded when it is the one we have. §12.8a
+inherited that pairing rather than re-reading the run, and I had cited §12.6
+myself without checking it.
+
+So this is the **fourth** arm-mismatch of the session, it sits in §12.6, and
+§12.8a's closing line — *"the arm label is part of the number"* — is exactly
+right and exactly what §12.6 violated. A correction that inherits its premise
+from the text it is correcting is the same failure wearing the reviewer's
+badge. The rule that would have caught all four is the same one: **re-read the
+run, not the section that summarised it.**
+
+`bow_router` 0.9307 → 0.9525 on the same arm is also a real drift worth having:
+the router moved 2.3% on a corpus whose covariate is pinned at `max 1 /
+mean 1.000`, which is §12.8's point in its stronger form — both probes drift
+with corpus size where the structure question is not posed, and neither drift
+means anything.
