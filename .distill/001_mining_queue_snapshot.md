@@ -43,6 +43,17 @@
     = `hot-dispatch-gpr-arg-budget` (sysv64 6-GPR budget; float-domain pack; preserve_none
     future). Dual verdict: the same source TRIGGERED the workspace wasmi 1.0 → 2.0 upgrade
     (riir-ai Plan 563 — 13 pins / 7 repos lockstep + fuel recalibration).
+  - **Batch 100 candidate (queued 2026-09-02, Plan 068 / Research 120): Layr-Labs/qwen-3.8-mtp-challenge**
+    (MIT, pin `0863b06a`, same team as ds4 B97/98) — route `kernel_opt`, verdict **YES B+**, yield 3–4
+    rules, lead = `functional-cache-versioning-loses-donation-under-kernel-read` (MLX slice-update
+    versioning of a slab KV cache loses donation when a custom kernel reads it in-flight → full-buffer
+    copies per update; measured 25,470→13.6 ms/step, ≈370 GiB/token; fix = stable buffer + in-place
+    kernel write), then the in-place-contract family (single-writer-reads-newest-from-input;
+    fence-token-consumer for writes through "input" declarations), Metal residency-set wired-once
+    post-warm, register-budget HPT head split. Caveats: Swift/Metal substrate (pseudocode rules, the
+    oMLX/ds4 precedent); the tree was STATIC since the previous session's pin — the user-reported perf
+    bump is leaderboard-side (auth-gated Yukon API) = league intelligence, routed to perf-rematch
+    opponent-watch, NOT the corpus.
   - **The arxiv pool re-walk #4: DONE 2026-09-02 ~07:15 +07** (`.research/113` — covered
     the Tuesday-09-01 announcement window; zero corpus delta; the spec-dec lane woke up:
     DBloom's ceiling-bin acceptance histogram (zero-cost telemetry adoption candidate for
