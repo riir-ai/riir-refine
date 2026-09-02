@@ -1,6 +1,6 @@
 # Wasmi v2.0 Blog — distill verdict + the workspace upgrade trigger
 
-**Status:** RECORD (Batch 99 landed 2026-09-02 — `mir-destprop-branch-site-merge` MEASURED ParetoDominant 2/0/1, asm-verified mechanism, negative control measured; the C+ secondary probed-Tie + queued kill-free; see Plan 067. The linked workspace action — the wasmi 1.0 → 2.0 upgrade — is executing under riir-ai Plan 563)
+**Status:** RECORD (Batch 99 landed 2026-09-02 — `mir-destprop-branch-site-merge` MEASURED ParetoDominant 2/0/1, asm-verified mechanism, negative control measured; the C+ secondary probed-Tie + queued kill-free; see Plan 067. The linked workspace action — the wasmi 1.0 → 2.0 upgrade — LANDED 2026-09-02 under riir-ai Plan 563 (`146d50c0a`: 13 pins / 7 repos unified on exactly one `wasmi 2.0.0`; zero API breakage; fuel budgets re-measured, one real under-budget fixed; gains 2.0–3.3× on every hot path; cognition G2 5.2%→2.4% of gate FAIL→PASS; evidence `riir-ai/.benchmarks/851_wasmi2_upgrade_gain.md`))
 
 - **Source:** https://wasmi-labs.github.io/blog/posts/wasmi-v2.0/ — "Wasmi 2.0 - Engineering of the Fastest Wasm Interpreters", Robin Freyler (wasmi author), published 2026-09-01.
 - **Inspection date:** 2026-09-02.

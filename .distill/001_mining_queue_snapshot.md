@@ -48,7 +48,10 @@
   - **~~Batch 99 candidate (queued 2026-09-02, Plan 067 / Research 119): wasmi v2.0 blog~~
     LANDED 2026-09-02** (see Last landed). Dual verdict consumed: the same source TRIGGERED
     the workspace wasmi 1.0 → 2.0 upgrade (riir-ai Plan 563 — 13 pins / 7 repos lockstep +
-    fuel recalibration; that lane is riir-ai's, not this repo's).
+    fuel recalibration; that lane is riir-ai's, not this repo's) — **upgrade LANDED same day
+    2026-09-02**: katgpt-rs `133664b9`, riir-ai `0b7cad41e`, neuron-db `22e8ff4`, game-sdk
+    `c08c02b`, chain `2c3e0b9d`, mmorpg `b3aaac6` (closeout `146d50c0a`); unified on one
+    `wasmi 2.0.0`, zero API breakage, gains 2.0–3.3×, Bench 851.
   - **Queued-secondary (kill-free): `hot-dispatch-gpr-arg-budget`** — probed Tie on
     windows-msvc x64 (1.009/0.999×, two runs; the blog's evidence is sysv64 tail-call
     dispatch). Re-open ONLY with a sysv64 measurement window; ABI-specific,
