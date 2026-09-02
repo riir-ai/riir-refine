@@ -653,6 +653,11 @@ fn run_kat_stake(usd: Option<&str>, info: bool) {
 fn run_stake_info(account_id: &str, root: &std::path::Path, now_unix: u64) {
     use riir_clippy::kat_stake_client as stake;
 
+    // `account_id`/`now_unix` are transport-path params (the service-first
+    // block below); the local-queue fallback renders from disk state alone.
+    #[cfg(not(feature = "kat_transport"))]
+    let _ = (account_id, now_unix);
+
     #[cfg(feature = "kat_transport")]
     {
         use riir_clippy::kat_stake_client::StakeTransport as _;
@@ -812,7 +817,7 @@ fn run_kat_vote(proposal: Option<u64>, yes: bool, no: bool) {
     }
     #[cfg(not(feature = "kat_transport"))]
     {
-        let _ = (root, now_unix);
+        let _ = (account_id, signing_key, proposal_id, choice, root, now_unix);
         eprintln!("vote: signing + submitting requires a build with --features kat_transport");
         std::process::exit(2);
     }
