@@ -233,14 +233,55 @@ impl RuleIndex {
         // `with_bm25_tokenizer` MUST precede `index_chunks` — the tokenizer is
         // used at both index and search time, and swapping it after indexing
         // silently desyncs the postings from the queries (substrate contract).
-        let retriever = match config.tokenizer {
-            IndexTokenizer::CodeDefault => NeuronDbRetriever::new(NeuronDbRetrieverConfig::default()),
-            IndexTokenizer::OpAware => NeuronDbRetriever::new(NeuronDbRetrieverConfig::default())
-                .with_bm25_tokenizer(Box::new(super::op_tokenizer::RustOpTokenizer)),
-            IndexTokenizer::OpAwareBigram => {
-                NeuronDbRetriever::new(NeuronDbRetrieverConfig::default())
-                    .with_bm25_tokenizer(Box::new(super::op_tokenizer::RustOpBigramTokenizer))
+        // Issue 063 — opt into riir-rag's TWO-STAGE latent KNN.
+        //
+        // `NeuronDbRetrieverConfig::default()` ships `two_stage_oversample:
+        // None`, which riir-clippy had silently taken since the retriever was
+        // adopted. That path is `retrieve_diverse` at **O(N·k)**; setting the
+        // field switches to `retrieve_diverse_two_stage` at **O(N + M·k)**
+        // (riir-rag Issue 593 / Bench 583). Nothing new was written here — this
+        // is shipped upstream substrate this crate had simply never enabled.
+        //
+        // Why this is the lever, measured rather than reasoned (Issue 063):
+        // `retrieve` is **92.1%** of `suggest_span`, against `rank_into` 2.3%
+        // and embedding 0.8%. Two plausible-looking culprits were measured and
+        // REJECTED first — hoisting the per-domain `query_for` would save 0.6%,
+        // and content loading is only ~11% of `retrieve` (a tiny-budget probe
+        // cut retrieved chunks to 0 and moved the total by that much). The cost
+        // is `retrieve_candidates`, which runs regardless of budget.
+        //
+        // Measured effect, 11 interleaved A/B pairs (per-pair ratios, because
+        // the box was loaded and absolute wall-clock drifted 2x during the
+        // session): median **0.806**, 10 of 11 pairs favouring two-stage.
+        //
+        // Measured quality cost — this is an APPROXIMATION, so it is not free:
+        //   * all 14 retrieval floors: IDENTICAL (clippy 89.6/93.8/95.8, perf
+        //     96.2/98.1/100.0, kernel 100/100/100, blended 94.7/96.9/98.5,
+        //     router 83/131) in both feature states;
+        //   * `latent_suggest_goat` G1: IDENTICAL, 21/24, same miss list;
+        //   * `uncontaminated_g1`: 8/8, pool recall @12 100%;
+        //   * `t48_gp_acquisition_ab`: @1 0.940 and @3 0.970 and McNemar
+        //     (b=74 c=1 z=8.429) identical, but **mrr 0.961 -> 0.959** —
+        //     one item moved by one rank BELOW top-3. A/B'd in one worktree at
+        //     one HEAD, so that delta is attributed to this flag, not to drift.
+        // No gated floor moves; the only observable change sits under rank 3,
+        // which is why `CLIPPY_TOP3` (at exactly zero margin) is untouched.
+        //
+        // `RIIR_CLIPPY_NO_TWO_STAGE=1` is the kill-switch (the repo's
+        // feature-flag convention) and is what the A/B above toggled.
+        let rcfg = || {
+            let mut c = NeuronDbRetrieverConfig::default();
+            if std::env::var("RIIR_CLIPPY_NO_TWO_STAGE").is_err() {
+                c.two_stage_oversample = Some(4);
             }
+            c
+        };
+        let retriever = match config.tokenizer {
+            IndexTokenizer::CodeDefault => NeuronDbRetriever::new(rcfg()),
+            IndexTokenizer::OpAware => NeuronDbRetriever::new(rcfg())
+                .with_bm25_tokenizer(Box::new(super::op_tokenizer::RustOpTokenizer)),
+            IndexTokenizer::OpAwareBigram => NeuronDbRetriever::new(rcfg())
+                .with_bm25_tokenizer(Box::new(super::op_tokenizer::RustOpBigramTokenizer)),
         };
         #[cfg(feature = "bonsai_retrieval")]
         {
