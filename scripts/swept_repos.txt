@@ -16,3 +16,4 @@
 /Users/katopz/git/riir-viewbridge
 /Users/katopz/git/seal-game-editor
 /Users/katopz/git/seal-remake
+/Users/katopz/git/seal-remake-unity
