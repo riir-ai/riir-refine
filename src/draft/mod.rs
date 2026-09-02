@@ -43,6 +43,7 @@ pub mod op_tokenizer;
 pub mod retrieval_eval;
 pub mod span_source;
 pub mod switch_cost;
+pub mod withheld_pair_ood;
 
 pub use corpus_index::{IndexTokenizer, RetrievalConfig, RuleIndex, ScoredRule, SuggestScratch};
 pub use domain_router::{
@@ -66,3 +67,7 @@ pub use retrieval_eval::{
 };
 pub use span_source::{collect_source_files, collect_source_files_sorted};
 pub use switch_cost::{cross_domain_spans, run_switch_cost_eval, print_switch_cost_report, SwitchCostReport};
+pub use withheld_pair_ood::{
+    atomic_keys, classify_rustc_shape, classify_shape, normalized_tokens, run_withheld_pair,
+    ArmRow, AtomicNull, Binding, ShapeClass, WithheldReport,
+};

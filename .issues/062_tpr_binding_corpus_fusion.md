@@ -1,20 +1,44 @@
 # Issue 62: TPR × healer corpus fusion — structured retrieval axis + corpus-generalization bench (Research 527 F5)
 
-**Status:** Open — Phase 1 immediately actionable (pure eval protocol, zero dependency); Phase 2 gated on katgpt-core `tpr` primitives (katgpt-rs `.issues/707`).
+**Status:** Phase 1 COMPLETE (T1+T2 landed, Bench 062) — Phase 2 (T3-T6) JUSTIFIED by our own measurement and still gated on katgpt-core `tpr` primitives (katgpt-rs `.issues/707`).
 
 **Research:** [katgpt-rs/.research/527_TPR_Emergent_Symbolic_Structure_Binding_Algebra.md](../katgpt-rs/.research/527_TPR_Emergent_Symbolic_Structure_Binding_Algebra.md) (arXiv:2608.29530, McCoy/Soulos/Linzen/Smolensky 2026)
 **Consumer rationale:** the healer corpus is the workspace's richest (role, filler) dataset — every entry IS a binding: role = rule/lint identity, filler = code shape. The retrieval stack's own history is the paper's thesis in miniature: the Issue 017/T3.5 misses were spans sharing the filler (generic fn shape) while differing in the ROLE (operator/punctuation pattern) — the RustOpTokenizer fix injected role-ish signal into tokens; TPR makes the role axis structural. And the one axis nothing measures is generalization: **every retrieval floor (14/14 gate) and every fixture set is in-distribution by construction.** The paper predicts atomic memorization is the default failure mode on unseen (rule, shape) combinations; this issue converts that prediction into OUR measurement before building anything.
 
 ## Phase 1 — the unmeasured axis (no dependency, no GPU)
 
-- [ ] **T1** **Withheld-pair OOD generalization bench** for the healer corpus. Define shape-classes over the fixture population (`src/draft/retrieval_eval.rs` 130 spans + `src/draft/eval_fixtures_composite.rs` 28 composite, oracle-labeled via `clippy_oracle.rs`); withhold (rule, shape-class) pairs from the INDEX (not just the eval set); report in-distribution vs withheld-pair top-1/top-k side by side. **Atomic null:** verbatim/pattern-exact lookup on the same split — must FAIL OOD by construction; retrieval+rerank beating it is the systematicity certificate. Preregister the prediction before running (paper: memorization is the default outcome). ~1 day, no GPU. Either result is the record: OOD at ceiling → the Phase 2 TPR axis is honestly demoted for the healer; OOD near the atomic floor → Phase 2 is justified by our own measurement, not the paper's.
-- [ ] **T2** **rustc_errors extension:** the same withheld-(error-code, pattern) protocol over the `corpus_gen` 200-case stratified corpus + 12 anchors. The domain already keys repair playbooks by error code — error code is the role; this measures whether playbook selection generalizes to unseen (code, pattern) combos.
+- [x] **T1** **Withheld-pair OOD generalization bench** for the healer corpus — LANDED, preregistered before running, results in [.benchmarks/062_withheld_pair_ood.md](../.benchmarks/062_withheld_pair_ood.md). Harness: `src/draft/withheld_pair_ood.rs` + `tests/t062_withheld_pair_ood.rs`. Population 113 distinct-text bindings (45 corpus + 48 fixtures + 20 oracle-labeled real-repo spans from `.benchmarks/data/049_t01/`), 45 roles x 8 context-derived shape-classes, 62 cells, **10 eligible**, n=25. **Measured: pure-retrieval ID 52.0% -> OOD 4.0% top-1 (paired Δ +48.0pp, 22/25 rows worse), against a 2.2% chance floor** — OOD is at chance. Shipped `RerankMode::Structural` arm ID 92.0% -> OOD 52.0% (Δ +40.0pp). Atomic null 0.0% on withheld pairs (asserted, by construction); NOROLE canary 0.0% on every arm. Bit-stable over 12 processes on the retrieval arm.
+- [x] **T2** **rustc_errors extension** — LANDED, same protocol, fully deterministic (no cargo/oracle). Population 212 (200 generated + 12 anchors), role = error code, filler = borrow-carrier shape-class, 8 roles x 10 fillers, 14 cells, **4 eligible**, n=43. **Measured: ID 97.7% -> OOD 48.8% top-1 (paired Δ +48.8pp) vs a 12.5% chance floor; atomic null 79.1% ID / 0.0% OOD** — the informative null of the two tasks. Mechanism localized: OOD is a **step function in the role's filler count** — E0597 (6 fillers) generalizes at 100.0%, E0596 (2 fillers) collapses to 0.0% while keeping the true code at rank 2-7 (present-but-demoted = a re-ranking shape, not a retrieval shape).
+- [-] **T2a (follow-up, deferred)** Substrate nondeterminism found by the 12-process determinism check: the shipped Structural OOD top-1 flips 52.0% (9/12) / 56.0% (3/12) on exactly ONE row — `needless_return` is sometimes absent from the `RERANK_POOL = 12` candidate pool. `corpus_index::rank_into` already applies a canonical tie-break, so the flip is upstream, in what `NeuronDbRetriever::retrieve` returns (per-process `RandomState`). This affects the shipped `--suggest` pool, not just this bench. **Unblock condition:** a deterministic candidate-cap tie-break in the riir-rag retriever (sibling repo — file there before fixing).
+
+## Phase 1 verdict (Bench 062, 2026-09-02)
+
+**Phase 2's TPR axis is JUSTIFIED by our own measurement, not by the paper's
+claim** — T1 Δ +48.0pp and T2 Δ +48.8pp on the pure-retrieval arm, both above
+the preregistered 20.0pp bar; the demote branch (Δ ≤ 5pp, "OOD at ceiling")
+did NOT fire. Three caveats that bound what Phase 2 may claim:
+
+1. **T1's atomic null is VACUOUS** (0.0% on the ID arm too — no two healer-corpus
+   bindings share a normalized token structure, so the memorizer cannot fit its
+   own training set). T1's OOD failure is therefore *filler-dominated
+   similarity*, not conjunction memorization. T2 is where the memorization
+   reading is direct (79.1% ID / 0.0% OOD).
+2. **The corpus is nearly role/filler-COLLINEAR**: 32/45 clippy roles and 6/8
+   error codes occur under exactly ONE shape-class, so no unseen combination of
+   them can exist. More fillers per role is a CORPUS task; the 20 real-repo
+   spans supplied all of T1's shape diversity.
+3. **Part of Δ is structurally unclosable.** OOD tracks the role's remaining
+   filler count as a step function; a role with one remaining filler has
+   nothing to compose from. T4's claim must be scoped to the
+   retrieved-but-demoted rows (all 22 E0596 rows; the `match_bool` /
+   `map_unwrap_or` T1 cells), and any gain on single-filler roles read as
+   leakage.
 
 ## Phase 2 — structured retrieval axis (gated on katgpt-core `tpr`, issue 707 T1–T5)
 
 - [ ] **T3** **ALS fit of the healer corpus** into role-filler form: filler = code-shape embedding (existing AstChunker/ModellessEmbedder path), role = rule identity (and separately domain); ridge-ALS closed form, monotone certificate, frozen BLAKE3 artifact. Substrate tie: `self_evolve`'s EMA domain direction vectors are already runtime-updated rank-1 role embeddings — the TPR role table should thaw from the same freeze/thaw cycle, not fork it.
-- [ ] **T4** **TPR-structured retrieval axis** behind a `tpr_retrieval` feature (off by default): query-side structural denoise (score against the TPR projection, not the raw 8-D embedding — paper finding 7: decoders read better from the idealization) + role-conditioned match in the reranker. **Honest claim discipline: in-distribution gains are NOT the claim** (top-1 already 89.6–100 on the floors); the claim axes are (a) the OOD delta over T1's baseline by a preregistered margin, and (b) kernel_opt long-tail crowding (426 rules, the biggest corpus). Floors MUST hold (the 14/14 retrieval gate + score-bench flat unless OOD wins land).
-- [ ] **T5** **BoW-null router per domain:** fit the m=1 shared-role ALS per corpus; residual ratio `r_bow/r_full < 1+ε` ⇒ that domain carries no binding structure ⇒ structured machinery skipped there. Records a per-domain structure verdict (prediction to test: clippy_lints strongly structured; kernel_opt categories possibly weaker than rule-level).
+- [ ] **T4** **TPR-structured retrieval axis** *(OOD baseline to beat, from Bench 062: T1 retrieval 4.0% / Structural 52.0% top-1; T2 retrieval 48.8% top-1, 51.2% top-3)* behind a `tpr_retrieval` feature (off by default): query-side structural denoise (score against the TPR projection, not the raw 8-D embedding — paper finding 7: decoders read better from the idealization) + role-conditioned match in the reranker. **Honest claim discipline: in-distribution gains are NOT the claim** (top-1 already 89.6–100 on the floors); the claim axes are (a) the OOD delta over T1's baseline by a preregistered margin, and (b) kernel_opt long-tail crowding (426 rules, the biggest corpus). Floors MUST hold (the 14/14 retrieval gate + score-bench flat unless OOD wins land).
+- [ ] **T5** **BoW-null router per domain:** *(prior measured by Bench 062: `rustc_errors` roles are 6/8 single-filler, so m=1 shared-role ALS should show little residual gain there; `clippy_lints` has 13 multi-filler roles)* fit the m=1 shared-role ALS per corpus; residual ratio `r_bow/r_full < 1+ε` ⇒ that domain carries no binding structure ⇒ structured machinery skipped there. Records a per-domain structure verdict (prediction to test: clippy_lints strongly structured; kernel_opt categories possibly weaker than rule-level).
 - [ ] **T6** **Counterfactual surgery on LatentFixMemory trajectories:** for score-bench persist-miss spans, surgery-swap the rule/domain filler and ask closed-form "would domain X / rule Y have healed this span?" — complements Bench 032's re-run-based switch-cost measurement with a zero-recompute counterfactual; feeds the post-mining intake (`.distill/001_mining_queue_snapshot.md`) with attributed misses.
 
 ## GOAT gate
