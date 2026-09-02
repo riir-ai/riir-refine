@@ -547,3 +547,56 @@ saying so), at BIC's `d = 1`:
 *expressible* (as fillers), which is what it was blocked on, but no kernel_opt
 population exists in this harness. That is a corpus-plumbing task, filed as
 Issue 062 T5b.
+
+---
+
+## 12. Addendum: the `kernel_opt` arm (Issue 062 T5b)
+
+**Preregistered 2026-09-02**, after §1–11 landed and after the run was
+launched but **before any of its output was read** — stated plainly because
+"before the run" is the stronger claim and this is not it. Nothing below was
+written with a number in hand.
+
+### 12.1 Why this arm and not another
+
+`kernel_opt` was §2's *motivating* corpus (426 rules, the largest) and the
+reason the scheme decision came out the way it did — rule identity had to go on
+the filler axis because `n_bind_slots == arity` caps roles at the block count
+and 426 roles against `D = 8` is inadmissible on its face. But no
+`kernel_opt_population()` existed, so the §11 table has no row for it and T5's
+original prediction about it ("categories possibly weaker than rule-level")
+was never tested. This adds the population; the mechanism is unchanged.
+
+**It is also the only arm outside §11.7's confound.** The clippy and rustc
+roles are computed by `classify_shape` / `classify_rustc_shape` from the same
+span text the state is hashed from, so a role there is partly readable off the
+state, and §11.7 recorded that as bounding what "structured" may claim.
+`kernel_opt`'s role is `KernelCategory` — **declared corpus metadata**, authored
+alongside the rule and not a function of `ref_shape`. A structure verdict here
+is not exposed to that objection. That makes this arm worth more than a third
+data point: it is the one that can say whether §11's control-space structure
+survives when the role stops being derivable from the state.
+
+### 12.2 Preregistered predictions
+
+| # | prediction | reasoning |
+|---|---|---|
+| **P12** | `kernel_opt` is **INADMISSIBLE at every `d` in the 8-D consumer space, coalesced and not** | `K = m·d ≥ D` fires at `d = 1` with `m = 15` vs `D = 8`. Coalescing at `T = 8` merges only categories holding ≤ 8 of ~426 states; with ~28 states/category on average, few merge, so `m'` stays well above 8. If this is wrong it is because the category sizes are far more skewed than the mean suggests. |
+| **P13** | the 256-D control is **admissible at every `d`** | `K = 15·8 = 120 < 256` at the worst `d`; `params ≈ 4.5 k` against `~109 k` observations at `d = 1`. The binding constraint, if any, is the per-role one — a category holding ≤ `d` states kills that `d`. |
+| **P14** | BIC picks **`d = 1`** | Both other arms did, monotonically, and §11.3 retired the "K too shallow" class of hypothesis for this fit. A different answer here would be the first evidence that result was corpus-specific rather than structural. |
+| **P15** | the control arm is **structured**, and by a ratio **above clippy's 1.1417** | The category partitions rules by GPU concept, and reference kernels genuinely differ in text by concept. Registered as the directional call even though it cuts AGAINST T5's original "categories possibly weaker than rule-level" prior — which was written before §2 forced categories onto the *role* axis, so it was a prediction about a different axis assignment and should not be imported. |
+| **P16** | `moved > 0` and `vacuous == false` on the cross-state control for every arm that runs | 15 distinct role labels. This is the katgpt-rs Issue 710 check, now upstream, and it is asserted rather than read. |
+
+### 12.3 What would make this arm change a conclusion
+
+- **P15 wrong and the ratio is FLAT (≤ 1 + ε) on the 256-D control.** That is
+  the outcome that matters most, because it is the one §11.7 predicted as a
+  possibility and could not rule out: if the two confounded arms are structured
+  and the one unconfounded arm is not, then §11's control-space structure is
+  substantially an artifact of the role being readable off the state, and §11.3's
+  "rustc is the most structured arm" should be discounted accordingly.
+- **P12 wrong** (the consumer space IS admissible here) would give T4 a second
+  measurable consumer arm and reopen the question §11.6 closed. It would not
+  change T4's recommendation on its own — the clippy 8-D measurement stands —
+  but it would mean "the 8-D state cannot host this structure" needs restating
+  per domain rather than as a property of the width.
