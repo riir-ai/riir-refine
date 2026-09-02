@@ -1,9 +1,9 @@
 # Plan 062 — Proposal 011 T1.1: the `/payreq` routes on the kat-service worker
 
-**Status:** IN PROGRESS — T1.1 of
-[Issue 061](../.issues/061_proposal_011_product_loop_rollout.md) (the KAT
-product loop). Unblocked by the landed Phase 0 substrate (Plan 015,
-riir-dapps `6df7097`).
+**Status:** T1.1 COMPLETE — riir-dapps `f43c014` (routes + limiter + contract
+suite, all validation green); the create-message golden pin followed in
+riir-dapps `0a4d37a` with the T1.3 client landing as riir-clippy `9a5086a`.
+Issue 061 updated.
 
 Proposal: riir-clippy `.proposals/011_kat_pay_request_qr_genesis_and_onboarding.md`
 (§1 the request IS a shareable link, §13/ask-14 the request-ledger rule,
@@ -62,22 +62,39 @@ response.
 
 ## Tasks
 
-- [ ] Substrate: `payreq::account_for_pubkey` + the three canonical message
+- [x] Substrate: `payreq::account_for_pubkey` + the three canonical message
       composers (pub, tested) + `mod.rs` re-export + the cross-pin test vs
-      `mining::submitter_for` (runs under the worker's feature union)
-- [ ] kat-service: `kat_payreq` feature + `ServiceEnv.payreq_max_open_per_account`
+      `mining::submitter_for` (runs under the worker's feature union) — 12/12
+      with the union, 11/11 payreq-only
+- [x] kat-service: `kat_payreq` feature + `ServiceEnv.payreq_max_open_per_account`
       (manual Default = 16; `KAT_PAYREQ_MAX_OPEN` env; `do_host::service_env_of`)
-- [ ] Routes: create / view / resolve / settle / invoice + the route-table doc
-- [ ] Contract tests (contract.rs): full lifecycle (create→resolve→settle→invoice,
+- [x] Routes: create / view / resolve / settle / invoice + the route-table doc
+- [x] Contract tests (contract.rs): full lifecycle (create→resolve→settle→invoice,
       balances, drained), replayed settle 409, forged signatures 401
       (create/resolve/settle), pinned-amount mismatch 400, any-amount settle,
       underfunded 400, self-pay conservation, idempotent create, limiter 429 +
-      refusal row, unknown-id 404s, invoice-before-settle 404
-- [ ] Validation: `cargo test` native contract suite (kat-service), `cargo
-      clippy` clean (kat-service + `riir-dapps --features kat_payreq`), the
-      substrate's `tests/kat_payreq.rs` 10/10 still green
-- [ ] Commit + push (riir-dapps develop)
-- [ ] riir-clippy Issue 061: T1.1 → landed with commit ref
+      refusal row, unknown-id 404s, invoice-before-settle 404 — 16/16
+- [x] Validation: `cargo test` native contract suite (kat-service), `cargo
+      clippy` clean (kat-service fresh-target + `riir-dapps --features
+      kat_payreq --all-targets`), the substrate's `tests/kat_payreq.rs` 10/10
+      still green (13/13 after the goldens)
+- [x] Commit + push (riir-dapps develop) — `f43c014` (+ golden `0a4d37a`)
+- [x] riir-clippy Issue 061: T1.1 → landed with commit ref (plus the T1.3
+      client half, `9a5086a`, landed the same session)
+
+En-route fixes the compile/test gates caught (recorded honestly): the
+`VerifyingKey::verify` trait-import gap, `PayreqError` Debug-format in the 500
+arms, `id_str.as_deref()` needless-Option borrow, the limiter test's off-by-one
+(14 fills not 15 — cap 16 means the 17th refuses), and the clippy drive-bys in
+routes.rs (manual_unwrap_or_default, manual_is_multiple_of — both pre-existing,
+mechanical, in a file already touched).
+
+## Addendum — T1.3 (the client half, same session)
+
+T1.3 landed with this plan's service half instead of waiting: Plan 062's scope
+stayed T1.1 (the routes), and the client module + CLI (`pay --request`) landed
+as the paired unit — the golden pin is only load-bearing when BOTH sides exist.
+Details in Issue 061's T1.3 row (riir-clippy `9a5086a`).
 
 ## Deliberately NOT in this plan
 

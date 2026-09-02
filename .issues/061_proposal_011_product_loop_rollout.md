@@ -1,12 +1,17 @@
 # Issue 061 — Proposal 011 rollout: the KAT product loop (pay-request, genesis ceremony, deploy UX, wet-run, onboarding)
 
-Status: **OPEN (2026-09-01) — Phase 0 ledger substrate LANDED 2026-09-02** (T0.1 +
-T0.5 + the ledger/payreq halves of T0.4: riir-dapps `6df7097`,
-[Plan 015](../.plans/015_kat011_phase0_payreq_substrate.md) — the `kat_payreq`
-request-ledger rows, invoice rows, signed registration intents, first-wins funding
-bindings, and the KAT-rail one-batch settle seam). **T0.3 LANDED 2026-09-02**
-(riir-chain-sdk `fe865ba1` + the dapps-side dual golden pin `46e6660`).
-Remaining Phase 0: T0.2b's service half (riir-dapps service-plane, rides T1.1).
+Status: **OPEN (2026-09-01) — Phase 0 LANDED + Phase 1's T1.1/T1.3 LANDED
+2026-09-02** (T0.1 + T0.5 + the ledger/payreq halves of T0.4: riir-dapps
+`6df7097`, [Plan 015](../.plans/015_kat011_phase0_payreq_substrate.md) — the
+`kat_payreq` request-ledger rows, invoice rows, signed registration intents,
+first-wins funding bindings, and the KAT-rail one-batch settle seam). **T0.3
+LANDED 2026-09-02** (riir-chain-sdk `fe865ba1` + the dapps-side dual golden pin
+`46e6660`). **T1.1 LANDED 2026-09-02** (riir-dapps `f43c014`,
+[Plan 062](../.plans/062_kat011_t111_payreq_routes.md) — the signed `/payreq`
+routes + the row-backed limiter). **T1.3 LANDED 2026-09-02** (riir-clippy
+`9a5086a` + the dapps-side create-message golden `0a4d37a` — `cargo heal pay
+--request`). Remaining Phase 0: T0.2b's service half (the `/balance` history
+route now exists to consume).
 The proposal is draft and the phased scope survives the noise-reduction rule via
 this tracker.
 Branch: `develop` (per global rule — no feature branches)
@@ -33,8 +38,10 @@ Proposal 008 (MemoShard).
       The service half (live `/balance`, the all-synced + nodes-healthy welcome gate,
       server-side history) is the `[-]` below.
 - [-] T0.2b — the service half of account: welcome gate evaluated from real sync/node
-      health + `/balance` history consumption (riir-dapps route shape lands with
-      T1.1). Blocked on T0.1/T1.1.
+      health + `/balance` history consumption (the payreq routes landed the
+      service-plane pattern; `/balance` already serves — the remaining work is the
+      all-synced + nodes-healthy welcome gate + the history consumption shape).
+      Unblocked.
 - [x] T0.3 riir-chain-sdk `pay_request` module (KAT compose + resolve/transfer; USDC
       arm stubbed behind the mock) — **LANDED 2026-09-02** (riir-chain-sdk
       `fe865ba1`; dapps-side dual golden pin `46e6660`): `request_id` byte-exact
@@ -66,15 +73,38 @@ Proposal 008 (MemoShard).
 
 ## Phase 1 — the KAT rail + web wallet (DEFAULT, ships first — owner call 2026-09-01)
 
-- [-] T1.1 `/payreq` routes (create/resolve/settle/invoice) + write-ahead rows +
+- [x] T1.1 `/payreq` routes (create/resolve/settle/invoice) + write-ahead rows +
       limiter-backed-by-rows + signed resolve (riir-dapps; caveat #7 — signature-
-      verified, idempotent, rate-limited, no unauthenticated state writes).
+      verified, idempotent, rate-limited, no unauthenticated state writes) —
+      **LANDED 2026-09-02** (riir-dapps `f43c014`,
+      [Plan 062](../.plans/062_kat011_t111_payreq_routes.md)): signed create
+      (payee; `blake3(pk)[..16]` account derivation — golden-pinned equal to the
+      sync plane's `submitter_for`), the ask-14 write-ahead row before the limiter
+      (`KAT_PAYREQ_MAX_OPEN`, refusal is itself a row — G-REQ), the
+      capability-URL view (caveat #12 — the request and nothing else), signed
+      resolve (payer; idempotent; honest terminal states), signed settle (amount
+      INSIDE the signature; ONE-batch transfer + invoice row; replay refused by
+      the terminal row), invoice readback. Contract tests 16/16 (lifecycle +
+      any-amount self-pay conservation + honest refusals + open-limit), ledger
+      goldens 14/14, clippy clean. Expiry (`link_ttl`) stays T1.8 — the row has
+      no expiry slot this phase, documented in the plan.
 - [-] T1.2 the web wallet on the kat-service host: GitHub OAuth → `.keys` fetch →
       key-match → session → press-and-hold SEND (**server-enforced min-hold** — the
       client's 3 s is cosmetic until the worker enforces `held_ms ≥ 3000`) → settle →
-      invoice row. **The root/genesis float stays CLI-only.**
-- [-] T1.3 clippy `pay --request [--amount]` (KAT default; blank = any amount) +
-      link-first (`--qr` fallback) + poll-on-credit (riir-clippy half — after T1.1).
+      invoice row. **The root/genesis float stays CLI-only.** The settle/resolve
+      signed routes it needs are T1.1's (landed).
+- [x] T1.3 clippy `pay --request [--amount]` (KAT default; blank = any amount) +
+      link-first (`--qr` fallback) + poll-on-credit (riir-clippy half — after T1.1) —
+      **LANDED 2026-09-02** (riir-clippy `9a5086a`; dapps-side create-message
+      golden `0a4d37a`): `src/kat_payreq_client.rs` — the create-message MIRROR
+      (golden digest pinned BOTH repos, independently computed),
+      `parse_kat_amount` (blank = ANY, ask 3), `HttpPayreqTransport` (the
+      VoteTransport pattern), `pay_request_flow` (signed create → link-first →
+      poll-on-credit, monotone Instant budget — the wall-clock-snapshot spin the
+      mock test caught is documented in-source); CLI `pay` +
+      `--amount/--qr/--label/--wait` (link-first print per ask 13, `--qr` renders
+      ASCII, poll default 600 s). 9 tests incl. the scripted-mock full flow + the
+      caveat-#15 no-dollar copy rule; lib 1127/1127; default build untouched (G3).
 - [-] T1.4 invoice display + bit-exact recheck (golden-pinned QR; caveat #3 — the
       re-encode pin rides the `qrcode` crate version + render params).
 - [-] T1.5 G1-S/G-WEB money + auth + adversarial suite (replay, session theft, amount
@@ -147,11 +177,16 @@ gist-rs/cargo-heal per 003; 12 → reference-key binding, memo as audit copy) or
 explicitly deferred. Phase 0 ledger substrate LANDED 2026-09-02 (T0.1 + T0.5 + the
 ledger/payreq halves of T0.4 — riir-dapps `6df7097` / Plan 015) alongside the
 repo-native T0.2 CLI slice, and **T0.3 (the payer-side SDK half) landed the same
-day** (`fe865ba1` + the dual golden pin `46e6660`). Remaining Phase 0: T0.2b's
-service half. Next action per the proposal: the riir-dapps Phase 1
-routes (T1.1 — unblocked by the landed substrate; the served payload format is
-the SDK's canonical payload v1) and Phase 2's ceremony early —
-bar's dry-run genesis is what puts the mint in the wallet every foo gets paid from.
+day** (`fe865ba1` + the dual golden pin `46e6660`). **Phase 1's payreq spine
+landed the same day**: T1.1 (riir-dapps `f43c014` / Plan 062 — the signed
+`/payreq` routes + the row-backed limiter) and T1.3 (riir-clippy `9a5086a` —
+`cargo heal pay --request`, the payee create + link-first + poll-on-credit loop,
+golden-pinned to the service byte-exactly, dapps-side golden `0a4d37a`).
+Remaining Phase 0: T0.2b's service half (unblocked — `/balance` already
+serves). Next executable: T1.2 (the web wallet — every signed route it needs is
+landed), T1.7/T1.8 (crank + faucet preset — the config-widening plan), then
+Phase 2's ceremony early — bar's dry-run genesis is what puts the mint in the
+wallet every foo gets paid from.
 
 ## Wait-state verification (2026-09-02)
 
