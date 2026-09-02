@@ -48,6 +48,24 @@ Inspection checklist:
 - **Maintenance** — stars/last commit matter only for the provenance note, never for the grade. Patterns are timeless; abandoned repos still mine fine.
 - **Unread files** — anything that timed out or wasn't read gets marked "unverified — re-read at mine time" in the verdict. Never grade an unread file.
 
+### Full-source access — clone into `.raw/` (ephemeral, `rm` when done)
+
+Round 1/2 structure fetches go over the wire; **mining batches and byte-accurate verdicts need the full tree** — full-text grep, multi-file reads, quote verification against the exact commit. When inspection outgrows URL fetches, clone into `.raw/`:
+
+```bash
+git clone --depth 1 https://github.com/<org>/<repo>.git .raw/<repo>   # shallow unless mining git history
+git -C .raw/<repo> rev-parse HEAD                                     # PIN this sha + license in the verdict BEFORE deleting
+```
+
+Rules (all mandatory):
+
+1. **Location:** `riir-clippy/.raw/<repo>/` (gitignored — a vendored upstream tree would be swept into sibling bulk adds and bloats the repo). Ephemeral scratch, never committed, never a sibling repo, never a Cargo/path dep target.
+2. **Pin before verdict:** the verdict/note records `@ <full-sha>` + license BEFORE the clone is deleted — the sha is the provenance; the clone is throwaway (precedent: Batches 96–98 cite `antirez/ds4 @ 110afdd8…` / `PrismML/llama.cpp @ e311ed38f` with quotes "re-verified at mine time"). A beta-quality fast-moving repo makes the pin load-bearing — quotes against an unpinned checkout are worthless.
+3. **Read-only.** Never modify files inside `.raw`; copy out for patch experiments.
+4. **Grep scope hygiene:** `.raw` is NOT shipped substrate — it stays OUT of dedup-gate/pre-flight grep scopes over `riir-clippy/src/` (a hit inside the clone is the source's own code, not coverage).
+5. **Cleanup is part of the batch:** when the verdict/note/plan/queue line is committed, `rm -rf .raw/<repo>`. A landed batch with a live `.raw/` entry is an unfinished batch. On session resume, any stale `.raw/` entry is UNTRUSTED — delete and re-clone at the pinned sha; never verdict against a checkout whose commit you did not pin yourself.
+6. **Shallow unless history-mining:** `--depth 1` default; full clone only when the task needs `git log`/diff archaeology — say so in the note. `--filter=blob:none` for very large repos with few read files.
+
 ## Dedup gate — MANDATORY before claiming any candidate is new
 
 For EACH candidate pattern, grep `riir-clippy/src/` under BOTH vocabularies:
