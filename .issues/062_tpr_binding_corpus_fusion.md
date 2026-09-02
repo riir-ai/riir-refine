@@ -136,6 +136,23 @@ did NOT fire. Three caveats that bound what Phase 2 may claim:
   *improving* the fit. So route (a)'s premise is now measured rather than
   argued — the structure exists in the code text (control ratios 1.14 clippy /
   2.21 rustc) and does not survive projection to 8 dimensions.
+  **QUALIFIED 2026-09-02 by the composition MEAN (`f4f5df3`, Bench 063 §12.6) —
+  read before starting either route.** The two control ratios this paragraph
+  leans on come from arms that are **near-degenerate**: `clippy_lints` max 4 but
+  **mean 1.378** over 45 fillers, `rustc_errors` max 6 **mean 1.750** over 8.
+  The typical filler contributes no `(role, filler)` variation at all and the
+  max is carried by a handful of them. `structured()` is still `Some(true)` and
+  the guard is still two-sided, so nothing here is overturned — but "the
+  structure exists in the code text" is a thinner claim than it read as when
+  only `max` was reported, and it is the claim BOTH routes are built on.
+  **Precondition on (b), not a blocker:** before building the scalar channel,
+  check that the role-conditioned match carries signal on the fillers that
+  actually vary rather than on the handful holding the max up. A scalar fused
+  into the rank from a near-degenerate role axis is a channel that fires on a
+  few rules and is noise on the rest — which is testable up front and much
+  cheaper than discovering it after the fuse. This is the same lesson as
+  katgpt-rs Issue 711 one level out: the covariate an interpretation depends on
+  has to be checked before the interpretation is spent.
   - **(b) bridge instead of widen — RECOMMENDED.** Keep the 8-D scoring
     state. Fit TPR in the wider token-bag space, emit a **scalar**
     role-conditioned match (`unbind_state_into` against the candidate rule's
