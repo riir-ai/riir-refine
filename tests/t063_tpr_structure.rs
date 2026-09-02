@@ -221,12 +221,13 @@ fn t063_tpr_structure_admissibility() {
         // reading the verdict — and assert it is EXACTLY an identity, which is
         // what makes the reading unsafe.
         if r.probe_status == ProbeStatus::Ran {
+            let sh = r.shuffled.as_ref().expect("probes ran");
             assert!(
-                r.shuffled_vacuous,
+                sh.vacuous,
                 "{tag}: the per-state shuffle stopped being vacuous — this \
                  corpus grew multi-binding states, so re-enable it as a real control"
             );
-            let sh = r.shuffled.as_ref().expect("probes ran");
+            assert_eq!(sh.moved, 0, "{tag}: a vacuous shuffle cannot have moved");
             assert!(
                 (sh.r_shuffled - sh.r_true).abs() <= f32::EPSILON,
                 "{tag}: per-state shuffle claimed to be vacuous but moved the \
@@ -238,6 +239,11 @@ fn t063_tpr_structure_admissibility() {
             // The replacement control must actually permute something. A
             // control that cannot move is the failure mode it exists to fix.
             let x = r.cross_state.as_ref().expect("probes ran");
+            assert!(
+                !x.vacuous,
+                "{tag}: the cross-state arm is vacuous too — the corpus has \
+                 fewer than two distinct role labels, so no control can help"
+            );
             assert!(
                 x.moved > 0,
                 "{tag}: cross-state permutation moved 0 of {} roles — identity \

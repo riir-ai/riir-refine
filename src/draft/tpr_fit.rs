@@ -52,12 +52,13 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use katgpt_core::tpr::als::param_count;
 use katgpt_core::tpr::{
-    AlsConfig, AlsInput, AlsReport, BicSelection, BowRouterReport, ShuffledRoleReport, TprArtifact,
-    TprBindings, TprError, TprScheme, als_fit, bic_select, bow_router, shuffled_role_control,
+    als_fit, bic_select, bow_router, shuffled_role_control_with, AlsConfig, AlsInput, AlsReport,
+    BicSelection, BowRouterReport, RoleShuffleMode, ShuffledRoleReport, TprArtifact, TprBindings,
+    TprError, TprScheme,
 };
-use riir_rag::{Embedder, ModellessEmbedder, query::LATENT_DIM};
+use riir_rag::{query::LATENT_DIM, Embedder, ModellessEmbedder};
 
-use super::withheld_pair_ood::{Binding, normalized_tokens};
+use super::withheld_pair_ood::{normalized_tokens, Binding};
 
 /// Bag width of the [`StateSpace::TokenBag256`] control.
 pub const TOKEN_BAG_DIM: usize = 256;
@@ -585,128 +586,6 @@ pub fn fit_at(c: &FitCorpus, d: usize) -> (Option<TprArtifact>, GridPoint) {
     }
 }
 
-// ── the cross-state role control ────────────────────────────────────────
-
-/// Result of [`cross_state_role_control`] — and the vacuity verdict for the
-/// upstream per-state control it replaces.
-#[derive(Debug, Clone, PartialEq)]
-pub struct CrossStateRoleReport {
-    pub r_true: f32,
-    pub r_permuted: f32,
-    pub ratio: f32,
-    /// `ratio > 1 + eps`: breaking the (role, filler) pairing across states
-    /// destroyed real structure.
-    pub degraded: bool,
-    /// The permutation actually moved at least one state's role — asserted
-    /// rather than assumed, because a control that cannot move is the failure
-    /// mode this whole type exists to route around.
-    pub moved: usize,
-}
-
-/// Is the upstream [`shuffled_role_control`] vacuous on this corpus?
-///
-/// It permutes each state's role list **within that state**
-/// (`for i in (1..n).rev()`), which is an empty loop at `n == 1`. Every state
-/// here carries exactly one binding, so the permutation is a provable identity
-/// and the report comes back `degraded = false` with `ratio == 1.0` — which is
-/// **indistinguishable from "roles carry nothing"**. That is the same
-/// vacuous-control signature Bench 062 §caveat-1 found in the atomic null, one
-/// level up, and it must be detected rather than read. See the
-/// `shuffled_role_control` source: `for i in (1..n).rev()`.
-#[must_use]
-pub fn per_state_shuffle_is_vacuous(bindings: &[TprBindings]) -> bool {
-    bindings.iter().all(|b| b.len() <= 1)
-}
-
-/// The control a single-binding corpus actually needs: permute the role
-/// assignment **across** states, leaving each state's filler alone, and refit.
-///
-/// This breaks the (role, filler) pairing globally — which is what "are the
-/// roles load-bearing?" means when no state has two bindings to swap. The
-/// permutation is a deterministic Fisher-Yates over `SplitMix64` (same generator
-/// shape as upstream) so the control is reproducible, and it is re-drawn until
-/// it moves at least one role, so an identity draw cannot masquerade as a
-/// no-structure verdict.
-///
-/// # Errors
-///
-/// Propagates any [`TprError`] from either of the two fits (same geometry as
-/// [`fit_at`], so a failure here means the true fit would have failed too).
-///
-/// # Panics
-///
-/// Panics if a Fisher-Yates index does not fit `usize` — impossible for a
-/// corpus this size, asserted rather than silently truncated because a wrapped
-/// index would quietly bias the permutation the control depends on.
-pub fn cross_state_role_control(
-    c: &FitCorpus,
-    d: usize,
-    seed: u64,
-    eps: f32,
-) -> Result<CrossStateRoleReport, TprError> {
-    let cfg = config(c, d);
-    let (_, true_rep) = als_fit(c.input(), &cfg)?;
-
-    let mut roles: Vec<u16> = c.bindings.iter().flat_map(|b| b.roles.clone()).collect();
-    let original = roles.clone();
-    let mut state = seed | 1;
-    let mut next = move || {
-        state = state.wrapping_add(0x9E37_79B9_7F4A_7C15);
-        let mut z = state;
-        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
-        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
-        z ^ (z >> 31)
-    };
-    for i in (1..roles.len()).rev() {
-        let j = usize::try_from(next() % (i as u64 + 1)).expect("index fits usize");
-        roles.swap(i, j);
-    }
-    let moved = original
-        .iter()
-        .zip(roles.iter())
-        .filter(|(a, b)| a != b)
-        .count();
-
-    let mut cursor = 0usize;
-    let permuted: Vec<TprBindings> = c
-        .bindings
-        .iter()
-        .map(|b| {
-            let n = b.len();
-            let slice = roles[cursor..cursor + n].to_vec();
-            cursor += n;
-            TprBindings {
-                roles: slice,
-                fillers: b.fillers.clone(),
-            }
-        })
-        .collect();
-    let perm_input = AlsInput {
-        dim: c.dim(),
-        n_fillers: c.vocab.fillers.len(),
-        states: &c.states,
-        bindings: &permuted,
-    };
-    let (_, perm_rep) = als_fit(perm_input, &cfg)?;
-
-    let r_true = true_rep.residual_energy_fraction;
-    let r_permuted = perm_rep.residual_energy_fraction;
-    let ratio = if r_true > 1e-9 {
-        r_permuted / r_true
-    } else if r_permuted > 1e-9 {
-        f32::MAX
-    } else {
-        1.0
-    };
-    Ok(CrossStateRoleReport {
-        r_true,
-        r_permuted,
-        ratio,
-        degraded: ratio > 1.0 + eps,
-        moved,
-    })
-}
-
 // ── the run ─────────────────────────────────────────────────────────────
 
 /// Whether the structure probes ran, and if not, why not.
@@ -742,13 +621,16 @@ pub struct SpaceReport {
     /// The `d` the structure probes ran at (BIC winner among admissible).
     pub chosen_d: Option<usize>,
     pub bow: Option<BowRouterReport>,
-    /// The upstream per-state control. **Vacuous on this corpus** — see
-    /// [`per_state_shuffle_is_vacuous`]; kept only so the vacuity is visible
-    /// in the record instead of being silently read as a no-structure verdict.
+    /// The upstream per-state control, pinned. **Vacuous on this corpus** —
+    /// one binding per state, so its permutation is the identity. Kept only so
+    /// the vacuity stays visible in the record instead of being read as a
+    /// no-structure verdict, which is what it was before katgpt-rs `af3bca25`
+    /// made `vacuous` a reported quantity (Issue 710).
     pub shuffled: Option<ShuffledRoleReport>,
-    pub shuffled_vacuous: bool,
-    /// The control that actually applies here.
-    pub cross_state: Option<CrossStateRoleReport>,
+    /// The control that actually applies here — the same upstream function on
+    /// its [`RoleShuffleMode::CrossState`] arm, which is what
+    /// `role_shuffle_mode_for` resolves to on a single-binding corpus.
+    pub cross_state: Option<ShuffledRoleReport>,
     pub probe_status: ProbeStatus,
 }
 
@@ -774,10 +656,14 @@ impl SpaceReport {
     /// fillers?) and the cross-state control (is the SPECIFIC pairing
     /// load-bearing?). A router verdict alone would credit any residual drop
     /// that extra per-block parameters can buy, structure or not.
+    ///
+    /// `None` when either instrument was vacuous: a control that could not
+    /// have failed reports the same `false` as a genuine negative, so the
+    /// verdict is UNKNOWN rather than "unstructured" (Issue 710).
     #[must_use]
     pub fn structured(&self) -> Option<bool> {
         match (&self.bow, &self.cross_state) {
-            (Some(b), Some(x)) => Some(b.structured && x.degraded),
+            (Some(b), Some(x)) if !b.vacuous && !x.vacuous => Some(b.structured && x.degraded),
             _ => None,
         }
     }
@@ -842,8 +728,20 @@ pub fn run(
             let cfg = config(&corpus, d);
             match (
                 bow_router(corpus.input(), &cfg, STRUCTURE_EPS),
-                shuffled_role_control(corpus.input(), &cfg, SHUFFLE_SEED, STRUCTURE_EPS),
-                cross_state_role_control(&corpus, d, SHUFFLE_SEED, STRUCTURE_EPS),
+                shuffled_role_control_with(
+                    corpus.input(),
+                    &cfg,
+                    SHUFFLE_SEED,
+                    STRUCTURE_EPS,
+                    RoleShuffleMode::WithinState,
+                ),
+                shuffled_role_control_with(
+                    corpus.input(),
+                    &cfg,
+                    SHUFFLE_SEED,
+                    STRUCTURE_EPS,
+                    RoleShuffleMode::CrossState,
+                ),
             ) {
                 (Ok(b), Ok(s), Ok(x)) => (Some(b), Some(s), Some(x), ProbeStatus::Ran),
                 (Err(e), _, _) | (_, Err(e), _) | (_, _, Err(e)) => (
@@ -871,7 +769,6 @@ pub fn run(
         chosen_d,
         bow,
         shuffled,
-        shuffled_vacuous: per_state_shuffle_is_vacuous(&corpus.bindings),
         cross_state,
         probe_status,
     }
@@ -974,24 +871,24 @@ fn print_probes(r: &SpaceReport) {
                     b.r_bow, b.r_full, b.ratio, b.structured
                 );
             }
-            if let Some(s) = &r.shuffled {
+            for (label, rep) in [
+                ("within-state", &r.shuffled),
+                ("cross-state", &r.cross_state),
+            ] {
+                let Some(s) = rep else { continue };
                 println!(
-                    "  shuffled_role (upstream): r_true={:.4e} r_shuffled={:.4e} ratio={:.4} degraded={}{}",
+                    "  role_shuffle[{label}]: r_true={:.4e} r_shuffled={:.4e} ratio={:.4} degraded={} moved={}/{}{}",
                     s.r_true,
                     s.r_shuffled,
                     s.ratio,
                     s.degraded,
-                    if r.shuffled_vacuous {
-                        "   [VACUOUS — 1 binding/state, the per-state permutation is the identity]"
+                    s.moved,
+                    r.n_states,
+                    if s.vacuous {
+                        "   [VACUOUS — the permutation is the identity; this row is not a verdict]"
                     } else {
                         ""
                     }
-                );
-            }
-            if let Some(x) = &r.cross_state {
-                println!(
-                    "  `cross_state_role`: r_true={:.4e} r_permuted={:.4e} ratio={:.4} degraded={} moved={}/{}",
-                    x.r_true, x.r_permuted, x.ratio, x.degraded, x.moved, r.n_states
                 );
             }
             println!(

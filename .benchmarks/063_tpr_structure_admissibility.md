@@ -215,13 +215,42 @@ structure verdict survives a control that *can* fail. The `structured()`
 verdict now requires the router **and** this control to agree — a router
 verdict alone would credit any residual drop extra per-block parameters buy.
 
-The vacuity is detected (`per_state_shuffle_is_vacuous`) and asserted, not
-assumed: the test fails if the corpus ever grows multi-binding states (at which
-point the upstream control becomes real and should be re-enabled), and fails if
-the "vacuous" arm ever moves the residual.
+The vacuity is detected and asserted, not assumed: the test fails if the corpus
+ever grows multi-binding states (at which point the within-state control becomes
+real), and fails if the "vacuous" arm ever moves the residual.
 
-Filed upstream as katgpt-rs `.issues/710` — any single-binding consumer of
-`shuffled_role_control` gets a silent pass from it.
+### 7.4a Upstreamed — this section describes a consumer-local fix that no longer exists
+
+Filed upstream as katgpt-rs `.issues/710`; **RESOLVED there in `af3bca25`**
+(issue closed + removed), which is the last commit this section's
+`cross_state_role_control` / `per_state_shuffle_is_vacuous` names are valid at.
+Upstream now ships:
+
+- `RoleShuffleMode::{WithinState, CrossState}` + `shuffled_role_control_with`,
+  with `role_shuffle_mode_for` resolving the non-vacuous arm automatically, so
+  a single-binding consumer gets a control that can fail *by default*.
+- `ShuffledRoleReport::{vacuous, moved, mode}` — vacuity is a reported
+  quantity, not something a consumer infers by reading the permutation loop.
+  Vacuity is judged on **distinct role labels**, not list length, so an
+  all-same-role corpus is caught on both arms (a case this bench's local
+  predicate would have missed).
+- The same discipline extended to the other two instruments: `bow_router`
+  gains `vacuous` (at `arity == 1` with all-zero roles its "null" IS the
+  caller's fit), and `candidate_pool_coverage` is the answerability check
+  `withheld_pair_top1`'s doc had always demanded with nothing to demand it of.
+
+`tpr_fit.rs` now calls the upstream function on both arms (~90 lines of
+duplicated control deleted) and **reproduces every number in this document
+bit-identically** — clippy `tokenbag256` 1.1773 / 1.0812 moved 81/113,
+coalesced 1.1417 / 1.0693 moved 79/113, `latent8` coalesced 0.9961 / 0.9897
+moved 79/113. Same SplitMix64, same draw order, so the port is behaviour-
+preserving and the §6 verdict below is unchanged.
+
+One verdict rule did change, and it is a strengthening: `SpaceReport::structured()`
+now returns `None` — UNKNOWN — when **either** instrument reports itself
+vacuous, rather than the `Some(false)` a vacuous control would otherwise
+manufacture. That is the whole lesson of this section applied to the verdict
+that reads it.
 
 ### 7.5 P6: one monotone violation, and why asserting zero was wrong
 

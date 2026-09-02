@@ -112,10 +112,14 @@ did NOT fire. Three caveats that bound what Phase 2 may claim:
   direction vectors are rank-1 role embeddings on the *domain* axis, and the
   fitted role axis here is the shape-class. Wiring the freeze/thaw cycle to a
   role table is T4 work and pointless before T4's space is settled.
-  **Found upstream, filed:** `shuffled_role_control` cannot fail on a
-  single-binding corpus (`for i in (1..1).rev()` is an empty loop) — it
-  contradicted `bow_router` on the same artifact. katgpt-rs `.issues/710`;
-  worked around locally by `cross_state_role_control`.
+  **Found upstream, filed, and RESOLVED:** `shuffled_role_control` could not
+  fail on a single-binding corpus (`for i in (1..1).rev()` is an empty loop) —
+  it contradicted `bow_router` on the same artifact. katgpt-rs `.issues/710`,
+  fixed + closed + removed in katgpt-rs `af3bca25`: vacuity is now a reported
+  quantity on all four validation instruments and the cross-state arm resolves
+  automatically. The consumer-local workaround is deleted; `tpr_fit.rs` calls
+  upstream on both arms and reproduces every Bench 063 number bit-identically
+  (Bench 063 §7.4a).
 - [ ] **T4 (RE-SCOPED by T3 — read Bench 063 §8 before starting)** **TPR
   structural evidence channel.** The original "score against the TPR
   projection, not the raw 8-D embedding" is **not runnable**: the projection
