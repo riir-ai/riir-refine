@@ -248,12 +248,18 @@ fn run_kat_login(import_key: Option<&Path>) {
 /// load-bearing for future sync, so a mismatch exits 1), then prints the
 /// identity block + (when a repo-local charge ledger exists) this repo's
 /// burn + balance projection with the per-repo caveat. `--history` (Proposal
-/// 011 T0.2, ask 8.5) adds the local earned/spent view; the welcome line
-/// prints while the account is fresh (the service-side all-synced + nodes-
-/// healthy gate lands with Issue 061 T0.2b and replaces the heuristic).
+/// 011 T0.2, ask 8.5) adds the earned/spent view.
+///
+/// T0.2b (Plan 064) moved the welcome and the history onto the SERVICE
+/// plane: `GET /health` + `GET /mining/health` + `GET /balance?acct=` decide
+/// the §8.3 `all-synced + nodes-healthy` gate, and `/balance` serves the
+/// history. The local renders are the offline fallback — an unreadable
+/// service prints "no claim is made" and the local view, never a health
+/// claim (`kat_account_client::WelcomeGate` is three-state for exactly
+/// this reason).
 #[cfg(feature = "kat_service")]
 fn run_kat_account(paths: &[PathBuf], show_history: bool) {
-    use riir_clippy::kat_account::{history_lines, welcome_line, KatAccount};
+    use riir_clippy::kat_account::{history_lines, KatAccount};
     use riir_clippy::kat_meter::{ChargeState, KAT_WARN_REMAINING};
 
     let dir = KatAccount::default_dir();
@@ -309,18 +315,65 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
         }
     }
 
-    // Proposal 011 T0.2: the welcome (while fresh) + the earned/spent view.
-    // Both render from LOCAL state only — the service-side events and the
-    // sync/node-health gate arrive with the dapps half (061 T0.2b) and are
-    // never fabricated here (the G9d posture).
     let spent = charge.as_ref().map_or(0, |c| c.charged_kat);
     let tokens = charge.as_ref().map_or(0, |c| c.meter_watermark_tokens);
-    if spent == 0 {
-        println!("{}", welcome_line());
-    }
+
+    // Proposal 011 T0.2b (Plan 064): the welcome gate and the history now
+    // come from the SERVICE plane — `GET /health` + `GET /mining/health` +
+    // `GET /balance?acct=` — replacing T0.2's local `no burn yet` guess.
+    // The service returns a THREE-state verdict, so an unreadable service
+    // prints an honest "no claim is made" line and falls back to the local
+    // view; it never renders as healthy, and never as out-of-sync either.
+    #[cfg(feature = "kat_transport")]
+    let served = {
+        use riir_clippy::kat_account_client as svc;
+        match svc::service_account_hex(&account.state().account_id) {
+            // The 64-hex local id truncates to the ledger's 32-hex
+            // AccountId; a malformed record cannot query the service.
+            None => {
+                eprintln!(
+                    "kat account: the local account id is not the 64-hex derivation — skipping the service reads"
+                );
+                None
+            }
+            Some(acct) => {
+                let url = riir_clippy::kat_lease_client::service_url_for_command();
+                // 5 s, deliberately short: `account` is offline-capable and
+                // the probe fail-fasts, so an offline run costs one budget.
+                let transport = svc::HttpAccountTransport::new(&url, 5);
+                let view = svc::account_service_view(&transport, acct);
+                for line in svc::welcome_gate_lines(&view.gate) {
+                    println!("{line}");
+                }
+                view.balance
+            }
+        }
+    };
+    // No transport compiled: the local heuristic is all this build has.
+    #[cfg(not(feature = "kat_transport"))]
+    let served: Option<riir_clippy::kat_account_client::ServiceBalance> = {
+        if spent == 0 {
+            println!("{}", riir_clippy::kat_account::welcome_line());
+        }
+        None
+    };
+
     if show_history {
-        for line in history_lines(grant, spent, tokens) {
-            println!("{line}");
+        match &served {
+            Some(balance) => {
+                for line in
+                    riir_clippy::kat_account_client::service_history_lines(balance, spent, tokens)
+                {
+                    println!("{line}");
+                }
+            }
+            // The offline fallback — T0.2's local earned/spent view, which
+            // is honest about being a per-repo projection.
+            None => {
+                for line in history_lines(grant, spent, tokens) {
+                    println!("{line}");
+                }
+            }
         }
     }
 }
@@ -902,7 +955,24 @@ fn run_kat_pay(amount: Option<&str>, label: Option<&str>, qr: bool, wait: u64) {
                     print_qr(&outcome.url);
                 }
                 match outcome.settled {
-                    Some(line) => println!("pay: {line}"),
+                    // T1.4: the full invoice display, gated on the
+                    // bit-exact recheck — a mismatch refuses to render the
+                    // body (Proposal 011 §1), and the caveat-#3 fallback
+                    // labels itself rather than passing silently.
+                    Some(riir_clippy::kat_payreq_client::SettleOutcome::Invoice(inv)) => {
+                        let recheck =
+                            riir_clippy::kat_payreq_client::recheck_invoice_qr(&inv, &outcome.url);
+                        for line in
+                            riir_clippy::kat_payreq_client::invoice_display_lines(&inv, &recheck)
+                        {
+                            println!("{line}");
+                        }
+                    }
+                    Some(riir_clippy::kat_payreq_client::SettleOutcome::Unreadable(why)) => {
+                        println!(
+                            "pay: the request settled, but the invoice row did not read back ({why}) — `account` shows the credit"
+                        );
+                    }
                     None if wait > 0 => println!(
                         "pay: no credit yet (waited {wait}s) — the request stays shareable until it settles; `account` shows the credit when it lands"
                     ),
@@ -1395,6 +1465,15 @@ struct Args {
     vote_yes: bool,
     /// Proposal 008 T2.4: `--no` — vote against.
     vote_no: bool,
+    /// Proposal 011 T1.3: `--request` — the pay-request mode selector.
+    /// The usage line has advertised `pay --request` since T1.3 while the
+    /// parser rejected it as an unknown flag, so the documented invocation
+    /// failed (found by the T1.4 CLI smoke, Plan 064). Accepted and
+    /// required-by-nothing: `pay` has exactly one mode today, and the flag
+    /// exists so the documented command works and so a future
+    /// `pay --settle <link>` (T1.2's payer half) has a sibling to select
+    /// against rather than a silent default.
+    pay_request: bool,
     /// Proposal 011 T1.3: `--amount <N>` — the pay-request amount in KAT
     /// (≤6 fractional digits; blank/absent = ANY amount, ask 3).
     pay_amount: Option<String>,
@@ -1467,6 +1546,7 @@ fn parse_args() -> Args {
         vote_proposal: None,
         vote_yes: false,
         vote_no: false,
+        pay_request: false,
         pay_amount: None,
         pay_qr: false,
         pay_label: None,
@@ -1585,6 +1665,7 @@ fn parse_args() -> Args {
                 };
                 args.pay_amount = Some(value);
             }
+            "--request" => args.pay_request = true,
             "--qr" => args.pay_qr = true,
             "--label" => {
                 let Some(value) = it.next() else {
@@ -1660,10 +1741,14 @@ fn parse_args() -> Args {
         eprintln!("--history requires the `account` command");
         usage();
     }
-    if (args.pay_amount.is_some() || args.pay_qr || args.pay_label.is_some() || args.pay_wait != 600)
+    if (args.pay_request
+        || args.pay_amount.is_some()
+        || args.pay_qr
+        || args.pay_label.is_some()
+        || args.pay_wait != 600)
         && !matches!(args.command, Some(KatCommand::Pay))
     {
-        eprintln!("--amount/--qr/--label/--wait require the `pay` command");
+        eprintln!("--request/--amount/--qr/--label/--wait require the `pay` command");
         usage();
     }
     if args.paths.is_empty()

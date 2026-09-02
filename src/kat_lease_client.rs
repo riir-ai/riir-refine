@@ -1469,18 +1469,166 @@ pub fn lease_kill_switched() -> bool {
         .is_some_and(|v| matches!(v.as_str(), "0" | "off" | "false" | "no"))
 }
 
-/// The ASCII QR render of `url` (the `qrcode` crate's dense unicode block
-/// renderer — terminal-friendly). Errors surface as an empty string (the
-/// QR is a convenience, never a gate).
+// ── the QR asset: render params, commitment, and the caveat-#3 pins ─────
+//
+// Proposal 011 T1.4 (Plan 064). **Caveat #3 restated: QR determinism is a
+// PINNED DEPENDENCY, not a property of QR.** A byte-exact re-encode holds
+// only while the `qrcode` crate version AND the render params (ECC level,
+// quiet zone) stay put. So the pin must be sensitive to BOTH axes — a pin
+// that silently survived a `qrcode` patch bump inside the `"0.14"`
+// requirement range, or a change of ECC level, would be doing nothing.
+//
+// Two independent mechanisms, because neither alone is enough:
+//
+// 1. **Structural** — the crate version and both render params ride IN the
+//    commitment preimage ([`qr_commitment_stamped`]), so changing any of
+//    them MOVES the digest by construction. Divergence probes in the test
+//    module assert each axis actually moves (an in-preimage field that no
+//    test varies is an assumption, not a pin).
+// 2. **Measured** — [`QRCODE_PINNED_VERSION`] is a hand-written declaration
+//    of provenance, and a hand-written constant cannot notice a `cargo
+//    update`. `qrcode_resolved_version_is_the_pinned_one` reads the
+//    RESOLVED version out of `Cargo.lock` and fails on drift, which is the
+//    half that catches `0.14.1 → 0.14.2`.
+//
+// Mechanism 1 without 2 lets a lock bump change every stored asset's
+// commitment while every golden still passes (the constant did not move,
+// so neither did the preimage). Mechanism 2 without 1 leaves the
+// commitment version-blind. Keep both.
+
+/// The pinned QR render parameters (caveat #3's "ECC, quiet zone").
+/// Both members ride in the [`qr_commitment`] preimage, so a change here
+/// moves every commitment — deliberately, since it also changes every
+/// rendered asset.
+#[cfg(feature = "kat_transport")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct QrRenderParams {
+    /// The error-correction level. `qrcode::QrCode::new` uses `M`
+    /// implicitly; naming it here makes the param visible to review and to
+    /// the commitment.
+    pub ec_level: qrcode::EcLevel,
+    /// Whether the render carries the 4-module quiet zone.
+    pub quiet_zone: bool,
+}
+
+/// The shipped render params — the values every stored KAT QR asset was
+/// encoded under. Changing either member is a **re-pin event**: the
+/// goldens in this module's tests move, and so does every stored
+/// invoice's commitment (caveat #3's re-encode-on-read fallback is what
+/// absorbs the pre-change assets).
+#[cfg(feature = "kat_transport")]
+pub const QR_RENDER_PARAMS: QrRenderParams = QrRenderParams {
+    ec_level: qrcode::EcLevel::M,
+    quiet_zone: true,
+};
+
+/// The **resolved** `qrcode` version the QR goldens were captured against,
+/// and the version stamped into every [`qr_commitment`] preimage.
+///
+/// Pinned by `qrcode_resolved_version_is_the_pinned_one`, which reads
+/// `Cargo.lock` — not `Cargo.toml`. The manifest only asks for `"0.14"`, so
+/// the requirement is satisfied by any `0.14.x`; only the lock knows which
+/// one actually compiled.
+#[cfg(feature = "kat_transport")]
+pub const QRCODE_PINNED_VERSION: &str = "0.14.1";
+
+/// The `Cargo.toml` requirement string for `qrcode`, pinned separately so
+/// widening it (`"0.14"` → `"0.15"`) fails a test *before* the lock moves.
+#[cfg(feature = "kat_transport")]
+pub const QRCODE_PINNED_REQUIREMENT: &str = "0.14";
+
+/// Domain separator for the QR asset commitment (bump the `v1` on any
+/// preimage-layout change — a layout change is not a param change).
+#[cfg(feature = "kat_transport")]
+pub const QR_COMMITMENT_DOMAIN: &[u8] = b"riir-kat-qr-v1:";
+
+/// The ASCII QR render of `url` under the pinned [`QR_RENDER_PARAMS`] (the
+/// `qrcode` crate's dense unicode block renderer — terminal-friendly).
+/// Errors surface as an empty string (the QR is a convenience, never a
+/// gate).
 #[cfg(feature = "kat_transport")]
 #[must_use]
 pub fn render_qr_ascii(url: &str) -> String {
+    render_qr_ascii_with(url, QR_RENDER_PARAMS)
+}
+
+/// [`render_qr_ascii`] with explicit params — exists so the divergence
+/// probes can vary a param without editing the shipped constant.
+#[cfg(feature = "kat_transport")]
+#[must_use]
+pub fn render_qr_ascii_with(url: &str, params: QrRenderParams) -> String {
     use qrcode::render::unicode::Dense1x2;
     use qrcode::QrCode;
-    match QrCode::new(url) {
-        Ok(code) => code.render::<Dense1x2>().quiet_zone(true).build(),
+    match QrCode::with_error_correction_level(url, params.ec_level) {
+        Ok(code) => code
+            .render::<Dense1x2>()
+            .quiet_zone(params.quiet_zone)
+            .build(),
         Err(_) => String::new(),
     }
+}
+
+/// The QR asset commitment (Proposal 011 §1's "bit-exact recheck before
+/// display", the payee/CLI half): BLAKE3 over a canonical serialization of
+/// the QR **module matrix** — the encoder's own output, not a rendering.
+///
+/// Committing the matrix rather than a rendered image is what lets this
+/// repo participate at all: `qrcode` ships here with
+/// `default-features = false` (no `image`), so there is no PNG to hash —
+/// and both a PNG and the ASCII render are pure functions of the matrix, so
+/// the matrix is the *stronger* commitment, not a weaker stand-in.
+///
+/// `None` when the URL cannot be encoded (too long for any version) — the
+/// same never-a-gate posture as [`render_qr_ascii`].
+#[cfg(feature = "kat_transport")]
+#[must_use]
+pub fn qr_commitment(url: &str) -> Option<[u8; 32]> {
+    qr_commitment_with(url, QR_RENDER_PARAMS)
+}
+
+/// [`qr_commitment`] with explicit params (the render-param divergence
+/// axis of the caveat-#3 pin).
+#[cfg(feature = "kat_transport")]
+#[must_use]
+pub fn qr_commitment_with(url: &str, params: QrRenderParams) -> Option<[u8; 32]> {
+    qr_commitment_stamped(url, params, QRCODE_PINNED_VERSION)
+}
+
+/// [`qr_commitment`] with explicit params AND an explicit crate-version
+/// stamp (the crate-version divergence axis).
+///
+/// Preimage layout ([`QR_COMMITMENT_DOMAIN`] `v1`):
+/// `domain` ‖ `version_len` u8 ‖ `crate_version` bytes ‖ `ec_level` u8 ‖
+/// `quiet_zone` u8 ‖ `width` u32 le ‖ one byte per module (row-major,
+/// `1` = dark, `0` = light).
+///
+/// The length prefix is not decoration: without it a version/param
+/// boundary shift could collide two different pins.
+#[cfg(feature = "kat_transport")]
+#[must_use]
+pub fn qr_commitment_stamped(
+    url: &str,
+    params: QrRenderParams,
+    crate_version: &str,
+) -> Option<[u8; 32]> {
+    use qrcode::{Color, QrCode};
+    let code = QrCode::with_error_correction_level(url, params.ec_level).ok()?;
+    let width = u32::try_from(code.width()).ok()?;
+    let version_len = u8::try_from(crate_version.len()).ok()?;
+    let mut h = blake3::Hasher::new();
+    h.update(QR_COMMITMENT_DOMAIN);
+    h.update(&[version_len]);
+    h.update(crate_version.as_bytes());
+    h.update(&[params.ec_level as u8]);
+    h.update(&[u8::from(params.quiet_zone)]);
+    h.update(&width.to_le_bytes());
+    for c in code.to_colors() {
+        h.update(&[match c {
+            Color::Dark => 1u8,
+            Color::Light => 0u8,
+        }]);
+    }
+    Some(*h.finalize().as_bytes())
 }
 
 #[cfg(test)]
@@ -1973,5 +2121,276 @@ mod tests {
         assert_eq!(unhex32(&hex32(&id)), Some(id));
         assert_eq!(unhex32("zz"), None);
         assert_eq!(unhex32(&"0".repeat(63)), None);
+    }
+
+    // ── T1.4 / caveat #3: the QR re-encode pin ──────────────────────────
+    //
+    // These are the "the pin must actually be sensitive to the crate
+    // version AND the render params" tests. Read the module comment above
+    // `QrRenderParams` for why it takes two mechanisms.
+
+    /// The canonical golden subject: a real payreq capability URL on the
+    /// production service base (the T0.3 golden request id).
+    #[cfg(feature = "kat_transport")]
+    const QR_GOLDEN_URL: &str =
+        "https://kat.heal.gist.rs/payreq/71b5cbf13626d2554aba7d9b06e63474";
+
+    /// Axis 2 (MEASURED): the **resolved** `qrcode` version in `Cargo.lock`
+    /// is the one [`QRCODE_PINNED_VERSION`] declares, and the `Cargo.toml`
+    /// requirement is the one [`QRCODE_PINNED_REQUIREMENT`] declares.
+    ///
+    /// Why the lock and not the manifest: the manifest asks for `"0.14"`,
+    /// which `0.14.1`, `0.14.2` and `0.14.99` all satisfy. A pin that read
+    /// only the manifest would sit green through a `cargo update` that
+    /// silently re-rendered every stored QR asset — the precise failure
+    /// caveat #3 names. Reading the lock is what makes a PATCH bump fail.
+    ///
+    /// The test also refuses to pass when it cannot FIND what it audits
+    /// (missing lock, missing `qrcode` entry, missing manifest line): an
+    /// auditor that vacuously passes on an empty read is worse than none.
+    #[cfg(feature = "kat_transport")]
+    #[test]
+    fn qrcode_resolved_version_is_the_pinned_one() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+
+        // (a) the resolved version, out of Cargo.lock.
+        let lock = std::fs::read_to_string(root.join("Cargo.lock"))
+            .expect("Cargo.lock must be present and readable — the pin has nothing to read without it");
+        let mut lines = lock.lines();
+        let mut resolved: Option<String> = None;
+        while let Some(line) = lines.next() {
+            if line.trim() != "name = \"qrcode\"" {
+                continue;
+            }
+            let v = lines
+                .next()
+                .expect("a Cargo.lock [[package]] block always carries `version` after `name`");
+            resolved = Some(
+                v.trim()
+                    .strip_prefix("version = \"")
+                    .and_then(|s| s.strip_suffix('"'))
+                    .expect("the line after `name = \"qrcode\"` must be the version line")
+                    .to_string(),
+            );
+            break;
+        }
+        let resolved = resolved.expect(
+            "no `name = \"qrcode\"` package in Cargo.lock — either the dep was dropped (then \
+             delete this pin deliberately) or the lock is stale; the pin does not get to guess",
+        );
+        assert_eq!(
+            resolved, QRCODE_PINNED_VERSION,
+            "the RESOLVED `qrcode` version moved ({QRCODE_PINNED_VERSION} → {resolved}). \
+             Caveat #3: every stored QR asset's commitment moves with it. Re-capture the QR \
+             goldens in this module, bump QRCODE_PINNED_VERSION, and note the re-pin — do NOT \
+             just edit the constant to make this pass."
+        );
+
+        // (b) the requirement, out of Cargo.toml — so widening the range
+        //     fails BEFORE a lock bump has a chance to happen.
+        let manifest = std::fs::read_to_string(root.join("Cargo.toml")).expect("Cargo.toml");
+        let req_line = manifest
+            .lines()
+            .find(|l| l.trim_start().starts_with("qrcode = "))
+            .expect("no `qrcode = ` dependency line in Cargo.toml — the pin has nothing to audit");
+        assert!(
+            req_line.contains(&format!("version = \"{QRCODE_PINNED_REQUIREMENT}\"")),
+            "the `qrcode` requirement is no longer \"{QRCODE_PINNED_REQUIREMENT}\": {req_line}"
+        );
+        assert!(
+            resolved.starts_with(&format!("{QRCODE_PINNED_REQUIREMENT}.")),
+            "the resolved version {resolved} is not inside the pinned requirement \
+             {QRCODE_PINNED_REQUIREMENT} — the two halves of the pin disagree"
+        );
+
+        // (c) `default-features = false` is load-bearing: the default set
+        //     drags `image` in, and a PNG renderer appearing would invite a
+        //     second, divergent commitment surface.
+        assert!(
+            req_line.contains("default-features = false"),
+            "qrcode must stay `default-features = false`: {req_line}"
+        );
+    }
+
+    /// The shipped render params are the ones the goldens were captured
+    /// under. A deliberate change edits BOTH this and the goldens; an
+    /// accidental one fails here first.
+    #[cfg(feature = "kat_transport")]
+    #[test]
+    fn qr_render_params_are_the_pinned_ones() {
+        assert_eq!(
+            QR_RENDER_PARAMS,
+            QrRenderParams {
+                ec_level: qrcode::EcLevel::M,
+                quiet_zone: true,
+            }
+        );
+        // The discriminant rides in the preimage as a byte — pin it so a
+        // reordering of the upstream enum is visible here.
+        assert_eq!(QR_RENDER_PARAMS.ec_level as u8, 1, "EcLevel::M == 1");
+    }
+
+    /// The commitment golden itself (deterministic across runs and hosts),
+    /// plus an INDEPENDENT recompute of the preimage layout — the
+    /// "pin every reimplemented derivation" discipline. A golden that only
+    /// records whatever the function emits cannot catch a preimage-layout
+    /// regression; this half can.
+    #[cfg(feature = "kat_transport")]
+    #[test]
+    fn qr_commitment_golden() {
+        let c = qr_commitment(QR_GOLDEN_URL).expect("the golden URL encodes");
+        assert_eq!(hex32(&c), QR_COMMITMENT_GOLDEN);
+
+        // Independent preimage recompute (built here, not via the fn).
+        {
+            use qrcode::{Color, QrCode};
+            let code = QrCode::with_error_correction_level(
+                QR_GOLDEN_URL,
+                QR_RENDER_PARAMS.ec_level,
+            )
+            .expect("encodes");
+            let mut pre: Vec<u8> = Vec::new();
+            pre.extend_from_slice(b"riir-kat-qr-v1:");
+            pre.push(u8::try_from(QRCODE_PINNED_VERSION.len()).unwrap());
+            pre.extend_from_slice(QRCODE_PINNED_VERSION.as_bytes());
+            pre.push(1); // EcLevel::M
+            pre.push(1); // quiet_zone = true
+            pre.extend_from_slice(&u32::try_from(code.width()).unwrap().to_le_bytes());
+            pre.extend(
+                code.to_colors()
+                    .into_iter()
+                    .map(|c| u8::from(c == Color::Dark)),
+            );
+            assert_eq!(
+                blake3::hash(&pre).as_bytes(),
+                &c,
+                "the preimage layout drifted from the documented one"
+            );
+        }
+        // Determinism: same input, same digest, twice.
+        assert_eq!(qr_commitment(QR_GOLDEN_URL), Some(c));
+        // Content sensitivity: one flipped hex nibble in the request id
+        // moves the commitment (the asset is bound to the request).
+        let other = QR_GOLDEN_URL.replace("71b5", "71b6");
+        assert_ne!(qr_commitment(&other), Some(c));
+    }
+
+    /// Captured 2026-09-02 against `qrcode 0.14.1` under
+    /// [`QR_RENDER_PARAMS`] (`EcLevel::M`, quiet zone on).
+    #[cfg(feature = "kat_transport")]
+    const QR_COMMITMENT_GOLDEN: &str =
+        "de7617019294c1ea2ea6609ce93df60c14b7a7cd6b4b9bd456535ae584b2f9df";
+
+    /// Axis 1 (STRUCTURAL), and the anti-vacuity half: the commitment must
+    /// MOVE on every pinned axis. An in-preimage field that no test varies
+    /// is an assumption, not a pin — so vary all of them and require
+    /// divergence.
+    #[cfg(feature = "kat_transport")]
+    #[test]
+    fn qr_commitment_moves_on_every_pinned_axis() {
+        use qrcode::EcLevel;
+        let base = qr_commitment(QR_GOLDEN_URL).expect("encodes");
+
+        // (i) ECC level — all three alternatives diverge.
+        for level in [EcLevel::L, EcLevel::Q, EcLevel::H] {
+            let c = qr_commitment_with(
+                QR_GOLDEN_URL,
+                QrRenderParams {
+                    ec_level: level,
+                    quiet_zone: QR_RENDER_PARAMS.quiet_zone,
+                },
+            )
+            .expect("encodes");
+            assert_ne!(
+                c, base,
+                "the commitment did NOT move for EcLevel::{level:?} — the ECC axis of the \
+                 caveat-#3 pin is vacuous"
+            );
+        }
+
+        // (ii) quiet zone.
+        let c = qr_commitment_with(
+            QR_GOLDEN_URL,
+            QrRenderParams {
+                ec_level: QR_RENDER_PARAMS.ec_level,
+                quiet_zone: !QR_RENDER_PARAMS.quiet_zone,
+            },
+        )
+        .expect("encodes");
+        assert_ne!(
+            c, base,
+            "the commitment did NOT move on the quiet zone — that axis of the pin is vacuous"
+        );
+
+        // (iii) the crate version. This is the axis a golden digest alone
+        //       can never cover: an upstream bump that happens to produce
+        //       the same matrix would leave a matrix-only digest green
+        //       while every stored asset's provenance had changed.
+        for v in ["0.14.2", "0.15.0", ""] {
+            let c = qr_commitment_stamped(QR_GOLDEN_URL, QR_RENDER_PARAMS, v).expect("encodes");
+            assert_ne!(
+                c, base,
+                "the commitment did NOT move for a {v:?} crate-version stamp — the version \
+                 axis of the caveat-#3 pin is vacuous"
+            );
+        }
+
+        // And the stamped form at the PINNED version is the shipped one
+        // (so the three-arg fn is the same function, not a parallel path).
+        assert_eq!(
+            qr_commitment_stamped(QR_GOLDEN_URL, QR_RENDER_PARAMS, QRCODE_PINNED_VERSION),
+            Some(base)
+        );
+    }
+
+    /// The param lift is behaviour-preserving: rendering through
+    /// [`QR_RENDER_PARAMS`] is byte-identical to the pre-T1.4 call shape
+    /// (`QrCode::new` + `quiet_zone(true)`), so no stored asset moved when
+    /// the params became explicit.
+    #[cfg(feature = "kat_transport")]
+    #[test]
+    fn render_qr_ascii_is_byte_identical_to_the_pre_t14_call_shape() {
+        use qrcode::render::unicode::Dense1x2;
+        use qrcode::QrCode;
+        let before = QrCode::new(QR_GOLDEN_URL)
+            .map(|c| c.render::<Dense1x2>().quiet_zone(true).build())
+            .expect("encodes");
+        assert_eq!(render_qr_ascii(QR_GOLDEN_URL), before);
+        assert_eq!(hex32(blake3::hash(before.as_bytes()).as_bytes()), QR_ASCII_GOLDEN);
+    }
+
+    /// Captured 2026-09-02 — blake3 of the ASCII render of
+    /// [`QR_GOLDEN_URL`] under [`QR_RENDER_PARAMS`].
+    #[cfg(feature = "kat_transport")]
+    const QR_ASCII_GOLDEN: &str =
+        "213caa9e76f61663721285eb567a221938fb6bbc150c8f6c89b5b810db888dd9";
+
+    /// The ASCII render digest moves on the render params too — same
+    /// anti-vacuity discipline applied to the surface a user actually sees.
+    #[cfg(feature = "kat_transport")]
+    #[test]
+    fn render_qr_ascii_digest_moves_on_the_render_params() {
+        use qrcode::EcLevel;
+        let base = render_qr_ascii(QR_GOLDEN_URL);
+        assert!(!base.is_empty());
+        let no_quiet = render_qr_ascii_with(
+            QR_GOLDEN_URL,
+            QrRenderParams {
+                ec_level: QR_RENDER_PARAMS.ec_level,
+                quiet_zone: false,
+            },
+        );
+        assert_ne!(no_quiet, base, "the quiet zone must change the render");
+        let ec_h = render_qr_ascii_with(
+            QR_GOLDEN_URL,
+            QrRenderParams {
+                ec_level: EcLevel::H,
+                quiet_zone: QR_RENDER_PARAMS.quiet_zone,
+            },
+        );
+        assert_ne!(ec_h, base, "the ECC level must change the render");
+        // An unencodable payload stays the never-a-gate empty string.
+        assert!(render_qr_ascii(&"x".repeat(8000)).is_empty());
+        assert_eq!(qr_commitment(&"x".repeat(8000)), None);
     }
 }

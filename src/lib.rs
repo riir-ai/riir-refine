@@ -249,6 +249,18 @@ pub mod kat_vote_client;
 #[cfg(feature = "kat_service")]
 pub mod kat_payreq_client;
 
+// Proposal 011 T0.2b (Issue 061, Plan 064): the account SERVICE-plane
+// client — the half T0.2 deliberately left undone. The §8.3 welcome gate
+// evaluated from REAL service health (`GET /health` + `GET /mining/health`)
+// instead of the local `no burn yet` heuristic, and the §8.5 history read
+// from the authoritative `GET /balance?acct=` instead of the per-repo
+// projection. Three-state verdict (Open / Withheld / Unknown) so an
+// unreadable network is never rendered as either healthy or out-of-sync.
+// `kat_service` gets the parses/gate/renders; the transport is
+// `kat_transport` (the payreq/vote-client convention).
+#[cfg(feature = "kat_service")]
+pub mod kat_account_client;
+
 // Proposal 005 Phase 2 T2.4 (Plan 042): the score-bench promotion gate
 // for network-learned corpus candidates — the frozen bench runs BEFORE any
 // candidate enters the local overlay (Certified on pass; Withdrawn is

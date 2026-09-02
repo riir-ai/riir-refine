@@ -561,12 +561,17 @@ impl KatAccount {
 }
 
 /// Proposal 011 T0.2 (ask 8.5): the LOCAL earned/spent history lines for
-/// `cargo heal account --history`. Earned is the login-grant projection —
-/// server-side events (mining credits, settlement, wet-run refunds labeled)
-/// land with the service half (Issue 061 T0.2b) and are deliberately NOT
-/// fabricated here. Spent is this repo's metered burn. Every line obeys the
-/// caveat-#15 copy rule (no `$` beside a KAT figure — none at all), pinned
-/// by [`tests::history_lines_obey_the_copy_rule`].
+/// `cargo heal account --history` — now the **offline fallback**, since
+/// T0.2b landed the service-ledger view
+/// ([`crate::kat_account_client::service_history_lines`], Plan 064) and the
+/// CLI prefers it whenever `/balance` reads. This render stays because a
+/// `kat_service`-only build has no transport, and because an unreachable
+/// service must still print something honest.
+///
+/// Earned is the login-grant projection; spent is this repo's metered
+/// burn. Every line obeys the caveat-#15 copy rule (no `$` beside a KAT
+/// figure — none at all), pinned by
+/// [`tests::history_lines_obey_the_copy_rule`].
 #[must_use]
 pub fn history_lines(grant_kat: u64, spent_kat: u64, metered_tokens: u64) -> Vec<String> {
     vec![
@@ -580,11 +585,15 @@ pub fn history_lines(grant_kat: u64, spent_kat: u64, metered_tokens: u64) -> Vec
     ]
 }
 
-/// Proposal 011 T0.2 (ask 8.3): the welcome line. The proposal's full gate
-/// ("when all-synced + nodes healthy") needs the service plane; the local
-/// render prints it while the account is fresh (no local burn) and the
-/// service-side gate REPLACES that heuristic when it lands (Issue 061
-/// T0.2b) — never a claim of sync health the CLI cannot see.
+/// Proposal 011 T0.2 (ask 8.3): the welcome line.
+///
+/// **The local `no burn yet` heuristic that used to decide when to print
+/// this is gone.** T0.2b (Plan 064) replaced it with
+/// [`crate::kat_account_client::evaluate_welcome`], which reads the real
+/// `all-synced + nodes-healthy` condition off the service plane. This
+/// string survives as the copy, and the `kat_service`-only build (no
+/// transport compiled) still gates it on freshness — the honest best a
+/// build with no network can do.
 #[must_use]
 pub fn welcome_line() -> &'static str {
     "welcome to the KAT network — this account is live; heal a repo to start metering"

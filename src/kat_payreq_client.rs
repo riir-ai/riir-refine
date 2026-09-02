@@ -227,6 +227,250 @@ impl PayreqTransport for HttpPayreqTransport {
     }
 }
 
+// ── the invoice view + the bit-exact recheck (T1.4) ─────────────────────
+
+/// The parsed invoice row — `GET /payreq/{id}/invoice` (riir-dapps
+/// `payreq_invoice_route`).
+///
+/// Wire-field note: the service's QR slot is spelled `qr_png_blake3` and
+/// is **all-zero until the T1.4 render step fills it** (dapps
+/// `invoice_set_qr_hash`, fills exactly once). This repo commits the QR
+/// **module matrix** (`kat_lease_client::qr_commitment`) rather than a PNG,
+/// because `qrcode` ships here with `default-features = false` — there is
+/// no `image` in the tree and so no PNG to hash. The matrix is the
+/// stronger artifact (any rendering is a function of it), and it is what
+/// the recheck compares against.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InvoiceView {
+    /// The request/invoice id, hex.
+    pub id_hex: String,
+    /// The payee account (16-byte ledger id), hex.
+    pub payee_hex: String,
+    /// The payer account (16-byte ledger id), hex.
+    pub payer_hex: String,
+    /// `"kat"` or `"usdc"` — the rail the settle used.
+    pub token: String,
+    /// What actually arrived, in micro-units (an any-amount request
+    /// records the amount the payer composed).
+    pub amount_paid_micro: i64,
+    /// The service tick the settle landed at.
+    pub settled_tick: u64,
+    /// The service's committed QR asset digest, hex — `""` or 64 zeros
+    /// while the service has not filled it.
+    pub qr_commitment_hex: String,
+}
+
+impl InvoiceView {
+    /// The unfilled-commitment sentinel: absent, or 32 zero bytes (the
+    /// dapps row's `[0u8; 32]` initial state).
+    #[must_use]
+    pub fn qr_commitment_is_unset(&self) -> bool {
+        self.qr_commitment_hex.is_empty()
+            || self.qr_commitment_hex.bytes().all(|b| b == b'0')
+    }
+}
+
+/// Parse the invoice JSON the service serves.
+///
+/// # Errors
+///
+/// A human-readable string when the body is not JSON, carries an `error`,
+/// or is missing a field the display needs (a partially-read invoice is
+/// never rendered as a whole one).
+pub fn parse_invoice(body: &[u8]) -> Result<InvoiceView, String> {
+    let v: serde_json::Value =
+        serde_json::from_slice(body).map_err(|_| "the invoice response was not JSON".to_string())?;
+    if let Some(err) = v.get("error").and_then(serde_json::Value::as_str) {
+        return Err(format!("the service refused the invoice read — {err}"));
+    }
+    let s = |k: &str| -> Result<String, String> {
+        v.get(k)
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_string)
+            .ok_or_else(|| format!("the invoice carried no `{k}`"))
+    };
+    Ok(InvoiceView {
+        id_hex: s("request_id")?,
+        payee_hex: s("payee")?,
+        payer_hex: s("payer")?,
+        token: s("token")?,
+        amount_paid_micro: v
+            .get("amount_paid")
+            .and_then(serde_json::Value::as_i64)
+            .ok_or("the invoice carried no `amount_paid`")?,
+        settled_tick: v
+            .get("settled")
+            .and_then(serde_json::Value::as_u64)
+            .ok_or("the invoice carried no `settled`")?,
+        qr_commitment_hex: v
+            .get("qr_png_blake3")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("")
+            .to_string(),
+    })
+}
+
+/// The verdict of the bit-exact recheck (Proposal 011 §1, "Bit-exact
+/// recheck before display"). **Three states, not two** — caveat #3's
+/// re-encode-on-read fallback exists precisely because "cannot verify" is
+/// not "does not match", and collapsing them would either refuse every
+/// pre-bump asset or silently pass every unverified one.
+#[cfg(feature = "kat_transport")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum QrRecheck {
+    /// A fresh re-encode from the canonical request URL is byte-identical
+    /// to the stored commitment — display is authorized.
+    Match {
+        /// The agreed digest, hex.
+        digest_hex: String,
+    },
+    /// The stored commitment and a fresh re-encode DISAGREE. Display is
+    /// REFUSED. Two causes, both refusals: the asset was altered, or the
+    /// service committed a different artifact / different render params
+    /// than this build's pinned QR contract.
+    Mismatch {
+        /// What the service stored.
+        stored_hex: String,
+        /// What this build re-encodes to (`"<unencodable>"` when the URL
+        /// does not fit any QR version).
+        recomputed_hex: String,
+    },
+    /// No stored commitment to compare against (the service has not filled
+    /// the slot, or the asset predates the pin). Caveat #3's fallback:
+    /// display is allowed but **labelled** — never silently.
+    Unavailable {
+        /// Why the bit-exact leg could not run.
+        reason: String,
+    },
+}
+
+/// The bit-exact recheck: re-encode the QR from the canonical request URL
+/// and compare against the invoice's stored commitment.
+///
+/// The `request_url` MUST be the canonical capability link
+/// ([`request_url_from_id_hex`]) — the same bytes the QR asset was
+/// encoded from. Passing anything else turns a healthy invoice into a
+/// [`QrRecheck::Mismatch`], which is the correct direction to fail in.
+#[cfg(feature = "kat_transport")]
+#[must_use]
+pub fn recheck_invoice_qr(inv: &InvoiceView, request_url: &str) -> QrRecheck {
+    let recomputed = crate::kat_lease_client::qr_commitment(request_url);
+    match (inv.qr_commitment_is_unset(), recomputed) {
+        // The service slot is still the all-zero sentinel: the bit-exact
+        // leg has nothing to compare against. NOT a tamper — an all-zero
+        // stored hash read as a mismatch would flag every invoice the
+        // service has ever written.
+        (true, _) => QrRecheck::Unavailable {
+            reason: "the service has not committed a QR asset digest for this invoice \
+                     (the slot is still the unset sentinel)"
+                .to_string(),
+        },
+        (false, None) => QrRecheck::Mismatch {
+            stored_hex: inv.qr_commitment_hex.clone(),
+            recomputed_hex: "<unencodable>".to_string(),
+        },
+        (false, Some(d)) => {
+            let recomputed_hex = hex_encode(&d);
+            if recomputed_hex == inv.qr_commitment_hex { QrRecheck::Match {
+                    digest_hex: recomputed_hex,
+                } } else { QrRecheck::Mismatch {
+                    stored_hex: inv.qr_commitment_hex.clone(),
+                    recomputed_hex,
+                } }
+        }
+    }
+}
+
+/// The compact paid line (the `pay` command's one-line payoff).
+/// Caveat-#15 copy: KAT amounts, never a `$`, never a redemption promise.
+#[must_use]
+pub fn invoice_line(inv: &InvoiceView) -> String {
+    let payer_short: String = inv.payer_hex.chars().take(8).collect();
+    format!(
+        "paid: {} from {payer_short}… — invoice {}",
+        render_kat(inv.amount_paid_micro),
+        inv.id_hex
+    )
+}
+
+/// The full invoice display (T1.4) — gated on the recheck.
+///
+/// On [`QrRecheck::Mismatch`] the invoice body is **not rendered at all**:
+/// the proposal's rule is "any mismatch ⇒ refuse to render + tamper
+/// indicator", and printing the amount beside a tamper warning is exactly
+/// the screenshot that rule exists to prevent.
+///
+/// Every line obeys the caveat-#15 copy rule: no `$`, and the KAT figure is
+/// labelled **service credit** — pinned by
+/// [`tests::invoice_display_obeys_the_copy_rule_in_every_recheck_state`].
+#[cfg(feature = "kat_transport")]
+#[must_use]
+pub fn invoice_display_lines(inv: &InvoiceView, recheck: &QrRecheck) -> Vec<String> {
+    match recheck {
+        QrRecheck::Mismatch {
+            stored_hex,
+            recomputed_hex,
+        } => vec![
+            format!("invoice {} REFUSED — tamper indicator", inv.id_hex),
+            "  the stored QR commitment and a fresh re-encode disagree; either the asset was \
+             altered or it was committed under different render params than this build pins"
+                .to_string(),
+            format!("  stored:     {stored_hex}"),
+            format!("  re-encoded: {recomputed_hex}"),
+            "  nothing from this invoice is displayed — report it before acting on it"
+                .to_string(),
+        ],
+        QrRecheck::Match { digest_hex } => {
+            let mut lines = invoice_body_lines(inv);
+            lines.push(format!(
+                "  qr asset:  re-encode matches the stored commitment {} (bit-exact)",
+                &digest_hex[..digest_hex.len().min(16)]
+            ));
+            lines
+        }
+        QrRecheck::Unavailable { reason } => {
+            let mut lines = invoice_body_lines(inv);
+            lines.push(format!("  qr asset:  NOT bit-exact-verified — {reason}"));
+            lines.push(
+                "  (caveat #3 fallback: the re-encode leg needs a committed digest; the row \
+                 below is the ledger's, which stands on its own)"
+                    .to_string(),
+            );
+            lines
+        }
+    }
+}
+
+/// The invoice body — shared by the two display states that render it, so
+/// the copy exists once.
+#[cfg(feature = "kat_transport")]
+fn invoice_body_lines(inv: &InvoiceView) -> Vec<String> {
+    vec![
+        invoice_line(inv),
+        format!("  invoice:   {}", inv.id_hex),
+        format!("  payee:     {}", inv.payee_hex),
+        format!("  payer:     {}", inv.payer_hex),
+        format!("  token:     {} (service credit)", inv.token),
+        format!(
+            "  amount:    {} (what actually arrived)",
+            render_kat(inv.amount_paid_micro)
+        ),
+        format!("  settled:   service tick {}", inv.settled_tick),
+    ]
+}
+
+/// What the poll saw once the request reached a terminal settle — three
+/// states, because "settled but the invoice did not read back" is neither
+/// "not settled" nor "here is your invoice".
+#[cfg(feature = "kat_transport")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SettleOutcome {
+    /// The settle landed and the invoice row read back.
+    Invoice(InvoiceView),
+    /// The settle landed but the invoice row did not read back.
+    Unreadable(String),
+}
+
 /// What a pay-request flow concluded (a plain struct — one shape, no
 /// match; the CLI renders the fields directly).
 #[cfg(feature = "kat_transport")]
@@ -238,9 +482,9 @@ pub struct PayRequestOutcome {
     pub url: String,
     /// The amount as created (0 = any amount).
     pub amount_micro: i64,
-    /// The invoice render line when the poll saw the settle before the
-    /// wait budget ended; `None` = not settled yet (or not polled).
-    pub settled: Option<String>,
+    /// The settle the poll saw before the wait budget ended; `None` = not
+    /// settled yet (or not polled).
+    pub settled: Option<SettleOutcome>,
 }
 
 /// The create + poll-on-credit flow (T1.3). Signs the create with the
@@ -313,7 +557,7 @@ pub fn pay_request_flow(
                 HttpResponse::Ok(b) => {
                     if let Ok(v) = serde_json::from_slice::<serde_json::Value>(&b) {
                         if v.get("status").and_then(serde_json::Value::as_str) == Some("settled") {
-                            settled = Some(invoice_line(transport, &id_hex));
+                            settled = Some(fetch_invoice(transport, &id_hex));
                             break;
                         }
                         if let Some(err) = v.get("error").and_then(serde_json::Value::as_str) {
@@ -342,28 +586,24 @@ pub fn pay_request_flow(
 // budget (a system clock step backwards ends the poll early — an honest
 // exit, the credit surfaces via `account`).
 
-/// The invoice render line (the poll-on-credit payoff; caveat-#15 copy —
-/// KAT amounts, never a `$`, never a redemption promise).
+/// Read the invoice row (the poll-on-credit payoff). An unreadable row is
+/// reported as such — never rendered as a zero-amount invoice, which is
+/// what a `.unwrap_or(0)` on `amount_paid` used to do.
 #[cfg(feature = "kat_transport")]
-fn invoice_line(transport: &dyn PayreqTransport, id_hex: &str) -> String {
-    if let HttpResponse::Ok(b) = transport.get_invoice(id_hex) {
-        if let Ok(v) = serde_json::from_slice::<serde_json::Value>(&b) {
-            let paid = v
-                .get("amount_paid")
-                .and_then(serde_json::Value::as_i64)
-                .unwrap_or(0);
-            let payer = v
-                .get("payer")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or("");
-            let payer_short: String = payer.chars().take(8).collect();
-            return format!(
-                "paid: {} from {payer_short}… — invoice {id_hex}",
-                render_kat(paid)
-            );
+pub fn fetch_invoice(transport: &dyn PayreqTransport, id_hex: &str) -> SettleOutcome {
+    match transport.get_invoice(id_hex) {
+        HttpResponse::Ok(b) => match parse_invoice(&b) {
+            Ok(inv) => SettleOutcome::Invoice(inv),
+            Err(e) => SettleOutcome::Unreadable(e),
+        },
+        HttpResponse::Status(c) => {
+            SettleOutcome::Unreadable(format!("the invoice read answered HTTP {c}"))
+        }
+        HttpResponse::Error(e) => SettleOutcome::Unreadable(format!("invoice read failed: {e}")),
+        HttpResponse::NotModified => {
+            SettleOutcome::Unreadable("the invoice read answered 304".to_string())
         }
     }
-    format!("settled — invoice {id_hex} (details unreadable)")
 }
 
 #[cfg(test)]
@@ -391,7 +631,13 @@ mod tests {
         let acct = account_for_pubkey(&[7u8; 32]);
         let expect_hex: String = {
             let d = blake3::hash(&[7u8; 32]);
-            d.as_bytes()[..16].iter().map(|b| format!("{b:02x}")).collect()
+            d.as_bytes()[..16]
+                .iter()
+                .fold(String::new(), |mut acc, b| {
+                    use std::fmt::Write as _;
+                    let _ = write!(acc, "{b:02x}");
+                    acc
+                })
         };
         assert_eq!(hex_encode(&acct), expect_hex);
     }
@@ -442,38 +688,191 @@ mod tests {
         assert_eq!(render_kat(-5), "-0.000005 KAT");
     }
 
-    /// Caveat-#15 copy rule: no render path puts a `$` beside a KAT amount
-    /// (service credit, not dollars — enforced by test like every client).
+    // ── T1.4: the invoice view + the bit-exact recheck ──────────────────
+
+    /// A settled invoice body with a caller-chosen QR commitment slot.
+    fn invoice_json(qr_hex: &str) -> Vec<u8> {
+        serde_json::json!({
+            "request_id": "71b5cbf13626d2554aba7d9b06e63474",
+            "payee": "ab".repeat(16),
+            "payer": "cd".repeat(16),
+            "token": "kat",
+            "amount_paid": 1_500_000,
+            "settled": 42,
+            "qr_png_blake3": qr_hex,
+        })
+        .to_string()
+        .into_bytes()
+    }
+
+    /// The parse is total over the served shape, and a partial row is an
+    /// error rather than a zero-filled invoice (the old
+    /// `amount_paid.unwrap_or(0)` would have rendered "0.000000 KAT paid"
+    /// for a malformed row — a wrong figure is worse than no figure).
+    #[test]
+    fn parse_invoice_is_total_and_refuses_partial_rows() {
+        let inv = parse_invoice(&invoice_json(&"0".repeat(64))).expect("parses");
+        assert_eq!(inv.id_hex, "71b5cbf13626d2554aba7d9b06e63474");
+        assert_eq!(inv.amount_paid_micro, 1_500_000);
+        assert_eq!(inv.settled_tick, 42);
+        assert_eq!(inv.token, "kat");
+        assert!(inv.qr_commitment_is_unset(), "all-zero is the unset sentinel");
+
+        // Absent slot is equally unset.
+        let no_slot = serde_json::json!({
+            "request_id": "ab".repeat(16), "payee": "ab".repeat(16),
+            "payer": "cd".repeat(16), "token": "kat",
+            "amount_paid": 1, "settled": 2,
+        })
+        .to_string();
+        assert!(parse_invoice(no_slot.as_bytes()).unwrap().qr_commitment_is_unset());
+
+        // Missing money field → error, not a zero.
+        let partial = serde_json::json!({
+            "request_id": "ab".repeat(16), "payee": "ab".repeat(16),
+            "payer": "cd".repeat(16), "token": "kat", "settled": 2,
+        })
+        .to_string();
+        let err = parse_invoice(partial.as_bytes()).expect_err("refused");
+        assert!(err.contains("amount_paid"), "{err}");
+
+        // A service error body surfaces as an error.
+        let refused = serde_json::json!({"error": "not settled yet"}).to_string();
+        assert!(parse_invoice(refused.as_bytes()).is_err());
+        assert!(parse_invoice(b"not json").is_err());
+    }
+
+    /// The recheck's three states, each reached for its own reason.
     #[cfg(feature = "kat_transport")]
     #[test]
-    fn invoice_line_never_renders_a_dollar() {
-        struct Mock;
-        impl PayreqTransport for Mock {
-            fn post_create(&self, _json: &str) -> HttpResponse {
-                unimplemented!()
-            }
-            fn get_request(&self, _id: &str) -> HttpResponse {
-                unimplemented!()
-            }
-            fn get_invoice(&self, _id: &str) -> HttpResponse {
-                HttpResponse::Ok(
-                    serde_json::json!({
-                        "request_id": "ab".repeat(16),
-                        "payee": "ab".repeat(16),
-                        "payer": "cd".repeat(16),
-                        "token": "kat",
-                        "amount_paid": 1_500_000,
-                        "settled": 42,
-                        "qr_png_blake3": "0".repeat(64),
-                    })
-                    .to_string()
-                    .into_bytes(),
-                )
+    fn recheck_reaches_all_three_states_for_the_right_reasons() {
+        let url = request_url_from_id_hex(
+            crate::kat_lease_client::DEFAULT_SERVICE_URL,
+            "71b5cbf13626d2554aba7d9b06e63474",
+        );
+        let good = hex_encode(
+            &crate::kat_lease_client::qr_commitment(&url).expect("the link encodes"),
+        );
+
+        // (a) Unset sentinel → Unavailable. This is the state EVERY invoice
+        //     the service has written is in today (dapps leaves
+        //     `qr_png_blake3` zeroed until its own T1.4 render step), so
+        //     reading it as a tamper would refuse every real invoice.
+        let unset = parse_invoice(&invoice_json(&"0".repeat(64))).unwrap();
+        assert!(matches!(
+            recheck_invoice_qr(&unset, &url),
+            QrRecheck::Unavailable { .. }
+        ));
+
+        // (b) Agreeing digest → Match.
+        let ok = parse_invoice(&invoice_json(&good)).unwrap();
+        assert_eq!(
+            recheck_invoice_qr(&ok, &url),
+            QrRecheck::Match { digest_hex: good.clone() }
+        );
+
+        // (c) Any other value → Mismatch. Including a well-formed digest of
+        //     the WRONG link — the asset is bound to its request.
+        let other_url = request_url_from_id_hex(
+            crate::kat_lease_client::DEFAULT_SERVICE_URL,
+            &"ab".repeat(16),
+        );
+        let wrong = hex_encode(&crate::kat_lease_client::qr_commitment(&other_url).unwrap());
+        let tampered = parse_invoice(&invoice_json(&wrong)).unwrap();
+        assert!(matches!(
+            recheck_invoice_qr(&tampered, &url),
+            QrRecheck::Mismatch { .. }
+        ));
+        // And a garbage-but-nonzero slot is a refusal, never a pass.
+        let junk = parse_invoice(&invoice_json("deadbeef")).unwrap();
+        assert!(matches!(
+            recheck_invoice_qr(&junk, &url),
+            QrRecheck::Mismatch { .. }
+        ));
+    }
+
+    /// A mismatch REFUSES to render the invoice body (Proposal 011 §1).
+    /// Printing the amount beside a tamper warning is the screenshot that
+    /// rule exists to prevent, so assert the figures are ABSENT.
+    #[cfg(feature = "kat_transport")]
+    #[test]
+    fn a_mismatch_refuses_to_display_the_invoice_body() {
+        let inv = parse_invoice(&invoice_json(&"ab".repeat(32))).unwrap();
+        let lines = invoice_display_lines(
+            &inv,
+            &QrRecheck::Mismatch {
+                stored_hex: "ab".repeat(32),
+                recomputed_hex: "cd".repeat(32),
+            },
+        );
+        let joined = lines.join("\n");
+        assert!(joined.contains("REFUSED"), "{joined}");
+        assert!(joined.contains("tamper indicator"), "{joined}");
+        assert!(
+            !joined.contains("1.500000"),
+            "a refused invoice must not print its amount: {joined}"
+        );
+        // Assert the BODY LABELS are absent rather than the field values:
+        // a value-substring check false-fired on the fixture, because a
+        // 32-byte digest rendered as repeated "cd" contains the payer's
+        // repeated "cd". Labels are the stable discriminator.
+        for label in ["payee:", "payer:", "token:", "amount:", "settled:"] {
+            assert!(
+                !joined.contains(label),
+                "a refused invoice must not print the `{label}` row: {joined}"
+            );
+        }
+
+        // The two rendering states DO carry the body, and label the QR leg
+        // differently — an unverified display must never read as verified.
+        let matched = invoice_display_lines(
+            &inv,
+            &QrRecheck::Match { digest_hex: "ef".repeat(32) },
+        )
+        .join("\n");
+        assert!(matched.contains("1.500000 KAT"), "{matched}");
+        assert!(matched.contains("bit-exact"), "{matched}");
+        let unavailable = invoice_display_lines(
+            &inv,
+            &QrRecheck::Unavailable { reason: "no digest".to_string() },
+        )
+        .join("\n");
+        assert!(unavailable.contains("1.500000 KAT"), "{unavailable}");
+        assert!(
+            unavailable.contains("NOT bit-exact-verified"),
+            "the fallback must SAY it is a fallback: {unavailable}"
+        );
+    }
+
+    /// Caveat-#15 copy rule over EVERY new display surface and EVERY
+    /// recheck state: no `$` anywhere, and the KAT figure is labelled
+    /// service credit.
+    #[cfg(feature = "kat_transport")]
+    #[test]
+    fn invoice_display_obeys_the_copy_rule_in_every_recheck_state() {
+        let inv = parse_invoice(&invoice_json(&"0".repeat(64))).unwrap();
+        let states = [
+            QrRecheck::Match { digest_hex: "ab".repeat(32) },
+            QrRecheck::Unavailable { reason: "unset".to_string() },
+            QrRecheck::Mismatch {
+                stored_hex: "ab".repeat(32),
+                recomputed_hex: "cd".repeat(32),
+            },
+        ];
+        for state in &states {
+            for line in invoice_display_lines(&inv, state) {
+                assert!(!line.contains('$'), "no dollars beside KAT: {line}");
             }
         }
-        let line = invoice_line(&Mock, &"ab".repeat(16));
-        assert!(!line.contains('$'), "no dollars beside KAT: {line}");
-        assert!(line.contains("1.500000 KAT"), "the amount renders: {line}");
+        // The rendering states must LABEL the credit (caveat #15's other
+        // half: an accrual figure without the service-credit label is the
+        // exposure, not just the `$`).
+        for state in &states[..2] {
+            let joined = invoice_display_lines(&inv, state).join("\n");
+            assert!(joined.contains("service credit"), "{joined}");
+        }
+        assert!(!invoice_line(&inv).contains('$'));
+        assert!(invoice_line(&inv).contains("1.500000 KAT"));
     }
 
     /// The full flow against a scripted mock: create → parse the id →
@@ -558,10 +957,16 @@ mod tests {
         .expect("flow completes");
         assert_eq!(outcome.id_hex, "71b5cbf13626d2554aba7d9b06e63474");
         assert_eq!(outcome.amount_micro, 1_500_000);
+        let Some(SettleOutcome::Invoice(inv)) = outcome.settled.as_ref() else {
+            panic!("the poll must have read the invoice row: {:?}", outcome.settled);
+        };
+        // The exact compact line stays pinned (T1.3's golden copy).
         assert_eq!(
-            outcome.settled.as_deref(),
-            Some("paid: 1.500000 KAT from cdcdcdcd… — invoice 71b5cbf13626d2554aba7d9b06e63474")
+            invoice_line(inv),
+            "paid: 1.500000 KAT from cdcdcdcd… — invoice 71b5cbf13626d2554aba7d9b06e63474"
         );
+        assert_eq!(inv.amount_paid_micro, 1_500_000);
+        assert!(inv.qr_commitment_is_unset(), "the mock serves the unset sentinel");
         assert!(outcome.url.ends_with("/payreq/71b5cbf13626d2554aba7d9b06e63474"));
     }
 
