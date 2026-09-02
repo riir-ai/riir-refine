@@ -72,6 +72,104 @@ pub fn create_message(payee_pubkey: &[u8; 32], amount: i64, label: &[u8]) -> Vec
     msg
 }
 
+/// The label every faucet-preset request carries — MIRROR of
+/// `riir_dapps::kat::payreq::FAUCET_LABEL` (§11: "a payreq whose label is
+/// `faucet`"). It rides the canonical request id, so a faucet request and
+/// a pay request opened by the same account in the same tick get
+/// different ids by construction.
+pub const FAUCET_LABEL: &str = "faucet";
+
+/// MIRROR of dapps `faucet_message` (T1.8, ask 11) — the exact signed
+/// bytes: `kat:payreq:faucet:v1:` ‖ `requester_pubkey[32]`. Signed by the
+/// REQUESTER: only the key holder opens a faucet request on their own
+/// account.
+///
+/// **The amount is deliberately NOT in the message.** A faucet request is
+/// pinned server-side to the deployment's `faucet_daily_cap_kat`, so there
+/// is nothing for a requester to choose and nothing for an attacker to
+/// inflate by replaying a captured signature at a different value — the
+/// opposite discipline from `settle_message`, where the amount is INSIDE
+/// the signature precisely because the payer chooses it.
+///
+/// **Do not drift**: the service verifies over its own composer, and the
+/// golden digest test ([`tests::faucet_message_golden_digest`]) holds the
+/// two sides together.
+#[must_use]
+pub fn faucet_message(requester_pubkey: &[u8; 32]) -> Vec<u8> {
+    let mut msg = Vec::with_capacity(21 + 32);
+    msg.extend_from_slice(b"kat:payreq:faucet:v1:");
+    msg.extend_from_slice(requester_pubkey);
+    msg
+}
+
+/// The faucet-request signed body — `POST /payreq/faucet`.
+///
+/// The wire carries the pubkey and the signature and **nothing else**: no
+/// amount (the ledger pins it), no ttl (`link_ttl_secs` does), no account
+/// (derived from the signed pubkey). Composed as a named function rather
+/// than inline so the "no amount on the wire" property is pinned by a test
+/// ([`tests::the_faucet_body_carries_no_amount_and_no_ttl`]) instead of by
+/// a code reading.
+#[must_use]
+pub fn faucet_request_body(key: &ed25519_dalek::SigningKey) -> String {
+    use ed25519_dalek::Signer as _;
+    let pubkey = key.verifying_key().to_bytes();
+    let signature = key.sign(&faucet_message(&pubkey));
+    serde_json::json!({
+        "pubkey_hex": hex_encode(&pubkey),
+        "signature_hex": hex_encode(&signature.to_bytes()),
+    })
+    .to_string()
+}
+
+/// The opened faucet request — the 200 body of `POST /payreq/faucet`.
+///
+/// `amount_micro` is the ledger's, echoed back: the CLI **displays** it and
+/// never proposes it. A zero here is not "any amount" (the pay-request
+/// convention) — it means the row read back without one, which the caller
+/// treats as unusable rather than as a free pass.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FaucetRequest {
+    /// The canonical request id, hex (32 chars).
+    pub id_hex: String,
+    /// The amount the ledger pinned (micro-units).
+    pub amount_micro: i64,
+    /// The `link_ttl`-derived deadline, in the ledger's tick domain.
+    pub expiry: u64,
+}
+
+/// Parse the `POST /payreq/faucet` 200 body.
+///
+/// # Errors
+///
+/// A human-readable string when the body is not JSON, carries the
+/// service's `error`, or is missing a field. A refusal body is surfaced
+/// verbatim — the ledger's four honest refusals (faucet disabled, service
+/// account, daily cap used, an open request already exists) are the
+/// operator's actual answer and must not be reworded into a timeout.
+pub fn parse_faucet_request(body: &[u8]) -> Result<FaucetRequest, String> {
+    let v: serde_json::Value = serde_json::from_slice(body)
+        .map_err(|_| "the faucet response was not JSON".to_string())?;
+    if let Some(err) = v.get("error").and_then(serde_json::Value::as_str) {
+        return Err(format!("the service refused the faucet request — {err}"));
+    }
+    Ok(FaucetRequest {
+        id_hex: v
+            .get("request_id")
+            .and_then(serde_json::Value::as_str)
+            .ok_or("the faucet response carried no `request_id`")?
+            .to_string(),
+        amount_micro: v
+            .get("amount_micro")
+            .and_then(serde_json::Value::as_i64)
+            .ok_or("the faucet response carried no `amount_micro`")?,
+        expiry: v
+            .get("expiry")
+            .and_then(serde_json::Value::as_u64)
+            .ok_or("the faucet response carried no `expiry`")?,
+    })
+}
+
 /// The shareable link (ask 13 — link-first): `{base}/payreq/{32 hex}` with
 /// any trailing `/` on the configured base trimmed (the
 /// `kat_lease_client::payment_url` base rule, mirrored).
@@ -145,6 +243,13 @@ pub trait PayreqTransport {
     /// `GET /payreq/{id}/invoice` → 200 with the invoice JSON (404 until
     /// settled).
     fn get_invoice(&self, id_hex: &str) -> HttpResponse;
+    /// `POST /payreq/faucet` (signed JSON body) → 200 with
+    /// `{"request_id","created","kind":"faucet","amount_micro","expiry"}`.
+    ///
+    /// Deliberately NOT given a default implementation: a defaulted method
+    /// is an absence that compiles, and this one moves money. Every
+    /// transport states its faucet posture explicitly.
+    fn post_faucet(&self, json: &str) -> HttpResponse;
 }
 
 /// The ureq HTTP transport over the shared service base URL (the
@@ -224,6 +329,10 @@ impl PayreqTransport for HttpPayreqTransport {
 
     fn get_invoice(&self, id_hex: &str) -> HttpResponse {
         self.get(&format!("/payreq/{id_hex}/invoice"))
+    }
+
+    fn post_faucet(&self, json: &str) -> HttpResponse {
+        self.post_json("/payreq/faucet", json)
     }
 }
 
@@ -624,6 +733,141 @@ mod tests {
         );
     }
 
+    /// THE cross-repo faucet golden (riir-dapps `tests/kat_payreq.rs`
+    /// `faucet_message_golden_digest` asserts the SAME two digests): the
+    /// T1.8 faucet-request message the signed route verifies.
+    ///
+    /// Both digests were computed **independently of either
+    /// implementation** — `b3sum` over the documented byte layout
+    /// (`kat:payreq:faucet:v1:` ‖ 32 pubkey bytes), and the method was
+    /// validated first by reproducing the already-pinned
+    /// `create_message` golden above bit-for-bit. Copying the service's
+    /// number would have pinned the copy, not the contract.
+    #[test]
+    fn faucet_message_golden_digest() {
+        let digest = |pk: &[u8; 32]| {
+            let mut h = blake3::Hasher::new();
+            h.update(&faucet_message(pk));
+            h.finalize().to_hex().to_string()
+        };
+        // 0x5A — the fixture riir-dapps' own faucet test uses.
+        assert_eq!(
+            digest(&[0x5Au8; 32]),
+            "acaeeffeb97116e50054b545c0f1ce77ca45ddcfe39b0a2d26876ffc650af3dd"
+        );
+        // 0x09 — the SAME key the create golden pins, so cross-domain
+        // separation is provable at a shared key rather than inferred
+        // from two unrelated fixtures.
+        assert_eq!(
+            digest(&[9u8; 32]),
+            "d3907ac379aa29f437a5439e29efa724934093f8d62ae43d71e4006fa7b8ee02"
+        );
+    }
+
+    /// The layout the golden is a digest OF — asserted separately so a
+    /// re-pin cannot quietly change the shape, and so the four payreq
+    /// domains are pinned mutually distinct at one key.
+    #[test]
+    fn faucet_message_is_domain_separated_and_carries_no_amount() {
+        let pk = [0x5Au8; 32];
+        let msg = faucet_message(&pk);
+        assert!(msg.starts_with(b"kat:payreq:faucet:v1:"));
+        assert_eq!(msg.len(), 21 + 32, "domain + pubkey, nothing else");
+        assert_eq!(&msg[21..], &pk, "the requester's key is the whole payload");
+        assert_ne!(
+            faucet_message(&[0x5Bu8; 32]),
+            msg,
+            "a different requester is a different message"
+        );
+        // A faucet signature must not be replayable as a create (and the
+        // reverse), including at the amount-0 "any amount" create.
+        assert_ne!(create_message(&pk, 0, FAUCET_LABEL.as_bytes()), msg);
+        assert!(!create_message(&pk, 0, FAUCET_LABEL.as_bytes())
+            .starts_with(b"kat:payreq:faucet:v1:"));
+    }
+
+    /// The wire body carries the pubkey + signature and NOTHING else.
+    ///
+    /// Pinned as a KEY-SET assertion rather than a spot check: an
+    /// `amount_micro` slot appearing here later would let a requester
+    /// propose their own faucet amount, which is exactly the replay the
+    /// amount-free message exists to prevent — and a per-field check
+    /// would not have noticed a *new* field at all.
+    #[test]
+    fn the_faucet_body_carries_no_amount_and_no_ttl() {
+        let key = ed25519_dalek::SigningKey::from_bytes(&[0x11u8; 32]);
+        let body = faucet_request_body(&key);
+        let v: serde_json::Value = serde_json::from_str(&body).expect("valid JSON");
+        let mut keys: Vec<&str> = v
+            .as_object()
+            .expect("object")
+            .keys()
+            .map(String::as_str)
+            .collect();
+        keys.sort_unstable();
+        assert_eq!(
+            keys,
+            ["pubkey_hex", "signature_hex"],
+            "the faucet wire is pubkey + signature ONLY — no amount, no ttl, no account"
+        );
+        assert_eq!(v["signature_hex"].as_str().map(str::len), Some(128));
+        assert_eq!(v["pubkey_hex"].as_str().map(str::len), Some(64));
+        // And the signature verifies over the mirrored message.
+        use ed25519_dalek::Verifier as _;
+        let sig_bytes = {
+            let hex = v["signature_hex"].as_str().unwrap();
+            let mut out = [0u8; 64];
+            for (i, b) in out.iter_mut().enumerate() {
+                *b = u8::from_str_radix(&hex[i * 2..i * 2 + 2], 16).expect("hex");
+            }
+            out
+        };
+        let pubkey = key.verifying_key();
+        pubkey
+            .verify(
+                &faucet_message(&pubkey.to_bytes()),
+                &ed25519_dalek::Signature::from_bytes(&sig_bytes),
+            )
+            .expect("the body's signature verifies over faucet_message");
+    }
+
+    /// The faucet 200 parse + the four honest refusals surfacing verbatim.
+    #[test]
+    fn parse_faucet_request_reads_the_pinned_amount_and_surfaces_refusals() {
+        let ok = serde_json::json!({
+            "request_id": "ab".repeat(16),
+            "created": true,
+            "kind": "faucet",
+            "amount_micro": 5_000_000,
+            "expiry": 4242,
+        })
+        .to_string();
+        assert_eq!(
+            parse_faucet_request(ok.as_bytes()),
+            Ok(FaucetRequest {
+                id_hex: "ab".repeat(16),
+                amount_micro: 5_000_000,
+                expiry: 4242,
+            })
+        );
+        for reason in [
+            "payreq: the faucet is disabled at this deployment (faucet_daily_cap_kat = 0)",
+            "payreq: service accounts cannot request from the faucet",
+            "payreq: faucet daily cap already used for this account today",
+            "payreq: an open faucet request already exists for this account",
+        ] {
+            let body = serde_json::json!({"error": reason}).to_string();
+            let err = parse_faucet_request(body.as_bytes()).expect_err("a refusal is an error");
+            assert!(
+                err.contains(reason),
+                "the ledger's own refusal must survive verbatim, got {err:?}"
+            );
+        }
+        // A missing amount is an error, never a zero-amount faucet.
+        let no_amt = serde_json::json!({"request_id": "ab".repeat(16), "expiry": 1}).to_string();
+        assert!(parse_faucet_request(no_amt.as_bytes()).is_err());
+    }
+
     /// The account derivation mirrors the sync plane (`submitter_for`):
     /// `blake3(pk)[..16]`, hex on the wire.
     #[test]
@@ -939,6 +1183,11 @@ mod tests {
                     .into_bytes(),
                 )
             }
+            fn post_faucet(&self, _json: &str) -> HttpResponse {
+                // This mock scripts the PAY-request flow only. The faucet
+                // channel (T1.8) has its own mocks in `kat_wetrun`.
+                unimplemented!()
+            }
         }
 
         let key = ed25519_dalek::SigningKey::from_bytes(&[0xC5; 32]);
@@ -985,6 +1234,11 @@ mod tests {
             fn get_invoice(&self, _id: &str) -> HttpResponse {
                 unimplemented!()
             }
+            fn post_faucet(&self, _json: &str) -> HttpResponse {
+                // This mock scripts the PAY-request flow only. The faucet
+                // channel (T1.8) has its own mocks in `kat_wetrun`.
+                unimplemented!()
+            }
         }
         let key = ed25519_dalek::SigningKey::from_bytes(&[1u8; 32]);
         let err = pay_request_flow(
@@ -1024,6 +1278,11 @@ mod tests {
                 )
             }
             fn get_invoice(&self, _id: &str) -> HttpResponse {
+                unimplemented!()
+            }
+            fn post_faucet(&self, _json: &str) -> HttpResponse {
+                // This mock scripts the PAY-request flow only. The faucet
+                // channel (T1.8) has its own mocks in `kat_wetrun`.
                 unimplemented!()
             }
         }
