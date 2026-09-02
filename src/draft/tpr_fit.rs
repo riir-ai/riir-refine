@@ -219,21 +219,6 @@ fn ratio(num: usize, den: usize) -> f64 {
     }
 }
 
-/// Distinct `(role, filler)` pairs present in a binding corpus.
-///
-/// Upstream's [`filler_role_spread`] already computes this internally as the
-/// numerator of its `mean`, but does not expose it; counting here keeps the
-/// consumer reading a primary quantity rather than un-multiplying a mean.
-fn distinct_role_filler_pairs(bindings: &[TprBindings]) -> usize {
-    let mut pairs: Vec<(u16, u16)> = bindings
-        .iter()
-        .flat_map(|b| b.roles.iter().copied().zip(b.fillers.iter().copied()))
-        .collect();
-    pairs.sort_unstable();
-    pairs.dedup();
-    pairs.len()
-}
-
 /// Build the fit corpus from a Bench 062 population.
 ///
 /// Deduplicates by text hash for the same reason Bench 062's protocol does:
@@ -655,21 +640,6 @@ pub struct SpaceReport {
     /// than as its threshold so a NEAR-degenerate corpus is visible too;
     /// upstream [`FillerRoleSpread`] since katgpt-rs Issue 711.
     pub spread: FillerRoleSpread,
-    /// Distinct `(role, filler)` pairs the corpus actually contains, counted
-    /// from the bindings themselves.
-    ///
-    /// The denominator of the **evidence** bound on Issue 062 T4 route (b):
-    /// every probe ratio is measured on these pairs only, so it certifies
-    /// nothing about the `n_roles * spread.fillers - distinct_pairs` pairs
-    /// that never occur. That is a gap in what has been measured, NOT a limit
-    /// on the mechanism — generalizing to unseen pairs is what TPR is for.
-    ///
-    /// Counted rather than derived as `spread.mean * spread.fillers`: this is
-    /// the primary quantity and that product is a float round-trip through a
-    /// mean. Reading a number off a derived aggregate instead of the artifact
-    /// that produced it is what put an uncoalesced covariate against a
-    /// coalesced ratio in this issue's own T4 note.
-    pub distinct_pairs: usize,
     pub ds: Vec<usize>,
     pub grid: Vec<GridPoint>,
     /// BIC over the admissible `d`s only — scoring inadmissible candidates
@@ -837,7 +807,6 @@ pub fn run(
         n_fillers: corpus.vocab.fillers.len(),
         role_census,
         spread: corpus.spread,
-        distinct_pairs: distinct_role_filler_pairs(&corpus.bindings),
         ds: ds.to_vec(),
         grid,
         bic,
@@ -900,10 +869,10 @@ pub fn print_space_report(r: &SpaceReport) {
     let space = r.n_roles * r.spread.fillers;
     println!(
         "  evidence:    {} of {} (role,filler) pairs occur = {:.1}% covered, {:.1} states/pair;          withheld-pair testable on {} of {} filler(s)",
-        r.distinct_pairs,
+        r.spread.distinct_pairs,
         space,
-        100.0 * ratio(r.distinct_pairs, space),
-        ratio(r.n_states, r.distinct_pairs),
+        100.0 * ratio(r.spread.distinct_pairs, space),
+        ratio(r.n_states, r.spread.distinct_pairs),
         r.spread.multi_role_fillers,
         r.spread.fillers
     );
