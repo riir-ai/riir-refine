@@ -1,7 +1,7 @@
 # Issue 061 — Proposal 011 rollout: the KAT product loop (pay-request, genesis ceremony, deploy UX, wet-run, onboarding)
 
-Status: **OPEN (2026-09-01) — Phase 0 LANDED + Phase 1's T1.1/T1.3 LANDED
-2026-09-02** (T0.1 + T0.5 + the ledger/payreq halves of T0.4: riir-dapps
+Status: **OPEN (2026-09-01) — Phase 0 LANDED; Phase 1's T1.1/T1.3 LANDED;
+Phase 2's T2.1 + ALL of Phase 3 LANDED 2026-09-02.** Phase 0 (T0.1 + T0.5 + the ledger/payreq halves of T0.4: riir-dapps
 `6df7097`, [Plan 015](../.plans/015_kat011_phase0_payreq_substrate.md) — the
 `kat_payreq` request-ledger rows, invoice rows, signed registration intents,
 first-wins funding bindings, and the KAT-rail one-batch settle seam). **T0.3
@@ -12,6 +12,12 @@ routes + the row-backed limiter). **T1.3 LANDED 2026-09-02** (riir-clippy
 `9a5086a` + the dapps-side create-message golden `0a4d37a` — `cargo heal pay
 --request`). Remaining Phase 0: T0.2b's service half (the `/balance` history
 route now exists to consume).
+**T2.1 + T3.1 + T3.2 + T3.3 LANDED 2026-09-02** (riir-deployer `96009cc`,
+[Plan 003](../../riir-deployer/.plans/003_genesis_params_deploy_ux_node_sync.md) —
+the genesis params pin with drift-FAILS validation, the TTY selector + the
+env-gated mainnet boundary, the `node-sync` fleet gate, and G-DEPLOY RUN on a
+real local 3-node cluster; 155 tests green, +27). Phase 2's remaining T2.2/T2.3
+are OWNER acts, and the dry-run harness they need is shipped.
 The proposal is draft and the phased scope survives the noise-reduction rule via
 this tracker.
 Branch: `develop` (per global rule — no feature branches)
@@ -119,20 +125,82 @@ Proposal 008 (MemoShard).
 
 ## Phase 2 — genesis ceremony (bar)
 
-- [-] T2.1 params yaml + validation against the pinned tokenomics constants (drift
-      FAILS — no silent clamp; 008/010 ratified defaults).
+- [x] T2.1 params yaml + validation against the pinned tokenomics constants (drift
+      FAILS — no silent clamp; 008/010 ratified defaults) — **LANDED 2026-09-02**
+      (riir-deployer `96009cc`,
+      [Plan 003](../../riir-deployer/.plans/003_genesis_params_deploy_ux_node_sync.md)):
+      `riir-deploy genesis --params <f>` + `examples/genesis-{devnet,testnet}.yaml`.
+      `src/genesis.rs` carries a **committed pin** of the ratified set (`RATIFIED` +
+      seven `LeverBoundPin` copies, each field naming its riir-dapps source symbol);
+      `validate()` collects EVERY drift row (field · yaml value · pinned value ·
+      provenance) and FAILS — **no clamp**, and the plan does not print for a refused
+      file. Beyond equality: split partition Σ 10 000, per-share `LeverBound` range,
+      the `epoch_split_bp[1] == staking_share_bp` cross-check, both **saturation**
+      properties (`reward_decay == DECAY_FACTOR.max_bp`, `yield_ceiling ==
+      YIELD_CEILING.max_bp` — genesis on the inflationary extreme, zero agent
+      headroom), the linear authority schedule, pre-mine vs `max_supply`, and the 040
+      topology. **The `decay_factor_bp` SENTINEL is enforced: a numeric value is a
+      hard FAIL** (a baked 9_900 overrides every deployment whose
+      `KatConfig::reward_decay_bp` differs — the bug riir-dapps caught live at decay
+      10 000). **BOUNDARY: no dep edge added** — the deployer's dep row is empty by
+      contract, so the legal move is a copy PLUS a gate (the `dapps_contract_pins`
+      discipline): committed vocabulary (`SIBLING_PINS`, asserted in CI with no
+      sibling) + derived population (`scripts/tokenomics_pin_gate.sh`,
+      `RIIR_DEPLOYER_REQUIRE_DAPPS_PINS=1` makes absence a failure). 25/25 pins
+      verified against riir-dapps **HEAD** (not its worktree — that repo was dirty
+      with this issue's own T1.7/T1.8 session). 13 tests.
 - [-] T2.2 ceremony: keys → chainspec authorship → registry genesis → SSH provision
       (caveat #6 — dry-run-by-default; wrong root key = locked treasury, double mint =
       supply bug; the ceremony is the ONLY sanctioned author of testnet/mainnet.toml —
-      closes the 040 D4 gap).
+      closes the 040 D4 gap). **The dry-run HARNESS is built and shipped** (T2.1
+      above): validated params + the printed four-step plan (owner-held keys →
+      chainspec rows → registry genesis → SSH provision, with the node count named).
+      `genesis --execute` REFUSES, naming this task. **Unblock: OWNER EXECUTES** —
+      this authors real testnet key material and writes to nodes as root (caveat #8);
+      not an agent act.
 - [-] T2.3 testnet ceremony executed once; `testnet.toml` lands.
+      **Unblock: T2.2, then OWNER EXECUTES.**
 
 ## Phase 3 — deploy UX + health
 
-- [-] T3.1 TTY selector + config/version acks (flags-only non-TTY; mainnet hardening —
-      caveat #5: a prompt is not a security boundary).
-- [-] T3.2 `node-sync` probe + 3-node verify gate (reachability + height + sync%).
-- [-] T3.3 G-DEPLOY on a local 3-node cluster.
+- [x] T3.1 TTY selector + config/version acks (flags-only non-TTY; mainnet hardening —
+      caveat #5: a prompt is not a security boundary) — **LANDED 2026-09-02**
+      (riir-deployer `96009cc`, Plan 003): `src/ux.rs` — the destination selector
+      (devnet first, **mainnet last, never the default, never auto-selected even at
+      N=1**) + the two §5 read-back acks (resolved config; artifact version + BLAKE3).
+      Non-TTY is **flags only**: an omitted `--dest` with no terminal is a hard error
+      naming the flag, never a prompt, and the acks print as an audit record (G3-S —
+      the CLI without a TTY is unchanged). **Caveat #5 honored structurally, not
+      rhetorically:** the mainnet gate is `RIIR_DEPLOY_ALLOW_MAINNET` == the
+      destination name EXACTLY (a truthy `1`/`true`/`yes` is REFUSED — a truthy env
+      var is a standing invitation) + `RIIR_DEPLOY_ADMIN_KEY` (the existing `roll.rs`
+      admin substrate, reused) + `--reason`, evaluated BEFORE any prompt and pinned
+      **terminal-independent** by a source-level invariant test (the gate's body may
+      not reference `is_interactive`/`is_terminal`/`read_line`/`select`/`ack`/`stdin`),
+      canaried against a hollow scan. 12 tests.
+- [x] T3.2 `node-sync` probe + 3-node verify gate (reachability + height + sync%) —
+      **LANDED 2026-09-02** (riir-deployer `96009cc`, Plan 003):
+      `VerifySpec::NodeSync`, the FLEET gate beside `chain-height`. Four independent
+      axes per node with named failures — `UNREACHABLE` / `PUBKEY-PIN` (the published
+      pin vs `/node-info`: a re-provisioned host on the old URL is the right address
+      and the wrong node) / `FROZEN` / `BEHIND`, where `sync_bp = height /
+      max(peer_heights)` comes from the probed set's own `/node-info` (no new network
+      service, §6). `expect_nodes` IS the gate — a probe that silently accepts 2 is
+      not a 3-node gate; `0` = all listed, so devnet's 1 node passes trivially.
+- [x] T3.3 G-DEPLOY on a local 3-node cluster — **RAN 2026-09-02** (riir-deployer
+      `96009cc`, record
+      [`.benchmarks/003`](../../riir-deployer/.benchmarks/003_genesis_ux_node_sync_goat.md)):
+      `build` → `deploy --dest local3` spawned **three real `mock-chain` processes** on
+      three loopback ports → `verify` ran the probe through the actual CLI binary.
+      Measured `PASS node-sync — 3/3 node(s) reachable, at height (fleet max 360),
+      synced ≥ 9900bp`; all three failure axes fire (killed → UNREACHABLE naming the
+      node, frozen → FROZEN,BEHIND, stale pin → PUBKEY-PIN), plus the count gate and
+      the selector-degrades clause. Re-run 3×. **One G-DEPLOY clause is NOT run and
+      NOT claimed:** *"a chainspec that `chaind --chain-spec` accepts"* — blocked twice
+      and neither is a harness gap: (1) no authored chainspec exists (authoring one IS
+      T2.2), and (2) `riir-chaind` cannot enter the deployer's build graph
+      (BOUNDARY.md's zero-sibling-dep hard rule). The owner runs that arm at ceremony
+      time from the ceremony runbook. Tracked as Plan 003 T3.3d.
 
 ## Phase 4 — wet-run + foo onboarding
 
@@ -182,11 +250,21 @@ landed the same day**: T1.1 (riir-dapps `f43c014` / Plan 062 — the signed
 `/payreq` routes + the row-backed limiter) and T1.3 (riir-clippy `9a5086a` —
 `cargo heal pay --request`, the payee create + link-first + poll-on-credit loop,
 golden-pinned to the service byte-exactly, dapps-side golden `0a4d37a`).
-Remaining Phase 0: T0.2b's service half (unblocked — `/balance` already
-serves). Next executable: T1.2 (the web wallet — every signed route it needs is
-landed), T1.7/T1.8 (crank + faucet preset — the config-widening plan), then
-Phase 2's ceremony early — bar's dry-run genesis is what puts the mint in the
-wallet every foo gets paid from.
+**Phase 2's T2.1 and ALL of Phase 3 landed the same day** (riir-deployer
+`96009cc` / [Plan 003](../../riir-deployer/.plans/003_genesis_params_deploy_ux_node_sync.md)):
+the genesis params yaml validated against a committed pin of the ratified
+008/010 constants (drift FAILS, nothing clamped; the `decay_factor_bp` sentinel
+enforced; `--execute` refused), the TTY selector + the env-gated mainnet
+boundary (caveat #5 honored structurally — the gate is pinned
+terminal-independent), the `node-sync` fleet gate, and **G-DEPLOY RUN on a real
+local 3-node cluster** with all three failure axes firing. Remaining Phase 0:
+T0.2b's service half (unblocked — `/balance` already serves).
+Next executable: T1.2 (the web wallet — every signed route it needs is landed),
+T1.7/T1.8 (crank + faucet preset — the config-widening plan; **when it lands,
+riir-deployer's `free_tier_daily_micro`/`faucet_daily_cap_micro` move from
+structurally-bounded to PINNED**, per Plan 003's named follow-up). Phase 2's
+T2.2/T2.3 are OWNER acts and their dry-run harness is now shipped — bar's
+dry-run genesis is what puts the mint in the wallet every foo gets paid from.
 
 ## Wait-state verification (2026-09-02)
 
