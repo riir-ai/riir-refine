@@ -168,7 +168,35 @@ did NOT fire. Three caveats that bound what Phase 2 may claim:
   states per pair, so its 18.8% is not an undersampling artifact and more data
   cannot fix it; only pairs that do not occur occurring would. Route (b)'s
   precondition below therefore has two different failure modes to test for, not
-  one. `structured()` is still `Some(true)` and
+  one.
+
+  **Is rustc's coverage a structural bound on route (b)? No — an EVIDENCE bound,
+  and that distinction is what makes it actionable.** A scalar channel fitted on
+  12 of 64 possible pairs does have to act on pairs it has never seen, and it is
+  tempting to call that circular. It is not: acting on unseen `(role, filler)`
+  pairs is what TPR is FOR, and a mechanism being used as intended is not a
+  defect. What IS true is narrower and worse for the current record — the 2.2096
+  ratio was measured on the 12 pairs that occur, so it certifies nothing about
+  the 52 that do not, and route (b) would be fused on the strength of a number
+  that never looked at the regime it will run in.
+
+  Unlike a structural bound, an evidence gap is measurable, and the instrument
+  already ships: `katgpt_core::tpr::withheld_pair_top1_report` (katgpt-rs
+  `8c7ca74b`) — withhold a pair, score against the shared pool, and read
+  `verdict()` / `coverage` rather than the bare `top1`. It is the same test G8
+  runs on a planted corpus, pointed at this one.
+
+  **The one thing that was missing is the population**, now shipped as
+  `FillerRoleSpread::multi_role_fillers` (katgpt-rs `149a0c02`): withholding a
+  pair from a single-role filler withholds the whole FILLER, so only fillers
+  seen with 2+ roles can host the test at all. `max` cannot say how many those
+  are — measured upstream, a corpus at `max 2 / mean 1.1250` had **1 of 8**
+  testable, while G8's planted corpus has 7 of 8. Read `multi_role_fillers` on
+  the rustc arm FIRST: with 8 fillers, `mean 1.500` and `max 4`, the testable
+  population is small by arithmetic and may be 2-3 fillers. If it is, route
+  (b)'s generalization question cannot be answered on this corpus and the honest
+  options are a wider corpus or an explicit decision to fuse on unvalidated
+  generalization — an owner call, made before the fuse and not after. `structured()` is still `Some(true)` and
   the guard is still two-sided, so nothing here is overturned — but "the
   structure exists in the code text" is a thinner claim than it read as when
   only `max` was reported, and it is the claim BOTH routes are built on.
