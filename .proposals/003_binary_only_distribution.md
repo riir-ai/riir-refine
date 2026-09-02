@@ -66,6 +66,38 @@ authentication to download (verified: cargo-dist issue #2267 exists exactly for
 this). The public repo solves it while containing **zero Rust source** — only
 markdown, shell, PowerShell, a Ruby formula, and JSON manifests.
 
+### The canonical install one-liners (Issue 061 T4.3, 2026-09-02)
+
+**This proposal owns the install copy.** Every other document mirrors these
+two lines verbatim; none of them invents a URL. The single source of truth:
+
+```text
+macOS/Linux:  curl -fsSL https://raw.githubusercontent.com/gist-rs/cargo-heal/main/install.sh | sh
+Windows:      iwr -useb https://raw.githubusercontent.com/gist-rs/cargo-heal/main/install.ps1 | iex
+```
+
+Enforced by `tests/install_copy_parity.rs`: any URL in any tracked `*.md`
+that ends in `install.sh`/`install.ps1` and is not one of these two FAILS.
+It is a source-text audit, and it exists because the copy had already
+drifted — [Proposal 005](005_kat_heal_service_network.md)'s TL;DR served both
+installers from the **vanity host `cargo-heal.gist.rs`, which does not
+exist**, while [Proposal 011](011_kat_pay_request_qr_genesis_and_onboarding.md)
+§8.1 advertised the `raw.githubusercontent.com` form. Two documents, two
+one-liners, one of them unrunnable, and nothing to catch it: the copy is a
+string literal in prose and there was no structure for it to disagree with.
+
+**Why `raw.githubusercontent.com` and not the vanity host:** it works the
+moment the dist repo exists, with no DNS record, no TLS certificate and no
+redirect to maintain. `cargo-heal.gist.rs` is a **deferred alias**, not the
+canonical form — promote it here (and re-run the audit) if and when it is
+actually served.
+
+**Neither line is runnable yet, and that is a repo-creation gap, not a copy
+gap.** `gh repo view gist-rs/cargo-heal` on 2026-09-02 answered *"Could not
+resolve to a Repository"* — T1.1 below has never been executed. The audit
+pins what the copy WILL point at; publishing binaries built from private
+source is an owner act.
+
 ### Platform matrix
 
 | Platform | Channel 1 (zero-infra) | Channel 2 (package manager) | Notes |

@@ -9,9 +9,17 @@ Related: [Proposal 001](001_multi_domain_modelless_code_healer.md), [Proposal 00
 
 ## TL;DR
 
-> **Install (1-liners, per Proposal 003's dist repo):**
-> - macOS/Linux: `curl -fsSL https://cargo-heal.gist.rs/install.sh | sh` (or `brew install gist-rs/tap/cargo-heal`)
-> - Windows: `iwr -useb https://cargo-heal.gist.rs/install.ps1 | iex` (or `scoop install gist-rs/cargo-heal`)
+> **Install (1-liners, per [Proposal 003](003_binary_only_distribution.md)'s
+> dist repo — that proposal OWNS this copy; these lines are a verbatim
+> mirror, enforced by `tests/install_copy_parity.rs`):**
+> *(correction, 2026-09-02, Issue 061 T4.3 — these two lines previously read
+> `https://cargo-heal.gist.rs/install.{sh,ps1}`, a **vanity host that does
+> not exist**, while Proposal 011 §8.1 advertised the
+> `raw.githubusercontent.com` form. Two documents, two one-liners, one
+> unrunnable. The package-manager arms were wrong too: the scoop form needs
+> the bucket added first. See 003 §The canonical install one-liners.)*
+> - macOS/Linux: `curl -fsSL https://raw.githubusercontent.com/gist-rs/cargo-heal/main/install.sh | sh` (or `brew tap gist-rs/tap && brew install cargo-heal`)
+> - Windows: `iwr -useb https://raw.githubusercontent.com/gist-rs/cargo-heal/main/install.ps1 | iex` (or `scoop bucket add gist-rs https://github.com/gist-rs/scoop-bucket && scoop install cargo-heal`)
 > - Then: `cargo heal login` → **free 100,000,000 KAT** (**1 KAT = 1 code word token processed** — modelless healing included; ≈ $300 of Claude-equivalent sticker value).
 
 Package the healer as **a metered network with a data flywheel**, not just a binary. **Modelless healing burns KAT — 1 KAT per code word token processed — because a token nothing burns for is a token with no value** (owner's call: the modelless sink IS the token economics). The free grant (100M KAT ≈ $300 of Claude-equivalent value) is consumed by real usage; **code miners** who sync heal data back earn KAT when it proves new value through a deterministic trainer-quorum replay (the game's `split_head` proof, 1..N nodes). **Trainer nodes build corpus from *mined* data only — never live consumer src; the consumer-facing fixer node is explicitly BLOCKED** (quality + consumer-src leak, caveat #2) — with a **Cloudflare Workers AI variant** (`@cf/qwen/qwen3.8-27b`, $0.450/$3.20 per M tokens, REST from the same Worker — no GPU fleet of our own for serving; sole designated model per the 2026-08-26 pivot, carrying the §The daily trainer window thinking-model gates) as the cheaply-re-gateable unblock candidate (Issue 040) — plus a **daily scheduled trainer window** that burns the 10,000-neurons/day free allocation on the unproven queue, Container created for the window and torn down after it so billing is run-window only (§The daily trainer window) **[two dated supersessions, 2026-09-01 alignment: (a) the teardown phrasing above is PRE-correction — the topology is deploy-once, cron-start, sleep-after since 2026-08-26 (§The daily trainer window's own correction); (b) routing is no longer CF-only — Issue 051 (2026-08-31) landed groq-first `LlmRouter` (free leg Groq llama-3.3-70b-fp8-fast, CF fallback; T7's live window absorbed calls at $0.0000 metered / 0 CF neurons), with fixer_regate arms CF-pinned by design]**. Pay with card (Stripe, on a Cloudflare Worker) or **Solana USDC** (Solana Pay QR; `txhash` + reference as mint proof — verification is **new code**, not a reuse of the bridge; the shipped watcher parses nothing). Mining rewards decay per epoch (`InflationSchedule` shape) with a first-discovery bonus — first come, more per serve. The CLI shows balance, accrued-but-unproven mining records, and **$-saved vs Claude per-token pricing** (never a $ figure beside a KAT accrual — caveat #15). This is our design fusing prior art (Solana Pay reference flow, prepaid-credit closed-loop posture, decayed mining rewards); the flywheel composition — heal usage → unproven data → quorum-proven corpus rules → a better healer for everyone → more usage — is the product.

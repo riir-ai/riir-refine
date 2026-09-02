@@ -13,6 +13,7 @@
 | [`boundary_rationale.md`](boundary_rationale.md) | Why this is a separate repo, not a module in riir-ai |
 | [`build_commands.md`](build_commands.md) | CI guard + GOAT benches + feature combos |
 | [`numbering_discipline.md`](numbering_discipline.md) | Monotonic numbers — never reused |
+| [`foo_end_to_end.md`](foo_end_to_end.md) | Proposal 011 §8 onboarding walkthrough — install → login → heal → `pay --request` / `faucet --request` / `wetrun`, with each step marked runnable-now or blocked-and-why |
 
 ## See also
 
