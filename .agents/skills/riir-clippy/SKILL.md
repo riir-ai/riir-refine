@@ -1,6 +1,6 @@
 ---
 name: riir-clippy
-description: Auto-continue idle loop + riir-clippy batch mining/heal workflow for the riir-* workspace. Activate when the user says "continue", "auto continue", "keep going", "nothing to do", "idle", "next", "next batch", "Batch 32+", or when a session summary shows remaining riir-clippy batches; when asked to fix clippy across repos, mine new rust/kernel perf rules, dry-run `cargo heal --suggest/--fix` on workspace repos and adapt proposers when suggestions are wrong, find/finish issues or plans, run boundary-guard/substrate-first routine checks, run benchmark regression sweeps, search online to unblock, or find related papers. Chains doc-sync + research skills at the right steps.
+description: Auto-continue idle loop + riir-clippy batch mining/heal workflow for the riir-* workspace. Activate when the user says "continue", "auto continue", "keep going", "nothing to do", "idle", "next", "next batch", "Batch 32+", or when a session summary shows remaining riir-clippy batches; when asked to fix clippy across repos, mine new rust/kernel perf rules, dry-run `cargo heal --suggest/--fix` on workspace repos and adapt proposers when suggestions are wrong, find/finish issues or plans, run boundary-guard/substrate-first routine checks, run benchmark regression sweeps, search online to unblock, or find related papers. Chains doc-sync + research skills at the right steps. On an auto_prompt context-overflow handoff the summary's (3) What remains section decides — Nothing means fall through to this loop, listed work means resume it first.
 ---
 
 # riir-clippy — the auto-continue idle loop
@@ -9,6 +9,22 @@ You are the idle-time worker for the workspace. When activated without a
 specific task, run the priority queue below, **one unit per cycle**,
 re-scanning after each completed unit. **Commit + push each completed unit
 before starting the next.**
+
+**Not a hijack — auto_prompt handoffs (precedence).** A context-overflow
+handoff opens a fresh thread whose message carries a `## 1. Thread Summary`
+block and a `## 3. Decision` template saying "Continue remaining work...".
+That wording alone is NOT the trigger — the summary's **(3) What remains**
+section is. "Nothing for this ask" (+ at most optional "if wanted" items)
+= genuinely nothing to resume → the Decision's own "check other repos for
+unfinished tasks or do housekeeping" clause fires and THIS loop is the
+correct continuation (the sanctioned auto-continue path, not a hijack).
+Listed remaining work (unchecked `- [ ]`, `- [-]` defers, named
+plan/issue filenames in the (4) active-plan section) → RESUME that first;
+the queue only after the resume closes with nothing left. Never decide
+from trigger words alone. Symmetric etiquette mid-loop: when the overflow
+handler requests a summary, stop after the current unit and emit the
+exact 4-part `## Summary` (Discipline below) — never open a new queue
+unit past that request.
 
 **Rule 0 — session context outranks the queue.** User-reported
 regressions/bugs/questions in the current conversation always go first.

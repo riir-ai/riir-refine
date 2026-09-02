@@ -2894,6 +2894,10 @@ targets, sibling-blocked files, corpus count) lives in
 2026-08-18 after it grew to 104KB and broke Zed's loader) and is
 updated in the same commit as each batch. Triggers: "continue",
 "auto continue", "idle", "nothing to do", "next batch", "Batch 32+".
+Auto_prompt handoffs are gated by the handoff summary's (3) What
+remains section — "Nothing" falls through to the loop (the sanctioned
+auto-continue path), listed work resumes first (the skill's precedence
+rule, 2026-09-02).
 **Issue 019 RESOLVED 2026-08-16 (removed per noise-reduction rule; gap
 analysis in git history — `git log -- .issues/019_*.md`):** T6's full
 clean cycle completed via queue items 10–13 — item 10 defer-marking sweep
