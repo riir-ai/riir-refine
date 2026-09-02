@@ -740,3 +740,63 @@ rule — not of a particular corpus size, which is the stronger version of
 `tests/t063_tpr_structure.rs` passes on the ported harness; the two-sided
 canary (`kernel_opt` fires the guard, `clippy_lints`/`rustc_errors` do not)
 holds unchanged.
+
+### 12.7 The evidence bound, measured: rustc can host the test on 2 of 8 fillers
+
+`.issues/062` T4 asked for one number before either route is built —
+`FillerRoleSpread::multi_role_fillers` on the rustc arm — because withholding a
+pair from a single-role filler withholds the whole **filler**, so only fillers
+seen with 2+ roles can host a withheld-pair test at all. The consumer did not
+surface it; it does now, on the arm each number belongs to rather than in a
+roll-up (§12.6's arm-mismatch is why).
+
+Coalesced, 256-D, at BIC's `d = 1`:
+
+| arm | testable fillers | distinct pairs | pair space | covered | states/pair |
+|---|---|---|---|---|---|
+| `clippy_lints` | **13 / 45** | 62 | 270 | 23.0% | 1.8 |
+| `rustc_errors` | **2 / 8** | 12 | 64 | 18.8% | 17.7 |
+| `kernel_opt` | **0 / 453** | 453 | 5436 | 8.3% | 1.0 |
+
+**The answer is 2 — the bottom of the range T4 named.** The rustc arm's 2.2096
+is the strongest structure signal in this bench, and the OOD test that would
+tell us whether it generalizes can draw on two fillers. That is not a verdict
+against route (b); it is the absence of the evidence route (b) would be fused
+on, which is what an evidence bound means. The uncoalesced rustc arm is no
+better — max 6 / mean 1.750 looks healthier on the threshold and still yields
+**2 of 8** testable, which is precisely the `max`-vs-`multi_role_fillers` gap
+katgpt-rs `149a0c02` was added to expose.
+
+`clippy_lints` is the opposite shape and the one route (b) can actually
+interrogate: 13 testable fillers, but 1.8 states per pair, so each pair's
+contribution is roughly a single sample. Thinly observed, not thinly covered —
+and unlike rustc, more corpus fixes it.
+
+**`distinct_pairs` is counted from the bindings, and it AGREES with §12.6's
+derived `fillers × mean`** (clippy 62 vs 62.01, rustc 12 vs 12.00). Recorded
+because the point of counting primarily was never that the derivation was
+suspect — it was that a derived aggregate cannot be arm-checked after the fact.
+Here it confirms rather than corrects.
+
+### 12.8 What corpus growth did to the guarded arm
+
+Between the §12.4 run (445 `kernel_opt` states) and this one (453, sibling
+batch `93b7448`), the cross-state control on `kernel_opt / tokenbag256
+[coalesced]` moved **1.0147 → 1.0512** and crossed `STRUCTURE_EPS = 0.05`, so
+that probe now reports `degraded = true` on the arm whose role is a
+deterministic function of its filler.
+
+Stated precisely, because the tempting overstatement is wrong: this is **not** a
+false positive that the Issue 711 guard caught. `structured()` is the
+conjunction of both probes and `bow_router` still reads `false` (0.9525), so
+the arm lands on `Some(false)` with or without the guard. What it does show is
+what "unreadable, not false" means operationally — a probe on a corpus where
+the structure question is not posed produced a **threshold crossing from corpus
+growth alone**, with the covariate completely unmoved (`max = 1`,
+`mean = 1.000` at 453 exactly as at 445). Read on its own, that row now says
+"breaking the pairing costs something" about a corpus with no pairing to break.
+
+The guard's value is therefore that `STRUCTURED` reads `None`, not that any
+single number changed. A consumer reading `cross_state.degraded` directly —
+which is what this harness did before Issue 711 — would now be reading a signal
+manufactured by eight extra rules.

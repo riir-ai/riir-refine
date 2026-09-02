@@ -180,6 +180,21 @@ did NOT fire. Three caveats that bound what Phase 2 may claim:
   the 52 that do not, and route (b) would be fused on the strength of a number
   that never looked at the regime it will run in.
 
+  **MEASURED 2026-09-02 (Bench 063 §12.7): `multi_role_fillers` on the rustc arm
+  is 2 of 8.** The consumer did not surface the field; it does now, alongside
+  the pair-coverage arithmetic, printed per arm. The answer is the bottom of the
+  2-3 range this section anticipated, so route (b)'s generalization question
+  **cannot be answered on this corpus** — the OOD test that would validate the
+  2.2096 signal can draw on two fillers. The uncoalesced arm is no better (max 6
+  / mean 1.750 reads healthier on the threshold, still 2 of 8 testable), which
+  is exactly the gap `multi_role_fillers` was added to expose. `clippy_lints` is
+  the tractable arm instead: 13 of 45 testable, but 1.8 states per distinct pair,
+  so it is thinly observed rather than thinly covered and more corpus fixes it.
+  **Owner call, unchanged in shape but now priced:** widen the rustc corpus, run
+  route (b) against clippy only, or fuse on unvalidated generalization and say
+  so. Not a blocker on the mechanism — an absence of the evidence the fuse would
+  rest on.
+
   Unlike a structural bound, an evidence gap is measurable, and the instrument
   already ships: `katgpt_core::tpr::withheld_pair_top1_report` (katgpt-rs
   `8c7ca74b`) — withhold a pair, score against the shared pool, and read
