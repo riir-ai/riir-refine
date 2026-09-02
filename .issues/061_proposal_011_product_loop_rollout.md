@@ -1,8 +1,14 @@
 # Issue 061 — Proposal 011 rollout: the KAT product loop (pay-request, genesis ceremony, deploy UX, wet-run, onboarding)
 
-Status: **OPEN (2026-09-01) — Phase 0 LANDED; Phase 1's T1.1/T1.3/T1.4/T1.8
-LANDED; Phase 2's T2.1 + ALL of Phase 3 LANDED; Phase 4's T4.1/T4.2/T4.3
-LANDED 2026-09-02.** Phase 4's engineering half is complete (riir-clippy
+Status: **OPEN (2026-09-02) — Phases 0, 1 and 3 COMPLETE; Phase 2's T2.1 and
+Phase 4's T4.1/T4.2/T4.3 LANDED. Every remaining row (13) is gated on an
+owner act, ops creds, or counsel — no engineering unblock exists in any repo.**
+Phase 1 closed out 2026-09-02 with T1.2/T1.5 (riir-dapps `db69499`),
+T1.6 (`faa05d0`) and T1.7 (`891f9fd`) — those four rows had LANDED but still
+read `[-]` here, because each dapps unit was instructed not to edit this shared
+tracker while a sibling held it and left its replacement row in its own plan's
+§Remaining, where nobody applied them. Corrected in this commit; the lesson is
+that "the row text is in my plan" is not the same as "the tracker is true".** Phase 4's engineering half is complete (riir-clippy
 `d72bbb6` + `aecef31` + `1016754` + `9b0e777` + riir-dapps `1736010`,
 [Plan 066](../.plans/066_kat011_t18_faucet_cli_and_phase4_wetrun.md)): the
 faucet preset, the six-step wet-run harness with G-WET (mint/burn asserted
@@ -122,11 +128,28 @@ Proposal 008 (MemoShard).
       any-amount self-pay conservation + honest refusals + open-limit), ledger
       goldens 14/14, clippy clean. Expiry (`link_ttl`) stays T1.8 — the row has
       no expiry slot this phase, documented in the plan.
-- [-] T1.2 the web wallet on the kat-service host: GitHub OAuth → `.keys` fetch →
-      key-match → session → press-and-hold SEND (**server-enforced min-hold** — the
-      client's 3 s is cosmetic until the worker enforces `held_ms ≥ 3000`) → settle →
-      invoice row. **The root/genesis float stays CLI-only.** The settle/resolve
-      signed routes it needs are T1.1's (landed).
+- [x] T1.2 the web wallet on the kat-service host: GitHub OAuth → `.keys` fetch →
+      key-match → session → press-and-hold SEND (**server-enforced min-hold**) →
+      settle → invoice row. **The root/genesis float stays CLI-only.** —
+      **LANDED 2026-09-02** (riir-dapps `db69499`,
+      [Plan 016](../../riir-dapps/.plans/016_kat011_t12_web_wallet_and_t15_adversarial_suite.md)):
+      `cloudflare/kat-service/src/wallet.rs` — the min-hold is a **server-stamped,
+      single-use press row** (`katsvc:whold:`) whose `started` is the host clock and
+      whose token is keyed by an ops secret; `held = now_tick − row.started` with
+      **NO `held_ms` anywhere on the wire**, and the row BINDS
+      `(session, request_id, from, amount)`. Enforced threshold is **4 s, not 3**: the
+      host clock resolves to 1 s and floor subtraction under-measures, so 4 is the
+      smallest value that cannot admit a sub-3 s hold; the server reports it and the
+      page animates from it. GitHub OAuth rides an `OauthProvider` trait seam — real
+      impl `cfg(wasm32)`, scripted mock in the suite — so **live creds are an ops
+      item, not a blocker**; the three vars fail closed at 503 unset. Key-match derives
+      every published `ssh-ed25519` key through `account_for_pubkey` and binds only
+      ledger-known accounts. OAuth `state` is keyed + time-bucketed — **zero
+      unauthenticated state writes** (caveat #7). Consumes T1.1's `payreq_settle`: no
+      second state machine. **Honest limit** (in the module doc, not hidden): the
+      server proves ≥ the minimum elapsed between a *server-issued* press-start and
+      its release and that exactly one send consumes it — it cannot prove a finger was
+      on a button, which no stateless HTTP protocol can.
 - [x] T1.3 clippy `pay --request [--amount]` (KAT default; blank = any amount) +
       link-first (`--qr` fallback) + poll-on-credit (riir-clippy half — after T1.1) —
       **LANDED 2026-09-02** (riir-clippy `9a5086a`; dapps-side create-message
@@ -165,13 +188,64 @@ Proposal 008 (MemoShard).
       `kat_lease_client::qr_commitment` of the canonical request URL — filling it
       with a PNG hash or different params would make every invoice display as a
       tamper.
-- [-] T1.5 G1-S/G-WEB money + auth + adversarial suite (replay, session theft, amount
-      manipulation, self-pay, hold-bypass, root-float refusal).
-- [-] T1.6 Stripe/USDC rails as MOCK tests only (five-check machinery against
-      fixtures; no live rail this phase).
-- [-] T1.7 the daily grant crank (alarm pass, `(account, utc_date)` exactly-once,
+- [x] T1.5 G1-S/G-WEB money + auth + adversarial suite (replay, session theft, amount
+      manipulation, self-pay, hold-bypass, root-float refusal) — **LANDED 2026-09-02**
+      (riir-dapps `db69499`, Plan 016): **19** wallet contract tests over the same
+      handlers the DO runs (kat-service `--lib` 20 → 39). Root-float refusal is proven
+      for **all five** service accounts by rebuilding the config so each slot in turn
+      IS the wallet's matched account. Money paths assert the **WHOLE `Meta` struct**
+      bit-unchanged (the T1.7 G-CRANK pattern), not a field subset. All 39 passed
+      first run, so **each gate was re-broken to prove it fires** (body-`held_ms`
+      → min-hold test fails; refusal removed → root-float test fails; press not
+      deleted → replay + happy-path fail). Remaining G-WEB rung: the SSH-signature
+      challenge for large sends (caveat #9 rung 3) — the ceiling refusal ships
+      instead.
+- [x] T1.6 Stripe/USDC rails as MOCK tests only (five-check machinery against
+      fixtures; no live rail this phase) — **LANDED 2026-09-02** (riir-dapps
+      `faa05d0`, [Plan 017](../../riir-dapps/.plans/017_kat011_t16_rails_mock_g_reg_matrix.md)):
+      `tests/kat_rails_mock.rs`, **test-only** (`src/kat/{solana,stripe}.rs`
+      byte-unchanged). The five-check core is **CONSUMED not copied** — `reg_claim`
+      delegates (d)(b)(c) to `solana::verify_checks` with the intent row's own
+      `min_amount`, source capture to `staking::funding_address`, (e) to
+      `record_mint_demand`'s dedupe, the binding to `bind_funding`'s FIRST-WINS — and
+      **no threshold is weakened**, pinned two ways (the core still rejects at +1 base
+      unit, and the harness verdict is asserted EQUAL to a direct `verify_checks` call
+      on **both** the accept and the reject arm). **21 run / 0 failed / 5 ignored**
+      (counts reported separately — an `#[ignore]`d test also reads as "passing" in a
+      merged number). Eight of the ten §12 cases are fixture-covered; the five
+      remaining arms are `#[ignore]`d with the unblock named **in the attribute**
+      (T5.1's watcher for the invoice row and the `memo_missing` flag; Issue 059 T2.2
+      for the outbound refund; ops creds for the two live rails). Instrument
+      revert-probed twice (threshold −1 → 2 failures; credited amount +1 → 7
+      failures). Pinned rows held: `kat_ledger` 14/0, default suite 111.
+- [x] T1.7 the daily grant crank (alarm pass, `(account, utc_date)` exactly-once,
       activity gate, budget cap) + G-CRANK. **A GRANT crank via M2 treasury-first —
-      never a mint faucet; the amount joins the 008 never-lever free-grant family.**
+      never a mint faucet; the amount joins the 008 never-lever free-grant family.** —
+      **LANDED 2026-09-02** (riir-dapps `891f9fd`,
+      [Plan 015](../../riir-dapps/.plans/015_kat011_t18_faucet_expiry_and_t17_grant_crank.md)):
+      `src/kat/crank.rs`. **Never a mint faucet structurally — no path in the module
+      reads or writes `Meta`**; every KAT is a treasury debit against a user credit in
+      one `CommitBatch`. Consumes the Proposal 010 M2 machinery rather than
+      duplicating it, and deliberately does NOT call `KatLedger::grant` (that surface
+      refuses on the `granted` flag, so it cannot serve a repeatable daily credit).
+      **G-CRANK PASSES**: mint/burn bit-unchanged asserted on the **whole `Meta`
+      struct** (so a future counter is covered without an edit) plus Σ-balance
+      conservation, verified in the substrate AND at the route boundary; a replayed
+      alarm yields `credited: 0, skipped_already: N`. One **documented divergence**:
+      the crank is treasury-**ONLY** — at/below `treasury_grant_floor` it *skips and
+      alerts* rather than taking `grant`'s M2 mint fallback, because a mint escape
+      hatch on a recurring unattended per-account path is exactly what caveat #2
+      forbids; that makes the guard unconditional. **The DO alarm did not exist** —
+      Plan 013's route table and AGENTS.md both described one, grep found zero
+      `set_alarm` hits repo-wide; this lands the first real one (self-arming, re-arming
+      *before* the work, hourly-not-daily since the pass is idempotent per date) and
+      corrects the stale doc claim in place. Tests: `kat_crank` **16/0**, `kat_payreq`
+      18/0, kat-service `--lib` 20/0, `kat_ledger` 14/0 unmoved, default 111.
+      ⚠️ **Inert in production until riir-dapps Issue 010 T2**: with
+      `treasury_grant_floor == max_supply` the treasury-debit path is structurally
+      unreachable, so the crank currently skips every account every day. Pinned by
+      `riir-dapps/tests/kat_grant_reachability.rs`; the fix is an owner supply
+      decision.
 - [x] T1.8 `faucet --request` preset + `faucet_daily_cap_kat` enforcement + `link_ttl`
       expiry (expired = settle-refused) — **LANDED 2026-09-02**. Service half
       riir-dapps `891f9fd`; CLI half riir-clippy `d72bbb6` (the signing mirror +
