@@ -198,6 +198,40 @@
     external measured confirmation on HIP v_perm_b32, MI300X 1.9–2.9× decode rows;
     CDNA-vs-RDNA MMVQ geometry regime). Source verdict upgraded to A- at mine time
     (measured HIP rows + upstream PR 26980 lineage).**
+  - **NEW 2026-09-02 late (league opponent watch #5, M3 lane — zero perf movement on the
+    fork, upstream M3 Max fa-vec tuning LANDED):** fork `origin/prism` moved only 3
+    commits past the pin `e311ed38f`, all docs (CONTRIBUTING/AGENTS ×2) — **the pinned
+    opponent binary stays valid, no re-pin**. Upstream ggml-org since 08-25: ~26 Metal
+    commits, ONE load-bearing for this box — `8963a9bdc` (08-28, #27863) adds
+    `fa_vec_tuned_table` rows for **M3 Max** (F16 + Q8_0; 64 GB MacBook Pro, low-power
+    mode) to `ggml-metal-tuning.cpp` — AFTER the fork pin, fork does not carry it.
+    League reading: (a) all scored cells remain FAIR (both sides untuned at measure
+    time); (b) the opponent bar is now POTENTIALLY STALE — any future re-pin at
+    upstream absorbs per-(device, dtype, head_dim, ne11/ne01-bucket) fa-vec launch
+    tuning and the attributable-delta rule applies to every flash-attention cell;
+    (c) the fork policy (read-only vendor binary, owner call Issue 782) is unchanged
+    by this — record only. **Distill lead (kernel_opt, mechanism class):**
+    `fa-vec` tuning-table dispatch — per-device/per-dtype/per-(dk,dv)/per-context-bucket
+    swept launch-parameter tables for the flash-attention vector kernels + the
+    `ggml-metal-tuning fa-vec` autotune sweep harness that generates them — vs our
+    two-point length gate (m16 <8192 ≤ / m32 ≥8192) on the tiled flash; the swept
+    multi-bucket axis is the richer shape. The rest of the upstream Metal movement is
+    the same mechanism for OTHER chips (M1/M1 Max/M1 Ultra/M2/M2 Pro/M2 Max/M3 Pro/
+    M3 Ultra/M4/M4 Pro/A18 Pro — ~15 commits) + `d5d993a09` Metal 4.0 tensor API on
+    M5+/A19+ (next-silicon external confirmation of the matrix-core-attention family
+    note in Issue 831's disposition) + `2a74817f9` top-k radix (sampling path, not our
+    hot loop).
+  - **NEW 2026-09-02 late (MLX watch, `../vendor/mlx` 37c26e5 → 90846ad):** three
+    Metal-kernel leads adjacent to our lanes: (1) `f99e916` #4416 — head-dim-256
+    prefill with array mask now runs the FUSED kernel path (Bonsai IS hd=256 — read
+    for what gated the fallback); (2) `685dba9` #4431 — `sdpa_vector_2pass_1_gqa`
+    batch-offset fix for K/V in GQA decode — cross-check target for OUR split-K
+    decode pair (Bench 831 `QwenAttentionDecodeGatedSplit{,Combine}`, G1 0/512 flips;
+    their bug class = per-batch K/V offset in the 2-pass split — verify our combine
+    indexing is offset-clean by inspection); (3) `bbf8a7a` #4380 — widens the 2-pass
+    GQA decode kernel to GQA sizes 12/16 (threshold data for when split-K pays —
+    ours fires >512 pos regardless of GQA). Not yet mined; low-priority leads (our
+    decode lane is league-defended, prefill is the open prize).
   - **LANDED 2026-09-02 (Batch 97, Research 117 addendum / Plan 063): antirez/ds4
     (DwarfStar) distill — 9 rules, corpus 426 → 435 (N+1 E+2 C+2 H+1 M+1 A+1 F+1).**
     Pin `110afdd8`; quotes re-verified byte-accurate; provenance vs upstream
