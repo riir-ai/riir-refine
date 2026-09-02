@@ -559,7 +559,9 @@ written with a number in hand.
 
 ### 12.1 Why this arm and not another
 
-`kernel_opt` was §2's *motivating* corpus (426 rules, the largest) and the
+`kernel_opt` was §2's *motivating* corpus (the largest; 445 distinct states at
+the revision measured here, and actively growing — read every count in this
+section as of `02e907e`, not as a property of the corpus) and the
 reason the scheme decision came out the way it did — rule identity had to go on
 the filler axis because `n_bind_slots == arity` caps roles at the block count
 and 426 roles against `D = 8` is inadmissible on its face. But no
@@ -600,3 +602,89 @@ survives when the role stops being derivable from the state.
   change T4's recommendation on its own — the clippy 8-D measurement stands —
   but it would mean "the 8-D state cannot host this structure" needs restating
   per domain rather than as a property of the width.
+
+### 12.4 Results — P15 refuted, and the refutation does NOT mean what §12.3 said it would
+
+Run: `--release --features tpr_structure --test t063_tpr_structure`, in an
+isolated worktree (a concurrent session's in-flight `src/modelability.rs` did
+not compile at the time; the worktree is `--detach` at `02e907e` with only this
+change applied, so the isolation is from a broken sibling file, not from the
+tree under test).
+
+| # | prediction | outcome |
+|---|---|---|
+| **P12** | `kernel_opt` inadmissible at every `d` in the 8-D consumer space, coalesced and not | **CONFIRMED.** Both arms `admissible_d = []`. `K = m·d ≥ D` at `d = 1` with `m = 15` vs `D = 8`, and coalescing at `T = 8` merged only 4 categories (sizes 4, 5, 5, 4) to `m' = 12`, still far above 8. |
+| **P13** | the 256-D control admissible at every `d` | **CONFIRMED coalesced** (all four `d`, `K = 96 < 256` at the worst, 3,773–28,392 params against 113,920 observations); **HALF on the uncoalesced arm** — `d ∈ {1, 2}` only, killed at `d ∈ {4, 8}` by the per-role bound exactly as the prediction's own caveat said it would be. |
+| **P14** | BIC picks `d = 1` | **CONFIRMED**, a third time, monotone in `d`. |
+| **P15** | control arm structured, ratio above clippy's 1.1417 | **REFUTED, and in the direction that matters.** `bow_router` **0.9307** (`structured = false`) and cross-state **1.0147** (`degraded = false`). Not merely below clippy — below 1.0, the same `r_bow < r_full` signature §11.2 found in the flat 8-D consumer space. |
+| **P16** | `moved > 0`, `vacuous = false` on every arm that ran | **CONFIRMED.** `moved = 383/445` on `kernel_opt`. The Issue 710 machinery worked exactly as intended — which is what makes this section necessary. |
+
+**§12.3's first bullet is hereby retracted, not triggered.** It said a flat
+unconfounded arm would mean §11's control-space structure is substantially the
+§11.7 confound, and that §11.3's "rustc is the most structured arm" should be
+discounted. That inference requires `kernel_opt` to be a *valid test of role
+structure*, and it is not:
+
+```
+             states/filler   bow_router   cross-state
+kernel_opt          1.00        0.9307        1.0147
+clippy_lints        2.51        1.1417        1.0693
+rustc_errors       26.50        2.2096        2.6661
+```
+
+`kernel_opt` has `n_fillers == n_states == 445`: every rule id occurs in
+exactly one state, and every rule belongs to exactly one declared category, so
+**the role is a deterministic function of the filler**. TPR's claim is
+systematicity — generalizing to unseen `(role, filler)` pairs — and here there
+are none. The corpus is **outside the scheme's domain of applicability**, not
+inside it and unstructured. A flat reading off it is not evidence about the
+confound; it is not evidence about anything.
+
+So the honest verdict is narrower than either §12.2 or §12.3 anticipated:
+
+- **T5's original prediction remains untested.** "kernel_opt categories
+  possibly weaker than rule-level" cannot be tested on this population under
+  this scheme, because the two axes are not independent. Testing it needs a
+  corpus where one rule id appears under more than one category, or a different
+  role axis (a *derived* shape class over `ref_shape`, which would work — and
+  would re-import §11.7's confound, which is presumably why the declared
+  category looked attractive).
+- **§11.7 is neither confirmed nor discounted.** This arm cannot speak to it.
+- **A new caution applies to §11.3.** Both probes are monotone in
+  states-per-filler across all three arms. That is the shape of a capacity
+  effect: the `m`-role model has `m` core blocks against the null's 1, so with
+  few fillers over many states (rustc: 8 over 212) the extra blocks buy
+  expressiveness whether or not any composition is being learned. This does not
+  overturn §11.3 — the cross-state control is params-neutral and rustc degrades
+  hard on it (2.6661) — but "most structured arm" and "arm with the most
+  filler reuse" are not distinguished by anything measured here, and §11.3
+  should not be cited as if they were.
+
+### 12.5 A third vacuity mode, and it is now instrumented
+
+Issue 710 established that a control's report must carry whether the control
+could have failed. This arm is the sharper case: **a control can be perfectly
+capable of failing and still measure the wrong thing.** `moved = 383/445` — the
+permutation worked, neither `vacuous` flag fired, and the reported number does
+not answer the question being asked of it.
+
+Shipped here rather than left as prose:
+
+- `FitCorpus::role_is_a_function_of_filler()` — every filler seen with `≤ 1`
+  distinct role — with `filler_roles` (distinct roles per filler) as the
+  underlying covariate, computed once by `filler_role_counts` and used by both
+  the plain and the coalesced corpus (coalescing can only lower it, and
+  lowering it to 1 is exactly what would make a verdict unreadable).
+- `SpaceReport::structured()` returns **`None`** on it, joining the two Issue
+  710 vacuity flags. `kernel_opt` therefore reports `structured = None`, not
+  `Some(false)`.
+- `print_space_report` prints `max roles/filler` and `states/filler` on every
+  arm, so a *near*-degenerate corpus is visible too — the threshold alone would
+  have called `kernel_opt` and a healthy corpus identical until the last filler
+  tipped over.
+
+Filed upstream as katgpt-rs **`.issues/711`** (`08310b4c`), which is where the
+predicate belongs: any consumer of `bow_router` / `shuffled_role_control` /
+`withheld_pair_top1` can hit this, and `withheld_pair_top1` is affected hardest
+— withholding a pair withholds the whole filler, so its OOD arm is not a harder
+version of the ID arm but a different question.

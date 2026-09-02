@@ -20,7 +20,7 @@
 
 use riir_clippy::draft::tpr_fit::{ProbeStatus, StateSpace, print_space_report, run};
 use riir_clippy::draft::withheld_pair_ood::{
-    Binding, clippy_population, rustc_errors_population,
+    Binding, clippy_population, kernel_opt_population, rustc_errors_population,
 };
 
 /// The Plan 049 T0.1 committed real-repo dataset — the only source of genuine
@@ -71,21 +71,27 @@ fn t063_tpr_structure_admissibility() {
     // BIC scores incomparable.
     let threshold = DS.iter().copied().max().expect("grid non-empty");
 
+    // T5b: `kernel_opt` is the third arm and the only one whose role is
+    // DECLARED metadata rather than a class derived from the span text, so it
+    // is the one arm outside §11.7's confound.
+    type Pop = (&'static str, fn() -> Vec<Binding>);
+    const POPS: [Pop; 3] = [
+        ("clippy_lints", clippy_pop),
+        ("rustc_errors", rustc_errors_population),
+        ("kernel_opt", kernel_opt_population),
+    ];
+
     let mut arms = Vec::new();
-    for space in StateSpace::ALL {
-        arms.push(run(clippy_pop(), space, "clippy_lints", &DS, None));
-        arms.push(run(rustc_errors_population(), space, "rustc_errors", &DS, None));
-    }
     let mut coalesced = Vec::new();
     for space in StateSpace::ALL {
-        coalesced.push(run(clippy_pop(), space, "clippy_lints", &DS, Some(threshold)));
-        coalesced.push(run(
-            rustc_errors_population(),
-            space,
-            "rustc_errors",
-            &DS,
-            Some(threshold),
-        ));
+        for (domain, pop) in POPS {
+            arms.push(run(pop(), space, domain, &DS, None));
+        }
+    }
+    for space in StateSpace::ALL {
+        for (domain, pop) in POPS {
+            coalesced.push(run(pop(), space, domain, &DS, Some(threshold)));
+        }
     }
 
     for r in &arms {
@@ -250,8 +256,44 @@ fn t063_tpr_structure_admissibility() {
                  draw, so its verdict is vacuous too",
                 r.n_states
             );
+
+            // §12.5: the composition guard must agree with its own covariate,
+            // and — with both probes non-vacuous — must be the ONLY thing that
+            // can make the verdict unreadable.
+            let b = r.bow.as_ref().expect("probes ran");
+            assert!(!b.vacuous, "{tag}: the BoW null IS this arm's own fit");
+            assert_eq!(
+                r.role_is_fn_of_filler,
+                r.max_filler_roles <= 1,
+                "{tag}: the guard disagrees with the covariate it reads"
+            );
+            assert_eq!(
+                r.structured().is_none(),
+                r.role_is_fn_of_filler,
+                "{tag}: with both probes live, a verdict is unreadable exactly \
+                 when role = f(filler) (max roles/filler {})",
+                r.max_filler_roles
+            );
         }
     }
+
+    // §12.5 canary: the guard must be TWO-SIDED on this corpus. A guard that
+    // never fires was never tested; one that always fires would void every
+    // verdict in the bench. `kernel_opt` supplies the first, clippy/rustc the
+    // second — which is the whole reason the third arm earns its place.
+    let ran: Vec<_> = arms
+        .iter()
+        .chain(coalesced.iter())
+        .filter(|r| r.probe_status == ProbeStatus::Ran)
+        .collect();
+    assert!(
+        ran.iter().any(|r| r.role_is_fn_of_filler),
+        "the role = f(filler) guard never fires — it cannot have been tested"
+    );
+    assert!(
+        ran.iter().any(|r| !r.role_is_fn_of_filler),
+        "the role = f(filler) guard fires on every arm — it would void the bench"
+    );
 
     // ── the preregistered verdict, printed not asserted ─────────────────
     println!("\n=== §6 verdict inputs ===");

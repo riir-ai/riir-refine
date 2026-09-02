@@ -455,13 +455,23 @@ impl AtomicNull {
 
 // ── population ──────────────────────────────────────────────────────────
 
-/// One (role, filler) binding: a rule id, its shape-class label, the span
-/// text, and where the datum came from.
+/// One binding: a rule id, its shape-class label, the span text, and where
+/// the datum came from.
+///
+/// **The two consumers assign the role/filler axes OPPOSITELY, on purpose.**
+/// This protocol's withheld-pair arms treat `rule` as the thing being
+/// retrieved (the "role" in [`ArmRow::role_fillers`]); the TPR fit in
+/// [`crate::draft::tpr_fit`] does the reverse — role = `shape`, filler =
+/// `rule` — because `n_bind_slots == arity` in `TprScheme::Orthogonal` caps
+/// the role count at the number of blocks, while the filler count is
+/// unconstrained, and only the filler axis can carry `kernel_opt`'s 426 rule
+/// ids (Bench 063 §2, the forced scheme decision). Check which axis a
+/// consumer means before reading a census off it.
 #[derive(Debug, Clone)]
 pub struct Binding {
-    /// The role — rule id / lint name / error code.
+    /// The rule id / lint name / error code. TPR **filler** axis.
     pub rule: String,
-    /// The filler — a shape-class label (see [`classify_shape`]).
+    /// A shape-class label (see [`classify_shape`]). TPR **role** axis.
     pub shape: &'static str,
     /// The span text (what gets indexed / queried).
     pub text: String,
@@ -531,6 +541,38 @@ pub fn rustc_errors_population() -> Vec<Binding> {
     for c in floor::MUTANT_CASES {
         let broken = c.broken().expect("anchor mutation site present");
         out.push(Binding::rustc(c.expect_code, broken, "anchor"));
+    }
+    out
+}
+
+/// The `kernel_opt` population (Issue 062 T5b): 426 GPU-optimization rules
+/// over their declared categories. Role = the [`KernelCategory`], filler = the
+/// rule id, text = the reference (slow) kernel shape.
+///
+/// This arm is the one that can answer T5's untested prediction ("kernel_opt
+/// categories possibly weaker than rule-level"), and it is **methodologically
+/// the strongest of the three** for a reason worth stating: its role is
+/// DECLARED corpus metadata, not a label derived from the span text. The
+/// clippy and rustc arms compute their shape class from the same text the
+/// state is hashed from, which is Bench 063 §11.7's stated-not-fixed confound
+/// — a role there is partly readable off the state. Here it is not, so a
+/// structure verdict on this arm is not exposed to that objection.
+///
+/// [`KernelCategory`]: crate::domains::kernel_opt::KernelCategory
+#[cfg(feature = "kernel_heal")]
+#[must_use]
+pub fn kernel_opt_population() -> Vec<Binding> {
+    let cats = crate::domains::kernel_opt::corpus::build_corpus_categorized();
+    let mut out = Vec::with_capacity(cats.iter().map(|(_, rs)| rs.len()).sum());
+    for (cat, rules) in cats {
+        for r in rules {
+            out.push(Binding {
+                rule: r.rule_id,
+                shape: cat.as_str(),
+                text: r.ref_shape,
+                source: "corpus",
+            });
+        }
     }
     out
 }

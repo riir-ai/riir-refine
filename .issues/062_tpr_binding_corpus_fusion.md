@@ -189,14 +189,36 @@ did NOT fire. Three caveats that bound what Phase 2 may claim:
   deeper compositionality.
   Original text retained:
   **BoW-null router per domain:** *(prior measured by Bench 062: `rustc_errors` roles are 6/8 single-filler, so m=1 shared-role ALS should show little residual gain there; `clippy_lints` has 13 multi-filler roles)* fit the m=1 shared-role ALS per corpus; residual ratio `r_bow/r_full < 1+ε` ⇒ that domain carries no binding structure ⇒ structured machinery skipped there. Records a per-domain structure verdict (prediction to test: clippy_lints strongly structured; kernel_opt categories possibly weaker than rule-level).
-- [ ] **T5b** **`kernel_opt` population for the structure harness.** The §2
-  scheme decision makes its 426 rules *expressible* (rule identity is the
-  filler axis, whose count is unconstrained — this was the blocker), but no
-  kernel_opt population exists in `withheld_pair_ood`'s builders, so T5's
-  per-domain table has no kernel_opt row and T5's original prediction about it
-  ("categories possibly weaker than rule-level") is untested. Corpus plumbing,
-  not new mechanism: add a `kernel_opt_population()` beside
-  `clippy_population()` / `rustc_errors_population()` and re-run Bench 063.
+- [x] **T5b** **`kernel_opt` population — LANDED** (Bench 063 §12, preregistered
+  at `b1472a4` before any output was read). `kernel_opt_population()` ships
+  beside the other two builders; `tpr_structure` now pulls `kernel_heal`
+  (which gates `domains::kernel_opt`) rather than cfg'ing the arm away, because
+  an arm that silently disappears on a feature is the vacuous-instrument
+  failure this bench exists to avoid.
+  **The row exists and T5's original prediction is still untested — for a
+  reason that is itself the finding.** `kernel_opt` binds 445 rule ids over 445
+  states, each rule in exactly one declared `KernelCategory`, so **the role is
+  a deterministic function of the filler**: there is no unseen `(role, filler)`
+  pair to generalize to, and systematicity — TPR's whole claim — is not posed,
+  let alone answered. P15 was refuted (0.9307 / 1.0147, both below the bar) but
+  §12.3's planned confound-discount is **retracted rather than triggered**: the
+  inference needed this arm to be a valid test of role structure and it is not.
+  Testing T5's prediction needs a corpus where one rule id appears under more
+  than one category, or a *derived* shape class over `ref_shape` — which would
+  re-import §11.7's confound the declared category was chosen to escape.
+  **New instrument, shipped:** `FitCorpus::role_is_a_function_of_filler()` +
+  the `filler_roles` covariate; `SpaceReport::structured()` returns `None` on
+  it, joining the two Issue 710 vacuity flags, and the printed table carries
+  `max roles/filler` on every arm so a *near*-degenerate corpus is visible too.
+  The test pins the guard **two-sided** — it must fire on some arm and not on
+  all, so a dead guard and an always-on guard both red the suite.
+  Filed upstream as katgpt-rs `.issues/711` (`08310b4c`).
+  **New caution on §11.3, recorded not resolved:** both probes are monotone in
+  states-per-filler across all three arms (1.00 → 0.93, 2.51 → 1.14, 26.50 →
+  2.21), which is the shape of a capacity effect. It does not overturn §11.3
+  (the cross-state control is params-neutral and rustc degrades hard at 2.6661)
+  but "most structured arm" and "arm with the most filler reuse" are not
+  distinguished by anything measured here.
 
 - [ ] **T6** **Counterfactual surgery on LatentFixMemory trajectories:** for score-bench persist-miss spans, surgery-swap the rule/domain filler and ask closed-form "would domain X / rule Y have healed this span?" — complements Bench 032's re-run-based switch-cost measurement with a zero-recompute counterfactual; feeds the post-mining intake (`.distill/001_mining_queue_snapshot.md`) with attributed misses.
 

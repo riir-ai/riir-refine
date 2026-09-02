@@ -173,7 +173,12 @@ latent_retrieval = ["dep:riir-rag", "dep:riir-neuron-db"]
 # Opt-in and measurement-only: no default code path, no retrieval path
 # touched. `latent_retrieval` supplies the 8-D consumer state embedder
 # (`riir_rag::ModellessEmbedder`), which is the arm whose result can feed T4.
-tpr_structure = ["katgpt-core/tpr", "latent_retrieval", "clippy_lints"]
+# `kernel_heal` is in the set for the corpus, not the healer: it is what gates
+# `domains::kernel_opt`, whose rules over their DECLARED categories are the
+# one arm whose role is not derived from the span text (Issue 062 T5b). Listed
+# rather than cfg'd away in the test, because an arm that silently disappears
+# on a feature is the vacuous-instrument failure this bench exists to avoid.
+tpr_structure = ["katgpt-core/tpr", "latent_retrieval", "clippy_lints", "kernel_heal"]
 
 # Plan 019 T0.3: the retrieval-free apply→check→revert substrate shared by
 # `fix_verify` (the `--fix --verify` batch gate) and the `rustc_errors`
