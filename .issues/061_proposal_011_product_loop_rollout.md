@@ -1,7 +1,19 @@
 # Issue 061 — Proposal 011 rollout: the KAT product loop (pay-request, genesis ceremony, deploy UX, wet-run, onboarding)
 
-Status: **OPEN (2026-09-01) — Phase 0 LANDED; Phase 1's T1.1/T1.3 LANDED;
-Phase 2's T2.1 + ALL of Phase 3 LANDED 2026-09-02.** Phase 0 (T0.1 + T0.5 + the ledger/payreq halves of T0.4: riir-dapps
+Status: **OPEN (2026-09-01) — Phase 0 LANDED; Phase 1's T1.1/T1.3/T1.4/T1.8
+LANDED; Phase 2's T2.1 + ALL of Phase 3 LANDED; Phase 4's T4.1/T4.2/T4.3
+LANDED 2026-09-02.** Phase 4's engineering half is complete (riir-clippy
+`d72bbb6` + `aecef31` + `1016754` + `9b0e777` + riir-dapps `1736010`,
+[Plan 066](../.plans/066_kat011_t18_faucet_cli_and_phase4_wetrun.md)): the
+faucet preset, the six-step wet-run harness with G-WET (mint/burn asserted
+BIT-unchanged over the whole counter struct), the no-override mainnet refusal,
+the measured `--dry-run` read-only proof, and the install-copy pin. **T4.4 is
+the only Phase 4 row left and it is an owner act** (the genesis ceremony, T2.2
+/T2.3); the wet-run's money legs are additionally blocked by riir-dapps
+**Issue 010** (the treasury grant floor equals max supply, so the daily crank
+skips every account) — the harness FAILS loudly and diagnostically on that
+path rather than retrying or reporting a pass.
+Phase 0 (T0.1 + T0.5 + the ledger/payreq halves of T0.4: riir-dapps
 `6df7097`, [Plan 015](../.plans/015_kat011_phase0_payreq_substrate.md) — the
 `kat_payreq` request-ledger rows, invoice rows, signed registration intents,
 first-wins funding bindings, and the KAT-rail one-batch settle seam). **T0.3
@@ -160,8 +172,31 @@ Proposal 008 (MemoShard).
 - [-] T1.7 the daily grant crank (alarm pass, `(account, utc_date)` exactly-once,
       activity gate, budget cap) + G-CRANK. **A GRANT crank via M2 treasury-first —
       never a mint faucet; the amount joins the 008 never-lever free-grant family.**
-- [-] T1.8 `faucet --request` preset + `faucet_daily_cap_kat` enforcement + `link_ttl`
-      expiry (expired = settle-refused).
+- [x] T1.8 `faucet --request` preset + `faucet_daily_cap_kat` enforcement + `link_ttl`
+      expiry (expired = settle-refused) — **LANDED 2026-09-02**. Service half
+      riir-dapps `891f9fd`; CLI half riir-clippy `d72bbb6` (the signing mirror +
+      wire parse) + `aecef31` (`faucet_request_flow` + `cargo heal faucet
+      --request [--qr]`), [Plan 066](../.plans/066_kat011_t18_faucet_cli_and_phase4_wetrun.md).
+      The **golden digest is pinned on BOTH repos** to numbers computed
+      independently of either implementation (`b3sum` over the documented byte
+      layout `kat:payreq:faucet:v1:` ‖ pubkey[32]; the method validated by first
+      reproducing the already-pinned `create_message` golden bit-for-bit) — the
+      dapps-side half is riir-dapps `1736010`, which did not exist before and
+      whose absence the client's own doc comment had already claimed away.
+      **The command deliberately refuses `--amount` and `--wait`:** the wire
+      carries neither (the ledger pins the amount to `faucet_daily_cap_kat` and
+      the TTL to `link_ttl_secs`), and the credit lands at the DAILY crank, so
+      a poll would be either a lie or a day-long hang. A pinned amount of 0 is
+      an ERROR rather than the pay-request "any amount" convention — otherwise a
+      faucet-disabled deployment would open an unbounded request.
+      **A real hole closed on the way:** `HttpPayreqTransport` dropped the body
+      of every non-200, and every payreq refusal IS a non-200 carrying
+      `{"error": "<the operator's words>"}` — so the documented "the four honest
+      refusals survive verbatim" contract was **unreachable on the deployed
+      path** while every mock-driven test passed. `refusal_body_or_status` now
+      carries a JSON error body through (POST arms only; the GET arms answer 404
+      for the ordinary not-settled-yet case and their callers already have
+      per-state copy for it).
 
 ## Phase 2 — genesis ceremony (bar)
 
@@ -244,14 +279,111 @@ Proposal 008 (MemoShard).
 
 ## Phase 4 — wet-run + foo onboarding
 
-- [-] T4.1 `wetrun` harness (steps 1–6) + G-WET. **Caveat #2 is load-bearing: the
+- [x] T4.1 `wetrun` harness (steps 1–6) + G-WET. **Caveat #2 is load-bearing: the
       refund is FAUCET-funded, never mint/burn-pool — the G-WET assertion (mint/burn
-      counters bit-unchanged) is the money-printer guard.**
-- [-] T4.2 mainnet refusal (unit + live, NO override by design) + `--dry-run`
-      read-only proof.
-- [-] T4.3 install.sh copy alignment (gist-rs/cargo-heal — the 003 surface, NOT
-      riir-clippy releases) + foo end-to-end doc.
+      counters bit-unchanged) is the money-printer guard.** — **LANDED 2026-09-02**
+      (riir-clippy `aecef31` + `1016754`,
+      [Plan 066](../.plans/066_kat011_t18_faucet_cli_and_phase4_wetrun.md)):
+      `src/kat_wetrun.rs` — the six §7 steps as a **pure step machine** over a
+      transport trait, plus `HttpWetrunTransport`, and
+      `tests/kat_wetrun_gwet.rs` (11/11) driving it against a scripted service
+      that models the ledger and **records every call**.
+      **How caveat #2 is enforced:** `SupplyCounters` (the wire view of
+      riir-dapps' `Meta`, read from `GET /telemetry?epoch=`) carries a
+      **total-function `to_bytes`**, so G-WET compares **bytes over the WHOLE
+      struct** — "bit-unchanged" is literal, and a counter added later is covered
+      without an edit anywhere (the riir-dapps G-CRANK `Meta` discipline).
+      `size_of` is crossed against `ENCODED_LEN`, so a field added without
+      extending the encoding **reds the gate** instead of escaping it; one
+      divergence probe per field proves each field actually moves the bytes; the
+      epoch rides IN the encoding so two epochs cannot compare as unchanged; and
+      a missing counter parses as an ERROR, never a zero (a zeroed mint counter
+      is exactly the reading that makes a printer look frozen). A full run that
+      cannot read both snapshots is a FAIL, not a pass.
+      **Step 3 is a REAL cycle**: the actual `clippy_lints` proposers over a
+      seeded dirty fixture through the actual `KatMeter`/`KatCharge` (a
+      fabricated spend would make the harness measure itself), and a zero-fix
+      cycle FAILS rather than recording a vacuous zero. **Step 4** enforces
+      redact ≥ floor in the HARNESS, not the composer (a composer that both
+      builds a payload and vouches for its redaction is one structure agreeing
+      with itself), refuses a 200 without a `recorded` count, and reports a
+      missing `latent_retrieval` build as a FAILURE rather than a skip.
+      Steps 1/6 reuse **T0.2b's landed reads verbatim** (three-state
+      `WelcomeGate`); the per-node reachability/height/sync% table stays
+      riir-deployer's `node-sync` (T3.2) and is **pointed at, not forked**.
+      **Every gate canaried** — a moved mint micro flips the verdict while every
+      step still passes; a money leg inside the dry-run branch reds the call-log
+      assertion; reordering `classify_faucet_leg` reds the Issue-010 ordering
+      test. That second canary also exposed that `Step::in_dry_run` was
+      DECORATIVE (widening it changed nothing), so `finish` now refuses a
+      dry-run report containing a money leg.
+      **BLOCKER, NOT PAPERED OVER — riir-dapps [Issue 010](../../riir-dapps/.issues/010_treasury_grant_floor_equals_max_supply_unreachable_path.md):**
+      `TREASURY_GRANT_FLOOR_DEFAULT == MAX_SUPPLY_PLACEHOLDER` (both 10¹²), so
+      the treasury-ONLY crank skips every account every day and **steps 2/5 (the
+      faucet legs) cannot succeed against a genesis-default deployment**.
+      `classify_faucet_leg` checks `skipped_treasury` **before every other skip
+      reason** (it marks a misconfigured DEPLOYMENT; the others mark a correctly
+      refused ACCOUNT — conflating them is how "the faucet does nothing, forever"
+      reads as "not eligible today"), and `issue_010_diagnostic` FAILS with the
+      issue number, both constants, `STRUCTURALLY UNREACHABLE`, `NOT retryable`,
+      the owner-act unblock, and what makes the legs reachable meanwhile. **No
+      retry, no wait-it-out, never a pass** — pinned by a test asserting the
+      write log is exactly one faucet open plus one crank attempt, the local legs
+      never ran, and no supply counter moved. The happy-path tests state in their
+      module docs that they script an **explicitly lowered**
+      `treasury_grant_floor`. **No riir-dapps constant was touched** — the
+      replacement value is a supply decision (Issue 010 T2, an owner act).
+- [x] T4.2 mainnet refusal (unit + live, NO override by design) + `--dry-run`
+      read-only proof — **LANDED 2026-09-02** (riir-clippy `aecef31` +
+      `1016754`). **There is no override at all.** Per caveat #2 a
+      `RIIR_ALLOW_MAINNET_WETRUN` would be "an attack on our own bookkeeping",
+      so `src/kat_wetrun.rs` reads the environment **nowhere** — pinned by a
+      source-level audit that strips line comments (its first cut failed on this
+      module's own docs naming the hatch that must not exist) and canaries its
+      predicate in both directions. The crank bearer is read in `heal.rs`, never
+      there. **Live-verified**: with `RIIR_ALLOW_MAINNET_WETRUN`,
+      `RIIR_DEPLOY_ALLOW_MAINNET` and `RIIR_HEAL_ALLOW_MAINNET` all exported at
+      once, `cargo heal wetrun` still exits 2 with `REFUSED`. Classification is
+      **fail-closed**: an unplaceable host is refused exactly like mainnet —
+      including the production default `kat.heal.gist.rs`, which carries no
+      network word (the safe answer, not an oversight). A refused run touches
+      **nothing**: the call log must be EMPTY, not merely write-free.
+      **`--dry-run` is proven read-only by measurement**, not prose: exactly six
+      GETs, zero POSTs, no telemetry read (nothing moved, so there is nothing to
+      snapshot), the scripted ledger bit-identical afterwards, on
+      devnet/testnet/mainnet/unclassifiable. The read/write split lives at the
+      TRANSPORT TRAIT, so a write added later shows up in the log automatically.
+- [x] T4.3 install.sh copy alignment (gist-rs/cargo-heal — the 003 surface, NOT
+      riir-clippy releases) + foo end-to-end doc — **LANDED 2026-09-02**
+      (riir-clippy `9b0e777`). The surface was verified before editing and the
+      corrected owner ask holds: no copy anywhere pointed at riir-clippy
+      releases. **The drift was elsewhere and real** — Proposal 005's TL;DR
+      served both installers from the vanity host `cargo-heal.gist.rs`, **which
+      does not exist**, while Proposal 011 §8.1 used the
+      `raw.githubusercontent.com` form: two documents, two one-liners, one
+      unrunnable, and nothing to catch it (install copy is a string literal in
+      prose with no structure to disagree with). Proposal 003 now DECLARES the
+      canonical pair and records `cargo-heal.gist.rs` as a **deferred alias**;
+      `tests/install_copy_parity.rs` (3/3) fails on any other install URL in any
+      tracked `*.md` and on any pointer at the private repo's releases, with an
+      instrument selftest that asserts it recognises the DRIFTED shape (else it
+      could not fail) and ignores the three non-URL mentions in the tree. The
+      audit fired twice while being written. Plus
+      `.docs/01_orientation/foo_end_to_end.md` — every step marked runnable-now
+      or blocked-and-why.
+      **Residue (owner act, not a copy gap):** `gh repo view gist-rs/cargo-heal`
+      answered *"Could not resolve to a Repository"* (2026-09-02) — the public
+      dist repo has **never been created** (Proposal 003 T1.1), so neither
+      one-liner is runnable yet. Publishing binaries built from private source
+      is an owner/security decision.
 - [-] T4.4 testnet wet-run executed; mesh-ready verdict recorded.
+      **Unblock: T2.2/T2.3 (the OWNER-EXECUTED genesis ceremony) — a testnet
+      wet-run needs real testnet key material authored and nodes written to as
+      root (caveat #8), which is not an agent act.** The harness it will run is
+      shipped (T4.1/T4.2 above) and its money legs additionally need riir-dapps
+      Issue 010 T2 (the owner's supply decision) plus a deployment
+      `RIIR_HEAL_KAT_CRANK_TOKEN` — `POST /admin/crank/daily` is bearer-gated
+      fail-closed and is what settles a faucet row.
 
 ## Phase 5 — live USDC pay-and-register (real users; counsel + demand gated)
 
@@ -299,12 +431,30 @@ boundary (caveat #5 honored structurally — the gate is pinned
 terminal-independent), the `node-sync` fleet gate, and **G-DEPLOY RUN on a real
 local 3-node cluster** with all three failure axes firing. Remaining Phase 0:
 T0.2b's service half (unblocked — `/balance` already serves).
+**Phase 4's engineering half landed the same day** (riir-clippy `d72bbb6` +
+`aecef31` + `1016754` + `9b0e777`, dapps-side faucet golden `1736010`,
+[Plan 066](../.plans/066_kat011_t18_faucet_cli_and_phase4_wetrun.md)): T1.8's
+faucet preset (`cargo heal faucet --request`, amount and TTL deliberately
+absent from both the wire and the flag set), T4.1's six-step wet-run harness
+with **G-WET asserting every supply counter BIT-unchanged over the whole
+struct** via a total-function encoding, T4.2's mainnet refusal with **no
+override anywhere** (the module reads no environment; live-verified against
+three plausible hatch variables set at once) plus a `--dry-run` proven
+read-only by a **recorded call log**, and T4.3's install-copy pin (which found
+Proposal 005 advertising a vanity host that does not exist).
+Two blockers are recorded rather than absorbed: `gist-rs/cargo-heal` has never
+been created (Proposal 003 T1.1 — publishing binaries of private source is an
+owner act), and riir-dapps **Issue 010** makes the wet-run's faucet legs
+unreachable at genesis defaults — the harness names it and FAILS, and the
+happy-path tests say out loud that they script an explicitly lowered floor.
 Next executable: T1.2 (the web wallet — every signed route it needs is landed),
-T1.7/T1.8 (crank + faucet preset — the config-widening plan; **when it lands,
+T1.5 (the money/auth adversarial suite), T1.6 (the mock rails), T1.7 (the daily
+grant crank's clippy-side follow-ups; **now that T1.8 has landed,
 riir-deployer's `free_tier_daily_micro`/`faucet_daily_cap_micro` move from
-structurally-bounded to PINNED**, per Plan 003's named follow-up). Phase 2's
-T2.2/T2.3 are OWNER acts and their dry-run harness is now shipped — bar's
-dry-run genesis is what puts the mint in the wallet every foo gets paid from.
+structurally-bounded to PINNED**, per its Plan 003's named follow-up). Phase
+2's T2.2/T2.3 and Phase 4's T4.4 are OWNER acts and every harness they need is
+shipped — bar's dry-run genesis is what puts the mint in the wallet every foo
+gets paid from, and the wet-run is what proves the loop once it does.
 
 ## Wait-state verification (2026-09-02)
 
