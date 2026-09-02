@@ -1,6 +1,6 @@
 # Issue 62: TPR × healer corpus fusion — structured retrieval axis + corpus-generalization bench (Research 527 F5)
 
-**Status:** Phase 1 COMPLETE (T1+T2+T2a landed, Bench 062; T2a's substrate nondeterminism fixed upstream — riir-neuron-db `aeb24e0` + riir-ai `.issues/849`) — Phase 2 (T3-T6) JUSTIFIED by our own measurement and still gated on katgpt-core `tpr` primitives (katgpt-rs `.issues/707`).
+**Status:** Phase 1 COMPLETE (T1+T2+T2a landed, Bench 062; T2a's substrate nondeterminism fixed upstream — riir-neuron-db `aeb24e0` + riir-ai `.issues/849`) — Phase 2 (T3-T6) JUSTIFIED by our own measurement and **UNBLOCKED 2026-09-02** — katgpt-core `tpr` landed (katgpt-rs `1f7a96d4`, Issue 707 GOAT ALL PASS); T3-T6 are actionable, and T4 is what promotes the upstream feature.
 
 **Research:** [katgpt-rs/.research/527_TPR_Emergent_Symbolic_Structure_Binding_Algebra.md](../katgpt-rs/.research/527_TPR_Emergent_Symbolic_Structure_Binding_Algebra.md) (arXiv:2608.29530, McCoy/Soulos/Linzen/Smolensky 2026)
 **Consumer rationale:** the healer corpus is the workspace's richest (role, filler) dataset — every entry IS a binding: role = rule/lint identity, filler = code shape. The retrieval stack's own history is the paper's thesis in miniature: the Issue 017/T3.5 misses were spans sharing the filler (generic fn shape) while differing in the ROLE (operator/punctuation pattern) — the RustOpTokenizer fix injected role-ish signal into tokens; TPR makes the role axis structural. And the one axis nothing measures is generalization: **every retrieval floor (14/14 gate) and every fixture set is in-distribution by construction.** The paper predicts atomic memorization is the default failure mode on unseen (rule, shape) combinations; this issue converts that prediction into OUR measurement before building anything.
@@ -34,20 +34,45 @@ did NOT fire. Three caveats that bound what Phase 2 may claim:
    `map_unwrap_or` T1 cells), and any gain on single-filler roles read as
    leakage.
 
-## Phase 2 — structured retrieval axis (gated on katgpt-core `tpr`, issue 707 T1–T5)
+## Phase 2 — structured retrieval axis (katgpt-core `tpr` LANDED, katgpt-rs `1f7a96d4`)
 
-> **All rows below are `[-]` (deferred), not `[ ]` (actionable): every one needs the
-> `tpr` primitive that does not exist yet. **Unblock: katgpt-rs `.issues/707` T1–T5
-> ship the algebra** (bind/unbind/surgery/project + the ridge-ALS fit). As of
-> 2026-09-02 that work is in flight in a sibling session — `katgpt-core/src/tpr/`
-> holds an UNTRACKED `types.rs` — so treat 707 as unlanded until it is committed.
+> **UNBLOCKED 2026-09-02** — katgpt-rs `1f7a96d4` landed `katgpt_core::tpr`
+> (Issue 707 T1–T7 + GOAT G1/G2/G3/G4/G8 ALL PASS,
+> katgpt-rs `.benchmarks/698_tpr_binding_algebra_goat.md`). The rows below are
+> now `[ ]` actionable. What to consume, so nobody re-derives it:
+>
+> | need | API |
+> |---|---|
+> | T3 fit | `tpr::als_fit(AlsInput { dim, n_fillers, states, bindings }, &AlsConfig::new(d, scheme))` → frozen `TprArtifact` + `AlsReport` |
+> | T4 denoise | `tpr::project_into(&art, state, &mut TprScratch::new(&art), &mut out)` → residual; `unbind_state_into` for role-conditioned match |
+> | T4 OOD eval | `tpr::withheld_pair_top1(...)` vs `tpr::AtomicNull` (the null this issue's Phase 1 already measured) |
+> | T5 router | `tpr::bow_router(input, &cfg, eps)` → `r_bow / r_full`, plus `tpr::shuffled_role_control` as the dual |
+> | T6 surgery | `tpr::surgery_delta_into` / `tpr::surgery_move_into` (exactly additive, one GEMV) |
+>
+> Four things measured upstream that change how these rows should be run:
+>
+> 1. **Feature is `tpr` on katgpt-core, opt-in, and stays opt-in** — its
+>    T-Promote is blocked by the no-default-consumer rule, i.e. by THIS issue's
+>    T4. Landing T4 is what promotes it, not another upstream gate.
+> 2. **`n_slots ≤ arity` (the square unbind case).** A role-per-rule scheme with
+>    426 kernel_opt rules cannot be a role-vector scheme at `m = 426`; either use
+>    `TprScheme::Orthogonal` with a small block count and put rule identity in the
+>    filler, or fold rules to categories. The fit REFUSES the over-complete case
+>    rather than silently mis-unbinding — decide the scheme before wiring T3.
+> 3. **The atomic-null discipline this issue already learned holds upstream too**
+>    — G8 checks the null's ID coverage FIRST, and a healer-corpus null is
+>    vacuous (0.0% ID). Phase 1's finding is now enforced in the shared harness.
+> 4. **`project_into` needs the artifact's cached inverse** (built when
+>    `K = m·d ≤ 1024`). A large filler dimension silently costs the denoise
+>    readout — size `d` with that in mind, not by embedding convenience.
+>
 > Phase 1 already discharged the half that needed nothing (T1/T2/T2a), and its
 > measurement is what justifies Phase 2 at all.
 
-- [-] **T3** **ALS fit of the healer corpus** into role-filler form: filler = code-shape embedding (existing AstChunker/ModellessEmbedder path), role = rule identity (and separately domain); ridge-ALS closed form, monotone certificate, frozen BLAKE3 artifact. Substrate tie: `self_evolve`'s EMA domain direction vectors are already runtime-updated rank-1 role embeddings — the TPR role table should thaw from the same freeze/thaw cycle, not fork it.
-- [-] **T4** **TPR-structured retrieval axis** *(OOD baseline to beat, from Bench 062: T1 retrieval 4.0% / Structural 52.0% top-1; T2 retrieval 48.8% top-1, 51.2% top-3)* behind a `tpr_retrieval` feature (off by default): query-side structural denoise (score against the TPR projection, not the raw 8-D embedding — paper finding 7: decoders read better from the idealization) + role-conditioned match in the reranker. **Honest claim discipline: in-distribution gains are NOT the claim** (top-1 already 89.6–100 on the floors); the claim axes are (a) the OOD delta over T1's baseline by a preregistered margin, and (b) kernel_opt long-tail crowding (426 rules, the biggest corpus). Floors MUST hold (the 14/14 retrieval gate + score-bench flat unless OOD wins land).
-- [-] **T5** **BoW-null router per domain:** *(prior measured by Bench 062: `rustc_errors` roles are 6/8 single-filler, so m=1 shared-role ALS should show little residual gain there; `clippy_lints` has 13 multi-filler roles)* fit the m=1 shared-role ALS per corpus; residual ratio `r_bow/r_full < 1+ε` ⇒ that domain carries no binding structure ⇒ structured machinery skipped there. Records a per-domain structure verdict (prediction to test: clippy_lints strongly structured; kernel_opt categories possibly weaker than rule-level).
-- [-] **T6** **Counterfactual surgery on LatentFixMemory trajectories:** for score-bench persist-miss spans, surgery-swap the rule/domain filler and ask closed-form "would domain X / rule Y have healed this span?" — complements Bench 032's re-run-based switch-cost measurement with a zero-recompute counterfactual; feeds the post-mining intake (`.distill/001_mining_queue_snapshot.md`) with attributed misses.
+- [ ] **T3** **ALS fit of the healer corpus** into role-filler form: filler = code-shape embedding (existing AstChunker/ModellessEmbedder path), role = rule identity (and separately domain); ridge-ALS closed form, monotone certificate, frozen BLAKE3 artifact. Substrate tie: `self_evolve`'s EMA domain direction vectors are already runtime-updated rank-1 role embeddings — the TPR role table should thaw from the same freeze/thaw cycle, not fork it.
+- [ ] **T4** **TPR-structured retrieval axis** *(OOD baseline to beat, from Bench 062: T1 retrieval 4.0% / Structural 52.0% top-1; T2 retrieval 48.8% top-1, 51.2% top-3)* behind a `tpr_retrieval` feature (off by default): query-side structural denoise (score against the TPR projection, not the raw 8-D embedding — paper finding 7: decoders read better from the idealization) + role-conditioned match in the reranker. **Honest claim discipline: in-distribution gains are NOT the claim** (top-1 already 89.6–100 on the floors); the claim axes are (a) the OOD delta over T1's baseline by a preregistered margin, and (b) kernel_opt long-tail crowding (426 rules, the biggest corpus). Floors MUST hold (the 14/14 retrieval gate + score-bench flat unless OOD wins land).
+- [ ] **T5** **BoW-null router per domain:** *(prior measured by Bench 062: `rustc_errors` roles are 6/8 single-filler, so m=1 shared-role ALS should show little residual gain there; `clippy_lints` has 13 multi-filler roles)* fit the m=1 shared-role ALS per corpus; residual ratio `r_bow/r_full < 1+ε` ⇒ that domain carries no binding structure ⇒ structured machinery skipped there. Records a per-domain structure verdict (prediction to test: clippy_lints strongly structured; kernel_opt categories possibly weaker than rule-level).
+- [ ] **T6** **Counterfactual surgery on LatentFixMemory trajectories:** for score-bench persist-miss spans, surgery-swap the rule/domain filler and ask closed-form "would domain X / rule Y have healed this span?" — complements Bench 032's re-run-based switch-cost measurement with a zero-recompute counterfactual; feeds the post-mining intake (`.distill/001_mining_queue_snapshot.md`) with attributed misses.
 
 ## GOAT gate
 
