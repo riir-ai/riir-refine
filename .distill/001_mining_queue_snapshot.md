@@ -129,18 +129,37 @@
     external measured confirmation on HIP v_perm_b32, MI300X 1.9–2.9× decode rows;
     CDNA-vs-RDNA MMVQ geometry regime). Source verdict upgraded to A- at mine time
     (measured HIP rows + upstream PR 26980 lineage).**
-  - **NEW 2026-09-02 (distill verdict, Research 117 / Plan 063): antirez/ds4
-    (DwarfStar) — YES B+, route kernel_opt (Metal lanes).** The engine behind the
-    250.1 t/s @11709 M3 Max league row; discipline evidence = bit-identity-abort
-    A/B harnesses + a 4096-pair GPU raw-bit oracle kernel. GOAT lead = half-domain
-    exact-band MXFP4 dequant table (E8M0∈[103,142] once-rounded exact, exhaustive
-    256×16 equivalence gate mandatory) + Metal4 MPP double-buffered dequant staging
-    (mechanism-doc class, 1 barrier/k-step) + tail-SIMDgroup cull under preserved
-    barriers + pair gate+up ONE-B-tile staging (bit-identical contract) + expert-major
-    atomic-scatter work map w/ stale-overwrite trailer (lead vs B94 expert_major
-    RESOLVED distinct) + static-shape proven specialization w/ identical-results
-    fallback. **Batch 97 next idle cycle (Plan 063, lane split: moe.metal verified /
-    dsv4_hc+kv+flash+host unverified).**
+  - **LANDED 2026-09-02 (Batch 97, Research 117 addendum / Plan 063): antirez/ds4
+    (DwarfStar) distill — 9 rules, corpus 426 → 435 (N+1 E+2 C+2 H+1 M+1 A+1 F+1).**
+    Pin `110afdd8`; quotes re-verified byte-accurate; provenance vs upstream
+    ggml-org/llama.cpp @ 9ca265a (the check FALSIFIED the mask-block classification
+    as llama.cpp-lineage — landed with corrected origin, the popcorn precedent).
+    GOAT lead `half-domain-exact-band-dequant-with-raw-bit-oracle` (N) landed with
+    the mandatory T6 exhaustive CPU twin — which caught its own first-implementation
+    bug (implicit mantissa bit overlapping the exponent field in the normal path).
+    Lane B delivered `bit-exact-dispatch-fusion-boundary-emulation` (C) +
+    `virtual-thread-folding-preserves-reduction-tree` (E) + the mask rule (F).
+    Dropped: candidate 7 row_blocks (LICM/B44). GOAT all green (kernel_heal 1252/0,
+    default 1008/0, floors 14/14 HELD, clippy 0, score-bench FLAT).**
+  - **NEXT BATCH LEADS (from the same source, dense.metal — DS4-native matvec
+    family, NOT llama.cpp-lineage):** (1) quad-composition via pair-impl
+    composition + args aliasing — ONE kernel hosts FOUR same-input projections
+    by splitting the grid at tgs0 and calling the existing pair impl twice with
+    a per-range aliased args struct (dense.metal L1100-1153, device-scope barrier
+    before the state append); (2) `kernel_mul_mv_id_mxfp4_sum6_*` route-fused
+    down-projection SUM — six routes fused into one accumulation pass with a
+    single final simd_sum (moe.metal family, same-input member); (3) the
+    shared-read-not-merging decision boundary — two same-input Q8_0 matrices
+    that share the ACTIVATION read but deliberately keep per-projection
+    reduction shapes (dense.metal L325-330, the family's boundary case); (4)
+    tiny-dense-matvec scalar fallback — parallelism DOWN-shift for short rows,
+    trading lanes for dispatch + reduction overhead (dense.metal L1440-1441);
+    (5) small-batch matvec-ext bridging GEMV and GEMM for 2..8 prompt tokens
+    (dense.metal L1596+L1697). P8-intake candidates: host ds4_metal.m
+    single-entry pipeline memo (L3077-3081, "decode calls this once per layer
+    with identical arguments"); M5 stable-sigmoid-vs-exp annotation (tanh form
+    produced non-finite logits at fused vector sites on M5 Max while finite in
+    the standalone path — dsv4_hc lane).**
 - **Sibling lanes (do not touch):** riir-train — sibling actively building
   (`/tmp/riir-train-499b`); the 4090 perf lanes — sibling PV work mid-flight as of 08-29
   (re-verify lane state at session start before any 4090 unit).

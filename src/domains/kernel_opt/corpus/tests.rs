@@ -63,11 +63,11 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 60 (1): measured-GOAT distillation (riir-train Issue 460 / katgpt-rs e2853fbf — pre-gate-recovery-by-division-cancels-algebraically; the MLA backward's saturated output-gate 0/0 NaN, fixed by algebraic cancellation; Bench 475: 6/10 -> 10/10 usable backward passes).
     // Batch 63 (3): the CubeCL twin unlock — same-input-gemv-weight-concat-at-upload, deferred-residual-fused-into-next-layer-norm, reset-state-in-place-fill-never-realloc (ternary_deltanet_gpu_forward.rs, Plan 009 / Research 071).
     // Batch 70 (3): the arxiv barrier-free-sync paper distill (arXiv:2608.13757, Plan 020 / Research 080) — barrier-free-per-dependency-wait-from-loop-counters, shared-counter-decode-producer-progress, masked-branchless-wait-collapse.
-    // Total: 209. // (historical batch-30 snapshot; current 426)
+    // Total: 209. // (historical batch-30 snapshot; current 435)
     assert_eq!(
         corpus.entries.len(),
-        426,
-        "kernel batches through Batch 96 should have 426 rules"
+        435,
+        "kernel batches through Batch 97 should have 435 rules"
     );
 }
 
@@ -5329,22 +5329,22 @@ fn kernel_categories_cover_all_corpus_rules_exhaustively() {
 
 #[test]
 fn kernel_categories_counts_match_plan_003_table() {
-    // Pin per-category rule counts to the Plan 003 table (updated for Batch 82).
+    // Pin per-category rule counts to the Plan 003 table (updated for Batch 97).
     let expected = [
-        (KernelCategory::MemoryAccess, 98),
+        (KernelCategory::MemoryAccess, 99),
         (KernelCategory::Compute, 55),
-        (KernelCategory::Fusion, 36),
+        (KernelCategory::Fusion, 38),
         (KernelCategory::Dispatch, 94),
-        (KernelCategory::Parallelism, 26),
-        (KernelCategory::FlashAttnTiling, 10),
+        (KernelCategory::Parallelism, 28),
+        (KernelCategory::FlashAttnTiling, 11),
         (KernelCategory::LinearAttnRecurrence, 26),
-        (KernelCategory::MoeDispatchBackward, 14),
+        (KernelCategory::MoeDispatchBackward, 15),
         (KernelCategory::NsaBlockSparse, 4),
         (KernelCategory::VarlenChunkedReduction, 5),
         (KernelCategory::AutotuneDispatch, 5),
         (KernelCategory::ConvGemmLayout, 12),
-        (KernelCategory::KernelPolymorphism, 11),
-        (KernelCategory::DtypeAlignment, 26),
+        (KernelCategory::KernelPolymorphism, 12),
+        (KernelCategory::DtypeAlignment, 27),
         (KernelCategory::IrStrengthReduction, 4),
     ];
     for (cat, count) in expected {
@@ -5359,9 +5359,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 426.
+    // Sum must equal 435.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 426, "Plan 003: category totals must sum to 426");
+    assert_eq!(total, 435, "Plan 003: category totals must sum to 435");
 }
 
 #[test]
@@ -5372,8 +5372,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 426,
-        "Plan 003: grouped corpus has {total} rules, expected 426"
+        total, 435,
+        "Plan 003: grouped corpus has {total} rules, expected 435"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -6510,5 +6510,343 @@ fn batch94_pseudocode_parses() {
             opt_verdict.parses,
             "batch-94 opt_pattern for '{id}' must parse"
         );
+    }
+}
+
+#[test]
+fn batch97_rules_present() {
+    // Batch 97 (antirez/ds4 DwarfStar Metal distill -- Research 117 /
+    // Plan 063): 9 kernel_opt rules (N +1, E +2, C +2, H +1, M +1,
+    // A +1, F +1). Provenance at pin 110afdd8: 8 DS4-original;
+    // mask-block-classification re-provenanced to ggml-org/llama.cpp
+    // @ 9ca265a at mine time (the falsification the provenance check
+    // exists for).
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "half-domain-exact-band-dequant-with-raw-bit-oracle",
+        "tail-simdgroup-cull-barriers-preserved",
+        "sibling-projections-one-kernel-shared-staged-tile",
+        "expert-major-work-map-token-scatter-clamped",
+        "proven-shape-static-sibling-identical-results-fallback",
+        "barrier-after-async-mma-before-staged-tile-reuse",
+        "bit-exact-dispatch-fusion-boundary-emulation",
+        "virtual-thread-folding-preserves-reduction-tree",
+        "mask-block-classification-skip-placement",
+    ];
+    for id in ids {
+        assert!(
+            corpus.entries.iter().any(|e| e.rule_id == id),
+            "batch-97 rule '{id}' missing from corpus"
+        );
+    }
+}
+
+#[test]
+fn batch97_concepts_covered() {
+    // Distinctness + mandated phrases must survive in the concept
+    // text (case-sensitive contains -- the B51 lesson).
+    let corpus = build_kernel_seed_corpus();
+    let checks: &[(&str, &[&str])] = &[
+        (
+            "half-domain-exact-band-dequant-with-raw-bit-oracle",
+            &[
+                "rounds EXACTLY ONCE",
+                "ONLY a raw-bit exhaustive match promotes the table",
+                "the per-element f32->f16 narrowing",
+                "e.g. scale 2^-25 x code 4 -> f32 path 2^-23, half path 0 x 4 = 0",
+            ],
+        ),
+        (
+            "tail-simdgroup-cull-barriers-preserved",
+            &[
+                "Keep all threads in staging and at every threadgroup barrier",
+                "threadgroup barriers are collective",
+                "the same nr1 clamp the bounds logic computes",
+            ],
+        ),
+        (
+            "sibling-projections-one-kernel-shared-staged-tile",
+            &[
+                "TWO threadgroup barriers TOTAL instead of two per matrix",
+                "BIT-IDENTITY to the unfused compose",
+                "the GEMV-level twin",
+            ],
+        ),
+        (
+            "expert-major-work-map-token-scatter-clamped",
+            &[
+                "zero work must overwrite any stale prior value",
+                "ORDER IS DELIBERATELY UNSPECIFIED",
+                "a counting-sort by atomic",
+            ],
+        ),
+        (
+            "proven-shape-static-sibling-identical-results-fallback",
+            &[
+                "identical results instead of garbage",
+                "BYTE-IDENTICAL to the dynamic implementation",
+                "NEVER delete the unreachable defensive branch as dead code",
+            ],
+        ),
+        (
+            "barrier-after-async-mma-before-staged-tile-reuse",
+            &[
+                "the barrier after mm.run prevents the next K iteration from replacing staged tiles while the cooperative matmul still reads them",
+                "ONE threadgroup barrier per k-step",
+                "SILENT CORRUPTION, no trap",
+            ],
+        ),
+        (
+            "bit-exact-dispatch-fusion-boundary-emulation",
+            &[
+                "every former dispatch boundary was also a compiler-optimization fence",
+                "volatile-qualified pointer",
+                "8-lane TG8 simd_sum",
+                "verified against full-vocabulary logits",
+            ],
+        ),
+        (
+            "virtual-thread-folding-preserves-reduction-tree",
+            &[
+                "virtual slices",
+                "survives bit-exactly",
+                "the redundancy buys the elimination of one dispatch",
+            ],
+        ),
+        (
+            "mask-block-classification-skip-placement",
+            &[
+                "fully masked",
+                "all-zero",
+                "partial final blocks default to compute",
+                "kernel_flash_attn_ext_blk",
+            ],
+        ),
+    ];
+    for (id, needles) in checks {
+        let e = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == *id)
+            .unwrap_or_else(|| panic!("batch-97 rule '{id}' missing"));
+        for needle in *needles {
+            assert!(
+                e.gpu_concept.contains(needle),
+                "batch-97 concept for '{id}' missing phrase '{needle}'"
+            );
+        }
+    }
+}
+
+#[test]
+#[cfg(not(feature = "kernel_verify"))]
+fn batch97_pseudocode_parses() {
+    // G1 for Batch 97: syn-parse gate (the ds4 DwarfStar Metal
+    // distill -- the exact-band half dequant, the barrier-preserving
+    // tail cull, the shared-staged-tile pair fusion, the atomic
+    // scatter work map, the static sibling fallback, the async-MMA
+    // barrier contract, the bit-exact fusion boundary emulation, the
+    // virtual-thread fold, the mask-block classification).
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "half-domain-exact-band-dequant-with-raw-bit-oracle",
+        "tail-simdgroup-cull-barriers-preserved",
+        "sibling-projections-one-kernel-shared-staged-tile",
+        "expert-major-work-map-token-scatter-clamped",
+        "proven-shape-static-sibling-identical-results-fallback",
+        "barrier-after-async-mma-before-staged-tile-reuse",
+        "bit-exact-dispatch-fusion-boundary-emulation",
+        "virtual-thread-folding-preserves-reduction-tree",
+        "mask-block-classification-skip-placement",
+    ];
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-97 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            ref_verdict.parses,
+            "batch-97 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            opt_verdict.parses,
+            "batch-97 opt_pattern for '{id}' must parse"
+        );
+    }
+}
+
+#[test]
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::cast_precision_loss
+)]
+fn batch97_mxfp4_half_band_exhaustive_oracle() {
+    // T6 for Batch 97 (Plan 063, MANDATORY for the GOAT lead): the
+    // CPU twin of ds4's kernel_test_mxfp4_down_half_lut (moe.metal
+    // L2505-2511). All 256 x 16 (E8M0 exponent byte, E2M1 code)
+    // pairs; the legacy arm is f32-multiply-then-narrow (one RNE
+    // rounding); the candidate arm rounds EACH operand to half first
+    // (the f16 multiply: exact product of the rounded operands,
+    // rounded once more -- exact in f32 because two half operands
+    // carry <= 22 significant bits). IN the proven band [103, 142]
+    // both arms must be BIT-IDENTICAL for every code (the band proof,
+    // 640 pairs); OUTSIDE it they DIVERGE (the non-vacuity half: the
+    // band is necessary, not decorative). The 0xff row stays
+    // arithmetic per the source policy (NaN payload canonicalization
+    // unchanged); the dead canonical LUT row agrees with it.
+    fn f32_to_f16_bits_rne(f: f32) -> u16 {
+        let b = f.to_bits();
+        let sign = ((b >> 16) & 0x8000) as u16;
+        let exp = ((b >> 23) & 0xff) as i32;
+        let man = b & 0x007f_ffff;
+        if exp == 0xff {
+            // Inf / NaN (NaN canonicalizes quiet, matching a narrow)
+            return if man == 0 {
+                sign | 0x7c00
+            } else {
+                sign | 0x7e00
+            };
+        }
+        if exp == 0 {
+            // f32 subnormal: far below the half subnormal grid -> 0
+            return sign;
+        }
+        let ue = exp - 127; // unbiased exponent
+        if ue > 15 {
+            return sign | 0x7c00; // overflow -> inf
+        }
+        if ue >= -14 {
+            // normal half: the top 10 STORED mantissa bits (the implicit
+            // bit is NOT stored -- including it would overlap the exponent
+            // field), RNE on the remainder
+            let m = (man >> 13) as u16;
+            let rem = man & 0x1fff;
+            let mut bits = sign | (((ue + 15) as u16) << 10) | m;
+            if rem > 0x1000 || (rem == 0x1000 && (m & 1) == 1) {
+                bits += 1; // may carry into the exponent: correct RNE
+            }
+            return bits;
+        }
+        // half subnormal / zero: the implicit bit IS part of the value here
+        // (value = full * 2^(ue-23); ulp = 2^-24)
+        let full = man | 0x0080_0000;
+        let sh = (-(ue + 1)) as u32;
+        if sh >= 27 {
+            return sign; // rounds to zero
+        }
+        let m = (full >> sh) as u16;
+        let rem = full & ((1u32 << sh) - 1);
+        let half_ulp = 1u32 << (sh - 1);
+        let mut bits = sign | m;
+        if rem > half_ulp || (rem == half_ulp && (m & 1) == 1) {
+            bits += 1; // 0x3ff + 1 = 0x400 = min normal: correct carry
+        }
+        bits
+    }
+
+    fn half_val(h: u16) -> f32 {
+        let sign = if h & 0x8000 != 0 { -1.0 } else { 1.0 };
+        let exp = ((h >> 10) & 0x1f) as i32;
+        let man = (h & 0x03ff) as i32;
+        let v = match exp {
+            0 => (man as f32) * 2f32.powi(-24),
+            31 => {
+                if man == 0 {
+                    f32::INFINITY
+                } else {
+                    f32::NAN
+                }
+            }
+            e => (1.0 + man as f32 / 1024.0) * 2f32.powi(e - 15),
+        };
+        sign * v
+    }
+
+    fn scale_f32(e: u8) -> f32 {
+        match e {
+            0xff => f32::NAN,
+            0 => 2f32.powi(-127),
+            _ => 2f32.powi(e as i32 - 127),
+        }
+    }
+
+    const CODES: [f32; 16] = [
+        0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, //
+        -0.0, -0.5, -1.0, -1.5, -2.0, -3.0, -4.0, -6.0,
+    ];
+
+    // legacy arm: f32 arithmetic, then ONE RNE narrow
+    let legacy = |e: u8, q: usize| -> u16 { f32_to_f16_bits_rne(scale_f32(e) * CODES[q]) };
+    // candidate arm: the f16 multiply -- both operands rounded to half
+    // first, the exact product rounded once more
+    let candidate = |e: u8, q: usize| -> u16 {
+        let dh = f32_to_f16_bits_rne(scale_f32(e));
+        let vh = f32_to_f16_bits_rne(CODES[q]);
+        f32_to_f16_bits_rne(half_val(dh) * half_val(vh))
+    };
+
+    // 1. The band proof: every in-band pair must be bit-identical.
+    for e in 103u8..=142 {
+        for (q, &code) in CODES.iter().enumerate() {
+            let l = legacy(e, q);
+            let c = candidate(e, q);
+            assert_eq!(
+                c, l,
+                "band pair (e={e}, q={q} code={code}) diverged: {c:#06x} vs {l:#06x}"
+            );
+        }
+    }
+
+    // 2. Non-vacuity: outside the band the arms DIVERGE.
+    let mut n_mismatch = 0usize;
+    for e in 0u8..=255 {
+        if (103..=142).contains(&e) || e == 0xff {
+            continue; // band + policy row excluded
+        }
+        for q in 0..16usize {
+            if legacy(e, q) != candidate(e, q) {
+                n_mismatch += 1;
+            }
+        }
+    }
+    assert!(
+        n_mismatch > 0,
+        "the band would be decorative if no out-of-band pair diverged"
+    );
+
+    // 3. The named failure modes at each band edge (underflow low,
+    // saturation high).
+    // e=102 (2^-25): half(scale) rounds to 0, f32 path keeps 2^-23
+    // for code 4.0 (2 ulp of the half subnormal grid).
+    assert_eq!(candidate(102, 6), 0x0000);
+    assert_eq!(legacy(102, 6), 0x0002);
+    // e=143 (2^16): half(scale) saturates to inf, f32 path 32768 exact.
+    assert_eq!(candidate(143, 1), 0x7c00);
+    assert_eq!(legacy(143, 1), 0x7800);
+
+    // 4. Boundary rows inside the band: exact on both arms.
+    // e=103 (2^-24) x 4.0 = 2^-22: exact half subnormal arithmetic.
+    assert_eq!(legacy(103, 6), 0x0004);
+    assert_eq!(candidate(103, 6), 0x0004);
+    // e=142 (2^15) x 6.0 = 196608: overflows half to inf on BOTH arms
+    // (the band guarantees equality, not absence of overflow).
+    assert_eq!(legacy(142, 7), 0x7c00);
+    assert_eq!(candidate(142, 7), 0x7c00);
+
+    // 5. The 0xff policy row: arithmetic keeps NaN canonicalization;
+    // the dead canonical LUT row agrees with it.
+    for q in 0..16usize {
+        let l = legacy(0xff, q);
+        assert_eq!(
+            l & 0x7e00,
+            0x7e00,
+            "legacy arm must yield NaN-class bits for the 0xff row (q={q})"
+        );
+        assert_eq!(candidate(0xff, q), l);
     }
 }

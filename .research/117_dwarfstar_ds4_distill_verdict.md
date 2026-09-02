@@ -1,6 +1,6 @@
 # 117 — Distill verdict: antirez/ds4 (DwarfStar)
 
-**Status:** DISTILLED — pending owner decision
+**Status:** RECORD (Batch 97 landed 2026-09-02 — see the addendum below)
 
 - **Source:** https://github.com/antirez/ds4 (DwarfStar) — Salvatore Sanfilippo's native
   DeepSeek-V4-Flash / GLM-5.2 inference engine. C + Metal + CUDA + ROCm. Beta-quality,
@@ -13,9 +13,49 @@
   concepts that route to riir-neuron-db thinking, not corpus rules; only the kernel +
   dispatch-adjacent host patterns mine. CUDA MMQ lane is secondary (the corpus's Marlin
   cluster B92 already covers W4A16 MMA plumbing broadly).
-- **Plan:** `.plans/063_batch97_dwarfstar_ds4_metal_distill.md` (Batch 97, next idle
-  cycle; number 063 per push-wins — a sibling session consumed plan numbers through
-  062 while this verdict was in flight, 061 is a dead hole in the origin timeline).
+- **Plan:** `.plans/063_batch97_dwarfstar_ds4_metal_distill.md` — **EXECUTED same day**
+  (all T1–T10; see the addendum).
+
+## Batch 97 addendum (2026-09-02, LANDED)
+
+- **Pin at mine time:** `110afdd8886586f18fc9b28bc5533152dd10e728` (2026-09-01 tip,
+  "Use random completion response IDs"), clone at `../vendor/ds4`.
+- **Final rule table (9 landed, corpus 426 → 435):**
+
+| # | Rule | Cat | Disposition vs this verdict |
+|---|---|---|---|
+| 1 | `half-domain-exact-band-dequant-with-raw-bit-oracle` | N | candidate 1, GOAT lead, as predicted; T6 exhaustive CPU twin landed (`batch97_mxfp4_half_band_exhaustive_oracle`) and CAUGHT a real bug in its own first implementation (normal path stored the implicit mantissa bit, overlapping the exponent field — 0.5 → 0x3C00 = 1.0; the gate doing its job) |
+| 2 | `tail-simdgroup-cull-barriers-preserved` | E | candidate 3 as predicted |
+| 3 | `sibling-projections-one-kernel-shared-staged-tile` | C | candidate 4 as predicted; coordinator dedup found the nearest neighbor is B15 `fuse-gate-up-gemv-activation` (GEMV register-sharing twin) — landed with that distinction in-concept |
+| 4 | `expert-major-work-map-token-scatter-clamped` | H | candidate 5 as predicted; B94 expert_major lead resolved as predicted (adjacent, distinct) |
+| 5 | `proven-shape-static-sibling-identical-results-fallback` | M | candidate 6 as predicted |
+| 6 | `barrier-after-async-mma-before-staged-tile-reuse` | A | candidate 2 (MPP direct-RHS), landed as the barrier-lifetime mechanism-doc rule with the honest Metal4-only scope note; upstream baseline contrast pinned (ggml-metal tensor mul_mm = TWO barriers/k-step single-tile — the ds4 delta is the double buffer) |
+| 7 | `bit-exact-dispatch-fusion-boundary-emulation` | C | Lane B (dsv4_kv/dsv4_rope) — new beyond this verdict's list |
+| 8 | `virtual-thread-folding-preserves-reduction-tree` | E | Lane B (dsv4_hc + flash packed8 + rope lane-identity) — new beyond this verdict's list |
+| 9 | `mask-block-classification-skip-placement` | F | **Lane B candidate FALSIFIED as ds4-original**: upstream llama.cpp @ 9ca265a already ships `kernel_flash_attn_ext_blk` (3-class scan + Q>1 gate + consumer classes + inline vec skip); ds4 adopts verbatim. Landed with corrected origin (mechanism absent from OUR corpus; the popcorn precedent) — exactly the falsification the provenance check exists for |
+
+- **Falsification ledger:** candidate 7 (`row_blocks` hoisted index) DROPPED — LICM/CSE
+  territory + a thinner B44 instance, no bounded decision. The mask-classification
+  provenance falsification above. dense.metal proved NOT llama.cpp-lineage (DS4-native
+  matvec family) — 5 leads recorded for the next batch instead of forced rules
+  (quad-composition args-aliasing, sum6 route-fused down projection, the
+  shared-read-not-merging pair boundary, tiny-matvec parallelism down-shift, the
+  2..8-token matvec-ext bridge). Host `ds4_metal.m` single-entry pipeline memo + the
+  M5 stable-sigmoid-vs-exp finding → P8 post-mining intake, not rules.
+- **Yield vs estimate:** verdict estimated 4–6 after falsification; landed 9 — the
+  estimate was conservative because Lane B (unverified files at verdict time) yielded
+  3 clean rules and the provenance check rescued one candidate rather than killing the
+  batch.
+- **GOAT:** batch97 rules_present + concepts_covered + pseudocode_parses
+  (cfg(not(kernel_verify))) + `batch97_mxfp4_half_band_exhaustive_oracle` + kernel_heal
+  lib 1252/0 + default lib 1008/0 + retrieval floors 14/14 HELD (~304 s, no re-pins) +
+  clippy lib kernel_heal/default/all-targets all 0 + score-bench 96.2/1.9/100/100 FLAT.
+  Full CI guard not run (B95/B96 honest-skip shape — every affected state validated
+  individually).
+- **Count pins walked:** tests.rs corpus-count + expected-array A/C/E/F/H/M/N (the
+  `kernel_categories_counts_match_plan_003_table` pin caught the category deltas) +
+  sums x2 + grouped x2 + router.rs expert total + mod.rs doc + category headers;
+  AGENTS.md kernel bullet 414→435 (was already stale from B96 — now true).
 
 ## Provenance chain
 
