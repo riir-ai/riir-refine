@@ -237,6 +237,18 @@ pub mod kat_stake_client;
 #[cfg(feature = "kat_service")]
 pub mod kat_vote_client;
 
+// Proposal 011 T1.3 (Plan 062): the pay-request CLI client — `cargo heal
+// pay --request [--amount N]`. The payee half of the §1 loop: sign a create
+// (the account-key Ed25519 over the canonical message — MIRROR of
+// riir-dapps' `kat::payreq` composer, golden-pinned both sides to an
+// independently computed digest), print the shareable LINK first (--qr
+// renders it as ASCII), then poll on credit until the view settles or the
+// wait budget ends. `kat_service` alone gets the mirrors + parses +
+// renders; the network half rides `kat_transport` (the vote-client
+// convention).
+#[cfg(feature = "kat_service")]
+pub mod kat_payreq_client;
+
 // Proposal 005 Phase 2 T2.4 (Plan 042): the score-bench promotion gate
 // for network-learned corpus candidates — the frozen bench runs BEFORE any
 // candidate enters the local overlay (Certified on pass; Withdrawn is

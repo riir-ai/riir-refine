@@ -71,6 +71,9 @@ enum KatCommand {
     /// Proposal 008 T2.4: `vote --proposal <id> --yes|--no` — the
     /// governance voting surface (weight + evidence render, signed vote).
     Vote,
+    /// Proposal 011 T1.3 (Plan 062): `pay --request [--amount N]` — the
+    /// pay-request surface (signed create + link-first + poll-on-credit).
+    Pay,
 }
 
 #[cfg(feature = "fix_verify")]
@@ -823,6 +826,105 @@ fn run_kat_vote(proposal: Option<u64>, yes: bool, no: bool) {
     }
 }
 
+/// Proposal 011 T1.3 (Plan 062): `pay --request [--amount N] [--label L]
+/// [--qr] [--wait SECS]` — the payee half of the §1 loop. Signs a create
+/// with the account key, prints the shareable LINK first (the QR is the
+/// `--qr` fallback rendering), then polls on credit until the wait budget
+/// ends. The poll blocks — that is the product (foo leaves it running,
+/// bar scans, foo watches the credit land).
+#[cfg(feature = "kat_service")]
+fn run_kat_pay(amount: Option<&str>, label: Option<&str>, qr: bool, wait: u64) {
+    use riir_clippy::kat_payreq_client as payreq;
+
+    let dir = riir_clippy::kat_account::KatAccount::default_dir();
+    let account = match riir_clippy::kat_account::KatAccount::load(&dir) {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!("pay: no account ({e}) — run `cargo heal login` first");
+            std::process::exit(1);
+        }
+    };
+    let signing_key = match account.signing_key() {
+        Ok(k) => k,
+        Err(e) => {
+            eprintln!("pay: could not load the account signing key: {e}");
+            std::process::exit(1);
+        }
+    };
+    let short = riir_clippy::kat_account::short_id(&account.state().account_id);
+
+    // Blank/absent --amount = ANY amount (ask 3 — the payer composes at
+    // settle). A supplied amount parses KAT → micro (positive, ≤6 decimals).
+    let amount_micro = match amount {
+        None | Some("") => None,
+        Some(s) => match payreq::parse_kat_amount(s) {
+            Some(m) => Some(m),
+            None => {
+                eprintln!(
+                    "pay: --amount expects a positive KAT amount with at most 6 decimals (e.g. 2 or 1.5); omit it for an ANY-amount request"
+                );
+                std::process::exit(2);
+            }
+        },
+    };
+    let label = label.unwrap_or("");
+    if label.len() > 64 {
+        eprintln!("pay: --label must be at most 64 bytes (the service's bound)");
+        std::process::exit(2);
+    }
+
+    println!(
+        "pay: requesting {} (any amount = the payer chooses)",
+        match amount_micro {
+            Some(m) => payreq::render_kat(m),
+            None => "ANY amount".to_string(),
+        }
+    );
+
+    #[cfg(feature = "kat_transport")]
+    {
+        let url = riir_clippy::kat_lease_client::service_url_for_command();
+        let transport = riir_clippy::kat_payreq_client::HttpPayreqTransport::new(&url, 10);
+        match riir_clippy::kat_payreq_client::pay_request_flow(
+            &transport,
+            &url,
+            &signing_key,
+            amount_micro,
+            label,
+            wait,
+            std::time::Duration::from_secs(5),
+        ) {
+            Ok(outcome) => {
+                // LINK FIRST (ask 13) — the URL was always the primitive.
+                println!("request {short}:");
+                println!("  share this link: {}", outcome.url);
+                if qr {
+                    print_qr(&outcome.url);
+                }
+                match outcome.settled {
+                    Some(line) => println!("pay: {line}"),
+                    None if wait > 0 => println!(
+                        "pay: no credit yet (waited {wait}s) — the request stays shareable until it settles; `account` shows the credit when it lands"
+                    ),
+                    None => println!(
+                        "pay: not polling (--wait 0) — `account` shows the credit when it lands"
+                    ),
+                }
+            }
+            Err(e) => {
+                eprintln!("pay: {e}");
+                std::process::exit(1);
+            }
+        }
+    }
+    #[cfg(not(feature = "kat_transport"))]
+    {
+        let _ = (signing_key, qr, wait, short);
+        eprintln!("pay: creating a request requires a build with --features kat_transport");
+        std::process::exit(2);
+    }
+}
+
 /// Print the ASCII QR under a URL line (the T1.6 QR render, reused —
 /// errors surface as silence, the QR is a convenience never a gate).
 #[cfg(all(feature = "kat_service", feature = "kat_transport"))]
@@ -1106,6 +1208,7 @@ USAGE:
     cargo heal stake --usd <N> | --info              (Proposal 007 staking: transfer QR / position, kat_transport)
     cargo heal vote --proposal <id> --yes|--no     (Proposal 008 T2.4 governance voting: weight + evidence render, kat_transport)
     cargo heal unstake                                (drain unlocked tranches + escrow disclosure, kat_transport)
+    cargo heal pay --request [--amount N] [--label L] [--qr] [--wait S]  (Proposal 011 T1.3 pay request: signed create + link-first + poll-on-credit, kat_transport)
 
     --suggest       Suggest mode: print matching rules per code span (no edits).
     --fix           Fix mode: apply the compiled-in proposers' span-preserving edits
@@ -1292,6 +1395,18 @@ struct Args {
     vote_yes: bool,
     /// Proposal 008 T2.4: `--no` — vote against.
     vote_no: bool,
+    /// Proposal 011 T1.3: `--amount <N>` — the pay-request amount in KAT
+    /// (≤6 fractional digits; blank/absent = ANY amount, ask 3).
+    pay_amount: Option<String>,
+    /// Proposal 011 T1.3: `--qr` — render the request link as an ASCII QR
+    /// after the link line (link-first stays the default).
+    pay_qr: bool,
+    /// Proposal 011 T1.3: `--label <s>` — the human label riding the
+    /// request ("invoice #1042"; ≤64 bytes, service-bounded).
+    pay_label: Option<String>,
+    /// Proposal 011 T1.3: `--wait <secs>` — the poll-on-credit budget
+    /// (default 600; `0` = don't poll — the credit surfaces via `account`).
+    pay_wait: u64,
     /// T1.6: the run-start update-phase budget in seconds (`0` = skip;
     /// default 4 — the proposal's ~3–5s window).
     update_timeout: u64,
@@ -1352,6 +1467,10 @@ fn parse_args() -> Args {
         vote_proposal: None,
         vote_yes: false,
         vote_no: false,
+        pay_amount: None,
+        pay_qr: false,
+        pay_label: None,
+        pay_wait: 600,
         update_timeout: 4,
         no_update: false,
         no_reheat: false,
@@ -1459,6 +1578,31 @@ fn parse_args() -> Args {
             }
             "--yes" => args.vote_yes = true,
             "--no" => args.vote_no = true,
+            "--amount" => {
+                let Some(value) = it.next() else {
+                    eprintln!("--amount requires a value (the request amount in KAT, e.g. 2 or 1.5; omit for ANY amount)");
+                    usage();
+                };
+                args.pay_amount = Some(value);
+            }
+            "--qr" => args.pay_qr = true,
+            "--label" => {
+                let Some(value) = it.next() else {
+                    eprintln!("--label requires a value (e.g. \"invoice #1042\")");
+                    usage();
+                };
+                args.pay_label = Some(value);
+            }
+            "--wait" => {
+                let Some(value) = it.next() else {
+                    eprintln!("--wait requires a value (seconds; 0 = don't poll for the credit)");
+                    usage();
+                };
+                args.pay_wait = value.parse().unwrap_or_else(|_| {
+                    eprintln!("--wait expects a number, got {value:?}");
+                    usage();
+                });
+            }
             "--update-timeout" => {
                 let Some(value) = it.next() else {
                     eprintln!("--update-timeout requires a value (seconds; 0 = skip)");
@@ -1494,6 +1638,7 @@ fn parse_args() -> Args {
                 usage();
             }
             "login" | "account" | "update" | "sync" | "claim" | "stake" | "unstake" | "vote"
+                | "pay"
                 if args.paths.is_empty() && args.command.is_none() =>
             {
                 args.command = Some(match arg.as_str() {
@@ -1504,6 +1649,7 @@ fn parse_args() -> Args {
                     "stake" => KatCommand::Stake,
                     "unstake" => KatCommand::Unstake,
                     "vote" => KatCommand::Vote,
+                    "pay" => KatCommand::Pay,
                     _ => KatCommand::Claim,
                 });
             }
@@ -1512,6 +1658,12 @@ fn parse_args() -> Args {
     }
     if args.account_history && !matches!(args.command, Some(KatCommand::Account)) {
         eprintln!("--history requires the `account` command");
+        usage();
+    }
+    if (args.pay_amount.is_some() || args.pay_qr || args.pay_label.is_some() || args.pay_wait != 600)
+        && !matches!(args.command, Some(KatCommand::Pay))
+    {
+        eprintln!("--amount/--qr/--label/--wait require the `pay` command");
         usage();
     }
     if args.paths.is_empty()
@@ -2125,6 +2277,12 @@ fn main() {
                 args.vote_yes,
                 args.vote_no,
             ),
+            KatCommand::Pay => run_kat_pay(
+                args.pay_amount.as_deref(),
+                args.pay_label.as_deref(),
+                args.pay_qr,
+                args.pay_wait,
+            ),
             // The transport commands degrade honestly without kat_transport.
             #[cfg(not(feature = "kat_transport"))]
             KatCommand::Update | KatCommand::Sync => {
@@ -2136,7 +2294,7 @@ fn main() {
     }
     #[cfg(not(feature = "kat_service"))]
     if args.command.is_some() {
-        eprintln!("login/account/update/sync/claim/stake/unstake require a build with --features kat_service");
+        eprintln!("login/account/update/sync/claim/stake/unstake/vote/pay require a build with --features kat_service");
         std::process::exit(2);
     }
 
