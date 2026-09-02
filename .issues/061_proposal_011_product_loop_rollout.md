@@ -4,9 +4,11 @@ Status: **OPEN (2026-09-01) — Phase 0 ledger substrate LANDED 2026-09-02** (T0
 T0.5 + the ledger/payreq halves of T0.4: riir-dapps `6df7097`,
 [Plan 015](../.plans/015_kat011_phase0_payreq_substrate.md) — the `kat_payreq`
 request-ledger rows, invoice rows, signed registration intents, first-wins funding
-bindings, and the KAT-rail one-batch settle seam). Remaining Phase 0 items live in
-riir-chain-sdk (T0.3) and riir-dapps service-plane work (T0.2b, T1.x). The proposal is
-draft and the phased scope survives the noise-reduction rule via this tracker.
+bindings, and the KAT-rail one-batch settle seam). **T0.3 LANDED 2026-09-02**
+(riir-chain-sdk `fe865ba1` + the dapps-side dual golden pin `46e6660`).
+Remaining Phase 0: T0.2b's service half (riir-dapps service-plane, rides T1.1).
+The proposal is draft and the phased scope survives the noise-reduction rule via
+this tracker.
 Branch: `develop` (per global rule — no feature branches)
 Proposal: [`.proposals/011_kat_pay_request_qr_genesis_and_onboarding.md`](../.proposals/011_kat_pay_request_qr_genesis_and_onboarding.md)
 Related: [Issue 059](059_proposal_007_remainder_ops_signer_and_counsel_gate.md) (the
@@ -33,8 +35,21 @@ Proposal 008 (MemoShard).
 - [-] T0.2b — the service half of account: welcome gate evaluated from real sync/node
       health + `/balance` history consumption (riir-dapps route shape lands with
       T1.1). Blocked on T0.1/T1.1.
-- [-] T0.3 riir-chain-sdk `pay_request` module (KAT compose + resolve/transfer; USDC
-      arm stubbed behind the mock).
+- [x] T0.3 riir-chain-sdk `pay_request` module (KAT compose + resolve/transfer; USDC
+      arm stubbed behind the mock) — **LANDED 2026-09-02** (riir-chain-sdk
+      `fe865ba1`; dapps-side dual golden pin `46e6660`): `request_id` byte-exact
+      mirror of the ledger half (golden hex `71b5cbf1…` asserted BOTH sides — the
+      `dapps_contract_pins` discipline), `request_url`/`parse_request_url`
+      (`{base}/payreq/{32 lowercase hex}`, strict), canonical payload v1
+      (`encode/decode_request` — the bytes T1.1's route serves), `verify_request`
+      (id cross-check + expiry, the T1.1 signature seam's call site), and
+      `kat_transfer_intent` (ask-3 amount-resolution matrix + expiry/token guards;
+      executes via `wallet_mut().transfer(payee, kat_slot, amount_minor)`).
+      Opt-in `pay_request = []` — pulls NO `chain_prog_*` (settle is the ledger's)
+      and stays out of `all-programs`; no signature seam (T1.1's), no QR rendering
+      (clippy's `render_qr_ascii`), no USDC settle (the `[-]` rails). 12 module
+      tests; validation: lib `pay_request` 24/0 + default 12/0 count-identical +
+      goat compile + doctest, clippy 0 both states, dapps `kat_payreq` 11/0.
 - [x] T0.4 self-pay fixtures (chain + ledger + payreq) — **ledger + payreq halves
       LANDED 2026-09-02** (Plan 015 tests/kat_payreq.rs: A→A settles to a paid
       invoice, no net supply change, exactly-once; insufficient-balance refusal;
@@ -131,9 +146,11 @@ The proposal's fourteen owner asks are all verdicted SHIP (two corrected: 8.1 �
 gist-rs/cargo-heal per 003; 12 → reference-key binding, memo as audit copy) or
 explicitly deferred. Phase 0 ledger substrate LANDED 2026-09-02 (T0.1 + T0.5 + the
 ledger/payreq halves of T0.4 — riir-dapps `6df7097` / Plan 015) alongside the
-repo-native T0.2 CLI slice. Remaining Phase 0: T0.3 (riir-chain-sdk `pay_request`
-module) and T0.2b's service half. Next action per the proposal: the riir-dapps Phase 1
-routes (T1.1 — unblocked by the landed substrate) and Phase 2's ceremony early —
+repo-native T0.2 CLI slice, and **T0.3 (the payer-side SDK half) landed the same
+day** (`fe865ba1` + the dual golden pin `46e6660`). Remaining Phase 0: T0.2b's
+service half. Next action per the proposal: the riir-dapps Phase 1
+routes (T1.1 — unblocked by the landed substrate; the served payload format is
+the SDK's canonical payload v1) and Phase 2's ceremony early —
 bar's dry-run genesis is what puts the mint in the wallet every foo gets paid from.
 
 ## Wait-state verification (2026-09-02)
