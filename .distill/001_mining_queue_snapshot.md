@@ -221,7 +221,14 @@ All classes closed; the standing divergence (P4 residual) has no action planned.
             claiming "installed binary rebuilt" — cause suspected: the session built under a
             /tmp CARGO_TARGET_DIR and the claim referred to that build. Rebuilt from HEAD
             23:28 +07 (`kernel_opt 411` probe PASS + suggest smoke) — the mtime-vs-commit
-            check is load-bearing, trust the mtime not the message.
+            check is load-bearing, trust the mtime not the message. **Recurred 09-02** (the
+            Sep-1 18:01 binary sat through the 062 OOD harness + Batch 98's corpus +10) and
+            **MECHANIZED same day**: `self_evolve_audit.sh` §0 `bin-age:` check — binary
+            mtime (symlink FOLLOWED; macOS stat does not deref by default, caught live)
+            vs the last commit touching src/ + Cargo.toml; sibling path-dep state
+            deliberately out of scope; gates grep `bin-age:.*STALE`; both branches
+            probe-verified. Binary rebuilt from HEAD 17:26 +07 (`kernel_opt 445` probe
+            PASS + suggest smoke).
 - [~] P4 **created-warning pair** — PARTIALLY CONSUMED 2026-08-28 (`1941712`): the
       plain-expression closure gap was already closed in expr_is_bool; the live residue
       was RECEIVER classification (turbofish `get::<` prefix match, `.lock(` joined

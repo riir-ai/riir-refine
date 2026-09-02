@@ -32,6 +32,16 @@ run_py() {
     echo "  (python unavailable on this box — section skipped)"
   fi
 }
+# Epoch → readable date, BSD (`date -r EPOCH`) first, GNU (`date -d @EPOCH`)
+# second, epoch fallback. Probe by execution — GNU's `-r` means REFERENCE FILE
+# and fails on a number, which is exactly the fallback signal.
+bin_age_fmt() {
+  _bf_d="$(date -r "$1" '+%m-%d %H:%M' 2>/dev/null || true)"
+  if [ -n "$_bf_d" ]; then echo "$_bf_d"; return 0; fi
+  _bf_d="$(date -u -d "@$1" '+%m-%d %H:%M' 2>/dev/null || true)"
+  if [ -n "$_bf_d" ]; then echo "$_bf_d"; return 0; fi
+  echo "$1"
+}
 MEMORY="${RIIR_HEAL_MEMORY:-$HOME/.cache/riir-clippy/memory.json}"
 HISTORY="$HEAL_REPO/.benchmarks/score_history.jsonl"
 INTAKE="$HEAL_REPO/.distill/001_mining_queue_snapshot.md"
@@ -48,6 +58,48 @@ if [ -x "$HOME/.cargo/bin/cargo-heal" ] || [ -L "$HOME/.cargo/bin/cargo-heal" ];
   echo "  binary:    OK  (~/.cargo/bin/cargo-heal)"
 else
   echo "  binary:    MISSING (~/.cargo/bin/cargo-heal)"
+fi
+# P3 discipline mechanized (2026-09-02): a stale installed binary silently serves a
+# stale corpus/proposer set — measured TWICE (the 08-31 incident sat through five
+# src/ commits despite a "rebuilt" claim; again 09-02 through Batch 98's corpus).
+# Rule: trust the mtime, not the message — flag when the binary predates the last
+# commit touching src/ or Cargo.toml. Sibling path-dep state is deliberately NOT
+# tracked here (a dirty sibling tree has no "current" to compare against); gates
+# grep `bin-age:.*STALE`.
+BIN_AGE_PATH="$HOME/.cargo/bin/cargo-heal"
+BIN_AGE_MTIME=""
+if [ -e "$BIN_AGE_PATH" ] || [ -L "$BIN_AGE_PATH" ]; then
+  # FOLLOW the symlink: macOS/BSD stat does NOT dereference by default (-L
+  # does), GNU stat DOES by default (-L is explicit dereference). The integer
+  # case-guard filters whichever flavor misparses (GNU `-f` is filesystem
+  # mode and does not print an epoch).
+  BIN_AGE_MTIME="$(stat -L -f %m "$BIN_AGE_PATH" 2>/dev/null || true)"
+  case "$BIN_AGE_MTIME" in ''|*[!0-9]*) BIN_AGE_MTIME="" ;; esac
+  if [ -z "$BIN_AGE_MTIME" ]; then
+    BIN_AGE_MTIME="$(stat -L -c %Y "$BIN_AGE_PATH" 2>/dev/null || true)"
+    case "$BIN_AGE_MTIME" in ''|*[!0-9]*) BIN_AGE_MTIME="" ;; esac
+  fi
+  if [ -z "$BIN_AGE_MTIME" ]; then
+    BIN_AGE_MTIME="$(stat -f %m "$BIN_AGE_PATH" 2>/dev/null || true)"
+    case "$BIN_AGE_MTIME" in ''|*[!0-9]*) BIN_AGE_MTIME="" ;; esac
+  fi
+  if [ -z "$BIN_AGE_MTIME" ]; then
+    BIN_AGE_MTIME="$(stat -c %Y "$BIN_AGE_PATH" 2>/dev/null || true)"
+    case "$BIN_AGE_MTIME" in ''|*[!0-9]*) BIN_AGE_MTIME="" ;; esac
+  fi
+fi
+BIN_AGE_LAST_CT="$(git -C "$HEAL_REPO" log -1 --format=%ct -- src/ Cargo.toml 2>/dev/null || true)"
+BIN_AGE_LAST_H="$(git -C "$HEAL_REPO" log -1 --format=%h -- src/ Cargo.toml 2>/dev/null || true)"
+[ -n "$BIN_AGE_LAST_H" ] || BIN_AGE_LAST_H="?"
+if [ -n "$BIN_AGE_MTIME" ] && [ -n "$BIN_AGE_LAST_CT" ]; then
+  if [ "$BIN_AGE_MTIME" -ge "$BIN_AGE_LAST_CT" ]; then
+    echo "  bin-age:   OK  (binary $(bin_age_fmt "$BIN_AGE_MTIME") >= last src commit $BIN_AGE_LAST_H $(bin_age_fmt "$BIN_AGE_LAST_CT"))"
+  else
+    echo "  bin-age:   STALE — binary $(bin_age_fmt "$BIN_AGE_MTIME") predates last src commit $BIN_AGE_LAST_H $(bin_age_fmt "$BIN_AGE_LAST_CT"); adoption runs serve a stale corpus"
+    echo "             rebuild: cd $HEAL_REPO && cargo build --release --features latent_retrieval --bin cargo-heal"
+  fi
+else
+  echo "  bin-age:   UNKNOWN (mtime/git comparison unavailable on this box — broken symlink? no git?)"
 fi
 # Skill + global-rule checks are drift-aware and multi-platform:
 #  - Mac: the global skill is a SYMLINK (the discipline)
