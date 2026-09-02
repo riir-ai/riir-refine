@@ -404,6 +404,17 @@ impl LatentMatcher {
     /// reusing the shared G4 scratch across domains. Field-direct index
     /// access keeps the borrow checker happy alongside the scratch borrow.
     fn suggest_all_domains(&mut self, code: &str, top_k: usize) -> Vec<(DomainId, Vec<ScoredRule>)> {
+        // One parse per span, shared across every domain's instantiation
+        // probe (Issue 063): the parse-fail contract — no parse, no marking,
+        // every flag stays `false` — is preserved by skipping the marking
+        // call entirely when `code` does not parse. `Off` mode needs no AST
+        // at all (the per-domain fn's own early return), so it skips the
+        // parse too.
+        let parsed = if self.rerank_mode == super::instantiation_rerank::RerankMode::Off {
+            None
+        } else {
+            syn::parse_file(code).ok()
+        };
         let mut out = Vec::with_capacity(DomainId::ALL.len());
         for domain in DomainId::ALL {
             // Direct field access (not `index_for`) so the immutable index
@@ -421,12 +432,17 @@ impl LatentMatcher {
                 // T3.5.2 misses sat at rank 2-3 (T3.5.4).
                 let pool = top_k.max(super::instantiation_rerank::RERANK_POOL);
                 let mut rules = index.suggest_deep_into(code, pool, &mut self.scratch).to_vec();
-                super::instantiation_rerank::mark_instantiation(
-                    domain,
-                    code,
-                    &mut rules,
-                    self.rerank_mode,
-                );
+                if let Some(file) = &parsed {
+                    super::instantiation_rerank::mark_instantiation_with_file(
+                        domain,
+                        code,
+                        file,
+                        &mut rules,
+                        self.rerank_mode,
+                    );
+                }
+                // No parse (or Off): no evidence in any domain — identical to
+                // the per-domain `mark_instantiation` short-circuit.
                 super::instantiation_rerank::rerank(&mut rules);
                 rules.truncate(top_k);
                 out.push((domain, rules));

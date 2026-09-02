@@ -151,6 +151,7 @@ fn dense_rerank_precision() {
             tokenizer: IndexTokenizer::OpAwareBigram,
             latent_weight: RetrievalConfig::DEFAULT_LATENT_WEIGHT,
             dense_weight: 0.0,
+            two_stage_oversample: RetrievalConfig::DEFAULT_TWO_STAGE_OVERSAMPLE,
         },
     )
     .expect("build clippy index");

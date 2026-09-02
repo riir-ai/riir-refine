@@ -209,8 +209,31 @@ pub fn mark_instantiation(
     let Ok(file) = syn::parse_file(code) else {
         return;
     };
+    mark_instantiation_with_file(domain, code, &file, rules, mode);
+}
+
+/// [`mark_instantiation`](Self::mark_instantiation) over a caller-parsed AST —
+/// the multi-domain fan-out path (Issue 063): one `syn::parse_file` per span
+/// shared across every Rust-domain probe instead of one per domain. The
+/// parse is ~20µs of a ~25µs stage on the gate's fixtures, so the per-domain
+/// parse dominated the marking itself.
+///
+/// The parse-fail contract lives with the caller: a span that does not parse
+/// gets NO marking in ANY domain (including docker, whose probe reads text —
+/// `mark_instantiation` short-circuits before the domain dispatch, and the
+/// fan-out path must skip equivalently). Every flag stays `false`.
+pub fn mark_instantiation_with_file(
+    domain: DomainId,
+    code: &str,
+    file: &syn::File,
+    rules: &mut [ScoredRule],
+    mode: RerankMode,
+) {
+    if mode == RerankMode::Off || rules.is_empty() {
+        return;
+    }
     for rule in rules.iter_mut() {
-        rule.instantiates = instantiates(domain, &rule.rule_id, code, &file, mode);
+        rule.instantiates = instantiates(domain, &rule.rule_id, code, file, mode);
     }
 }
 

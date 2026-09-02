@@ -20,7 +20,7 @@ use std::collections::HashMap;
 
 use riir_rag::{
     Embedder, LatentQuery, ModellessEmbedder, NeuronDbRetriever, NeuronDbRetrieverConfig,
-    RawChunk, RetrievalProvider, TokenBudget,
+    RawChunk,
 };
 
 /// A rule retrieved for a code span, with its relevance score.
@@ -128,6 +128,20 @@ pub struct RetrievalConfig {
     /// entirely — no GGUF is loaded. Requires the `bonsai_retrieval` feature
     /// to have any effect; ignored (with the index built modellessly) without it.
     pub dense_weight: f32,
+    /// Two-stage latent KNN oversample factor (Issue 063) — forwarded to the
+    /// substrate's `NeuronDbRetrieverConfig::two_stage_oversample`.
+    ///
+    /// `Some(n)` switches the latent leg from the O(N·k) greedy
+    /// `retrieve_diverse` to the O(N + M·k) `retrieve_diverse_two_stage`
+    /// (M = min(k·n, N)) — pre-filtering candidates by query relevance before
+    /// diversification, the substrate's documented mode for query-time
+    /// retrieval. `None` keeps full-index diversity. **Measured default
+    /// (Issue 063)**: `Some(4)` at the shipped corpus sizes — the suggest
+    /// path is query-relevance-primary (rule suggestion, not ensemble
+    /// selection), and the greedy expansion was the dominant G2 latency
+    /// stage. Quality gated by the Issue 017 retrieval floors + the
+    /// composite G1 eval, both green at the switch.
+    pub two_stage_oversample: Option<usize>,
 }
 
 impl RetrievalConfig {
@@ -141,6 +155,16 @@ impl RetrievalConfig {
     /// behaviour change; the knob survives only to keep the sweep runnable
     /// and the refutation reproducible.
     pub const DEFAULT_LATENT_WEIGHT: f32 = 1.0;
+
+    /// The Issue 063-measured two-stage oversample default.
+    ///
+    /// 4 is the substrate's own documented recommendation (21× at N=10K,
+    /// k=100; preserving the diversity guarantee whenever `k·n ≥ N-1`). At
+    /// the shipped corpus sizes (80-640 chunks per domain) it halves the
+    /// dominant retrieval stage with the Issue 017 floors + composite G1
+    /// holding — see `.benchmarks/018_plan005_latent_suggest_goat.md`'s
+    /// Issue 063 addendum.
+    pub const DEFAULT_TWO_STAGE_OVERSAMPLE: Option<usize> = Some(4);
 }
 
 impl Default for RetrievalConfig {
@@ -149,6 +173,7 @@ impl Default for RetrievalConfig {
             tokenizer: IndexTokenizer::default(),
             latent_weight: Self::DEFAULT_LATENT_WEIGHT,
             dense_weight: 0.0,
+            two_stage_oversample: Self::DEFAULT_TWO_STAGE_OVERSAMPLE,
         }
     }
 }
@@ -233,55 +258,38 @@ impl RuleIndex {
         // `with_bm25_tokenizer` MUST precede `index_chunks` — the tokenizer is
         // used at both index and search time, and swapping it after indexing
         // silently desyncs the postings from the queries (substrate contract).
-        // Issue 063 — opt into riir-rag's TWO-STAGE latent KNN.
         //
-        // `NeuronDbRetrieverConfig::default()` ships `two_stage_oversample:
-        // None`, which riir-clippy had silently taken since the retriever was
-        // adopted. That path is `retrieve_diverse` at **O(N·k)**; setting the
-        // field switches to `retrieve_diverse_two_stage` at **O(N + M·k)**
-        // (riir-rag Issue 593 / Bench 583). Nothing new was written here — this
-        // is shipped upstream substrate this crate had simply never enabled.
+        // Issue 063 — two-stage latent KNN, surfaced as a `RetrievalConfig`
+        // knob (default `Some(4)`, see `DEFAULT_TWO_STAGE_OVERSAMPLE`).
+        // Measured record (e5ffe9c, kept verbatim from the first landing):
+        // `retrieve` is 92.1% of `suggest_span` (rank_into 2.3%, embedding
+        // 0.8%); median 0.806× over 11 interleaved A/B pairs, 10 of 11
+        // favouring two-stage; all 14 retrieval floors IDENTICAL, goat G1
+        // IDENTICAL (21/24, same miss list), uncontaminated_g1 8/8 with pool
+        // recall @12 100%; the one observable cost is t48 mrr 0.961 → 0.959
+        // (one item one rank below top-3, under every gated floor).
         //
-        // Why this is the lever, measured rather than reasoned (Issue 063):
-        // `retrieve` is **92.1%** of `suggest_span`, against `rank_into` 2.3%
-        // and embedding 0.8%. Two plausible-looking culprits were measured and
-        // REJECTED first — hoisting the per-domain `query_for` would save 0.6%,
-        // and content loading is only ~11% of `retrieve` (a tiny-budget probe
-        // cut retrieved chunks to 0 and moved the total by that much). The cost
-        // is `retrieve_candidates`, which runs regardless of budget.
-        //
-        // Measured effect, 11 interleaved A/B pairs (per-pair ratios, because
-        // the box was loaded and absolute wall-clock drifted 2x during the
-        // session): median **0.806**, 10 of 11 pairs favouring two-stage.
-        //
-        // Measured quality cost — this is an APPROXIMATION, so it is not free:
-        //   * all 14 retrieval floors: IDENTICAL (clippy 89.6/93.8/95.8, perf
-        //     96.2/98.1/100.0, kernel 100/100/100, blended 94.7/96.9/98.5,
-        //     router 83/131) in both feature states;
-        //   * `latent_suggest_goat` G1: IDENTICAL, 21/24, same miss list;
-        //   * `uncontaminated_g1`: 8/8, pool recall @12 100%;
-        //   * `t48_gp_acquisition_ab`: @1 0.940 and @3 0.970 and McNemar
-        //     (b=74 c=1 z=8.429) identical, but **mrr 0.961 -> 0.959** —
-        //     one item moved by one rank BELOW top-3. A/B'd in one worktree at
-        //     one HEAD, so that delta is attributed to this flag, not to drift.
-        // No gated floor moves; the only observable change sits under rank 3,
-        // which is why `CLIPPY_TOP3` (at exactly zero margin) is untouched.
-        //
-        // `RIIR_CLIPPY_NO_TWO_STAGE=1` is the kill-switch (the repo's
-        // feature-flag convention) and is what the A/B above toggled.
-        let rcfg = || {
-            let mut c = NeuronDbRetrieverConfig::default();
-            if std::env::var("RIIR_CLIPPY_NO_TWO_STAGE").is_err() {
-                c.two_stage_oversample = Some(4);
-            }
-            c
+        // `RIIR_CLIPPY_NO_TWO_STAGE=1` is the kill-switch and is what the
+        // e5ffe9c A/B toggled (the repo's feature-flag convention): it forces
+        // the pre-063 single-stage `retrieve_diverse`, overriding the config
+        // value for same-binary A/B.
+        let two_stage = if std::env::var("RIIR_CLIPPY_NO_TWO_STAGE").is_err() {
+            config.two_stage_oversample
+        } else {
+            None
+        };
+        let substrate_cfg = NeuronDbRetrieverConfig {
+            two_stage_oversample: two_stage,
+            ..NeuronDbRetrieverConfig::default()
         };
         let retriever = match config.tokenizer {
-            IndexTokenizer::CodeDefault => NeuronDbRetriever::new(rcfg()),
-            IndexTokenizer::OpAware => NeuronDbRetriever::new(rcfg())
+            IndexTokenizer::CodeDefault => NeuronDbRetriever::new(substrate_cfg),
+            IndexTokenizer::OpAware => NeuronDbRetriever::new(substrate_cfg)
                 .with_bm25_tokenizer(Box::new(super::op_tokenizer::RustOpTokenizer)),
-            IndexTokenizer::OpAwareBigram => NeuronDbRetriever::new(rcfg())
-                .with_bm25_tokenizer(Box::new(super::op_tokenizer::RustOpBigramTokenizer)),
+            IndexTokenizer::OpAwareBigram => {
+                NeuronDbRetriever::new(substrate_cfg)
+                    .with_bm25_tokenizer(Box::new(super::op_tokenizer::RustOpBigramTokenizer))
+            }
         };
         #[cfg(feature = "bonsai_retrieval")]
         {
@@ -351,7 +359,11 @@ impl RuleIndex {
     ) -> &'s [ScoredRule] {
         scratch.retrieved.clear();
         let query = self.query_for(code);
-        let mut retrieved = self.retriever.retrieve(&query, TokenBudget(usize::MAX));
+        // Score-only retrieval (Issue 063): `rank_into` reads `zone_hash` +
+        // scores only, so the packed `retrieve()` path's content Strings +
+        // source lookups were 100% discarded work — measured 53-61% of each
+        // retrieve call (the gate's G2 latency overrun).
+        let mut retrieved = self.retriever.retrieve_for_scoring(&query);
         scratch.retrieved.append(&mut retrieved);
         self.rank_into(&scratch.retrieved, top_k, &mut scratch.best, &mut scratch.ranked)
     }
@@ -385,16 +397,21 @@ impl RuleIndex {
         scratch.retrieved.clear();
         {
             let query = self.query_for(code);
-            let mut retrieved_vec = self.retriever.retrieve(&query, TokenBudget(usize::MAX));
+            let mut retrieved_vec = self.retriever.retrieve_for_scoring(&query);
             scratch.retrieved.append(&mut retrieved_vec);
         }
         for line in code.lines() {
             let trimmed = line.trim();
-            if trimmed.len() <= 8 {
+            // Two skips, both output-identical by construction (Issue 063):
+            // insignificant lines contribute nothing, and a line whose
+            // trimmed text IS the whole span (single-line spans) is a
+            // duplicate of the whole-span query — same query, same results,
+            // already merged by `rank_into`'s per-rule best.
+            if trimmed.len() <= 8 || trimmed == code {
                 continue;
             }
             let query = self.query_for(trimmed);
-            let mut line_vec = self.retriever.retrieve(&query, TokenBudget(usize::MAX));
+            let mut line_vec = self.retriever.retrieve_for_scoring(&query);
             scratch.retrieved.append(&mut line_vec);
         }
         self.rank_into(&scratch.retrieved, top_k, &mut scratch.best, &mut scratch.ranked)

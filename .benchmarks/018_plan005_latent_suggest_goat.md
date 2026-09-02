@@ -164,6 +164,81 @@ precision (Wilson) is ~0.80 — the gate floor — versus ~0.76 at 12 items
 rules) more than statistical tightness; the honest statement is "≥80% with
 95% confidence on a 24-item fixture covering all 10 clippy + 14 perf rules".
 
+## Addendum 3 (2026-09-02, Issue 063) — G2 latency green: two-stage KNN + score-only retrieval + parse hoist
+
+The G2 gate went RED as the corpus grew (1155–1203 µs/chunk measured
+2026-09-02 vs the 1000 µs bar; green at 290 µs when authored 2026-08-14
+with a ~3× smaller corpus). Two sessions worked the issue independently
+the same evening — the fix landed in two commits.
+
+**First landing (`e5ffe9c` — the diagnosis + the headline lever).** A
+load-aware profile (temporary in-source counters): `retrieve` is **92.1%**
+of `suggest_span` (rank_into 2.3%, embedding 0.8%); two plausible culprits
+measured and REJECTED — per-domain `query_for` hoisting (0.6%) and content
+loading (~11% of retrieve, via a tiny-budget probe). The lever: riir-rag's
+shipped-but-never-enabled `two_stage_oversample` — O(N + M·k) instead of
+O(N·k) latent KNN. Measured median 0.806× over 11 interleaved A/B pairs;
+all 14 floors IDENTICAL, goat G1 IDENTICAL, uncontaminated_g1 8/8 (pool
+recall @12 100%); the one observable cost: t48 mrr 0.961 → 0.959 (one item
+one rank below top-3 — under every gated floor). Kill-switch:
+`RIIR_CLIPPY_NO_TWO_STAGE=1`.
+
+**Second landing (this commit — the remaining waste + the idle-box
+verdict).** A stage-attribution probe on a quiet box (worktree-pinned,
+release, gate fixtures) confirmed the split and found the rest:
+
+| stage (per chunk, 3 domains × ~3.6 queries) | share | cause |
+|---|---|---|
+| retrieve (latent KNN + BM25) | ~86% | (a) the packed `retrieve()` loads content Strings + source KV entries for every candidate — discarded unread by `rank_into` (zone_hash + scores only); (b) `retrieve_diverse`'s greedy wedge expansion is O(N·k) per query — the perf index at 640 chunks |
+| instantiation marking | ~5% | one `syn::parse_file` PER DOMAIN (2 Rust domains) instead of one per span |
+| route + assembly | ~3% | fine |
+
+Fixes in this commit (no spec change — the bar stays 1000 µs):
+
+1. **Score-only retrieval** (substrate, riir-rag `d5f600ea2` →
+   `NeuronDbRetriever::retrieve_for_scoring`): the candidate set without
+   content/provenance/packing — the same stages `retrieve()` runs before
+   its post-processing, now public for scoring consumers. `corpus_index`
+   consumes it in `suggest_into`/`suggest_deep_into`. Output-identical by
+   construction (the packer at `TokenBudget(MAX)` selects everything; only
+   non-empty-content chunks could differ, and corpus patterns are non-empty
+   by construction).
+2. **`RetrievalConfig::two_stage_oversample`** (default `Some(4)`): the
+   e5ffe9c behavior surfaced as the A/B-able config knob this struct exists
+   to carry, with the env kill-switch preserved as the runtime override.
+   Quality re-gated at the RULE level: the Issue 017 retrieval eval + router
+   annotation are **bit-identical** None vs Some(4) (clippy 89.6/93.8/95.8,
+   perf 96.2/98.1/100.0, router 74/101); the composite uncontaminated G1 is
+   **bit-identical** (off 67.4%, structural 90.7%, all 97.7%) — the BM25
+   term dominates the fused ranking, so latent-leg candidate shuffling does
+   not move merged rule rankings on any measured axis. (The zone-hash-level
+   candidate sets DO change — 0–6/22 identical on whole-span queries — which
+   is exactly why quality was gated at the level consumers see.)
+3. **One parse per span** (`mark_instantiation_with_file`): the
+   instantiation probe's `syn::parse_file` hoisted out of the per-domain
+   loop; the parse-fail contract (no parse → no marking in ANY domain,
+   including docker) is preserved exactly.
+4. **Single-line-span dedupe**: a line whose trimmed text equals the whole
+   span skips its duplicate query (identical query → identical results,
+   already merged by `rank_into`).
+
+**Measured (release, quiet box, HEAD corpus, both landings): 1334 →
+739 µs/chunk (−45%), G2 GREEN with 26% headroom — the absolute verdict the
+first landing could not claim under load 8–14.** With the sibling batch's
+WIP corpus in tree (the conservative case): goat 5/5, floors 13/13. Full
+validation: G1 100% per-domain fixtures, G4 scratch-stable, Issue 017
+floors 13/13, composite G1 structural 100% (multi-lint set),
+uncontaminated G1 bit-identical A/B, latent lib suite 1116/0, default lib
+1012/0, clippy 0 findings in touched files, `bonsai_retrieval` combo
+compiles (the one `RetrievalConfig` literal that needed the new field).
+
+Standing notes for future corpus growth: the remaining cost is the latent
+KNN's O(N) stage-1a scan (per query, per domain) + BM25 — linear in corpus
+size. At the current growth rate (~5 rules/batch) the 26% headroom covers
+roughly 100+ batches. If G2 ever re-reddens, the next lever (measured here:
+clippy 1.0×, perf 1.6×, docker 1.2× further) is lowering `latent_k` for
+line queries — quality-gated the same way.
+
 ## Reproduce
 
 ```sh
