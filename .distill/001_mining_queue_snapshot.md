@@ -64,6 +64,19 @@
     oMLX/ds4 precedent); the tree was STATIC since the previous session's pin — the user-reported perf
     bump is leaderboard-side (auth-gated Yukon API) = league intelligence, routed to perf-rematch
     opponent-watch, NOT the corpus.
+  - **Unnumbered candidate (probe-only, 2026-09-02 — Research 119 §Parallel-session addendum):
+    `dispatch-handler-pair-hoist` (rust_perf/dispatch).** The aarch64 complement of Batch 99's landed
+    rule: the merged conditional-dispatch form keeps an IN-LOOP indexed handler load on aarch64 (asm-pinned,
+    `csel` offset + `ldr` + one `blr`; the classic `HANDLERS[op](..)` per-dispatch idiom), and hoisting the
+    handler pair once (register-resident select) measured ParetoDominant 2/0/0 — 1.19-1.23x at 10K/1M
+    dispatches on UNPREDICTABLE streams (structured/periodic = Tie band; verdict-stable x3, 0/0 allocs).
+    NOT landed with Batch 99 (collision yielded push-wins) — needs its own dedup cycle vs the landed
+    `mir-destprop-branch-site-merge` (distinct mechanism/fixtures: value-returning + runtime table vs
+    tail-call + known items; the landed rule's negative control marks the runtime-opaque regime
+    out-of-scope) + a cross-arch re-gate (x86_64's merged form uses `lea rip+h_*` — no in-loop load — so
+    the hoist win may be aarch64-shaped). Batch 99's own split-vs-merged negative control (0.95-1.00x on
+    runtime-opaque targets) does NOT cover this transform: splitting re-merges structurally on aarch64,
+    but the hoist still wins by eliminating the load.
   - **The arxiv pool re-walk #4: DONE 2026-09-02 ~07:15 +07** (`.research/113` — covered
     the Tuesday-09-01 announcement window; zero corpus delta; the spec-dec lane woke up:
     DBloom's ceiling-bin acceptance histogram (zero-cost telemetry adoption candidate for
