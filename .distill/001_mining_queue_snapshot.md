@@ -12,10 +12,14 @@
 
 ## Live queue state (2026-08-31, post-Batch-93, M3 box)
 
-- **Corpus counts:** kernel_opt 422 · rust_perf 97 · clippy_lints 45 · sec 12 · docker 31
+- **Corpus counts:** kernel_opt 445 · rust_perf 97 · clippy_lints 45 · sec 12 · docker 31
   (AGENTS.md is the authoritative ledger — bump there per batch, snapshot counts are a convenience copy).
-- **Last landed:** Batch 93 (`501fdb2` — ktransformers residue disposition, ZERO corpus
-  delta, the last mined-source lane CLOSED) + the t48 substrate tie-break fix (`944741f`).
+- **Last landed:** Batch 98 (2026-09-02, Research 118 / Plan 065 — the ds4 dense.metal/moe.metal
+  leads Batch 97 queued: 10 rules, corpus 435 → 445, +4 riders on B97×2/B35/B32a; GOAT all green,
+  floors HELD, score-bench #29 flat; 4 mine-time corrections incl. the INVERTED M5 sigmoid
+  hazard and the args-aliasing-by-value correction). Prior: Batch 93 (`501fdb2` — ktransformers
+  residue disposition, ZERO corpus delta, the last mined-source lane CLOSED) + the t48 substrate
+  tie-break fix (`944741f`).
   **2026-09-01 late: P8 adoption wave 2** — the nan-unsafe sweep's benches/examples/
   tests residue + unclaimed repos discharged across riir-clippy (self + loop-habitat
   proposer fix `5122bbe`), riir-neuron-db (`4524854`), riir-train (`20b53943`),
@@ -141,8 +145,11 @@
     `virtual-thread-folding-preserves-reduction-tree` (E) + the mask rule (F).
     Dropped: candidate 7 row_blocks (LICM/B44). GOAT all green (kernel_heal 1252/0,
     default 1008/0, floors 14/14 HELD, clippy 0, score-bench FLAT).**
-  - **NEXT BATCH LEADS (from the same source, dense.metal — DS4-native matvec
-    family, NOT llama.cpp-lineage):** (1) quad-composition via pair-impl
+  - **~~NEXT BATCH LEADS (from the same source, dense.metal — DS4-native matvec
+    family, NOT llama.cpp-lineage):~~ MINED 2026-09-02 — Batch 98 (Research 118 /
+    Plan 065): all 5 leads + both P8-intake candidates consumed (10 rules + 4
+    riders; the dense.metal lead file is now FULLY MINED).** Original leads for
+    the record: (1) quad-composition via pair-impl
     composition + args aliasing — ONE kernel hosts FOUR same-input projections
     by splitting the grid at tgs0 and calling the existing pair impl twice with
     a per-range aliased args struct (dense.metal L1100-1153, device-scope barrier

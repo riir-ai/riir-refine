@@ -63,11 +63,12 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 60 (1): measured-GOAT distillation (riir-train Issue 460 / katgpt-rs e2853fbf — pre-gate-recovery-by-division-cancels-algebraically; the MLA backward's saturated output-gate 0/0 NaN, fixed by algebraic cancellation; Bench 475: 6/10 -> 10/10 usable backward passes).
     // Batch 63 (3): the CubeCL twin unlock — same-input-gemv-weight-concat-at-upload, deferred-residual-fused-into-next-layer-norm, reset-state-in-place-fill-never-realloc (ternary_deltanet_gpu_forward.rs, Plan 009 / Research 071).
     // Batch 70 (3): the arxiv barrier-free-sync paper distill (arXiv:2608.13757, Plan 020 / Research 080) — barrier-free-per-dependency-wait-from-loop-counters, shared-counter-decode-producer-progress, masked-branchless-wait-collapse.
-    // Total: 209. // (historical batch-30 snapshot; current 435)
+    // Total: 209. // (historical batch-30 snapshot; current 445)
+    // Batch 98 (10): antirez/ds4 dense.metal/moe.metal leads -- grid-range-split-verbatim-impl-composition, share-activation-stream-keep-projection-reductions, tiny-rows-scalar-thread-per-row-downshift, small-batch-matvec-gemm-bridge-rung, moe-routed-down-sum-single-accumulate-pass, fused-vector-site-transcendental-form-nonportable, monomorphic-hot-caller-last-hit-memo, per-row-scale-folded-into-rhs-staging-tile, dequant-byte-pairs-as-aligned-u16-loads, cross-simd-bitonic-alternating-bank-exchange (the Batch-97 queued NEXT BATCH LEADS + 3 additional candidates).
     assert_eq!(
         corpus.entries.len(),
-        435,
-        "kernel batches through Batch 97 should have 435 rules"
+        445,
+        "kernel batches through Batch 98 should have 445 rules"
     );
 }
 
@@ -5329,21 +5330,21 @@ fn kernel_categories_cover_all_corpus_rules_exhaustively() {
 
 #[test]
 fn kernel_categories_counts_match_plan_003_table() {
-    // Pin per-category rule counts to the Plan 003 table (updated for Batch 97).
+    // Pin per-category rule counts to the Plan 003 table (updated for Batch 98).
     let expected = [
-        (KernelCategory::MemoryAccess, 99),
-        (KernelCategory::Compute, 55),
-        (KernelCategory::Fusion, 38),
-        (KernelCategory::Dispatch, 94),
-        (KernelCategory::Parallelism, 28),
+        (KernelCategory::MemoryAccess, 100),
+        (KernelCategory::Compute, 57),
+        (KernelCategory::Fusion, 39),
+        (KernelCategory::Dispatch, 95),
+        (KernelCategory::Parallelism, 30),
         (KernelCategory::FlashAttnTiling, 11),
         (KernelCategory::LinearAttnRecurrence, 26),
-        (KernelCategory::MoeDispatchBackward, 15),
+        (KernelCategory::MoeDispatchBackward, 16),
         (KernelCategory::NsaBlockSparse, 4),
         (KernelCategory::VarlenChunkedReduction, 5),
         (KernelCategory::AutotuneDispatch, 5),
-        (KernelCategory::ConvGemmLayout, 12),
-        (KernelCategory::KernelPolymorphism, 12),
+        (KernelCategory::ConvGemmLayout, 13),
+        (KernelCategory::KernelPolymorphism, 13),
         (KernelCategory::DtypeAlignment, 27),
         (KernelCategory::IrStrengthReduction, 4),
     ];
@@ -5359,9 +5360,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 435.
+    // Sum must equal 445.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 435, "Plan 003: category totals must sum to 435");
+    assert_eq!(total, 445, "Plan 003: category totals must sum to 445");
 }
 
 #[test]
@@ -5372,8 +5373,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 435,
-        "Plan 003: grouped corpus has {total} rules, expected 435"
+        total, 445,
+        "Plan 003: grouped corpus has {total} rules, expected 445"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -6675,6 +6676,188 @@ fn batch97_pseudocode_parses() {
         assert!(
             opt_verdict.parses,
             "batch-97 opt_pattern for '{id}' must parse"
+        );
+    }
+}
+
+#[test]
+fn batch98_rules_present() {
+    // Batch 98 (antirez/ds4 dense.metal/moe.metal distill -- Research 118
+    // / Plan 065): 10 kernel_opt rules (A +1, B +2, C +1, D +1, E +2,
+    // H +1, L +1, M +1) -- the NEXT BATCH LEADS Batch 97 queued + 3
+    // additional candidates. Same pin 110afdd8, quotes re-verified.
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "grid-range-split-verbatim-impl-composition",
+        "share-activation-stream-keep-projection-reductions",
+        "tiny-rows-scalar-thread-per-row-downshift",
+        "small-batch-matvec-gemm-bridge-rung",
+        "moe-routed-down-sum-single-accumulate-pass",
+        "fused-vector-site-transcendental-form-nonportable",
+        "monomorphic-hot-caller-last-hit-memo",
+        "per-row-scale-folded-into-rhs-staging-tile",
+        "dequant-byte-pairs-as-aligned-u16-loads",
+        "cross-simd-bitonic-alternating-bank-exchange",
+    ];
+    for id in ids {
+        assert!(
+            corpus.entries.iter().any(|e| e.rule_id == id),
+            "batch-98 rule '{id}' missing from corpus"
+        );
+    }
+}
+
+#[test]
+fn batch98_concepts_covered() {
+    // Distinctness + mandated phrases must survive in the concept
+    // text (case-sensitive contains -- the B51 lesson).
+    let corpus = build_kernel_seed_corpus();
+    let checks: &[(&str, &[&str])] = &[
+        (
+            "grid-range-split-verbatim-impl-composition",
+            &[
+                "BY-VALUE copy of the shared args struct",
+                "tgs0 = ceil(width0 / rows_per_group)",
+                "DEVICE-scope threadgroup barrier is mandatory",
+                "The pattern composes: a 5-way variant",
+            ],
+        ),
+        (
+            "share-activation-stream-keep-projection-reductions",
+            &[
+                "the point is not to fuse two independent weight streams into one matmul",
+                "BOUNDARY COMPLEMENT of same-input-gemv-weight-concat-at-upload",
+                "share the activation WALK",
+                "Separate accumulators are forced regardless by the per-matrix scales",
+            ],
+        ),
+        (
+            "tiny-rows-scalar-thread-per-row-downshift",
+            &[
+                "one thread per output row",
+                "Parallelism DOWN-shift",
+                "The threshold derives from the warp width",
+                "should be bench-pinned before any promotion",
+            ],
+        ),
+        (
+            "small-batch-matvec-gemm-bridge-rung",
+            &[
+                "dequantizes its K-chunk stripe ONCE and dots it against ALL tokens",
+                "the middle rung is NOT universally the winner",
+                "never hardcode the comment's range as the regime",
+                "a three-way ladder with explicit thresholds",
+            ],
+        ),
+        (
+            "moe-routed-down-sum-single-accumulate-pass",
+            &[
+                "ONE cross-lane reduction per output row",
+                "NOT BIT-IDENTICAL",
+                "OUTPUT-SUM composition",
+                "serializing the k GEMVs inside one simdgroup",
+            ],
+        ),
+        (
+            "fused-vector-site-transcendental-form-nonportable",
+            &[
+                "per-call-site, per-vector-width, per-silicon contract",
+                "produced NON-FINITE logits",
+                "inline the validated form AT the fused sites",
+                "the measured tanh-at-fused-sites failure is the contract",
+            ],
+        ),
+        (
+            "monomorphic-hot-caller-last-hit-memo",
+            &[
+                "LAST-HIT MEMO",
+                "the caller is MONOMORPHIC across the hot loop",
+                "rebuild-when-payload-tiny-and-lookup-cheap",
+                "the memo is in front of, never instead of, the generic cache",
+            ],
+        ),
+        (
+            "per-row-scale-folded-into-rhs-staging-tile",
+            &[
+                "WHERE the F32-to-F16 rounding lands",
+                "NOT bit-identical to scale-then-matmul",
+                "the lossy-surface rule",
+                "opposite sides of the matvec",
+            ],
+        ),
+        (
+            "dequant-byte-pairs-as-aligned-u16-loads",
+            &[
+                "load-width TWIN",
+                "never assumed from a runtime pointer value",
+                "the alignment invariant must be DERIVED from the struct layout",
+                "the 16-lane Q8_0 block becomes 8 loads",
+            ],
+        ),
+        (
+            "cross-simd-bitonic-alternating-bank-exchange",
+            &[
+                "DOUBLE-BUFFERED into two banks selected by cross-stage PARITY",
+                "stage-distance-based",
+                "one barrier per cross stage replaces the write+read pair",
+                "they govern different access patterns",
+            ],
+        ),
+    ];
+    for (id, needles) in checks {
+        let e = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == *id)
+            .unwrap_or_else(|| panic!("batch-98 rule '{id}' missing"));
+        for needle in *needles {
+            assert!(
+                e.gpu_concept.contains(needle),
+                "batch-98 concept for '{id}' missing phrase '{needle}'"
+            );
+        }
+    }
+}
+
+#[test]
+#[cfg(not(feature = "kernel_verify"))]
+fn batch98_pseudocode_parses() {
+    // G1 for Batch 98: syn-parse gate (the ds4 dense.metal/moe.metal
+    // distill -- the grid-range split composition, the shared-activation
+    // non-merge boundary, the tiny-row scalar downshift, the small-batch
+    // matvec bridge, the routed-sum single-pass accumulation, the fused-
+    // site transcendental contract, the last-hit lookup memo, the staging-
+    // boundary scale fold, the aligned pair loads, the alternating-bank
+    // bitonic exchange).
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "grid-range-split-verbatim-impl-composition",
+        "share-activation-stream-keep-projection-reductions",
+        "tiny-rows-scalar-thread-per-row-downshift",
+        "small-batch-matvec-gemm-bridge-rung",
+        "moe-routed-down-sum-single-accumulate-pass",
+        "fused-vector-site-transcendental-form-nonportable",
+        "monomorphic-hot-caller-last-hit-memo",
+        "per-row-scale-folded-into-rhs-staging-tile",
+        "dequant-byte-pairs-as-aligned-u16-loads",
+        "cross-simd-bitonic-alternating-bank-exchange",
+    ];
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-98 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            ref_verdict.parses,
+            "batch-98 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            opt_verdict.parses,
+            "batch-98 opt_pattern for '{id}' must parse"
         );
     }
 }
