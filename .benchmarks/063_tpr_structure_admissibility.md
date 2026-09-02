@@ -936,3 +936,39 @@ the router moved 2.3% on a corpus whose covariate is pinned at `max 1 /
 mean 1.000`, which is §12.8's point in its stronger form — both probes drift
 with corpus size where the structure question is not posed, and neither drift
 means anything.
+
+### 12.9 The two mislabels were the exceptions — audited, not assumed
+
+§12.8a closes with "any number cited from §11/§12 prose is unverified until
+someone returns to the artifact." That is the right reflex after a doc
+mislabels itself twice, but left standing it condemns every number here on the
+strength of two. Audited instead:
+
+**Arm labelling.** Every ratio citation in §11–§12 outside a table or code
+block, checked for an arm label in scope. 13 candidates, all resolved to a
+labelled heading or an arm-labelled quoted block — e.g. §11.2's `0.9961 /
+0.9897` sits four lines under `clippy_lints/latent8 [coalesced T=8]`. **No
+third mislabel.** The two known ones — §12.6's sentence, and §12.4's P15 row
+which gave `0.9307 / 1.0147` without naming an arm and so let §12.6 guess wrong
+— are the exceptions, not a pattern.
+
+**Values.** The `clippy_lints` and `rustc_errors` corpora did not move between
+the §12.4 run and the §12.7 run (113 and 212 states in both), so their cited
+numbers are directly checkable against the later artifact. Nine claims, nine
+exact matches:
+
+| arm | `bow_router` | cross-state | moved |
+|---|---|---|---|
+| `clippy_lints / latent8 [coalesced]` | 0.9961 ✓ | 0.9897 ✓ | 79/113 ✓ |
+| `clippy_lints / tokenbag256 [coalesced]` | 1.1417 ✓ | 1.0693 ✓ | 79/113 ✓ |
+| `rustc_errors / tokenbag256 [coalesced]` | 2.2096 ✓ | 2.6661 ✓ | 178/212 ✓ |
+
+Only `kernel_opt` moved (445 → 453), which is why it is the only arm whose
+§12.4 values differ from §12.7's — and §12.8/§12.8b already price that drift.
+
+**So the standing caution is discharged for §11–§12 as written, and replaced
+with the narrower rule that actually prevents recurrence:** a ratio cited in
+prose must name its arm *at the citation*, not rely on a heading a reader may
+not still be inside. §12.4's P15 row is the counterexample — it was under a
+correct heading and still lost the arm on the way into §12.6, because a table
+row travels and a heading does not.
