@@ -1545,6 +1545,7 @@ mod entries_gpu_10;
 mod entries_gpu_11;
 mod entries_gpu_12;
 mod entries_gpu_13;
+mod entries_gpu_14;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -1571,6 +1572,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_11::entries());
     entries.extend(entries_gpu_12::entries());
     entries.extend(entries_gpu_13::entries());
+    entries.extend(entries_gpu_14::entries());
     Corpus::new(entries)
 }
 
@@ -1583,7 +1585,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 445-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 453-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1591,7 +1593,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (100 rules)
+    // A: Memory access patterns (103 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -1695,6 +1697,9 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "quant-group-scale-fetch-gating",
             "barrier-after-async-mma-before-staged-tile-reuse",
             "share-activation-stream-keep-projection-reductions",
+            "functional-cache-versioning-loses-donation-under-kernel-read",
+            "fused-kv-write-single-writer-reads-newest-from-input",
+            "never-gqa-multiply-full-d-merge-smem",
         ],
     ),
     // B: Compute patterns (57 rules)
@@ -1807,7 +1812,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "grid-range-split-verbatim-impl-composition",
         ],
     ),
-    // D: Dispatch patterns (95 rules)
+    // D: Dispatch patterns (98 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -1907,9 +1912,12 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "row-addressable-operand-index-not-full-tensor-map",
             "wide-row-copy-tile-rows-across-workgroups",
             "monomorphic-hot-caller-last-hit-memo",
+            "in-place-write-through-input-emits-fence-consumer",
+            "residency-set-wired-once-post-warm-persistent-footprint",
+            "container-rebind-over-retrace-for-churn-survival",
         ],
     ),
-    // E: Parallelism patterns (30 rules)
+    // E: Parallelism patterns (32 rules)
     (
         KernelCategory::Parallelism,
         "E: parallelism",
@@ -1944,6 +1952,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "virtual-thread-folding-preserves-reduction-tree",
             "tiny-rows-scalar-thread-per-row-downshift",
             "cross-simd-bitonic-alternating-bank-exchange",
+            "register-budget-head-split-gqa-reread-trade",
+            "batch-composition-invariant-grid-early-return",
         ],
     ),
     // F: Flash-attention tiling (11 rules)

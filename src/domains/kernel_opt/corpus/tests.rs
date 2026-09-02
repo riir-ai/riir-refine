@@ -63,12 +63,13 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 60 (1): measured-GOAT distillation (riir-train Issue 460 / katgpt-rs e2853fbf — pre-gate-recovery-by-division-cancels-algebraically; the MLA backward's saturated output-gate 0/0 NaN, fixed by algebraic cancellation; Bench 475: 6/10 -> 10/10 usable backward passes).
     // Batch 63 (3): the CubeCL twin unlock — same-input-gemv-weight-concat-at-upload, deferred-residual-fused-into-next-layer-norm, reset-state-in-place-fill-never-realloc (ternary_deltanet_gpu_forward.rs, Plan 009 / Research 071).
     // Batch 70 (3): the arxiv barrier-free-sync paper distill (arXiv:2608.13757, Plan 020 / Research 080) — barrier-free-per-dependency-wait-from-loop-counters, shared-counter-decode-producer-progress, masked-branchless-wait-collapse.
-    // Total: 209. // (historical batch-30 snapshot; current 445)
+    // Total: 209. // (historical batch-30 snapshot; current 453)
     // Batch 98 (10): antirez/ds4 dense.metal/moe.metal leads -- grid-range-split-verbatim-impl-composition, share-activation-stream-keep-projection-reductions, tiny-rows-scalar-thread-per-row-downshift, small-batch-matvec-gemm-bridge-rung, moe-routed-down-sum-single-accumulate-pass, fused-vector-site-transcendental-form-nonportable, monomorphic-hot-caller-last-hit-memo, per-row-scale-folded-into-rhs-staging-tile, dequant-byte-pairs-as-aligned-u16-loads, cross-simd-bitonic-alternating-bank-exchange (the Batch-97 queued NEXT BATCH LEADS + 3 additional candidates).
+    // Batch 100 (8): Layr-Labs/qwen-3.8-mtp-challenge -- functional-cache-versioning-loses-donation-under-kernel-read, fused-kv-write-single-writer-reads-newest-from-input, in-place-write-through-input-emits-fence-consumer, residency-set-wired-once-post-warm-persistent-footprint, register-budget-head-split-gqa-reread-trade, batch-composition-invariant-grid-early-return, never-gqa-multiply-full-d-merge-smem, container-rebind-over-retrace-for-churn-survival (Research 120 / Plan 068; A +3, D +3, E +2).
     assert_eq!(
         corpus.entries.len(),
-        445,
-        "kernel batches through Batch 98 should have 445 rules"
+        453,
+        "kernel batches through Batch 100 should have 453 rules"
     );
 }
 
@@ -1169,8 +1170,8 @@ fn batch22_cudarc_kernels_concepts_covered() {
     assert!(concepts.contains(&"use extern __shared__ with launch-time shared_mem_bytes instead of a compile-time __shared__ array when the smem size depends on a runtime dimension (e.g. head_dim varies: 64 for DeltaNet, 128 for Qwen-7B, 256 for Bonsai-27B)"));
     // A: ternary-bit-plane-u64-as-2x-u32 (riir-gpu cudarc_kernels/embedding.rs L37-69)
     assert!(concepts.contains(&"ternary weights as two bit-planes (positive + negative sign bits) packed as u64 blocks cast to 2×u32 words — extract sign per column via bit_pos = c % 32, word_in_block = (c % 64) / 32, then output = sign * per-group scale. The 2×u32 cast is because u64 isn't directly per-bit addressable in CUDA; two u32 words are"));
-    // B: warp-shuffle-intrinsics-for-sub-warp-reduction (riir-gpu cudarc_kernels/mod.rs L163-167 + attention.rs L336-344)
-    assert!(concepts.contains(&"for blocks of 32 threads or fewer (one warp), use __shfl_down_sync(mask, val, delta) butterfly reduction instead of shared memory + __syncthreads — the warp executes in lockstep (SIMT), so the shuffle is both correct and free (no smem allocation, no synchronization barrier). For the final 32-thread tail of a larger smem tree reduction, cast to volatile float* and skip __syncthreads — volatile prevents the compiler from caching stale values in registers"));
+    // B: warp-shuffle-intrinsics-for-sub-warp-reduction (riir-gpu cudarc_kernels/mod.rs L163-167 + attention.rs L336-344; + the Batch-100 Metal measured-cost rider)
+    assert!(concepts.contains(&"for blocks of 32 threads or fewer (one warp), use __shfl_down_sync(mask, val, delta) butterfly reduction instead of shared memory + __syncthreads — the warp executes in lockstep (SIMT), so the shuffle is both correct and free (no smem allocation, no synchronization barrier). For the final 32-thread tail of a larger smem tree reduction, cast to volatile float* and skip __syncthreads — volatile prevents the compiler from caching stale values in registers. Measured Metal cost note (qwen-3.8-mtp-challenge kernel-research.md section 1.1 @ 0863b06a, Batch 100): simd_sum(f32) runs ~14.5 cycles throughput / ~28 latency vs ~2 for a shuffle — a per-(token, head) simd_sum is a real ALU cost in a GQA=8 pass-A inner loop (8 simd_sums per token per simdgroup); quad reductions are ~2x cheaper and a shuffle tree can beat the builtin — the shuffle-butterfly arm of this rule is the measured-cheap arm on Apple silicon as well, not only under the CUDA lockstep argument."));
     // C: fused-activation-quantize-for-gemv-consumer (riir-gpu cudarc_kernels/mod.rs L191-289 + L407-554)
     assert!(concepts.contains(&"when an activation's output (RMSNorm, SwiGLU, gate*sigmoid, gate*silu) is immediately consumed by a GEMV that reads int8 (not f32), fuse the activation + per-block absmax reduction + int8 quantize into one kernel — eliminates the intermediate f32 HBM round-trip and one kernel launch. The activation is the non-trivial part (needs a reduction or exp); the quantize is the trivial part (absmax + scale + round)"));
     // D: cuda-graph-scalar-via-device-pointer (riir-gpu cudarc_kernels/embedding.rs L76-105 + attention.rs L421-610)
@@ -5330,13 +5331,13 @@ fn kernel_categories_cover_all_corpus_rules_exhaustively() {
 
 #[test]
 fn kernel_categories_counts_match_plan_003_table() {
-    // Pin per-category rule counts to the Plan 003 table (updated for Batch 98).
+    // Pin per-category rule counts to the Plan 003 table (updated for Batch 100).
     let expected = [
-        (KernelCategory::MemoryAccess, 100),
+        (KernelCategory::MemoryAccess, 103),
         (KernelCategory::Compute, 57),
         (KernelCategory::Fusion, 39),
-        (KernelCategory::Dispatch, 95),
-        (KernelCategory::Parallelism, 30),
+        (KernelCategory::Dispatch, 98),
+        (KernelCategory::Parallelism, 32),
         (KernelCategory::FlashAttnTiling, 11),
         (KernelCategory::LinearAttnRecurrence, 26),
         (KernelCategory::MoeDispatchBackward, 16),
@@ -5360,9 +5361,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 445.
+    // Sum must equal 453.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 445, "Plan 003: category totals must sum to 445");
+    assert_eq!(total, 453, "Plan 003: category totals must sum to 453");
 }
 
 #[test]
@@ -5373,8 +5374,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 445,
-        "Plan 003: grouped corpus has {total} rules, expected 445"
+        total, 453,
+        "Plan 003: grouped corpus has {total} rules, expected 453"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -6858,6 +6859,163 @@ fn batch98_pseudocode_parses() {
         assert!(
             opt_verdict.parses,
             "batch-98 opt_pattern for '{id}' must parse"
+        );
+    }
+}
+
+#[test]
+fn batch100_rules_present() {
+    // Batch 100 (Layr-Labs/qwen-3.8-mtp-challenge -- Research 120 / Plan 068):
+    // 8 kernel_opt rules (A +3, D +3, E +2) -- the M5-Max Swift/Metal
+    // inference arena distill, same team as antirez/ds4. Pin 0863b06a,
+    // byte-identical to the verdict-time pin (tree static since 2026-08-23);
+    // quotes re-verified byte-accurate by two parallel verification lanes.
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "functional-cache-versioning-loses-donation-under-kernel-read",
+        "fused-kv-write-single-writer-reads-newest-from-input",
+        "in-place-write-through-input-emits-fence-consumer",
+        "residency-set-wired-once-post-warm-persistent-footprint",
+        "register-budget-head-split-gqa-reread-trade",
+        "batch-composition-invariant-grid-early-return",
+        "never-gqa-multiply-full-d-merge-smem",
+        "container-rebind-over-retrace-for-churn-survival",
+    ];
+    for id in ids {
+        assert!(
+            corpus.entries.iter().any(|e| e.rule_id == id),
+            "batch-100 rule '{id}' missing from corpus"
+        );
+    }
+}
+
+#[test]
+fn batch100_concepts_covered() {
+    // Distinctness + mandated phrases must survive in the concept
+    // text (case-sensitive contains -- the B51 lesson).
+    let corpus = build_kernel_seed_corpus();
+    let checks: &[(&str, &[&str])] = &[
+        (
+            "functional-cache-versioning-loses-donation-under-kernel-read",
+            &[
+                "23 layers x {K,V} x 8 GiB",
+                "pure write-only chains donate fine",
+                "the failure needs >= 2 layers sharing a slab group",
+                "dead on arrival",
+                "STABLE buffer written IN PLACE by a kernel",
+            ],
+        ),
+        (
+            "fused-kv-write-single-writer-reads-newest-from-input",
+            &[
+                "exactly ONE threadgroup per byte is the writer",
+                "knew/vnew INPUT operands",
+                "outside every attendable window",
+            ],
+        ),
+        (
+            "in-place-write-through-input-emits-fence-consumer",
+            &[
+                "fence[0] = prev[0] + 1",
+                "directly or transitively",
+                "fewer than 8 elements land in the CONSTANT address space",
+            ],
+        ),
+        (
+            "residency-set-wired-once-post-warm-persistent-footprint",
+            &[
+                "capacity is ZERO until a wired limit is applied",
+                "live post-warm footprint",
+                "Never end or shrink the ticket",
+            ],
+        ),
+        (
+            "register-budget-head-split-gqa-reread-trade",
+            &[
+                "HPT*D/32 <= 32",
+                "no head's summation order changes",
+                "UNCATCHABLE process fatal",
+                "vLLM RFC #15351",
+            ],
+        ),
+        (
+            "batch-composition-invariant-grid-early-return",
+            &[
+                "INCLUDING float summation order, is bit-identical regardless of batchmates",
+                "RETURN EARLY on lo >= attend_len",
+                "RECOMPUTES the partition count from the row's own attended length",
+            ],
+        ),
+        (
+            "never-gqa-multiply-full-d-merge-smem",
+            &[
+                "Never put a GQA multiplier on a full-D threadgroup-memory merge surface",
+                "constant ~4 KB smem REGARDLESS of D and GQA",
+                "GQA-INDEPENDENT smem",
+                "the anti-pattern no production kernel uses",
+            ],
+        ),
+        (
+            "container-rebind-over-retrace-for-churn-survival",
+            &[
+                "no copy, no retrace",
+                "clears the lane WHOLESALE",
+                "never a permanent invalidation",
+                "FOURTH mechanism",
+            ],
+        ),
+    ];
+    for (id, needles) in checks {
+        let e = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == *id)
+            .unwrap_or_else(|| panic!("batch-100 rule '{id}' missing"));
+        for needle in *needles {
+            assert!(
+                e.gpu_concept.contains(needle),
+                "batch-100 concept for '{id}' missing phrase '{needle}'"
+            );
+        }
+    }
+}
+
+#[test]
+#[cfg(not(feature = "kernel_verify"))]
+fn batch100_pseudocode_parses() {
+    // G1 for Batch 100: syn-parse gate (the qwen-3.8-mtp-challenge
+    // distill -- the donation-loss versioning trap, the fused single-writer
+    // KV write, the fence-token ordering contract, the wire-once residency
+    // ticket, the head-split register budget, the batch-composition-
+    // invariant grid, the GQA-independent merge surface, and the
+    // container-rebind churn-survival design).
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "functional-cache-versioning-loses-donation-under-kernel-read",
+        "fused-kv-write-single-writer-reads-newest-from-input",
+        "in-place-write-through-input-emits-fence-consumer",
+        "residency-set-wired-once-post-warm-persistent-footprint",
+        "register-budget-head-split-gqa-reread-trade",
+        "batch-composition-invariant-grid-early-return",
+        "never-gqa-multiply-full-d-merge-smem",
+        "container-rebind-over-retrace-for-churn-survival",
+    ];
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-100 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            ref_verdict.parses,
+            "batch-100 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            opt_verdict.parses,
+            "batch-100 opt_pattern for '{id}' must parse"
         );
     }
 }

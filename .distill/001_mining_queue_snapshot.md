@@ -17,9 +17,27 @@
 
 ## Live queue state (2026-08-31, post-Batch-93, M3 box)
 
-- **Corpus counts:** kernel_opt 445 · rust_perf 98 · clippy_lints 45 · sec 12 · docker 31
+- **Corpus counts:** kernel_opt 453 · rust_perf 98 · clippy_lints 45 · sec 12 · docker 31
   (AGENTS.md is the authoritative ledger — bump there per batch, snapshot counts are a convenience copy).
-- **Last landed:** **Batch 99 (2026-09-02, Research 119 / Plan 067 — the wasmi v2.0 blog
+- **Last landed:** **Batch 100 (2026-09-02, Research 120 / Plan 068 — the Layr-Labs/qwen-3.8-mtp-challenge
+  distill, the M5-Max Swift/Metal inference arena, same team as ds4 B97/98): 8 rules + 1 B22 rider,
+  corpus 445 → 453 (A +3, D +3, E +2). Lead `functional-cache-versioning-loses-donation-under-
+  kernel-read` (the MLX slice-update donation-loss trap; ONE numeric correction from the verdict:
+  23 layers × {K,V} × 8 GiB, not 24×; + the throttle-serialization rider ~13× + the ≥2-layers
+  fixture corollary) + the in-place-contract family (fused single-writer-reads-newest-from-input;
+  fence-token-consumer + the MLX <8-element CONSTANT-address-space ABI rider) + Metal
+  residency-set wire-once + the register-budget HPT head split (test file confirmed:
+  CBv2PagedEligibilityTests) + 3 NOVEL (batch-composition-invariant-grid-early-return;
+  never-gqa-multiply-full-d-merge-smem — the source doc's own extracted rule; container-rebind-
+  over-retrace-for-churn-survival — the FOURTH graph-churn mechanism beside B58/B81/B92/B97).
+  Rider: B22 warp-shuffle += the Metal measured-cost note (simd_sum ~14.5 cyc vs ~2 shuffle).
+  Pin byte-identical to the verdict (tree static since 08-23; leaderboard bumps are auth-gated).
+  Two verification lanes; DFlashBatchedEngine = honest zero. R6 SKIPPED per plan (config-knob);
+  7 defers ledgered in Research 120 (span-snapping, hidden-footprint ledger, chained-decode
+  overlap, dtype priming, scratch-lane recycle, wrap-seam warmup, dispatch-batching note).
+  GOAT: kernel_heal 1262/0/1i + default 1012/0 + clippy 0 both states + floors 14/14 HELD
+  (bands identical); ALL count pins walked incl. the batch22 full-concept pin (moved WITH the
+  rider — the gate caught the deliberate change as designed).** Prior: Batch 99 (2026-09-02, Research 119 / Plan 067 — the wasmi v2.0 blog
   distill, the first rust_perf batch since Batch 94): `mir-destprop-branch-site-merge`
   MEASURED ParetoDominant 2/0/1 (1.04/1.24/1.25×, corpus validator; probe-stable ×2),
   asm-verified mechanism (merged = cmovne + ONE indirect tail-jump; split = two
@@ -29,7 +47,7 @@
   secondary `hot-dispatch-gpr-arg-budget` probed-Tie on msvc-x64 (1.009/0.999×) →
   queued-secondary kill-free (sysv64 window). GOAT: default 1012/0 + bench 1030/0 +
   floors 13/13 + score-bench FLAT + clippy 0 both states; SIX count pins walked
-  (three caught by the full-suite run).** Prior: Batch 98 (2026-09-02, Research 118 / Plan 065 — the ds4 dense.metal/moe.metal
+  (three caught by the full-suite run). Prior: Batch 98 (2026-09-02, Research 118 / Plan 065 — the ds4 dense.metal/moe.metal
   leads Batch 97 queued: 10 rules, corpus 435 → 445, +4 riders on B97×2/B35/B32a; GOAT all green,
   floors HELD, score-bench #29 flat; 4 mine-time corrections incl. the INVERTED M5 sigmoid
   hazard and the args-aliasing-by-value correction). Prior: Batch 93 (`501fdb2` — ktransformers
@@ -56,17 +74,14 @@
     windows-msvc x64 (1.009/0.999×, two runs; the blog's evidence is sysv64 tail-call
     dispatch). Re-open ONLY with a sysv64 measurement window; ABI-specific,
     interpreter/VM-loop-shaped pattern.
-  - **Batch 100 candidate (queued 2026-09-02, Plan 068 / Research 120): Layr-Labs/qwen-3.8-mtp-challenge**
-    (MIT, pin `0863b06a`, same team as ds4 B97/98) — route `kernel_opt`, verdict **YES B+**, yield 3–4
-    rules, lead = `functional-cache-versioning-loses-donation-under-kernel-read` (MLX slice-update
-    versioning of a slab KV cache loses donation when a custom kernel reads it in-flight → full-buffer
-    copies per update; measured 25,470→13.6 ms/step, ≈370 GiB/token; fix = stable buffer + in-place
-    kernel write), then the in-place-contract family (single-writer-reads-newest-from-input;
-    fence-token-consumer for writes through "input" declarations), Metal residency-set wired-once
-    post-warm, register-budget HPT head split. Caveats: Swift/Metal substrate (pseudocode rules, the
-    oMLX/ds4 precedent); the tree was STATIC since the previous session's pin — the user-reported perf
-    bump is leaderboard-side (auth-gated Yukon API) = league intelligence, routed to perf-rematch
-    opponent-watch, NOT the corpus.
+  - **~~Batch 100 candidate (queued 2026-09-02, Plan 068 / Research 120): Layr-Labs/qwen-3.8-mtp-challenge~~
+    LANDED 2026-09-02** (see Last landed — 8 rules, not the verdict's 3–4 estimate: the two verification
+    lanes surfaced 3 novel rules beyond the planned R1-R5). **Deferred-with-reasons ledger carried in
+    Research 120's appendix — the strongest reopen candidates:** hidden fast-path footprint charged
+    to the admission ledger + refuse-on-half-budget (CompiledDecodeV2; reopen on the next
+    qwen-3.8-mtp-challenge-adjacent batch or a paged-KV admission consumer) and indivisible-attention-
+    span chunk snapping + one-shot starvation guard (SchedulerV2; reopen on a multimodal or span-atomic
+    chunked-prefill consumer).
   - **Unnumbered candidate (probe-only, 2026-09-02 — Research 119 §Parallel-session addendum):
     `dispatch-handler-pair-hoist` (rust_perf/dispatch).** The aarch64 complement of Batch 99's landed
     rule: the merged conditional-dispatch form keeps an IN-LOOP indexed handler load on aarch64 (asm-pinned,
