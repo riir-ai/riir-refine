@@ -139,9 +139,36 @@ did NOT fire. Three caveats that bound what Phase 2 may claim:
   **QUALIFIED 2026-09-02 by the composition MEAN (`f4f5df3`, Bench 063 §12.6) —
   read before starting either route.** The two control ratios this paragraph
   leans on come from arms that are **near-degenerate**: `clippy_lints` max 4 but
-  **mean 1.378** over 45 fillers, `rustc_errors` max 6 **mean 1.750** over 8.
+  **mean 1.378** over 45 fillers, `rustc_errors` max 4 **mean 1.500** over 8.
   The typical filler contributes no `(role, filler)` variation at all and the
-  max is carried by a handful of them. `structured()` is still `Some(true)` and
+  max is carried by a handful of them.
+
+  *(Arm-matched 2026-09-02. The `rustc_errors` covariate was first written here
+  as max 6 / mean 1.750 — that is the **uncoalesced** arm, whose probes were
+  `SkippedInadmissible` and which therefore produced no ratio at all. 2.2096
+  comes from `rustc_errors / tokenbag256 [coalesced T=8]`, whose covariate is
+  max 4 / mean 1.500; coalescing merges roles and can only lower it. Same for
+  1.1417, which is `clippy_lints / tokenbag256 [coalesced T=8]` — that one was
+  already right, because coalescing leaves clippy's covariate unchanged. The
+  conclusion is unaffected: both are near-degenerate either way. Recorded
+  because quoting a covariate from a different arm than the ratio it qualifies
+  is the same one-step-wider-than-measured shape this whole thread is about.)*
+
+  **The two arms are thin in DIFFERENT ways, and the remedies differ.** From the
+  arm-matched numbers, distinct `(role, filler)` pairs = `fillers x mean`:
+
+  | arm (coalesced, 256-D) | fillers | m' | distinct pairs | pair space | covered | states/pair |
+  |---|---|---|---|---|---|---|
+  | `clippy_lints` | 45 | 6 | 62 | 270 | 23.0% | **1.8** |
+  | `rustc_errors` | 8 | 8 | 12 | 64 | 18.8% | **17.7** |
+
+  `clippy_lints` is thinly **observed** — 1.8 states per distinct pair, so each
+  pair's contribution is essentially a single sample and more corpus would
+  sharpen it. `rustc_errors` is thinly **covered** but well observed — 17.7
+  states per pair, so its 18.8% is not an undersampling artifact and more data
+  cannot fix it; only pairs that do not occur occurring would. Route (b)'s
+  precondition below therefore has two different failure modes to test for, not
+  one. `structured()` is still `Some(true)` and
   the guard is still two-sided, so nothing here is overturned — but "the
   structure exists in the code text" is a thinner claim than it read as when
   only `max` was reported, and it is the claim BOTH routes are built on.
