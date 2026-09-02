@@ -55,6 +55,14 @@
     groups, KVarN), never per-channel-scaled ones (Bench 556's insight).
     DASC 2608.30386 = GDN lane record only. Standing fix for walk #6: drop `cat:cs.LG`
     from the spec-dec query (walk-#4 recall hole).
+  - **Issue 845 (the PoT lever) CPU HALF LANDED 2026-09-02** — katgpt-rs `91a9cdaf`
+    (Plan 586, `pot_scales` opt-in in katgpt-types): `quantize_from_f32_pot` (snap-before-
+    quantize = requantize-from-parents), exact `snap_f32_to_pow2`, `all_scales_are_pow2`,
+    scale-covariance property test, SNR harness — PoT rel-err ratio 0.988–1.012 vs native
+    (the carry loop absorbs the ≤√2 snap factor). T0 scale inventory in Plan 586.
+    **Remaining: GPU G1/G3** (Vulkan-vs-CPU bit-identity at scale sites + negative
+    control), 4090-window-gated — the box was running the sibling's L4 eval at landing
+    time. q8kv arm + trit-tier mirror stay deferred per the issue's entry rules.
   - **09-15 MCP search quota reset** → online perf-search pool walk (queue item 11).
   - **Batch 94 (LANDED 2026-09-01, Plan 058 / Research 112): oMLX PR #3260
     expert-streaming distill CONSUMED** — 8 kernel_opt D + 1 rust_perf io +
