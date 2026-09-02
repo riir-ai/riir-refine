@@ -5,6 +5,7 @@
 - **Source:** https://wasmi-labs.github.io/blog/posts/wasmi-v2.0/ — "Wasmi 2.0 - Engineering of the Fastest Wasm Interpreters", Robin Freyler (wasmi author), published 2026-09-01.
 - **Inspection date:** 2026-09-02.
 - **Source type:** engineering blog (not a repo) — fixtures for any corpus entry must be ORIGINAL minimal reproductions per the distill constraints; the blog's assembly listings are evidence, never pasted.
+- **Mine-time pin (2026-09-02, cloned for the pending Batch 99):** `wasmi-labs/wasmi @ 2970aa871cc1001b57b267ccecdcd1e42306199e` (shallow, default-branch tip), dual-licensed Apache-2.0/MIT. `.raw/wasmi` is ephemeral scratch — if a later session finds it stale or absent, re-clone at this sha (or the then-current tip) and re-pin; never quote against a checkout whose commit you did not pin yourself.
 - **Provenance chain:** first-party (the interpreter's author), measured (wasmi-benchmarks suite, 3 hardware setups, PR-by-PR release notes), cross-verified (the DestProp finding was independently reproduced on Stitch before being found in wasmi; upstream rustc context cited). Sponsorship note: SDF funding ends 2026-10 — a maintenance watch item for the DEPENDENCY, not the patterns.
 
 ## Why this source matters to the workspace (dual verdict)
