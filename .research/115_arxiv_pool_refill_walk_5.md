@@ -2,7 +2,11 @@
 
 **Status:** RECORD — read-only intake walk; zero corpus delta. One A− candidate
 queued for source-verification; two lane records filed. Next window: 09-03+
-(Wed-09-02 submissions land Thu ~07:00 +07).
+(Wed-09-02 submissions land Thu ~07:00 +07). **UPDATE 2026-09-02 (later session): both
+queued source-verifications DISCHARGED — [Research 116](116_pot_determinism_ocgquant_source_verification.md)
+confirms 2609.00363 on all three pinned questions (lever filed: riir-ai Issue 845) and
+refutes 2609.00066's runtime-cost concern in the B+ direction (static permutation, zero
+GEMM cost; grouping lever queued).**
 
 Walk executor: idle-loop subagent (read-only lane). Coordinator intake + this
 record: same session. Predecessor: [Research 113](113_arxiv_pool_refill_walk_4.md)

@@ -34,13 +34,27 @@
     modelless-first). **Next window 09-03+** (daily differential cadence; MCP quota 09-15).
   - **The arxiv pool re-walk #5: DONE 2026-09-02 (later session, subagent read-only lane)**
     (`.research/115` — Sept-ID (2609.x) differential wave + two NEW query surfaces
-    [KV+eviction, quant+inference]; zero corpus delta). **Queued from the walk:**
-    2609.00363 (A− — PoT-scale INT8 determinism lever; source-verify: PoT procedure
-    mirrorable? f16-KV blindness transfer? upgrades Bench 802's flat-tolerance verdict
-    into a fault-class classification?) QUEUED FIRST; 2609.00066 (B+ — NVFP4 outlier
-    grouping; source-verify: pure channel permutation vs calibration-coupled; svcca
-    Permuted-detection constraint) QUEUED SECOND; DASC 2608.30386 = GDN lane record only.
-    Standing fix for walk #6: drop `cat:cs.LG` from the spec-dec query (walk-#4 recall hole).
+    [KV+eviction, quant+inference]; zero corpus delta). **Queued from the walk — both
+    DISCHARGED same day (`.research/116`):** 2609.00363 (A−) CONFIRMED on all three pinned
+    questions — PoT requantization is deterministic weights-only w/ a byte-exact
+    reconstruction gate (mirrorable; caveat: pin our own scale inventory first), the
+    ≤1-spacing blindness transfers to f16-KV AS DOCTRINE (not the INT32 alibi — our fp32
+    accumulation is order-dependent and multi-ULP, hence tolerance-visible), and Bench 802's
+    flat-budget verdict is upgraded to the fault-class classification (tolerance gates
+    certify boundedness + preconditions + operand provenance ONLY; Bench 728's div.full is
+    the live invisible-class instance). **Lever FILED: riir-ai Issue 845** (PoT-scale
+    determinism for ternary group scales + q8kv block scales — kills the div.full class by
+    construction; requantize-not-rewrite + byte-exact gate mandatory; entry via GOAT with
+    bit-identity promoted from measured to required). 2609.00066 (B+) — runtime-cost concern
+    REFUTED in the B+ direction: decision = offline deterministic greedy (RMS-ranked,
+    ~5 min/8B model), runtime = static permutation absorbed into the quantize kernel
+    (contiguous-segment fast path; −1.5..−2.9% prefill vs fused-RTN, decode memory
+    identical). **Grouping lever QUEUED** with a falsifiable entry condition (measured
+    collateral-error case the B55 sidecar does not fix at lower cost); block-invariance
+    boundary recorded: OCG applies ONLY to block-shared-scale surfaces (q8kv, Q4_K, ternary
+    groups, KVarN), never per-channel-scaled ones (Bench 556's insight).
+    DASC 2608.30386 = GDN lane record only. Standing fix for walk #6: drop `cat:cs.LG`
+    from the spec-dec query (walk-#4 recall hole).
   - **09-15 MCP search quota reset** → online perf-search pool walk (queue item 11).
   - **Batch 94 (LANDED 2026-09-01, Plan 058 / Research 112): oMLX PR #3260
     expert-streaming distill CONSUMED** — 8 kernel_opt D + 1 rust_perf io +
