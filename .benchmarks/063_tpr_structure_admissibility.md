@@ -294,3 +294,90 @@ Bench 062 §10 headroom description already pointed at (the closable part is
   would open `d = 2`. The window is corpus-limited, so the structure verdict is
   a verdict at the sparsest admissible geometry — the *weakest* setting the
   claim could have been made in, which cuts in its favour but bounds its size.
+
+---
+
+## 10. Addendum (preregistered 2026-09-02, after §1-9 landed at `74d99e9`)
+
+### 10.1 Why an addendum rather than a re-run
+
+Two of §7's results are limited by the same thing, and it is fixable:
+
+- **`rustc_errors` is unmeasurable at every `d`** because `plain-binding` holds
+  exactly **1** of 212 spans. It is `classify_rustc_shape`'s final `else`
+  branch — the catch-all — so a population of 1 means the classifier is nearly
+  *total* on this corpus. Good classifier, fatal for the per-role bound.
+- **P3 was confirmed only weakly**: `d = 1` was the sole admissible candidate,
+  so BIC had nothing to choose between and its "preference" was vacuous.
+
+Both are consequences of one or two near-empty role blocks, not of the corpus.
+A role with `≤ d` states carries no fittable readout — so give it none.
+
+### 10.2 The coalescing rule (mechanical, fixed before running)
+
+For each `d`, before fitting:
+
+1. Every role with `≤ d` states is merged into a single synthetic role
+   `other`.
+2. If `other` itself ends with `≤ d` states, its states are **dropped** and the
+   count is reported. Dropping is preferred to fitting a block that cannot be
+   fitted; a silent drop would be the real defect, so the count travels in the
+   report.
+3. Surviving role ids are remapped to a contiguous `0..m'` (required by
+   `Orthogonal`, whose block index *is* the role id).
+
+This is the "fold rules to categories" move katgpt-rs Issue 707's handoff note
+offered as the alternative to a wide role vocabulary, applied to the axis that
+actually needed it. It is **not** free: it lowers role resolution, so the
+structure claim it supports is a claim about the coarser vocabulary.
+
+Projected geometry (arithmetic, pre-run — the per-role bound needs `> d`):
+
+| arm | d | roles ≤ d | `other` | m' | dropped | expected |
+|---|---|---|---|---|---|---|
+| clippy | 1 | — | — | 8 | 0 | admissible (already) |
+| clippy | 2 | generic(2) | 2 | 7 | 2 | admissible after drop |
+| clippy | 4 | generic, closure | 6 | 7 | 0 | admissible |
+| clippy | 8 | generic, closure, impl-block | 11 | 6 | 0 | admissible |
+| rustc | 1 | plain-binding(1) | 1 | 9 | 1 | admissible after drop |
+| rustc | 4 | plain-binding | 1 | 9 | 1 | admissible after drop |
+| rustc | 8 | as-view, format-macro, plain-binding | 11 | 8 | 0 | admissible |
+
+### 10.3 Predictions
+
+- **P7** Coalescing makes `rustc_errors` admissible at ≥1 `d`, so its BoW
+  verdict becomes **measurable**. §7 recorded it as *unmeasurable*, not
+  unstructured; this is where that distinction gets cashed. Direction claimed:
+  Bench 062 §10's prior says rustc should show **little** role gain (6/8 error
+  codes single-filler), so a ratio near 1 is the *expected* outcome and would
+  confirm the prior rather than refute the method.
+- **P8** With a genuinely multi-candidate admissible set, BIC selects `d > 1`
+  on at least one arm — a real test of P3, which §7.3 could not give it.
+- **P9** The clippy structure verdict **survives** coalescing: both probes
+  still fire (`bow_router` ratio > 1.05 AND `cross_state_role_control`
+  degraded). If it does not, §8's conclusion narrows to the fine-grained role
+  set and must say so — the verdict would then have been carried by the sparse
+  roles coalescing removes.
+- **P10** The clippy BoW ratio **falls** under coalescing (coarser roles carry
+  less than the full set). Direction only; no magnitude claimed.
+- **P11** The uncoalesced numbers are **unchanged** by this addendum — the
+  coalescing path is additive, so §7's table must reproduce bit-identically in
+  the same run. A shift there is a harness defect, not a finding.
+
+### 10.4 Verdict rule
+
+- T5's **per-domain structure verdict** is read from the coalesced arm at BIC's
+  chosen `d`, recorded per domain, with `m'` and the dropped count alongside —
+  a verdict over a coalesced vocabulary is not a verdict over the full one.
+- §8's `T4 BLOCKED-ON-STATE-WIDTH` verdict is **not** revisitable by
+  coalescing: `latent8` fails on `K = m·d ≥ D`, and coalescing only *shrinks*
+  `m`, so at best it reaches the same `K == D` boundary. If some coalesced
+  `latent8` arm nonetheless reports admissible, that is a bug in the bound and
+  must be treated as one.
+- If P9 fails, §8 is amended in place rather than left standing.
+
+Nothing below this line existed at addendum preregistration.
+
+## 11. Addendum results
+
+_(pending run)_
