@@ -52,9 +52,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use katgpt_core::tpr::als::param_count;
 use katgpt_core::tpr::{
-    als_fit, bic_select, bow_router, shuffled_role_control_with, AlsConfig, AlsInput, AlsReport,
-    BicSelection, BowRouterReport, RoleShuffleMode, ShuffledRoleReport, TprArtifact, TprBindings,
-    TprError, TprScheme,
+    als_fit, bic_select, bow_router, filler_role_spread, shuffled_role_control_with, AlsConfig,
+    AlsInput, AlsReport, BicSelection, BowRouterReport, FillerRoleSpread, RoleShuffleMode,
+    ShuffledRoleReport, TprArtifact, TprBindings, TprError, TprScheme,
 };
 use riir_rag::{query::LATENT_DIM, Embedder, ModellessEmbedder};
 
@@ -169,13 +169,12 @@ pub struct FitCorpus {
     pub role_states: Vec<usize>,
     /// States per filler id, parallel to `vocab.fillers`.
     pub filler_states: Vec<usize>,
-    /// Distinct roles each filler is seen with, parallel to `vocab.fillers`.
-    ///
-    /// The **composition covariate** (Bench 063 §12.4). When its maximum is
-    /// `1` the role is a deterministic function of the filler and carries zero
-    /// information given it, so no probe can report role structure — see
-    /// [`FitCorpus::role_is_a_function_of_filler`].
-    pub filler_roles: Vec<usize>,
+    /// The **composition covariate** (Bench 063 §12.4), measured upstream by
+    /// [`filler_role_spread`]. Derived from the bindings rather than the
+    /// population, so a coalesced corpus reports it over its COARSER role
+    /// vocabulary — merging roles can only lower it, and lowering it to 1 is
+    /// exactly what makes a verdict unreadable.
+    pub spread: FillerRoleSpread,
 }
 
 impl FitCorpus {
@@ -199,47 +198,12 @@ impl FitCorpus {
         }
     }
 
-    /// Every filler is seen with exactly one role — so `role = f(filler)` and
-    /// the role adds nothing to what the filler already determines.
-    ///
-    /// This is a **third vacuity mode**, sibling to the two katgpt-rs Issue 710
-    /// closed: the permutation is not an identity and the null is not the
-    /// input, but the corpus cannot exhibit role structure under this scheme
-    /// whatever the fit does. `kernel_opt` is the measured case — 445 rule ids
-    /// over 445 states, one category each — and it reports `structured = false`
-    /// on both probes, which is indistinguishable from a real negative unless
-    /// this is checked (Bench 063 §12.4).
-    ///
-    /// TPR's claim is systematicity — generalizing to unseen `(role, filler)`
-    /// pairs. When the role is determined by the filler there are no unseen
-    /// pairs to generalize to, so the corpus is outside the primitive's domain
-    /// of applicability rather than inside it and unstructured.
-    #[must_use]
-    pub fn role_is_a_function_of_filler(&self) -> bool {
-        self.filler_roles.iter().all(|&n| n <= 1)
-    }
-
     #[must_use]
     pub fn scheme(&self) -> TprScheme {
         TprScheme::Orthogonal {
             arity: self.vocab.roles.len(),
         }
     }
-}
-
-/// Distinct roles per filler id — the composition covariate.
-///
-/// Derived from the bindings rather than the population, so the coalesced
-/// corpus reports it over its COARSER role vocabulary (merging roles can only
-/// lower it, and lowering it to 1 is exactly what makes a verdict unreadable).
-fn filler_role_counts(bindings: &[TprBindings], n_fillers: usize) -> Vec<usize> {
-    let mut seen: Vec<BTreeSet<u16>> = vec![BTreeSet::new(); n_fillers];
-    for b in bindings {
-        for (&p, &v) in b.roles.iter().zip(b.fillers.iter()) {
-            seen[v as usize].insert(p);
-        }
-    }
-    seen.iter().map(BTreeSet::len).collect()
 }
 
 /// Build the fit corpus from a Bench 062 population.
@@ -299,7 +263,7 @@ pub fn build_corpus(population: Vec<Binding>, space: StateSpace) -> FitCorpus {
         filler_states[v as usize] += 1;
         bindings.push(TprBindings::from_pairs(&[(p, v)]));
     }
-    let filler_roles = filler_role_counts(&bindings, fillers.len());
+    let spread = filler_role_spread(&bindings);
 
     FitCorpus {
         space,
@@ -308,7 +272,7 @@ pub fn build_corpus(population: Vec<Binding>, space: StateSpace) -> FitCorpus {
         vocab: Vocab { roles, fillers },
         role_states,
         filler_states,
-        filler_roles,
+        spread,
     }
 }
 
@@ -427,7 +391,7 @@ pub fn coalesce_for(c: &FitCorpus, threshold: usize) -> (FitCorpus, CoalesceRepo
         bindings.push(TprBindings::from_pairs(&[(p, v)]));
     }
 
-    let filler_roles = filler_role_counts(&bindings, c.vocab.fillers.len());
+    let spread = filler_role_spread(&bindings);
     (
         FitCorpus {
             space: c.space,
@@ -439,7 +403,7 @@ pub fn coalesce_for(c: &FitCorpus, threshold: usize) -> (FitCorpus, CoalesceRepo
             },
             role_states,
             filler_states,
-            filler_roles,
+            spread,
         },
         CoalesceReport {
             threshold,
@@ -658,14 +622,11 @@ pub struct SpaceReport {
     pub n_fillers: usize,
     /// Sparsest / densest role census, for the starvation reading.
     pub role_census: Vec<(&'static str, usize)>,
-    /// Every filler is seen with exactly one role on this corpus, so
-    /// `role = f(filler)` and no probe can report role structure —
-    /// [`FitCorpus::role_is_a_function_of_filler`] (Bench 063 §12.4).
-    pub role_is_fn_of_filler: bool,
-    /// Largest number of distinct roles any single filler is seen with. `1`
-    /// is the degenerate case above; the covariate is reported rather than
-    /// only its threshold so a near-degenerate corpus is visible too.
-    pub max_filler_roles: usize,
+    /// The composition covariate — `max == 1` means `role = f(filler)` and no
+    /// probe can report role structure (Bench 063 §12.4). Carried whole rather
+    /// than as its threshold so a NEAR-degenerate corpus is visible too;
+    /// upstream [`FillerRoleSpread`] since katgpt-rs Issue 711.
+    pub spread: FillerRoleSpread,
     pub ds: Vec<usize>,
     pub grid: Vec<GridPoint>,
     /// BIC over the admissible `d`s only — scoring inadmissible candidates
@@ -716,18 +677,24 @@ impl SpaceReport {
     /// verdict is UNKNOWN rather than "unstructured" (Issue 710).
     ///
     /// Also `None` when the role is a deterministic function of the filler —
-    /// the third vacuity mode (Bench 063 §12.4). There the probes CAN move,
+    /// the fourth vacuity mode (Bench 063 §12.4). There the probes CAN move,
     /// so neither `vacuous` flag fires, but the corpus has no unseen
     /// `(role, filler)` pair to generalize to and is outside TPR's domain of
     /// applicability rather than inside it and unstructured.
+    ///
+    /// Both conditions are decided by the upstream `verdict()` accessors
+    /// (katgpt-rs Issue 711) rather than re-derived here: each report gates on
+    /// its own `vacuous` and its own `spread`, so this conjunction cannot
+    /// drift from the numbers it is reading.
     #[must_use]
     pub fn structured(&self) -> Option<bool> {
-        match (&self.bow, &self.cross_state) {
-            (Some(b), Some(x))
-                if !b.vacuous && !x.vacuous && !self.role_is_fn_of_filler =>
-            {
-                Some(b.structured && x.degraded)
-            }
+        match (
+            self.bow.as_ref().and_then(BowRouterReport::verdict),
+            self.cross_state
+                .as_ref()
+                .and_then(ShuffledRoleReport::verdict),
+        ) {
+            (Some(structured), Some(degraded)) => Some(structured && degraded),
             _ => None,
         }
     }
@@ -826,8 +793,7 @@ pub fn run(
         n_roles: corpus.vocab.roles.len(),
         n_fillers: corpus.vocab.fillers.len(),
         role_census,
-        role_is_fn_of_filler: corpus.role_is_a_function_of_filler(),
-        max_filler_roles: corpus.filler_roles.iter().copied().max().unwrap_or(0),
+        spread: corpus.spread,
         ds: ds.to_vec(),
         grid,
         bic,
@@ -876,10 +842,12 @@ pub fn print_space_report(r: &SpaceReport) {
             .join(" ")
     );
     println!(
-        "  composition: max roles/filler = {} ({:.2} states/filler){}",
-        r.max_filler_roles,
+        "  composition: roles/filler max={} mean={:.3} over {} filler(s) ({:.2} states/filler){}",
+        r.spread.max,
+        r.spread.mean,
+        r.spread.fillers,
         r.n_states as f64 / r.n_fillers.max(1) as f64,
-        match r.role_is_fn_of_filler {
+        match r.spread.role_determined_by_filler() {
             true => "   [ROLE = f(FILLER) — no unseen pair to generalize to; a structure verdict here is not readable]",
             false => "",
         }

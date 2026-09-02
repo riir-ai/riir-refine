@@ -1,6 +1,9 @@
 # Bench 063: TPR structure fit on the healer corpus — admissibility first (Issue 062 T3)
 
-**Status:** RUN 2026-09-02, addendum RUN same day. Verdict
+**Status:** RUN 2026-09-02, addendum RUN same day, §12.6 RUN same day on the
+upstream covariate (katgpt-rs `4af2b3cf`) — the consumer-local predicate is
+deleted and the reported MEAN weakens §11.3's margin without overturning it.
+Verdict
 **T4 BLOCKED-ON-STATE-CONTENT** (§6 branch 5 — a branch preregistration did not
 anticipate; §11.6 amends §8's branch-2 verdict to it, same consequence,
 stronger evidence).
@@ -688,3 +691,52 @@ predicate belongs: any consumer of `bow_router` / `shuffled_role_control` /
 `withheld_pair_top1` can hit this, and `withheld_pair_top1` is affected hardest
 — withholding a pair withholds the whole filler, so its OOD arm is not a harder
 version of the ID arm but a different question.
+
+### 12.6 The covariate moved upstream — and reporting the MEAN found something
+
+§12.5's machinery was consumer-local. It has since landed in `katgpt_core::tpr`
+(katgpt-rs `4af2b3cf`, Issue 711 T1–T3) and this harness now **consumes** it
+instead of carrying its own copy: `FillerRoleSpread { max, mean, fillers }` +
+`filler_role_spread()`, riding on `BowRouterReport::spread` and
+`ShuffledRoleReport::spread`, with `verdict() -> Option<bool>` on each report.
+
+`FitCorpus::role_is_a_function_of_filler`, `filler_role_counts` and
+`SpaceReport::{role_is_fn_of_filler, max_filler_roles}` are **deleted**.
+`SpaceReport::structured()` is now the conjunction of the two upstream
+`verdict()`s and does not re-derive either gate, so it cannot drift from the
+numbers it reads — the same DRY move Issue 710's consumer step made one level
+down. Two new assertions pin `report.spread == corpus.spread` on both probes:
+each report measures the covariate from its *own* input, so a mismatch means
+the probes did not see the corpus the row describes.
+
+**What the mean says that the max did not.** §12.5 shipped `max` only. With the
+mean printed:
+
+| arm | `max` | **`mean`** | fillers | states/filler | `structured()` |
+|---|---|---|---|---|---|
+| `clippy_lints` | 4 | **1.378** | 45 | 2.51 | `Some(true)` |
+| `rustc_errors` | 6 | **1.750** | 8 | 26.50 | `Some(true)` — coalesced/256 |
+| `kernel_opt` | 1 | **1.000** | 453 | 1.00 | **`None`** |
+
+Both arms that report structure are **near**-degenerate on the mean: on
+`clippy_lints` the typical filler is seen with 1.38 roles, so most fillers
+contribute no `(role, filler)` variation at all and the `max = 4` is carried by
+a handful. That is exactly the case T2 argued the threshold could not see, and
+it further weakens §11.3's "most structured arm" reading — already flagged
+there as not separated from "arm with the most filler reuse". It does **not**
+overturn §11.3: `structured()` is still `Some(true)` there and the guard is
+still two-sided across the arm set. It does mean the margin is thinner than
+`max` alone suggested, and §11.3 should be read with this column beside it.
+
+**The numbers moved, and not because of this refactor.** A sibling's distill
+batch (`93b7448`) grew `kernel_opt` 445 → 453 states between §12.4's run and
+this one, so `bow_router` on `kernel_opt/tokenbag256` reads 0.9351 (was 0.9307)
+and the coalesced arm 0.9525 (was 0.9307's sibling row). The covariate did
+**not** move: `max = 1, mean = 1.000` at 453 states as at 445. The degeneracy
+is a property of the `kernel_opt` *scheme* — one declared `KernelCategory` per
+rule — not of a particular corpus size, which is the stronger version of
+§12.4's claim and the reason it is worth stating separately from the ratios.
+
+`tests/t063_tpr_structure.rs` passes on the ported harness; the two-sided
+canary (`kernel_opt` fires the guard, `clippy_lints`/`rustc_errors` do not)
+holds unchanged.

@@ -263,16 +263,29 @@ fn t063_tpr_structure_admissibility() {
             let b = r.bow.as_ref().expect("probes ran");
             assert!(!b.vacuous, "{tag}: the BoW null IS this arm's own fit");
             assert_eq!(
-                r.role_is_fn_of_filler,
-                r.max_filler_roles <= 1,
+                r.spread.role_determined_by_filler(),
+                r.spread.max <= 1,
                 "{tag}: the guard disagrees with the covariate it reads"
             );
             assert_eq!(
                 r.structured().is_none(),
-                r.role_is_fn_of_filler,
+                r.spread.role_determined_by_filler(),
                 "{tag}: with both probes live, a verdict is unreadable exactly \
-                 when role = f(filler) (max roles/filler {})",
-                r.max_filler_roles
+                 when role = f(filler) (roles/filler max {} mean {:.3})",
+                r.spread.max,
+                r.spread.mean
+            );
+            // The upstream reports must agree with the corpus-level covariate;
+            // they measure it independently from their own inputs, so a
+            // mismatch means the probes did not see the corpus this row
+            // describes (katgpt-rs Issue 711).
+            assert_eq!(
+                b.spread, r.spread,
+                "{tag}: the BoW report's covariate is not this corpus's"
+            );
+            assert_eq!(
+                x.spread, r.spread,
+                "{tag}: the cross-state report's covariate is not this corpus's"
             );
         }
     }
@@ -287,11 +300,11 @@ fn t063_tpr_structure_admissibility() {
         .filter(|r| r.probe_status == ProbeStatus::Ran)
         .collect();
     assert!(
-        ran.iter().any(|r| r.role_is_fn_of_filler),
+        ran.iter().any(|r| r.spread.role_determined_by_filler()),
         "the role = f(filler) guard never fires — it cannot have been tested"
     );
     assert!(
-        ran.iter().any(|r| !r.role_is_fn_of_filler),
+        ran.iter().any(|r| !r.spread.role_determined_by_filler()),
         "the role = f(filler) guard fires on every arm — it would void the bench"
     );
 
