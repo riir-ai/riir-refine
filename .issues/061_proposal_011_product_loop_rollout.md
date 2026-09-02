@@ -1,10 +1,12 @@
 # Issue 061 — Proposal 011 rollout: the KAT product loop (pay-request, genesis ceremony, deploy UX, wet-run, onboarding)
 
-Status: **OPEN (2026-09-01)** — Phase 0 **T0.2 (the riir-clippy slice) landed this
-session** (see the Landed section + [Plan 059](../.plans/059_kat011_t02_and_corpus_runtime_counts.md));
-every other task lives in riir-dapps / riir-deployer / riir-chain-sdk and awaits their
-respective sessions. The proposal is draft and all five phases were open at filing; this
-issue is the cross-repo tracker so the phased scope survives the noise-reduction rule.
+Status: **OPEN (2026-09-01) — Phase 0 ledger substrate LANDED 2026-09-02** (T0.1 +
+T0.5 + the ledger/payreq halves of T0.4: riir-dapps `6df7097`,
+[Plan 015](../.plans/015_kat011_phase0_payreq_substrate.md) — the `kat_payreq`
+request-ledger rows, invoice rows, signed registration intents, first-wins funding
+bindings, and the KAT-rail one-batch settle seam). Remaining Phase 0 items live in
+riir-chain-sdk (T0.3) and riir-dapps service-plane work (T0.2b, T1.x). The proposal is
+draft and the phased scope survives the noise-reduction rule via this tracker.
 Branch: `develop` (per global rule — no feature branches)
 Proposal: [`.proposals/011_kat_pay_request_qr_genesis_and_onboarding.md`](../.proposals/011_kat_pay_request_qr_genesis_and_onboarding.md)
 Related: [Issue 059](059_proposal_007_remainder_ops_signer_and_counsel_gate.md) (the
@@ -15,13 +17,17 @@ Proposal 008 (MemoShard).
 
 ## Phase 0 — ledger + SDK substrate
 
-- [-] T0.1 `payreq` request-ledger lifecycle rows + invoice rows + faucet credit row
-      type (riir-dapps, `kat_payreq`). **The request-ledger rule (ask 14) is
-      load-bearing: every request is a row FIRST — the limiter reads these rows,
-      refusals are rows too, and `chain_anchor` is the chain-mapping slot.**
+- [x] T0.1 `payreq` request-ledger lifecycle rows + invoice rows + faucet credit row
+      type (riir-dapps, `kat_payreq`) — **LANDED 2026-09-02** (riir-dapps `6df7097`,
+      [Plan 015](../.plans/015_kat011_phase0_payreq_substrate.md)): `kat:req:`
+      lifecycle rows (status machine `Created→Resolved→Settled|Expired|Refused`,
+      terminal states immutable, refusals are rows, `chain_anchor` slot rides every
+      row), `kat:inv:` invoice rows (QR commitment slot fills exactly once), the
+      faucet REQUEST row kind (the daily-cap crank settles these in T1.7; no separate
+      credit row needed — the kind enum is the row type).
 - [x] T0.2 clippy CLI: `login` default-SSH adoption + `RIIR_HEAL_KAT_KEY` override;
       `account` welcome + `--history` (local view; the copy rule test-enforced) —
-      **LANDED this session** ([Plan 059](../.plans/059_kat011_t02_and_corpus_runtime_counts.md)).
+      **LANDED** ([Plan 059](../.plans/059_kat011_t02_and_corpus_runtime_counts.md)).
       The service half (live `/balance`, the all-synced + nodes-healthy welcome gate,
       server-side history) is the `[-]` below.
 - [-] T0.2b — the service half of account: welcome gate evaluated from real sync/node
@@ -29,12 +35,19 @@ Proposal 008 (MemoShard).
       T1.1). Blocked on T0.1/T1.1.
 - [-] T0.3 riir-chain-sdk `pay_request` module (KAT compose + resolve/transfer; USDC
       arm stubbed behind the mock).
-- [-] T0.4 self-pay fixtures (chain + ledger + payreq) — the wet-run loop IS self-pay
-      (ask 2).
-- [-] T0.5 registration-intent + funding-binding row types (the ask-12 substrate).
-      **The binding verdict is decided: the REFERENCE key is the mandatory machine
-      link; the memo is mandatory-in-URL audit copy — a memo-mandatory gate would
-      strand real payments.**
+- [x] T0.4 self-pay fixtures (chain + ledger + payreq) — **ledger + payreq halves
+      LANDED 2026-09-02** (Plan 015 tests/kat_payreq.rs: A→A settles to a paid
+      invoice, no net supply change, exactly-once; insufficient-balance refusal;
+      the `chain` TxDelta A→A half is riir-chain-sdk/chain territory — the chain
+      fixtures there cover transfer mechanics; revisit only if the wet-run needs a
+      payreq-shaped chain fixture).
+- [x] T0.5 registration-intent + funding-binding row types (the ask-12 substrate) —
+      **LANDED 2026-09-02** (Plan 015): `kat:uintnt:` signed intents + the fail-closed
+      ed25519 verify seam (forged key refused) + `kat:fbind:` FIRST-WINS funding
+      bindings (same source idempotent, different source refused with the existing
+      binding surfaced). **The binding verdict is decided: the REFERENCE key is the
+      mandatory machine link; the memo is mandatory-in-URL audit copy — a
+      memo-mandatory gate would strand real payments.**
 
 ## Phase 1 — the KAT rail + web wallet (DEFAULT, ships first — owner call 2026-09-01)
 
@@ -116,9 +129,20 @@ Proposal 008 (MemoShard).
 
 The proposal's fourteen owner asks are all verdicted SHIP (two corrected: 8.1 →
 gist-rs/cargo-heal per 003; 12 → reference-key binding, memo as audit copy) or
-explicitly deferred. Phase 0 T0.2 is the only task native to this repo and it LANDED
-this session; everything else needs riir-dapps (rows + web wallet + crank), the
-riir-deployer genesis/deploy work, riir-chain-sdk, and the two counsel-gated launches.
-Next action per the proposal: the riir-dapps Phase 0 plan, and Phase 2's ceremony
-early — bar's dry-run genesis is what puts the mint in the wallet every foo gets paid
-from.
+explicitly deferred. Phase 0 ledger substrate LANDED 2026-09-02 (T0.1 + T0.5 + the
+ledger/payreq halves of T0.4 — riir-dapps `6df7097` / Plan 015) alongside the
+repo-native T0.2 CLI slice. Remaining Phase 0: T0.3 (riir-chain-sdk `pay_request`
+module) and T0.2b's service half. Next action per the proposal: the riir-dapps Phase 1
+routes (T1.1 — unblocked by the landed substrate) and Phase 2's ceremony early —
+bar's dry-run genesis is what puts the mint in the wallet every foo gets paid from.
+
+## Wait-state verification (2026-09-02)
+
+- [Issue 059](059_proposal_007_remainder_ops_signer_and_counsel_gate.md):
+  re-verified — both open items are ops/counsel-gated (RPC provider + custody-key
+  posture; counsel engagement). No engineering unblock exists; the file stays as the
+  wait-state tracker.
+- [Issue 060](060_proposal_008_remainder_new_plan_and_gated_levers.md):
+  re-verified — terminal-as-specified (G5 FAIL-wash stands); the only path is the
+  owner-commissioned v2-candidates plan, which is an owner act, not an agent one.
+  The file stays as the wait-state tracker.
