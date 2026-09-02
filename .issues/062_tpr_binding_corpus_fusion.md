@@ -190,7 +190,7 @@ did NOT fire. Three caveats that bound what Phase 2 may claim:
   Original text retained:
   **BoW-null router per domain:** *(prior measured by Bench 062: `rustc_errors` roles are 6/8 single-filler, so m=1 shared-role ALS should show little residual gain there; `clippy_lints` has 13 multi-filler roles)* fit the m=1 shared-role ALS per corpus; residual ratio `r_bow/r_full < 1+ε` ⇒ that domain carries no binding structure ⇒ structured machinery skipped there. Records a per-domain structure verdict (prediction to test: clippy_lints strongly structured; kernel_opt categories possibly weaker than rule-level).
 - [x] **T5b** **`kernel_opt` population — LANDED** (Bench 063 §12, preregistered
-  at `b1472a4` before any output was read). `kernel_opt_population()` ships
+  at `a6bea77` before any output was read). `kernel_opt_population()` ships
   beside the other two builders; `tpr_structure` now pulls `kernel_heal`
   (which gates `domains::kernel_opt`) rather than cfg'ing the arm away, because
   an arm that silently disappears on a feature is the vacuous-instrument
