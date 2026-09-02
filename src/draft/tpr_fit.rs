@@ -267,6 +267,143 @@ pub fn build_corpus(population: Vec<Binding>, space: StateSpace) -> FitCorpus {
     }
 }
 
+// ── role coalescing ─────────────────────────────────────────────────────
+
+/// What [`coalesce_for`] did, so a coarser vocabulary is never read as the
+/// original one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CoalesceReport {
+    /// States-per-role cutoff at or below which a role loses its own block.
+    pub threshold: usize,
+    /// Roles merged into the synthetic `other` block.
+    pub merged: Vec<(&'static str, usize)>,
+    /// States discarded because even `other` could not be fitted.
+    pub dropped: usize,
+    /// Role count after coalescing (`m'`).
+    pub m_after: usize,
+    /// Nothing merged and nothing dropped — the coalesced corpus IS the
+    /// original, so its numbers must match the uncoalesced arm exactly.
+    pub identity: bool,
+}
+
+/// Synthetic block for roles too sparse to carry a readout.
+pub const OTHER_ROLE: &str = "other";
+
+/// Coalesce roles with `≤ threshold` states into one `other` block, dropping
+/// its states if it is still unfittable, and remap to contiguous ids.
+///
+/// Preregistered in Bench 063 §10.2, amended by §10.2a: the threshold is
+/// **fixed** at the grid maximum rather than set per `d`. Per-`d` coalescing
+/// changes `n_states`, and BIC's `N·ln(RSS/N) + p·ln N` is not comparable
+/// across different `N` — so a per-`d` rule cannot answer "which `d` does BIC
+/// prefer", which is the question coalescing was added to make answerable.
+///
+/// A role with `≤ threshold` states has a `D×d` readout and too few
+/// independent states to fit it, so the honest options are "no block of its
+/// own" then "no states". Both are taken, in that order, and the second is
+/// counted — a silent drop would be the defect this reports its way out of.
+///
+/// Contiguity is not cosmetic: [`TprScheme::Orthogonal`] uses the role id AS
+/// the core block index, so a gap would leave a permanently-zero block still
+/// costing `D·d` parameters against the admissibility bound.
+///
+/// # Panics
+///
+/// Panics if the surviving role count exceeds `u16::MAX` — see
+/// [`build_corpus`]; coalescing only shrinks it, so this cannot fire on a
+/// corpus that built successfully.
+#[must_use]
+pub fn coalesce_for(c: &FitCorpus, threshold: usize) -> (FitCorpus, CoalesceReport) {
+    let merged: Vec<(&'static str, usize)> = c
+        .vocab
+        .roles
+        .iter()
+        .zip(c.role_states.iter())
+        .filter(|(_, &n)| n <= threshold)
+        .map(|(&r, &n)| (r, n))
+        .collect();
+
+    if merged.is_empty() {
+        return (
+            c.clone(),
+            CoalesceReport {
+                threshold,
+                merged,
+                dropped: 0,
+                m_after: c.vocab.roles.len(),
+                identity: true,
+            },
+        );
+    }
+
+    let merged_set: BTreeSet<&'static str> = merged.iter().map(|&(r, _)| r).collect();
+    let other_states: usize = merged.iter().map(|&(_, n)| n).sum();
+    // `other` needs MORE than `threshold` states for the same reason every
+    // other role does — merging does not exempt the merged block from the
+    // bound it was merged to satisfy.
+    let keep_other = other_states > threshold;
+
+    let survivors: Vec<&'static str> = c
+        .vocab
+        .roles
+        .iter()
+        .copied()
+        .filter(|r| !merged_set.contains(r))
+        .chain(keep_other.then_some(OTHER_ROLE))
+        .collect();
+    let new_id: BTreeMap<&'static str, u16> = survivors
+        .iter()
+        .enumerate()
+        .map(|(i, &r)| (r, u16::try_from(i).expect("coalesced role ids fit u16")))
+        .collect();
+
+    let dim = c.dim();
+    let mut states = Vec::with_capacity(c.states.len());
+    let mut bindings = Vec::with_capacity(c.bindings.len());
+    let mut role_states = vec![0usize; survivors.len()];
+    let mut filler_states = vec![0usize; c.vocab.fillers.len()];
+    let mut dropped = 0usize;
+    for (i, b) in c.bindings.iter().enumerate() {
+        let old = c.vocab.roles[b.roles[0] as usize];
+        let target = if merged_set.contains(old) {
+            if !keep_other {
+                dropped += 1;
+                continue;
+            }
+            OTHER_ROLE
+        } else {
+            old
+        };
+        let p = new_id[target];
+        let v = b.fillers[0];
+        states.extend_from_slice(&c.states[i * dim..(i + 1) * dim]);
+        role_states[p as usize] += 1;
+        filler_states[v as usize] += 1;
+        bindings.push(TprBindings::from_pairs(&[(p, v)]));
+    }
+
+    (
+        FitCorpus {
+            space: c.space,
+            states,
+            bindings,
+            vocab: Vocab {
+                roles: survivors.clone(),
+                fillers: c.vocab.fillers.clone(),
+            },
+            role_states,
+            filler_states,
+        },
+        CoalesceReport {
+            threshold,
+            merged,
+            dropped,
+            m_after: survivors.len(),
+            identity: false,
+        },
+    )
+}
+
 // ── admissibility ───────────────────────────────────────────────────────
 
 /// Two-sided admissibility of a `(corpus, d)` pair — computed **before** any
@@ -380,6 +517,8 @@ pub fn admissibility(c: &FitCorpus, d: usize) -> Admissibility {
 #[derive(Debug, Clone)]
 pub struct GridPoint {
     pub adm: Admissibility,
+    /// Present only on the coalesced arm.
+    pub coalesce: Option<CoalesceReport>,
     /// `None` when the fit itself errored (recorded, never swallowed).
     pub report: Option<AlsReport>,
     pub error: Option<String>,
@@ -421,6 +560,7 @@ pub fn fit_at(c: &FitCorpus, d: usize) -> (Option<TprArtifact>, GridPoint) {
             None,
             GridPoint {
                 adm,
+                coalesce: None,
                 report: None,
                 error: Some(e.to_string()),
                 params_shipped: None,
@@ -433,6 +573,7 @@ pub fn fit_at(c: &FitCorpus, d: usize) -> (Option<TprArtifact>, GridPoint) {
             let identical = again.map(|b| b == art.to_bytes());
             let point = GridPoint {
                 adm,
+                coalesce: None,
                 report: Some(report),
                 error: None,
                 params_shipped: Some(param_count(&art)),
@@ -582,6 +723,10 @@ pub enum ProbeStatus {
 #[derive(Debug, Clone)]
 pub struct SpaceReport {
     pub domain: &'static str,
+    /// `None` = the roles are the classifier's own; `Some` = roles below the
+    /// threshold were coalesced, so every verdict here is a verdict over a
+    /// COARSER vocabulary (Bench 063 §10.4).
+    pub coalesce: Option<CoalesceReport>,
     pub space: StateSpace,
     pub n_states: usize,
     pub n_roles: usize,
@@ -649,10 +794,25 @@ pub fn run(
     space: StateSpace,
     domain: &'static str,
     ds: &[usize],
+    coalesce_threshold: Option<usize>,
 ) -> SpaceReport {
     assert!(!ds.is_empty(), "grid must not be empty");
-    let corpus = build_corpus(population, space);
-    let grid: Vec<GridPoint> = ds.iter().map(|&d| fit_at(&corpus, d).1).collect();
+    let base = build_corpus(population, space);
+    let (corpus, coalesce) = match coalesce_threshold {
+        None => (base, None),
+        Some(t) => {
+            let (c, rep) = coalesce_for(&base, t);
+            (c, Some(rep))
+        }
+    };
+    let grid: Vec<GridPoint> = ds
+        .iter()
+        .map(|&d| {
+            let mut g = fit_at(&corpus, d).1;
+            g.coalesce.clone_from(&coalesce);
+            g
+        })
+        .collect();
 
     let mut role_census: Vec<(&'static str, usize)> = corpus
         .vocab
@@ -698,6 +858,7 @@ pub fn run(
 
     SpaceReport {
         domain,
+        coalesce,
         space,
         n_states: corpus.n_states(),
         n_roles: corpus.vocab.roles.len(),
@@ -726,14 +887,23 @@ pub fn run(
 /// wrong arithmetic and every row above it is void.
 pub fn print_space_report(r: &SpaceReport) {
     println!(
-        "\n── {} / {} ──  n_states={} m(roles)={} n_fillers={} D={}",
+        "\n── {} / {}{} ──  n_states={} m(roles)={} n_fillers={} D={}",
         r.domain,
         r.space.label(),
+        r.coalesce
+            .as_ref()
+            .map_or_else(String::new, |c| format!(" [coalesced T={}]", c.threshold)),
         r.n_states,
         r.n_roles,
         r.n_fillers,
         r.space.dim()
     );
+    if let Some(c) = &r.coalesce {
+        println!(
+            "  coalesced: merged {:?} -> `{OTHER_ROLE}`  m'={} dropped={} identity={}",
+            c.merged, c.m_after, c.dropped, c.identity
+        );
+    }
     println!(
         "  role census (sparsest first): {}",
         r.role_census
@@ -742,6 +912,11 @@ pub fn print_space_report(r: &SpaceReport) {
             .collect::<Vec<_>>()
             .join(" ")
     );
+    print_grid(r);
+    print_probes(r);
+}
+
+fn print_grid(r: &SpaceReport) {
     println!(
         "  {:>3}  {:>5} {:>7} {:>7}  {:>9} {:>6}  verdict",
         "d", "K", "params", "obs", "resid", "ident"
@@ -776,6 +951,9 @@ pub fn print_space_report(r: &SpaceReport) {
             println!("       fit error: {e}");
         }
     }
+}
+
+fn print_probes(r: &SpaceReport) {
     match (&r.probe_status, r.chosen_d) {
         (ProbeStatus::Ran, Some(d)) => {
             println!("  BIC over admissible d {:?} → d={d}", r.bic_ds);

@@ -66,18 +66,94 @@ fn t063_tpr_structure_admissibility() {
          scheme: Orthogonal{{arity=m}}, role = shape-class, filler = rule identity"
     );
 
+    // §10.2a: ONE fixed threshold at the grid maximum, so BIC compares `d` at
+    // a constant `N`. Per-`d` coalescing would change `n_states` and make the
+    // BIC scores incomparable.
+    let threshold = DS.iter().copied().max().expect("grid non-empty");
+
     let mut arms = Vec::new();
     for space in StateSpace::ALL {
-        arms.push(run(clippy_pop(), space, "clippy_lints", &DS));
-        arms.push(run(rustc_errors_population(), space, "rustc_errors", &DS));
+        arms.push(run(clippy_pop(), space, "clippy_lints", &DS, None));
+        arms.push(run(rustc_errors_population(), space, "rustc_errors", &DS, None));
+    }
+    let mut coalesced = Vec::new();
+    for space in StateSpace::ALL {
+        coalesced.push(run(clippy_pop(), space, "clippy_lints", &DS, Some(threshold)));
+        coalesced.push(run(
+            rustc_errors_population(),
+            space,
+            "rustc_errors",
+            &DS,
+            Some(threshold),
+        ));
     }
 
     for r in &arms {
         print_space_report(r);
     }
+    println!("\n=== §11 addendum: coalesced arms (T={threshold}) ===");
+    for r in &coalesced {
+        print_space_report(r);
+    }
+
+    // P11: the coalescing path is additive, so the uncoalesced arms must be
+    // untouched by it. Asserted rather than eyeballed — a shift would be
+    // invisible in a table read one arm at a time.
+    for r in &arms {
+        assert!(
+            r.coalesce.is_none(),
+            "{}/{}: uncoalesced arm carries a coalesce report",
+            r.domain,
+            r.space.label()
+        );
+    }
+
+    // §10.4's guard was REFUTED by this run and is replaced by the invariant it
+    // should have been. It asserted that coalescing can never make the consumer
+    // space admissible "because it only shrinks m" — but shrinking m is exactly
+    // what takes `K = m'*d` BELOW `D`: clippy coalesces to m'=6, so `K = 6 < 8`
+    // at d=1 IS admissible. The prediction assumed m stayed 8.
+    //
+    // What must actually hold is the bound itself, on every arm: admissible
+    // implies all three conditions. Asserting that catches a bound that has
+    // drifted from the verdict it decides, which is what the guard was reaching
+    // for.
+    for r in arms.iter().chain(coalesced.iter()) {
+        for g in &r.grid {
+            let a = &g.adm;
+            if a.admissible() {
+                assert!(
+                    a.k < a.dim,
+                    "{}/{} d={}: ADMISSIBLE with K={} >= D={}",
+                    r.domain,
+                    r.space.label(),
+                    a.d,
+                    a.k,
+                    a.dim
+                );
+                assert!(
+                    a.params < a.observations,
+                    "{}/{} d={}: ADMISSIBLE with params {} >= obs {}",
+                    r.domain,
+                    r.space.label(),
+                    a.d,
+                    a.params,
+                    a.observations
+                );
+                assert!(
+                    a.starved_roles.is_empty(),
+                    "{}/{} d={}: ADMISSIBLE with {} starved role(s)",
+                    r.domain,
+                    r.space.label(),
+                    a.d,
+                    a.starved_roles.len()
+                );
+            }
+        }
+    }
 
     // ── instrument integrity ────────────────────────────────────────────
-    for r in &arms {
+    for r in arms.iter().chain(coalesced.iter()) {
         let tag = format!("{}/{}", r.domain, r.space.label());
         assert!(r.n_states > 0, "{tag}: empty population");
         assert!(
@@ -173,7 +249,7 @@ fn t063_tpr_structure_admissibility() {
 
     // ── the preregistered verdict, printed not asserted ─────────────────
     println!("\n=== §6 verdict inputs ===");
-    for r in &arms {
+    for r in arms.iter().chain(coalesced.iter()) {
         println!(
             "  {:<14} {:<12} admissible_d={:?} structured={:?} probes={:?}",
             r.domain,
@@ -183,21 +259,47 @@ fn t063_tpr_structure_admissibility() {
             r.probe_status
         );
     }
-    let consumer: Vec<_> = arms.iter().filter(|r| r.space.is_consumer()).collect();
-    let control: Vec<_> = arms.iter().filter(|r| !r.space.is_consumer()).collect();
+    // Both arm sets are evidence. Scoring only the uncoalesced set was how the
+    // first cut printed BLOCKED-ON-STATE-WIDTH while an admissible coalesced
+    // consumer arm sat two tables above it.
+    let all: Vec<&_> = arms.iter().chain(coalesced.iter()).collect();
+    let consumer: Vec<&_> = all
+        .iter()
+        .copied()
+        .filter(|r| r.space.is_consumer())
+        .collect();
+    let control: Vec<&_> = all
+        .iter()
+        .copied()
+        .filter(|r| !r.space.is_consumer())
+        .collect();
     let consumer_ok = consumer.iter().any(|r| r.structured() == Some(true));
     let control_ok = control.iter().any(|r| r.structured() == Some(true));
-    println!(
-        "  consumer admissible anywhere: {}",
-        consumer.iter().any(|r| r.any_admissible())
-    );
-    let verdict = match (consumer_ok, control_ok, control.iter().any(|r| r.any_admissible())) {
-        (true, _, _) => "T4 PROCEEDS — the consumer state is admissible AND structured",
-        (false, true, _) => {
-            "T4 BLOCKED-ON-STATE-WIDTH — control is structured, consumer state too narrow"
-        }
-        (false, false, true) => "T4 DEMOTED — admissible control carries no binding structure",
-        (false, false, false) => "INCONCLUSIVE — no arm admissible; widen the grid or the corpus",
+    let consumer_admissible = consumer.iter().any(|r| r.any_admissible());
+    let consumer_measured_flat = consumer.iter().any(|r| r.structured() == Some(false));
+    println!("  consumer admissible anywhere: {consumer_admissible}");
+    println!("  consumer measured flat:       {consumer_measured_flat}");
+
+    // §6 had four branches. The run produced a fifth: a consumer arm that is
+    // ADMISSIBLE and measures NOT structured. That is strictly stronger
+    // evidence for the same consequence as branch 2 — the 8-D state does not
+    // carry the structure — because it is MEASURED in the consumer space rather
+    // than inferred from that space being unmeasurable. It gets its own name
+    // instead of being folded into branch 2.
+    let verdict = if consumer_ok {
+        "T4 PROCEEDS — the consumer state is admissible AND structured"
+    } else if consumer_admissible && consumer_measured_flat && control_ok {
+        "T4 BLOCKED-ON-STATE-CONTENT (§6 branch 5, unanticipated) — the consumer state \
+         IS measurable and carries NO role-filler structure, while the wider control \
+         does. Stronger than branch 2: measured, not inferred."
+    } else if consumer_admissible && consumer_measured_flat {
+        "T4 DEMOTED — the consumer state is measurable and flat, and no control shows \
+         structure either"
+    } else if control_ok {
+        "T4 BLOCKED-ON-STATE-WIDTH (§6 branch 2) — control structured, consumer state \
+         never admissible"
+    } else {
+        "INCONCLUSIVE — no structured arm; widen the grid or the corpus"
     };
     println!("\nVERDICT: {verdict}");
 }
