@@ -1,6 +1,9 @@
 # Bench 063: TPR structure fit on the healer corpus — admissibility first (Issue 062 T3)
 
-**Status:** RUN 2026-09-02. Verdict **T4 BLOCKED-ON-STATE-WIDTH** (§6 branch 2).
+**Status:** RUN 2026-09-02, addendum RUN same day. Verdict
+**T4 BLOCKED-ON-STATE-CONTENT** (§6 branch 5 — a branch preregistration did not
+anticipate; §11.6 amends §8's branch-2 verdict to it, same consequence,
+stronger evidence).
 Preregistration commit `c6d0452` — predictions P1-P6, the scheme decision and
 the verdict rule were committed before the harness existed. **P2 was refuted by
 its own bound and P1 was confirmed by a different bound than the one it
@@ -380,4 +383,138 @@ Nothing below this line existed at addendum preregistration.
 
 ## 11. Addendum results
 
-_(pending run)_
+Same run, same process, all eight arms. Uncoalesced §7 rows reproduce
+bit-identically (P11, asserted in the harness). Coalesced threshold `T = 8`.
+
+### 11.1 Coalescing did what §10.2a projected — zero drops on both domains
+
+| arm | merged into `other` | `other` | m' | dropped | n_states |
+|---|---|---|---|---|---|
+| clippy | `closure`(4), `generic`(2), `impl-block`(5) | 11 | **6** | 0 | 113 |
+| rustc | `as-view`(5), `format-macro`(5), `plain-binding`(1) | 11 | **8** | 0 | 212 |
+
+### 11.2 The consumer space became measurable — and measures FLAT
+
+`clippy_lints/latent8 [coalesced T=8]`, m'=6:
+
+| d | K | params | obs | resid | verdict |
+|---|---|---|---|---|---|
+| 1 | 6 | 101 | 904 | 8.738e-1 | **ADMISSIBLE** |
+| 2 | 12 | 194 | 904 | 8.118e-1 | INADMISSIBLE — K ≥ D |
+| 4 | 24 | 380 | 904 | 6.695e-1 | INADMISSIBLE — K ≥ D |
+| 8 | 48 | 752 | 904 | 5.957e-1 | INADMISSIBLE — K ≥ D |
+
+- BIC over `{1}` → `d = 1`, label `orthogonal:m6:d1`, score −2094.8.
+- `bow_router`: `r_bow` 8.7039e-1, `r_full` 8.7381e-1, **ratio 0.9961,
+  structured = false**.
+- `cross_state_role`: `r_true` 8.7381e-1, `r_permuted` 8.6483e-1, **ratio
+  0.9897, degraded = false**, moved 79/113.
+
+Both probes land **below 1.0**, and that is the informative part. `r_bow`
+*beats* `r_full`: the `m = 1` bag-of-fillers fit reconstructs the 8-D state
+slightly better than the 6-block structured fit, and permuting the role
+assignment across states made the fit slightly **better** still. At `d = 1` and
+`D = 8` the roles are not merely unhelpful — the role assignment behaves like
+noise in this space.
+
+`rustc_errors/latent8 [coalesced]` stays inadmissible at every `d`: it coalesces
+to m'=**8**, so `K = 8 == D = 8` exactly at `d = 1`. The consumer measurement
+exists for clippy only.
+
+### 11.3 The control: all four `d` admissible, and rustc is the MOST structured arm
+
+| arm | d admissible | BIC scores (d=1,2,4,8) | chosen | `bow` ratio | `cross_state` ratio | structured |
+|---|---|---|---|---|---|---|
+| clippy/tokenbag256 [coalesced] | 1,2,4,8 | −207755.1, −199354.3, −176567.4, −122511.8 | **1** | 1.1417 | 1.0693 (79/212 moved) | **true** |
+| rustc/tokenbag256 [coalesced] | 1,2,4,8 | −500429.6, −485136.7, −440309.1, −350653.0 | **1** | **2.2096** | **2.6661** (178/212 moved) | **true** |
+
+### 11.4 Predictions, scored
+
+| | prediction | outcome |
+|---|---|---|
+| **P7** | rustc becomes measurable; expected ratio **near 1** per Bench 062 §10's prior | **half CONFIRMED, direction REFUTED.** Measurable: yes. Near 1: no — rustc is the **most** structured arm measured (`bow` 2.2096, `cross_state` 2.6661), well above clippy. **Bench 062 §10's rustc prior does not transfer**, and §11.6 explains why: it was a statement about the *error-code* axis, which this scheme puts on the **filler** side. A prior about one axis was applied to the other. |
+| **P8** | BIC selects `d > 1` on ≥1 arm | **REFUTED, and now strongly.** With all four `d` admissible on both control arms, BIC still picks `d = 1`, and the scores rise **monotonically** with `d` on both — the extra parameters never pay for themselves. This converts §7.3's weak P3 into a real result: `d = 1` is preferred, not merely the only option. |
+| **P9** | the clippy structure verdict survives coalescing | **CONFIRMED** on the arm that had a verdict (control: 1.1417 + 1.0693, both probes still firing). §8 therefore does **not** need narrowing to the fine-grained role set. |
+| **P10** | the clippy BoW ratio falls under coalescing | **CONFIRMED.** 1.1773 → 1.1417. Coarser roles carry less, as claimed, and by little. |
+| **P11** | uncoalesced numbers unchanged | **CONFIRMED**, asserted in-harness rather than eyeballed. |
+
+### 11.5 §10.4's own guard was REFUTED — by the arithmetic it asserted
+
+§10.4 stated that coalescing "cannot revisit" the §8 verdict because it "only
+shrinks `m`, so at best it reaches the same `K == D` boundary", and instructed
+that an admissible coalesced `latent8` arm be treated as a **bug in the bound**.
+
+The run produced exactly that arm, and the bound is correct: shrinking `m` is
+precisely what takes `K = m'·d` **below** `D`. Clippy coalesces to m'=6, so
+`K = 6 < 8`. The prediction had silently held `m = 8` fixed while varying it.
+
+The guard is replaced by the invariant it was reaching for — *admissible implies
+all three conditions*, asserted on every arm — which catches a bound that has
+drifted from the verdict it decides without forbidding a legitimate result. The
+original wording is left above rather than corrected in place.
+
+This is the second time in this bench that a preregistered claim was wrong in
+the same direction: reasoning about one bound while a different one decided the
+outcome (§7.3 P1, §7.3 P2, and now §10.4). The two-sided check is what caught
+all three.
+
+### 11.6 §8 AMENDED: the verdict is stronger than BLOCKED-ON-STATE-WIDTH
+
+§6 offered four branches. The run produced a fifth, named
+**T4 BLOCKED-ON-STATE-CONTENT**:
+
+> the consumer state **IS** measurable (clippy, coalesced, `d = 1`) and carries
+> **no** role-filler structure — both probes below 1.0 — while the wider control
+> carries strong structure on both domains.
+
+That is strictly stronger evidence for the same consequence as §8's branch 2.
+§8 inferred "the 8-D state cannot host the structure" from that space being
+*unmeasurable*; §11 **measures** it there and finds it flat. T4's re-scope to
+the bridge route (Bench 063 §8 route b) is unchanged, and its justification no
+longer depends on an inadmissibility argument.
+
+Route **(a) widen `LATENT_DIM`** is correspondingly *more* attractive than §8
+implied, not less: the structure demonstrably exists in the code text (control
+`bow` 1.14 clippy / 2.21 rustc) and demonstrably does not survive projection to
+8 dimensions. But the blast radius argument stands, so the recommendation is
+unchanged — file it in riir-ai, do not work around it here.
+
+### 11.7 The confound this bench cannot remove, stated plainly
+
+The shape-class role is computed **from the span text**
+(`classify_rustc_shape` looks for `format!`, `[..]`, `&mut `, …), and the
+token-bag state is hashed **from the same text**. So the role is partly readable
+off the state by construction, and a per-role readout is fitting a partition
+that correlates with what it must reconstruct.
+
+This bounds what "structured" means here: it means *the role partition carries
+information the bag of fillers does not*, which is what `bow_router` compares
+and what `cross_state_role_control` confirms by destroying the pairing. It does
+**not** establish that a role derived independently of the span would do as
+well. Any modelless role is a function of the input, so this confound is not
+removable within the modelless mandate — it is a bound to be stated, not a
+defect to be fixed, and it is the same collinearity concern Bench 062
+§caveat-2 raised, in a new form.
+
+It also explains rustc's 2.2/2.7 ratios without appeal to deeper structure:
+`rustc_errors` has only **8** fillers against 8 role blocks, so the role
+partition is a large share of the total signal available. Read the *ordering*
+(rustc > clippy) as a property of the two corpora's role/filler ratio, not as
+"rustc code is more compositional".
+
+### 11.8 What §11 hands T5
+
+T5's per-domain BoW verdict, over the **coalesced** vocabulary (§10.4 requires
+saying so), at BIC's `d = 1`:
+
+| domain | space | m' | verdict |
+|---|---|---|---|
+| clippy_lints | consumer 8-D | 6 | **NOT structured** (0.9961 / 0.9897) |
+| clippy_lints | control 256-D | 6 | **structured** (1.1417 / 1.0693) |
+| rustc_errors | consumer 8-D | 8 | unmeasurable (`K == D` at `d = 1`) |
+| rustc_errors | control 256-D | 8 | **structured** (2.2096 / 2.6661) |
+
+`kernel_opt` is still unmeasured — the §2 scheme decision makes its 426 rules
+*expressible* (as fillers), which is what it was blocked on, but no kernel_opt
+population exists in this harness. That is a corpus-plumbing task, filed as
+Issue 062 T5b.

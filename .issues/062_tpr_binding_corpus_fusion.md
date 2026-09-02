@@ -1,7 +1,8 @@
 # Issue 62: TPR × healer corpus fusion — structured retrieval axis + corpus-generalization bench (Research 527 F5)
 
-**Status:** Phase 1 COMPLETE (T1+T2+T2a landed, Bench 062). Phase 2: **T3 LANDED
-(Bench 063, 2026-09-02) and its verdict RE-SCOPES T4** — the role scheme is
+**Status:** Phase 1 COMPLETE (T1+T2+T2a landed, Bench 062). Phase 2: **T3 + T5 LANDED
+(Bench 063 + its coalescing addendum, 2026-09-02) and their verdict RE-SCOPES
+T4** — the role scheme is
 decided (role = shape-class, filler = rule identity), and the 8-D consumer
 state is **INADMISSIBLE at every `d`**: `K = m·d ≥ D` fires at `d = 1`, so a
 TPR fit in the reranker's scoring space reproduces its own training states.
@@ -9,7 +10,9 @@ T4 as written ("score against the TPR projection instead of the raw 8-D
 embedding") is **not runnable**; the corpus IS structured (measured in a wider
 control space: BoW ratio 1.1773, cross-state ratio 1.0812, two agreeing
 probes), so the blocker is state width, not TPR. T4 is re-scoped to the bridge
-route (§Phase 2 T4 below). T5/T6 unchanged and still actionable. The upstream
+route (§Phase 2 T4 below). **T5 is LANDED** with a per-domain verdict that
+refutes Bench 062 §10's rustc prior as a category error, and adds T5b
+(kernel_opt population, corpus plumbing). T6 unchanged and still actionable. The upstream
 `tpr` promotion still waits on a landed consumer, i.e. still on T4.
 
 **Research:** [katgpt-rs/.research/527_TPR_Emergent_Symbolic_Structure_Binding_Algebra.md](../katgpt-rs/.research/527_TPR_Emergent_Symbolic_Structure_Binding_Algebra.md) (arXiv:2608.29530, McCoy/Soulos/Linzen/Smolensky 2026)
@@ -121,6 +124,14 @@ did NOT fire. Three caveats that bound what Phase 2 may claim:
   - **(a) widen the consumer state.** `riir_rag::query::LATENT_DIM = 8` is a
     cross-repo contract (riir-rag + riir-neuron-db indexes + every committed
     floor). File in riir-ai; do NOT work around it here.
+  **AMENDED by Bench 063 §11.6 — the justification got stronger, the
+  recommendation did not change.** §8 *inferred* that the 8-D state cannot host
+  the structure, from that space being unmeasurable. §11 **measures** it there
+  (clippy, coalesced to m'=6, `d = 1`, admissible) and finds it **flat**: both
+  probes below 1.0, `r_bow` beating `r_full`, and permuting roles across states
+  *improving* the fit. So route (a)'s premise is now measured rather than
+  argued — the structure exists in the code text (control ratios 1.14 clippy /
+  2.21 rustc) and does not survive projection to 8 dimensions.
   - **(b) bridge instead of widen — RECOMMENDED.** Keep the 8-D scoring
     state. Fit TPR in the wider token-bag space, emit a **scalar**
     role-conditioned match (`unbind_state_into` against the candidate rule's
@@ -132,7 +143,57 @@ did NOT fire. Three caveats that bound what Phase 2 may claim:
   The claim discipline below is unchanged and still binding. Original text
   retained for the record:
   **TPR-structured retrieval axis** *(OOD baseline to beat, from Bench 062: T1 retrieval 4.0% / Structural 52.0% top-1; T2 retrieval 48.8% top-1, 51.2% top-3)* behind a `tpr_retrieval` feature (off by default): query-side structural denoise (score against the TPR projection, not the raw 8-D embedding — paper finding 7: decoders read better from the idealization) + role-conditioned match in the reranker. **Honest claim discipline: in-distribution gains are NOT the claim** (top-1 already 89.6–100 on the floors); the claim axes are (a) the OOD delta over T1's baseline by a preregistered margin, and (b) kernel_opt long-tail crowding (426 rules, the biggest corpus). Floors MUST hold (the 14/14 retrieval gate + score-bench flat unless OOD wins land).
-- [ ] **T5** **BoW-null router per domain:** *(prior measured by Bench 062: `rustc_errors` roles are 6/8 single-filler, so m=1 shared-role ALS should show little residual gain there; `clippy_lints` has 13 multi-filler roles)* fit the m=1 shared-role ALS per corpus; residual ratio `r_bow/r_full < 1+ε` ⇒ that domain carries no binding structure ⇒ structured machinery skipped there. Records a per-domain structure verdict (prediction to test: clippy_lints strongly structured; kernel_opt categories possibly weaker than rule-level).
+- [x] **T5** **BoW-null router per domain — LANDED** (Bench 063 §10-11, the
+  coalescing addendum; preregistered at `d64523a` before running). Needed one
+  thing first: `rustc_errors` was unmeasurable because `plain-binding` — the
+  classifier's final `else` branch — holds 1 of 212 spans, so the per-role
+  bound killed every `d`. Fixed by coalescing roles with `≤ T` states into one
+  `other` block at a **fixed** `T = 8` (per-`d` coalescing changes `n_states`
+  and makes BIC scores incomparable — §10.2a). Zero states dropped on either
+  domain. **Verdict, over the coalesced vocabulary, at BIC's `d = 1`:**
+
+  | domain | space | m' | verdict |
+  |---|---|---|---|
+  | clippy_lints | consumer 8-D | 6 | **NOT structured** (bow 0.9961 / cross-state 0.9897) |
+  | clippy_lints | control 256-D | 6 | **structured** (1.1417 / 1.0693) |
+  | rustc_errors | consumer 8-D | 8 | unmeasurable (`K == D` at `d = 1`) |
+  | rustc_errors | control 256-D | 8 | **structured** (2.2096 / 2.6661) |
+
+  Three results that change what the rest of Phase 2 may assume:
+  1. **Bench 062 §10's rustc prior is REFUTED, and was a category error.** It
+     predicted little role gain from "6/8 error codes are single-filler";
+     rustc is the **most** structured arm measured. The prior was about the
+     *error-code* axis, which this scheme puts on the **filler** side — a
+     prior about one axis applied to the other. Do not re-import it.
+  2. **BIC prefers `d = 1` even with all four `d` admissible**, scores rising
+     monotonically in `d` on both control arms. Wide filler rows never pay for
+     themselves on this corpus, which retires the "K too shallow" class of
+     hypothesis for this fit.
+  3. **The 8-D consumer space is measurably FLAT** — both probes below 1.0,
+     `r_bow` beating `r_full`, and a cross-state role permutation *improving*
+     the fit. Which is what amends T4 (below).
+
+  Preregistered guard §10.4 was itself refuted (it claimed coalescing could not
+  make the consumer space admissible "because it only shrinks `m`" — shrinking
+  `m` is exactly what takes `K = m'·d` below `D`); replaced by the
+  bound-vs-verdict invariant, asserted on every arm. §11.5.
+  **Confound stated, not fixed** (§11.7): the shape-class role is computed from
+  the same span text the state is hashed from, so a role is partly readable off
+  the state. Unavoidable under the modelless mandate — any modelless role is a
+  function of the input — so it bounds what "structured" claims, and it
+  explains rustc's high ratios (8 fillers vs 8 role blocks) without appeal to
+  deeper compositionality.
+  Original text retained:
+  **BoW-null router per domain:** *(prior measured by Bench 062: `rustc_errors` roles are 6/8 single-filler, so m=1 shared-role ALS should show little residual gain there; `clippy_lints` has 13 multi-filler roles)* fit the m=1 shared-role ALS per corpus; residual ratio `r_bow/r_full < 1+ε` ⇒ that domain carries no binding structure ⇒ structured machinery skipped there. Records a per-domain structure verdict (prediction to test: clippy_lints strongly structured; kernel_opt categories possibly weaker than rule-level).
+- [ ] **T5b** **`kernel_opt` population for the structure harness.** The §2
+  scheme decision makes its 426 rules *expressible* (rule identity is the
+  filler axis, whose count is unconstrained — this was the blocker), but no
+  kernel_opt population exists in `withheld_pair_ood`'s builders, so T5's
+  per-domain table has no kernel_opt row and T5's original prediction about it
+  ("categories possibly weaker than rule-level") is untested. Corpus plumbing,
+  not new mechanism: add a `kernel_opt_population()` beside
+  `clippy_population()` / `rustc_errors_population()` and re-run Bench 063.
+
 - [ ] **T6** **Counterfactual surgery on LatentFixMemory trajectories:** for score-bench persist-miss spans, surgery-swap the rule/domain filler and ask closed-form "would domain X / rule Y have healed this span?" — complements Bench 032's re-run-based switch-cost measurement with a zero-recompute counterfactual; feeds the post-mining intake (`.distill/001_mining_queue_snapshot.md`) with attributed misses.
 
 ## GOAT gate
