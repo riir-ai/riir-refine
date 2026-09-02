@@ -56,6 +56,25 @@ composes with), riir-dapps Plans 008/011.
 - Activation: `staking_share_bp` 500, `yield_ceiling_bp` 22 armed, thin-base window
   unwritable (Proposal 010 Phase 4).
 
+## Wait-state re-verification (2026-09-02, source-level)
+
+Re-verified this date **against source, not against this file's own prose** — a
+tracker that re-reads itself cannot detect that the thing it describes has changed.
+
+- **The activation claim holds.** `riir-dapps/src/kat/compose.rs`
+  `EpochParams::DEFAULT` carries `staking_share_bp: 500` with `yield_ceiling_bp: 22`
+  armed in the SAME default, and `src/kat/ledger.rs:1350` structurally refuses a row
+  with `staking_share_bp > 0` while the ceiling is disabled. The ordering constraint
+  (Issue 009 — never open the thin-base window uncapped) is enforced by construction,
+  not by convention.
+- **Both open items remain non-engineering.** T2.2 needs ops to name the RPC provider
+  and the custody-key posture (those two choices determine the binary's connection
+  pooling, key source, and alerting shape — writing it first would be guessing at the
+  spec). T3.1/T3.2 need a counsel engagement. Neither has an unblock this repo can
+  perform, and no amount of engineering effort changes that.
+- **The KAT-stake fallback arm still ships**, so a "no" from counsel drops the USDC
+  rail only, not the feature.
+
 ## Summary
 
 The staking feature is functionally complete and live at 500 bp; what remains is the

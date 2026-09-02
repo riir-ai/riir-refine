@@ -68,6 +68,24 @@ Related: [Issue 059](059_proposal_007_remainder_ops_signer_and_counsel_gate.md),
 - Proposal 010 (the ledger-budget-rule re-open half) LANDED end-to-end: row v2, the
   yield ceiling, treasury-first grants, activation.
 
+## Wait-state re-verification (2026-09-02, source-level)
+
+Re-verified this date against the recorded benchmark rather than against this file's
+own status line.
+
+- **The G5 FAIL verdict is real and pinned, not stale prose.**
+  `riir-dao/.benchmarks/001_g5_simulator.md:36` reads "**FAIL — no metric where
+  adaptive strictly beats frozen (wash)**", and the doc records a regression pin
+  asserting the verdict stays EXACTLY that. So advisory-only remains terminal for
+  this proposal by measurement, not by opinion.
+- **The only path out is still an owner act.** The v2-candidates plan requires an
+  owner-commissioned supply decision (the cap/initial-supply ratio is never an agent
+  move). Re-rolling the G5 campaign with the same candidates is explicitly NOT the
+  path — that would re-measure a known wash.
+- **T3.1/T3.2 stay gated** on G5-class evidence that failed; **T2.3's soak** stays
+  blocked on live telemetry, which needs Proposal 011's genesis ceremony
+  (Issue 061 T2.2 — an owner act). No engineering unblock exists for any of the four.
+
 ## Summary
 
 008 is a landed, terminal-as-specified advisory system with one open path: a NEW plan
