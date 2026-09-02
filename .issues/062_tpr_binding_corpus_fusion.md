@@ -45,6 +45,20 @@ did NOT fire. Three caveats that bound what Phase 2 may claim:
 
 - [ ] **G1** ALS determinism: monotone-certificate assert + double-run bit-identical artifact.
 - [ ] **G3** Floors hold with the feature off AND on (14/14 retrieval gate; score-bench run recorded before/after).
+      **Selector resolved by measurement 2026-09-02 - do not re-derive:** the "14/14
+      retrieval gate" is the LIB test module `src/draft/retrieval_eval.rs` (floors in its
+      private `mod floors`, assertion `retrieval_precision_regression_gate`), NOT a
+      `tests/*.rs` file. `--features latent_retrieval` alone selects **12** of the 14 -
+      the other two need `sec` + `kernel_heal`. Both states measured GREEN:
+      `latent_retrieval` = 12/0 (1103 filtered), `latent_retrieval,sec,kernel_heal` =
+      14/0 (1409 filtered, ~343 s). A "12, not 14" reading is the wrong selector, not a
+      regression. **Feature-off state measured HELD** by the T2a consumer A/B: 3
+      processes per arm, bit-identical (clippy 89.6/93.8/95.8, perf 96.2/98.1/100.0,
+      blended 93.1/96.0/98.0, router 74/101). Two standing fragilities recorded there,
+      neither caused by this work: `CLIPPY_TOP3` sits at **exactly zero margin**
+      (45/48 measured vs 45/48 asserted - one casualty reds the gate), and the `mod
+      floors` P7 re-pin comment understates measured blended top-3/top-5 by 1-2 spans
+      (floors were not weakened; the corpus moved).
 - [ ] **G4** Zero-alloc hot path for the projection/unbind inside retrieval (tracking allocator, exact counts).
 - [ ] **G8** OOD delta vs the T1 baseline at the preregistered margin, OR an honest no-gain record + demote-loser (flat cosine + Structural rerank keeps the slot at OOD parity). Per-domain BoW verdict recorded.
 - [ ] **Promote** Only after gates pass AND T1 shows the OOD gap the axis claims to close; opt-in until then.
