@@ -17,9 +17,19 @@
 
 ## Live queue state (2026-08-31, post-Batch-93, M3 box)
 
-- **Corpus counts:** kernel_opt 445 · rust_perf 97 · clippy_lints 45 · sec 12 · docker 31
+- **Corpus counts:** kernel_opt 445 · rust_perf 98 · clippy_lints 45 · sec 12 · docker 31
   (AGENTS.md is the authoritative ledger — bump there per batch, snapshot counts are a convenience copy).
-- **Last landed:** Batch 98 (2026-09-02, Research 118 / Plan 065 — the ds4 dense.metal/moe.metal
+- **Last landed:** **Batch 99 (2026-09-02, Research 119 / Plan 067 — the wasmi v2.0 blog
+  distill, the first rust_perf batch since Batch 94): `mir-destprop-branch-site-merge`
+  MEASURED ParetoDominant 2/0/1 (1.04/1.24/1.25×, corpus validator; probe-stable ×2),
+  asm-verified mechanism (merged = cmovne + ONE indirect tail-jump; split = two
+  DIRECT tail-jumps, no re-merge), negative control measured (runtime-opaque
+  targets = 0.95-1.00× — rule applies ONLY to compile-time-known code pointers),
+  toolchain regime rustc ≥1.92 DestProp; corpus 97 → 98, dispatch 3 → 4; the C+
+  secondary `hot-dispatch-gpr-arg-budget` probed-Tie on msvc-x64 (1.009/0.999×) →
+  queued-secondary kill-free (sysv64 window). GOAT: default 1012/0 + bench 1030/0 +
+  floors 13/13 + score-bench FLAT + clippy 0 both states; SIX count pins walked
+  (three caught by the full-suite run).** Prior: Batch 98 (2026-09-02, Research 118 / Plan 065 — the ds4 dense.metal/moe.metal
   leads Batch 97 queued: 10 rules, corpus 435 → 445, +4 riders on B97×2/B35/B32a; GOAT all green,
   floors HELD, score-bench #29 flat; 4 mine-time corrections incl. the INVERTED M5 sigmoid
   hazard and the args-aliasing-by-value correction). Prior: Batch 93 (`501fdb2` — ktransformers
@@ -35,14 +45,14 @@
   files committed while the sibling's 16 uncommitted files stayed out via
   explicit-path `git add`). Full record: P8 ADOPTION WAVE 2 below.
 - **Next executable (cadence-gated):**
-  - **Batch 99 candidate (queued 2026-09-02, Plan 067 / Research 119): wasmi v2.0 blog**
-    (wasmi-labs, Robin Freyler, first-party + measured) — route `rust_perf`/dispatch, yield 1–2
-    rules, lead = `mir-destprop-branch-site-merge` (rustc ≥1.92 DestinationPropagation merges a
-    conditional dispatch's two call sites into one branch site → predictor history mixing;
-    wasmi measured ~2800 → >4200 CoreMark from the single fix; Stitch reproduced), secondary
-    = `hot-dispatch-gpr-arg-budget` (sysv64 6-GPR budget; float-domain pack; preserve_none
-    future). Dual verdict: the same source TRIGGERED the workspace wasmi 1.0 → 2.0 upgrade
-    (riir-ai Plan 563 — 13 pins / 7 repos lockstep + fuel recalibration).
+  - **~~Batch 99 candidate (queued 2026-09-02, Plan 067 / Research 119): wasmi v2.0 blog~~
+    LANDED 2026-09-02** (see Last landed). Dual verdict consumed: the same source TRIGGERED
+    the workspace wasmi 1.0 → 2.0 upgrade (riir-ai Plan 563 — 13 pins / 7 repos lockstep +
+    fuel recalibration; that lane is riir-ai's, not this repo's).
+  - **Queued-secondary (kill-free): `hot-dispatch-gpr-arg-budget`** — probed Tie on
+    windows-msvc x64 (1.009/0.999×, two runs; the blog's evidence is sysv64 tail-call
+    dispatch). Re-open ONLY with a sysv64 measurement window; ABI-specific,
+    interpreter/VM-loop-shaped pattern.
   - **Batch 100 candidate (queued 2026-09-02, Plan 068 / Research 120): Layr-Labs/qwen-3.8-mtp-challenge**
     (MIT, pin `0863b06a`, same team as ds4 B97/98) — route `kernel_opt`, verdict **YES B+**, yield 3–4
     rules, lead = `functional-cache-versioning-loses-donation-under-kernel-read` (MLX slice-update

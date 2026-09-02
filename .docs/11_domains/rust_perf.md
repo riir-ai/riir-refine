@@ -23,9 +23,24 @@
 
 ## Corpus
 
-97 rules across 12 categories (rust-optimize skill checklist +
+98 rules across 12 categories (rust-optimize skill checklist +
 nnethercote/perf-book + rustc-hash/bevy real-world patterns + the hotpath-rs
-profiling guide, Research 032; **now 97 rules — Batch 94 (2026-09-01,
+profiling guide, Research 032; **now 98 rules — Batch 99 (2026-09-02,
+Research 119 — the wasmi v2.0 blog distill, Plan 067) added
+`mir-destprop-branch-site-merge` (dispatch; **ParetoDominant 2/0/1 —
+1.04/1.24/1.25× at 1K/100K/1M dispatches, alloc axis EXACT 0/0, alloc-det
+stable ×3** — a hot conditional dispatch whose two arms load a KNOWN fn
+item and converge into ONE call site lowers [asm-verified] to a cmov of
+the two code addresses + a SINGLE indirect tail-jump (mixed
+branch-target history, no devirtualization possible); the split form
+emits TWO DIRECT tail-jumps. Negative control measured: with
+RUNTIME-OPAQUE fn pointers (genuinely dynamic dispatch) both forms keep
+indirect calls and the split buys NOTHING (0.95-1.00×) — the rule
+applies only to compile-time-known code pointers; toolchain regime:
+rustc ≥1.92 MIR DestinationPropagation, re-gate on toolchain bumps);
+the C+ secondary `hot-dispatch-gpr-arg-budget` was probed and honestly
+NOT landed (Tie on windows-msvc x64 — 1.009/0.999×; sysv64-specific
+evidence, queued-secondary kill-free) — Batch 94 (2026-09-01,
 Research 110/112 — the oMLX PR #3260 SSD expert-streaming distill, Plan 058)
 added `coalesce-nearby-reads-bounded-gap-cacheability-gated` (io;
 source-reported regime-annotation, honestly NotBenchable — merge addressed

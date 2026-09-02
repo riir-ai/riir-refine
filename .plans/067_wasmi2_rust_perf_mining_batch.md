@@ -1,6 +1,6 @@
 # Plan 067 — Batch 99: wasmi v2.0 blog distill → rust_perf (branch-site merge + GPR budget)
 
-**Status:** QUEUED — verdict YES B (`.research/119_wasmi_v2_blog_distill.md`); batch not yet mined. The linked workspace action (wasmi 1.0 → 2.0 dependency upgrade) runs under riir-ai Plan 563 and is NOT this batch.
+**Status:** LANDED 2026-09-02 — Batch 99 complete (1 rule `mir-destprop-branch-site-merge` MEASURED ParetoDominant 2/0/1; the C+ secondary honestly probed-Tie + queued kill-free). GOAT: default lib 1012/0 + bench lib 1030/0 + floors 13/13 + score-bench FLAT + clippy 0 both states. Record: Research 119 (status → RECORD) + AGENTS.md Batch 99 entry. The linked workspace action (wasmi 1.0 → 2.0 dependency upgrade) runs under riir-ai Plan 563 and is NOT this batch.
 
 ## Source
 
@@ -14,16 +14,16 @@
 
 ## Tasks
 
-- [ ] T1 Dedup re-verification at mine time (grep `mir-destprop|branch.?site|destprop|gpr|calling.?convention` over all domain corpora — vocab translation incl. `predictor|dispatch|csel|register`), record one line of evidence per candidate.
-- [ ] T2 Author candidate 1 corpus entry: original minimal buggy/fixed fixtures (merged call-site dispatch loop vs split sites), `context_notes` carrying (a) rustc ≥1.92 DestProp regime, (b) tail-call/indirect-dispatch-only win regime, (c) the re-merge caveat, source cited (wasmi v2.0 blog, Research 119).
-- [ ] T3 Bench spec for candidate 1 (perf-bench Pareto validator + alloc axis): two arms, sizes axis on dispatch count; G1 output-identity gate; verdict-stability ×2. If Tie with re-merge evidence → land as honest-annotation (the varint-compose precedent) or kill with the measured reason.
-- [ ] T4 Candidate 2 corpus entry + bench spec IF T3 lands ≥1 rule and time permits; otherwise record as queued-secondary with the kill-free note.
-- [ ] T5 Standing gates: `batch99_rules_present` + `batch99_concepts_covered` + `batch99_pseudocode_parses` (cfg(not(kernel_verify)) per the B70 convention).
-- [ ] T6 Count pins: mod.rs header, category headers + comments, tests.rs corpus-count/expected-array/sums, router.rs expert total, the `(10/88)`-style Not-benchable line if the count moves.
-- [ ] T7 Retrieval floors (14/14) + score-bench run — must be FLAT or better; re-pin only if justified.
-- [ ] T8 Clippy 0 both states `--all-targets`; doc-markdown backticks pre-empted (the B37 lesson).
-- [ ] T9 Docs: AGENTS.md batch entry (rust_perf count bump + annotated counts), `.docs/11_domains/rust_perf.md` table rows, this plan's checkboxes, `.research/119` status → RECORD, queue snapshot line update (Batch 99 landed / counts).
-- [ ] T10 Commit + push (`feat(batch99): ...`), same-unit queue update per the idle-loop discipline.
+- [x] T1 Dedup re-verification at mine time (grep `mir-destprop|branch.?site|destprop|gpr|calling.?convention` over all domain corpora — vocab translation incl. `predictor|dispatch|csel|register`), record one line of evidence per candidate.
+- [x] T2 Author candidate 1 corpus entry: original minimal buggy/fixed fixtures (merged call-site dispatch loop vs split sites), `context_notes` carrying (a) rustc ≥1.92 DestProp regime, (b) tail-call/indirect-dispatch-only win regime, (c) the re-merge caveat, source cited (wasmi v2.0 blog, Research 119).
+- [x] T3 Bench spec for candidate 1 (perf-bench Pareto validator + alloc axis): two arms, sizes axis on dispatch count; G1 output-identity gate; verdict-stability ×2. If Tie with re-merge evidence → land as honest-annotation (the varint-compose precedent) or kill with the measured reason. — VERDICT: ParetoDominant 2/0/1 (1.04/1.24/1.25×); asm-verified NO re-merge (merged = cmovne + one indirect `jmp r9`; split = two direct `jmp h_*`); probe verdict-stable ×2 (1.11/1.21/1.19 + 1.05/1.22/1.18).
+- [x] T4 Candidate 2 corpus entry + bench spec IF T3 lands ≥1 rule and time permits; otherwise record as queued-secondary with the kill-free note. — DISPOSITION: probed + honestly NOT landed (Tie 1.009/0.999× on windows-msvc x64, two runs; sysv64-specific evidence, ABI-specific pattern) — queued-secondary kill-free per the plan's own rule.
+- [x] T5 Standing gates: `batch99_rules_present` + `batch99_concepts_covered` + `batch99_pseudocode_parses` (cfg(not(kernel_verify)) per the B70 convention). — NOTE: the kernel_verify cfg guard is a kernel_opt convention; the rust_perf gates run ungated in the corpus test module (the Batch 91 shape) + a G1 dispatch-sequence gate.
+- [x] T6 Count pins: mod.rs header, category headers + comments, tests.rs corpus-count/expected-array/sums, router.rs expert total, the `(10/88)`-style Not-benchable line if the count moves. — SIX sites walked, THREE initially missed and caught by the full-suite run (seed-corpus total + fn rename; eighty_four→eighty_five; annotated 40→41 + fn rename + list; unannotated message; serde round-trip 40→41; drafter-propagates 40→41 + stale '34' comment).
+- [x] T7 Retrieval floors (14/14) + score-bench run — must be FLAT or better; re-pin only if justified. — 13/13 rust_perf floors HELD (the kernel self-variant gate is kernel-batch territory; Batch 91's rust_perf shape = 13) + score-bench #30 FLAT (96.2/1.9/100/100).
+- [x] T8 Clippy 0 both states `--all-targets`; doc-markdown backticks pre-empted (the B37 lesson). — 0 real findings both states (exFAT hardlink noise excepted); the B37 line-initial `+ ` class struck anyway in the count-pin doc walk (caught by clippy, fixed) + the B85 `///`-in-fn-body class (caught on read-back).
+- [x] T9 Docs: AGENTS.md batch entry (rust_perf count bump + annotated counts), `.docs/11_domains/rust_perf.md` table rows, this plan's checkboxes, `.research/119` status → RECORD, queue snapshot line update (Batch 99 landed / counts).
+- [x] T10 Commit + push (`feat(batch99): ...`), same-unit queue update per the idle-loop discipline.
 
 ## Honest caveats carried into the batch
 

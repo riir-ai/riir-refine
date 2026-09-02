@@ -1,6 +1,6 @@
 # Wasmi v2.0 Blog — distill verdict + the workspace upgrade trigger
 
-**Status:** DISTILLED — pending owner decision (mining batch queued as Batch 99, Plan 067; the linked workspace action — the wasmi 1.0 → 2.0 upgrade — is executing under riir-ai Plan 563)
+**Status:** RECORD (Batch 99 landed 2026-09-02 — `mir-destprop-branch-site-merge` MEASURED ParetoDominant 2/0/1, asm-verified mechanism, negative control measured; the C+ secondary probed-Tie + queued kill-free; see Plan 067. The linked workspace action — the wasmi 1.0 → 2.0 upgrade — is executing under riir-ai Plan 563)
 
 - **Source:** https://wasmi-labs.github.io/blog/posts/wasmi-v2.0/ — "Wasmi 2.0 - Engineering of the Fastest Wasm Interpreters", Robin Freyler (wasmi author), published 2026-09-01.
 - **Inspection date:** 2026-09-02.

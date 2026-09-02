@@ -212,7 +212,7 @@
 //!
 //! ## Context-dependent rules (`context_notes`)
 //!
-//! Thirty-nine rules carry a `context_notes` annotation (as of Batch 91;
+//! Forty-one rules carry a `context_notes` annotation (as of Batch 99;
 //! this prose last walked then). Ten record that
 //! the Pareto validator found them **ParetoDominated** or **Mixed** in the
 //! default configuration: the original 4 from Bench 013 (`precompute-table`,
@@ -230,7 +230,9 @@
 //! regime on `channel-send-batching-unpark`) complete the set; Batch 91's
 //! two (the two-regime note on `filter-before-expensive-transform`, the
 //! invariance-precondition note on `decision-projection-before-construction`)
-//! extend it. The patterns
+//! extend it; Batch 94's cacheability note and Batch 99's measured-verdict +
+//! regime-boundary note on `mir-destprop-branch-site-merge` complete the
+//! current set. The patterns
 //! are genuine wins in their respective regimes and are kept in the corpus as
 //! documented patterns, but consumers should treat annotated rules as
 //! context-dependent — not unconditional suggestions.
@@ -240,7 +242,7 @@ use crate::domains::rust_perf::{PerfRule, RustPerfDomain};
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 96 entries
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 98 entries
 /// covering the main perf pattern categories (complexity, allocation, simd,
 /// layout, iterators, concurrency, io, arithmetic, dispatch, caching, bevy,
 /// wasm). Allocation is the deepest (22 rules; Batch 86 added 2); complexity
@@ -249,9 +251,10 @@ use crate::domains::rust_perf::{PerfRule, RustPerfDomain};
 /// each); layout has 9 (Batch 61 + 85 + 86 added); concurrency has 8
 /// (Issue 014 added the two metric-mismatch rules; Batch 65 added the two
 /// contention rules; Batch 73 added 1);
-/// arithmetic has 8 (Batch 74 added 1); dispatch has 3 (Batch 61 + 74 added
-/// 1 each); caching has 4 (Batch 73 + 76 added 1 each); io has 4 (Batch
-/// 68/69 added 1 each + Batch 85 added 1); bevy + wasm have 1 each.
+/// arithmetic has 8 (Batch 74 added 1); dispatch has 4 (Batch 61 + 74 added
+/// 1 each; Batch 99 added the DestProp branch-site rule); caching has 4 (Batch 73 + 76 added 1 each); io has 5 (Batch
+/// 68/69 added 1 each + Batch 85 added 1 + Batch 94 added the cacheability-
+/// coupled coalescing rule); bevy + wasm have 1 each.
 #[must_use]
 #[allow(clippy::too_many_lines)] // seed corpus is a data table; length scales with rule count
 pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
@@ -2493,6 +2496,29 @@ PerfRule {
             context_notes: Some("REGIME-ANNOTATED, source-reported (the source ships serving-level numbers only -- no isolated A/B for the coalescing itself; honestly NotBenchable here). The DECISION CONTENT is the cacheability coupling, not the merge: gap budget = cacheable ? 64 KiB : 0 -- in direct/F_NOCACHE mode over-read bytes are NOT free (they bypass the page cache and cannot repay the extra transfer), so only exactly-adjacent rows merge; on a cacheable descriptor the page cache repays the gap and 64 KiB of slack is cheap. Merge is gap-BOUNDED, not whole-range (an unbounded merge re-reads the shard -- the eager-pointer-collect-lazy-fetch failure shape on the transport axis). Re-selection after the merge preserves the caller's row order incl. duplicates; sort + merge at O(n log n) over the REQUESTED set only. RIDERS from the same source: (1) Darwin hints (fcntl F_RDAHEAD on cacheable fds, F_NOCACHE on direct fds) are applied ONCE per persistent descriptor and advisory-swallowed on unsupported platforms -- a descriptor-lifetime hint, not a per-read posix_fadvise; (2) fd cache keyed (path, cache-mode) so direct and cached descriptors coexist for the same file (note: that dict's get/set is unsynchronized in the source -- double os.open with the loser's fd leaked -- a concurrency hazard recorded in Research 110 section 7, not folded into this rule). Distinct from buffered-io (sequential stream buffering with a fixed window; this is random-addressed access merged by measured gap), from eager-pointer-collect-lazy-fetch (avoids materializing an O(all) index to read a subset; this transports a known subset in fewer syscalls), and from software-prefetch-storage-bound (both are storage-side; SW prefetch hides latency on compute-bound streams, coalescing removes syscall count on random-addressed streams -- different mechanisms, compose freely). Suggestion-only (I/O orchestration; a parse-only proposer cannot see descriptor cacheability). Source: jundot/omlx PR #3260 safetensors.py:448+452 (cold_max_gap_bytes = 64 KiB, clamped), :560-562 (gap-bounded range split), :597-598 (gap 0 when not use_file_cache), :675-678 (re-selection from merged spans), :536-549 (advisory fcntl hints), :526-531 (fd cache keyed (path, use_file_cache)). Batch 94 / Research 110 / Plan 058.".to_string()),
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: None,
+        },
+        // -- dispatch: conditional dispatch with both arms loading a KNOWN fn
+        // and converging into ONE call site (the DestProp-merged shape) ----
+        // Batch 99 (2026-09-02, Research 119 / Plan 067 -- the wasmi v2.0
+        // blog distill). rustc's MIR DestinationPropagation (>=1.92, on by
+        // default) folds `let f = if c { h_a } else { h_b }; f(x)` into a
+        // conditional move of the two code addresses + a SINGLE indirect
+        // branch: every dispatch (whichever handler) shares one
+        // branch-target-predictor entry and the call can never devirtualize.
+        // Verified on this toolchain (x86_64-pc-windows-msvc, rustc 1.97,
+        // asm-inspected): the merged form emits `cmovne` + one indirect
+        // `jmp r9` tail-jump; the split form emits TWO DIRECT `jmp h_*`
+        // tail-jumps -- distinct sites, monomorphic history, no re-merge.
+        // Suggest-only (a parse-only proposer cannot see codegen).
+        PerfRule {
+            rule_id: "mir-destprop-branch-site-merge".to_string(),
+            name: "conditional dispatch phi'd into ONE call site (cmov + single indirect branch) -> keep two distinct call sites (direct jumps, per-site predictor history)".to_string(),
+            category: "dispatch".to_string(),
+            buggy_code: "// A hot interpreter step loads a KNOWN handler in each arm, then the\n// two fn pointers converge into one call. rustc's MIR\n// DestinationPropagation (>=1.92) turns this into a conditional move of\n// the two code addresses + a SINGLE indirect branch: every dispatch --\n// whichever handler -- shares one branch-target-predictor entry, and\n// the call can never devirtualize.\ntype Handler = fn(&mut State, u32);\n\n#[inline(never)]\nfn handler_add(st: &mut State, x: u32) { st.acc = st.acc.wrapping_add(x); }\n#[inline(never)]\nfn handler_mul(st: &mut State, x: u32) { st.acc = st.acc.wrapping_mul(31).wrapping_add(x); }\n\nfn step(pick_add: bool, st: &mut State, x: u32) {\n    let f: Handler = if pick_add { handler_add } else { handler_mul };\n    f(st, x); // ONE call site shared by both arms\n}".to_string(),
+            fixed_code: "// Two DISTINCT tail-call sites, one per arm: each site keeps its own\n// (monomorphic) branch-target history and the compiler emits DIRECT\n// jumps -- no phi, no indirect dispatch, nothing to mispredict. In a\n// hot dispatch loop this was wasmi 2.0's single ~50% fix.\ntype Handler = fn(&mut State, u32);\n\n#[inline(never)]\nfn handler_add(st: &mut State, x: u32) { st.acc = st.acc.wrapping_add(x); }\n#[inline(never)]\nfn handler_mul(st: &mut State, x: u32) { st.acc = st.acc.wrapping_mul(31).wrapping_add(x); }\n\nfn step(pick_add: bool, st: &mut State, x: u32) {\n    if pick_add {\n        handler_add(st, x); // site 1 -- direct, own history\n    } else {\n        handler_mul(st, x); // site 2 -- direct, own history\n    }\n}".to_string(),
+            context_notes: Some("MEASURED ParetoDominant 2/0/1 -- 1.04x/1.24x/1.25x at n=1K/100K/1M dispatches, 50/50 mixed stream, the corpus Pareto validator the recorded instrument (x86_64-pc-windows-msvc, rustc 1.97, 2026-09-02, box quiet; alloc axis EXACT 0/0/0/0 at every size, alloc-det stable across 3 runs). Verdict-stable vs the mine-time probe (median-of-15 methodology): 1.11x/1.21x/1.19x + a second run 1.05x/1.22x/1.18x -- the two large sizes are rock-stable at 1.18-1.25x, the 1K cell straddles the Faster threshold (1.04-1.11) and lands Tie under the validator. MECHANISM (asm-inspected on this toolchain, not inferred): the merged form emits `lea rax,[rip+h_a]; lea r9,[rip+h_b]; test cl,cl; cmovne r9,rax; jmp r9` -- a conditional move of the two code addresses + ONE indirect tail-jump; the split form emits TWO DIRECT `jmp h_a` / `jmp h_b` tail-jumps. Both mechanisms are load-bearing and BOTH are the rule's honest content: (1) devirtualization enablement -- the phi of two KNOWN fn items can never fold to a direct call, so the merged form forces an indirect branch forever; (2) per-site predictor history -- the single site is 2-target polymorphic, mixing BTB history across arms. REGIME (measured, three skew arms): 98/02 skew 1.18/1.30/1.28 (most stable -- rare transitions pay full mispredicts at the shared site); 50/50 1.11/1.21/1.19; 75/25 1.31/1.05/1.03 (borderline at the two large sizes). NEGATIVE CONTROL (the boundary, measured): when the two fn pointers are RUNTIME-OPAQUE (fn args, table entries behind opaque loads -- genuinely dynamic dispatch), BOTH forms keep indirect calls and the split buys NOTHING (0.95-1.00x across all nine cells, two runs) -- the rule applies ONLY when the arms load compile-time-known code pointers (fn items / consts / statics), where splitting re-enables direct calls; for genuinely dynamic dispatch see dyn-to-enum (change the representation) instead. TOOLCHAIN REGIME: the deopt class is rustc >=1.92 MIR DestinationPropagation (default-on; the source measured the 1.91->1.92 boundary, ~2800 -> >4200 CoreMark ~+50% from the single fix on the wasmi tail-call dispatch, independently reproduced on Stitch); re-gate on toolchain bumps (the debug-assert-length-hoist cross-arch precedent). The source's own scope note: only the tail-call-based dispatch configurations see improvements (our fixture is the tail-call shape -- the step fn's last op is the handler call). Suggestion-only (a parse-only proposer cannot see codegen shapes). Source: wasmi v2.0 blog 'Accidental Rust Deoptimization' (wasmi-labs.github.io, 2026-09-01, Robin Freyler), Batch 99 / Research 119 / Plan 067.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(mir_destprop_branch_site_merge_bench_spec()),
         },
     ])
 }
@@ -7712,9 +7738,9 @@ mod tests {
     }
 
     #[test]
-    fn seed_corpus_has_ninety_seven_entries_across_twelve_categories() {
+    fn seed_corpus_has_ninety_eight_entries_across_twelve_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 97);
+        assert_eq!(corpus.entries.len(), 98);
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
@@ -7748,9 +7774,10 @@ mod tests {
         // has 7 (Batch 53 added powi-vs-powf + distance-sq-no-sqrt; Batch 59
         // added division-by-invariant-multiplication; Batch 62
         // added newton-refinement-vs-hardware-transcendental; Batch 74
-        // added swar-digit-chunk-parse); dispatch has 3
+        // added swar-digit-chunk-parse); dispatch has 4
         // (Batch 61 added keyword-map-to-match; Batch 74 added
-        // runtime-feature-detect-per-chunk); caching has 4 (Issue 014
+        // runtime-feature-detect-per-chunk; Batch 99 added
+        // mir-destprop-branch-site-merge); caching has 4 (Issue 014
         // added regex-hoist-lazylock; Batch 73 added
         // sort-key-cache-precompute-out-of-lock; Batch 76 added
         // eager-pointer-collect-lazy-fetch); io has 5 (Batch 68 added
@@ -8624,6 +8651,130 @@ mod tests {
         assert_eq!(fixed_calls, 0, "the fixed predicate never needs the canonical form");
     }
 
+    /// Batch 99 — the new rule is present.
+    #[test]
+    fn batch99_rules_present() {
+        let corpus = build_perf_seed_corpus();
+        let ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        assert!(ids.contains(&"mir-destprop-branch-site-merge"));
+    }
+
+    /// Batch 99 — the new rule parses (syn) on buggy AND fixed code.
+    #[test]
+    fn batch99_pseudocode_parses() {
+        let corpus = build_perf_seed_corpus();
+        let e = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == "mir-destprop-branch-site-merge")
+            .unwrap_or_else(|| panic!("mir-destprop-branch-site-merge missing from corpus"));
+        assert!(
+            syn::parse_file(&e.buggy_code)
+                .and_then(|_| syn::parse_file(&e.fixed_code))
+                .is_ok(),
+            "mir-destprop-branch-site-merge buggy/fixed must both parse"
+        );
+    }
+
+    /// Batch 99 — the load-bearing concepts survive into the corpus text
+    /// (retrieval discriminators, the kernel-batch concepts_covered
+    /// convention applied to a rust_perf batch).
+    #[test]
+    fn batch99_concepts_covered() {
+        let corpus = build_perf_seed_corpus();
+        let e = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == "mir-destprop-branch-site-merge")
+            .expect("rule present");
+        let text = format!("{}\n{}\n{}", e.name, e.buggy_code, e.fixed_code);
+        for needle in [
+            "DestinationPropagation",
+            "predictor",
+            "devirtualize",
+            "indirect",
+            "call site",
+        ] {
+            assert!(text.contains(needle), "concept {needle:?} missing from the rule text");
+        }
+        assert!(
+            e.context_notes.as_deref().unwrap_or("").contains("ParetoDominant"),
+            "the measured verdict must be recorded in context_notes"
+        );
+    }
+
+    /// Batch 99 G1 (output + dispatch-sequence identity): both shapes
+    /// dispatch the IDENTICAL handler sequence over the same stream (pinned
+    /// by per-handler call counters, not just final state) and land the
+    /// identical final state. Non-vacuous: both counters must be > 0. The
+    /// mechanism (merged = cmov + one indirect tail-jump, split = two
+    /// direct tail-jumps) is asm evidence recorded in the annotation — it
+    /// is not unit-gateable portably.
+    #[test]
+    fn batch99_split_sites_preserve_output_and_dispatch_sequence() {
+        use std::cell::RefCell;
+        struct State {
+            acc: u64,
+        }
+        type Handler = fn(&mut State, u32);
+        thread_local! {
+            static CALLS: RefCell<(u64, u64)> = const { RefCell::new((0, 0)) };
+        }
+        fn handler_add(st: &mut State, x: u32) {
+            CALLS.with(|c| c.borrow_mut().0 += 1);
+            st.acc = st.acc.wrapping_add(u64::from(x));
+        }
+        fn handler_mul(st: &mut State, x: u32) {
+            CALLS.with(|c| c.borrow_mut().1 += 1);
+            st.acc = st.acc.wrapping_mul(31).wrapping_add(u64::from(x));
+        }
+        // same shapes as the corpus fixtures
+        let step_merged = |pick_add: bool, st: &mut State, x: u32| {
+            let f: Handler = if pick_add { handler_add } else { handler_mul };
+            f(st, x);
+        };
+        let step_split = |pick_add: bool, st: &mut State, x: u32| {
+            if pick_add {
+                handler_add(st, x);
+            } else {
+                handler_mul(st, x);
+            }
+        };
+        // deterministic mixed stream (LCG, 50/50-ish)
+        let mut seed = 0x243F_6A88_85A3_08D3u64;
+        let stream: Vec<(bool, u32)> = (0..1024)
+            .map(|i| {
+                seed = seed
+                    .wrapping_mul(6_364_136_223_846_793_005)
+                    .wrapping_add(1_442_695_040_888_963_407);
+                let pick = ((seed >> 33) as u32) % 256 < 128;
+                let x = (((seed >> 40) as u32) ^ i) & 0xFFFF;
+                (pick, x)
+            })
+            .collect();
+
+        CALLS.with(|c| *c.borrow_mut() = (0, 0));
+        let mut sm = State { acc: 0 };
+        for &(pick, x) in &stream {
+            step_merged(pick, &mut sm, x);
+        }
+        let merged_calls = CALLS.with(|c| *c.borrow());
+
+        CALLS.with(|c| *c.borrow_mut() = (0, 0));
+        let mut ss = State { acc: 0 };
+        for &(pick, x) in &stream {
+            step_split(pick, &mut ss, x);
+        }
+        let split_calls = CALLS.with(|c| *c.borrow());
+
+        assert_eq!(sm.acc, ss.acc, "both shapes must land the identical final state");
+        assert_eq!(
+            merged_calls, split_calls,
+            "both shapes must dispatch the IDENTICAL handler sequence"
+        );
+        assert!(merged_calls.0 > 0 && merged_calls.1 > 0, "non-vacuous: both handlers ran");
+    }
+
     /// Batch 86 G1 (exactness gate, integer ops — the ported-numeric
     /// MANDATE shape): the serialize-once buffer must reconstruct every
     /// (name, payload) record BYTE-EXACTLY, including the edge records
@@ -8714,10 +8865,14 @@ mod tests {
 
     #[cfg(feature = "rust_perf_bench")]
     #[test]
-    fn eighty_four_rules_have_bench_specs() {
+    fn eighty_five_rules_have_bench_specs() {
         let corpus = build_perf_seed_corpus();
-        let with_spec = corpus.entries.iter().filter(|e| e.bench_spec.is_some()).count();
-        assert_eq!(with_spec, 84, "expected 84 benchable rules, got {with_spec}");
+        let with_spec = corpus
+            .entries
+            .iter()
+            .filter(|e| e.bench_spec.is_some())
+            .count();
+        assert_eq!(with_spec, 85, "expected 85 benchable rules, got {with_spec}");
     }
 
     #[cfg(feature = "rust_perf_bench")]
@@ -8777,11 +8932,16 @@ mod tests {
     /// axis + the repr-reorder caveat). Batch 91 added 2
     /// (filter-before-expensive-transform — the two-regime discard ×
     /// transform-cost note; decision-projection-before-construction — the
-    /// invariance-precondition note).
+    /// invariance-precondition note). Batch 94 added 1
+    /// (coalesce-nearby-reads-bounded-gap-cacheability-gated — the
+    /// cacheability-coupling regime, source-reported). Batch 99 added 1
+    /// (mir-destprop-branch-site-merge — the measured ParetoDominant verdict
+    /// with the runtime-opaque-targets negative-control boundary and the
+    /// rustc DestProp toolchain regime).
     /// The other 57 have `context_notes: None` (unconditional wins or
     /// honestly NotBenchable).
     #[test]
-    fn thirty_nine_annotated_rules_carry_context_notes() {
+    fn forty_one_annotated_rules_carry_context_notes() {
         let corpus = build_perf_seed_corpus();
         let annotated: Vec<&str> = corpus
             .entries
@@ -8789,7 +8949,7 @@ mod tests {
             .filter(|e| e.context_notes.is_some())
             .map(|e| e.rule_id.as_str())
             .collect();
-        assert_eq!(annotated.len(), 40, "expected 40 context-annotated rules");
+        assert_eq!(annotated.len(), 41, "expected 41 context-annotated rules");
         assert!(annotated.contains(&"weight-tile-consumption-order")); // Batch 85 — measured ParetoDominant + the M3-L1-shift regime note
         assert!(annotated.contains(&"software-prefetch-storage-bound")); // Batch 85 — the x86-source-cited honest-loser annotation
         assert!(annotated.contains(&"precompute-table"));
@@ -8826,6 +8986,7 @@ mod tests {
         assert!(annotated.contains(&"filter-before-expensive-transform")); // Batch 91 — measured ParetoDominant + the two-regime (discard × cost) note
         assert!(annotated.contains(&"decision-projection-before-construction")); // Batch 91 — the invariance-precondition note
         assert!(annotated.contains(&"coalesce-nearby-reads-bounded-gap-cacheability-gated")); // Batch 94 — the cacheability-coupling regime note (source-reported)
+        assert!(annotated.contains(&"mir-destprop-branch-site-merge")); // Batch 99 — measured ParetoDominant + the runtime-opaque-targets boundary + toolchain regime
     }
 
     /// The non-annotated rules (ParetoDominant + honestly NotBenchable) must
@@ -8839,7 +9000,7 @@ mod tests {
             .iter()
             .filter(|e| e.context_notes.is_none())
             .count();
-        assert_eq!(unannotated, 57, "expected 57 unannotated rules (97 - 40 annotated)");
+        assert_eq!(unannotated, 57, "expected 57 unannotated rules (98 - 41 annotated)");
     }
 
     /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -8851,7 +9012,7 @@ mod tests {
         let json = serde_json::to_string(&corpus.entries).unwrap();
         let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
         let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-        assert_eq!(annotated, 40);
+        assert_eq!(annotated, 41);
 
         // Simulate a pre-field snapshot: strip `context_notes` from JSON.
         // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -8883,9 +9044,9 @@ mod tests {
 
         let corpus = build_perf_seed_corpus();
 
-        // Filter to the 34 annotated rules.
+        // Filter to the 41 annotated rules.
         let annotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_some()).collect();
-        assert_eq!(annotated.len(), 40, "expected 40 annotated rules");
+        assert_eq!(annotated.len(), 41, "expected 41 annotated rules");
 
         // The HealEntry trait override must agree with the struct field.
         for rule in &annotated {
@@ -10099,6 +10260,94 @@ pub fn run_buggy(input: &Input) {
 
 pub fn run_fixed(input: &Input) {
     std::hint::black_box(fixed::count_hot(&input.items, input.hot));
+}
+"#
+        .to_string(),
+    }
+}
+
+/// Bench spec for `mir-destprop-branch-site-merge` (Batch 99, Research 119
+/// — the wasmi v2.0 blog distill): the DestProp shape — both arms load a
+/// KNOWN fn item, converge into one call (cmov + single indirect tail-jump,
+/// asm-verified) vs two distinct direct tail-jump sites. 50/50 mixed
+/// dispatch stream (LCG), sizes on the dispatch-count axis. G1 output
+/// identity is pinned in `batch99_split_sites_preserve_output_and_dispatch_sequence`.
+#[cfg(feature = "rust_perf_bench")]
+#[allow(clippy::items_after_test_module)] // bench-spec tables live after the corpus tests by design
+fn mir_destprop_branch_site_merge_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![1_000, 100_000, 1_000_000],
+        harness: r#"
+pub type Handler = fn(&mut u64, u64);
+
+#[inline(never)]
+pub fn handle_a(s: &mut u64, x: u64) {
+    *s = s.wrapping_add(x).wrapping_add(0x9E37);
+}
+
+#[inline(never)]
+pub fn handle_b(s: &mut u64, x: u64) {
+    *s = s.wrapping_mul(31).wrapping_add(x);
+}
+
+// BUGGY: both arms load a KNOWN fn item, the pointers converge (phi) --
+// cmov of the two code addresses + ONE indirect tail-jump site.
+#[inline(never)]
+pub fn step_merged(cond: bool, s: &mut u64, x: u64) {
+    let f: Handler = if cond { handle_a } else { handle_b };
+    f(s, x);
+}
+
+// FIXED: two DISTINCT tail-call sites -- direct jumps, per-site history.
+#[inline(never)]
+pub fn step_split(cond: bool, s: &mut u64, x: u64) {
+    if cond {
+        handle_a(s, x);
+    } else {
+        handle_b(s, x);
+    }
+}
+
+pub struct Input {
+    conds: Vec<u32>,
+    xs: Vec<u64>,
+}
+
+pub fn make_input(n: usize) -> Input {
+    let mut seed = 0x243F_6A88_85A3_08D3u64;
+    let conds: Vec<u32> = (0..n)
+        .map(|_| {
+            seed = seed
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            u32::from(((seed >> 33) as u32) % 256 < 128) // 50/50 mixed stream
+        })
+        .collect();
+    let xs: Vec<u64> = (0..n)
+        .map(|i| {
+            seed = seed
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            (seed >> 33) ^ (i as u64)
+        })
+        .collect();
+    Input { conds, xs }
+}
+
+pub fn run_buggy(input: &Input) {
+    let mut s = 0u64;
+    for i in 0..input.conds.len() {
+        step_merged(input.conds[i] != 0, &mut s, input.xs[i]);
+    }
+    std::hint::black_box(s);
+}
+
+pub fn run_fixed(input: &Input) {
+    let mut s = 0u64;
+    for i in 0..input.conds.len() {
+        step_split(input.conds[i] != 0, &mut s, input.xs[i]);
+    }
+    std::hint::black_box(s);
 }
 "#
         .to_string(),
