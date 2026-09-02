@@ -1542,6 +1542,7 @@ mod entries_gpu_07;
 mod entries_gpu_08;
 mod entries_gpu_09;
 mod entries_gpu_10;
+mod entries_gpu_11;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -1565,6 +1566,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_08::entries());
     entries.extend(entries_gpu_09::entries());
     entries.extend(entries_gpu_10::entries());
+    entries.extend(entries_gpu_11::entries());
     Corpus::new(entries)
 }
 
@@ -1577,7 +1579,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 422-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 426-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1690,7 +1692,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
 
         ],
     ),
-    // B: Compute patterns (54 rules)
+    // B: Compute patterns (55 rules)
     (
         KernelCategory::Compute,
         "B: compute",
@@ -1748,6 +1750,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "per-key-projection-hoist-out-of-query-sweep",
             "regularizer-above-noise-floor-coupled-to-damping-cap",
             "masked-branchless-wait-collapse",            "mma-fragment-layout-m16n8k16",
+            "fwht-shuffle-xor-butterfly-register-resident",
 
         ],
     ),
@@ -1794,7 +1797,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fusion-payback-gated-on-per-dispatch-overhead",
         ],
     ),
-    // D: Dispatch patterns (93 rules)
+    // D: Dispatch patterns (94 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -1892,6 +1895,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "scratch-bank-isolates-one-shot-operands-from-hot-cache",
             "sort-consumer-routes-by-physical-slot",
             "row-addressable-operand-index-not-full-tensor-map",
+            "wide-row-copy-tile-rows-across-workgroups",
         ],
     ),
     // E: Parallelism patterns (26 rules)
@@ -2070,7 +2074,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
 
         ],
     ),
-    // N: dtype + alignment specialization (24 rules)
+    // N: dtype + alignment specialization (26 rules)
     (
         KernelCategory::DtypeAlignment,
         "N: dtype + alignment",
@@ -2098,6 +2102,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "pre-gate-recovery-by-division-cancels-algebraically",
             "token-local-only-approximate-accelerator",            "lop3-int4-to-half2-dequant",
             "prmt-int8-to-half2-dequant",
+            "telescoped-digit-coefficients-byte-fma-dot",
+            "bit-plane-plane-sums-input-side-offset-dot",
 
         ],
     ),

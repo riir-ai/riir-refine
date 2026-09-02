@@ -63,11 +63,11 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 60 (1): measured-GOAT distillation (riir-train Issue 460 / katgpt-rs e2853fbf — pre-gate-recovery-by-division-cancels-algebraically; the MLA backward's saturated output-gate 0/0 NaN, fixed by algebraic cancellation; Bench 475: 6/10 -> 10/10 usable backward passes).
     // Batch 63 (3): the CubeCL twin unlock — same-input-gemv-weight-concat-at-upload, deferred-residual-fused-into-next-layer-norm, reset-state-in-place-fill-never-realloc (ternary_deltanet_gpu_forward.rs, Plan 009 / Research 071).
     // Batch 70 (3): the arxiv barrier-free-sync paper distill (arXiv:2608.13757, Plan 020 / Research 080) — barrier-free-per-dependency-wait-from-loop-counters, shared-counter-decode-producer-progress, masked-branchless-wait-collapse.
-    // Total: 209. // (historical batch-30 snapshot; current 422)
+    // Total: 209. // (historical batch-30 snapshot; current 426)
     assert_eq!(
         corpus.entries.len(),
-        422,
-        "kernel batches through Batch 94 should have 423 rules"
+        426,
+        "kernel batches through Batch 96 should have 426 rules"
     );
 }
 
@@ -5332,9 +5332,9 @@ fn kernel_categories_counts_match_plan_003_table() {
     // Pin per-category rule counts to the Plan 003 table (updated for Batch 82).
     let expected = [
         (KernelCategory::MemoryAccess, 98),
-        (KernelCategory::Compute, 54),
+        (KernelCategory::Compute, 55),
         (KernelCategory::Fusion, 36),
-        (KernelCategory::Dispatch, 93),
+        (KernelCategory::Dispatch, 94),
         (KernelCategory::Parallelism, 26),
         (KernelCategory::FlashAttnTiling, 10),
         (KernelCategory::LinearAttnRecurrence, 26),
@@ -5344,7 +5344,7 @@ fn kernel_categories_counts_match_plan_003_table() {
         (KernelCategory::AutotuneDispatch, 5),
         (KernelCategory::ConvGemmLayout, 12),
         (KernelCategory::KernelPolymorphism, 11),
-        (KernelCategory::DtypeAlignment, 24),
+        (KernelCategory::DtypeAlignment, 26),
         (KernelCategory::IrStrengthReduction, 4),
     ];
     for (cat, count) in expected {
@@ -5359,9 +5359,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 422.
+    // Sum must equal 426.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 422, "Plan 003: category totals must sum to 422");
+    assert_eq!(total, 426, "Plan 003: category totals must sum to 426");
 }
 
 #[test]
@@ -5372,8 +5372,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 422,
-        "Plan 003: grouped corpus has {total} rules, expected 422"
+        total, 426,
+        "Plan 003: grouped corpus has {total} rules, expected 426"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -6140,6 +6140,113 @@ fn batch95_pseudocode_parses() {
         assert!(
             opt_verdict.parses,
             "batch-95 opt_pattern for '{id}' must parse"
+        );
+    }
+}
+
+#[test]
+fn batch96_rules_present() {
+    // Batch 96 (PrismML fork Metal quant-MV distill -- Research 114 /
+    // Plan 060): 4 kernel_opt rules (N +2, D +1, B +1).
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "telescoped-digit-coefficients-byte-fma-dot",
+        "bit-plane-plane-sums-input-side-offset-dot",
+        "wide-row-copy-tile-rows-across-workgroups",
+        "fwht-shuffle-xor-butterfly-register-resident",
+    ];
+    for id in ids {
+        assert!(
+            corpus.entries.iter().any(|e| e.rule_id == id),
+            "batch-96 rule '{id}' missing from corpus"
+        );
+    }
+}
+
+#[test]
+fn batch96_concepts_covered() {
+    // Distinctness + mandated phrases must survive in the concept
+    // text (case-sensitive contains -- the B51 lesson).
+    let corpus = build_kernel_seed_corpus();
+    let checks: &[(&str, &[&str])] = &[
+        (
+            "telescoped-digit-coefficients-byte-fma-dot",
+            &[
+                "express the 2-bit field shifts as float floor ops",
+                "tolerance-gated optimization (rel-error gate), NEVER a bit-identity candidate",
+                "the codec's -1 offset rides as the accumulator SEED",
+            ],
+        ),
+        (
+            "bit-plane-plane-sums-input-side-offset-dot",
+            &[
+                "acc_lo + 2.0 * acc_hi",
+                "computed ONCE per slice and SHARED across every weight row",
+                "POSITIONAL digits of one code, weighted 2^k",
+            ],
+        ),
+        (
+            "wide-row-copy-tile-rows-across-workgroups",
+            &[
+                "cannot saturate the memory bandwidth for rows of 100k+",
+                "the threshold is a dispatch fact, not a device query",
+                "what must scale is the number of workgroups in flight",
+            ],
+        ),
+        (
+            "fwht-shuffle-xor-butterfly-register-resident",
+            &[
+                "the xor mask IS the butterfly partner",
+                "ZERO shared memory and ZERO barriers",
+                "TRANSFORM side of the Hadamard family",
+            ],
+        ),
+    ];
+    for (id, needles) in checks {
+        let e = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == *id)
+            .unwrap_or_else(|| panic!("batch-96 rule '{id}' missing"));
+        for needle in *needles {
+            assert!(
+                e.gpu_concept.contains(needle),
+                "batch-96 concept for '{id}' missing phrase '{needle}'"
+            );
+        }
+    }
+}
+
+#[test]
+#[cfg(not(feature = "kernel_verify"))]
+fn batch96_pseudocode_parses() {
+    // G1 for Batch 96: syn-parse gate (the PrismML Metal quant-MV
+    // distill -- telescoped digit coefficients, bit-plane plane sums
+    // with an input-side offset, wide-row workgroup tiling, the FWHT
+    // register-resident xor butterfly).
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "telescoped-digit-coefficients-byte-fma-dot",
+        "bit-plane-plane-sums-input-side-offset-dot",
+        "wide-row-copy-tile-rows-across-workgroups",
+        "fwht-shuffle-xor-butterfly-register-resident",
+    ];
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-96 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            ref_verdict.parses,
+            "batch-96 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            opt_verdict.parses,
+            "batch-96 opt_pattern for '{id}' must parse"
         );
     }
 }

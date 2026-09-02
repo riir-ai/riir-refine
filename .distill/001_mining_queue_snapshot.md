@@ -85,12 +85,19 @@
     dequant fallback). Secondary in-range fork commits: GDN ring decode (`bed6e9a6b` +
     `08d8c9035`, the known +3.2% decode move, already distilled as the mlx-lm GDN
     batch-95 lane's external confirmation), `e8b6452b1` im2col fix + wide-row set_rows,
-    `e0c828b90` Hadamard weight-fold runtime. **ARMED DISTILL SOURCE:
+    `e0c828b90` Hadamard weight-fold runtime. ~~ARMED DISTILL SOURCE:
     `../vendor/prismml-llama.cpp @ e311ed38f` — `ggml/src/ggml-metal/kernels/mul_mv.metal`
     (PQ2_0/Q2_0 group-128 native Metal mul_mv: 8 sub-blocks × 16 weights, SIMDWIDTH/8
     lane packing — same ternary-class codec as our Q2_0 GEMV family; verdict B, same
     model/quant as the league opponent) + `set_rows.metal` wide-row KV write. Not yet
-    mined; next idle-loop batch candidate after the arxiv re-walk.**
+    mined; next idle-loop batch candidate after the arxiv re-walk.~~ **MINED 2026-09-02
+    — Batch 96 (Research 114 / Plan 060): 4 rules, corpus 422 → 426 (N +2, D +1, B +1):
+    telescoped-digit-coefficients-byte-fma-dot (N), bit-plane-plane-sums-input-side-
+    offset-dot (N), wide-row-copy-tile-rows-across-workgroups (D),
+    fwht-shuffle-xor-butterfly-register-resident (B) + riders (B20/B92 byte-perm
+    external measured confirmation on HIP v_perm_b32, MI300X 1.9–2.9× decode rows;
+    CDNA-vs-RDNA MMVQ geometry regime). Source verdict upgraded to A- at mine time
+    (measured HIP rows + upstream PR 26980 lineage).**
 - **Sibling lanes (do not touch):** riir-train — sibling actively building
   (`/tmp/riir-train-499b`); the 4090 perf lanes — sibling PV work mid-flight as of 08-29
   (re-verify lane state at session start before any 4090 unit).
