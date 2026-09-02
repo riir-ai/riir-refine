@@ -308,6 +308,30 @@ did NOT fire. Three caveats that bound what Phase 2 may claim:
   distinguished by anything measured here.
 
 - [ ] **T6** **Counterfactual surgery on LatentFixMemory trajectories:** for score-bench persist-miss spans, surgery-swap the rule/domain filler and ask closed-form "would domain X / rule Y have healed this span?" — complements Bench 032's re-run-based switch-cost measurement with a zero-recompute counterfactual; feeds the post-mining intake (`.distill/001_mining_queue_snapshot.md`) with attributed misses.
+  **T6 INHERITS T4's evidence bound, and the mechanism does NOT warn you.**
+  Noted 2026-09-02 so it is not discovered after the build. `surgery_delta_into`
+  is exactly additive (Issue 707 G1, max |Δ| 9.5e-7) and stays exact on any
+  corpus — including one where the structure verdict is unreadable. So T6 will
+  produce clean, confident, zero-recompute numbers whether or not the artifact
+  has ever seen the counterfactual it is being asked about. That is the same
+  shape as Issues 710/711 a third time: the operation can succeed perfectly and
+  still answer a question the corpus cannot support.
+  Concretely: a counterfactual swaps the span's filler to rule `Y`, producing
+  the pair `(shape_of_span, Y)`. That pair is **observed** iff some other span
+  of the same shape class carried `Y`. Coverage is 23.0% on clippy and 18.8% on
+  rustc (§12.7), so a substantial fraction of counterfactuals will land on pairs
+  the fit never saw — an extrapolation, not a readout. **NOT a blocker and NOT
+  a claim that most counterfactuals are unobserved:** the counterfactual
+  distribution is over rules that plausibly compete for a span, not uniform over
+  the pair space, so the real fraction is unknown and is worth measuring rather
+  than assuming.
+  **First task, cheap, before any attribution is published:** tag every emitted
+  counterfactual with whether `(role, filler_new)` occurs in the fit corpus, and
+  report the two populations separately. `filler_role_spread` already carries
+  the machinery; the per-pair lookup is one sorted-set membership test. An
+  attributed miss on an observed pair is a readout; on an unobserved pair it is
+  a prediction, and the intake at `.distill/001_mining_queue_snapshot.md` should
+  not receive them mixed.
 
 ## GOAT gate
 
