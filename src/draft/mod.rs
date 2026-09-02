@@ -43,6 +43,8 @@ pub mod op_tokenizer;
 pub mod retrieval_eval;
 pub mod span_source;
 pub mod switch_cost;
+#[cfg(all(feature = "tpr_structure", feature = "latent_retrieval"))]
+pub mod tpr_fit;
 pub mod withheld_pair_ood;
 
 pub use corpus_index::{IndexTokenizer, RetrievalConfig, RuleIndex, ScoredRule, SuggestScratch};

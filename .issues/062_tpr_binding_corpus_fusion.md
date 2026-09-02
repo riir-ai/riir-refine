@@ -1,6 +1,16 @@
 # Issue 62: TPR × healer corpus fusion — structured retrieval axis + corpus-generalization bench (Research 527 F5)
 
-**Status:** Phase 1 COMPLETE (T1+T2+T2a landed, Bench 062; T2a's substrate nondeterminism fixed upstream — riir-neuron-db `aeb24e0` + riir-ai `.issues/849`) — Phase 2 (T3-T6) JUSTIFIED by our own measurement and **UNBLOCKED 2026-09-02** — katgpt-core `tpr` landed (katgpt-rs `1f7a96d4`, Issue 707 GOAT ALL PASS); T3-T6 are actionable, and T4 is what promotes the upstream feature.
+**Status:** Phase 1 COMPLETE (T1+T2+T2a landed, Bench 062). Phase 2: **T3 LANDED
+(Bench 063, 2026-09-02) and its verdict RE-SCOPES T4** — the role scheme is
+decided (role = shape-class, filler = rule identity), and the 8-D consumer
+state is **INADMISSIBLE at every `d`**: `K = m·d ≥ D` fires at `d = 1`, so a
+TPR fit in the reranker's scoring space reproduces its own training states.
+T4 as written ("score against the TPR projection instead of the raw 8-D
+embedding") is **not runnable**; the corpus IS structured (measured in a wider
+control space: BoW ratio 1.1773, cross-state ratio 1.0812, two agreeing
+probes), so the blocker is state width, not TPR. T4 is re-scoped to the bridge
+route (§Phase 2 T4 below). T5/T6 unchanged and still actionable. The upstream
+`tpr` promotion still waits on a landed consumer, i.e. still on T4.
 
 **Research:** [katgpt-rs/.research/527_TPR_Emergent_Symbolic_Structure_Binding_Algebra.md](../katgpt-rs/.research/527_TPR_Emergent_Symbolic_Structure_Binding_Algebra.md) (arXiv:2608.29530, McCoy/Soulos/Linzen/Smolensky 2026)
 **Consumer rationale:** the healer corpus is the workspace's richest (role, filler) dataset — every entry IS a binding: role = rule/lint identity, filler = code shape. The retrieval stack's own history is the paper's thesis in miniature: the Issue 017/T3.5 misses were spans sharing the filler (generic fn shape) while differing in the ROLE (operator/punctuation pattern) — the RustOpTokenizer fix injected role-ish signal into tokens; TPR makes the role axis structural. And the one axis nothing measures is generalization: **every retrieval floor (14/14 gate) and every fixture set is in-distribution by construction.** The paper predicts atomic memorization is the default failure mode on unseen (rule, shape) combinations; this issue converts that prediction into OUR measurement before building anything.
@@ -69,8 +79,59 @@ did NOT fire. Three caveats that bound what Phase 2 may claim:
 > Phase 1 already discharged the half that needed nothing (T1/T2/T2a), and its
 > measurement is what justifies Phase 2 at all.
 
-- [ ] **T3** **ALS fit of the healer corpus** into role-filler form: filler = code-shape embedding (existing AstChunker/ModellessEmbedder path), role = rule identity (and separately domain); ridge-ALS closed form, monotone certificate, frozen BLAKE3 artifact. Substrate tie: `self_evolve`'s EMA domain direction vectors are already runtime-updated rank-1 role embeddings — the TPR role table should thaw from the same freeze/thaw cycle, not fork it.
-- [ ] **T4** **TPR-structured retrieval axis** *(OOD baseline to beat, from Bench 062: T1 retrieval 4.0% / Structural 52.0% top-1; T2 retrieval 48.8% top-1, 51.2% top-3)* behind a `tpr_retrieval` feature (off by default): query-side structural denoise (score against the TPR projection, not the raw 8-D embedding — paper finding 7: decoders read better from the idealization) + role-conditioned match in the reranker. **Honest claim discipline: in-distribution gains are NOT the claim** (top-1 already 89.6–100 on the floors); the claim axes are (a) the OOD delta over T1's baseline by a preregistered margin, and (b) kernel_opt long-tail crowding (426 rules, the biggest corpus). Floors MUST hold (the 14/14 retrieval gate + score-bench flat unless OOD wins land).
+- [x] **T3** **ALS fit of the healer corpus** into role-filler form — LANDED,
+  [.benchmarks/063_tpr_structure_admissibility.md](../.benchmarks/063_tpr_structure_admissibility.md),
+  harness `src/draft/tpr_fit.rs` + `tests/t063_tpr_structure.rs`, feature
+  `tpr_structure`, preregistered at `c6d0452` before the harness existed.
+  Four things it settled, two of which change the plan:
+  1. **Scheme decided (the question the Phase 2 preamble left open):** role =
+     **shape-class** (`Orthogonal { arity: m = 8 }`), filler = **rule
+     identity**. Inverted from Phase 1's naming and forced to be:
+     `n_bind_slots == arity` means role = rule identity would need `m = 45`
+     (`K ≥ 45` against `D = 8`), and `kernel_opt`'s 426 rules are only
+     expressible on the *filler* axis, whose count is unconstrained. This is
+     the upstream note's recommendation, now priced.
+  2. **The 8-D consumer state is INADMISSIBLE at every `d ∈ {1,2,4,8}`** on
+     both domains — `K = m·d ≥ D = 8` at `d = 1` already. A fit there
+     reproduces every training state, so any OOD number read off it is
+     content-free. This is what re-scopes T4.
+  3. **The corpus IS structured** — measured in the 256-D token-bag control at
+     the only admissible geometry (`d = 1`): `bow_router` ratio 1.1773
+     (structured) AND `cross_state_role_control` ratio 1.0812 (degraded). Two
+     probes that can disagree, agreeing.
+  4. **`rustc_errors` is unmeasurable, not unstructured** — inadmissible at
+     every `d` because `plain-binding` has exactly 1 state. Bench 062 §10's
+     rustc BoW prior is still a prior; T5 must not read this as its answer.
+  Two of the run's own predictions were wrong and are recorded as stated (P2
+  refuted by the per-role bound it omitted; P1 confirmed by a different bound
+  than it argued) — Bench 063 §7.3.
+  **Substrate tie deliberately NOT taken yet:** `self_evolve`'s EMA domain
+  direction vectors are rank-1 role embeddings on the *domain* axis, and the
+  fitted role axis here is the shape-class. Wiring the freeze/thaw cycle to a
+  role table is T4 work and pointless before T4's space is settled.
+  **Found upstream, filed:** `shuffled_role_control` cannot fail on a
+  single-binding corpus (`for i in (1..1).rev()` is an empty loop) — it
+  contradicted `bow_router` on the same artifact. katgpt-rs `.issues/710`;
+  worked around locally by `cross_state_role_control`.
+- [ ] **T4 (RE-SCOPED by T3 — read Bench 063 §8 before starting)** **TPR
+  structural evidence channel.** The original "score against the TPR
+  projection, not the raw 8-D embedding" is **not runnable**: the projection
+  lives in the state space, and the state space is 8-D, where no admissible
+  fit exists (T3 finding 2). Two routes, and the second is recommended:
+  - **(a) widen the consumer state.** `riir_rag::query::LATENT_DIM = 8` is a
+    cross-repo contract (riir-rag + riir-neuron-db indexes + every committed
+    floor). File in riir-ai; do NOT work around it here.
+  - **(b) bridge instead of widen — RECOMMENDED.** Keep the 8-D scoring
+    state. Fit TPR in the wider token-bag space, emit a **scalar**
+    role-conditioned match (`unbind_state_into` against the candidate rule's
+    filler row), and fuse that scalar into the existing rank. Latent
+    structural evidence → one scalar → the raw score: the documented
+    latent→raw bridge, no `LATENT_DIM` change, no index rebuild. It also
+    matches where Bench 062 §10 said the headroom is — *retrieved-but-demoted*
+    rows are a re-ranking shape, not a retrieval shape.
+  The claim discipline below is unchanged and still binding. Original text
+  retained for the record:
+  **TPR-structured retrieval axis** *(OOD baseline to beat, from Bench 062: T1 retrieval 4.0% / Structural 52.0% top-1; T2 retrieval 48.8% top-1, 51.2% top-3)* behind a `tpr_retrieval` feature (off by default): query-side structural denoise (score against the TPR projection, not the raw 8-D embedding — paper finding 7: decoders read better from the idealization) + role-conditioned match in the reranker. **Honest claim discipline: in-distribution gains are NOT the claim** (top-1 already 89.6–100 on the floors); the claim axes are (a) the OOD delta over T1's baseline by a preregistered margin, and (b) kernel_opt long-tail crowding (426 rules, the biggest corpus). Floors MUST hold (the 14/14 retrieval gate + score-bench flat unless OOD wins land).
 - [ ] **T5** **BoW-null router per domain:** *(prior measured by Bench 062: `rustc_errors` roles are 6/8 single-filler, so m=1 shared-role ALS should show little residual gain there; `clippy_lints` has 13 multi-filler roles)* fit the m=1 shared-role ALS per corpus; residual ratio `r_bow/r_full < 1+ε` ⇒ that domain carries no binding structure ⇒ structured machinery skipped there. Records a per-domain structure verdict (prediction to test: clippy_lints strongly structured; kernel_opt categories possibly weaker than rule-level).
 - [ ] **T6** **Counterfactual surgery on LatentFixMemory trajectories:** for score-bench persist-miss spans, surgery-swap the rule/domain filler and ask closed-form "would domain X / rule Y have healed this span?" — complements Bench 032's re-run-based switch-cost measurement with a zero-recompute counterfactual; feeds the post-mining intake (`.distill/001_mining_queue_snapshot.md`) with attributed misses.
 
@@ -80,7 +141,17 @@ did NOT fire. Three caveats that bound what Phase 2 may claim:
 > unblock (707 T1–T5). G8's OOD baseline is the ONLY part already in hand — Phase 1
 > produced it (Bench 062), and the caveats recorded above bound what G8 may claim.
 
-- [-] **G1** ALS determinism: monotone-certificate assert + double-run bit-identical artifact.
+> **G1 is now PASSED by T3** (Bench 063 §7.5) — kept in the list because the
+> remaining gates still inherit T4's unblock.
+
+- [x] **G1** ALS determinism — PASS. Double fit bit-identical on all 16 grid
+  points, and the whole report bit-identical over **5 processes** (not an
+  in-process repeat loop — the T2a lesson). The monotone assertion is the
+  **rollback certificate** (`final_ssr ≤ min(ssr_per_sweep)`), not
+  `monotone_violations == 0`: a violation is the descent guard *working*, and
+  one does occur (`clippy_lints/latent8 d=1`, where `K == D` makes the fit
+  exactly determined and f32 noise exceeds the `1e-9·ssr_0` band). Asserting
+  the counter was a false red on a correct fit — Bench 063 §7.5.
 - [-] **G3** Floors hold with the feature off AND on (14/14 retrieval gate; score-bench run recorded before/after).
       **Selector resolved by measurement 2026-09-02 - do not re-derive:** the "14/14
       retrieval gate" is the LIB test module `src/draft/retrieval_eval.rs` (floors in its
@@ -98,7 +169,7 @@ did NOT fire. Three caveats that bound what Phase 2 may claim:
       (floors were not weakened; the corpus moved).
 - [-] **G4** Zero-alloc hot path for the projection/unbind inside retrieval (tracking allocator, exact counts).
 - [-] **G8** OOD delta vs the T1 baseline at the preregistered margin, OR an honest no-gain record + demote-loser (flat cosine + Structural rerank keeps the slot at OOD parity). Per-domain BoW verdict recorded.
-- [-] **Promote** Only after gates pass AND T1 shows the OOD gap the axis claims to close; opt-in until then.
+- [-] **Promote** (katgpt-core `tpr` → default-on) Only after gates pass AND T1 shows the OOD gap the axis claims to close; opt-in until then.
 
 ## Cross-refs
 

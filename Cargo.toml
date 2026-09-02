@@ -165,6 +165,16 @@ kernel_heal = ["katgpt-core/variable_rank_domain_expert", "dep:regex"]
 # Opt-in: heavy dep tree (riir-rag + riir-neuron-db + syn-pulled chunker).
 latent_retrieval = ["dep:riir-rag", "dep:riir-neuron-db"]
 
+# Issue 062 T3 (Bench 063): TPR role-filler structure fit over the healer
+# corpus. Enables katgpt-core's `tpr` primitive (Issue 707) and measures
+# whether a TPR artifact is *admissible* on this corpus at all before T4
+# wires a projection into the reranker — `m*d >= D` makes the fit reproduce
+# every training state, so an OOD number read off it is content-free.
+# Opt-in and measurement-only: no default code path, no retrieval path
+# touched. `latent_retrieval` supplies the 8-D consumer state embedder
+# (`riir_rag::ModellessEmbedder`), which is the arm whose result can feed T4.
+tpr_structure = ["katgpt-core/tpr", "latent_retrieval", "clippy_lints"]
+
 # Plan 019 T0.3: the retrieval-free apply→check→revert substrate shared by
 # `fix_verify` (the `--fix --verify` batch gate) and the `rustc_errors`
 # `--fix-compile` driver (Phase 1). Owns the cargo-check subprocess, the

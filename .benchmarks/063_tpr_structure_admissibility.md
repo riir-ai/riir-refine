@@ -1,8 +1,12 @@
 # Bench 063: TPR structure fit on the healer corpus — admissibility first (Issue 062 T3)
 
-**Status:** PREREGISTERED 2026-09-02 — predictions P1-P6, the scheme decision
-and the verdict rule below were committed BEFORE the harness ran. No numbers
-in §6 onward at preregistration time.
+**Status:** RUN 2026-09-02. Verdict **T4 BLOCKED-ON-STATE-WIDTH** (§6 branch 2).
+Preregistration commit `c6d0452` — predictions P1-P6, the scheme decision and
+the verdict rule were committed before the harness existed. **P2 was refuted by
+its own bound and P1 was confirmed by a different bound than the one it
+argued**; both are recorded as stated rather than retro-fitted. Harness
+`src/draft/tpr_fit.rs` + `tests/t063_tpr_structure.rs`, feature
+`tpr_structure`. Bit-identical over 5 processes.
 
 ## 1. Why this bench exists before T4
 
@@ -131,4 +135,162 @@ Nothing below this line existed at preregistration.
 
 ## 7. Results
 
-_(pending run)_
+```
+CARGO_TARGET_DIR=/tmp/riir_clippy_063 cargo test --release \
+  --features tpr_structure --test t063_tpr_structure -- --nocapture
+```
+
+Grid `d ∈ {1, 2, 4, 8}`, all four arms. `obs = n_states · D`.
+
+### 7.1 `latent8` — the consumer space: INADMISSIBLE everywhere
+
+| domain | n_states | m | n_fillers | d | K | params | obs | resid | verdict |
+|---|---|---|---|---|---|---|---|---|---|
+| clippy_lints | 113 | 8 | 45 | 1 | 8 | 117 | 904 | 8.745e-1 | INADMISSIBLE — K ≥ D |
+| clippy_lints | 113 | 8 | 45 | 2 | 16 | 226 | 904 | 7.784e-1 | INADMISSIBLE — K ≥ D; `generic`=2 |
+| clippy_lints | 113 | 8 | 45 | 4 | 32 | 444 | 904 | 6.802e-1 | INADMISSIBLE — K ≥ D; 2 starved |
+| clippy_lints | 113 | 8 | 45 | 8 | 64 | 880 | 904 | 5.721e-1 | INADMISSIBLE — K ≥ D; 3 starved |
+| rustc_errors | 212 | 10 | 8 | 1 | 10 | 96 | 1696 | 9.313e-1 | INADMISSIBLE — K ≥ D; `plain-binding`=1 |
+| rustc_errors | 212 | 10 | 8 | 8 | 80 | 712 | 1696 | 9.180e-1 | INADMISSIBLE — K ≥ D; 3 starved |
+
+Role census (clippy): `generic`=2 `closure`=4 `impl-block`=5 `iter-chain`=9
+`loop`=9 `multi-item`=18 `macro`=20 `plain-fn`=46.
+Role census (rustc): `plain-binding`=1 `as-view`=5 `format-macro`=5
+`slice-borrow`=10 `string-owner`=16 `struct-field`=16 `mut-borrow`=26
+`closure-capture`=27 `index-expr`=47 `vec-owner`=59.
+
+### 7.2 `tokenbag256` — the control: admissible at `d = 1` only, and STRUCTURED
+
+| domain | d | K | params | obs | resid | verdict |
+|---|---|---|---|---|---|---|
+| clippy_lints | 1 | 8 | 2349 | 28928 | 7.397e-1 | **ADMISSIBLE** |
+| clippy_lints | 2 | 16 | 4442 | 28928 | 5.529e-1 | INADMISSIBLE — `generic`=2 |
+| clippy_lints | 4 | 32 | 8628 | 28928 | 3.795e-1 | INADMISSIBLE — `closure`=4, `generic`=2 |
+| clippy_lints | 8 | 64 | 17000 | 28928 | 2.834e-1 | INADMISSIBLE — 3 starved |
+| rustc_errors | 1 | 10 | 2824 | 54272 | 2.884e-1 | INADMISSIBLE — `plain-binding`=1 |
+
+- BIC over the admissible set `{1}` → `d = 1`, label `orthogonal:m8:d1`, score −203383.3.
+- `bow_router`: `r_bow` 8.7091e-1, `r_full` 7.3973e-1, **ratio 1.1773, structured = true**.
+- `cross_state_role` (see §7.4): `r_true` 7.3973e-1, `r_permuted` 7.9982e-1,
+  **ratio 1.0812, degraded = true**, moved 81/113.
+- `shuffled_role` (upstream): ratio **1.0000**, degraded = false — **VACUOUS**, §7.4.
+
+### 7.3 Predictions, scored honestly
+
+| | prediction | outcome |
+|---|---|---|
+| **P1** | `latent8` inadmissible; T4 blocked on state width | **CONFIRMED — by a different bound than P1 argued.** P1 reasoned via the global params bound, which *passes* (117 < 904). The bound that actually fires is `K = m·d ≥ D`, at `d = 1` already (K=8 vs D=8 clippy; K=10 > 8 rustc). Right conclusion, partly wrong mechanism; recorded rather than rewritten. |
+| **P2** | `tokenbag256` admissible for `d ≤ 8` | **REFUTED.** Admissible at `d = 1` only. P2's arithmetic priced the global bound (16,999 < 28,928 — correct) and omitted the per-role bound, which kills `d ≥ 2` on `generic`=2. The two-sided check refuted the prediction of the person who wrote it. |
+| **P3** | BIC prefers small `d` (≤ 4) | **CONFIRMED but WEAK** — `d = 1` was the only admissible candidate, so BIC had nothing to choose between. Not evidence about `d`. |
+| **P4** | clippy structured; rustc not | **HALF CONFIRMED.** clippy structured (ratio 1.1773 + cross-state 1.0812). rustc is **unmeasurable, not unstructured**: inadmissible at every `d` because `plain-binding` has exactly 1 state. Bench 062 §10's rustc prior remains untested. |
+| **P5** | structured ⇒ role shuffle degrades | **the control was VACUOUS — §7.4.** |
+| **P6** | double fit bit-identical, `monotone_violations == 0` | **first half CONFIRMED** (all 16 grid points bit-identical, 5 processes). Second half **WRONG AS WRITTEN** — §7.5. |
+
+### 7.4 P5: the upstream role-shuffle control cannot fail on this corpus
+
+`shuffled_role_control` permutes each state's role list **within that state**:
+
+```rust
+for i in (1..n).rev() { ... roles.swap(i, j); }
+```
+
+Every state in this corpus carries exactly **one** binding (one span, one rule,
+one shape), so `n == 1` and the loop body never executes. The permutation is a
+**provable identity**: measured `r_shuffled == r_true` bit-exactly, ratio
+1.0000, `degraded = false`.
+
+That output is **indistinguishable from "the roles carry nothing"** — the same
+vacuous-control signature Bench 062 §caveat-1 found in the atomic null, one
+level up. Read naively it would have contradicted the router and looked like a
+harness defect on our side.
+
+Replaced by `cross_state_role_control` (`src/draft/tpr_fit.rs`): permute the
+role assignment **across** states, fillers untouched, refit. That is what "are
+the roles load-bearing?" means when no state has two bindings to swap. It moved
+81 of 113 roles and the residual rose 8.1% (`degraded = true`), so the clippy
+structure verdict survives a control that *can* fail. The `structured()`
+verdict now requires the router **and** this control to agree — a router
+verdict alone would credit any residual drop extra per-block parameters buy.
+
+The vacuity is detected (`per_state_shuffle_is_vacuous`) and asserted, not
+assumed: the test fails if the corpus ever grows multi-binding states (at which
+point the upstream control becomes real and should be re-enabled), and fails if
+the "vacuous" arm ever moves the residual.
+
+Filed upstream as katgpt-rs `.issues/710` — any single-binding consumer of
+`shuffled_role_control` gets a silent pass from it.
+
+### 7.5 P6: one monotone violation, and why asserting zero was wrong
+
+`clippy_lints/latent8 d=1` reports `monotone_violations = 1`. The first cut of
+the test asserted `== 0` and went red on it.
+
+That assertion misread the upstream contract: an uphill sweep is **rejected and
+rolled back**, so a violation is the descent guard *working*. It fires here
+because `K == D` makes the fit exactly determined, so f32 noise at the
+convergence floor exceeds the `1e-9·ssr_0` band. The assertion is now the
+**rollback certificate** — `final_ssr ≤ min(ssr_per_sweep)` — which is what the
+guard actually promises. Asserting the counter would have been a permanent
+false red on a correct fit.
+
+`param_count` from the artifact is asserted equal to this module's analytic
+`params` at every grid point, so the admissibility verdict — computed from
+geometry *before* any fit — is not decided by local arithmetic that drifted
+from upstream's.
+
+## 8. Verdict: T4 BLOCKED-ON-STATE-WIDTH
+
+§6 branch 2, unambiguously: the control arm is admissible **and** structured
+(two agreeing probes), while the consumer arm is inadmissible at **every** `d`
+in the grid — and not marginally. `K = m·d ≥ D` cannot be satisfied at
+`m = 8, d ≥ 1` against `D = 8` except at the boundary, and the boundary is
+where `W` reproduces any state.
+
+So the finding is **not** "TPR does not help the healer corpus". The corpus
+carries role-filler binding structure that a bag of fillers does not
+(ratio 1.1773) and that survives breaking the pairing (ratio 1.0812). The
+blocker is the **width of the state the reranker scores in**: 8 dimensions
+cannot host a role-filler decomposition over 8 shape-classes, because the core
+is already 8-wide at the smallest possible filler dimension.
+
+This is a **dimension** finding, and it is why running T3 before T4 was worth
+doing: T4 as specified ("score against the TPR projection instead of the raw
+8-D embedding") is not runnable, and the OOD number it would have produced
+would have come off a fit that reproduces its own training states.
+
+### What unblocks T4 — two routes, neither taken here
+
+1. **Widen the consumer state.** `riir_rag::query::LATENT_DIM = 8` is a
+   cross-repo contract (riir-rag + riir-neuron-db indexes + every committed
+   floor); widening it is a riir-ai concern with a large blast radius and must
+   be filed there, not worked around in this repo.
+2. **Bridge instead of widen** (cheaper, and the repo's own pattern). Keep the
+   8-D scoring state; fit TPR in the wider token-bag space; emit a **scalar**
+   role-conditioned match (`unbind_state_into` against the candidate rule's
+   filler row) and fuse that scalar into the existing rank. Latent structural
+   evidence → one scalar → the raw score, which is exactly the documented
+   latent→raw bridge. It needs no change to `LATENT_DIM` and no index rebuild.
+
+Route 2 is the recommended T4 re-scope. It changes T4 from "replace the
+scoring space" to "add a structural evidence channel", which is also what the
+Bench 062 §10 headroom description already pointed at (the closable part is
+*retrieved-but-demoted* rows — a re-ranking shape, not a retrieval shape).
+
+## 9. What this bench does NOT establish
+
+- **No OOD number.** The withheld-pair OOD arm (`withheld_pair_top1`) was not
+  run: on the consumer space it would be read off an inadmissible fit, and on
+  the control space it would measure a state the reranker never sees. Bench
+  062's T1/T2 OOD baselines stand unchallenged and unimproved.
+- **Nothing about `rustc_errors`.** Inadmissible at every `d` (one role has a
+  single state). Its Bench 062 §10 BoW prior is still a prior.
+- **Nothing about `kernel_opt`.** The scheme decision (§2) makes its 426 rules
+  *expressible* as fillers, which is what it was blocked on, but no
+  kernel_opt population was fitted here.
+- **No floors touched.** `tpr_structure` is opt-in, adds no default code path,
+  and modifies no existing eval. The 14/14 retrieval gate and score-bench are
+  untouched by construction, not by measurement.
+- **`d = 1` is a narrow admissible window.** One extra `generic`-shape span
+  would open `d = 2`. The window is corpus-limited, so the structure verdict is
+  a verdict at the sparsest admissible geometry — the *weakest* setting the
+  claim could have been made in, which cuts in its favour but bounds its size.
