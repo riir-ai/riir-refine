@@ -9,6 +9,11 @@
 > the rolling queue (next targets, sibling-blocked files, corpus count, standing
 > lessons). Canonical batch ledger = AGENTS.md batch entries; per-batch detail =
 > `.research/NNN_*.md` + `.plans/NNN_*.md`.
+>
+> Mining via a live external clone — the `.raw` discipline applies: clone into
+> `<repo>/.raw/<name>` (gitignored), pin `@ <sha>` + license in the note BEFORE
+> the verdict, `rm -rf` when the batch lands. Full contract = `distill` skill
+> §"Full-source access" (Batch 96-98 vendor precedent) + katgpt-rs `research` §0.5.
 
 ## Live queue state (2026-08-31, post-Batch-93, M3 box)
 
