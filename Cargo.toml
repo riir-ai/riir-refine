@@ -607,6 +607,14 @@ debug = false
 name = "t049_t023_stop_verdict"
 required-features = ["latent_retrieval"]
 
+# Issue 64 Phase 2 — the pre-registered modelability ↔ top-1 Spearman sweep
+# (`tests/modelability_sweep.rs`). Domain points need `clippy_lints` +
+# `rust_perf`; the kernel points cfg-gate behind `kernel_heal` (run with it
+# for the full 12-point surface, without for 9).
+[[test]]
+name = "modelability_sweep"
+required-features = ["latent_retrieval", "clippy_lints", "rust_perf"]
+
 # ⛔ `[patch]` is honoured ONLY in the root manifest of the workspace being
 # built. `riir-neuron-db` deps katgpt by git URL and redirects it back to the
 # local checkout with its own `[patch]` — a redirect that does NOT reach us

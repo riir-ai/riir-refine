@@ -37,6 +37,20 @@
 //! (the variant sweep over the retrieval surface) validates the gate; this
 //! module is the Phase-1 primitive.
 //!
+//! # Phase 2 verdict (measured 2026-09-02 — `.benchmarks/064`)
+//!
+//! **NEGATIVE (kill branch): ρ = 0.2256 < 0.5** over 12 population-distinct
+//! corpus/chunking variants (`tests/modelability_sweep.rs`). The real
+//! retrieval populations are near-structureless by this measurement
+//! (−0.20…+0.23 excess nats vs > 1.5 on synthetic clusters) and downstream
+//! top-1 on that surface is BM25-discrimination driven, not latent-shape
+//! driven (consistent with T3.5's latent-weight refutation + Issue 020's
+//! lexical ceiling). The diagnostic delivers its intended message — do not
+//! invest embedder/density-scaffold effort on the 8-D modelless space. The
+//! primitive stays valid on synthetic populations and standing for
+//! re-measurement when a latent-driven surface exists (e.g. a trained
+//! embedder passing the Plan 524 Phase 7 gate).
+//
 //! # Contract
 //!
 //! - **Modelless only**: bucketed counts + k-means; no trained density
@@ -396,6 +410,80 @@ fn lloyd(train: &[&[f32]], mut centroids: Vec<Vec<f64>>, iters: usize) -> Vec<Ve
     centroids
 }
 
+/// Tie-corrected Spearman rank correlation between two equal-length samples
+/// (Phase 2 of the Issue 64 protocol: oracle value vs measured downstream
+/// top-1 across corpus/chunking variants).
+///
+/// Ties receive the average of their would-be ranks (standard mid-rank
+/// convention); the correlation is Pearson's r over the rank vectors.
+/// Returns `None` when the samples differ in length, carry fewer than 2
+/// pairs, or either side is constant — no ordering to correlate is
+/// "undefined", not 0.
+///
+/// Diagnostic-tier measurement utility: same posture as
+/// [`scaffold_value`] — never gates a heal decision.
+#[must_use]
+pub fn rank_correlation(xs: &[f64], ys: &[f64]) -> Option<f64> {
+    if xs.len() != ys.len() || xs.len() < 2 {
+        return None;
+    }
+    let rx = average_ranks(xs)?;
+    let ry = average_ranks(ys)?;
+    pearson(&rx, &ry)
+}
+
+/// Mid-ranks (ties → the average of their would-be ranks), 1-based.
+/// `None` on a constant sample (every rank equal → no ordering).
+///
+/// The float-equality tests ARE the semantics: rank ties are EXACT value
+/// equality (these are the caller's own values; merging near-misses with an
+/// epsilon would corrupt the ranks the correlation is defined over).
+#[allow(clippy::float_cmp)]
+fn average_ranks(v: &[f64]) -> Option<Vec<f64>> {
+    let n = v.len();
+    let mut idx: Vec<usize> = (0..n).collect();
+    idx.sort_by(|&a, &b| v[a].total_cmp(&v[b]));
+    let mut ranks = vec![0.0f64; n];
+    let mut i = 0;
+    while i < n {
+        let mut j = i;
+        while j + 1 < n && v[idx[j + 1]] == v[idx[i]] {
+            j += 1;
+        }
+        let avg = (i + j) as f64 / 2.0 + 1.0;
+        for &k in &idx[i..=j] {
+            ranks[k] = avg;
+        }
+        i = j + 1;
+    }
+    let first = ranks[0];
+    if ranks.iter().all(|&r| r == first) {
+        None
+    } else {
+        Some(ranks)
+    }
+}
+
+/// Pearson's r over two equal-length vectors; `None` on zero variance.
+fn pearson(xs: &[f64], ys: &[f64]) -> Option<f64> {
+    let n = xs.len() as f64;
+    let (mut sx, mut sy, mut sxx, mut syy, mut sxy) = (0.0, 0.0, 0.0, 0.0, 0.0);
+    for (&x, &y) in xs.iter().zip(ys.iter()) {
+        sx += x;
+        sy += y;
+        sxx += x * x;
+        syy += y * y;
+        sxy += x * y;
+    }
+    let cov = sxy - sx * sy / n;
+    let vx = sxx - sx * sx / n;
+    let vy = syy - sy * sy / n;
+    if vx <= 0.0 || vy <= 0.0 {
+        return None;
+    }
+    Some(cov / (vx.sqrt() * vy.sqrt()))
+}
+
 // ──────────────────────────────────────────────────────────────────────────
 // Tests
 // ──────────────────────────────────────────────────────────────────────────
@@ -570,5 +658,38 @@ mod tests {
         let rep = scaffold_value(&pop, &ModelabilityConfig::default());
         assert_eq!(rep.n_train + rep.n_holdout, pop.len());
         assert_eq!(rep.n_holdout, pop.len() / 5 + 1); // indices 0,5,10,...
+    }
+
+    #[test]
+    fn rank_correlation_monotone_is_perfect() {
+        let xs = [1.0, 2.0, 3.0, 4.0, 5.0];
+        let ys = [10.0, 20.0, 30.0, 40.0, 50.0];
+        let r = rank_correlation(&xs, &ys).expect("non-constant");
+        assert!((r - 1.0).abs() < 1e-12, "ascending: {r}");
+        let rev = [50.0, 40.0, 30.0, 20.0, 10.0];
+        let r = rank_correlation(&xs, &rev).expect("non-constant");
+        assert!((r + 1.0).abs() < 1e-12, "descending: {r}");
+        // Rank correlation is invariant under any monotone transform of
+        // either side (nonlinear spacing).
+        let warped = [0.1, 0.5, 7.0, 7.1, 900.0];
+        let r = rank_correlation(&xs, &warped).expect("non-constant");
+        assert!((r - 1.0).abs() < 1e-12, "warped monotone: {r}");
+    }
+
+    #[test]
+    fn rank_correlation_ties_use_average_ranks() {
+        // x = [1, 1, 2] → ranks [1.5, 1.5, 3]; y = [5, 3, 1] → [3, 2, 1].
+        // Pearson over those: cov −1.5, vx 1.5, vy 2 → r = −1.5/√3 ≈ −0.866.
+        let r = rank_correlation(&[1.0, 1.0, 2.0], &[5.0, 3.0, 1.0]).expect("non-constant");
+        let expected = -1.5 / (1.5f64 * 2.0).sqrt();
+        assert!((r - expected).abs() < 1e-12, "tied: {r} vs {expected}");
+    }
+
+    #[test]
+    fn rank_correlation_undefined_cases_return_none() {
+        assert!(rank_correlation(&[1.0], &[2.0]).is_none(), "n < 2");
+        assert!(rank_correlation(&[1.0, 2.0], &[1.0]).is_none(), "length mismatch");
+        assert!(rank_correlation(&[7.0, 7.0, 7.0], &[1.0, 2.0, 3.0]).is_none(), "constant x");
+        assert!(rank_correlation(&[1.0, 2.0, 3.0], &[4.0, 4.0, 4.0]).is_none(), "constant y");
     }
 }

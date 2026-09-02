@@ -549,7 +549,7 @@ pub fn rustc_errors_population() -> Vec<Binding> {
 /// over their declared categories. Role = the [`KernelCategory`], filler = the
 /// rule id, text = the reference (slow) kernel shape.
 ///
-/// This arm is the one that can answer T5's untested prediction ("kernel_opt
+/// This arm is the one that can answer T5's untested prediction ("`kernel_opt`
 /// categories possibly weaker than rule-level"), and it is **methodologically
 /// the strongest of the three** for a reason worth stating: its role is
 /// DECLARED corpus metadata, not a label derived from the span text. The

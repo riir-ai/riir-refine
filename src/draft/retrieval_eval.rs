@@ -530,9 +530,11 @@ pub(crate) fn domain_index(d: DomainId) -> usize {
 /// caught it). A substrate-level deterministic tie-break in riir-rag remains
 /// a documented follow-up; this keeps the eval self-contained.
 ///
-/// `pub(crate)` — shared by the Issue 024 switch-cost measurement so both
-/// evals rank identically.
-pub(crate) fn canonical_rank(rules: &[crate::draft::ScoredRule]) -> Vec<&crate::draft::ScoredRule> {
+/// `pub` — shared by the Issue 024 switch-cost measurement and the
+/// Issue 64 modelability sweep (tests/) so all three measurements rank
+/// identically.
+#[must_use]
+pub fn canonical_rank(rules: &[crate::draft::ScoredRule]) -> Vec<&crate::draft::ScoredRule> {
     let mut v: Vec<&crate::draft::ScoredRule> = rules.iter().collect();
     // MUST match `instantiation_rerank::rerank`'s key order — instantiation
     // first, then similarity, then rule_id. Sorting by score alone here would
