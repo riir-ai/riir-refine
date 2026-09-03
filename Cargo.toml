@@ -651,3 +651,92 @@ required-features = ["tpr_structure", "score_bench"]
 [patch."https://github.com/katopz/katgpt-rs"]
 katgpt-core          = { path = "../katgpt-rs/crates/katgpt-core" }
 katgpt-device-verify = { path = "../katgpt-rs/crates/katgpt-device-verify" }
+
+# ── Issue 713 T3: `required-features` on `#![cfg]`-gated GOAT gates ─────────
+#
+# Every target below opens with a whole-file `#![cfg(feature = ...)]`. Without
+# the row, `cargo test --test <name>` compiles it to an EMPTY binary and prints
+# `running 0 tests` / `ok. 0 passed` with exit 0 — indistinguishable from a real
+# pass, on the gates whose green IS the evidence for a promotion.
+#
+# The `#![cfg]` protects the COUNT. This protects the READER. Both are needed.
+#
+# `cargo test --workspace` is UNAFFECTED: cargo silently skips a target whose
+# required-features are off, so this cannot red an existing workspace CI. What
+# changes is that naming the target without its features now errors (exit 101)
+# instead of reporting a green zero.
+#
+# Measured population + the instrument (katgpt-rs):
+# .docs/10_audits/cfg_gated_silent_zero_pass.md, scripts/cfg_gated_target_audit.py
+
+[[test]]
+name = "g4_l4_composition"
+required-features = ["l4_lora"]
+
+[[test]]
+name = "kat_account_g9"
+required-features = ["kat_service"]
+
+[[test]]
+name = "kat_lease_client_g10"
+required-features = ["kat_transport"]
+
+[[test]]
+name = "kat_meter_g2_alloc"
+required-features = ["kat_service"]
+
+[[test]]
+name = "kat_meter_g9"
+required-features = ["kat_service"]
+
+[[test]]
+name = "kat_pending_estimator_g4"
+required-features = ["kat_service", "latent_retrieval"]
+
+[[test]]
+name = "kat_promotion_g2p"
+required-features = ["kat_service", "score_bench"]
+
+[[test]]
+name = "kat_redact_g4"
+required-features = ["kat_service"]
+
+[[test]]
+name = "kat_stake_client_g2s"
+required-features = ["kat_transport"]
+
+[[test]]
+name = "kat_sync_payload_g4"
+required-features = ["kat_service", "latent_retrieval"]
+
+[[test]]
+name = "kat_vote_client_g9gov"
+required-features = ["kat_transport"]
+
+[[test]]
+name = "latent_suggest_goat"
+required-features = ["latent_retrieval"]
+
+[[test]]
+name = "llm_spend_g2_alloc"
+required-features = ["cf_workers_ai"]
+
+[[test]]
+name = "llm_spend_gates"
+required-features = ["cf_workers_ai"]
+
+[[test]]
+name = "scope_gate_adoption"
+required-features = ["contrastive_scope"]
+
+[[test]]
+name = "sec_boundary_gate"
+required-features = ["sec"]
+
+[[test]]
+name = "t40_fixer_regate_harness"
+required-features = ["cf_workers_ai"]
+
+[[test]]
+name = "uncontaminated_g1"
+required-features = ["clippy_verify", "latent_retrieval"]
