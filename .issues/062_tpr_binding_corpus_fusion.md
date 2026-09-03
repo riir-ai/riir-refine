@@ -395,7 +395,48 @@ did NOT fire. Three caveats that bound what Phase 2 may claim:
   but "most structured arm" and "arm with the most filler reuse" are not
   distinguished by anything measured here.
 
-- [ ] **T6** **Counterfactual surgery on LatentFixMemory trajectories:** for score-bench persist-miss spans, surgery-swap the rule/domain filler and ask closed-form "would domain X / rule Y have healed this span?" — complements Bench 032's re-run-based switch-cost measurement with a zero-recompute counterfactual; feeds the post-mining intake (`.distill/001_mining_queue_snapshot.md`) with attributed misses.
+- [ ] **T6 — RE-SCOPED 2026-09-03 to a MEASUREMENT before any consumer wiring
+  (owner call, made rather than deferred).** Bench 065 changes what T6 may
+  ship, not whether it runs. The re-scope, and the gate it now carries, are in
+  the block immediately below the original text.
+
+  **T6 Counterfactual surgery on LatentFixMemory trajectories:** for score-bench persist-miss spans, surgery-swap the rule/domain filler and ask closed-form "would domain X / rule Y have healed this span?" — complements Bench 032's re-run-based switch-cost measurement with a zero-recompute counterfactual; feeds the post-mining intake (`.distill/001_mining_queue_snapshot.md`) with attributed misses.
+  ### T6a (gates T6) — does a surgery delta predict a healing outcome at all?
+
+  **The call, 2026-09-03.** Bench 065 measured TPR's withheld-pair top-1 at
+  **chance on unseen pairs at every admissible geometry**, and at **63.3%** on
+  pairs it was fitted on, at the best readable one. T6 as written would feed
+  the mining intake with attributions built on that readout. So T6 does not get
+  wired to a consumer until it has shown it carries signal, and the shape of
+  the evidence is preregistered here rather than chosen once numbers exist:
+
+  - **Population, split, never pooled.** Every counterfactual query is tagged
+    `ObservedPairs::contains(role_of_span, Y)`. Observed and unobserved are
+    reported as two numbers with two sample sizes. Pooled, the ~77% unobserved
+    half — where Bench 065 says the answer is *at chance* — would be carried by
+    the ~23% observed half and the whole thing would read as a measurement.
+  - **The gate.** On the OBSERVED half, the surgery delta must rank the rule
+    that actually healed the span above the rules that did not, better than a
+    frequency prior over rules (the trivial "guess the most common healer"
+    baseline) by a margin fixed before running. A zero-recompute attribution
+    that loses to counting is not worth the artifact.
+  - **The null is not optional and is not the atomic dictionary here.** Bench
+    062 §caveat 1 already found the atomic null *vacuous* on this corpus (0.0%
+    ID). The frequency prior is the null that can actually fail.
+  - **The UNOBSERVED half ships as a refusal, not a number.** Bench 065 §6 is
+    strong enough that an unobserved-pair readout should be expected *wrong*,
+    not merely unvalidated. The consumer surface must return "unobserved pair —
+    no attribution" there. Shipping a confident float would be the Issue
+    710/711 shape a fourth time, with the extra twist that we now have the
+    measurement saying it is wrong.
+
+  **Why T6 is not simply closed with T4.** T4 asked whether TPR *generalizes*;
+  T6 asks whether it *interpolates* usefully, which Bench 065 did not refute —
+  63.3% ID at `d = 4` against a 1.6% floor is real signal, just not
+  compositional signal. Those are different claims and only the first is
+  refuted. What is closed is T6's right to ship an attribution without
+  measuring the second.
+
   **T6's hazard is now QUANTIFIED (Bench 065 §2/§7.4):** the outside-the-fit
   population on this arm is **208 of the 270-pair space — 77%**. Every
   counterfactual `surgery_delta_into` answers there is bit-additive, clean,
