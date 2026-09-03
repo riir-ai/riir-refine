@@ -756,7 +756,7 @@ closed.**
   live at **`.raw/ldg_probe/`** (gitignored scratch; nvcc v13.3 confirmed on the box; design self-review
   caught the warmup nullptr + serial-consume-chain bugs BEFORE any run). Instrument commits only AFTER
   compile+run (the 848 lesson). Full details in `.plans/073` T0a. Everything else re-verified still gated
-  at 04:14 (T4 running PID 48700; walk #7 not due; MCP quota; 066-T4/P18 owner; mmorpg-092 siblings).
+  at 04:14 (T4 running PID 48700; walk #7 not due; MCP quota; 066-T4 LANDED by idle cycle / P18 owner; mmorpg-092 siblings).
 - **2026-09-04 ~04:50 (idle cycle 6, M3 — T0a harness COMPILE-VERIFIED on the box, zero-GPU-touch de-risk unit):** the window was still closed at cycle start (NO `t504_confirm/status.txt`; 4090 GPU 31% / 8.1 GB resident with `bonsai_lora_accuracy_parity_arm_c.exe` — the sibling 504 lane is LIVE on the box), so the compile gate moved out of the window too: scp → nvcc → GREEN, zero GPU state touched. **Three pre-window defects caught + fixed** (the de-risk paying for itself): (1) the warmup nullptr guard was INCOMPLETE (deref guarded, the cudaEventElapsedTime CALL not — InvalidValue → exit(1) during warmup, before any measurement); (2) CUDA 13 REMOVED `cudaDeviceProp::clockRate`/`memoryClockRate` (compile error on the box) — replaced with `cudaDeviceGetAttribute(cudaDevAttrClockRate/MemoryClockRate)`; (3) box recipe: non-interactive ssh PATH lacks cl.exe — prepend the MSVC 14.41 Hostx64/x64 bin. **ptxas: all 5 arms 40–44 regs, 0 spills — K=16 at 41 regs REFUTES the anticipated "spill at high K invalidates the arm" caveat; the depth axis is clean through K=16.** Compiled+verified `probe_873.exe` STAGED at `C:\Users\katop\ldg_probe_873\` — the window-open recipe is now: pre-flight → run → scp CSV back. `.raw/ldg_probe/README.md` + `.plans/073` T0a updated in-plan. Instrument still commits only AFTER compile+run (the 848 lesson). **Walk #7 correction: it ALREADY LANDED while this cycle ran (`4c9ba72`, sibling session) — strict window EMPTY, next announce Sun 09-06 20ET — so the inherited summary's "walk #7 due ~07:00 today" is superseded; no walk is pending until Sunday.** Everything else re-verified still gated (MCP quota; 066-T4/P18 owner; mmorpg-092 siblings).
 - **Hygiene:** current after this entry. `.issues/` = 059/060/061 (owner/ops/legal-gated)
   + 065 (T3/T7 latent; T6 CLOSED on the 09-03 nightly PASS) + 066 (T1/T2/T3 DONE 09-04 —
@@ -772,8 +772,12 @@ closed.**
   (`d731cac` — the four first-hand poison rows repaired via the one-shot dated upsert
   `examples/repair_066_corpus_store.rs`, git-verified values, provenance `repair-066`).
   Store = projection = mined now agree (27/31/31/31/31/31); the nightly regeneration diff
-  that motivated `a7c473c`'s "do not commit" note is structurally gone. Remaining: T4
-  (log projection-vs-mined divergence instead of silently losing — owner call).
+  that motivated `a7c473c`'s "do not commit" note is structurally gone. ~~Remaining: T4
+  (log projection-vs-mined divergence instead of silently losing — owner call).~~
+  **T4 LANDED same day** by the idle cycle (log-not-fail divergence lines + the mined-layer
+  CWD anchor it exposed — `_count_in_rev` inherited the caller CWD and read zeros off-root;
+  both subprocess calls now `cwd=REPO_ROOT`); the 3 residual drift lines root-caused benign
+  (commit-time vs stamp-time definitional boundary), recorded in `.issues/066` T4.
   Corpus-count note: kernel_opt moved 453→459 in the sibling's Batch 102 (landed mid-cycle,
   `17f00e7`) — today's stamp carries it; no action needed here.
 

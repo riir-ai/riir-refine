@@ -351,20 +351,25 @@ def _count_working_tree(path: str, needle: str) -> int:
 
 
 def _count_in_rev(rev: str, path: str, needle: str) -> int:
-    """Count `needle` occurrences in the corpus source(s) at `rev`."""
+    """Count `needle` occurrences in the corpus source(s) at `rev`.
+
+    Anchored to REPO_ROOT (Issue 066 T4): an inherited CWD makes every git
+    show return b'' -> 0, and the pre-T4 merge then "wins" those zeros over
+    real store rows — a mined-layer failure indistinguishable from drift.
+    """
     import subprocess
     if path.endswith(".rs"):
         r = subprocess.run(["git", "show", f"{rev}:{path}"],
-                           capture_output=True, text=True)
+                           capture_output=True, text=True, cwd=REPO_ROOT)
         return r.stdout.count(needle) if r.returncode == 0 else 0
     # A directory: enumerate its .rs files at that rev (renames/splits safe).
     ls = subprocess.run(["git", "ls-tree", "-r", "--name-only", rev, path],
-                        capture_output=True, text=True)
+                        capture_output=True, text=True, cwd=REPO_ROOT)
     n = 0
     for f in ls.stdout.splitlines():
         if f.endswith(".rs") and not f.endswith("mod.rs"):
             r = subprocess.run(["git", "show", f"{rev}:{f}"],
-                               capture_output=True, text=True)
+                               capture_output=True, text=True, cwd=REPO_ROOT)
             if r.returncode == 0:
                 n += r.stdout.count(needle)
     return n
@@ -462,6 +467,18 @@ def load_corpus_history(days: int = 35) -> list[dict]:
             log(f"corpus stamp: recorded {today} "
                 + " ".join(f"{n}={today_row[n]}" for n, _, _ in CORPUS_DOMAINS))
 
+    # Issue 066 T4: recorded wins, but a store-vs-mined disagreement on an
+    # overlapping day IS the drift signal the mined layer exists to surface
+    # (the poisoned docker 2-vs-31 week was exactly this shape, and the loss
+    # was silent). Log per divergent domain — never fail, never override.
+    for day in sorted(set(by_day) & set(recorded)):
+        mined_row, stored_row = by_day[day], recorded[day]
+        for name, _, _ in CORPUS_DOMAINS:
+            m, s = mined_row.get(name), stored_row.get(name)
+            if m is not None and s is not None and m != s:
+                log(f"corpus drift: {name} {day} store={s} mined={m} "
+                    "(recorded wins; if the stamp is the skew, repair via the "
+                    "dated writer — Issue 066 precedent)")
     by_day.update(recorded)  # recorded wins over mined for overlapping days
     return [by_day[d] for d in sorted(by_day)]
 
