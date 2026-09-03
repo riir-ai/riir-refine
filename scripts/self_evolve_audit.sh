@@ -46,7 +46,7 @@ MEMORY="${RIIR_HEAL_MEMORY:-$HOME/.cache/riir-clippy/memory.json}"
 HISTORY="$HEAL_REPO/.benchmarks/score_history.jsonl"
 INTAKE="$HEAL_REPO/.distill/001_mining_queue_snapshot.md"
 ADOPTION_DATE="2026-08-24T00:00:00"
-REPOS="katgpt-rs riir-ai riir-train riir-neuron-db riir-chain riir-clippy riir-game-sdk riir-mmorpg-examples riir-unity riir-viewbridge riir-dapps"
+REPOS="katgpt-rs riir-ai riir-train riir-neuron-db riir-chain riir-clippy riir-game-sdk riir-mmorpg-examples riir-viewbridge riir-dapps"
 
 echo "╔══════════════════════════════════════════════════════════════╗"
 echo "║ cargo-heal adoption + self-evolve audit  (Issue 037)         ║"

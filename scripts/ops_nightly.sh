@@ -219,8 +219,13 @@ fi
 # --settle first appends settlement rows for completed account days whose
 # ledger attribution drifts from CF GraphQL (issue 057), so the regenerated
 # dashboard reflects the settled state in the same run. --sweep shells out to
-# cargo-heal per repo; 20 min is ~4x the measured cost.
-if timeout 1200 python3 "${REPO}/scripts/gen_dashboard.py" --sweep --settle >> "${LOG}" 2>&1; then
+# cargo-heal per repo. Issue 065 T6: the sweep phase is internally bounded to
+# COVERAGE_BUDGET_S (600s here = half this run budget, dynamic per-repo
+# timeouts drawn from the remainder) — the other half always stays available
+# for settle + CF collections + render. (The unbounded 600s-per-repo form
+# burned the whole 1200s on the 09-01/09-02 riir-ai timeouts: exit 124, no
+# regen, no deploy, stale dashboard.)
+if COVERAGE_BUDGET_S=600 timeout 1200 python3 "${REPO}/scripts/gen_dashboard.py" --sweep --settle >> "${LOG}" 2>&1; then
   log "regen OK"
 else
   log "FAIL regen (exit $?) — leaving artifacts untouched, no deploy"

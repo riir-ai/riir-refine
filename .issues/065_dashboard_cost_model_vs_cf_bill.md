@@ -93,9 +93,18 @@ Three defects, in increasing order of how much money they hid:
       coverage dry-run budget is `timeout=600` (`scripts/gen_dashboard.py:1089`) across 11 repos —
       one slow repo can consume half the run. Measured: 09-01 logged
       `riir-ai: coverage dry-run timeout` and both nights died at exactly 20:00 elapsed. The
-      per-repo budget must be a fraction of the run budget, not half of it. Deliberately not
-      fixed here: it is a timing change that wants its own measurement, and it is independent of
-      the cost model.
+      per-repo budget must be a fraction of the run budget, not half of it. **FIX LANDED
+      2026-09-04 (~17:55 UTC, ahead of the 18:23 UTC scheduled run):** the coverage phase is
+      now internally bounded — `COVERAGE_BUDGET_S` (default/env 600s = half the run budget),
+      per-repo timeouts drawn from the phase budget's REMAINDER (`max(30, remaining)`),
+      budget-exhaustion keeps cached rows, every repo logs its duration, and the cache write
+      MERGES instead of REPLACES (pre-fix, any repo that did not complete was silently dropped
+      from the coverage table — a second, latent data-loss defect found in the same function).
+      Also removed `riir-unity` from both mirrored REPOS lists (`gen_dashboard.py` +
+      `self_evolve_audit.sh`) — the repo moved to `obsolete/` in the 2026-09-04 owner move.
+      Validation: `py_compile` + `bash -n` clean; smoke at `COVERAGE_BUDGET_S=1` exercises the
+      exhaustion branch and returns all 10 cached rows merged. End-to-end verdict = the next
+      scheduled 18:23 UTC run (this file's checkbox flips on its PASS).
 
 ## Rules that now hold, and the ones that do not
 

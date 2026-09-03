@@ -67,12 +67,20 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 LEDGER = REPO_ROOT / ".benchmarks" / "llm_cost_ledger.jsonl"
 SCORE_HISTORY = REPO_ROOT / ".benchmarks" / "score_history.jsonl"
 COVERAGE_CACHE = REPO_ROOT / ".benchmarks" / "dashboard_coverage.json"
+# Issue 065 T6 — the coverage phase gets a BOUNDED slice of the nightly regen
+# budget (ops_nightly.sh gives the whole gen_dashboard run `timeout 1200`).
+# Per-repo dry-run timeouts are drawn from the phase budget's REMAINDER, never
+# a fixed 600s: one slow repo (riir-ai) used to be able to eat half the run
+# budget, and two slow repos exhausted the whole 1200s (the 09-01/09-02
+# exit-124 nights — dashboard pinned stale, no deploy).
+COVERAGE_BUDGET_S = int(os.environ.get("COVERAGE_BUDGET_S", "600"))
+COVERAGE_MIN_PER_REPO_S = 30
 DEFAULT_OUT = REPO_ROOT / "cloudflare" / "dashboard" / "public" / "index.html"
 
 # Mirrors scripts/self_evolve_audit.sh REPOS.
 REPOS = [
     "katgpt-rs", "riir-ai", "riir-train", "riir-neuron-db", "riir-chain",
-    "riir-clippy", "riir-game-sdk", "riir-mmorpg-examples", "riir-unity",
+    "riir-clippy", "riir-game-sdk", "riir-mmorpg-examples",
     "riir-viewbridge", "riir-dapps",
 ]
 GIT_ROOT = Path(os.environ.get("RIIR_GIT_ROOT", "/Users/katopz/git"))
@@ -1073,7 +1081,9 @@ def coverage_snapshot(sweep: bool) -> list[dict]:
             cached = []
     if not sweep or not HEAL_BIN.exists():
         return cached
-    fresh = []
+    fresh: list[dict] = []
+    measured: set[str] = set()
+    phase_deadline = time.monotonic() + COVERAGE_BUDGET_S
     for repo in REPOS:
         target = None
         for cand in ("crates", "src"):
@@ -1083,14 +1093,21 @@ def coverage_snapshot(sweep: bool) -> list[dict]:
                 break
         if target is None:
             continue
+        remaining = phase_deadline - time.monotonic()
+        if remaining < COVERAGE_MIN_PER_REPO_S:
+            log(f"{repo}: coverage budget exhausted ({COVERAGE_BUDGET_S}s phase), keeping cached")
+            break
         try:
+            t0 = time.monotonic()
             proc = subprocess.run(
                 [str(HEAL_BIN), "--fix", target],
-                capture_output=True, text=True, timeout=600,
+                capture_output=True, text=True,
+                timeout=max(COVERAGE_MIN_PER_REPO_S, int(remaining)),
             )
         except subprocess.TimeoutExpired:
-            log(f"{repo}: coverage dry-run timeout")
+            log(f"{repo}: coverage dry-run timeout after {int(remaining)}s of the {COVERAGE_BUDGET_S}s phase")
             continue
+        dur = time.monotonic() - t0
         m = re.search(r"fixed (\d+) file\(s\) / (\d+) edit\(s\)", proc.stdout)
         if m:
             fresh.append({
@@ -1099,11 +1116,19 @@ def coverage_snapshot(sweep: bool) -> list[dict]:
                 "edits": int(m.group(2)),
                 "measured_at": datetime.now(timezone.utc).isoformat(),
             })
-    if fresh:
+            measured.add(repo)
+            log(f"{repo}: coverage {dur:.1f}s, {m.group(1)} file(s) / {m.group(2)} edit(s)")
+        else:
+            log(f"{repo}: coverage produced no counts ({dur:.1f}s)")
+    # Merge, never replace: a timed-out / budget-exhausted / no-count repo
+    # keeps its previous row (pre-fix, the cache write silently DROPPED any
+    # repo that did not complete — data loss on every partial sweep).
+    merged = fresh + [c for c in cached if c.get("repo") not in measured]
+    if merged:
         COVERAGE_CACHE.write_text(json.dumps(
-            {"repos": fresh, "updated": datetime.now(timezone.utc).isoformat()},
+            {"repos": merged, "updated": datetime.now(timezone.utc).isoformat()},
             indent=1))
-        return fresh
+        return merged
     return cached
 
 
