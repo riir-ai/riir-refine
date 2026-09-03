@@ -63,13 +63,14 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 60 (1): measured-GOAT distillation (riir-train Issue 460 / katgpt-rs e2853fbf — pre-gate-recovery-by-division-cancels-algebraically; the MLA backward's saturated output-gate 0/0 NaN, fixed by algebraic cancellation; Bench 475: 6/10 -> 10/10 usable backward passes).
     // Batch 63 (3): the CubeCL twin unlock — same-input-gemv-weight-concat-at-upload, deferred-residual-fused-into-next-layer-norm, reset-state-in-place-fill-never-realloc (ternary_deltanet_gpu_forward.rs, Plan 009 / Research 071).
     // Batch 70 (3): the arxiv barrier-free-sync paper distill (arXiv:2608.13757, Plan 020 / Research 080) — barrier-free-per-dependency-wait-from-loop-counters, shared-counter-decode-producer-progress, masked-branchless-wait-collapse.
-    // Total: 209. // (historical batch-30 snapshot; current 453)
+    // Total: 209. // (historical batch-30 snapshot; current 459)
     // Batch 98 (10): antirez/ds4 dense.metal/moe.metal leads -- grid-range-split-verbatim-impl-composition, share-activation-stream-keep-projection-reductions, tiny-rows-scalar-thread-per-row-downshift, small-batch-matvec-gemm-bridge-rung, moe-routed-down-sum-single-accumulate-pass, fused-vector-site-transcendental-form-nonportable, monomorphic-hot-caller-last-hit-memo, per-row-scale-folded-into-rhs-staging-tile, dequant-byte-pairs-as-aligned-u16-loads, cross-simd-bitonic-alternating-bank-exchange (the Batch-97 queued NEXT BATCH LEADS + 3 additional candidates).
     // Batch 100 (8): Layr-Labs/qwen-3.8-mtp-challenge -- functional-cache-versioning-loses-donation-under-kernel-read, fused-kv-write-single-writer-reads-newest-from-input, in-place-write-through-input-emits-fence-consumer, residency-set-wired-once-post-warm-persistent-footprint, register-budget-head-split-gqa-reread-trade, batch-composition-invariant-grid-early-return, never-gqa-multiply-full-d-merge-smem, container-rebind-over-retrace-for-churn-survival (Research 120 / Plan 068; A +3, D +3, E +2).
+    // Batch 102 (6): FlashQuant sparse-dense fusion (arXiv 2608.15531) -- heterogeneous-unit-paths-shared-tile-fusion, lpt-min-heap-disjoint-column-ownership, tile-coo-sparse-tile-aligned-format, bucketed-sparse-reader-column-partition, bank-group-circular-element-reorder, stream-k-persistent-cta-mac-segments (Research 123 / Plan 071; A +2, C +2, H +1, N +1; the headline was REFUTED for direct adoption at walk time -- the fusion mechanism is the distilled core).
     assert_eq!(
         corpus.entries.len(),
-        453,
-        "kernel batches through Batch 100 should have 453 rules"
+        459,
+        "kernel batches through Batch 102 should have 459 rules"
     );
 }
 
@@ -5288,7 +5289,7 @@ fn kernel_categories_table_has_15_entries() {
 
 #[test]
 fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-    // Every rule_id in the 398-rule corpus must appear in exactly one category.
+    // Every rule_id in the 459-rule corpus must appear in exactly one category.
     let corpus = build_kernel_seed_corpus();
     let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     let mut categorized: Vec<&str> = Vec::new();
@@ -5331,22 +5332,22 @@ fn kernel_categories_cover_all_corpus_rules_exhaustively() {
 
 #[test]
 fn kernel_categories_counts_match_plan_003_table() {
-    // Pin per-category rule counts to the Plan 003 table (updated for Batch 100).
+    // Pin per-category rule counts to the Plan 003 table (updated for Batch 102).
     let expected = [
-        (KernelCategory::MemoryAccess, 103),
+        (KernelCategory::MemoryAccess, 105),
         (KernelCategory::Compute, 57),
-        (KernelCategory::Fusion, 39),
+        (KernelCategory::Fusion, 41),
         (KernelCategory::Dispatch, 98),
         (KernelCategory::Parallelism, 32),
         (KernelCategory::FlashAttnTiling, 11),
         (KernelCategory::LinearAttnRecurrence, 26),
-        (KernelCategory::MoeDispatchBackward, 16),
+        (KernelCategory::MoeDispatchBackward, 17),
         (KernelCategory::NsaBlockSparse, 4),
         (KernelCategory::VarlenChunkedReduction, 5),
         (KernelCategory::AutotuneDispatch, 5),
         (KernelCategory::ConvGemmLayout, 13),
         (KernelCategory::KernelPolymorphism, 13),
-        (KernelCategory::DtypeAlignment, 27),
+        (KernelCategory::DtypeAlignment, 28),
         (KernelCategory::IrStrengthReduction, 4),
     ];
     for (cat, count) in expected {
@@ -5361,9 +5362,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 453.
+    // Sum must equal 459.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 453, "Plan 003: category totals must sum to 453");
+    assert_eq!(total, 459, "Plan 003: category totals must sum to 459");
 }
 
 #[test]
@@ -5374,8 +5375,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 453,
-        "Plan 003: grouped corpus has {total} rules, expected 453"
+        total, 459,
+        "Plan 003: grouped corpus has {total} rules, expected 459"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -7017,6 +7018,144 @@ fn batch100_pseudocode_parses() {
         assert!(
             opt_verdict.parses,
             "batch-100 opt_pattern for '{id}' must parse"
+        );
+    }
+}
+
+#[test]
+fn batch102_rules_present() {
+    // Batch 102 (FlashQuant sparse-dense fusion -- Research 123 / Plan 071):
+    // 6 kernel_opt rules (A +2, C +2, H +1, N +1) distilled from the
+    // outlier-aware W4A16 paper (arXiv 2608.15531). The headline was
+    // REFUTED for direct adoption at walk time; the fusion mechanism is
+    // the distilled core. Quotes verified byte-accurate by the
+    // coordinator against the arXiv HTML v1 rendering.
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "heterogeneous-unit-paths-shared-tile-fusion",
+        "lpt-min-heap-disjoint-column-ownership",
+        "tile-coo-sparse-tile-aligned-format",
+        "bucketed-sparse-reader-column-partition",
+        "bank-group-circular-element-reorder",
+        "stream-k-persistent-cta-mac-segments",
+    ];
+    for id in ids {
+        assert!(
+            corpus.entries.iter().any(|e| e.rule_id == id),
+            "batch-102 rule '{id}' missing from corpus"
+        );
+    }
+}
+
+#[test]
+fn batch102_concepts_covered() {
+    // Distinctness + mandated phrases must survive in the concept
+    // text (case-sensitive contains -- the B51 lesson).
+    let corpus = build_kernel_seed_corpus();
+    let checks: &[(&str, &[&str])] = &[
+        (
+            "heterogeneous-unit-paths-shared-tile-fusion",
+            &[
+                "co-scheduled over a common tiled execution space",
+                "tile correspondence",
+                "the sparse path runs on CUDA cores",
+                "we allocate additional warps to this task",
+                "diminishes for very small batches, such as 1 and 2",
+                "ADDITIVE-HETEROGENEOUS-PATHS member",
+            ],
+        ),
+        (
+            "lpt-min-heap-disjoint-column-ownership",
+            &[
+                "descending order of nonzero count",
+                "assigned to the currently least-loaded bucket",
+                "preserves conflict-free accumulation",
+                "remains below 100 s for all evaluated matrices",
+            ],
+        ),
+        (
+            "tile-coo-sparse-tile-aligned-format",
+            &[
+                "represented using uint8_t",
+                "repurposed to store original weight values",
+                "alignment of outlier entries with GEMM tile boundaries",
+                "assert it at encode",
+            ],
+        ),
+        (
+            "bucketed-sparse-reader-column-partition",
+            &[
+                "threads access the same column simultaneously",
+                "N_bucket = warp_size/N_thread buckets",
+                "under the conflict threshold by construction",
+            ],
+        ),
+        (
+            "bank-group-circular-element-reorder",
+            &[
+                "reducing inter-sub-warp bank conflicts",
+                "reduces the number of conflicts from 4 to 1",
+                "the circular start offset rotates per bucket",
+                "bench before citing",
+            ],
+        ),
+        (
+            "stream-k-persistent-cta-mac-segments",
+            &[
+                "aggregate MAC iteration space across persistent CTAs",
+                "a subsequent global reduction is performed",
+                "mandatory control arm",
+                "occupancy-grid-cap-refuted-uncapped-default",
+            ],
+        ),
+    ];
+    for (id, needles) in checks {
+        let e = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == *id)
+            .unwrap_or_else(|| panic!("batch-102 rule '{id}' missing"));
+        for needle in *needles {
+            assert!(
+                e.gpu_concept.contains(needle),
+                "batch-102 concept for '{id}' missing phrase '{needle}'"
+            );
+        }
+    }
+}
+
+#[test]
+#[cfg(not(feature = "kernel_verify"))]
+fn batch102_pseudocode_parses() {
+    // G1 for Batch 102: syn-parse gate (the FlashQuant distill -- the
+    // heterogeneous-unit fusion, the LPT disjoint column ownership, the
+    // Tile-COO format, the bucketed sparse-reader partition, the
+    // bank-group circular reorder, and the Stream-K MAC-space segments).
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "heterogeneous-unit-paths-shared-tile-fusion",
+        "lpt-min-heap-disjoint-column-ownership",
+        "tile-coo-sparse-tile-aligned-format",
+        "bucketed-sparse-reader-column-partition",
+        "bank-group-circular-element-reorder",
+        "stream-k-persistent-cta-mac-segments",
+    ];
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-102 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            ref_verdict.parses,
+            "batch-102 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            opt_verdict.parses,
+            "batch-102 opt_pattern for '{id}' must parse"
         );
     }
 }

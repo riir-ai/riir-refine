@@ -1546,6 +1546,7 @@ mod entries_gpu_11;
 mod entries_gpu_12;
 mod entries_gpu_13;
 mod entries_gpu_14;
+mod entries_gpu_15;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -1573,6 +1574,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_12::entries());
     entries.extend(entries_gpu_13::entries());
     entries.extend(entries_gpu_14::entries());
+    entries.extend(entries_gpu_15::entries());
     Corpus::new(entries)
 }
 
@@ -1585,7 +1587,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 453-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 459-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1700,6 +1702,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "functional-cache-versioning-loses-donation-under-kernel-read",
             "fused-kv-write-single-writer-reads-newest-from-input",
             "never-gqa-multiply-full-d-merge-smem",
+            "bucketed-sparse-reader-column-partition",
+            "bank-group-circular-element-reorder",
         ],
     ),
     // B: Compute patterns (57 rules)
@@ -1810,6 +1814,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "sibling-projections-one-kernel-shared-staged-tile",
             "bit-exact-dispatch-fusion-boundary-emulation",
             "grid-range-split-verbatim-impl-composition",
+            "heterogeneous-unit-paths-shared-tile-fusion",
+            "stream-k-persistent-cta-mac-segments",
         ],
     ),
     // D: Dispatch patterns (98 rules)
@@ -2028,6 +2034,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "expert-loop-two-phase-split-batch-across-iterations",
             "expert-major-work-map-token-scatter-clamped",
             "moe-routed-down-sum-single-accumulate-pass",
+            "lpt-min-heap-disjoint-column-ownership",
         ],
     ),
     // I: NSA block-sparse selection (4 rules)
@@ -2136,6 +2143,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "telescoped-digit-coefficients-byte-fma-dot",
             "bit-plane-plane-sums-input-side-offset-dot",
             "half-domain-exact-band-dequant-with-raw-bit-oracle",
+            "tile-coo-sparse-tile-aligned-format",
         ],
     ),
     // O: IR strength reduction (4 rules)

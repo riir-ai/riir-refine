@@ -17,8 +17,29 @@
 
 ## Live queue state (2026-08-31, post-Batch-93, M3 box)
 
-- **Corpus counts:** kernel_opt 453 · rust_perf 98 · clippy_lints 45 · sec 12 · docker 31
+- **Corpus counts:** kernel_opt 459 · rust_perf 99 · clippy_lints 45 · sec 12 · docker 31
   (AGENTS.md is the authoritative ledger — bump there per batch, snapshot counts are a convenience copy).
+- **Last landed:** **Batch 102 (2026-09-04, Research 123 / Plan 071 — the FlashQuant
+  sparse-dense fusion distill, arXiv 2608.15531; taken over from a dead sibling session +
+  renumbered 070 → 071 per the reserved-071 flag): 6 rules, corpus 453 → 459 (A +2, C +2,
+  H +1, N +1).** `heterogeneous-unit-paths-shared-tile-fusion` (C — the additive-heterogeneous-
+  paths member of the same-input family: TC dense + CUDA-core sparse over one tile space,
+  offline tile correspondence, EW extra-warps rider folded), `lpt-min-heap-disjoint-column-
+  ownership` (H — assignment-time LPT balance, one owner per column, zero atomics — the work-
+  map family's balance complement), `tile-coo-sparse-tile-aligned-format` (N — u8 indices
+  from staged-tile extent + padding-slot repurpose), `bucketed-sparse-reader-column-partition`
+  (A — access-granularity mismatch, consumer-side partition vs B92's address-transform arm),
+  `bank-group-circular-element-reorder` (A — offline bank-group staggering keyed to the
+  consumer walk), `stream-k-persistent-cta-mac-segments` (C — MAC-space decomposition with
+  B58 uncapped-default as mandatory control arm; Lane B's decomposition-vs-reduction kill-check
+  beat Lane A's rider deferral — coordinator adjudicated LAND). Headline honestly carried:
+  batch ≥ 8 regime, NOT our batch-1 decode; INT4+BF16 evidence-only. GOAT: batch102 gates 3/3
+  first-shot + kernel_heal lib 1282/0/1i + default 1029/0 + kernel_heal+latent 1389/0/2i with
+  retrieval floors HELD (kernel 100/100/100, 13th consecutive) + clippy 0 both states. Full CI
+  guard NOT run (the B95 honest-skip shape — the 504 T3 NoRA matrix holds the 4090 until
+  ~09:00–10:30 09-04).** Prior: Batch 101 (2026-09-02, Plan 069 — `dispatch-handler-pair-hoist`,
+  corpus 98 → 99, x86 re-gate ARMED) + Batch 100 (2026-09-02, Research 120 / Plan 068 —
+  the Layr-Labs/qwen-3.8-mtp-challenge distill: 8 rules, corpus 445 → 453, A +3, D +3, E +2).**
 - **Last landed:** **Batch 100 (2026-09-02, Research 120 / Plan 068 — the Layr-Labs/qwen-3.8-mtp-challenge
   distill, the M5-Max Swift/Metal inference arena, same team as ds4 B97/98): 8 rules + 1 B22 rider,
   corpus 445 → 453 (A +3, D +3, E +2). Lead `functional-cache-versioning-loses-donation-under-
@@ -110,21 +131,22 @@
     the hoist win may be aarch64-shaped). Batch 99's own split-vs-merged negative control (0.95-1.00x on
     runtime-opaque targets) does NOT cover this transform: splitting re-merges structurally on aarch64,
     but the hoist still wins by eliminating the load.
-  - **Queued behind B102 (filed 2026-09-03, Plan 072 / Research 122): youssofal/MTPLX
+  - **NEXT UP (UNBLOCKED by B102's landing): Plan 072 (Research 122) — youssofal/MTPLX
     PR #391 (davidtai Qwen3.8-Flash-Next restack) — W87-led kernel_opt batch, 2–3 rules
-    + riders.** Verdict: YES grade B as a mining source, MARGINAL for prefill throughput —
-    every retained prefill lever is HAVE / refuted / no-analog in-stack (Bench 805 mask-fuse
-    twin, Bench 710 wider-chunk refuted, Issue 734 GDN-chunked negative, Issue 742 prefix
-    cache). Candidates: `shape-class-keyed-capability` (A− lead — a one-shape capability
-    refusal disarmed the flag process-wide; key by the full shape tuple, re-ask per call),
-    `wavefront-overlap-pair-ceiling` (B — 2×2 wavefront ⇒ 1 pair ⇒ 19.2% ceiling vs the
-    15% gate), `request-shape-decline-mirror-completeness` (B — the fast path mirrors
-    every request-dependent decline branch; two HTTP-500 outages); W67 graph-build
+    + riders, MAY COMBINE (default COMBINE) with the queued NAX leads** (`backing-provenance-
+    causal-shadowed-extent-widen` — the MLX 846 rule-1; `dispatcher-eligibility-predicate-
+    lags-kernel-capability` — the MLX #4416 rule-2) into ONE post-B102 kernel batch (one
+    corpus cycle, one GOAT run, one count-pin walk). Verdict: YES grade B as a mining source,
+    MARGINAL for prefill throughput — every retained prefill lever is HAVE / refuted / no-analog
+    in-stack (Bench 805 mask-fuse twin, Bench 710 wider-chunk refuted, Issue 734 GDN-chunked
+    negative, Issue 742 prefix cache). Candidates: `shape-class-keyed-capability` (A− lead — a
+    one-shape capability refusal disarmed the flag process-wide; key by the full shape tuple,
+    re-ask per call), `wavefront-overlap-pair-ceiling` (B — 2×2 wavefront ⇒ 1 pair ⇒ 19.2%
+    ceiling vs the 15% gate), `request-shape-decline-mirror-completeness` (B — the fast path
+    mirrors every request-dependent decline branch; two HTTP-500 outages); W67 graph-build
     overlap evaluate-then-likely-drop. Pin `ef96313…` (fork davidtai/MTPLX-1, Apache-2.0,
-    unmerged; re-pin at T0). MAY COMBINE with the queued NAX
-    `dispatcher-eligibility-predicate-lags-kernel-capability` lead into ONE post-B102
-    kernel batch (one corpus cycle, one GOAT run, one count-pin walk) — decision at
-    batch start, default COMBINE.
+    unmerged; re-pin at T0). Also queued for the next B100 touch: the NAX hd-256 dsplit
+    rider + the #4380 GQA-12/16 table (B100 rider enrichment).
   - **The arxiv pool re-walk #4: DONE 2026-09-02 ~07:15 +07** (`.research/113` — covered
     the Tuesday-09-01 announcement window; zero corpus delta; the spec-dec lane woke up:
     DBloom's ceiling-bin acceptance histogram (zero-cost telemetry adoption candidate for
@@ -538,7 +560,10 @@
   session): `.plans/.highwater` now reads 72 — Plan 072 allocated to the MTPLX PR391
   batch (Plan 072 / Research 122, committed). 071 stays RESERVED for the flashquant
   renumber per the flag above; a renumber write-back must be max(current-highwater, 71)
-  so the bump never regresses (the Bench-675 class).**
+  so the bump never regresses (the Bench-675 class).** **RESOLVED 2026-09-04 (B102
+  takeover session): the flashquant plan renumbered to 071 and LANDED (Research 123
+  / Plan 071, all tasks `[x]`); highwater stays 72; the duplicate-070 state is
+closed.**
 - **Owner-gated tails:** `.issues/044` (paging secrets `ALERT_WEBHOOK_URL` +
   `MONTHLY_BUDGET_USD`), `.issues/045` (T7 launchctl activation) — verified 08-31.
 - **Queue items 6/7** (boundary-guard + substrate-first drift audit): last full run 08-29,
