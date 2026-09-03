@@ -360,6 +360,22 @@
     + hero_fsm 1/0 (bevy_backend), out_of_box 1/0 (scenario_runner,social_signals,
     pet_pvp), duo 18/0 release (+scenario_runner), warm-tier-do contract 4/0,
     clippy 0 own-crate both states.
+  - **2026-09-04 (M3, idle cycle 8): two units.** **Unit 1 — hygiene follow-through,
+    mmorpg `97d60eb`:** container-tick-test's generated Cargo.lock TRACKED + a nested
+    .gitignore (/target, /node_modules, /.wrangler — the warm-tier-do precedent; the
+    repo-root .gitignore is root-anchored and never covered nested crate targets) —
+    closes cycle 7's noted-not-fixed leftover; staged-set audit clean (2 files, both
+    mine). **Unit 2 — the cycle-7 verify-gate tooling gap CLOSED, riir-clippy
+    `97f4ca32`:** see the inline closure on the cycle-7 entry above
+    (workspace_belief_cause + enrich_cargo_run_error; lib 1033→1035/0; fix_verify e2e
+    2/2 incl. the new workspace-belief fixture; clippy 0; no-dep check clean; GLOBAL
+    BINARY REBUILT release fix_verify,clippy_verify per the AGENTS.md rule). Gates
+    re-checked at cycle start: T0a STILL GATED (no t504_confirm/status.txt — the 504
+    T3 harvest lane is actively running; 4090 quiet at 5%/617 MiB but the gate needs
+    ALL_DONE, not just a quiet box); walk #8 → Mon 09-07; MCP pool → 09-15; re-sweep
+    surface still closed (riir-train 8 / riir-neuron-db 46 / riir-game-sdk 7 dirty —
+    sibling lanes: 509/digit_ood, a src-wide sweep, riir-e2e NFT; riir-ai heavily
+    dirty). The nearest_rank-copy housekeeping lane is ANOTHER AGENT's — not touched.
   - **Batch 94 (LANDED 2026-09-01, Plan 058 / Research 112): oMLX PR #3260
     expert-streaming distill CONSUMED** — 8 kernel_opt D + 1 rust_perf io +
     3 riders (B63 4th member, B71 producer complement, B84 routing member);
