@@ -367,10 +367,68 @@
     `split_decode_geometry(0, ..)` would div-by-zero (unreachable — decode always
     has ≥1 position).; (3) `bbf8a7a` #4380 — widens the 2-pass
     GQA decode kernel to GQA sizes 12/16 (threshold data for when split-K pays —
-    ours fires >512 pos regardless of GQA). Leads (1)/(3) remain not-yet-mined,
-    low-priority (our decode lane is league-defended, prefill is the open prize);
-    lead (2) DISCHARGED as the verification above — verdict CLEAN, no corpus
+    ours fires >512 pos regardless of GQA). Leads (1)/(3) were marked not-yet-mined
+    low-priority — **both now DISCHARGED 2026-09-03, see the extraction unit below**
+    (decode lane stays league-defended; prefill is the open prize — neither changes
+    that); lead (2) DISCHARGED as the verification above — verdict CLEAN, no corpus
     delta, no issue filed.
+    **Leads (1)+(3) DISCHARGED 2026-09-03 (4090 box, read-only kernel-extraction
+    unit #2 — `git show` on the vendor clone, zero contention while the Plan-371
+    window + B102 run):**
+    - **(1) `f99e916` #4416 — CONFIRMED the dispatcher-drift rule shape, QUEUED
+      as the second next-batch kernel_opt lead** (candidate id
+      `dispatcher-eligibility-predicate-lags-kernel-capability`, name final at
+      batch time). Mechanism, fully verified at source: #3842 (`714a7ef`) landed
+      the hd-256 NAX fused path with the gate `do_causal && !has_arr_mask`, and
+      the KERNEL carried full array-mask support from the SAME commit —
+      `has_mask` function_constant(300), mask buffer bindings (5/6), in-kernel
+      mask reads in both the main + dsplit kernels (verified in
+      `steel_attention_nax.h` at 714a7ef). The `!has_arr_mask` conjunct was dead
+      conservatism for the kernel's ENTIRE life: every array-mask hd-256
+      seq≥1024 prefill silently ran the decomposed fallback — correct output,
+      slower, NO test fails, profiler shows work happening. #4416 deleted the
+      stale conjunct 13 days later (`(do_causal || has_arr_mask)`), touching
+      ONLY the 2-line dispatcher predicate — zero kernel changes. The
+      soundness evidence for any such widening lives in the kernel's
+      SPECIALIZATION SURFACE (func consts / mask-typed kernel name), not in
+      the predicate. Fix-space: align the predicate with capability + a
+      POSITIVE ENGAGEMENT test (assert the fused path ENGAGES at every shape
+      the kernel supports — output-parity tests cannot see this failure
+      class). NAX-scoped evidence (M5-class), portable mechanism — our own
+      capability-conditional gates (split-decode >512, tiled-flash/SMEM tiers,
+      m16/cmma) carry engagement canaries from their GOATs, which IS the
+      standing defense the rule prescribes. Dedup verified: B23
+      hardcoded-fast-path (specializes KERNELS for known configs — not
+      predicate drift), vendor-batched-gemm-contiguity-staging (external
+      library's internal path chosen by LAYOUT — host fix is contiguization;
+      here OUR predicate vs OUR kernel, fix is predicate re-alignment),
+      aliased-slot-allocate-replace-fallback (a semantically WRONG fallback
+      vs a merely-slower one), gate-prep-fold capability gate (loud REJECT on
+      incapable backends — the inverse direction). Landing gated behind B102
+      (kernel_opt corpus contention) with the NAX rule-1 lead.
+    - **(3) `bbf8a7a` #4380 — B100 rider ENRICHMENT recorded** (folds at the
+      next B100 touch beside the NAX rule-2 instance): the 2-pass GQA decode
+      kernel adds gqa 12/16 instantiations (table: 64/g8/hpt8, 128/g8/hpt4,
+      128/g12/hpt4, 128/g16/hpt2) — hpt FALLS as the GQA factor rises, the
+      register-budget trade in the exact B100 direction, a SECOND external
+      instance beside the NAX hd-256 dsplit. Dispatcher predicate generalized
+      to `gqa_dims` (g8×{64,128} ∪ {g12,g16}×128); the 2-pass ELIGIBILITY
+      length threshold is unchanged at KV ≥ 8192 — boundary note: MLX's 2-pass
+      vector kernel pays only at 8K while our split-K flash decode fires >512
+      (Bench 831) — DIFFERENT kernel families (their single-pass vector baseline
+      vs our gated flash split), not a contradiction, do not cite as one. Our
+      GQA factor is fixed so the g-axis does not bind for Bonsai — recorded as
+      threshold data only.
+    - **Watch pin + tooling note (same unit):** MLX origin/main re-verified ==
+      `90846ad`, zero new movement since the recorded watch tip; the box's
+      clone checkout sits behind-14 stale (local HEAD `c899c5a`) — refreshed at
+      mine time per the `.raw` discipline, not by this read-only unit.
+      Extraction-tooling: `git grep <rev> -- <wrong-path-prefix>` returns EMPTY
+      exit-1 — indistinguishable from `absent at this rev` (this session first
+      mis-read the NAX kernel as mask-less via a `metal/steel/...` vs
+      `metal/kernels/steel/...` path slip; `git show <rev> --stat=200` prints
+      full paths and is the disambiguator — the same silent-empty class the
+      multi-root workspace grep warns about).
   - **LANDED 2026-09-02 (Batch 97, Research 117 addendum / Plan 063): antirez/ds4
     (DwarfStar) distill — 9 rules, corpus 426 → 435 (N+1 E+2 C+2 H+1 M+1 A+1 F+1).**
     Pin `110afdd8`; quotes re-verified byte-accurate; provenance vs upstream
