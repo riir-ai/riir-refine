@@ -62,6 +62,19 @@
   configs count-identical; shared-checkout discipline held — exactly 13
   files committed while the sibling's 16 uncommitted files stayed out via
   explicit-path `git add`). Full record: P8 ADOPTION WAVE 2 below.
+- **2026-09-03 (4090 box, while B102 FlashQuant runs in a sibling lane): Protocol B
+  heal sweep of riir-dapps/src — the repo was NEVER swept (created 08-20, postdates
+  the Aug campaign; P8 wave recorded only "zero hits" there).** 16 edit sites / 23
+  placeholder edits in src/kat/{crank,payreq}.rs (15 `use_self` — the Batch-89 rule's
+  first live workspace yield — + 1 `match_bool` guard-free 2-arm). riir-dapps ff'd
+  3eacd6c→5a55048 first (issue 010/011 hygiene + kat/ compose work landed upstream).
+  Validation: dapps `cargo clippy --all-targets` 0 warnings + lib 25/25 + gated
+  integration 25/25 (`kat_payments,kat_payreq,kat_staking` — the 4 kat test binaries
+  are inner-`#![cfg(feature)]`-gated; default run shows "0 passed", the empty-binary
+  class). Landed `b7f1fbe`, pushed. Zero residue post-heal; no proposer divergence
+  surfaced (use_self + match_bool both first-shot correct). The `.plans/070` sibling
+  plan (untracked, B102 IN FLIGHT) respected — kernel_opt corpus, AGENTS.md kernel
+  lines, and the NAX/LDG/riders queue items all left untouched this cycle.
 - **Next executable (cadence-gated):**
   - **~~Batch 99 candidate (queued 2026-09-02, Plan 067 / Research 119): wasmi v2.0 blog~~
     LANDED 2026-09-02** (see Last landed). Dual verdict consumed: the same source TRIGGERED
