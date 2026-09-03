@@ -110,6 +110,21 @@
     the hoist win may be aarch64-shaped). Batch 99's own split-vs-merged negative control (0.95-1.00x on
     runtime-opaque targets) does NOT cover this transform: splitting re-merges structurally on aarch64,
     but the hoist still wins by eliminating the load.
+  - **Queued behind B102 (filed 2026-09-03, Plan 072 / Research 122): youssofal/MTPLX
+    PR #391 (davidtai Qwen3.8-Flash-Next restack) — W87-led kernel_opt batch, 2–3 rules
+    + riders.** Verdict: YES grade B as a mining source, MARGINAL for prefill throughput —
+    every retained prefill lever is HAVE / refuted / no-analog in-stack (Bench 805 mask-fuse
+    twin, Bench 710 wider-chunk refuted, Issue 734 GDN-chunked negative, Issue 742 prefix
+    cache). Candidates: `shape-class-keyed-capability` (A− lead — a one-shape capability
+    refusal disarmed the flag process-wide; key by the full shape tuple, re-ask per call),
+    `wavefront-overlap-pair-ceiling` (B — 2×2 wavefront ⇒ 1 pair ⇒ 19.2% ceiling vs the
+    15% gate), `request-shape-decline-mirror-completeness` (B — the fast path mirrors
+    every request-dependent decline branch; two HTTP-500 outages); W67 graph-build
+    overlap evaluate-then-likely-drop. Pin `ef96313…` (fork davidtai/MTPLX-1, Apache-2.0,
+    unmerged; re-pin at T0). MAY COMBINE with the queued NAX
+    `dispatcher-eligibility-predicate-lags-kernel-capability` lead into ONE post-B102
+    kernel batch (one corpus cycle, one GOAT run, one count-pin walk) — decision at
+    batch start, default COMBINE.
   - **The arxiv pool re-walk #4: DONE 2026-09-02 ~07:15 +07** (`.research/113` — covered
     the Tuesday-09-01 announcement window; zero corpus delta; the spec-dec lane woke up:
     DBloom's ceiling-bin acceptance histogram (zero-cost telemetry adoption candidate for
@@ -519,7 +534,11 @@
   current `.highwater`=70 is already the correct next-free state; do NOT take a
   number AT highwater, the 848 lesson) + grep-fix any live refs to "Plan 070"/"070_"
   inside the file. The number is not taken by another session here — this note is
-  the flag; do not commit through the duplicate name.
+  the flag; do not commit through the duplicate name. **UPDATE 2026-09-03 (verdict-filing
+  session): `.plans/.highwater` now reads 72 — Plan 072 allocated to the MTPLX PR391
+  batch (Plan 072 / Research 122, committed). 071 stays RESERVED for the flashquant
+  renumber per the flag above; a renumber write-back must be max(current-highwater, 71)
+  so the bump never regresses (the Bench-675 class).**
 - **Owner-gated tails:** `.issues/044` (paging secrets `ALERT_WEBHOOK_URL` +
   `MONTHLY_BUDGET_USD`), `.issues/045` (T7 launchctl activation) — verified 08-31.
 - **Queue items 6/7** (boundary-guard + substrate-first drift audit): last run 08-29,
