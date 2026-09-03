@@ -553,6 +553,31 @@
   highwater 72). Active siblings probed before the unit: riir-neuron-db UNCOMMITTED WIP
   (avoid), riir-chain last touched 21:52 same evening (defer its re-sweep to a quieter
   cycle — 3 weeks of post-campaign code incl. the closed 031/032 territory is still owed).
+- **2026-09-03 night (idle cycle 3, M3 — four units, all pushed):**
+  (1) **riir-train Issue 507 LANDED `e0716476`** — the repo's rust.yml compiled 15,147
+  `#[test]` sites and executed none; new parallel `tests` job runs
+  `scripts/test_gate.sh` (engine `--lib` default features, per-target FLOORS firing
+  downward only — floor 1487 = the committed-HEAD measurement, strict single-result-line
+  parse, `--test-threads=2` for the bench_transfer_overhead load-flake, `--canary`
+  proven both directions: normal PASS 1498, canary FAIL via the floor branch). NOT
+  covered, named: riir-train-gpu (1,669 GPU-bound), integration targets (277/487
+  required-features), examples/benches. Guard stays compile-only by design. Issue file
+  removed (noise-reduction); record in riir-train AGENTS.md + the workflow/script
+  headers. NOTE: the tests job inherits the guard's SIBLING_REPOS_TOKEN loud-fail until
+  the owner provisions it (P18).
+  (2) **riir-deployer first-ever heal sweep `7a091db`** — 24 edits / 6 files (use_self
+  x12, match_bool x5, + uninlined/vec-capacity/map_unwrap_or/single_match_else/
+  shrink-to-fit); clippy 0 + 178/0 tests. (3) **riir-game-sdk heal sweep `fff904f`** —
+  18 edits / 5 files; 3 targets inner-`#![cfg]`-gated → feature-aware validation (prod_e2e
+  + game_e2e compile+run); sibling WIP arrived MID-UNIT (Cargo.lock + orchard demo dirty
+  at commit time) → named-path staging held, theirs excluded. (4) **riir-chain re-sweep:
+  the "still owed" note above is STALE — measured 0 proposable edits / 459 files** (a
+  sibling discharged it in-window; dockerfile lines are the ledger-pinned declines).
+  riir-auth scanned clean (0/17); riir-viewbridge PARKED (Proposal 001 D1/D3 — skip
+  sweeps of parked repos, the CI gate is the rot check). Contended and skipped: katgpt-rs
+  (717-719 agent), riir-ai (854-858 agent), mmorpg (092/094 agents), neuron-db (dirty),
+  seal-remake (fps agent), 4090 (NoRA + Plan-371 + B102). kernel_opt mining stays gated
+  behind sibling B102; B101 x86 re-gate armed on the 4090 window.
 - **Hygiene:** current after this entry. `.issues/` = 059/060/061 (owner/ops/legal-gated)
   only; plans tree 0 unchecked (069 closed 2026-09-03).
 
