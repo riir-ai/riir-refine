@@ -48,7 +48,7 @@ fn main() {
             counted, *expected,
             "git truth for {day} (rev {rev}) is {counted}, table says {expected} — fix the table"
         );
-        let (store, _bad) = TrajStore::open(&repo.to_path_buf()).expect("open store");
+        let (store, _bad) = TrajStore::open(repo).expect("open store");
         store
             .upsert_corpus_count(day, "docker", *expected, true, "repair-066")
             .unwrap_or_else(|e| panic!("upsert {day}: {e}"));
