@@ -127,12 +127,14 @@ impl CheckRunner {
         let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
         if !output.status.success() && !stdout.lines().any(is_json_line) {
             // cargo itself failed without emitting JSON (bad args, broken
-            // manifest) — surface stderr.
+            // manifest, workspace-belief refusal) — surface stderr, with
+            // the workspace-exclusion diagnosis appended when the
+            // signature matches.
             let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
-            return Err(format!(
-                "cargo check failed to run in {}: {}",
-                pkg.display(),
-                first_meaningful_line(&stderr)
+            return Err(enrich_cargo_run_error(
+                "cargo check",
+                pkg,
+                &first_meaningful_line(&stderr),
             ));
         }
         Ok(CheckOutcome {
@@ -178,12 +180,14 @@ impl CheckRunner {
         let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
         if !stdout.lines().any(is_json_line) {
             // cargo itself failed without emitting JSON (bad args, broken
-            // manifest) — surface stderr.
+            // manifest, workspace-belief refusal) — surface stderr, with
+            // the workspace-exclusion diagnosis appended when the
+            // signature matches.
             let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
-            return Err(format!(
-                "cargo clippy failed to run in {}: {}",
-                pkg.display(),
-                first_meaningful_line(&stderr)
+            return Err(enrich_cargo_run_error(
+                "cargo clippy",
+                pkg,
+                &first_meaningful_line(&stderr),
             ));
         }
         Ok(CheckOutcome {
@@ -253,6 +257,67 @@ fn manifest_declares_workspace(text: &str) -> bool {
         .any(|l| l.trim_start().starts_with("[workspace"))
 }
 
+/// Diagnose the cargo "current package believes it's in a workspace when
+/// it's not" refusal for `pkg`: the owning manifest has NO `[workspace]`
+/// table but some ancestor manifest DOES — so cargo adopted the ancestor's
+/// workspace, and that workspace does not list `pkg` as a member (or lists
+/// it under a glob `exclude`). Returns the root cause + remedy, or `None`
+/// when the shape does not apply (`pkg` self-roots, or no enclosing
+/// workspace exists — the ordinary standalone case).
+///
+/// Membership itself is NOT parsed (ancestor `members` lists accept globs,
+/// and a false "you are excluded" would be worse than none) — this is the
+/// precondition set of the refusal, surfaced with the fix that resolves
+/// every instance of it. The container-tick-test incident (2026-09-04,
+/// mmorpg `bd4a4f2` follow-up): the whole `--verify` batch auto-reverted
+/// on this error with only cargo's one-line stderr to go on.
+#[must_use]
+pub fn workspace_belief_cause(pkg: &Path) -> Option<String> {
+    let manifest = pkg.join("Cargo.toml");
+    let text = std::fs::read_to_string(&manifest).ok()?;
+    if manifest_declares_workspace(&text) {
+        return None; // self-rooting — cargo never walks above it
+    }
+    let mut dir = pkg.parent()?.to_path_buf();
+    loop {
+        let ancestor = dir.join("Cargo.toml");
+        if ancestor.is_file() {
+            if let Ok(ancestor_text) = std::fs::read_to_string(&ancestor) {
+                if manifest_declares_workspace(&ancestor_text) {
+                    return Some(format!(
+                        "cargo refused because {} has no [workspace] table while the \
+                         enclosing workspace at {} does not list it as a member — add an \
+                         empty `[workspace]` table to {} (the self-rooting precedent), or \
+                         run the pass scoped to that crate root",
+                        manifest.display(),
+                        ancestor.display(),
+                        manifest.display(),
+                    ));
+                }
+            }
+        }
+        if !dir.pop() {
+            return None;
+        }
+    }
+}
+
+/// Enrich a cargo spawn/run failure with the workspace-belief diagnosis
+/// when the stderr matches cargo's signature line; otherwise the message
+/// passes through unchanged. Shared by [`CheckRunner::run_check`] and
+/// [`CheckRunner::run_clippy`] — both fail this way on the same shape.
+fn enrich_cargo_run_error(label: &str, pkg: &Path, stderr_first: &str) -> String {
+    let base = format!("{label} failed to run in {}: {stderr_first}", pkg.display());
+    if stderr_first.contains("believes it's in a workspace") {
+        match workspace_belief_cause(pkg) {
+            Some(cause) => format!("{base}; {cause}"),
+            None => base,
+        }
+    } else {
+        base
+    }
+}
+
 /// Resolve a rustc-reported file name to an on-disk path. rustc reports
 /// workspace-RELATIVE paths (`crates/foo/src/lib.rs`); try the workspace
 /// root first, then the package root, and canonicalize whichever exists.
@@ -293,6 +358,83 @@ mod tests {
         assert_eq!(
             workspace_root(&pkg).as_deref(),
             Some(tmp.join("ws").as_path())
+        );
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// The container-tick-test shape: a memberless nested crate under a
+    /// parent workspace. The precondition set of cargo's "believes it's in
+    /// a workspace" refusal — the cause must name both manifests + the
+    /// remedy. Negative controls: self-rooting manifest + plain standalone
+    /// (no ancestor workspace) both return `None`.
+    #[test]
+    fn workspace_belief_cause_names_the_excluded_nested_crate() {
+        let tmp =
+            std::env::temp_dir().join(format!("co_ws_belief_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+
+        // Positive: nested crate WITHOUT [workspace] under a parent WITH one.
+        let nested = tmp.join("parent").join("cloudflare").join("tick");
+        std::fs::create_dir_all(&nested).unwrap();
+        std::fs::write(
+            tmp.join("parent").join("Cargo.toml"),
+            "[workspace]\nmembers = [\"crates/*\"]\n",
+        )
+        .unwrap();
+        std::fs::write(nested.join("Cargo.toml"), "[package]\nname = \"tick\"\n").unwrap();
+        let cause = workspace_belief_cause(&nested).expect("cause for the nested shape");
+        assert!(cause.contains("tick"), "names the nested manifest: {cause}");
+        assert!(
+            cause.contains("[workspace] table"),
+            "states the remedy: {cause}"
+        );
+
+        // Negative: self-rooting manifest — cargo never walks above it.
+        std::fs::write(
+            nested.join("Cargo.toml"),
+            "[package]\nname = \"tick\"\n\n[workspace]\n",
+        )
+        .unwrap();
+        assert!(workspace_belief_cause(&nested).is_none(), "self-rooted");
+
+        // Negative: no ancestor workspace at all (plain standalone).
+        let plain = tmp.join("plain");
+        std::fs::create_dir_all(&plain).unwrap();
+        std::fs::write(plain.join("Cargo.toml"), "[package]\nname = \"p\"\n").unwrap();
+        assert!(workspace_belief_cause(&plain).is_none(), "no ancestor");
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// The enrichment only fires on cargo's signature line; unrelated
+    /// spawn failures pass through byte-identical.
+    #[test]
+    fn enrich_cargo_run_error_matches_the_signature_only() {
+        let tmp = std::env::temp_dir().join(format!("co_ws_enrich_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let nested = tmp.join("parent").join("nested");
+        std::fs::create_dir_all(&nested).unwrap();
+        std::fs::write(
+            tmp.join("parent").join("Cargo.toml"),
+            "[workspace]\nmembers = []\n",
+        )
+        .unwrap();
+        std::fs::write(nested.join("Cargo.toml"), "[package]\nname = \"n\"\n").unwrap();
+
+        let sig = "current package believes it's in a workspace when it's not";
+        let enriched = enrich_cargo_run_error("cargo check", &nested, sig);
+        assert!(enriched.contains("cargo check failed to run in"), "{enriched}");
+        assert!(enriched.contains(sig), "keeps the original line: {enriched}");
+        assert!(enriched.contains("[workspace] table"), "adds the remedy");
+
+        let other = "no such subcommand: `chek`";
+        assert_eq!(
+            enrich_cargo_run_error("cargo check", &nested, other),
+            format!(
+                "cargo check failed to run in {}: {other}",
+                nested.display()
+            ),
+            "unrelated errors unchanged"
         );
         let _ = std::fs::remove_dir_all(&tmp);
     }

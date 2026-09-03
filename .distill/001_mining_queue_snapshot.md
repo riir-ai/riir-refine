@@ -338,7 +338,15 @@
     cannot handle standalone-workspace-inside-repo layouts** (it ran the parent-context
     cargo check over the excluded crate and reverted the whole first batch) — heal the
     standalone crates in a SECOND scoped pass after their roots resolve; noted as
-    tooling follow-up. **build.rs map_or terminal-fix recurred** (the Unknown-receiver
+    tooling follow-up **— ROOT-CAUSE DIAGNOSTIC LANDED next cycle (this repo, lib test
+    1035/0): `compile_oracle::workspace_belief_cause` + `enrich_cargo_run_error`** —
+    when cargo's "believes it's in a workspace" signature line fails a baseline/loop
+    check, the error now names the memberless nested manifest + the enclosing workspace
+    + the self-rooting remedy (wired into BOTH CheckRunner::run_check and ::run_clippy;
+    membership itself deliberately NOT parsed — ancestor members lists accept globs, a
+    false "you are excluded" would be worse than none). 2 unit fixtures + e2e
+    `fix_verify_e2e_workspace_belief_refusal_names_the_remedy` (real cargo temp layout:
+    fail-closed BEFORE any write + enriched message). **build.rs map_or terminal-fix recurred** (the Unknown-receiver
     call-expr conservative emission — `git_out(..).map_or(false, |s| ..)` →
     is_some_and by hand) — **ROOT CAUSE FIXED same cycle, riir-clippy `609d7267`:
     map_unwrap_or same-file fn-signature resolution** — Collector fn_rets map

@@ -1026,6 +1026,65 @@ mod tests {
         let _ = std::fs::remove_dir_all(&tmp);
     }
 
+    /// The workspace-belief e2e (the container-tick-test incident, 09-04):
+    /// a nested crate WITHOUT a [workspace] table under a parent workspace
+    /// that does not list it. The baseline `cargo check` must fail-closed
+    /// (nothing written, no edits applied) and the error must carry the
+    /// enriched diagnosis — cargo's signature line + the root cause + the
+    /// self-rooting remedy — not just the one-line stderr the incident
+    /// left us with. Runs real cargo → `#[ignore]`d like the acceptance
+    /// fixture above.
+    #[test]
+    #[ignore = "spawns cargo (seconds); run explicitly for the workspace-belief proof"]
+    fn fix_verify_e2e_workspace_belief_refusal_names_the_remedy() {
+        let tmp = std::env::temp_dir().join(format!("fv_e2e_wsb_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+
+        // Parent workspace (empty members is legal) + a nested standalone
+        // crate WITHOUT [workspace] — cargo walks up from the nested cwd,
+        // adopts the parent workspace, and refuses.
+        let nested = tmp.join("cloudflare").join("tick");
+        std::fs::create_dir_all(nested.join("src")).unwrap();
+        std::fs::write(
+            tmp.join("Cargo.toml"),
+            "[workspace]\nmembers = []\n",
+        )
+        .unwrap();
+        std::fs::write(
+            nested.join("Cargo.toml"),
+            "[package]\nname = \"tick\"\nversion = \"0.0.0\"\nedition = \"2021\"\n",
+        )
+        .unwrap();
+        let original = "pub fn f(n: usize) -> Vec<u32> {\n    let mut v = Vec::new();\n    v\n}\n";
+        std::fs::write(nested.join("src").join("lib.rs"), original).unwrap();
+
+        let fixed = original.replace("Vec::new();", "Vec::with_capacity(n);");
+        let set = FileEditSet {
+            path: nested.join("src").join("lib.rs"),
+            original: original.to_string(),
+            fixed,
+            edits: vec![EditAtLine {
+                rule_id: "vec-with-capacity".to_string(),
+                final_line: 2,
+                replacement: "Vec::with_capacity(n)".to_string(),
+                restore: "Vec::new()".to_string(),
+            }],
+        };
+        let report = FixVerifier::new().verify(&[set]);
+        assert!(report.ran, "verifier ran");
+        let err = report.error.as_deref().expect("workspace refusal surfaces");
+        assert!(
+            err.contains("believes it's in a workspace"),
+            "keeps cargo's signature: {err}"
+        );
+        assert!(err.contains("[workspace] table"), "names the remedy: {err}");
+        assert!(!report.baseline_clean, "baseline never passed");
+        // Fail-closed BEFORE any write: disk still holds the original.
+        let on_disk = std::fs::read_to_string(nested.join("src").join("lib.rs")).unwrap();
+        assert_eq!(on_disk, original, "nothing written on a refused baseline");
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
     // ── 037-T2: lint-resolution oracle parsing + verdict matrix ─────────
 
     #[test]
