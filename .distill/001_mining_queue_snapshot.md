@@ -304,6 +304,22 @@
     submittedDate range filter returns 0 through both encodings — walks go via
     `curl` + unbounded lane fetch + local `<published>` window filtering.
   - **09-15 MCP search quota reset** → online perf-search pool walk (queue item 11).
+  - **2026-09-04 (M3, idle unit): Protocol B sweep of seal-remake — the repo was NEVER
+    swept (created 09-01).** Zero own-crate findings: `cargo clippy --workspace
+    --all-targets` clean (isolated /tmp target; the only warnings are the sibling
+    katgpt-rs lib's known `logit_scratch` + riir-viewbridge-core build-script info
+    lines — the landing sessions' gate discipline held). Nothing to heal; no commit.
+  - **2026-09-04 (M3, idle unit): riir-ai Issue 866 FIXED** — the perf-rematch
+    contention detector's two inline basename allowlists missed released cargo
+    examples (digit_ood_eval held the M3 GPU 29 min while the gates read quiet).
+    Fixed riir-ai `acd443b9a`: committed vocabulary file (contender_names.txt, 19
+    patterns, empty=hard-refusal, floor pinned) + resource arm (≥80% CPU AND ≥2 GiB
+    RSS, RIIR_CONTAM_* knobs, Darwin/Linux) + legible negative ([scan-stats],
+    enforce_midrun tag contract pinned) + 32-assertion fixture selftest
+    (perf_rematch_detector_selftest.sh) + en-route wrapper/VAR= interleave normalizer
+    fix. Validated LIVE first-run: caught digit_ood_eval in the wild (589 scanned, 21
+    matched, gate refused, both arms). Issue file removed at close; durable note in
+    the league doc rule 4.
   - **Batch 94 (LANDED 2026-09-01, Plan 058 / Research 112): oMLX PR #3260
     expert-streaming distill CONSUMED** — 8 kernel_opt D + 1 rust_perf io +
     3 riders (B63 4th member, B71 producer complement, B84 routing member);
