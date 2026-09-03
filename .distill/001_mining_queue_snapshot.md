@@ -320,6 +320,32 @@
     fix. Validated LIVE first-run: caught digit_ood_eval in the wild (589 scanned, 21
     matched, gate refused, both arms). Issue file removed at close; durable note in
     the league doc rule 4.
+  - **2026-09-04 (M3, idle cycle 7, unit 1 — hygiene): katgpt-rs Issue 717 file
+    REMOVED** (`0187b384`) — status CLOSED 09-03, record `.benchmarks/699_lt2_deep_loop_
+    stability.md` carries T7-defer + Plan-373 contingency; zero external refs to the
+    issue path. katgpt-rs issues re-triaged: 718 (T3 owner cost call), 719 (T2-T4
+    trigger-gated), 721 (T3 owner sequencing) all gated; chain 095 (multi-repo
+    extraction, unclaimed), 101 (constraint note), 110 (needs ESP32 silicon) not
+    idle-loop units.
+  - **2026-09-04 (M3, idle cycle 7, unit 2 — mmorpg re-sweep with the post-Batch-90
+    fixable set, mmorpg `bd4a4f2`): 54+3 edits / 17 files** — first re-sweep of the
+    08-28-swept repo under the new rules (use_self/manual_let_else/items_after_
+    statements); yield = items x6 + manual_let_else x4 + match_bool x2 + map_unwrap_or
+    x3 + uninlined bulk; chain/dao/auth/viewbridge dry-runs all ZERO (their fixpoint
+    holds). **Drive-by: container-tick-test was UNBUILDABLE** — no [workspace] table +
+    not a parent member → every cargo command refused ("believes it's in a workspace");
+    fixed with the warm-tier-do self-rooting precedent. **The healer's verify gate
+    cannot handle standalone-workspace-inside-repo layouts** (it ran the parent-context
+    cargo check over the excluded crate and reverted the whole first batch) — heal the
+    standalone crates in a SECOND scoped pass after their roots resolve; noted as
+    tooling follow-up. **build.rs map_or terminal-fix recurred** (the Unknown-receiver
+    call-expr conservative emission — `git_out(..).map_or(false, |s| ..)` →
+    is_some_and by hand): the closure-bool/call-expr receiver extension stays the
+    top post-mining backlog item. Validation: default lib 441/0, e2e_topology 12/0,
+    warm_tier_e2e 3/0, bench_remote_smoothing 8/0, bench_game_sync 2/0/2i, taming 2/0
+    + hero_fsm 1/0 (bevy_backend), out_of_box 1/0 (scenario_runner,social_signals,
+    pet_pvp), duo 18/0 release (+scenario_runner), warm-tier-do contract 4/0,
+    clippy 0 own-crate both states.
   - **Batch 94 (LANDED 2026-09-01, Plan 058 / Research 112): oMLX PR #3260
     expert-streaming distill CONSUMED** — 8 kernel_opt D + 1 rust_perf io +
     3 riders (B63 4th member, B71 producer complement, B84 routing member);
