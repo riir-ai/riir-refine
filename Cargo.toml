@@ -469,6 +469,17 @@ required-features = ["rustc_errors"]
 name = "wgsl_mine"
 required-features = ["kernel_heal"]
 
+# Issue 066 T3: the ONE-SHOT store repair for the poisoned docker corpus rows
+# (first-hand source-walk stamps carrying the old plumbing count 2 against
+# true 27..31 — import-series correctly yields to them, so the dated upsert
+# is the only sanctioned writer). Run ONCE, git-verified values, honest
+# `repair-066` provenance:
+#   cargo run --release --features latent_retrieval,rust_perf,clippy_lints \
+#     --example repair_066_corpus_store
+[[example]]
+name = "repair_066_corpus_store"
+required-features = ["latent_retrieval"]
+
 [[example]]
 name = "ruliology_search_demo"
 required-features = ["ruliology_search"]
