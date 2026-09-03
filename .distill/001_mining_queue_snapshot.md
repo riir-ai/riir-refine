@@ -541,8 +541,10 @@
   so the bump never regresses (the Bench-675 class).**
 - **Owner-gated tails:** `.issues/044` (paging secrets `ALERT_WEBHOOK_URL` +
   `MONTHLY_BUDGET_USD`), `.issues/045` (T7 launchctl activation) — verified 08-31.
-- **Queue items 6/7** (boundary-guard + substrate-first drift audit): last run 08-29,
-  quarterly — not due until ~11-29.
+- **Queue items 6/7** (boundary-guard + substrate-first drift audit): last full run 08-29,
+  quarterly — item 6 re-run OFF-CADENCE 2026-09-04 early (see the idle-cycle-4 entry: the
+  19→16 owner move needed a fresh contract measurement + the SP5 phase was found unable to
+  complete on a loaded box); item 7 stays at 08-29, due ~11-29.
 - **2026-09-03 late (idle cycle 2, M3):** P18 verification sweep DONE (see the P18 row —
   all rust.yml full-guard on default branch; token missing on train/mmorpg/seal-remake,
   owner act); Issue 062 closed-negative + removed (`3e12635`, AGENTS.md record); plan 069
@@ -578,6 +580,28 @@
   (717-719 agent), riir-ai (854-858 agent), mmorpg (092/094 agents), neuron-db (dirty),
   seal-remake (fps agent), 4090 (NoRA + Plan-371 + B102). kernel_opt mining stays gated
   behind sibling B102; B101 x86 re-gate armed on the 4090 window.
+- **2026-09-04 early (idle cycle 4, M3 — boundary-contract unit + burner top-up):**
+  (1) **Queue item 6 OFF-CADENCE re-run, and the gate could not previously complete on this
+  box:** the contract script's SP5 phase walks 8 repos' manifests with
+  `find -not -path '*/target/*'` — which FILTERS but still DESCENDS into every target tree
+  (measured standalone: katgpt-rs alone 3m42s under build load, riir-train 43s) — two runs
+  exceeded a 10-min timeout while healthy and read as hangs (the 862 collision note's
+  line-621 death was a sibling session hitting this file mid-edit; crossfire documented both
+  sides). Fixed in riir-ai: prune form + a **zero-scan hard guard** (a scan returning zero
+  Cargo.toml for a Rust repo = hard error, never the vacuous green — the over-escaped
+  predicate intermediate demonstrated that shape LIVE: 8 find syntax errors, zero rows, both
+  SP5 gates ok). Canary: zero-manifest contract repo fires hard exit 2; full workspace run
+  green in 35 s. **Edge count RE-MEASURED: 224 edges / 16 repos, contract clean exit 0** —
+  the 862 issue's "currently unmeasured" record closed in its addendum. Landed riir-ai
+  `3ae41bc83` via the detached-worktree push dance (main checkout carried sibling WIP + was
+  diverged; patch-id dedup will collapse the local twin `18180d322` on the next rebase).
+  (2) **riir-burner top-up `8c2ab9a`** — 2 semicolon_if_nothing_returned in pipeline.rs
+  (missed by the 23:43 sweep; compile-gated, 2 Certified, clippy 0, 19 tests) — landed
+  minutes before the owner's 19→16 move moved the repo to `obsolete/` (work preserved; the
+  AGENTS.md lineage note now names it). (3) viewbridge re-dry-run post-`143aceb` = 0 edits
+  (fully clean); riir-dapps confirmed already discharged by its finder (`d91881f` manual +
+  `2b9cce9` post-fix re-heal). Contended/skipped: game-sdk (sibling WIP dirty), all other
+  active-lane repos per the sibling-lanes note.
 - **Hygiene:** current after this entry. `.issues/` = 059/060/061 (owner/ops/legal-gated)
   only; plans tree 0 unchecked (069 closed 2026-09-03).
 
