@@ -338,11 +338,39 @@
     for what gated the fallback); (2) `685dba9` #4431 — `sdpa_vector_2pass_1_gqa`
     batch-offset fix for K/V in GQA decode — cross-check target for OUR split-K
     decode pair (Bench 831 `QwenAttentionDecodeGatedSplit{,Combine}`, G1 0/512 flips;
-    their bug class = per-batch K/V offset in the 2-pass split — verify our combine
-    indexing is offset-clean by inspection); (3) `bbf8a7a` #4380 — widens the 2-pass
+    their bug class = per-batch K/V offset in the 2-pass split — **VERIFIED CLEAN
+    2026-09-03 (4090 box, read-only inspection unit, zero-contention while the
+    Plan-371 window runs)**: our pair has NO batch axis (single-token decode —
+    query `n_head*head_dim`, KV `n_positions*n_kv_head*head_dim`; sequences never
+    share a buffer with an implicit batch stride), so MLX's bug dimension is
+    structurally absent. The analogous axes all check out by inspection of
+    `qwen_attention_cubecl.rs` (f32 split L948-1151, f16 split L1459-1688,
+    combine L1160-1218, geometry L922-927) + the caller
+    (`ternary_deltanet_gpu_forward.rs` L2387-2393 alloc, L4265-4300 launches):
+    (a) GQA per-head K/V offset `kv_group = head_idx*n_kv_head/n_head` at
+    `pos*kv_stride + kv_off + d` correct in BOTH twins (f16 word twins
+    `kv_stride_words`/`kv_off_words` exact under the even-head_dim contract);
+    (b) per-split position ranges disjoint + complete — hd-aligned split_len
+    (`split_decode_geometry`), split i owns `[i*split_len, min(+split_len, n_pos))`,
+    first_tile division exact, over-dispatched splits write EMPTY partials
+    (m=-1e30/l=0/out=0 → w=0 in the merge; the stale-byte×NaN hazard guarded by
+    design comment); (c) split↔combine partials layout identical
+    `(head*n_splits+split)*(hd+2)`, BOTH launches take n_splits from the SAME
+    geometry call, `new()` allocation uses the same 64-split cap (monotone-superior
+    to any per-call n_splits; every combine read is written by the same call's
+    split launch — no stale cross-call reads); (d) f16 K-dot q↔word pairing + V
+    dim-pair ownership verified element-by-element, per-dim summation order
+    matches f32. Boundary notes (NOT bugs): hd ≤ 256 is the family-wide smem
+    ceiling (all 6 attention kernels allocate 256-float smem; tree/prefill kernels
+    document it in comments, decode kernels imply it) — a future hd>256 model would
+    OOB-write smem, pin with a debug_assert if such a model ever lands;
+    `split_decode_geometry(0, ..)` would div-by-zero (unreachable — decode always
+    has ≥1 position).; (3) `bbf8a7a` #4380 — widens the 2-pass
     GQA decode kernel to GQA sizes 12/16 (threshold data for when split-K pays —
-    ours fires >512 pos regardless of GQA). Not yet mined; low-priority leads (our
-    decode lane is league-defended, prefill is the open prize).
+    ours fires >512 pos regardless of GQA). Leads (1)/(3) remain not-yet-mined,
+    low-priority (our decode lane is league-defended, prefill is the open prize);
+    lead (2) DISCHARGED as the verification above — verdict CLEAN, no corpus
+    delta, no issue filed.
   - **LANDED 2026-09-02 (Batch 97, Research 117 addendum / Plan 063): antirez/ds4
     (DwarfStar) distill — 9 rules, corpus 426 → 435 (N+1 E+2 C+2 H+1 M+1 A+1 F+1).**
     Pin `110afdd8`; quotes re-verified byte-accurate; provenance vs upstream
