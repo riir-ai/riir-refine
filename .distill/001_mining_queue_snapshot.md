@@ -223,6 +223,57 @@
     M5+/A19+ (next-silicon external confirmation of the matrix-core-attention family
     note in Issue 831's disposition) + `2a74817f9` top-k radix (sampling path, not our
     hot loop).
+  - **VERDICT 2026-09-03 (this session — the 846 deferred intake, kernel-reading
+    extraction from `../vendor/mlx` @ f99e916; the riir-ai 844 reading extract's
+    two candidate rules verified against the ACTUAL kernel bodies at
+    `steel/attn/kernels/steel_attention_nax.h` 907 lines, full read):**
+    - **Candidate rule 1 — causal-shadowed padding read for tile alignment
+      (`has_backing_rows`): CONFIRMED NOVEL, kernel-grade, corpus-worthy.** The
+      orchestrator-level reading held: kL widens to the next bk multiple IFF the
+      K/V slices provably back the padded rows (negative-stride reject + row-pitch
+      containment `row0 + rows <= pitch` + buffer-bounds end check); padded rows
+      sit beyond every query's causal horizon (`qL_off = kL − qL` preserves the
+      true diagonal), garbage reads are shadowed by the causal mask, and the
+      ragged-tail masked-store branch is DELETED for the common chunked-KV-cache
+      shape. Dedup verified: `has_backing_rows`-style backing-provenance is
+      ABSENT from the corpus (B84 pad-tail PADS THE DATA via a scratch copy +
+      strip-before-stateful-consumer — a different mechanism entirely: data-side
+      padding with a crossover tuner vs extent-side widening with read-provenance
+      proof and NO data movement; B17 clamp+discard keeps the guard; B100
+      early-return derives extent from row metadata — none carry "prove the rows
+      exist behind the slice, then read past the logical extent under causal
+      shadow"). The provenance check itself (stride sanity + pitch containment +
+      buffer end) is portable to ANY engine whose KV slices view a ring/cache
+      allocation. Proposed id: `backing-provenance-causal-shadowed-extent-widen`.
+    - **Candidate rule 2 — hd-256 head-dim split (`attention_nax_dsplit`):
+      CONFIRMED as the B100 external-confirmation instance** (`register-budget-
+      head-split-gqa-reread-trade`), exactly as the 844 extract predicted —
+      split the head dim across WN=2 simdgroups of the second warp dimension,
+      halving the accumulator set, K/V re-read per half, redundant-per-half
+      softmax with ONE smem exchange of the partial Q@K.T fragment pairs
+      (`s_xchg[WM][WN][2*kEPF*32]`, both halves share the frag-to-lane mapping
+      so the exchange needs no coordinate math). Fold as an instance/rider at
+      the next B100 touch, not a new rule. Two EXTRA specifics worth pinning in
+      the fold: the Q-half register-residency for the whole KV loop
+      (`NAXTile<T,1,1> Qtiles[TDh]` hoisted OUT of the loop — the TDh fragments
+      are "cheap next to the accumulators"), and the exchange reducing EXACTLY
+      ONE peer so WN is structurally fixed at 2 (static_assert).
+    - **NAX-gating boundary re-verified live:** `use_fallback`'s widening branch
+      AND both NAX kernel routes require `metal::is_nax_available()` (M5-class
+      per-core neural accelerator) — absent on M3/M4, so the widening cannot
+      move our pinned M3 opponents at any version (the 0.32.2 reference stays
+      structurally unaffected; version-pinning applies to M5-class cells only).
+      ALSO unfused on M3: hd-256 falls to the decomposed path at seq > 8
+      (`return query_head_dim == 192 || query_head_dim == 256`), and the
+      non-NAX steel kernel's shape table tops out at bd=256 with bq32/bk16 —
+      never compiled for the Bonsai shape's fused use.
+    - **Disposition:** rule 1 QUEUED as a next-batch kernel_opt lead (batch
+      ~B102; needs fixtures + GOAT per standing discipline — the pseudocode is
+      host-side extent-widening + a provenance predicate, straightforward to
+      fixture); rule 2 = B100 rider (deferred to the next B100 touch); nothing
+      routes to the flash-vs-GEMM prize as a lever (NAX is hardware-unavailable
+      on M3 — the prize stays KV-traffic amortization per T1). The 846 handoff
+      item DISCHARGED at the reading level; fixtures own the rest.
   - **NEW 2026-09-02 late (MLX watch, `../vendor/mlx` 37c26e5 → 90846ad):** three
     Metal-kernel leads adjacent to our lanes: (1) `f99e916` #4416 — head-dim-256
     prefill with array mask now runs the FUSED kernel path (Bonsai IS hd=256 — read
