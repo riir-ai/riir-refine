@@ -103,6 +103,34 @@
     the verify-loop benches) + compressed draft-side KV (riir-train route) + a rigor-matched
     audit paper (measurement doctrine); two doctrine citations (G4/alloc budgets,
     modelless-first). **Next window 09-03+** (daily differential cadence; MCP quota 09-15).
+  - **The arxiv pool re-walk #6: DONE 2026-09-03 (4090 box, read-only lane while the
+    Plan-371 GPU window runs)** (`.research/121` — Wed-09-02 batch differential;
+    strict window NOT FIRED: only AceSpec 2609.02514, C). **Walk yield = the NEW
+    GPU-kernel query surface** (`abs:"GPU kernel"` × DC/PF/AR), which out-recalled
+    every category-listing surface: **2608.15764 (A−) QUEUED** — H100 plain-load
+    concurrency knee (bandwidth peaks at ~2 outstanding loads/thread, −35% by K=8;
+    cp.async 2.1–2.9× at depth) — the first measurement-shaped kernel_opt intake
+    since Batch 49; preregistered source questions incl. the Ada/Hopper transfer
+    caveat; **2608.15531 FlashQuant (B−) QUEUED behind** — sparse-dense single-kernel
+    fusion, the heterogeneous-path member of the B58/B98 same-input family (source
+    question (c): reachability from ternary/Q4_K formats). **2608.12700 (A−) =
+    doctrine citation, no batch** — contract-grade kernel verifier, 1,487/14
+    standard-test-vs-verifier disagreement over 2,638 kernels = the external measured
+    confirmation of the Bench-802/Research-116 fault-class doctrine; cite in the
+    lossy-surface + tolerance-budget surfaces at the next doc-sync touch. Riders
+    queued (land WITH the next adjacent batch, never standalone): Bole 2608.01651 →
+    B82 (tree-verify state-free external confirmation, memory-side win measured),
+    rl-triton 2608.17641 → B79 (associative-scan breadth: 7 RL estimators as ONE
+    first-order recurrence). Lane records: DAMP 2608.27513 (B− GDN state-quant, the
+    DASC group; the recurrent-state surface consolidating), H-Scale 2608.28113
+    (the quant scale-AXIS triplet completed: 845-PoT / OCGQuant-grouping /
+    H-Scale-value), sigmoid-eviction 2608.23296 (external sigmoid-not-softmax
+    confirmation in the learned-eviction regime). Walk-#5 miss corrected honestly:
+    SMELT 2609.01343 + mzCache 2609.01338 sat inside walk #5's Tue-batch window
+    (09-01T14:4xZ) unrecorded — both C, cheap miss; walk #5's query set doesn't
+    reach training-scaling/mobile-memory papers. Standing lanes for walk #7:
+    spec-dec (unrestricted), KV+eviction, quant+inference, GPU-kernel (permanent),
+    DC/PF listings. **Next window Fri 09-04 ~07:00 +07** (MCP quota 09-15).
   - **The arxiv pool re-walk #5: DONE 2026-09-02 (later session, subagent read-only lane)**
     (`.research/115` — Sept-ID (2609.x) differential wave + two NEW query surfaces
     [KV+eviction, quant+inference]; zero corpus delta). **Queued from the walk — both
