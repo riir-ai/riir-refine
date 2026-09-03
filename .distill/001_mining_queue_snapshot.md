@@ -603,7 +603,14 @@
   `2b9cce9` post-fix re-heal). Contended/skipped: game-sdk (sibling WIP dirty), all other
   active-lane repos per the sibling-lanes note.
 - **Hygiene:** current after this entry. `.issues/` = 059/060/061 (owner/ops/legal-gated)
-  only; plans tree 0 unchecked (069 closed 2026-09-03).
+  + 065 (T3/T7 latent; T6 CLOSED on the 09-03 nightly PASS) + 066 (corpus-series docker
+  needle skew — root cause measured, fix scoped post-nightly); plans tree 0 unchecked
+  (069 closed 2026-09-03).
+- **065 T6 verdict (2026-09-04 cycle):** the fix `319319a` passed the scheduled 18:23 UTC
+  run end-to-end — regen OK 10.5 min, per-repo duration lines, the budget-exhaustion branch
+  fired live (riir-clippy kept cached) with coverage=10 through the merge path, deploy
+  verified, `=== done ===`. Checkbox flipped in `.issues/065`; first fresh dashboard
+  artifact since 09-01 03:44. The T6 pre-run also surfaced 066 (docker corpus needle).
 
 ## Standing rules (pointers — full text in the skills + AGENTS.md)
 

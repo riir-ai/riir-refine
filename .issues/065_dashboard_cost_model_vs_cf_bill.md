@@ -87,7 +87,7 @@ Three defects, in increasing order of how much money they hid:
       execute, and the trap is now documented at the point of enablement
       (`cloudflare/housekeeping/README.md`, budget bullet). Port `bill_line()` /
       `bill_reconciliation()` before setting the secret.
-- [ ] **T6** — the M3 nightly has failed `exit 124` on **2026-09-01 and 2026-09-02**, so the
+- [x] **T6** — the M3 nightly has failed `exit 124` on **2026-09-01 and 2026-09-02**, so the
       deployed dashboard is pinned at the 2026-09-01 03:44 artifact. Structural, not flaky: the
       whole-run budget is `timeout 1200` (`scripts/ops_nightly.sh:223`) while the **per-repo**
       coverage dry-run budget is `timeout=600` (`scripts/gen_dashboard.py:1089`) across 11 repos —
@@ -105,6 +105,17 @@ Three defects, in increasing order of how much money they hid:
       Validation: `py_compile` + `bash -n` clean; smoke at `COVERAGE_BUDGET_S=1` exercises the
       exhaustion branch and returns all 10 cached rows merged. End-to-end verdict = the next
       scheduled 18:23 UTC run (this file's checkbox flips on its PASS).
+      **VERDICT PASS 2026-09-03T18:23 UTC (run of record):** `regen OK` at 18:33:36 (10.5 min
+      inside the 1200s budget; the 09-01/09-02 runs died at exactly 20:00), per-repo duration
+      lines present (katgpt-rs 156.1s, riir-ai 244.7s, riir-train 164.9s under sibling-agent
+      load), the **budget-exhaustion branch fired in production** — `riir-clippy: coverage
+      budget exhausted (600s phase), keeping cached` — and the run CONTINUED to completion
+      instead of dying, with `coverage=10` proving the merge-not-replace path (the skipped
+      repo's cached row survived). verify_dom PASS → artifacts committed (`9bc1aec`, FF to
+      main) → deployed → **verified: deployment landed 18:34:10Z** → housekeeping worker
+      tests PASS → `=== done ===`. First fresh dashboard artifact since 09-01 03:44. The
+      pre-run de-risk (00:52 +0700, creds-less, `--out /tmp`) had already validated the
+      quiet-box path (10/10 repos, 111s total, EXIT=0).
 
 ## Rules that now hold, and the ones that do not
 
