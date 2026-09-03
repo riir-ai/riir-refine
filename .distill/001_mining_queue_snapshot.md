@@ -386,10 +386,24 @@
   "armed/GPU-window-gated" — a future session could have re-run a passed gate);
   riir-ai Issue 847 status line reconciled (T7/T8 were already `- [-]` defer-marked; the
   "Remaining" clause now names only the owner promotion call). Plans 582 (CLOSED-NEGATIVE)
+  Plans 582 (CLOSED-NEGATIVE)
   and 584 (OPEN-DEFERRED with triggers) verified already-honest — untouched. Plan 530
   flagged for a future doc-sync pass (status "IN PROGRESS — pivoted to inference prefill"
   predates the Bench-641/653/730 prefill arc; absorption not verified, not marked blind).
   katgpt-rs ff'd 345e301f→f84f5c7e first (the 713/716 release-gate session's landings).
+- **2026-09-03 (4090 box, third unit — doc-sync on the Plan-530 flag above, zero-contention
+  while the resident riir-train GPU run holds the box): riir-ai Plan 530 reconciled to
+  RESOLVED** (riir-ai `f5e8c430e`) — pivot arc CLOSED (Goal 2's ≥3× kernel gate superseded
+  by the prefill arc: Benches 774/790/805 default-on, M3 prefill @2048 44.94→~105.78 tok/s;
+  Goal 3 landed — batched prefill DEFAULT-ON via Issues 653/730); backward remainder VERIFIED
+  LANDED cudarc-side in riir-train-gpu (`ternary_deltanet_backward_cudarc.rs` Phases 1–4,
+  cites "Issue 641 T7.5", gate `test_gpu_backward_matches_cpu_reference`, consumer riir-train
+  arm_c under `lora-gpu-backward` "T7.6") — tasks T6–T11 marked `[x]` DONE-AS-CUDA, T2–T5/T12
+  `- [-]` superseded/void with reasons (Metal/CubeCL backward never built + now
+  boundary-forbidden in riir-ai per Issue 741 / `ci_modelless_residue.sh` C6). The
+  GPU-training-forward lane's live state = riir-train Issue 729 (open-loop, option-1
+  deferred with reopen trigger). Flag consumed — no open doc-sync leads remain from the
+  09-03 plan-board sweep.
 - **Post-mining intake: 0 open classes** — P8 nan-unsafe float sort comparator CLOSED
   2026-09-01 (landed as sec `nan-unsafe-sort-comparator`, Plan 057; record below); all
   prior classes closed (records below; full text in the history note).
