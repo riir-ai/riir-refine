@@ -16,7 +16,10 @@ Source evidence: `riir-clippy/.research/119` §Parallel-session addendum (the M3
 - [x] GOAT (M3, worktree, CARGO_TARGET_DIR=/tmp/riir-clippy-b101-target): default lib count-identical + --features rust_perf_bench (the corpus validator = the recorded instrument, aarch64 re-validation) + --features latent_retrieval retrieval floors 13/13 HELD + clippy 0 both states.
 - [x] Docs: Research 119 addendum disposition note (landed as Batch 101), AGENTS.md Batch 101 line, queue snapshot update, .docs/11_domains/rust_perf.md row.
 - [x] Commit + push from the worktree (`87d8d13`).
-- [ ] git worktree remove + rm -rf /tmp/riir-clippy-b101-target at landing.
+- [x] git worktree remove + rm -rf /tmp/riir-clippy-b101-target at landing.
+      (VERIFIED 2026-09-03: neither exists — no b101 worktree in `git worktree list`,
+      /tmp/riir-clippy-b101-target gone; the remaining `.riir-clippy-main` worktree is
+      the intentional main-branch ops-deploy checkout, not b101.)
 - [-] **x86_64 cross-arch re-gate - DEFERRED, armed**: the 4090 box carried 4 cargo + 3 rustc active sibling builds at batch time (contention = both boxes slowed + target-dir lock wedging their session). Unblock: a 4090 window (probe tasklist | findstr cargo); then pull, build --features rust_perf_bench, run the new rule's bench (PERF_BENCH_FILTER=dispatch-handler-pair-hoist), annotate the entry with the measured x86 verdict (expected Tie if the lea-rip analysis holds - annotation updates, never deletion). Until then the entry carries the x86-pending caveat in context_notes; the rule is suggestion-only (no --fix path can fire it).
 
 ## Non-goals

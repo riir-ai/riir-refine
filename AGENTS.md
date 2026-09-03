@@ -2879,6 +2879,33 @@ analytics-scoped value in the deploy env silently breaks auth. Every
 `env -u CLOUDFLARE_API_TOKEN -u CF_API_TOKEN -u CLOUDFLARE_API_KEY -u CLOUDFLARE_EMAIL …`.
 Keep that prefix; a bare `npx wrangler deploy` is the bug.
 
+**Issue 062 (TPR × healer corpus fusion, Research 527 F5) CLOSED-NEGATIVE +
+removed 2026-09-03 per the noise-reduction rule (full narrative in git
+history — `git log -- .issues/062_*.md`; verdicts in Benches 062 / 063 /
+065 / 066, all committed).** The arc: Phase 1 measured the unmeasured axis —
+OOD generalization is AT CHANCE on both the healer corpus (52.0% → 4.0%)
+and rustc_errors (97.7% → 48.8%), which justified Phase 2 — and T2a fixed a
+REAL upstream bug en route (ndb `Bm25Index::search` tie-truncation returned
+a per-process candidate SET from a `RandomState`-seeded HashMap;
+score-desc-then-key-asc total order before the truncation, ndb `aeb24e0`,
+riir-ai `.issues/849`, 12-process determinism pin in riir-rag). Phase 2
+refuted the consumer route: **T4a (Bench 065) — route (b) REFUTED as atomic
+memorization** (ID top-1 climbs 21.1% → 81.1% across the admissible `d` grid
+while OOD stays at chance; decisive row `d = 4`, selected by a rule stated
+before it was applied, margin 0.0pp vs the 20pp bar; preregistration
+amendments A1–A3 recorded, A3's refit-admissibility check fired at `d = 8`),
+and **T6a (Bench 066) — the counterfactual-surgery gate is INCONCLUSIVE**
+(the gate population is structurally starved); T6 stays UNWIRED with its
+reopen condition recorded in the bench. **Consequence: katgpt-core `tpr`
+stays opt-in** — there is no route to a consumer on this corpus, and that is
+a consumer-side refutation, not a defect in `tpr` (its upstream G1–G4/G8
+passed on planted corpora, which G8's own record calls a positive control,
+never evidence about real corpora). Harnesses kept as reproducible
+artifacts: `src/draft/{withheld_pair_ood,tpr_fit,tpr_t4a_withheld,tpr_t6a_counterfactual}.rs`
++ `tests/t062_*.rs` / `t063_tpr_structure.rs`. Reopen: the corpus gains
+multiple fillers per role (the measured step-function axis), or a
+structured-corpus consumer materializes.
+
 ## The `riir-clippy` skill (auto-continue idle loop)
 
 `.agents/skills/riir-clippy/SKILL.md` (symlinked into `~/.agents/skills/`
