@@ -435,6 +435,17 @@
 - **Post-mining intake: 0 open classes** — P8 nan-unsafe float sort comparator CLOSED
   2026-09-01 (landed as sec `nan-unsafe-sort-comparator`, Plan 057; record below); all
   prior classes closed (records below; full text in the history note).
+- **2026-09-03 (4090 box, fourth unit — plan-number collision NOTE, discovered at the
+  post-unit rebase):** `.plans/070` is DUAL-ALLOCATED between two sibling lanes —
+  `070_kat062_t6a_counterfactual_surgery_gate.md` (COMMITTED `eae2e4e`, pushed —
+  Status COMPLETE, Bench 066) vs `070_flashquant_sparse_dense_fusion_distill.md`
+  (untracked WIP, Status IN FLIGHT, created 09-03). **Tie-breaker (Bench-697/848
+  push-wins + baked-refs): kat062 KEEPS 070.** The flashquant plan MUST renumber →
+  **071** at its next write time (read highwater 70, take 71, write back 71 — the
+  current `.highwater`=70 is already the correct next-free state; do NOT take a
+  number AT highwater, the 848 lesson) + grep-fix any live refs to "Plan 070"/"070_"
+  inside the file. The number is not taken by another session here — this note is
+  the flag; do not commit through the duplicate name.
 - **Owner-gated tails:** `.issues/044` (paging secrets `ALERT_WEBHOOK_URL` +
   `MONTHLY_BUDGET_USD`), `.issues/045` (T7 launchctl activation) — verified 08-31.
 - **Queue items 6/7** (boundary-guard + substrate-first drift audit): last run 08-29,
