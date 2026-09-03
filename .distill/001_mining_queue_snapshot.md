@@ -672,6 +672,18 @@ closed.**
   active-lane repos per the sibling-lanes note.
 - **Batch 103 landed this cycle (2026-09-04):** see Last landed above; Plan 072 all tasks `[x]`;
   Plan 073 stays ARMED on the 4090 window (T0a probe blocked by the NoRA matrix until ~10:00-12:30).
+- **2026-09-04 ~04:30 (idle cycle 5, M3 — T0a harness PRE-AUTHORED, zero-contention unit):** the 4090
+  was observed 0% util / 8.1 GB resident at 04:17 — the NoRA matrix is sequenced BEHIND the M3 509-T4
+  run and had NOT started — but the window was NOT taken (the sibling's post-T4 pull/build/launch on
+  that box is minutes-after-T4 and is itself probe-poisoning contention; the prior cycle already
+  yielded the 504/509 lane). Instead the T0a authoring moved OUT of the window: `probe.cu` (nvcc sm_89
+  standalone CUDA C; K∈{1,2,4,8,16} template arms; sparse 64×256 + saturating 512×256 grid regimes
+  isolating depth from concurrency; fixed 4096 loads/thread; allocation-sweep; 3 interleaved reps; K
+  independent 2-fadd consume chains so the 16B load cannot narrow) + run recipe + 3-condition pre-flight
+  live at **`.raw/ldg_probe/`** (gitignored scratch; nvcc v13.3 confirmed on the box; design self-review
+  caught the warmup nullptr + serial-consume-chain bugs BEFORE any run). Instrument commits only AFTER
+  compile+run (the 848 lesson). Full details in `.plans/073` T0a. Everything else re-verified still gated
+  at 04:14 (T4 running PID 48700; walk #7 not due; MCP quota; 066-T4/P18 owner; mmorpg-092 siblings).
 - **Hygiene:** current after this entry. `.issues/` = 059/060/061 (owner/ops/legal-gated)
   + 065 (T3/T7 latent; T6 CLOSED on the 09-03 nightly PASS) + 066 (T1/T2/T3 DONE 09-04 —
   docker needle `c9863d6` + store repair `d731cac`; T4 projection-drift logging open,
