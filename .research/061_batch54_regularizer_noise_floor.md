@@ -104,3 +104,5 @@ format noise). Clean.
   4 sites, mod.rs 2 sites + B-category comment. The stale `current 348` → `current 349`.
 - `.research/.highwater` 60 → 61 (write-back; 060 existed at scan time — the re-scan rule
   held).
+
+> **PASS-Redirects (synthesis):** Lin et al. [arXiv:2402.03496 "Can We Remove the Square-Root in Adaptive Gradient Methods? A Second-Order Perspective"] — root-free (p=1) adaptive methods; the eps-vs-format-noise-floor coupling distilled here (Batch 54) is the in-house twin of its claim 3 (roots are the instability in reduced precision); training-track verdict + Plan filed at `../riir-train/.research/441_Root_Free_Adaptive_Gradient_Methods.md`, modelless extraction rows all discarded with cited coverage (§5 there).
