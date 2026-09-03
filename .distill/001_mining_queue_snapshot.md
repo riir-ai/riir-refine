@@ -185,9 +185,13 @@
     quantize = requantize-from-parents), exact `snap_f32_to_pow2`, `all_scales_are_pow2`,
     scale-covariance property test, SNR harness — PoT rel-err ratio 0.988–1.012 vs native
     (the carry loop absorbs the ≤√2 snap factor). T0 scale inventory in Plan 586.
-    **Remaining: GPU G1/G3** (Vulkan-vs-CPU bit-identity at scale sites + negative
-    control), 4090-window-gated — the box was running the sibling's L4 eval at landing
-    time. q8kv arm + trit-tier mirror stay deferred per the issue's entry rules.
+    **GPU G1/G3 LANDED + PASSED same day 2026-09-02** (4090-exclusive window, Vulkan
+    wgpu<spirv>; gate `crates/riir-gpu/tests/issue845_pot_scale_gpu_g1.rs` — fold invariance
+    0 diffs on 3 Bonsai shapes, PoT-shift covariance 0 violations; structural scoping:
+    f32-accumulator fold-invariance out of reach → the integer-dot slice landed as riir-ai
+    Issue 850 / Bench 850, all four gates PASS). Lever RESOLVED-SCOPED; `pot_scales` opt-in,
+    no consumer; q8kv slice + trit-tier mirror stay deferred (850 T4 scoped the q8kv
+    discriminator to the f16 STORAGE site). Plan 586 + this line reconciled 2026-09-03.
   - **09-15 MCP search quota reset** → online perf-search pool walk (queue item 11).
   - **Batch 94 (LANDED 2026-09-01, Plan 058 / Research 112): oMLX PR #3260
     expert-streaming distill CONSUMED** — 8 kernel_opt D + 1 rust_perf io +
@@ -376,6 +380,16 @@
 - **Sibling lanes (do not touch):** riir-train — sibling actively building
   (`/tmp/riir-train-499b`); the 4090 perf lanes — sibling PV work mid-flight as of 08-29
   (re-verify lane state at session start before any 4090 unit).
+- **2026-09-03 (4090 box, second unit — plan-board truth sweep, zero-contention while the
+  Plan-371 window + sibling B102 run):** katgpt-rs Plan 586 reconciled to RESOLVED-SCOPED
+  (the GPU gates had PASSED 09-02 while the plan + the 845 line above still read
+  "armed/GPU-window-gated" — a future session could have re-run a passed gate);
+  riir-ai Issue 847 status line reconciled (T7/T8 were already `- [-]` defer-marked; the
+  "Remaining" clause now names only the owner promotion call). Plans 582 (CLOSED-NEGATIVE)
+  and 584 (OPEN-DEFERRED with triggers) verified already-honest — untouched. Plan 530
+  flagged for a future doc-sync pass (status "IN PROGRESS — pivoted to inference prefill"
+  predates the Bench-641/653/730 prefill arc; absorption not verified, not marked blind).
+  katgpt-rs ff'd 345e301f→f84f5c7e first (the 713/716 release-gate session's landings).
 - **Post-mining intake: 0 open classes** — P8 nan-unsafe float sort comparator CLOSED
   2026-09-01 (landed as sec `nan-unsafe-sort-comparator`, Plan 057; record below); all
   prior classes closed (records below; full text in the history note).
