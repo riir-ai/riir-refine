@@ -73,11 +73,12 @@
 //!   readout is a prediction.
 
 use katgpt_core::tpr::{
-    als_fit, filler_role_spread, withheld_pair_top1_report, AlsConfig, AlsInput, AtomicNull,
-    FillerRoleSpread, ObservedPairs, TprBindings, TprScheme, TprScratch, WithheldPairReport,
+    als_fit, filler_role_spread, withheld_pair_top1, withheld_pair_top1_report, AlsConfig,
+    AlsInput, AtomicNull, FillerRoleSpread, ObservedPairs, TprBindings, TprScheme, TprScratch,
+    WithheldPairReport,
 };
 
-use super::tpr_fit::{build_corpus, coalesce_for, run, FitCorpus, StateSpace};
+use super::tpr_fit::{admissibility, build_corpus, coalesce_for, run, FitCorpus, StateSpace};
 use super::withheld_pair_ood::Binding;
 
 /// The bar, in percentage points, TPR must beat the atomic null by. Identical
@@ -146,6 +147,22 @@ pub struct Trial {
     /// The null's coverage of its OWN training bindings — the vacuity check,
     /// per trial, because a refit changes the training set.
     pub null_id_coverage: f32,
+    /// **The REFIT's admissibility** (amendment A3), not the full corpus's.
+    ///
+    /// Bench 063 P13 measured admissibility at 113 states; every trial fits a
+    /// corpus 1–5 states smaller, and the per-role starvation bound (`> d`
+    /// states per role) is exactly the one a withhold can break — at `d = 8` a
+    /// role holding 9 states and losing 2 to the withhold becomes starved. A
+    /// row read off a starved refit is a vacuous fit's number, so the sweep's
+    /// most favourable geometry is precisely where this must be checked.
+    pub train_admissible: bool,
+    /// **TPR's own vacuity check** (amendment A1): the same artifact, the same
+    /// shared pool, scored on the states it was FITTED on. The OOD number is
+    /// only a generalization failure if this one is a success; if TPR cannot
+    /// identify a state whose pair it trained on, a 0% OOD says the readout is
+    /// too weak to answer at all, which is a fact about the instrument and not
+    /// about the corpus.
+    pub tpr_id_top1: f32,
 }
 
 impl Trial {
@@ -252,15 +269,44 @@ impl T4aReport {
         }
     }
 
-    /// Every trial produced a readable number: a `Some` verdict and a fully
-    /// answerable pool. An unreadable trial can never contribute to a PASS.
+    /// Every trial produced a readable number: a `Some` verdict, a fully
+    /// answerable pool, and an ADMISSIBLE refit (A3). An unreadable trial can
+    /// never contribute to a PASS — nor to a FAIL, per [`Self::verdict`].
     #[must_use]
     pub fn readable(&self) -> bool {
         !self.trials.is_empty()
-            && self
-                .trials
-                .iter()
-                .all(|t| t.report.verdict().is_some() && t.report.coverage > 0.999)
+            && self.trials.iter().all(|t| {
+                t.report.verdict().is_some() && t.report.coverage > 0.999 && t.train_admissible
+            })
+    }
+
+    /// Refits that broke the two-sided admissibility bound — reported as a
+    /// count so a partially-starved sweep row is visible rather than only
+    /// flipping `readable` to false.
+    #[must_use]
+    pub fn inadmissible_refits(&self) -> usize {
+        self.trials.iter().filter(|t| !t.train_admissible).count()
+    }
+
+    /// State-weighted in-distribution top-1 of the TPR arm — the A1 control.
+    #[must_use]
+    #[allow(clippy::cast_precision_loss)]
+    pub fn tpr_id_top1(&self) -> f32 {
+        match self.trials.len() {
+            0 => 0.0,
+            n => self.trials.iter().map(|t| t.tpr_id_top1).sum::<f32>() / n as f32,
+        }
+    }
+
+    /// **Amendment A1** — the TPR arm can answer the question in-distribution.
+    ///
+    /// Symmetric to [`Self::null_informative`], and added for the same reason
+    /// Bench 062 added that one: an arm that cannot fit its own training set
+    /// fails OOD by vacuity, and its 0% certifies nothing. The bar is the same
+    /// `> 0.5` Issue 707 G8 applies to the null's ID top-1.
+    #[must_use]
+    pub fn tpr_informative(&self) -> bool {
+        !self.trials.is_empty() && self.tpr_id_top1() > 0.5
     }
 
     /// The null fits its own training set on every trial — Bench 062's
@@ -286,15 +332,25 @@ impl T4aReport {
     /// The preregistered decision.
     ///
     /// **A FAIL is only available on a readable instrument.** FAIL closes T4
-    /// REFUTED, which is a claim about the corpus; an unreadable trial or a
-    /// vacuous null is a claim about the measurement, and the two must not
-    /// share an outcome. So instrument failure lands in INCONCLUSIVE whatever
-    /// the margin does — the reverse of the usual conservative default, and
-    /// deliberate: the conservative outcome here is the one that does NOT
-    /// close the route.
+    /// REFUTED, which is a claim about the corpus; an unreadable trial, a
+    /// vacuous null or a vacuous TPR arm is a claim about the measurement, and
+    /// the two must not share an outcome. So instrument failure lands in
+    /// INCONCLUSIVE whatever the margin does — the reverse of the usual
+    /// conservative default, and deliberate: the conservative outcome here is
+    /// the one that does NOT close the route.
+    ///
+    /// **Amendment A1, made after the first run and one-directional.** The
+    /// preregistration checked the NULL's vacuity and not TPR's, and the first
+    /// run returned 0.0% on both arms of all 30 trials — the exact shape where
+    /// "the corpus does not generalize" and "the readout cannot answer" are
+    /// indistinguishable. [`Self::tpr_informative`] closes that gap. It can
+    /// only ever convert a FAIL into an INCONCLUSIVE; it cannot turn anything
+    /// into a PASS, and it cannot raise the margin. An amendment that can only
+    /// weaken the conclusion it is being applied to is safe to make after
+    /// seeing the number; one that could strengthen it would not be.
     #[must_use]
     pub fn verdict(&self) -> T4aVerdict {
-        if !self.readable() || !self.null_informative() {
+        if !self.readable() || !self.null_informative() || !self.tpr_informative() {
             return T4aVerdict::Inconclusive;
         }
         let margin = self.margin_pp();
@@ -321,6 +377,31 @@ fn subset(c: &FitCorpus, idx: &[usize]) -> (Vec<f32>, Vec<TprBindings>) {
         bindings.push(c.bindings[i].clone());
     }
     (states, bindings)
+}
+
+/// A [`FitCorpus`] over a subset's states/bindings, with the vocabulary of the
+/// parent held FIXED.
+///
+/// Rebuilding from a population would re-derive the vocabulary and could
+/// shrink `m`, which is a different geometry than the one the gate declares.
+/// The per-role and per-filler censuses are recounted, because those are what
+/// the starvation bound reads.
+fn subset_corpus(parent: &FitCorpus, states: &[f32], bindings: &[TprBindings]) -> FitCorpus {
+    let mut role_states = vec![0usize; parent.vocab.roles.len()];
+    let mut filler_states = vec![0usize; parent.vocab.fillers.len()];
+    for b in bindings {
+        role_states[b.roles[0] as usize] += 1;
+        filler_states[b.fillers[0] as usize] += 1;
+    }
+    FitCorpus {
+        space: parent.space,
+        states: states.to_vec(),
+        bindings: bindings.to_vec(),
+        vocab: parent.vocab.clone(),
+        role_states,
+        filler_states,
+        spread: filler_role_spread(bindings),
+    }
 }
 
 /// Distinct roles per filler id, over the whole corpus.
@@ -362,8 +443,34 @@ pub fn run_t4a(population: Vec<Binding>, domain: &'static str) -> Option<T4aRepo
         &DS,
         Some(COALESCE_T),
     );
-    let chosen_d = bench.chosen_d?;
+    run_t4a_at(population, domain, bench.chosen_d?)
+}
 
+/// The gate at an EXPLICIT `d` — the diagnostic entry point (amendment A2).
+///
+/// [`run_t4a`] is the preregistered gate and takes `d` from BIC. This one does
+/// not, and is only for answering the question the first run raised: BIC picks
+/// `d` by fit parsimony, and the withheld-pair readout's discriminability is a
+/// different quantity. At `d = 1` a filler vector is a SCALAR, so two
+/// candidates sharing a role differ only in scale and an L2 argmin over a
+/// 256-D state can barely separate them — a structural handicap on the
+/// readout that has nothing to do with whether the corpus is structured.
+///
+/// Sweeping the admissible grid separates "the corpus does not generalize"
+/// from "BIC's `d` cannot express the answer". It is **not** the
+/// widen-and-retry T4a forbids: no corpus is added, and the geometries swept
+/// are the ones Bench 063 P13 already declared admissible on this arm.
+///
+/// # Panics
+///
+/// Panics if the corpus carries no roles — [`build_corpus`] cannot produce
+/// that from a non-empty population, so it would mean the population is empty.
+#[must_use]
+pub fn run_t4a_at(
+    population: Vec<Binding>,
+    domain: &'static str,
+    chosen_d: usize,
+) -> Option<T4aReport> {
     let corpus = gate_corpus(population);
     let m_roles = corpus.vocab.roles.len();
     let n_fillers = corpus.vocab.fillers.len();
@@ -432,7 +539,15 @@ pub fn run_t4a(population: Vec<Binding>, domain: &'static str) -> Option<T4aRepo
             skipped.push((role, filler, SkipReason::FitError));
             continue;
         };
+        // A3: the refit's own geometry, on the corpus the refit actually saw.
+        let train_corpus = subset_corpus(&corpus, &train_states, &train_bindings);
+        let train_admissible = admissibility(&train_corpus, chosen_d).admissible();
+
         let null = AtomicNull::fit(dim, &train_states, &train_bindings);
+        // A1: the same readout on the states the fit saw. Same pool, so the
+        // two arms differ only in whether the scored pair was withheld.
+        let id = withheld_pair_top1(&art, &train_states, &train_bindings, &pool, &mut scratch)
+            .unwrap_or(0.0);
         trials.push(Trial {
             role,
             filler,
@@ -441,6 +556,8 @@ pub fn run_t4a(population: Vec<Binding>, domain: &'static str) -> Option<T4aRepo
             report,
             null_top1: null.top1(&held_states, &held_bindings, &pool),
             null_id_coverage: null.coverage(&train_bindings),
+            train_admissible,
+            tpr_id_top1: id,
         });
     }
 
@@ -516,12 +633,13 @@ pub fn print_t4a(r: &T4aReport) {
     );
     for t in &r.trials {
         println!(
-            "  {:<28} {:<34} {:>5} {:>6} {:>6.1}% {:>6.1}% {:>5.1}%",
+            "  {:<28} {:<34} {:>5} {:>6} {:>6.1}% {:>6.1}% {:>6.1}% {:>5.1}%",
             t.role,
             t.filler,
             t.held,
             t.train,
             t.report.top1 * 100.0,
+            t.tpr_id_top1 * 100.0,
             t.null_top1 * 100.0,
             t.report.coverage * 100.0
         );
@@ -532,8 +650,15 @@ pub fn print_t4a(r: &T4aReport) {
         r.null_informative()
     );
     println!(
-        "  readable: every trial verdict Some + coverage 1.0 = {}",
-        r.readable()
+        "  TPR (A1): in-distribution top-1 {:.1}% over the same pool -> informative = {}",
+        r.tpr_id_top1() * 100.0,
+        r.tpr_informative()
+    );
+    println!(
+        "  readable: every trial verdict Some + coverage 1.0 + admissible refit = {} \
+         ({} inadmissible refit(s))",
+        r.readable(),
+        r.inadmissible_refits()
     );
     println!(
         "  OOD top-1 (state-weighted): TPR {:.1}%  vs  null {:.1}%  (chance {:.1}%, pool {})",

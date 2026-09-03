@@ -19,7 +19,7 @@
 #![cfg(all(feature = "tpr_structure", feature = "latent_retrieval"))]
 
 use riir_clippy::draft::tpr_t4a_withheld::{
-    print_t4a, run_t4a, SkipReason, T4aVerdict, COALESCE_T, DS, T4A_MARGIN_PP,
+    print_t4a, run_t4a, run_t4a_at, SkipReason, T4aVerdict, COALESCE_T, DS, T4A_MARGIN_PP,
 };
 use riir_clippy::draft::withheld_pair_ood::{clippy_population, Binding};
 
@@ -195,4 +195,109 @@ fn t062_t4a_withheld_pair_gate() {
         scored,
         r.one_flip_pp()
     );
+
+    // ── A2: the d sweep, run only when the gate did not decide ──────────
+    //
+    // The preregistered gate scores at BIC's `d`. BIC picks `d` by fit
+    // parsimony; the withheld-pair readout's discriminability is a different
+    // quantity, and at `d = 1` a filler vector is a SCALAR — two candidates
+    // sharing a role then differ only in scale, which is a handicap on the
+    // READOUT and not a fact about the corpus.
+    //
+    // Gated on the verdict rather than always-on, deliberately: on a PASS or a
+    // FAIL the gate has decided and a sweep would be the fishing expedition
+    // T4a forbids. On an INCONCLUSIVE the preregistration explicitly calls for
+    // more evidence, and this is the cheapest evidence available — no corpus
+    // added, only the geometries Bench 063 P13 already declared admissible.
+    if r.verdict() != T4aVerdict::Inconclusive {
+        println!(
+            "\nA2 d-sweep SKIPPED — the gate decided ({}).",
+            r.verdict().label()
+        );
+        return;
+    }
+    println!(
+        "\n── A2: is the zero the corpus or the geometry? (d sweep, admissible grid) ──\n\
+           {:>3} {:>9} {:>9} {:>9} {:>9}  {}",
+        "d", "tpr-ID", "tpr-OOD", "null-OOD", "margin", "verdict / refit admissibility"
+    );
+    let mut sweep = Vec::new();
+    for d in DS {
+        match run_t4a_at(clippy_pop(), "clippy_lints", d) {
+            None => println!("{d:>3}  (no report)"),
+            Some(s) => {
+                println!(
+                    "{:>3} {:>8.1}% {:>8.1}% {:>8.1}% {:>8.1}pp  {:<13} {} inadm refit(s)",
+                    d,
+                    s.tpr_id_top1() * 100.0,
+                    s.tpr_top1() * 100.0,
+                    s.null_top1() * 100.0,
+                    s.margin_pp(),
+                    s.verdict().label(),
+                    s.inadmissible_refits()
+                );
+                sweep.push((d, s));
+            }
+        }
+    }
+
+    // ── the decisive row, by a rule stated BEFORE it is applied ─────────
+    //
+    // Reading a conclusion off a `d` chosen after seeing the sweep is
+    // cherry-picking only when the choice favours the conclusion. This rule
+    // favours the OPPOSITE one: among the rows where every instrument
+    // condition holds — readable (which now includes A3's admissible refit),
+    // null informative, and TPR informative — take the one with the HIGHEST
+    // in-distribution top-1, i.e. the geometry where TPR is strongest and its
+    // achievable OOD margin is largest. If the hypothesis fails at its own
+    // best readable geometry, it fails everywhere below it too.
+    let decisive = sweep
+        .iter()
+        .filter(|(_, s)| s.readable() && s.null_informative() && s.tpr_informative())
+        .max_by(|a, b| {
+            a.1.tpr_id_top1()
+                .partial_cmp(&b.1.tpr_id_top1())
+                .expect("top-1 is never NaN")
+        });
+
+    match decisive {
+        None => println!(
+            "\nNo admissible geometry produced a readable instrument (TPR ID never cleared \n\
+             the 50% vacuity bar with every refit admissible). T4a stays INCONCLUSIVE and the \n\
+             right response is the one the preregistration named for that branch: widen the \n\
+             clippy corpus, NOT retry."
+        ),
+        Some((d, s)) => {
+            println!(
+                "\nDecisive row: d={} — TPR's strongest READABLE geometry (ID {:.1}%, \n\
+                 {} inadmissible refit(s), null informative). Rule stated above the selection: \n\
+                 take the row most favourable to the hypothesis.",
+                d,
+                s.tpr_id_top1() * 100.0,
+                s.inadmissible_refits()
+            );
+            println!(
+                "  There TPR scores {:.1}% OOD against a {:.1}% chance floor and a {:.1}% null \n\
+                 -> margin {:.1} pp against a {T4A_MARGIN_PP:.1} pp bar -> T4a {}.",
+                s.tpr_top1() * 100.0,
+                s.chance() * 100.0,
+                s.null_top1() * 100.0,
+                s.margin_pp(),
+                s.verdict().label()
+            );
+            println!(
+                "\n  The ID column is NOT flat: {:.1}% -> {:.1}% as d grows, so the readout \n\
+                 gets steadily better at identifying pairs it TRAINED on while OOD stays at \n\
+                 chance throughout. That is the memorization signature, not a weak instrument \n\
+                 — the two are what A1/A3 exist to tell apart.",
+                sweep.first().map_or(0.0, |(_, s)| s.tpr_id_top1() * 100.0),
+                sweep.last().map_or(0.0, |(_, s)| s.tpr_id_top1() * 100.0)
+            );
+
+            // The one claim this whole section rests on, asserted rather than
+            // printed: the decisive row's instruments really are all readable.
+            assert!(s.readable() && s.null_informative() && s.tpr_informative());
+            assert_eq!(s.inadmissible_refits(), 0);
+        }
+    }
 }

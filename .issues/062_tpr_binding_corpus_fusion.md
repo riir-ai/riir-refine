@@ -1,8 +1,46 @@
 # Issue 62: TPR × healer corpus fusion — structured retrieval axis + corpus-generalization bench (Research 527 F5)
 
-**Status:** T4 **DECIDED 2026-09-03** — route (b) against `clippy_lints`
-only, `rustc_errors` excluded, gated on the preregistered T4a withheld-pair
-test (§ route (b) below). Original status follows.
+**Status:** T4 **CLOSED REFUTED 2026-09-03** — T4a RAN and FAILED at its
+decisive row. [.benchmarks/065_t4a_withheld_pair_gate.md](../.benchmarks/065_t4a_withheld_pair_gate.md),
+harness `src/draft/tpr_t4a_withheld.rs` + `tests/t062_t4a_withheld_clippy.rs`,
+preregistered at `19beece` before it produced a number.
+
+**The finding is stronger than a FAIL.** In-distribution top-1 climbs
+**21.1% → 46.8% → 63.3% → 81.1%** across the admissible `d` grid while OOD
+stays at chance (0.0%, one 2.2% cell = 1 state of 45) throughout. The fit gets
+steadily better at identifying pairs it TRAINED on and gains nothing that
+transfers to an unseen `(role, filler)` combination — the atomic-memorization
+mode Research 527 predicts as the default, measured on our own corpus.
+
+Three amendments were needed to reach a readable verdict, and each of the first
+two would have produced the wrong one on its own:
+
+- **A1** — the preregistration checked the NULL's vacuity and not TPR's. At
+  BIC's `d = 1` TPR's own ID top-1 is 21.1%, so a 20 pp margin was never
+  *reachable*: a readout cannot generalize better than it interpolates. The raw
+  FAIL would have been decided by the readout's weakness. A1 is one-directional
+  (FAIL → INCONCLUSIVE only) and so safe to add after seeing the number.
+- **A2** — the `d` sweep. BIC picks `d` by fit parsimony; readout
+  discriminability is a different quantity, and at `d = 1` a filler vector is a
+  scalar. Not the forbidden widen-and-retry: no corpus added, only geometries
+  Bench 063 P13 already declared admissible.
+- **A3** — refit admissibility, per trial. It **fired**: `d = 8` has 4 of 30
+  refits starved, so its 81.1% is partly vacuous and the row is INCONCLUSIVE
+  rather than the sweep's best evidence.
+
+Decisive row `d = 4` by a rule stated before it was applied — TPR's strongest
+READABLE geometry, i.e. the selection most favourable to the hypothesis: ID
+63.3%, 0 inadmissible refits, null informative, every trial readable →
+**margin 0.0 pp against a 20.0 pp bar → FAIL.** The preregistration's "do not
+widen and retry" governs; this is not the INCONCLUSIVE branch.
+
+**Consequence for the upstream promotion:** katgpt-core's `tpr` stays opt-in.
+T4 was the candidate consumer and there is now no route to one on this corpus.
+That is a consumer-side refutation, not a defect in `tpr` — G1–G4/G8 all pass
+upstream on a **planted** corpus, which G8's own record calls a positive
+control rather than evidence about real corpora. Bench 065 is that evidence.
+
+Original status follows.
 
 **Status:** Phase 1 COMPLETE (T1+T2+T2a landed, Bench 062). Phase 2: **T3 + T5 LANDED
 (Bench 063 + its coalescing addendum, 2026-09-02) and their verdict RE-SCOPES
@@ -124,7 +162,7 @@ did NOT fire. Three caveats that bound what Phase 2 may claim:
   automatically. The consumer-local workaround is deleted; `tpr_fit.rs` calls
   upstream on both arms and reproduces every Bench 063 number bit-identically
   (Bench 063 §7.4a).
-- [ ] **T4 (RE-SCOPED by T3 — read Bench 063 §8 before starting)** **TPR
+- [x] **T4 — CLOSED REFUTED 2026-09-03 (Bench 065). (RE-SCOPED by T3 — read Bench 063 §8 before starting)** **TPR
   structural evidence channel.** The original "score against the TPR
   projection, not the raw 8-D embedding" is **not runnable**: the projection
   lives in the state space, and the state space is 8-D, where no admissible
@@ -219,7 +257,7 @@ did NOT fire. Three caveats that bound what Phase 2 may claim:
   to correct. If the fuse is worth doing it is worth gating, and the gate is
   affordable.
 
-- [ ] **T4a (gates T4, cheap, kill-switch)** Run
+- [x] **T4a — RAN 2026-09-03, verdict FAIL (Bench 065); see the status block at the top for the three amendments the run required.** Run
   `withheld_pair_top1_report` on the `clippy_lints / tokenbag256 [coalesced
   T=8]` arm over its 13 multi-role fillers: withhold one `(role, filler)` pair
   at a time, score against the shared pool, read `verdict()` and `coverage` —
@@ -358,6 +396,14 @@ did NOT fire. Three caveats that bound what Phase 2 may claim:
   distinguished by anything measured here.
 
 - [ ] **T6** **Counterfactual surgery on LatentFixMemory trajectories:** for score-bench persist-miss spans, surgery-swap the rule/domain filler and ask closed-form "would domain X / rule Y have healed this span?" — complements Bench 032's re-run-based switch-cost measurement with a zero-recompute counterfactual; feeds the post-mining intake (`.distill/001_mining_queue_snapshot.md`) with attributed misses.
+  **T6's hazard is now QUANTIFIED (Bench 065 §2/§7.4):** the outside-the-fit
+  population on this arm is **208 of the 270-pair space — 77%**. Every
+  counterfactual `surgery_delta_into` answers there is bit-additive, clean,
+  confident and about a pair the artifact never saw. Report
+  `ObservedPairs::contains` per query and keep the populations apart; Bench 065
+  §6 also means an unobserved-pair readout should be expected to be *wrong*,
+  not merely unvalidated — TPR generalizes at chance on this corpus.
+
   **T6 INHERITS T4's evidence bound, and the mechanism does NOT warn you.**
   Noted 2026-09-02 so it is not discovered after the build. `surgery_delta_into`
   is exactly additive (Issue 707 G1, max |Δ| 9.5e-7) and stays exact on any
