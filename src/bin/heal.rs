@@ -2281,7 +2281,14 @@ const CORPUS_DOMAIN_TABLE: &[(&str, &str, &str)] = &[
     ("rust_perf", "src/domains/rust_perf/corpus.rs", "rule_id:"),
     ("clippy_lints", "src/domains/clippy_lints/corpus.rs", "lint_name:"),
     ("sec", "src/domains/sec/corpus.rs", "rule_id:"),
-    ("docker", "src/domains/docker/corpus.rs", "rule_id:"),
+    // Docker's corpus uses the positional `rule()` shorthand constructor
+    // (corpus.rs's own design note), so there is no per-entry `rule_id:`
+    // text — the old needle counted the constructor's PLUMBING (exactly 2
+    // occurrences at every rev) and every source-walk stamp since the
+    // domain landed recorded docker:2 against 27..31 true entries (Issue
+    // 066). `    rule(` matches exactly the 8-space-indented entry calls;
+    // the count-pin test below fails loud if a re-indent moves it.
+    ("docker", "src/domains/docker/corpus.rs", "    rule("),
 ];
 
 /// Whether the domain's feature is compiled into THIS binary (the honest
@@ -5099,6 +5106,61 @@ mod fix_domain_tests {
     #[test]
     fn sec_scopes_to_sec_only() {
         assert_eq!(fix_domain_scopes(Some(DomainId::Sec)), (false, false, true));
+    }
+}
+
+/// Issue 066: the source-walk needle per domain must count ENTRIES, not
+/// plumbing. The runtime corpus builder is the authority (the feature is
+/// compiled into the test binary for every default-on domain); the walk
+/// must agree with it. This is the pin that makes a needle rot (or a
+/// corpus re-indent that moves docker's `    rule(` marker) LOUD instead
+/// of a silently-wrong dashboard series.
+#[cfg(test)]
+mod corpus_stats_needle_tests {
+    use super::{count_corpus_domain, resolve_corpus_repo_root, runtime_corpus_count, CORPUS_DOMAIN_TABLE};
+
+    #[test]
+    fn source_walk_agrees_with_runtime_count_for_compiled_domains() {
+        let repo = resolve_corpus_repo_root()
+            .expect("corpus paths must resolve when tests run in-repo");
+        let mut checked = 0;
+        for (domain, rel, needle) in CORPUS_DOMAIN_TABLE {
+            let Some(runtime) = runtime_corpus_count(domain) else {
+                continue; // feature off in this binary — no authority to pin against
+            };
+            let walked = count_corpus_domain(&repo, rel, needle);
+            assert_eq!(
+                walked, runtime,
+                "source-walk needle for {domain} counts {walked}, runtime corpus has {runtime} \
+                 — the needle rotted (Issue 066 class: counting plumbing instead of entries)"
+            );
+            checked += 1;
+        }
+        assert!(checked >= 2, "expected to pin at least the default-on domains, checked {checked}");
+    }
+
+    #[test]
+    fn docker_needle_is_not_the_old_plumbing_count() {
+        // The regression itself: the old `rule_id:` needle matched exactly 2
+        // occurrences (fn param + struct-field init) at every rev while the
+        // corpus carried 27..31 entries. Pin (a) the table no longer carries
+        // that needle and (b) the table's needle counts strictly more than
+        // the plumbing count, so reverting either half is loud with a
+        // message that says WHY.
+        let repo = resolve_corpus_repo_root().unwrap();
+        let (_, docker_rel, docker_needle) = CORPUS_DOMAIN_TABLE
+            .iter()
+            .find(|(d, _, _)| *d == "docker")
+            .expect("docker row missing from CORPUS_DOMAIN_TABLE");
+        assert_ne!(
+            *docker_needle, "rule_id:",
+            "the docker needle regressed to the Issue-066 plumbing needle"
+        );
+        let walked = count_corpus_domain(&repo, docker_rel, docker_needle);
+        assert!(
+            walked > 2,
+            "docker source-walk counts {walked} — at or below the Issue-066 plumbing count (2)"
+        );
     }
 }
 

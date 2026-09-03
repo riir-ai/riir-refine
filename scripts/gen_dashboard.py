@@ -318,7 +318,12 @@ CORPUS_DOMAINS = [
     ("rust_perf", "src/domains/rust_perf/corpus.rs", "rule_id:"),
     ("clippy_lints", "src/domains/clippy_lints/corpus.rs", "lint_name:"),
     ("sec", "src/domains/sec/corpus.rs", "rule_id:"),
-    ("docker", "src/domains/docker/corpus.rs", "rule_id:"),
+    # Docker's corpus uses the positional `rule()` shorthand constructor, so
+    # there is no per-entry `rule_id:` text — the old needle counted the
+    # constructor's PLUMBING (exactly 2 at every rev) and the git-mined layer
+    # recorded docker:2 against 27..31 true entries since the domain landed
+    # (Issue 066). `    rule(` matches exactly the 8-space entry calls.
+    ("docker", "src/domains/docker/corpus.rs", "    rule("),
 ]
 
 # The RECORDED series (the bridge to the neuron-db Warm tier — Issue 050).
