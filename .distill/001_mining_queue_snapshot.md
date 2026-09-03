@@ -340,8 +340,14 @@
     standalone crates in a SECOND scoped pass after their roots resolve; noted as
     tooling follow-up. **build.rs map_or terminal-fix recurred** (the Unknown-receiver
     call-expr conservative emission — `git_out(..).map_or(false, |s| ..)` →
-    is_some_and by hand): the closure-bool/call-expr receiver extension stays the
-    top post-mining backlog item. Validation: default lib 441/0, e2e_topology 12/0,
+    is_some_and by hand) — **ROOT CAUSE FIXED same cycle, riir-clippy `609d7267`:
+    map_unwrap_or same-file fn-signature resolution** — Collector fn_rets map
+    (fn name → Option/Result from its RETURN type), classify_receiver consults it
+    for bare-call receivers (qualified path OK; foreign calls/method receivers stay
+    Unknown); 4 fixtures (45 total); e2e proof on the exact build.rs shape heals to
+    is_some_and first-pass; score-bench #35 flat (96.2/1.9/100); lib 1033/0.
+    Standing residual: shadowing-let misclassification accepted (parse-only;
+    --verify reverts E0599). Validation: default lib 441/0, e2e_topology 12/0,
     warm_tier_e2e 3/0, bench_remote_smoothing 8/0, bench_game_sync 2/0/2i, taming 2/0
     + hero_fsm 1/0 (bevy_backend), out_of_box 1/0 (scenario_runner,social_signals,
     pet_pvp), duo 18/0 release (+scenario_runner), warm-tier-do contract 4/0,
