@@ -1,0 +1,20 @@
+# Issue 066 — the corpus series' docker counts are wrong since the domain landed (needle counts constructor plumbing, not entries)
+
+**Status:** OPEN — root cause measured, fix scoped, deliberately NOT landed before the 09-03 18:23 UTC nightly (that run validates 065 T6 on the current tree; do not couple the two)
+
+- [ ] T1 — fix the docker source-walk needle in BOTH walkers: `src/bin/heal.rs` `CORPUS_DOMAIN_TABLE` + `scripts/gen_dashboard.py` `CORPUS_DOMAINS` (the two are a documented mirror pair). `rule_id:` appears exactly **2×** in `src/domains/docker/corpus.rs` at every rev (the `rule()` fn param + the struct-field init) — the shorthand positional constructor (the file's own design note celebrates it) means there is no per-entry `rule_id:` text. Needle `    rule(` (4 spaces + paren) matches exactly the 8-space-indented constructor calls: 27 at landing (`3839457`), 31 since `e63f819` (08-29), 31 at HEAD. Whitespace-coupled — acceptable for a documented best-effort walk, but pin it with a count test in T1.
+- [ ] T2 — add the count-pin test: the Rust source-walk for docker at HEAD must equal `build_docker_seed_corpus().entries.len()` (31); same assertion shape on the Python side (or a fixture file if the Python walk is not unit-tested). Without this the needle can silently rot again on a re-indent.
+- [ ] T3 — repair the poisoned history: true series from git is **08-28=27, 08-29=31, 08-31=31, 09-01=31** (09-02/09-03 already stamped 31 by runtime-corpus binaries and are correct). The store rows for the four bad days must be corrected (check whether they are `source-walk`-stamped or jsonl-imported — `--import-series` yields to stamped rows, so if they were imported, a corrected jsonl + re-import fixes them; if stamped, the repair needs the stamp path or a documented one-off). Then re-run the projection so `corpus_history.jsonl` is true and the dashboard series stops showing docker collapsing 2→31→2 across days that never happened.
+- [ ] T4 — (design note, owner call if rejected) the projection layer prefers store rows over git-mined for overlapping days (`load_corpus_history`: "recorded wins over mined"). When the two disagree for a domain, that is exactly the drift signal the mined layer exists to surface ("the backfill + drift cross-check") — silently losing to a skewed stamp defeats the cross-check. Consider logging (not failing) when a store row's domain count differs from the mined count for the same day.
+
+## Evidence
+
+- The 065 T6 de-risk pre-run (2026-09-04 ~00:52 +0700) regenerated `corpus_history.jsonl` and flipped the 09-01 row `docker:31 → 2` — the same diff commit `a7c473c` declined to commit ("a feature-skewed store row — the store owner's machinery to reconcile"). This issue IS that reconciliation.
+- Measured: `git show 3839457:src/domains/docker/corpus.rs | grep -c 'rule_id:'` = 2; `grep -c '^        rule('` = 27. At HEAD (`e63f819`+): 2 and 31. Runtime count via `build_docker_seed_corpus().entries.len()` = 31 (docker default-on since 08-28, so every current production binary stamps 31 correctly — only historical rows and the feature-off source-walk path are wrong).
+- Store series (2026-09-04 read): 08-28/29/31 + 09-01 all carry `docker:2`; 09-02/09-03 carry 31. All other domains walk correctly because their corpus entries carry per-entry `rule_id:` / `lint_name:` fields — docker is the only corpus using a positional shorthand constructor.
+- Layering that preserves the poison: `load_corpus_history` (gen_dashboard.py) merges git-mined (layer 1), store rows (layer 2), today (layer 3) with **store winning over mined** — so the git-mined layer, which counts text correctly-per-needle and would say 31 for every day since 08-29, loses to the wrong store rows every regeneration.
+
+## Non-goals
+
+- Not a 065 T6 problem: T6's budget/timeout/merge fix is orthogonal and unaffected; the poisoned series deploys in the dashboard either way.
+- Not restructuring the docker corpus to satisfy the needle — the shorthand constructor is good design; the needle is the wrong end to preserve.
