@@ -1,5 +1,9 @@
 # Issue 62: TPR × healer corpus fusion — structured retrieval axis + corpus-generalization bench (Research 527 F5)
 
+**Status:** T4 **DECIDED 2026-09-03** — route (b) against `clippy_lints`
+only, `rustc_errors` excluded, gated on the preregistered T4a withheld-pair
+test (§ route (b) below). Original status follows.
+
 **Status:** Phase 1 COMPLETE (T1+T2+T2a landed, Bench 062). Phase 2: **T3 + T5 LANDED
 (Bench 063 + its coalescing addendum, 2026-09-02) and their verdict RE-SCOPES
 T4** — the role scheme is
@@ -190,10 +194,56 @@ did NOT fire. Three caveats that bound what Phase 2 may claim:
   is exactly the gap `multi_role_fillers` was added to expose. `clippy_lints` is
   the tractable arm instead: 13 of 45 testable, but 1.8 states per distinct pair,
   so it is thinly observed rather than thinly covered and more corpus fixes it.
-  **Owner call, unchanged in shape but now priced:** widen the rustc corpus, run
-  route (b) against clippy only, or fuse on unvalidated generalization and say
-  so. Not a blocker on the mechanism — an absence of the evidence the fuse would
-  rest on.
+  **OWNER CALL MADE 2026-09-03 — route (b) proceeds against `clippy_lints`
+  ONLY, gated on a withheld-pair pre-test. The `rustc_errors` arm is excluded
+  from the fuse. Option (c), fusing on unvalidated generalization, is
+  rejected.** Rationale below; T4a is the cheap gate that can still kill it.
+
+  *Why not widen rustc (option a).* Its 18.8% coverage is **structural, not a
+  sampling artifact** — 17.7 states per distinct pair means the pairs that
+  occur are saturated, so more corpus buys more observations of the same 12
+  pairs. New pairs would have to come from an error code appearing in a shape
+  class it never appears in, and the vocabulary is 8 x 8 and fixed. High cost,
+  low expected yield, and the diagnostic that would tell us it worked
+  (`multi_role_fillers`) is the one already reading 2.
+
+  *Why clippy (option b).* 13 of 45 testable fillers is a real population, and
+  at **1.8 states per pair it is thinly OBSERVED rather than thinly covered** —
+  the opposite failure, and the one more data actually fixes. 62 of 270
+  possible pairs seen means the corpus is nowhere near saturated, so widening
+  clippy adds pairs *and* observations. It is also the cheaper corpus to widen:
+  lints are abundant, `rustc` error codes are not.
+
+  *Why not (c).* Choosing the unmeasured option while a tractable measurement
+  sits on the other arm is the exact move this issue's whole §12 thread exists
+  to correct. If the fuse is worth doing it is worth gating, and the gate is
+  affordable.
+
+- [ ] **T4a (gates T4, cheap, kill-switch)** Run
+  `withheld_pair_top1_report` on the `clippy_lints / tokenbag256 [coalesced
+  T=8]` arm over its 13 multi-role fillers: withhold one `(role, filler)` pair
+  at a time, score against the shared pool, read `verdict()` and `coverage` —
+  never the bare `top1`. Compare against the `AtomicNull` on the same withheld
+  pairs, which must fail OOD by construction.
+
+  **Preregistered, before the harness exists**, because a threshold chosen
+  after seeing the number is not a threshold:
+
+  - **PASS** — `verdict()` is `Some` on every arm that runs (no withheld pair
+    may make the corpus degenerate, which `ObservedPairs` now makes checkable
+    up front), `coverage == 1.0`, and TPR beats the null by **≥ 20 pp**, the
+    same bar Issue 707 G8 registered. Route (b) proceeds.
+  - **FAIL** — TPR does not clear the bar. Route (b) is dead on this corpus and
+    T4 closes REFUTED; do not widen and retry, that is the fishing expedition
+    this bar exists to prevent.
+  - **INCONCLUSIVE** — clears the bar but on so few withheld pairs that a
+    single flip would cross it. That is the 1.8-states-per-pair risk
+    materialising, and it is the ONE branch where widening the clippy corpus
+    is the right response rather than a retry.
+
+  Report the three populations apart — validated, unvalidated-but-fitted, and
+  outside-the-fit — rather than pooling them into one accuracy. Pooled, a
+  prediction reads as a measurement.
 
   Unlike a structural bound, an evidence gap is measurable, and the instrument
   already ships: `katgpt_core::tpr::withheld_pair_top1_report` (katgpt-rs
