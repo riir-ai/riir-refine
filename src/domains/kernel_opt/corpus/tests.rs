@@ -67,10 +67,11 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 98 (10): antirez/ds4 dense.metal/moe.metal leads -- grid-range-split-verbatim-impl-composition, share-activation-stream-keep-projection-reductions, tiny-rows-scalar-thread-per-row-downshift, small-batch-matvec-gemm-bridge-rung, moe-routed-down-sum-single-accumulate-pass, fused-vector-site-transcendental-form-nonportable, monomorphic-hot-caller-last-hit-memo, per-row-scale-folded-into-rhs-staging-tile, dequant-byte-pairs-as-aligned-u16-loads, cross-simd-bitonic-alternating-bank-exchange (the Batch-97 queued NEXT BATCH LEADS + 3 additional candidates).
     // Batch 100 (8): Layr-Labs/qwen-3.8-mtp-challenge -- functional-cache-versioning-loses-donation-under-kernel-read, fused-kv-write-single-writer-reads-newest-from-input, in-place-write-through-input-emits-fence-consumer, residency-set-wired-once-post-warm-persistent-footprint, register-budget-head-split-gqa-reread-trade, batch-composition-invariant-grid-early-return, never-gqa-multiply-full-d-merge-smem, container-rebind-over-retrace-for-churn-survival (Research 120 / Plan 068; A +3, D +3, E +2).
     // Batch 102 (6): FlashQuant sparse-dense fusion (arXiv 2608.15531) -- heterogeneous-unit-paths-shared-tile-fusion, lpt-min-heap-disjoint-column-ownership, tile-coo-sparse-tile-aligned-format, bucketed-sparse-reader-column-partition, bank-group-circular-element-reorder, stream-k-persistent-cta-mac-segments (Research 123 / Plan 071; A +2, C +2, H +1, N +1; the headline was REFUTED for direct adoption at walk time -- the fusion mechanism is the distilled core).
+    // Batch 103 (4): MTPLX PR #391 + MLX NAX combined host-orchestration batch -- shape-class-keyed-capability, wavefront-overlap-pair-ceiling, request-shape-decline-mirror-completeness, backing-provenance-causal-shadowed-extent-widen (Research 124 / Plan 072; D +4; MTPLX re-pinned ef96313 -> a5e38bb at mine time, all anchors re-verified; + the B100 rider enrichment in entries_gpu_14.rs).
     assert_eq!(
         corpus.entries.len(),
-        459,
-        "kernel batches through Batch 102 should have 459 rules"
+        463,
+        "kernel batches through Batch 103 should have 463 rules"
     );
 }
 
@@ -5289,7 +5290,7 @@ fn kernel_categories_table_has_15_entries() {
 
 #[test]
 fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-    // Every rule_id in the 459-rule corpus must appear in exactly one category.
+    // Every rule_id in the 463-rule corpus must appear in exactly one category.
     let corpus = build_kernel_seed_corpus();
     let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     let mut categorized: Vec<&str> = Vec::new();
@@ -5332,12 +5333,12 @@ fn kernel_categories_cover_all_corpus_rules_exhaustively() {
 
 #[test]
 fn kernel_categories_counts_match_plan_003_table() {
-    // Pin per-category rule counts to the Plan 003 table (updated for Batch 102).
+    // Pin per-category rule counts to the Plan 003 table (updated for Batch 103).
     let expected = [
         (KernelCategory::MemoryAccess, 105),
         (KernelCategory::Compute, 57),
         (KernelCategory::Fusion, 41),
-        (KernelCategory::Dispatch, 98),
+        (KernelCategory::Dispatch, 102),
         (KernelCategory::Parallelism, 32),
         (KernelCategory::FlashAttnTiling, 11),
         (KernelCategory::LinearAttnRecurrence, 26),
@@ -5362,9 +5363,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 459.
+    // Sum must equal 463.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 459, "Plan 003: category totals must sum to 459");
+    assert_eq!(total, 463, "Plan 003: category totals must sum to 463");
 }
 
 #[test]
@@ -5375,8 +5376,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 459,
-        "Plan 003: grouped corpus has {total} rules, expected 459"
+        total, 463,
+        "Plan 003: grouped corpus has {total} rules, expected 463"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -7156,6 +7157,124 @@ fn batch102_pseudocode_parses() {
         assert!(
             opt_verdict.parses,
             "batch-102 opt_pattern for '{id}' must parse"
+        );
+    }
+}
+
+#[test]
+fn batch103_rules_present() {
+    // Batch 103 (MTPLX PR #391 + MLX NAX combined host-orchestration
+    // batch -- Research 124 / Plan 072): 4 kernel_opt rules (D +4),
+    // distilled from youssofal/MTPLX PR #391 (re-pinned ef96313 ->
+    // a5e38bb at mine time; all anchors re-verified against the new head
+    // and the rewritten PR body) + the apple/mlx NAX extraction
+    // (f99e916). Host-orchestration batch: no prefill-throughput claim.
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "shape-class-keyed-capability",
+        "wavefront-overlap-pair-ceiling",
+        "request-shape-decline-mirror-completeness",
+        "backing-provenance-causal-shadowed-extent-widen",
+    ];
+    for id in ids {
+        assert!(
+            corpus.entries.iter().any(|e| e.rule_id == id),
+            "batch-103 rule '{id}' missing from corpus"
+        );
+    }
+}
+
+#[test]
+fn batch103_concepts_covered() {
+    // Distinctness + mandated phrases must survive in the concept
+    // text (case-sensitive contains -- the B51 lesson).
+    let corpus = build_kernel_seed_corpus();
+    let checks: &[(&str, &[&str])] = &[
+        (
+            "shape-class-keyed-capability",
+            &[
+                "fails loudly at install",
+                "imported rather than re-spelled so the routing predicate and the kernel cannot drift apart",
+                "a 4,096-token probe exercises the same grid a 17,408-token cycle does",
+                "if 32 * gqa_factor * int(q_len) > 1024",
+                "NOT re-confirmable",
+            ],
+        ),
+        (
+            "wavefront-overlap-pair-ceiling",
+            &[
+                "0.4 % against a 15 % gate; tile ceiling 19.2 %",
+                "the ceiling is too low to fund",
+                "cross-stream fences cost as much as the overlap gains",
+                "exactly S-1 overlappable producer/consumer pairs",
+            ],
+        ),
+        (
+            "request-shape-decline-mirror-completeness",
+            &[
+                "2026-09-02, HTTP 500 on every HumanEval prompt",
+                "the two questions are different, and :func:`context_decline` asks",
+                "a measurement that looks like a result",
+                "a single total would not have shown that, so the sites are named",
+                "cannot quietly measure the default",
+                "One key set to ``0`` on its own raises at model install",
+            ],
+        ),
+        (
+            "backing-provenance-causal-shadowed-extent-widen",
+            &[
+                "if ((st[0] < 0) || (st[1] <= 0) || (st[2] <= 0) || (st[1] % st[2] != 0)) { return false; }",
+                "if (row0 + rows > pitch)",
+                "The causal offset describes the true diagonal even if kL is widened below.",
+                "has_backing_rows(k, kLp) && has_backing_rows(v, kLp)",
+                "if (split_d && do_causal_ && !mask.has_value() && (kL % bk))",
+            ],
+        ),
+    ];
+    for (id, needles) in checks {
+        let e = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == *id)
+            .unwrap_or_else(|| panic!("batch-103 rule '{id}' missing"));
+        for needle in *needles {
+            assert!(
+                e.gpu_concept.contains(needle),
+                "batch-103 concept for '{id}' missing phrase '{needle}'"
+            );
+        }
+    }
+}
+
+#[test]
+#[cfg(not(feature = "kernel_verify"))]
+fn batch103_pseudocode_parses() {
+    // G1 for Batch 103: syn-parse gate (the MTPLX shape-keyed capability,
+    // the wavefront overlap-pair ceiling, the request-shape decline
+    // mirror, and the MLX backing-provenance extent widen).
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "shape-class-keyed-capability",
+        "wavefront-overlap-pair-ceiling",
+        "request-shape-decline-mirror-completeness",
+        "backing-provenance-causal-shadowed-extent-widen",
+    ];
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-103 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            ref_verdict.parses,
+            "batch-103 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            opt_verdict.parses,
+            "batch-103 opt_pattern for '{id}' must parse"
         );
     }
 }

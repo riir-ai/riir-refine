@@ -17,12 +17,49 @@
 
 ## Live queue state (2026-08-31, post-Batch-93, M3 box)
 
-- **Corpus counts:** kernel_opt 459 · rust_perf 99 · clippy_lints 45 · sec 12 · docker 31
+- **Corpus counts:** kernel_opt 463 · rust_perf 99 · clippy_lints 45 · sec 12 · docker 31
   (AGENTS.md is the authoritative ledger — bump there per batch, snapshot counts are a convenience copy).
-- **Last landed:** **Batch 102 (2026-09-04, Research 123 / Plan 071 — the FlashQuant
+- **Last landed:** **Batch 103 (2026-09-04, Research 124 / Plan 072 — the MTPLX PR #391 + MLX NAX
+  combined host-orchestration batch; T7 default COMBINE executed; M3 box, CPU-only): 4 rules,
+  corpus 459 → 463 (D 98 → 102) + the B100 external-instances rider.** `shape-class-keyed-capability`
+  (D — the A− GOAT lead: a capability verdict is valid ONLY for the shape tuple the native gate reads;
+  the MTPLX wiring defect — the ONE call site that could reach the verify width asked about a width the
+  flag never armed — measured the control on both seeds silently; the owner's rule 'a flag either works
+  on every request path the server accepts, or it fails loudly at install'),
+  `wavefront-overlap-pair-ceiling` (D — bound the overlap-pair count BEFORE building any multi-stream
+  seam: exactly S-1 pairs, each bounded by min(producer tail, consumer head); their 2×2 wavefront:
+  '0.4 % against a 15 % gate; tile ceiling 19.2 %' — 'the ceiling is too low to fund'; + 'cross-stream
+  fences cost as much as the overlap gains'), `request-shape-decline-mirror-completeness` (D — THE
+  MIRROR: every request-dependent decline branch of the native contract paired with a stable key;
+  everything else is CONFIGURATION and raises; two production outages ('HTTP 500 on every HumanEval
+  prompt' + the 1,024-token-in-a-2,048-bank crossover miss); decline sites named not totaled + reasons
+  counted + the armed-lane-must-engage raise), `backing-provenance-causal-shadowed-extent-widen`
+  (D — from the MLX NAX extraction @ f99e916: widen K to the tile multiple only after the slices PROVE
+  the padded rows are backed (stride sanity + row-pitch containment + buffer end) and causally
+  unreachable (qL_off from the WIDENED extent keeps the true diagonal); ragged-tail branch deleted).
+  Rider: B100 register-budget-head-split += EXTERNAL INSTANCES (the NAX hd-256 dsplit — WN==2
+  static_assert, the ONE-peer exchange, Q-half register residency; the #4380 GQA-12/16 table — hpt
+  falls as GQA rises, KV ≥ 8192 threshold unchanged). T0 re-pin: MTPLX verdict pin ef96313 →
+  **a5e38bb** (branch rewrite deleted the fable_* scaffolding + rewrote the body 09-03 18:24Z; TWO
+  verdict anchors did NOT survive, carried honestly in-rule: the W87 attribution NOT re-confirmable +
+  the hard-coded-draft-width note re-anchored to the wiring test). T5 graph-build overlap (W67)
+  evaluated then DROPPED with reason (their lane is default-on at the new head, but our Bench-761/771
+  caches consumed the same seam — no measured exposed host-enqueue window remains). T6 riders
+  research-noted: Bench 805 mask-fuse external confirmation (+3.5% prefill but divergence 8/8 at
+  median position 7.5 — ours bit-identical, the posture is the point); Issue 734 GDN regime note
+  (theirs −0.35 s on unblocked-eager stock vs ours 0.97-0.98× on already-batched); Bench 641/B77
+  micro-vs-e2e third external instance (micro 1.94×, e2e −3.6%). Non-goals held: NO prefill-throughput
+  claim; no league action. GOAT: batch103 gates 3/3 + kernel_heal lib 1285/0/1i + default 1029/0 +
+  kernel_heal+latent 1392/0/2i (floors HELD zero re-pins) + clippy 0 --lib all three states. Count
+  pins walked + EN-ROUTE rot fixed: the 15 mod.rs category header comments were stale by up to 2
+  batches (A 103 vs 105, C 39 vs 41, H 16 vs 17, N 27 vs 28 — pinned by NO test) — all 15 now match
+  the pinned table. Generator lesson re-proven (B77 escape-strip class): the in-place B100 rider edit
+  landed bare quotes (22 compile errors), repaired byte-precisely; the Python-heredoc GENERATOR path
+  was clean first-shot.**
+  Prior: **Batch 102** (2026-09-04, Research 123 / Plan 071 — the FlashQuant
   sparse-dense fusion distill, arXiv 2608.15531; taken over from a dead sibling session +
   renumbered 070 → 071 per the reserved-071 flag): 6 rules, corpus 453 → 459 (A +2, C +2,
-  H +1, N +1).** `heterogeneous-unit-paths-shared-tile-fusion` (C — the additive-heterogeneous-
+  H +1, N +1). `heterogeneous-unit-paths-shared-tile-fusion` (C — the additive-heterogeneous-
   paths member of the same-input family: TC dense + CUDA-core sparse over one tile space,
   offline tile correspondence, EW extra-warps rider folded), `lpt-min-heap-disjoint-column-
   ownership` (H — assignment-time LPT balance, one owner per column, zero atomics — the work-
@@ -133,9 +170,13 @@
     the hoist win may be aarch64-shaped). Batch 99's own split-vs-merged negative control (0.95-1.00x on
     runtime-opaque targets) does NOT cover this transform: splitting re-merges structurally on aarch64,
     but the hoist still wins by eliminating the load.
-  - **NEXT UP (UNBLOCKED by B102's landing): Plan 072 (Research 122) — youssofal/MTPLX
+  - **~~NEXT UP (UNBLOCKED by B102's landing): Plan 072 (Research 122) — youssofal/MTPLX
     PR #391 (davidtai Qwen3.8-Flash-Next restack) — W87-led kernel_opt batch, 2–3 rules
-    + riders, MAY COMBINE (default COMBINE) with the queued NAX leads** (`backing-provenance-
+    + riders, MAY COMBINE (default COMBINE) with the queued NAX leads~~ — LANDED 2026-09-04
+    as Batch 103 (Research 124: 4 rules incl. the NAX backing-provenance lead + the B100 rider;
+    T5 graph-build overlap dropped with reason; T7 COMBINE executed; the dispatcher-eligibility
+    predicate lead is DISCHARGED as fix-space guidance inside the request-shape rule's engagement-
+    canary complement — no separate corpus rule, see Research 124).** Original queue row: (`backing-provenance-
     causal-shadowed-extent-widen` — the MLX 846 rule-1; `dispatcher-eligibility-predicate-
     lags-kernel-capability` — the MLX #4416 rule-2) into ONE post-B102 kernel batch (one
     corpus cycle, one GOAT run, one count-pin walk). Verdict: YES grade B as a mining source,
@@ -629,6 +670,8 @@ closed.**
   (fully clean); riir-dapps confirmed already discharged by its finder (`d91881f` manual +
   `2b9cce9` post-fix re-heal). Contended/skipped: game-sdk (sibling WIP dirty), all other
   active-lane repos per the sibling-lanes note.
+- **Batch 103 landed this cycle (2026-09-04):** see Last landed above; Plan 072 all tasks `[x]`;
+  Plan 073 stays ARMED on the 4090 window (T0a probe blocked by the NoRA matrix until ~10:00-12:30).
 - **Hygiene:** current after this entry. `.issues/` = 059/060/061 (owner/ops/legal-gated)
   + 065 (T3/T7 latent; T6 CLOSED on the 09-03 nightly PASS) + 066 (T1/T2/T3 DONE 09-04 —
   docker needle `c9863d6` + store repair `d731cac`; T4 projection-drift logging open,
