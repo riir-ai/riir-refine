@@ -8,7 +8,7 @@
 //! after a `let`; silent when all items precede the statements.
 //!
 //! Fix: hoist the items to the top of the block's statement list. This is
-//! provably semantics-preserving for every compiling input: a block item
+//! provably semantics-preserved for every compiling input: a block item
 //! cannot capture block locals (that is precisely why `const K: i32 = x;`
 //! inside a block is a compile error), and Rust name resolution is
 //! order-independent WITHIN a block — the hoist stays inside the block, so
@@ -24,22 +24,33 @@
 //! set. Nested-block edits inside the region resolve outer-first (dropped
 //! this pass, picked up by the next fixpoint iteration).
 //!
+//! Indentation: every line the edit INSERTS (items after the first, the
+//! blank separator, the first kept statement) is prefixed with the block's
+//! indent unit — the whitespace run preceding the region on its line. A
+//! mid-line region (one-liner blocks) uses the empty indent, byte-preserving
+//! the single-line fixtures. Without this the hoisted items and the kept
+//! tail landed at column 0 (found live in the riir-dapps sweep, 2026-09-03:
+//! `kat_ledger`'s consts and `let` re-emitted unindented).
+//!
 //! Guards:
-//! - **Macro items are never moved** (`Item::Macro` — token opacity; the
-//!   `use_self` nested-items precedent). They stay in place; the unguarded
-//!   items still hoist.
-//! - **Comment guards** (Issue 027/028 class — a hoist would leave a
-//!   comment attached to the wrong node): an item whose LEADING gap
-//!   (previous node end → item start) carries a comment marker is skipped —
-//!   the comment stays with the statements and the item would move away
-//!   from its docs. An item with a same-line trailing comment is skipped —
-//!   the note would be displaced onto whatever follows the moved span.
-//!   Multi-item blocks hoist the unguarded subset (a partial hoist is still
-//!   an improvement, and the fixpoint is idempotent).
-//! - Comment-guarded leftovers are an honest divergence: real clippy keeps
-//!   firing on an item we refuse to move (we are SAFER — the rewrite would
-//!   displace the comment), the same class as the comment-guarded
-//!   `single_match_else` refusals.
+//! - **ALL-OR-NOTHING per block.** A partial hoist can separate an `impl`
+//!   from its target type: a comment above `struct S;` guards the struct
+//!   but not its `impl Trait for S`, and hoisting the impl alone splits the
+//!   pair across the statement list (compiles — resolution is
+//!   order-independent — but unreadable; found live in the same sweep:
+//!   `kat_chaos`'s `SettlementSubmitter` impls). So if ANY item candidate in
+//!   the region is comment-guarded or non-movable, the whole hoist is
+//!   refused. Comment-guarded leftovers are an honest divergence: real
+//!   clippy keeps firing on items we refuse to move (we are SAFER — the
+//!   rewrite would displace the comment), the same class as the
+//!   comment-guarded `single_match_else` refusals.
+//! - **`macro_rules!` definition items refuse the block.** `Item::Macro` is
+//!   non-movable for token-opacity reasons, but worse: `macro_rules!`
+//!   scoping is TEXTUAL — an item hoisted above the definition can lose
+//!   access to it (a guaranteed compile-gate revert). A definition item
+//!   anywhere after the first statement refuses the whole hoist.
+//!   `Stmt::Macro` invocations (`m!();`) are unaffected — they create no
+//!   scoping.
 
 use super::helpers::{byte_range, comment_marker_positions};
 use super::{SourceEdit, src};
@@ -91,13 +102,17 @@ impl Collector<'_> {
         }
         // The first non-item statement — nothing before it can fire.
         let first_stmt = block.stmts.iter().position(|s| !is_item(s))?;
-        // Candidate items after it, comment-guarded per item.
+        // ALL-OR-NOTHING: every item candidate must be movable AND
+        // comment-unguarded, or the block is refused. A partial hoist
+        // separates `impl` blocks from their (guarded) target types.
         let mut moved: Vec<usize> = Vec::new();
         for (idx, stmt) in block.stmts.iter().enumerate().skip(first_stmt + 1) {
-            if !movable(stmt) {
-                continue;
+            match stmt {
+                Stmt::Item(Item::Macro(_)) => return None, // textual scoping
+                Stmt::Item(_) if self.item_comment_guarded(&block.stmts, idx) => return None,
+                _ => {}
             }
-            if self.item_comment_guarded(&block.stmts, idx) {
+            if !movable(stmt) {
                 continue;
             }
             moved.push(idx);
@@ -109,12 +124,15 @@ impl Collector<'_> {
         let region_start = block.stmts[first_stmt].span().byte_range().start;
         let region_end = block.stmts[last_moved].span().byte_range().end;
 
-        // Items text (original relative order, one per line).
+        // Items text (original relative order). Each item AFTER the first
+        // is re-indented to the block's indent unit — the raw spans start at
+        // the item keyword, so a plain join would emit them at column 0.
+        let indent = self.line_indent(region_start);
         let mut parts: Vec<String> = Vec::with_capacity(moved.len());
         for &idx in &moved {
             parts.push(src(self.source, &block.stmts[idx])?);
         }
-        let items_text = parts.join("\n");
+        let items_text = parts.join(&format!("\n{indent}"));
 
         // Region text minus the moved spans, preserving every kept
         // statement and its preceding gap byte-verbatim.
@@ -135,12 +153,26 @@ impl Collector<'_> {
             cursor = r.end;
         }
 
-        let replacement = format!("{items_text}\n\n{kept}");
+        // The blank separator re-establishes the block indent for the first
+        // kept statement — the replacement lands mid-line, right after the
+        // source's own leading whitespace for the region.
+        let replacement = format!("{items_text}\n\n{indent}{kept}");
         Some(SourceEdit {
             start: region_start,
             end: region_end,
             replacement,
         })
+    }
+
+    /// The whitespace run preceding `pos` on its line — the block's indent
+    /// unit. Empty when the statement starts mid-line (one-liner blocks):
+    /// there is nothing to re-establish.
+    fn line_indent(&self, pos: usize) -> String {
+        let line_start = self.source[..pos].rfind('\n').map_or(0, |i| i + 1);
+        match self.source.get(line_start..pos) {
+            Some(prefix) if prefix.chars().all(char::is_whitespace) => prefix.to_string(),
+            _ => String::new(),
+        }
     }
 
     /// Would moving `stmts[idx]` displace a comment? Two checks: the gap
@@ -311,6 +343,56 @@ mod tests {
         let y = out.find("let y").expect("y");
         assert!(inner < y, "inner block hoisted: {out}");
         assert!(out.find("fn outer").unwrap() < out.find("let x").unwrap(), "{out}");
+        assert!(syn::parse_file(&out).is_ok(), "{out}");
+    }
+
+    #[test]
+    fn multiline_block_items_get_block_indent() {
+        // The riir-dapps kat_ledger shape: in an indented block the hoisted
+        // consts and the kept `let` must all carry the block indent (the
+        // pre-fix output emitted them at column 0).
+        let input = "fn f() {\n    let l = open();\n    const D14: u32 = 14;\n    const D15: u32 = 15;\n    l.post(D14);\n    l.post(D15);\n}";
+        let out = propose_fix("items_after_statements", input).expect("pattern matched");
+        assert!(syn::parse_file(&out).is_ok(), "{out}");
+        // Items hoisted above the let, all at 4-space indent, `let` re-indented.
+        let d14 = out.find("const D14").expect("D14");
+        let d15 = out.find("const D15").expect("D15");
+        let l = out.find("let l").expect("let");
+        assert!(d14 < d15 && d15 < l, "order + hoist: {out}");
+        assert!(out.contains("\n    const D14"), "D14 indent: {out}");
+        assert!(out.contains("\n    const D15"), "D15 indent (was col 0): {out}");
+        assert!(out.contains("\n\n    let l"), "kept let re-indented (was col 0): {out}");
+    }
+
+    #[test]
+    fn impl_not_separated_from_comment_guarded_struct() {
+        // The riir-dapps kat_chaos shape: a comment above `struct S;` guards
+        // the struct, but its `impl` is unguarded. Pre-fix the impl hoisted
+        // alone, splitting the pair across the statement list. The whole
+        // hoist is now refused (all-or-nothing).
+        let input = "fn f(l: L) {\n    let r = l.go();\n    assert_eq!(r, 4);\n\n    // Simulate the crash window.\n    struct LandsOnce;\n    impl Sub for LandsOnce {\n        fn go(&mut self) -> u32 { 1 }\n    }\n    let p = 1;\n}";
+        let out = propose_fix("items_after_statements", input);
+        assert!(out.is_none(), "guarded struct must refuse the whole hoist: {out:?}");
+    }
+
+    #[test]
+    fn macro_rules_definition_in_region_refuses_hoist() {
+        // macro_rules! scoping is TEXTUAL: hoisting `fn h` above the
+        // definition would break its access to `m`. The block refuses.
+        let input = "fn f() {\n    let x = 1;\n    macro_rules! m { () => { 2 } }\n    fn h() -> i32 { m!() }\n    x + h()\n}";
+        let out = propose_fix("items_after_statements", input);
+        assert!(out.is_none(), "macro_rules definition must refuse: {out:?}");
+    }
+
+    #[test]
+    fn multiline_two_items_hoist_in_order_at_indent() {
+        let input = "fn f() -> i32 {\n    let x = 1;\n    fn h1() -> i32 { 1 }\n    fn h2() -> i32 { 2 }\n    h1() + h2() + x\n}";
+        let out = propose_fix("items_after_statements", input).expect("pattern matched");
+        let h1 = out.find("fn h1").expect("h1");
+        let h2 = out.find("fn h2").expect("h2");
+        let x = out.find("let x").expect("x");
+        assert!(h1 < h2 && h2 < x, "{out}");
+        assert!(out.contains("\n    fn h2"), "second item at block indent: {out}");
         assert!(syn::parse_file(&out).is_ok(), "{out}");
     }
 
