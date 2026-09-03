@@ -39,6 +39,13 @@ fn g2_count_path_is_alloc_free() {
     while payload.len() < 1024 * 1024 {
         payload.extend_from_slice(line);
     }
+    // Warm the ambient allocation sources OUTSIDE the bracket: libtest
+    // machinery (thread-local init, panic-formatting buffers) allocates
+    // lazily on first use and the sites differ per platform — measured live
+    // on the first linux run (2026-09-03): +4 allocs inside the bracket
+    // (180 vs 176) that a macOS run never sees. The warm-up call absorbs
+    // them; the bracket then measures only count_word_tokens.
+    let _ = count_word_tokens(&payload);
     let before = ALLOCS.load(std::sync::atomic::Ordering::Relaxed);
     let n = count_word_tokens(&payload);
     let after = ALLOCS.load(std::sync::atomic::Ordering::Relaxed);
