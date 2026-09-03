@@ -799,7 +799,27 @@ All classes closed; the standing divergence (P4 residual) has no action planned.
       harness (fake receiver type) and rustc THAT — type-checks the real
       content without the dependency graph, ~2 min, and it is the only
       Windows-reachable gate for macOS-gated repairs.
-- [-] **P18 (open — self-applied 2026-09-02, riir-clippy `2044722`; riir-deployer
+- [-] **P18 (VERIFICATION SWEEP DONE 2026-09-03 — remainder is owner-only. Measured
+      via `gh api` across all 13 gist-rs repos + katopz/katgpt-rs: (1) every repo's
+      rust.yml runs the repo's own `scripts/ci_feature_guard.sh` (the full guard, not
+      a subset) and EXISTS ON THE DEFAULT BRANCH (schedule/dispatch liveness, the
+      `.issues/704` rot class) with schedule+dispatch+push triggers — including
+      riir-train (rust.yml on `main`, its working branch) and riir-game-sdk (default
+      flipped main→develop mid-day 2026-09-03 by the parallel CI session);
+      (2) riir-unity has ZERO `.rs` files and no Cargo.toml — the boundary-only
+      `no_rust_boundary.yml` is the correct shape, closed; (3) riir-dao's "no PAT
+      needed" AGENTS.md claim VERIFIED — its only escaping dep is katgpt-core
+      (public katopz/katgpt-rs, default GITHUB_TOKEN checkout), no riir-dapps path
+      dep in the manifest yet; (4) `SIBLING_REPOS_TOKEN` configured on riir-chain /
+      riir-dapps / riir-viewbridge / riir-auth / riir-clippy; **still MISSING on
+      riir-train (Sun 04:17 cron), riir-mmorpg-examples (Mon 04:47), seal-remake
+      (Wed 04:37)** — all three guards hard-fail LOUDLY at the first private
+      checkout (the designed Issue-028 expiry-alarm behavior), but the owner should
+      provision the secret before those first runs; provisioning is an owner act
+      (secret value — not derivable, and minting one from a session's OAuth token
+      is a security decision). riir-neuron-db (public-only dep) and riir-deployer
+      (zero escaping deps by hard rule) legitimately need none. Original record —
+      self-applied 2026-09-02, riir-clippy `2044722`; riir-deployer
       landed 2026-09-01, deployer `2b7d58d`; riir-ai landed 2026-09-02,
       riir-ai `4b085ebeb` — the workspace's WIDEST surface: 79 escaping deps
       across FIVE siblings pinned in its new scripts/standalone_dep_gate.sh
