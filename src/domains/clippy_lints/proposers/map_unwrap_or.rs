@@ -54,6 +54,7 @@ pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
         edits: Vec::new(),
         param_kinds: Vec::new(),
         pinned: std::collections::HashSet::new(),
+        fn_rets: std::collections::HashMap::new(),
     };
     v.visit_file(file);
     v.edits
@@ -74,11 +75,20 @@ struct Collector<'a> {
     /// read, so the unsize coercion fires and the rewrite compiles
     /// (probe-verified 2026-08-28 — see the guard in `try_map_or`).
     pinned: std::collections::HashSet<(usize, usize)>,
+    /// Same-file fn name → Option/Result classification of its RETURN type
+    /// (a fn whose return type is an `Option`/`Result` path, any arity).
+    /// Lets a BARE-CALL
+    /// receiver (`git_out(..).map(f).unwrap_or(false)` — the build.rs:33
+    /// shape, recurred 2026-09-04) reach the terminal forms instead of the
+    /// always-compiling `map_or` whose output `unnecessary_map_or` re-flags.
+    /// Foreign fns are absent → Unknown (conservative, unchanged).
+    fn_rets: std::collections::HashMap<String, ReceiverKind>,
 }
 
 impl<'ast> Visit<'ast> for Collector<'_> {
     fn visit_item_fn(&mut self, f: &'ast syn::ItemFn) {
         self.param_kinds.push(fn_param_kinds(&f.sig));
+        self.note_fn_ret(&f.sig);
         self.note_fn_tail_pin(&f.sig, &f.block);
         syn::visit::visit_item_fn(self, f);
         self.param_kinds.pop();
@@ -86,6 +96,7 @@ impl<'ast> Visit<'ast> for Collector<'_> {
 
     fn visit_impl_item_fn(&mut self, f: &'ast syn::ImplItemFn) {
         self.param_kinds.push(fn_param_kinds(&f.sig));
+        self.note_fn_ret(&f.sig);
         self.note_fn_tail_pin(&f.sig, &f.block);
         syn::visit::visit_impl_item_fn(self, f);
         self.param_kinds.pop();
@@ -114,7 +125,9 @@ impl<'ast> Visit<'ast> for Collector<'_> {
     fn visit_expr_method_call(&mut self, m: &'ast ExprMethodCall) {
         syn::visit::visit_expr_method_call(self, m);
         let slice_pinned = self.pinned.contains(&two(byte_range(m)));
-        if let Some(replacement) = try_map_or(self.source, m, self.innermost_params(), slice_pinned) {
+        if let Some(replacement) =
+            try_map_or(self.source, m, self.innermost_params(), Some(&self.fn_rets), slice_pinned)
+        {
             self.edits.push(edit(m, replacement));
         }
     }
@@ -164,12 +177,22 @@ impl Collector<'_> {
             let Ok(expr) = syn::parse2::<Expr>(stream) else {
                 continue; // named args / non-expression tokens — skip
             };
-            scan_expr_for_matches(self.source, &mut self.edits, &expr, params.as_ref());
+            scan_expr_for_matches(self.source, &mut self.edits, &expr, params.as_ref(), Some(&self.fn_rets));
         }
     }
 
     fn innermost_params(&self) -> Option<&std::collections::HashMap<String, ReceiverKind>> {
         self.param_kinds.last()
+    }
+
+    /// Record a same-file fn's RETURN-type classification (free + impl fns;
+    /// the last-segment `Option`/`Result` rule shared with `param_type_kind`).
+    fn note_fn_ret(&mut self, sig: &Signature) {
+        if let syn::ReturnType::Type(_, ty) = &sig.output {
+            if let Some(kind) = param_type_kind(ty) {
+                self.fn_rets.insert(sig.ident.to_string(), kind);
+            }
+        }
     }
 }
 
@@ -182,21 +205,23 @@ fn scan_expr_for_matches(
     edits: &mut Vec<SourceEdit>,
     expr: &Expr,
     params: Option<&std::collections::HashMap<String, ReceiverKind>>,
+    fn_rets: Option<&std::collections::HashMap<String, ReceiverKind>>,
 ) {
     struct Sub<'a> {
         source: &'a str,
         edits: &'a mut Vec<SourceEdit>,
         params: Option<&'a std::collections::HashMap<String, ReceiverKind>>,
+        fn_rets: Option<&'a std::collections::HashMap<String, ReceiverKind>>,
     }
     impl<'ast> Visit<'ast> for Sub<'ast> {
         fn visit_expr_method_call(&mut self, m: &'ast ExprMethodCall) {
             syn::visit::visit_expr_method_call(self, m);
-            if let Some(replacement) = try_map_or(self.source, m, self.params, false) {
+            if let Some(replacement) = try_map_or(self.source, m, self.params, self.fn_rets, false) {
                 self.edits.push(edit(m, replacement));
             }
         }
     }
-    let mut sub = Sub { source, edits, params };
+    let mut sub = Sub { source, edits, params, fn_rets };
     sub.visit_expr(expr);
 }
 
@@ -263,6 +288,7 @@ fn try_map_or(
     source: &str,
     m: &ExprMethodCall,
     params: Option<&std::collections::HashMap<String, ReceiverKind>>,
+    fn_rets: Option<&std::collections::HashMap<String, ReceiverKind>>,
     slice_pinned: bool,
 ) -> Option<String> {
         let else_form = if m.method == "unwrap_or" {
@@ -358,7 +384,7 @@ fn try_map_or(
                 // of real clippy's terminal suggestion — the documented
                 // SAFER-than-clippy divergence, same class as the type-blind
                 // lint demotions).
-                match classify_receiver(&recv, params) {
+                match classify_receiver(&recv, params, fn_rets) {
                     ReceiverKind::OptionLike => {
                         if default {
                             // clippy chain: `map_or(true, f)` → `is_none_or`
@@ -409,7 +435,11 @@ enum ReceiverKind {
     Unknown,
 }
 
-fn classify_receiver(recv: &str, params: Option<&std::collections::HashMap<String, ReceiverKind>>) -> ReceiverKind {
+fn classify_receiver(
+    recv: &str,
+    params: Option<&std::collections::HashMap<String, ReceiverKind>>,
+    fn_rets: Option<&std::collections::HashMap<String, ReceiverKind>>,
+) -> ReceiverKind {
     const OPTION_SHAPES: [&str; 7] = [
         ".get(", ".find(", ".first(", ".last(", ".pop()", ".next()", ".ok()",
     ];
@@ -425,6 +455,18 @@ fn classify_receiver(recv: &str, params: Option<&std::collections::HashMap<Strin
             return *kind;
         }
         return ReceiverKind::Unknown;
+    }
+    // A BARE-CALL receiver typed by a same-file fn signature
+    // (`git_out(..).map(f).unwrap_or(false)` — the build-script shape:
+    // build.rs:33 recurred 2026-09-04 after the riir-examples 08-19 miss).
+    // The callee ident immediately before the FIRST `(` is looked up in the
+    // same-file fn-return map; method-call receivers (leading `.`) and
+    // foreign callees stay Unknown. Params still outrank this (a same-named
+    // local param is the tighter scope); a shadowing `let` binding would
+    // too in real rustc — out of scope for a parse-only pass, and the
+    // --verify compile gate reverts any E0599 that slips through.
+    if let Some(kind) = bare_call_receiver_kind(recv, fn_rets) {
+        return kind;
     }
     let mut best: Option<(usize, ReceiverKind)> = None;
     for shape in OPTION_SHAPES {
@@ -442,6 +484,29 @@ fn classify_receiver(recv: &str, params: Option<&std::collections::HashMap<Strin
         }
     }
     best.map_or(ReceiverKind::Unknown, |(_, kind)| kind)
+}
+
+/// Classify a receiver of the shape `callee(..)` / `path::callee(..)`: extract
+/// the callee's final ident (scanning back from the first `(` over the
+/// `::`-qualified segments), then look it up in the same-file fn-return map.
+/// None unless the text actually IS a call (an ident chain directly followed
+/// by `(`) — method-call receivers and struct literals stay out of scope.
+fn bare_call_receiver_kind(
+    recv: &str,
+    fn_rets: Option<&std::collections::HashMap<String, ReceiverKind>>,
+) -> Option<ReceiverKind> {
+    let map = fn_rets?;
+    let open = recv.find('(')?;
+    let head = &recv[..open];
+    let head = head.trim_end();
+    if head.is_empty() || head.contains('.') || head.contains('(') {
+        return None;
+    }
+    let callee = head.rsplit("::").next()?.trim();
+    if callee.is_empty() || !callee.chars().all(|c| c.is_alphanumeric() || c == '_') {
+        return None;
+    }
+    map.get(callee).copied()
 }
 
 /// `rfind` for a shape allowlist entry, ALSO matching the turbofish call
@@ -970,6 +1035,65 @@ mod tests {
         assert!(
             !out.contains("is_some_and"),
             "terminal form on unknown receiver must not be produced: {out}"
+        );
+    }
+
+    #[test]
+    fn same_file_fn_receiver_becomes_is_some_and() {
+        // The build.rs:33 shape (recurred 2026-09-04; the riir-examples 08-19
+        // miss class): a BARE-CALL receiver whose callee is a same-file fn
+        // with an `-> Option<T>` return — the fn-return map proves the
+        // receiver Option, so the terminal form replaces the `map_or` that
+        // `unnecessary_map_or` re-flags.
+        let input = concat!(
+            "fn git_out(args: &[&str]) -> Option<String> { Some(String::new()) }\n",
+            "fn build() -> bool { git_out(&[\"status\"]).map(|s| !s.is_empty()).unwrap_or(false) }",
+        );
+        let out = propose_fix("map_unwrap_or", input).expect("matched");
+        assert!(
+            out.contains("git_out(&[\"status\"]).is_some_and(|s| !s.is_empty())"),
+            "is_some_and on same-file fn receiver not produced: {out}"
+        );
+    }
+
+    #[test]
+    fn same_file_result_fn_receiver_becomes_is_ok_and() {
+        let input = concat!(
+            "fn load(p: &str) -> Result<u8, u8> { Ok(1) }\n",
+            "fn f(p: &str) -> bool { load(p).map(|v| v > 3).unwrap_or(false) }",
+        );
+        let out = propose_fix("map_unwrap_or", input).expect("matched");
+        assert!(
+            out.contains("load(p).is_ok_and(|v| v > 3)"),
+            "is_ok_and on same-file Result fn receiver not produced: {out}"
+        );
+    }
+
+    #[test]
+    fn foreign_call_receiver_still_falls_back_to_map_or() {
+        // The callee is NOT defined in the scanned file (no map entry) —
+        // Unknown, conservative fallback unchanged (the pre-extension
+        // behavior is the regression floor here).
+        let input = "fn f(k: u32) -> bool { foreign_lookup(k).map(|v| v > 3).unwrap_or(false) }";
+        let out = propose_fix("map_unwrap_or", input).expect("matched");
+        assert!(
+            out.contains("foreign_lookup(k).map_or(false, |v| v > 3)"),
+            "map_or fallback not produced: {out}"
+        );
+        assert!(!out.contains("is_some_and"), "terminal leaked: {out}");
+    }
+
+    #[test]
+    fn qualified_same_file_fn_receiver_becomes_is_some_and() {
+        // `path::callee(..)` — the final `::` segment is the lookup key.
+        let input = concat!(
+            "mod git { pub fn out(args: &[&str]) -> Option<String> { None } }\n",
+            "fn f() -> bool { git::out(&[\"s\"]).map(|s| !s.is_empty()).unwrap_or(false) }",
+        );
+        let out = propose_fix("map_unwrap_or", input).expect("matched");
+        assert!(
+            out.contains("git::out(&[\"s\"]).is_some_and(|s| !s.is_empty())"),
+            "is_some_and on qualified fn receiver not produced: {out}"
         );
     }
 
