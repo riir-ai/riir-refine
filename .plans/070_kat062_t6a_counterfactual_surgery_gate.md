@@ -77,4 +77,4 @@ query total.
 - [x] Cargo.toml test row (`required-features = ["tpr_structure", "score_bench"]`).
 - [x] Run it once, record the verdict + numbers in `.benchmarks/066_t6a_counterfactual_gate.md`.
 - [x] Update `.issues/062` (T6a row), AGENTS.md, mining-queue snapshot.
-- [ ] Commit + push.
+- [x] Commit + push. (`9c0807b`)
