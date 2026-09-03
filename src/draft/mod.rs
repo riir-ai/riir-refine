@@ -45,6 +45,8 @@ pub mod span_source;
 pub mod switch_cost;
 #[cfg(all(feature = "tpr_structure", feature = "latent_retrieval"))]
 pub mod tpr_fit;
+#[cfg(all(feature = "tpr_structure", feature = "latent_retrieval"))]
+pub mod tpr_t4a_withheld;
 pub mod withheld_pair_ood;
 
 pub use corpus_index::{IndexTokenizer, RetrievalConfig, RuleIndex, ScoredRule, SuggestScratch};

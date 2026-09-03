@@ -615,6 +615,20 @@ required-features = ["latent_retrieval"]
 name = "modelability_sweep"
 required-features = ["latent_retrieval", "clippy_lints", "rust_perf"]
 
+# Issue 062 T3 / Bench 063 — the TPR structure-admissibility harness, and T4a,
+# the withheld-pair gate that decides route (b). BOTH carry a whole-file
+# `#![cfg(...)]`, which protects the COUNT and not the READER: without these
+# rows `cargo test --test t063_tpr_structure` compiles to nothing and reports
+# `0 passed` with exit 0 — a silent pass over zero assertions, indistinguishable
+# from a real one. `required-features` is what makes the omission an error.
+[[test]]
+name = "t063_tpr_structure"
+required-features = ["tpr_structure"]
+
+[[test]]
+name = "t062_t4a_withheld_clippy"
+required-features = ["tpr_structure"]
+
 # ⛔ `[patch]` is honoured ONLY in the root manifest of the workspace being
 # built. `riir-neuron-db` deps katgpt by git URL and redirects it back to the
 # local checkout with its own `[patch]` — a redirect that does NOT reach us
