@@ -6709,6 +6709,7 @@ fn batch98_rules_present() {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn batch98_concepts_covered() {
     // Distinctness + mandated phrases must survive in the concept
     // text (case-sensitive contains -- the B51 lesson).
@@ -7024,7 +7025,8 @@ fn batch100_pseudocode_parses() {
 #[allow(
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,
-    clippy::cast_precision_loss
+    clippy::cast_precision_loss,
+    clippy::too_many_lines
 )]
 fn batch97_mxfp4_half_band_exhaustive_oracle() {
     // T6 for Batch 97 (Plan 063, MANDATORY for the GOAT lead): the
@@ -7043,7 +7045,7 @@ fn batch97_mxfp4_half_band_exhaustive_oracle() {
     fn f32_to_f16_bits_rne(f: f32) -> u16 {
         let b = f.to_bits();
         let sign = ((b >> 16) & 0x8000) as u16;
-        let exp = ((b >> 23) & 0xff) as i32;
+        let exp = i32::from(((b >> 23) & 0xff) as u8);
         let man = b & 0x007f_ffff;
         if exp == 0xff {
             // Inf / NaN (NaN canonicalizes quiet, matching a narrow)
@@ -7092,8 +7094,8 @@ fn batch97_mxfp4_half_band_exhaustive_oracle() {
 
     fn half_val(h: u16) -> f32 {
         let sign = if h & 0x8000 != 0 { -1.0 } else { 1.0 };
-        let exp = ((h >> 10) & 0x1f) as i32;
-        let man = (h & 0x03ff) as i32;
+        let exp = i32::from((h >> 10) & 0x1f);
+        let man = i32::from(h & 0x03ff);
         let v = match exp {
             0 => (man as f32) * 2f32.powi(-24),
             31 => {
@@ -7112,7 +7114,7 @@ fn batch97_mxfp4_half_band_exhaustive_oracle() {
         match e {
             0xff => f32::NAN,
             0 => 2f32.powi(-127),
-            _ => 2f32.powi(e as i32 - 127),
+            _ => 2f32.powi(i32::from(e) - 127),
         }
     }
 

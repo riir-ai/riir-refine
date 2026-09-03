@@ -218,8 +218,8 @@ fn t062_t4a_withheld_pair_gate() {
     }
     println!(
         "\n── A2: is the zero the corpus or the geometry? (d sweep, admissible grid) ──\n\
-           {:>3} {:>9} {:>9} {:>9} {:>9}  {}",
-        "d", "tpr-ID", "tpr-OOD", "null-OOD", "margin", "verdict / refit admissibility"
+           {:>3} {:>9} {:>9} {:>9} {:>9}  verdict / refit admissibility",
+        "d", "tpr-ID", "tpr-OOD", "null-OOD", "margin"
     );
     let mut sweep = Vec::new();
     for d in DS {

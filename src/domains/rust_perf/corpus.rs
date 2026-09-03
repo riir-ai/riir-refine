@@ -8802,8 +8802,8 @@ mod tests {
         let handlers: [fn(u64) -> u64; 2] = [op_add, op_mul];
 
         // Fixed 2-op stream: both ops exercised, deterministic.
-        let ops: Vec<u32> = (0..256).map(|i| (i % 2) as u32).collect();
-        let xs: Vec<u64> = (0..256).map(|i| (i as u64) ^ 0xABCD).collect();
+        let ops: Vec<u32> = (0..256u32).map(|i| i % 2).collect();
+        let xs: Vec<u64> = (0..256u32).map(|i| (u64::from(i)) ^ 0xABCD).collect();
 
         let run_table = |ops: &[u32], xs: &[u64]| -> u64 {
             let mut acc = 0u64;
