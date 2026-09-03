@@ -600,6 +600,20 @@
 
 All classes closed; the standing divergence (P4 residual) has no action planned.
 
+- [ ] **2026-09-03 LIVE REPRO (items_after_statements try_hoist, in-flight fix acceptance
+      criterion):** a `--fix --write --verify` sweep of riir-viewbridge reproduced the
+      column-0 defect on real code — `crates/riir-viewbridge-abi/tests/net_ffi_roundtrip.rs`
+      `ws_burst_over_the_inbound_cap_drops_oldest_and_keeps_order`: the hoisted `const N`
+      landed correctly BUT the displaced `let url = spawn_ws_relay();` lost its
+      indentation (column 0). **Both standing gates passed it**: the compile gate is
+      indentation-blind (column-0 `let` is valid Rust → verify kept the edit), and the
+      fmt-clean-at-HEAD gate correctly skipped the file (pre-existing drift) — so the
+      mangling SURVIVED TO DISK. Edit reverted by the sweeping session; surface yielded
+      (the fixer was mid-edit on the proposer). **Acceptance criterion for the fix:** the
+      hoist must preserve the displaced statement's original indentation BY CONSTRUCTION
+      (not rely on rustfmt) — rustfmt-skip files are exactly where a malformed hoist
+      ships.
+
 - [x] P1 **macro-nesting family** — CONSUMED 2026-08-28 (the descent unit): match_bool +
       uninlined macro-arg descent with the oracle boundary (uninlined direct-child skip —
       format_in_format_args owns that position); 9 fixtures (5 match_bool + 4 uninlined);
