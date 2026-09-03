@@ -107,14 +107,27 @@
     Plan-371 GPU window runs)** (`.research/121` — Wed-09-02 batch differential;
     strict window NOT FIRED: only AceSpec 2609.02514, C). **Walk yield = the NEW
     GPU-kernel query surface** (`abs:"GPU kernel"` × DC/PF/AR), which out-recalled
-    every category-listing surface: **2608.15764 (A−) QUEUED** — H100 plain-load
-    concurrency knee (bandwidth peaks at ~2 outstanding loads/thread, −35% by K=8;
-    cp.async 2.1–2.9× at depth) — the first measurement-shaped kernel_opt intake
-    since Batch 49; preregistered source questions incl. the Ada/Hopper transfer
-    caveat; **2608.15531 FlashQuant (B−) QUEUED behind** — sparse-dense single-kernel
-    fusion, the heterogeneous-path member of the B58/B98 same-input family (source
-    question (c): reachability from ternary/Q4_K formats). **2608.12700 (A−) =
-    doctrine citation, no batch** — contract-grade kernel verifier, 1,487/14
+    every category-listing surface. **BOTH queued source-verifications DISCHARGED
+    same day (`.research/121` §discharges):** **2608.15764 (A−) CONFIRMED** — H100
+    plain-load bandwidth peaks at K≈2 outstanding loads/thread, −35% by K=8
+    (fixed-work + order + 2-die + allocation-sweep + ncu-controlled; evidence
+    quality unusually high); Ada transfer OPEN (paper H100-only; Blackwell ≠ Ada);
+    mechanism explicitly UNIDENTIFIED by the authors (only the operational curve
+    distills); cp.async axis COMBINES with B92 (equality at 1 group, 2.1–2.9× at
+    16, shrinking with occupancy — the occupancy×depth WHEN-to-use axis B92 lacks).
+    **BATCH ARMED behind the 4090 GPU window, probe-first:** T0 4090 LDG-response
+    probe + cudarc GEMV inner-loop K audit → T1 `offered-load-knee-plain-loads`
+    (Ada probe verdict decides rule vs annotation-only; H100-scoped demote-loser
+    if Ada refutes) → T2 B92 rider. **2608.15531 FlashQuant: headline REFUTED for
+    direct adoption** (INT4+BF16 weight outliers unreachable from ternary/Q4_K;
+    batch≥8 regime — pads to 8, advantage "diminishes for very small batches such
+    as 1 and 2" — not our batch-1 decode); **mechanism KEPT QUEUED** as a
+    paper-distill batch candidate: heterogeneous-EXECUTION-UNIT warp specialization
+    (TC dense ∥ CUDA-core sparse over one tile space, Stream-K, disjoint
+    output-column ownership via LPT heap) = the additive-heterogeneous-paths member
+    of the B58/B98 same-input family; dedup surface large (B79 plane-split, B98
+    moe-sum, B15) → needs its own plan-first session. **2608.12700 (A−) = doctrine
+    citation, no batch** — contract-grade kernel verifier, 1,487/14
     standard-test-vs-verifier disagreement over 2,638 kernels = the external measured
     confirmation of the Bench-802/Research-116 fault-class doctrine; cite in the
     lossy-surface + tolerance-budget surfaces at the next doc-sync touch. Riders
