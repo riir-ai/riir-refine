@@ -629,6 +629,13 @@ required-features = ["tpr_structure"]
 name = "t062_t4a_withheld_clippy"
 required-features = ["tpr_structure"]
 
+# Issue 062 T6a — the counterfactual-surgery gate. Same whole-file-cfg
+# shape as the rows above; `score_bench` because the gold (what actually
+# healed) comes from a FRESH score-bench run at HEAD, not a history row.
+[[test]]
+name = "t062_t6a_counterfactual"
+required-features = ["tpr_structure", "score_bench"]
+
 # ⛔ `[patch]` is honoured ONLY in the root manifest of the workspace being
 # built. `riir-neuron-db` deps katgpt by git URL and redirects it back to the
 # local checkout with its own `[patch]` — a redirect that does NOT reach us

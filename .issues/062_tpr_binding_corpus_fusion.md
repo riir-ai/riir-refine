@@ -3,7 +3,10 @@
 **Status:** T4 **CLOSED REFUTED 2026-09-03** — T4a RAN and FAILED at its
 decisive row. [.benchmarks/065_t4a_withheld_pair_gate.md](../.benchmarks/065_t4a_withheld_pair_gate.md),
 harness `src/draft/tpr_t4a_withheld.rs` + `tests/t062_t4a_withheld_clippy.rs`,
-preregistered at `19beece` before it produced a number.
+preregistered at `19beece` before it produced a number. **T6a RAN 2026-09-03:
+INCONCLUSIVE — the gate population is structurally starved**
+([Bench 066](../.benchmarks/066_t6a_counterfactual_gate.md)); T6 stays UNWIRED,
+reopen condition recorded there.
 
 **The finding is stronger than a FAIL.** In-distribution top-1 climbs
 **21.1% → 46.8% → 63.3% → 81.1%** across the admissible `d` grid while OOD
@@ -395,8 +398,9 @@ did NOT fire. Three caveats that bound what Phase 2 may claim:
   but "most structured arm" and "arm with the most filler reuse" are not
   distinguished by anything measured here.
 
-- [ ] **T6 — RE-SCOPED 2026-09-03 to a MEASUREMENT before any consumer wiring
-  (owner call, made rather than deferred).** Bench 065 changes what T6 may
+- [x] **T6 — RE-SCOPED 2026-09-03 to a MEASUREMENT before any consumer wiring
+  (owner call, made rather than deferred) — T6a RAN: INCONCLUSIVE (Bench 066),
+  T6 stays UNWIRED.** Bench 065 changes what T6 may
   ship, not whether it runs. The re-scope, and the gate it now carries, are in
   the block immediately below the original text.
 
@@ -469,6 +473,26 @@ did NOT fire. Three caveats that bound what Phase 2 may claim:
   attributed miss on an observed pair is a readout; on an unobserved pair it is
   a prediction, and the intake at `.distill/001_mining_queue_snapshot.md` should
   not receive them mixed.
+
+  **✅ T6a RAN — INCONCLUSIVE, and the starvation is the finding (2026-09-03,
+  [Bench 066](../.benchmarks/066_t6a_counterfactual_gate.md), preregistered in
+  [Plan 070](../.plans/070_kat062_t6a_counterfactual_surgery_gate.md) before its
+  first run; harness `src/draft/tpr_t6a_counterfactual.rs` +
+  `tests/t062_t6a_counterfactual.rs`).** The gate population is EMPTY at
+  current healer quality: of 29 score-bench fixtures with vocabulary lints, 27
+  heal completely (no persisted contrast), the ONE mixed fixture
+  (`composite-range_loop_plus_format_args`) has its single gold on an
+  UNOBSERVED pair — the readout Bench 065 measured at chance. Verdict per the
+  preregistered branch table: INCONCLUSIVE (population/instrument failure can
+  never make a FAIL). **T6 stays UNWIRED**, and the census sharpens why: the
+  persist population is `map_unwrap_or` + `useless_format` — both documented
+  we-stay-silent divergence classes, i.e. misses the corpus deliberately cannot
+  answer. **Reopen condition:** a mixed-fixture population of useful size
+  (frozen bench grows real persist-miss fixtures with in-corpus gold pairs, or
+  the `.heal/misses/` real-repo store with trajectory-supplied gold — a
+  different instrument, its own preregistration; not a widen-and-retry of this
+  one). The all-healed-27 admission was considered and REFUSED in the bench
+  doc: it could only strengthen the conclusion, so it is forbidden post hoc.
 
 ## GOAT gate
 
