@@ -272,6 +272,37 @@
     Issue 850 / Bench 850, all four gates PASS). Lever RESOLVED-SCOPED; `pot_scales` opt-in,
     no consumer; q8kv slice + trit-tier mirror stay deferred (850 T4 scoped the q8kv
     discriminator to the f16 STORAGE site). Plan 586 + this line reconciled 2026-09-03.
+  - **The arxiv pool re-walk #7: DONE 2026-09-05 ~04:15 +07** (`.research/125` —
+    zero corpus delta). **Strict differential EMPTY — the frontier has NOT advanced**:
+    measured 09-04T21:15Z, the whole API tops out at submissions 09-02T17:59:46Z
+    (cs.LG probe) and the listing's newest announcement group is still "Thu 3 Sep";
+    walk #6's predicted Fri-09-04 ~07:00 +07 batch did not post (next observable
+    ≈ Sun 09-06 20:00 ET → **walk #8 window Mon 09-07 ~07:00 +07**, the
+    09-02T18:00Z→09-03T18:00Z submissions rolling into it). **The walk's yield is
+    the BACKFILL triage**: the broader standing queries surface 12 rows inside
+    walk #6's own strict window of which walk #6 recorded ONE — root cause:
+    walk #6's per-lane queries were narrower than the standing set (KV+eviction
+    vs plain KV; quant+inference misses pretraining/capability rows). Graded:
+    **2609.01962 Post-Training Ternarization of Qwen3-4B (B− doctrine — per-task
+    retention spread BoolQ 84.6% vs ARC-C 43.8% under a −9.8pp aggregate = external
+    lossy-surface confirmation, CITED into the katgpt-rs rule this walk;
+    effective-bit accounting 1.641 vs nominal 1.58 = the honest-accounting analog
+    for our ternary GGUF claims; lossless packing 8.29→3.96 GiB unchanged-PPL vs a
+    LOSSY third-party packing excluded — the BLAKE3-committed-packing echo)**;
+    2609.02029 HeadWiseKV (B− lane record — per-head STATIC residency for hybrid
+    global layers, materialize-residency-not-mask; **out-of-stack: Issue-746
+    append-only KV prohibition**); 2609.02846 UE5M3 FP4 (C+/B− doctrine — drops RHT
+    + BF16 final-layer exemption, +21.2% throughput at lower loss = recipe-level
+    ROTATION-TAX echo beside our Bench-716 refutation + LightRot/GyRot; the
+    scale-FORMAT axis again: Issue-845 PoT narrow-deterministic vs UE5M3 wide);
+    2609.02027 LRU mean-field (C+, serving-capacity theory); 2609.02052 SchedBlame
+    (C+ — culprit-attributed CPU contention via eBPF = the principled version of
+    Bench-649/`watch_midrun` victim-side gates; cite in the league doc at next
+    touch). **Walk #6's queued 2608.12700 citation (contract-grade verifier →
+    lossy-surface/tolerance-budget) DISCHARGED in the same docs commit.**
+    Tooling note: the `fetch` MCP tool strips Atom `<entry>` bodies and its
+    submittedDate range filter returns 0 through both encodings — walks go via
+    `curl` + unbounded lane fetch + local `<published>` window filtering.
   - **09-15 MCP search quota reset** → online perf-search pool walk (queue item 11).
   - **Batch 94 (LANDED 2026-09-01, Plan 058 / Research 112): oMLX PR #3260
     expert-streaming distill CONSUMED** — 8 kernel_opt D + 1 rust_perf io +
