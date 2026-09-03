@@ -552,7 +552,7 @@ mod tests {
         );
     }
 
-    /// The held-out honesty gate: an overfit scaffold (k = n_train, every
+    /// The held-out honesty gate: an overfit scaffold (`k` = `n_train`, every
     /// train point its own centroid → train residual 0) must NOT drive the
     /// value up — held-out residual stays the honest estimate.
     #[test]
