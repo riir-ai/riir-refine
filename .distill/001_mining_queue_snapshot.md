@@ -543,9 +543,18 @@
   `MONTHLY_BUDGET_USD`), `.issues/045` (T7 launchctl activation) — verified 08-31.
 - **Queue items 6/7** (boundary-guard + substrate-first drift audit): last run 08-29,
   quarterly — not due until ~11-29.
-- **Hygiene:** the snapshot fold itself is this unit (`.research/108`); no other
-  pending hygiene. Plans tree clean (0 unchecked boxes); `.issues/` = the two
-  owner-gated tails only.
+- **2026-09-03 late (idle cycle 2, M3):** P18 verification sweep DONE (see the P18 row —
+  all rust.yml full-guard on default branch; token missing on train/mmorpg/seal-remake,
+  owner act); Issue 062 closed-negative + removed (`3e12635`, AGENTS.md record); plan 069
+  landing-cleanup box verified done and closed; Protocol B sweep of **riir-dao** = ZERO
+  residue (healer 0 proposable edits over 21 files / 118 spans; real `cargo clippy
+  --workspace --all-targets` 0 warnings — the repo is 6 days old and written under its own
+  `-D warnings` gate; the flashquant `.plans/070` dual-allocation self-resolved — file gone,
+  highwater 72). Active siblings probed before the unit: riir-neuron-db UNCOMMITTED WIP
+  (avoid), riir-chain last touched 21:52 same evening (defer its re-sweep to a quieter
+  cycle — 3 weeks of post-campaign code incl. the closed 031/032 territory is still owed).
+- **Hygiene:** current after this entry. `.issues/` = 059/060/061 (owner/ops/legal-gated)
+  only; plans tree 0 unchecked (069 closed 2026-09-03).
 
 ## Standing rules (pointers — full text in the skills + AGENTS.md)
 
