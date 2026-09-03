@@ -316,13 +316,19 @@ fn poc023_q2_l2_vs_imagination_latency() {
     );
 
     // The load-bearing finding: L2 is not ms-scale, so it cannot be the
-    // bottleneck the T11.6 latency gate assumes.
+    // bottleneck the T11.6 latency gate assumes. BOX-INDEPENDENT, so it is
+    // the only asserted half: the ms-scale premise fails long before 1 ms
+    // on every host measured (83 µs M3, 256 µs ubuntu-4core).
     assert!(
         l2_ns_per_fix < 1_000_000,
         "T11.5 premise says L2 is ms-scale; measured {l2_ns_per_fix} ns"
     );
-    assert!(
-        best < 1.5,
-        "T11.6's 1.5x latency gate should be unreachable against a syn-parse L2; got {best:.4}x"
-    );
+    // The Amdahl ceiling is NOT asserted: `best` depends on the L2/imagination
+    // ratio RELATIVE to the fixed 349 µs retrieval constant, so a box whose
+    // syn-parse is ~3x slower than the authoring M3 (the first linux run,
+    // 2026-09-03: L2 255.6 µs, imag 9.0 µs) arithmetically reaches 1.69x —
+    // the saved FRACTION of t_base grows with L2 while retrieval stays fixed.
+    // The 1.5x finding is a property of the authoring box's timing mix, not an
+    // invariant; the measured table above is the record per run.
+    println!("\n  verdict: recorded per-box (see the table); asserted only L2 < 1 ms");
 }
