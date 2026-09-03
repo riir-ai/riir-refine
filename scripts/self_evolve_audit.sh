@@ -359,7 +359,21 @@ for r in rows:
 last = rows[-1] if rows else {}
 hr = float(last.get('heal_rate', 0)) * 100
 cr = float(last.get('created_rate', 0)) * 100
-print(f"  E4 (no decay vs 98.1/1.9): {'see latest run above — gate: heal>=98.1 created<=1.9' if rows else 'NO RUNS'}")
+# E4 floor re-pinned 2026-09-03 (post-mining triage): the old 98.1 reference
+# predates the P9 fixture `riir-ai-ruliology-player-001` (added 2026-08-25),
+# whose map_unwrap_or persist is a CORRECT decline — the trait-object-cast
+# mapper guard (probe re-verified 2026-09-03 on the current toolchain: the
+# map_or rewrite still E0308s — expected `&fn(..)`, found `&dyn Fn(..)`; the
+# original compiles). The rate step 98.1→96.2 was denominator growth from a
+# deliberately-declined lint, not healing decay; every run since 08-25 is
+# stable at 96.2/1.9. The remaining persist (useless_format, String-typed) +
+# the 1 created (single_option_map on manual_map's output — clippy's own
+# cascade) are the Run-#3 documented boundaries. Floor = post-P9 stable
+# state; a drop BELOW it (or created above) is decay.
+E4_HEAL_FLOOR = 96.1   # 96.2 stable − tie slack
+E4_CREATED_CEIL = 2.0  # 1 created = 1.9%
+verdict = 'PASS' if (hr >= E4_HEAL_FLOOR and cr <= E4_CREATED_CEIL) else 'FAIL — DECAY (investigate the miss map: cargo heal --score-bench)'
+print(f"  E4 (no decay vs post-P9 floor 96.2/<=1.9): {verdict} — latest heal={hr:.1f}% created={cr:.1f}%")
 EOF
 else
   echo "  score_history.jsonl ABSENT — run: cargo heal --score-bench"

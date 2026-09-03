@@ -493,6 +493,22 @@
 - **Post-mining intake: 0 open classes** — P8 nan-unsafe float sort comparator CLOSED
   2026-09-01 (landed as sec `nan-unsafe-sort-comparator`, Plan 057; record below); all
   prior classes closed (records below; full text in the history note).
+- **2026-09-03 (M3, idle loop — E4 decay-gate triage, the flat 35-run curve resolved):**
+  the score bench has read 96.2/1.9 since 08-25 and the audit's E4 gate referenced the
+  pre-P9 peak (98.1), printing a false decay context every run. Full miss-map triage
+  (`per_fixture_diagnostics`): ALL THREE entries are documented, probe-verified
+  boundaries — (1) `map_unwrap_or` persist on `riir-ai-ruliology-player-001` = the P9
+  trait-object-cast mapper guard declining CORRECTLY (probe RE-VERIFIED 2026-09-03 on
+  the current toolchain: the map_or rewrite still E0308s — expected `&fn(..)`, found
+  `&dyn Fn(..)`; original compiles — the guard is sound, we-stay-silent is SAFER than
+  clippy's autofix); (2) `useless_format` persist = the Run-#3 String-typed frontier
+  (bench-symmetric trade, `created` is the trust axis); (3) `single_option_map`
+  created = clippy's own cascade on `manual_map`'s output. **The 98.1→96.2 step was
+  DENOMINATOR GROWTH (the P9 fixture deliberately frozen as a declined lint), not
+  healing decay.** E4 re-pinned in `scripts/self_evolve_audit.sh` to the post-P9
+  stable floor (96.2/<=1.9, tie slack) and now EVALUATES (was a static print; hr/cr
+  were computed but never compared). Fixtures untouched — reclassifying correct
+  declines as resolved would be the fake-coverage gaming Plan 014 exists to prevent.
 - **2026-09-03 (4090 box, fourth unit — plan-number collision NOTE, discovered at the
   post-unit rebase):** `.plans/070` is DUAL-ALLOCATED between two sibling lanes —
   `070_kat062_t6a_counterfactual_surgery_gate.md` (COMMITTED `eae2e4e`, pushed —
