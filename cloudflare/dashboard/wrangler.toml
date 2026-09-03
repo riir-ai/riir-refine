@@ -12,6 +12,15 @@
 # src/worker.js). Authenticate once via ?token=… (301-exchanged for an
 # HttpOnly cookie) or the cookie itself.
 #   one-time:  npx wrangler secret put DASHBOARD_TOKEN
+#
+# STATE 2026-09-03 (Issue 065 T8): the secret is now SET, so the gate is CLOSED
+# and every unauthenticated request answers 401. It had never been set since
+# T13 armed this file, meaning the fail-open branch served the whole private
+# payload to a bare `curl` for the entire time. Found by fetching the worker
+# after a deploy rather than by reading the deploy's exit code. The remaining
+# residual is that `UNCONFIGURED_POLICY` is still `serve`: DELETING the secret
+# silently republishes the payload. Flipping it to `deny` (owner call, declined
+# 2026-09-03 as too disruptive) is what makes that fail closed instead.
 name = "riir-ops-dashboard"
 compatibility_date = "2026-08-26"
 main = "src/worker.js"

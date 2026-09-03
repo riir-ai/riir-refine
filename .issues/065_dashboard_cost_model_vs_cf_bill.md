@@ -1,6 +1,6 @@
 # Issue 065 — the ops dashboard's cost model did not model the bill
 
-**Status:** T1/T2/T4/T5 DONE (2026-09-03) · T3 OPEN (owner call — the $8.00 is not this repo's) · T6/T7 OPEN (latent)
+**Status:** T1/T2/T4/T5/T8 DONE (2026-09-03; DEPLOYED + auth-gated) · T3 OPEN (owner call — the $8.00 is not this repo's) · T6/T7 OPEN (latent)
 **Evidence:** [`.benchmarks/067_cf_bill_reconciliation.md`](../.benchmarks/067_cf_bill_reconciliation.md) ·
 bill snapshot [`.benchmarks/cf_bill_pin.json`](../.benchmarks/cf_bill_pin.json)
 **Surface:** `scripts/gen_dashboard.py`, `cloudflare/dashboard/public/index.html` (generated)
@@ -51,6 +51,30 @@ Three defects, in increasing order of how much money they hid:
       the read line from 6 blocks to 5. Worker CPU agrees: `scriptName __unknown__` is 522,185
       requests / 4,034,105 cpu-ms = 97.9% of the account's Workers CPU. riir-clippy's own two
       workers are 381 requests combined. **Not this repo's spend — needs the account owner.**
+- [x] **T8** — **the live dashboard was serving its whole private payload
+      unauthenticated, and this change widened it.** Found by *fetching* the
+      worker after deploy rather than trusting the deploy's exit code:
+      `x-dashboard-auth: OPEN-INSECURE` + `x-dashboard-warning: DASHBOARD_TOKEN
+      unset`. The secret had never been set since Issue 044 T13 armed the gate,
+      so `UNCONFIGURED_POLICY` defaulted to `serve` on every request. Exposure
+      inventory at that moment (all readable with a bare `curl`, no header):
+      4 KV namespace IDs **with per-namespace op counts**, the full per-line bill
+      breakdown and the `cf_bill_pin.json` account usage across 12 product lines
+      (**all three added by this commit**), plus 6 durable-object IDs, 6
+      container app UUIDs, 11 private repo names with per-repo unhealed-lint
+      counts, and 23 LLM ledger rows — 45,391 bytes of private engineering
+      profile. **CLOSED 2026-09-03** by `wrangler secret put DASHBOARD_TOKEN`
+      (32 random bytes, url-safe) with the least-privilege deploy credential.
+      Verified on the live worker, all four branches, not inferred: anon → **401**
+      / 61 bytes / zero payload / namespace id absent; wrong token → **401**, no
+      echo; correct token → **301** with the token stripped from `Location` and
+      an `HttpOnly; Secure; SameSite=Lax; Max-Age=2592000` cookie planted;
+      cookie → **200** with the payload. Token stored in the gitignored `.env`
+      as `DASHBOARD_TOKEN`. `UNCONFIGURED_POLICY = "deny"` was offered and
+      **declined** as too disruptive — so the fail-open branch still exists and
+      is unreachable only while the secret lives. Deleting the secret
+      re-publishes the payload silently; that residual is the reason to
+      eventually take the `deny` flip.
 - [ ] **T7** — the **same defect ships in the housekeeping Worker**, latently.
       `costUsd()` (`cloudflare/housekeeping/src/worker.js:296`) is the identical
       from-unit-zero model, and the `MONTHLY_BUDGET_USD` alert sums *per-day*
