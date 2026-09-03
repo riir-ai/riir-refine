@@ -143,7 +143,7 @@
     mechanism explicitly UNIDENTIFIED by the authors (only the operational curve
     distills); cp.async axis COMBINES with B92 (equality at 1 group, 2.1–2.9× at
     16, shrinking with occupancy — the occupancy×depth WHEN-to-use axis B92 lacks).
-    **BATCH ARMED behind the 4090 GPU window, probe-first:** T0 4090 LDG-response
+    **BATCH ARMED behind the 4090 GPU window, probe-first (plan filed 2026-09-04: `.plans/073_offered_load_knee_ldg_probe.md` — T0b GEMV K-audit DONE in-plan, findings recorded there; headline: the production dp4a decode GEMV already sits at natural K≈2 = the paper's H100 optimum, so the decode surface is a likely NEGATIVE case for depth-adding levers and the T2 rider's home narrows to the prefill staged-tile kernels):** T0 4090 LDG-response
     probe + cudarc GEMV inner-loop K audit → T1 `offered-load-knee-plain-loads`
     (Ada probe verdict decides rule vs annotation-only; H100-scoped demote-loser
     if Ada refutes) → T2 B92 rider. **2608.15531 FlashQuant: headline REFUTED for
