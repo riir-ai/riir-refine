@@ -186,6 +186,19 @@ env -u CLOUDFLARE_API_TOKEN -u CF_API_TOKEN -u CLOUDFLARE_API_KEY -u CLOUDFLARE_
 - **Monthly budget:** if `MONTHLY_BUDGET_USD` is set, the run sums the
   month's `day:*` rows and alerts once per month (`alert:<YYYYMM>:budget`)
   when month-to-date est cost reaches the budget.
+  > ⚠ **Read Issue 065 before setting this secret.** `costUsd()`
+  > (`src/worker.js:296`) computes `usage × rate` from unit **zero** — the
+  > Workers-Paid included allowances (25 GiB-h mem / 200 GB-h disk / 375
+  > vCPU-min per month) are never subtracted, and the alert sums *per-day*
+  > figures whose allowance cannot be apportioned to a day anyway. Measured
+  > 2026-09-03: that model says **$0.3780** where Cloudflare billed **$0.08**
+  > (4.7×), so a budget set from the real bill would alarm at roughly a fifth
+  > of the intended spend. It also models containers only, and containers were
+  > **1.0%** of the bill — KV was $8.00 of $8.08. The alert path is currently
+  > **inert** (`/status` reports `has_monthly_budget: false` and
+  > `has_webhook: false`), which is the only reason this is latent rather than
+  > live. Port `bill_line()` / `bill_reconciliation()` from
+  > `scripts/gen_dashboard.py` first — Issue 065 T7.
 - **`day:*` rows are recomputed, not accumulated** (fixed 2026-08-28): each
   run sums the authoritative `hour:<day>*` rows. The previous
   read-modify-write double-counted on a cron double-fire or manual invoke and

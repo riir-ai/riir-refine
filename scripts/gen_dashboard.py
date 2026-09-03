@@ -53,6 +53,7 @@ Deploy: cd cloudflare/dashboard && npx wrangler deploy
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import subprocess
@@ -673,6 +674,72 @@ CONT_MEM_USD_PER_GIB_S = 0.0000025   # $/GiB-s beyond 25 GiB-h/mo included
 CONT_DISK_USD_PER_GB_S = 0.00000007  # $/GB-s beyond 200 GB-h/mo included
 CONT_CPU_USD_PER_S = 0.000020       # $/vCPU-s beyond 375 vCPU-min/mo included
 
+# ── the CF bill model (Issue 065) ─────────────────────────────────────────
+# What the bill actually computes, per line:
+#
+#   billable = max(0, PERIOD_ACCOUNT_total - included)
+#   usd      = ceil(billable / gran) * price          # gran > 1
+#   usd      = billable * price                       # gran == 1 (continuous)
+#
+# Three properties of that formula are what the dashboard used to get wrong,
+# and each one is load-bearing:
+#
+#  1. `included` is subtracted. Until 2026-09-03 every container dollar on this
+#     dashboard was `usage * rate` from unit ZERO, while the card sub-text
+#     claimed "beyond the Workers-Paid included allowances". Measured: $0.3780
+#     against a real bill of $0.08 (4.7x), and $0.0189 of "disk cost" against a
+#     disk line the bill charges $0.00 for.
+#  2. The allowance is MONTHLY and ACCOUNT-WIDE. It is not per app, not per
+#     namespace and not per day, so a per-app or per-day dollar figure cannot be
+#     reconciled against the bill at ALL -- see `container_marginal_usd`.
+#  3. `gran` rounds the remainder UP. KV is sold by the million: 301.97k
+#     billable list ops cost the full $5.00 of a million, not $1.51. Pricing KV
+#     linearly under-reports; this is the only line where a naive model is too
+#     LOW, so it cannot be dismissed as conservative.
+#
+# Verified against the 2026-09-03 bill snapshot (`.benchmarks/cf_bill_pin.json`)
+# to the cent on all 7 lines -- Bench 067.
+BILL_LINES: dict[str, dict] = {
+    "container_mem":  {"label": "container memory", "unit": "GiB-s",
+                       "included": 25 * 3600, "price": CONT_MEM_USD_PER_GIB_S,
+                       "gran": 1, "included_label": "25 GiB-h"},
+    "container_disk": {"label": "container disk", "unit": "GB-s",
+                       "included": 200 * 3600, "price": CONT_DISK_USD_PER_GB_S,
+                       "gran": 1, "included_label": "200 GB-h"},
+    "container_cpu":  {"label": "container vCPU", "unit": "vCPU-s",
+                       "included": 375 * 60, "price": CONT_CPU_USD_PER_S,
+                       "gran": 1, "included_label": "375 vCPU-min"},
+    "kv_read":        {"label": "KV read ops", "unit": "ops",
+                       "included": 10_000_000, "price": 0.50,
+                       "gran": 1_000_000, "included_label": "10M"},
+    "kv_list":        {"label": "KV list ops", "unit": "ops",
+                       "included": 1_000_000, "price": 5.00,
+                       "gran": 1_000_000, "included_label": "1M"},
+    "kv_write":       {"label": "KV write ops", "unit": "ops",
+                       "included": 1_000_000, "price": 5.00,
+                       "gran": 1_000_000, "included_label": "1M"},
+    "kv_delete":      {"label": "KV delete ops", "unit": "ops",
+                       "included": 1_000_000, "price": 5.00,
+                       "gran": 1_000_000, "included_label": "1M"},
+}
+
+# The billing period is NOT derivable with this dashboard's credential: every
+# /billing, /subscriptions and namespace-list endpoint answers `10000
+# Authentication error` for both CF_API_TOKEN and the wrangler OAuth token
+# (analytics GraphQL is all they carry). So the anniversary day is a PIN, and
+# the reconciliation reports it as one rather than implying a measurement.
+#
+# Measured bound (2026-09-03, Issue 065): the bill's container lines reproduce
+# from the 2026-08-26 usage rows ALONE to within 0.11% and EXCLUDE the
+# 2026-08-14 rows, so the period starts in 2026-08-15..2026-08-26. Every day in
+# that bound gives the SAME reconciliation over the present data, because no
+# usage row falls between 08-15 and 08-25 -- the pin is currently unfalsifiable,
+# which is why it is labelled instead of trusted. Override once it is known:
+#   CF_BILLING_ANNIVERSARY_DAY=<1..28>
+CF_BILLING_ANNIVERSARY_DAY = int(
+    os.environ.get("CF_BILLING_ANNIVERSARY_DAY", "16"))
+BILL_PIN = REPO_ROOT / ".benchmarks" / "cf_bill_pin.json"
+
 
 def _wrangler_oauth_token():
     if WRANGLER_TOKEN_FILE.exists():
@@ -702,13 +769,74 @@ def _gql(token: str, query: str):
         return json.load(resp)
 
 
-def container_cost_usd(mem_byte_s: float, disk_byte_s: float, cpu_s: float) -> float:
-    """Est cost from billing-dataset sums (Issue 045 pinned constants)."""
+def container_marginal_usd(mem_byte_s: float, disk_byte_s: float,
+                           cpu_s: float) -> float:
+    """MARGINAL cost of one usage slice: usage x rate, allowances NOT applied.
+
+    Correct ONLY as "what this slice would add if the account month is already
+    past the allowance for that resource". The slice's actual BILLED cost is
+    $0.00 until the account crosses, and the crossing is a property of the whole
+    account over the whole month -- so a per-app or per-day figure is not a
+    billing quantity and must never be reconciled against the bill. Use
+    `bill_reconciliation()` for anything that claims to match Cloudflare.
+    """
     mem_gib_s = (mem_byte_s or 0.0) / (1024.0 ** 3)
     disk_gb_s = (disk_byte_s or 0.0) / 1e9
     return (mem_gib_s * CONT_MEM_USD_PER_GIB_S
             + disk_gb_s * CONT_DISK_USD_PER_GB_S
             + (cpu_s or 0.0) * CONT_CPU_USD_PER_S)
+
+
+def billing_period_start(now: datetime | None = None) -> str:
+    """Most recent CF_BILLING_ANNIVERSARY_DAY at or before `now` (UTC date)."""
+    now = now or datetime.now(timezone.utc)
+    day = max(1, min(28, CF_BILLING_ANNIVERSARY_DAY))
+    if now.day >= day:
+        return now.replace(day=day).strftime("%Y-%m-%d")
+    prev_month_end = now.replace(day=1) - timedelta(days=1)
+    return prev_month_end.replace(day=day).strftime("%Y-%m-%d")
+
+
+def bill_line(key: str, used: float) -> dict:
+    """One line of the CF bill from an account-wide, period-scoped total."""
+    spec = BILL_LINES[key]
+    billable = max(0.0, (used or 0.0) - spec["included"])
+    gran = spec["gran"]
+    # gran == 1 keeps the line continuous; gran > 1 is sold in whole blocks and
+    # the remainder rounds UP, so a 30% block still costs a whole one.
+    units = math.ceil(billable / gran) if gran > 1 else billable
+    return {"key": key, "label": spec["label"], "unit": spec["unit"],
+            "used": used or 0.0, "included": float(spec["included"]),
+            "included_label": spec["included_label"], "billable": billable,
+            "gran": gran, "billed_units": units, "price": spec["price"],
+            "usd": units * spec["price"],
+            "marginal_usd": (used or 0.0) * spec["price"] / (gran or 1)}
+
+
+def bill_reconciliation(usage: dict[str, float], period_start: str) -> dict:
+    """Account-wide, period-scoped bill. `usage` maps BILL_LINES keys to totals.
+
+    Lines with no collected total are reported as `present: False` rather than
+    as a zero -- an uncollected line and an unused one are different facts, and
+    conflating them is how this dashboard reported $0.08 of container spend as
+    the whole cloud bill while KV was charging $8.00 (Issue 065).
+    """
+    lines = [bill_line(k, usage[k]) for k in BILL_LINES if k in usage]
+    missing = [k for k in BILL_LINES if k not in usage]
+    pin = {}
+    if BILL_PIN.exists():
+        try:
+            pin = json.loads(BILL_PIN.read_text())
+        except json.JSONDecodeError:
+            log("cf_bill_pin.json is not valid JSON — skipping bill cross-check")
+    return {"period_start": period_start,
+            "anniversary_day": CF_BILLING_ANNIVERSARY_DAY,
+            "anniversary_pinned": "CF_BILLING_ANNIVERSARY_DAY" not in os.environ,
+            "lines": lines,
+            "usd": sum(x["usd"] for x in lines),
+            "marginal_usd": sum(x["marginal_usd"] for x in lines),
+            "uncollected": missing,
+            "pin": pin}
 
 
 def collect_containers(daily_days: int = 30, hourly_hours: int = 48) -> dict:
@@ -860,6 +988,78 @@ def collect_containers(daily_days: int = 30, hourly_hours: int = 48) -> dict:
             "rates": {"mem": CONT_MEM_USD_PER_GIB_S,
                       "disk": CONT_DISK_USD_PER_GB_S,
                       "cpu": CONT_CPU_USD_PER_S}}
+
+
+# ── 5c. KV operations (the line that actually costs money) ────────────────
+# Issue 065: the dashboard modelled containers ($0.08/mo) and Workers-AI
+# neurons and tracked KV NOT AT ALL -- while KV list + read ops were $8.00 of
+# the $8.08 bill, 99.0%. Attribution matters as much as the total: one
+# namespace is 99.98% of every KV op on this account, and it is not one of
+# riir-clippy's (HOUSEKEEPING_KV is 1,980 reads of 15.29M).
+
+KV_ACTION_TO_LINE = {"read": "kv_read", "list": "kv_list",
+                     "write": "kv_write", "delete": "kv_delete"}
+
+
+def collect_kv(days: int = 30) -> dict:
+    """KV ops per namespace + action + day from CF GraphQL (Issue 065).
+
+    Degrades to `{"daily": [], "namespaces": []}` exactly like the container
+    collector, and for the same reason: no credential must ever mean a broken
+    dashboard. The window is clamped to the account's GraphQL limit -- a wider
+    `date_geq` is rejected wholesale with a `quota` error and yields ZERO rows,
+    which is indistinguishable from an idle account (measured: 45d asks
+    "cannot request a time range wider than 4w4d").
+    """
+    empty = {"daily": [], "namespaces": [], "totals": {}}
+    token = _cf_token()
+    if not token:
+        log("no CF token — skipping KV analytics")
+        return empty
+    days = min(days, 30)
+    start = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%d")
+    q = ("{ viewer { accounts(filter: {accountTag: \"%s\"}) { "
+         "kvOperationsAdaptiveGroups(limit: 10000, filter: {date_geq: \"%s\"}, "
+         "orderBy: [date_ASC]) { dimensions { namespaceId actionType date } "
+         "sum { requests } } } } }" % (CF_ACCOUNT_ID, start))
+    try:
+        d = _gql(token, q)
+    except Exception as e:  # noqa: BLE001 — best-effort source
+        log(f"KV GraphQL failed: {e}")
+        return empty
+    if d.get("errors"):
+        log(f"KV GraphQL errors: {str(d['errors'])[:200]}")
+    try:
+        rows = d["data"]["viewer"]["accounts"][0]["kvOperationsAdaptiveGroups"] or []
+    except (KeyError, IndexError, TypeError):
+        rows = []
+    if not rows:
+        return empty
+    per_ns: dict[str, dict[str, float]] = {}
+    per_day: dict[str, dict[str, float]] = {}
+    totals: dict[str, float] = {}
+    for g in rows:
+        dims = g["dimensions"]
+        act = dims.get("actionType") or "?"
+        ns = dims.get("namespaceId") or "?"
+        n = g["sum"].get("requests") or 0
+        per_ns.setdefault(ns, {}).setdefault(act, 0.0)
+        per_ns[ns][act] += n
+        per_day.setdefault(dims["date"], {}).setdefault(act, 0.0)
+        per_day[dims["date"]][act] += n
+        line = KV_ACTION_TO_LINE.get(act)
+        if line:
+            totals[line] = totals.get(line, 0.0) + n
+    # The op mix is the whole diagnosis: 11.6 reads per list is a
+    # list-then-read-each loop, which is the shape that turns a 1M-op
+    # allowance into a $5.00 line.
+    namespaces = sorted(
+        ({"id": ns, "ops": acts, "total": sum(acts.values())}
+         for ns, acts in per_ns.items()),
+        key=lambda x: -x["total"])
+    return {"daily": [{"date": k, "ops": per_day[k]} for k in sorted(per_day)],
+            "namespaces": namespaces, "totals": totals,
+            "window_start": start}
 
 
 # ── 6. coverage sweep (healer dry-run per repo; cached) ────────────────────
@@ -1017,6 +1217,9 @@ th{color:var(--dim);text-align:left;font-weight:500;border-bottom:1px solid var(
 td{border-bottom:1px solid var(--line);padding:6px 8px;vertical-align:top}
 tr:hover td{background:var(--panel2)}
 .num{text-align:right;white-space:nowrap}
+/* Issue 065 bill-reconciliation delta cells: a drifted line must be
+   visible without reading the number. */
+td.ok{color:var(--accent)}td.bad{color:var(--crit);font-weight:600}
 .note{color:var(--dim);max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .missing{color:var(--dim)}
 .missing li{margin:6px 0}
@@ -1082,24 +1285,47 @@ footer{color:var(--dim);font:11px var(--mono);margin-top:34px;border-top:1px sol
 </div>
 
 <div class="grid">
+  <div class="card wide"><h2>cloudflare bill — reconciliation (billing period, account-wide)</h2>
+    <div id="billTable"></div>
+    <div class="sub">billed = <code>ceil(max(0, period_total − included) / block) × price</code>.
+      The <b>included allowance is monthly and account-wide</b>, so no per-app,
+      per-namespace or per-day figure on this page is a billing quantity — those
+      are <b>marginal</b> costs (what a slice adds <i>once</i> the account is past
+      the allowance). KV is sold by the million and the remainder rounds
+      <b>up</b>: 301.97k billable list ops cost a whole $5.00 block, not $1.51.
+      Cross-checked against the transcribed bill in
+      <code>.benchmarks/cf_bill_pin.json</code> (Issue 065 / Bench 067).</div>
+  </div>
+  <div class="card wide"><h2>KV operations — per namespace (30d)</h2>
+    <div id="kvTable"></div>
+    <div class="sub">The line that actually costs money: KV was <b>$8.00 of the
+      $8.08</b> bill while this dashboard modelled only containers ($0.08) and
+      neurons. A high read:list ratio is a list-then-read-each loop — the shape
+      that turns a 1M-op allowance into a $5.00 block.</div>
+  </div>
   <div class="card wide"><h2>containers — awake hours per hour (48h, per app)</h2>
     <div id="contHourly"></div>
     <div class="legend"><span><i style="background:var(--accent2)"></i>awake (uptime s in hour)</span>
       <span>gap = asleep / no data</span></div>
   </div>
-  <div class="card"><h2>containers — daily est cost (14d)</h2>
+  <div class="card"><h2>containers — daily MARGINAL cost (14d)</h2>
     <div id="contDaily"></div>
-    <div class="legend"><span><i style="background:var(--accent2)"></i>est $/day ×1000</span>
-      <span>Workers-Paid allowances not subtracted</span></div>
+    <div class="legend"><span><i style="background:var(--accent2)"></i>marginal $/day ×1000</span>
+      <span>not billed cost — allowances are monthly + account-wide</span></div>
   </div>
-  <div class="card"><h2>containers — weekly est cost (4w)</h2>
+  <div class="card"><h2>containers — weekly MARGINAL cost (4w)</h2>
     <div id="contWeekly"></div>
-    <div class="legend"><span><i style="background:var(--accent)"></i>est $/week ×1000</span></div>
+    <div class="legend"><span><i style="background:var(--accent)"></i>marginal $/week ×1000</span></div>
   </div>
   <div class="card wide"><h2>containers — per app (30d, billing dataset)</h2>
     <div id="contTable"></div>
-    <div class="sub">cost = mem GiB-s×$2.5e-6 + disk GB-s×$7e-8 + vCPU-s×$2e-5 — beyond the
-      Workers-Paid included allowances (25 GiB-h mem / 375 vCPU-min / 200 GB-h disk per month)</div>
+    <div class="sub">marginal $ = mem GiB-s×$2.5e-6 + disk GB-s×$7e-8 + vCPU-s×$2e-5,
+      <b>allowances NOT subtracted</b> — they cannot be, being monthly and
+      account-wide rather than per app. Read this column as usage weight, and the
+      reconciliation card above as cost. Worked example: the top app's 234,298
+      GB-s of disk shows a marginal $0.0164 here and is billed <b>$0.00</b>, because
+      the account's 246.33k GB-s is 34% of the 720k GB-s (200 GB-h) allowance.
+      The window is also a rolling 30d, <b>not</b> the billing period.</div>
   </div>
 </div>
 
@@ -1154,13 +1380,18 @@ const fmt = {
 };
 $('generated').textContent = 'generated ' + D.generated_utc + ' UTC';
 
-// ── container cost helpers (issue 045; used by KPIs + containers section) ──
-const contCost = (mem,disk,cpu) =>
+// ── container MARGINAL cost helpers (issue 045; renamed issue 065) ─────────
+// usage x rate with NO allowance subtraction -- deliberately, because the
+// allowance is monthly and account-wide and so cannot be apportioned to an app
+// or a day. Never label the output of these "cost"; the billed number comes
+// from D.bill. The old name `contCost` is what let a $0.378 marginal figure be
+// read as a bill of $0.08 for a week.
+const contMarginal = (mem,disk,cpu) =>
   (mem||0)/1073741824*(D.containers&&D.containers.rates?D.containers.rates.mem:2.5e-6)
   + (disk||0)/1e9*(D.containers&&D.containers.rates?D.containers.rates.disk:7e-8)
   + (cpu||0)*(D.containers&&D.containers.rates?D.containers.rates.cpu:2e-5);
-function contDayCost(dayRow){ let c=0; for(const a in dayRow.apps)
-  c+=contCost(dayRow.apps[a].mem,dayRow.apps[a].disk,dayRow.apps[a].cpu); return c; }
+function contDayMarginal(dayRow){ let c=0; for(const a in dayRow.apps)
+  c+=contMarginal(dayRow.apps[a].mem,dayRow.apps[a].disk,dayRow.apps[a].cpu); return c; }
 
 // ── alert bar ──
 if (D.cf_daily && D.cf_daily.length) {
@@ -1199,14 +1430,24 @@ if (D.cf_daily && D.cf_daily.length) {
       + (D.ledger.groq||{completion_tokens:0}).completion_tokens),
       fmt.usd((D.ledger.groq||{usd_avoided:0}).usd_avoided) + ' CF avoided (est)'],
   ];
+  // The BILLED number leads, because it is the only one Cloudflare charges.
+  // It used to be absent entirely while a 4.7x-too-high marginal figure sat in
+  // the KPI row under the label "est $" (Issue 065).
+  if (D.bill && D.bill.lines && D.bill.lines.length) {
+    const top = D.bill.lines.slice().sort((a,b)=>b.usd-a.usd)[0];
+    k.push(['CF billed $ (period)', fmt.usd(D.bill.usd),
+      'since ' + D.bill.period_start + (D.bill.anniversary_pinned ? ' · day PINNED' : '')],
+      ['top billed line', top && top.usd>0 ? top.label : 'all within allowance',
+       top && top.usd>0 ? fmt.usd(top.usd) + ' of ' + fmt.usd(D.bill.usd) : 'nothing billable']);
+  }
   if (D.containers && D.containers.daily && D.containers.daily.length) {
     const days = D.containers.daily;
-    const last24 = days.slice(-1).map(contDayCost).reduce((a,b)=>a+b,0);
-    const week = days.slice(-7).map(contDayCost).reduce((a,b)=>a+b,0);
+    const last24 = days.slice(-1).map(contDayMarginal).reduce((a,b)=>a+b,0);
+    const week = days.slice(-7).map(contDayMarginal).reduce((a,b)=>a+b,0);
     let awakeH = 0;
     (D.containers.hourly||[]).slice(-24).forEach(h=>{ for(const a in h.apps) awakeH += h.apps[a]/3.6e6; });
-    k.push(['containers est $ (24h)', fmt.usd(last24),
-      fmt.usd(week) + ' / 7d · est'],
+    k.push(['containers MARGINAL $ (24h)', fmt.usd(last24),
+      fmt.usd(week) + ' / 7d · not billed'],
       ['container awake h (24h)', awakeH.toFixed(1),
       (D.containers.apps||[]).length + ' apps seen']);
   }
@@ -1429,6 +1670,70 @@ if (D.corpus && D.corpus.length) {
   $('corpusSparks').innerHTML = rows;
 }
 
+// ── cloudflare bill reconciliation (issue 065) ──
+// The card the dashboard was missing: what Cloudflare actually CHARGES, with
+// the allowance subtracted and the block rounding applied, cross-checked
+// against the transcribed bill so a model that drifts shows a delta instead of
+// agreeing with itself.
+if (D.bill && D.bill.lines && D.bill.lines.length) {
+  const pinL = (D.bill.pin && D.bill.pin.lines) || {};
+  const fmtU = (v,unit) => unit==='ops' ? fmt.n(v) : fmt.n1(v);
+  const lines = D.bill.lines.slice().sort((a,b)=>b.usd-a.usd || b.billable-a.billable);
+  $('billTable').innerHTML = tableHTML(
+    ['line','used','included','billable','blocks','billed $','bill says','Δ'],
+    lines,
+    L => {
+      const pin = pinL[L.key];
+      // A missing pin row is reported as such, never as a zero delta: "not in
+      // the snapshot" and "matches the snapshot" are different facts.
+      const d = pin===undefined ? null : L.usd - pin.usd;
+      const dCls = d===null ? '' : (Math.abs(d) < 0.005 ? 'ok' : 'bad');
+      return '<td>'+L.label+'</td>'+
+        '<td class="num">'+fmtU(L.used,L.unit)+' '+L.unit+'</td>'+
+        '<td class="num">'+L.included_label+'</td>'+
+        '<td class="num">'+fmtU(L.billable,L.unit)+'</td>'+
+        '<td class="num">'+(L.gran>1 ? L.billed_units+' × '+fmt.usd(L.price) : '—')+'</td>'+
+        '<td class="num"><b>'+fmt.usd(L.usd)+'</b></td>'+
+        '<td class="num">'+(pin===undefined ? '—' : fmt.usd(pin.usd))+'</td>'+
+        '<td class="num '+dCls+'">'+(d===null ? 'not pinned'
+          : (Math.abs(d)<0.005 ? '✓' : (d>0?'+':'')+fmt.usd(d)))+'</td>';
+    });
+  const marg = D.bill.marginal_usd || 0;
+  $('billTable').innerHTML +=
+    '<div class="sub">billed total <b>'+fmt.usd(D.bill.usd)+'</b>'+
+    (D.bill.pin && D.bill.pin.usage_cost_usd!==undefined
+      ? ' · bill snapshot ('+D.bill.pin.snapshot_utc+') <b>'+fmt.usd(D.bill.pin.usage_cost_usd)+'</b>'
+      : ' · no bill snapshot pinned') +
+    ' · the pre-Issue-065 arithmetic (usage × rate from unit zero, no allowance, no '+
+    'block rounding) applied to every line here would say '+fmt.usd(marg)+', '+
+    (D.bill.usd>0?(marg/D.bill.usd).toFixed(1)+'×':'∞')+' the truth — and it '+
+    'modelled only the container lines, so the figure it actually published was '+
+    'the $0.08 family alone' +
+    (D.bill.uncollected && D.bill.uncollected.length
+      ? ' · <b>uncollected lines:</b> '+D.bill.uncollected.join(', ')+
+        ' (absent from this reconciliation — NOT known to be zero)'
+      : '') + '</div>';
+}
+
+// ── KV operations per namespace (issue 065) ──
+if (D.kv && D.kv.namespaces && D.kv.namespaces.length) {
+  const grand = D.kv.namespaces.reduce((a,n)=>a+n.total,0);
+  const acts = ['read','list','write','delete'];
+  $('kvTable').innerHTML = tableHTML(
+    ['namespace'].concat(acts).concat(['total','share','read:list']),
+    D.kv.namespaces,
+    n => {
+      const rd = n.ops.read||0, ls = n.ops.list||0;
+      return '<td title="'+n.id+'"><code>'+n.id+'</code></td>'+
+        acts.map(a=>'<td class="num">'+fmt.n(n.ops[a]||0)+'</td>').join('')+
+        '<td class="num"><b>'+fmt.n(n.total)+'</b></td>'+
+        '<td class="num">'+fmt.pct(grand?n.total/grand:0)+'</td>'+
+        '<td class="num">'+(ls>0 ? (rd/ls).toFixed(1)+'×' : '—')+'</td>';
+    });
+} else {
+  $('kvTable').innerHTML = '<div class="sub">no KV analytics (token/lag) — nothing read, or retention window empty</div>';
+}
+
 // ── containers (issue 045) ──
 if (D.containers && (D.containers.daily.length || D.containers.hourly.length)) {
   // hourly awake chart: one line per app (uptime seconds in each hour bucket)
@@ -1449,7 +1754,7 @@ if (D.containers && (D.containers.daily.length || D.containers.hourly.length)) {
   if (D.containers.daily.length) {
     const days = D.containers.daily.slice(-14);
     const labels = days.map(d=>d.date.slice(5));
-    const costs = days.map(d=>contDayCost(d));
+    const costs = days.map(d=>contDayMarginal(d));
     svgBarChart($('contDaily'), labels, costs.map(c=>c*1000)); // $ milli-units for visibility
     // weekly cost (4w)
     const wk = {};
@@ -1457,7 +1762,7 @@ if (D.containers && (D.containers.daily.length || D.containers.hourly.length)) {
       const dt = new Date(d.date+'T00:00:00Z');
       const mon = new Date(dt); mon.setUTCDate(dt.getUTCDate()-dt.getUTCDay()+1);
       const k = mon.toISOString().slice(0,10);
-      wk[k]=(wk[k]||0)+contDayCost(d);
+      wk[k]=(wk[k]||0)+contDayMarginal(d);
     });
     const wkeys = Object.keys(wk).sort().slice(-4);
     svgBarChart($('contWeekly'), wkeys.map(k=>k.slice(5)), wkeys.map(k=>wk[k]*1000));
@@ -1467,12 +1772,12 @@ if (D.containers && (D.containers.daily.length || D.containers.hourly.length)) {
       const s = agg[a] = agg[a] || {mem:0,disk:0,cpu:0,tx:0,last:d.date};
       s.mem+=d.apps[a].mem; s.disk+=d.apps[a].disk; s.cpu+=d.apps[a].cpu;
       s.tx+=d.apps[a].tx||0; s.last=d.date; }});
-    const rows = Object.entries(agg).sort((a,b)=>contCost(b[1].mem,b[1].disk,b[1].cpu)-contCost(a[1].mem,a[1].disk,a[1].cpu));
+    const rows = Object.entries(agg).sort((a,b)=>contMarginal(b[1].mem,b[1].disk,b[1].cpu)-contMarginal(a[1].mem,a[1].disk,a[1].cpu));
     // Issue 045 T5: show the FULL applicationId (the 8-char stub is not
     // addressable against the API) plus the join keys — backing DO + colo.
     const cmeta = (D.containers.meta)||{};
     $('contTable').innerHTML = tableHTML(
-      ['app id','backing DO','colo','mem GiB-s','disk GB-s','cpu vCPU-s','tx MB','est $ (30d)','last seen'],
+      ['app id','backing DO','colo','mem GiB-s','disk GB-s','cpu vCPU-s','tx MB','marginal $ (30d)','last seen'],
       rows,
       r => { const m = cmeta[r[0]]||{};
         const dobj = (m.do&&m.do.length) ? m.do.map(x=>x.slice(0,12)).join(', ') : '—';
@@ -1482,7 +1787,7 @@ if (D.containers && (D.containers.daily.length || D.containers.hourly.length)) {
         '</td><td class="num">'+(r[1].mem/1073741824).toFixed(0)+
         '</td><td class="num">'+(r[1].disk/1e9).toFixed(0)+'</td><td class="num">'+
         r[1].cpu.toFixed(1)+'</td><td class="num">'+(r[1].tx/1e6).toFixed(1)+
-        '</td><td class="num">'+fmt.usd(contCost(r[1].mem,r[1].disk,r[1].cpu))+'</td><td>'+
+        '</td><td class="num">'+fmt.usd(contMarginal(r[1].mem,r[1].disk,r[1].cpu))+'</td><td>'+
         r[1].last+'</td>'; });
   } else {
     $('contDaily').innerHTML = '<div class="sub">no daily usage rows</div>';
@@ -1686,6 +1991,26 @@ def build_data(sweep: bool) -> dict:
     cadence = collect_git_cadence()
     cf_daily = collect_cf_daily()
     containers = collect_containers()
+    kv = collect_kv()
+    # The bill is account-wide and period-scoped, so it is assembled ONCE from
+    # every collected line rather than per-card. Container totals are scoped to
+    # the same period as KV -- the 30d rolling window used by the cards is NOT
+    # the billing period, and mixing the two is what left a 10% residual when
+    # this was first reconciled by hand (Bench 067).
+    period_start = billing_period_start()
+    bill_usage: dict[str, float] = dict(kv.get("totals") or {})
+    cont_period = {"mem": 0.0, "disk": 0.0, "cpu": 0.0}
+    for row in containers["daily"]:
+        if row["date"] < period_start:
+            continue
+        for app in row["apps"].values():
+            for k in cont_period:
+                cont_period[k] += app.get(k) or 0.0
+    if containers["daily"]:
+        bill_usage["container_mem"] = cont_period["mem"] / (1024.0 ** 3)
+        bill_usage["container_disk"] = cont_period["disk"] / 1e9
+        bill_usage["container_cpu"] = cont_period["cpu"]
+    bill = bill_reconciliation(bill_usage, period_start)
     coverage = coverage_snapshot(sweep)
     training = collect_training()
     fixer = load_fixer_quality()
@@ -1712,6 +2037,8 @@ def build_data(sweep: bool) -> dict:
         "cadence": cadence,
         "cf_daily": cf_daily,
         "containers": containers,
+        "kv": kv,
+        "bill": bill,
         "coverage": coverage,
         "training": training,
         "fixer": fixer,
@@ -1724,6 +2051,8 @@ def build_data(sweep: bool) -> dict:
             ["git-cadence", bool(cadence)],
             ["cf-analytics", bool(cf_daily)],
             ["containers", bool(containers["daily"]) or bool(containers["hourly"])],
+            ["kv-ops", bool(kv["namespaces"])],
+            ["bill-recon", bool(bill["lines"])],
             ["coverage", bool(coverage)],
             ["training", bool(training)],
             ["fixer-quality", bool(fixer)],
@@ -1759,7 +2088,10 @@ def main() -> int:
         f"ledger={len(data['ledger']['rows'])} rows, "
         f"cf_days={len(data['cf_daily'])}, traj_repos={len(data['traj'])}, "
         f"coverage={len(data['coverage'])}, training={len(data['training'])}, "
-        f"fixer={len(data['fixer'])}, corpus_days={len(data['corpus'])})")
+        f"fixer={len(data['fixer'])}, corpus_days={len(data['corpus'])}, "
+        f"kv_ns={len(data['kv']['namespaces'])}, "
+        f"bill=${data['bill']['usd']:.2f} over {len(data['bill']['lines'])} lines "
+        f"since {data['bill']['period_start']})")
     return 0
 
 

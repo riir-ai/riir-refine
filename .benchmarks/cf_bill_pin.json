@@ -1,0 +1,54 @@
+{
+  "_comment": [
+    "Cloudflare bill snapshot, transcribed from the dashboard's Billing >",
+    "Usage page on 2026-09-03 (Issue 065 / Bench 067). This exists so the",
+    "generated reconciliation can be cross-checked against the real bill",
+    "instead of against itself -- a cost model that only agrees with its own",
+    "arithmetic is what shipped here for a week.",
+    "`billable` and `usd` are Cloudflare's OWN numbers, not derived: they are",
+    "what pins the two non-obvious rules (allowance subtraction, and KV's",
+    "round-up-to-the-next-million). Do NOT recompute these fields."
+  ],
+  "snapshot_utc": "2026-09-03",
+  "usage_cost_usd": 8.08,
+  "lines": {
+    "kv_list":        { "used": 1301970,   "billable": 301970,  "usd": 5.00, "included_label": "1M", "used_reconstructed": true },
+    "kv_read":        { "used": 15310000,  "billable": 5310000, "usd": 3.00, "included_label": "10M" },
+    "kv_write":       { "used": 419160,    "billable": 0,       "usd": 0.00, "included_label": "1M" },
+    "container_mem":  { "used": 122940,    "billable": 32940,   "usd": 0.08, "included_label": "25 GiB-h" },
+    "container_disk": { "used": 246330,    "billable": 0,       "usd": 0.00, "included_label": "200 GB-h" },
+    "container_cpu":  { "used": 1020,      "billable": 0,       "usd": 0.00, "included_label": "375 vCPU-min" }
+  },
+  "zero_cost_lines_observed": {
+    "container_egress_na_eu_gb": 17.66,
+    "container_disk_gb_s": 246330,
+    "durable_objects_compute_requests": 800730,
+    "durable_objects_compute_duration_gb_s": 87900,
+    "durable_objects_storage_reads": 60,
+    "durable_objects_sql_rows_read": 352,
+    "durable_objects_sql_rows_written": 52,
+    "workers_standard_requests": 626250,
+    "workers_cpu_ms": 4120000,
+    "kv_storage_gb_months": 0.01,
+    "r2_data_storage_gb_months": 0,
+    "regular_twitch_neurons": 11010
+  },
+  "_precision": [
+    "Cloudflare prints `used` at 3 significant figures and `billable` exactly,",
+    "so where the two disagree the exact one wins and `used` is reconstructed",
+    "as billable + included (`used_reconstructed: true`). KV list is the only",
+    "such line here: the page reads `1.3M` used / `301.97k` billable, and",
+    "1.3M - 1M = 300k != 301.97k. Transcribing the DISPLAYED used would put a",
+    "1,970-op error into the one line whose block-rounding is 30% of a block."
+  ],
+  "notes": [
+    "Container egress 17.66 GB equals app a03a70ff's egress EXACTLY, so that",
+    "one app is 100% of the account's container egress, 95.2% of its memory",
+    "and 95.1% of its disk. The app is NOT missing from Cloudflare -- its",
+    "COST is, because 246.33k GB-s of disk is 34% of the 720k GB-s (200",
+    "GB-hour) monthly allowance, so the disk line is billable 0.",
+    "Workers CPU ms is 97.9% attributed to scriptName `__unknown__`",
+    "(522,185 requests, 4,034,105 cpu-ms). riir-clippy's own two workers are",
+    "381 requests combined -- riir-kat-housekeeping 290, riir-ops-dashboard 91."
+  ]
+}
