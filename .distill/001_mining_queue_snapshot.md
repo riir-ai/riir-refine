@@ -104,10 +104,12 @@
     2026-09-02**: katgpt-rs `133664b9`, riir-ai `0b7cad41e`, neuron-db `22e8ff4`, game-sdk
     `c08c02b`, chain `2c3e0b9d`, mmorpg `b3aaac6` (closeout `146d50c0a`); unified on one
     `wasmi 2.0.0`, zero API breakage, gains 2.0–3.3×, Bench 851.
-  - **Queued-secondary (kill-free): `hot-dispatch-gpr-arg-budget`** — probed Tie on
+  - **~~Queued-secondary (kill-free): `hot-dispatch-gpr-arg-budget`~~ — probed Tie on
     windows-msvc x64 (1.009/0.999×, two runs; the blog's evidence is sysv64 tail-call
     dispatch). Re-open ONLY with a sysv64 measurement window; ABI-specific,
-    interpreter/VM-loop-shaped pattern.
+    interpreter/VM-loop-shaped pattern.** Related: B101's x86 re-gate DONE 2026-09-04
+    (ParetoDominant 3/0/0, expected-Tie REFUTED — the runtime-table fixture loads
+    in-loop on both arches; see Plan 069 + the corpus annotation).
   - **~~Batch 100 candidate (queued 2026-09-02, Plan 068 / Research 120): Layr-Labs/qwen-3.8-mtp-challenge~~
     LANDED 2026-09-02** (see Last landed — 8 rules, not the verdict's 3–4 estimate: the two verification
     lanes surfaced 3 novel rules beyond the planned R1-R5). **Deferred-with-reasons ledger carried in
