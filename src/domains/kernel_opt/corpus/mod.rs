@@ -1589,7 +1589,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 463-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 464-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1820,7 +1820,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "stream-k-persistent-cta-mac-segments",
         ],
     ),
-    // D: Dispatch patterns (102 rules)
+    // D: Dispatch patterns (103 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -1927,6 +1927,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "wavefront-overlap-pair-ceiling",
             "request-shape-decline-mirror-completeness",
             "backing-provenance-causal-shadowed-extent-widen",
+            "dispatcher-eligibility-predicate-lags-kernel-capability",
         ],
     ),
     // E: Parallelism patterns (32 rules)

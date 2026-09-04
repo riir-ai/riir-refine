@@ -63,15 +63,15 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 60 (1): measured-GOAT distillation (riir-train Issue 460 / katgpt-rs e2853fbf — pre-gate-recovery-by-division-cancels-algebraically; the MLA backward's saturated output-gate 0/0 NaN, fixed by algebraic cancellation; Bench 475: 6/10 -> 10/10 usable backward passes).
     // Batch 63 (3): the CubeCL twin unlock — same-input-gemv-weight-concat-at-upload, deferred-residual-fused-into-next-layer-norm, reset-state-in-place-fill-never-realloc (ternary_deltanet_gpu_forward.rs, Plan 009 / Research 071).
     // Batch 70 (3): the arxiv barrier-free-sync paper distill (arXiv:2608.13757, Plan 020 / Research 080) — barrier-free-per-dependency-wait-from-loop-counters, shared-counter-decode-producer-progress, masked-branchless-wait-collapse.
-    // Total: 209. // (historical batch-30 snapshot; current 459)
+    // Total: 209. // (historical batch-30 snapshot; current 464)
     // Batch 98 (10): antirez/ds4 dense.metal/moe.metal leads -- grid-range-split-verbatim-impl-composition, share-activation-stream-keep-projection-reductions, tiny-rows-scalar-thread-per-row-downshift, small-batch-matvec-gemm-bridge-rung, moe-routed-down-sum-single-accumulate-pass, fused-vector-site-transcendental-form-nonportable, monomorphic-hot-caller-last-hit-memo, per-row-scale-folded-into-rhs-staging-tile, dequant-byte-pairs-as-aligned-u16-loads, cross-simd-bitonic-alternating-bank-exchange (the Batch-97 queued NEXT BATCH LEADS + 3 additional candidates).
     // Batch 100 (8): Layr-Labs/qwen-3.8-mtp-challenge -- functional-cache-versioning-loses-donation-under-kernel-read, fused-kv-write-single-writer-reads-newest-from-input, in-place-write-through-input-emits-fence-consumer, residency-set-wired-once-post-warm-persistent-footprint, register-budget-head-split-gqa-reread-trade, batch-composition-invariant-grid-early-return, never-gqa-multiply-full-d-merge-smem, container-rebind-over-retrace-for-churn-survival (Research 120 / Plan 068; A +3, D +3, E +2).
     // Batch 102 (6): FlashQuant sparse-dense fusion (arXiv 2608.15531) -- heterogeneous-unit-paths-shared-tile-fusion, lpt-min-heap-disjoint-column-ownership, tile-coo-sparse-tile-aligned-format, bucketed-sparse-reader-column-partition, bank-group-circular-element-reorder, stream-k-persistent-cta-mac-segments (Research 123 / Plan 071; A +2, C +2, H +1, N +1; the headline was REFUTED for direct adoption at walk time -- the fusion mechanism is the distilled core).
-    // Batch 103 (4): MTPLX PR #391 + MLX NAX combined host-orchestration batch -- shape-class-keyed-capability, wavefront-overlap-pair-ceiling, request-shape-decline-mirror-completeness, backing-provenance-causal-shadowed-extent-widen (Research 124 / Plan 072; D +4; MTPLX re-pinned ef96313 -> a5e38bb at mine time, all anchors re-verified; + the B100 rider enrichment in entries_gpu_14.rs).
+    // Batch 103 (5): MTPLX PR #391 + MLX NAX combined host-orchestration batch -- shape-class-keyed-capability, wavefront-overlap-pair-ceiling, request-shape-decline-mirror-completeness, backing-provenance-causal-shadowed-extent-widen (Research 124 / Plan 072; D +4; MTPLX re-pinned ef96313 -> a5e38bb at mine time, all anchors re-verified; + the B100 rider enrichment in entries_gpu_14.rs) + dispatcher-eligibility-predicate-lags-kernel-capability (the ADDENDUM rule -- the MLX #4416 lead the sibling landing silently omitted; D +1; see the Research 124 addendum note).
     assert_eq!(
         corpus.entries.len(),
-        463,
-        "kernel batches through Batch 103 should have 463 rules"
+        464,
+        "kernel batches through Batch 103 should have 464 rules"
     );
 }
 
@@ -5290,7 +5290,7 @@ fn kernel_categories_table_has_15_entries() {
 
 #[test]
 fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-    // Every rule_id in the 463-rule corpus must appear in exactly one category.
+    // Every rule_id in the 464-rule corpus must appear in exactly one category.
     let corpus = build_kernel_seed_corpus();
     let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     let mut categorized: Vec<&str> = Vec::new();
@@ -5338,7 +5338,7 @@ fn kernel_categories_counts_match_plan_003_table() {
         (KernelCategory::MemoryAccess, 105),
         (KernelCategory::Compute, 57),
         (KernelCategory::Fusion, 41),
-        (KernelCategory::Dispatch, 102),
+        (KernelCategory::Dispatch, 103),
         (KernelCategory::Parallelism, 32),
         (KernelCategory::FlashAttnTiling, 11),
         (KernelCategory::LinearAttnRecurrence, 26),
@@ -5363,9 +5363,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 463.
+    // Sum must equal 464.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 463, "Plan 003: category totals must sum to 463");
+    assert_eq!(total, 464, "Plan 003: category totals must sum to 464");
 }
 
 #[test]
@@ -5376,8 +5376,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 463,
-        "Plan 003: grouped corpus has {total} rules, expected 463"
+        total, 464,
+        "Plan 003: grouped corpus has {total} rules, expected 464"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -7175,6 +7175,7 @@ fn batch103_rules_present() {
         "wavefront-overlap-pair-ceiling",
         "request-shape-decline-mirror-completeness",
         "backing-provenance-causal-shadowed-extent-widen",
+        "dispatcher-eligibility-predicate-lags-kernel-capability",
     ];
     for id in ids {
         assert!(
@@ -7230,6 +7231,16 @@ fn batch103_concepts_covered() {
                 "if (split_d && do_causal_ && !mask.has_value() && (kL % bk))",
             ],
         ),
+        (
+            "dispatcher-eligibility-predicate-lags-kernel-capability",
+            &[
+                "Make head-dim-256 prefill with array mask run fused NAX kernel",
+                "dead conservatism",
+                "function_constant(300)",
+                "POSITIVE ENGAGEMENT",
+                "split-decode",
+            ],
+        ),
     ];
     for (id, needles) in checks {
         let e = corpus
@@ -7259,6 +7270,7 @@ fn batch103_pseudocode_parses() {
         "wavefront-overlap-pair-ceiling",
         "request-shape-decline-mirror-completeness",
         "backing-provenance-causal-shadowed-extent-widen",
+        "dispatcher-eligibility-predicate-lags-kernel-capability",
     ];
     for id in ids {
         let entry = corpus

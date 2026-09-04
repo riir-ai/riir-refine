@@ -1,6 +1,6 @@
 # 124 — Batch 103: the MTPLX PR #391 + MLX NAX combined kernel batch
 
-**Status:** RECORD — batch landed (4 rules, corpus 459 → 463, D +4, + the B100 rider enrichment)
+**Status:** RECORD — batch landed (4 rules, corpus 459 → 463, D +4, + the B100 rider enrichment) + **ADDENDUM landed same day** (the silently-omitted MLX #4416 rule, corpus 463 → 464, D +1; see the addendum section at the end)
 
 ## Source 1 — youssofal/MTPLX PR #391 (the Plan 072 batch)
 
@@ -155,3 +155,27 @@ production-outage evidence. The MLX extraction adds the one kernel-grade rule (b
 extent widening) that has a direct analog in our chunked-KV-cache decode surfaces. The real
 prefill frontier for our stack stays Issue 771 (GEMM TF gap) and Issue 844 (flash-vs-GEMM long-P
 prize) — untouched by this batch, as the verdict predicted.
+
+## Addendum (2026-09-04, second session — the Issue-665 collision salvage)
+
+Both sessions executed the same Plan-072 NEXT-UP row concurrently (the 4090
+handoff thread and the M3 sibling). Push-wins adjudication: this landing
+(98b3b8f, 4 rules, corpus 459 → 463) kept the batch number and all baked
+references; the duplicate was yielded without merge.
+
+**The salvage — one rule the landing silently omitted:**
+`dispatcher-eligibility-predicate-lags-kernel-capability` (D) — the MLX #4416
+lead-2 from the 09-03 extraction unit. It is absent from the corpus above, from
+the drop ledger, and from this note (an oversight, not a decision — the landed
+`request-shape-decline-mirror-completeness` rule even cites its fix-space, "the
+engagement-canary defense", without the rule existing). Anchors re-verified
+byte-accurate by the salvage session at `714a7ef` (#3842: the kernel's
+`has_mask` function_constant(300) + buffer(5)/buffer(6) mask bindings landed
+WITH the `!has_arr_mask` dispatcher conjunct) and `f99e916` (#4416: the 2-line
+predicate fix, zero kernel changes); `origin/main` moved `90846ad` → `b636898`
+(allocator-query API, no kernel) — anchors unaffected.
+
+Landed as the Batch 103 addendum: corpus 463 → 464, D 102 → 103, gates
+extended in place (rules_present + concepts + parses), GOAT green (kernel_heal
+lib 1291/0/1i, default 1035/0, retrieval floors HELD kernel 100/100/100,
+clippy 0). AGENTS.md carries the addendum rider on the Batch 103 line.
