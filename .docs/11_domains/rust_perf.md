@@ -23,9 +23,19 @@
 
 ## Corpus
 
-99 rules across 12 categories (rust-optimize skill checklist +
+100 rules across 12 categories (rust-optimize skill checklist +
 nnethercote/perf-book + rustc-hash/bevy real-world patterns + the hotpath-rs
-profiling guide, Research 032; **now 98 rules — Batch 99 (2026-09-02,
+profiling guide, Research 032; **now 100 rules — Batch 109 (2026-09-05,
+Plan 080 — the post-mining P10 measurement-honesty distill from the
+katgpt-rs Issue 723 Class A2 evidence) added
+`dead-result-timing-loop-folded-under-lto` (complexity; NotBenchable — the
+FIRST measurement-honesty axis rule: a timed loop discarding its work
+result measures ZERO under fat LTO even through callee-side `black_box`;
+the fix is chained state + a consumer sink + the loud nonzero-baseline
+assert; the gate refuted BOTH draft fix-patterns — XOR sinks cancel over
+GF(2)-linear work in power-of-two batches, and wrapping_add sinks collapse
+to the seed-independent constant 2^64 − n/2 over balanced batches — both
+pinned as anti-shape assertions) — Batch 99 (2026-09-02,
 Research 119 — the wasmi v2.0 blog distill, Plan 067) added
 `mir-destprop-branch-site-merge` (dispatch; **ParetoDominant 2/0/1 —
 1.04/1.24/1.25× at 1K/100K/1M dispatches, alloc axis EXACT 0/0, alloc-det

@@ -9,13 +9,14 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //! unconditional wins + honestly NotBenchable rules.
 //!
-//! 99 entries across 12 categories (complexity 18, allocation 22, simd 8,
+//! 100 entries across 12 categories (complexity 19, allocation 22, simd 8,
 //! layout 9, iterators 10, concurrency 8, io 5, arithmetic 8, dispatch 5,
-//! caching 4, bevy 1, wasm 1). 86 are benchable; 13 are honestly
+//! caching 4, bevy 1, wasm 1). 86 are benchable; 14 are honestly
 //! NotBenchable (8 external-runtime/size-class + 2 metric-mismatch (Issue
 //! 014) + the x86-only prefetch annotation (Batch 85) + the bitflag size
 //! axis (Batch 86) + the workload-level read-coalescing annotation (Batch
-//! 94)).
+//! 94) + the measurement-honesty axis itself (Batch 109 — a timing gate
+//! whose work folds away has no nonzero baseline to ratio).
 //! Batch 48 (idle-queue item 11, 2026-08-16) added the 8 online-search
 //! candidates (perf-book std-types + iterators chapters): collect-append-to-
 //! extend, hashset-insert-bool-return, unwrap-or-else-lazy, filter-count-to-
@@ -95,6 +96,17 @@
 //! no-cache descriptor coalesces with gap 0 (exactly-adjacent rows only).
 //! The source's serving numbers are workload-level, no isolated corpus
 //! bench — regime-annotated, suggestion-only.
+//!
+//! Batch 109 (2026-09-05, post-mining intake P10 — the katgpt-rs Issue 723
+//! Class A2 measurement-honesty distill) added dead-result-timing-loop-
+//! folded-under-lto to complexity: a timed loop whose work result is
+//! discarded (`let _ = f()`) measures ZERO under rustc 1.98.1 + fat LTO —
+//! the fold eliminates inlined-callee work EVEN THROUGH `black_box` inside
+//! the callee (only a CALLER-side sink of per-iteration data survives);
+//! the fix pattern is xorshift data-dependent work + `black_box(sink)` at
+//! the consumer + a loud nonzero-baseline assert before any ratio. The
+//! first rule on the measurement-honesty axis: the "buggy" arm is a
+//! harness that passes its own timing gate while timing nothing.
 //!
 //! ## Bench specs (behind `rust_perf_bench`)
 //!
@@ -242,11 +254,12 @@ use crate::domains::rust_perf::{PerfRule, RustPerfDomain};
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 99 entries
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 100 entries
 /// covering the main perf pattern categories (complexity, allocation, simd,
 /// layout, iterators, concurrency, io, arithmetic, dispatch, caching, bevy,
 /// wasm). Allocation is the deepest (22 rules; Batch 86 added 2); complexity
-/// has 18 (Batch 76 + 91 added 1 each); iterators
+/// has 19 (Batch 76 + 91 added 1 each; Batch 109 added the measurement-
+/// honesty rule); iterators
 /// has 10 (Batch 66/67 added 2; Batch 91 added 1); simd has 8 (Batch 62 + 64 + 83 added 1
 /// each); layout has 9 (Batch 61 + 85 + 86 added); concurrency has 8
 /// (Issue 014 added the two metric-mismatch rules; Batch 65 added the two
@@ -2190,6 +2203,72 @@ PerfRule {
     context_notes: Some("MEASURED ParetoDominant 3/0/0 — 168.91x/1929.27x/5851.00x at N=10K/100K/300K store size (B=100 inserted per op; M3 Max release, rustc 1.97, 2026-08-27, load ~2.4 of 16; verdict-stable ×2: 179.55x/1883.75x/6293.55x on the re-run; allocs 0/0 equal by design, alloc-det stable). REGIME (store-size to batch-size ratio N/B): the buggy arm pays O(N) per insert batch — the win GROWS linearly with total store size (the source: 559s → 2–3s on a 19M-item store, ~200x on the step). At N ≈ B (tiny store, huge batches) the scan is one pass over what the insert touches anyway — expected Tie; the rule lives where the collection ACCUMULATES (insert-heavy stores where per-op diagnostics re-walk the past). The decision content: diagnostics eagerly computed in hot paths are a hidden O(collection) tax — the source's fix was REMOVAL (tests/CI now guard the invariant); the maintained-aggregate form is the fix when the statistic is actually consumed downstream. Distinct from `sort-key-cache-precompute-out-of-lock` (per-comparison recompute under lock) — this is per-operation whole-collection statistics. Suggestion-only (a parse-only proposer cannot prove the statistic unconsumed). Source: Meilisearch blog 2026-03-18 §Stop computing useless stats.".to_string()),
     #[cfg(feature = "rust_perf_bench")]
     bench_spec: Some(debug_stat_full_scan_out_of_hot_path_bench_spec()),
+},
+// ── complexity: measurement honesty — a timed harness whose work result ──
+// is dead measures ZERO under fat LTO (rustc 1.98.1 measured class) ───────
+// Source: post-mining intake P10 (2026-09-04), found by the katgpt-rs Issue
+// 723 Class A2 fixes (`b4cef008`): a direct-call probe in ONE binary showed
+// the used result at 16.6 µs vs `let _ = f()` ≈ 0 — the fold eliminates
+// inlined-callee work when the caller discards the result, EVEN THROUGH
+// `black_box` INSIDE the callee (the barrier protects the callee's own
+// return value from intra-callee folding; it cannot keep the CALLER's dead
+// result alive — under fat LTO the whole chain is one CFG and the work's
+// only observable use is gone). Three harness patterns proven in-tree:
+// (1) the timed work must CHAIN its state (each iteration consumes the
+// previous accumulator — the xorshift-PRNG shape, unprunable by
+// construction): parallel sinks cancel in batches three ways — XOR dies
+// on GF(2) linearity over 0..2^k, wrapping_add collapses to the
+// seed-independent 2^64 − n/2 constant over balanced power-of-two
+// batches, and constant work folds through anything; (2) the
+// black_box lives at the CONSUMER (in the timed loop, not only inside
+// the work fn — a caller-dead result dies under fat LTO); (3) for
+// bar-adjacent ratios, interleave (baseline, candidate) chunks and take a
+// median-of-ratios — two sequential 2M-iteration arms read +5.2%/+21.7%
+// drift thirty seconds apart while the paired median read −0.0%/+0.6%
+// twice. The LOUD-BASELINE corollary is the cheap detector every timing
+// gate should carry: assert the baseline elapsed is NONZERO before forming
+// a ratio. The failure directions differ by comparison form — a `>=`
+// PASS bar with a NaN ratio (0 ns baseline → 0/0) is always-false = a loud
+// fail; a `<=` budget bar with NaN is always-false TOO, so a budget gate
+// reads as PASSING forever while measuring nothing — the silent direction.
+// Both arms must do equal non-pruner work (one shared timed fn, the
+// candidate's delta passed as data) so the ratio isolates the delta rather
+// than arming the fold on one side only. Distinct from
+// `debug-stat-full-scan-out-of-hot-path` (an UNCONSUMED PRODUCTION
+// statistic dragged through a hot path; this is the HARNESS side — the
+// production code is fine, the measurement of it is empty) and from
+// `encoded-layout-borrowed-view`'s bench note ("an unread &str costs zero
+// and the ratio inflates" — the same physics from the bench-consumption
+// side; this rule is the general harness contract). Suggestion-only: the
+// detector is a dataflow question (is the timed loop's result observable
+// anywhere?) that a parse-only proposer cannot answer; the loud
+// zero-baseline assert is the machine-checkable surrogate. No Pareto bench
+// is possible — the rule's entire content is that the baseline is zero, so
+// there is nothing to ratio (NotBenchable, the measurement-honesty axis).
+PerfRule {
+    rule_id: "dead-result-timing-loop-folded-under-lto".to_string(),
+    name: "timed loop discards its work result (`let _ = f()`) → fat-LTO fold eliminates the inlined callee and the gate times ZERO — xorshift data-dependent work + `black_box(sink)` at the consumer + a loud nonzero-baseline assert".to_string(),
+    category: "complexity".to_string(),
+    buggy_code: "use std::hint::black_box;\nuse std::time::Instant;\n\nfn work(seed: u64) -> u64 {\n    // some non-trivial kernel the gate pretends to measure\n    let mut x = seed;\n    for _ in 0..64 {\n        x ^= x << 13;\n        x ^= x >> 7;\n        x ^= x << 17;\n    }\n    x\n}\n\nfn overhead_ratio(iters: u32) -> f64 {\n    let start = Instant::now();\n    for i in 0..iters {\n        // the result is DISCARDED: under rustc 1.98.1 + fat LTO the\n        // inlined body folds away (the callee-internal black_box cannot\n        // keep a caller-dead result alive) and this times ~0 ns\n        let _ = work(black_box(i as u64));\n    }\n    let baseline = start.elapsed();\n    // NaN when baseline is 0: with a `<=` budget bar this is an\n    // always-false comparison = a SILENT vacuous pass, forever\n    baseline.as_nanos() as f64 / 1_000.0\n}".to_string(),
+    fixed_code: "use std::hint::black_box;\nuse std::time::Instant;\n\nfn work(seed: u64) -> u64 {\n    let mut x = seed;\n    for _ in 0..64 {\n        x ^= x << 13;\n        x ^= x >> 7;\n        x ^= x << 17;\n    }\n    x\n}\n\nfn overhead_ratio(iters: u32) -> f64 {\n    let start = Instant::now();\n    // CHAIN the state: each iteration consumes the previous accumulator,
+    // so every output depends on the whole sequential history — the
+    // xorshift-PRNG shape, unprunable by construction. PARALLEL sinks
+    // cancel in batches and are the trap this rule exists for: an XOR
+    // sink over a GF(2)-linear work fn (xorshift, CRC, most bit math)
+    // is exactly 0 over 0..2^k (linearity), and even a wrapping_add
+    // sink collapses to the seed-independent constant 2^64 − n/2
+    // over a power-of-two batch when the work’s output bits are
+    // balanced — both measured, not theorized. The per-iteration
+    // black_box on the index keeps the loop input live; the final
+    // black_box consumes the chain.
+    let mut state = black_box(0x9E37_79B9_7F4A_7C15u64);
+    for i in 0..iters {
+        state = work(state ^ black_box(i as u64));
+    }
+    black_box(state);\n    let measured = start.elapsed();\n    // the loud-baseline assert: a gate that measured 0 ns is a gate that\n    // measured NOTHING — fail before any ratio can go NaN\n    assert!(measured.as_nanos() > 0, \"timing harness folded: dead-result work measured zero ns — chain the timed state — parallel sinks cancel in batches (XOR: GF(2) linearity; balanced-add: the 2^64 − n/2 constant over 2^k)\");\n    measured.as_nanos() as f64 / 1_000.0\n}".to_string(),
+    context_notes: Some("NotBenchable — measurement-honesty axis (Batch 109): the rule's content is that the baseline folds to zero, so there is no nonzero quantity to ratio; the evidence is the katgpt-rs direct-call probe (used result 16.6 µs vs `let _ = f()` ≈ 0, one binary, rustc 1.98.1 + fat LTO) and the rv gate that measured 0 ns → NaN% for its entire release life (found by Issue 723 Class A2, `b4cef008`). The load-bearing subtleties: (1) `black_box` INSIDE the callee does NOT save the work when the CALLER discards the result — under fat LTO the barrier only pins the callee's own return value, and the whole chain is one CFG where the value has no observer; (2) PARALLEL sinks cancel in batches — THREE measured modes: XOR over a GF(2)-linear work fn (xorshift, CRC, most bit math) is exactly 0 over 0..2^k (linearity; the gate caught the rule’s OWN first draft dying on this), wrapping_add over a power-of-two batch collapses to the seed-independent constant 2^64 − n/2 when the work’s output bits are balanced (each bit is 1 in exactly half the terms regardless of seed — measured: both arms read 18446744073709549568), and a constant-work fn folds through any sink at compile time — the robust fix is CHAINED STATE (each iteration consumes the previous accumulator, the xorshift-PRNG shape, unprunable by construction); (3) the NaN direction contract: NaN compares false against EVERYTHING, so a `>=` PASS bar fails loudly on a zero baseline while a `<=` budget bar passes silently forever — the assert must fire BEFORE the ratio; (4) for ratio gates, equal non-pruner work in both arms (one shared timed fn) + interleaved median-of-ratios (sequential arms drifted +5.2%/+21.7% thirty seconds apart; the paired median read −0.0%/+0.6% twice). Distinct from `debug-stat-full-scan-out-of-hot-path` (unconsumed PRODUCTION statistic; this is the HARNESS side) and from `encoded-layout-borrowed-view`'s bench-consumption note (the same physics from the bench side). Suggestion-only (a parse-only proposer cannot prove the timed result is unobservable; the zero-baseline assert is the machine-checkable surrogate). Source: post-mining intake P10, katgpt-rs Issue 723 Class A2 evidence (`tests/bench_gdsd_modelless.rs` + `tests/rv_gated_routing.rs` sink docs).".to_string()),
+    #[cfg(feature = "rust_perf_bench")]
+    bench_spec: None,
 },
 // ── caching: materialize a lookup index over ALL entries (full scan) ───
 // to serve a SUBSET of random accesses → lazy/direct access of only ───
@@ -7764,7 +7843,7 @@ mod tests {
     #[test]
     fn seed_corpus_has_ninety_eight_entries_across_twelve_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 99);
+        assert_eq!(corpus.entries.len(), 100); // Batch 109 (P10) 99 → 100
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
@@ -8844,6 +8923,126 @@ mod tests {
         assert_ne!(run_table(&only_add, &xs), run_table(&only_mul, &xs));
     }
 
+    /// Batch 109 — the rule is present.
+    #[test]
+    fn batch109_rules_present() {
+        let corpus = build_perf_seed_corpus();
+        let ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        assert!(ids.contains(&"dead-result-timing-loop-folded-under-lto"));
+    }
+
+    /// Batch 109 — the rule parses (syn) on buggy AND fixed code.
+    #[test]
+    fn batch109_pseudocode_parses() {
+        let corpus = build_perf_seed_corpus();
+        let e = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == "dead-result-timing-loop-folded-under-lto")
+            .expect("rule present");
+        assert!(
+            syn::parse_file(&e.buggy_code).and_then(|_| syn::parse_file(&e.fixed_code)).is_ok(),
+            "dead-result-timing-loop-folded-under-lto buggy/fixed must both parse"
+        );
+    }
+
+    /// Batch 109 — the measurement-honesty contract is pinned in the rule
+    /// text: the callee-side black_box caveat, the constant-work fold
+    /// hazard, the NaN comparison directions, and the NotBenchable verdict
+    /// (no fabricated Pareto number for a rule whose baseline is zero).
+    #[test]
+    fn batch109_concepts_covered() {
+        let corpus = build_perf_seed_corpus();
+        let e = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == "dead-result-timing-loop-folded-under-lto")
+            .expect("rule present");
+        let text = format!("{}\n{}\n{}", e.name, e.buggy_code, e.fixed_code);
+        for needle in ["black_box", "sink", "xorshift", "assert"] {
+            assert!(text.to_lowercase().contains(needle), "concept {needle:?} missing from the rule text");
+        }
+        let notes = e.context_notes.as_deref().unwrap_or("");
+        for needle in [
+            "NotBenchable",
+            "CALLER discards",
+            "CHAINED STATE",
+            "cancel in batches",
+            "budget bar",
+            "debug-stat-full-scan-out-of-hot-path",
+        ] {
+            assert!(notes.contains(needle), "contract {needle:?} missing from context_notes");
+        }
+        // No fabricated bench: the measurement-honesty rule carries NO bench_spec.
+        #[cfg(feature = "rust_perf_bench")]
+        assert!(e.bench_spec.is_none(), "a measurement-honesty rule must not carry a fabricated Pareto bench");
+    }
+
+    /// Batch 109 G1 — the rule's own fix pattern, run as code: the fixed
+    /// harness's work chain is DATA-DEPENDENT (xorshift over the loop
+    /// index) and the sink CONSUMES per-iteration results, so two different
+    /// data streams produce different sinks (the fold has nothing constant
+    /// to cut); the buggy shape's sink over a CONSTANT-work fn collapses to
+    /// 0 at compile time — the exact hazard the rule names. The timing
+    /// assertions are deliberately absent (a debug-profile unit test must
+    /// not gate on wall-clock); the gate pins the DATAFLOW contract, the
+    /// loud-baseline assert shape is pinned by the concepts gate above.
+    #[test]
+    fn batch109_sink_consumes_per_iteration_data() {
+        // The gate that shaped the rule: BOTH draft fix-patterns failed
+        // here before the chain form shipped. Each anti-shape is pinned as
+        // an assertion so a future editor cannot quietly reintroduce it.
+        let work = |seed: u64| -> u64 {
+            let mut x = seed;
+            for _ in 0..64 {
+                x ^= x << 13;
+                x ^= x >> 7;
+                x ^= x << 17;
+            }
+            x
+        };
+
+        // Anti-shape 1 (GF(2) linearity): an XOR sink over the linear work
+        // cancels EXACTLY over 0..2^k — the first draft's "fix" was itself
+        // foldable to zero.
+        let mut xor_sink = 0u64;
+        for i in 0..4096u64 {
+            xor_sink ^= work(i);
+        }
+        assert_eq!(xor_sink, 0, "XOR of a GF(2)-linear work over 0..2^k must cancel — the trap the rule names");
+
+        // Anti-shape 2 (balanced-bit addition collapse): over a
+        // power-of-two batch, every balanced output bit is 1 in exactly
+        // half the terms regardless of seed, so even wrapping_add lands
+        // the SAME seed-independent constant (2^64 − n/2; measured:
+        // both arms read 18446744073709549568).
+        let add_sink = |seed: u64| -> u64 {
+            let mut sink = 0u64;
+            for i in 0..4096u64 {
+                sink = sink.wrapping_add(work(seed ^ i));
+            }
+            sink
+        };
+        assert_eq!(
+            add_sink(0),
+            add_sink(0xDEAD_BEEF),
+            "wrapping_add over a balanced power-of-two batch must collapse to the seed-independent constant — the second trap the rule names"
+        );
+
+        // The shipped fix pattern: CHAINED state — every iteration
+        // consumes the previous accumulator, so the final value depends on
+        // the whole sequential history and no batch algebra can fold it.
+        // Non-vacuous both ways: different seeds land different chains.
+        let chained = |seed: u64| -> u64 {
+            let mut state = seed;
+            for i in 0..4096u64 {
+                state = work(state ^ i);
+            }
+            state
+        };
+        assert_ne!(chained(0), chained(0xDEAD_BEEF), "the chained harness must stay seed-dependent — this is the fold-proof shape the rule prescribes");
+    }
+
     /// Batch 99 G1 (output + dispatch-sequence identity): both shapes
     /// dispatch the IDENTICAL handler sequence over the same stream (pinned
     /// by per-handler call counters, not just final state) and land the
@@ -9018,7 +9217,7 @@ mod tests {
 
     #[cfg(feature = "rust_perf_bench")]
     #[test]
-    fn thirteen_rules_are_not_benchable() {
+    fn fourteen_rules_are_not_benchable() {
         let corpus = build_perf_seed_corpus();
         let without_spec: Vec<&str> = corpus
             .entries
@@ -9026,7 +9225,7 @@ mod tests {
             .filter(|e| e.bench_spec.is_none())
             .map(|e| e.rule_id.as_str())
             .collect();
-        assert_eq!(without_spec.len(), 13);
+        assert_eq!(without_spec.len(), 14); // Batch 109 — the measurement-honesty axis joins
         assert!(without_spec.contains(&"coalesce-nearby-reads-bounded-gap-cacheability-gated")); // Batch 94 — cacheability-coupled regime, source-reported only
         assert!(without_spec.contains(&"software-prefetch-storage-bound")); // Batch 85 — x86-only source evidence, the annotation IS the rule
         assert!(without_spec.contains(&"bitflag-pack-when-footprint-dominates")); // Batch 86 — the deterministic size axis (12 → 8), not a speed bench
@@ -9041,6 +9240,7 @@ mod tests {
         // Issue 014 T2.3/T2.4 — NotBenchable metric-mismatch class.
         assert!(without_spec.contains(&"tokio-guard-across-await"));
         assert!(without_spec.contains(&"bounded-channel-backpressure"));
+        assert!(without_spec.contains(&"dead-result-timing-loop-folded-under-lto")); // Batch 109 — a gate whose baseline folds to zero has nothing to ratio
     }
 
     /// Bench 013 found 4 rules with non-dominant verdicts in the default
@@ -9082,7 +9282,7 @@ mod tests {
     /// The other 57 have `context_notes: None` (unconditional wins or
     /// honestly NotBenchable).
     #[test]
-    fn forty_two_annotated_rules_carry_context_notes() {
+    fn forty_three_annotated_rules_carry_context_notes() {
         let corpus = build_perf_seed_corpus();
         let annotated: Vec<&str> = corpus
             .entries
@@ -9090,7 +9290,8 @@ mod tests {
             .filter(|e| e.context_notes.is_some())
             .map(|e| e.rule_id.as_str())
             .collect();
-        assert_eq!(annotated.len(), 42, "expected 42 context-annotated rules");
+        assert_eq!(annotated.len(), 43, "expected 43 context-annotated rules (Batch 109 added the measurement-honesty annotation)");
+        assert!(annotated.contains(&"dead-result-timing-loop-folded-under-lto")); // Batch 109 — the NotBenchable measurement-honesty axis
         assert!(annotated.contains(&"weight-tile-consumption-order")); // Batch 85 — measured ParetoDominant + the M3-L1-shift regime note
         assert!(annotated.contains(&"software-prefetch-storage-bound")); // Batch 85 — the x86-source-cited honest-loser annotation
         assert!(annotated.contains(&"precompute-table"));
@@ -9142,7 +9343,7 @@ mod tests {
             .iter()
             .filter(|e| e.context_notes.is_none())
             .count();
-        assert_eq!(unannotated, 57, "expected 57 unannotated rules (99 - 42 annotated)");
+        assert_eq!(unannotated, 57, "expected 57 unannotated rules (100 - 43 annotated)");
     }
 
     /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -9154,7 +9355,7 @@ mod tests {
         let json = serde_json::to_string(&corpus.entries).unwrap();
         let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
         let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-        assert_eq!(annotated, 42);
+        assert_eq!(annotated, 43);
 
         // Simulate a pre-field snapshot: strip `context_notes` from JSON.
         // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -9186,9 +9387,9 @@ mod tests {
 
         let corpus = build_perf_seed_corpus();
 
-        // Filter to the 41 annotated rules.
+        // Filter to the 43 annotated rules.
         let annotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_some()).collect();
-        assert_eq!(annotated.len(), 42, "expected 42 annotated rules");
+        assert_eq!(annotated.len(), 43, "expected 43 annotated rules");
 
         // The HealEntry trait override must agree with the struct field.
         for rule in &annotated {
