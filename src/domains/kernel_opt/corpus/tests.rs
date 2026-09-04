@@ -63,7 +63,8 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 60 (1): measured-GOAT distillation (riir-train Issue 460 / katgpt-rs e2853fbf — pre-gate-recovery-by-division-cancels-algebraically; the MLA backward's saturated output-gate 0/0 NaN, fixed by algebraic cancellation; Bench 475: 6/10 -> 10/10 usable backward passes).
     // Batch 63 (3): the CubeCL twin unlock — same-input-gemv-weight-concat-at-upload, deferred-residual-fused-into-next-layer-norm, reset-state-in-place-fill-never-realloc (ternary_deltanet_gpu_forward.rs, Plan 009 / Research 071).
     // Batch 70 (3): the arxiv barrier-free-sync paper distill (arXiv:2608.13757, Plan 020 / Research 080) — barrier-free-per-dependency-wait-from-loop-counters, shared-counter-decode-producer-progress, masked-branchless-wait-collapse.
-    // Total: 209. // (historical batch-30 snapshot; current 466)
+    // Batch 105 (11): uzu + lily combined Metal-engine distill (Research 127 + 128 / Plan 075) -- concurrent-dispatch-dependency-level-barriers, gpu-resident-moe-routing-no-host-sync, indirect-device-dispatch-tile-map-moe, pipelined-token-slot-ping-pong-submit-ahead, split-k-two-pass-attention-decode-long-context, cooperative-tensor-mma-capability-route, rht-epilogue-fusion-contract, lane-sequenced-deterministic-bucket-scatter, a8-activation-route-stability-guard, target-tile-split-k-deterministic-two-dispatch, hazard-tracked-aliasing-scratch-allocator (A +1, C +1, D +3, E +1, F +1, H +3, M +1; sources trymirai/uzu @ 115609b + perplexityai/pplx-garden lily @ 1ed972ed, both lanes re-verified every quote; the cross-source dedup mandate executed per rule; the R128 tile-by-expert-load rider FALSIFIED at pin -- chunk-size-routed table, both tiles 4 simdgroups).
+    // Total: 209. // (historical batch-30 snapshot; current 477)
     // Batch 98 (10): antirez/ds4 dense.metal/moe.metal leads -- grid-range-split-verbatim-impl-composition, share-activation-stream-keep-projection-reductions, tiny-rows-scalar-thread-per-row-downshift, small-batch-matvec-gemm-bridge-rung, moe-routed-down-sum-single-accumulate-pass, fused-vector-site-transcendental-form-nonportable, monomorphic-hot-caller-last-hit-memo, per-row-scale-folded-into-rhs-staging-tile, dequant-byte-pairs-as-aligned-u16-loads, cross-simd-bitonic-alternating-bank-exchange (the Batch-97 queued NEXT BATCH LEADS + 3 additional candidates).
     // Batch 100 (8): Layr-Labs/qwen-3.8-mtp-challenge -- functional-cache-versioning-loses-donation-under-kernel-read, fused-kv-write-single-writer-reads-newest-from-input, in-place-write-through-input-emits-fence-consumer, residency-set-wired-once-post-warm-persistent-footprint, register-budget-head-split-gqa-reread-trade, batch-composition-invariant-grid-early-return, never-gqa-multiply-full-d-merge-smem, container-rebind-over-retrace-for-churn-survival (Research 120 / Plan 068; A +3, D +3, E +2).
     // Batch 102 (6): FlashQuant sparse-dense fusion (arXiv 2608.15531) -- heterogeneous-unit-paths-shared-tile-fusion, lpt-min-heap-disjoint-column-ownership, tile-coo-sparse-tile-aligned-format, bucketed-sparse-reader-column-partition, bank-group-circular-element-reorder, stream-k-persistent-cta-mac-segments (Research 123 / Plan 071; A +2, C +2, H +1, N +1; the headline was REFUTED for direct adoption at walk time -- the fusion mechanism is the distilled core).
@@ -71,8 +72,8 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 104 (2): ggml-org/llama.cpp fa-vec offline swept launch-table distill -- swept-shape-bucket-launch-tables, no-harm-bucket-representative (Research 126 / Plan 074; K +2; infra efeda76b9, table pin 8963a9bdc the M3 Max rows, harness read at d230ddd76 byte-identical pin->HEAD; MIT; the league-relevant SKU).
     assert_eq!(
         corpus.entries.len(),
-        466,
-        "kernel batches through Batch 104 should have 466 rules"
+        477,
+        "kernel batches through Batch 105 should have 477 rules"
     );
 }
 
@@ -5334,21 +5335,21 @@ fn kernel_categories_cover_all_corpus_rules_exhaustively() {
 
 #[test]
 fn kernel_categories_counts_match_plan_003_table() {
-    // Pin per-category rule counts to the Plan 003 table (updated for Batch 103).
+    // Pin per-category rule counts to the Plan 003 table (updated for Batch 105).
     let expected = [
-        (KernelCategory::MemoryAccess, 105),
+        (KernelCategory::MemoryAccess, 106),
         (KernelCategory::Compute, 57),
-        (KernelCategory::Fusion, 41),
-        (KernelCategory::Dispatch, 103),
-        (KernelCategory::Parallelism, 32),
-        (KernelCategory::FlashAttnTiling, 11),
+        (KernelCategory::Fusion, 42),
+        (KernelCategory::Dispatch, 106),
+        (KernelCategory::Parallelism, 33),
+        (KernelCategory::FlashAttnTiling, 12),
         (KernelCategory::LinearAttnRecurrence, 26),
-        (KernelCategory::MoeDispatchBackward, 17),
+        (KernelCategory::MoeDispatchBackward, 20),
         (KernelCategory::NsaBlockSparse, 4),
         (KernelCategory::VarlenChunkedReduction, 5),
         (KernelCategory::AutotuneDispatch, 7),
         (KernelCategory::ConvGemmLayout, 13),
-        (KernelCategory::KernelPolymorphism, 13),
+        (KernelCategory::KernelPolymorphism, 14),
         (KernelCategory::DtypeAlignment, 28),
         (KernelCategory::IrStrengthReduction, 4),
     ];
@@ -5364,9 +5365,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 466.
+    // Sum must equal 477.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 466, "Plan 003: category totals must sum to 466");
+    assert_eq!(total, 477, "Plan 003: category totals must sum to 477");
 }
 
 #[test]
@@ -5377,8 +5378,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 466,
-        "Plan 003: grouped corpus has {total} rules, expected 466"
+        total, 477,
+        "Plan 003: grouped corpus has {total} rules, expected 477"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -7384,6 +7385,208 @@ fn batch104_pseudocode_parses() {
         assert!(
             opt_verdict.parses,
             "batch-104 opt_pattern for '{id}' must parse"
+        );
+    }
+}
+
+#[test]
+fn batch105_rules_present() {
+    // Batch 105 (uzu + lily combined Metal-engine distill -- Research 127
+    // + 128 / Plan 075): 11 kernel_opt rules (A +1, C +1, D +3, E +1,
+    // F +1, H +3, M +1). Sources: trymirai/uzu @ 115609b and
+    // perplexityai/pplx-garden lily/ @ 1ed972ed; both inspection lanes
+    // re-verified every quote at the pins; the cross-source dedup
+    // mandate executed per rule (the uzu/lily pairs cross-referenced
+    // in-rule, not merged).
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "concurrent-dispatch-dependency-level-barriers",
+        "gpu-resident-moe-routing-no-host-sync",
+        "indirect-device-dispatch-tile-map-moe",
+        "pipelined-token-slot-ping-pong-submit-ahead",
+        "split-k-two-pass-attention-decode-long-context",
+        "cooperative-tensor-mma-capability-route",
+        "rht-epilogue-fusion-contract",
+        "lane-sequenced-deterministic-bucket-scatter",
+        "a8-activation-route-stability-guard",
+        "target-tile-split-k-deterministic-two-dispatch",
+        "hazard-tracked-aliasing-scratch-allocator",
+    ];
+    for id in ids {
+        assert!(
+            corpus.entries.iter().any(|e| e.rule_id == id),
+            "batch-105 rule '{id}' missing from corpus"
+        );
+    }
+}
+
+#[test]
+fn batch105_concepts_covered() {
+    // Distinctness + mandated phrases must survive in the concept
+    // text (case-sensitive contains -- the B51 lesson).
+    let corpus = build_kernel_seed_corpus();
+    let checks: &[(&str, &[&str])] = &[
+        (
+            "concurrent-dispatch-dependency-level-barriers",
+            &[
+                "Metal drops the serial encoder's implicit ordering",
+                "independent kernels within a level overlap",
+                "Serial encoders ignore the barrier",
+                "Five dispatches in five dependency levels",
+                "caller documentation",
+            ],
+        ),
+        (
+            "gpu-resident-moe-routing-no-host-sync",
+            &[
+                "the CPU never inspects routing intermediates",
+                "ceil(S/T) + min(E, S)",
+                "drop rows SILENTLY",
+                "zero host readback",
+                "prefill-only",
+            ],
+        ),
+        (
+            "indirect-device-dispatch-tile-map-moe",
+            &[
+                "never round-trips to the host",
+                "Only the RAGGED axis is indirect",
+                "Over-provisioned threadgroups early-return",
+                "one dead TG row",
+                "GROUPS(INDIRECT)",
+            ],
+        ),
+        (
+            "pipelined-token-slot-ping-pong-submit-ahead",
+            &[
+                "submit-ahead",
+                "U32[2] ping-pong slot pair",
+                "the NEXT step's INPUT slot",
+                "OUT-OF-BAND",
+                "does not gate the next submission",
+                "advances at ENCODE time",
+            ],
+        ),
+        (
+            "split-k-two-pass-attention-decode-long-context",
+            &[
+                "fixed-block TWO-PASS split",
+                "per-block partial attention state (m, l, acc)",
+                "The crossover is exact, not tuned",
+                "exact model shape",
+                "GLOBAL max/sum",
+                "sdpa_vector_2pass_1",
+            ],
+        ),
+        (
+            "cooperative-tensor-mma-capability-route",
+            &[
+                "FAIL-CLOSED",
+                "DEFAULT FALSE",
+                "relaxed multiply is slightly faster",
+                "strict-layout override",
+                "diverges from FP32 across layers",
+                "alignment decides",
+            ],
+        ),
+        (
+            "rht-epilogue-fusion-contract",
+            &[
+                "only when split_k == 1",
+                "Bias is DEMOTED",
+                "transforms STRIPPED",
+                "folds INTO the quantize kernel",
+                "the ordering, not the arithmetic, is the correctness content",
+            ],
+        ),
+        (
+            "lane-sequenced-deterministic-bucket-scatter",
+            &[
+                "no device atomics",
+                "32 ordered steps per tile",
+                "INPUT ORDER, not from sorting",
+                "tok2row = -1",
+                "OFF by default",
+            ],
+        ),
+        (
+            "a8-activation-route-stability-guard",
+            &[
+                "RE-RUN THE FULL DISPATCH",
+                "does A8 still win",
+                "min(weight_group, 128)",
+            ],
+        ),
+        (
+            "target-tile-split-k-deterministic-two-dispatch",
+            &[
+                "TWO kernels",
+                "output transforms STRIPPED",
+                "quant-group alignment LADDER",
+                "k % (split_k * align) == 0",
+                "bit-deterministic",
+            ],
+        ),
+        (
+            "hazard-tracked-aliasing-scratch-allocator",
+            &[
+                "RAW/WAW/WAR",
+                "the barrier consumes the history",
+                "Barriers are COMPUTED, not authored",
+                "Aliasing legality is DERIVED",
+                "can_alias_before",
+            ],
+        ),
+    ];
+    for (id, needles) in checks {
+        let e = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == *id)
+            .unwrap_or_else(|| panic!("batch-105 rule '{id}' missing"));
+        for needle in *needles {
+            assert!(
+                e.gpu_concept.contains(needle),
+                "batch-105 concept for '{id}' missing phrase '{needle}'"
+            );
+        }
+    }
+}
+
+#[test]
+#[cfg(not(feature = "kernel_verify"))]
+fn batch105_pseudocode_parses() {
+    // G1 for Batch 105: syn-parse gate (the combined uzu + lily rules).
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "concurrent-dispatch-dependency-level-barriers",
+        "gpu-resident-moe-routing-no-host-sync",
+        "indirect-device-dispatch-tile-map-moe",
+        "pipelined-token-slot-ping-pong-submit-ahead",
+        "split-k-two-pass-attention-decode-long-context",
+        "cooperative-tensor-mma-capability-route",
+        "rht-epilogue-fusion-contract",
+        "lane-sequenced-deterministic-bucket-scatter",
+        "a8-activation-route-stability-guard",
+        "target-tile-split-k-deterministic-two-dispatch",
+        "hazard-tracked-aliasing-scratch-allocator",
+    ];
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-105 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            ref_verdict.parses,
+            "batch-105 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            opt_verdict.parses,
+            "batch-105 opt_pattern for '{id}' must parse"
         );
     }
 }

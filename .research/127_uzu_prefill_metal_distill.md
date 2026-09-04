@@ -113,6 +113,8 @@ uzu is a **competitor engine with an M3 lane** — an opponent *candidate*, not 
 
 ## Queue slot
 
+**MINED 2026-09-05 — Batch 105 (combined with Research 128/lily per the cross-source mandate; Plan 075): 11 rules landed, corpus 466 → 477, entries_gpu_18.rs.** This note's 10 candidates all confirmed at the pin (2 with corrections: the strict-layout override arm replaced "RELAXED everywhere"; the Hadamard-of-a-constant-column quote does not exist in-tree and was killed — the bias-demotion code is the evidence); 5 new candidates found in the unread surfaces (3 deferred to the queue: sparse-demand-paged-kv, gumbel-argmax-unified-sampling, hazard-tracked-aliasing — the last landed in this batch; the counts_shared OOB hazard found and recorded for upstream).
+
 `riir-clippy/.distill/001_mining_queue_snapshot.md` — next kernel batch (Batch 105 candidate), 2 inspection lanes already complete; batch plan (`.plans/NNN_*`) opens BEFORE the first corpus edit per the plan-first rule. Lead with `indirect-device-dispatch-tile-map-moe`.
 
 ## Bench-probe addendum (2026-09-04, Issue 851 arm (e))

@@ -1549,6 +1549,7 @@ mod entries_gpu_14;
 mod entries_gpu_15;
 mod entries_gpu_16;
 mod entries_gpu_17;
+mod entries_gpu_18;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -1579,6 +1580,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_15::entries());
     entries.extend(entries_gpu_16::entries());
     entries.extend(entries_gpu_17::entries());
+    entries.extend(entries_gpu_18::entries());
     Corpus::new(entries)
 }
 
@@ -1599,7 +1601,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (103 rules)
+    // A: Memory access patterns (106 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -1708,6 +1710,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "never-gqa-multiply-full-d-merge-smem",
             "bucketed-sparse-reader-column-partition",
             "bank-group-circular-element-reorder",
+            "hazard-tracked-aliasing-scratch-allocator",
         ],
     ),
     // B: Compute patterns (57 rules)
@@ -1774,7 +1777,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "per-row-scale-folded-into-rhs-staging-tile",
         ],
     ),
-    // C: Fusion patterns (39 rules)
+    // C: Fusion patterns (42 rules)
     (
         KernelCategory::Fusion,
         "C: fusion",
@@ -1820,9 +1823,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "grid-range-split-verbatim-impl-composition",
             "heterogeneous-unit-paths-shared-tile-fusion",
             "stream-k-persistent-cta-mac-segments",
+            "rht-epilogue-fusion-contract",
         ],
     ),
-    // D: Dispatch patterns (103 rules)
+    // D: Dispatch patterns (106 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -1930,9 +1934,12 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "request-shape-decline-mirror-completeness",
             "backing-provenance-causal-shadowed-extent-widen",
             "dispatcher-eligibility-predicate-lags-kernel-capability",
+            "concurrent-dispatch-dependency-level-barriers",
+            "pipelined-token-slot-ping-pong-submit-ahead",
+            "a8-activation-route-stability-guard",
         ],
     ),
-    // E: Parallelism patterns (32 rules)
+    // E: Parallelism patterns (33 rules)
     (
         KernelCategory::Parallelism,
         "E: parallelism",
@@ -1969,9 +1976,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "cross-simd-bitonic-alternating-bank-exchange",
             "register-budget-head-split-gqa-reread-trade",
             "batch-composition-invariant-grid-early-return",
+            "target-tile-split-k-deterministic-two-dispatch",
         ],
     ),
-    // F: Flash-attention tiling (11 rules)
+    // F: Flash-attention tiling (12 rules)
     (
         KernelCategory::FlashAttnTiling,
         "F: flash-attn tiling",
@@ -1987,6 +1995,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "block-local-reference-frame-for-overflow",
             "two-stage-mask-softmax-then-conv",
             "mask-block-classification-skip-placement",
+            "split-k-two-pass-attention-decode-long-context",
         ],
     ),
     // G: Linear-attention recurrence (26 rules)
@@ -2022,7 +2031,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "whole-sequence-zero-barrier-single-dispatch-scan",
         ],
     ),
-    // H: MoE dispatch + backward pass (16 rules)
+    // H: MoE dispatch + backward pass (20 rules)
     (
         KernelCategory::MoeDispatchBackward,
         "H: MoE dispatch + backward",
@@ -2044,6 +2053,9 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "expert-major-work-map-token-scatter-clamped",
             "moe-routed-down-sum-single-accumulate-pass",
             "lpt-min-heap-disjoint-column-ownership",
+            "gpu-resident-moe-routing-no-host-sync",
+            "indirect-device-dispatch-tile-map-moe",
+            "lane-sequenced-deterministic-bucket-scatter",
         ],
     ),
     // I: NSA block-sparse selection (4 rules)
@@ -2103,7 +2115,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "dequant-byte-pairs-as-aligned-u16-loads",
         ],
     ),
-    // M: Kernel parametric polymorphism (13 rules)
+    // M: Kernel parametric polymorphism (14 rules)
     (
         KernelCategory::KernelPolymorphism,
         "M: kernel polymorphism",
@@ -2120,6 +2132,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "batch-width-routed-dual-tile-twins",
             "device-m-runtime-mblock-graph-stable-gemm",
             "proven-shape-static-sibling-identical-results-fallback",
+            "cooperative-tensor-mma-capability-route",
             "small-batch-matvec-gemm-bridge-rung",
         ],
     ),
