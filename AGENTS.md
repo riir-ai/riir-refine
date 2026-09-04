@@ -2848,6 +2848,14 @@ deployed `693972ec`; server half riir-dapps `10ffb18`, exactly-once per
 `(date, neurons)`). The residuals, preserved here because the files
 are gone:
 
+**Issue 065 (the ops cost model vs the CF bill) RESOLVED + removed
+2026-09-04 per the noise-reduction rule — full narrative in git history
+(`git log -- .issues/065_*`); evidence in
+[Bench 067](.benchmarks/067_cf_bill_reconciliation.md) + the committed
+`.benchmarks/cf_bill_pin.json`; its residuals are items 1–2 below and the
+owner steps (set `MONTHLY_BUDGET_USD`; override
+`CF_BILLING_ANNIVERSARY_DAY` once the real day is known).**
+
 1. **Dashboard auth gate CLOSED 2026-09-03 (Issue 065 T8):**
    `DASHBOARD_TOKEN` set via `wrangler secret put`; live-verified all four
    branches (anon → 401 / wrong token → 401 / correct → 301 with token
