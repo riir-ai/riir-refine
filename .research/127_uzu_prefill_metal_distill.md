@@ -114,3 +114,16 @@ uzu is a **competitor engine with an M3 lane** — an opponent *candidate*, not 
 ## Queue slot
 
 `riir-clippy/.distill/001_mining_queue_snapshot.md` — next kernel batch (Batch 105 candidate), 2 inspection lanes already complete; batch plan (`.plans/NNN_*`) opens BEFORE the first corpus edit per the plan-first rule. Lead with `indirect-device-dispatch-tile-map-moe`.
+
+## Bench-probe addendum (2026-09-04, Issue 851 arm (e))
+
+The user asked "bench it first?" — done, SMALL-model arm per disk constraint. Harness VALIDATED end-to-end:
+PyPI wheel (`uzu==0.5.23`, uv venv) → `Engine.create` → catalog → download → chat; the engine SELF-REPORTS
+`ChatReplyStats.prefill_tokens_per_second` (`token_limit(1)` isolates prefill — no wall-clock harness needed).
+Smoke (`alibaba:qwen3.5:0.8b:mirai:mirai-m:4`, M3, ambient sibling build, non-scoring): pp512 2 625 /
+pp2048 3 838 / pp4096 4 296 / pp8192 4 260 tok/s (median of 3) — rises with P, plateaus ~4.2–4.3k.
+Catalog snapshot (`~/.cache/mirai/resolved-models.json`) confirms the 27B arms for the real ranking:
+`alibaba:qwen3.6:27b:mirai:mirai-m:4` (shape-matched to Bonsai) and `alibaba:qwen3.8:27b:mirai:mirai-m:4`
+(family-matched to the 4090 qwen38 lane) — one ~15 GB download away when disk frees. Batch 105 mining
+priority UNCHANGED (a 0.8B number cannot rank 27B stacks); the measurement-harness risk for opponent
+intake is retired. Harness: `/tmp/uzu_bench/uzu_bench.py`; record: riir-ai `.issues/851` §Arm (e) probe.
