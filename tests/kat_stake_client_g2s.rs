@@ -16,7 +16,10 @@
 //!   `kat_pending_estimator::no_dollar_sign_in_any_render` precedent,
 //!   extended: no `$` beside a KAT accrual; accruals labeled "service
 //!   credit"; APY only inside the no-promise phrase; the four unstake
-//!   disclosures present).
+//!   disclosures present). Driven through the module's ONE shared
+//!   predicate (`caveat15_violation`) + the D3 required-disclosure
+//!   checklist (`caveat15_missing_disclosure`) — the canaries live in the
+//!   module tests.
 //! - **The G2-S render budget smoke** — the position render completes well
 //!   inside the 50 ms CLI gate.
 
@@ -446,26 +449,19 @@ fn copy_gate_no_dollar_beside_a_kat_accrual_in_any_flow_render() {
         ),
         ("unstake".into(), kat_stake_client::unstake_disclosure()),
     ]);
+    // ONE shared predicate with the module gate (the two hand-copied loops
+    // this replaces could drift apart); the integration half adds the FLOW
+    // coverage — every render the live/not-live flows can produce.
     for (name, text) in &renders {
-        for line in text.lines() {
-            let mentions_kat =
-                line.contains("KAT") || line.contains("accru") || line.contains("Incentive");
-            assert!(
-                !(mentions_kat && line.contains('$')),
-                "caveat #15 ({name}): a KAT/accrual line must never carry a $ figure: {line}"
-            );
-        }
-        // APY only inside the no-promise phrase.
-        if text.contains("APY") {
-            assert!(
-                text.contains("no APY promise"),
-                "caveat #15 ({name}): APY must only appear in the no-promise phrase"
-            );
-        }
+        assert_eq!(
+            kat_stake_client::caveat15_violation(text),
+            None,
+            "caveat #15 ({name}): {text}"
+        );
     }
-    // The accrual line is labeled service credit.
-    let info_text = renders["info"].clone();
-    assert!(info_text.contains("service credit"), "{info_text}");
+    // The D3 pinned copy set rides the same shared checklist.
+    kat_stake_client::caveat15_missing_disclosure(&renders["stake_line"], &renders["info"])
+        .expect("the flow renders carry every required disclosure");
 }
 
 // ── the G2-S render budget smoke ───────────────────────────────────────────

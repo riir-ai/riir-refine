@@ -39,7 +39,11 @@
 //! APY is promised anywhere** — the string "APY" appears only inside the
 //! no-promise phrase. USDC principal/refund amounts may carry `$` (the
 //! proposal's own unstake mock does) — the gate is the KAT-accrual side.
-//! Pinned by the in-module copy-gate tests + the integration binary.
+//! Pinned by the in-module copy-gate tests + the integration binary, both
+//! driving ONE shared predicate ([`caveat15_violation`]) + the required-
+//! disclosure checklist ([`caveat15_missing_disclosure`], 068 D3's pinned
+//! copy set) — and canaried: a deliberately `$`-adjacent (or promised-rate)
+//! rendering must FIRE the gate (a gate that cannot fire is a green zero).
 
 use std::path::{Path, PathBuf};
 
@@ -547,6 +551,66 @@ pub fn render_info(info: &StakeInfo, now_tick: u64) -> String {
     out
 }
 
+// ── the caveat-#15 copy gate (ONE predicate; module + integration tests) ──
+
+/// The caveat-#15 copy-rule predicate over ONE rendered surface:
+///
+/// 1. **No `$` beside a KAT accrual** — a line mentioning `KAT` / `accru` /
+///    `Incentive` must never carry a `$` figure (USDC principal/refund lines
+///    may — the gate is the KAT-accrual side).
+/// 2. **`APY` only inside the no-promise phrase** — the promised-rate
+///    rendering class ("guaranteed … APY") is rejected outright.
+///
+/// Returns `Some(description)` naming the first violation, `None` when the
+/// text is clean. The single source of truth for the module's copy-gate
+/// tests AND the integration binary's flow-render gate (068 D3) — the two
+/// sites previously carried hand-copied loops that could drift apart.
+#[must_use]
+pub fn caveat15_violation(text: &str) -> Option<String> {
+    for line in text.lines() {
+        let mentions_kat =
+            line.contains("KAT") || line.contains("accru") || line.contains("Incentive");
+        if mentions_kat && line.contains('$') {
+            return Some(format!(
+                "caveat #15: a KAT/accrual line must never carry a $ figure: {line}"
+            ));
+        }
+    }
+    if text.contains("APY") && !text.contains("no APY promise") {
+        return Some(format!(
+            "caveat #15: APY must only appear in the no-promise phrase: {text}"
+        ));
+    }
+    None
+}
+
+/// The REQUIRED honest disclosures of the KAT-stake copy set (068 D3 — the
+/// surface's pinned-copy checklist, one place): the per-tranche 7-day
+/// lockup clock wording, the no-promised-rate line, and service-credit
+/// labeling. `Err` names the first missing disclosure; `Ok(())` means the
+/// surface discloses everything the rule requires. Deliberately a POSITIVE
+/// checklist beside the NEGATIVE [`caveat15_violation`] rule — the gate is
+/// only as wide as what it requires.
+///
+/// # Errors
+///
+/// A human-readable description of the first missing disclosure.
+pub fn caveat15_missing_disclosure(stake: &str, info: &str) -> Result<(), String> {
+    if !stake.contains("7-day lockup") {
+        return Err(format!("stake copy must disclose the 7-day lockup clock: {stake}"));
+    }
+    if !stake.contains("no APY promise") {
+        return Err("stake copy must carry the no-promised-rate line".into());
+    }
+    if !info.contains("service credit") {
+        return Err("info accrual must be labeled service credit".into());
+    }
+    if !info.contains("rate floats with burn") {
+        return Err("info accrual must disclose that the rate floats with burn".into());
+    }
+    Ok(())
+}
+
 /// bp → whole-percent display (1000 → "10"; 250 → "2.5").
 #[must_use]
 fn bp_pct(bp: u32) -> String {
@@ -987,39 +1051,55 @@ mod tests {
     }
 
     // ── the caveat-#15 copy gate (the no_dollar_sign_in_any_render
-    // precedent, extended to the staking surface) ────────────────────────
+    // precedent, extended to the staking surface) — ONE shared predicate
+    // ([`caveat15_violation`]) + the D3 canaries ──────────────────────────
 
     #[test]
     fn copy_gate_no_dollar_beside_a_kat_accrual() {
-        // Every render this module can produce: gate each LINE — no line
-        // carries both a `$` and a KAT/accrual figure.
-        let renders = [
+        // Every render this module can produce, through the shared predicate.
+        for text in [
             stake_line(100_000_000),
             render_info(&fixture_info(), 100_000),
             unstake_disclosure(),
-        ];
-        for text in &renders {
-            for line in text.lines() {
-                let mentions_kat =
-                    line.contains("KAT") || line.contains("accru") || line.contains("Incentive");
-                assert!(
-                    !(mentions_kat && line.contains('$')),
-                    "caveat #15: a KAT/accrual line must never carry a $ figure: {line}"
-                );
-            }
+        ] {
+            assert_eq!(caveat15_violation(&text), None, "{text}");
         }
     }
 
     #[test]
-    fn copy_gate_accruals_are_service_credit_and_no_apy_promise() {
-        let info = render_info(&fixture_info(), 100_000);
-        assert!(info.contains("service credit"), "{info}");
-        // "APY" appears ONLY inside the no-promise phrase.
-        for text in [stake_line(1_000_000), info.clone(), unstake_disclosure()] {
-            if text.contains("APY") {
-                assert!(text.contains("no APY promise"), "APY must only appear in the no-promise phrase: {text}");
-            }
-        }
+    fn copy_gate_canary_a_dollar_adjacent_accrual_fires() {
+        // The D3 acceptance canary: reintroduce a $-adjacent rendering and
+        // the gate must FIRE — a clean-only gate is a green zero (the 705
+        // liveness-sentinel discipline, applied to copy).
+        let violating = "Incentives:      +5.000000 KAT accrued ($0.42 at today's rate)";
+        let v = caveat15_violation(violating);
+        assert!(v.is_some(), "the canary render must fire the gate: {violating}");
+        // And the violation NAMES the offending line.
+        assert!(v.unwrap().contains("$0.42"));
+    }
+
+    #[test]
+    fn copy_gate_canary_a_promised_rate_fires() {
+        // The second violation class: a promised-rate rendering (APY outside
+        // the no-promise phrase) must fire too.
+        let violating = "earn a guaranteed 12% APY on every tranche";
+        assert!(caveat15_violation(violating).is_some(), "{violating}");
+        // The honest form stays clean.
+        assert_eq!(caveat15_violation("earn KAT from the burn pool (no APY promise)"), None);
+    }
+
+    #[test]
+    fn copy_gate_required_disclosures_are_pinned() {
+        // The D3 pinned copy set for the KAT-stake surface: the 7-day lockup
+        // clock + the no-promised-rate line + service credit + rate-floats.
+        caveat15_missing_disclosure(
+            &stake_line(100_000_000),
+            &render_info(&fixture_info(), 100_000),
+        )
+        .expect("the shipped renders carry every required disclosure");
+        // Negative controls: strip a disclosure and the checklist fires.
+        assert!(caveat15_missing_disclosure("stake 1 USDC", "").is_err());
+        assert!(caveat15_missing_disclosure(&stake_line(1), "no service credit here").is_err());
     }
 
     #[test]

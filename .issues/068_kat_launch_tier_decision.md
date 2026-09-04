@@ -209,7 +209,16 @@ Every row now carries a verdict instead of an open bracket:
 
 1. **D7** — the devnet ceremony rung (riir-deployer). Engineering, unblocked, ready to plan.
 2. **D8** — the advisory soak, once D7's cluster is up. Rides D7.
-3. **D3** — extend the pinned copy set to the KAT-stake surface. Small, unblocked.
+3. ~~**D3** — extend the pinned copy set to the KAT-stake surface. Small, unblocked.~~
+   **DONE 2026-09-05 (this commit):** the gate predicate is now ONE shared fn
+   (`kat_stake_client::caveat15_violation`) driven by the module tests AND the
+   integration binary (the two hand-copied loops it replaces could drift), the
+   required-disclosure checklist (`caveat15_missing_disclosure`: 7-day lockup
+   clock, no-promised-rate line, service credit, rate-floats) pins the stake
+   copy set, and the D3 acceptance canaries landed — a `$`-adjacent accrual
+   render and a promised-rate (APY-outside-no-promise) render both FIRE the
+   gate (a clean-only gate is a green zero). 21/21 module + 9/9 integration
+   under `kat_transport`, clippy 0.
 4. **D9** — create `gist-rs/cargo-heal`. **Owner act, one command, awaiting go-ahead.**
 5. **T2.2/T2.3/T4.4 on testnet** — owner act, but only *after* D7's rehearsal reports clean.
 
