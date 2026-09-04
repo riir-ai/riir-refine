@@ -1457,3 +1457,23 @@ One open class (below); the standing divergence (P4 residual) has no action plan
 **Standing never-heal divergence table:** the cargo-heal skill owns it (comment-guarded
 matches, array-literal defaults, named-arg renames, nested macro args, NaN-unsound
 negated comparisons, cfg-attributed trailing returns).
+
+
+## Sweep findings log (2026-09-05, 4090 idle session)
+
+- **riir-chain Issue-125 blocker CLEARED**: the NftProgram retirement landed
+  (`4044471`) + closed (`5f52d4c`); the consumer half (`5d2d1bcbe`) landed in
+  riir-ai. mmorpg 092 item (2) unblocked and RUN: guard Layers 1-3 pass,
+  needs_ruliology 45/45.
+- **mmorpg Windows platform break fixed** (`9f11c06`): `port_evict.rs` test const
+  `EADDRINUSE` existed only under macOS/linux cfg - Windows E0425 at Layer 1.
+  Added the `#[cfg(windows)] 10048` (WSAEADDRINUSE) arm, probed live (48/98/100
+  decode Uncategorized on Windows; only 10048 maps to AddrInUse).
+- **NEW ISSUE mmorpg 096**: scn_t11 Timeout (credited plateaus 5 < 8 at the
+  hero-sleep boundary t~2200, never resumes) + scn_t6 fire drift 1451 -> 1811
+  (+25%). Deterministic; pre-existing at tip; first full guard run since 09-02.
+  Owner/scenelab-lane (871/872 session owns the scenario engine).
+- **riir-dapps 012 closed** (`db98807`): live-verified by Plan 079 G3
+  (claim -> gate Open, steps 1-4 PASS); file removed per noise-reduction.
+- **game-sdk 026 closed** (`ea01194`); fresh-clone buildability re-probed CLEAN
+  (cargo metadata exit 0) - the scenelab + panel commits pushed 09-05 resolve it.
