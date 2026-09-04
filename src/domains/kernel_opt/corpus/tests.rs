@@ -7421,6 +7421,7 @@ fn batch105_rules_present() {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn batch105_concepts_covered() {
     // Distinctness + mandated phrases must survive in the concept
     // text (case-sensitive contains -- the B51 lesson).
