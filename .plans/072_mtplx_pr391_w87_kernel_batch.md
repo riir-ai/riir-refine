@@ -1,6 +1,6 @@
 # 072 — MTPLX PR 391 distill batch (W87-led, kernel_opt D, 2–3 rules + riders)
 
-**Status:** COMPLETE — Batch 103 landed 2026-09-04 (4 rules, corpus 459 → 463, D +4, + the B100 rider enrichment; T7 COMBINE executed; record: `.research/124_batch103_mtplx_nax_combined.md`; re-pin `a5e38bb`)
+**Status:** COMPLETE — Batch 103 landed 2026-09-04 (4 rules, corpus 459 → 463, D +4, + the B100 rider enrichment; T7 COMBINE executed; record: `.research/124_batch103_mtplx_nax_combined.md`; re-pin `a5e38bb`) + **two same-day addenda from the Issue-665 collision salvage** (the duplicate session yielded push-wins, then landed what the batch lacked): the silently-omitted MLX #4416 rule `dispatcher-eligibility-predicate-lags-kernel-capability` (corpus 463 → 464, D 102 → 103, `07fa0df`) + the mask-fuse cache facility rider on the shape-class rule (`8bbd59e`); R124 §addendum has the narrative
 
 ## Source + pin
 
