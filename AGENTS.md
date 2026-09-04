@@ -3013,6 +3013,30 @@ committed jsonl is the only cross-clone durable record and the git-mined
 corpus layer stays as the drift cross-check. Landed with T1 (the recorded
 jsonl bridge, `586402c`). Record: git history — `git log -- .issues/050_*.md`.
 
+**Issue 066 (2026-09-04, RESOLVED + removed per noise-reduction rule) — the
+corpus series' docker counts were wrong since the domain landed (the
+source-walk needle counted constructor plumbing, not entries).** The docker
+corpus uses a positional shorthand `rule()` constructor with no per-entry
+`rule_id:` text, so the `--corpus-stats` source-walk needle `rule_id:` (and
+its `gen_dashboard.py` mirror) matched only the 2 plumbing occurrences —
+historical stamps read docker ≈ 2 while the runtime count was 27→31, and
+`load_corpus_history`'s store-wins merge preserved the poison across every
+regeneration (the dashboard showed docker collapsing 31→2→31 across days
+that never happened). Fixed in four pieces: **T1** the needle is now the
+8-space `    rule(` constructor call + the count-pin test
+`corpus_stats_needle_tests` pins EVERY compiled domain's walk == runtime
+count (generalizes beyond docker) (`c9863d6`); **T3** the poisoned store
+history repaired through the only sanctioned dated writer
+`examples/repair_066_corpus_store.rs`, each value verified against
+`git show <rev>` BEFORE writing, provenance `repair-066` so a future
+first-hand stamp may supersede (`d731cac`); **T4** store-vs-mined
+per-domain divergence LOGGING (never fails, never overrides — commit-time
+vs stamp-time is a definitional boundary, not skew) + the mined-layer CWD
+anchor it exposed (`_count_in_rev`'s `git show`/`git ls-tree` inherited the
+caller's CWD — run off the repo root every count read 0 and the merge then
+"won" those zeros over real store rows; both anchored to `REPO_ROOT`)
+(`4239dbdd`). Record: git history — `git log -- .issues/066_*.md`.
+
 **Issue 037 (E2E self-evolve proof + adoption observability) — CLOSED
 2026-08-26** (file removed per the noise-reduction rule; full session records
 in git history — `git log -- .issues/037_*.md`). **ALL GATES GREEN**: A1
