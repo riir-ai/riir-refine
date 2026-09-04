@@ -1,6 +1,6 @@
 # Plan 074 — Batch 104: the fa-vec swept shape-bucket launch-table distill
 
-**Status:** IN PROGRESS
+**Status:** COMPLETE (2026-09-05, commit `ecade10`, pushed develop; `.raw/llama-upstream` removed)
 **Source:** ggml-org/llama.cpp — infra `efeda76b9` (08-24, fa-vec machinery), table pin `8963a9bdc`
 (08-28, #27863: M3 Max + M5 + M5 Pro rows), harness read at `d230ddd76` (b10793; the tools/tuning
 tree is byte-identical from the pin to HEAD — verified by `git diff 8963a9bdc HEAD -- tools/tuning/`
