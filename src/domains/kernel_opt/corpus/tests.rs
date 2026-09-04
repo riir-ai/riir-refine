@@ -7199,6 +7199,12 @@ fn batch103_concepts_covered() {
                 "a 4,096-token probe exercises the same grid a 17,408-token cycle does",
                 "if 32 * gqa_factor * int(q_len) > 1024",
                 "NOT re-confirmable",
+                "never by mask kind alone",
+                "3 * 12 = 36 > 32",
+                "warmup ladder: verify before any wide chunk",
+                "silently the control in the other",
+                "never a wrong answer",
+                "not evidence of engagement",
             ],
         ),
         (
