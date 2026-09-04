@@ -1,49 +1,61 @@
-# Issue 060 — Proposal 008 remainder: autonomy re-open needs a NEW plan; dopamine levers G5-gated; soak async
+# Issue 060 — Proposal 008 remainder: autonomy re-open, dopamine levers, advisory soak
 
-Status: **OPEN (2026-09-01) — advisory-only is TERMINAL for this proposal.** The G5
-verdict is FAIL (wash) (`riir-dao Bench 001`,
-re-confirmed at the ratified genesis in `Bench 002`):
-adaptive ≈ frozen constants, so the agent stays advisory-only — a recorded defend-wrong
-outcome, not a re-roll. Phases 0–2 LANDED (scaffold, bounds + telemetry, signals/
-strategies/guards, GLM advisory transport, decision artifacts + audit CLI, shallow-DAO
-ban/unban voting G9-GOV PASS + the dao-side ban composer `b1af3f8`). Everything below is
-blocked on owner decisions, a NEW plan, or live-telemetry accumulation — nothing here is
-executable without one of those. Issue filed while converting the KAT proposals
-(007–011) to tracked issues.
+Status: **RESOLVED (2026-09-04) by owner decision — see
+[Issue 068](068_kat_launch_tier_decision.md). Advisory-only is 008's SHIPPED END STATE,
+not a waiting room.** The G5 verdict is FAIL (wash), measured and pinned; the decision is
+to **not commission** the v2-candidates plan on a calendar, to **kill** the dopamine
+levers rather than keep them deferred, and to move the advisory soak onto the devnet rung
+(068 D7/D8) that unblocks it. This file is kept rather than removed because sibling repos
+cite it by number; it is now a record, not a wait-state tracker.
 Branch: `develop` (per global rule — no feature branches)
 Proposal: [`.proposals/008_adaptive_tokenomics_riir_dao.md`](../.proposals/008_adaptive_tokenomics_riir_dao.md)
-Related: [Issue 059](059_proposal_007_remainder_ops_signer_and_counsel_gate.md),
-[Issue 061](061_proposal_011_product_loop_rollout.md), riir-dapps
-`Issue 006`
-(CLOSED — the decay-saturation resolution), Proposal 010 (the landed re-open half).
+Decision: [Issue 068](068_kat_launch_tier_decision.md) · Related:
+[Issue 059](059_proposal_007_remainder_ops_signer_and_counsel_gate.md),
+[Issue 061](061_proposal_011_product_loop_rollout.md), riir-dapps `Issue 006` (CLOSED —
+the decay-saturation resolution), Proposal 010 (the landed re-open half).
 
-## Open items
+## Decisions applied (2026-09-04)
 
-- [-] **The NEW plan (the only path to autonomy).** The owner's "auto-live tokenomics"
-      ask is NOT deliverable by 008 as specified — measured, not opinions: the G5
-      verdict (adaptive ≈ frozen) plus Bench 004's axis-E finding (no agent-reachable
-      `decay_factor` keeps mining alive to a 1000-epoch horizon at launch scale under
-      any cap). The proposal's own re-open clause: "a ledger budget-rule change ... or
-      v2 candidates require a NEW plan" — and the cap/initial-supply ratio change is an
-      OWNER act (a supply decision), never an agent move. **Unblock: owner commissions
-      the v2-candidates plan** (contents per Proposal 008 T1.4: v2 strategy candidates
-      incl. decay/Inflate directions + the supply-ratio decision framed for owner
-      sign-off). Do NOT re-roll the G5 campaign with the same candidates.
-- [-] **T3.1 — `FairRoll` jackpot table as a governed lever, end-to-end.** GATED on
-      G5-class evidence (the phase gate: "gated on G5 evidence" — which FAILED).
-      Partially landed: the guard-side caps ship (`REWARD_EV_EPSILON_BP = 0`,
-      `REWARD_MAX_MULTIPLIER_X = 10`, riir-dao guard.rs); what is open is the FairRoll
-      table itself wired as a governed lever end-to-end. Unblock: the NEW plan above
-      carries it, or owner explicitly de-gates it.
-- [-] **T3.2 — streak bonuses (bounded, capped; retention metric wired into signals).**
-      Same gate as T3.1.
-- [-] **T2.3 — advisory-mode soak (operator applies by hand; N epochs clean).** ASYNC
-      OPERATOR WORK — the mechanism landed (T2.1/T2.2); the soak accumulates when live
-      telemetry flows. Unblock: the service plane runs live epochs (Proposal 011's
-      Phase 2 genesis ceremony is the precondition — no live network, no telemetry).
-- [-] **T4.1/T4.2 — the autonomy ramp. TERMINALLY FORECLOSED by the G5 verdict** for
-      this proposal; re-opens only inside the NEW plan. Recorded here so the
-      checkboxes in the proposal never look like ordinary backlog.
+- [x] **The NEW plan (the only path to autonomy) — DO NOT COMMISSION** (068 D4).
+      Commissioning a v2-candidates campaign today buys a re-measurement whose only
+      evidenced outcome class is another wash, and it would need an owner **supply-ratio**
+      decision made on no data. The measurements, re-verified at source on 2026-09-04:
+      `riir-dao/.benchmarks/001_g5_simulator.md` reads *"**FAIL — no metric where adaptive
+      strictly beats frozen (wash)**"*, carrying a regression pin that asserts the verdict
+      stays exactly that; Bench 004 axis-E adds that no agent-reachable `decay_factor`
+      keeps mining alive to a 1000-epoch horizon at launch scale under any cap.
+      **So the landed system is the answer, not a shortfall:** it is bounded, audited
+      (`dao-audit`), and a frozen constant performs as well as anything adaptive we have
+      tried. That is a recorded negative result — treating it as unfinished work is how
+      someone re-runs a campaign we already paid for.
+      **Re-open trigger — a MEASUREMENT, not a calendar:** the Tier-0 soak (below) shows a
+      metric where a frozen constant is measurably leaving value on the table. Let the
+      data commission the plan.
+- [x] **T3.1 `FairRoll` jackpot table as a governed lever — WON'T-DO** (068 D5), not
+      deferred. Two concrete reasons: (1) the guard layer already pins
+      `REWARD_EV_EPSILON_BP = 0` — *"EV ≤ base exactly, the strictest reading"*
+      (`riir-dao/crates/riir-dao/src/guard.rs`, asserted in
+      `tests/dapps_contract_pins.rs:177`, with `REWARD_MAX_MULTIPLIER_X = 10` at :176), so
+      a jackpot table with **zero EV edge is a presentation layer over a constant** with
+      no economic function by construction; (2) gambling-adjacent mechanics and copy on a
+      token we have just decided to keep **non-transferable and closed-loop** (068 D1) add
+      exposure to precisely the surface 005 caveat #15 calls "most likely to be
+      screenshotted". The guard-side caps STAY (they bound anything future); the levers do
+      not get wired.
+      **Re-open trigger:** only inside a future proposal that first shows, measured, a
+      retention metric the levers are supposed to move — with the copy posture re-checked.
+- [x] **T3.2 streak bonuses — WON'T-DO**, same gate and same reasoning as T3.1.
+- [x] **T2.3 — advisory-mode soak. UNBLOCKED and RE-HOMED to
+      [Issue 061](061_proposal_011_product_loop_rollout.md)** (068 D7/D8). It was blocked
+      on live telemetry → blocked on the genesis ceremony → an owner act. The devnet rung
+      breaks that chain: a local ceremony produces a real cluster emitting real epochs, so
+      the soak runs there. A devnet soak is **not** a substitute for a testnet one for
+      *launch* purposes, but it is a full substitute for the purpose this row stated —
+      proving the advisory loop runs N epochs clean and the guard layer does not trip on
+      real telemetry. It is also the measurement that could re-open the v2 plan above.
+- [x] **T4.1/T4.2 — the autonomy ramp. CLOSED (terminally foreclosed)** (068 D6). Already
+      terminal-as-specified by the G5 verdict; recorded as closed rather than left
+      perpetually "open, gated". Re-opens only inside a future proposal, never inside 008.
 
 ## Landed (record — do not re-do)
 
@@ -68,27 +80,11 @@ Related: [Issue 059](059_proposal_007_remainder_ops_signer_and_counsel_gate.md),
 - Proposal 010 (the ledger-budget-rule re-open half) LANDED end-to-end: row v2, the
   yield ceiling, treasury-first grants, activation.
 
-## Wait-state re-verification (2026-09-02, source-level)
-
-Re-verified this date against the recorded benchmark rather than against this file's
-own status line.
-
-- **The G5 FAIL verdict is real and pinned, not stale prose.**
-  `riir-dao/.benchmarks/001_g5_simulator.md:36` reads "**FAIL — no metric where
-  adaptive strictly beats frozen (wash)**", and the doc records a regression pin
-  asserting the verdict stays EXACTLY that. So advisory-only remains terminal for
-  this proposal by measurement, not by opinion.
-- **The only path out is still an owner act.** The v2-candidates plan requires an
-  owner-commissioned supply decision (the cap/initial-supply ratio is never an agent
-  move). Re-rolling the G5 campaign with the same candidates is explicitly NOT the
-  path — that would re-measure a known wash.
-- **T3.1/T3.2 stay gated** on G5-class evidence that failed; **T2.3's soak** stays
-  blocked on live telemetry, which needs Proposal 011's genesis ceremony
-  (Issue 061 T2.2 — an owner act). No engineering unblock exists for any of the four.
-
 ## Summary
 
-008 is a landed, terminal-as-specified advisory system with one open path: a NEW plan
-carrying v2 candidates + an owner supply decision. The dopamine levers and the soak are
-gated/async respectively. This issue tracks those four wait-states so they surface in
-issue sweeps instead of hiding in the proposal's checkboxes.
+008 is a landed, bounded, audited advisory system, and **advisory-only is its shipped end
+state by measurement**. The v2 plan is not commissioned (re-opens on a measurement, not a
+date), the dopamine levers are killed rather than deferred, the autonomy ramp is closed,
+and the one row with a real path — the advisory soak — moved to
+[Issue 061](061_proposal_011_product_loop_rollout.md) behind the devnet ceremony rung.
+Full reasoning: [Issue 068](068_kat_launch_tier_decision.md).

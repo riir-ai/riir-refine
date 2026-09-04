@@ -1,8 +1,21 @@
 # Issue 061 — Proposal 011 rollout: the KAT product loop (pay-request, genesis ceremony, deploy UX, wet-run, onboarding)
 
-Status: **OPEN (2026-09-02) — Phases 0, 1 and 3 COMPLETE; Phase 2's T2.1 and
-Phase 4's T4.1/T4.2/T4.3 LANDED. Every remaining row (13) is gated on an
-owner act, ops creds, or counsel — no engineering unblock exists in any repo.**
+Status: **OPEN (2026-09-04) — the live product tracker. Phases 0, 1 and 3 COMPLETE;
+Phase 2's T2.1 and Phase 4's T4.1/T4.2/T4.3 LANDED.**
+**RE-TIERED 2026-09-04 by owner decision — [Issue 068](068_kat_launch_tier_decision.md).**
+This file previously read *"every remaining row is gated on an owner act, ops creds, or
+counsel — no engineering unblock exists in any repo."* **That was wrong in one specific
+way, and it is the finding:** the counsel and ops gates both belong to the **USDC custody
+rail** (Tier 2, now not proposed), and the genesis ceremony is an owner act *because it
+authors real testnet key material and writes to production hosts as root* — which is true
+of **testnet** and true of **nothing on devnet**. So there IS an engineering unblock: the
+**devnet ceremony rung** (068 D7, T2.0 below), which rehearses the owner's one-shot act,
+produces the live telemetry [Issue 060](060_proposal_008_remainder_new_plan_and_gated_levers.md)
+T2.3 was waiting on, and runs T4.1's shipped wet-run harness against a real service
+instead of a scripted one. **Tier 0 (devnet + testnet, operator-owned accounts only,
+no fiat, no custody) is AUTHORIZED and needs no counsel**; Tiers 1 and 2 carry the gates.
+One owner act now blocks a shipped surface: `gist-rs/cargo-heal` has never been created,
+so neither install one-liner is runnable (068 D9).
 Phase 1 closed out 2026-09-02 with T1.2/T1.5 (riir-dapps `db69499`),
 T1.6 (`faa05d0`) and T1.7 (`891f9fd`) — those four rows had LANDED but still
 read `[-]` here, because each dapps unit was instructed not to edit this shared
@@ -300,6 +313,27 @@ Proposal 008 (MemoShard).
       `RIIR_DEPLOYER_REQUIRE_DAPPS_PINS=1` makes absence a failure). 25/25 pins
       verified against riir-dapps **HEAD** (not its worktree — that repo was dirty
       with this issue's own T1.7/T1.8 session). 13 tests.
+- [ ] **T2.0 — the DEVNET ceremony rung (NEW, 068 D7). AGENT-EXECUTABLE — this is the
+      unblock.** Allow `genesis --execute` for `--dest devnet` **only**; run the four
+      ceremony steps end to end against a local loopback cluster (ephemeral keys, no
+      production hosts, none of caveat #6's hazards) and author `devnet.toml` **by the
+      ceremony, not by hand**. `examples/genesis-devnet.yaml` already exists and G-DEPLOY
+      already ran against three real `mock-chain` processes on loopback (riir-deployer
+      `96009cc`, Bench 003) — the only thing in the way is that `genesis --execute`
+      refuses *unconditionally*, a refusal written for the testnet/mainnet hazard that
+      also catches the case carrying none of it.
+      **Guardrails are the decision, not garnish** (011 caveat #2: an override env var is
+      a standing invitation): the permit is on the **destination name matched exactly**,
+      in the same shape T3.1 already uses for `RIIR_DEPLOY_ALLOW_MAINNET` — not a truthy
+      env var, not a `--force`; `testnet`/`mainnet` keep the current unconditional
+      refusal **pinned by a test that fails if either becomes executable**; the devnet
+      ceremony refuses any host not on loopback/private space, fail-closed on
+      unclassifiable exactly as `kat_wetrun.rs` does; and `wetrun`'s mainnet refusal is
+      **untouched** — it reads no environment and must keep reading none.
+      **Acceptance:** `devnet.toml` authored by the ceremony; the four steps reported;
+      T4.4's wet-run green against the devnet cluster with G-WET's supply counters
+      bit-unchanged; the testnet/mainnet refusal tests still red when broken.
+      Work lands in riir-deployer.
 - [-] T2.2 ceremony: keys → chainspec authorship → registry genesis → SSH provision
       (caveat #6 — dry-run-by-default; wrong root key = locked treasury, double mint =
       supply bug; the ceremony is the ONLY sanctioned author of testnet/mainnet.toml —
@@ -308,9 +342,13 @@ Proposal 008 (MemoShard).
       chainspec rows → registry genesis → SSH provision, with the node count named).
       `genesis --execute` REFUSES, naming this task. **Unblock: OWNER EXECUTES** —
       this authors real testnet key material and writes to nodes as root (caveat #8);
-      not an agent act.
+      not an agent act. **Sequenced behind T2.0 (068 D7): the owner runs the rehearsed
+      script, not a first execution.** Caveat #6's failure modes (wrong root key = locked
+      treasury; double mint = supply bug) are unrecoverable *because the ceremony has
+      never been executed anywhere* — T2.0 removes that property before the owner's hands
+      are on the real keys.
 - [-] T2.3 testnet ceremony executed once; `testnet.toml` lands.
-      **Unblock: T2.2, then OWNER EXECUTES.**
+      **Unblock: T2.0's devnet report clean, THEN OWNER EXECUTES T2.2.**
 
 ## Phase 3 — deploy UX + health
 
@@ -449,39 +487,71 @@ Proposal 008 (MemoShard).
       dist repo has **never been created** (Proposal 003 T1.1), so neither
       one-liner is runnable yet. Publishing binaries built from private source
       is an owner/security decision.
-- [-] T4.4 testnet wet-run executed; mesh-ready verdict recorded.
-      **Unblock: T2.2/T2.3 (the OWNER-EXECUTED genesis ceremony) — a testnet
-      wet-run needs real testnet key material authored and nodes written to as
-      root (caveat #8), which is not an agent act.** The harness it will run is
-      shipped (T4.1/T4.2 above); its money legs need only a deployment
-      `RIIR_HEAL_KAT_CRANK_TOKEN` (the riir-dapps Issue 010 supply blocker
-      resolved 2026-09-03) — `POST /admin/crank/daily` is bearer-gated
+- [ ] **T4.4a — DEVNET wet-run (NEW, 068 D7). AGENT-EXECUTABLE, rides T2.0.**
+      Run the shipped six-step harness against the devnet cluster T2.0 stands up.
+      This is the first time the steps, G-WET's bit-unchanged supply assertion, and
+      the crank's treasury-debit path meet an **actual** service rather than the
+      scripted one they were proven against — and the happy-path tests currently
+      script an explicitly lowered `treasury_grant_floor` for isolation, so devnet is
+      also the first run at the real floor (1,000 bp / 100 K KAT runway,
+      riir-dapps `bf2215d`+`3eacd6c`). Money legs need a local
+      `RIIR_HEAL_KAT_CRANK_TOKEN`; `POST /admin/crank/daily` is bearer-gated
       fail-closed and is what settles a faucet row.
+- [-] T4.4 **testnet** wet-run executed; mesh-ready verdict recorded.
+      **Unblock: T4.4a clean, then T2.2/T2.3 (the OWNER-EXECUTED genesis ceremony)** —
+      a testnet wet-run needs real testnet key material authored and nodes written to
+      as root (caveat #8), which is not an agent act. The harness is shipped
+      (T4.1/T4.2 above) and by then rehearsed (T4.4a).
 
-## Phase 5 — live USDC pay-and-register (real users; counsel + demand gated)
+## Phase 5 — live USDC pay-and-register — **TIER 2, NOT PROPOSED** (068 D1)
+
+The whole phase moves behind the Tier-2 gate: counsel **and** measured demand. The USDC
+arm is not dropped, it is **not put in front of counsel until there is demand for it** —
+paying for a review of a rail we have decided not to operate is the wrong order. The
+shipping arm is the custody-free KAT-stake arm, which is already live.
 
 - [-] T5.1 live Solana-Pay settle path + G-REG matrix run live (the ten §12 cases;
-      fixtures first; the `#[ignore]`d live arm un-ignored).
-- [-] T5.2 ops reconcile runbook for expired-intent stuck funds (until outbound
-      refunds exist — Issue 059 T2.2 territory).
-- [-] T5.3 testnet-then-mainnet launch decision (the counsel envelope shared with the
-      KAT rail — Issue 059 T3.1).
+      fixtures first; the `#[ignore]`d live arm un-ignored). **Tier 2.** The eight
+      fixture-covered §12 cases already pass (T1.6); only the live arm waits.
+- [x] T5.2 ops reconcile runbook for expired-intent stuck funds — **WON'T-NEED under the
+      decision.** It existed to cover the window before outbound refunds exist
+      (Issue 059 T2.2). With no USDC custody there are no stuck funds to reconcile.
+      Re-opens with Tier 2, alongside the signer it was compensating for.
+- [-] T5.3 testnet-then-mainnet launch decision. **Split by tier:** the *testnet* half is
+      **Tier 0 — authorized now** (T2.0 → T2.2/T2.3 → T4.4); the *mainnet* half is
+      **Tier 1** and carries the narrow counsel question plus 005 caveat #7's Phase-1
+      exit list (ToS with a data-license grant, privacy policy, sanctions screening, tax
+      handling, refund policy). Bundling the two is what made the cheap decision wait on
+      the expensive one.
 
-## Deferred — gated (from the proposal; tracked, not scheduled)
+## Deferred — **every row now carries a verdict** (068, 2026-09-04)
 
-- [-] Chain-NFT invoice mint (after the Warm-tier invoice proves out; opt-in,
-      Glacial cadence — a per-payment NFT would fail the rate test).
-- [-] MemoShard v4 signing-message adoption (riir-chain 008 decision).
-- [-] LIVE Stripe + Solana-Pay rails (mock-tested; only the launch decision waits).
-- [-] KAT-rail launch beyond operator-owned accounts (the counsel gate — Issue 059).
-- [-] `riir-wallet-wasm` invoice display (browser wallet; CLI view first).
-- [-] Discord faucet bot (link-first made it pure automation; reopen on volume,
-      gated on a per-account daily cap + identity proof no weaker than GitHub-SSH).
-- [-] Baz fixer tier — its OWN plan, gated per 011 §9: (a) a fixer arm beats `decline`
-      on the reachable set, (b) leak-posture sign-off, (c) reward economics with
-      G5-class evidence (blocked by 060's advisory-only verdict). Opening it before
-      clippy-tier onboarding lands would put the least-proven earning lane in front of
-      the newest users.
+The rows below used to be open brackets with no trigger that said what would end the
+wait. Each now has one.
+
+- [x] **Chain-NFT invoice mint — WON'T-DO.** A per-payment NFT fails 011's own rate test
+      (the Glacial ≤0.1 Hz tier). Re-open only as Glacial **batch** anchoring, and only
+      if invoice volume ever asks for it.
+- [-] **MemoShard v4 signing-message adoption — DEFER (unchanged).** Rides riir-chain
+      Proposal 008's decision; not ours to make.
+- [-] **LIVE Stripe + Solana-Pay rails — TIER 2** (068 D1). Mock-tested (T1.6); stays
+      that way until demand + counsel.
+- [-] **KAT-rail launch beyond operator-owned accounts — TIER 1** (068 D1). The narrow
+      counsel question, asked when a Tier-0 demand signal exists.
+- [-] **`riir-wallet-wasm` invoice display — DEFER (unchanged).** CLI view ships first.
+- [x] **Discord faucet bot — WON'T-DO now.** Link-first (T1.3/T1.8) already made this
+      pure automation with no bot in the loop. Re-open on volume, still gated on a
+      per-account daily cap + identity proof no weaker than GitHub-SSH.
+- [-] **Baz fixer tier — GATE RE-SCOPED, (c) collapses** (068, Deferred table). Its three
+      gates were (a) a fixer arm beats `decline` on the reachable set, (b) leak-posture
+      sign-off, (c) reward economics with **G5-class evidence**. 068 D4 closes 008 as
+      terminal, so (c) as written is permanently unsatisfiable — and it was
+      **mis-specified**: a fixer tier needs a reward **constant**, not an **adaptive**
+      one, and 008's measured verdict is precisely that a frozen constant performs as
+      well as anything adaptive. (c) is discharged by picking a bounded constant inside
+      the existing guard caps (`REWARD_EV_EPSILON_BP = 0`, `REWARD_MAX_MULTIPLIER_X = 10`).
+      **The gate is now (a) + (b).** Still sequenced behind clippy-tier onboarding per
+      011 §9 — the least-proven earning lane does not go in front of the newest users.
 
 ## Summary
 
@@ -522,22 +592,49 @@ wet-run's faucet legs are reachable at genesis defaults now; the harness
 still names a misconfigured deployment and FAILS rather than faking a pass,
 and the happy-path tests say out loud that they script an explicitly lowered
 floor.
-Next executable: T1.2 (the web wallet — every signed route it needs is landed),
-T1.5 (the money/auth adversarial suite), T1.6 (the mock rails), T1.7 (the daily
-grant crank's clippy-side follow-ups; **now that T1.8 has landed,
-riir-deployer's `free_tier_daily_micro`/`faucet_daily_cap_micro` move from
-structurally-bounded to PINNED**, per its Plan 003's named follow-up). Phase
-2's T2.2/T2.3 and Phase 4's T4.4 are OWNER acts and every harness they need is
-shipped — bar's dry-run genesis is what puts the mint in the wallet every foo
-gets paid from, and the wet-run is what proves the loop once it does.
+**Next executable (corrected 2026-09-04 — the list below had gone stale: T1.2, T1.5,
+T1.6 and T1.7 were named as "next" here after all four had LANDED, the same
+tracker-vs-reality drift the header records for Phase 1):**
 
-## Wait-state verification (2026-09-02)
+1. **T2.0 — the devnet ceremony rung** (riir-deployer). The unblock; everything else
+   downstream rides it. Guardrails in the row are load-bearing.
+2. **T4.4a — the devnet wet-run**, against the cluster T2.0 stands up.
+3. **The 060 advisory soak** on the devnet epochs (068 D8) — also the measurement that
+   could re-open 008's v2 plan.
+4. **Extend the pinned copy set to the KAT-stake surface** (068 D3 — the lockup clock,
+   the no-promised-rate line). Small, independent of the above.
+5. riir-deployer's `free_tier_daily_micro` / `faucet_daily_cap_micro` move from
+   structurally-bounded to **PINNED** now that T1.8 has landed (Plan 003's named
+   follow-up) — still open, still small.
 
-- [Issue 059](059_proposal_007_remainder_ops_signer_and_counsel_gate.md):
-  re-verified — both open items are ops/counsel-gated (RPC provider + custody-key
-  posture; counsel engagement). No engineering unblock exists; the file stays as the
-  wait-state tracker.
-- [Issue 060](060_proposal_008_remainder_new_plan_and_gated_levers.md):
-  re-verified — terminal-as-specified (G5 FAIL-wash stands); the only path is the
-  owner-commissioned v2-candidates plan, which is an owner act, not an agent one.
-  The file stays as the wait-state tracker.
+**Owner acts, in the order that unblocks the most:** create `gist-rs/cargo-heal`
+(one command; without it nobody can install `cargo-heal` at all), then the testnet
+ceremony T2.2/T2.3 **after** T2.0's rehearsal reports clean. bar's genesis is what puts
+the mint in the wallet every foo gets paid from, and the wet-run is what proves the loop
+once it does.
+
+## Wait-state resolution (2026-09-04) — [Issue 068](068_kat_launch_tier_decision.md)
+
+The 2026-09-02 entry recorded both sibling trackers as re-verified wait-states with no
+engineering unblock. That verification was **accurate about each file and wrong about the
+set** — read together, the three trackers were not blocked on three shortages but on one
+mis-scoping, and re-verifying each in isolation could never surface that. Both are now
+RESOLVED by decision:
+
+- [Issue 059](059_proposal_007_remainder_ops_signer_and_counsel_gate.md) — **RESOLVED.**
+  The ops signer is **not built** (Tier 2, re-open on a real USDC deposit intent) and the
+  counsel question is **answered by arm selection**: the custody-free KAT-stake arm ships,
+  the USDC arm is not proposed. A narrow Tier-1 review is unbundled and deferred until
+  there is demand for it.
+- [Issue 060](060_proposal_008_remainder_new_plan_and_gated_levers.md) — **RESOLVED.**
+  Advisory-only is 008's shipped end state by measurement, not a waiting room. The v2 plan
+  is not commissioned (re-opens on a **measurement**, not a date), the dopamine levers are
+  killed, the autonomy ramp is closed, and the advisory soak moves here behind T2.0.
+
+**What remains open in this tracker, all with named unblocks:** T2.0 + T4.4a (engineering,
+ready now), the 060 advisory soak riding them, T2.2/T2.3/T4.4 (owner, after the devnet
+rehearsal reports clean), and Tier 1/2 rows behind demand. Plus **one owner act that
+blocks a shipped surface**: `gist-rs/cargo-heal` has never been created (re-verified
+2026-09-04 — `gh repo view` answers *"Could not resolve to a Repository"*), so **nobody
+can install `cargo-heal` at all** and the onboarding loop is unreachable regardless of how
+the ceremony goes. One command, decided in 068 D9, awaiting go-ahead.
