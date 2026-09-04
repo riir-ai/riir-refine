@@ -8206,6 +8206,11 @@ mod tests {
                     Self { magic: (m + 1) as u32, shift: l, add: true }
                 }
             }
+            // manual_midpoint (clippy 1.98): the widened (hi + x) >> 1 fold IS the
+            // algorithm — construction-identical to the pinned harness string, and
+            // overflow-free by the u64 widening (the midpoint() rewrite would force
+            // a corpus fixture edit for zero semantic change).
+            #[allow(clippy::manual_midpoint)]
             fn div(&self, x: u32) -> u32 {
                 if self.magic == 0 { return x >> self.shift; }
                 let hi = ((u64::from(self.magic) * u64::from(x)) >> 32) as u32;
@@ -8230,6 +8235,7 @@ mod tests {
                     Self { magic: (m + 1) as u64, shift: l, add: true }
                 }
             }
+            #[allow(clippy::manual_midpoint)] // same algorithm-mirror reason as the u32 twin
             fn div(&self, x: u64) -> u64 {
                 if self.magic == 0 { return x >> self.shift; }
                 let hi = ((u128::from(self.magic) * u128::from(x)) >> 64) as u64;

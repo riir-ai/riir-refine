@@ -174,3 +174,41 @@ are now permanent gates in `tests/floor_corpus_integrity.rs`.
   "matched" means textually equal to the seed, not proven equivalent.
 - **Single-file crates, no deps, no features.** The feature-set blindness
   recorded for `fix_verify` applies here unchanged.
+
+## 4. Toolchain re-verify — rustc 1.98.1 (2026-09-05)
+
+The stable pin bump to **1.98.1** (repo-wide, owner-directed; riir-clippy
+`4c96c64`) armed this bench's standing T4 reminder. Re-ran the full surface
+under rustc **1.98.1** (`premise_probe` 6/6 + `floor_corpus_integrity` 3/3 +
+`rustc_errors_floor` release):
+
+- **§1 premise probe: UNCHANGED.** Same 8-row table — 0 suggestion spans on
+  E0597/E0499/E0502, 1 machine-applicable span on each contested code with the
+  same replacements (`.clone()` ×3, `mut `, `move `). The
+  contested/uncontested split survived the bump: rustc 1.98 did not gain
+  auto-fixes for the uncontested three, and still owns the five contested.
+- **§2 `cargo fix` floor at N=212: bit-stable.** Identical per-code row to the
+  Bench 045 record — E0373 27/27, E0382 21/21, E0499 0/26, E0502 0/37, E0505
+  100% fix at 100% divergence (21), E0507 16/16, E0596 22/22, E0597 0/42.
+  Total 50.5%, uncontested stratum 0/105.
+- **§3 `--fix-compile` driver: bit-stable.** Identical to the Bench 045 driver
+  arm — E0597 42 diverged, E0499 26 diverged, E0502 21 matched + 16 diverged,
+  E0505 21 MATCHED, delegated 86 unfixed. 126/212 repaired (59.4%),
+  uncontested 105/105, G1 semantics pass 126/126, no-op arm 0.0%, seed
+  validity 212/212.
+- **G2 latency:** p50 156 ms/case / 95 ms/iteration (vs the recorded 151 / 78
+  at 1.97) — the box carried sibling waves at ~99% CPU during the run; not
+  read as a toolchain signal.
+
+Verdict: **the entire measured surface is bit-stable across 1.97 → 1.98.1.**
+No territory moved; no playbook delegation invalidated; T4 discharged for
+this bump.
+
+Same-window re-gates recorded elsewhere: score-bench #36 flat
+(96.2/1.9/100/100 — clippy 1.98 shifted nothing on the frozen fixtures); the
+three toolchain-regime `rust_perf` rules re-gated via the perf-bench
+validator with verdict classes unchanged (`mir-destprop-branch-site-merge`
+ParetoDominant, `debug-assert-length-hoist` Mixed, `runtime-feature-detect-
+per-chunk` Mixed); clippy 1.98's new `manual_midpoint` lint fired twice on
+the libdivide G1 mirror (algorithm-mirroring code, `#[allow]`ed with reason —
+the construction is pinned to the harness string by the substring canary).

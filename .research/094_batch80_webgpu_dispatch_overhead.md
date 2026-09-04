@@ -1,6 +1,6 @@
 # Research 094 — Batch 80: the WebGPU dispatch-overhead characterization distill (arXiv:2604.02344)
 
-**Status:** RECORD (batch landed same day — corpus 384 → 387, commit see AGENTS.md)
+**Status:** RECORD (batch landed same day — corpus 384 → 387, commit see AGENTS.md). **1.98.1 toolchain re-gate 2026-09-05 (M3, loaded box): `runtime-feature-detect-per-chunk` verdict class UNCHANGED (Mixed — was 0/0/3 all-ties on 1.97 aarch64, now 1/0/2 with a mild 1.06× @4096); the std::detect const-fold note stands, no annotation flip.**
 
 **Source:** Jędrzej Maczan, *Characterizing WebGPU Dispatch Overhead for LLM
 Inference Across Four GPU Vendors, Three Backends, and Three Browsers*
