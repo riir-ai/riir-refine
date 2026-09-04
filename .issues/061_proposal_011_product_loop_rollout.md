@@ -313,8 +313,35 @@ Proposal 008 (MemoShard).
       `RIIR_DEPLOYER_REQUIRE_DAPPS_PINS=1` makes absence a failure). 25/25 pins
       verified against riir-dapps **HEAD** (not its worktree — that repo was dirty
       with this issue's own T1.7/T1.8 session). 13 tests.
-- [ ] **T2.0 — the DEVNET ceremony rung (NEW, 068 D7). AGENT-EXECUTABLE — this is the
-      unblock.** Allow `genesis --execute` for `--dest devnet` **only**; run the four
+- [x] **T2.0 — the DEVNET ceremony rung. LANDED + EXECUTED 2026-09-04**
+      (riir-deployer `73159a0`,
+      [Plan 004](../../riir-deployer/.plans/004_kat011_t20_devnet_ceremony_rung.md)):
+      `src/ceremony.rs` — the five-conjunct permit, the four steps as data, 12
+      gate tests (every conjunct asserted to refuse AND to admit; the chainspec
+      contract checker canaried against 10 planted defects before being trusted).
+      Workspace 190/0, clippy clean. The ceremony **ran through the real binary**:
+      per-node + treasury + faucet keys (0600 seeds in a 0700 dir), `devnet.toml`,
+      `kat-registry-genesis.json`, `node-0.authorized_keys`. **The root account is
+      RESOLVED, never authored** — no `root.seed` exists, pinned.
+      **T3.3d DISCHARGED at the same time** (see T3.3 below): a throwaway probe
+      OUTSIDE both repos loaded the authored spec with
+      `riir_chaind::chainspec::ChainSpec::load` — **PARSED**, the parser's own
+      `player_id_hash = BLAKE3(pubkey)[..16]` agreeing with ours on all three
+      accounts, and `chainspec_ceremony::verify_spec` **PASS**. No dep edge added.
+      **Three findings, each of which cost something:** (1) `fs::read("/dev/urandom")`
+      reads to EOF and that stream has none — the first EXECUTED ceremony died with
+      **SIGKILL** having authored nothing, while all 11 tests were green, because
+      every one passes an explicit seed and none reached `os_seed`; (2) `MICRO_PER_KAT`
+      and the chain's `SCALE` are both 1 000 000, so `render_chainspec` no longer
+      takes `GenesisParams` **at all** — every KAT figure lives on that struct, and
+      not handing it over makes the KAT-vs-chain-coin confusion *unrepresentable*
+      rather than merely tested for; (3) our first authored spec passed the
+      sibling's C2 filename check **vacuously** (a non-network stem is admitted
+      without comparing anything) — output renamed to `<network>.toml`, pinned.
+      **Scope note carried forward to T2.2:** the sibling's C3 check ("no undeclared
+      64-hex material") is SKIPPED on devnet, not passed, and the out-dir sits beside
+      `*.seed` files — a named review item for the owner ceremony.
+      The original row, for the record: allow `genesis --execute` for `--dest devnet` **only**; run the four
       ceremony steps end to end against a local loopback cluster (ephemeral keys, no
       production hosts, none of caveat #6's hazards) and author `devnet.toml` **by the
       ceremony, not by hand**. `examples/genesis-devnet.yaml` already exists and G-DEPLOY
@@ -376,7 +403,10 @@ Proposal 008 (MemoShard).
       max(peer_heights)` comes from the probed set's own `/node-info` (no new network
       service, §6). `expect_nodes` IS the gate — a probe that silently accepts 2 is
       not a 3-node gate; `0` = all listed, so devnet's 1 node passes trivially.
-- [x] T3.3 G-DEPLOY on a local 3-node cluster — **RAN 2026-09-02** (riir-deployer
+- [x] T3.3 G-DEPLOY on a local 3-node cluster — **RAN 2026-09-02**; its one
+      NOT-RUN clause **DISCHARGED 2026-09-04** (see T2.0 above — the authored
+      spec was loaded by the real `chaind` parser from outside both repos, so
+      the zero-sibling-dep rule was never bent). Original record (riir-deployer
       `96009cc`, record
       ``.benchmarks/003``):
       `build` → `deploy --dest local3` spawned **three real `mock-chain` processes** on
@@ -384,12 +414,19 @@ Proposal 008 (MemoShard).
       Measured `PASS node-sync — 3/3 node(s) reachable, at height (fleet max 360),
       synced ≥ 9900bp`; all three failure axes fire (killed → UNREACHABLE naming the
       node, frozen → FROZEN,BEHIND, stale pin → PUBKEY-PIN), plus the count gate and
-      the selector-degrades clause. Re-run 3×. **One G-DEPLOY clause is NOT run and
-      NOT claimed:** *"a chainspec that `chaind --chain-spec` accepts"* — blocked twice
-      and neither is a harness gap: (1) no authored chainspec exists (authoring one IS
-      T2.2), and (2) `riir-chaind` cannot enter the deployer's build graph
-      (BOUNDARY.md's zero-sibling-dep hard rule). The owner runs that arm at ceremony
-      time from the ceremony runbook. Tracked as Plan 003 T3.3d.
+      the selector-degrades clause. Re-run 3×. **The one clause recorded here as NOT
+      run and NOT claimed — *"a chainspec that `chaind --chain-spec` accepts"* — is
+      DISCHARGED (2026-09-04).** It was blocked on two things that both looked
+      permanent: (1) no authored chainspec existed, because authoring one was T2.2,
+      and (2) `riir-chaind` cannot enter the deployer's build graph (BOUNDARY.md's
+      zero-sibling-dep hard rule). T2.0 dissolved the first; the second never
+      needed dissolving — a throwaway probe crate **outside both repos** can call
+      `ChainSpec::load` without any repo taking a dep. PARSED, with the parser's own
+      `player_id_hash` derivation agreeing on all three accounts, and
+      `chainspec_ceremony::verify_spec` PASS. **Read the PASS with its scope**: C2
+      was passing vacuously over us until the output filename became `<network>.toml`,
+      and C3 is SKIPPED on devnet rather than passed. Plan 003 T3.3d closed;
+      riir-deployer Plan 004 §Findings carries the record.
 
 ## Phase 4 — wet-run + foo onboarding
 
@@ -487,7 +524,7 @@ Proposal 008 (MemoShard).
       dist repo has **never been created** (Proposal 003 T1.1), so neither
       one-liner is runnable yet. Publishing binaries built from private source
       is an owner/security decision.
-- [ ] **T4.4a — DEVNET wet-run (NEW, 068 D7). AGENT-EXECUTABLE, rides T2.0.**
+- [ ] **T4.4a — DEVNET wet-run (068 D7). NEXT EXECUTABLE — T2.0 has landed.**
       Run the shipped six-step harness against the devnet cluster T2.0 stands up.
       This is the first time the steps, G-WET's bit-unchanged supply assertion, and
       the crank's treasury-debit path meet an **actual** service rather than the
