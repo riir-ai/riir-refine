@@ -860,17 +860,31 @@ closed.**
   Corpus-count note: kernel_opt moved 453→459 in the sibling's Batch 102 (landed mid-cycle,
   `17f00e7`) — today's stamp carries it; no action needed here.
 - **2026-09-04 ~07:10 (idle cycle 9, M3 — hygiene unit, zero-contention during the sibling
-  MLX 32K cell):** Issue 066 fully resolved + file REMOVED per noise-reduction (`1a1db877`;
-  T1–T4 were all already landed `c9863d6`/`d731cac`/`4239dbdd` — the closeout is the AGENTS.md
-  record + `git rm`). Plans 002/051 re-verified: 0 REAL unchecked boxes (the plan-002 grep
-  hits are prose; 051's last box was verified done 08-31). Everything else re-verified still
-  gated: T0a (NO `t504_confirm/` status file; 4090 busy 21% / 8.1 GB — the riir-chain verify
-  sibling holds the box), walk #8 → Sun 09-06, MCP pool → 09-15, Batch 104 = sibling session,
-  owner gates unchanged (P18, 059/060/061/065, katgpt-rs 718/719/721, riir-ai lanes).
-  Sweep surfaces all confirmed closed per the 09-03/09-04 entries (dao ZERO, deployer
-  `7a091db`, auth 0/17, chain 0/459, game-sdk `fff904f` — now sibling-dirty again, dapps
-  discharged, seal-remake zero-findings 09-04, viewbridge PARKED, mmorpg sibling lane).
-  Queues empty after this entry → idle report.
+MLX 32K cell):** Issue 066 fully resolved + file REMOVED per noise-reduction (`1a1db877`;
+T1–T4 were all already landed `c9863d6`/`d731cac`/`4239dbdd` — the closeout is the AGENTS.md
+record + `git rm`). Plans 002/051 re-verified: 0 REAL unchecked boxes (the plan-002 grep
+hits are prose; 051's last box was verified done 08-31). Everything else re-verified still
+gated: T0a (NO `t504_confirm/` status file; 4090 busy 21% / 8.1 GB — the riir-chain verify
+sibling holds the box), walk #8 → Sun 09-06, MCP pool → 09-15, Batch 104 = sibling session,
+owner gates unchanged (P18, 059/060/061/065, katgpt-rs 718/719/721, riir-ai lanes).
+Sweep surfaces all confirmed closed per the 09-03/09-04 entries (dao ZERO, deployer
+`7a091db`, auth 0/17, chain 0/459, game-sdk `fff904f` — now sibling-dirty again, dapps
+discharged, seal-remake zero-findings 09-04, viewbridge PARKED, mmorpg sibling lane).
+Queues empty after this entry → idle report.
+- **2026-09-05 (M3, idle cycle 11 — Batch 104 LANDED):** the 09-02-queued fa-vec league
+    opponent-watch lead CONSUMED — see Last landed above (Research 126 / Plan 074, corpus
+    464 → 466, K 5 → 7; `ecade10` + the plan-close `6f26898`). Everything else re-verified
+    still gated: T0a (NO `t504_confirm/status.txt`; 4090 at 10% / 8.1 GB — near-quiet but the
+    gate needs ALL_DONE, and the sibling 504-harvest lane is still running its analysis per the
+    session context), walk #8 → Mon 09-07, MCP pool → 09-15, owner gates unchanged (P18,
+    059/060/061 — 065 RESOLVED + removed by the sibling `0ba69cf` with T7 landed `1117f0a`).
+    Upstream moved +3 mid-unit (the dispatcher mask-fuse rider `8bbd59e` + Plan-072 status
+    `577b30d` + Issue-067 docs `0fb2a97`); rebased clean, counts re-verified post-rebase
+    (the rider edits an existing rule's concept text — no corpus delta). Queues: the mining
+    queue is again leadless for kernel_opt external sources (the oMLX pool closed at B94;
+    ds4/PrismML/MTPLX/NAX/llama-fa-vec all mined; the arxiv walk is the remaining intake
+    channel until 09-15) — next units are T0a when unblocked, walk #8 Monday, and the
+    Protocol-B re-sweep when the dirty siblings settle.
 
 ## Standing rules (pointers — full text in the skills + AGENTS.md)
 
