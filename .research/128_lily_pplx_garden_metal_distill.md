@@ -62,8 +62,25 @@ A single-model (Qwen3.6-35B-A3B, MLX affine-4bit, group 64) Metal inference engi
 
 The repo's other ~90% (fabric-lib, p2p-all-to-all, cuda-lib, gdrapi-sys, python-ext) is Perplexity's **multi-node MoE dispatch/combine fabric** (arXiv 2510.27656; ConnectX-7/EFA, NVLink intra-node + GPUDirect RDMA inter-node, DeepEP-inspired, SM-free transfer, CUDA-Graph support). Verdict **NO**: wrong domain (cluster communication vs single-node inference), zero benchability on our hardware (no RDMA NICs, no multi-GPU), no decision content transferable to our single-node Metal/CUDA surfaces. Mined surface = `lily/` ONLY. Recorded here so the garden monorepo is never re-scoped wholesale.
 
+## 9. Addendum (2026-09-05, same-day empirical follow-up) — the family-10 gate is a ONE-LINE patch, and the MPP-emulation claim is TRUE
+
+Caveat 1 above said "Lily cannot run on the pinned M3" — FALSIFIED with a one-line local patch
+(`family >= 10` → `family >= 9` in `src/metal.rs`, copy at `/tmp/lily-run`, never committed). The
+verbatim refusal was captured first (`…this device reports family 9` — M3 Max = family 9, as their
+own comment predicted). With the patch: **the full engine — Metal-4 tensor-op GEMM pipelines
+included — compiles and runs end-to-end on M3 via MPP emulation**, empirically verifying the
+comment's claim for the first time. Bench (their own `lily-bench`, deterministic prompt,
+median-of-3, digest-identical per config): **917 / 1 080 / 1 003 / 943 prefill tok/s** at
+pp512/2048/4096/8192 on Qwen3.6-35B-A3B-4bit (19 GB checkpoint downloaded to
+`riir-train/data/`, pinned rev `38740b84…`). Blog's M5-native 4K cell = 5 749.9 tok/s ≈ 5.7× this
+emulated run (silicon + emulation tax mixed). Consequences: (a) the A− leads (#1 routing, #2
+concurrent dispatch) are EXPERIMENTALLY REACHABLE on this box — an ours-vs-lily ORCHESTRATION A/B
+on M3 is possible, which the README's M5+ requirement forbids in principle; (b) Lily still never
+enters the 851 ranking table (single-checkpoint engine + emulated GEMM path = not a ranking
+opponent); full probe record: riir-ai `.issues/851` §"Lily arm probed same day".
+
 ## 8. Queue + batch shape
 
-- Queue line: appended to `.distill/001_mining_queue_snapshot.md` (Batch 106 candidate).
+- Queue line: appended to `.distill/001_mining_queue_snapshot.md` (Batch 106 candidate). **Updated by addendum §9: the M5+ runtime gate is patchable (one line) and MPP emulation runs on M3 — the orchestration A/B lead is live on this box.**
 - **Cross-reference Batch 105/uzu at mine time**: both are Apple-Silicon Metal engines for the SAME model family (qwen3.x GDN hybrid), both adapt MLX kernels, both were verdicted within 3 days. The mining pass MUST run the dedup gate ACROSS the two sources (e.g. uzu's `lane-sequenced-deterministic-bucket-scatter` vs Lily's atomic scatter; uzu's `indirect-device-dispatch-tile-map-moe` vs Lily's tile-map builder — likely the same mechanism family with different determinism postures). Either mine them as one combined batch (105+106) or strictly sequence 105 → 106 with the second batch's dedup gate covering the first.
 - Plan-first at batch open (the 2026-08-18 owner discipline); plan number per `.plans/.highwater` at write time.
