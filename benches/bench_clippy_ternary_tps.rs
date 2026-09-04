@@ -347,7 +347,7 @@ fn main() {
             for _ in 1..decode_tokens {
                 let cur = *generated.last().unwrap();
                 fwd.set_input_token(&weights, cur);
-                last_logits = fwd.forward_token(cur);
+                last_logits = fwd.forward_token();
                 let next = argmax(&last_logits[..vocab]).unwrap_or(0);
                 if next == tokenizer.eos_id() {
                     break;
@@ -559,7 +559,7 @@ fn decode_speculative(
             let reapply_tokens = &generated[generated.len() - n_to_reapply..];
             for &tok in reapply_tokens {
                 fwd.set_input_token(weights, tok as usize);
-                let _ = fwd.forward_token(tok as usize);
+                let _ = fwd.forward_token();
             }
         }
 
