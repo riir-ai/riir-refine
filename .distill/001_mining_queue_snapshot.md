@@ -174,9 +174,13 @@
     PR #391 (davidtai Qwen3.8-Flash-Next restack) — W87-led kernel_opt batch, 2–3 rules
     + riders, MAY COMBINE (default COMBINE) with the queued NAX leads~~ — LANDED 2026-09-04
     as Batch 103 (Research 124: 4 rules incl. the NAX backing-provenance lead + the B100 rider;
-    T5 graph-build overlap dropped with reason; T7 COMBINE executed; the dispatcher-eligibility
+    T5 graph-build overlap dropped with reason; T7 COMBINE executed; ~~the dispatcher-eligibility
     predicate lead is DISCHARGED as fix-space guidance inside the request-shape rule's engagement-
-    canary complement — no separate corpus rule, see Research 124).** Original queue row: (`backing-provenance-
+    canary complement — no separate corpus rule~~ — **OVERRIDDEN same day by the Issue-665
+    collision addendum (07fa0df): the lead LANDED as the 5th rule** (`dispatcher-eligibility-
+    predicate-lags-kernel-capability`, D, corpus 463 -> 464) after push-wins adjudication —
+    the "discharged" call was an oversight (the lead sat in no drop ledger; the landed decline-
+    mirror rule cited its fix-space without the rule existing), see Research 124 §addendum.** Original queue row: (`backing-provenance-
     causal-shadowed-extent-widen` — the MLX 846 rule-1; `dispatcher-eligibility-predicate-
     lags-kernel-capability` — the MLX #4416 rule-2) into ONE post-B102 kernel batch (one
     corpus cycle, one GOAT run, one count-pin walk). Verdict: YES grade B as a mining source,
