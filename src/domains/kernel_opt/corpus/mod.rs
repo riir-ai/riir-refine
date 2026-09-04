@@ -1552,6 +1552,7 @@ mod entries_gpu_17;
 mod entries_gpu_18;
 mod entries_gpu_19;
 mod entries_gpu_20;
+mod entries_gpu_21;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -1585,6 +1586,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_18::entries());
     entries.extend(entries_gpu_19::entries());
     entries.extend(entries_gpu_20::entries());
+    entries.extend(entries_gpu_21::entries());
     Corpus::new(entries)
 }
 
@@ -1597,7 +1599,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 490-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 494-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1605,7 +1607,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (108 rules)
+    // A: Memory access patterns (109 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -1717,6 +1719,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "hazard-tracked-aliasing-scratch-allocator",
             "sparse-demand-paged-kv-cache",
             "tensor-op-strided-device-operand-binding",
+            "multi-simdgroup-shared-staged-tile",
         ],
     ),
     // B: Compute patterns (57 rules)
@@ -1952,7 +1955,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "prefill-chunk-command-buffer-capacity-coupled",
         ],
     ),
-    // E: Parallelism patterns (35 rules)
+    // E: Parallelism patterns (37 rules)
     (
         KernelCategory::Parallelism,
         "E: parallelism",
@@ -1992,6 +1995,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "target-tile-split-k-deterministic-two-dispatch",
             "packed-total-order-multi-field-argmax",
             "radix-select-ordered-key-topk",
+            "independent-accumulator-chains-hide-load-latency-at-capped-occupancy",
+            "byte-cut-loses-when-plateau-is-issue-bound",
         ],
     ),
     // F: Flash-attention tiling (12 rules)
@@ -2013,7 +2018,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "split-k-two-pass-attention-decode-long-context",
         ],
     ),
-    // G: Linear-attention recurrence (26 rules)
+    // G: Linear-attention recurrence (27 rules)
     (
         KernelCategory::LinearAttnRecurrence,
         "G: linear-attn recurrence",
@@ -2044,6 +2049,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "state-normalization-between-updates-breaks-associative-scan",
             "dynamic-kernel-params-break-prefix-scan",
             "whole-sequence-zero-barrier-single-dispatch-scan",
+            "smem-envelope-gate-kernel-variant",
         ],
     ),
     // H: MoE dispatch + backward pass (21 rules)

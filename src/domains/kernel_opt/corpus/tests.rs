@@ -64,7 +64,7 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 63 (3): the CubeCL twin unlock — same-input-gemv-weight-concat-at-upload, deferred-residual-fused-into-next-layer-norm, reset-state-in-place-fill-never-realloc (ternary_deltanet_gpu_forward.rs, Plan 009 / Research 071).
     // Batch 70 (3): the arxiv barrier-free-sync paper distill (arXiv:2608.13757, Plan 020 / Research 080) — barrier-free-per-dependency-wait-from-loop-counters, shared-counter-decode-producer-progress, masked-branchless-wait-collapse.
     // Batch 105 (11): uzu + lily combined Metal-engine distill (Research 127 + 128 / Plan 075) -- concurrent-dispatch-dependency-level-barriers, gpu-resident-moe-routing-no-host-sync, indirect-device-dispatch-tile-map-moe, pipelined-token-slot-ping-pong-submit-ahead, split-k-two-pass-attention-decode-long-context, cooperative-tensor-mma-capability-route, rht-epilogue-fusion-contract, lane-sequenced-deterministic-bucket-scatter, a8-activation-route-stability-guard, target-tile-split-k-deterministic-two-dispatch, hazard-tracked-aliasing-scratch-allocator (A +1, C +1, D +3, E +1, F +1, H +3, M +1; sources trymirai/uzu @ 115609b + perplexityai/pplx-garden lily @ 1ed972ed, both lanes re-verified every quote; the cross-source dedup mandate executed per rule; the R128 tile-by-expert-load rider FALSIFIED at pin -- chunk-size-routed table, both tiles 4 simdgroups).
-    // Total: 209. // (historical batch-30 snapshot; current 490)
+    // Total: 209. // (historical batch-30 snapshot; current 494)
     // Batch 98 (10): antirez/ds4 dense.metal/moe.metal leads -- grid-range-split-verbatim-impl-composition, share-activation-stream-keep-projection-reductions, tiny-rows-scalar-thread-per-row-downshift, small-batch-matvec-gemm-bridge-rung, moe-routed-down-sum-single-accumulate-pass, fused-vector-site-transcendental-form-nonportable, monomorphic-hot-caller-last-hit-memo, per-row-scale-folded-into-rhs-staging-tile, dequant-byte-pairs-as-aligned-u16-loads, cross-simd-bitonic-alternating-bank-exchange (the Batch-97 queued NEXT BATCH LEADS + 3 additional candidates).
     // Batch 100 (8): Layr-Labs/qwen-3.8-mtp-challenge -- functional-cache-versioning-loses-donation-under-kernel-read, fused-kv-write-single-writer-reads-newest-from-input, in-place-write-through-input-emits-fence-consumer, residency-set-wired-once-post-warm-persistent-footprint, register-budget-head-split-gqa-reread-trade, batch-composition-invariant-grid-early-return, never-gqa-multiply-full-d-merge-smem, container-rebind-over-retrace-for-churn-survival (Research 120 / Plan 068; A +3, D +3, E +2).
     // Batch 102 (6): FlashQuant sparse-dense fusion (arXiv 2608.15531) -- heterogeneous-unit-paths-shared-tile-fusion, lpt-min-heap-disjoint-column-ownership, tile-coo-sparse-tile-aligned-format, bucketed-sparse-reader-column-partition, bank-group-circular-element-reorder, stream-k-persistent-cta-mac-segments (Research 123 / Plan 071; A +2, C +2, H +1, N +1; the headline was REFUTED for direct adoption at walk time -- the fusion mechanism is the distilled core).
@@ -72,10 +72,11 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 104 (2): ggml-org/llama.cpp fa-vec offline swept launch-table distill -- swept-shape-bucket-launch-tables, no-harm-bucket-representative (Research 126 / Plan 074; K +2; infra efeda76b9, table pin 8963a9bdc the M3 Max rows, harness read at d230ddd76 byte-identical pin->HEAD; MIT; the league-relevant SKU).
     // Batch 106 (5): MTPLX upstream residue distill (mistakes/ post-mortem corpus + docs + targeted kernel diff; Research 129 / Plan 076) -- prefix-reuse-key-must-mirror-the-restore-predicate, request-arrival-work-asks-reuse-state-first, serving-raises-only-behind-strict-flag, derived-key-single-constructor-parity-test, vendor-fused-op-instantiation-check (D +5; source youssofal/MTPLX @ dd4031a8 upstream main, Apache-2.0; the B+ lead CONFIRMED with both instances in-source -- the sentinel fingerprint post-mortem + the dd4031a8 fix commit).
     // Batch 107 (8): uzu + lily defers batch (Research 130 / Plan 077) -- sparse-demand-paged-kv-cache, tensor-op-strided-device-operand-binding (A +2), gumbel-argmax-filtered-sampling-descent (C +1), prefill-chunk-command-buffer-capacity-coupled (D +1), packed-total-order-multi-field-argmax, radix-select-ordered-key-topk (E +2), single-threadgroup-fused-count-scan (H +1), integer-mma-span-epilogue-dequant (N +1); sources trymirai/uzu @ 115609b (MIT) + perplexityai/pplx-garden lily @ 1ed972ed (Apache-2.0); 12 defers re-verified, 3 dropped (flat-topology = B23-family, RIF-sentinel = born-dead arms, weight-hygiene = B63/B31 instances) + 1 collapsed to the B63 rider; upstream E>128 hazards in counts_offsets_fused recorded in-rule.
+    // Batch 108 (4): riir-ai M3 campaign measured-GOAT distill (Plan 078) -- smem-envelope-gate-kernel-variant (G +1), multi-simdgroup-shared-staged-tile (A +1), independent-accumulator-chains-hide-load-latency-at-capped-occupancy, byte-cut-loses-when-plateau-is-issue-bound (E +2, the last refutation-type); source riir-ai @ 59a172623 (committed state; the first in-source batch since Batch 63 -- the M3 prefill/decode campaign mined: Issues 768/771/779/831/843, numbers belong to Benches 774/790/804/831 and are cited as records); two verification lanes at the pin + coordinator spot-check (all VERIFIED); +3 riders on B01/B06/B57 + 2 arxiv riders discharged on B79 (2608.17641 breadth) and B82 (2608.01651 confirmation -- the land-with-next-adjacent-batch queue); recorded-not-landed: axis-swap refutation (S2:40-42), 4-arm ladder (B104 ethos), empty-partial identity (B35 grain).
     assert_eq!(
         corpus.entries.len(),
-        490,
-        "kernel batches through Batch 107 should have 490 rules"
+        494,
+        "kernel batches through Batch 108 should have 494 rules"
     );
 }
 
@@ -982,8 +983,8 @@ fn batch18_rowtile_factoraffine_pinlane_concepts_covered() {
         .iter()
         .map(|e| e.gpu_concept.as_str())
         .collect();
-    // Category A: row-tile amortize input load (riir-gpu gemv_q4k_plane_rowtiled)
-    assert!(concepts.contains(&"assign N consecutive output rows per plane (subgroup), hold N register accumulators, load each input element once and reuse across all N dot products — GEMV to small-GEMM via M-widening"));
+    // Category A: row-tile-amortize-input-load (riir-gpu gemv_q4k_plane_rowtiled; full-concept pin moved with the Batch 108 rider per the B22 precedent)
+    assert!(concepts.contains(&"assign N consecutive output rows per plane (subgroup), hold N register accumulators, load each input element once and reuse across all N dot products — GEMV to small-GEMM via M-widening. RIDER (Batch 108, riir-ai M3 campaign / Plan 078, the CMMA STAGED-GEMM IN-STACK INSTANCE): the same mechanism at the tensor-core tile grain — the 32x32 staged GEMM stages each input tile ONCE and consumes it across 4 M-subtiles (4 independent accumulator sets), cutting input traffic 4x; the input-load share measured 42-63% of the whole kernel (91.2 GB/GEMM of input traffic at the FFN shape), the largest single cost axis; regime m >= 64 (measured 0.773x at m=48 — padding dominates small m, stay on the older arms); bit-identity argument: execute order WITHIN a k-tile is free across distinct accumulators, per-accumulator order across k-tiles unchanged (riir-ai @ 59a172623 gemm_ternary_simdgroup_cubecl.rs:938-940; the untried-axis note at :563-565 — every prior variant widened P or restructured K, none increased M-rows-per-workgroup; Issue 768 / Bench 774: 32x32 promoted default-ON, e2e 1.41-1.53x)."));
     // Category B: factor affine quant scale (riir-gpu gemv_q4k_plane_factored)
     assert!(concepts.contains(&"when the dequant formula is affine in the quantized code within a sub-block (scale and min are constant), factor d*scale and dmin*min out of the per-element accumulation — accumulate sum(code*x) and sum(x) separately, apply scales once per sub-block"));
     // Category A: pin-lane coalesce byte loads (riir-gpu gemv_q4k_plane_factored)
@@ -5294,7 +5295,7 @@ fn kernel_categories_table_has_15_entries() {
 
 #[test]
 fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-    // Every rule_id in the 464-rule corpus must appear in exactly one category.
+    // Every rule_id in the 494-rule corpus must appear in exactly one category.
     let corpus = build_kernel_seed_corpus();
     let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     let mut categorized: Vec<&str> = Vec::new();
@@ -5337,15 +5338,15 @@ fn kernel_categories_cover_all_corpus_rules_exhaustively() {
 
 #[test]
 fn kernel_categories_counts_match_plan_003_table() {
-    // Pin per-category rule counts to the Plan 003 table (updated for Batch 107).
+    // Pin per-category rule counts to the Plan 003 table (updated for Batch 108).
     let expected = [
-        (KernelCategory::MemoryAccess, 108),
+        (KernelCategory::MemoryAccess, 109),
         (KernelCategory::Compute, 57),
         (KernelCategory::Fusion, 43),
         (KernelCategory::Dispatch, 112),
-        (KernelCategory::Parallelism, 35),
+        (KernelCategory::Parallelism, 37),
         (KernelCategory::FlashAttnTiling, 12),
-        (KernelCategory::LinearAttnRecurrence, 26),
+        (KernelCategory::LinearAttnRecurrence, 27),
         (KernelCategory::MoeDispatchBackward, 21),
         (KernelCategory::NsaBlockSparse, 4),
         (KernelCategory::VarlenChunkedReduction, 5),
@@ -5367,9 +5368,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 490.
+    // Sum must equal 494.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 490, "Plan 003: category totals must sum to 490");
+    assert_eq!(total, 494, "Plan 003: category totals must sum to 494");
 }
 
 #[test]
@@ -5380,8 +5381,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 490,
-        "Plan 003: grouped corpus has {total} rules, expected 490"
+        total, 494,
+        "Plan 003: grouped corpus has {total} rules, expected 494"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -7872,6 +7873,129 @@ fn batch107_pseudocode_parses() {
         assert!(
             opt_verdict.parses,
             "batch-107 opt_pattern for '{id}' must parse"
+        );
+    }
+}
+
+#[test]
+fn batch108_rules_present() {
+    // Batch 108 (riir-ai M3 campaign measured-GOAT distill -- Plan 078):
+    // 4 kernel_opt rules. Source: riir-ai @ 59a172623 (committed state
+    // only) -- the first in-source batch since Batch 63; the M3
+    // prefill/decode campaign mined (Issues 768/771/779/831/843; the
+    // numbers belong to Benches 774/790/804/831 and are cited as
+    // records, never re-measured). Two verification lanes read the pin
+    // byte-accurately pre-plan; the coordinator spot-verified the
+    // primary quotes at landing (all VERIFIED). Riders: B01 (CMMA
+    // staged-GEMM in-stack instance), B06 (capped-occupancy regime
+    // complement), B57 (staged-epilogue exploitation half).
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "smem-envelope-gate-kernel-variant",
+        "multi-simdgroup-shared-staged-tile",
+        "independent-accumulator-chains-hide-load-latency-at-capped-occupancy",
+        "byte-cut-loses-when-plateau-is-issue-bound",
+    ];
+    for id in ids {
+        assert!(
+            corpus.entries.iter().any(|e| e.rule_id == id),
+            "batch-108 rule '{id}' missing from corpus"
+        );
+    }
+}
+
+#[test]
+fn batch108_concepts_covered() {
+    // Distinctness + mandated phrases must survive in the concept
+    // text (case-sensitive contains -- the B51 lesson).
+    let corpus = build_kernel_seed_corpus();
+    let checks: &[(&str, &[&str])] = &[
+        (
+            "smem-envelope-gate-kernel-variant",
+            &[
+                "32*(head_dim + 4) > head_dim * 33",
+                "overflows into p_smem",
+                "row-0 score writes",
+                "DETERMINISTIC in head_dim",
+                "verify_kf4_for",
+                "just don't read",
+            ],
+        ),
+        (
+            "multi-simdgroup-shared-staged-tile",
+            &[
+                "one shared tile would race",
+                "private 8x64 regions",
+                "TWO barriers per K window",
+                "26.6 KB of the 32 KB",
+                "m >= 128 && p >= 64",
+                "fresh +0.0 could flip a -0.0",
+            ],
+        ),
+        (
+            "independent-accumulator-chains-hide-load-latency-at-capped-occupancy",
+            &[
+                "~1.8x at 4096 ctx",
+                "valid_n",
+                "tolerance band, never bit-identity",
+                "median ratios 1.01-1.06",
+                "loads-in-flight",
+            ],
+        ),
+        (
+            "byte-cut-loses-when-plateau-is-issue-bound",
+            &[
+                "1.44-1.60x SLOWER",
+                "~114 GB/s",
+                "~400 GB/s peak",
+                "-3.4%",
+                "BINDING AXIS is the tell",
+                "65536-pattern",
+            ],
+        ),
+    ];
+    for (id, needles) in checks {
+        let e = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == *id)
+            .unwrap_or_else(|| panic!("batch-108 rule '{id}' missing"));
+        for needle in *needles {
+            assert!(
+                e.gpu_concept.contains(needle),
+                "batch-108 concept for '{id}' missing phrase '{needle}'"
+            );
+        }
+    }
+}
+
+#[test]
+#[cfg(not(feature = "kernel_verify"))]
+fn batch108_pseudocode_parses() {
+    // G1 for Batch 108: syn-parse gate (the riir-ai M3 campaign rules).
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "smem-envelope-gate-kernel-variant",
+        "multi-simdgroup-shared-staged-tile",
+        "independent-accumulator-chains-hide-load-latency-at-capped-occupancy",
+        "byte-cut-loses-when-plateau-is-issue-bound",
+    ];
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-108 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            ref_verdict.parses,
+            "batch-108 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            opt_verdict.parses,
+            "batch-108 opt_pattern for '{id}' must parse"
         );
     }
 }

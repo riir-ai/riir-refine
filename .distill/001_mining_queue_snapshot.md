@@ -15,10 +15,26 @@
 > the verdict, `rm -rf` when the batch lands. Full contract = `distill` skill
 > §"Full-source access" (Batch 96-98 vendor precedent) + katgpt-rs `research` §0.5.
 
-## Live queue state (2026-09-05, post-Batch-107, 4090 box)
+## Live queue state (2026-09-05, post-Batch-108, M3 box)
 
-- **Corpus counts:** kernel_opt 490 · rust_perf 99 · clippy_lints 45 · sec 12 · docker 31
+- **Corpus counts:** kernel_opt 494 · rust_perf 99 · clippy_lints 45 · sec 12 · docker 31
   (AGENTS.md is the authoritative ledger — bump there per batch, snapshot counts are a convenience copy).
+- **Last landed:** **Batch 108 (2026-09-05, Plan 078 — the riir-ai M3 campaign measured-GOAT distill, prefill
+  GEMM + decode attention; M3 box, CPU-only; the FIRST in-source batch since Batch 63): 4 rules, corpus 490 → 494
+  (A +1, E +2, G +1; entries_gpu_21.rs).** Source riir-ai @ `59a172623` committed state only (no .raw — the sources
+  live in the sibling repo at the pin). Rules: smem-envelope-gate-kernel-variant (G — the Issue-779 derived
+  capacity predicate 32*(hd+4) <= hd*33 at ALL 8 rows-family launchers), multi-simdgroup-shared-staged-tile (A —
+  the Issue-771-T1 smem 128x64 GEMM, per-sg PRIVATE result regions, bit-identical),
+  independent-accumulator-chains-hide-load-latency-at-capped-occupancy (E — the Issue-831 4-chain unroll, ~1.8x
+  @4096 / flat @2048), byte-cut-loses-when-plateau-is-issue-bound (E, refutation-type — the packed-f16-KV arm
+  1.44-1.60x SLOWER at 114-vs-400 GB/s issue-bound plateau). RIDERS (5): B01 cmma staged-GEMM in-stack instance,
+  B06 capped-occupancy regime complement, B57 staged-epilogue exploitation half, + the walk-#6
+  land-with-next-adjacent-batch pair DISCHARGED (B79 += 2608.17641 rl-triton breadth; B82 += 2608.01651 Bole
+  confirmation). RECORDED-NOT-LANDED: axis-swap refutation (S2:40-42), 4-arm ladder (B104 ethos), empty-partial
+  identity (B35 grain). GOAT: batch108 gates 3/3 FIRST-SHOT + kernel_heal 1349/0/1i + default 1078/0 +
+  kernel_heal+latent 1457/0/2i (floors HELD zero re-pins) + clippy 0 three states + all-targets. Gate-catch: the
+  B18 full-concept pin moved with the rider (B22 precedent). Count pins walked incl. the stale 464 cover-all
+  comment repaired. Record: Plan 078 / Research 131.
 - **Last landed:** **Batch 107 (2026-09-05, Research 130 / Plan 077 — the uzu + lily defers batch; the B105
   deferred queue CONSUMED; 4090 box, CPU-only): 8 rules, corpus 482 → 490 (A +2, C +1, D +1, E +2, H +1, N +1).**
   Sources re-cloned at the pins (uzu @ 115609b MIT, lily @ 1ed972ed Apache-2.0); 12 defers re-verified by two lanes,
@@ -334,10 +350,11 @@
     standard-test-vs-verifier disagreement over 2,638 kernels = the external measured
     confirmation of the Bench-802/Research-116 fault-class doctrine; cite in the
     lossy-surface + tolerance-budget surfaces at the next doc-sync touch. Riders
-    queued (land WITH the next adjacent batch, never standalone): Bole 2608.01651 →
+    queued (land WITH the next adjacent batch, never standalone): ~~Bole 2608.01651 →
     B82 (tree-verify state-free external confirmation, memory-side win measured),
     rl-triton 2608.17641 → B79 (associative-scan breadth: 7 RL estimators as ONE
-    first-order recurrence). Lane records: DAMP 2608.27513 (B− GDN state-quant, the
+    first-order recurrence)~~ — BOTH DISCHARGED 2026-09-05 with Batch 108 (the next adjacent batch; see the
+    B108 Last-landed entry). Lane records: DAMP 2608.27513 (B− GDN state-quant, the
     DASC group; the recurrent-state surface consolidating), H-Scale 2608.28113
     (the quant scale-AXIS triplet completed: 845-PoT / OCGQuant-grouping /
     H-Scale-value), sigmoid-eviction 2608.23296 (external sigmoid-not-softmax
