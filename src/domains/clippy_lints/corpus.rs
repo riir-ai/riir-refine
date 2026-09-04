@@ -18,14 +18,16 @@ use crate::domains::clippy_lints::{ClippyFixEntry, ClippyLintDomain};
 
 /// Build a seed corpus from common clippy lint examples.
 ///
-/// Returns a BLAKE3-committed [`Corpus<ClippyLintDomain>`] with 43 entries:
+/// Returns a BLAKE3-committed [`Corpus<ClippyLintDomain>`] with 49 entries:
 /// the 10 seed lints (style, complexity, perf, nursery groups) + the 33
-/// Issue 016 structural-expansion, post-mining, and Batch 89 fired-histogram
-/// lints (frequency-ranked from kornel's 100K-crate clippy run + Li et al.'s
-/// 8.09M-warning crates.io study ∩ clippy's `MachineApplicable` axis ∩
-/// parse-only provability — see `.benchmarks/021`; the Batch 89 pair from
-/// the Plan 049 T0.1 real-code fired histogram, Bench 061).
-// 40-entry data table, not logic — length is the point.
+/// Issue 016 structural-expansion and post-mining lints (frequency-ranked
+/// from kornel's 100K-crate clippy run + Li et al.'s 8.09M-warning
+/// crates.io study ∩ clippy's `MachineApplicable` axis ∩ parse-only
+/// provability — see `.benchmarks/021`; the Batch 89 pair from the Plan
+/// 049 T0.1 real-code fired histogram, Bench 061) + the 2 Batch 90
+/// fired-histogram pedantic rows + the 4 Batch 91 clippy-1.98 new-lint
+/// rows (P9 intake, all four suggestion-only in real clippy).
+// 49-entry data table, not logic — length is the point.
 #[allow(clippy::too_many_lines)]
 #[must_use]
 pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
@@ -354,6 +356,71 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
             fixed_code: "fn f(x: Option<u32>) -> u32 { let Some(v) = x else { return 0 }; v + 1 }"
                 .to_string(),
         },
+        // ── Batch 91 (the 2026-09-05 P9 clippy-1.98 new-lint batch) ──
+        // Populations measured workspace-wide by the 1.98.1 re-gate sweep:
+        // manual_checked_ops [dao 17 + katgpt-rs 7], byte_char_slices
+        // [ndb 6 + katgpt-rs 2], manual_slice_fill [ndb 2],
+        // chunks_exact_to_as_chunks [katgpt-rs 12 + ndb 2]. All four lints
+        // are suggestion-only in clippy (MaybeIncorrect / Unspecified —
+        // `--fix` applied 0/17 on the dao run), which is why the proposers
+        // exist.
+        ClippyFixEntry {
+            lint_name: "byte_char_slices".to_string(),
+            lint_group: "style".to_string(),
+            // FIXABLE: bit-identical by construction (same bytes, same
+            // `[u8; N]` type). The ndb wire-magic batch landed this exact
+            // form (`FREEZE_MAGIC: [u8; 4] = *b"FRZE"`) with the
+            // consensus-committed device-vector pins still passing.
+            buggy_code: "pub const SHARD_MAGIC: [u8; 4] = [b'S', b'H', b'R', b'D'];".to_string(),
+            fixed_code: "pub const SHARD_MAGIC: [u8; 4] = *b\"SHRD\";".to_string(),
+        },
+        ClippyFixEntry {
+            lint_name: "manual_slice_fill".to_string(),
+            lint_group: "style".to_string(),
+            // FIXABLE behind the pure-value gate: `fill` evaluates its value
+            // ONCE while the loop evaluates it PER ITERATION — impure values
+            // (calls) change evaluation count and stay silent. A path value
+            // is safe because the original loop only compiles when the value
+            // is `Copy`, which subsumes `fill`'s `Clone` bound. Iterable
+            // gate: only the `&mut place` form (real clippy is silent on
+            // `iter_mut()` too).
+            buggy_code: "struct Terrain { data: Vec<f32> }\nfn reset(t: &mut Terrain) {\n    for v in &mut t.data {\n        *v = 0.5;\n    }\n}"
+                .to_string(),
+            fixed_code: "struct Terrain { data: Vec<f32> }\nfn reset(t: &mut Terrain) {\n    t.data.fill(0.5);\n}"
+                .to_string(),
+        },
+        ClippyFixEntry {
+            lint_name: "manual_checked_ops".to_string(),
+            lint_group: "complexity".to_string(),
+            // VERIFY: real clippy fires ONLY on unsigned divisions
+            // (probe-verified: i32/i64/isize silent — for signed types
+            // checked_div also catches MIN / -1, a behavior change) and is
+            // MaybeIncorrect (its --fix applied 0/17 on the dao run). Our
+            // proposer refuses provably-signed divisors, refuses
+            // method-call divisors (double evaluation — clippy refuses them
+            // too), and requires the division's divisor to be TEXTUALLY the
+            // condition's divisor.
+            buggy_code: "fn share(total: u64, n: u64) -> u64 {\n    if n == 0 { 0 } else { total / n }\n}"
+                .to_string(),
+            fixed_code: "fn share(total: u64, n: u64) -> u64 {\n    total.checked_div(n).unwrap_or(0)\n}"
+                .to_string(),
+        },
+        ClippyFixEntry {
+            lint_name: "chunks_exact_to_as_chunks".to_string(),
+            lint_group: "style".to_string(),
+            // VERIFY: the chunk changes `&[u8]` → `&[u8; N]` (a body
+            // consuming it as `&[u8]` in a typed position is E0599 the
+            // compile gate reverts) and a non-const Path size compiles as
+            // `chunks_exact(n)` but not as `as_chunks::<n>()`. MSRV floor:
+            // `as_chunks` stabilized in std 1.88 — the workspace floats
+            // 1.98.1 and real clippy is MSRV-aware (it never fires on an
+            // older declared rust-version), so the suggest path is
+            // inherently safe; the module doc carries the note.
+            buggy_code: "fn ids(bytes: &[u8]) -> Vec<u32> {\n    let mut out = Vec::new();\n    for chunk in bytes.chunks_exact(4) {\n        out.push(u32::from_le_bytes(chunk.try_into().unwrap()));\n    }\n    out\n}"
+                .to_string(),
+            fixed_code: "fn ids(bytes: &[u8]) -> Vec<u32> {\n    let mut out = Vec::new();\n    for chunk in bytes.as_chunks::<4>().0 {\n        out.push(u32::from_le_bytes(chunk));\n    }\n    out\n}"
+                .to_string(),
+        },
     ])
 }
 
@@ -424,14 +491,15 @@ mod tests {
         assert!(thawed.verify());
     }
 
-    /// Corpus size pin: 10 seed + 31 expansion/post-mining + 2 Batch 89.
+    /// Corpus size pin: 10 seed, 31 expansion/post-mining, 2 Batch 89,
+    /// 2 Batch 90, and 4 Batch 91 (the clippy-1.98 new-lint batch) = 49.
     /// (`missing_const_for_fn` — the histogram's #1 — was proposed then
     /// KILLED: a broad const-ability proposer cross-fires every fixture
     /// and the clean-span set; see `VERIFY_LINTS` + `.plans/050`.)
     #[test]
-    fn corpus_size_is_45() {
+    fn corpus_size_is_49() {
         let corpus = build_seed_corpus();
-        assert_eq!(corpus.entries.len(), 45);
+        assert_eq!(corpus.entries.len(), 49);
     }
 
     /// Every corpus entry's proposer round-trips: the buggy fixture fires

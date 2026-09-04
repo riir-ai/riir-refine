@@ -30,13 +30,18 @@ game concern, NOT a training repo, NOT a chain repo.
 Five retrieval domains ship (Plan 001 + Plans 018/030; `rustc_errors` is a
 6th, driver-based rather than retrieval):
 1. **`clippy_lints`** (default-on) — heals `cargo clippy` warnings. The
-   original domain; **45 corpus lints** (Batch 90: +`items_after_statements`
+   original domain; **49 corpus lints** (Batch 91, 2026-09-05: the P9
+   clippy-1.98 new-lint batch — +`byte_char_slices` FIXABLE,
+   +`manual_slice_fill` FIXABLE, +`manual_checked_ops` VERIFY,
+   +`chunks_exact_to_as_chunks` VERIFY [MSRV floor: std 1.88, documented];
+   all four suggestion-only in real clippy — `--fix` applied 0/17 on the
+   dao run; Batch 90: +`items_after_statements`
    FIXABLE, +`manual_let_else` FIXABLE, `option_if_let_else` REFUTED — the
    rewrite output re-enters `single_match_else`'s territory → fixpoint
    ping-pong, `.plans/051`; Batch 89: +`use_self` FIXABLE,
    +`suboptimal_flops` VERIFY; `missing_const_for_fn` proposed then KILLED —
-   `.plans/050`) across style/complexity/perf/pedantic/nursery; 36 `--fix`
-   eligible + 6 `--verify` tier + 3 self_evolve-only.
+   `.plans/050`) across style/complexity/perf/pedantic/nursery; 38 `--fix`
+   eligible + 8 `--verify` tier + 3 self_evolve-only.
 2. **`rust_perf`** (default-on since 2026-08-13, Phase 2) — heals rust perf
    issues. **99 rules** (Batch 101 ->99 dispatch; Batch 99 ->98 dispatch; Batch 94 ->97 io; Batch 91 ->96; Batch 86 ->94) distilled from the `rust-optimize` skill checklist +
    nnethercote/perf-book + rustc-hash/bevy real-world patterns + the hotpath-rs

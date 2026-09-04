@@ -41,7 +41,7 @@
 //! `--fix` applies edits without a type checker — the L2 pruner only validates
 //! syntax. Rules whose **detection is purely structural** (the pattern match
 //! alone guarantees the rewrite preserves semantics) are `--fix` eligible.
-//! The 36 rows below (6 seed + 27 from the Issue 016 expansion + 1 Batch 89
+//! The 38 rows below (6 seed + 27 from the Issue 016 expansion + 1 Batch 89
 //! `use_self` + 2 Batch 90, selected
 //! frequency-ranked from kornel's 100K-crate clippy run + Li et al.'s
 //! 8.09M-warning crates.io study ∩ clippy's `MachineApplicable` axis ∩
@@ -129,10 +129,12 @@
 //!
 //! Each proposer handles ONE lint. Adding a new lint = adding a new proposer
 //! module + a row in `collect_rule_edits`' match (and, when detection is
-//! structural, a row in [`FIXABLE_LINTS`]). 45 lints ship today (10 seed +
+//! structural, a row in [`FIXABLE_LINTS`]). 49 lints ship today (10 seed +
 //! 31 from the Issue 016 expansion and the post-mining P7 verify-tier row); future lints drop in by extending the
 //! match.
 
+pub mod byte_char_slices;
+pub mod chunks_exact_to_as_chunks;
 pub mod collapsible_else_if;
 pub mod collapsible_if;
 pub mod comparison_to_empty;
@@ -144,9 +146,11 @@ pub mod identity_op;
 pub mod iter_next_loop;
 pub mod iter_nth_zero;
 pub mod items_after_statements;
+pub mod manual_checked_ops;
 pub mod manual_is_multiple_of;
 pub mod manual_let_else;
 pub mod manual_map;
+pub mod manual_slice_fill;
 pub mod manual_unwrap_or;
 pub mod map_unwrap_or;
 pub mod match_bool;
@@ -249,6 +253,17 @@ pub const FIXABLE_LINTS: &[&str] = &[
     // panic-family macro) — a `!`-returning CALL fallback stays silent
     // (parse-only cannot prove the return type).
     "manual_let_else",
+    // ── Batch 91 (the 2026-09-05 P9 clippy-1.98 new-lint batch) ──
+    // `[b'F', b'R', b'Z', b'E']` → `*b"FRZE"` — bit-identical by
+    // construction (same bytes, same `[u8; N]` type, `*b".."` legal in
+    // every position the array literal was). Guards: every element a byte
+    // literal, non-empty, no interior comments. FIXABLE.
+    "byte_char_slices",
+    // `for v in &mut place { *v = val; }` → `place.fill(val);` — pure-value
+    // gate (fill evaluates ONCE, the loop per-iteration), ref-form iterable
+    // gate (`iter_mut()` is silent in real clippy too), single-assign body.
+    // FIXABLE.
+    "manual_slice_fill",
     // NOTE — `option_if_let_else` (38 in the fired histogram) was PROBED
     // then REFUTED (Batch 90, see `.plans/051`): nursery-group pure style
     // with zero perf/correctness content, applicability Unspecified, its
@@ -278,6 +293,22 @@ pub const VERIFY_LINTS: &[&str] = &[
     // typeck raises E0689, so the check-only --verify gate is structurally
     // blind to it and must never see the proposal at all.
     "manual_is_multiple_of",
+    // Batch 91 (P9 clippy-1.98): `if n == 0 { v } else { total / n }` →
+    // `total.checked_div(n).unwrap_or(v)`. VERIFY: the signed `MIN / -1`
+    // corner changes panic→guard-value and a custom `Div` type has no
+    // `checked_div` (E0599) — provably-signed divisors are refused in the
+    // proposer, the rest rides the compile gate. Real clippy fires ONLY on
+    // unsigned (probe-verified) and is MaybeIncorrect (`--fix` applied 0/17
+    // on the 2026-09-04 riir-dao run); our proposer CAN see the else arm.
+    "manual_checked_ops",
+    // Batch 91 (P9 clippy-1.98): `chunks_exact(4)` → `as_chunks::<4>().0`
+    // (and the `_mut` twin). VERIFY: the chunk changes `&[u8]` → `&[u8; N]`
+    // and a non-const Path size compiles one way not the other — both
+    // E0599/E0277 classes the compile gate reverts. MSRV floor: `as_chunks`
+    // stabilized in std 1.88 (the workspace floats 1.98.1; real clippy is
+    // MSRV-aware so the suggest path is inherently safe — documented in the
+    // module doc).
+    "chunks_exact_to_as_chunks",
     // Batch 89 (fired-histogram expansion): `suboptimal_flops` — the
     // receiver's type is invisible to syn (a custom `powf`/`log` would
     // make the rewrite semantic; the `single_char_pattern` precedent).
@@ -327,7 +358,7 @@ pub fn collect_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<Rul
         .collect()
 }
 
-/// Dispatch to one lint's proposer. All 41 lints are reachable here (the
+/// Dispatch to one lint's proposer. All 49 lints are reachable here (the
 /// `self_evolve` loop verifies output with cargo clippy); `--fix` callers
 /// filter through [`FIXABLE_LINTS`] instead.
 #[allow(clippy::too_many_lines)]
@@ -382,6 +413,11 @@ fn collect_rule_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<So
         // ── Batch 90 (fired-histogram pedantic tail) ──
         "items_after_statements" => items_after_statements::collect_edits(source, file),
         "manual_let_else" => manual_let_else::collect_edits(source, file),
+        // ── Batch 91 (the 2026-09-05 P9 clippy-1.98 new-lint batch) ──
+        "byte_char_slices" => byte_char_slices::collect_edits(source, file),
+        "manual_slice_fill" => manual_slice_fill::collect_edits(source, file),
+        "manual_checked_ops" => manual_checked_ops::collect_edits(source, file),
+        "chunks_exact_to_as_chunks" => chunks_exact_to_as_chunks::collect_edits(source, file),
         _ => Vec::new(),
     }
 }
@@ -417,6 +453,10 @@ mod tests {
             "while_let_on_iterator",
             "single_char_pattern",
             "manual_is_multiple_of",
+            // Batch 91: semantic-corner (signed MIN/-1) + E0599 classes —
+            // VERIFY-tier only.
+            "manual_checked_ops",
+            "chunks_exact_to_as_chunks",
             // Batch 89: invisible receiver types — VERIFY-tier only.
             // (missing_const_for_fn was proposed then KILLED — see the
             // VERIFY_LINTS note.)
@@ -428,13 +468,14 @@ mod tests {
             );
         }
         // 6 seed + 27 Issue 016 structural rows + 1 Batch 89 use_self
-        // + 2 Batch 90 (items_after_statements + manual_let_else).
-        assert_eq!(FIXABLE_LINTS.len(), 36);
+        // + 2 Batch 90 (items_after_statements + manual_let_else)
+        // + 2 Batch 91 (byte_char_slices + manual_slice_fill).
+        assert_eq!(FIXABLE_LINTS.len(), 38);
     }
 
     /// Every proposer lint round-trips through the shared dispatch (fires on
     /// its fixture + output re-parses — the L2 pruner check `--fix` runs).
-    /// 44-row fixture table — length is the point.
+    /// 48-row fixture table — length is the point.
     #[test]
     #[allow(clippy::too_many_lines)]
     fn all_lints_fire_and_parse() {
@@ -673,6 +714,27 @@ impl S {
                 "manual_let_else",
                 "fn f(x: Option<u32>) -> u32 { let v = match x { Some(v) => v, None => return 0 }; v + 1 }",
                 "let Some(v) = x else { return 0 };",
+            ),
+            // ── Batch 91 (the 2026-09-05 P9 clippy-1.98 new-lint batch) ──
+            (
+                "byte_char_slices",
+                "const SHARD_MAGIC: [u8; 4] = [b'S', b'H', b'R', b'D'];",
+                "*b\"SHRD\"",
+            ),
+            (
+                "manual_slice_fill",
+                "struct Terrain { data: Vec<f32> }\nfn reset(t: &mut Terrain) {\n    for v in &mut t.data {\n        *v = 0.5;\n    }\n}",
+                "t.data.fill(0.5);",
+            ),
+            (
+                "manual_checked_ops",
+                "fn share(total: u64, n: u64) -> u64 { if n == 0 { 0 } else { total / n } }",
+                "total.checked_div(n).unwrap_or(0)",
+            ),
+            (
+                "chunks_exact_to_as_chunks",
+                "fn ids(bytes: &[u8]) -> Vec<u32> { let mut out = Vec::new(); for chunk in bytes.chunks_exact(4) { out.push(u32::from_le_bytes(chunk.try_into().unwrap())); } out }",
+                "bytes.as_chunks::<4>().0",
             ),
         ];
         let pruner = crate::pruner::RustAnalyzerPruner::new();

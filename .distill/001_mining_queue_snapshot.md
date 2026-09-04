@@ -909,7 +909,7 @@ Queues empty after this entry → idle report.
 
 All classes closed; the standing divergence (P4 residual) has no action planned.
 
-- [ ] **2026-09-05 P9 NEW — clippy 1.98 new-lint corpus candidates** (found by the
+- [x] **2026-09-05 P9 NEW — clippy 1.98 new-lint corpus candidates** (found by the
       1.98.1 toolchain re-gate sweep across the workspace; measured populations in
       brackets): `chunks_exact_to_as_chunks` [katgpt-rs 12 + 4 chunks_exact_mut,
       ndb 2 — `as_chunks::<N>().0`, needs const-generic N; MachineApplicable],
@@ -926,6 +926,28 @@ All classes closed; the standing divergence (P4 residual) has no action planned.
       + `byte_char_slices` + `manual_slice_fill`; `chunks_exact_to_as_chunks`
       needs an as-chunks MSRV check (std 1.88). Populations measured under load,
       re-count at batch time.
+      **LANDED same day (Batch 91, M3): all four P0 candidates +
+      `chunks_exact_to_as_chunks` as corpus rules + proposers — corpus 45 → 49
+      (2 FIXABLE: `byte_char_slices`, `manual_slice_fill`; 2 VERIFY:
+      `manual_checked_ops` [signed-divisor refusal gate; the MIN/-1 corner +
+      custom-Div E0599 class rides the compile gate], `chunks_exact_to_as_chunks`
+      [`&[u8]`→`&[u8; N]` body class + non-const Path size; MSRV floor std 1.88
+      documented in the module doc — real clippy is MSRV-aware so the suggest
+      path is inherently safe, the AST `--fix` path has no manifest access
+      (fxhashmap precedent)]). Probe first (rustc 1.98.1 probe crate):
+      `manual_checked_ops` fires ONLY on unsigned (i32/i64/isize silent), on
+      `==`/zero-on-left/`!=`/`> 0` forms, NOT on `%`, span = the CONDITION;
+      `manual_slice_fill` fires ONLY on the `&mut place` form (`iter_mut()`
+      silent), span = the whole for-loop; all four lints are suggestion-only
+      (no structured fix) — the proposers are the value. Gates: default lib
+      1076/0, latent 1182/0/1i, clippy_verify 1090/0/6i, all-features 1883/0/16i,
+      clippy `--all-targets` 0, retrieval floors HELD, suggest-retrievability
+      PASS, score-bench #37 FLAT (96.2/1.9/100/100), real-clippy truthfulness
+      4/4 (each corpus snippet fires its named lint). REMAINING P9 tail (not
+      landed, populations small/judgement): `collapsible_match` [6],
+      `sort_by_key` [4], `explicit_counter_loop` [1], `manual_isolate_lowest_one`
+      [1], `needless_pattern_in_..`-class [1], `redundant_reference_format_args`
+      [1] — re-file from the next fired histogram.
 
 - [x] **2026-09-03 LIVE REPRO → CLOSED same night (items_after_statements try_hoist, fix
       `143aceb`):** a `--fix --write --verify` sweep of riir-viewbridge reproduced the
