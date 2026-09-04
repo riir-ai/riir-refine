@@ -237,8 +237,7 @@
     overlap evaluate-then-likely-drop. Pin `ef96313…` (fork davidtai/MTPLX-1, Apache-2.0,
     unmerged; re-pin at T0). Also queued for the next B100 touch: the NAX hd-256 dsplit
     rider + the #4380 GQA-12/16 table (B100 rider enrichment).
-  - **MTPLX RESIDUE (queued 2026-09-04, cadence-gated behind the B105 defers) — the same source,
-    three surfaces Batch 103 never read.** Batch 103's population was the PR #391 diff + body;
+  - **MTPLX RESIDUE (queued 2026-09-04, cadence-gated behind the B105 defers) — CLAIMED 2026-09-05 by the 4090-box idle loop: Plan 076 / Research 129 allocated and pushed; fresh full clone at `.raw/mtplx-upstream` @ `dd4031a8f9ed9d0a532b6e16bcc147dc40399c1d` (verified = the head below; `core.longpaths` required — mistake filenames exceed Windows MAX_PATH); `.research/.highwater` repaired 127 → 129 at allocation.** Batch 103's population was the PR #391 diff + body;
     upstream `youssofal/MTPLX` main has NEVER been mined (**196 commits / 300 files** ahead of the
     mined base `8bc4d88`, `behind_by` 0; v2.10.2 09-01 + v2.11.1 09-04; head
     `dd4031a8` 2026-09-04T10:25Z, Apache-2.0), the `mistakes/` post-mortem corpus is **16 files
