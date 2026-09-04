@@ -1249,6 +1249,27 @@ All classes closed; the standing divergence (P4 residual) has no action planned.
       time instead of trusting the list (riir-dao already carries rust.yml;
       whether it runs the FULL guard is the check that matters).
 
+- [x] **P19 — needless_return on the cfg-switched dual-return fn (2026-09-04, live
+      misfire → CONSUMED same day, `2dc31c0`):** a `--fix --write --verify` sweep of
+      seal-remake fired needless_return on `fps_bench.rs::present_mode_from_env` —
+      the parse-view last stmt was `#[cfg(target_arch = "wasm32")] return
+      PresentMode::default();` and the rewrite (whose edit span COVERS the stmt's
+      attributes) promoted the wasm32 arm to an UNGUARDED tail, dropping the attr:
+      `unreachable_code` on native (the consumer's `-D warnings` clippy caught it;
+      the healer's own `cargo check` verify passed — warnings don't fail check, the
+      P-a screen class). Probe-first (clippy 1.93): real clippy is SILENT on the
+      whole switch — it runs post-expansion, so its verdict is per-view, while the
+      proposer's "last statement" is parse-view only and is NOT last on the arches
+      whose cfg drops the stmt. Fix: refuse when the trailing return carries ANY
+      attribute (cfg = view-dependent last; anything else = silent attr loss on the
+      rewrite) — 3 fixtures incl. the positive control that a cfg'd NON-return stmt
+      earlier in the body keeps firing (the guard is scoped to the target stmt, not
+      cfg-anywhere). Lib 1038/0 (+3), score-bench #35 steady (96.2/1.9/100/100),
+      binary rebuilt + live-smoked (1 edit proposed on the repro: the plain return
+      only). Consumer-side disposition for the record: the heal's other 13 edits
+      were sound; the misfired edit was reverted to the dual-#[cfg] form in the
+      same session (seal-remake `ce5f7ee6`).
+
 **Standing never-heal divergence table:** the cargo-heal skill owns it (comment-guarded
 matches, array-literal defaults, named-arg renames, nested macro args, NaN-unsound
-negated comparisons).
+negated comparisons, cfg-attributed trailing returns).

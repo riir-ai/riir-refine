@@ -68,6 +68,7 @@ REFUSES BY DESIGN (fix manually — the healer is SAFER than clippy here):
 | nested macro args (`format!` inside `println!`/`assert_eq!`) | descent is format-family, one level |
 | guard-on-first-arm `match_bool`, `{0}`/dynamic-spec format args | rewrite shape not parse-provable |
 | NaN-unsound negated comparisons (`!(a > b)` → `a <= b`, the `neg_cmp_op_on_partial_ord` shape) | NOT equivalent on floats — `!(NaN > x)` ≠ `NaN <= x`; the rewrite silently changes NaN semantics (the only correct fix is semantic) |
+| cfg-attributed trailing `return` (needless_return; any attribute on the target stmt) | the edit span covers the stmt's attrs — the rewrite would drop them; a `#[cfg]`'d trailing return is only "last" on the arches whose cfg keeps it (clippy is post-expansion and SILENT on the switch — probe 2026-09-04, the seal-remake fps_bench misfire) |
 
 Semantic lints (`if_same_then_else`, …) are not heal class — owner call.
 
