@@ -963,7 +963,20 @@ One open class (below); the standing divergence (P4 residual) has no action plan
       1076/0, latent 1182/0/1i, clippy_verify 1090/0/6i, all-features 1883/0/16i,
       clippy `--all-targets` 0, retrieval floors HELD, suggest-retrievability
       PASS, score-bench #37 FLAT (96.2/1.9/100/100), real-clippy truthfulness
-      4/4 (each corpus snippet fires its named lint). REMAINING P9 tail (not
+      4/4 (each corpus snippet fires its named lint). POST-MINING FINDING (same
+      day, the loop working as designed): the `byte_char_slices` proposer
+      shipped with a LATENT postfix-continuation bug -- `[b'-', b'.'].into_iter()`
+      rewrote to `*b"- .".into_iter()`, which parses as `*(b"- .".into_iter())`
+      (unary `*` binds looser than method-call `.`), so the emitted byte-string
+      derefs the Iterator. Found live in the katgpt-rs consumer proof: the
+      `--verify` compile gate AUTO-REVERTED both katgpt-pruners edits
+      byte-exactly -- zero damage shipped, the safety net's first real catch on
+      this class. Fix riir-clippy `012c68b`: when the next non-ws char after
+      the rewrite is `.` or `[`, parenthesize the byte-string literal
+      (`(*b"{[").iter()`); 2 new fixtures (method-receiver position, index
+      position). Re-heal with the fixed binary landed the 2 sites (compiler.rs
+      + dfa.rs, oracle 2/2 Certified) -- katgpt-rs `0ffe0e15`, 34 verified
+      edits total across the four new classes. REMAINING P9 tail (not
       landed, populations small/judgement): `collapsible_match` [6],
       `sort_by_key` [4], `explicit_counter_loop` [1], `manual_isolate_lowest_one`
       [1], `needless_pattern_in_..`-class [1], `redundant_reference_format_args`
