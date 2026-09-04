@@ -63,15 +63,16 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 60 (1): measured-GOAT distillation (riir-train Issue 460 / katgpt-rs e2853fbf — pre-gate-recovery-by-division-cancels-algebraically; the MLA backward's saturated output-gate 0/0 NaN, fixed by algebraic cancellation; Bench 475: 6/10 -> 10/10 usable backward passes).
     // Batch 63 (3): the CubeCL twin unlock — same-input-gemv-weight-concat-at-upload, deferred-residual-fused-into-next-layer-norm, reset-state-in-place-fill-never-realloc (ternary_deltanet_gpu_forward.rs, Plan 009 / Research 071).
     // Batch 70 (3): the arxiv barrier-free-sync paper distill (arXiv:2608.13757, Plan 020 / Research 080) — barrier-free-per-dependency-wait-from-loop-counters, shared-counter-decode-producer-progress, masked-branchless-wait-collapse.
-    // Total: 209. // (historical batch-30 snapshot; current 464)
+    // Total: 209. // (historical batch-30 snapshot; current 466)
     // Batch 98 (10): antirez/ds4 dense.metal/moe.metal leads -- grid-range-split-verbatim-impl-composition, share-activation-stream-keep-projection-reductions, tiny-rows-scalar-thread-per-row-downshift, small-batch-matvec-gemm-bridge-rung, moe-routed-down-sum-single-accumulate-pass, fused-vector-site-transcendental-form-nonportable, monomorphic-hot-caller-last-hit-memo, per-row-scale-folded-into-rhs-staging-tile, dequant-byte-pairs-as-aligned-u16-loads, cross-simd-bitonic-alternating-bank-exchange (the Batch-97 queued NEXT BATCH LEADS + 3 additional candidates).
     // Batch 100 (8): Layr-Labs/qwen-3.8-mtp-challenge -- functional-cache-versioning-loses-donation-under-kernel-read, fused-kv-write-single-writer-reads-newest-from-input, in-place-write-through-input-emits-fence-consumer, residency-set-wired-once-post-warm-persistent-footprint, register-budget-head-split-gqa-reread-trade, batch-composition-invariant-grid-early-return, never-gqa-multiply-full-d-merge-smem, container-rebind-over-retrace-for-churn-survival (Research 120 / Plan 068; A +3, D +3, E +2).
     // Batch 102 (6): FlashQuant sparse-dense fusion (arXiv 2608.15531) -- heterogeneous-unit-paths-shared-tile-fusion, lpt-min-heap-disjoint-column-ownership, tile-coo-sparse-tile-aligned-format, bucketed-sparse-reader-column-partition, bank-group-circular-element-reorder, stream-k-persistent-cta-mac-segments (Research 123 / Plan 071; A +2, C +2, H +1, N +1; the headline was REFUTED for direct adoption at walk time -- the fusion mechanism is the distilled core).
     // Batch 103 (5): MTPLX PR #391 + MLX NAX combined host-orchestration batch -- shape-class-keyed-capability, wavefront-overlap-pair-ceiling, request-shape-decline-mirror-completeness, backing-provenance-causal-shadowed-extent-widen (Research 124 / Plan 072; D +4; MTPLX re-pinned ef96313 -> a5e38bb at mine time, all anchors re-verified; + the B100 rider enrichment in entries_gpu_14.rs) + dispatcher-eligibility-predicate-lags-kernel-capability (the ADDENDUM rule -- the MLX #4416 lead the sibling landing silently omitted; D +1; see the Research 124 addendum note).
+    // Batch 104 (2): ggml-org/llama.cpp fa-vec offline swept launch-table distill -- swept-shape-bucket-launch-tables, no-harm-bucket-representative (Research 126 / Plan 074; K +2; infra efeda76b9, table pin 8963a9bdc the M3 Max rows, harness read at d230ddd76 byte-identical pin->HEAD; MIT; the league-relevant SKU).
     assert_eq!(
         corpus.entries.len(),
-        464,
-        "kernel batches through Batch 103 should have 464 rules"
+        466,
+        "kernel batches through Batch 104 should have 466 rules"
     );
 }
 
@@ -5345,7 +5346,7 @@ fn kernel_categories_counts_match_plan_003_table() {
         (KernelCategory::MoeDispatchBackward, 17),
         (KernelCategory::NsaBlockSparse, 4),
         (KernelCategory::VarlenChunkedReduction, 5),
-        (KernelCategory::AutotuneDispatch, 5),
+        (KernelCategory::AutotuneDispatch, 7),
         (KernelCategory::ConvGemmLayout, 13),
         (KernelCategory::KernelPolymorphism, 13),
         (KernelCategory::DtypeAlignment, 28),
@@ -5363,9 +5364,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 464.
+    // Sum must equal 466.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 464, "Plan 003: category totals must sum to 464");
+    assert_eq!(total, 466, "Plan 003: category totals must sum to 466");
 }
 
 #[test]
@@ -5376,8 +5377,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 464,
-        "Plan 003: grouped corpus has {total} rules, expected 464"
+        total, 466,
+        "Plan 003: grouped corpus has {total} rules, expected 466"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -7276,7 +7277,6 @@ fn batch103_pseudocode_parses() {
         "wavefront-overlap-pair-ceiling",
         "request-shape-decline-mirror-completeness",
         "backing-provenance-causal-shadowed-extent-widen",
-        "dispatcher-eligibility-predicate-lags-kernel-capability",
     ];
     for id in ids {
         let entry = corpus
@@ -7293,6 +7293,97 @@ fn batch103_pseudocode_parses() {
         assert!(
             opt_verdict.parses,
             "batch-103 opt_pattern for '{id}' must parse"
+        );
+    }
+}
+
+#[test]
+fn batch104_rules_present() {
+    // Batch 104 (ggml-org/llama.cpp fa-vec swept launch-table distill --
+    // Research 126 / Plan 074): 2 kernel_opt rules (K +2), distilled from
+    // the fa-vec system -- infra efeda76b9, table pin 8963a9bdc (the
+    // M3 Max rows), harness read at d230ddd76 (byte-identical pin->HEAD).
+    let corpus = build_kernel_seed_corpus();
+    let ids = ["swept-shape-bucket-launch-tables", "no-harm-bucket-representative"];
+    for id in ids {
+        assert!(
+            corpus.entries.iter().any(|e| e.rule_id == id),
+            "batch-104 rule '{id}' missing from corpus"
+        );
+    }
+}
+
+#[test]
+fn batch104_concepts_covered() {
+    // Distinctness + mandated phrases must survive in the concept
+    // text (case-sensitive contains -- the B51 lesson).
+    let corpus = build_kernel_seed_corpus();
+    let checks: &[(&str, &[&str])] = &[
+        (
+            "swept-shape-bucket-launch-tables",
+            &[
+                "tightly packed for memcmp",
+                "short KV: attention is a small slice of the step, left to baseline",
+                "fall back to baseline (Q=1) if the tuned config exceeds threadgroup memory",
+                "single source shared by the offline tuner and test-backend-ops",
+                "small dk crosses late, large dk wins even at short KV",
+                "never a pass/fail test",
+                "no measurement there can reach the table",
+            ],
+        ),
+        (
+            "no-harm-bucket-representative",
+            &[
+                "no slower than the baseline config at every point that bucket covers",
+                "one of a bucket's first Q values carries the worst padding it can ever see",
+                "a config picked on the aligned ne01=8,16 says nothing about ne01=9",
+                "a floor on the evidence, not a proof",
+                "TUNE_TAU = 0.05",
+                "Nothing measured, nothing proven",
+                "a bucket with no surviving sample admits baseline only",
+                "instead of letting the ne11-collapsed domain default ride in unmeasured",
+                "load-bearing for the timings, not just for numerics",
+            ],
+        ),
+    ];
+    for (id, needles) in checks {
+        let e = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == *id)
+            .unwrap_or_else(|| panic!("batch-104 rule '{id}' missing"));
+        for needle in *needles {
+            assert!(
+                e.gpu_concept.contains(needle),
+                "batch-104 concept for '{id}' missing phrase '{needle}'"
+            );
+        }
+    }
+}
+
+#[test]
+#[cfg(not(feature = "kernel_verify"))]
+fn batch104_pseudocode_parses() {
+    // G1 for Batch 104: syn-parse gate (the swept-shape-bucket launch
+    // table + the no-harm bucket representative).
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = ["swept-shape-bucket-launch-tables", "no-harm-bucket-representative"];
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-104 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            ref_verdict.parses,
+            "batch-104 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            opt_verdict.parses,
+            "batch-104 opt_pattern for '{id}' must parse"
         );
     }
 }

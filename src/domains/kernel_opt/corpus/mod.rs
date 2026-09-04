@@ -1548,6 +1548,7 @@ mod entries_gpu_13;
 mod entries_gpu_14;
 mod entries_gpu_15;
 mod entries_gpu_16;
+mod entries_gpu_17;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -1577,6 +1578,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_14::entries());
     entries.extend(entries_gpu_15::entries());
     entries.extend(entries_gpu_16::entries());
+    entries.extend(entries_gpu_17::entries());
     Corpus::new(entries)
 }
 
@@ -2067,7 +2069,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "ragged-chunk-pad",
         ],
     ),
-    // K: Autotune dispatch (5 rules)
+    // K: Autotune dispatch (7 rules)
     (
         KernelCategory::AutotuneDispatch,
         "K: autotune dispatch",
@@ -2077,6 +2079,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "shape-kind-dispatch",
             "vector-width-pow2-sweep",
             "autotune-cache-extract-outlives-owner",
+            "swept-shape-bucket-launch-tables",
+            "no-harm-bucket-representative",
         ],
     ),
     // L: Conv-as-GEMM + memory layout (13 rules)

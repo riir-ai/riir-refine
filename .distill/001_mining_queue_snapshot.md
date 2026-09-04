@@ -15,11 +15,54 @@
 > the verdict, `rm -rf` when the batch lands. Full contract = `distill` skill
 > §"Full-source access" (Batch 96-98 vendor precedent) + katgpt-rs `research` §0.5.
 
-## Live queue state (2026-08-31, post-Batch-93, M3 box)
+## Live queue state (2026-09-05, post-Batch-104, M3 box)
 
-- **Corpus counts:** kernel_opt 463 · rust_perf 99 · clippy_lints 45 · sec 12 · docker 31
+- **Corpus counts:** kernel_opt 466 · rust_perf 99 · clippy_lints 45 · sec 12 · docker 31
   (AGENTS.md is the authoritative ledger — bump there per batch, snapshot counts are a convenience copy).
-- **Last landed:** **Batch 103 (2026-09-04, Research 124 / Plan 072 — the MTPLX PR #391 + MLX NAX
+- **Last landed:** **Batch 104 (2026-09-05, Research 126 / Plan 074 — the ggml-org/llama.cpp
+  fa-vec offline swept launch-table distill; the 09-02-queued league opponent-watch lead
+  consumed; M3 box, CPU-only, read-only source lane): 2 rules, corpus 464 → 466 (K 5 → 7).**
+  Infra `efeda76b9` (08-24: ggml-metal-tuning.{h,cpp} the runtime table + tools/tuning/ the
+  offline sweep harness), table pin `8963a9bdc` (08-28, #27863: the M3 Max rows — 91 rows
+  F16+Q8_0, the league-relevant SKU; our pinned opponent fork e311ed38f does NOT carry fa-vec,
+  upstream-only), harness `d230ddd76` (b10793; tools/tuning/ BYTE-IDENTICAL pin→HEAD verified
+  by empty diff; post-pin movement is table ROWS only: 1,293 → 3,420 rows across 20 SKUs in
+  two weeks, the community sweeping through discussion #27668). `swept-shape-bucket-launch-tables`
+  (K — the A− GOAT lead: when a kernel's optimal launch config is non-monotonic across
+  device × dtype × shape × axis buckets, sweep OFFLINE and ship a constexpr data table keyed
+  by an 8-byte packed struct ("tightly packed for memcmp") with SIX decision contents:
+  the fallback ladder (exact bucket → collapsed domain default → family-representative SKU →
+  template baseline), the short-axis skip ("short KV: attention is a small slice of the step,
+  left to baseline"), consumer-side device-limit validation ("fall back to baseline (Q=1) if
+  the tuned config exceeds threadgroup memory"), the shared legality constraint
+  ("single source shared by the offline tuner and test-backend-ops"), exception-row sparsity,
+  and the swept-vs-derived axis split (Q/NE swept, nsg stays the runtime formula); grid
+  derived from runtime specialization boundaries ("Bucket 0 is not sampled at all: the
+  runtime leaves short KV at baseline, so no measurement there can reach the table");
+  harness "never a pass/fail test" / "stdout carries nothing but table rows"; in-stack
+  contrast: our tiled-flash m16/m32 single-axis single-SKU length gate),
+  `no-harm-bucket-representative` (K — a bucket representative is a WORST-CASE-REGRET
+  contract, never best-average: "no slower than the baseline config at every point that
+  bucket covers" + the padding witness ("one of a bucket's first Q values carries the worst
+  padding it can ever see, and that value has to be sampled ... a floor on the evidence, not
+  a proof") + two gates not one (TUNE_THETA 1.05 aggregate / TUNE_TAU 0.05 pointwise) +
+  unmeasured-is-baseline + anchor/cooldown drift gating with dirty-window re-measure +
+  refusal reporting + fixture realism is timing-load-bearing (the -INF mask blocks)).
+  Dedup: anchor-shape-bucketing (L) = cache-KEY bucketing, composed not duplicated;
+  K-family runtime-autotune rules = RUNTIME mechanics; B77 twins = compile-time tile
+  instances; B103 shape-class = capability verdicts. Drop ledger: sample-where-consumable
+  folded into rule 1; harness-as-shipped-binary folded as process half; mask-timing note
+  cited in rule 2 (B97 owns the mechanism). GOAT: batch104 gates 3/3 + kernel_heal lib
+  1294/0/1i + default 1035/0 + kernel_heal+latent floors HELD (kernel self-variants
+  100/100/100 — zero re-pins, blended 94.7/96.9/98.5) + clippy 0 --lib three states (one
+  doc_markdown fix: F16+Q8_0 backticks — the B37 lesson). Count pins walked incl.
+  router.rs expert total (the 18th-count-pin-site lesson — the FIRST failed run caught it).
+  EN-ROUTE: the stale .plans/.highwater (read 72, Plan 073 existed — the 848 class)
+  repaired to 74 at allocation; en-route gate-collision REPAIRED IN-PASS (the batch104
+  insertion edit fuzzy-clobbered the batch97 oracle test's header + batch103's `for`
+  header — both restored byte-exact before any commit, caught by the compile). Record:
+  Research 126 / Plan 074 (.raw/llama-upstream removed at landing).**
+  Prior: **Batch 103 (2026-09-04, Research 124 / Plan 072 — the MTPLX PR #391 + MLX NAX
   combined host-orchestration batch; T7 default COMBINE executed; M3 box, CPU-only): 4 rules,
   corpus 459 → 463 (D 98 → 102) + the B100 external-instances rider.** `shape-class-keyed-capability`
   (D — the A− GOAT lead: a capability verdict is valid ONLY for the shape tuple the native gate reads;
@@ -458,11 +501,13 @@
     tuning and the attributable-delta rule applies to every flash-attention cell;
     (c) the fork policy (read-only vendor binary, owner call Issue 782) is unchanged
     by this — record only. **Distill lead (kernel_opt, mechanism class):**
-    `fa-vec` tuning-table dispatch — per-device/per-dtype/per-(dk,dv)/per-context-bucket
+    ~~`fa-vec` tuning-table dispatch — per-device/per-dtype/per-(dk,dv)/per-context-bucket
     swept launch-parameter tables for the flash-attention vector kernels + the
     `ggml-metal-tuning fa-vec` autotune sweep harness that generates them — vs our
     two-point length gate (m16 <8192 ≤ / m32 ≥8192) on the tiled flash; the swept
-    multi-bucket axis is the richer shape. The rest of the upstream Metal movement is
+    multi-bucket axis is the richer shape.~~ **MINED 2026-09-05 — Batch 104 (Research 126 /
+    Plan 074): 2 rules, corpus 464 → 466 (K 5 → 7); see Last landed above.** The rest of
+    the upstream Metal movement is
     the same mechanism for OTHER chips (M1/M1 Max/M1 Ultra/M2/M2 Pro/M2 Max/M3 Pro/
     M3 Ultra/M4/M4 Pro/A18 Pro — ~15 commits) + `d5d993a09` Metal 4.0 tensor API on
     M5+/A19+ (next-silicon external confirmation of the matrix-core-attention family
