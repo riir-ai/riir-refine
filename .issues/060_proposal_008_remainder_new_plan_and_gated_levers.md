@@ -1,8 +1,8 @@
 # Issue 060 — Proposal 008 remainder: autonomy re-open needs a NEW plan; dopamine levers G5-gated; soak async
 
 Status: **OPEN (2026-09-01) — advisory-only is TERMINAL for this proposal.** The G5
-verdict is FAIL (wash) ([riir-dao Bench 001](../../riir-dao/.benchmarks/001_g5_simulator.md),
-re-confirmed at the ratified genesis in [Bench 002](../../riir-dao/.benchmarks/002_longevity_cross_bench.md)):
+verdict is FAIL (wash) (`riir-dao Bench 001`,
+re-confirmed at the ratified genesis in `Bench 002`):
 adaptive ≈ frozen constants, so the agent stays advisory-only — a recorded defend-wrong
 outcome, not a re-roll. Phases 0–2 LANDED (scaffold, bounds + telemetry, signals/
 strategies/guards, GLM advisory transport, decision artifacts + audit CLI, shallow-DAO
@@ -14,7 +14,7 @@ Branch: `develop` (per global rule — no feature branches)
 Proposal: [`.proposals/008_adaptive_tokenomics_riir_dao.md`](../.proposals/008_adaptive_tokenomics_riir_dao.md)
 Related: [Issue 059](059_proposal_007_remainder_ops_signer_and_counsel_gate.md),
 [Issue 061](061_proposal_011_product_loop_rollout.md), riir-dapps
-[Issue 006](../../riir-dapps/.issues/006_freeze_ratification_gate_and_decay_bound_conflict.md)
+`Issue 006`
 (CLOSED — the decay-saturation resolution), Proposal 010 (the landed re-open half).
 
 ## Open items

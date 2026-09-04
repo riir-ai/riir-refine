@@ -353,12 +353,12 @@ one-line insert on `record_outcome`. No change to the retrieval API.
 
 ## Related Research
 
-- [Proposal 034](../riir-ai/.proposals/034_clippy_healing_drafter_pruner.md) — the clippy-healing design this extends
-- [Plan 523 (riir-agents)](../riir-ai/.plans/) — the `ModellessReasoner` whose `dot+sigmoid` pattern we borrow
-- [Plan 524/526 (riir-rag)](../riir-ai/.plans/) — the 3-axis retrieval pattern we borrow
-- [katgpt-rs `.research/302`](../katgpt-rs/.research/302_FAME_Sampling_Invariant_Per_Entity_MoE.md) — `CommittedFieldBlend`, the EMA direction-update pattern
-- [katgpt-rs `.research/276`](../katgpt-rs/.research/276_Personality_Weighted_Latent_Layer_Composition.md) — `PersonalityWeightedComposition`, the sigmoid-gated composition pattern
-- [katgpt-rs `.docs/06_game_arenas/heuristic_learning.md`](../katgpt-rs/.docs/06_game_arenas/heuristic_learning.md) — the codebase's native "self-evolving via code updates" framing (HL)
+- [Proposal 034](../../riir-ai/.proposals/034_clippy_healing_drafter_pruner.md) — the clippy-healing design this extends
+- [Plan 523 (riir-agents)](../../riir-ai/.plans/523_riir_agents_latent_space_task_reasoning.md) — the `ModellessReasoner` whose `dot+sigmoid` pattern we borrow
+- [Plan 524/526 (riir-rag)](../../riir-ai/.plans/524_riir_rag_latent_first_retrieval_facade.md) — the 3-axis retrieval pattern we borrow
+- [katgpt-rs `.research/302`](../../katgpt-rs/.research/302_FAME_Sampling_Invariant_Per_Entity_MoE.md) — `CommittedFieldBlend`, the EMA direction-update pattern
+- [katgpt-rs `.research/276`](../../katgpt-rs/.research/276_Personality_Weighted_Latent_Layer_Composition.md) — `PersonalityWeightedComposition`, the sigmoid-gated composition pattern
+- [katgpt-rs `.docs/06_game_arenas/heuristic_learning.md`](../../katgpt-rs/.docs/06_game_arenas/heuristic_learning.md) — the codebase's native "self-evolving via code updates" framing (HL)
 
 > **Survey cross-reference:** Zhou, Hu, Shang, Zhang. "Self-Evolving Coding Agents." arXiv:2608.03392 [cs.SE], Aug 2026. This note distills the survey's 5-category taxonomy into the 2 categories applicable to riir-clippy (memory + skills), implemented modellessly via latent-first ops.
 >

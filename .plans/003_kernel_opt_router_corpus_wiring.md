@@ -1,6 +1,6 @@
 # Plan 003 — kernel_opt Router ↔ Corpus Wiring (Category-Keyed Experts)
 
-**Proposal:** [012](../katgpt-rs/.proposals/012_kernel_heal_thermal_moe.md) §"The
+**Proposal:** [012](../../katgpt-rs/.proposals/012_kernel_heal_thermal_moe.md) §"The
 latent-MoE expert selector" — the placeholder identity-direction router must be
 replaced with corpus-aware experts.
 **Branch:** `develop` (per global rule — no feature branches)
@@ -211,9 +211,9 @@ blocked on GPU).
 
 ## References
 
-- [Proposal 012](../katgpt-rs/.proposals/012_kernel_heal_thermal_moe.md) §"The
+- [Proposal 012](../../katgpt-rs/.proposals/012_kernel_heal_thermal_moe.md) §"The
   latent-MoE expert selector"
-- [Plan 558](../katgpt-rs/.plans/558_variable_rank_domain_expert.md) —
+- `Plan 558` —
   `pick_domain` substrate
 - [Research 009](../.research/009_burn_cubecl_cubecl_opt_kernel_opt_distillation_batch8.md)
   — "Router → corpus wiring ... now the highest-value next step"

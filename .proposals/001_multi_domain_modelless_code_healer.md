@@ -48,7 +48,7 @@ Each row is a `(rule_name, buggy_pattern, fixed_pattern)` triple — exactly the
 
 ### Problem 4: Bench 009's silent-miss is a Stage 1 limitation; Stage 2 is the modelless fix (2-stage drafter, `quest_grammar` precedent)
 
-Bench 009 measured the clippy domain: modelless cache 1.8M tok/s, held-out quality 0/10, silent miss (L2 `parses=true` on wrong answers). [Issue 010](../.issues/010_drafter_cannot_generalize_heldout_code.md) root-caused this: the L1 drafter (`ClippyTernaryDrafter`) is a **corpus retriever with a hash-driven index**, not a code transformer — `buggy_code` only selects *which* stored fix to return; it never influences the returned text. The lesson — *"a perf gain on an incorrect answer is a speedup of a wrong result"* — applies to EVERY domain's **Stage 1 hot path**:
+Bench 009 measured the clippy domain: modelless cache 1.8M tok/s, held-out quality 0/10, silent miss (L2 `parses=true` on wrong answers). `Issue 010` root-caused this: the L1 drafter (`ClippyTernaryDrafter`) is a **corpus retriever with a hash-driven index**, not a code transformer — `buggy_code` only selects *which* stored fix to return; it never influences the returned text. The lesson — *"a perf gain on an incorrect answer is a speedup of a wrong result"* — applies to EVERY domain's **Stage 1 hot path**:
 
 | Domain | Stage 1 silent-miss | Stage 2 ground-truth validator |
 |---|---|---|
@@ -56,7 +56,7 @@ Bench 009 measured the clippy domain: modelless cache 1.8M tok/s, held-out quali
 | rust_perf | Wrong "optimization" that breaks correctness or regresses perf | `cargo test` + `cargo bench` (seconds) |
 | kernel_opt | **Wrong GPU output → desync + anti-cheat false positives + replay divergence** (Proposal 012 §Problem 4) | compile + run + **numeric compare vs reference** |
 
-**The fix is a 2-stage drafter**, mirroring `quest_grammar`'s `plasma_draft` (Stage 1, always-on, ~µs, hash-selected template pool) + `adaptive_drafter` (Stage 2, optional override, loaded when a verified pool exists). See [Issue 010](../.issues/010_drafter_cannot_generalize_heldout_code.md) §"Fix direction" for the full pattern. The key point: **re-running the domain validator (e.g. `cargo clippy`) during the tuning phase is fine** — the ~130 ms cost is acceptable OFF the hot path; it is the mechanism that populates the Stage 2 pool. The hot path stays at Stage 1's ~µs latency and upgrades to Stage 2 only when a verified entry exists.
+**The fix is a 2-stage drafter**, mirroring `quest_grammar`'s `plasma_draft` (Stage 1, always-on, ~µs, hash-selected template pool) + `adaptive_drafter` (Stage 2, optional override, loaded when a verified pool exists). See `Issue 010` §"Fix direction" for the full pattern. The key point: **re-running the domain validator (e.g. `cargo clippy`) during the tuning phase is fine** — the ~130 ms cost is acceptable OFF the hot path; it is the mechanism that populates the Stage 2 pool. The hot path stays at Stage 1's ~µs latency and upgrades to Stage 2 only when a verified entry exists.
 
 The validator MUST be domain-pluggable (the `HealDomain::validate` method) AND each domain's Stage 2 tuning loop MUST hold a ground-truth signal stronger than "it parsed". This is a **modelless generalization path** (per the modelless-first mandate, it must be exhausted before L4 LoRA).
 
@@ -135,7 +135,7 @@ pub fn draft_fix(&mut self, rule_id: &str, buggy_code: &str, corpus: &[D::Entry]
 
 **Re-running the domain validator during tuning is fine.** The cost (~130 ms clippy / seconds perf / minutes kernel) is acceptable for a batch/background tuning process; it is NOT the hot-path guard. The hot path stays at Stage 1's ~µs and upgrades to Stage 2's ~µs serve only when a verified entry exists. This is a **modelless generalization path** — it must be exhausted before L4 LoRA (per the modelless-first mandate + caveat 4).
 
-See [Issue 010](../.issues/010_drafter_cannot_generalize_heldout_code.md) §"Fix direction" for the clippy-domain concrete design.
+See `Issue 010` §"Fix direction" for the clippy-domain concrete design.
 
 ### Domain-agnostic core (shared, renamed)
 
@@ -204,7 +204,7 @@ Each domain is selected by the caller enabling its feature flag — there is no 
 1. **Proposal 034** (`riir-ai/.proposals/034_clippy_healing_drafter_pruner.md`) — the original single-domain pipeline. This proposal generalizes its vocabulary from clippy-specific to domain-pluggable.
 2. **Proposal 012** (`katgpt-rs/.proposals/012_kernel_heal_thermal_moe.md`) — the kernel-domain design (thermal-tier + latent-MoE + numeric validator). This proposal adopts its domain design unchanged, supersedes its repo placement, and absorbs it as the `kernel_opt` domain module.
 3. **`HealConflictDetector`** (katgpt-core Issue 133) — the precedent for heal-path validation traits. The `HealDomain::validate` method mirrors its shape (domain-specific verdict type, stronger than "parses").
-4. **`quest_grammar` 2-stage drafter** (`riir-ai/crates/riir-games-quest/src/quest_grammar/`) — the **Stage 1 + Stage 2 drafter pattern** this proposal adopts. `QuestGrammarPipeline` holds `plasma_draft` (Stage 1, `TernaryDraftModel`, always-on, ~µs) + `adaptive_drafter` (Stage 2, `AdaptiveQuestDrafter`, optional override loaded via `load_seal_corpus`). The `draft_text` routing function is the direct precedent for `draft_fix`. See [Issue 010](../.issues/010_drafter_cannot_generalize_heldout_code.md) §"Fix direction" for the riir-clippy mapping.
+4. **`quest_grammar` 2-stage drafter** (`riir-ai/crates/riir-games-quest/src/quest_grammar/`) — the **Stage 1 + Stage 2 drafter pattern** this proposal adopts. `QuestGrammarPipeline` holds `plasma_draft` (Stage 1, `TernaryDraftModel`, always-on, ~µs) + `adaptive_drafter` (Stage 2, `AdaptiveQuestDrafter`, optional override loaded via `load_seal_corpus`). The `draft_text` routing function is the direct precedent for `draft_fix`. See `Issue 010` §"Fix direction" for the riir-clippy mapping.
 
 The combination produces: one pipeline (Stage 1 drafter + Stage 2 adaptive drafter + pruner + ruliology + self-evolve tuning loop) × N domains (clippy/perf/kernel/future) × M validators (per-domain ground truth, Stage 2 tuning-phase). None of the four alone gives this — Proposal 034 is single-domain single-stage, Proposal 012 is single-domain-new-repo, `HealConflictDetector` is validation-only, `quest_grammar` is single-domain (game quests) but ships the 2-stage pattern this proposal generalizes.
 

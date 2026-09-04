@@ -1,7 +1,7 @@
 # Bench 067 — the CF bill vs the ops dashboard: what $8.08 was actually made of
 
 **Status:** ALIGNED (2026-09-03) — 6/6 collected bill lines reproduce to the cent, total $8.08 = $8.08
-**Issue:** riir-clippy [`.issues/065`](../.issues/065_dashboard_cost_model_vs_cf_bill.md)
+**Issue:** riir-clippy ``.issues/065``
 **Harness:** `scripts/gen_dashboard.py` (`bill_line` / `bill_reconciliation` / `collect_kv`) against
 `.benchmarks/cf_bill_pin.json` — the bill transcribed from Cloudflare's Billing → Usage page
 **Run:** `set -a; . ./.env; set +a; python3 scripts/gen_dashboard.py --out /tmp/dash.html`

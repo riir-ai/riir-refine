@@ -1,6 +1,6 @@
 # Bench 049 — fixer re-gate POC: harness + arms A/B RUN (verdict: BEATS decline)
 
-**Issue:** [040](../.issues/040_fixer_regate_poc_cf_workers_ai.md) · **Proposal:** [005](../.proposals/005_kat_heal_service_network.md) caveat #2 / Phase 3
+**Issue:** `040` · **Proposal:** [005](../.proposals/005_kat_heal_service_network.md) caveat #2 / Phase 3
 **Date:** 2026-08-25 (harness + offline) → **2026-08-26 02:45–03:20Z (arms A/B RUN, verdict landed)**
 **Machine:** M3 Max (macOS, arm64) — **UNDER SIBLING COMPUTE LOAD** (`bonsai_clippy_l4_sft_train` ~822% CPU + `maglev_drafter_train` ~85% CPU for the whole session). No latency number in this note is gate-grade; every number here is a COUNT or a VERDICT (load-insensitive).
 **Status:** **RESOLVED — the falsifiable question answers YES.** Arms A/B (CF llama-3.3-70b-fp8-fast) both beat `decline` on the reachable-miss bar: strict-keep **5/9 (A, raw)** and **6/9 (B, pre-pass)** vs **decline 0/9**; the pre-pass arm dominates on every partial-credit axis. qwen3.8-27b measured UNUSABLE on the free tier for this task shape (thinking-model token economics — §qwen below). Arm C/D (Bonsai) stay blocked (GPU + checkpoint) and are now OPTIONAL for the unblock question — the Proposal 005 bar reads "CF llama arm OR base-Bonsai arm" and the CF arm met it.

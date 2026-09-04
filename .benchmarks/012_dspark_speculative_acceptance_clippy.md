@@ -1,7 +1,7 @@
 # Bench 012 — DSpark speculative decode acceptance + speedup on clippy-class prompts (M3 Max Metal)
 
 **Date:** 2026-08-13
-**Issue:** [011 — Measure DSpark speculative decode on clippy prompts](../.issues/011_dspark_speculative_decode_on_clippy.md)
+**Issue:** `011 — Measure DSpark speculative decode on clippy prompts`
 **Hardware:** M3 Max, Metal only (Apple M3 Max, MTLGPUFamilyApple9 / Metal4, 53 GB free working set)
 **Models:**
 - Target: `riir-train/data/Ternary-Bonsai-27B-Q2_0.gguf` (7.17 GB) — `Bonsai-27B`, 27B, Qwen3.5 tokenizer (`tokenizer.ggml.pre = qwen35`, vocab 248320, **no chat_template in GGUF**)
@@ -304,6 +304,6 @@ Logs: `/tmp/dspark_realeval_gpu.log`, `/tmp/dspark_realeval_cpu.log` (this sessi
 
 - Issue 011 (this repo) — the question + gates
 - [Bench 010](010_llamacpp_vs_katgpt_ternary_clippy_tps.md) — raw forward baseline (llama.cpp 31.21 / katgpt 17.85 decode), no speculation
-- riir-ai [Issue 640](../../riir-ai/.issues/640_batched_rmsnorm_prefill_nondeterministic.md) + [Bench 649](../../riir-ai/.benchmarks/649_contention_ab.md) — GPU-exclusivity rule (12.3× argmax divergence under contention)
+- riir-ai `Issue 640` + [Bench 649](../../riir-ai/.benchmarks/649_contention_ab.md) — GPU-exclusivity rule (12.3× argmax divergence under contention)
 - riir-ai [Issue 637](../../riir-ai/.issues/) — batched-prefill route (the orthogonal gap; also did not close it)
 - vendor `docs/dspark-scope.md` — *"accept rate does not yet beat MTP… gated on training convergence"*

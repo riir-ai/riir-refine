@@ -1,6 +1,6 @@
 # Bench 011 — Stage 2 GOAT gate: 10/10 on held-out fixture (was 0/10)
 
-**Issue:** [010](../.issues/010_drafter_cannot_generalize_heldout_code.md) (RESOLVED)
+**Issue:** `010` (RESOLVED)
 **Date:** 2026-08-13
 **Host:** M3 Max, Metal, macOS Darwin 25.5.0
 **Gate path:** `cargo run --release --example stage2_tuning_demo --features self_evolve,clippy_verify`
@@ -119,7 +119,7 @@ CARGO_TARGET_DIR=/tmp/clippy_stage2 cargo test --test stage2_goat --features sel
 
 ## References
 
-- [Issue 010](../.issues/010_drafter_cannot_generalize_heldout_code.md) — RESOLVED. The original 0/10 root cause + the 2-stage fix direction.
+- `Issue 010` — RESOLVED. The original 0/10 root cause + the 2-stage fix direction.
 - [Proposal 001](../.proposals/001_multi_domain_modelless_code_healer.md) — the multi-domain framework this Stage 2 stack composes into.
 - [`quest_grammar` 2-stage drafter](../../riir-ai/crates/riir-games-quest/src/quest_grammar/plasma_draft.rs) — `TernaryDraftModel` (Stage 1) + `AdaptiveQuestDrafter` (Stage 2) precedent.
 - [Bench 009](./009_bonsai_vs_modelless_e2e_tokps.md) — the original 0/10 measurement (Stage 1 baseline).

@@ -1,7 +1,7 @@
 # Bench 026 — Issue 021: evidential-status axis for `LatentFixMemory`
 
 **Date:** 2026-08-16.
-**Issue:** [021](../.issues/021_evidential_status_memory_axis.md) (resolved + removed).
+**Issue:** `021` (resolved + removed).
 **Research:** [049](../.research/049_Long_Horizon_AI_Research_Evidential_Status.md)
 (arXiv:2608.11195 — the retelling-bias failure mode).
 **Scope:** per-trajectory evidential tier (`EvidenceTier`: Certified /

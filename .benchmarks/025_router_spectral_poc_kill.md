@@ -1,7 +1,7 @@
 # Bench 025 — Issue 020: DomainRouter spectral-routing POC (KILLED at the gate bar)
 
 **Date:** 2026-08-16
-**Issue:** [020](../.issues/020_domain_router_spectral_routing_poc.md) (resolved-KILLED, removed per noise-reduction rule)
+**Issue:** `020` (resolved-KILLED, removed per noise-reduction rule)
 **Verdict:** **KILL for gating** — the best token-frequency variant reaches 70.3% routing accuracy, 15pp under the 85% kill-bar. **Salvage shipped:** the annotation-only router now uses the measured-best variant (TF-cosine, +20pp annotation accuracy at ~3.4× lower cost). Fan-out retrieval stays the shipped behavior; the "future tuning option" question is CLOSED for the lexical/spectral branch.
 
 ## The question

@@ -8,7 +8,7 @@ across 230 `.rs` files in this repo.
 
 Repo: riir-clippy · Surface: `src/kat_redact.rs` `scan_rust_secret_literals`
 Related: [Bench 052](052_t32_external_leak_posture.md) (the v2 hexish bump — same defect class),
-[Proposal 005](../.proposals/005_kat_metered_self_improving_service_network.md) T0.2
+`Proposal 005` T0.2
 
 ---
 
@@ -120,7 +120,7 @@ line.
 checks `redact_version`** — the receiver accepts a payload produced by any
 gate version, including one weaker than the current floor. The client fails
 closed on a stale *policy*; the service does not fail closed on a stale
-*gate*. Filed as [riir-dapps Issue 007](../../riir-dapps/.issues/007_ingest_accepts_any_redact_version.md)
+*gate*. Filed as `riir-dapps Issue 007`
 (commit `6d65f5d`) rather than fixed here — boundary (the service plane is
 riir-dapps per Proposal 005 Issue 041), and the receive-side floor is a design
 decision for the Worker/DO shell in flight there. The compatibility question is

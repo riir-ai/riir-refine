@@ -1,7 +1,7 @@
 # Bench 043 — DFlash2 selection-headroom POC: T1 measured NEGATIVE
 
 **Date:** 2026-08-21 · **Repo:** riir-clippy · **Verdict:** T1.2 stop rule FIRES — no selector built
-**Refs:** [Issue 034](../.issues/034_dflash2_selection_headroom_poc.md) (closed by this doc) ·
+**Refs:** `Issue 034` (closed by this doc) ·
 [Plan 017](../.plans/017_dflash2_selection_headroom_poc.md) ·
 [Research 077](../.research/077_dflash2_draft_only_distillation.md)
 **Harness:** `src/draft/headroom_probe.rs` (fixture surface) ·

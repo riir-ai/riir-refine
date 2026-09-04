@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-16
 **Scope:** `src/domains/kernel_opt/wgsl_scan.rs` (T2 patterns) + `cube_extract.rs` (T3) + the `cargo heal --suggest` wiring (T4) — the non-syn surface scanner (`.wgsl` files + `#[cube]` bodies).
-**Gate:** [Issue 025](../.issues/025_non_syn_surface_scanner.md) T5 — "≥5 real anti-patterns drawn from the Batch 14–51 rule set, zero false positives on the clean-file control, <1 ms/file".
+**Gate:** `Issue 025` T5 — "≥5 real anti-patterns drawn from the Batch 14–51 rule set, zero false positives on the clean-file control, <1 ms/file".
 
 ## G1 — ≥5 real anti-patterns on the live tree
 

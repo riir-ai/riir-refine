@@ -1,7 +1,7 @@
 # Bench 016 — rust_perf corpus v2: sorting + IO-write + bulk-copy gaps (Issue 012)
 
 **Date:** 2026-08-13
-**Issue:** [012](../.issues/012_rust_perf_corpus_v2_sorting_io_copy_gaps.md)
+**Issue:** `012`
 **Feature gate:** `rust_perf_bench` (opt-in)
 **Machine:** Apple M3 Max (macOS)
 **GOAT gate:** G1 (correctness) + G5 (Pareto)

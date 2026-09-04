@@ -3,7 +3,7 @@
 **Date:** 2026-08-25
 **Verdict:** **NOT ELEVATED — the RAG-collapse transfer does not hold at our
 scale/params.** The monitor ships anyway (cheap standing tripwire + audit
-columns); the negative is recorded in [R346 §"PoC Addendum"](../riir-ai/.research/346_rag_collapse_self_authored_retrieval.md).
+columns); the negative is recorded in [R346 §"PoC Addendum"](../../riir-ai/.research/346_rag_collapse_self_authored_retrieval.md).
 
 **Harness:** `src/collapse_monitor.rs` (module + 7 tests; the production
 measurement is env-gated `RIIR_COLLAPSE_ENVELOPE` / `RIIR_COLLAPSE_STORE_ROOT`

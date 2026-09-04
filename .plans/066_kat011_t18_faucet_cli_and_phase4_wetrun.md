@@ -10,7 +10,7 @@ Branch: `develop`
 Issue: [`.issues/061_proposal_011_product_loop_rollout.md`](../.issues/061_proposal_011_product_loop_rollout.md)
 Proposal: [`.proposals/011_kat_pay_request_qr_genesis_and_onboarding.md`](../.proposals/011_kat_pay_request_qr_genesis_and_onboarding.md) §7 / §8.1 / G-WET
 Blocked-by (named, NOT papered over): riir-dapps
-[Issue 010](../../riir-dapps/.issues/010_treasury_grant_floor_equals_max_supply_unreachable_path.md)
+`Issue 010`
 
 ## The blocker, stated first
 

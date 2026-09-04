@@ -3069,8 +3069,7 @@ the honest 3-day evidence stands independent of it). E1–E5 + A2/A3 were
 already MET (E5 2026-08-25: P9 closed — ruliology/player.rs verify-revert
 cluster root-caused, proposer guard `64820c1` + score-bench v2 fixture;
 narrative: git history). **T7 discharged — Proposals 003 + 004 UNBLOCKED**
-(their Blocked-by lines updated in the same commit). KAT ([Proposal
-005](../.proposals/005_kat_heal_service_network.md)) Phase 0 unblocks with
+(their Blocked-by lines updated in the same commit). KAT (`Proposal 005`) Phase 0 unblocks with
 this close.
 
 ## Guard-landing protocol — a guard is not landed until the residue is counted
@@ -3138,7 +3137,7 @@ is `(file_name, byte_start)`.
 becomes public. The product surface (`cargo heal`) ships as **prebuilt
 binaries only**, via GitHub Releases on a small PUBLIC distribution repo —
 NOT on this repo (release assets on a private repo are not publicly
-downloadable). Full design: [Proposal 003](../.proposals/003_binary_only_distribution.md).
+downloadable). Full design: `Proposal 003`.
 
 Hard rules for any future session:
 

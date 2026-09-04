@@ -1,6 +1,6 @@
 # Bench 009 — E2E tokens/sec: Ternary-Bonsai-27B (llama.cpp) vs the modelless pipeline
 
-**Issue:** [009](../.issues/009_bonsai_vs_modelless_e2e_tokps.md)
+**Issue:** `009`
 **Date:** 2026-08-12
 **Host:** M3 Max, Metal (12 threads), macOS Darwin 25.5.0
 **Model:** `riir-train/data/Ternary-Bonsai-27B-Q2_0.gguf` (6.66 GiB, 26.90 B params, `qwen35 27B Q2_0`)

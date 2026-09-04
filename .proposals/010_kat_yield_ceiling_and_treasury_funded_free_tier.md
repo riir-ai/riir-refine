@@ -1,6 +1,6 @@
 # Proposal 010 — KAT yield ceiling + treasury-funded free tier (two ledger budget rules)
 
-Status: **COMPLETE — Phases 1–3 LANDED (riir-dapps `c27300b`, 2026-08-29); Phase 4 (the delegated perf/sec activation call) + the dao-side mirror LANDED 2026-08-30** (filed 2026-08-29). G16 PASS: [riir-dao Bench 003](../../riir-dao/.benchmarks/003_yield_ceiling_g16_sim.md). Enters through the re-open path [Proposal 008](008_adaptive_tokenomics_riir_dao.md) T1.4 names verbatim: *"Re-open levers (v2 candidates incl. decay_factor/Inflate, **or a ledger budget-rule change**) require a NEW plan."* This is the ledger-budget-rule half. It does **not** re-roll the G5 campaign and does **not** ask for agent autonomy — the agent stays advisory-only. **Consumer cross-ref 2026-09-01 — Proposal 011** restates both rules at genesis and builds on them: ask 10's daily free-tier crank rides the M2 treasury-first grant (`free_tier_daily_kat`, never-lever family), and the ceremony yaml carries `yield_ceiling_bp` 22 + the armed 6500/500/2000/1000 split as ratified defaults (drift ⇒ ceremony FAILS).
+Status: **COMPLETE — Phases 1–3 LANDED (riir-dapps `c27300b`, 2026-08-29); Phase 4 (the delegated perf/sec activation call) + the dao-side mirror LANDED 2026-08-30** (filed 2026-08-29). G16 PASS: `riir-dao Bench 003`. Enters through the re-open path [Proposal 008](008_adaptive_tokenomics_riir_dao.md) T1.4 names verbatim: *"Re-open levers (v2 candidates incl. decay_factor/Inflate, **or a ledger budget-rule change**) require a NEW plan."* This is the ledger-budget-rule half. It does **not** re-roll the G5 campaign and does **not** ask for agent autonomy — the agent stays advisory-only. **Consumer cross-ref 2026-09-01 — Proposal 011** restates both rules at genesis and builds on them: ask 10's daily free-tier crank rides the M2 treasury-first grant (`free_tier_daily_kat`, never-lever family), and the ceremony yaml carries `yield_ceiling_bp` 22 + the armed 6500/500/2000/1000 split as ratified defaults (drift ⇒ ceremony FAILS).
 
 ## TL;DR
 
@@ -178,7 +178,7 @@ One nuance recorded so the synergy is not overclaimed: M1's undrawn excess stays
 
 ## Phased rollout
 
-### Phase 0 — simulator arm (riir-dao, no ledger change) — **COMPLETE, G16 PASS** ([Bench 003](../../riir-dao/.benchmarks/003_yield_ceiling_g16_sim.md), 2026-08-29)
+### Phase 0 — simulator arm (riir-dao, no ledger change) — **COMPLETE, G16 PASS** (`Bench 003`, 2026-08-29)
 - [x] T0.1 Model the thin-base exploit in the riir-dao sim; **reproduce it against today's rules** — reproduced at 38–42 M bp/epoch on the eligible base, early birds 717×–1 813× principal, 5/5 seeds
 - [x] T0.2 Implement M1 as a sim-side rule; run G16 (10⁴ epochs × 5 seeds vs frozen baseline) — PASS: blocked at exactly 22 bp (cap bound 156–180 epochs/seed, verified to fire); participation delta **0 bp** under the pinned 1 000 bp tolerance; replay bit-identical
 - [x] T0.3 Sim M2: cumulative `mint_demand` and treasury trajectory vs baseline (G14 shape) — main regime 100 % treasury-funded (zero fallback mint); stress regime (3× inflow drain) 34 % treasury-funded with the fallback firing every epoch and the floor never breached
@@ -227,7 +227,7 @@ Agent autonomy (008 Phase 4 stays blocked). Axis-E / supply-cap decisions. USDC-
 5. `riir-dapps/src/kat/compose.rs:29-140` — `EpochParams`, its codec, `split_burn_with`
 6. `riir-dapps/src/kat/ledger.rs:729-747` — `grant`, the M2 insertion point
 7. `riir-dapps/src/kat/governance.rs:100-200` — `LeverBound`, `bounds_violation`, the PENDING rows
-8. riir-dapps [Issue 006](../../riir-dapps/.issues/006_freeze_ratification_gate_and_decay_bound_conflict.md) — the genesis-saturates-the-safe-end discipline M1 replicates
+8. riir-dapps `Issue 006` — the genesis-saturates-the-safe-end discipline M1 replicates
 9. riir-dapps [Bench 004](../../riir-dapps/.benchmarks/004_g7_econ_sim_and_staking_chaos.md) — axis-E, and the measurement that mining death is schedule-bound not pool-bound
 
 ## TL;DR

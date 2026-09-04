@@ -34,7 +34,7 @@ routes + the row-backed limiter). **T1.3 LANDED 2026-09-02** (riir-clippy
 the service-plane welcome gate + `/balance` history, and the invoice display
 with the caveat-#3 QR pin canaried on both axes). **Phase 0 is now COMPLETE.**
 **T2.1 + T3.1 + T3.2 + T3.3 LANDED 2026-09-02** (riir-deployer `96009cc`,
-[Plan 003](../../riir-deployer/.plans/003_genesis_params_deploy_ux_node_sync.md) —
+`Plan 003` —
 the genesis params pin with drift-FAILS validation, the TTY selector + the
 env-gated mainnet boundary, the `node-sync` fleet gate, and G-DEPLOY RUN on a
 real local 3-node cluster; 155 tests green, +27). Phase 2's remaining T2.2/T2.3
@@ -46,7 +46,7 @@ Proposal: [`.proposals/011_kat_pay_request_qr_genesis_and_onboarding.md`](../.pr
 Related: [Issue 059](059_proposal_007_remainder_ops_signer_and_counsel_gate.md) (the
 shared counsel envelope), [Issue 060](060_proposal_008_remainder_new_plan_and_gated_levers.md)
 (the crank's grant machinery context), riir-deployer
-[Proposal 001](../../riir-deployer/.proposals/001_riir_control_cf_worker_do.md), riir-chain
+`Proposal 001`, riir-chain
 Proposal 008 (MemoShard).
 
 ## Phase 0 — ledger + SDK substrate
@@ -279,7 +279,7 @@ Proposal 008 (MemoShard).
 - [x] T2.1 params yaml + validation against the pinned tokenomics constants (drift
       FAILS — no silent clamp; 008/010 ratified defaults) — **LANDED 2026-09-02**
       (riir-deployer `96009cc`,
-      [Plan 003](../../riir-deployer/.plans/003_genesis_params_deploy_ux_node_sync.md)):
+      `Plan 003`):
       `riir-deploy genesis --params <f>` + `examples/genesis-{devnet,testnet}.yaml`.
       `src/genesis.rs` carries a **committed pin** of the ratified set (`RATIFIED` +
       seven `LeverBoundPin` copies, each field naming its riir-dapps source symbol);
@@ -340,7 +340,7 @@ Proposal 008 (MemoShard).
       not a 3-node gate; `0` = all listed, so devnet's 1 node passes trivially.
 - [x] T3.3 G-DEPLOY on a local 3-node cluster — **RAN 2026-09-02** (riir-deployer
       `96009cc`, record
-      [`.benchmarks/003`](../../riir-deployer/.benchmarks/003_genesis_ux_node_sync_goat.md)):
+      ``.benchmarks/003``):
       `build` → `deploy --dest local3` spawned **three real `mock-chain` processes** on
       three loopback ports → `verify` ran the probe through the actual CLI binary.
       Measured `PASS node-sync — 3/3 node(s) reachable, at height (fleet max 360),
@@ -496,7 +496,7 @@ landed the same day**: T1.1 (riir-dapps `f43c014` / Plan 062 — the signed
 `cargo heal pay --request`, the payee create + link-first + poll-on-credit loop,
 golden-pinned to the service byte-exactly, dapps-side golden `0a4d37a`).
 **Phase 2's T2.1 and ALL of Phase 3 landed the same day** (riir-deployer
-`96009cc` / [Plan 003](../../riir-deployer/.plans/003_genesis_params_deploy_ux_node_sync.md)):
+`96009cc` / `Plan 003`):
 the genesis params yaml validated against a committed pin of the ratified
 008/010 constants (drift FAILS, nothing clamped; the `decay_factor_bp` sentinel
 enforced; `--execute` refused), the TTY selector + the env-gated mainnet

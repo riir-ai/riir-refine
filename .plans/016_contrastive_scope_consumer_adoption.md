@@ -1,7 +1,7 @@
 # Plan 016 — Contrastive-scope consumer adoption (Bench 669 T5 reopen)
 
 **Date:** 2026-08-20
-**Source:** katgpt-rs [Bench 669](../katgpt-rs/.benchmarks/669_contrastive_scope_poc_goat.md) T5 verdict — "a shipped opt-in primitive awaiting its consumer". The issue's own promotion rule: *"if G-gates pass AND a consumer adopts (riir-clippy L4 2D gate or riir-ai engram), promote per GOAT discipline; else record negative result and close."*
+**Source:** katgpt-rs [Bench 669](../../katgpt-rs/.benchmarks/669_contrastive_scope_poc_goat.md) T5 verdict — "a shipped opt-in primitive awaiting its consumer". The issue's own promotion rule: *"if G-gates pass AND a consumer adopts (riir-clippy L4 2D gate or riir-ai engram), promote per GOAT discipline; else record negative result and close."*
 **Primitive:** `katgpt_core::contrastive_scope` (Issue 674 / Research 493 / arXiv:2608.13545) — `ContrastiveScoreTable`, `scope_score D(x)`, `ScopeGate` (κ haircut / θ decline), `oos_probe_battery`.
 
 ## The gap the adoption closes

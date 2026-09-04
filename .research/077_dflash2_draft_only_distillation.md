@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-20
 **Sources:** Inco AI blog ["DFlash 2: Keep Drafting Parallel"](https://inco.ai/blog/dflash2/) · ggml-org/llama.cpp PR [#27342](https://github.com/ggml-org/llama.cpp/pull/27342) @ `5ecbe1a` (built locally at `/Users/katopz/git/llama.cpp`, branch `dflash2`, Metal) · `z-lab/Qwen3.8-27B-DFlash2-GGUF` Q4_K_M (1.14 GB, on disk at `riir-train/data/`) · DFlash paper (Chen et al., ICML 2026)
-**Status:** DISTILLED — POC-A plan filed ([Plan 017](../.plans/017_dflash2_selection_headroom_poc.md) + [Issue 034](../.issues/034_dflash2_selection_headroom_poc.md)); the artifact-based L4 arm (POC-B) is **DEFERRED — show-stopper** (owner call, 2026-08-20: parasitism + the in-house DSpark precedent, §2.1). Only the DFlash2 *primitive* (selection headroom) stays active. Weights kept on disk, unused.
+**Status:** DISTILLED — POC-A plan filed ([Plan 017](../.plans/017_dflash2_selection_headroom_poc.md) + `Issue 034`); the artifact-based L4 arm (POC-B) is **DEFERRED — show-stopper** (owner call, 2026-08-20: parasitism + the in-house DSpark precedent, §2.1). Only the DFlash2 *primitive* (selection headroom) stays active. Weights kept on disk, unused.
 
 ## TL;DR
 

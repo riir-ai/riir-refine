@@ -1,6 +1,6 @@
 # Bench 035 — Entropic (max-seeking) selection mode: measured NEGATIVE on the max metric
 
-> **Issue:** [026](../.issues/026_entropic_selection_mode.md) — T3/T4
+> **Issue:** `026` — T3/T4
 > **Date:** 2026-08-17
 > **Source paper:** arXiv:2601.16175 (TTT-Discover), prior art RS-GRPO arXiv:2509.24261 / RSPO arXiv:2508.01174; distilled at `katgpt-rs/.research/019_TTT_Discover_Test_Time_Training.md` (+ 2026-08-16 addendum)
 > **Verdict:** **NEGATIVE — not promoted.** `SelectionMode::BetaPosterior` stays the default. The variant + harness are kept as the reproducible negative-result artifact (`gemma2_directions` precedent).

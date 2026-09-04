@@ -2,7 +2,7 @@
 
 **Status:** RECORD
 **Date:** 2026-08-18
-**Source:** riir-ai Issue 716 / [Bench 691](../riir-ai/.benchmarks/691_q8kv_sink_guard_goat.md) (landed `e794b0033`, 2026-08-18) + Bench 642 / Issue 639 (2026-08-12) — both root-caused with fixes before distillation
+**Source:** riir-ai Issue 716 / [Bench 691](../../riir-ai/.benchmarks/691_q8kv_sink_guard_goat.md) (landed `e794b0033`, 2026-08-18) + Bench 642 / Issue 639 (2026-08-12) — both root-caused with fixes before distillation
 **Corpus:** 349 → 351 kernel rules (N 19 → 20, D 63 → 64)
 
 ## What was distilled

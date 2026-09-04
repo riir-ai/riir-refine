@@ -5,7 +5,7 @@
 patterns (`scan_single_slot_staging` P6 default; `scan_serial_row_dot` P7
 experimental) + `tests/wgsl_mine_pairs.rs` (the pair fixtures) + the full
 mining run over riir-gpu history with adjudication.
-**Gate:** [Issue 025](../.issues/025_non_syn_surface_scanner.md) T6 — "mine
+**Gate:** `Issue 025` T6 — "mine
 WGSL buggy→fixed pairs from riir-gpu fix history toward Phase 5's reopen
 trigger (≥5 proposer-grade pairs). Every batch re-runs the Issue 017
 retrieval regression gate."

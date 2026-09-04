@@ -1,6 +1,6 @@
 # Plan 004 — kernel_opt Activity Vector Extension (5 → 8 dims)
 
-**Proposal:** [012](../katgpt-rs/.proposals/012_kernel_heal_thermal_moe.md) §"The
+**Proposal:** [012](../../katgpt-rs/.proposals/012_kernel_heal_thermal_moe.md) §"The
 latent-MoE expert selector" — the activity vector must discriminate operation
 classes, not just kernel shapes.
 **Branch:** `develop` (per global rule — no feature branches)
@@ -193,7 +193,7 @@ blocked on GPU).
 - [Plan 003](003_kernel_opt_router_corpus_wiring.md) — documented the C+O
   unreachability + recommended "extend ACTIVITY_DIM from 5 to ~8 with
   operation-class one-hot axes" as the next step.
-- [Proposal 012](../katgpt-rs/.proposals/012_kernel_heal_thermal_moe.md)
+- [Proposal 012](../../katgpt-rs/.proposals/012_kernel_heal_thermal_moe.md)
   §"The latent-MoE expert selector"
-- [Plan 558](../katgpt-rs/.plans/558_variable_rank_domain_expert.md) —
+- `Plan 558` —
   `pick_domain<N, A>` substrate (already generic over A).

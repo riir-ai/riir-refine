@@ -1,7 +1,7 @@
 # Bench 050 — Issue 048 GP acquisition layer POC (NEGATIVE-noise-equivalent)
 
 **Status:** CLOSED 2026-08-27 — verdict `NEGATIVE-noise-equivalent`, recorded + asserted live
-**Issue:** [.issues/048_gp_acquisition_layer.md](../.issues/048_gp_acquisition_layer.md) (removed at close per the noise-reduction rule)
+**Issue:** `.issues/048_gp_acquisition_layer.md` (removed at close per the noise-reduction rule)
 **Source:** ActFlow Eq 10 (arXiv:2606.08802) via [katgpt-rs R510](../../katgpt-rs/.research/510_ActFlow_Certified_Frontier_Expansion.md)
 
 ## What shipped (the seams — permanent, default-inert)

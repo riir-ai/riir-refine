@@ -2,7 +2,7 @@
 
 **Status:** PREREGISTERED 2026-09-02 — prediction written BEFORE any run. Results appended below, prediction section never edited.
 
-**Issue:** [.issues/062_tpr_binding_corpus_fusion.md](../.issues/062_tpr_binding_corpus_fusion.md) T1 (healer corpus) + T2 (rustc_errors).
+**Issue:** `.issues/062_tpr_binding_corpus_fusion.md` T1 (healer corpus) + T2 (rustc_errors).
 **Research:** katgpt-rs `.research/527_TPR_Emergent_Symbolic_Structure_Binding_Algebra.md` (arXiv:2608.29530, McCoy/Soulos/Linzen/Smolensky 2026).
 **Toolchain:** rustc 1.97.0 (2d8144b78 2026-07-07) / clippy 0.1.97, macOS aarch64 (M3 Max).
 

@@ -1,7 +1,7 @@
 # Bench 051 — Issue 049 growing-input conditioning POC (NEGATIVE-no-gain)
 
 **Status:** CLOSED 2026-08-27 — verdict `NEGATIVE-no-gain` per T3's own rule
-**Issue:** [.issues/049_kat_growing_input_conditioning_poc.md](../.issues/049_kat_growing_input_conditioning_poc.md) (removed at close)
+**Issue:** `.issues/049_kat_growing_input_conditioning_poc.md` (removed at close)
 **Source:** katgpt-rs [R512](../../katgpt-rs/.research/512_Meta_n_Fixed_Omega_Growing_Input_PASS.md) (Meta^n, arXiv:2608.24735 — "the gain comes from giving the improver more to read")
 
 ## What shipped (T1 — permanent, arms A/B untouched)

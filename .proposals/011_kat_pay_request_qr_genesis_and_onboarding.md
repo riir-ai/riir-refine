@@ -4,7 +4,7 @@ Status: **draft**
 Branch: `develop` (per global rule — no feature branches)
 Owner: unassigned
 Fusion of: [Proposal 005](005_kat_heal_service_network.md) (KAT service network + payment rails) × [Proposal 007](007_kat_usdc_staking.md) (Solana-Pay rail, staking, authority share) × [Proposal 010](010_kat_yield_ceiling_and_treasury_funded_free_tier.md) (yield ceiling + treasury free tier) × riir-chain [Proposal 008](../../riir-chain/.proposals/008_payment_memo_commitment_and_memoshard.md) (payment memo / MemoShard) × riir-ai [Proposal 040](../../riir-ai/.proposals/040_riir_deployer_game_and_chain_devops.md) (deployer chain domain, devnet/testnet/mainnet topology)
-Related: riir-deployer [Proposal 001](../../riir-deployer/.proposals/001_riir_control_cf_worker_do.md) (control plane / node tiers), riir-dapps Plans 004/005/013 (Stripe / Solana-Pay rails / kat-service worker shell), [Proposal 003](003_binary_only_distribution.md) (binary-only distribution — governs the install surface)
+Related: riir-deployer `Proposal 001` (control plane / node tiers), riir-dapps Plans 004/005/013 (Stripe / Solana-Pay rails / kat-service worker shell), [Proposal 003](003_binary_only_distribution.md) (binary-only distribution — governs the install surface)
 
 ## TL;DR
 

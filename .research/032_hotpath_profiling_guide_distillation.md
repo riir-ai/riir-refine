@@ -3,7 +3,7 @@
 **Date:** 2026-08-14
 **Source:** [hotpath.rs/blog/profiling-rust-guide](https://hotpath.rs/blog/profiling-rust-guide) — "Profiling Rust: The Complete Guide - From SQL Queries to CPU Sampling", Paweł Urbanek, published 2026-08-11. A tool-vendor guide (hotpath-rs profiler) walking 7 profiling layers (SQL N+1, HTTP sequential→parallel, I/O throughput, lock wait/acquire split, channel queue depth, allocation counting, CPU sampling), each with a before/after fixture measured by the author's own tool.
 **Target:** `riir-clippy` — `rust_perf` domain (corpus + Pareto bench validator). Not a paper; an engineering blog. Classified as rule-distillation + methodology input, not novel research.
-**Verdict:** **Gain** → [Issue 014](../.issues/014_rust_perf_v4_profiling_guide_rules_alloc_axis.md). Not Super-GOAT (Q1 prior art exists — see §2; Q2/Q3 no new behavior class or product selling point; this is internal tooling).
+**Verdict:** **Gain** → `Issue 014`. Not Super-GOAT (Q1 prior art exists — see §2; Q2/Q3 no new behavior class or product selling point; this is internal tooling).
 
 ## 1. What the guide covers (author's measured numbers)
 
@@ -68,7 +68,7 @@ Guard acquired before a slow await, released after → fetch first, guard only a
 
 ## References
 
-- [Issue 014](../.issues/014_rust_perf_v4_profiling_guide_rules_alloc_axis.md) — execution
+- `Issue 014` — execution
 - Bench 013/015/016/017 — Pareto validator methodology + rejection precedent
 - dhat-rs (nnethercote) — heap-usage testing prior art
 - riir-mmorpg-examples G4 gates — in-workspace CountingAllocator precedent

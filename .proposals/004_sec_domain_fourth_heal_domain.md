@@ -1,6 +1,6 @@
 # Proposal 004 — The `sec` Domain: Security-Pattern Healing as the Fourth HealDomain
 
-Status: **Phase 0+1 LANDED 2026-08-22** ([Bench 046](../.benchmarks/046_sec_domain_phase0_1_goat.md) / [Research 079](../.research/079_sec_domain_phase0_1.md): 6 rules shipped of 11 candidates; trait fit held, caveat 5 discharged; Phase 2 unblocked-but-deferred). Loop unblock record: [Issue 037](../.issues/037_e2e_self_evolve_adoption_proof.md) CLOSED (all gates green incl. A1 cadence).
+Status: **Phase 0+1 LANDED 2026-08-22** ([Bench 046](../.benchmarks/046_sec_domain_phase0_1_goat.md) / [Research 079](../.research/079_sec_domain_phase0_1.md): 6 rules shipped of 11 candidates; trait fit held, caveat 5 discharged; Phase 2 unblocked-but-deferred). Loop unblock record: `Issue 037` CLOSED (all gates green incl. A1 cadence).
 Branch: `develop` (per global rule — no feature branches)
 Owner: unassigned
 Fusion of: Plan 001 (HealDomain meta-architecture) × Research 078 (seed inventory) × the `clippy_verify`/`fix_verify` validator shapes

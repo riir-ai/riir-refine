@@ -14,7 +14,7 @@
 
 A 6-week human-steered AI research program (reasoning model + coding agent + bulletin + file-based session reports; ~240 sessions, 2,091 reasoning calls, 152M tokens, ~$5,400) tightened the Grothendieck-constant bounds. The load-bearing findings for THIS repo are about the harness, not the math: (1) a clean decomposition of long-horizon research into **technical execution / research judgement / research-state representation**, with measured asymmetry — execution strong, the two global functionalities weak; (2) the **retelling-bias failure mode**: iterated compression of the curated state loses caveats and evidential status while headline values survive (an uncertified numerical score got promoted to a record; a proved lemma was lost and reproved 25 days later); (3) humans supplied ~40 program-level directives, the decisive one being "stop varying the failing search — synthesize the failures into an obstruction theorem."
 
-**Distilled for riir-clippy (self-adaptive agent loop):** our `LatentFixMemory` (`FixTrajectory`) has exactly the schema the paper's session-44 incident predicts will fail: `success_count`/`fail_count` u32s + boolean `record_outcome`, **no evidential tier, no withdrawn transition, no trust axis in retrieval**. A fix that passed only the syn-parse gate is indistinguishable in memory from one that passed the full validator — and iterated retrieval+resummarization launders the former into the latter. Fix: an `EvidenceTier` axis (Certified / Heuristic / Withdrawn) fused from GAMER's Q+/Q− split + `adaptive_drafter`'s verified-fix pool. Filed as [Issue 021](../.issues/021_evidential_status_memory_axis.md).
+**Distilled for riir-clippy (self-adaptive agent loop):** our `LatentFixMemory` (`FixTrajectory`) has exactly the schema the paper's session-44 incident predicts will fail: `success_count`/`fail_count` u32s + boolean `record_outcome`, **no evidential tier, no withdrawn transition, no trust axis in retrieval**. A fix that passed only the syn-parse gate is indistinguishable in memory from one that passed the full validator — and iterated retrieval+resummarization launders the former into the latter. Fix: an `EvidenceTier` axis (Certified / Heuristic / Withdrawn) fused from GAMER's Q+/Q− split + `adaptive_drafter`'s verified-fix pool. Filed as `Issue 021`.
 
 ---
 
@@ -82,7 +82,7 @@ The only certified/uncertified split in the crate is one level up (`adaptive_dra
 
 ### 2.3 The fix (fused from three precedents)
 
-**`EvidenceTier` axis on `FixTrajectory`** — see [Issue 021](../.issues/021_evidential_status_memory_axis.md):
+**`EvidenceTier` axis on `FixTrajectory`** — see `Issue 021`:
 
 - **GAMER Q+/Q− (katgpt-rs R473):** decouple success-rate from violation-rate so a 50%-wins-50%-catastrophes fix isn't averaged into neutrality. Direct analog: decouple *how often a fix fires* from *how it was verified*.
 - **`adaptive_drafter` verified pool:** the Certified tier's admission rule already exists (validator-pass).

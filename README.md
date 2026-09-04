@@ -68,7 +68,7 @@ scope-limit conclusion is unchanged):
 | e2e throughput vs Bonsai-27B | ~74,000× tok/s | ~68,000× tok/s |
 
 The L1 drafter returns corpus `fixed_code` **verbatim** — the input code selects
-*which* stored fix to return but never influences the text ([Issue 010](.issues/010_drafter_cannot_generalize_heldout_code.md)).
+*which* stored fix to return but never influences the text (`Issue 010`).
 On unseen code it therefore emits a valid-but-wrong function, and L2 reports
 `parses = true` on it, so **a cache miss is currently silent**. Deploy it as a
 cache with a fallback path, and do not read the throughput number as a

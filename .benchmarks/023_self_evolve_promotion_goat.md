@@ -1,7 +1,7 @@
 # Bench 023 — Issue 018: `self_evolve` promotion with graceful oracle degradation
 
 **Date:** 2026-08-16.
-**Issue:** [018](../.issues/022_corpus_real_clippy_drift.md) (resolved + removed; the OPEN follow-up found during this GOAT is Issue 022 — corpus drift).
+**Issue:** `018` (resolved + removed; the OPEN follow-up found during this GOAT is Issue 022 — corpus drift).
 **Scope:** promote the self-evolution layer (memory + EMA learning) from
 opt-in to default-on, splitting the oracle-free memory half from the
 oracle-gated learning half. Promotion + degradation plumbing only — no new

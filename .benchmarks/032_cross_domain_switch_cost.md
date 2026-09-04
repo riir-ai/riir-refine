@@ -1,7 +1,7 @@
 # Bench 032 — Issue 024: cross-domain switch-cost measurement (retrieval axis)
 
 **Commit:** `e34ade9` (measurement + mitigation) · this doc (verdict record)
-**Filed from:** [Issue 024](../.issues/024_cross_domain_switch_cost_measurement.md) · [katgpt-rs Research 484](../../katgpt-rs/.research/484_Skill_Entropy_Directed_Switch_Cost.md)
+**Filed from:** `Issue 024` · [katgpt-rs Research 484](../../katgpt-rs/.research/484_Skill_Entropy_Directed_Switch_Cost.md)
 **Question (falsifiable):** does an anti-pattern retrieve its rule worse when a *different domain's* anti-pattern is co-present in the span than in isolation — the Skill-Entropy paper's switch-cost failure class, asked of our dense fan-out retrieval?
 
 ## Method (paired, fresh-baseline)

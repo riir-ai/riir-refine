@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-16
 **Feature:** `clippy_lints` (default-on) — corpus + proposers, no new Cargo features
-**Issue:** [016](../.issues/016_clippy_structural_lint_expansion.md) (resolved + removed per the noise-reduction rule)
+**Issue:** `016` (resolved + removed per the noise-reduction rule)
 
 ## What shipped
 
