@@ -1465,8 +1465,7 @@ pub fn service_url_for_command() -> String {
 #[must_use]
 pub fn lease_kill_switched() -> bool {
     std::env::var("RIIR_HEAL_KAT_LEASE")
-        .ok()
-        .is_some_and(|v| matches!(v.as_str(), "0" | "off" | "false" | "no"))
+        .is_ok_and(|v| matches!(v.as_str(), "0" | "off" | "false" | "no"))
 }
 
 // ── the QR asset: render params, commitment, and the caveat-#3 pins ─────
