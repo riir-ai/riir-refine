@@ -906,7 +906,28 @@ Queues empty after this entry → idle report.
 
 ## Post-mining intake (compact — full records in `.research/108_mining_queue_snapshot_history.md`)
 
-All classes closed; the standing divergence (P4 residual) has no action planned.
+One open class (below); the standing divergence (P4 residual) has no action planned.
+
+- [ ] **2026-09-04 P10 NEW — LTO fold-elimination kills timing gates whose work
+      has a dead result** (found by the katgpt-rs Issue 723 Class A2 fixes,
+      commit `b4cef008`): rustc 1.98.1 + fat LTO eliminates inlined-callee
+      work whose outer result is dead, EVEN THROUGH `black_box` INSIDE the
+      callee — measured by a direct-call probe in one binary: used result
+      16.6 µs vs `let _ = f()` ≈ 0. The rv gate measured 0 ns → NaN% for its
+      entire release life. Fix patterns proven in-tree: (1) xorshift
+      data-dependent work + caller-consumed sinks (`black_box` at the CONSUMER);
+      (2) a bare CONSTANT work fn still folds through a sink (XOR of a
+      constant 2M times = 0) — the sink must mix per-iteration data; (3)
+      equal non-pruner work in both arms (one shared timed fn) so the ratio
+      isolates the delta; (4) interleaved (baseline, candidate) chunks with a
+      median-of-ratios for bar-adjacent gates — two sequential 2M arms read
+      +5.2% and +21.7% thirty seconds apart, the paired median read −0.0%/
+      +0.6% twice. Route: rust_perf measurement-honesty rule candidate
+      (`dead-result-timing-loop-eliminated-under-lto` class) — the detector
+      is the loud zero-baseline assert; the proposer would need CFG-level
+      dataflow (suggest-only first). Evidence: katgpt-rs
+      `tests/bench_gdsd_modelless.rs` header + `tests/rv_gated_routing.rs`
+      sink docs.
 
 - [x] **2026-09-05 P9 NEW — clippy 1.98 new-lint corpus candidates** (found by the
       1.98.1 toolchain re-gate sweep across the workspace; measured populations in
