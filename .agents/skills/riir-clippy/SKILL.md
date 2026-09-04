@@ -42,11 +42,11 @@ still applies whenever a measurement saturates the box, at any hour.
 
 | # | Item | How |
 |---|------|-----|
-| 1 | **Fix open issues** | Scan `.issues/` across repos, oldest first, skip deferred. Fix → validate → doc → remove file (noise-reduction rule). |
+| 1 | **Fix open issues — ISSUE-FIRST GATE** | Scan `.issues/` in THIS repo first, then every sibling repo (scan order below), oldest first, skip deferred. Items 5/11/12 are FORBIDDEN while any actionable issue remains anywhere. Fix → validate → doc → remove file (noise-reduction rule). |
 | 2 | **Finish in-flight plans** | `.plans/` with unchecked `- [ ]` — complete the next task group, honor `- [-]` defers. Rank plans from ORIGIN, never the working tree (Discipline: plan_read_origin). |
 | 3 | **Clippy sweep, all repos** | Heal-driven where possible (see heal protocol below), manual `cargo clippy --all-targets` otherwise. |
 | 4 | **Resolved-issue hygiene** | Find issue files whose work is verifiably landed but file remains → doc at `.docs`/AGENTS.md → `rm` the file. |
-| 5 | **Batch mining + heal dry-run** | The centerpiece — see the two protocols below. |
+| 5 | **Batch mining + heal dry-run — GATED on 1–4 exhausted across ALL repos** | The centerpiece — see the two protocols below. If issues/plans exist anywhere, mining is a mispick, not a valid unit. |
 | 6 | **boundary-guard routine check** | Run `scripts/ci_boundary_guard.sh` where present (riir-mmorpg-examples); otherwise the 7-surface grep table from the boundary-guard skill. File violations as `.issues/` — do NOT fix in the same commit as detection. Record the run in the skill's Run log. |
 | 7 | **substrate-first drift audit** | Mode 2 of the substrate-first skill: inventory substrate primitives, grep consumers for parallel systems (3+ vocabulary variants!), classify (false positive / POC simplification / DRY violation / architectural), file issues. |
 | 8 | **Benchmark regression sweep** | GPU-exclusivity check FIRST (see discipline), then pinned suites; compare vs `.benchmarks/` baselines; drift → bisect → root-cause fix → new bench file. |
@@ -59,6 +59,27 @@ still applies whenever a measurement saturates the box, at any hour.
 
 Items 6 + 7 run BEFORE item 8 (benchmarks) by design — boundary/DRY
 findings are cheaper to fix before you benchmark around them.
+
+**Scan order + racing partition (why: 2026-09-04, three idle sessions
+all raced to mining while zed had 6 open issues — "across repos" was
+never grounded in actual repo roots).** The workspace spans TWO roots;
+enumerate both, never guess from cwd alone:
+1. **This repo** — the checkout your session runs in: `ls .issues/`.
+2. **Sibling repos, both roots** — `ls -d /Users/katopz/git/*/.issues`
+   AND, when this session's root differs, `ls -d <session-parent>/*/.issues`
+   (e.g. `/Volumes/SDXC1TB/git` holds zed + the zed-mcp-server-* extensions).
+   Oldest issue first across the merged list.
+3. Item 2 (plans) follows the SAME order; items 3–4 next.
+4. Item 5 (mining) + 11/12 (pre-mining research) ONLY when 1–4 are
+   exhausted across ALL repos.
+
+**One repo per session** — N idle sessions must not pile on one repo
+then all fall through to mining. Before picking, partition: if `ls -lat`
+or `git status` shows a sibling session mid-flight in repo X (Issue-665
+discipline), take repo Y's issues, not X, and never mining as the
+diversion. If ALL repos' issues/plans are claimed by live sessions,
+claim an uncontended item from 3–4/6–14 instead — mining stays gated
+until the claims clear.
 
 ## Protocol A — batch mining (queue item 5) — PRE-mining (external sources)
 
