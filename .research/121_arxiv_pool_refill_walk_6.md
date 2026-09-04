@@ -179,6 +179,44 @@ questions:
   dedup. If the Ada probe REFUTES the knee on our part, the rule lands as
   H100-scoped annotation-only or dies — demote-loser without sentiment.
 
+**RESULT (2026-09-04, Plan 073 T0a executed on the 4090 in the post-matrix window —
+Issue 504 closed, GPU compute-quiet, sibling lane already yielded): the knee does NOT
+transfer to Ada.** Verdict = pre-registered shape (b): H100-scoped annotation-only,
+no rule landed, T2 rider MOOT (its precondition — "T1 lands as a rule" — failed).
+
+- Instrument: the plan's pre-registered standalone CUDA sm_89 probe
+  (`scripts/ldg_probe/probe_873.cu`; K ∈ {1,2,4,8,16} template arms; TWO grid regimes
+  isolating depth from concurrency — sparse 64×256 ≈ 128 thr/SM so K=1 sits below DRAM
+  saturation per Little's law, saturating 512×256 = 1024 thr/SM; fixed total work
+  4096×16B loads/thread; 2×512 MiB allocation-swept halves + base-offset rotation;
+  3 round-robin interleaved reps; K independent 2-fadd consume chains so the 16B load
+  cannot narrow). ptxas: all five arms 40–44 regs, 0 spills — the anticipated high-K
+  spill caveat was refuted pre-run.
+- Pooled results (3 runs × 3 reps = 9 samples/cell, GB/s medians, % of the 1008
+  nominal): sparse K=1/2/4/8/16 = **935.5 / 951.6 / 951.5 / 948.3 / 948.9**
+  (92.8 / 94.4 / 94.4 / 94.0 / 94.1%); saturating = 869.4 / 875.7 / 896.5 / 854.2 /
+  866.4. Peak observed 958.8 GB/s = 95.1% of nominal (vs the production lm_head's
+  ~854 GB/s Bench-684-era figure — the pure-streaming shape does slightly better
+  than a real GEMV, as expected: no compute interleave).
+- Reading: bandwidth SATURATES at K=2 and stays flat through K=16 (−0.3% K=2→16 —
+  noise). No −35%-by-K=8 decline in either grid. The only sub-plateau cell is K=1 at
+  −1.7%: depth past ~2 buys nothing but costs nothing. The paper's degradation regime
+  is ABSENT on Ada for this shape — consistent with the paper's own prevalence-map
+  bound (179/288 curves decline, only 8 saturate, absent at narrow-width/low-occupancy
+  cells: a config-dependent regime, never a universal property; our part lands on the
+  absent side).
+- Honest caveats: pure-load microbench, no compute interleave (the paper's regime
+  too); Ada is monolithic — the paper's 2-die control has no Ada analogue; the
+  saturating grid's ±8% within-cell spread (min ~797 / max ~959) makes it
+  non-discriminating (recorded, not hidden); single-rep same-window transients down
+  to 557.8 GB/s (desktop-compositor contention) absorbed by interleaved-rep medians;
+  verdict-stable ×3 (three separate invocations agree on the shape).
+- Landing: B92 `cpasync-multistage-tile-pipeline` gains the Ada-neutral rider (corpus
+  prose only, zero rule-count delta — kernel_opt stays 466); T0b's production audit
+  stands unchanged (decode GEMV at natural K≈2 = optimal either way; the
+  Issue-734-T5 `__ldcs` −1.2% Ada regression remains B77 cache-policy territory).
+  Raw CSVs: `scripts/ldg_probe/run{1,2,3}.csv`.
+
 ### 2608.15531 (FlashQuant) — headline REFUTED for direct adoption; mechanism CONFIRMED as a queue-able family member
 
 - **(a) Regime: batch≥8, NOT our batch-1 decode.** The kernel pads inputs to a
