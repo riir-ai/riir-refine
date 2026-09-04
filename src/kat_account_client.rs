@@ -317,7 +317,8 @@ pub fn evaluate_welcome(
     if !balance.granted {
         return WelcomeGate::Withheld {
             reason: "the service ledger has no free-tier grant row for this account yet — \
-                     run `cargo heal sync` once so the service sees the key"
+                     run `cargo heal account` (or `cargo heal sync`) once — either \
+                     claims the once-per-key free-tier grant"
                 .to_string(),
         };
     }

@@ -101,6 +101,138 @@ pub fn faucet_message(requester_pubkey: &[u8; 32]) -> Vec<u8> {
     msg.extend_from_slice(requester_pubkey);
     msg
 }
+/// MIRROR of dapps `claim_message` (T079) — the exact signed bytes:
+/// `kat:payreq:claim:v1:` ‖ `pubkey[32]`. Signed by the ACCOUNT KEY: the
+/// onboarding step that mints the once-per-key free-tier grant
+/// (`FREE_GRANT_KAT`, the `granted` flag the welcome gate reads).
+///
+/// **Nothing request-shaped rides the message** — the amount is the
+/// ledger's genesis constant and the once-per-key bound is the ledger's
+/// `AlreadySettled` refusal, so a captured signature is worth exactly one
+/// replay of a claim the key holder was already entitled to.
+///
+/// **Do not drift**: the service verifies over its own composer, and the
+/// golden digest test ([`tests::claim_message_golden_digest`]) holds the
+/// two sides together.
+#[must_use]
+pub fn claim_message(pubkey: &[u8; 32]) -> Vec<u8> {
+    let mut msg = Vec::with_capacity(20 + 32);
+    msg.extend_from_slice(b"kat:payreq:claim:v1:");
+    msg.extend_from_slice(pubkey);
+    msg
+}
+
+/// The account-claim signed body — `POST /account/claim`. The wire
+/// carries the pubkey and the signature and **nothing else** (same
+/// discipline as [`faucet_request_body`]: nothing on the wire for a
+/// requester to choose or an attacker to inflate).
+#[must_use]
+pub fn claim_request_body(key: &ed25519_dalek::SigningKey) -> String {
+    use ed25519_dalek::Signer as _;
+    let pubkey = key.verifying_key().to_bytes();
+    let signature = key.sign(&claim_message(&pubkey));
+    serde_json::json!({
+        "pubkey_hex": hex_encode(&pubkey),
+        "signature_hex": hex_encode(&signature.to_bytes()),
+    })
+    .to_string()
+}
+
+/// The parsed claim response — the 200 body of `POST /account/claim`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClaimResponse {
+    /// The account id the service derived from the signed key (32 hex).
+    pub account_id_hex: String,
+    /// Whether the once-per-key free-tier grant is now applied — always
+    /// `true` on a 200.
+    pub granted: bool,
+    /// `true` when this call was a REPLAY (the grant already existed) —
+    /// an idempotent read, not an error.
+    pub already: bool,
+    /// The account's balance after the claim, micro-units.
+    pub balance_micro: i64,
+    /// What THIS claim credited (0 on a replay).
+    pub claimed_micro: i64,
+}
+
+/// Parse the `POST /account/claim` 200 body.
+///
+/// # Errors
+///
+/// A human-readable string when the body is not JSON, carries the
+/// service's `error`, or is missing a field.
+pub fn parse_claim_response(body: &[u8]) -> Result<ClaimResponse, String> {
+    let v: serde_json::Value = serde_json::from_slice(body)
+        .map_err(|_| "the claim response was not JSON".to_string())?;
+    if let Some(err) = v.get("error").and_then(serde_json::Value::as_str) {
+        return Err(format!("the service refused the claim — {err}"));
+    }
+    Ok(ClaimResponse {
+        account_id_hex: v
+            .get("account_id")
+            .and_then(serde_json::Value::as_str)
+            .ok_or("the claim response carried no `account_id`")?
+            .to_string(),
+        granted: v
+            .get("granted")
+            .and_then(serde_json::Value::as_bool)
+            .ok_or("the claim response carried no `granted`")?,
+        already: v
+            .get("already")
+            .and_then(serde_json::Value::as_bool)
+            .ok_or("the claim response carried no `already`")?,
+        balance_micro: v
+            .get("balance_micro")
+            .and_then(serde_json::Value::as_i64)
+            .ok_or("the claim response carried no `balance_micro`")?,
+        claimed_micro: v
+            .get("claimed_micro")
+            .and_then(serde_json::Value::as_i64)
+            .ok_or("the claim response carried no `claimed_micro`")?,
+    })
+}
+
+/// The ensure-grant flow (T079): claim the once-per-key free-tier grant
+/// if the account does not have it yet. Read-first — a granted account
+/// costs ZERO requests, so `sync`/`account` can call this unconditionally.
+///
+/// Returns the claim response, or `None` when the balance read showed the
+/// grant already in place (nothing was sent).
+///
+/// # Errors
+///
+/// A human-readable string on an unreachable service, a non-200, or an
+/// unparseable body.
+#[cfg(feature = "kat_transport")]
+pub fn ensure_grant_flow(
+    transport: &dyn PayreqTransport,
+    key: &ed25519_dalek::SigningKey,
+    account_hex: &str,
+) -> Result<Option<ClaimResponse>, String> {
+    let balance_body = match transport.get_balance(account_hex) {
+        HttpResponse::Ok(b) => b,
+        HttpResponse::Status(c) => {
+            return Err(format!(
+                "the balance read answered HTTP {c} — cannot decide the claim;                  run `cargo heal account` once the service is reachable"
+            ))
+        }
+        HttpResponse::NotModified => return Err("the balance read answered 304".to_string()),
+        HttpResponse::Error(e) => {
+            return Err(format!("the service is unreachable ({e}) — cannot decide the claim"))
+        }
+    };
+    let balance = crate::kat_account_client::parse_balance(&balance_body)?;
+    if balance.granted {
+        return Ok(None);
+    }
+    let body = match transport.post_claim(&claim_request_body(key)) {
+        HttpResponse::Ok(b) => b,
+        HttpResponse::Status(c) => return Err(format!("the claim was refused (HTTP {c})")),
+        HttpResponse::NotModified => return Err("the claim answered 304".to_string()),
+        HttpResponse::Error(e) => return Err(format!("the claim failed: {e}")),
+    };
+    parse_claim_response(&body).map(Some)
+}
 
 /// The faucet-request signed body — `POST /payreq/faucet`.
 ///
@@ -250,6 +382,16 @@ pub trait PayreqTransport {
     /// is an absence that compiles, and this one moves money. Every
     /// transport states its faucet posture explicitly.
     fn post_faucet(&self, json: &str) -> HttpResponse;
+    /// `GET /balance?acct=` — the read the claim decision consumes
+    /// (grant already in place?).
+    fn get_balance(&self, acct_hex: &str) -> HttpResponse;
+    /// `POST /account/claim` (signed JSON body) → 200 with
+    /// `{"account_id","granted","already","balance_micro","claimed_micro"}`.
+    ///
+    /// Deliberately NOT given a default implementation, same posture as
+    /// [`Self::post_faucet`]: this mints the free-tier grant. Every
+    /// transport states its claim posture explicitly.
+    fn post_claim(&self, json: &str) -> HttpResponse;
 }
 
 /// The ureq HTTP transport over the shared service base URL (the
@@ -381,6 +523,14 @@ impl PayreqTransport for HttpPayreqTransport {
 
     fn post_faucet(&self, json: &str) -> HttpResponse {
         self.post_json("/payreq/faucet", json)
+    }
+
+    fn get_balance(&self, acct_hex: &str) -> HttpResponse {
+        self.get(&format!("/balance?acct={acct_hex}"))
+    }
+
+    fn post_claim(&self, json: &str) -> HttpResponse {
+        self.post_json("/account/claim", json)
     }
 }
 
@@ -902,6 +1052,111 @@ mod tests {
             "d3907ac379aa29f437a5439e29efa724934093f8d62ae43d71e4006fa7b8ee02"
         );
     }
+    /// THE cross-repo CLAIM golden (T079) — riir-dapps
+    /// `tests/kat_payreq.rs::claim_message_golden_digest` pins the SAME
+    /// two digests, computed independently of BOTH implementations, so
+    /// the client mirror cannot drift from the verifying side.
+    #[test]
+    fn claim_message_golden_digest() {
+        let digest = |pk: &[u8; 32]| {
+            let mut h = blake3::Hasher::new();
+            h.update(&claim_message(pk));
+            h.finalize().to_hex().to_string()
+        };
+        assert_eq!(
+            digest(&[0x5Au8; 32]),
+            "d9256f89b00a68b64516c0aa1a1dd9c1955507ab7f3ffcff21a9524a5c4734f8"
+        );
+        assert_eq!(
+            digest(&[9u8; 32]),
+            "00f2801ddad51fb906aad37a40936c872191c77591b8c099c9b6b844d6043543"
+        );
+    }
+
+    /// The claim body carries the pubkey and the signature and NOTHING
+    /// else — nothing on the wire for a requester to choose or an
+    /// attacker to inflate.
+    #[test]
+    fn the_claim_body_carries_no_amount() {
+        let key = ed25519_dalek::SigningKey::from_bytes(&[3u8; 32]);
+        let body = claim_request_body(&key);
+        let v: serde_json::Value = serde_json::from_str(&body).expect("json");
+        assert_eq!(v.as_object().expect("object").len(), 2, "pubkey + signature only");
+        assert!(v.get("pubkey_hex").is_some());
+        assert!(v.get("signature_hex").is_some());
+        assert!(v.get("amount").is_none());
+        assert!(v.get("amount_micro").is_none());
+    }
+
+    /// The ensure-grant flow: read-first (granted ⇒ NO post), claim on
+    /// missing grant, idempotent replay handled.
+    #[cfg(feature = "kat_transport")]
+    #[test]
+    fn ensure_grant_claims_once_and_is_a_noop_when_granted() {
+        use std::cell::RefCell;
+
+        struct ClaimMock {
+            granted: RefCell<bool>,
+            claims: RefCell<u32>,
+        }
+        impl PayreqTransport for ClaimMock {
+            fn post_create(&self, _json: &str) -> HttpResponse {
+                unimplemented!()
+            }
+            fn get_request(&self, _id: &str) -> HttpResponse {
+                unimplemented!()
+            }
+            fn get_invoice(&self, _id: &str) -> HttpResponse {
+                unimplemented!()
+            }
+            fn post_faucet(&self, _json: &str) -> HttpResponse {
+                unimplemented!()
+            }
+            fn get_balance(&self, acct_hex: &str) -> HttpResponse {
+                let granted = *self.granted.borrow();
+                HttpResponse::Ok(
+                    serde_json::json!({
+                        "account_id": acct_hex,
+                        "balance_micro": if granted { 100_000_000 } else { 0 },
+                        "granted": granted,
+                    })
+                    .to_string()
+                    .into_bytes(),
+                )
+            }
+            fn post_claim(&self, _json: &str) -> HttpResponse {
+                *self.claims.borrow_mut() += 1;
+                self.granted.replace(true);
+                HttpResponse::Ok(
+                    serde_json::json!({
+                        "account_id": "ab".repeat(16),
+                        "granted": true,
+                        "already": false,
+                        "balance_micro": 100_000_000,
+                        "claimed_micro": 100_000_000,
+                    })
+                    .to_string()
+                    .into_bytes(),
+                )
+            }
+        }
+        let key = ed25519_dalek::SigningKey::from_bytes(&[4u8; 32]);
+
+        // Not granted: exactly one claim POST, granted flips.
+        let mock = ClaimMock { granted: RefCell::new(false), claims: RefCell::new(0) };
+        let out = ensure_grant_flow(&mock, &key, &"ab".repeat(16)).expect("claimed");
+        let claim = out.expect("a claim happened");
+        assert!(!claim.already);
+        assert_eq!(claim.claimed_micro, 100_000_000);
+        assert_eq!(*mock.claims.borrow(), 1);
+
+        // Granted: read-first, ZERO posts.
+        let out = ensure_grant_flow(&mock, &key, &"ab".repeat(16)).expect("read ok");
+        assert!(out.is_none(), "no second claim");
+        assert_eq!(*mock.claims.borrow(), 1, "read-first: the replay never hit the wire");
+    }
+
+
 
     /// The layout the golden is a digest OF — asserted separately so a
     /// re-pin cannot quietly change the shape, and so the four payreq
@@ -1328,6 +1583,12 @@ mod tests {
                 // channel (T1.8) has its own mocks in `kat_wetrun`.
                 unimplemented!()
             }
+            fn get_balance(&self, _acct_hex: &str) -> HttpResponse {
+                unimplemented!()
+            }
+            fn post_claim(&self, _json: &str) -> HttpResponse {
+                unimplemented!()
+            }
         }
 
         let key = ed25519_dalek::SigningKey::from_bytes(&[0xC5; 32]);
@@ -1390,6 +1651,12 @@ mod tests {
             assert_eq!(v["pubkey_hex"].as_str().map(str::len), Some(64));
             assert_eq!(v["signature_hex"].as_str().map(str::len), Some(128));
             self.reply.clone()
+        }
+        fn get_balance(&self, _acct_hex: &str) -> HttpResponse {
+            unimplemented!("the faucet flow must never read a balance")
+        }
+        fn post_claim(&self, _json: &str) -> HttpResponse {
+            unimplemented!("the faucet flow must never claim the grant")
         }
     }
 
@@ -1555,6 +1822,12 @@ mod tests {
                 // channel (T1.8) has its own mocks in `kat_wetrun`.
                 unimplemented!()
             }
+            fn get_balance(&self, _acct_hex: &str) -> HttpResponse {
+                unimplemented!()
+            }
+            fn post_claim(&self, _json: &str) -> HttpResponse {
+                unimplemented!()
+            }
         }
         let key = ed25519_dalek::SigningKey::from_bytes(&[1u8; 32]);
         let err = pay_request_flow(
@@ -1599,6 +1872,12 @@ mod tests {
             fn post_faucet(&self, _json: &str) -> HttpResponse {
                 // This mock scripts the PAY-request flow only. The faucet
                 // channel (T1.8) has its own mocks in `kat_wetrun`.
+                unimplemented!()
+            }
+            fn get_balance(&self, _acct_hex: &str) -> HttpResponse {
+                unimplemented!()
+            }
+            fn post_claim(&self, _json: &str) -> HttpResponse {
                 unimplemented!()
             }
         }

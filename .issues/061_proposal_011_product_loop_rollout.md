@@ -14,8 +14,10 @@ produces the live telemetry [Issue 060](060_proposal_008_remainder_new_plan_and_
 T2.3 was waiting on, and runs T4.1's shipped wet-run harness against a real service
 instead of a scripted one. **Tier 0 (devnet + testnet, operator-owned accounts only,
 no fiat, no custody) is AUTHORIZED and needs no counsel**; Tiers 1 and 2 carry the gates.
-One owner act now blocks a shipped surface: `gist-rs/cargo-heal` has never been created,
-so neither install one-liner is runnable (068 D9).
+One owner act still blocks a shipped surface: `gist-rs/cargo-heal` has never been created,
+so neither install one-liner is runnable (068 D9). The devnet wet-run (T4.4a) reached
+steps 1–4 PASS live on 2026-09-05; step 5 waits on the refund-leg design decision
+(Plan 079).
 Phase 1 closed out 2026-09-02 with T1.2/T1.5 (riir-dapps `db69499`),
 T1.6 (`faa05d0`) and T1.7 (`891f9fd`) — those four rows had LANDED but still
 read `[-]` here, because each dapps unit was instructed not to edit this shared
@@ -524,16 +526,35 @@ Proposal 008 (MemoShard).
       dist repo has **never been created** (Proposal 003 T1.1), so neither
       one-liner is runnable yet. Publishing binaries built from private source
       is an owner/security decision.
-- [ ] **T4.4a — DEVNET wet-run (068 D7). NEXT EXECUTABLE — T2.0 has landed.**
-      Run the shipped six-step harness against the devnet cluster T2.0 stands up.
-      This is the first time the steps, G-WET's bit-unchanged supply assertion, and
-      the crank's treasury-debit path meet an **actual** service rather than the
-      scripted one they were proven against — and the happy-path tests currently
-      script an explicitly lowered `treasury_grant_floor` for isolation, so devnet is
-      also the first run at the real floor (1,000 bp / 100 K KAT runway,
-      riir-dapps `bf2215d`+`3eacd6c`). Money legs need a local
-      `RIIR_HEAL_KAT_CRANK_TOKEN`; `POST /admin/crank/daily` is bearer-gated
-      fail-closed and is what settles a faucet row.
+- [-] **T4.4a — DEVNET wet-run (068 D7). STEPS 1–4 PASS LIVE; step 5 blocked on a
+      harness-design decision (owner).** [Plan 079](../.plans/079_kat_account_claim_grant_route.md),
+      2026-09-05. The first run found THREE missing production surfaces, all landed
+      (riir-dapps `kat-service` + `riir-dapps/src/kat`, riir-clippy client + harness):
+      (1) the **account-claim grant route** — `POST /account/claim`, the once-per-key
+      `FREE_GRANT_KAT` + the `granted` flag the welcome gate reads; `KatLedger::grant`
+      had ZERO production call sites, so every fresh account withheld at step 1 on a
+      state the service could not mint (the CLI hint named `cargo heal sync`, which
+      ingests into the MINING plane and never touches the ledger). (2) the
+      **treasury-fund route** — `POST /admin/treasury/fund` (ops bearer = the crank
+      token, exactly-once per `event_id_hex` via `record_mint_demand`): a fresh ledger's
+      zero-treasury float made every credit skip `skipped_treasury`; the payment rails
+      that were designed to fund it are Tier-2 and not live. (3) the **sync wire
+      contract fix** — the harness parsed `recorded` (Plan 066's assumed shape); the
+      service answers `accepted`/`rows_new`/`rows_refreshed`/`rows_terminal_skipped`
+      (Plan 015's shape, its e2e is the authority). Plus the `KAT_FAUCET_DAILY_CAP_KAT`
+      dev knob (the `KAT_CRANK_ALARM_SECS` posture). **Live proof** (wrangler dev on
+      loopback, crank-warm → funded → claimed): step 1 preflight PASS (gate Open,
+      100 KAT), step 2 faucet top-up PASS (the TREASURY paid — grant, not mint), step 3
+      scored scan→fix PASS (real metered spend), step 4 signed sync push PASS (6942
+      rows recorded new=6942, 0 skipped). **Step 5 (the refund draw) is structurally
+      impossible as written**: `faucet_request_create` pins the FULL daily cap, so the
+      top-up always empties the account's cap and the same-day refund draw is always
+      refused — proven live at caps 10, 20 AND 40 (pin == cap ⇒ one draw empties it).
+      The refund leg's meaning needs a decision: (a) settled-invoice readback + balance
+      assertion (pure harness; recommended), or (b) ride the crank's free-tier daily
+      grant leg (needs the harness to push a burn for the activity marker). Either
+      unblocks the 6-step READY verdict; this row then completes on a fresh-day re-run.
+      **Unblock: the owner picks (a) or (b); the rest is mechanical.**
 - [-] T4.4 **testnet** wet-run executed; mesh-ready verdict recorded.
       **Unblock: T4.4a clean, then T2.2/T2.3 (the OWNER-EXECUTED genesis ceremony)** —
       a testnet wet-run needs real testnet key material authored and nodes written to

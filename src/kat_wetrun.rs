@@ -308,7 +308,11 @@ pub fn assert_supply_unchanged(
             moved.push(format!("{name} {a} → {b}"));
         }
     };
-    note("epoch", i64::try_from(before.epoch).unwrap_or(i64::MAX), i64::try_from(after.epoch).unwrap_or(i64::MAX));
+    note(
+        "epoch",
+        i64::try_from(before.epoch).unwrap_or(i64::MAX),
+        i64::try_from(after.epoch).unwrap_or(i64::MAX),
+    );
     note("mint_kat", before.mint_kat, after.mint_kat);
     note("burn_kat", before.burn_kat, after.burn_kat);
     note("pool_paid_kat", before.pool_paid_kat, after.pool_paid_kat);
@@ -365,8 +369,8 @@ pub struct CrankReport {
 /// counter. Missing is an error rather than a zero: a zeroed
 /// `skipped_treasury` is precisely the reading that would hide Issue 010.
 pub fn parse_crank_report(body: &[u8]) -> Result<CrankReport, String> {
-    let v: serde_json::Value = serde_json::from_slice(body)
-        .map_err(|_| "the crank response was not JSON".to_string())?;
+    let v: serde_json::Value =
+        serde_json::from_slice(body).map_err(|_| "the crank response was not JSON".to_string())?;
     if let Some(err) = v.get("error").and_then(serde_json::Value::as_str) {
         return Err(format!("the crank pass was refused — {err}"));
     }
@@ -438,7 +442,10 @@ pub fn classify_faucet_leg(r: &CrankReport) -> FaucetLegVerdict {
             granted_micro: r.granted_micro,
         },
         () if r.skipped_budget > 0 => FaucetLegVerdict::SkippedOther {
-            reason: format!("the daily grant budget was reached ({} skipped)", r.skipped_budget),
+            reason: format!(
+                "the daily grant budget was reached ({} skipped)",
+                r.skipped_budget
+            ),
         },
         () if r.skipped_faucet_cap > 0 => FaucetLegVerdict::SkippedOther {
             reason: format!(
@@ -450,7 +457,10 @@ pub fn classify_faucet_leg(r: &CrankReport) -> FaucetLegVerdict {
             reason: format!("already credited today ({} skipped)", r.skipped_already),
         },
         () if r.skipped_dormant > 0 => FaucetLegVerdict::SkippedOther {
-            reason: format!("outside the activity window ({} skipped)", r.skipped_dormant),
+            reason: format!(
+                "outside the activity window ({} skipped)",
+                r.skipped_dormant
+            ),
         },
         () => FaucetLegVerdict::SkippedOther {
             reason: "the pass settled no faucet row and named no skip reason".to_string(),
@@ -467,19 +477,11 @@ pub fn classify_faucet_leg(r: &CrankReport) -> FaucetLegVerdict {
 #[must_use]
 pub fn issue_010_diagnostic(skipped: u64) -> String {
     format!(
-        "wetrun step FAILED (not a transient) — the daily crank SKIPPED {skipped} account(s) \
-         with `skipped_treasury`, so no faucet row settled and steps 2/5 cannot complete.\n  \
-         cause: riir-dapps Issue 010 — TREASURY_GRANT_FLOOR_DEFAULT == MAX_SUPPLY_PLACEHOLDER \
-         (both 1e12), so `surplus >= treasury_grant_floor` needs a treasury larger than the \
-         entire max supply. The treasury-debit grant path is STRUCTURALLY UNREACHABLE under \
-         genesis defaults, and the crank is deliberately treasury-ONLY (a mint fallback on an \
-         unattended recurring path is what caveat #2 forbids), so it skips every account, \
-         every day.\n  \
-         this is NOT retryable: waiting or re-running changes nothing. The fix is a supply \
-         decision (riir-dapps Issue 010 T2, an OWNER act), not a harness change.\n  \
-         to exercise the faucet legs meanwhile, deploy with `treasury_grant_floor` explicitly \
-         lowered — the override is what makes the path reachable, and a run against genesis \
-         defaults will land here again."
+        "wetrun step FAILED (not a transient) - the daily crank SKIPPED {skipped} account(s)          with `skipped_treasury`, so no faucet row settled and steps 2/5 cannot complete.
+           cause: the treasury-debit grant gate refused - one of TWO distinct states:
+           (a) riir-dapps Issue 010 - TREASURY_GRANT_FLOOR_DEFAULT >= MAX_SUPPLY_PLACEHOLDER          (the 2026-09-03 resolution set the floor to 1 000 bp of supply, so this is now the          LEGACY defect; it recurs only if the floor constants regress), or
+           (b) an UNFUNDED TREASURY - a freshly stood-up deployment has a zero treasury float,          so `treasury - grant >= floor` cannot hold at any grant size. The crank is          deliberately treasury-ONLY (a mint fallback on an unattended recurring path is what          caveat #2 forbids). Seed the float with the ops bearer: POST /admin/treasury/fund          (exactly-once per event_id_hex), then re-run.
+           distinguish them from /health's crank report after ONE pass: a config defect skips          EVERY account on EVERY deployment; an unfunded float skips on THIS deployment only          and `granted_micro` stays 0 while the floor arithmetic checks out."
     )
 }
 
@@ -607,7 +609,9 @@ impl WetrunReport {
                 self.steps.len(),
                 self.network.label()
             ),
-            Verdict::NotReady(why) => format!("wetrun: NOT READY on {} — {why}", self.network.label()),
+            Verdict::NotReady(why) => {
+                format!("wetrun: NOT READY on {} — {why}", self.network.label())
+            }
             Verdict::Refused(why) => why.clone(),
         }
     }
@@ -671,8 +675,14 @@ pub fn run(
 
     // ── step 1: preflight, read-only ─────────────────────────────────
     let pre = read_planes(transport, acct_hex);
-    let pre_ok = matches!(pre.gate, crate::kat_account_client::WelcomeGate::Open { .. });
-    let mut lines = vec![format!("network:   {} (classified from the service URL)", network.label())];
+    let pre_ok = matches!(
+        pre.gate,
+        crate::kat_account_client::WelcomeGate::Open { .. }
+    );
+    let mut lines = vec![format!(
+        "network:   {} (classified from the service URL)",
+        network.label()
+    )];
     lines.extend(crate::kat_account_client::welcome_gate_lines(&pre.gate));
     lines.push(
         "  fleet:     per-node reachability/height/sync% is `riir-deploy verify --network \
@@ -716,7 +726,11 @@ pub fn run(
     };
 
     // ── step 2: the faucet top-up ────────────────────────────────────
-    steps.push(faucet_leg(transport, Step::FaucetTopUp, "the wet-run top-up"));
+    steps.push(faucet_leg(
+        transport,
+        Step::FaucetTopUp,
+        "the wet-run top-up",
+    ));
     if !steps.last().is_some_and(|s| s.ok) {
         return finish(mode, network, steps, Some(supply_before), None);
     }
@@ -811,10 +825,10 @@ fn faucet_leg(transport: &dyn WetrunTransport, step: Step, label: &str) -> StepR
     let opened = match transport.open_faucet_request() {
         HttpResponse::Ok(b) => b,
         HttpResponse::Status(c) => {
-            return fail(vec![format!("the faucet request was refused (HTTP {c})")])
+            return fail(vec![format!("the faucet request was refused (HTTP {c})")]);
         }
         HttpResponse::NotModified => {
-            return fail(vec!["the faucet request answered 304".to_string()])
+            return fail(vec!["the faucet request answered 304".to_string()]);
         }
         HttpResponse::Error(e) => return fail(vec![format!("the faucet request failed: {e}")]),
     };
@@ -842,19 +856,17 @@ fn faucet_leg(transport: &dyn WetrunTransport, step: Step, label: &str) -> StepR
                  unsettled. `POST /admin/crank/daily` is bearer-gated fail-closed; a wet-run \
                  needs the deployment's crank token. This is not retryable without it."
                     .to_string(),
-            ])
+            ]);
         }
         HttpResponse::Status(503) => {
             return fail(vec![
                 "the crank is unconfigured at this deployment (503) — `KAT_CRANK_TOKEN` is \
                  unset, so nothing settles faucet rows and steps 2/5 cannot complete."
                     .to_string(),
-            ])
+            ]);
         }
         HttpResponse::Status(c) => return fail(vec![format!("the crank pass answered HTTP {c}")]),
-        HttpResponse::NotModified => {
-            return fail(vec!["the crank pass answered 304".to_string()])
-        }
+        HttpResponse::NotModified => return fail(vec!["the crank pass answered 304".to_string()]),
         HttpResponse::Error(e) => return fail(vec![format!("the crank pass failed: {e}")]),
     };
     let report = match parse_crank_report(&report_body) {
@@ -915,27 +927,47 @@ fn sync_leg(transport: &dyn WetrunTransport, legs: &mut dyn LocalLegs) -> StepRe
     }
     match transport.post_sync(&ndjson) {
         HttpResponse::Ok(b) => {
-            let recorded = serde_json::from_slice::<serde_json::Value>(&b)
-                .ok()
-                .and_then(|v| v.get("recorded").and_then(serde_json::Value::as_u64));
-            match recorded {
-                Some(n) if usize::try_from(n) == Ok(rows) => StepRecord {
-                    step: Step::SyncPush,
-                    ok: true,
-                    lines: vec![format!(
-                        "pushed {rows} row(s) at redact v{redact}; the service recorded {n} — \
-                         the self-evolve dry-run is queued service-side"
-                    )],
-                },
-                Some(n) => fail(vec![format!(
-                    "pushed {rows} row(s) and the service recorded {n} — a partial record is \
-                     not a successful push"
-                )]),
-                None => fail(vec![
-                    "the sync answered 200 without a `recorded` count — refusing to read that \
-                     as a successful push"
-                        .to_string(),
-                ]),
+            // The service's ingest answer (kat-service `mining_route`):
+            // `{"accepted":true,"rows_new":N,"rows_refreshed":M,
+            //   "rows_terminal_skipped":K}`. `recorded` is accepted as a
+            // legacy synonym for rows_new. "The service recorded what I
+            // pushed" = new + refreshed == the payload's rows; a skip is
+            // surfaced, never hidden.
+            let parsed = serde_json::from_slice::<serde_json::Value>(&b).ok();
+            let accepted = parsed
+                .as_ref()
+                .and_then(|v| v.get("accepted").and_then(serde_json::Value::as_bool))
+                .unwrap_or(false);
+            let n_new = parsed
+                .as_ref()
+                .and_then(|v| v.get("rows_new").and_then(serde_json::Value::as_u64))
+                .or_else(|| {
+                    parsed
+                        .as_ref()
+                        .and_then(|v| v.get("recorded").and_then(serde_json::Value::as_u64))
+                });
+            let n_refreshed = parsed
+                .as_ref()
+                .and_then(|v| v.get("rows_refreshed").and_then(serde_json::Value::as_u64))
+                .unwrap_or(0);
+            let n_skipped = parsed
+                .as_ref()
+                .and_then(|v| {
+                    v.get("rows_terminal_skipped")
+                        .and_then(serde_json::Value::as_u64)
+                })
+                .unwrap_or(0);
+            match (accepted, n_new) {
+                (true, Some(n)) if usize::try_from(n + n_refreshed) == Ok(rows) => {
+                    StepRecord {
+                        step: Step::SyncPush,
+                        ok: true,
+                        lines: vec![format!("pushed {rows} row(s) at redact v{redact}; the service recorded {n} new + {n_refreshed} refreshed ({n_skipped} terminal-skipped) - the self-evolve dry-run is queued service-side")],
+                    }
+                }
+                (true, Some(n)) => fail(vec![format!("pushed {rows} row(s); the service recorded {n} new + {n_refreshed} refreshed ({n_skipped} terminal-skipped) - a partial record is not a successful push")]),
+                (true, None) => fail(vec!["the sync answered 200 as accepted but carried no per-row counts - refusing to read that as a successful push".to_string()]),
+                (false, _) => fail(vec!["the sync answered 200 without `accepted:true` - refusing to read that as a successful push".to_string()]),
             }
         }
         HttpResponse::Status(c) => fail(vec![format!("the sync push was refused (HTTP {c})")]),
@@ -1008,7 +1040,9 @@ fn finish(
              1+6, read-only, zero state (Proposal 011 §7)",
             illegal.join(", ")
         )),
-        () if !failed.is_empty() => Verdict::NotReady(format!("step(s) failed: {}", failed.join(", "))),
+        () if !failed.is_empty() => {
+            Verdict::NotReady(format!("step(s) failed: {}", failed.join(", ")))
+        }
         () if mode == RunMode::DryRun => Verdict::Ready,
         // A full run that reached the end MUST have both snapshots; a
         // missing one is a failure to verify, never a pass.
@@ -1205,7 +1239,10 @@ mod tests {
         for net in [Network::Mainnet, Network::Unclassifiable] {
             let err = admit(net, RunMode::Full).expect_err("must refuse");
             assert!(err.contains("REFUSED"), "{err}");
-            assert!(err.contains("--dry-run"), "the refusal must name the way out: {err}");
+            assert!(
+                err.contains("--dry-run"),
+                "the refusal must name the way out: {err}"
+            );
         }
         // The mainnet refusal states that no override exists, so an
         // operator does not go looking for one.
@@ -1319,10 +1356,22 @@ mod tests {
         };
         let probes = [
             SupplyCounters { epoch: 4, ..base },
-            SupplyCounters { mint_kat: 6, ..base },
-            SupplyCounters { burn_kat: 8, ..base },
-            SupplyCounters { pool_paid_kat: 12, ..base },
-            SupplyCounters { pool_available_kat: 14, ..base },
+            SupplyCounters {
+                mint_kat: 6,
+                ..base
+            },
+            SupplyCounters {
+                burn_kat: 8,
+                ..base
+            },
+            SupplyCounters {
+                pool_paid_kat: 12,
+                ..base
+            },
+            SupplyCounters {
+                pool_available_kat: 14,
+                ..base
+            },
         ];
         assert_eq!(
             probes.len(),
@@ -1330,8 +1379,15 @@ mod tests {
             "one divergence probe per encoded 8-byte field"
         );
         for (i, p) in probes.iter().enumerate() {
-            assert_ne!(p.to_bytes(), base.to_bytes(), "field {i} does not move the bytes");
-            assert!(assert_supply_unchanged(base, *p).is_err(), "field {i} escapes the gate");
+            assert_ne!(
+                p.to_bytes(),
+                base.to_bytes(),
+                "field {i} does not move the bytes"
+            );
+            assert!(
+                assert_supply_unchanged(base, *p).is_err(),
+                "field {i} escapes the gate"
+            );
         }
         assert!(assert_supply_unchanged(base, base).is_ok());
     }
@@ -1366,14 +1422,16 @@ mod tests {
         assert_eq!(absent.mint_kat, 0);
         assert_eq!(absent.epoch, 9);
         assert!(assert_supply_unchanged(absent, SupplyCounters::absent(9)).is_ok());
-        assert!(assert_supply_unchanged(
-            absent,
-            SupplyCounters {
-                mint_kat: 1,
-                ..absent
-            }
-        )
-        .is_err());
+        assert!(
+            assert_supply_unchanged(
+                absent,
+                SupplyCounters {
+                    mint_kat: 1,
+                    ..absent
+                }
+            )
+            .is_err()
+        );
         // And a snapshot from a DIFFERENT epoch cannot masquerade as
         // unchanged — the epoch rides in the bytes.
         assert!(assert_supply_unchanged(absent, SupplyCounters::absent(10)).is_err());
@@ -1396,7 +1454,10 @@ mod tests {
         // Reading epoch 5's row as epoch 4's would be the plane-mismatch
         // defect in another costume.
         let err = parse_supply(4, &row(5)).expect_err("epoch mismatch");
-        assert!(err.contains("refusing to read one epoch's counters as another's"), "{err}");
+        assert!(
+            err.contains("refusing to read one epoch's counters as another's"),
+            "{err}"
+        );
         // A missing counter is an ERROR, never a zero — a zeroed mint is
         // exactly the reading that makes a printer look frozen.
         let partial = serde_json::json!({"epoch": 4, "burn_kat": 0}).to_string();
@@ -1462,8 +1523,8 @@ mod tests {
             ("skipped_already", "already credited today"),
             ("skipped_dormant", "activity window"),
         ] {
-            let r = parse_crank_report(&crank_json(&serde_json::json!({ field: 1 })))
-                .expect("reads");
+            let r =
+                parse_crank_report(&crank_json(&serde_json::json!({ field: 1 }))).expect("reads");
             match classify_faucet_leg(&r) {
                 FaucetLegVerdict::SkippedOther { reason } => {
                     assert!(reason.contains(needle), "{field}: {reason}");
@@ -1485,17 +1546,15 @@ mod tests {
         let d = issue_010_diagnostic(7);
         assert!(d.contains("Issue 010"), "{d}");
         assert!(d.contains("TREASURY_GRANT_FLOOR_DEFAULT"), "{d}");
-        assert!(d.contains("MAX_SUPPLY_PLACEHOLDER"), "{d}");
         assert!(d.contains("skipped_treasury"), "{d}");
         assert!(d.contains("7 account(s)"), "{d}");
-        assert!(d.contains("STRUCTURALLY UNREACHABLE"), "{d}");
-        assert!(d.contains("NOT retryable"), "{d}");
-        assert!(d.contains("OWNER act"), "{d}");
-        // It must say what makes the legs reachable meanwhile, and that a
-        // default deployment lands here again — so nobody "fixes" it by
-        // loosening the harness.
-        assert!(d.contains("explicitly lowered"), "{d}");
-        assert!(d.contains("land here again"), "{d}");
+        // The two-cause split (T4.4a live finding): a config defect vs an
+        // unfunded treasury on a freshly stood-up deployment — the fix is
+        // different (owner supply constants vs the ops fund route).
+        assert!(d.contains("UNFUNDED TREASURY"), "{d}");
+        assert!(d.contains("/admin/treasury/fund"), "{d}");
+        assert!(d.contains("treasury-ONLY"), "{d}");
+        assert!(d.contains("caveat #2"), "{d}");
     }
 
     #[test]
@@ -1524,7 +1583,11 @@ mod tests {
             Step::MeshReadiness,
         ];
         let dry: Vec<Step> = all.into_iter().filter(|s| s.in_dry_run()).collect();
-        assert_eq!(dry, [Step::Preflight, Step::MeshReadiness], "§7: steps 1+6 only");
+        assert_eq!(
+            dry,
+            [Step::Preflight, Step::MeshReadiness],
+            "§7: steps 1+6 only"
+        );
         // The four money legs are exactly the complement.
         assert_eq!(all.len() - dry.len(), 4);
         for s in all {

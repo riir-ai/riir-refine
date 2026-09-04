@@ -355,7 +355,45 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
                 for line in svc::welcome_gate_lines(&view.gate) {
                     println!("{line}");
                 }
-                view.balance
+                // T079: the once-per-key free-tier grant has a production
+                // claim path now. Read-first (`ensure_grant_flow` sends
+                // NOTHING when the grant is in place), signed with the
+                // account key, idempotent on replay; a failure is printed
+                // and never blocks the local view.
+                match account.signing_key() {
+                    Ok(key) => {
+                        let payreq = riir_clippy::kat_payreq_client::HttpPayreqTransport::new(&url, 5);
+                        match riir_clippy::kat_payreq_client::ensure_grant_flow(&payreq, &key, acct) {
+                            Ok(Some(claim)) => {
+                                if claim.already {
+                                    println!("grant:  already claimed (balance {} micro)", claim.balance_micro);
+                                } else {
+                                    println!(
+                                        "grant:  {} claimed — the free-tier grant is live (balance {} micro)",
+                                        claim.claimed_micro, claim.balance_micro
+                                    );
+                                }
+                                // Re-read through the service view so the
+                                // gate below reflects the claim, not a
+                                // pre-claim snapshot.
+                                let view2 = svc::account_service_view(&transport, acct);
+                                for line in svc::welcome_gate_lines(&view2.gate) {
+                                    println!("{line}");
+                                }
+                                view2.balance
+                            }
+                            Ok(None) => view.balance,
+                            Err(e) => {
+                                println!("grant:  not claimed — {e}");
+                                view.balance
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        println!("grant:  not claimed — the account key is unusable ({e})");
+                        view.balance
+                    }
+                }
             }
         }
     };
@@ -510,6 +548,30 @@ fn run_kat_sync() {
                     match transport.post_sync(&payload.ndjson) {
                         riir_clippy::kat_lease_client::HttpResponse::Ok(_) => {
                             println!("sync: push accepted by {url}");
+                            // T079: the ledger-plane half of "the service
+                            // sees the key" — claim the once-per-key
+                            // free-tier grant (read-first; a no-op when it
+                            // is already in place). The mining ingest and
+                            // the ledger grant are different DOs, so the
+                            // push alone never produced the grant row.
+                            match account.signing_key() {
+                                Ok(key) => {
+                                    if let Some(acct) = riir_clippy::kat_account_client::service_account_hex(
+                                        &account.state().account_id,
+                                    ) {
+                                        let payreq = riir_clippy::kat_payreq_client::HttpPayreqTransport::new(&url, 10);
+                                        match riir_clippy::kat_payreq_client::ensure_grant_flow(&payreq, &key, acct) {
+                                            Ok(Some(claim)) if !claim.already => println!(
+                                                "sync: free-tier grant claimed ({} micro)",
+                                                claim.claimed_micro
+                                            ),
+                                            Ok(_) => {}
+                                            Err(e) => println!("sync: grant not claimed — {e}"),
+                                        }
+                                    }
+                                }
+                                Err(_) => {}
+                            }
                             // Real acceptance → advance the watermark (the
                             // pushed rows are no longer "pending-unsynced").
                             let wm = riir_clippy::kat_pending_estimator::SyncWatermark::from_payload(
