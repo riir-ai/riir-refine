@@ -11,6 +11,17 @@
 //! expression — everything else in the file is untouched. The bare-return
 //! deletion goes through `delete_stmt_edit` so line ownership (own-line vs
 //! mid-line) is respected.
+//!
+//! Divergence (2026-09-04): a trailing `return` that carries ANY attribute is
+//! refused. A `#[cfg]`-attributed one is a target-arch/-feature switch — the
+//! parse-view "last" statement is only last on the arches whose cfg keeps it;
+//! on the others it vanishes and a DIFFERENT statement trails (real clippy
+//! runs post-expansion, so its verdict is per-view while ours is parse-view;
+//! probe-verified SILENT on the dual-`#[cfg]` return switch). The rewrite
+//! span covers the attribute, so emitting the bare expr would silently drop
+//! it. Live misfire: seal-remake `fps_bench.rs::present_mode_from_env` (the
+//! wasm32 arm got promoted to an unguarded tail → `unreachable_code` on
+//! native, caught by the consumer's `-D warnings` clippy).
 
 use super::{delete_stmt_edit, edit, for_each_fn, src, SourceEdit};
 use syn::{Expr, File, Stmt};
@@ -21,6 +32,12 @@ pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
     for_each_fn(file, |_sig, block| {
         let Some(last) = block.stmts.last() else { return };
         if let Stmt::Expr(Expr::Return(ret), _semi) = last {
+            // Attribute guard: the edit span covers the statement's
+            // attributes, so any rewrite would silently drop them. cfg is
+            // the load-bearing case (see the module doc for the misfire).
+            if !ret.attrs.is_empty() {
+                return;
+            }
             match ret.expr.as_ref() {
                 // `return <expr>` — the expr becomes the tail expression.
                 Some(inner) => {
@@ -101,5 +118,38 @@ mod tests {
         let input = "struct S;\nimpl S {\n    fn get(&self) -> u8 { return 7; }\n}";
         let out = propose_fix("needless_return", input).expect("pattern matched");
         assert!(out.contains("fn get(&self) -> u8 { 7 }"), "{out}");
+    }
+
+    #[test]
+    fn cfg_switched_trailing_return_refused() {
+        // The live misfire (seal-remake fps_bench.rs, minimized): the parse-view
+        // last stmt is a cfg-attributed return — only last on the arches whose
+        // cfg keeps it. Real clippy is SILENT on the whole switch (probe 2026-09-04,
+        // clippy 1.93); the old rewrite promoted the wasm32 arm to an unguarded
+        // tail AND dropped the attribute, creating `unreachable_code` on native.
+        let input = "fn f(e: Option<u8>) -> u8 {\n    #[cfg(not(target_arch = \"wasm32\"))]\n    return e.unwrap_or(0);\n    #[cfg(target_arch = \"wasm32\")]\n    return 0;\n}";
+        let out = propose_fix("needless_return", input);
+        assert!(out.is_none(), "cfg-switched return must be refused: {out:?}");
+    }
+
+    #[test]
+    fn single_cfg_trailing_return_refused() {
+        // Same rule one arm short: cfg'd trailing return with no sibling arm —
+        // on other arches the stmt vanishes and an earlier stmt trails.
+        let input = "fn f() -> u8 {\n    let x = 1;\n    #[cfg(unix)]\n    return 7;\n}";
+        let out = propose_fix("needless_return", input);
+        assert!(out.is_none(), "cfg'd trailing return must be refused: {out:?}");
+    }
+
+    #[test]
+    fn plain_trailing_return_after_cfg_stmt_still_fires() {
+        // A cfg'd NON-return statement earlier in the body never moves after
+        // the parse-view last on any view — the trailing return stays trailing,
+        // so the fix is safe and must keep firing (the guard is on the target
+        // statement's attributes, not on cfg anywhere in the body).
+        let input = "fn f() -> u8 {\n    #[cfg(unix)]\n    let _ = 1;\n    return 42;\n}";
+        let out = propose_fix("needless_return", input).expect("pattern matched");
+        assert!(out.contains("42"), "{out}");
+        assert!(out.contains("#[cfg(unix)]"), "unrelated cfg stmt must survive: {out}");
     }
 }
