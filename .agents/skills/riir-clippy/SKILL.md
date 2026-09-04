@@ -178,7 +178,8 @@ skill points agents there). Per sweep:
 ## Discipline (non-negotiable)
 
 - **Commit + push per unit** — `feat:`/`fix:`/`docs:` prefixes; stay on
-  `develop` (`main` for riir-train); rebase non-interactive only.
+  `develop` (every repo — riir-train flipped from `main` to develop + default
+  on 2026-09-04); rebase non-interactive only.
 - **Numbering**: read `.highwater`, +1, AND re-scan the folder at WRITE
   time — concurrent sessions dual-allocated 675 AND 677 in one night.
 - **Queue-item dual-allocation (Issue 665, 2026-08-17)**: two idle sessions
@@ -194,13 +195,14 @@ skill points agents there). Per sweep:
 - **Plan selection reads ORIGIN, not the working tree** (2026-08-27, the
   Plan-346 stale-copy trap): before ranking/dispatching any `.plans/` work,
   use `riir-clippy/scripts/plan_read_origin.sh <repo> (--list | <file>)` —
-  fetches origin, resolves the default branch from the remote (`main` for
-  riir-train, `develop` elsewhere), reads `git show origin/<default>:...`,
-  logs the commit hash (cite it when acting on a plan). The shared checkout
-  can ride a SIBLING branch for days (riir-train on `sync/p348-*`) whose
-  plans are stale vs origin — a working-tree read once dispatched a plan
-  already closed there. Guard: `--self-test` (dirty non-default-branch
-  checkout must still yield origin contents).
+  fetches origin, resolves the default branch from the remote (`develop`
+  everywhere since the 2026-09-04 riir-train flip),
+  reads `git show origin/<default>:...`, logs the commit hash (cite it when
+  acting on a plan). The shared checkout can ride a SIBLING branch for days
+  (riir-train rode `sync/p348-*` while its mainline was `main`) whose plans
+  are stale vs origin — a working-tree read once dispatched a plan already
+  closed there. Guard: `--self-test` (dirty non-default-branch checkout must
+  still yield origin contents).
 - **Sibling safety**: never `git stash` sibling WIP; commit only your own
   hunks; isolate builds under `/tmp`; before blaming CI on riir-clippy,
   check whether `src/domains/*/bench.rs` WIP is the sibling's.
