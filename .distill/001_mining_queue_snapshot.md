@@ -237,6 +237,28 @@
     overlap evaluate-then-likely-drop. Pin `ef96313…` (fork davidtai/MTPLX-1, Apache-2.0,
     unmerged; re-pin at T0). Also queued for the next B100 touch: the NAX hd-256 dsplit
     rider + the #4380 GQA-12/16 table (B100 rider enrichment).
+  - **MTPLX RESIDUE (queued 2026-09-04, cadence-gated behind the B105 defers) — the same source,
+    three surfaces Batch 103 never read.** Batch 103's population was the PR #391 diff + body;
+    upstream `youssofal/MTPLX` main has NEVER been mined (**196 commits / 300 files** ahead of the
+    mined base `8bc4d88`, `behind_by` 0; v2.10.2 09-01 + v2.11.1 09-04; head
+    `dd4031a8` 2026-09-04T10:25Z, Apache-2.0), the `mistakes/` post-mortem corpus is **16 files
+    upstream vs 9 in the vendor clone** (7 upstream-only), and `docs/plans` 1217 / `docs/specs` 757
+    / `docs/concurrency` 259 lines are unread. **Lead (B+):
+    `prefix-reuse-key-must-mirror-the-restore-predicate`** — TWO independent instances in one
+    source (HEAD `dd4031a8`: the 2.10.2 admission shed asked `SessionBank.longest_prefix` exact
+    containment while restore serves by block prefix ⇒ 41,901 tokens re-prefilled cold, 54 s, with
+    a 41,391-token restore available; + the trailing-sentinel bank-fingerprint mistake, the
+    mirror-image direction). Sibling of the landed `shape-class-keyed-capability` one layer up, and
+    **the first MTPLX row with an in-stack analog** (Issue 742 GDN+KV prefix cache, 441× TTFT) —
+    every prefill lever in R122's table was HAVE / refuted / no-analog. Axis B is the best
+    confidence-per-token (filenames ARE the rules): `git-stash-is-shared-by-every-worktree` is an
+    external confirmation of our own stash rule + the `hash-object`/`update-index` fix pattern;
+    `mean-tps-...-p99-inter-emit-gap` censuses delivered-cadence silence, an axis we do not measure
+    at all. Blockers: the vendor clone is **depth-1 shallow** (`a5e38bb` + `ef96313`) so it cannot
+    serve the upstream axis — fresh pinned clone required; `.research/.highwater` reads 127 while
+    128 exists (stale-highwater class, repair at allocation). Index + anchors:
+    `.research/122` §Residue (SCOPE-CORRECTED 2026-09-04). Execution = Research 129 / Plan 076,
+    axes A+B in one corpus cycle (B103/B105 COMBINE precedent), axis C riders only.
   - **The arxiv pool re-walk #4: DONE 2026-09-02 ~07:15 +07** (`.research/113` — covered
     the Tuesday-09-01 announcement window; zero corpus delta; the spec-dec lane woke up:
     DBloom's ceiling-bin acceptance histogram (zero-cost telemetry adoption candidate for

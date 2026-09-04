@@ -26,6 +26,17 @@
 
 mincore read-skip (their own W62 negative), route kernel, draft K20 pre-scatter, FR-Spec (spec-decode closed-negative in-stack: Issues 717/721/737), sparse split-K decode (Bench 763: attention ≈ 0% share), GDN keep-mask fold (their measured LOSS), oMLX keepwarm (they falsified it themselves).
 
+## Residue (added 2026-09-04, after the batch closed)
+
+This plan's population was the PR #391 diff + body only. The SAME source has three unmined
+surfaces — upstream `main` (196 commits / 300 files ahead of the base `8bc4d88`; v2.10.2 + v2.11.1
+released since), the 16-file `mistakes/` post-mortem corpus (the vendor clone carries only 9), and
+`docs/{specs,plans,concurrency}` — indexed with grades, anchors and the B+ lead
+(`prefix-reuse-key-must-mirror-the-restore-predicate`, TWO instances, and the first MTPLX residue
+row WITH an in-stack analog: Issue 742's prefix cache) in
+[`.research/122`](../.research/122_mtplx_pr391_distill_verdict.md) §Residue. Execution takes its
+own verdict + pin (Research 129 / Plan 076) — do NOT widen this plan's pin.
+
 ## Non-goals
 
 - **No prefill-throughput claim from this batch.** The verdict is explicit: none of the retained levers transfers (all HAVE / refuted / no-analog). This batch buys corpus rules, not tok/s.
