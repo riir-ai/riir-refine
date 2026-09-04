@@ -15,6 +15,9 @@ const assets = { fetch: async () => new Response(ASSET_BODY, { headers: { "Conte
 const envOpen = { ASSETS: assets, HK_ORIGIN: HK };
 const envDeny = { ASSETS: assets, HK_ORIGIN: HK, UNCONFIGURED_POLICY: "deny" };
 const envGated = { ASSETS: assets, HK_ORIGIN: HK, DASHBOARD_TOKEN: SECRET };
+// 2026-09-04 owner call: the live deployment carries AUTH_MODE=public —
+// every caller is served, no credential required, even with the secret set.
+const envPublic = { ASSETS: assets, HK_ORIGIN: HK, DASHBOARD_TOKEN: SECRET, AUTH_MODE: "public" };
 
 const req = (url, { method = "GET", cookie } = {}) =>
   new Request(url, { method, headers: cookie ? { Cookie: cookie } : {} });
@@ -43,6 +46,36 @@ await t("unconfigured/serve", async () => {
   ok(r.headers.get("x-dashboard-auth") === "OPEN-INSECURE", "unconfigured marker not loud");
   ok(r.headers.get("x-dashboard-warning"), "unconfigured warning header absent");
   assertHardened(r, "unconfigured/serve");
+});
+
+await t("public mode: no credential → 200 payload, marked public", async () => {
+  const r = await worker.fetch(req(U), envPublic);
+  ok(r.status === 200, `public anon status ${r.status}`);
+  ok((await r.text()).includes("SENTINEL_ASSET_BODY_9f3a"), "public anon did NOT serve the payload");
+  ok(r.headers.get("x-dashboard-auth") === "public", "public anon marker");
+  assertHardened(r, "public/anon");
+});
+
+await t("public mode: wrong cookie still served (gate dormant)", async () => {
+  const r = await worker.fetch(req(U, { cookie: `dashboard_token=nope` }), envPublic);
+  ok(r.status === 200, `public wrong-cookie status ${r.status}`);
+  ok(r.headers.get("x-dashboard-auth") === "public", "public wrong-cookie marker");
+});
+
+await t("public mode: ?token=… ignored — gate fully dormant, 200 payload", async () => {
+  const r = await worker.fetch(req(`${U}?token=${SECRET}`), envPublic);
+  ok(r.status === 200, `public token-param status ${r.status}`);
+  ok((await r.text()).includes("SENTINEL_ASSET_BODY_9f3a"), "public token-param did NOT serve");
+  ok(r.headers.get("x-dashboard-auth") === "public", "public token-param marker");
+});
+
+await t("public mode: HEAD served, non-GET still 405", async () => {
+  const h = await worker.fetch(req(U, { method: "HEAD" }), envPublic);
+  ok(h.status === 200, `public HEAD status ${h.status}`);
+  for (const m of ["POST", "PUT", "DELETE"]) {
+    const r = await worker.fetch(req(U, { method: m }), envPublic);
+    ok(r.status === 405, `public/${m} → ${r.status}`);
+  }
 });
 
 await t("unconfigured/deny", async () => {
@@ -119,4 +152,4 @@ if (fails.length) {
   for (const f of fails) console.error("  - " + f);
   process.exit(1);
 }
-console.log(`PASS: ${n} auth scenarios — unconfigured serve/deny, 401 paths (no leak, no echo), token exchange strips token + sets HttpOnly/Secure/SameSite, cookie auth serves, 405 on non-GET, hardening headers on every branch`);
+console.log(`PASS: ${n} auth scenarios — unconfigured serve/deny, PUBLIC mode (anon served + marker, gate dormant, 405 intact), 401 paths (no leak, no echo), token exchange strips token + sets HttpOnly/Secure/SameSite, cookie auth serves, 405 on non-GET, hardening headers on every branch`);

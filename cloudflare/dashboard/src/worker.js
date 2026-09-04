@@ -34,6 +34,17 @@
 // flip the var to "deny" so an accidentally deleted secret fails safe instead
 // of silently republishing the payload. Once the secret exists the branch is
 // unreachable either way.
+//
+// ── AUTH_MODE (2026-09-04, OWNER CALL): the dashboard is PUBLIC ─────────────
+// The owner asked for the dashboard to open with no token ("i just want to
+// open it and it should be public"). AUTH_MODE="public" serves the assets to
+// EVERY caller, marked `x-dashboard-auth: public` — an explicit, recorded
+// decision in the deployed config, NOT the silent fail-open branch (that one
+// stays loud with OPEN-INSECURE for any future accidental state). Reversible:
+// delete the AUTH_MODE var (or set it to anything else) and the token gate
+// resumes with the SAME secret. The T13 payload-audit caveat now applies to
+// anonymous visitors BY OWNER DECISION: the page carries the private
+// engineering profile (repo names, lint counts, costs, fixer internals).
 
 const COOKIE_NAME = "dashboard_token";
 const HK_ORIGIN_DEFAULT = "https://riir-kat-housekeeping.foxfox.workers.dev";
@@ -107,6 +118,18 @@ export default {
         }),
         env,
       );
+    }
+
+    // ── AUTH_MODE="public" (owner call, 2026-09-04) ── serve everyone.
+    // Evaluated FIRST so it overrides both the unconfigured branch and the
+    // token gate; ?token=… still exchanges for a cookie (harmless), but no
+    // credential is REQUIRED. Deliberately distinct from the silent fail-open
+    // branch below: this is a recorded config decision, marked `public`.
+    if (String(env.AUTH_MODE || "") === "public") {
+      const res = await env.ASSETS.fetch(request);
+      const out = harden(res, env);
+      out.headers.set("x-dashboard-auth", "public");
+      return out;
     }
 
     // No secret configured → UNCONFIGURED_POLICY decides (see header).

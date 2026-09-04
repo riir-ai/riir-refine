@@ -2857,12 +2857,22 @@ are gone:
 owner steps (set `MONTHLY_BUDGET_USD`; override
 `CF_BILLING_ANNIVERSARY_DAY` once the real day is known).**
 
-1. **Dashboard auth gate CLOSED 2026-09-03 (Issue 065 T8):**
+1. **Dashboard auth gate CLOSED 2026-09-03 (Issue 065 T8) → FLIPPED PUBLIC 2026-09-04 (owner call):**
    `DASHBOARD_TOKEN` set via `wrangler secret put`; live-verified all four
    branches (anon → 401 / wrong token → 401 / correct → 301 with token
-   stripped + cookie / cookie → 200). Residual = `UNCONFIGURED_POLICY` still
-   `serve` (deny flip declined as disruptive) — deleting the secret would
-   re-publish the payload silently; `wrangler.toml:21` documents it.
+   stripped + cookie / cookie → 200). **2026-09-04, owner call ("it should
+   be public"): `AUTH_MODE="public"` now serves every caller**
+   (`x-dashboard-auth: public`; `wrangler.toml` `[vars]`, version
+   `9f25ff9f`) — the token gate is DORMANT, not deleted: the secret stays
+   set as a private door, and deleting the `AUTH_MODE` var re-arms the 401
+   gate with the same secret. Public mode deliberately bypasses BOTH the
+   token gate and the silent fail-open branch (that one still answers
+   `OPEN-INSECURE` for any future accidental state). The T13 payload caveat
+   — the page carries repo names, lint counts, costs, fixer internals — now
+   applies to anonymous visitors BY OWNER DECISION. The old
+   `UNCONFIGURED_POLICY` residual is moot while public mode is armed; if
+   the public mode is ever retired, revisit `deny` before relying on the
+   secret alone. `verify_auth.mjs` covers the public branch (14 scenarios).
 2. **Push paging owner-gated**: `ALERT_WEBHOOK_URL` + optional
    `MONTHLY_BUDGET_USD` verified ABSENT live 09-01. Collection +
    cap-crossing detection are LIVE (since 08-29); crossings land in

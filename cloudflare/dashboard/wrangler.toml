@@ -17,10 +17,17 @@
 # and every unauthenticated request answers 401. It had never been set since
 # T13 armed this file, meaning the fail-open branch served the whole private
 # payload to a bare `curl` for the entire time. Found by fetching the worker
-# after a deploy rather than by reading the deploy's exit code. The remaining
-# residual is that `UNCONFIGURED_POLICY` is still `serve`: DELETING the secret
-# silently republishes the payload. Flipping it to `deny` (owner call, declined
-# 2026-09-03 as too disruptive) is what makes that fail closed instead.
+# after a deploy rather than by reading the deploy's exit code.
+#
+# STATE 2026-09-04 (OWNER CALL): the dashboard is PUBLIC. The owner asked for
+# it to open with no token, so AUTH_MODE="public" below serves every caller
+# and the token gate is dormant (the DASHBOARD_TOKEN secret stays SET and
+# still works as a private door; deleting the AUTH_MODE var re-arms the 401
+# gate with the same secret). The T13 payload caveat — the page carries repo
+# names, lint counts, costs and fixer internals — now applies to anonymous
+# visitors BY DECISION, not by accident. UNCONFIGURED_POLICY stays `serve`
+# (the original deny-flip question is moot while AUTH_MODE=public; if the
+# public mode is ever retired, revisit deny before relying on the secret).
 name = "riir-ops-dashboard"
 compatibility_date = "2026-08-26"
 main = "src/worker.js"
@@ -37,3 +44,6 @@ binding = "ASSETS"
 # housekeeping worker's /latest live badge (T3). Keep in sync if that moves.
 [vars]
 HK_ORIGIN = "https://riir-kat-housekeeping.foxfox.workers.dev"
+# OWNER CALL 2026-09-04: public dashboard — serve every caller, no token.
+# Re-arm the gate by deleting this var (the DASHBOARD_TOKEN secret stays set).
+AUTH_MODE = "public"
