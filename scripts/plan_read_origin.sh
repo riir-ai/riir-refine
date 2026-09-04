@@ -35,8 +35,9 @@
 #   1. git ls-remote --symref origin HEAD   — authoritative, from the remote
 #   2. git symbolic-ref refs/remotes/origin/HEAD — local remote-tracking HEAD
 #   3. existence fallback: origin/main, then origin/develop
-# (riir-train works on main; the rest of the workspace on develop — the
-# remote's own HEAD is the one source of truth that needs no per-repo table.)
+# (the whole workspace works on develop since the 2026-09-04 riir-train
+# flip — before that riir-train worked on main; the remote's own HEAD is
+# the one source of truth that needs no per-repo table.)
 
 set -uo pipefail
 
