@@ -70,7 +70,7 @@
 //! envelope (Issue 018's G4 dep-light rule) — no dual-write drift. With
 //! `latent_retrieval` on, the compile domain records HERE.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 
 use riir_neuron_db::bm25::Bm25Index;
@@ -790,6 +790,27 @@ impl TrajStore {
             .collect()
     }
 
+    /// Issue 067 T1 — Certified same-rule trajectory density: the number of
+    /// DISTINCT Certified rows per `lint_key`, one scan at call time. This
+    /// is the reopen-trigger instrument: the issue's T2 (same-rule exemplar
+    /// channels, condition-first placement) stays gated until a queried
+    /// lint holds `>= 3` Certified same-rule trajectories. `Withdrawn` and
+    /// `Heuristic` rows do not count (Heuristic is the unverified first
+    /// sight; Withdrawn is the absorbing failure state).
+    #[must_use]
+    pub fn certified_density(&self) -> BTreeMap<String, usize> {
+        let mut out: BTreeMap<String, usize> = BTreeMap::new();
+        for (_, v) in self.kv.scan_prefix(b"traj:") {
+            let Ok(row) = serde_json::from_slice::<TrajRowDoc>(&v) else {
+                continue;
+            };
+            if EvidenceTier::from_u8(row.tier) == EvidenceTier::Certified {
+                *out.entry(row.lint_key).or_insert(0) += 1;
+            }
+        }
+        out
+    }
+
     /// Row count (diagnostics + tests).
     #[must_use]
     pub fn len(&self) -> usize {
@@ -1435,6 +1456,39 @@ mod tests {
             assert_eq!(EvidenceTier::from_u8(t.as_u8()), t);
         }
         assert_eq!(EvidenceTier::from_u8(9), EvidenceTier::Heuristic);
+    }
+
+    #[test]
+    fn certified_density_counts_only_certified_rows_per_lint_key() {
+        // Issue 067 T1 — the reopen-trigger instrument's counting core:
+        // Certified rows count per lint_key; Heuristic (unverified success)
+        // and Withdrawn (absorbing failure) do not.
+        let root = tmp_root("certified_density");
+        let (store, bad) = TrajStore::open(&root).unwrap();
+        assert_eq!(bad, 0);
+        // rule_x: 3 Certified rows (3 distinct shapes).
+        for (i, shape) in ["a", "b", "c"].iter().enumerate() {
+            store
+                .record("rule_x", shape, "fix", true, true, &format!("run-{i}"))
+                .unwrap();
+        }
+        // rule_y: 2 Certified + 1 unverified (Heuristic) — density 2.
+        store.record("rule_y", "s1", "f1", true, true, "r").unwrap();
+        store.record("rule_y", "s2", "f2", true, true, "r").unwrap();
+        store.record("rule_y", "s3", "f3", true, false, "r").unwrap();
+        // rule_z: 1 Certified + 3 consecutive fails → Withdrawn — density 1.
+        store.record("rule_z", "w1", "f", true, true, "r").unwrap();
+        store.record("rule_z", "w2", "f", false, false, "r").unwrap();
+        store.record("rule_z", "w3", "f", false, false, "r").unwrap();
+        store.record("rule_z", "w4", "f", false, false, "r").unwrap();
+
+        let density = store.certified_density();
+        assert_eq!(density.get("rule_x"), Some(&3), "3 certified rows");
+        assert_eq!(density.get("rule_y"), Some(&2), "heuristic row excluded");
+        assert_eq!(density.get("rule_z"), Some(&1), "withdrawn row excluded");
+        assert!(!density.contains_key("rule_never_seen"));
+        // One scan per call; a repeat call is stable.
+        assert_eq!(store.certified_density().get("rule_x"), Some(&3));
     }
 
     #[test]

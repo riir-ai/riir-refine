@@ -67,7 +67,9 @@ use riir_clippy::domains::clippy_lints::ClippyLintDomain;
 use riir_clippy::domains::rust_perf::RustPerfDomain;
 use riir_clippy::draft::eval_fixtures_clippy::CLIPPY_SPANS;
 use riir_clippy::draft::eval_fixtures_perf::PERF_SPANS;
-use riir_clippy::draft::retrieval_eval::{canonical_rank, mutate_shape, run_eval_with};
+use riir_clippy::draft::retrieval_eval::{canonical_rank, run_eval_with};
+#[cfg(feature = "kernel_heal")]
+use riir_clippy::draft::retrieval_eval::mutate_shape;
 use riir_clippy::draft::{DomainId, IndexTokenizer, RetrievalConfig, RuleIndex};
 use riir_clippy::modelability::{
     ModelabilityConfig, ModelabilityReport, rank_correlation, scaffold_value,
@@ -149,6 +151,7 @@ fn kernel_data() -> DomainData {
 }
 
 fn all_domains() -> Vec<DomainData> {
+    #[cfg_attr(not(feature = "kernel_heal"), allow(unused_mut))]
     let mut v = vec![clippy_data(), perf_data()];
     #[cfg(feature = "kernel_heal")]
     v.push(kernel_data());

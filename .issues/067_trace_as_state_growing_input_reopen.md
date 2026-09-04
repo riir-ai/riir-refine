@@ -1,6 +1,32 @@
 # Issue 067: growing-input conditioning reopen — condition-first placement + same-rule gating (arXiv:2609.02702)
 
-**Status:** OPEN — gated on the T1 trigger (same-rule exemplar availability in the TrajStore). No code changes until it fires.
+**Status:** OPEN — T1 (the trigger instrumentation) LANDED 2026-09-04; T2/T3/T4 stay gated on the T1 trigger (same-rule exemplar availability in the TrajStore). T2 has no code changes until it fires.
+
+## T1 record (2026-09-04)
+
+The instrument shipped (`src/traj_store.rs` `TrajStore::certified_density()` + the
+`ReopenTrigger067` per-run trigger in `src/bin/heal.rs`):
+
+- **Condition encoded**: `lint_key` holds `>= 3` (K=3) DISTINCT `Certified` rows in the
+  durable store. Heuristic (unverified first sight) and Withdrawn (absorbing failure)
+  rows do not count.
+- **Hooks** (the apply moment = "queried lint"): the clippy-lane `--fix --write`
+  apply loops (both `fix_verify` / non-`fix_verify` branches) keyed by rule id, and
+  the `--fix-compile` applied loop keyed by `code:strategy` (`traj_key`).
+- **Cost**: one lazy full scan of the store per run (first queried lint), then a
+  BTreeMap lookup per apply — zero hot-path store traffic after the scan. Logs at
+  most once per key per run, to stderr:
+  `self-evolve: issue 067 reopen trigger FIRED: '<key>' holds N Certified same-rule
+  trajectories (K=3) — same-rule exemplar channels (issue 067 T2) are unblocked for
+  this lint`.
+- **E2E proven**: a scratch store planted with 3 Certified `identity_op` rows + a
+  real `--fix --write` run fired the line exactly once on the apply (and the heal
+  itself landed). Unit gate: `certified_density_counts_only_certified_rows_per_lint_key`
+  (Certified counts, Heuristic/Withdrawn excluded, multi-key, scan stability).
+- **Dev-store baseline (2026-09-04)**: 6942 rows, 2 Certified keys, **0 keys >= K=3**
+  — not fired; the watch is now automatic at every durable-store heal run.
+- Light builds (no `latent_retrieval`) keep the envelope backend by design and are
+  NOT instrumented — the reopen condition is defined over the TrajStore.
 
 ## Context
 
@@ -15,7 +41,7 @@ Design corollary: the paper's Answer-Feedback arm (45.4 EM) vs full-trace arm (8
 
 ## Tasks
 
-- [ ] T1 — trigger instrumentation: define the reopen condition as "the TrajStore holds ≥K (K=3) Certified same-rule trajectories for a queried lint"; measure store density at heal time (one counter; cheap). Log when the trigger first fires.
+- [x] T1 — trigger instrumentation: define the reopen condition as "the TrajStore holds ≥K (K=3) Certified same-rule trajectories for a queried lint"; measure store density at heal time (one counter; cheap). Log when the trigger first fires. **LANDED 2026-09-04 — `TrajStore::certified_density()` + the per-run `ReopenTrigger067` (hooks: clippy apply loops + `--fix-compile` applied loop); e2e-proven; dev store not yet fired (2 Certified keys, 0 ≥ 3).**
 - [ ] T2 — arm G' construction (only after T1 fires): same-rule-only exemplar channels (cap 3, Certified-first), **condition-first placement** — channels before the code module — reusing `prompt_growing`'s splice mechanics and keeping arms A/B byte-identical as controls. Empty-channel degradation must stay byte-identical to arm B (the existing test's contract).
 - [ ] T3 — A/B on the Bench 049 harness (reachable-miss set + strict-keep + never-wrong filters), CF arm. Pre-registered verdict: G' beats B iff strict-keep ≥ B + 1 with zero kept-wrong, at token cost ≤ 2× B. A second negative closes this class for the short-context healer permanently; the placement principle then applies only to long-context surfaces.
 - [ ] T4 — record in a new `.benchmarks/{NNN}_*.md` (next free number at write time), cross-linked to Bench 051 and katgpt-rs `.research/530`; close this issue per the noise-reduction rule.

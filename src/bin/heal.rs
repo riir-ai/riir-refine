@@ -1357,6 +1357,45 @@ fn migrate_envelope_once(store: &riir_clippy::traj_store::TrajStore) {
     }
 }
 
+/// Issue 067 T1 — the same-rule reopen-trigger instrument. The reopen
+/// condition (from the issue): "the TrajStore holds ≥ K (K=3) Certified
+/// same-rule trajectories for a queried lint". This scans the store ONCE
+/// per run (lazily, on the first queried lint), then logs the FIRST time
+/// each queried lint's density reaches K. Zero store traffic on the hot
+/// path after that one scan; inert without a store.
+#[cfg(feature = "latent_retrieval")]
+struct ReopenTrigger067 {
+    density: Option<std::collections::BTreeMap<String, usize>>,
+    logged: std::collections::HashSet<String>,
+}
+
+#[cfg(feature = "latent_retrieval")]
+impl ReopenTrigger067 {
+    const K: usize = 3;
+
+    fn new() -> Self {
+        Self {
+            density: None,
+            logged: std::collections::HashSet::new(),
+        }
+    }
+
+    /// Note one queried lint key (the key the store is addressed by at
+    /// apply/record time — rule id in the clippy lane, `code:strategy` in
+    /// the compile lane). Logs at most once per key per run.
+    fn note(&mut self, store: &riir_clippy::traj_store::TrajStore, lint_key: &str) {
+        let density = self.density.get_or_insert_with(|| store.certified_density());
+        if let Some(n) = density.get(lint_key) {
+            if *n >= Self::K && self.logged.insert(lint_key.to_string()) {
+                eprintln!(
+                    "self-evolve: issue 067 reopen trigger FIRED: '{lint_key}' holds {n} Certified same-rule trajectories (K={}) — same-rule exemplar channels (issue 067 T2) are unblocked for this lint",
+                    Self::K
+                );
+            }
+        }
+    }
+}
+
 /// Record one verdict event into the durable store (best-effort — a store
 /// failure warns once per event, never fails the heal). `component` is the
 /// Issue 047 decision-time failure attribution (`None` on successes and
@@ -3096,6 +3135,14 @@ fn main() {
         format!("run-{t:x}-{}", std::process::id())
     };
 
+    // Issue 067 T1 — the same-rule reopen-trigger instrument (durable-store
+    // builds only; light builds keep the envelope by design and are not
+    // instrumented). Lazily scans the store ONCE for Certified-trajectory
+    // density, then logs the FIRST time a queried lint's density reaches
+    // the reopen threshold K=3.
+    #[cfg(feature = "latent_retrieval")]
+    let mut reopen067 = ReopenTrigger067::new();
+
     // ── Plan 019 Phase 1: --fix-compile — the oracle driver ──────────
     // A separate early-exit arm: it operates on PACKAGES (cargo check per
     // owning package), needs no retrieval, and its loop carries its own
@@ -3194,6 +3241,7 @@ fn main() {
                 if let Some(store) = &traj_store {
                     use riir_clippy::domains::rustc_errors::evolve::traj_key;
                     for a in &report.applied {
+                        reopen067.note(store, &traj_key(&a.code, &a.strategy_id));
                         if let Err(e) = store.record(
                             &traj_key(&a.code, &a.strategy_id),
                             &a.shape,
@@ -3933,6 +3981,7 @@ fn main() {
                 #[cfg(feature = "latent_retrieval")]
                 if let Some(store) = &traj_store {
                     for (rule, _, replacement, restore) in &all_edits {
+                        reopen067.note(store, rule);
                         if let Err(e) =
                             store.record_applied(rule, restore, replacement, &heal_run_id)
                         {
@@ -3974,6 +4023,7 @@ fn main() {
                 #[cfg(feature = "latent_retrieval")]
                 if let Some(store) = &traj_store {
                     for (rule, _, replacement, restore) in &all_edits {
+                        reopen067.note(store, rule);
                         if let Err(e) =
                             store.record_applied(rule, restore, replacement, &heal_run_id)
                         {
