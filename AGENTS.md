@@ -2848,13 +2848,12 @@ deployed `693972ec`; server half riir-dapps `10ffb18`, exactly-once per
 `(date, neurons)`). The residuals, preserved here because the files
 are gone:
 
-1. **Dashboard auth gate OPEN by owner decision** (2026-08-28;
-   re-verified live 09-01: `x-dashboard-auth: OPEN-INSECURE`). The
-   payload carries 19 full ledger rows, 10 private repo names, per-repo
-   lint debt + container costs. One command from closed:
-   `cd cloudflare/dashboard && npx wrangler secret put DASHBOARD_TOKEN`
-   — then flip `UNCONFIGURED_POLICY` to `deny` so a deleted secret
-   fails safe instead of silently republishing the payload.
+1. **Dashboard auth gate CLOSED 2026-09-03 (Issue 065 T8):**
+   `DASHBOARD_TOKEN` set via `wrangler secret put`; live-verified all four
+   branches (anon → 401 / wrong token → 401 / correct → 301 with token
+   stripped + cookie / cookie → 200). Residual = `UNCONFIGURED_POLICY` still
+   `serve` (deny flip declined as disruptive) — deleting the secret would
+   re-publish the payload silently; `wrangler.toml:21` documents it.
 2. **Push paging owner-gated**: `ALERT_WEBHOOK_URL` + optional
    `MONTHLY_BUDGET_USD` verified ABSENT live 09-01. Collection +
    cap-crossing detection are LIVE (since 08-29); crossings land in

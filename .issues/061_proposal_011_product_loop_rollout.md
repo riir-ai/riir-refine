@@ -15,10 +15,11 @@ faucet preset, the six-step wet-run harness with G-WET (mint/burn asserted
 BIT-unchanged over the whole counter struct), the no-override mainnet refusal,
 the measured `--dry-run` read-only proof, and the install-copy pin. **T4.4 is
 the only Phase 4 row left and it is an owner act** (the genesis ceremony, T2.2
-/T2.3); the wet-run's money legs are additionally blocked by riir-dapps
-**Issue 010** (the treasury grant floor equals max supply, so the daily crank
-skips every account) — the harness FAILS loudly and diagnostically on that
-path rather than retrying or reporting a pass.
+/T2.3); the wet-run's money-leg blocker riir-dapps **Issue 010** is RESOLVED
+(2026-09-03 — the owner supply decision landed: floor = 1,000 bp = 100 K KAT
+runway, `bf2215d`+`3eacd6c`; the faucet legs are reachable at genesis defaults
+now) — the harness's loud diagnostic path below is retained as the guard for
+any future misconfigured deployment.
 Phase 0 (T0.1 + T0.5 + the ledger/payreq halves of T0.4: riir-dapps
 `6df7097`, [Plan 015](../.plans/015_kat011_phase0_payreq_substrate.md) — the
 `kat_payreq` request-ledger rows, invoice rows, signed registration intents,
@@ -241,11 +242,12 @@ Proposal 008 (MemoShard).
       *before* the work, hourly-not-daily since the pass is idempotent per date) and
       corrects the stale doc claim in place. Tests: `kat_crank` **16/0**, `kat_payreq`
       18/0, kat-service `--lib` 20/0, `kat_ledger` 14/0 unmoved, default 111.
-      ⚠️ **Inert in production until riir-dapps Issue 010 T2**: with
-      `treasury_grant_floor == max_supply` the treasury-debit path is structurally
-      unreachable, so the crank currently skips every account every day. Pinned by
-      `riir-dapps/tests/kat_grant_reachability.rs`; the fix is an owner supply
-      decision.
+      ✅ **RESOLVED (2026-09-03) — riir-dapps Issue 010 T2 landed**:
+      `TREASURY_GRANT_FLOOR_BP = 1_000` (10% of max supply = 100 K KAT runway,
+      `src/kat/mod.rs`), pinned by `tests/kat_grant_reachability.rs` converted
+      from tripwire to real gate. The crank's treasury-debit path is reachable
+      at genesis defaults; the diagnostic below stays as the guard for a
+      misconfigured deployment.
 - [x] T1.8 `faucet --request` preset + `faucet_daily_cap_kat` enforcement + `link_ttl`
       expiry (expired = settle-refused) — **LANDED 2026-09-02**. Service half
       riir-dapps `891f9fd`; CLI half riir-clippy `d72bbb6` (the signing mirror +
@@ -391,22 +393,19 @@ Proposal 008 (MemoShard).
       test. That second canary also exposed that `Step::in_dry_run` was
       DECORATIVE (widening it changed nothing), so `finish` now refuses a
       dry-run report containing a money leg.
-      **BLOCKER, NOT PAPERED OVER — riir-dapps [Issue 010](../../riir-dapps/.issues/010_treasury_grant_floor_equals_max_supply_unreachable_path.md):**
-      `TREASURY_GRANT_FLOOR_DEFAULT == MAX_SUPPLY_PLACEHOLDER` (both 10¹²), so
-      the treasury-ONLY crank skips every account every day and **steps 2/5 (the
-      faucet legs) cannot succeed against a genesis-default deployment**.
-      `classify_faucet_leg` checks `skipped_treasury` **before every other skip
-      reason** (it marks a misconfigured DEPLOYMENT; the others mark a correctly
-      refused ACCOUNT — conflating them is how "the faucet does nothing, forever"
-      reads as "not eligible today"), and `issue_010_diagnostic` FAILS with the
-      issue number, both constants, `STRUCTURALLY UNREACHABLE`, `NOT retryable`,
-      the owner-act unblock, and what makes the legs reachable meanwhile. **No
-      retry, no wait-it-out, never a pass** — pinned by a test asserting the
-      write log is exactly one faucet open plus one crank attempt, the local legs
-      never ran, and no supply counter moved. The happy-path tests state in their
-      module docs that they script an **explicitly lowered**
-      `treasury_grant_floor`. **No riir-dapps constant was touched** — the
-      replacement value is a supply decision (Issue 010 T2, an owner act).
+      **BLOCKER RESOLVED 2026-09-03 — riir-dapps [Issue 010](../../riir-dapps/.issues/) fixed + removed:**
+      the old genesis defaults (`floor == MAX_SUPPLY`, both 10¹²) made the
+      treasury-ONLY crank skip every account every day. The owner supply
+      decision landed (`bf2215d`+`3eacd6c`: floor = 1,000 bp = 100 K KAT),
+      reachability gate green. `classify_faucet_leg` + `issue_010_diagnostic`
+      below stay live as the guard: they now fire only on a genuinely
+      misconfigured DEPLOYMENT (the distinction from a correctly refused
+      ACCOUNT is load-bearing — conflating them is how "the faucet does
+      nothing, forever" reads as "not eligible today"). **No retry, no
+      wait-it-out, never a pass** — pinned by a test asserting the write log
+      is exactly one faucet open plus one crank attempt, the local legs never
+      ran, and no supply counter moved. The happy-path tests still script an
+      **explicitly lowered** `treasury_grant_floor` for isolation.
 - [x] T4.2 mainnet refusal (unit + live, NO override by design) + `--dry-run`
       read-only proof — **LANDED 2026-09-02** (riir-clippy `aecef31` +
       `1016754`). **There is no override at all.** Per caveat #2 a
@@ -454,9 +453,9 @@ Proposal 008 (MemoShard).
       **Unblock: T2.2/T2.3 (the OWNER-EXECUTED genesis ceremony) — a testnet
       wet-run needs real testnet key material authored and nodes written to as
       root (caveat #8), which is not an agent act.** The harness it will run is
-      shipped (T4.1/T4.2 above) and its money legs additionally need riir-dapps
-      Issue 010 T2 (the owner's supply decision) plus a deployment
-      `RIIR_HEAL_KAT_CRANK_TOKEN` — `POST /admin/crank/daily` is bearer-gated
+      shipped (T4.1/T4.2 above); its money legs need only a deployment
+      `RIIR_HEAL_KAT_CRANK_TOKEN` (the riir-dapps Issue 010 supply blocker
+      resolved 2026-09-03) — `POST /admin/crank/daily` is bearer-gated
       fail-closed and is what settles a faucet row.
 
 ## Phase 5 — live USDC pay-and-register (real users; counsel + demand gated)
@@ -518,9 +517,11 @@ read-only by a **recorded call log**, and T4.3's install-copy pin (which found
 Proposal 005 advertising a vanity host that does not exist).
 Two blockers are recorded rather than absorbed: `gist-rs/cargo-heal` has never
 been created (Proposal 003 T1.1 — publishing binaries of private source is an
-owner act), and riir-dapps **Issue 010** makes the wet-run's faucet legs
-unreachable at genesis defaults — the harness names it and FAILS, and the
-happy-path tests say out loud that they script an explicitly lowered floor.
+owner act), and riir-dapps **Issue 010** — RESOLVED 2026-09-03, so the
+wet-run's faucet legs are reachable at genesis defaults now; the harness
+still names a misconfigured deployment and FAILS rather than faking a pass,
+and the happy-path tests say out loud that they script an explicitly lowered
+floor.
 Next executable: T1.2 (the web wallet — every signed route it needs is landed),
 T1.5 (the money/auth adversarial suite), T1.6 (the mock rails), T1.7 (the daily
 grant crank's clippy-side follow-ups; **now that T1.8 has landed,
