@@ -1,4 +1,4 @@
-# Plan 077 — riir-ai M3 campaign measured-GOAT distill (prefill GEMM + decode attention)
+# Plan 078 — riir-ai M3 campaign measured-GOAT distill (prefill GEMM + decode attention)
 
 Status: IN PROGRESS (plan-first per the B60 discipline) — verification lanes DONE, batch not yet opened
 Date: 2026-09-04 · Box: M3 (CPU-only) · Source: riir-ai @ pin `59a172623bb3748ed49061e2202b787b4e4e3f08`
@@ -10,7 +10,10 @@ tracked `075_residual_attention_simd_audit.md` (katgpt-rs Issue 724 T1) and the
 "Batch 105" slot it claimed was consumed by the uzu+lily combine (this repo's Plan 075,
 landed 2026-09-05 as Batch 105; Batch 106 = MTPLX residue, Plan 076, also landed).
 Re-homed here 2026-09-04 (the mining domain per BOUNDARY.md / Issue 724 T1's own
-arbitration) as the next free number; its BATCH number is assigned when the mining
+arbitration). Number history: initially pushed as 077, but the 4090's in-flight
+`077_uzu_lily_defers_batch.md` (baked "Batch 107" in its title, active session)
+held 077 concurrently — renumbered 078 the same evening per the baked-refs
+tie-breaker (Bench 697/848 class). Its BATCH number is assigned when the mining
 queue opens it, not by this file.
 
 ## Motivation
