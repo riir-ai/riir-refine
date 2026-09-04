@@ -909,6 +909,24 @@ Queues empty after this entry → idle report.
 
 All classes closed; the standing divergence (P4 residual) has no action planned.
 
+- [ ] **2026-09-05 P9 NEW — clippy 1.98 new-lint corpus candidates** (found by the
+      1.98.1 toolchain re-gate sweep across the workspace; measured populations in
+      brackets): `chunks_exact_to_as_chunks` [katgpt-rs 12 + 4 chunks_exact_mut,
+      ndb 2 — `as_chunks::<N>().0`, needs const-generic N; MachineApplicable],
+      `manual_checked_ops` [riir-dao 17, katgpt-rs 7 — if-guard + else-arm rewrite,
+      MaybeIncorrect for clippy (the 17-site dao run applied 0 via `clippy --fix`),
+      our proposer CAN see the else arm and emit `checked_div().unwrap_or(v)`,
+      guarded against sample-accounting guards where the check gates more than the
+      division — the riir-dao `sim/mod.rs:843/852` allow class], `collapsible_match`
+      [katgpt-rs 6], `sort_by_key` [katgpt-rs 4], `byte_char_slices` [ndb 6,
+      katgpt-rs 2 — `*b"FRZE"`, trivially fixable], `manual_slice_fill`
+      [ndb 2], `explicit_counter_loop` [katgpt-rs 1], `manual_isolate_lowest_one`
+      [1], `needless_pattern_in_..`-class [1], `redundant_reference_format_args`
+      [1]. P0 candidates by population + bounded fix-space: `manual_checked_ops`
+      + `byte_char_slices` + `manual_slice_fill`; `chunks_exact_to_as_chunks`
+      needs an as-chunks MSRV check (std 1.88). Populations measured under load,
+      re-count at batch time.
+
 - [x] **2026-09-03 LIVE REPRO → CLOSED same night (items_after_statements try_hoist, fix
       `143aceb`):** a `--fix --write --verify` sweep of riir-viewbridge reproduced the
       column-0 defect on real code — `crates/riir-viewbridge-abi/tests/net_ffi_roundtrip.rs`
