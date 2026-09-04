@@ -696,9 +696,12 @@
     with identical arguments"); M5 stable-sigmoid-vs-exp annotation (tanh form
     produced non-finite logits at fused vector sites on M5 Max while finite in
     the standalone path — dsv4_hc lane).**
-- **Sibling lanes (do not touch):** riir-train — sibling actively building
-  (`/tmp/riir-train-499b`); the 4090 perf lanes — sibling PV work mid-flight as of 08-29
-  (re-verify lane state at session start before any 4090 unit).
+- **Sibling lanes (do not touch):** **riir-train — OWNER-RESTRICTED (2026-09-04): do not
+  route NEW work to riir-train for any task; only riir-clippy-related units are sanctioned
+  for this session lane.** Existing riir-train in-flight lanes stay with their owning
+  siblings (e.g. `/tmp/riir-train-499b`); read-only citations of riir-train records are
+  fine — never initiate fixes/gates/benches there. The 4090 perf lanes — sibling PV work
+  mid-flight as of 08-29 (re-verify lane state at session start before any 4090 unit).
 - **2026-09-03 (4090 box, second unit — plan-board truth sweep, zero-contention while the
   Plan-371 window + sibling B102 run):** katgpt-rs Plan 586 reconciled to RESOLVED-SCOPED
   (the GPU gates had PASSED 09-02 while the plan + the 845 line above still read

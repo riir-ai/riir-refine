@@ -177,6 +177,11 @@ skill points agents there). Per sweep:
 
 ## Discipline (non-negotiable)
 
+- **Routing restriction (owner, 2026-09-04): do NOT trigger riir-train for
+  other tasks — only `riir-clippy`-related units are allowed.** Read-only
+  citations of riir-train records stay fine; never initiate fixes, gates,
+  benches, or doc edits there. Sibling-owned riir-train lanes belong to
+  their owning sessions.
 - **Commit + push per unit** — `feat:`/`fix:`/`docs:` prefixes; stay on
   `develop` (every repo — riir-train flipped from `main` to develop + default
   on 2026-09-04); rebase non-interactive only.
