@@ -2858,6 +2858,16 @@ are gone:
    `MONTHLY_BUDGET_USD` verified ABSENT live 09-01. Collection +
    cap-crossing detection are LIVE (since 08-29); crossings land in
    KV + `/status alerts_today` and page nobody.
+   **The MONTHLY_BUDGET_USD trap is now FIXED (Issue 065 T7, 2026-09-04,
+   deployed `1314c925`, live-verified `/status` → `bill_model:
+   "issue065-t7"`):** the old alert summed per-day MARGINAL `est_usd` rows
+   (from-unit-zero — 4.7× high, containers-only, and the family that was
+   99% of the bill unwatched). The alert now reconciles the account-wide,
+   period-scoped CF bill (`src/bill.js`, ported from `scripts/gen_dashboard.py`,
+   pinned to `.benchmarks/cf_bill_pin.json` by `test/bill.test.mjs`), with
+   KV ops collected and degraded collectors named unwatched. Setting the
+   secret is now safe; the period start rides the `CF_BILLING_ANNIVERSARY_DAY`
+   `[vars]` pin (16, unfalsifiable bound 08-15..08-26 — override once known).
 3. **KAT mint go-live (044 T5 / 045 T6)**: armed-but-INERT until the
    kat-service production deploy (riir-dapps surface) lands AND the
    owner pushes `KAT_SERVICE_URL` + `KAT_MINT_TOKEN` (verified absent

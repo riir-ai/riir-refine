@@ -1,6 +1,14 @@
 // riir-kat-housekeeping — Issue 045 (riir-clippy).
 // Hourly cron: container cost snapshot + KAT mint anchor → KV.
-// Deliberately dependency-free (no build step; wrangler deploys this file).
+// Deliberately build-free: wrangler bundles the ESM import of ./bill.js (the
+// Issue 065 T7 bill model) with no build step of its own.
+
+import {
+  BILL_LINES,
+  KV_ACTION_TO_LINE,
+  billReconciliation,
+  billingPeriodStart,
+} from "./bill.js";
 
 const GRAPHQL = "https://api.cloudflare.com/client/v4/graphql";
 
@@ -293,7 +301,16 @@ function hourMeta(row) {
   };
 }
 
-function costUsd(env, memByteS, diskByteS, cpuS) {
+// MARGINAL cost of one usage slice: usage × rate from unit ZERO, allowances
+// NOT applied (Issue 065). Correct ONLY as "what this slice would add if the
+// account month is already past the allowance for that resource". The slice's
+// actual BILLED cost is $0.00 until the account crosses, and the crossing is a
+// property of the whole account over the whole month — so a per-app or per-day
+// figure is not a billing quantity and must never be reconciled against the
+// bill. Measured 2026-09-03: this model said $0.3780 where Cloudflare billed
+// $0.08 (4.7×). Use `billReconciliation()` (./bill.js) for anything that
+// claims to match Cloudflare — the MONTHLY_BUDGET_USD alert does.
+function marginalUsd(env, memByteS, diskByteS, cpuS) {
   const mem = (memByteS || 0) / 1073741824 * parseFloat(env.MEM_USD_PER_GIB_S);
   const disk = (diskByteS || 0) / 1e9 * parseFloat(env.DISK_USD_PER_GB_S);
   const cpu = (cpuS || 0) * parseFloat(env.CPU_USD_PER_S);
@@ -416,6 +433,52 @@ async function aiNeuronsToday(env, dateISO) {
   return g ? (g.sum.totalNeurons || 0) : 0;
 }
 
+// ---- period collectors (Issue 065 T7): the BILL query shapes -------------
+
+// Account-wide container usage totals for the billing period. The hourly
+// collector groups by datetimeHour; a month-wide ask through it would return
+// up to ~720 groups and silently truncate at the limit, so the bill asks for
+// ONE ungrouped aggregate instead — the exact shape aiNeuronsToday already
+// proves the dataset supports.
+async function containerTotals(env, startISO, endISO) {
+  const acc = await gql(env, `{ viewer { accounts(filter: {accountTag: "${env.CF_ACCOUNT_ID}"}) {
+    containersUsageAdaptiveGroups(limit: 10000,
+      filter: {datetimeHour_geq: "${startISO}", datetimeHour_lt: "${endISO}"}) {
+      sum { allocatedMemory allocatedDisk cpuTimeSec }
+    } } } }`);
+  let mem = 0, disk = 0, cpu = 0;
+  for (const g of acc.containersUsageAdaptiveGroups || []) {
+    mem += g.sum.allocatedMemory || 0;
+    disk += g.sum.allocatedDisk || 0;
+    cpu += g.sum.cpuTimeSec || 0;
+  }
+  return { mem, disk, cpu };
+}
+
+// Account-wide KV op totals per actionType for the billing period. KV was
+// $8.00 of the $8.08 bill — the family the old budget alert could not see at
+// all. Date filters (this dataset groups by DAY), and the window always fits
+// the dataset's 4w4d cap because a billing period is at most ~31 days.
+async function kvOpsByAction(env, startDateISO) {
+  const acc = await gql(env, `{ viewer { accounts(filter: {accountTag: "${env.CF_ACCOUNT_ID}"}) {
+    kvOperationsAdaptiveGroups(limit: 10000, filter: {date_geq: "${startDateISO}"}) {
+      dimensions { actionType }
+      sum { requests }
+    } } } }`);
+  const out = {};
+  for (const g of acc.kvOperationsAdaptiveGroups || []) {
+    const act = (g.dimensions && g.dimensions.actionType) || "?";
+    out[act] = (out[act] || 0) + (g.sum.requests || 0);
+  }
+  return out;
+}
+
+// The CF_BILLING_ANNIVERSARY_DAY var, defaulted to the dashboard's pin (16).
+function anniversaryDay(env) {
+  const d = parseInt(env.CF_BILLING_ANNIVERSARY_DAY, 10);
+  return Number.isFinite(d) ? d : 16;
+}
+
 // ---- the hourly run ------------------------------------------------------
 
 async function runHousekeeping(env) {
@@ -479,11 +542,13 @@ async function runHousekeeping(env) {
     const apps = {};
     for (const app of new Set([...Object.keys(usage), ...Object.keys(awake)])) {
       const u = usage[app] || { mem: 0, disk: 0, cpu: 0, tx: 0 };
-      const c = costUsd(env, u.mem, u.disk, u.cpu);
+      const c = marginalUsd(env, u.mem, u.disk, u.cpu);
       cost += c;
       apps[app] = { awake_s: Math.round(awake[app] || 0), est_usd: +c.toFixed(6) };
     }
-    row.containers = { est_usd: +cost.toFixed(6), apps };
+    // `marginal: true` labels the semantics at the read site (Issue 065 T7):
+    // est_usd here is usage × rate from unit ZERO — never a bill quantity.
+    row.containers = { est_usd: +cost.toFixed(6), marginal: true, apps };
     row.ai = { neurons_today: neurons };
 
     // KAT mint anchor (Issue 045 T3): the day's Workers-AI neuron burn is
@@ -596,42 +661,67 @@ async function runHousekeeping(env) {
       }
     }
 
-    // ---- monthly container budget (optional secret) ----------------------
+    // ---- monthly budget vs the CF BILL (Issue 065 T7) --------------------
+    // Runs only in the token-present path. The alert reconciles the
+    // account-wide, PERIOD-scoped bill (allowances subtracted, KV's
+    // round-to-the-next-million applied, KV ops included) against
+    // MONTHLY_BUDGET_USD — NOT the per-day marginal `est_usd` rows the old
+    // check summed: a monthly allowance cannot be apportioned to a day, the
+    // from-unit-zero model read 4.7× high, and containers were 1.0% of the
+    // real bill (KV was $8.00 of $8.08). Collectors degrade independently:
+    // a FAILED collector leaves its lines OUT of the bill and the alert names
+    // them as unwatched rather than silently billing them $0. Two extra
+    // GraphQL subrequests per run until the period's alert fires; the dedupe
+    // check below runs FIRST, so post-alert runs spend none of them.
     if (env.MONTHLY_BUDGET_USD) {
       try {
-        const ym = dateISO.slice(0, 7).replace("-", ""); // YYYYMM
-        const dedupeKey = `alert:${ym}:budget`;
-        // Check the dedupe key BEFORE the scan, not after. The alert fires at
-        // most once a month, but the scan under it — 1 KV list + up to 31 gets
-        // — was running EVERY HOUR for the rest of the month to recompute a
-        // number that could only re-fire an alert already sent. Workers count
-        // every KV binding call as a subrequest, so this was ~32 of them per
-        // run, hourly, to reach a guaranteed no-op.
-        const alreadyAlerted = await env.HOUSEKEEPING_KV.get(dedupeKey);
-        let mtd = 0;
-        const listed = alreadyAlerted
-          ? { keys: [] }
-          : await env.HOUSEKEEPING_KV.list({ prefix: `day:${ym}` });
-        const vals = await mapLimit(listed.keys.map((k) => k.name), KV_CONCURRENCY,
-          (n) => env.HOUSEKEEPING_KV.get(n));
-        for (const v of vals) {
-          try {
-            mtd += (JSON.parse(v || "{}").est_usd) || 0;
-          } catch (_) { /* tolerate malformed rows */ }
-        }
         const budget = parseFloat(env.MONTHLY_BUDGET_USD);
-        if (!alreadyAlerted && budget > 0 && mtd >= budget) {
-          const msg = `⚠ ops budget alert ${ym}: month-to-date container est cost $${mtd.toFixed(2)} ≥ monthly budget $${budget.toFixed(2)} — ${DASHBOARD_URL}`;
-          const sent = await notify(env, msg);
-          await env.HOUSEKEEPING_KV.put(dedupeKey, JSON.stringify({
-            ts: now.toISOString(),
-            kind: "monthly_budget",
-            mtd_usd: +mtd.toFixed(6),
-            budget_usd: budget,
-            notified: sent,
-          }));
+        if (budget > 0) {
+          const periodStart = billingPeriodStart(now, anniversaryDay(env));
+          const dedupeKey = `alert:bill:${periodStart.replace(/-/g, "")}`;
+          // Dedupe BEFORE the collectors — one alert per billing period, and
+          // the same discipline the old scan had: never spend subrequests
+          // recomputing a number that can only re-fire an alert already sent.
+          if (!(await env.HOUSEKEEPING_KV.get(dedupeKey))) {
+            const [rCont, rKv] = await Promise.allSettled([
+              containerTotals(env, `${periodStart}T00:00:00Z`, hourEndISO),
+              kvOpsByAction(env, periodStart),
+            ]);
+            const usage = {};
+            if (rCont.status === "fulfilled") {
+              usage.container_mem = rCont.value.mem / 1073741824;
+              usage.container_disk = rCont.value.disk / 1e9;
+              usage.container_cpu = rCont.value.cpu;
+            }
+            if (rKv.status === "fulfilled") {
+              for (const [act, line] of Object.entries(KV_ACTION_TO_LINE)) {
+                usage[line] = rKv.value[act] || 0;
+              }
+            }
+            const bill = billReconciliation(usage, periodStart);
+            if (bill.usd >= budget) {
+              const top = [...bill.lines].sort((a, b) => b.usd - a.usd)[0];
+              const unwatched = bill.uncollected
+                .map((k) => BILL_LINES[k].label).join(", ");
+              let msg = `⚠ ops budget alert ${bill.period_start}: CF bill $${bill.usd.toFixed(2)} ≥ monthly budget $${budget.toFixed(2)}`;
+              if (top && top.usd > 0) msg += ` — top line: ${top.label} $${top.usd.toFixed(2)}`;
+              if (unwatched) msg += ` — NOT counted (collector failed): ${unwatched}`;
+              msg += ` — ${DASHBOARD_URL}`;
+              const sent = await notify(env, msg);
+              await env.HOUSEKEEPING_KV.put(dedupeKey, JSON.stringify({
+                ts: now.toISOString(),
+                kind: "monthly_budget",
+                period_start: periodStart,
+                bill_usd: +bill.usd.toFixed(4),
+                marginal_usd: +bill.marginal_usd.toFixed(4),
+                budget_usd: budget,
+                uncollected: bill.uncollected,
+                notified: sent,
+              }));
+            }
+          }
         }
-      } catch (_) { /* monthly budget check is best-effort */ }
+      } catch (_) { /* bill check is best-effort */ }
     }
     // ---- end budget alerting ---------------------------------------------
   } catch (e) {
@@ -707,6 +797,7 @@ async function recomputeDay(env, dk, seed) {
   const out = {
     date: `${dk.slice(0, 4)}-${dk.slice(4, 6)}-${dk.slice(6, 8)}`,
     est_usd: +est.toFixed(6),
+    marginal: true,
     hours,
     hours_present: present,
     updated: new Date().toISOString(),
@@ -841,7 +932,7 @@ async function backfillRange(env, endDay, days) {
       const apps = {};
       for (const app of new Set([...Object.keys(u), ...Object.keys(a)])) {
         const g = u[app] || { mem: 0, disk: 0, cpu: 0, tx: 0 };
-        const c = costUsd(env, g.mem, g.disk, g.cpu);
+        const c = marginalUsd(env, g.mem, g.disk, g.cpu);
         cost += c;
         apps[app] = { awake_s: Math.round(a[app] || 0), est_usd: +c.toFixed(6) };
       }
@@ -857,7 +948,7 @@ async function backfillRange(env, endDay, days) {
         hour: `${hk.slice(0, 4)}-${hk.slice(4, 6)}-${hk.slice(6, 8)}T${hk.slice(8, 10)}:00:00Z`,
         ok: true,
         notes: ["backfilled from GraphQL billing rows; ai + mint_anchor are not per-hour reconstructible"],
-        containers: { est_usd: +cost.toFixed(6), apps },
+        containers: { est_usd: +cost.toFixed(6), marginal: true, apps },
         ai: (prior && prior.ai) || null,
         mint: (prior && prior.mint) || "n/a-backfill",
       };
@@ -1050,6 +1141,10 @@ async function handleFetch(request, env, ctx) {
           has_webhook: !!env.ALERT_WEBHOOK_URL,
           has_monthly_budget: !!env.MONTHLY_BUDGET_USD,
           read_gated: !!env.READ_TOKEN,
+          // Deploy marker + the active anniversary pin (Issue 065 T7). The
+          // budget alert reconciles the period BILL, not marginal sums.
+          bill_model: "issue065-t7",
+          billing_anniversary_day: anniversaryDay(env),
         });
       }
       if (hasToken) {

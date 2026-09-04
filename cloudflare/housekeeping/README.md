@@ -5,8 +5,11 @@ anchor**. Deployed at `riir-kat-housekeeping.<account>.workers.dev`.
 
 - **Cron** `0 * * * *` — pulls CF GraphQL (`containersUsageAdaptiveGroups`
   billing dataset + `containersMetricsAdaptiveGroups` awake seconds +
-  `aiInferenceAdaptiveGroups` day neurons), computes est cost, writes KV
+  `aiInferenceAdaptiveGroups` day neurons), computes MARGINAL est cost
+  (usage × rate from unit zero — never a bill quantity, Issue 065), writes KV
   rows (`hour:*`, `day:*`, `latest`), and records the **KAT mint anchor**.
+  When `MONTHLY_BUDGET_USD` is set it additionally reconciles the account-wide,
+  **period-scoped CF bill** (`src/bill.js`, Issue 065 T7) for alerting.
 - **Mint:** records the local anchor for the in-progress UTC day
   (`row.mint_anchor`, `status: "accruing"`; `row.mint: "anchor-only"`).
   The ledger shell landed 2026-08-29 (riir-dapps Plan 013 kat-service):
@@ -183,22 +186,46 @@ env -u CLOUDFLARE_API_TOKEN -u CF_API_TOKEN -u CLOUDFLARE_API_KEY -u CLOUDFLARE_
   retry storms; check the KV row's `notified` flag).
 - **At 100%:** the message adds `CAP EXCEEDED — new generations hard-fail
   until 00:00 UTC`.
-- **Monthly budget:** if `MONTHLY_BUDGET_USD` is set, the run sums the
-  month's `day:*` rows and alerts once per month (`alert:<YYYYMM>:budget`)
-  when month-to-date est cost reaches the budget.
-  > ⚠ **Read Issue 065 before setting this secret.** `costUsd()`
-  > (`src/worker.js:296`) computes `usage × rate` from unit **zero** — the
-  > Workers-Paid included allowances (25 GiB-h mem / 200 GB-h disk / 375
-  > vCPU-min per month) are never subtracted, and the alert sums *per-day*
-  > figures whose allowance cannot be apportioned to a day anyway. Measured
-  > 2026-09-03: that model says **$0.3780** where Cloudflare billed **$0.08**
-  > (4.7×), so a budget set from the real bill would alarm at roughly a fifth
-  > of the intended spend. It also models containers only, and containers were
-  > **1.0%** of the bill — KV was $8.00 of $8.08. The alert path is currently
-  > **inert** (`/status` reports `has_monthly_budget: false` and
-  > `has_webhook: false`), which is the only reason this is latent rather than
-  > live. Port `bill_line()` / `bill_reconciliation()` from
-  > `scripts/gen_dashboard.py` first — Issue 065 T7.
+- **Monthly budget:** if `MONTHLY_BUDGET_USD` is set, the run reconciles the
+  **period CF bill** against the budget and alerts once per billing period
+  (`alert:bill:<periodStartYYYYMMDD>`) when the bill's total reaches the
+  budget. **Issue 065 T7 (landed 2026-09-04) replaced the old model**, which
+  summed per-day `est_usd` rows — the ⚠ note below records what that model
+  got wrong, kept as the history of the fix:
+  > ⚠ **The pre-T7 model (do not resurrect):** `costUsd()` computed
+  > `usage × rate` from unit **zero** — the Workers-Paid included allowances
+  > (25 GiB-h mem / 200 GB-h disk / 375 vCPU-min per month) were never
+  > subtracted, and the alert summed *per-day* figures whose allowance cannot
+  > be apportioned to a day anyway. Measured 2026-09-03: that model says
+  > **$0.3780** where Cloudflare billed **$0.08** (4.7×), so a budget set from
+  > the real bill would alarm at roughly a fifth of the intended spend. It
+  > also modelled containers only, and containers were **1.0%** of the bill —
+  > KV was $8.00 of $8.08. It was **inert** (`/status`: `has_monthly_budget:
+  > false`, `has_webhook: false`) — the only reason it was latent rather than
+  > live.
+  >
+  > **The T7 model (`src/bill.js`, ported from `scripts/gen_dashboard.py`):**
+  > `billable = max(0, period_account_total − included)`;
+  > `usd = ceil(billable / block) × price` — allowances subtracted, KV's
+  > round-up-to-the-next-million applied (301,970 billable list ops cost the
+  > full $5.00, not $1.51), and **KV ops collected** (`kvOperationsAdaptiveGroups`
+  > by actionType). Verified against the 2026-09-03 bill to the cent in
+  > `test/bill.test.mjs` (`.benchmarks/cf_bill_pin.json`); two of those pins
+  > were mutation-checked red (drop the allowance subtraction → 6 red; price
+  > linearly → 4 red).
+  - **Period start is a PIN.** Neither this worker's credential nor the
+    dashboard's can read the billing anniversary (analytics GraphQL only), so
+    `CF_BILLING_ANNIVERSARY_DAY` (a `[vars]` entry, default **16** = the
+    dashboard's pin, bounded to 2026-08-15..2026-08-26) scopes both bill
+    queries and the dedupe key. Override once the real day is known.
+  - **Degraded collectors are unwatched, not zero.** A failed bill collector
+    leaves its lines OUT of the reconciliation and the alert names them
+    (`NOT counted (collector failed): …`) — an uncollected line and an unused
+    one are different facts (the Issue 065 defect that hid $8.00 of KV behind
+    a $0.08 container total).
+  - **Cost discipline unchanged:** the dedupe get runs BEFORE the two bill
+    GraphQL calls, so a post-alert run spends zero bill subrequests (pinned
+    by test).
 - **`day:*` rows are recomputed, not accumulated** (fixed 2026-08-28): each
   run sums the authoritative `hour:<day>*` rows. The previous
   read-modify-write double-counted on a cron double-fire or manual invoke and
@@ -481,8 +508,13 @@ Two things it deliberately does **not** do:
 ## Tests
 
 ```sh
-node --test cloudflare/housekeeping/test/*.test.mjs   # 31 tests, no deps
+node --test cloudflare/housekeeping/test/*.test.mjs   # 56 tests, no deps
 ```
+
+`test/bill.test.mjs` (added Issue 065 T7) pins the bill model to the real
+2026-09-03 bill (`.benchmarks/cf_bill_pin.json`) and pins the `[vars]`
+marginal rates equal to the BILL_LINES prices — two price sources exist on
+purpose (marginal vs bill) and silent drift between them is a red test.
 
 A bare directory arg fails `MODULE_NOT_FOUND` — `node --test` wants file
 paths. The Worker is dependency-free ESM and every global it touches exists
@@ -545,3 +577,10 @@ logs/month included on Paid.
 `CPU_USD_PER_S=2e-5` — Workers Paid, beyond the included 25 GiB-h mem /
 375 vCPU-min / 200 GB-h disk per month. A change is a `[vars]` re-pin +
 redeploy (the `CHARGE_VERSION` discipline from Proposal 005).
+
+These are the **MARGINAL** rates. The **BILL** model (allowances subtracted,
+KV's round-to-the-next-million, KV ops) lives in `src/bill.js`, mirrored from
+`scripts/gen_dashboard.py` and pinned to the real bill by
+test/bill.test.mjs — including a test that the `[vars]` rates equal the
+BILL_LINES prices. Since Issue 065 T7 the MONTHLY_BUDGET_USD alert uses the
+bill model, never these marginal rates.

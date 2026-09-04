@@ -93,10 +93,20 @@ id = "a3a0add9325f4078a16e32eb26f54932"
 
 [vars]
 CF_ACCOUNT_ID = "7e11517c4dd4f6e9cede7da9b60d66eb"
-# Pricing pinned 2026-08-26 (Issue 045) — Workers Paid, beyond included.
+# MARGINAL pricing pinned 2026-08-26 (Issue 045) — Workers Paid, beyond
+# included. These feed marginalUsd() (usage × rate from unit zero); the BILL
+# model (allowances subtracted, KV block rounding, KV ops included) lives in
+# src/bill.js mirroring scripts/gen_dashboard.py — test/bill.test.mjs pins the
+# two sources equal so they cannot drift.
 MEM_USD_PER_GIB_S = "0.0000025"
 DISK_USD_PER_GB_S = "0.00000007"
 CPU_USD_PER_S = "0.000020"
+# The billing-period anniversary day (Issue 065 T7). NOT derivable with this
+# worker's credential (analytics GraphQL only answers 10000-authentication-
+# error on every billing endpoint) — a PIN, defaulting to the dashboard's 16,
+# bounded by arithmetic to 2026-08-15..2026-08-26 and currently unfalsifiable.
+# Override once known; the budget alert reconciles from this day.
+CF_BILLING_ANNIVERSARY_DAY = "16"
 # Daily Workers-AI neuron cap (Issue 044 T4 budget alerting). Alert
 # thresholds are 50% / 90% / 100% of this, once per threshold per day.
 NEURON_CAP = "10000"

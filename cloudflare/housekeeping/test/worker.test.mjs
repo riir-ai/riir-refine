@@ -109,9 +109,24 @@ const APP = "a03a70ff-88e9-45c5-af80-339ab7707fbe";
 // test could have caught an hour-grouping bug. `opts.omitHour` reproduces the
 // old shape on purpose, to pin the cron's fallback.
 function fetchStub(opts = {}) {
-  const { omitHour = false, calls = null } = opts;
+  const {
+    omitHour = false, calls = null, webhooks = null,
+    kvActions = null, kvFail = false, periodTotals = null,
+  } = opts;
+  // Defaults for the BILL queries (Issue 065 T7): account-wide period usage
+  // shaped like .benchmarks/cf_bill_pin.json — the $8.08 Cloudflare actually
+  // charged. An hourly-shaped answer here would make the budget tests pass
+  // against a stub the real dataset never produces.
+  const kvActs = kvActions || { read: 15310000, list: 1301970, write: 419160 };
+  const pt = periodTotals || { memGibS: 122940, diskGbS: 246330, cpuS: 1020 };
   return async (_url, init) => {
-    const q = JSON.parse(init.body).query;
+    let body = {};
+    try { body = JSON.parse(init.body); } catch (_) {}
+    if (webhooks && body.content !== undefined) {
+      webhooks.push(body.content);
+      return { ok: true, async json() { return {}; } };
+    }
+    const q = body.query || "";
     if (calls) calls.push(q);
     const geq = (q.match(/datetimeHour_geq: "([^"]+)"/) || [])[1];
     const lt = (q.match(/datetimeHour_lt: "([^"]+)"/) || [])[1];
@@ -123,11 +138,31 @@ function fetchStub(opts = {}) {
     }
     const dims = (h) => (omitHour ? { applicationId: APP } : { applicationId: APP, datetimeHour: h });
     const acc = {};
-    if (q.includes("containersUsageAdaptiveGroups")) {
-      acc.containersUsageAdaptiveGroups = hours.map((h) => ({
-        dimensions: dims(h),
-        sum: { allocatedMemory: 1073741824, allocatedDisk: 1e9, cpuTimeSec: 10, txBytes: 5 },
+    if (q.includes("kvOperationsAdaptiveGroups")) {
+      // the per-actionType period query (the bill's KV half). kvFail
+      // reproduces a degraded collector so the uncollected path is testable.
+      if (kvFail) throw new Error("kv dataset down");
+      acc.kvOperationsAdaptiveGroups = Object.entries(kvActs).map(([actionType, requests]) => ({
+        dimensions: { actionType },
+        sum: { requests },
       }));
+    } else if (q.includes("containersUsageAdaptiveGroups")) {
+      if (q.includes("datetimeHour }")) {
+        // per-hour grouped query (hourly cron + backfill)
+        acc.containersUsageAdaptiveGroups = hours.map((h) => ({
+          dimensions: dims(h),
+          sum: { allocatedMemory: 1073741824, allocatedDisk: 1e9, cpuTimeSec: 10, txBytes: 5 },
+        }));
+      } else {
+        // ungrouped account-wide period totals (the bill's container half)
+        acc.containersUsageAdaptiveGroups = [{
+          sum: {
+            allocatedMemory: pt.memGibS * 1073741824,
+            allocatedDisk: pt.diskGbS * 1e9,
+            cpuTimeSec: pt.cpuS,
+          },
+        }];
+      }
     } else if (q.includes("containersMetricsAdaptiveGroups")) {
       acc.containersMetricsAdaptiveGroups = hours.map((h) => ({
         dimensions: dims(h),
@@ -158,9 +193,9 @@ const get = (path, { token, origin } = {}) => new Request(
   } },
 );
 
-async function runHour(kv, iso, extra = {}) {
+async function runHour(kv, iso, extra = {}, stubOpts = {}) {
   const realFetch = globalThis.fetch;
-  globalThis.fetch = fetchStub();
+  globalThis.fetch = fetchStub(stubOpts);
   try {
     await atUtc(iso, async () => {
       const c = ctxStub();
@@ -550,32 +585,93 @@ test("an authenticated body is never marked publicly cacheable", async () => {
   }
 });
 
-test("the monthly-budget scan stops running once the alert has fired", async () => {
+// ---- Issue 065 T7: the budget alert reconciles the BILL, not marginal sums
+// The old check summed per-day `est_usd` rows — a from-unit-zero MARGINAL
+// quantity whose monthly allowance cannot be apportioned to a day, covering
+// only the container family (1.0% of the real bill). The tests below pin the
+// replacement: account-wide, period-scoped, allowances subtracted, KV's
+// round-up applied, KV ops included, degraded collectors named as unwatched.
+
+test("the monthly-budget alert reconciles the CF BILL against the period window", async () => {
+  const webhooks = [];
+  const calls = [];
+  const kv = kvStub();
+  await runHour(kv, "2026-08-28T10:00:06.549Z", {
+    MONTHLY_BUDGET_USD: "8.08",   // the real bill's total — must fire
+    ALERT_WEBHOOK_URL: "https://hooks.example/discord",
+  }, { webhooks, calls });
+
+  // Period scope: the default anniversary pin (16) puts the period at
+  // 2026-08-16, and BOTH bill queries must be windowed from it.
+  const key = "alert:bill:20260816";
+  assert.ok(kv.store.has(key), "period-scoped dedupe key missing");
+  assert.ok(calls.some((q) => q.includes("kvOperationsAdaptiveGroups") &&
+    q.includes('date_geq: "2026-08-16"')), "KV bill query not period-scoped");
+  assert.ok(calls.some((q) =>
+    q.includes('datetimeHour_geq: "2026-08-16T00:00:00Z"')),
+    "container bill query not period-scoped");
+
+  // The message is the bill, with the top line attributed. The same usage
+  // priced marginal-from-zero would read far higher — the message must not.
+  assert.match(webhooks[0], /CF bill \$8\.08 ≥ monthly budget \$8\.08/);
+  assert.match(webhooks[0], /top line: KV list ops \$5\.00/);
+  assert.ok(!webhooks[0].includes("NOT counted"),
+    "both collectors succeeded; nothing is unwatched");
+
+  const row = JSON.parse(kv.store.get(key));
+  assert.equal(row.kind, "monthly_budget");
+  assert.equal(row.period_start, "2026-08-16");
+  assert.deepEqual(row.uncollected, []);
+  // 5.00 + 3.00 + 0.08235 = 8.08235 (toFixed(4) on the row; tolerance here
+  // because the 4th decimal sits on a rounding boundary).
+  assert.ok(Math.abs(row.bill_usd - 8.08235) < 0.001,
+    `bill_usd ${row.bill_usd} vs 8.08235`);
+  assert.equal(row.notified, true);
+});
+
+test("the bill scan stops running once the period alert has fired", async () => {
   const extra = { MONTHLY_BUDGET_USD: "0.000001" };   // trivially exceeded
-  // A prior day row must exist: the month-to-date scan reads the `day:`
-  // aggregates, and this run writes its own only after the budget check.
-  const seed = { "day:20260827": JSON.stringify({ date: "2026-08-27", est_usd: 1, hours: 24 }) };
-  const kv = kvStub(seed);
-  await runHour(kv, "2026-08-28T10:00:06.549Z", extra);
-  assert.ok(kv.store.has("alert:202608:budget"), "precondition: alert fired");
+  const calls1 = [];
+  const kv = kvStub();
+  await runHour(kv, "2026-08-28T10:00:06.549Z", extra, { calls: calls1 });
+  assert.ok(kv.store.has("alert:bill:20260816"), "precondition: alert fired");
+  assert.equal(calls1.filter((q) => q.includes("kvOperationsAdaptiveGroups")).length, 1,
+    "precondition: the bill scan ran before the alert");
 
-  // The scan is 1 list + up to 31 gets, and it was re-running EVERY hour for
-  // the rest of the month to recompute a number that could only re-fire an
-  // alert already sent.
-  const before = { ...kv.ops };
-  await runHour(kv, "2026-08-28T11:00:06.549Z", extra);
-  const withAlert = { list: kv.ops.list - before.list, get: kv.ops.get - before.get };
+  // The dedupe check runs BEFORE the collectors, so a post-alert run spends
+  // zero bill subrequests — the same discipline the old day-row scan had.
+  const calls2 = [];
+  await runHour(kv, "2026-08-28T11:00:06.549Z", extra, { calls: calls2 });
+  assert.equal(calls2.filter((q) => q.includes("kvOperationsAdaptiveGroups")).length, 0,
+    "post-alert run must not spend the bill subrequests");
+  assert.equal(calls2.length, 3,
+    "post-alert run still collects the three hourly datasets");
+});
 
-  const kv2 = kvStub(seed);
-  await runHour(kv2, "2026-08-28T10:00:06.549Z");          // no budget configured
-  const before2 = { ...kv2.ops };
-  await runHour(kv2, "2026-08-28T11:00:06.549Z");
-  const noBudget = { list: kv2.ops.list - before2.list, get: kv2.ops.get - before2.get };
+test("a failed KV collector leaves KV out of the bill and names it unwatched", async () => {
+  const webhooks = [];
+  const kv = kvStub();
+  await runHour(kv, "2026-08-28T10:00:06.549Z", {
+    MONTHLY_BUDGET_USD: "0.01",   // containers alone ($0.08) exceed this
+    ALERT_WEBHOOK_URL: "https://hooks.example/discord",
+  }, { webhooks, kvFail: true });
 
-  assert.equal(withAlert.list, noBudget.list,
-    "a post-alert run must not spend the month-to-date list op");
-  assert.ok(withAlert.get <= noBudget.get + 1,
-    `post-alert run scanned the month anyway: ${withAlert.get} vs ${noBudget.get}`);
+  const row = JSON.parse(kv.store.get("alert:bill:20260816"));
+  assert.deepEqual(row.uncollected, ["kv_read", "kv_list", "kv_write", "kv_delete"],
+    "a degraded collector must read as UNCOLLECTED, never as a zero");
+  // The bill that fired counts containers only (0.08235) — and says so.
+  assert.ok(Math.abs(row.bill_usd - 0.08235) < 0.001);
+  assert.match(webhooks[0], /NOT counted \(collector failed\): KV read ops/);
+});
+
+test("no MONTHLY_BUDGET_USD: the bill collectors never run", async () => {
+  const calls = [];
+  const kv = kvStub();
+  await runHour(kv, "2026-08-28T10:00:06.549Z", {}, { calls });
+  assert.equal(calls.length, 3, "only the three hourly datasets");
+  assert.ok(!calls.some((q) => q.includes("kvOperationsAdaptiveGroups")));
+  assert.ok(!calls.some((q) =>
+    q.includes("containersUsageAdaptiveGroups") && !q.includes("datetimeHour }")));
 });
 
 test("a long backfill stops on a wall-clock budget with a resumable cursor", async () => {

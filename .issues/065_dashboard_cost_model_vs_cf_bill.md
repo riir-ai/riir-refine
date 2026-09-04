@@ -1,6 +1,6 @@
 # Issue 065 — the ops dashboard's cost model did not model the bill
 
-**Status:** T1/T2/T4/T5/T8 DONE (2026-09-03; DEPLOYED + auth-gated) · T3 OPEN (owner call — the $8.00 is not this repo's) · T6/T7 OPEN (latent)
+**Status:** T1/T2/T4/T5/T8 DONE (2026-09-03; DEPLOYED + auth-gated) · T3 DONE (owner-resolved 2026-09-03: zed agent bug — see T3's inline note) · T6 DONE (verdict PASS 2026-09-03T18:23 UTC) · **T7 DONE (2026-09-04; deployed + live-verified — see T7's resolution note)**
 **Evidence:** [`.benchmarks/067_cf_bill_reconciliation.md`](../.benchmarks/067_cf_bill_reconciliation.md) ·
 bill snapshot [`.benchmarks/cf_bill_pin.json`](../.benchmarks/cf_bill_pin.json)
 **Surface:** `scripts/gen_dashboard.py`, `cloudflare/dashboard/public/index.html` (generated)
@@ -43,14 +43,15 @@ Three defects, in increasing order of how much money they hid:
 - [x] **T5** — make drift detectable instead of self-agreeing: `.benchmarks/cf_bill_pin.json`
       carries Cloudflare's own `billable`/`usd` figures (never recomputed) and the reconciliation
       card renders a per-line Δ against it, with `not pinned` distinct from `✓`.
-- [ ] **T3** — **owner call: identify who owns KV namespace `d2cdb46dee30430b96dbf5b439ed318b`.**
+- [x] **T3** — **owner call: identify who owns KV namespace `d2cdb46dee30430b96dbf5b439ed318b`.**
       99.98% of every KV op on the account (17,026,180 ops: 15.29M read / 1.32M list / 417.6k
       write) and it appears in **no wrangler config under `/Users/katopz/git`**. Its 11.6
       reads-per-list is a list-then-read-each loop; caching or a single `list` + batched reads
       would take the $5.00 list block to $0.00 (billable would fall under the 1M allowance) and
       the read line from 6 blocks to 5. Worker CPU agrees: `scriptName __unknown__` is 522,185
       requests / 4,034,105 cpu-ms = 97.9% of the account's Workers CPU. riir-clippy's own two
-      workers are 381 requests combined. **Not this repo's spend — needs the account owner.**
+      workers are 381 requests combined. **Not this repo's spend — needs the account owner.** 
+      // it's zed agent bug, has been resolved.
 - [x] **T8** — **the live dashboard was serving its whole private payload
       unauthenticated, and this change widened it.** Found by *fetching* the
       worker after deploy rather than trusting the deploy's exit code:
@@ -75,7 +76,7 @@ Three defects, in increasing order of how much money they hid:
       is unreachable only while the secret lives. Deleting the secret
       re-publishes the payload silently; that residual is the reason to
       eventually take the `deny` flip.
-- [ ] **T7** — the **same defect ships in the housekeeping Worker**, latently.
+- [x] **T7** — the **same defect ships in the housekeeping Worker**, latently.
       `costUsd()` (`cloudflare/housekeeping/src/worker.js:296`) is the identical
       from-unit-zero model, and the `MONTHLY_BUDGET_USD` alert sums *per-day*
       `est_usd` rows — a quantity whose allowance cannot be apportioned to a day
@@ -87,6 +88,45 @@ Three defects, in increasing order of how much money they hid:
       execute, and the trap is now documented at the point of enablement
       (`cloudflare/housekeeping/README.md`, budget bullet). Port `bill_line()` /
       `bill_reconciliation()` before setting the secret.
+      **RESOLVED 2026-09-04** (deployed + live-verified; `/status` answers
+      `bill_model: "issue065-t7"`):
+      * **`cloudflare/housekeeping/src/bill.js` (new)** — the bill model ported
+        from `scripts/gen_dashboard.py`: `BILL_LINES` / `billLine()` /
+        `billReconciliation()` / `billingPeriodStart()` / `KV_ACTION_TO_LINE`.
+        Wrangler bundles the ESM import; still no build step.
+      * **`marginalUsd()`** — `costUsd()` renamed + doc-commented with the
+        marginal-vs-billed contract (the dashboard's `container_marginal_usd`
+        wording); `marginal: true` added to hour-row `containers` and day
+        aggregates so the semantics are labelled at the read site.
+      * **The alert is bill-shaped**: account-wide, period-scoped (the
+        `CF_BILLING_ANNIVERSARY_DAY` `[vars]` pin, default 16 = the
+        dashboard's), allowances subtracted, KV's round-up applied, and **KV
+        ops collected** (`kvOperationsAdaptiveGroups` by actionType — the
+        family that was $8.00 of $8.08). Two new ungrouped-period-total query
+        shapes (the `aiNeuronsToday` shape proves the dataset supports it);
+        degraded collectors leave their lines OUT and the alert names them as
+        unwatched (uncollected ≠ zero — the Issue 065 defect-3 lesson). Dedupe
+        `alert:bill:<periodStartYYYYMMDD>` checked BEFORE the 2 GraphQL calls
+        (cost discipline kept: post-alert runs spend zero bill subrequests).
+        Dedupe row records `bill_usd` / `marginal_usd` / `uncollected`.
+      * **Pins**: `test/bill.test.mjs` (new) reproduces the 2026-09-03 bill to
+        the cent from `.benchmarks/cf_bill_pin.json` (incl. KV's 301,970 →
+        one whole $5 block), pins `billingPeriodStart` off UTC fields, and
+        pins the `[vars]` marginal rates == the BILL_LINES prices (two price
+        sources exist on purpose; drift is a red test). The worker budget
+        tests replace the day-row-sum test with: bill-shaped firing + period
+        window in the queries, stop-after-alert (0 bill fetches post-dedupe,
+        3 hourly collectors still run), KV-collector-failure → uncollected
+        named in the alert, and no-budget → collectors never run. Both
+        mutation checks bite (allowance subtraction dropped → 6 red; linear
+        instead of ceil → 4 red).
+      * 56/56 tests green (`node --test cloudflare/housekeeping/test/*.test.mjs`).
+      * **Still true after the fix**: `MONTHLY_BUDGET_USD` and
+        `ALERT_WEBHOOK_URL` remain UNSET, so the alert stays inert until the
+        owner sets them — but setting them is now SAFE: the number the alert
+        compares is the bill. The trap documentation in the README budget
+        bullet is now the description of the fixed behaviour (pre-T7 model
+        preserved as a do-not-resurrect note).
 - [x] **T6** — the M3 nightly has failed `exit 124` on **2026-09-01 and 2026-09-02**, so the
       deployed dashboard is pinned at the 2026-09-01 03:44 artifact. Structural, not flaky: the
       whole-run budget is `timeout 1200` (`scripts/ops_nightly.sh:223`) while the **per-repo**
