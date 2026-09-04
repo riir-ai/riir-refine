@@ -207,8 +207,14 @@ Every row now carries a verdict instead of an open bracket:
 
 ## What is actually open after this record
 
-1. **D7** — the devnet ceremony rung (riir-deployer). Engineering, unblocked, ready to plan.
-2. **D8** — the advisory soak, once D7's cluster is up. Rides D7.
+1. ~~**D7** — the devnet ceremony rung (riir-deployer). Engineering, unblocked, ready to plan.~~
+   **DONE 2026-09-04** (riir-deployer `73159a0`, deployer Plan 004) — the five-conjunct
+   permit, the four steps executed through the real binary, `devnet.toml` authored by the
+   ceremony, 12 gate tests, chainspec cross-verified by a throwaway loader. 061's T2.0 row
+   carries the full record.
+2. **D8** — the advisory soak, once D7's cluster is up. Rides D7. **D7 is done; the soak
+   itself is still unrun from this box** (riir-dao is not checked out here — it is an
+   M3-lane execution).
 3. ~~**D3** — extend the pinned copy set to the KAT-stake surface. Small, unblocked.~~
    **DONE 2026-09-05 (this commit):** the gate predicate is now ONE shared fn
    (`kat_stake_client::caveat15_violation`) driven by the module tests AND the
@@ -221,6 +227,10 @@ Every row now carries a verdict instead of an open bracket:
    under `kat_transport`, clippy 0.
 4. **D9** — create `gist-rs/cargo-heal`. **Owner act, one command, awaiting go-ahead.**
 5. **T2.2/T2.3/T4.4 on testnet** — owner act, but only *after* D7's rehearsal reports clean.
+   **(2026-09-05: T4.4a — the DEVNET wet-run — has since executed: steps 1–4 PASS live; the
+   step-5 refund-leg semantics are the owner's pick, see 061's T4.4a row. D3 above is also
+   done. What remains on this list is unchanged in substance: D8's soak (M3 lane, riir-dao
+   not checked out on the 4090 box) and the owner acts.)
 
 Everything else in 059, 060 and 061 is now decided, closed, or explicitly tiered with a
 named re-open trigger. **No row anywhere in the three trackers is "waiting" without a

@@ -15,7 +15,30 @@
 > the verdict, `rm -rf` when the batch lands. Full contract = `distill` skill
 > §"Full-source access" (Batch 96-98 vendor precedent) + katgpt-rs `research` §0.5.
 
-## Live queue state (2026-09-05, post-Batch-108, M3 box)
+## Live queue state (2026-09-05, post-Batch-108; 4090-box sweep session below, M3 batch records follow)
+
+- **2026-09-05 sweep unit (4090 box) — NO LAND, territory contested; re-arm condition recorded.** The queue
+  fell to item 3 (clippy sweep): riir-dapps + riir-viewbridge dry-run **0 edits** (riir-dapps clean under real
+  clippy --all-targets — developed with the healer in the loop; viewbridge's 08-26 sweep still holds).
+  riir-game-sdk dry-ran **19 edits / 6 files** (riir-e2e: map_unwrap_or x5, uninlined x8, shrink-to-fit x2,
+  vec-with-capacity, use_self, +1 the fixpoint pass) — applied, then **REVERTED unvalidated**: the nft_e2e
+  surface cannot compile on this box. Three environment findings, all cross-repo:
+  (1) **riir-auth + riir-mmorpg-examples were missing from E:/git** — cloned from gist-rs (auth @ 3ecdd1e,
+    mmorpg @ d1640cd), restoring the both-boxes sync rule for those two.
+  (2) **game-sdk origin/develop is UNBUILDABLE from a fresh clone** — mmorpg's `0e4403a`/`d1640cd` (the
+    scenelab migration, 030 P1) consumes `../riir-game-sdk/crates/riir-scenelab` + the game-sdk `panel`
+    feature, NEITHER of which exists at game-sdk origin (the crate half of the 092 move-map was never
+    pushed). Every cargo invocation in the graph dies at manifest load even with the deps inactive. The
+    scenelab session (riir-ai Issues 871/872) is LIVE — their lane, not filed here.
+  (3) **riir-chain `src/wallet/tx_log.rs:2079` E0282** (inferred `Option<T>` where T is unconstrained —
+    `set_permissions(mode.clone())`) breaks the lib **under specific feature selections only** (compiles
+    clean as a riir-dapps dep; breaks as an riir-e2e `nft_e2e` transitive dep). The file is the documented
+    excluded-sibling (031/032) territory and the NFT-retirement migration (125) landed hours ago — the
+    owning session should see it; not filed in the read-only repo.
+  **Re-arm:** the game-sdk e2e sweep after the chain-125/scenelab migration lands and origin resolves from
+  a fresh clone. Housekeeping done this unit: ticked Plan 075's stale GOAT checklist (batch verifiably
+  landed 09-04), 068's stale open-list rows updated (D7 done, D8 named M3-lane), leftover wrangler-dev
+  tree from the wet-run session killed (port 8813 clear).
 
 - **Corpus counts:** kernel_opt 494 · rust_perf 99 · clippy_lints 45 · sec 12 · docker 31
   (AGENTS.md is the authoritative ledger — bump there per batch, snapshot counts are a convenience copy).

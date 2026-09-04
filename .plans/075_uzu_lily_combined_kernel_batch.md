@@ -101,9 +101,16 @@ walk) executes. The combined batch is **Batch 105**; the "Batch 106" slot merges
 
 ## GOAT checklist (landing bar)
 
-- [ ] New gates green (present/parses/concepts per batch file)
-- [ ] kernel_heal lib + default lib green, count-identical pre/post except the new gates
-- [ ] Retrieval floors HELD (no re-pins)
-- [ ] clippy -D warnings clean, both states
-- [ ] Count pins walked (every site)
-- [ ] Queue + AGENTS.md + research statuses + highwater committed in the landing commit
+- [x] New gates green (present/parses/concepts per batch file) — 3/3 FIRST RUN
+      (one concepts needle caught pre-landing; gate doing its job).
+- [x] kernel_heal lib + default lib green, count-identical pre/post except the new
+      gates — kernel_heal 1338/0/1i, default 1076/0.
+- [x] Retrieval floors HELD (no re-pins) — retrieval_precision_regression_gate PASS.
+- [x] clippy -D warnings clean, both states — landed clean; the residual clippy
+      batch105_concepts_covered `too_many_lines` discharged post-close 2026-09-04 by
+      the resume session (the batch98 `#[allow]` precedent).
+- [x] Count pins walked (every site) — tests.rs total/batch-list/expected-array x7
+      categories + sums x2 + grouped x2; router.rs; mod.rs doc + 7 member lists + 7
+      category comments.
+- [x] Queue + AGENTS.md + research statuses + highwater committed in the landing
+      commit.
