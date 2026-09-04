@@ -1551,6 +1551,7 @@ mod entries_gpu_16;
 mod entries_gpu_17;
 mod entries_gpu_18;
 mod entries_gpu_19;
+mod entries_gpu_20;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -1583,6 +1584,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_17::entries());
     entries.extend(entries_gpu_18::entries());
     entries.extend(entries_gpu_19::entries());
+    entries.extend(entries_gpu_20::entries());
     Corpus::new(entries)
 }
 
@@ -1595,7 +1597,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 482-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 490-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1603,7 +1605,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (106 rules)
+    // A: Memory access patterns (108 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -1713,6 +1715,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "bucketed-sparse-reader-column-partition",
             "bank-group-circular-element-reorder",
             "hazard-tracked-aliasing-scratch-allocator",
+            "sparse-demand-paged-kv-cache",
+            "tensor-op-strided-device-operand-binding",
         ],
     ),
     // B: Compute patterns (57 rules)
@@ -1779,7 +1783,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "per-row-scale-folded-into-rhs-staging-tile",
         ],
     ),
-    // C: Fusion patterns (42 rules)
+    // C: Fusion patterns (43 rules)
     (
         KernelCategory::Fusion,
         "C: fusion",
@@ -1826,9 +1830,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "heterogeneous-unit-paths-shared-tile-fusion",
             "stream-k-persistent-cta-mac-segments",
             "rht-epilogue-fusion-contract",
+            "gumbel-argmax-filtered-sampling-descent",
         ],
     ),
-    // D: Dispatch patterns (111 rules)
+    // D: Dispatch patterns (112 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -1944,9 +1949,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "serving-raises-only-behind-strict-flag",
             "derived-key-single-constructor-parity-test",
             "vendor-fused-op-instantiation-check",
+            "prefill-chunk-command-buffer-capacity-coupled",
         ],
     ),
-    // E: Parallelism patterns (33 rules)
+    // E: Parallelism patterns (35 rules)
     (
         KernelCategory::Parallelism,
         "E: parallelism",
@@ -1984,6 +1990,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "register-budget-head-split-gqa-reread-trade",
             "batch-composition-invariant-grid-early-return",
             "target-tile-split-k-deterministic-two-dispatch",
+            "packed-total-order-multi-field-argmax",
+            "radix-select-ordered-key-topk",
         ],
     ),
     // F: Flash-attention tiling (12 rules)
@@ -2038,7 +2046,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "whole-sequence-zero-barrier-single-dispatch-scan",
         ],
     ),
-    // H: MoE dispatch + backward pass (20 rules)
+    // H: MoE dispatch + backward pass (21 rules)
     (
         KernelCategory::MoeDispatchBackward,
         "H: MoE dispatch + backward",
@@ -2063,6 +2071,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "gpu-resident-moe-routing-no-host-sync",
             "indirect-device-dispatch-tile-map-moe",
             "lane-sequenced-deterministic-bucket-scatter",
+            "single-threadgroup-fused-count-scan",
         ],
     ),
     // I: NSA block-sparse selection (4 rules)
@@ -2143,7 +2152,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "small-batch-matvec-gemm-bridge-rung",
         ],
     ),
-    // N: dtype + alignment specialization (27 rules)
+    // N: dtype + alignment specialization (29 rules)
     (
         KernelCategory::DtypeAlignment,
         "N: dtype + alignment",
@@ -2175,6 +2184,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "bit-plane-plane-sums-input-side-offset-dot",
             "half-domain-exact-band-dequant-with-raw-bit-oracle",
             "tile-coo-sparse-tile-aligned-format",
+            "integer-mma-span-epilogue-dequant",
         ],
     ),
     // O: IR strength reduction (4 rules)
