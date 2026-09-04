@@ -63,7 +63,20 @@ impl Collector<'_> {
         if drops_interior_comment(self.source, byte_range(a), &[]) {
             return None;
         }
-        Some(format!("*b\"{text}\""))
+        let mut replacement = format!("*b\"{text}\"");
+        // Postfix-continuation guard: unary `*` binds LOOSER than `.`/`[`/`?`,
+        // so an array in method-receiver/index position needs parens —
+        // `[b'-', b'.'].into_iter()` must become `(*b"- .").into_iter()`,
+        // never `*b"- .".into_iter()` (that derefs the Iterator). Found live
+        // by the katgpt-pruners compile gate (2 auto-reverted edits,
+        // Batch 91 consumer proof).
+        if self.source[byte_range(a).end..]
+            .trim_start()
+            .starts_with(['.', '[', '?'])
+        {
+            replacement = format!("({replacement})");
+        }
+        Some(replacement)
     }
 }
 
@@ -127,5 +140,23 @@ mod tests {
         let input = "const M: [u8; 2] = [b'A', /* x */ b'B'];";
         let out = propose_fix("byte_char_slices", input);
         assert!(out.is_none(), "interior comment must refuse: {out:?}");
+    }
+
+    #[test]
+    fn method_receiver_position_parenthesizes() {
+        // The katgpt-pruners revert class: unary * binds looser than `.` —
+        // the array in receiver position needs parens.
+        let input = "fn f() -> u8 { [b'-', b'.'].into_iter().next().unwrap() }";
+        let out = propose_fix("byte_char_slices", input).expect("matched");
+        assert!(out.contains("(*b\"-.\").into_iter()") || out.contains("(*b\"- .\").into_iter()"), "{out}");
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn index_position_parenthesizes() {
+        let input = "fn f() -> u8 { [b'a', b'b'][1] }";
+        let out = propose_fix("byte_char_slices", input).expect("matched");
+        assert!(out.contains("(*b\"ab\")[1]"), "{out}");
+        syn::parse_file(&out).expect("re-parses");
     }
 }
