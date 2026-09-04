@@ -17,9 +17,41 @@
 
 ## Live queue state (2026-09-05, post-Batch-104, M3 box)
 
-- **Corpus counts:** kernel_opt 466 · rust_perf 99 · clippy_lints 45 · sec 12 · docker 31
+- **Corpus counts:** kernel_opt 482 · rust_perf 99 · clippy_lints 45 · sec 12 · docker 31
   (AGENTS.md is the authoritative ledger — bump there per batch, snapshot counts are a convenience copy).
-- **Last landed:** **Batch 104 (2026-09-05, Research 126 / Plan 074 — the ggml-org/llama.cpp
+- **Last landed:** **Batch 106 (2026-09-05, Research 129 / Plan 076 — the MTPLX upstream
+  residue distill; 4090 box, CPU-only; the queued NEXT-UP row consumed): 5 rules, corpus
+  477 → 482 (D 106 → 111).** Source youssofal/MTPLX upstream main @ `dd4031a8f9ed9d0a532b6e16bcc147dc40399c1d`
+  (v2.11.1, Apache-2.0) — the three surfaces Batch 103 never read: the upstream `mistakes/`
+  post-mortem corpus (16 files, filename IS the rule), docs/plans+specs+concurrency, and
+  the targeted kernel diff since the mined base `8bc4d88`. `prefix-reuse-key-must-mirror-
+  the-restore-predicate` (D, the B+ lead CONFIRMED with BOTH instances in-source: the
+  sentinel bank-fingerprint post-mortem + the dd4031a8 fix commit itself — the fingerprint
+  carries only what changes KV/MTP history without changing tokens, and every reuse
+  estimator must ask the question the restore path answers; the 2.10.2 exact-containment
+  shed re-prefilled 41,901 tokens cold / 54 s with a 41,391-token block restore available),
+  `request-arrival-work-asks-reuse-state-first` (D — arrival-time work gated on the
+  bank's shares_ram_prefix answer + never await unconsumed work; the PLE first-gather
+  650k-row warm-turn waste), `serving-raises-only-behind-strict-flag` (D — the verdict-
+  delivery policy composed with B103's measurement half: measurement = raise, serving =
+  count + one warning per class), `derived-key-single-constructor-parity-test` (D — one
+  constructor for every reader+writer of a hashed contract key + a drift-failing parity
+  test + provenance markers for values equal to defaults), `vendor-fused-op-instantiation-
+  check` (D, axis-A find — read the shipped metallib's symbol table before assuming a
+  vendor fused op covers your shape; MLX sdpa is instantiated only for head dims
+  64/96/128/256, the MLA latent is 512 wide, so the 'fast path' measured the vendor's own
+  fallback). Riders: p99-inter-emit-gap census + delivered-cadence doctrine (league doc
+  citations), stale-binary provenance (Bench-749/Issue-866 confirmation), git-stash-
+  shared-by-worktrees (our AGENTS.md rule confirmed), census-vs-E2E 4th instance. 11
+  mistake files dispositioned out-of-scope in Research 129; `docs/perf/` subdirs named
+  unread-remainder. EN-ROUTE: fresh FULL clone needed (the queue's depth-1 note) +
+  `core.longpaths` (mistake filenames exceed Windows MAX_PATH); the mod.rs "464-rule"
+  doc line was 2 batches stale (post-B104/B105) — repaired to 482. GOAT: batch106 gates
+  3/3 FIRST-SHOT + kernel_heal lib 1343/0/1i + default lib 1078/0 + kernel_heal+latent
+  1451/0/2i (floors HELD zero re-pins) + clippy 0 --lib both states (the exFAT hard-link
+  cargo noise excepted). Count pins walked: tests.rs 75 + 5368-sum + 5382-grouped +
+  expected-array D + router.rs 461 + mod.rs D header/list + the 464→482 doc-line repair.
+  Prior: **Batch 104 (2026-09-05, Research 126 / Plan 074 — the ggml-org/llama.cpp
   fa-vec offline swept launch-table distill; the 09-02-queued league opponent-watch lead
   consumed; M3 box, CPU-only, read-only source lane): 2 rules, corpus 464 → 466 (K 5 → 7).**
   Infra `efeda76b9` (08-24: ggml-metal-tuning.{h,cpp} the runtime table + tools/tuning/ the
@@ -237,7 +269,7 @@
     overlap evaluate-then-likely-drop. Pin `ef96313…` (fork davidtai/MTPLX-1, Apache-2.0,
     unmerged; re-pin at T0). Also queued for the next B100 touch: the NAX hd-256 dsplit
     rider + the #4380 GQA-12/16 table (B100 rider enrichment).
-  - **MTPLX RESIDUE (queued 2026-09-04, cadence-gated behind the B105 defers) — CLAIMED 2026-09-05 by the 4090-box idle loop: Plan 076 / Research 129 allocated and pushed; fresh full clone at `.raw/mtplx-upstream` @ `dd4031a8f9ed9d0a532b6e16bcc147dc40399c1d` (verified = the head below; `core.longpaths` required — mistake filenames exceed Windows MAX_PATH); `.research/.highwater` repaired 127 → 129 at allocation.** Batch 103's population was the PR #391 diff + body;
+  - **MTPLX RESIDUE (queued 2026-09-04, cadence-gated behind the B105 defers) — LANDED 2026-09-05 as Batch 106 (Research 129 / Plan 076): 5 rules, corpus 477 → 482 (D 106 → 111); the B+ lead CONFIRMED with both instances in-source; see the Last-landed entry above.** Batch 103's population was the PR #391 diff + body;
     upstream `youssofal/MTPLX` main has NEVER been mined (**196 commits / 300 files** ahead of the
     mined base `8bc4d88`, `behind_by` 0; v2.10.2 09-01 + v2.11.1 09-04; head
     `dd4031a8` 2026-09-04T10:25Z, Apache-2.0), the `mistakes/` post-mortem corpus is **16 files

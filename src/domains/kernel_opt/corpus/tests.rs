@@ -64,16 +64,17 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 63 (3): the CubeCL twin unlock — same-input-gemv-weight-concat-at-upload, deferred-residual-fused-into-next-layer-norm, reset-state-in-place-fill-never-realloc (ternary_deltanet_gpu_forward.rs, Plan 009 / Research 071).
     // Batch 70 (3): the arxiv barrier-free-sync paper distill (arXiv:2608.13757, Plan 020 / Research 080) — barrier-free-per-dependency-wait-from-loop-counters, shared-counter-decode-producer-progress, masked-branchless-wait-collapse.
     // Batch 105 (11): uzu + lily combined Metal-engine distill (Research 127 + 128 / Plan 075) -- concurrent-dispatch-dependency-level-barriers, gpu-resident-moe-routing-no-host-sync, indirect-device-dispatch-tile-map-moe, pipelined-token-slot-ping-pong-submit-ahead, split-k-two-pass-attention-decode-long-context, cooperative-tensor-mma-capability-route, rht-epilogue-fusion-contract, lane-sequenced-deterministic-bucket-scatter, a8-activation-route-stability-guard, target-tile-split-k-deterministic-two-dispatch, hazard-tracked-aliasing-scratch-allocator (A +1, C +1, D +3, E +1, F +1, H +3, M +1; sources trymirai/uzu @ 115609b + perplexityai/pplx-garden lily @ 1ed972ed, both lanes re-verified every quote; the cross-source dedup mandate executed per rule; the R128 tile-by-expert-load rider FALSIFIED at pin -- chunk-size-routed table, both tiles 4 simdgroups).
-    // Total: 209. // (historical batch-30 snapshot; current 477)
+    // Total: 209. // (historical batch-30 snapshot; current 482)
     // Batch 98 (10): antirez/ds4 dense.metal/moe.metal leads -- grid-range-split-verbatim-impl-composition, share-activation-stream-keep-projection-reductions, tiny-rows-scalar-thread-per-row-downshift, small-batch-matvec-gemm-bridge-rung, moe-routed-down-sum-single-accumulate-pass, fused-vector-site-transcendental-form-nonportable, monomorphic-hot-caller-last-hit-memo, per-row-scale-folded-into-rhs-staging-tile, dequant-byte-pairs-as-aligned-u16-loads, cross-simd-bitonic-alternating-bank-exchange (the Batch-97 queued NEXT BATCH LEADS + 3 additional candidates).
     // Batch 100 (8): Layr-Labs/qwen-3.8-mtp-challenge -- functional-cache-versioning-loses-donation-under-kernel-read, fused-kv-write-single-writer-reads-newest-from-input, in-place-write-through-input-emits-fence-consumer, residency-set-wired-once-post-warm-persistent-footprint, register-budget-head-split-gqa-reread-trade, batch-composition-invariant-grid-early-return, never-gqa-multiply-full-d-merge-smem, container-rebind-over-retrace-for-churn-survival (Research 120 / Plan 068; A +3, D +3, E +2).
     // Batch 102 (6): FlashQuant sparse-dense fusion (arXiv 2608.15531) -- heterogeneous-unit-paths-shared-tile-fusion, lpt-min-heap-disjoint-column-ownership, tile-coo-sparse-tile-aligned-format, bucketed-sparse-reader-column-partition, bank-group-circular-element-reorder, stream-k-persistent-cta-mac-segments (Research 123 / Plan 071; A +2, C +2, H +1, N +1; the headline was REFUTED for direct adoption at walk time -- the fusion mechanism is the distilled core).
     // Batch 103 (5): MTPLX PR #391 + MLX NAX combined host-orchestration batch -- shape-class-keyed-capability, wavefront-overlap-pair-ceiling, request-shape-decline-mirror-completeness, backing-provenance-causal-shadowed-extent-widen (Research 124 / Plan 072; D +4; MTPLX re-pinned ef96313 -> a5e38bb at mine time, all anchors re-verified; + the B100 rider enrichment in entries_gpu_14.rs) + dispatcher-eligibility-predicate-lags-kernel-capability (the ADDENDUM rule -- the MLX #4416 lead the sibling landing silently omitted; D +1; see the Research 124 addendum note).
     // Batch 104 (2): ggml-org/llama.cpp fa-vec offline swept launch-table distill -- swept-shape-bucket-launch-tables, no-harm-bucket-representative (Research 126 / Plan 074; K +2; infra efeda76b9, table pin 8963a9bdc the M3 Max rows, harness read at d230ddd76 byte-identical pin->HEAD; MIT; the league-relevant SKU).
+    // Batch 106 (5): MTPLX upstream residue distill (mistakes/ post-mortem corpus + docs + targeted kernel diff; Research 129 / Plan 076) -- prefix-reuse-key-must-mirror-the-restore-predicate, request-arrival-work-asks-reuse-state-first, serving-raises-only-behind-strict-flag, derived-key-single-constructor-parity-test, vendor-fused-op-instantiation-check (D +5; source youssofal/MTPLX @ dd4031a8 upstream main, Apache-2.0; the B+ lead CONFIRMED with both instances in-source -- the sentinel fingerprint post-mortem + the dd4031a8 fix commit).
     assert_eq!(
         corpus.entries.len(),
-        477,
-        "kernel batches through Batch 105 should have 477 rules"
+        482,
+        "kernel batches through Batch 106 should have 482 rules"
     );
 }
 
@@ -5335,12 +5336,12 @@ fn kernel_categories_cover_all_corpus_rules_exhaustively() {
 
 #[test]
 fn kernel_categories_counts_match_plan_003_table() {
-    // Pin per-category rule counts to the Plan 003 table (updated for Batch 105).
+    // Pin per-category rule counts to the Plan 003 table (updated for Batch 106).
     let expected = [
         (KernelCategory::MemoryAccess, 106),
         (KernelCategory::Compute, 57),
         (KernelCategory::Fusion, 42),
-        (KernelCategory::Dispatch, 106),
+        (KernelCategory::Dispatch, 111),
         (KernelCategory::Parallelism, 33),
         (KernelCategory::FlashAttnTiling, 12),
         (KernelCategory::LinearAttnRecurrence, 26),
@@ -5365,9 +5366,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 477.
+    // Sum must equal 482.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 477, "Plan 003: category totals must sum to 477");
+    assert_eq!(total, 482, "Plan 003: category totals must sum to 482");
 }
 
 #[test]
@@ -5378,8 +5379,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 477,
-        "Plan 003: grouped corpus has {total} rules, expected 477"
+        total, 482,
+        "Plan 003: grouped corpus has {total} rules, expected 482"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -7588,6 +7589,131 @@ fn batch105_pseudocode_parses() {
         assert!(
             opt_verdict.parses,
             "batch-105 opt_pattern for '{id}' must parse"
+        );
+    }
+}
+
+#[test]
+fn batch106_rules_present() {
+    // Batch 106 (MTPLX upstream residue distill -- Research 129 / Plan
+    // 076): 5 kernel_opt rules (D +5). Source: youssofal/MTPLX upstream
+    // main @ dd4031a8f9ed9d0a532b6e16bcc147dc40399c1d (v2.11.1,
+    // Apache-2.0); the upstream mistakes/ post-mortem corpus (16 files,
+    // filename IS the rule) + docs/plans + specs + concurrency + the
+    // targeted kernel diff since the Batch-103 mined base 8bc4d88. The
+    // B+ lead is CONFIRMED with BOTH instances in-source (the sentinel
+    // fingerprint post-mortem + the dd4031a8 fix commit itself).
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "prefix-reuse-key-must-mirror-the-restore-predicate",
+        "request-arrival-work-asks-reuse-state-first",
+        "serving-raises-only-behind-strict-flag",
+        "derived-key-single-constructor-parity-test",
+        "vendor-fused-op-instantiation-check",
+    ];
+    for id in ids {
+        assert!(
+            corpus.entries.iter().any(|e| e.rule_id == id),
+            "batch-106 rule '{id}' missing from corpus"
+        );
+    }
+}
+
+#[test]
+fn batch106_concepts_covered() {
+    // Distinctness + mandated phrases must survive in the concept
+    // text (case-sensitive contains -- the B51 lesson).
+    let corpus = build_kernel_seed_corpus();
+    let checks: &[(&str, &[&str])] = &[
+        (
+            "prefix-reuse-key-must-mirror-the-restore-predicate",
+            &[
+                "the fingerprint only has to carry what changes the KV",
+                "ask the bank the question the restore asks",
+                "41,901 tokens cold (54 s)",
+                "an estimator stricter than restore strands restorable state",
+            ],
+        ),
+        (
+            "request-arrival-work-asks-reuse-state-first",
+            &[
+                "the gather was pure waste and its wait was pure dead time",
+                "ASK THE REUSE STATE FIRST",
+                "NEVER AWAIT UNCONSUMED WORK",
+                "no probe = no preempt = legacy behaviour",
+            ],
+        ),
+        (
+            "serving-raises-only-behind-strict-flag",
+            &[
+                "finish_reason 'error'",
+                "ONE warning per verdict class per process",
+                "measurement = raise; serving = count + warn",
+                "grep it for raise on paths a request can reach",
+            ],
+        ),
+        (
+            "derived-key-single-constructor-parity-test",
+            &[
+                "MUST derive its key through this function",
+                "A PARITY TEST THAT FAILS ON DRIFT",
+                "still the user's standing pin",
+                "the DERIVATION TOPOLOGY",
+            ],
+        ),
+        (
+            "vendor-fused-op-instantiation-check",
+            &[
+                "read the symbol table of each shipped mlx.metallib",
+                "the MLA latent is 512 wide",
+                "a benchmark of the fallback while the team believes it is measuring fusion",
+                "The fallback is a COMPARATOR",
+            ],
+        ),
+    ];
+    for (id, needles) in checks {
+        let e = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == *id)
+            .unwrap_or_else(|| panic!("batch-106 rule '{id}' missing"));
+        for needle in *needles {
+            assert!(
+                e.gpu_concept.contains(needle),
+                "batch-106 concept for '{id}' missing phrase '{needle}'"
+            );
+        }
+    }
+}
+
+#[test]
+#[cfg(not(feature = "kernel_verify"))]
+fn batch106_pseudocode_parses() {
+    // G1 for Batch 106: syn-parse gate (the MTPLX upstream residue rules).
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "prefix-reuse-key-must-mirror-the-restore-predicate",
+        "request-arrival-work-asks-reuse-state-first",
+        "serving-raises-only-behind-strict-flag",
+        "derived-key-single-constructor-parity-test",
+        "vendor-fused-op-instantiation-check",
+    ];
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-106 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            ref_verdict.parses,
+            "batch-106 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            opt_verdict.parses,
+            "batch-106 opt_pattern for '{id}' must parse"
         );
     }
 }

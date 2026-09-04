@@ -1,7 +1,7 @@
 # Plan 076 — Batch 106: MTPLX upstream residue (axes A+B, mistakes/ corpus + the prefix-reuse lead)
 
-Status: **IN FLIGHT (2026-09-05, claimed by the 4090 box idle loop — allocation claim pushed
-early per the Issue-665 collision protocol).**
+Status: **COMPLETE (2026-09-05) — Batch 106 landed: 5 rules, corpus 477 → 482 (D 106 →
+111); all gates green first-shot; Research 129 is the record.**
 
 Consumes the queued MTPLX RESIDUE row from
 `.distill/001_mining_queue_snapshot.md` (queued 2026-09-04, cadence-gated behind the
@@ -29,29 +29,29 @@ FIRST MTPLX row with an in-stack analog (Issue 742 GDN+KV prefix cache, 441× TT
 
 - [x] T0: repair `.research/.highwater` (stale 127, 128 exists → 128, allocate 129); bump
   `.plans/.highwater` 75 → 76; file this plan; mark the queue row CLAIMED; push the claim.
-- [ ] T1: axis B — read all 16 `mistakes/` files; grade each as corpus-rule candidate /
+- [x] T1: axis B — read all 16 `mistakes/` files; grade each as corpus-rule candidate /
   rider / doctrine citation / out-of-scope. Filenames ARE the rules (best
-  confidence-per-token axis).
-- [ ] T2: the B+ lead — locate BOTH instances' source anchors (the admission-shed commit /
-  code + the sentinel mistake file), extract the decision content, write the rule.
-- [ ] T3: axis A — skim `docs/plans` + `docs/specs` + `docs/concurrency` for kernel-shaped
-  rule material; targeted diff-mining of `8bc4d88..dd4031a8` kernel/Metal/CUDA surfaces
-  (NOT the full 300 files — targeted grep lanes).
-- [ ] T4: dedup vs the landed corpus — B103's five (`shape-class-keyed-capability`,
-  `wavefront-overlap-pair-ceiling`, `request-shape-decline-mirror-completeness`,
-  `backing-provenance-causal-shadowed-extent-widen`,
-  `dispatcher-eligibility-predicate-lags-kernel-capability`) + the same-input family
-  (B58/B63/B77/B97/B98) + cache-key rules. Grep `buggy_code`/`fixed_code` BODIES, not just
-  concepts (the B66 standing lesson).
-- [ ] T5: land rules via the Python heredoc generator (the B77 escape-strip discipline;
-  ensure_ascii=False) + buggy/clean fixtures + gates (present / parses /
-  concepts_covered, cfg(not(kernel_verify)) per B70).
-- [ ] T6: GOAT — batch106 gates + kernel_heal lib + default lib + kernel_heal+latent
-  retrieval floors + clippy 0 both states; walk ALL count pins (tests.rs corpus count +
-  expected-array + sums x2 + grouped + router.rs expert total + mod.rs header/category
-  comments — the 18th-count-pin-site lesson).
-- [ ] T7: records — Research 129 (verdict + anchors + license + pin + axis dispositions),
-  AGENTS.md Batch-106 entry, queue snapshot update (row consumed), `rm -rf .raw/mtplx-upstream`.
+  confidence-per-token axis). Result: 4 corpus rules + riders; 11 files dispositioned
+  out-of-scope (AppKit/QA-hygiene classes) in Research 129.
+- [x] T2: the B+ lead — BOTH instances found in-source (the sentinel mistake file + the
+  dd4031a8 fix commit itself + `_policy_fingerprint` comment + `longest_shared_prefix_tokens`
+  docstring); third corroborating instance in the numerics spec. Rule written.
+- [x] T3: axis A — docs/plans + specs + concurrency read (the mode-vs-lane split and
+  width-neutral identity restate landed rules; the numerics-profile METHOD is our GOAT
+  doctrine externally confirmed); targeted diff = the vendored Steel sparse-GQA cluster →
+  rule 5 (`vendor-fused-op-instantiation-check`) + B100/B103 riders; `docs/perf/` subdirs
+  + `docs/research/` recorded as the named-unread remainder.
+- [x] T4: dedup vs the landed corpus — bodies grepped; 5 rules distinct with explicit
+  cross-references (B103 ×2, B94 ×2, B77, B36, B25, B23, B105); ledger in Research 129.
+- [x] T5: landed via the file-form Python generator (the heredoc form hit a shell
+  length limit — new tooling lesson) + parse-only fixtures + the 3 standing gates.
+- [x] T6: GOAT — batch106 gates 3/3 first-shot + kernel_heal lib 1343/0/1i + default lib
+  1078/0 + kernel_heal+latent 1451/0/2i (floors HELD zero re-pins) + clippy 0 both
+  states; count pins walked + the "464-rule" mod.rs doc line repaired 464 → 482 (2
+  batches stale).
+- [x] T7: records — Research 129, AGENTS.md Batch-106 entry + kernel count line, queue
+  snapshot row consumed, `.docs/11_domains/kernel_opt.md` D-row, `.raw/mtplx-upstream`
+  removed.
 
 ## Routing
 

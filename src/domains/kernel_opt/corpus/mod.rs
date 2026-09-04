@@ -1550,6 +1550,7 @@ mod entries_gpu_15;
 mod entries_gpu_16;
 mod entries_gpu_17;
 mod entries_gpu_18;
+mod entries_gpu_19;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -1581,6 +1582,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_16::entries());
     entries.extend(entries_gpu_17::entries());
     entries.extend(entries_gpu_18::entries());
+    entries.extend(entries_gpu_19::entries());
     Corpus::new(entries)
 }
 
@@ -1593,7 +1595,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 464-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 482-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1826,7 +1828,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "rht-epilogue-fusion-contract",
         ],
     ),
-    // D: Dispatch patterns (106 rules)
+    // D: Dispatch patterns (111 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -1937,6 +1939,11 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "concurrent-dispatch-dependency-level-barriers",
             "pipelined-token-slot-ping-pong-submit-ahead",
             "a8-activation-route-stability-guard",
+            "prefix-reuse-key-must-mirror-the-restore-predicate",
+            "request-arrival-work-asks-reuse-state-first",
+            "serving-raises-only-behind-strict-flag",
+            "derived-key-single-constructor-parity-test",
+            "vendor-fused-op-instantiation-check",
         ],
     ),
     // E: Parallelism patterns (33 rules)
