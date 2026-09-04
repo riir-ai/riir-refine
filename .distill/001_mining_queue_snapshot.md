@@ -789,9 +789,9 @@ closed.**
   at 04:14 (T4 running PID 48700; walk #7 not due; MCP quota; 066-T4 LANDED by idle cycle / P18 owner; mmorpg-092 siblings).
 - **2026-09-04 ~04:50 (idle cycle 6, M3 — T0a harness COMPILE-VERIFIED on the box, zero-GPU-touch de-risk unit):** the window was still closed at cycle start (NO `t504_confirm/status.txt`; 4090 GPU 31% / 8.1 GB resident with `bonsai_lora_accuracy_parity_arm_c.exe` — the sibling 504 lane is LIVE on the box), so the compile gate moved out of the window too: scp → nvcc → GREEN, zero GPU state touched. **Three pre-window defects caught + fixed** (the de-risk paying for itself): (1) the warmup nullptr guard was INCOMPLETE (deref guarded, the cudaEventElapsedTime CALL not — InvalidValue → exit(1) during warmup, before any measurement); (2) CUDA 13 REMOVED `cudaDeviceProp::clockRate`/`memoryClockRate` (compile error on the box) — replaced with `cudaDeviceGetAttribute(cudaDevAttrClockRate/MemoryClockRate)`; (3) box recipe: non-interactive ssh PATH lacks cl.exe — prepend the MSVC 14.41 Hostx64/x64 bin. **ptxas: all 5 arms 40–44 regs, 0 spills — K=16 at 41 regs REFUTES the anticipated "spill at high K invalidates the arm" caveat; the depth axis is clean through K=16.** Compiled+verified `probe_873.exe` STAGED at `C:\Users\katop\ldg_probe_873\` — the window-open recipe is now: pre-flight → run → scp CSV back. `.raw/ldg_probe/README.md` + `.plans/073` T0a updated in-plan. Instrument still commits only AFTER compile+run (the 848 lesson). **Walk #7 correction: it ALREADY LANDED while this cycle ran (`4c9ba72`, sibling session) — strict window EMPTY, next announce Sun 09-06 20ET — so the inherited summary's "walk #7 due ~07:00 today" is superseded; no walk is pending until Sunday.** Everything else re-verified still gated (MCP quota; 066-T4/P18 owner; mmorpg-092 siblings).
 - **Hygiene:** current after this entry. `.issues/` = 059/060/061 (owner/ops/legal-gated)
-  + 065 (T3/T7 latent; T6 CLOSED on the 09-03 nightly PASS) + 066 (T1/T2/T3 DONE 09-04 —
-  docker needle `c9863d6` + store repair `d731cac`; T4 projection-drift logging open,
-  owner call); plans tree 0 unchecked (069 closed 2026-09-03).
+  + 065 (T3/T7 latent; T6 CLOSED on the 09-03 nightly PASS); **066 fully resolved + file
+  REMOVED 09-04 (`1a1db877` — T4 had landed `4239dbdd`; durable record = the AGENTS.md
+  paragraph beside Issue 050)**; plans tree 0 unchecked (069 closed 2026-09-03).
 - **065 T6 verdict (2026-09-04 cycle):** the fix `319319a` passed the scheduled 18:23 UTC
   run end-to-end — regen OK 10.5 min, per-repo duration lines, the budget-exhaustion branch
   fired live (riir-clippy kept cached) with coverage=10 through the merge path, deploy
@@ -810,6 +810,18 @@ closed.**
   (commit-time vs stamp-time definitional boundary), recorded in `.issues/066` T4.
   Corpus-count note: kernel_opt moved 453→459 in the sibling's Batch 102 (landed mid-cycle,
   `17f00e7`) — today's stamp carries it; no action needed here.
+- **2026-09-04 ~07:10 (idle cycle 9, M3 — hygiene unit, zero-contention during the sibling
+  MLX 32K cell):** Issue 066 fully resolved + file REMOVED per noise-reduction (`1a1db877`;
+  T1–T4 were all already landed `c9863d6`/`d731cac`/`4239dbdd` — the closeout is the AGENTS.md
+  record + `git rm`). Plans 002/051 re-verified: 0 REAL unchecked boxes (the plan-002 grep
+  hits are prose; 051's last box was verified done 08-31). Everything else re-verified still
+  gated: T0a (NO `t504_confirm/` status file; 4090 busy 21% / 8.1 GB — the riir-chain verify
+  sibling holds the box), walk #8 → Sun 09-06, MCP pool → 09-15, Batch 104 = sibling session,
+  owner gates unchanged (P18, 059/060/061/065, katgpt-rs 718/719/721, riir-ai lanes).
+  Sweep surfaces all confirmed closed per the 09-03/09-04 entries (dao ZERO, deployer
+  `7a091db`, auth 0/17, chain 0/459, game-sdk `fff904f` — now sibling-dirty again, dapps
+  discharged, seal-remake zero-findings 09-04, viewbridge PARKED, mmorpg sibling lane).
+  Queues empty after this entry → idle report.
 
 ## Standing rules (pointers — full text in the skills + AGENTS.md)
 
