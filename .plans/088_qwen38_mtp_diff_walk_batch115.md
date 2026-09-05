@@ -11,6 +11,6 @@
 - [x] T5 author entries — target 3–6 rules + 4–8 riders after falsification; fixtures ORIGINAL (no source text in corpus); ported-numeric candidates get the exhaustive equivalence gate (B59 mandate).
 - [x] T6 standing gates + count pins walked (corpus header, expected-array, sums, router, mod.rs doc); GOAT G1–G5 + G-det; retrieval floors; score-bench flat.
 - [x] T7 bookkeeping: Research 139 Status → RECORD; snapshot line + AGENTS.md corpus counts; `.raw/` removed at landing.
-- [ ] T8 commit + push on `develop`.
+- [x] T8 commit + push on `develop` (batch commit `11863f8`)..
 
 **Queue position:** behind Batch 114 (oMLX ANE/GDN — the other prefill lane). Owner may reorder; the Bonsai-exact geometry argues for priority over non-prefill queue items.
