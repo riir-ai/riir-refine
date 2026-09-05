@@ -1556,6 +1556,7 @@ mod entries_gpu_21;
 mod entries_gpu_22;
 mod entries_gpu_23;
 mod entries_gpu_24;
+mod entries_gpu_25;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -1593,6 +1594,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_22::entries());
     entries.extend(entries_gpu_23::entries());
     entries.extend(entries_gpu_24::entries());
+    entries.extend(entries_gpu_25::entries());
     Corpus::new(entries)
 }
 
@@ -1605,7 +1607,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 518-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 522-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1848,7 +1850,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "softmax-denominator-cancels-through-scale-invariant-norm",
         ],
     ),
-    // D: Dispatch patterns (117 rules)
+    // D: Dispatch patterns (118 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -1970,6 +1972,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "grid-dependency-wait-scoped-to-dependent-operands",
             "refine-by-rescan-prefix-filter-vs-buffered-ties",
             "ane-bank-split-ladder",
+            "carried-state-reduction-stays-scalar",
         ],
     ),
     // E: Parallelism patterns (41 rules)
@@ -2039,7 +2042,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "split-k-two-pass-attention-decode-long-context",
         ],
     ),
-    // G: Linear-attention recurrence (28 rules)
+    // G: Linear-attention recurrence (29 rules)
     (
         KernelCategory::LinearAttnRecurrence,
         "G: linear-attn recurrence",
@@ -2072,6 +2075,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "whole-sequence-zero-barrier-single-dispatch-scan",
             "smem-envelope-gate-kernel-variant",
             "recurrence-prefill-exact-restructure-before-reformulation",
+            "chunk-transition-consumed-by-mma",
         ],
     ),
     // H: MoE dispatch + backward pass (23 rules)
@@ -2104,7 +2108,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "routing-by-precomputed-lookup",
         ],
     ),
-    // I: NSA block-sparse selection (4 rules)
+    // I: NSA block-sparse selection (5 rules)
     (
         KernelCategory::NsaBlockSparse,
         "I: NSA block-sparse",
@@ -2113,6 +2117,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "precompute-scalar-reduction",
             "block-compression-before-routing",
             "sliding-window-plus-sparse",
+            "sparse-kv-index-list-sentinel-padded",
         ],
     ),
     // J: Varlen packing + chunked reductions (5 rules)
@@ -2185,7 +2190,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "lane-owned-topk-output",
         ],
     ),
-    // N: dtype + alignment specialization (32 rules)
+    // N: dtype + alignment specialization (33 rules)
     (
         KernelCategory::DtypeAlignment,
         "N: dtype + alignment",
@@ -2221,6 +2226,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "router-math-stays-fp32",
             "ue8m0-pow2-scale-as-biased-exponent-byte",
             "coarse-precision-first-exact-refine",
+            "shader-fastdiv-mulhi",
         ],
     ),
     // O: IR strength reduction (4 rules)

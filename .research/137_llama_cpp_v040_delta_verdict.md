@@ -1,6 +1,6 @@
 # 137 — Distill verdict: ggml-org/llama.cpp v0.4.0 delta (Batch 113 candidate)
 
-**Status:** DISTILLED — pending owner decision
+**Status:** RECORD — Batch 113 LANDED 2026-09-05 (Plan 086; 4 rules + 18 riders, corpus 518 → 522, executed ahead of the soft arxiv-walk slot since the walk is time-blocked; batch record in riir-clippy AGENTS.md). Mine-time verification: a dedicated read lane re-read all five surfaces with exact line numbers; THREE attribution corrections — the XOR-swizzle (#25635) and MoE-fusion (#25952/#27621) commits are CUDA-side (zero 'moe'/'swizzle' in ggml-metal at this pin); --lazy-mode is APP-LAYER (common/arg.cpp:2737, include/llama.h:217, src/llama-model-loader.cpp:1082-1088), absent from ggml/src; the Metal-4 gate is has_tensor/MTLGPUFamilyMetal4_GGML + a name gate (M5/M6/A19/A20) with MEASURED reasons in-source (M2 Ultra ~5% slower, M4 no significant difference) — richer than the verdict's gating claim. fastdiv_L is byte-spaced 8-slot with a 6-bit mask (not tightly-packed 6-bit fields) and carries no in-source commit comment. Candidate #4 (sparse-FA) LANDED AS A RULE in category I (the T1 read confirmed the sentinel/clamp/single-source contracts); #20 FWHT revert is in-tree (restore post-pin) — regime evidence only.
 
 - **Source:** https://github.com/ggml-org/llama.cpp/releases/tag/v0.4.0 (release notes span v0.3.0 → v0.4.0, ~150 commits)
 - **Inspection date:** 2026-09-05
