@@ -1520,6 +1520,8 @@ negated comparisons, cfg-attributed trailing returns).
 
 ## Sweep findings log (2026-09-05, 4090 idle session)
 
+- **2026-09-06 unit — riir-clippy Issue 071 CLOSED (`9ebac59`):** the tier-2 buildcheck gate red was a REGISTRY-BLOCKED BOX, not a check-set drift — the three check-only fixtures rode `FROM alpine:3.20`, so each oracle call paid a registry resolve; on this box each DeadlineExceeded (~60 s × 6 calls ≈ the recorded 399 s) → `Unavailable`, which the gate honestly refuses. The `OracleSilentOnBuggy` verdict was not reproducible (the Issue-723 repair-the-instrument-first lesson — all three proposed dispositions would have been wrong). Fix: fixtures → `FROM scratch` (registry-free, tier-2 399 s red → 2.74 s 4/4), `buildcheck::classify()` completion-marker backstop (no `Check complete` on stdout → `Errored`, never a fake `Ran(empty)`), gate failure output names `docker version`. Records: `.docs/11_domains/docker.md` header + degradation §, AGENTS.md issue-071 row; issue file removed per noise-reduction. docker.md's tier-2 row now reads "was ~9.6 s with `alpine` round-trips" — healthy-box cost, superseding this entry's wedge arithmetic.
+
 - **2026-09-05 (later session) — mmorpg 092 item (3) CLOSED + chain E0282 ROOT-CAUSED:**
   (a) the substrate's 3 pre-existing clippy warnings healed at root cause (riir-ai
   `fcb880986`; unused_mut + unused_assignments + doc_lazy_continuation; lib 430/0/4i
