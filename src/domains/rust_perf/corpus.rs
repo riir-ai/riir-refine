@@ -9,9 +9,9 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //! unconditional wins + honestly NotBenchable rules.
 //!
-//! 100 entries across 12 categories (complexity 19, allocation 22, simd 8,
-//! layout 9, iterators 10, concurrency 8, io 5, arithmetic 8, dispatch 5,
-//! caching 4, bevy 1, wasm 1). 86 are benchable; 14 are honestly
+//! 101 entries across 12 categories (complexity 19, allocation 22, simd 8,
+//! layout 10, iterators 10, concurrency 8, io 5, arithmetic 8, dispatch 5,
+//! caching 4, bevy 1, wasm 1). 87 are benchable; 14 are honestly
 //! NotBenchable (8 external-runtime/size-class + 2 metric-mismatch (Issue
 //! 014) + the x86-only prefetch annotation (Batch 85) + the bitflag size
 //! axis (Batch 86) + the workload-level read-coalescing annotation (Batch
@@ -115,7 +115,7 @@
 //! `run_buggy` / `run_fixed` entry points. The bench validator generates a
 //! temp bin crate from the spec + runs a timing loop at multiple sizes.
 //!
-//! Currently benchable (84/97):
+//! Currently benchable (87/101):
 //! - `o1-lookup` (Vec scan vs HashMap lookup — clear O(n) vs O(1))
 //! - `bsearch-sorted-slice` (linear scan vs binary search — O(n) vs O(log n) on sorted data)
 //! - `dedupe-hashset-vs-vec` (Vec::contains loop vs HashSet collect — O(n²) vs O(n))
@@ -196,8 +196,11 @@
 //! - `bitflag-pack-when-footprint-dominates` (bool cluster → one bitflag byte, stored-at-scale footprint regime — Batch 86, annotated)
 //! - `filter-before-expensive-transform` (map(expensive).filter(relevant) → filter-first on the RAW input — win ∝ discard × transform cost; Batch 91, Rustdoc filter-first distill)
 //! - `decision-projection-before-construction` (transform-to-decide → decide on the invariant raw projection, canonicalize only behind the decision — Batch 91, annotated)
+//! - `mir-destprop-branch-site-merge` (known-fn-item conditional dispatch → two direct tail-jumps — MIR DestinationPropagation cmov-merges the merged form into one indirect site mixing branch-target history; Batch 99, wasmi distill)
+//! - `dispatch-handler-pair-hoist` (runtime-table handler read per dispatch → hoist both entries once — register-resident select; cross-arch ParetoDominant, x86 re-gated 2026-09-04; Batch 101)
+//! - `hot-byval-move-over-memcpy-threshold` (hot by-value move of a >128-byte type → shrink/ref — the threshold is an arch-shaped LLVM backend constant; Mixed on M3, x86 pays the memcpy call; Batch 112)
 //!
-//! Not benchable (12/96) — honest:
+//! Not benchable (14/101) — honest:
 //! - `layout-reorder` (struct size — deterministic `size_of`, not a runtime
 //!   microbench; the cache-utilization claim needs a specific access pattern)
 //! - `repr-u8-enum` (enum size — deterministic `size_of`, same class as
@@ -221,11 +224,20 @@
 //! - `bitflag-pack-when-footprint-dominates` (deterministic `size_of` delta,
 //!   the `layout-reorder`/`box-large-enum-variant` class — the gate pins
 //!   12 → 8 for the fixture layout; Batch 86, annotated)
+//! - `coalesce-nearby-reads-bounded-gap-cacheability-gated` (workload-level
+//!   read-coalescing annotation, source-reported — the DECISION CONTENT is the
+//!   cacheability coupling: the gap budget collapses to 0 on direct/F_NOCACHE
+//!   descriptors; Batch 94, oMLX safetensors reader)
+//! - `dead-result-timing-loop-folded-under-lto` (measurement-honesty axis —
+//!   a timing gate whose work folds away under LTO has no nonzero baseline to
+//!   ratio; the rule's content IS that fact; Batch 109, Plan 080)
 //!
 //! ## Context-dependent rules (`context_notes`)
 //!
-//! Forty-one rules carry a `context_notes` annotation (as of Batch 99;
-//! this prose last walked then). Ten record that
+//! Forty-four rules carry a `context_notes` annotation (as of Batch 112;
+//! the count is pinned by `forty_three_annotated_rules_carry_context_notes`
+//! — the fn name is one batch behind its own assert, which reads 44). The
+//! class ledger below is the accounting as it grew batch by batch. Ten record that
 //! the Pareto validator found them **ParetoDominated** or **Mixed** in the
 //! default configuration: the original 4 from Bench 013 (`precompute-table`,
 //! `papaya-lockfree`, `dedupe-hashset-vs-vec`, `reuse-allocation-clear`) + 2
