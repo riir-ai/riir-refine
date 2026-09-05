@@ -3221,6 +3221,35 @@ paper's consensus≠accuracy discipline (Appx C.2) survives in the collapse dete
 converged pool with the oracle outside it is now a first-class diagnostic instead of an
 invisible Issue-024 recurrence.
 
+**Issue 067 (Trace-as-State growing-input reopen — arm G2) RESOLVED 2026-09-05
+(file removed per the noise-reduction rule; `e053671` + `910a285`; record:
+[Bench 068](.benchmarks/068_issue067_arm_g2_trace_as_state.md) + git
+history).** Bench 051's cross-rule/condition-LAST negative was RECALIBRATED, not
+overturned: with the two Research-530 (arXiv:2609.02702) deltas applied —
+**same-rule-only channels** (the `{lint}:` boundary-safe retrieval prefix + a
+family-scoped pattern fold over the row's own `lint_key`) and
+**condition-first placement** (channels between the instruction header and the
+code module — `[z, C]` dominated `[C, z]` in 26/27 paper cells) — the arm
+G2 A/B on llama-3.3-70b-fp8-fast (25 samples, planted 4×3 Certified scratch
+store via the kept-reproducible `examples/plant_067_store`) **PASSes the
+pre-registered gate exactly**: reachable-miss strict-keep 6/10 vs arm B 5/10
+(the one flip: `reachable:redundant_clone` vetoed → clean keep — a COVERED
+lint, channels live), zero kept-wrong both arms, prompt tokens +9.9% (≤ 2×
+bar). Honest caveats carried in the bench: the margin is exactly the bar on a
+thin n, exemplars are constructed (real fix semantics, hand-varied shapes —
+not organic store history), and B-before-G2 ordering (the scoring axis is
+deterministic clippy findings, not latency). **The growing-input class is
+REOPENED for the healer** — Bench 051's "second negative closes this class
+permanently" clause does not fire; this was the first properly-placed
+negative-to-positive cycle. Production adoption: NO flag flip — the fixer
+service's prompt builder gains the same-rule channels only when its store has
+fired keys for the queried lint (the T1 trigger log line is the per-lint
+green light); until then the channels degrade to arm B byte-identically,
+which this bench measured as safe. Ops note recorded in the bench: the CLI
+default model has drifted to glm-5.3-flash (401s under both credential paths);
+the working path is the wrangler OAuth bridge refreshed OUTSIDE a directory
+carrying `.env` (wrangler auto-loads it and masks OAuth).
+
 **Issue 037 (E2E self-evolve proof + adoption observability) — CLOSED
 2026-08-26** (file removed per the noise-reduction rule; full session records
 in git history — `git log -- .issues/037_*.md`). **ALL GATES GREEN**: A1
