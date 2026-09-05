@@ -64,7 +64,7 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 63 (3): the CubeCL twin unlock — same-input-gemv-weight-concat-at-upload, deferred-residual-fused-into-next-layer-norm, reset-state-in-place-fill-never-realloc (ternary_deltanet_gpu_forward.rs, Plan 009 / Research 071).
     // Batch 70 (3): the arxiv barrier-free-sync paper distill (arXiv:2608.13757, Plan 020 / Research 080) — barrier-free-per-dependency-wait-from-loop-counters, shared-counter-decode-producer-progress, masked-branchless-wait-collapse.
     // Batch 105 (11): uzu + lily combined Metal-engine distill (Research 127 + 128 / Plan 075) -- concurrent-dispatch-dependency-level-barriers, gpu-resident-moe-routing-no-host-sync, indirect-device-dispatch-tile-map-moe, pipelined-token-slot-ping-pong-submit-ahead, split-k-two-pass-attention-decode-long-context, cooperative-tensor-mma-capability-route, rht-epilogue-fusion-contract, lane-sequenced-deterministic-bucket-scatter, a8-activation-route-stability-guard, target-tile-split-k-deterministic-two-dispatch, hazard-tracked-aliasing-scratch-allocator (A +1, C +1, D +3, E +1, F +1, H +3, M +1; sources trymirai/uzu @ 115609b + perplexityai/pplx-garden lily @ 1ed972ed, both lanes re-verified every quote; the cross-source dedup mandate executed per rule; the R128 tile-by-expert-load rider FALSIFIED at pin -- chunk-size-routed table, both tiles 4 simdgroups).
-    // Total: 209. // (historical batch-30 snapshot; current 528)
+    // Total: 209. // (historical batch-30 snapshot; current 532)
     // Batch 98 (10): antirez/ds4 dense.metal/moe.metal leads -- grid-range-split-verbatim-impl-composition, share-activation-stream-keep-projection-reductions, tiny-rows-scalar-thread-per-row-downshift, small-batch-matvec-gemm-bridge-rung, moe-routed-down-sum-single-accumulate-pass, fused-vector-site-transcendental-form-nonportable, monomorphic-hot-caller-last-hit-memo, per-row-scale-folded-into-rhs-staging-tile, dequant-byte-pairs-as-aligned-u16-loads, cross-simd-bitonic-alternating-bank-exchange (the Batch-97 queued NEXT BATCH LEADS + 3 additional candidates).
     // Batch 100 (8): Layr-Labs/qwen-3.8-mtp-challenge -- functional-cache-versioning-loses-donation-under-kernel-read, fused-kv-write-single-writer-reads-newest-from-input, in-place-write-through-input-emits-fence-consumer, residency-set-wired-once-post-warm-persistent-footprint, register-budget-head-split-gqa-reread-trade, batch-composition-invariant-grid-early-return, never-gqa-multiply-full-d-merge-smem, container-rebind-over-retrace-for-churn-survival (Research 120 / Plan 068; A +3, D +3, E +2).
     // Batch 102 (6): FlashQuant sparse-dense fusion (arXiv 2608.15531) -- heterogeneous-unit-paths-shared-tile-fusion, lpt-min-heap-disjoint-column-ownership, tile-coo-sparse-tile-aligned-format, bucketed-sparse-reader-column-partition, bank-group-circular-element-reorder, stream-k-persistent-cta-mac-segments (Research 123 / Plan 071; A +2, C +2, H +1, N +1; the headline was REFUTED for direct adoption at walk time -- the fusion mechanism is the distilled core).
@@ -76,11 +76,11 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 110 (11): vLLM libtorch_stable distill (Research 133 / Plan 081) -- spin-barrier-needs-co-residency-capped-launch, ballot-matrix-tie-rank, m-group-shared-weight-scan-register-relief, row-parallelism-ladder-split-vs-pack (E +4), captured-graph-init-unconditional-and-stream-ordered, batch-invariance-locks-reduction-geometry (D +2), rope-pair-partner-via-cross-lane-shuffle, degenerate-selection-falls-back-to-identity-uniform (B +2), softmax-denominator-cancels-through-scale-invariant-norm (C +1), persistent-kernel-length-bucketed-mechanism-ladder (K +1), router-math-stays-fp32 (N +1); source vllm-project/vllm csrc/libtorch_stable @ 8277c42e4 (Apache-2.0, never mined); two inspection lanes + coordinator byte-verification of 13 lead quotes; the VERIFIED A-/B+ tier of a 25-candidate pool (the B-/C+ remainder = Batch 111); upstream hazard ledger in Research 133 (H1 silent tie-buffer overflow, H2 dispatch-no-default, H3 cross-tier router divergence).
     // Batch 111 (11): vLLM libtorch_stable remainder + rider sweep (Research 133 / Plan 082) -- register-rotation-prefetch-loop, shared-operand-groups-per-warp, whole-row-register-resident-under-length-budget (A +3), grid-dependency-wait-scoped-to-dependent-operands, refine-by-rescan-prefix-filter-vs-buffered-ties (D +2), warp-aggregated-atomic-scatter, routing-by-precomputed-lookup (H +2), launch-heuristic-pinned-to-calibration-arch (K +1), lane-owned-topk-output (M +1), ue8m0-pow2-scale-as-biased-exponent-byte, coarse-precision-first-exact-refine (N +2); source re-cloned + re-pinned at 8277c42e4 at mine time (origin had moved to 16328c7a minutes before); lanes: rules #12-#20/#22/#25 LAND, #21 (noinline) + #23 (clamp-before-collective) KILLED as COVERAGE (B110 rules already carry them, same citations), #24 demoted to a RIDER on device-m-runtime-mblock-graph-stable-gemm; + 20 riders across 13 files (19 kernel_opt + weight-tile-consumption-order in rust_perf), incl. the hi/lo packed-u64 redux (B107), phase-counted barrier (B92 stripe), B57 union-across-phase + filler-thread barrier matching, stable-softplus third form (B98), loud-refusal third instance (B103), PDL capability gating (B105), measurement-revision + family-gated table (B104), and the H1 fit-guard contract encoded as refine-by-rescan-prefix-filter-vs-buffered-ties.
     // Batch 114 (2): oMLX ANE-prefill + GDN blocked-sequential distill (Research 138 / Plan 087) -- recurrence-prefill-exact-restructure-before-reformulation (G +1, the A- GOAT lead: restructure the EXACT sequential recurrence's memory layout -- TB-block smem staging + register-resident state -- BEFORE an algebraic reformulation; stock per-slice k/q re-read = 32x redundant traffic (~13 GB/16k-token layer), ~2x at 16K on M3 ULTRA source-reported; the WY/FLA chunked reformulation measured a LOSER 3x independent + our Bench 734/769 negatives 0.97x/0.98x), ane-bank-split-ladder (D +1: near-half-first split ladder for a monolithic accelerator bank that cannot map at program-create (0x20004; our 0x50004 cascade the same class); the driver's release is ASYNCHRONOUS -> drop + gc + settle BEFORE the headroom re-measure; 70% phys-footprint jetsam gate -- 4 bounded attempts still hit 48.3 GB on 48 GB (source-measured); bank-count = DETERMINISM axis; fail-open snapshot; feeds riir-ai 876/769 T2/R1/R4a-R7), + 6 riders (B84 token-local recurrent-safe fraction cap; B84 pad-tail profitability + single-prompt guard; B22 sub-simdgroup cooperation radius -- the FULL-STRING pin regenerated; B95 whole-sequence prefill-grain instance; B107 program-SHAPE vs delivered-chunk-WIDTH coupling; B79 scalar-staging pad boundary). Source jundot/omlx @ e467261 (Apache-2.0).
-    // Batch 115 (6): qwen-3.8-mtp-challenge submission-diff-history walk (Research 139 / Plan 088) -- ordinal-map-exact-tail-selection (D +1, the strongest intake: replace a reference sort's tail-K EXACTLY by order-encoding the reference's TOTAL order -- stable ties toward the HIGHER index, NaN above all, -0.0 folded -- into a monotone u32 key; then any integer selection reproduces the reference bit-for-bit; same-set + tie-forcing + positive-control gates; 14-dispatch full-argsort stub -> 2), complete-coverage-scatter-collapses-operand-to-dense (D +1: island-row COVERAGE decides dead compute -- a complete-permutation scatter means every packed row is overwritten unread -> one dense matmul + an install-time argSort-inverse reorder; partial keeps the scatter; lazy eligibility when install ordering makes the replaced gate unknowable; the same lens bounds PRUNING -- the measured 49,152 trim REGRESSED accept 1.00 -> 0.877 below committed argmax support), exhaustive-domain-input-patch-bit-identity (N +1: a 16-bit input domain is exhaustively sweepable -- 65,280 finite values -- so patch ONLY the divergent inputs via direct output-word mapping before the lossless expansion, exhaustive zero-mismatch gate + boundary negative control; f32 unsweepable -> tolerance stays), derived-index-from-pinned-checkpoint-is-a-cache (M +1: a warm-time index from pinned tensors alone is CACHE-class -- legality boundary + canonical order (runtime-derived == offline-screened) + fail-loud over silent fallback + one attempt forever; balanced bisection makes empty clusters impossible), warm-reachable-dispatch-signatures-before-timed-window (M +1: JIT backends compile per signature (shape/dtype/input-count/host-device-mix) and an ADAPTIVE schedule reaches a SET -- warm the reachable set with throwaway token-neutral state, the scored EXPRESSION not a call prefix, extend with receipt when the schedule changes), env-gate-reaches-and-arms-the-scored-process (D +1, measurement-honesty #2: sanitizer-allowlist spelling (a gate outside the allowlist runs both arms on the same code), force-set injected defaults into first-use-cached knobs (ambient stock defeats no-overwrite), durable arm witness not stderr, bare-leg no-env receipt; source Layr-Labs/qwen-3.8-mtp-challenge @ 0863b06ac (Apache-2.0; B100 read the tip TREE, this batch read the ~50-diff HISTORY -- complementary); + 8 riders: B63 boundary-fused residual pair (external confirmation + eval-ladder-both-halves), B96 activation-side digit-fold two-posture exactness, B97 single-rounding-boundary fusion, B38 unconsumed-variant factory skip, B107 workgroup radix + ordinal bitmap tie-cut + bf16 16-bit exact key, B51 quantized-embed dequant-at-use, B82 shapeless-trace Slice-fatal, B77 derived-sum-table member).
+    // Batch 115 (6): qwen-3.8-mtp-challenge submission-diff-history walk (Research 139 / Plan 088) -- ordinal-map-exact-tail-selection (D +1, the strongest intake: replace a reference sort's tail-K EXACTLY by order-encoding the reference's TOTAL order -- stable ties toward the HIGHER index, NaN above all, -0.0 folded -- into a monotone u32 key; then any integer selection reproduces the reference bit-for-bit; same-set + tie-forcing + positive-control gates; 14-dispatch full-argsort stub -> 2), complete-coverage-scatter-collapses-operand-to-dense (D +1: island-row COVERAGE decides dead compute -- a complete-permutation scatter means every packed row is overwritten unread -> one dense matmul + an install-time argSort-inverse reorder; partial keeps the scatter; lazy eligibility when install ordering makes the replaced gate unknowable; the same lens bounds PRUNING -- the measured 49,152 trim REGRESSED accept 1.00 -> 0.877 below committed argmax support), exhaustive-domain-input-patch-bit-identity (N +1: a 16-bit input domain is exhaustively sweepable -- 65,280 finite values -- so patch ONLY the divergent inputs via direct output-word mapping before the lossless expansion, exhaustive zero-mismatch gate + boundary negative control; f32 unsweepable -> tolerance stays), derived-index-from-pinned-checkpoint-is-a-cache (M +1: a warm-time index from pinned tensors alone is CACHE-class -- legality boundary + canonical order (runtime-derived == offline-screened) + fail-loud over silent fallback + one attempt forever; balanced bisection makes empty clusters impossible), warm-reachable-dispatch-signatures-before-timed-window (M +1: JIT backends compile per signature (shape/dtype/input-count/host-device-mix) and an ADAPTIVE schedule reaches a SET -- warm the reachable set with throwaway token-neutral state, the scored EXPRESSION not a call prefix, extend with receipt when the schedule changes), env-gate-reaches-and-arms-the-scored-process (D +1, measurement-honesty #2: sanitizer-allowlist spelling (a gate outside the allowlist runs both arms on the same code), force-set injected defaults into first-use-cached knobs (ambient stock defeats no-overwrite), durable arm witness not stderr, bare-leg no-env receipt; source Layr-Labs/qwen-3.8-mtp-challenge @ 0863b06ac (Apache-2.0; B100 read the tip TREE, this batch read the ~50-diff HISTORY -- complementary); + 8 riders: B63 boundary-fused residual pair (external confirmation + eval-ladder-both-halves), B96 activation-side digit-fold two-posture exactness, B97 single-rounding-boundary fusion, B38 unconsumed-variant factory skip, B107 workgroup radix + ordinal bitmap tie-cut + bf16 16-bit exact key, B51 quantized-embed dequant-at-use, B82 shapeless-trace Slice-fatal, B77 derived-sum-table member). **ADDENDUM (collision salvage, 2026-09-06):** a parallel session's duplicate Batch 115 (4 rules incl. two shared seeds) yielded per push-wins; the salvage the landed batch lacks landed as 4 rules (dispatch-cliff-bitexact-shape-confinement D, readout-trim-needs-committed-id-coverage D, dead-output-rows-state-append-only-path D, distinct-index-bitmap-ascending-compaction E) + 6 riders (B96 bit-plane in-consumer offset-sum placement -- corrects this batch's claim that the arm was already covered, B97 verbatim-body text-identity construction, B104 x2 DIRECT_NIBBLES + register-cliff / worst-domain 2.3e-4 semantic pruning, B100 host-side grid-trim witness, exhaustive-domain-input-patch += the per-OUTPUT fidelity-exclusion half); batch115_addendum gates 3.
     assert_eq!(
         corpus.entries.len(),
-        528,
-        "kernel batches through Batch 115 should have 528 rules"
+        532,
+        "kernel batches through Batch 115 (incl. the addendum) should have 532 rules"
     );
 }
 
@@ -5299,7 +5299,7 @@ fn kernel_categories_table_has_15_entries() {
 
 #[test]
 fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-    // Every rule_id in the 528-rule corpus must appear in exactly one category.
+    // Every rule_id in the 532-rule corpus must appear in exactly one category.
     let corpus = build_kernel_seed_corpus();
     let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     let mut categorized: Vec<&str> = Vec::new();
@@ -5342,13 +5342,13 @@ fn kernel_categories_cover_all_corpus_rules_exhaustively() {
 
 #[test]
 fn kernel_categories_counts_match_plan_003_table() {
-    // Pin per-category rule counts to the Plan 003 table (updated for Batch 113).
+    // Pin per-category rule counts to the Plan 003 table (updated for Batch 115 + addendum).
     let expected = [
         (KernelCategory::MemoryAccess, 112),
         (KernelCategory::Compute, 59),
         (KernelCategory::Fusion, 44),
-        (KernelCategory::Dispatch, 121),
-        (KernelCategory::Parallelism, 41),
+        (KernelCategory::Dispatch, 124),
+        (KernelCategory::Parallelism, 42),
         (KernelCategory::FlashAttnTiling, 12),
         (KernelCategory::LinearAttnRecurrence, 29),
         (KernelCategory::MoeDispatchBackward, 23),
@@ -5372,9 +5372,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 528.
+    // Sum must equal 532.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 528, "Plan 003: category totals must sum to 528");
+    assert_eq!(total, 532, "Plan 003: category totals must sum to 532");
 }
 
 #[test]
@@ -5385,8 +5385,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 528,
-        "Plan 003: grouped corpus has {total} rules, expected 528"
+        total, 532,
+        "Plan 003: grouped corpus has {total} rules, expected 532"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -9270,4 +9270,120 @@ fn batch115_coverage_collapse_dense_and_partial_arms() {
     assert_eq!(install(4, &[0, 0, 1, 2]), Plan::Partial);
     // All-covered-but-permutation-incomplete (count < rows).
     assert_eq!(install(4, &[0, 1, 2]), Plan::Partial);
+}
+
+#[test]
+fn batch115_addendum_rules_present() {
+    // Batch 115 ADDENDUM (collision salvage -- 2026-09-06): the sibling
+    // Batch 115 (11863f8) landed first with 6 different rules; per the
+    // push-wins tie-breaker (the B103-addendum precedent) the duplicate
+    // yielded and these 4 rules land as the salvage the landed batch
+    // genuinely lacks. Quotes were coordinator-verified at pin 0863b06ac
+    // BEFORE the collision.
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "dispatch-cliff-bitexact-shape-confinement",
+        "readout-trim-needs-committed-id-coverage",
+        "dead-output-rows-state-append-only-path",
+        "distinct-index-bitmap-ascending-compaction",
+    ];
+    for id in ids {
+        assert!(
+            corpus.entries.iter().any(|e| e.rule_id == id),
+            "batch-115 addendum rule '{id}' missing from corpus"
+        );
+    }
+}
+
+#[test]
+fn batch115_addendum_concepts_covered() {
+    // Distinctness + mandated phrases must survive in the concept
+    // text (case-sensitive contains -- the B51 lesson).
+    let corpus = build_kernel_seed_corpus();
+    let checks: &[(&str, &[&str])] = &[
+        (
+            "dispatch-cliff-bitexact-shape-confinement",
+            &[
+                "qL * gqa <= 32",
+                "VALUE drift",
+                "accumulation order",
+                "SINGLE SOURCE OF TRUTH",
+                "proven width range",
+            ],
+        ),
+        (
+            "readout-trim-needs-committed-id-coverage",
+            &[
+                "49_152",
+                "REGRESSED",
+                "committed argmax ids",
+                "escape range",
+                "1.00 -> 0.877",
+            ],
+        ),
+        (
+            "dead-output-rows-state-append-only-path",
+            &[
+                "query+gate projection",
+                "KV-only",
+                "FAILS CLOSED",
+                "STATE-APPEND-ONLY",
+                "final axis",
+            ],
+        ),
+        (
+            "distinct-index-bitmap-ascending-compaction",
+            &[
+                "no tie rule",
+                "exclusive",
+                "ascending",
+                "bitmap",
+                "SET IDENTITY",
+            ],
+        ),
+    ];
+    for (id, needles) in checks {
+        let e = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == *id)
+            .unwrap_or_else(|| panic!("batch-115 addendum rule '{id}' missing"));
+        for needle in *needles {
+            assert!(
+                e.gpu_concept.contains(needle),
+                "batch-115 addendum concept for '{id}' missing phrase '{needle}'"
+            );
+        }
+    }
+}
+
+#[test]
+#[cfg(not(feature = "kernel_verify"))]
+fn batch115_addendum_pseudocode_parses() {
+    // G1 for the Batch 115 addendum: syn-parse gate (the salvage rules).
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "dispatch-cliff-bitexact-shape-confinement",
+        "readout-trim-needs-committed-id-coverage",
+        "dead-output-rows-state-append-only-path",
+        "distinct-index-bitmap-ascending-compaction",
+    ];
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-115 addendum rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            ref_verdict.parses,
+            "batch-115 addendum ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            opt_verdict.parses,
+            "batch-115 addendum opt_pattern for '{id}' must parse"
+        );
+    }
 }

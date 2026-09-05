@@ -144,7 +144,7 @@ fn forward(plan: &IslandPlan, x: &[f32]) -> Vec<f32> {
 // -- exhaustive-domain-input-patch-bit-identity -- Batch 115.
         KernelRule {
             rule_id: "exhaustive-domain-input-patch-bit-identity".to_string(),
-            gpu_concept: "When a fused kernel's transcendental must be bit-identical to a reference implementation and the INPUT DOMAIN is exhaustively sweepable (16-bit inputs: 2^16 words total, 65,280 finite values -- an offline enumeration is cheap), do NOT tune the expression toward tolerance: enumerate the WHOLE domain offline against the reference, find the divergent inputs (typically 1-3 of 65,280), and patch exactly those inputs via a direct output-word mapping applied before the lossless widening expansion -- every other input retains the inherited expression unchanged. The patch is bit-level: map the input's raw bit pattern to the reference's raw output word, so the fused single-launch form is bit-exact over the entire finite domain and the fusion survives without a tolerance gate. f32 domains are NOT sweepable (2^32) -- fall back to tolerance gates there; the sweepability boundary is the rule's precondition. Two mandatory gate legs: (1) an exhaustive post-patch comparison (every finite input, zero mismatches -- 65,280-point oracle, not a sample); (2) a boundary negative control (perturb the geometry -- e.g. one extra window row -- and require EXACTLY the outputs reading that geometry to fail, proving the gate is live rather than vacuously green). Validation scale precedent: 12.98M element comparisons zero-mismatch when the sweep feeds a full forward equivalence. Distinct from half-domain-exact-band-dequant-with-raw-bit-oracle (B97 -- an ALGEBRAIC band condition proving a narrowed-arithmetic form exact on a band, with the exhaustive oracle as the PROMOTION gate; this patches the residual divergences of an otherwise-correct fused expression), from fused-vector-site-transcendental-form-nonportable (B98 -- transcendental form choice is per-site and must be re-validated; this says WHAT to do when that validation finds exactly a handful of divergent inputs on a sweepable domain), and from sign-branch-stable-sigmoid (B32a -- forward overflow hygiene by algebraic argument; orthogonal). Source: Layr-Labs/qwen-3.8-mtp-challenge @ 0863b06 (Apache-2.0), the bf16 sigmoid 1-ulp divergence found by the all-65,280-input sweep (input 0xC0DB mapped to the reference's output word 0x3A8B before the fp32 expansion); Batch 115 / Research 139 / Plan 088.".to_string(),
+            gpu_concept: "When a fused kernel's transcendental must be bit-identical to a reference implementation and the INPUT DOMAIN is exhaustively sweepable (16-bit inputs: 2^16 words total, 65,280 finite values -- an offline enumeration is cheap), do NOT tune the expression toward tolerance: enumerate the WHOLE domain offline against the reference, find the divergent inputs (typically 1-3 of 65,280), and patch exactly those inputs via a direct output-word mapping applied before the lossless widening expansion -- every other input retains the inherited expression unchanged. The patch is bit-level: map the input's raw bit pattern to the reference's raw output word, so the fused single-launch form is bit-exact over the entire finite domain and the fusion survives without a tolerance gate. f32 domains are NOT sweepable (2^32) -- fall back to tolerance gates there; the sweepability boundary is the rule's precondition. Two mandatory gate legs: (1) an exhaustive post-patch comparison (every finite input, zero mismatches -- 65,280-point oracle, not a sample); (2) a boundary negative control (perturb the geometry -- e.g. one extra window row -- and require EXACTLY the outputs reading that geometry to fail, proving the gate is live rather than vacuously green). Validation scale precedent: 12.98M element comparisons zero-mismatch when the sweep feeds a full forward equivalence. Distinct from half-domain-exact-band-dequant-with-raw-bit-oracle (B97 -- an ALGEBRAIC band condition proving a narrowed-arithmetic form exact on a band, with the exhaustive oracle as the PROMOTION gate; this patches the residual divergences of an otherwise-correct fused expression), from fused-vector-site-transcendental-form-nonportable (B98 -- transcendental form choice is per-site and must be re-validated; this says WHAT to do when that validation finds exactly a handful of divergent inputs on a sweepable domain), and from sign-branch-stable-sigmoid (B32a -- forward overflow hygiene by algebraic argument; orthogonal). Source: Layr-Labs/qwen-3.8-mtp-challenge @ 0863b06 (Apache-2.0), the bf16 sigmoid 1-ulp divergence found by the all-65,280-input sweep (input 0xC0DB mapped to the reference's output word 0x3A8B before the fp32 expansion); Batch 115 / Research 139 / Plan 088. ADDENDUM RIDER (Batch 115 collision salvage -- the per-OUTPUT exclusion half this rule's closure presupposes): before any sweep can license a fusion, the ADMISSION decision is per-output and fidelity-driven -- an output feeding an ABSOLUTE-FIDELITY consumer (a verify recurrence, a commitment) stays EXCLUDED from the fused kernel while any op on its path lacks a bit-exactness proof, even at a priced dispatch cost: 'beta feeds the VERIFY recurrence where fidelity is absolute, so it stays a plain graph sigmoid(b) -- one [1,S,48] elementwise launch, ~0.06 ms of the ~0.7 ms saving, in exchange for removing an unquantifiable knife-edge' (diff e3b4531d9:27). The exclusion is the conservative state; the exhaustive sweep + singleton patch is what LIFTS it per-output, and until the sweep exists the priced launch is the correct answer, not a tolerance gate.".to_string(),
             ref_shape: "// naive: a fused kernel's hand-written activation diverges from the
 // reference by 1 ulp somewhere; shipped under a tolerance gate.
 fn fused_gate_tol(x_bits: u16) -> f32 {
@@ -340,5 +340,178 @@ fn main() {
 }
 ".to_string(),
         },
+
+// ============================================================
+// -- Batch 115 ADDENDUM (collision salvage) -- the sibling Batch 115
+// (11863f8) landed first with 6 different rules; per the push-wins
+// tie-breaker (the B103-addendum precedent) the duplicate yielded and these
+// 4 rules land as the salvage the landed batch genuinely lacks. Quotes were
+// coordinator-verified at the pin BEFORE the collision (the re-verification
+// corrected the lane-C radix misattribution now codified in the sibling's
+// B107 rider).
+// ============================================================
+// -- dispatch-cliff-bitexact-shape-confinement -- Batch 115 addendum (collision salvage) / Research 139 / Plan 088.
+        KernelRule {
+            rule_id: "dispatch-cliff-bitexact-shape-confinement".to_string(),
+            gpu_concept: "A batched multi-row op with a kernel-family dispatch threshold must keep every dispatch INSIDE the bit-proven width range of one family: crossing the threshold changes the kernel family AND the accumulation order of every score/output element, so a consumer reading VALUES (top-2 evidence, tolerance gates, rank-sensitive orderings) diverges even when argmax ids stay stable. The source's own diagnosis, verbatim: 'fused sdpa vector path serves qL * gqa <= 32; above it the dispatch changes kernel family and the accumulation order of every score -- the measured source of the MTP width wall's top-2 VALUE drift.' The fix is NOT diagnosing the culprit op: remove the wide shapes -- split the batched verify into sub-chunks confined to the proven width range, each provably window-identical to a small round (query rows split with bottom-right causal alignment so every row sees the window a small round would; keys re-sliced, never recomputed; ONE cache update over read-only views; the recurrence twin: split [S-4, 4] with the fp32 state chained across the boundary, conv windows taken as slices of the SAME concatenated input). Load-bearing contract: the boundary constant is the SINGLE SOURCE OF TRUTH shared by forward AND replay -- 'Replay MUST mirror the same boundary ... which is why this is the one shared source of truth for it' -- a replay that re-runs rows as one call re-introduces the wide shape and diverges from the forward's own chaining. Only after the crack is closed by construction is the width cap raisable ('the wall is cracked structurally, by removing the wide shapes rather than diagnosing the culprit op'). Distinct from tile-loop-back-edge-needs-multi-tile-bitexact-gate (B57 -- the GATE half: a fixture must CROSS the boundary to test it; this is the production fix the gate protects), from reduction-restructure-needs-source-owned-comparator (B95 -- the ORACLE half; composes: the confined chunks are what the comparator pins), from shape-class-keyed-capability (B103 -- decides whether the fast path MAY run per shape class; this preserves bit-exactness when it DOES, the same threshold read from the numerics side), from carried-state-reduction-stays-scalar (B113 -- decides which products may reassociate at all; this avoids reassociation by never crossing the family boundary), and from batch-invariance-locks-reduction-geometry (B110 -- locks the geometry against BATCH COMPOSITION for cross-run reproducibility; this locks the shape against the KERNEL-FAMILY threshold for value stability within one binary). Source: Layr-Labs/qwen-3.8-mtp-challenge @ 0863b06ac -- Vendor/mlx-swift-lm/Libraries/MLXLMCommon/AttentionUtils.swift:105-108 (the threshold comment, verbatim), the sdpa split with byte-identical windows (diff b6ce964b1, comment survives at tip), the GDN width-wall boundary 'widths 2...5 are bit-exact, drift starts at the 6th row' + the shared verifyChunkBoundary (diff 08897af24, at tip). Batch 115 addendum (collision salvage) / Research 139 / Plan 088.".to_string(),
+            ref_shape: "// naive: a batched verify runs ALL query rows through whichever kernel the
+// row count selects -- the wide family switches in above the fused vector
+// path's width gate, and its accumulation order differs from the small
+// family's. Argmax ids survive; top-2 VALUE evidence drifts.
+const GQA: usize = 4;
+const WIDE_GATE: usize = 32;
+
+fn verify_rows_naive(q: &[f32], k: &[f32], n_q: usize) -> Vec<f32> {
+    let mut out = Vec::with_capacity(n_q * 2);
+    if n_q * GQA <= WIDE_GATE {
+        small_family(q, k, n_q, &mut out);
+    } else {
+        wide_family(q, k, n_q, &mut out); // different accumulation order
+    }
+    out
+}
+
+fn small_family(_q: &[f32], _k: &[f32], _n: usize, _out: &mut Vec<f32>) {}
+fn wide_family(_q: &[f32], _k: &[f32], _n: usize, _out: &mut Vec<f32>) {}
+".to_string(),
+            opt_pattern: "// optimized: confine every dispatch to the bit-proven width range; when the
+// batch exceeds it, split so each piece is inside the proven range, and make
+// the boundary constant the single source of truth for forward AND replay.
+const GQA: usize = 4;
+const PROVEN_MAX_ROWS: usize = 8; // bit-proven: qL * gqa <= 32
+const DIM: usize = 128;
+
+fn verify_rows_confined(q: &[f32], k: &[f32], n_q: usize) -> Vec<f32> {
+    let mut out = Vec::with_capacity(n_q * 2);
+    let mut row = 0;
+    while row < n_q {
+        let take = PROVEN_MAX_ROWS.min(n_q - row);
+        // keys re-sliced, never recomputed; one cache update per call site
+        small_family(&q[row * DIM..], k, take, &mut out);
+        row += take;
+    }
+    out
+}
+
+fn small_family(_q: &[f32], _k: &[f32], _n: usize, _out: &mut Vec<f32>) {}
+".to_string(),
+        },
+
+// ============================================================
+// -- readout-trim-needs-committed-id-coverage -- Batch 115 addendum (collision salvage) / Research 139 / Plan 088.
+        KernelRule {
+            rule_id: "readout-trim-needs-committed-id-coverage".to_string(),
+            gpu_concept: "Any readout/vocabulary subspace trim (compact draft head, prefix-only projection) is valid only if every id the consumer can actually COMMIT lies inside the retained slice -- verified against the live committed-argmax distribution of the promotion gate, never against the top-k of any single eval prompt. Ids outside the slice become unproposable; every occurrence forces a reject whose round-base cost exceeds the trimmed read savings. The measured negative is encoded at the tip as the guard's own evidence, verbatim: 'Prefix 98_304, the promoted trim. A 49_152 halving was measured on the public longcopy gate and REGRESSED: three of its committed argmax ids live in [49_152, 248_044), the head could no longer propose them, and the forced rejects cost more round-bases than the halved compact-head read saved (accept 1.00 -> 0.877, 21.1 -> 22.8 ms/token).' The promoted scheme keeps a prefix PLUS an explicit escape range for control tokens; the guard is the committed-id histogram of the gate corpus with a required margin, and the read's own cost bounds the upside -- 'the ceiling of any further trim is small and the acceptance downside is not.' Kinship: complete-coverage-scatter-collapses-operand-to-dense (the same-batch lens cites this trim as the PRUNING bound -- full coverage lets a scatter collapse to a dense op, and PARTIAL coverage is exactly what invalidates a trim; this rule is the dedicated guard: the histogram check, the escape range, and the promotion-gate verification contract the lens points at). Distinct from lm-head-loss-positions-only (B37 -- elides the projection for provably-DEAD positions, a cost elision; this is a VALUE-coverage constraint on a KEPT projection), from coarse-precision-first-exact-refine (B110 -- a lossy coarse KEY with exact refinement downstream; here the trimmed slice loses ids no refinement can recover), and from degenerate-selection-falls-back-to-identity-uniform (B110 -- neutralizes pathological VALUES before selection; this guards the SELECTION SPACE itself). Source: Layr-Labs/qwen-3.8-mtp-challenge @ 0863b06ac -- Vendor/mlx-swift-lm/Libraries/MLXLLM/Models/Qwen35.swift:5171-5177 (the guard comment, verbatim, verified at the pin); origin diff 61936f265 (compact draft vocabulary: row-subset compose + on-device remap + padding rows semantically unreachable before argmax). Batch 115 addendum (collision salvage) / Research 139 / Plan 088.".to_string(),
+            ref_shape: "// naive: the draft head is trimmed to the eval prompts' top ids -- the trim
+// is never checked against the promotion gate's committed-argmax set, so ids
+// the gate actually commits become unproposable and every hit is a forced
+// reject that costs more round-bases than the trimmed read saved.
+fn trim_readout_naive(vocab: usize) -> usize {
+    vocab / 4 // 'the eval prompt never leaves the first quarter'
+}
+".to_string(),
+            opt_pattern: "// optimized: the trim bound is gated by the committed-id histogram of the
+// promotion gate -- every id the gate can commit must sit inside the kept
+// slice, with an explicit escape range for control tokens.
+fn trim_readout_guarded(vocab: usize, committed_ids: &[u32]) -> Option<(usize, usize)> {
+    let keep = vocab / 2;
+    let escape_start = vocab - 276;
+    let max_committed = committed_ids.iter().copied().max()?;
+    if max_committed as usize >= escape_start {
+        return Some((keep, escape_start)); // the escape range covers control ids
+    }
+    if committed_ids.iter().any(|id| *id as usize >= keep) {
+        return None; // the trim would make a committed id unproposable: refuse
+    }
+    Some((keep, escape_start))
+}
+".to_string(),
+        },
+
+// ============================================================
+// -- dead-output-rows-state-append-only-path -- Batch 115 addendum (collision salvage) / Research 139 / Plan 088.
+        KernelRule {
+            rule_id: "dead-output-rows-state-append-only-path".to_string(),
+            gpu_concept: "In a multi-row forward where only trailing row(s) feed every consumer (a proposal flush: history rows + current row), leading rows execute through a STATE-APPEND-ONLY path -- projection + norm + rope + cache update, NO attention output, no MLP, no final norm, no vocab head -- so dead rows 'never stream or compute the unused query+gate projection.' The path is backed by a dedicated packed KV-only weight (k|v concatenated at first use, group/bits/mode matched to the live projections, per-projection fallback otherwise) so the cheap path still reads a cache-friendly layout. The capability FAILS CLOSED before mutating any state: a guard (single-layer + single-cache + packed weight present) runs BEFORE the first cache append and reports 'not capable' on any mismatch, the caller takes the generic full path, and a nil result means NO mutation happened. Family members in the same diffs: the seed-tail projection (a long seed's full logits are dead -- the vocab head runs on the one kept row only), KV-write without vocab projection for prefix rows (the 248,320-way head paid once, not per row), and publish-the-normed-block (the verify forward already computes the post-norm block on the way to the vocab projection; consumers row-slice it because 'RMSNorm reduces only over the final axis, so these are the same values' as re-normalizing each row). Distinct from lm-head-loss-positions-only (B37 -- the projection-ELISION member expressed as a GEMV support-set gate; this ships the whole alternative row path + packed weights + the fail-closed capability contract), from write-before-read-state-skips-checkpoint (B58 -- which STATE needs no checkpoint under append-only writes; this is which ROWS need no compute), and from batch-composition-invariant-grid-early-return (B100 -- over-launched GROUPS return early; here the rows are never launched onto the expensive path at all). Source: Layr-Labs/qwen-3.8-mtp-challenge @ 0863b06ac -- Sources/MLXFastModel/Qwen36MTPBlockSession.swift:717 (feeds ONE row in and gets ONE row back, and lastHiddenWithKVOnlyHistory), Vendor/mlx-swift-lm/Libraries/MLXLLM/Models/Qwen35MTP.swift:218 (func lastHiddenWithKVOnlyHistory), Qwen35.swift:2977 ('never stream or compute the unused query+gate projection'), diff cf350293f (the fail-closed guard: layers.count == 1, cache.count == 1, checked before any cache append). Batch 115 addendum (collision salvage) / Research 139 / Plan 088.".to_string(),
+            ref_shape: "// naive: the proposal flush runs the FULL decoder block for every row --
+// history rows' attention output, MLP and vocab head are provably dead
+// (only the trailing row feeds any consumer), but the loop cannot tell.
+fn flush_naive(rows: usize) -> Vec<f32> {
+    (0..rows).map(full_block).collect() // dead work on rows 0..rows-1
+}
+
+fn full_block(_row: usize) -> f32 {
+    0.0
+}
+".to_string(),
+            opt_pattern: "// optimized: history rows take the state-append-only path -- projection +
+// norm + rope + cache update, no attention output / MLP / vocab head --
+// backed by a packed KV-only weight; the capability FAILS CLOSED before any
+// cache mutation, and the caller falls back when the guard refuses.
+fn flush_rows(rows: usize, keep_last: usize) -> Vec<f32> {
+    if !kv_only_capable() {
+        return (0..rows).map(full_block).collect(); // fail closed: generic path
+    }
+    let mut out = Vec::with_capacity(keep_last);
+    for r in 0..rows - keep_last {
+        append_state_only(r); // dead rows never stream the query+gate projection
+    }
+    for r in rows - keep_last..rows {
+        out.push(full_block(r));
+    }
+    out
+}
+
+fn kv_only_capable() -> bool {
+    true // single-layer + single-cache + packed-weight guard
+}
+
+fn append_state_only(_row: usize) {}
+
+fn full_block(_row: usize) -> f32 {
+    0.0
+}
+".to_string(),
+        },
+
+// ============================================================
+// -- distinct-index-bitmap-ascending-compaction -- Batch 115 addendum (collision salvage) / Research 139 / Plan 088.
+        KernelRule {
+            rule_id: "distinct-index-bitmap-ascending-compaction".to_string(),
+            gpu_concept: "When a selector's output is a SET OF DISTINCT INDICES (an argPartition segment -- no element repeats), ascending output order is a function of the set ALONE: no tie semantics exist, so the compaction needs neither a comparator nor an order-encoded key. One threadgroup marks the selected ids in a ceil(N/32)-word bitmap, runs an exclusive per-word popcount prefix scan (thread t owns the ascending word range), and emits set bits in ascending order -- replacing a multi-dispatch stable sort of thousands of keys with correctness by SET IDENTITY, one dispatch. The source's own contrast, verbatim: 'A counting sort therefore reproduces MLX.sorted exactly by construction: there is no tie rule to state' and 'the scan is exclusive over t, so the emitted ids ascend globally.' The boundary is explicit and rule-shaped: ordinal-map-exact-tail-selection (the same batch) handles the sibling kernel that selects tail-K over TIED float scores -- there a total order exists and must be order-encoded; HERE the producer emits distinct indices, so distinctness DELETES the tie machinery, and the only obligation is to verify the producer actually emits a set before dropping it. Deterministic by construction: the bitmap + scan order is input-order-independent and the emitted sequence is the unique ascending order of the set. Distinct from radix-select-ordered-key-topk (B107 -- selects over KEYED VALUES that tie, histogram passes over the key bytes; this compacts an already-selected index SET), from packed-total-order-multi-field-argmax (B107/B110 lineage -- manufactures a total order to break ties; this proves ties cannot exist), from ballot-matrix-tie-rank (B110 -- warp-ballot rank computation AMONG ties; here the tie class is empty), and from ordinal-map-exact-tail-selection (Batch 115 -- encodes a LIVE total order into a monotone key for bit-exact tail-K; this proves no order decision exists to encode). Source: Layr-Labs/qwen-3.8-mtp-challenge @ 0863b06ac -- Vendor/mlx-swift-lm/Libraries/MLXLLM/Models/Qwen35.swift:4341-4358 (the counting-sort compaction comment, verbatim, verified at the pin: 'A counting sort therefore / reproduces MLX.sorted exactly by construction: there is no tie rule to / state' + 'the scan is exclusive over t, so the emitted ids ascend globally'). Batch 115 addendum (collision salvage) / Research 139 / Plan 088.".to_string(),
+            ref_shape: "// naive: the selected ids are a SET (an argPartition segment -- no element
+// repeats), but the compaction runs a comparator sort, paying tie machinery
+// that cannot fire on a set and a multi-pass sort for what set identity
+// already decides.
+fn compact_naive(mut picked: Vec<u32>) -> Vec<u32> {
+    picked.sort_by(|a, b| a.cmp(b)); // tie rules that cannot fire on a set
+    picked
+}
+".to_string(),
+            opt_pattern: "// optimized: mark the set in a bitmap, exclusive-scan per-word popcounts,
+// emit set bits in ascending order -- correctness by SET IDENTITY, one pass,
+// no comparator, no tie rule to state.
+const WORDS: usize = (4096 + 31) / 32;
+
+fn compact_ascending(selected: &[u32], vocab: usize) -> Vec<u32> {
+    let mut bits = [0u32; WORDS];
+    for id in selected {
+        bits[(*id as usize) / 32] |= 1 << (*id % 32);
+    }
+    let mut out = Vec::with_capacity(selected.len());
+    for (wi, w) in bits.iter().enumerate().take(vocab.div_ceil(32)) {
+        let base = (wi * 32) as u32;
+        let mut word = *w;
+        while word != 0 {
+            let bit = word.trailing_zeros();
+            out.push(base + bit);
+            word &= word - 1;
+        }
+    }
+    out
+}
+".to_string(),
+        },
+
     ]
 }

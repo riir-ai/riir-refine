@@ -1609,7 +1609,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 528-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 532-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1852,7 +1852,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "softmax-denominator-cancels-through-scale-invariant-norm",
         ],
     ),
-    // D: Dispatch patterns (121 rules)
+    // D: Dispatch patterns (124 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -1978,9 +1978,12 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "ordinal-map-exact-tail-selection",
             "complete-coverage-scatter-collapses-operand-to-dense",
             "env-gate-reaches-and-arms-the-scored-process",
+            "dispatch-cliff-bitexact-shape-confinement",
+            "readout-trim-needs-committed-id-coverage",
+            "dead-output-rows-state-append-only-path",
         ],
     ),
-    // E: Parallelism patterns (41 rules)
+    // E: Parallelism patterns (42 rules)
     (
         KernelCategory::Parallelism,
         "E: parallelism",
@@ -2026,6 +2029,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "ballot-matrix-tie-rank",
             "m-group-shared-weight-scan-register-relief",
             "row-parallelism-ladder-split-vs-pack",
+            "distinct-index-bitmap-ascending-compaction",
         ],
     ),
     // F: Flash-attention tiling (12 rules)

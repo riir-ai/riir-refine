@@ -14,3 +14,5 @@
 - [x] T8 commit + push on `develop` (batch commit `11863f8`)..
 
 **Queue position:** behind Batch 114 (oMLX ANE/GDN — the other prefill lane). Owner may reorder; the Bonsai-exact geometry argues for priority over non-prefill queue items.
+
+**COLLISION NOTE (2026-09-06):** this plan was executed CONCURRENTLY by two sessions. The sibling landed first (`11863f8`, 6 rules + 8 riders, corpus 522 -> 528) and owns the batch per push-wins; this session's duplicate landing (efc8782, never pushed) was dropped. The salvage — the content the landed batch genuinely lacks — landed as the Batch 115 ADDENDUM (4 rules + 6 riders, corpus 528 -> 532; batch115_addendum gates 3; kernel_heal 1379/0). Full adjudication: Research 139 landing addendum 2.
