@@ -3084,8 +3084,8 @@ caller's CWD — run off the repo root every count read 0 and the merge then
 
 **Issue 059 (Proposal 007 remainder — ops signer T2.2 + counsel gate Phase 3) RESOLVED
 (2026-09-04) by owner decision — file removed 2026-09-05 per the noise-reduction rule
-(canonical decision record: Issue 068, kept on disk
-`.issues/068_kat_launch_tier_decision.md`; live tracker: Issue 061; full narrative in
+(canonical decision record: Issue 068 — removed 2026-09-05 with the tracker, digest in
+the **Issues 061 + 068** entry below; live tracker: Issue 061 (same removal); full narrative in
 git history — `git log -- .issues/059_*.md`).** Both open items were blocked on NON-code
 decisions and belong to the USDC custody rail (Tier 2 — not proposed, demand-gated),
 while the shipping arm is the custody-free KAT-stake arm that was already live.
@@ -3111,8 +3111,9 @@ surface: the per-tranche 7-day lockup clock, the no-promised-rate line) tracked 
 
 **Issue 060 (Proposal 008 remainder — autonomy re-open, dopamine levers, advisory
 soak) RESOLVED (2026-09-04) by owner decision — file removed 2026-09-05 per the
-noise-reduction rule (canonical decision record: Issue 068, kept on disk
-`.issues/068_kat_launch_tier_decision.md`; live tracker: Issue 061; full narrative in
+noise-reduction rule (canonical decision record: Issue 068 — removed 2026-09-05 with
+the tracker, digest in the **Issues 061 + 068** entry below; live tracker: Issue 061
+(same removal); full narrative in
 git history — `git log -- .issues/060_*.md`).** **Advisory-only is 008's SHIPPED END
 STATE by measurement, not a waiting room**: the G5 verdict is FAIL (wash), measured
 and pinned with a regression pin asserting the verdict; Bench 004 axis-E adds that no
@@ -3134,6 +3135,91 @@ signals/selection/guard/simulator, T2.1–T2.2 advisory transport + `dao-audit`
 artifacts, T2.4 shallow-DAO voting (G9-GOV), the decay-bound resolution with the
 bound unchanged (riir-dapps `3577986`, Issue 006), and Proposal 010's ledger re-open
 landed end-to-end.
+
+**Issues 061 + 068 — the KAT product loop (rollout tracker + the launch-tier decision
+record) RESOLVED 2026-09-05 — engineering complete; every remaining row is an OWNER act
+with a named unblock — both files removed per the noise-reduction rule (full text in
+git history — `git log -- .issues/061_*.md .issues/068_*.md`; by-number citations
+remain valid).** 068 was the owner decision record; its digest survives here.
+**Tiers:** Tier 0 (devnet + testnet, operator-owned accounts only, no fiat, no custody)
+AUTHORIZED, needs no counsel; Tier 1 (KAT rail beyond operator accounts / the operator
+loop on mainnet) gated on one narrow counsel question + 005 caveat #7's Phase-1 exit
+list, asked when a Tier-0 demand signal exists; Tier 2 (live USDC custody, live
+Stripe/Solana rails) NOT PROPOSED — counsel + measured demand, re-opens on a real
+inbound USDC deposit intent. **D1** ship the custody-free KAT-stake arm, do not propose
+USDC. **D2** ops signer WON'T-BUILD-NOW (Tier-2-only, highest blast radius; accepted
+cost: if Tier 2 lands, its longest-lead item starts from zero). **D3** copy review
+needs no counsel — DONE 2026-09-05 (one shared gate predicate
+`kat_stake_client::caveat15_violation` drives the module tests AND the integration
+binary; the 4-item disclosure checklist pins the stake copy set; `$`-adjacent and
+promised-rate canaries FIRE; 21/21 + 9/9). **D4** advisory-only is 008's shipped end
+state; v2 plan not commissioned (re-opens on a measurement, never a calendar). **D5**
+dopamine levers WON'T-DO. **D6** autonomy ramp foreclosed. **D7** the devnet ceremony
+rung DONE (riir-deployer `73159a0` — five-conjunct permit, four steps through the real
+binary, `devnet.toml` authored, 12 gate tests). **D8** the advisory soak on devnet
+EXECUTED 2026-09-05 (riir-dao `e7b1f89`: the `dao-soak` driver + first run — 16/16
+epochs clean, breaker NORMAL every epoch, 16/16 provenance-verified, `dao-audit verify`
+OK, byte-identical re-run, $0 cap-0 guard-only; **live GLM leg blocked by credential
+scope** — both CF tokens valid for the account but 403 on `ai/models/search`; owner
+unblock = an AI-scoped token + re-smoke, then `dao-soak --epochs 16` live ≤ $0.02;
+record: riir-dao `.benchmarks/004_d8_devnet_advisory_soak.md`). **D9** create
+`gist-rs/cargo-heal` — STILL OPEN, the one owner act that blocks a shipped surface
+(without it both install one-liners are unrunnable and nobody can install `cargo-heal`
+at all): `gh repo create gist-rs/cargo-heal --public --description "cargo-heal — binary
+releases"`. **061 at removal:** Phases 0/1/3 COMPLETE; Phase 2 T2.1 + Phase 4
+T4.1–T4.3 + T4.4a steps 1–4 PASS live (step 5 = the refund-leg design pick, owner,
+Plan 079); T2.2/T2.3/T4.4 testnet = owner acts sequenced after D7's clean rehearsal.
+**Standing owner asks, in unblock order:** (1) D9's one command; (2) an AI-scoped
+`CF_API_TOKEN` → `dao-advisory --smoke` → the live soak; (3) the testnet ceremony
+(T2.2/T2.3/T4.4); (4) the T4.4a step-5 refund-leg pick; (5) Tier 1/2 rows behind
+demand.
+
+**Issue 069 (four duplicate doc numbers — two work streams, one counter) RESOLVED
+2026-09-05 (file removed per the noise-reduction rule; owner GO given by the session
+directive; riir-clippy `58e7c1d` + katgpt-rs `29d95956`).** T2 executed per the
+citation-weight arbitration (katgpt-rs `scripts/citation_weight.py`, every site read):
+`.plans/015_batch69_unaligned_word_load` → **084** (the kat phase0 substrate keeps 015,
+10 vs 4), `.plans/026_dirty_encoding_write_elision_batch72` → **085** (the kat redaction
+plan keeps 026, 8 vs 3), `.research/083_elo_selection_gate` → **135** (the oMLX distill
+keeps 083, 12 vs 2), `.research/086_mnt_io_room_list_dod_batch73` → **136** (the
+dockerfile inventory keeps 086, 27 vs 4); highwaters `.plans` 83→85, `.research`
+134→136 (the issue's measured 80/132 were stale at write time — 081–083/133–134 had
+been taken by later batches; the write-time re-scan rule working as designed). **17
+citation rewrites** across 9 files (the 13 listed + 4 stragglers caught by the
+both-names grep, incl. one live `**Plan:**` link); dated NUMBERING-FLAGS queue-log
+records left as history per the katgpt-rs Plan-587 precedent. T3 recorded (§Numbering
+Discipline, option (a) — one counter per directory, enforced). T4: katgpt-rs
+`scripts/numbering_drift_floors.txt` riir-clippy ratchet `4 → 0`; sweep:
+`riir-clippy files=233 dup=0 stale=0 malformed=0`. Side-findings left for their owners:
+`riir-mmorpg-examples` `.issues/.highwater` carries the `-n 97` corruption (the
+katgpt-rs Issue-725 `echo -n` class — the sweep's remaining exit 1) + its files floor
+35→36; riir-train (13) / seal-game-editor (12) duplicates sit at their ratchets by
+design.
+
+**Issue 070 (ThoughtComm α-fusion + rerank diversity guard, arXiv:2510.20733)
+RESOLVED 2026-09-05 (file removed per the noise-reduction rule; `906b152`).** **T1
+measured — the α-fusion arm is dead on arrival for rule-id fusion, by measurement not
+assumption:** through the healer's own fan-out (`LatentMatcher::suggest_span`, pool 12)
+over 129 spans (28 composite + 101 Issue-017 labeled; domains Clippy+Perf+Docker),
+cross-domain rule-id overlap is **0/129** and byte-identical pattern-text overlap
+**0/129** (per-domain corpora are disjoint by construction and were authored
+independently); instantiation co-presence (α≥2 domains both firing proposers) is
+**2/129 = 1.6%** (both witnesses: Clippy `needless_range_loop` × Perf
+`vec-with-capacity` on `Vec::new()`+push-loop composites — already co-present in the
+merged pool). T2 **closed with the numbers recorded, never built** (RRF's rank
+information is strictly richer; a concept-level join would need a hand-authored mapping
+table = new corpus structure, a non-goal). T3 **landed** — the diagnostic-only
+rerank-pool collapse detector: `rule_family` (leading `-`/`_` segment),
+`CollapseVerdict`, `detect_collapse`/`detect_collapse_rule_ids` in
+`src/draft/instantiation_rerank.rs`, surfaced as `EvalReport::collapsed_pools` + a
+print section (prints `none` when empty — default output unchanged); G1a
+planted-collapse DETECTED, G1b real-composite-pool diverse control PASSED, no-crash
+gate; lib 1193→1200 (+7), clippy 0, retrieval floors unchanged (selection
+bit-identical). T4 foreclosed (its reopen condition was "only if T2 lands"). Standing
+measurement harness: `cross_domain_agreement_rate_report` (3-process stable). The
+paper's consensus≠accuracy discipline (Appx C.2) survives in the collapse detector — a
+converged pool with the oracle outside it is now a first-class diagnostic instead of an
+invisible Issue-024 recurrence.
 
 **Issue 037 (E2E self-evolve proof + adoption observability) — CLOSED
 2026-08-26** (file removed per the noise-reduction rule; full session records

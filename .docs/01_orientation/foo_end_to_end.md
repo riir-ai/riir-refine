@@ -214,4 +214,6 @@ Per-node reachability / height / sync% is **not** in this repo. It is
 
 - [`../../.proposals/011_kat_pay_request_qr_genesis_and_onboarding.md`](../../.proposals/011_kat_pay_request_qr_genesis_and_onboarding.md) — §8 onboarding, the G-WET gate
 - [`../../.proposals/003_binary_only_distribution.md`](../../.proposals/003_binary_only_distribution.md) — the dist surface + the canonical install copy
-- [`../../.issues/061_proposal_011_product_loop_rollout.md`](../../.issues/061_proposal_011_product_loop_rollout.md) — the rollout tracker
+- Issue 061 — the rollout tracker, RESOLVED + removed 2026-09-05 per the
+  noise-reduction rule; the rollout record lives in the repo-root `AGENTS.md`
+  ("Issues 061 + 068" entry) and git history

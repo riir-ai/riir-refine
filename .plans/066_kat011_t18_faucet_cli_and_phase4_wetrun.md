@@ -7,7 +7,8 @@ Status: **COMPLETE (2026-09-02)** — T1 + T2 + T3 + T4 all LANDED: `d72bbb6`
 closed**; **T4.4 stays deferred** — a testnet wet-run needs the
 owner-executed genesis ceremony (061 T2.2/T2.3).
 Branch: `develop`
-Issue: [`.issues/061_proposal_011_product_loop_rollout.md`](../.issues/061_proposal_011_product_loop_rollout.md)
+Issue: 061 (the tracker was resolved + removed 2026-09-05; record in riir-clippy
+AGENTS.md "Issues 061 + 068" + git history)
 Proposal: [`.proposals/011_kat_pay_request_qr_genesis_and_onboarding.md`](../.proposals/011_kat_pay_request_qr_genesis_and_onboarding.md) §7 / §8.1 / G-WET
 Blocked-by (named, NOT papered over): riir-dapps
 `Issue 010`

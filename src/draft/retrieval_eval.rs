@@ -1713,9 +1713,9 @@ mod tests {
         assert!(misses.is_empty(), "sec self-variant top-1 misses:\n{}", misses.join("\n"));
     }
 
-    /// Issue 070 T1 — the cross-domain agreement pre-check (ThoughtComm
-    /// α-fusion DoA measurement; source Research 364, issue
-    /// `.issues/070_thoughtcomm_alpha_fusion_healer.md`).
+    /// Issue 070 T1 — the cross-domain agreement pre-check (`ThoughtComm`
+    /// α-fusion `DoA` measurement; source Research 364; the issue was
+    /// resolved + removed 2026-09-05 — record in AGENTS.md + git history).
     ///
     /// The healer fans each span out across one index per enabled domain and
     /// re-ranks within a domain. An α-fusion arm (the issue's T2) needs ≥2
@@ -1735,7 +1735,7 @@ mod tests {
     ///   corpus pattern text (`buggy_code`) is byte-identical, i.e. the same
     ///   anti-pattern was independently authored into both corpora. This is
     ///   the issue's "re-scope to pattern-text overlap" viability probe.
-    /// - **C. instantiation co-presence (α_j)** — the count of domains with
+    /// - **C. instantiation co-presence (`α_j`)** — the count of domains with
     ///   ≥1 candidate whose proposer FIRED on the span (post
     ///   `mark_instantiation`); agreement = α ≥ 2. This is the exact
     ///   quantity a count-tiered fusion would consume. It measures
@@ -1744,11 +1744,11 @@ mod tests {
     ///
     /// Measured domain set = whatever is feature-enabled at test time; the
     /// committed gate state is defaults + `latent_retrieval` =
-    /// clippy_lints + rust_perf + docker. Kernel/sec opt-ins would add
+    /// `clippy_lints` + `rust_perf` + `docker`. Kernel/sec opt-ins would add
     /// nothing measurable here (kernel ships no proposers and GPU-kernel
     /// patterns; sec's corpus is FFI/Drop shapes) — enabling them would only
     /// widen the retrieval fan, not the firing surface, which is itself part
-    /// of the DoA verdict for this fixture corpus.
+    /// of the `DoA` verdict for this fixture corpus.
     ///
     /// Report-first: the measured rates print via `--nocapture` and ONLY
     /// structural invariants assert (A == 0, histogram sums, measurable > 0)
@@ -1756,6 +1756,11 @@ mod tests {
     /// measures it.
     #[cfg(all(feature = "latent_retrieval", feature = "clippy_lints", feature = "rust_perf"))]
     #[test]
+    // A report-first test: the three operationalizations + their printers are
+    // one narrative unit — splitting it would separate the measurement from
+    // the doc block that pins its semantics (the batch98 too_many_lines
+    // precedent).
+    #[allow(clippy::too_many_lines)]
     fn cross_domain_agreement_rate_report() {
         use crate::draft::instantiation_rerank::{RERANK_POOL, RerankMode};
         use std::collections::{HashMap, HashSet};
@@ -1858,6 +1863,9 @@ mod tests {
             }
         }
 
+        // display-only percentages over a bounded span population (< 2^23);
+        // the cast IS the print format.
+        #[allow(clippy::cast_precision_loss)]
         let pct = |n: usize| 100.0 * n as f32 / measurable as f32;
         println!("\n== Issue 070 T1: cross-domain agreement (fan-out retrieval, pool {pool}) ==");
         println!("domains measured: {}", measured_domains.join(", "));

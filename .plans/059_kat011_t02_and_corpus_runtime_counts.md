@@ -3,7 +3,8 @@
 Status: **COMPLETE (2026-09-01)** — all tasks landed and validated; see the Landed
 notes per task. Two work items bundled because they share the `cargo-heal` bin surface
 and both trace to the KAT-proposal → issue conversion session:
-[Issue 061](../.issues/061_proposal_011_product_loop_rollout.md) T0.2 and
+Issue 061 T0.2 (the tracker was resolved + removed 2026-09-05; its record lives in
+riir-clippy AGENTS.md "Issues 061 + 068" + git history) and
 [Proposal 009](../.proposals/009_trained_clippy_drafter_moka_puct.md) §F2 item (ii).
 Branch: `develop` (per global rule — no feature branches)
 
