@@ -1,10 +1,10 @@
 # Issue 068 — OWNER DECISION: the KAT launch tiers (settles 059 + 060, restructures 061)
 
 Status: **DECIDED (2026-09-04) — this is a decision RECORD, not a work item.**
-It resolves every open row in [Issue 059](059_proposal_007_remainder_ops_signer_and_counsel_gate.md)
-and [Issue 060](060_proposal_008_remainder_new_plan_and_gated_levers.md) (both now
-RESOLVED in place, kept as records because ~30 files across five repos cite them by
-number), and re-tiers the open rows in
+It resolves every open row in Issue 059
+and Issue 060 (both RESOLVED; files removed 2026-09-05 per the noise-reduction rule —
+records in riir-clippy AGENTS.md + git history; by-number citations remain valid), and
+re-tiers the open rows in
 [Issue 061](061_proposal_011_product_loop_rollout.md), which stays the live product
 tracker. Owner asked for a decision on 2026-09-04 after all three trackers had sat in
 "no engineering unblock exists" for two days.

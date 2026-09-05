@@ -10,7 +10,7 @@ rail** (Tier 2, now not proposed), and the genesis ceremony is an owner act *bec
 authors real testnet key material and writes to production hosts as root* — which is true
 of **testnet** and true of **nothing on devnet**. So there IS an engineering unblock: the
 **devnet ceremony rung** (068 D7, T2.0 below), which rehearses the owner's one-shot act,
-produces the live telemetry [Issue 060](060_proposal_008_remainder_new_plan_and_gated_levers.md)
+produces the live telemetry Issue 060
 T2.3 was waiting on, and runs T4.1's shipped wet-run harness against a real service
 instead of a scripted one. **Tier 0 (devnet + testnet, operator-owned accounts only,
 no fiat, no custody) is AUTHORIZED and needs no counsel**; Tiers 1 and 2 carry the gates.
@@ -58,8 +58,8 @@ The proposal is draft and the phased scope survives the noise-reduction rule via
 this tracker.
 Branch: `develop` (per global rule — no feature branches)
 Proposal: [`.proposals/011_kat_pay_request_qr_genesis_and_onboarding.md`](../.proposals/011_kat_pay_request_qr_genesis_and_onboarding.md)
-Related: [Issue 059](059_proposal_007_remainder_ops_signer_and_counsel_gate.md) (the
-shared counsel envelope), [Issue 060](060_proposal_008_remainder_new_plan_and_gated_levers.md)
+Related: Issue 059 (the
+shared counsel envelope), Issue 060
 (the crank's grant machinery context), riir-deployer
 `Proposal 001`, riir-chain
 Proposal 008 (MemoShard).
@@ -679,12 +679,12 @@ set** — read together, the three trackers were not blocked on three shortages 
 mis-scoping, and re-verifying each in isolation could never surface that. Both are now
 RESOLVED by decision:
 
-- [Issue 059](059_proposal_007_remainder_ops_signer_and_counsel_gate.md) — **RESOLVED.**
+- Issue 059 — **RESOLVED.**
   The ops signer is **not built** (Tier 2, re-open on a real USDC deposit intent) and the
   counsel question is **answered by arm selection**: the custody-free KAT-stake arm ships,
   the USDC arm is not proposed. A narrow Tier-1 review is unbundled and deferred until
   there is demand for it.
-- [Issue 060](060_proposal_008_remainder_new_plan_and_gated_levers.md) — **RESOLVED.**
+- Issue 060 — **RESOLVED.**
   Advisory-only is 008's shipped end state by measurement, not a waiting room. The v2 plan
   is not commissioned (re-opens on a **measurement**, not a date), the dopamine levers are
   killed, the autonomy ramp is closed, and the advisory soak moves here behind T2.0.

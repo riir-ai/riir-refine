@@ -3082,6 +3082,59 @@ caller's CWD — run off the repo root every count read 0 and the merge then
 "won" those zeros over real store rows; both anchored to `REPO_ROOT`)
 (`4239dbdd`). Record: git history — `git log -- .issues/066_*.md`.
 
+**Issue 059 (Proposal 007 remainder — ops signer T2.2 + counsel gate Phase 3) RESOLVED
+(2026-09-04) by owner decision — file removed 2026-09-05 per the noise-reduction rule
+(canonical decision record: Issue 068, kept on disk
+`.issues/068_kat_launch_tier_decision.md`; live tracker: Issue 061; full narrative in
+git history — `git log -- .issues/059_*.md`).** Both open items were blocked on NON-code
+decisions and belong to the USDC custody rail (Tier 2 — not proposed, demand-gated),
+while the shipping arm is the custody-free KAT-stake arm that was already live.
+**Ops signer WON'T-BUILD NOW** (068 D2): it serves only outbound USDC unstake refunds,
+which exist only in the Tier-2 USDC custody rail, and it is the highest-blast-radius
+component in the system (a custody key with send authority); the "missing"
+RPC-provider/custody-posture answers are premature, not missing; re-open trigger =
+Tier 2 authorized (a real inbound USDC deposit intent / an operator fiat-in ask),
+re-opening as its own plan with real load numbers; accepted cost recorded: at Tier 2
+the longest-lead item starts from zero. **Counsel gate DECIDED BY ARM SELECTION**
+(068 D1): the custody-free KAT-stake arm ships under 005 caveat-#7 unchanged and was
+already live (`staking_share_bp` 500, `yield_ceiling_bp` 22 armed in
+`EpochParams::DEFAULT`; the ordering constraint enforced structurally at
+`riir-dapps/src/kat/ledger.rs:1350`), and the USDC arm is NOT proposed to counsel;
+counsel engagement rescoped to ONE narrow Tier-1 question ("may a non-transferable,
+non-redeemable prepaid service credit move between two independent account holders
+inside our own closed loop without reclassifying the product?"), asked when a Tier-0
+demand signal exists — explicitly not a legal opinion. **Copy review no longer
+counsel-gated** (068 D3 — the KAT-stake arm has no escrow window/venting/refund story
+to disclose); residual engineering (extend the pinned copy set to the KAT-stake
+surface: the per-tranche 7-day lockup clock, the no-promised-rate line) tracked in
+068 + 061.
+
+**Issue 060 (Proposal 008 remainder — autonomy re-open, dopamine levers, advisory
+soak) RESOLVED (2026-09-04) by owner decision — file removed 2026-09-05 per the
+noise-reduction rule (canonical decision record: Issue 068, kept on disk
+`.issues/068_kat_launch_tier_decision.md`; live tracker: Issue 061; full narrative in
+git history — `git log -- .issues/060_*.md`).** **Advisory-only is 008's SHIPPED END
+STATE by measurement, not a waiting room**: the G5 verdict is FAIL (wash), measured
+and pinned with a regression pin asserting the verdict; Bench 004 axis-E adds that no
+agent-reachable `decay_factor` keeps mining alive to a 1000-epoch horizon at launch
+scale. The v2-candidates plan NOT commissioned (068 D4) — it re-opens on a
+MEASUREMENT (the devnet soak showing a frozen constant leaving value on the table),
+never on a calendar; commissioning today would have needed an owner supply-ratio
+decision on no data. **Dopamine levers (T3.1 FairRoll jackpot table, T3.2 streak
+bonuses) WON'T-DO, not deferred** (068 D5): the guard pins `REWARD_EV_EPSILON_BP = 0`
+("EV ≤ base exactly") + `REWARD_MAX_MULTIPLIER_X = 10` make a zero-EV jackpot a
+presentation layer over a constant, and gambling-adjacent mechanics/copy on a token
+just decided non-transferable and closed-loop add exposure to the surface 005 caveat
+#15 calls most screenshot-likely; the guard-side caps STAY. **T4.1/T4.2 autonomy ramp
+CLOSED** (terminally foreclosed by the G5 verdict; re-opens only inside a future
+proposal). **T2.3 advisory-mode soak UNBLOCKED and re-homed to Issue 061** behind the
+devnet ceremony rung (T2.0) — also the measurement that could re-open the v2 plan.
+Landed record retained: T0.1–T0.3 scaffold/bounds/telemetry, T1.1–T1.4
+signals/selection/guard/simulator, T2.1–T2.2 advisory transport + `dao-audit`
+artifacts, T2.4 shallow-DAO voting (G9-GOV), the decay-bound resolution with the
+bound unchanged (riir-dapps `3577986`, Issue 006), and Proposal 010's ledger re-open
+landed end-to-end.
+
 **Issue 037 (E2E self-evolve proof + adoption observability) — CLOSED
 2026-08-26** (file removed per the noise-reduction rule; full session records
 in git history — `git log -- .issues/037_*.md`). **ALL GATES GREEN**: A1
