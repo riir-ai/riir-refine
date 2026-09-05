@@ -57,12 +57,16 @@ use std::time::Duration;
 /// base, which does not warm). This cap is ~50x the slowest healthy call,
 /// so it can never fire on a working daemon — it exists for the state
 /// where the docker CLI **hangs instead of failing**. Measured live
-/// (2026-09-05, Docker Desktop 4.87 with a wedged credential helper):
-/// `docker-credential-desktop` blocks forever in `open()`, every
-/// `build --check` on a non-`scratch` base inherits that hang, and the
+/// (2026-09-05, Docker Desktop 4.87, a ~75-min window where the
+/// `docker-credential-desktop` helper blocked in `open()`): every
+/// `build --check` on a non-`scratch` base inherited that hang and the
 /// oracle (plus any gate behind it) stalls until an OUTER timeout kills
-/// the whole run. A hang is worse than [`CheckRun::Unavailable`]: it
-/// converts "not checked" into "never finished checking".
+/// the whole run. The wedge self-recovered (helper re-probed instant
+/// the same evening), so it is a TRANSIENT daemon state — which is
+/// exactly why the bound belongs in code and not in a one-off kill:
+/// the next occurrence is unannounced. A hang is worse than
+/// [`CheckRun::Unavailable`]: it converts "not checked" into "never
+/// finished checking".
 const CALL_TIMEOUT: Duration = Duration::from_secs(120);
 
 /// One `BuildKit` check finding, reduced to what the agreement gate needs.
@@ -123,8 +127,8 @@ and passed'."
 /// The invocation is bounded by [`CALL_TIMEOUT`]; on timeout the child is
 /// killed and the run degrades to [`CheckRun::Unavailable`] — the
 /// "check-by-hang" failure mode (a wedged credential helper blocks the
-/// CLI forever) must not be distinguishable from a pass by anyone
-/// waiting on us.
+/// CLI for as long as the daemon stays wedged) must not be
+/// distinguishable from a pass by anyone waiting on us.
 #[must_use]
 pub fn build_check(source: &str) -> CheckRun {
     if !available() {
