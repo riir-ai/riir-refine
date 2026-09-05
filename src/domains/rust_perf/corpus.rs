@@ -254,14 +254,14 @@ use crate::domains::rust_perf::{PerfRule, RustPerfDomain};
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 100 entries
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 101 entries
 /// covering the main perf pattern categories (complexity, allocation, simd,
 /// layout, iterators, concurrency, io, arithmetic, dispatch, caching, bevy,
 /// wasm). Allocation is the deepest (22 rules; Batch 86 added 2); complexity
 /// has 19 (Batch 76 + 91 added 1 each; Batch 109 added the measurement-
 /// honesty rule); iterators
 /// has 10 (Batch 66/67 added 2; Batch 91 added 1); simd has 8 (Batch 62 + 64 + 83 added 1
-/// each); layout has 9 (Batch 61 + 85 + 86 added); concurrency has 8
+/// each); layout has 10 (Batch 61 + 85 + 86 + 112 added); concurrency has 8
 /// (Issue 014 added the two metric-mismatch rules; Batch 65 added the two
 /// contention rules; Batch 73 added 1);
 /// arithmetic has 8 (Batch 74 added 1); dispatch has 5 (Batch 61 + 74 added
@@ -1599,7 +1599,7 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
         // no proposer (the Batch 58 signature-change lesson).
         PerfRule {
             rule_id: "usize-index-to-u32".to_string(),
-            name: "usize index/offset fields in high-volume structs → u32 (halve cache footprint)".to_string(),
+            name: "usize index/offset fields in high-volume structs → u32 (halve cache footprint) RIDER (Batch 112 external confirmation, nnethercote 2026-07: rustc #158720 shrank AST expression nodes 72→64 B — \"small enough to fit in a cache line\" — >10% wall on AST-heavy benches + cache-miss −29%; the lineage from 104 B years ago is \"chip, chip, chipping\": shrink past the 64 B cache-line boundary is a step function, not a smooth curve)".to_string(),
             category: "layout".to_string(),
             buggy_code: "struct Span { start: usize, end: usize } // 16 bytes — pointer-sized for a < 4GB domain\nfn total_len(spans: &[Span]) -> u64 {\n    let mut acc = 0;\n    for s in spans { acc += (s.end - s.start) as u64; }\n    acc\n}".to_string(),
             fixed_code: "struct Span { start: u32, end: u32 } // 8 bytes — same domain, half the cache line traffic\nfn total_len(spans: &[Span]) -> u64 {\n    let mut acc = 0;\n    for s in spans { acc += u64::from(s.end - s.start); }\n    acc\n}".to_string(),
@@ -1641,6 +1641,49 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
             ),
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: Some(narrow_counter_overflow_promotion_bench_spec()),
+        },
+        // ── layout: by-value moves of >128-byte types lower to memcpy CALLS ──
+        // Source: nnethercote July-2026 rustc-perf post (rust-lang/rust
+        // #160005, Research 134, Batch 112): LLVM lowers any by-value move
+        // of a >128-byte type to a `memcpy` call instead of inline
+        // load/store pairs — a hot 136-byte type paid ~half its compile
+        // time in memcpy; the fix shrank the type to 104 bytes so the
+        // remaining moves inlined (plus avoiding 2/3 of the moves outright)
+        // → 40% wall on the two worst crates. DHAT copy-profiling was the
+        // finding instrument. The 128 B threshold is an LLVM BACKEND
+        // CONSTANT (`MaxStoresPerMemcpy` family) and it is ARCH-SHAPED:
+        // x86-64's inline ceiling is 128 B (8 stores = 4 pairs x 32 B) so
+        // 136 B → memcpy CALL; aarch64's ceiling is HIGHER — the corpus
+        // gate's asm reading shows a 136-byte move inlining to ldp/stp
+        // pairs (4 pairs + an 8 B tail) on Apple silicon with current
+        // rustc, while a 320-byte move on the same box emits `bl _memcpy`
+        // — the ARM boundary sits in (136, 320]. The M3 bench therefore
+        // ties at 136 B (both arms inline); the x86 re-gate (4090,
+        // same day) then showed the step DIRECTLY: the 48-byte copy
+        // inlines while the 136-byte loop carries `movl $136;
+        // callq memcpy` per iteration. Fix forms: (1) pass by reference where the
+        // consumer only reads; (2) shrink the type under the threshold
+        // (repack, usize-index-to-u32 composition, move the cold tail
+        // out-of-line); (3) avoid the move (in-place construction —
+        // architectural). Distinct from `box-large-enum-variant` (variant
+        // packing at the ENUM level), `async-future-size` (state-machine
+        // footprint, no move-cost axis), `soa-hot-field` (single-field scan
+        // contiguity) — the mechanism here is the MOVE COST of the whole
+        // type crossing the inline-memcpy boundary, found by copy-profiling
+        // not by field scans. Suggestion-only (a parse-only proposer cannot
+        // see type sizes or hot-path move frequency).
+        PerfRule {
+            rule_id: "hot-byval-move-over-memcpy-threshold".to_string(),
+            name: "hot by-value moves of a >128-byte struct → shrink under the memcpy threshold / pass by reference (LLVM lowers big moves to memcpy CALLS)".to_string(),
+            category: "layout".to_string(),
+            buggy_code: "// Hot path: every call moves the 136-byte record BY VALUE — LLVM lowers\n// each move to a memcpy CALL (not inline stores) once the type crosses the\n// 128-byte inline threshold (x86-64 `MaxStoresPerMemcpy` = 128 B; aarch64's\n// ceiling is lower still). Copy-profiling (DHAT) is how you find this.\nstruct Record {\n    hot: [u64; 13], // 104 B — the fields the hot path actually consumes\n    cold: [u64; 4], // 32 B — carried along in EVERY move\n}\n\nfn score(r: Record) -> u64 {\n    let mut a = 0u64;\n    for i in 0..13 { a = a.wrapping_add(r.hot[i].rotate_left(7) ^ (i as u64)); }\n    for i in 0..4 { a = a.wrapping_add(r.cold[i].wrapping_mul(3)); }\n    a\n}\n\nfn run(mut state: Record, n: usize) -> u64 {\n    let mut acc = 0u64;\n    for i in 0..n {\n        acc ^= score(state); // 136-byte memcpy per call\n        state.hot[i % 13] = state.hot[i % 13].wrapping_add(acc);\n        state.cold[i & 3] = state.cold[i & 3].rotate_left(1);\n    }\n    acc\n}".to_string(),
+            fixed_code: "// Fix (composed forms): shrink the moved type under the threshold by\n// moving the cold tail OUT of the hot record (by reference when read-only,\n// in-place when mutated) — the 104-byte moves now inline as load/store\n// pairs (on x86-64), and the cold fields are never copied at all.\nstruct Record {\n    hot: [u64; 13], // 104 B — under the threshold\n}\n\nfn score(r: Record, cold: &[u64; 4]) -> u64 {\n    let mut a = 0u64;\n    for i in 0..13 { a = a.wrapping_add(r.hot[i].rotate_left(7) ^ (i as u64)); }\n    for i in 0..4 { a = a.wrapping_add(cold[i].wrapping_mul(3)); }\n    a\n}\n\nfn run(mut state: Record, cold: &mut [u64; 4], n: usize) -> u64 {\n    let mut acc = 0u64;\n    for i in 0..n {\n        acc ^= score(state, cold); // 104-byte move: inline stores\n        state.hot[i % 13] = state.hot[i % 13].wrapping_add(acc);\n        cold[i & 3] = cold[i & 3].rotate_left(1); // cold tail mutated in place — zero copies\n    }\n    acc\n}".to_string(),
+            context_notes: Some(
+                "MEASURED Mixed 1/0/1 at 1K/1M iterations (M3 Max release, 2026-09-05, verdict-stable x2: 1.29x/0.99x then 1.29x/0.99x; allocs 0/0 both arms, alloc-det stable). The tie at n=1M is the honest mechanism cell, not a bench bug: the threshold step this rule encodes is ARCH-SHAPED and the M3 sits on the no-step side at 136 B. Asm evidence (the corpus gate reads the -C emit-asm output): on aarch64 + current rustc a 136-byte by-value move inlines to ldp/stp pairs (4 pairs + an 8 B tail) - NO memcpy call - while a 320-byte move on the same box emits bl _memcpy, so the aarch64 inline ceiling sits in (136, 320]; x86-64's ceiling is 128 B (nnethercote: rust-lang/rust #160005, July 2026 - any by-value move of a >128-byte type lowers to a memcpy CALL; a hot 136-byte type paid ~half its compile time in memcpy until shrunk to 104 B, 40% wall on the two worst crates; DHAT copy-profiling was the finding instrument). REGIME: a measured x86 win at the 128 B boundary; an ARM win only at larger types (once the move crosses the ARM ceiling - between 136 and 320 B on this toolchain - the call appears there too and the same shrink fixes it). The n=1K 1.29x cell is warm-up-dominated (per-iter cost drops 2x from n=1K to n=1M in BOTH arms); never cite it as the mechanism. The fix doctrine is arch-independent and never-negative (fewer/smaller by-value moves; profile with DHAT-class copy counters, not field scans). Composed-fix disclosure: the bench's fixed arm = shrink (136 -> 104) + the 32 B cold tail by-reference/in-place - both rule fix-forms; a binary bench cannot separate them. x86 RE-GATED 2026-09-05 (4090 box, quiet, rustc 1.93 x86_64-pc-windows-msvc): the asm shows the step DIRECTLY - the 48-byte loop's copy has NO memcpy call while the 136-byte loop's hot loop carries `movl $136; callq memcpy` per iteration, and the probe's wall clock moves the same direction (136 B loop = 1.32-1.35x the 48 B loop per iteration on x86 vs 1.00-1.13x on the M3). Distinct from box-large-enum-variant (enum-variant packing), async-future-size (state-machine footprint), soa-hot-field (field-scan contiguity) - the mechanism here is the MOVE COST of the whole type at a call boundary. Suggestion-only (a parse-only proposer cannot see type sizes or hot-path move frequency)."
+                    .to_string(),
+            ),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: Some(hot_byval_move_memcpy_threshold_bench_spec()),
         },
         // ── simd: transposed-weight register GEMV ─────────────────────────────────────
         // Source: microGPT-C (MIT, Research 070, Batch 62). The row-major
@@ -1948,7 +1991,7 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
         // (once-per-program vs once-per-data-update).
         PerfRule {
             rule_id: "sort-key-cache-precompute-out-of-lock".to_string(),
-            name: "comparator lock+clone per invocation → maintained sort-key cache refreshed once per update".to_string(),
+            name: "comparator lock+clone per invocation → maintained sort-key cache refreshed once per update RIDER (Batch 112 external confirmation, nnethercote 2026-07: rustc #157179 — rustdoc sorted impls by LONG GENERATED HTML STRINGS; a short text repr as the sort key won >6% icount — never sort by expensive payloads, derive a cheap key)".to_string(),
             category: "caching".to_string(),
             buggy_code: "use std::sync::RwLock;\nstruct LatestEvent { timestamp: u64, body: String /* …144 B total */ }\nstruct RoomInfo { latest_event: Option<LatestEvent> /* …many other fields */ }\nstruct Room { info: RwLock<RoomInfo> }\nimpl Room {\n    fn latest_event_timestamp(&self) -> Option<u64> {\n        // read-lock acquire + clone of the WHOLE LatestEventValue (144 B)\n        // to read one u64 — paid O(N log N) times per sort, twice per\n        // comparison, by every sorter AND every binary_search_by in the\n        // reactive diff machinery\n        self.info.read().unwrap().latest_event.clone().map(|ev| ev.timestamp)\n    }\n}\nfn sort_rooms(rooms: &mut [Room]) {\n    rooms.sort_by(|a, b| b.latest_event_timestamp().cmp(&a.latest_event_timestamp()));\n}".to_string(),
             fixed_code: "use std::sync::RwLock;\nstruct LatestEvent { timestamp: u64, body: String /* …144 B total */ }\nstruct RoomInfo { latest_event: Option<LatestEvent> /* …many other fields */ }\nstruct Room { info: RwLock<RoomInfo> }\nimpl Room {\n    fn latest_event_timestamp(&self) -> Option<u64> {\n        // narrow read through the guard — no clone (composes with\n        // lock-guard-narrow-field-accessor)\n        self.info.read().unwrap().latest_event.as_ref().map(|ev| ev.timestamp)\n    }\n}\n/// The production `RoomListItem` pattern: cache the sort/filter-relevant\n/// fields, refresh once per data update (only the CHANGED item).\nstruct RoomListItem {\n    inner: Room,\n    cached_latest_event_timestamp: Option<u64>,\n}\nimpl RoomListItem {\n    fn refresh_cached_data(&mut self) { // called on each RoomInfoNotableUpdate\n        self.cached_latest_event_timestamp = self.inner.latest_event_timestamp();\n    }\n}\nfn sort_rooms(rooms: &mut [RoomListItem]) {\n    // comparator reads the maintained cache — no lock, no clone\n    rooms.sort_by(|a, b| b.cached_latest_event_timestamp.cmp(&a.cached_latest_event_timestamp));\n}".to_string(),
@@ -5799,6 +5842,93 @@ pub fn run_fixed(input: &Input) {
     }
 }
 
+/// Bench spec for `hot-byval-move-over-memcpy-threshold` (Batch 112,
+/// Research 134 — the nnethercote July-2026 distill): a 136-byte record
+/// moved BY VALUE per hot-loop call (LLVM lowers each move to a `memcpy`
+/// call above the inline threshold) vs the composed fix — the record shrunk
+/// to 104 bytes + the 32-byte cold tail passed by reference and mutated in
+/// place. Both arms fold the SAME 17 u64s per score call with the SAME
+/// per-field ops in the same order (the fairness gate pins it), so the
+/// measured delta is move cost only, never workload. `#[inline(never)]`
+/// keeps the calls out-of-line (the source's shape); `black_box` at the
+/// call sites defeats move elision. n = hot-loop iterations. Composition
+/// disclosure: a binary bench cannot separate the shrink step from the
+/// cold-tail move-avoidance — the measured delta is the composed fix,
+/// exactly as the rule's fix space prescribes.
+/// Alloc axis: zero allocations both arms (stack-only values).
+#[cfg(feature = "rust_perf_bench")]
+#[allow(clippy::too_many_lines)] // data table: the harness is a single embedded raw string
+fn hot_byval_move_memcpy_threshold_bench_spec() -> BenchSpec {
+    BenchSpec {
+        sizes: vec![1_000, 1_000_000],
+        harness: r#"
+mod buggy {
+    #[derive(Clone, Copy)]
+    pub struct Record { pub hot: [u64; 13], pub cold: [u64; 4] } // 17 x 8 = 136 B (> 128)
+
+    #[inline(never)]
+    pub fn score(r: Record) -> u64 {
+        let mut a = 0u64;
+        for i in 0..13 { a = a.wrapping_add(r.hot[i].rotate_left(7) ^ (i as u64)); }
+        for i in 0..4 { a = a.wrapping_add(r.cold[i].wrapping_mul(3)); }
+        a
+    }
+}
+
+mod fixed {
+    #[derive(Clone, Copy)]
+    pub struct Record { pub hot: [u64; 13] } // 13 x 8 = 104 B (<= 128 on x86-64)
+
+    #[inline(never)]
+    pub fn score(r: Record, cold: &[u64; 4]) -> u64 {
+        let mut a = 0u64;
+        for i in 0..13 { a = a.wrapping_add(r.hot[i].rotate_left(7) ^ (i as u64)); }
+        for i in 0..4 { a = a.wrapping_add(cold[i].wrapping_mul(3)); }
+        a
+    }
+}
+
+pub struct Input { seed_hot: [u64; 13], seed_cold: [u64; 4], iters: usize }
+
+pub fn make_input(n: usize) -> Input {
+    let mut x = 0x9E37_79B9_7F4A_7C15u64;
+    let mut next = || { x ^= x << 13; x ^= x >> 7; x ^= x << 17; x };
+    let mut seed_hot = [0u64; 13];
+    let mut seed_cold = [0u64; 4];
+    for v in seed_hot.iter_mut() { *v = next(); }
+    for v in seed_cold.iter_mut() { *v = next(); }
+    Input { seed_hot, seed_cold, iters: n }
+}
+
+pub fn run_buggy(input: &Input) {
+    let input = std::hint::black_box(input);
+    let mut state = buggy::Record { hot: input.seed_hot, cold: input.seed_cold };
+    let mut acc = 0u64;
+    for i in 0..input.iters {
+        acc ^= buggy::score(std::hint::black_box(state)); // by-value 136 B move per call
+        state.hot[i % 13] = state.hot[i % 13].wrapping_add(acc);
+        state.cold[i & 3] = state.cold[i & 3].rotate_left(1);
+    }
+    std::hint::black_box((state, acc));
+}
+
+pub fn run_fixed(input: &Input) {
+    let input = std::hint::black_box(input);
+    let mut state = fixed::Record { hot: input.seed_hot };
+    let mut cold = input.seed_cold;
+    let mut acc = 0u64;
+    for i in 0..input.iters {
+        acc ^= fixed::score(std::hint::black_box(state), std::hint::black_box(&cold)); // 104 B move + by-ref tail
+        state.hot[i % 13] = state.hot[i % 13].wrapping_add(acc);
+        cold[i & 3] = cold[i & 3].rotate_left(1); // cold tail: zero copies
+    }
+    std::hint::black_box((state, cold, acc));
+}
+"#
+            .to_string(),
+    }
+}
+
 /// Bench spec for `transposed-weight-register-gemv`: row-major per-row dot
 /// with its horizontal reduce, vs transposed weights with per-input
 /// broadcast FMA
@@ -7843,7 +7973,7 @@ mod tests {
     #[test]
     fn seed_corpus_has_ninety_eight_entries_across_twelve_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 100); // Batch 109 (P10) 99 → 100
+        assert_eq!(corpus.entries.len(), 101); // Batch 112 (nnethercote) 100 → 101
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
@@ -7864,10 +7994,11 @@ mod tests {
         // filter-before-expensive-transform); simd has 8 (Batch 62 added
         // transposed-weight-register-gemv; Batch 64 added
         // loop-order-innermost-contiguous; Batch 83 added
-        // bitplane-transpose-repeated-predicate-scan); layout has 7 (Batch 53 added
+        // bitplane-transpose-repeated-predicate-scan); layout has 10 (Batch 53 added
         // soa-hot-field; Batch 61 added usize-index-to-u32; Batch 78 added
         // narrow-counter-overflow-promotion; Batch 85 added
-        // weight-tile-consumption-order) + concurrency
+        // weight-tile-consumption-order; Batch 112 added
+        // hot-byval-move-over-memcpy-threshold) + concurrency
         // has 8 (Issue 014 added the two metric-mismatch rules; Batch 65
         // added align-64-false-sharing + channel-send-batching-unpark;
         // Batch 73 added lock-guard-narrow-field-accessor; Batch 78 added
@@ -9043,6 +9174,150 @@ mod tests {
         assert_ne!(chained(0), chained(0xDEAD_BEEF), "the chained harness must stay seed-dependent — this is the fold-proof shape the rule prescribes");
     }
 
+
+    /// Batch 112 — the rule is present in the corpus.
+    #[test]
+    fn batch112_rules_present() {
+        let corpus = build_perf_seed_corpus();
+        let ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
+        assert!(ids.contains(&"hot-byval-move-over-memcpy-threshold"));
+    }
+
+    /// Batch 112 — the rule parses (syn) on buggy AND fixed code.
+    #[test]
+    fn batch112_pseudocode_parses() {
+        let corpus = build_perf_seed_corpus();
+        let e = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == "hot-byval-move-over-memcpy-threshold")
+            .expect("rule present");
+        assert!(
+            syn::parse_file(&e.buggy_code).and_then(|_| syn::parse_file(&e.fixed_code)).is_ok(),
+            "hot-byval-move-over-memcpy-threshold buggy/fixed must both parse"
+        );
+    }
+
+    /// Batch 112 — the decision content is pinned in the rule text: the
+    /// memcpy-call threshold, the arch-shaped ceiling (asm evidence), the
+    /// composed-fix disclosure, and the armed x86 re-gate.
+    #[test]
+    fn batch112_concepts_covered() {
+        let corpus = build_perf_seed_corpus();
+        let e = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == "hot-byval-move-over-memcpy-threshold")
+            .expect("rule present");
+        let text = format!("{}\n{}\n{}", e.name, e.buggy_code, e.fixed_code);
+        for needle in ["memcpy", "threshold", "cold", "by reference", "in place"] {
+            assert!(text.to_lowercase().contains(needle), "concept {needle:?} missing from the rule text");
+        }
+        let notes = e.context_notes.as_deref().unwrap_or("");
+        for needle in [
+            "Mixed",
+            "#160005",
+            "asm",
+            "ldp/stp",
+            "bl _memcpy",
+            "(136, 320]",
+            "128 B",
+            "40% wall",
+            "DHAT",
+            "Composed-fix disclosure",
+            "x86 RE-GATED",
+            "callq memcpy",
+            "box-large-enum-variant",
+        ] {
+            assert!(notes.contains(needle), "contract {needle:?} missing from context_notes");
+        }
+        // The rule IS benchable — the annotation's Mixed verdict comes from
+        // the recorded run, not from an absent spec.
+        #[cfg(feature = "rust_perf_bench")]
+        assert!(e.bench_spec.is_some(), "the memcpy-threshold rule must carry its measured bench");
+    }
+
+    /// Batch 112 G1 (the fairness contract): the buggy composed fold (17
+    /// fields moved by value) and the fixed composed fold (13 in the moved
+    /// struct + 4 by reference, mutated in place) land BIT-IDENTICAL state
+    /// and accumulator over the same LCG stream — the bench compares move
+    /// cost only, never workload. Also pins the load-bearing sizes:
+    /// 13 + 4 u64 = 136 B (the source's type) and 13 u64 = 104 B (the
+    /// source's shrunk type); the x86-64 threshold is 128 B, so 136 crosses
+    /// it and 104 does not — the bench shapes ARE the threshold content.
+    #[test]
+    fn batch112_byval_folds_agree_bit_identical() {
+        // LCG stream — the same construction the bench harness uses.
+        // The folded field ops — IDENTICAL per-field math in both arms, the
+        // exact order the bench harness folds in.
+        fn fold_hot(hot: &[u64; 13]) -> u64 {
+            hot.iter()
+                .enumerate()
+                .fold(0u64, |a, (i, &v)| a.wrapping_add(v.rotate_left(7) ^ (i as u64)))
+        }
+        fn fold_cold(cold: &[u64; 4]) -> u64 {
+            cold.iter().fold(0u64, |a, &v| a.wrapping_add(v.wrapping_mul(3)))
+        }
+
+        // Buggy arm: cold lives INSIDE the moved record (the RecBig/RecSmall
+        // shapes ARE the bench's — 136 B vs 104 B straddling x86-64's 128 B).
+        #[derive(Clone, Copy)]
+        struct RecBig {
+            hot: [u64; 13],
+            cold: [u64; 4],
+        }
+        #[derive(Clone, Copy)]
+        struct RecSmall {
+            hot: [u64; 13],
+        }
+
+        let mut x = 0x9E37_79B9_7F4A_7C15u64;
+        let mut next = || {
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            x
+        };
+        let mut seed_hot = [0u64; 13];
+        let mut seed_cold = [0u64; 4];
+        for v in &mut seed_hot {
+            *v = next();
+        }
+        for v in &mut seed_cold {
+            *v = next();
+        }
+
+        let mut state = RecBig { hot: seed_hot, cold: seed_cold };
+        let mut acc_buggy = 0u64;
+        for i in 0..1_000 {
+            // score moves the WHOLE 136 B record by value (buggy_code's shape)
+            let r = state;
+            acc_buggy ^= fold_hot(&r.hot) ^ fold_cold(&r.cold);
+            state.hot[i % 13] = state.hot[i % 13].wrapping_add(acc_buggy);
+            state.cold[i & 3] = state.cold[i & 3].rotate_left(1);
+        }
+
+        // Fixed arm: cold is a separate by-ref tail, mutated in place.
+        let mut state = RecSmall { hot: seed_hot };
+        let mut cold = seed_cold;
+        let mut acc_fixed = 0u64;
+        for i in 0..1_000 {
+            let r = state;
+            acc_fixed ^= fold_hot(&r.hot) ^ fold_cold(&cold);
+            state.hot[i % 13] = state.hot[i % 13].wrapping_add(acc_fixed);
+            cold[i & 3] = cold[i & 3].rotate_left(1);
+        }
+
+        assert_eq!(acc_buggy, acc_fixed, "the two arms must fold identically");
+        let final_cold = cold;
+        let rejoined = RecBig { hot: state.hot, cold: final_cold };
+        assert_eq!(rejoined.cold, final_cold, "cold tail state must agree across the arms");
+
+        // The threshold content: the bench shapes straddle x86-64's 128 B.
+        assert_eq!(std::mem::size_of::<RecBig>(), 136);
+        assert_eq!(std::mem::size_of::<RecSmall>(), 104);
+    }
+
     /// Batch 99 G1 (output + dispatch-sequence identity): both shapes
     /// dispatch the IDENTICAL handler sequence over the same stream (pinned
     /// by per-handler call counters, not just final state) and land the
@@ -9212,7 +9487,7 @@ mod tests {
             .iter()
             .filter(|e| e.bench_spec.is_some())
             .count();
-        assert_eq!(with_spec, 86, "expected 86 benchable rules, got {with_spec}");
+        assert_eq!(with_spec, 87, "expected 87 benchable rules (Batch 112 added the memcpy-threshold bench), got {with_spec}");
     }
 
     #[cfg(feature = "rust_perf_bench")]
@@ -9290,8 +9565,9 @@ mod tests {
             .filter(|e| e.context_notes.is_some())
             .map(|e| e.rule_id.as_str())
             .collect();
-        assert_eq!(annotated.len(), 43, "expected 43 context-annotated rules (Batch 109 added the measurement-honesty annotation)");
+        assert_eq!(annotated.len(), 44, "expected 44 context-annotated rules (Batch 112 added the memcpy-threshold arch-regime annotation)");
         assert!(annotated.contains(&"dead-result-timing-loop-folded-under-lto")); // Batch 109 — the NotBenchable measurement-honesty axis
+        assert!(annotated.contains(&"hot-byval-move-over-memcpy-threshold")); // Batch 112 — the arch-regime Mixed annotation
         assert!(annotated.contains(&"weight-tile-consumption-order")); // Batch 85 — measured ParetoDominant + the M3-L1-shift regime note
         assert!(annotated.contains(&"software-prefetch-storage-bound")); // Batch 85 — the x86-source-cited honest-loser annotation
         assert!(annotated.contains(&"precompute-table"));
@@ -9343,7 +9619,7 @@ mod tests {
             .iter()
             .filter(|e| e.context_notes.is_none())
             .count();
-        assert_eq!(unannotated, 57, "expected 57 unannotated rules (100 - 43 annotated)");
+        assert_eq!(unannotated, 57, "expected 57 unannotated rules (101 total - 44 annotated; the new rule joined the ANNOTATED side)");
     }
 
     /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -9355,7 +9631,7 @@ mod tests {
         let json = serde_json::to_string(&corpus.entries).unwrap();
         let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
         let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-        assert_eq!(annotated, 43);
+        assert_eq!(annotated, 44);
 
         // Simulate a pre-field snapshot: strip `context_notes` from JSON.
         // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -9387,9 +9663,9 @@ mod tests {
 
         let corpus = build_perf_seed_corpus();
 
-        // Filter to the 43 annotated rules.
+        // Filter to the 44 annotated rules.
         let annotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_some()).collect();
-        assert_eq!(annotated.len(), 43, "expected 43 annotated rules");
+        assert_eq!(annotated.len(), 44, "expected 44 annotated rules");
 
         // The HealEntry trait override must agree with the struct field.
         for rule in &annotated {

@@ -4,6 +4,16 @@
 two external-confirmations queued as riders, one lane record, one ops note. Zero corpus delta
 this unit (landing = Batch 112, next build window).
 
+**LANDED 2026-09-05 as Batch 112 / Plan 083** (corpus 100 → 101, layout 9 → 10; riders
+landed on `usize-index-to-u32` + `sort-key-cache-precompute-out-of-lock`). Mine-time
+measured addendum: the threshold is ARCH-SHAPED — aarch64 INLINES a 136-byte by-value
+move (ldp/stp pairs + an 8 B tail, asm-verified) while a 320-byte move emits `bl _memcpy`
+(the ARM ceiling sits in (136, 320]); x86-64's 128 B ceiling is where the source's step
+lives. M3 bench: Mixed 1/0/1 (the 1M tie is the honest mechanism cell at 136 B on ARM);
+x86-64 re-gate DISCHARGED same-day on the 4090 — the asm shows the step directly
+(48 B copy inlines; the 136-byte loop's hot loop carries `movl $136; callq memcpy`). The partitioned-visitor lane record (#17124) and the
+XProtect ops note stand unchanged.
+
 ## Method
 
 - Queue item 11 (online rust/kernel perf search); MCP `web_search_prime` quota dead until
