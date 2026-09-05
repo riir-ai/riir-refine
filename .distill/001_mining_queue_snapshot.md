@@ -1461,6 +1461,24 @@ negated comparisons, cfg-attributed trailing returns).
 
 ## Sweep findings log (2026-09-05, 4090 idle session)
 
+- **2026-09-05 (later session) — mmorpg 092 item (3) CLOSED + chain E0282 ROOT-CAUSED:**
+  (a) the substrate's 3 pre-existing clippy warnings healed at root cause (riir-ai
+  `fcb880986`; unused_mut + unused_assignments + doc_lazy_continuation; lib 430/0/4i
+  count-identical; crate clippy now ZERO) — mmorpg `e18a5ab` records the closure.
+  (b) **riir-chain tx_log.rs E0282 root cause + the 1-line fix, for the owning session**
+  (repo is READ-ONLY to the idle loop per the standing owner instruction — not fixed
+  here): on non-unix the `#[cfg(unix)]` arm compiles out, so `old_mode` (tx_log.rs:2079)
+  is `Option<?T>` constrained by NOTHING; the sole use is `mode.clone()` at :2104 — the
+  ambiguous deref-clone on an unknown pointee (`<&?T as Clone>` vs `?T::clone`) → E0282
+  "type must be known at this point". Unix builds are fine (`Permissions::from_mode`
+  constrains it) and dapps dep builds are fine because the enclosing module is
+  `chain_cold_write`-gated (dapps doesn't enable it; game-sdk `nft_e2e` does) — hence
+  the feature-selection dependence. Fix: annotate the binding — `let old_mode:
+  Option<std::fs::Permissions> = { ... }` (identical on unix; typed None elsewhere).
+  PROBED LIVE at chain tip `3ffd900`: `cargo check -p riir-e2e --test prod_nft_mint
+  --features nft_e2e` (game-sdk) fails on exactly this; game-sdk e2e sweep re-arm stays
+  blocked on it.
+
 - **riir-chain Issue-125 blocker CLEARED**: the NftProgram retirement landed
   (`4044471`) + closed (`5f52d4c`); the consumer half (`5d2d1bcbe`) landed in
   riir-ai. mmorpg 092 item (2) unblocked and RUN: guard Layers 1-3 pass,
