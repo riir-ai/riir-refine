@@ -1556,3 +1556,34 @@ negated comparisons, cfg-attributed trailing returns).
   (claim -> gate Open, steps 1-4 PASS); file removed per noise-reduction.
 - **game-sdk 026 closed** (`ea01194`); fresh-clone buildability re-probed CLEAN
   (cargo metadata exit 0) - the scenelab + panel commits pushed 09-05 resolve it.
+
+- **2026-09-06 unit (M3 idle housekeeping) — boundary-guard 30th run + doc-sync CLEAN; queues empty.**
+  Full-workspace `ci_boundary_contract.sh` (script mtime Sep 5 11:20, not mid-edit): exit 0,
+  16 repos / 236 cross-repo dep edges unchanged from the 28th run, 2 known-drift = the ledgered
+  seal-online-remaster pair (unchanged), C6 modelless-residue green (0 LOC tracked residue),
+  C7 4 repos no-lock (the documented shape), C8 advisory worsened 498 → 507 commits behind on
+  the `6f392727` pin (5 security fixes in the gap — standing owner call). katgpt-rs delta since
+  the 29th run = the 513 lane only (`d434e3d5` cfg-scanner fix + `9865feae` docs pushed;
+  `96cc0d7d` max_empty-WALL commit unpushed in the shared checkout — the sibling's in-flight
+  work, hands off per Issue-665 discipline); scripts/docs surface, no dep-graph delta. doc-sync
+  riir-clippy CLEAN: `9ebac59`/`55c3b3d`/`ad35e28` each carried their docs same-commit
+  (docker.md degradation § + AGENTS.md issue-071 row verified). Issues scan across all 16
+  contract repos: every remaining open issue is active-lane (riir-ai 629/769/844/846/851/852/
+  875/876 league+ANE trackers, mmorpg 092/096/097 — 097 is the live agent's own tracker,
+  riir-train 513 live lane + the 4090-gated set), read-only-ratcheted (seal-game-editor), or
+  hardware-gated (chain 110; chain itself read-only to the idle loop) — NOTHING unclaimed this
+  cycle. Mining: arxiv walk #8 time-blocked until Mon 09-07 ~07:00 +07; Protocol C intake clean
+  (done=12 open=0); Batch 115 landed, nothing queued behind the walk. Benchmarks skipped (tree
+  clean; the 09-05 run-10 full-guard green + score-bench #39 flat stand as current baselines).
+  No work invented; stopping cleanly. Run-log note: the 30th-run row is recorded HERE because
+  the boundary-guard SKILL.md run log lives in the katgpt-rs shared checkout, which carries
+  the sibling's unpushed commit this cycle (a push from here would carry theirs).
+  **Disk-pressure incident (this commit's window):** the first commit attempt failed
+  `No space left on device` — Data volume at 100% (1.2 GiB avail of 1.8 TiB). Freed 10 GB the
+  documented-safe way (this repo's own `target/debug/incremental`, no build running; the
+  `target/release/cargo-heal` binary the global symlink points at untouched). The remaining
+  big consumers are ACTIVE agents' surfaces and NOT reclaimable from here: /tmp A/B target
+  dirs (`v1_*`/`v2*` ≈ 40+ GB — the game-sdk 097-V2 lane; `513_*_probe` ≈ 11 GB — the 513
+  sibling; `e6_*` ≈ 19 GB — the E6 goldens lane; `skill_graph_t5` 4.5 GB), plus
+  katgpt-rs `target/` at 93 GB (its owner's sweep to compact, the 728 precedent). Post-free
+  avail 16 GiB — workable but the next heavy lane should budget its own cleanup.
