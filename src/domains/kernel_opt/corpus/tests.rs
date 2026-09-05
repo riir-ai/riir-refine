@@ -64,7 +64,7 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 63 (3): the CubeCL twin unlock — same-input-gemv-weight-concat-at-upload, deferred-residual-fused-into-next-layer-norm, reset-state-in-place-fill-never-realloc (ternary_deltanet_gpu_forward.rs, Plan 009 / Research 071).
     // Batch 70 (3): the arxiv barrier-free-sync paper distill (arXiv:2608.13757, Plan 020 / Research 080) — barrier-free-per-dependency-wait-from-loop-counters, shared-counter-decode-producer-progress, masked-branchless-wait-collapse.
     // Batch 105 (11): uzu + lily combined Metal-engine distill (Research 127 + 128 / Plan 075) -- concurrent-dispatch-dependency-level-barriers, gpu-resident-moe-routing-no-host-sync, indirect-device-dispatch-tile-map-moe, pipelined-token-slot-ping-pong-submit-ahead, split-k-two-pass-attention-decode-long-context, cooperative-tensor-mma-capability-route, rht-epilogue-fusion-contract, lane-sequenced-deterministic-bucket-scatter, a8-activation-route-stability-guard, target-tile-split-k-deterministic-two-dispatch, hazard-tracked-aliasing-scratch-allocator (A +1, C +1, D +3, E +1, F +1, H +3, M +1; sources trymirai/uzu @ 115609b + perplexityai/pplx-garden lily @ 1ed972ed, both lanes re-verified every quote; the cross-source dedup mandate executed per rule; the R128 tile-by-expert-load rider FALSIFIED at pin -- chunk-size-routed table, both tiles 4 simdgroups).
-    // Total: 209. // (historical batch-30 snapshot; current 516)
+    // Total: 209. // (historical batch-30 snapshot; current 518)
     // Batch 98 (10): antirez/ds4 dense.metal/moe.metal leads -- grid-range-split-verbatim-impl-composition, share-activation-stream-keep-projection-reductions, tiny-rows-scalar-thread-per-row-downshift, small-batch-matvec-gemm-bridge-rung, moe-routed-down-sum-single-accumulate-pass, fused-vector-site-transcendental-form-nonportable, monomorphic-hot-caller-last-hit-memo, per-row-scale-folded-into-rhs-staging-tile, dequant-byte-pairs-as-aligned-u16-loads, cross-simd-bitonic-alternating-bank-exchange (the Batch-97 queued NEXT BATCH LEADS + 3 additional candidates).
     // Batch 100 (8): Layr-Labs/qwen-3.8-mtp-challenge -- functional-cache-versioning-loses-donation-under-kernel-read, fused-kv-write-single-writer-reads-newest-from-input, in-place-write-through-input-emits-fence-consumer, residency-set-wired-once-post-warm-persistent-footprint, register-budget-head-split-gqa-reread-trade, batch-composition-invariant-grid-early-return, never-gqa-multiply-full-d-merge-smem, container-rebind-over-retrace-for-churn-survival (Research 120 / Plan 068; A +3, D +3, E +2).
     // Batch 102 (6): FlashQuant sparse-dense fusion (arXiv 2608.15531) -- heterogeneous-unit-paths-shared-tile-fusion, lpt-min-heap-disjoint-column-ownership, tile-coo-sparse-tile-aligned-format, bucketed-sparse-reader-column-partition, bank-group-circular-element-reorder, stream-k-persistent-cta-mac-segments (Research 123 / Plan 071; A +2, C +2, H +1, N +1; the headline was REFUTED for direct adoption at walk time -- the fusion mechanism is the distilled core).
@@ -75,10 +75,11 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 108 (4): riir-ai M3 campaign measured-GOAT distill (Plan 078) -- smem-envelope-gate-kernel-variant (G +1), multi-simdgroup-shared-staged-tile (A +1), independent-accumulator-chains-hide-load-latency-at-capped-occupancy, byte-cut-loses-when-plateau-is-issue-bound (E +2, the last refutation-type); source riir-ai @ 59a172623 (committed state; the first in-source batch since Batch 63 -- the M3 prefill/decode campaign mined: Issues 768/771/779/831/843, numbers belong to Benches 774/790/804/831 and are cited as records); two verification lanes at the pin + coordinator spot-check (all VERIFIED); +3 riders on B01/B06/B57 + 2 arxiv riders discharged on B79 (2608.17641 breadth) and B82 (2608.01651 confirmation -- the land-with-next-adjacent-batch queue); recorded-not-landed: axis-swap refutation (S2:40-42), 4-arm ladder (B104 ethos), empty-partial identity (B35 grain).
     // Batch 110 (11): vLLM libtorch_stable distill (Research 133 / Plan 081) -- spin-barrier-needs-co-residency-capped-launch, ballot-matrix-tie-rank, m-group-shared-weight-scan-register-relief, row-parallelism-ladder-split-vs-pack (E +4), captured-graph-init-unconditional-and-stream-ordered, batch-invariance-locks-reduction-geometry (D +2), rope-pair-partner-via-cross-lane-shuffle, degenerate-selection-falls-back-to-identity-uniform (B +2), softmax-denominator-cancels-through-scale-invariant-norm (C +1), persistent-kernel-length-bucketed-mechanism-ladder (K +1), router-math-stays-fp32 (N +1); source vllm-project/vllm csrc/libtorch_stable @ 8277c42e4 (Apache-2.0, never mined); two inspection lanes + coordinator byte-verification of 13 lead quotes; the VERIFIED A-/B+ tier of a 25-candidate pool (the B-/C+ remainder = Batch 111); upstream hazard ledger in Research 133 (H1 silent tie-buffer overflow, H2 dispatch-no-default, H3 cross-tier router divergence).
     // Batch 111 (11): vLLM libtorch_stable remainder + rider sweep (Research 133 / Plan 082) -- register-rotation-prefetch-loop, shared-operand-groups-per-warp, whole-row-register-resident-under-length-budget (A +3), grid-dependency-wait-scoped-to-dependent-operands, refine-by-rescan-prefix-filter-vs-buffered-ties (D +2), warp-aggregated-atomic-scatter, routing-by-precomputed-lookup (H +2), launch-heuristic-pinned-to-calibration-arch (K +1), lane-owned-topk-output (M +1), ue8m0-pow2-scale-as-biased-exponent-byte, coarse-precision-first-exact-refine (N +2); source re-cloned + re-pinned at 8277c42e4 at mine time (origin had moved to 16328c7a minutes before); lanes: rules #12-#20/#22/#25 LAND, #21 (noinline) + #23 (clamp-before-collective) KILLED as COVERAGE (B110 rules already carry them, same citations), #24 demoted to a RIDER on device-m-runtime-mblock-graph-stable-gemm; + 20 riders across 13 files (19 kernel_opt + weight-tile-consumption-order in rust_perf), incl. the hi/lo packed-u64 redux (B107), phase-counted barrier (B92 stripe), B57 union-across-phase + filler-thread barrier matching, stable-softplus third form (B98), loud-refusal third instance (B103), PDL capability gating (B105), measurement-revision + family-gated table (B104), and the H1 fit-guard contract encoded as refine-by-rescan-prefix-filter-vs-buffered-ties.
+    // Batch 114 (2): oMLX ANE-prefill + GDN blocked-sequential distill (Research 138 / Plan 087) -- recurrence-prefill-exact-restructure-before-reformulation (G +1, the A- GOAT lead: restructure the EXACT sequential recurrence's memory layout -- TB-block smem staging + register-resident state -- BEFORE an algebraic reformulation; stock per-slice k/q re-read = 32x redundant traffic (~13 GB/16k-token layer), ~2x at 16K on M3 ULTRA source-reported; the WY/FLA chunked reformulation measured a LOSER 3x independent + our Bench 734/769 negatives 0.97x/0.98x), ane-bank-split-ladder (D +1: near-half-first split ladder for a monolithic accelerator bank that cannot map at program-create (0x20004; our 0x50004 cascade the same class); the driver's release is ASYNCHRONOUS -> drop + gc + settle BEFORE the headroom re-measure; 70% phys-footprint jetsam gate -- 4 bounded attempts still hit 48.3 GB on 48 GB (source-measured); bank-count = DETERMINISM axis; fail-open snapshot; feeds riir-ai 876/769 T2/R1/R4a-R7), + 6 riders (B84 token-local recurrent-safe fraction cap; B84 pad-tail profitability + single-prompt guard; B22 sub-simdgroup cooperation radius -- the FULL-STRING pin regenerated; B95 whole-sequence prefill-grain instance; B107 program-SHAPE vs delivered-chunk-WIDTH coupling; B79 scalar-staging pad boundary). Source jundot/omlx @ e467261 (Apache-2.0).
     assert_eq!(
         corpus.entries.len(),
-        516,
-        "kernel batches through Batch 111 should have 516 rules"
+        518,
+        "kernel batches through Batch 114 should have 518 rules"
     );
 }
 
@@ -1180,7 +1181,7 @@ fn batch22_cudarc_kernels_concepts_covered() {
     // A: ternary-bit-plane-u64-as-2x-u32 (riir-gpu cudarc_kernels/embedding.rs L37-69)
     assert!(concepts.contains(&"ternary weights as two bit-planes (positive + negative sign bits) packed as u64 blocks cast to 2×u32 words — extract sign per column via bit_pos = c % 32, word_in_block = (c % 64) / 32, then output = sign * per-group scale. The 2×u32 cast is because u64 isn't directly per-bit addressable in CUDA; two u32 words are"));
     // B: warp-shuffle-intrinsics-for-sub-warp-reduction (riir-gpu cudarc_kernels/mod.rs L163-167 + attention.rs L336-344; + the Batch-100 Metal measured-cost rider)
-    assert!(concepts.contains(&"for blocks of 32 threads or fewer (one warp), use __shfl_down_sync(mask, val, delta) butterfly reduction instead of shared memory + __syncthreads — the warp executes in lockstep (SIMT), so the shuffle is both correct and free (no smem allocation, no synchronization barrier). For the final 32-thread tail of a larger smem tree reduction, cast to volatile float* and skip __syncthreads — volatile prevents the compiler from caching stale values in registers. Measured Metal cost note (qwen-3.8-mtp-challenge kernel-research.md section 1.1 @ 0863b06a, Batch 100): simd_sum(f32) runs ~14.5 cycles throughput / ~28 latency vs ~2 for a shuffle — a per-(token, head) simd_sum is a real ALU cost in a GQA=8 pass-A inner loop (8 simd_sums per token per simdgroup); quad reductions are ~2x cheaper and a shuffle tree can beat the builtin — the shuffle-butterfly arm of this rule is the measured-cheap arm on Apple silicon as well, not only under the CUDA lockstep argument."));
+    assert!(concepts.contains(&"for blocks of 32 threads or fewer (one warp), use __shfl_down_sync(mask, val, delta) butterfly reduction instead of shared memory + __syncthreads — the warp executes in lockstep (SIMT), so the shuffle is both correct and free (no smem allocation, no synchronization barrier). For the final 32-thread tail of a larger smem tree reduction, cast to volatile float* and skip __syncthreads — volatile prevents the compiler from caching stale values in registers. Measured Metal cost note (qwen-3.8-mtp-challenge kernel-research.md section 1.1 @ 0863b06a, Batch 100): simd_sum(f32) runs ~14.5 cycles throughput / ~28 latency vs ~2 for a shuffle — a per-(token, head) simd_sum is a real ALU cost in a GQA=8 pass-A inner loop (8 simd_sums per token per simdgroup); quad reductions are ~2x cheaper and a shuffle tree can beat the builtin — the shuffle-butterfly arm of this rule is the measured-cheap arm on Apple silicon as well, not only under the CUDA lockstep argument. RIDER (Batch 114 external instance, jundot/omlx @ e467261 -- custom_kernels/qwen35_prefill/gdn.py:438-442 + :499-517): the SUB-SIMDGROUP cooperation radius -- state fragments owned by 8-lane SEGMENTS inside a 32-lane simdgroup reduce via simd_shuffle_down(4,2,1) (three steps, staying inside the row's 8 lanes) and broadcast once from the row leader (simd_shuffle(part, (tid % 32) / 8 * 8)); zero barriers in the hot loop ('reduce across the 8 threads of a dv row via simd_shuffle_down (no threadgroup barriers in the hot loop)') -- a finer radius than one full simdgroup, with the leader-index broadcast replacing any cross-lane tree."));
     // C: fused-activation-quantize-for-gemv-consumer (riir-gpu cudarc_kernels/mod.rs L191-289 + L407-554)
     assert!(concepts.contains(&"when an activation's output (RMSNorm, SwiGLU, gate*sigmoid, gate*silu) is immediately consumed by a GEMV that reads int8 (not f32), fuse the activation + per-block absmax reduction + int8 quantize into one kernel — eliminates the intermediate f32 HBM round-trip and one kernel launch. The activation is the non-trivial part (needs a reduction or exp); the quantize is the trivial part (absmax + scale + round) RIDER (Batch 111 external instance, vllm @ 8277c42e4 -- fused_kimi_k3_mla_key_concat_kv_cache_kernel.cu:15-24 + cache_kernels_fused.cu:108-145): the RoPE rotation is computed in-registers and the rotated pair is written DIRECTLY to its quantized cache slot in the producing kernel (qk_t rotate -> optional scaled_convert -> kv_cache_ptr[...]) -- the consumer-side quantize/store fused into the producer, three in-source kernel families (deepseek-v4, minimax-m3, kimi-k3)."));
     // D: cuda-graph-scalar-via-device-pointer (riir-gpu cudarc_kernels/embedding.rs L76-105 + attention.rs L421-610)
@@ -5297,7 +5298,7 @@ fn kernel_categories_table_has_15_entries() {
 
 #[test]
 fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-    // Every rule_id in the 516-rule corpus must appear in exactly one category.
+    // Every rule_id in the 518-rule corpus must appear in exactly one category.
     let corpus = build_kernel_seed_corpus();
     let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     let mut categorized: Vec<&str> = Vec::new();
@@ -5340,15 +5341,15 @@ fn kernel_categories_cover_all_corpus_rules_exhaustively() {
 
 #[test]
 fn kernel_categories_counts_match_plan_003_table() {
-    // Pin per-category rule counts to the Plan 003 table (updated for Batch 111).
+    // Pin per-category rule counts to the Plan 003 table (updated for Batch 114).
     let expected = [
         (KernelCategory::MemoryAccess, 112),
         (KernelCategory::Compute, 59),
         (KernelCategory::Fusion, 44),
-        (KernelCategory::Dispatch, 116),
+        (KernelCategory::Dispatch, 117),
         (KernelCategory::Parallelism, 41),
         (KernelCategory::FlashAttnTiling, 12),
-        (KernelCategory::LinearAttnRecurrence, 27),
+        (KernelCategory::LinearAttnRecurrence, 28),
         (KernelCategory::MoeDispatchBackward, 23),
         (KernelCategory::NsaBlockSparse, 4),
         (KernelCategory::VarlenChunkedReduction, 5),
@@ -5370,9 +5371,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 516.
+    // Sum must equal 518.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 516, "Plan 003: category totals must sum to 516");
+    assert_eq!(total, 518, "Plan 003: category totals must sum to 518");
 }
 
 #[test]
@@ -5383,8 +5384,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 516,
-        "Plan 003: grouped corpus has {total} rules, expected 516"
+        total, 518,
+        "Plan 003: grouped corpus has {total} rules, expected 518"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -8790,5 +8791,101 @@ fn batch111_ue8m0_byte_contract() {
         assert!(b >= prev, "byte regressed at absmax {v:e}: {b} < {prev}");
         prev = b;
         v *= 1.7;
+    }
+}
+
+
+#[test]
+fn batch114_rules_present() {
+    // Batch 114 (oMLX ANE-prefill + GDN blocked-sequential distill --
+    // Research 138 / Plan 087): 2 kernel_opt rules (#1 the A- GOAT
+    // lead, #2 the highest-value D rule), source jundot/omlx re-cloned
+    // at e467261 for the batch (quote-verification lane re-read all ten
+    // surfaces with exact line numbers). #3-#6 landed as riders on B84
+    // (x2), B22, B95, B107, B79; #7 stayed lane-intel (769 f-split +
+    // R4a warm rows).
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "recurrence-prefill-exact-restructure-before-reformulation",
+        "ane-bank-split-ladder",
+    ];
+    for id in ids {
+        assert!(
+            corpus.entries.iter().any(|e| e.rule_id == id),
+            "batch-114 rule '{id}' missing from corpus"
+        );
+    }
+}
+
+#[test]
+fn batch114_concepts_covered() {
+    // Distinctness + mandated phrases must survive in the concept
+    // text (case-sensitive contains -- the B51 lesson).
+    let corpus = build_kernel_seed_corpus();
+    let checks: &[(&str, &[&str])] = &[
+        (
+            "recurrence-prefill-exact-restructure-before-reformulation",
+            &[
+                "32x redundant traffic",
+                "8x fewer threadgroups",
+                "restructure-first",
+                "measured a LOSER three independent times",
+                "0.97x/0.98x",
+                "source-reported",
+            ],
+        ),
+        (
+            "ane-bank-split-ladder",
+            &[
+                "0x20004",
+                "DETERMINISM axis",
+                "ASYNCHRONOUS",
+                "70%",
+                "48.3 GB",
+                "fail OPEN",
+            ],
+        ),
+    ];
+    for (id, needles) in checks {
+        let e = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == *id)
+            .unwrap_or_else(|| panic!("batch-114 rule '{id}' missing"));
+        for needle in *needles {
+            assert!(
+                e.gpu_concept.contains(needle),
+                "batch-114 concept for '{id}' missing phrase '{needle}'"
+            );
+        }
+    }
+}
+
+#[test]
+#[cfg(not(feature = "kernel_verify"))]
+fn batch114_pseudocode_parses() {
+    // G1 for Batch 114: syn-parse gate (the oMLX rules).
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "recurrence-prefill-exact-restructure-before-reformulation",
+        "ane-bank-split-ladder",
+    ];
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-114 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            ref_verdict.parses,
+            "batch-114 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            opt_verdict.parses,
+            "batch-114 opt_pattern for '{id}' must parse"
+        );
     }
 }
