@@ -1621,7 +1621,9 @@ originally-CRLF files scoped out; 1 file fmt-polished (gemma2_cpu_bench
 −2/+1). **Broken gates documented (owner flags):** arm_c E0601 (default
 `--examples` breaker — [[example]] block missing required-features while
 inner cfg gates out main), ane-arena ×4 E0599 (macOS-only CoreML backend),
-catchup_demo E0308 (stale riir-chain API), go_13 (empty-feature gate but
+catchup_demo E0308 (stale riir-chain API — RESOLVED upstream since: the
+example compiles AND runs green at HEAD, verified 2026-09-05; only its
+~heal edits remain deferred), go_13 (empty-feature gate but
 body needs go-training→riir-gpu). **Deferred (~436 edits):** all
 riir-gpu-pulling example families (sibling 721/ANE WIP) + ane-arena (M3)
 + catchup_demo + arm_c + go_13 — re-arms when the sibling's GPU work
