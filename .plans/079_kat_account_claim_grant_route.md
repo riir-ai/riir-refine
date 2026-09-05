@@ -129,3 +129,15 @@ the third run doesn't rediscover them:
 Also independently confirmed: the dapps `/sync` route now carries BOTH
 shapes' fields (`recorded` + `accepted`/`rows_*`), so the T7 harness parse
 fix and the route-side additive field are compatible, not competing fixes.
+
+**Third run (2026-09-06, deployer T4.4a — the ceremony-driven composition):
+[Bench 005](../riir-deployer/.benchmarks/005_t44a_devnet_wetrun.md).** Two
+additions to this recipe: (3) **the treasury floor is a RESERVE** —
+funding to exactly `treasury_grant_floor_micro` leaves zero grant headroom
+(`crank_treasury_debit` requires `treasury − grant ≥ floor`), so the fund
+MUST be floor + float (the Bench-005 recipe: floor + one faucet draw + one
+free-tier grant, all registry-json numbers); a floor-exact fund skips every
+credit with `skipped_treasury`; and (4) a FAILED pass leaves an open faucet
+request that blocks re-creation until UTC midnight — wipe the persist dir
+and re-boot (re-claim re-grants honestly on a fresh devnet ledger; the
+once-per-key bound is per-ledger).
