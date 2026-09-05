@@ -1,6 +1,6 @@
 # Research 133 — vLLM `libtorch_stable` kernel distill verdict
 
-**Status:** DISTILLED — Batch 110 planned (Plan 081); mining pending.
+**Status:** RECORD — Batch 110 LANDED 2026-09-05 (11 rules, corpus 494 → 505; see the queue snapshot Last-landed entry). Batch 111 = the remainder tier (#12-#25) + the rider sweep.
 
 - **Repo:** https://github.com/vllm-project/vllm (`csrc/libtorch_stable/` — the stable kernel ABI tree; vLLM moved its classic kernels under this path while consolidating the rest into FlashInfer/FlashAttention backends).
 - **Inspected:** 2026-09-05, 4090 box, CPU-only. Two parallel subagent lanes (A: decode-fusion/model-specific kernels, 8,366 lines read in full; B: sampling/top-k + MoE + cache + misc, 14 files full + 9 partial) + coordinator spot-verification of 13 lead-candidate quotes (all byte-accurate at the pin).

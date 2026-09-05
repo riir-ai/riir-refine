@@ -64,7 +64,7 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 63 (3): the CubeCL twin unlock — same-input-gemv-weight-concat-at-upload, deferred-residual-fused-into-next-layer-norm, reset-state-in-place-fill-never-realloc (ternary_deltanet_gpu_forward.rs, Plan 009 / Research 071).
     // Batch 70 (3): the arxiv barrier-free-sync paper distill (arXiv:2608.13757, Plan 020 / Research 080) — barrier-free-per-dependency-wait-from-loop-counters, shared-counter-decode-producer-progress, masked-branchless-wait-collapse.
     // Batch 105 (11): uzu + lily combined Metal-engine distill (Research 127 + 128 / Plan 075) -- concurrent-dispatch-dependency-level-barriers, gpu-resident-moe-routing-no-host-sync, indirect-device-dispatch-tile-map-moe, pipelined-token-slot-ping-pong-submit-ahead, split-k-two-pass-attention-decode-long-context, cooperative-tensor-mma-capability-route, rht-epilogue-fusion-contract, lane-sequenced-deterministic-bucket-scatter, a8-activation-route-stability-guard, target-tile-split-k-deterministic-two-dispatch, hazard-tracked-aliasing-scratch-allocator (A +1, C +1, D +3, E +1, F +1, H +3, M +1; sources trymirai/uzu @ 115609b + perplexityai/pplx-garden lily @ 1ed972ed, both lanes re-verified every quote; the cross-source dedup mandate executed per rule; the R128 tile-by-expert-load rider FALSIFIED at pin -- chunk-size-routed table, both tiles 4 simdgroups).
-    // Total: 209. // (historical batch-30 snapshot; current 494)
+    // Total: 209. // (historical batch-30 snapshot; current 505)
     // Batch 98 (10): antirez/ds4 dense.metal/moe.metal leads -- grid-range-split-verbatim-impl-composition, share-activation-stream-keep-projection-reductions, tiny-rows-scalar-thread-per-row-downshift, small-batch-matvec-gemm-bridge-rung, moe-routed-down-sum-single-accumulate-pass, fused-vector-site-transcendental-form-nonportable, monomorphic-hot-caller-last-hit-memo, per-row-scale-folded-into-rhs-staging-tile, dequant-byte-pairs-as-aligned-u16-loads, cross-simd-bitonic-alternating-bank-exchange (the Batch-97 queued NEXT BATCH LEADS + 3 additional candidates).
     // Batch 100 (8): Layr-Labs/qwen-3.8-mtp-challenge -- functional-cache-versioning-loses-donation-under-kernel-read, fused-kv-write-single-writer-reads-newest-from-input, in-place-write-through-input-emits-fence-consumer, residency-set-wired-once-post-warm-persistent-footprint, register-budget-head-split-gqa-reread-trade, batch-composition-invariant-grid-early-return, never-gqa-multiply-full-d-merge-smem, container-rebind-over-retrace-for-churn-survival (Research 120 / Plan 068; A +3, D +3, E +2).
     // Batch 102 (6): FlashQuant sparse-dense fusion (arXiv 2608.15531) -- heterogeneous-unit-paths-shared-tile-fusion, lpt-min-heap-disjoint-column-ownership, tile-coo-sparse-tile-aligned-format, bucketed-sparse-reader-column-partition, bank-group-circular-element-reorder, stream-k-persistent-cta-mac-segments (Research 123 / Plan 071; A +2, C +2, H +1, N +1; the headline was REFUTED for direct adoption at walk time -- the fusion mechanism is the distilled core).
@@ -73,10 +73,11 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 106 (5): MTPLX upstream residue distill (mistakes/ post-mortem corpus + docs + targeted kernel diff; Research 129 / Plan 076) -- prefix-reuse-key-must-mirror-the-restore-predicate, request-arrival-work-asks-reuse-state-first, serving-raises-only-behind-strict-flag, derived-key-single-constructor-parity-test, vendor-fused-op-instantiation-check (D +5; source youssofal/MTPLX @ dd4031a8 upstream main, Apache-2.0; the B+ lead CONFIRMED with both instances in-source -- the sentinel fingerprint post-mortem + the dd4031a8 fix commit).
     // Batch 107 (8): uzu + lily defers batch (Research 130 / Plan 077) -- sparse-demand-paged-kv-cache, tensor-op-strided-device-operand-binding (A +2), gumbel-argmax-filtered-sampling-descent (C +1), prefill-chunk-command-buffer-capacity-coupled (D +1), packed-total-order-multi-field-argmax, radix-select-ordered-key-topk (E +2), single-threadgroup-fused-count-scan (H +1), integer-mma-span-epilogue-dequant (N +1); sources trymirai/uzu @ 115609b (MIT) + perplexityai/pplx-garden lily @ 1ed972ed (Apache-2.0); 12 defers re-verified, 3 dropped (flat-topology = B23-family, RIF-sentinel = born-dead arms, weight-hygiene = B63/B31 instances) + 1 collapsed to the B63 rider; upstream E>128 hazards in counts_offsets_fused recorded in-rule.
     // Batch 108 (4): riir-ai M3 campaign measured-GOAT distill (Plan 078) -- smem-envelope-gate-kernel-variant (G +1), multi-simdgroup-shared-staged-tile (A +1), independent-accumulator-chains-hide-load-latency-at-capped-occupancy, byte-cut-loses-when-plateau-is-issue-bound (E +2, the last refutation-type); source riir-ai @ 59a172623 (committed state; the first in-source batch since Batch 63 -- the M3 prefill/decode campaign mined: Issues 768/771/779/831/843, numbers belong to Benches 774/790/804/831 and are cited as records); two verification lanes at the pin + coordinator spot-check (all VERIFIED); +3 riders on B01/B06/B57 + 2 arxiv riders discharged on B79 (2608.17641 breadth) and B82 (2608.01651 confirmation -- the land-with-next-adjacent-batch queue); recorded-not-landed: axis-swap refutation (S2:40-42), 4-arm ladder (B104 ethos), empty-partial identity (B35 grain).
+    // Batch 110 (11): vLLM libtorch_stable distill (Research 133 / Plan 081) -- spin-barrier-needs-co-residency-capped-launch, ballot-matrix-tie-rank, m-group-shared-weight-scan-register-relief, row-parallelism-ladder-split-vs-pack (E +4), captured-graph-init-unconditional-and-stream-ordered, batch-invariance-locks-reduction-geometry (D +2), rope-pair-partner-via-cross-lane-shuffle, degenerate-selection-falls-back-to-identity-uniform (B +2), softmax-denominator-cancels-through-scale-invariant-norm (C +1), persistent-kernel-length-bucketed-mechanism-ladder (K +1), router-math-stays-fp32 (N +1); source vllm-project/vllm csrc/libtorch_stable @ 8277c42e4 (Apache-2.0, never mined); two inspection lanes + coordinator byte-verification of 13 lead quotes; the VERIFIED A-/B+ tier of a 25-candidate pool (the B-/C+ remainder = Batch 111); upstream hazard ledger in Research 133 (H1 silent tie-buffer overflow, H2 dispatch-no-default, H3 cross-tier router divergence).
     assert_eq!(
         corpus.entries.len(),
-        494,
-        "kernel batches through Batch 108 should have 494 rules"
+        505,
+        "kernel batches through Batch 110 should have 505 rules"
     );
 }
 
@@ -5295,7 +5296,7 @@ fn kernel_categories_table_has_15_entries() {
 
 #[test]
 fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-    // Every rule_id in the 494-rule corpus must appear in exactly one category.
+    // Every rule_id in the 505-rule corpus must appear in exactly one category.
     let corpus = build_kernel_seed_corpus();
     let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     let mut categorized: Vec<&str> = Vec::new();
@@ -5338,22 +5339,22 @@ fn kernel_categories_cover_all_corpus_rules_exhaustively() {
 
 #[test]
 fn kernel_categories_counts_match_plan_003_table() {
-    // Pin per-category rule counts to the Plan 003 table (updated for Batch 108).
+    // Pin per-category rule counts to the Plan 003 table (updated for Batch 110).
     let expected = [
         (KernelCategory::MemoryAccess, 109),
-        (KernelCategory::Compute, 57),
-        (KernelCategory::Fusion, 43),
-        (KernelCategory::Dispatch, 112),
-        (KernelCategory::Parallelism, 37),
+        (KernelCategory::Compute, 59),
+        (KernelCategory::Fusion, 44),
+        (KernelCategory::Dispatch, 114),
+        (KernelCategory::Parallelism, 41),
         (KernelCategory::FlashAttnTiling, 12),
         (KernelCategory::LinearAttnRecurrence, 27),
         (KernelCategory::MoeDispatchBackward, 21),
         (KernelCategory::NsaBlockSparse, 4),
         (KernelCategory::VarlenChunkedReduction, 5),
-        (KernelCategory::AutotuneDispatch, 7),
+        (KernelCategory::AutotuneDispatch, 8),
         (KernelCategory::ConvGemmLayout, 13),
         (KernelCategory::KernelPolymorphism, 14),
-        (KernelCategory::DtypeAlignment, 29),
+        (KernelCategory::DtypeAlignment, 30),
         (KernelCategory::IrStrengthReduction, 4),
     ];
     for (cat, count) in expected {
@@ -5368,9 +5369,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 494.
+    // Sum must equal 505.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 494, "Plan 003: category totals must sum to 494");
+    assert_eq!(total, 505, "Plan 003: category totals must sum to 505");
 }
 
 #[test]
@@ -5381,8 +5382,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 494,
-        "Plan 003: grouped corpus has {total} rules, expected 494"
+        total, 505,
+        "Plan 003: grouped corpus has {total} rules, expected 505"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -7998,6 +7999,270 @@ fn batch108_pseudocode_parses() {
             "batch-108 opt_pattern for '{id}' must parse"
         );
     }
+}
+
+#[test]
+fn batch110_rules_present() {
+    // Batch 110 (vLLM libtorch_stable distill -- Research 133 / Plan
+    // 081): 11 kernel_opt rules, the VERIFIED A-/B+ tier of a
+    // 25-candidate pool. Source: vllm-project/vllm csrc/libtorch_stable
+    // @ 8277c42e4 (Apache-2.0, never mined). Two inspection lanes +
+    // coordinator byte-verification of 13 lead quotes at the pin. The
+    // B-/C+ remainder tier is Batch 111; the upstream hazard ledger
+    // (H1 tie-buffer overflow, H2 dispatch-no-default, H3 router
+    // divergence) lives in Research 133.
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "spin-barrier-needs-co-residency-capped-launch",
+        "captured-graph-init-unconditional-and-stream-ordered",
+        "ballot-matrix-tie-rank",
+        "m-group-shared-weight-scan-register-relief",
+        "softmax-denominator-cancels-through-scale-invariant-norm",
+        "batch-invariance-locks-reduction-geometry",
+        "rope-pair-partner-via-cross-lane-shuffle",
+        "row-parallelism-ladder-split-vs-pack",
+        "persistent-kernel-length-bucketed-mechanism-ladder",
+        "router-math-stays-fp32",
+        "degenerate-selection-falls-back-to-identity-uniform",
+    ];
+    for id in ids {
+        assert!(
+            corpus.entries.iter().any(|e| e.rule_id == id),
+            "batch-110 rule '{id}' missing from corpus"
+        );
+    }
+}
+
+#[test]
+#[allow(clippy::too_many_lines)]
+fn batch110_concepts_covered() {
+    // Distinctness + mandated phrases must survive in the concept
+    // text (case-sensitive contains -- the B51 lesson).
+    let corpus = build_kernel_seed_corpus();
+    let checks: &[(&str, &[&str])] = &[
+        (
+            "spin-barrier-needs-co-residency-capped-launch",
+            &[
+                "overestimating it deadlocks the cooperative barrier",
+                "most deadlock-prone case",
+                "never dropping below one full group",
+                "cap only when co-residency is load-bearing",
+                "no co-residency precondition",
+                "would wait on the inter-CTA barrier for peers",
+            ],
+        ),
+        (
+            "captured-graph-init-unconditional-and-stream-ordered",
+            &[
+                "the node set is frozen at capture, the data is not",
+                "always true under FULL_DECODE_ONLY",
+                "sub-microsecond",
+                "the zero is globally visible before any CTA runs",
+                "NOT repaired by re-execution",
+            ],
+        ),
+        (
+            "ballot-matrix-tie-rank",
+            &[
+                "1024 comparisons in one instruction per warp",
+                "score desc, index asc",
+                "kMaxTies = 1024",
+                "4.0 at the source's 4096 bins",
+                "H1 hazard",
+            ],
+        ),
+        (
+            "m-group-shared-weight-scan-register-relief",
+            &[
+                "128 regs",
+                "weight traffic stays 1x",
+                "1.26-1.66x",
+                "0.91x",
+                "re-measure, never trust one sweep",
+                "NOTHING is re-read from DRAM",
+            ],
+        ),
+        (
+            "softmax-denominator-cancels-through-scale-invariant-norm",
+            &[
+                "= acc * rsqrt(mean(acc^2) + eps * s^2)",
+                "ZERO divides",
+                "eps * s^2",
+                "never bit-identity",
+                "attention probability weights need the real s",
+            ],
+        ),
+        (
+            "batch-invariance-locks-reduction-geometry",
+            &[
+                "one expression serves both masters",
+                "an explicit precedence term",
+                "Do not invert token_scale for exact match with FBGemm",
+                "two-regime split by CONTRACT",
+            ],
+        ),
+        (
+            "rope-pair-partner-via-cross-lane-shuffle",
+            &[
+                "XOR with that distance",
+                "half % elems_per_lane == 0",
+                "NOT WGSL/Vulkan",
+                "the sign fold",
+                "a convention, not a one-off",
+            ],
+        ),
+        (
+            "row-parallelism-ladder-split-vs-pack",
+            &[
+                "one 8-element chunk per lane",
+                "kDecodeRowSplitMaxTokens",
+                "grid-stride loop instead of a huge launch",
+                "SMs*8",
+                "no cross-lane reductions inside the row",
+            ],
+        ),
+        (
+            "persistent-kernel-length-bucketed-mechanism-ladder",
+            &[
+                "8192/2048 = 4 elements/bin avg",
+                "no static __shared__",
+                "kill occupancy for the decode/trivial paths",
+                "a launch per bucket",
+                "H1 hazard",
+            ],
+        ),
+        (
+            "router-math-stays-fp32",
+            &[
+                "weight is always fp32",
+                "PER-ROLE, not per-model",
+                "M <= 32",
+                "0.5f * tanhf(0.5f * x) + 0.5f",
+                "routes differently BY TIER",
+            ],
+        ),
+        (
+            "degenerate-selection-falls-back-to-identity-uniform",
+            &[
+                "always pick expert 0 for every top-k slot",
+                "pick [0,1,2,...,k-1]",
+                "1.0f / topk_i32",
+                "every LSE to -inf",
+                "clamp first, tie-break second",
+            ],
+        ),
+    ];
+    for (id, needles) in checks {
+        let e = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == *id)
+            .unwrap_or_else(|| panic!("batch-110 rule '{id}' missing"));
+        for needle in *needles {
+            assert!(
+                e.gpu_concept.contains(needle),
+                "batch-110 concept for '{id}' missing phrase '{needle}'"
+            );
+        }
+    }
+}
+
+#[test]
+#[cfg(not(feature = "kernel_verify"))]
+fn batch110_pseudocode_parses() {
+    // G1 for Batch 110: syn-parse gate (the vLLM libtorch_stable rules).
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "spin-barrier-needs-co-residency-capped-launch",
+        "captured-graph-init-unconditional-and-stream-ordered",
+        "ballot-matrix-tie-rank",
+        "m-group-shared-weight-scan-register-relief",
+        "softmax-denominator-cancels-through-scale-invariant-norm",
+        "batch-invariance-locks-reduction-geometry",
+        "rope-pair-partner-via-cross-lane-shuffle",
+        "row-parallelism-ladder-split-vs-pack",
+        "persistent-kernel-length-bucketed-mechanism-ladder",
+        "router-math-stays-fp32",
+        "degenerate-selection-falls-back-to-identity-uniform",
+    ];
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-110 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            ref_verdict.parses,
+            "batch-110 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            opt_verdict.parses,
+            "batch-110 opt_pattern for '{id}' must parse"
+        );
+    }
+}
+
+#[test]
+fn batch110_spin_barrier_launch_contract() {
+    // T5 for Batch 110 (Plan 081, the GOAT lead): the co-residency
+    // launch arithmetic of
+    // spin-barrier-needs-co-residency-capped-launch pinned as a pure
+    // function. Correctness-bearing: a spin barrier under
+    // oversubscription is a hang, not a slowdown. The uncapped arm is
+    // load-bearing too (the barrier-unreachable regime keeps the B58
+    // uncapped default) -- assert BOTH directions.
+    fn launch_plan(
+        rows: usize,
+        ctas_per_group: usize,
+        num_sms: usize,
+        occupancy: usize,
+        needs_cooperative: bool,
+    ) -> (usize, bool) {
+        let hw_cap = num_sms * occupancy;
+        if !needs_cooperative {
+            return (rows * ctas_per_group, false); // uncapped, no barrier
+        }
+        let headroom = if occupancy > 1 { num_sms } else { 1 };
+        let mut resident = hw_cap;
+        if resident >= headroom + ctas_per_group {
+            resident -= headroom;
+        }
+        let groups = (resident / ctas_per_group).min(rows).max(1);
+        let total = groups * ctas_per_group;
+        (total, total > hw_cap) // (total_ctas, fallback)
+    }
+    // Barrier reachable, occupancy > 1: headroom = one CTA per SM.
+    // hw_cap=16, headroom=8, resident=8, groups=2, total=8 (was 16).
+    let (total, fallback) = launch_plan(1024, 4, 8, 2, true);
+    assert_eq!(total, 8);
+    assert!(!fallback);
+    // Occupancy == 1: headroom collapses to ONE CTA (the most
+    // deadlock-prone case -- any straggler on the only slot hangs).
+    // hw_cap=8, headroom=1, resident=7, groups=1, total=4.
+    let (total_occ1, _) = launch_plan(1024, 4, 8, 1, true);
+    assert_eq!(total_occ1, 4);
+    // The cooperative form would not fit -> the non-barrier fallback
+    // fires instead of deadlocking. hw_cap=4; 4 < 1+16 so resident
+    // stays 4; groups = max(0,1) = 1; total=16 > 4 -> fallback.
+    let (_, fallback_tight) = launch_plan(64, 16, 4, 1, true);
+    assert!(fallback_tight);
+    // Barrier unreachable: UNCAPPED (the B58 perf-side default
+    // preserved -- capping here would be a measured 1-2% loss).
+    let (total_uncapped, fallback_uncapped) = launch_plan(1024, 4, 8, 2, false);
+    assert_eq!(total_uncapped, 4096);
+    assert!(!fallback_uncapped);
+    // Never below one full group's worth (the groups.max(1) floor):
+    // hw_cap=2, ctas_per_group=8 -> groups floors to 1, total=8, and
+    // the fit check then routes to the fallback.
+    let (total_floored, fallback_floored) = launch_plan(1, 8, 2, 1, true);
+    assert_eq!(total_floored, 8);
+    assert!(fallback_floored);
+    // Non-vacuity: the headroom subtract actually fires (24, not 32).
+    let (total_subtract, _) = launch_plan(1024, 1, 8, 4, true);
+    assert_eq!(total_subtract, 24);
 }
 
 #[test]

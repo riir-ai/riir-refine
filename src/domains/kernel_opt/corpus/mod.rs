@@ -1553,6 +1553,7 @@ mod entries_gpu_18;
 mod entries_gpu_19;
 mod entries_gpu_20;
 mod entries_gpu_21;
+mod entries_gpu_22;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -1587,6 +1588,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_19::entries());
     entries.extend(entries_gpu_20::entries());
     entries.extend(entries_gpu_21::entries());
+    entries.extend(entries_gpu_22::entries());
     Corpus::new(entries)
 }
 
@@ -1599,7 +1601,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 494-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 505-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1722,7 +1724,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "multi-simdgroup-shared-staged-tile",
         ],
     ),
-    // B: Compute patterns (57 rules)
+    // B: Compute patterns (59 rules)
     (
         KernelCategory::Compute,
         "B: compute",
@@ -1784,9 +1786,11 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
 
             "fused-vector-site-transcendental-form-nonportable",
             "per-row-scale-folded-into-rhs-staging-tile",
+            "rope-pair-partner-via-cross-lane-shuffle",
+            "degenerate-selection-falls-back-to-identity-uniform",
         ],
     ),
-    // C: Fusion patterns (43 rules)
+    // C: Fusion patterns (44 rules)
     (
         KernelCategory::Fusion,
         "C: fusion",
@@ -1834,9 +1838,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "stream-k-persistent-cta-mac-segments",
             "rht-epilogue-fusion-contract",
             "gumbel-argmax-filtered-sampling-descent",
+            "softmax-denominator-cancels-through-scale-invariant-norm",
         ],
     ),
-    // D: Dispatch patterns (112 rules)
+    // D: Dispatch patterns (114 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -1953,9 +1958,11 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "derived-key-single-constructor-parity-test",
             "vendor-fused-op-instantiation-check",
             "prefill-chunk-command-buffer-capacity-coupled",
+            "captured-graph-init-unconditional-and-stream-ordered",
+            "batch-invariance-locks-reduction-geometry",
         ],
     ),
-    // E: Parallelism patterns (37 rules)
+    // E: Parallelism patterns (41 rules)
     (
         KernelCategory::Parallelism,
         "E: parallelism",
@@ -1997,6 +2004,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "radix-select-ordered-key-topk",
             "independent-accumulator-chains-hide-load-latency-at-capped-occupancy",
             "byte-cut-loses-when-plateau-is-issue-bound",
+            "spin-barrier-needs-co-residency-capped-launch",
+            "ballot-matrix-tie-rank",
+            "m-group-shared-weight-scan-register-relief",
+            "row-parallelism-ladder-split-vs-pack",
         ],
     ),
     // F: Flash-attention tiling (12 rules)
@@ -2103,7 +2114,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "ragged-chunk-pad",
         ],
     ),
-    // K: Autotune dispatch (7 rules)
+    // K: Autotune dispatch (8 rules)
     (
         KernelCategory::AutotuneDispatch,
         "K: autotune dispatch",
@@ -2115,6 +2126,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "autotune-cache-extract-outlives-owner",
             "swept-shape-bucket-launch-tables",
             "no-harm-bucket-representative",
+            "persistent-kernel-length-bucketed-mechanism-ladder",
         ],
     ),
     // L: Conv-as-GEMM + memory layout (13 rules)
@@ -2158,7 +2170,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "small-batch-matvec-gemm-bridge-rung",
         ],
     ),
-    // N: dtype + alignment specialization (29 rules)
+    // N: dtype + alignment specialization (30 rules)
     (
         KernelCategory::DtypeAlignment,
         "N: dtype + alignment",
@@ -2191,6 +2203,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "half-domain-exact-band-dequant-with-raw-bit-oracle",
             "tile-coo-sparse-tile-aligned-format",
             "integer-mma-span-epilogue-dequant",
+            "router-math-stays-fp32",
         ],
     ),
     // O: IR strength reduction (4 rules)
