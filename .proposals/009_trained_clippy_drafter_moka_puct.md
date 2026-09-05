@@ -228,6 +228,11 @@ Gated per-phase; the full promotion gate before any default flip:
 6. Bench 049 (fixer re-gate POC: CF llama 5–6/9, decline 0/9), Bench 031 (fix_verify 14.3%
    first-pass rejection — the compiles-per-heal perf axis), Bench 043 (headroom negative),
    Bench 463/467 + riir-train Plan 336 (the 0/60 generative-LoRA failure this design avoids).
+7. Drozdova et al., "Diffusion as a Training Curriculum for Timestep-Free Iterative
+   Reasoning" (arXiv:2609.01449) — **distilled in-house** as riir-train Research 449 + Plan
+   387 (the `riir-bench-algo` Sudoku-Extreme/Maze-Unique bench, Phase 1 landed 2026-09-05).
+   Feeds the settle-refiner fusion lane (§Addendum 2026-09-05 below) and the Phase-3 PUCT
+   prior-art challenge.
 
 ## TL;DR
 
@@ -374,3 +379,69 @@ choice of kill-switch band.
 plan spends its first (and most expensive) phase attacking a band its own committed instrument
 already measured at zero, while the band that instrument says is real — proposer coverage — is
 deferred to Phase 2 and is addressable **modellessly**. Reframe, do not cancel.
+
+---
+
+## Addendum — 2026-09-05: the settle-refiner fusion lane (DEFERRED — re-plan priorities UNCHANGED)
+
+Source: riir-train [Research 449](../riir-train/.research/449_Diffusion_Curriculum_Timestep_Free_Iterative_Reasoning.md)
+(arXiv:2609.01449) + riir-train [Plan 387](../riir-train/.plans/387_sudoku_maze_algo_reasoning_bench.md)
+(Sudoku-Extreme/Maze-Unique bench, `riir-bench-algo` Phase 1 landed). Owner direction
+recorded: training around this is acceptable (tiny params, hours-class on M3) but **lower
+priority than the re-plan above**; posture is freeze/thaw (weights as committed DATA), and
+the design should FUSE with the healer's existing stack — the moka+PUCT precedent, not a
+wholesale port.
+
+### The fusion (moka+PUCT shape, one layer over)
+
+moka+PUCT fused policy/value search with draft-and-verify. This fuses the paper's
+**single-trajectory settle solver** with the same verifier stack:
+
+- **Mechanism transposed.** The paper's solver holds a persistent hidden state, injects
+  fresh noise on the non-clue cells each step, and SETTLES on the answer — no parallel
+  rollouts, no selection head (it explicitly names PTRM/GRAM's parallel-trajectory +
+  selection-head design — PUCT's family — as machinery it does not need; 99.90% at K=10k).
+  Transposed: a **settle-refiner drafter** — persistent state over the span, each step emits
+  a bounded `(rule, slot)` action, noise = exploration over the action space, settle = the
+  EXISTING verify gates pass. Our verifier is CHEAPER than the paper's internal one and our
+  fix space is multi-solution, so the open hypothesis the POC measures: does
+  sample-until-verify with a settle-style refiner match or beat tree ordering (PUCT) at
+  lower per-fix cost?
+- **Curriculum transposed — SPECULATIVE, flagged as such.** "Violation = corruption, fixed
+  span = clean target": denoising-style training on template-perturbed spans (annealed
+  corruption during training, max-noise + patience at inference). The paper's corruption
+  path is CONTINUOUS diffusion; our action space is discrete — this port is a hypothesis to
+  test, not a result to cite.
+- **Weight posture.** Tiny model (~250k class), trained ONCE in riir-train, shipped as a
+  BLAKE3-committed freeze artifact consumed as DATA — the proposal's existing boundary
+  ("weights are bytes, not a cargo dep") unchanged. Updates = re-freeze a new snapshot,
+  never in-place; fine-tuning = a new snapshot on top.
+
+### Next actions (in order — an agent picking this up starts here)
+
+1. **Do NOT start here.** The re-plan above (steps 1–6) owns the critical path: modelless
+   proposers for the proposer-coverage band first, arm the L4 seam with the Bench 049 arm,
+   land the §F4 plumbing (parameterized headroom span source + `ClippyOracle` batch
+   labeler). This lane activates ONLY on the residual training denominator that re-plan
+   step 3 defines — the POC below CONSUMES the same batch-labeler plumbing.
+2. **Capability-gate the trainer first (riir-train Plan 387 Phase 2).** The tiny-reasoner
+   trainer must reproduce published-class numbers on the `riir-bench-algo` harness
+   (Sudoku-Extreme ≥ 99% on the 10k ablation subset @ K=10k; Maze-Unique ≥ 98% @ K=100)
+   BEFORE any clippy-side training. One trainer, two consumers — do not build a second.
+3. **POC before training (defend-wrong, `riir-poc`).** Three arms on oracle-labeled
+   real-repo spans: (a) decline baseline; (b) one-shot prior + verify loop
+   (sample-until-verify, re-ranker as prior — the modelless-reachable shape); (c)
+   settle-refiner loop (persistent state + noise injection + patience, verifier as settle
+   criterion). Proof bar: (c) strict-keep ≥ (b) AND directionally vs the Bench 049 CF-70B
+   arm at lower per-fix cost; G1 never-wrong preserved (verifier-gated keeps only, decline
+   stays default). POC harness may reuse the paper's settle classifier
+   (`riir-bench-algo::eval::classify_settling`) as the stability instrument.
+4. **Training (only after POC pass).** Denoising curriculum on frozen oracle-labeled spans
+   (BLAKE3-committed, per §evaluation-validity risk); M3 Metal, hours-class. G5 gains the
+   acceptance-vs-depth axis + the settle classification (settled-and-stayed /
+   settled-then-wandered / never-settled). G2/G3/G6 bars unchanged.
+5. **Phase 3 (PUCT) impact.** PUCT stays the contested-span search layer, but arm (c) is
+   now its measured comparator — arXiv:2609.01449 is the prior-art datapoint that
+   single-trajectory settle matched parallel+selection in its domain; ours differs (cheap
+   external verifier, multi-solution), so this is a measurement obligation, not an
+   assumption either way.
