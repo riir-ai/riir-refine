@@ -1589,7 +1589,14 @@ impl RegateHarness {
             HealPipeline::new(crate::TernaryDrafter::fallback(), RustAnalyzerPruner::new());
         pipeline.seed_from_corpus(&corpus.entries);
         let matcher = LatentMatcher::from_enabled_domains()?;
-        let store = crate::traj_store::TrajStore::open(std::path::Path::new(".")).ok().map(|(s, _)| s);
+        // Store path is CWD-relative by default (the arm-G convention — run
+        // from the repo whose dev store you want), overridable per run so an
+        // A/B can point at a scratch/planted store without CWD tricks.
+        let store_dir =
+            std::env::var("RIIR_REGATE_STORE_DIR").unwrap_or_else(|_| ".".to_string());
+        let store = crate::traj_store::TrajStore::open(std::path::Path::new(&store_dir))
+            .ok()
+            .map(|(s, _)| s);
         Ok(Self {
             pipeline,
             corpus,

@@ -410,6 +410,10 @@ harness = false
 name = "heal_demo"
 required-features = ["clippy_lints"]
 
+[[example]]
+name = "plant_067_store"
+required-features = ["latent_retrieval"]
+
 # Phase 2: rust_perf domain demo. Validates the scaffold end-to-end.
 [[example]]
 name = "perf_heal_demo"
