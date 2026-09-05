@@ -1,6 +1,6 @@
 # Research 133 — vLLM `libtorch_stable` kernel distill verdict
 
-**Status:** RECORD — Batch 110 LANDED 2026-09-05 (11 rules, corpus 494 → 505; see the queue snapshot Last-landed entry). Batch 111 = the remainder tier (#12-#25) + the rider sweep.
+**Status:** RECORD — Batch 110 LANDED 2026-09-05 (11 rules, corpus 494 → 505) AND Batch 111 LANDED 2026-09-05 (the remainder tier + rider sweep, corpus 505 → 516; see the queue snapshot Last-landed entry + the AGENTS.md Batch 111 entry). Mine-time dispositions: #21 + #23 KILLED as coverage (B110 rules carry them, same source citations); #24 demoted to a RIDER on B92 device-m-runtime-mblock-graph-stable-gemm; all 20 rider-inventory instances located with quotes and landed (plus 1 bonus: the single-pass-vs-streaming capacity gate folded into #18's third-instance text). H1's fix contract is now ENCODED as the rule refine-by-rescan-prefix-filter-vs-buffered-ties (the silent-drop class + the sampler fit-guard + the written-entries clamp).
 
 - **Repo:** https://github.com/vllm-project/vllm (`csrc/libtorch_stable/` — the stable kernel ABI tree; vLLM moved its classic kernels under this path while consolidating the rest into FlashInfer/FlashAttention backends).
 - **Inspected:** 2026-09-05, 4090 box, CPU-only. Two parallel subagent lanes (A: decode-fusion/model-specific kernels, 8,366 lines read in full; B: sampling/top-k + MoE + cache + misc, 14 files full + 9 partial) + coordinator spot-verification of 13 lead-candidate quotes (all byte-accurate at the pin).

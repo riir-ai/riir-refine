@@ -1554,6 +1554,7 @@ mod entries_gpu_19;
 mod entries_gpu_20;
 mod entries_gpu_21;
 mod entries_gpu_22;
+mod entries_gpu_23;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -1589,6 +1590,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_20::entries());
     entries.extend(entries_gpu_21::entries());
     entries.extend(entries_gpu_22::entries());
+    entries.extend(entries_gpu_23::entries());
     Corpus::new(entries)
 }
 
@@ -1601,7 +1603,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 505-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 516-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1609,7 +1611,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (109 rules)
+    // A: Memory access patterns (112 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -1722,6 +1724,9 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "sparse-demand-paged-kv-cache",
             "tensor-op-strided-device-operand-binding",
             "multi-simdgroup-shared-staged-tile",
+            "register-rotation-prefetch-loop",
+            "shared-operand-groups-per-warp",
+            "whole-row-register-resident-under-length-budget",
         ],
     ),
     // B: Compute patterns (59 rules)
@@ -1841,7 +1846,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "softmax-denominator-cancels-through-scale-invariant-norm",
         ],
     ),
-    // D: Dispatch patterns (114 rules)
+    // D: Dispatch patterns (116 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -1960,6 +1965,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "prefill-chunk-command-buffer-capacity-coupled",
             "captured-graph-init-unconditional-and-stream-ordered",
             "batch-invariance-locks-reduction-geometry",
+            "grid-dependency-wait-scoped-to-dependent-operands",
+            "refine-by-rescan-prefix-filter-vs-buffered-ties",
         ],
     ),
     // E: Parallelism patterns (41 rules)
@@ -2063,7 +2070,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "smem-envelope-gate-kernel-variant",
         ],
     ),
-    // H: MoE dispatch + backward pass (21 rules)
+    // H: MoE dispatch + backward pass (23 rules)
     (
         KernelCategory::MoeDispatchBackward,
         "H: MoE dispatch + backward",
@@ -2089,6 +2096,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "indirect-device-dispatch-tile-map-moe",
             "lane-sequenced-deterministic-bucket-scatter",
             "single-threadgroup-fused-count-scan",
+            "warp-aggregated-atomic-scatter",
+            "routing-by-precomputed-lookup",
         ],
     ),
     // I: NSA block-sparse selection (4 rules)
@@ -2114,7 +2123,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "ragged-chunk-pad",
         ],
     ),
-    // K: Autotune dispatch (8 rules)
+    // K: Autotune dispatch (9 rules)
     (
         KernelCategory::AutotuneDispatch,
         "K: autotune dispatch",
@@ -2127,6 +2136,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "swept-shape-bucket-launch-tables",
             "no-harm-bucket-representative",
             "persistent-kernel-length-bucketed-mechanism-ladder",
+            "launch-heuristic-pinned-to-calibration-arch",
         ],
     ),
     // L: Conv-as-GEMM + memory layout (13 rules)
@@ -2149,7 +2159,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "dequant-byte-pairs-as-aligned-u16-loads",
         ],
     ),
-    // M: Kernel parametric polymorphism (14 rules)
+    // M: Kernel parametric polymorphism (15 rules)
     (
         KernelCategory::KernelPolymorphism,
         "M: kernel polymorphism",
@@ -2168,9 +2178,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "proven-shape-static-sibling-identical-results-fallback",
             "cooperative-tensor-mma-capability-route",
             "small-batch-matvec-gemm-bridge-rung",
+            "lane-owned-topk-output",
         ],
     ),
-    // N: dtype + alignment specialization (30 rules)
+    // N: dtype + alignment specialization (32 rules)
     (
         KernelCategory::DtypeAlignment,
         "N: dtype + alignment",
@@ -2204,6 +2215,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "tile-coo-sparse-tile-aligned-format",
             "integer-mma-span-epilogue-dequant",
             "router-math-stays-fp32",
+            "ue8m0-pow2-scale-as-biased-exponent-byte",
+            "coarse-precision-first-exact-refine",
         ],
     ),
     // O: IR strength reduction (4 rules)

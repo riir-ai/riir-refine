@@ -64,7 +64,7 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 63 (3): the CubeCL twin unlock — same-input-gemv-weight-concat-at-upload, deferred-residual-fused-into-next-layer-norm, reset-state-in-place-fill-never-realloc (ternary_deltanet_gpu_forward.rs, Plan 009 / Research 071).
     // Batch 70 (3): the arxiv barrier-free-sync paper distill (arXiv:2608.13757, Plan 020 / Research 080) — barrier-free-per-dependency-wait-from-loop-counters, shared-counter-decode-producer-progress, masked-branchless-wait-collapse.
     // Batch 105 (11): uzu + lily combined Metal-engine distill (Research 127 + 128 / Plan 075) -- concurrent-dispatch-dependency-level-barriers, gpu-resident-moe-routing-no-host-sync, indirect-device-dispatch-tile-map-moe, pipelined-token-slot-ping-pong-submit-ahead, split-k-two-pass-attention-decode-long-context, cooperative-tensor-mma-capability-route, rht-epilogue-fusion-contract, lane-sequenced-deterministic-bucket-scatter, a8-activation-route-stability-guard, target-tile-split-k-deterministic-two-dispatch, hazard-tracked-aliasing-scratch-allocator (A +1, C +1, D +3, E +1, F +1, H +3, M +1; sources trymirai/uzu @ 115609b + perplexityai/pplx-garden lily @ 1ed972ed, both lanes re-verified every quote; the cross-source dedup mandate executed per rule; the R128 tile-by-expert-load rider FALSIFIED at pin -- chunk-size-routed table, both tiles 4 simdgroups).
-    // Total: 209. // (historical batch-30 snapshot; current 505)
+    // Total: 209. // (historical batch-30 snapshot; current 516)
     // Batch 98 (10): antirez/ds4 dense.metal/moe.metal leads -- grid-range-split-verbatim-impl-composition, share-activation-stream-keep-projection-reductions, tiny-rows-scalar-thread-per-row-downshift, small-batch-matvec-gemm-bridge-rung, moe-routed-down-sum-single-accumulate-pass, fused-vector-site-transcendental-form-nonportable, monomorphic-hot-caller-last-hit-memo, per-row-scale-folded-into-rhs-staging-tile, dequant-byte-pairs-as-aligned-u16-loads, cross-simd-bitonic-alternating-bank-exchange (the Batch-97 queued NEXT BATCH LEADS + 3 additional candidates).
     // Batch 100 (8): Layr-Labs/qwen-3.8-mtp-challenge -- functional-cache-versioning-loses-donation-under-kernel-read, fused-kv-write-single-writer-reads-newest-from-input, in-place-write-through-input-emits-fence-consumer, residency-set-wired-once-post-warm-persistent-footprint, register-budget-head-split-gqa-reread-trade, batch-composition-invariant-grid-early-return, never-gqa-multiply-full-d-merge-smem, container-rebind-over-retrace-for-churn-survival (Research 120 / Plan 068; A +3, D +3, E +2).
     // Batch 102 (6): FlashQuant sparse-dense fusion (arXiv 2608.15531) -- heterogeneous-unit-paths-shared-tile-fusion, lpt-min-heap-disjoint-column-ownership, tile-coo-sparse-tile-aligned-format, bucketed-sparse-reader-column-partition, bank-group-circular-element-reorder, stream-k-persistent-cta-mac-segments (Research 123 / Plan 071; A +2, C +2, H +1, N +1; the headline was REFUTED for direct adoption at walk time -- the fusion mechanism is the distilled core).
@@ -74,10 +74,11 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 107 (8): uzu + lily defers batch (Research 130 / Plan 077) -- sparse-demand-paged-kv-cache, tensor-op-strided-device-operand-binding (A +2), gumbel-argmax-filtered-sampling-descent (C +1), prefill-chunk-command-buffer-capacity-coupled (D +1), packed-total-order-multi-field-argmax, radix-select-ordered-key-topk (E +2), single-threadgroup-fused-count-scan (H +1), integer-mma-span-epilogue-dequant (N +1); sources trymirai/uzu @ 115609b (MIT) + perplexityai/pplx-garden lily @ 1ed972ed (Apache-2.0); 12 defers re-verified, 3 dropped (flat-topology = B23-family, RIF-sentinel = born-dead arms, weight-hygiene = B63/B31 instances) + 1 collapsed to the B63 rider; upstream E>128 hazards in counts_offsets_fused recorded in-rule.
     // Batch 108 (4): riir-ai M3 campaign measured-GOAT distill (Plan 078) -- smem-envelope-gate-kernel-variant (G +1), multi-simdgroup-shared-staged-tile (A +1), independent-accumulator-chains-hide-load-latency-at-capped-occupancy, byte-cut-loses-when-plateau-is-issue-bound (E +2, the last refutation-type); source riir-ai @ 59a172623 (committed state; the first in-source batch since Batch 63 -- the M3 prefill/decode campaign mined: Issues 768/771/779/831/843, numbers belong to Benches 774/790/804/831 and are cited as records); two verification lanes at the pin + coordinator spot-check (all VERIFIED); +3 riders on B01/B06/B57 + 2 arxiv riders discharged on B79 (2608.17641 breadth) and B82 (2608.01651 confirmation -- the land-with-next-adjacent-batch queue); recorded-not-landed: axis-swap refutation (S2:40-42), 4-arm ladder (B104 ethos), empty-partial identity (B35 grain).
     // Batch 110 (11): vLLM libtorch_stable distill (Research 133 / Plan 081) -- spin-barrier-needs-co-residency-capped-launch, ballot-matrix-tie-rank, m-group-shared-weight-scan-register-relief, row-parallelism-ladder-split-vs-pack (E +4), captured-graph-init-unconditional-and-stream-ordered, batch-invariance-locks-reduction-geometry (D +2), rope-pair-partner-via-cross-lane-shuffle, degenerate-selection-falls-back-to-identity-uniform (B +2), softmax-denominator-cancels-through-scale-invariant-norm (C +1), persistent-kernel-length-bucketed-mechanism-ladder (K +1), router-math-stays-fp32 (N +1); source vllm-project/vllm csrc/libtorch_stable @ 8277c42e4 (Apache-2.0, never mined); two inspection lanes + coordinator byte-verification of 13 lead quotes; the VERIFIED A-/B+ tier of a 25-candidate pool (the B-/C+ remainder = Batch 111); upstream hazard ledger in Research 133 (H1 silent tie-buffer overflow, H2 dispatch-no-default, H3 cross-tier router divergence).
+    // Batch 111 (11): vLLM libtorch_stable remainder + rider sweep (Research 133 / Plan 082) -- register-rotation-prefetch-loop, shared-operand-groups-per-warp, whole-row-register-resident-under-length-budget (A +3), grid-dependency-wait-scoped-to-dependent-operands, refine-by-rescan-prefix-filter-vs-buffered-ties (D +2), warp-aggregated-atomic-scatter, routing-by-precomputed-lookup (H +2), launch-heuristic-pinned-to-calibration-arch (K +1), lane-owned-topk-output (M +1), ue8m0-pow2-scale-as-biased-exponent-byte, coarse-precision-first-exact-refine (N +2); source re-cloned + re-pinned at 8277c42e4 at mine time (origin had moved to 16328c7a minutes before); lanes: rules #12-#20/#22/#25 LAND, #21 (noinline) + #23 (clamp-before-collective) KILLED as COVERAGE (B110 rules already carry them, same citations), #24 demoted to a RIDER on device-m-runtime-mblock-graph-stable-gemm; + 20 riders across 13 files (19 kernel_opt + weight-tile-consumption-order in rust_perf), incl. the hi/lo packed-u64 redux (B107), phase-counted barrier (B92 stripe), B57 union-across-phase + filler-thread barrier matching, stable-softplus third form (B98), loud-refusal third instance (B103), PDL capability gating (B105), measurement-revision + family-gated table (B104), and the H1 fit-guard contract encoded as refine-by-rescan-prefix-filter-vs-buffered-ties.
     assert_eq!(
         corpus.entries.len(),
-        505,
-        "kernel batches through Batch 110 should have 505 rules"
+        516,
+        "kernel batches through Batch 111 should have 516 rules"
     );
 }
 
@@ -1181,7 +1182,7 @@ fn batch22_cudarc_kernels_concepts_covered() {
     // B: warp-shuffle-intrinsics-for-sub-warp-reduction (riir-gpu cudarc_kernels/mod.rs L163-167 + attention.rs L336-344; + the Batch-100 Metal measured-cost rider)
     assert!(concepts.contains(&"for blocks of 32 threads or fewer (one warp), use __shfl_down_sync(mask, val, delta) butterfly reduction instead of shared memory + __syncthreads — the warp executes in lockstep (SIMT), so the shuffle is both correct and free (no smem allocation, no synchronization barrier). For the final 32-thread tail of a larger smem tree reduction, cast to volatile float* and skip __syncthreads — volatile prevents the compiler from caching stale values in registers. Measured Metal cost note (qwen-3.8-mtp-challenge kernel-research.md section 1.1 @ 0863b06a, Batch 100): simd_sum(f32) runs ~14.5 cycles throughput / ~28 latency vs ~2 for a shuffle — a per-(token, head) simd_sum is a real ALU cost in a GQA=8 pass-A inner loop (8 simd_sums per token per simdgroup); quad reductions are ~2x cheaper and a shuffle tree can beat the builtin — the shuffle-butterfly arm of this rule is the measured-cheap arm on Apple silicon as well, not only under the CUDA lockstep argument."));
     // C: fused-activation-quantize-for-gemv-consumer (riir-gpu cudarc_kernels/mod.rs L191-289 + L407-554)
-    assert!(concepts.contains(&"when an activation's output (RMSNorm, SwiGLU, gate*sigmoid, gate*silu) is immediately consumed by a GEMV that reads int8 (not f32), fuse the activation + per-block absmax reduction + int8 quantize into one kernel — eliminates the intermediate f32 HBM round-trip and one kernel launch. The activation is the non-trivial part (needs a reduction or exp); the quantize is the trivial part (absmax + scale + round)"));
+    assert!(concepts.contains(&"when an activation's output (RMSNorm, SwiGLU, gate*sigmoid, gate*silu) is immediately consumed by a GEMV that reads int8 (not f32), fuse the activation + per-block absmax reduction + int8 quantize into one kernel — eliminates the intermediate f32 HBM round-trip and one kernel launch. The activation is the non-trivial part (needs a reduction or exp); the quantize is the trivial part (absmax + scale + round) RIDER (Batch 111 external instance, vllm @ 8277c42e4 -- fused_kimi_k3_mla_key_concat_kv_cache_kernel.cu:15-24 + cache_kernels_fused.cu:108-145): the RoPE rotation is computed in-registers and the rotated pair is written DIRECTLY to its quantized cache slot in the producing kernel (qk_t rotate -> optional scaled_convert -> kv_cache_ptr[...]) -- the consumer-side quantize/store fused into the producer, three in-source kernel families (deepseek-v4, minimax-m3, kimi-k3)."));
     // D: cuda-graph-scalar-via-device-pointer (riir-gpu cudarc_kernels/embedding.rs L76-105 + attention.rs L421-610)
     assert!(concepts.contains(&"when capturing a CUDA graph, scalar kernel args (int pos, int row_idx) get baked into the captured graph at capture time — the graph replays the exact value on every launch and cannot change. Ship a _devpos variant that reads the scalar from a const device pointer dereferenced at kernel runtime; the caller writes the new value to a 4-byte device buffer via memcpy_htod on the same stream before graph.launch(), so the captured graph processes a different input each call"));
 }
@@ -1234,7 +1235,7 @@ fn batch23_attention_cubecl_concepts_covered() {
     // D: fold-query-tokens-for-occupancy (riir-gpu attention_cubecl/mod.rs L336-576 + L1552-1573)
     assert!(concepts.contains(&"when n_head < SM_count (small models, speculative decode with seq_len_q > 1), fold multiple query tokens into one workgroup to increase GPU occupancy. Each workgroup processes fold_factor query tokens sequentially for one head. fold_factor(n_head, seq_len_q, workgroup_size) picks the largest divisor of seq_len_q ≤ workgroup_size / n_head. Benefit: (n_head × fold) workgroups vs n_head → fills idle SMs during speculative decode"));
     // D: hardcoded-fast-path-jit-specialization (riir-gpu attention_cubecl/mod.rs L1313-1342)
-    assert!(concepts.contains(&"when kernel params match a known config (e.g. Gemma 2 2B: n_head=8, n_kv_head=4, head_dim=256, softcap=50.0), dispatch a hardcoded variant that bakes the constants into the kernel body — the JIT compiler can then constant-fold dimensions into optimized shaders (unrolled loops, known stride multiplies, eliminated per-tile branching). The generic parametric kernel reads dims from a buffer per dispatch, preventing constant-folding. Measured gain: ~24% decode throughput (31.4 → 41.4 tok/s on M3 Max Metal). Distinct from autotune-warps-stages (sweeps configs) — here the config is matched, not searched"));
+    assert!(concepts.contains(&"when kernel params match a known config (e.g. Gemma 2 2B: n_head=8, n_kv_head=4, head_dim=256, softcap=50.0), dispatch a hardcoded variant that bakes the constants into the kernel body — the JIT compiler can then constant-fold dimensions into optimized shaders (unrolled loops, known stride multiplies, eliminated per-tile branching). The generic parametric kernel reads dims from a buffer per dispatch, preventing constant-folding. Measured gain: ~24% decode throughput (31.4 → 41.4 tok/s on M3 Max Metal). Distinct from autotune-warps-stages (sweeps configs) — here the config is matched, not searched RIDER (Batch 111 external instance, vllm @ 8277c42e4 -- moe/topk_softmax_kernels.cu:679 + moe/topk_softplus_sqrt_kernels.cu:786): both MoE top-k launchers switch (num_experts) to dispatch per-count template instantiations -- the specialization axis on a second family (expert count rather than head count)."));
 }
 
 #[test]
@@ -1393,7 +1394,7 @@ fn batch26_wgpu_forward_concepts_covered() {
     // D: derive-params-from-global-invocation-id (riir-gpu forward/batched_dispatch.rs L280-350)
     assert!(concepts.contains(&"instead of writing a per-item parameter (query position, head index, row offset) to a uniform from the host — which under the write_buffer ordering bug forces an encoder + submit PER ITEM — encode the parameter in the dispatch grid: flatten (head, item) into workgroup IDs and derive it in-kernel from global_invocation_id. The batched attention path dispatches n_head × seq_len workgroups in ONE call with causal masking + GQA mapping computed inside the kernel — zero per-position uniform writes, zero per-position submits (vs the encoder-per-position fallback paying ~1 submit/position). Distinct from fold-query-tokens-for-occupancy (goal: fill idle SMs — here the goal is eliminating the host-side parameter channel) and from grid-stride-loop (iteration coverage — the grid IS the parameter)"));
     // D: merge-dispatches-into-single-compute-pass (riir-gpu forward/adapter_merge.rs L410-424 + L654-770)
-    assert!(concepts.contains(&"dependent dispatches queued in ONE compute pass (set_pipeline/set_bind_group/dispatch × N inside a single begin/end) execute in order with memory ordering between them — the consumer dispatch reads the producer's writes without a separate pass, and N−1 pass begin/end boundaries disappear. The QKV LoRA path merges 6 dispatches (3× A pass + 3× B pass) into one pass; pure input-save copies ride the copy channel (encoder.copy_buffer_to_buffer) outside any pass. Distinct from chain-dispatches-single-sync-point (command-buffer-level sync amortization) — this is pass-level merging; composes with per-slot-uniform-buffer-write-ordering (all uniform writes precede the pass, into per-slot buffers)"));
+    assert!(concepts.contains(&"dependent dispatches queued in ONE compute pass (set_pipeline/set_bind_group/dispatch × N inside a single begin/end) execute in order with memory ordering between them — the consumer dispatch reads the producer's writes without a separate pass, and N−1 pass begin/end boundaries disappear. The QKV LoRA path merges 6 dispatches (3× A pass + 3× B pass) into one pass; pure input-save copies ride the copy channel (encoder.copy_buffer_to_buffer) outside any pass. Distinct from chain-dispatches-single-sync-point (command-buffer-level sync amortization) — this is pass-level merging; composes with per-slot-uniform-buffer-write-ordering (all uniform writes precede the pass, into per-slot buffers) RIDER (Batch 111 external instance, vllm @ 8277c42e4 -- cache_kernels.cu:456-474): N per-layer cache inserts merge into ONE launch over a pointer-array workspace (grid = (num_tokens, num_layers), each layer rebinds its cache base from kv_cache_ptrs[layer]) -- the pointer-array indirection replacing per-layer launches."));
     // D: batched-downloads-single-sync-cycle (riir-gpu buffer.rs L263-280 — Issue 421 P0.5)
     assert!(concepts.contains(&"N GPU→CPU readbacks share ONE command encoder, ONE queue.submit, ONE map_async, and ONE device.poll(Wait) — pack each request into a contiguous, non-overlapping, 4-byte-aligned region of a single grow-only staging buffer, copy all sources in one encoder, map the whole range once, and slice per request. Sync overhead drops from N to 1 — the dominant cost in launch-overhead-bound paths (measured ~1.28 ms per sync regardless of data size; the 4-buffer LoRA-Muon step saves ~3.8 ms/step). Distinct from device-side-argmax-minimal-download (download SIZE) and chain-dispatches-single-sync-point (dispatch sync) — this is readback sync COUNT with the staging-layout + single-map mechanics"));
     // D: chunk-encoder-submits-below-driver-limit (riir-gpu forward/mod.rs L1403-1411 + L1456-1458)
@@ -5296,7 +5297,7 @@ fn kernel_categories_table_has_15_entries() {
 
 #[test]
 fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-    // Every rule_id in the 505-rule corpus must appear in exactly one category.
+    // Every rule_id in the 516-rule corpus must appear in exactly one category.
     let corpus = build_kernel_seed_corpus();
     let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     let mut categorized: Vec<&str> = Vec::new();
@@ -5339,22 +5340,22 @@ fn kernel_categories_cover_all_corpus_rules_exhaustively() {
 
 #[test]
 fn kernel_categories_counts_match_plan_003_table() {
-    // Pin per-category rule counts to the Plan 003 table (updated for Batch 110).
+    // Pin per-category rule counts to the Plan 003 table (updated for Batch 111).
     let expected = [
-        (KernelCategory::MemoryAccess, 109),
+        (KernelCategory::MemoryAccess, 112),
         (KernelCategory::Compute, 59),
         (KernelCategory::Fusion, 44),
-        (KernelCategory::Dispatch, 114),
+        (KernelCategory::Dispatch, 116),
         (KernelCategory::Parallelism, 41),
         (KernelCategory::FlashAttnTiling, 12),
         (KernelCategory::LinearAttnRecurrence, 27),
-        (KernelCategory::MoeDispatchBackward, 21),
+        (KernelCategory::MoeDispatchBackward, 23),
         (KernelCategory::NsaBlockSparse, 4),
         (KernelCategory::VarlenChunkedReduction, 5),
-        (KernelCategory::AutotuneDispatch, 8),
+        (KernelCategory::AutotuneDispatch, 9),
         (KernelCategory::ConvGemmLayout, 13),
-        (KernelCategory::KernelPolymorphism, 14),
-        (KernelCategory::DtypeAlignment, 30),
+        (KernelCategory::KernelPolymorphism, 15),
+        (KernelCategory::DtypeAlignment, 32),
         (KernelCategory::IrStrengthReduction, 4),
     ];
     for (cat, count) in expected {
@@ -5369,9 +5370,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 505.
+    // Sum must equal 516.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 505, "Plan 003: category totals must sum to 505");
+    assert_eq!(total, 516, "Plan 003: category totals must sum to 516");
 }
 
 #[test]
@@ -5382,8 +5383,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 505,
-        "Plan 003: grouped corpus has {total} rules, expected 505"
+        total, 516,
+        "Plan 003: grouped corpus has {total} rules, expected 516"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -8435,5 +8436,360 @@ fn batch97_mxfp4_half_band_exhaustive_oracle() {
             "legacy arm must yield NaN-class bits for the 0xff row (q={q})"
         );
         assert_eq!(candidate(0xff, q), l);
+    }
+}
+
+#[test]
+fn batch111_rules_present() {
+    // Batch 111 (vLLM libtorch_stable remainder + rider sweep --
+    // Research 133 / Plan 082): 11 kernel_opt rules (#12-#20, #22,
+    // #25 of the verdict table), source re-cloned + re-pinned at
+    // 8277c42e4 at mine time (origin had moved to 16328c7a minutes
+    // before). Dispositions at mine time: #21 (noinline rare path)
+    // and #23 (clamp-before-collective) KILLED as COVERAGE -- B110's
+    // persistent-kernel-length-bucketed-mechanism-ladder protection
+    // (b) and spin-barrier companion contract already carry them with
+    // the same source citations; #24 (capture-stable grid shape)
+    // demoted to a RIDER on device-m-runtime-mblock-graph-stable-gemm
+    // (B92 owns the capture-stable core). +20 riders across 13 files
+    // (the Research 133 rider inventory, all located with quotes).
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "grid-dependency-wait-scoped-to-dependent-operands",
+        "ue8m0-pow2-scale-as-biased-exponent-byte",
+        "register-rotation-prefetch-loop",
+        "shared-operand-groups-per-warp",
+        "launch-heuristic-pinned-to-calibration-arch",
+        "warp-aggregated-atomic-scatter",
+        "refine-by-rescan-prefix-filter-vs-buffered-ties",
+        "coarse-precision-first-exact-refine",
+        "whole-row-register-resident-under-length-budget",
+        "lane-owned-topk-output",
+        "routing-by-precomputed-lookup",
+    ];
+    for id in ids {
+        assert!(
+            corpus.entries.iter().any(|e| e.rule_id == id),
+            "batch-111 rule '{id}' missing from corpus"
+        );
+    }
+}
+
+#[test]
+#[allow(clippy::too_many_lines)]
+fn batch111_concepts_covered() {
+    // Distinctness + mandated phrases must survive in the concept
+    // text (case-sensitive contains -- the B51 lesson). The needles
+    // were asserted by the generator at authoring time; this gate
+    // pins them against corpus drift.
+    let corpus = build_kernel_seed_corpus();
+    let checks: &[(&str, &[&str])] = &[
+        (
+            "grid-dependency-wait-scoped-to-dependent-operands",
+            &[
+                "CONSERVATIVE TOP",
+                "ONCE-FLAG",
+                "skip the wait entirely",
+                "must not fire before this kernel's stores are issued",
+                "No-op when PDL is not enabled on the launch",
+                "wait as late as the data dependency allows",
+            ],
+        ),
+        (
+            "ue8m0-pow2-scale-as-biased-exponent-byte",
+            &[
+                "floor absmax",
+                "the CEILING is the",
+                "exponent-field bump",
+                "7 real + 1 pad",
+                "EXACT power of two",
+                "Issue-845 PoT kin",
+            ],
+        ),
+        (
+            "register-rotation-prefetch-loop",
+            &[
+                "register-only rung",
+                "no shared memory, no cp.async",
+                "has_next boolean",
+                "Buffer rotation",
+                "DRAM-bandwidth-bound",
+                "the stall merely moves",
+            ],
+        ),
+        (
+            "shared-operand-groups-per-warp",
+            &[
+                "operand-affinity axis",
+                "wait_group<1>",
+                "first head's RoPE",
+                "heads of one token share",
+                "a front wait_group<0> is the ref shape",
+                "ordered by consumer dependency",
+            ],
+        ),
+        (
+            "launch-heuristic-pinned-to-calibration-arch",
+            &[
+                "calibrated on",
+                "until profiled",
+                "CONSERVATIVE baseline",
+                "sm_version == 90",
+                "B104's ref_shape IS this rule's naive shape",
+                "refuses to extrapolate at all",
+            ],
+        ),
+        (
+            "warp-aggregated-atomic-scatter",
+            &[
+                "ONE leader atomicAdd",
+                "O(hits)",
+                "O(warps)",
+                "ANTI-INSTANCE",
+                "lanemask_lt",
+                "lanes land in lane order",
+            ],
+        ),
+        (
+            "refine-by-rescan-prefix-filter-vs-buffered-ties",
+            &[
+                "SILENTLY DROPS",
+                "measure the bin size",
+                "bit-prefix",
+                "written smem tie_buffer entries",
+                "the H1 hazard comment",
+                "single-pass-vs-streaming third instance",
+            ],
+        ),
+        (
+            "coarse-precision-first-exact-refine",
+            &[
+                "LOSSY coarse key",
+                "order-preserving",
+                "from the ORIGINAL f32",
+                "may only DISCRIMINATE bins, never rank within them",
+                "per-type",
+                "f16-rounding collision band",
+            ],
+        ),
+        (
+            "whole-row-register-resident-under-length-budget",
+            &[
+                "register budget",
+                "load the row ONCE",
+                "(idx, score) pairs",
+                "the fallback is the correct arm",
+                "16384",
+                "if forcing residency spills registers",
+            ],
+        ),
+        (
+            "lane-owned-topk-output",
+            &[
+                "result k is parked on lane k",
+                "LaneOwnedResourcesFit",
+                "512..=1024 experts",
+                "PER-LANE DIVERGENT follow-up",
+                "Zero post-reduction gather",
+                "an extra exchange the broadcast never paid",
+            ],
+        ),
+        (
+            "routing-by-precomputed-lookup",
+            &[
+                "deterministic function of token IDENTITY",
+                "6 gather loads",
+                "sentinel check",
+                "never a silent miss",
+                "a stale table is silently wrong",
+                "recomputes only the gate WEIGHTS",
+            ],
+        ),
+    ];
+    for (id, needles) in checks {
+        let e = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == *id)
+            .unwrap_or_else(|| panic!("batch-111 rule '{id}' missing"));
+        for needle in *needles {
+            assert!(
+                e.gpu_concept.contains(needle),
+                "batch-111 concept for '{id}' missing phrase '{needle}'"
+            );
+        }
+    }
+}
+
+#[test]
+#[cfg(not(feature = "kernel_verify"))]
+fn batch111_pseudocode_parses() {
+    // G1 for Batch 111: syn-parse gate (the vLLM remainder rules).
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "grid-dependency-wait-scoped-to-dependent-operands",
+        "ue8m0-pow2-scale-as-biased-exponent-byte",
+        "register-rotation-prefetch-loop",
+        "shared-operand-groups-per-warp",
+        "launch-heuristic-pinned-to-calibration-arch",
+        "warp-aggregated-atomic-scatter",
+        "refine-by-rescan-prefix-filter-vs-buffered-ties",
+        "coarse-precision-first-exact-refine",
+        "whole-row-register-resident-under-length-budget",
+        "lane-owned-topk-output",
+        "routing-by-precomputed-lookup",
+    ];
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-111 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            ref_verdict.parses,
+            "batch-111 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            opt_verdict.parses,
+            "batch-111 opt_pattern for '{id}' must parse"
+        );
+    }
+}
+
+#[test]
+fn batch111_ue8m0_byte_contract() {
+    // GOAT lead gate for Batch 111: the UE8M0 biased-exponent byte
+    // encoding of ue8m0-pow2-scale-as-biased-exponent-byte, pinned as
+    // a pure function of (absmax, fp8_max). Contract halves (each
+    // from the source's own arithmetic):
+    //   (1) the 1e-4 FLOOR keeps log2 finite -- absmax 0 must encode
+    //       to a real byte, never NaN/-inf (which would clamp to 0 =
+    //       scale 2^-127 and corrupt every dequant);
+    //   (2) the CEILING guarantees the scaled payload fits the fp8
+    //       range: absmax * decode(byte) <= fp8_max (up to fp
+    //       epsilon) for every input;
+    //   (3) decode is an EXACT power of two (2^(byte-127)) -- assert
+    //       bit-exact against an integer shift in the exact range;
+    //   (4) clamp bounds: extreme inputs saturate into [0, 255];
+    //   (5) monotonicity: byte is non-decreasing in absmax;
+    //   (6) NON-VACUITY: a swept input range produces MANY distinct
+    //       bytes (a constant byte would make the whole contract
+    //       vacuous -- the planted-degenerate-input discipline).
+    fn encode(absmax_raw: f32, fp8_max: f32) -> u8 {
+        let absmax = absmax_raw.max(1e-4); // floor: log2 never sees 0
+        let exponent = (absmax / fp8_max).log2().ceil();
+        // the clamp makes the f32->u8 cast exact; the cast IS the encoding
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        {
+            (exponent + 127.0).clamp(0.0, 255.0) as u8
+        }
+    }
+    fn decode(byte: u8) -> f32 {
+        // u8 -> i32 is infallible; the subtraction is the unbias step
+        #[allow(clippy::cast_possible_wrap)]
+        2.0f32.powi(byte as i32 - 127) // exact power of two
+    }
+
+    const FP8_MAX: f32 = 448.0; // e4m3 max (the source's non-ROCm arm)
+
+    // (6) non-vacuity first: sweep absmax over ~30 decades by
+    // varying the EXPONENT FIELD directly (random mantissa per
+    // exponent) and count distinct bytes. A bit-sweep that only
+    // perturbs mantissa bits floors to 1e-4 and collapses to ONE
+    // byte -- the vacuity guard exists to catch exactly that
+    // fixture bug (it caught the first draft of this sweep).
+    let mut distinct = std::collections::BTreeSet::new();
+    let mut x: u32 = 0x1234_5678;
+    for biased_exp in 90u32..=200u32 {
+        // 2^(biased_exp - 127) spans ~2^-37 .. 2^73; bytes below the
+        // 1e-4 floor collapse (by design) and bytes above the clamp
+        // saturate at 255, so the informative band is ~105..=255.
+        for _ in 0..64 {
+            x = x.wrapping_mul(1_103_515_245).wrapping_add(12_345);
+            let bits = (biased_exp << 23) | (x & 0x007F_FFFF); // exp + random mantissa
+            let absmax = f32::from_bits(bits);
+            if absmax.is_finite() && absmax > 0.0 {
+                distinct.insert(encode(absmax, FP8_MAX));
+            }
+        }
+    }
+    assert!(
+        distinct.len() >= 64,
+        "UE8M0 encoding collapsed to {} distinct bytes over the sweep -- vacuous",
+        distinct.len()
+    );
+
+    // (1) the floor: absmax 0 encodes to the 1e-4 byte, never the
+    // saturating 0 byte.
+    let b_zero = encode(0.0, FP8_MAX);
+    assert_eq!(b_zero, encode(1e-4, FP8_MAX), "floor must absorb 0");
+    assert_ne!(b_zero, 0, "floor failed: absmax 0 saturated to byte 0");
+
+    // (2) the ceiling guarantee over the whole sweep incl. the floor
+    // boundary and extremes: absmax * scale <= fp8_max (epsilon slack
+    // for the f32 division).
+    let mut probe: Vec<f32> = vec![0.0, 1e-4, 1e-3, 0.5, 1.0, 448.0, 449.0, 1e6, 1e30, f32::MAX];
+    let mut lcg: u32 = 0x1234_5678;
+    for _ in 0..2048 {
+        lcg = lcg.wrapping_mul(1_103_515_245).wrapping_add(12_345);
+        let bits = lcg >> 2;
+        let v = f32::from_bits(bits) * 1.0e12;
+        if v.is_finite() {
+            probe.push(v.abs());
+        }
+    }
+    for &absmax in &probe {
+        if !absmax.is_finite() {
+            continue;
+        }
+        let b = encode(absmax, FP8_MAX);
+        let dequant_scale = decode(b); // 2^exponent: undoes the store
+        let scaled = absmax / dequant_scale; // what lands in the fp8 payload
+        assert!(
+            scaled <= FP8_MAX * (1.0 + 1e-4),
+            "ceiling violated: absmax {absmax:e} -> byte {b} -> scaled {scaled:e} > {FP8_MAX}"
+        );
+        // Tightness: the CEILING (not round) means one octave of
+        // headroom at most -- the encoding never wastes more than
+        // 1 bit of the payload's exponent range. Only meaningful
+        // ABOVE the floor: a floored input (absmax < 1e-4, incl. 0)
+        // legitimately lands far below the range top -- the floor
+        // exists to give subnormal-scale inputs a usable exponent.
+        if absmax >= 1e-4 {
+            assert!(
+                scaled > FP8_MAX * 0.25,
+                "overshot: absmax {absmax:e} -> byte {b} -> scaled {scaled:e} << {FP8_MAX}"
+            );
+        }
+    }
+
+    // (3) decode is an exact power of two: bit-exact against the
+    // IEEE biased-exponent construction for bytes whose exponent is
+    // in the exact-f32 normal range (biased_exp = byte itself).
+    for b in 111..=143u8 {
+        let expect = f32::from_bits((b as u32) << 23); // 2^(b-127) exactly
+        assert_eq!(
+            decode(b).to_bits(),
+            expect.to_bits(),
+            "decode({b}) is not the exact power of two 2^{}",
+            b as i32 - 127
+        );
+    }
+
+    // (4) clamp bounds.
+    assert_eq!(encode(f32::MAX, 1e-30), 255, "huge absmax must saturate at 255");
+    assert_eq!(encode(0.0, f32::MAX), encode(1e-4, f32::MAX), "floor arm at extreme fp8_max");
+
+    // (5) monotonicity over an ordered probe.
+    let mut prev = 0u8;
+    let mut v = 1e-4f32;
+    while v < 1e12 {
+        let b = encode(v, FP8_MAX);
+        assert!(b >= prev, "byte regressed at absmax {v:e}: {b} < {prev}");
+        prev = b;
+        v *= 1.7;
     }
 }
