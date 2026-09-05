@@ -8689,8 +8689,7 @@ fn batch111_ue8m0_byte_contract() {
     }
     fn decode(byte: u8) -> f32 {
         // u8 -> i32 is infallible; the subtraction is the unbias step
-        #[allow(clippy::cast_possible_wrap)]
-        2.0f32.powi(byte as i32 - 127) // exact power of two
+        2.0f32.powi(i32::from(byte) - 127) // exact power of two
     }
 
     const FP8_MAX: f32 = 448.0; // e4m3 max (the source's non-ROCm arm)
@@ -8770,12 +8769,12 @@ fn batch111_ue8m0_byte_contract() {
     // IEEE biased-exponent construction for bytes whose exponent is
     // in the exact-f32 normal range (biased_exp = byte itself).
     for b in 111..=143u8 {
-        let expect = f32::from_bits((b as u32) << 23); // 2^(b-127) exactly
+        let expect = f32::from_bits(u32::from(b) << 23); // 2^(b-127) exactly
         assert_eq!(
             decode(b).to_bits(),
             expect.to_bits(),
             "decode({b}) is not the exact power of two 2^{}",
-            b as i32 - 127
+            i32::from(b) - 127
         );
     }
 

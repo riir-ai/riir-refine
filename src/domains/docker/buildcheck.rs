@@ -46,9 +46,24 @@
 //! finding list. "We could not check" and "we checked and it was clean"
 //! stay different facts.
 
-use std::io::Write;
+use std::io::{Read, Write};
 use std::process::{Command, Stdio};
 use std::sync::OnceLock;
+use std::time::Duration;
+
+/// Hard wall-clock cap on ONE `docker build --check` invocation.
+///
+/// Measured healthy cost is ~0.2 s (`FROM scratch`) to ~2.2 s (a registry
+/// base, which does not warm). This cap is ~50x the slowest healthy call,
+/// so it can never fire on a working daemon — it exists for the state
+/// where the docker CLI **hangs instead of failing**. Measured live
+/// (2026-09-05, Docker Desktop 4.87 with a wedged credential helper):
+/// `docker-credential-desktop` blocks forever in `open()`, every
+/// `build --check` on a non-`scratch` base inherits that hang, and the
+/// oracle (plus any gate behind it) stalls until an OUTER timeout kills
+/// the whole run. A hang is worse than [`CheckRun::Unavailable`]: it
+/// converts "not checked" into "never finished checking".
+const CALL_TIMEOUT: Duration = Duration::from_secs(120);
 
 /// One `BuildKit` check finding, reduced to what the agreement gate needs.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -105,6 +120,11 @@ and passed'."
 /// Nothing is written to the repo and no image is produced — `--check` is a
 /// parse-and-lint pass. A registry round-trip still happens for any base
 /// image that is not `scratch`; that is `BuildKit`'s behavior, not ours.
+/// The invocation is bounded by [`CALL_TIMEOUT`]; on timeout the child is
+/// killed and the run degrades to [`CheckRun::Unavailable`] — the
+/// "check-by-hang" failure mode (a wedged credential helper blocks the
+/// CLI forever) must not be distinguishable from a pass by anyone
+/// waiting on us.
 #[must_use]
 pub fn build_check(source: &str) -> CheckRun {
     if !available() {
@@ -131,7 +151,13 @@ pub fn findings(source: &str) -> Option<Vec<BuildCheckFinding>> {
     }
 }
 
-/// Spawn the oracle. `None` only when the process could not be run at all.
+/// Spawn the oracle under [`CALL_TIMEOUT`]. `None` when the process could
+/// not be run at all OR outlived the cap (killed) — the caller degrades
+/// that to [`CheckRun::Unavailable`], because a hang is "not checked",
+/// never a pass. `wait_with_output` has no timeout form, and a piped
+/// `kill` without draining can deadlock the child on a full pipe buffer,
+/// so the pipes are drained on worker threads while the deadline is
+/// polled with `try_wait`.
 fn run_raw(source: &str) -> Option<(i32, String, String)> {
     let mut child = Command::new("docker")
         .args(["build", "--check", "-"])
@@ -143,11 +169,51 @@ fn run_raw(source: &str) -> Option<(i32, String, String)> {
     child.stdin.as_mut()?.write_all(source.as_bytes()).ok()?;
     // Drop the handle so the child sees EOF; otherwise it waits on stdin.
     drop(child.stdin.take());
-    let out = child.wait_with_output().ok()?;
+
+    let mut stdout = child.stdout.take()?;
+    let mut stderr = child.stderr.take()?;
+    // Drain both pipes on worker threads so a full pipe buffer can never
+    // block the child while we enforce the deadline.
+    let (out_tx, out_rx) = std::sync::mpsc::channel();
+    let (err_tx, err_rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let mut buf = Vec::new();
+        let _ = stdout.read_to_end(&mut buf);
+        let _ = out_tx.send(buf);
+    });
+    std::thread::spawn(move || {
+        let mut buf = Vec::new();
+        let _ = stderr.read_to_end(&mut buf);
+        let _ = err_tx.send(buf);
+    });
+
+    let start = std::time::Instant::now();
+    let status = loop {
+        if let Some(status) = child.try_wait().ok().flatten() {
+            break status;
+        }
+        if start.elapsed() >= CALL_TIMEOUT {
+            let _ = child.kill();
+            let _ = child.wait();
+            eprintln!(
+                "docker_buildcheck: invocation exceeded the {CALL_TIMEOUT:?} cap and was killed — \
+degrading to Unavailable (a hang is 'not checked', never a pass)"
+            );
+            return None;
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    };
+
+    let out = out_rx
+        .recv_timeout(Duration::from_secs(5))
+        .unwrap_or_default();
+    let err = err_rx
+        .recv_timeout(Duration::from_secs(5))
+        .unwrap_or_default();
     Some((
-        out.status.code().unwrap_or(-1),
-        String::from_utf8_lossy(&out.stdout).into_owned(),
-        String::from_utf8_lossy(&out.stderr).into_owned(),
+        status.code().unwrap_or(-1),
+        String::from_utf8_lossy(&out).into_owned(),
+        String::from_utf8_lossy(&err).into_owned(),
     ))
 }
 

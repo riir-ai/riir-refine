@@ -129,6 +129,24 @@ if [ -n "$_TIMEOUT_BIN" ]; then
     "$_TIMEOUT_BIN" "$LAYER_5C_TIMEOUT_SECS" cargo test --all-features --tests 2>&1 | tee "$RUNLOG"
     _5C_RC=${PIPESTATUS[0]}
     set -e
+    # Per-test wall-clock probe: a single test burning a large share of the
+    # layer budget is named here, because the layer-level "exceeded Ns" only
+    # says WHICH TARGET was last started, not WHICH TEST hung. Measured live
+    # (2026-09-05, Docker Desktop cred-helper wedge): docker_tier2_buildcheck's
+    # agreement test sat >25 min in ONE `docker build --check` invocation
+    # whose CLI blocked forever in `open()` — the in-crate CALL_TIMEOUT now
+    # converts that to a loud FAIL; this line names any OTHER test that ever
+    # wedges the same way, before the whole layer burns.
+    awk '
+        /has been running for over/ && /^test / {
+            s = $2; for (i = 3; i < NF; i++) s = s " " $i;
+            sub(/ has been running for over.*/, "", s);
+            sub(/\.\.\.$/, "", s);
+            print s
+        }
+    ' "$RUNLOG" | sort -u | while IFS= read -r slow; do
+        echo "  ⚠ slow test (libtest watchdog fired ≥60s): $slow"
+    done
     if [ "$_5C_RC" = 124 ]; then
         echo
         echo "✗ Layer 5c exceeded ${LAYER_5C_TIMEOUT_SECS}s and was killed."
@@ -196,7 +214,7 @@ fi
 echo "  instrument check: $OBSERVED_TARGETS/$EXPECTED_TARGETS targets observed"
 
 ZERO_TEST_TARGETS="$(awk '
-    /^ +Running tests[\\/]/ { t = $2 }
+    /^ +Running tests/ { t = $2 }
     /^running 0 tests$/  { if (t != "") { print t; t = "" } }
 ' "$RUNLOG")"
 if [ -n "$ZERO_TEST_TARGETS" ]; then

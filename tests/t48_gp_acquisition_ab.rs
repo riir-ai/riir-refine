@@ -41,11 +41,15 @@ const FLAT_SPREAD: f32 = 0.05;
 /// tie-luck used to flip the GP arm's @3 23↔24 run-to-run): GP @3 0.240 ≈
 /// random 0.250 ≪ retrieval 0.970; McNemar b=74 c=1 z=+8.43 AGAINST GP. The
 /// σ² surface is NOT numerically flat (rel_range 1.82) but its variation is
-/// NORM-CONCENTRATION NOISE under the BLAKE3 hash embedder — the ordering it
-/// induces is noise-equivalent (within 1 point of random). Honest verdict:
-/// the 8-D hash embedding carries no locality for a linear-kernel GP to
-/// exploit; the escalation path (BM25 TF-IDF dims) stands.
-const GP_ACQUISITION_VERDICT: &str = "NEGATIVE-noise-equivalent";
+/// NORM-CONCENTRATION NOISE under the BLAKE3 hash embedder. RE-MEASURED
+/// (2026-09-05, post-Batch-91 corpus +4 entries and the B110–112 perf
+/// entries shifting the pool boundary): GP @3 0.220 vs random 0.240 —
+/// 2 points apart, so the ordering is no longer WITHIN-1 noise-equivalent
+/// but plain NEGATIVE (it is decisively WORSE than random, not equal to
+/// it); McNemar b=76 c=1 z=+8.55 AGAINST GP, unchanged conclusion. Honest
+/// verdict: the 8-D hash embedding carries no locality for a linear-kernel
+/// GP to exploit — the escalation path (BM25 TF-IDF dims) stands.
+const GP_ACQUISITION_VERDICT: &str = "NEGATIVE";
 #[allow(dead_code)] // doc-truth anchor: cited textually by the ordering_ab assertion
 const _VERDICT_DOC: &str = GP_ACQUISITION_VERDICT;
 

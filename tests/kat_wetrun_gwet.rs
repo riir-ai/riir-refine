@@ -214,8 +214,17 @@ impl WetrunTransport for MockService {
     fn post_sync(&self, ndjson: &str) -> HttpResponse {
         self.note("POST /sync");
         assert!(!ndjson.is_empty(), "an empty payload is not a push");
+        // The REAL service's ingest answer (kat-service `mining_route`, its
+        // contract test is the authority): `accepted:true` + `recorded` (the
+        // legacy synonym) + `rows_new`. The tightened sync-leg gate refuses a
+        // 200 without `accepted:true`, so the healthy arm must carry the
+        // full real shape — `recorded` alone is the stale-contract shape the
+        // gate exists to catch.
         match self.sync_recorded {
-            Some(n) => Self::ok(&serde_json::json!({"recorded": n})),
+            Some(n) => Self::ok(&serde_json::json!({
+                "accepted": true, "recorded": n, "rows_new": n,
+                "rows_refreshed": 0, "rows_terminal_skipped": 0
+            })),
             None => Self::ok(&serde_json::json!({"accepted": true})),
         }
     }
@@ -462,10 +471,14 @@ fn an_issue_010_treasury_skip_fails_loudly_and_never_retries() {
     assert!(d.contains("TREASURY_GRANT_FLOOR_DEFAULT"), "{d}");
     assert!(d.contains("MAX_SUPPLY_PLACEHOLDER"), "{d}");
     assert!(d.contains("skipped_treasury"), "{d}");
-    assert!(d.contains("STRUCTURALLY UNREACHABLE"), "{d}");
-    assert!(d.contains("NOT retryable"), "{d}");
-    assert!(d.contains("OWNER act"), "{d}");
-    assert!(d.contains("explicitly lowered"), "{d}");
+    // The T4.4a two-cause split vocabulary (f5cce1e): the legacy phrases
+    // (STRUCTURALLY UNREACHABLE / NOT retryable / OWNER act) were replaced —
+    // the diagnostic now names BOTH causes (config defect vs unfunded
+    // treasury) and the ops fund route that fixes the second.
+    assert!(d.contains("not a transient"), "{d}");
+    assert!(d.contains("UNFUNDED TREASURY"), "{d}");
+    assert!(d.contains("/admin/treasury/fund"), "{d}");
+    assert!(d.contains("treasury-ONLY"), "{d}");
 
     // ONE crank attempt, ONE faucet request. A retry loop here would burn
     // the per-account daily cap and still never settle.
@@ -637,11 +650,14 @@ fn a_payload_below_the_redact_floor_is_refused_rather_than_pushed() {
     );
 }
 
-/// A 200 without a `recorded` count is NOT a successful push, and a partial
-/// record is not one either.
+/// A 200 that cannot confirm WHAT was recorded (no `accepted:true`, no
+/// per-row counts, or a partial record) is NOT a successful push.
 #[test]
 fn a_sync_that_cannot_confirm_the_record_is_not_a_pass() {
-    for (recorded, needle) in [(None, "without a `recorded` count"), (Some(1), "partial record")] {
+    for (recorded, needle) in [
+        (None, "carried no per-row counts"),
+        (Some(1), "partial record"),
+    ] {
         let mut mock = MockService::new(CrankScript::SettlesFromTreasury);
         mock.sync_recorded = recorded;
         let mut legs = ScriptedLegs::healthy();

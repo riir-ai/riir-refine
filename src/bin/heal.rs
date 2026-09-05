@@ -554,23 +554,20 @@ fn run_kat_sync() {
                             // is already in place). The mining ingest and
                             // the ledger grant are different DOs, so the
                             // push alone never produced the grant row.
-                            match account.signing_key() {
-                                Ok(key) => {
-                                    if let Some(acct) = riir_clippy::kat_account_client::service_account_hex(
-                                        &account.state().account_id,
-                                    ) {
-                                        let payreq = riir_clippy::kat_payreq_client::HttpPayreqTransport::new(&url, 10);
-                                        match riir_clippy::kat_payreq_client::ensure_grant_flow(&payreq, &key, acct) {
-                                            Ok(Some(claim)) if !claim.already => println!(
-                                                "sync: free-tier grant claimed ({} micro)",
-                                                claim.claimed_micro
-                                            ),
-                                            Ok(_) => {}
-                                            Err(e) => println!("sync: grant not claimed — {e}"),
-                                        }
+                            if let Ok(key) = account.signing_key() {
+                                if let Some(acct) = riir_clippy::kat_account_client::service_account_hex(
+                                    &account.state().account_id,
+                                ) {
+                                    let payreq = riir_clippy::kat_payreq_client::HttpPayreqTransport::new(&url, 10);
+                                    match riir_clippy::kat_payreq_client::ensure_grant_flow(&payreq, &key, acct) {
+                                        Ok(Some(claim)) if !claim.already => println!(
+                                            "sync: free-tier grant claimed ({} micro)",
+                                            claim.claimed_micro
+                                        ),
+                                        Ok(_) => {}
+                                        Err(e) => println!("sync: grant not claimed — {e}"),
                                     }
                                 }
-                                Err(_) => {}
                             }
                             // Real acceptance → advance the watermark (the
                             // pushed rows are no longer "pending-unsynced").
