@@ -93,20 +93,42 @@ The verdict MUST name the single strongest benchable candidate and test it again
 3. **Magnitude story** — a mechanism-level cycle/instruction/allocation argument (hardware div 20-40+ cycles vs mul+shift ~5), not "probably faster".
 4. **Deterministic** — same input, same output, no timing-dependent verdicts.
 
-If no candidate passes all four, the source is MARGINAL at best — say so.
+If no candidate passes all four, the source is MARGINAL **as a corpus batch** at best — say so, then run the lane-intel axis below before recording: a corpus-MARGINAL source can still be the highest-value verdict of the session when it maps onto an open perf lane (the qwen38-recipe precedent).
+
+## The lane-intel axis — MANDATORY second output (added 2026-09-05, the qwen38-recipe miss)
+
+The corpus grade answers ONE question: "how many rules does this source feed riir-clippy?" It does NOT answer "does this source move one of the workspace's OPEN perf lanes?" — and a source can be corpus-MARGINAL while its lane intelligence is the single most valuable thing in it. The qwen38-flash-6bit-m3-ultra-recipe verdict (2026-09-05) was graded C+/MARGINAL correctly on the corpus axis and simultaneously filed the owner-challenged finding — a production-qualified instance of the ANE-GDN configuration our own Bench 775/779 named as the sign-flip path for the open Issue 769 lane — as a conversation footnote. That was the miss this section exists to prevent.
+
+**For EVERY verdict on a perf-relevant source, BEFORE recording, map the source's techniques against the workspace's open lanes:**
+
+1. Read the league durable record (`../riir-ai/.docs/09_performance/perf_rematch_league.md`) scoreboard — which rows FAIL and by how much (prefill 0.53–0.57× vs llama.cpp at the 2026-09 regate; decode WON).
+2. Grep the target lane's open issues (`../riir-ai/.issues/*.md` for M3/GPU lanes) for the source's mechanism keywords (e.g. ANE, offload, prefill, quant).
+3. Check the source-shelf docs (`../riir-ai/.docs/09_performance/*sources*.md`) — a named-unmined-lead row pointing at this source family is a STRONG prior that the distill should run even if the repo looks small.
+
+**If a mapping to an open lane exists, the verdict MUST produce — regardless of corpus grade:**
+
+- A dated **league/lane-intel line in the mining queue snapshot** (`.distill/001_mining_queue_snapshot.md`) recording: the mapped lane + issue numbers, the source's config/mechanism deltas vs our measured-negative config, what is NOT transferable (with the measured negative that closes it), and the offered follow-up (targeted distill / re-arm probe / issue addendum).
+- A recommendation to **file or update the target issue** with the reference design (config deltas, pin sha) — the verdict alone does not update sibling-repo issues; it names the file and the content.
+- The absolute-numbers caveat: a serving recipe's tok/s on different silicon / different model / different quant is NOT headroom evidence — only the same-box league cells own that comparison.
+
+**Corpus-MARGINAL + lane-mapped is a valid combined verdict.** It produces the lane-intel artifacts above but NOT a mining batch. Do not let a C+ corpus grade suppress a lane mapping; do not let a lane mapping inflate the corpus grade.
+
+**Source-class note:** serving-recipe / measured-config repos (env-gated patches around someone else's runtime, JSON tuning tables, benchmark JSONs) are corpus-MARGINAL by construction — their unit of value is the QUALIFIED CONFIGURATION, not kernels. Grade them on the lane axis; mine them only when a component survives the dedup gate as a new rule.
 
 ## Verdict format — exact output shape, in conversation
 
-1. **Verdict line** — YES / NO / MARGINAL + letter grade (A, B+, B, C).
+1. **Verdict line** — YES / NO / MARGINAL + letter grade, PLUS the lane-intel verdict when the axis fires (e.g. "MARGINAL C+ corpus / LEAGUE INTEL HIGH").
 2. **Domain routing** — target corpus + category, explicitly naming the tempting WRONG domain (the CPU-SIMD-is-not-kernel_opt trap).
-3. **Ranked candidate table** — pattern | source file | grade | notes. Include the Drop rows (killed candidates) for transparency.
-4. **Yield estimate** — expected rules landing after ~50% coordinator falsification.
-5. **Honest caveats** — WIP status, provenance, maintenance, consumer-base narrowness, unread files.
-6. **Bottom line** — "mine as one batch (next batch number), lead with `<GOAT rule>`" + offer to add to the mining queue.
+3. **Lane mapping** — when the axis fires: mapped lane + issues, transferable vs not-transferable (each with its measured negative), follow-up offered.
+4. **Ranked candidate table** — pattern | source file | grade | notes. Include the Drop rows (killed candidates) for transparency.
+5. **Yield estimate** — expected rules landing after ~50% coordinator falsification.
+6. **Honest caveats** — WIP status, provenance, maintenance, consumer-base narrowness, unread files.
+7. **Bottom line** — "mine as one batch (next batch number), lead with `<GOAT rule>`" + offer to add to the mining queue; or the lane-intel follow-up when corpus-MARGINAL.
 
 ## Recording the verdict
 
-- **NO / MARGINAL** → conversation only. No files, no queue entry.
+- **NO / MARGINAL, no lane mapping** → conversation only. No files, no queue entry.
+- **NO / MARGINAL, WITH lane mapping** → the lane-intel line in the queue snapshot (committed, `docs:` prefix) + the issue-filing recommendation recorded in that line. No research note, no plan, no corpus batch.
 - **YES (grade B or better)** → three artifacts, same commit:
   1. One line in the mining queue snapshot at `riir-clippy/.distill/001_mining_queue_snapshot.md`.
   2. A `.research/` note in riir-clippy following the repo's research-note shape — `**Status:** DISTILLED — pending owner decision` (the vocabulary is RECORD / DISTILLED / NEGATIVE), born-complete, no checkboxes. Number per `.research/.highwater` monotonic discipline. The note records: source URL, inspection date, provenance chain, ranked table, dedup-grep evidence, caveats, queue slot. Future mining batches cite it.
