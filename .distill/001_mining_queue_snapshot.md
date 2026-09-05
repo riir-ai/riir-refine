@@ -99,7 +99,7 @@
   Swept-closure state: katgpt-rs/ndb/auth/clippy/dapps/viewbridge clean; game-sdk + chain LANDED this unit;
   mmorpg 1 edit deferred to its active agent; riir-ai hands-off (sibling lanes).
 
-- **Corpus counts:** kernel_opt 516 · rust_perf 100 · clippy_lints 45 · sec 12 · docker 31
+- **Corpus counts (convenience copy, synced 2026-09-06 post-Batch-115-addendum; AGENTS.md is the authoritative ledger — bump there per batch, this copy is a read aid):** kernel_opt 532 (D 124 · E 42 · M 17 · N 34 + the other categories per the tests.rs expected-array) · rust_perf 101 · clippy_lints 45 · sec 12 · docker 31
   (AGENTS.md is the authoritative ledger — bump there per batch, snapshot counts are a convenience copy).
 - **Last landed:** **Batch 108 (2026-09-05, Plan 078 — the riir-ai M3 campaign measured-GOAT distill, prefill
   GEMM + decode attention; M3 box, CPU-only; the FIRST in-source batch since Batch 63): 4 rules, corpus 490 → 494
