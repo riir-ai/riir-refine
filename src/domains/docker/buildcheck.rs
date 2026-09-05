@@ -19,7 +19,7 @@
 //! again. This oracle therefore never runs in the heal path; it runs in
 //! gates and benches.
 //!
-//! ## Three measured facts this parser is built on
+//! ## Four measured facts this parser is built on
 //!
 //! 1. **There is no structured output.** `--progress=rawjson` emits only
 //!    `vertexes`/`statuses` objects; the check results are printed as plain
@@ -27,12 +27,24 @@
 //!    it is the only interface.
 //! 2. **Findings go to stdout, build errors go to stderr.** They are
 //!    cleanly separable, which is what makes fact 3 handleable.
+//!    Re-verified 2026-09-06 on Docker 29.7.2: the `WARNING:` block rides
+//!    stdout, the `ERROR:` resolve-failure block rides stderr, and the
+//!    progress (`#N ...`) lines ride stderr.
 //! 3. **A resolve failure SILENTLY TRUNCATES the finding set.** Feeding a
 //!    two-defect Dockerfile whose base image cannot be resolved reported
 //!    *one* warning, not two, and still exited 1. So a partial result is
 //!    indistinguishable from a complete one by shape alone — the only
 //!    signal is `ERROR:` on stderr, and [`CheckRun::Errored`] discards the
 //!    findings rather than reporting a subset as if it were the whole.
+//! 4. **A completed run always prints `Check complete` on stdout**;
+//!    a failed resolve never does (measured 2026-09-06, Issue 071). This
+//!    is the classification backstop for fact 3: if a future buildx
+//!    reroutes or rewords the error summary, the `ERROR:`-prefix gate
+//!    stops firing — and a run without the marker still lands
+//!    [`CheckRun::Errored`], never a fake `Ran(empty)`. That fake was the
+//!    mechanism behind Issue 071's misread: a registry-blocked box produced
+//!    a verdict that looked like "the check stopped firing" when the check
+//!    phase had never completed.
 //!
 //! The exit code is deliberately **not** used as the verdict: 1 means both
 //! "found warnings" and "the build errored", and 0 means both "clean" and
@@ -134,14 +146,44 @@ pub fn build_check(source: &str) -> CheckRun {
     if !available() {
         return CheckRun::Unavailable;
     }
-    let Some((_code, stdout, stderr)) = run_raw(source) else {
+    let Some((code, stdout, stderr)) = run_raw(source) else {
         return CheckRun::Unavailable;
     };
-    // Fact 3: stderr `ERROR:` means the finding set on stdout is a subset.
+    classify(code, &stdout, &stderr)
+}
+
+/// Reduce one completed oracle invocation to a [`CheckRun`]. Pure, so the
+/// classification rules are unit-testable without a daemon.
+///
+/// Two independent gates, in order:
+///
+/// 1. **An `ERROR:` line on stderr** — the measured resolve-failure shape
+///    (2026-09-06, Docker 29.7.2: the whole `ERROR: alpine:3.20: failed to
+///    resolve...` block rides stderr while stdout stays empty). The
+///    findings that may have printed are a subset, so they are dropped.
+/// 2. **The completion marker** — a run whose stdout never prints
+///    `Check complete` did not finish the lint phase, whatever its stderr
+///    says. Measured 2026-09-06: every completed run prints it ("Check
+///    complete, N warnings" / "no warnings"), every failed resolve prints
+///    none. This is the belt to gate 1's braces: if a future buildx
+///    reroutes or rewords the error summary, gate 1 stops firing — and
+///    THIS gate catches the run, because the failure of a completed check
+///    to print the marker is a stream-routing drift, and misreading it as
+///    `Ran(empty)` is exactly the fake-clean that once produced an
+///    `OracleSilentOnBuggy` misdiagnosis (Issue 071). The marker's own
+///    wording changing lands `Errored` — loud, never a fake `Ran`.
+#[must_use]
+pub fn classify(_exit: i32, stdout: &str, stderr: &str) -> CheckRun {
     if let Some(err) = stderr.lines().map(str::trim).find(|l| l.starts_with("ERROR:")) {
         return CheckRun::Errored(err.to_string());
     }
-    CheckRun::Ran(parse_checks(&stdout))
+    if !stdout.contains("Check complete") {
+        return CheckRun::Errored(
+            "no `ERROR:` line and no `Check complete` marker — the check phase never finished"
+                .to_string(),
+        );
+    }
+    CheckRun::Ran(parse_checks(stdout))
 }
 
 /// [`build_check`] reduced to `Option`, for callers that treat "could not
@@ -312,5 +354,73 @@ WARNING: Real - https://y\n/tmp/d/Dockerfile:3\n";
             check: "Real".into(),
             line: 3
         }]);
+    }
+
+    // ── classify: the two failure gates, unit-tested without a daemon ──
+
+    const COMPLETED_DIRTY: &str = "Check complete, 1 warning has been found!\n\
+WARNING: LegacyKeyValueFormat - https://docs.docker.com/go/dockerfile/rule/legacy-key-value-format/\n\
+\"ENV key=value\" should be used instead of legacy \"ENV key value\" format\n\
+/tmp/d/Dockerfile:2\n";
+
+    #[test]
+    fn classify_completed_runs_parse_findings() {
+        assert_eq!(
+            classify(1, COMPLETED_DIRTY, ""),
+            CheckRun::Ran(vec![BuildCheckFinding {
+                check: "LegacyKeyValueFormat".into(),
+                line: 2
+            }])
+        );
+        assert_eq!(classify(0, "Check complete, no warnings found.\n", ""), CheckRun::Ran(vec![]));
+    }
+
+    #[test]
+    fn classify_stderr_error_wins_even_over_a_marker() {
+        // A resolve failure measured 2026-09-06: stdout empty, stderr
+        // carries the `ERROR:` summary. No findings may survive.
+        let err = "ERROR: alpine:3.20: failed to resolve source metadata \
+for docker.io/library/alpine:3.20: DeadlineExceeded: context deadline exceeded\n";
+        assert_eq!(
+            classify(1, "", err),
+            CheckRun::Errored(err.trim_end().to_string())
+        );
+        // Even a (never-observed) both-shapes run degrades to Errored.
+        assert!(matches!(
+            classify(1, COMPLETED_DIRTY, err),
+            CheckRun::Errored(_)
+        ));
+    }
+
+    #[test]
+    fn classify_run_without_the_completion_marker_is_never_ran() {
+        // The Issue 071 hardening: a stream-rerouted failure (no `ERROR:`
+        // line reachable on stderr) must land Errored, never a fake
+        // `Ran(empty)`.
+        assert!(matches!(
+            classify(1, "", "#2 ERROR: DeadlineExceeded\n"),
+            CheckRun::Errored(_)
+        ));
+        assert!(matches!(classify(0, "", ""), CheckRun::Errored(_)));
+        assert!(matches!(
+            classify(1, "WARNING: X - https://x\n/tmp/d/Dockerfile:1\n", ""),
+            CheckRun::Errored(_)
+        ));
+    }
+
+    #[test]
+    fn classify_error_line_inside_the_progress_block_does_not_erro() {
+        // The progress prefix `=> ERROR` does not start with `ERROR:` —
+        // measured stderr shape. Without a completed marker it still errs
+        // (gate 2); with one it is a completed run.
+        let progress = "#1 [internal] load build definition\n#1 DONE 0.0s\n";
+        assert!(matches!(
+            classify(1, COMPLETED_DIRTY, progress),
+            CheckRun::Ran(_)
+        ));
+        assert!(matches!(
+            classify(1, "", progress),
+            CheckRun::Errored(_)
+        ));
     }
 }

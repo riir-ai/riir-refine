@@ -11,6 +11,19 @@ hand-measured Bench 056 postscript and are now a standing gate
 injected defect classes (fix does not silence the check; the oracle does not
 see the claimed defect; a mistyped ledger cross-ref) each turn it red with the
 right verdict.
+**Issue 071 (2026-09-06): the gate went red and the filing misread it as
+"Docker 29.7.2 removed the check" — live probes proved the check set had not
+drifted at all.** The real failure: the three check-only fixtures carried
+`FROM alpine:3.20`, so the tier-2 oracle paid a registry round-trip per call,
+and on a registry-blocked box each resolve DeadlineExceeded (~60 s × 6 calls ≈
+the recorded 399 s red) → `Unavailable` verdicts, which the gate honestly
+refuses. Repair, not re-pin: (1) the three check-only fixtures now ride
+`FROM scratch` — the check is a frontend-parse verdict, so the base
+contributed nothing, and the tier is registry-free (399 s red → 2.7 s green,
+measured on the same daemon); (2) `classify()` gained the measured
+completion-marker backstop (a run whose stdout never prints `Check complete`
+lands `Errored`, never a fake `Ran(empty)`); (3) the gate's failure output
+names `docker version` and separates could-not-check from true disagreement.
 **Plan:** [030](../../.plans/030_docker_domain_phase0_batch1.md) ·
 **Proposal:** [006](../../.proposals/006_docker_heal_domain_fifth_healdomain.md) ·
 **Research:** [086](../../.research/086_dockerfile_detection_inventory_hadolint_buildkit.md) (dedup ledger) + [087](../../.research/087_docker_heal_seed_inventory.md) (seed inventory)
@@ -159,6 +172,12 @@ or exit code alone. So `CheckRun` has three variants and `Errored` **discards**
 the findings it did receive: reporting a strict subset would let a truncated
 run masquerade as a clean-ish one. The only usable signal is `ERROR:` on
 stderr; findings arrive on stdout, and the two streams are cleanly separable.
+**Fourth measured fact (2026-09-06, Issue 071): a completed run always prints
+`Check complete` on stdout and a failed resolve never does** — so
+`classify()` refuses to return `Ran` for any run without the marker, whatever
+its stderr says. If a future buildx reroutes or rewords the error summary, the
+`ERROR:`-prefix gate stops firing and THIS gate catches the run: `Errored`,
+never a fake `Ran(empty)`.
 
 Two more measured facts the Tier-2 parser is built on, neither of them
 guessable from the docs: `--progress=rawjson` carries **only** `vertexes` and
@@ -179,7 +198,7 @@ end to end.
 | **G4** alloc | scan buffers reach a steady state; a clean file allocates no findings at all |
 | **G5-real** | PASS — `edge-wallet-container` healed, `docker build` GREEN (the healed cache-mount `RUN` compiled for 167.7 s), image 141 MB, binary present |
 | **Class-A agreement** | PASS — all DL-coded rules agree with live hadolint 2.15.1 |
-| **Tier-2 agreement** | PASS — 4/4 BuildKit-check rules agree with live `docker build --check` (Docker 29.7.2 / buildx v0.36.1). Falsified with 3 injected defect classes; ~9.6 s for the suite, dominated by the registry round-trip on the `alpine`-based fixtures |
+| **Tier-2 agreement** | PASS — 4/4 BuildKit-check rules agree with live `docker build --check` (Docker 29.7.2 / buildx v0.36.1). Falsified with 3 injected defect classes. Since the Issue-071 repair the fixtures are registry-free: 2.7 s for the suite (was ~9.6 s with `alpine` round-trips, and 399 s + red on a registry-blocked box) |
 
 ### The negative controls, stated precisely
 

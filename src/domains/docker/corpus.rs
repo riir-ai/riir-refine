@@ -20,6 +20,15 @@
 //! | `instruction-casing` | `RunCorrectness` | A | bounded | `ConsistentInstructionCasing` |
 //! | `legacy-key-value-format` | `RunCorrectness` | A | bounded | `LegacyKeyValueFormat` |
 //! | `no-empty-continuation` | `RunCorrectness` | A | suggest | `NoEmptyContinuation` |
+//!
+//! The three rules whose only incumbent is a `BuildKit` check name (the
+//! tier-2 rows above) carry `FROM scratch` fixtures by design: the check
+//! is a frontend-parse verdict, so the base image contributes nothing,
+//! while a registry base makes the tier-2 oracle pay a network round-trip
+//! that fails hard on a registry-blocked box (measured 2026-09-06, Issue
+//! 071 — `alpine:3.20` resolve `DeadlineExceeded` ×6 ≈ the 399 s red). The
+//! DL-coded rows keep realistic bases — their fixtures are teaching
+//! material and hadolint never leaves the box.
 //! | `apt-update-install-same-run` | `CachePerf` | **B** | bounded | none |
 //! | `cache-mount-missing-on-cargo-build` | `CachePerf` | **B** | bounded | none |
 //! | `missing-syntax-directive` | `CachePerf` | **B** | bounded | none |
@@ -198,24 +207,24 @@ fn entries() -> Vec<DockerRule> {
             "instruction-casing",
             "mixed instruction casing is the loudest tell of a machine-written Dockerfile and BuildKit warns on it by default",
             "an instruction keyword carrying a lowercase letter",
-            "FROM alpine:3.20\nrun echo hi\n",
-            "FROM alpine:3.20\nRUN echo hi\n",
+            "FROM scratch\nrun echo hi\n",
+            "FROM scratch\nRUN echo hi\n",
             F::RunCorrectness, S::Builtin, Some("ConsistentInstructionCasing"), None,
         ),
         rule(
             "legacy-key-value-format",
             "`ENV key value` is the pre-1.0 form; the space-separated variant silently swallows the rest of the line as one value",
             "an ENV/LABEL with no `=` and two whitespace-separated operands",
-            "FROM alpine:3.20\nENV RUST_LOG info\n",
-            "FROM alpine:3.20\nENV RUST_LOG=info\n",
+            "FROM scratch\nENV RUST_LOG info\n",
+            "FROM scratch\nENV RUST_LOG=info\n",
             F::RunCorrectness, S::Builtin, Some("LegacyKeyValueFormat"), None,
         ),
         rule(
             "no-empty-continuation",
             "a line continuation followed by a blank line is DROPPED by the parser — what the author wrote and what the build runs diverge silently",
             "a stanza line ending in the escape character whose successor line is empty",
-            "FROM alpine:3.20\nRUN echo a \\\n\n  && echo b\n",
-            "FROM alpine:3.20\nRUN echo a \\\n  && echo b\n",
+            "FROM scratch\nRUN echo a \\\n\n  && echo b\n",
+            "FROM scratch\nRUN echo a \\\n  && echo b\n",
             F::RunCorrectness, S::Builtin, Some("NoEmptyContinuation"),
             Some("Suggest-only: which side of the blank line the author meant to keep is not derivable from the text."),
         ),

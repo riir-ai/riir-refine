@@ -3269,6 +3269,37 @@ narrative: git history). **T7 discharged — Proposals 003 + 004 UNBLOCKED**
 (their Blocked-by lines updated in the same commit). KAT (`Proposal 005`) Phase 0 unblocks with
 this close.
 
+**Issue 071 (docker tier-2 buildcheck gate red — a registry-blocked box misread
+as "Docker 29.7.2 removed the check") RESOLVED same day 2026-09-06 (file
+removed per the noise-reduction rule; record:
+[`.docs/11_domains/docker.md`](.docs/11_domains/docker.md) header + git
+history).** The filing's T1 premise was WRONG, and the correction is the
+valuable half: direct stream-split probes on the same daemon (Engine 29.7.2,
+buildx v0.36.1) proved the check set had NOT drifted — `LegacyKeyValueFormat`
+still fires (`FROM scratch + ENV RUST_LOG info`), findings ride stdout, the
+`ERROR:` resolve-failure summary rides stderr, stdout empty on failure. The
+real failure: the three check-only fixtures carried `FROM alpine:3.20`, so the
+tier-2 oracle paid a registry round-trip per call; on this box Docker Hub
+resolves DeadlineExceed (~60 s × 6 calls ≈ the recorded 399 s red) →
+`Unavailable` verdicts, which the gate honestly refuses. The filing recorded
+the verdict as `OracleSilentOnBuggy`; that arm is not reproducible under the
+current daemon, and the 399-s-each determinism fits the Unavailable path
+exactly — the Issue-723 lesson (repair the instrument first, decide the
+disposition second) re-proven, since every originally-proposed disposition
+(re-pin cross-ref / re-arm syntax / retire rule) would have been wrong.
+Repair landed: (1) the three tier-2-only fixtures now ride `FROM scratch` —
+BuildKit-frontend verdicts with no DL code, so the base contributed nothing to
+any oracle and hadolint never checks them (tier-1 skips non-DL incumbents) —
+the tier is registry-free, **399 s red → 2.7 s green 4/4 on the same daemon**;
+(2) `buildcheck::classify()` (pure, unit-tested daemon-free) gained the
+measured completion-marker backstop — no `Check complete` on stdout lands
+`Errored` even with no `ERROR:` line, so a future buildx stream reroute can
+never produce a fake `Ran(empty)`; (3) the gate's failure output names
+`docker version` and separates could-not-check from disagreement, with the
+misdiagnosis recorded in the message itself. Validation: lib docker 26/26,
+tier-2 4/4 (2.74 s), tier-1 hadolint 3/3, refusal 13/13, t5 10/10, g4 4/4,
+clippy 0 both states.
+
 ## Guard-landing protocol — a guard is not landed until the residue is counted
 
 Landing a proposer guard stops the healer **emitting** a broken class. It does

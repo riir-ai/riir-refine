@@ -25,6 +25,21 @@ use riir_clippy::domains::docker::buildcheck::{available, build_check, findings,
 use riir_clippy::domains::docker::corpus::build_docker_seed_corpus;
 use riir_clippy::domains::docker::verify::{all_tier2_agreements, Agreement};
 
+/// Best-effort daemon identity for failure output — the issue-071 lesson:
+/// both sides of the agreement contract are version-locked to the installed
+/// daemon, so a red gate that does not NAME the daemon cannot be diagnosed
+/// from the log alone.
+fn daemon_version() -> String {
+    std::process::Command::new("docker")
+        .args(["version", "--format", "{{.Server.Version}}"])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "<unavailable>".to_string())
+}
+
 #[test]
 fn every_buildkit_rule_agrees_with_docker_build_check() {
     if !available() {
@@ -46,13 +61,22 @@ Bench 056 measured 4",
         .collect();
     assert!(
         bad.is_empty(),
-        "Tier-2 disagreements (rule, check, verdict): {bad:#?}\n\
-A rule here either does not fire the check it cites, or its fix does not \
-silence it. Both mean the ledger cross-ref is unearned."
+        "Tier-2 disagreements (daemon {daemon}; rule, check, verdict): {bad:#?}\n\
+\nA rule here either does not fire the check it cites, or its fix does not \
+silence it — OR the oracle could not check it (`Unavailable` = the check phase \
+never completed, typically a registry resolve failure; that is NOT a check-set \
+drift and NOT a pass — the fixtures for the three check-only rules are \
+registry-free, so this arm now means a daemon or scratch-level problem, not \
+network). Diagnose the `Unavailable` arm with: `docker build --check` on the \
+rule's fixture.\n\nMisdiagnosis guard (Issue 071, 2026-09-06): an `Unavailable` \
+was once read as \"the daemon removed the check\" — the check had never stopped \
+firing; the oracle never finished.",
+        daemon = daemon_version(),
     );
     for (rule, check, _) in &results {
         println!("tier2 OK: {rule} -> {check}");
     }
+    println!("tier2 daemon: {}", daemon_version());
 }
 
 /// The corpus's own claim about which rules are Tier-2-checkable, pinned so
