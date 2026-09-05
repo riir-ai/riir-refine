@@ -64,7 +64,7 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 63 (3): the CubeCL twin unlock — same-input-gemv-weight-concat-at-upload, deferred-residual-fused-into-next-layer-norm, reset-state-in-place-fill-never-realloc (ternary_deltanet_gpu_forward.rs, Plan 009 / Research 071).
     // Batch 70 (3): the arxiv barrier-free-sync paper distill (arXiv:2608.13757, Plan 020 / Research 080) — barrier-free-per-dependency-wait-from-loop-counters, shared-counter-decode-producer-progress, masked-branchless-wait-collapse.
     // Batch 105 (11): uzu + lily combined Metal-engine distill (Research 127 + 128 / Plan 075) -- concurrent-dispatch-dependency-level-barriers, gpu-resident-moe-routing-no-host-sync, indirect-device-dispatch-tile-map-moe, pipelined-token-slot-ping-pong-submit-ahead, split-k-two-pass-attention-decode-long-context, cooperative-tensor-mma-capability-route, rht-epilogue-fusion-contract, lane-sequenced-deterministic-bucket-scatter, a8-activation-route-stability-guard, target-tile-split-k-deterministic-two-dispatch, hazard-tracked-aliasing-scratch-allocator (A +1, C +1, D +3, E +1, F +1, H +3, M +1; sources trymirai/uzu @ 115609b + perplexityai/pplx-garden lily @ 1ed972ed, both lanes re-verified every quote; the cross-source dedup mandate executed per rule; the R128 tile-by-expert-load rider FALSIFIED at pin -- chunk-size-routed table, both tiles 4 simdgroups).
-    // Total: 209. // (historical batch-30 snapshot; current 522)
+    // Total: 209. // (historical batch-30 snapshot; current 528)
     // Batch 98 (10): antirez/ds4 dense.metal/moe.metal leads -- grid-range-split-verbatim-impl-composition, share-activation-stream-keep-projection-reductions, tiny-rows-scalar-thread-per-row-downshift, small-batch-matvec-gemm-bridge-rung, moe-routed-down-sum-single-accumulate-pass, fused-vector-site-transcendental-form-nonportable, monomorphic-hot-caller-last-hit-memo, per-row-scale-folded-into-rhs-staging-tile, dequant-byte-pairs-as-aligned-u16-loads, cross-simd-bitonic-alternating-bank-exchange (the Batch-97 queued NEXT BATCH LEADS + 3 additional candidates).
     // Batch 100 (8): Layr-Labs/qwen-3.8-mtp-challenge -- functional-cache-versioning-loses-donation-under-kernel-read, fused-kv-write-single-writer-reads-newest-from-input, in-place-write-through-input-emits-fence-consumer, residency-set-wired-once-post-warm-persistent-footprint, register-budget-head-split-gqa-reread-trade, batch-composition-invariant-grid-early-return, never-gqa-multiply-full-d-merge-smem, container-rebind-over-retrace-for-churn-survival (Research 120 / Plan 068; A +3, D +3, E +2).
     // Batch 102 (6): FlashQuant sparse-dense fusion (arXiv 2608.15531) -- heterogeneous-unit-paths-shared-tile-fusion, lpt-min-heap-disjoint-column-ownership, tile-coo-sparse-tile-aligned-format, bucketed-sparse-reader-column-partition, bank-group-circular-element-reorder, stream-k-persistent-cta-mac-segments (Research 123 / Plan 071; A +2, C +2, H +1, N +1; the headline was REFUTED for direct adoption at walk time -- the fusion mechanism is the distilled core).
@@ -76,10 +76,11 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 110 (11): vLLM libtorch_stable distill (Research 133 / Plan 081) -- spin-barrier-needs-co-residency-capped-launch, ballot-matrix-tie-rank, m-group-shared-weight-scan-register-relief, row-parallelism-ladder-split-vs-pack (E +4), captured-graph-init-unconditional-and-stream-ordered, batch-invariance-locks-reduction-geometry (D +2), rope-pair-partner-via-cross-lane-shuffle, degenerate-selection-falls-back-to-identity-uniform (B +2), softmax-denominator-cancels-through-scale-invariant-norm (C +1), persistent-kernel-length-bucketed-mechanism-ladder (K +1), router-math-stays-fp32 (N +1); source vllm-project/vllm csrc/libtorch_stable @ 8277c42e4 (Apache-2.0, never mined); two inspection lanes + coordinator byte-verification of 13 lead quotes; the VERIFIED A-/B+ tier of a 25-candidate pool (the B-/C+ remainder = Batch 111); upstream hazard ledger in Research 133 (H1 silent tie-buffer overflow, H2 dispatch-no-default, H3 cross-tier router divergence).
     // Batch 111 (11): vLLM libtorch_stable remainder + rider sweep (Research 133 / Plan 082) -- register-rotation-prefetch-loop, shared-operand-groups-per-warp, whole-row-register-resident-under-length-budget (A +3), grid-dependency-wait-scoped-to-dependent-operands, refine-by-rescan-prefix-filter-vs-buffered-ties (D +2), warp-aggregated-atomic-scatter, routing-by-precomputed-lookup (H +2), launch-heuristic-pinned-to-calibration-arch (K +1), lane-owned-topk-output (M +1), ue8m0-pow2-scale-as-biased-exponent-byte, coarse-precision-first-exact-refine (N +2); source re-cloned + re-pinned at 8277c42e4 at mine time (origin had moved to 16328c7a minutes before); lanes: rules #12-#20/#22/#25 LAND, #21 (noinline) + #23 (clamp-before-collective) KILLED as COVERAGE (B110 rules already carry them, same citations), #24 demoted to a RIDER on device-m-runtime-mblock-graph-stable-gemm; + 20 riders across 13 files (19 kernel_opt + weight-tile-consumption-order in rust_perf), incl. the hi/lo packed-u64 redux (B107), phase-counted barrier (B92 stripe), B57 union-across-phase + filler-thread barrier matching, stable-softplus third form (B98), loud-refusal third instance (B103), PDL capability gating (B105), measurement-revision + family-gated table (B104), and the H1 fit-guard contract encoded as refine-by-rescan-prefix-filter-vs-buffered-ties.
     // Batch 114 (2): oMLX ANE-prefill + GDN blocked-sequential distill (Research 138 / Plan 087) -- recurrence-prefill-exact-restructure-before-reformulation (G +1, the A- GOAT lead: restructure the EXACT sequential recurrence's memory layout -- TB-block smem staging + register-resident state -- BEFORE an algebraic reformulation; stock per-slice k/q re-read = 32x redundant traffic (~13 GB/16k-token layer), ~2x at 16K on M3 ULTRA source-reported; the WY/FLA chunked reformulation measured a LOSER 3x independent + our Bench 734/769 negatives 0.97x/0.98x), ane-bank-split-ladder (D +1: near-half-first split ladder for a monolithic accelerator bank that cannot map at program-create (0x20004; our 0x50004 cascade the same class); the driver's release is ASYNCHRONOUS -> drop + gc + settle BEFORE the headroom re-measure; 70% phys-footprint jetsam gate -- 4 bounded attempts still hit 48.3 GB on 48 GB (source-measured); bank-count = DETERMINISM axis; fail-open snapshot; feeds riir-ai 876/769 T2/R1/R4a-R7), + 6 riders (B84 token-local recurrent-safe fraction cap; B84 pad-tail profitability + single-prompt guard; B22 sub-simdgroup cooperation radius -- the FULL-STRING pin regenerated; B95 whole-sequence prefill-grain instance; B107 program-SHAPE vs delivered-chunk-WIDTH coupling; B79 scalar-staging pad boundary). Source jundot/omlx @ e467261 (Apache-2.0).
+    // Batch 115 (6): qwen-3.8-mtp-challenge submission-diff-history walk (Research 139 / Plan 088) -- ordinal-map-exact-tail-selection (D +1, the strongest intake: replace a reference sort's tail-K EXACTLY by order-encoding the reference's TOTAL order -- stable ties toward the HIGHER index, NaN above all, -0.0 folded -- into a monotone u32 key; then any integer selection reproduces the reference bit-for-bit; same-set + tie-forcing + positive-control gates; 14-dispatch full-argsort stub -> 2), complete-coverage-scatter-collapses-operand-to-dense (D +1: island-row COVERAGE decides dead compute -- a complete-permutation scatter means every packed row is overwritten unread -> one dense matmul + an install-time argSort-inverse reorder; partial keeps the scatter; lazy eligibility when install ordering makes the replaced gate unknowable; the same lens bounds PRUNING -- the measured 49,152 trim REGRESSED accept 1.00 -> 0.877 below committed argmax support), exhaustive-domain-input-patch-bit-identity (N +1: a 16-bit input domain is exhaustively sweepable -- 65,280 finite values -- so patch ONLY the divergent inputs via direct output-word mapping before the lossless expansion, exhaustive zero-mismatch gate + boundary negative control; f32 unsweepable -> tolerance stays), derived-index-from-pinned-checkpoint-is-a-cache (M +1: a warm-time index from pinned tensors alone is CACHE-class -- legality boundary + canonical order (runtime-derived == offline-screened) + fail-loud over silent fallback + one attempt forever; balanced bisection makes empty clusters impossible), warm-reachable-dispatch-signatures-before-timed-window (M +1: JIT backends compile per signature (shape/dtype/input-count/host-device-mix) and an ADAPTIVE schedule reaches a SET -- warm the reachable set with throwaway token-neutral state, the scored EXPRESSION not a call prefix, extend with receipt when the schedule changes), env-gate-reaches-and-arms-the-scored-process (D +1, measurement-honesty #2: sanitizer-allowlist spelling (a gate outside the allowlist runs both arms on the same code), force-set injected defaults into first-use-cached knobs (ambient stock defeats no-overwrite), durable arm witness not stderr, bare-leg no-env receipt; source Layr-Labs/qwen-3.8-mtp-challenge @ 0863b06ac (Apache-2.0; B100 read the tip TREE, this batch read the ~50-diff HISTORY -- complementary); + 8 riders: B63 boundary-fused residual pair (external confirmation + eval-ladder-both-halves), B96 activation-side digit-fold two-posture exactness, B97 single-rounding-boundary fusion, B38 unconsumed-variant factory skip, B107 workgroup radix + ordinal bitmap tie-cut + bf16 16-bit exact key, B51 quantized-embed dequant-at-use, B82 shapeless-trace Slice-fatal, B77 derived-sum-table member).
     assert_eq!(
         corpus.entries.len(),
-        522,
-        "kernel batches through Batch 113 should have 522 rules"
+        528,
+        "kernel batches through Batch 115 should have 528 rules"
     );
 }
 
@@ -5298,7 +5299,7 @@ fn kernel_categories_table_has_15_entries() {
 
 #[test]
 fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-    // Every rule_id in the 522-rule corpus must appear in exactly one category.
+    // Every rule_id in the 528-rule corpus must appear in exactly one category.
     let corpus = build_kernel_seed_corpus();
     let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     let mut categorized: Vec<&str> = Vec::new();
@@ -5346,7 +5347,7 @@ fn kernel_categories_counts_match_plan_003_table() {
         (KernelCategory::MemoryAccess, 112),
         (KernelCategory::Compute, 59),
         (KernelCategory::Fusion, 44),
-        (KernelCategory::Dispatch, 118),
+        (KernelCategory::Dispatch, 121),
         (KernelCategory::Parallelism, 41),
         (KernelCategory::FlashAttnTiling, 12),
         (KernelCategory::LinearAttnRecurrence, 29),
@@ -5355,8 +5356,8 @@ fn kernel_categories_counts_match_plan_003_table() {
         (KernelCategory::VarlenChunkedReduction, 5),
         (KernelCategory::AutotuneDispatch, 9),
         (KernelCategory::ConvGemmLayout, 13),
-        (KernelCategory::KernelPolymorphism, 15),
-        (KernelCategory::DtypeAlignment, 33),
+        (KernelCategory::KernelPolymorphism, 17),
+        (KernelCategory::DtypeAlignment, 34),
         (KernelCategory::IrStrengthReduction, 4),
     ];
     for (cat, count) in expected {
@@ -5371,9 +5372,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 522.
+    // Sum must equal 528.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 522, "Plan 003: category totals must sum to 522");
+    assert_eq!(total, 528, "Plan 003: category totals must sum to 528");
 }
 
 #[test]
@@ -5384,8 +5385,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 522,
-        "Plan 003: grouped corpus has {total} rules, expected 522"
+        total, 528,
+        "Plan 003: grouped corpus has {total} rules, expected 528"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -9010,4 +9011,263 @@ fn batch113_pseudocode_parses() {
             "batch-113 opt_pattern for '{id}' must parse"
         );
     }
+}
+
+#[test]
+fn batch115_rules_present() {
+    // Batch 115 (qwen-3.8-mtp-challenge submission-diff-history walk --
+    // Research 139 / Plan 088): 6 kernel_opt rules; source re-cloned at
+    // 0863b06ac for the batch (two read lanes + coordinator synthesis;
+    // B100 read the tip TREE, this batch read the ~50-diff HISTORY --
+    // complementary).
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "ordinal-map-exact-tail-selection",
+        "complete-coverage-scatter-collapses-operand-to-dense",
+        "exhaustive-domain-input-patch-bit-identity",
+        "derived-index-from-pinned-checkpoint-is-a-cache",
+        "warm-reachable-dispatch-signatures-before-timed-window",
+        "env-gate-reaches-and-arms-the-scored-process",
+    ];
+    for id in ids {
+        assert!(
+            corpus.entries.iter().any(|e| e.rule_id == id),
+            "batch-115 rule '{id}' missing from corpus"
+        );
+    }
+}
+
+#[test]
+fn batch115_concepts_covered() {
+    // Distinctness + mandated phrases must survive in the concept
+    // text (case-sensitive contains -- the B51 lesson).
+    let corpus = build_kernel_seed_corpus();
+    let checks: &[(&str, &[&str])] = &[
+        (
+            "ordinal-map-exact-tail-selection",
+            &[
+                "TOTAL order",
+                "HIGHER index",
+                "NaN ranking ABOVE every number",
+                "signed zero",
+                "a gate that cannot fail is not a gate",
+                "14 dependent dispatches",
+            ],
+        ),
+        (
+            "complete-coverage-scatter-collapses-operand-to-dense",
+            &[
+                "COMPLETE permutation",
+                "argSort of a permutation is its inverse",
+                "DEAD WORK",
+                "UNKNOWABLE at install time",
+                "committed support",
+                "1.00 to 0.877",
+            ],
+        ),
+        (
+            "exhaustive-domain-input-patch-bit-identity",
+            &[
+                "65,280",
+                "output-word mapping",
+                "lossless",
+                "NOT sweepable",
+                "boundary negative control",
+                "zero mismatches",
+            ],
+        ),
+        (
+            "derived-index-from-pinned-checkpoint-is-a-cache",
+            &[
+                "parameter-class",
+                "CANONICAL ORDER",
+                "FAIL-LOUD",
+                "plausible time for the WRONG mechanism",
+                "ONE ATTEMPT",
+                "empty clusters are impossible",
+            ],
+        ),
+        (
+            "warm-reachable-dispatch-signatures-before-timed-window",
+            &[
+                "REACHABLE SET",
+                "host/device mix",
+                "EXPRESSION, not a call-chain prefix",
+                "throwaway",
+                "measured receipt",
+                "mis-attribute",
+            ],
+        ),
+        (
+            "env-gate-reaches-and-arms-the-scored-process",
+            &[
+                "ALLOWLIST",
+                "same code twice",
+                "FORCE-SET",
+                "no-overwrite",
+                "ARM WITNESS",
+                "BARE-LEG RECEIPT",
+            ],
+        ),
+    ];
+    for (id, needles) in checks {
+        let e = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == *id)
+            .unwrap_or_else(|| panic!("batch-115 rule '{id}' missing"));
+        for needle in *needles {
+            assert!(
+                e.gpu_concept.contains(needle),
+                "batch-115 concept for '{id}' missing phrase '{needle}'"
+            );
+        }
+    }
+}
+
+#[test]
+#[cfg(not(feature = "kernel_verify"))]
+fn batch115_pseudocode_parses() {
+    // G1 for Batch 115: syn-parse gate (the qwen38-mtp diff-walk rules).
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "ordinal-map-exact-tail-selection",
+        "complete-coverage-scatter-collapses-operand-to-dense",
+        "exhaustive-domain-input-patch-bit-identity",
+        "derived-index-from-pinned-checkpoint-is-a-cache",
+        "warm-reachable-dispatch-signatures-before-timed-window",
+        "env-gate-reaches-and-arms-the-scored-process",
+    ];
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-115 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            ref_verdict.parses,
+            "batch-115 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            opt_verdict.parses,
+            "batch-115 opt_pattern for '{id}' must parse"
+        );
+    }
+}
+
+#[test]
+fn batch115_ordinal_map_reproduces_stable_sort_semantics() {
+    // The rule's load-bearing numeric claim, proven in Rust: a monotone
+    // float-to-u32 ordinal encoding the reference comparator's corners
+    // (NaN above all, signed zeros folded to one class, monotone on the
+    // key plane) reproduces a stable ascending sort's tail-K
+    // ELEMENT-WISE, including every tie class.
+    fn ordinal(v: f32) -> u32 {
+        if v.is_nan() {
+            return u32::MAX;
+        }
+        if v == 0.0 {
+            return 0x8000_0000;
+        }
+        let u = v.to_bits();
+        if u & 0x8000_0000 != 0 { !u } else { u | 0x8000_0000 }
+    }
+    // Reference comparator: stable ascending, NaN ranks above every
+    // number, -0.0 == +0.0 (ties keep original index order in the
+    // ascending array, so the TAIL keeps the highest indices).
+    fn ref_cmp(a: f32, b: f32) -> std::cmp::Ordering {
+        match (a.is_nan(), b.is_nan()) {
+            (true, true) => std::cmp::Ordering::Equal,
+            (true, false) => std::cmp::Ordering::Greater,
+            (false, true) => std::cmp::Ordering::Less,
+            _ => a.partial_cmp(&b).unwrap_or(std::cmp::Ordering::Equal),
+        }
+    }
+    // Seeded corpus heavy on corners: zeros, NaNs, infinities, plus a
+    // xorshift spread of arbitrary bit patterns.
+    let mut values: Vec<f32> = vec![
+        0.0,
+        -0.0,
+        f32::NAN,
+        f32::NAN,
+        1.5,
+        -1.5,
+        f32::INFINITY,
+        f32::NEG_INFINITY,
+        1.0e-30,
+        -1.0e30,
+    ];
+    let mut s: u64 = 0x9E37_79B9_7F4A_7C15;
+    for _ in 0..4000 {
+        s ^= s << 13;
+        s ^= s >> 7;
+        s ^= s << 17;
+        let bits = (s & 0xFFFF) as u16;
+        let v = f32::from_bits(u32::from(bits) << 7);
+        values.push(v); // NaNs and zeros included on purpose
+    }
+    let n = values.len();
+    let k = 33; // deliberately not a power of two
+
+    // Reference: stable ascending sort by the comparator, tail slice.
+    let mut order: Vec<usize> = (0..n).collect();
+    order.sort_by(|&a, &b| ref_cmp(values[a], values[b]));
+    let ref_tail: Vec<usize> = order[n - k..].to_vec();
+
+    // Mine: (ordinal, index)-ascending, tail-K = the LAST k -- ties
+    // resolve toward the higher index, output ascending.
+    let mut pairs: Vec<(u32, usize)> =
+        values.iter().enumerate().map(|(i, v)| (ordinal(*v), i)).collect();
+    pairs.sort_unstable();
+    let mine_tail: Vec<usize> = pairs[n - k..].iter().map(|(_, i)| *i).collect();
+
+    assert_eq!(
+        mine_tail, ref_tail,
+        "ordinal-map selection must be element-wise identical to the \
+         reference stable sort's tail"
+    );
+    // Non-vacuity: at least one zero-fold tie and one NaN tie class
+    // must exist in the corpus, or the corners are not exercised.
+    assert!(values.iter().filter(|v| **v == 0.0).count() >= 2);
+    assert!(values.iter().any(|v| v.is_nan()));
+}
+
+#[test]
+fn batch115_coverage_collapse_dense_and_partial_arms() {
+    // Non-vacuity for the coverage rule: a COMPLETE-permutation island
+    // set must route to the dense path with the scatter folded away
+    // (the packed compute never runs), while a PARTIAL set must keep
+    // the packed-plus-scatter path. Self-contained reimplementation of
+    // the fixture's plan logic.
+    #[derive(Debug, PartialEq)]
+    enum Plan {
+        Complete { reordered: Vec<usize> },
+        Partial,
+    }
+    fn install(rows: usize, islands: &[usize]) -> Plan {
+        let mut idx: Vec<usize> = islands.to_vec();
+        idx.sort_unstable();
+        idx.dedup();
+        if idx.len() == rows && idx.iter().enumerate().all(|(i, r)| *r == i) {
+            Plan::Complete { reordered: idx }
+        } else {
+            Plan::Partial
+        }
+    }
+    // Complete: every row covered exactly once -> dense, and the
+    // reorder is the identity (the install-time argSort-inverse).
+    assert_eq!(
+        install(4, &[2, 0, 3, 1]),
+        Plan::Complete { reordered: vec![0, 1, 2, 3] }
+    );
+    // Partial: two of four rows -> scatter path retained.
+    assert_eq!(install(4, &[1, 3]), Plan::Partial);
+    // Duplicate indices are NOT complete coverage even when the count
+    // matches (dedup collapses them) -- the naive form would be fooled.
+    assert_eq!(install(4, &[0, 0, 1, 2]), Plan::Partial);
+    // All-covered-but-permutation-incomplete (count < rows).
+    assert_eq!(install(4, &[0, 1, 2]), Plan::Partial);
 }

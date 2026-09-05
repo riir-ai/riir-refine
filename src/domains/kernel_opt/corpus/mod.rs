@@ -1557,6 +1557,7 @@ mod entries_gpu_22;
 mod entries_gpu_23;
 mod entries_gpu_24;
 mod entries_gpu_25;
+mod entries_gpu_26;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -1595,6 +1596,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_23::entries());
     entries.extend(entries_gpu_24::entries());
     entries.extend(entries_gpu_25::entries());
+    entries.extend(entries_gpu_26::entries());
     Corpus::new(entries)
 }
 
@@ -1607,7 +1609,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 522-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 528-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1850,7 +1852,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "softmax-denominator-cancels-through-scale-invariant-norm",
         ],
     ),
-    // D: Dispatch patterns (118 rules)
+    // D: Dispatch patterns (121 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -1973,6 +1975,9 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "refine-by-rescan-prefix-filter-vs-buffered-ties",
             "ane-bank-split-ladder",
             "carried-state-reduction-stays-scalar",
+            "ordinal-map-exact-tail-selection",
+            "complete-coverage-scatter-collapses-operand-to-dense",
+            "env-gate-reaches-and-arms-the-scored-process",
         ],
     ),
     // E: Parallelism patterns (41 rules)
@@ -2168,7 +2173,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "dequant-byte-pairs-as-aligned-u16-loads",
         ],
     ),
-    // M: Kernel parametric polymorphism (15 rules)
+    // M: Kernel parametric polymorphism (17 rules)
     (
         KernelCategory::KernelPolymorphism,
         "M: kernel polymorphism",
@@ -2188,9 +2193,11 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "cooperative-tensor-mma-capability-route",
             "small-batch-matvec-gemm-bridge-rung",
             "lane-owned-topk-output",
+            "derived-index-from-pinned-checkpoint-is-a-cache",
+            "warm-reachable-dispatch-signatures-before-timed-window",
         ],
     ),
-    // N: dtype + alignment specialization (33 rules)
+    // N: dtype + alignment specialization (34 rules)
     (
         KernelCategory::DtypeAlignment,
         "N: dtype + alignment",
@@ -2227,6 +2234,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "ue8m0-pow2-scale-as-biased-exponent-byte",
             "coarse-precision-first-exact-refine",
             "shader-fastdiv-mulhi",
+            "exhaustive-domain-input-patch-bit-identity",
         ],
     ),
     // O: IR strength reduction (4 rules)
