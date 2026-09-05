@@ -46,6 +46,12 @@
   a fresh clone. Housekeeping done this unit: ticked Plan 075's stale GOAT checklist (batch verifiably
   landed 09-04), 068's stale open-list rows updated (D7 done, D8 named M3-lane), leftover wrangler-dev
   tree from the wet-run session killed (port 8813 clear).
+  **RE-ARM BLOCKERS BOTH CLEARED (2026-09-05 later session, M3):** (1) game-sdk origin/develop now carries
+  `crates/riir-scenelab` + the workspace-members entry + the panel feature (verified `git ls-tree origin/develop`);
+  (2) the chain tx_log E0282 filed + fixed chain-side (Issue 126, `e6a0e221` — `None::<std::fs::Permissions>`
+  type-pins the cfg(not(unix)) arm; M3 `cargo check -p riir-chain --lib` green; Windows re-verify owed on the
+  4090; `f23da0da`/`e6a0e221`/`56c078b8` pushed). Remaining re-arm condition is only a build window (the 851
+  ranking lane is live + wait-quiet on this box).
 
 - **Corpus counts:** kernel_opt 516 · rust_perf 100 · clippy_lints 45 · sec 12 · docker 31
   (AGENTS.md is the authoritative ledger — bump there per batch, snapshot counts are a convenience copy).
