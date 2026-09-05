@@ -1587,3 +1587,22 @@ negated comparisons, cfg-attributed trailing returns).
   sibling; `e6_*` ≈ 19 GB — the E6 goldens lane; `skill_graph_t5` 4.5 GB), plus
   katgpt-rs `target/` at 93 GB (its owner's sweep to compact, the 728 precedent). Post-free
   avail 16 GiB — workable but the next heavy lane should budget its own cleanup.
+
+- **2026-09-06 unit 2 (M3 idle housekeeping) — boundary-guard 31st run CLEAN; no drift under
+  active sibling lanes.** Full-workspace `ci_boundary_contract.sh`: exit 0, 16 repos / 236
+  cross-repo dep edges — IDENTICAL to the 30th run measured hours earlier, which is the
+  finding: two sibling lanes are actively rewiring manifests in the working tree right now
+  (riir-ai: the Issue-097-V2 view-core move, `entity_sync.rs` deleted + `lib.rs` modified;
+  riir-game-sdk: `Cargo.toml` + `test_gate.sh` modified, `ed25519.rs` deleted) and neither
+  has moved the measured graph yet (their edits are tree-only, not manifest-committed).
+  Re-run on the same day as the 30th run; the next boundary run AFTER these lanes land is
+  the one that can move the count. Same 2 known-drift (ledgered seal-online-remaster pair),
+  C6 green, C7 same 4-repo no-lock shape, C8 advisory unchanged at 507 commits behind the
+  `6f392727` pin (5 security fixes in the gap — standing owner call; the 4090 has not
+  re-pinned since the 30th run). katgpt-rs still `ahead 1` (`96cc0d7d` unpushed) — hands
+  off that repo entirely, so this row records HERE again. Doc-sync: no new commits in this
+  repo since the 30th-run docs commit (`3075c73` IS HEAD) — CLEAN, no action. Disk re-checked:
+  Data volume unchanged at 16 GiB avail; top /tmp consumers are the same active sibling
+  A/B arms inventoried last unit — nothing reclaimable from here. Queues otherwise unchanged
+  from unit 1: arxiv walk #8 time-blocked until Mon 09-07 ~07:00 +07; Protocol C clean;
+  issues/plans scans clean (see unit 1). No work invented; stopping cleanly.
