@@ -1,6 +1,17 @@
 # Issue 067: growing-input conditioning reopen — condition-first placement + same-rule gating (arXiv:2609.02702)
 
-**Status:** OPEN — T1 (the trigger instrumentation) LANDED 2026-09-04; T2/T3/T4 stay gated on the T1 trigger (same-rule exemplar availability in the TrajStore). T2 has no code changes until it fires.
+**Status:** OPEN — T1 (the trigger instrumentation) LANDED 2026-09-04; **the trigger has measurably FIRED in practice (2026-09-05, store read below) — T2 is unblocked as engineering work, gated only on a build window** (the 851 league sweep holds the box at filing time).
+
+## Trigger-state measurement (2026-09-05, no-build read)
+
+`cargo heal --memory-stats` (the installed binary, read-only) over the riir-ai store:
+2338 rows, **2281 Certified**, `uninlined_format_args` alone holds **1811 recorded
+outcomes** (2405 W / 15 L on the ELO surface) — the K=3 same-rule Certified
+threshold is cleared by ~600× for the top rules, and the katgpt-rs / riir-train /
+riir-mmorpg-examples stores clear it too (`nan-unsafe-sort-comparator` 128 W,
+`uninlined_format_args` 43 W, 378 Certified respectively). Every future
+`--fix --write` run querying a top rule logs the T1 fire line; T2/T3/T4 are now
+waiting on nothing but a build window.
 
 ## T1 record (2026-09-04)
 
