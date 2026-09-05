@@ -1,7 +1,7 @@
 # Research 084 — Batch 72: the frguthmann/NVIDIA compute-shader external distill (1 rule + 1 rider)
 
 **Status:** RECORD (batch landed same day)
-**Plan:** `.plans/026_dirty_encoding_write_elision_batch72.md`
+**Plan:** `.plans/085_dirty_encoding_write_elision_batch72.md`
 **Sources (both fetched + read in full):**
 - frguthmann.github.io "Exploring ways to optimize compute shaders — Part 1" (F. Guthmann, 2020-09-26) — GLSL/Vulkan Game-of-Life, Nsight GPU-trace P3-driven, honest failed-experiments list.
 - developer.nvidia.com "Optimizing Compute Shaders for L2 Locality using Thread-Group ID Swizzling" (L. Bavoil, NVIDIA, 2020-07-16) — Battlefield V DXR denoiser measurement, GDC 2019 talk distill.

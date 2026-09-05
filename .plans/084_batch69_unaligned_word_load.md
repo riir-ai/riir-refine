@@ -1,4 +1,8 @@
-# Plan 015 — Batch 69: unaligned-word-load-from-bytes (the Plan 013 T6 refutation)
+# Plan 084 — Batch 69: unaligned-word-load-from-bytes (the Plan 013 T6 refutation)
+
+> **Renumbered 015 -> 084 on 2026-09-05 (Issue 069 citation-weight arbitration).**
+> `015` was allocated twice: this plan and `015_kat011_phase0_payreq_substrate.md`
+> (the KAT lane — 10 inbound citations vs 4 here); the KAT plan keeps 015.
 
 **Source:** Research 075 §Secondary (the B− `unaligned-word-load-from-bytes` candidate, DEFERRED at
 Batch 68 with the reason "the varint lead's honest-loser verdict showed the M3 aarch64 box hides exactly

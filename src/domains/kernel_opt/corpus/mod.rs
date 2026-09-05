@@ -1367,7 +1367,7 @@
 //!   killed as B16 dedup (validation evidence only) + #5 Laguna fusions dropped
 //!   (`optimizations.py` read at mine time: a hardware-detection stub, the
 //!   fusions are not in it). Record: Research 083.
-//! - **Batch 72 (2026-08-26, Plan 026 — the frguthmann/NVIDIA external
+//! - **Batch 72 (2026-08-26, Plan 085 — the frguthmann/NVIDIA external
 //!   distill, Research 084):** 1 rule, corpus 372 -> 373 (A 88 -> 89) + 1
 //! - **Batch 77 (2026-08-27, lucebox PR #625 external distill, Plan 035 /
 //!   Research 091):** 6 rules, corpus 373 -> 379 (A 89 -> 90, C 34 -> 35,

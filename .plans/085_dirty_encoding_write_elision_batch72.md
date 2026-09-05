@@ -1,4 +1,8 @@
-# Plan 026 — Batch 72: the frguthmann/NVIDIA compute-shader external distill (1 rule + 1 rider)
+# Plan 085 — Batch 72: the frguthmann/NVIDIA compute-shader external distill (1 rule + 1 rider)
+
+> **Renumbered 026 -> 085 on 2026-09-05 (Issue 069 citation-weight arbitration).**
+> `026` was allocated twice: this plan and `026_kat_phase0_redaction.md` (the
+> KAT redaction gate — 8 inbound citations vs 3 here); the KAT plan keeps 026.
 
 **Filed:** 2026-08-26 (idle-loop housekeeping unit; queue item 11 online-search pool → Protocol A).
 **Source pool:** two external GPU-compute articles fetched + read in full this session:

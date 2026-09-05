@@ -1,4 +1,8 @@
-# Research 083 — ELO selection challenge gate (Issue 039 T5)
+# Research 135 — ELO selection challenge gate (Issue 039 T5)
+
+> **Renumbered 083 -> 135 on 2026-09-05 (Issue 069 citation-weight arbitration).**
+> `083` was allocated twice: this note and `083_omlx_external_distill_batch71.md`
+> (12 inbound citations vs 2 here); the oMLX note keeps 083.
 
 **Status:** NEGATIVE (measured no-win; ELO stays report-only)
 **Bench:** [047](../.benchmarks/047_elo_selection_challenge_gate.md)

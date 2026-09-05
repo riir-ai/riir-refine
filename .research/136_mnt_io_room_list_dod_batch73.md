@@ -2,6 +2,10 @@
 
 **Status:** RECORD (Batch 73 landed 2026-08-26; Plan 029; consumes Research 085's queued verdict)
 
+> **Renumbered 086 -> 136 on 2026-09-05 (Issue 069 citation-weight arbitration).**
+> `086` was allocated twice: this note and `086_dockerfile_detection_inventory_hadolint_buildkit.md`
+> (27 inbound citations vs 4 here); the docker note keeps 086.
+
 **Classification:** in-scope amplification (Issue 469 T2.1's gate — the rust_perf
 domain + Pareto bench substrate already exist; the batch only adds corpus entries).
 

@@ -1,6 +1,6 @@
 # Plan 029 — Batch 73: mnt.io Matrix-RSDK room-list DoD distill (rust_perf external)
 
-**Status:** COMPLETE — landed 2026-08-26 (all tasks `[x]`; the batch record is [Research 086](../.research/086_mnt_io_room_list_dod_batch73.md)).
+**Status:** COMPLETE — landed 2026-08-26 (all tasks `[x]`; the batch record is [Research 136](../.research/136_mnt_io_room_list_dod_batch73.md)).
 Consumes [Research 085](../.research/085_mnt_io_matrix_room_list_dod_distill.md)
 (the queued distill verdict: YES B+, 2 candidates, drops pre-adjudicated).
 
@@ -29,7 +29,7 @@ it — no wall-clock timeout in its command line); box at load 7.13/12+ cores,
 83% memory free (~53 GB available), 4 GB residual swap untouched. The Plan
 337 discipline trigger ("a measurement saturates the machine") does NOT fire.
 GOAT proceeds with `CARGO_TARGET_DIR=/tmp/riir-clippy-b73`, benches verified
-stable across invocations, load conditions recorded in Research 086. If
+stable across invocations, load conditions recorded in Research 136. If
 memory pressure appears (swap growth), abort remaining builds + defer.
 
 ## Tasks
@@ -70,7 +70,7 @@ memory pressure appears (swap growth), abort remaining builds + defer.
   amortization curve; rule 2 11.5-12.7x), honest `context_notes` from the
   MEASURED verdicts (never cite 78× as our bench claim; regime-annotate the
   sorts-per-update ≈ 0 loser side). CI guard ALL LAYERS.
-- [x] T8 Docs: Research 086 (batch record), AGENTS.md batch entry + corpus
+- [x] T8 Docs: Research 136 (batch record), AGENTS.md batch entry + corpus
   count, `.docs/11_domains/rust_perf.md` row, queue snapshot update (same
   commit).
 - [x] T9 Commit `feat: batch 73: ...` + push develop.
