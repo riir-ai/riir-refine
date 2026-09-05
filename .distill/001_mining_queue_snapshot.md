@@ -53,6 +53,33 @@
   4090; `f23da0da`/`e6a0e221`/`56c078b8` pushed). Remaining re-arm condition is only a build window (the 851
   ranking lane is live + wait-quiet on this box).
 
+- **2026-09-05 re-arm unit EXECUTED + LANDED (4090 box; the game-sdk e2e sweep + the closure tail; M3 records
+  the box coordination):** window opened (GPU 5%/660 MiB, desktop-class only, zero cargo). All 9 closure repos
+  synced on the box first — found + cleared a **stale 82-min index.lock in riir-ai** (crashed process; the ~40
+  git.exe on the box are per-repo `fsmonitor--daemon` instances, innocent — verify lock AGE before deleting);
+  cleared the box's leftover Batch-111 plan draft (`082_vllm_libtorch_stable_batch111.md`, hash-DIFFERED from
+  origin's landed `d710353` version — landed record wins) + dirty `.plans/.highwater` (82 vs origin 83).
+  Healer REBUILT on the box (5m06s — the 10-commit pull touched src/; `cargo build --release --bin cargo-heal
+  --features fix_verify,clippy_verify`; NOTE: `-p cargo-heal` fails — the package is `riir-clippy`, the BIN is
+  cargo-heal). **Issue 126 Windows re-verify DISCHARGED:** `cargo check -p riir-chain --lib` on Windows
+  1.98.1-msvc, clean in 10.39s (the AGENTS.md caveat is closed). **Landed game-sdk `9e3bef8`: 26 edits / 12
+  files** (the blocked 19-edit e2e set had GROWN — the T5.4/T5.5/T8.7 test files landed since — plus 7
+  scenelab edits from the new crate: map_unwrap_or x5, shrink-to-fit x6, uninlined x5, use_self,
+  vec-with-capacity, items_after_statements, range_plus_one). Validated count-pinned: e2e default **29/29**,
+  item_e2e **194/194**, nft_e2e **236/236** (nft implies item_e2e so it subsumes the item row's surface),
+  scenelab-trace **32/32** + trace_index+stat_cards compile+run green. One `prod_l3_sigkill_drills`
+  0xc0000005 access-violation = the documented SIGKILL-subprocess flake (passed 6/6 on re-run x3, differing
+  crash line each time — the `.issues/023` class). 2 pre-existing `last_log_size` never-read warnings in
+  prod_t54_soak: the heal did NOT create them (diff-verified untouched lines) — owner note. Chain tail:
+  dry-run 1 edit (`items_after_statements` in tests/asset_lifecycle_persistence.rs) — the box CANNOT validate
+  it (chain_cold_write pulls libsql-ffi whose bundled build panics PermissionDenied on exFAT — environmental),
+  so **box reverted, M3 applied + validated 10/0 under the exact feature gate, landed chain `4b7b78e3`**; box
+  synced after. mmorpg dry-run 1 edit (`semicolon_if_nothing_returned` in src/scenarios/runner.rs) —
+  **SKIPPED, sibling-active**: the renderer-extraction agent's M3 lane is restructuring exactly that surface;
+  left for the owning lane. riir-dapps + riir-viewbridge re-confirm 0 edits (prior unit's verdict holds).
+  Swept-closure state: katgpt-rs/ndb/auth/clippy/dapps/viewbridge clean; game-sdk + chain LANDED this unit;
+  mmorpg 1 edit deferred to its active agent; riir-ai hands-off (sibling lanes).
+
 - **Corpus counts:** kernel_opt 516 · rust_perf 100 · clippy_lints 45 · sec 12 · docker 31
   (AGENTS.md is the authoritative ledger — bump there per batch, snapshot counts are a convenience copy).
 - **Last landed:** **Batch 108 (2026-09-05, Plan 078 — the riir-ai M3 campaign measured-GOAT distill, prefill
