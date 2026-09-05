@@ -103,3 +103,29 @@ on the missing grant, and the session ended).
       twice mid-optimize). The temp `wasm-opt = false` manifest block was REVERTED
       before commit (production/M3 keep optimization); re-add it locally for future
       4090-box service builds, or pre-warm and accept the 25 min.
+
+## Composition notes (second independent run, 2026-09-05)
+
+An independent session re-ran the full composition (boot → fund → claim →
+wetrun) and confirmed G3 end to end, including the `--dry-run` arm GREEN
+(steps 1 + 6 PASS, supply counters bit-unchanged) once the claim+fund
+surfaces existed. Two operational findings the recipe needs, recorded so
+the third run doesn't rediscover them:
+
+1. **Fresh `--persist-to` state is MANDATORY when `KAT_FAUCET_DAILY_CAP_KAT`
+   (or any config-affecting var) changes** — the ledger DO cold-boots with
+   `ConfigMismatch` over a warm store authored under different config bytes.
+   Symptom: `GET /health` → 500 `ledger cold boot: config mismatch`; fix:
+   wipe the state dir and re-fund/re-claim.
+2. **The faucet DATE is real UTC wall time even under the virtual tick** —
+   `utc_today(wall_unix)` ignores `KAT_TICK_SOURCE=virtual` (by design, the
+   Issue-004 rule: the host picks the date; `/admin/tick` is unauthenticated
+   on workerd dev, so a tick-derived date would be a caller-advancable
+   faucet-day roller). Consequence for rehearsal: the per-account daily cap
+   rolls at UTC midnight ONLY — a same-day fix-and-rerun of the step-5 leg
+   stays cap-blocked no matter what the tick says. Plan the refund-leg
+   re-run after the design decision lands accordingly.
+
+Also independently confirmed: the dapps `/sync` route now carries BOTH
+shapes' fields (`recorded` + `accepted`/`rows_*`), so the T7 harness parse
+fix and the route-side additive field are compatible, not competing fixes.
