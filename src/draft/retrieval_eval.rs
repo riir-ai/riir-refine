@@ -37,6 +37,7 @@
 #![allow(clippy::needless_raw_string_hashes)]
 
 use super::domain_router::DomainId;
+use super::instantiation_rerank::{CollapseVerdict, detect_collapse_rule_ids, rule_family};
 use super::latent_matcher::LatentMatcher;
 use crate::domain::{HealDomain, HealEntry};
 
@@ -91,6 +92,26 @@ pub struct MissRecord {
     pub component: crate::component::ComponentClass,
 }
 
+/// Issue 070 T3: one recorded rerank-pool collapse — the labeled span's own
+/// domain ranking collapsed to a single rule family across the probe window
+/// while the ground-truth label's family sits OUTSIDE it (the Issue-024
+/// pool-crowding class, made a visible diagnostic). Collapsed pools WITHOUT
+/// a dissenting oracle are not recorded: without a label there is no
+/// crowding evidence, only a shape.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CollapseRecord {
+    /// The labeled span's ground-truth rule id — its own family (via
+    /// [`rule_family`]) is the family the pool SHOULD have collapsed onto.
+    pub label: String,
+    /// The domain whose ranking collapsed.
+    pub domain: DomainId,
+    /// The family the top-k collapsed onto (owned copy — the detector's
+    /// borrowed verdict does not outlive the eval loop).
+    pub family: String,
+    /// The probe depth at which the collapse was measured.
+    pub pool_top_k: usize,
+}
+
 /// The full eval output.
 #[derive(Debug, Default)]
 pub struct EvalReport {
@@ -117,6 +138,12 @@ pub struct EvalReport {
     pub router_correct: usize,
     /// Labeled spans skipped because their domain's index is feature-off.
     pub skipped: usize,
+    /// Issue 070 T3: labeled spans whose own-domain post-rerank top-k
+    /// ([`PROBE_TOP_K`]) collapsed to one rule family while the
+    /// ground-truth family sits outside it. Purely diagnostic — selection
+    /// is untouched, this observes the ranking the eval already computed —
+    /// so an empty list is the pre-T3 behaviour, byte for byte.
+    pub collapsed_pools: Vec<CollapseRecord>,
 }
 
 /// The clean-span set: REAL production excerpts from this crate (shipped
@@ -609,6 +636,22 @@ pub fn run_eval_inner(
         let rank = ranked.iter().position(|r| r.rule_id == label);
         let top1 = ranked.first().map(|r| r.rule_id.clone());
 
+        // Issue 070 T3 diagnostic: record a top-k family collapse with the
+        // oracle OUTSIDE the collapsed family (the crowding-evidence shape).
+        // The small `ids` vec is measurement-path scratch — the production
+        // heal path never calls the detector with an oracle.
+        let ids: Vec<&str> = ranked.iter().map(|r| r.rule_id.as_str()).collect();
+        if let CollapseVerdict::Collapsed { family, pool_top_k, oracle_outside: true } =
+            detect_collapse_rule_ids(&ids, PROBE_TOP_K, Some(label))
+        {
+            report.collapsed_pools.push(CollapseRecord {
+                label: label.to_string(),
+                domain,
+                family: family.to_string(),
+                pool_top_k,
+            });
+        }
+
         report.router_checked += 1;
         if routed == domain {
             report.router_correct += 1;
@@ -747,6 +790,20 @@ pub fn print_report(report: &EvalReport) {
             }
         }
         println!("  component counts: E(corpus)={e}  rho(retrieval)={rho}");
+    }
+    println!("\n-- rerank-pool collapse (top-k one family, oracle outside it) --");
+    if report.collapsed_pools.is_empty() {
+        println!("none");
+    }
+    for c in &report.collapsed_pools {
+        println!(
+            "  COLLAPSED [{:?}] {} top-{} onto family '{}' — oracle family '{}'",
+            c.domain,
+            c.label,
+            c.pool_top_k,
+            c.family,
+            rule_family(&c.label),
+        );
     }
     println!("\n-- clean-span false-positive profile (what tops real clean code) --");
     for (tag, tops) in &report.clean_profile {
@@ -1654,5 +1711,231 @@ mod tests {
             }
         }
         assert!(misses.is_empty(), "sec self-variant top-1 misses:\n{}", misses.join("\n"));
+    }
+
+    /// Issue 070 T1 — the cross-domain agreement pre-check (ThoughtComm
+    /// α-fusion DoA measurement; source Research 364, issue
+    /// `.issues/070_thoughtcomm_alpha_fusion_healer.md`).
+    ///
+    /// The healer fans each span out across one index per enabled domain and
+    /// re-ranks within a domain. An α-fusion arm (the issue's T2) needs ≥2
+    /// domains to contribute entries addressing the SAME span shape; this
+    /// measures how often that can happen at all, over the composite fixture
+    /// corpus + the Issue-017 labeled spans, through the same fan-out the
+    /// healer uses (`LatentMatcher::suggest_span`, pool = [`RERANK_POOL`]).
+    ///
+    /// Three operationalizations, weakest to strongest — per span:
+    ///
+    /// - **A. rule-id overlap** — the same `rule_id` retrieved by ≥2
+    ///   DISTINCT domains. Structurally impossible by construction (each
+    ///   domain's corpus owns a disjoint id namespace), so the test ASSERTS
+    ///   zero as a corpus invariant: a nonzero means the namespaces collided
+    ///   and T2's premise changes.
+    /// - **B. pattern-text overlap** — two domains retrieve entries whose
+    ///   corpus pattern text (`buggy_code`) is byte-identical, i.e. the same
+    ///   anti-pattern was independently authored into both corpora. This is
+    ///   the issue's "re-scope to pattern-text overlap" viability probe.
+    /// - **C. instantiation co-presence (α_j)** — the count of domains with
+    ///   ≥1 candidate whose proposer FIRED on the span (post
+    ///   `mark_instantiation`); agreement = α ≥ 2. This is the exact
+    ///   quantity a count-tiered fusion would consume. It measures
+    ///   co-presence of addressable anti-patterns, NOT same-rule agreement —
+    ///   domain B firing on a different rule is still a countable witness.
+    ///
+    /// Measured domain set = whatever is feature-enabled at test time; the
+    /// committed gate state is defaults + `latent_retrieval` =
+    /// clippy_lints + rust_perf + docker. Kernel/sec opt-ins would add
+    /// nothing measurable here (kernel ships no proposers and GPU-kernel
+    /// patterns; sec's corpus is FFI/Drop shapes) — enabling them would only
+    /// widen the retrieval fan, not the firing surface, which is itself part
+    /// of the DoA verdict for this fixture corpus.
+    ///
+    /// Report-first: the measured rates print via `--nocapture` and ONLY
+    /// structural invariants assert (A == 0, histogram sums, measurable > 0)
+    /// — a measured rate must never be pinned by the instrument that
+    /// measures it.
+    #[cfg(all(feature = "latent_retrieval", feature = "clippy_lints", feature = "rust_perf"))]
+    #[test]
+    fn cross_domain_agreement_rate_report() {
+        use crate::draft::instantiation_rerank::{RERANK_POOL, RerankMode};
+        use std::collections::{HashMap, HashSet};
+
+        let mut matcher = LatentMatcher::from_enabled_domains().expect("build matcher");
+        let measured_domains: Vec<String> = DomainId::ALL
+            .iter()
+            .filter(|d| matcher.has_domain(**d))
+            .map(|d| format!("{d:?}"))
+            .collect();
+
+        // (name, code, is_composite). The composite tags are handles, not
+        // labels — this measurement needs no oracle at all.
+        let mut spans: Vec<(String, String, bool)> = Vec::new();
+        for (tag, code) in crate::draft::eval_fixtures_composite::COMPOSITE_SPANS {
+            spans.push(((*tag).to_string(), (*code).to_string(), true));
+        }
+        for s in labeled_eval_spans() {
+            spans.push((s.label, s.code, false));
+        }
+
+        let pool = RERANK_POOL;
+        let mut measurable = 0usize; // spans served by >= 2 domain indexes
+        let mut agree_id = 0usize;
+        let mut agree_text = 0usize;
+        let mut agree_alpha = 0usize;
+        let mut alpha_hist = [0usize; 6]; // alpha = 0..=4, 5+ bucketed last
+        let (mut comp_n, mut comp_alpha) = (0usize, 0usize);
+        let (mut lab_n, mut lab_alpha) = (0usize, 0usize);
+
+        for (name, code, is_composite) in &spans {
+            let (_routed, by_domain) = matcher.suggest_span(code, pool);
+            if by_domain.len() < 2 {
+                continue;
+            }
+            measurable += 1;
+            if *is_composite {
+                comp_n += 1;
+            } else {
+                lab_n += 1;
+            }
+
+            // A — rule-id overlap across DISTINCT domain lists.
+            let mut id_domains: HashMap<&str, HashSet<String>> = HashMap::new();
+            for (d, rules) in &by_domain {
+                for r in rules {
+                    id_domains
+                        .entry(r.rule_id.as_str())
+                        .or_default()
+                        .insert(format!("{d:?}"));
+                }
+            }
+            if id_domains.values().any(|ds| ds.len() >= 2) {
+                agree_id += 1;
+            }
+
+            // B — byte-identical corpus pattern text across domains (via the
+            // rule book; an id missing from the book cannot contribute).
+            let mut text_domains: HashMap<&str, HashSet<String>> = HashMap::new();
+            for (d, rules) in &by_domain {
+                for r in rules {
+                    if let Some(info) = matcher.rule_book(&r.rule_id) {
+                        text_domains
+                            .entry(info.buggy_code.as_str())
+                            .or_default()
+                            .insert(format!("{d:?}"));
+                    }
+                }
+            }
+            if text_domains.values().any(|ds| ds.len() >= 2) {
+                agree_text += 1;
+            }
+
+            // C — α_j: domains contributing a firing proposer on this span.
+            let alpha = by_domain
+                .iter()
+                .filter(|(_, rules)| rules.iter().any(|r| r.instantiates))
+                .count();
+            alpha_hist[alpha.min(5)] += 1;
+            if alpha >= 2 {
+                agree_alpha += 1;
+                if *is_composite {
+                    comp_alpha += 1;
+                } else {
+                    lab_alpha += 1;
+                }
+                let witnesses: Vec<String> = by_domain
+                    .iter()
+                    .filter(|(_, rules)| rules.iter().any(|r| r.instantiates))
+                    .map(|(d, rules)| {
+                        let fired: Vec<&str> = rules
+                            .iter()
+                            .filter(|r| r.instantiates)
+                            .map(|r| r.rule_id.as_str())
+                            .collect();
+                        format!("{:?}:{}", d, fired.join(","))
+                    })
+                    .collect();
+                println!("   alpha={alpha} span '{name}' <- {}", witnesses.join(" | "));
+            }
+        }
+
+        let pct = |n: usize| 100.0 * n as f32 / measurable as f32;
+        println!("\n== Issue 070 T1: cross-domain agreement (fan-out retrieval, pool {pool}) ==");
+        println!("domains measured: {}", measured_domains.join(", "));
+        println!(
+            "spans: {} ({} composite + {} labeled); measurable (>=2 domain indexes): {}",
+            spans.len(),
+            comp_n,
+            lab_n,
+            measurable
+        );
+        assert!(measurable > 0, "fan-out must serve >= 2 domain indexes per span");
+        println!(
+            "A rule-id overlap:             {}/{} = {:.1}%",
+            agree_id,
+            measurable,
+            pct(agree_id)
+        );
+        println!(
+            "B pattern-text overlap:        {}/{} = {:.1}%",
+            agree_text,
+            measurable,
+            pct(agree_text)
+        );
+        println!(
+            "C alpha>=2 (Structural mode):  {}/{} = {:.1}%",
+            agree_alpha,
+            measurable,
+            pct(agree_alpha)
+        );
+        println!(
+            "   composite-only: {comp_alpha}/{comp_n}   labeled-only: {lab_alpha}/{lab_n}"
+        );
+        println!(
+            "   alpha histogram (domains with a firing proposer): 0:{} 1:{} 2:{} 3:{} 4:{} 5+:{}",
+            alpha_hist[0],
+            alpha_hist[1],
+            alpha_hist[2],
+            alpha_hist[3],
+            alpha_hist[4],
+            alpha_hist[5]
+        );
+
+        // Structural invariant (asserted, never measured): the per-domain id
+        // namespaces are disjoint by construction.
+        assert_eq!(
+            agree_id, 0,
+            "the same rule id was retrieved by >= 2 domains — per-domain id namespaces collided; T2's premise changes"
+        );
+        assert_eq!(
+            alpha_hist.iter().sum::<usize>(),
+            measurable,
+            "the alpha histogram must account for every measurable span"
+        );
+
+        // Secondary pass — the `All` rerank arm widens the proposer set with
+        // the type-blind over-matchers. This is the honest UPPER bound for
+        // what a fusion tier could count as witnesses.
+        let mut all_matcher = LatentMatcher::from_enabled_domains()
+            .expect("build matcher")
+            .with_rerank_mode(RerankMode::All);
+        let mut agree_alpha_all = 0usize;
+        for (_name, code, _c) in &spans {
+            let (_routed, by_domain) = all_matcher.suggest_span(code, pool);
+            if by_domain.len() < 2 {
+                continue;
+            }
+            if by_domain
+                .iter()
+                .filter(|(_, rules)| rules.iter().any(|r| r.instantiates))
+                .count()
+                >= 2
+            {
+                agree_alpha_all += 1;
+            }
+        }
+        println!(
+            "C alpha>=2 (All mode, upper bound): {agree_alpha_all}/{measurable} = {:.1}%",
+            pct(agree_alpha_all)
+        );
     }
 }

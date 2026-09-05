@@ -65,7 +65,10 @@ pub use headroom_probe::{
     run_headroom_probe_with_spans, HeadroomDecomposition, HeadroomMetrics, HeadroomMiss,
     HeadroomReport, HeadroomVerdict, MissKind, ResidualCause, HEADROOM_DEPTHS, HEADROOM_STOP_BAR_PP,
 };
-pub use instantiation_rerank::{RerankMode, RERANK_POOL};
+pub use instantiation_rerank::{
+    CollapseVerdict, RerankMode, RERANK_POOL, detect_collapse, detect_collapse_rule_ids,
+    rule_family,
+};
 pub use op_tokenizer::{RustOpBigramTokenizer, RustOpTokenizer, BIGRAM_SEP, OP_PREFIX};
 pub use retrieval_eval::{
     run_eval, run_eval_with, run_retrieval_sweep, run_router_eval, OwnedEvalSpan, EvalReport,

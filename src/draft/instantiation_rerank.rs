@@ -254,6 +254,125 @@ pub fn rerank(rules: &mut [ScoredRule]) {
     });
 }
 
+// ── Rerank-pool collapse detector (Issue 070 T3) ─────────────────────────
+//
+// Issue 024 (Bench 032) measured the failure this surfaces: under
+// cross-domain co-presence the correct rule can be crowded to raw similarity
+// rank 9 — one past the then-pool of 8 — while lookalike rules fill the
+// visible top-k. Until now that shape was only visible as a post-hoc
+// switch-cost delta; this is the first-class detector beside
+// [`RerankMode::Structural`]. It is DIAGNOSTIC ONLY: it observes a ranked
+// pool, it never reorders, promotes, or removes anything, so an unused
+// detector is bit-identical to not having one.
+
+/// The deterministic rule-family key for the collapse detector: the rule
+/// id's LEADING SEGMENT — the text before the first `-` or `_`, whichever
+/// comes first, or the whole id when neither appears.
+///
+/// This groups the snake clippy ids (`needless_return`/`needless_bool`/
+/// `needless_match` → `needless`) and the kebab perf/kernel/sec ids
+/// (`collect-append-to-extend` → `collect`,
+/// `smem-envelope-gate-kernel-variant` → `smem`) by their leading stem. It
+/// is coarse by design — the detector is a diagnostic, not a classifier —
+/// and deterministic by construction: a pure prefix scan, no table, no
+/// allocation.
+///
+/// Chosen over the candidate's *domain* as the family axis because a rerank
+/// pool is per-domain by construction (the fan-out ranks within one
+/// domain's index), where a domain family is constant and "collapsed to one
+/// family" would be vacuously true for every pool.
+#[must_use]
+pub fn rule_family(rule_id: &str) -> &str {
+    match (rule_id.find('-'), rule_id.find('_')) {
+        (Some(dash), Some(under)) => &rule_id[..dash.min(under)],
+        (Some(dash), None) => &rule_id[..dash],
+        (None, Some(under)) => &rule_id[..under],
+        (None, None) => rule_id,
+    }
+}
+
+/// Whether a rerank pool's top-k collapsed to one rule family — the
+/// measurable shape of the Issue-024 pool-crowding failure.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CollapseVerdict<'a> {
+    /// No crowding signal: the top-k spans more than one family, OR the
+    /// pool collapsed onto the oracle's own family (the right answer won —
+    /// collapse without a dissenting oracle is not the crowding class), OR
+    /// there is no pool/no probe window to speak of.
+    Diverse,
+    /// Every one of the top-`pool_top_k` candidates shares one rule
+    /// `family`.
+    ///
+    /// `oracle_outside` is the crowding EVIDENCE bit: `true` when a
+    /// ground-truth label was supplied and its family sits outside the
+    /// collapsed one (the right answer was crowded out of view). `false`
+    /// means no oracle was available — the production heal path passes
+    /// `None`, since it has no label — so the pool is collapsed but nothing
+    /// says it is *wrongly* so.
+    Collapsed {
+        family: &'a str,
+        pool_top_k: usize,
+        oracle_outside: bool,
+    },
+}
+
+/// The shared walk: `families` are the top-k candidates' family keys in
+/// ranked order (an empty iterator = empty pool or a zero probe window).
+fn collapse_over<'a>(
+    mut families: impl ExactSizeIterator<Item = &'a str>,
+    oracle_label: Option<&str>,
+) -> CollapseVerdict<'a> {
+    let pool_top_k = families.len();
+    let Some(family) = families.next() else {
+        return CollapseVerdict::Diverse;
+    };
+    if families.any(|f| f != family) {
+        return CollapseVerdict::Diverse;
+    }
+    if oracle_label.is_some_and(|oracle| rule_family(oracle) == family) {
+        // Collapsed onto the oracle's own family — the right answer won.
+        return CollapseVerdict::Diverse;
+    }
+    CollapseVerdict::Collapsed {
+        family,
+        pool_top_k,
+        // An equal-family oracle returned `Diverse` above, so `Some` here
+        // always means "a supplied oracle from a DIFFERENT family".
+        oracle_outside: oracle_label.is_some(),
+    }
+}
+
+/// Detect a top-k family collapse in a ranked rerank pool (Issue 070 T3).
+///
+/// `pool` is the post-[`rerank`] candidate list (best first — the detector
+/// reads order, it does not sort); `top_k` scopes the probe window
+/// (`min(top_k, pool.len())`); `oracle_label` is the eval fixtures' known
+/// rule id, or `None` on the production path.
+///
+/// Zero-allocation: the verdict borrows the first candidate's `rule_id`.
+#[must_use]
+pub fn detect_collapse<'a>(
+    pool: &'a [ScoredRule],
+    top_k: usize,
+    oracle_label: Option<&str>,
+) -> CollapseVerdict<'a> {
+    let k = top_k.min(pool.len());
+    collapse_over(pool[..k].iter().map(|r| rule_family(&r.rule_id)), oracle_label)
+}
+
+/// [`detect_collapse`] over bare rule ids — the eval path's entry point,
+/// where the ranked candidates sit behind shared refs
+/// (`canonical_rank` returns `Vec<&ScoredRule>`).
+#[must_use]
+pub fn detect_collapse_rule_ids<'a>(
+    rule_ids: &[&'a str],
+    top_k: usize,
+    oracle_label: Option<&str>,
+) -> CollapseVerdict<'a> {
+    let k = top_k.min(rule_ids.len());
+    collapse_over(rule_ids[..k].iter().copied().map(rule_family), oracle_label)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -344,5 +463,129 @@ mod tests {
         let mut v = vec![sr("needless_return", 1.0, false)];
         mark_instantiation(DomainId::Clippy, "fn broken( {{{", &mut v, RerankMode::Structural);
         assert!(!v[0].instantiates, "a parse failure must not fabricate evidence");
+    }
+
+    // ── Issue 070 T3: rerank-pool collapse detector ──────────────────────
+
+    #[test]
+    fn rule_family_is_the_leading_dash_or_underscore_segment() {
+        assert_eq!(rule_family("needless_return"), "needless");
+        assert_eq!(rule_family("collect-append-to-extend"), "collect");
+        assert_eq!(rule_family("smem-envelope-gate-kernel-variant"), "smem");
+        assert_eq!(rule_family("nan-unsafe-sort-comparator"), "nan");
+        assert_eq!(rule_family("plainid"), "plainid");
+    }
+
+    /// G1a — the planted Issue-024 shape: the top-4 window is one family
+    /// (`needless`) while the oracle label (`vec-with-capacity`, family
+    /// `vec`) sits outside it. The 5th candidate (the oracle's own family)
+    /// sits at rank 5, deliberately OUTSIDE the probed top-4 — crowding is
+    /// a property of the WINDOW, not of the whole pool.
+    #[test]
+    fn planted_collapse_with_the_oracle_outside_is_detected() {
+        let pool = vec![
+            sr("needless_return", 5.0, false),
+            sr("needless_bool", 4.0, false),
+            sr("needless_match", 3.0, false),
+            sr("needless_borrow", 2.0, false),
+            sr("vec_with_capacity", 1.0, false),
+        ];
+        assert_eq!(
+            detect_collapse(&pool, 4, Some("vec-with-capacity")),
+            CollapseVerdict::Collapsed {
+                family: "needless",
+                pool_top_k: 4,
+                oracle_outside: true
+            }
+        );
+    }
+
+    /// Widening the same pool's window to include the second family
+    /// dissolves the verdict — the detector scopes to `top_k`.
+    #[test]
+    fn a_multi_family_top_k_window_is_diverse() {
+        let pool = vec![
+            sr("needless_return", 5.0, false),
+            sr("vec_with_capacity", 1.0, false),
+        ];
+        assert_eq!(
+            detect_collapse(&pool, 2, Some("vec-with-capacity")),
+            CollapseVerdict::Diverse
+        );
+    }
+
+    /// G1b (constructed complement): a single-family pool that collapsed
+    /// onto the ORACLE's own family is not crowding — the right answer won.
+    #[test]
+    fn a_single_family_pool_holding_the_oracle_is_diverse() {
+        let pool = vec![sr("needless_return", 3.0, true), sr("needless_bool", 2.0, false)];
+        assert_eq!(
+            detect_collapse(&pool, 2, Some("needless_lifetimes")),
+            CollapseVerdict::Diverse
+        );
+    }
+
+    /// No crash + honest verdicts on degenerate pools: empty (nothing to
+    /// collapse), a zero probe window, and a single candidate (maximally
+    /// collapsed; the oracle decides whether it is the crowding class).
+    #[test]
+    fn empty_and_single_candidate_pools_do_not_crash() {
+        assert_eq!(
+            detect_collapse(&[], 4, Some("needless_return")),
+            CollapseVerdict::Diverse
+        );
+        assert_eq!(detect_collapse_rule_ids(&[], 4, None), CollapseVerdict::Diverse);
+        let single = vec![sr("collect-append-to-extend", 1.0, false)];
+        assert_eq!(
+            detect_collapse(&single, 0, Some("needless_return")),
+            CollapseVerdict::Diverse,
+            "top_k = 0 probes nothing"
+        );
+        assert_eq!(
+            detect_collapse(&single, 4, None),
+            CollapseVerdict::Collapsed {
+                family: "collect",
+                pool_top_k: 1,
+                oracle_outside: false
+            }
+        );
+        assert_eq!(
+            detect_collapse(&single, 4, Some("needless_return")),
+            CollapseVerdict::Collapsed {
+                family: "collect",
+                pool_top_k: 1,
+                oracle_outside: true
+            }
+        );
+    }
+
+    /// G1b — a REALISTIC pool straight off the composite-corpus eval path
+    /// (`LatentMatcher` fan-out + the structural re-rank, unmodified). The
+    /// oracle is the pool's own top-1 rule: its family IS the top family by
+    /// construction (or the pool is multi-family), so `Diverse` is the
+    /// required verdict under EITHER detector branch — the assertion is
+    /// deliberately top-1-independent, because whichever rule the
+    /// deterministic retrieval surfaces, an oracle inside the winning
+    /// family is never crowding.
+    #[cfg(feature = "clippy_lints")]
+    #[test]
+    fn a_real_composite_pool_with_the_oracle_inside_the_top_family_is_diverse() {
+        let mut matcher =
+            crate::draft::LatentMatcher::from_enabled_domains().expect("build matcher");
+        let (tag, code) = crate::draft::eval_fixtures_composite::COMPOSITE_SPANS[0];
+        let (_routed, by_domain) = matcher.suggest_span(code, RERANK_POOL);
+        let clippy: &[ScoredRule] = by_domain
+            .iter()
+            .find(|(d, _)| *d == DomainId::Clippy)
+            .map_or(&[], |(_, rules)| rules.as_slice());
+        assert!(
+            !clippy.is_empty(),
+            "{tag}: the composite span must retrieve clippy candidates"
+        );
+        let oracle = clippy[0].rule_id.clone();
+        assert_eq!(
+            detect_collapse(clippy, RERANK_POOL, Some(&oracle)),
+            CollapseVerdict::Diverse
+        );
     }
 }
