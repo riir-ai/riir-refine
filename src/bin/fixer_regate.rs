@@ -9,6 +9,13 @@
 //!   conditioning channels from the durable trajectory store (prior
 //!   outcomes for shape-similar inputs + the per-rule failure-pattern
 //!   summary). Arm A/B prompts are untouched — reproducible baselines.
+//! - `--arm G2` — Issue 067 arm G' (the Research-530 reopen): the SAME two
+//!   channels restricted to the QUERIED lint's family (the relevance fix —
+//!   cross-rule exemplars are the paper's Random-Trace harm class) and
+//!   placed BEFORE the code module (condition-first — the placement arm
+//!   that dominated 26/27 cells). Empty same-rule channels degrade to arm
+//!   B byte-identically; `growing_prime_channels_empty` records the
+//!   degradation rate per row.
 //! - `--arm C` — local Bonsai via the `bonsai_clippy_l4_eval --serve` daemon
 //!   (`--l4-bin/--l4-gguf/--l4-lora`; note the riir-train driver REQUIRES
 //!   `--lora`, so arm C needs a checkpoint — see the issue Status section)
@@ -251,6 +258,13 @@ struct Prepared {
     /// absent or no shape-similar rows) — arm G degenerates to arm B there;
     /// recorded per-row so the bench can report the degradation rate.
     growing_channels_empty: bool,
+    /// Issue 067 arm G2 (G'): the same-rule, condition-first prompt — the
+    /// two channels restricted to the queried lint's family and placed
+    /// before the code module.
+    prompt_growing_prime: String,
+    /// Whether both SAME-RULE channels were empty for this sample — arm G2
+    /// degenerates to arm B byte-identically there; recorded per-row.
+    growing_prime_channels_empty: bool,
     reachable_miss: bool,
 }
 
@@ -272,6 +286,19 @@ fn prepare(harness: &mut RegateHarness, samples: Vec<Sample>, few_shots: usize) 
                 &patterns,
             );
             let reachable_miss = miss.is_reachable_miss();
+            // Issue 067 arm G2: same-rule channels, condition-first. The
+            // queried lint is the sample's primary target (the same one
+            // `classify` consumed above).
+            let (traj_sr, patterns_sr) =
+                harness.trajectory_context_same_rule(&sample.module, &sample.lints[0], 3);
+            let growing_prime_empty = traj_sr.is_empty() && patterns_sr.is_empty();
+            let growing_prime = cf_workers_ai::prompt_growing_same_rule(
+                &sample.module,
+                modelless.as_deref(),
+                &fs,
+                &traj_sr,
+                &patterns_sr,
+            );
             Prepared {
                 sample,
                 miss,
@@ -281,6 +308,8 @@ fn prepare(harness: &mut RegateHarness, samples: Vec<Sample>, few_shots: usize) 
                 prompt_prepass: prepass,
                 prompt_growing: growing,
                 growing_channels_empty: growing_empty,
+                prompt_growing_prime: growing_prime,
+                growing_prime_channels_empty: growing_prime_empty,
                 reachable_miss,
             }
         })
@@ -319,6 +348,7 @@ fn record_case(
             "modelless_served": p.modelless.is_some(),
             "reachable_miss": p.reachable_miss,
             "growing_channels_empty": p.growing_channels_empty,
+            "growing_prime_channels_empty": p.growing_prime_channels_empty,
             "prompt_blake3_12": &blake3::hash(prompt.as_bytes()).to_hex().as_str()[..12],
             "prompt_chars": prompt.len(),
             "gen_chars": gen.len(),
@@ -413,10 +443,10 @@ fn main() {
 
     match args.arm.as_str() {
         "DRY" => run_dry(&args, &verifier, &prepared),
-        "A" | "B" | "G" => run_cf(&args, &verifier, &prepared),
+        "A" | "B" | "G" | "G2" => run_cf(&args, &verifier, &prepared),
         "C" => run_daemon(&args, &verifier, &prepared),
         other => {
-            eprintln!("unknown --arm {other} (A|B|G|C|DRY)");
+            eprintln!("unknown --arm {other} (A|B|G|G2|C|DRY)");
             std::process::exit(2);
         }
     }
@@ -434,14 +464,17 @@ fn run_dry(args: &Args, verifier: &ClippyVerifier, prepared: &[Prepared]) {
         let raw = blake3::hash(p.prompt_raw.as_bytes()).to_hex();
         let pre = blake3::hash(p.prompt_prepass.as_bytes()).to_hex();
         let grow = blake3::hash(p.prompt_growing.as_bytes()).to_hex();
+        let grow2 = blake3::hash(p.prompt_growing_prime.as_bytes()).to_hex();
         println!(
-            "  {:<28} miss={:<14} raw={:<12} prepass={:<12} growing={:<12} channels={} modelless={}",
+            "  {:<28} miss={:<14} raw={:<12} prepass={:<12} growing={:<12} growing2={:<12} channels={} channels2={} modelless={}",
             p.sample.id,
             format!("{:?}", p.miss),
             &raw.to_string()[..12],
             &pre.to_string()[..12],
             &grow.to_string()[..12],
+            &grow2.to_string()[..12],
             if p.growing_channels_empty { "empty" } else { "live" },
+            if p.growing_prime_channels_empty { "empty" } else { "live" },
             if p.modelless.is_some() { "served" } else { "declined" },
         );
     }
@@ -552,6 +585,7 @@ fn run_cf(args: &Args, verifier: &ClippyVerifier, prepared: &[Prepared]) {
     for p in prepared {
         let prompt = match args.arm.as_str() {
             "G" => &p.prompt_growing,
+            "G2" => &p.prompt_growing_prime,
             "B" => &p.prompt_prepass,
             _ => &p.prompt_raw,
         };

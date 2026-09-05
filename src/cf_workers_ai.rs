@@ -326,11 +326,24 @@ pub fn prompt_raw(module: &str) -> String {
 /// Deterministic by construction: the few-shot order is the retrieval
 /// ranking's order, the candidate is the seeded pipeline's serve (or an
 /// explicit "declined" line), and nothing else varies.
+///
+/// Byte-contract: arms A/B are reproducible baselines — the Issue-067 split
+/// of this fn into header + [`push_prepass_body`] is output-preserving by
+/// construction (the body is the same pushes, called from one place).
 #[must_use]
 pub fn prompt_prepass(module: &str, modelless: Option<&str>, fewshots: &[FewShot]) -> String {
     let mut s = String::new();
     s.push_str(TRAINED_INSTRUCTION);
     s.push_str("\n\n");
+    push_prepass_body(&mut s, module, modelless, fewshots);
+    s
+}
+
+/// The arm-B prompt body AFTER the instruction header (module + candidate +
+/// few-shots + the closing respond-line). Extracted so the Issue-067 arm G'
+/// builder can insert its conditioning channels BETWEEN the header and the
+/// code module without duplicating (and drifting from) this body.
+fn push_prepass_body(s: &mut String, module: &str, modelless: Option<&str>, fewshots: &[FewShot]) {
     s.push_str(module);
     s.push_str("\n\nA static modelless analyzer proposed this candidate fix (it may be WRONG — verify it, do not trust it):\n");
     match modelless {
@@ -356,7 +369,6 @@ pub fn prompt_prepass(module: &str, modelless: Option<&str>, fewshots: &[FewShot
         }
     }
     s.push_str("\nRespond with ONLY the corrected lines that differ from the input code, no explanation.");
-    s
 }
 
 // ── Issue 049: the growing-input channels (Meta^n conditioning POC) ──────
@@ -400,20 +412,17 @@ pub struct FailurePattern {
 /// in the paper's ablation. This is the single-call instantiation: the
 /// improver's input grows with the store; arm A/B remain byte-identical
 /// baselines (their builders are untouched).
-#[must_use]
-pub fn prompt_growing(
-    module: &str,
-    modelless: Option<&str>,
-    fewshots: &[FewShot],
+/// The two growing-input channel blocks, rendered exactly as arm G has
+/// always rendered them (byte-preserved — arm G stays a reproducible
+/// baseline). Shared by arm G (channels spliced before the closing line)
+/// and arm G' (channels placed before the code module). Each block starts
+/// with a leading `\n` separator; empty channels render to "".
+fn render_growing_channels(
     trajectories: &[TrajectoryExemplar],
     failure_summary: &[FailurePattern],
 ) -> String {
     use std::fmt::Write as _;
-    let s = prompt_prepass(module, modelless, fewshots);
-    // Splice the channels BEFORE the closing respond-line.
-    let closing = "\nRespond with ONLY the corrected lines that differ from the input code, no explanation.";
-    let base = s.strip_suffix(closing).unwrap_or(&s).to_string();
-    let mut s = base;
+    let mut s = String::new();
     if !trajectories.is_empty() {
         s.push_str("\nPrior fix attempts on shape-similar code (from the trajectory store — outcomes are ground truth, not suggestions):\n");
         for t in trajectories {
@@ -448,7 +457,60 @@ pub fn prompt_growing(
             }
         }
     }
+    s
+}
+
+#[must_use]
+pub fn prompt_growing(
+    module: &str,
+    modelless: Option<&str>,
+    fewshots: &[FewShot],
+    trajectories: &[TrajectoryExemplar],
+    failure_summary: &[FailurePattern],
+) -> String {
+    let s = prompt_prepass(module, modelless, fewshots);
+    // Splice the channels BEFORE the closing respond-line.
+    let closing = "\nRespond with ONLY the corrected lines that differ from the input code, no explanation.";
+    let base = s.strip_suffix(closing).unwrap_or(&s).to_string();
+    let mut s = base;
+    s.push_str(&render_growing_channels(trajectories, failure_summary));
     s.push_str(closing);
+    s
+}
+
+/// Issue 067 arm G' prompt (arm `G2` on the `fixer_regate` CLI): the arm-B
+/// pre-pass with the SAME-RULE conditioning channels placed BEFORE the code
+/// module. Two deltas vs arm G, both from katgpt-rs Research 530
+/// (arXiv:2609.02702 "Trace as State"):
+///
+/// 1. Placement. For causal processors, conditioning placed BEFORE the
+///    context dominated the reverse (26/27 model×task×metric cells) — arm G
+///    appended the channels after the module (the paper's controlled
+///    variable); G' puts them between the instruction header and the module
+///    so the model reads same-rule outcomes BEFORE the input they condition
+///    (`[z, C]`, not `[C, z]`).
+/// 2. Relevance. The channels are same-rule only (the harness's
+///    `trajectory_context_same_rule`) — the paper's Random-Trace arm scored
+///    BELOW no-trace, so weakly-relevant conditioning content is actively
+///    harmful; cross-rule exemplars cannot ride along.
+///
+/// The channel rendering is arm G's, byte-preserved. Degradation contract:
+/// empty channels ⇒ byte-identical to [`prompt_prepass`] (arm B) — pinned
+/// by test. Arm A/B prompts are untouched.
+#[must_use]
+pub fn prompt_growing_same_rule(
+    module: &str,
+    modelless: Option<&str>,
+    fewshots: &[FewShot],
+    trajectories: &[TrajectoryExemplar],
+    failure_summary: &[FailurePattern],
+) -> String {
+    let mut s = String::new();
+    s.push_str(TRAINED_INSTRUCTION);
+    s.push_str("\n\n");
+    // Condition-first: channels before the code module.
+    s.push_str(&render_growing_channels(trajectories, failure_summary));
+    push_prepass_body(&mut s, module, modelless, fewshots);
     s
 }
 
@@ -1613,78 +1675,172 @@ impl RegateHarness {
     ///
     /// Both channels degrade to empty without a store — the runner records
     /// the degradation per sample (arm G ≡ arm B there).
-    pub fn trajectory_context(&self, module: &str, k: usize) -> (Vec<TrajectoryExemplar>, Vec<FailurePattern>) {
-        use std::collections::BTreeMap;
-        /// (`ok`, `fail`, [(`shape`, `fix`, `fail_count`)] rows) — the per-rule fold.
-        type RuleFold = (u32, u32, Vec<(String, String, u32)>);
-        let Some(store) = &self.store else {
-            return (Vec::new(), Vec::new());
+    pub fn trajectory_context(
+        &self,
+        module: &str,
+        k: usize,
+    ) -> (Vec<TrajectoryExemplar>, Vec<FailurePattern>) {
+        match &self.store {
+            Some(store) => all_rule_context(store, module, k),
+            None => (Vec::new(), Vec::new()),
+        }
+    }
+
+    /// Issue 067 T2 — the SAME-RULE channels for one sample: both channels
+    /// restricted to the queried lint's family. Channel 1 retrieves with the
+    /// boundary-safe `{lint}:` key prefix (the `TrajStore` row-key boundary —
+    /// `traj:{lint_key}:{shape_hash}` — which also admits the rustc
+    /// `{code}:{strategy}` rows under one code); channel 3 folds only that
+    /// family's rows. This is the relevance fix: arm G's cross-rule channels
+    /// are the paper's Random-Trace class — weakly-relevant conditioning
+    /// that measured BELOW no-trace (katgpt-rs Research 530).
+    ///
+    /// Both channels degrade to empty without a store or with no same-rule
+    /// rows — arm G' ≡ arm B there, recorded per-row by the runner.
+    pub fn trajectory_context_same_rule(
+        &self,
+        module: &str,
+        lint_key: &str,
+        k: usize,
+    ) -> (Vec<TrajectoryExemplar>, Vec<FailurePattern>) {
+        match &self.store {
+            Some(store) => same_rule_context(store, module, lint_key, k),
+            None => (Vec::new(), Vec::new()),
+        }
+    }
+}
+
+/// Arm G's channel build over a store: shape-similar neighbors across ALL
+/// rules (empty lint prefix) + the whole-store failure-pattern summary.
+fn all_rule_context(
+    store: &crate::traj_store::TrajStore,
+    module: &str,
+    k: usize,
+) -> (Vec<TrajectoryExemplar>, Vec<FailurePattern>) {
+    let exemplars = growing_exemplars(store, module, "", k);
+    let patterns = fold_failure_patterns(store.dump(), None);
+    (exemplars, patterns)
+}
+
+/// Arm G''s channel build over a store: both channels restricted to the
+/// queried lint's family. The retrieval prefix is the boundary-safe
+/// `{lint}:` (never a bare prefix — `ptr_arg:` must not admit a
+/// hypothetical `ptr_arg_extra` row); the fold matches the row's own
+/// `lint_key` field with the same boundary rule (the field carries no
+/// shape-hash suffix, so it needs the `== fam || starts_with(fam + ":")`
+/// form rather than the key prefix).
+fn same_rule_context(
+    store: &crate::traj_store::TrajStore,
+    module: &str,
+    lint_key: &str,
+    k: usize,
+) -> (Vec<TrajectoryExemplar>, Vec<FailurePattern>) {
+    let exemplars = growing_exemplars(store, module, &format!("{lint_key}:"), k);
+    let patterns = fold_failure_patterns(store.dump(), Some(lint_key));
+    (exemplars, patterns)
+}
+
+/// Channel 1: top-k shape-similar neighbors (`lint_prefix` = "" for all
+/// rules, `{lint}:` for one family), Certified first then Heuristic,
+/// deterministic order (arm G's original comparator, extracted).
+fn growing_exemplars(
+    store: &crate::traj_store::TrajStore,
+    module: &str,
+    lint_prefix: &str,
+    k: usize,
+) -> Vec<TrajectoryExemplar> {
+    let mut neighbors = store.retrieve(module, lint_prefix, k);
+    neighbors.sort_by(|a, b| {
+        let tier_rank = |t: crate::memory::EvidenceTier| {
+            u8::from(!matches!(t, crate::memory::EvidenceTier::Certified))
         };
-        // Channel 1: shape-similar neighbors across ALL rules (empty lint
-        // prefix). Certified first, then Heuristic; deterministic order.
-        let mut neighbors = store.retrieve(module, "", k);
-        neighbors.sort_by(|a, b| {
-            let tier_rank = |t: crate::memory::EvidenceTier| {
-                u8::from(!matches!(t, crate::memory::EvidenceTier::Certified))
-            };
-            tier_rank(a.tier)
-                .cmp(&tier_rank(b.tier))
-                .then(b.bm25.total_cmp(&a.bm25))
-        });
-        let exemplars: Vec<TrajectoryExemplar> = neighbors
-            .iter()
-            .map(|n| TrajectoryExemplar {
-                lint_key: n.lint_key.clone(),
-                shape: n.shape.clone(),
-                fix: n.fix.clone(),
-                success: n.success_count,
-                fail: n.fail_count,
-                tier: if matches!(n.tier, crate::memory::EvidenceTier::Certified) { "Certified" } else { "Heuristic" },
-            })
-            .collect();
-        // Channel 3: aggregate every row per rule; report the top rules by
-        // attempts (the distribution the improver should calibrate against).
-        let mut by_rule: BTreeMap<String, RuleFold> = BTreeMap::new();
-        for row in store.dump() {
-            if matches!(crate::memory::EvidenceTier::from_u8(row.tier), crate::memory::EvidenceTier::Withdrawn) {
+        tier_rank(a.tier)
+            .cmp(&tier_rank(b.tier))
+            .then(b.bm25.total_cmp(&a.bm25))
+    });
+    neighbors
+        .iter()
+        .map(|n| TrajectoryExemplar {
+            lint_key: n.lint_key.clone(),
+            shape: n.shape.clone(),
+            fix: n.fix.clone(),
+            success: n.success_count,
+            fail: n.fail_count,
+            tier: if matches!(n.tier, crate::memory::EvidenceTier::Certified) {
+                "Certified"
+            } else {
+                "Heuristic"
+            },
+        })
+        .collect()
+}
+
+/// Channel 3: the per-rule failure-pattern fold (`family` = `None` for arm
+/// G's whole-store summary, `Some(lint)` for arm G''s same-rule
+/// restriction). Withdrawn rows are excluded (the T7.4 rule); rules with
+/// zero attempts are dropped; top rules by attempts (the distribution the
+/// improver should calibrate against), up to 2 representative REJECTED
+/// pairs each, 5 rules max.
+fn fold_failure_patterns(
+    rows: Vec<crate::traj_store::TrajRowDoc>,
+    family: Option<&str>,
+) -> Vec<FailurePattern> {
+    use std::collections::BTreeMap;
+    /// (`ok`, `fail`, [(`shape`, `fix`, `fail_count`)] rows) — the per-rule fold.
+    type RuleFold = (u32, u32, Vec<(String, String, u32)>);
+    let mut by_rule: BTreeMap<String, RuleFold> = BTreeMap::new();
+    for row in rows {
+        if matches!(
+            crate::memory::EvidenceTier::from_u8(row.tier),
+            crate::memory::EvidenceTier::Withdrawn
+        ) {
+            continue;
+        }
+        if let Some(fam) = family {
+            let in_family = row.lint_key == fam
+                || row
+                    .lint_key
+                    .strip_prefix(fam)
+                    .is_some_and(|rest| rest.starts_with(':'));
+            if !in_family {
                 continue;
             }
-            let e = by_rule.entry(row.lint_key.clone()).or_insert((0, 0, Vec::new()));
-            e.0 += row.success_count;
-            e.1 += row.fail_count;
-            if row.fail_count > 0 {
-                e.2.push((row.shape.clone(), row.fix.clone(), row.fail_count));
-            }
         }
-        let mut patterns: Vec<FailurePattern> = by_rule
-            .into_iter()
-            .filter_map(|(rule, (ok, fail, rejected))| {
-                let attempts = ok + fail;
-                if attempts == 0 {
-                    return None;
-                }
-                let mut rejected = rejected;
-                rejected.sort_by_key(|r| std::cmp::Reverse(r.2));
-                Some(FailurePattern {
-                    rule,
-                    attempts,
-                    kept: ok,
-                    // Display-only rate on tiny counts (≤ store rows); the
-                    // exact integers ride alongside in `kept`/`attempts`.
-                    #[allow(clippy::cast_precision_loss)]
-                    success_rate: ok as f32 / attempts as f32,
-                    representative_failures: rejected
-                        .into_iter()
-                        .take(2)
-                        .map(|(s, f, _)| (s, f))
-                        .collect(),
-                })
-            })
-            .collect();
-        patterns.sort_by(|a, b| b.attempts.cmp(&a.attempts).then(a.rule.cmp(&b.rule)));
-        patterns.truncate(5);
-        (exemplars, patterns)
+        let e = by_rule.entry(row.lint_key.clone()).or_insert((0, 0, Vec::new()));
+        e.0 += row.success_count;
+        e.1 += row.fail_count;
+        if row.fail_count > 0 {
+            e.2.push((row.shape.clone(), row.fix.clone(), row.fail_count));
+        }
     }
+    let mut patterns: Vec<FailurePattern> = by_rule
+        .into_iter()
+        .filter_map(|(rule, (ok, fail, rejected))| {
+            let attempts = ok + fail;
+            if attempts == 0 {
+                return None;
+            }
+            let mut rejected = rejected;
+            rejected.sort_by_key(|r| std::cmp::Reverse(r.2));
+            Some(FailurePattern {
+                rule,
+                attempts,
+                kept: ok,
+                // Display-only rate on tiny counts (≤ store rows); the
+                // exact integers ride alongside in `kept`/`attempts`.
+                #[allow(clippy::cast_precision_loss)]
+                success_rate: ok as f32 / attempts as f32,
+                representative_failures: rejected
+                    .into_iter()
+                    .take(2)
+                    .map(|(s, f, _)| (s, f))
+                    .collect(),
+            })
+        })
+        .collect();
+    patterns.sort_by(|a, b| b.attempts.cmp(&a.attempts).then(a.rule.cmp(&b.rule)));
+    patterns.truncate(5);
+    patterns
 }
 
 // ── Aggregation ────────────────────────────────────────────────────────────
@@ -2149,6 +2305,138 @@ mod tests {
         assert_eq!(g, prompt_growing("MOD", Some("CAND"), &fs, &traj, &patterns));
         // Empty channels → byte-identical to arm B (the degradation case).
         assert_eq!(prompt_growing("MOD", Some("CAND"), &fs, &[], &[]), prompt_prepass("MOD", Some("CAND"), &fs));
+    }
+
+    // ── Issue 067 — arm G' (same-rule channels, condition-first) ────
+
+    fn gprime_channels() -> (Vec<TrajectoryExemplar>, Vec<FailurePattern>) {
+        let traj = vec![TrajectoryExemplar {
+            lint_key: "ptr_arg".into(),
+            shape: "fn f(v: &Vec<u8>) -> usize { v.len() }".into(),
+            fix: "fn f(v: &[u8]) -> usize { v.len() }".into(),
+            success: 3,
+            fail: 0,
+            tier: "Certified",
+        }];
+        let patterns = vec![FailurePattern {
+            rule: "ptr_arg".into(),
+            attempts: 4,
+            kept: 3,
+            success_rate: 0.75,
+            representative_failures: vec![(
+                "fn g(v: &Vec<u8>) {}".into(),
+                "fn g(v: Vec<u8>) {}".into(),
+            )],
+        }];
+        (traj, patterns)
+    }
+
+    #[test]
+    fn prompt_growing_same_rule_places_channels_before_the_module() {
+        let fs = vec![FewShot { rule_id: "manual_map".into(), buggy: "b".into(), fixed: "f".into() }];
+        let (traj, patterns) = gprime_channels();
+        let g = prompt_growing_same_rule("MODCODE", Some("CAND"), &fs, &traj, &patterns);
+        // Condition-first: instruction header < channels < code module
+        // (arm G appends the channels at the tail instead).
+        let hdr = g.find(TRAINED_INSTRUCTION).expect("instruction header");
+        let chan = g
+            .find("Prior fix attempts on shape-similar code")
+            .expect("channel 1 present");
+        let module = g.find("MODCODE").expect("module present");
+        assert!(hdr < chan && chan < module, "condition-first: header < channels < module");
+        assert!(
+            module < g.find("A static modelless analyzer").unwrap(),
+            "the candidate block follows the module (arm B's body intact)"
+        );
+        // Both channels carried; exactly one respond-line.
+        assert!(g.contains("Historical fix-reliability by rule"));
+        assert_eq!(g.matches("Respond with ONLY").count(), 1);
+        // Deterministic.
+        assert_eq!(g, prompt_growing_same_rule("MODCODE", Some("CAND"), &fs, &traj, &patterns));
+    }
+
+    #[test]
+    fn prompt_growing_same_rule_empty_channels_is_byte_identical_to_arm_b() {
+        let fs = vec![FewShot { rule_id: "manual_map".into(), buggy: "b".into(), fixed: "f".into() }];
+        assert_eq!(
+            prompt_growing_same_rule("MOD", Some("CAND"), &fs, &[], &[]),
+            prompt_prepass("MOD", Some("CAND"), &fs),
+        );
+        // And the arm-G byte contract still holds after the renderer
+        // extraction (both builders share it).
+        let (traj, patterns) = gprime_channels();
+        assert_eq!(
+            prompt_growing("MOD", Some("CAND"), &fs, &traj, &patterns),
+            prompt_growing("MOD", Some("CAND"), &fs, &traj, &patterns),
+        );
+    }
+
+    #[test]
+    fn same_rule_context_excludes_other_rules_and_orders_certified_first() {
+        let mut d = std::env::temp_dir();
+        d.push(format!("riir_gprime_ctx_{}_{}", std::process::id(), line!()));
+        let _ = std::fs::remove_dir_all(&d);
+        let (store, bad) = crate::traj_store::TrajStore::open(&d).unwrap();
+        assert_eq!(bad, 0);
+        // Queried rule `ptr_arg`: one Heuristic (unverified) + one Certified.
+        // Records interleave so a stable sort would NOT produce the
+        // Certified-first order — only the explicit tier rank does.
+        store.record("ptr_arg", "shape_h", "fix_h", true, false, "r").unwrap();
+        store.record("ptr_arg", "shape_c", "fix_c", true, true, "r").unwrap();
+        // Another rule at identical shape — arm G would carry it, G' must not.
+        store.record("needless_borrow", "shape_c", "fix_x", true, true, "r").unwrap();
+        // A prefix-collision rule — the boundary-safe `ptr_arg:` key prefix
+        // must NOT admit it (a bare-prefix filter would).
+        store.record("ptr_arg_extra", "shape_c", "fix_y", true, true, "r").unwrap();
+
+        let (exemplars, patterns) = same_rule_context(&store, "shape_c", "ptr_arg", 3);
+        assert_eq!(exemplars.len(), 2, "only the ptr_arg family: {exemplars:?}");
+        assert!(exemplars.iter().all(|e| e.lint_key == "ptr_arg"));
+        assert_eq!(exemplars[0].tier, "Certified", "Certified first: {exemplars:?}");
+        assert_eq!(exemplars[0].shape, "shape_c");
+        assert_eq!(exemplars[1].tier, "Heuristic");
+        // Channel 3: the family fold only — the other rules' attempts must
+        // not appear.
+        assert_eq!(patterns.len(), 1, "one family rule: {patterns:?}");
+        assert_eq!(patterns[0].rule, "ptr_arg");
+        assert_eq!(patterns[0].attempts, 2);
+        // The all-rules build (arm G) still sees the other rules — the two
+        // contexts differ by exactly the family restriction.
+        let (all_ex, all_pat) = all_rule_context(&store, "shape_c", 3);
+        assert!(all_ex.iter().any(|e| e.lint_key == "needless_borrow"));
+        assert!(all_pat.iter().any(|p| p.rule == "ptr_arg_extra"));
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn same_rule_context_folds_rustc_code_family_and_excludes_withdrawn() {
+        let mut d = std::env::temp_dir();
+        d.push(format!("riir_gprime_rustc_{}_{}", std::process::id(), line!()));
+        let _ = std::fs::remove_dir_all(&d);
+        let (store, bad) = crate::traj_store::TrajStore::open(&d).unwrap();
+        assert_eq!(bad, 0);
+        // Two strategies under one rustc code — the `{code}:` prefix admits
+        // both; the fold reports them as their own pattern rows.
+        store.record("E0502:a-strategy", "&v[0]", "x", true, true, "r").unwrap();
+        store.record("E0502:b-strategy", "&w[0]", "y", false, false, "r").unwrap();
+        store.record("E0502:b-strategy", "&w[0]", "y", false, false, "r").unwrap();
+        // A Withdrawn row (3 consecutive fails = the absorbing transition) —
+        // excluded from BOTH channels.
+        store.record("E0502:dead-strategy", "&d[0]", "z", false, false, "r").unwrap();
+        store.record("E0502:dead-strategy", "&d[0]", "z", false, false, "r").unwrap();
+        store.record("E0502:dead-strategy", "&d[0]", "z", false, false, "r").unwrap();
+        // Another code entirely.
+        store.record("E0382:other", "&m[0]", "q", true, true, "r").unwrap();
+
+        let (exemplars, patterns) = same_rule_context(&store, "&v[0]", "E0502", 3);
+        assert!(!exemplars.is_empty() && exemplars.iter().all(|e| e.lint_key.starts_with("E0502:")));
+        assert!(!exemplars.iter().any(|e| e.lint_key == "E0502:dead-strategy"), "withdrawn excluded");
+        assert!(patterns.iter().all(|p| p.rule.starts_with("E0502:")));
+        assert!(!patterns.iter().any(|p| p.rule == "E0502:dead-strategy"));
+        assert!(patterns.iter().any(|p| p.rule == "E0502:a-strategy" && p.kept == 1));
+        let b = patterns.iter().find(|p| p.rule == "E0502:b-strategy").expect("b-strategy row");
+        assert_eq!((b.attempts, b.kept), (2, 0), "2 fails stays Heuristic (3 would withdraw)");
+        let _ = std::fs::remove_dir_all(&d);
     }
 
     // ── contract + first_fn ────────────────────────────────────────────────
