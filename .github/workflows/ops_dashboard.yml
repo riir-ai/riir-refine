@@ -152,12 +152,12 @@ jobs:
           path: ${{ runner.temp }}/git/riir-ai
           fetch-depth: 2000
 
-      - name: Checkout riir-train (main)
+      - name: Checkout riir-train (develop — default since 2026-09-04, was main)
         continue-on-error: true
         uses: actions/checkout@v4
         with:
           repository: gist-rs/riir-train
-          ref: main
+          ref: develop
           token: ${{ secrets.GH_PAT }}
           path: ${{ runner.temp }}/git/riir-train
           fetch-depth: 2000

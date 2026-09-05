@@ -1389,7 +1389,10 @@ One open class (below); the standing divergence (P4 residual) has no action plan
       rust.yml runs the repo's own `scripts/ci_feature_guard.sh` (the full guard, not
       a subset) and EXISTS ON THE DEFAULT BRANCH (schedule/dispatch liveness, the
       `.issues/704` rot class) with schedule+dispatch+push triggers — including
-      riir-train (rust.yml on `main`, its working branch) and riir-game-sdk (default
+      riir-train (rust.yml on `main`, its then-working branch — NOTE 2026-09-05:
+      riir-train flipped to `develop` as default + working branch on 2026-09-04; the
+      ops_dashboard.yml checkout was re-pointed `main` → `develop` the same day as
+      this note, and its rust.yml triggers were stripped to dispatch-only) and riir-game-sdk (default
       flipped main→develop mid-day 2026-09-03 by the parallel CI session);
       (2) riir-unity has ZERO `.rs` files and no Cargo.toml — the boundary-only
       `no_rust_boundary.yml` is the correct shape, closed; (3) riir-dao's "no PAT
