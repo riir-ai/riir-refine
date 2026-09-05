@@ -1558,6 +1558,7 @@ mod entries_gpu_23;
 mod entries_gpu_24;
 mod entries_gpu_25;
 mod entries_gpu_26;
+mod entries_gpu_27;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -1597,6 +1598,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_24::entries());
     entries.extend(entries_gpu_25::entries());
     entries.extend(entries_gpu_26::entries());
+    entries.extend(entries_gpu_27::entries());
     Corpus::new(entries)
 }
 
@@ -1609,7 +1611,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 532-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 538-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1617,7 +1619,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (112 rules)
+    // A: Memory access patterns (113 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -1733,6 +1735,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "register-rotation-prefetch-loop",
             "shared-operand-groups-per-warp",
             "whole-row-register-resident-under-length-budget",
+            "byte-owning-threads-non-positional-digit-codes",
         ],
     ),
     // B: Compute patterns (59 rules)
@@ -1852,7 +1855,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "softmax-denominator-cancels-through-scale-invariant-norm",
         ],
     ),
-    // D: Dispatch patterns (124 rules)
+    // D: Dispatch patterns (127 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -1981,9 +1984,12 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "dispatch-cliff-bitexact-shape-confinement",
             "readout-trim-needs-committed-id-coverage",
             "dead-output-rows-state-append-only-path",
+            "scratch-sizing-shares-dispatch-eligibility-predicate",
+            "shader-shape-cutover-keys-on-resource-block-ratio",
+            "same-input-folded-transform-memo-per-build",
         ],
     ),
-    // E: Parallelism patterns (42 rules)
+    // E: Parallelism patterns (43 rules)
     (
         KernelCategory::Parallelism,
         "E: parallelism",
@@ -2030,6 +2036,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "m-group-shared-weight-scan-register-relief",
             "row-parallelism-ladder-split-vs-pack",
             "distinct-index-bitmap-ascending-compaction",
+            "fwht-wide-block-row-per-threadgroup-exchange-ladder",
         ],
     ),
     // F: Flash-attention tiling (12 rules)
@@ -2201,7 +2208,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "warm-reachable-dispatch-signatures-before-timed-window",
         ],
     ),
-    // N: dtype + alignment specialization (34 rules)
+    // N: dtype + alignment specialization (35 rules)
     (
         KernelCategory::DtypeAlignment,
         "N: dtype + alignment",
@@ -2239,6 +2246,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "coarse-precision-first-exact-refine",
             "shader-fastdiv-mulhi",
             "exhaustive-domain-input-patch-bit-identity",
+            "activation-bitplane-popcount-word-dot",
         ],
     ),
     // O: IR strength reduction (4 rules)
