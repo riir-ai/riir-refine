@@ -69,7 +69,7 @@ finding instrument. The 128-byte threshold IS the decision content.
       no re-pins); clippy 0 in default `--all-targets` + bench + latent states;
       score-bench run #39 FLAT at the floor (96.2/1.9/100/100, miss map unchanged:
       map_unwrap_or ×1, useless_format ×1 — the documented parse-only frontier).
-- [x] T8 — Commit `feat: batch 112: byval-move memcpy-threshold rule (rust_perf layout,
+- [x] T8 — Commit `1d29e04` — feat: batch 112: byval-move memcpy-threshold rule (rust_perf layout,
       corpus 100->101) + 2 confirmation riders` + push on develop. No `.raw/` (blog
       source, consumed at R134); 4090-side probe artifacts cleaned.
 
