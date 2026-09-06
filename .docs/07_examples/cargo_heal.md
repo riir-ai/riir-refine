@@ -140,11 +140,16 @@ without `kernel_heal`).
   Run after every proposer/corpus change so the history accumulates; the
   run is dual-written into the Warm-tier store under `latent_retrieval`
   (Issue 050).
-- `--score-bench --generation 2` — run the M4 construction-built k-ladder
-  (issue 072 T5) behind the non-vacuity admission gate: the first v2 append
-  is admitted ONLY if it measures harder than v1 (refusals exit non-zero,
-  nothing appended — the honest-ratchet contract). Generation 1 (default)
-  is the frozen v1 set; pre-092 history rows read as generation 1.
+- `--score-bench --generation <1|2|3>` — run a non-v1 bench generation
+  behind the non-vacuity admission gate: a generation's first append is
+  admitted ONLY if it measures harder than its predecessor (refusals exit
+  non-zero, nothing appended — the honest-ratchet contract). Generation 2
+  is the M4 construction-built k-ladder (issue 072 T5, Bench 069);
+  generation 3 is the persist-stratified ladder (Bench 070 — 4 persist-shape
+  atoms stratifying the 38 corpus atoms; its own gate FALSIFIED 2 of 5
+  authored atoms on the first freeze run and they were REPLACED, not
+  pinned). Pre-092 history rows read as generation 1; each generation
+  gets its own SVG.
 - `--misses [--limit N]` — print the `.heal/misses/` authoring queue in
   FRONTIER order (Plan 091 T1.2): dispersion-informative error codes first
   (resolving THOSE converts uncertain candidates), then unobserved /
@@ -155,9 +160,10 @@ without `kernel_heal`).
   (the FIFO baseline vs the frontier landings) against the wiring commit.
 - Saturation (Plan 092 M5): every bench run prints the per-generation
   saturation verdict (5-run window, strict marginal); a saturated
-  generation refuses a same-difficulty v2 append — difficulty for a
-  generation 3 re-enters through the freeze discipline, never a silent
-  rewrite. See [Bench 069](../../.benchmarks/069_issue072_t5_t6_generations.md).
+  generation refuses a same-difficulty append — difficulty for a new
+  generation re-enters through the freeze discipline, never a silent
+  rewrite. See [Bench 069](../../.benchmarks/069_issue072_t5_t6_generations.md)
+  + [Bench 070](../../.benchmarks/070_generation3_persist_stratified_ladder.md).
 
 ## KAT subcommands (Proposal 005 / 007 / 008 — `kat_service`, submit legs `kat_transport`)
 
