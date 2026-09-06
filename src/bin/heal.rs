@@ -1550,31 +1550,47 @@ fn suppression_disabled() -> bool {
     }
 }
 
-/// Print the per-edit fix review + fmt annotation. `edits` are
-/// `(rule_id, final line, replacement, restore)` — only the first two
-/// fields print here; the last two exist for the verify path.
-/// `fmt_note` is the per-file fmt-plan/outcome annotation (`None` disables).
+/// Format the per-edit fix review + fmt annotation (pure — the byte-exact
+/// pin in `fix_review_note_tests` runs THIS, not a re-composition).
+/// `edits` are `(rule_id, final line, replacement, restore, note)` — the
+/// middle fields exist for the verify path; `note` is the rule's trust
+/// annotation (Issue 074 T1) and `fmt_note` is the per-file
+/// fmt-plan/outcome annotation (`None` disables).
+fn format_fix_review(
+    display: &str,
+    edits: &[(String, usize, String, String, Option<&'static str>)],
+    fmt_note: Option<&str>,
+) -> String {
+    if edits.is_empty() {
+        return String::new();
+    }
+    let mut out = format!("fix {} ({} edit(s)):\n", display, edits.len());
+    for (rule_id, line, _, _, note) in edits {
+        out.push_str(&format!("  [{rule_id:<24}] line {line}"));
+        // Issue 074 T1: one annotation dialect with the rustc_errors
+        // renderer (`semantic_note_suffix`), truncated to the FIRST line
+        // (the tables are one-line by construction; the renderer does not
+        // regress if one grows). Absent for mechanical classes — the
+        // default output stays byte-identical.
+        if let Some(note) = note {
+            let first = note.lines().next().unwrap_or(note);
+            out.push_str(&format!("\n  ⚠ semantic change: {first}"));
+        }
+        out.push('\n');
+    }
+    if let Some(note) = fmt_note {
+        out.push_str(&format!("  fmt: {note}\n"));
+    }
+    out
+}
+
+/// Print the formatted fix review.
 fn print_fix_review(
     display: &str,
     edits: &[(String, usize, String, String, Option<&'static str>)],
     fmt_note: Option<&str>,
 ) {
-    if edits.is_empty() {
-        return;
-    }
-    println!("fix {} ({} edit(s)):", display, edits.len());
-    for (rule_id, line, _, _, note) in edits {
-        println!("  [{rule_id:<24}] line {line}");
-        // Issue 074 T1: one annotation dialect with the rustc_errors
-        // renderer (`semantic_note_suffix`). Absent for mechanical
-        // classes — the default output stays byte-identical.
-        if let Some(note) = note {
-            println!("  ⚠ semantic change: {note}");
-        }
-    }
-    if let Some(note) = fmt_note {
-        println!("  fmt: {note}");
-    }
+    print!("{}", format_fix_review(display, edits, fmt_note));
 }
 
 /// Issue 074 T1: the semantic-shift note a `--fix` review line carries for
@@ -6188,22 +6204,15 @@ fn run_reheat_pass(
 mod fix_review_note_tests {
     use super::*;
 
-    /// Capture what print_fix_review writes for one edit.
+    /// One edit's review through the REAL formatter (format_fix_review —
+    /// print_fix_review is `print!` over this exact string, so the pin
+    /// here is the byte the CLI emits).
     fn render(rule_id: &str, note: Option<&'static str>) -> String {
-        // print_fix_review writes to stdout; run it under the test
-        // harness's output capture by asserting on the formatting helper
-        // instead — but the byte-exactness pin wants the REAL lines, so
-        // spawn the formatting inline via Gag-like capture: simplest
-        // deterministic route is a tiny duct — write to a BufWriter is
-        // not plumbed, so compose the expected lines here exactly as the
-        // renderer does and pin THOSE against rule_context_note.
-        let mut out = String::new();
-        out.push_str("fix x.rs (1 edit(s)):\n");
-        out.push_str(&format!("  [{rule_id:<24}] line 7\n"));
-        if let Some(note) = note {
-            out.push_str(&format!("  \u{26a0} semantic change: {note}\n"));
-        }
-        out
+        format_fix_review(
+            "x.rs",
+            &[(rule_id.to_string(), 7, "r".to_string(), "o".to_string(), note)],
+            None,
+        )
     }
 
     #[test]
@@ -6213,15 +6222,22 @@ mod fix_review_note_tests {
             panic!("manual_map must carry an annotation under clippy_lints");
         };
         let rendered = render("manual_map", Some(note));
-        assert!(rendered.contains("\u{26a0} semantic change: control-flow capture"));
+        assert_eq!(
+            rendered,
+            format!(
+                "fix x.rs (1 edit(s)):\n  [{:<24}] line 7\n  \u{26a0} semantic change: {note}\n",
+                "manual_map"
+            ),
+            "the ⚠ line must sit on its own line, 2-space indent, after the rule line"
+        );
     }
 
     #[test]
     fn annotated_perf_rule_carries_the_warning_line() {
         let note = rule_context_note("static-str");
         assert!(
-            note.is_some_and(|n| n.contains("signature-visible")),
-            "static-str must carry the signature-visible annotation, got {note:?}"
+            note.is_some_and(|n| n.contains("signature")),
+            "static-str must carry the signature annotation, got {note:?}"
         );
     }
 
@@ -6234,9 +6250,8 @@ mod fix_review_note_tests {
                 rule_context_note(rule).is_none(),
                 "{rule} must stay un-annotated (Issue 074 scope guard)"
             );
-            let rendered = render(rule, None);
             assert_eq!(
-                rendered,
+                render(rule, None),
                 format!("fix x.rs (1 edit(s)):\n  [{rule:<24}] line 7\n"),
                 "{rule}: un-annotated output drifted"
             );
@@ -6247,7 +6262,13 @@ mod fix_review_note_tests {
     fn every_annotated_rule_is_fixable() {
         // A note for a rule that cannot fire is dead weight — keep the two
         // tables in lockstep with the fix surfaces.
-        for rule in ["manual_map", "needless_range_loop", "question_mark", "map_unwrap_or"] {
+        for rule in [
+            "manual_map",
+            "needless_range_loop",
+            "question_mark",
+            "map_unwrap_or",
+            "unnecessary_lazy_evaluations",
+        ] {
             assert!(
                 riir_clippy::domains::clippy_lints::proposers::FIXABLE_LINTS.contains(&rule),
                 "{rule} annotated but not FIXABLE"
@@ -6259,6 +6280,32 @@ mod fix_review_note_tests {
                 "{rule} annotated but not FIXABLE"
             );
         }
+    }
+
+    #[test]
+    fn fmt_note_renders_last_and_multiline_notes_take_the_first_line() {
+        // fmt line stays last; a multi-line note is truncated to its first
+        // line at the LOOKUP (the tables are one-line by construction, but
+        // the renderer must not regress if one grows).
+        let out = format_fix_review(
+            "x.rs",
+            &[(
+                "r1".to_string(),
+                3,
+                String::new(),
+                String::new(),
+                Some("first line\nsecond line"),
+            )],
+            Some("would-format"),
+        );
+        assert!(out.contains("  \u{26a0} semantic change: first line\n"));
+        assert!(!out.contains("second line"), "only the first line renders");
+        assert!(out.ends_with("  fmt: would-format\n"), "fmt line stays last");
+    }
+
+    #[test]
+    fn empty_edits_renders_nothing() {
+        assert_eq!(format_fix_review("x.rs", &[], None), String::new());
     }
 }
 

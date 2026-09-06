@@ -300,6 +300,12 @@ pub fn context_note(rule_id: &str) -> Option<&'static str> {
         // (E0308 on trait-object/array-literal defaults) — those shapes
         // are skipped (the P9 divergence).
         "map_unwrap_or" => Some("inference shape — map_or infers the default's type from both args; unsize-coercion defaults (trait-object/array literal) are refused"),
+        // lazy twin -> eager twin (unwrap_or_else(|| x) -> unwrap_or(x)):
+        // the default computes on EVERY path instead of only on
+        // None/Err. Gated on a syntactically-pure closure body (no
+        // calls/macros/indexing), so no behavior change — but an
+        // expensive pure default now costs the hot path too.
+        "unnecessary_lazy_evaluations" => Some("evaluation timing — the default computes EAGERLY on every path (was: only on None/Err); pure-body-gated (no behavior change), an expensive default now costs the hot path"),
         _ => None,
     }
 }
