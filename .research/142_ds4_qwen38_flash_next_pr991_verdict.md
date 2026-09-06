@@ -1,6 +1,6 @@
 # Distill verdict — antirez/ds4 PR #991 (ivanfioravanti/ds4-metal, Qwen3.8-Flash-Next)
 
-**Status:** DISTILLED — pending owner decision (plan-first batch queued: `.plans/097_ds4_qwen38_flash_next_pr991_batch118.md`; queue line landed in the same commit)
+**Status:** RECORD — batch landed 2026-09-06 (Batch 118: 6 kernel_opt rules + 1 rust_perf io rule + 7 riders, corpus kernel_opt 544 → 550 / rust_perf 101 → 102; `entries_gpu_29.rs` + the io entry; GOAT green — batch118 gates 5/5 incl. the production-magnitude exactly-uniform detector + the shuffle-ladder exactness gate, kernel_heal lib 1450/0, default 1142/0, combined 1567/0/2i floors HELD zero re-pins [retrieval re-run kernel 100/100/100, blended 94.7/96.9/97.7], clippy 0 in the default / kernel_heal / kernel_heal+latent states lib + all-targets, score-bench #65 FLAT 96.2/1.9/100/100). Corrections applied at mine time: '7 sessions' → SIX [sessions 14→19 per the doc's own numbering]; 'B98 NSG ladder' → mis-mapping [corpus B98 = tiny-rows-scalar-thread-per-row-downshift; the NSG content landed as the cooperation-radius rider on B95]; the campaign engine ds4_qwen4.c is SUPERSEDED [Makefile:446-449] — items (a)(c)(d)(f)(g) verified against the handoff + surviving corroboration, the PLE gather code (e) IS live in ds4_qwen4.c.
 
 - **Verdict date:** 2026-09-06 (M3 box, read-only lane)
 - **Source:** https://github.com/antirez/ds4/pull/991 — "Qwen3.8 flash next", ivanfioravanti → antirez, **OPEN** (unmerged; branch force-pushed once, `ecf1da3` → `236cb2a`)

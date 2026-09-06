@@ -3398,7 +3398,11 @@ fn run_conversion_report() {
             format!("  {label:<18} 0 rules — nothing authored in this era yet")
         } else {
             // Integer-rounded percent — no float casts in a print path.
-            let pct = (certified * 100 + total / 2) / total;
+            // checked_div: the total == 0 arm above makes this unreachable-as-None,
+            // the lint wants the total-failure form (guard 5a/clippy drive-by).
+            let pct = (certified * 100 + total / 2)
+                .checked_div(total)
+                .unwrap_or_default();
             format!("  {label:<18} {total} rule(s), {certified} Certified conversion(s) ({pct}%)")
         }
     };
@@ -4995,7 +4999,7 @@ fn main() {
                     fixed: current.clone(),
                     edits: all_edits
                         .iter()
-                        .map(|(rule, line, repl, restore)| {
+                        .map(|(rule, line, repl, restore, _note)| {
                             riir_clippy::fix_verify::EditAtLine {
                                 rule_id: rule.clone(),
                                 final_line: *line,

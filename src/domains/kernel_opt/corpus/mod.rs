@@ -1560,6 +1560,7 @@ mod entries_gpu_25;
 mod entries_gpu_26;
 mod entries_gpu_27;
 mod entries_gpu_28;
+mod entries_gpu_29;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -1601,6 +1602,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_26::entries());
     entries.extend(entries_gpu_27::entries());
     entries.extend(entries_gpu_28::entries());
+    entries.extend(entries_gpu_29::entries());
     Corpus::new(entries)
 }
 
@@ -1613,7 +1615,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 544-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 550-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1621,7 +1623,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (114 rules)
+    // A: Memory access patterns (116 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -1738,7 +1740,9 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "shared-operand-groups-per-warp",
             "whole-row-register-resident-under-length-budget",
             "byte-owning-threads-non-positional-digit-codes",
-            "routed-activation-pack-once-shared-operand"
+            "routed-activation-pack-once-shared-operand",
+            "role-scoped-store-must-match-compute-guard",
+            "compute-role-split-by-accumulator-pressure"
         ],
     ),
     // B: Compute patterns (59 rules)
@@ -1859,7 +1863,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "batch-verify-rows-single-dispatch"
         ],
     ),
-    // D: Dispatch patterns (127 rules)
+    // D: Dispatch patterns (128 rules)
     (
         KernelCategory::Dispatch,
         "D: dispatch",
@@ -1991,6 +1995,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "scratch-sizing-shares-dispatch-eligibility-predicate",
             "shader-shape-cutover-keys-on-resource-block-ratio",
             "same-input-folded-transform-memo-per-build",
+            "speculation-scheduler-break-even-flip",
         ],
     ),
     // E: Parallelism patterns (43 rules)
@@ -2099,7 +2104,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "chunk-transition-consumed-by-mma",
         ],
     ),
-    // H: MoE dispatch + backward pass (23 rules)
+    // H: MoE dispatch + backward pass (24 rules)
     (
         KernelCategory::MoeDispatchBackward,
         "H: MoE dispatch + backward",
@@ -2127,9 +2132,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "single-threadgroup-fused-count-scan",
             "warp-aggregated-atomic-scatter",
             "routing-by-precomputed-lookup",
+            "tile-amplification-precedes-staging-pass",
         ],
     ),
-    // I: NSA block-sparse selection (5 rules)
+    // I: NSA block-sparse selection (6 rules)
     (
         KernelCategory::NsaBlockSparse,
         "I: NSA block-sparse",
@@ -2139,6 +2145,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "block-compression-before-routing",
             "sliding-window-plus-sparse",
             "sparse-kv-index-list-sentinel-padded",
+            "running-threshold-prune-compaction-aliasing-guard",
         ],
     ),
     // J: Varlen packing + chunked reductions (5 rules)
@@ -2215,7 +2222,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "row-aware-indexing-reuses-static-single-token-kernel"
         ],
     ),
-    // N: dtype + alignment specialization (36 rules)
+    // N: dtype + alignment specialization (37 rules)
     (
         KernelCategory::DtypeAlignment,
         "N: dtype + alignment",
@@ -2255,6 +2262,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "exhaustive-domain-input-patch-bit-identity",
             "activation-bitplane-popcount-word-dot",
             "swar-lane-widened-base3-dp4a-dot",
+            "operand-precision-gated-by-consumer-invariance",
         ],
     ),
     // O: IR strength reduction (4 rules)

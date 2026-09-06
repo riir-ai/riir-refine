@@ -23,9 +23,17 @@
 
 ## Corpus
 
-101 rules across 12 categories (rust-optimize skill checklist +
+102 rules across 12 categories (rust-optimize skill checklist +
 nnethercote/perf-book + rustc-hash/bevy real-world patterns + the hotpath-rs
-profiling guide, Research 032; **now 101 rules — Batch 112 (2026-09-05,
+profiling guide, Research 032; **now 102 rules — Batch 118 (2026-09-06,
+Research 142 / Plan 097 — the antirez/ds4 PR #991 PLE-gather distill) added
+`parallel-disjoint-pread-hides-cold-page-latency` (io; REGIME-ANNOTATED
+NotBenchable per the B94 precedent — N known DISJOINT byte ranges →
+thread-parallel positional reads on the SHARED fd + indexed writes,
+byte-identical by construction; QD1 → QD32 cold page-in overlap ~20×
+source-reported, warm neutral; floor 512 rows + cap 64 + degrade-to-inline;
+NEAR-ADJACENT ranges are coalesce-nearby-reads' OPPOSITE regime). Batch 112
+(2026-09-05,
 Research 134 / Plan 083 — the nnethercote July-2026 byval-move
 distill) added `hot-byval-move-over-memcpy-threshold` (layout; Mixed
 1/0/1 at 1K/1M, verdict-stable ×2, allocs 0/0 — the memcpy-call

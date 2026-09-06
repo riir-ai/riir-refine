@@ -81,8 +81,8 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 117 (5): antirez/ds4 Metal tensor-prefill delta distill (Plan 090 / Research 141) -- routed-activation-pack-once-shared-operand (L +1: pack the scattered routed activations ONCE per stage into a dense converted device tensor -- all consumers read it plain; f32->half exactly once at the pack; bounded grow-only scratch + derived 256 MiB refusal; bit-exact by conversion-site-only movement; +1.7-3.2% source-reported, MXFP4 arm non-uniform and said so), device-affine-scratch-admission-with-pool-fallback (A +1: three-check admission tuple ptr^device^capacity with the ladder RETAINED -- device affinity captured at SET time is the multi-GPU illegal-access guard; pool-alloc-inside-capture is the motivation (the remove-the-alloc complement of captured-graph-bakes-buffer-addresses); best-effort 96 MiB provisioning; +7.5/6.5/6.4% steady decode source-reported), batch-verify-rows-single-dispatch (C +1: the 2-6-row verify block in ONE launch, partials straight into the TP exchange slab, combine epilogue hoisted and byte-identical for both schedules -- lockstep by construction; +11-23% whole-commit conflated with the seed schedule, said so), row-aware-indexing-reuses-static-single-token-kernel (M +1: widen the existing static kernel's grid mapping (z -> token,slot) + per-token bases and call the static impl VERBATIM rebased -- reuse-instead-of-twin, the static pole of the B92 axis), dense-fast-path-bounded-by-selector-coverage (F +1: dense substitution is legal exactly through top_k + anchor_pool - 1 -- the selector's own reach, never the work-window; converts a tolerance into a proof while enabling the bounded GEMM; ~21 -> ~68 tok/s companion enablement source-reported) + 8 riders (B97 duplicate-pad-at-materialization complement, B35 TP non-owner identity + selector-padding sentinel, B23 byte-size static pin + topology-axis widening, B57 single-pass two-phase twins + four-backend audit, B58 remove-the-alloc-from-capture complement, B103 clamp-to-stay-on-bounded-gemm); source antirez/ds4 main @ 9ab7053 (MIT; Batch 97/98 pin 110afdd + ~14 commits; two read lanes + coordinator spot-verification, line drifts corrected).
     assert_eq!(
         corpus.entries.len(),
-        544,
-        "kernel batches through Batch 117 should have 544 rules"
+        550,
+        "kernel batches through Batch 118 should have 550 rules"
     );
 }
 
@@ -1184,7 +1184,7 @@ fn batch22_cudarc_kernels_concepts_covered() {
     // A: ternary-bit-plane-u64-as-2x-u32 (riir-gpu cudarc_kernels/embedding.rs L37-69)
     assert!(concepts.contains(&"ternary weights as two bit-planes (positive + negative sign bits) packed as u64 blocks cast to 2×u32 words — extract sign per column via bit_pos = c % 32, word_in_block = (c % 64) / 32, then output = sign * per-group scale. The 2×u32 cast is because u64 isn't directly per-bit addressable in CUDA; two u32 words are"));
     // B: warp-shuffle-intrinsics-for-sub-warp-reduction (riir-gpu cudarc_kernels/mod.rs L163-167 + attention.rs L336-344; + the Batch-100 Metal measured-cost rider)
-    assert!(concepts.contains(&"for blocks of 32 threads or fewer (one warp), use __shfl_down_sync(mask, val, delta) butterfly reduction instead of shared memory + __syncthreads — the warp executes in lockstep (SIMT), so the shuffle is both correct and free (no smem allocation, no synchronization barrier). For the final 32-thread tail of a larger smem tree reduction, cast to volatile float* and skip __syncthreads — volatile prevents the compiler from caching stale values in registers. Measured Metal cost note (qwen-3.8-mtp-challenge kernel-research.md section 1.1 @ 0863b06a, Batch 100): simd_sum(f32) runs ~14.5 cycles throughput / ~28 latency vs ~2 for a shuffle — a per-(token, head) simd_sum is a real ALU cost in a GQA=8 pass-A inner loop (8 simd_sums per token per simdgroup); quad reductions are ~2x cheaper and a shuffle tree can beat the builtin — the shuffle-butterfly arm of this rule is the measured-cheap arm on Apple silicon as well, not only under the CUDA lockstep argument. RIDER (Batch 114 external instance, jundot/omlx @ e467261 -- custom_kernels/qwen35_prefill/gdn.py:438-442 + :499-517): the SUB-SIMDGROUP cooperation radius -- state fragments owned by 8-lane SEGMENTS inside a 32-lane simdgroup reduce via simd_shuffle_down(4,2,1) (three steps, staying inside the row's 8 lanes) and broadcast once from the row leader (simd_shuffle(part, (tid % 32) / 8 * 8)); zero barriers in the hot loop ('reduce across the 8 threads of a dv row via simd_shuffle_down (no threadgroup barriers in the hot loop)') -- a finer radius than one full simdgroup, with the leader-index broadcast replacing any cross-lane tree."));
+    assert!(concepts.contains(&"for blocks of 32 threads or fewer (one warp), use __shfl_down_sync(mask, val, delta) butterfly reduction instead of shared memory + __syncthreads — the warp executes in lockstep (SIMT), so the shuffle is both correct and free (no smem allocation, no synchronization barrier). For the final 32-thread tail of a larger smem tree reduction, cast to volatile float* and skip __syncthreads — volatile prevents the compiler from caching stale values in registers. Measured Metal cost note (qwen-3.8-mtp-challenge kernel-research.md section 1.1 @ 0863b06a, Batch 100): simd_sum(f32) runs ~14.5 cycles throughput / ~28 latency vs ~2 for a shuffle — a per-(token, head) simd_sum is a real ALU cost in a GQA=8 pass-A inner loop (8 simd_sums per token per simdgroup); quad reductions are ~2x cheaper and a shuffle tree can beat the builtin — the shuffle-butterfly arm of this rule is the measured-cheap arm on Apple silicon as well, not only under the CUDA lockstep argument. RIDER (Batch 114 external instance, jundot/omlx @ e467261 -- custom_kernels/qwen35_prefill/gdn.py:438-442 + :499-517): the SUB-SIMDGROUP cooperation radius -- state fragments owned by 8-lane SEGMENTS inside a 32-lane simdgroup reduce via simd_shuffle_down(4,2,1) (three steps, staying inside the row's 8 lanes) and broadcast once from the row leader (simd_shuffle(part, (tid % 32) / 8 * 8)); zero barriers in the hot loop ('reduce across the 8 threads of a dv row via simd_shuffle_down (no threadgroup barriers in the hot loop)') -- a finer radius than one full simdgroup, with the leader-index broadcast replacing any cross-lane tree. RIDER (Batch 118, antirez/ds4 PR #991 @ 236cb2a5 MIT): the XOR-BUTTERFLY SUB-SIMDGROUP twin -- lane segments smaller than the simdgroup shuffle by xor masks, zero barriers: an 8-lane sub-simdgroup dot reduce (acc += simd_shuffle_xor(acc,1/2/4) within the stream's lane segment, s = tiisg/8, lane = tiisg%8) then a cross-segment merge (g += simd_shuffle_xor(g,8/16)) over 4 stream segments; in-source instances: router argmax ladder (qwen4.metal:821-825/:848-852), the online-softmax quad reduce (:1577-1589), hc_gate_mix_pair (:289-296), and the stream-row dot (:239,:245-251). Composition note: xor BUTTERFLY ladders are safe to accumulate IN PLACE (disjoint partner pairs per stage) while INDEXED shuffle ladders are not -- see the shuffle-lane unmutated-partial face on block-reduction-separate-scratch-runtime-strides (same batch)."));
     // C: fused-activation-quantize-for-gemv-consumer (riir-gpu cudarc_kernels/mod.rs L191-289 + L407-554)
     assert!(concepts.contains(&"when an activation's output (RMSNorm, SwiGLU, gate*sigmoid, gate*silu) is immediately consumed by a GEMV that reads int8 (not f32), fuse the activation + per-block absmax reduction + int8 quantize into one kernel — eliminates the intermediate f32 HBM round-trip and one kernel launch. The activation is the non-trivial part (needs a reduction or exp); the quantize is the trivial part (absmax + scale + round) RIDER (Batch 111 external instance, vllm @ 8277c42e4 -- fused_kimi_k3_mla_key_concat_kv_cache_kernel.cu:15-24 + cache_kernels_fused.cu:108-145): the RoPE rotation is computed in-registers and the rotated pair is written DIRECTLY to its quantized cache slot in the producing kernel (qk_t rotate -> optional scaled_convert -> kv_cache_ptr[...]) -- the consumer-side quantize/store fused into the producer, three in-source kernel families (deepseek-v4, minimax-m3, kimi-k3). RIDER (Batch 113 external instance, ggml-org/llama.cpp @ 5266f24da v0.4.0 -- commit 662a0b0 #27310 -- CUDA-side): the DFlash encoder is fused INTO the KV injection, and the sibling commit 8663224 #27877 DISABLES the non-fused GDN/LID paths -- the fused-path preference posture: when the fused kernel exists, the non-fused path is a liability, not a fallback."));
     // D: cuda-graph-scalar-via-device-pointer (riir-gpu cudarc_kernels/embedding.rs L76-105 + attention.rs L421-610)
@@ -5301,7 +5301,7 @@ fn kernel_categories_table_has_15_entries() {
 
 #[test]
 fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-    // Every rule_id in the 544-rule corpus must appear in exactly one category.
+    // Every rule_id in the 550-rule corpus must appear in exactly one category.
     let corpus = build_kernel_seed_corpus();
     let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     let mut categorized: Vec<&str> = Vec::new();
@@ -5344,22 +5344,22 @@ fn kernel_categories_cover_all_corpus_rules_exhaustively() {
 
 #[test]
 fn kernel_categories_counts_match_plan_003_table() {
-    // Pin per-category rule counts to the Plan 003 table (updated for Batch 115 + addendum).
+    // Pin per-category rule counts to the Plan 003 table (updated for Batch 118).
     let expected = [
-        (KernelCategory::MemoryAccess, 114),
+        (KernelCategory::MemoryAccess, 116),
         (KernelCategory::Compute, 59),
         (KernelCategory::Fusion, 45),
-        (KernelCategory::Dispatch, 127),
+        (KernelCategory::Dispatch, 128),
         (KernelCategory::Parallelism, 43),
         (KernelCategory::FlashAttnTiling, 13),
         (KernelCategory::LinearAttnRecurrence, 29),
-        (KernelCategory::MoeDispatchBackward, 23),
-        (KernelCategory::NsaBlockSparse, 5),
+        (KernelCategory::MoeDispatchBackward, 24),
+        (KernelCategory::NsaBlockSparse, 6),
         (KernelCategory::VarlenChunkedReduction, 5),
         (KernelCategory::AutotuneDispatch, 9),
         (KernelCategory::ConvGemmLayout, 14),
         (KernelCategory::KernelPolymorphism, 18),
-        (KernelCategory::DtypeAlignment, 36),
+        (KernelCategory::DtypeAlignment, 37),
         (KernelCategory::IrStrengthReduction, 4),
     ];
     for (cat, count) in expected {
@@ -5374,9 +5374,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 544.
+    // Sum must equal 550.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 544, "Plan 003: category totals must sum to 544");
+    assert_eq!(total, 550, "Plan 003: category totals must sum to 550");
 }
 
 #[test]
@@ -5387,8 +5387,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 544,
-        "Plan 003: grouped corpus has {total} rules, expected 544"
+        total, 550,
+        "Plan 003: grouped corpus has {total} rules, expected 550"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -9404,8 +9404,8 @@ fn batch116_rules_present() {
     ];
     assert_eq!(
         corpus.entries.len(),
-        544,
-        "Batch 117: corpus should have 544 rules"
+        550,
+        "Batch 118: corpus should have 550 rules"
     );
     let present: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     for expected in ids {
@@ -9844,4 +9844,321 @@ fn batch117_pseudocode_parses() {
             "batch-117 opt_pattern for '{id}' must parse"
         );
     }
+}
+
+#[test]
+fn batch118_rules_present() {
+    // Batch 118 (antirez/ds4 PR #991, Qwen3.8-Flash-Next -- Plan 097 /
+    // Research 142): 6 kernel_opt rules mined at the fresh pin 236cb2a5
+    // (upstream main unchanged at 9ab7053 = the Batch-117 pin, so the PR
+    // branch IS the delta; two read lanes + coordinator synthesis; the
+    // campaign kernel generation verified at 35ce0b0 + HEAD successors).
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "role-scoped-store-must-match-compute-guard",
+        "tile-amplification-precedes-staging-pass",
+        "operand-precision-gated-by-consumer-invariance",
+        "compute-role-split-by-accumulator-pressure",
+        "speculation-scheduler-break-even-flip",
+        "running-threshold-prune-compaction-aliasing-guard",
+    ];
+    for id in ids {
+        assert!(
+            corpus.entries.iter().any(|e| e.rule_id == id),
+            "batch-118 rule '{id}' missing from corpus"
+        );
+    }
+}
+
+#[test]
+fn batch118_concepts_covered() {
+    // Distinctness + mandated phrases must survive in the concept
+    // text (case-sensitive contains -- the B51 lesson).
+    let corpus = build_kernel_seed_corpus();
+    let concept = |id: &str| -> String {
+        corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-118 rule '{id}' missing"))
+            .gpu_concept
+            .clone()
+    };
+    let c = concept("role-scoped-store-must-match-compute-guard");
+    assert!(
+        c.contains("EXACTLY 1/n")
+            && c.contains("LOAD-BEARING")
+            && c.contains("row_half")
+            && c.contains("six measured sessions")
+            && c.contains("smem-slot-role-reversal-needs-barrier"),
+        "store-guard concept"
+    );
+    let c = concept("tile-amplification-precedes-staging-pass");
+    assert!(
+        c.contains("3.2x padded FLOPs")
+            && c.contains("125.2 -> 42.2")
+            && c.contains("NET-NEGATIVE")
+            && c.contains("knob that does not reach the loop")
+            && c.contains("kill-switch constant"),
+        "tile-amplification concept"
+    );
+    let c = concept("operand-precision-gated-by-consumer-invariance");
+    assert!(
+        c.contains("0.0000082")
+            && c.contains("0.0581")
+            && c.contains("greedy diverging at token 2")
+            && c.contains("MODEL-SCOPED")
+            && c.contains("router-math-stays-fp32"),
+        "operand-precision concept"
+    );
+    let c = concept("compute-role-split-by-accumulator-pressure");
+    assert!(
+        c.contains("~200 registers")
+            && c.contains("1.50x")
+            && c.contains("0% +- 1%")
+            && c.contains("plane-specialization-load-compute-role-split")
+            && c.contains("role-scoped-store-must-match-compute-guard"),
+        "role-split concept"
+    );
+    let c = concept("speculation-scheduler-break-even-flip");
+    assert!(
+        c.contains("202 bypass vs 62")
+            && c.contains("110%")
+            && c.contains("0.59-0.84")
+            && c.contains("1.88-4.54")
+            && c.contains("DSpark"),
+        "break-even concept"
+    );
+    let c = concept("running-threshold-prune-compaction-aliasing-guard");
+    assert!(
+        c.contains("Kth-best")
+            && c.contains("memcmp == 0")
+            && c.contains("stale tail entries")
+            && c.contains("first-tile fallback")
+            && c.contains("lane-owned-topk-output"),
+        "threshold-prune concept"
+    );
+}
+
+#[test]
+#[cfg(not(feature = "kernel_verify"))]
+fn batch118_pseudocode_parses() {
+    // G1 for Batch 118: syn-parse gate (the ds4 PR #991 rules).
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "role-scoped-store-must-match-compute-guard",
+        "tile-amplification-precedes-staging-pass",
+        "operand-precision-gated-by-consumer-invariance",
+        "compute-role-split-by-accumulator-pressure",
+        "speculation-scheduler-break-even-flip",
+        "running-threshold-prune-compaction-aliasing-guard",
+    ];
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-118 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            ref_verdict.parses,
+            "batch-118 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            opt_verdict.parses,
+            "batch-118 opt_pattern for '{id}' must parse"
+        );
+    }
+}
+
+#[test]
+#[allow(clippy::cast_precision_loss)] // fixture RNG draws and an n=8 reciprocal -- the detector
+// asserts spreads orders of magnitude past f32 mantissa granularity
+fn batch118_unguarded_store_yields_uniform_softmax() {
+    // The load-bearing numeric gate for role-scoped-store-must-match-
+    // compute-guard: a role-partitioned attention tile where the PV roles'
+    // row_half maps onto the score roles' rows. UNGUARDED stores overwrite
+    // real scores with the PV roles' (zero-filled) fragments -> pre-softmax
+    // scores collapse equal -> softmax weights EXACTLY uniform while the
+    // running max stays sane (nothing NaNs). The GUARDED twin keeps the true
+    // spread. Production magnitude is the point: at tiny fixtures the uniform
+    // weights are inside a 5e-3 + 3e-2|ref| tolerance of the true weights
+    // (asserted here) -- that is exactly why the bug survived six sessions.
+    const EPS: f32 = 1e-7;
+    // Two role halves x 8 rows; score rows carry production-magnitude spreads.
+    // xorshift64* - integer state, one f32 divide per draw; the mantissa
+    // losses are irrelevant to a spread detector (production magnitude is
+    // orders past the 2^23 mantissa boundary).
+    let mut rng_state: u64 = 0x243F_6A88_85A3_08D3;
+    let mut rand = move || {
+        rng_state ^= rng_state << 13;
+        rng_state ^= rng_state >> 7;
+        rng_state ^= rng_state << 17;
+        ((rng_state >> 40) & 0xFFFF) as f32 / 65536.0f32 - 0.5
+    };
+    let q_scale = 12.0f32; // x12 input scale: score spreads reach ~+-20
+    let true_scores: Vec<Vec<f32>> = (0..2) // row_half -> 8 rows of scores
+        .map(|_| (0..8).map(|_| rand() * 40.0 * q_scale).collect())
+        .collect();
+    let softmax = |scores: &[f32]| -> Vec<f32> {
+        let max = scores.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+        let exps: Vec<f32> = scores.iter().map(|s| (s - max).exp()).collect();
+        let sum: f32 = exps.iter().sum();
+        exps.iter().map(|e| e / sum).collect()
+    };
+    // GUARDED twin: only score roles store; PV fragments never reach s_tile.
+    let guarded_weights: Vec<Vec<f32>> = true_scores
+        .iter()
+        .map(|row| softmax(row))
+        .collect();
+    for row in &guarded_weights {
+        let spread = row.iter().copied().fold(f32::NEG_INFINITY, f32::max)
+            - row.iter().copied().fold(f32::INFINITY, f32::min);
+        assert!(
+            spread > 0.5,
+            "guarded store must keep a real weight spread, got {spread}"
+        );
+    }
+    // UNGUARDED twin: PV roles (uninitialized -> zeros, the passing-run
+    // reading) store LAST onto the same rows. Scores collapse equal.
+    let mut s_tile = vec![vec![0.0f32; 8]; 2];
+    for (half, rows) in true_scores.iter().enumerate() {
+        s_tile[half] = rows.clone(); // score roles (sg 0/1) store first
+    }
+    for row_half in &mut s_tile {
+        // PV roles sg 2,3 -> row_half 0 and sg 4,5 -> row_half 1 store zeros.
+        row_half.fill(0.0);
+    }
+    // The lazy running-max stays FINITE and sane (0.0) -- nothing NaNs.
+    for row in &s_tile {
+        let max = row.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+        assert!(max.is_finite(), "running max must stay finite (the source bug's invisibility)");
+    }
+    for row in &s_tile {
+        let w = softmax(row);
+        let spread = w.iter().copied().fold(f32::NEG_INFINITY, f32::max)
+            - w.iter().copied().fold(f32::INFINITY, f32::min);
+        assert!(
+            spread < EPS,
+            "unguarded store must collapse softmax to EXACTLY uniform, spread {spread}"
+        );
+    }
+    // Determinism x2 (rerun the unguarded detector on a fresh clone of the tile).
+    let s_tile2 = s_tile.clone();
+    for row in &s_tile2 {
+        let w = softmax(row);
+        let spread = w.iter().copied().fold(f32::NEG_INFINITY, f32::max)
+            - w.iter().copied().fold(f32::INFINITY, f32::min);
+        assert!(spread < EPS, "deterministic rerun must stay uniform");
+    }
+    // WHY the old tiny-magnitude fixtures passed: at tiny-fixture-class score
+    // spreads (~0.1, the |q| <= 0.12 input class) the uniform weights sit
+    // INSIDE the source's 5e-3 + 3e-2|ref| tolerance of the true weights
+    // (max weight deviation ~ spread/(2n) ~ 6e-3 < ~8.7e-3 here).
+    let tiny: [f32; 8] = [
+        -0.05, -0.0375, -0.025, -0.0125, 0.0, 0.0125, 0.025, 0.0375,
+    ];
+    let w_true = softmax(&tiny);
+    let w_uniform = vec![1.0 / 8.0; 8];
+    for (t, u) in w_true.iter().zip(&w_uniform) {
+        let tol = 5e-3 + 3e-2 * t.abs();
+        assert!(
+            (t - u).abs() <= tol,
+            "tiny-magnitude invisibility: |{t} - {u}| must fit {tol}"
+        );
+    }
+    // And the same tolerance FAILS at production magnitude (the fixture gap).
+    let prod = &guarded_weights[0];
+    let prod_uniform: Vec<f32> = vec![1.0 / prod.len() as f32; prod.len()];
+    let max_err = prod
+        .iter()
+        .zip(&prod_uniform)
+        .map(|(t, u)| (t - u).abs())
+        .fold(0.0f32, f32::max);
+    let within_tol = prod.iter().zip(&prod_uniform).all(|(t, u)| {
+        (t - u).abs() <= 5e-3 + 3e-2 * t.abs()
+    });
+    assert!(
+        max_err > 0.0 && !within_tol,
+        "production magnitude must EXCEED the tolerance (the six-session invisibility ends here)"
+    );
+}
+
+#[test]
+#[allow(
+    clippy::cast_precision_loss,
+    clippy::float_cmp,
+    clippy::needless_range_loop
+)] // exact f32 equality IS the tested contract here (integer-valued partials
+    // keep every add exact, so no tolerance exists to hide behind) and the
+    // ladders are inherently index-structured (stage j reads lane j)
+fn batch118_indexed_shuffle_ladders_must_read_unmutated_partials() {
+    // The block-reduction rider's decision content, pinned executable:
+    // an INDEXED shuffle ladder (partner = lane index j, not xor mask) that
+    // accumulates into the LIVE partial double-counts lanes (v0 + 4v1 +
+    // 2v2 + v3 here); reading from an UNMUTATED copy is exact; the XOR
+    // butterfly is safe in place (disjoint partner pairs per stage); and a
+    // MAX reduction is blind to the whole bug (idempotence masks it -- which
+    // is exactly why the symptom is a uniformly-scaled SUM with a sane max).
+    // Integer-valued partials (< 2^24) keep every f32 add exact, so all
+    // comparisons below are EXACT equality, no tolerance.
+    let v = [7.0f32, 11.0, 13.0, 17.0];
+    // Reference: sequential sum in lane order.
+    let reference = ((v[0] + v[1]) + v[2]) + v[3];
+    // Correct indexed ladder: accumulate from an UNMUTATED copy.
+    let frozen = v;
+    let mut acc = v[0];
+    for &part in frozen.iter().skip(1) {
+        acc += part;
+    }
+    assert_eq!(acc, reference, "unmutated indexed ladder must be exact");
+    // BUGGY in-place indexed ladder: every lane accumulates into its own
+    // live slot; stage j reads lane j's END-OF-PREVIOUS-STAGE value (SIMD
+    // lockstep: all reads happen before any write within a stage).
+    let mut live = v;
+    for stage in 1..4 {
+        let snapshot = live;
+        let delta = snapshot[stage];
+        for lane in &mut live {
+            *lane += delta;
+        }
+    }
+    let buggy_lane0 = live[0];
+    assert_ne!(
+        buggy_lane0, reference,
+        "in-place indexed ladder must double-count (bug present)"
+    );
+    // The exact double-count shape for this ladder: v0 + 4v1 + 2v2 + v3.
+    assert_eq!(
+        buggy_lane0,
+        v[0] + 4.0 * v[1] + 2.0 * v[2] + v[3],
+        "the double-count coefficients are the rule's falsifiable content"
+    );
+    // XOR butterfly is SAFE in place (partners are disjoint per stage).
+    let mut x = v;
+    x[0] += x[1];
+    x[2] += x[3];
+    x[0] += x[2];
+    assert_eq!(
+        x[0],
+        (v[0] + v[1]) + (v[2] + v[3]),
+        "xor butterfly in place = explicit pairwise association (exact)"
+    );
+    // MAX reduction is BLIND to the bug (idempotence masks it): the same
+    // buggy lockstep ladder on max returns the correct max.
+    let mut m = v;
+    for stage in 1..4 {
+        let snapshot = m;
+        let running = snapshot[stage];
+        for lane in &mut m {
+            *lane = lane.max(running);
+        }
+    }
+    assert_eq!(
+        m[0],
+        v.iter().copied().fold(f32::NEG_INFINITY, f32::max),
+        "max survives the buggy ladder by idempotence -- sums do NOT"
+    );
 }

@@ -58,6 +58,10 @@ pub mod edit_emitter;
 pub mod elo;
 pub mod embedder;
 pub mod fmt;
+// Issue 072 PoC — construction-pair factory. Deps: rustc_errors::corpus_gen +
+// traj_store::ConstructionPair consumers, so the module rides whichever of
+// those two features is on (the 5a no-default state compiles to nothing).
+#[cfg(any(feature = "rustc_errors", feature = "latent_retrieval"))]
 pub mod frontier_pairs;
 pub mod modelability;
 pub mod pruner;

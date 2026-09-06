@@ -9,9 +9,9 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //! unconditional wins + honestly NotBenchable rules.
 //!
-//! 101 entries across 12 categories (complexity 19, allocation 22, simd 8,
-//! layout 10, iterators 10, concurrency 8, io 5, arithmetic 8, dispatch 5,
-//! caching 4, bevy 1, wasm 1). 87 are benchable; 14 are honestly
+//! 102 entries across 12 categories (complexity 19, allocation 22, simd 8,
+//! layout 10, iterators 10, concurrency 8, io 6, arithmetic 8, dispatch 5,
+//! caching 4, bevy 1, wasm 1). 87 are benchable; 15 are honestly
 //! NotBenchable (8 external-runtime/size-class + 2 metric-mismatch (Issue
 //! 014) + the x86-only prefetch annotation (Batch 85) + the bitflag size
 //! axis (Batch 86) + the workload-level read-coalescing annotation (Batch
@@ -97,6 +97,14 @@
 //! The source's serving numbers are workload-level, no isolated corpus
 //! bench — regime-annotated, suggestion-only.
 //!
+//! Batch 118 (2026-09-06, Research 142 / Plan 097 — the antirez/ds4 PR #991
+//! PLE-gather distill) added parallel-disjoint-pread-hides-cold-page-latency
+//! to io: N known DISJOINT byte ranges -> thread-parallel positional reads on
+//! the shared fd + indexed writes (byte-identical by construction); the
+//! LATENCY-OVERLAP axis is the decision content — cold page-ins paid serially
+//! at queue depth one (~20x measured) vs warm-neutral; near-adjacent ranges
+//! are the OPPOSITE regime (coalesce-nearby-reads). Suggestion-only.
+//!
 //! Batch 109 (2026-09-05, post-mining intake P10 — the katgpt-rs Issue 723
 //! Class A2 measurement-honesty distill) added dead-result-timing-loop-
 //! folded-under-lto to complexity: a timed loop whose work result is
@@ -115,7 +123,7 @@
 //! `run_buggy` / `run_fixed` entry points. The bench validator generates a
 //! temp bin crate from the spec + runs a timing loop at multiple sizes.
 //!
-//! Currently benchable (87/101):
+//! Currently benchable (87/102):
 //! - `o1-lookup` (Vec scan vs HashMap lookup — clear O(n) vs O(1))
 //! - `bsearch-sorted-slice` (linear scan vs binary search — O(n) vs O(log n) on sorted data)
 //! - `dedupe-hashset-vs-vec` (Vec::contains loop vs HashSet collect — O(n²) vs O(n))
@@ -200,7 +208,7 @@
 //! - `dispatch-handler-pair-hoist` (runtime-table handler read per dispatch → hoist both entries once — register-resident select; cross-arch ParetoDominant, x86 re-gated 2026-09-04; Batch 101)
 //! - `hot-byval-move-over-memcpy-threshold` (hot by-value move of a >128-byte type → shrink/ref — the threshold is an arch-shaped LLVM backend constant; Mixed on M3, x86 pays the memcpy call; Batch 112)
 //!
-//! Not benchable (14/101) — honest:
+//! Not benchable (15/102) — honest:
 //! - `layout-reorder` (struct size — deterministic `size_of`, not a runtime
 //!   microbench; the cache-utilization claim needs a specific access pattern)
 //! - `repr-u8-enum` (enum size — deterministic `size_of`, same class as
@@ -228,6 +236,11 @@
 //!   read-coalescing annotation, source-reported — the DECISION CONTENT is the
 //!   cacheability coupling: the gap budget collapses to 0 on direct/F_NOCACHE
 //!   descriptors; Batch 94, oMLX safetensors reader)
+//! - `parallel-disjoint-pread-hides-cold-page-latency` (workload-level
+//!   latency-overlap annotation, source-reported — the DECISION CONTENT is the
+//!   disjoint-vs-near regime split vs coalesce-nearby-reads: DISJOINT far
+//!   ranges overlap cold page-ins across threads, warm is neutral; Batch 118,
+//!   ds4 PLE gather)
 //! - `dead-result-timing-loop-folded-under-lto` (measurement-honesty axis —
 //!   a timing gate whose work folds away under LTO has no nonzero baseline to
 //!   ratio; the rule's content IS that fact; Batch 109, Plan 080)
@@ -280,7 +293,8 @@ use crate::domains::rust_perf::{PerfRule, RustPerfDomain};
 /// 1 each; Batch 99 added the DestProp branch-site rule; Batch 101 added
 /// the runtime-table handler-pair hoist); caching has 4 (Batch 73 + 76 added 1 each); io has 5 (Batch
 /// 68/69 added 1 each + Batch 85 added 1 + Batch 94 added the cacheability-
-/// coupled coalescing rule); bevy + wasm have 1 each.
+/// coupled coalescing rule + Batch 118 added the disjoint-pread latency-
+/// overlap rule); bevy + wasm have 1 each.
 #[must_use]
 #[allow(clippy::too_many_lines)] // seed corpus is a data table; length scales with rule count
 pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
@@ -2629,6 +2643,31 @@ PerfRule {
             buggy_code: "// One pread PER requested row: 9 hot experts scattered across two\n// shards cost 9 syscalls, each paying its own overhead; rows 40 KiB\n// apart pay the gap three times over.\nfn read_rows(fd: i32, rows: &[(u64, u32)]) -> Vec<Vec<u8>> {\n    rows.iter().map(|(off, len)| pread(fd, *off, *len)).collect()\n}\n\n".to_string(),
             fixed_code: "// Merge rows whose byte gap fits the budget into ONE pread per\n// cluster, then re-select the requested rows from the merged spans\n// (caller's order and duplicates preserved). Cacheability-gated:\n// gap 0 when the fd is opened no-cache -- over-read is only free\n// when the page cache absorbs it.\nconst MAX_GAP: u64 = 64 * 1024;\nfn read_rows(fd: i32, rows: &[(u64, u32)], cacheable: bool) -> Vec<Vec<u8>> {\n    let budget = if cacheable { MAX_GAP } else { 0 };\n    let mut sorted: Vec<(u64, u64)> =\n        rows.iter().map(|(o, l)| (*o, *o + *l as u64)).collect();\n    sorted.sort_by_key(|r| r.0);\n    let mut spans: Vec<(u64, u64)> = Vec::new();\n    for (off, end) in sorted {\n        match spans.last_mut() {\n            Some((_, last_end)) if off - *last_end <= budget => {\n                *last_end = end;\n            }\n            _ => spans.push((off, end)),\n        }\n    }\n    spans.iter().map(|(s, e)| pread(fd, *s, (e - s) as u32)).collect()\n}\n\n".to_string(),
             context_notes: Some("REGIME-ANNOTATED, source-reported (the source ships serving-level numbers only -- no isolated A/B for the coalescing itself; honestly NotBenchable here). The DECISION CONTENT is the cacheability coupling, not the merge: gap budget = cacheable ? 64 KiB : 0 -- in direct/F_NOCACHE mode over-read bytes are NOT free (they bypass the page cache and cannot repay the extra transfer), so only exactly-adjacent rows merge; on a cacheable descriptor the page cache repays the gap and 64 KiB of slack is cheap. Merge is gap-BOUNDED, not whole-range (an unbounded merge re-reads the shard -- the eager-pointer-collect-lazy-fetch failure shape on the transport axis). Re-selection after the merge preserves the caller's row order incl. duplicates; sort + merge at O(n log n) over the REQUESTED set only. RIDERS from the same source: (1) Darwin hints (fcntl F_RDAHEAD on cacheable fds, F_NOCACHE on direct fds) are applied ONCE per persistent descriptor and advisory-swallowed on unsupported platforms -- a descriptor-lifetime hint, not a per-read posix_fadvise; (2) fd cache keyed (path, cache-mode) so direct and cached descriptors coexist for the same file (note: that dict's get/set is unsynchronized in the source -- double os.open with the loser's fd leaked -- a concurrency hazard recorded in Research 110 section 7, not folded into this rule). Distinct from buffered-io (sequential stream buffering with a fixed window; this is random-addressed access merged by measured gap), from eager-pointer-collect-lazy-fetch (avoids materializing an O(all) index to read a subset; this transports a known subset in fewer syscalls), and from software-prefetch-storage-bound (both are storage-side; SW prefetch hides latency on compute-bound streams, coalescing removes syscall count on random-addressed streams -- different mechanisms, compose freely). Suggestion-only (I/O orchestration; a parse-only proposer cannot see descriptor cacheability). Source: jundot/omlx PR #3260 safetensors.py:448+452 (cold_max_gap_bytes = 64 KiB, clamped), :560-562 (gap-bounded range split), :597-598 (gap 0 when not use_file_cache), :675-678 (re-selection from merged spans), :536-549 (advisory fcntl hints), :526-531 (fd cache keyed (path, use_file_cache)). Batch 94 / Research 110 / Plan 058.".to_string()),
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: None,
+        },
+        // -- io: N known DISJOINT byte-range reads from one file run as one
+        // serial pread per range -------------------------------------------
+        // Batch 118 (2026-09-06, Research 142 / Plan 097 -- the antirez/ds4
+        // PR #991 PLE-gather distill). A cold gather of N fixed-size scattered
+        // rows from one large file runs the device at queue depth ONE when
+        // issued as one serial pread per row: every row's page-in latency is
+        // paid serially (~60 us/row, 6.9-7.7 s per fresh 8K chunk;
+        // warm = 204 ms). Splitting the row list into contiguous index ranges
+        // across threads -- each doing positional preads on the SHARED fd --
+        // overlaps the page-ins (QD1 -> QD32): 6857 -> 338 ms at 32 threads,
+        // ~20x cold; warm NEUTRAL; 64 threads no further gain. Byte-identity
+        // is by CONSTRUCTION, not by ordering: each row decodes independently
+        // from per-thread scratch and writes its own indexed output slice, so
+        // completion order is irrelevant and no concatenation step exists.
+        // Suggestion-only (I/O orchestration -- not a parse-only rewrite).
+        PerfRule {
+            rule_id: "parallel-disjoint-pread-hides-cold-page-latency".to_string(),
+            name: "N known disjoint byte-range reads from one file issued as one serial pread per range -> thread-parallel positional reads on the shared fd + indexed (not concatenated) writes; byte-identical, engages past a range-count floor".to_string(),
+            category: "io".to_string(),
+            buggy_code: "// One serial pread PER row: a cold region costs ~60 us/row at queue\n// depth one -- 6.9-7.7 s per fresh 8K chunk; warm cache hides the cost.\nfn gather_rows(fd: i32, offsets: &[u64], row_bytes: usize, out: &mut [u8]) {\n    for (r, off) in offsets.iter().enumerate() {\n        let row = pread_exact(fd, *off, row_bytes); // serial page-ins, QD1\n        out[r * row_bytes..(r + 1) * row_bytes].copy_from_slice(&row);\n    }\n}\n\n".to_string(),
+            fixed_code: "// Contiguous range partition across threads; positional reads on the\n// SHARED fd (read_at / pread -- no shared cursor); indexed writes make\n// completion order irrelevant -> byte-identical by construction. Floor +\n// cap + degrade-to-inline keep the transform a pure optimization.\nfn gather_rows(fd: i32, offsets: &[u64], row_bytes: usize, out: &mut [u8]) -> bool {\n    if offsets.len() < 512 {\n        return gather_rows_serial(fd, offsets, row_bytes, out); // engagement floor\n    }\n    let threads = offsets.len().min(32); // source default 32, cap 64\n    let per = div_ceil(offsets.len(), threads);\n    let mut ok = true;\n    std::thread::scope(|s| {\n        let handles: Vec<_> = (0..threads)\n            .map(|t| {\n                let begin = t * per;\n                let end = (begin + per).min(offsets.len());\n                s.spawn(move || {\n                    let mut slice_ok = true;\n                    for r in begin..end {\n                        match read_at_bytes(fd, offsets[r], row_bytes) {\n                            Ok(row) => out[r * row_bytes..(r + 1) * row_bytes]\n                                .copy_from_slice(&row), // indexed write: no ordering step\n                            Err(_) => slice_ok = false,\n                        }\n                    }\n                    slice_ok\n                })\n            })\n            .collect();\n        for h in handles {\n            ok &= h.join().unwrap_or(false); // all-or-nothing: AND of ranges\n        }\n    });\n    ok\n}\n\n".to_string(),
+            context_notes: Some("REGIME-ANNOTATED, source-reported (source numbers are campaign-level: serial 557 -> 933/971/997 tok/s at 8/16/32 threads, gather 6857 -> 922/533/338 ms; full-model 16K/128 greedy dumps SHA-identical between threads=1 and 32; honestly NotBenchable here -- page-cache state dominates any microbench, see the cold-vs-warm note). MECHANISM: one serial pread per row runs the storage device at queue depth one, so each row's cold page-in latency is paid serially (~60 us/row on the source's SSD); N threads of positional preads overlap the page-ins (QD1 -> QD32). BYTE-IDENTITY BY CONSTRUCTION: fixed-size rows -> disjoint byte ranges -> per-row indexed output slices, so completion order is irrelevant and no concatenation/reordering step exists (their gate: SHA-identical dumps, threads=1 vs 32). REGIME: first-touch/cold page cache dominates (measured ~20x); ranges computable upfront (fixed row size -> offset = row * row_bytes, checked mul); range count >= floor (512 rows ~= 50 KB min gather; source default 32 threads, cap 64, config clamped to row count); file large enough that open/stat amortizes (30 GB sidecar). ANTI-REGIME: sequential dependence between ranges; WARM cache (measured neutral -- gather 200 ms hidden under an 8.3 s GPU wall); tiny inputs where spawn overhead dominates; NEAR-ADJACENT ranges are the OPPOSITE regime -- coalesce-nearby-reads-bounded-gap-cacheability-gated (B94) merges those into fewer syscalls; the two compose only when the set splits into far-apart clusters. RUST MAPPING: std::os::unix::fs::FileExt::read_at on a shared &File (positional, no cursor state) -- never Seek+read on a shared handle (the seek position is shared mutable state); a failed worker degrade means the CALLING thread runs that slice inline (never wrong output); error contract = all-or-nothing (AND of per-range results). Their escape hatch: an mmap serial path behind an env knob. Record-only: a direct-GPU gather variant was on the source's rejected list -- the validated design is CPU-parallel pread. Distinct from coalesce-nearby-reads (fewer syscalls for NEAR rows; this overlaps LATENCY for DISJOINT rows), from buffered-io (sequential streams), and from software-prefetch-storage-bound (compute-bound streams). Suggestion-only (I/O orchestration; a parse-only proposer cannot see fd sharing or page-cache state). Source: antirez/ds4 PR #991 @ 236cb2a5 (MIT) -- ds4_qwen4.c:2340-2345 (the QD1 comment + ~60 us/row), :2327-2338 (EINTR + short-read loop), :2385-2388 (pread_exact + indexed write), :2420-2428 (contiguous range partition), :2346-2357 (floor 512 + cap 64 + clamp), :2430-2438 (degrade-to-inline), :2443-2444 (AND), :2038-2051 (checked-mul offset fn), :2493-2500 (mmap escape); QWEN38_PERF_HANDOFF.md:872-881 (23c: the cold sweep + warm neutral + SHA-identical), :1850 (GPU gather rejected). Batch 118 / Research 142 / Plan 097.".to_string()),
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: None,
         },
@@ -7985,7 +8024,7 @@ mod tests {
     #[test]
     fn seed_corpus_has_ninety_eight_entries_across_twelve_categories() {
         let corpus = build_perf_seed_corpus();
-        assert_eq!(corpus.entries.len(), 101); // Batch 112 (nnethercote) 100 → 101
+        assert_eq!(corpus.entries.len(), 102); // Batch 118 (ds4 PR #991) 101 → 102
         let mut categories: Vec<&str> =
             corpus.entries.iter().map(|e| e.category.as_str()).collect();
         categories.sort_unstable();
@@ -9577,7 +9616,8 @@ mod tests {
             .filter(|e| e.context_notes.is_some())
             .map(|e| e.rule_id.as_str())
             .collect();
-        assert_eq!(annotated.len(), 44, "expected 44 context-annotated rules (Batch 112 added the memcpy-threshold arch-regime annotation)");
+        assert_eq!(annotated.len(), 45, "expected 45 context-annotated rules (Batch 118 added the ds4 disjoint-pread io annotation)");
+        assert!(annotated.contains(&"parallel-disjoint-pread-hides-cold-page-latency")); // Batch 118 — the ds4 PLE-gather io annotation (source-reported, NotBenchable here)
         assert!(annotated.contains(&"dead-result-timing-loop-folded-under-lto")); // Batch 109 — the NotBenchable measurement-honesty axis
         assert!(annotated.contains(&"hot-byval-move-over-memcpy-threshold")); // Batch 112 — the arch-regime Mixed annotation
         assert!(annotated.contains(&"weight-tile-consumption-order")); // Batch 85 — measured ParetoDominant + the M3-L1-shift regime note
@@ -9631,7 +9671,7 @@ mod tests {
             .iter()
             .filter(|e| e.context_notes.is_none())
             .count();
-        assert_eq!(unannotated, 57, "expected 57 unannotated rules (101 total - 44 annotated; the new rule joined the ANNOTATED side)");
+        assert_eq!(unannotated, 57, "expected 57 unannotated rules (102 total - 45 annotated; the new rule joined the ANNOTATED side)");
     }
 
     /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -9643,7 +9683,7 @@ mod tests {
         let json = serde_json::to_string(&corpus.entries).unwrap();
         let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
         let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-        assert_eq!(annotated, 44);
+        assert_eq!(annotated, 45);
 
         // Simulate a pre-field snapshot: strip `context_notes` from JSON.
         // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -9675,9 +9715,9 @@ mod tests {
 
         let corpus = build_perf_seed_corpus();
 
-        // Filter to the 44 annotated rules.
+        // Filter to the 45 annotated rules.
         let annotated: Vec<&PerfRule> = corpus.entries.iter().filter(|e| e.context_notes.is_some()).collect();
-        assert_eq!(annotated.len(), 44, "expected 44 annotated rules");
+        assert_eq!(annotated.len(), 45, "expected 45 annotated rules");
 
         // The HealEntry trait override must agree with the struct field.
         for rule in &annotated {
