@@ -2520,6 +2520,37 @@ list is now FULLY EXECUTED (#1b→5, #2→6, #3→7, #4→4); real-G8 A/B stays
 data-gated. CLI: `--generation 7` + `score_history_v7.svg`. Record: Plan 096
 (T1 probe addendum + freeze-fence amendments) + Bench 074.
 
+**Issue 073 (2026-09-06→07, CLOSED — T1/T2 landed + T3 measured-NEGATIVE;
+removed per noise-reduction rule; XBridge arXiv:2608.11676 transfer,
+Research 535 katgpt-rs).** T1 anchor-primacy pins + T2 entity-perturbation
+fixtures landed 2026-09-06 (`085a5e8`): all four fixer prompt builders carry
+identity fields verbatim; the T2 twin construction (same-kind fn rename +
+rule-label swap, mutation-verified) discriminates an anchor-primacy builder
+from a summarizing one in both directions. **T3 (the Bt8 anchor-ledger A/B)
+ran 2026-09-07 — FAIL under the pre-registered bar, twice**
+([Bench 076](.benchmarks/076_issue073_bt8_anchor_ab.md)): follows-swap arm A
+3/12 vs arm Bt8 2/12 (delta −1) at max_new 256, then 4/12 vs 2/12 (delta −2)
+at max_new 1024 after the truncation confound was removed; strict-keep
+no-regression PASS both runs. Failure mode is instrument-structural, not
+arm quality: glm-5.3-flash under the trained instruction answers in
+MINIMAL-EDIT-LINES style (`fn_sig_line` present in 0/24 run-2 generations),
+so the identity-bearing signature line — where the renamed symbol lives —
+never crosses the output for either arm, and the ≥10/12 bar presumes
+signature-bearing outputs. **Zero prior-regression events in 48 calls** (the
+model never once wrote the original symbol into a fix): the XBridge
+identity-collapse mode did not manifest on this corpus, and at the
+applied-module level the merge contract preserves the twin's identity lines
+trivially. Verdict: `prompt_anchor_ledger` stays the landed opt-in builder
+with its builder-level pins; nothing promotes; the A/B is mechanically
+re-runnable (`fixer_regate --arm BT8 --max-new 1024 --gens <path>`, ~$0.005)
+if a future fixer arm emits full-fn rewrites. Runner + helpers landed this
+commit: `fixer_regate --arm BT8|BT8DRY` (BT8DRY = the offline instrument
+gate, 12/12 pairs PINNED before any live call), `perturb_symbol_ident` +
+`ident_mentioned` promoted to `cf_workers_ai` (one implementation shared by
+the pins and the runner). T4 (LAM cross-tokenizer mapper) stays deferred
+trigger-gated (zero cross-family drafter/verifier pairs exist; reopen on
+consumer ask).
+
 **Issue 036 (2026-08-23, RESOLVED-NEGATIVE + removed per noise-reduction
 rule; harness `src/draft/jury_disagreement.rs` + `tests/jury_disagreement_poc.rs`
 kept as the reproducible artifact).** The Jagged Judges (arXiv:2608.12645 §6.2)

@@ -19,6 +19,16 @@
 //! - `--arm C` — local Bonsai via the `bonsai_clippy_l4_eval --serve` daemon
 //!   (`--l4-bin/--l4-gguf/--l4-lora`; note the riir-train driver REQUIRES
 //!   `--lora`, so arm C needs a checkpoint — see the issue Status section)
+//! - `--arm BT8DRY` — Issue 073 T3 offline validation: builds the 12
+//!   perturbation pairs (frozen score-bench fixtures, T2 twin construction),
+//!   composes both prompts, and plants known generations through the grading
+//!   path. Instrument evidence only — no model, no network.
+//! - `--arm BT8` — the same 12 pairs through the CF backend, one call per
+//!   pair per arm: arm A = `prompt_growing` (prose baseline, channels empty
+//!   for synthetic twins) vs arm Bt8 = `prompt_anchor_ledger` (prose + the
+//!   discrete identity ledger). Graded by the PRE-REGISTERED bar in
+//!   `.issues/073` (swapped-symbol following ≥10/12, delta ≥3, strict-keep
+//!   no-regression), recorded in the bench doc.
 //! - `--arm DRY` (default) — offline harness validation: golden prompt
 //!   snapshots (blake3) + scoring of PLANTED fixes (positive + negative
 //!   controls). No model, no network. This is the "arms pending" evidence
@@ -45,8 +55,8 @@ use std::io::Write as _;
 use std::path::PathBuf;
 
 use riir_clippy::cf_workers_ai::{
-    self, ArmSummary, CaseScore, CfClient, CfUsageToday, FewShot, MissClass, RegateHarness,
-    Sample, SampleSource, reachable_samples,
+    self, ArmSummary, CaseScore, CfClient, CfUsageToday, FewShot, MissClass, RegateHarness, Sample,
+    SampleSource, reachable_samples,
 };
 use riir_clippy::kat_redact::{GateDecision, RedactionGate, RedactionLog, SpanOrigin};
 use riir_clippy::l4_daemon::DaemonL4;
@@ -74,6 +84,9 @@ struct Args {
     max_new: usize,
     data_dir: Option<PathBuf>,
     out: Option<PathBuf>,
+    /// Per-call full prompt + generation dump (audit evidence; NOT committed
+    /// by default — the rows file stays the compact record).
+    gens: Option<PathBuf>,
     policy: Option<PathBuf>,
     model: Option<String>,
     l4_bin: Option<String>,
@@ -95,6 +108,7 @@ impl Args {
             max_new: 128,
             data_dir: None,
             out: None,
+            gens: None,
             policy: None,
             model: None,
             l4_bin: None,
@@ -121,6 +135,7 @@ impl Args {
                 "--max-new" => a.max_new = val().parse().expect("--max-new must be an integer"),
                 "--data-dir" => a.data_dir = Some(PathBuf::from(val())),
                 "--out" => a.out = Some(PathBuf::from(val())),
+                "--gens" => a.gens = Some(PathBuf::from(val())),
                 "--policy" => a.policy = Some(PathBuf::from(val())),
                 "--model" => a.model = Some(val()),
                 "--l4-bin" => a.l4_bin = Some(val()),
@@ -409,6 +424,14 @@ fn main() {
     let args = Args::parse();
     let t0 = std::time::Instant::now();
 
+    // Issue 073 T3: the Bt8 arms build their own pair set from the frozen
+    // score-bench fixtures — the reachable/v2edit sample path does not apply.
+    if matches!(args.arm.as_str(), "BT8" | "BT8DRY") {
+        bt8_dispatch(&args);
+        eprintln!("[regate] total wall: {:.1}s", t0.elapsed().as_secs_f32());
+        return;
+    }
+
     let mut harness = match RegateHarness::new() {
         Ok(h) => h,
         Err(e) => {
@@ -446,7 +469,7 @@ fn main() {
         "A" | "B" | "G" | "G2" => run_cf(&args, &verifier, &prepared),
         "C" => run_daemon(&args, &verifier, &prepared),
         other => {
-            eprintln!("unknown --arm {other} (A|B|G|G2|C|DRY)");
+            eprintln!("unknown --arm {other} (A|B|G|G2|C|DRY|BT8|BT8DRY)");
             std::process::exit(2);
         }
     }
@@ -869,4 +892,412 @@ fn run_daemon(args: &Args, verifier: &ClippyVerifier, prepared: &[Prepared]) {
     summary.latency_ms_total = lat_total;
     summary.latency_ms_max = lat_max;
     append_quality_history("C", "local-bonsai-daemon", &summary);
+}
+
+// ── Issue 073 T3 — the Bt8 anchor-ledger A/B (entity-following twins) ─────
+
+/// Entry for the BT8 arms; gated on the frozen fixture set (score_bench).
+fn bt8_dispatch(args: &Args) {
+    #[cfg(feature = "score_bench")]
+    {
+        let mut harness = match RegateHarness::new() {
+            Ok(h) => h,
+            Err(e) => {
+                eprintln!("FATAL: harness init failed: {e}");
+                std::process::exit(1);
+            }
+        };
+        let verifier = std::mem::replace(&mut harness.verifier, ClippyVerifier::new());
+        std::fs::create_dir_all(&args.behav_dir).ok();
+        run_bt8(args, &verifier, &mut harness);
+    }
+    #[cfg(not(feature = "score_bench"))]
+    {
+        let _ = args;
+        eprintln!("--arm BT8/BT8DRY requires --features score_bench (the frozen fixture set)");
+        std::process::exit(2);
+    }
+}
+
+/// The same-kind few-shot rule-label swap (the T2 landed pair). Absence ⇒
+/// the label crosses unchanged and the row records the unflipped axis.
+#[cfg(feature = "score_bench")]
+fn bt8_same_kind_rule(rule: &str) -> Option<&'static str> {
+    match rule {
+        "manual_map" => Some("manual_unwrap_or"),
+        "manual_unwrap_or" => Some("manual_map"),
+        _ => None,
+    }
+}
+
+/// First `fn` name in the module + its byte offset (the twin target).
+/// Word-boundary guarded so a longer identifier ending in "fn" never matches.
+#[cfg(feature = "score_bench")]
+fn bt8_first_fn(code: &str) -> Option<(&str, usize)> {
+    let mut from = 0usize;
+    while let Some(rel) = code[from..].find("fn ") {
+        let at = from + rel;
+        let bounded = at == 0
+            || !code[..at]
+                .ends_with(|c: char| c.is_alphanumeric() || c == '_');
+        let name_at = at + 3;
+        let rest = &code[name_at..];
+        let end = rest
+            .find(|c: char| !(c.is_alphanumeric() || c == '_'))
+            .unwrap_or(rest.len());
+        if bounded && end > 0 {
+            return Some((&rest[..end], name_at));
+        }
+        from = at + 3;
+    }
+    None
+}
+
+#[cfg(feature = "score_bench")]
+struct Bt8Pair {
+    fixture_id: &'static str,
+    clean: bool,
+    lint: Option<String>,
+    original: String,
+    renamed: String,
+    twin: String,
+    prompt_a: String,
+    prompt_b: String,
+    sample: Option<Sample>,
+    fewshot_swapped: usize,
+    fewshot_total: usize,
+    channels_empty: bool,
+    miss: MissClass,
+    modelless_served: bool,
+}
+
+/// Build the pre-registered pair set: the frozen fixtures in id order, the
+/// window ending at the set tail so it CONTAINS the T2 anchor. The
+/// pre-registration's arithmetic ("the T2 fixture plus the next 11") is
+/// unsatisfiable forward — the frozen set has only 7 successors after the
+/// anchor — so the window is the LAST 12 (anchor + all 7 successors + the 4
+/// id-adjacent predecessors). Recorded in the bench doc BEFORE the run.
+#[cfg(feature = "score_bench")]
+fn bt8_build_pairs(harness: &mut RegateHarness, few_shots: usize) -> Vec<Bt8Pair> {
+use riir_clippy::cf_workers_ai::{ident_mentioned, FixAnchors};
+
+    const ANCHOR: &str = "katgpt-rs-bench_ptrm_width_scaling-002";
+    let mut fixtures = riir_clippy::score_bench::fixtures::fixtures();
+    assert!(fixtures.len() >= 12, "frozen set smaller than the pre-registered pair count");
+    fixtures.sort_by(|a, b| a.id.cmp(b.id));
+    let pos = fixtures
+        .iter()
+        .position(|f| f.id == ANCHOR)
+        .expect("pre-registration anchor fixture missing from the frozen set");
+    let start = if fixtures.len() - pos >= 12 {
+        pos
+    } else {
+        fixtures.len() - 12
+    };
+    let selected: Vec<_> = fixtures[start..start + 12].to_vec();
+    assert_eq!(selected.len(), 12, "the pre-registered pair count");
+    assert!(selected.iter().any(|f| f.id == ANCHOR), "anchor in the window");
+    eprintln!(
+        "[bt8] window {start}..{} of {} fixtures (anchor at {pos}) — 12 pairs, named BEFORE the run",
+        start + 12,
+        fixtures.len()
+    );
+
+    let mut pairs = Vec::with_capacity(selected.len());
+    for f in selected {
+        let (name, _at) = bt8_first_fn(f.code)
+            .unwrap_or_else(|| panic!("fixture {} has no fn to twin", f.id));
+        let mut renamed = format!("{name}_alt");
+        if ident_mentioned(f.code, &renamed) {
+            renamed = format!("{name}_v2");
+        }
+        let twin = cf_workers_ai::perturb_symbol_ident(f.code, name, &renamed);
+        if ident_mentioned(&twin, name) {
+            eprintln!("[bt8] SKIP {}: rename not total (instrument hazard)", f.id);
+            continue;
+        }
+        let fs = harness.few_shots(&twin, few_shots);
+        let fewshot_swapped = fs
+            .iter()
+            .filter(|s| bt8_same_kind_rule(&s.rule_id).is_some())
+            .count();
+        let fs_twin: Vec<FewShot> = fs
+            .iter()
+            .map(|s| FewShot {
+                rule_id: bt8_same_kind_rule(&s.rule_id)
+                    .unwrap_or(&s.rule_id)
+                    .to_string(),
+                buggy: s.buggy.clone(),
+                fixed: s.fixed.clone(),
+            })
+            .collect();
+        let lint = f.expect_lints.first().map(|s| s.to_string());
+        let (miss, modelless) = harness.classify(lint.as_deref().unwrap_or(""), &twin);
+        let (traj, patterns) = harness.trajectory_context(&twin, 3);
+        let channels_empty = traj.is_empty() && patterns.is_empty();
+        let prompt_a = cf_workers_ai::prompt_growing(
+            &twin,
+            modelless.as_deref(),
+            &fs_twin,
+            &traj,
+            &patterns,
+        );
+        // The ledger restates only TRUE identity fields: the real target lint
+        // (None on clean fixtures — never a lie), the renamed symbol, and the
+        // symbol's verbatim byte span in the twin.
+        let sym_at = twin.find(&renamed).expect("renamed symbol present in twin");
+        let anchors = FixAnchors {
+            rule_id: lint.clone(),
+            error_code: None,
+            symbols: vec![renamed.clone()],
+            span: Some(format!("bytes {sym_at}..{}", sym_at + renamed.len())),
+        };
+        let prompt_b =
+            cf_workers_ai::prompt_anchor_ledger(&twin, modelless.as_deref(), &fs_twin, &anchors);
+        // Clean fixtures have no target lint: the oracle has nothing to fire
+        // on, so score_case is skipped for them (recorded; both arms neutral
+        // on the keep axes). The symbol-following axis still grades.
+        let sample = lint.as_ref().map(|lint| Sample {
+            id: format!("bt8:{}", f.id),
+            lints: vec![lint.clone()],
+            module: twin.clone(),
+            expected: None,
+            source: if f.id.starts_with("composite-") {
+                SampleSource::V2edit
+            } else {
+                SampleSource::Reachable
+            },
+        });
+        pairs.push(Bt8Pair {
+            fixture_id: f.id,
+            clean: f.clean,
+            lint,
+            original: name.to_string(),
+            renamed,
+            twin,
+            prompt_a,
+            prompt_b,
+            sample,
+            fewshot_swapped,
+            fewshot_total: fs.len(),
+            channels_empty,
+            miss,
+            modelless_served: modelless.is_some(),
+        });
+    }
+    pairs
+}
+
+/// One graded generation. `follows` = the healed text references the SWAPPED
+/// symbol (the pre-registered property); `prior` = it references the ORIGINAL
+/// symbol instead (the identity-regression signal; boundary-disjoint from
+/// `follows` by construction).
+#[cfg(feature = "score_bench")]
+struct Bt8Call {
+    follows: bool,
+    prior: bool,
+    keep_strict: Option<bool>,
+    latency_ms: u128,
+    prompt_tokens: u64,
+    completion_tokens: u64,
+}
+
+#[cfg(feature = "score_bench")]
+fn bt8_grade(
+    verifier: &ClippyVerifier,
+    p: &Bt8Pair,
+    gen: &str,
+    behav: &std::path::Path,
+) -> Bt8Call {
+    use riir_clippy::cf_workers_ai::ident_mentioned;
+
+    let text = cf_workers_ai::extract_code_block(gen);
+    let call = Bt8Call {
+        follows: ident_mentioned(text, &p.renamed),
+        prior: ident_mentioned(text, &p.original),
+        keep_strict: p
+            .sample
+            .as_ref()
+            .map(|s| cf_workers_ai::score_case(verifier, s, gen, Some(behav)).keep_strict),
+        latency_ms: 0,
+        prompt_tokens: 0,
+        completion_tokens: 0,
+    };
+    call
+}
+
+#[cfg(feature = "score_bench")]
+fn bt8_row(out: &mut Option<std::fs::File>, p: &Bt8Pair, arm: &str, c: &Bt8Call, prompt: &str, gen: &str) {
+    if let Some(f) = out.as_mut() {
+        let row = serde_json::json!({
+            "pair": p.fixture_id,
+            "arm": arm,
+            "clean": p.clean,
+            "lint": p.lint,
+            "renamed": p.renamed,
+            "follows_swap": c.follows,
+            "prior_symbol": c.prior,
+            "keep_strict": c.keep_strict,
+            "latency_ms": c.latency_ms,
+            "prompt_tokens": c.prompt_tokens,
+            "completion_tokens": c.completion_tokens,
+            "fewshot_swapped": format!("{}/{}", p.fewshot_swapped, p.fewshot_total),
+            "channels_empty": p.channels_empty,
+            "miss_class": format!("{:?}", p.miss),
+            "modelless_served": p.modelless_served,
+            "prompt_blake3_12": &blake3::hash(prompt.as_bytes()).to_hex().as_str()[..12],
+            "gen_chars": gen.len(),
+        });
+        let _ = writeln!(f, "{row}");
+    }
+}
+
+#[cfg(feature = "score_bench")]
+fn run_bt8(args: &Args, verifier: &ClippyVerifier, harness: &mut RegateHarness) {
+    let pairs = bt8_build_pairs(harness, args.few_shots);
+    eprintln!("[bt8] {} pairs built", pairs.len());
+
+    if args.arm == "BT8DRY" {
+        // Instrument evidence only: planted generations through the grading
+        // path. A twin that FOLLOWS keeps the renamed symbol; a twin that
+        // REGRESSES to the prior flips exactly the entity back.
+        let mut all_pinned = true;
+        for p in &pairs {
+            let planted_follow = p.twin.clone();
+            let planted_regress = cf_workers_ai::perturb_symbol_ident(&p.twin, &p.renamed, &p.original);
+            let f = bt8_grade(verifier, p, &planted_follow, &args.behav_dir);
+            let r = bt8_grade(verifier, p, &planted_regress, &args.behav_dir);
+            let ok = f.follows && !f.prior && !r.follows && r.prior;
+            all_pinned &= ok;
+            println!(
+                "  {:<44} rename={} degrade_prompt={} fs_swap={}/{} planted_follow={} planted_regress={} {}",
+                p.fixture_id,
+                p.renamed,
+                p.channels_empty,
+                p.fewshot_swapped,
+                p.fewshot_total,
+                f.follows,
+                r.prior,
+                if ok { "PINNED" } else { "BROKEN" },
+            );
+        }
+        println!(
+            "\n═ BT8DRY: {} pairs, planted instrument {} ═",
+            pairs.len(),
+            if all_pinned { "PINNED" } else { "BROKEN — do not run BT8" }
+        );
+        if !all_pinned {
+            std::process::exit(5);
+        }
+        return;
+    }
+
+    let mut client = match CfClient::from_env(args.model.as_deref()) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("SKIP arm BT8: {e}");
+            std::process::exit(3);
+        }
+    };
+    let mut out = args.out.as_ref().and_then(|p| std::fs::File::create(p).ok());
+    let mut gens = args.gens.as_ref().and_then(|p| std::fs::File::create(p).ok());
+    let mut per_pair: Vec<(bool, bool, Option<bool>, Option<bool>)> = Vec::new();
+
+    for p in &pairs {
+        eprintln!("[bt8] {} (rename → {}) …", p.fixture_id, p.renamed);
+        let mut calls = Vec::with_capacity(2);
+        for (arm, prompt) in [("A", &p.prompt_a), ("Bt8", &p.prompt_b)] {
+            let t = std::time::Instant::now();
+            let gen = match client.generate(prompt, args.max_new) {
+                Ok(g) => g,
+                Err(e) => {
+                    eprintln!("  GEN FAILED {arm} (recorded unscoreable): {e}");
+                    let c = Bt8Call {
+                        follows: false,
+                        prior: false,
+                        keep_strict: None,
+                        latency_ms: t.elapsed().as_millis(),
+                        prompt_tokens: 0,
+                        completion_tokens: 0,
+                    };
+                    bt8_row(&mut out, p, arm, &c, prompt, "");
+                    calls.push(c);
+                    continue;
+                }
+            };
+            let mut c = bt8_grade(verifier, p, &gen.text, &args.behav_dir);
+            c.latency_ms = t.elapsed().as_millis();
+            c.prompt_tokens = gen.prompt_tokens;
+            c.completion_tokens = gen.completion_tokens;
+            if let Some(gf) = gens.as_mut() {
+                let _ = writeln!(
+                    gf,
+                    "{}",
+                    serde_json::json!({
+                        "pair": p.fixture_id,
+                        "arm": arm,
+                        "renamed": p.renamed,
+                        "gen": gen.text,
+                        "truncated_hint": gen.completion_tokens >= args.max_new as u64,
+                    })
+                );
+            }
+            println!(
+                "  {:<14} follows={} prior={} keep_s={:?} {}ms {}+{}tok",
+                arm, c.follows, c.prior, c.keep_strict, c.latency_ms, c.prompt_tokens, c.completion_tokens,
+            );
+            bt8_row(&mut out, p, arm, &c, prompt, &gen.text);
+            calls.push(c);
+        }
+        per_pair.push((calls[0].follows, calls[1].follows, calls[0].keep_strict, calls[1].keep_strict));
+    }
+
+    let follow_a = per_pair.iter().filter(|(a, ..)| *a).count();
+    let follow_b = per_pair.iter().filter(|(_, b, ..)| *b).count();
+    let strict_a = per_pair.iter().filter(|(.., sa, _)| sa == &Some(true)).count();
+    let strict_b = per_pair.iter().filter(|(.., sb)| sb == &Some(true)).count();
+    let delta = follow_b as isize - follow_a as isize;
+    let n = per_pair.len();
+    let bar_primary = follow_b >= 10;
+    let bar_delta = delta >= 3;
+    let bar_strict = strict_b >= strict_a;
+    println!("\n═ arm BT8 summary (n={n}) ═");
+    println!("| follows A | follows Bt8 | delta | strict A | strict Bt8 |");
+    println!("|---|");
+    println!("| {follow_a}/{n} | {follow_b}/{n} | {delta:+} | {strict_a} | {strict_b} |");
+    println!(
+        "  pre-registered bar: follows ≥10/12 → {}; delta ≥+3 → {}; strict no-regression → {}",
+        if bar_primary { "PASS" } else { "FAIL" },
+        if bar_delta { "PASS" } else { "FAIL" },
+        if bar_strict { "PASS" } else { "FAIL" },
+    );
+    println!(
+        "  VERDICT: {}",
+        if bar_primary && bar_delta && bar_strict { "PASS" } else { "FAIL" }
+    );
+    let server = client.fetch_usage_today().ok();
+    if let Some(u) = &server {
+        println!(
+            "  server meter (today): {} req · {}+{} tok · {:.2} neurons",
+            u.requests, u.input_tokens, u.output_tokens, u.neurons
+        );
+    }
+    println!("  {}", client.spend_summary());
+    if let Some(f) = out.as_mut() {
+        let row = serde_json::json!({
+            "summary": {
+                "n": n,
+                "follows_a": follow_a,
+                "follows_bt8": follow_b,
+                "delta": delta,
+                "strict_a": strict_a,
+                "strict_bt8": strict_b,
+                "bar_primary": bar_primary,
+                "bar_delta": bar_delta,
+                "bar_strict": bar_strict,
+                "model": client.model_id(),
+            }
+        });
+        let _ = writeln!(f, "{row}");
+    }
 }

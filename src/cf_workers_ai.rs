@@ -605,6 +605,56 @@ pub fn prompt_anchor_ledger(
     s
 }
 
+/// Issue 073 T2/T3: same-kind identifier rename at word boundaries —
+/// deterministic, no regex dep. Replaces EVERY boundary occurrence of `from`
+/// with `to` (a partial rename would break the twin instrument). Shared by
+/// the builder pins (tests) and the Bt8 A/B runner (`fixer_regate --arm
+/// BT8`) so both exercise ONE implementation.
+#[must_use]
+pub fn perturb_symbol_ident(code: &str, from: &str, to: &str) -> String {
+    let mut out = String::with_capacity(code.len() + 16);
+    let mut rest = code;
+    while let Some(pos) = rest.find(from) {
+        let (before, after) = rest.split_at(pos);
+        out.push_str(before);
+        rest = after;
+        let ident_end = rest[from.len()..]
+            .find(|c: char| !(c.is_alphanumeric() || c == '_'))
+            .map_or(rest.len(), |i| i + from.len());
+        if ident_end == from.len() {
+            out.push_str(to);
+            rest = &rest[from.len()..];
+        } else {
+            out.push_str(&rest[..ident_end]);
+            rest = &rest[ident_end..];
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+/// Issue 073 T3: word-boundary `contains` — the grading predicate for "the
+/// healed fix references the swapped symbol". Boundary semantics match
+/// [`perturb_symbol_ident`], so the rename target and the original are
+/// DISJOINT predicates: `greedy_path` is not found inside `greedy_path_alt`.
+#[must_use]
+pub fn ident_mentioned(text: &str, ident: &str) -> bool {
+    let mut from = 0usize;
+    while let Some(rel) = text[from..].find(ident) {
+        let at = from + rel;
+        let before_ok =
+            at == 0 || !text[..at].ends_with(|c: char| c.is_alphanumeric() || c == '_');
+        let after_at = at + ident.len();
+        let after_ok = after_at >= text.len()
+            || !text[after_at..].starts_with(|c: char| c.is_alphanumeric() || c == '_');
+        if before_ok && after_ok {
+            return true;
+        }
+        from = after_at;
+    }
+    false
+}
+
 // ── Edit application (the v2edit "only the corrected lines" contract) ──────
 
 /// Compute the brace depth before each line of `src`.
@@ -2489,30 +2539,9 @@ mod tests {
         ISSUE073_MODULE
     }
 
-    /// Same-kind rename (ident -> ident) at word boundaries — deterministic,
-    /// no regex dep.
-    fn perturb_symbol(code: &str, from: &str, to: &str) -> String {
-        let mut out = String::with_capacity(code.len() + 16);
-        let mut rest = code;
-        while let Some(pos) = rest.find(from) {
-            let (before, after) = rest.split_at(pos);
-            out.push_str(before);
-            rest = after;
-            let ident_end = rest
-                [from.len()..]
-                .find(|c: char| !(c.is_alphanumeric() || c == '_'))
-                .map_or(rest.len(), |i| i + from.len());
-            if ident_end == from.len() {
-                out.push_str(to);
-                rest = &rest[from.len()..];
-            } else {
-                out.push_str(&rest[..ident_end]);
-                rest = &rest[ident_end..];
-            }
-        }
-        out.push_str(rest);
-        out
-    }
+    /// Same-kind rename — the lib helper (one implementation for the pins
+    /// and the Bt8 runner).
+    use super::perturb_symbol_ident as perturb_symbol;
 
     #[cfg(feature = "score_bench")]
     #[test]
@@ -2605,6 +2634,8 @@ mod tests {
     fn anchor_ledger_perturbation_flips_exactly_the_anchor_lines() {
         let module = issue073_module();
         let twin = perturb_symbol(module, "greedy_path", "greedy_route");
+        assert!(ident_mentioned(&twin, "greedy_route"));
+        assert!(!ident_mentioned(&twin, "greedy_path"));
         let anchors = FixAnchors {
             rule_id: Some("ptr_arg".into()),
             error_code: Some("E0599".into()),
@@ -2634,6 +2665,13 @@ mod tests {
         let module = issue073_module();
         let twin = perturb_symbol(module, "greedy_path", "greedy_route");
         assert_ne!(module, twin, "perturbation applies");
+        assert!(ident_mentioned(&twin, "greedy_route"));
+        assert!(!ident_mentioned(&twin, "greedy_path"));
+        assert!(ident_mentioned("x greedy_path_alt y", "greedy_path_alt"));
+        assert!(!ident_mentioned("x greedy_path_alt y", "greedy_path"));
+        assert!(!ident_mentioned("x greedy_path_alt y", "alt"));
+        assert!(ident_mentioned("greedy_path_alt", "greedy_path_alt"));
+        assert!(!ident_mentioned("", "greedy_path"));
         assert!(!twin.contains("greedy_path"), "rename is total on the fixture");
         let fs = vec![FewShot { rule_id: "manual_map".into(), buggy: "b".into(), fixed: "f".into() }];
         let fs_twin = vec![FewShot { rule_id: "manual_unwrap_or".into(), buggy: "b".into(), fixed: "f".into() }];
