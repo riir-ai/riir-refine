@@ -2551,6 +2551,27 @@ the pins and the runner). T4 (LAM cross-tokenizer mapper) stays deferred
 trigger-gated (zero cross-family drafter/verifier pairs exist; reopen on
 consumer ask).
 
+**Issue 074 (2026-09-06, CLOSED — T1–T3 landed (`0b1e9c9` render-gate hardening
++ the eager/lazy class, `339a5b4` the deferred gate-red fix unit, `d67f398`
+record); removed per noise-reduction rule.** The trust channels no longer
+stop at the rustc_errors domain: `rule_context_note` per-domain tables
+(clippy_lints: manual_map control-flow capture, needless_range_loop borrow
+shape, question_mark short-circuit scope, map_unwrap_or inference shape,
+unnecessary_lazy_evaluations eager-on-every-path; rust_perf: static-str +
+bool-to-bitpack signature-visible) render `⚠ semantic change: {note}` in the
+general `--fix` review through the REAL formatter (`format_fix_review` split
+from the printer so the byte pin executes what the CLI runs; notes truncate
+to first line; mechanical classes byte-identical, pinned). Table ↔ FIXABLE
+lockstep asserted. Score-bench runs #58/#59: rates bit-identical, the trust
+axis (created 1.9%) unmoved. **T4 (`--suggest` instantiated display) stays
+DEFERRED with its DRY constraint, reopen on consumer ask:** the suggestion
+text must be the proposer's own output (the instantiation re-ranker already
+runs propose_fix visitors under RerankMode::Structural), never a
+presentation-layer hand binder — a parallel binder can emit a
+plausible-but-noncompiling instantiation, the exact "suggestion that lies"
+failure the verbatim-corpus-text design prevents. No consumer ask exists
+today (zero `--suggest` display complaints since landing).
+
 **Issue 036 (2026-08-23, RESOLVED-NEGATIVE + removed per noise-reduction
 rule; harness `src/draft/jury_disagreement.rs` + `tests/jury_disagreement_poc.rs`
 kept as the reproducible artifact).** The Jagged Judges (arXiv:2608.12645 §6.2)
