@@ -3014,6 +3014,10 @@ pub fn generation_v6() -> Vec<BenchFixture> {
 // full probe record — including the two dropped atoms (question_mark's lack
 // of match-form support, iter_next_loop's header-only edit) and the mined
 // capacity-hint nested-block blind spot — lives in Plan 096 §T1 addendum.
+// allowed with cause: the raw-string form keeps every fixture byte-visible
+// (plain literals would bury the atoms in \n escapes); exactly one atom
+// needs the hash form (an embedded "), so the table stays uniform.
+#[allow(clippy::needless_raw_string_hashes)]
 pub static RAW_ATOMS_V7: &[(&str, &str)] = &[
     // ── flat (the control: same lints, disjoint — expected 1 pass) ──
     (
@@ -3295,7 +3299,7 @@ pub fn specs_v7() -> Vec<GenSpec> {
 
 /// The territory of a generation-7 spec id: `flat` (the disjoint control),
 /// `chain` (overlap, expected 2..=4 passes), `capped` (the depth exceeds
-/// MAX_FIX_PASSES — pass 4 is the last), `refused` (a guard refusal leaves
+/// `MAX_FIX_PASSES` — pass 4 is the last), `refused` (a guard refusal leaves
 /// the shape in place after 1 pass).
 #[must_use]
 pub fn v7_territory(spec_id: &str) -> &'static str {

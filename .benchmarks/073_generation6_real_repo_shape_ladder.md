@@ -116,6 +116,9 @@ v1's own composites mix in the persist atoms).
   series justifying it.
 - Real-G8 conversion A/B: still data-gated (`.heal/misses/` empty).
 - Saturation telemetry on gen-6 activates at 6 rows (currently 4).
+- **The last unexecuted difficulty axis (#3, overlap-edit chains) is now
+  EXECUTED 2026-09-06: ADMITTED as generation 7 (78.3% < v1) —
+  [`.benchmarks/074_generation7_overlap_chain_ladder.md`](074_generation7_overlap_chain_ladder.md).**
 
 ## Validation
 

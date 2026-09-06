@@ -2483,6 +2483,44 @@ the mining sha — owner-gated on the series justifying it). New tool:
 `examples/score_bench_mine_v6.rs` (batch-oracle discovery + tiered carve +
 census). CLI: `--generation 6` + `score_history_v6.svg`. Record: Plan 095
 (§1a falsification table + §1b salvage) + Bench 073.
+**REOPEN (1) EXECUTED A FIFTH TIME — the LAST axis — 2026-09-06 (Bench 074,
+Plan 096): generation 7 = the overlap-edit-chain ladder (Bench 069 candidate
+#3, manufactured maximal overlap: composites whose proposers' edits overlap,
+exercising the fixpoint's drop-and-refire semantics, including one spec
+engineered past `MAX_FIX_PASSES = 4`). The ladder dimension is CHAIN DEPTH
+(k = expected passes; rungs 1–5, k=5 = capped). 15 authored specs in four
+territories — flat (disjoint control) / chain / capped / refused. Probe
+(T1, pre-freeze) confirmed the mechanics and cost two atoms (question_mark
+has no match-form support; iter_next_loop's edit is header-only, not
+whole-loop atomic) + mined the **capacity-hint nested-block blind spot**
+(vec-with-capacity and hashmap-with-capacity are SILENT when the collection
+sits inside an `if let`/match-arm block — intake). First freeze run excluded
+2 (probe-gap: the probe validates parse, the compile fence is the freeze's
+own instrument — E0308 return-type; E0425 cross-arm binding), both repaired;
+landed **15/15, 0 standing exclusions, drift ×2**. The fence also found the
+**created-chain subtype**: on d2-nrl-format the outer rewrite CREATES the
+inner lint's firing site (`uninlined_format_args` cannot inline an index
+expression; the rewrite-created bare ident `__elem` is exactly what it fires
+on) — label = the outer member, chain depth still 2. **ADMITTED: 78.26% < v1
+96.23%**, deterministic ×3 (rows #57–#59 + score_history_v7.svg). Depth
+gradient CONFIRMED: flat 100% · chain 86.7% · capped 33.3% · refused 0% —
+the drop-and-refire semantics fully absorb overlap at depth ≤ 4 (depths 3–4
+measure 100%); difficulty lives ENTIRELY past the cap and in the refusal.
+THREE measured findings, all pre-existing, all intake-not-fixed (Plan 096
+non-goal): (1) **the needless_range_loop rewrite produces NON-COMPILING
+output when a slot sits in a comparison context** (`if __elem > 2` is E0308 —
+`&u32` vs integer needs a deref; `n += __elem` compiles because std ships
+`AddAssign<&u32>`) — no fixture had ever covered the class (the corpus atom
+is `total += v[i]` where `Add` exists); production `--verify` auto-reverts
+it, the bench measures unverified by design and caught it (parse_safety
+93.3%); (2) the `__elem` collision guard turns nested needless_range_loop
+into a hard persist (refused 0%) — fresh-binding uniquing is the fix-space;
+(3) the fix cascade EXPOSES deeper lints outside the fixable vocabulary
+(created 3: map_identity + single_option_map from `x.map(|v| v)`,
+suboptimal_flops from distance-sq's `r * r`). The Bench-069 difficulty-axis
+list is now FULLY EXECUTED (#1b→5, #2→6, #3→7, #4→4); real-G8 A/B stays
+data-gated. CLI: `--generation 7` + `score_history_v7.svg`. Record: Plan 096
+(T1 probe addendum + freeze-fence amendments) + Bench 074.
 
 **Issue 036 (2026-08-23, RESOLVED-NEGATIVE + removed per noise-reduction
 rule; harness `src/draft/jury_disagreement.rs` + `tests/jury_disagreement_poc.rs`

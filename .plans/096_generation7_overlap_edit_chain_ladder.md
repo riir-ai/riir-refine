@@ -1,12 +1,15 @@
 # Plan 096 — generation 7: the overlap-edit-chain ladder (Bench 069 candidate #3)
 
-Status: **IN FLIGHT** — design pre-registered before implementation (plan-first
-discipline). Bench 069 §"What actually remains" candidate #3, the last
-unexecuted difficulty axis: *"composites whose proposers' edits overlap (the
-fixpoint's drop-and-refire semantics), forcing multi-pass convergence past
-`MAX_FIX_PASSES = 4`."* Generations 2/3/5 compose disjoint atoms; generation 6
-mined organic interference; **generation 7 manufactures maximal overlap** (the
-gen-6 non-goal #2, explicitly deferred to a separate generation).
+Status: **RECORD** — gen-7 **ADMITTED** at 78.26% < v1 96.23% (M5 gate),
+deterministic ×3, freeze 15/15 (0 standing exclusions), drift ×2. Design
+pre-registered before implementation (plan-first discipline). Bench 069
+§"What actually remains" candidate #3, the last unexecuted difficulty axis:
+*"composites whose proposers' edits overlap (the fixpoint's drop-and-refire
+semantics), forcing multi-pass convergence past `MAX_FIX_PASSES = 4`."
+Generations 2/3/5 compose disjoint atoms; generation 6 mined organic
+interference; **generation 7 manufactures maximal overlap** (the gen-6
+non-goal #2, explicitly deferred to a separate generation). Record:
+`.benchmarks/074`.
 
 ## Pre-registered design (written before the first probe/freeze run)
 
@@ -142,13 +145,15 @@ gen-6 non-goal #2, explicitly deferred to a separate generation).
   1..=7, help text, `print_v7_chain_tables` (per-depth + per-territory +
   passes distribution), `HISTORY_SVG_V7`, `finish_score_bench` arms (svg_path
   7, the per-generation SVG loop, the history line).
-- [ ] T5 — Freeze run → land the tables → drift re-run (dual-mode loud).
-- [ ] T6 — The bench: `--score-bench --generation 7` ×3 (determinism) →
+- [x] T5 — Freeze run → land the tables → drift re-run (dual-mode loud).
+- [x] T6 — The bench: `--score-bench --generation 7` ×3 (determinism) →
   `score_history_v7.svg` → the M5 admission verdict recorded either way.
-- [ ] T7 — `.benchmarks/074_generation7_overlap_chain_ladder.md` (highwater
+  **ADMITTED: 78.26% < v1 96.23%**, rows #57–#59, deterministic ×3.
+- [x] T7 — `.benchmarks/074_generation7_overlap_chain_ladder.md` (highwater
   73→74) + AGENTS.md Issue-072 row update + Bench 069-073 §What-remains
-  pointers + the mining-queue snapshot refresh.
-- [ ] T8 — Full validation: lib default + score_bench union counts; freeze
+  pointers + the mining-queue snapshot refresh (the three findings joined
+  the post-mining intake as P11).
+- [x] T8 — Full validation: lib default + score_bench union counts; freeze
   drift ×2; bench deterministic ×3; clippy zero findings on every touched
   line; CLI surfaces re-verified (`--generation 7` admission, `--generation 8`
   → validation error exit 2, the v2 refusal byte-identical through the shared

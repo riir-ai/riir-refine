@@ -1082,6 +1082,25 @@ Queues empty after this entry → idle report.
 
 One open class (below); the standing divergence (P4 residual) has no action planned.
 
+- [ ] **2026-09-06 P11 NEW — gen-7 bench yields, three classes (Bench 074; all
+  pre-existing, none gen-7-caused):** (1) the `needless_range_loop` rewrite
+  produces NON-COMPILING output when a substituted slot sits in a comparison
+  context (`if __elem > 2` E0308 — the fresh `&u32` binding vs an integer
+  literal needs a deref; `n += __elem` compiles via `AddAssign<&u32>`) —
+  fix-space: a context-aware slot guard or a `*__elem` splice for
+  value-context slots; production `--verify` auto-reverts the edit today.
+  (2) the `__elem` collision guard makes NESTED needless_range_loop a hard
+  persist (level 2 refuses after level 1 introduces the binding) —
+  fix-space: fresh-binding uniquing (`__elem2`). (3) the capacity-hint
+  nested-block blind spot: `vec-with-capacity` and `hashmap-with-capacity`
+  are SILENT when the collection sits inside an `if let`/match-arm block
+  (the capacity-source derivation is fn-body-level; measured on the
+  post-smx text, edits=0). (4) context, not a fix: the fix cascade EXPOSES
+  deeper non-vocabulary lints (`x.map(|v| v)` → map_identity +
+  single_option_map; distance-sq's `r * r` → suboptimal_flops). Fixing any
+  of (1)–(3) re-runs `--score-bench --generation 7` and moves the gen-7
+  series (78.3%, the ratchet sees it).
+
 - [x] **2026-09-04 P10 NEW — LTO fold-elimination kills timing gates whose work
   **LANDED 2026-09-05 (Batch 109, Plan 080, 4090 box): the rule + TWO gate-refuted draft fix-patterns** (XOR-sink GF(2) cancellation over 0..2^k; wrapping_add balanced-batch collapse to 2^64-2048) — the shipped pattern is CHAINED state + consumer black_box + the loud nonzero-baseline assert; both anti-shapes pinned as assertions in batch109_sink_consumes_per_iteration_data. Corpus 99 → 100, complexity 19, NotBenchable 14, annotated 43. Record: Research 132.
       has a dead result** (found by the katgpt-rs Issue 723 Class A2 fixes,

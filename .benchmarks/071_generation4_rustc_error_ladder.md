@@ -122,8 +122,10 @@ to a suspicious-green as much as to a suspicious-red.
   extension to rust_perf rules (candidate #1b — **EXECUTED 2026-09-06 as
   generation 5, ADMITTED at 69.2%:
   [`.benchmarks/072_generation5_rust_perf_ladder.md`](072_generation5_rust_perf_ladder.md)**);
-  real-repo interference spans (#2); overlap-edit chains (#3). The real-G8
-  conversion A/B stays data-gated (`.heal/misses/` empty).
+  real-repo interference spans (#2, → generation 6, 95.2%);
+  overlap-edit chains (#3, → **generation 7, ADMITTED 78.3%:
+  [`.benchmarks/074_generation7_overlap_chain_ladder.md`](074_generation7_overlap_chain_ladder.md)**).
+  The real-G8 conversion A/B stays data-gated (`.heal/misses/` empty).
 - **A template family for a delegate-only code** would move the gen-4 floor —
   gated on the floor harness's divergence measurement, not scheduled here.
 

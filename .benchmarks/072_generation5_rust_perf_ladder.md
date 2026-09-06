@@ -127,8 +127,9 @@ cross-heal is honest and the marker design demonstrably does not false-credit it
   interference spans (#2) — **EXECUTED 2026-09-06: premise falsified by
   mining, the real-shape salvage ADMITTED as generation 6 (95.2% < v1):
   [`.benchmarks/073_generation6_real_repo_shape_ladder.md`](073_generation6_real_repo_shape_ladder.md)**;
-  overlap-edit chains (#3) remains open. The real-G8 conversion A/B
-  stays data-gated (`.heal/misses/` empty).
+  overlap-edit chains (#3) — **EXECUTED 2026-09-06: ADMITTED as generation 7
+  (78.3% < v1): [`.benchmarks/074_generation7_overlap_chain_ladder.md`](074_generation7_overlap_chain_ladder.md)**.
+  The real-G8 conversion A/B stays data-gated (`.heal/misses/` empty).
 
 ## Validation
 

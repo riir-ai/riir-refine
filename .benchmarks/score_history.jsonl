@@ -54,3 +54,6 @@
 {"ts":"2026-09-06T12:26:04","sha":"6e92b47f","n_ran":17,"n_healable":17,"n_clean":0,"heal_rate":0.95238096,"created_rate":0.0,"parse_safety":1.0,"decline_correctness":1.0,"edits_total":52,"vocab_size":38,"generation":6}
 {"ts":"2026-09-06T12:26:19","sha":"6e92b47f","n_ran":17,"n_healable":17,"n_clean":0,"heal_rate":0.95238096,"created_rate":0.0,"parse_safety":1.0,"decline_correctness":1.0,"edits_total":52,"vocab_size":38,"generation":6}
 {"ts":"2026-09-06T12:39:48","sha":"6e92b47f","n_ran":17,"n_healable":17,"n_clean":0,"heal_rate":0.95238096,"created_rate":0.0,"parse_safety":1.0,"decline_correctness":1.0,"edits_total":52,"vocab_size":38,"generation":6}
+{"ts":"2026-09-06T13:26:13","sha":"15d5c502","n_ran":15,"n_healable":15,"n_clean":0,"heal_rate":0.7826087,"created_rate":0.13043478,"parse_safety":0.93333334,"decline_correctness":1.0,"edits_total":37,"vocab_size":38,"generation":7}
+{"ts":"2026-09-06T13:29:31","sha":"15d5c502","n_ran":15,"n_healable":15,"n_clean":0,"heal_rate":0.7826087,"created_rate":0.13043478,"parse_safety":0.93333334,"decline_correctness":1.0,"edits_total":37,"vocab_size":38,"generation":7}
+{"ts":"2026-09-06T13:29:35","sha":"15d5c502","n_ran":15,"n_healable":15,"n_clean":0,"heal_rate":0.7826087,"created_rate":0.13043478,"parse_safety":0.93333334,"decline_correctness":1.0,"edits_total":37,"vocab_size":38,"generation":7}

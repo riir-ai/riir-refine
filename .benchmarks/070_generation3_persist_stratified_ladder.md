@@ -142,6 +142,9 @@ function-level conflict review.
   spans) — premise FALSIFIED by mining, the real-shape salvage landed as
   generation 6 and was ADMITTED (95.2% < v1):
   [`.benchmarks/073_generation6_real_repo_shape_ladder.md`](073_generation6_real_repo_shape_ladder.md)**.
+- **EXECUTED 2026-09-06: candidate #3 (overlap-edit chains) — the LAST
+  axis, ADMITTED as generation 7 (78.3% < v1):
+  [`.benchmarks/074_generation7_overlap_chain_ladder.md`](074_generation7_overlap_chain_ladder.md)**.
 
 ## Validation
 
