@@ -161,6 +161,130 @@ pub fn dump_misses(root: &Path, misses: &[MissRecord]) -> (Vec<PathBuf>, Vec<Str
     (written, warnings)
 }
 
+/// One parsed authoring-queue entry (Plan 091 T1.1).
+#[derive(Debug, Clone)]
+pub struct MissEntry {
+    pub path: PathBuf,
+    /// The error code — filename stem up to the last `-<digits>` suffix
+    /// (`E0502-1730000000000000000.md` → `E0502`); the whole stem when no
+    /// digit suffix (hand-authored entries stay queueable).
+    pub code: String,
+    /// Captured timestamp from the filename suffix, when parseable.
+    pub captured_unix_nanos: Option<u128>,
+    /// `- **file:** {path}:{line}` from the body, when parseable.
+    pub file_line: Option<(String, u32)>,
+}
+
+/// Parse one queue entry. Tolerant by design: any `.md` file that is not
+/// the README is an entry, and unparsable fields degrade to `None` — the
+/// queue is an aid, never a gate. The code is the leading `-`-token of the
+/// stem (rustc codes are `E<digits>`, never containing a dash), so both
+/// the writer's `{code}-{nanos}.md` form and hand-authored
+/// `{code}-note.md` forms pool correctly.
+#[must_use]
+fn parse_miss_entry(path: PathBuf) -> MissEntry {
+    let stem = path
+        .file_stem()
+        .map_or_else(|| "unknown".to_string(), |s| s.to_string_lossy().into_owned());
+    let code = stem.split('-').next().unwrap_or("unknown").to_string();
+    let captured = match stem.rsplit_once('-') {
+        Some((_, tail)) if !tail.is_empty() && tail.bytes().all(|b| b.is_ascii_digit()) => {
+            tail.parse::<u128>().ok()
+        }
+        _ => None,
+    };
+    let body = std::fs::read_to_string(&path).ok();
+    let file_line = body.as_deref().and_then(|b| {
+        b.lines().find_map(|l| {
+            let rest = l.trim().strip_prefix("- **file:** ")?;
+            let (f, ln) = rest.rsplit_once(':')?;
+            Some((f.to_string(), ln.trim().parse::<u32>().ok()?))
+        })
+    });
+    MissEntry {
+        path,
+        code,
+        captured_unix_nanos: captured,
+        file_line,
+    }
+}
+
+/// Read the whole authoring queue (`.heal/misses/*.md`, README excluded),
+/// filename-sorted for determinism (the ts suffix is sortable).
+///
+/// # Errors
+///
+/// I/O from the directory read — the caller decides loud-vs-skip.
+pub fn read_misses(dir: &Path) -> std::io::Result<Vec<MissEntry>> {
+    let mut entries = Vec::new();
+    for e in std::fs::read_dir(dir)? {
+        let e = e?;
+        let path = e.path();
+        let is_entry = path.extension().is_some_and(|x| x == "md")
+            && path.file_name().is_some_and(|n| n.to_string_lossy() != "README.md");
+        if is_entry {
+            entries.push(parse_miss_entry(path));
+        }
+    }
+    entries.sort_by(|a, b| a.path.cmp(&b.path));
+    Ok(entries)
+}
+
+/// Frontier-order the authoring queue (Plan 091 T1.1) — the real-G8
+/// enabler: informative code-pools first (resolving THOSE codes converts
+/// uncertain candidates), empty next (one probe is cheap), regenerate,
+/// saturated last (the template already always-works or always-fails).
+/// Ties break by code then path, deterministic.
+///
+/// `outcomes_by_code` maps an error code to its observed driver outcomes
+/// (`Kept` = success-verified, `Reverted` = failure, `Missed` = no
+/// candidate kept). The caller builds it from the trajectory store; an
+/// empty map means every pool reads `Empty` and the order degenerates to
+/// code-sorted — byte-equivalent information to today's FIFO listing.
+#[must_use]
+pub fn frontier_order_misses(
+    entries: &[MissEntry],
+    outcomes_by_code: &std::collections::BTreeMap<String, Vec<crate::dispersion::OutcomeClass>>,
+) -> Vec<(MissEntry, crate::dispersion::FrontierVerdict)> {
+    // One verdict per CODE (the pool granularity); entries inherit it.
+    let codes: std::collections::BTreeSet<&str> =
+        entries.iter().map(|e| e.code.as_str()).collect();
+    let pool: Vec<crate::dispersion::PoolEntry> = codes
+        .iter()
+        .map(|&c| {
+            crate::dispersion::PoolEntry::new(
+                c.to_string(),
+                outcomes_by_code.get(c).cloned().unwrap_or_default(),
+            )
+        })
+        .collect();
+    let verdicts: std::collections::BTreeMap<String, crate::dispersion::FrontierVerdict> =
+        crate::dispersion::frontier_order(&pool)
+            .into_iter()
+            .map(|v| (v.id.clone(), v))
+            .collect();
+    let mut ordered: Vec<(MissEntry, crate::dispersion::FrontierVerdict)> = entries
+        .iter()
+        .filter_map(|e| {
+            verdicts.get(&e.code).map(|v| (e.clone(), v.clone()))
+        })
+        .collect();
+    let rank = |r: crate::dispersion::Regime| match r {
+        crate::dispersion::Regime::Informative => 0_u8,
+        crate::dispersion::Regime::Empty => 1,
+        crate::dispersion::Regime::Regenerate => 2,
+        crate::dispersion::Regime::Saturated => 3,
+    };
+    ordered.sort_by(|(a, va), (b, vb)| {
+        rank(va.regime)
+            .cmp(&rank(vb.regime))
+            .then(vb.entropy.total_cmp(&va.entropy))
+            .then(a.code.cmp(&b.code))
+            .then(a.path.cmp(&b.path))
+    });
+    ordered
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -233,6 +357,88 @@ mod tests {
         let (written, warns) = dump_misses(&root, &[]);
         assert!(written.is_empty() && warns.is_empty());
         assert!(!root.exists(), "no dir created for an empty queue");
+    }
+
+    // ── Plan 091 T1.1 — read_misses + frontier_order_misses ───────────
+
+    fn seed_queue(dir: &Path, name: &str, body: &str) -> PathBuf {
+        std::fs::create_dir_all(dir).unwrap();
+        let p = dir.join(name);
+        std::fs::write(&p, body).unwrap();
+        p
+    }
+
+    const MISS_BODY: &str = "# E0502 — unresolved by the rustc_errors playbooks\n\
+         - **file:** /x/src/lib.rs:7\n\
+         - **message:** cannot borrow\n";
+
+    #[test]
+    fn read_misses_parses_code_ts_and_file_line_excluding_readme() {
+        let dir = std::env::temp_dir().join(format!("p091_read_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        seed_queue(&dir, "E0502-1730000000000000000.md", MISS_BODY);
+        seed_queue(&dir, "README.md", "the contract");
+        seed_queue(&dir, "E9999-hand-authored.md", "- **file:** /y/a.rs:12\n");
+        seed_queue(&dir, "weird.md", "no structured fields\n");
+        let mut entries = read_misses(&dir).unwrap();
+        assert_eq!(entries.len(), 3, "README excluded");
+        entries.sort_by(|a, b| a.code.cmp(&b.code));
+        let e = entries.iter().find(|e| e.code == "E0502").unwrap();
+        assert_eq!(e.captured_unix_nanos, Some(1_730_000_000_000_000_000));
+        assert_eq!(e.file_line, Some(("/x/src/lib.rs".into(), 7)));
+        let h = entries.iter().find(|e| e.code == "E9999").unwrap();
+        assert_eq!(h.file_line, Some(("/y/a.rs".into(), 12)));
+        let w = entries.iter().find(|e| e.code == "weird").unwrap();
+        assert_eq!(w.captured_unix_nanos, None, "no digit suffix → whole stem");
+        assert_eq!(w.file_line, None, "tolerant of unstructured bodies");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn frontier_order_puts_informative_codes_first_and_orders_within() {
+        use crate::dispersion::OutcomeClass;
+        let dir = std::env::temp_dir().join(format!("p091_ord_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        // Filenames in DELIBERATELY anti-frontier order: saturated code
+        // (all Kept) first, informative second, empty third.
+        seed_queue(&dir, "E0001-1.md", "x");
+        seed_queue(&dir, "E0002-2.md", "x");
+        seed_queue(&dir, "E0003-3.md", "x");
+        let entries = read_misses(&dir).unwrap();
+        let mut outcomes = std::collections::BTreeMap::new();
+        outcomes.insert(
+            "E0001".to_string(),
+            vec![OutcomeClass::Kept, OutcomeClass::Kept],
+        );
+        outcomes.insert(
+            "E0002".to_string(),
+            vec![OutcomeClass::Kept, OutcomeClass::Reverted],
+        );
+        // E0003: no record → Empty.
+        let ordered = frontier_order_misses(&entries, &outcomes);
+        let codes: Vec<&str> = ordered.iter().map(|(e, _)| e.code.as_str()).collect();
+        assert_eq!(codes, vec!["E0002", "E0003", "E0001"], "informative, empty, saturated");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn frontier_order_with_no_evidence_degenerates_to_code_sorted() {
+        let dir = std::env::temp_dir().join(format!("p091_deg_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        seed_queue(&dir, "E0009-1.md", "x");
+        seed_queue(&dir, "E0001-2.md", "x");
+        let entries = read_misses(&dir).unwrap();
+        let empty = std::collections::BTreeMap::new();
+        let ordered = frontier_order_misses(&entries, &empty);
+        let codes: Vec<&str> = ordered.iter().map(|(e, _)| e.code.as_str()).collect();
+        assert_eq!(codes, vec!["E0001", "E0009"], "all Empty → tie-break by code");
+        // Determinism: a second run is identical.
+        let again = frontier_order_misses(&entries, &empty);
+        assert_eq!(
+            ordered.iter().map(|(e, _)| e.path.clone()).collect::<Vec<_>>(),
+            again.iter().map(|(e, _)| e.path.clone()).collect::<Vec<_>>()
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

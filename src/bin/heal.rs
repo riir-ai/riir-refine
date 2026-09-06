@@ -1694,6 +1694,14 @@ USAGE:
                     tier/outcome counts, top rules, commitment status, the
                     E1 record / E2 verdict / E3 learn state — the one-command
                     \"is the loop actually closed?\" query. Read-only.
+    --misses       Print the `.heal/misses/` authoring queue in FRONTIER
+                    order (Plan 091 T1.2): dispersion-informative error
+                    codes first — resolving THOSE converts uncertain
+                    candidates — then unobserved, regenerate, saturated.
+                    Pool evidence comes from the trajectory store when the
+                    build ships latent_retrieval; without it the order
+                    degenerates to code-sorted. `--limit <N>` caps the
+                    output. Read-only standalone mode.
     --recompute-elo Batch ELO over the trajectory store (Issue 039 T2; needs
                     --features latent_retrieval): replay every verdict count
                     as rule-vs-shape matches from base 1200 + write the final
@@ -1824,6 +1832,13 @@ struct Args {
     /// Read-only standalone mode (no paths, no recording, ignores the
     /// opt-out env — a query, not a run).
     memory_stats: bool,
+    /// Plan 091 T1.2: `--misses` — print the `.heal/misses/` authoring
+    /// queue in FRONTIER order (dispersion-informative codes first, the
+    /// real-G8 enabler). Read-only standalone mode (the memory-stats
+    /// pattern: early return before validate_mode_flags).
+    misses: bool,
+    /// `--limit <N>` with `--misses`: cap the printed queue (default: all).
+    misses_limit: Option<usize>,
     /// `--recompute-elo` (Issue 039 T2): batch PL→Elo (standard-update
     /// canonical replay) over the trajectory store — backfills/writes the
     /// final rule + span ratings onto every row. Standalone WRITE mode
@@ -1935,6 +1950,8 @@ fn parse_args() -> Args {
         score_bench: false,
         score_report: false,
         memory_stats: false,
+        misses: false,
+        misses_limit: None,
         recompute_elo: false,
         collapse_report: false,
         command: None,
@@ -1974,6 +1991,17 @@ fn parse_args() -> Args {
             "--score-bench" => args.score_bench = true,
             "--score-report" => args.score_report = true,
             "--memory-stats" => args.memory_stats = true,
+            "--misses" => args.misses = true,
+            "--limit" => {
+                let Some(value) = it.next() else {
+                    eprintln!("--limit requires a value");
+                    usage();
+                };
+                args.misses_limit = Some(value.parse().unwrap_or_else(|_| {
+                    eprintln!("--limit expects a number, got {value:?}");
+                    usage();
+                }));
+            }
             "--recompute-elo" => args.recompute_elo = true,
             "--collapse-report" => args.collapse_report = true,
             "--corpus-stats" => args.corpus_stats = true,
@@ -2176,6 +2204,7 @@ fn parse_args() -> Args {
         && !args.score_report
         && !args.dump_trajectories
         && !args.memory_stats
+        && !args.misses
         && !args.recompute_elo
         && !args.collapse_report
         && !args.corpus_stats
@@ -2489,6 +2518,100 @@ fn resolve_corpus_repo_root() -> Option<PathBuf> {
         return Some(manifest);
     }
     None
+}
+
+/// Plan 091 T1.2: the `--misses` standalone mode — print the
+/// `.heal/misses/` authoring queue in frontier order.
+///
+/// Pool evidence comes from the trajectory store when the build ships
+/// `latent_retrieval` AND the store exists (per-code Kept/Reverted counts
+/// via [`riir_clippy::dispersion::from_counts`]); otherwise every pool
+/// reads `Empty` and the order degenerates to code-sorted — pinned by the
+/// evolve tests. The queue dir resolves like the dump path writes it: the
+/// CWD's `.heal/misses` (the operator runs from the repo they healed).
+fn run_misses_queue(limit: Option<usize>) {
+    use riir_clippy::domains::rustc_errors::evolve;
+    let root = std::env::current_dir().unwrap_or_default();
+    let dir = evolve::misses_dir(&root);
+    let entries = match evolve::read_misses(&dir) {
+        Ok(e) => e,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            println!("misses: queue empty (no {})", dir.display());
+            return;
+        }
+        Err(e) => {
+            eprintln!("misses: cannot read {}: {e}", dir.display());
+            std::process::exit(1);
+        }
+    };
+    if entries.is_empty() {
+        println!("misses: queue empty ({})", dir.display());
+        return;
+    }
+
+    // Per-code outcome pools (Plan 091 T1.1): store rows keyed
+    // `"{code}:{strategy}"` fold into Kept/Reverted counts. Without the
+    // store the map stays empty — the documented degeneration.
+    let mut outcomes_by_code: std::collections::BTreeMap<
+        String,
+        Vec<riir_clippy::dispersion::OutcomeClass>,
+    > = std::collections::BTreeMap::new();
+    #[cfg(feature = "latent_retrieval")]
+    if root.join(".heal").join("trajectories.kv").exists() {
+        match riir_clippy::traj_store::TrajStore::open(&root) {
+            Ok((store, bad)) => {
+                if bad > 0 {
+                    eprintln!("misses: {bad} corrupt store row(s) skipped");
+                }
+                let mut counts: std::collections::BTreeMap<String, (usize, usize)> =
+                    std::collections::BTreeMap::new();
+                for row in store.dump() {
+                    let code = row.lint_key.split(':').next().unwrap_or("").to_string();
+                    if code.is_empty() {
+                        continue;
+                    }
+                    let e = counts.entry(code).or_default();
+                    e.0 += row.success_count as usize;
+                    e.1 += row.fail_count as usize;
+                }
+                for (code, (kept, reverted)) in counts {
+                    outcomes_by_code
+                        .insert(code, riir_clippy::dispersion::from_counts(kept, reverted, 0));
+                }
+            }
+            Err(e) => eprintln!("misses: store unreadable ({e}) — ordering without evidence"),
+        }
+    }
+
+    let ordered = evolve::frontier_order_misses(&entries, &outcomes_by_code);
+    println!(
+        "misses: {} entr{} across {} code(s) — frontier order (informative first):",
+        ordered.len(),
+        if ordered.len() == 1 { "y" } else { "ies" },
+        ordered.iter().map(|(e, _)| e.code.as_str()).collect::<std::collections::BTreeSet<_>>().len(),
+    );
+    let shown = ordered.iter().take(limit.unwrap_or(ordered.len()));
+    for (i, (e, v)) in shown.enumerate() {
+        let regime = match v.regime {
+            riir_clippy::dispersion::Regime::Informative => "informative",
+            riir_clippy::dispersion::Regime::Saturated => "saturated",
+            riir_clippy::dispersion::Regime::Regenerate => "regenerate",
+            riir_clippy::dispersion::Regime::Empty => "unobserved",
+        };
+        let loc = e
+            .file_line
+            .as_ref()
+            .map_or_else(String::new, |(f, l)| format!(" @ {f}:{l}"));
+        println!(
+            "  {:>3}. [{:<11}] h={:.3} n={:<3} {}{}",
+            i + 1,
+            regime,
+            v.entropy,
+            outcomes_by_code.get(&e.code).map_or(0, Vec::len),
+            e.path.display(),
+            loc
+        );
+    }
 }
 
 /// Issue 050 T2: the `--corpus-stats` / `--import-series` standalone mode.
@@ -2860,6 +2983,30 @@ fn main() {
     // latent_retrieval (handled inside run_corpus_stats).
     if args.corpus_stats || args.import_series {
         run_corpus_stats(args.corpus_stats, args.json, args.import_series);
+        return;
+    }
+
+    // ── Plan 091 T1.2: --misses — the frontier-ordered authoring queue ──
+    // Read-only standalone mode (the memory-stats pattern: early return,
+    // validate_mode_flags never sees it). Prints `.heal/misses/*.md`
+    // frontiers-ordered by per-code dispersion: informative pools first —
+    // resolving THOSE codes converts uncertain candidates — then unobserved
+    // (one probe is cheap), regenerate, saturated last. The G8 enabler:
+    // this ordering is the treatment arm the conversion ledger (T1.3)
+    // measures against the pre-wiring FIFO baseline.
+    if args.misses {
+        if args.suggest
+            || args.fix
+            || args.fix_compile
+            || args.dump_trajectories
+            || args.write
+            || args.score_bench
+            || args.memory_stats
+        {
+            eprintln!("--misses is a standalone read-only mode");
+            std::process::exit(2);
+        }
+        run_misses_queue(args.misses_limit);
         return;
     }
 

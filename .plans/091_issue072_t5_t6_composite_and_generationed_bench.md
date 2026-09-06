@@ -29,7 +29,7 @@ G8 becomes measurable)."
 - [ ] T0 — Racing pre-check: `git status` clean in riir-clippy; no sibling hunks on
   `score_bench/`, `evolve.rs`, `corpus_gen.rs`, `traj_store.rs`; claim recorded here.
 - [ ] T1 — `.heal/misses/` frontier-order wiring (the real-G8 enabler):
-  - [ ] T1.1 `evolve.rs`: `read_misses(dir) -> Vec<MissEntry>` (parse `{code}-{ts}.md`
+  - [x] T1.1 `evolve.rs`: `read_misses(dir) -> Vec<MissEntry>` (parse `{code}-{ts}.md`
     back into code + captured-ts + file/line/message; tolerate hand-authored entries
     missing fields — the queue is an aid, never a gate) +
     `frontier_order_misses(entries, outcomes) -> Vec<(MissEntry, DispersionVerdict)>`:
@@ -38,9 +38,22 @@ G8 becomes measurable)."
     Missed=no-record, ordered by `dispersion::frontier_order` semantics — informative
     first, saturated/regenerate flagged. Determinism pinned (BTreeMap iteration, the
     Plan-090 BT pattern); the cold authoring path is exempt from G4.
-  - [ ] T1.2 CLI: `cargo heal --fix-compile --misses [--limit N]` prints the ordered
+    **DONE 2026-09-06:** code = the LEADING `-`-token of the stem (rustc codes are
+    `E<digits>`, never containing a dash — so `E9999-hand.md` pools as `E9999`; the
+    first draft's trailing-digit-only strip was wrong, caught by the test); caller
+    supplies the per-code outcome map so evolve.rs stays feature-free (the store-join
+    lives in the CLI); 3 tests (parse roundtrip + README exclusion, informative-first
+    ordering, empty-pool degeneration + determinism).
+  - [x] T1.2 CLI: `cargo heal --misses [--limit N]` prints the ordered
     authoring queue (code, verdict band, dispersion, path). Without the flag the dump
-    path is byte-identical to today (G3 on `dump_misses` behavior).
+    path is byte-identical to today (G3 on `dump_misses` behavior — untouched).
+    **DONE 2026-09-06:** standalone read-only mode per the memory-stats convention
+    (early return before `validate_mode_flags`, which keeps its 20 pinned call sites
+    untouched); store-join gated `latent_retrieval` (per-code Kept/Reverted counts via
+    `dispersion::from_counts`), degenerates to code-sorted without it; live-verified
+    (empty queue, `--limit` cap, file:line parse, hand-authored pooling, guard
+    rejections for `--misses --write` / `--misses --suggest`); clippy 0 in default +
+    latent/rustc_errors/score_bench states; default lib 1115/0 (+3).
   - [ ] T1.3 G8 instrument: conversion ledger — when an authored template lands for a
     code (playbook count for `code` increases) and that code's subsequent driver
     outcomes include a Certified admission, record the conversion; `--misses --report`
