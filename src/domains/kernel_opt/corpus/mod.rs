@@ -1559,6 +1559,7 @@ mod entries_gpu_24;
 mod entries_gpu_25;
 mod entries_gpu_26;
 mod entries_gpu_27;
+mod entries_gpu_28;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -1599,6 +1600,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_25::entries());
     entries.extend(entries_gpu_26::entries());
     entries.extend(entries_gpu_27::entries());
+    entries.extend(entries_gpu_28::entries());
     Corpus::new(entries)
 }
 
@@ -1611,7 +1613,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 539-rule corpus appears in exactly one
+/// - **Exhaustive:** every `rule_id` in the 544-rule corpus appears in exactly one
 ///   category (no orphan rules, no duplicate appearances).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
@@ -1619,7 +1621,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (113 rules)
+    // A: Memory access patterns (114 rules)
     (
         KernelCategory::MemoryAccess,
         "A: memory access",
@@ -1736,6 +1738,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "shared-operand-groups-per-warp",
             "whole-row-register-resident-under-length-budget",
             "byte-owning-threads-non-positional-digit-codes",
+            "routed-activation-pack-once-shared-operand"
         ],
     ),
     // B: Compute patterns (59 rules)
@@ -1804,7 +1807,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "degenerate-selection-falls-back-to-identity-uniform",
         ],
     ),
-    // C: Fusion patterns (44 rules)
+    // C: Fusion patterns (45 rules)
     (
         KernelCategory::Fusion,
         "C: fusion",
@@ -1853,6 +1856,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "rht-epilogue-fusion-contract",
             "gumbel-argmax-filtered-sampling-descent",
             "softmax-denominator-cancels-through-scale-invariant-norm",
+            "batch-verify-rows-single-dispatch"
         ],
     ),
     // D: Dispatch patterns (127 rules)
@@ -2039,7 +2043,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fwht-wide-block-row-per-threadgroup-exchange-ladder",
         ],
     ),
-    // F: Flash-attention tiling (12 rules)
+    // F: Flash-attention tiling (13 rules)
     (
         KernelCategory::FlashAttnTiling,
         "F: flash-attn tiling",
@@ -2056,6 +2060,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "two-stage-mask-softmax-then-conv",
             "mask-block-classification-skip-placement",
             "split-k-two-pass-attention-decode-long-context",
+            "dense-fast-path-bounded-by-selector-coverage"
         ],
     ),
     // G: Linear-attention recurrence (29 rules)
@@ -2164,7 +2169,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "launch-heuristic-pinned-to-calibration-arch",
         ],
     ),
-    // L: Conv-as-GEMM + memory layout (13 rules)
+    // L: Conv-as-GEMM + memory layout (14 rules)
     (
         KernelCategory::ConvGemmLayout,
         "L: conv-as-GEMM + layout",
@@ -2182,9 +2187,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fold-tile-transpose-into-dequant-scatter",            "ldmatrix-mma-layout-loads",
 
             "dequant-byte-pairs-as-aligned-u16-loads",
+            "device-affine-scratch-admission-with-pool-fallback"
         ],
     ),
-    // M: Kernel parametric polymorphism (17 rules)
+    // M: Kernel parametric polymorphism (18 rules)
     (
         KernelCategory::KernelPolymorphism,
         "M: kernel polymorphism",
@@ -2206,6 +2212,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "lane-owned-topk-output",
             "derived-index-from-pinned-checkpoint-is-a-cache",
             "warm-reachable-dispatch-signatures-before-timed-window",
+            "row-aware-indexing-reuses-static-single-token-kernel"
         ],
     ),
     // N: dtype + alignment specialization (36 rules)
