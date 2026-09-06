@@ -3196,7 +3196,12 @@ Discipline, option (a) — one counter per directory, enforced). T4: katgpt-rs
 `riir-mmorpg-examples` `.issues/.highwater` carries the `-n 97` corruption (the
 katgpt-rs Issue-725 `echo -n` class — the sweep's remaining exit 1) + its files floor
 35→36; riir-train (13) / seal-game-editor (12) duplicates sit at their ratchets by
-design.
+design. **RESOLVED 2026-09-06:** the mmorpg allocator was repaired upstream in the
+owning repo (mmorpg `adc8877` — `-n 97` → `097`, value- and padding-preserving, now
+git-tracked; a same-unit duplicate repair from the 4090 box yielded cleanly at the
+rejected push, the Issue-665 class working as designed) and the floors row's observed
+count went 35→36 (katgpt-rs sweep commit). riir-train/seal-game-editor remain at
+their ratchets (branch split / read-only).
 
 **Issue 070 (ThoughtComm α-fusion + rerank diversity guard, arXiv:2510.20733)
 RESOLVED 2026-09-05 (file removed per the noise-reduction rule; `906b152`).** **T1
