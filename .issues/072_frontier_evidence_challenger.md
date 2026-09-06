@@ -1,8 +1,9 @@
 # Issue 072 — Frontier-evidence Challenger: construction-labeled pairs + dispersion selection + generationed bench (J-Zero modelless fusion)
 
 **Status:** OPEN → **PoC EXIT CRITERION MET 2026-09-06** (2 of 3 axes pass, the third
-discharged structurally + gate green): T1/T2/T3/T4/T7 landed (Plan 090); T5/T6 below stay
-open pending their plan (the issue's own "Plan after the PoC proves it").
+discharged structurally + gate green): T1/T2/T3/T4/T7 landed (Plan 090); T5/T6 below
+PLANNED as `.plans/091_issue072_t5_t6_composite_and_generationed_bench.md` (2026-09-06)
+— the issue's own "Plan after the PoC proves it" step.
 **Source:** riir-train `.research/450_J-Zero_Judge_Co_Evolution_Gain.md` §4.1 (arXiv:2608.26582, mechanisms M1–M6).
 **Targets the two measured gaps:** (1) T39/Research 135 — selection pools starved (98.5% of candidates unseen; "the bottleneck is evidence volume, not selection math"); (2) Plan 014 Phase 3 — score-bench real-fraction growth deferred with no mechanism; bench saturating (run #3 heal 98.1%).
 **Unifying principle (paper §3.2 requirement (ii), discovered independently here as the T3.5.4 contamination fix):** labels must never depend on signals produced by the evaluator itself. Construction labeling is the general form; oracle labeling is its ground-truth special case.
