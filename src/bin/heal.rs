@@ -1702,6 +1702,12 @@ USAGE:
                     build ships latent_retrieval; without it the order
                     degenerates to code-sorted. `--limit <N>` caps the
                     output. Read-only standalone mode.
+    --report       With `--misses`: print the conversion ledger instead of
+                    the queue (Plan 091 T1.3) — conversion-per-authored-rule
+                    split by authoring era (the FIFO baseline the WIRED
+                    strategies were authored in vs the frontier landings
+                    authored from this queue), against the wiring commit
+                    that frontier-ordered the queue. Read-only.
     --recompute-elo Batch ELO over the trajectory store (Issue 039 T2; needs
                     --features latent_retrieval): replay every verdict count
                     as rule-vs-shape matches from base 1200 + write the final
@@ -1839,6 +1845,9 @@ struct Args {
     misses: bool,
     /// `--limit <N>` with `--misses`: cap the printed queue (default: all).
     misses_limit: Option<usize>,
+    /// `--report` with `--misses`: print the conversion ledger (Plan 091
+    /// T1.3) instead of the queue.
+    misses_report: bool,
     /// `--recompute-elo` (Issue 039 T2): batch PL→Elo (standard-update
     /// canonical replay) over the trajectory store — backfills/writes the
     /// final rule + span ratings onto every row. Standalone WRITE mode
@@ -1952,6 +1961,7 @@ fn parse_args() -> Args {
         memory_stats: false,
         misses: false,
         misses_limit: None,
+        misses_report: false,
         recompute_elo: false,
         collapse_report: false,
         command: None,
@@ -1992,6 +2002,7 @@ fn parse_args() -> Args {
             "--score-report" => args.score_report = true,
             "--memory-stats" => args.memory_stats = true,
             "--misses" => args.misses = true,
+            "--report" => args.misses_report = true,
             "--limit" => {
                 let Some(value) = it.next() else {
                     eprintln!("--limit requires a value");
@@ -2205,6 +2216,7 @@ fn parse_args() -> Args {
         && !args.dump_trajectories
         && !args.memory_stats
         && !args.misses
+        && !args.misses_report
         && !args.recompute_elo
         && !args.collapse_report
         && !args.corpus_stats
@@ -2614,6 +2626,106 @@ fn run_misses_queue(limit: Option<usize>) {
     }
 }
 
+/// Plan 091 T1.3: the `--misses --report` mode — the conversion ledger
+/// (the real-G8 instrument). Prints conversion-per-authored-rule split by
+/// authoring era: the FIFO baseline (strategies authored pre-wiring, from
+/// `WIRED_STRATEGIES`) vs the frontier era (post-wiring landings, from
+/// `FRONTIER_LANDINGS`). The store join maps `TrajRowDoc`s into the
+/// feature-free [`ConversionSignal`]s; without the store the conversion
+/// columns print `n/a` (an absent store is NOT a zero — the honest
+/// degeneration, the T1.2 convention).
+fn run_conversion_report() {
+    use riir_clippy::domains::rustc_errors::evolve;
+    let root = std::env::current_dir().unwrap_or_default();
+    let inventory = evolve::playbook_inventory();
+    let mut signals: Vec<evolve::ConversionSignal> = Vec::new();
+    let mut store_present = false;
+    #[cfg(feature = "latent_retrieval")]
+    if root.join(".heal").join("trajectories.kv").exists() {
+        match riir_clippy::traj_store::TrajStore::open(&root) {
+            Ok((store, bad)) => {
+                if bad > 0 {
+                    eprintln!("misses: {bad} corrupt store row(s) skipped");
+                }
+                store_present = true;
+                for row in store.dump() {
+                    signals.push(evolve::ConversionSignal {
+                        lint_key: row.lint_key,
+                        tier: row.tier,
+                        last_seen_unix: row.last_seen_at,
+                    });
+                }
+            }
+            Err(e) => eprintln!("misses: store unreadable ({e}) — conversions n/a"),
+        }
+    }
+    #[cfg(not(feature = "latent_retrieval"))]
+    eprintln!(
+        "misses: built without latent_retrieval — conversions n/a (inventory + landings still printed)"
+    );
+
+    let report = evolve::conversion_report(
+        &inventory,
+        evolve::WIRED_STRATEGIES,
+        evolve::FRONTIER_LANDINGS,
+        &signals,
+    );
+    println!(
+        "conversion ledger — G8: frontier vs its own FIFO baseline (wiring {}):",
+        evolve::WIRING_COMMIT
+    );
+    let era_line = |label: &str, total: usize, certified: usize| {
+        if !store_present {
+            format!("  {label:<18} {total} rule(s), conversions n/a (no trajectory store)")
+        } else if total == 0 {
+            format!("  {label:<18} 0 rules — nothing authored in this era yet")
+        } else {
+            // Integer-rounded percent — no float casts in a print path.
+            let pct = (certified * 100 + total / 2) / total;
+            format!("  {label:<18} {total} rule(s), {certified} Certified conversion(s) ({pct}%)")
+        }
+    };
+    println!(
+        "{}",
+        era_line(
+            "FIFO baseline:",
+            report.baseline_total,
+            report.baseline_certified
+        )
+    );
+    println!(
+        "{}",
+        era_line(
+            "frontier era:",
+            report.frontier_total,
+            report.frontier_certified
+        )
+    );
+    for (code, strategy) in &report.unrecorded {
+        println!("  UNRECORDED: {code} {strategy} — ledger bug, neither era accounts for it");
+    }
+    println!(
+        "  note: the FIFO arm is historical, not re-runnable post-wiring — the \
+         comparison is frontier-vs-its-own-baseline (T39/Bench-051); \
+         conversion = the rule's CURRENT tier is Certified"
+    );
+    println!("  per-rule (code strategy era converted last-seen-unix):");
+    for r in &report.rows {
+        let era = match r.era {
+            evolve::LedgerEra::Baseline => "baseline",
+            evolve::LedgerEra::Frontier => "frontier",
+            evolve::LedgerEra::Unrecorded => "UNRECORDED",
+        };
+        let seen = r
+            .last_seen_unix
+            .map_or_else(String::new, |t| format!(" {}", t));
+        println!(
+            "    {:<6} {:<24} {:<9} {:<3}{}",
+            r.code, r.strategy, era, r.certified, seen
+        );
+    }
+}
+
 /// Issue 050 T2: the `--corpus-stats` / `--import-series` standalone mode.
 /// Counts the corpus domains (runtime builders where the feature is on,
 /// source-walk needle otherwise — Proposal 009 §F2 item (ii)), prints the
@@ -3006,8 +3118,16 @@ fn main() {
             eprintln!("--misses is a standalone read-only mode");
             std::process::exit(2);
         }
-        run_misses_queue(args.misses_limit);
+        if args.misses_report {
+            run_conversion_report();
+        } else {
+            run_misses_queue(args.misses_limit);
+        }
         return;
+    }
+    if args.misses_report {
+        eprintln!("--report requires --misses");
+        std::process::exit(2);
     }
 
     // ── Issue 037 observability: --memory-stats — the loop debug query ────

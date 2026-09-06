@@ -39,6 +39,10 @@ impl CompileProposer for ReplacePlaybook {
         "test-replace"
     }
 
+    fn code(&self) -> &'static str {
+        self.code
+    }
+
     fn propose(&self, diag: &RustcErrorDiag, _file: &Path, source: &str) -> Vec<FixCandidate> {
         if diag.code != self.code {
             return Vec::new();

@@ -175,8 +175,12 @@ impl CompileProposer for AnonLifetime {
         "e0597-anon-lifetime"
     }
 
+    fn code(&self) -> &'static str {
+        "E0597"
+    }
+
     fn propose(&self, diag: &RustcErrorDiag, file: &std::path::Path, source: &str) -> Vec<FixCandidate> {
-        if diag.code != "E0597" {
+        if diag.code != self.code() {
             return Vec::new();
         }
         // Only the ANNOTATION indictment carries a swap-able token. The
@@ -225,8 +229,12 @@ impl CompileProposer for MoveCapture {
         "e0597-move"
     }
 
+    fn code(&self) -> &'static str {
+        "E0597"
+    }
+
     fn propose(&self, diag: &RustcErrorDiag, file: &std::path::Path, source: &str) -> Vec<FixCandidate> {
-        if diag.code != "E0597" {
+        if diag.code != self.code() {
             return Vec::new();
         }
         let Some(cap) = anchor(diag, |l| l == "value captured here") else {
@@ -262,8 +270,12 @@ impl CompileProposer for MoveCloneCapture {
         "e0597-move-clone"
     }
 
+    fn code(&self) -> &'static str {
+        "E0597"
+    }
+
     fn propose(&self, diag: &RustcErrorDiag, file: &std::path::Path, source: &str) -> Vec<FixCandidate> {
-        if diag.code != "E0597" {
+        if diag.code != self.code() {
             return Vec::new();
         }
         let Some(cap) = anchor(diag, |l| l == "value captured here") else {
@@ -312,8 +324,12 @@ impl CompileProposer for DropTheBox {
         "e0597-drop-the-box"
     }
 
+    fn code(&self) -> &'static str {
+        "E0597"
+    }
+
     fn propose(&self, diag: &RustcErrorDiag, file: &std::path::Path, source: &str) -> Vec<FixCandidate> {
-        if diag.code != "E0597" {
+        if diag.code != self.code() {
             return Vec::new();
         }
         let Some(cap) = anchor(diag, |l| l == "value captured here") else {
@@ -382,8 +398,12 @@ impl CompileProposer for SharedOwnership {
         "e0597-shared-ownership"
     }
 
+    fn code(&self) -> &'static str {
+        "E0597"
+    }
+
     fn propose(&self, diag: &RustcErrorDiag, file: &std::path::Path, source: &str) -> Vec<FixCandidate> {
-        if diag.code != "E0597" {
+        if diag.code != self.code() {
             return Vec::new();
         }
         let Some(cap) = anchor(diag, |l| l == "value captured here") else {
@@ -479,8 +499,12 @@ impl CompileProposer for ScopeHoist {
         "e0597-scope-hoist"
     }
 
+    fn code(&self) -> &'static str {
+        "E0597"
+    }
+
     fn propose(&self, diag: &RustcErrorDiag, file: &std::path::Path, source: &str) -> Vec<FixCandidate> {
-        if diag.code != "E0597" {
+        if diag.code != self.code() {
             return Vec::new();
         }
         let Some(dropped) = anchor(diag, |l| l.contains("dropped here while still borrowed")) else {

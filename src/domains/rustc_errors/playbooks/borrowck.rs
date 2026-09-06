@@ -203,8 +203,12 @@ impl CompileProposer for E0502DerefRemoval {
         "e0502-deref-removal"
     }
 
+    fn code(&self) -> &'static str {
+        "E0502"
+    }
+
     fn propose(&self, diag: &RustcErrorDiag, file: &std::path::Path, source: &str) -> Vec<FixCandidate> {
-        if diag.code != "E0502" {
+        if diag.code != self.code() {
             return Vec::new();
         }
         // The borrowed-place label locates the binding; the anchor span
@@ -265,8 +269,12 @@ impl CompileProposer for E0502CloneOut {
         "e0502-clone-out"
     }
 
+    fn code(&self) -> &'static str {
+        "E0502"
+    }
+
     fn propose(&self, diag: &RustcErrorDiag, file: &std::path::Path, source: &str) -> Vec<FixCandidate> {
-        if diag.code != "E0502" {
+        if diag.code != self.code() {
             return Vec::new();
         }
         let Some(borrow) = anchor(diag, |l| l.contains("immutable borrow occurs here")) else {
@@ -316,8 +324,12 @@ impl CompileProposer for E0499SwapSecondDecl {
         "e0499-swap-second-decl"
     }
 
+    fn code(&self) -> &'static str {
+        "E0499"
+    }
+
     fn propose(&self, diag: &RustcErrorDiag, file: &std::path::Path, source: &str) -> Vec<FixCandidate> {
-        if diag.code != "E0499" {
+        if diag.code != self.code() {
             return Vec::new();
         }
         let Some(second) = anchor(diag, |l| l.contains("second mutable borrow occurs here"))
@@ -386,8 +398,12 @@ impl CompileProposer for E0505CloneAtMove {
         "e0505-clone-at-move"
     }
 
+    fn code(&self) -> &'static str {
+        "E0505"
+    }
+
     fn propose(&self, diag: &RustcErrorDiag, file: &std::path::Path, source: &str) -> Vec<FixCandidate> {
-        if diag.code != "E0505" {
+        if diag.code != self.code() {
             return Vec::new();
         }
         let Some(moved) = anchor(diag, |l| l.contains("move out of") && l.contains("occurs here"))

@@ -26,8 +26,10 @@ G8 becomes measurable)."
 
 ## Tasks
 
-- [ ] T0 — Racing pre-check: `git status` clean in riir-clippy; no sibling hunks on
+- [x] T0 — Racing pre-check: `git status` clean in riir-clippy; no sibling hunks on
   `score_bench/`, `evolve.rs`, `corpus_gen.rs`, `traj_store.rs`; claim recorded here.
+  **DONE 2026-09-06:** tree clean at `3580477` (== origin/develop); all four files untouched
+  by siblings. Claim recorded.
 - [ ] T1 — `.heal/misses/` frontier-order wiring (the real-G8 enabler):
   - [x] T1.1 `evolve.rs`: `read_misses(dir) -> Vec<MissEntry>` (parse `{code}-{ts}.md`
     back into code + captured-ts + file/line/message; tolerate hand-authored entries
@@ -54,13 +56,41 @@ G8 becomes measurable)."
     (empty queue, `--limit` cap, file:line parse, hand-authored pooling, guard
     rejections for `--misses --write` / `--misses --suggest`); clippy 0 in default +
     latent/rustc_errors/score_bench states; default lib 1115/0 (+3).
-  - [ ] T1.3 G8 instrument: conversion ledger — when an authored template lands for a
+  - [x] T1.3 G8 instrument: conversion ledger — when an authored template lands for a
     code (playbook count for `code` increases) and that code's subsequent driver
     outcomes include a Certified admission, record the conversion; `--misses --report`
     prints conversion-per-authored-rule against the PRE-WIRING FIFO history as the
     baseline. Honest note: the FIFO arm is historical, not re-runnable post-wiring —
     the comparison is frontier-vs-its-own-baseline (the T39/Bench-051 discipline), and
     the ledger records the wiring commit so the baseline window is unambiguous.
+    **DONE 2026-09-06:** two design upgrades over the task text, both forced by
+    durability: (1) the "playbook count" became a per-STRATEGY membership pin —
+    `WIRED_STRATEGIES` (the 10 pre-wiring rules, era = FIFO baseline) +
+    `FRONTIER_LANDINGS` (empty at wiring; one row appended IN THE SAME COMMIT as each
+    landing, the pins-file discipline) with a ratchet test
+    (`wired_plus_frontier_equals_the_derived_inventory`) reding any landing without its
+    ledger row, any row outliving its playbook, any rename, and any duplicate — a count
+    pin cannot see a same-size swap (the repo_set lesson); (2) the inventory DERIVES
+    from the registry via a new required `CompileProposer::code()` method — the 10
+    duplicated `diag.code != "E…"` guards now read `self.code()` (one source of truth,
+    the compiler enumerated all 12 impls incl. the two test helpers), never
+    name-prefix parsing. Conversions: a strategy is converted iff ANY of its store rows
+    (`{code}:{strategy}:{shape}` keys — multiple rows per strategy) has CURRENT tier
+    Certified; Withdrawn is a RETRACTION not a conversion (Issue 021 absorbing);
+    `last_seen_at` (unix secs, same units as `WIRING_UNIX_SECS` = 1788680316) is the
+    max over the strategy's rows. Store rows map into the feature-free
+    `ConversionSignal` so evolve.rs stays pure (the T1.1 convention); without the store
+    the CLI prints conversions `n/a` (absent ≠ zero). Era attribution: a strategy
+    belongs to its AUTHORING era no matter when re-verified — a post-wiring
+    re-certification of a baseline rule never inflates the frontier column.
+    Live-verified both paths: no-store (10 baseline rules, n/a), planted store (2
+    Certified rows + 1 Heuristic on E0505-clone-at-move → 1/10 = 10%; the
+    withdrawn E0502-clone-out → not converted, sighting printed); guards fire
+    (`--report` alone → exit 2, `--misses --report --write` → exit 2). Gates: 5 new
+    tests (ratchet, era attribution, tier-only-conversions, unrecorded flag,
+    determinism+completeness); default lib 1120/0 (+5), all-features 1987/0/16i,
+    fix_compile trio 6/6+6/6+4/4, clippy 0 default + all-features `-D warnings`.
+    Known cosmetic: `cargo heal --report` without `--misses` exits 2 with usage.
 - [ ] T2 — Composite case generation (M4 generation side):
   - [ ] T2.1 `corpus_gen::generate_composites() -> Vec<CompositeCase>`: compose
     k ∈ {1,2,3,4} atomic cases into one file/scope with order-independent defects

@@ -169,6 +169,11 @@ impl FixCandidate {
 pub trait CompileProposer {
     /// Stable identity for reports (`e0597-clone`, `rustc-suggestion`...).
     fn name(&self) -> &'static str;
+    /// The single `E….` code this playbook addresses — the propose
+    /// guard's source of truth AND the conversion-ledger inventory key
+    /// (Plan 091 T1.3). The ledger derives from this, never from name
+    /// prefixes.
+    fn code(&self) -> &'static str;
     /// Propose candidates. Empty = this playbook has no move here (the
     /// driver records the diagnostic as a miss if NO playbook proposes).
     fn propose(&self, diag: &RustcErrorDiag, file: &Path, source: &str) -> Vec<FixCandidate>;
@@ -254,6 +259,10 @@ mod tests {
     impl CompileProposer for FixedProposer {
         fn name(&self) -> &'static str {
             self.0
+        }
+
+        fn code(&self) -> &'static str {
+            "" // test helper — never in production(); proposes for any code
         }
 
         fn propose(&self, diag: &RustcErrorDiag, _file: &Path, _source: &str) -> Vec<FixCandidate> {

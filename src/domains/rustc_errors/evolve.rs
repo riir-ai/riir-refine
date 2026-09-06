@@ -285,6 +285,204 @@ pub fn frontier_order_misses(
     ordered
 }
 
+// ── Plan 091 T1.3 — the conversion ledger (the real-G8 instrument) ────
+
+/// The `.heal/misses/` frontier-ordering commit (Plan 091 T1.1/T1.2) —
+/// the FIFO/frontier window boundary. Everything before it is the FIFO
+/// era; the authoring queue orders by dispersion evidence from here on.
+pub const WIRING_COMMIT: &str = "3580477";
+
+/// Unix seconds of [`WIRING_COMMIT`] (2026-09-06 14:38:36 +07). Same units
+/// as `TrajRowDoc::last_seen_at`, so era splits are a plain comparison.
+pub const WIRING_UNIX_SECS: u64 = 1_788_680_316;
+
+/// One post-wiring authored template: a `FRONTIER_LANDINGS` row. Append one
+/// IN THE SAME COMMIT as the template's playbook lands — the pins-file
+/// discipline. A landing without its row reds
+/// `wired_plus_frontier_equals_the_derived_inventory`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FrontierLanding {
+    /// The landing commit (short hash).
+    pub commit: &'static str,
+    /// Unix seconds of `commit`.
+    pub unix_secs: u64,
+    /// The addressed error code (`"E0601"`).
+    pub code: &'static str,
+    /// The playbook strategy id (`CompileProposer::name`).
+    pub strategy: &'static str,
+}
+
+/// The playbook strategies authored BEFORE the wiring — the FIFO-baseline
+/// era (E0597 family = Phase 2, Bench 041/045; borrowck family = Phase 3).
+/// Membership is the authoring-era attribution: these rules' conversions
+/// belong to the pre-wiring history no matter when they were re-verified.
+pub const WIRED_STRATEGIES: &[(&str, &str)] = &[
+    ("E0597", "e0597-anon-lifetime"),
+    ("E0597", "e0597-move"),
+    ("E0597", "e0597-move-clone"),
+    ("E0597", "e0597-drop-the-box"),
+    ("E0597", "e0597-shared-ownership"),
+    ("E0597", "e0597-scope-hoist"),
+    ("E0502", "e0502-deref-removal"),
+    ("E0502", "e0502-clone-out"),
+    ("E0499", "e0499-swap-second-decl"),
+    ("E0505", "e0505-clone-at-move"),
+];
+
+/// Post-wiring authored templates, one row per landing. EMPTY at the wiring
+/// commit — the frontier era has no conversions to attribute yet, which is
+/// the honest starting state of the G8 measurement.
+pub const FRONTIER_LANDINGS: &[FrontierLanding] = &[];
+
+/// Which authoring era a playbook strategy belongs to. `Unrecorded` is a
+/// ledger bug (a registry strategy no table accounts for) — it prints
+/// loudly and the ratchet test makes it unrepresentable in-tree.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LedgerEra {
+    /// Authored pre-wiring (`WIRED_STRATEGIES`) — the FIFO baseline.
+    Baseline,
+    /// Authored post-wiring (`FRONTIER_LANDINGS`) — the frontier era.
+    Frontier,
+    /// In neither table.
+    Unrecorded,
+}
+
+/// The playbook inventory as `(code, strategy)` pairs, derived from the
+/// production registry via `CompileProposer::code` — the registry IS the
+/// source of truth; nothing is name-prefix-parsed.
+#[must_use]
+pub fn playbook_inventory() -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = super::playbooks::Playbooks::production()
+        .into_entries()
+        .into_iter()
+        .map(|p| (p.code().to_string(), p.name().to_string()))
+        .collect();
+    out.sort();
+    out
+}
+
+/// One driver-outcome signal for the ledger. The CLI maps store rows into
+/// this so `evolve.rs` stays feature-free (the T1.1 convention — the
+/// store-join lives behind the caller's feature gate).
+#[derive(Debug, Clone)]
+pub struct ConversionSignal {
+    /// The trajectory key half `{code}:{strategy_id}` (rows are keyed per
+    /// `(key, shape)`, so one strategy may carry many rows).
+    pub lint_key: String,
+    /// The row's `EvidenceTier::as_u8()` value.
+    pub tier: u8,
+    /// The row's `last_seen_at` (unix seconds; `0` = never stamped).
+    pub last_seen_unix: u64,
+}
+
+/// One playbook strategy's conversion state in the report.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConversionRow {
+    pub code: String,
+    pub strategy: String,
+    pub era: LedgerEra,
+    /// The strategy's CURRENT tier is `Certified` — the conversion
+    /// definition. A once-certified-then-withdrawn rule is RETRACTED
+    /// (Issue 021: absorbing, never re-emitted), not a live conversion.
+    pub certified: bool,
+    /// The latest `last_seen_unix` over the strategy's rows, when any row
+    /// exists. `None` = the strategy has never run against a driver.
+    pub last_seen_unix: Option<u64>,
+}
+
+/// The G8 report: conversion-per-authored-rule, split by authoring era.
+/// The FIFO arm is HISTORICAL (not re-runnable post-wiring) — the
+/// comparison is frontier-vs-its-own-baseline (the T39/Bench-051
+/// discipline); `WIRING_COMMIT` pins the window so the baseline stays
+/// unambiguous.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct ConversionReport {
+    /// Baseline-era rules with a Certified row / total baseline rules.
+    pub baseline_certified: usize,
+    pub baseline_total: usize,
+    /// Frontier-era conversions / total frontier rules.
+    pub frontier_certified: usize,
+    pub frontier_total: usize,
+    /// Registry strategies accounted in NEITHER table (a ledger bug).
+    pub unrecorded: Vec<(String, String)>,
+    /// Per-strategy rows, sorted by `(code, strategy)`.
+    pub rows: Vec<ConversionRow>,
+}
+
+/// Build the conversion report. `wired`/`frontier` are parameters (not the
+/// consts directly) so tests can exercise eras synthetically; the CLI
+/// passes [`WIRED_STRATEGIES`] and [`FRONTIER_LANDINGS`].
+#[must_use]
+pub fn conversion_report(
+    inventory: &[(String, String)],
+    wired: &[(&str, &str)],
+    frontier: &[FrontierLanding],
+    signals: &[ConversionSignal],
+) -> ConversionReport {
+    // Best state per strategy key: Certified outranks everything (any
+    // Certified row converts the strategy); `last_seen` is the max.
+    let mut certified: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
+    let mut last_seen: std::collections::BTreeMap<&str, u64> = std::collections::BTreeMap::new();
+    for s in signals {
+        let key: &str = &s.lint_key;
+        if s.tier == crate::memory::EvidenceTier::Certified as u8 {
+            certified.insert(key);
+        }
+        let e = last_seen.entry(key).or_insert(0);
+        *e = (*e).max(s.last_seen_unix);
+    }
+
+    let era_of = |code: &str, strategy: &str| -> LedgerEra {
+        if wired
+            .iter()
+            .any(|&(c, s)| c == code && s == strategy)
+        {
+            LedgerEra::Baseline
+        } else if frontier
+            .iter()
+            .any(|l| l.code == code && l.strategy == strategy)
+        {
+            LedgerEra::Frontier
+        } else {
+            LedgerEra::Unrecorded
+        }
+    };
+
+    let mut report = ConversionReport::default();
+    for (code, strategy) in inventory {
+        let key = format!("{code}:{strategy}");
+        let era = era_of(code, strategy);
+        let certified_hit = certified.contains(key.as_str());
+        let last = last_seen.get(key.as_str()).copied().filter(|&t| t > 0);
+        report.rows.push(ConversionRow {
+            code: code.clone(),
+            strategy: strategy.clone(),
+            era,
+            certified: certified_hit,
+            last_seen_unix: last,
+        });
+        match era {
+            LedgerEra::Baseline => {
+                report.baseline_total += 1;
+                if certified_hit {
+                    report.baseline_certified += 1;
+                }
+            }
+            LedgerEra::Frontier => {
+                report.frontier_total += 1;
+                if certified_hit {
+                    report.frontier_certified += 1;
+                }
+            }
+            LedgerEra::Unrecorded => {
+                report.unrecorded.push((code.clone(), strategy.clone()));
+            }
+        }
+    }
+    report.rows.sort_by(|a, b| a.code.cmp(&b.code).then(a.strategy.cmp(&b.strategy)));
+    report
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -480,5 +678,139 @@ mod tests {
             .find(|t| t.lint_name == "E0502:e0502-clone-out")
             .expect("reverted trajectory keyed by code:strategy");
         assert_eq!(reverted.fail_count, 1, "oracle rejection counted");
+    }
+
+    // ── Plan 091 T1.3 — the conversion ledger ──────────────────────────
+
+    /// THE RATCHET: the derived registry inventory must be exactly the
+    /// wired baseline union the frontier landings — no more, no less, no
+    /// duplicates. A playbook landing without its `FRONTIER_LANDINGS` row
+    /// reds here; a ledger row outliving its playbook reds here; a rename
+    /// reds here. Bump the tables in the SAME commit as the registry.
+    #[test]
+    fn wired_plus_frontier_equals_the_derived_inventory() {
+        let derived = playbook_inventory();
+        let derived_set: std::collections::BTreeSet<(String, String)> =
+            derived.iter().cloned().collect();
+        assert_eq!(
+            derived.len(),
+            derived_set.len(),
+            "duplicate (code, strategy) in the registry inventory"
+        );
+        let mut accounted: std::collections::BTreeSet<(String, String)> = WIRED_STRATEGIES
+            .iter()
+            .map(|&(c, s)| (c.to_string(), s.to_string()))
+            .collect();
+        for l in FRONTIER_LANDINGS {
+            accounted.insert((l.code.to_string(), l.strategy.to_string()));
+        }
+        assert_eq!(
+            derived_set, accounted,
+            "ledger drift: append a FRONTIER_LANDINGS row in the SAME commit \
+             as the playbook landing (or update WIRED_STRATEGIES on a rename)"
+        );
+    }
+
+    #[test]
+    fn conversion_report_attributes_certified_rows_by_era() {
+        let inventory = vec![
+            ("E0001".to_string(), "old-strat".to_string()),
+            ("E0002".to_string(), "new-strat".to_string()),
+            ("E0003".to_string(), "idle-strat".to_string()),
+        ];
+        let wired = [("E0001", "old-strat"), ("E0003", "idle-strat")];
+        let frontier = [FrontierLanding {
+            commit: "abc1234",
+            unix_secs: 1_788_680_316,
+            code: "E0002",
+            strategy: "new-strat",
+        }];
+        // Multiple rows per key (one per shape): the second Certified row
+        // is redundant, not a second conversion.
+        let signals = vec![
+            ConversionSignal {
+                lint_key: "E0001:old-strat".to_string(),
+                tier: crate::memory::EvidenceTier::Certified as u8,
+                last_seen_unix: 1_000,
+            },
+            ConversionSignal {
+                lint_key: "E0001:old-strat".to_string(),
+                tier: crate::memory::EvidenceTier::Certified as u8,
+                last_seen_unix: 2_000,
+            },
+            ConversionSignal {
+                lint_key: "E0002:new-strat".to_string(),
+                tier: crate::memory::EvidenceTier::Heuristic as u8,
+                last_seen_unix: 3_000,
+            },
+        ];
+        let report = conversion_report(&inventory, &wired, &frontier, &signals);
+        assert_eq!(report.baseline_total, 2, "old-strat + idle-strat");
+        assert_eq!(report.baseline_certified, 1, "any Certified row converts");
+        assert_eq!(report.frontier_total, 1);
+        assert_eq!(
+            report.frontier_certified, 0,
+            "Heuristic tier is a sighting, not a conversion"
+        );
+        assert!(report.unrecorded.is_empty());
+        // last_seen takes the MAX over the strategy's rows.
+        let old = report
+            .rows
+            .iter()
+            .find(|r| r.strategy == "old-strat")
+            .unwrap();
+        assert_eq!(old.last_seen_unix, Some(2_000));
+    }
+
+    #[test]
+    fn conversion_report_counts_only_certified_tier_as_conversion() {
+        let inventory = vec![("E0001".to_string(), "s".to_string())];
+        let wired = [("E0001", "s")];
+        // Withdrawn (once certified, then retracted — Issue 021 absorbing)
+        // is NOT a live conversion.
+        let signals = vec![ConversionSignal {
+            lint_key: "E0001:s".to_string(),
+            tier: crate::memory::EvidenceTier::Withdrawn as u8,
+            last_seen_unix: 5_000,
+        }];
+        let report = conversion_report(&inventory, &wired, &frontier_dummy(), &signals);
+        assert_eq!(report.baseline_certified, 0);
+        let row = &report.rows[0];
+        assert!(!row.certified);
+        assert_eq!(row.last_seen_unix, Some(5_000), "sighting still recorded");
+    }
+
+    fn frontier_dummy() -> &'static [FrontierLanding] {
+        &[]
+    }
+
+    #[test]
+    fn conversion_report_flags_unrecorded_strategies() {
+        let inventory = vec![
+            ("E0001".to_string(), "known".to_string()),
+            ("E0009".to_string(), "orphan".to_string()),
+        ];
+        let report =
+            conversion_report(&inventory, &[("E0001", "known")], &[], &[]);
+        assert_eq!(
+            report.unrecorded,
+            vec![("E0009".to_string(), "orphan".to_string())]
+        );
+    }
+
+    #[test]
+    fn conversion_report_is_deterministic() {
+        let inventory = playbook_inventory();
+        let signals = vec![ConversionSignal {
+            lint_key: "E0505:e0505-clone-at-move".to_string(),
+            tier: crate::memory::EvidenceTier::Certified as u8,
+            last_seen_unix: 1_788_680_400,
+        }];
+        let a = conversion_report(&inventory, WIRED_STRATEGIES, FRONTIER_LANDINGS, &signals);
+        let b = conversion_report(&inventory, WIRED_STRATEGIES, FRONTIER_LANDINGS, &signals);
+        assert_eq!(a, b);
+        // The production wiring: the derived inventory IS fully accounted
+        // (rows carry no Unrecorded era in-tree).
+        assert!(a.unrecorded.is_empty(), "in-tree ledger must be complete");
     }
 }
